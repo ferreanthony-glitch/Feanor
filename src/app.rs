@@ -8,6 +8,7 @@ use crate::document::{fresh_layer_id, CelId, Document, Layer, LayerKind, Shot};
 use crate::fill::{self, FillSettings};
 use crate::history::{Edit, History, Nav};
 use crate::io;
+use crate::keymap::{self, Keymap};
 use crate::raster::{premultiply, unpremultiply, Tile, TILE};
 use crate::render::{self, Plan, PlanItem, Renderer};
 use crate::storyboard::MontageDrag;
@@ -20,7 +21,7 @@ const ONION_BEFORE: [u8; 3] = [225, 45, 45];
 const ONION_AFTER: [u8; 3] = [35, 160, 70];
 
 /// Storyboard : on monte les plans. Animation : on est entré dans un plan.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
     Storyboard,
     Animation,
@@ -70,16 +71,17 @@ impl Tool {
         }
     }
 
-    pub fn shortcut(self) -> &'static str {
+    /// Action qui choisit cet outil (son raccourci est dans le fichier de raccourcis).
+    pub fn action(self) -> &'static str {
         match self {
-            Tool::Brush => "B",
-            Tool::Pencil => "P",
-            Tool::Eraser => "E",
-            Tool::Fill => "G",
-            Tool::Shape => "U",
-            Tool::Select => "V",
-            Tool::Picker => "I",
-            Tool::Pan => "H",
+            Tool::Brush => "outil.pinceau",
+            Tool::Pencil => "outil.crayon",
+            Tool::Eraser => "outil.gomme",
+            Tool::Fill => "outil.remplissage",
+            Tool::Shape => "outil.formes",
+            Tool::Select => "outil.selection",
+            Tool::Picker => "outil.pipette",
+            Tool::Pan => "outil.main",
         }
     }
 }
@@ -177,9 +179,9 @@ pub struct App {
     pub(crate) export_transparent: bool,
     pub(crate) follow_frame: bool,
     pub(crate) hover_canvas: Option<Pos2>,
-    /// Tab pressé hors d'un champ texte (retiré des événements avant qu'egui ne s'en serve),
-    /// avec ou sans Maj.
-    tab_pressed: Option<bool>,
+    /// Touches retirées des événements avant qu'egui ne s'en serve (Tab), traitées comme raccourcis.
+    pending_keys: Vec<(Key, Option<Key>, egui::Modifiers)>,
+    pub(crate) keymap: Keymap,
     title: String,
 }
 
@@ -261,7 +263,8 @@ impl App {
             export_transparent: false,
             follow_frame: false,
             hover_canvas: None,
-            tab_pressed: None,
+            pending_keys: Vec::new(),
+            keymap: Keymap::load(),
             title: String::new(),
         }
     }
@@ -1266,47 +1269,17 @@ impl App {
         }
         // Pas de raccourci pendant une saisie, un dialogue, ou un glissé dans la bande de montage.
         if ctx.wants_keyboard_input() || self.modal_open() || self.montage_drag.is_some() {
-            self.tab_pressed = None;
+            self.pending_keys.clear();
             return;
         }
-        // Ctrl+C/X/V arrivent comme événements de presse-papiers, pas comme touches.
-        let clipboard: Vec<Event> = ctx.input(|i| {
-            i.events
-                .iter()
-                .filter(|e| matches!(e, Event::Copy | Event::Cut | Event::Paste(_)))
-                .cloned()
-                .collect()
-        });
-        for event in clipboard {
-            match event {
-                Event::Copy => {
-                    self.copy_selection();
-                }
-                Event::Cut => self.cut_selection(),
-                Event::Paste(_) => self.paste(),
-                _ => {}
-            }
-        }
-        match (self.tab_pressed.take(), self.mode) {
-            // Maj+Tab : vue d'ensemble des planches, et retour à la scène.
-            (Some(true), Mode::Storyboard) => {
-                self.board_view = match self.board_view {
-                    BoardView::Scene => BoardView::Panels,
-                    BoardView::Panels => BoardView::Scene,
-                };
-            }
-            (Some(true), Mode::Animation) => {
-                self.set_mode(Mode::Storyboard);
-                self.board_view = BoardView::Panels;
-            }
-            (Some(false), Mode::Storyboard) => self.set_mode(Mode::Animation),
-            (Some(false), Mode::Animation) => self.set_mode(Mode::Storyboard),
-            (None, _) => {}
-        }
-        let keys: Vec<(Key, Option<Key>, egui::Modifiers, bool)> = ctx.input(|i| {
-            i.events
-                .iter()
-                .filter_map(|e| match e {
+        // Touches retirées à egui avant qu'il ne s'en serve (Tab), puis touches de cette image.
+        let mut keys: Vec<(Key, Option<Key>, egui::Modifiers, bool)> = std::mem::take(&mut self.pending_keys)
+            .into_iter()
+            .map(|(k, p, m)| (k, p, m, false))
+            .collect();
+        ctx.input(|i| {
+            for e in &i.events {
+                match e {
                     Event::Key {
                         key,
                         physical_key,
@@ -1314,87 +1287,203 @@ impl App {
                         repeat,
                         modifiers,
                         ..
-                    } => Some((*key, *physical_key, *modifiers, *repeat)),
-                    _ => None,
-                })
-                .collect()
-        });
-        let board = self.mode == Mode::Storyboard;
-        for (key, physical, m, repeat) in keys {
-            // Touches repérées par leur position physique, pour marcher aussi en AZERTY.
-            let at = |k: Key| key == k || physical == Some(k);
-            if m.command {
-                match key {
-                    Key::Z if m.shift => self.redo(),
-                    Key::Z => self.undo(),
-                    Key::Y => self.redo(),
-                    _ if repeat => {}
-                    Key::S if m.shift => {
-                        self.save_as();
-                    }
-                    Key::S => {
-                        self.save();
-                    }
-                    Key::O => self.request(Pending::Open),
-                    Key::N => self.request(Pending::New),
-                    Key::D => self.new_image(true),
-                    Key::R => self.reset_rotation(),
-                    Key::A => self.select_all(),
-                    Key::Delete | Key::Backspace if board => self.delete_shot(),
-                    Key::Delete | Key::Backspace => self.delete_image(),
+                    } => keys.push((*key, *physical_key, *modifiers, *repeat)),
+                    // egui transforme Ctrl+C / X / V en événements de presse-papiers.
+                    Event::Copy => keys.push((Key::C, Some(Key::C), egui::Modifiers::COMMAND, false)),
+                    Event::Cut => keys.push((Key::X, Some(Key::X), egui::Modifiers::COMMAND, false)),
+                    Event::Paste(_) => keys.push((Key::V, Some(Key::V), egui::Modifiers::COMMAND, false)),
                     _ => {}
                 }
+            }
+        });
+        for (key, physical, m, repeat) in keys {
+            let Some(action) = self.keymap.find(key, physical, m, self.mode) else { continue };
+            let action = action.to_string();
+            if repeat && !keymap::action_info(&action).is_some_and(|a| a.repeat) {
                 continue;
             }
-            match key {
-                Key::ArrowLeft if board => self.step_global(-1),
-                Key::ArrowRight if board => self.step_global(1),
-                Key::ArrowLeft => self.goto_frame(self.cur_frame.saturating_sub(1)),
-                Key::ArrowRight => self.goto_frame(self.cur_frame + 1),
-                Key::ArrowUp => self.select_layer(self.cur_layer + 1),
-                Key::ArrowDown => self.select_layer(self.cur_layer.saturating_sub(1)),
-                Key::PageUp => self.select_shot(self.cur_shot.saturating_sub(1)),
-                Key::PageDown => self.select_shot(self.cur_shot + 1),
-                _ if at(Key::OpenBracket) => self.resize_brush(1.0 / 1.15),
-                _ if at(Key::CloseBracket) => self.resize_brush(1.15),
-                _ if repeat => {}
-                Key::B => self.tool = Tool::Brush,
-                Key::P => self.tool = Tool::Pencil,
-                Key::E => self.tool = Tool::Eraser,
-                Key::G => self.tool = Tool::Fill,
-                Key::U => self.tool = Tool::Shape,
-                Key::V => self.tool = Tool::Select,
-                Key::I => self.tool = Tool::Picker,
-                Key::H => self.tool = Tool::Pan,
-                Key::R if m.shift => self.rotate_view(-15.0),
-                Key::R => self.rotate_view(15.0),
-                Key::F if m.shift => self.zoom_actual(),
-                Key::F => self.fit_pending = true,
-                Key::M => self.flip_view(),
-                Key::O => self.onion.enabled = !self.onion.enabled,
-                Key::Escape => {
-                    self.end_stroke();
-                    self.vsel = None;
-                }
-                Key::Home if board => self.goto_global(0),
-                Key::End if board => self.goto_global(self.doc.total_frames() - 1),
-                Key::Home => self.goto_frame(0),
-                Key::End => self.goto_frame(self.frame_count() - 1),
-                Key::Enter => self.toggle_play(),
-                Key::Insert if board => self.new_shot(),
-                Key::Insert => self.new_image(false),
-                Key::Delete | Key::Backspace => {
-                    if self.tool == Tool::Select && self.vsel.is_some() {
-                        self.delete_selection();
-                    } else {
-                        self.clear_image();
-                    }
-                }
-                Key::Plus | Key::Equals => self.exposure_plus(),
-                Key::Minus => self.exposure_minus(),
-                Key::F1 => self.show_help = !self.show_help,
-                _ => {}
+            self.run_action(&action);
+        }
+    }
+
+    /// Exécute une action désignée par son identifiant stable (voir `keymap::ACTIONS`).
+    pub(crate) fn run_action(&mut self, action: &str) {
+        let board = self.mode == Mode::Storyboard;
+        match action {
+            "fichier.nouveau" => self.request(Pending::New),
+            "fichier.ouvrir" => self.request(Pending::Open),
+            "fichier.enregistrer" => {
+                self.save();
             }
+            "fichier.enregistrer_sous" => {
+                self.save_as();
+            }
+            "fichier.quitter" => self.request(Pending::Quit),
+            "edition.annuler" => self.undo(),
+            "edition.retablir" => self.redo(),
+            "edition.couper" => self.cut_selection(),
+            "edition.copier" => {
+                self.copy_selection();
+            }
+            "edition.coller" => self.paste(),
+            "edition.supprimer" => {
+                if self.tool == Tool::Select && self.vsel.is_some() {
+                    self.delete_selection();
+                } else {
+                    self.clear_image();
+                }
+            }
+            "edition.tout_selectionner" => self.select_all(),
+            "edition.tout_deselectionner" => {
+                self.end_stroke();
+                self.vsel = None;
+            }
+            "vue.zoom_avant" => self.zoom_step(1.25),
+            "vue.zoom_arriere" => self.zoom_step(1.0 / 1.25),
+            "vue.plein_ecran" => {
+                let full = self.ctx.input(|i| i.viewport().fullscreen.unwrap_or(false));
+                self.ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(!full));
+            }
+            "vue.rotation_horaire" => self.rotate_view(15.0),
+            "vue.rotation_antihoraire" => self.rotate_view(-15.0),
+            "vue.reinit_rotation" => self.reset_rotation(),
+            "vue.reinit_zoom" => self.zoom_actual(),
+            "vue.ajuster" => self.fit_pending = true,
+            "vue.pelure" => self.onion.enabled = !self.onion.enabled,
+            "vue.miroir" => self.flip_view(),
+            "vue.planches" => {
+                if board {
+                    self.board_view = match self.board_view {
+                        BoardView::Scene => BoardView::Panels,
+                        BoardView::Panels => BoardView::Scene,
+                    };
+                } else {
+                    self.set_mode(Mode::Storyboard);
+                    self.board_view = BoardView::Panels;
+                }
+            }
+            "mode.basculer" => self.set_mode(if board { Mode::Animation } else { Mode::Storyboard }),
+            "aide.raccourcis" => self.show_help = !self.show_help,
+            "outil.pinceau" => self.set_tool(Tool::Brush),
+            "outil.crayon" => self.set_tool(Tool::Pencil),
+            "outil.gomme" => self.set_tool(Tool::Eraser),
+            "outil.remplissage" => self.set_tool(Tool::Fill),
+            "outil.pipette" => self.set_tool(Tool::Picker),
+            "outil.selection" => self.set_tool(Tool::Select),
+            "outil.formes" => self.set_tool(Tool::Shape),
+            "outil.main" => self.set_tool(Tool::Pan),
+            "outil.taille_plus" => self.resize_brush(1.15),
+            "outil.taille_moins" => self.resize_brush(1.0 / 1.15),
+            "selection.miroir_h" => self.flip_selection(true),
+            "selection.miroir_v" => self.flip_selection(false),
+            "lecture.basculer" => self.toggle_play(),
+            "image.precedente" if board => self.step_global(-1),
+            "image.suivante" if board => self.step_global(1),
+            "image.precedente" => self.goto_frame(self.cur_frame.saturating_sub(1)),
+            "image.suivante" => self.goto_frame(self.cur_frame + 1),
+            "image.premiere" => self.goto_panel_frame(0),
+            "image.derniere" => self.goto_panel_frame(self.frame_count() - 1),
+            "montage.debut" => self.goto_global(0),
+            "montage.fin" => self.goto_global(self.doc.total_frames() - 1),
+            "panneau.precedent" => self.select_shot(self.cur_shot.saturating_sub(1)),
+            "panneau.suivant" => self.select_shot(self.cur_shot + 1),
+            "panneau.nouveau" => self.new_shot(),
+            "panneau.supprimer" => self.delete_shot(),
+            "panneau.ajouter_image" => self.nudge_shot_length(1),
+            "panneau.retirer_image" => self.nudge_shot_length(-1),
+            "dessin.nouveau" => self.new_image(false),
+            "dessin.dupliquer" => self.new_image(true),
+            "dessin.supprimer" => self.delete_image(),
+            "exposition.allonger" => self.exposure_plus(),
+            "exposition.raccourcir" => self.exposure_minus(),
+            "calque.nouveau_vectoriel" => self.add_layer(LayerKind::Vector),
+            "calque.nouveau_bitmap" => self.add_layer(LayerKind::Bitmap),
+            "calque.supprimer" => self.delete_layer(),
+            "calque.dessus" => self.select_layer(self.cur_layer + 1),
+            "calque.dessous" => self.select_layer(self.cur_layer.saturating_sub(1)),
+            // « vue.pan_libre » se maintient : il est lu en continu par le canevas.
+            "vue.pan_libre" => {}
+            other => self.status = format!("« {other} » n'est pas encore disponible."),
+        }
+    }
+
+    fn set_tool(&mut self, tool: Tool) {
+        if self.tool != tool {
+            self.end_stroke();
+            self.tool = tool;
+        }
+    }
+
+    /// Zoom par pas, autour du centre de la vue.
+    fn zoom_step(&mut self, factor: f32) {
+        let (rect, size) = (self.canvas_rect, self.canvas_size());
+        self.view.zoom_around(rect, size, rect.center(), factor);
+    }
+
+    /// Va à une image du panneau courant (dans le montage en mode storyboard).
+    fn goto_panel_frame(&mut self, frame: usize) {
+        match self.mode {
+            Mode::Storyboard => self.goto_global(self.doc.shot_start(self.cur_shot) + frame),
+            Mode::Animation => self.goto_frame(frame),
+        }
+    }
+
+    /// Allonge ou raccourcit le panneau d'une image (une étape d'annulation par appui).
+    fn nudge_shot_length(&mut self, delta: i64) {
+        let n = (self.frame_count() as i64 + delta).max(1) as usize;
+        if n == self.frame_count() {
+            return;
+        }
+        self.end_stroke();
+        let snap = self.snapshot();
+        self.shot_mut().set_length(n);
+        self.length_origin = None;
+        self.commit_structure(snap);
+        self.status = format!(
+            "Durée du panneau : {}",
+            crate::storyboard::duration_label(n, self.doc.fps)
+        );
+    }
+
+    /// Recharge les raccourcis (après modification du fichier).
+    pub(crate) fn reload_keymap(&mut self) {
+        self.keymap = Keymap::load();
+        self.status = match (&self.keymap.user_file, self.keymap.warnings.len()) {
+            (Some(p), 0) => format!("Raccourcis rechargés depuis {}.", p.display()),
+            (Some(p), n) => format!("Raccourcis rechargés depuis {} ({n} remarque(s), voir F1).", p.display()),
+            (None, 0) => "Raccourcis par défaut.".into(),
+            (None, n) => format!("Raccourcis par défaut ({n} remarque(s), voir F1)."),
+        };
+    }
+
+    /// Crée au besoin la copie personnelle du fichier de raccourcis, puis l'ouvre dans le Bloc-notes.
+    pub(crate) fn edit_keymap(&mut self) {
+        let path = match &self.keymap.user_file {
+            Some(p) => p.clone(),
+            None => {
+                let Some(p) = Keymap::appdata_path() else {
+                    self.status = "Dossier %APPDATA% introuvable.".into();
+                    return;
+                };
+                if let Some(dir) = p.parent() {
+                    let _ = std::fs::create_dir_all(dir);
+                }
+                if let Err(e) = std::fs::write(&p, keymap::DEFAULT_KEYMAP) {
+                    self.status = format!("Impossible de créer {} : {e}", p.display());
+                    return;
+                }
+                self.keymap.user_file = Some(p.clone());
+                p
+            }
+        };
+        match std::process::Command::new("notepad.exe").arg(&path).spawn() {
+            Ok(_) => {
+                self.status = format!(
+                    "Raccourcis ouverts dans le Bloc-notes ({}). Enregistre, puis « Aide > Recharger les raccourcis ».",
+                    path.display()
+                )
+            }
+            Err(e) => self.status = format!("Impossible d'ouvrir {} : {e}", path.display()),
         }
     }
 
@@ -1423,16 +1512,22 @@ impl App {
 }
 
 impl eframe::App for App {
-    /// egui se sert de Tab pour passer d'un champ à l'autre ; ici, hors d'un champ texte,
-    /// Tab bascule entre storyboard et animation.
+    /// egui se sert de Tab pour passer d'un champ à l'autre ; hors d'un champ texte, on le lui
+    /// retire pour en faire un raccourci comme les autres.
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         if ctx.wants_keyboard_input() {
             return;
         }
         raw_input.events.retain(|e| match e {
-            Event::Key { key: Key::Tab, pressed, modifiers, .. } if !modifiers.command => {
+            Event::Key {
+                key: Key::Tab,
+                physical_key,
+                pressed,
+                modifiers,
+                ..
+            } if !modifiers.command => {
                 if *pressed {
-                    self.tab_pressed = Some(modifiers.shift);
+                    self.pending_keys.push((Key::Tab, *physical_key, *modifiers));
                 }
                 false
             }

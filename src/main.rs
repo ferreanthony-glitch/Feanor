@@ -7,6 +7,9 @@ mod document;
 mod fill;
 mod history;
 mod io;
+mod keymap;
+#[cfg(test)]
+mod keymap_tests;
 mod panels;
 mod raster;
 mod render;

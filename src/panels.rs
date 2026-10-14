@@ -1,6 +1,6 @@
 use eframe::egui::{self, vec2, Align, Align2, Color32, Layout, RichText, Sense, Stroke, StrokeKind};
 
-use crate::app::{App, Mode, Pending, ShapeKind, Tool};
+use crate::app::{App, Mode, ShapeKind, Tool};
 use crate::brush::BrushSettings;
 use crate::document::{Document, LayerKind};
 
@@ -12,46 +12,15 @@ const PRESETS: [(&str, usize, usize); 5] = [
     ("Vertical 1080×1920", 1080, 1920),
 ];
 
-const SHORTCUTS: [(&str, &str); 39] = [
-    ("Tab", "Passer du storyboard à l'animation du plan, et retour"),
-    ("Maj+Tab", "Storyboard : vue scène / vue planches"),
-    ("Double-clic sur un plan", "Entrer dans le plan pour l'animer"),
-    ("Inser (storyboard)", "Nouveau plan après le plan courant"),
-    ("Ctrl+Suppr (storyboard)", "Supprimer le plan"),
-    ("Page préc. / suiv.", "Plan précédent / suivant"),
-    ("B / P / E / G", "Pinceau / Crayon / Gomme / Remplir"),
-    ("U / V", "Formes / Sélection vectorielle"),
-    ("I / H", "Pipette / Main"),
-    ("Alt + clic", "Prélever une couleur"),
-    ("Touches à droite de P", "Taille du pinceau − / + ([ ] en QWERTY)"),
-    ("Sélection : glisser", "Lasso ; Maj pour ajouter / retirer"),
-    ("Sélection : poignées", "Échelle (Maj : proportionnelle), rotation (Maj : par 15°)"),
-    ("Ctrl+A", "Tout sélectionner (calque vectoriel)"),
-    ("Ctrl+C / X / V", "Copier / couper / coller des traits vectoriels"),
-    ("Échap", "Désélectionner"),
-    ("Espace + glisser", "Déplacer la vue (ou bouton du milieu)"),
-    ("Molette", "Zoom autour du curseur"),
-    ("Maj + molette", "Rotation de la vue"),
-    ("R / Maj+R", "Tourner la vue de 15°"),
-    ("Ctrl+R", "Remettre la vue droite"),
-    ("M", "Miroir de la vue"),
-    ("F / Maj+F", "Ajuster à la fenêtre / 100 %"),
-    ("Flèches gauche / droite", "Image précédente / suivante"),
-    ("Flèches haut / bas", "Calque au-dessus / en dessous"),
-    ("Origine / Fin", "Début / fin (du montage ou du plan)"),
-    ("Entrée", "Lecture / pause (montage ou plan)"),
-    ("O", "Pelure d'oignon"),
-    ("Inser (animation)", "Nouvelle image après l'exposition"),
-    ("Ctrl+D", "Dupliquer le dessin"),
-    ("+ / −", "Allonger / raccourcir l'exposition"),
-    ("Suppr", "Effacer le dessin (ou la sélection)"),
-    ("Ctrl+Suppr (animation)", "Supprimer le dessin de la timeline"),
-    ("Ctrl+Z", "Annuler"),
-    ("Ctrl+Y / Ctrl+Maj+Z", "Rétablir"),
-    ("Ctrl+N", "Nouveau projet"),
-    ("Ctrl+O", "Ouvrir"),
-    ("Ctrl+S / Ctrl+Maj+S", "Enregistrer / Enregistrer sous"),
-    ("F1", "Cette aide"),
+/// Gestes à la souris et au stylet (hors fichier de raccourcis).
+const MOUSE_GESTURES: [(&str, &str); 7] = [
+    ("Alt + clic", "prélever une couleur"),
+    ("Molette", "zoom autour du curseur"),
+    ("Maj + molette", "rotation de la vue"),
+    ("Bouton du milieu + glisser", "déplacer la vue"),
+    ("Double-clic sur un plan", "entrer dans le plan pour l'animer"),
+    ("Sélection : glisser dans le vide", "lasso (Maj : ajouter / retirer)"),
+    ("Sélection : poignées", "échelle (Maj : proportionnelle), rotation (Maj : par 15°)"),
 ];
 
 fn menu_item(ui: &mut egui::Ui, label: &str, shortcut: &str) -> bool {
@@ -84,21 +53,21 @@ fn brush_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
 }
 
 impl App {
+    /// Entrée de menu reliée à une action ; le raccourci affiché vient du fichier de raccourcis.
+    fn action_item(&mut self, ui: &mut egui::Ui, text: &str, action: &str) {
+        let shortcut = self.keymap.label(action);
+        if menu_item(ui, text, &shortcut) {
+            self.run_action(action);
+        }
+    }
+
     pub(crate) fn menu_bar(&mut self, ui: &mut egui::Ui) {
         egui::menu::bar(ui, |ui| {
             ui.menu_button("Fichier", |ui| {
-                if menu_item(ui, "Nouveau…", "Ctrl+N") {
-                    self.request(Pending::New);
-                }
-                if menu_item(ui, "Ouvrir…", "Ctrl+O") {
-                    self.request(Pending::Open);
-                }
-                if menu_item(ui, "Enregistrer", "Ctrl+S") {
-                    self.save();
-                }
-                if menu_item(ui, "Enregistrer sous…", "Ctrl+Maj+S") {
-                    self.save_as();
-                }
+                self.action_item(ui, "Nouveau…", "fichier.nouveau");
+                self.action_item(ui, "Ouvrir…", "fichier.ouvrir");
+                self.action_item(ui, "Enregistrer", "fichier.enregistrer");
+                self.action_item(ui, "Enregistrer sous…", "fichier.enregistrer_sous");
                 ui.separator();
                 if menu_item(ui, "Importer une image (calque bitmap)…", "") {
                     self.import_image();
@@ -118,100 +87,63 @@ impl App {
                 }
                 ui.checkbox(&mut self.export_transparent, "Séquences sans le papier (fond transparent)");
                 ui.separator();
-                if menu_item(ui, "Quitter", "") {
-                    self.request(Pending::Quit);
-                }
+                self.action_item(ui, "Quitter", "fichier.quitter");
             });
             ui.menu_button("Édition", |ui| {
-                if menu_item(ui, "Annuler", "Ctrl+Z") {
-                    self.undo();
-                }
-                if menu_item(ui, "Rétablir", "Ctrl+Y") {
-                    self.redo();
-                }
+                self.action_item(ui, "Annuler", "edition.annuler");
+                self.action_item(ui, "Rétablir", "edition.retablir");
                 ui.separator();
-                if menu_item(ui, "Copier la sélection", "Ctrl+C") {
-                    self.copy_selection();
-                }
-                if menu_item(ui, "Couper la sélection", "Ctrl+X") {
-                    self.cut_selection();
-                }
-                if menu_item(ui, "Coller", "Ctrl+V") {
-                    self.paste();
-                }
-                if menu_item(ui, "Tout sélectionner", "Ctrl+A") {
-                    self.select_all();
-                }
+                self.action_item(ui, "Copier la sélection", "edition.copier");
+                self.action_item(ui, "Couper la sélection", "edition.couper");
+                self.action_item(ui, "Coller", "edition.coller");
+                self.action_item(ui, "Tout sélectionner", "edition.tout_selectionner");
+                self.action_item(ui, "Tout désélectionner", "edition.tout_deselectionner");
                 ui.separator();
-                if menu_item(ui, "Effacer le dessin", "Suppr") {
-                    self.clear_image();
-                }
+                self.action_item(ui, "Supprimer la sélection ou effacer le dessin", "edition.supprimer");
             });
             ui.menu_button("Plan", |ui| {
-                if menu_item(ui, "Nouveau plan", "Inser") {
-                    self.new_shot();
-                }
+                self.action_item(ui, "Nouveau plan", "panneau.nouveau");
                 if menu_item(ui, "Dupliquer le plan", "") {
                     self.duplicate_shot();
                 }
-                if menu_item(ui, "Supprimer le plan", "") {
-                    self.delete_shot();
-                }
+                self.action_item(ui, "Supprimer le plan", "panneau.supprimer");
+                self.action_item(ui, "Allonger le plan d'une image", "panneau.ajouter_image");
+                self.action_item(ui, "Raccourcir le plan d'une image", "panneau.retirer_image");
                 ui.separator();
-                if menu_item(ui, "Plan précédent", "Page préc.") {
-                    self.select_shot(self.cur_shot.saturating_sub(1));
-                }
-                if menu_item(ui, "Plan suivant", "Page suiv.") {
-                    self.select_shot(self.cur_shot + 1);
-                }
+                self.action_item(ui, "Plan précédent", "panneau.precedent");
+                self.action_item(ui, "Plan suivant", "panneau.suivant");
                 ui.separator();
-                match self.mode {
-                    Mode::Storyboard => {
-                        if menu_item(ui, "Animer ce plan", "Tab") {
-                            self.enter_animation(self.cur_shot);
-                        }
-                    }
-                    Mode::Animation => {
-                        if menu_item(ui, "Retour au storyboard", "Tab") {
-                            self.set_mode(Mode::Storyboard);
-                        }
-                    }
-                }
+                let label = match self.mode {
+                    Mode::Storyboard => "Animer ce plan",
+                    Mode::Animation => "Retour au storyboard",
+                };
+                self.action_item(ui, label, "mode.basculer");
+                self.action_item(ui, "Vue planches / scène", "vue.planches");
             });
             ui.menu_button("Animation", |ui| {
-                if menu_item(ui, "Lecture / pause", "Entrée") {
-                    self.toggle_play();
-                }
+                self.action_item(ui, "Lecture / pause", "lecture.basculer");
+                self.action_item(ui, "Image précédente", "image.precedente");
+                self.action_item(ui, "Image suivante", "image.suivante");
+                self.action_item(ui, "Première image du plan", "image.premiere");
+                self.action_item(ui, "Dernière image du plan", "image.derniere");
                 ui.separator();
-                if menu_item(ui, "Nouvelle image", "Inser") {
-                    self.new_image(false);
-                }
-                if menu_item(ui, "Dupliquer le dessin", "Ctrl+D") {
-                    self.new_image(true);
-                }
-                if menu_item(ui, "Allonger l'exposition", "+") {
-                    self.exposure_plus();
-                }
-                if menu_item(ui, "Raccourcir l'exposition", "−") {
-                    self.exposure_minus();
-                }
-                if menu_item(ui, "Supprimer le dessin", "Ctrl+Suppr") {
-                    self.delete_image();
-                }
+                self.action_item(ui, "Nouveau dessin", "dessin.nouveau");
+                self.action_item(ui, "Dupliquer le dessin", "dessin.dupliquer");
+                self.action_item(ui, "Allonger l'exposition", "exposition.allonger");
+                self.action_item(ui, "Raccourcir l'exposition", "exposition.raccourcir");
+                self.action_item(ui, "Retirer le dessin de la timeline", "dessin.supprimer");
             });
             ui.menu_button("Affichage", |ui| {
-                if menu_item(ui, "Ajuster à la fenêtre", "F") {
-                    self.fit_pending = true;
-                }
-                if menu_item(ui, "Taille réelle (100 %)", "Maj+F") {
-                    self.zoom_actual();
-                }
-                if menu_item(ui, "Miroir", "M") {
-                    self.flip_view();
-                }
-                if menu_item(ui, "Remettre la vue droite", "Ctrl+R") {
-                    self.reset_rotation();
-                }
+                self.action_item(ui, "Ajuster à la fenêtre", "vue.ajuster");
+                self.action_item(ui, "Zoom 100 %", "vue.reinit_zoom");
+                self.action_item(ui, "Zoom avant", "vue.zoom_avant");
+                self.action_item(ui, "Zoom arrière", "vue.zoom_arriere");
+                self.action_item(ui, "Tourner (sens horaire)", "vue.rotation_horaire");
+                self.action_item(ui, "Tourner (sens antihoraire)", "vue.rotation_antihoraire");
+                self.action_item(ui, "Remettre la vue droite", "vue.reinit_rotation");
+                self.action_item(ui, "Miroir", "vue.miroir");
+                self.action_item(ui, "Pelure d'oignon", "vue.pelure");
+                self.action_item(ui, "Plein écran", "vue.plein_ecran");
                 ui.separator();
                 ui.horizontal(|ui| {
                     ui.label("Couleur du papier");
@@ -222,8 +154,12 @@ impl App {
                 });
             });
             ui.menu_button("Aide", |ui| {
-                if menu_item(ui, "Raccourcis clavier", "F1") {
-                    self.show_help = true;
+                self.action_item(ui, "Raccourcis clavier", "aide.raccourcis");
+                if menu_item(ui, "Modifier les raccourcis…", "") {
+                    self.edit_keymap();
+                }
+                if menu_item(ui, "Recharger les raccourcis", "") {
+                    self.reload_keymap();
                 }
             });
 
@@ -252,9 +188,24 @@ impl App {
             .spacing([4.0, 4.0])
             .show(ui, |ui| {
                 for (i, tool) in Tool::ALL.into_iter().enumerate() {
-                    let label = format!("{}  ({})", tool.label(), tool.shortcut());
+                    let shortcut = self.keymap.label(tool.action());
+                    let hint = if shortcut.is_empty() {
+                        "Pas de raccourci".to_string()
+                    } else {
+                        format!("Raccourci : {shortcut}")
+                    };
+                    let mut text = egui::text::LayoutJob::default();
+                    let style = ui.style().clone();
+                    RichText::new(tool.label()).append_to(&mut text, &style, egui::FontSelection::Default, Align::Center);
+                    RichText::new(format!("  {shortcut}")).small().weak().append_to(
+                        &mut text,
+                        &style,
+                        egui::FontSelection::Default,
+                        Align::Center,
+                    );
                     if ui
-                        .add_sized([104.0, 26.0], egui::SelectableLabel::new(self.tool == tool, label))
+                        .add_sized([108.0, 26.0], egui::SelectableLabel::new(self.tool == tool, text))
+                        .on_hover_text(hint)
                         .clicked()
                     {
                         self.end_stroke();
@@ -668,26 +619,73 @@ impl App {
 
         if self.show_help {
             let mut open = true;
+            let mut edit = false;
+            let mut reload = false;
             egui::Window::new("Raccourcis clavier")
                 .open(&mut open)
                 .resizable(true)
-                .default_height(520.0)
-                .default_pos(ctx.screen_rect().center() - vec2(220.0, 280.0))
+                .default_size([640.0, 560.0])
+                .default_pos(ctx.screen_rect().center() - vec2(320.0, 280.0))
                 .show(ctx, |ui| {
+                    let file = match &self.keymap.user_file {
+                        Some(p) => format!("Fichier : {}", p.display()),
+                        None => "Raccourcis par défaut (aucun fichier personnel).".into(),
+                    };
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(RichText::new(file).small());
+                        edit = ui.button("Modifier…").clicked();
+                        reload = ui.button("Recharger").clicked();
+                    });
+                    for w in &self.keymap.warnings {
+                        ui.colored_label(Color32::from_rgb(240, 170, 60), format!("⚠ {w}"));
+                    }
+                    ui.separator();
                     egui::ScrollArea::vertical().show(ui, |ui| {
                         egui::Grid::new("grille_raccourcis")
-                            .num_columns(2)
+                            .num_columns(3)
                             .striped(true)
                             .show(ui, |ui| {
-                                for (keys, action) in SHORTCUTS {
-                                    ui.label(RichText::new(keys).strong());
-                                    ui.label(action);
+                                for b in &self.keymap.bindings {
+                                    let info = crate::keymap::action_info(&b.action);
+                                    let mut keys = b.combos.iter().map(|c| c.label()).collect::<Vec<_>>();
+                                    keys.dedup();
+                                    // Un raccourci en réserve peut être un geste qu'on ne sait pas encore lire.
+                                    if keys.is_empty() {
+                                        keys = b.keys.clone();
+                                    }
+                                    let keys = if keys.is_empty() { "—".to_string() } else { keys.join("  ou  ") };
+                                    let why = if b.reserved { "non implémenté" } else { "désactivé" };
+                                    let mut label = info.map_or(b.action.clone(), |i| i.label.to_string());
+                                    match b.context {
+                                        Some(Mode::Storyboard) => label += " (storyboard)",
+                                        Some(Mode::Animation) => label += " (animation)",
+                                        None => {}
+                                    }
+                                    if b.active {
+                                        ui.label(RichText::new(keys).strong());
+                                        ui.label(label);
+                                    } else {
+                                        ui.label(RichText::new(keys).weak());
+                                        ui.label(RichText::new(format!("{label} — {why}")).weak());
+                                    }
+                                    ui.label(RichText::new(&b.source).small().weak());
                                     ui.end_row();
                                 }
                             });
+                        ui.add_space(8.0);
+                        ui.label(RichText::new("Souris et stylet").strong());
+                        for (geste, effet) in MOUSE_GESTURES {
+                            ui.label(format!("{geste} : {effet}"));
+                        }
                     });
                 });
             self.show_help = open;
+            if edit {
+                self.edit_keymap();
+            }
+            if reload {
+                self.reload_keymap();
+            }
         }
     }
 }

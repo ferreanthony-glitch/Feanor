@@ -10,6 +10,7 @@ rfd = "0.15"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+toml = "0.8"
 
 # Le dessin et la composition sont du calcul pixel : même en debug on optimise,
 # sinon le pinceau rame.

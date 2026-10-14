@@ -1,0 +1,568 @@
+# Raccourcis clavier de Pelure
+#
+# Chaque bloc [[raccourci]] associe une ou plusieurs touches à une action (identifiant stable).
+#
+# Pour personnaliser : « Aide > Modifier les raccourcis » crée une copie de ce fichier dans
+# %APPDATA%\Pelure\keymap.toml et l'ouvre. Ne gardez-y que les actions que vous changez si vous
+# voulez : chaque action redéfinie remplace celle d'ici, les autres restent par défaut.
+# Puis « Aide > Recharger les raccourcis » (ou relancez Pelure). touches = [] retire un raccourci.
+#
+# Écriture des touches : modificateurs Ctrl, Maj (ou Shift), Alt, puis la touche, séparés par « + ».
+#   Exemples : "Ctrl+Z", "Ctrl+Maj+Z", "Alt+B", "F5", "Entrée", "Suppr", "Échap", "Espace", "+".
+#   Lettres : c'est la lettre tapée qui compte (en AZERTY, "Q" est la touche marquée Q).
+#   Chiffres et ponctuation : c'est la POSITION de la touche qui compte, nommée comme sur un clavier
+#   QWERTY. En AZERTY : "," = touche ;   "." = touche :   "[" = touche ^   "]" = touche $
+#   "-" = touche )   "1" = touche &/1 (sans Maj). "+" accepte aussi le + du pavé numérique.
+#   Pour forcer : "car:," (le caractère virgule) ou "pos:A" (la position du A d'un QWERTY).
+#
+# contexte = "storyboard" ou "animation" : le raccourci ne vaut que dans ce mode.
+# etat = "non implémenté" : gardé en réserve, la fonction n'existe pas encore dans Pelure.
+# etat = "désactivé" : le raccourci est ignoré.
+# source : d'où vient le raccourci.
+#   « Storyboard Pro 27 » = raccourci par défaut lu dans sb_shortcuts.xml de Storyboard Pro 27 ;
+#   « perso » = vos réglages (STB_Shortcuts.xml) ; « proposition » = proposé par Pelure, à valider.
+
+version = 1
+
+# ------------------------------------------------------------------------------------ Fichier
+
+[[raccourci]]
+action = "fichier.nouveau"
+touches = ["Ctrl+N"]
+source = "Storyboard Pro 27 : NEW_KEY"
+
+[[raccourci]]
+action = "fichier.ouvrir"
+touches = ["Ctrl+O"]
+source = "Storyboard Pro 27 : OPEN_KEY"
+
+[[raccourci]]
+action = "fichier.enregistrer"
+touches = ["Ctrl+S"]
+source = "Storyboard Pro 27 : SAVE_ALL_KEY"
+
+[[raccourci]]
+action = "fichier.enregistrer_sous"
+touches = ["Ctrl+Maj+S"]
+source = "proposition (SAVE_AS_KEY n'a pas de touche par défaut)"
+
+[[raccourci]]
+action = "fichier.fermer"
+touches = ["Ctrl+W"]
+source = "Storyboard Pro 27 : CLOSE_KEY"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "fichier.quitter"
+touches = ["Ctrl+Q"]
+source = "Storyboard Pro 27 : QUIT_KEY"
+
+# ------------------------------------------------------------------------------------ Édition
+
+[[raccourci]]
+action = "edition.annuler"
+touches = ["Ctrl+Z"]
+source = "Storyboard Pro 27 : UNDO_KEY"
+
+[[raccourci]]
+action = "edition.retablir"
+touches = ["Ctrl+Maj+Z"]
+source = "Storyboard Pro 27 : REDO_KEY"
+
+[[raccourci]]
+action = "edition.retablir"
+touches = ["Ctrl+Y"]
+source = "proposition (second raccourci, habituel sous Windows)"
+
+[[raccourci]]
+action = "edition.couper"
+touches = ["Ctrl+X"]
+source = "Storyboard Pro 27 : CUT_KEY"
+
+[[raccourci]]
+action = "edition.copier"
+touches = ["Ctrl+C"]
+source = "Storyboard Pro 27 : COPY_KEY"
+
+[[raccourci]]
+action = "edition.coller"
+touches = ["Ctrl+V"]
+source = "Storyboard Pro 27 : PASTE_KEY"
+
+[[raccourci]]
+action = "edition.coller_sur_place"
+touches = ["Ctrl+Maj+V"]
+source = "Storyboard Pro 27 : PASTE_IN_PLACE_KEY"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "edition.supprimer"
+touches = ["Suppr"]
+source = "Storyboard Pro 27 : DELETE_KEY"
+
+[[raccourci]]
+action = "edition.supprimer"
+touches = ["Retour arrière"]
+source = "proposition (second raccourci)"
+
+[[raccourci]]
+action = "edition.supprimer_et_resserrer"
+touches = ["Maj+Suppr"]
+source = "Storyboard Pro 27 : DELETE_ALT_KEY (Ripple Delete)"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "edition.tout_selectionner"
+touches = ["Ctrl+A"]
+source = "Storyboard Pro 27 : SELECT_ALL_KEY"
+
+[[raccourci]]
+action = "edition.selectionner_dessins_scene"
+touches = ["Ctrl+Maj+A"]
+source = "Storyboard Pro 27 : SELECT_ALL_DRAWING_IN_SHOT"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "edition.tout_deselectionner"
+touches = ["Échap"]
+source = "Storyboard Pro 27 : DESELECT_ALL_KEY"
+
+# ------------------------------------------------------------------------------------ Vue
+
+[[raccourci]]
+action = "vue.outil_zoom"
+touches = ["Alt+Z"]
+source = "Storyboard Pro 27 : DRAWING_ZOOM_TOOL_KEY"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "vue.zoom_arriere"
+touches = ["1"]
+source = "Storyboard Pro 27 : ZOOM_OUT_KEY"
+
+[[raccourci]]
+action = "vue.zoom_avant"
+touches = ["2"]
+source = "Storyboard Pro 27 : ZOOM_IN_KEY"
+
+[[raccourci]]
+action = "vue.plein_ecran"
+touches = ["Ctrl+Maj+Alt+F"]
+source = "Storyboard Pro 27 : TOGGLE_FULLSCREEN_KEY"
+
+[[raccourci]]
+action = "vue.rotation_horaire"
+touches = ["V"]
+source = "Storyboard Pro 27 : ROTATE_CW_KEY"
+
+[[raccourci]]
+action = "vue.rotation_antihoraire"
+touches = ["C"]
+source = "Storyboard Pro 27 : ROTATE_CCW_KEY"
+
+[[raccourci]]
+action = "vue.reinit_rotation"
+touches = ["Maj+X"]
+source = "Storyboard Pro 27 : DRAWING_RESET_ROTATION_KEY"
+
+[[raccourci]]
+action = "vue.reinit_zoom"
+touches = ["Maj+Z"]
+source = "Storyboard Pro 27 : RESET_ZOOM_KEY"
+
+[[raccourci]]
+action = "vue.ajuster"
+touches = ["Maj+F"]
+source = "proposition"
+
+[[raccourci]]
+action = "vue.pan_libre"
+touches = ["Espace"]
+source = "Storyboard Pro 27 : FREE_PAN_AND_ZOOM_KEY (maintenir)"
+
+[[raccourci]]
+action = "vue.rotation_temporaire"
+touches = ["Ctrl+Alt"]
+source = "Storyboard Pro 27 : OVERRIDE_ROTATE (maintenir)"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "vue.zoom_temporaire_avant"
+touches = ["Ctrl+Espace"]
+source = "Storyboard Pro 27 : OVERRIDE_ZOOM_IN (maintenir)"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "vue.zoom_temporaire_arriere"
+touches = ["Alt+Espace"]
+source = "Storyboard Pro 27 : OVERRIDE_ZOOM_OUT (maintenir)"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "vue.grille"
+touches = ["Ctrl+G"]
+source = "Storyboard Pro 27 : DRAWING_SHOW_GRID_KEY"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "vue.pelure"
+touches = ["Alt+O"]
+source = "Storyboard Pro 27 : DRAWING_OS_TOGGLE_KEY"
+
+[[raccourci]]
+action = "vue.miroir"
+touches = ["M"]
+source = "proposition"
+
+[[raccourci]]
+action = "vue.planches"
+touches = ["Maj+Tab"]
+source = "proposition"
+
+[[raccourci]]
+action = "mode.basculer"
+touches = ["Tab"]
+source = "proposition"
+
+[[raccourci]]
+action = "aide.raccourcis"
+touches = ["F1"]
+source = "proposition"
+
+# ------------------------------------------------------------------------------------ Outils
+
+[[raccourci]]
+action = "outil.pinceau"
+touches = ["Alt+B"]
+source = "Storyboard Pro 27 : DRAWING_BRUSH_TOOL_KEY"
+
+[[raccourci]]
+action = "outil.crayon"
+touches = ["Alt+P"]
+source = "proposition"
+
+[[raccourci]]
+action = "outil.gomme"
+touches = ["Alt+E"]
+source = "Storyboard Pro 27 : DRAWING_ERASER_TOOL_KEY"
+
+[[raccourci]]
+action = "outil.remplissage"
+touches = ["Alt+I"]
+source = "Storyboard Pro 27 : DRAWING_PAINT_TOOL_KEY"
+
+[[raccourci]]
+action = "outil.peindre_non_peint"
+touches = ["Alt+Y"]
+source = "Storyboard Pro 27 : DRAWING_PAINT_UNPAINTED_TOOL_KEY"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "outil.pipette"
+touches = ["Alt+D"]
+source = "Storyboard Pro 27 : DRAWING_COLOR_DROPPER_TOOL_KEY"
+
+[[raccourci]]
+action = "outil.selection"
+touches = ["Alt+S"]
+source = "Storyboard Pro 27 : DRAWING_SELECT_TOOL_KEY"
+
+[[raccourci]]
+action = "outil.cutter"
+touches = ["Alt+T"]
+source = "Storyboard Pro 27 : DRAWING_CUTTER_TOOL_KEY"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "outil.pochoir"
+touches = []
+source = "perso : DRAWING_STENCIL_BRUSH_TOOL_KEY retiré (Alt+X par défaut dans Storyboard Pro 27)"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "outil.formes"
+touches = ["Alt+R"]
+source = "proposition"
+
+[[raccourci]]
+action = "outil.main"
+touches = ["H"]
+source = "proposition"
+
+[[raccourci]]
+action = "outil.epaisseur_crayon"
+touches = ["O"]
+source = "Storyboard Pro 27 : RESIZE_PEN_STYLE_TOOL_KEY"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "outil.taille_plus"
+touches = ["]"]
+source = "Storyboard Pro 27 : DRAWING_INCREMENT_BRUSH_SIZE"
+
+[[raccourci]]
+action = "outil.taille_moins"
+touches = ["["]
+source = "Storyboard Pro 27 : DRAWING_DECREMENT_BRUSH_SIZE"
+
+# ------------------------------------------------------------------------------------ Dessin
+
+[[raccourci]]
+action = "selection.miroir_h"
+touches = ["Alt+H"]
+source = "Storyboard Pro 27 : DRAWING_FLIP_HORIZONTAL_KEY"
+
+[[raccourci]]
+action = "selection.miroir_v"
+touches = ["Alt+V"]
+source = "Storyboard Pro 27 : DRAWING_FLIP_VERTICAL_KEY"
+
+[[raccourci]]
+action = "dessin.supprimer_hors_selection"
+touches = ["Maj+Suppr", "Maj+Retour arrière"]
+source = "Storyboard Pro 27 : DRAWING_DELETE_NON_SELECTION_KEY, DRAWING_DELETE_NON_SELECTION_BACKSPACE_KEY"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "dessin.aplatir"
+touches = ["Alt+Maj+F"]
+source = "Storyboard Pro 27 : DRAWING_FLATTEN"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "dessin.aimanter_contour"
+touches = ["Ctrl+Alt+;"]
+source = "Storyboard Pro 27 : DRAWING_SNAP_TO_CONTOUR"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "dessin.remplir_zones_auto"
+touches = ["Ctrl+Maj+R"]
+source = "Storyboard Pro 27 : DRAWING_AUTO_FILL_INSIDE_REGIONS"
+etat = "non implémenté"
+
+# ------------------------------------------------------------------------------------ Lecture et navigation
+
+[[raccourci]]
+action = "lecture.basculer"
+touches = ["Entrée"]
+source = "perso : TOGGLE_PLAYBACK_ALL_KEY"
+
+[[raccourci]]
+action = "image.precedente"
+touches = [","]
+source = "Storyboard Pro 27 : PREV_FRAME_KEY"
+
+[[raccourci]]
+action = "image.suivante"
+touches = ["."]
+source = "Storyboard Pro 27 : NEXT_FRAME_KEY"
+
+[[raccourci]]
+action = "image.precedente"
+touches = ["Flèche gauche"]
+source = "proposition (second raccourci)"
+
+[[raccourci]]
+action = "image.suivante"
+touches = ["Flèche droite"]
+source = "proposition (second raccourci)"
+
+[[raccourci]]
+action = "image.premiere"
+touches = ["Origine"]
+source = "Storyboard Pro 27 : FIRST_FRAME_KEY"
+
+[[raccourci]]
+action = "image.derniere"
+touches = ["Fin"]
+source = "Storyboard Pro 27 : LAST_FRAME_KEY"
+
+[[raccourci]]
+action = "montage.debut"
+touches = ["Ctrl+Origine"]
+source = "proposition"
+
+[[raccourci]]
+action = "montage.fin"
+touches = ["Ctrl+Fin"]
+source = "proposition"
+
+[[raccourci]]
+action = "panneau.precedent"
+touches = ["A"]
+source = "Storyboard Pro 27 : PREV_PANEL_KEY"
+
+[[raccourci]]
+action = "panneau.suivant"
+touches = ["F"]
+source = "Storyboard Pro 27 : NEXT_PANEL_KEY"
+
+[[raccourci]]
+action = "panneau.precedent"
+touches = ["PgPréc"]
+source = "proposition (second raccourci)"
+
+[[raccourci]]
+action = "panneau.suivant"
+touches = ["PgSuiv"]
+source = "proposition (second raccourci)"
+
+[[raccourci]]
+action = "scene.aller_a"
+touches = ["Ctrl+F"]
+source = "Storyboard Pro 27 : GOTO_SHOT_KEY"
+etat = "non implémenté"
+
+# ------------------------------------------------------------------------------------ Panneaux
+
+[[raccourci]]
+action = "panneau.nouveau"
+touches = ["P"]
+source = "Storyboard Pro 27 : NEW_PANEL_KEY"
+
+[[raccourci]]
+action = "panneau.nouveau"
+touches = ["Inser"]
+contexte = "storyboard"
+source = "proposition (second raccourci)"
+
+[[raccourci]]
+action = "panneau.ajouter_image"
+touches = ["+"]
+source = "Storyboard Pro 27 : ADD_FRAME_KEY"
+
+[[raccourci]]
+action = "panneau.retirer_image"
+touches = ["-"]
+source = "Storyboard Pro 27 : REMOVE_FRAME_KEY"
+
+[[raccourci]]
+action = "panneau.proprietes"
+touches = ["Alt+Entrée"]
+source = "Storyboard Pro 27 : SB_PROPERTIES_KEY"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "panneau.couper"
+touches = ["F5"]
+source = "perso : SPLIT_PANEL_KEY"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "panneau.supprimer"
+touches = ["Ctrl+Suppr"]
+contexte = "storyboard"
+source = "proposition"
+
+# ------------------------------------------------------------------------------------ Animation
+
+[[raccourci]]
+action = "dessin.nouveau"
+touches = ["Inser"]
+contexte = "animation"
+source = "proposition"
+
+[[raccourci]]
+action = "dessin.dupliquer"
+touches = ["Ctrl+D"]
+source = "proposition"
+
+[[raccourci]]
+action = "dessin.supprimer"
+touches = ["Ctrl+Suppr"]
+contexte = "animation"
+source = "proposition"
+
+[[raccourci]]
+action = "exposition.allonger"
+touches = ["Alt++"]
+source = "proposition"
+
+[[raccourci]]
+action = "exposition.raccourcir"
+touches = ["Alt+-"]
+source = "proposition"
+
+# ------------------------------------------------------------------------------------ Calques
+
+[[raccourci]]
+action = "calque.nouveau_vectoriel"
+touches = ["Maj+S"]
+source = "perso : ADD_VECTOR_LAYER_KEY"
+
+[[raccourci]]
+action = "calque.nouveau_bitmap"
+touches = ["Maj+B"]
+source = "proposition"
+
+[[raccourci]]
+action = "calque.copier"
+touches = ["W"]
+source = "perso : COPY_LAYERS_KEY"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "calque.coller"
+touches = ["X"]
+source = "perso : PASTE_LAYERS_KEY"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "calque.supprimer"
+touches = ["Q"]
+source = "perso : DELETE_LAYER_KEY"
+
+[[raccourci]]
+action = "calque.flou"
+touches = ["Maj+D"]
+source = "perso : BLUR_BITMAP_LAYER_KEY"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "calque.verrouiller"
+touches = ["Alt+L"]
+source = "Storyboard Pro 27 : LOCK_LAYER_KEY"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "calque.fusionner_dessous"
+touches = ["Ctrl+E"]
+source = "Storyboard Pro 27 : MERGE_DOWN_LAYERS"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "calque.reinit_transformation"
+touches = ["Ctrl+R"]
+source = "Storyboard Pro 27 : RESET_LAYER_TRANSFORM_KEY"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "calque.dessus"
+touches = ["Flèche haut"]
+source = "proposition"
+
+[[raccourci]]
+action = "calque.dessous"
+touches = ["Flèche bas"]
+source = "proposition"
+
+# ------------------------------------------------------------------------------------ Autres (en réserve)
+
+[[raccourci]]
+action = "clips.lier_au_panneau"
+touches = ["Ctrl+L"]
+source = "Storyboard Pro 27 : LINK_CLIP_AND_PANEL"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "reference.decharger"
+touches = ["Suppr"]
+source = "Storyboard Pro 27 : DRAWING_UNLOAD_MODEL_KEY (vue de référence)"
+etat = "non implémenté"
+
+[[raccourci]]
+action = "legende.chercher"
+touches = ["Ctrl+Maj+F"]
+source = "Storyboard Pro 27 : FIND_TEXT_KEY"
+etat = "non implémenté"

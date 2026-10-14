@@ -1,5 +1,5 @@
 use eframe::egui::{
-    self, pos2, vec2, Color32, CursorIcon, Event, Key, PointerButton, Pos2, Rect, Sense, Shape, Stroke,
+    self, pos2, vec2, Color32, CursorIcon, Event, PointerButton, Pos2, Rect, Sense, Shape, Stroke,
     StrokeKind, TouchPhase, Vec2,
 };
 
@@ -65,7 +65,7 @@ impl App {
                 i.smooth_scroll_delta,
                 i.zoom_delta(),
                 i.modifiers,
-                i.key_down(Key::Space),
+                self.keymap.held(i, "vue.pan_libre"),
                 i.pointer.primary_down(),
             )
         });
@@ -249,7 +249,7 @@ impl App {
         if self.modal_open() {
             return;
         }
-        let (space, alt) = ctx.input(|i| (i.key_down(Key::Space), i.modifiers.alt));
+        let (space, alt) = ctx.input(|i| (self.keymap.held(i, "vue.pan_libre"), i.modifiers.alt));
         if space || self.tool == Tool::Pan {
             ctx.set_cursor_icon(if response.dragged() {
                 CursorIcon::Grabbing

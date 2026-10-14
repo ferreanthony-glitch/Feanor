@@ -16,7 +16,7 @@ L'exécutable est ensuite dans `target\release\pelure.exe`. On peut lui passer u
 
 - **Storyboard** (au démarrage) : le film est une suite de plans. En bas, la bande de montage montre
   chaque plan avec sa vignette, sa largeur proportionnelle à sa durée.
-  - Créer, dupliquer, supprimer un plan (Inser, Ctrl+Suppr). On réordonne les plans en les faisant
+  - Créer, dupliquer, supprimer un plan (P ou Inser, Ctrl+Suppr). On réordonne les plans en les faisant
     glisser dans la bande, et on règle la durée en tirant le bord droit d'un plan.
   - « Lire le montage » enchaîne tous les plans (animatique), en boucle si on veut.
   - Chaque plan a un titre, une durée, et des champs Action / Dialogue / Notes (panneau de droite).
@@ -35,8 +35,8 @@ Chaque plan a ses calques, de deux sortes :
   - La gomme coupe les traits, ou retire des traits entiers en mode « traits entiers ».
   - Le pot de peinture crée une zone remplie qui passe sous les traits. Sur un trait ou une zone
     déjà peinte, il en change la couleur.
-  - Les formes (ligne, rectangle, ellipse, pleines ou non) se tracent avec U.
-  - L'outil Sélection (V) prend au clic ou au lasso (Maj pour ajouter). Ses poignées servent à
+  - Les formes (ligne, rectangle, ellipse, pleines ou non) se tracent avec l'outil Formes (Alt+R).
+  - L'outil Sélection (Alt+S) prend au clic ou au lasso (Maj pour ajouter). Ses poignées servent à
     déplacer, mettre à l'échelle (Maj : proportionnel) et tourner (Maj : par 15°). On peut aussi
     appliquer la couleur courante, épaissir, affiner, faire un miroir, passer devant ou derrière,
     supprimer. Copier, couper et coller (Ctrl+C/X/V) marchent d'un plan à l'autre.
@@ -51,12 +51,20 @@ Les traits vectoriels sont rendus à la résolution du projet : en zoomant très
 - **Tablette** : la pression module la taille et/ou l'opacité. Elle passe par Windows Ink : sur une
   Wacom, l'option « Utiliser Windows Ink » doit être cochée dans les propriétés de la tablette.
 - **Pelure d'oignon** : dessins précédents en rouge, suivants en vert.
-- **Vue** : zoom à la molette, rotation (Maj + molette, R), miroir (M), déplacement (Espace + glisser).
+- **Vue** : zoom à la molette (ou 1 / 2), rotation (Maj + molette, ou V / C), miroir (M),
+  déplacement (Espace + glisser).
 - **Annuler / rétablir** : 200 étapes, qui couvrent traits, vectoriel, plans, montage et calques.
 - **Export** : image courante, séquence PNG du plan ou de tout le montage, storyboard en page HTML
   imprimable (une planche par plan avec action, dialogue et notes ; à imprimer en PDF depuis le navigateur).
 
-F1 dans l'application affiche tous les raccourcis.
+## Raccourcis clavier
+
+Ils sont repris de Storyboard Pro 27 (raccourcis par défaut) et de tes réglages personnels, et
+rangés dans `keymap.toml`. F1 les affiche tous, avec leur origine. Pour les changer sans recompiler :
+« Aide > Modifier les raccourcis », puis « Aide > Recharger les raccourcis ». Détails et choix pour
+le clavier AZERTY : `docs/reference/sbpro_presets/README.md`.
+
+Documentation technique : `docs/ARCHITECTURE.md` ; avancement : `docs/ROADMAP.md`.
 
 ## Format `.pelure`
 
