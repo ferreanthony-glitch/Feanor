@@ -95,6 +95,11 @@ deux calques vectoriels restent vectoriels, sinon le résultat est bitmap ; les 
 
 - **Tablette** : la pression module la taille et/ou l'opacité. Elle passe par Windows Ink : sur une
   Wacom, l'option « Utiliser Windows Ink » doit être cochée dans les propriétés de la tablette.
+- **Pinceaux texturés** (calque bitmap, panneau Outils) : liste de réglages (pinceau rond, crayon à
+  papier, craie grasse, encre, gommes) ; « Papier » et « Grain » donnent un grain fixe sur le
+  dessin, que la couleur remplit quand on appuie. « Importer… » lit un fichier de pinceaux Toon
+  Boom (`.xml`, par exemple `STB_TextureBrushes_preset.xml`) : ses pinceaux, pointes et papiers
+  s'ajoutent à la liste et restent pour les fois suivantes.
 - **Pelure d'oignon** (Alt+O) : par défaut 3 dessins avant en rouge et 3 après en vert, de plus en
   plus pâles. Dans la timeline : nombre avant / après, et « Réglages… » (compter par dessin ou par
   image, opacité, teinte ou vraies couleurs, couleurs). Les réglages sont retenus pour la prochaine
@@ -173,7 +178,10 @@ ligne « Caméra » de la timeline et en petits losanges dans la bande de montag
 | `vector.rs` | Éléments vectoriels : rendu, sélection, transformations, gomme, contours de remplissage |
 | `pixsel.rs`, `pixtools.rs` | Sélection bitmap : zones, pixels soulevés, transformations ; outil |
 | `guides.rs` | Guides de perspective : géométrie, affichage, traits alignés |
-| `brush.rs` | Moteur de pinceau : empreintes, pression, lissage |
+| `brush.rs` | Moteur de pinceau : empreintes, pression, lissage, pointe en image, grain |
+| `brushtex.rs`, `brushui.rs` | Pointes, papiers, réglages nommés ; leur panneau |
+| `tbbrush.rs` | Import des pinceaux Toon Boom (XML) |
+| `onion.rs` | Pelure d'oignon |
 | `fill.rs` | Remplissage par zone et débord |
 | `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra |
 | `gpu.rs` | Composition et affichage par la carte graphique, envoi des dessins par tuiles |

@@ -148,6 +148,8 @@ pub struct App {
     pub(crate) brush: BrushSettings,
     pub(crate) pencil: BrushSettings,
     pub(crate) eraser: BrushSettings,
+    /// Pointes, papiers et réglages de pinceau (ceux de Pelure et les importés).
+    pub(crate) brushes: crate::brushtex::BrushLibrary,
     pub(crate) fill: FillSettings,
     pub(crate) shape: ShapeSettings,
     pub(crate) vector_erase_whole: bool,
@@ -283,6 +285,7 @@ impl App {
             brush: BrushSettings::brush(),
             pencil: BrushSettings::pencil(),
             eraser: BrushSettings::eraser(),
+            brushes: crate::brushtex::BrushLibrary::load(crate::brushtex::BrushLibrary::user_dir().as_deref()),
             fill: FillSettings::default(),
             shape: ShapeSettings {
                 kind: ShapeKind::Rect,
@@ -764,7 +767,8 @@ impl App {
         } else {
             StrokeMode::Paint(self.color)
         };
-        let mut stroke = StrokeState::new(cel, mode, settings, prefix, pen);
+        let textures = self.brushes.textures(&settings);
+        let mut stroke = StrokeState::new(cel, mode, settings, prefix, pen).with_textures(textures);
         let mut dirty = Vec::new();
         if let Some(c) = self.doc.cels.get_mut(&cel) {
             stroke.add_point(&mut c.raster, p, pressure, &mut dirty);

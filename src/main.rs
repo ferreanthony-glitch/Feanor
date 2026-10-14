@@ -5,6 +5,10 @@ mod audio;
 #[cfg(test)]
 mod audio_tests;
 mod brush;
+mod brushtex;
+#[cfg(test)]
+mod brushtex_tests;
+mod brushui;
 mod camera;
 #[cfg(test)]
 mod camera_tests;
@@ -52,6 +56,7 @@ mod soundtrack;
 #[cfg(test)]
 mod stage_tests;
 mod storyboard;
+mod tbbrush;
 #[cfg(test)]
 mod tests;
 mod thumbs;

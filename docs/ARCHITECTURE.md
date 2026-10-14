@@ -104,6 +104,25 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   séquences et de scènes, panneaux, pistes son). Les noms « Dessin / Vignettes » évitent la confusion
   avec la « scène » du découpage.
 
+## Pinceaux texturés (3d-2)
+
+- `brush.rs` : chaque empreinte calcule une couverture par pixel — disque (dureté) ou pointe en
+  image (`Tip`, échantillonnée dans le repère de la pointe : rondeur, angle, hasard), multipliée
+  par l'opacité (pression) et par le grain. Le trait garde le maximum par pixel (pas
+  d'accumulation dans un même trait), comme avant.
+- `brushtex.rs` : grain = papier en motif fixe sur le dessin (coordonnées du dessin, pas du
+  trait) ; un pixel reçoit la couleur si son relief dépasse un seuil qui baisse quand on appuie
+  (`grain_factor`). Papiers de Pelure fabriqués au démarrage (bruit fin réparti uniformément,
+  `procedural_paper`). Pointes : réductions successives (moyenne 2 × 2) pour qu'une petite pointe
+  reste lisse. `BrushLibrary` : textures et réglages nommés ; les importés sont gardés dans
+  `%APPDATA%\Pelure\pinceaux` (`pinceaux.json` + textures PNG en gris). Les réglages
+  (`BrushSettings`, sérialisés en français) ne citent les textures que par numéro.
+- `tbbrush.rs` : lecture des préréglages Toon Boom — petit lecteur XML maison (le format n'a que
+  des balises et des attributs `value`), textures `bundledFile` en hexadécimal (en-tête de
+  18 octets, gris 8 bits, lignes alignées sur 4 octets). Correspondance des réglages et
+  hypothèses en tête du fichier. Coût d'un vrai lecteur XML : une bibliothèque à télécharger,
+  inutile ici ; réversible.
+
 ## Pelure d'oignon (3d-1)
 
 - `onion.rs` : voisins du dessin courant, sur le calque courant, posés sous lui dans le plan de

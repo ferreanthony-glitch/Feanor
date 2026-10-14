@@ -46,7 +46,15 @@ fn brush_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
     ui.add(egui::Slider::new(&mut s.spacing, 0.02..=1.0).text("Espacement"));
     ui.add(egui::Slider::new(&mut s.smoothing, 0.0..=0.95).text("Lissage"));
     ui.checkbox(&mut s.pressure_size, "Taille selon la pression");
+    if s.pressure_size {
+        ui.add(egui::Slider::new(&mut s.min_size, 0.0..=1.0).text("Taille mini"))
+            .on_hover_text("Taille quand on effleure, en part de la taille");
+    }
     ui.checkbox(&mut s.pressure_opacity, "Opacité selon la pression");
+    if s.pressure_opacity {
+        ui.add(egui::Slider::new(&mut s.min_opacity, 0.0..=1.0).text("Opacité mini"))
+            .on_hover_text("Opacité quand on effleure, en part de l'opacité");
+    }
     if !vector {
         ui.checkbox(&mut s.aliased, "Pixels nets (sans anticrénelage)");
     }
@@ -300,11 +308,16 @@ impl App {
                     .weak(),
             );
         });
+        // Réglages nommés, papier et grain : sur un calque bitmap seulement.
+        if matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser) && !vector {
+            self.brush_library_ui(ui);
+        }
         match self.tool {
             Tool::Brush => {
                 brush_ui(ui, &mut self.brush, vector);
                 if vector {
-                    note(ui, "Le trait reste modifiable avec l'outil Sélection (V).");
+                    note(ui, "Le trait reste modifiable avec l'outil Sélection (V). Grain et pointes en \
+                              image : sur un calque bitmap.");
                 }
             }
             Tool::Pencil => {

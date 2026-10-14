@@ -93,7 +93,7 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
     étape. Pas encore : déplacer la caméra depuis cette vue, vue de côté, vraie vue 3D.
 - ⏳ 2d. Import glTF de repère.
 
-## Phase 3 — Animatique et animation 🔧
+## Phase 3 — Animatique et animation ✅
 
 - ✅ 3a. Lecture fluide. Mesuré sur un montage lourd (20 panneaux, 3 calques bitmap chargés,
   cadre 1920×1080) : chaque changement de panneau figeait l'image 45 à 75 ms (envoi des dessins
@@ -120,13 +120,22 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
   français ; images JPEG) ; vérifié avec un lecteur PDF tiers (PDF.js). Commande de Storyboard
   Pro 27 reprise sans touche : PDF_EXPORT_KEY. Pas encore : autres mises en page, police au
   choix, caractères hors de l'alphabet latin (remplacés par « ? »).
-- 🔧 3d. Animation à la TVPaint (rendu visé : TVPaint, pas Storyboard Pro — choix d'Anthony).
+- ✅ 3d. Animation à la TVPaint (rendu visé : TVPaint, pas Storyboard Pro — choix d'Anthony).
   - ✅ 3d-1. Pelure d'oignon : valeurs par défaut reprises des préférences Storyboard Pro
     d'Anthony (3 avant en rouge, 3 après en vert, teintées, sous le dessin) ; compter par dessin
     ou par image ; jusqu'à 12 de chaque côté ; opacité du plus proche, puis de plus en plus pâle ;
     teinte ou vraies couleurs ; couleurs au choix ; réglages retenus d'une séance à l'autre.
     Pas encore : pelure à travers les panneaux, sur tous les calques.
-  - ⏳ 3d-2. Pinceaux texturés (grain du papier) ; essai d'import des 9 pinceaux perso.
+  - ✅ 3d-2. Pinceaux texturés : grain du papier fixe sur le dessin (appuyer remplit les creux),
+    pointes en image (avec réductions pour les petites tailles), pointe aplatie / tournée,
+    variations au hasard (angle, taille), taille et opacité mini sous la pression. Réglages
+    nommés dans le panneau Outils : 6 de Pelure (pinceau rond, crayon à papier, craie grasse,
+    encre, gomme, gomme à grain) et import d'un fichier de pinceaux Toon Boom (XML
+    `penstyles`) : les 9 pinceaux perso d'Anthony passent (3 pointes, 3 papiers), gardés dans
+    %APPDATA%\Pelure\pinceaux. Rendu de Pelure (visé : TVPaint), pas celui de Storyboard Pro.
+    Hypothèses d'échelle non vérifiées (dureté sur 0–5, taille en pixels) : voir `tbbrush.rs`.
+    Pas encore : mélange des couleurs (peinture humide), double pointe, inclinaison du stylet,
+    grain sur les calques vectoriels.
 - ⏸ Export XML Toon Boom : non prévu (format propriétaire non documenté).
 
 ## Phase 4 — Confort ⏳

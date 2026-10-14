@@ -1,27 +1,65 @@
 use std::collections::HashMap;
 
 use eframe::egui::{Color32, Pos2};
+use serde::{Deserialize, Serialize};
 
+use crate::brushtex::{grain_factor, BrushTextures};
 use crate::document::CelId;
 use crate::history::Edit;
 use crate::raster::{Raster, Tile, TILE, TILE_PIXELS};
 use crate::vector::VPoint;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
+#[serde(default)]
 pub struct BrushSettings {
     /// Diamètre en pixels.
+    #[serde(rename = "taille")]
     pub size: f32,
+    #[serde(rename = "opacite")]
     pub opacity: f32,
     /// 0 = bord très flou, 1 = bord net.
+    #[serde(rename = "durete")]
     pub hardness: f32,
     /// Distance entre deux empreintes, en fraction du diamètre.
+    #[serde(rename = "espacement")]
     pub spacing: f32,
     /// Stabilisation du trait (0 = aucune).
+    #[serde(rename = "lissage")]
     pub smoothing: f32,
+    #[serde(rename = "pression_taille")]
     pub pressure_size: bool,
+    #[serde(rename = "pression_opacite")]
     pub pressure_opacity: bool,
     /// Pixels francs, sans anticrénelage (crayon).
+    #[serde(rename = "pixels_nets")]
     pub aliased: bool,
+    /// Taille (en part de la taille) et opacité quand on effleure, si elles suivent la pression.
+    #[serde(rename = "taille_min")]
+    pub min_size: f32,
+    #[serde(rename = "opacite_min")]
+    pub min_opacity: f32,
+    /// Force du grain du papier (0 = papier lisse).
+    pub grain: f32,
+    /// Papier et pointe en image (numéros dans `BrushLibrary`) ; pas de pointe : pointe ronde.
+    #[serde(rename = "papier")]
+    pub paper: Option<u32>,
+    #[serde(rename = "pointe")]
+    pub tip: Option<u32>,
+    /// Pointe aplatie (1 = ronde) et tournée de `angle` degrés, plus un hasard de ± `angle_jitter`/2.
+    #[serde(rename = "rondeur")]
+    pub roundness: f32,
+    pub angle: f32,
+    #[serde(rename = "angle_hasard")]
+    pub angle_jitter: f32,
+    /// Variation de taille au hasard, en part de la taille.
+    #[serde(rename = "taille_hasard")]
+    pub size_jitter: f32,
+}
+
+impl Default for BrushSettings {
+    fn default() -> Self {
+        Self::brush()
+    }
 }
 
 impl BrushSettings {
@@ -35,32 +73,35 @@ impl BrushSettings {
             pressure_size: true,
             pressure_opacity: false,
             aliased: false,
+            min_size: 0.0,
+            min_opacity: 0.0,
+            grain: 0.0,
+            paper: None,
+            tip: None,
+            roundness: 1.0,
+            angle: 0.0,
+            angle_jitter: 0.0,
+            size_jitter: 0.0,
         }
     }
 
     pub fn pencil() -> Self {
         Self {
             size: 2.0,
-            opacity: 1.0,
             hardness: 1.0,
             spacing: 0.1,
             smoothing: 0.0,
-            pressure_size: true,
-            pressure_opacity: false,
             aliased: true,
+            ..Self::brush()
         }
     }
 
     pub fn eraser() -> Self {
         Self {
             size: 24.0,
-            opacity: 1.0,
             hardness: 0.7,
-            spacing: 0.08,
             smoothing: 0.2,
-            pressure_size: true,
-            pressure_opacity: false,
-            aliased: false,
+            ..Self::brush()
         }
     }
 }
@@ -91,6 +132,10 @@ pub struct StrokeState {
     smoothed: Option<Pos2>,
     raw: Option<(Pos2, f32)>,
     since_dab: f32,
+    /// Pointe et papier en image (aucun : pointe ronde, papier lisse).
+    textures: BrushTextures,
+    /// Hasard (angle, taille des empreintes), le même à chaque fois pour un même trait.
+    rng: u32,
 }
 
 impl StrokeState {
@@ -114,7 +159,25 @@ impl StrokeState {
             smoothed: None,
             raw: None,
             since_dab: 0.0,
+            textures: BrushTextures::default(),
+            rng: 0x9E37_79B9,
         }
+    }
+
+    /// Pointe et papier du trait (pinceaux texturés).
+    pub fn with_textures(mut self, textures: BrushTextures) -> Self {
+        self.textures = textures;
+        self
+    }
+
+    /// Nombre au hasard entre -0,5 et 0,5.
+    fn jitter(&mut self) -> f32 {
+        let mut x = self.rng;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        self.rng = x;
+        (x as f32 / u32::MAX as f32) - 0.5
     }
 
     pub fn add_point(&mut self, raster: &mut Raster, pos: Pos2, pressure: f32, dirty: &mut Vec<usize>) {
@@ -156,7 +219,8 @@ impl StrokeState {
 
     fn size_factor(&self, pressure: f32) -> f32 {
         if self.settings.pressure_size {
-            pressure.clamp(0.0, 1.0).max(0.03)
+            let min = self.settings.min_size.clamp(0.0, 1.0);
+            (min + (1.0 - min) * pressure.clamp(0.0, 1.0)).max(0.03)
         } else {
             1.0
         }
@@ -200,8 +264,12 @@ impl StrokeState {
         let s = self.settings;
         let mode = self.mode;
         let mut radius = s.size * 0.5 * self.size_factor(pressure);
+        if s.size_jitter > 0.0 {
+            radius *= (1.0 + s.size_jitter * 2.0 * self.jitter()).max(0.05);
+        }
         let mut flow = if s.pressure_opacity {
-            pressure.clamp(0.0, 1.0)
+            let min = s.min_opacity.clamp(0.0, 1.0);
+            min + (1.0 - min) * pressure.clamp(0.0, 1.0)
         } else {
             1.0
         };
@@ -216,14 +284,40 @@ impl StrokeState {
             return;
         }
         let inner = (radius * s.hardness.clamp(0.0, 1.0)).min(radius - 0.5).max(0.0);
+        // Pointe aplatie ou tournée : on mesure chaque pixel dans le repère de la pointe.
+        let angle = (s.angle + s.angle_jitter * self.jitter()).to_radians();
+        let (sin, cos) = angle.sin_cos();
+        let squash = s.roundness.clamp(0.05, 1.0);
+        let shaped = squash < 1.0 || self.textures.tip.is_some();
+        let tip = self.textures.tip.clone();
+        let tip = tip.as_ref().map(|t| t.level(radius * 2.0));
+        let paper = self.textures.paper.clone().filter(|_| s.grain > 0.0);
+        // Une pointe en image tournée déborde du cercle : on couvre le carré qui la contient.
+        let reach = if tip.is_some() { radius * std::f32::consts::SQRT_2 } else { radius };
 
-        let x0 = (c.x - radius - 1.0).floor().max(0.0) as usize;
-        let y0 = (c.y - radius - 1.0).floor().max(0.0) as usize;
-        let x1 = (c.x + radius + 1.0).ceil().clamp(0.0, raster.width as f32) as usize;
-        let y1 = (c.y + radius + 1.0).ceil().clamp(0.0, raster.height as f32) as usize;
+        let x0 = (c.x - reach - 1.0).floor().max(0.0) as usize;
+        let y0 = (c.y - reach - 1.0).floor().max(0.0) as usize;
+        let x1 = (c.x + reach + 1.0).ceil().clamp(0.0, raster.width as f32) as usize;
+        let y1 = (c.y + reach + 1.0).ceil().clamp(0.0, raster.height as f32) as usize;
         if x0 >= x1 || y0 >= y1 {
             return;
         }
+        // Couverture d'un pixel par l'empreinte, à (dx, dy) de son centre.
+        let footprint = |dx: f32, dy: f32| -> f32 {
+            let (lx, ly) = if shaped {
+                (dx * cos + dy * sin, (-dx * sin + dy * cos) / squash)
+            } else {
+                (dx, dy)
+            };
+            match tip {
+                Some(img) => {
+                    let u = (lx / (2.0 * radius) + 0.5) * img.width as f32;
+                    let v = (ly / (2.0 * radius) + 0.5) * img.height as f32;
+                    img.sample(u, v)
+                }
+                None => coverage((lx * lx + ly * ly).sqrt(), radius, inner, s.aliased),
+            }
+        };
 
         for ty in y0 / TILE..=(y1 - 1) / TILE {
             for tx in x0 / TILE..=(x1 - 1) / TILE {
@@ -246,8 +340,13 @@ impl StrokeState {
                     let dy = py as f32 + 0.5 - c.y;
                     for px in x0.max(ox)..x1.min(ox + TILE) {
                         let dx = px as f32 + 0.5 - c.x;
-                        let cov = coverage((dx * dx + dy * dy).sqrt(), radius, inner, s.aliased);
-                        let v = cov * flow;
+                        let cov = footprint(dx, dy);
+                        if cov <= 0.0 {
+                            continue;
+                        }
+                        // Grain du papier, fixe sur le dessin.
+                        let grain = paper.as_ref().map_or(1.0, |p| grain_factor(p.tiled(px, py), pressure, s.grain));
+                        let v = cov * flow * grain;
                         let i = (py - oy) * TILE + (px - ox);
                         if v <= mask[i] {
                             continue;
