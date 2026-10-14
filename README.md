@@ -114,8 +114,9 @@ deux calques vectoriels restent vectoriels, sinon le résultat est bitmap ; les 
     Une barre de progression indique le temps restant ; « Annuler » arrête et efface la vidéo
     inachevée. La vidéo est fabriquée par **ffmpeg**, que Pelure cherche sur le poste (il est
     installé avec Krita, par exemple) ; « Choisir un autre ffmpeg… » sinon.
-  - Image courante (PNG), et storyboard en page HTML imprimable (une planche par panneau, rangées
-    par séquence ; à imprimer en PDF depuis le navigateur).
+  - « Exporter le storyboard (PDF)… » : planches A4 paysage, 6 panneaux par page, avec titre,
+    durée, action, dialogue et notes ; une nouvelle page à chaque séquence.
+  - Image courante (PNG), et storyboard en page HTML (une planche par panneau).
 
 ## Raccourcis clavier
 
@@ -174,7 +175,8 @@ ligne « Caméra » de la timeline et en petits losanges dans la bande de montag
 | `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra |
 | `gpu.rs` | Composition et affichage par la carte graphique, envoi des dessins par tuiles |
 | `playback.rs` | Lecture fluide : dessins envoyés d'avance, cadence affichée |
-| `export.rs`, `exportui.rs` | Exports : film (ffmpeg), images, son ; fenêtres de choix et de progression |
+| `export.rs`, `exportui.rs` | Exports : film (ffmpeg), images, son, PDF ; fenêtres de choix et de progression |
+| `pdf.rs` | Écriture du PDF de storyboard : texte, images, mise en page |
 | `settings.rs` | Réglages de l'application (emplacement de ffmpeg) |
 | `camera.rs`, `camtools.rs` | Caméra du panneau : images clés, courbes ; outil Caméra, vue caméra |
 | `layertools.rs` | Outil Transformer (calque entier) |

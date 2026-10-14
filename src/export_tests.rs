@@ -47,7 +47,7 @@ fn camera_image_reference(doc: &Document, plan: &Plan, cam: &Camera) -> Vec<Colo
 
 /// Cadre 150×90 (feuille 300×180, pas un multiple de 64) ; deux calques avec un motif, dont un
 /// transformé ; `panels` panneaux de `len` images.
-fn doc_with_drawing(panels: usize, len: usize) -> Document {
+pub(crate) fn doc_with_drawing(panels: usize, len: usize) -> Document {
     let mut doc = Document::with_frame(150, 90, 12);
     for _ in 1..panels {
         let n = doc.panels.len() - 1;

@@ -112,7 +112,14 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
   fenêtre figée). Couleurs vérifiées (BT.709). Commandes de Storyboard Pro 27 reprises sans
   touche : MOVIE_EXPORT_KEY, BITMAP_EXPORT_KEY, SOUNDTRACK_EXPORT_KEY, EXPORT_CURRENT_IMAGE_KEY.
   Pas encore : choix de la qualité, images JPEG, export EDL/AAF/XML.
-- ⏳ 3c. PDF de storyboard : planches avec action, dialogue, notes.
+- ✅ 3c. PDF de storyboard (Fichier > Exporter le storyboard (PDF), ou dans la fenêtre
+  d'export) : A4 paysage, 6 panneaux par page (2 rangées de 3), image de début de panneau vue
+  par la caméra, titre et durée, puis action, dialogue, notes sous l'image (« … » si le texte
+  ne tient pas) ; nouvelle page à chaque séquence ; en-tête : projet, séquence, page n / N.
+  Montage, scène ou panneau. Fabriqué sans bibliothèque (police standard Helvetica, accents
+  français ; images JPEG) ; vérifié avec un lecteur PDF tiers (PDF.js). Commande de Storyboard
+  Pro 27 reprise sans touche : PDF_EXPORT_KEY. Pas encore : autres mises en page, police au
+  choix, caractères hors de l'alphabet latin (remplacés par « ? »).
 - ⏳ 3d. Animation à la TVPaint : pelure d'oignon plus réglable, pinceaux (essai d'import des
   9 pinceaux perso).
 - ⏸ Export XML Toon Boom : non prévu (format propriétaire non documenté).

@@ -70,7 +70,13 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   d'écriture PNG, ou vers un fil qui les verse dans l'entrée de ffmpeg (images RGBA brutes). Le
   son est mixé d'avance (`MixState`, hors carte son) dans un WAV temporaire que ffmpeg lit à
   côté. Couleurs converties et étiquetées BT.709 ; tailles impaires rognées d'un pixel (les codecs
-  veulent des tailles paires). ffmpeg n'est pas fourni : cherché sur le poste, ou choisi
+  veulent des tailles paires). Le PDF (3c) passe par la même file : un fil réduit chaque image
+  (800 px, Lanczos) en JPEG, puis `pdf.rs` met en page et écrit le fichier à la fin.
+- **PDF** (`pdf.rs`) : écrit à la main (en-tête, objets, table des positions), PDF 1.4. Polices
+  standard Helvetica / Helvetica-Bold en WinAnsi : rien à embarquer, lisibles partout, accents
+  français compris ; largeurs des caractères d'après leurs métriques publiées, pour couper les
+  lignes. Coût : pas de police au choix ni d'écritures non latines — il faudrait alors embarquer
+  une police TrueType (bibliothèque à ajouter, réversible : seul `pdf.rs` change). ffmpeg n'est pas fourni : cherché sur le poste, ou choisi
   (`settings.rs`, `%APPDATA%\Pelure\reglages.toml`), lancé sans fenêtre de console. Annuler ou
   quitter pendant un export arrête ffmpeg et efface la vidéo inachevée.
 - **Annuler / rétablir** (`history.rs`) : chaque modification enregistre l'état d'avant, **avant**

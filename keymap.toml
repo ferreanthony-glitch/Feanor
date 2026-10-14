@@ -74,6 +74,11 @@ touches = []
 source = "Storyboard Pro 27 sans touche par défaut : SOUNDTRACK_EXPORT_KEY"
 
 [[raccourci]]
+action = "fichier.exporter_pdf"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : PDF_EXPORT_KEY"
+
+[[raccourci]]
 action = "fichier.exporter_image_courante"
 touches = []
 source = "Storyboard Pro 27 sans touche par défaut : EXPORT_CURRENT_IMAGE_KEY"

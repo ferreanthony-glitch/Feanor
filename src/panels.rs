@@ -76,6 +76,7 @@ impl App {
                 self.action_item(ui, "Exporter le film (vidéo)…", "fichier.exporter_film");
                 self.action_item(ui, "Exporter des images (PNG)…", "fichier.exporter_images");
                 self.action_item(ui, "Exporter le son (WAV)…", "fichier.exporter_son");
+                self.action_item(ui, "Exporter le storyboard (PDF)…", "fichier.exporter_pdf");
                 self.action_item(ui, "Exporter l'image courante (PNG)…", "fichier.exporter_image_courante");
                 if menu_item(ui, "Exporter le storyboard (page HTML + planches)…", "") {
                     self.export_storyboard();

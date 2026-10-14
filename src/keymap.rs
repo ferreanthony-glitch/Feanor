@@ -43,6 +43,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("fichier.exporter_film", "Exporter le film (vidéo)", true, false),
     act("fichier.exporter_images", "Exporter des images (PNG)", true, false),
     act("fichier.exporter_son", "Exporter le son (WAV)", true, false),
+    act("fichier.exporter_pdf", "Exporter le storyboard (PDF)", true, false),
     act("fichier.exporter_image_courante", "Exporter l'image courante (PNG)", true, false),
     act("edition.annuler", "Annuler", true, true),
     act("edition.retablir", "Rétablir", true, true),

@@ -1725,6 +1725,7 @@ impl App {
             "fichier.exporter_film" => self.open_export(crate::export::Format::Mp4),
             "fichier.exporter_images" => self.open_export(crate::export::Format::Png),
             "fichier.exporter_son" => self.open_export(crate::export::Format::Wav),
+            "fichier.exporter_pdf" => self.open_export(crate::export::Format::Pdf),
             "fichier.exporter_image_courante" => self.export_frame(),
             "edition.annuler" => self.undo(),
             "edition.retablir" => self.redo(),

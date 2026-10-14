@@ -31,6 +31,9 @@ mod keymap_tests;
 #[cfg(test)]
 mod ops_tests;
 mod panels;
+mod pdf;
+#[cfg(test)]
+mod pdf_tests;
 mod playback;
 #[cfg(test)]
 mod playback_tests;

@@ -90,6 +90,7 @@ impl App {
                     ui.radio_value(&mut s.format, Format::ProRes, "Film MOV (ProRes 422 HQ) : pour le montage");
                     ui.radio_value(&mut s.format, Format::Png, "Images PNG (une par image)");
                     ui.radio_value(&mut s.format, Format::Wav, "Son seul (WAV)");
+                    ui.radio_value(&mut s.format, Format::Pdf, "Storyboard PDF (A4 paysage, 6 panneaux par page)");
                 });
                 ui.end_row();
                 ui.label("Étendue");
@@ -187,6 +188,12 @@ impl App {
                 let Some(dir) = Self::pick_folder("Dossier où exporter les images") else { return };
                 self.export_job = Some(ExportJob::images(&dir, &base, frames, self.doc.frame, !s.transparent));
             }
+            Format::Pdf => {
+                let Some(out) = save_dialog(&base, Format::Pdf) else { return };
+                let panels = export::panels_of(&frames);
+                let boards = panels.iter().map(|&p| export::board_of(&self.doc, p)).collect();
+                self.export_job = Some(ExportJob::pdf(&out, &base, &panels, boards, self.doc.frame));
+            }
             Format::Mp4 | Format::ProRes => {
                 let Some((ffmpeg, Ok(enc))) = self.ffmpeg_info().cloned() else {
                     self.status = "Export impossible : ffmpeg introuvable ou inutilisable.".into();
@@ -232,7 +239,7 @@ impl App {
             match job.progress() {
                 Progress::Running(done, total) => {
                     ui.add(egui::ProgressBar::new(done as f32 / total.max(1) as f32).show_percentage());
-                    let mut text = format!("Image {done} sur {total}");
+                    let mut text = format!("{} {done} sur {total}", job.unit);
                     if let Some(rest) = job.remaining() {
                         let s = rest.as_secs();
                         text += &format!(" · reste environ {}:{:02}", s / 60, s % 60);
@@ -294,6 +301,7 @@ fn save_dialog(base: &str, format: Format) -> Option<PathBuf> {
     let (title, filter) = match format {
         Format::Mp4 => ("Exporter le film", "Vidéo MP4"),
         Format::ProRes => ("Exporter le film", "Vidéo MOV (ProRes)"),
+        Format::Pdf => ("Exporter le storyboard", "Document PDF"),
         _ => ("Exporter le son", "Son WAV"),
     };
     let mut path = rfd::FileDialog::new()

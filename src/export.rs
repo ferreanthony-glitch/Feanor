@@ -8,6 +8,7 @@
 use std::io::{BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -18,6 +19,7 @@ use eframe::egui::Color32;
 use crate::audio::{self, MixClip, MixState};
 use crate::camera::Camera;
 use crate::document::Document;
+use crate::pdf;
 use crate::render::{self, Plan};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -30,6 +32,8 @@ pub enum Format {
     Png,
     /// Son seul, WAV 48 kHz 16 bits stéréo.
     Wav,
+    /// Storyboard PDF : planches A4 paysage, 6 panneaux par page.
+    Pdf,
 }
 
 impl Format {
@@ -39,6 +43,7 @@ impl Format {
             Format::ProRes => "mov",
             Format::Png => "png",
             Format::Wav => "wav",
+            Format::Pdf => "pdf",
         }
     }
 
@@ -330,6 +335,66 @@ enum Sink {
         /// Son mixé, à effacer à la fin.
         wav: Option<PathBuf>,
     },
+    /// Storyboard PDF : un fil réduit chaque image en JPEG, puis écrit le fichier à la fin.
+    Pdf {
+        tx: Option<SyncSender<(usize, Image)>>,
+        writer: Option<JoinHandle<Result<(), String>>>,
+        cancelled: Arc<AtomicBool>,
+    },
+}
+
+/// Largeur des images du PDF, en pixels : ~220 points par pouce dans une case de 3,5 pouces.
+const PDF_IMAGE_WIDTH: u32 = 800;
+
+/// Image d'un panneau pour le PDF : sur fond blanc, réduite, en JPEG.
+pub fn board_image(img: &[Color32], size: [usize; 2]) -> Result<pdf::BoardImage, String> {
+    let [w, h] = size;
+    let rgb: Vec<u8> = img
+        .iter()
+        .flat_map(|c| {
+            // Couleurs prémultipliées posées sur du blanc.
+            let white = 255 - c.a();
+            [c.r().saturating_add(white), c.g().saturating_add(white), c.b().saturating_add(white)]
+        })
+        .collect();
+    let mut image = image::RgbImage::from_raw(w as u32, h as u32, rgb).ok_or("image invalide")?;
+    if image.width() > PDF_IMAGE_WIDTH {
+        let nh = ((image.height() as f32 * PDF_IMAGE_WIDTH as f32 / image.width() as f32).round() as u32).max(1);
+        image = image::imageops::resize(&image, PDF_IMAGE_WIDTH, nh, image::imageops::FilterType::Lanczos3);
+    }
+    let mut jpeg = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 88)
+        .encode(image.as_raw(), image.width(), image.height(), image::ExtendedColorType::Rgb8)
+        .map_err(|e| e.to_string())?;
+    Ok(pdf::BoardImage {
+        width: image.width(),
+        height: image.height(),
+        jpeg,
+    })
+}
+
+/// Panneaux (une fois chacun, dans l'ordre) des images `frames`.
+pub fn panels_of(frames: &[(usize, usize)]) -> Vec<usize> {
+    let mut out: Vec<usize> = Vec::new();
+    for &(p, _) in frames {
+        if out.last() != Some(&p) {
+            out.push(p);
+        }
+    }
+    out
+}
+
+/// Ce que le PDF écrit du panneau `index`.
+pub fn board_of(doc: &Document, index: usize) -> pdf::Board {
+    let panel = &doc.panels[index];
+    pdf::Board {
+        title: crate::storyboard::panel_long_title(doc, index),
+        duration: crate::storyboard::duration_label(panel.frame_count(), doc.fps),
+        sequence: doc.sequence_label(doc.sequence_of(index)),
+        action: panel.action.clone(),
+        dialogue: panel.dialogue.clone(),
+        notes: panel.notes.clone(),
+    }
 }
 
 enum Sent {
@@ -349,6 +414,10 @@ impl Sink {
                 TrySendError::Full(img) => Some(img),
                 TrySendError::Disconnected(_) => None,
             }),
+            Sink::Pdf { tx: Some(tx), .. } => tx.try_send((index, img)).map_err(|e| match e {
+                TrySendError::Full((_, img)) => Some(img),
+                TrySendError::Disconnected(_) => None,
+            }),
             _ => Err(None),
         };
         match result {
@@ -363,6 +432,7 @@ impl Sink {
         match self {
             Sink::Png { tx, .. } => *tx = None,
             Sink::Video { tx, .. } => *tx = None,
+            Sink::Pdf { tx, .. } => *tx = None,
         }
     }
 
@@ -406,11 +476,21 @@ impl Sink {
                     })
                 })
             }
+            Sink::Pdf { writer, .. } => {
+                if writer.as_ref().is_some_and(|w| !w.is_finished()) {
+                    return None;
+                }
+                Some(writer.take().map_or(Ok(()), |w| w.join().unwrap_or(Err("écriture interrompue".into()))))
+            }
         }
     }
 
     /// Arrêt immédiat (annulation, fermeture).
     fn abort(&mut self) {
+        // Avant de fermer la file : le fil du PDF ne doit pas prendre la fin pour un export fini.
+        if let Sink::Pdf { cancelled, .. } = self {
+            cancelled.store(true, Ordering::Relaxed);
+        }
         self.close();
         match self {
             Sink::Png { workers, .. } => {
@@ -431,6 +511,11 @@ impl Sink {
                     let _ = std::fs::remove_file(w);
                 }
             }
+            Sink::Pdf { writer, .. } => {
+                if let Some(w) = writer.take() {
+                    let _ = w.join();
+                }
+            }
         }
     }
 }
@@ -447,6 +532,8 @@ pub enum Progress {
 /// Un export en cours.
 pub struct ExportJob {
     pub title: String,
+    /// Ce qu'on compte dans la progression (« Image », « Panneau »).
+    pub unit: &'static str,
     /// Fichier ou dossier produit.
     pub target: PathBuf,
     frames: Vec<(usize, usize)>,
@@ -539,8 +626,46 @@ impl ExportJob {
         ))
     }
 
+    /// Storyboard PDF `out` : une planche par panneau de `boards` (image de début de panneau).
+    pub fn pdf(out: &Path, title: &str, panels: &[usize], boards: Vec<pdf::Board>, frame: [usize; 2]) -> ExportJob {
+        let (tx, rx) = sync_channel::<(usize, Image)>(QUEUE);
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let (stop, path, name) = (cancelled.clone(), out.to_path_buf(), title.to_string());
+        let n = boards.len();
+        let writer = std::thread::spawn(move || -> Result<(), String> {
+            let mut images: Vec<Option<pdf::BoardImage>> = (0..n).map(|_| None).collect();
+            for (i, img) in rx {
+                if stop.load(Ordering::Relaxed) {
+                    return Err("annulé".into());
+                }
+                images[i] = Some(board_image(&img, frame)?);
+            }
+            if stop.load(Ordering::Relaxed) {
+                return Err("annulé".into());
+            }
+            let images: Vec<pdf::BoardImage> = images.into_iter().collect::<Option<_>>().ok_or("image manquante")?;
+            let aspect = frame[0] as f32 / frame[1].max(1) as f32;
+            let bytes = pdf::storyboard(&name, &boards, &images, aspect);
+            std::fs::write(&path, bytes).map_err(|e| format!("{} : {e}", path.display()))
+        });
+        let mut job = ExportJob::new(
+            format!("Export du storyboard ({n} panneaux)"),
+            out.to_path_buf(),
+            panels.iter().map(|&p| (p, 0)).collect(),
+            true,
+            Sink::Pdf {
+                tx: Some(tx),
+                writer: Some(writer),
+                cancelled,
+            },
+        );
+        job.unit = "Panneau";
+        job
+    }
+
     fn new(title: String, target: PathBuf, frames: Vec<(usize, usize)>, paper: bool, sink: Sink) -> ExportJob {
         ExportJob {
+            unit: "Image",
             title,
             target,
             frames,
@@ -609,7 +734,8 @@ impl ExportJob {
         self.sink.close();
         if let Some(result) = self.sink.poll() {
             let n = self.frames.len();
-            self.outcome = Some(result.map(|()| format!("{n} images exportées : {}", self.target.display())));
+            let what = if self.unit == "Panneau" { "panneaux exportés" } else { "images exportées" };
+            self.outcome = Some(result.map(|()| format!("{n} {what} : {}", self.target.display())));
         }
     }
 
@@ -619,7 +745,7 @@ impl ExportJob {
             return;
         }
         self.sink.abort();
-        if matches!(self.sink, Sink::Video { .. }) {
+        if matches!(self.sink, Sink::Video { .. } | Sink::Pdf { .. }) {
             let _ = std::fs::remove_file(&self.target);
         }
         self.outcome = Some(Err("Export annulé.".into()));
