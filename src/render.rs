@@ -171,6 +171,10 @@ pub struct Renderer {
     dirty_all: bool,
     dirty: Vec<bool>,
     any_dirty: bool,
+    /// Composition par la carte graphique (`gpu.rs`) : les changements lui sont aussi transmis.
+    gpu: bool,
+    gpu_all: bool,
+    gpu_tiles: Vec<usize>,
 }
 
 impl Renderer {
@@ -184,11 +188,19 @@ impl Renderer {
             dirty_all: true,
             dirty: Vec::new(),
             any_dirty: false,
+            gpu: false,
+            gpu_all: true,
+            gpu_tiles: Vec::new(),
         }
+    }
+
+    pub fn set_gpu(&mut self, on: bool) {
+        self.gpu = on;
     }
 
     pub fn invalidate_all(&mut self) {
         self.dirty_all = true;
+        self.gpu_all = true;
     }
 
     pub fn invalidate_tiles(&mut self, tiles: &[usize]) {
@@ -198,6 +210,17 @@ impl Renderer {
                 self.any_dirty = true;
             }
         }
+        if self.gpu {
+            self.gpu_tiles.extend_from_slice(tiles);
+        }
+    }
+
+    /// Changements à envoyer à la carte graphique depuis la dernière fois : tout, ou ces tuiles.
+    pub fn take_gpu_dirty(&mut self) -> (bool, Vec<usize>) {
+        let mut tiles = std::mem::take(&mut self.gpu_tiles);
+        tiles.sort_unstable();
+        tiles.dedup();
+        (std::mem::take(&mut self.gpu_all), tiles)
     }
 
     pub fn update(&mut self, ctx: &egui::Context, doc: &Document, plan: Plan) -> egui::TextureId {

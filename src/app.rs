@@ -7,6 +7,7 @@ use crate::audio::AudioEngine;
 use crate::brush::{BrushSettings, StrokeMode, StrokeState};
 use crate::document::{fresh_layer_id, CelId, Document, Layer, LayerKind, Panel};
 use crate::fill::{self, FillSettings};
+use crate::gpu::GpuCanvas;
 use crate::guides::GuideState;
 use crate::history::{Edit, Gesture, History, Nav};
 use crate::io;
@@ -236,6 +237,8 @@ pub struct App {
     title: String,
     /// Moteur d'affichage utilisé (carte graphique et son interface, ou OpenGL).
     pub(crate) display_info: String,
+    /// Superposition des calques par la carte graphique (absente en OpenGL ou si on la coupe).
+    pub(crate) gpu: Option<GpuCanvas>,
 }
 
 impl App {
@@ -245,7 +248,7 @@ impl App {
             let info = rs.adapter.get_info();
             eprintln!("affichage : wgpu, {} ({:?}, {:?})", info.name, info.backend, info.device_type);
         }
-        Self {
+        let mut app = Self {
             ctx: cc.egui_ctx.clone(),
             doc: Document::new(1920, 1080, 24),
             mode: Mode::Storyboard,
@@ -349,7 +352,20 @@ impl App {
                 }
                 None => "OpenGL (moteur de secours)".into(),
             },
+            gpu: None,
+        };
+        // Calques superposés par la carte graphique, sauf PELURE_COMPOSITION=processeur.
+        let cpu = std::env::var("PELURE_COMPOSITION").is_ok_and(|v| v.eq_ignore_ascii_case("processeur"));
+        if !cpu {
+            app.gpu = cc.wgpu_render_state.as_ref().map(GpuCanvas::new);
         }
+        app.renderer.set_gpu(app.gpu.is_some());
+        app.display_info.push_str(if app.gpu.is_some() {
+            " · calques par la carte graphique"
+        } else {
+            " · calques par le processeur"
+        });
+        app
     }
 
     // ------------------------------------------------------------------ accès

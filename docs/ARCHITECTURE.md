@@ -36,9 +36,20 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - **Dessins** : bitmap = tuiles RGBA prémultipliées allouées à la demande (`raster.rs`) ;
   vectoriel = traits à épaisseur variable et zones remplies (`vector.rs`), re-rendus en pixels à chaque
   modification. Toute la composition ne voit donc que des pixels.
-- **Rendu** (`render.rs`) : sur le processeur. Les calques et la pelure d'oignon sont empilés dans une
-  image envoyée à la carte graphique comme une seule texture ; seules les tuiles modifiées sont
-  recalculées. Vignettes des plans en cache (`thumbs.rs`).
+- **Rendu à l'écran** (`gpu.rs`, depuis 2a-2) : par la carte graphique, en deux temps.
+  1. *Composer* : papier puis calques (opacité, teinte de pelure, table lumineuse) empilés dans
+     une image à la taille du projet, pixel pour pixel. C'est là que viendront la caméra et le
+     multiplan.
+  2. *Afficher* : cette image posée à l'écran avec la vue (zoom, rotation, miroir), lissée comme
+     egui lisse ses images. Superposer chaque calque directement à l'écran donnait des bords de
+     trait plus foncés en vue réduite.
+
+  Chaque dessin affiché est une texture, renvoyée en entier quand sa version change, sinon tuile
+  par tuile pendant un trait (signal `Renderer::invalidate_tiles`) ; au-delà d'1 Go de textures,
+  les plus anciennes sont libérées.
+- **Rendu sur processeur** (`render.rs`) : export, vignettes (`thumbs.rs`), pipette, pot de
+  peinture, et affichage de secours (OpenGL, ou `PELURE_COMPOSITION=processeur`). Même calcul,
+  même résultat : c'est la référence de comparaison.
 - **Annuler / rétablir** (`history.rs`) : chaque modification enregistre l'état d'avant, **avant**
   d'avoir lieu : tuiles d'un dessin bitmap, dessin vectoriel, ou « structure ». La structure, c'est
   tout le document hors dessins et sons : séquences, scènes, panneaux et leurs textes, calques

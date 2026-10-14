@@ -24,8 +24,6 @@ impl App {
         self.canvas_input(ui.ctx(), &response, rect);
 
         let plan = self.build_plan(self.cur_frame, true, true);
-        let texture = self.renderer.update(ui.ctx(), &self.doc, plan);
-
         let painter = ui.painter_at(rect);
         let corners = [
             pos2(0.0, 0.0),
@@ -39,18 +37,26 @@ impl App {
             Color32::from_black_alpha(110),
             Stroke::NONE,
         ));
-        let mut mesh = egui::Mesh::with_texture(texture);
-        let uvs = [pos2(0.0, 0.0), pos2(1.0, 0.0), pos2(1.0, 1.0), pos2(0.0, 1.0)];
-        for (pos, uv) in corners.into_iter().zip(uvs) {
-            mesh.vertices.push(egui::epaint::Vertex {
-                pos,
-                uv,
-                color: Color32::WHITE,
-            });
+        if let Some(gpu) = &mut self.gpu {
+            // Les calques sont superposés par la carte graphique, directement à leur place.
+            let (all, tiles) = self.renderer.take_gpu_dirty();
+            gpu.sync(&self.doc, &plan, all, &tiles);
+            painter.add(gpu.paint(&plan, corners, rect));
+        } else {
+            let texture = self.renderer.update(ui.ctx(), &self.doc, plan);
+            let mut mesh = egui::Mesh::with_texture(texture);
+            let uvs = [pos2(0.0, 0.0), pos2(1.0, 0.0), pos2(1.0, 1.0), pos2(0.0, 1.0)];
+            for (pos, uv) in corners.into_iter().zip(uvs) {
+                mesh.vertices.push(egui::epaint::Vertex {
+                    pos,
+                    uv,
+                    color: Color32::WHITE,
+                });
+            }
+            mesh.add_triangle(0, 1, 2);
+            mesh.add_triangle(0, 2, 3);
+            painter.add(Shape::mesh(mesh));
         }
-        mesh.add_triangle(0, 1, 2);
-        mesh.add_triangle(0, 2, 3);
-        painter.add(Shape::mesh(mesh));
 
         let shift = ui.input(|i| i.modifiers.shift);
         self.paint_guides(&painter, rect, self.hover_canvas);
