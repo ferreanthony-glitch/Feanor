@@ -4,11 +4,16 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::onion::OnionSettings;
+
 #[derive(Default, Serialize, Deserialize)]
 pub struct Settings {
     /// ffmpeg choisi à la main (sinon : cherché automatiquement à chaque export).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ffmpeg: Option<PathBuf>,
+    /// Pelure d'oignon.
+    #[serde(default, rename = "pelure")]
+    pub onion: OnionSettings,
 }
 
 impl Settings {

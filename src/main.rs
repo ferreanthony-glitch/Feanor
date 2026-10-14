@@ -30,6 +30,9 @@ mod layertools;
 mod keymap_tests;
 #[cfg(test)]
 mod ops_tests;
+mod onion;
+#[cfg(test)]
+mod onion_tests;
 mod panels;
 mod pdf;
 #[cfg(test)]

@@ -26,9 +26,6 @@ use crate::vector::{Affine, Element, VectorDrawing};
 use crate::view::View;
 use crate::vtools::{VDrag, VSelection, VectorErase, VectorStroke};
 
-const ONION_BEFORE: [u8; 3] = [225, 45, 45];
-const ONION_AFTER: [u8; 3] = [35, 160, 70];
-
 /// Storyboard : on monte les plans. Animation : on est entré dans un plan.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
@@ -117,13 +114,6 @@ pub struct ShapeSettings {
     pub width: f32,
 }
 
-pub struct OnionSettings {
-    pub enabled: bool,
-    pub before: usize,
-    pub after: usize,
-    pub opacity: f32,
-}
-
 /// Action qui attend une confirmation parce que le projet n'est pas enregistré.
 #[derive(Clone, Copy)]
 pub enum Pending {
@@ -167,7 +157,8 @@ pub struct App {
     pub(crate) fit_pending: bool,
     pub(crate) canvas_rect: Rect,
     pub(crate) ppp: f32,
-    pub(crate) onion: OnionSettings,
+    /// Pelure d'oignon (réglage de l'application, retenu dans `settings`).
+    pub(crate) onion: crate::onion::OnionSettings,
     /// Table lumineuse : les calques autres que le calque courant sont estompés.
     pub(crate) light_table: bool,
     /// Opacité gardée par les calques estompés (0 à 1).
@@ -279,6 +270,7 @@ impl App {
             let info = rs.adapter.get_info();
             eprintln!("affichage : wgpu, {} ({:?}, {:?})", info.name, info.backend, info.device_type);
         }
+        let settings = crate::settings::Settings::load();
         let mut app = Self {
             ctx: cc.egui_ctx.clone(),
             doc: Document::with_frame(1920, 1080, 24),
@@ -315,12 +307,7 @@ impl App {
             fit_pending: true,
             canvas_rect: Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0)),
             ppp: 1.0,
-            onion: OnionSettings {
-                enabled: true,
-                before: 2,
-                after: 1,
-                opacity: 0.45,
-            },
+            onion: settings.onion.clone(),
             light_table: false,
             light_table_strength: 0.3,
             guides: GuideState::default(),
@@ -335,7 +322,7 @@ impl App {
             export_last: Default::default(),
             export_job: None,
             ffmpeg: None,
-            settings: crate::settings::Settings::load(),
+            settings,
             default_exposure: 1,
             playing: false,
             play_montage: false,
@@ -533,23 +520,18 @@ impl App {
             let seen = layer.transform_seen(offset);
             let transform = (!seen.is_identity()).then_some(seen);
             if onion && self.onion.enabled && !self.playing && li == self.cur_layer {
-                let (before, after) = onion_neighbours(layer, frame, self.onion.before, self.onion.after);
-                // Du plus lointain au plus proche, pour que le plus proche soit au-dessus.
-                for (k, &cel) in before.iter().enumerate().rev() {
-                    items.push(PlanItem {
-                        cel,
-                        opacity: fade(self.onion.opacity, k, self.onion.before),
-                        tint: Some(ONION_BEFORE),
-                        transform,
-                    });
-                }
-                for (k, &cel) in after.iter().enumerate().rev() {
-                    items.push(PlanItem {
-                        cel,
-                        opacity: fade(self.onion.opacity, k, self.onion.after),
-                        tint: Some(ONION_AFTER),
-                        transform,
-                    });
+                let s = &self.onion;
+                let (before, after) = crate::onion::neighbours(layer, frame, s);
+                // Sous le dessin courant, du plus lointain au plus proche (le plus proche au-dessus).
+                for (list, n, color) in [(&before, s.before, s.before_color), (&after, s.after, s.after_color)] {
+                    for &(cel, k) in list.iter().rev() {
+                        items.push(PlanItem {
+                            cel,
+                            opacity: crate::onion::fade(s.opacity, k, n),
+                            tint: s.tinted.then_some(color),
+                            transform,
+                        });
+                    }
                 }
             }
             if let Some(cel) = layer.cel_at(frame) {
@@ -2116,36 +2098,13 @@ impl eframe::App for App {
         if self.thumbs.pending {
             ctx.request_repaint();
         }
-    }
-}
-
-/// Dessins voisins (distincts du dessin courant) pour la pelure d'oignon, du plus proche au plus lointain.
-fn onion_neighbours(layer: &Layer, frame: usize, n_before: usize, n_after: usize) -> (Vec<CelId>, Vec<CelId>) {
-    let current = layer.cel_at(frame);
-    let mut before = Vec::new();
-    let mut f = frame.min(layer.frames.len());
-    while f > 0 && before.len() < n_before {
-        f -= 1;
-        if let Some(id) = layer.frames[f] {
-            if Some(id) != current && !before.contains(&id) {
-                before.push(id);
+        // Réglages de la pelure : enregistrés quand ils changent (pas pendant un glissé).
+        if self.onion != self.settings.onion && !ctx.input(|i| i.pointer.any_down()) {
+            self.settings.onion = self.onion.clone();
+            if let Err(e) = self.settings.save() {
+                self.status = format!("Réglages non enregistrés : {e}");
             }
         }
     }
-    let mut after = Vec::new();
-    let mut f = frame + 1;
-    while f < layer.frames.len() && after.len() < n_after {
-        if let Some(id) = layer.frames[f] {
-            if Some(id) != current && !after.contains(&id) {
-                after.push(id);
-            }
-        }
-        f += 1;
-    }
-    (before, after)
 }
 
-fn fade(opacity: f32, k: usize, n: usize) -> u8 {
-    let n = n.max(1);
-    (opacity * (n - k.min(n - 1)) as f32 / n as f32 * 255.0).round() as u8
-}

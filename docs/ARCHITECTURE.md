@@ -104,6 +104,15 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   séquences et de scènes, panneaux, pistes son). Les noms « Dessin / Vignettes » évitent la confusion
   avec la « scène » du découpage.
 
+## Pelure d'oignon (3d-1)
+
+- `onion.rs` : voisins du dessin courant, sur le calque courant, posés sous lui dans le plan de
+  composition (même chemin que le reste : carte graphique ou processeur), teintés (`PlanItem::tint`)
+  ou non, opacité dégressive (`fade`). Deux façons de compter : par dessin (les dessins différents
+  les plus proches) ou par image (les images voisines ; un dessin vu plusieurs fois n'est montré
+  qu'une fois, au plus près). Réglage de l'application, pas du projet : `[pelure]` dans
+  `%APPDATA%\Pelure\reglages.toml`, enregistré quand il change (pas pendant un glissé).
+
 ## Sélection bitmap, table lumineuse, guides
 
 - **Sélection bitmap** (`pixsel.rs` : calcul, testé sans interface ; `pixtools.rs` : outil). Une

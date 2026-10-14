@@ -95,7 +95,10 @@ deux calques vectoriels restent vectoriels, sinon le résultat est bitmap ; les 
 
 - **Tablette** : la pression module la taille et/ou l'opacité. Elle passe par Windows Ink : sur une
   Wacom, l'option « Utiliser Windows Ink » doit être cochée dans les propriétés de la tablette.
-- **Pelure d'oignon** : dessins précédents en rouge, suivants en vert.
+- **Pelure d'oignon** (Alt+O) : par défaut 3 dessins avant en rouge et 3 après en vert, de plus en
+  plus pâles. Dans la timeline : nombre avant / après, et « Réglages… » (compter par dessin ou par
+  image, opacité, teinte ou vraies couleurs, couleurs). Les réglages sont retenus pour la prochaine
+  fois.
 - **Table lumineuse** (Outils > Vue, ou menu Affichage) : les autres calques du panneau sont
   estompés, le calque sur lequel on dessine reste net.
 - **Guides de perspective** (Outils > Guides) : 1, 2 ou 3 points de fuite, que l'on déplace à la

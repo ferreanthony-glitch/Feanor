@@ -120,8 +120,13 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
   français ; images JPEG) ; vérifié avec un lecteur PDF tiers (PDF.js). Commande de Storyboard
   Pro 27 reprise sans touche : PDF_EXPORT_KEY. Pas encore : autres mises en page, police au
   choix, caractères hors de l'alphabet latin (remplacés par « ? »).
-- ⏳ 3d. Animation à la TVPaint : pelure d'oignon plus réglable, pinceaux (essai d'import des
-  9 pinceaux perso).
+- 🔧 3d. Animation à la TVPaint (rendu visé : TVPaint, pas Storyboard Pro — choix d'Anthony).
+  - ✅ 3d-1. Pelure d'oignon : valeurs par défaut reprises des préférences Storyboard Pro
+    d'Anthony (3 avant en rouge, 3 après en vert, teintées, sous le dessin) ; compter par dessin
+    ou par image ; jusqu'à 12 de chaque côté ; opacité du plus proche, puis de plus en plus pâle ;
+    teinte ou vraies couleurs ; couleurs au choix ; réglages retenus d'une séance à l'autre.
+    Pas encore : pelure à travers les panneaux, sur tous les calques.
+  - ⏳ 3d-2. Pinceaux texturés (grain du papier) ; essai d'import des 9 pinceaux perso.
 - ⏸ Export XML Toon Boom : non prévu (format propriétaire non documenté).
 
 ## Phase 4 — Confort ⏳
