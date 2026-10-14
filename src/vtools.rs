@@ -29,6 +29,8 @@ pub(crate) struct VectorErase {
     pub changed: bool,
     pub last: Option<Pos2>,
     pub pen: bool,
+    /// Zone touchée par la gomme depuis le début du geste.
+    pub region: Rect,
 }
 
 pub(crate) struct VSelection {
@@ -212,20 +214,49 @@ impl App {
         self.modified = true;
     }
 
-    pub(crate) fn commit_vector_stroke(&mut self, vs: VectorStroke, path: Vec<VPoint>) {
+    /// Pose le trait vectoriel tracé. `preview` : l'état des tuiles avant l'aperçu dessiné pendant
+    /// le geste.
+    pub(crate) fn commit_vector_stroke(
+        &mut self,
+        vs: VectorStroke,
+        path: Vec<VPoint>,
+        preview: Option<Vec<(usize, Option<crate::raster::Tile>)>>,
+    ) {
         let points = vector::simplify(&path, 0.25);
         if points.is_empty() {
+            // Rien à garder : on efface l'aperçu.
+            if let (Some(tiles), Some(c)) = (preview, self.doc.cels.get_mut(&vs.cel)) {
+                let changed: Vec<usize> = tiles.iter().map(|t| t.0).collect();
+                for (i, t) in tiles {
+                    c.raster.tiles[i] = t;
+                }
+                self.renderer.invalidate_tiles(&changed);
+            }
             return;
         }
+        let element = Element::Stroke {
+            points,
+            color: vs.color,
+            opacity: vs.opacity,
+            hardness: vs.hardness,
+        };
         if let Some(d) = self.drawing_mut(vs.cel) {
-            d.elements.push(Element::Stroke {
-                points,
-                color: vs.color,
-                opacity: vs.opacity,
-                hardness: vs.hardness,
-            });
+            d.elements.push(element.clone());
         }
-        self.refresh_cel(vs.cel);
+        match (preview, self.doc.cels.get_mut(&vs.cel)) {
+            // Le nouveau trait est le dernier élément, donc dessus tout le reste : on remet les
+            // pixels d'avant l'aperçu et on le dessine par-dessus. Même image qu'un rendu complet,
+            // pour le prix du seul trait.
+            (Some(tiles), Some(c)) => {
+                let changed = c.render_on_top(tiles, &element);
+                self.renderer.invalidate_tiles(&changed);
+            }
+            // Sans aperçu connu : on refait la zone du trait.
+            _ => {
+                let region = element.bounds().union(vector::path_bounds(&path));
+                self.refresh_cel_region(vs.cel, region);
+            }
+        }
         self.push_vector(vs.cel, vs.before, vs.prefix);
     }
 
@@ -238,6 +269,7 @@ impl App {
             changed: false,
             last: None,
             pen,
+            region: Rect::NOTHING,
         });
         self.vsel = None;
         let pressure = if pen { self.pen_pressure } else { 1.0 };
@@ -255,6 +287,15 @@ impl App {
         // On gomme le long du segment parcouru, pas seulement aux points reçus.
         let from = ve.last.unwrap_or(p);
         let steps = ((from.distance(p) / (radius * 0.5).max(0.5)).ceil() as usize).max(1);
+        // Seuls les éléments que touche le passage de la gomme peuvent changer, et ce qu'il en
+        // reste tient dans leur ancien rectangle : on ne refait que cette zone.
+        let swept = Rect::from_two_pos(from, p).expand(radius + 1.0);
+        let region = d
+            .elements
+            .iter()
+            .map(|e| e.bounds().expand(1.5))
+            .filter(|b| b.intersects(swept))
+            .fold(Rect::NOTHING, |r, b| r.union(b));
         let mut changed = false;
         for k in 1..=steps {
             let q = from + (p - from) * (k as f32 / steps as f32);
@@ -263,7 +304,8 @@ impl App {
         ve.last = Some(p);
         if changed {
             ve.changed = true;
-            let tiles = cel.rerender();
+            ve.region = ve.region.union(region);
+            let tiles = cel.rerender_region(region.expand(2.0));
             self.renderer.invalidate_tiles(&tiles);
         }
     }
@@ -273,10 +315,11 @@ impl App {
         if !ve.changed {
             return;
         }
+        // Les morceaux coupés sont simplifiés ; le reste du dessin n'a pas bougé.
         if let Some(d) = self.drawing_mut(ve.cel) {
-            d.simplify_strokes(0.25);
+            d.simplify_strokes_in(0.25, ve.region);
         }
-        self.refresh_cel(ve.cel);
+        self.refresh_cel_region(ve.cel, ve.region);
         self.push_vector(ve.cel, ve.before, None);
     }
 
@@ -497,12 +540,16 @@ impl App {
                 let Some(sel) = &self.vsel else { return };
                 let Some(cel) = self.doc.cels.get_mut(&sel.cel) else { return };
                 let Some(d) = cel.vector.as_mut() else { return };
+                // On ne refait que là où étaient les éléments déplacés et là où ils arrivent.
+                let mut region = Rect::NOTHING;
                 for (k, &i) in sel.items.iter().enumerate() {
                     if let (Some(dst), Some(src)) = (d.elements.get_mut(i), originals.get(k)) {
+                        region = region.union(dst.bounds().expand(1.5));
                         *dst = src.transformed(&aff);
+                        region = region.union(dst.bounds().expand(1.5));
                     }
                 }
-                let tiles = cel.rerender();
+                let tiles = cel.rerender_region(region.expand(2.0));
                 self.renderer.invalidate_tiles(&tiles);
             }
             None => {}

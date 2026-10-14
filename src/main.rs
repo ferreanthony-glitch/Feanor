@@ -29,6 +29,8 @@ mod guides_tests;
 mod history;
 mod io;
 mod keymap;
+#[cfg(test)]
+mod latency_tests;
 mod layertools;
 #[cfg(test)]
 mod keymap_tests;
@@ -100,6 +102,12 @@ fn run(renderer: eframe::Renderer, initial: Option<std::path::PathBuf>) -> efram
             .with_inner_size([1500.0, 920.0])
             .with_min_inner_size([960.0, 600.0]),
         renderer,
+        // Une seule image d'avance dans la file d'affichage (au lieu de 2 par défaut) : le trait
+        // suit le stylet avec une image de retard en moins, sans déchirement de l'image.
+        wgpu_options: eframe::egui_wgpu::WgpuConfiguration {
+            desired_maximum_frame_latency: Some(1),
+            ..Default::default()
+        },
         ..Default::default()
     };
     eframe::run_native(

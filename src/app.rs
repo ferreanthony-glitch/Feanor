@@ -821,7 +821,14 @@ impl App {
             };
             self.renderer.invalidate_tiles(&dirty);
             match self.vstroke.take() {
-                Some(vs) => self.commit_vector_stroke(vs, std::mem::take(&mut stroke.path)),
+                Some(vs) => {
+                    // Les pixels d'avant l'aperçu servent à poser le trait définitif sans tout redessiner.
+                    let preview = match edit {
+                        Some(Edit::Tiles { tiles, .. }) => Some(tiles),
+                        _ => None,
+                    };
+                    self.commit_vector_stroke(vs, std::mem::take(&mut stroke.path), preview)
+                }
                 None => {
                     if let Some(c) = self.doc.cels.get_mut(&cel) {
                         c.version += 1;
@@ -924,6 +931,15 @@ impl App {
     pub(crate) fn refresh_cel(&mut self, cel: CelId) {
         if let Some(c) = self.doc.cels.get_mut(&cel) {
             let tiles = c.rerender();
+            self.renderer.invalidate_tiles(&tiles);
+        }
+    }
+
+    /// Comme `refresh_cel`, dans `region` seulement (là où quelque chose a changé) : le coût ne
+    /// grandit plus avec le nombre de traits du dessin.
+    pub(crate) fn refresh_cel_region(&mut self, cel: CelId, region: Rect) {
+        if let Some(c) = self.doc.cels.get_mut(&cel) {
+            let tiles = c.rerender_region(region.expand(2.0));
             self.renderer.invalidate_tiles(&tiles);
         }
     }

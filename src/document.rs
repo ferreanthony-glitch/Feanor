@@ -68,6 +68,52 @@ impl Cel {
         self.version += 1;
         changed
     }
+
+    /// Pose `element`, qui vient d'être ajouté en dernier au dessin vectoriel : les tuiles
+    /// `before` (l'état d'avant un aperçu dessiné par-dessus) sont remises, puis l'élément est
+    /// dessiné sur le reste. Même image qu'un `rerender` complet (l'élément est au-dessus de
+    /// tout), pour le prix du seul élément. Renvoie les tuiles touchées.
+    pub fn render_on_top(&mut self, before: Vec<(usize, Option<crate::raster::Tile>)>, element: &crate::vector::Element) -> Vec<usize> {
+        let mut changed: Vec<usize> = before.iter().map(|t| t.0).collect();
+        for (i, t) in before {
+            self.raster.tiles[i] = t;
+        }
+        crate::vector::render_element(&mut self.raster, element);
+        changed.extend(crate::vector::tiles_in(&self.raster, element.bounds().expand(1.5)));
+        changed.sort_unstable();
+        changed.dedup();
+        self.version += 1;
+        changed
+    }
+
+    /// Refait l'image d'un dessin vectoriel dans `region` seulement : ses tuiles sont vidées, puis
+    /// les éléments qui les touchent y sont redessinés, dans l'ordre. Même image qu'un `rerender`
+    /// complet, pour un coût qui ne dépend que de la zone et de ce qu'elle contient (et non plus
+    /// du nombre de traits du dessin). Renvoie les tuiles refaites.
+    pub fn rerender_region(&mut self, region: Rect) -> Vec<usize> {
+        let Some(v) = &self.vector else {
+            return Vec::new();
+        };
+        let tiles = crate::vector::tiles_in(&self.raster, region);
+        if tiles.is_empty() {
+            return tiles;
+        }
+        // Rectangle exact des tuiles : on y redessine tout, pixel pour pixel.
+        let clip = tiles.iter().fold(Rect::NOTHING, |r, &i| {
+            let (x, y, w, h) = self.raster.tile_bounds(i);
+            r.union(Rect::from_min_size(pos2(x as f32, y as f32), vec2(w as f32, h as f32)))
+        });
+        for &i in &tiles {
+            self.raster.tiles[i] = None;
+        }
+        for e in &v.elements {
+            if e.bounds().expand(1.5).intersects(clip) {
+                crate::vector::render_element_clipped(&mut self.raster, e, clip);
+            }
+        }
+        self.version += 1;
+        tiles
+    }
 }
 
 static NEXT_LAYER_ID: AtomicU64 = AtomicU64::new(1);

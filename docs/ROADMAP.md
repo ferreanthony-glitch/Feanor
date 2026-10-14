@@ -138,6 +138,17 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
     grain sur les calques vectoriels.
 - ⏸ Export XML Toon Boom : non prévu (format propriétaire non documenté).
 
+## Correctif — latence du dessin ✅
+
+Signalé par Anthony après la phase 4 : le dessin n'est plus fluide depuis la phase 2. Mesuré
+(traits simulés dans l'entrée de l'application) : le calcul pendant un trait est léger
+(< 1 ms par image), mais la fin d'un trait vectoriel redessinait tout le dessin, sur la feuille
+4 fois plus grande que le cadre depuis la phase 2 : 1 ms au premier trait, 56 ms au 80ᵉ, et
+plus encore sur une vraie planche. Désormais ~1 ms quel que soit le nombre de traits (trait posé
+par-dessus l'image existante) ; gomme vectorielle et déplacement de sélection ne refont que leur
+zone. File d'affichage ramenée de 2 images à 1. Reste à confirmer au stylet par Anthony (le
+retard ressenti à l'écran ne se mesure pas d'ici).
+
 ## Phase 4 — Confort ✅
 
 - ✅ 4a. Copie de secours et récupération après plantage : toutes les minutes par défaut

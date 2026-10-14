@@ -194,8 +194,12 @@ impl VectorDrawing {
             .find(|&i| self.elements[i].hit(p, tol))
     }
 
-    pub fn simplify_strokes(&mut self, tol: f32) {
+    /// Simplifie les traits qui touchent `region` (les autres ne bougent pas d'un pixel).
+    pub fn simplify_strokes_in(&mut self, tol: f32, region: Rect) {
         for e in &mut self.elements {
+            if !e.bounds().intersects(region) {
+                continue;
+            }
             if let Element::Stroke { points, .. } = e {
                 *points = simplify(points, tol);
             }
@@ -396,7 +400,13 @@ impl Mask {
 }
 
 pub fn render_element(raster: &mut Raster, e: &Element) {
-    let Some(mut mask) = Mask::new(e.bounds().expand(1.5), raster.width, raster.height) else {
+    render_element_clipped(raster, e, Rect::EVERYTHING);
+}
+
+/// Dessine l'élément dans `clip` seulement (bords en pixels entiers) : chaque pixel du rectangle
+/// reçoit exactement ce qu'un rendu complet lui donnerait.
+pub fn render_element_clipped(raster: &mut Raster, e: &Element, clip: Rect) {
+    let Some(mut mask) = Mask::new(e.bounds().expand(1.5).intersect(clip), raster.width, raster.height) else {
         return;
     };
     match e {
@@ -484,6 +494,12 @@ fn add_span(row: &mut [f32], a: f32, b: f32, weight: f32) {
             *v += (hi - lo) * weight;
         }
     }
+}
+
+/// Rectangle couvert par un trait de points `path` (cercles de rayon `r`), anticrénelage compris.
+pub fn path_bounds(path: &[VPoint]) -> Rect {
+    path.iter()
+        .fold(Rect::NOTHING, |r, p| r.union(Rect::from_center_size(p.pos(), Vec2::splat(p.r * 2.0 + 3.0))))
 }
 
 /// Tuiles de l'image recouvertes par `rect`.

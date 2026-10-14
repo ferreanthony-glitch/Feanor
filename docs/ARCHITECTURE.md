@@ -35,13 +35,18 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   un dessin ; plusieurs images consécutives sur le même dessin forment une exposition.
 - **Dessins** : bitmap = tuiles RGBA prémultipliées allouées à la demande (`raster.rs`) ;
   vectoriel = traits à épaisseur variable et zones remplies (`vector.rs`), re-rendus en pixels à chaque
-  modification. Toute la composition ne voit donc que des pixels.
+  modification. Toute la composition ne voit donc que des pixels. Pour que le coût ne grandisse
+  pas avec le nombre de traits : un nouveau trait est posé par-dessus l'image d'avant son aperçu
+  (`Cel::render_on_top`) ; la gomme et le déplacement d'une sélection ne refont que leur zone
+  (`Cel::rerender_region`, éléments rendus coupés aux tuiles touchées). Les deux sont testés
+  identiques, pixel pour pixel, à un rendu complet.
 - **Rendu à l'écran** (`gpu.rs`, depuis 2a-2) : par la carte graphique, en deux temps.
   1. *Composer* : papier puis calques (opacité, teinte de pelure, table lumineuse) empilés dans
      une image à la taille du projet, pixel pour pixel. C'est là que viendront la caméra et le
      multiplan.
   2. *Afficher* : cette image posée à l'écran avec la vue (zoom, rotation, miroir), lissée comme
-     egui lisse ses images. Superposer chaque calque directement à l'écran donnait des bords de
+     egui lisse ses images. File d'affichage réduite à une image (`desired_maximum_frame_latency`
+     = 1, au lieu de 2 par défaut) : une image de retard en moins entre le stylet et l'écran. Superposer chaque calque directement à l'écran donnait des bords de
      trait plus foncés en vue réduite.
 
   Chaque dessin affiché est une texture à la taille de la feuille. Quand sa version change, on
