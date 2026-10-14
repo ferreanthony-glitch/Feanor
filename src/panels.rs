@@ -80,6 +80,7 @@ impl App {
                 if menu_item(ui, "Importer une image (calque bitmap)…", "") {
                     self.import_image();
                 }
+                self.action_item(ui, "Importer un modèle 3D (glTF) comme repère…", "fichier.importer_modele3d");
                 ui.separator();
                 self.action_item(ui, "Exporter le film (vidéo)…", "fichier.exporter_film");
                 self.action_item(ui, "Exporter des images (PNG)…", "fichier.exporter_images");
@@ -396,6 +397,7 @@ impl App {
                      Les dessins ne sont pas modifiés : on peut annuler la transformation à tout moment.",
                 );
             }
+            Tool::Ref3d => self.ref3d_panel(ui),
             Tool::Camera => {
                 self.camera_fields(ui);
                 ui.horizontal_wrapped(|ui| self.camera_keys_ui(ui));

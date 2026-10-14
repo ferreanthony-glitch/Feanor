@@ -50,7 +50,7 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
   Pelure (Storyboard Pro 27 passe par une sélection de plusieurs panneaux, pas encore possible
   ici). Reste : sélection de plusieurs panneaux ou calques à la fois.
 
-## Phase 2 — Caméra et 3D ⏳
+## Phase 2 — Caméra et 3D ✅
 
 - ✅ Prérequis : outils de compilation Microsoft (Build Tools 2022) installés, projet compilé avec
   la toolchain MSVC (`rust-toolchain.toml`) ; tests et lecture avec son vérifiés.
@@ -91,7 +91,22 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
     du mouvement en pointillés), chaque calque à sa distance avec sa largeur réelle ; glisser un
     calque vers le haut / le bas change sa profondeur (Maj : par pas de 0,1), annulable en une
     étape. Pas encore : déplacer la caméra depuis cette vue, vue de côté, vraie vue 3D.
-- ⏳ 2d. Import glTF de repère.
+- ✅ 2d. Import glTF de repère, en fil de fer (choix d'Anthony).
+  - Fichier > Importer un modèle 3D (glTF) : `.glb` ou `.gltf` (tampons intégrés ou à côté),
+    lecteur écrit pour Pelure. Sommets soudés, seules les arêtes utiles sont tracées (bords,
+    cassures de plus de 25°), arêtes cachées masquées. Le modèle est gardé dans le projet
+    (`modeles/<id>.pelure3d`, format de projet 5).
+  - Un repère par panneau (modèle, point de vue, couleur, opacité), posé sur toute la feuille comme
+    un guide : il ne s'exporte pas et n'apparaît pas dans les vignettes. Outil « Repère 3D » :
+    glisser pour tourner autour, Maj pour déplacer, Ctrl pour avancer ou reculer ; azimut, hauteur,
+    distance et focale (mm) chiffrés ; « Cadrer le modèle », « Comme le panneau précédent ».
+  - « Dessiner dans un calque » : le fil de fer devient un calque bitmap tout en bas, qui s'exporte.
+  - Mesuré sur un vrai décor (1,77 million de triangles, 313 000 arêtes) : import 0,4 s, vue
+    complète recalculée en 0,15 s sur un autre fil ; pendant qu'on tourne, aperçu immédiat (les
+    6 000 plus longues arêtes) ; l'affichage du repère ne coûte qu'une image au pinceau.
+  - Pas encore : matières et textures (fil de fer seulement), plusieurs modèles dans un panneau,
+    repère animé dans le panneau, export avec le repère visible, formats autres que glTF (FBX, OBJ :
+    passer par Blender), modèles compressés (Draco, quantifiés : refusés avec un message).
 
 ## Phase 3 — Animatique et animation ✅
 

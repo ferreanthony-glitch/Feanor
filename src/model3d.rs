@@ -7,7 +7,6 @@
 //! Dans le projet, un modèle est gardé dans son propre format (`modeles/<id>.pelure3d`) :
 //! positions et triangles seulement, indépendant du fichier d'origine.
 
-use std::collections::HashMap;
 use std::path::Path;
 
 use serde_json::Value;
@@ -27,7 +26,8 @@ pub struct Model3d {
     pub name: String,
     pub mesh: Mesh3d,
     /// Arêtes utiles : bords, cassures (faces voisines à plus de `CREASE` degrés), arêtes
-    /// partagées par plus de deux faces. Pas les diagonales des faces planes.
+    /// partagées par plus de deux faces. Pas les diagonales des faces planes. Les plus longues
+    /// d'abord.
     pub edges: Vec<[u32; 2]>,
     /// Boîte englobante (min, max).
     pub bounds: ([f32; 3], [f32; 3]),
@@ -39,7 +39,13 @@ pub const CREASE: f32 = 25.0;
 impl Model3d {
     pub fn new(id: u64, name: String, mesh: Mesh3d) -> Model3d {
         let mesh = weld(&mesh);
-        let edges = feature_edges(&mesh, CREASE);
+        let mut edges = feature_edges(&mesh, CREASE);
+        // Les plus longues d'abord : l'aperçu pendant qu'on tourne n'en prend que le début.
+        let length = |e: &[u32; 2]| {
+            let (a, b) = (mesh.positions[e[0] as usize], mesh.positions[e[1] as usize]);
+            (0..3).map(|k| (a[k] - b[k]) * (a[k] - b[k])).sum::<f32>()
+        };
+        edges.sort_by(|a, b| length(b).total_cmp(&length(a)).then(a.cmp(b)));
         let bounds = bounds_of(&mesh.positions);
         Model3d { id, name, mesh, edges, bounds }
     }
@@ -367,23 +373,33 @@ fn node_matrix(node: &Value) -> [f32; 16] {
 
 /// Fusionne les sommets confondus (les exports dupliquent les sommets aux coutures de textures
 /// ou de normales) : sans cela, chaque face aurait ses propres arêtes de bord.
+/// Les sommets gardent l'ordre de leur première apparition : souder un maillage déjà soudé le
+/// rend tel quel.
 pub fn weld(mesh: &Mesh3d) -> Mesh3d {
     let (lo, hi) = bounds_of(&mesh.positions);
     let size = (0..3).map(|k| hi[k] - lo[k]).fold(0.0f32, f32::max).max(1e-9);
     let cell = size * 1e-6;
-    let mut map: HashMap<[i64; 3], u32> = HashMap::new();
+    let keys: Vec<[i64; 3]> = mesh.positions.iter().map(|p| p.map(|v| (v / cell).round() as i64)).collect();
+    // Tri (stable) des sommets par case : les sommets confondus se suivent, le premier en tête.
+    let mut order: Vec<u32> = (0..keys.len() as u32).collect();
+    order.sort_by_key(|&i| keys[i as usize]);
+    let mut first = vec![0u32; keys.len()];
+    for group in order.chunk_by(|&a, &b| keys[a as usize] == keys[b as usize]) {
+        for &i in group {
+            first[i as usize] = group[0];
+        }
+    }
     let mut positions = Vec::new();
-    let remap: Vec<u32> = mesh
-        .positions
-        .iter()
-        .map(|p| {
-            let key = p.map(|v| (v / cell).round() as i64);
-            *map.entry(key).or_insert_with(|| {
-                positions.push(*p);
-                (positions.len() - 1) as u32
-            })
-        })
-        .collect();
+    let mut remap = vec![0u32; keys.len()];
+    for i in 0..keys.len() {
+        let f = first[i] as usize;
+        remap[i] = if f == i {
+            positions.push(mesh.positions[i]);
+            (positions.len() - 1) as u32
+        } else {
+            remap[f]
+        };
+    }
     let triangles = mesh
         .triangles
         .iter()
@@ -405,29 +421,31 @@ fn normal(m: &Mesh3d, t: &[u32; 3]) -> [f32; 3] {
 /// moins de 180 − `crease` : une lame très fine n'est pas dessinée) et arêtes partagées par plus
 /// de deux faces.
 pub fn feature_edges(mesh: &Mesh3d, crease: f32) -> Vec<[u32; 2]> {
-    let mut faces: HashMap<[u32; 2], Vec<usize>> = HashMap::new();
+    // Chaque côté de triangle, repéré par ses deux sommets (le plus petit d'abord) ; triés, les
+    // côtés d'une même arête se suivent.
+    let mut sides: Vec<(u64, u32)> = Vec::with_capacity(mesh.triangles.len() * 3);
     for (f, t) in mesh.triangles.iter().enumerate() {
         for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
-            faces.entry([a.min(b), a.max(b)]).or_default().push(f);
+            sides.push(((a.min(b) as u64) << 32 | a.max(b) as u64, f as u32));
         }
     }
+    sides.sort_unstable();
+    let normals: Vec<[f32; 3]> = mesh.triangles.iter().map(|t| normal(mesh, t)).collect();
     let cos = crease.to_radians().cos();
-    let mut edges: Vec<[u32; 2]> = faces
-        .into_iter()
-        .filter(|(_, f)| match f.as_slice() {
+    sides
+        .chunk_by(|a, b| a.0 == b.0)
+        .filter(|faces| match faces {
             [_] => true,
-            [a, b] => {
-                let (na, nb) = (normal(mesh, &mesh.triangles[*a]), normal(mesh, &mesh.triangles[*b]));
+            [(_, a), (_, b)] => {
+                let (na, nb) = (normals[*a as usize], normals[*b as usize]);
                 // Faces à moins de `crease` degrés : arête intérieure, cachée. Valeur absolue : une
                 // face retournée (fréquent dans les décors) ne fait pas apparaître ses diagonales.
                 (na[0] * nb[0] + na[1] * nb[1] + na[2] * nb[2]).abs() < cos
             }
             _ => true,
         })
-        .map(|(e, _)| e)
-        .collect();
-    edges.sort_unstable();
-    edges
+        .map(|faces| [(faces[0].0 >> 32) as u32, faces[0].0 as u32])
+        .collect()
 }
 
 // ------------------------------------------------------------------------ format de Pelure

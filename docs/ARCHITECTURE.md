@@ -1,6 +1,6 @@
 # Architecture de Pelure
 
-Document tenu à jour à chaque étape. Dernière mise à jour : phase 1e (octobre 2026).
+Document tenu à jour à chaque étape. Dernière mise à jour : phase 2d (octobre 2026).
 
 ## Vue d'ensemble
 
@@ -275,19 +275,54 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   non adoucies = mouvement régulier). C'est un choix de Pelure : la façon dont Storyboard Pro règle
   les vitesses de caméra n'a pas été vérifiée.
 
-## Format de projet (version 4, dossier)
+## Repère 3D (2d)
+
+- `model3d.rs` : lecteur **glTF 2.0** écrit pour Pelure (pas de bibliothèque ajoutée) : `.glb`, ou
+  `.gltf` avec tampons intégrés (base64) ou à côté (jamais hors de son dossier). On prend les
+  triangles de la scène (listes, bandes, éventails ; indices 8, 16, 32 bits), avec les
+  transformations des nœuds (matrice ou translation, rotation, échelle). Matières, textures,
+  animations ignorées ; accesseurs « clairsemés », Draco et données quantifiées refusés avec un
+  message. Sommets **soudés** (les exports dupliquent les sommets aux coutures), puis **arêtes
+  utiles** : bord, cassure de plus de 25° entre deux faces (en valeur absolue : une face retournée
+  ne fait pas apparaître de diagonale), arête partagée par plus de deux faces. Tri plutôt que
+  tables de hachage : 1,77 million de triangles en 0,33 s. Arêtes rangées des plus longues aux
+  plus courtes (pour l'aperçu).
+- `view3d.rs` : caméra en orbite (`Cam3d` : point visé, azimut, hauteur, distance, focale en mm pour
+  36 mm de large). Fil de fer en pixels du cadre ; arêtes cachées par un **tampon de profondeur**
+  calculé sur le processeur (1/z, ≈ 1300 pixels sur la largeur du cadre ; une arête est visible si
+  aucun des 9 pixels autour n'est nettement plus proche). Tout est réparti sur les cœurs (bandes du
+  tampon, paquets d'arêtes). `rasterize` trace les segments, lissés, dans un masque.
+- `ref3dtool.rs` : `Panel.ref3d` = modèle, caméra, visible, arêtes cachées, couleur, opacité ;
+  modèles dans `Document::models` (partagés entre panneaux, jamais retirés pendant la séance). Le
+  repère couvre **toute la feuille** (le décor continue dans le hors-champ). Affichage : le fil de
+  fer complet est calculé sur un autre fil et tracé dans **une image** (taille de la feuille × le
+  zoom de l'écran, par paliers), posée sur la feuille comme un dessin : une seule texture par
+  image d'écran, le pinceau ne ralentit pas. Pendant qu'on tourne, ou le temps du calcul, un
+  aperçu des 6 000 plus longues arêtes est tracé directement. Le repère n'entre ni dans les
+  exports ni dans les vignettes ; « Dessiner dans un calque » le trace dans un calque bitmap.
+- Annulation : le repère fait partie de la structure (copie au début du geste, une étape au
+  lâcher, comme l'outil Caméra).
+
+## Format de projet (version 5, dossier)
 
 ```
 MonFilm/
-  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 4, "largeur",
+  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 5, "largeur",
                       "hauteur" (feuille), "cadre": [l, h], réglages,
                       "sequences": [{ "scenes": [{ "panneaux": [{ "calques": [{ "expositions": … }]}]}]}],
                       "sons": [{"id", "nom", "fichier"}], "pistes_son": [{ "extraits": [{"son", "debut",
-                      "decalage", "duree"}] }]}
+                      "decalage", "duree"}] }], "modeles": [{"id", "nom"}]}
   dessins/<id>.png    dessin bitmap (RGBA non prémultiplié)
   dessins/<id>.json   dessin vectoriel (éléments sérialisés)
   sons/<id>.<ext>     fichier son importé, copié tel quel (wav, mp3, flac, ogg)
+  modeles/<id>.pelure3d  modèle 3D soudé : "PELURE3D", version, nombre de sommets et de
+                      triangles, positions (3 × f32) puis triangles (3 × u32), petit-boutiste
 ```
+
+- Format 5 (2d) : `modeles`, et `repere3d` par panneau (`modele`, `cible`, `azimut`,
+  `elevation`, `distance`, `focale`, `visible`, `aretes_cachees`, `couleur`, `opacite`). Comme
+  les sons, un modèle n'est écrit que s'il manque, et effacé quand plus aucun panneau ne s'en sert.
+  Un modèle manquant est signalé à l'ouverture, ses repères sont retirés, le reste s'ouvre.
 
 - Le champ `guides` (1c) suit la même règle.
 - Les champs `sons` et `pistes_son` ont été ajoutés en 1b sans changer de version : absents, ils
@@ -351,3 +386,4 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 | Sons en temps de montage (pas liés aux panneaux) | comportement le plus simple et prévisible | nul | moyen : un panneau rallongé décale l'image par rapport au son | oui : le lien extrait-panneau pourra s'ajouter (champ en plus) |
 | Export vidéo via ffmpeg installé à part (phase 3) | seule voie fiable sans souci de licence ni de compilation | dépendance externe | faible | oui |
 | Pas d'export XML Toon Boom | format propriétaire non documenté | — | — | — |
+| Repère 3D : lecteur glTF et fil de fer écrits pour Pelure, sur le processeur (2d) | glTF = format ouvert que Blender exporte ; pas de bibliothèque ni de passe GPU à ajouter pour un guide en fil de fer | ≈ 900 lignes ; calcul 0,15 s par vue sur un gros décor (sur un autre fil) | faible : mauvais fichier → message | oui : affichage par la carte graphique ou rendu ombré possibles plus tard, le format `.pelure3d` ne change pas |

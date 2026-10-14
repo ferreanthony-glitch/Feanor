@@ -279,20 +279,15 @@ fn distance_to_segment(p: Pos2, s: [Pos2; 2]) -> f32 {
     p.distance(s[0] + d * t)
 }
 
-#[test]
-fn wireframe_hides_the_back_edges() {
-    let model = Model3d::new(1, "cube".into(), cube_mesh());
-    let cam = Cam3d::fit(cube_bounds(), FRAME);
-    let all = wireframe(&model, &cam, FRAME, false);
-    assert_eq!(all.len(), 12);
-    // Vu de +x, +y, +z : le sommet (-1, -1, -1) est caché, et les 3 arêtes qui y mènent.
-    let seen = wireframe(&model, &cam, FRAME, true);
+/// Vu de +x, +y, +z : le sommet (-1, -1, -1) est caché, et les 3 arêtes qui y mènent ; les 9
+/// autres sont entières dans `seen`.
+fn check_back_edges(model: &Model3d, cam: &Cam3d, frame: [f32; 2], seen: &[[Pos2; 2]]) {
     let hidden_corner = [-1.0f32; 3];
     let mut hidden = 0;
     for e in &model.edges {
         let (a, b) = (model.mesh.positions[e[0] as usize], model.mesh.positions[e[1] as usize]);
         let back = a == hidden_corner || b == hidden_corner;
-        let (pa, pb) = (cam.project(a, FRAME).unwrap(), cam.project(b, FRAME).unwrap());
+        let (pa, pb) = (cam.project(a, frame).unwrap(), cam.project(b, frame).unwrap());
         for k in 1..10 {
             let q = pa + (pb - pa) * (k as f32 / 10.0);
             let near = seen.iter().map(|s| distance_to_segment(q, *s)).fold(f32::MAX, f32::min);
@@ -305,6 +300,39 @@ fn wireframe_hides_the_back_edges() {
         hidden += back as usize;
     }
     assert_eq!(hidden, 3);
+}
+
+#[test]
+fn wireframe_hides_the_back_edges() {
+    let model = Model3d::new(1, "cube".into(), cube_mesh());
+    let cam = Cam3d::fit(cube_bounds(), FRAME);
+    let all = wireframe(&model, &cam, FRAME, false);
+    assert_eq!(all.len(), 12);
+    check_back_edges(&model, &cam, FRAME, &wireframe(&model, &cam, FRAME, true));
+}
+
+#[test]
+fn back_edges_stay_hidden_off_frame() {
+    // Petit cadre, cube vu de près : il déborde du cadre, sur la feuille autour.
+    let model = Model3d::new(1, "cube".into(), cube_mesh());
+    let frame = [160.0, 90.0];
+    let mut cam = Cam3d::fit(cube_bounds(), frame);
+    cam.dolly(0.75);
+    let outside = all_points_outside(&model, &cam, frame);
+    assert!(outside > 0, "le cube doit déborder du cadre");
+    let area = eframe::egui::Rect::from_min_size(pos2(-160.0, -90.0), eframe::egui::vec2(480.0, 270.0));
+    let seen = crate::view3d::wireframe_in(&model, &cam, frame, area, true);
+    check_back_edges(&model, &cam, frame, &seen);
+}
+
+fn all_points_outside(model: &Model3d, cam: &Cam3d, frame: [f32; 2]) -> usize {
+    model
+        .mesh
+        .positions
+        .iter()
+        .filter_map(|&p| cam.project(p, frame))
+        .filter(|q| q.x < 0.0 || q.y < 0.0 || q.x > frame[0] || q.y > frame[1])
+        .count()
 }
 
 #[test]
@@ -353,6 +381,144 @@ fn models_and_references_are_saved_with_the_project() {
     assert!(!file.exists());
     assert_eq!(project::load(&manifest).unwrap().doc.panels[0].ref3d, None);
     std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn longest_edges_come_first_for_the_preview() {
+    let plane = Mesh3d {
+        positions: vec![[0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [10.0, 1.0, 0.0], [0.0, 1.0, 0.0]],
+        triangles: vec![[0, 1, 2], [0, 2, 3]],
+    };
+    let model = Model3d::new(1, "plan".into(), plane);
+    let length = |e: &[u32; 2]| {
+        let (a, b) = (model.mesh.positions[e[0] as usize], model.mesh.positions[e[1] as usize]);
+        (a[0] - b[0]).abs() + (a[1] - b[1]).abs()
+    };
+    let lengths: Vec<f32> = model.edges.iter().map(length).collect();
+    assert_eq!(lengths, vec![10.0, 10.0, 1.0, 1.0]);
+    let cube = Model3d::new(2, "cube".into(), cube_mesh());
+    let cam = Cam3d::fit(cube_bounds(), FRAME);
+    assert_eq!(crate::view3d::preview(&cube, &cam, FRAME, 5).len(), 5);
+    assert_eq!(crate::view3d::preview(&cube, &cam, FRAME, 100).len(), 12);
+}
+
+#[test]
+fn lines_are_traced_smoothly_in_a_mask() {
+    use crate::view3d::rasterize;
+    // Trait horizontal au milieu de la ligne 5.
+    let m = rasterize(&[[pos2(2.0, 5.5), pos2(18.0, 5.5)]], [20, 10], 1.0, 1.3);
+    assert_eq!(m[5 * 20 + 10], 255);
+    assert!(m[4 * 20 + 10] > 0 && m[4 * 20 + 10] < 128, "bord adouci : {}", m[4 * 20 + 10]);
+    assert_eq!(m[3 * 20 + 10], 0);
+    assert_eq!(m[5 * 20], 0, "le trait s'arrête à son bout");
+    // Même trait en pixels du cadre, image deux fois plus grande.
+    let m2 = rasterize(&[[pos2(1.0, 2.75), pos2(9.0, 2.75)]], [20, 10], 2.0, 1.3);
+    assert_eq!(m2[5 * 20 + 10], 255);
+    // Trait vertical sur une grande hauteur (partagée entre plusieurs fils) : sans trou.
+    let tall = rasterize(&[[pos2(10.5, -5.0), pos2(10.5, 400.0)]], [30, 300], 1.0, 1.3);
+    assert!((0..300).all(|y| tall[y * 30 + 10] == 255));
+    // Trait très long qui sort de l'image : coupé, la diagonale est tracée.
+    let diag = rasterize(&[[pos2(-1000.0, -1000.0), pos2(1000.0, 1000.0)]], [100, 100], 1.0, 1.3);
+    assert!((0..100).all(|i| diag[i * 100 + i] == 255));
+    assert_eq!(diag[10 * 100 + 90], 0);
+}
+
+#[test]
+fn reference_is_baked_into_a_bottom_layer() {
+    let mut doc = Document::with_frame(64, 48, 24);
+    assert_eq!(crate::ref3dtool::bake(&mut doc, 0, 1.5), None, "pas de repère, pas de calque");
+    let id = doc.add_model("cube".into(), cube_mesh());
+    let mut r = Ref3d::new(id, Cam3d::fit(cube_bounds(), [64.0, 48.0]));
+    r.color = [200, 0, 0];
+    doc.panels[0].ref3d = Some(r);
+    let before = doc.panels[0].layers.len();
+    assert_eq!(crate::ref3dtool::bake(&mut doc, 0, 1.5), Some(0));
+    let layers = &doc.panels[0].layers;
+    assert_eq!(layers.len(), before + 1);
+    assert_eq!(layers[0].name, "Repère 3D");
+    assert_eq!(layers[0].kind, crate::document::LayerKind::Bitmap);
+    assert_eq!(layers[0].frames.len(), doc.panels[0].frame_count());
+    // Cube cadré : tout dans le cadre, de la couleur du repère.
+    let (inside, outside) = painted(&doc, layers[0].frames[0].unwrap());
+    assert!(inside > 50 && outside == 0, "{inside} dedans, {outside} dehors");
+    // Vu de plus près, il déborde : le dessin continue sur la feuille, hors du cadre.
+    doc.panels[0].ref3d.as_mut().unwrap().cam.dolly(0.6);
+    crate::ref3dtool::bake(&mut doc, 0, 1.5).unwrap();
+    let (inside, outside) = painted(&doc, doc.panels[0].layers[0].frames[0].unwrap());
+    assert!(inside > 50 && outside > 20, "{inside} dedans, {outside} dehors");
+}
+
+/// Pixels peints d'un dessin bitmap, dans le cadre et hors du cadre (tous en rouge).
+fn painted(doc: &Document, cel: crate::document::CelId) -> (usize, usize) {
+    let raster = &doc.cels[&cel].raster;
+    let frame = doc.frame_rect();
+    let (mut inside, mut outside) = (0, 0);
+    for y in 0..raster.height {
+        for x in 0..raster.width {
+            let c = raster.get(x, y);
+            if c.a() > 0 {
+                assert!(c.r() > 0 && c.g() == 0 && c.b() == 0, "{c:?}");
+                if frame.contains(pos2(x as f32 + 0.5, y as f32 + 0.5)) {
+                    inside += 1;
+                } else {
+                    outside += 1;
+                }
+            }
+        }
+    }
+    (inside, outside)
+}
+
+/// Mesure sur un vrai décor : `PELURE_GLB=chemin.glb cargo test --release real_decor -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn real_decor_timings() {
+    let Ok(path) = std::env::var("PELURE_GLB") else { return };
+    let t = std::time::Instant::now();
+    let mesh = model3d::load_gltf(std::path::Path::new(&path)).unwrap();
+    let read = t.elapsed();
+    let (nv, nt) = (mesh.positions.len(), mesh.triangles.len());
+    let t = std::time::Instant::now();
+    let model = Model3d::new(1, "decor".into(), mesh);
+    let build = t.elapsed();
+    println!(
+        "lecture {read:?} ({nv} sommets, {nt} triangles) ; soudure + arêtes {build:?} ({} sommets, {} arêtes)",
+        model.mesh.positions.len(),
+        model.edges.len()
+    );
+    let frame = [1920.0, 1080.0];
+    let cam = Cam3d::fit(model.bounds, frame);
+    for hidden in [false, true] {
+        let t = std::time::Instant::now();
+        let segs = wireframe(&model, &cam, frame, hidden);
+        let wire = t.elapsed();
+        let t = std::time::Instant::now();
+        let mask = crate::view3d::rasterize(&segs, [1920, 1080], 1.0, 1.3);
+        println!(
+            "fil de fer (cachées {hidden}) : {wire:?}, {} segments ; image {:?} ({} pixels tracés)",
+            segs.len(),
+            t.elapsed(),
+            mask.iter().filter(|&&a| a > 0).count()
+        );
+    }
+    let t = std::time::Instant::now();
+    let segs = crate::view3d::preview(&model, &cam, frame, 6000);
+    println!("aperçu : {:?}, {} segments", t.elapsed(), segs.len());
+    println!("boîte : {:?}", model.bounds);
+    // Répartition des sommets (1 %, 5 %, 50 %, 95 %, 99 %) sur chaque axe.
+    for k in 0..3 {
+        let mut v: Vec<f32> = model.mesh.positions.iter().map(|p| p[k]).collect();
+        v.sort_by(f32::total_cmp);
+        let q = |f: f32| v[((v.len() - 1) as f32 * f) as usize];
+        println!("axe {k} : {:.1} {:.1} {:.1} {:.1} {:.1}", q(0.01), q(0.05), q(0.5), q(0.95), q(0.99));
+    }
+    if let Ok(png) = std::env::var("PELURE_GLB_PNG") {
+        let segs = wireframe(&model, &cam, frame, true);
+        let mask = crate::view3d::rasterize(&segs, [1920, 1080], 1.0, 1.3);
+        let pixels: Vec<eframe::egui::Color32> =
+            mask.iter().map(|&a| eframe::egui::Color32::from_gray(255 - a)).collect();
+        crate::io::write_png(std::path::Path::new(&png), &pixels, 1920, 1080).unwrap();
+    }
 }
 
 #[test]

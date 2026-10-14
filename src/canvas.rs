@@ -27,6 +27,7 @@ impl App {
         }
 
         self.canvas_input(ui.ctx(), &response, rect);
+        self.update_ref3d(ui.ctx());
 
         let plan = self.build_plan(self.cur_frame, true, true);
         let painter = ui.painter_at(rect);
@@ -73,6 +74,7 @@ impl App {
             painter.add(Shape::mesh(mesh));
         }
 
+        self.paint_ref3d(&painter, rect);
         self.paint_camera(&painter, rect);
         self.paint_layer_transform(&painter);
         let shift = ui.input(|i| i.modifiers.shift);
@@ -192,6 +194,7 @@ impl App {
                         Tool::Select => self.select_press(p, *pos, modifiers.shift),
                         Tool::Camera => self.camera_press(stage, *pos),
                         Tool::Transform => self.transform_press(stage, *pos),
+                        Tool::Ref3d => self.ref3d_press(*pos, *modifiers),
                         Tool::Picker | Tool::Pan => {}
                     }
                 }
@@ -222,6 +225,8 @@ impl App {
                         self.camera_drag(stage, mods.shift);
                     } else if self.layer_drag.is_some() {
                         self.transform_drag(stage, mods.shift);
+                    } else if self.ref3d.dragging() {
+                        self.ref3d_drag_to(*pos);
                     } else if self.picking {
                         self.pick_color(stage);
                     }
@@ -356,6 +361,10 @@ impl App {
         }
         if alt || matches!(self.tool, Tool::Picker | Tool::Fill | Tool::Shape) {
             ctx.set_cursor_icon(CursorIcon::Crosshair);
+            return;
+        }
+        if self.tool == Tool::Ref3d {
+            ctx.set_cursor_icon(if self.ref3d.dragging() { CursorIcon::Grabbing } else { CursorIcon::Grab });
             return;
         }
         let handle = match self.tool {

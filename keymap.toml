@@ -674,6 +674,18 @@ action = "vue.dessus"
 touches = []
 source = "Pelure (fenêtre Vue de dessus ; aucune commande équivalente dans sb_shortcuts.xml de Storyboard Pro 27)"
 
+# ------------------------------------------------------------------------------------ Repère 3D
+
+[[raccourci]]
+action = "outil.repere3d"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : CANVAS_THIRD_PERSON_NAVIGATION_3D_TOOL_KEY (navigation 3D ; le repère en fil de fer est propre à Pelure)"
+
+[[raccourci]]
+action = "fichier.importer_modele3d"
+touches = []
+source = "Pelure (import glTF ; aucune commande équivalente vérifiée dans sb_shortcuts.xml de Storyboard Pro 27)"
+
 # ------------------------------------------------------------------------------------ Espaces de travail
 # Les dispositions de Pelure reprennent par le nom les commandes de Storyboard Pro 27 (sans
 # touche) ; leur contenu est propre à Pelure.

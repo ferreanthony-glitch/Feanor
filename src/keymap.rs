@@ -149,6 +149,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("camera.cle_adoucir", "Adoucir le mouvement à cette image clé", true, false),
     act("vue.table_lumineuse", "Table lumineuse (autres calques estompés)", true, false),
     act("vue.dessus", "Vue de dessus (profondeur des calques)", true, false),
+    act("outil.repere3d", "Outil repère 3D (tourner autour du modèle)", true, false),
+    act("fichier.importer_modele3d", "Importer un modèle 3D (glTF) comme repère", true, false),
     act("espace.standard", "Espace de travail : Standard", true, false),
     act("espace.dessin", "Espace de travail : Dessin", true, false),
     act("espace.timeline", "Espace de travail : Timeline", true, false),

@@ -57,6 +57,7 @@ mod recovery;
 #[cfg(test)]
 mod recovery_tests;
 mod recoveryui;
+mod ref3dtool;
 mod render;
 mod settings;
 mod soundtrack;

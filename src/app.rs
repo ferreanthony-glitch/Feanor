@@ -52,10 +52,12 @@ pub enum Tool {
     Pan,
     Camera,
     Transform,
+    /// Repère 3D (2d) : tourner autour du modèle 3D du panneau.
+    Ref3d,
 }
 
 impl Tool {
-    pub const ALL: [Tool; 10] = [
+    pub const ALL: [Tool; 11] = [
         Tool::Brush,
         Tool::Pencil,
         Tool::Eraser,
@@ -66,6 +68,7 @@ impl Tool {
         Tool::Pan,
         Tool::Camera,
         Tool::Transform,
+        Tool::Ref3d,
     ];
 
     pub fn label(self) -> &'static str {
@@ -80,6 +83,7 @@ impl Tool {
             Tool::Pan => "Main",
             Tool::Camera => "Caméra",
             Tool::Transform => "Transformer",
+            Tool::Ref3d => "Repère 3D",
         }
     }
 
@@ -96,6 +100,7 @@ impl Tool {
             Tool::Pan => "outil.main",
             Tool::Camera => "outil.camera",
             Tool::Transform => "outil.transformer",
+            Tool::Ref3d => "outil.repere3d",
         }
     }
 }
@@ -171,6 +176,8 @@ pub struct App {
     pub(crate) cam_drag: Option<CamDrag>,
     /// Transformation d'un calque à la souris (outil Transformer).
     pub(crate) layer_drag: Option<LayerDrag>,
+    /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
+    pub(crate) ref3d: crate::ref3dtool::Ref3dState,
     /// Vue à travers la caméra du panneau (sinon : la feuille, avec le cadre tracé).
     pub(crate) camera_view: bool,
     /// Hors-champ estompé sur la feuille.
@@ -327,6 +334,7 @@ impl App {
             guides: GuideState::default(),
             cam_drag: None,
             layer_drag: None,
+            ref3d: Default::default(),
             camera_view: false,
             camera_mask: true,
             top_view: false,
@@ -851,6 +859,7 @@ impl App {
         }
         self.finish_camera_drag();
         self.finish_layer_drag();
+        self.finish_ref3d_drag();
         self.guides.stroke = None;
         self.shape_drag = None;
     }
@@ -1759,6 +1768,7 @@ impl App {
             "fichier.exporter_son" => self.open_export(crate::export::Format::Wav),
             "fichier.exporter_pdf" => self.open_export(crate::export::Format::Pdf),
             "fichier.exporter_image_courante" => self.export_frame(),
+            "fichier.importer_modele3d" => self.import_model3d(),
             "edition.annuler" => self.undo(),
             "edition.retablir" => self.redo(),
             "edition.couper" if self.bsel.is_some() => self.bitmap_cut(),
@@ -1887,6 +1897,7 @@ impl App {
             "calque.verrouiller" => self.toggle_layer_lock(self.cur_layer),
             "calque.fusionner_dessous" => self.merge_layer_down(),
             "outil.camera" => self.set_tool(Tool::Camera),
+            "outil.repere3d" => self.set_tool(Tool::Ref3d),
             "outil.transformer" => self.set_tool(Tool::Transform),
             "calque.reinit_transformation" => self.reset_layer_transform(),
             "camera.vue" => {

@@ -154,6 +154,7 @@ Bus/
   dessins/12.png    un fichier par dessin bitmap
   dessins/13.json   un fichier par dessin vectoriel
   sons/14.mp3       les sons importés, copiés tels quels
+  modeles/15.pelure3d  les modèles 3D de repère
 ```
 
 On ouvre le projet en choisissant `Bus.pelure`. Un enregistrement n'écrit que les dessins modifiés,
@@ -178,6 +179,14 @@ Caméra) posent des images clés ; on règle la caméra sur chacune, elle va de 
 « Adoucir » fait arriver et repartir la caméra en douceur à une clé. Les clés apparaissent dans la
 ligne « Caméra » de la timeline et en petits losanges dans la bande de montage.
 
+**Repère 3D** : exporte ton décor en glTF depuis Blender (Fichier > Exporter > glTF 2.0, `.glb`),
+puis Fichier > « Importer un modèle 3D (glTF) comme repère… ». Il apparaît en fil de fer sur la
+feuille, comme un guide pour dessiner (il ne s'exporte pas). Outil « Repère 3D » : glisser pour
+tourner autour, Maj + glisser pour déplacer, Ctrl + glisser pour avancer ou reculer ; azimut,
+hauteur, distance et focale se règlent aussi en chiffres. Chaque panneau a son point de vue
+(« Comme le panneau précédent » le recopie). « Dessiner dans un calque » transforme le fil de fer
+en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le projet (`modeles/`).
+
 ## Organisation du code
 
 | Fichier | Rôle |
@@ -201,9 +210,10 @@ ligne « Caméra » de la timeline et en petits losanges dans la bande de montag
 | `camera.rs`, `camtools.rs` | Caméra du panneau : images clés, courbes ; outil Caméra, vue caméra |
 | `layertools.rs` | Outil Transformer (calque entier) |
 | `topview.rs` | Vue de dessus (profondeur des calques) |
+| `model3d.rs`, `view3d.rs`, `ref3dtool.rs` | Repère 3D : lecture glTF, arêtes utiles ; caméra en orbite, fil de fer, arêtes cachées ; outil et affichage |
 | `thumbs.rs` | Cache des vignettes de panneaux |
 | `history.rs` | Annuler / rétablir |
-| `project.rs` | Projet en dossier (format 4), enregistrement préparé puis écrit |
+| `project.rs` | Projet en dossier (format 5), enregistrement préparé puis écrit |
 | `recovery.rs`, `recoveryui.rs` | Copie de secours, récupération après plantage |
 | `workspace.rs`, `workspaceui.rs` | Espaces de travail, disposition retenue |
 | `settings.rs` | Réglages de l'application (ffmpeg, pelure, copie de secours, dispositions) |
@@ -218,7 +228,7 @@ ligne « Caméra » de la timeline et en petits losanges dans la bande de montag
 
 `cargo test --release` lance les tests (pinceau, vectoriel, remplissage, séquences/scènes/panneaux,
 annulation, projet en dossier, anciens fichiers, raccourcis, son, caméra, transformation,
-profondeur, vue de dessus, lecture).
+profondeur, vue de dessus, lecture, repère 3D).
 
 ## Compilation (Windows)
 
