@@ -73,19 +73,14 @@ impl App {
                     self.import_image();
                 }
                 ui.separator();
-                if menu_item(ui, "Exporter l'image courante (PNG)…", "") {
-                    self.export_frame();
-                }
-                if menu_item(ui, "Exporter le panneau (séquence PNG)…", "") {
-                    self.export_panel_sequence();
-                }
-                if menu_item(ui, "Exporter tout le montage (séquence PNG)…", "") {
-                    self.export_montage_sequence();
-                }
+                self.action_item(ui, "Exporter le film (vidéo)…", "fichier.exporter_film");
+                self.action_item(ui, "Exporter des images (PNG)…", "fichier.exporter_images");
+                self.action_item(ui, "Exporter le son (WAV)…", "fichier.exporter_son");
+                self.action_item(ui, "Exporter l'image courante (PNG)…", "fichier.exporter_image_courante");
                 if menu_item(ui, "Exporter le storyboard (page HTML + planches)…", "") {
                     self.export_storyboard();
                 }
-                ui.checkbox(&mut self.export_transparent, "Séquences sans le papier (fond transparent)");
+                ui.checkbox(&mut self.export_transparent, "Images PNG sans le papier (fond transparent)");
                 ui.separator();
                 self.action_item(ui, "Quitter", "fichier.quitter");
             });

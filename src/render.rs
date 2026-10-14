@@ -88,11 +88,18 @@ fn paper_color(plan: &Plan) -> Color32 {
 
 /// Compose la tuile `idx` dans `buf`, image pleine de la taille du document.
 pub fn composite_tile(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color32]) {
-    let w = doc.width;
+    composite_tile_into(doc, plan, idx, buf, doc.width, (0, 0));
+}
+
+/// Compose la tuile `idx` dans `buf`, une zone de la feuille de largeur `stride` dont le coin
+/// haut-gauche est au point `origin` de la feuille.
+fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color32], stride: usize, origin: (usize, usize)) {
+    let w = stride;
     let (ox, oy, tw, th) = tile_bounds(doc.width, doc.height, idx);
+    let at = |x: usize, y: usize| (y - origin.1) * w + (x - origin.0);
     let base = paper_color(plan);
     for y in 0..th {
-        let s = (oy + y) * w + ox;
+        let s = at(ox, oy + y);
         buf[s..s + tw].fill(base);
     }
     for item in &plan.items {
@@ -100,7 +107,7 @@ pub fn composite_tile(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color3
         if let Some(inv) = inverse_of(doc, &item.transform) {
             let Some(cel) = doc.cels.get(&item.cel) else { continue };
             for y in 0..th {
-                let s = (oy + y) * w + ox;
+                let s = at(ox, oy + y);
                 for (x, d) in buf[s..s + tw].iter_mut().enumerate() {
                     let p = inv.apply(egui::pos2((ox + x) as f32 + 0.5, (oy + y) as f32 + 0.5));
                     let src = sample(&cel.raster, p.x, p.y);
@@ -116,7 +123,7 @@ pub fn composite_tile(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color3
         };
         let tile: &[Color32; TILE_PIXELS] = tile;
         for y in 0..th {
-            let s = (oy + y) * w + ox;
+            let s = at(ox, oy + y);
             let row = &tile[y * TILE..y * TILE + tw];
             for (d, &src) in buf[s..s + tw].iter_mut().zip(row) {
                 if src.a() != 0 {
@@ -139,23 +146,75 @@ pub fn composite_full(doc: &Document, plan: &Plan) -> Vec<Color32> {
     buf
 }
 
+/// Traite `buf` par morceaux de `chunk` éléments, répartis sur les cœurs du processeur
+/// (`f` reçoit le numéro du morceau et le morceau).
+fn par_chunks<T: Send>(buf: &mut [T], chunk: usize, f: impl Fn(usize, &mut [T]) + Sync) {
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(1, 16);
+    let mut groups: Vec<Vec<(usize, &mut [T])>> = (0..threads).map(|_| Vec::new()).collect();
+    // En alternance : les zones chargées (souvent groupées) se répartissent entre les fils.
+    for (i, c) in buf.chunks_mut(chunk.max(1)).enumerate() {
+        groups[i % threads].push((i, c));
+    }
+    let f = &f;
+    std::thread::scope(|s| {
+        for group in groups.into_iter().filter(|g| !g.is_empty()) {
+            s.spawn(move || {
+                for (i, c) in group {
+                    f(i, c);
+                }
+            });
+        }
+    });
+}
+
 /// Ce que voit la caméra `cam` : l'image finale (`doc.frame`). Chaque pixel prend la couleur de
 /// la feuille au point filmé (interpolation bilinéaire) ; caméra centrée sans zoom ni rotation :
 /// les pixels de la feuille, tels quels. Hors de la feuille : transparent.
+///
+/// Seule la zone filmée de la feuille est composée (en tuiles entières, avec une marge pour
+/// l'interpolation), et le travail est réparti sur les cœurs du processeur.
 pub fn camera_image(doc: &Document, plan: &Plan, cam: &Camera) -> Vec<Color32> {
-    let full = composite_full(doc, plan);
     let [fw, fh] = doc.frame;
-    let (w, h) = (doc.width as i64, doc.height as i64);
+    let mut out = vec![Color32::TRANSPARENT; fw * fh];
+    let (w, h) = (doc.width, doc.height);
+    let corners = cam.corners(doc.frame);
+    let lo = corners.iter().fold((f32::MAX, f32::MAX), |(x, y), c| (x.min(c.x), y.min(c.y)));
+    let hi = corners.iter().fold((f32::MIN, f32::MIN), |(x, y), c| (x.max(c.x), y.max(c.y)));
+    if w == 0 || h == 0 || hi.0 + 2.0 < 0.0 || hi.1 + 2.0 < 0.0 || lo.0 - 2.0 >= w as f32 || lo.1 - 2.0 >= h as f32 {
+        return out;
+    }
+    let clamp = |v: f32, max: usize| (v.max(0.0) as usize).min(max - 1);
+    let (tx0, ty0) = (clamp(lo.0 - 2.0, w) / TILE, clamp(lo.1 - 2.0, h) / TILE);
+    let (tx1, ty1) = (clamp(hi.0 + 2.0, w) / TILE, clamp(hi.1 + 2.0, h) / TILE);
+    let (rx, ry) = (tx0 * TILE, ty0 * TILE);
+    let rw = ((tx1 + 1) * TILE).min(w) - rx;
+    let rh = ((ty1 + 1) * TILE).min(h) - ry;
+    let tiles_x = tiles_across(w);
+
+    // Composer la zone, une bande de tuiles par morceau.
+    let mut region = vec![Color32::TRANSPARENT; rw * rh];
+    par_chunks(&mut region, TILE * rw, |band, buf| {
+        let ty = ty0 + band;
+        for tx in tx0..=tx1 {
+            composite_tile_into(doc, plan, ty * tiles_x + tx, buf, rw, (rx, ty * TILE));
+        }
+    });
+
+    // Échantillonner ce que filme la caméra. Hors de la zone (donc hors de la feuille, grâce à la
+    // marge) : transparent.
+    let region = &region;
     let get = |x: i64, y: i64| -> [f32; 4] {
-        if x < 0 || y < 0 || x >= w || y >= h {
+        let (x, y) = (x - rx as i64, y - ry as i64);
+        if x < 0 || y < 0 || x >= rw as i64 || y >= rh as i64 {
             return [0.0; 4];
         }
-        let c = full[(y * w + x) as usize];
+        let c = region[y as usize * rw + x as usize];
         [c.r() as f32, c.g() as f32, c.b() as f32, c.a() as f32]
     };
-    let mut out = Vec::with_capacity(fw * fh);
-    for v in 0..fh {
-        for u in 0..fw {
+    const ROWS: usize = 16;
+    par_chunks(&mut out, fw * ROWS, |chunk, rows| {
+        for (k, px_out) in rows.iter_mut().enumerate() {
+            let (u, v) = (k % fw, chunk * ROWS + k / fw);
             let p = cam.to_stage(doc.frame, u as f32 + 0.5, v as f32 + 0.5);
             let (fx, fy) = (p.x - 0.5, p.y - 0.5);
             let (ix, iy) = (fx.floor(), fy.floor());
@@ -168,9 +227,9 @@ pub fn camera_image(doc: &Document, plan: &Plan, cam: &Camera) -> Vec<Color32> {
                 let bottom = c[k] + (d[k] - c[k]) * tx;
                 px[k] = (top + (bottom - top) * ty).round().clamp(0.0, 255.0) as u8;
             }
-            out.push(Color32::from_rgba_premultiplied(px[0], px[1], px[2], px[3]));
+            *px_out = Color32::from_rgba_premultiplied(px[0], px[1], px[2], px[3]);
         }
-    }
+    });
     out
 }
 

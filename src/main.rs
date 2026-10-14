@@ -13,6 +13,10 @@ mod canvas;
 #[cfg(test)]
 mod depth_tests;
 mod document;
+mod export;
+#[cfg(test)]
+mod export_tests;
+mod exportui;
 mod fill;
 mod gpu;
 mod guides;
@@ -37,6 +41,7 @@ mod pixtools;
 mod project;
 mod raster;
 mod render;
+mod settings;
 mod soundtrack;
 #[cfg(test)]
 mod stage_tests;

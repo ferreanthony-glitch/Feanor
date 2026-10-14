@@ -107,8 +107,15 @@ deux calques vectoriels restent vectoriels, sinon le résultat est bitmap ; les 
 - **Annuler / rétablir** (Ctrl+Z / Ctrl+Maj+Z) : 200 étapes, sur tout le projet : traits, vectoriel,
   sélections, panneaux, scènes, séquences, calques, sons, textes, noms, réglages des calques et des
   pistes, guides, papier, cadence. Une saisie ou un glissé de curseur compte pour une seule étape.
-- **Export** : image courante, séquence PNG du panneau ou de tout le montage, storyboard en page HTML
-  imprimable (une planche par panneau, rangées par séquence ; à imprimer en PDF depuis le navigateur).
+- **Export** (menu Fichier) :
+  - « Exporter le film / des images / le son… » ouvre une fenêtre : film MP4 (pour regarder,
+    envoyer) ou MOV ProRes (pour un logiciel de montage), images PNG, ou son seul (WAV) ; tout le
+    montage, la scène ou le panneau courant ; vidéo en taille réelle ou moitié, avec ou sans son.
+    Une barre de progression indique le temps restant ; « Annuler » arrête et efface la vidéo
+    inachevée. La vidéo est fabriquée par **ffmpeg**, que Pelure cherche sur le poste (il est
+    installé avec Krita, par exemple) ; « Choisir un autre ffmpeg… » sinon.
+  - Image courante (PNG), et storyboard en page HTML imprimable (une planche par panneau, rangées
+    par séquence ; à imprimer en PDF depuis le navigateur).
 
 ## Raccourcis clavier
 
@@ -167,6 +174,8 @@ ligne « Caméra » de la timeline et en petits losanges dans la bande de montag
 | `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra |
 | `gpu.rs` | Composition et affichage par la carte graphique, envoi des dessins par tuiles |
 | `playback.rs` | Lecture fluide : dessins envoyés d'avance, cadence affichée |
+| `export.rs`, `exportui.rs` | Exports : film (ffmpeg), images, son ; fenêtres de choix et de progression |
+| `settings.rs` | Réglages de l'application (emplacement de ffmpeg) |
 | `camera.rs`, `camtools.rs` | Caméra du panneau : images clés, courbes ; outil Caméra, vue caméra |
 | `layertools.rs` | Outil Transformer (calque entier) |
 | `topview.rs` | Vue de dessus (profondeur des calques) |

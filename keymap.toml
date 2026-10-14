@@ -57,6 +57,27 @@ action = "fichier.quitter"
 touches = ["Ctrl+Q"]
 source = "Storyboard Pro 27 : QUIT_KEY"
 
+# Exports : commandes de Storyboard Pro 27 sans touche par défaut (correspondance par le nom).
+[[raccourci]]
+action = "fichier.exporter_film"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : MOVIE_EXPORT_KEY"
+
+[[raccourci]]
+action = "fichier.exporter_images"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : BITMAP_EXPORT_KEY"
+
+[[raccourci]]
+action = "fichier.exporter_son"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : SOUNDTRACK_EXPORT_KEY"
+
+[[raccourci]]
+action = "fichier.exporter_image_courante"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : EXPORT_CURRENT_IMAGE_KEY"
+
 # ------------------------------------------------------------------------------------ Édition
 
 [[raccourci]]

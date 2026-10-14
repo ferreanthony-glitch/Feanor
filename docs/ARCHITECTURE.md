@@ -59,7 +59,20 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   5 ms.
 - **Rendu sur processeur** (`render.rs`) : export, vignettes (`thumbs.rs`), pipette, pot de
   peinture, et affichage de secours (OpenGL, ou `PELURE_COMPOSITION=processeur`). Même calcul,
-  même résultat : c'est la référence de comparaison.
+  même résultat : c'est la référence de comparaison. `camera_image` (export) ne compose que la
+  zone filmée, en tuiles entières avec 2 px de marge pour l'interpolation, répartie sur les
+  cœurs (`par_chunks`, fils `std::thread::scope`) ; testée identique, pixel pour pixel, à
+  l'ancien calcul (feuille entière, un fil).
+- **Exports** (`export.rs`, `exportui.rs`, 3b) : les images sont calculées sur le fil de
+  l'interface, 40 ms par image d'écran, derrière une fenêtre modale (le document ne peut pas
+  changer : pas besoin de le copier, ce qui doublerait la mémoire). Une image tenue (même plan,
+  même caméra) n'est pas recalculée. Elles partent par une file bornée (8 images) vers des fils
+  d'écriture PNG, ou vers un fil qui les verse dans l'entrée de ffmpeg (images RGBA brutes). Le
+  son est mixé d'avance (`MixState`, hors carte son) dans un WAV temporaire que ffmpeg lit à
+  côté. Couleurs converties et étiquetées BT.709 ; tailles impaires rognées d'un pixel (les codecs
+  veulent des tailles paires). ffmpeg n'est pas fourni : cherché sur le poste, ou choisi
+  (`settings.rs`, `%APPDATA%\Pelure\reglages.toml`), lancé sans fenêtre de console. Annuler ou
+  quitter pendant un export arrête ffmpeg et efface la vidéo inachevée.
 - **Annuler / rétablir** (`history.rs`) : chaque modification enregistre l'état d'avant, **avant**
   d'avoir lieu : tuiles d'un dessin bitmap, dessin vectoriel, ou « structure ». La structure, c'est
   tout le document hors dessins et sons : séquences, scènes, panneaux et leurs textes, calques

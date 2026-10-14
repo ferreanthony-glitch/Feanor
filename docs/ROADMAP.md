@@ -102,9 +102,16 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
   au-dessus de 20 ms de calcul, ni en lecture ni en défilement. Vignettes : quelques ms par image
   au lieu de 4 d'un coup. Barre d'état : cadence réellement affichée pendant la lecture (orange
   si des images sont sautées pour rester calé sur le son).
-- ⏳ 3b. Exports sans figer la fenêtre (progression, annuler) : séquence d'images (existe, à
-  mettre en tâche de fond et à accélérer), vidéo avec le son via ffmpeg (celui de Krita est déjà
-  installé sur ce poste), son seul.
+- ✅ 3b. Exports (Fichier > Exporter…) : film MP4 H.264 + son AAC (regarder, envoyer), film
+  MOV ProRes 422 HQ + son PCM (montage), images PNG, son seul WAV ; tout le montage, la scène ou
+  le panneau ; vidéo pleine taille ou moitié. Fenêtre de progression (temps restant, annuler) :
+  la fenêtre reste vivante, le document est bloqué pendant l'export. ffmpeg : celui trouvé sur
+  le poste (Krita, PATH, winget) ou choisi à la main (retenu dans les réglages). Image filmée
+  4 à 8 fois plus rapide (zone filmée seulement, plusieurs cœurs) et images tenues pas
+  recalculées : montage lourd de 960 images 1080p exporté en 23 s (avant : ~85 s de calcul,
+  fenêtre figée). Couleurs vérifiées (BT.709). Commandes de Storyboard Pro 27 reprises sans
+  touche : MOVIE_EXPORT_KEY, BITMAP_EXPORT_KEY, SOUNDTRACK_EXPORT_KEY, EXPORT_CURRENT_IMAGE_KEY.
+  Pas encore : choix de la qualité, images JPEG, export EDL/AAF/XML.
 - ⏳ 3c. PDF de storyboard : planches avec action, dialogue, notes.
 - ⏳ 3d. Animation à la TVPaint : pelure d'oignon plus réglable, pinceaux (essai d'import des
   9 pinceaux perso).

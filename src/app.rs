@@ -187,6 +187,14 @@ pub struct App {
     pub(crate) top_drag: Option<crate::topview::TopDrag>,
     /// Cadence réellement affichée pendant la lecture.
     pub(crate) play_meter: crate::playback::PlayMeter,
+    /// Fenêtre d'export ouverte, derniers choix, export en cours.
+    pub(crate) export_dialog: Option<crate::export::ExportSettings>,
+    pub(crate) export_last: crate::export::ExportSettings,
+    pub(crate) export_job: Option<crate::export::ExportJob>,
+    /// ffmpeg trouvé (ou choisi) et ce qu'il sait encoder ; cherché à la première ouverture.
+    pub(crate) ffmpeg: Option<Option<(PathBuf, Result<crate::export::Encoders, String>)>>,
+    /// Réglages de l'application (%APPDATA%\Pelure\reglages.toml).
+    pub(crate) settings: crate::settings::Settings,
     pub(crate) default_exposure: usize,
     pub(crate) playing: bool,
     pub(crate) play_montage: bool,
@@ -323,6 +331,11 @@ impl App {
             top_view: false,
             top_drag: None,
             play_meter: Default::default(),
+            export_dialog: None,
+            export_last: Default::default(),
+            export_job: None,
+            ffmpeg: None,
+            settings: crate::settings::Settings::load(),
             default_exposure: 1,
             playing: false,
             play_montage: false,
@@ -472,7 +485,7 @@ impl App {
     }
 
     pub(crate) fn modal_open(&self) -> bool {
-        self.new_dialog.is_some() || self.pending.is_some()
+        self.new_dialog.is_some() || self.pending.is_some() || self.export_dialog.is_some() || self.export_job.is_some()
     }
 
     pub(crate) fn current_brush(&self) -> Option<&BrushSettings> {
@@ -1476,7 +1489,7 @@ impl App {
         self.length_origin = None;
     }
 
-    fn base_name(&self) -> String {
+    pub(crate) fn base_name(&self) -> String {
         self.base_name_or("image")
     }
 
@@ -1490,45 +1503,8 @@ impl App {
             .unwrap_or_else(|| fallback.into())
     }
 
-    fn pick_folder(title: &str) -> Option<PathBuf> {
+    pub(crate) fn pick_folder(title: &str) -> Option<PathBuf> {
         rfd::FileDialog::new().set_title(title).pick_folder()
-    }
-
-    /// Écrit en PNG les images `(plan, image)` données, numérotées à partir de 1.
-    fn export_frames(&mut self, dir: &std::path::Path, frames: &[(usize, usize)]) {
-        let base = self.base_name();
-        let paper = (!self.export_transparent).then_some(self.doc.paper);
-        for (n, &(panel, frame)) in frames.iter().enumerate() {
-            let plan = render::panel_plan_at(&self.doc, panel, frame, paper);
-            let cam = self.doc.panel_camera(panel, frame);
-            let pixels = render::camera_image(&self.doc, &plan, &cam);
-            let path = dir.join(format!("{base}_{:04}.png", n + 1));
-            if let Err(e) = io::write_png(&path, &pixels, self.doc.frame[0], self.doc.frame[1]) {
-                self.status = format!("Échec de l'export ({}) : {e}", path.display());
-                return;
-            }
-        }
-        self.status = format!("{} images exportées dans {}", frames.len(), dir.display());
-    }
-
-    pub(crate) fn export_panel_sequence(&mut self) {
-        self.end_stroke();
-        let Some(dir) = Self::pick_folder("Dossier où exporter le panneau") else { return };
-        let frames: Vec<_> = (0..self.frame_count()).map(|f| (self.cur_panel, f)).collect();
-        self.export_frames(&dir, &frames);
-    }
-
-    pub(crate) fn export_montage_sequence(&mut self) {
-        self.end_stroke();
-        let Some(dir) = Self::pick_folder("Dossier où exporter tout le montage") else { return };
-        let frames: Vec<_> = self
-            .doc
-            .panels
-            .iter()
-            .enumerate()
-            .flat_map(|(s, panel)| (0..panel.frame_count()).map(move |f| (s, f)))
-            .collect();
-        self.export_frames(&dir, &frames);
     }
 
     /// Une planche par plan (première image) et une page HTML imprimable avec les indications.
@@ -1746,6 +1722,10 @@ impl App {
                 self.save_as();
             }
             "fichier.quitter" => self.request(Pending::Quit),
+            "fichier.exporter_film" => self.open_export(crate::export::Format::Mp4),
+            "fichier.exporter_images" => self.open_export(crate::export::Format::Png),
+            "fichier.exporter_son" => self.open_export(crate::export::Format::Wav),
+            "fichier.exporter_image_courante" => self.export_frame(),
             "edition.annuler" => self.undo(),
             "edition.retablir" => self.redo(),
             "edition.couper" if self.bsel.is_some() => self.bitmap_cut(),
@@ -2123,6 +2103,14 @@ impl eframe::App for App {
 
         self.dialogs(ctx);
         self.top_view_window(ctx);
+        // Export en cours : quelques images par image d'écran, la fenêtre reste vivante.
+        if let Some(job) = &mut self.export_job {
+            job.step(&self.doc, std::time::Duration::from_millis(40));
+            if job.outcome.is_none() {
+                ctx.request_repaint();
+            }
+        }
+        self.export_windows(ctx);
         self.scrub_audio();
         if self.thumbs.pending {
             ctx.request_repaint();
