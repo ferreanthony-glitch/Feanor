@@ -96,6 +96,9 @@ impl App {
             }
         });
         ui.menu_button("Panneaux", |ui| {
+            ui.checkbox(&mut self.layout.command_bar, "Barre de commandes (en haut)");
+            ui.checkbox(&mut self.layout.tool_bar, "Barre d'outils (à gauche)");
+            ui.separator();
             let panes = self.dock_layout();
             let detached = self.detached_panes();
             // Un par un…

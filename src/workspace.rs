@@ -38,6 +38,11 @@ pub struct Layout {
     /// Fenêtre « Vue de dessus » ouverte.
     #[serde(rename = "vue_dessus")]
     pub top_view: bool,
+    /// Barre de commandes en haut et barre d'outils verticale à gauche (6a).
+    #[serde(rename = "barre_commandes")]
+    pub command_bar: bool,
+    #[serde(rename = "barre_outils")]
+    pub tool_bar: bool,
 }
 
 impl Default for Layout {
@@ -46,12 +51,14 @@ impl Default for Layout {
             panneaux: None,
             tools: true,
             sheet: true,
-            sheet_width: 290.0,
+            sheet_width: 230.0,
             strip: true,
             montage_height: 290.0,
             timeline_height: 210.0,
             vignettes: false,
             top_view: false,
+            command_bar: true,
+            tool_bar: true,
         }
     }
 }
@@ -66,12 +73,24 @@ impl Layout {
         self
     }
 
-    /// Les panneaux et leur place.
+    /// Les panneaux et leur place. Une disposition d'avant 6a perd son panneau Outils (les
+    /// outils sont dans la barre verticale).
     pub fn dock_layout(&self) -> DockLayout {
         match &self.panneaux {
+            Some(d) if d.version < crate::dock::LAYOUT_VERSION => {
+                let mut d = d.clone();
+                d.close(crate::dock::Pane::Tools);
+                d.version = crate::dock::LAYOUT_VERSION;
+                d.sanitized()
+            }
             Some(d) => d.clone().sanitized(),
             None => DockLayout::from_legacy(self),
         }
+    }
+
+    /// Disposition enregistrée avant 6a (on lui préfère la nouvelle disposition par défaut).
+    pub fn is_before_6a(&self) -> bool {
+        self.panneaux.as_ref().is_some_and(|d| d.version < crate::dock::LAYOUT_VERSION)
     }
 }
 

@@ -178,6 +178,9 @@ pub struct DetachedPanel {
 /// La disposition des panneaux.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DockLayout {
+    /// `LAYOUT_VERSION` ; absent (0) : disposition d'avant 6a.
+    #[serde(default)]
+    pub version: u32,
     pub principal: DockNode,
     #[serde(default)]
     pub fenetres: Vec<FloatingPanel>,
@@ -197,20 +200,25 @@ fn column(part: f32, a: DockNode, b: DockNode) -> DockNode {
     DockNode::Column { part, haut: Box::new(a), bas: Box::new(b) }
 }
 
-/// Colonne de gauche par défaut : les outils en haut, la couleur, puis réglages, vue et guides
-/// en onglets.
+/// Colonne des réglages (6a, à droite) : réglages de l'outil, vue et guides en onglets, la
+/// couleur dessous ; les icônes des outils au-dessus si on les a rouvertes en panneau (elles sont
+/// d'ordinaire dans la barre verticale).
 fn left_column(only: &[Pane]) -> Option<DockNode> {
     let keep = |list: Vec<Pane>| -> Option<DockNode> {
         let list: Vec<Pane> = list.into_iter().filter(|p| only.contains(p)).collect();
         (!list.is_empty()).then(|| tabs(list))
     };
     let parts = [
-        (0.34, keep(vec![Pane::Tools])),
-        (0.2, keep(vec![Pane::Color])),
-        (1.0, keep(vec![Pane::ToolOptions, Pane::View, Pane::Guides])),
+        (0.3, keep(vec![Pane::Tools])),
+        (0.6, keep(vec![Pane::ToolOptions, Pane::View, Pane::Guides])),
+        (1.0, keep(vec![Pane::Color])),
     ];
     stack(&parts)
 }
+
+/// Version de la disposition : 1 depuis 6a (outils dans la barre verticale, calques à côté du
+/// dessin, réglages et couleur à droite).
+pub const LAYOUT_VERSION: u32 = 1;
 
 /// Empile de haut en bas des parties (part de chacune dans ce qui reste), en sautant les absentes.
 fn stack(parts: &[(f32, Option<DockNode>)]) -> Option<DockNode> {
@@ -223,17 +231,19 @@ fn stack(parts: &[(f32, Option<DockNode>)]) -> Option<DockNode> {
     Some(node)
 }
 
+/// Colonne des calques (6a, à droite du dessin) : les calques, la fiche du panneau dessous.
 fn right_column(only: &[Pane]) -> Option<DockNode> {
     let sheet = only.contains(&Pane::Sheet).then(|| tabs(vec![Pane::Sheet]));
     let layers = only.contains(&Pane::Layers).then(|| tabs(vec![Pane::Layers]));
-    stack(&[(0.55, sheet), (1.0, layers)])
+    stack(&[(0.6, layers), (1.0, sheet)])
 }
 
 /// Taille de fenêtre de référence pour passer des tailles en pixels (anciennes dispositions) aux
-/// parts de la nouvelle.
-const REF_WIDTH: f32 = 1500.0;
-const REF_HEIGHT: f32 = 860.0;
-const LEFT_WIDTH: f32 = 250.0;
+/// parts de la nouvelle (largeur hors barre d'outils verticale).
+const REF_WIDTH: f32 = 1454.0;
+const REF_HEIGHT: f32 = 820.0;
+/// Largeur de la colonne des réglages.
+const TOOLS_WIDTH: f32 = 290.0;
 
 impl DockNode {
     fn collect(&self, out: &mut Vec<Pane>) {
@@ -325,22 +335,18 @@ impl DockLayout {
     /// pixels), ou celle d'un espace de travail de Pelure.
     pub fn from_legacy(l: &Layout) -> DockLayout {
         let mut center = tabs(vec![Pane::Canvas]);
-        let mut width = REF_WIDTH;
-        if l.tools {
-            if let Some(left) = left_column(&Group::Left.panes()) {
-                center = row(LEFT_WIDTH / width, left, center);
-            }
-            width -= LEFT_WIDTH;
-        }
-        if l.sheet {
-            if let Some(right) = right_column(&Group::Right.panes()) {
-                let canvas_part = 1.0 - l.sheet_width.clamp(160.0, 900.0) / width.max(1.0);
-                // La colonne de droite est à droite du dessin (et de la colonne de gauche).
-                center = match center {
-                    DockNode::Row { part, gauche, droite } => row(part, *gauche, row(canvas_part, *droite, right)),
-                    c => row(canvas_part, c, right),
-                };
-            }
+        // À droite du dessin : les calques (et la fiche), puis les réglages et la couleur.
+        let tools = if l.tools { left_column(&[Pane::ToolOptions, Pane::View, Pane::Guides, Pane::Color]) } else { None };
+        let layers = if l.sheet { right_column(&Group::Right.panes()) } else { None };
+        let layers_w = l.sheet_width.clamp(160.0, 900.0);
+        let side = match (layers, tools) {
+            (Some(a), Some(b)) => Some((row(layers_w / (layers_w + TOOLS_WIDTH), a, b), layers_w + TOOLS_WIDTH)),
+            (Some(a), None) => Some((a, layers_w)),
+            (None, Some(b)) => Some((b, TOOLS_WIDTH)),
+            (None, None) => None,
+        };
+        if let Some((side, w)) = side {
+            center = row(1.0 - w / REF_WIDTH, center, side);
         }
         if l.strip {
             let part = 1.0 - l.montage_height.clamp(140.0, 1200.0) / REF_HEIGHT;
@@ -351,7 +357,7 @@ impl DockLayout {
 
     /// Le dessin seul.
     fn empty() -> DockLayout {
-        DockLayout { principal: tabs(vec![Pane::Canvas]), fenetres: Vec::new(), detachees: Vec::new() }
+        DockLayout { version: LAYOUT_VERSION, principal: tabs(vec![Pane::Canvas]), fenetres: Vec::new(), detachees: Vec::new() }
     }
 
     pub fn panes(&self) -> Vec<Pane> {
@@ -410,7 +416,7 @@ impl DockLayout {
                 None => tabs(vec![Pane::Canvas]),
             });
         }
-        DockLayout { principal: principal.unwrap_or_else(|| tabs(vec![Pane::Canvas])), fenetres, detachees }
+        DockLayout { version: self.version, principal: principal.unwrap_or_else(|| tabs(vec![Pane::Canvas])), fenetres, detachees }
     }
 
     /// Ferme un panneau (le dessin ne se ferme pas).
@@ -430,7 +436,13 @@ impl DockLayout {
             })
             .collect();
         let detachees = layout.detachees.into_iter().filter(|d| d.panneau != pane).collect();
-        *self = DockLayout { principal: principal.unwrap_or_else(|| tabs(vec![Pane::Canvas])), fenetres, detachees }.sanitized();
+        *self = DockLayout {
+            version: layout.version,
+            principal: principal.unwrap_or_else(|| tabs(vec![Pane::Canvas])),
+            fenetres,
+            detachees,
+        }
+        .sanitized();
     }
 
     /// Rouvre un panneau à sa place : avec les panneaux de son groupe s'il en reste, sinon dans
@@ -474,10 +486,15 @@ impl DockLayout {
                 self.principal = column(1.0 - 290.0 / REF_HEIGHT, main, tabs(panes.to_vec()));
             }
             Group::Left => {
-                let Some(left) = left_column(panes) else { return };
-                let mut left = Some(left);
-                self.principal
-                    .wrap_tabs_of(Pane::Canvas, &mut |canvas| row(0.2, left.take().unwrap_or_else(|| tabs(Vec::new())), canvas));
+                // La colonne des réglages, tout à droite (au-dessus de la bande s'il y en a une).
+                let Some(col) = left_column(panes) else { return };
+                let main = std::mem::replace(&mut self.principal, tabs(Vec::new()));
+                self.principal = match main {
+                    DockNode::Column { part, haut, bas } if bas.first_tabs().contains(&Pane::Strip) => {
+                        column(part, row(0.8, *haut, col), *bas)
+                    }
+                    other => row(0.8, other, col),
+                };
             }
             Group::Right => {
                 let Some(right) = right_column(panes) else { return };
@@ -486,7 +503,8 @@ impl DockLayout {
                     .wrap_tabs_of(Pane::Canvas, &mut |canvas| row(0.78, canvas, right.take().unwrap_or_else(|| tabs(Vec::new()))));
             }
         }
-        *self = std::mem::replace(self, DockLayout::empty()).sanitized();
+        let version = self.version;
+        *self = DockLayout { version, ..std::mem::replace(self, DockLayout::empty()) }.sanitized();
     }
 
     /// Deux dispositions égales, aux parts près (elles bougent d'un rien quand on tire un bord).
@@ -606,7 +624,7 @@ pub fn from_state(state: &DockState<Pane>, window_rect: &dyn Fn(usize) -> Option
             }
         }
     }
-    DockLayout { principal, fenetres, detachees: Vec::new() }.sanitized()
+    DockLayout { version: LAYOUT_VERSION, principal, fenetres, detachees: Vec::new() }.sanitized()
 }
 
 fn read(tree: &Tree<Pane>, at: NodeIndex) -> Option<DockNode> {

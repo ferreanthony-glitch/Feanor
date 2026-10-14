@@ -13,33 +13,53 @@ fn count(layout: &DockLayout, pane: Pane) -> usize {
     layout.panes().iter().filter(|p| **p == pane).count()
 }
 
+/// Panneaux d'une disposition par défaut : tous, sauf les icônes des outils (barre verticale).
+fn default_panes() -> impl Iterator<Item = Pane> {
+    Pane::ALL.into_iter().filter(|p| *p != Pane::Tools)
+}
+
 #[test]
 fn default_layout_has_every_panel_once() {
     let l = DockLayout::from_legacy(&Layout::default());
-    for pane in Pane::ALL {
+    for pane in default_panes() {
         assert_eq!(count(&l, pane), 1, "{pane:?}");
     }
-    // La bande en bas, sur toute la largeur ; au-dessus, outils | dessin | fiche et calques.
+    assert_eq!(count(&l, Pane::Tools), 0, "les outils sont dans la barre verticale");
+    assert_eq!(l.version, dock::LAYOUT_VERSION);
+    // La bande en bas, sur toute la largeur ; au-dessus : dessin | calques et fiche | réglages
+    // et couleur.
     let DockNode::Column { part, haut, bas } = &l.principal else { panic!("{:?}", l.principal) };
     assert_eq!(**bas, tabs(&[Pane::Strip]));
-    assert!((part - (1.0 - 290.0 / 860.0)).abs() < 1e-4, "{part}");
-    let DockNode::Row { part: left, gauche, droite } = &**haut else { panic!() };
-    assert!((left - 250.0 / 1500.0).abs() < 1e-4);
-    let mut left_panes = Vec::new();
-    for p in [Pane::Tools, Pane::Color, Pane::ToolOptions] {
-        assert!(format!("{gauche:?}").contains(&format!("{p:?}")), "{p:?} à gauche");
-        left_panes.push(p);
-    }
-    let DockNode::Row { gauche: center, droite: right, .. } = &**droite else { panic!() };
+    assert!((part - (1.0 - 290.0 / 820.0)).abs() < 1e-4, "{part}");
+    let DockNode::Row { gauche: center, droite: side, .. } = &**haut else { panic!() };
     assert_eq!(**center, tabs(&[Pane::Canvas]));
-    assert!(format!("{right:?}").contains("Layers") && format!("{right:?}").contains("Sheet"));
+    let DockNode::Row { gauche: layers, droite: tools, .. } = &**side else { panic!() };
+    assert!(format!("{layers:?}").contains("Layers") && format!("{layers:?}").contains("Sheet"));
+    for p in [Pane::ToolOptions, Pane::View, Pane::Guides, Pane::Color] {
+        assert!(format!("{tools:?}").contains(&format!("{p:?}")), "{p:?} à droite");
+    }
+}
+
+#[test]
+fn layouts_from_before_6a_lose_the_tools_panel() {
+    let mut old = DockLayout::from_legacy(&Layout::default());
+    old.open(Pane::Tools);
+    old.version = 0;
+    let l = Layout { panneaux: Some(old), ..Layout::default() };
+    assert!(l.is_before_6a());
+    let d = l.dock_layout();
+    assert!(!d.contains(Pane::Tools) && d.version == dock::LAYOUT_VERSION);
+    // Les outils en panneau restent possibles : rouverts au-dessus des réglages.
+    let mut again = d.clone();
+    again.open(Pane::Tools);
+    assert_eq!(count(&again, Pane::Tools), 1);
 }
 
 #[test]
 fn builtin_workspaces_keep_their_meaning() {
     let all = workspace::builtin();
     let dessin = all[1].2.dock_layout();
-    assert!(!dessin.contains(Pane::Sheet) && !dessin.contains(Pane::Layers) && dessin.contains(Pane::Tools));
+    assert!(!dessin.contains(Pane::Sheet) && !dessin.contains(Pane::Layers) && dessin.contains(Pane::ToolOptions));
     let ensemble = all[3].2.dock_layout();
     assert!(Group::Left.panes().iter().all(|p| !ensemble.contains(*p)));
     assert!(ensemble.contains(Pane::Canvas) && ensemble.contains(Pane::Strip));
@@ -56,18 +76,20 @@ fn layouts_survive_the_trip_through_egui_dock() {
     let mut l = DockLayout::from_legacy(&Layout::default());
     l.close(Pane::Guides);
     l.fenetres.push(FloatingPanel { panneaux: tabs(&[Pane::Guides]), x: 300.0, y: 200.0, largeur: 260.0, hauteur: 320.0 });
-    // Un groupe de trois onglets dont le deuxième est ouvert.
-    if let DockNode::Column { haut, .. } = &mut l.principal {
-        if let DockNode::Row { gauche, .. } = &mut **haut {
-            if let DockNode::Column { bas, .. } = &mut **gauche {
-                if let DockNode::Column { bas, .. } = &mut **bas {
-                    if let DockNode::Tabs { actif, .. } = &mut **bas {
-                        *actif = 1;
-                    }
-                }
+    // Un groupe de plusieurs onglets dont le deuxième est ouvert.
+    fn second_tab(n: &mut DockNode) -> bool {
+        match n {
+            DockNode::Tabs { panneaux, actif } if panneaux.len() >= 2 => {
+                *actif = 1;
+                true
+            }
+            DockNode::Tabs { .. } => false,
+            DockNode::Row { gauche: a, droite: b, .. } | DockNode::Column { haut: a, bas: b, .. } => {
+                second_tab(a) || second_tab(b)
             }
         }
     }
+    assert!(second_tab(&mut l.principal));
     let state = dock::to_state(&l);
     let mut back = dock::from_state(&state, &|_| None);
     // Une fenêtre pas encore affichée n'a pas de place connue : on ne compare que l'arbre.
@@ -103,7 +125,7 @@ fn closing_and_reopening_a_panel_puts_it_back_with_its_group() {
     l.close(Pane::Strip);
     l.open(Pane::Strip);
     assert!(matches!(&l.principal, DockNode::Column { bas, .. } if **bas == tabs(&[Pane::Strip])));
-    for pane in Pane::ALL {
+    for pane in default_panes() {
         assert_eq!(count(&l, pane), 1, "{pane:?}");
     }
 }
@@ -125,6 +147,7 @@ fn a_whole_group_toggles_at_once() {
 #[test]
 fn damaged_layouts_are_repaired() {
     let bad = DockLayout {
+        version: dock::LAYOUT_VERSION,
         principal: DockNode::Row {
             part: 7.0,
             gauche: Box::new(DockNode::Tabs { panneaux: vec![Pane::Tools, Pane::Tools], actif: 9 }),
@@ -144,6 +167,16 @@ fn damaged_layouts_are_repaired() {
     assert_eq!(bad.fenetres[0].largeur, 0.0, "taille absurde : à replacer");
     let s = format!("{:?}", bad.principal);
     assert!(s.contains("actif: 0") && !s.contains("part: 7"), "{s}");
+}
+
+#[test]
+fn the_vertical_tool_bar_has_every_tool_once() {
+    let mut all: Vec<crate::app::Tool> = crate::toolbars::TOOL_GROUPS.iter().flat_map(|g| g.iter().copied()).collect();
+    assert_eq!(all.len(), crate::app::Tool::ALL.len());
+    for t in crate::app::Tool::ALL {
+        assert_eq!(all.iter().filter(|x| **x == t).count(), 1, "{}", t.label());
+    }
+    all.dedup();
 }
 
 #[test]

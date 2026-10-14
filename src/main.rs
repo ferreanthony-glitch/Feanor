@@ -89,6 +89,7 @@ mod tbbrush;
 mod tests;
 mod thumbs;
 mod timeline;
+mod toolbars;
 mod topview;
 #[cfg(test)]
 mod topview_tests;

@@ -543,7 +543,19 @@ impl App {
             " · calques par le processeur"
         });
         // La disposition de la dernière fois.
-        if let Some(layout) = app.settings.layout.clone() {
+        if let Some(mut layout) = app.settings.layout.clone() {
+            // Disposition d'avant 6a : la nouvelle disposition par défaut (barre d'outils
+            // verticale, calques à côté du dessin), en gardant les panneaux affichés.
+            if layout.is_before_6a() {
+                let d = layout.dock_layout();
+                layout = crate::workspace::Layout {
+                    tools: d.contains(crate::dock::Pane::ToolOptions),
+                    sheet: d.contains(crate::dock::Pane::Layers) || d.contains(crate::dock::Pane::Sheet),
+                    strip: d.contains(crate::dock::Pane::Strip),
+                    panneaux: None,
+                    ..crate::workspace::Layout::default()
+                };
+            }
             app.apply_layout(layout);
         }
         app
@@ -2282,7 +2294,16 @@ impl eframe::App for App {
         self.thumbs.pending = false;
 
         egui::TopBottomPanel::top("menu").show(ctx, |ui| self.menu_bar(ui));
+        if self.layout.command_bar {
+            egui::TopBottomPanel::top("commandes").show(ctx, |ui| self.command_bar(ui));
+        }
         egui::TopBottomPanel::bottom("statut").show(ctx, |ui| self.status_bar(ui));
+        if self.layout.tool_bar {
+            egui::SidePanel::left("barre_outils")
+                .exact_width(44.0)
+                .resizable(false)
+                .show(ctx, |ui| self.vertical_tool_bar(ui));
+        }
         // Les panneaux : onglets que l'on glisse, aimante ou fait flotter (5b).
         self.show_dock(ctx);
 

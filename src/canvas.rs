@@ -85,8 +85,19 @@ impl App {
         self.paint_text_overlay(&painter);
         self.paint_persp_overlay(&painter);
         self.paint_stroke_tip(&painter);
+        self.paint_canvas_title(&painter, rect);
         self.paint_cursor(ui.ctx(), &painter, &response);
         self.text_edit_window(ui.ctx());
+    }
+
+    /// Scène et panneau en cours, en haut à droite du dessin.
+    fn paint_canvas_title(&self, painter: &egui::Painter, rect: Rect) {
+        let text = crate::storyboard::panel_long_title(&self.doc, self.cur_panel);
+        let galley = painter.layout_no_wrap(text, egui::FontId::proportional(17.0), Color32::from_gray(235));
+        let at = egui::pos2(rect.right() - galley.size().x - 14.0, rect.top() + 8.0);
+        let bg = Rect::from_min_size(at - vec2(8.0, 4.0), galley.size() + vec2(16.0, 8.0));
+        painter.rect_filled(bg, 4.0, Color32::from_black_alpha(150));
+        painter.galley(at, galley, Color32::from_gray(235));
     }
 
     /// Pendant un trait : relie le dernier point posé à la pointe du stylet, pour que le trait
