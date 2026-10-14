@@ -244,39 +244,27 @@ impl App {
     pub(crate) fn tools_panel(&mut self, ui: &mut egui::Ui) {
         ui.add_space(4.0);
         ui.heading("Outils");
-        egui::Grid::new("grille_outils")
-            .num_columns(2)
-            .spacing([4.0, 4.0])
-            .show(ui, |ui| {
-                for (i, tool) in Tool::ALL.into_iter().enumerate() {
-                    let shortcut = self.keymap.label(tool.action());
-                    let hint = if shortcut.is_empty() {
-                        "Pas de raccourci".to_string()
-                    } else {
-                        format!("Raccourci : {shortcut}")
-                    };
-                    let mut text = egui::text::LayoutJob::default();
-                    let style = ui.style().clone();
-                    RichText::new(tool.label()).append_to(&mut text, &style, egui::FontSelection::Default, Align::Center);
-                    RichText::new(format!("  {shortcut}")).small().weak().append_to(
-                        &mut text,
-                        &style,
-                        egui::FontSelection::Default,
-                        Align::Center,
-                    );
-                    if ui
-                        .add_sized([108.0, 26.0], egui::SelectableLabel::new(self.tool == tool, text))
-                        .on_hover_text(hint)
-                        .clicked()
-                    {
-                        self.end_stroke();
-                        self.tool = tool;
-                    }
-                    if i % 2 == 1 {
-                        ui.end_row();
-                    }
+        // Une icône par outil ; nom et raccourci au survol.
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
+            for tool in Tool::ALL {
+                let shortcut = self.keymap.label(tool.action());
+                let hint = if shortcut.is_empty() {
+                    format!("{} (pas de raccourci)", tool.label())
+                } else {
+                    format!("{}   {shortcut}", tool.label())
+                };
+                let icon = RichText::new(tool.icon()).size(21.0);
+                if ui
+                    .add_sized([38.0, 34.0], egui::SelectableLabel::new(self.tool == tool, icon))
+                    .on_hover_text(hint)
+                    .clicked()
+                {
+                    self.end_stroke();
+                    self.tool = tool;
                 }
-            });
+            }
+        });
 
         ui.separator();
         ui.heading("Couleur");
@@ -315,7 +303,7 @@ impl App {
         ui.separator();
         let vector = self.layer().kind == LayerKind::Vector;
         ui.horizontal(|ui| {
-            ui.heading(self.tool.label());
+            ui.heading(format!("{}  {}", self.tool.icon(), self.tool.label()));
             ui.label(
                 RichText::new(if vector { "calque vectoriel" } else { "calque bitmap" })
                     .small()

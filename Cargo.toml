@@ -17,6 +17,10 @@ bytemuck = "1"
 toml = "0.8"
 cpal = "0.15"
 symphonia = { version = "0.5", default-features = false, features = ["wav", "pcm", "mp3", "flac", "ogg", "vorbis"] }
+# Phase 5 (choix d'Anthony) : icônes Phosphor (police d'icônes, licence MIT) et panneaux que l'on
+# glisse, range en onglets et aimante sur les bords (licence MIT). Versions faites pour egui 0.31.
+egui-phosphor = "0.9"
+egui_dock = { version = "0.16", features = ["serde"] }
 
 # Le dessin et la composition sont du calcul pixel : même en debug on optimise,
 # sinon le pinceau rame.

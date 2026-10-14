@@ -87,6 +87,24 @@ impl Tool {
         }
     }
 
+    /// Icône de l'outil (police d'icônes Phosphor, chargée au démarrage).
+    pub fn icon(self) -> &'static str {
+        use egui_phosphor::regular as ph;
+        match self {
+            Tool::Brush => ph::PAINT_BRUSH,
+            Tool::Pencil => ph::PENCIL_SIMPLE,
+            Tool::Eraser => ph::ERASER,
+            Tool::Fill => ph::PAINT_BUCKET,
+            Tool::Shape => ph::SHAPES,
+            Tool::Select => ph::LASSO,
+            Tool::Picker => ph::EYEDROPPER,
+            Tool::Pan => ph::HAND,
+            Tool::Camera => ph::VIDEO_CAMERA,
+            Tool::Transform => ph::BOUNDING_BOX,
+            Tool::Ref3d => ph::CUBE,
+        }
+    }
+
     /// Action qui choisit cet outil (son raccourci est dans le fichier de raccourcis).
     pub fn action(self) -> &'static str {
         match self {
@@ -286,6 +304,10 @@ pub struct App {
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         cc.egui_ctx.set_visuals(egui::Visuals::dark());
+        // Icônes (Phosphor) : ajoutées à la police de l'interface, utilisables dans tout texte.
+        let mut fonts = egui::FontDefinitions::default();
+        egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+        cc.egui_ctx.set_fonts(fonts);
         if let Some(rs) = &cc.wgpu_render_state {
             let info = rs.adapter.get_info();
             eprintln!("affichage : wgpu, {} ({:?}, {:?})", info.name, info.backend, info.device_type);
