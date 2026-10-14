@@ -55,7 +55,11 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
 - ✅ Prérequis : outils de compilation Microsoft (Build Tools 2022) installés, projet compilé avec
   la toolchain MSVC (`rust-toolchain.toml`) ; tests et lecture avec son vérifiés.
 
-- ⏳ 2a. Affichage sur la carte graphique (wgpu).
+- 🔧 2a. Affichage sur la carte graphique (wgpu).
+  - ✅ 2a-1. Moteur d'affichage de la fenêtre : wgpu (Vulkan / Direct3D 12), repli automatique sur
+    OpenGL ; carte utilisée indiquée dans le menu Aide.
+  - ⏳ 2a-2. Superposition des calques par la carte graphique (opacité, pelure, table lumineuse),
+    le calcul sur processeur restant pour l'export.
 - ⏳ 2b. Caméra : cadre, panoramique, zoom, rotation, images clés et courbes, visibles dans la timeline.
 - ⏳ 2c. Profondeur Z des calques (multiplan), vue 3D de contrôle.
 - ⏳ 2d. Import glTF de repère.

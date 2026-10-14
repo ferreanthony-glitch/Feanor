@@ -5,7 +5,9 @@ edition = "2021"
 description = "Logiciel d'animation 2D bitmap image par image, inspiré de TVPaint"
 
 [dependencies]
-eframe = "0.31"
+# « wgpu » : affichage par la carte graphique (Direct3D 12 / Vulkan) ; « glow » (OpenGL, inclus par
+# défaut) reste en secours.
+eframe = { version = "0.31", features = ["wgpu"] }
 rfd = "0.15"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 serde = { version = "1", features = ["derive"] }

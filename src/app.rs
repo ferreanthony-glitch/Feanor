@@ -234,11 +234,17 @@ pub struct App {
     pending_keys: Vec<(Key, Option<Key>, egui::Modifiers)>,
     pub(crate) keymap: Keymap,
     title: String,
+    /// Moteur d'affichage utilisé (carte graphique et son interface, ou OpenGL).
+    pub(crate) display_info: String,
 }
 
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         cc.egui_ctx.set_visuals(egui::Visuals::dark());
+        if let Some(rs) = &cc.wgpu_render_state {
+            let info = rs.adapter.get_info();
+            eprintln!("affichage : wgpu, {} ({:?}, {:?})", info.name, info.backend, info.device_type);
+        }
         Self {
             ctx: cc.egui_ctx.clone(),
             doc: Document::new(1920, 1080, 24),
@@ -336,6 +342,13 @@ impl App {
             pending_keys: Vec::new(),
             keymap: Keymap::load(),
             title: String::new(),
+            display_info: match &cc.wgpu_render_state {
+                Some(rs) => {
+                    let info = rs.adapter.get_info();
+                    format!("wgpu, {} ({:?})", info.name, info.backend)
+                }
+                None => "OpenGL (moteur de secours)".into(),
+            },
         }
     }
 

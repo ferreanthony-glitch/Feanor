@@ -4,7 +4,10 @@ Document tenu à jour à chaque étape. Dernière mise à jour : phase 1e (octob
 
 ## Vue d'ensemble
 
-Application de bureau en Rust. Une seule fenêtre, interface **egui 0.31** (via eframe, affichage OpenGL).
+Application de bureau en Rust. Une seule fenêtre, interface **egui 0.31** (via eframe). Affichage
+par la carte graphique avec **wgpu** (Vulkan ou Direct3D 12) depuis la phase 2a ; si wgpu ne démarre
+pas, Pelure repart en OpenGL (forçable avec `PELURE_AFFICHAGE=opengl`). Le moteur utilisé est
+indiqué dans le menu Aide.
 
 ```
 Document ─ séquences ─ scènes ─ panneaux ─ calques (bitmap ou vectoriel) ─ une case par image → dessin (Cel)
@@ -163,6 +166,7 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 |---|---|---|---|---|
 | egui 0.31, pas de mise à jour pour l'instant | stable, déjà en place | nul | moyen à terme (retard sur les versions) | oui, coût croissant avec la taille du code |
 | Rendu sur processeur en phase 1, carte graphique (wgpu) en phase 2 | la 3D et le multiplan l'exigent ; inutile avant | réécriture de `render.rs` en phase 2 | moyen | oui (le modèle de données ne change pas) |
+| Moteur d'affichage egui : wgpu par défaut, OpenGL en secours (fait en 2a-1) | wgpu permet nos propres passes de rendu (calques, caméra, 3D) | ≈ 1 min de compilation en plus ; mémoire 112 → 335 Mo au démarrage (pilote) | faible : repli automatique sur OpenGL | oui : une option au lancement |
 | Toolchain GNU → **outils Microsoft (MSVC)** (validé, fait au début de la phase 2) | plus de contournements à chaque bibliothèque | 5–7 Go, une fois ; exécutable 20,5 → 8,8 Mo | faible | oui : supprimer `rust-toolchain.toml` |
 | **Projet = dossier** (validé, fait en 1a) | sons, 3D, sauvegarde auto incrémentale | lecture des anciens `.pelure` gardée | moyen | format versionné : les évolutions futures se font par ajout de champs |
 | **Séquence > Scène > Panneau** (validé, fait en 1a) | vocabulaire de Storyboard Pro | refonte du modèle | moyen | l'arbre du fichier est stable ; la liste à plat en mémoire peut changer sans toucher au fichier |

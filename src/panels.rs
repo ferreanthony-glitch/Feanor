@@ -197,6 +197,8 @@ impl App {
                 if menu_item(ui, "Recharger les raccourcis", "") {
                     self.reload_keymap();
                 }
+                ui.separator();
+                ui.label(RichText::new(format!("Affichage : {}", self.display_info)).small().weak());
             });
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
