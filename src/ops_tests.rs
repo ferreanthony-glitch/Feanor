@@ -124,6 +124,7 @@ fn merge_vector_and_mixed_layers() {
         color: [0, 0, 0],
         opacity: 1.0,
         hardness: 1.0,
+        brush: None,
     };
     for c in [below, above] {
         doc.cels.get_mut(&c).unwrap().vector.as_mut().unwrap().elements.push(stroke.clone());

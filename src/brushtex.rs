@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock, RwLock};
 
 use serde::{Deserialize, Serialize};
 
@@ -207,12 +207,98 @@ pub struct Preset {
     pub source: String,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
 pub enum TextureKind {
     #[serde(rename = "pointe")]
     Tip,
     #[serde(rename = "papier")]
     Paper,
+}
+
+impl TextureKind {
+    /// Nom dans les fichiers de textures d'un projet.
+    pub fn file_word(self) -> &'static str {
+        match self {
+            TextureKind::Tip => "pointe",
+            TextureKind::Paper => "papier",
+        }
+    }
+}
+
+// ---------------------------------------------------------------- textures partagées (7b)
+
+/// Image en octets (0 à 255), telle qu'elle est écrite dans un fichier.
+pub fn quantized(img: &GrayImage) -> Vec<u8> {
+    img.values.iter().map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8).collect()
+}
+
+/// Clé d'une texture d'après son contenu (sorte, taille, octets) : la même image a la même clé
+/// d'une séance et d'une machine à l'autre. Le bit de poids fort est mis : une clé ne ressemble
+/// jamais à un numéro de la bibliothèque de pinceaux.
+pub fn content_key(kind: TextureKind, img: &GrayImage) -> u32 {
+    let mut h: u32 = 0x811c_9dc5;
+    let mut eat = |b: u8| {
+        h ^= b as u32;
+        h = h.wrapping_mul(0x0100_0193);
+    };
+    eat(kind as u8);
+    for b in (img.width as u32).to_le_bytes().into_iter().chain((img.height as u32).to_le_bytes()) {
+        eat(b);
+    }
+    for b in quantized(img) {
+        eat(b);
+    }
+    h | 0x8000_0000
+}
+
+/// Textures que voient les traits vectoriels texturés, par clé de contenu : celles de la
+/// bibliothèque de pinceaux et celles des projets ouverts. Partagées, parce que le rendu d'un
+/// dessin vectoriel n'a pas accès à l'application.
+#[derive(Default)]
+struct Shared {
+    tips: HashMap<u32, Arc<Tip>>,
+    papers: HashMap<u32, Arc<GrayImage>>,
+    /// Numéro dans la bibliothèque → clé de contenu.
+    from_library: HashMap<(TextureKind, u32), u32>,
+}
+
+static SHARED: LazyLock<RwLock<Shared>> = LazyLock::new(Default::default);
+
+/// Clé de contenu de la texture `id` de la bibliothèque (après `BrushLibrary::share`).
+pub fn shared_key(kind: TextureKind, id: u32) -> Option<u32> {
+    SHARED.read().ok()?.from_library.get(&(kind, id)).copied()
+}
+
+/// Les textures d'un réglage dont `tip` et `paper` sont des clés de contenu (celles qui manquent
+/// sont ignorées : pointe ronde, papier lisse).
+pub fn shared_textures(s: &BrushSettings) -> BrushTextures {
+    let Ok(shared) = SHARED.read() else { return BrushTextures::default() };
+    BrushTextures {
+        tip: s.tip.and_then(|k| shared.tips.get(&k)).cloned(),
+        paper: s.paper.and_then(|k| shared.papers.get(&k)).cloned(),
+    }
+}
+
+/// L'image d'une texture partagée (pour l'écrire dans un projet).
+pub fn shared_image(kind: TextureKind, key: u32) -> Option<GrayImage> {
+    let shared = SHARED.read().ok()?;
+    match kind {
+        TextureKind::Tip => shared.tips.get(&key).map(|t| t.full().clone()),
+        TextureKind::Paper => shared.papers.get(&key).map(|p| p.as_ref().clone()),
+    }
+}
+
+/// Ajoute une texture lue dans un projet, sous sa clé (sans remplacer celle déjà là).
+pub fn share_texture(kind: TextureKind, key: u32, img: GrayImage) {
+    let Ok(mut shared) = SHARED.write() else { return };
+    match kind {
+        TextureKind::Tip => {
+            shared.tips.entry(key).or_insert_with(|| Arc::new(Tip::new(img)));
+        }
+        TextureKind::Paper => {
+            shared.papers.entry(key).or_insert_with(|| Arc::new(img));
+        }
+    }
 }
 
 /// Pointes, papiers et réglages nommés. Ceux de Pelure sont fabriqués au démarrage ; ceux
@@ -346,6 +432,39 @@ impl BrushLibrary {
         id
     }
 
+    /// Met les textures de la bibliothèque à la disposition des traits vectoriels (au démarrage
+    /// et après un import).
+    pub fn share(&self) {
+        let Ok(mut shared) = SHARED.write() else { return };
+        for (&id, (_, tip)) in &self.tips {
+            let key = content_key(TextureKind::Tip, tip.full());
+            shared.tips.entry(key).or_insert_with(|| tip.clone());
+            shared.from_library.insert((TextureKind::Tip, id), key);
+        }
+        for (&id, (_, paper)) in &self.papers {
+            let key = content_key(TextureKind::Paper, paper);
+            shared.papers.entry(key).or_insert_with(|| paper.clone());
+            shared.from_library.insert((TextureKind::Paper, id), key);
+        }
+    }
+
+    /// Le réglage `s` (numéros de la bibliothèque) pour un trait vectoriel : pointe et papier
+    /// désignés par leur clé de contenu. Aucun : le réglage n'a pas de texture.
+    pub fn for_vector(&self, s: &BrushSettings) -> Option<BrushSettings> {
+        let textured = s.tip.is_some() || (s.paper.is_some() && s.grain > 0.0);
+        if !textured {
+            return None;
+        }
+        // Une texture pas encore partagée (bibliothèque changée depuis) : on partage à nouveau.
+        let key = |kind, id: Option<u32>| {
+            id.and_then(|id| shared_key(kind, id).or_else(|| {
+                self.share();
+                shared_key(kind, id)
+            }))
+        };
+        Some(BrushSettings { tip: key(TextureKind::Tip, s.tip), paper: key(TextureKind::Paper, s.paper), ..*s })
+    }
+
     /// Les textures d'un réglage (celles qui manquent sont ignorées).
     pub fn textures(&self, s: &BrushSettings) -> BrushTextures {
         BrushTextures {
@@ -392,6 +511,7 @@ impl BrushLibrary {
             lib.next_id = lib.next_id.max(t.id + 1);
         }
         lib.presets.extend(saved.presets);
+        lib.share();
         lib
     }
 

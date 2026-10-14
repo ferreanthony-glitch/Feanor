@@ -181,7 +181,7 @@ pub fn warp_element(e: &Element, h: &Homography, k: f32) -> Element {
         [q.x, q.y]
     };
     match e {
-        Element::Stroke { points, color, opacity, hardness } => Element::Stroke {
+        Element::Stroke { points, color, opacity, hardness, brush } => Element::Stroke {
             points: points
                 .iter()
                 .map(|p| {
@@ -192,6 +192,7 @@ pub fn warp_element(e: &Element, h: &Homography, k: f32) -> Element {
             color: *color,
             opacity: *opacity,
             hardness: *hardness,
+            brush: brush.as_ref().map(|b| Box::new(crate::brush::BrushSettings { size: b.size * k, ..**b })),
         },
         Element::Fill { contours, color, opacity } => Element::Fill {
             contours: contours.iter().map(|c| c.iter().map(|p| map(p[0], p[1])).collect()).collect(),

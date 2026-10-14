@@ -28,6 +28,7 @@ fn small_doc() -> (Document, u64, u64) {
         color: [0, 0, 0],
         opacity: 1.0,
         hardness: 1.0,
+        brush: None,
     });
     c.rerender();
     doc.panels[0].layers[0].frames = vec![Some(b)];

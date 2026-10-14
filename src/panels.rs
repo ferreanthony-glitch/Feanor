@@ -283,16 +283,17 @@ impl App {
                     .weak(),
             );
         });
-        // Réglages nommés, papier et grain : sur un calque bitmap seulement.
-        if matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser) && !vector {
+        // Réglages nommés, papier et grain : pinceau et crayon sur les deux sortes de calques (le
+        // trait vectoriel texturé reste modifiable, 7b) ; la gomme sur un calque bitmap.
+        if matches!(self.tool, Tool::Brush | Tool::Pencil) || (self.tool == Tool::Eraser && !vector) {
             self.brush_library_ui(ui);
         }
         match self.tool {
             Tool::Brush => {
                 brush_ui(ui, &mut self.brush, vector);
                 if vector {
-                    note(ui, "Le trait reste modifiable avec l'outil Sélection (V). Grain et pointes en \
-                              image : sur un calque bitmap.");
+                    note(ui, "Le trait reste modifiable avec l'outil Sélection (V), même texturé (pointe en \
+                              image, grain du papier).");
                 }
             }
             Tool::Pencil => {

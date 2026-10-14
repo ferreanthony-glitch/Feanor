@@ -189,6 +189,7 @@ impl App {
         self.brushes.presets.retain(|p| p.source != source);
         match crate::tbbrush::import(&text, &source, &mut self.brushes) {
             Ok(r) => {
+                self.brushes.share();
                 let saved = match BrushLibrary::user_dir() {
                     Some(dir) => self.brushes.save(&dir).err(),
                     None => Some("dossier %APPDATA% introuvable".into()),

@@ -28,6 +28,7 @@ fn line(x0: f32, y0: f32, x1: f32, y1: f32, r: f32) -> Element {
         color: [0, 0, 0],
         opacity: 1.0,
         hardness: 1.0,
+        brush: None,
     }
 }
 
@@ -494,6 +495,7 @@ fn demo_project() {
         color: [24, 24, 28],
         opacity: 1.0,
         hardness: 0.9,
+        brush: None,
     };
     // Séquence 1 : « Arrivée » (2 panneaux), « Gros plan » ; séquence 2 : « Large ».
     let i1 = doc.add_panel_after(0);

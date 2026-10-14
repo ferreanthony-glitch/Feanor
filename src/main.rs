@@ -111,6 +111,8 @@ mod view;
 mod view3d;
 #[cfg(test)]
 mod view3d_tests;
+#[cfg(test)]
+mod vtexture_tests;
 mod vtools;
 mod workspace;
 #[cfg(test)]

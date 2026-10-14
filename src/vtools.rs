@@ -19,6 +19,8 @@ pub(crate) struct VectorStroke {
     pub color: [u8; 3],
     pub opacity: f32,
     pub hardness: f32,
+    /// Pinceau texturé (7b), textures désignées par leur clé de contenu.
+    pub brush: Option<Box<crate::brush::BrushSettings>>,
 }
 
 pub(crate) struct VectorErase {
@@ -193,7 +195,10 @@ impl App {
         }
         let (cel, prefix) = self.ensure_cel();
         let before = self.drawing(cel).cloned().unwrap_or_default();
-        let mut stroke = StrokeState::new(cel, StrokeMode::Paint(self.color), settings, None, pen);
+        // Pinceau texturé : l'aperçu prend ses textures, le trait gardera le réglage (7b).
+        let brush = self.brushes.for_vector(&settings).map(Box::new);
+        let textures = if brush.is_some() { self.brushes.textures(&settings) } else { Default::default() };
+        let mut stroke = StrokeState::new(cel, StrokeMode::Paint(self.color), settings, None, pen).with_textures(textures);
         let mut dirty = Vec::new();
         if let Some(c) = self.doc.cels.get_mut(&cel) {
             stroke.add_point(&mut c.raster, p, pressure, &mut dirty);
@@ -207,6 +212,7 @@ impl App {
             color: self.color,
             opacity: settings.opacity,
             hardness: settings.hardness,
+            brush,
         });
         self.vsel = None;
         self.modified = true;
@@ -237,6 +243,7 @@ impl App {
             color: vs.color,
             opacity: vs.opacity,
             hardness: vs.hardness,
+            brush: vs.brush,
         };
         if let Some(d) = self.drawing_mut(vs.cel) {
             d.elements.push(element.clone());

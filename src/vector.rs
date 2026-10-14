@@ -3,10 +3,10 @@
 
 use std::collections::HashMap;
 
-use eframe::egui::{pos2, Pos2, Rect, Vec2};
+use eframe::egui::{pos2, vec2, Pos2, Rect, Vec2};
 use serde::{Deserialize, Serialize};
 
-use crate::brush::{coverage, paint};
+use crate::brush::{coverage, paint, BrushSettings, StrokeMode, StrokeState};
 use crate::raster::{Raster, TILE};
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -40,6 +40,11 @@ pub enum Element {
         color: [u8; 3],
         opacity: f32,
         hardness: f32,
+        /// Pinceau texturé (7b) : pointe en image, grain du papier (désignés par leur clé de
+        /// contenu, voir `brushtex::content_key`). Le trait est alors tracé par empreintes, comme
+        /// sur un calque bitmap, et reste modifiable. Aucun : trait lisse.
+        #[serde(default, rename = "pinceau", skip_serializing_if = "Option::is_none")]
+        brush: Option<Box<crate::brush::BrushSettings>>,
     },
     /// Zone remplie, délimitée par un ou plusieurs contours (pair-impair : les trous restent vides).
     Fill {
@@ -109,9 +114,11 @@ impl Element {
     pub fn bounds(&self) -> Rect {
         let mut r = Rect::NOTHING;
         match self {
-            Element::Stroke { points, .. } => {
+            Element::Stroke { points, brush, .. } => {
+                // Un pinceau texturé peut grossir ses empreintes au hasard.
+                let grow = 1.0 + brush.as_ref().map_or(0.0, |b| b.size_jitter.max(0.0) * 0.5);
                 for p in points {
-                    r = r.union(Rect::from_center_size(p.pos(), Vec2::splat(p.r * 2.0)));
+                    r = r.union(Rect::from_center_size(p.pos(), Vec2::splat(p.r * 2.0 * grow)));
                 }
             }
             Element::Fill { contours, .. } => {
@@ -138,9 +145,13 @@ impl Element {
     }
 
     pub fn scale_width(&mut self, k: f32) {
-        if let Element::Stroke { points, .. } = self {
+        if let Element::Stroke { points, brush, .. } = self {
             for p in points {
                 p.r = (p.r * k).clamp(0.2, 200.0);
+            }
+            // La taille du pinceau suit : la pression se retrouve d'après le rayon (voir le rendu).
+            if let Some(b) = brush {
+                b.size *= k;
             }
         }
     }
@@ -152,6 +163,7 @@ impl Element {
                 color,
                 opacity,
                 hardness,
+                brush,
             } => {
                 let k = a.width_factor();
                 Element::Stroke {
@@ -165,6 +177,7 @@ impl Element {
                     color: *color,
                     opacity: *opacity,
                     hardness: *hardness,
+                    brush: brush.as_ref().map(|b| Box::new(crate::brush::BrushSettings { size: b.size * k, ..**b })),
                 }
             }
             Element::Fill {
@@ -496,7 +509,18 @@ pub fn render_element_clipped(raster: &mut Raster, e: &Element, clip: Rect) {
             points,
             color,
             opacity,
+            brush: Some(b),
+            ..
+        } => {
+            let region = Rect::from_min_size(pos2(mask.x0 as f32, mask.y0 as f32), vec2(mask.w as f32, mask.h as f32));
+            paint_textured(raster, points, *color, *opacity, b, region);
+        }
+        Element::Stroke {
+            points,
+            color,
+            opacity,
             hardness,
+            brush: None,
         } => {
             stamp_path(&mut mask, points, *hardness);
             mask.composite(raster, *color, *opacity);
@@ -518,6 +542,47 @@ pub fn render_element_clipped(raster: &mut Raster, e: &Element, clip: Rect) {
                 }
             }
             mask.composite(raster, *color, *opacity);
+        }
+    }
+}
+
+/// Trait vectoriel texturé (7b) : tracé par le moteur des pinceaux bitmap (empreintes de la
+/// pointe, grain du papier) sur une feuille à part, puis posé sur `raster` dans `region`
+/// seulement. La pression de chaque point se retrouve d'après son rayon (rayon = taille / 2 ×
+/// facteur de pression) ; une pointe ou un papier introuvable donne une pointe ronde, un papier lisse.
+fn paint_textured(raster: &mut Raster, points: &[VPoint], color: [u8; 3], opacity: f32, b: &BrushSettings, region: Rect) {
+    let settings = BrushSettings { opacity, smoothing: 0.0, aliased: false, ..*b };
+    let textures = crate::brushtex::shared_textures(&settings);
+    let mut sheet = Raster::new(raster.width, raster.height);
+    let mut stroke = StrokeState::new(0, StrokeMode::Paint(color), settings, None, true).with_textures(textures);
+    let mut dirty = Vec::new();
+    let half = (settings.size * 0.5).max(1e-3);
+    for p in points {
+        let pressure = if settings.pressure_size && settings.min_size < 1.0 {
+            ((p.r / half - settings.min_size) / (1.0 - settings.min_size)).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        stroke.add_point(&mut sheet, p.pos(), pressure, &mut dirty);
+    }
+    stroke.finish(&mut sheet, &mut dirty);
+    let (x0, y0) = (region.min.x.max(0.0) as usize, region.min.y.max(0.0) as usize);
+    let x1 = (region.max.x.ceil().max(0.0) as usize).min(raster.width);
+    let y1 = (region.max.y.ceil().max(0.0) as usize).min(raster.height);
+    for idx in 0..sheet.tiles.len() {
+        let Some(tile) = &sheet.tiles[idx] else { continue };
+        let (tx, ty, tw, th) = sheet.tile_bounds(idx);
+        for y in ty.max(y0)..(ty + th).min(y1) {
+            for x in tx.max(x0)..(tx + tw).min(x1) {
+                let i = (y % TILE) * TILE + x % TILE;
+                let s = tile[i];
+                if s.a() == 0 {
+                    continue;
+                }
+                let di = raster.tile_index_of(x, y);
+                let dst = raster.tile_mut(di);
+                dst[i] = crate::render::over(dst[i], s, 255, None);
+            }
         }
     }
 }
@@ -893,6 +958,7 @@ pub fn erase_circle(d: &mut VectorDrawing, c: Pos2, radius: f32, whole: bool) ->
                 color,
                 opacity,
                 hardness,
+                brush,
             } => {
                 if whole {
                     e.hit(c, radius).then(Vec::new)
@@ -922,6 +988,7 @@ pub fn erase_circle(d: &mut VectorDrawing, c: Pos2, radius: f32, whole: bool) ->
                                 color: *color,
                                 opacity: *opacity,
                                 hardness: *hardness,
+                                brush: brush.clone(),
                             })
                             .collect()
                     })

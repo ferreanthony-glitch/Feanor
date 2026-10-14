@@ -25,6 +25,7 @@ use crate::document::{
     fresh_layer_id, AudioTrack, Cel, CelId, Document, Layer, LayerKind, LayerTransform, Panel, Ref3d, Scene, SceneWide,
     Sequence, Sound, SoundClip, Structure,
 };
+use crate::brushtex::{GrayImage, TextureKind};
 use crate::camera::{Camera, CameraKey};
 use crate::guides::Guide;
 use crate::io::encode_png;
@@ -40,12 +41,16 @@ pub const FORMAT: &str = "pelure-projet";
 /// précédentes : elles refusent le projet plutôt que de perdre ces dessins).
 /// 7 (phase 6f) : calques de toute la scène (`toute_la_scene`) ; une version précédente en ferait
 /// des calques séparés qui partagent un même dessin.
-/// 8 (phase 7) : notes de la planche (`planche`), qu'une version précédente perdrait.
+/// 8 (phase 7) : notes de la planche (`planche`), traits vectoriels texturés (`pinceau` dans les
+/// dessins, textures dans `textures/`), qu'une version précédente perdrait.
 pub const VERSION: u32 = 8;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Modèles 3D de repère (2d), dans le format de Pelure.
 const MODELS: &str = "modeles";
+/// Textures des traits vectoriels texturés (7b) : `pointe_<clé>.png`, `papier_<clé>.png`, la clé
+/// venant du contenu (une texture ne change jamais sous la même clé).
+const TEXTURES: &str = "textures";
 /// Formats de son acceptés à l'import.
 pub const SOUND_EXTS: [&str; 5] = ["wav", "mp3", "flac", "ogg", "oga"];
 
@@ -347,6 +352,67 @@ fn used_sounds(doc: &Document) -> BTreeSet<u64> {
         .collect()
 }
 
+/// Textures citées par les traits vectoriels texturés des dessins `used` : (sorte, clé).
+fn used_textures(doc: &Document, used: &BTreeSet<CelId>) -> BTreeSet<(TextureKind, u32)> {
+    let mut out = BTreeSet::new();
+    for e in used.iter().filter_map(|id| doc.cels.get(id)).filter_map(|c| c.vector.as_ref()).flat_map(|v| &v.elements) {
+        if let crate::vector::Element::Stroke { brush: Some(b), .. } = e {
+            out.extend(b.tip.map(|k| (TextureKind::Tip, k)));
+            out.extend(b.paper.map(|k| (TextureKind::Paper, k)));
+        }
+    }
+    out
+}
+
+fn texture_file(dir: &Path, kind: TextureKind, key: u32) -> PathBuf {
+    dir.join(TEXTURES).join(format!("{}_{key}.png", kind.file_word()))
+}
+
+/// Lit les textures du projet et les met à la disposition des traits vectoriels.
+fn load_textures(dir: &Path, warnings: &mut Vec<String>) {
+    let Ok(entries) = fs::read_dir(dir.join(TEXTURES)) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some((word, key)) = path.file_stem().and_then(|s| s.to_str()).and_then(|s| s.split_once('_')) else { continue };
+        let kind = match word {
+            "pointe" => TextureKind::Tip,
+            "papier" => TextureKind::Paper,
+            _ => continue,
+        };
+        let Ok(key) = key.parse::<u32>() else { continue };
+        match image::open(&path) {
+            Ok(img) => {
+                let gray = img.to_luma8();
+                let values = gray.as_raw().iter().map(|&v| v as f32 / 255.0).collect();
+                crate::brushtex::share_texture(kind, key, GrayImage::new(gray.width() as usize, gray.height() as usize, values));
+            }
+            Err(e) => warnings.push(format!("texture {} illisible ({e}) : traits lisses à la place", path.display())),
+        }
+    }
+}
+
+/// Efface les textures du dossier qui ne servent plus.
+fn remove_unused_textures(dir: &Path, used: &BTreeSet<(TextureKind, u32)>) -> usize {
+    let Ok(entries) = fs::read_dir(dir.join(TEXTURES)) else { return 0 };
+    let mut removed = 0;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some((word, key)) = path.file_stem().and_then(|s| s.to_str()).and_then(|s| s.split_once('_')) else { continue };
+        let kind = match word {
+            "pointe" => TextureKind::Tip,
+            "papier" => TextureKind::Paper,
+            _ => continue,
+        };
+        let is_png = path.extension().and_then(|e| e.to_str()) == Some("png");
+        if let (true, Ok(key)) = (is_png, key.parse::<u32>()) {
+            if !used.contains(&(kind, key)) && fs::remove_file(&path).is_ok() {
+                removed += 1;
+            }
+        }
+    }
+    removed
+}
+
 pub struct SaveReport {
     pub written: usize,
     pub removed: usize,
@@ -382,10 +448,12 @@ pub struct SaveJob {
     drawings: Vec<(PathBuf, DrawingData)>,
     sounds: Vec<(PathBuf, Arc<Vec<u8>>)>,
     models: Vec<(PathBuf, Arc<Model3d>)>,
+    textures: Vec<(PathBuf, GrayImage)>,
     manifest: Vec<u8>,
     used: BTreeSet<CelId>,
     used_sounds: BTreeSet<u64>,
     used_models: BTreeSet<u64>,
+    used_textures: BTreeSet<(TextureKind, u32)>,
 }
 
 /// Prépare l'enregistrement de `doc` dans `manifest_path`. `written` est mis à jour comme si
@@ -436,16 +504,26 @@ pub fn prepare_save(
         .map(|id| (model_file(dir, *id), doc.models[id].clone()))
         .filter(|(path, _)| !path.exists())
         .collect();
+    // Une texture non plus (sa clé vient de son contenu) : écrite seulement si elle manque.
+    let used_textures = used_textures(doc, &used);
+    let textures = used_textures
+        .iter()
+        .map(|&(kind, key)| (texture_file(dir, kind, key), kind, key))
+        .filter(|(path, _, _)| !path.exists())
+        .filter_map(|(path, kind, key)| crate::brushtex::shared_image(kind, key).map(|img| (path, img)))
+        .collect();
     let manifest = serde_json::to_vec_pretty(&manifest_of(doc)).map_err(|e| e.to_string())?;
     Ok(SaveJob {
         manifest_path: manifest_path.to_path_buf(),
         drawings,
         sounds,
         models,
+        textures,
         manifest,
         used,
         used_sounds,
         used_models,
+        used_textures,
     })
 }
 
@@ -479,10 +557,22 @@ impl SaveJob {
             write_atomic(path, &crate::model3d::to_bytes(&model.mesh))?;
             count += 1;
         }
+        if !self.textures.is_empty() {
+            fs::create_dir_all(dir.join(TEXTURES)).map_err(|e| format!("{} : {e}", dir.display()))?;
+        }
+        for (path, img) in &self.textures {
+            let gray = image::GrayImage::from_raw(img.width as u32, img.height as u32, crate::brushtex::quantized(img))
+                .ok_or("texture de taille invalide")?;
+            let mut bytes = Vec::new();
+            gray.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).map_err(|e| e.to_string())?;
+            write_atomic(path, &bytes)?;
+            count += 1;
+        }
         write_atomic(&self.manifest_path, &self.manifest)?;
         let removed = remove_unused(dir, &self.used)
             + remove_unused_sounds(dir, &self.used_sounds)
-            + remove_unused_models(dir, &self.used_models);
+            + remove_unused_models(dir, &self.used_models)
+            + remove_unused_textures(dir, &self.used_textures);
         Ok(SaveReport { written: count, removed })
     }
 }
@@ -716,6 +806,8 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
         return Err("taille d'image invalide dans le manifeste".into());
     }
     let mut warnings = Vec::new();
+    // Les textures d'abord : les dessins vectoriels texturés en ont besoin pour leur rendu.
+    load_textures(dir, &mut warnings);
     let mut cels: HashMap<CelId, Cel> = HashMap::new();
     let mut missing: BTreeSet<CelId> = BTreeSet::new();
     let referenced: BTreeSet<CelId> = manifest

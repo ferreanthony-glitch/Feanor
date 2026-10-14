@@ -14,6 +14,7 @@ fn stroke(points: &[(f32, f32)], r: f32, color: [u8; 3]) -> Element {
         color,
         opacity: 0.8,
         hardness: 0.7,
+        brush: None,
     }
 }
 
