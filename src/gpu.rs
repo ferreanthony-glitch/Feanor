@@ -82,9 +82,24 @@ fn gamma_from_linear_rgb(rgb: vec3<f32>) -> vec3<f32> {
     return select(higher, lower, cutoff);
 }
 
+// En réduisant fort (vignette, vue très éloignée), une seule lecture par pixel d'écran sauterait
+// des pixels de l'image et les traits fins disparaîtraient : on moyenne n×n lectures réparties
+// sur ce que couvre le pixel (n selon la réduction, 8 au plus).
 @fragment
 fn fs_display(v: VOut) -> @location(0) vec4<f32> {
-    let lin = textureSample(tex, samp, v.uv);
+    let dx = dpdx(v.uv);
+    let dy = dpdy(v.uv);
+    let size = vec2<f32>(textureDimensions(tex));
+    let texels = max(length(dx * size), length(dy * size));
+    let n = i32(clamp(ceil(texels / 1.5), 1.0, 8.0));
+    var acc = vec4<f32>(0.0);
+    for (var j = 0; j < n; j++) {
+        for (var i = 0; i < n; i++) {
+            let o = (vec2<f32>(f32(i), f32(j)) + 0.5) / f32(n) - 0.5;
+            acc += textureSampleLevel(tex, samp, v.uv + dx * o.x + dy * o.y, 0.0);
+        }
+    }
+    let lin = acc / f32(n * n);
     return vec4<f32>(gamma_from_linear_rgb(lin.rgb), lin.a);
 }
 "#;

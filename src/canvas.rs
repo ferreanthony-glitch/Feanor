@@ -85,7 +85,9 @@ impl App {
         self.paint_text_overlay(&painter);
         self.paint_persp_overlay(&painter);
         self.paint_stroke_tip(&painter);
-        self.paint_canvas_title(&painter, rect);
+        if !self.in_card {
+            self.paint_canvas_title(&painter, rect);
+        }
         self.paint_cursor(ui.ctx(), &painter, &response);
         self.text_edit_window(ui.ctx());
     }

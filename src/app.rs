@@ -264,6 +264,8 @@ pub struct App {
     pub(crate) ref3d: crate::ref3dtool::Ref3dState,
     /// Vue à travers la caméra du panneau (sinon : la feuille, avec le cadre tracé).
     pub(crate) camera_view: bool,
+    /// Le dessin est affiché dans la vignette choisie de la vue Vignettes (6e).
+    pub(crate) in_card: bool,
     /// Hors-champ estompé sur la feuille.
     pub(crate) camera_mask: bool,
     /// Fenêtre « Vue de dessus » (profondeur des calques) et son glisser en cours.
@@ -450,6 +452,7 @@ impl App {
             brush_previews: Default::default(),
             ref3d: Default::default(),
             camera_view: false,
+            in_card: false,
             camera_mask: true,
             top_view: false,
             top_drag: None,

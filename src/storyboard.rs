@@ -822,11 +822,32 @@ impl App {
 
     // ------------------------------------------------------------------ vue « vignettes » (action vue.planches)
 
+    /// Vue Vignettes : les panneaux en cartes, par scène. La vignette du panneau choisi est le
+    /// dessin lui-même, à travers la caméra : on y dessine directement (6e). Les textes sous les
+    /// vignettes se replient.
     pub(crate) fn panels_view(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
+        ui.horizontal(|ui| {
+            ui.add_space(6.0);
+            let open = self.layout.card_text;
+            let label = format!("{}  Textes", if open { ph::CARET_DOWN } else { ph::CARET_RIGHT });
+            if ui
+                .selectable_label(open, label)
+                .on_hover_text("Afficher ou replier l'action et le dialogue sous les vignettes")
+                .clicked()
+            {
+                self.layout.card_text = !open;
+            }
+            ui.label(
+                RichText::new("On dessine directement dans la vignette du panneau choisi ; double-clic sur un titre : l'animer.")
+                    .small()
+                    .weak(),
+            );
+        });
         let card_w = 250.0;
         let thumb_w = card_w - 12.0;
         let thumb_h = thumb_w * self.doc.frame[1] as f32 / self.doc.frame[0].max(1) as f32;
-        let card_h = thumb_h + 120.0;
+        let card_h = thumb_h + if self.layout.card_text { 120.0 } else { 34.0 };
         let fps = self.doc.fps;
         let deadline = std::time::Instant::now() + crate::thumbs::THUMB_TIME;
         let mut clicked = None;
@@ -879,7 +900,11 @@ impl App {
                         }
                         let tr = Rect::from_min_size(rect.min + vec2(6.0, 6.0), vec2(thumb_w, thumb_h));
                         painter.rect_filled(tr, 0.0, Color32::from_gray(30));
-                        if let Some(tex) = self.thumbs.texture(ui.ctx(), &self.doc, i, deadline) {
+                        if selected {
+                            // Le dessin lui-même, à travers la caméra du panneau.
+                            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(tr).id_salt("vignette_vive"));
+                            self.card_canvas(&mut child);
+                        } else if let Some(tex) = self.thumbs.texture(ui.ctx(), &self.doc, i, deadline) {
                             painter.image(
                                 tex,
                                 tr,
@@ -887,6 +912,7 @@ impl App {
                                 Color32::WHITE,
                             );
                         }
+                        let visuals = ui.visuals();
                         let panel = &self.doc.panels[i];
                         let mut y = tr.bottom() + 6.0;
                         painter.text(
@@ -905,7 +931,7 @@ impl App {
                         );
                         y += 22.0;
                         for (label, text) in [("Action", &panel.action), ("Dialogue", &panel.dialogue)] {
-                            if text.trim().is_empty() {
+                            if !self.layout.card_text || text.trim().is_empty() {
                                 continue;
                             }
                             let galley = painter.layout(
@@ -930,6 +956,17 @@ impl App {
         if let Some(i) = double {
             self.enter_animation(i);
         }
+    }
+
+    /// Le dessin dans la vignette choisie : vue à travers la caméra du panneau, cadrée sur la
+    /// vignette ; la vue du dessin en grand est rendue telle quelle ensuite.
+    fn card_canvas(&mut self, ui: &mut egui::Ui) {
+        let (view, camera_view, canvas_rect) = (self.view, self.camera_view, self.canvas_rect);
+        self.camera_view = true;
+        self.in_card = true;
+        self.canvas_panel(ui);
+        self.in_card = false;
+        (self.view, self.camera_view, self.canvas_rect) = (view, camera_view, canvas_rect);
     }
 
     // ------------------------------------------------------------------ fiche du plan

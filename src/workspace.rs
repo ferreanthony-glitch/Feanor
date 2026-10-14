@@ -43,6 +43,9 @@ pub struct Layout {
     pub command_bar: bool,
     #[serde(rename = "barre_outils")]
     pub tool_bar: bool,
+    /// Vue Vignettes : textes (action, dialogue) sous chaque vignette (6e).
+    #[serde(rename = "textes_vignettes")]
+    pub card_text: bool,
 }
 
 impl Default for Layout {
@@ -59,6 +62,7 @@ impl Default for Layout {
             top_view: false,
             command_bar: true,
             tool_bar: true,
+            card_text: true,
         }
     }
 }
