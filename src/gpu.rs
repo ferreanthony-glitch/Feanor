@@ -6,8 +6,10 @@
 //! 2. **afficher** : cette image est posée à l'écran avec la vue (zoom, rotation, miroir), lissée
 //!    comme egui lisse ses images.
 //!
-//! Chaque dessin affiché est une texture, envoyée en entier quand il a changé, ou seulement dans les
-//! tuiles touchées pendant un trait. Le calcul sur processeur (`render.rs`) reste pour l'export,
+//! Chaque dessin affiché est une texture. On n'envoie que ses tuiles dessinées (et on efface
+//! celles qui ne le sont plus), toutes regroupées en une seule copie ; pendant un trait, seulement
+//! les tuiles touchées. Pendant la lecture, les dessins des images suivantes partent d'avance, par
+//! petits morceaux (`playback.rs`). Le calcul sur processeur (`render.rs`) reste pour l'export,
 //! les vignettes, la pipette, le pot de peinture, et en secours. L'étape « composer » est aussi
 //! celle où viendront la caméra et le multiplan.
 
@@ -26,6 +28,8 @@ use crate::render::Plan;
 const ITEM_BYTES: u64 = 96;
 /// Au-delà, les textures les moins récemment affichées sont libérées.
 const CACHE_BYTES: u64 = 1 << 30;
+/// Envoi d'avance, par image d'écran : 4 Mo de tuiles (256 tuiles), quelques millisecondes.
+const AHEAD_BYTES: usize = 4 << 20;
 /// Format des images composées : valeurs gamma, comme le calcul sur processeur.
 const FRAME_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
@@ -92,6 +96,11 @@ struct CelTexture {
     /// Version du dessin envoyée (`u64::MAX` : rien d'envoyé).
     version: u64,
     last_used: u64,
+    /// Tuiles non vides dans la texture (une texture neuve est transparente) : seules celles-ci
+    /// sont à effacer quand le dessin en perd.
+    filled: Vec<bool>,
+    /// Envoi d'avance en cours : version visée et prochaine tuile.
+    partial: Option<(u64, usize)>,
 }
 
 /// Image composée, à la taille du projet.
@@ -243,43 +252,71 @@ impl GpuCanvas {
         }
     }
 
+    /// Nombre de dessins qu'on peut envoyer d'avance sans chasser ceux qui sont affichés.
+    pub fn ahead_capacity(&self, doc: &Document, shown: usize) -> usize {
+        let per = (doc.width as u64 * doc.height as u64 * 4).max(1);
+        ((CACHE_BYTES / per) as usize).saturating_sub(shown + 4) / 2
+    }
+
     /// Met à jour les textures des dessins du plan. `all` : tout a pu changer ; `tiles` : tuiles
-    /// touchées depuis l'image précédente (dans le dessin en cours de modification).
-    pub fn sync(&mut self, doc: &Document, plan: &Plan, all: bool, tiles: &[usize]) {
+    /// touchées depuis l'image précédente (dans le dessin en cours de modification). `ahead` :
+    /// dessins des images qui suivent (lecture, défilement), envoyés d'avance par petits morceaux,
+    /// pour qu'un changement de panneau ne fige pas l'image.
+    pub fn sync(&mut self, doc: &Document, plan: &Plan, all: bool, tiles: &[usize], ahead: &[CelId]) {
         let rs = &self.render_state;
         let mut renderer = rs.renderer.write();
         let Some(res) = renderer.callback_resources.get_mut::<CanvasResources>() else { return };
         res.tick += 1;
+        let tick = res.tick;
         let size = (doc.width as u32, doc.height as u32);
+        let mut up = Uploads::default();
         for item in &plan.items {
             let Some(cel) = doc.cels.get(&item.cel) else { continue };
-            let entry = match res.textures.get_mut(&item.cel) {
-                Some(e) if e.size == size => e,
-                _ => {
-                    let texture = cel_texture(&rs.device, size.0, size.1);
-                    let view = texture.create_view(&Default::default());
-                    let bind_group = texture_group(&rs.device, &res.texture_layout, &view, &res.nearest);
-                    res.textures.insert(
-                        item.cel,
-                        CelTexture {
-                            bind_group,
-                            texture,
-                            size,
-                            version: u64::MAX,
-                            last_used: 0,
-                        },
-                    );
-                    res.textures.get_mut(&item.cel).expect("texture ajoutée juste avant")
-                }
-            };
+            let entry = ensure_texture(rs, res, item.cel, cel.raster.tiles.len(), size);
             if all || entry.version != cel.version {
-                upload_full(&rs.queue, &entry.texture, &cel.raster);
+                // Un envoi d'avance commencé pour cette version reprend où il en était.
+                let start = match entry.partial {
+                    Some((v, next)) if v == cel.version && !all => next,
+                    _ => 0,
+                };
+                let rest: Vec<usize> = (start..cel.raster.tiles.len()).collect();
+                up.add(item.cel, entry, &cel.raster, &rest);
                 entry.version = cel.version;
+                entry.partial = None;
             } else if !tiles.is_empty() {
-                upload_tiles(&rs.queue, &entry.texture, &cel.raster, tiles);
+                up.add(item.cel, entry, &cel.raster, tiles);
             }
-            entry.last_used = res.tick;
+            entry.last_used = tick;
         }
+        // Envoi d'avance, borné à AHEAD_BYTES par image d'écran ; un dessin entamé reprend à sa
+        // prochaine tuile à l'image suivante.
+        let shown = up.data.len();
+        for &id in ahead {
+            if up.data.len() >= shown + AHEAD_BYTES {
+                break;
+            }
+            let Some(cel) = doc.cels.get(&id) else { continue };
+            let entry = ensure_texture(rs, res, id, cel.raster.tiles.len(), size);
+            entry.last_used = tick;
+            if entry.version == cel.version {
+                continue;
+            }
+            let mut next = match entry.partial {
+                Some((v, next)) if v == cel.version => next,
+                _ => 0,
+            };
+            while next < cel.raster.tiles.len() && up.data.len() < shown + AHEAD_BYTES {
+                up.add(id, entry, &cel.raster, &[next]);
+                next += 1;
+            }
+            if next >= cel.raster.tiles.len() {
+                entry.version = cel.version;
+                entry.partial = None;
+            } else {
+                entry.partial = Some((cel.version, next));
+            }
+        }
+        up.submit(rs, &res.textures);
         // Mémoire de la carte graphique : on libère les textures les plus anciennes au-delà d'un Go.
         let per = size.0 as u64 * size.1 as u64 * 4;
         let max = (CACHE_BYTES / per.max(1)).max(plan.items.len() as u64 + 8) as usize;
@@ -488,6 +525,34 @@ fn uniform_buffer(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, stride:
 }
 
 /// Texture d'un dessin : valeurs gamma prémultipliées, telles qu'elles sont en mémoire.
+/// Texture du dessin `id`, créée (transparente) si besoin.
+fn ensure_texture<'a>(
+    rs: &RenderState,
+    res: &'a mut CanvasResources,
+    id: CelId,
+    tiles: usize,
+    size: (u32, u32),
+) -> &'a mut CelTexture {
+    if !res.textures.get(&id).is_some_and(|e| e.size == size) {
+        let texture = cel_texture(&rs.device, size.0, size.1);
+        let view = texture.create_view(&Default::default());
+        let bind_group = texture_group(&rs.device, &res.texture_layout, &view, &res.nearest);
+        res.textures.insert(
+            id,
+            CelTexture {
+                bind_group,
+                texture,
+                size,
+                version: u64::MAX,
+                last_used: 0,
+                filled: vec![false; tiles],
+                partial: None,
+            },
+        );
+    }
+    res.textures.get_mut(&id).expect("texture présente")
+}
+
 fn cel_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
         label: Some("dessin"),
@@ -536,27 +601,79 @@ fn write_region(queue: &wgpu::Queue, texture: &wgpu::Texture, x: u32, y: u32, w:
     );
 }
 
-fn upload_full(queue: &wgpu::Queue, texture: &wgpu::Texture, raster: &Raster) {
-    let bytes: Vec<u8> = raster.to_flat().iter().flat_map(|c| c.to_array()).collect();
-    write_region(queue, texture, 0, 0, raster.width as u32, raster.height as u32, &bytes);
+/// Tuiles à envoyer, rangées bout à bout dans un seul tampon : un envoi par passage au lieu d'un
+/// par tuile (chaque `write_texture` crée son propre tampon intermédiaire, trop lent par milliers).
+/// Une tuile garde ses lignes de 64 pixels (256 octets), l'alignement que demande la copie.
+#[derive(Default)]
+struct Uploads {
+    data: Vec<u8>,
+    /// Emplacement d'une tuile transparente, partagée par toutes les tuiles à effacer.
+    zero: Option<u64>,
+    /// Dessin, position dans `data`, puis rectangle de destination.
+    copies: Vec<(CelId, u64, [u32; 4])>,
 }
 
-fn upload_tiles(queue: &wgpu::Queue, texture: &wgpu::Texture, raster: &Raster, tiles: &[usize]) {
-    let mut bytes = Vec::with_capacity(TILE * TILE * 4);
-    for &idx in tiles {
-        if idx >= raster.tiles.len() {
-            continue;
-        }
-        let (ox, oy, tw, th) = raster.tile_bounds(idx);
-        bytes.clear();
-        match &raster.tiles[idx] {
-            Some(tile) => {
-                for y in 0..th {
-                    bytes.extend(tile[y * TILE..y * TILE + tw].iter().flat_map(|c| c.to_array()));
-                }
+impl Uploads {
+    /// Ajoute les tuiles `tiles` du dessin `id` : pleines si dessinées, effacées si elles l'étaient.
+    fn add(&mut self, id: CelId, entry: &mut CelTexture, raster: &Raster, tiles: &[usize]) {
+        for &idx in tiles {
+            if idx >= raster.tiles.len() || idx >= entry.filled.len() {
+                continue;
             }
-            None => bytes.resize(tw * th * 4, 0),
+            let (ox, oy, tw, th) = raster.tile_bounds(idx);
+            let offset = match &raster.tiles[idx] {
+                Some(tile) => {
+                    entry.filled[idx] = true;
+                    let at = self.data.len() as u64;
+                    self.data.extend_from_slice(bytemuck::cast_slice(&tile[..]));
+                    at
+                }
+                None if entry.filled[idx] => {
+                    entry.filled[idx] = false;
+                    let data = &mut self.data;
+                    *self.zero.get_or_insert_with(|| {
+                        let at = data.len() as u64;
+                        data.resize(data.len() + TILE * TILE * 4, 0);
+                        at
+                    })
+                }
+                None => continue,
+            };
+            self.copies.push((id, offset, [ox as u32, oy as u32, tw as u32, th as u32]));
         }
-        write_region(queue, texture, ox as u32, oy as u32, tw as u32, th as u32, &bytes);
+    }
+
+    fn submit(self, rs: &RenderState, textures: &HashMap<CelId, CelTexture>) {
+        if self.copies.is_empty() {
+            return;
+        }
+        use wgpu::util::DeviceExt;
+        let buffer = rs.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("tuiles à envoyer"),
+            contents: &self.data,
+            usage: wgpu::BufferUsages::COPY_SRC,
+        });
+        let mut encoder = rs.device.create_command_encoder(&Default::default());
+        for (id, offset, [x, y, w, h]) in self.copies {
+            let Some(t) = textures.get(&id) else { continue };
+            encoder.copy_buffer_to_texture(
+                wgpu::TexelCopyBufferInfo {
+                    buffer: &buffer,
+                    layout: wgpu::TexelCopyBufferLayout {
+                        offset,
+                        bytes_per_row: Some((TILE * 4) as u32),
+                        rows_per_image: Some(TILE as u32),
+                    },
+                },
+                wgpu::TexelCopyTextureInfo {
+                    texture: &t.texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d { x, y, z: 0 },
+                    aspect: wgpu::TextureAspect::All,
+                },
+                extent(w, h),
+            );
+        }
+        rs.queue.submit([encoder.finish()]);
     }
 }

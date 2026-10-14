@@ -44,9 +44,19 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
      egui lisse ses images. Superposer chaque calque directement à l'écran donnait des bords de
      trait plus foncés en vue réduite.
 
-  Chaque dessin affiché est une texture, renvoyée en entier quand sa version change, sinon tuile
-  par tuile pendant un trait (signal `Renderer::invalidate_tiles`) ; au-delà d'1 Go de textures,
-  les plus anciennes sont libérées.
+  Chaque dessin affiché est une texture à la taille de la feuille. Quand sa version change, on
+  n'envoie que ses tuiles dessinées, et on efface celles qui l'étaient (`CelTexture::filled`) ;
+  pendant un trait, seulement les tuiles touchées (signal `Renderer::invalidate_tiles`). Toutes
+  les tuiles d'une image d'écran partent dans un seul tampon et une seule commande de copie
+  (`Uploads`) : `write_texture` tuile par tuile créait un tampon par appel, trop lent par
+  milliers. Au-delà d'1 Go de textures, les plus anciennes sont libérées.
+- **Lecture fluide** (`playback.rs`, 3a) : à chaque image d'écran, les dessins des images qui
+  viennent (la seconde suivante en lecture, en suivant le montage et la boucle ; les images et
+  panneaux voisins à l'arrêt) sont envoyés d'avance, 4 Mo au plus par image, un dessin entamé
+  reprenant à sa prochaine tuile (`CelTexture::partial`). Leur nombre est borné pour ne pas
+  chasser les textures affichées. `PlayMeter` mesure la cadence réellement affichée (barre
+  d'état). Mesure de référence (montage lourd) : changements de panneau de 45–75 ms → moins de
+  5 ms.
 - **Rendu sur processeur** (`render.rs`) : export, vignettes (`thumbs.rs`), pipette, pot de
   peinture, et affichage de secours (OpenGL, ou `PELURE_COMPOSITION=processeur`). Même calcul,
   même résultat : c'est la référence de comparaison.

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 use eframe::egui::{self, TextureHandle, TextureId, TextureOptions};
 
@@ -13,8 +14,11 @@ struct Entry {
     texture: TextureHandle,
 }
 
+/// Temps accordé aux vignettes par image d'écran (au moins une est refaite à chaque fois).
+pub const THUMB_TIME: Duration = Duration::from_millis(6);
+
 /// Vignettes des plans (première image), refaites seulement quand leur contenu change,
-/// et pas plus de quelques-unes par image d'écran pour ne pas figer l'interface.
+/// et seulement quelques millisecondes par image d'écran pour ne pas saccader l'interface.
 #[derive(Default)]
 pub struct Thumbs {
     entries: HashMap<u64, Entry>,
@@ -35,7 +39,7 @@ impl Thumbs {
         ctx: &egui::Context,
         doc: &Document,
         panel: usize,
-        budget: &mut usize,
+        deadline: Instant,
     ) -> Option<TextureId> {
         let s = &doc.panels[panel];
         let plan = render::panel_plan_at(doc, panel, 0, Some(doc.paper));
@@ -47,13 +51,12 @@ impl Thumbs {
         let cam = doc.panel_camera(panel, 0);
         let key = (plan, versions, [cam.x, cam.y, cam.zoom, cam.angle].map(f32::to_bits));
         let fresh = self.entries.get(&s.id).is_some_and(|e| e.key == key);
-        if fresh || *budget == 0 {
+        if fresh || Instant::now() >= deadline {
             if !fresh {
                 self.pending = true;
             }
             return self.entries.get(&s.id).map(|e| e.texture.id());
         }
-        *budget -= 1;
         let (tw, th) = thumb_size(doc);
         let image = render::thumbnail(doc, &key.0, &cam, tw, th);
         match self.entries.get_mut(&s.id) {

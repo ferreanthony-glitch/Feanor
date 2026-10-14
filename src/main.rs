@@ -27,6 +27,9 @@ mod keymap_tests;
 #[cfg(test)]
 mod ops_tests;
 mod panels;
+mod playback;
+#[cfg(test)]
+mod playback_tests;
 mod pixsel;
 #[cfg(test)]
 mod pixsel_tests;

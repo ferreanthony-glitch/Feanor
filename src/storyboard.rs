@@ -502,7 +502,7 @@ impl App {
         }
 
         // Plans.
-        let mut budget = 4;
+        let deadline = std::time::Instant::now() + crate::thumbs::THUMB_TIME;
         let thumb_h = (block_h - 24.0).max(10.0);
         let aspect = self.doc.frame[0] as f32 / self.doc.frame[1].max(1) as f32;
         let mut blocks: Vec<Rect> = Vec::with_capacity(self.doc.panels.len());
@@ -524,7 +524,7 @@ impl App {
             };
             painter.rect_filled(rect, 4.0, bg);
             let clip = painter.with_clip_rect(rect.shrink(2.0).intersect(r));
-            if let Some(tex) = self.thumbs.texture(ui.ctx(), &self.doc, i, &mut budget) {
+            if let Some(tex) = self.thumbs.texture(ui.ctx(), &self.doc, i, deadline) {
                 let tr = Rect::from_min_size(rect.min + vec2(3.0, 3.0), vec2(thumb_h * aspect, thumb_h));
                 clip.image(
                     tex,
@@ -828,7 +828,7 @@ impl App {
         let thumb_h = thumb_w * self.doc.frame[1] as f32 / self.doc.frame[0].max(1) as f32;
         let card_h = thumb_h + 120.0;
         let fps = self.doc.fps;
-        let mut budget = 6;
+        let deadline = std::time::Instant::now() + crate::thumbs::THUMB_TIME;
         let mut clicked = None;
         let mut double = None;
         egui::ScrollArea::vertical()
@@ -879,7 +879,7 @@ impl App {
                         }
                         let tr = Rect::from_min_size(rect.min + vec2(6.0, 6.0), vec2(thumb_w, thumb_h));
                         painter.rect_filled(tr, 0.0, Color32::from_gray(30));
-                        if let Some(tex) = self.thumbs.texture(ui.ctx(), &self.doc, i, &mut budget) {
+                        if let Some(tex) = self.thumbs.texture(ui.ctx(), &self.doc, i, deadline) {
                             painter.image(
                                 tex,
                                 tr,

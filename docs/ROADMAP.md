@@ -93,10 +93,21 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
     étape. Pas encore : déplacer la caméra depuis cette vue, vue de côté, vraie vue 3D.
 - ⏳ 2d. Import glTF de repère.
 
-## Phase 3 — Animatique et animation ⏳
+## Phase 3 — Animatique et animation 🔧
 
-- ⏳ Lecture fluide (cache d'images), pinceaux texturés (essai d'import des 9 pinceaux perso).
-- ⏳ Exports : séquence d'images, vidéo (via ffmpeg), PDF de planches.
+- ✅ 3a. Lecture fluide. Mesuré sur un montage lourd (20 panneaux, 3 calques bitmap chargés,
+  cadre 1920×1080) : chaque changement de panneau figeait l'image 45 à 75 ms (envoi des dessins
+  à la carte graphique). Désormais seules les tuiles dessinées partent, en une copie groupée, et
+  les dessins de la seconde suivante sont envoyés d'avance par petits morceaux : plus aucune image
+  au-dessus de 20 ms de calcul, ni en lecture ni en défilement. Vignettes : quelques ms par image
+  au lieu de 4 d'un coup. Barre d'état : cadence réellement affichée pendant la lecture (orange
+  si des images sont sautées pour rester calé sur le son).
+- ⏳ 3b. Exports sans figer la fenêtre (progression, annuler) : séquence d'images (existe, à
+  mettre en tâche de fond et à accélérer), vidéo avec le son via ffmpeg (celui de Krita est déjà
+  installé sur ce poste), son seul.
+- ⏳ 3c. PDF de storyboard : planches avec action, dialogue, notes.
+- ⏳ 3d. Animation à la TVPaint : pelure d'oignon plus réglable, pinceaux (essai d'import des
+  9 pinceaux perso).
 - ⏸ Export XML Toon Boom : non prévu (format propriétaire non documenté).
 
 ## Phase 4 — Confort ⏳

@@ -42,10 +42,20 @@ impl App {
             Color32::from_black_alpha(110),
             Stroke::NONE,
         ));
+        // Dessins des images qui viennent, à envoyer d'avance à la carte graphique.
+        let ahead = match &self.gpu {
+            Some(gpu) => crate::playback::upcoming_cels(
+                &self.doc,
+                self.play_position(),
+                &plan,
+                gpu.ahead_capacity(&self.doc, plan.items.len()),
+            ),
+            None => Vec::new(),
+        };
         if let Some(gpu) = &mut self.gpu {
             // Les calques sont superposés par la carte graphique, directement à leur place.
             let (all, tiles) = self.renderer.take_gpu_dirty();
-            gpu.sync(&self.doc, &plan, all, &tiles);
+            gpu.sync(&self.doc, &plan, all, &tiles, &ahead);
             painter.add(gpu.paint(&plan, corners, rect, [self.doc.width, self.doc.height]));
         } else {
             let texture = self.renderer.update(ui.ctx(), &self.doc, plan);

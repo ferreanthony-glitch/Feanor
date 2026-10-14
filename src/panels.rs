@@ -738,6 +738,21 @@ impl App {
                 ui.separator();
                 ui.label(format!("x {:.0}  y {:.0}", p.x, p.y));
             }
+            // Pendant la lecture : la cadence vraiment affichée (orange si la machine ne suit pas).
+            if let (true, Some((rate, skipped))) = (self.playing, self.play_meter.rate) {
+                ui.separator();
+                let mut text = format!("Lecture {} i/s", format!("{rate:.1}").replace('.', ","));
+                if skipped > 0 {
+                    let s = if skipped > 1 { "s" } else { "" };
+                    text += &format!(" · {skipped} image{s} sautée{s}");
+                }
+                let slow = skipped > 0 || rate < self.doc.fps as f32 * 0.95;
+                let color = if slow { Color32::from_rgb(240, 170, 60) } else { ui.visuals().text_color() };
+                ui.label(RichText::new(text).color(color)).on_hover_text(
+                    "Images réellement affichées pendant la dernière seconde de lecture. Si la machine \
+                     ne suit pas, des images sont sautées pour rester calé sur le son.",
+                );
+            }
             ui.separator();
             ui.label(&self.status);
         });

@@ -42,6 +42,8 @@ ouvrir d'un double-clic).
     la piste. Le bouton M d'une piste la rend muette.
   - La lecture suit le son : l'image reste synchronisée. En changeant d'image hors lecture, on
     entend une image de son (« son au défilement », menu Son).
+  - Pendant la lecture, la barre d'état indique la cadence vraiment affichée (« Lecture 24,0 i/s ») ;
+    elle passe en orange si la machine saute des images pour rester calée sur le son.
   - Le son est en temps de montage : déplacer ou rallonger un panneau ne déplace pas le son.
 - **Animation** (Tab, ou double-clic sur un panneau) : on entre dans le panneau, avec sa timeline,
   ses calques, ses expositions, la pelure d'oignon et la lecture en boucle. Tab ramène au storyboard.
@@ -162,10 +164,15 @@ ligne « Caméra » de la timeline et en petits losanges dans la bande de montag
 | `guides.rs` | Guides de perspective : géométrie, affichage, traits alignés |
 | `brush.rs` | Moteur de pinceau : empreintes, pression, lissage |
 | `fill.rs` | Remplissage par zone et débord |
-| `render.rs` | Composition des calques et de la pelure, mise à jour partielle de l'affichage, vignettes |
+| `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra |
+| `gpu.rs` | Composition et affichage par la carte graphique, envoi des dessins par tuiles |
+| `playback.rs` | Lecture fluide : dessins envoyés d'avance, cadence affichée |
+| `camera.rs`, `camtools.rs` | Caméra du panneau : images clés, courbes ; outil Caméra, vue caméra |
+| `layertools.rs` | Outil Transformer (calque entier) |
+| `topview.rs` | Vue de dessus (profondeur des calques) |
 | `thumbs.rs` | Cache des vignettes de panneaux |
 | `history.rs` | Annuler / rétablir |
-| `project.rs` | Projet en dossier (format 3) |
+| `project.rs` | Projet en dossier (format 4) |
 | `io.rs` | Anciens fichiers `.pelure`, écriture d'images |
 | `audio.rs` | Décodage des sons, formes d'onde, mixage et sortie audio |
 | `keymap.rs` | Raccourcis : actions, lecture de `keymap.toml` |
@@ -176,7 +183,8 @@ ligne « Caméra » de la timeline et en petits losanges dans la bande de montag
 | `canvas.rs`, `panels.rs`, `timeline.rs` | Interface |
 
 `cargo test --release` lance les tests (pinceau, vectoriel, remplissage, séquences/scènes/panneaux,
-annulation, projet en dossier, anciens fichiers, raccourcis, son).
+annulation, projet en dossier, anciens fichiers, raccourcis, son, caméra, transformation,
+profondeur, vue de dessus, lecture).
 
 ## Compilation (Windows)
 

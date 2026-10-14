@@ -185,6 +185,8 @@ pub struct App {
     /// Fenêtre « Vue de dessus » (profondeur des calques) et son glisser en cours.
     pub(crate) top_view: bool,
     pub(crate) top_drag: Option<crate::topview::TopDrag>,
+    /// Cadence réellement affichée pendant la lecture.
+    pub(crate) play_meter: crate::playback::PlayMeter,
     pub(crate) default_exposure: usize,
     pub(crate) playing: bool,
     pub(crate) play_montage: bool,
@@ -320,6 +322,7 @@ impl App {
             camera_mask: true,
             top_view: false,
             top_drag: None,
+            play_meter: Default::default(),
             default_exposure: 1,
             playing: false,
             play_montage: false,
@@ -2068,6 +2071,13 @@ impl eframe::App for App {
             self.handle_dropped_files(ctx);
         }
         self.tick_playback(ctx);
+        if self.playing {
+            let now = ctx.input(|i| i.time);
+            let g = self.global_frame();
+            self.play_meter.tick(now, g);
+        } else {
+            self.play_meter.reset();
+        }
         self.validate_selection();
         self.validate_bitmap_selection();
         self.update_title(ctx);
