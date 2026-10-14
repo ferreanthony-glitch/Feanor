@@ -63,10 +63,12 @@ pub enum Tool {
     /// Tampon, comme dans Storyboard Pro, et tampon de duplication (5e).
     Stamp,
     Clone,
+    /// Déformer en perspective (5f).
+    Perspective,
 }
 
 impl Tool {
-    pub const ALL: [Tool; 17] = [
+    pub const ALL: [Tool; 18] = [
         Tool::Brush,
         Tool::Pencil,
         Tool::Eraser,
@@ -83,6 +85,7 @@ impl Tool {
         Tool::Pan,
         Tool::Camera,
         Tool::Transform,
+        Tool::Perspective,
         Tool::Ref3d,
     ];
 
@@ -105,6 +108,7 @@ impl Tool {
             Tool::Text => "Texte",
             Tool::Stamp => "Tampon",
             Tool::Clone => "Tampon de duplication",
+            Tool::Perspective => "Perspective",
         }
     }
 
@@ -129,6 +133,7 @@ impl Tool {
             Tool::Text => ph::TEXT_T,
             Tool::Stamp => ph::STAMP,
             Tool::Clone => ph::COPY,
+            Tool::Perspective => ph::PERSPECTIVE,
         }
     }
 
@@ -152,6 +157,7 @@ impl Tool {
             Tool::Text => "outil.texte",
             Tool::Stamp => "outil.tampon",
             Tool::Clone => "outil.tampon_duplication",
+            Tool::Perspective => "outil.perspective",
         }
     }
 
@@ -330,6 +336,8 @@ pub struct App {
     pub(crate) stamp_stroke: Option<crate::stamptools::StampStroke>,
     pub(crate) clone: crate::stamptools::CloneSettings,
     pub(crate) clone_stroke: Option<crate::stamptools::CloneStrokeState>,
+    /// Déformation en perspective en cours (5f).
+    pub(crate) persp: Option<crate::perstools::PerspEdit>,
     pub(crate) clipboard: Vec<Element>,
     pub(crate) renderer: Renderer,
     pub(crate) thumbs: Thumbs,
@@ -482,6 +490,7 @@ impl App {
             stamp_stroke: None,
             clone: Default::default(),
             clone_stroke: None,
+            persp: None,
             clipboard: Vec::new(),
             renderer: Renderer::new(),
             thumbs: Thumbs::default(),
@@ -1863,6 +1872,10 @@ impl App {
     pub(crate) fn run_action(&mut self, action: &str) {
         // Un texte en cours de saisie est posé avant toute commande (annuler, changer d'image…).
         self.finish_text_edit();
+        // Annuler ou rétablir pendant une déformation : elle repartirait d'un dessin périmé.
+        if matches!(action, "edition.annuler" | "edition.retablir") {
+            self.persp = None;
+        }
         if self.workspace_action(action) {
             return;
         }
@@ -1975,6 +1988,7 @@ impl App {
             "outil.texte" => self.set_tool(Tool::Text),
             "outil.tampon" => self.set_tool(Tool::Stamp),
             "outil.tampon_duplication" => self.set_tool(Tool::Clone),
+            "outil.perspective" => self.set_tool(Tool::Perspective),
             "outil.rectangle" => self.set_tool(Tool::Rect),
             "outil.ellipse" => self.set_tool(Tool::Ellipse),
             "outil.polyligne" => self.set_tool(Tool::Polyline),
@@ -2087,7 +2101,7 @@ impl App {
 
     /// Touche pour l'outil en cours (voir `handle_shortcuts`) ; vrai si elle a servi.
     fn tool_key(&mut self, key: Key) -> bool {
-        self.shape_key(key)
+        self.shape_key(key) || self.persp_key(key)
     }
 
     /// Change d'outil : la forme en cours (courbe, polyligne) est posée avant.
@@ -2095,6 +2109,7 @@ impl App {
         if self.tool != tool {
             self.finish_shape_edit();
             self.finish_text_edit();
+            self.persp = None;
             self.end_stroke();
             self.tool = tool;
             if tool.is_shape() {

@@ -29,6 +29,7 @@ impl App {
         self.canvas_input(ui.ctx(), &response, rect);
         self.update_ref3d(ui.ctx());
         self.update_text_preview(ui.ctx());
+        self.check_persp();
 
         let plan = self.build_plan(self.cur_frame, true, true);
         let painter = ui.painter_at(rect);
@@ -82,6 +83,7 @@ impl App {
         self.paint_guides(&painter, rect, self.hover_canvas);
         self.paint_vector_overlay(&painter, rect, shift);
         self.paint_text_overlay(&painter);
+        self.paint_persp_overlay(&painter);
         self.paint_stroke_tip(&painter);
         self.paint_cursor(ui.ctx(), &painter, &response);
         self.text_edit_window(ui.ctx());
@@ -196,6 +198,7 @@ impl App {
                             self.stamp_press(p, pressure, pen);
                         }
                         Tool::Clone => self.clone_press(p, modifiers.command || modifiers.ctrl),
+                        Tool::Perspective => self.persp_press(p, *pos),
                         Tool::Select => self.select_press(p, *pos, modifiers.shift),
                         Tool::Camera => self.camera_press(stage, *pos),
                         Tool::Transform => self.transform_press(stage, *pos),
@@ -225,6 +228,7 @@ impl App {
                         if let Some(q) = self.guided_point(stage) {
                             self.erase_to(self.to_layer(q), pressure);
                         }
+                    } else if self.persp_drag(p) {
                     } else if self.shape_bend_move(p) {
                     } else if let Some((_, end)) = &mut self.shape_drag {
                         *end = p;
@@ -249,6 +253,7 @@ impl App {
                 }
                 | Event::PointerGone => {
                     self.shape_release(mods.shift);
+                    self.persp_release();
                     if self.vdrag.is_some() {
                         self.finish_vdrag(mods.shift);
                     }
@@ -370,6 +375,10 @@ impl App {
         }
         if self.tool == Tool::Text {
             ctx.set_cursor_icon(CursorIcon::Text);
+            return;
+        }
+        if self.tool == Tool::Perspective {
+            ctx.set_cursor_icon(self.persp_cursor(p));
             return;
         }
         if self.paint_stamp_cursor(ctx, painter, p) {

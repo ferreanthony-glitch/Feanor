@@ -48,6 +48,10 @@ mod panels;
 mod pdf;
 #[cfg(test)]
 mod pdf_tests;
+mod persp;
+#[cfg(test)]
+mod persp_tests;
+mod perstools;
 mod playback;
 #[cfg(test)]
 mod playback_tests;

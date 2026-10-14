@@ -95,6 +95,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("outil.texte", "Outil texte", true, false),
     act("outil.tampon", "Outil tampon", true, false),
     act("outil.tampon_duplication", "Outil tampon de duplication", true, false),
+    act("outil.perspective", "Outil perspective (déformer par les quatre coins)", true, false),
     act("outil.main", "Outil main", true, false),
     act("outil.epaisseur_crayon", "Outil épaisseur du trait de crayon", false, false),
     act("outil.taille_plus", "Pinceau plus gros", true, true),
