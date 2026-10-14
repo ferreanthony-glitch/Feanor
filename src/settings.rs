@@ -6,14 +6,32 @@ use serde::{Deserialize, Serialize};
 
 use crate::onion::OnionSettings;
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Settings {
     /// ffmpeg choisi à la main (sinon : cherché automatiquement à chaque export).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ffmpeg: Option<PathBuf>,
+    /// Copie de secours toutes les N minutes (0 = jamais). 1 par défaut, comme
+    /// AUTO_SAVE_DELAY dans les préférences Storyboard Pro d'Anthony.
+    #[serde(default = "default_autosave", rename = "copie_secours_minutes")]
+    pub autosave_minutes: u32,
     /// Pelure d'oignon.
     #[serde(default, rename = "pelure")]
     pub onion: OnionSettings,
+}
+
+fn default_autosave() -> u32 {
+    1
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings {
+            ffmpeg: None,
+            autosave_minutes: default_autosave(),
+            onion: OnionSettings::default(),
+        }
+    }
 }
 
 impl Settings {

@@ -50,6 +50,10 @@ mod pixsel_tests;
 mod pixtools;
 mod project;
 mod raster;
+mod recovery;
+#[cfg(test)]
+mod recovery_tests;
+mod recoveryui;
 mod render;
 mod settings;
 mod soundtrack;

@@ -115,6 +115,9 @@ deux calques vectoriels restent vectoriels, sinon le résultat est bitmap ; les 
 - **Annuler / rétablir** (Ctrl+Z / Ctrl+Maj+Z) : 200 étapes, sur tout le projet : traits, vectoriel,
   sélections, panneaux, scènes, séquences, calques, sons, textes, noms, réglages des calques et des
   pistes, guides, papier, cadence. Une saisie ou un glissé de curseur compte pour une seule étape.
+- **Copie de secours** : toutes les minutes (menu Fichier pour changer, 0 = jamais), Pelure copie
+  le projet modifié à part, sans toucher au projet lui-même. Après un plantage, au démarrage
+  suivant, Pelure propose d'ouvrir la copie ; « Enregistrer » la remet dans le projet.
 - **Export** (menu Fichier) :
   - « Exporter le film / des images / le son… » ouvre une fenêtre : film MP4 (pour regarder,
     envoyer) ou MOV ProRes (pour un logiciel de montage), images PNG, ou son seul (WAV) ; tout le
@@ -194,7 +197,8 @@ ligne « Caméra » de la timeline et en petits losanges dans la bande de montag
 | `topview.rs` | Vue de dessus (profondeur des calques) |
 | `thumbs.rs` | Cache des vignettes de panneaux |
 | `history.rs` | Annuler / rétablir |
-| `project.rs` | Projet en dossier (format 4) |
+| `project.rs` | Projet en dossier (format 4), enregistrement préparé puis écrit |
+| `recovery.rs`, `recoveryui.rs` | Copie de secours, récupération après plantage |
 | `io.rs` | Anciens fichiers `.pelure`, écriture d'images |
 | `audio.rs` | Décodage des sons, formes d'onde, mixage et sortie audio |
 | `keymap.rs` | Raccourcis : actions, lecture de `keymap.toml` |

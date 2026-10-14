@@ -291,43 +291,118 @@ pub struct SaveReport {
 }
 
 /// Enregistre le projet. `written` retient la version de chaque dessin déjà écrit dans ce dossier.
+/// En cas d'échec, `written` est vidé : le prochain enregistrement réécrira tout.
 pub fn save(doc: &Document, manifest_path: &Path, written: &mut HashMap<CelId, u64>) -> Result<SaveReport, String> {
+    let job = prepare_save(doc, manifest_path, written, None)?;
+    job.run().inspect_err(|_| written.clear())
+}
+
+/// Un dessin à écrire : déjà converti (vectoriel), copié tel quel (bitmap, converti en PNG à
+/// l'écriture, la partie lente), ou à recopier d'un autre dossier où il est déjà écrit.
+enum DrawingData {
+    Bytes(Vec<u8>),
+    Raster(Raster),
+    CopyFrom(PathBuf),
+}
+
+/// Dossier d'un projet déjà enregistré, et versions des dessins qui y sont écrits : un dessin
+/// inchangé depuis s'y recopie au lieu d'être réencodé.
+pub struct Reuse<'a> {
+    pub manifest_path: &'a Path,
+    pub written: &'a HashMap<CelId, u64>,
+}
+
+/// Ce qu'un enregistrement doit écrire, préparé sur le fil de l'interface (copie des dessins
+/// modifiés seulement) : l'écriture, elle, peut se faire sur un autre fil (sauvegarde de
+/// secours) pendant qu'on continue à dessiner.
+pub struct SaveJob {
+    manifest_path: PathBuf,
+    drawings: Vec<(PathBuf, DrawingData)>,
+    sounds: Vec<(PathBuf, Arc<Vec<u8>>)>,
+    manifest: Vec<u8>,
+    used: BTreeSet<CelId>,
+    used_sounds: BTreeSet<u64>,
+}
+
+/// Prépare l'enregistrement de `doc` dans `manifest_path`. `written` est mis à jour comme si
+/// l'écriture allait réussir (à vider si elle échoue).
+pub fn prepare_save(
+    doc: &Document,
+    manifest_path: &Path,
+    written: &mut HashMap<CelId, u64>,
+    reuse: Option<Reuse>,
+) -> Result<SaveJob, String> {
     let dir = manifest_path.parent().ok_or("chemin de projet invalide")?;
-    fs::create_dir_all(dir.join(DRAWINGS)).map_err(|e| format!("{} : {e}", dir.display()))?;
+    let reuse_dir = reuse.as_ref().and_then(|r| r.manifest_path.parent());
     let used = doc.used_cels();
-    let mut count = 0;
+    written.retain(|id, _| used.contains(id));
+    let mut drawings = Vec::new();
     for &id in &used {
         let Some(cel) = doc.cels.get(&id) else { continue };
-        let path = drawing_path(dir, id, cel.vector.is_some());
+        let vector = cel.vector.is_some();
+        let path = drawing_path(dir, id, vector);
         if written.get(&id) == Some(&cel.version) && path.exists() {
             continue;
         }
-        let bytes = match &cel.vector {
-            Some(v) => serde_json::to_vec(v).map_err(|e| e.to_string())?,
-            None => encode_png(&cel.raster.to_rgba(), cel.raster.width, cel.raster.height)?,
+        let elsewhere = reuse_dir
+            .zip(reuse.as_ref())
+            .filter(|(_, r)| r.written.get(&id) == Some(&cel.version))
+            .map(|(d, _)| drawing_path(d, id, vector))
+            .filter(|p| p.exists());
+        let data = match (&cel.vector, elsewhere) {
+            (_, Some(from)) => DrawingData::CopyFrom(from),
+            (Some(v), None) => DrawingData::Bytes(serde_json::to_vec(v).map_err(|e| e.to_string())?),
+            (None, None) => DrawingData::Raster(cel.raster.clone()),
         };
-        write_atomic(&path, &bytes)?;
+        drawings.push((path, data));
         written.insert(id, cel.version);
-        count += 1;
     }
     // Un son ne change jamais : on ne l'écrit que s'il n'est pas déjà dans le dossier.
-    let sounds = used_sounds(doc);
-    if !sounds.is_empty() {
-        fs::create_dir_all(dir.join(SOUNDS)).map_err(|e| format!("{} : {e}", dir.display()))?;
-    }
-    for id in &sounds {
-        let sound = &doc.sounds[id];
-        let path = dir.join(SOUNDS).join(sound_file(sound));
-        if !path.exists() {
-            write_atomic(&path, &sound.bytes)?;
+    let used_sounds = used_sounds(doc);
+    let sounds = used_sounds
+        .iter()
+        .map(|id| &doc.sounds[id])
+        .map(|s| (dir.join(SOUNDS).join(sound_file(s)), s.bytes.clone()))
+        .filter(|(path, _)| !path.exists())
+        .collect();
+    let manifest = serde_json::to_vec_pretty(&manifest_of(doc)).map_err(|e| e.to_string())?;
+    Ok(SaveJob {
+        manifest_path: manifest_path.to_path_buf(),
+        drawings,
+        sounds,
+        manifest,
+        used,
+        used_sounds,
+    })
+}
+
+impl SaveJob {
+    /// Écrit les dessins, puis les sons, puis le manifeste (en dernier : un manifeste ne cite
+    /// jamais un dessin pas encore écrit), puis efface ce qui ne sert plus.
+    pub fn run(self) -> Result<SaveReport, String> {
+        let dir = self.manifest_path.parent().ok_or("chemin de projet invalide")?;
+        fs::create_dir_all(dir.join(DRAWINGS)).map_err(|e| format!("{} : {e}", dir.display()))?;
+        let mut count = 0;
+        for (path, data) in &self.drawings {
+            let bytes = match data {
+                DrawingData::Bytes(b) => b.clone(),
+                DrawingData::Raster(r) => encode_png(&r.to_rgba(), r.width, r.height)?,
+                DrawingData::CopyFrom(from) => fs::read(from).map_err(|e| format!("{} : {e}", from.display()))?,
+            };
+            write_atomic(path, &bytes)?;
             count += 1;
         }
+        if !self.sounds.is_empty() {
+            fs::create_dir_all(dir.join(SOUNDS)).map_err(|e| format!("{} : {e}", dir.display()))?;
+        }
+        for (path, bytes) in &self.sounds {
+            write_atomic(path, bytes)?;
+            count += 1;
+        }
+        write_atomic(&self.manifest_path, &self.manifest)?;
+        let removed = remove_unused(dir, &self.used) + remove_unused_sounds(dir, &self.used_sounds);
+        Ok(SaveReport { written: count, removed })
     }
-    let manifest = manifest_of(doc);
-    let json = serde_json::to_vec_pretty(&manifest).map_err(|e| e.to_string())?;
-    write_atomic(manifest_path, &json)?;
-    let removed = remove_unused(dir, &used, written) + remove_unused_sounds(dir, &sounds);
-    Ok(SaveReport { written: count, removed })
 }
 
 /// Efface les sons du dossier qui ne servent plus (seulement les fichiers « <nombre>.<ext> »).
@@ -348,7 +423,7 @@ fn remove_unused_sounds(dir: &Path, used: &BTreeSet<u64>) -> usize {
 }
 
 /// Efface les dessins du dossier qui ne servent plus (seulement les fichiers « <nombre>.png/json »).
-fn remove_unused(dir: &Path, used: &BTreeSet<CelId>, written: &mut HashMap<CelId, u64>) -> usize {
+fn remove_unused(dir: &Path, used: &BTreeSet<CelId>) -> usize {
     let Ok(entries) = fs::read_dir(dir.join(DRAWINGS)) else { return 0 };
     let mut removed = 0;
     for entry in entries.flatten() {
@@ -357,7 +432,6 @@ fn remove_unused(dir: &Path, used: &BTreeSet<CelId>, written: &mut HashMap<CelId
         let id = path.file_stem().and_then(|s| s.to_str()).and_then(|s| s.parse::<CelId>().ok());
         if let (Some(id), "png" | "json") = (id, ext) {
             if !used.contains(&id) && fs::remove_file(&path).is_ok() {
-                written.remove(&id);
                 removed += 1;
             }
         }

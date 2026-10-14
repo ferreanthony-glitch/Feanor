@@ -138,9 +138,19 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
     grain sur les calques vectoriels.
 - ⏸ Export XML Toon Boom : non prévu (format propriétaire non documenté).
 
-## Phase 4 — Confort ⏳
+## Phase 4 — Confort 🔧
 
-- ⏳ Espaces de travail, sauvegarde automatique, récupération après plantage.
+- ✅ 4a. Copie de secours et récupération après plantage : toutes les minutes par défaut
+  (AUTO_SAVE_DELAY = 1 dans les préférences Storyboard Pro d'Anthony ; réglable dans le menu
+  Fichier, 0 = jamais), si le projet a changé, sans figer la fenêtre (écriture sur un autre
+  fil). La copie va dans `%LOCALAPPDATA%\Pelure\secours`, jamais dans le projet lui-même : seul
+  « Enregistrer » l'écrit (choix prudent ; comment Storyboard Pro fait exactement n'est pas
+  vérifié). Fermeture normale : copie effacée. Après un plantage : fenêtre « Pelure s'est fermé
+  sans enregistrer » (ouvrir la copie, la supprimer, ou plus tard), avec un avertissement si le
+  projet a été enregistré après la copie. Barre d'état : « Secours il y a … ». Vérifié par un
+  vrai plantage (processus tué) : copie retrouvée et rouverte, traits compris.
+- ⏳ 4b. Espaces de travail enregistrables (disposition des panneaux), retenus à la fermeture
+  (AUTO_SAVE_LAYOUT = Y dans les mêmes préférences).
 
 ## Raccourcis proposés, à valider
 

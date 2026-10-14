@@ -104,6 +104,21 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   séquences et de scènes, panneaux, pistes son). Les noms « Dessin / Vignettes » évitent la confusion
   avec la « scène » du découpage.
 
+## Copie de secours (4a)
+
+- `project.rs` : l'enregistrement est en deux temps. `prepare_save` (fil de l'interface) copie
+  ce qui a changé — dessins bitmap clonés (tuiles), vectoriels déjà convertis, ou à recopier du
+  dossier du projet s'ils n'ont pas changé depuis (`Reuse`) — et le manifeste. `SaveJob::run`
+  écrit (encodage PNG : la partie lente), manifeste en dernier, puis efface l'inutile. Un échec
+  vide la mémoire des dessins écrits : le suivant réécrit tout.
+- `recovery.rs` : un dossier par séance (`%LOCALAPPDATA%\Pelure\secours\<heure>-<processus>`),
+  avec un `verrou` ouvert sans partage (Windows refuse de l'effacer tant que la séance vit),
+  `seance.json` et la copie `projet\secours.pelure`. Copie lancée quand le délai est passé, que
+  le projet est modifié et que l'historique a bougé depuis la précédente, jamais pendant un
+  geste ; écrite sur un fil. Au démarrage, les séances dont le verrou s'efface sont
+  interrompues : avec copie, proposées (`recoveryui.rs`) ; sans, effacées. `on_exit` efface le
+  dossier de la séance.
+
 ## Pinceaux texturés (3d-2)
 
 - `brush.rs` : chaque empreinte calcule une couverture par pixel — disque (dureté) ou pointe en

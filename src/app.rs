@@ -188,6 +188,9 @@ pub struct App {
     pub(crate) ffmpeg: Option<Option<(PathBuf, Result<crate::export::Encoders, String>)>>,
     /// Réglages de l'application (%APPDATA%\Pelure\reglages.toml).
     pub(crate) settings: crate::settings::Settings,
+    /// Copie de secours de cette séance, et séances interrompues à proposer au démarrage.
+    pub(crate) recovery: Option<crate::recovery::Recovery>,
+    pub(crate) orphans: Vec<crate::recovery::Orphan>,
     pub(crate) default_exposure: usize,
     pub(crate) playing: bool,
     pub(crate) play_montage: bool,
@@ -326,6 +329,9 @@ impl App {
             export_job: None,
             ffmpeg: None,
             settings,
+            // Les séances interrompues d'abord (avant d'ouvrir la nôtre).
+            orphans: crate::recovery::root().map(|r| crate::recovery::orphans(&r, None)).unwrap_or_default(),
+            recovery: crate::recovery::root().and_then(|r| crate::recovery::Recovery::start(&r).ok()),
             default_exposure: 1,
             playing: false,
             play_montage: false,
@@ -475,7 +481,11 @@ impl App {
     }
 
     pub(crate) fn modal_open(&self) -> bool {
-        self.new_dialog.is_some() || self.pending.is_some() || self.export_dialog.is_some() || self.export_job.is_some()
+        self.new_dialog.is_some()
+            || self.pending.is_some()
+            || self.export_dialog.is_some()
+            || self.export_job.is_some()
+            || !self.orphans.is_empty()
     }
 
     pub(crate) fn current_brush(&self) -> Option<&BrushSettings> {
@@ -1480,7 +1490,7 @@ impl App {
     }
 
     /// Nom du projet (ou de l'ancien fichier importé), sinon `fallback`.
-    fn base_name_or(&self, fallback: &str) -> String {
+    pub(crate) fn base_name_or(&self, fallback: &str) -> String {
         self.path
             .as_ref()
             .or(self.import_source.as_ref())
@@ -2098,6 +2108,7 @@ impl eframe::App for App {
             }
         }
         self.export_windows(ctx);
+        self.recovery_window(ctx);
         self.scrub_audio();
         if self.thumbs.pending {
             ctx.request_repaint();
@@ -2108,6 +2119,14 @@ impl eframe::App for App {
             if let Err(e) = self.settings.save() {
                 self.status = format!("Réglages non enregistrés : {e}");
             }
+        }
+        self.tick_recovery(ctx);
+    }
+
+    /// Fermeture normale (même sans enregistrer) : la copie de secours de la séance est effacée.
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        if let Some(r) = self.recovery.take() {
+            r.close();
         }
     }
 }

@@ -91,6 +91,8 @@ impl App {
                 }
                 ui.checkbox(&mut self.export_transparent, "Images PNG sans le papier (fond transparent)");
                 ui.separator();
+                self.autosave_menu_ui(ui);
+                ui.separator();
                 self.action_item(ui, "Quitter", "fichier.quitter");
             });
             ui.menu_button("Édition", |ui| {
@@ -747,6 +749,7 @@ impl App {
                 ui.separator();
                 ui.label(format!("x {:.0}  y {:.0}", p.x, p.y));
             }
+            self.recovery_status_ui(ui);
             // Pendant la lecture : la cadence vraiment affichée (orange si la machine ne suit pas).
             if let (true, Some((rate, skipped))) = (self.playing, self.play_meter.rate) {
                 ui.separator();
