@@ -199,7 +199,7 @@ n'est plus bridée quand la fenêtre est derrière une autre.
   d'Anthony). Une disposition = panneaux affichés, leurs tailles, vue vignettes, vue de dessus.
   Pas encore : fenêtres détachées, plusieurs vues du même dessin.
 
-## Phase 5 — Interface et nouveaux outils ⏳
+## Phase 5 — Interface et nouveaux outils ✅
 
 Demandée par Anthony après la phase 4. Choix faits : icônes Phosphor, fenêtres modulables dans
 la fenêtre de Pelure (egui_dock), tampon comme Storyboard Pro **et** tampon de duplication,
@@ -214,14 +214,26 @@ perspective = déformer en perspective (outil Perspective de Storyboard Pro).
   tirer. Affichage > Panneaux : afficher / masquer chaque panneau (il revient à sa place). Les
   espaces de travail enregistrent tout cela (y compris les panneaux flottants et leur place) ;
   les anciennes dispositions sont converties. Le dessin ne se ferme pas et ne flotte pas.
-  Pas encore : panneaux dans une fenêtre Windows à part (2e écran).
-- 5c. Formes en outils séparés : Ligne (droite, courbe), Rectangle, Ellipse, Polyligne (outils
-  LINE / RECTANGLE / ELLIPSE / POLYLINE de Storyboard Pro 27, sans touche).
-- 5d. Texte (TEXT_TOOL de Storyboard Pro 27, sans touche).
-- 5e. Tampon comme Storyboard Pro (STAMP_TOOL : images posées le long du trait, échelle,
-  angle, espacement, variations au hasard, plusieurs images en cycle), puis tampon de duplication.
-- 5f. Déformer en perspective (PERSPECTIVE_TOOL de Storyboard Pro 27 : les 4 coins d'une
-  sélection ou d'un calque).
+- ✅ 5c. Formes en outils séparés : Ligne (droite, courbe, courbe en S), Rectangle, Ellipse,
+  Polyligne (outils LINE / RECTANGLE / ELLIPSE / POLYLINE de Storyboard Pro 27, sans touche ; leur
+  maniement exact n'est pas vérifié, celui-ci est propre à Pelure). Courbe : tracer, puis glisser
+  pour courber (la courbe passe par le pointeur) ; en S, deux glissers. Polyligne : un clic par
+  point, double-clic ou Entrée pour finir, clic sur le premier point pour fermer.
+- ✅ 5d. Texte (TEXT_TOOL de Storyboard Pro 27) : polices du poste, taille, couleur ; sur un calque
+  vectoriel le texte reste modifiable (clic dessus), la Sélection le déplace, l'agrandit, le
+  tourne ; sur un calque bitmap il devient des pixels. Police absente : celle de Pelure (signalé).
+  Pas encore : crénage, alignement centré / à droite, gras ou italique autrement que par la police.
+  Format de projet 6.
+- ✅ 5e. Tampon comme Storyboard Pro (STAMP_TOOL, d'après ses réglages : taille max et min,
+  espacement, angle, rondeur, variations au hasard, miroirs, plusieurs images en cycle) avec six
+  tampons de Pelure et les images importées ; tampon de duplication (Ctrl + clic pour la source,
+  aligné ou non, calque courant ou tous les calques). Calques bitmap.
+- ✅ 5f. Déformer en perspective (PERSPECTIVE_TOOL de Storyboard Pro 27) : les 4 coins du dessin
+  (ou de la sélection vectorielle), grille de perspective ; chaque geste repart du dessin d'origine.
+  Pas encore : sur une sélection bitmap.
+- ✅ 5g. Panneau dans une fenêtre Windows à part (clic droit sur son onglet), à poser sur un autre
+  écran ; la fermer le remet à sa place ; sa place est retenue. Les raccourcis clavier restent ceux
+  de la fenêtre principale.
 
 ## Raccourcis proposés, à valider
 

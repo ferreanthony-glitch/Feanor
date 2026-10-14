@@ -279,6 +279,10 @@ pub struct App {
     /// glisse et aimante, sont dans `dock` (affiché par egui_dock).
     pub(crate) layout: crate::workspace::Layout,
     pub(crate) dock: Option<egui_dock::DockState<crate::dock::Pane>>,
+    /// Panneaux dans leur propre fenêtre Windows (5g), et celui à y mettre (clic droit sur
+    /// son onglet).
+    pub(crate) detached: Vec<crate::dock::DetachedPanel>,
+    pub(crate) detach_request: Option<crate::dock::Pane>,
     /// Nom en cours de saisie pour enregistrer l'espace de travail.
     pub(crate) workspace_name: Option<String>,
     /// Copie de secours de cette séance, et séances interrompues à proposer au démarrage.
@@ -448,6 +452,8 @@ impl App {
             ffmpeg: None,
             layout: crate::workspace::Layout::default(),
             dock: None,
+            detached: Vec::new(),
+            detach_request: None,
             workspace_name: None,
             settings,
             // Les séances interrompues d'abord (avant d'ouvrir la nôtre).

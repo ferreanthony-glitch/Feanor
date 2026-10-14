@@ -160,12 +160,29 @@ pub struct FloatingPanel {
     pub hauteur: f32,
 }
 
+/// Panneau dans sa propre fenêtre Windows (5g, par exemple sur un deuxième écran) : place de la
+/// fenêtre et taille de son contenu, en points de l'écran (0 = à placer).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DetachedPanel {
+    pub panneau: Pane,
+    #[serde(default)]
+    pub x: f32,
+    #[serde(default)]
+    pub y: f32,
+    #[serde(default)]
+    pub largeur: f32,
+    #[serde(default)]
+    pub hauteur: f32,
+}
+
 /// La disposition des panneaux.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DockLayout {
     pub principal: DockNode,
     #[serde(default)]
     pub fenetres: Vec<FloatingPanel>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub detachees: Vec<DetachedPanel>,
 }
 
 fn tabs(panes: Vec<Pane>) -> DockNode {
@@ -329,7 +346,12 @@ impl DockLayout {
             let part = 1.0 - l.montage_height.clamp(140.0, 1200.0) / REF_HEIGHT;
             center = column(part, center, tabs(vec![Pane::Strip]));
         }
-        DockLayout { principal: center, fenetres: Vec::new() }.sanitized()
+        DockLayout { principal: center, ..DockLayout::empty() }.sanitized()
+    }
+
+    /// Le dessin seul.
+    fn empty() -> DockLayout {
+        DockLayout { principal: tabs(vec![Pane::Canvas]), fenetres: Vec::new(), detachees: Vec::new() }
     }
 
     pub fn panes(&self) -> Vec<Pane> {
@@ -338,7 +360,17 @@ impl DockLayout {
         for w in &self.fenetres {
             w.panneaux.collect(&mut out);
         }
+        out.extend(self.detachees.iter().map(|d| d.panneau));
         out
+    }
+
+    /// Met `pane` dans sa propre fenêtre (le dessin reste dans la fenêtre principale).
+    pub fn detach(&mut self, pane: Pane) {
+        if pane == Pane::Canvas || self.detachees.iter().any(|d| d.panneau == pane) {
+            return;
+        }
+        self.close(pane);
+        self.detachees.push(DetachedPanel { panneau: pane, x: 0.0, y: 0.0, largeur: 0.0, hauteur: 0.0 });
     }
 
     pub fn contains(&self, pane: Pane) -> bool {
@@ -361,13 +393,24 @@ impl DockLayout {
                 fenetres.push(w);
             }
         }
+        let mut detachees = Vec::new();
+        for mut d in self.detachees {
+            if d.panneau == Pane::Canvas || seen.contains(&d.panneau) {
+                continue;
+            }
+            seen.push(d.panneau);
+            if ![d.x, d.y, d.largeur, d.hauteur].iter().all(|v| v.is_finite()) || d.largeur < 40.0 || d.hauteur < 40.0 {
+                (d.x, d.y, d.largeur, d.hauteur) = (0.0, 0.0, 0.0, 0.0);
+            }
+            detachees.push(d);
+        }
         if !seen.contains(&Pane::Canvas) {
             principal = Some(match principal {
                 Some(p) => row(0.25, p, tabs(vec![Pane::Canvas])),
                 None => tabs(vec![Pane::Canvas]),
             });
         }
-        DockLayout { principal: principal.unwrap_or_else(|| tabs(vec![Pane::Canvas])), fenetres }
+        DockLayout { principal: principal.unwrap_or_else(|| tabs(vec![Pane::Canvas])), fenetres, detachees }
     }
 
     /// Ferme un panneau (le dessin ne se ferme pas).
@@ -375,7 +418,7 @@ impl DockLayout {
         if pane == Pane::Canvas {
             return;
         }
-        let layout = std::mem::replace(self, DockLayout { principal: tabs(vec![Pane::Canvas]), fenetres: Vec::new() });
+        let layout = std::mem::replace(self, DockLayout::empty());
         let mut seen = vec![pane];
         let principal = layout.principal.sanitized(&mut seen);
         let fenetres = layout
@@ -386,7 +429,8 @@ impl DockLayout {
                 Some(w)
             })
             .collect();
-        *self = DockLayout { principal: principal.unwrap_or_else(|| tabs(vec![Pane::Canvas])), fenetres }.sanitized();
+        let detachees = layout.detachees.into_iter().filter(|d| d.panneau != pane).collect();
+        *self = DockLayout { principal: principal.unwrap_or_else(|| tabs(vec![Pane::Canvas])), fenetres, detachees }.sanitized();
     }
 
     /// Rouvre un panneau à sa place : avec les panneaux de son groupe s'il en reste, sinon dans
@@ -442,7 +486,7 @@ impl DockLayout {
                     .wrap_tabs_of(Pane::Canvas, &mut |canvas| row(0.78, canvas, right.take().unwrap_or_else(|| tabs(Vec::new()))));
             }
         }
-        *self = std::mem::replace(self, DockLayout { principal: tabs(vec![Pane::Canvas]), fenetres: Vec::new() }).sanitized();
+        *self = std::mem::replace(self, DockLayout::empty()).sanitized();
     }
 
     /// Deux dispositions égales, aux parts près (elles bougent d'un rien quand on tire un bord).
@@ -461,6 +505,13 @@ impl DockLayout {
             && self.fenetres.len() == other.fenetres.len()
             && self.fenetres.iter().zip(&other.fenetres).all(|(a, b)| {
                 same(&a.panneaux, &b.panneaux)
+                    && [(a.x, b.x), (a.y, b.y), (a.largeur, b.largeur), (a.hauteur, b.hauteur)]
+                        .iter()
+                        .all(|(u, v)| (u - v).abs() < 1.0)
+            })
+            && self.detachees.len() == other.detachees.len()
+            && self.detachees.iter().zip(&other.detachees).all(|(a, b)| {
+                a.panneau == b.panneau
                     && [(a.x, b.x), (a.y, b.y), (a.largeur, b.largeur), (a.hauteur, b.hauteur)]
                         .iter()
                         .all(|(u, v)| (u - v).abs() < 1.0)
@@ -555,7 +606,7 @@ pub fn from_state(state: &DockState<Pane>, window_rect: &dyn Fn(usize) -> Option
             }
         }
     }
-    DockLayout { principal, fenetres }.sanitized()
+    DockLayout { principal, fenetres, detachees: Vec::new() }.sanitized()
 }
 
 fn read(tree: &Tree<Pane>, at: NodeIndex) -> Option<DockNode> {

@@ -97,10 +97,12 @@ impl App {
         });
         ui.menu_button("Panneaux", |ui| {
             let panes = self.dock_layout();
+            let detached = self.detached_panes();
             // Un par un…
             for pane in Pane::ALL.into_iter().filter(|p| *p != Pane::Canvas) {
                 let mut on = panes.contains(pane);
-                if ui.checkbox(&mut on, format!("{}  {}", pane.icon(), pane.name())).changed() {
+                let apart = if detached.iter().any(|d| d.panneau == pane) { " (fenêtre à part)" } else { "" };
+                if ui.checkbox(&mut on, format!("{}  {}{apart}", pane.icon(), pane.name())).changed() {
                     self.toggle_pane(pane);
                 }
             }
@@ -123,7 +125,8 @@ impl App {
             ui.label(
                 egui::RichText::new(
                     "Glisse l'onglet d'un panneau : il s'aimante sur un bord ou dans un autre panneau, \
-                     ou flotte si on le lâche ailleurs.",
+                     ou flotte si on le lâche ailleurs. Clic droit sur l'onglet : « Dans une fenêtre à \
+                     part », pour le poser sur un autre écran.",
                 )
                 .small()
                 .weak(),

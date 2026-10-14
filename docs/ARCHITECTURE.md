@@ -159,6 +159,27 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   `panneaux` manque (espaces enregistrés avant 5b).
 - L'accessibilité d'egui (accesskit) est coupée : elle plantait quand un panneau devenait
   flottant (`Option::unwrap` dans accesskit_consumer 0.26). À réactiver quand ce sera corrigé.
+- **Fenêtre à part** (5g) : `DockLayout::detachees` ; chaque panneau détaché est affiché par
+  `ctx.show_viewport_immediate` (une vraie fenêtre de Windows, même contenu que l'onglet, via
+  `App::pane_ui`). Le clavier de ces fenêtres ne passe pas par les raccourcis.
+
+## Outils de la phase 5
+
+- **Formes** (`shapes.rs` géométrie testée, `shapetools.rs` gestes) : `ShapeEdit` pour les formes
+  en plusieurs gestes (courbe à courber, polyligne) ; Entrée, Échap, Retour arrière leur sont
+  donnés avant les raccourcis (`App::tool_key`). Courbe : Bézier cubique ; une courbure fait passer
+  la courbe par le pointeur à mi-chemin, la seconde aux deux tiers.
+- **Texte** (`text.rs`, `texttools.rs`) : polices de Windows lues par ttf-parser ; seule la table
+  des noms est lue au démarrage (sur un autre fil). Élément vectoriel `Text` (texte, police,
+  taille, couleur, placement affine), dessiné par les contours des lettres (cache des mises en
+  page) en règle non nulle, lettre par lettre.
+- **Tampons** (`stamp.rs`, `stamptools.rs`) : suite des tampons le long du trait (espacement en
+  part de la taille, hasard reproductible), pose par échantillonnage inverse bilinéaire, teinte
+  par `render::over`. Duplication : instantané de la source au début du trait, chaque pixel
+  reçoit au plus une fois la plus forte couverture (pas d'accumulation).
+- **Perspective** (`persp.rs`, `perstools.rs`) : homographie rectangle → quadrilatère ; l'image
+  est refaite depuis l'original à chaque lâcher ; éléments vectoriels : points transformés
+  (le texte prend l'affine la plus proche).
 
 ## Pinceaux texturés (3d-2)
 

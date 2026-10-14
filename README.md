@@ -101,8 +101,18 @@ deux calques vectoriels restent vectoriels, sinon le résultat est bitmap ; les 
   ou Timeline) est un onglet. Glisse un onglet : des boutons apparaissent au milieu du panneau
   survolé, lâche-le sur l'un d'eux pour l'aimanter (à gauche, à droite, dessus, dessous, ou en
   onglet), ou ailleurs pour qu'il flotte. Tire les bords entre panneaux pour les redimensionner.
-  La croix d'un onglet le ferme ; Affichage > Panneaux le fait revenir à sa place. Les outils
-  sont des icônes : leur nom et leur raccourci s'affichent au survol.
+  La croix d'un onglet le ferme ; Affichage > Panneaux le fait revenir à sa place. Clic droit
+  sur un onglet : « Dans une fenêtre à part », pour le poser sur un autre écran (le fermer le
+  remet à sa place). Les outils sont des icônes : leur nom et leur raccourci s'affichent au survol.
+- **Formes** : Ligne (droite, courbe : tracer puis glisser pour courber ; courbe en S : deux
+  glissers), Rectangle, Ellipse (Maj : carré, cercle), Polyligne (un clic par point, double-clic
+  ou Entrée pour finir, clic sur le premier point pour fermer).
+- **Texte** : clic pour poser un texte, Ctrl+Entrée pour le valider ; police et taille dans
+  Réglages. Sur un calque vectoriel il reste modifiable (clic dessus avec l'outil Texte).
+- **Tampon** (calque bitmap) : des images posées le long du trait (feuille, herbe, caillou…, ou
+  tes images importées), avec variations au hasard ; Ctrl + clic sur plusieurs tampons pour les
+  alterner. **Tampon de duplication** : Ctrl + clic pour la source, puis peindre.
+- **Perspective** : clic sur le dessin, puis tirer ses coins (Ctrl+Z annule chaque geste).
 - **Pinceaux texturés** (calque bitmap, panneau Réglages) : liste de réglages (pinceau rond, crayon à
   papier, craie grasse, encre, gommes) ; « Papier » et « Grain » donnent un grain fixe sur le
   dessin, que la couleur remplit quand on appuie. « Importer… » lit un fichier de pinceaux Toon
@@ -223,7 +233,11 @@ en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le 
 | `project.rs` | Projet en dossier (format 5), enregistrement préparé puis écrit |
 | `recovery.rs`, `recoveryui.rs` | Copie de secours, récupération après plantage |
 | `workspace.rs`, `workspaceui.rs` | Espaces de travail, disposition retenue |
-| `dock.rs`, `dockui.rs` | Panneaux modulables : disposition (format de Pelure), contenu des onglets |
+| `dock.rs`, `dockui.rs` | Panneaux modulables : disposition (format de Pelure), contenu des onglets, fenêtres à part |
+| `shapes.rs`, `shapetools.rs` | Formes : ligne (courbes), rectangle, ellipse, polyligne |
+| `text.rs`, `texttools.rs` | Texte : polices du poste, mise en page, outil |
+| `stamp.rs`, `stamptools.rs` | Tampon et tampon de duplication |
+| `persp.rs`, `perstools.rs` | Déformer en perspective |
 | `settings.rs` | Réglages de l'application (ffmpeg, pelure, copie de secours, dispositions) |
 | `io.rs` | Anciens fichiers `.pelure`, écriture d'images |
 | `audio.rs` | Décodage des sons, formes d'onde, mixage et sortie audio |

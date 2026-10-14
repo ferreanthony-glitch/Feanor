@@ -134,6 +134,7 @@ fn damaged_layouts_are_repaired() {
             FloatingPanel { panneaux: tabs(&[Pane::Canvas, Pane::Color]), x: f32::NAN, y: 0.0, largeur: 10.0, hauteur: 5.0 },
             FloatingPanel { panneaux: tabs(&[Pane::Tools]), x: 0.0, y: 0.0, largeur: 0.0, hauteur: 0.0 },
         ],
+        detachees: Vec::new(),
     }
     .sanitized();
     assert_eq!(count(&bad, Pane::Tools), 1);
@@ -143,6 +144,35 @@ fn damaged_layouts_are_repaired() {
     assert_eq!(bad.fenetres[0].largeur, 0.0, "taille absurde : à replacer");
     let s = format!("{:?}", bad.principal);
     assert!(s.contains("actif: 0") && !s.contains("part: 7"), "{s}");
+}
+
+#[test]
+fn a_panel_can_have_its_own_window() {
+    let mut l = DockLayout::from_legacy(&Layout::default());
+    l.detach(Pane::Layers);
+    assert_eq!(count(&l, Pane::Layers), 1, "dans sa fenêtre, plus dans un onglet");
+    assert!(!format!("{:?}", l.principal).contains("Layers"));
+    assert_eq!(l.detachees[0].panneau, Pane::Layers);
+    l.detach(Pane::Canvas);
+    assert!(l.detachees.iter().all(|d| d.panneau != Pane::Canvas), "le dessin reste dans la fenêtre principale");
+    // Rouvrir ne le double pas ; le fermer le retire de sa fenêtre.
+    l.open(Pane::Layers);
+    assert_eq!(count(&l, Pane::Layers), 1);
+    l.close(Pane::Layers);
+    assert!(!l.contains(Pane::Layers) && l.detachees.is_empty());
+    // Une fenêtre à part de taille absurde sera replacée.
+    l.close(Pane::View);
+    let bad = dock::DetachedPanel { panneau: Pane::View, x: 10.0, y: 10.0, largeur: 5.0, hauteur: f32::NAN };
+    l.detachees.push(bad.clone());
+    let l = l.sanitized();
+    assert_eq!(count(&l, Pane::View), 1);
+    assert_eq!((l.detachees[0].largeur, l.detachees[0].hauteur), (0.0, 0.0));
+    // En double avec un onglet : l'onglet l'emporte.
+    let mut twice = DockLayout::from_legacy(&Layout::default());
+    twice.detachees.push(bad);
+    let twice = twice.sanitized();
+    assert_eq!(count(&twice, Pane::View), 1);
+    assert!(twice.detachees.is_empty());
 }
 
 #[test]
