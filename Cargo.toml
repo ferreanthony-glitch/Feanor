@@ -1,0 +1,23 @@
+[package]
+name = "pelure"
+version = "0.1.0"
+edition = "2021"
+description = "Logiciel d'animation 2D bitmap image par image, inspiré de TVPaint"
+
+[dependencies]
+eframe = "0.31"
+rfd = "0.15"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Le dessin et la composition sont du calcul pixel : même en debug on optimise,
+# sinon le pinceau rame.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+opt-level = 3
