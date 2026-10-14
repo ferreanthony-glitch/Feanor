@@ -366,6 +366,7 @@ impl App {
             }
             Tool::Camera => {
                 self.camera_fields(ui);
+                ui.horizontal_wrapped(|ui| self.camera_keys_ui(ui));
                 let was = self.camera_view;
                 ui.checkbox(&mut self.camera_view, "Vue à travers la caméra");
                 if was && !self.camera_view {

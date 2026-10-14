@@ -10,6 +10,9 @@ const HEADER_H: f32 = 20.0;
 const NAMES_W: f32 = 170.0;
 /// Ligne du son sous les calques (forme d'onde du montage pendant le panneau).
 const SOUND_H: f32 = 30.0;
+/// Ligne des images clés de la caméra, sous les calques.
+const CAM_H: f32 = 18.0;
+const CAM_KEY: Color32 = Color32::from_rgb(255, 196, 60);
 
 pub(crate) const CUR_FRAME: Color32 = Color32::from_rgb(255, 96, 72);
 
@@ -118,6 +121,9 @@ impl App {
             .on_hover_text("Nombre d'images que tient chaque nouveau dessin (1 = « en 1 », 2 = « en 2 »…)");
 
             ui.separator();
+            self.camera_keys_ui(ui);
+
+            ui.separator();
             ui.checkbox(&mut self.onion.enabled, "Pelure d'oignon (O)");
             ui.add(egui::DragValue::new(&mut self.onion.before).range(0..=6).prefix("avant "));
             ui.add(egui::DragValue::new(&mut self.onion.after).range(0..=6).prefix("après "));
@@ -132,10 +138,28 @@ impl App {
     fn timeline_names(&mut self, ui: &mut egui::Ui) {
         let rows = self.layers().len();
         let sound_h = self.sound_row_h();
-        let size = vec2(NAMES_W, HEADER_H + rows as f32 * ROW_H + sound_h);
+        let size = vec2(NAMES_W, HEADER_H + rows as f32 * ROW_H + CAM_H + sound_h);
         let (resp, painter) = ui.allocate_painter(size, Sense::click());
         let r = resp.rect;
         let visuals = ui.visuals();
+        {
+            let y = r.top() + HEADER_H + rows as f32 * ROW_H;
+            let row = Rect::from_min_size(pos2(r.left(), y), vec2(NAMES_W, CAM_H)).shrink2(vec2(0.0, 1.0));
+            painter.rect_filled(row, 2.0, Color32::from_gray(34));
+            let n = self.panel().camera.len();
+            let label = match n {
+                0 => "Caméra".to_string(),
+                1 => "Caméra (fixe)".to_string(),
+                _ => format!("Caméra ({n} clés)"),
+            };
+            painter.text(
+                pos2(r.left() + 8.0, row.center().y),
+                Align2::LEFT_CENTER,
+                label,
+                FontId::proportional(11.0),
+                visuals.weak_text_color(),
+            );
+        }
         if sound_h > 0.0 {
             let row = Rect::from_min_max(pos2(r.left(), r.bottom() - sound_h), r.max).shrink2(vec2(0.0, 1.0));
             painter.rect_filled(row, 2.0, Color32::from_gray(36));
@@ -233,11 +257,40 @@ impl App {
         let visible_cols = (ui.available_width() / CELL_W) as usize + 1;
         let cols = (count + 48).max(self.cur_frame + 24).max(visible_cols);
         let sound_h = self.sound_row_h();
-        let size = vec2(cols as f32 * CELL_W, HEADER_H + rows as f32 * ROW_H + sound_h);
+        let size = vec2(cols as f32 * CELL_W, HEADER_H + rows as f32 * ROW_H + CAM_H + sound_h);
         let (resp, painter) = ui.allocate_painter(size, Sense::click_and_drag());
         let r = resp.rect;
         let visuals = ui.visuals().clone();
         let grid_top = r.top() + HEADER_H;
+
+        // Images clés de la caméra : losanges (ronds si le mouvement y est adouci), reliés par un
+        // trait là où la caméra bouge.
+        {
+            let y = grid_top + rows as f32 * ROW_H;
+            let row = Rect::from_min_size(pos2(r.left(), y), vec2(size.x, CAM_H)).shrink2(vec2(0.0, 1.0));
+            painter.rect_filled(row, 0.0, Color32::from_gray(30));
+            let keys = &self.panel().camera;
+            let cx = |f: usize| r.left() + (f as f32 + 0.5) * CELL_W;
+            if keys.len() >= 2 {
+                painter.line_segment(
+                    [pos2(cx(keys[0].frame), row.center().y), pos2(cx(keys[keys.len() - 1].frame), row.center().y)],
+                    Stroke::new(2.0_f32, CAM_KEY.gamma_multiply(0.45)),
+                );
+            }
+            for k in keys {
+                let c = pos2(cx(k.frame), row.center().y);
+                if k.smooth {
+                    painter.circle_filled(c, 4.5, CAM_KEY);
+                } else {
+                    let d = 5.0;
+                    painter.add(egui::Shape::convex_polygon(
+                        vec![c + vec2(0.0, -d), c + vec2(d, 0.0), c + vec2(0.0, d), c + vec2(-d, 0.0)],
+                        CAM_KEY,
+                        Stroke::new(1.0_f32, Color32::from_black_alpha(140)),
+                    ));
+                }
+            }
+        }
 
         // Le son du montage pendant ce panneau (toutes pistes superposées), en lecture seule.
         if sound_h > 0.0 {

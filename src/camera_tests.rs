@@ -17,11 +17,11 @@ fn cam(x: f32, zoom: f32, angle: f32) -> Camera {
 fn keys_and_interpolation() {
     let default = Camera::centered(200, 100);
     assert_eq!(camera_at(&[], 7, default), default, "sans clé : au centre");
-    let one = [CameraKey { frame: 3, cam: cam(10.0, 1.0, 0.0) }];
+    let one = [CameraKey::new(3, cam(10.0, 1.0, 0.0))];
     assert_eq!(camera_at(&one, 0, default).x, 10.0, "une clé : caméra fixe");
     let keys = [
-        CameraKey { frame: 0, cam: cam(0.0, 1.0, 0.0) },
-        CameraKey { frame: 10, cam: cam(100.0, 4.0, 90.0) },
+        CameraKey::new(0, cam(0.0, 1.0, 0.0)),
+        CameraKey::new(10, cam(100.0, 4.0, 90.0)),
     ];
     let mid = camera_at(&keys, 5, default);
     assert!((mid.x - 50.0).abs() < 1e-4 && (mid.angle - 45.0).abs() < 1e-4);
@@ -32,6 +32,24 @@ fn keys_and_interpolation() {
     camera::set_key(&mut ks, 10, cam(9.0, 1.0, 0.0));
     assert_eq!(ks.iter().map(|k| k.frame).collect::<Vec<_>>(), vec![0, 4, 10]);
     assert_eq!(ks[2].cam.x, 9.0, "une clé à la même image est remplacée");
+}
+
+#[test]
+fn smooth_keys_slow_the_move_down() {
+    let default = Camera::centered(200, 100);
+    let mut keys = vec![CameraKey::new(0, cam(0.0, 1.0, 0.0)), CameraKey::new(8, cam(80.0, 1.0, 0.0))];
+    let linear: Vec<f32> = (0..=8).map(|f| camera_at(&keys, f, default).x).collect();
+    assert_eq!(linear[2], 20.0);
+    keys[0].smooth = true;
+    keys[1].smooth = true;
+    let soft: Vec<f32> = (0..=8).map(|f| camera_at(&keys, f, default).x).collect();
+    assert!(soft[1] < 10.0 && soft[7] > 70.0, "départ et arrivée ralentis : {soft:?}");
+    assert!((soft[4] - 40.0).abs() < 1e-3, "même position à mi-chemin");
+    assert_eq!((soft[0], soft[8]), (0.0, 80.0));
+    // Adouci seulement à l'arrivée : départ franc.
+    keys[0].smooth = false;
+    let end_only: Vec<f32> = (0..=8).map(|f| camera_at(&keys, f, default).x).collect();
+    assert!(end_only[1] > soft[1] && end_only[7] > 70.0);
 }
 
 #[test]
@@ -71,7 +89,7 @@ fn splitting_and_merging_keep_the_camera_move() {
     doc.panels[0].length = 11;
     let a = Camera { x: 0.0, ..doc.default_camera() };
     let b = Camera { x: 100.0, ..doc.default_camera() };
-    doc.panels[0].camera = vec![CameraKey { frame: 0, cam: a }, CameraKey { frame: 10, cam: b }];
+    doc.panels[0].camera = vec![CameraKey::new(0, a), CameraKey::new(10, b)];
     let before: Vec<f32> = (0..11).map(|f| doc.panel_camera(0, f).x).collect();
     doc.split_panel(0, 5).unwrap();
     let split: Vec<f32> = (0..5)
@@ -86,7 +104,7 @@ fn splitting_and_merging_keep_the_camera_move() {
     // Un panneau sans caméra réuni à un panneau animé garde sa caméra fixe au centre.
     let mut doc = Document::new(64, 48, 24);
     doc.add_panel_after(0);
-    doc.panels[1].camera = vec![CameraKey { frame: 0, cam: a }, CameraKey { frame: 10, cam: b }];
+    doc.panels[1].camera = vec![CameraKey::new(0, a), CameraKey::new(10, b)];
     let n0 = doc.panels[0].frame_count();
     doc.merge_with_next(0).unwrap();
     assert_eq!(doc.panel_camera(0, 0), doc.default_camera());
@@ -102,9 +120,10 @@ fn cameras_are_saved_and_follow_the_stage() {
     let manifest = dir.join("C.pelure");
     let mut doc = Document::with_frame(32, 24, 24);
     doc.panels[0].camera = vec![
-        CameraKey { frame: 0, cam: Camera { x: 10.0, y: 12.0, zoom: 1.5, angle: -12.5 } },
-        CameraKey { frame: 20, cam: Camera { x: 40.0, y: 30.0, zoom: 0.8, angle: 3.0 } },
+        CameraKey::new(0, Camera { x: 10.0, y: 12.0, zoom: 1.5, angle: -12.5 }),
+        CameraKey::new(20, Camera { x: 40.0, y: 30.0, zoom: 0.8, angle: 3.0 }),
     ];
+    doc.panels[0].camera[1].smooth = true;
     project::save(&doc, &manifest, &mut Default::default()).unwrap();
     let back = project::load(&manifest).unwrap().doc;
     assert_eq!(back.panels[0].camera, doc.panels[0].camera);

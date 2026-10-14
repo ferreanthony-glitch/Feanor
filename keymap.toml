@@ -614,6 +614,31 @@ action = "camera.reinitialiser"
 touches = []
 source = "Storyboard Pro 27 sans touche par défaut : RESET_CAMERA_KEY"
 
+[[raccourci]]
+action = "camera.cle_debut"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : ADD_CAMERA_KEY_AT_BEGIN"
+
+[[raccourci]]
+action = "camera.cle_ici"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : ADD_CAMERA_KEY_AT_CURRENT"
+
+[[raccourci]]
+action = "camera.cle_fin"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : ADD_CAMERA_KEY_AT_END"
+
+[[raccourci]]
+action = "camera.cle_supprimer"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : REMOVE_CAMERA_KEY_AT_CURRENT"
+
+[[raccourci]]
+action = "camera.cle_adoucir"
+touches = []
+source = "Pelure (adoucissement par clé ; Storyboard Pro règle les courbes autrement, non vérifié)"
+
 # ------------------------------------------------------------------------------------ Table lumineuse et guides
 # Les touches des guides viennent du module « Guides » de Storyboard Pro 27
 # (Plugins\GuideTool\resources\sb_shortcuts.xml, valeurs « Toon Boom Storyboard »).

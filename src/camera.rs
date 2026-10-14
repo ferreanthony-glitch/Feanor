@@ -74,6 +74,26 @@ impl Camera {
 pub struct CameraKey {
     pub frame: usize,
     pub cam: Camera,
+    /// Mouvement adouci à cette clé : la caméra y arrive et en repart lentement.
+    pub smooth: bool,
+}
+
+impl CameraKey {
+    pub fn new(frame: usize, cam: Camera) -> CameraKey {
+        CameraKey {
+            frame,
+            cam,
+            smooth: false,
+        }
+    }
+}
+
+/// Avancement entre deux clés : en ligne droite, ou ralenti au départ (`slow_start`) et/ou à
+/// l'arrivée (`slow_end`) — courbe de Hermite dont les pentes valent 1 ou 0.
+fn ease(t: f32, slow_start: bool, slow_end: bool) -> f32 {
+    let (m0, m1) = (if slow_start { 0.0 } else { 1.0 }, if slow_end { 0.0 } else { 1.0 });
+    let (t2, t3) = (t * t, t * t * t);
+    (t3 - 2.0 * t2 + t) * m0 + (-2.0 * t3 + 3.0 * t2) + (t3 - t2) * m1
 }
 
 /// Caméra à l'image `f` d'un panneau dont les images clés sont `keys` (triées par image) ; sans
@@ -90,19 +110,20 @@ pub fn camera_at(keys: &[CameraKey], f: usize, default: Camera) -> Camera {
                 Some(i) => {
                     let (a, b) = (&keys[i - 1], &keys[i]);
                     let t = (f - a.frame) as f32 / (b.frame - a.frame).max(1) as f32;
-                    Camera::lerp(&a.cam, &b.cam, t)
+                    Camera::lerp(&a.cam, &b.cam, ease(t, a.smooth, b.smooth))
                 }
             }
         }
     }
 }
 
-/// Pose (ou remplace) la clé de l'image `frame`, en gardant les clés triées.
+/// Pose (ou remplace) la clé de l'image `frame`, en gardant les clés triées (et l'adoucissement
+/// d'une clé remplacée).
 pub fn set_key(keys: &mut Vec<CameraKey>, frame: usize, cam: Camera) {
     match keys.iter().position(|k| k.frame >= frame) {
         Some(i) if keys[i].frame == frame => keys[i].cam = cam,
-        Some(i) => keys.insert(i, CameraKey { frame, cam }),
-        None => keys.push(CameraKey { frame, cam }),
+        Some(i) => keys.insert(i, CameraKey::new(frame, cam)),
+        None => keys.push(CameraKey::new(frame, cam)),
     }
 }
 
@@ -140,15 +161,19 @@ pub fn join_keys(a: &[CameraKey], a_len: usize, b: &[CameraKey], b_len: usize, d
             return keys.to_vec();
         }
         let cam = camera_at(keys, 0, default);
-        let mut v = vec![CameraKey { frame: 0, cam }];
+        let mut v = vec![CameraKey::new(0, cam)];
         if len > 1 {
-            v.push(CameraKey { frame: len - 1, cam });
+            v.push(CameraKey::new(len - 1, cam));
         }
         v
     };
     let mut out = fixed(a, a_len);
     for k in fixed(b, b_len) {
-        set_key(&mut out, k.frame + a_len, k.cam);
+        let frame = k.frame + a_len;
+        set_key(&mut out, frame, k.cam);
+        if let Some(x) = out.iter_mut().find(|x| x.frame == frame) {
+            x.smooth = k.smooth;
+        }
     }
     out
 }

@@ -140,7 +140,12 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   d'habitude. Hors du cadre : masque opaque.
 - **Export, vignettes, planches** : `render::camera_image` prend chaque pixel de l'image finale au
   point filmé de la feuille (bilinéaire) ; caméra centrée sans zoom ni rotation = pixels exacts.
-- Manifeste : `"camera": [{"image", "x", "y", "zoom", "rotation"}]` par panneau (absent si aucune).
+- Manifeste : `"camera": [{"image", "x", "y", "zoom", "rotation", "doux"}]` par panneau (absent si
+  aucune clé).
+- **Courbes** (2b-3) : entre deux clés, l'avancement suit une courbe de Hermite dont la pente
+  vaut 0 au départ et/ou à l'arrivée si la clé correspondante est « adoucie », 1 sinon (deux clés
+  non adoucies = mouvement régulier). C'est un choix de Pelure : la façon dont Storyboard Pro règle
+  les vitesses de caméra n'a pas été vérifiée.
 
 ## Format de projet (version 4, dossier)
 

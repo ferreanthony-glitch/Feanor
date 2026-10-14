@@ -141,6 +141,9 @@ struct CameraEntry {
     zoom: f32,
     #[serde(default)]
     rotation: f32,
+    /// Mouvement adouci à cette clé.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    doux: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -390,6 +393,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                     y: k.cam.y,
                     zoom: k.cam.zoom,
                     rotation: k.cam.angle,
+                    doux: k.smooth,
                 })
                 .collect(),
         });
@@ -582,6 +586,9 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                             angle: k.rotation,
                         };
                         crate::camera::set_key(&mut camera, k.image, cam);
+                        if let Some(x) = camera.iter_mut().find(|x| x.frame == k.image) {
+                            x.smooth = k.doux;
+                        }
                     }
                 }
                 structure.panels.push(Panel {

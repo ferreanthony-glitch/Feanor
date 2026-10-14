@@ -1823,6 +1823,11 @@ impl App {
             }
             "camera.masque" => self.camera_mask = !self.camera_mask,
             "camera.reinitialiser" => self.reset_camera(),
+            "camera.cle_debut" => self.add_camera_key(0),
+            "camera.cle_ici" => self.add_camera_key(self.cur_frame),
+            "camera.cle_fin" => self.add_camera_key(self.frame_count().saturating_sub(1)),
+            "camera.cle_supprimer" => self.remove_camera_key_here(),
+            "camera.cle_adoucir" => self.toggle_camera_key_smooth(),
             "vue.table_lumineuse" => {
                 self.light_table = !self.light_table;
                 self.status = format!("Table lumineuse : {}.", if self.light_table { "oui" } else { "non" });

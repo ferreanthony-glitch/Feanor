@@ -1,7 +1,7 @@
 //! Outil Caméra et vue caméra : régler le cadre d'un panneau à la souris (déplacer, zoomer par un
 //! coin, tourner par la poignée), le voir sur la feuille, ou regarder à travers lui.
 
-use eframe::egui::{self, pos2, vec2, Color32, Pos2, Rect, Shape, Stroke, Vec2};
+use eframe::egui::{self, pos2, vec2, Color32, Pos2, Rect, RichText, Shape, Stroke, Vec2};
 
 use crate::app::App;
 use crate::camera::{self, Camera};
@@ -35,7 +35,8 @@ pub(crate) fn view_through(cam: &Camera, frame: [usize; 2], stage: Vec2, rect: R
     let zoom_cam = cam.zoom.max(0.01);
     let (w, h) = (frame[0] as f32 / zoom_cam, frame[1] as f32 / zoom_cam);
     let zoom = (rect.width() / w).min(rect.height() / h) * 0.96;
-    let rotation = -cam.angle.to_radians();
+    // (0 et non -0 : la vue affiche sa rotation en degrés.)
+    let rotation = if cam.angle == 0.0 { 0.0 } else { -cam.angle.to_radians() };
     let v = pos2(cam.x, cam.y).to_vec2() - stage * 0.5;
     let (s, c) = rotation.sin_cos();
     let turned = vec2(v.x * c - v.y * s, v.x * s + v.y * c);
@@ -63,9 +64,59 @@ impl App {
             camera::set_key(keys, frame, cam);
         } else {
             keys.clear();
-            keys.push(camera::CameraKey { frame: 0, cam });
+            keys.push(camera::CameraKey::new(0, cam));
         }
         self.modified = true;
+    }
+
+    /// Ajoute une image clé de caméra à l'image `frame` du panneau courant, avec la caméra telle
+    /// qu'elle y est déjà (l'image ne change pas) ; on la règle ensuite à la souris.
+    pub(crate) fn add_camera_key(&mut self, frame: usize) {
+        let frame = frame.min(self.frame_count().saturating_sub(1));
+        let cam = self.doc.panel_camera(self.cur_panel, frame);
+        self.record_step();
+        let keys = &mut self.doc.panels[self.cur_panel].camera;
+        // Une caméra fixe sans clé à elle devient la clé du début.
+        if keys.is_empty() && frame > 0 {
+            keys.push(camera::CameraKey::new(0, cam));
+        }
+        camera::set_key(keys, frame, cam);
+        let n = keys.len();
+        self.status = format!(
+            "Image clé de caméra à l'image {} ({n} clé{} dans ce panneau). Règle la caméra avec l'outil Caméra.",
+            frame + 1,
+            if n > 1 { "s" } else { "" }
+        );
+    }
+
+    /// Retire l'image clé de caméra de l'image courante.
+    pub(crate) fn remove_camera_key_here(&mut self) {
+        let frame = self.cur_frame;
+        let Some(i) = self.doc.panels[self.cur_panel].camera.iter().position(|k| k.frame == frame) else {
+            self.status = "Pas d'image clé de caméra sur cette image.".into();
+            return;
+        };
+        self.record_step();
+        self.doc.panels[self.cur_panel].camera.remove(i);
+        self.status = "Image clé de caméra retirée.".into();
+    }
+
+    /// Image clé de caméra de l'image courante, s'il y en a une.
+    pub(crate) fn camera_key_here(&self) -> Option<&camera::CameraKey> {
+        self.doc.panels[self.cur_panel].camera.iter().find(|k| k.frame == self.cur_frame)
+    }
+
+    /// Adoucit (ou non) le mouvement à la clé de l'image courante.
+    pub(crate) fn toggle_camera_key_smooth(&mut self) {
+        let frame = self.cur_frame;
+        if self.camera_key_here().is_none() {
+            self.status = "Place-toi sur une image clé de caméra pour l'adoucir.".into();
+            return;
+        }
+        self.record_step();
+        if let Some(k) = self.doc.panels[self.cur_panel].camera.iter_mut().find(|k| k.frame == frame) {
+            k.smooth = !k.smooth;
+        }
     }
 
     pub(crate) fn reset_camera(&mut self) {
@@ -264,6 +315,30 @@ impl App {
             let c = to_s(pos2(cam.x, cam.y));
             painter.line_segment([c - vec2(6.0, 0.0), c + vec2(6.0, 0.0)], Stroke::new(1.0_f32, CAMERA));
             painter.line_segment([c - vec2(0.0, 6.0), c + vec2(0.0, 6.0)], Stroke::new(1.0_f32, CAMERA));
+        }
+    }
+
+    /// Boutons des images clés de caméra (timeline d'animation et outil Caméra).
+    pub(crate) fn camera_keys_ui(&mut self, ui: &mut egui::Ui) {
+        let here = self.camera_key_here().copied();
+        let item = |app: &mut App, ui: &mut egui::Ui, text: &str, hover: &str, action: &str, enabled: bool| {
+            let key = app.keymap.label(action);
+            let hover = if key.is_empty() { hover.to_string() } else { format!("{hover} ({key})") };
+            if ui.add_enabled(enabled, egui::Button::new(text)).on_hover_text(hover).clicked() {
+                app.run_action(action);
+            }
+        };
+        ui.label(RichText::new("Caméra").weak());
+        item(self, ui, "Clé début", "Image clé de caméra au début du panneau", "camera.cle_debut", true);
+        item(self, ui, "Clé ici", "Image clé de caméra à l'image courante", "camera.cle_ici", here.is_none());
+        item(self, ui, "Clé fin", "Image clé de caméra à la fin du panneau", "camera.cle_fin", true);
+        item(self, ui, "Retirer", "Retirer l'image clé de cette image", "camera.cle_supprimer", here.is_some());
+        let mut smooth = here.is_some_and(|k| k.smooth);
+        let resp = ui
+            .add_enabled(here.is_some(), egui::Checkbox::new(&mut smooth, "Adoucir"))
+            .on_hover_text("La caméra arrive à cette clé et en repart en douceur");
+        if resp.changed() {
+            self.toggle_camera_key_smooth();
         }
     }
 

@@ -514,6 +514,7 @@ impl App {
                 pos2(x_of(start + len) - 1.0, top + block_h),
             );
             blocks.push(rect);
+            let panel_start = start;
             start += len;
             let selected = i == self.cur_panel;
             let bg = if selected {
@@ -552,6 +553,19 @@ impl App {
                     Stroke::new(2.0_f32, visuals.selection.stroke.color),
                     StrokeKind::Inside,
                 );
+            }
+            // Mouvement de caméra : un petit losange par image clé, en bas du bloc.
+            let keys = &self.doc.panels[i].camera;
+            if keys.len() >= 2 {
+                for k in keys {
+                    let c = pos2(x_of(panel_start + k.frame) + ppf * 0.5, rect.bottom() - 5.0);
+                    let d = 3.5;
+                    painter.add(egui::Shape::convex_polygon(
+                        vec![c + vec2(0.0, -d), c + vec2(d, 0.0), c + vec2(0.0, d), c + vec2(-d, 0.0)],
+                        Color32::from_rgb(255, 196, 60),
+                        Stroke::NONE,
+                    ));
+                }
             }
             // Poignée de durée sur le bord droit.
             painter.rect_filled(

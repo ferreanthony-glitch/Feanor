@@ -136,6 +136,11 @@ déplacer, on tire un coin pour zoomer, la poignée ronde pour tourner (Maj : pa
 panneau donne les valeurs exactes et « Réinitialiser ». « Vue à travers la caméra » (outil Caméra
 ou menu Affichage) montre ce qui sera filmé ; on peut y dessiner.
 
+**Mouvements de caméra** : « Clé début », « Clé ici », « Clé fin » (timeline d'animation ou outil
+Caméra) posent des images clés ; on règle la caméra sur chacune, elle va de l'une à l'autre.
+« Adoucir » fait arriver et repartir la caméra en douceur à une clé. Les clés apparaissent dans la
+ligne « Caméra » de la timeline et en petits losanges dans la bande de montage.
+
 ## Organisation du code
 
 | Fichier | Rôle |

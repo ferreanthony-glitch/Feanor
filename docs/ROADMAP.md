@@ -63,7 +63,7 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
     processeur (0 pixel différent sur les essais : montage, pelure + table lumineuse, trait en
     cours). Le calcul sur processeur reste pour l'export, et en secours
     (`PELURE_COMPOSITION=processeur`).
-- 🔧 2b. Caméra : cadre, panoramique, zoom, rotation, images clés et courbes, visibles dans la timeline.
+- ✅ 2b. Caméra : cadre, panoramique, zoom, rotation, images clés et courbes, visibles dans la timeline.
   - ✅ 2b-1. Feuille de dessin deux fois plus grande que le cadre (validé : option A, marge du
     double), cadre « Caméra » tracé, hors-champ estompé ; export et vignettes = ce que voit la
     caméra ; anciens projets convertis à l'ouverture (même cadrage), format de projet 4.
@@ -71,7 +71,11 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
     poignée), réglages chiffrés dans la fiche du panneau, réinitialisation ; vue à travers la caméra ;
     hors-champ estompé (désactivable) ; export, vignettes et planches à travers la caméra ; la
     caméra suit la coupe et la réunion de panneaux. Modèle d'images clés déjà en place.
-  - ⏳ 2b-3. Mouvements de caméra par images clés, visibles dans la timeline.
+  - ✅ 2b-3. Mouvements de caméra par images clés : clé au début / ici / à la fin, retirer
+    (commandes de Storyboard Pro 27, sans touche), adoucir le mouvement à une clé (Pelure) ; clés
+    visibles dans la timeline d'animation (ligne « Caméra ») et dans la bande de montage ; lecture,
+    vue caméra et export suivent le mouvement. Reste : déplacer une clé à la souris dans la
+    timeline, copier la caméra d'un panneau à l'autre, chemin de caméra affiché sur la feuille.
 - ⏳ 2c. Profondeur Z des calques (multiplan), vue 3D de contrôle.
 - ⏳ 2d. Import glTF de repère.
 
