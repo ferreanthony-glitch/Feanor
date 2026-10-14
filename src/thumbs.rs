@@ -33,11 +33,11 @@ impl Thumbs {
         &mut self,
         ctx: &egui::Context,
         doc: &Document,
-        shot: usize,
+        panel: usize,
         budget: &mut usize,
     ) -> Option<TextureId> {
-        let s = &doc.shots[shot];
-        let plan = render::shot_plan(s, 0, Some(doc.paper));
+        let s = &doc.panels[panel];
+        let plan = render::panel_plan(s, 0, Some(doc.paper));
         let versions = plan
             .items
             .iter()
@@ -68,7 +68,7 @@ impl Thumbs {
     }
 
     pub fn prune(&mut self, doc: &Document) {
-        self.entries.retain(|id, _| doc.shots.iter().any(|s| s.id == *id));
+        self.entries.retain(|id, _| doc.panels.iter().any(|s| s.id == *id));
     }
 
     pub fn clear(&mut self) {

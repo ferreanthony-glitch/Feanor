@@ -5,6 +5,7 @@ use crate::document::{Document, Layer, LayerKind};
 use crate::fill;
 use crate::history::{Edit, History, Nav};
 use crate::io;
+use crate::project;
 use crate::raster::{premultiply, unpremultiply, Raster};
 use crate::render::{self, Plan, PlanItem};
 use crate::vector::{self, Affine, Element, VPoint, VectorDrawing};
@@ -31,7 +32,7 @@ fn line(x0: f32, y0: f32, x1: f32, y1: f32, r: f32) -> Element {
 }
 
 fn nav() -> Nav {
-    Nav { shot: 0, layer: 0 }
+    Nav { panel: 0, layer: 0 }
 }
 
 #[test]
@@ -240,32 +241,47 @@ fn vector_undo_restores_drawing() {
     assert_eq!(doc.cels[&cel].raster.get(30, 5).a(), 255);
 }
 
-// ------------------------------------------------------------------------------ plans
+// ------------------------------------------------------------------------------ séquences, scènes, panneaux
+
+/// Projet type : séquence 1 = scène A (panneaux a1, a2) + scène B (b1) ; séquence 2 = scène C (c1).
+fn sample() -> Document {
+    let mut doc = Document::new(32, 32, 10);
+    let a2 = doc.add_panel_after(0);
+    let b1 = doc.add_scene_after(a2);
+    doc.add_sequence_after(b1);
+    doc
+}
+
+fn temp_dir(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("pelure-test-{name}-{}", std::process::id()));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
 
 #[test]
-fn shot_length_holds_last_drawing() {
+fn panel_length_holds_last_drawing() {
     let mut doc = Document::new(32, 32, 24);
     let a = doc.new_cel(LayerKind::Vector);
-    let shot = &mut doc.shots[0];
-    assert_eq!(shot.frame_count(), 48, "un plan neuf dure deux secondes");
-    shot.layers[0].frames = vec![Some(a); 48];
-    shot.set_length(60);
-    assert_eq!(shot.frame_count(), 60);
-    assert_eq!(shot.layers[0].cel_at(59), Some(a), "le dessin tenu suit la nouvelle fin");
-    shot.set_length(12);
-    assert_eq!(shot.frame_count(), 12);
-    assert_eq!(shot.layers[0].frames.len(), 12);
+    let panel = &mut doc.panels[0];
+    assert_eq!(panel.frame_count(), 48, "un panneau neuf dure deux secondes");
+    panel.layers[0].frames = vec![Some(a); 48];
+    panel.set_length(60);
+    assert_eq!(panel.frame_count(), 60);
+    assert_eq!(panel.layers[0].cel_at(59), Some(a), "le dessin tenu suit la nouvelle fin");
+    panel.set_length(12);
+    assert_eq!(panel.frame_count(), 12);
+    assert_eq!(panel.layers[0].frames.len(), 12);
 }
 
 #[test]
 fn montage_positions() {
     let mut doc = Document::new(32, 32, 10);
-    let s = doc.make_shot();
-    doc.shots.push(s);
-    doc.shots[0].set_length(5);
-    doc.shots[1].set_length(8);
+    doc.add_panel_after(0);
+    doc.panels[0].set_length(5);
+    doc.panels[1].set_length(8);
     assert_eq!(doc.total_frames(), 13);
-    assert_eq!(doc.shot_start(1), 5);
+    assert_eq!(doc.panel_start(1), 5);
     assert_eq!(doc.locate(0), (0, 0));
     assert_eq!(doc.locate(4), (0, 4));
     assert_eq!(doc.locate(5), (1, 0));
@@ -273,63 +289,155 @@ fn montage_positions() {
 }
 
 #[test]
-fn duplicated_shot_owns_its_drawings() {
-    let mut doc = Document::new(32, 32, 24);
-    let a = doc.new_cel(LayerKind::Vector);
-    doc.shots[0].layers[0].frames = vec![Some(a), Some(a)];
-    let copy = doc.duplicate_shot(0);
-    let b = copy.layers[0].frames[0].unwrap();
-    assert_ne!(a, b);
-    assert_eq!(copy.layers[0].frames, vec![Some(b), Some(b)], "l'exposition est conservée");
-    assert_ne!(copy.id, doc.shots[0].id);
+fn hierarchy_and_numbering() {
+    let doc = sample();
+    assert_eq!((doc.sequences.len(), doc.scenes.len(), doc.panels.len()), (2, 3, 4));
+    let (a, b, c) = (doc.panels[0].scene, doc.panels[2].scene, doc.panels[3].scene);
+    assert_eq!(doc.panels[1].scene, a);
+    assert_eq!((doc.scene_number(a), doc.scene_number(b), doc.scene_number(c)), (1, 2, 3));
+    assert_eq!(doc.panel_number(0), (1, 2));
+    assert_eq!(doc.panel_number(1), (2, 2));
+    assert_eq!(doc.panel_number(2), (1, 1));
+    assert_eq!(doc.scene_run(1), (0, 2));
+    assert_eq!(doc.sequence_run(2), (0, 3));
+    assert_eq!(doc.sequence_run(3), (3, 4));
+    assert_eq!(doc.sequence_number(doc.sequence_of(3)), 2);
+    assert_eq!(doc.scene_label(b), "2");
+    let mut doc = doc;
+    doc.scene_mut(b).unwrap().name = "120".into();
+    assert_eq!(doc.scene_label(b), "120");
+    assert_eq!(doc.scene_number(c), 3, "un nom n'empêche pas la numérotation des suivantes");
 }
 
 #[test]
-fn structure_undo_restores_shots() {
+fn new_scene_and_sequence_go_after_the_current_one() {
+    let mut doc = sample();
+    // Depuis le 1er panneau de la scène A : la nouvelle scène vient après A, avant B.
+    let i = doc.add_scene_after(0);
+    assert_eq!(i, 2);
+    assert_eq!(doc.scene_number(doc.panels[2].scene), 2);
+    assert_eq!(doc.sequence_of(2), doc.sequence_of(0), "même séquence");
+    // Nouvelle séquence depuis la séquence 1 : elle passe avant l'ancienne séquence 2.
+    let j = doc.add_sequence_after(0);
+    assert_eq!(j, 4);
+    assert_eq!(doc.sequence_number(doc.sequence_of(4)), 2);
+    assert_eq!(doc.sequence_number(doc.sequence_of(5)), 3);
+}
+
+#[test]
+fn moving_a_panel_keeps_or_changes_its_scene() {
+    let mut doc = sample();
+    let (a, b) = (doc.panels[0].scene, doc.panels[2].scene);
+    let a1 = doc.panels[0].id;
+    // a1 passe après a2 : il reste dans la scène A.
+    let i = doc.move_panel(0, 2).unwrap();
+    assert_eq!((i, doc.panels[i].id, doc.panels[i].scene), (1, a1, a));
+    assert_eq!(doc.move_panel(1, 2), None, "même place : rien ne bouge");
+    // c1 posé devant b1 (hors de sa scène) : il rejoint B, juste avant b1 ; sa scène C et la
+    // séquence 2, vides, disparaissent.
+    let c1 = doc.panels[3].id;
+    let i = doc.move_panel(3, 2).unwrap();
+    assert_eq!((doc.panels[i].id, doc.panels[i].scene), (c1, b));
+    assert_eq!(doc.panel_number(i), (1, 2));
+    assert_eq!((doc.scenes.len(), doc.sequences.len()), (2, 1));
+    // À la frontière entre deux scènes, un panneau venu d'ailleurs rejoint la scène qui suit.
+    let a1_now = doc.panels.iter().position(|p| p.id == a1).unwrap();
+    let i = doc.move_panel(a1_now, 4).unwrap();
+    assert_eq!(doc.panels[i].scene, b, "posé tout à la fin : il rejoint la dernière scène");
+}
+
+#[test]
+fn normalize_regroups_and_drops_empty_groups() {
+    let mut doc = sample();
+    // On mélange à la main : un panneau de A se retrouve après B.
+    let a1 = doc.panels.remove(0);
+    doc.panels.insert(2, a1);
+    doc.normalize();
+    let scenes: Vec<u64> = doc.panels.iter().map(|p| p.scene).collect();
+    assert_eq!(scenes[0], scenes[1], "les panneaux de A sont regroupés");
+    // Une scène qui n'a plus de panneau disparaît, sa séquence aussi.
+    doc.panels.pop();
+    doc.normalize();
+    assert_eq!((doc.sequences.len(), doc.scenes.len()), (1, 2));
+}
+
+#[test]
+fn removing_panels_and_scenes() {
+    let mut doc = sample();
+    assert!(doc.remove_scene(0).is_some());
+    assert_eq!(doc.panels.len(), 2);
+    assert!(doc.remove_panel(0).is_some());
+    assert_eq!(doc.panels.len(), 1);
+    assert_eq!(doc.remove_panel(0), None, "on garde toujours un panneau");
+    assert_eq!(doc.remove_scene(0), None, "et une scène");
+}
+
+#[test]
+fn duplicated_panel_and_scene_own_their_drawings() {
+    let mut doc = Document::new(32, 32, 24);
+    let a = doc.new_cel(LayerKind::Vector);
+    doc.panels[0].layers[0].frames = vec![Some(a), Some(a)];
+    let i = doc.duplicate_panel_after(0);
+    let b = doc.panels[i].layers[0].frames[0].unwrap();
+    assert_ne!(a, b);
+    assert_eq!(doc.panels[i].layers[0].frames, vec![Some(b), Some(b)], "l'exposition est conservée");
+    assert_eq!(doc.panels[i].scene, doc.panels[0].scene);
+    doc.scene_mut(doc.panels[0].scene).unwrap().name = "Bus".into();
+    let j = doc.duplicate_scene_after(0);
+    assert_eq!(j, 2);
+    assert_ne!(doc.panels[2].scene, doc.panels[0].scene);
+    assert_eq!(doc.scene_label(doc.panels[2].scene), "Bus copie");
+    assert_eq!(doc.scene_run(2), (2, 4), "les deux panneaux sont copiés");
+    assert!(doc.panels[2].layers[0].frames[0] != Some(a));
+}
+
+#[test]
+fn structure_undo_restores_scenes_and_panels() {
     let mut doc = Document::new(32, 32, 24);
     let snap = Edit::Structure {
-        shots: doc.shots.clone(),
+        structure: doc.structure(),
         nav: nav(),
     };
-    let s = doc.make_shot();
-    doc.shots.push(s);
+    doc.add_scene_after(0);
     let mut history = History::default();
     history.push(snap);
-    let mut n = Nav { shot: 1, layer: 0 };
+    let mut n = Nav { panel: 1, layer: 0 };
     history.undo(&mut doc, &mut n);
-    assert_eq!(doc.shots.len(), 1);
-    assert_eq!(n.shot, 0);
+    assert_eq!((doc.scenes.len(), doc.panels.len(), n.panel), (1, 1, 0));
     history.redo(&mut doc, &mut n);
-    assert_eq!(doc.shots.len(), 2);
-    assert_eq!(n.shot, 1);
+    assert_eq!((doc.scenes.len(), doc.panels.len(), n.panel), (2, 2, 1));
 }
 
 #[test]
 fn structure_undo_keeps_texts_and_layer_settings() {
     let mut doc = Document::new(32, 32, 24);
     let snap = Edit::Structure {
-        shots: doc.shots.clone(),
+        structure: doc.structure(),
         nav: nav(),
     };
-    // Après l'instantané : on écrit le dialogue, on règle le calque, et on rallonge le plan.
-    doc.shots[0].dialogue = "— Toi ici ?".into();
-    doc.shots[0].layers[0].opacity = 0.3;
-    doc.shots[0].layers[0].name = "Crayonné".into();
-    doc.shots[0].set_length(100);
+    // Après l'instantané : on écrit, on renomme, on règle le calque, et on rallonge le panneau.
+    doc.panels[0].dialogue = "— Toi ici ?".into();
+    doc.panels[0].layers[0].opacity = 0.3;
+    doc.panels[0].layers[0].name = "Crayonné".into();
+    let scene = doc.panels[0].scene;
+    doc.scene_mut(scene).unwrap().name = "12A".into();
+    doc.panels[0].set_length(100);
     let mut history = History::default();
     history.push(snap);
     let mut n = nav();
     history.undo(&mut doc, &mut n);
-    assert_eq!(doc.shots[0].frame_count(), 48, "la durée est bien annulée");
-    assert_eq!(doc.shots[0].dialogue, "— Toi ici ?", "le texte saisi est conservé");
-    assert_eq!(doc.shots[0].layers[0].opacity, 0.3);
-    assert_eq!(doc.shots[0].layers[0].name, "Crayonné");
+    assert_eq!(doc.panels[0].frame_count(), 48, "la durée est bien annulée");
+    assert_eq!(doc.panels[0].dialogue, "— Toi ici ?", "le texte saisi est conservé");
+    assert_eq!(doc.panels[0].layers[0].opacity, 0.3);
+    assert_eq!(doc.panels[0].layers[0].name, "Crayonné");
+    assert_eq!(doc.scene_label(scene), "12A");
     history.redo(&mut doc, &mut n);
-    assert_eq!(doc.shots[0].frame_count(), 100);
-    assert_eq!(doc.shots[0].dialogue, "— Toi ici ?");
+    assert_eq!(doc.panels[0].frame_count(), 100);
 }
 
-/// Projet de démonstration (trois plans) : `PELURE_DEMO=chemin.pelure cargo test -- --ignored demo`.
+// ------------------------------------------------------------------------------ fichiers
+
+/// Projet de démonstration : `PELURE_DEMO=chemin\demo.pelure cargo test -- --ignored demo`.
 #[test]
 #[ignore]
 fn demo_project() {
@@ -346,12 +454,20 @@ fn demo_project() {
         opacity: 1.0,
         hardness: 0.9,
     };
-    let titles = [("Arrivée", "Le bus s'arrête. Brume.", ""), ("Gros plan", "Elle lève les yeux.", "— C'est ici ?"), ("Large", "La station, vide.", "")];
-    for (i, (name, action, dialogue)) in titles.iter().enumerate() {
-        if i > 0 {
-            let s = doc.make_shot();
-            doc.shots.push(s);
-        }
+    // Séquence 1 : « Arrivée » (2 panneaux), « Gros plan » ; séquence 2 : « Large ».
+    let i1 = doc.add_panel_after(0);
+    let i2 = doc.add_scene_after(i1);
+    let i3 = doc.add_sequence_after(i2);
+    doc.scene_mut(doc.panels[0].scene).unwrap().name = "Arrivée".into();
+    doc.scene_mut(doc.panels[i2].scene).unwrap().name = "Gros plan".into();
+    doc.scene_mut(doc.panels[i3].scene).unwrap().name = "Large".into();
+    let texts = [
+        ("Le bus s'arrête. Brume.", ""),
+        ("Les portes s'ouvrent.", ""),
+        ("Elle lève les yeux.", "— C'est ici ?"),
+        ("La station, vide.", ""),
+    ];
+    for (i, (action, dialogue)) in texts.iter().enumerate() {
         let cel = doc.new_cel(LayerKind::Vector);
         let c = doc.cels.get_mut(&cel).unwrap();
         let d = c.vector.as_mut().unwrap();
@@ -361,23 +477,23 @@ fn demo_project() {
             opacity: 1.0,
         });
         d.elements.push(line(0.0, 760.0, 1920.0, 700.0, 4.0));
-        let r = 120.0 + 90.0 * i as f32;
-        d.elements.push(circle(960.0 + 200.0 * i as f32 - 200.0, 480.0, r, 6.0));
+        let r = 120.0 + 70.0 * i as f32;
+        d.elements.push(circle(760.0 + 150.0 * i as f32, 480.0, r, 6.0));
         d.elements.push(line(760.0, 900.0, 1160.0, 880.0, 3.0));
         c.rerender();
-        let shot = &mut doc.shots[i];
-        shot.name = name.to_string();
-        shot.action = action.to_string();
-        shot.dialogue = dialogue.to_string();
-        shot.set_length(24 * (i + 1));
-        let n = shot.frame_count();
-        shot.layers[0].frames = vec![Some(cel); n];
+        let panel = &mut doc.panels[i];
+        panel.action = action.to_string();
+        panel.dialogue = dialogue.to_string();
+        panel.set_length(24 * (i % 3 + 1));
+        let n = panel.frame_count();
+        panel.layers[0].frames = vec![Some(cel); n];
     }
-    io::save_project(&doc, std::path::Path::new(&out)).unwrap();
+    let path = std::path::PathBuf::from(out);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    project::save(&doc, &path, &mut Default::default()).unwrap();
 }
 
-#[test]
-fn project_roundtrip() {
+fn rich_doc() -> (Document, [u64; 3]) {
     let mut doc = Document::new(130, 70, 12);
     let a = doc.new_cel(LayerKind::Bitmap);
     let b = doc.new_cel(LayerKind::Bitmap);
@@ -393,41 +509,111 @@ fn project_roundtrip() {
     bitmap.frames = vec![Some(a), Some(a), None, Some(b)];
     bitmap.opacity = 0.5;
     bitmap.visible = false;
-    doc.shots[0].layers[0].frames = vec![Some(v)];
-    doc.shots[0].layers.push(bitmap);
-    doc.shots[0].action = "Il entre, <hésite>.".into();
-    let mut second = doc.make_shot();
-    second.name = "Contrechamp".into();
-    second.dialogue = "— Toi ici ?".into();
-    second.set_length(30);
-    doc.shots.push(second);
+    doc.panels[0].layers[0].frames = vec![Some(v)];
+    doc.panels[0].layers.push(bitmap);
+    doc.panels[0].action = "Il entre, <hésite>.".into();
+    let i = doc.add_scene_after(0);
+    doc.scene_mut(doc.panels[i].scene).unwrap().name = "Contrechamp".into();
+    doc.panels[i].dialogue = "— Toi ici ?".into();
+    doc.panels[i].set_length(30);
+    let s = doc.sequence_of(0);
+    doc.sequence_mut(s).unwrap().name = "Ouverture".into();
     doc.paper = [250, 240, 230];
+    (doc, [a, b, v])
+}
 
-    let dir = std::env::temp_dir().join(format!("pelure-test-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("essai.pelure");
-    io::save_project(&doc, &path).unwrap();
-    let loaded = io::load_project(&path).unwrap();
-    std::fs::remove_dir_all(&dir).ok();
-
+fn check_rich(loaded: &Document, original: &Document, [a, b, v]: [u64; 3]) {
     assert_eq!((loaded.width, loaded.height, loaded.fps, loaded.paper), (130, 70, 12, [250, 240, 230]));
-    assert_eq!(loaded.shots.len(), 2);
-    let s0 = &loaded.shots[0];
-    assert_eq!(s0.action, "Il entre, <hésite>.");
-    assert_eq!(s0.layers.len(), 2);
-    assert_eq!(s0.layers[0].kind, LayerKind::Vector);
-    assert_eq!(s0.layers[1].frames, vec![Some(a), Some(a), None, Some(b)]);
-    assert_eq!(s0.layers[1].name, "Couleurs é");
-    assert!(!s0.layers[1].visible);
-    let s1 = &loaded.shots[1];
-    assert_eq!((s1.name.as_str(), s1.dialogue.as_str(), s1.frame_count()), ("Contrechamp", "— Toi ici ?", 30));
+    assert_eq!(loaded.panels.len(), 2);
+    let p0 = &loaded.panels[0];
+    assert_eq!(p0.action, "Il entre, <hésite>.");
+    assert_eq!(p0.layers.len(), 2);
+    assert_eq!(p0.layers[0].kind, LayerKind::Vector);
+    assert_eq!(p0.layers[1].frames, vec![Some(a), Some(a), None, Some(b)]);
+    assert_eq!(p0.layers[1].name, "Couleurs é");
+    assert!(!p0.layers[1].visible);
+    let p1 = &loaded.panels[1];
+    assert_eq!((loaded.scene_label(p1.scene).as_str(), p1.dialogue.as_str(), p1.frame_count()), ("Contrechamp", "— Toi ici ?", 30));
     for id in [a, b] {
-        assert_eq!(loaded.cels[&id].raster.to_flat(), doc.cels[&id].raster.to_flat(), "dessin {id}");
+        assert_eq!(loaded.cels[&id].raster.to_flat(), original.cels[&id].raster.to_flat(), "dessin {id}");
     }
-    assert_eq!(loaded.cels[&v].vector, doc.cels[&v].vector);
+    assert_eq!(loaded.cels[&v].vector, original.cels[&v].vector);
     assert_eq!(loaded.cels[&v].raster.get(60, 35).a(), 255, "le vectoriel est re-rendu au chargement");
-    // Un nouvel élément ne doit pas réutiliser un identifiant existant.
-    let mut loaded = loaded;
-    let fresh = loaded.new_cel(LayerKind::Bitmap);
-    assert!(fresh > v && loaded.shots.iter().all(|s| s.id != fresh));
+}
+
+#[test]
+fn folder_project_roundtrip() {
+    let (doc, ids) = rich_doc();
+    let dir = temp_dir("dossier");
+    let (proj_dir, manifest) = project::target_for(&dir.join("Essai.pelure"));
+    assert_eq!(proj_dir, dir.join("Essai"));
+    let mut written = std::collections::HashMap::new();
+    let report = project::save(&doc, &manifest, &mut written).unwrap();
+    assert_eq!(report.written, 3);
+    assert!(proj_dir.join("dessins").join(format!("{}.json", ids[2])).exists());
+
+    let loaded = project::load(&manifest).unwrap();
+    assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
+    check_rich(&loaded.doc, &doc, ids);
+    assert_eq!(loaded.doc.sequence_label(loaded.doc.sequence_of(0)), "Ouverture");
+    let mut loaded_doc = loaded.doc;
+    let fresh = loaded_doc.new_cel(LayerKind::Bitmap);
+    assert!(fresh > ids[2] && loaded_doc.panels.iter().all(|p| p.id != fresh), "pas de réutilisation d'identifiant");
+
+    // Réenregistrer sans rien changer n'écrit aucun dessin.
+    let mut written = loaded.written;
+    assert_eq!(project::save(&loaded_doc, &manifest, &mut written).unwrap().written, 0);
+    // Un dessin modifié est réécrit, seul.
+    loaded_doc.cels.get_mut(&ids[0]).unwrap().version += 1;
+    assert_eq!(project::save(&loaded_doc, &manifest, &mut written).unwrap().written, 1);
+    // Un dessin qui ne sert plus est effacé du dossier.
+    loaded_doc.panels[0].layers[1].frames = vec![Some(ids[0])];
+    let report = project::save(&loaded_doc, &manifest, &mut written).unwrap();
+    assert_eq!(report.removed, 1);
+    assert!(!proj_dir.join("dessins").join(format!("{}.png", ids[1])).exists());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn missing_drawing_is_reported_not_fatal() {
+    let (doc, ids) = rich_doc();
+    let dir = temp_dir("manquant");
+    let (_, manifest) = project::target_for(&dir.join("P.pelure"));
+    project::save(&doc, &manifest, &mut Default::default()).unwrap();
+    std::fs::remove_file(manifest.parent().unwrap().join("dessins").join(format!("{}.png", ids[1]))).unwrap();
+    let loaded = project::load(&manifest).unwrap();
+    assert_eq!(loaded.warnings.len(), 1);
+    assert_eq!(loaded.doc.panels[0].layers[1].frames, vec![Some(ids[0]), Some(ids[0]), None, None]);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn save_target_rules() {
+    let base = std::path::Path::new("C:\\Films");
+    let (d, m) = project::target_for(&base.join("Bus.pelure"));
+    assert_eq!((d.clone(), m.clone()), (base.join("Bus"), base.join("Bus").join("Bus.pelure")));
+    // Choisir le manifeste déjà dans son dossier ne crée pas « Bus\Bus\ ».
+    assert_eq!(project::target_for(&m), (d, m));
+
+    let dir = temp_dir("cible");
+    let (_, manifest) = project::target_for(&dir.join("Film.pelure"));
+    let (doc, _) = rich_doc();
+    project::save(&doc, &manifest, &mut Default::default()).unwrap();
+    assert!(project::check_target(&manifest, None).is_err(), "pas d'écrasement d'un autre projet");
+    assert!(project::check_target(&manifest, Some(&manifest)).is_ok(), "réenregistrer au même endroit");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn legacy_file_is_imported() {
+    let (doc, ids) = rich_doc();
+    let dir = temp_dir("ancien");
+    let path = dir.join("ancien.pelure");
+    io::save_legacy_v2(&doc, &path).unwrap();
+    assert!(io::is_legacy_file(&path));
+    let loaded = io::load_legacy(&path).unwrap();
+    check_rich(&loaded, &doc, ids);
+    // Chaque ancien « plan » devient une scène d'un panneau, dans une seule séquence.
+    assert_eq!((loaded.sequences.len(), loaded.scenes.len()), (1, 2));
+    std::fs::remove_dir_all(&dir).ok();
 }

@@ -18,7 +18,7 @@ const MOUSE_GESTURES: [(&str, &str); 7] = [
     ("Molette", "zoom autour du curseur"),
     ("Maj + molette", "rotation de la vue"),
     ("Bouton du milieu + glisser", "déplacer la vue"),
-    ("Double-clic sur un plan", "entrer dans le plan pour l'animer"),
+    ("Double-clic sur un panneau", "entrer dans le panneau pour l'animer"),
     ("Sélection : glisser dans le vide", "lasso (Maj : ajouter / retirer)"),
     ("Sélection : poignées", "échelle (Maj : proportionnelle), rotation (Maj : par 15°)"),
 ];
@@ -76,8 +76,8 @@ impl App {
                 if menu_item(ui, "Exporter l'image courante (PNG)…", "") {
                     self.export_frame();
                 }
-                if menu_item(ui, "Exporter le plan (séquence PNG)…", "") {
-                    self.export_shot_sequence();
+                if menu_item(ui, "Exporter le panneau (séquence PNG)…", "") {
+                    self.export_panel_sequence();
                 }
                 if menu_item(ui, "Exporter tout le montage (séquence PNG)…", "") {
                     self.export_montage_sequence();
@@ -101,20 +101,26 @@ impl App {
                 ui.separator();
                 self.action_item(ui, "Supprimer la sélection ou effacer le dessin", "edition.supprimer");
             });
-            ui.menu_button("Plan", |ui| {
-                self.action_item(ui, "Nouveau plan", "panneau.nouveau");
-                if menu_item(ui, "Dupliquer le plan", "") {
-                    self.duplicate_shot();
-                }
-                self.action_item(ui, "Supprimer le plan", "panneau.supprimer");
-                self.action_item(ui, "Allonger le plan d'une image", "panneau.ajouter_image");
-                self.action_item(ui, "Raccourcir le plan d'une image", "panneau.retirer_image");
+            ui.menu_button("Storyboard", |ui| {
+                self.action_item(ui, "Nouveau panneau", "panneau.nouveau");
+                self.action_item(ui, "Nouvelle scène", "scene.nouvelle");
+                self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
                 ui.separator();
-                self.action_item(ui, "Plan précédent", "panneau.precedent");
-                self.action_item(ui, "Plan suivant", "panneau.suivant");
+                self.action_item(ui, "Dupliquer le panneau", "panneau.dupliquer");
+                self.action_item(ui, "Supprimer le panneau", "panneau.supprimer");
+                self.action_item(ui, "Allonger le panneau d'une image", "panneau.ajouter_image");
+                self.action_item(ui, "Raccourcir le panneau d'une image", "panneau.retirer_image");
+                ui.separator();
+                self.action_item(ui, "Dupliquer la scène", "scene.dupliquer");
+                self.action_item(ui, "Supprimer la scène", "scene.supprimer");
+                ui.separator();
+                self.action_item(ui, "Panneau précédent", "panneau.precedent");
+                self.action_item(ui, "Panneau suivant", "panneau.suivant");
+                self.action_item(ui, "Scène précédente", "scene.precedente");
+                self.action_item(ui, "Scène suivante", "scene.suivante");
                 ui.separator();
                 let label = match self.mode {
-                    Mode::Storyboard => "Animer ce plan",
+                    Mode::Storyboard => "Animer ce panneau",
                     Mode::Animation => "Retour au storyboard",
                 };
                 self.action_item(ui, label, "mode.basculer");
@@ -124,8 +130,8 @@ impl App {
                 self.action_item(ui, "Lecture / pause", "lecture.basculer");
                 self.action_item(ui, "Image précédente", "image.precedente");
                 self.action_item(ui, "Image suivante", "image.suivante");
-                self.action_item(ui, "Première image du plan", "image.premiere");
-                self.action_item(ui, "Dernière image du plan", "image.derniere");
+                self.action_item(ui, "Première image du panneau", "image.premiere");
+                self.action_item(ui, "Dernière image du panneau", "image.derniere");
                 ui.separator();
                 self.action_item(ui, "Nouveau dessin", "dessin.nouveau");
                 self.action_item(ui, "Dupliquer le dessin", "dessin.dupliquer");
@@ -166,13 +172,13 @@ impl App {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let animation = ui
                     .selectable_label(self.mode == Mode::Animation, RichText::new(" Animation ").strong())
-                    .on_hover_text("Animer le plan courant (Tab)");
+                    .on_hover_text("Animer le panneau courant (Tab)");
                 if animation.clicked() && self.mode != Mode::Animation {
                     self.set_mode(Mode::Animation);
                 }
                 let board = ui
                     .selectable_label(self.mode == Mode::Storyboard, RichText::new(" Storyboard ").strong())
-                    .on_hover_text("Monter les plans (Tab)");
+                    .on_hover_text("Monter les panneaux (Tab)");
                 if board.clicked() && self.mode != Mode::Storyboard {
                     self.set_mode(Mode::Storyboard);
                 }
@@ -415,7 +421,7 @@ impl App {
         egui::ScrollArea::vertical()
             .id_salt("panneau_droit")
             .show(ui, |ui| {
-                self.shot_inspector(ui);
+                self.panel_inspector(ui);
                 ui.separator();
                 self.layers_panel(ui);
             });
@@ -510,8 +516,8 @@ impl App {
     pub(crate) fn status_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             let where_ = match self.mode {
-                Mode::Storyboard => format!("Storyboard · plan {}/{}", self.cur_shot + 1, self.doc.shots.len()),
-                Mode::Animation => format!("Animation · plan {}", self.cur_shot + 1),
+                Mode::Storyboard => format!("Storyboard · {}", crate::storyboard::panel_long_title(&self.doc, self.cur_panel)),
+                Mode::Animation => format!("Animation · {}", crate::storyboard::panel_long_title(&self.doc, self.cur_panel)),
             };
             ui.label(RichText::new(where_).strong());
             ui.separator();

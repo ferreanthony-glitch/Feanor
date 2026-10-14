@@ -37,19 +37,14 @@ impl App {
         ui.horizontal_wrapped(|ui| {
             if ui
                 .button(RichText::new("< Storyboard").strong())
-                .on_hover_text("Revenir au montage des plans (Tab)")
+                .on_hover_text("Revenir au montage des panneaux (Tab)")
                 .clicked()
             {
                 self.set_mode(Mode::Storyboard);
             }
-            let shot = self.shot();
-            let title = if shot.name.is_empty() {
-                format!("Plan {}", self.cur_shot + 1)
-            } else {
-                format!("Plan {} · {}", self.cur_shot + 1, shot.name)
-            };
+            let title = crate::storyboard::panel_long_title(&self.doc, self.cur_panel);
             ui.label(RichText::new(title).strong());
-            self.shot_length_field(ui, "durée ")
+            self.panel_length_field(ui, "durée ")
                 .on_hover_text(duration_label(count, fps));
             ui.separator();
 
@@ -60,7 +55,7 @@ impl App {
                 self.goto_frame(self.cur_frame.saturating_sub(1));
             }
             let play = if self.playing { "⏸ Pause" } else { "▶ Lecture" };
-            if ui.button(play).on_hover_text("Lecture du plan en boucle (Entrée)").clicked() {
+            if ui.button(play).on_hover_text("Lecture du panneau en boucle (Entrée)").clicked() {
                 self.toggle_play();
             }
             if ui.button("⏩").on_hover_text("Image suivante (flèche droite)").clicked() {

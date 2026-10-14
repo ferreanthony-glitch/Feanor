@@ -1,20 +1,29 @@
 # Architecture de Pelure
 
-Document tenu à jour à chaque étape. Dernière mise à jour : phase 0 (octobre 2026).
+Document tenu à jour à chaque étape. Dernière mise à jour : phase 1a (octobre 2026).
 
 ## Vue d'ensemble
 
 Application de bureau en Rust. Une seule fenêtre, interface **egui 0.31** (via eframe, affichage OpenGL).
 
 ```
-Document ─ plans (Shot) ─ calques (Layer : bitmap ou vectoriel) ─ une case par image → dessin (Cel)
-                                                                        │
+Document ─ séquences ─ scènes ─ panneaux ─ calques (bitmap ou vectoriel) ─ une case par image → dessin (Cel)
+                                                                                  │
 Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendus dans l'image)
 ```
 
-- **Modèle** (`document.rs`) : le projet contient des plans montés bout à bout. Chaque plan a sa
-  durée, ses textes (action, dialogue, notes) et ses calques. Un calque associe à chaque image un
-  dessin ; plusieurs images consécutives sur le même dessin forment une exposition.
+- **Modèle** (`document.rs`) : en mémoire, les panneaux sont une **liste à plat dans l'ordre du film** ;
+  chaque panneau désigne sa scène, chaque scène sa séquence. Les panneaux d'une même scène se suivent,
+  comme les scènes d'une même séquence : `normalize()` rétablit cette règle après chaque opération et
+  supprime les scènes ou séquences vides. Ce choix garde simples la bande de montage, la lecture et
+  l'annulation ; le fichier, lui, est rangé en arbre (voir plus bas). Les numéros de scène (1, 2, 3…
+  dans l'ordre du film) et de panneau (dans la scène) sont calculés, sauf nom ou numéro choisi.
+- **Opérations de montage** (`Document::add_panel_after`, `add_scene_after`, `add_sequence_after`,
+  `move_panel`, `remove_scene`…) : dans le modèle, testées sans interface. Un panneau déplacé garde sa
+  scène s'il reste à côté d'un panneau de sa scène ; sinon il rejoint celle du panneau devant lequel
+  on le pose. Comportement de Storyboard Pro non vérifié : c'est une interprétation.
+- **Panneau** : durée, textes (action, dialogue, notes) et calques. Un calque associe à chaque image
+  un dessin ; plusieurs images consécutives sur le même dessin forment une exposition.
 - **Dessins** : bitmap = tuiles RGBA prémultipliées allouées à la demande (`raster.rs`) ;
   vectoriel = traits à épaisseur variable et zones remplies (`vector.rs`), re-rendus en pixels à chaque
   modification. Toute la composition ne voit donc que des pixels.
@@ -22,13 +31,36 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   image envoyée à la carte graphique comme une seule texture ; seules les tuiles modifiées sont
   recalculées. Vignettes des plans en cache (`thumbs.rs`).
 - **Annuler / rétablir** (`history.rs`) : chaque modification enregistre l'état d'avant (tuiles,
-  dessin vectoriel, ou structure des plans). Les textes et réglages de calque n'y sont pas encore
-  (prévu en phase 1d), mais une annulation ne les fait jamais revenir en arrière.
-- **Fichier** (`io.rs`) : `.pelure` = en-tête + manifeste JSON versionné + PNG. Les versions 1 et 2 se lisent.
+  dessin vectoriel, ou structure : séquences, scènes, panneaux, calques). Les noms, textes et réglages
+  de calque n'y sont pas encore (prévu en phase 1d), mais une annulation ne les fait jamais revenir
+  en arrière (ils sont conservés par identifiant).
+- **Fichier** : voir « Format de projet ».
 - **Raccourcis** (`keymap.rs`, `keymap.toml`) : voir plus bas.
 - **Interface** : `app.rs` (état, actions, `run_action`), `canvas.rs` (dessin à la souris/stylet),
   `panels.rs` (menus, outils, calques, dialogues), `timeline.rs` (animation), `storyboard.rs` (montage,
   planches, fiche du plan), `vtools.rs` (outils vectoriels).
+
+## Format de projet (version 3, dossier)
+
+```
+MonFilm/
+  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 3, réglages,
+                      "sequences": [{ "scenes": [{ "panneaux": [{ "calques": [{ "expositions": … }]}]}]}]}
+  dessins/<id>.png    dessin bitmap (RGBA non prémultiplié)
+  dessins/<id>.json   dessin vectoriel (éléments sérialisés)
+```
+
+- Clés en français, expositions écrites en plages (`{"dessin": 12, "images": 24}`) : le manifeste
+  reste lisible et court.
+- **Enregistrement incrémental** (`project.rs`) : un dessin n'est réécrit que si sa `version` a changé
+  depuis le dernier enregistrement dans ce dossier. Écriture « à côté puis renommage » pour chaque
+  fichier ; manifeste écrit après les dessins ; dessins inutilisés effacés en dernier (seulement les
+  fichiers `<nombre>.png/json` de `dessins/`). Ce schéma servira à la sauvegarde automatique (phase 4).
+- **Garde-fous** : « Enregistrer sous » refuse un dossier qui contient déjà un autre projet ou un
+  dossier `dessins`. À l'ouverture, un dessin manquant ou illisible est signalé, le reste s'ouvre.
+- **Compatibilité** : un champ inconnu est ignoré, un champ absent prend sa valeur par défaut ; un
+  format plus récent que le logiciel est refusé avec un message. Les anciens fichiers à fichier unique
+  (formats 1 et 2, `io.rs`) s'ouvrent : chaque ancien « plan » devient une scène d'un panneau.
 
 ## Raccourcis clavier
 
@@ -60,8 +92,8 @@ Toolchain Rust `x86_64-pc-windows-gnu` (MinGW minimal de rustup). Conséquences 
 | egui 0.31, pas de mise à jour pour l'instant | stable, déjà en place | nul | moyen à terme (retard sur les versions) | oui, coût croissant avec la taille du code |
 | Rendu sur processeur en phase 1, carte graphique (wgpu) en phase 2 | la 3D et le multiplan l'exigent ; inutile avant | réécriture de `render.rs` en phase 2 | moyen | oui (le modèle de données ne change pas) |
 | Toolchain GNU → **outils Microsoft (MSVC) avant la phase 2** (validé) | plus de contournements à chaque bibliothèque | 5–7 Go, une fois | faible | oui |
-| **Projet = dossier** (validé, mise en œuvre phase 1a) | sons, 3D, sauvegarde auto incrémentale | migration des `.pelure` (lecture gardée) | moyen | coûteux une fois en usage : format versionné dès le départ |
-| **Séquence > Scène > Panneau** (validé, phase 1a) | vocabulaire de Storyboard Pro | refonte du modèle | moyen | difficile après la phase 1a |
+| **Projet = dossier** (validé, fait en 1a) | sons, 3D, sauvegarde auto incrémentale | lecture des anciens `.pelure` gardée | moyen | format versionné : les évolutions futures se font par ajout de champs |
+| **Séquence > Scène > Panneau** (validé, fait en 1a) | vocabulaire de Storyboard Pro | refonte du modèle | moyen | l'arbre du fichier est stable ; la liste à plat en mémoire peut changer sans toucher au fichier |
 | Raccourcis en TOML, identifiants stables | modifiables sans recompiler | faible | faible | oui |
 | Export vidéo via ffmpeg installé à part (phase 3) | seule voie fiable sans souci de licence ni de compilation | dépendance externe | faible | oui |
 | Pas d'export XML Toon Boom | format propriétaire non documenté | — | — | — |

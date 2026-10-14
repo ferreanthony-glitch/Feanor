@@ -1,6 +1,6 @@
 use eframe::egui::{self, Color32, ColorImage, TextureFilter, TextureHandle, TextureOptions};
 
-use crate::document::{CelId, Document, Shot};
+use crate::document::{CelId, Document, Panel};
 use crate::raster::{tile_bounds, tiles_across, TILE, TILE_PIXELS};
 
 /// Un dessin à superposer, avec son opacité et une teinte éventuelle (pelure d'oignon).
@@ -106,10 +106,10 @@ pub fn composite_pixel(doc: &Document, plan: &Plan, x: usize, y: usize) -> Color
 }
 
 /// Plan de composition d'une image d'un plan, sans pelure d'oignon (vignettes, export).
-pub fn shot_plan(shot: &Shot, frame: usize, paper: Option<[u8; 3]>) -> Plan {
+pub fn panel_plan(panel: &Panel, frame: usize, paper: Option<[u8; 3]>) -> Plan {
     Plan {
         paper,
-        items: shot
+        items: panel
             .layers
             .iter()
             .filter(|l| l.visible)

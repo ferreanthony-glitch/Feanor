@@ -18,10 +18,13 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
 - ✅ Nouvelles petites actions pour coller au preset : zoom par pas (1/2), plein écran, rotation
   par pas (V/C), allonger/raccourcir le panneau (+/−), première/dernière image du panneau, quitter.
 
-## Phase 1 — Fondations storyboard ⏳
+## Phase 1 — Fondations storyboard 🔧
 
-- ⏳ 1a. Modèle Séquence > Scène > Panneau (le « plan » actuel devient le panneau), numérotation,
-  projet en dossier (format v3, ouverture des anciens `.pelure`). Vocabulaire de l'interface.
+- ✅ 1a. Modèle Séquence > Scène > Panneau (l'ancien « plan » est devenu le panneau) ; numérotation
+  automatique et noms personnalisés ; barres de séquences et de scènes dans la bande de montage ;
+  vue Planches rangée par scène ; nouveau panneau / scène / séquence, dupliquer et supprimer un
+  panneau ou une scène, déplacer un panneau d'une scène à l'autre ; projet en dossier (format 3,
+  enregistrement incrémental) ; ouverture des anciens `.pelure` ; export HTML rangé par séquence.
 - ⏳ 1b. Vues Vignettes / Scène / Timeline avec pistes son (WAV/MP3, forme d'onde, lecture synchronisée).
 - ⏳ 1c. Sélection et transformation en bitmap, guides de perspective, table lumineuse.
 - ⏳ 1d. Annuler/rétablir sur tout (textes, réglages de calque, sons), gestes regroupés.
@@ -56,7 +59,9 @@ Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans 
 | Enregistrer sous | Ctrl+Maj+S | aucune touche par défaut dans Storyboard Pro |
 | Rétablir (second) | Ctrl+Y | habituel sous Windows |
 | Supprimer (second) | Retour arrière | |
-| Ajuster à la fenêtre | Maj+F | |
+| Ajuster à la fenêtre | Ctrl+0 | changé en 1a : Maj+F sert désormais à « scène suivante » |
+| Nouvelle scène | Maj+P | NEW_SCENE_KEY n'a pas de touche par défaut ; P = nouveau panneau (preset) |
+| Scène précédente / suivante | Maj+A / Maj+F | PREV_SHOT_KEY / NEXT_SHOT_KEY sans touche ; A / F = panneau (preset) |
 | Miroir de la vue | M | |
 | Storyboard ⇄ animation | Tab | |
 | Vue planches / scène | Maj+Tab | |

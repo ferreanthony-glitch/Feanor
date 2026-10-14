@@ -11,6 +11,7 @@ mod keymap;
 #[cfg(test)]
 mod keymap_tests;
 mod panels;
+mod project;
 mod raster;
 mod render;
 mod storyboard;

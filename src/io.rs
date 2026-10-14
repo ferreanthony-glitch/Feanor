@@ -1,8 +1,8 @@
-//! Fichiers projet `.pelure` et export d'images.
+//! Anciens fichiers `.pelure` (formats 1 et 2, un seul fichier) et écriture d'images PNG.
 //!
-//! Format `.pelure` : l'en-tête `PELURE\0\x01`, la version (u32), la longueur du manifeste
-//! JSON (u64), le manifeste, puis les dessins bitmap encodés en PNG, mis bout à bout.
-//! Les dessins vectoriels sont écrits dans le manifeste lui-même.
+//! Format 1 et 2 : l'en-tête `PELURE\0\x01`, la version (u32), la longueur du manifeste JSON
+//! (u64), le manifeste, puis les dessins bitmap encodés en PNG, mis bout à bout. Ces fichiers
+//! s'ouvrent toujours ; on les enregistre désormais en dossier projet (voir `project.rs`).
 
 use std::collections::HashMap;
 use std::fs;
@@ -13,16 +13,16 @@ use image::codecs::png::{CompressionType, FilterType, PngEncoder};
 use image::ImageEncoder;
 use serde::{Deserialize, Serialize};
 
-use crate::document::{fresh_layer_id, Cel, Document, Layer, LayerKind, Shot};
+use crate::document::{fresh_layer_id, Cel, Document, Layer, LayerKind, Panel, Scene, Sequence, Structure};
 use crate::raster::{unpremultiply, Raster};
 use crate::vector::VectorDrawing;
 
-const MAGIC: &[u8; 8] = b"PELURE\x00\x01";
-const VERSION: u32 = 2;
+pub(crate) const LEGACY_MAGIC: &[u8; 8] = b"PELURE\x00\x01";
+const LEGACY_VERSION: u32 = 2;
 const HEADER: usize = 8 + 4 + 8;
 
 #[derive(Serialize, Deserialize)]
-struct Manifest {
+struct LegacyManifest {
     version: u32,
     width: usize,
     height: usize,
@@ -30,14 +30,15 @@ struct Manifest {
     paper: [u8; 3],
     /// Format 1 : un seul plan, ses calques directement ici.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    layers: Vec<LayerEntry>,
+    layers: Vec<LegacyLayer>,
+    /// Format 2 : les plans, chacun avec ses calques.
     #[serde(default)]
-    shots: Vec<ShotEntry>,
-    cels: Vec<CelEntry>,
+    shots: Vec<LegacyShot>,
+    cels: Vec<LegacyCel>,
 }
 
 #[derive(Serialize, Deserialize)]
-struct ShotEntry {
+struct LegacyShot {
     id: u64,
     #[serde(default)]
     name: String,
@@ -49,11 +50,11 @@ struct ShotEntry {
     dialogue: String,
     #[serde(default)]
     notes: String,
-    layers: Vec<LayerEntry>,
+    layers: Vec<LegacyLayer>,
 }
 
 #[derive(Serialize, Deserialize)]
-struct LayerEntry {
+struct LegacyLayer {
     name: String,
     #[serde(default)]
     kind: LayerKind,
@@ -63,7 +64,7 @@ struct LayerEntry {
 }
 
 #[derive(Serialize, Deserialize)]
-struct CelEntry {
+struct LegacyCel {
     id: u64,
     #[serde(default)]
     offset: u64,
@@ -73,17 +74,7 @@ struct CelEntry {
     vector: Option<VectorDrawing>,
 }
 
-fn layer_entry(l: &Layer) -> LayerEntry {
-    LayerEntry {
-        name: l.name.clone(),
-        kind: l.kind,
-        visible: l.visible,
-        opacity: l.opacity,
-        frames: l.frames.clone(),
-    }
-}
-
-fn encode_png(rgba: &[u8], width: usize, height: usize) -> Result<Vec<u8>, String> {
+pub(crate) fn encode_png(rgba: &[u8], width: usize, height: usize) -> Result<Vec<u8>, String> {
     let mut out = Vec::new();
     PngEncoder::new_with_quality(&mut out, CompressionType::Fast, FilterType::Adaptive)
         .write_image(rgba, width as u32, height as u32, image::ExtendedColorType::Rgba8)
@@ -91,80 +82,31 @@ fn encode_png(rgba: &[u8], width: usize, height: usize) -> Result<Vec<u8>, Strin
     Ok(out)
 }
 
-pub fn save_project(doc: &Document, path: &Path) -> Result<(), String> {
-    let mut blob = Vec::new();
-    let mut cels = Vec::new();
-    for id in doc.used_cels() {
-        let Some(cel) = doc.cels.get(&id) else { continue };
-        if let Some(v) = &cel.vector {
-            cels.push(CelEntry {
-                id,
-                offset: 0,
-                length: 0,
-                vector: Some(v.clone()),
-            });
-            continue;
-        }
-        let png = encode_png(&cel.raster.to_rgba(), cel.raster.width, cel.raster.height)?;
-        cels.push(CelEntry {
-            id,
-            offset: blob.len() as u64,
-            length: png.len() as u64,
-            vector: None,
-        });
-        blob.extend_from_slice(&png);
-    }
-    let manifest = Manifest {
-        version: VERSION,
-        width: doc.width,
-        height: doc.height,
-        fps: doc.fps,
-        paper: doc.paper,
-        layers: Vec::new(),
-        shots: doc
-            .shots
-            .iter()
-            .map(|s| ShotEntry {
-                id: s.id,
-                name: s.name.clone(),
-                length: s.length,
-                action: s.action.clone(),
-                dialogue: s.dialogue.clone(),
-                notes: s.notes.clone(),
-                layers: s.layers.iter().map(layer_entry).collect(),
-            })
-            .collect(),
-        cels,
-    };
-    let json = serde_json::to_vec(&manifest).map_err(|e| e.to_string())?;
-
-    let mut out = Vec::with_capacity(HEADER + json.len() + blob.len());
-    out.extend_from_slice(MAGIC);
-    out.extend_from_slice(&VERSION.to_le_bytes());
-    out.extend_from_slice(&(json.len() as u64).to_le_bytes());
-    out.extend_from_slice(&json);
-    out.extend_from_slice(&blob);
-
-    // On écrit à côté puis on remplace : un plantage en cours d'écriture ne détruit pas l'ancien fichier.
-    let tmp = path.with_extension("pelure.tmp");
-    fs::write(&tmp, &out).map_err(|e| e.to_string())?;
-    fs::rename(&tmp, path).map_err(|e| e.to_string())
+/// Le fichier est-il un ancien `.pelure` (un seul fichier binaire) ?
+pub fn is_legacy_file(path: &Path) -> bool {
+    use std::io::Read;
+    let mut head = [0u8; 8];
+    fs::File::open(path)
+        .and_then(|mut f| f.read_exact(&mut head))
+        .is_ok_and(|_| &head == LEGACY_MAGIC)
 }
 
-pub fn load_project(path: &Path) -> Result<Document, String> {
+/// Ouvre un ancien `.pelure`. Chaque « plan » d'alors devient une scène d'un panneau, dans une
+/// seule séquence ; le nom du plan devient le nom de la scène.
+pub fn load_legacy(path: &Path) -> Result<Document, String> {
     let data = fs::read(path).map_err(|e| e.to_string())?;
-    if data.len() < HEADER || &data[..8] != MAGIC {
+    if data.len() < HEADER || &data[..8] != LEGACY_MAGIC {
         return Err("ce fichier n'est pas un projet Pelure".into());
     }
     let version = u32::from_le_bytes(data[8..12].try_into().unwrap());
-    if version > VERSION {
-        return Err(format!("projet créé par une version plus récente (format {version})"));
+    if version > LEGACY_VERSION {
+        return Err(format!("format {version} inconnu"));
     }
     let json_len = u64::from_le_bytes(data[12..20].try_into().unwrap()) as usize;
     let json = data
         .get(HEADER..HEADER + json_len)
         .ok_or("fichier tronqué")?;
-    let manifest: Manifest = serde_json::from_slice(json).map_err(|e| e.to_string())?;
+    let manifest: LegacyManifest = serde_json::from_slice(json).map_err(|e| e.to_string())?;
     let blob = &data[HEADER + json_len..];
     let (w, h) = (manifest.width, manifest.height);
 
@@ -196,7 +138,7 @@ pub fn load_project(path: &Path) -> Result<Document, String> {
         cels.insert(c.id, cel);
     }
 
-    let to_layers = |entries: Vec<LayerEntry>| -> Vec<Layer> {
+    let to_layers = |entries: Vec<LegacyLayer>| -> Vec<Layer> {
         let mut layers: Vec<Layer> = entries
             .into_iter()
             .map(|l| Layer {
@@ -218,30 +160,54 @@ pub fn load_project(path: &Path) -> Result<Document, String> {
         layers
     };
 
-    let mut shots: Vec<Shot> = manifest
-        .shots
-        .into_iter()
-        .map(|s| Shot {
-            id: s.id,
+    // Les identifiants de séquence et de scène sont pris au-dessus de tous ceux du fichier.
+    let mut next = cels
+        .keys()
+        .copied()
+        .chain(manifest.shots.iter().map(|s| s.id))
+        .max()
+        .unwrap_or(0)
+        + 1;
+    let mut alloc = || {
+        next += 1;
+        next - 1
+    };
+    let sequence = alloc();
+    let mut structure = Structure {
+        sequences: vec![Sequence {
+            id: sequence,
+            name: String::new(),
+        }],
+        scenes: Vec::new(),
+        panels: Vec::new(),
+    };
+    let mut shots = manifest.shots;
+    if shots.is_empty() {
+        shots.push(LegacyShot {
+            id: alloc(),
+            name: String::new(),
+            length: 0,
+            action: String::new(),
+            dialogue: String::new(),
+            notes: String::new(),
+            layers: manifest.layers,
+        });
+    }
+    for s in shots {
+        let scene = alloc();
+        structure.scenes.push(Scene {
+            id: scene,
             name: s.name,
+            sequence,
+        });
+        structure.panels.push(Panel {
+            id: s.id,
+            scene,
             length: s.length,
             layers: to_layers(s.layers),
             action: s.action,
             dialogue: s.dialogue,
             notes: s.notes,
-        })
-        .collect();
-    if shots.is_empty() {
-        // Format 1 : un seul plan.
-        let id = cels.keys().max().copied().unwrap_or(0) + 1;
-        shots.push(Shot {
-            id,
-            name: String::new(),
-            length: 0,
-            layers: to_layers(manifest.layers),
-            action: String::new(),
-            dialogue: String::new(),
-            notes: String::new(),
         });
     }
     Ok(Document::from_parts(
@@ -249,9 +215,76 @@ pub fn load_project(path: &Path) -> Result<Document, String> {
         h,
         manifest.fps.max(1),
         manifest.paper,
-        shots,
+        structure,
         cels,
     ))
+}
+
+/// Écrit un ancien `.pelure` (format 2) : sert seulement aux tests de compatibilité.
+#[cfg(test)]
+pub fn save_legacy_v2(doc: &Document, path: &Path) -> Result<(), String> {
+    let mut blob = Vec::new();
+    let mut cels = Vec::new();
+    for id in doc.used_cels() {
+        let cel = &doc.cels[&id];
+        if let Some(v) = &cel.vector {
+            cels.push(LegacyCel {
+                id,
+                offset: 0,
+                length: 0,
+                vector: Some(v.clone()),
+            });
+            continue;
+        }
+        let png = encode_png(&cel.raster.to_rgba(), cel.raster.width, cel.raster.height)?;
+        cels.push(LegacyCel {
+            id,
+            offset: blob.len() as u64,
+            length: png.len() as u64,
+            vector: None,
+        });
+        blob.extend_from_slice(&png);
+    }
+    let manifest = LegacyManifest {
+        version: 2,
+        width: doc.width,
+        height: doc.height,
+        fps: doc.fps,
+        paper: doc.paper,
+        layers: Vec::new(),
+        shots: doc
+            .panels
+            .iter()
+            .map(|p| LegacyShot {
+                id: p.id,
+                name: doc.scene(p.scene).map(|s| s.name.clone()).unwrap_or_default(),
+                length: p.length,
+                action: p.action.clone(),
+                dialogue: p.dialogue.clone(),
+                notes: p.notes.clone(),
+                layers: p
+                    .layers
+                    .iter()
+                    .map(|l| LegacyLayer {
+                        name: l.name.clone(),
+                        kind: l.kind,
+                        visible: l.visible,
+                        opacity: l.opacity,
+                        frames: l.frames.clone(),
+                    })
+                    .collect(),
+            })
+            .collect(),
+        cels,
+    };
+    let json = serde_json::to_vec(&manifest).map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    out.extend_from_slice(LEGACY_MAGIC);
+    out.extend_from_slice(&2u32.to_le_bytes());
+    out.extend_from_slice(&(json.len() as u64).to_le_bytes());
+    out.extend_from_slice(&json);
+    out.extend_from_slice(&blob);
+    fs::write(path, out).map_err(|e| e.to_string())
 }
 
 pub fn write_png(path: &Path, pixels: &[Color32], width: usize, height: usize) -> Result<(), String> {

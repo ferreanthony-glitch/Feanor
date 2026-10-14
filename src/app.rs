@@ -4,11 +4,12 @@ use std::path::PathBuf;
 use eframe::egui::{self, vec2, Color32, Event, Key, Pos2, Rect, Vec2};
 
 use crate::brush::{BrushSettings, StrokeMode, StrokeState};
-use crate::document::{fresh_layer_id, CelId, Document, Layer, LayerKind, Shot};
+use crate::document::{fresh_layer_id, CelId, Document, Layer, LayerKind, Panel};
 use crate::fill::{self, FillSettings};
 use crate::history::{Edit, History, Nav};
 use crate::io;
 use crate::keymap::{self, Keymap};
+use crate::project;
 use crate::raster::{premultiply, unpremultiply, Tile, TILE};
 use crate::render::{self, Plan, PlanItem, Renderer};
 use crate::storyboard::MontageDrag;
@@ -126,7 +127,7 @@ pub struct App {
     pub(crate) doc: Document,
     pub(crate) mode: Mode,
     pub(crate) board_view: BoardView,
-    pub(crate) cur_shot: usize,
+    pub(crate) cur_panel: usize,
     pub(crate) cur_layer: usize,
     pub(crate) cur_frame: usize,
     pub(crate) tool: Tool,
@@ -163,13 +164,18 @@ pub struct App {
     pub(crate) montage_drag: Option<MontageDrag>,
     /// Plan tel qu'il était au début du réglage de sa durée : chaque valeur intermédiaire
     /// repart de lui, rien n'est perdu avant la fin du geste.
-    pub(crate) length_origin: Option<Shot>,
+    pub(crate) length_origin: Option<Panel>,
     /// Un champ de durée est en cours d'utilisation pendant cette image d'écran.
     pub(crate) length_field_active: bool,
     pub(crate) pen_pressure: f32,
     pub(crate) pen_touch: bool,
     pub(crate) picking: bool,
+    /// Manifeste du projet en dossier (`MonFilm/MonFilm.pelure`).
     pub(crate) path: Option<PathBuf>,
+    /// Ancien fichier `.pelure` importé, pas encore enregistré en dossier.
+    pub(crate) import_source: Option<PathBuf>,
+    /// Version de chaque dessin déjà écrit dans le dossier du projet.
+    pub(crate) written: HashMap<CelId, u64>,
     pub(crate) modified: bool,
     pub(crate) status: String,
     pub(crate) new_dialog: Option<NewDocDialog>,
@@ -193,7 +199,7 @@ impl App {
             doc: Document::new(1920, 1080, 24),
             mode: Mode::Storyboard,
             board_view: BoardView::Scene,
-            cur_shot: 0,
+            cur_panel: 0,
             cur_layer: 0,
             cur_frame: 0,
             tool: Tool::Brush,
@@ -254,8 +260,10 @@ impl App {
             pen_touch: false,
             picking: false,
             path: None,
+            import_source: None,
+            written: HashMap::new(),
             modified: false,
-            status: "Storyboard : dessine le premier plan, Inser pour en ajouter, double-clic sur un plan pour l'animer (F1 : raccourcis).".into(),
+            status: "Storyboard : dessine le premier panneau ; P pour un nouveau panneau, double-clic sur un panneau pour l'animer (F1 : raccourcis).".into(),
             new_dialog: None,
             pending: None,
             show_help: false,
@@ -271,20 +279,20 @@ impl App {
 
     // ------------------------------------------------------------------ accès
 
-    pub(crate) fn shot(&self) -> &Shot {
-        &self.doc.shots[self.cur_shot]
+    pub(crate) fn panel(&self) -> &Panel {
+        &self.doc.panels[self.cur_panel]
     }
 
-    pub(crate) fn shot_mut(&mut self) -> &mut Shot {
-        &mut self.doc.shots[self.cur_shot]
+    pub(crate) fn panel_mut(&mut self) -> &mut Panel {
+        &mut self.doc.panels[self.cur_panel]
     }
 
     pub(crate) fn layers(&self) -> &[Layer] {
-        &self.doc.shots[self.cur_shot].layers
+        &self.doc.panels[self.cur_panel].layers
     }
 
     pub(crate) fn layers_mut(&mut self) -> &mut Vec<Layer> {
-        &mut self.doc.shots[self.cur_shot].layers
+        &mut self.doc.panels[self.cur_panel].layers
     }
 
     pub(crate) fn layer(&self) -> &Layer {
@@ -296,12 +304,12 @@ impl App {
     }
 
     pub(crate) fn frame_count(&self) -> usize {
-        self.shot().frame_count()
+        self.panel().frame_count()
     }
 
     /// Image courante dans le montage complet.
     pub(crate) fn global_frame(&self) -> usize {
-        self.doc.shot_start(self.cur_shot) + self.cur_frame.min(self.frame_count() - 1)
+        self.doc.panel_start(self.cur_panel) + self.cur_frame.min(self.frame_count() - 1)
     }
 
     pub(crate) fn canvas_size(&self) -> Vec2 {
@@ -332,7 +340,7 @@ impl App {
 
     /// Garde plan et calque courants dans les bornes (après une annulation, un chargement…).
     fn clamp_nav(&mut self) {
-        self.cur_shot = self.cur_shot.min(self.doc.shots.len() - 1);
+        self.cur_panel = self.cur_panel.min(self.doc.panels.len() - 1);
         self.cur_layer = self.cur_layer.min(self.layers().len() - 1);
     }
 
@@ -397,8 +405,8 @@ impl App {
     pub(crate) fn goto_global(&mut self, global: usize) {
         self.end_stroke();
         self.playing = false;
-        let (shot, frame) = self.doc.locate(global);
-        self.set_shot(shot);
+        let (panel, frame) = self.doc.locate(global);
+        self.set_panel(panel);
         self.cur_frame = frame;
         self.follow_frame = true;
     }
@@ -410,27 +418,27 @@ impl App {
     }
 
     /// Change de plan courant (sans rien changer si c'est déjà lui).
-    pub(crate) fn set_shot(&mut self, index: usize) {
-        let index = index.min(self.doc.shots.len() - 1);
-        if index == self.cur_shot {
+    pub(crate) fn set_panel(&mut self, index: usize) {
+        let index = index.min(self.doc.panels.len() - 1);
+        if index == self.cur_panel {
             return;
         }
         self.end_stroke();
-        self.cur_shot = index;
+        self.cur_panel = index;
         self.cur_layer = self.cur_layer.min(self.layers().len() - 1);
         self.cur_frame = 0;
         self.vsel = None;
     }
 
-    pub(crate) fn select_shot(&mut self, index: usize) {
+    pub(crate) fn select_panel(&mut self, index: usize) {
         self.playing = false;
-        self.set_shot(index);
+        self.set_panel(index);
         self.follow_frame = true;
     }
 
     /// Entre dans un plan pour l'animer.
     pub(crate) fn enter_animation(&mut self, index: usize) {
-        self.select_shot(index);
+        self.select_panel(index);
         self.set_mode(Mode::Animation);
     }
 
@@ -445,8 +453,8 @@ impl App {
         }
         self.follow_frame = true;
         self.status = match mode {
-            Mode::Storyboard => "Storyboard : montage des plans.".into(),
-            Mode::Animation => format!("Animation du plan {} (Tab : retour au storyboard).", self.cur_shot + 1),
+            Mode::Storyboard => "Storyboard : montage des panneaux.".into(),
+            Mode::Animation => format!("Animation de {} (Tab : retour au storyboard).", crate::storyboard::panel_long_title(&self.doc, self.cur_panel)),
         };
     }
 
@@ -472,7 +480,7 @@ impl App {
         };
         if at_end {
             if self.play_montage {
-                self.set_shot(0);
+                self.set_panel(0);
             }
             self.cur_frame = 0;
         }
@@ -493,12 +501,12 @@ impl App {
             self.play_accum -= frame_duration;
             if self.cur_frame + 1 < self.frame_count() {
                 self.cur_frame += 1;
-            } else if self.play_montage && self.cur_shot + 1 < self.doc.shots.len() {
-                let next = self.cur_shot + 1;
-                self.set_shot(next);
+            } else if self.play_montage && self.cur_panel + 1 < self.doc.panels.len() {
+                let next = self.cur_panel + 1;
+                self.set_panel(next);
             } else if self.looping {
                 if self.play_montage {
-                    self.set_shot(0);
+                    self.set_panel(0);
                 }
                 self.cur_frame = 0;
             } else {
@@ -716,9 +724,9 @@ impl App {
 
     pub(crate) fn snapshot(&self) -> Edit {
         Edit::Structure {
-            shots: self.doc.shots.clone(),
+            structure: self.doc.structure(),
             nav: Nav {
-                shot: self.cur_shot,
+                panel: self.cur_panel,
                 layer: self.cur_layer,
             },
         }
@@ -915,7 +923,7 @@ impl App {
         self.cancel_montage_drag();
         self.end_stroke();
         let mut nav = Nav {
-            shot: self.cur_shot,
+            panel: self.cur_panel,
             layer: self.cur_layer,
         };
         if self.history.undo(&mut self.doc, &mut nav) {
@@ -929,7 +937,7 @@ impl App {
         self.cancel_montage_drag();
         self.end_stroke();
         let mut nav = Nav {
-            shot: self.cur_shot,
+            panel: self.cur_panel,
             layer: self.cur_layer,
         };
         if self.history.redo(&mut self.doc, &mut nav) {
@@ -940,7 +948,7 @@ impl App {
     }
 
     fn after_history(&mut self, nav: Nav) {
-        self.cur_shot = nav.shot;
+        self.cur_panel = nav.panel;
         self.cur_layer = nav.layer;
         self.clamp_nav();
         self.vsel = None;
@@ -986,32 +994,47 @@ impl App {
         }
     }
 
+    /// « Enregistrer sous » : on choisit un nom, Pelure crée le dossier du projet à ce nom.
     pub(crate) fn save_as(&mut self) -> bool {
         self.end_stroke();
-        let name = self
-            .path
-            .as_ref()
-            .and_then(|p| p.file_name())
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "animation.pelure".into());
-        let Some(mut path) = rfd::FileDialog::new()
+        let name = format!("{}.pelure", self.base_name_or("Mon film"));
+        let mut dialog = rfd::FileDialog::new()
+            .set_title("Enregistrer le projet (un dossier à ce nom sera créé)")
             .add_filter("Projet Pelure", &["pelure"])
-            .set_file_name(name)
-            .save_file()
-        else {
+            .set_file_name(name);
+        if let Some(dir) = self.import_source.as_ref().and_then(|p| p.parent()) {
+            dialog = dialog.set_directory(dir);
+        }
+        let Some(chosen) = dialog.save_file() else {
             return false;
         };
-        if path.extension().is_none() {
-            path.set_extension("pelure");
+        let (_, manifest) = project::target_for(&chosen);
+        if let Err(e) = project::check_target(&manifest, self.path.as_deref()) {
+            self.status = format!("Enregistrement annulé : {e}");
+            return false;
         }
-        self.save_to(path)
+        if self.path.as_ref() != Some(&manifest) {
+            // Nouveau dossier : tous les dessins y seront écrits.
+            self.written.clear();
+        }
+        self.save_to(manifest)
     }
 
-    fn save_to(&mut self, path: PathBuf) -> bool {
-        match io::save_project(&self.doc, &path) {
-            Ok(()) => {
-                self.status = format!("Enregistré : {}", path.display());
-                self.path = Some(path);
+    fn save_to(&mut self, manifest: PathBuf) -> bool {
+        match project::save(&self.doc, &manifest, &mut self.written) {
+            Ok(report) => {
+                self.status = format!(
+                    "Enregistré : {} ({} dessin(s) écrit(s){}).",
+                    manifest.display(),
+                    report.written,
+                    if report.removed > 0 {
+                        format!(", {} inutilisé(s) effacé(s)", report.removed)
+                    } else {
+                        String::new()
+                    }
+                );
+                self.path = Some(manifest);
+                self.import_source = None;
                 self.modified = false;
                 true
             }
@@ -1032,11 +1055,32 @@ impl App {
         self.open_path(path);
     }
 
+    /// Ouvre un projet en dossier, ou importe un ancien fichier `.pelure`.
     pub(crate) fn open_path(&mut self, path: PathBuf) {
-        match io::load_project(&path) {
-            Ok(doc) => {
-                self.load_doc(doc);
-                self.status = format!("Ouvert : {}", path.display());
+        if io::is_legacy_file(&path) {
+            match io::load_legacy(&path) {
+                Ok(doc) => {
+                    self.load_doc(doc);
+                    self.status = format!(
+                        "Ancien format importé ({}). « Enregistrer » créera le dossier du projet.",
+                        path.display()
+                    );
+                    self.import_source = Some(path);
+                    self.modified = true;
+                }
+                Err(e) => self.status = format!("Impossible d'ouvrir le projet : {e}"),
+            }
+            return;
+        }
+        match project::load(&path) {
+            Ok(loaded) => {
+                self.load_doc(loaded.doc);
+                self.written = loaded.written;
+                self.status = if loaded.warnings.is_empty() {
+                    format!("Ouvert : {}", path.display())
+                } else {
+                    format!("Ouvert avec {} problème(s) : {}", loaded.warnings.len(), loaded.warnings.join(" ; "))
+                };
                 self.path = Some(path);
             }
             Err(e) => self.status = format!("Impossible d'ouvrir le projet : {e}"),
@@ -1046,7 +1090,7 @@ impl App {
     pub(crate) fn load_doc(&mut self, doc: Document) {
         self.doc = doc;
         self.mode = Mode::Storyboard;
-        self.cur_shot = 0;
+        self.cur_panel = 0;
         self.cur_layer = self.layers().len() - 1;
         self.cur_frame = 0;
         self.stroke = None;
@@ -1061,14 +1105,23 @@ impl App {
         self.fit_pending = true;
         self.modified = false;
         self.path = None;
+        self.import_source = None;
+        self.written.clear();
+        self.length_origin = None;
     }
 
     fn base_name(&self) -> String {
+        self.base_name_or("image")
+    }
+
+    /// Nom du projet (ou de l'ancien fichier importé), sinon `fallback`.
+    fn base_name_or(&self, fallback: &str) -> String {
         self.path
             .as_ref()
+            .or(self.import_source.as_ref())
             .and_then(|p| p.file_stem())
             .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "image".into())
+            .unwrap_or_else(|| fallback.into())
     }
 
     fn pick_folder(title: &str) -> Option<PathBuf> {
@@ -1079,8 +1132,8 @@ impl App {
     fn export_frames(&mut self, dir: &std::path::Path, frames: &[(usize, usize)]) {
         let base = self.base_name();
         let paper = (!self.export_transparent).then_some(self.doc.paper);
-        for (n, &(shot, frame)) in frames.iter().enumerate() {
-            let plan = render::shot_plan(&self.doc.shots[shot], frame, paper);
+        for (n, &(panel, frame)) in frames.iter().enumerate() {
+            let plan = render::panel_plan(&self.doc.panels[panel], frame, paper);
             let pixels = render::composite_full(&self.doc, &plan);
             let path = dir.join(format!("{base}_{:04}.png", n + 1));
             if let Err(e) = io::write_png(&path, &pixels, self.doc.width, self.doc.height) {
@@ -1091,10 +1144,10 @@ impl App {
         self.status = format!("{} images exportées dans {}", frames.len(), dir.display());
     }
 
-    pub(crate) fn export_shot_sequence(&mut self) {
+    pub(crate) fn export_panel_sequence(&mut self) {
         self.end_stroke();
-        let Some(dir) = Self::pick_folder("Dossier où exporter le plan") else { return };
-        let frames: Vec<_> = (0..self.frame_count()).map(|f| (self.cur_shot, f)).collect();
+        let Some(dir) = Self::pick_folder("Dossier où exporter le panneau") else { return };
+        let frames: Vec<_> = (0..self.frame_count()).map(|f| (self.cur_panel, f)).collect();
         self.export_frames(&dir, &frames);
     }
 
@@ -1103,10 +1156,10 @@ impl App {
         let Some(dir) = Self::pick_folder("Dossier où exporter tout le montage") else { return };
         let frames: Vec<_> = self
             .doc
-            .shots
+            .panels
             .iter()
             .enumerate()
-            .flat_map(|(s, shot)| (0..shot.frame_count()).map(move |f| (s, f)))
+            .flat_map(|(s, panel)| (0..panel.frame_count()).map(move |f| (s, f)))
             .collect();
         self.export_frames(&dir, &frames);
     }
@@ -1123,28 +1176,34 @@ impl App {
              section{{border:1px solid #ccc;padding:10px;break-inside:avoid}}\
              img{{width:100%;border:1px solid #999}}h2{{font-size:15px;margin:8px 0 2px}}\
              .dur{{color:#777;font-size:12px;margin:0 0 6px}}p{{font-size:13px;margin:4px 0}}\
-             .label{{font-weight:600}}</style></head><body><h1>{title} — storyboard</h1><main>"
+             .label{{font-weight:600}}h2.seq{{font-size:18px;margin:28px 0 10px;break-after:avoid}}\
+             </style></head><body><h1>{title} — storyboard</h1>"
         );
         let (w, h, fps) = (self.doc.width, self.doc.height, self.doc.fps);
-        for (i, shot) in self.doc.shots.iter().enumerate() {
-            let plan = render::shot_plan(shot, 0, Some(self.doc.paper));
+        for (i, panel) in self.doc.panels.iter().enumerate() {
+            // Intertitre au début de chaque séquence.
+            if self.doc.sequence_run(i).0 == i {
+                if i > 0 {
+                    html += "</main>";
+                }
+                html += &format!(
+                    "<h2 class=\"seq\">Séquence {}</h2><main>",
+                    io::html_escape(&self.doc.sequence_label(self.doc.sequence_of(i)))
+                );
+            }
+            let plan = render::panel_plan(panel, 0, Some(self.doc.paper));
             let pixels = render::composite_full(&self.doc, &plan);
             let file = format!("planche_{:03}.png", i + 1);
             if let Err(e) = io::write_png_scaled(&dir.join(&file), &pixels, w, h, 960) {
                 self.status = format!("Échec de l'export : {e}");
                 return;
             }
-            let name = if shot.name.is_empty() {
-                String::new()
-            } else {
-                format!(" — {}", io::html_escape(&shot.name))
-            };
             html += &format!(
-                "<section><img src=\"{file}\"><h2>Plan {}{name}</h2><p class=\"dur\">{}</p>",
-                i + 1,
-                crate::storyboard::duration_label(shot.frame_count(), fps)
+                "<section><img src=\"{file}\"><h2>{}</h2><p class=\"dur\">{}</p>",
+                io::html_escape(&crate::storyboard::panel_long_title(&self.doc, i)),
+                crate::storyboard::duration_label(panel.frame_count(), fps)
             );
-            for (label, text) in [("Action", &shot.action), ("Dialogue", &shot.dialogue), ("Notes", &shot.notes)] {
+            for (label, text) in [("Action", &panel.action), ("Dialogue", &panel.dialogue), ("Notes", &panel.notes)] {
                 if !text.trim().is_empty() {
                     html += &format!("<p><span class=\"label\">{label} :</span> {}</p>", io::html_escape(text));
                 }
@@ -1385,12 +1444,19 @@ impl App {
             "image.derniere" => self.goto_panel_frame(self.frame_count() - 1),
             "montage.debut" => self.goto_global(0),
             "montage.fin" => self.goto_global(self.doc.total_frames() - 1),
-            "panneau.precedent" => self.select_shot(self.cur_shot.saturating_sub(1)),
-            "panneau.suivant" => self.select_shot(self.cur_shot + 1),
-            "panneau.nouveau" => self.new_shot(),
-            "panneau.supprimer" => self.delete_shot(),
-            "panneau.ajouter_image" => self.nudge_shot_length(1),
-            "panneau.retirer_image" => self.nudge_shot_length(-1),
+            "panneau.precedent" => self.select_panel(self.cur_panel.saturating_sub(1)),
+            "panneau.suivant" => self.select_panel(self.cur_panel + 1),
+            "panneau.nouveau" => self.new_panel(),
+            "panneau.dupliquer" => self.duplicate_panel(),
+            "scene.nouvelle" => self.new_scene(),
+            "scene.dupliquer" => self.duplicate_scene(),
+            "scene.supprimer" => self.delete_scene(),
+            "scene.precedente" => self.step_scene(false),
+            "scene.suivante" => self.step_scene(true),
+            "sequence.nouvelle" => self.new_sequence(),
+            "panneau.supprimer" => self.delete_panel(),
+            "panneau.ajouter_image" => self.nudge_panel_length(1),
+            "panneau.retirer_image" => self.nudge_panel_length(-1),
             "dessin.nouveau" => self.new_image(false),
             "dessin.dupliquer" => self.new_image(true),
             "dessin.supprimer" => self.delete_image(),
@@ -1423,20 +1489,20 @@ impl App {
     /// Va à une image du panneau courant (dans le montage en mode storyboard).
     fn goto_panel_frame(&mut self, frame: usize) {
         match self.mode {
-            Mode::Storyboard => self.goto_global(self.doc.shot_start(self.cur_shot) + frame),
+            Mode::Storyboard => self.goto_global(self.doc.panel_start(self.cur_panel) + frame),
             Mode::Animation => self.goto_frame(frame),
         }
     }
 
     /// Allonge ou raccourcit le panneau d'une image (une étape d'annulation par appui).
-    fn nudge_shot_length(&mut self, delta: i64) {
+    fn nudge_panel_length(&mut self, delta: i64) {
         let n = (self.frame_count() as i64 + delta).max(1) as usize;
         if n == self.frame_count() {
             return;
         }
         self.end_stroke();
         let snap = self.snapshot();
-        self.shot_mut().set_length(n);
+        self.panel_mut().set_length(n);
         self.length_origin = None;
         self.commit_structure(snap);
         self.status = format!(

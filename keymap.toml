@@ -172,7 +172,7 @@ source = "Storyboard Pro 27 : RESET_ZOOM_KEY"
 
 [[raccourci]]
 action = "vue.ajuster"
-touches = ["Maj+F"]
+touches = ["Ctrl+0"]
 source = "proposition"
 
 [[raccourci]]
@@ -409,6 +409,16 @@ touches = ["PgSuiv"]
 source = "proposition (second raccourci)"
 
 [[raccourci]]
+action = "scene.precedente"
+touches = ["Maj+A"]
+source = "proposition (PREV_SHOT_KEY n'a pas de touche par défaut)"
+
+[[raccourci]]
+action = "scene.suivante"
+touches = ["Maj+F"]
+source = "proposition (NEXT_SHOT_KEY n'a pas de touche par défaut)"
+
+[[raccourci]]
 action = "scene.aller_a"
 touches = ["Ctrl+F"]
 source = "Storyboard Pro 27 : GOTO_SHOT_KEY"
@@ -426,6 +436,31 @@ action = "panneau.nouveau"
 touches = ["Inser"]
 contexte = "storyboard"
 source = "proposition (second raccourci)"
+
+[[raccourci]]
+action = "panneau.dupliquer"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : DUPLICATE_PANEL_KEY"
+
+[[raccourci]]
+action = "scene.nouvelle"
+touches = ["Maj+P"]
+source = "proposition (NEW_SCENE_KEY n'a pas de touche par défaut)"
+
+[[raccourci]]
+action = "scene.dupliquer"
+touches = []
+source = "Pelure (pas d'équivalent direct repéré dans Storyboard Pro 27)"
+
+[[raccourci]]
+action = "scene.supprimer"
+touches = []
+source = "Pelure (pas d'équivalent direct repéré dans Storyboard Pro 27)"
+
+[[raccourci]]
+action = "sequence.nouvelle"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : ADD_NEW_SEQUENCE_KEY"
 
 [[raccourci]]
 action = "panneau.ajouter_image"

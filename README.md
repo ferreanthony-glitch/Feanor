@@ -1,7 +1,7 @@
 # Pelure
 
-Logiciel d'animation 2D écrit en Rust avec egui : montage de plans façon storyboard,
-animation image par image façon TVPaint, et dessin vectoriel modifiable façon Storyboard Pro.
+Logiciel d'animation 2D écrit en Rust avec egui : storyboard en séquences, scènes et panneaux façon
+Storyboard Pro, animation image par image façon TVPaint, et dessin vectoriel modifiable.
 
 ## Lancer
 
@@ -10,25 +10,32 @@ cargo run --release
 ```
 
 L'exécutable est ensuite dans `target\release\pelure.exe`. On peut lui passer un projet :
-`pelure.exe mon_film.pelure` (et donc l'associer aux fichiers `.pelure` pour les ouvrir d'un double-clic).
+`pelure.exe "C:\Films\Bus\Bus.pelure"` (et donc associer les fichiers `.pelure` à Pelure pour les
+ouvrir d'un double-clic).
 
 ## Deux niveaux : storyboard et animation
 
-- **Storyboard** (au démarrage) : le film est une suite de plans. En bas, la bande de montage montre
-  chaque plan avec sa vignette, sa largeur proportionnelle à sa durée.
-  - Créer, dupliquer, supprimer un plan (P ou Inser, Ctrl+Suppr). On réordonne les plans en les faisant
-    glisser dans la bande, et on règle la durée en tirant le bord droit d'un plan.
-  - « Lire le montage » enchaîne tous les plans (animatique), en boucle si on veut.
-  - Chaque plan a un titre, une durée, et des champs Action / Dialogue / Notes (panneau de droite).
-  - Vue « Planches » (Maj+Tab) : la grille des plans avec leurs indications, comme une planche de storyboard.
-  - On peut dessiner directement sur le plan dans la vue « Scène » : en storyboard, un nouveau dessin
-    est tenu sur toute la durée du plan.
-- **Animation** (Tab, ou double-clic sur un plan) : on entre dans le plan. On retrouve sa timeline
-  avec calques, expositions, pelure d'oignon et lecture en boucle du plan seul. Tab ramène au storyboard.
+- **Storyboard** (au démarrage) : le film est une suite de **séquences**, découpées en **scènes**,
+  découpées en **panneaux**. En bas, la bande de montage montre les panneaux (vignette, largeur
+  proportionnelle à la durée) sous deux barres : séquences et scènes.
+  - « + Panneau » (P), « + Scène » (Maj+P), « + Séquence » ; le menu « Panneau… » duplique ou
+    supprime un panneau ou une scène entière.
+  - On réordonne les panneaux en les faisant glisser. Un panneau posé dans une autre scène la
+    rejoint (à la frontière entre deux scènes : celle qui suit). Le bord droit d'un panneau règle
+    sa durée.
+  - Numérotation automatique : scènes 1, 2, 3… dans l'ordre du film, panneaux 1, 2… dans chaque
+    scène. Une scène ou une séquence peut recevoir un nom ou un numéro à soi (fiche à droite).
+  - Chaque panneau a sa durée et ses champs Action / Dialogue / Notes.
+  - « Lire le montage » enchaîne tout (animatique), en boucle si on veut.
+  - Vue « Planches » (Maj+Tab) : les panneaux rangés par scène, avec leurs indications.
+  - On dessine directement sur le panneau dans la vue « Scène » : un nouveau dessin y est tenu
+    sur toute la durée du panneau.
+- **Animation** (Tab, ou double-clic sur un panneau) : on entre dans le panneau, avec sa timeline,
+  ses calques, ses expositions, la pelure d'oignon et la lecture en boucle. Tab ramène au storyboard.
 
 ## Calques vectoriels et bitmap
 
-Chaque plan a ses calques, de deux sortes :
+Chaque panneau a ses calques, de deux sortes :
 
 - **Vectoriel** (V, par défaut, façon Storyboard Pro) : les traits restent des objets modifiables.
   - Pinceau et crayon tracent des traits à épaisseur variable (pression du stylet comprise).
@@ -39,7 +46,7 @@ Chaque plan a ses calques, de deux sortes :
   - L'outil Sélection (Alt+S) prend au clic ou au lasso (Maj pour ajouter). Ses poignées servent à
     déplacer, mettre à l'échelle (Maj : proportionnel) et tourner (Maj : par 15°). On peut aussi
     appliquer la couleur courante, épaissir, affiner, faire un miroir, passer devant ou derrière,
-    supprimer. Copier, couper et coller (Ctrl+C/X/V) marchent d'un plan à l'autre.
+    supprimer. Copier, couper et coller (Ctrl+C/X/V) marchent d'un panneau à l'autre.
 - **Bitmap** (B, façon TVPaint) : peinture en pixels, avec le pinceau, le crayon à pixels nets,
   la gomme, le remplissage avec débord sous le trait et l'import d'images PNG/JPEG.
 
@@ -53,9 +60,11 @@ Les traits vectoriels sont rendus à la résolution du projet : en zoomant très
 - **Pelure d'oignon** : dessins précédents en rouge, suivants en vert.
 - **Vue** : zoom à la molette (ou 1 / 2), rotation (Maj + molette, ou V / C), miroir (M),
   déplacement (Espace + glisser).
-- **Annuler / rétablir** : 200 étapes, qui couvrent traits, vectoriel, plans, montage et calques.
-- **Export** : image courante, séquence PNG du plan ou de tout le montage, storyboard en page HTML
-  imprimable (une planche par plan avec action, dialogue et notes ; à imprimer en PDF depuis le navigateur).
+- **Annuler / rétablir** : 200 étapes, qui couvrent traits, vectoriel, panneaux, scènes, séquences et
+  calques. Les textes (noms, action, dialogue…) ne s'annulent pas encore, mais une annulation ne les
+  efface jamais.
+- **Export** : image courante, séquence PNG du panneau ou de tout le montage, storyboard en page HTML
+  imprimable (une planche par panneau, rangées par séquence ; à imprimer en PDF depuis le navigateur).
 
 ## Raccourcis clavier
 
@@ -66,33 +75,44 @@ le clavier AZERTY : `docs/reference/sbpro_presets/README.md`.
 
 Documentation technique : `docs/ARCHITECTURE.md` ; avancement : `docs/ROADMAP.md`.
 
-## Format `.pelure`
+## Projet en dossier
 
-Un seul fichier : un en-tête, un manifeste JSON lisible (plans, calques, expositions, indications,
-dessins vectoriels), puis les dessins bitmap encodés en PNG. Les projets de la première version
-(un seul plan) s'ouvrent toujours. L'enregistrement passe par un fichier temporaire : un plantage
-pendant l'écriture n'abîme pas la version précédente.
+« Enregistrer » crée un dossier au nom du projet :
+
+```
+Bus/
+  Bus.pelure        manifeste lisible (réglages, séquences > scènes > panneaux > calques)
+  dessins/12.png    un fichier par dessin bitmap
+  dessins/13.json   un fichier par dessin vectoriel
+```
+
+On ouvre le projet en choisissant `Bus.pelure`. Un enregistrement n'écrit que les dessins modifiés,
+et chaque fichier est écrit à côté puis renommé : un plantage pendant l'enregistrement n'abîme pas la
+version précédente. Les anciens fichiers `.pelure` (un seul fichier) s'ouvrent toujours : chaque
+ancien « plan » devient une scène d'un panneau, et le premier « Enregistrer » crée le dossier.
 
 ## Organisation du code
 
 | Fichier | Rôle |
 |---|---|
-| `document.rs` | Projet, plans, calques, expositions, dessins |
+| `document.rs` | Séquences, scènes, panneaux, calques, expositions, dessins ; opérations de montage |
 | `raster.rs` | Images en tuiles de 64×64 allouées à la demande |
 | `vector.rs` | Éléments vectoriels : rendu, sélection, transformations, gomme, contours de remplissage |
 | `brush.rs` | Moteur de pinceau : empreintes, pression, lissage |
 | `fill.rs` | Remplissage par zone et débord |
 | `render.rs` | Composition des calques et de la pelure, mise à jour partielle de l'affichage, vignettes |
-| `thumbs.rs` | Cache des vignettes de plans |
+| `thumbs.rs` | Cache des vignettes de panneaux |
 | `history.rs` | Annuler / rétablir |
-| `io.rs` | Lecture / écriture `.pelure`, export PNG |
+| `project.rs` | Projet en dossier (format 3) |
+| `io.rs` | Anciens fichiers `.pelure`, écriture d'images |
+| `keymap.rs` | Raccourcis : actions, lecture de `keymap.toml` |
 | `app.rs` | État de l'application, actions, raccourcis |
 | `vtools.rs` | Outils des calques vectoriels |
-| `storyboard.rs` | Bande de montage, vue planches, fiche du plan |
+| `storyboard.rs` | Bande de montage, vue planches, fiche du panneau |
 | `canvas.rs`, `panels.rs`, `timeline.rs` | Interface |
 
-`cargo test --release` lance les tests (pinceau, vectoriel, remplissage, plans, annulation,
-aller-retour fichier).
+`cargo test --release` lance les tests (pinceau, vectoriel, remplissage, séquences/scènes/panneaux,
+annulation, projet en dossier, anciens fichiers, raccourcis).
 
 ## Particularités de compilation (Windows, toolchain GNU)
 
@@ -105,12 +125,4 @@ La toolchain `x86_64-pc-windows-gnu` installée par rustup n'embarque qu'un MinG
 - `link/libshlwapi.a` (copiée de `winapi-x86_64-pc-windows-gnu`) fournit la bibliothèque d'import
   de `shlwapi`, demandée par une dépendance d'egui. `build.rs` l'ajoute au chemin d'édition de liens.
 
-Avec la toolchain MSVC (Visual Studio Build Tools), rien de tout cela n'est nécessaire.
-
-## Pistes pour la suite
-
-- Piste son dans le montage (indispensable pour une vraie animatique).
-- Caméra par plan (cadrage, travelling, zoom) et transitions.
-- Édition des points d'un trait vectoriel, gomme qui coupe aussi les zones remplies.
-- Rendu vectoriel net à tous les zooms (tessellation GPU).
-- Export vidéo via ffmpeg, export PDF direct du storyboard.
+Le passage aux outils Microsoft (MSVC) est prévu avant la phase 2 et supprimera ces contournements.

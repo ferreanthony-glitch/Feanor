@@ -1,4 +1,4 @@
-use crate::document::{CelId, Document, Shot};
+use crate::document::{CelId, Document, Structure};
 use crate::raster::Tile;
 use crate::vector::VectorDrawing;
 
@@ -7,7 +7,7 @@ const LIMIT: usize = 200;
 /// Plan et calque courants, rétablis avec la structure.
 #[derive(Clone, Copy)]
 pub struct Nav {
-    pub shot: usize,
+    pub panel: usize,
     pub layer: usize,
 }
 
@@ -21,8 +21,8 @@ pub enum Edit {
     },
     /// Dessin vectoriel complet avant modification.
     Vector { cel: CelId, drawing: VectorDrawing },
-    /// Plans et calques (images, expositions, durées, noms, ordre…).
-    Structure { shots: Vec<Shot>, nav: Nav },
+    /// Séquences, scènes, panneaux et calques (images, expositions, durées, ordre…).
+    Structure { structure: Structure, nav: Nav },
     Group(Vec<Edit>),
 }
 
@@ -48,12 +48,12 @@ impl Edit {
                 c.rerender();
                 Edit::Vector { cel, drawing: old }
             }
-            Edit::Structure { mut shots, nav: saved } => {
-                keep_current_metadata(&mut shots, &doc.shots);
-                let old = std::mem::replace(&mut doc.shots, shots);
+            Edit::Structure { mut structure, nav: saved } => {
+                keep_current_metadata(&mut structure, doc);
+                let old = doc.replace_structure(structure);
                 let old_nav = std::mem::replace(nav, saved);
                 Edit::Structure {
-                    shots: old,
+                    structure: old,
                     nav: old_nav,
                 }
             }
@@ -69,16 +69,25 @@ impl Edit {
     }
 }
 
-/// Les textes des plans et les réglages des calques ne passent pas par l'historique :
-/// annuler une opération de structure ne doit pas les faire revenir en arrière.
-fn keep_current_metadata(restored: &mut [Shot], current: &[Shot]) {
-    for shot in restored {
-        let Some(now) = current.iter().find(|s| s.id == shot.id) else { continue };
-        shot.name.clone_from(&now.name);
-        shot.action.clone_from(&now.action);
-        shot.dialogue.clone_from(&now.dialogue);
-        shot.notes.clone_from(&now.notes);
-        for layer in &mut shot.layers {
+/// Les noms, les textes des panneaux et les réglages des calques ne passent pas (encore) par
+/// l'historique : annuler une opération de structure ne doit pas les faire revenir en arrière.
+fn keep_current_metadata(restored: &mut Structure, doc: &Document) {
+    for seq in &mut restored.sequences {
+        if let Some(now) = doc.sequences.iter().find(|s| s.id == seq.id) {
+            seq.name.clone_from(&now.name);
+        }
+    }
+    for scene in &mut restored.scenes {
+        if let Some(now) = doc.scenes.iter().find(|s| s.id == scene.id) {
+            scene.name.clone_from(&now.name);
+        }
+    }
+    for panel in &mut restored.panels {
+        let Some(now) = doc.panels.iter().find(|s| s.id == panel.id) else { continue };
+        panel.action.clone_from(&now.action);
+        panel.dialogue.clone_from(&now.dialogue);
+        panel.notes.clone_from(&now.notes);
+        for layer in &mut panel.layers {
             if let Some(l) = now.layers.iter().find(|l| l.id == layer.id) {
                 layer.name.clone_from(&l.name);
                 layer.opacity = l.opacity;
