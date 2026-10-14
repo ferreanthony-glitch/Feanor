@@ -1,6 +1,6 @@
 use eframe::egui::{self, vec2, Align, Align2, Color32, Layout, RichText, Sense, Stroke, StrokeKind};
 
-use crate::app::{App, Mode, ShapeKind, Tool};
+use crate::app::{App, Mode, Tool};
 use crate::brush::BrushSettings;
 use crate::document::{Document, LayerKind};
 
@@ -258,8 +258,7 @@ impl App {
                     .on_hover_text(hint)
                     .clicked()
                 {
-                    self.end_stroke();
-                    self.tool = tool;
+                    self.set_tool(tool);
                 }
             }
         });
@@ -356,18 +355,7 @@ impl App {
                     );
                 }
             }
-            Tool::Shape => {
-                ui.horizontal(|ui| {
-                    ui.selectable_value(&mut self.shape.kind, ShapeKind::Line, "Ligne");
-                    ui.selectable_value(&mut self.shape.kind, ShapeKind::Rect, "Rectangle");
-                    ui.selectable_value(&mut self.shape.kind, ShapeKind::Ellipse, "Ellipse");
-                });
-                ui.add(egui::Slider::new(&mut self.shape.width, 0.5..=100.0).logarithmic(true).text("Épaisseur"));
-                if self.shape.kind != ShapeKind::Line {
-                    ui.checkbox(&mut self.shape.filled, "Forme pleine");
-                }
-                note(ui, "Maj : carré, cercle, ou angle par pas de 15°.");
-            }
+            Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline => self.shape_options_ui(ui),
             Tool::Select => self.selection_ui(ui),
             Tool::Picker => {
                 ui.label("Clique sur le dessin pour prélever une couleur.");
@@ -557,7 +545,8 @@ impl App {
     }
 
     pub(crate) fn layers_panel(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
+        // Boutons à la ligne si le panneau est étroit.
+        ui.horizontal_wrapped(|ui| {
             if ui.button("+ Vectoriel").on_hover_text("Traits modifiables, façon Storyboard Pro").clicked() {
                 self.add_layer(LayerKind::Vector);
             }
@@ -565,7 +554,7 @@ impl App {
                 self.add_layer(LayerKind::Bitmap);
             }
         });
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if ui.button("Dupliquer").clicked() {
                 self.duplicate_layer();
             }
@@ -587,7 +576,7 @@ impl App {
                 format!("{text} ({key})")
             }
         };
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if ui.button("Copier").on_hover_text(hint(self, "Copier le calque", "calque.copier")).clicked() {
                 self.copy_layer();
             }

@@ -1,11 +1,9 @@
 //! Outils des calques vectoriels : trait, gomme qui coupe, pot de peinture, formes,
 //! sélection au lasso avec poignées (déplacer, mettre à l'échelle, tourner), presse-papiers.
 
-use std::f32::consts::TAU;
+use eframe::egui::{pos2, Color32, Pos2, Rect};
 
-use eframe::egui::{pos2, vec2, Color32, Pos2, Rect, Vec2};
-
-use crate::app::{App, ShapeKind, Tool};
+use crate::app::{App, Tool};
 use crate::brush::{StrokeMode, StrokeState};
 use crate::document::{CelId, LayerKind};
 use crate::fill;
@@ -126,7 +124,7 @@ impl App {
         self.doc.cels.get(&cel)?.vector.as_ref()
     }
 
-    fn drawing_mut(&mut self, cel: CelId) -> Option<&mut VectorDrawing> {
+    pub(crate) fn drawing_mut(&mut self, cel: CelId) -> Option<&mut VectorDrawing> {
         self.doc.cels.get_mut(&cel)?.vector.as_mut()
     }
 
@@ -372,81 +370,7 @@ impl App {
         self.push_vector(cel, before, prefix);
     }
 
-    // ------------------------------------------------------------------ formes
-
-    pub(crate) fn shape_points(&self, a: Pos2, b: Pos2, shift: bool) -> Vec<Pos2> {
-        let mut b = b;
-        match self.shape.kind {
-            ShapeKind::Line => {
-                if shift {
-                    let d = b - a;
-                    let step = 15f32.to_radians();
-                    b = a + Vec2::angled((d.angle() / step).round() * step) * d.length();
-                }
-                vec![a, b]
-            }
-            ShapeKind::Rect | ShapeKind::Ellipse => {
-                if shift {
-                    let d = b - a;
-                    let m = d.x.abs().max(d.y.abs());
-                    b = a + vec2(m.copysign(d.x), m.copysign(d.y));
-                }
-                let r = Rect::from_two_pos(a, b);
-                if self.shape.kind == ShapeKind::Rect {
-                    vec![r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()]
-                } else {
-                    let (c, rx, ry) = (r.center(), r.width() * 0.5, r.height() * 0.5);
-                    let n = 96;
-                    (0..=n)
-                        .map(|k| {
-                            let t = k as f32 / n as f32 * TAU;
-                            pos2(c.x + rx * t.cos(), c.y + ry * t.sin())
-                        })
-                        .collect()
-                }
-            }
-        }
-    }
-
-    pub(crate) fn commit_shape(&mut self, a: Pos2, b: Pos2, shift: bool) {
-        if a.distance(b) * self.layer_zoom() < 2.0 || !self.layer_editable() {
-            return;
-        }
-        let pts = self.shape_points(a, b, shift);
-        let element = if self.shape.kind != ShapeKind::Line && self.shape.filled {
-            Element::Fill {
-                contours: vec![pts[..pts.len() - 1].iter().map(|p| [p.x, p.y]).collect()],
-                color: self.color,
-                opacity: 1.0,
-            }
-        } else {
-            let r = self.shape.width * 0.5;
-            Element::Stroke {
-                points: pts.iter().map(|p| VPoint { x: p.x, y: p.y, r }).collect(),
-                color: self.color,
-                opacity: 1.0,
-                hardness: 0.9,
-            }
-        };
-        let kind = self.layer().kind;
-        let (cel, prefix) = self.ensure_cel();
-        match kind {
-            LayerKind::Vector => {
-                let Some(d) = self.drawing_mut(cel) else { return };
-                let before = d.clone();
-                d.elements.push(element);
-                self.refresh_cel(cel);
-                self.push_vector(cel, before, prefix);
-            }
-            LayerKind::Bitmap => {
-                let Some(c) = self.doc.cels.get_mut(&cel) else { return };
-                let tiles = vector::tiles_in(&c.raster, element.bounds().expand(2.0));
-                let before = tiles.iter().map(|&i| (i, c.raster.tiles[i].clone())).collect();
-                vector::render_element(&mut c.raster, &element);
-                self.push_pixels(cel, prefix, before);
-            }
-        }
-    }
+    // (Formes : voir `shapetools.rs`.)
 
     // ------------------------------------------------------------------ sélection
 

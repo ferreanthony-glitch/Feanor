@@ -64,6 +64,10 @@ mod recoveryui;
 mod ref3dtool;
 mod render;
 mod settings;
+mod shapes;
+#[cfg(test)]
+mod shapes_tests;
+mod shapetools;
 mod soundtrack;
 #[cfg(test)]
 mod stage_tests;

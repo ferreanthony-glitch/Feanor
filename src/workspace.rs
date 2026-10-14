@@ -46,7 +46,7 @@ impl Default for Layout {
             panneaux: None,
             tools: true,
             sheet: true,
-            sheet_width: 250.0,
+            sheet_width: 290.0,
             strip: true,
             montage_height: 290.0,
             timeline_height: 210.0,

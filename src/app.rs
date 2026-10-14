@@ -46,7 +46,11 @@ pub enum Tool {
     Pencil,
     Eraser,
     Fill,
-    Shape,
+    /// Formes (5c) : outils séparés, comme dans Storyboard Pro.
+    Line,
+    Rect,
+    Ellipse,
+    Polyline,
     Select,
     Picker,
     Pan,
@@ -57,12 +61,15 @@ pub enum Tool {
 }
 
 impl Tool {
-    pub const ALL: [Tool; 11] = [
+    pub const ALL: [Tool; 14] = [
         Tool::Brush,
         Tool::Pencil,
         Tool::Eraser,
         Tool::Fill,
-        Tool::Shape,
+        Tool::Line,
+        Tool::Rect,
+        Tool::Ellipse,
+        Tool::Polyline,
         Tool::Select,
         Tool::Picker,
         Tool::Pan,
@@ -77,7 +84,10 @@ impl Tool {
             Tool::Pencil => "Crayon",
             Tool::Eraser => "Gomme",
             Tool::Fill => "Remplir",
-            Tool::Shape => "Formes",
+            Tool::Line => "Ligne",
+            Tool::Rect => "Rectangle",
+            Tool::Ellipse => "Ellipse",
+            Tool::Polyline => "Polyligne",
             Tool::Select => "Sélection",
             Tool::Picker => "Pipette",
             Tool::Pan => "Main",
@@ -95,7 +105,10 @@ impl Tool {
             Tool::Pencil => ph::PENCIL_SIMPLE,
             Tool::Eraser => ph::ERASER,
             Tool::Fill => ph::PAINT_BUCKET,
-            Tool::Shape => ph::SHAPES,
+            Tool::Line => ph::LINE_SEGMENT,
+            Tool::Rect => ph::RECTANGLE,
+            Tool::Ellipse => ph::CIRCLE,
+            Tool::Polyline => ph::LINE_SEGMENTS,
             Tool::Select => ph::LASSO,
             Tool::Picker => ph::EYEDROPPER,
             Tool::Pan => ph::HAND,
@@ -112,7 +125,10 @@ impl Tool {
             Tool::Pencil => "outil.crayon",
             Tool::Eraser => "outil.gomme",
             Tool::Fill => "outil.remplissage",
-            Tool::Shape => "outil.formes",
+            Tool::Line => "outil.ligne",
+            Tool::Rect => "outil.rectangle",
+            Tool::Ellipse => "outil.ellipse",
+            Tool::Polyline => "outil.polyligne",
             Tool::Select => "outil.selection",
             Tool::Picker => "outil.pipette",
             Tool::Pan => "outil.main",
@@ -120,6 +136,21 @@ impl Tool {
             Tool::Transform => "outil.transformer",
             Tool::Ref3d => "outil.repere3d",
         }
+    }
+
+    /// Ligne, rectangle ou ellipse (tracés d'un seul glisser).
+    pub fn shape_kind(self) -> Option<ShapeKind> {
+        match self {
+            Tool::Line => Some(ShapeKind::Line),
+            Tool::Rect => Some(ShapeKind::Rect),
+            Tool::Ellipse => Some(ShapeKind::Ellipse),
+            _ => None,
+        }
+    }
+
+    /// Un des outils de forme.
+    pub fn is_shape(self) -> bool {
+        self.shape_kind().is_some() || self == Tool::Polyline
     }
 }
 
@@ -131,10 +162,16 @@ pub enum ShapeKind {
 }
 
 pub struct ShapeSettings {
-    pub kind: ShapeKind,
+    /// Rectangle, ellipse, polyligne fermée : remplie plutôt que tracée.
     pub filled: bool,
     /// Épaisseur du trait, en pixels.
     pub width: f32,
+    /// Outil Ligne : droite, courbe ou courbe en S.
+    pub line_mode: crate::shapes::LineMode,
+    /// Outil Polyligne : refermer la forme en la terminant.
+    pub closed: bool,
+    /// Dernier outil de forme utilisé (action « outil.formes »).
+    pub last: Tool,
 }
 
 /// Action qui attend une confirmation parce que le projet n'est pas enregistré.
@@ -263,6 +300,8 @@ pub struct App {
     /// Calque copié (W / X).
     pub(crate) layer_clipboard: Option<LayerClip>,
     pub(crate) shape_drag: Option<(Pos2, Pos2)>,
+    /// Forme en plusieurs gestes : ligne à courber, polyligne en cours (5c).
+    pub(crate) shape_edit: Option<crate::shapes::ShapeEdit>,
     pub(crate) clipboard: Vec<Element>,
     pub(crate) renderer: Renderer,
     pub(crate) thumbs: Thumbs,
@@ -328,9 +367,11 @@ impl App {
             brushes: crate::brushtex::BrushLibrary::load(crate::brushtex::BrushLibrary::user_dir().as_deref()),
             fill: FillSettings::default(),
             shape: ShapeSettings {
-                kind: ShapeKind::Rect,
                 filled: false,
                 width: 4.0,
+                line_mode: crate::shapes::LineMode::Straight,
+                closed: true,
+                last: Tool::Rect,
             },
             vector_erase_whole: false,
             color: [24, 24, 28],
@@ -401,6 +442,7 @@ impl App {
             pixel_clipboard: None,
             layer_clipboard: None,
             shape_drag: None,
+            shape_edit: None,
             clipboard: Vec::new(),
             renderer: Renderer::new(),
             thumbs: Thumbs::default(),
@@ -979,7 +1021,7 @@ impl App {
     }
 
     pub(crate) fn resize_brush(&mut self, factor: f32) {
-        if self.tool == Tool::Shape {
+        if self.tool.is_shape() {
             self.shape.width = (self.shape.width * factor).clamp(0.5, 200.0);
         } else if let Some(b) = self.current_brush_mut() {
             b.size = (b.size * factor).clamp(0.5, 400.0);
@@ -1760,6 +1802,10 @@ impl App {
             }
         });
         for (key, physical, m, repeat) in keys {
+            // Entrée, Échap, Retour arrière servent d'abord à l'outil en cours (forme à finir…).
+            if !m.any() && self.tool_key(key) {
+                continue;
+            }
             let Some(action) = self.keymap.find(key, physical, m, self.mode) else { continue };
             let action = action.to_string();
             if repeat && !keymap::action_info(&action).is_some_and(|a| a.repeat) {
@@ -1870,7 +1916,19 @@ impl App {
             "outil.remplissage" => self.set_tool(Tool::Fill),
             "outil.pipette" => self.set_tool(Tool::Picker),
             "outil.selection" => self.set_tool(Tool::Select),
-            "outil.formes" => self.set_tool(Tool::Shape),
+            "outil.formes" => self.set_tool(self.shape.last),
+            "outil.ligne" => self.set_tool(Tool::Line),
+            "outil.ligne_droite" | "outil.ligne_courbe" | "outil.ligne_s" => {
+                self.shape.line_mode = match action {
+                    "outil.ligne_droite" => crate::shapes::LineMode::Straight,
+                    "outil.ligne_courbe" => crate::shapes::LineMode::Curve,
+                    _ => crate::shapes::LineMode::SCurve,
+                };
+                self.set_tool(Tool::Line);
+            }
+            "outil.rectangle" => self.set_tool(Tool::Rect),
+            "outil.ellipse" => self.set_tool(Tool::Ellipse),
+            "outil.polyligne" => self.set_tool(Tool::Polyline),
             "outil.main" => self.set_tool(Tool::Pan),
             "outil.taille_plus" => self.resize_brush(1.15),
             "outil.taille_moins" => self.resize_brush(1.0 / 1.15),
@@ -1978,10 +2036,20 @@ impl App {
         }
     }
 
-    fn set_tool(&mut self, tool: Tool) {
+    /// Touche pour l'outil en cours (voir `handle_shortcuts`) ; vrai si elle a servi.
+    fn tool_key(&mut self, key: Key) -> bool {
+        self.shape_key(key)
+    }
+
+    /// Change d'outil : la forme en cours (courbe, polyligne) est posée avant.
+    pub(crate) fn set_tool(&mut self, tool: Tool) {
         if self.tool != tool {
+            self.finish_shape_edit();
             self.end_stroke();
             self.tool = tool;
+            if tool.is_shape() {
+                self.shape.last = tool;
+            }
         }
     }
 

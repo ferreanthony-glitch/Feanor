@@ -308,7 +308,43 @@ etat = "non implémenté"
 [[raccourci]]
 action = "outil.formes"
 touches = ["Alt+R"]
-source = "proposition"
+source = "proposition (dernier outil de forme utilisé)"
+
+# Formes en outils séparés (5c) : commandes de Storyboard Pro 27, sans touche par défaut.
+[[raccourci]]
+action = "outil.ligne"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : DRAWING_LINE_TOOL_KEY"
+
+[[raccourci]]
+action = "outil.ligne_droite"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : DRAWING_LINE_TOOL_NORMAL_MODE_KEY"
+
+[[raccourci]]
+action = "outil.ligne_courbe"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : DRAWING_LINE_TOOL_QUADRATIC_MODE_KEY"
+
+[[raccourci]]
+action = "outil.ligne_s"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : DRAWING_LINE_TOOL_CUBIC_MODE_KEY"
+
+[[raccourci]]
+action = "outil.rectangle"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : DRAWING_RECTANGLE_TOOL_KEY"
+
+[[raccourci]]
+action = "outil.ellipse"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : DRAWING_ELLIPSE_TOOL_KEY"
+
+[[raccourci]]
+action = "outil.polyligne"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : DRAWING_POLYLINE_TOOL_KEY"
 
 [[raccourci]]
 action = "outil.main"

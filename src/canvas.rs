@@ -186,11 +186,7 @@ impl App {
                             self.begin_guided_stroke(stage);
                             self.begin_paint(p, pressure, pen);
                         }
-                        Tool::Shape => {
-                            self.end_stroke();
-                            self.playing = false;
-                            self.shape_drag = Some((p, p));
-                        }
+                        Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline => self.shape_press(p, modifiers.shift),
                         Tool::Select => self.select_press(p, *pos, modifiers.shift),
                         Tool::Camera => self.camera_press(stage, *pos),
                         Tool::Transform => self.transform_press(stage, *pos),
@@ -215,6 +211,7 @@ impl App {
                         if let Some(q) = self.guided_point(stage) {
                             self.erase_to(self.to_layer(q), pressure);
                         }
+                    } else if self.shape_bend_move(p) {
                     } else if let Some((_, end)) = &mut self.shape_drag {
                         *end = p;
                     } else if self.vdrag.is_some() {
@@ -237,9 +234,7 @@ impl App {
                     ..
                 }
                 | Event::PointerGone => {
-                    if let Some((a, b)) = self.shape_drag.take() {
-                        self.commit_shape(a, b, mods.shift);
-                    }
+                    self.shape_release(mods.shift);
                     if self.vdrag.is_some() {
                         self.finish_vdrag(mods.shift);
                     }
@@ -270,11 +265,7 @@ impl App {
         // Tout ce qui suit est en coordonnées du dessin du calque courant (transformé ou non).
         let to_s = |p: Pos2| self.layer_to_screen(p);
 
-        if let Some((a, b)) = self.shape_drag {
-            let pts: Vec<Pos2> = self.shape_points(a, b, shift).into_iter().map(to_s).collect();
-            let width = (self.shape.width * self.layer_zoom()).clamp(1.0, 40.0);
-            painter.add(Shape::line(pts, Stroke::new(width, self.preview_color())));
-        }
+        self.paint_shape_overlay(painter, shift);
 
         // Lasso ou rectangle en cours de tracé (vectoriel ou bitmap).
         let drawing_lasso: Option<Vec<Pos2>> = match (&self.vdrag, &self.bdrag) {
@@ -359,7 +350,7 @@ impl App {
             });
             return;
         }
-        if alt || matches!(self.tool, Tool::Picker | Tool::Fill | Tool::Shape) {
+        if alt || matches!(self.tool, Tool::Picker | Tool::Fill) || self.tool.is_shape() {
             ctx.set_cursor_icon(CursorIcon::Crosshair);
             return;
         }
