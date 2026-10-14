@@ -422,7 +422,7 @@ fn structure_undo_covers_texts_settings_and_guides() {
     doc.panels[0].layers[0].visible = false;
     let scene = doc.panels[0].scene;
     doc.scene_mut(scene).unwrap().name = "12A".into();
-    doc.guides.push(crate::guides::Guide::new(1, 32.0, 32.0));
+    doc.guides.push(crate::guides::Guide::new(1, eframe::egui::Rect::from_min_size(eframe::egui::Pos2::ZERO, eframe::egui::vec2(32.0, 32.0))));
     doc.paper = [240, 230, 200];
     doc.fps = 25;
     doc.panels[0].set_length(100);

@@ -63,7 +63,12 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
     processeur (0 pixel différent sur les essais : montage, pelure + table lumineuse, trait en
     cours). Le calcul sur processeur reste pour l'export, et en secours
     (`PELURE_COMPOSITION=processeur`).
-- ⏳ 2b. Caméra : cadre, panoramique, zoom, rotation, images clés et courbes, visibles dans la timeline.
+- 🔧 2b. Caméra : cadre, panoramique, zoom, rotation, images clés et courbes, visibles dans la timeline.
+  - ✅ 2b-1. Feuille de dessin deux fois plus grande que le cadre (validé : option A, marge du
+    double), cadre « Caméra » tracé, hors-champ estompé ; export et vignettes = ce que voit la
+    caméra ; anciens projets convertis à l'ouverture (même cadrage), format de projet 4.
+  - ⏳ 2b-2. Caméra par panneau : position, zoom, rotation ; vue à travers la caméra.
+  - ⏳ 2b-3. Mouvements de caméra par images clés, visibles dans la timeline.
 - ⏳ 2c. Profondeur Z des calques (multiplan), vue 3D de contrôle.
 - ⏳ 2d. Import glTF de repère.
 

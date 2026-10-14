@@ -667,8 +667,12 @@ impl App {
             ui.label(RichText::new(where_).strong());
             ui.separator();
             ui.label(format!(
-                "{}×{} px · {} i/s",
-                self.doc.width, self.doc.height, self.doc.fps
+                "Cadre {}×{} · {} i/s",
+                self.doc.frame[0], self.doc.frame[1], self.doc.fps
+            ))
+            .on_hover_text(format!(
+                "Image finale {}×{} px ; feuille de dessin {}×{} px",
+                self.doc.frame[0], self.doc.frame[1], self.doc.width, self.doc.height
             ));
             ui.separator();
             ui.label(format!("Zoom {:.0} %", self.view.zoom * self.ppp * 100.0));
@@ -706,12 +710,14 @@ impl App {
                         }
                     });
                     ui.add_space(6.0);
+                    // Le cadre : taille de l'image finale. La feuille de dessin fait le double, pour
+                    // dessiner hors champ (limite : 4096 px de cadre, soit 8192 px de feuille).
                     egui::Grid::new("grille_nouveau").num_columns(2).show(ui, |ui| {
-                        ui.label("Largeur");
-                        ui.add(egui::DragValue::new(&mut d.width).range(16..=8192).suffix(" px"));
+                        ui.label("Largeur du cadre");
+                        ui.add(egui::DragValue::new(&mut d.width).range(16..=4096).suffix(" px"));
                         ui.end_row();
-                        ui.label("Hauteur");
-                        ui.add(egui::DragValue::new(&mut d.height).range(16..=8192).suffix(" px"));
+                        ui.label("Hauteur du cadre");
+                        ui.add(egui::DragValue::new(&mut d.height).range(16..=4096).suffix(" px"));
                         ui.end_row();
                         ui.label("Cadence");
                         ui.add(egui::DragValue::new(&mut d.fps).range(1..=120).suffix(" i/s"));
@@ -728,8 +734,15 @@ impl App {
                     });
                 });
             if create {
-                self.load_doc(Document::new(d.width, d.height, d.fps));
-                self.status = format!("Nouveau projet {}×{} à {} i/s.", d.width, d.height, d.fps);
+                self.load_doc(Document::with_frame(d.width, d.height, d.fps));
+                self.status = format!(
+                    "Nouveau projet : cadre {}×{} à {} i/s, feuille de dessin {}×{}.",
+                    d.width,
+                    d.height,
+                    d.fps,
+                    d.width * 2,
+                    d.height * 2
+                );
             } else if keep {
                 self.new_dialog = Some(d);
             }

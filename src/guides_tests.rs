@@ -23,9 +23,9 @@ fn directions_follow_the_vanishing_points() {
     let q = project(s, d, pos2(530.0, 400.0));
     assert!((q.x - 500.0).abs() < 1e-3 && (q.y - 400.0).abs() < 1e-3);
     // 1 point : fuyante, horizontale et verticale.
-    let one = Guide::new(1, 1920.0, 1080.0);
+    let one = Guide::new(1, eframe::egui::Rect::from_min_size(eframe::egui::Pos2::ZERO, eframe::egui::vec2(1920.0, 1080.0)));
     assert_eq!(one.directions(pos2(0.0, 0.0)).len(), 3);
-    assert_eq!(Guide::new(3, 1920.0, 1080.0).directions(pos2(0.0, 0.0)).len(), 3);
+    assert_eq!(Guide::new(3, eframe::egui::Rect::from_min_size(eframe::egui::Pos2::ZERO, eframe::egui::vec2(1920.0, 1080.0))).directions(pos2(0.0, 0.0)).len(), 3);
 }
 
 #[test]
@@ -46,7 +46,7 @@ fn guides_are_saved_with_the_project() {
     std::fs::create_dir_all(&dir).unwrap();
     let manifest = dir.join("G.pelure");
     let mut doc = Document::new(64, 48, 24);
-    doc.guides.push(Guide::new(2, 64.0, 48.0));
+    doc.guides.push(Guide::new(2, eframe::egui::Rect::from_min_size(eframe::egui::Pos2::ZERO, eframe::egui::vec2(64.0, 48.0))));
     doc.guides[0].points[1] = [500.0, -20.0];
     project::save(&doc, &manifest, &mut Default::default()).unwrap();
     let back = project::load(&manifest).unwrap().doc;

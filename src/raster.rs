@@ -64,6 +64,36 @@ impl Raster {
         self.tiles[idx].get_or_insert_with(empty_tile)
     }
 
+    /// Même image dans une feuille `width`×`height`, décalée de (`dx`, `dy`) pixels.
+    pub fn placed_in(&self, width: usize, height: usize, dx: usize, dy: usize) -> Raster {
+        let mut out = Raster::new(width, height);
+        for (idx, tile) in self.tiles.iter().enumerate() {
+            let Some(tile) = tile else { continue };
+            let (ox, oy, tw, th) = self.tile_bounds(idx);
+            for y in 0..th {
+                for x in 0..tw {
+                    let c = tile[y * TILE + x];
+                    let (nx, ny) = (ox + x + dx, oy + y + dy);
+                    if c.a() == 0 || nx >= width || ny >= height {
+                        continue;
+                    }
+                    let i = out.tile_index_of(nx, ny);
+                    out.tile_mut(i)[(ny % TILE) * TILE + nx % TILE] = c;
+                }
+            }
+        }
+        out
+    }
+
+    /// Partie `x0..x0+w`, `y0..y0+h` d'une image pleine `flat` de cette largeur.
+    pub fn crop(flat: &[Color32], width: usize, x0: usize, y0: usize, w: usize, h: usize) -> Vec<Color32> {
+        let mut out = Vec::with_capacity(w * h);
+        for y in y0..y0 + h {
+            out.extend_from_slice(&flat[y * width + x0..y * width + x0 + w]);
+        }
+        out
+    }
+
     /// Copie l'image dans un tableau plein, ligne par ligne.
     pub fn to_flat(&self) -> Vec<Color32> {
         let mut out = vec![Color32::TRANSPARENT; self.width * self.height];

@@ -124,6 +124,13 @@ et chaque fichier est écrit à côté puis renommé : un plantage pendant l'enr
 version précédente. Les anciens fichiers `.pelure` (un seul fichier) s'ouvrent toujours : chaque
 ancien « plan » devient une scène d'un panneau, et le premier « Enregistrer » crée le dossier.
 
+**Cadre et feuille** : la feuille de dessin est deux fois plus grande que le cadre de la caméra (la
+taille de l'image finale, choisie à la création du projet). Le cadre est tracé (« Caméra »), le
+hors-champ est estompé autour ; on peut y dessiner pour préparer des panoramiques. Les exports et
+les vignettes montrent ce que voit la caméra. Un projet enregistré avant cette version est converti
+à l'ouverture (feuille agrandie, même cadrage) et passe au nouveau format au premier
+« Enregistrer » ; une version plus ancienne de Pelure ne pourra plus l'ouvrir.
+
 ## Organisation du code
 
 | Fichier | Rôle |

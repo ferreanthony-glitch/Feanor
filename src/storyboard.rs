@@ -504,7 +504,7 @@ impl App {
         // Plans.
         let mut budget = 4;
         let thumb_h = (block_h - 24.0).max(10.0);
-        let aspect = self.doc.width as f32 / self.doc.height as f32;
+        let aspect = self.doc.frame[0] as f32 / self.doc.frame[1].max(1) as f32;
         let mut blocks: Vec<Rect> = Vec::with_capacity(self.doc.panels.len());
         let mut start = 0;
         for i in 0..self.doc.panels.len() {
@@ -811,7 +811,7 @@ impl App {
     pub(crate) fn panels_view(&mut self, ui: &mut egui::Ui) {
         let card_w = 250.0;
         let thumb_w = card_w - 12.0;
-        let thumb_h = thumb_w * self.doc.height as f32 / self.doc.width as f32;
+        let thumb_h = thumb_w * self.doc.frame[1] as f32 / self.doc.frame[0].max(1) as f32;
         let card_h = thumb_h + 120.0;
         let fps = self.doc.fps;
         let mut budget = 6;

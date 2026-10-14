@@ -92,6 +92,15 @@ pub fn composite_full(doc: &Document, plan: &Plan) -> Vec<Color32> {
     buf
 }
 
+/// Ce que voit la caméra : l'image du cadre, à la taille finale (`doc.frame`). Pour l'instant le
+/// cadre est fixe et centré : c'est la partie correspondante de la feuille, pixel pour pixel.
+pub fn frame_image(doc: &Document, plan: &Plan) -> Vec<Color32> {
+    let full = composite_full(doc, plan);
+    let r = doc.frame_rect();
+    let [fw, fh] = doc.frame;
+    crate::raster::Raster::crop(&full, doc.width, r.min.x as usize, r.min.y as usize, fw, fh)
+}
+
 pub fn composite_pixel(doc: &Document, plan: &Plan, x: usize, y: usize) -> Color32 {
     let mut c = paper_color(plan);
     for item in &plan.items {
@@ -124,16 +133,17 @@ pub fn panel_plan(panel: &Panel, frame: usize, paper: Option<[u8; 3]>) -> Plan {
     }
 }
 
-/// Image réduite (moyenne de 4 échantillons par pixel).
+/// Image réduite de ce que voit la caméra (moyenne de 4 échantillons par pixel).
 pub fn thumbnail(doc: &Document, plan: &Plan, tw: usize, th: usize) -> ColorImage {
-    let (sx, sy) = (doc.width as f32 / tw as f32, doc.height as f32 / th as f32);
+    let r = doc.frame_rect();
+    let (sx, sy) = (r.width() / tw as f32, r.height() / th as f32);
     let mut pixels = Vec::with_capacity(tw * th);
     for y in 0..th {
         for x in 0..tw {
             let mut acc = [0u32; 4];
             for (ox, oy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
-                let px = (((x as f32 + ox) * sx) as usize).min(doc.width - 1);
-                let py = (((y as f32 + oy) * sy) as usize).min(doc.height - 1);
+                let px = ((r.min.x + (x as f32 + ox) * sx) as usize).min(doc.width - 1);
+                let py = ((r.min.y + (y as f32 + oy) * sy) as usize).min(doc.height - 1);
                 let c = composite_pixel(doc, plan, px, py);
                 for (a, v) in acc.iter_mut().zip(c.to_array()) {
                     *a += v as u32;

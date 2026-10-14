@@ -113,11 +113,25 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - **Son au défilement** : quand l'image courante change hors lecture, une image de son est jouée.
 - Le mixage (`MixState`) se teste sans carte son.
 
-## Format de projet (version 3, dossier)
+## Feuille et cadre (depuis 2b-1)
+
+- **Feuille** (`Document.width/height`) : la surface de tous les dessins, deux fois plus grande que
+  le cadre pour un nouveau projet. Tout le dessin (pinceaux, sélection, guides…) travaille en
+  pixels de feuille, sans changement. Une zone vide ne coûte pas de mémoire (tuiles à la demande).
+- **Cadre** (`Document.frame`) : la taille de l'image finale ; centré sur la feuille
+  (`Document::frame_rect`). L'export, les vignettes et la page de storyboard montrent le cadre
+  (`render::frame_image`).
+- **Conversion** : un projet au format 3 (ou un ancien `.pelure`) avait feuille = cadre. À
+  l'ouverture, `Document::enlarge_stage` double la feuille et décale tout le contenu au centre
+  (dessins bitmap et vectoriels, guides) : le cadrage ne change pas.
+- Taille maximale du cadre : 4096 px (feuille 8192 px, limite des textures de la carte graphique).
+
+## Format de projet (version 4, dossier)
 
 ```
 MonFilm/
-  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 3, réglages,
+  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 4, "largeur",
+                      "hauteur" (feuille), "cadre": [l, h], réglages,
                       "sequences": [{ "scenes": [{ "panneaux": [{ "calques": [{ "expositions": … }]}]}]}],
                       "sons": [{"id", "nom", "fichier"}], "pistes_son": [{ "extraits": [{"son", "debut",
                       "decalage", "duree"}] }]}

@@ -21,13 +21,14 @@ pub struct Guide {
 }
 
 impl Guide {
-    /// Guide neuf à `n` points de fuite, placés pour être visibles dans un dessin `w`×`h`.
-    pub fn new(n: usize, w: f32, h: f32) -> Guide {
-        let horizon = h * 0.42;
+    /// Guide neuf à `n` points de fuite, placés pour être visibles dans le cadre `frame`.
+    pub fn new(n: usize, frame: Rect) -> Guide {
+        let (x0, y0, w, h) = (frame.min.x, frame.min.y, frame.width(), frame.height());
+        let horizon = y0 + h * 0.42;
         let points = match n {
-            1 => vec![[w * 0.5, horizon]],
-            2 => vec![[w * 0.08, horizon], [w * 0.92, horizon]],
-            _ => vec![[w * 0.08, horizon], [w * 0.92, horizon], [w * 0.5, h * 0.98]],
+            1 => vec![[x0 + w * 0.5, horizon]],
+            2 => vec![[x0 + w * 0.08, horizon], [x0 + w * 0.92, horizon]],
+            _ => vec![[x0 + w * 0.08, horizon], [x0 + w * 0.92, horizon], [x0 + w * 0.5, y0 + h * 0.98]],
         };
         Guide {
             name: format!("Perspective {} point{}", n.min(3), if n > 1 { "s" } else { "" }),
@@ -146,8 +147,8 @@ impl App {
 
     pub(crate) fn add_guide(&mut self, n: usize) {
         self.record_step();
-        let (w, h) = (self.doc.width as f32, self.doc.height as f32);
-        self.doc.guides.push(Guide::new(n, w, h));
+        let frame = self.doc.frame_rect();
+        self.doc.guides.push(Guide::new(n, frame));
         self.guides.current = self.doc.guides.len() - 1;
         self.guides.enabled = true;
         self.status = "Guide ajouté : fais glisser ses points de fuite (Maj+L pour les verrouiller).".into();

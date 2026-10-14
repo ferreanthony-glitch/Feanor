@@ -250,7 +250,7 @@ impl App {
         }
         let mut app = Self {
             ctx: cc.egui_ctx.clone(),
-            doc: Document::new(1920, 1080, 24),
+            doc: Document::with_frame(1920, 1080, 24),
             mode: Mode::Storyboard,
             board_view: BoardView::Scene,
             cur_panel: 0,
@@ -1245,8 +1245,8 @@ impl App {
         match action {
             Pending::New => {
                 self.new_dialog = Some(NewDocDialog {
-                    width: self.doc.width,
-                    height: self.doc.height,
+                    width: self.doc.frame[0],
+                    height: self.doc.frame[1],
                     fps: self.doc.fps,
                 })
             }
@@ -1331,7 +1331,11 @@ impl App {
     pub(crate) fn open_path(&mut self, path: PathBuf) {
         if io::is_legacy_file(&path) {
             match io::load_legacy(&path) {
-                Ok(doc) => {
+                Ok(mut doc) => {
+                    // Comme un projet au format 3 : la feuille devient le double du cadre.
+                    let (w, h) = (doc.width, doc.height);
+                    doc.enlarge_stage(w * 2, h * 2);
+                    doc.frame = [w, h];
                     self.load_doc(doc);
                     self.status = format!(
                         "Ancien format importé ({}). « Enregistrer » créera le dossier du projet.",
@@ -1353,6 +1357,14 @@ impl App {
                 } else {
                     format!("Ouvert avec {} problème(s) : {}", loaded.warnings.len(), loaded.warnings.join(" ; "))
                 };
+                if loaded.converted {
+                    // Rien n'est réécrit sur le disque avant « Enregistrer ».
+                    self.modified = true;
+                    self.status.push_str(
+                        " — Ancien format : la feuille de dessin a été agrandie autour du cadre (même cadrage). \
+                         « Enregistrer » le passe au nouveau format.",
+                    );
+                }
                 self.path = Some(path);
             }
             Err(e) => self.status = format!("Impossible d'ouvrir le projet : {e}"),
@@ -1413,9 +1425,9 @@ impl App {
         let paper = (!self.export_transparent).then_some(self.doc.paper);
         for (n, &(panel, frame)) in frames.iter().enumerate() {
             let plan = render::panel_plan(&self.doc.panels[panel], frame, paper);
-            let pixels = render::composite_full(&self.doc, &plan);
+            let pixels = render::frame_image(&self.doc, &plan);
             let path = dir.join(format!("{base}_{:04}.png", n + 1));
-            if let Err(e) = io::write_png(&path, &pixels, self.doc.width, self.doc.height) {
+            if let Err(e) = io::write_png(&path, &pixels, self.doc.frame[0], self.doc.frame[1]) {
                 self.status = format!("Échec de l'export ({}) : {e}", path.display());
                 return;
             }
@@ -1458,7 +1470,7 @@ impl App {
              .label{{font-weight:600}}h2.seq{{font-size:18px;margin:28px 0 10px;break-after:avoid}}\
              </style></head><body><h1>{title} — storyboard</h1>"
         );
-        let (w, h, fps) = (self.doc.width, self.doc.height, self.doc.fps);
+        let ([w, h], fps) = (self.doc.frame, self.doc.fps);
         for (i, panel) in self.doc.panels.iter().enumerate() {
             // Intertitre au début de chaque séquence.
             if self.doc.sequence_run(i).0 == i {
@@ -1471,7 +1483,7 @@ impl App {
                 );
             }
             let plan = render::panel_plan(panel, 0, Some(self.doc.paper));
-            let pixels = render::composite_full(&self.doc, &plan);
+            let pixels = render::frame_image(&self.doc, &plan);
             let file = format!("planche_{:03}.png", i + 1);
             if let Err(e) = io::write_png_scaled(&dir.join(&file), &pixels, w, h, 960) {
                 self.status = format!("Échec de l'export : {e}");
@@ -1509,8 +1521,8 @@ impl App {
             path.set_extension("png");
         }
         let plan = self.build_plan(self.cur_frame, false, !self.export_transparent);
-        let pixels = render::composite_full(&self.doc, &plan);
-        self.status = match io::write_png(&path, &pixels, self.doc.width, self.doc.height) {
+        let pixels = render::frame_image(&self.doc, &plan);
+        self.status = match io::write_png(&path, &pixels, self.doc.frame[0], self.doc.frame[1]) {
             Ok(()) => format!("Image exportée : {}", path.display()),
             Err(e) => format!("Échec de l'export : {e}"),
         };

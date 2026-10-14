@@ -30,7 +30,8 @@ use crate::raster::Raster;
 use crate::vector::VectorDrawing;
 
 pub const FORMAT: &str = "pelure-projet";
-pub const VERSION: u32 = 3;
+/// 4 (phase 2b) : la feuille de dessin est plus grande que le cadre de la caméra (`cadre`).
+pub const VERSION: u32 = 4;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Formats de son acceptés à l'import.
@@ -40,8 +41,13 @@ pub const SOUND_EXTS: [&str; 5] = ["wav", "mp3", "flac", "ogg", "oga"];
 struct Manifest {
     format: String,
     version: u32,
+    /// Taille de la feuille de dessin (et de chaque fichier de `dessins/`).
     largeur: usize,
     hauteur: usize,
+    /// Cadre de la caméra = taille de l'image finale. Absent (format 3) : la feuille était le
+    /// cadre ; elle est alors doublée à l'ouverture, dessin au centre.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cadre: Option<[usize; 2]>,
     cadence: u32,
     papier: [u8; 3],
     sequences: Vec<SequenceEntry>,
@@ -366,6 +372,7 @@ fn manifest_of(doc: &Document) -> Manifest {
         version: VERSION,
         largeur: doc.width,
         hauteur: doc.height,
+        cadre: Some(doc.frame),
         cadence: doc.fps,
         papier: doc.paper,
         sequences,
@@ -412,6 +419,8 @@ pub struct Loaded {
     pub written: HashMap<CelId, u64>,
     /// Problèmes non bloquants (dessin manquant ou illisible…).
     pub warnings: Vec<String>,
+    /// Ancien format (3) converti à l'ouverture : feuille doublée autour du cadre.
+    pub converted: bool,
 }
 
 pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
@@ -550,9 +559,29 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
     if structure.panels.is_empty() {
         return Err("le projet ne contient aucun panneau".into());
     }
-    let written = cels.keys().map(|&id| (id, 0)).collect();
-    let doc = Document::from_parts(w, h, structure, cels, sounds);
-    Ok(Loaded { doc, written, warnings })
+    let frame = manifest.cadre;
+    let mut written: HashMap<CelId, u64> = cels.keys().map(|&id| (id, 0)).collect();
+    let mut doc = Document::from_parts(w, h, structure, cels, sounds);
+    let converted = match frame {
+        Some([fw, fh]) if fw > 0 && fh > 0 && fw <= w && fh <= h => {
+            doc.frame = [fw, fh];
+            false
+        }
+        // Format 3 : la feuille était le cadre. On la double, dessin au centre ; les fichiers de
+        // dessins seront tous réécrits à la nouvelle taille au prochain enregistrement.
+        _ => {
+            doc.enlarge_stage(w * 2, h * 2);
+            doc.frame = [w, h];
+            written.clear();
+            true
+        }
+    };
+    Ok(Loaded {
+        doc,
+        written,
+        warnings,
+        converted,
+    })
 }
 
 fn load_sound(dir: &Path, entry: &SoundEntry) -> Result<Sound, String> {

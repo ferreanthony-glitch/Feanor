@@ -28,6 +28,8 @@ mod project;
 mod raster;
 mod render;
 mod soundtrack;
+#[cfg(test)]
+mod stage_tests;
 mod storyboard;
 #[cfg(test)]
 mod tests;

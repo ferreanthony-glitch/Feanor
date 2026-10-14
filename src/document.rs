@@ -2,6 +2,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
+use eframe::egui::{pos2, vec2, Rect};
 use serde::{Deserialize, Serialize};
 
 use crate::audio::Pcm;
@@ -285,8 +286,12 @@ pub struct Structure {
 }
 
 pub struct Document {
+    /// Taille de la feuille de dessin (de tous les dessins), en pixels. Elle déborde du cadre
+    /// pour qu'on puisse dessiner hors champ (panoramiques, mouvements de caméra).
     pub width: usize,
     pub height: usize,
+    /// Cadre de la caméra : taille de l'image finale (export), centré sur la feuille.
+    pub frame: [usize; 2],
     pub fps: u32,
     pub paper: [u8; 3],
     pub sequences: Vec<Sequence>,
@@ -305,11 +310,19 @@ pub struct Document {
 }
 
 impl Document {
-    /// Projet neuf : une séquence, une scène, un panneau.
+    /// Projet neuf d'un cadre `frame_w`×`frame_h`, sur une feuille deux fois plus grande.
+    pub fn with_frame(frame_w: usize, frame_h: usize, fps: u32) -> Self {
+        let mut doc = Self::new(frame_w * 2, frame_h * 2, fps);
+        doc.frame = [frame_w, frame_h];
+        doc
+    }
+
+    /// Projet neuf : une séquence, une scène, un panneau ; feuille et cadre de même taille.
     pub fn new(width: usize, height: usize, fps: u32) -> Self {
         let mut doc = Self {
             width,
             height,
+            frame: [width, height],
             fps,
             paper: [255, 255, 255],
             sequences: Vec::new(),
@@ -350,6 +363,7 @@ impl Document {
         let mut doc = Self {
             width,
             height,
+            frame: [width, height],
             fps: structure.fps.max(1),
             paper: structure.paper,
             sequences: structure.sequences,
@@ -363,6 +377,47 @@ impl Document {
         };
         doc.normalize();
         doc
+    }
+
+    /// Cadre de la caméra sur la feuille (centré), en pixels de la feuille.
+    pub fn frame_rect(&self) -> Rect {
+        let [fw, fh] = self.frame;
+        let x0 = (self.width.saturating_sub(fw) / 2) as f32;
+        let y0 = (self.height.saturating_sub(fh) / 2) as f32;
+        Rect::from_min_size(pos2(x0, y0), vec2(fw as f32, fh as f32))
+    }
+
+    /// Agrandit la feuille à `width`×`height` en gardant le dessin au centre : dessins bitmap et
+    /// vectoriels, guides, tout est décalé ; le cadre ne change pas de taille et reste centré.
+    pub fn enlarge_stage(&mut self, width: usize, height: usize) {
+        if width < self.width || height < self.height {
+            return;
+        }
+        let (dx, dy) = ((width - self.width) / 2, (height - self.height) / 2);
+        let shift = crate::vector::Affine::translate(vec2(dx as f32, dy as f32));
+        for cel in self.cels.values_mut() {
+            match &mut cel.vector {
+                Some(d) => {
+                    for e in &mut d.elements {
+                        *e = e.transformed(&shift);
+                    }
+                    cel.raster = Raster::new(width, height);
+                    cel.rerender();
+                }
+                None => {
+                    cel.raster = cel.raster.placed_in(width, height, dx, dy);
+                    cel.version += 1;
+                }
+            }
+        }
+        for g in &mut self.guides {
+            for p in &mut g.points {
+                p[0] += dx as f32;
+                p[1] += dy as f32;
+            }
+        }
+        self.width = width;
+        self.height = height;
     }
 
     pub fn structure(&self) -> Structure {

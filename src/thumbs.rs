@@ -24,7 +24,8 @@ pub struct Thumbs {
 
 pub fn thumb_size(doc: &Document) -> (usize, usize) {
     let tw = 192;
-    let th = ((tw as f32 * doc.height as f32 / doc.width as f32).round() as usize).clamp(8, 320);
+    let [fw, fh] = doc.frame;
+    let th = ((tw as f32 * fh as f32 / fw.max(1) as f32).round() as usize).clamp(8, 320);
     (tw, th)
 }
 
