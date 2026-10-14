@@ -16,6 +16,8 @@ mod io;
 mod keymap;
 #[cfg(test)]
 mod keymap_tests;
+#[cfg(test)]
+mod ops_tests;
 mod panels;
 mod pixsel;
 #[cfg(test)]

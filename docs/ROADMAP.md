@@ -18,7 +18,7 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
 - ✅ Nouvelles petites actions pour coller au preset : zoom par pas (1/2), plein écran, rotation
   par pas (V/C), allonger/raccourcir le panneau (+/−), première/dernière image du panneau, quitter.
 
-## Phase 1 — Fondations storyboard 🔧
+## Phase 1 — Fondations storyboard ✅
 
 - ✅ 1a. Modèle Séquence > Scène > Panneau (l'ancien « plan » est devenu le panneau) ; numérotation
   automatique et noms personnalisés ; barres de séquences et de scènes dans la bande de montage ;
@@ -43,8 +43,12 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
   suppression, nom, points de fuite), couleur du papier, cadence. Une étape par geste (une saisie,
   un glissé de curseur ou de point). Reste : regrouper les appuis répétés d'une même touche
   (+ / − sur la durée font une étape par appui).
-- ⏳ 1e. Couper (F5) / fusionner des panneaux, copier/coller de calques (W/X), verrouillage (Alt+L),
-  fusion (Ctrl+E).
+- ✅ 1e. Couper le panneau à l'image courante (F5) et réunir un panneau avec le suivant ; couper
+  une scène au panneau courant et la joindre à la précédente ; copier / coller un calque d'un
+  panneau à l'autre (W / X) ; verrouiller un calque (Alt+L) ; fusionner avec le calque du dessous
+  (Ctrl+E). « Réunir des panneaux » et « joindre à la scène précédente » sont des commandes de
+  Pelure (Storyboard Pro 27 passe par une sélection de plusieurs panneaux, pas encore possible
+  ici). Reste : sélection de plusieurs panneaux ou calques à la fois.
 
 ## Phase 2 — Caméra et 3D ⏳
 

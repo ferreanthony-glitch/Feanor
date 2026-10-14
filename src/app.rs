@@ -121,6 +121,14 @@ pub enum Pending {
     Quit,
 }
 
+/// Calque copié (W) : sa timeline, ses dessins, et la durée du panneau d'où il vient.
+#[derive(Clone)]
+pub(crate) struct LayerClip {
+    pub layer: Layer,
+    pub cels: HashMap<CelId, crate::document::Cel>,
+    pub panel_len: usize,
+}
+
 pub struct NewDocDialog {
     pub width: usize,
     pub height: usize,
@@ -191,6 +199,8 @@ pub struct App {
     pub(crate) select_rect: bool,
     /// Zone bitmap copiée.
     pub(crate) pixel_clipboard: Option<Floating>,
+    /// Calque copié (W / X).
+    pub(crate) layer_clipboard: Option<LayerClip>,
     pub(crate) shape_drag: Option<(Pos2, Pos2)>,
     pub(crate) clipboard: Vec<Element>,
     pub(crate) renderer: Renderer,
@@ -299,6 +309,7 @@ impl App {
             bdrag: None,
             select_rect: false,
             pixel_clipboard: None,
+            layer_clipboard: None,
             shape_drag: None,
             clipboard: Vec::new(),
             renderer: Renderer::new(),
@@ -615,6 +626,11 @@ impl App {
     }
 
     pub(crate) fn layer_editable(&mut self) -> bool {
+        if self.layer().locked {
+            let key = self.keymap.label("calque.verrouiller");
+            self.status = format!("Ce calque est verrouillé ({key} pour le déverrouiller).");
+            return false;
+        }
         if self.layer().visible {
             return true;
         }
@@ -938,6 +954,10 @@ impl App {
     pub(crate) fn clear_image(&mut self) {
         self.end_stroke();
         self.drop_bitmap_selection();
+        if self.layer().locked {
+            self.layer_editable();
+            return;
+        }
         let Some(id) = self.cel_here() else { return };
         let Some(c) = self.doc.cels.get_mut(&id) else { return };
         if let Some(d) = c.vector.as_mut() {
@@ -1035,6 +1055,107 @@ impl App {
         self.layers_mut().swap(i, j);
         self.cur_layer = j;
         self.commit_structure(snap);
+    }
+
+    /// Verrouille ou déverrouille le calque `li` du panneau courant (Alt+L : le calque courant).
+    pub(crate) fn toggle_layer_lock(&mut self, li: usize) {
+        if li >= self.layers().len() {
+            return;
+        }
+        self.end_stroke();
+        self.drop_bitmap_selection();
+        self.vsel = None;
+        self.record_step();
+        let layer = &mut self.layers_mut()[li];
+        layer.locked = !layer.locked;
+        self.status = format!(
+            "Calque « {} » {}.",
+            layer.name,
+            if layer.locked { "verrouillé" } else { "déverrouillé" }
+        );
+    }
+
+    /// Copie le calque courant, avec ses dessins et sa timeline (W).
+    pub(crate) fn copy_layer(&mut self) {
+        let layer = self.layer().clone();
+        let cels = layer
+            .frames
+            .iter()
+            .flatten()
+            .filter_map(|id| self.doc.cels.get(id).map(|c| (*id, c.clone())))
+            .collect();
+        self.status = format!("Calque « {} » copié : X pour le coller dans un autre panneau.", layer.name);
+        self.layer_clipboard = Some(LayerClip {
+            layer,
+            cels,
+            panel_len: self.frame_count(),
+        });
+    }
+
+    /// Colle le calque copié au-dessus du calque courant (X), avec ses propres copies des dessins.
+    /// Il est coupé à la durée du panneau ; un dessin tenu jusqu'à la fin du panneau d'origine
+    /// reste tenu jusqu'à la fin de celui-ci.
+    pub(crate) fn paste_layer(&mut self) {
+        let Some(clip) = self.layer_clipboard.clone() else {
+            self.status = "Aucun calque copié (W pour copier le calque courant).".into();
+            return;
+        };
+        self.end_stroke();
+        self.drop_bitmap_selection();
+        let snap = self.snapshot();
+        let mut copies: HashMap<CelId, CelId> = HashMap::new();
+        let mut layer = Layer {
+            id: fresh_layer_id(),
+            ..clip.layer.clone()
+        };
+        for f in layer.frames.iter_mut() {
+            *f = f.and_then(|old| {
+                if let Some(&c) = copies.get(&old) {
+                    return Some(c);
+                }
+                let cel = clip.cels.get(&old)?.clone();
+                let c = self.doc.add_cel(cel);
+                copies.insert(old, c);
+                Some(c)
+            });
+        }
+        let n = self.frame_count();
+        let held = clip.layer.frames.len() >= clip.panel_len && clip.layer.frames.last().is_some_and(Option::is_some);
+        if layer.frames.len() > n {
+            layer.frames.truncate(n);
+        } else if held {
+            let last = layer.frames.last().copied().flatten();
+            layer.frames.resize(n, last);
+        }
+        layer.trim();
+        let name = layer.name.clone();
+        let at = self.cur_layer + 1;
+        self.layers_mut().insert(at, layer);
+        self.cur_layer = at;
+        self.vsel = None;
+        self.commit_structure(snap);
+        self.status = format!("Calque « {name} » collé.");
+    }
+
+    /// Fusionne le calque courant avec celui du dessous (Ctrl+E).
+    pub(crate) fn merge_layer_down(&mut self) {
+        self.end_stroke();
+        self.drop_bitmap_selection();
+        let (li, kinds) = (self.cur_layer, self.layers().get(self.cur_layer.wrapping_sub(1)).map(|b| (b.kind, self.layer().kind)));
+        let snap = self.snapshot();
+        match self.doc.merge_layer_down(self.cur_panel, li) {
+            Ok(()) => {
+                self.cur_layer = li - 1;
+                self.vsel = None;
+                self.commit_structure(snap);
+                self.status = match kinds {
+                    Some((LayerKind::Vector, LayerKind::Vector)) => "Calques fusionnés (vectoriel).".into(),
+                    Some((LayerKind::Bitmap, LayerKind::Bitmap)) => "Calques fusionnés.".into(),
+                    _ => "Calques fusionnés en un calque bitmap : les traits vectoriels ne sont plus modifiables.".into(),
+                };
+            }
+            Err(e) => self.status = e,
+        }
     }
 
     pub(crate) fn undo(&mut self) {
@@ -1626,6 +1747,14 @@ impl App {
             "calque.supprimer" => self.delete_layer(),
             "calque.dessus" => self.select_layer(self.cur_layer + 1),
             "calque.dessous" => self.select_layer(self.cur_layer.saturating_sub(1)),
+            "panneau.couper" => self.split_current_panel(),
+            "panneau.fusionner_suivant" => self.merge_next_panel(),
+            "scene.couper" => self.split_current_scene(),
+            "scene.joindre_precedente" => self.join_previous_scene(),
+            "calque.copier" => self.copy_layer(),
+            "calque.coller" => self.paste_layer(),
+            "calque.verrouiller" => self.toggle_layer_lock(self.cur_layer),
+            "calque.fusionner_dessous" => self.merge_layer_down(),
             "vue.table_lumineuse" => {
                 self.light_table = !self.light_table;
                 self.status = format!("Table lumineuse : {}.", if self.light_table { "oui" } else { "non" });

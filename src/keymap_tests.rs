@@ -163,8 +163,12 @@ fn modifiers_and_contexts() {
     assert_eq!(press(&map, Key::Tab, Key::Tab, NONE, Mode::Animation).as_deref(), Some("mode.basculer"));
     assert_eq!(press(&map, Key::Tab, Key::Tab, Modifiers::SHIFT, Mode::Storyboard).as_deref(), Some("vue.planches"));
     // Raccourcis en réserve : ils ne déclenchent rien.
-    assert_eq!(press(&map, Key::F5, Key::F5, NONE, Mode::Storyboard), None);
-    assert_eq!(press(&map, Key::W, Key::W, NONE, Mode::Storyboard), None);
+    assert_eq!(press(&map, Key::L, Key::L, ctrl, Mode::Storyboard), None);
+    assert_eq!(press(&map, Key::Enter, Key::Enter, Modifiers::ALT, Mode::Storyboard), None);
+    // Réglages perso devenus actifs en 1e.
+    assert_eq!(press(&map, Key::F5, Key::F5, NONE, Mode::Storyboard).as_deref(), Some("panneau.couper"));
+    assert_eq!(press(&map, Key::W, Key::W, NONE, Mode::Animation).as_deref(), Some("calque.copier"));
+    assert_eq!(press(&map, Key::E, Key::E, ctrl, Mode::Animation).as_deref(), Some("calque.fusionner_dessous"));
 }
 
 #[test]
@@ -175,7 +179,8 @@ fn menu_labels() {
     assert_eq!(map.label("image.precedente"), "; (QWERTY ,)");
     assert_eq!(map.label("outil.taille_plus"), "$ (QWERTY ])");
     assert_eq!(map.label("panneau.ajouter_image"), "+");
-    assert_eq!(map.label("calque.copier"), "", "pas d'étiquette pour un raccourci en réserve");
+    assert_eq!(map.label("panneau.proprietes"), "", "pas d'étiquette pour un raccourci en réserve");
+    assert_eq!(map.label("calque.verrouiller"), "Alt+L");
 }
 
 #[test]

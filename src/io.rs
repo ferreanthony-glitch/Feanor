@@ -147,6 +147,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
                 kind: l.kind,
                 visible: l.visible,
                 opacity: l.opacity.clamp(0.0, 1.0),
+                locked: false,
                 frames: l
                     .frames
                     .into_iter()

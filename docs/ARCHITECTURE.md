@@ -1,6 +1,6 @@
 # Architecture de Pelure
 
-Document tenu à jour à chaque étape. Dernière mise à jour : phase 1d (octobre 2026).
+Document tenu à jour à chaque étape. Dernière mise à jour : phase 1e (octobre 2026).
 
 ## Vue d'ensemble
 
@@ -22,6 +22,12 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   `move_panel`, `remove_scene`…) : dans le modèle, testées sans interface. Un panneau déplacé garde sa
   scène s'il reste à côté d'un panneau de sa scène ; sinon il rejoint celle du panneau devant lequel
   on le pose. Comportement de Storyboard Pro non vérifié : c'est une interprétation.
+  Couper un panneau (`split_panel`) duplique les dessins de la seconde partie (chaque panneau
+  possède ses dessins) ; le réunir (`merge_with_next`) met les calques bout à bout par rang et par
+  sorte. Fusionner deux calques (`merge_layer_down`) crée de **nouveaux** dessins : les anciens
+  restent intacts, et l'annulation (copie de la structure) y revient sans rien recalculer.
+- **Verrouillage** : `Layer::locked`, enregistré dans le manifeste (`"verrouille"`, absent si faux).
+  `App::layer_editable` refuse alors tout ce qui touche aux dessins ; la timeline reste modifiable.
 - **Panneau** : durée, textes (action, dialogue, notes) et calques. Un calque associe à chaque image
   un dessin ; plusieurs images consécutives sur le même dessin forment une exposition.
 - **Dessins** : bitmap = tuiles RGBA prémultipliées allouées à la demande (`raster.rs`) ;

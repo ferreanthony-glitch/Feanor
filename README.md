@@ -20,6 +20,9 @@ ouvrir d'un double-clic).
   proportionnelle à la durée) sous deux barres : séquences et scènes.
   - « + Panneau » (P), « + Scène » (Maj+P), « + Séquence » ; le menu « Panneau… » duplique ou
     supprime un panneau ou une scène entière.
+  - F5 coupe le panneau à l'image courante (la suite devient un nouveau panneau, avec ses propres
+    copies des dessins) ; « Réunir le panneau et le suivant » fait l'inverse. Une scène se coupe
+    au panneau courant, ou se joint à la précédente (menus Storyboard et « Panneau… »).
   - On réordonne les panneaux en les faisant glisser. Un panneau posé dans une autre scène la
     rejoint (à la frontière entre deux scènes : celle qui suit). Le bord droit d'un panneau règle
     sa durée.
@@ -69,6 +72,12 @@ Chaque panneau a ses calques, de deux sortes :
 
 Les traits vectoriels sont rendus à la résolution du projet : en zoomant très fort, on voit les pixels
 (comme à l'export), mais le trait reste modifiable.
+
+Calques (menu Calques, panneau de droite) : W copie le calque courant et X le colle dans un autre
+panneau (avec ses dessins et sa timeline, ajustée à la durée du panneau). Alt+L verrouille le
+calque (cadenas) : on ne peut plus dessiner dessus. Ctrl+E le fusionne avec le calque du dessous :
+deux calques vectoriels restent vectoriels, sinon le résultat est bitmap ; les deux calques doivent
+être visibles et non verrouillés.
 
 ## Le reste
 

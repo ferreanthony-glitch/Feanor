@@ -195,6 +195,18 @@ impl App {
                 FontId::proportional(13.0),
                 text_color,
             );
+            // Cadenas à droite : plein si le calque est verrouillé, à peine visible sinon.
+            painter.text(
+                pos2(r.right() - ROW_H * 0.5, row_rect.center().y),
+                Align2::CENTER_CENTER,
+                "🔒",
+                FontId::proportional(12.0),
+                if layer.locked {
+                    visuals.text_color()
+                } else {
+                    visuals.weak_text_color().gamma_multiply(0.35)
+                },
+            );
         }
         if resp.clicked() {
             if let Some(p) = resp.interact_pointer_pos() {
@@ -205,6 +217,8 @@ impl App {
                         self.record_step();
                         let layer = &mut self.layers_mut()[li];
                         layer.visible = !layer.visible;
+                    } else if p.x > r.right() - ROW_H {
+                        self.toggle_layer_lock(li);
                     } else {
                         self.select_layer(li);
                     }

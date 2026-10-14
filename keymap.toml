@@ -481,7 +481,21 @@ etat = "non implémenté"
 action = "panneau.couper"
 touches = ["F5"]
 source = "perso : SPLIT_PANEL_KEY"
-etat = "non implémenté"
+
+[[raccourci]]
+action = "panneau.fusionner_suivant"
+touches = []
+source = "Pelure (inverse de « couper le panneau » ; pas de commande équivalente repérée dans Storyboard Pro 27)"
+
+[[raccourci]]
+action = "scene.couper"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : SPLIT_SHOT_KEY"
+
+[[raccourci]]
+action = "scene.joindre_precedente"
+touches = []
+source = "Pelure (Storyboard Pro 27 crée une scène à partir des panneaux sélectionnés : JOIN_PANEL_KEY, sans touche)"
 
 [[raccourci]]
 action = "panneau.supprimer"
@@ -534,13 +548,11 @@ source = "proposition"
 action = "calque.copier"
 touches = ["W"]
 source = "perso : COPY_LAYERS_KEY"
-etat = "non implémenté"
 
 [[raccourci]]
 action = "calque.coller"
 touches = ["X"]
 source = "perso : PASTE_LAYERS_KEY"
-etat = "non implémenté"
 
 [[raccourci]]
 action = "calque.supprimer"
@@ -557,13 +569,11 @@ etat = "non implémenté"
 action = "calque.verrouiller"
 touches = ["Alt+L"]
 source = "Storyboard Pro 27 : LOCK_LAYER_KEY"
-etat = "non implémenté"
 
 [[raccourci]]
 action = "calque.fusionner_dessous"
 touches = ["Ctrl+E"]
 source = "Storyboard Pro 27 : MERGE_DOWN_LAYERS"
-etat = "non implémenté"
 
 [[raccourci]]
 action = "calque.reinit_transformation"

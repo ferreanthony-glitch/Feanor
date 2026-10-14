@@ -111,8 +111,13 @@ impl App {
                 self.action_item(ui, "Allonger le panneau d'une image", "panneau.ajouter_image");
                 self.action_item(ui, "Raccourcir le panneau d'une image", "panneau.retirer_image");
                 ui.separator();
+                self.action_item(ui, "Couper le panneau à l'image courante", "panneau.couper");
+                self.action_item(ui, "Réunir le panneau et le suivant", "panneau.fusionner_suivant");
+                ui.separator();
                 self.action_item(ui, "Dupliquer la scène", "scene.dupliquer");
                 self.action_item(ui, "Supprimer la scène", "scene.supprimer");
+                self.action_item(ui, "Couper la scène au panneau courant", "scene.couper");
+                self.action_item(ui, "Joindre la scène à la précédente", "scene.joindre_precedente");
                 ui.separator();
                 self.action_item(ui, "Panneau précédent", "panneau.precedent");
                 self.action_item(ui, "Panneau suivant", "panneau.suivant");
@@ -127,6 +132,21 @@ impl App {
                 self.action_item(ui, "Vue dessin / vignettes", "vue.planches");
             });
             ui.menu_button("Son", |ui| self.sound_menu(ui));
+            ui.menu_button("Calques", |ui| {
+                self.action_item(ui, "Nouveau calque vectoriel", "calque.nouveau_vectoriel");
+                self.action_item(ui, "Nouveau calque bitmap", "calque.nouveau_bitmap");
+                self.action_item(ui, "Supprimer le calque", "calque.supprimer");
+                ui.separator();
+                self.action_item(ui, "Copier le calque", "calque.copier");
+                self.action_item(ui, "Coller le calque", "calque.coller");
+                ui.separator();
+                let lock = if self.layer().locked { "Déverrouiller le calque" } else { "Verrouiller le calque" };
+                self.action_item(ui, lock, "calque.verrouiller");
+                self.action_item(ui, "Fusionner avec le calque du dessous", "calque.fusionner_dessous");
+                ui.separator();
+                self.action_item(ui, "Calque du dessus", "calque.dessus");
+                self.action_item(ui, "Calque du dessous", "calque.dessous");
+            });
             ui.menu_button("Animation", |ui| {
                 self.action_item(ui, "Lecture / pause", "lecture.basculer");
                 self.action_item(ui, "Image précédente", "image.precedente");
@@ -529,10 +549,39 @@ impl App {
                 self.move_layer(false);
             }
         });
+        let hint = |app: &App, text: &str, action: &str| {
+            let key = app.keymap.label(action);
+            if key.is_empty() {
+                text.to_string()
+            } else {
+                format!("{text} ({key})")
+            }
+        };
+        ui.horizontal(|ui| {
+            if ui.button("Copier").on_hover_text(hint(self, "Copier le calque", "calque.copier")).clicked() {
+                self.copy_layer();
+            }
+            if ui
+                .add_enabled(self.layer_clipboard.is_some(), egui::Button::new("Coller"))
+                .on_hover_text(hint(self, "Coller le calque copié au-dessus du calque courant", "calque.coller"))
+                .clicked()
+            {
+                self.paste_layer();
+            }
+            if ui
+                .add_enabled(self.cur_layer > 0, egui::Button::new("Fusionner"))
+                .on_hover_text(hint(self, "Fusionner avec le calque du dessous", "calque.fusionner_dessous"))
+                .clicked()
+            {
+                self.merge_layer_down();
+            }
+        });
         ui.add_space(4.0);
 
         let mut select = None;
         let mut toggle = None;
+        let mut lock = None;
+        let lock_hint = hint(self, "Verrouiller / déverrouiller : on ne peut plus dessiner sur le calque", "calque.verrouiller");
         for li in (0..self.layers().len()).rev() {
             let layer = &self.layers()[li];
             ui.horizontal(|ui| {
@@ -543,6 +592,14 @@ impl App {
                     .clicked()
                 {
                     toggle = Some(li);
+                }
+                let padlock = if layer.locked { "🔒" } else { "  " };
+                if ui
+                    .add(egui::Button::new(padlock).min_size(vec2(26.0, 22.0)))
+                    .on_hover_text(&lock_hint)
+                    .clicked()
+                {
+                    lock = Some(li);
                 }
                 ui.label(RichText::new(layer.kind.badge()).monospace().weak())
                     .on_hover_text(match layer.kind {
@@ -569,6 +626,9 @@ impl App {
             self.record_step();
             let layer = &mut self.layers_mut()[li];
             layer.visible = !layer.visible;
+        }
+        if let Some(li) = lock {
+            self.toggle_layer_lock(li);
         }
         if let Some(li) = select {
             self.select_layer(li);

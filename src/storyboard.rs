@@ -154,6 +154,43 @@ impl App {
         }
     }
 
+    /// Coupe le panneau courant à l'image courante (F5).
+    pub(crate) fn split_current_panel(&mut self) {
+        let at = self.cur_frame;
+        if self.structure_op(|d, i| d.split_panel(i, at)) {
+            self.status = format!("Panneau coupé : la suite est {}.", panel_long_title(&self.doc, self.cur_panel));
+        } else {
+            self.status = "Place la tête de lecture dans le panneau, après sa première image, pour le couper.".into();
+        }
+    }
+
+    /// Réunit le panneau courant et le suivant (de la même scène).
+    pub(crate) fn merge_next_panel(&mut self) {
+        if self.structure_op(|d, i| d.merge_with_next(i)) {
+            self.status = format!("Panneaux réunis : {}.", panel_long_title(&self.doc, self.cur_panel));
+        } else {
+            self.status = "Pas de panneau suivant dans cette scène.".into();
+        }
+    }
+
+    /// Le panneau courant et les suivants de sa scène forment une nouvelle scène.
+    pub(crate) fn split_current_scene(&mut self) {
+        if self.structure_op(|d, i| d.split_scene(i)) {
+            self.status = format!("Scène coupée : nouvelle scène {}.", self.doc.scene_label(self.panel().scene));
+        } else {
+            self.status = "Le panneau courant est le premier de sa scène : rien à couper.".into();
+        }
+    }
+
+    /// La scène courante rejoint la scène précédente.
+    pub(crate) fn join_previous_scene(&mut self) {
+        if self.structure_op(|d, i| d.join_previous_scene(i)) {
+            self.status = format!("Scènes réunies : scène {}.", self.doc.scene_label(self.panel().scene));
+        } else {
+            self.status = "Pas de scène précédente dans cette séquence.".into();
+        }
+    }
+
     /// Premier panneau de la scène précédente (ou suivante).
     pub(crate) fn step_scene(&mut self, forward: bool) {
         let (start, end) = self.doc.scene_run(self.cur_panel);
@@ -277,23 +314,22 @@ impl App {
                 self.new_sequence();
             }
             ui.menu_button("Panneau…", |ui| {
-                if ui.button("Dupliquer le panneau").clicked() {
-                    self.duplicate_panel();
-                    ui.close_menu();
-                }
-                if ui.button("Supprimer le panneau").clicked() {
-                    self.delete_panel();
-                    ui.close_menu();
-                }
+                let item = |app: &mut App, ui: &mut egui::Ui, text: &str, action: &str| {
+                    let key = app.keymap.label(action);
+                    if ui.add(egui::Button::new(text).shortcut_text(key)).clicked() {
+                        ui.close_menu();
+                        app.run_action(action);
+                    }
+                };
+                item(self, ui, "Dupliquer le panneau", "panneau.dupliquer");
+                item(self, ui, "Supprimer le panneau", "panneau.supprimer");
+                item(self, ui, "Couper le panneau à l'image courante", "panneau.couper");
+                item(self, ui, "Réunir le panneau et le suivant", "panneau.fusionner_suivant");
                 ui.separator();
-                if ui.button("Dupliquer la scène").clicked() {
-                    self.duplicate_scene();
-                    ui.close_menu();
-                }
-                if ui.button("Supprimer la scène").clicked() {
-                    self.delete_scene();
-                    ui.close_menu();
-                }
+                item(self, ui, "Dupliquer la scène", "scene.dupliquer");
+                item(self, ui, "Supprimer la scène", "scene.supprimer");
+                item(self, ui, "Couper la scène au panneau courant", "scene.couper");
+                item(self, ui, "Joindre la scène à la précédente", "scene.joindre_precedente");
             });
             if ui.button("< Avancer").on_hover_text("Place le panneau plus tôt dans le montage").clicked() {
                 self.shift_panel(false);
@@ -406,6 +442,14 @@ impl App {
         if ui.button("Supprimer le panneau").clicked() {
             ui.close_menu();
             self.delete_panel();
+        }
+        if ui.button("Couper le panneau à l'image courante").clicked() {
+            ui.close_menu();
+            self.split_current_panel();
+        }
+        if ui.button("Réunir avec le panneau suivant").clicked() {
+            ui.close_menu();
+            self.merge_next_panel();
         }
         ui.separator();
         if ui.button("Importer un son au début du panneau…").clicked() {

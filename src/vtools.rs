@@ -409,6 +409,10 @@ impl App {
     // ------------------------------------------------------------------ sélection
 
     pub(crate) fn select_press(&mut self, p: Pos2, screen: Pos2, shift: bool) {
+        if self.layer().locked {
+            self.layer_editable();
+            return;
+        }
         if self.layer().kind == LayerKind::Bitmap {
             self.bitmap_select_press(p, screen, shift);
             return;

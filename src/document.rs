@@ -82,6 +82,8 @@ pub struct Layer {
     pub kind: LayerKind,
     pub visible: bool,
     pub opacity: f32,
+    /// Verrouillé : on ne peut plus dessiner dessus (la timeline reste modifiable).
+    pub locked: bool,
     /// Une entrée par image du plan : le dessin exposé à cette image, ou rien.
     /// Plusieurs images consécutives qui pointent vers le même dessin forment une exposition
     /// (un dessin « tenu » sur 2, 3… images).
@@ -96,6 +98,7 @@ impl Layer {
             kind,
             visible: true,
             opacity: 1.0,
+            locked: false,
             frames: Vec::new(),
         }
     }
@@ -636,6 +639,224 @@ impl Document {
         let id = moved.id;
         self.panels.insert(at, moved);
         Some(self.normalize_keeping(id))
+    }
+
+    /// Coupe le panneau `index` à son image `at` : il garde [0, at) ; un nouveau panneau de la
+    /// même scène, juste après, reçoit [at, fin) avec ses propres copies des dessins (modifier
+    /// l'un ne touche pas l'autre). Les textes restent au premier. Renvoie l'indice du nouveau.
+    pub fn split_panel(&mut self, index: usize, at: usize) -> Option<usize> {
+        let n = self.panels.get(index)?.frame_count();
+        if at == 0 || at >= n {
+            return None;
+        }
+        let source = self.panels[index].clone();
+        let mut copies: HashMap<CelId, CelId> = HashMap::new();
+        let mut layers = Vec::with_capacity(source.layers.len());
+        for layer in &source.layers {
+            let mut frames = Vec::with_capacity(layer.frames.len().saturating_sub(at));
+            for f in layer.frames.iter().skip(at) {
+                frames.push(match *f {
+                    Some(c) => Some(match copies.get(&c) {
+                        Some(&d) => d,
+                        None => {
+                            let d = self.duplicate_cel(c);
+                            copies.insert(c, d);
+                            d
+                        }
+                    }),
+                    None => None,
+                });
+            }
+            let mut l = Layer {
+                id: fresh_layer_id(),
+                frames,
+                ..layer.clone()
+            };
+            l.trim();
+            layers.push(l);
+        }
+        let second = Panel {
+            id: self.alloc(),
+            scene: source.scene,
+            length: n - at,
+            layers,
+            action: String::new(),
+            dialogue: String::new(),
+            notes: String::new(),
+        };
+        let first = &mut self.panels[index];
+        for l in &mut first.layers {
+            l.frames.truncate(at);
+            l.trim();
+        }
+        first.length = at;
+        Some(self.insert_and_normalize(index + 1, vec![second]))
+    }
+
+    /// Réunit le panneau `index` et le suivant, s'il est dans la même scène : les images du
+    /// suivant viennent après, calque par calque (même rang et même sorte, sinon un calque de
+    /// plus), et les textes se suivent. L'inverse de `split_panel`.
+    pub fn merge_with_next(&mut self, index: usize) -> Option<usize> {
+        if index + 1 >= self.panels.len() || self.panels[index].scene != self.panels[index + 1].scene {
+            return None;
+        }
+        let next = self.panels.remove(index + 1);
+        let next_len = next.frame_count();
+        let a = &mut self.panels[index];
+        let a_len = a.frame_count();
+        for (i, lb) in next.layers.into_iter().enumerate() {
+            if i < a.layers.len() && a.layers[i].kind == lb.kind {
+                let la = &mut a.layers[i];
+                la.frames.resize(a_len, None);
+                la.frames.extend(lb.frames);
+                la.trim();
+            } else {
+                let mut l = lb;
+                l.frames.splice(0..0, std::iter::repeat_n(None, a_len));
+                l.trim();
+                a.layers.push(l);
+            }
+        }
+        a.length = a_len + next_len;
+        for (dst, src) in [
+            (&mut a.action, next.action),
+            (&mut a.dialogue, next.dialogue),
+            (&mut a.notes, next.notes),
+        ] {
+            if !src.trim().is_empty() {
+                if !dst.trim().is_empty() {
+                    dst.push('\n');
+                }
+                dst.push_str(&src);
+            }
+        }
+        let id = a.id;
+        Some(self.normalize_keeping(id))
+    }
+
+    /// Coupe la scène du panneau `index` : ce panneau et les suivants de la scène forment une
+    /// nouvelle scène, juste après. Refusé sur le premier panneau d'une scène.
+    pub fn split_scene(&mut self, index: usize) -> Option<usize> {
+        let (start, end) = self.scene_run(index);
+        if index == start {
+            return None;
+        }
+        let scene = self.new_scene(self.sequence_of(index));
+        for p in &mut self.panels[index..end] {
+            p.scene = scene;
+        }
+        let id = self.panels[index].id;
+        Some(self.normalize_keeping(id))
+    }
+
+    /// Réunit la scène du panneau `index` à la scène qui la précède dans la même séquence.
+    pub fn join_previous_scene(&mut self, index: usize) -> Option<usize> {
+        let (start, end) = self.scene_run(index);
+        let prev = start.checked_sub(1)?;
+        if self.sequence_of(prev) != self.sequence_of(index) {
+            return None;
+        }
+        let target = self.panels[prev].scene;
+        for p in &mut self.panels[start..end] {
+            p.scene = target;
+        }
+        let id = self.panels[index].id;
+        Some(self.normalize_keeping(id))
+    }
+
+    /// Fusionne le calque `layer` du panneau `index` dans celui du dessous. Les dessins fusionnés
+    /// sont de nouveaux dessins : ceux d'avant restent intacts (l'annulation y revient). Deux
+    /// calques vectoriels donnent un calque vectoriel ; sinon le résultat est bitmap. Les
+    /// opacités des deux calques sont appliquées aux dessins, le résultat est à 100 %.
+    pub fn merge_layer_down(&mut self, index: usize, layer: usize) -> Result<(), String> {
+        let panel = self.panels.get(index).ok_or("panneau introuvable")?;
+        if layer == 0 || layer >= panel.layers.len() {
+            return Err("Il n'y a pas de calque en dessous.".into());
+        }
+        let (above, below) = (panel.layers[layer].clone(), panel.layers[layer - 1].clone());
+        if !above.visible || !below.visible {
+            return Err("Affiche les deux calques avant de les fusionner.".into());
+        }
+        if above.locked || below.locked {
+            return Err("Un des deux calques est verrouillé (Alt+L).".into());
+        }
+        let vector = above.kind == LayerKind::Vector && below.kind == LayerKind::Vector;
+        let n = above.frames.len().max(below.frames.len());
+        let mut made: HashMap<(Option<CelId>, Option<CelId>), Option<CelId>> = HashMap::new();
+        let mut frames = Vec::with_capacity(n);
+        for f in 0..n {
+            let key = (below.cel_at(f), above.cel_at(f));
+            let cel = match made.get(&key) {
+                Some(&c) => c,
+                None => {
+                    let c = self.merged_cel(key, below.opacity, above.opacity, vector);
+                    made.insert(key, c);
+                    c
+                }
+            };
+            frames.push(cel);
+        }
+        let mut merged = Layer {
+            kind: if vector { LayerKind::Vector } else { LayerKind::Bitmap },
+            opacity: 1.0,
+            frames,
+            ..below
+        };
+        merged.trim();
+        let p = &mut self.panels[index];
+        p.layers[layer - 1] = merged;
+        p.layers.remove(layer);
+        Ok(())
+    }
+
+    /// Nouveau dessin : `below` puis `above` par-dessus, chacun avec son opacité.
+    fn merged_cel(&mut self, (below, above): (Option<CelId>, Option<CelId>), ob: f32, oa: f32, vector: bool) -> Option<CelId> {
+        if below.is_none() && above.is_none() {
+            return None;
+        }
+        let sources: Vec<(Cel, f32)> = [(below, ob), (above, oa)]
+            .into_iter()
+            .filter_map(|(c, o)| c.and_then(|c| self.cels.get(&c)).map(|cel| (cel.clone(), o.clamp(0.0, 1.0))))
+            .collect();
+        let kind = if vector { LayerKind::Vector } else { LayerKind::Bitmap };
+        let id = self.new_cel(kind);
+        let cel = self.cels.get_mut(&id).expect("dessin créé juste avant");
+        if vector {
+            let drawing = cel.vector.get_or_insert_with(VectorDrawing::default);
+            for (src, o) in sources {
+                for mut e in src.vector.map(|d| d.elements).unwrap_or_default() {
+                    match &mut e {
+                        crate::vector::Element::Stroke { opacity, .. } | crate::vector::Element::Fill { opacity, .. } => {
+                            *opacity *= o
+                        }
+                    }
+                    drawing.elements.push(e);
+                }
+            }
+            cel.rerender();
+        } else {
+            let opacity = |o: f32| (o * 255.0).round() as u8;
+            for (src, o) in sources {
+                for (idx, tile) in src.raster.tiles.iter().enumerate() {
+                    let Some(tile) = tile else { continue };
+                    let dst = cel.raster.tile_mut(idx);
+                    for (d, &s) in dst.iter_mut().zip(tile.iter()) {
+                        if s.a() != 0 {
+                            *d = crate::render::over(*d, s, opacity(o), None);
+                        }
+                    }
+                }
+            }
+        }
+        Some(id)
+    }
+
+    /// Ajoute un dessin existant (collage) sous un nouvel identifiant.
+    pub fn add_cel(&mut self, mut cel: Cel) -> CelId {
+        cel.version = 0;
+        let id = self.alloc();
+        self.cels.insert(id, cel);
+        id
     }
 
     fn insert_and_normalize(&mut self, at: usize, panels: Vec<Panel>) -> usize {

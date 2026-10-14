@@ -130,6 +130,9 @@ struct LayerEntry {
     visible: bool,
     #[serde(default = "one")]
     opacite: f32,
+    /// Ajouté en 1e (absent = non verrouillé).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    verrouille: bool,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -351,6 +354,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                     },
                     visible: l.visible,
                     opacite: l.opacity,
+                    verrouille: l.locked,
                     expositions: to_exposures(&l.frames),
                 })
                 .collect(),
@@ -521,6 +525,7 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                         },
                         visible: l.visible,
                         opacity: l.opacite.clamp(0.0, 1.0),
+                        locked: l.verrouille,
                         frames: from_exposures(&l.expositions)
                             .into_iter()
                             .map(|f| f.filter(|id| !missing.contains(id)))
