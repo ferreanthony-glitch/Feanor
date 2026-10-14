@@ -73,7 +73,7 @@ fn camera_image_through_zoom_and_rotation() {
     let idx = r.tile_index_of(10, 5);
     r.tile_mut(idx)[5 * 64 + 10] = RED;
     doc.panels[0].layers[0].frames = vec![Some(b)];
-    let plan = render::panel_plan(&doc.panels[0], 0, None);
+    let plan = render::panel_plan_at(&doc, 0, 0, None);
     let straight = render::camera_image(&doc, &plan, &doc.default_camera());
     assert_eq!(straight[0], RED, "caméra centrée : pixel pour pixel");
     let turned = render::camera_image(&doc, &plan, &Camera { angle: 180.0, ..doc.default_camera() });

@@ -175,6 +175,9 @@ struct LayerEntry {
     /// échelle, rotation en degrés, autour du centre de la feuille.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     transformation: Option<TransformEntry>,
+    /// Profondeur multiplan (2c ; absent = 0, plan de référence).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    profondeur: f32,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -209,6 +212,10 @@ fn yes() -> bool {
 
 fn one() -> f32 {
     1.0
+}
+
+fn is_zero(v: &f32) -> bool {
+    *v == 0.0
 }
 
 /// Dossier et manifeste correspondant au nom choisi dans la boîte « Enregistrer sous ».
@@ -403,6 +410,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                         echelle: l.transform.scale,
                         rotation: l.transform.angle,
                     }),
+                    profondeur: l.depth,
                     expositions: to_exposures(&l.frames),
                 })
                 .collect(),
@@ -600,6 +608,11 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                                 angle: t.rotation,
                             })
                             .unwrap_or_default(),
+                        depth: if l.profondeur.is_finite() {
+                            l.profondeur.clamp(Layer::MIN_DEPTH, 1000.0)
+                        } else {
+                            0.0
+                        },
                         frames: from_exposures(&l.expositions)
                             .into_iter()
                             .map(|f| f.filter(|id| !missing.contains(id)))

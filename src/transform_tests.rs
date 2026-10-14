@@ -41,14 +41,14 @@ fn affine_and_pivoting() {
 fn transformed_layers_are_composited_where_they_go() {
     let mut doc = one_pixel_doc(10, 10);
     doc.panels[0].layers[0].transform = LayerTransform { x: 5.0, y: 3.0, ..Default::default() };
-    let plan = render::panel_plan(&doc.panels[0], 0, None);
+    let plan = render::panel_plan_at(&doc, 0, 0, None);
     let full = render::composite_full(&doc, &plan);
     assert_eq!(full[13 * 64 + 15], RED, "le pixel suit le calque");
     assert_eq!(full[10 * 64 + 10], Color32::TRANSPARENT);
     assert_eq!(render::composite_pixel(&doc, &plan, 15, 13), RED);
     // Demi-tour autour du centre (32, 24) : (10.5, 10.5) va en (53.5, 37.5).
     doc.panels[0].layers[0].transform = LayerTransform { angle: 180.0, ..Default::default() };
-    let plan = render::panel_plan(&doc.panels[0], 0, None);
+    let plan = render::panel_plan_at(&doc, 0, 0, None);
     let full = render::composite_full(&doc, &plan);
     assert!(full[37 * 64 + 53].a() > 200);
 }

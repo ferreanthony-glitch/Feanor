@@ -429,14 +429,20 @@ impl App {
         vec2(self.doc.width as f32, self.doc.height as f32)
     }
 
+    /// Transformation du calque courant telle qu'on la voit à l'image courante : la sienne, plus le
+    /// défilement multiplan si le calque est en profondeur et la caméra décalée.
+    pub(crate) fn layer_seen(&self) -> crate::document::LayerTransform {
+        self.layer().transform_seen(self.doc.camera_offset(self.cur_panel, self.cur_frame))
+    }
+
     /// Transformation du calque courant (de son dessin vers la feuille).
     pub(crate) fn layer_affine(&self) -> Affine {
-        self.layer().transform.affine(self.doc.stage_center())
+        self.layer_seen().affine(self.doc.stage_center())
     }
 
     /// Point de la feuille → point du dessin du calque courant (là où le pinceau doit peindre).
     pub(crate) fn to_layer(&self, stage: Pos2) -> Pos2 {
-        if self.layer().transform.is_identity() {
+        if self.layer_seen().is_identity() {
             return stage;
         }
         self.layer_affine().inverse().map_or(stage, |inv| inv.apply(stage))
@@ -444,7 +450,7 @@ impl App {
 
     /// Point du dessin du calque courant → écran.
     pub(crate) fn layer_to_screen(&self, p: Pos2) -> Pos2 {
-        let stage = if self.layer().transform.is_identity() {
+        let stage = if self.layer_seen().is_identity() {
             p
         } else {
             self.layer_affine().apply(p)
@@ -493,6 +499,8 @@ impl App {
         let mut items = Vec::new();
         // Table lumineuse : les autres calques sont estompés, le calque courant reste net.
         let washed = onion && self.light_table && !self.playing;
+        // Multiplan : les calques en profondeur défilent selon la position de la caméra.
+        let offset = self.doc.camera_offset(self.cur_panel, frame);
         for (li, layer) in self.layers().iter().enumerate() {
             if !layer.visible {
                 continue;
@@ -501,7 +509,8 @@ impl App {
             if washed && li != self.cur_layer {
                 opacity *= self.light_table_strength.clamp(0.05, 1.0);
             }
-            let transform = (!layer.transform.is_identity()).then_some(layer.transform);
+            let seen = layer.transform_seen(offset);
+            let transform = (!seen.is_identity()).then_some(seen);
             if onion && self.onion.enabled && !self.playing && li == self.cur_layer {
                 let (before, after) = onion_neighbours(layer, frame, self.onion.before, self.onion.after);
                 // Du plus lointain au plus proche, pour que le plus proche soit au-dessus.
@@ -1482,7 +1491,7 @@ impl App {
         let base = self.base_name();
         let paper = (!self.export_transparent).then_some(self.doc.paper);
         for (n, &(panel, frame)) in frames.iter().enumerate() {
-            let plan = render::panel_plan(&self.doc.panels[panel], frame, paper);
+            let plan = render::panel_plan_at(&self.doc, panel, frame, paper);
             let cam = self.doc.panel_camera(panel, frame);
             let pixels = render::camera_image(&self.doc, &plan, &cam);
             let path = dir.join(format!("{base}_{:04}.png", n + 1));
@@ -1541,7 +1550,7 @@ impl App {
                     io::html_escape(&self.doc.sequence_label(self.doc.sequence_of(i)))
                 );
             }
-            let plan = render::panel_plan(panel, 0, Some(self.doc.paper));
+            let plan = render::panel_plan_at(&self.doc, i, 0, Some(self.doc.paper));
             let pixels = render::camera_image(&self.doc, &plan, &self.doc.panel_camera(i, 0));
             let file = format!("planche_{:03}.png", i + 1);
             if let Err(e) = io::write_png_scaled(&dir.join(&file), &pixels, w, h, 960) {

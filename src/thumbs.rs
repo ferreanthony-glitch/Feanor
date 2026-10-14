@@ -38,7 +38,7 @@ impl Thumbs {
         budget: &mut usize,
     ) -> Option<TextureId> {
         let s = &doc.panels[panel];
-        let plan = render::panel_plan(s, 0, Some(doc.paper));
+        let plan = render::panel_plan_at(doc, panel, 0, Some(doc.paper));
         let versions = plan
             .items
             .iter()

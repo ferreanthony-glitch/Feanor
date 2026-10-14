@@ -82,7 +82,11 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
     jusque-là en réserve) ; on dessine normalement sur un calque transformé ; affichage, export et
     vignettes en tiennent compte. Pas encore : transformation animée, miroir, fusion d'un calque
     transformé (refusée avec un message).
-  - ⏳ 2c-2. Profondeur des calques : effet multiplan quand la caméra bouge.
+  - ✅ 2c-2. Profondeur des calques : réglage « Profondeur » dans les calques (0 = plan de
+    référence, 1 = deux fois plus loin, négatif = premier plan) ; quand la caméra se déplace, les
+    plans lointains défilent moins vite et les premiers plans plus vite, à l'écran, en vue caméra,
+    à l'export et dans les vignettes. Le zoom de caméra reste un zoom d'objectif (sans effet de
+    profondeur) ; les calques de profondeurs différentes ne se fusionnent pas.
   - ⏳ 2c-3. Vue de dessus pour voir et régler les distances.
 - ⏳ 2d. Import glTF de repère.
 

@@ -1,4 +1,4 @@
-use eframe::egui::{self, Color32, ColorImage, TextureFilter, TextureHandle, TextureOptions};
+use eframe::egui::{self, Color32, ColorImage, TextureFilter, TextureHandle, TextureOptions, Vec2};
 
 use crate::camera::Camera;
 use crate::document::{CelId, Document, LayerTransform, Panel};
@@ -193,8 +193,13 @@ pub fn composite_pixel(doc: &Document, plan: &Plan, x: usize, y: usize) -> Color
     c
 }
 
-/// Plan de composition d'une image d'un plan, sans pelure d'oignon (vignettes, export).
-pub fn panel_plan(panel: &Panel, frame: usize, paper: Option<[u8; 3]>) -> Plan {
+/// Plan de l'image `frame` du panneau `index` tel que la caméra le filme (vignettes, export) :
+/// les calques en profondeur défilent selon le décalage de la caméra (multiplan).
+pub fn panel_plan_at(doc: &Document, index: usize, frame: usize, paper: Option<[u8; 3]>) -> Plan {
+    plan_with_offset(&doc.panels[index], frame, paper, doc.camera_offset(index, frame))
+}
+
+fn plan_with_offset(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, offset: Vec2) -> Plan {
     Plan {
         paper,
         items: panel
@@ -202,11 +207,12 @@ pub fn panel_plan(panel: &Panel, frame: usize, paper: Option<[u8; 3]>) -> Plan {
             .iter()
             .filter(|l| l.visible)
             .filter_map(|l| {
+                let t = l.transform_seen(offset);
                 l.cel_at(frame).map(|cel| PlanItem {
                     cel,
                     opacity: (l.opacity.clamp(0.0, 1.0) * 255.0).round() as u8,
                     tint: None,
-                    transform: (!l.transform.is_identity()).then_some(l.transform),
+                    transform: (!t.is_identity()).then_some(t),
                 })
             })
             .collect(),

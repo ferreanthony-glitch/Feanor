@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use eframe::egui::{pos2, vec2, Pos2, Rect};
+use eframe::egui::{pos2, vec2, Pos2, Rect, Vec2};
 use serde::{Deserialize, Serialize};
 
 use crate::audio::Pcm;
@@ -146,6 +146,9 @@ pub struct Layer {
     pub locked: bool,
     /// Transformation du calque entier (identité par défaut).
     pub transform: LayerTransform,
+    /// Profondeur (multiplan) : 0 = plan de référence ; 1 = deux fois plus loin de la caméra
+    /// (défile deux fois moins vite) ; négatif = premier plan (défile plus vite).
+    pub depth: f32,
     /// Une entrée par image du plan : le dessin exposé à cette image, ou rien.
     /// Plusieurs images consécutives qui pointent vers le même dessin forment une exposition
     /// (un dessin « tenu » sur 2, 3… images).
@@ -162,7 +165,31 @@ impl Layer {
             opacity: 1.0,
             locked: false,
             transform: LayerTransform::default(),
+            depth: 0.0,
             frames: Vec::new(),
+        }
+    }
+
+    /// Plus proche que ça, le calque serait derrière la caméra.
+    pub const MIN_DEPTH: f32 = -0.9;
+
+    /// Facteur de perspective : 1 au plan de référence, ½ deux fois plus loin, 2 deux fois plus près.
+    pub fn perspective(&self) -> f32 {
+        1.0 / (1.0 + self.depth.max(Self::MIN_DEPTH))
+    }
+
+    /// Transformation affichée quand la caméra est décalée de `camera_offset` (pixels de la feuille)
+    /// par rapport au centre : un calque lointain suit en partie la caméra (il défile moins vite),
+    /// un premier plan part en sens inverse (il défile plus vite).
+    pub fn transform_seen(&self, camera_offset: Vec2) -> LayerTransform {
+        if self.depth == 0.0 || camera_offset == Vec2::ZERO {
+            return self.transform;
+        }
+        let k = 1.0 - self.perspective();
+        LayerTransform {
+            x: self.transform.x + camera_offset.x * k,
+            y: self.transform.y + camera_offset.y * k,
+            ..self.transform
         }
     }
 
@@ -505,6 +532,13 @@ impl Document {
             Some(p) => camera::camera_at(&p.camera, frame, self.default_camera()),
             None => self.default_camera(),
         }
+    }
+
+    /// Décalage de la caméra du panneau `index` à l'image `frame`, depuis le centre de la feuille
+    /// (c'est lui qui fait défiler les plans du multiplan).
+    pub fn camera_offset(&self, index: usize, frame: usize) -> Vec2 {
+        let c = self.panel_camera(index, frame);
+        pos2(c.x, c.y) - self.stage_center()
     }
 
     pub fn structure(&self) -> Structure {
@@ -929,6 +963,9 @@ impl Document {
         }
         if !above.transform.is_identity() || !below.transform.is_identity() {
             return Err("Un des deux calques est transformé : annule la transformation (Ctrl+R) avant de fusionner.".into());
+        }
+        if above.depth != below.depth {
+            return Err("Les deux calques ne sont pas à la même profondeur.".into());
         }
         let vector = above.kind == LayerKind::Vector && below.kind == LayerKind::Vector;
         let n = above.frames.len().max(below.frames.len());

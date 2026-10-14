@@ -10,6 +10,8 @@ mod camera;
 mod camera_tests;
 mod camtools;
 mod canvas;
+#[cfg(test)]
+mod depth_tests;
 mod document;
 mod fill;
 mod gpu;

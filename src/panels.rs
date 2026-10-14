@@ -668,7 +668,8 @@ impl App {
         ui.separator();
         let li = self.cur_layer;
         let layer = &self.layers()[li];
-        let (mut name, mut opacity, mut visible) = (layer.name.clone(), layer.opacity, layer.visible);
+        let (mut name, mut opacity, mut visible, mut depth) =
+            (layer.name.clone(), layer.opacity, layer.visible, layer.depth);
         ui.horizontal(|ui| {
             ui.label("Nom");
             let resp = ui.text_edit_singleline(&mut name);
@@ -683,6 +684,27 @@ impl App {
         let resp = ui.checkbox(&mut visible, "Visible");
         if self.edited(&resp) {
             self.layers_mut()[li].visible = visible;
+        }
+        let resp = ui
+            .horizontal(|ui| {
+                ui.label("Profondeur");
+                ui.add(
+                    egui::DragValue::new(&mut depth)
+                        .speed(0.01)
+                        .range(crate::document::Layer::MIN_DEPTH..=1000.0)
+                        .max_decimals(2),
+                )
+            })
+            .inner
+            .on_hover_text(
+                "Distance du calque quand la caméra se déplace (multiplan) :\n\
+                 0 = plan de référence, défile avec la caméra ;\n\
+                 1 = deux fois plus loin, défile deux fois moins vite ;\n\
+                 négatif = premier plan, défile plus vite.\n\
+                 Le zoom de la caméra n'en tient pas compte.",
+            );
+        if self.edited(&resp) {
+            self.layers_mut()[li].depth = depth;
         }
     }
 

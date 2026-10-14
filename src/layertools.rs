@@ -17,8 +17,11 @@ pub(crate) struct LayerDrag {
     handle: CamHandle,
     start: Pos2,
     t0: LayerTransform,
-    /// Centre de la boîte, sur la feuille : point fixe de l'échelle et de la rotation.
+    /// Centre de la boîte dans le repère de la transformation du calque : point fixe de l'échelle
+    /// et de la rotation.
     center: Pos2,
+    /// Le même centre tel qu'on le voit (avec le défilement multiplan) : pour lire la souris.
+    seen_center: Pos2,
     snap: Edit,
     changed: bool,
 }
@@ -96,15 +99,20 @@ impl App {
             return;
         };
         let corners = self.box_corners();
-        let center = pos2(
+        // Centre de la boîte telle qu'on la voit, ramené au repère de la transformation du calque
+        // (sans le défilement multiplan, qui ne dépend que de la caméra).
+        let (seen, own) = (self.layer_seen(), self.layer().transform);
+        let seen_center = pos2(
             corners.iter().map(|c| c.x).sum::<f32>() / 4.0,
             corners.iter().map(|c| c.y).sum::<f32>() / 4.0,
         );
+        let center = seen_center - vec2(seen.x - own.x, seen.y - own.y);
         self.layer_drag = Some(LayerDrag {
             handle,
             start: stage,
-            t0: self.layer().transform,
+            t0: own,
             center,
+            seen_center,
             snap: self.snapshot(),
             changed: false,
         });
@@ -113,7 +121,7 @@ impl App {
     pub(crate) fn transform_drag(&mut self, p: Pos2, shift: bool) {
         let pivot = self.doc.stage_center();
         let Some(d) = &mut self.layer_drag else { return };
-        let (t0, start, q) = (d.t0, d.start, d.center);
+        let (t0, start, q, seen) = (d.t0, d.start, d.center, d.seen_center);
         let t = match d.handle {
             CamHandle::Move => {
                 let mut delta = p - start;
@@ -131,11 +139,11 @@ impl App {
                 }
             }
             CamHandle::Zoom => {
-                let factor = p.distance(q).max(1.0) / start.distance(q).max(1.0);
+                let factor = p.distance(seen).max(1.0) / start.distance(seen).max(1.0);
                 t0.around(pivot, q, factor, 0.0)
             }
             CamHandle::Rotate => {
-                let mut turn = ((p - q).angle() - (start - q).angle()).to_degrees();
+                let mut turn = ((p - seen).angle() - (start - seen).angle()).to_degrees();
                 if shift {
                     turn = ((t0.angle + turn) / 15.0).round() * 15.0 - t0.angle;
                 }

@@ -139,6 +139,23 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - Échelle et rotation à la souris se font autour du centre de la boîte du contenu
   (`LayerTransform::around` garde la forme « décalage + échelle + rotation »).
 
+## Profondeur et multiplan (depuis 2c-2)
+
+- `Layer::depth` (z) : 0 = plan de référence, celui qui défile exactement avec la caméra. Un plan
+  à z est vu à la distance 1 + z : quand le centre de la caméra s'écarte de C − C0 du centre de la
+  feuille, le calque glisse de (C − C0) × (1 − 1/(1 + z)) dans le même sens (`transform_seen`).
+  Résultat dans le cadre : z = 1 défile deux fois moins vite, z très grand reste fixe (ciel),
+  z négatif défile plus vite (premier plan). Borne : z ≥ −0,9.
+- Ce glissement s'ajoute à la transformation du calque au moment de composer
+  (`render::panel_plan_at`, `App::build_plan`) : rien n'est enregistré en plus, et caméra centrée
+  = aucun effet. Le zoom et la rotation de la caméra n'en tiennent pas compte (zoom d'objectif,
+  pas de travelling avant). C'est le choix le moins coûteux et réversible : un vrai rendu en
+  perspective (taille qui change avec la distance) pourra venir avec la vue 3D.
+- Dessiner sur un calque en profondeur : la souris passe par la transformation **vue**
+  (`App::layer_seen`), le trait tombe donc sous le curseur quelle que soit la position de la
+  caméra à l'image courante.
+- Manifeste : `"profondeur"` par calque, absent si 0. Fusion refusée entre profondeurs différentes.
+
 ## Caméra (depuis 2b-2)
 
 - `camera.rs` : une caméra = centre du cadre sur la feuille, zoom (1 = taille de l'image finale),

@@ -77,6 +77,10 @@ L'outil **Transformer** déplace, agrandit ou tourne un calque entier (tous ses 
 dans la boîte, tirer un coin, tirer la poignée ronde (Maj : contraintes). Les dessins ne sont pas
 modifiés, Ctrl+R annule la transformation, et on peut continuer à dessiner sur le calque.
 
+**Multiplan** : le réglage « Profondeur » d'un calque (sous Visible) fixe sa distance. Quand la
+caméra se déplace, un décor à 1 défile deux fois moins vite, un premier plan à −0,3 défile plus
+vite ; à 0, rien ne change. Visible à l'écran, en vue caméra, à l'export et dans les vignettes.
+
 Calques (menu Calques, panneau de droite) : W copie le calque courant et X le colle dans un autre
 panneau (avec ses dessins et sa timeline, ajustée à la durée du panneau). Alt+L verrouille le
 calque (cadenas) : on ne peut plus dessiner dessus. Ctrl+E le fusionne avec le calque du dessous :
