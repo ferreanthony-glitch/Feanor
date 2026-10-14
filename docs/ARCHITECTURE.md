@@ -45,8 +45,13 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
      une image à la taille du projet, pixel pour pixel. C'est là que viendront la caméra et le
      multiplan.
   2. *Afficher* : cette image posée à l'écran avec la vue (zoom, rotation, miroir), lissée comme
-     egui lisse ses images. File d'affichage réduite à une image (`desired_maximum_frame_latency`
-     = 1, au lieu de 2 par défaut) : une image de retard en moins entre le stylet et l'écran. Superposer chaque calque directement à l'écran donnait des bords de
+     egui lisse ses images. Affichage sans attente de la synchro de l'écran
+     (`PresentMode::AutoNoVsync`, une image d'avance au plus) : chaque mouvement du stylet est
+     affiché aussitôt ; en fenêtre, Windows compose l'image à la synchro (pas de déchirement).
+     `App::update` limite le rythme : 500 images/s quand il y a des entrées, 125 sinon (lecture,
+     export), rien au repos. Pendant un trait, `paint_stroke_tip` relie à l'écran le dernier
+     point posé à la pointe du stylet (le lissage fait sinon traîner le trait) ; le curseur garde
+     la croix du système, déplacée par Windows sans attendre l'image. Superposer chaque calque directement à l'écran donnait des bords de
      trait plus foncés en vue réduite.
 
   Chaque dessin affiché est une texture à la taille de la feuille. Quand sa version change, on

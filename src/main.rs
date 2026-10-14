@@ -102,9 +102,13 @@ fn run(renderer: eframe::Renderer, initial: Option<std::path::PathBuf>) -> efram
             .with_inner_size([1500.0, 920.0])
             .with_min_inner_size([960.0, 600.0]),
         renderer,
-        // Une seule image d'avance dans la file d'affichage (au lieu de 2 par défaut) : le trait
-        // suit le stylet avec une image de retard en moins, sans déchirement de l'image.
+        // Affichage sans attente de la synchro de l'écran, une seule image d'avance : chaque
+        // mouvement du stylet est affiché aussitôt, pour que le cercle et le trait restent collés
+        // à la croix. En fenêtre, Windows compose l'image à la synchro (pas de déchirement) ; le
+        // rythme est limité dans `App::update` pour ne pas faire tourner la carte pour rien.
+        // « Auto » : si la carte ne sait pas le faire, on revient à l'affichage synchronisé.
         wgpu_options: eframe::egui_wgpu::WgpuConfiguration {
+            present_mode: eframe::egui_wgpu::wgpu::PresentMode::AutoNoVsync,
             desired_maximum_frame_latency: Some(1),
             ..Default::default()
         },

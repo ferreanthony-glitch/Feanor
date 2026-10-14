@@ -164,6 +164,28 @@ impl StrokeState {
         }
     }
 
+    /// Bout du trait : le dernier point posé, la pointe réelle du stylet et son rayon. Le
+    /// lissage (et l'espacement des empreintes) laissent un petit écart entre les deux, que
+    /// l'affichage comble pour que le trait reste attaché à la pointe.
+    pub fn tip(&self) -> Option<(Pos2, Pos2, f32)> {
+        let (last, _) = self.last?;
+        let (raw, pressure) = self.raw?;
+        Some((last, raw, self.settings.size * 0.5 * self.size_factor(pressure)))
+    }
+
+    /// Couleur et opacité du trait à la pointe (aucune pour la gomme).
+    pub fn tip_paint(&self) -> Option<([u8; 3], f32)> {
+        let StrokeMode::Paint(rgb) = self.mode else { return None };
+        let s = self.settings;
+        let pressure = self.raw.map_or(1.0, |r| r.1);
+        let flow = if s.pressure_opacity {
+            s.min_opacity + (1.0 - s.min_opacity) * pressure.clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        Some((rgb, (s.opacity * flow).clamp(0.0, 1.0)))
+    }
+
     /// Pointe et papier du trait (pinceaux texturés).
     pub fn with_textures(mut self, textures: BrushTextures) -> Self {
         self.textures = textures;

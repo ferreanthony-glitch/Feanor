@@ -153,8 +153,16 @@ Retour d'Anthony : « le curseur a un léger retard sur le stylet ». Cause : av
 cachait le curseur de Windows et dessinait son propre cercle dans l'image (une à deux images de
 retard). Désormais la croix du système reste affichée à la pointe (Windows la déplace sans
 attendre l'image), avec le cercle de la taille du pinceau autour ; réglage « Croix du système sur
-le pinceau » (menu Affichage, activé par défaut). Piste suivante si le trait lui-même semble en
-retard : affichage sans attente de la synchro (risque de déchirement, à essayer).
+le pinceau » (menu Affichage, activé par défaut).
+
+Second retour : « rien ne doit traîner derrière la croix, le cercle et le trait doivent y rester
+collés ». Affichage sans attente de la synchro de l'écran (chaque mouvement du stylet est
+affiché aussitôt, rythme limité : rien au repos, ~17 % d'un cœur en lecture) ; bout du trait
+relié à la pointe du stylet à l'écran pendant le geste (le lissage ne le fait plus traîner).
+L'écart restant est le temps de calcul et d'affichage d'une image (quelques millisecondes) :
+aucun logiciel ne dessine dans sa fenêtre aussi vite que Windows déplace son curseur. Piste si
+c'est encore visible : prédire la position du stylet d'une image. Effet secondaire : la lecture
+n'est plus bridée quand la fenêtre est derrière une autre.
 
 ## Phase 4 — Confort ✅
 

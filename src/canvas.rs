@@ -78,7 +78,23 @@ impl App {
         let shift = ui.input(|i| i.modifiers.shift);
         self.paint_guides(&painter, rect, self.hover_canvas);
         self.paint_vector_overlay(&painter, rect, shift);
+        self.paint_stroke_tip(&painter);
         self.paint_cursor(ui.ctx(), &painter, &response);
+    }
+
+    /// Pendant un trait : relie le dernier point posé à la pointe du stylet, pour que le trait
+    /// reste attaché à la croix (le lissage le fait sinon traîner un peu derrière). Rien n'est
+    /// écrit dans le dessin : le trait définitif arrive dans les images suivantes.
+    fn paint_stroke_tip(&self, painter: &egui::Painter) {
+        let Some(s) = &self.stroke else { return };
+        let (Some((last, raw, r)), Some((rgb, alpha))) = (s.tip(), s.tip_paint()) else { return };
+        let (a, b) = (self.layer_to_screen(last), self.layer_to_screen(raw));
+        let w = (r * self.layer_zoom()).max(0.5);
+        let color = Color32::from_rgba_unmultiplied(rgb[0], rgb[1], rgb[2], (alpha * 255.0).round() as u8);
+        if a.distance(b) > 0.5 {
+            painter.line_segment([a, b], Stroke::new(2.0 * w, color));
+        }
+        painter.circle_filled(b, w, color);
     }
 
     fn canvas_input(&mut self, ctx: &egui::Context, response: &egui::Response, rect: Rect) {

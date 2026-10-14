@@ -180,6 +180,8 @@ pub struct App {
     pub(crate) top_drag: Option<crate::topview::TopDrag>,
     /// Cadence réellement affichée pendant la lecture.
     pub(crate) play_meter: crate::playback::PlayMeter,
+    /// Début de l'image précédente (rythme des images).
+    frame_start: Option<std::time::Instant>,
     /// Fenêtre d'export ouverte, derniers choix, export en cours.
     pub(crate) export_dialog: Option<crate::export::ExportSettings>,
     pub(crate) export_last: crate::export::ExportSettings,
@@ -330,6 +332,7 @@ impl App {
             top_view: false,
             top_drag: None,
             play_meter: Default::default(),
+            frame_start: None,
             export_dialog: None,
             export_last: Default::default(),
             export_job: None,
@@ -2071,6 +2074,18 @@ impl eframe::App for App {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Rythme des images : l'affichage n'attend plus la synchro de l'écran. Une image suit
+        // chaque mouvement du stylet (500 par seconde au plus) ; sans entrée (lecture, export,
+        // animations), 125 par seconde suffisent : la carte ne tourne pas pour rien.
+        let input = ctx.input(|i| !i.events.is_empty());
+        let min = std::time::Duration::from_micros(if input { 2_000 } else { 8_000 });
+        if let Some(t) = self.frame_start {
+            let elapsed = t.elapsed();
+            if elapsed < min {
+                std::thread::sleep(min - elapsed);
+            }
+        }
+        self.frame_start = Some(std::time::Instant::now());
         self.ppp = ctx.pixels_per_point();
         self.clamp_nav();
         self.end_length_gesture_if_idle();
