@@ -352,6 +352,16 @@ touches = []
 source = "Storyboard Pro 27 sans touche par défaut : DRAWING_TEXT_TOOL_KEY"
 
 [[raccourci]]
+action = "outil.tampon"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : DRAWING_STAMP_TOOL_KEY"
+
+[[raccourci]]
+action = "outil.tampon_duplication"
+touches = []
+source = "Pelure (aucun tampon de duplication dans sb_shortcuts.xml de Storyboard Pro 27)"
+
+[[raccourci]]
 action = "outil.main"
 touches = ["H"]
 source = "proposition"

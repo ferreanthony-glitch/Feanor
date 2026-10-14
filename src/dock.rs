@@ -188,8 +188,8 @@ fn left_column(only: &[Pane]) -> Option<DockNode> {
         (!list.is_empty()).then(|| tabs(list))
     };
     let parts = [
-        (0.27, keep(vec![Pane::Tools])),
-        (0.22, keep(vec![Pane::Color])),
+        (0.34, keep(vec![Pane::Tools])),
+        (0.2, keep(vec![Pane::Color])),
         (1.0, keep(vec![Pane::ToolOptions, Pane::View, Pane::Guides])),
     ];
     stack(&parts)

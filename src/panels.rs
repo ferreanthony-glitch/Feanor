@@ -357,6 +357,8 @@ impl App {
             }
             Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline => self.shape_options_ui(ui),
             Tool::Text => self.text_options_ui(ui),
+            Tool::Stamp => self.stamp_options_ui(ui),
+            Tool::Clone => self.clone_options_ui(ui),
             Tool::Select => self.selection_ui(ui),
             Tool::Picker => {
                 ui.label("Clique sur le dessin pour prélever une couleur.");

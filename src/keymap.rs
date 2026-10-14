@@ -93,6 +93,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("outil.ellipse", "Outil ellipse", true, false),
     act("outil.polyligne", "Outil polyligne", true, false),
     act("outil.texte", "Outil texte", true, false),
+    act("outil.tampon", "Outil tampon", true, false),
+    act("outil.tampon_duplication", "Outil tampon de duplication", true, false),
     act("outil.main", "Outil main", true, false),
     act("outil.epaisseur_crayon", "Outil épaisseur du trait de crayon", false, false),
     act("outil.taille_plus", "Pinceau plus gros", true, true),

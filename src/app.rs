@@ -60,14 +60,19 @@ pub enum Tool {
     Ref3d,
     /// Texte (5d).
     Text,
+    /// Tampon, comme dans Storyboard Pro, et tampon de duplication (5e).
+    Stamp,
+    Clone,
 }
 
 impl Tool {
-    pub const ALL: [Tool; 15] = [
+    pub const ALL: [Tool; 17] = [
         Tool::Brush,
         Tool::Pencil,
         Tool::Eraser,
         Tool::Fill,
+        Tool::Stamp,
+        Tool::Clone,
         Tool::Line,
         Tool::Rect,
         Tool::Ellipse,
@@ -98,6 +103,8 @@ impl Tool {
             Tool::Transform => "Transformer",
             Tool::Ref3d => "Repère 3D",
             Tool::Text => "Texte",
+            Tool::Stamp => "Tampon",
+            Tool::Clone => "Tampon de duplication",
         }
     }
 
@@ -120,6 +127,8 @@ impl Tool {
             Tool::Transform => ph::BOUNDING_BOX,
             Tool::Ref3d => ph::CUBE,
             Tool::Text => ph::TEXT_T,
+            Tool::Stamp => ph::STAMP,
+            Tool::Clone => ph::COPY,
         }
     }
 
@@ -141,6 +150,8 @@ impl Tool {
             Tool::Transform => "outil.transformer",
             Tool::Ref3d => "outil.repere3d",
             Tool::Text => "outil.texte",
+            Tool::Stamp => "outil.tampon",
+            Tool::Clone => "outil.tampon_duplication",
         }
     }
 
@@ -314,6 +325,11 @@ pub struct App {
     pub(crate) text_size: f32,
     pub(crate) text_fonts: Option<Vec<String>>,
     pub(crate) text_font_filter: String,
+    /// Tampons (5e) : bibliothèque et réglages, trait en cours ; tampon de duplication.
+    pub(crate) stamps: crate::stamptools::StampLibrary,
+    pub(crate) stamp_stroke: Option<crate::stamptools::StampStroke>,
+    pub(crate) clone: crate::stamptools::CloneSettings,
+    pub(crate) clone_stroke: Option<crate::stamptools::CloneStrokeState>,
     pub(crate) clipboard: Vec<Element>,
     pub(crate) renderer: Renderer,
     pub(crate) thumbs: Thumbs,
@@ -462,6 +478,10 @@ impl App {
             text_size: 48.0,
             text_fonts: None,
             text_font_filter: String::new(),
+            stamps: crate::stamptools::StampLibrary::load(),
+            stamp_stroke: None,
+            clone: Default::default(),
+            clone_stroke: None,
             clipboard: Vec::new(),
             renderer: Renderer::new(),
             thumbs: Thumbs::default(),
@@ -943,6 +963,7 @@ impl App {
         self.finish_camera_drag();
         self.finish_layer_drag();
         self.finish_ref3d_drag();
+        self.finish_stamps();
         self.guides.stroke = None;
         self.shape_drag = None;
     }
@@ -1040,7 +1061,11 @@ impl App {
     }
 
     pub(crate) fn resize_brush(&mut self, factor: f32) {
-        if self.tool.is_shape() {
+        if self.tool == Tool::Stamp {
+            self.stamps.settings.size = (self.stamps.settings.size * factor).clamp(2.0, 1000.0);
+        } else if self.tool == Tool::Clone {
+            self.clone.size = (self.clone.size * factor).clamp(1.0, 500.0);
+        } else if self.tool.is_shape() {
             self.shape.width = (self.shape.width * factor).clamp(0.5, 200.0);
         } else if let Some(b) = self.current_brush_mut() {
             b.size = (b.size * factor).clamp(0.5, 400.0);
@@ -1948,6 +1973,8 @@ impl App {
                 self.set_tool(Tool::Line);
             }
             "outil.texte" => self.set_tool(Tool::Text),
+            "outil.tampon" => self.set_tool(Tool::Stamp),
+            "outil.tampon_duplication" => self.set_tool(Tool::Clone),
             "outil.rectangle" => self.set_tool(Tool::Rect),
             "outil.ellipse" => self.set_tool(Tool::Ellipse),
             "outil.polyligne" => self.set_tool(Tool::Polyline),

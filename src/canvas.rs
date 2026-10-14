@@ -191,6 +191,11 @@ impl App {
                         }
                         Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline => self.shape_press(p, modifiers.shift),
                         Tool::Text => self.text_press(p),
+                        Tool::Stamp => {
+                            let pressure = if pen { self.pen_pressure } else { 1.0 };
+                            self.stamp_press(p, pressure, pen);
+                        }
+                        Tool::Clone => self.clone_press(p, modifiers.command || modifiers.ctrl),
                         Tool::Select => self.select_press(p, *pos, modifiers.shift),
                         Tool::Camera => self.camera_press(stage, *pos),
                         Tool::Transform => self.transform_press(stage, *pos),
@@ -210,6 +215,11 @@ impl App {
                         if let Some(q) = self.guided_point(stage) {
                             self.stroke_to(self.to_layer(q), pressure);
                         }
+                    } else if let Some(pen) = self.stamp_stroke.as_ref().map(|s| s.pen) {
+                        let pressure = if pen { self.pen_pressure } else { 1.0 };
+                        self.stamp_to(p, pressure);
+                    } else if self.clone_stroke.is_some() {
+                        self.clone_to(p);
                     } else if let Some(pen) = self.erase_pen() {
                         let pressure = if pen { self.pen_pressure } else { 1.0 };
                         if let Some(q) = self.guided_point(stage) {
@@ -360,6 +370,9 @@ impl App {
         }
         if self.tool == Tool::Text {
             ctx.set_cursor_icon(CursorIcon::Text);
+            return;
+        }
+        if self.paint_stamp_cursor(ctx, painter, p) {
             return;
         }
         if self.tool == Tool::Ref3d {
