@@ -126,6 +126,22 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   (dessins bitmap et vectoriels, guides) : le cadrage ne change pas.
 - Taille maximale du cadre : 4096 px (feuille 8192 px, limite des textures de la carte graphique).
 
+## Caméra (depuis 2b-2)
+
+- `camera.rs` : une caméra = centre du cadre sur la feuille, zoom (1 = taille de l'image finale),
+  rotation en degrés. Chaque panneau a des images clés (`Panel.camera`, triées) : aucune = caméra
+  au centre ; une = caméra fixe ; plusieurs = interpolation (positions et rotation en ligne
+  droite, zoom à vitesse régulière, c'est-à-dire géométrique). Couper un panneau coupe le
+  mouvement (`split_keys`), les réunir le recolle (`join_keys`) : l'image filmée ne change pas.
+- Régler la caméra (`camtools.rs`) : caméra fixe → on change l'unique clé ; caméra animée → on
+  règle (ou crée) la clé de l'image courante. Annulable comme le reste (clés dans la structure).
+- **Vue caméra** : n'est pas un rendu à part, c'est une vue (zoom, rotation, décalage) calculée
+  pour que le cadre remplisse l'écran ; dessiner y reste possible, la souris est convertie comme
+  d'habitude. Hors du cadre : masque opaque.
+- **Export, vignettes, planches** : `render::camera_image` prend chaque pixel de l'image finale au
+  point filmé de la feuille (bilinéaire) ; caméra centrée sans zoom ni rotation = pixels exacts.
+- Manifeste : `"camera": [{"image", "x", "y", "zoom", "rotation"}]` par panneau (absent si aucune).
+
 ## Format de projet (version 4, dossier)
 
 ```

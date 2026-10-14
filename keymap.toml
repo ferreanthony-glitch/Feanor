@@ -591,6 +591,29 @@ action = "calque.dessous"
 touches = ["Flèche bas"]
 source = "proposition"
 
+# ------------------------------------------------------------------------------------ Caméra
+# Storyboard Pro 27 a ces fonctions sans touche par défaut.
+
+[[raccourci]]
+action = "outil.camera"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : SP_CAMERA_TRANSFORM_TOOL_KEY"
+
+[[raccourci]]
+action = "camera.vue"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : TOGGLE_CAMERA_KEY (aperçu caméra)"
+
+[[raccourci]]
+action = "camera.masque"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : TOGGLE_CAMERA_MASK_KEY"
+
+[[raccourci]]
+action = "camera.reinitialiser"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : RESET_CAMERA_KEY"
+
 # ------------------------------------------------------------------------------------ Table lumineuse et guides
 # Les touches des guides viennent du module « Guides » de Storyboard Pro 27
 # (Plugins\GuideTool\resources\sb_shortcuts.xml, valeurs « Toon Boom Storyboard »).

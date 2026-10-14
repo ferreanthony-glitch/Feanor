@@ -131,6 +131,11 @@ les vignettes montrent ce que voit la caméra. Un projet enregistré avant cette
 à l'ouverture (feuille agrandie, même cadrage) et passe au nouveau format au premier
 « Enregistrer » ; une version plus ancienne de Pelure ne pourra plus l'ouvrir.
 
+**Caméra** : chaque panneau a sa caméra. Avec l'outil Caméra, on glisse dans le cadre pour le
+déplacer, on tire un coin pour zoomer, la poignée ronde pour tourner (Maj : par 15°) ; la fiche du
+panneau donne les valeurs exactes et « Réinitialiser ». « Vue à travers la caméra » (outil Caméra
+ou menu Affichage) montre ce qui sera filmé ; on peut y dessiner.
+
 ## Organisation du code
 
 | Fichier | Rôle |

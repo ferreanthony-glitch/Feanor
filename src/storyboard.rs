@@ -975,6 +975,8 @@ impl App {
             });
             ui.end_row();
         });
+        ui.label("Caméra").on_hover_text("Décalage du centre, zoom, rotation (outil Caméra pour la régler à la souris)");
+        self.camera_fields(ui);
         for (label, field, rows) in [("Action", 0, 3), ("Dialogue", 1, 2), ("Notes", 2, 2)] {
             let p = &self.doc.panels[i];
             let mut text = [&p.action, &p.dialogue, &p.notes][field].clone();

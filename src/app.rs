@@ -5,6 +5,7 @@ use eframe::egui::{self, vec2, Color32, Event, Key, Pos2, Rect, Vec2};
 
 use crate::audio::AudioEngine;
 use crate::brush::{BrushSettings, StrokeMode, StrokeState};
+use crate::camtools::CamDrag;
 use crate::document::{fresh_layer_id, CelId, Document, Layer, LayerKind, Panel};
 use crate::fill::{self, FillSettings};
 use crate::gpu::GpuCanvas;
@@ -51,10 +52,11 @@ pub enum Tool {
     Select,
     Picker,
     Pan,
+    Camera,
 }
 
 impl Tool {
-    pub const ALL: [Tool; 8] = [
+    pub const ALL: [Tool; 9] = [
         Tool::Brush,
         Tool::Pencil,
         Tool::Eraser,
@@ -63,6 +65,7 @@ impl Tool {
         Tool::Select,
         Tool::Picker,
         Tool::Pan,
+        Tool::Camera,
     ];
 
     pub fn label(self) -> &'static str {
@@ -75,6 +78,7 @@ impl Tool {
             Tool::Select => "Sélection",
             Tool::Picker => "Pipette",
             Tool::Pan => "Main",
+            Tool::Camera => "Caméra",
         }
     }
 
@@ -89,6 +93,7 @@ impl Tool {
             Tool::Select => "outil.selection",
             Tool::Picker => "outil.pipette",
             Tool::Pan => "outil.main",
+            Tool::Camera => "outil.camera",
         }
     }
 }
@@ -164,6 +169,12 @@ pub struct App {
     pub(crate) light_table_strength: f32,
     /// Guides de perspective : affichage, alignement, verrouillage, glisser d'un point.
     pub(crate) guides: GuideState,
+    /// Réglage de la caméra à la souris (outil Caméra).
+    pub(crate) cam_drag: Option<CamDrag>,
+    /// Vue à travers la caméra du panneau (sinon : la feuille, avec le cadre tracé).
+    pub(crate) camera_view: bool,
+    /// Hors-champ estompé sur la feuille.
+    pub(crate) camera_mask: bool,
     pub(crate) default_exposure: usize,
     pub(crate) playing: bool,
     pub(crate) play_montage: bool,
@@ -293,6 +304,9 @@ impl App {
             light_table: false,
             light_table_strength: 0.3,
             guides: GuideState::default(),
+            cam_drag: None,
+            camera_view: false,
+            camera_mask: true,
             default_exposure: 1,
             playing: false,
             play_montage: false,
@@ -745,6 +759,7 @@ impl App {
         if self.bdrag.is_some() {
             self.finish_bdrag();
         }
+        self.finish_camera_drag();
         self.guides.stroke = None;
         self.shape_drag = None;
     }
@@ -1425,7 +1440,8 @@ impl App {
         let paper = (!self.export_transparent).then_some(self.doc.paper);
         for (n, &(panel, frame)) in frames.iter().enumerate() {
             let plan = render::panel_plan(&self.doc.panels[panel], frame, paper);
-            let pixels = render::frame_image(&self.doc, &plan);
+            let cam = self.doc.panel_camera(panel, frame);
+            let pixels = render::camera_image(&self.doc, &plan, &cam);
             let path = dir.join(format!("{base}_{:04}.png", n + 1));
             if let Err(e) = io::write_png(&path, &pixels, self.doc.frame[0], self.doc.frame[1]) {
                 self.status = format!("Échec de l'export ({}) : {e}", path.display());
@@ -1483,7 +1499,7 @@ impl App {
                 );
             }
             let plan = render::panel_plan(panel, 0, Some(self.doc.paper));
-            let pixels = render::frame_image(&self.doc, &plan);
+            let pixels = render::camera_image(&self.doc, &plan, &self.doc.panel_camera(i, 0));
             let file = format!("planche_{:03}.png", i + 1);
             if let Err(e) = io::write_png_scaled(&dir.join(&file), &pixels, w, h, 960) {
                 self.status = format!("Échec de l'export : {e}");
@@ -1521,7 +1537,8 @@ impl App {
             path.set_extension("png");
         }
         let plan = self.build_plan(self.cur_frame, false, !self.export_transparent);
-        let pixels = render::frame_image(&self.doc, &plan);
+        let cam = self.doc.panel_camera(self.cur_panel, self.cur_frame);
+        let pixels = render::camera_image(&self.doc, &plan, &cam);
         self.status = match io::write_png(&path, &pixels, self.doc.frame[0], self.doc.frame[1]) {
             Ok(()) => format!("Image exportée : {}", path.display()),
             Err(e) => format!("Échec de l'export : {e}"),
@@ -1796,6 +1813,16 @@ impl App {
             "calque.coller" => self.paste_layer(),
             "calque.verrouiller" => self.toggle_layer_lock(self.cur_layer),
             "calque.fusionner_dessous" => self.merge_layer_down(),
+            "outil.camera" => self.set_tool(Tool::Camera),
+            "camera.vue" => {
+                self.camera_view = !self.camera_view;
+                if !self.camera_view {
+                    self.fit_pending = true;
+                }
+                self.status = format!("Vue à travers la caméra : {}.", if self.camera_view { "oui" } else { "non" });
+            }
+            "camera.masque" => self.camera_mask = !self.camera_mask,
+            "camera.reinitialiser" => self.reset_camera(),
             "vue.table_lumineuse" => {
                 self.light_table = !self.light_table;
                 self.status = format!("Table lumineuse : {}.", if self.light_table { "oui" } else { "non" });

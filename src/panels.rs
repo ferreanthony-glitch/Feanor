@@ -172,6 +172,10 @@ impl App {
                 self.action_item(ui, "Pelure d'oignon", "vue.pelure");
                 self.action_item(ui, "Table lumineuse", "vue.table_lumineuse");
                 ui.separator();
+                self.action_item(ui, "Vue à travers la caméra", "camera.vue");
+                self.action_item(ui, "Estomper le hors-champ", "camera.masque");
+                self.action_item(ui, "Réinitialiser la caméra du panneau", "camera.reinitialiser");
+                ui.separator();
                 self.action_item(ui, "Guide : afficher et utiliser", "guide.activer");
                 self.action_item(ui, "Guide : aligner les traits", "guide.aligner");
                 self.action_item(ui, "Guide : verrouiller", "guide.verrouiller");
@@ -359,6 +363,20 @@ impl App {
             Tool::Pan => {
                 ui.label("Glisse pour déplacer la vue.");
                 note(ui, "Sinon : Espace + glisser, ou bouton du milieu.");
+            }
+            Tool::Camera => {
+                self.camera_fields(ui);
+                let was = self.camera_view;
+                ui.checkbox(&mut self.camera_view, "Vue à travers la caméra");
+                if was && !self.camera_view {
+                    self.fit_pending = true;
+                }
+                ui.checkbox(&mut self.camera_mask, "Estomper le hors-champ");
+                note(
+                    ui,
+                    "Glisser dans le cadre : déplacer (Maj : à l'horizontale ou à la verticale). Coin : \
+                     zoomer. Poignée ronde : tourner (Maj : par 15°). La caméra appartient au panneau.",
+                );
             }
         }
         if self.current_brush().is_some_and(|b| b.pressure_size || b.pressure_opacity) {

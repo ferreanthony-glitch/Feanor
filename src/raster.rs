@@ -85,15 +85,6 @@ impl Raster {
         out
     }
 
-    /// Partie `x0..x0+w`, `y0..y0+h` d'une image pleine `flat` de cette largeur.
-    pub fn crop(flat: &[Color32], width: usize, x0: usize, y0: usize, w: usize, h: usize) -> Vec<Color32> {
-        let mut out = Vec::with_capacity(w * h);
-        for y in y0..y0 + h {
-            out.extend_from_slice(&flat[y * width + x0..y * width + x0 + w]);
-        }
-        out
-    }
-
     /// Copie l'image dans un tableau plein, ligne par ligne.
     pub fn to_flat(&self) -> Vec<Color32> {
         let mut out = vec![Color32::TRANSPARENT; self.width * self.height];

@@ -16,7 +16,9 @@ impl App {
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
         self.canvas_rect = rect;
         let size = self.canvas_size();
-        if self.fit_pending {
+        // En vue caméra, la vue suit la caméra du panneau (avant de lire la souris).
+        self.apply_camera_view(rect);
+        if self.fit_pending && !self.camera_view {
             // On cadre la caméra (centrée sur la feuille), avec un peu de hors-champ autour.
             let [fw, fh] = self.doc.frame;
             let margin = if [fw, fh] == [self.doc.width, self.doc.height] { 1.0 } else { 1.12 };
@@ -61,7 +63,7 @@ impl App {
             painter.add(Shape::mesh(mesh));
         }
 
-        self.paint_camera_frame(&painter, rect);
+        self.paint_camera(&painter, rect);
         let shift = ui.input(|i| i.modifiers.shift);
         self.paint_guides(&painter, rect, self.hover_canvas);
         self.paint_vector_overlay(&painter, rect, shift);
@@ -157,6 +159,7 @@ impl App {
                             self.shape_drag = Some((p, p));
                         }
                         Tool::Select => self.select_press(p, *pos, modifiers.shift),
+                        Tool::Camera => self.camera_press(p, *pos),
                         Tool::Picker | Tool::Pan => {}
                     }
                 }
@@ -181,6 +184,8 @@ impl App {
                         self.select_drag(p, mods.shift);
                     } else if self.bdrag.is_some() {
                         self.bitmap_drag(p, mods.shift);
+                    } else if self.cam_drag.is_some() {
+                        self.camera_drag(p, mods.shift);
                     } else if self.picking {
                         self.pick_color(p);
                     }
@@ -217,41 +222,6 @@ impl App {
         self.hover_canvas = hover
             .filter(|p| rect.contains(*p))
             .map(|p| self.view.to_canvas(rect, size, p));
-    }
-
-    /// Cadre de la caméra : ce qui est hors champ est estompé, le cadre est tracé par-dessus.
-    fn paint_camera_frame(&self, painter: &egui::Painter, rect: Rect) {
-        let size = self.canvas_size();
-        let to_s = |p: Pos2| self.view.to_screen(rect, size, p);
-        let f = self.doc.frame_rect();
-        let stage = Rect::from_min_size(Pos2::ZERO, size);
-        if f == stage {
-            return;
-        }
-        let dim = Color32::from_black_alpha(if self.playing { 150 } else { 70 });
-        for band in [
-            Rect::from_min_max(stage.min, pos2(stage.max.x, f.min.y)),
-            Rect::from_min_max(pos2(stage.min.x, f.max.y), stage.max),
-            Rect::from_min_max(pos2(stage.min.x, f.min.y), pos2(f.min.x, f.max.y)),
-            Rect::from_min_max(pos2(f.max.x, f.min.y), pos2(stage.max.x, f.max.y)),
-        ] {
-            if band.width() > 0.0 && band.height() > 0.0 {
-                let pts = [band.left_top(), band.right_top(), band.right_bottom(), band.left_bottom()].map(to_s);
-                painter.add(Shape::convex_polygon(pts.to_vec(), dim, Stroke::NONE));
-            }
-        }
-        let corners: Vec<Pos2> = [f.left_top(), f.right_top(), f.right_bottom(), f.left_bottom()]
-            .map(to_s)
-            .to_vec();
-        painter.add(Shape::closed_line(corners.clone(), Stroke::new(3.0_f32, Color32::from_black_alpha(120))));
-        painter.add(Shape::closed_line(corners, Stroke::new(1.0_f32, Color32::from_gray(235))));
-        painter.text(
-            to_s(f.left_top()) + vec2(4.0, -3.0),
-            egui::Align2::LEFT_BOTTOM,
-            "Caméra",
-            egui::FontId::proportional(11.0),
-            Color32::from_gray(225),
-        );
     }
 
     /// Sélection vectorielle, lasso et aperçu des formes, par-dessus le dessin.
@@ -350,6 +320,15 @@ impl App {
         }
         if alt || matches!(self.tool, Tool::Picker | Tool::Fill | Tool::Shape) {
             ctx.set_cursor_icon(CursorIcon::Crosshair);
+            return;
+        }
+        if self.tool == Tool::Camera {
+            ctx.set_cursor_icon(match self.camera_handle_at(p) {
+                Some(crate::camtools::CamHandle::Move) => CursorIcon::Move,
+                Some(crate::camtools::CamHandle::Zoom) => CursorIcon::ResizeNwSe,
+                Some(crate::camtools::CamHandle::Rotate) => CursorIcon::Alias,
+                None => CursorIcon::Default,
+            });
             return;
         }
         if self.tool == Tool::Select {

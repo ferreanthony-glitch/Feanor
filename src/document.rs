@@ -6,6 +6,7 @@ use eframe::egui::{pos2, vec2, Rect};
 use serde::{Deserialize, Serialize};
 
 use crate::audio::Pcm;
+use crate::camera::{self, Camera, CameraKey};
 use crate::guides::Guide;
 use crate::raster::Raster;
 use crate::vector::VectorDrawing;
@@ -187,6 +188,8 @@ pub struct Panel {
     pub action: String,
     pub dialogue: String,
     pub notes: String,
+    /// Images clés de la caméra, triées (aucune : caméra au centre de la feuille).
+    pub camera: Vec<CameraKey>,
 }
 
 impl Panel {
@@ -416,8 +419,26 @@ impl Document {
                 p[1] += dy as f32;
             }
         }
+        for panel in &mut self.panels {
+            for k in &mut panel.camera {
+                k.cam = k.cam.shifted(dx as f32, dy as f32);
+            }
+        }
         self.width = width;
         self.height = height;
+    }
+
+    /// Caméra par défaut : au centre de la feuille, cadre de la taille de l'image finale.
+    pub fn default_camera(&self) -> Camera {
+        Camera::centered(self.width, self.height)
+    }
+
+    /// Caméra du panneau `index` à son image `frame`.
+    pub fn panel_camera(&self, index: usize, frame: usize) -> Camera {
+        match self.panels.get(index) {
+            Some(p) => camera::camera_at(&p.camera, frame, self.default_camera()),
+            None => self.default_camera(),
+        }
     }
 
     pub fn structure(&self) -> Structure {
@@ -730,6 +751,7 @@ impl Document {
             l.trim();
             layers.push(l);
         }
+        let (keys_before, keys_after) = camera::split_keys(&source.camera, at, self.default_camera());
         let second = Panel {
             id: self.alloc(),
             scene: source.scene,
@@ -738,6 +760,7 @@ impl Document {
             action: String::new(),
             dialogue: String::new(),
             notes: String::new(),
+            camera: keys_after,
         };
         let first = &mut self.panels[index];
         for l in &mut first.layers {
@@ -745,6 +768,7 @@ impl Document {
             l.trim();
         }
         first.length = at;
+        first.camera = keys_before;
         Some(self.insert_and_normalize(index + 1, vec![second]))
     }
 
@@ -757,8 +781,10 @@ impl Document {
         }
         let next = self.panels.remove(index + 1);
         let next_len = next.frame_count();
+        let default = self.default_camera();
         let a = &mut self.panels[index];
         let a_len = a.frame_count();
+        a.camera = camera::join_keys(&a.camera, a_len, &next.camera, next_len, default);
         for (i, lb) in next.layers.into_iter().enumerate() {
             if i < a.layers.len() && a.layers[i].kind == lb.kind {
                 let la = &mut a.layers[i];
@@ -937,6 +963,7 @@ impl Document {
             action: String::new(),
             dialogue: String::new(),
             notes: String::new(),
+            camera: Vec::new(),
         }
     }
 

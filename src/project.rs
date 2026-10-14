@@ -24,6 +24,7 @@ use crate::document::{
     fresh_layer_id, AudioTrack, Cel, CelId, Document, Layer, LayerKind, Panel, Scene, Sequence, Sound, SoundClip,
     Structure,
 };
+use crate::camera::{Camera, CameraKey};
 use crate::guides::Guide;
 use crate::io::encode_png;
 use crate::raster::Raster;
@@ -124,6 +125,22 @@ struct PanelEntry {
     #[serde(default)]
     notes: String,
     calques: Vec<LayerEntry>,
+    /// Images clés de la caméra (absent : caméra au centre de la feuille).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    camera: Vec<CameraEntry>,
+}
+
+/// Une image clé de caméra : à l'image `image` du panneau, centre (`x`, `y`) en pixels de la
+/// feuille, zoom, rotation en degrés.
+#[derive(Serialize, Deserialize)]
+struct CameraEntry {
+    image: usize,
+    x: f32,
+    y: f32,
+    #[serde(default = "one")]
+    zoom: f32,
+    #[serde(default)]
+    rotation: f32,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -364,6 +381,17 @@ fn manifest_of(doc: &Document) -> Manifest {
                     expositions: to_exposures(&l.frames),
                 })
                 .collect(),
+            camera: panel
+                .camera
+                .iter()
+                .map(|k| CameraEntry {
+                    image: k.frame,
+                    x: k.cam.x,
+                    y: k.cam.y,
+                    zoom: k.cam.zoom,
+                    rotation: k.cam.angle,
+                })
+                .collect(),
         });
     }
     let used = used_sounds(doc);
@@ -544,6 +572,18 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                 if layers.is_empty() {
                     layers.push(Layer::new("Dessin", LayerKind::Vector));
                 }
+                let mut camera: Vec<CameraKey> = Vec::new();
+                for k in &p.camera {
+                    if k.x.is_finite() && k.y.is_finite() && k.zoom.is_finite() && k.rotation.is_finite() {
+                        let cam = Camera {
+                            x: k.x,
+                            y: k.y,
+                            zoom: k.zoom.clamp(0.05, 50.0),
+                            angle: k.rotation,
+                        };
+                        crate::camera::set_key(&mut camera, k.image, cam);
+                    }
+                }
                 structure.panels.push(Panel {
                     id: p.id,
                     scene: scene.id,
@@ -552,6 +592,7 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                     action: p.action,
                     dialogue: p.dialogue,
                     notes: p.notes,
+                    camera,
                 });
             }
         }

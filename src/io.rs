@@ -213,6 +213,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
             action: s.action,
             dialogue: s.dialogue,
             notes: s.notes,
+            camera: Vec::new(),
         });
     }
     Ok(Document::from_parts(w, h, structure, cels, HashMap::new()))

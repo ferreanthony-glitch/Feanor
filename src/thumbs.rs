@@ -5,8 +5,8 @@ use eframe::egui::{self, TextureHandle, TextureId, TextureOptions};
 use crate::document::Document;
 use crate::render::{self, Plan};
 
-/// Ce qui fait changer une vignette : sa composition et la version de chaque dessin.
-type Key = (Plan, Vec<u64>);
+/// Ce qui fait changer une vignette : sa composition, la version de chaque dessin et la caméra.
+type Key = (Plan, Vec<u64>, [u32; 4]);
 
 struct Entry {
     key: Key,
@@ -44,7 +44,8 @@ impl Thumbs {
             .iter()
             .map(|i| doc.cels.get(&i.cel).map_or(0, |c| c.version))
             .collect();
-        let key = (plan, versions);
+        let cam = doc.panel_camera(panel, 0);
+        let key = (plan, versions, [cam.x, cam.y, cam.zoom, cam.angle].map(f32::to_bits));
         let fresh = self.entries.get(&s.id).is_some_and(|e| e.key == key);
         if fresh || *budget == 0 {
             if !fresh {
@@ -54,7 +55,7 @@ impl Thumbs {
         }
         *budget -= 1;
         let (tw, th) = thumb_size(doc);
-        let image = render::thumbnail(doc, &key.0, tw, th);
+        let image = render::thumbnail(doc, &key.0, &cam, tw, th);
         match self.entries.get_mut(&s.id) {
             Some(e) => {
                 e.texture.set(image, TextureOptions::LINEAR);

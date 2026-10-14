@@ -5,6 +5,10 @@ mod audio;
 #[cfg(test)]
 mod audio_tests;
 mod brush;
+mod camera;
+#[cfg(test)]
+mod camera_tests;
+mod camtools;
 mod canvas;
 mod document;
 mod fill;

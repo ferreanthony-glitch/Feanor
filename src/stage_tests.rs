@@ -65,7 +65,7 @@ fn enlarging_the_stage_keeps_the_framing() {
     assert_eq!(doc.guides[0].points[0], [30.0, 25.0]);
     // L'image de la caméra est la même qu'avant l'agrandissement.
     let plan = render::panel_plan(&doc.panels[0], 0, None);
-    let img = render::frame_image(&doc, &plan);
+    let img = render::camera_image(&doc, &plan, &doc.default_camera());
     assert_eq!(img.len(), 40 * 30);
     assert_eq!(img[40 + 1], RED, "pixel (1, 1) du cadre");
 }

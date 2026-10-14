@@ -1,5 +1,6 @@
 use eframe::egui::{self, Color32, ColorImage, TextureFilter, TextureHandle, TextureOptions};
 
+use crate::camera::Camera;
 use crate::document::{CelId, Document, Panel};
 use crate::raster::{tile_bounds, tiles_across, TILE, TILE_PIXELS};
 
@@ -92,13 +93,39 @@ pub fn composite_full(doc: &Document, plan: &Plan) -> Vec<Color32> {
     buf
 }
 
-/// Ce que voit la caméra : l'image du cadre, à la taille finale (`doc.frame`). Pour l'instant le
-/// cadre est fixe et centré : c'est la partie correspondante de la feuille, pixel pour pixel.
-pub fn frame_image(doc: &Document, plan: &Plan) -> Vec<Color32> {
+/// Ce que voit la caméra `cam` : l'image finale (`doc.frame`). Chaque pixel prend la couleur de
+/// la feuille au point filmé (interpolation bilinéaire) ; caméra centrée sans zoom ni rotation :
+/// les pixels de la feuille, tels quels. Hors de la feuille : transparent.
+pub fn camera_image(doc: &Document, plan: &Plan, cam: &Camera) -> Vec<Color32> {
     let full = composite_full(doc, plan);
-    let r = doc.frame_rect();
     let [fw, fh] = doc.frame;
-    crate::raster::Raster::crop(&full, doc.width, r.min.x as usize, r.min.y as usize, fw, fh)
+    let (w, h) = (doc.width as i64, doc.height as i64);
+    let get = |x: i64, y: i64| -> [f32; 4] {
+        if x < 0 || y < 0 || x >= w || y >= h {
+            return [0.0; 4];
+        }
+        let c = full[(y * w + x) as usize];
+        [c.r() as f32, c.g() as f32, c.b() as f32, c.a() as f32]
+    };
+    let mut out = Vec::with_capacity(fw * fh);
+    for v in 0..fh {
+        for u in 0..fw {
+            let p = cam.to_stage(doc.frame, u as f32 + 0.5, v as f32 + 0.5);
+            let (fx, fy) = (p.x - 0.5, p.y - 0.5);
+            let (ix, iy) = (fx.floor(), fy.floor());
+            let (tx, ty) = (fx - ix, fy - iy);
+            let (ix, iy) = (ix as i64, iy as i64);
+            let (a, b, c, d) = (get(ix, iy), get(ix + 1, iy), get(ix, iy + 1), get(ix + 1, iy + 1));
+            let mut px = [0u8; 4];
+            for k in 0..4 {
+                let top = a[k] + (b[k] - a[k]) * tx;
+                let bottom = c[k] + (d[k] - c[k]) * tx;
+                px[k] = (top + (bottom - top) * ty).round().clamp(0.0, 255.0) as u8;
+            }
+            out.push(Color32::from_rgba_premultiplied(px[0], px[1], px[2], px[3]));
+        }
+    }
+    out
 }
 
 pub fn composite_pixel(doc: &Document, plan: &Plan, x: usize, y: usize) -> Color32 {
@@ -133,18 +160,21 @@ pub fn panel_plan(panel: &Panel, frame: usize, paper: Option<[u8; 3]>) -> Plan {
     }
 }
 
-/// Image réduite de ce que voit la caméra (moyenne de 4 échantillons par pixel).
-pub fn thumbnail(doc: &Document, plan: &Plan, tw: usize, th: usize) -> ColorImage {
-    let r = doc.frame_rect();
-    let (sx, sy) = (r.width() / tw as f32, r.height() / th as f32);
+/// Image réduite de ce que voit la caméra `cam` (moyenne de 4 échantillons par pixel).
+pub fn thumbnail(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize) -> ColorImage {
+    let [fw, fh] = doc.frame;
+    let (sx, sy) = (fw as f32 / tw as f32, fh as f32 / th as f32);
     let mut pixels = Vec::with_capacity(tw * th);
     for y in 0..th {
         for x in 0..tw {
             let mut acc = [0u32; 4];
             for (ox, oy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
-                let px = ((r.min.x + (x as f32 + ox) * sx) as usize).min(doc.width - 1);
-                let py = ((r.min.y + (y as f32 + oy) * sy) as usize).min(doc.height - 1);
-                let c = composite_pixel(doc, plan, px, py);
+                let p = cam.to_stage(doc.frame, (x as f32 + ox) * sx, (y as f32 + oy) * sy);
+                let c = if p.x < 0.0 || p.y < 0.0 || p.x >= doc.width as f32 || p.y >= doc.height as f32 {
+                    Color32::TRANSPARENT
+                } else {
+                    composite_pixel(doc, plan, p.x as usize, p.y as usize)
+                };
                 for (a, v) in acc.iter_mut().zip(c.to_array()) {
                     *a += v as u32;
                 }
