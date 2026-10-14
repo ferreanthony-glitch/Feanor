@@ -71,6 +71,8 @@ mod recovery_tests;
 mod recoveryui;
 mod ref3dtool;
 mod render;
+#[cfg(test)]
+mod scenelayer_tests;
 mod settings;
 mod shapes;
 #[cfg(test)]

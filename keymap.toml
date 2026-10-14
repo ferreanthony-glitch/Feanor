@@ -742,6 +742,18 @@ action = "fichier.importer_modele3d"
 touches = []
 source = "Pelure (import glTF ; aucune commande équivalente vérifiée dans sb_shortcuts.xml de Storyboard Pro 27)"
 
+# ------------------------------------------------------------------------------------ Calques de toute la scène (6f)
+
+[[raccourci]]
+action = "calque.nouveau_fond"
+touches = []
+source = "Pelure (calque de fond commun aux panneaux d'une scène ; aucune commande équivalente vérifiée)"
+
+[[raccourci]]
+action = "calque.toute_la_scene"
+touches = []
+source = "Pelure"
+
 # ------------------------------------------------------------------------------------ Espaces de travail
 # Les dispositions de Pelure reprennent par le nom les commandes de Storyboard Pro 27 (sans
 # touche) ; leur contenu est propre à Pelure.

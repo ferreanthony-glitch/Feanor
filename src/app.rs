@@ -674,7 +674,7 @@ impl App {
     }
 
     /// Garde plan et calque courants dans les bornes (après une annulation, un chargement…).
-    fn clamp_nav(&mut self) {
+    pub(crate) fn clamp_nav(&mut self) {
         self.cur_panel = self.cur_panel.min(self.doc.panels.len() - 1);
         self.cur_layer = self.cur_layer.min(self.layers().len() - 1);
     }
@@ -1319,10 +1319,12 @@ impl App {
                 None => None,
             });
         }
+        // La copie d'un calque de toute la scène est un calque du seul panneau.
         let layer = Layer {
             id: fresh_layer_id(),
             name: format!("{} copie", source.name),
             frames,
+            scene_wide: None,
             ..source
         };
         let at = self.cur_layer + 1;
@@ -1340,7 +1342,13 @@ impl App {
         }
         let snap = self.snapshot();
         let at = self.cur_layer;
-        self.layers_mut().remove(at);
+        // Un calque de toute la scène part de tous ses panneaux.
+        match self.layer().scene_wide {
+            Some(w) => self.doc.remove_scene_layer(w),
+            None => {
+                self.layers_mut().remove(at);
+            }
+        }
         self.cur_layer = at.min(self.layers().len() - 1);
         self.vsel = None;
         self.commit_structure(snap);
@@ -1408,6 +1416,7 @@ impl App {
         let mut copies: HashMap<CelId, CelId> = HashMap::new();
         let mut layer = Layer {
             id: fresh_layer_id(),
+            scene_wide: None,
             ..clip.layer.clone()
         };
         for f in layer.frames.iter_mut() {
@@ -2069,6 +2078,8 @@ impl App {
             "calque.coller" => self.paste_layer(),
             "calque.verrouiller" => self.toggle_layer_lock(self.cur_layer),
             "calque.fusionner_dessous" => self.merge_layer_down(),
+            "calque.nouveau_fond" => self.add_scene_background(),
+            "calque.toute_la_scene" => self.toggle_scene_wide(),
             "outil.camera" => self.set_tool(Tool::Camera),
             "outil.repere3d" => self.set_tool(Tool::Ref3d),
             "outil.transformer" => self.set_tool(Tool::Transform),
@@ -2288,6 +2299,7 @@ impl eframe::App for App {
         self.end_gesture_if_idle();
         self.handle_close_request(ctx);
         self.handle_shortcuts(ctx);
+        self.sync_scene_layers();
         if !self.modal_open() {
             self.handle_dropped_files(ctx);
         }

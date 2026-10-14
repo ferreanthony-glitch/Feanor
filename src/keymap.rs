@@ -162,6 +162,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("vue.dessus", "Vue de dessus (profondeur des calques)", true, false),
     act("outil.repere3d", "Outil repère 3D (tourner autour du modèle)", true, false),
     act("fichier.importer_modele3d", "Importer un modèle 3D (glTF) comme repère", true, false),
+    act("calque.nouveau_fond", "Nouveau calque de fond pour toute la scène", true, false),
+    act("calque.toute_la_scene", "Calque de toute la scène (oui / non)", true, false),
     act("espace.standard", "Espace de travail : Standard", true, false),
     act("espace.dessin", "Espace de travail : Dessin", true, false),
     act("espace.timeline", "Espace de travail : Timeline", true, false),

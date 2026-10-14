@@ -181,7 +181,16 @@ impl LayerTransform {
     }
 }
 
-#[derive(Clone)]
+/// Calque de toute la scène (6f), comme un décor : chaque panneau de la scène `scene` en a un
+/// exemplaire, réglé pareil, qui montre le même dessin pendant tout le panneau. `key` relie les
+/// exemplaires d'un panneau à l'autre (chaque calque garde son propre `id`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SceneWide {
+    pub key: u64,
+    pub scene: u64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct Layer {
     pub id: u64,
     pub name: String,
@@ -199,6 +208,8 @@ pub struct Layer {
     /// Plusieurs images consécutives qui pointent vers le même dessin forment une exposition
     /// (un dessin « tenu » sur 2, 3… images).
     pub frames: Vec<Option<CelId>>,
+    /// Calque de toute la scène (6f) ; aucun : calque du seul panneau.
+    pub scene_wide: Option<SceneWide>,
 }
 
 impl Layer {
@@ -213,6 +224,7 @@ impl Layer {
             transform: LayerTransform::default(),
             depth: 0.0,
             frames: Vec::new(),
+            scene_wide: None,
         }
     }
 
@@ -376,6 +388,18 @@ impl Panel {
         }
         self.length = n;
     }
+}
+
+/// Images d'un panneau sans compter ses calques de toute la scène (qui suivent sa durée).
+fn own_frame_count(p: &Panel) -> usize {
+    p.layers
+        .iter()
+        .filter(|l| l.scene_wide.is_none())
+        .map(|l| l.frames.len())
+        .max()
+        .unwrap_or(0)
+        .max(p.length)
+        .max(1)
 }
 
 /// Un fichier son importé, gardé tel quel (pour l'enregistrement) et décodé (pour la lecture).
@@ -904,6 +928,8 @@ impl Document {
             let mut frames = Vec::with_capacity(layer.frames.len().saturating_sub(at));
             for f in layer.frames.iter().skip(at) {
                 frames.push(match *f {
+                    // Un calque de toute la scène garde le dessin de la scène.
+                    Some(c) if layer.scene_wide.is_some() => Some(c),
                     Some(c) => Some(match copies.get(&c) {
                         Some(&d) => d,
                         None => {
@@ -958,9 +984,12 @@ impl Document {
         let a = &mut self.panels[index];
         let a_len = a.frame_count();
         a.camera = camera::join_keys(&a.camera, a_len, &next.camera, next_len, default);
-        for (i, lb) in next.layers.into_iter().enumerate() {
-            if i < a.layers.len() && a.layers[i].kind == lb.kind {
-                let la = &mut a.layers[i];
+        // Les calques de toute la scène sont déjà dans le premier : seuls les autres se suivent,
+        // rang pour rang parmi les calques propres au panneau.
+        let own: Vec<usize> = (0..a.layers.len()).filter(|&k| a.layers[k].scene_wide.is_none()).collect();
+        for (i, lb) in next.layers.into_iter().filter(|l| l.scene_wide.is_none()).enumerate() {
+            if let Some(&k) = own.get(i).filter(|&&k| a.layers[k].kind == lb.kind) {
+                let la = &mut a.layers[k];
                 la.frames.resize(a_len, None);
                 la.frames.extend(lb.frames);
                 la.trim();
@@ -996,10 +1025,14 @@ impl Document {
             return None;
         }
         let scene = self.new_scene(self.sequence_of(index));
-        for p in &mut self.panels[index..end] {
+        let mut moved: Vec<Panel> = self.panels.drain(index..end).collect();
+        for p in &mut moved {
             p.scene = scene;
         }
-        let id = self.panels[index].id;
+        // La nouvelle scène garde le fond de l'ancienne, en copie à elle.
+        self.adopt_scene_layers(&mut moved, scene);
+        let id = moved[0].id;
+        self.panels.splice(index..index, moved);
         Some(self.normalize_keeping(id))
     }
 
@@ -1039,6 +1072,9 @@ impl Document {
         }
         if above.depth != below.depth {
             return Err("Les deux calques ne sont pas à la même profondeur.".into());
+        }
+        if above.scene_wide.is_some() || below.scene_wide.is_some() {
+            return Err("Un calque de toute la scène ne se fusionne pas avec un autre.".into());
         }
         let vector = above.kind == LayerKind::Vector && below.kind == LayerKind::Vector;
         let n = above.frames.len().max(below.frames.len());
@@ -1158,22 +1194,28 @@ impl Document {
                 s.name = format!("{} copie", name.trim());
             }
         }
-        (start..end)
+        let mut copies: Vec<Panel> = (start..end)
             .map(|i| {
                 let mut p = self.duplicate_panel(i);
                 p.scene = scene;
                 p
             })
-            .collect()
+            .collect();
+        self.adopt_scene_layers(&mut copies, scene);
+        copies
     }
 
-    /// Copie complète d'un panneau : ses dessins sont dupliqués, modifier l'un ne touche pas l'autre.
+    /// Copie complète d'un panneau : ses dessins sont dupliqués, modifier l'un ne touche pas l'autre
+    /// (sauf ceux des calques de toute la scène : la copie est dans la même scène).
     pub fn duplicate_panel(&mut self, index: usize) -> Panel {
         let mut panel = self.panels[index].clone();
         panel.id = self.alloc();
         let mut copies: HashMap<CelId, CelId> = HashMap::new();
         for layer in &mut panel.layers {
             layer.id = fresh_layer_id();
+            if layer.scene_wide.is_some() {
+                continue;
+            }
             for f in layer.frames.iter_mut().flatten() {
                 *f = match copies.get(f) {
                     Some(&c) => c,
@@ -1186,6 +1228,138 @@ impl Document {
             }
         }
         panel
+    }
+
+    // ---------------------------------------------------------------- calques de toute la scène (6f)
+
+    /// Accorde les calques de toute la scène : chaque panneau de la scène a son exemplaire,
+    /// réglé comme le modèle, qui montre le même dessin pendant tout le panneau. Le modèle est
+    /// l'exemplaire du panneau `cur` s'il en a un (c'est lui qu'on modifie), sinon le premier
+    /// trouvé ; son dessin est celui de l'image `frame` (un nouveau dessin remplace donc l'ancien
+    /// partout). Un exemplaire égaré dans une autre scène (panneau déplacé, scènes réunies) est
+    /// retiré : le panneau prend le fond de sa nouvelle scène. Vrai si quelque chose a changé.
+    pub fn sync_scene_layers(&mut self, cur: usize, frame: usize) -> bool {
+        let mut changed = false;
+        for p in &mut self.panels {
+            let scene = p.scene;
+            let before = p.layers.len();
+            p.layers.retain(|l| l.scene_wide.is_none_or(|w| w.scene == scene));
+            if p.layers.len() != before {
+                changed = true;
+                if p.layers.is_empty() {
+                    p.layers.push(Layer::new("Dessin", LayerKind::Vector));
+                }
+            }
+        }
+        // Modèles : l'exemplaire, son rang et son dessin.
+        let mut models: Vec<(Layer, usize, Option<CelId>)> = Vec::new();
+        for (pi, p) in self.panels.iter().enumerate() {
+            for (k, l) in p.layers.iter().enumerate() {
+                let Some(w) = l.scene_wide else { continue };
+                let first = l.frames.iter().flatten().next().copied();
+                let cel = if pi == cur { l.cel_at(frame).or(first) } else { first };
+                match models.iter_mut().find(|m| m.0.scene_wide.is_some_and(|v| v.key == w.key)) {
+                    Some(m) if pi == cur => *m = (l.clone(), k, cel),
+                    Some(_) => {}
+                    None => models.push((l.clone(), k, cel)),
+                }
+            }
+        }
+        for p in &mut self.panels {
+            let n = own_frame_count(p);
+            for (model, rank, cel) in &models {
+                let Some(w) = model.scene_wide.filter(|w| w.scene == p.scene) else { continue };
+                let frames = cel.map_or(Vec::new(), |c| vec![Some(c); n]);
+                match p.layers.iter().position(|l| l.scene_wide == Some(w)) {
+                    Some(k) => {
+                        let want = Layer { id: p.layers[k].id, frames, ..model.clone() };
+                        if p.layers[k] != want {
+                            p.layers[k] = want;
+                            changed = true;
+                        }
+                    }
+                    None => {
+                        let at = (*rank).min(p.layers.len());
+                        p.layers.insert(at, Layer { id: fresh_layer_id(), frames, ..model.clone() });
+                        changed = true;
+                    }
+                }
+            }
+        }
+        changed
+    }
+
+    /// Fait du calque `layer` du panneau `index` un calque de toute sa scène (son dessin à l'image
+    /// `frame` sera celui de toute la scène), ou le rend à son seul panneau : les autres panneaux
+    /// gardent alors leur exemplaire, chacun avec sa propre copie du dessin.
+    pub fn set_scene_wide(&mut self, index: usize, layer: usize, frame: usize, on: bool) {
+        let Some(l) = self.panels.get(index).and_then(|p| p.layers.get(layer)) else { return };
+        match (on, l.scene_wide) {
+            (true, None) => {
+                let w = SceneWide { key: fresh_layer_id(), scene: self.panels[index].scene };
+                self.panels[index].layers[layer].scene_wide = Some(w);
+                self.sync_scene_layers(index, frame);
+            }
+            (false, Some(w)) => {
+                for pi in 0..self.panels.len() {
+                    let Some(k) = self.panels[pi].layers.iter().position(|l| l.scene_wide == Some(w)) else { continue };
+                    self.panels[pi].layers[k].scene_wide = None;
+                    if pi == index {
+                        continue;
+                    }
+                    let mut copies: HashMap<CelId, CelId> = HashMap::new();
+                    let mut frames = std::mem::take(&mut self.panels[pi].layers[k].frames);
+                    for f in frames.iter_mut().flatten() {
+                        *f = match copies.get(f) {
+                            Some(&c) => c,
+                            None => {
+                                let c = self.duplicate_cel(*f);
+                                copies.insert(*f, c);
+                                c
+                            }
+                        };
+                    }
+                    self.panels[pi].layers[k].frames = frames;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Retire de tous les panneaux le calque de toute la scène `w` (un panneau qui n'aurait plus
+    /// de calque en reçoit un vide).
+    pub fn remove_scene_layer(&mut self, w: SceneWide) {
+        for p in &mut self.panels {
+            p.layers.retain(|l| l.scene_wide != Some(w));
+            if p.layers.is_empty() {
+                p.layers.push(Layer::new("Dessin", LayerKind::Vector));
+            }
+        }
+    }
+
+    /// Les calques de toute la scène des panneaux `panels`, passés dans la scène `scene` (scène
+    /// coupée ou copiée), deviennent les siens : nouvelle clé et leur propre copie du dessin
+    /// (modifier le fond d'une scène ne touche pas l'autre).
+    fn adopt_scene_layers(&mut self, panels: &mut [Panel], scene: u64) {
+        let mut keys: HashMap<u64, u64> = HashMap::new();
+        let mut cels: HashMap<CelId, CelId> = HashMap::new();
+        for p in panels.iter_mut() {
+            for l in &mut p.layers {
+                let Some(w) = l.scene_wide.filter(|w| w.scene != scene) else { continue };
+                let key = *keys.entry(w.key).or_insert_with(fresh_layer_id);
+                l.scene_wide = Some(SceneWide { key, scene });
+                for f in l.frames.iter_mut().flatten() {
+                    *f = match cels.get(f) {
+                        Some(&c) => c,
+                        None => {
+                            let c = self.duplicate_cel(*f);
+                            cels.insert(*f, c);
+                            c
+                        }
+                    };
+                }
+            }
+        }
     }
 
     pub fn new_cel(&mut self, kind: LayerKind) -> CelId {

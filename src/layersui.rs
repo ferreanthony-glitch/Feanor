@@ -12,6 +12,8 @@ use crate::render::over;
 
 /// Taille des vignettes de calque.
 const THUMB: [usize; 2] = [64, 36];
+/// Marque des calques de toute la scène (6f).
+pub(crate) const SCENE_WIDE: Color32 = Color32::from_rgb(214, 170, 92);
 
 /// Vignettes des dessins (par dessin et version), refaites quand le dessin change.
 #[derive(Default)]
@@ -58,6 +60,49 @@ impl App {
         Some(tex)
     }
 
+    /// Calques de toute la scène accordés d'un panneau à l'autre (6f), à chaque image ; le
+    /// calque courant reste le même.
+    pub(crate) fn sync_scene_layers(&mut self) {
+        let id = self.layers().get(self.cur_layer).map(|l| l.id);
+        if self.doc.sync_scene_layers(self.cur_panel, self.cur_frame) {
+            if let Some(i) = id.and_then(|id| self.layers().iter().position(|l| l.id == id)) {
+                self.cur_layer = i;
+            }
+            self.clamp_nav();
+            self.renderer.invalidate_all();
+        }
+    }
+
+    /// Nouveau calque bitmap « Fond » tout en bas, commun à tous les panneaux de la scène.
+    pub(crate) fn add_scene_background(&mut self) {
+        self.end_stroke();
+        self.drop_bitmap_selection();
+        let snap = self.snapshot();
+        self.layers_mut().insert(0, crate::document::Layer::new("Fond", LayerKind::Bitmap));
+        self.doc.set_scene_wide(self.cur_panel, 0, self.cur_frame, true);
+        self.cur_layer = 0;
+        self.vsel = None;
+        self.commit_structure(snap);
+        self.status = "Calque « Fond » : ce qu'on y dessine se voit dans tous les panneaux de la scène.".into();
+    }
+
+    /// Étend le calque courant à toute la scène, ou le rend à ce seul panneau (les autres panneaux
+    /// gardent alors leur copie).
+    pub(crate) fn toggle_scene_wide(&mut self) {
+        self.end_stroke();
+        self.drop_bitmap_selection();
+        let snap = self.snapshot();
+        let on = self.layer().scene_wide.is_none();
+        self.doc.set_scene_wide(self.cur_panel, self.cur_layer, self.cur_frame, on);
+        self.commit_structure(snap);
+        let name = self.layer().name.clone();
+        self.status = if on {
+            format!("Calque « {name} » étendu à toute la scène : un seul dessin, dans chaque panneau.")
+        } else {
+            format!("Calque « {name} » rendu à ce panneau ; les autres panneaux gardent leur copie.")
+        };
+    }
+
     fn layer_hint(&self, text: &str, action: &str) -> String {
         let key = self.keymap.label(action);
         if key.is_empty() {
@@ -88,9 +133,9 @@ impl App {
         let frame = self.cur_frame;
         let accent = ui.visuals().selection.bg_fill;
         for li in (0..self.layers().len()).rev() {
-            let (visible, locked, kind, name, cel) = {
+            let (visible, locked, kind, name, cel, wide) = {
                 let l = &self.layers()[li];
-                (l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame))
+                (l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame), l.scene_wide.is_some())
             };
             let current = li == self.cur_layer;
             let thumb = cel.and_then(|c| self.layer_thumb(ui.ctx(), c));
@@ -140,14 +185,16 @@ impl App {
                             if ui.add(egui::Label::new(text).sense(Sense::click()).truncate()).clicked() {
                                 select = Some(li);
                             }
-                            ui.label(
-                                RichText::new(match kind {
-                                    LayerKind::Vector => "vectoriel",
-                                    LayerKind::Bitmap => "bitmap",
-                                })
-                                .small()
-                                .weak(),
-                            );
+                            let kind = match kind {
+                                LayerKind::Vector => "vectoriel",
+                                LayerKind::Bitmap => "bitmap",
+                            };
+                            if wide {
+                                ui.label(RichText::new(format!("{kind} · toute la scène")).small().color(SCENE_WIDE))
+                                    .on_hover_text("Le même dessin dans tous les panneaux de la scène");
+                            } else {
+                                ui.label(RichText::new(kind).small().weak());
+                            }
                         });
                     });
                 });
@@ -174,6 +221,13 @@ impl App {
             }
             if ui.button(RichText::new(format!("{} B", ph::PLUS))).on_hover_text("Nouveau calque bitmap (peinture en pixels)").clicked() {
                 self.add_layer(LayerKind::Bitmap);
+            }
+            let fond_hint = self.layer_hint(
+                "Nouveau calque de fond, tout en bas, commun à tous les panneaux de la scène (décor)",
+                "calque.nouveau_fond",
+            );
+            if ui.button(RichText::new(format!("{} Fond", ph::PLUS))).on_hover_text(fond_hint).clicked() {
+                self.add_scene_background();
             }
             if ui.button(icon(ph::COPY_SIMPLE)).on_hover_text("Dupliquer le calque").clicked() {
                 self.duplicate_layer();
@@ -216,6 +270,17 @@ impl App {
         let resp = ui.checkbox(&mut visible, "Visible");
         if self.edited(&resp) {
             self.layers_mut()[li].visible = visible;
+        }
+        let mut wide = self.layers()[li].scene_wide.is_some();
+        if ui
+            .checkbox(&mut wide, "Toute la scène")
+            .on_hover_text(
+                "Un seul dessin, montré dans chaque panneau de la scène (un décor, par exemple). \
+                 Décoché : chaque panneau garde sa propre copie.",
+            )
+            .changed()
+        {
+            self.toggle_scene_wide();
         }
         let resp = ui
             .horizontal(|ui| {

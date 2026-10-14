@@ -22,8 +22,8 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::document::{
-    fresh_layer_id, AudioTrack, Cel, CelId, Document, Layer, LayerKind, LayerTransform, Panel, Ref3d, Scene, Sequence,
-    Sound, SoundClip, Structure,
+    fresh_layer_id, AudioTrack, Cel, CelId, Document, Layer, LayerKind, LayerTransform, Panel, Ref3d, Scene, SceneWide,
+    Sequence, Sound, SoundClip, Structure,
 };
 use crate::camera::{Camera, CameraKey};
 use crate::guides::Guide;
@@ -38,7 +38,9 @@ pub const FORMAT: &str = "pelure-projet";
 /// 5 (phase 2d) : modèles 3D (`modeles`) et repère 3D par panneau (`repere3d`).
 /// 6 (phase 5d) : textes dans les dessins vectoriels (éléments `Text`, inconnus des versions
 /// précédentes : elles refusent le projet plutôt que de perdre ces dessins).
-pub const VERSION: u32 = 6;
+/// 7 (phase 6f) : calques de toute la scène (`toute_la_scene`) ; une version précédente en ferait
+/// des calques séparés qui partagent un même dessin.
+pub const VERSION: u32 = 7;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Modèles 3D de repère (2d), dans le format de Pelure.
@@ -223,6 +225,10 @@ struct LayerEntry {
     /// Profondeur multiplan (2c ; absent = 0, plan de référence).
     #[serde(default, skip_serializing_if = "is_zero")]
     profondeur: f32,
+    /// Calque de toute la scène (6f ; absent = calque du seul panneau) : ses exemplaires, un par
+    /// panneau de la scène, portent le même numéro.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    toute_la_scene: Option<u64>,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -567,6 +573,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                         rotation: l.transform.angle,
                     }),
                     profondeur: l.depth,
+                    toute_la_scene: l.scene_wide.map(|w| w.key),
                     expositions: to_exposures(&l.frames),
                 })
                 .collect(),
@@ -782,11 +789,17 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                 name: scene.nom,
                 sequence: seq.id,
             });
+            // Numéros des calques de toute la scène : neufs pour la session.
+            let mut keys: HashMap<u64, u64> = HashMap::new();
             for p in scene.panneaux {
                 let mut layers: Vec<Layer> = p
                     .calques
                     .into_iter()
                     .map(|l| Layer {
+                        scene_wide: l.toute_la_scene.map(|k| SceneWide {
+                            key: *keys.entry(k).or_insert_with(fresh_layer_id),
+                            scene: scene.id,
+                        }),
                         id: fresh_layer_id(),
                         name: l.nom,
                         kind: if l.kind == "bitmap" {

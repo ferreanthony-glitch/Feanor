@@ -151,6 +151,14 @@ impl App {
                 self.action_item(ui, lock, "calque.verrouiller");
                 self.action_item(ui, "Fusionner avec le calque du dessous", "calque.fusionner_dessous");
                 ui.separator();
+                self.action_item(ui, "Nouveau fond pour toute la scène", "calque.nouveau_fond");
+                let wide = if self.layer().scene_wide.is_some() {
+                    "Rendre le calque à ce seul panneau"
+                } else {
+                    "Étendre le calque à toute la scène"
+                };
+                self.action_item(ui, wide, "calque.toute_la_scene");
+                ui.separator();
                 self.action_item(ui, "Calque du dessus", "calque.dessus");
                 self.action_item(ui, "Calque du dessous", "calque.dessous");
             });
