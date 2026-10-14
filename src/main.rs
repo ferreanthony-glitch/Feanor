@@ -15,6 +15,9 @@ mod camera_tests;
 mod camtools;
 mod canvas;
 #[cfg(test)]
+mod color_tests;
+mod colorui;
+#[cfg(test)]
 mod depth_tests;
 mod dock;
 #[cfg(test)]

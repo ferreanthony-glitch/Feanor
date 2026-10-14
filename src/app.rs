@@ -237,6 +237,8 @@ pub struct App {
     pub(crate) shape: ShapeSettings,
     pub(crate) vector_erase_whole: bool,
     pub(crate) color: [u8; 3],
+    /// La couleur en teinte, saturation, valeur (panneau Couleur, 6b).
+    pub(crate) hsv: [f32; 3],
     pub(crate) swatches: Vec<[u8; 3]>,
     pub(crate) view: View,
     pub(crate) fit_pending: bool,
@@ -417,6 +419,7 @@ impl App {
             },
             vector_erase_whole: false,
             color: [24, 24, 28],
+            hsv: crate::colorui::rgb_to_hsv([24, 24, 28]),
             swatches: vec![
                 [24, 24, 28],
                 [255, 255, 255],

@@ -1,4 +1,4 @@
-use eframe::egui::{self, vec2, Align, Align2, Color32, Layout, RichText, Sense, Stroke, StrokeKind};
+use eframe::egui::{self, vec2, Align, Align2, Color32, Layout, RichText};
 
 use crate::app::{App, Mode, Tool};
 use crate::brush::BrushSettings;
@@ -262,41 +262,6 @@ impl App {
                 }
             }
         });
-    }
-
-    /// Panneau Couleur : couleur courante et nuancier.
-    pub(crate) fn color_panel(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().interact_size = vec2(60.0, 26.0);
-            ui.color_edit_button_srgb(&mut self.color);
-            if ui.button("+ Nuancier").clicked() && !self.swatches.contains(&self.color) {
-                self.swatches.push(self.color);
-            }
-        });
-        let mut remove = None;
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
-            for (i, c) in self.swatches.iter().enumerate() {
-                let (rect, resp) = ui.allocate_exact_size(vec2(19.0, 19.0), Sense::click());
-                ui.painter().rect_filled(rect, 3.0, Color32::from_rgb(c[0], c[1], c[2]));
-                let border = if *c == self.color {
-                    Stroke::new(2.0_f32, Color32::WHITE)
-                } else {
-                    Stroke::new(1.0_f32, Color32::from_gray(70))
-                };
-                ui.painter().rect_stroke(rect, 3.0, border, StrokeKind::Inside);
-                let resp = resp.on_hover_text("Clic : choisir · clic droit : retirer");
-                if resp.clicked() {
-                    self.color = *c;
-                }
-                if resp.secondary_clicked() {
-                    remove = Some(i);
-                }
-            }
-        });
-        if let Some(i) = remove {
-            self.swatches.remove(i);
-        }
     }
 
     /// Panneau des réglages de l'outil courant.
