@@ -215,10 +215,10 @@ pub struct App {
     pub(crate) ffmpeg: Option<Option<(PathBuf, Result<crate::export::Encoders, String>)>>,
     /// Réglages de l'application (%APPDATA%\Pelure\reglages.toml).
     pub(crate) settings: crate::settings::Settings,
-    /// Disposition de la fenêtre (panneaux affichés, tailles). `layout_gen` change quand on
-    /// applique un espace de travail : les panneaux repartent alors des tailles demandées.
+    /// Dernière disposition appliquée (espace de travail) ; les panneaux eux-mêmes, que l'on
+    /// glisse et aimante, sont dans `dock` (affiché par egui_dock).
     pub(crate) layout: crate::workspace::Layout,
-    pub(crate) layout_gen: u64,
+    pub(crate) dock: Option<egui_dock::DockState<crate::dock::Pane>>,
     /// Nom en cours de saisie pour enregistrer l'espace de travail.
     pub(crate) workspace_name: Option<String>,
     /// Copie de secours de cette séance, et séances interrompues à proposer au démarrage.
@@ -368,7 +368,7 @@ impl App {
             export_job: None,
             ffmpeg: None,
             layout: crate::workspace::Layout::default(),
-            layout_gen: 0,
+            dock: None,
             workspace_name: None,
             settings,
             // Les séances interrompues d'abord (avant d'ouvrir la nôtre).
@@ -2144,51 +2144,8 @@ impl eframe::App for App {
 
         egui::TopBottomPanel::top("menu").show(ctx, |ui| self.menu_bar(ui));
         egui::TopBottomPanel::bottom("statut").show(ctx, |ui| self.status_bar(ui));
-        // Panneaux selon la disposition ; on relit leurs tailles (l'utilisateur les tire).
-        let gen = self.layout_gen;
-        if self.layout.strip {
-            match self.mode {
-                Mode::Storyboard => {
-                    let r = egui::TopBottomPanel::bottom(egui::Id::new(("montage", gen)))
-                        .resizable(true)
-                        .default_height(self.layout.montage_height)
-                        .min_height(140.0)
-                        .show(ctx, |ui| self.montage_panel(ui));
-                    self.layout.montage_height = r.response.rect.height();
-                }
-                Mode::Animation => {
-                    let r = egui::TopBottomPanel::bottom(egui::Id::new(("timeline", gen)))
-                        .resizable(true)
-                        .default_height(self.layout.timeline_height)
-                        .min_height(110.0)
-                        .show(ctx, |ui| self.timeline_panel(ui));
-                    self.layout.timeline_height = r.response.rect.height();
-                }
-            }
-        }
-        if self.layout.tools {
-            egui::SidePanel::left(egui::Id::new(("outils", gen)))
-                .resizable(false)
-                .exact_width(236.0)
-                .show(ctx, |ui| {
-                    egui::ScrollArea::vertical().show(ui, |ui| self.tools_panel(ui));
-                });
-        }
-        if self.layout.sheet {
-            let r = egui::SidePanel::right(egui::Id::new(("plan_calques", gen)))
-                .default_width(self.layout.sheet_width)
-                .show(ctx, |ui| self.right_panel(ui));
-            self.layout.sheet_width = r.response.rect.width();
-        }
-        egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(Color32::from_gray(42)))
-            .show(ctx, |ui| {
-                if self.mode == Mode::Storyboard && self.board_view == BoardView::Panels {
-                    self.panels_view(ui);
-                } else {
-                    self.canvas_panel(ui);
-                }
-            });
+        // Les panneaux : onglets que l'on glisse, aimante ou fait flotter (5b).
+        self.show_dock(ctx);
 
         self.dialogs(ctx);
         self.top_view_window(ctx);

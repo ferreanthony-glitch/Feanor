@@ -139,6 +139,27 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   demandée. Les tailles tirées à la main sont relues chaque image et retenues quand la souris
   est relâchée.
 
+## Fenêtres modulables (5b)
+
+- Affichage et gestes par **egui_dock 0.16** (onglets, boutons d'aimantation, panneaux
+  flottants dans la fenêtre). `dock.rs` : les neuf panneaux (`Pane`) et la disposition dans un
+  **format propre à Pelure** (`DockLayout` : arbre `onglets` / `cote_a_cote` / `dessus_dessous`
+  avec la part de chaque côté, plus les panneaux flottants et leur place), converti vers l'état
+  d'egui_dock (`to_state`) et retour (`from_state`). Les espaces de travail ne dépendent donc pas
+  de la version de la bibliothèque, et tout cela se teste sans interface (`dock_tests.rs`).
+- Réparation à la lecture (`sanitized`) : chaque panneau une fois, le dessin toujours dans la
+  fenêtre principale, parts bornées, groupes vides retirés. Rouvrir un panneau : avec les
+  panneaux de son groupe (gauche : outils, couleur, réglages, vue, guides ; droite : fiche,
+  calques ; bas : bande), sinon dans une colonne recréée à côté du dessin.
+- `dockui.rs` : le contenu de chaque onglet (les fonctions de panneau existantes), les menus.
+  egui_dock 0.16 ne retient pas la place des panneaux flottants : on la lit dans la mémoire
+  d'egui (`dock::window_id`), sans le cadre (sinon la taille grandirait à chaque ouverture).
+- `workspace::Layout` garde ses anciens champs (panneaux affichés, tailles en pixels) : ils
+  décrivent les dispositions de Pelure et sont convertis (`DockLayout::from_legacy`) quand
+  `panneaux` manque (espaces enregistrés avant 5b).
+- L'accessibilité d'egui (accesskit) est coupée : elle plantait quand un panneau devenait
+  flottant (`Option::unwrap` dans accesskit_consumer 0.26). À réactiver quand ce sera corrigé.
+
 ## Pinceaux texturés (3d-2)
 
 - `brush.rs` : chaque empreinte calcule une couverture par pixel — disque (dureté) ou pointe en
@@ -386,4 +407,6 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 | Sons en temps de montage (pas liés aux panneaux) | comportement le plus simple et prévisible | nul | moyen : un panneau rallongé décale l'image par rapport au son | oui : le lien extrait-panneau pourra s'ajouter (champ en plus) |
 | Export vidéo via ffmpeg installé à part (phase 3) | seule voie fiable sans souci de licence ni de compilation | dépendance externe | faible | oui |
 | Pas d'export XML Toon Boom | format propriétaire non documenté | — | — | — |
+| Icônes Phosphor (egui-phosphor, MIT) (5a, choix d'Anthony) | jeu complet et cohérent, dans la police de l'interface | ≈ 1 Mo d'exécutable | faible | oui : `Tool::icon`, `Pane::icon` |
+| Panneaux par egui_dock 0.16 (MIT), disposition dans un format de Pelure (5b) | aimantation, onglets, panneaux flottants déjà faits et éprouvés ; format à nous pour ne pas dépendre de la version | refonte de l'affichage des panneaux | moyen : accessibilité coupée (plantage d'accesskit) | oui : le format `DockLayout` ne dépend pas de la bibliothèque |
 | Repère 3D : lecteur glTF et fil de fer écrits pour Pelure, sur le processeur (2d) | glTF = format ouvert que Blender exporte ; pas de bibliothèque ni de passe GPU à ajouter pour un guide en fil de fer | ≈ 900 lignes ; calcul 0,15 s par vue sur un gros décor (sur un autre fil) | faible : mauvais fichier → message | oui : affichage par la carte graphique ou rendu ombré possibles plus tard, le format `.pelure3d` ne change pas |

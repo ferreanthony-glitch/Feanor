@@ -16,6 +16,10 @@ mod camtools;
 mod canvas;
 #[cfg(test)]
 mod depth_tests;
+mod dock;
+#[cfg(test)]
+mod dock_tests;
+mod dockui;
 mod document;
 mod export;
 #[cfg(test)]

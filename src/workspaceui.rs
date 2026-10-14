@@ -3,26 +3,31 @@
 use eframe::egui;
 
 use crate::app::{App, BoardView};
+use crate::dock::{Group, Pane};
 use crate::workspace::{self, Layout};
 
 impl App {
     /// La disposition telle qu'elle est à l'écran.
     pub(crate) fn current_layout(&self) -> Layout {
+        let panes = self.dock_layout();
         Layout {
+            tools: panes.contains(Pane::Tools),
+            sheet: panes.contains(Pane::Sheet) || panes.contains(Pane::Layers),
+            strip: panes.contains(Pane::Strip),
+            panneaux: Some(panes),
             top_view: self.top_view,
             vignettes: self.board_view == BoardView::Panels,
             ..self.layout.clone()
         }
     }
 
-    /// Applique une disposition : panneaux, tailles (les panneaux repartent de ces tailles),
-    /// vue vignettes, vue de dessus.
+    /// Applique une disposition : panneaux et leur place, vue vignettes, vue de dessus.
     pub(crate) fn apply_layout(&mut self, layout: Layout) {
         let layout = layout.sanitized();
         self.top_view = layout.top_view;
         self.board_view = if layout.vignettes { BoardView::Panels } else { BoardView::Scene };
+        self.set_dock_layout(layout.dock_layout());
         self.layout = layout;
-        self.layout_gen += 1;
     }
 
     /// Retient la disposition quand elle change (pas pendant qu'on tire un panneau).
@@ -47,9 +52,9 @@ impl App {
         }
         match action {
             "espace.enregistrer" => self.workspace_name = Some(String::new()),
-            "vue.panneau_outils" => self.layout.tools = !self.layout.tools,
-            "vue.panneau_fiche" => self.layout.sheet = !self.layout.sheet,
-            "vue.panneau_bande" => self.layout.strip = !self.layout.strip,
+            "vue.panneau_outils" => self.toggle_pane_group(Group::Left),
+            "vue.panneau_fiche" => self.toggle_pane_group(Group::Right),
+            "vue.panneau_bande" => self.toggle_pane_group(Group::Bottom),
             _ => return false,
         }
         true
@@ -91,19 +96,38 @@ impl App {
             }
         });
         ui.menu_button("Panneaux", |ui| {
-            let checks = [
-                ("Outils", "vue.panneau_outils", self.layout.tools),
-                ("Fiche et calques", "vue.panneau_fiche", self.layout.sheet),
-                ("Montage / timeline", "vue.panneau_bande", self.layout.strip),
+            let panes = self.dock_layout();
+            // Un par un…
+            for pane in Pane::ALL.into_iter().filter(|p| *p != Pane::Canvas) {
+                let mut on = panes.contains(pane);
+                if ui.checkbox(&mut on, format!("{}  {}", pane.icon(), pane.name())).changed() {
+                    self.toggle_pane(pane);
+                }
+            }
+            ui.separator();
+            // … ou par groupe (actions du fichier de raccourcis).
+            let groups = [
+                ("Colonne des outils", "vue.panneau_outils", Group::Left),
+                ("Fiche et calques", "vue.panneau_fiche", Group::Right),
+                ("Montage / timeline", "vue.panneau_bande", Group::Bottom),
             ];
-            for (label, action, on) in checks {
-                let mut v = on;
+            for (label, action, group) in groups {
+                let mut on = group.panes().iter().any(|p| panes.contains(*p));
                 let key = self.keymap.label(action);
                 let text = if key.is_empty() { label.to_string() } else { format!("{label} ({key})") };
-                if ui.checkbox(&mut v, text).changed() {
+                if ui.checkbox(&mut on, text).changed() {
                     self.workspace_action(action);
                 }
             }
+            ui.separator();
+            ui.label(
+                egui::RichText::new(
+                    "Glisse l'onglet d'un panneau : il s'aimante sur un bord ou dans un autre panneau, \
+                     ou flotte si on le lâche ailleurs.",
+                )
+                .small()
+                .weak(),
+            );
         });
     }
 
@@ -140,15 +164,7 @@ impl App {
     }
 }
 
-/// Deux dispositions identiques, à un pixel près (les tailles relues à l'écran bougent un peu).
+/// Deux dispositions identiques, aux parts près (elles bougent d'un rien d'une image à l'autre).
 fn same_layout(a: &Layout, b: &Layout) -> bool {
-    let close = |x: f32, y: f32| (x - y).abs() < 1.0;
-    a.tools == b.tools
-        && a.sheet == b.sheet
-        && a.strip == b.strip
-        && a.vignettes == b.vignettes
-        && a.top_view == b.top_view
-        && close(a.sheet_width, b.sheet_width)
-        && close(a.montage_height, b.montage_height)
-        && close(a.timeline_height, b.timeline_height)
+    a.vignettes == b.vignettes && a.top_view == b.top_view && a.dock_layout().close_to(&b.dock_layout())
 }

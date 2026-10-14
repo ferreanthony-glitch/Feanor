@@ -97,7 +97,13 @@ deux calques vectoriels restent vectoriels, sinon le résultat est bitmap ; les 
   Wacom, l'option « Utiliser Windows Ink » doit être cochée dans les propriétés de la tablette.
   Sur le dessin, la croix de Windows marque la pointe sans retard, le cercle autour montre la
   taille du pinceau (Affichage > « Croix du système sur le pinceau » pour n'avoir que le cercle).
-- **Pinceaux texturés** (calque bitmap, panneau Outils) : liste de réglages (pinceau rond, crayon à
+- **Panneaux** : chaque panneau (Outils, Couleur, Réglages, Vue, Guides, Fiche, Calques, Montage
+  ou Timeline) est un onglet. Glisse un onglet : des boutons apparaissent au milieu du panneau
+  survolé, lâche-le sur l'un d'eux pour l'aimanter (à gauche, à droite, dessus, dessous, ou en
+  onglet), ou ailleurs pour qu'il flotte. Tire les bords entre panneaux pour les redimensionner.
+  La croix d'un onglet le ferme ; Affichage > Panneaux le fait revenir à sa place. Les outils
+  sont des icônes : leur nom et leur raccourci s'affichent au survol.
+- **Pinceaux texturés** (calque bitmap, panneau Réglages) : liste de réglages (pinceau rond, crayon à
   papier, craie grasse, encre, gommes) ; « Papier » et « Grain » donnent un grain fixe sur le
   dessin, que la couleur remplit quand on appuie. « Importer… » lit un fichier de pinceaux Toon
   Boom (`.xml`, par exemple `STB_TextureBrushes_preset.xml`) : ses pinceaux, pointes et papiers
@@ -106,9 +112,9 @@ deux calques vectoriels restent vectoriels, sinon le résultat est bitmap ; les 
   plus pâles. Dans la timeline : nombre avant / après, et « Réglages… » (compter par dessin ou par
   image, opacité, teinte ou vraies couleurs, couleurs). Les réglages sont retenus pour la prochaine
   fois.
-- **Table lumineuse** (Outils > Vue, ou menu Affichage) : les autres calques du panneau sont
+- **Table lumineuse** (panneau Vue, ou menu Affichage) : les autres calques du panneau sont
   estompés, le calque sur lequel on dessine reste net.
-- **Guides de perspective** (Outils > Guides) : 1, 2 ou 3 points de fuite, que l'on déplace à la
+- **Guides de perspective** (panneau Guides) : 1, 2 ou 3 points de fuite, que l'on déplace à la
   souris. G les affiche, Maj+A aligne les traits (le trait suit la fuyante, la verticale ou
   l'horizontale la plus proche de son départ), Maj+L verrouille les points, Maj+G montre des lignes
   de référence. Les guides sont enregistrés avec le projet.
@@ -119,8 +125,9 @@ deux calques vectoriels restent vectoriels, sinon le résultat est bitmap ; les 
   pistes, guides, papier, cadence. Une saisie ou un glissé de curseur compte pour une seule étape.
 - **Espaces de travail** (Affichage > Espaces de travail) : Standard, Dessin (plus de place pour
   dessiner), Timeline (bande du bas plus haute), Vue d'ensemble (vignettes) ; « Enregistrer la
-  disposition… » garde la tienne sous un nom. Affichage > Panneaux masque ou affiche chaque
-  panneau. Pelure rouvre avec la disposition de la dernière fois.
+  disposition… » garde la tienne sous un nom (panneaux aimantés et flottants compris).
+  Affichage > Panneaux masque ou affiche chaque panneau. Pelure rouvre avec la disposition de la
+  dernière fois.
 - **Copie de secours** : toutes les minutes (menu Fichier pour changer, 0 = jamais), Pelure copie
   le projet modifié à part, sans toucher au projet lui-même. Après un plantage, au démarrage
   suivant, Pelure propose d'ouvrir la copie ; « Enregistrer » la remet dans le projet.
@@ -216,6 +223,7 @@ en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le 
 | `project.rs` | Projet en dossier (format 5), enregistrement préparé puis écrit |
 | `recovery.rs`, `recoveryui.rs` | Copie de secours, récupération après plantage |
 | `workspace.rs`, `workspaceui.rs` | Espaces de travail, disposition retenue |
+| `dock.rs`, `dockui.rs` | Panneaux modulables : disposition (format de Pelure), contenu des onglets |
 | `settings.rs` | Réglages de l'application (ffmpeg, pelure, copie de secours, dispositions) |
 | `io.rs` | Anciens fichiers `.pelure`, écriture d'images |
 | `audio.rs` | Décodage des sons, formes d'onde, mixage et sortie audio |

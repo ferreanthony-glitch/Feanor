@@ -199,6 +199,30 @@ n'est plus bridée quand la fenêtre est derrière une autre.
   d'Anthony). Une disposition = panneaux affichés, leurs tailles, vue vignettes, vue de dessus.
   Pas encore : fenêtres détachées, plusieurs vues du même dessin.
 
+## Phase 5 — Interface et nouveaux outils ⏳
+
+Demandée par Anthony après la phase 4. Choix faits : icônes Phosphor, fenêtres modulables dans
+la fenêtre de Pelure (egui_dock), tampon comme Storyboard Pro **et** tampon de duplication,
+perspective = déformer en perspective (outil Perspective de Storyboard Pro).
+
+- ✅ 5a. Icônes des outils (jeu d'icônes Phosphor, licence MIT) : une icône par outil, nom et
+  raccourci au survol ; icônes aussi dans les onglets des panneaux.
+- ✅ 5b. Fenêtres modulables et aimantées : neuf panneaux (Dessin, Outils, Couleur, Réglages,
+  Vue, Guides, Fiche, Calques, Montage / timeline) en onglets ; on glisse un onglet sur un des
+  boutons qui apparaissent au milieu d'un panneau pour l'y aimanter (à gauche, à droite, dessus,
+  dessous, ou en onglet), ou on le lâche ailleurs pour le faire flotter ; bords entre panneaux à
+  tirer. Affichage > Panneaux : afficher / masquer chaque panneau (il revient à sa place). Les
+  espaces de travail enregistrent tout cela (y compris les panneaux flottants et leur place) ;
+  les anciennes dispositions sont converties. Le dessin ne se ferme pas et ne flotte pas.
+  Pas encore : panneaux dans une fenêtre Windows à part (2e écran).
+- 5c. Formes en outils séparés : Ligne (droite, courbe), Rectangle, Ellipse, Polyligne (outils
+  LINE / RECTANGLE / ELLIPSE / POLYLINE de Storyboard Pro 27, sans touche).
+- 5d. Texte (TEXT_TOOL de Storyboard Pro 27, sans touche).
+- 5e. Tampon comme Storyboard Pro (STAMP_TOOL : images posées le long du trait, échelle,
+  angle, espacement, variations au hasard, plusieurs images en cycle), puis tampon de duplication.
+- 5f. Déformer en perspective (PERSPECTIVE_TOOL de Storyboard Pro 27 : les 4 coins d'une
+  sélection ou d'un calque).
+
 ## Raccourcis proposés, à valider
 
 Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans `keymap.toml`) :

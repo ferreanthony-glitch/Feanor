@@ -2,13 +2,22 @@
 //! de Pelure (leurs commandes reprennent par le nom celles de Storyboard Pro 27, sans touche ;
 //! leur contenu est propre à Pelure), les espaces enregistrés par l'utilisateur, et la
 //! disposition en cours, retenue à la fermeture (AUTO_SAVE_LAYOUT = Y chez Anthony).
+//!
+//! Depuis 5b (fenêtres modulables), la disposition est l'arbre des panneaux (`panneaux`) ; les
+//! champs d'avant (panneaux affichés, tailles en pixels) servent aux dispositions de Pelure et aux
+//! espaces enregistrés avant 5b, convertis à l'ouverture (`DockLayout::from_legacy`).
 
 use serde::{Deserialize, Serialize};
+
+use crate::dock::DockLayout;
 
 /// Disposition de la fenêtre.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Layout {
+    /// Panneaux et leur place (5b) ; absent : tirée des champs ci-dessous.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub panneaux: Option<DockLayout>,
     /// Panneau Outils (à gauche).
     #[serde(rename = "outils")]
     pub tools: bool,
@@ -34,6 +43,7 @@ pub struct Layout {
 impl Default for Layout {
     fn default() -> Self {
         Layout {
+            panneaux: None,
             tools: true,
             sheet: true,
             sheet_width: 250.0,
@@ -52,7 +62,16 @@ impl Layout {
         self.sheet_width = self.sheet_width.clamp(160.0, 900.0);
         self.montage_height = self.montage_height.clamp(140.0, 1200.0);
         self.timeline_height = self.timeline_height.clamp(110.0, 1200.0);
+        self.panneaux = self.panneaux.map(DockLayout::sanitized);
         self
+    }
+
+    /// Les panneaux et leur place.
+    pub fn dock_layout(&self) -> DockLayout {
+        match &self.panneaux {
+            Some(d) => d.clone().sanitized(),
+            None => DockLayout::from_legacy(self),
+        }
     }
 }
 

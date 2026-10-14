@@ -241,10 +241,8 @@ impl App {
         });
     }
 
-    pub(crate) fn tools_panel(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(4.0);
-        ui.heading("Outils");
-        // Une icône par outil ; nom et raccourci au survol.
+    /// Panneau Outils : une icône par outil ; nom et raccourci au survol.
+    pub(crate) fn tool_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
             for tool in Tool::ALL {
@@ -265,9 +263,10 @@ impl App {
                 }
             }
         });
+    }
 
-        ui.separator();
-        ui.heading("Couleur");
+    /// Panneau Couleur : couleur courante et nuancier.
+    pub(crate) fn color_panel(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.spacing_mut().interact_size = vec2(60.0, 26.0);
             ui.color_edit_button_srgb(&mut self.color);
@@ -299,8 +298,10 @@ impl App {
         if let Some(i) = remove {
             self.swatches.remove(i);
         }
+    }
 
-        ui.separator();
+    /// Panneau des réglages de l'outil courant.
+    pub(crate) fn tool_options_panel(&mut self, ui: &mut egui::Ui) {
         let vector = self.layer().kind == LayerKind::Vector;
         ui.horizontal(|ui| {
             ui.heading(format!("{}  {}", self.tool.icon(), self.tool.label()));
@@ -405,9 +406,10 @@ impl App {
         if self.current_brush().is_some_and(|b| b.pressure_size || b.pressure_opacity) {
             note(ui, "La pression vient du stylet (Windows Ink). À la souris, elle vaut 100 %.");
         }
+    }
 
-        ui.separator();
-        ui.heading("Vue");
+    /// Panneau Vue : cadrage, zoom, miroir, rotation, table lumineuse.
+    pub(crate) fn view_panel(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             if ui.button("Ajuster").clicked() {
                 self.fit_pending = true;
@@ -437,10 +439,6 @@ impl App {
                     .custom_formatter(|v, _| format!("{:.0} %", v * 100.0)),
             );
         }
-
-        ui.separator();
-        ui.heading("Guides");
-        self.guides_ui(ui);
     }
 
     /// Options de l'outil Sélection sur un calque bitmap.
@@ -558,18 +556,7 @@ impl App {
         );
     }
 
-    pub(crate) fn right_panel(&mut self, ui: &mut egui::Ui) {
-        egui::ScrollArea::vertical()
-            .id_salt("panneau_droit")
-            .show(ui, |ui| {
-                self.panel_inspector(ui);
-                ui.separator();
-                self.layers_panel(ui);
-            });
-    }
-
-    fn layers_panel(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Calques");
+    pub(crate) fn layers_panel(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             if ui.button("+ Vectoriel").on_hover_text("Traits modifiables, façon Storyboard Pro").clicked() {
                 self.add_layer(LayerKind::Vector);

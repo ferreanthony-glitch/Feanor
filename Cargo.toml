@@ -5,9 +5,12 @@ edition = "2021"
 description = "Logiciel d'animation 2D bitmap image par image, inspiré de TVPaint"
 
 [dependencies]
-# « wgpu » : affichage par la carte graphique (Direct3D 12 / Vulkan) ; « glow » (OpenGL, inclus par
-# défaut) reste en secours.
-eframe = { version = "0.31", features = ["wgpu"] }
+# « wgpu » : affichage par la carte graphique (Direct3D 12 / Vulkan) ; « glow » (OpenGL) reste en
+# secours. Fonctions par défaut d'eframe, sauf l'accessibilité (accesskit) : elle plante quand un
+# panneau devient flottant (5b, `Option::unwrap` dans accesskit_consumer 0.26).
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "wgpu", "x11", "wayland"] }
+# Fonctions par défaut de winit, qu'eframe active d'ordinaire avec les siennes (même version).
+winit = "0.30"
 rfd = "0.15"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 serde = { version = "1", features = ["derive"] }
@@ -20,7 +23,7 @@ symphonia = { version = "0.5", default-features = false, features = ["wav", "pcm
 # Phase 5 (choix d'Anthony) : icônes Phosphor (police d'icônes, licence MIT) et panneaux que l'on
 # glisse, range en onglets et aimante sur les bords (licence MIT). Versions faites pour egui 0.31.
 egui-phosphor = "0.9"
-egui_dock = { version = "0.16", features = ["serde"] }
+egui_dock = "0.16"
 
 # Le dessin et la composition sont du calcul pixel : même en debug on optimise,
 # sinon le pinceau rame.
