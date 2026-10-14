@@ -25,7 +25,13 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
   vue Planches rangée par scène ; nouveau panneau / scène / séquence, dupliquer et supprimer un
   panneau ou une scène, déplacer un panneau d'une scène à l'autre ; projet en dossier (format 3,
   enregistrement incrémental) ; ouverture des anciens `.pelure` ; export HTML rangé par séquence.
-- ⏳ 1b. Vues Vignettes / Scène / Timeline avec pistes son (WAV/MP3, forme d'onde, lecture synchronisée).
+- ✅ 1b. Vues « Dessin » / « Vignettes » + bande de montage servant de timeline ; pistes son sous
+  les panneaux : import WAV / MP3 / FLAC / OGG (bouton, menu, ou fichier lâché sur la fenêtre),
+  forme d'onde, déplacer un extrait (aussi d'une piste à l'autre), raccourcir par les bords, couper,
+  supprimer, piste muette, volume, nom ; lecture calée sur le son ; son au défilement ; son visible
+  dans la timeline d'animation ; sons enregistrés dans `sons/` du projet.
+  Reste pour plus tard : lier un son à un panneau (Ctrl+L, en réserve), fondus, export du son
+  (phase 3, avec la vidéo), formats AAC/M4A.
 - ⏳ 1c. Sélection et transformation en bitmap, guides de perspective, table lumineuse.
 - ⏳ 1d. Annuler/rétablir sur tout (textes, réglages de calque, sons), gestes regroupés.
 - ⏳ 1e. Couper (F5) / fusionner des panneaux, copier/coller de calques (W/X), verrouillage (Alt+L),
@@ -64,7 +70,7 @@ Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans 
 | Scène précédente / suivante | Maj+A / Maj+F | PREV_SHOT_KEY / NEXT_SHOT_KEY sans touche ; A / F = panneau (preset) |
 | Miroir de la vue | M | |
 | Storyboard ⇄ animation | Tab | |
-| Vue planches / scène | Maj+Tab | |
+| Vue dessin / vignettes | Maj+Tab | |
 | Aide raccourcis | F1 | |
 | Outil crayon | Alt+P | |
 | Outil formes | Alt+R | |

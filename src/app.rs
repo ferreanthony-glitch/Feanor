@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use eframe::egui::{self, vec2, Color32, Event, Key, Pos2, Rect, Vec2};
 
+use crate::audio::AudioEngine;
 use crate::brush::{BrushSettings, StrokeMode, StrokeState};
 use crate::document::{fresh_layer_id, CelId, Document, Layer, LayerKind, Panel};
 use crate::fill::{self, FillSettings};
@@ -12,6 +13,7 @@ use crate::keymap::{self, Keymap};
 use crate::project;
 use crate::raster::{premultiply, unpremultiply, Tile, TILE};
 use crate::render::{self, Plan, PlanItem, Renderer};
+use crate::soundtrack::MenuTarget;
 use crate::storyboard::MontageDrag;
 use crate::thumbs::Thumbs;
 use crate::vector::{Element, VectorDrawing};
@@ -146,10 +148,25 @@ pub struct App {
     pub(crate) onion: OnionSettings,
     pub(crate) default_exposure: usize,
     pub(crate) playing: bool,
-    play_montage: bool,
+    pub(crate) play_montage: bool,
     pub(crate) looping: bool,
     play_accum: f64,
     last_time: Option<f64>,
+    /// Sortie audio (ouverte à la première lecture avec du son).
+    pub(crate) audio: Option<AudioEngine>,
+    pub(crate) audio_tried: bool,
+    /// La lecture en cours suit la position du son (sinon l'horloge de l'ordinateur).
+    pub(crate) audio_clock: bool,
+    /// Son pendant la lecture.
+    pub(crate) sound_on: bool,
+    /// Son au défilement (une image de son à chaque changement d'image).
+    pub(crate) sound_scrub: bool,
+    /// Dernière image entendue au défilement.
+    pub(crate) heard_frame: Option<usize>,
+    /// Extrait de son sélectionné dans la bande de montage.
+    pub(crate) sel_clip: Option<u64>,
+    /// Ce qu'on a cliqué du bouton droit dans la bande de montage.
+    pub(crate) menu_target: Option<MenuTarget>,
     pub(crate) history: History,
     pub(crate) stroke: Option<StrokeState>,
     pub(crate) vstroke: Option<VectorStroke>,
@@ -242,6 +259,14 @@ impl App {
             looping: true,
             play_accum: 0.0,
             last_time: None,
+            audio: None,
+            audio_tried: false,
+            audio_clock: false,
+            sound_on: true,
+            sound_scrub: true,
+            heard_frame: Some(0),
+            sel_clip: None,
+            menu_target: None,
             history: History::default(),
             stroke: None,
             vstroke: None,
@@ -469,6 +494,7 @@ impl App {
     pub(crate) fn toggle_play(&mut self) {
         if self.playing {
             self.playing = false;
+            self.stop_audio();
             return;
         }
         self.end_stroke();
@@ -487,10 +513,17 @@ impl App {
         self.playing = true;
         self.last_time = None;
         self.play_accum = 0.0;
+        self.start_audio_playback();
     }
 
     fn tick_playback(&mut self, ctx: &egui::Context) {
         if !self.playing {
+            // La lecture a pu être arrêtée par n'importe quelle action : le son s'arrête avec.
+            self.stop_audio();
+            return;
+        }
+        if self.tick_audio_clock() {
+            ctx.request_repaint();
             return;
         }
         let now = ctx.input(|i| i.time);
@@ -560,6 +593,8 @@ impl App {
     pub(crate) fn begin_paint(&mut self, p: Pos2, pressure: f32, pen: bool) {
         self.end_stroke();
         self.playing = false;
+        // On dessine : Suppr doit de nouveau viser le dessin, pas un extrait de son.
+        self.sel_clip = None;
         if !self.layer_editable() {
             return;
         }
@@ -1099,6 +1134,11 @@ impl App {
         self.vsel = None;
         self.vdrag = None;
         self.playing = false;
+        self.stop_audio();
+        self.sel_clip = None;
+        self.menu_target = None;
+        self.montage_drag = None;
+        self.heard_frame = Some(0);
         self.history.clear();
         self.thumbs.clear();
         self.renderer.invalidate_all();
@@ -1386,7 +1426,9 @@ impl App {
             }
             "edition.coller" => self.paste(),
             "edition.supprimer" => {
-                if self.tool == Tool::Select && self.vsel.is_some() {
+                if let Some(id) = self.sel_clip.filter(|&id| board && self.doc.clip(id).is_some()) {
+                    self.delete_clip(id);
+                } else if self.tool == Tool::Select && self.vsel.is_some() {
                     self.delete_selection();
                 } else {
                     self.clear_image();
@@ -1467,6 +1509,17 @@ impl App {
             "calque.supprimer" => self.delete_layer(),
             "calque.dessus" => self.select_layer(self.cur_layer + 1),
             "calque.dessous" => self.select_layer(self.cur_layer.saturating_sub(1)),
+            "son.importer" => self.import_sound(None, None),
+            "son.nouvelle_piste" => self.new_audio_track(),
+            "son.couper" => self.split_sound_at_playhead(),
+            "son.defilement" => {
+                self.sound_scrub = !self.sound_scrub;
+                self.status = format!("Son au défilement : {}.", if self.sound_scrub { "oui" } else { "non" });
+            }
+            "son.lecture" => {
+                self.sound_on = !self.sound_on;
+                self.status = format!("Son pendant la lecture : {}.", if self.sound_on { "oui" } else { "non" });
+            }
             // « vue.pan_libre » se maintient : il est lu en continu par le canevas.
             "vue.pan_libre" => {}
             other => self.status = format!("« {other} » n'est pas encore disponible."),
@@ -1607,6 +1660,9 @@ impl eframe::App for App {
         self.end_length_gesture_if_idle();
         self.handle_close_request(ctx);
         self.handle_shortcuts(ctx);
+        if !self.modal_open() {
+            self.handle_dropped_files(ctx);
+        }
         self.tick_playback(ctx);
         self.validate_selection();
         self.update_title(ctx);
@@ -1619,7 +1675,7 @@ impl eframe::App for App {
             Mode::Storyboard => {
                 egui::TopBottomPanel::bottom("montage")
                     .resizable(true)
-                    .default_height(240.0)
+                    .default_height(290.0)
                     .min_height(140.0)
                     .show(ctx, |ui| self.montage_panel(ui));
             }
@@ -1651,6 +1707,7 @@ impl eframe::App for App {
             });
 
         self.dialogs(ctx);
+        self.scrub_audio();
         if self.thumbs.pending {
             ctx.request_repaint();
         }

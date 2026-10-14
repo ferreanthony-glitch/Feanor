@@ -1,6 +1,6 @@
 # Architecture de Pelure
 
-Document tenu à jour à chaque étape. Dernière mise à jour : phase 1a (octobre 2026).
+Document tenu à jour à chaque étape. Dernière mise à jour : phase 1b (octobre 2026).
 
 ## Vue d'ensemble
 
@@ -31,25 +31,56 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   image envoyée à la carte graphique comme une seule texture ; seules les tuiles modifiées sont
   recalculées. Vignettes des plans en cache (`thumbs.rs`).
 - **Annuler / rétablir** (`history.rs`) : chaque modification enregistre l'état d'avant (tuiles,
-  dessin vectoriel, ou structure : séquences, scènes, panneaux, calques). Les noms, textes et réglages
-  de calque n'y sont pas encore (prévu en phase 1d), mais une annulation ne les fait jamais revenir
-  en arrière (ils sont conservés par identifiant).
+  dessin vectoriel, ou structure : séquences, scènes, panneaux, calques, pistes son et extraits). Les
+  noms, textes, réglages de calque et de piste (muette, volume) n'y sont pas encore (prévu en
+  phase 1d), mais une annulation ne les fait jamais revenir en arrière (conservés par identifiant).
+- **Son** : voir « Son » plus bas.
 - **Fichier** : voir « Format de projet ».
 - **Raccourcis** (`keymap.rs`, `keymap.toml`) : voir plus bas.
 - **Interface** : `app.rs` (état, actions, `run_action`), `canvas.rs` (dessin à la souris/stylet),
   `panels.rs` (menus, outils, calques, dialogues), `timeline.rs` (animation), `storyboard.rs` (montage,
-  planches, fiche du plan), `vtools.rs` (outils vectoriels).
+  vignettes, fiche du panneau), `soundtrack.rs` (pistes son), `vtools.rs` (outils vectoriels).
+- **Vues du storyboard** : « Dessin » (le panneau courant, au centre), « Vignettes » (tous les
+  panneaux rangés par scène) et la bande de montage en bas, qui sert de timeline (règle, barres de
+  séquences et de scènes, panneaux, pistes son). Les noms « Dessin / Vignettes » évitent la confusion
+  avec la « scène » du découpage.
+
+## Son
+
+- **Décodage** (`audio.rs`, bibliothèque symphonia) : à l'import ou à l'ouverture, le fichier entier
+  est converti en stéréo 48 kHz, 16 bits, en mémoire (≈ 11 Mo par minute), avec un résumé de forme
+  d'onde (une valeur toutes les 240 échantillons) pour l'affichage.
+- **Modèle** : `Document.sounds` (fichiers importés, jamais retirés pendant la session, comme les
+  dessins) et `Document.audio_tracks` (pistes, chacune avec des extraits qui ne se chevauchent pas).
+  Un extrait = un son, une image de départ dans le montage, un décalage dans le son, une durée.
+  Les pistes sont en **temps de montage** : elles ne suivent pas les panneaux (le lien
+  extrait-panneau de Storyboard Pro, `LINK_CLIP_AND_PANEL`, reste en réserve).
+- **Lecture** : la sortie audio (bibliothèque cpal, WASAPI) est ouverte à la première lecture avec
+  du son. Le mixage tourne dans le fil de la carte son ; **sa position sert d'horloge** à l'image,
+  qui ne peut donc pas dériver. Sans sortie audio, ou si elle tombe en panne, la lecture continue à
+  l'horloge de l'ordinateur, avec un message.
+- **Son au défilement** : quand l'image courante change hors lecture, une image de son est jouée.
+- Le mixage (`MixState`) se teste sans carte son.
 
 ## Format de projet (version 3, dossier)
 
 ```
 MonFilm/
   MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 3, réglages,
-                      "sequences": [{ "scenes": [{ "panneaux": [{ "calques": [{ "expositions": … }]}]}]}]}
+                      "sequences": [{ "scenes": [{ "panneaux": [{ "calques": [{ "expositions": … }]}]}]}],
+                      "sons": [{"id", "nom", "fichier"}], "pistes_son": [{ "extraits": [{"son", "debut",
+                      "decalage", "duree"}] }]}
   dessins/<id>.png    dessin bitmap (RGBA non prémultiplié)
   dessins/<id>.json   dessin vectoriel (éléments sérialisés)
+  sons/<id>.<ext>     fichier son importé, copié tel quel (wav, mp3, flac, ogg)
 ```
 
+- Les champs `sons` et `pistes_son` ont été ajoutés en 1b sans changer de version : absents, ils
+  valent « aucun son », et une version précédente de Pelure les ignore (elle perdrait le son en
+  réenregistrant, mais rien d'autre).
+- Un son n'est écrit qu'une fois (il ne change jamais) ; les sons qui ne servent plus sont effacés de
+  `sons/` à l'enregistrement. Un son manquant ou illisible est signalé à l'ouverture, ses extraits
+  sont retirés, le reste s'ouvre. Un nom de fichier qui sortirait de `sons/` est refusé.
 - Clés en français, expositions écrites en plages (`{"dessin": 12, "images": 24}`) : le manifeste
   reste lisible et court.
 - **Enregistrement incrémental** (`project.rs`) : un dessin n'est réécrit que si sa `version` a changé
@@ -57,7 +88,7 @@ MonFilm/
   fichier ; manifeste écrit après les dessins ; dessins inutilisés effacés en dernier (seulement les
   fichiers `<nombre>.png/json` de `dessins/`). Ce schéma servira à la sauvegarde automatique (phase 4).
 - **Garde-fous** : « Enregistrer sous » refuse un dossier qui contient déjà un autre projet ou un
-  dossier `dessins`. À l'ouverture, un dessin manquant ou illisible est signalé, le reste s'ouvre.
+  dossier `dessins` ou `sons`. À l'ouverture, un dessin manquant ou illisible est signalé, le reste s'ouvre.
 - **Compatibilité** : un champ inconnu est ignoré, un champ absent prend sa valeur par défaut ; un
   format plus récent que le logiciel est refusé avec un message. Les anciens fichiers à fichier unique
   (formats 1 et 2, `io.rs`) s'ouvrent : chaque ancien « plan » devient une scène d'un panneau.
@@ -95,5 +126,9 @@ Toolchain Rust `x86_64-pc-windows-gnu` (MinGW minimal de rustup). Conséquences 
 | **Projet = dossier** (validé, fait en 1a) | sons, 3D, sauvegarde auto incrémentale | lecture des anciens `.pelure` gardée | moyen | format versionné : les évolutions futures se font par ajout de champs |
 | **Séquence > Scène > Panneau** (validé, fait en 1a) | vocabulaire de Storyboard Pro | refonte du modèle | moyen | l'arbre du fichier est stable ; la liste à plat en mémoire peut changer sans toucher au fichier |
 | Raccourcis en TOML, identifiants stables | modifiables sans recompiler | faible | faible | oui |
+| Son : **symphonia** (décodage) + **cpal** (sortie) (fait en 1b) | en Rust pur, sans DLL à fournir ; formats courants (WAV, MP3, FLAC, OGG) ; compilent avec la toolchain actuelle sans toucher aux versions figées | ≈ 3,5 Mo d'exécutable en plus (17 → 20,5 Mo) | faible (bibliothèques très utilisées) ; pas d'AAC/M4A | oui : tout passe par `audio.rs` |
+| Son décodé entier en mémoire, 16 bits | simple, lecture et défilement instantanés | ≈ 11 Mo par minute de son | élevé seulement pour des heures de son | oui : lecture par morceaux possible plus tard sans changer le format |
+| Horloge de lecture = position du son | l'image ne peut pas dériver du son | nul | faible (repli sur l'horloge si pas de sortie) | oui |
+| Sons en temps de montage (pas liés aux panneaux) | comportement le plus simple et prévisible | nul | moyen : un panneau rallongé décale l'image par rapport au son | oui : le lien extrait-panneau pourra s'ajouter (champ en plus) |
 | Export vidéo via ffmpeg installé à part (phase 3) | seule voie fiable sans souci de licence ni de compilation | dépendance externe | faible | oui |
 | Pas d'export XML Toon Boom | format propriétaire non documenté | — | — | — |

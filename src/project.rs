@@ -2,9 +2,11 @@
 //!
 //! ```text
 //! MonFilm/
-//!   MonFilm.pelure        manifeste JSON lisible : réglages, séquences > scènes > panneaux > calques
+//!   MonFilm.pelure        manifeste JSON lisible : réglages, séquences > scènes > panneaux > calques,
+//!                         pistes son
 //!   dessins/<id>.png      dessins bitmap
 //!   dessins/<id>.json     dessins vectoriels
+//!   sons/<id>.<ext>       fichiers son importés, copiés tels quels
 //! ```
 //!
 //! Un enregistrement n'écrit que les dessins modifiés depuis le précédent, puis le manifeste.
@@ -14,10 +16,14 @@
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::document::{fresh_layer_id, Cel, CelId, Document, Layer, LayerKind, Panel, Scene, Sequence, Structure};
+use crate::document::{
+    fresh_layer_id, AudioTrack, Cel, CelId, Document, Layer, LayerKind, Panel, Scene, Sequence, Sound, SoundClip,
+    Structure,
+};
 use crate::io::encode_png;
 use crate::raster::Raster;
 use crate::vector::VectorDrawing;
@@ -25,6 +31,9 @@ use crate::vector::VectorDrawing;
 pub const FORMAT: &str = "pelure-projet";
 pub const VERSION: u32 = 3;
 const DRAWINGS: &str = "dessins";
+const SOUNDS: &str = "sons";
+/// Formats de son acceptés à l'import.
+pub const SOUND_EXTS: [&str; 5] = ["wav", "mp3", "flac", "ogg", "oga"];
 
 #[derive(Serialize, Deserialize)]
 struct Manifest {
@@ -35,6 +44,46 @@ struct Manifest {
     cadence: u32,
     papier: [u8; 3],
     sequences: Vec<SequenceEntry>,
+    /// Fichiers son, copiés tels quels dans `sons/` (ajouté en 1b ; absent = aucun son).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    sons: Vec<SoundEntry>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pistes_son: Vec<TrackEntry>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SoundEntry {
+    id: u64,
+    /// Nom du fichier d'origine (affiché).
+    #[serde(default)]
+    nom: String,
+    /// Fichier dans `sons/`.
+    fichier: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct TrackEntry {
+    id: u64,
+    #[serde(default)]
+    nom: String,
+    #[serde(default)]
+    muette: bool,
+    #[serde(default = "one")]
+    volume: f32,
+    #[serde(default)]
+    extraits: Vec<ClipEntry>,
+}
+
+/// Un extrait de son, en images du montage.
+#[derive(Serialize, Deserialize)]
+struct ClipEntry {
+    id: u64,
+    son: u64,
+    debut: usize,
+    /// Images sautées au début du son.
+    #[serde(default)]
+    decalage: usize,
+    duree: usize,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -144,11 +193,13 @@ pub fn check_target(manifest: &Path, current: Option<&Path>) -> Result<(), Strin
             manifest.display()
         ));
     }
-    if dir.join(DRAWINGS).exists() {
-        return Err(format!(
-            "le dossier {} contient déjà un dossier « {DRAWINGS} ». Choisis un autre nom.",
-            dir.display()
-        ));
+    for sub in [DRAWINGS, SOUNDS] {
+        if dir.join(sub).exists() {
+            return Err(format!(
+                "le dossier {} contient déjà un dossier « {sub} ». Choisis un autre nom.",
+                dir.display()
+            ));
+        }
     }
     Ok(())
 }
@@ -163,6 +214,19 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
 
 fn drawing_path(dir: &Path, id: CelId, vector: bool) -> PathBuf {
     dir.join(DRAWINGS).join(format!("{id}.{}", if vector { "json" } else { "png" }))
+}
+
+fn sound_file(sound: &Sound) -> String {
+    format!("{}.{}", sound.id, sound.ext)
+}
+
+/// Sons utilisés par au moins un extrait.
+fn used_sounds(doc: &Document) -> BTreeSet<u64> {
+    doc.audio_tracks
+        .iter()
+        .flat_map(|t| t.clips.iter().map(|c| c.sound))
+        .filter(|id| doc.sounds.contains_key(id))
+        .collect()
 }
 
 pub struct SaveReport {
@@ -190,11 +254,41 @@ pub fn save(doc: &Document, manifest_path: &Path, written: &mut HashMap<CelId, u
         written.insert(id, cel.version);
         count += 1;
     }
+    // Un son ne change jamais : on ne l'écrit que s'il n'est pas déjà dans le dossier.
+    let sounds = used_sounds(doc);
+    if !sounds.is_empty() {
+        fs::create_dir_all(dir.join(SOUNDS)).map_err(|e| format!("{} : {e}", dir.display()))?;
+    }
+    for id in &sounds {
+        let sound = &doc.sounds[id];
+        let path = dir.join(SOUNDS).join(sound_file(sound));
+        if !path.exists() {
+            write_atomic(&path, &sound.bytes)?;
+            count += 1;
+        }
+    }
     let manifest = manifest_of(doc);
     let json = serde_json::to_vec_pretty(&manifest).map_err(|e| e.to_string())?;
     write_atomic(manifest_path, &json)?;
-    let removed = remove_unused(dir, &used, written);
+    let removed = remove_unused(dir, &used, written) + remove_unused_sounds(dir, &sounds);
     Ok(SaveReport { written: count, removed })
+}
+
+/// Efface les sons du dossier qui ne servent plus (seulement les fichiers « <nombre>.<ext> »).
+fn remove_unused_sounds(dir: &Path, used: &BTreeSet<u64>) -> usize {
+    let Ok(entries) = fs::read_dir(dir.join(SOUNDS)) else { return 0 };
+    let mut removed = 0;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+        let id = path.file_stem().and_then(|s| s.to_str()).and_then(|s| s.parse::<u64>().ok());
+        if let Some(id) = id {
+            if SOUND_EXTS.contains(&ext.as_str()) && !used.contains(&id) && fs::remove_file(&path).is_ok() {
+                removed += 1;
+            }
+        }
+    }
+    removed
 }
 
 /// Efface les dessins du dossier qui ne servent plus (seulement les fichiers « <nombre>.png/json »).
@@ -258,6 +352,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                 .collect(),
         });
     }
+    let used = used_sounds(doc);
     Manifest {
         format: FORMAT.into(),
         version: VERSION,
@@ -266,6 +361,39 @@ fn manifest_of(doc: &Document) -> Manifest {
         cadence: doc.fps,
         papier: doc.paper,
         sequences,
+        sons: used
+            .iter()
+            .map(|id| {
+                let s = &doc.sounds[id];
+                SoundEntry {
+                    id: s.id,
+                    nom: s.name.clone(),
+                    fichier: sound_file(s),
+                }
+            })
+            .collect(),
+        pistes_son: doc
+            .audio_tracks
+            .iter()
+            .map(|t| TrackEntry {
+                id: t.id,
+                nom: t.name.clone(),
+                muette: t.muted,
+                volume: t.volume,
+                extraits: t
+                    .clips
+                    .iter()
+                    .filter(|c| used.contains(&c.sound))
+                    .map(|c| ClipEntry {
+                        id: c.id,
+                        son: c.sound,
+                        debut: c.start,
+                        decalage: c.offset,
+                        duree: c.length,
+                    })
+                    .collect(),
+            })
+            .collect(),
     }
 }
 
@@ -318,10 +446,43 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
         }
     }
 
+    let mut sounds: HashMap<u64, Sound> = HashMap::new();
+    for entry in &manifest.sons {
+        match load_sound(dir, entry) {
+            Ok(sound) => {
+                sounds.insert(sound.id, sound);
+            }
+            Err(e) => warnings.push(e),
+        }
+    }
+    let audio_tracks = manifest
+        .pistes_son
+        .iter()
+        .map(|t| AudioTrack {
+            id: t.id,
+            name: t.nom.clone(),
+            muted: t.muette,
+            volume: t.volume.clamp(0.0, 4.0),
+            clips: t
+                .extraits
+                .iter()
+                .filter(|c| sounds.contains_key(&c.son) && c.duree > 0)
+                .map(|c| SoundClip {
+                    id: c.id,
+                    sound: c.son,
+                    start: c.debut,
+                    offset: c.decalage,
+                    length: c.duree,
+                })
+                .collect(),
+        })
+        .collect();
+
     let mut structure = Structure {
         sequences: Vec::new(),
         scenes: Vec::new(),
         panels: Vec::new(),
+        audio_tracks,
     };
     for seq in manifest.sequences {
         structure.sequences.push(Sequence {
@@ -373,8 +534,31 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
         return Err("le projet ne contient aucun panneau".into());
     }
     let written = cels.keys().map(|&id| (id, 0)).collect();
-    let doc = Document::from_parts(w, h, manifest.cadence.max(1), manifest.papier, structure, cels);
+    let doc = Document::from_parts(w, h, manifest.cadence.max(1), manifest.papier, structure, cels, sounds);
     Ok(Loaded { doc, written, warnings })
+}
+
+fn load_sound(dir: &Path, entry: &SoundEntry) -> Result<Sound, String> {
+    let shown = if entry.nom.is_empty() { &entry.fichier } else { &entry.nom };
+    // Le nom de fichier vient du manifeste : on refuse tout ce qui sortirait du dossier `sons`.
+    let file = Path::new(&entry.fichier);
+    if file.components().count() != 1 || file.file_name().is_none() {
+        return Err(format!("son « {shown} » : nom de fichier invalide"));
+    }
+    let bytes = fs::read(dir.join(SOUNDS).join(file)).map_err(|e| format!("son « {shown} » introuvable ({e})"))?;
+    let ext = file
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let pcm = crate::audio::decode(&bytes, &ext).map_err(|e| format!("son « {shown} » : {e}"))?;
+    Ok(Sound {
+        id: entry.id,
+        name: entry.nom.clone(),
+        ext,
+        bytes: Arc::new(bytes),
+        pcm: Arc::new(pcm),
+    })
 }
 
 fn load_drawing(dir: &Path, id: CelId, w: usize, h: usize) -> Result<Cel, String> {

@@ -488,6 +488,48 @@ fn demo_project() {
         let n = panel.frame_count();
         panel.layers[0].frames = vec![Some(cel); n];
     }
+    // Sons de synthèse : une ambiance sur tout le montage (et un peu après), et une réplique
+    // (des « syllabes ») au début du panneau « Gros plan ».
+    let synth = |seconds: f32, f: &dyn Fn(f32) -> f32| {
+        let n = (seconds * 48_000.0) as usize;
+        let mut b = Vec::new();
+        for (tag, value) in [(b"RIFF", 36 + 2 * n as u32), (b"WAVE", 0), (b"fmt ", 16)] {
+            b.extend_from_slice(tag);
+            if tag != b"WAVE" {
+                b.extend_from_slice(&value.to_le_bytes());
+            }
+        }
+        for v in [1u16, 1] {
+            b.extend_from_slice(&v.to_le_bytes());
+        }
+        b.extend_from_slice(&48_000u32.to_le_bytes());
+        b.extend_from_slice(&96_000u32.to_le_bytes());
+        b.extend_from_slice(&2u16.to_le_bytes());
+        b.extend_from_slice(&16u16.to_le_bytes());
+        b.extend_from_slice(b"data");
+        b.extend_from_slice(&(2 * n as u32).to_le_bytes());
+        for i in 0..n {
+            let s = (f(i as f32 / 48_000.0).clamp(-1.0, 1.0) * 32_000.0) as i16;
+            b.extend_from_slice(&s.to_le_bytes());
+        }
+        b
+    };
+    let ambiance = synth(8.0, &|t| {
+        let swell = 0.25 + 0.15 * (t * 0.8).sin();
+        swell * ((t * 110.0 * std::f32::consts::TAU).sin() * 0.6 + (t * 173.0 * std::f32::consts::TAU).sin() * 0.4)
+    });
+    let voice = synth(1.6, &|t| {
+        let syllable = (t * 5.0 * std::f32::consts::PI).sin().abs().powf(1.5);
+        syllable * 0.8 * (t * 220.0 * std::f32::consts::TAU).sin()
+    });
+    for (name, bytes, at) in [("ambiance.wav", ambiance, 0), ("replique.wav", voice, doc.panel_start(i2) + 4)] {
+        let pcm = crate::audio::decode(&bytes, "wav").unwrap();
+        let sound = doc.add_sound(name.into(), "wav".into(), std::sync::Arc::new(bytes), std::sync::Arc::new(pcm));
+        doc.place_sound(sound, at, None).unwrap();
+    }
+    doc.audio_tracks[0].name = "Ambiance".into();
+    doc.audio_tracks[0].volume = 0.6;
+    doc.audio_tracks[1].name = "Dialogue".into();
     let path = std::path::PathBuf::from(out);
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     project::save(&doc, &path, &mut Default::default()).unwrap();

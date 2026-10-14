@@ -8,6 +8,7 @@ use eframe::egui::{
 use crate::app::{App, BoardView};
 use crate::document::{Document, Panel};
 use crate::history::Edit;
+use crate::soundtrack::{ClipDrag, ClipEdge, MenuTarget, LANE_GAP, TRACK_H};
 use crate::timeline::CUR_FRAME;
 
 pub(crate) enum MontageDrag {
@@ -23,6 +24,8 @@ pub(crate) enum MontageDrag {
     /// Plan déplacé dans le montage ; `target` est la place où il sera inséré.
     Move { panel: usize, target: usize },
     Scrub,
+    /// Extrait de son déplacé, ou raccourci par un bord.
+    Clip(ClipDrag),
 }
 
 const RULER_H: f32 = 18.0;
@@ -212,11 +215,15 @@ impl App {
 
     /// Abandonne un glissé en cours dans la bande de montage (la durée revient à l'original).
     pub(crate) fn cancel_montage_drag(&mut self) {
-        if let Some(MontageDrag::Trim { panel, original, .. }) = self.montage_drag.take() {
-            if self.doc.panels.get(panel).is_some_and(|s| s.id == original.id) {
-                self.doc.panels[panel] = original;
-                self.renderer.invalidate_all();
+        match self.montage_drag.take() {
+            Some(MontageDrag::Trim { panel, original, .. }) => {
+                if self.doc.panels.get(panel).is_some_and(|s| s.id == original.id) {
+                    self.doc.panels[panel] = original;
+                    self.renderer.invalidate_all();
+                }
             }
+            Some(MontageDrag::Clip(d)) => self.doc.audio_tracks = d.before,
+            _ => {}
         }
     }
 
@@ -296,6 +303,19 @@ impl App {
             }
             ui.separator();
             if ui
+                .button("+ Son…")
+                .on_hover_text(hint(
+                    self,
+                    "Importer un son (WAV, MP3, FLAC, OGG) à l'image courante ; on peut aussi lâcher le fichier sur la fenêtre",
+                    "son.importer",
+                ))
+                .clicked()
+            {
+                self.import_sound(None, None);
+            }
+            ui.menu_button("Son…", |ui| self.sound_menu(ui));
+            ui.separator();
+            if ui
                 .button(RichText::new("Animer ce panneau").strong())
                 .on_hover_text(hint(
                     self,
@@ -307,10 +327,10 @@ impl App {
                 self.enter_animation(self.cur_panel);
             }
             ui.separator();
-            ui.selectable_value(&mut self.board_view, BoardView::Scene, "Scène")
-                .on_hover_text(hint(self, "Dessiner le panneau", "vue.planches"));
-            ui.selectable_value(&mut self.board_view, BoardView::Panels, "Planches")
-                .on_hover_text(hint(self, "Vue d'ensemble des panneaux", "vue.planches"));
+            ui.selectable_value(&mut self.board_view, BoardView::Scene, "Dessin")
+                .on_hover_text(hint(self, "Dessiner le panneau courant", "vue.planches"));
+            ui.selectable_value(&mut self.board_view, BoardView::Panels, "Vignettes")
+                .on_hover_text(hint(self, "Vue d'ensemble des panneaux, rangés par scène", "vue.planches"));
             ui.separator();
             ui.add(
                 egui::Slider::new(&mut self.montage_zoom, 0.5..=16.0)
@@ -320,30 +340,106 @@ impl App {
             );
         });
         ui.separator();
-        egui::ScrollArea::horizontal()
-            .id_salt("montage_h")
+        // Hauteur des panneaux : ce qui reste une fois la règle, les barres et les pistes son placées.
+        let lanes = self.doc.audio_tracks.len() as f32 * TRACK_H;
+        let block_h = (ui.available_height() - RULER_H - BANDS_H - LANE_GAP - lanes - 12.0).clamp(56.0, 170.0);
+        egui::ScrollArea::vertical()
+            .id_salt("montage_v")
             .auto_shrink([false, false])
-            .show(ui, |ui| self.montage_strip(ui));
+            .show(ui, |ui| {
+                ui.horizontal_top(|ui| {
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    self.track_headers(ui, RULER_H + BANDS_H + block_h + LANE_GAP);
+                    egui::ScrollArea::horizontal()
+                        .id_salt("montage_h")
+                        .auto_shrink([false, true])
+                        .show(ui, |ui| self.montage_strip(ui, block_h));
+                });
+            });
     }
 
-    fn montage_strip(&mut self, ui: &mut egui::Ui) {
+    /// Menu « Son… » de la barre du montage.
+    pub(crate) fn sound_menu(&mut self, ui: &mut egui::Ui) {
+        let item = |app: &mut App, ui: &mut egui::Ui, text: &str, action: &str| {
+            let key = app.keymap.label(action);
+            if ui.add(egui::Button::new(text).shortcut_text(key)).clicked() {
+                ui.close_menu();
+                app.run_action(action);
+            }
+        };
+        item(self, ui, "Importer un son…", "son.importer");
+        item(self, ui, "Nouvelle piste son", "son.nouvelle_piste");
+        item(self, ui, "Couper le son à l'image courante", "son.couper");
+        if let Some(id) = self.sel_clip.filter(|&id| self.doc.clip(id).is_some()) {
+            if ui.button("Supprimer l'extrait sélectionné").clicked() {
+                ui.close_menu();
+                self.delete_clip(id);
+            }
+        }
+        ui.separator();
+        let on = self.sound_on;
+        if ui.checkbox(&mut self.sound_on, "Son pendant la lecture").changed() {
+            self.sound_on = on;
+            self.run_action("son.lecture");
+        }
+        let scrub = self.sound_scrub;
+        if ui.checkbox(&mut self.sound_scrub, "Son au défilement").changed() {
+            self.sound_scrub = scrub;
+            self.run_action("son.defilement");
+        }
+    }
+
+    /// Menu du clic droit sur un panneau de la bande de montage.
+    fn panel_menu(&mut self, ui: &mut egui::Ui, index: usize) {
+        if ui.button("Animer ce panneau").clicked() {
+            ui.close_menu();
+            self.enter_animation(index);
+        }
+        if ui.button("Nouveau panneau après").clicked() {
+            ui.close_menu();
+            self.new_panel();
+        }
+        if ui.button("Dupliquer le panneau").clicked() {
+            ui.close_menu();
+            self.duplicate_panel();
+        }
+        if ui.button("Supprimer le panneau").clicked() {
+            ui.close_menu();
+            self.delete_panel();
+        }
+        ui.separator();
+        if ui.button("Importer un son au début du panneau…").clicked() {
+            ui.close_menu();
+            let at = self.doc.panel_start(index.min(self.doc.panels.len() - 1));
+            self.import_sound(None, Some(at));
+        }
+    }
+
+    fn montage_strip(&mut self, ui: &mut egui::Ui, block_h: f32) {
         let ppf = self.montage_zoom;
         let fps = self.doc.fps.max(1) as usize;
         let total = self.doc.total_frames();
-        let block_h = (ui.available_height() - RULER_H - BANDS_H - 6.0).clamp(56.0, 170.0);
-        let width = (total as f32 * ppf + 260.0).max(ui.available_width());
-        let (resp, painter) =
-            ui.allocate_painter(vec2(width, RULER_H + BANDS_H + block_h + 4.0), Sense::click_and_drag());
+        // Le son peut dépasser la fin des panneaux : on le montre en entier.
+        let shown = total.max(self.doc.audio_end());
+        let n_tracks = self.doc.audio_tracks.len();
+        if self.sel_clip.is_some_and(|id| self.doc.clip(id).is_none()) {
+            self.sel_clip = None;
+        }
+        let width = (shown as f32 * ppf + 260.0).max(ui.available_width());
+        let height = RULER_H + BANDS_H + block_h + LANE_GAP + n_tracks as f32 * TRACK_H + 2.0;
+        let (resp, painter) = ui.allocate_painter(vec2(width, height), Sense::click_and_drag());
         let r = resp.rect;
         let left = r.left() + 6.0;
         let x_of = |g: usize| left + g as f32 * ppf;
         let bands_top = r.top() + RULER_H;
         let top = bands_top + BANDS_H;
+        let lanes_top = top + block_h + LANE_GAP;
+        let in_blocks = |p: Pos2| p.y >= top && p.y <= top + block_h;
         let visuals = ui.visuals().clone();
 
         // Règle : une graduation par seconde, un repère lisible tous les ~60 pixels.
         let label_every = ((60.0 / (fps as f32 * ppf)).ceil() as usize).max(1);
-        for s in 0..=(total / fps + 2) {
+        for s in 0..=(shown / fps + 2) {
             let x = x_of(s * fps);
             let major = s % label_every == 0;
             painter.line_segment(
@@ -461,17 +557,30 @@ impl App {
             }
         }
 
+        // Pistes son, sous les panneaux.
+        self.paint_lanes(&painter, r, left, ppf, lanes_top, visuals.selection.stroke.color);
+
         let panel_at = |x: f32| blocks.iter().position(|b| x >= b.left() - 1.0 && x <= b.right() + 1.0);
         let edge_at = |p: Pos2| {
-            if p.y < top {
+            if !in_blocks(p) {
                 return None;
             }
             blocks.iter().position(|b| (p.x - b.right()).abs() <= 5.0)
         };
         let frame_at = |x: f32| (((x - left) / ppf).floor().max(0.0) as usize).min(total - 1);
+        // Sans limite à la fin des panneaux (on peut poser un son plus loin).
+        let free_frame_at = |x: f32| ((x - left) / ppf).floor().max(0.0) as usize;
 
         if let Some(p) = resp.hover_pos() {
-            if edge_at(p).is_some() || matches!(self.montage_drag, Some(MontageDrag::Trim { .. })) {
+            let clip_edge = matches!(
+                self.lane_hit(p, left, ppf, lanes_top),
+                Some((_, Some((_, ClipEdge::Left | ClipEdge::Right))))
+            );
+            let resizing = matches!(
+                &self.montage_drag,
+                Some(MontageDrag::Trim { .. })
+            ) || matches!(&self.montage_drag, Some(MontageDrag::Clip(d)) if d.edge != ClipEdge::Move);
+            if edge_at(p).is_some() || clip_edge || resizing {
                 ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
             }
         }
@@ -480,24 +589,28 @@ impl App {
             let origin = ui.input(|i| i.pointer.press_origin()).unwrap_or(r.center());
             // Sans recentrer la bande : le bord tiré doit rester sous le pointeur.
             self.playing = false;
-            let drag = if origin.y < top {
-                MontageDrag::Scrub
-            } else if let Some(i) = edge_at(origin) {
-                self.set_panel(i);
-                MontageDrag::Trim {
-                    panel: i,
-                    original: self.doc.panels[i].clone(),
-                    start_len: self.doc.panels[i].frame_count(),
-                    origin_x: origin.x,
-                    snap: self.snapshot(),
-                }
-            } else if let Some(i) = panel_at(origin.x) {
-                self.set_panel(i);
-                MontageDrag::Move { panel: i, target: i }
+            if let Some((_, Some((id, edge)))) = self.lane_hit(origin, left, ppf, lanes_top) {
+                self.begin_clip_drag(id, edge, origin);
             } else {
-                MontageDrag::Scrub
-            };
-            self.montage_drag = Some(drag);
+                let drag = if !in_blocks(origin) {
+                    MontageDrag::Scrub
+                } else if let Some(i) = edge_at(origin) {
+                    self.set_panel(i);
+                    MontageDrag::Trim {
+                        panel: i,
+                        original: self.doc.panels[i].clone(),
+                        start_len: self.doc.panels[i].frame_count(),
+                        origin_x: origin.x,
+                        snap: self.snapshot(),
+                    }
+                } else if let Some(i) = panel_at(origin.x) {
+                    self.set_panel(i);
+                    MontageDrag::Move { panel: i, target: i }
+                } else {
+                    MontageDrag::Scrub
+                };
+                self.montage_drag = Some(drag);
+            }
         }
 
         if resp.dragged() {
@@ -513,6 +626,7 @@ impl App {
                         *target = blocks.iter().filter(|b| b.center().x < p.x).count();
                     }
                     Some(MontageDrag::Trim { .. }) => self.update_trim(p.x),
+                    Some(MontageDrag::Clip(_)) => self.update_clip_drag(p, ppf, lanes_top),
                     None => {}
                 }
             }
@@ -537,23 +651,61 @@ impl App {
                     }
                 }
                 Some(MontageDrag::Move { panel, target }) => self.move_panel(panel, target),
+                Some(MontageDrag::Clip(d)) => self.finish_clip_drag(d),
                 _ => {}
             }
         }
 
         if resp.clicked() {
             if let Some(p) = resp.interact_pointer_pos() {
-                // Clic sur une barre de scène ou de séquence : son premier panneau.
-                match runs.iter().find(|(rect, _)| rect.contains(p)) {
-                    Some(&(_, start)) => self.select_panel(start),
-                    None => self.goto_global(frame_at(p.x)),
+                if let Some((_, hit)) = self.lane_hit(p, left, ppf, lanes_top) {
+                    // Clic dans une piste son : sélectionne l'extrait (ou rien) et y place la tête.
+                    self.sel_clip = hit.map(|(id, _)| id);
+                    self.goto_global(frame_at(p.x));
+                } else {
+                    self.sel_clip = None;
+                    // Clic sur une barre de scène ou de séquence : son premier panneau.
+                    match runs.iter().find(|(rect, _)| rect.contains(p)) {
+                        Some(&(_, start)) => self.select_panel(start),
+                        None => self.goto_global(frame_at(p.x)),
+                    }
                 }
             }
         }
         if resp.double_clicked() {
-            if let Some(i) = resp.interact_pointer_pos().filter(|p| p.y >= top).and_then(|p| panel_at(p.x)) {
+            if let Some(i) = resp.interact_pointer_pos().filter(|&p| in_blocks(p)).and_then(|p| panel_at(p.x)) {
                 self.enter_animation(i);
             }
+        }
+
+        // Clic droit : menu du panneau ou de la piste son visés.
+        if resp.secondary_clicked() {
+            if let Some(p) = resp.interact_pointer_pos() {
+                self.menu_target = if let Some((track, hit)) = self.lane_hit(p, left, ppf, lanes_top) {
+                    let clip = hit.map(|(id, _)| id);
+                    if clip.is_some() {
+                        self.sel_clip = clip;
+                    }
+                    Some(MenuTarget::Lane {
+                        track,
+                        clip,
+                        frame: free_frame_at(p.x),
+                    })
+                } else if in_blocks(p) {
+                    panel_at(p.x).map(|i| {
+                        self.select_panel(i);
+                        MenuTarget::Panel(i)
+                    })
+                } else {
+                    None
+                };
+            }
+        }
+        if let Some(target) = self.menu_target {
+            resp.context_menu(|ui| match target {
+                MenuTarget::Panel(i) => self.panel_menu(ui, i),
+                MenuTarget::Lane { track, clip, frame } => self.lane_menu(ui, track, clip, frame),
+            });
         }
 
         // Tête de lecture et repère de déplacement.
@@ -610,7 +762,7 @@ impl App {
         self.status = format!("{} : {}", panel_long_title(&self.doc, i), duration_label(n, fps));
     }
 
-    // ------------------------------------------------------------------ vue « planches »
+    // ------------------------------------------------------------------ vue « vignettes » (action vue.planches)
 
     pub(crate) fn panels_view(&mut self, ui: &mut egui::Ui) {
         let card_w = 250.0;

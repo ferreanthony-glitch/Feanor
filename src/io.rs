@@ -180,6 +180,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
         }],
         scenes: Vec::new(),
         panels: Vec::new(),
+        audio_tracks: Vec::new(),
     };
     let mut shots = manifest.shots;
     if shots.is_empty() {
@@ -217,6 +218,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
         manifest.paper,
         structure,
         cels,
+        HashMap::new(),
     ))
 }
 

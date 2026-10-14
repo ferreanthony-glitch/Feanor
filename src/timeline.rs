@@ -8,10 +8,21 @@ const CELL_W: f32 = 16.0;
 const ROW_H: f32 = 24.0;
 const HEADER_H: f32 = 20.0;
 const NAMES_W: f32 = 170.0;
+/// Ligne du son sous les calques (forme d'onde du montage pendant le panneau).
+const SOUND_H: f32 = 30.0;
 
 pub(crate) const CUR_FRAME: Color32 = Color32::from_rgb(255, 96, 72);
 
 impl App {
+    /// Hauteur de la ligne du son (rien s'il n'y a aucun son dans le projet).
+    fn sound_row_h(&self) -> f32 {
+        if self.doc.audio_tracks.iter().any(|t| !t.clips.is_empty()) {
+            SOUND_H
+        } else {
+            0.0
+        }
+    }
+
     pub(crate) fn timeline_panel(&mut self, ui: &mut egui::Ui) {
         ui.add_space(2.0);
         self.timeline_toolbar(ui);
@@ -121,10 +132,22 @@ impl App {
 
     fn timeline_names(&mut self, ui: &mut egui::Ui) {
         let rows = self.layers().len();
-        let size = vec2(NAMES_W, HEADER_H + rows as f32 * ROW_H);
+        let sound_h = self.sound_row_h();
+        let size = vec2(NAMES_W, HEADER_H + rows as f32 * ROW_H + sound_h);
         let (resp, painter) = ui.allocate_painter(size, Sense::click());
         let r = resp.rect;
         let visuals = ui.visuals();
+        if sound_h > 0.0 {
+            let row = Rect::from_min_max(pos2(r.left(), r.bottom() - sound_h), r.max).shrink2(vec2(0.0, 1.0));
+            painter.rect_filled(row, 2.0, Color32::from_gray(36));
+            painter.text(
+                pos2(r.left() + 8.0, row.center().y),
+                Align2::LEFT_CENTER,
+                "Son (montage)",
+                FontId::proportional(12.0),
+                visuals.weak_text_color(),
+            );
+        }
         painter.text(
             pos2(r.left() + 6.0, r.top() + HEADER_H * 0.5),
             Align2::LEFT_CENTER,
@@ -196,11 +219,50 @@ impl App {
         let rows = self.layers().len();
         let visible_cols = (ui.available_width() / CELL_W) as usize + 1;
         let cols = (count + 48).max(self.cur_frame + 24).max(visible_cols);
-        let size = vec2(cols as f32 * CELL_W, HEADER_H + rows as f32 * ROW_H);
+        let sound_h = self.sound_row_h();
+        let size = vec2(cols as f32 * CELL_W, HEADER_H + rows as f32 * ROW_H + sound_h);
         let (resp, painter) = ui.allocate_painter(size, Sense::click_and_drag());
         let r = resp.rect;
         let visuals = ui.visuals().clone();
         let grid_top = r.top() + HEADER_H;
+
+        // Le son du montage pendant ce panneau (toutes pistes superposées), en lecture seule.
+        if sound_h > 0.0 {
+            let row = Rect::from_min_max(pos2(r.left(), r.bottom() - sound_h), r.max).shrink2(vec2(0.0, 1.0));
+            painter.rect_filled(row, 0.0, Color32::from_gray(32));
+            let start = self.doc.panel_start(self.cur_panel);
+            let left = r.left() - start as f32 * CELL_W;
+            let fps = self.doc.fps;
+            for track in &self.doc.audio_tracks {
+                let color = if track.muted {
+                    Color32::from_gray(90)
+                } else {
+                    Color32::from_rgb(120, 190, 215)
+                };
+                for clip in &track.clips {
+                    let cr = Rect::from_min_max(
+                        pos2(left + clip.start as f32 * CELL_W, row.top() + 2.0),
+                        pos2(left + clip.end() as f32 * CELL_W, row.bottom() - 2.0),
+                    )
+                    .intersect(row);
+                    if !cr.is_positive() {
+                        continue;
+                    }
+                    if let Some(sound) = self.doc.sounds.get(&clip.sound) {
+                        crate::soundtrack::paint_wave(
+                            &painter.with_clip_rect(cr),
+                            Rect::from_min_max(pos2(cr.left(), row.top() + 2.0), pos2(cr.right(), row.bottom() - 2.0)),
+                            &sound.pcm,
+                            clip,
+                            left,
+                            CELL_W,
+                            fps,
+                            color,
+                        );
+                    }
+                }
+            }
+        }
 
         // Fond des lignes, calque courant en surbrillance.
         for row in 0..rows {

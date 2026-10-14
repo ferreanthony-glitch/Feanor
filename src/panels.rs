@@ -124,8 +124,9 @@ impl App {
                     Mode::Animation => "Retour au storyboard",
                 };
                 self.action_item(ui, label, "mode.basculer");
-                self.action_item(ui, "Vue planches / scène", "vue.planches");
+                self.action_item(ui, "Vue dessin / vignettes", "vue.planches");
             });
+            ui.menu_button("Son", |ui| self.sound_menu(ui));
             ui.menu_button("Animation", |ui| {
                 self.action_item(ui, "Lecture / pause", "lecture.basculer");
                 self.action_item(ui, "Image précédente", "image.precedente");

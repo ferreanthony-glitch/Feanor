@@ -1,8 +1,10 @@
 use std::collections::{BTreeSet, HashMap};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
+use crate::audio::Pcm;
 use crate::raster::Raster;
 use crate::vector::VectorDrawing;
 
@@ -212,7 +214,55 @@ impl Panel {
     }
 }
 
-/// Séquences, scènes et panneaux : tout ce qu'une opération de montage peut changer.
+/// Un fichier son importé, gardé tel quel (pour l'enregistrement) et décodé (pour la lecture).
+#[derive(Clone)]
+pub struct Sound {
+    pub id: u64,
+    /// Nom du fichier d'origine, sans dossier.
+    pub name: String,
+    /// Extension en minuscules (wav, mp3, flac, ogg).
+    pub ext: String,
+    pub bytes: Arc<Vec<u8>>,
+    pub pcm: Arc<Pcm>,
+}
+
+impl Sound {
+    /// Durée en images (arrondie au-dessus).
+    pub fn frames(&self, fps: u32) -> usize {
+        (self.pcm.seconds() * fps.max(1) as f64).ceil().max(1.0) as usize
+    }
+}
+
+/// Un extrait de son posé sur une piste, en images du montage.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SoundClip {
+    pub id: u64,
+    pub sound: u64,
+    /// Première image du montage où il commence.
+    pub start: usize,
+    /// Images sautées au début du son (extrait raccourci par la gauche).
+    pub offset: usize,
+    pub length: usize,
+}
+
+impl SoundClip {
+    pub fn end(&self) -> usize {
+        self.start + self.length
+    }
+}
+
+/// Une piste son : des extraits qui ne se chevauchent pas.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AudioTrack {
+    pub id: u64,
+    pub name: String,
+    pub muted: bool,
+    /// Gain linéaire (1 = inchangé).
+    pub volume: f32,
+    pub clips: Vec<SoundClip>,
+}
+
+/// Séquences, scènes, panneaux et pistes son : tout ce qu'une opération de montage peut changer.
 /// Les panneaux sont dans l'ordre du film ; ceux d'une même scène se suivent, comme les
 /// scènes d'une même séquence.
 #[derive(Clone)]
@@ -220,6 +270,7 @@ pub struct Structure {
     pub sequences: Vec<Sequence>,
     pub scenes: Vec<Scene>,
     pub panels: Vec<Panel>,
+    pub audio_tracks: Vec<AudioTrack>,
 }
 
 pub struct Document {
@@ -233,6 +284,10 @@ pub struct Document {
     /// Tous les dessins du projet. On n'en retire jamais pendant la session (l'historique
     /// d'annulation peut y faire référence) ; seuls ceux encore utilisés sont enregistrés.
     pub cels: HashMap<CelId, Cel>,
+    /// Pistes son, en temps du montage (elles ne bougent pas avec les panneaux).
+    pub audio_tracks: Vec<AudioTrack>,
+    /// Sons importés. Comme les dessins, on n'en retire pas pendant la session.
+    pub sounds: HashMap<u64, Sound>,
     next_id: u64,
 }
 
@@ -248,6 +303,8 @@ impl Document {
             scenes: Vec::new(),
             panels: Vec::new(),
             cels: HashMap::new(),
+            audio_tracks: Vec::new(),
+            sounds: HashMap::new(),
             next_id: 1,
         };
         let seq = doc.new_sequence();
@@ -264,14 +321,18 @@ impl Document {
         paper: [u8; 3],
         structure: Structure,
         cels: HashMap<CelId, Cel>,
+        sounds: HashMap<u64, Sound>,
     ) -> Self {
-        let max_cel = cels.keys().max().copied().unwrap_or(0);
         let max_id = structure
             .panels
             .iter()
             .map(|p| p.id)
             .chain(structure.scenes.iter().map(|s| s.id))
             .chain(structure.sequences.iter().map(|s| s.id))
+            .chain(structure.audio_tracks.iter().map(|t| t.id))
+            .chain(structure.audio_tracks.iter().flat_map(|t| t.clips.iter().map(|c| c.id)))
+            .chain(cels.keys().copied())
+            .chain(sounds.keys().copied())
             .max()
             .unwrap_or(0);
         let mut doc = Self {
@@ -283,7 +344,9 @@ impl Document {
             scenes: structure.scenes,
             panels: structure.panels,
             cels,
-            next_id: max_cel.max(max_id) + 1,
+            audio_tracks: structure.audio_tracks,
+            sounds,
+            next_id: max_id + 1,
         };
         doc.normalize();
         doc
@@ -294,6 +357,7 @@ impl Document {
             sequences: self.sequences.clone(),
             scenes: self.scenes.clone(),
             panels: self.panels.clone(),
+            audio_tracks: self.audio_tracks.clone(),
         }
     }
 
@@ -302,6 +366,7 @@ impl Document {
             sequences: std::mem::replace(&mut self.sequences, s.sequences),
             scenes: std::mem::replace(&mut self.scenes, s.scenes),
             panels: std::mem::replace(&mut self.panels, s.panels),
+            audio_tracks: std::mem::replace(&mut self.audio_tracks, s.audio_tracks),
         }
     }
 
@@ -671,5 +736,148 @@ impl Document {
         }
         let last = self.panels.len() - 1;
         (last, self.panels[last].frame_count() - 1)
+    }
+
+    // ---------------------------------------------------------------------------- son
+
+    pub fn add_sound(&mut self, name: String, ext: String, bytes: Arc<Vec<u8>>, pcm: Arc<Pcm>) -> u64 {
+        let id = self.alloc();
+        self.sounds.insert(id, Sound { id, name, ext, bytes, pcm });
+        id
+    }
+
+    /// Nouvelle piste son vide, en dernière position. Renvoie son identifiant.
+    pub fn add_audio_track(&mut self) -> u64 {
+        let id = self.alloc();
+        let n = self.audio_tracks.len() + 1;
+        self.audio_tracks.push(AudioTrack {
+            id,
+            name: format!("Son {n}"),
+            muted: false,
+            volume: 1.0,
+            clips: Vec::new(),
+        });
+        id
+    }
+
+    /// Fin (exclue) du dernier extrait son, en images du montage.
+    pub fn audio_end(&self) -> usize {
+        self.audio_tracks
+            .iter()
+            .flat_map(|t| t.clips.iter().map(SoundClip::end))
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Piste et place de l'extrait `id`.
+    pub fn find_clip(&self, id: u64) -> Option<(usize, usize)> {
+        self.audio_tracks
+            .iter()
+            .enumerate()
+            .find_map(|(t, track)| track.clips.iter().position(|c| c.id == id).map(|c| (t, c)))
+    }
+
+    pub fn clip(&self, id: u64) -> Option<&SoundClip> {
+        self.find_clip(id).map(|(t, c)| &self.audio_tracks[t].clips[c])
+    }
+
+    /// Vrai si la plage [start, end) de la piste `track` est libre (en ignorant l'extrait `except`).
+    pub fn track_free(&self, track: usize, start: usize, end: usize, except: u64) -> bool {
+        self.audio_tracks.get(track).is_some_and(|t| {
+            t.clips
+                .iter()
+                .all(|c| c.id == except || c.end() <= start || c.start >= end)
+        })
+    }
+
+    /// Pose tout le son `sound` à l'image `start` : sur la piste `track` si la place est libre,
+    /// sinon sur la première piste libre, sinon sur une nouvelle piste.
+    /// Renvoie l'identifiant du nouvel extrait.
+    pub fn place_sound(&mut self, sound: u64, start: usize, track: Option<usize>) -> Option<u64> {
+        let length = self.sounds.get(&sound)?.frames(self.fps);
+        let end = start + length;
+        let t = track
+            .filter(|&t| self.track_free(t, start, end, 0))
+            .or_else(|| (0..self.audio_tracks.len()).find(|&t| self.track_free(t, start, end, 0)))
+            .unwrap_or_else(|| {
+                self.add_audio_track();
+                self.audio_tracks.len() - 1
+            });
+        let id = self.alloc();
+        let clips = &mut self.audio_tracks[t].clips;
+        clips.push(SoundClip {
+            id,
+            sound,
+            start,
+            offset: 0,
+            length,
+        });
+        clips.sort_by_key(|c| c.start);
+        Some(id)
+    }
+
+    pub fn remove_clip(&mut self, id: u64) -> bool {
+        match self.find_clip(id) {
+            Some((t, c)) => {
+                self.audio_tracks[t].clips.remove(c);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Coupe l'extrait `id` à l'image `at` du montage. Renvoie l'identifiant de la partie droite.
+    pub fn split_clip(&mut self, id: u64, at: usize) -> Option<u64> {
+        let (t, c) = self.find_clip(id)?;
+        let clip = self.audio_tracks[t].clips[c].clone();
+        if at <= clip.start || at >= clip.end() {
+            return None;
+        }
+        let right_id = self.alloc();
+        let cut = at - clip.start;
+        let right = SoundClip {
+            id: right_id,
+            sound: clip.sound,
+            start: at,
+            offset: clip.offset + cut,
+            length: clip.length - cut,
+        };
+        let clips = &mut self.audio_tracks[t].clips;
+        clips[c].length = cut;
+        clips.insert(c + 1, right);
+        Some(right_id)
+    }
+
+    /// Place l'extrait `id` sur [start, end) de la piste `track`, en gardant le même son sous les
+    /// mêmes images (une poignée de bord ne fait que montrer ou cacher une partie du son).
+    /// Refusé si la place est prise ou si on dépasse le son. `keep_offset` : déplacement simple,
+    /// l'extrait garde son contenu.
+    pub fn set_clip_span(&mut self, id: u64, track: usize, start: usize, end: usize, keep_offset: bool) -> bool {
+        let Some((t, c)) = self.find_clip(id) else {
+            return false;
+        };
+        let clip = self.audio_tracks[t].clips[c].clone();
+        let Some(total) = self.sounds.get(&clip.sound).map(|s| s.frames(self.fps)) else {
+            return false;
+        };
+        if end <= start || !self.track_free(track, start, end, id) {
+            return false;
+        }
+        let offset = if keep_offset {
+            clip.offset as i64
+        } else {
+            clip.offset as i64 + start as i64 - clip.start as i64
+        };
+        if offset < 0 || offset as usize + (end - start) > total {
+            return false;
+        }
+        let mut moved = self.audio_tracks[t].clips.remove(c);
+        moved.start = start;
+        moved.length = end - start;
+        moved.offset = offset as usize;
+        let clips = &mut self.audio_tracks[track].clips;
+        clips.push(moved);
+        clips.sort_by_key(|c| c.start);
+        true
     }
 }

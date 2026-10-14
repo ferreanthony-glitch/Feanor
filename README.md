@@ -26,10 +26,20 @@ ouvrir d'un double-clic).
   - Numérotation automatique : scènes 1, 2, 3… dans l'ordre du film, panneaux 1, 2… dans chaque
     scène. Une scène ou une séquence peut recevoir un nom ou un numéro à soi (fiche à droite).
   - Chaque panneau a sa durée et ses champs Action / Dialogue / Notes.
-  - « Lire le montage » enchaîne tout (animatique), en boucle si on veut.
-  - Vue « Planches » (Maj+Tab) : les panneaux rangés par scène, avec leurs indications.
-  - On dessine directement sur le panneau dans la vue « Scène » : un nouveau dessin y est tenu
+  - « Lire le montage » enchaîne tout (animatique), en boucle si on veut, avec le son.
+  - Vue « Vignettes » (Maj+Tab) : les panneaux rangés par scène, avec leurs indications.
+  - On dessine directement sur le panneau dans la vue « Dessin » : un nouveau dessin y est tenu
     sur toute la durée du panneau.
+- **Son** : sous les panneaux, des pistes son.
+  - « + Son… » (ou un fichier lâché sur la fenêtre) importe un WAV, MP3, FLAC ou OGG à l'image
+    courante, sur la première piste libre.
+  - Chaque extrait montre sa forme d'onde. On le déplace en le faisant glisser (aussi d'une piste à
+    l'autre) ; ses bords cachent ou montrent le début ou la fin du son.
+  - Clic droit : couper le son à cet endroit, supprimer l'extrait (ou Suppr), importer ici, régler
+    la piste. Le bouton M d'une piste la rend muette.
+  - La lecture suit le son : l'image reste synchronisée. En changeant d'image hors lecture, on
+    entend une image de son (« son au défilement », menu Son).
+  - Le son est en temps de montage : déplacer ou rallonger un panneau ne déplace pas le son.
 - **Animation** (Tab, ou double-clic sur un panneau) : on entre dans le panneau, avec sa timeline,
   ses calques, ses expositions, la pelure d'oignon et la lecture en boucle. Tab ramène au storyboard.
 
@@ -84,6 +94,7 @@ Bus/
   Bus.pelure        manifeste lisible (réglages, séquences > scènes > panneaux > calques)
   dessins/12.png    un fichier par dessin bitmap
   dessins/13.json   un fichier par dessin vectoriel
+  sons/14.mp3       les sons importés, copiés tels quels
 ```
 
 On ouvre le projet en choisissant `Bus.pelure`. Un enregistrement n'écrit que les dessins modifiés,
@@ -105,14 +116,16 @@ ancien « plan » devient une scène d'un panneau, et le premier « Enregistrer 
 | `history.rs` | Annuler / rétablir |
 | `project.rs` | Projet en dossier (format 3) |
 | `io.rs` | Anciens fichiers `.pelure`, écriture d'images |
+| `audio.rs` | Décodage des sons, formes d'onde, mixage et sortie audio |
 | `keymap.rs` | Raccourcis : actions, lecture de `keymap.toml` |
 | `app.rs` | État de l'application, actions, raccourcis |
 | `vtools.rs` | Outils des calques vectoriels |
-| `storyboard.rs` | Bande de montage, vue planches, fiche du panneau |
+| `storyboard.rs` | Bande de montage, vue vignettes, fiche du panneau |
+| `soundtrack.rs` | Pistes son : import, lecture synchronisée, affichage, glisser des extraits |
 | `canvas.rs`, `panels.rs`, `timeline.rs` | Interface |
 
 `cargo test --release` lance les tests (pinceau, vectoriel, remplissage, séquences/scènes/panneaux,
-annulation, projet en dossier, anciens fichiers, raccourcis).
+annulation, projet en dossier, anciens fichiers, raccourcis, son).
 
 ## Particularités de compilation (Windows, toolchain GNU)
 

@@ -21,7 +21,7 @@ pub enum Edit {
     },
     /// Dessin vectoriel complet avant modification.
     Vector { cel: CelId, drawing: VectorDrawing },
-    /// Séquences, scènes, panneaux et calques (images, expositions, durées, ordre…).
+    /// Séquences, scènes, panneaux, calques (images, expositions, durées, ordre…) et pistes son.
     Structure { structure: Structure, nav: Nav },
     Group(Vec<Edit>),
 }
@@ -93,6 +93,13 @@ fn keep_current_metadata(restored: &mut Structure, doc: &Document) {
                 layer.opacity = l.opacity;
                 layer.visible = l.visible;
             }
+        }
+    }
+    for track in &mut restored.audio_tracks {
+        if let Some(now) = doc.audio_tracks.iter().find(|t| t.id == track.id) {
+            track.name.clone_from(&now.name);
+            track.muted = now.muted;
+            track.volume = now.volume;
         }
     }
 }

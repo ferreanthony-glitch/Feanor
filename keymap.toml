@@ -582,6 +582,34 @@ action = "calque.dessous"
 touches = ["Flèche bas"]
 source = "proposition"
 
+# ------------------------------------------------------------------------------------ Son
+# Storyboard Pro 27 a ces fonctions sans touche par défaut : on n'en invente pas.
+
+[[raccourci]]
+action = "son.importer"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : IMPORT_SOUND_KEY"
+
+[[raccourci]]
+action = "son.nouvelle_piste"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : NEW_SOUND_TRACK_KEY"
+
+[[raccourci]]
+action = "son.couper"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : SPLIT_SOUND_KEY"
+
+[[raccourci]]
+action = "son.defilement"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : TOGGLE_SCRUBBING_SOUND_KEY"
+
+[[raccourci]]
+action = "son.lecture"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : TOGGLE_SOUND_KEY"
+
 # ------------------------------------------------------------------------------------ Autres (en réserve)
 
 [[raccourci]]
