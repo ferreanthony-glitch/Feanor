@@ -216,6 +216,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
             dialogue: s.dialogue,
             notes: s.notes,
             camera: Vec::new(),
+            ref3d: None,
         });
     }
     Ok(Document::from_parts(w, h, structure, cels, HashMap::new()))

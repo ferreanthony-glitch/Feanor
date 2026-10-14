@@ -324,6 +324,28 @@ pub struct Panel {
     pub notes: String,
     /// Images clés de la caméra, triées (aucune : caméra au centre de la feuille).
     pub camera: Vec<CameraKey>,
+    /// Repère 3D (2d) : modèle importé vu par sa propre caméra, en fil de fer dans le cadre.
+    pub ref3d: Option<Ref3d>,
+}
+
+/// Repère 3D d'un panneau : un modèle de `Document::models`, vu par sa caméra, dessiné en fil
+/// de fer dans le cadre comme un guide (ni à l'export ni dans les vignettes ; « Dessiner dans un
+/// calque » en fait un dessin).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Ref3d {
+    pub model: u64,
+    pub cam: crate::view3d::Cam3d,
+    pub visible: bool,
+    /// Masquer les arêtes cachées par des faces plus proches.
+    pub hidden_lines: bool,
+    pub color: [u8; 3],
+    pub opacity: f32,
+}
+
+impl Ref3d {
+    pub fn new(model: u64, cam: crate::view3d::Cam3d) -> Ref3d {
+        Ref3d { model, cam, visible: true, hidden_lines: true, color: [40, 150, 230], opacity: 0.8 }
+    }
 }
 
 impl Panel {
@@ -441,6 +463,8 @@ pub struct Document {
     pub audio_tracks: Vec<AudioTrack>,
     /// Sons importés. Comme les dessins, on n'en retire pas pendant la session.
     pub sounds: HashMap<u64, Sound>,
+    /// Modèles 3D importés (repères, 2d). Comme les sons, on n'en retire pas pendant la session.
+    pub models: HashMap<u64, Arc<crate::model3d::Model3d>>,
     /// Guides de perspective du projet.
     pub guides: Vec<Guide>,
     next_id: u64,
@@ -468,6 +492,7 @@ impl Document {
             cels: HashMap::new(),
             audio_tracks: Vec::new(),
             sounds: HashMap::new(),
+            models: HashMap::new(),
             guides: Vec::new(),
             next_id: 1,
         };
@@ -509,6 +534,7 @@ impl Document {
             cels,
             audio_tracks: structure.audio_tracks,
             sounds,
+            models: HashMap::new(),
             guides: structure.guides,
             next_id: max_id + 1,
         };
@@ -907,6 +933,7 @@ impl Document {
             dialogue: String::new(),
             notes: String::new(),
             camera: keys_after,
+            ref3d: source.ref3d.clone(),
         };
         let first = &mut self.panels[index];
         for l in &mut first.layers {
@@ -1116,6 +1143,7 @@ impl Document {
             dialogue: String::new(),
             notes: String::new(),
             camera: Vec::new(),
+            ref3d: None,
         }
     }
 
@@ -1210,6 +1238,19 @@ impl Document {
     }
 
     // ---------------------------------------------------------------------------- son
+
+    /// Ajoute un modèle 3D importé ; renvoie son identifiant.
+    pub fn add_model(&mut self, name: String, mesh: crate::model3d::Mesh3d) -> u64 {
+        let id = self.alloc();
+        self.models.insert(id, Arc::new(crate::model3d::Model3d::new(id, name, mesh)));
+        id
+    }
+
+    /// Remet un modèle relu d'un projet, avec son identifiant.
+    pub fn insert_model(&mut self, model: crate::model3d::Model3d) {
+        self.next_id = self.next_id.max(model.id + 1);
+        self.models.insert(model.id, Arc::new(model));
+    }
 
     pub fn add_sound(&mut self, name: String, ext: String, bytes: Arc<Vec<u8>>, pcm: Arc<Pcm>) -> u64 {
         let id = self.alloc();
