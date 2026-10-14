@@ -1,0 +1,5 @@
+# Toolchain du projet : Rust « MSVC » (outils de compilation Microsoft, installés en phase 2).
+# Pour revenir à l'ancienne toolchain GNU, supprimer ce fichier : `build.rs`, `link/` et les
+# versions figées de Cargo.lock la font toujours compiler.
+[toolchain]
+channel = "stable-x86_64-pc-windows-msvc"

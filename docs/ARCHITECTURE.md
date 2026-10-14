@@ -149,12 +149,13 @@ MonFilm/
 
 ## Compilation
 
-Toolchain Rust `x86_64-pc-windows-gnu` (MinGW minimal de rustup). Conséquences :
+Toolchain Rust **MSVC** (`stable-x86_64-pc-windows-msvc`, fixée par `rust-toolchain.toml`) avec les
+« Visual Studio Build Tools 2022 » (charge C++), installés au début de la phase 2.
 
-- `Cargo.lock` fige `parking_lot` 0.12.3, `parking_lot_core` 0.9.10, `libloading` 0.8.6 (les
-  versions récentes exigent un `dlltool` complet). Ne pas lancer `cargo update` sans vérifier
-  `cargo tree -i windows-link --target x86_64-pc-windows-gnu`.
-- `link/libshlwapi.a` + `build.rs` fournissent une bibliothèque d'import manquante.
+L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (supprimer
+`rust-toolchain.toml`) : `Cargo.lock` fige encore `parking_lot` 0.12.3, `parking_lot_core` 0.9.10,
+`libloading` 0.8.6, et `link/libshlwapi.a` + `build.rs` fournissent une bibliothèque d'import
+(sans effet avec MSVC). À retirer quand ce secours ne servira plus.
 
 ## Décisions (coût / risque / réversibilité)
 
@@ -162,7 +163,7 @@ Toolchain Rust `x86_64-pc-windows-gnu` (MinGW minimal de rustup). Conséquences 
 |---|---|---|---|---|
 | egui 0.31, pas de mise à jour pour l'instant | stable, déjà en place | nul | moyen à terme (retard sur les versions) | oui, coût croissant avec la taille du code |
 | Rendu sur processeur en phase 1, carte graphique (wgpu) en phase 2 | la 3D et le multiplan l'exigent ; inutile avant | réécriture de `render.rs` en phase 2 | moyen | oui (le modèle de données ne change pas) |
-| Toolchain GNU → **outils Microsoft (MSVC) avant la phase 2** (validé) | plus de contournements à chaque bibliothèque | 5–7 Go, une fois | faible | oui |
+| Toolchain GNU → **outils Microsoft (MSVC)** (validé, fait au début de la phase 2) | plus de contournements à chaque bibliothèque | 5–7 Go, une fois ; exécutable 20,5 → 8,8 Mo | faible | oui : supprimer `rust-toolchain.toml` |
 | **Projet = dossier** (validé, fait en 1a) | sons, 3D, sauvegarde auto incrémentale | lecture des anciens `.pelure` gardée | moyen | format versionné : les évolutions futures se font par ajout de champs |
 | **Séquence > Scène > Panneau** (validé, fait en 1a) | vocabulaire de Storyboard Pro | refonte du modèle | moyen | l'arbre du fichier est stable ; la liste à plat en mémoire peut changer sans toucher au fichier |
 | Raccourcis en TOML, identifiants stables | modifiables sans recompiler | faible | faible | oui |

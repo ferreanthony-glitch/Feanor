@@ -151,15 +151,22 @@ ancien « plan » devient une scène d'un panneau, et le premier « Enregistrer 
 `cargo test --release` lance les tests (pinceau, vectoriel, remplissage, séquences/scènes/panneaux,
 annulation, projet en dossier, anciens fichiers, raccourcis, son).
 
-## Particularités de compilation (Windows, toolchain GNU)
+## Compilation (Windows)
 
-La toolchain `x86_64-pc-windows-gnu` installée par rustup n'embarque qu'un MinGW minimal :
+Depuis la phase 2, le projet se compile avec la toolchain Rust **MSVC**
+(`stable-x86_64-pc-windows-msvc`, fixée par `rust-toolchain.toml`). Elle demande les outils de
+compilation Microsoft : « Visual Studio Build Tools 2022 », charge de travail C++
+(`winget install Microsoft.VisualStudio.2022.BuildTools`, avec `Microsoft.VisualStudio.Workload.VCTools`).
 
-- `Cargo.lock` fige `parking_lot` 0.12.3, `parking_lot_core` 0.9.10 et `libloading` 0.8.6. Les
-  versions plus récentes passent par `windows-link` (« raw-dylib »), qui exige un `dlltool`
-  complet absent de cette toolchain. **Ne pas lancer `cargo update` sans revérifier
-  `cargo tree -i windows-link --target x86_64-pc-windows-gnu`.**
-- `link/libshlwapi.a` (copiée de `winapi-x86_64-pc-windows-gnu`) fournit la bibliothèque d'import
-  de `shlwapi`, demandée par une dépendance d'egui. `build.rs` l'ajoute au chemin d'édition de liens.
+### Ancienne toolchain GNU (gardée en secours)
 
-Le passage aux outils Microsoft (MSVC) est prévu avant la phase 2 et supprimera ces contournements.
+Avant la phase 2, le projet utilisait `x86_64-pc-windows-gnu`, qui n'embarque qu'un MinGW minimal.
+Les contournements sont encore là, pour pouvoir y revenir en supprimant `rust-toolchain.toml` :
+
+- `Cargo.lock` fige `parking_lot` 0.12.3, `parking_lot_core` 0.9.10 et `libloading` 0.8.6 (les
+  versions récentes exigent un `dlltool` complet).
+- `link/libshlwapi.a` + `build.rs` fournissent une bibliothèque d'import manquante (sans effet avec
+  MSVC).
+
+Ils pourront être retirés quand on n'aura plus besoin de ce secours (les versions figées seront
+alors libérées lors d'une mise à jour des bibliothèques).

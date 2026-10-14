@@ -52,7 +52,8 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
 
 ## Phase 2 — Caméra et 3D ⏳
 
-Prérequis : installer les outils de compilation Microsoft (validé, à faire au début de la phase).
+- ✅ Prérequis : outils de compilation Microsoft (Build Tools 2022) installés, projet compilé avec
+  la toolchain MSVC (`rust-toolchain.toml`) ; tests et lecture avec son vérifiés.
 
 - ⏳ 2a. Affichage sur la carte graphique (wgpu).
 - ⏳ 2b. Caméra : cadre, panoramique, zoom, rotation, images clés et courbes, visibles dans la timeline.
