@@ -8,7 +8,7 @@ use eframe::egui::{
 use crate::app::{App, BoardView};
 use crate::document::{Document, Panel};
 use crate::history::Edit;
-use crate::soundtrack::{ClipDrag, ClipEdge, MenuTarget, LANE_GAP, TRACK_H};
+use crate::soundtrack::{ClipDrag, ClipEdge, MenuTarget};
 use crate::timeline::CUR_FRAME;
 
 pub(crate) enum MontageDrag {
@@ -28,10 +28,10 @@ pub(crate) enum MontageDrag {
     Clip(ClipDrag),
 }
 
-const RULER_H: f32 = 18.0;
+pub(crate) const RULER_H: f32 = 18.0;
 const SEQ_H: f32 = 15.0;
 const SCENE_H: f32 = 18.0;
-const BANDS_H: f32 = SEQ_H + SCENE_H + 2.0;
+pub(crate) const BANDS_H: f32 = SEQ_H + SCENE_H + 2.0;
 
 pub fn timecode(frames: usize, fps: u32) -> String {
     let fps = fps.max(1) as usize;
@@ -376,20 +376,20 @@ impl App {
             );
         });
         ui.separator();
-        // Hauteur des panneaux : ce qui reste une fois la règle, les barres et les pistes son placées.
-        let lanes = self.doc.audio_tracks.len() as f32 * TRACK_H;
-        let block_h = (ui.available_height() - RULER_H - BANDS_H - LANE_GAP - lanes - 12.0).clamp(56.0, 170.0);
+        // Hauteur des panneaux : ce qui reste une fois la règle, les barres et les pistes placées.
+        let rows = self.montage_rows(ui.available_height());
         egui::ScrollArea::vertical()
             .id_salt("montage_v")
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
-                    self.track_headers(ui, RULER_H + BANDS_H + block_h + LANE_GAP);
+                    let headers = self.track_headers(ui, rows.lanes_top());
+                    self.row_headers(ui, headers, &rows);
                     egui::ScrollArea::horizontal()
                         .id_salt("montage_h")
                         .auto_shrink([false, true])
-                        .show(ui, |ui| self.montage_strip(ui, block_h));
+                        .show(ui, |ui| self.montage_strip(ui, &rows));
                 });
             });
     }
@@ -459,7 +459,8 @@ impl App {
         }
     }
 
-    fn montage_strip(&mut self, ui: &mut egui::Ui, block_h: f32) {
+    fn montage_strip(&mut self, ui: &mut egui::Ui, rows: &crate::montagerows::Rows) {
+        let block_h = rows.block_h;
         let ppf = self.montage_zoom;
         let fps = self.doc.fps.max(1) as usize;
         let total = self.doc.total_frames();
@@ -470,14 +471,14 @@ impl App {
             self.sel_clip = None;
         }
         let width = (shown as f32 * ppf + 260.0).max(ui.available_width());
-        let height = RULER_H + BANDS_H + block_h + LANE_GAP + n_tracks as f32 * TRACK_H + 2.0;
+        let height = rows.height(n_tracks);
         let (resp, painter) = ui.allocate_painter(vec2(width, height), Sense::click_and_drag());
         let r = resp.rect;
         let left = r.left() + 6.0;
         let x_of = |g: usize| left + g as f32 * ppf;
         let bands_top = r.top() + RULER_H;
-        let top = bands_top + BANDS_H;
-        let lanes_top = top + block_h + LANE_GAP;
+        let top = r.top() + rows.blocks_top();
+        let lanes_top = r.top() + rows.lanes_top();
         let in_blocks = |p: Pos2| p.y >= top && p.y <= top + block_h;
         let visuals = ui.visuals().clone();
 
@@ -514,7 +515,6 @@ impl App {
                 pos2(x_of(start + len) - 1.0, top + block_h),
             );
             blocks.push(rect);
-            let panel_start = start;
             start += len;
             let selected = i == self.cur_panel;
             let bg = if selected {
@@ -553,19 +553,6 @@ impl App {
                     Stroke::new(2.0_f32, visuals.selection.stroke.color),
                     StrokeKind::Inside,
                 );
-            }
-            // Mouvement de caméra : un petit losange par image clé, en bas du bloc.
-            let keys = &self.doc.panels[i].camera;
-            if keys.len() >= 2 {
-                for k in keys {
-                    let c = pos2(x_of(panel_start + k.frame) + ppf * 0.5, rect.bottom() - 5.0);
-                    let d = 3.5;
-                    painter.add(egui::Shape::convex_polygon(
-                        vec![c + vec2(0.0, -d), c + vec2(d, 0.0), c + vec2(0.0, d), c + vec2(-d, 0.0)],
-                        Color32::from_rgb(255, 196, 60),
-                        Stroke::NONE,
-                    ));
-                }
             }
             // Poignée de durée sur le bord droit.
             painter.rect_filled(
@@ -615,7 +602,8 @@ impl App {
             }
         }
 
-        // Pistes son, sous les panneaux.
+        // Caméra au-dessus des panneaux, calques et fond dessous (6f), puis les pistes son.
+        self.paint_track_rows(&painter, r, &blocks, ppf, rows, &visuals);
         self.paint_lanes(&painter, r, left, ppf, lanes_top, visuals.selection.stroke.color);
 
         let panel_at = |x: f32| blocks.iter().position(|b| x >= b.left() - 1.0 && x <= b.right() + 1.0);
@@ -716,7 +704,14 @@ impl App {
 
         if resp.clicked() {
             if let Some(p) = resp.interact_pointer_pos() {
-                if let Some((_, hit)) = self.lane_hit(p, left, ppf, lanes_top) {
+                if let Some((i, k)) = self.layer_row_hit(p, r.top(), &blocks, rows) {
+                    // Clic dans une piste de calque : ce panneau, cette image, ce calque.
+                    self.sel_clip = None;
+                    self.goto_global(frame_at(p.x));
+                    if self.cur_panel == i {
+                        self.select_layer(k);
+                    }
+                } else if let Some((_, hit)) = self.lane_hit(p, left, ppf, lanes_top) {
                     // Clic dans une piste son : sélectionne l'extrait (ou rien) et y place la tête.
                     self.sel_clip = hit.map(|(id, _)| id);
                     self.goto_global(frame_at(p.x));

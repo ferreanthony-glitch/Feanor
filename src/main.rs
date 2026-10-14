@@ -45,6 +45,7 @@ mod keymap_tests;
 #[cfg(test)]
 mod ops_tests;
 mod model3d;
+mod montagerows;
 mod onion;
 #[cfg(test)]
 mod onion_tests;

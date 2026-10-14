@@ -459,8 +459,9 @@ impl App {
     }
 
     /// Colonne des noms de pistes, à gauche de la bande de montage. `lanes_top` : distance entre
-    /// le haut de la bande et la première piste.
-    pub(crate) fn track_headers(&mut self, ui: &mut egui::Ui, lanes_top: f32) {
+    /// le haut de la bande et la première piste. Renvoie la colonne (les noms des autres pistes
+    /// s'y ajoutent au-dessus).
+    pub(crate) fn track_headers(&mut self, ui: &mut egui::Ui, lanes_top: f32) -> Rect {
         let n = self.doc.audio_tracks.len();
         let (rect, _) = ui.allocate_exact_size(vec2(HEADERS_W, lanes_top + n as f32 * TRACK_H), Sense::hover());
         let visuals = ui.visuals().clone();
@@ -516,6 +517,7 @@ impl App {
             let track = &mut self.doc.audio_tracks[t];
             track.muted = !track.muted;
         }
+        rect
     }
 
     /// Menu d'une piste son (nom, muette, volume, import, nouvelle piste, suppression).
