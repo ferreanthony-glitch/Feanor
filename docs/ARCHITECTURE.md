@@ -119,6 +119,16 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   interrompues : avec copie, proposées (`recoveryui.rs`) ; sans, effacées. `on_exit` efface le
   dossier de la séance.
 
+## Espaces de travail (4b)
+
+- `workspace.rs` : une disposition (`Layout`) = panneaux affichés, largeur de la fiche, hauteurs
+  du montage et de la timeline, vue vignettes, vue de dessus. Dispositions de Pelure, espaces
+  enregistrés et dernière disposition dans `reglages.toml` (`[disposition]`, `[[espaces]]`).
+- `workspaceui.rs` : les panneaux egui gardent leur taille d'une image à l'autre ; pour imposer
+  celle d'une disposition, leur identifiant change (`layout_gen`) et ils repartent de la taille
+  demandée. Les tailles tirées à la main sont relues chaque image et retenues quand la souris
+  est relâchée.
+
 ## Pinceaux texturés (3d-2)
 
 - `brush.rs` : chaque empreinte calcule une couverture par pixel — disque (dureté) ou pointe en

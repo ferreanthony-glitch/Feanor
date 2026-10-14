@@ -73,6 +73,10 @@ mod transform_tests;
 mod vector;
 mod view;
 mod vtools;
+mod workspace;
+#[cfg(test)]
+mod workspace_tests;
+mod workspaceui;
 
 fn main() -> eframe::Result<()> {
     // Un projet passé en argument (ou par double-clic sur un .pelure) est ouvert au démarrage.

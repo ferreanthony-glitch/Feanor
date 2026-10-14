@@ -62,7 +62,7 @@ fn brush_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
 
 impl App {
     /// Entrée de menu reliée à une action ; le raccourci affiché vient du fichier de raccourcis.
-    fn action_item(&mut self, ui: &mut egui::Ui, text: &str, action: &str) {
+    pub(crate) fn action_item(&mut self, ui: &mut egui::Ui, text: &str, action: &str) {
         let shortcut = self.keymap.label(action);
         if menu_item(ui, text, &shortcut) {
             self.run_action(action);
@@ -188,6 +188,7 @@ impl App {
                 self.action_item(ui, "Guide : verrouiller", "guide.verrouiller");
                 self.action_item(ui, "Guide : lignes de référence", "guide.lignes_reference");
                 ui.separator();
+                self.workspace_menu(ui);
                 self.action_item(ui, "Plein écran", "vue.plein_ecran");
                 ui.separator();
                 ui.horizontal(|ui| {

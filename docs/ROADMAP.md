@@ -138,7 +138,7 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
     grain sur les calques vectoriels.
 - ⏸ Export XML Toon Boom : non prévu (format propriétaire non documenté).
 
-## Phase 4 — Confort 🔧
+## Phase 4 — Confort ✅
 
 - ✅ 4a. Copie de secours et récupération après plantage : toutes les minutes par défaut
   (AUTO_SAVE_DELAY = 1 dans les préférences Storyboard Pro d'Anthony ; réglable dans le menu
@@ -149,8 +149,14 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
   sans enregistrer » (ouvrir la copie, la supprimer, ou plus tard), avec un avertissement si le
   projet a été enregistré après la copie. Barre d'état : « Secours il y a … ». Vérifié par un
   vrai plantage (processus tué) : copie retrouvée et rouverte, traits compris.
-- ⏳ 4b. Espaces de travail enregistrables (disposition des panneaux), retenus à la fermeture
-  (AUTO_SAVE_LAYOUT = Y dans les mêmes préférences).
+- ✅ 4b. Espaces de travail (Affichage > Espaces de travail) : quatre dispositions de Pelure
+  (Standard ; Dessin, Timeline et Vue d'ensemble, qui reprennent par le nom les commandes
+  VIEW_LAYOUT_DRAWING / TIMELINE / OVERVIEW de Storyboard Pro 27, sans touche, avec un contenu
+  propre à Pelure) ; « Enregistrer la disposition… » sous un nom, et supprimer ; panneaux
+  Outils, fiche et calques, montage / timeline à afficher ou masquer (Affichage > Panneaux) ;
+  la disposition est retenue d'une séance à l'autre (AUTO_SAVE_LAYOUT = Y dans les préférences
+  d'Anthony). Une disposition = panneaux affichés, leurs tailles, vue vignettes, vue de dessus.
+  Pas encore : fenêtres détachées, plusieurs vues du même dessin.
 
 ## Raccourcis proposés, à valider
 

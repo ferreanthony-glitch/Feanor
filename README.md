@@ -115,6 +115,10 @@ deux calques vectoriels restent vectoriels, sinon le résultat est bitmap ; les 
 - **Annuler / rétablir** (Ctrl+Z / Ctrl+Maj+Z) : 200 étapes, sur tout le projet : traits, vectoriel,
   sélections, panneaux, scènes, séquences, calques, sons, textes, noms, réglages des calques et des
   pistes, guides, papier, cadence. Une saisie ou un glissé de curseur compte pour une seule étape.
+- **Espaces de travail** (Affichage > Espaces de travail) : Standard, Dessin (plus de place pour
+  dessiner), Timeline (bande du bas plus haute), Vue d'ensemble (vignettes) ; « Enregistrer la
+  disposition… » garde la tienne sous un nom. Affichage > Panneaux masque ou affiche chaque
+  panneau. Pelure rouvre avec la disposition de la dernière fois.
 - **Copie de secours** : toutes les minutes (menu Fichier pour changer, 0 = jamais), Pelure copie
   le projet modifié à part, sans toucher au projet lui-même. Après un plantage, au démarrage
   suivant, Pelure propose d'ouvrir la copie ; « Enregistrer » la remet dans le projet.
@@ -199,6 +203,8 @@ ligne « Caméra » de la timeline et en petits losanges dans la bande de montag
 | `history.rs` | Annuler / rétablir |
 | `project.rs` | Projet en dossier (format 4), enregistrement préparé puis écrit |
 | `recovery.rs`, `recoveryui.rs` | Copie de secours, récupération après plantage |
+| `workspace.rs`, `workspaceui.rs` | Espaces de travail, disposition retenue |
+| `settings.rs` | Réglages de l'application (ffmpeg, pelure, copie de secours, dispositions) |
 | `io.rs` | Anciens fichiers `.pelure`, écriture d'images |
 | `audio.rs` | Décodage des sons, formes d'onde, mixage et sortie audio |
 | `keymap.rs` | Raccourcis : actions, lecture de `keymap.toml` |

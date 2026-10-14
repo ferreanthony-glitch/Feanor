@@ -188,6 +188,12 @@ pub struct App {
     pub(crate) ffmpeg: Option<Option<(PathBuf, Result<crate::export::Encoders, String>)>>,
     /// Réglages de l'application (%APPDATA%\Pelure\reglages.toml).
     pub(crate) settings: crate::settings::Settings,
+    /// Disposition de la fenêtre (panneaux affichés, tailles). `layout_gen` change quand on
+    /// applique un espace de travail : les panneaux repartent alors des tailles demandées.
+    pub(crate) layout: crate::workspace::Layout,
+    pub(crate) layout_gen: u64,
+    /// Nom en cours de saisie pour enregistrer l'espace de travail.
+    pub(crate) workspace_name: Option<String>,
     /// Copie de secours de cette séance, et séances interrompues à proposer au démarrage.
     pub(crate) recovery: Option<crate::recovery::Recovery>,
     pub(crate) orphans: Vec<crate::recovery::Orphan>,
@@ -328,6 +334,9 @@ impl App {
             export_last: Default::default(),
             export_job: None,
             ffmpeg: None,
+            layout: crate::workspace::Layout::default(),
+            layout_gen: 0,
+            workspace_name: None,
             settings,
             // Les séances interrompues d'abord (avant d'ouvrir la nôtre).
             orphans: crate::recovery::root().map(|r| crate::recovery::orphans(&r, None)).unwrap_or_default(),
@@ -404,6 +413,10 @@ impl App {
         } else {
             " · calques par le processeur"
         });
+        // La disposition de la dernière fois.
+        if let Some(layout) = app.settings.layout.clone() {
+            app.apply_layout(layout);
+        }
         app
     }
 
@@ -486,6 +499,7 @@ impl App {
             || self.export_dialog.is_some()
             || self.export_job.is_some()
             || !self.orphans.is_empty()
+            || self.workspace_name.is_some()
     }
 
     pub(crate) fn current_brush(&self) -> Option<&BrushSettings> {
@@ -1707,6 +1721,9 @@ impl App {
 
     /// Exécute une action désignée par son identifiant stable (voir `keymap::ACTIONS`).
     pub(crate) fn run_action(&mut self, action: &str) {
+        if self.workspace_action(action) {
+            return;
+        }
         let board = self.mode == Mode::Storyboard;
         match action {
             "fichier.nouveau" => self.request(Pending::New),
@@ -2063,31 +2080,42 @@ impl eframe::App for App {
 
         egui::TopBottomPanel::top("menu").show(ctx, |ui| self.menu_bar(ui));
         egui::TopBottomPanel::bottom("statut").show(ctx, |ui| self.status_bar(ui));
-        match self.mode {
-            Mode::Storyboard => {
-                egui::TopBottomPanel::bottom("montage")
-                    .resizable(true)
-                    .default_height(290.0)
-                    .min_height(140.0)
-                    .show(ctx, |ui| self.montage_panel(ui));
-            }
-            Mode::Animation => {
-                egui::TopBottomPanel::bottom("timeline")
-                    .resizable(true)
-                    .default_height(210.0)
-                    .min_height(110.0)
-                    .show(ctx, |ui| self.timeline_panel(ui));
+        // Panneaux selon la disposition ; on relit leurs tailles (l'utilisateur les tire).
+        let gen = self.layout_gen;
+        if self.layout.strip {
+            match self.mode {
+                Mode::Storyboard => {
+                    let r = egui::TopBottomPanel::bottom(egui::Id::new(("montage", gen)))
+                        .resizable(true)
+                        .default_height(self.layout.montage_height)
+                        .min_height(140.0)
+                        .show(ctx, |ui| self.montage_panel(ui));
+                    self.layout.montage_height = r.response.rect.height();
+                }
+                Mode::Animation => {
+                    let r = egui::TopBottomPanel::bottom(egui::Id::new(("timeline", gen)))
+                        .resizable(true)
+                        .default_height(self.layout.timeline_height)
+                        .min_height(110.0)
+                        .show(ctx, |ui| self.timeline_panel(ui));
+                    self.layout.timeline_height = r.response.rect.height();
+                }
             }
         }
-        egui::SidePanel::left("outils")
-            .resizable(false)
-            .exact_width(236.0)
-            .show(ctx, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| self.tools_panel(ui));
-            });
-        egui::SidePanel::right("plan_calques")
-            .default_width(250.0)
-            .show(ctx, |ui| self.right_panel(ui));
+        if self.layout.tools {
+            egui::SidePanel::left(egui::Id::new(("outils", gen)))
+                .resizable(false)
+                .exact_width(236.0)
+                .show(ctx, |ui| {
+                    egui::ScrollArea::vertical().show(ui, |ui| self.tools_panel(ui));
+                });
+        }
+        if self.layout.sheet {
+            let r = egui::SidePanel::right(egui::Id::new(("plan_calques", gen)))
+                .default_width(self.layout.sheet_width)
+                .show(ctx, |ui| self.right_panel(ui));
+            self.layout.sheet_width = r.response.rect.width();
+        }
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(Color32::from_gray(42)))
             .show(ctx, |ui| {
@@ -2109,6 +2137,7 @@ impl eframe::App for App {
         }
         self.export_windows(ctx);
         self.recovery_window(ctx);
+        self.workspace_name_window(ctx);
         self.scrub_audio();
         if self.thumbs.pending {
             ctx.request_repaint();
@@ -2121,13 +2150,17 @@ impl eframe::App for App {
             }
         }
         self.tick_recovery(ctx);
+        self.remember_layout(ctx);
     }
 
-    /// Fermeture normale (même sans enregistrer) : la copie de secours de la séance est effacée.
+    /// Fermeture normale (même sans enregistrer) : la copie de secours de la séance est effacée,
+    /// la disposition de la fenêtre retenue.
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         if let Some(r) = self.recovery.take() {
             r.close();
         }
+        self.settings.layout = Some(self.current_layout());
+        let _ = self.settings.save();
     }
 }
 

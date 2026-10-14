@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::onion::OnionSettings;
+use crate::workspace::{Layout, Workspace};
 
 #[derive(Serialize, Deserialize)]
 pub struct Settings {
@@ -18,6 +19,12 @@ pub struct Settings {
     /// Pelure d'oignon.
     #[serde(default, rename = "pelure")]
     pub onion: OnionSettings,
+    /// Disposition de la fenêtre à la dernière fermeture.
+    #[serde(default, rename = "disposition", skip_serializing_if = "Option::is_none")]
+    pub layout: Option<Layout>,
+    /// Espaces de travail enregistrés.
+    #[serde(default, rename = "espaces")]
+    pub workspaces: Vec<Workspace>,
 }
 
 fn default_autosave() -> u32 {
@@ -30,6 +37,8 @@ impl Default for Settings {
             ffmpeg: None,
             autosave_minutes: default_autosave(),
             onion: OnionSettings::default(),
+            layout: None,
+            workspaces: Vec::new(),
         }
     }
 }

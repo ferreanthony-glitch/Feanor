@@ -674,6 +674,50 @@ action = "vue.dessus"
 touches = []
 source = "Pelure (fenêtre Vue de dessus ; aucune commande équivalente dans sb_shortcuts.xml de Storyboard Pro 27)"
 
+# ------------------------------------------------------------------------------------ Espaces de travail
+# Les dispositions de Pelure reprennent par le nom les commandes de Storyboard Pro 27 (sans
+# touche) ; leur contenu est propre à Pelure.
+
+[[raccourci]]
+action = "espace.standard"
+touches = []
+source = "Pelure (disposition par défaut)"
+
+[[raccourci]]
+action = "espace.dessin"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : VIEW_LAYOUT_DRAWING_KEY"
+
+[[raccourci]]
+action = "espace.timeline"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : VIEW_LAYOUT_TIMELINE_KEY"
+
+[[raccourci]]
+action = "espace.ensemble"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : VIEW_LAYOUT_OVERVIEW_KEY"
+
+[[raccourci]]
+action = "espace.enregistrer"
+touches = []
+source = "Pelure (Storyboard Pro 27 passe par WORKSPACE_MANAGER, sans touche)"
+
+[[raccourci]]
+action = "vue.panneau_outils"
+touches = []
+source = "Pelure"
+
+[[raccourci]]
+action = "vue.panneau_fiche"
+touches = []
+source = "Pelure"
+
+[[raccourci]]
+action = "vue.panneau_bande"
+touches = []
+source = "Pelure"
+
 # ------------------------------------------------------------------------------------ Table lumineuse et guides
 # Les touches des guides viennent du module « Guides » de Storyboard Pro 27
 # (Plugins\GuideTool\resources\sb_shortcuts.xml, valeurs « Toon Boom Storyboard »).
