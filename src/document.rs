@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use eframe::egui::{pos2, vec2, Rect};
+use eframe::egui::{pos2, vec2, Pos2, Rect};
 use serde::{Deserialize, Serialize};
 
 use crate::audio::Pcm;
@@ -77,6 +77,64 @@ pub fn fresh_layer_id() -> u64 {
     NEXT_LAYER_ID.fetch_add(1, Ordering::Relaxed)
 }
 
+/// Transformation d'un calque entier : décalage, échelle et rotation autour du centre de la
+/// feuille. Elle s'applique à l'affichage de tous ses dessins ; les dessins eux-mêmes ne changent
+/// pas (on peut l'annuler à tout moment).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LayerTransform {
+    pub x: f32,
+    pub y: f32,
+    pub scale: f32,
+    /// En degrés (sens horaire à l'écran).
+    pub angle: f32,
+}
+
+impl Default for LayerTransform {
+    fn default() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            scale: 1.0,
+            angle: 0.0,
+        }
+    }
+}
+
+impl LayerTransform {
+    pub fn is_identity(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// Du dessin du calque vers la feuille, la feuille ayant son centre en `pivot`.
+    pub fn affine(&self, pivot: Pos2) -> crate::vector::Affine {
+        let (s, c) = self.angle.to_radians().sin_cos();
+        let k = self.scale;
+        let (a, b, cc, d) = (k * c, -k * s, k * s, k * c);
+        crate::vector::Affine {
+            a,
+            b,
+            c: cc,
+            d,
+            tx: pivot.x + self.x - (a * pivot.x + b * pivot.y),
+            ty: pivot.y + self.y - (cc * pivot.x + d * pivot.y),
+        }
+    }
+
+    /// Même transformation suivie d'une similitude autour du point `q` de la feuille : échelle
+    /// `factor` et rotation `turn` (degrés). On reste ainsi dans « décalage + échelle + rotation ».
+    pub fn around(&self, pivot: Pos2, q: Pos2, factor: f32, turn: f32) -> LayerTransform {
+        let (s, c) = turn.to_radians().sin_cos();
+        let v = pos2(pivot.x + self.x, pivot.y + self.y) - q;
+        let moved = q + vec2(v.x * c - v.y * s, v.x * s + v.y * c) * factor;
+        LayerTransform {
+            x: moved.x - pivot.x,
+            y: moved.y - pivot.y,
+            scale: (self.scale * factor).clamp(0.01, 100.0),
+            angle: self.angle + turn,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Layer {
     pub id: u64,
@@ -86,6 +144,8 @@ pub struct Layer {
     pub opacity: f32,
     /// Verrouillé : on ne peut plus dessiner dessus (la timeline reste modifiable).
     pub locked: bool,
+    /// Transformation du calque entier (identité par défaut).
+    pub transform: LayerTransform,
     /// Une entrée par image du plan : le dessin exposé à cette image, ou rien.
     /// Plusieurs images consécutives qui pointent vers le même dessin forment une exposition
     /// (un dessin « tenu » sur 2, 3… images).
@@ -101,6 +161,7 @@ impl Layer {
             visible: true,
             opacity: 1.0,
             locked: false,
+            transform: LayerTransform::default(),
             frames: Vec::new(),
         }
     }
@@ -426,6 +487,11 @@ impl Document {
         }
         self.width = width;
         self.height = height;
+    }
+
+    /// Centre de la feuille (pivot des transformations de calque).
+    pub fn stage_center(&self) -> Pos2 {
+        pos2(self.width as f32 / 2.0, self.height as f32 / 2.0)
     }
 
     /// Caméra par défaut : au centre de la feuille, cadre de la taille de l'image finale.
@@ -860,6 +926,9 @@ impl Document {
         }
         if above.locked || below.locked {
             return Err("Un des deux calques est verrouillé (Alt+L).".into());
+        }
+        if !above.transform.is_identity() || !below.transform.is_identity() {
+            return Err("Un des deux calques est transformé : annule la transformation (Ctrl+R) avant de fusionner.".into());
         }
         let vector = above.kind == LayerKind::Vector && below.kind == LayerKind::Vector;
         let n = above.frames.len().max(below.frames.len());

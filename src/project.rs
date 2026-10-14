@@ -21,8 +21,8 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::document::{
-    fresh_layer_id, AudioTrack, Cel, CelId, Document, Layer, LayerKind, Panel, Scene, Sequence, Sound, SoundClip,
-    Structure,
+    fresh_layer_id, AudioTrack, Cel, CelId, Document, Layer, LayerKind, LayerTransform, Panel, Scene, Sequence, Sound,
+    SoundClip, Structure,
 };
 use crate::camera::{Camera, CameraKey};
 use crate::guides::Guide;
@@ -130,6 +130,18 @@ struct PanelEntry {
     camera: Vec<CameraEntry>,
 }
 
+#[derive(Serialize, Deserialize)]
+struct TransformEntry {
+    #[serde(default)]
+    x: f32,
+    #[serde(default)]
+    y: f32,
+    #[serde(default = "one")]
+    echelle: f32,
+    #[serde(default)]
+    rotation: f32,
+}
+
 /// Une image clé de caméra : à l'image `image` du panneau, centre (`x`, `y`) en pixels de la
 /// feuille, zoom, rotation en degrés.
 #[derive(Serialize, Deserialize)]
@@ -159,6 +171,10 @@ struct LayerEntry {
     /// Ajouté en 1e (absent = non verrouillé).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     verrouille: bool,
+    /// Transformation du calque (2c ; absent = aucune) : décalage en pixels de la feuille,
+    /// échelle, rotation en degrés, autour du centre de la feuille.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    transformation: Option<TransformEntry>,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -381,6 +397,12 @@ fn manifest_of(doc: &Document) -> Manifest {
                     visible: l.visible,
                     opacite: l.opacity,
                     verrouille: l.locked,
+                    transformation: (!l.transform.is_identity()).then(|| TransformEntry {
+                        x: l.transform.x,
+                        y: l.transform.y,
+                        echelle: l.transform.scale,
+                        rotation: l.transform.angle,
+                    }),
                     expositions: to_exposures(&l.frames),
                 })
                 .collect(),
@@ -567,6 +589,17 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                         visible: l.visible,
                         opacity: l.opacite.clamp(0.0, 1.0),
                         locked: l.verrouille,
+                        transform: l
+                            .transformation
+                            .as_ref()
+                            .filter(|t| [t.x, t.y, t.echelle, t.rotation].iter().all(|v| v.is_finite()))
+                            .map(|t| LayerTransform {
+                                x: t.x,
+                                y: t.y,
+                                scale: t.echelle.clamp(0.01, 100.0),
+                                angle: t.rotation,
+                            })
+                            .unwrap_or_default(),
                         frames: from_exposures(&l.expositions)
                             .into_iter()
                             .map(|f| f.filter(|id| !missing.contains(id)))

@@ -19,6 +19,7 @@ mod guides_tests;
 mod history;
 mod io;
 mod keymap;
+mod layertools;
 #[cfg(test)]
 mod keymap_tests;
 #[cfg(test)]
@@ -39,6 +40,8 @@ mod storyboard;
 mod tests;
 mod thumbs;
 mod timeline;
+#[cfg(test)]
+mod transform_tests;
 mod vector;
 mod view;
 mod vtools;

@@ -203,8 +203,11 @@ impl GpuCanvas {
         };
         let compose = pipeline("fs_compose", FRAME_FORMAT);
         let display = pipeline("fs_display", rs.target_format);
+        // Bilinéaire : un calque transformé est lissé ; un calque tel quel tombe pile sur les pixels.
         let nearest = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("composer"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
         let smooth = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -316,9 +319,20 @@ impl GpuCanvas {
     /// Commande de dessin : composer le papier et les calques du plan, puis afficher l'image.
     /// `corners` : les coins du dessin à l'écran, en points (haut-gauche, haut-droite, bas-droite,
     /// bas-gauche) ; `rect` : la zone d'affichage (ce qui dépasse est coupé).
-    pub fn paint(&self, plan: &Plan, corners: [Pos2; 4], rect: Rect) -> egui::PaintCallback {
+    pub fn paint(&self, plan: &Plan, corners: [Pos2; 4], rect: Rect, stage: [usize; 2]) -> egui::PaintCallback {
         // Composer : l'image entière, en coordonnées normalisées.
         let full = [[-1.0, 1.0, 0.0, 0.0], [1.0, 1.0, 1.0, 0.0], [1.0, -1.0, 1.0, 1.0], [-1.0, -1.0, 0.0, 1.0]];
+        let (w, h) = (stage[0] as f32, stage[1] as f32);
+        let pivot = egui::pos2(w / 2.0, h / 2.0);
+        // Calque transformé : les coins de la feuille, déplacés, en coordonnées normalisées.
+        let placed = |t: &crate::document::LayerTransform| -> [[f32; 4]; 4] {
+            let aff = t.affine(pivot);
+            let uv = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
+            std::array::from_fn(|i| {
+                let p = aff.apply(egui::pos2(uv[i][0] * w, uv[i][1] * h));
+                [p.x / w * 2.0 - 1.0, 1.0 - p.y / h * 2.0, uv[i][0], uv[i][1]]
+            })
+        };
         let mut items = Vec::with_capacity(plan.items.len() + 1);
         if let Some(p) = plan.paper {
             items.push(GpuItem {
@@ -335,7 +349,7 @@ impl GpuCanvas {
             };
             items.push(GpuItem {
                 cel: Some(item.cel),
-                corners: full,
+                corners: item.transform.as_ref().map_or(full, placed),
                 color: [color[0], color[1], color[2], tinted],
                 params: [item.opacity as f32 / 255.0, 1.0, 0.0, 0.0],
             });

@@ -76,7 +76,14 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
     visibles dans la timeline d'animation (ligne « Caméra ») et dans la bande de montage ; lecture,
     vue caméra et export suivent le mouvement. Reste : déplacer une clé à la souris dans la
     timeline, copier la caméra d'un panneau à l'autre, chemin de caméra affiché sur la feuille.
-- ⏳ 2c. Profondeur Z des calques (multiplan), vue 3D de contrôle.
+- 🔧 2c. Profondeur Z des calques (multiplan), vue 3D de contrôle.
+  - ✅ 2c-1. Transformer un calque entier : outil Transformer (déplacer, échelle par un coin,
+    rotation par la poignée), valeurs exactes, Ctrl+R pour annuler (raccourci de Storyboard Pro 27,
+    jusque-là en réserve) ; on dessine normalement sur un calque transformé ; affichage, export et
+    vignettes en tiennent compte. Pas encore : transformation animée, miroir, fusion d'un calque
+    transformé (refusée avec un message).
+  - ⏳ 2c-2. Profondeur des calques : effet multiplan quand la caméra bouge.
+  - ⏳ 2c-3. Vue de dessus pour voir et régler les distances.
 - ⏳ 2d. Import glTF de repère.
 
 ## Phase 3 — Animatique et animation ⏳

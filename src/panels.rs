@@ -364,6 +364,15 @@ impl App {
                 ui.label("Glisse pour déplacer la vue.");
                 note(ui, "Sinon : Espace + glisser, ou bouton du milieu.");
             }
+            Tool::Transform => {
+                self.transform_fields(ui);
+                note(
+                    ui,
+                    "Glisser dans la boîte : déplacer le calque (Maj : à l'horizontale ou à la \
+                     verticale). Coin : agrandir ou réduire. Poignée ronde : tourner (Maj : par 15°). \
+                     Les dessins ne sont pas modifiés : on peut annuler la transformation à tout moment.",
+                );
+            }
             Tool::Camera => {
                 self.camera_fields(ui);
                 ui.horizontal_wrapped(|ui| self.camera_keys_ui(ui));

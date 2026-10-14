@@ -579,7 +579,6 @@ source = "Storyboard Pro 27 : MERGE_DOWN_LAYERS"
 action = "calque.reinit_transformation"
 touches = ["Ctrl+R"]
 source = "Storyboard Pro 27 : RESET_LAYER_TRANSFORM_KEY"
-etat = "non implémenté"
 
 [[raccourci]]
 action = "calque.dessus"
@@ -598,6 +597,11 @@ source = "proposition"
 action = "outil.camera"
 touches = []
 source = "Storyboard Pro 27 sans touche par défaut : SP_CAMERA_TRANSFORM_TOOL_KEY"
+
+[[raccourci]]
+action = "outil.transformer"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : SP_LAYER_TRANSFORM_TOOL_KEY"
 
 [[raccourci]]
 action = "camera.vue"

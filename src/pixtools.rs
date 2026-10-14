@@ -176,7 +176,7 @@ impl App {
     }
 
     pub(crate) fn bitmap_drag(&mut self, p: Pos2, shift: bool) {
-        let zoom = self.view.zoom;
+        let zoom = self.layer_zoom();
         match &mut self.bdrag {
             Some(BDrag::Lasso { points, .. }) => {
                 if points.last().is_none_or(|q| q.distance(p) * zoom > 1.5) {
@@ -208,8 +208,7 @@ impl App {
         let (polygon, add) = match drag {
             BDrag::Transform { .. } => return,
             BDrag::Lasso { points, add } => {
-                let (rect, size) = (self.canvas_rect, self.canvas_size());
-                let screen: Vec<Pos2> = points.iter().map(|q| self.view.to_screen(rect, size, *q)).collect();
+                let screen: Vec<Pos2> = points.iter().map(|q| self.layer_to_screen(*q)).collect();
                 let extent = Rect::from_points(&screen);
                 if points.len() < 3 || extent.width().max(extent.height()) < 4.0 {
                     (None, add)
@@ -219,7 +218,7 @@ impl App {
             }
             BDrag::Rect { from, to, add } => {
                 let r = Rect::from_two_pos(from, to);
-                if r.width().min(r.height()) * self.view.zoom < 3.0 {
+                if r.width().min(r.height()) * self.layer_zoom() < 3.0 {
                     (None, add)
                 } else {
                     (Some(pixsel::rect_polygon(r)), add)

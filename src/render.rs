@@ -1,15 +1,46 @@
 use eframe::egui::{self, Color32, ColorImage, TextureFilter, TextureHandle, TextureOptions};
 
 use crate::camera::Camera;
-use crate::document::{CelId, Document, Panel};
-use crate::raster::{tile_bounds, tiles_across, TILE, TILE_PIXELS};
+use crate::document::{CelId, Document, LayerTransform, Panel};
+use crate::raster::{tile_bounds, tiles_across, Raster, TILE, TILE_PIXELS};
+use crate::vector::Affine;
 
-/// Un dessin à superposer, avec son opacité et une teinte éventuelle (pelure d'oignon).
+/// Un dessin à superposer, avec son opacité, une teinte éventuelle (pelure d'oignon) et la
+/// transformation de son calque (aucune : le dessin tel quel sur la feuille).
 #[derive(Clone, PartialEq)]
 pub struct PlanItem {
     pub cel: CelId,
     pub opacity: u8,
     pub tint: Option<[u8; 3]>,
+    pub transform: Option<LayerTransform>,
+}
+
+/// Couleur du dessin au point (`x`, `y`) de ses pixels (interpolation bilinéaire, prémultipliée).
+pub fn sample(raster: &Raster, x: f32, y: f32) -> Color32 {
+    let (fx, fy) = (x - 0.5, y - 0.5);
+    let (ix, iy) = (fx.floor(), fy.floor());
+    let (tx, ty) = (fx - ix, fy - iy);
+    let (ix, iy) = (ix as i64, iy as i64);
+    let get = |x: i64, y: i64| -> [f32; 4] {
+        if x < 0 || y < 0 || x >= raster.width as i64 || y >= raster.height as i64 {
+            return [0.0; 4];
+        }
+        let c = raster.get(x as usize, y as usize);
+        [c.r() as f32, c.g() as f32, c.b() as f32, c.a() as f32]
+    };
+    let (a, b, c, d) = (get(ix, iy), get(ix + 1, iy), get(ix, iy + 1), get(ix + 1, iy + 1));
+    let mut px = [0u8; 4];
+    for k in 0..4 {
+        let top = a[k] + (b[k] - a[k]) * tx;
+        let bottom = c[k] + (d[k] - c[k]) * tx;
+        px[k] = (top + (bottom - top) * ty).round().clamp(0.0, 255.0) as u8;
+    }
+    Color32::from_rgba_premultiplied(px[0], px[1], px[2], px[3])
+}
+
+/// Transformation inverse (feuille → dessin) d'un dessin transformé.
+fn inverse_of(doc: &Document, t: &Option<LayerTransform>) -> Option<Affine> {
+    t.as_ref().and_then(|t| t.affine(doc.stage_center()).inverse())
 }
 
 /// Ce qu'il faut composer pour afficher une image, du fond vers le dessus.
@@ -65,6 +96,21 @@ pub fn composite_tile(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color3
         buf[s..s + tw].fill(base);
     }
     for item in &plan.items {
+        // Calque transformé : chaque pixel va chercher le point correspondant du dessin.
+        if let Some(inv) = inverse_of(doc, &item.transform) {
+            let Some(cel) = doc.cels.get(&item.cel) else { continue };
+            for y in 0..th {
+                let s = (oy + y) * w + ox;
+                for (x, d) in buf[s..s + tw].iter_mut().enumerate() {
+                    let p = inv.apply(egui::pos2((ox + x) as f32 + 0.5, (oy + y) as f32 + 0.5));
+                    let src = sample(&cel.raster, p.x, p.y);
+                    if src.a() != 0 {
+                        *d = over(*d, src, item.opacity, item.tint);
+                    }
+                }
+            }
+            continue;
+        }
         let Some(tile) = doc.cels.get(&item.cel).and_then(|c| c.raster.tiles[idx].as_ref()) else {
             continue;
         };
@@ -132,7 +178,13 @@ pub fn composite_pixel(doc: &Document, plan: &Plan, x: usize, y: usize) -> Color
     let mut c = paper_color(plan);
     for item in &plan.items {
         if let Some(cel) = doc.cels.get(&item.cel) {
-            let s = cel.raster.get(x, y);
+            let s = match inverse_of(doc, &item.transform) {
+                Some(inv) => {
+                    let p = inv.apply(egui::pos2(x as f32 + 0.5, y as f32 + 0.5));
+                    sample(&cel.raster, p.x, p.y)
+                }
+                None => cel.raster.get(x, y),
+            };
             if s.a() != 0 {
                 c = over(c, s, item.opacity, item.tint);
             }
@@ -154,6 +206,7 @@ pub fn panel_plan(panel: &Panel, frame: usize, paper: Option<[u8; 3]>) -> Plan {
                     cel,
                     opacity: (l.opacity.clamp(0.0, 1.0) * 255.0).round() as u8,
                     tint: None,
+                    transform: (!l.transform.is_identity()).then_some(l.transform),
                 })
             })
             .collect(),

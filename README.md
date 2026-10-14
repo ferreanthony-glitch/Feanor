@@ -73,6 +73,10 @@ Chaque panneau a ses calques, de deux sortes :
 Les traits vectoriels sont rendus à la résolution du projet : en zoomant très fort, on voit les pixels
 (comme à l'export), mais le trait reste modifiable.
 
+L'outil **Transformer** déplace, agrandit ou tourne un calque entier (tous ses dessins) : glisser
+dans la boîte, tirer un coin, tirer la poignée ronde (Maj : contraintes). Les dessins ne sont pas
+modifiés, Ctrl+R annule la transformation, et on peut continuer à dessiner sur le calque.
+
 Calques (menu Calques, panneau de droite) : W copie le calque courant et X le colle dans un autre
 panneau (avec ses dessins et sa timeline, ajustée à la durée du panneau). Alt+L verrouille le
 calque (cadenas) : on ne peut plus dessiner dessus. Ctrl+E le fusionne avec le calque du dessous :

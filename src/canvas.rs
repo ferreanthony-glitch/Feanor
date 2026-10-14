@@ -46,7 +46,7 @@ impl App {
             // Les calques sont superposés par la carte graphique, directement à leur place.
             let (all, tiles) = self.renderer.take_gpu_dirty();
             gpu.sync(&self.doc, &plan, all, &tiles);
-            painter.add(gpu.paint(&plan, corners, rect));
+            painter.add(gpu.paint(&plan, corners, rect, [self.doc.width, self.doc.height]));
         } else {
             let texture = self.renderer.update(ui.ctx(), &self.doc, plan);
             let mut mesh = egui::Mesh::with_texture(texture);
@@ -64,6 +64,7 @@ impl App {
         }
 
         self.paint_camera(&painter, rect);
+        self.paint_layer_transform(&painter);
         let shift = ui.input(|i| i.modifiers.shift);
         self.paint_guides(&painter, rect, self.hover_canvas);
         self.paint_vector_overlay(&painter, rect, shift);
@@ -136,7 +137,10 @@ impl App {
                     if modal || panning || !on_canvas(*pos) {
                         continue;
                     }
-                    let p = self.view.to_canvas(rect, size, *pos);
+                    // `stage` : point de la feuille (guides, caméra, pipette) ; `p` : point du dessin
+                    // du calque courant, qui peut être transformé (pinceaux, formes, sélection…).
+                    let stage = self.view.to_canvas(rect, size, *pos);
+                    let p = self.to_layer(stage);
                     // Un point de fuite du guide se déplace avec n'importe quel outil.
                     if let Some(k) = self.guide_point_at(*pos) {
                         self.guides.drag = Some(k);
@@ -144,13 +148,14 @@ impl App {
                     }
                     if modifiers.alt || self.tool == Tool::Picker {
                         self.picking = true;
-                        self.pick_color(p);
+                        self.pick_color(stage);
                         continue;
                     }
                     match self.tool {
                         Tool::Fill => self.fill_at(p),
                         Tool::Brush | Tool::Pencil | Tool::Eraser => {
                             let pressure = if pen { self.pen_pressure } else { 1.0 };
+                            self.begin_guided_stroke(stage);
                             self.begin_paint(p, pressure, pen);
                         }
                         Tool::Shape => {
@@ -159,24 +164,27 @@ impl App {
                             self.shape_drag = Some((p, p));
                         }
                         Tool::Select => self.select_press(p, *pos, modifiers.shift),
-                        Tool::Camera => self.camera_press(p, *pos),
+                        Tool::Camera => self.camera_press(stage, *pos),
+                        Tool::Transform => self.transform_press(stage, *pos),
                         Tool::Picker | Tool::Pan => {}
                     }
                 }
                 Event::PointerMoved(pos) => {
-                    let p = self.view.to_canvas(rect, size, *pos);
+                    let stage = self.view.to_canvas(rect, size, *pos);
+                    let p = self.to_layer(stage);
                     if let Some(k) = self.guides.drag {
-                        self.move_guide_point(k, p);
+                        self.move_guide_point(k, stage);
                     } else if let Some(pen) = self.stroke.as_ref().map(|s| s.pen) {
                         let pressure = if pen { self.pen_pressure } else { 1.0 };
-                        // Trait aligné sur le guide : rien tant que la direction n'est pas choisie.
-                        if let Some(q) = self.guided_point(p) {
-                            self.stroke_to(q, pressure);
+                        // Trait aligné sur le guide (sur la feuille) : rien tant que la direction
+                        // n'est pas choisie.
+                        if let Some(q) = self.guided_point(stage) {
+                            self.stroke_to(self.to_layer(q), pressure);
                         }
                     } else if let Some(pen) = self.erase_pen() {
                         let pressure = if pen { self.pen_pressure } else { 1.0 };
-                        if let Some(q) = self.guided_point(p) {
-                            self.erase_to(q, pressure);
+                        if let Some(q) = self.guided_point(stage) {
+                            self.erase_to(self.to_layer(q), pressure);
                         }
                     } else if let Some((_, end)) = &mut self.shape_drag {
                         *end = p;
@@ -185,9 +193,11 @@ impl App {
                     } else if self.bdrag.is_some() {
                         self.bitmap_drag(p, mods.shift);
                     } else if self.cam_drag.is_some() {
-                        self.camera_drag(p, mods.shift);
+                        self.camera_drag(stage, mods.shift);
+                    } else if self.layer_drag.is_some() {
+                        self.transform_drag(stage, mods.shift);
                     } else if self.picking {
-                        self.pick_color(p);
+                        self.pick_color(stage);
                     }
                 }
                 Event::PointerButton {
@@ -225,13 +235,13 @@ impl App {
     }
 
     /// Sélection vectorielle, lasso et aperçu des formes, par-dessus le dessin.
-    fn paint_vector_overlay(&self, painter: &egui::Painter, rect: Rect, shift: bool) {
-        let size = self.canvas_size();
-        let to_s = |p: Pos2| self.view.to_screen(rect, size, p);
+    fn paint_vector_overlay(&self, painter: &egui::Painter, _rect: Rect, shift: bool) {
+        // Tout ce qui suit est en coordonnées du dessin du calque courant (transformé ou non).
+        let to_s = |p: Pos2| self.layer_to_screen(p);
 
         if let Some((a, b)) = self.shape_drag {
             let pts: Vec<Pos2> = self.shape_points(a, b, shift).into_iter().map(to_s).collect();
-            let width = (self.shape.width * self.view.zoom).clamp(1.0, 40.0);
+            let width = (self.shape.width * self.layer_zoom()).clamp(1.0, 40.0);
             painter.add(Shape::line(pts, Stroke::new(width, self.preview_color())));
         }
 
@@ -322,8 +332,13 @@ impl App {
             ctx.set_cursor_icon(CursorIcon::Crosshair);
             return;
         }
-        if self.tool == Tool::Camera {
-            ctx.set_cursor_icon(match self.camera_handle_at(p) {
+        let handle = match self.tool {
+            Tool::Camera => Some(self.camera_handle_at(p)),
+            Tool::Transform => Some(self.transform_handle_at(p)),
+            _ => None,
+        };
+        if let Some(h) = handle {
+            ctx.set_cursor_icon(match h {
                 Some(crate::camtools::CamHandle::Move) => CursorIcon::Move,
                 Some(crate::camtools::CamHandle::Zoom) => CursorIcon::ResizeNwSe,
                 Some(crate::camtools::CamHandle::Rotate) => CursorIcon::Alias,
@@ -338,7 +353,7 @@ impl App {
                 Some(Handle::Corner(_)) => CursorIcon::ResizeNeSw,
                 Some(Handle::Edge(0 | 2)) => CursorIcon::ResizeVertical,
                 Some(Handle::Edge(_)) => CursorIcon::ResizeHorizontal,
-                _ => match (self.hover_canvas, self.selection_bounds()) {
+                _ => match (self.hover_canvas.map(|c| self.to_layer(c)), self.selection_bounds()) {
                     (Some(c), Some(b)) if b.contains(c) => CursorIcon::Move,
                     _ => CursorIcon::Default,
                 },
@@ -348,7 +363,7 @@ impl App {
         }
         let Some(brush) = self.current_brush() else { return };
         ctx.set_cursor_icon(CursorIcon::None);
-        let r = (brush.size * 0.5 * self.view.zoom).max(1.5);
+        let r = (brush.size * 0.5 * self.layer_zoom()).max(1.5);
         painter.circle_stroke(p, r, Stroke::new(1.0_f32, Color32::from_black_alpha(170)));
         painter.circle_stroke(p, r + 1.0, Stroke::new(1.0_f32, Color32::from_white_alpha(150)));
         let cross = Stroke::new(1.0_f32, Color32::from_gray(230));

@@ -126,6 +126,19 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   (dessins bitmap et vectoriels, guides) : le cadrage ne change pas.
 - Taille maximale du cadre : 4096 px (feuille 8192 px, limite des textures de la carte graphique).
 
+## Transformation de calque (depuis 2c-1)
+
+- `Layer::transform` (`LayerTransform`) : décalage, échelle uniforme, rotation, autour du centre
+  de la feuille. Les dessins ne sont jamais recalculés : la transformation est appliquée à la
+  composition (`PlanItem::transform` ; processeur : chaque pixel va chercher le point du dessin,
+  bilinéaire ; carte graphique : le calque est posé tourné / agrandi dans l'image composée, lissage
+  bilinéaire qui tombe pile sur les pixels pour un calque non transformé).
+- Dessiner sur un calque transformé : la souris est convertie dans le repère du dessin
+  (`App::to_layer`), et les repères affichés (sélection, formes, curseur) le sont dans l'autre sens
+  (`App::layer_to_screen`, `layer_zoom`). Guides, caméra et pipette restent sur la feuille.
+- Échelle et rotation à la souris se font autour du centre de la boîte du contenu
+  (`LayerTransform::around` garde la forme « décalage + échelle + rotation »).
+
 ## Caméra (depuis 2b-2)
 
 - `camera.rs` : une caméra = centre du cadre sur la feuille, zoom (1 = taille de l'image finale),

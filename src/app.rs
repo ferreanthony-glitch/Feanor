@@ -6,6 +6,7 @@ use eframe::egui::{self, vec2, Color32, Event, Key, Pos2, Rect, Vec2};
 use crate::audio::AudioEngine;
 use crate::brush::{BrushSettings, StrokeMode, StrokeState};
 use crate::camtools::CamDrag;
+use crate::layertools::LayerDrag;
 use crate::document::{fresh_layer_id, CelId, Document, Layer, LayerKind, Panel};
 use crate::fill::{self, FillSettings};
 use crate::gpu::GpuCanvas;
@@ -21,7 +22,7 @@ use crate::render::{self, Plan, PlanItem, Renderer};
 use crate::soundtrack::MenuTarget;
 use crate::storyboard::MontageDrag;
 use crate::thumbs::Thumbs;
-use crate::vector::{Element, VectorDrawing};
+use crate::vector::{Affine, Element, VectorDrawing};
 use crate::view::View;
 use crate::vtools::{VDrag, VSelection, VectorErase, VectorStroke};
 
@@ -53,10 +54,11 @@ pub enum Tool {
     Picker,
     Pan,
     Camera,
+    Transform,
 }
 
 impl Tool {
-    pub const ALL: [Tool; 9] = [
+    pub const ALL: [Tool; 10] = [
         Tool::Brush,
         Tool::Pencil,
         Tool::Eraser,
@@ -66,6 +68,7 @@ impl Tool {
         Tool::Picker,
         Tool::Pan,
         Tool::Camera,
+        Tool::Transform,
     ];
 
     pub fn label(self) -> &'static str {
@@ -79,6 +82,7 @@ impl Tool {
             Tool::Picker => "Pipette",
             Tool::Pan => "Main",
             Tool::Camera => "Caméra",
+            Tool::Transform => "Transformer",
         }
     }
 
@@ -94,6 +98,7 @@ impl Tool {
             Tool::Picker => "outil.pipette",
             Tool::Pan => "outil.main",
             Tool::Camera => "outil.camera",
+            Tool::Transform => "outil.transformer",
         }
     }
 }
@@ -171,6 +176,8 @@ pub struct App {
     pub(crate) guides: GuideState,
     /// Réglage de la caméra à la souris (outil Caméra).
     pub(crate) cam_drag: Option<CamDrag>,
+    /// Transformation d'un calque à la souris (outil Transformer).
+    pub(crate) layer_drag: Option<LayerDrag>,
     /// Vue à travers la caméra du panneau (sinon : la feuille, avec le cadre tracé).
     pub(crate) camera_view: bool,
     /// Hors-champ estompé sur la feuille.
@@ -305,6 +312,7 @@ impl App {
             light_table_strength: 0.3,
             guides: GuideState::default(),
             cam_drag: None,
+            layer_drag: None,
             camera_view: false,
             camera_mask: true,
             default_exposure: 1,
@@ -421,6 +429,34 @@ impl App {
         vec2(self.doc.width as f32, self.doc.height as f32)
     }
 
+    /// Transformation du calque courant (de son dessin vers la feuille).
+    pub(crate) fn layer_affine(&self) -> Affine {
+        self.layer().transform.affine(self.doc.stage_center())
+    }
+
+    /// Point de la feuille → point du dessin du calque courant (là où le pinceau doit peindre).
+    pub(crate) fn to_layer(&self, stage: Pos2) -> Pos2 {
+        if self.layer().transform.is_identity() {
+            return stage;
+        }
+        self.layer_affine().inverse().map_or(stage, |inv| inv.apply(stage))
+    }
+
+    /// Point du dessin du calque courant → écran.
+    pub(crate) fn layer_to_screen(&self, p: Pos2) -> Pos2 {
+        let stage = if self.layer().transform.is_identity() {
+            p
+        } else {
+            self.layer_affine().apply(p)
+        };
+        self.view.to_screen(self.canvas_rect, self.canvas_size(), stage)
+    }
+
+    /// Pixels d'écran par pixel du dessin du calque courant.
+    pub(crate) fn layer_zoom(&self) -> f32 {
+        self.view.zoom * self.layer().transform.scale
+    }
+
     pub(crate) fn modal_open(&self) -> bool {
         self.new_dialog.is_some() || self.pending.is_some()
     }
@@ -465,6 +501,7 @@ impl App {
             if washed && li != self.cur_layer {
                 opacity *= self.light_table_strength.clamp(0.05, 1.0);
             }
+            let transform = (!layer.transform.is_identity()).then_some(layer.transform);
             if onion && self.onion.enabled && !self.playing && li == self.cur_layer {
                 let (before, after) = onion_neighbours(layer, frame, self.onion.before, self.onion.after);
                 // Du plus lointain au plus proche, pour que le plus proche soit au-dessus.
@@ -473,6 +510,7 @@ impl App {
                         cel,
                         opacity: fade(self.onion.opacity, k, self.onion.before),
                         tint: Some(ONION_BEFORE),
+                        transform,
                     });
                 }
                 for (k, &cel) in after.iter().enumerate().rev() {
@@ -480,12 +518,14 @@ impl App {
                         cel,
                         opacity: fade(self.onion.opacity, k, self.onion.after),
                         tint: Some(ONION_AFTER),
+                        transform,
                     });
                 }
             }
             if let Some(cel) = layer.cel_at(frame) {
                 items.push(PlanItem {
                     cel,
+                    transform,
                     opacity: (opacity * 255.0).round() as u8,
                     tint: None,
                 });
@@ -692,9 +732,9 @@ impl App {
         }
         let erase = self.tool == Tool::Eraser;
         if erase && self.cel_here().is_none() {
+            self.guides.stroke = None;
             return;
         }
-        self.begin_guided_stroke(p);
         match (self.layer().kind, erase) {
             (LayerKind::Vector, true) => self.begin_vector_erase(p, pen),
             (LayerKind::Vector, false) => self.begin_vector_stroke(p, pressure, pen),
@@ -760,6 +800,7 @@ impl App {
             self.finish_bdrag();
         }
         self.finish_camera_drag();
+        self.finish_layer_drag();
         self.guides.stroke = None;
         self.shape_drag = None;
     }
@@ -792,7 +833,9 @@ impl App {
     /// Image sur laquelle le pot de peinture cherche ses contours.
     pub(crate) fn fill_source(&self) -> Vec<Color32> {
         let (w, h) = (self.doc.width, self.doc.height);
-        if self.fill.sample_all {
+        // Les contours de tous les calques sont pris sur la feuille : sur un calque transformé, ils
+        // ne tomberaient pas au bon endroit de son dessin ; on prend alors le calque seul.
+        if self.fill.sample_all && self.layer().transform.is_identity() {
             return render::composite_full(&self.doc, &self.build_plan(self.cur_frame, false, false));
         }
         match self.cel_here() {
@@ -1814,6 +1857,8 @@ impl App {
             "calque.verrouiller" => self.toggle_layer_lock(self.cur_layer),
             "calque.fusionner_dessous" => self.merge_layer_down(),
             "outil.camera" => self.set_tool(Tool::Camera),
+            "outil.transformer" => self.set_tool(Tool::Transform),
+            "calque.reinit_transformation" => self.reset_layer_transform(),
             "camera.vue" => {
                 self.camera_view = !self.camera_view;
                 if !self.camera_view {

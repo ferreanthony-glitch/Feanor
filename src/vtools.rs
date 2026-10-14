@@ -158,7 +158,7 @@ impl App {
     /// Poignées de la sélection, en coordonnées du dessin.
     pub(crate) fn handle_points(&self, b: Rect) -> Vec<(Handle, Pos2)> {
         let c = b.center();
-        let up = 28.0 / self.view.zoom;
+        let up = 28.0 / self.layer_zoom();
         vec![
             (Handle::Rotate, pos2(c.x, b.min.y - up)),
             (Handle::Corner(0), b.left_top()),
@@ -175,10 +175,9 @@ impl App {
     /// Poignée sous le pointeur (position écran), le cas échéant.
     pub(crate) fn handle_at(&self, screen: Pos2) -> Option<Handle> {
         let b = self.selection_bounds()?;
-        let (rect, size) = (self.canvas_rect, self.canvas_size());
         self.handle_points(b)
             .into_iter()
-            .find(|(_, q)| self.view.to_screen(rect, size, *q).distance(screen) <= HANDLE_GRAB)
+            .find(|(_, q)| self.layer_to_screen(*q).distance(screen) <= HANDLE_GRAB)
             .map(|(h, _)| h)
     }
 
@@ -290,7 +289,7 @@ impl App {
     /// Sur un trait ou une zone déjà peinte : change sa couleur. Ailleurs : crée une zone
     /// remplie (sous les traits) à partir des contours trouvés.
     pub(crate) fn fill_vector(&mut self, p: Pos2) {
-        let tol = 2.0 / self.view.zoom;
+        let tol = 2.0 / self.layer_zoom();
         if let Some(cel) = self.cel_here() {
             if let Some(i) = self.drawing(cel).and_then(|d| d.hit_test(p, tol)) {
                 let color = self.color;
@@ -367,7 +366,7 @@ impl App {
     }
 
     pub(crate) fn commit_shape(&mut self, a: Pos2, b: Pos2, shift: bool) {
-        if a.distance(b) * self.view.zoom < 2.0 || !self.layer_editable() {
+        if a.distance(b) * self.layer_zoom() < 2.0 || !self.layer_editable() {
             return;
         }
         let pts = self.shape_points(a, b, shift);
@@ -432,7 +431,7 @@ impl App {
                 return;
             }
         }
-        let tol = 4.0 / self.view.zoom;
+        let tol = 4.0 / self.layer_zoom();
         match self.drawing(cel).and_then(|d| d.hit_test(p, tol)) {
             Some(i) => {
                 let sel = self.vsel.get_or_insert(VSelection { cel, items: Vec::new() });
@@ -478,7 +477,7 @@ impl App {
     }
 
     pub(crate) fn select_drag(&mut self, p: Pos2, shift: bool) {
-        let zoom = self.view.zoom;
+        let zoom = self.layer_zoom();
         match &mut self.vdrag {
             Some(VDrag::Lasso(points)) => {
                 if points.last().is_none_or(|q| q.distance(p) * zoom > 1.5) {
@@ -515,8 +514,7 @@ impl App {
         match drag {
             VDrag::Lasso(points) => {
                 let Some(cel) = self.cel_here() else { return };
-                let (rect, size) = (self.canvas_rect, self.canvas_size());
-                let screen: Vec<Pos2> = points.iter().map(|q| self.view.to_screen(rect, size, *q)).collect();
+                let screen: Vec<Pos2> = points.iter().map(|q| self.layer_to_screen(*q)).collect();
                 let extent = Rect::from_points(&screen);
                 if points.len() < 3 || extent.width().max(extent.height()) < 4.0 {
                     return;
