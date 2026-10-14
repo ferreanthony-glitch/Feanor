@@ -43,7 +43,9 @@ pub const FORMAT: &str = "pelure-projet";
 /// des calques séparés qui partagent un même dessin.
 /// 8 (phase 7) : notes de la planche (`planche`), traits vectoriels texturés (`pinceau` dans les
 /// dessins, textures dans `textures/`), qu'une version précédente perdrait.
-pub const VERSION: u32 = 8;
+/// 9 (phase 8) : notes attachées à une vignette (`attache`), textes de la planche
+/// (`planche_textes`), mode de fusion des calques (`fusion`).
+pub const VERSION: u32 = 9;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Modèles 3D de repère (2d), dans le format de Pelure.
@@ -79,16 +81,34 @@ struct Manifest {
     /// Modèles 3D de repère (format 5).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     modeles: Vec<ModelEntry>,
-    /// Notes de la planche (format 8) : traits libres de la vue Vignettes.
+    /// Notes de la planche (format 8) : traits de la vue Vignettes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     planche: Vec<NoteEntry>,
+    /// Textes de la planche (format 9).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    planche_textes: Vec<NoteTextEntry>,
 }
 
-/// Un trait de note : couleur et points (x, y, rayon), en coordonnées de la planche.
+/// Un trait de note : couleur et points (x, y, rayon), en coordonnées de la planche, ou, s'il
+/// est attaché à une vignette (format 9, `attache` : id du panneau), relatifs à elle (en
+/// largeurs de vignette).
 #[derive(Serialize, Deserialize)]
 struct NoteEntry {
     couleur: [u8; 3],
     points: Vec<[f32; 3]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    attache: Option<u64>,
+}
+
+/// Un texte de note (format 9) : coin haut gauche, taille, mêmes règles d'attache.
+#[derive(Serialize, Deserialize)]
+struct NoteTextEntry {
+    texte: String,
+    position: [f32; 2],
+    taille: f32,
+    couleur: [u8; 3],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    attache: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -759,7 +779,23 @@ fn manifest_of(doc: &Document) -> Manifest {
             .board
             .strokes
             .iter()
-            .map(|s| NoteEntry { couleur: s.color, points: s.points.iter().map(|p| [p.x, p.y, p.r]).collect() })
+            .map(|s| NoteEntry {
+                couleur: s.color,
+                points: s.points.iter().map(|p| [p.x, p.y, p.r]).collect(),
+                attache: s.anchor,
+            })
+            .collect(),
+        planche_textes: doc
+            .board
+            .texts
+            .iter()
+            .map(|t| NoteTextEntry {
+                texte: t.text.clone(),
+                position: [t.pos.x, t.pos.y],
+                taille: t.size,
+                couleur: t.color,
+                attache: t.anchor,
+            })
             .collect(),
     }
 }
@@ -896,10 +932,23 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                         .points
                         .into_iter()
                         .filter(|p| p.iter().all(|v| v.is_finite()))
-                        .map(|[x, y, r]| crate::vector::VPoint { x, y, r: r.clamp(0.1, 200.0) })
+                        .map(|[x, y, r]| crate::vector::VPoint { x, y, r: r.clamp(1e-4, 200.0) })
                         .collect(),
+                    anchor: n.attache,
                 })
                 .filter(|s| !s.points.is_empty())
+                .collect(),
+            texts: manifest
+                .planche_textes
+                .into_iter()
+                .filter(|t| t.position.iter().all(|v| v.is_finite()) && t.taille.is_finite() && t.taille > 0.0)
+                .map(|t| crate::board::NoteText {
+                    pos: eframe::egui::pos2(t.position[0], t.position[1]),
+                    text: t.texte,
+                    size: t.taille.min(500.0),
+                    color: t.couleur,
+                    anchor: t.attache,
+                })
                 .collect(),
         },
     };

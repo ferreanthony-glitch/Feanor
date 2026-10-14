@@ -79,9 +79,12 @@ impl App {
         self.playing = false;
         let snap = self.snapshot();
         let before = self.panel().id;
+        let board_before = self.board_layout();
         let Some(index) = op(&mut self.doc, self.cur_panel) else {
             return false;
         };
+        // Les notes attachées à un panneau qui n'est plus là restent sur la planche, libres.
+        self.release_removed_notes(&board_before);
         if self.doc.panels[index].id != before {
             self.cur_frame = 0;
         }

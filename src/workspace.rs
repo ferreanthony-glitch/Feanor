@@ -46,6 +46,18 @@ pub struct Layout {
     /// Vue Vignettes : largeur des vignettes sur la planche (7).
     #[serde(rename = "taille_vignettes")]
     pub card_size: f32,
+    /// Vue Vignettes (8) : colonnes (6 au plus), lignes par page (0 : une seule page), écart,
+    /// une ligne par scène, notes nouvelles attachées à la vignette la plus proche.
+    #[serde(rename = "colonnes_vignettes")]
+    pub board_columns: usize,
+    #[serde(rename = "lignes_vignettes")]
+    pub board_rows: usize,
+    #[serde(rename = "ecart_vignettes")]
+    pub board_spacing: f32,
+    #[serde(rename = "scene_a_la_ligne")]
+    pub board_scene_breaks: bool,
+    #[serde(rename = "attacher_notes")]
+    pub board_attach: bool,
 }
 
 impl Default for Layout {
@@ -62,7 +74,12 @@ impl Default for Layout {
             top_view: false,
             command_bar: true,
             tool_bar: true,
-            card_size: 260.0,
+            card_size: 240.0,
+            board_columns: 4,
+            board_rows: 4,
+            board_spacing: 18.0,
+            board_scene_breaks: false,
+            board_attach: false,
         }
     }
 }
@@ -76,10 +93,25 @@ impl Layout {
         self.card_size = if self.card_size.is_finite() {
             self.card_size.clamp(crate::board::CARD_MIN, crate::board::CARD_MAX)
         } else {
-            260.0
+            240.0
         };
+        self.board_columns = self.board_columns.clamp(1, crate::board::MAX_COLUMNS);
+        self.board_rows = self.board_rows.min(crate::board::MAX_ROWS);
+        self.board_spacing =
+            if self.board_spacing.is_finite() { self.board_spacing.clamp(0.0, crate::board::MAX_SPACING) } else { 18.0 };
         self.panneaux = self.panneaux.map(DockLayout::sanitized);
         self
+    }
+
+    /// Réglages de la planche de la vue Vignettes.
+    pub fn board_settings(&self) -> crate::board::BoardSettings {
+        crate::board::BoardSettings {
+            card_w: self.card_size,
+            columns: self.board_columns.clamp(1, crate::board::MAX_COLUMNS),
+            rows: self.board_rows.min(crate::board::MAX_ROWS),
+            spacing: self.board_spacing,
+            scene_breaks: self.board_scene_breaks,
+        }
     }
 
     /// Les panneaux et leur place. Une disposition d'avant 6a perd son panneau Outils (les

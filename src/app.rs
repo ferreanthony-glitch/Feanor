@@ -271,6 +271,9 @@ pub struct App {
     pub(crate) board_pan: Vec2,
     pub(crate) board_sel: Vec<u64>,
     pub(crate) board_drag: Option<crate::boardui::BoardDrag>,
+    /// Notes choisies sur la planche, et texte de note en cours d'écriture (8).
+    pub(crate) board_notes: Vec<crate::board::NoteRef>,
+    pub(crate) board_text: Option<crate::boardui::NoteTextEdit>,
     /// Hors-champ estompé sur la feuille.
     pub(crate) camera_mask: bool,
     /// Fenêtre « Vue de dessus » (profondeur des calques) et son glisser en cours.
@@ -458,10 +461,13 @@ impl App {
             ref3d: Default::default(),
             camera_view: false,
             in_card: false,
-            board_zoom: 1.0,
+            // Nul : la page sera mise à la largeur de la vue au premier affichage.
+            board_zoom: 0.0,
             board_pan: Vec2::ZERO,
             board_sel: Vec::new(),
             board_drag: None,
+            board_notes: Vec::new(),
+            board_text: None,
             camera_mask: true,
             top_view: false,
             top_drag: None,
@@ -1965,6 +1971,7 @@ impl App {
                     self.paste();
                 }
             }
+            "edition.supprimer" if self.board_shown() && !self.board_notes.is_empty() => self.delete_board_notes(),
             "edition.supprimer" => {
                 if let Some(id) = self.sel_clip.filter(|&id| board && self.doc.clip(id).is_some()) {
                     self.delete_clip(id);
