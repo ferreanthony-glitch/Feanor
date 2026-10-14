@@ -265,6 +265,26 @@ montage, calque de fond étendu à toute la scène, et la disposition générale
   sur un calque le rend courant.
   Pas encore : glisser des expositions dans les pistes du montage, replier les pistes.
 
+## Phase 7 — Planche de travail et pinceaux vectoriels texturés ✅
+
+Demandée par Anthony (capture annotée de la vue Vignettes) : « un vrai espace de travail où
+dessiner, noter, sélectionner des shots et les déplacer, un maximum de souplesse » ; et des
+textures pour les pinceaux vectoriels. Choix : tout le fond de la planche est un canevas libre
+(les notes restent où on les dessine) ; « cadrage » = la caméra du panneau.
+
+- ✅ 7a. Planche : fond gris clair où l'on note (pinceau, crayon, formes : un trait de note ;
+  gomme : efface les notes touchées), zones de texte sous les vignettes retirées, titre au-dessus.
+  Molette, Ctrl + molette (zoom), Espace / bouton du milieu / Main (déplacer), taille des
+  vignettes. Clic, Ctrl + clic, Maj + clic, lasso de l'outil Sélection : choisir des panneaux ; les
+  glisser (le panneau courant par son titre) pour les placer avant ou après d'autres, dans une
+  autre scène aussi ; clic droit : menus (animer, nouveau, dupliquer, supprimer la sélection,
+  nouvelle scène, recadrer). La vignette du panneau courant est le dessin ; avec l'outil Caméra
+  elle montre la feuille et le cadre. Format de projet 8 (`planche`).
+  Pas encore : déplacer ou recolorer une note, texte tapé sur la planche.
+- ✅ 7b. Pinceaux texturés sur les calques vectoriels : mêmes réglages (grille, papier, grain,
+  pointes importées) ; le trait reste modifiable. Textures enregistrées avec le projet.
+  Pas encore : l'opacité selon la pression n'est pas gardée par le trait vectoriel texturé.
+
 ## Raccourcis proposés, à valider
 
 Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans `keymap.toml`) :

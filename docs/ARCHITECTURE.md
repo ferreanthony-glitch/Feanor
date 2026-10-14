@@ -206,6 +206,25 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - `montagerows.rs` : rangées de la bande de montage (`Rows` : caméra, panneaux, calques, fond,
   sons), leur dessin, leurs noms à gauche et le clic sur un calque.
 
+## Planche et pinceaux vectoriels texturés (phase 7)
+
+- `board.rs` (sans interface, testé dans `board_tests.rs`) : disposition des vignettes en
+  coordonnées de la planche (points au zoom 1, retour à la ligne à la largeur de la vue), place
+  visée par des panneaux lâchés (`drop_target`), notes (`Board`, `NoteStroke`). Les notes sont
+  dans `Structure` : l'annulation et l'enregistrement (`planche`) les couvrent.
+- `boardui.rs` : la planche (zoom, décalage, gestes : déplacer, choisir, noter, gommer, glisser
+  des panneaux), menus. `Document::move_panels` / `remove_panels` agissent sur plusieurs panneaux.
+  La vignette du panneau courant appelle `canvas_panel` dans un `Ui` enfant, agrandi de la marge
+  de la vue caméra et coupé à la vignette ; `canvas_input` n'accepte que la partie visible
+  (`interact_rect`). Vignettes : une par plan et par largeur affichée (`thumbs.rs`).
+- Traits vectoriels texturés : `Element::Stroke.brush` garde le réglage, pointe et papier
+  désignés par une **clé tirée du contenu** (`brushtex::content_key`), stable d'une machine à
+  l'autre. `brushtex` tient un registre partagé (bibliothèque + textures des projets ouverts),
+  car le rendu vectoriel n'a pas accès à l'application. Rendu : `vector::paint_textured` passe
+  les points au moteur bitmap (`StrokeState`) sur une feuille à part, la pression retrouvée
+  d'après le rayon, puis pose le résultat dans la zone demandée. Transformer un trait met à
+  l'échelle la taille du pinceau.
+
 ## Pinceaux texturés (3d-2)
 
 - `brush.rs` : chaque empreinte calcule une couverture par pixel — disque (dureté) ou pointe en
@@ -370,11 +389,11 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - Annulation : le repère fait partie de la structure (copie au début du geste, une étape au
   lâcher, comme l'outil Caméra).
 
-## Format de projet (version 7, dossier)
+## Format de projet (version 8, dossier)
 
 ```
 MonFilm/
-  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 7, "largeur",
+  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 8, "largeur",
                       "hauteur" (feuille), "cadre": [l, h], réglages,
                       "sequences": [{ "scenes": [{ "panneaux": [{ "calques": [{ "expositions": … }]}]}]}],
                       "sons": [{"id", "nom", "fichier"}], "pistes_son": [{ "extraits": [{"son", "debut",
@@ -386,6 +405,9 @@ MonFilm/
                       triangles, positions (3 × f32) puis triangles (3 × u32), petit-boutiste
 ```
 
+- Format 8 (7) : `planche` (notes : couleur et points x, y, rayon) ; `pinceau` sur un trait
+  vectoriel texturé ; `textures/pointe_<clé>.png`, `textures/papier_<clé>.png` (gris 8 bits),
+  écrites seulement si elles manquent (la clé vient du contenu), effacées quand plus rien ne les cite.
 - Format 7 (6f) : `toute_la_scene` sur un calque (un numéro, le même pour les exemplaires d'une
   scène) ; le dessin partagé n'est écrit qu'une fois. Format 6 (5d) : éléments texte.
 - Format 5 (2d) : `modeles`, et `repere3d` par panneau (`modele`, `cible`, `azimut`,
@@ -458,5 +480,7 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 | Icônes Phosphor (egui-phosphor, MIT) (5a, choix d'Anthony) | jeu complet et cohérent, dans la police de l'interface | ≈ 1 Mo d'exécutable | faible | oui : `Tool::icon`, `Pane::icon` |
 | Panneaux par egui_dock 0.16 (MIT), disposition dans un format de Pelure (5b) | aimantation, onglets, panneaux flottants déjà faits et éprouvés ; format à nous pour ne pas dépendre de la version | refonte de l'affichage des panneaux | moyen : accessibilité coupée (plantage d'accesskit) | oui : le format `DockLayout` ne dépend pas de la bibliothèque |
 | Calque de toute la scène = un exemplaire par panneau, accordés à chaque image (6f) | rendu, export, vignettes, outils et annulation inchangés | une passe sur les calques à chaque image (négligeable) ; règles à suivre dans les opérations de scène | moyen : une opération de montage oubliée pourrait mélanger deux fonds (couvert par `scenelayer_tests.rs`) | oui : le fichier ne garde qu'un numéro par calque ; un vrai calque de scène pourrait le remplacer |
+| Notes de la planche libres, pas attachées aux vignettes (7, choix d'Anthony) | la planche est un espace de travail à part entière | nul | une note peut ne plus montrer le bon panneau après un déplacement | oui : une ancre par note pourrait s'ajouter (champ en plus) |
+| Textures des traits vectoriels par clé de contenu, embarquées dans le projet (7b) | les numéros de la bibliothèque changent d'une machine à l'autre ; les dessins déjà écrits restent valables | un petit PNG par texture utilisée | faible (collision de clé sur 31 bits négligeable) | oui |
 | Dessin dans la vignette = le même `canvas_panel` dans un `Ui` enfant (6e) | aucun second chemin de dessin | nul | faible | oui |
 | Repère 3D : lecteur glTF et fil de fer écrits pour Pelure, sur le processeur (2d) | glTF = format ouvert que Blender exporte ; pas de bibliothèque ni de passe GPU à ajouter pour un guide en fil de fer | ≈ 900 lignes ; calcul 0,15 s par vue sur un gros décor (sur un autre fil) | faible : mauvais fichier → message | oui : affichage par la carte graphique ou rendu ombré possibles plus tard, le format `.pelure3d` ne change pas |

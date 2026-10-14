@@ -30,9 +30,17 @@ ouvrir d'un double-clic).
     scène. Une scène ou une séquence peut recevoir un nom ou un numéro à soi (fiche à droite).
   - Chaque panneau a sa durée et ses champs Action / Dialogue / Notes.
   - « Lire le montage » enchaîne tout (animatique), en boucle si on veut, avec le son.
-  - Vue « Vignettes » (Maj+Tab) : les panneaux rangés par scène, avec leurs indications. On
-    dessine directement dans la vignette du panneau choisi (vue par la caméra) ; « Textes », en
-    haut, replie ou rouvre l'action et le dialogue sous les vignettes.
+  - Vue « Vignettes » (Maj+Tab) : une **planche** gris clair où les panneaux sont rangés par
+    scène, et où l'on note librement autour (pinceau ou crayon : un trait de note ; gomme : efface
+    les notes touchées ; elles restent où on les a dessinées).
+    - On dessine directement dans la vignette du panneau courant ; avec l'outil Caméra, elle
+      montre la feuille et le cadre pour recadrer.
+    - Molette : défiler ; Ctrl + molette : zoom ; Espace, bouton du milieu ou outil Main :
+      déplacer la planche ; « Taille » : taille des vignettes ; le bouton « 100 % » revient au début.
+    - Clic : choisir un panneau ; Ctrl + clic : en ajouter ; Maj + clic : une suite ; outil
+      Sélection : lasso. Glisser les panneaux choisis (le courant par son titre) les place avant
+      ou après d'autres, dans une autre scène aussi. Clic droit : animer, nouveau panneau,
+      dupliquer, supprimer les panneaux choisis, nouvelle scène, recadrer.
   - Sous la bande : une piste par calque (le calque de chaque panneau à ce rang, ses dessins
     exposés), une piste « Fond » par scène, et au-dessus des panneaux la piste Caméra (clés,
     mouvements). Un clic sur un calque, dans sa piste ou dans les noms à gauche, le rend courant.
@@ -118,7 +126,9 @@ prend le fond de celle-ci.
   remet à sa place). Les outils sont des icônes : leur nom et leur raccourci s'affichent au survol.
   En haut, une barre de commandes ; à gauche, la barre d'outils verticale (Affichage > Panneaux
   pour les masquer). Couleur : teinte, saturation, valeur et nuancier. Réglages du pinceau : une
-  grille de réglages, chacun avec l'aperçu de son trait et sa taille.
+  grille de réglages, chacun avec l'aperçu de son trait et sa taille. Les pinceaux texturés
+  (pointe en image, grain du papier, pinceaux importés) marchent aussi sur un calque vectoriel :
+  le trait reste modifiable, et ses textures sont enregistrées avec le projet.
 - **Formes** : Ligne (droite, courbe : tracer puis glisser pour courber ; courbe en S : deux
   glissers), Rectangle, Ellipse (Maj : carré, cercle), Polyligne (un clic par point, double-clic
   ou Entrée pour finir, clic sur le premier point pour fermer).
@@ -245,7 +255,8 @@ en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le 
 | `model3d.rs`, `view3d.rs`, `ref3dtool.rs` | Repère 3D : lecture glTF, arêtes utiles ; caméra en orbite, fil de fer, arêtes cachées ; outil et affichage |
 | `thumbs.rs` | Cache des vignettes de panneaux |
 | `history.rs` | Annuler / rétablir |
-| `project.rs` | Projet en dossier (format 7), enregistrement préparé puis écrit |
+| `project.rs` | Projet en dossier (format 8), enregistrement préparé puis écrit |
+| `board.rs`, `boardui.rs` | Planche de la vue Vignettes : disposition, notes, gestes, menus |
 | `recovery.rs`, `recoveryui.rs` | Copie de secours, récupération après plantage |
 | `workspace.rs`, `workspaceui.rs` | Espaces de travail, disposition retenue |
 | `dock.rs`, `dockui.rs` | Panneaux modulables : disposition (format de Pelure), contenu des onglets, fenêtres à part |
