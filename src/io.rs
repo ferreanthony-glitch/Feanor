@@ -181,6 +181,9 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
         scenes: Vec::new(),
         panels: Vec::new(),
         audio_tracks: Vec::new(),
+        guides: Vec::new(),
+        paper: manifest.paper,
+        fps: manifest.fps.max(1),
     };
     let mut shots = manifest.shots;
     if shots.is_empty() {
@@ -211,15 +214,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
             notes: s.notes,
         });
     }
-    Ok(Document::from_parts(
-        w,
-        h,
-        manifest.fps.max(1),
-        manifest.paper,
-        structure,
-        cels,
-        HashMap::new(),
-    ))
+    Ok(Document::from_parts(w, h, structure, cels, HashMap::new()))
 }
 
 /// Écrit un ancien `.pelure` (format 2) : sert seulement aux tests de compatibilité.

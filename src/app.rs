@@ -8,7 +8,7 @@ use crate::brush::{BrushSettings, StrokeMode, StrokeState};
 use crate::document::{fresh_layer_id, CelId, Document, Layer, LayerKind, Panel};
 use crate::fill::{self, FillSettings};
 use crate::guides::GuideState;
-use crate::history::{Edit, History, Nav};
+use crate::history::{Edit, Gesture, History, Nav};
 use crate::io;
 use crate::keymap::{self, Keymap};
 use crate::pixsel::Floating;
@@ -177,6 +177,8 @@ pub struct App {
     /// Ce qu'on a cliqué du bouton droit dans la bande de montage.
     pub(crate) menu_target: Option<MenuTarget>,
     pub(crate) history: History,
+    /// Geste de réglage en cours (champ, curseur, point de fuite) : une étape d'annulation par geste.
+    gesture: Gesture,
     pub(crate) stroke: Option<StrokeState>,
     pub(crate) vstroke: Option<VectorStroke>,
     pub(crate) verase: Option<VectorErase>,
@@ -287,6 +289,7 @@ impl App {
             sel_clip: None,
             menu_target: None,
             history: History::default(),
+            gesture: Gesture::default(),
             stroke: None,
             vstroke: None,
             verase: None,
@@ -808,6 +811,49 @@ impl App {
         self.renderer.invalidate_all();
     }
 
+    /// Enregistre l'étape d'annulation d'un changement de réglage (nom, texte, opacité…), à
+    /// appeler AVANT le changement. Un même geste (même champ ou curseur, sans autre étape
+    /// entre-temps) n'en enregistre qu'une : taper une phrase ou glisser un curseur = une étape.
+    pub(crate) fn note_change(&mut self, gesture: egui::Id) {
+        let key = gesture.value();
+        if self.gesture.needs_step(key, self.history.serial()) {
+            let snap = self.snapshot();
+            self.history.push(snap);
+        }
+        self.gesture.started(key, self.history.serial());
+        self.modified = true;
+    }
+
+    /// Un clic qui change un réglage (œil d'un calque, piste muette…) : une étape à lui seul.
+    pub(crate) fn record_step(&mut self) {
+        let snap = self.snapshot();
+        self.history.push(snap);
+        self.gesture.reset();
+        self.modified = true;
+    }
+
+    /// Suit un champ ou un curseur qui modifie une copie d'une valeur du document. Renvoie vrai si
+    /// la copie vient de changer : l'étape d'annulation est alors enregistrée, et l'appelant
+    /// reporte la nouvelle valeur dans le document.
+    pub(crate) fn edited(&mut self, resp: &egui::Response) -> bool {
+        // Le geste dure tant qu'on tape dans le champ, qu'on tire le curseur ou que la fenêtre de
+        // choix (couleur) reste ouverte.
+        let busy = resp.has_focus() || resp.dragged() || resp.ctx.memory(|m| m.any_popup_open());
+        if busy {
+            self.gesture.keep(resp.id.value());
+        }
+        if resp.changed() {
+            self.note_change(resp.id);
+            return true;
+        }
+        false
+    }
+
+    /// En début d'image : le geste est fini quand plus aucun champ ni glissé ne le prolonge.
+    fn end_gesture_if_idle(&mut self) {
+        self.gesture.end_frame(self.guides.drag.is_some());
+    }
+
     /// Insère un dessin vide (ou une copie du dessin courant) juste après l'exposition courante.
     pub(crate) fn new_image(&mut self, duplicate: bool) {
         self.end_stroke();
@@ -1026,6 +1072,7 @@ impl App {
         self.cur_panel = nav.panel;
         self.cur_layer = nav.layer;
         self.clamp_nav();
+        self.guides.current = self.guides.current.min(self.doc.guides.len().saturating_sub(1));
         self.vsel = None;
         self.length_origin = None;
         self.renderer.invalidate_all();
@@ -1752,6 +1799,7 @@ impl eframe::App for App {
         self.ppp = ctx.pixels_per_point();
         self.clamp_nav();
         self.end_length_gesture_if_idle();
+        self.end_gesture_if_idle();
         self.handle_close_request(ctx);
         self.handle_shortcuts(ctx);
         if !self.modal_open() {

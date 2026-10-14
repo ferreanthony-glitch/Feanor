@@ -1,6 +1,6 @@
 # Architecture de Pelure
 
-Document tenu à jour à chaque étape. Dernière mise à jour : phase 1c (octobre 2026).
+Document tenu à jour à chaque étape. Dernière mise à jour : phase 1d (octobre 2026).
 
 ## Vue d'ensemble
 
@@ -30,10 +30,20 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - **Rendu** (`render.rs`) : sur le processeur. Les calques et la pelure d'oignon sont empilés dans une
   image envoyée à la carte graphique comme une seule texture ; seules les tuiles modifiées sont
   recalculées. Vignettes des plans en cache (`thumbs.rs`).
-- **Annuler / rétablir** (`history.rs`) : chaque modification enregistre l'état d'avant (tuiles,
-  dessin vectoriel, ou structure : séquences, scènes, panneaux, calques, pistes son et extraits). Les
-  noms, textes, réglages de calque et de piste (muette, volume) n'y sont pas encore (prévu en
-  phase 1d), mais une annulation ne les fait jamais revenir en arrière (conservés par identifiant).
+- **Annuler / rétablir** (`history.rs`) : chaque modification enregistre l'état d'avant, **avant**
+  d'avoir lieu : tuiles d'un dessin bitmap, dessin vectoriel, ou « structure ». La structure, c'est
+  tout le document hors dessins et sons : séquences, scènes, panneaux et leurs textes, calques
+  (expositions, nom, opacité, visibilité), pistes son et extraits, guides, papier, cadence.
+  - Les champs et curseurs modifient une **copie** de la valeur ; s'ils changent, `App::edited`
+    enregistre l'étape puis on reporte la valeur. Un **geste** = une étape : taper tout un texte
+    tant que le champ reste actif, tirer un curseur, glisser un point de fuite, choisir une couleur
+    tant que la fenêtre est ouverte (`history::Gesture`). Si une autre étape s'intercale (bouton,
+    annulation), la suite du geste en ouvre une nouvelle.
+  - Les clics qui changent un réglage (œil d'un calque, M d'une piste) font une étape chacun.
+  - Ne s'annulent pas : les réglages de l'application (outil, couleur, zoom, pelure, table
+    lumineuse, affichage des guides), qui ne sont pas dans le projet.
+  - Coût : une étape de structure copie toute la structure (pas les dessins). Négligeable pour un
+    storyboard ; à revoir (copies partagées) si un projet atteint des milliers de panneaux.
 - **Son** : voir « Son » plus bas.
 - **Fichier** : voir « Format de projet ».
 - **Raccourcis** (`keymap.rs`, `keymap.toml`) : voir plus bas.
@@ -59,8 +69,8 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   C'est notre lecture de la « Light Table » de Storyboard Pro (autres calques estompés) ; la table
   lumineuse de TVPaint, qui montre d'autres images, correspond plutôt à notre pelure d'oignon.
 - **Guides** (`guides.rs`) : un guide = 1, 2 ou 3 points de fuite en pixels du dessin, enregistrés
-  dans le manifeste (`"guides"`). Réglages d'affichage (actif, aligné, verrouillé, lignes de
-  référence) gardés dans l'application, pas dans le projet. Trait aligné : au départ du trait on
+  dans le manifeste (`"guides"`) et annulables comme le reste. Réglages d'affichage (actif, aligné,
+  verrouillé, lignes de référence) gardés dans l'application, pas dans le projet. Trait aligné : au départ du trait on
   attend 6 pixels d'écran de mouvement, puis on choisit la direction du guide la plus proche (vers un
   point de fuite, verticale, horizontale) et chaque point du trait est projeté sur cette droite.
   Les types de guides de Storyboard Pro autres que la perspective à 1, 2 ou 3 points (lignes,

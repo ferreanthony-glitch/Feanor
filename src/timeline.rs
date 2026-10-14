@@ -76,11 +76,10 @@ impl App {
                 self.goto_frame(count - 1);
             }
             ui.checkbox(&mut self.looping, "Boucle");
-            if ui
-                .add(egui::DragValue::new(&mut self.doc.fps).range(1..=120).suffix(" i/s"))
-                .changed()
-            {
-                self.modified = true;
+            let mut fps = self.doc.fps;
+            let resp = ui.add(egui::DragValue::new(&mut fps).range(1..=120).suffix(" i/s"));
+            if self.edited(&resp) {
+                self.doc.fps = fps;
             }
             ui.label(format!("Image {} / {}", self.cur_frame + 1, count));
 
@@ -203,9 +202,9 @@ impl App {
                 if row >= 0.0 && (row as usize) < rows {
                     let li = rows - 1 - row as usize;
                     if p.x < r.left() + ROW_H {
+                        self.record_step();
                         let layer = &mut self.layers_mut()[li];
                         layer.visible = !layer.visible;
-                        self.modified = true;
                     } else {
                         self.select_layer(li);
                     }

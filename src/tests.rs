@@ -409,30 +409,70 @@ fn structure_undo_restores_scenes_and_panels() {
 }
 
 #[test]
-fn structure_undo_keeps_texts_and_layer_settings() {
+fn structure_undo_covers_texts_settings_and_guides() {
     let mut doc = Document::new(32, 32, 24);
     let snap = Edit::Structure {
         structure: doc.structure(),
         nav: nav(),
     };
-    // Après l'instantané : on écrit, on renomme, on règle le calque, et on rallonge le panneau.
+    // Après l'instantané : textes, noms, réglages de calque, guide, papier, cadence, durée.
     doc.panels[0].dialogue = "— Toi ici ?".into();
     doc.panels[0].layers[0].opacity = 0.3;
     doc.panels[0].layers[0].name = "Crayonné".into();
+    doc.panels[0].layers[0].visible = false;
     let scene = doc.panels[0].scene;
     doc.scene_mut(scene).unwrap().name = "12A".into();
+    doc.guides.push(crate::guides::Guide::new(1, 32.0, 32.0));
+    doc.paper = [240, 230, 200];
+    doc.fps = 25;
     doc.panels[0].set_length(100);
     let mut history = History::default();
     history.push(snap);
     let mut n = nav();
     history.undo(&mut doc, &mut n);
-    assert_eq!(doc.panels[0].frame_count(), 48, "la durée est bien annulée");
-    assert_eq!(doc.panels[0].dialogue, "— Toi ici ?", "le texte saisi est conservé");
-    assert_eq!(doc.panels[0].layers[0].opacity, 0.3);
-    assert_eq!(doc.panels[0].layers[0].name, "Crayonné");
-    assert_eq!(doc.scene_label(scene), "12A");
+    assert_eq!(doc.panels[0].frame_count(), 48, "la durée est annulée");
+    assert_eq!(doc.panels[0].dialogue, "", "le texte aussi");
+    assert_eq!(doc.panels[0].layers[0].opacity, 1.0);
+    assert_eq!(doc.panels[0].layers[0].name, "Dessin");
+    assert!(doc.panels[0].layers[0].visible);
+    assert_eq!(doc.scene_label(scene), "1");
+    assert!(doc.guides.is_empty());
+    assert_eq!((doc.paper, doc.fps), ([255, 255, 255], 24));
     history.redo(&mut doc, &mut n);
     assert_eq!(doc.panels[0].frame_count(), 100);
+    assert_eq!(doc.panels[0].dialogue, "— Toi ici ?");
+    assert_eq!((doc.guides.len(), doc.fps), (1, 25));
+}
+
+#[test]
+fn a_gesture_records_one_step() {
+    use crate::history::Gesture;
+    let mut g = Gesture::default();
+    let (field, other) = (1, 2);
+    // Première lettre tapée : une étape (l'historique passe au numéro 1).
+    assert!(g.needs_step(field, 0));
+    g.started(field, 1);
+    // Lettres suivantes, le champ restant actif d'une image à l'autre : pas de nouvelle étape.
+    g.end_frame(false);
+    g.keep(field);
+    assert!(!g.needs_step(field, 1));
+    g.started(field, 1);
+    g.end_frame(false);
+    // Une autre étape s'est glissée (bouton, annulation…) : la suite de la saisie en refait une.
+    assert!(g.needs_step(field, 2));
+    // Un autre champ : nouvelle étape.
+    assert!(g.needs_step(other, 1));
+    // Le champ n'est plus actif pendant une image : le geste est fini.
+    g.started(field, 3);
+    g.end_frame(false);
+    g.end_frame(false);
+    assert!(g.needs_step(field, 3));
+    // Un point de fuite tenu sans bouger reste le même geste.
+    g.started(other, 4);
+    g.end_frame(false);
+    g.end_frame(true);
+    g.end_frame(true);
+    assert!(!g.needs_step(other, 4));
 }
 
 // ------------------------------------------------------------------------------ fichiers

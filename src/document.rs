@@ -266,12 +266,19 @@ pub struct AudioTrack {
 /// Séquences, scènes, panneaux et pistes son : tout ce qu'une opération de montage peut changer.
 /// Les panneaux sont dans l'ordre du film ; ceux d'une même scène se suivent, comme les
 /// scènes d'une même séquence.
+///
+/// C'est aussi tout l'état du document en dehors des dessins et des sons : noms, textes, réglages
+/// des calques et des pistes, guides, couleur du papier, cadence. Une étape d'annulation qui le
+/// conserve rétablit donc tout cela.
 #[derive(Clone)]
 pub struct Structure {
     pub sequences: Vec<Sequence>,
     pub scenes: Vec<Scene>,
     pub panels: Vec<Panel>,
     pub audio_tracks: Vec<AudioTrack>,
+    pub guides: Vec<Guide>,
+    pub paper: [u8; 3],
+    pub fps: u32,
 }
 
 pub struct Document {
@@ -321,8 +328,6 @@ impl Document {
     pub fn from_parts(
         width: usize,
         height: usize,
-        fps: u32,
-        paper: [u8; 3],
         structure: Structure,
         cels: HashMap<CelId, Cel>,
         sounds: HashMap<u64, Sound>,
@@ -342,15 +347,15 @@ impl Document {
         let mut doc = Self {
             width,
             height,
-            fps,
-            paper,
+            fps: structure.fps.max(1),
+            paper: structure.paper,
             sequences: structure.sequences,
             scenes: structure.scenes,
             panels: structure.panels,
             cels,
             audio_tracks: structure.audio_tracks,
             sounds,
-            guides: Vec::new(),
+            guides: structure.guides,
             next_id: max_id + 1,
         };
         doc.normalize();
@@ -363,6 +368,9 @@ impl Document {
             scenes: self.scenes.clone(),
             panels: self.panels.clone(),
             audio_tracks: self.audio_tracks.clone(),
+            guides: self.guides.clone(),
+            paper: self.paper,
+            fps: self.fps,
         }
     }
 
@@ -372,6 +380,9 @@ impl Document {
             scenes: std::mem::replace(&mut self.scenes, s.scenes),
             panels: std::mem::replace(&mut self.panels, s.panels),
             audio_tracks: std::mem::replace(&mut self.audio_tracks, s.audio_tracks),
+            guides: std::mem::replace(&mut self.guides, s.guides),
+            paper: std::mem::replace(&mut self.paper, s.paper),
+            fps: std::mem::replace(&mut self.fps, s.fps),
         }
     }
 

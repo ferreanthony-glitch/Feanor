@@ -184,7 +184,7 @@ fn clips_on_tracks() {
 }
 
 #[test]
-fn undo_restores_clips_but_keeps_track_settings() {
+fn undo_restores_clips_and_track_settings() {
     let (mut doc, sound) = doc_with_sound(1.0);
     let clip = doc.place_sound(sound, 0, None).unwrap();
     let snap = Edit::Structure {
@@ -199,8 +199,8 @@ fn undo_restores_clips_but_keeps_track_settings() {
     let mut nav = Nav { panel: 0, layer: 0 };
     history.undo(&mut doc, &mut nav);
     assert_eq!(doc.clip(clip).unwrap().start, 0, "le déplacement est annulé");
-    assert!(doc.audio_tracks[0].muted, "le réglage de la piste reste");
-    assert_eq!(doc.audio_tracks[0].volume, 0.4);
+    assert!(!doc.audio_tracks[0].muted, "les réglages de la piste aussi");
+    assert_eq!(doc.audio_tracks[0].volume, 1.0);
 }
 
 #[test]

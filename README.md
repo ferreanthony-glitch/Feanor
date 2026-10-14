@@ -83,9 +83,9 @@ Les traits vectoriels sont rendus à la résolution du projet : en zoomant très
   de référence. Les guides sont enregistrés avec le projet.
 - **Vue** : zoom à la molette (ou 1 / 2), rotation (Maj + molette, ou V / C), miroir (M),
   déplacement (Espace + glisser).
-- **Annuler / rétablir** : 200 étapes, qui couvrent traits, vectoriel, panneaux, scènes, séquences et
-  calques. Les textes (noms, action, dialogue…) ne s'annulent pas encore, mais une annulation ne les
-  efface jamais.
+- **Annuler / rétablir** (Ctrl+Z / Ctrl+Maj+Z) : 200 étapes, sur tout le projet : traits, vectoriel,
+  sélections, panneaux, scènes, séquences, calques, sons, textes, noms, réglages des calques et des
+  pistes, guides, papier, cadence. Une saisie ou un glissé de curseur compte pour une seule étape.
 - **Export** : image courante, séquence PNG du panneau ou de tout le montage, storyboard en page HTML
   imprimable (une planche par panneau, rangées par séquence ; à imprimer en PDF depuis le navigateur).
 

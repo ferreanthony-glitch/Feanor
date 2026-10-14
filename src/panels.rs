@@ -161,8 +161,10 @@ impl App {
                 ui.separator();
                 ui.horizontal(|ui| {
                     ui.label("Couleur du papier");
-                    if ui.color_edit_button_srgb(&mut self.doc.paper).changed() {
-                        self.modified = true;
+                    let mut paper = self.doc.paper;
+                    let resp = ui.color_edit_button_srgb(&mut paper);
+                    if self.edited(&resp) {
+                        self.doc.paper = paper;
                         self.renderer.invalidate_all();
                     }
                 });
@@ -564,28 +566,33 @@ impl App {
             });
         }
         if let Some(li) = toggle {
+            self.record_step();
             let layer = &mut self.layers_mut()[li];
             layer.visible = !layer.visible;
-            self.modified = true;
         }
         if let Some(li) = select {
             self.select_layer(li);
         }
 
+        // Réglages du calque courant : on modifie des copies, `edited` enregistre l'annulation.
         ui.separator();
         let li = self.cur_layer;
-        let layer = &mut self.layers_mut()[li];
-        let mut changed = false;
+        let layer = &self.layers()[li];
+        let (mut name, mut opacity, mut visible) = (layer.name.clone(), layer.opacity, layer.visible);
         ui.horizontal(|ui| {
             ui.label("Nom");
-            changed |= ui.text_edit_singleline(&mut layer.name).changed();
+            let resp = ui.text_edit_singleline(&mut name);
+            if self.edited(&resp) {
+                self.layers_mut()[li].name = name;
+            }
         });
-        changed |= ui
-            .add(egui::Slider::new(&mut layer.opacity, 0.0..=1.0).text("Opacité"))
-            .changed();
-        changed |= ui.checkbox(&mut layer.visible, "Visible").changed();
-        if changed {
-            self.modified = true;
+        let resp = ui.add(egui::Slider::new(&mut opacity, 0.0..=1.0).text("Opacité"));
+        if self.edited(&resp) {
+            self.layers_mut()[li].opacity = opacity;
+        }
+        let resp = ui.checkbox(&mut visible, "Visible");
+        if self.edited(&resp) {
+            self.layers_mut()[li].visible = visible;
         }
     }
 

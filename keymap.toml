@@ -410,12 +410,12 @@ source = "proposition (second raccourci)"
 [[raccourci]]
 action = "scene.precedente"
 touches = ["Ctrl+PgPréc"]
-source = "proposition (PREV_SHOT_KEY n'a pas de touche par défaut ; Maj+A est pris par le module Guides)"
+source = "proposition validée (PREV_SHOT_KEY n'a pas de touche par défaut ; Maj+A est pris par le module Guides)"
 
 [[raccourci]]
 action = "scene.suivante"
 touches = ["Ctrl+PgSuiv"]
-source = "proposition (NEXT_SHOT_KEY n'a pas de touche par défaut)"
+source = "proposition validée (NEXT_SHOT_KEY n'a pas de touche par défaut)"
 
 [[raccourci]]
 action = "scene.aller_a"

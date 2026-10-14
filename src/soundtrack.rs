@@ -512,34 +512,34 @@ impl App {
             resp.context_menu(|ui| self.track_menu(ui, t));
         }
         if let Some(t) = toggle {
+            self.record_step();
             let track = &mut self.doc.audio_tracks[t];
             track.muted = !track.muted;
-            self.modified = true;
         }
     }
 
     /// Menu d'une piste son (nom, muette, volume, import, nouvelle piste, suppression).
     pub(crate) fn track_menu(&mut self, ui: &mut egui::Ui, t: usize) {
-        let Some(track) = self.doc.audio_tracks.get_mut(t) else {
+        let Some(track) = self.doc.audio_tracks.get(t) else {
             ui.close_menu();
             return;
         };
+        // Copies modifiées par les champs ; `edited` enregistre l'annulation (une étape par geste).
+        let (mut name, mut muted, mut pct) = (track.name.clone(), track.muted, track.volume * 100.0);
         ui.horizontal(|ui| {
             ui.label("Nom");
-            if ui.add(egui::TextEdit::singleline(&mut track.name).desired_width(120.0)).changed() {
-                self.modified = true;
+            let resp = ui.add(egui::TextEdit::singleline(&mut name).desired_width(120.0));
+            if self.edited(&resp) {
+                self.doc.audio_tracks[t].name = name;
             }
         });
-        if ui.checkbox(&mut track.muted, "Piste muette").changed() {
-            self.modified = true;
+        let resp = ui.checkbox(&mut muted, "Piste muette");
+        if self.edited(&resp) {
+            self.doc.audio_tracks[t].muted = muted;
         }
-        let mut pct = track.volume * 100.0;
-        if ui
-            .add(egui::Slider::new(&mut pct, 0.0..=200.0).suffix(" %").text("Volume"))
-            .changed()
-        {
-            track.volume = pct / 100.0;
-            self.modified = true;
+        let resp = ui.add(egui::Slider::new(&mut pct, 0.0..=200.0).suffix(" %").text("Volume"));
+        if self.edited(&resp) {
+            self.doc.audio_tracks[t].volume = pct / 100.0;
         }
         ui.separator();
         if ui.button("Importer un son sur cette piste…").clicked() {

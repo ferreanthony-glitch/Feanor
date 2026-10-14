@@ -145,20 +145,20 @@ impl App {
     }
 
     pub(crate) fn add_guide(&mut self, n: usize) {
+        self.record_step();
         let (w, h) = (self.doc.width as f32, self.doc.height as f32);
         self.doc.guides.push(Guide::new(n, w, h));
         self.guides.current = self.doc.guides.len() - 1;
         self.guides.enabled = true;
-        self.modified = true;
         self.status = "Guide ajouté : fais glisser ses points de fuite (Maj+L pour les verrouiller).".into();
     }
 
     pub(crate) fn delete_guide(&mut self) {
         let i = self.guides.current;
         if i < self.doc.guides.len() {
+            self.record_step();
             self.doc.guides.remove(i);
             self.guides.current = i.saturating_sub(1);
-            self.modified = true;
         }
     }
 
@@ -172,11 +172,12 @@ impl App {
         (0..g.points.len()).find(|&i| self.view.to_screen(rect, size, g.point(i)).distance(screen) <= GRAB)
     }
 
+    /// Déplace un point de fuite (tout le glissé = une étape d'annulation).
     pub(crate) fn move_guide_point(&mut self, i: usize, p: Pos2) {
         let current = self.guides.current;
-        if let Some(pt) = self.doc.guides.get_mut(current).and_then(|g| g.points.get_mut(i)) {
-            *pt = [p.x, p.y];
-            self.modified = true;
+        if self.doc.guides.get(current).is_some_and(|g| i < g.points.len()) {
+            self.note_change(egui::Id::new(("point_de_fuite", current, i)));
+            self.doc.guides[current].points[i] = [p.x, p.y];
         }
     }
 
@@ -343,18 +344,20 @@ impl App {
                 }
             }
         });
-        let mut delete = false;
-        if let Some(g) = self.doc.guides.get_mut(self.guides.current) {
+        let current = self.guides.current;
+        if let Some(mut name) = self.doc.guides.get(current).map(|g| g.name.clone()) {
+            let mut delete = false;
             ui.horizontal(|ui| {
                 ui.label("Nom");
-                if ui.add(egui::TextEdit::singleline(&mut g.name).desired_width(110.0)).changed() {
-                    self.modified = true;
+                let resp = ui.add(egui::TextEdit::singleline(&mut name).desired_width(110.0));
+                if self.edited(&resp) {
+                    self.doc.guides[current].name = name;
                 }
                 delete = ui.button("Supprimer").clicked();
             });
-        }
-        if delete {
-            self.delete_guide();
+            if delete {
+                self.delete_guide();
+            }
         }
     }
 }

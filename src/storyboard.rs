@@ -886,30 +886,39 @@ impl App {
         let seq_number = self.doc.sequence_number(seq).to_string();
         ui.add_space(4.0);
         ui.heading(panel_long_title(&self.doc, i));
-        let mut changed = false;
+        // Chaque champ modifie une copie ; `edited` enregistre l'étape d'annulation avant qu'on
+        // reporte la valeur (une étape par saisie).
         egui::Grid::new("fiche_panneau").num_columns(2).show(ui, |ui| {
             ui.label("Séquence");
-            if let Some(s) = self.doc.sequence_mut(seq) {
-                changed |= ui
+            if let Some(mut name) = self.doc.sequences.iter().find(|s| s.id == seq).map(|s| s.name.clone()) {
+                let resp = ui
                     .add(
-                        egui::TextEdit::singleline(&mut s.name)
+                        egui::TextEdit::singleline(&mut name)
                             .hint_text(seq_number)
                             .desired_width(150.0),
                     )
-                    .on_hover_text("Vide = numéro automatique")
-                    .changed();
+                    .on_hover_text("Vide = numéro automatique");
+                if self.edited(&resp) {
+                    if let Some(s) = self.doc.sequence_mut(seq) {
+                        s.name = name;
+                    }
+                }
             }
             ui.end_row();
             ui.label("Scène");
-            if let Some(s) = self.doc.scene_mut(scene) {
-                changed |= ui
+            if let Some(mut name) = self.doc.scene(scene).map(|s| s.name.clone()) {
+                let resp = ui
                     .add(
-                        egui::TextEdit::singleline(&mut s.name)
+                        egui::TextEdit::singleline(&mut name)
                             .hint_text(scene_number)
                             .desired_width(150.0),
                     )
-                    .on_hover_text("Numéro ou nom de la scène (vide = numéro automatique)")
-                    .changed();
+                    .on_hover_text("Numéro ou nom de la scène (vide = numéro automatique)");
+                if self.edited(&resp) {
+                    if let Some(s) = self.doc.scene_mut(scene) {
+                        s.name = name;
+                    }
+                }
             }
             ui.end_row();
             ui.label("Panneau");
@@ -922,23 +931,19 @@ impl App {
             });
             ui.end_row();
         });
-        let panel = &mut self.doc.panels[i];
-        for (label, text, rows) in [
-            ("Action", &mut panel.action, 3),
-            ("Dialogue", &mut panel.dialogue, 2),
-            ("Notes", &mut panel.notes, 2),
-        ] {
+        for (label, field, rows) in [("Action", 0, 3), ("Dialogue", 1, 2), ("Notes", 2, 2)] {
+            let p = &self.doc.panels[i];
+            let mut text = [&p.action, &p.dialogue, &p.notes][field].clone();
             ui.label(label);
-            changed |= ui
-                .add(
-                    egui::TextEdit::multiline(text)
-                        .desired_rows(rows)
-                        .desired_width(f32::INFINITY),
-                )
-                .changed();
-        }
-        if changed {
-            self.modified = true;
+            let resp = ui.add(
+                egui::TextEdit::multiline(&mut text)
+                    .desired_rows(rows)
+                    .desired_width(f32::INFINITY),
+            );
+            if self.edited(&resp) {
+                let p = &mut self.doc.panels[i];
+                *[&mut p.action, &mut p.dialogue, &mut p.notes][field] = text;
+            }
         }
     }
 }

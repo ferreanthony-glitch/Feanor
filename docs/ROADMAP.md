@@ -38,7 +38,11 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
   Maj+G, comme le module Guides de Storyboard Pro 27), enregistrés dans le projet.
   Reste pour plus tard : peinture limitée à la sélection, déformation en perspective d'une
   sélection (outil Perspective), autres types de guides, annulation des réglages de guide.
-- ⏳ 1d. Annuler/rétablir sur tout (textes, réglages de calque, sons), gestes regroupés.
+- ✅ 1d. Annuler / rétablir sur tout le document : textes des panneaux, noms de séquence, de scène,
+  de calque et de piste, opacité et visibilité des calques, piste muette et volume, guides (ajout,
+  suppression, nom, points de fuite), couleur du papier, cadence. Une étape par geste (une saisie,
+  un glissé de curseur ou de point). Reste : regrouper les appuis répétés d'une même touche
+  (+ / − sur la durée font une étape par appui).
 - ⏳ 1e. Couper (F5) / fusionner des panneaux, copier/coller de calques (W/X), verrouillage (Alt+L),
   fusion (Ctrl+E).
 
@@ -72,7 +76,7 @@ Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans 
 | Supprimer (second) | Retour arrière | |
 | Ajuster à la fenêtre | Ctrl+0 | changé en 1a : Maj+F sert désormais à « scène suivante » |
 | Nouvelle scène | Maj+P | NEW_SCENE_KEY n'a pas de touche par défaut ; P = nouveau panneau (preset) |
-| Scène précédente / suivante | Ctrl+Pg préc. / Ctrl+Pg suiv. | PREV_SHOT_KEY / NEXT_SHOT_KEY sans touche ; changé en 1c : Maj+A appartient au module Guides de Storyboard Pro (« aligner sur le guide ») |
+| Scène précédente / suivante | Ctrl+Pg préc. / Ctrl+Pg suiv. | ✅ validé (1d). PREV_SHOT_KEY / NEXT_SHOT_KEY sans touche ; Maj+A appartient au module Guides de Storyboard Pro (« aligner sur le guide ») |
 | Miroir de la vue | M | |
 | Storyboard ⇄ animation | Tab | |
 | Vue dessin / vignettes | Maj+Tab | |

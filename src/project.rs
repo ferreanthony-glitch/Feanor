@@ -488,6 +488,13 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
         scenes: Vec::new(),
         panels: Vec::new(),
         audio_tracks,
+        guides: manifest
+            .guides
+            .into_iter()
+            .filter(|g| (1..=3).contains(&g.points.len()) && g.points.iter().flatten().all(|v| v.is_finite()))
+            .collect(),
+        paper: manifest.papier,
+        fps: manifest.cadence.max(1),
     };
     for seq in manifest.sequences {
         structure.sequences.push(Sequence {
@@ -539,12 +546,7 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
         return Err("le projet ne contient aucun panneau".into());
     }
     let written = cels.keys().map(|&id| (id, 0)).collect();
-    let mut doc = Document::from_parts(w, h, manifest.cadence.max(1), manifest.papier, structure, cels, sounds);
-    doc.guides = manifest
-        .guides
-        .into_iter()
-        .filter(|g| (1..=3).contains(&g.points.len()) && g.points.iter().flatten().all(|v| v.is_finite()))
-        .collect();
+    let doc = Document::from_parts(w, h, structure, cels, sounds);
     Ok(Loaded { doc, written, warnings })
 }
 

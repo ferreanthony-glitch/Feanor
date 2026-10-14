@@ -1,4 +1,7 @@
 use crate::document::{CelId, Document, Structure};
+
+// Une seule règle : toute modification du document enregistre son étape AVANT d'avoir lieu.
+// Les champs de saisie et curseurs passent par `App::edited` (une étape par geste).
 use crate::raster::Tile;
 use crate::vector::VectorDrawing;
 
@@ -21,7 +24,8 @@ pub enum Edit {
     },
     /// Dessin vectoriel complet avant modification.
     Vector { cel: CelId, drawing: VectorDrawing },
-    /// Séquences, scènes, panneaux, calques (images, expositions, durées, ordre…) et pistes son.
+    /// Tout le document hors dessins : séquences, scènes, panneaux et leurs textes, calques
+    /// (images, expositions, réglages), pistes son, guides, papier, cadence.
     Structure { structure: Structure, nav: Nav },
     Group(Vec<Edit>),
 }
@@ -48,8 +52,7 @@ impl Edit {
                 c.rerender();
                 Edit::Vector { cel, drawing: old }
             }
-            Edit::Structure { mut structure, nav: saved } => {
-                keep_current_metadata(&mut structure, doc);
+            Edit::Structure { structure, nav: saved } => {
                 let old = doc.replace_structure(structure);
                 let old_nav = std::mem::replace(nav, saved);
                 Edit::Structure {
@@ -69,38 +72,45 @@ impl Edit {
     }
 }
 
-/// Les noms, les textes des panneaux et les réglages des calques ne passent pas (encore) par
-/// l'historique : annuler une opération de structure ne doit pas les faire revenir en arrière.
-fn keep_current_metadata(restored: &mut Structure, doc: &Document) {
-    for seq in &mut restored.sequences {
-        if let Some(now) = doc.sequences.iter().find(|s| s.id == seq.id) {
-            seq.name.clone_from(&now.name);
+/// Regroupe les modifications d'un même geste (taper dans un champ, tirer un curseur, glisser un
+/// point) en une seule étape d'annulation.
+#[derive(Default)]
+pub struct Gesture {
+    /// Geste en cours et numéro de l'historique juste après son étape.
+    current: Option<(u64, u64)>,
+    /// Le geste a été prolongé pendant cette image d'écran.
+    alive: bool,
+}
+
+impl Gesture {
+    /// Faut-il enregistrer une étape avant cette modification ? Oui pour un nouveau geste, ou si
+    /// une autre étape (ou une annulation) s'est glissée depuis celle du geste.
+    pub fn needs_step(&self, key: u64, serial: u64) -> bool {
+        self.current != Some((key, serial))
+    }
+
+    /// Le geste `key` a enregistré son étape ; l'historique en est maintenant au numéro `serial`.
+    pub fn started(&mut self, key: u64, serial: u64) {
+        self.current = Some((key, serial));
+        self.alive = true;
+    }
+
+    /// Le geste continue pendant cette image (champ encore actif, curseur encore tenu…).
+    pub fn keep(&mut self, key: u64) {
+        if self.current.is_some_and(|(k, _)| k == key) {
+            self.alive = true;
         }
     }
-    for scene in &mut restored.scenes {
-        if let Some(now) = doc.scenes.iter().find(|s| s.id == scene.id) {
-            scene.name.clone_from(&now.name);
+
+    /// Fin d'image : un geste que rien n'a prolongé est terminé (sauf si `hold`).
+    pub fn end_frame(&mut self, hold: bool) {
+        if !std::mem::take(&mut self.alive) && !hold {
+            self.current = None;
         }
     }
-    for panel in &mut restored.panels {
-        let Some(now) = doc.panels.iter().find(|s| s.id == panel.id) else { continue };
-        panel.action.clone_from(&now.action);
-        panel.dialogue.clone_from(&now.dialogue);
-        panel.notes.clone_from(&now.notes);
-        for layer in &mut panel.layers {
-            if let Some(l) = now.layers.iter().find(|l| l.id == layer.id) {
-                layer.name.clone_from(&l.name);
-                layer.opacity = l.opacity;
-                layer.visible = l.visible;
-            }
-        }
-    }
-    for track in &mut restored.audio_tracks {
-        if let Some(now) = doc.audio_tracks.iter().find(|t| t.id == track.id) {
-            track.name.clone_from(&now.name);
-            track.muted = now.muted;
-            track.volume = now.volume;
-        }
+
+    pub fn reset(&mut self) {
+        self.current = None;
     }
 }
 
@@ -108,12 +118,16 @@ fn keep_current_metadata(restored: &mut Structure, doc: &Document) {
 pub struct History {
     undo: Vec<Edit>,
     redo: Vec<Edit>,
+    /// Augmente à chaque changement de l'historique : un geste en cours (saisie dans un champ…)
+    /// sait ainsi si une autre étape s'est glissée depuis la sienne.
+    serial: u64,
 }
 
 impl History {
     pub fn push(&mut self, edit: Edit) {
         self.undo.push(edit);
         self.redo.clear();
+        self.serial += 1;
         if self.undo.len() > LIMIT {
             self.undo.remove(0);
         }
@@ -124,6 +138,7 @@ impl History {
             return false;
         };
         self.redo.push(edit.apply(doc, nav));
+        self.serial += 1;
         true
     }
 
@@ -132,11 +147,17 @@ impl History {
             return false;
         };
         self.undo.push(edit.apply(doc, nav));
+        self.serial += 1;
         true
     }
 
     pub fn clear(&mut self) {
         self.undo.clear();
         self.redo.clear();
+        self.serial += 1;
+    }
+
+    pub fn serial(&self) -> u64 {
+        self.serial
     }
 }
