@@ -106,6 +106,32 @@ impl BrushSettings {
     }
 }
 
+/// Aperçu d'un réglage (grille des pinceaux) : un trait en vague tracé par le vrai moteur dans
+/// une image `w`×`h`, effleuré aux bouts et appuyé au milieu. Renvoie la couverture (0 à 255)
+/// de chaque pixel, ligne par ligne. La taille est ramenée à ce qui tient dans l'image ; une
+/// gomme est montrée comme le trait qu'elle enlève.
+pub fn stroke_preview(settings: &BrushSettings, textures: BrushTextures, w: usize, h: usize) -> Vec<u8> {
+    let mut s = *settings;
+    s.size = s.size.clamp(1.0, h as f32 * 0.5);
+    s.smoothing = 0.0;
+    let mut raster = Raster::new(w, h);
+    let mut stroke = StrokeState::new(0, StrokeMode::Paint([0, 0, 0]), s, None, true).with_textures(textures);
+    let mut dirty = Vec::new();
+    let margin = s.size * 0.5 + 2.0;
+    let swing = (h as f32 * 0.5 - margin).max(0.0) * 0.7;
+    let n = 64;
+    for k in 0..=n {
+        let t = k as f32 / n as f32;
+        let p = Pos2::new(
+            margin + t * (w as f32 - 2.0 * margin),
+            h as f32 * 0.5 - (t * std::f32::consts::TAU).sin() * swing,
+        );
+        stroke.add_point(&mut raster, p, (t * std::f32::consts::PI).sin().max(0.15), &mut dirty);
+    }
+    stroke.finish(&mut raster, &mut dirty);
+    (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).map(|(x, y)| raster.get(x, y).a()).collect()
+}
+
 #[derive(Clone, Copy)]
 pub enum StrokeMode {
     Paint([u8; 3]),

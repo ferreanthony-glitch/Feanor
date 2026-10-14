@@ -219,6 +219,28 @@ fn old_brush_settings_get_defaults() {
     assert!(s.tip.is_none());
 }
 
+#[test]
+fn preset_previews_fit_and_show_size() {
+    let (w, h) = (60, 30);
+    let ink = |px: &[u8]| px.iter().map(|&a| a as u32).sum::<u32>();
+    let thin = crate::brush::stroke_preview(&BrushSettings { size: 2.0, ..BrushSettings::brush() }, BrushTextures::default(), w, h);
+    let thick = crate::brush::stroke_preview(&BrushSettings { size: 10.0, ..BrushSettings::brush() }, BrushTextures::default(), w, h);
+    let huge = crate::brush::stroke_preview(&BrushSettings { size: 300.0, ..BrushSettings::brush() }, BrushTextures::default(), w, h);
+    assert_eq!(thin.len(), w * h);
+    assert!(ink(&thin) > 0, "un trait fin se voit");
+    assert!(ink(&thick) > 2 * ink(&thin), "plus gros, plus d'encre");
+    // Un très gros pinceau est ramené à la hauteur : le trait ne remplit pas tout, ni ne touche
+    // les bords gauche et droit.
+    assert!(ink(&huge) < (w * h * 255) as u32 * 9 / 10);
+    for y in 0..h {
+        assert_eq!(huge[y * w], 0, "bord gauche, ligne {y}");
+        assert_eq!(huge[y * w + w - 1], 0, "bord droit, ligne {y}");
+    }
+    // Une gomme est montrée comme le trait qu'elle enlève ; le lissage ne déforme pas l'aperçu.
+    let eraser = crate::brush::stroke_preview(&BrushSettings::eraser(), BrushTextures::default(), w, h);
+    assert!(ink(&eraser) > 0);
+}
+
 /// Import du vrai fichier d'Anthony (lancé à la main : `PELURE_PINCEAUX=<fichier>` et `--ignored`).
 #[test]
 #[ignore]

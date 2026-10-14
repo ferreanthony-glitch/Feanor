@@ -258,6 +258,8 @@ pub struct App {
     pub(crate) layer_drag: Option<LayerDrag>,
     /// Vignettes des calques (panneau Calques, 6c).
     pub(crate) layer_thumbs: crate::layersui::LayerThumbs,
+    /// Aperçus des réglages de pinceau (grille du panneau Réglages, 6d).
+    pub(crate) brush_previews: crate::brushui::BrushPreviews,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
     pub(crate) ref3d: crate::ref3dtool::Ref3dState,
     /// Vue à travers la caméra du panneau (sinon : la feuille, avec le cadre tracé).
@@ -445,6 +447,7 @@ impl App {
             cam_drag: None,
             layer_drag: None,
             layer_thumbs: Default::default(),
+            brush_previews: Default::default(),
             ref3d: Default::default(),
             camera_view: false,
             camera_mask: true,

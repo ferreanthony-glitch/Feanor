@@ -1,10 +1,24 @@
-//! Réglages nommés, papier et grain des pinceaux (3d-2), dans le panneau Outils.
+//! Réglages nommés, papier et grain des pinceaux (3d-2), dans le panneau Réglages ; les
+//! réglages en grille, chacun avec l'aperçu de son trait et sa taille (6d).
 
-use eframe::egui::{self, RichText};
+use std::collections::HashMap;
+
+use eframe::egui::{self, pos2, vec2, Color32, RichText, Sense, TextureHandle, Vec2};
 
 use crate::app::{App, Tool};
-use crate::brush::BrushSettings;
+use crate::brush::{stroke_preview, BrushSettings};
 use crate::brushtex::{BrushLibrary, Target};
+
+/// Case d'un réglage dans la grille, et l'aperçu du trait qu'elle contient.
+const TILE: Vec2 = vec2(58.0, 48.0);
+const PREVIEW: Vec2 = vec2(54.0, 30.0);
+
+/// Aperçus des réglages (par numéro de réglage), refaits quand le réglage ou l'échelle de
+/// l'écran change.
+#[derive(Default)]
+pub(crate) struct BrushPreviews {
+    cache: HashMap<usize, (BrushSettings, f32, TextureHandle)>,
+}
 
 impl App {
     fn tool_brush_mut(&mut self) -> Option<&mut BrushSettings> {
@@ -40,32 +54,37 @@ impl App {
             .map_or("(réglé à la main)".to_string(), |p| p.name.clone());
         let mut pick = None;
         ui.horizontal(|ui| {
-            egui::ComboBox::from_id_salt("reglage_pinceau")
-                .selected_text(selected)
-                .width(150.0)
-                .show_ui(ui, |ui| {
-                    let mut last_source = String::new();
-                    for (i, name, source) in &presets {
-                        if *source != last_source {
-                            if !last_source.is_empty() {
-                                ui.separator();
-                            }
-                            ui.label(RichText::new(source).small().weak());
-                            last_source = source.clone();
-                        }
-                        if ui.selectable_label(false, name).clicked() {
-                            pick = Some(*i);
-                        }
-                    }
-                });
-            if ui
-                .small_button("Importer…")
-                .on_hover_text("Importer des pinceaux d'un fichier de préréglages Toon Boom (.xml)")
-                .clicked()
-            {
-                self.import_brushes();
-            }
+            ui.label(RichText::new(selected).strong());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .small_button("Importer…")
+                    .on_hover_text("Importer des pinceaux d'un fichier de préréglages Toon Boom (.xml)")
+                    .clicked()
+                {
+                    self.import_brushes();
+                }
+            });
         });
+        // Grille des réglages, par provenance : aperçu du trait et taille.
+        let several = presets.iter().any(|p| p.2 != presets[0].2);
+        let mut start = 0;
+        while start < presets.len() {
+            let source = presets[start].2.clone();
+            let end = presets[start..].iter().position(|p| p.2 != source).map_or(presets.len(), |n| start + n);
+            if several {
+                ui.label(RichText::new(&source).small().weak());
+            }
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
+                for (i, name, _) in &presets[start..end] {
+                    if self.preset_tile(ui, *i, name, &source, current).clicked() {
+                        pick = Some(*i);
+                    }
+                }
+            });
+            start = end;
+        }
+        ui.add_space(2.0);
         if let Some(i) = pick {
             let settings = self.brushes.presets[i].settings;
             if let Some(b) = self.tool_brush_mut() {
@@ -73,6 +92,49 @@ impl App {
             }
         }
         self.grain_ui(ui);
+    }
+
+    /// Case d'un réglage de la grille : aperçu du trait et taille ; nom et provenance au survol.
+    fn preset_tile(&mut self, ui: &mut egui::Ui, index: usize, name: &str, source: &str, current: BrushSettings) -> egui::Response {
+        let settings = self.brushes.presets[index].settings;
+        let ppp = ui.ctx().pixels_per_point();
+        let fresh = self.brush_previews.cache.get(&index).is_some_and(|(s, p, _)| *s == settings && *p == ppp);
+        if !fresh {
+            let (w, h) = ((PREVIEW.x * ppp).round() as usize, (PREVIEW.y * ppp).round() as usize);
+            let alpha = stroke_preview(&settings, self.brushes.textures(&settings), w, h);
+            let pixels = alpha.iter().map(|&a| Color32::from_rgba_premultiplied(a, a, a, a)).collect();
+            let tex = ui.ctx().load_texture(
+                format!("pinceau {index}"),
+                egui::ColorImage { size: [w, h], pixels },
+                egui::TextureOptions::LINEAR,
+            );
+            self.brush_previews.cache.insert(index, (settings, ppp, tex));
+        }
+        let tex = self.brush_previews.cache[&index].2.id();
+        let (rect, resp) = ui.allocate_exact_size(TILE, Sense::click());
+        let v = ui.visuals();
+        let chosen = settings == current;
+        let bg = if chosen {
+            v.selection.bg_fill
+        } else if resp.hovered() {
+            v.widgets.hovered.weak_bg_fill
+        } else {
+            v.extreme_bg_color
+        };
+        let ink = if chosen { v.selection.stroke.color } else { v.text_color() };
+        let painter = ui.painter();
+        painter.rect_filled(rect, 4.0, bg);
+        let image = egui::Rect::from_min_size(rect.min + vec2((TILE.x - PREVIEW.x) * 0.5, 2.0), PREVIEW);
+        painter.image(tex, image, egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), ink);
+        let size = if settings.size < 10.0 { format!("{:.1}", settings.size) } else { format!("{:.0}", settings.size) };
+        painter.text(
+            pos2(rect.center().x, rect.bottom() - 8.0),
+            egui::Align2::CENTER_CENTER,
+            size,
+            egui::FontId::proportional(11.0),
+            ink,
+        );
+        resp.on_hover_text(format!("{name}\n{source}"))
     }
 
     /// Papier, grain et pointe en image du pinceau courant.
