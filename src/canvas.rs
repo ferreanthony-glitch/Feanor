@@ -28,6 +28,7 @@ impl App {
 
         self.canvas_input(ui.ctx(), &response, rect);
         self.update_ref3d(ui.ctx());
+        self.update_text_preview(ui.ctx());
 
         let plan = self.build_plan(self.cur_frame, true, true);
         let painter = ui.painter_at(rect);
@@ -80,8 +81,10 @@ impl App {
         let shift = ui.input(|i| i.modifiers.shift);
         self.paint_guides(&painter, rect, self.hover_canvas);
         self.paint_vector_overlay(&painter, rect, shift);
+        self.paint_text_overlay(&painter);
         self.paint_stroke_tip(&painter);
         self.paint_cursor(ui.ctx(), &painter, &response);
+        self.text_edit_window(ui.ctx());
     }
 
     /// Pendant un trait : relie le dernier point posé à la pointe du stylet, pour que le trait
@@ -187,6 +190,7 @@ impl App {
                             self.begin_paint(p, pressure, pen);
                         }
                         Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline => self.shape_press(p, modifiers.shift),
+                        Tool::Text => self.text_press(p),
                         Tool::Select => self.select_press(p, *pos, modifiers.shift),
                         Tool::Camera => self.camera_press(stage, *pos),
                         Tool::Transform => self.transform_press(stage, *pos),
@@ -352,6 +356,10 @@ impl App {
         }
         if alt || matches!(self.tool, Tool::Picker | Tool::Fill) || self.tool.is_shape() {
             ctx.set_cursor_icon(CursorIcon::Crosshair);
+            return;
+        }
+        if self.tool == Tool::Text {
+            ctx.set_cursor_icon(CursorIcon::Text);
             return;
         }
         if self.tool == Tool::Ref3d {

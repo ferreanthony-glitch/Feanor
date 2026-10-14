@@ -47,9 +47,65 @@ pub enum Element {
         color: [u8; 3],
         opacity: f32,
     },
+    /// Texte (5d), modifiable avec l'outil Texte : dessiné par les contours des lettres de sa
+    /// police (voir `text.rs`).
+    Text {
+        text: String,
+        #[serde(rename = "police")]
+        font: String,
+        /// Pixels par em.
+        #[serde(rename = "taille")]
+        size: f32,
+        color: [u8; 3],
+        opacity: f32,
+        /// Placement (a, b, c, d, tx, ty) du texte mis en page en (0, 0).
+        #[serde(rename = "placement")]
+        place: [f32; 6],
+    },
+}
+
+impl Affine {
+    pub fn to_array(&self) -> [f32; 6] {
+        [self.a, self.b, self.c, self.d, self.tx, self.ty]
+    }
+
+    pub fn from_array(v: [f32; 6]) -> Affine {
+        Affine { a: v[0], b: v[1], c: v[2], d: v[3], tx: v[4], ty: v[5] }
+    }
 }
 
 impl Element {
+    /// Un texte posé en `place`.
+    pub fn text(text: String, font: String, size: f32, color: [u8; 3], place: Affine) -> Element {
+        Element::Text { text, font, size, color, opacity: 1.0, place: place.to_array() }
+    }
+
+    /// Texte : sa boîte (coins dans l'ordre) et les contours de chaque lettre, placés.
+    pub fn text_shape(&self) -> Option<([Pos2; 4], Vec<Vec<Vec<[f32; 2]>>>)> {
+        let Element::Text { text, font, size, place, .. } = self else { return None };
+        let a = Affine::from_array(*place);
+        let laid = crate::text::layout(text, font, *size);
+        let b = laid.bounds;
+        let corners = [b.left_top(), b.right_top(), b.right_bottom(), b.left_bottom()].map(|p| a.apply(p));
+        let glyphs = laid
+            .glyphs
+            .iter()
+            .map(|g| {
+                g.iter()
+                    .map(|c| {
+                        c.iter()
+                            .map(|p| {
+                                let q = a.apply(pos2(p[0], p[1]));
+                                [q.x, q.y]
+                            })
+                            .collect()
+                    })
+                    .collect()
+            })
+            .collect();
+        Some((corners, glyphs))
+    }
+
     pub fn bounds(&self) -> Rect {
         let mut r = Rect::NOTHING;
         match self {
@@ -63,13 +119,21 @@ impl Element {
                     r.extend_with(pos2(p[0], p[1]));
                 }
             }
+            Element::Text { .. } => {
+                if let Some((corners, glyphs)) = self.text_shape() {
+                    r = Rect::from_points(&corners);
+                    for p in glyphs.iter().flatten().flatten() {
+                        r.extend_with(pos2(p[0], p[1]));
+                    }
+                }
+            }
         }
         r
     }
 
     pub fn set_color(&mut self, c: [u8; 3]) {
         match self {
-            Element::Stroke { color, .. } | Element::Fill { color, .. } => *color = c,
+            Element::Stroke { color, .. } | Element::Fill { color, .. } | Element::Text { color, .. } => *color = c,
         }
     }
 
@@ -122,6 +186,14 @@ impl Element {
                 color: *color,
                 opacity: *opacity,
             },
+            Element::Text { text, font, size, color, opacity, place } => Element::Text {
+                text: text.clone(),
+                font: font.clone(),
+                size: *size,
+                color: *color,
+                opacity: *opacity,
+                place: Affine::from_array(*place).then(a).to_array(),
+            },
         }
     }
 
@@ -141,6 +213,8 @@ impl Element {
                 })
             }
             Element::Fill { contours, .. } => inside_contours(p, contours),
+            // Un texte se prend n'importe où dans sa boîte.
+            Element::Text { .. } => self.text_shape().is_some_and(|(c, _)| point_in_polygon(p, &c)),
         }
     }
 
@@ -152,6 +226,10 @@ impl Element {
                 .iter()
                 .flatten()
                 .any(|q| point_in_polygon(pos2(q[0], q[1]), lasso)),
+            Element::Text { .. } => self.text_shape().is_some_and(|(c, glyphs)| {
+                c.iter().any(|q| point_in_polygon(*q, lasso))
+                    || glyphs.iter().flatten().flatten().any(|q| point_in_polygon(pos2(q[0], q[1]), lasso))
+            }),
         }
     }
 
@@ -169,6 +247,10 @@ impl Element {
                     line
                 })
                 .collect(),
+            Element::Text { .. } => match self.text_shape() {
+                Some((c, _)) => vec![vec![c[0], c[1], c[2], c[3], c[0]]],
+                None => Vec::new(),
+            },
         }
     }
 }
@@ -426,6 +508,58 @@ pub fn render_element_clipped(raster: &mut Raster, e: &Element, clip: Rect) {
         } => {
             fill_even_odd(&mut mask, contours);
             mask.composite(raster, *color, *opacity);
+        }
+        Element::Text { color, opacity, .. } => {
+            // Lettre par lettre (règle non nulle des polices) ; les couvertures s'ajoutent, deux
+            // lettres qui se touchent ne se creusent pas.
+            if let Some((_, glyphs)) = e.text_shape() {
+                for g in &glyphs {
+                    fill_nonzero(&mut mask, g);
+                }
+            }
+            mask.composite(raster, *color, *opacity);
+        }
+    }
+}
+
+/// Remplissage à règle non nulle (celle des polices : un contour dans le même sens que celui qui
+/// l'entoure ne fait pas de trou), anticrénelé comme `fill_even_odd`.
+fn fill_nonzero(mask: &mut Mask, contours: &[Vec<[f32; 2]>]) {
+    const SUB: usize = 4;
+    let mut edges = Vec::new();
+    for c in contours.iter().filter(|c| c.len() >= 3) {
+        for i in 0..c.len() {
+            let (a, b) = (c[i], c[(i + 1) % c.len()]);
+            if a[1] != b[1] {
+                edges.push((a[0], a[1], b[0], b[1], if b[1] > a[1] { 1 } else { -1 }));
+            }
+        }
+    }
+    let ox = mask.x0 as f32;
+    let mut xs: Vec<(f32, i32)> = Vec::new();
+    for ly in 0..mask.h {
+        let row_y = (mask.y0 + ly) as f32;
+        let row = &mut mask.data[ly * mask.w..(ly + 1) * mask.w];
+        for s in 0..SUB {
+            let sy = row_y + (s as f32 + 0.5) / SUB as f32;
+            xs.clear();
+            for &(x0, y0, x1, y1, dir) in &edges {
+                if (y0 <= sy) != (y1 <= sy) {
+                    xs.push((x0 + (sy - y0) * (x1 - x0) / (y1 - y0) - ox, dir));
+                }
+            }
+            xs.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let mut winding = 0;
+            let mut start = 0.0;
+            for &(x, dir) in &xs {
+                let was = winding;
+                winding += dir;
+                if was == 0 && winding != 0 {
+                    start = x;
+                } else if was != 0 && winding == 0 {
+                    add_span(row, start, x, 1.0 / SUB as f32);
+                }
+            }
         }
     }
 }
@@ -744,7 +878,7 @@ fn densify(points: &[VPoint], step: f32) -> Vec<VPoint> {
 }
 
 /// Gomme vectorielle : coupe les traits sous le cercle (ou les retire entiers si `whole`).
-/// Les zones remplies ne sont retirées qu'en mode `whole`.
+/// Les zones remplies et les textes ne sont retirés qu'en mode `whole`.
 pub fn erase_circle(d: &mut VectorDrawing, c: Pos2, radius: f32, whole: bool) -> bool {
     let mut changed = false;
     let mut out = Vec::with_capacity(d.elements.len());
@@ -793,7 +927,7 @@ pub fn erase_circle(d: &mut VectorDrawing, c: Pos2, radius: f32, whole: bool) ->
                     })
                 }
             }
-            Element::Fill { .. } => (whole && e.hit(c, 0.0)).then(Vec::new),
+            Element::Fill { .. } | Element::Text { .. } => (whole && e.hit(c, 0.0)).then(Vec::new),
         };
         match cut {
             Some(parts) => {

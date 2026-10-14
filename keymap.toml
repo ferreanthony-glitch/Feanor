@@ -347,6 +347,11 @@ touches = []
 source = "Storyboard Pro 27 sans touche par défaut : DRAWING_POLYLINE_TOOL_KEY"
 
 [[raccourci]]
+action = "outil.texte"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : DRAWING_TEXT_TOOL_KEY"
+
+[[raccourci]]
 action = "outil.main"
 touches = ["H"]
 source = "proposition"

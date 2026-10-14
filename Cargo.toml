@@ -23,6 +23,8 @@ symphonia = { version = "0.5", default-features = false, features = ["wav", "pcm
 # Phase 5 (choix d'Anthony) : icônes Phosphor (police d'icônes, licence MIT) et panneaux que l'on
 # glisse, range en onglets et aimante sur les bords (licence MIT). Versions faites pour egui 0.31.
 egui-phosphor = "0.9"
+# Texte (5d) : lecture des polices (noms, contours des lettres). Déjà utilisé par egui.
+ttf-parser = "0.25"
 egui_dock = "0.16"
 
 # Le dessin et la composition sont du calcul pixel : même en debug on optimise,

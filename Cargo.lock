@@ -2389,6 +2389,7 @@ dependencies = [
  "serde_json",
  "symphonia",
  "toml",
+ "ttf-parser",
  "winit",
 ]
 

@@ -36,7 +36,9 @@ use crate::vector::VectorDrawing;
 pub const FORMAT: &str = "pelure-projet";
 /// 4 (phase 2b) : la feuille de dessin est plus grande que le cadre de la caméra (`cadre`).
 /// 5 (phase 2d) : modèles 3D (`modeles`) et repère 3D par panneau (`repere3d`).
-pub const VERSION: u32 = 5;
+/// 6 (phase 5d) : textes dans les dessins vectoriels (éléments `Text`, inconnus des versions
+/// précédentes : elles refusent le projet plutôt que de perdre ces dessins).
+pub const VERSION: u32 = 6;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Modèles 3D de repère (2d), dans le format de Pelure.

@@ -69,6 +69,10 @@ mod shapes;
 mod shapes_tests;
 mod shapetools;
 mod soundtrack;
+mod text;
+#[cfg(test)]
+mod text_tests;
+mod texttools;
 #[cfg(test)]
 mod stage_tests;
 mod storyboard;

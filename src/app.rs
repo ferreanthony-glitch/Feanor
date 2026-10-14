@@ -58,10 +58,12 @@ pub enum Tool {
     Transform,
     /// Repère 3D (2d) : tourner autour du modèle 3D du panneau.
     Ref3d,
+    /// Texte (5d).
+    Text,
 }
 
 impl Tool {
-    pub const ALL: [Tool; 14] = [
+    pub const ALL: [Tool; 15] = [
         Tool::Brush,
         Tool::Pencil,
         Tool::Eraser,
@@ -70,6 +72,7 @@ impl Tool {
         Tool::Rect,
         Tool::Ellipse,
         Tool::Polyline,
+        Tool::Text,
         Tool::Select,
         Tool::Picker,
         Tool::Pan,
@@ -94,6 +97,7 @@ impl Tool {
             Tool::Camera => "Caméra",
             Tool::Transform => "Transformer",
             Tool::Ref3d => "Repère 3D",
+            Tool::Text => "Texte",
         }
     }
 
@@ -115,6 +119,7 @@ impl Tool {
             Tool::Camera => ph::VIDEO_CAMERA,
             Tool::Transform => ph::BOUNDING_BOX,
             Tool::Ref3d => ph::CUBE,
+            Tool::Text => ph::TEXT_T,
         }
     }
 
@@ -135,6 +140,7 @@ impl Tool {
             Tool::Camera => "outil.camera",
             Tool::Transform => "outil.transformer",
             Tool::Ref3d => "outil.repere3d",
+            Tool::Text => "outil.texte",
         }
     }
 
@@ -302,6 +308,12 @@ pub struct App {
     pub(crate) shape_drag: Option<(Pos2, Pos2)>,
     /// Forme en plusieurs gestes : ligne à courber, polyligne en cours (5c).
     pub(crate) shape_edit: Option<crate::shapes::ShapeEdit>,
+    /// Texte en cours de saisie, police et taille des nouveaux textes, polices du poste (5d).
+    pub(crate) text_edit: Option<crate::texttools::TextEditState>,
+    pub(crate) text_font: String,
+    pub(crate) text_size: f32,
+    pub(crate) text_fonts: Option<Vec<String>>,
+    pub(crate) text_font_filter: String,
     pub(crate) clipboard: Vec<Element>,
     pub(crate) renderer: Renderer,
     pub(crate) thumbs: Thumbs,
@@ -347,6 +359,8 @@ impl App {
         let mut fonts = egui::FontDefinitions::default();
         egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
         cc.egui_ctx.set_fonts(fonts);
+        // Polices du poste (outil Texte) : lues sur un autre fil dès le démarrage.
+        crate::text::scan_in_background();
         if let Some(rs) = &cc.wgpu_render_state {
             let info = rs.adapter.get_info();
             eprintln!("affichage : wgpu, {} ({:?}, {:?})", info.name, info.backend, info.device_type);
@@ -443,6 +457,11 @@ impl App {
             layer_clipboard: None,
             shape_drag: None,
             shape_edit: None,
+            text_edit: None,
+            text_font: "Arial".into(),
+            text_size: 48.0,
+            text_fonts: None,
+            text_font_filter: String::new(),
             clipboard: Vec::new(),
             renderer: Renderer::new(),
             thumbs: Thumbs::default(),
@@ -1817,6 +1836,8 @@ impl App {
 
     /// Exécute une action désignée par son identifiant stable (voir `keymap::ACTIONS`).
     pub(crate) fn run_action(&mut self, action: &str) {
+        // Un texte en cours de saisie est posé avant toute commande (annuler, changer d'image…).
+        self.finish_text_edit();
         if self.workspace_action(action) {
             return;
         }
@@ -1926,6 +1947,7 @@ impl App {
                 };
                 self.set_tool(Tool::Line);
             }
+            "outil.texte" => self.set_tool(Tool::Text),
             "outil.rectangle" => self.set_tool(Tool::Rect),
             "outil.ellipse" => self.set_tool(Tool::Ellipse),
             "outil.polyligne" => self.set_tool(Tool::Polyline),
@@ -2045,6 +2067,7 @@ impl App {
     pub(crate) fn set_tool(&mut self, tool: Tool) {
         if self.tool != tool {
             self.finish_shape_edit();
+            self.finish_text_edit();
             self.end_stroke();
             self.tool = tool;
             if tool.is_shape() {

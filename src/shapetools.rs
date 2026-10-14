@@ -157,12 +157,19 @@ impl App {
         true
     }
 
-    /// Ajoute la forme au dessin courant (élément vectoriel, ou pixels sur un calque bitmap).
+    /// Ajoute la forme au dessin courant.
     pub(crate) fn commit_shape_points(&mut self, points: &[Pos2], closed: bool, filled: bool) {
+        if let Some(element) = shapes::element(points, closed, filled, self.shape.width, self.color) {
+            self.commit_element(element);
+        }
+    }
+
+    /// Ajoute un élément au dessin courant : élément vectoriel modifiable, ou pixels sur un
+    /// calque bitmap. Une étape d'annulation.
+    pub(crate) fn commit_element(&mut self, element: vector::Element) {
         if !self.layer_editable() {
             return;
         }
-        let Some(element) = shapes::element(points, closed, filled, self.shape.width, self.color) else { return };
         let kind = self.layer().kind;
         let (cel, prefix) = self.ensure_cel();
         match kind {

@@ -1086,9 +1086,9 @@ impl Document {
             for (src, o) in sources {
                 for mut e in src.vector.map(|d| d.elements).unwrap_or_default() {
                     match &mut e {
-                        crate::vector::Element::Stroke { opacity, .. } | crate::vector::Element::Fill { opacity, .. } => {
-                            *opacity *= o
-                        }
+                        crate::vector::Element::Stroke { opacity, .. }
+                        | crate::vector::Element::Fill { opacity, .. }
+                        | crate::vector::Element::Text { opacity, .. } => *opacity *= o,
                     }
                     drawing.elements.push(e);
                 }
