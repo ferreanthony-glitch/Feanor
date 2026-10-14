@@ -49,7 +49,7 @@ pub fn duration_label(frames: usize, fps: u32) -> String {
 }
 
 /// « Sc 3 · P 2 » : numéro de scène et de panneau, pour les vignettes.
-fn panel_title(doc: &Document, index: usize) -> String {
+pub(crate) fn panel_title(doc: &Document, index: usize) -> String {
     let (n, _) = doc.panel_number(index);
     format!("Sc {} · P {}", doc.scene_label(doc.panels[index].scene), n)
 }
@@ -524,7 +524,7 @@ impl App {
             };
             painter.rect_filled(rect, 4.0, bg);
             let clip = painter.with_clip_rect(rect.shrink(2.0).intersect(r));
-            if let Some(tex) = self.thumbs.texture(ui.ctx(), &self.doc, i, deadline) {
+            if let Some(tex) = self.thumbs.texture(ui.ctx(), &self.doc, i, crate::thumbs::STRIP_WIDTH, deadline) {
                 let tr = Rect::from_min_size(rect.min + vec2(3.0, 3.0), vec2(thumb_h * aspect, thumb_h));
                 clip.image(
                     tex,
@@ -813,155 +813,6 @@ impl App {
         self.doc.panels[i] = s;
         self.renderer.invalidate_all();
         self.status = format!("{} : {}", panel_long_title(&self.doc, i), duration_label(n, fps));
-    }
-
-    // ------------------------------------------------------------------ vue « vignettes » (action vue.planches)
-
-    /// Vue Vignettes : les panneaux en cartes, par scène. La vignette du panneau choisi est le
-    /// dessin lui-même, à travers la caméra : on y dessine directement (6e). Les textes sous les
-    /// vignettes se replient.
-    pub(crate) fn panels_view(&mut self, ui: &mut egui::Ui) {
-        use egui_phosphor::regular as ph;
-        ui.horizontal(|ui| {
-            ui.add_space(6.0);
-            let open = self.layout.card_text;
-            let label = format!("{}  Textes", if open { ph::CARET_DOWN } else { ph::CARET_RIGHT });
-            if ui
-                .selectable_label(open, label)
-                .on_hover_text("Afficher ou replier l'action et le dialogue sous les vignettes")
-                .clicked()
-            {
-                self.layout.card_text = !open;
-            }
-            ui.label(
-                RichText::new("On dessine directement dans la vignette du panneau choisi ; double-clic sur un titre : l'animer.")
-                    .small()
-                    .weak(),
-            );
-        });
-        let card_w = 250.0;
-        let thumb_w = card_w - 12.0;
-        let thumb_h = thumb_w * self.doc.frame[1] as f32 / self.doc.frame[0].max(1) as f32;
-        let card_h = thumb_h + if self.layout.card_text { 120.0 } else { 34.0 };
-        let fps = self.doc.fps;
-        let deadline = std::time::Instant::now() + crate::thumbs::THUMB_TIME;
-        let mut clicked = None;
-        let mut double = None;
-        egui::ScrollArea::vertical()
-            .id_salt("planches")
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                ui.add_space(6.0);
-                // Une rangée de cartes par scène, sous son titre (et celui de la séquence).
-                let mut run_start = 0;
-                while run_start < self.doc.panels.len() {
-                    let (start, end) = self.doc.scene_run(run_start);
-                    let scene = self.doc.panels[start].scene;
-                    let mut header = format!("Scène {}", self.doc.scene_label(scene));
-                    if self.doc.sequence_run(start).0 == start {
-                        let seq = self.doc.sequence_of(start);
-                        header = format!("Séquence {}  ·  {header}", self.doc.sequence_label(seq));
-                    }
-                    ui.horizontal(|ui| {
-                        ui.add_space(8.0);
-                        ui.label(RichText::new(header).heading());
-                    });
-                    ui.add_space(4.0);
-                    ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing = vec2(14.0, 14.0);
-                    ui.add_space(6.0);
-                    for i in start..end {
-                        let (rect, resp) = ui.allocate_exact_size(vec2(card_w, card_h), Sense::click());
-                        if resp.clicked() {
-                            clicked = Some(i);
-                        }
-                        if resp.double_clicked() {
-                            double = Some(i);
-                        }
-                        if !ui.is_rect_visible(rect) {
-                            continue;
-                        }
-                        let visuals = ui.visuals();
-                        let painter = ui.painter_at(rect);
-                        let selected = i == self.cur_panel;
-                        painter.rect_filled(rect, 6.0, Color32::from_gray(if selected { 66 } else { 52 }));
-                        if selected {
-                            painter.rect_stroke(
-                                rect,
-                                6.0,
-                                Stroke::new(2.0_f32, visuals.selection.stroke.color),
-                                StrokeKind::Inside,
-                            );
-                        }
-                        let tr = Rect::from_min_size(rect.min + vec2(6.0, 6.0), vec2(thumb_w, thumb_h));
-                        painter.rect_filled(tr, 0.0, Color32::from_gray(30));
-                        if selected {
-                            // Le dessin lui-même, à travers la caméra du panneau.
-                            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(tr).id_salt("vignette_vive"));
-                            self.card_canvas(&mut child);
-                        } else if let Some(tex) = self.thumbs.texture(ui.ctx(), &self.doc, i, deadline) {
-                            painter.image(
-                                tex,
-                                tr,
-                                Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
-                                Color32::WHITE,
-                            );
-                        }
-                        let visuals = ui.visuals();
-                        let panel = &self.doc.panels[i];
-                        let mut y = tr.bottom() + 6.0;
-                        painter.text(
-                            pos2(rect.left() + 8.0, y),
-                            Align2::LEFT_TOP,
-                            panel_title(&self.doc, i),
-                            FontId::proportional(14.0),
-                            visuals.strong_text_color(),
-                        );
-                        painter.text(
-                            pos2(rect.right() - 8.0, y + 2.0),
-                            Align2::RIGHT_TOP,
-                            duration_label(panel.frame_count(), fps),
-                            FontId::monospace(11.0),
-                            visuals.weak_text_color(),
-                        );
-                        y += 22.0;
-                        for (label, text) in [("Action", &panel.action), ("Dialogue", &panel.dialogue)] {
-                            if !self.layout.card_text || text.trim().is_empty() {
-                                continue;
-                            }
-                            let galley = painter.layout(
-                                format!("{label} : {text}"),
-                                FontId::proportional(12.0),
-                                visuals.text_color(),
-                                card_w - 16.0,
-                            );
-                            let height = galley.size().y;
-                            painter.galley(pos2(rect.left() + 8.0, y), galley, visuals.text_color());
-                            y += height + 4.0;
-                        }
-                    }
-                    });
-                    ui.add_space(16.0);
-                    run_start = end;
-                }
-            });
-        if let Some(i) = clicked {
-            self.select_panel(i);
-        }
-        if let Some(i) = double {
-            self.enter_animation(i);
-        }
-    }
-
-    /// Le dessin dans la vignette choisie : vue à travers la caméra du panneau, cadrée sur la
-    /// vignette ; la vue du dessin en grand est rendue telle quelle ensuite.
-    fn card_canvas(&mut self, ui: &mut egui::Ui) {
-        let (view, camera_view, canvas_rect) = (self.view, self.camera_view, self.canvas_rect);
-        self.camera_view = true;
-        self.in_card = true;
-        self.canvas_panel(ui);
-        self.in_card = false;
-        (self.view, self.camera_view, self.canvas_rect) = (view, camera_view, canvas_rect);
     }
 
     // ------------------------------------------------------------------ fiche du plan

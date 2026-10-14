@@ -466,6 +466,8 @@ pub struct Structure {
     pub guides: Vec<Guide>,
     pub paper: [u8; 3],
     pub fps: u32,
+    /// Notes de la planche (vue Vignettes, phase 7).
+    pub board: crate::board::Board,
 }
 
 pub struct Document {
@@ -491,6 +493,8 @@ pub struct Document {
     pub models: HashMap<u64, Arc<crate::model3d::Model3d>>,
     /// Guides de perspective du projet.
     pub guides: Vec<Guide>,
+    /// Notes de la planche (vue Vignettes, phase 7).
+    pub board: crate::board::Board,
     next_id: u64,
 }
 
@@ -518,6 +522,7 @@ impl Document {
             sounds: HashMap::new(),
             models: HashMap::new(),
             guides: Vec::new(),
+            board: Default::default(),
             next_id: 1,
         };
         let seq = doc.new_sequence();
@@ -560,6 +565,7 @@ impl Document {
             sounds,
             models: HashMap::new(),
             guides: structure.guides,
+            board: structure.board,
             next_id: max_id + 1,
         };
         doc.normalize();
@@ -646,6 +652,7 @@ impl Document {
             guides: self.guides.clone(),
             paper: self.paper,
             fps: self.fps,
+            board: self.board.clone(),
         }
     }
 
@@ -658,6 +665,7 @@ impl Document {
             guides: std::mem::replace(&mut self.guides, s.guides),
             paper: std::mem::replace(&mut self.paper, s.paper),
             fps: std::mem::replace(&mut self.fps, s.fps),
+            board: std::mem::replace(&mut self.board, s.board),
         }
     }
 
@@ -911,6 +919,64 @@ impl Document {
         let id = moved.id;
         self.panels.insert(at, moved);
         Some(self.normalize_keeping(id))
+    }
+
+    /// Déplace les panneaux `ids` (gardés dans l'ordre du film) dans la scène `scene`, devant le
+    /// panneau `before` (un id ; aucun : à la fin de la scène). Un panneau visé qui fait partie
+    /// du déplacement cède la place au suivant. Renvoie l'indice du premier panneau déplacé, ou
+    /// rien si rien n'a changé.
+    pub fn move_panels(&mut self, ids: &[u64], scene: u64, before: Option<u64>) -> Option<usize> {
+        if self.scene(scene).is_none() {
+            return None;
+        }
+        let moving = |p: &Panel| ids.contains(&p.id);
+        // Panneau devant lequel poser le groupe (aucun : tout à la fin du film).
+        let anchor = match before.and_then(|b| self.panels.iter().position(|p| p.id == b)) {
+            Some(i) => self.panels[i..].iter().find(|p| !moving(p)).map(|p| p.id),
+            None => {
+                let last = self.panels.iter().rposition(|p| p.scene == scene)?;
+                self.panels[last + 1..].iter().find(|p| !moving(p)).map(|p| p.id)
+            }
+        };
+        let before_order: Vec<(u64, u64)> = self.panels.iter().map(|p| (p.id, p.scene)).collect();
+        let mut moved: Vec<Panel> = Vec::new();
+        let mut kept: Vec<Panel> = Vec::new();
+        for p in std::mem::take(&mut self.panels) {
+            if moving(&p) {
+                moved.push(p);
+            } else {
+                kept.push(p);
+            }
+        }
+        if moved.is_empty() {
+            self.panels = kept;
+            return None;
+        }
+        let first = moved[0].id;
+        for p in &mut moved {
+            p.scene = scene;
+        }
+        let at = anchor.and_then(|a| kept.iter().position(|p| p.id == a)).unwrap_or(kept.len());
+        kept.splice(at..at, moved);
+        self.panels = kept;
+        let index = self.normalize_keeping(first);
+        let after: Vec<(u64, u64)> = self.panels.iter().map(|p| (p.id, p.scene)).collect();
+        (after != before_order).then_some(index)
+    }
+
+    /// Retire les panneaux `ids` ; il en reste toujours au moins un (le dernier n'est pas retiré).
+    /// Renvoie l'indice du panneau à rendre courant, ou rien si rien n'a été retiré.
+    pub fn remove_panels(&mut self, ids: &[u64]) -> Option<usize> {
+        let first = self.panels.iter().position(|p| ids.contains(&p.id))?;
+        // Tous visés : le premier panneau du film reste.
+        let spared = self.panels.iter().all(|p| ids.contains(&p.id)).then(|| self.panels[0].id);
+        let before = self.panels.len();
+        self.panels.retain(|p| !ids.contains(&p.id) || Some(p.id) == spared);
+        if self.panels.len() == before {
+            return None;
+        }
+        let next = self.panels[first.min(self.panels.len() - 1)].id;
+        Some(self.normalize_keeping(next))
     }
 
     /// Coupe le panneau `index` à son image `at` : il garde [0, at) ; un nouveau panneau de la

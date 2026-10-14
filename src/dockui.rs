@@ -85,7 +85,7 @@ impl App {
             Pane::Canvas => {
                 ui.painter().rect_filled(ui.max_rect(), 0.0, Color32::from_gray(42));
                 if self.mode == Mode::Storyboard && self.board_view == BoardView::Panels {
-                    self.panels_view(ui);
+                    self.board_view(ui);
                 } else {
                     self.canvas_panel(ui);
                 }

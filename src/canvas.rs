@@ -157,8 +157,10 @@ impl App {
             self.view.pan += response.drag_delta();
         }
 
-        let on_canvas =
-            |pos: Pos2| rect.contains(pos) && ctx.layer_id_at(pos) == Some(response.layer_id);
+        // Partie visible seulement (une vignette de la planche peut dépasser de la vue).
+        let on_canvas = |pos: Pos2| {
+            rect.contains(pos) && response.interact_rect.contains(pos) && ctx.layer_id_at(pos) == Some(response.layer_id)
+        };
 
         for event in &events {
             match event {

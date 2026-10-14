@@ -188,6 +188,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
         guides: Vec::new(),
         paper: manifest.paper,
         fps: manifest.fps.max(1),
+        board: Default::default(),
     };
     let mut shots = manifest.shots;
     if shots.is_empty() {

@@ -4,6 +4,10 @@ mod app;
 mod audio;
 #[cfg(test)]
 mod audio_tests;
+mod board;
+#[cfg(test)]
+mod board_tests;
+mod boardui;
 mod brush;
 mod brushtex;
 #[cfg(test)]

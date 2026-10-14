@@ -266,6 +266,11 @@ pub struct App {
     pub(crate) camera_view: bool,
     /// Le dessin est affiché dans la vignette choisie de la vue Vignettes (6e).
     pub(crate) in_card: bool,
+    /// Planche de la vue Vignettes (7) : zoom, décalage, panneaux choisis (ids), geste en cours.
+    pub(crate) board_zoom: f32,
+    pub(crate) board_pan: Vec2,
+    pub(crate) board_sel: Vec<u64>,
+    pub(crate) board_drag: Option<crate::boardui::BoardDrag>,
     /// Hors-champ estompé sur la feuille.
     pub(crate) camera_mask: bool,
     /// Fenêtre « Vue de dessus » (profondeur des calques) et son glisser en cours.
@@ -453,6 +458,10 @@ impl App {
             ref3d: Default::default(),
             camera_view: false,
             in_card: false,
+            board_zoom: 1.0,
+            board_pan: Vec2::ZERO,
+            board_sel: Vec::new(),
+            board_drag: None,
             camera_mask: true,
             top_view: false,
             top_drag: None,
@@ -1982,6 +1991,10 @@ impl App {
                 self.vsel = None;
                 self.drop_bitmap_selection();
             }
+            // Sur la planche (vue Vignettes), le zoom et l'ajustement sont ceux de la planche.
+            "vue.zoom_avant" if self.board_shown() => self.board_zoom_step(1.25),
+            "vue.zoom_arriere" if self.board_shown() => self.board_zoom_step(1.0 / 1.25),
+            "vue.ajuster" | "vue.reinit_zoom" if self.board_shown() => self.board_fit(),
             "vue.zoom_avant" => self.zoom_step(1.25),
             "vue.zoom_arriere" => self.zoom_step(1.0 / 1.25),
             "vue.plein_ecran" => {

@@ -40,7 +40,8 @@ pub const FORMAT: &str = "pelure-projet";
 /// précédentes : elles refusent le projet plutôt que de perdre ces dessins).
 /// 7 (phase 6f) : calques de toute la scène (`toute_la_scene`) ; une version précédente en ferait
 /// des calques séparés qui partagent un même dessin.
-pub const VERSION: u32 = 7;
+/// 8 (phase 7) : notes de la planche (`planche`), qu'une version précédente perdrait.
+pub const VERSION: u32 = 8;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Modèles 3D de repère (2d), dans le format de Pelure.
@@ -73,6 +74,16 @@ struct Manifest {
     /// Modèles 3D de repère (format 5).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     modeles: Vec<ModelEntry>,
+    /// Notes de la planche (format 8) : traits libres de la vue Vignettes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    planche: Vec<NoteEntry>,
+}
+
+/// Un trait de note : couleur et points (x, y, rayon), en coordonnées de la planche.
+#[derive(Serialize, Deserialize)]
+struct NoteEntry {
+    couleur: [u8; 3],
+    points: Vec<[f32; 3]>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -654,6 +665,12 @@ fn manifest_of(doc: &Document) -> Manifest {
                 nom: doc.models[id].name.clone(),
             })
             .collect(),
+        planche: doc
+            .board
+            .strokes
+            .iter()
+            .map(|s| NoteEntry { couleur: s.color, points: s.points.iter().map(|p| [p.x, p.y, p.r]).collect() })
+            .collect(),
     }
 }
 
@@ -777,6 +794,22 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
             .collect(),
         paper: manifest.papier,
         fps: manifest.cadence.max(1),
+        board: crate::board::Board {
+            strokes: manifest
+                .planche
+                .into_iter()
+                .map(|n| crate::board::NoteStroke {
+                    color: n.couleur,
+                    points: n
+                        .points
+                        .into_iter()
+                        .filter(|p| p.iter().all(|v| v.is_finite()))
+                        .map(|[x, y, r]| crate::vector::VPoint { x, y, r: r.clamp(0.1, 200.0) })
+                        .collect(),
+                })
+                .filter(|s| !s.points.is_empty())
+                .collect(),
+        },
     };
     for seq in manifest.sequences {
         structure.sequences.push(Sequence {

@@ -43,9 +43,9 @@ pub struct Layout {
     pub command_bar: bool,
     #[serde(rename = "barre_outils")]
     pub tool_bar: bool,
-    /// Vue Vignettes : textes (action, dialogue) sous chaque vignette (6e).
-    #[serde(rename = "textes_vignettes")]
-    pub card_text: bool,
+    /// Vue Vignettes : largeur des vignettes sur la planche (7).
+    #[serde(rename = "taille_vignettes")]
+    pub card_size: f32,
 }
 
 impl Default for Layout {
@@ -62,7 +62,7 @@ impl Default for Layout {
             top_view: false,
             command_bar: true,
             tool_bar: true,
-            card_text: true,
+            card_size: 260.0,
         }
     }
 }
@@ -73,6 +73,11 @@ impl Layout {
         self.sheet_width = self.sheet_width.clamp(160.0, 900.0);
         self.montage_height = self.montage_height.clamp(140.0, 1200.0);
         self.timeline_height = self.timeline_height.clamp(110.0, 1200.0);
+        self.card_size = if self.card_size.is_finite() {
+            self.card_size.clamp(crate::board::CARD_MIN, crate::board::CARD_MAX)
+        } else {
+            260.0
+        };
         self.panneaux = self.panneaux.map(DockLayout::sanitized);
         self
     }
