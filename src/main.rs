@@ -38,6 +38,7 @@ mod io;
 mod keymap;
 #[cfg(test)]
 mod latency_tests;
+mod layersui;
 mod layertools;
 #[cfg(test)]
 mod keymap_tests;

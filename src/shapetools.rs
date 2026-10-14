@@ -95,7 +95,10 @@ impl App {
         if let Some((a, b)) = self.shape_drag.take() {
             let Some(kind) = self.tool.shape_kind() else { return };
             let pts = self.drag_shape_points(kind, a, b, shift);
-            if a.distance(pts[pts.len() - 1]) * self.layer_zoom() < 2.0 {
+            // Trop petite à l'écran : rien (le contour d'un rectangle revient à son départ, on
+            // mesure donc le point le plus éloigné).
+            let reach = pts.iter().map(|p| a.distance(*p)).fold(0.0, f32::max);
+            if !shapes::big_enough(reach, self.layer_zoom()) {
                 return;
             }
             if kind == ShapeKind::Line && self.shape.line_mode != LineMode::Straight {

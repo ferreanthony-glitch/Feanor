@@ -256,6 +256,8 @@ pub struct App {
     pub(crate) cam_drag: Option<CamDrag>,
     /// Transformation d'un calque à la souris (outil Transformer).
     pub(crate) layer_drag: Option<LayerDrag>,
+    /// Vignettes des calques (panneau Calques, 6c).
+    pub(crate) layer_thumbs: crate::layersui::LayerThumbs,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
     pub(crate) ref3d: crate::ref3dtool::Ref3dState,
     /// Vue à travers la caméra du panneau (sinon : la feuille, avec le cadre tracé).
@@ -442,6 +444,7 @@ impl App {
             guides: GuideState::default(),
             cam_drag: None,
             layer_drag: None,
+            layer_thumbs: Default::default(),
             ref3d: Default::default(),
             camera_view: false,
             camera_mask: true,

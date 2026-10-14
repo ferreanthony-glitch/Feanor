@@ -102,6 +102,12 @@ pub fn second_bend_through(a: Pos2, c1: Pos2, b: Pos2, p: Pos2) -> Pos2 {
     )
 }
 
+/// Une forme tracée qui s'éloigne de `reach` pixels du dessin de son point de départ est-elle
+/// assez grande pour être gardée (au moins 2 pixels d'écran au zoom `zoom`) ?
+pub fn big_enough(reach: f32, zoom: f32) -> bool {
+    reach * zoom >= 2.0
+}
+
 /// Le point `p` referme-t-il la polyligne (assez près de son premier point, à `tol` près) ?
 pub fn closes(points: &[Pos2], p: Pos2, tol: f32) -> bool {
     points.len() >= 3 && points[0].distance(p) <= tol

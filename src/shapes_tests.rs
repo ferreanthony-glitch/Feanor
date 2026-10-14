@@ -50,6 +50,14 @@ fn snapping_and_squares() {
     let r = shapes::rect_points(pos2(10.0, 10.0), pos2(0.0, 5.0));
     assert_eq!(r.len(), 5);
     assert_eq!(r[0], r[4]);
+    // Un rectangle revient à son départ : sa taille se mesure au point le plus éloigné.
+    // Tracé du coin haut gauche vers le bas droit : le dernier point du contour est le départ.
+    let a = pos2(0.0, 5.0);
+    let r = shapes::rect_points(a, pos2(10.0, 10.0));
+    let reach = r.iter().map(|p| a.distance(*p)).fold(0.0, f32::max);
+    assert!(shapes::big_enough(reach, 0.4), "rectangle de 10 × 5 à 40 % : gardé");
+    assert!(!shapes::big_enough(a.distance(r[4]), 1.0), "(l'ancienne mesure le jetait)");
+    assert!(!shapes::big_enough(3.0, 0.5));
     let e = shapes::ellipse_points(pos2(0.0, 0.0), pos2(20.0, 10.0));
     assert!(e.iter().all(|p| ((p.x - 10.0) / 10.0).powi(2) + ((p.y - 5.0) / 5.0).powi(2) - 1.0 < 1e-3));
 }
