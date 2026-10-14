@@ -10,6 +10,8 @@ use crate::fill::{self, FillSettings};
 use crate::history::{Edit, History, Nav};
 use crate::io;
 use crate::keymap::{self, Keymap};
+use crate::pixsel::Floating;
+use crate::pixtools::{BDrag, BSelection};
 use crate::project;
 use crate::raster::{premultiply, unpremultiply, Tile, TILE};
 use crate::render::{self, Plan, PlanItem, Renderer};
@@ -173,6 +175,13 @@ pub struct App {
     pub(crate) verase: Option<VectorErase>,
     pub(crate) vsel: Option<VSelection>,
     pub(crate) vdrag: Option<VDrag>,
+    /// Sélection dans un dessin bitmap, et geste en cours avec l'outil Sélection.
+    pub(crate) bsel: Option<BSelection>,
+    pub(crate) bdrag: Option<BDrag>,
+    /// Sélection bitmap au rectangle (sinon au lasso).
+    pub(crate) select_rect: bool,
+    /// Zone bitmap copiée.
+    pub(crate) pixel_clipboard: Option<Floating>,
     pub(crate) shape_drag: Option<(Pos2, Pos2)>,
     pub(crate) clipboard: Vec<Element>,
     pub(crate) renderer: Renderer,
@@ -273,6 +282,10 @@ impl App {
             verase: None,
             vsel: None,
             vdrag: None,
+            bsel: None,
+            bdrag: None,
+            select_rect: false,
+            pixel_clipboard: None,
             shape_drag: None,
             clipboard: Vec::new(),
             renderer: Renderer::new(),
@@ -663,6 +676,9 @@ impl App {
         if self.vdrag.is_some() {
             self.finish_vdrag(false);
         }
+        if self.bdrag.is_some() {
+            self.finish_bdrag();
+        }
         self.shape_drag = None;
     }
 
@@ -838,6 +854,7 @@ impl App {
     /// Retire le dessin courant et toutes ses expositions ; la suite du calque recule.
     pub(crate) fn delete_image(&mut self) {
         self.end_stroke();
+        self.drop_bitmap_selection();
         let (li, f) = (self.cur_layer, self.cur_frame);
         if f >= self.layer().frames.len() {
             return;
@@ -855,6 +872,7 @@ impl App {
     /// Vide le dessin courant sans toucher à la timeline.
     pub(crate) fn clear_image(&mut self) {
         self.end_stroke();
+        self.drop_bitmap_selection();
         let Some(id) = self.cel_here() else { return };
         let Some(c) = self.doc.cels.get_mut(&id) else { return };
         if let Some(d) = c.vector.as_mut() {
@@ -957,6 +975,8 @@ impl App {
     pub(crate) fn undo(&mut self) {
         self.cancel_montage_drag();
         self.end_stroke();
+        // Une zone bitmap déplacée est d'abord reposée : l'annulation défait alors ce déplacement.
+        self.drop_bitmap_selection();
         let mut nav = Nav {
             panel: self.cur_panel,
             layer: self.cur_layer,
@@ -971,6 +991,7 @@ impl App {
     pub(crate) fn redo(&mut self) {
         self.cancel_montage_drag();
         self.end_stroke();
+        self.drop_bitmap_selection();
         let mut nav = Nav {
             panel: self.cur_panel,
             layer: self.cur_layer,
@@ -1133,6 +1154,8 @@ impl App {
         self.verase = None;
         self.vsel = None;
         self.vdrag = None;
+        self.bsel = None;
+        self.bdrag = None;
         self.playing = false;
         self.stop_audio();
         self.sel_clip = None;
@@ -1420,24 +1443,50 @@ impl App {
             "fichier.quitter" => self.request(Pending::Quit),
             "edition.annuler" => self.undo(),
             "edition.retablir" => self.redo(),
+            "edition.couper" if self.bsel.is_some() => self.bitmap_cut(),
             "edition.couper" => self.cut_selection(),
+            "edition.copier" if self.bsel.is_some() => {
+                self.bitmap_copy();
+            }
             "edition.copier" => {
                 self.copy_selection();
             }
-            "edition.coller" => self.paste(),
+            "edition.coller" => {
+                if self.layer().kind == LayerKind::Bitmap && self.pixel_clipboard.is_some() {
+                    self.bitmap_paste();
+                } else if self.layer().kind == LayerKind::Bitmap && !self.clipboard.is_empty() {
+                    self.status = "Des éléments vectoriels se collent dans un calque vectoriel.".into();
+                } else if self.layer().kind == LayerKind::Vector && self.clipboard.is_empty() && self.pixel_clipboard.is_some() {
+                    self.status = "Une zone bitmap se colle dans un calque bitmap.".into();
+                } else {
+                    self.paste();
+                }
+            }
             "edition.supprimer" => {
                 if let Some(id) = self.sel_clip.filter(|&id| board && self.doc.clip(id).is_some()) {
                     self.delete_clip(id);
+                } else if self.bsel.is_some() {
+                    self.bitmap_erase(true);
                 } else if self.tool == Tool::Select && self.vsel.is_some() {
                     self.delete_selection();
                 } else {
                     self.clear_image();
                 }
             }
+            "dessin.supprimer_hors_selection" => {
+                if self.bsel.is_some() {
+                    self.bitmap_erase(false);
+                } else if self.vsel.is_some() {
+                    self.delete_unselected();
+                } else {
+                    self.status = "Rien de sélectionné : rien à garder.".into();
+                }
+            }
             "edition.tout_selectionner" => self.select_all(),
             "edition.tout_deselectionner" => {
                 self.end_stroke();
                 self.vsel = None;
+                self.drop_bitmap_selection();
             }
             "vue.zoom_avant" => self.zoom_step(1.25),
             "vue.zoom_arriere" => self.zoom_step(1.0 / 1.25),
@@ -1475,6 +1524,8 @@ impl App {
             "outil.main" => self.set_tool(Tool::Pan),
             "outil.taille_plus" => self.resize_brush(1.15),
             "outil.taille_moins" => self.resize_brush(1.0 / 1.15),
+            "selection.miroir_h" if self.bsel.is_some() => self.bitmap_flip(true),
+            "selection.miroir_v" if self.bsel.is_some() => self.bitmap_flip(false),
             "selection.miroir_h" => self.flip_selection(true),
             "selection.miroir_v" => self.flip_selection(false),
             "lecture.basculer" => self.toggle_play(),
@@ -1665,6 +1716,7 @@ impl eframe::App for App {
         }
         self.tick_playback(ctx);
         self.validate_selection();
+        self.validate_bitmap_selection();
         self.update_title(ctx);
         self.thumbs.prune(&self.doc);
         self.thumbs.pending = false;

@@ -62,7 +62,7 @@ pub(crate) enum VDrag {
 /// Rayon de prise des poignées, en pixels d'écran.
 const HANDLE_GRAB: f32 = 9.0;
 
-fn transform_for(handle: Handle, s: Pos2, p: Pos2, b: Rect, shift: bool) -> Affine {
+pub(crate) fn transform_for(handle: Handle, s: Pos2, p: Pos2, b: Rect, shift: bool) -> Affine {
     let ratio = |num: f32, den: f32| {
         if den.abs() < 1e-3 {
             return 1.0;
@@ -140,7 +140,11 @@ impl App {
         }
     }
 
+    /// Rectangle de la sélection courante (bitmap ou vectorielle), pour les poignées.
     pub(crate) fn selection_bounds(&self) -> Option<Rect> {
+        if self.bsel.is_some() {
+            return self.bitmap_selection_bounds();
+        }
         let sel = self.vsel.as_ref()?;
         let d = self.drawing(sel.cel)?;
         let r = sel
@@ -405,12 +409,12 @@ impl App {
     // ------------------------------------------------------------------ sélection
 
     pub(crate) fn select_press(&mut self, p: Pos2, screen: Pos2, shift: bool) {
-        self.end_stroke();
-        self.playing = false;
-        if self.layer().kind != LayerKind::Vector {
-            self.status = "La sélection agit sur les calques vectoriels.".into();
+        if self.layer().kind == LayerKind::Bitmap {
+            self.bitmap_select_press(p, screen, shift);
             return;
         }
+        self.end_stroke();
+        self.playing = false;
         let Some(cel) = self.cel_here() else {
             self.vdrag = Some(VDrag::Lasso(vec![p]));
             return;
@@ -566,6 +570,18 @@ impl App {
         });
     }
 
+    /// Garde seulement les éléments sélectionnés (« effacer hors de la sélection »).
+    pub(crate) fn delete_unselected(&mut self) {
+        self.edit_selection(|d, items| {
+            let mut idx = items.clone();
+            idx.sort_unstable();
+            idx.dedup();
+            idx.retain(|&i| i < d.elements.len());
+            d.elements = idx.iter().map(|&i| d.elements[i].clone()).collect();
+            *items = (0..d.elements.len()).collect();
+        });
+    }
+
     pub(crate) fn recolor_selection(&mut self) {
         let color = self.color;
         self.edit_selection(|d, items| {
@@ -625,6 +641,7 @@ impl App {
 
     pub(crate) fn select_all(&mut self) {
         if self.layer().kind != LayerKind::Vector {
+            self.bitmap_select_all();
             return;
         }
         let Some(cel) = self.cel_here() else { return };

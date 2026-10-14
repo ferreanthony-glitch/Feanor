@@ -274,6 +274,52 @@ impl Affine {
     pub fn width_factor(&self) -> f32 {
         (self.a * self.d - self.b * self.c).abs().sqrt()
     }
+
+    /// `self` puis `next`.
+    pub fn then(&self, next: &Affine) -> Affine {
+        Affine {
+            a: next.a * self.a + next.b * self.c,
+            b: next.a * self.b + next.b * self.d,
+            c: next.c * self.a + next.d * self.c,
+            d: next.c * self.b + next.d * self.d,
+            tx: next.a * self.tx + next.b * self.ty + next.tx,
+            ty: next.c * self.tx + next.d * self.ty + next.ty,
+        }
+    }
+
+    /// Transformation inverse (`None` si elle écrase tout sur une ligne).
+    pub fn inverse(&self) -> Option<Affine> {
+        let det = self.a * self.d - self.b * self.c;
+        if det.abs() < 1e-8 {
+            return None;
+        }
+        let (a, b, c, d) = (self.d / det, -self.b / det, -self.c / det, self.a / det);
+        Some(Affine {
+            a,
+            b,
+            c,
+            d,
+            tx: -(a * self.tx + b * self.ty),
+            ty: -(c * self.tx + d * self.ty),
+        })
+    }
+
+    /// Rectangle englobant de `r` transformé.
+    pub fn apply_rect(&self, r: Rect) -> Rect {
+        Rect::from_points(&[r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom()].map(|p| self.apply(p)))
+    }
+}
+
+/// Couverture (0 à 1) d'un ou plusieurs polygones (règle pair-impair), anticrénelée, sur la partie
+/// de l'image qu'ils recouvrent : (x0, y0, largeur, hauteur, couvertures ligne par ligne).
+pub fn polygon_coverage(contours: &[Vec<[f32; 2]>], width: usize, height: usize) -> Option<(usize, usize, usize, usize, Vec<f32>)> {
+    let pts: Vec<Pos2> = contours.iter().flatten().map(|p| pos2(p[0], p[1])).collect();
+    let mut mask = Mask::new(Rect::from_points(&pts).expand(1.0), width, height)?;
+    fill_even_odd(&mut mask, contours);
+    for v in &mut mask.data {
+        *v = v.min(1.0);
+    }
+    Some((mask.x0, mask.y0, mask.w, mask.h, mask.data))
 }
 
 // ---------------------------------------------------------------------------------- rendu

@@ -86,7 +86,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("outil.taille_moins", "Pinceau plus fin", true, true),
     act("selection.miroir_h", "Retourner la sélection horizontalement", true, false),
     act("selection.miroir_v", "Retourner la sélection verticalement", true, false),
-    act("dessin.supprimer_hors_selection", "Effacer ce qui est hors de la sélection", false, false),
+    act("dessin.supprimer_hors_selection", "Effacer ce qui est hors de la sélection", true, false),
     act("dessin.aplatir", "Aplatir le dessin", false, false),
     act("dessin.aimanter_contour", "Aimanter au contour", false, false),
     act("dessin.remplir_zones_auto", "Remplir automatiquement les zones fermées", false, false),
@@ -506,7 +506,8 @@ impl Keymap {
                 Ok(user_bindings) => {
                     let redefined: Vec<String> = user_bindings.iter().map(|b| b.action.clone()).collect();
                     bindings.retain(|b| !redefined.contains(&b.action));
-                    bindings.extend(user_bindings);
+                    // Placés devant : en cas de touche partagée, le fichier personnel l'emporte.
+                    bindings.splice(0..0, user_bindings);
                 }
                 Err(e) => warnings.push(format!("fichier de raccourcis illisible, raccourcis par défaut utilisés : {e}")),
             }

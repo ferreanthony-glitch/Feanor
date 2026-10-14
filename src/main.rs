@@ -14,6 +14,10 @@ mod keymap;
 #[cfg(test)]
 mod keymap_tests;
 mod panels;
+mod pixsel;
+#[cfg(test)]
+mod pixsel_tests;
+mod pixtools;
 mod project;
 mod raster;
 mod render;

@@ -321,7 +321,6 @@ source = "Storyboard Pro 27 : DRAWING_FLIP_VERTICAL_KEY"
 action = "dessin.supprimer_hors_selection"
 touches = ["Maj+Suppr", "Maj+Retour arrière"]
 source = "Storyboard Pro 27 : DRAWING_DELETE_NON_SELECTION_KEY, DRAWING_DELETE_NON_SELECTION_BACKSPACE_KEY"
-etat = "non implémenté"
 
 [[raccourci]]
 action = "dessin.aplatir"

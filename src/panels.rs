@@ -358,9 +358,64 @@ impl App {
         }
     }
 
+    /// Options de l'outil Sélection sur un calque bitmap.
+    fn bitmap_selection_ui(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut self.select_rect, false, "Lasso");
+            ui.selectable_value(&mut self.select_rect, true, "Rectangle");
+        });
+        let has = self.bsel.is_some();
+        ui.label(match self.bsel.as_ref().map(|s| s.lifted.is_some()) {
+            None => "Rien de sélectionné.",
+            Some(false) => "Zone sélectionnée.",
+            Some(true) => "Zone soulevée : elle sera posée en quittant la sélection.",
+        });
+        ui.add_enabled_ui(has, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("Miroir H").clicked() {
+                    self.bitmap_flip(true);
+                }
+                if ui.button("Miroir V").clicked() {
+                    self.bitmap_flip(false);
+                }
+                if ui.button("Copier").clicked() {
+                    self.bitmap_copy();
+                }
+                if ui.button("Couper").clicked() {
+                    self.bitmap_cut();
+                }
+                if ui.button("Effacer dedans").clicked() {
+                    self.bitmap_erase(true);
+                }
+                if ui.button("Effacer autour").clicked() {
+                    self.bitmap_erase(false);
+                }
+                if ui.button("Poser").on_hover_text("Repose la zone et quitte la sélection (Échap)").clicked() {
+                    self.drop_bitmap_selection();
+                }
+            });
+        });
+        ui.horizontal(|ui| {
+            if ui.button("Tout sélectionner").clicked() {
+                self.bitmap_select_all();
+            }
+            if ui
+                .add_enabled(self.pixel_clipboard.is_some(), egui::Button::new("Coller"))
+                .clicked()
+            {
+                self.bitmap_paste();
+            }
+        });
+        note(
+            ui,
+            "Glisser : lasso ou rectangle (Maj : ajouter). Dans la zone : déplacer. Poignées : \
+             échelle (Maj : proportionnelle), rotation (Maj : par 15°). Échap ou autre outil : poser.",
+        );
+    }
+
     fn selection_ui(&mut self, ui: &mut egui::Ui) {
         if self.layer().kind != LayerKind::Vector {
-            note(ui, "La sélection agit sur les calques vectoriels.");
+            self.bitmap_selection_ui(ui);
             return;
         }
         let n = self.vsel.as_ref().map_or(0, |s| s.items.len());

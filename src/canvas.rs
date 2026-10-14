@@ -5,6 +5,7 @@ use eframe::egui::{
 
 use crate::app::{App, Tool};
 use crate::document::LayerKind;
+use crate::pixtools::BDrag;
 use crate::vtools::{Handle, VDrag};
 
 const ACCENT: Color32 = Color32::from_rgb(70, 165, 255);
@@ -155,6 +156,8 @@ impl App {
                         *end = p;
                     } else if self.vdrag.is_some() {
                         self.select_drag(p, mods.shift);
+                    } else if self.bdrag.is_some() {
+                        self.bitmap_drag(p, mods.shift);
                     } else if self.picking {
                         self.pick_color(p);
                     }
@@ -170,6 +173,9 @@ impl App {
                     }
                     if self.vdrag.is_some() {
                         self.finish_vdrag(mods.shift);
+                    }
+                    if self.bdrag.is_some() {
+                        self.finish_bdrag();
                     }
                     self.end_stroke();
                     self.picking = false;
@@ -199,25 +205,41 @@ impl App {
             painter.add(Shape::line(pts, Stroke::new(width, self.preview_color())));
         }
 
-        if let Some(VDrag::Lasso(points)) = &self.vdrag {
-            if points.len() >= 2 {
-                let pts: Vec<Pos2> = points.iter().map(|p| to_s(*p)).collect();
-                painter.add(Shape::closed_line(pts.clone(), Stroke::new(2.5_f32, Color32::from_black_alpha(120))));
-                painter.add(Shape::closed_line(pts, Stroke::new(1.0_f32, ACCENT)));
-            }
+        // Lasso ou rectangle en cours de tracé (vectoriel ou bitmap).
+        let drawing_lasso: Option<Vec<Pos2>> = match (&self.vdrag, &self.bdrag) {
+            (Some(VDrag::Lasso(points)), _) | (_, Some(BDrag::Lasso { points, .. })) => Some(points.clone()),
+            (_, Some(BDrag::Rect { from, to, .. })) => Some(crate::pixsel::rect_polygon(Rect::from_two_pos(*from, *to))),
+            _ => None,
+        };
+        if let Some(points) = drawing_lasso.filter(|p| p.len() >= 2) {
+            let pts: Vec<Pos2> = points.iter().map(|p| to_s(*p)).collect();
+            painter.add(Shape::closed_line(pts.clone(), Stroke::new(2.5_f32, Color32::from_black_alpha(120))));
+            painter.add(Shape::closed_line(pts, Stroke::new(1.0_f32, ACCENT)));
         }
 
-        let (Some(sel), Some(b)) = (&self.vsel, self.selection_bounds()) else {
+        // Contour de la zone bitmap sélectionnée : pointillés noirs et blancs.
+        for poly in self.bitmap_selection_outline() {
+            let mut pts: Vec<Pos2> = poly.into_iter().map(to_s).collect();
+            if let Some(&first) = pts.first() {
+                pts.push(first);
+            }
+            painter.add(Shape::line(pts.clone(), Stroke::new(1.0_f32, Color32::WHITE)));
+            painter.extend(Shape::dashed_line(&pts, Stroke::new(1.0_f32, Color32::BLACK), 5.0, 5.0));
+        }
+
+        let Some(b) = self.selection_bounds() else {
             return;
         };
-        if let Some(d) = self.drawing(sel.cel) {
-            for e in sel.items.iter().filter_map(|&i| d.elements.get(i)) {
-                for line in e.outline() {
-                    if line.len() >= 2 {
-                        painter.add(Shape::line(
-                            line.into_iter().map(to_s).collect(),
-                            Stroke::new(1.0_f32, ACCENT.gamma_multiply(0.85)),
-                        ));
+        if let Some(sel) = &self.vsel {
+            if let Some(d) = self.drawing(sel.cel) {
+                for e in sel.items.iter().filter_map(|&i| d.elements.get(i)) {
+                    for line in e.outline() {
+                        if line.len() >= 2 {
+                            painter.add(Shape::line(
+                                line.into_iter().map(to_s).collect(),
+                                Stroke::new(1.0_f32, ACCENT.gamma_multiply(0.85)),
+                            ));
+                        }
                     }
                 }
             }
