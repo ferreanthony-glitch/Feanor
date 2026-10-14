@@ -95,6 +95,8 @@ deux calques vectoriels restent vectoriels, sinon le résultat est bitmap ; les 
 
 - **Tablette** : la pression module la taille et/ou l'opacité. Elle passe par Windows Ink : sur une
   Wacom, l'option « Utiliser Windows Ink » doit être cochée dans les propriétés de la tablette.
+  Sur le dessin, la croix de Windows marque la pointe sans retard, le cercle autour montre la
+  taille du pinceau (Affichage > « Croix du système sur le pinceau » pour n'avoir que le cercle).
 - **Pinceaux texturés** (calque bitmap, panneau Outils) : liste de réglages (pinceau rond, crayon à
   papier, craie grasse, encre, gommes) ; « Papier » et « Grain » donnent un grain fixe sur le
   dessin, que la couleur remplit quand on appuie. « Importer… » lit un fichier de pinceaux Toon

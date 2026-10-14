@@ -372,13 +372,18 @@ impl App {
             return;
         }
         let Some(brush) = self.current_brush() else { return };
-        ctx.set_cursor_icon(CursorIcon::None);
+        // La croix du système suit le stylet sans retard ; le cercle (taille du pinceau), dessiné
+        // dans l'image, arrive une image plus tard.
+        let system = self.settings.system_cursor;
+        ctx.set_cursor_icon(if system { CursorIcon::Crosshair } else { CursorIcon::None });
         let r = (brush.size * 0.5 * self.layer_zoom()).max(1.5);
         painter.circle_stroke(p, r, Stroke::new(1.0_f32, Color32::from_black_alpha(170)));
         painter.circle_stroke(p, r + 1.0, Stroke::new(1.0_f32, Color32::from_white_alpha(150)));
-        let cross = Stroke::new(1.0_f32, Color32::from_gray(230));
-        painter.line_segment([p - vec2(4.0, 0.0), p + vec2(4.0, 0.0)], cross);
-        painter.line_segment([p - vec2(0.0, 4.0), p + vec2(0.0, 4.0)], cross);
+        if !system {
+            let cross = Stroke::new(1.0_f32, Color32::from_gray(230));
+            painter.line_segment([p - vec2(4.0, 0.0), p + vec2(4.0, 0.0)], cross);
+            painter.line_segment([p - vec2(0.0, 4.0), p + vec2(0.0, 4.0)], cross);
+        }
         if self.layer().kind == LayerKind::Vector {
             // Petit repère « V » : le trait sera vectoriel.
             painter.text(

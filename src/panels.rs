@@ -190,6 +190,16 @@ impl App {
                 ui.separator();
                 self.workspace_menu(ui);
                 self.action_item(ui, "Plein écran", "vue.plein_ecran");
+                if ui
+                    .checkbox(&mut self.settings.system_cursor, "Croix du système sur le pinceau")
+                    .on_hover_text(
+                        "Affiche la croix de Windows à la pointe, en plus du cercle du pinceau : elle suit \
+                         le stylet sans retard (le cercle, dessiné par Pelure, arrive une image plus tard).",
+                    )
+                    .changed()
+                {
+                    let _ = self.settings.save();
+                }
                 ui.separator();
                 ui.horizontal(|ui| {
                     ui.label("Couleur du papier");

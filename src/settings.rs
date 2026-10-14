@@ -16,6 +16,10 @@ pub struct Settings {
     /// AUTO_SAVE_DELAY dans les préférences Storyboard Pro d'Anthony.
     #[serde(default = "default_autosave", rename = "copie_secours_minutes")]
     pub autosave_minutes: u32,
+    /// Croix du système sur le dessin, en plus du cercle du pinceau : Windows la déplace dès que
+    /// le stylet bouge, sans attendre l'image suivante (le cercle, dessiné par Pelure, la suit).
+    #[serde(default = "yes", rename = "curseur_systeme")]
+    pub system_cursor: bool,
     /// Pelure d'oignon.
     #[serde(default, rename = "pelure")]
     pub onion: OnionSettings,
@@ -31,11 +35,16 @@ fn default_autosave() -> u32 {
     1
 }
 
+fn yes() -> bool {
+    true
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Settings {
             ffmpeg: None,
             autosave_minutes: default_autosave(),
+            system_cursor: true,
             onion: OnionSettings::default(),
             layout: None,
             workspaces: Vec::new(),

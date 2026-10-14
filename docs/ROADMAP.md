@@ -149,6 +149,13 @@ par-dessus l'image existante) ; gomme vectorielle et déplacement de sélection 
 zone. File d'affichage ramenée de 2 images à 1. Reste à confirmer au stylet par Anthony (le
 retard ressenti à l'écran ne se mesure pas d'ici).
 
+Retour d'Anthony : « le curseur a un léger retard sur le stylet ». Cause : avec les pinceaux, Pelure
+cachait le curseur de Windows et dessinait son propre cercle dans l'image (une à deux images de
+retard). Désormais la croix du système reste affichée à la pointe (Windows la déplace sans
+attendre l'image), avec le cercle de la taille du pinceau autour ; réglage « Croix du système sur
+le pinceau » (menu Affichage, activé par défaut). Piste suivante si le trait lui-même semble en
+retard : affichage sans attente de la synchro (risque de déchirement, à essayer).
+
 ## Phase 4 — Confort ✅
 
 - ✅ 4a. Copie de secours et récupération après plantage : toutes les minutes par défaut
