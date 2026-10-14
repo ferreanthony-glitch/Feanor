@@ -27,13 +27,11 @@ pub(crate) struct LayerDrag {
 }
 
 impl App {
-    /// Boîte du contenu du calque courant à l'image courante, en coordonnées de son dessin (le
-    /// cadre de la caméra s'il est vide).
-    fn content_box(&self) -> Rect {
-        let fallback = self.doc.frame_rect();
-        let Some(cel) = self.cel_here().and_then(|id| self.doc.cels.get(&id)) else {
-            return fallback;
-        };
+    /// Boîte du contenu du calque `li` à l'image `frame`, en coordonnées de son dessin (rien s'il
+    /// est vide). Bitmap : à la tuile près.
+    pub(crate) fn layer_content_box(&self, li: usize, frame: usize) -> Option<Rect> {
+        let id = self.layers().get(li)?.cel_at(frame)?;
+        let cel = self.doc.cels.get(&id)?;
         let r = match &cel.vector {
             Some(d) => d.elements.iter().fold(Rect::NOTHING, |r, e| r.union(e.bounds())),
             None => (0..cel.raster.tiles.len())
@@ -44,11 +42,13 @@ impl App {
                 })
                 .fold(Rect::NOTHING, |r, t| r.union(t)),
         };
-        if r.is_finite() && r.width() > 0.0 && r.height() > 0.0 {
-            r
-        } else {
-            fallback
-        }
+        (r.is_finite() && r.width() > 0.0 && r.height() > 0.0).then_some(r)
+    }
+
+    /// Boîte du contenu du calque courant à l'image courante (le cadre de la caméra s'il est vide).
+    fn content_box(&self) -> Rect {
+        self.layer_content_box(self.cur_layer, self.cur_frame)
+            .unwrap_or_else(|| self.doc.frame_rect())
     }
 
     /// Coins de la boîte sur la feuille (haut-gauche, haut-droite, bas-droite, bas-gauche).

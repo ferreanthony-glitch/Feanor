@@ -155,6 +155,12 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   (`App::layer_seen`), le trait tombe donc sous le curseur quelle que soit la position de la
   caméra à l'image courante.
 - Manifeste : `"profondeur"` par calque, absent si 0. Fusion refusée entre profondeurs différentes.
+- **Vue de dessus** (`topview.rs`, 2c-3) : un calque à la distance D = 1 + z est un trait ; un
+  point x de son dessin y est à X = D × (x − centre de la feuille). La caméra est en X = C − centre,
+  son champ s'ouvre de D × cadre / zoom. Ce sténopé redonne exactement le défilement multiplan
+  (testé) : la vue montre ce que filme la caméra. Distances au-delà de 12 posées au bord haut.
+  Glisser un calque : copie de la structure au départ, une étape d'annulation au lâcher (comme
+  l'outil Transformer) ; le cadrage de la vue est figé pendant le glisser.
 
 ## Caméra (depuis 2b-2)
 

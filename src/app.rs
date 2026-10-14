@@ -182,6 +182,9 @@ pub struct App {
     pub(crate) camera_view: bool,
     /// Hors-champ estompé sur la feuille.
     pub(crate) camera_mask: bool,
+    /// Fenêtre « Vue de dessus » (profondeur des calques) et son glisser en cours.
+    pub(crate) top_view: bool,
+    pub(crate) top_drag: Option<crate::topview::TopDrag>,
     pub(crate) default_exposure: usize,
     pub(crate) playing: bool,
     pub(crate) play_montage: bool,
@@ -315,6 +318,8 @@ impl App {
             layer_drag: None,
             camera_view: false,
             camera_mask: true,
+            top_view: false,
+            top_drag: None,
             default_exposure: 1,
             playing: false,
             play_montage: false,
@@ -1882,6 +1887,7 @@ impl App {
             "camera.cle_fin" => self.add_camera_key(self.frame_count().saturating_sub(1)),
             "camera.cle_supprimer" => self.remove_camera_key_here(),
             "camera.cle_adoucir" => self.toggle_camera_key_smooth(),
+            "vue.dessus" => self.top_view = !self.top_view,
             "vue.table_lumineuse" => {
                 self.light_table = !self.light_table;
                 self.status = format!("Table lumineuse : {}.", if self.light_table { "oui" } else { "non" });
@@ -2106,6 +2112,7 @@ impl eframe::App for App {
             });
 
         self.dialogs(ctx);
+        self.top_view_window(ctx);
         self.scrub_audio();
         if self.thumbs.pending {
             ctx.request_repaint();

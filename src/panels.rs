@@ -174,6 +174,7 @@ impl App {
                 ui.separator();
                 self.action_item(ui, "Vue à travers la caméra", "camera.vue");
                 self.action_item(ui, "Estomper le hors-champ", "camera.masque");
+                self.action_item(ui, "Vue de dessus (profondeur des calques)", "vue.dessus");
                 self.action_item(ui, "Réinitialiser la caméra du panneau", "camera.reinitialiser");
                 ui.separator();
                 self.action_item(ui, "Guide : afficher et utiliser", "guide.activer");

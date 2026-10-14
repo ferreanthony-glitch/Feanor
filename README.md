@@ -80,6 +80,8 @@ modifiés, Ctrl+R annule la transformation, et on peut continuer à dessiner sur
 **Multiplan** : le réglage « Profondeur » d'un calque (sous Visible) fixe sa distance. Quand la
 caméra se déplace, un décor à 1 défile deux fois moins vite, un premier plan à −0,3 défile plus
 vite ; à 0, rien ne change. Visible à l'écran, en vue caméra, à l'export et dans les vignettes.
+Affichage > Vue de dessus montre la caméra, son champ et chaque calque à sa distance : glisser un
+calque vers le haut l'éloigne, vers le bas le rapproche (Maj : par pas de 0,1).
 
 Calques (menu Calques, panneau de droite) : W copie le calque courant et X le colle dans un autre
 panneau (avec ses dessins et sa timeline, ajustée à la durée du panneau). Alt+L verrouille le

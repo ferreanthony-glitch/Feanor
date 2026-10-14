@@ -42,6 +42,9 @@ mod storyboard;
 mod tests;
 mod thumbs;
 mod timeline;
+mod topview;
+#[cfg(test)]
+mod topview_tests;
 #[cfg(test)]
 mod transform_tests;
 mod vector;

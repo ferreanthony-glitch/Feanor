@@ -643,6 +643,11 @@ action = "camera.cle_adoucir"
 touches = []
 source = "Pelure (adoucissement par clé ; Storyboard Pro règle les courbes autrement, non vérifié)"
 
+[[raccourci]]
+action = "vue.dessus"
+touches = []
+source = "Pelure (fenêtre Vue de dessus ; aucune commande équivalente dans sb_shortcuts.xml de Storyboard Pro 27)"
+
 # ------------------------------------------------------------------------------------ Table lumineuse et guides
 # Les touches des guides viennent du module « Guides » de Storyboard Pro 27
 # (Plugins\GuideTool\resources\sb_shortcuts.xml, valeurs « Toon Boom Storyboard »).

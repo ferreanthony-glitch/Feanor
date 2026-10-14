@@ -143,6 +143,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("camera.cle_supprimer", "Retirer l'image clé de caméra de l'image courante", true, false),
     act("camera.cle_adoucir", "Adoucir le mouvement à cette image clé", true, false),
     act("vue.table_lumineuse", "Table lumineuse (autres calques estompés)", true, false),
+    act("vue.dessus", "Vue de dessus (profondeur des calques)", true, false),
     act("guide.activer", "Guide de perspective : afficher et utiliser", true, false),
     act("guide.aligner", "Guide : aligner les traits", true, false),
     act("guide.verrouiller", "Guide : verrouiller", true, false),
