@@ -24,6 +24,12 @@ qui appartient à Toon Boom) dans l'installation locale :
   Les fichiers personnels ajoutent un enfant `<flavour key="…" id="Toon Boom Storyboard"/>`.
 - Certaines entrées portent une `condition` (ex. `not express`, `hasPaintUnpaintedTool`). On a
   supposé qu'elles s'appliquent à Storyboard Pro 27 complet.
+- **Module « Guides »** (relevé en 1c) : `Plugins\GuideTool\resources\sb_shortcuts.xml` ajoute 4
+  touches pour la saveur « Toon Boom Storyboard » : G (activer le guide), Maj+A (aligner sur le
+  guide), Maj+L (verrouiller), Maj+G (lignes de référence). Elles sont dans `keymap.toml`. Maj+A,
+  jusque-là proposé pour « scène précédente », a donc été rendu au guide.
+- Certaines entrées ont des valeurs différentes selon la saveur (`<valueList flavour="…">`). On prend
+  toujours « Toon Boom Storyboard » (ex. table lumineuse : aucune touche, alors que Harmony a Maj+L).
 
 Le même dossier contient `shortcuts.xml` (629 entrées : vue nodale, feuille d'exposition…), qui
 semble être celui de Harmony. **Il n'a pas été utilisé** : impossible de savoir avec certitude ce que

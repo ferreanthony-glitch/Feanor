@@ -7,6 +7,7 @@ use crate::audio::AudioEngine;
 use crate::brush::{BrushSettings, StrokeMode, StrokeState};
 use crate::document::{fresh_layer_id, CelId, Document, Layer, LayerKind, Panel};
 use crate::fill::{self, FillSettings};
+use crate::guides::GuideState;
 use crate::history::{Edit, History, Nav};
 use crate::io;
 use crate::keymap::{self, Keymap};
@@ -148,6 +149,12 @@ pub struct App {
     pub(crate) canvas_rect: Rect,
     pub(crate) ppp: f32,
     pub(crate) onion: OnionSettings,
+    /// Table lumineuse : les calques autres que le calque courant sont estompés.
+    pub(crate) light_table: bool,
+    /// Opacité gardée par les calques estompés (0 à 1).
+    pub(crate) light_table_strength: f32,
+    /// Guides de perspective : affichage, alignement, verrouillage, glisser d'un point.
+    pub(crate) guides: GuideState,
     pub(crate) default_exposure: usize,
     pub(crate) playing: bool,
     pub(crate) play_montage: bool,
@@ -262,6 +269,9 @@ impl App {
                 after: 1,
                 opacity: 0.45,
             },
+            light_table: false,
+            light_table_strength: 0.3,
+            guides: GuideState::default(),
             default_exposure: 1,
             playing: false,
             play_montage: false,
@@ -384,12 +394,19 @@ impl App {
 
     // ------------------------------------------------------------------ composition
 
-    /// Ce qu'il faut empiler pour afficher l'image `frame` du plan courant.
+    /// Ce qu'il faut empiler pour afficher l'image `frame` du plan courant. `onion` : affichage
+    /// de travail (pelure d'oignon et table lumineuse), sinon l'image telle qu'elle est.
     pub(crate) fn build_plan(&self, frame: usize, onion: bool, paper: bool) -> Plan {
         let mut items = Vec::new();
+        // Table lumineuse : les autres calques sont estompés, le calque courant reste net.
+        let washed = onion && self.light_table && !self.playing;
         for (li, layer) in self.layers().iter().enumerate() {
             if !layer.visible {
                 continue;
+            }
+            let mut opacity = layer.opacity.clamp(0.0, 1.0);
+            if washed && li != self.cur_layer {
+                opacity *= self.light_table_strength.clamp(0.05, 1.0);
             }
             if onion && self.onion.enabled && !self.playing && li == self.cur_layer {
                 let (before, after) = onion_neighbours(layer, frame, self.onion.before, self.onion.after);
@@ -412,7 +429,7 @@ impl App {
             if let Some(cel) = layer.cel_at(frame) {
                 items.push(PlanItem {
                     cel,
-                    opacity: (layer.opacity.clamp(0.0, 1.0) * 255.0).round() as u8,
+                    opacity: (opacity * 255.0).round() as u8,
                     tint: None,
                 });
             }
@@ -615,6 +632,7 @@ impl App {
         if erase && self.cel_here().is_none() {
             return;
         }
+        self.begin_guided_stroke(p);
         match (self.layer().kind, erase) {
             (LayerKind::Vector, true) => self.begin_vector_erase(p, pen),
             (LayerKind::Vector, false) => self.begin_vector_stroke(p, pressure, pen),
@@ -679,6 +697,7 @@ impl App {
         if self.bdrag.is_some() {
             self.finish_bdrag();
         }
+        self.guides.stroke = None;
         self.shape_drag = None;
     }
 
@@ -1560,6 +1579,30 @@ impl App {
             "calque.supprimer" => self.delete_layer(),
             "calque.dessus" => self.select_layer(self.cur_layer + 1),
             "calque.dessous" => self.select_layer(self.cur_layer.saturating_sub(1)),
+            "vue.table_lumineuse" => {
+                self.light_table = !self.light_table;
+                self.status = format!("Table lumineuse : {}.", if self.light_table { "oui" } else { "non" });
+            }
+            "guide.activer" => {
+                self.guides.enabled = !self.guides.enabled;
+                if self.guides.enabled && self.doc.guides.is_empty() {
+                    self.status = "Aucun guide dans ce projet : ajoutes-en un (Outils > Guides).".into();
+                }
+            }
+            "guide.aligner" => {
+                self.guides.align = !self.guides.align;
+                if self.guides.align {
+                    self.guides.enabled = true;
+                }
+                self.status = format!("Traits alignés sur le guide : {}.", if self.guides.align { "oui" } else { "non" });
+            }
+            "guide.verrouiller" => {
+                self.guides.locked = !self.guides.locked;
+                self.status = format!("Guide verrouillé : {}.", if self.guides.locked { "oui" } else { "non" });
+            }
+            "guide.lignes_reference" => self.guides.reference = !self.guides.reference,
+            "guide.gomme" => self.guides.eraser = !self.guides.eraser,
+            "guide.curseur_complet" => self.guides.full_cursor = !self.guides.full_cursor,
             "son.importer" => self.import_sound(None, None),
             "son.nouvelle_piste" => self.new_audio_track(),
             "son.couper" => self.split_sound_at_playhead(),

@@ -24,6 +24,7 @@ use crate::document::{
     fresh_layer_id, AudioTrack, Cel, CelId, Document, Layer, LayerKind, Panel, Scene, Sequence, Sound, SoundClip,
     Structure,
 };
+use crate::guides::Guide;
 use crate::io::encode_png;
 use crate::raster::Raster;
 use crate::vector::VectorDrawing;
@@ -49,6 +50,9 @@ struct Manifest {
     sons: Vec<SoundEntry>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pistes_son: Vec<TrackEntry>,
+    /// Guides de perspective (ajouté en 1c).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    guides: Vec<Guide>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -394,6 +398,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                     .collect(),
             })
             .collect(),
+        guides: doc.guides.clone(),
     }
 }
 
@@ -534,7 +539,12 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
         return Err("le projet ne contient aucun panneau".into());
     }
     let written = cels.keys().map(|&id| (id, 0)).collect();
-    let doc = Document::from_parts(w, h, manifest.cadence.max(1), manifest.papier, structure, cels, sounds);
+    let mut doc = Document::from_parts(w, h, manifest.cadence.max(1), manifest.papier, structure, cels, sounds);
+    doc.guides = manifest
+        .guides
+        .into_iter()
+        .filter(|g| (1..=3).contains(&g.points.len()) && g.points.iter().flatten().all(|v| v.is_finite()))
+        .collect();
     Ok(Loaded { doc, written, warnings })
 }
 

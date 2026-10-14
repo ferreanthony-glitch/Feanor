@@ -1,6 +1,6 @@
 # Architecture de Pelure
 
-Document tenu à jour à chaque étape. Dernière mise à jour : phase 1b (octobre 2026).
+Document tenu à jour à chaque étape. Dernière mise à jour : phase 1c (octobre 2026).
 
 ## Vue d'ensemble
 
@@ -45,6 +45,27 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   séquences et de scènes, panneaux, pistes son). Les noms « Dessin / Vignettes » évitent la confusion
   avec la « scène » du découpage.
 
+## Sélection bitmap, table lumineuse, guides
+
+- **Sélection bitmap** (`pixsel.rs` : calcul, testé sans interface ; `pixtools.rs` : outil). Une
+  zone = un masque anticrénelé (lasso ou rectangle, réunion avec Maj). Au premier déplacement, les
+  pixels sont **soulevés** : on garde le dessin sans eux (`base`), le dessin d'avant (`before`) et
+  les pixels eux-mêmes. Chaque mouvement repose les pixels d'origine avec la transformation totale
+  (interpolation bilinéaire ; déplacement arrondi au pixel, donc sans flou). En quittant la
+  sélection (Échap, autre outil, autre image, Ctrl+Z…), l'annulation reçoit une seule étape : les
+  tuiles qui diffèrent de `before`.
+- **Table lumineuse** : dans l'affichage de travail seulement (pas à l'export ni dans les
+  vignettes), les calques autres que le calque courant sont composés avec une opacité réduite.
+  C'est notre lecture de la « Light Table » de Storyboard Pro (autres calques estompés) ; la table
+  lumineuse de TVPaint, qui montre d'autres images, correspond plutôt à notre pelure d'oignon.
+- **Guides** (`guides.rs`) : un guide = 1, 2 ou 3 points de fuite en pixels du dessin, enregistrés
+  dans le manifeste (`"guides"`). Réglages d'affichage (actif, aligné, verrouillé, lignes de
+  référence) gardés dans l'application, pas dans le projet. Trait aligné : au départ du trait on
+  attend 6 pixels d'écran de mouvement, puis on choisit la direction du guide la plus proche (vers un
+  point de fuite, verticale, horizontale) et chaque point du trait est projeté sur cette droite.
+  Les types de guides de Storyboard Pro autres que la perspective à 1, 2 ou 3 points (lignes,
+  isométrique…) ne sont pas faits.
+
 ## Son
 
 - **Décodage** (`audio.rs`, bibliothèque symphonia) : à l'import ou à l'ouverture, le fichier entier
@@ -75,6 +96,7 @@ MonFilm/
   sons/<id>.<ext>     fichier son importé, copié tel quel (wav, mp3, flac, ogg)
 ```
 
+- Le champ `guides` (1c) suit la même règle.
 - Les champs `sons` et `pistes_son` ont été ajoutés en 1b sans changer de version : absents, ils
   valent « aucun son », et une version précédente de Pelure les ignore (elle perdrait le son en
   réenregistrant, mais rien d'autre).
@@ -99,8 +121,10 @@ MonFilm/
   on n'en renomme jamais : les fichiers personnels de l'utilisateur restent valables.
 - `keymap.toml` (racine du dépôt) est le fichier par défaut, **intégré au programme**. Un fichier
   personnel (à côté de l'exécutable, sinon `%APPDATA%\Pelure\keymap.toml`) remplace action par action
-  ce qu'il redéfinit. Menu « Aide > Modifier / Recharger les raccourcis ».
-- Les raccourcis viennent de Storyboard Pro 27 (65, par défaut) et des réglages perso (8). Ceux dont
+  ce qu'il redéfinit ; si une de ses touches est aussi prise par le fichier par défaut, la sienne
+  l'emporte (et l'aide signale le conflit). Menu « Aide > Modifier / Recharger les raccourcis ».
+- Les raccourcis viennent de Storyboard Pro 27 (65 par défaut, plus 4 du module Guides) et des
+  réglages perso (8). Ceux dont
   la fonction n'existe pas encore sont gardés avec `etat = "non implémenté"`. Les ajouts de Pelure
   sont marqués `source = "proposition"`.
 - Lettres = caractère tapé ; chiffres et ponctuation = position physique (clavier AZERTY).

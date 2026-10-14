@@ -409,12 +409,12 @@ source = "proposition (second raccourci)"
 
 [[raccourci]]
 action = "scene.precedente"
-touches = ["Maj+A"]
-source = "proposition (PREV_SHOT_KEY n'a pas de touche par défaut)"
+touches = ["Ctrl+PgPréc"]
+source = "proposition (PREV_SHOT_KEY n'a pas de touche par défaut ; Maj+A est pris par le module Guides)"
 
 [[raccourci]]
 action = "scene.suivante"
-touches = ["Maj+F"]
+touches = ["Ctrl+PgSuiv"]
 source = "proposition (NEXT_SHOT_KEY n'a pas de touche par défaut)"
 
 [[raccourci]]
@@ -580,6 +580,45 @@ source = "proposition"
 action = "calque.dessous"
 touches = ["Flèche bas"]
 source = "proposition"
+
+# ------------------------------------------------------------------------------------ Table lumineuse et guides
+# Les touches des guides viennent du module « Guides » de Storyboard Pro 27
+# (Plugins\GuideTool\resources\sb_shortcuts.xml, valeurs « Toon Boom Storyboard »).
+
+[[raccourci]]
+action = "vue.table_lumineuse"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : DRAWING_AUTO_LIGHT_TABLE_KEY"
+
+[[raccourci]]
+action = "guide.activer"
+touches = ["G"]
+source = "Storyboard Pro 27 (module Guides) : GuideEnabled"
+
+[[raccourci]]
+action = "guide.aligner"
+touches = ["Maj+A"]
+source = "Storyboard Pro 27 (module Guides) : AlignEnabled"
+
+[[raccourci]]
+action = "guide.verrouiller"
+touches = ["Maj+L"]
+source = "Storyboard Pro 27 (module Guides) : LockEnabled"
+
+[[raccourci]]
+action = "guide.lignes_reference"
+touches = ["Maj+G"]
+source = "Storyboard Pro 27 (module Guides) : GridEnabled"
+
+[[raccourci]]
+action = "guide.gomme"
+touches = []
+source = "Storyboard Pro 27 (module Guides) sans touche par défaut : EraserEnabled"
+
+[[raccourci]]
+action = "guide.curseur_complet"
+touches = []
+source = "Storyboard Pro 27 (module Guides) sans touche par défaut : FullDisplayEnabled"
 
 # ------------------------------------------------------------------------------------ Son
 # Storyboard Pro 27 a ces fonctions sans touche par défaut : on n'en invente pas.

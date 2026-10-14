@@ -150,6 +150,13 @@ impl App {
                 self.action_item(ui, "Remettre la vue droite", "vue.reinit_rotation");
                 self.action_item(ui, "Miroir", "vue.miroir");
                 self.action_item(ui, "Pelure d'oignon", "vue.pelure");
+                self.action_item(ui, "Table lumineuse", "vue.table_lumineuse");
+                ui.separator();
+                self.action_item(ui, "Guide : afficher et utiliser", "guide.activer");
+                self.action_item(ui, "Guide : aligner les traits", "guide.aligner");
+                self.action_item(ui, "Guide : verrouiller", "guide.verrouiller");
+                self.action_item(ui, "Guide : lignes de référence", "guide.lignes_reference");
+                ui.separator();
                 self.action_item(ui, "Plein écran", "vue.plein_ecran");
                 ui.separator();
                 ui.horizontal(|ui| {
@@ -356,6 +363,19 @@ impl App {
             let (rect, size) = (self.canvas_rect, self.canvas_size());
             self.view.rotate_around(rect, size, rect.center(), delta);
         }
+        ui.checkbox(&mut self.light_table, "Table lumineuse")
+            .on_hover_text("Les autres calques du panneau sont estompés ; le calque courant reste net.");
+        if self.light_table {
+            ui.add(
+                egui::Slider::new(&mut self.light_table_strength, 0.05..=0.8)
+                    .text("autres")
+                    .custom_formatter(|v, _| format!("{:.0} %", v * 100.0)),
+            );
+        }
+
+        ui.separator();
+        ui.heading("Guides");
+        self.guides_ui(ui);
     }
 
     /// Options de l'outil Sélection sur un calque bitmap.

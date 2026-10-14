@@ -59,6 +59,13 @@ Chaque panneau a ses calques, de deux sortes :
     supprimer. Copier, couper et coller (Ctrl+C/X/V) marchent d'un panneau à l'autre.
 - **Bitmap** (B, façon TVPaint) : peinture en pixels, avec le pinceau, le crayon à pixels nets,
   la gomme, le remplissage avec débord sous le trait et l'import d'images PNG/JPEG.
+  - L'outil Sélection y découpe une zone au lasso ou au rectangle (Maj : ajouter). On la déplace
+    en la faisant glisser (au pixel près, sans flou), ses poignées la mettent à l'échelle ou la
+    tournent, Alt+H / Alt+V la retournent. Tant que la zone reste sélectionnée, chaque
+    transformation repart de l'image d'origine : tourner deux fois ne floute pas deux fois.
+  - Suppr efface dedans, Maj+Suppr efface autour, Ctrl+C / X / V copient, coupent, collent
+    (la zone collée arrive à sa place, prête à être déplacée). Échap ou un autre outil la pose ;
+    Ctrl+Z annule toute la transformation d'un coup.
 
 Les traits vectoriels sont rendus à la résolution du projet : en zoomant très fort, on voit les pixels
 (comme à l'export), mais le trait reste modifiable.
@@ -68,6 +75,12 @@ Les traits vectoriels sont rendus à la résolution du projet : en zoomant très
 - **Tablette** : la pression module la taille et/ou l'opacité. Elle passe par Windows Ink : sur une
   Wacom, l'option « Utiliser Windows Ink » doit être cochée dans les propriétés de la tablette.
 - **Pelure d'oignon** : dessins précédents en rouge, suivants en vert.
+- **Table lumineuse** (Outils > Vue, ou menu Affichage) : les autres calques du panneau sont
+  estompés, le calque sur lequel on dessine reste net.
+- **Guides de perspective** (Outils > Guides) : 1, 2 ou 3 points de fuite, que l'on déplace à la
+  souris. G les affiche, Maj+A aligne les traits (le trait suit la fuyante, la verticale ou
+  l'horizontale la plus proche de son départ), Maj+L verrouille les points, Maj+G montre des lignes
+  de référence. Les guides sont enregistrés avec le projet.
 - **Vue** : zoom à la molette (ou 1 / 2), rotation (Maj + molette, ou V / C), miroir (M),
   déplacement (Espace + glisser).
 - **Annuler / rétablir** : 200 étapes, qui couvrent traits, vectoriel, panneaux, scènes, séquences et
@@ -109,6 +122,8 @@ ancien « plan » devient une scène d'un panneau, et le premier « Enregistrer 
 | `document.rs` | Séquences, scènes, panneaux, calques, expositions, dessins ; opérations de montage |
 | `raster.rs` | Images en tuiles de 64×64 allouées à la demande |
 | `vector.rs` | Éléments vectoriels : rendu, sélection, transformations, gomme, contours de remplissage |
+| `pixsel.rs`, `pixtools.rs` | Sélection bitmap : zones, pixels soulevés, transformations ; outil |
+| `guides.rs` | Guides de perspective : géométrie, affichage, traits alignés |
 | `brush.rs` | Moteur de pinceau : empreintes, pression, lissage |
 | `fill.rs` | Remplissage par zone et débord |
 | `render.rs` | Composition des calques et de la pelure, mise à jour partielle de l'affichage, vignettes |

@@ -5,6 +5,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::audio::Pcm;
+use crate::guides::Guide;
 use crate::raster::Raster;
 use crate::vector::VectorDrawing;
 
@@ -288,6 +289,8 @@ pub struct Document {
     pub audio_tracks: Vec<AudioTrack>,
     /// Sons importés. Comme les dessins, on n'en retire pas pendant la session.
     pub sounds: HashMap<u64, Sound>,
+    /// Guides de perspective du projet.
+    pub guides: Vec<Guide>,
     next_id: u64,
 }
 
@@ -305,6 +308,7 @@ impl Document {
             cels: HashMap::new(),
             audio_tracks: Vec::new(),
             sounds: HashMap::new(),
+            guides: Vec::new(),
             next_id: 1,
         };
         let seq = doc.new_sequence();
@@ -346,6 +350,7 @@ impl Document {
             cels,
             audio_tracks: structure.audio_tracks,
             sounds,
+            guides: Vec::new(),
             next_id: max_id + 1,
         };
         doc.normalize();

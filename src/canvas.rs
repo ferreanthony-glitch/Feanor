@@ -53,6 +53,7 @@ impl App {
         painter.add(Shape::mesh(mesh));
 
         let shift = ui.input(|i| i.modifiers.shift);
+        self.paint_guides(&painter, rect, self.hover_canvas);
         self.paint_vector_overlay(&painter, rect, shift);
         self.paint_cursor(ui.ctx(), &painter, &response);
     }
@@ -124,6 +125,11 @@ impl App {
                         continue;
                     }
                     let p = self.view.to_canvas(rect, size, *pos);
+                    // Un point de fuite du guide se déplace avec n'importe quel outil.
+                    if let Some(k) = self.guide_point_at(*pos) {
+                        self.guides.drag = Some(k);
+                        continue;
+                    }
                     if modifiers.alt || self.tool == Tool::Picker {
                         self.picking = true;
                         self.pick_color(p);
@@ -146,12 +152,19 @@ impl App {
                 }
                 Event::PointerMoved(pos) => {
                     let p = self.view.to_canvas(rect, size, *pos);
-                    if let Some(stroke) = &self.stroke {
-                        let pressure = if stroke.pen { self.pen_pressure } else { 1.0 };
-                        self.stroke_to(p, pressure);
+                    if let Some(k) = self.guides.drag {
+                        self.move_guide_point(k, p);
+                    } else if let Some(pen) = self.stroke.as_ref().map(|s| s.pen) {
+                        let pressure = if pen { self.pen_pressure } else { 1.0 };
+                        // Trait aligné sur le guide : rien tant que la direction n'est pas choisie.
+                        if let Some(q) = self.guided_point(p) {
+                            self.stroke_to(q, pressure);
+                        }
                     } else if let Some(pen) = self.erase_pen() {
                         let pressure = if pen { self.pen_pressure } else { 1.0 };
-                        self.erase_to(p, pressure);
+                        if let Some(q) = self.guided_point(p) {
+                            self.erase_to(q, pressure);
+                        }
                     } else if let Some((_, end)) = &mut self.shape_drag {
                         *end = p;
                     } else if self.vdrag.is_some() {
@@ -177,6 +190,7 @@ impl App {
                     if self.bdrag.is_some() {
                         self.finish_bdrag();
                     }
+                    self.guides.drag = None;
                     self.end_stroke();
                     self.picking = false;
                 }
@@ -187,6 +201,7 @@ impl App {
         if !primary_down {
             self.end_stroke();
             self.picking = false;
+            self.guides.drag = None;
         }
 
         self.hover_canvas = hover
@@ -272,6 +287,14 @@ impl App {
             return;
         }
         let (space, alt) = ctx.input(|i| (self.keymap.held(i, "vue.pan_libre"), i.modifiers.alt));
+        if self.guides.drag.is_some() || self.guide_point_at(p).is_some() {
+            ctx.set_cursor_icon(if self.guides.drag.is_some() {
+                CursorIcon::Grabbing
+            } else {
+                CursorIcon::Grab
+            });
+            return;
+        }
         if space || self.tool == Tool::Pan {
             ctx.set_cursor_icon(if response.dragged() {
                 CursorIcon::Grabbing

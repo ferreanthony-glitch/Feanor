@@ -8,6 +8,9 @@ mod brush;
 mod canvas;
 mod document;
 mod fill;
+mod guides;
+#[cfg(test)]
+mod guides_tests;
 mod history;
 mod io;
 mod keymap;
