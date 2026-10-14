@@ -181,6 +181,31 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   est refaite depuis l'original à chaque lâcher ; éléments vectoriels : points transformés
   (le texte prend l'affine la plus proche).
 
+## Interface de la phase 6
+
+- `toolbars.rs` : barre de commandes (`TopBottomPanel`) et barre d'outils verticale (`SidePanel`
+  de 44 points), outils groupés par `TOOL_GROUPS` ; elles ne sont pas des panneaux du dock.
+- `colorui.rs` : conversions teinte / saturation / valeur testées, curseurs dégradés.
+- `layersui.rs` : panneau Calques ; vignettes de calque rendues sur le processeur (cadre du
+  projet, 64 points de large), en cache par dessin et par `version`.
+- `brushui.rs` + `brush::stroke_preview` : l'aperçu d'un réglage est un vrai trait du moteur dans
+  une petite image (taille ramenée à la hauteur), en cache par réglage et échelle d'écran.
+- Vue Vignettes (`storyboard::panels_view`) : la vignette du panneau choisi appelle `canvas_panel`
+  dans un `Ui` enfant, en vue caméra (`in_card`) ; vue, vue caméra et rectangle du dessin sont
+  remis après. Pas de second chemin de dessin : outils, annulation et rendu sont les mêmes.
+- Affichage GPU (`gpu.rs`, `fs_display`) : en réduction, n × n lectures par pixel d'écran
+  (n = réduction / 1,5, 8 au plus), à partir des dérivées des coordonnées de texture.
+- **Calques de toute la scène** (`document.rs`, 6f) : pas de calque « hors panneau » ; chaque
+  panneau de la scène porte un exemplaire (`Layer::scene_wide = SceneWide { key, scene }`) qui
+  pointe sur le même dessin pour toutes ses images. `Document::sync_scene_layers`, appelé à chaque
+  image, accorde les exemplaires sur le modèle (celui du panneau courant, sinon le premier) et
+  retire ceux égarés dans une autre scène. Ainsi le rendu, l'export, les vignettes, la pelure
+  d'oignon et les outils n'ont rien à savoir. Les opérations qui créent une scène depuis une autre
+  (couper, copier) donnent au fond une nouvelle clé et sa propre copie du dessin
+  (`adopt_scene_layers`) ; supprimer le calque le retire de toute la scène ; il ne se fusionne pas.
+- `montagerows.rs` : rangées de la bande de montage (`Rows` : caméra, panneaux, calques, fond,
+  sons), leur dessin, leurs noms à gauche et le clic sur un calque.
+
 ## Pinceaux texturés (3d-2)
 
 - `brush.rs` : chaque empreinte calcule une couverture par pixel — disque (dureté) ou pointe en
@@ -345,11 +370,11 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - Annulation : le repère fait partie de la structure (copie au début du geste, une étape au
   lâcher, comme l'outil Caméra).
 
-## Format de projet (version 5, dossier)
+## Format de projet (version 7, dossier)
 
 ```
 MonFilm/
-  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 5, "largeur",
+  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 7, "largeur",
                       "hauteur" (feuille), "cadre": [l, h], réglages,
                       "sequences": [{ "scenes": [{ "panneaux": [{ "calques": [{ "expositions": … }]}]}]}],
                       "sons": [{"id", "nom", "fichier"}], "pistes_son": [{ "extraits": [{"son", "debut",
@@ -361,6 +386,8 @@ MonFilm/
                       triangles, positions (3 × f32) puis triangles (3 × u32), petit-boutiste
 ```
 
+- Format 7 (6f) : `toute_la_scene` sur un calque (un numéro, le même pour les exemplaires d'une
+  scène) ; le dessin partagé n'est écrit qu'une fois. Format 6 (5d) : éléments texte.
 - Format 5 (2d) : `modeles`, et `repere3d` par panneau (`modele`, `cible`, `azimut`,
   `elevation`, `distance`, `focale`, `visible`, `aretes_cachees`, `couleur`, `opacite`). Comme
   les sons, un modèle n'est écrit que s'il manque, et effacé quand plus aucun panneau ne s'en sert.
@@ -430,4 +457,6 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 | Pas d'export XML Toon Boom | format propriétaire non documenté | — | — | — |
 | Icônes Phosphor (egui-phosphor, MIT) (5a, choix d'Anthony) | jeu complet et cohérent, dans la police de l'interface | ≈ 1 Mo d'exécutable | faible | oui : `Tool::icon`, `Pane::icon` |
 | Panneaux par egui_dock 0.16 (MIT), disposition dans un format de Pelure (5b) | aimantation, onglets, panneaux flottants déjà faits et éprouvés ; format à nous pour ne pas dépendre de la version | refonte de l'affichage des panneaux | moyen : accessibilité coupée (plantage d'accesskit) | oui : le format `DockLayout` ne dépend pas de la bibliothèque |
+| Calque de toute la scène = un exemplaire par panneau, accordés à chaque image (6f) | rendu, export, vignettes, outils et annulation inchangés | une passe sur les calques à chaque image (négligeable) ; règles à suivre dans les opérations de scène | moyen : une opération de montage oubliée pourrait mélanger deux fonds (couvert par `scenelayer_tests.rs`) | oui : le fichier ne garde qu'un numéro par calque ; un vrai calque de scène pourrait le remplacer |
+| Dessin dans la vignette = le même `canvas_panel` dans un `Ui` enfant (6e) | aucun second chemin de dessin | nul | faible | oui |
 | Repère 3D : lecteur glTF et fil de fer écrits pour Pelure, sur le processeur (2d) | glTF = format ouvert que Blender exporte ; pas de bibliothèque ni de passe GPU à ajouter pour un guide en fil de fer | ≈ 900 lignes ; calcul 0,15 s par vue sur un gros décor (sur un autre fil) | faible : mauvais fichier → message | oui : affichage par la carte graphique ou rendu ombré possibles plus tard, le format `.pelure3d` ne change pas |

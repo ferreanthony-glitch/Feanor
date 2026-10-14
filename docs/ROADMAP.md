@@ -235,6 +235,36 @@ perspective = déformer en perspective (outil Perspective de Storyboard Pro).
   écran ; la fermer le remet à sa place ; sa place est retenue. Les raccourcis clavier restent ceux
   de la fenêtre principale.
 
+## Phase 6 — Une interface proche de Storyboard Pro ✅
+
+Demandée par Anthony (capture annotée de Pelure et capture de Storyboard Pro) : barre d'outils
+verticale, dessiner directement dans la vignette, replier les textes des cartes, calques dans le
+montage, calque de fond étendu à toute la scène, et la disposition générale de Storyboard Pro
+(inspiration fonctionnelle seulement : ni nom ni image de Toon Boom).
+
+- ✅ 6a. Barre de commandes en haut (fichier, édition, panneaux, vue, lecture) et barre d'outils
+  verticale à gauche, outils groupés ; nouvelle disposition : dessin | Calques et Fiche | Réglages,
+  Vue, Guides et Couleur ; montage dessous. Une disposition enregistrée avant 6a passe une fois à
+  la nouvelle. Affichage > Panneaux : chaque barre s'affiche ou se masque.
+- ✅ 6b. Panneau Couleur : teinte, saturation et valeur en curseurs dégradés, code hexadécimal,
+  nuancier.
+- ✅ 6c. Panneau Calques : vignette de chaque calque à l'image courante, œil et cadenas en icônes,
+  opacité en haut, commandes en icônes en bas.
+- ✅ 6d. Réglages des pinceaux en grille : chaque case montre le trait du réglage (tracé par le vrai
+  moteur) et sa taille ; nom et provenance au survol.
+- ✅ 6e. Vue Vignettes : la vignette du panneau choisi est le dessin lui-même, vu par la caméra, où
+  l'on dessine directement ; textes sous les vignettes repliables (« Textes »). L'affichage par la
+  carte graphique moyenne plusieurs lectures quand il réduit fort : les traits fins ne disparaissent
+  plus en vignette ou en vue très éloignée.
+- ✅ 6f. Calque de toute la scène (« + Fond », case « Toute la scène ») : chaque panneau de la
+  scène en a un exemplaire, réglé pareil, qui montre le même dessin pendant tout le panneau. Couper
+  ou copier une scène lui donne son propre fond ; un panneau qui change de scène prend le fond de
+  la nouvelle ; « rendre au panneau » laisse à chaque panneau sa copie. Format de projet 7.
+  Montage : piste Caméra au-dessus des panneaux, une piste par calque dessous (le r-ième calque de
+  chaque panneau, ses expositions), une piste Fond par scène, noms des pistes à gauche ; un clic
+  sur un calque le rend courant.
+  Pas encore : glisser des expositions dans les pistes du montage, replier les pistes.
+
 ## Raccourcis proposés, à valider
 
 Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans `keymap.toml`) :

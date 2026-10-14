@@ -30,7 +30,12 @@ ouvrir d'un double-clic).
     scène. Une scène ou une séquence peut recevoir un nom ou un numéro à soi (fiche à droite).
   - Chaque panneau a sa durée et ses champs Action / Dialogue / Notes.
   - « Lire le montage » enchaîne tout (animatique), en boucle si on veut, avec le son.
-  - Vue « Vignettes » (Maj+Tab) : les panneaux rangés par scène, avec leurs indications.
+  - Vue « Vignettes » (Maj+Tab) : les panneaux rangés par scène, avec leurs indications. On
+    dessine directement dans la vignette du panneau choisi (vue par la caméra) ; « Textes », en
+    haut, replie ou rouvre l'action et le dialogue sous les vignettes.
+  - Sous la bande : une piste par calque (le calque de chaque panneau à ce rang, ses dessins
+    exposés), une piste « Fond » par scène, et au-dessus des panneaux la piste Caméra (clés,
+    mouvements). Un clic sur un calque, dans sa piste ou dans les noms à gauche, le rend courant.
   - On dessine directement sur le panneau dans la vue « Dessin » : un nouveau dessin y est tenu
     sur toute la durée du panneau.
 - **Son** : sous les panneaux, des pistes son.
@@ -91,6 +96,13 @@ calque (cadenas) : on ne peut plus dessiner dessus. Ctrl+E le fusionne avec le c
 deux calques vectoriels restent vectoriels, sinon le résultat est bitmap ; les deux calques doivent
 être visibles et non verrouillés.
 
+Le panneau Calques montre la vignette de chaque calque à l'image courante. **« + Fond »** crée,
+tout en bas, un calque bitmap commun à toute la scène (un décor) : ce qu'on y dessine se voit dans
+chaque panneau de la scène, pendant tout le panneau. La case « Toute la scène » étend n'importe
+quel calque de la même façon, ou le rend à son panneau (chaque panneau garde alors sa copie).
+Couper ou copier une scène lui donne son propre fond ; un panneau déplacé dans une autre scène
+prend le fond de celle-ci.
+
 ## Le reste
 
 - **Tablette** : la pression module la taille et/ou l'opacité. Elle passe par Windows Ink : sur une
@@ -104,6 +116,9 @@ deux calques vectoriels restent vectoriels, sinon le résultat est bitmap ; les 
   La croix d'un onglet le ferme ; Affichage > Panneaux le fait revenir à sa place. Clic droit
   sur un onglet : « Dans une fenêtre à part », pour le poser sur un autre écran (le fermer le
   remet à sa place). Les outils sont des icônes : leur nom et leur raccourci s'affichent au survol.
+  En haut, une barre de commandes ; à gauche, la barre d'outils verticale (Affichage > Panneaux
+  pour les masquer). Couleur : teinte, saturation, valeur et nuancier. Réglages du pinceau : une
+  grille de réglages, chacun avec l'aperçu de son trait et sa taille.
 - **Formes** : Ligne (droite, courbe : tracer puis glisser pour courber ; courbe en S : deux
   glissers), Rectangle, Ellipse (Maj : carré, cercle), Polyligne (un clic par point, double-clic
   ou Entrée pour finir, clic sur le premier point pour fermer).
@@ -230,7 +245,7 @@ en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le 
 | `model3d.rs`, `view3d.rs`, `ref3dtool.rs` | Repère 3D : lecture glTF, arêtes utiles ; caméra en orbite, fil de fer, arêtes cachées ; outil et affichage |
 | `thumbs.rs` | Cache des vignettes de panneaux |
 | `history.rs` | Annuler / rétablir |
-| `project.rs` | Projet en dossier (format 5), enregistrement préparé puis écrit |
+| `project.rs` | Projet en dossier (format 7), enregistrement préparé puis écrit |
 | `recovery.rs`, `recoveryui.rs` | Copie de secours, récupération après plantage |
 | `workspace.rs`, `workspaceui.rs` | Espaces de travail, disposition retenue |
 | `dock.rs`, `dockui.rs` | Panneaux modulables : disposition (format de Pelure), contenu des onglets, fenêtres à part |
@@ -245,12 +260,15 @@ en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le 
 | `app.rs` | État de l'application, actions, raccourcis |
 | `vtools.rs` | Outils des calques vectoriels |
 | `storyboard.rs` | Bande de montage, vue vignettes, fiche du panneau |
+| `montagerows.rs` | Pistes du montage : caméra, calques, fond de scène, noms des pistes |
+| `toolbars.rs`, `colorui.rs`, `layersui.rs`, `brushui.rs` | Barres de commandes et d'outils, panneau Couleur, panneau Calques, grille des pinceaux |
 | `soundtrack.rs` | Pistes son : import, lecture synchronisée, affichage, glisser des extraits |
 | `canvas.rs`, `panels.rs`, `timeline.rs` | Interface |
 
 `cargo test --release` lance les tests (pinceau, vectoriel, remplissage, séquences/scènes/panneaux,
 annulation, projet en dossier, anciens fichiers, raccourcis, son, caméra, transformation,
-profondeur, vue de dessus, lecture, repère 3D).
+profondeur, vue de dessus, lecture, repère 3D, formes, texte, tampons, perspective, couleur,
+panneaux modulables, calques de toute la scène).
 
 ## Compilation (Windows)
 
