@@ -326,6 +326,9 @@ impl App {
                 visuals.selection.bg_fill.gamma_multiply(0.35)
             } else if self.is_chosen_layer(li) {
                 visuals.selection.bg_fill.gamma_multiply(0.18)
+            } else if self.layers()[li].folder {
+                // Dossier (13b-5) : pas de dessin, une rangée plus sombre.
+                theme::RANGEE_SOMBRE
             } else {
                 theme::RANGEE
             };

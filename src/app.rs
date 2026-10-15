@@ -31,6 +31,9 @@ use crate::vtools::{VDrag, VSelection, VectorErase, VectorStroke};
 pub(crate) const POSITION_LOCKED: &str =
     "La position de ce calque est verrouillée : on ne peut ni le déplacer ni dessiner dessus.";
 
+/// Ce qu'on dit quand un outil ou une commande de dessin vise un dossier (13b-5).
+pub(crate) const FOLDER_NOT_DRAWABLE: &str = "Un dossier ne se dessine pas : choisis un de ses calques.";
+
 /// Storyboard : on monte les plans. Animation : on est entré dans un plan.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
@@ -238,6 +241,8 @@ pub enum Pending {
 #[derive(Clone)]
 pub(crate) struct LayerClip {
     pub layer: Layer,
+    /// Calques du dossier copié (13b-5), du plus bas au plus haut ; vide pour un calque.
+    pub children: Vec<Layer>,
     pub cels: HashMap<CelId, crate::document::Cel>,
     pub panel_len: usize,
 }
@@ -777,10 +782,8 @@ impl App {
         // Multiplan : les calques en profondeur défilent selon la position de la caméra.
         let camera = self.doc.camera_seen(self.cur_panel, frame);
         for (li, layer) in self.layers().iter().enumerate() {
-            if !layer.visible {
-                continue;
-            }
-            let mut opacity = layer.opacity.clamp(0.0, 1.0);
+            // Caché (lui ou son dossier) : rien ; sinon son opacité, avec celle de son dossier.
+            let Some(mut opacity) = crate::folders::effect(self.layers(), li) else { continue };
             if washed && li != self.cur_layer {
                 opacity *= self.light_table_strength.clamp(0.05, 1.0);
             }
@@ -992,19 +995,37 @@ impl App {
     }
 
     pub(crate) fn layer_editable(&mut self) -> bool {
+        if self.layer().folder {
+            self.status = FOLDER_NOT_DRAWABLE.into();
+            return false;
+        }
         if self.layer().locked {
             let key = self.keymap.label("calque.verrouiller");
             self.status = format!("Ce calque est verrouillé ({key} pour le déverrouiller).");
+            return false;
+        }
+        if crate::folders::locked_by_folder(self.layers(), self.cur_layer) {
+            self.status = "Le dossier de ce calque est verrouillé : déverrouille-le pour dessiner.".into();
             return false;
         }
         if self.layer().position_locked {
             self.status = POSITION_LOCKED.into();
             return false;
         }
-        if self.layer().visible {
+        if crate::folders::effect(self.layers(), self.cur_layer).is_some() {
             return true;
         }
-        self.status = "Ce calque est masqué : affiche-le pour dessiner dessus.".into();
+        self.status = "Ce calque est masqué (lui ou son dossier) : affiche-le pour dessiner dessus.".into();
+        false
+    }
+
+    /// Le calque courant est un dossier : les commandes de dessins et d'expositions ne s'y
+    /// appliquent pas (le message le dit).
+    pub(crate) fn refuse_on_folder(&mut self) -> bool {
+        if self.layers().get(self.cur_layer).is_some_and(|l| l.folder) {
+            self.status = FOLDER_NOT_DRAWABLE.into();
+            return true;
+        }
         false
     }
 
@@ -1062,7 +1083,7 @@ impl App {
         let empty = crate::raster::Raster::new(self.doc.width, self.doc.height);
         let mut stencil = None;
         for (li, l) in self.layers().iter().enumerate() {
-            if li == self.cur_layer || !l.stencil || !l.visible {
+            if li == self.cur_layer || !l.stencil || crate::folders::effect(self.layers(), li).is_none() {
                 continue;
             }
             let cel = l.cel_at(self.cur_frame);
@@ -1305,6 +1326,9 @@ impl App {
 
     /// Insère un dessin vide (ou une copie du dessin courant) juste après l'exposition courante.
     pub(crate) fn new_image(&mut self, duplicate: bool) {
+        if self.refuse_on_folder() {
+            return;
+        }
         self.end_stroke();
         self.playing = false;
         let (li, f) = (self.cur_layer, self.cur_frame);
@@ -1330,6 +1354,9 @@ impl App {
     }
 
     pub(crate) fn exposure_plus(&mut self) {
+        if self.refuse_on_folder() {
+            return;
+        }
         self.end_stroke();
         let (li, f) = (self.cur_layer, self.cur_frame);
         let layer = self.layer();
@@ -1344,6 +1371,9 @@ impl App {
     }
 
     pub(crate) fn exposure_minus(&mut self) {
+        if self.refuse_on_folder() {
+            return;
+        }
         self.end_stroke();
         let (li, f) = (self.cur_layer, self.cur_frame);
         let layer = self.layer();
@@ -1367,6 +1397,9 @@ impl App {
 
     /// Retire le dessin courant et toutes ses expositions ; la suite du calque recule.
     pub(crate) fn delete_image(&mut self) {
+        if self.refuse_on_folder() {
+            return;
+        }
         self.end_stroke();
         self.drop_bitmap_selection();
         let (li, f) = (self.cur_layer, self.cur_frame);
@@ -1425,7 +1458,10 @@ impl App {
             LayerKind::Bitmap => format!("Calque {n}"),
         };
         let at = self.cur_layer + 1;
-        self.layers_mut().insert(at, Layer::new(name, kind));
+        // Au-dessus d'un calque rangé dans un dossier : dans ce dossier (13b-5).
+        let mut layer = Layer::new(name, kind);
+        layer.parent = self.layer().parent;
+        self.layers_mut().insert(at, layer);
         self.cur_layer = at;
         self.vsel = None;
         self.commit_structure(snap);
@@ -1441,16 +1477,19 @@ impl App {
         self.commit_structure(snap);
     }
 
+    /// Monte ou descend le calque courant d'un rang (Ctrl + Haut / Bas). Un dossier se déplace
+    /// avec ses calques, par-dessus le calque ou le dossier voisin ; un calque rangé qui passe le
+    /// bord de son dossier en sort (13b-5).
     pub(crate) fn move_layer(&mut self, up: bool) {
         self.end_stroke();
-        let i = self.cur_layer;
-        let j = if up { i + 1 } else { i.wrapping_sub(1) };
-        if j >= self.layers().len() {
+        let id = self.layer().id;
+        let mut layers = self.layers().to_vec();
+        if !crate::folders::move_step(&mut layers, self.cur_layer, up) {
             return;
         }
         let snap = self.snapshot();
-        self.layers_mut().swap(i, j);
-        self.cur_layer = j;
+        *self.layers_mut() = layers;
+        self.cur_layer = self.layers().iter().position(|l| l.id == id).unwrap_or(0);
         self.commit_structure(snap);
     }
 
@@ -1472,40 +1511,33 @@ impl App {
         );
     }
 
-    /// Copie le calque courant, avec ses dessins et sa timeline (W).
+    /// Copie le calque courant, avec ses dessins et sa timeline (W) ; un dossier, avec ses
+    /// calques (13b-5).
     pub(crate) fn copy_layer(&mut self) {
         let layer = self.layer().clone();
-        let cels = layer
-            .frames
+        let children: Vec<Layer> =
+            crate::folders::children_of(self.layers(), self.cur_layer).into_iter().map(|i| self.layers()[i].clone()).collect();
+        let cels = children
             .iter()
-            .flatten()
+            .chain(std::iter::once(&layer))
+            .flat_map(|l| l.frames.iter().flatten())
             .filter_map(|id| self.doc.cels.get(id).map(|c| (*id, c.clone())))
             .collect();
-        self.status = format!("Calque « {} » copié : X pour le coller dans un autre plan.", layer.name);
+        let what = if layer.folder { "Dossier" } else { "Calque" };
+        self.status = format!("{what} « {} » copié : X pour le coller dans un autre plan.", layer.name);
         self.layer_clipboard = Some(LayerClip {
             layer,
+            children,
             cels,
             panel_len: self.frame_count(),
         });
     }
 
-    /// Colle le calque copié au-dessus du calque courant (X), avec ses propres copies des dessins.
-    /// Il est coupé à la durée du panneau ; un dessin tenu jusqu'à la fin du panneau d'origine
-    /// reste tenu jusqu'à la fin de celui-ci.
-    pub(crate) fn paste_layer(&mut self) {
-        let Some(clip) = self.layer_clipboard.clone() else {
-            self.status = "Aucun calque copié (W pour copier le calque courant).".into();
-            return;
-        };
-        self.end_stroke();
-        self.drop_bitmap_selection();
-        let snap = self.snapshot();
-        let mut copies: HashMap<CelId, CelId> = HashMap::new();
-        let mut layer = Layer {
-            id: fresh_layer_id(),
-            scene_wide: None,
-            ..clip.layer.clone()
-        };
+    /// Calque collé : une copie de `source` avec ses propres copies des dessins (`copies` évite de
+    /// copier deux fois un même dessin), à la durée du plan ; un dessin tenu jusqu'à la fin du plan
+    /// d'origine reste tenu jusqu'à la fin de celui-ci.
+    fn pasted_layer(&mut self, source: &Layer, clip: &LayerClip, copies: &mut HashMap<CelId, CelId>) -> Layer {
+        let mut layer = Layer { id: fresh_layer_id(), scene_wide: None, ..source.clone() };
         for f in layer.frames.iter_mut() {
             *f = f.and_then(|old| {
                 if let Some(&c) = copies.get(&old) {
@@ -1518,7 +1550,7 @@ impl App {
             });
         }
         let n = self.frame_count();
-        let held = clip.layer.frames.len() >= clip.panel_len && clip.layer.frames.last().is_some_and(Option::is_some);
+        let held = source.frames.len() >= clip.panel_len && source.frames.last().is_some_and(Option::is_some);
         if layer.frames.len() > n {
             layer.frames.truncate(n);
         } else if held {
@@ -1526,13 +1558,47 @@ impl App {
             layer.frames.resize(n, last);
         }
         layer.trim();
+        layer
+    }
+
+    /// Colle le calque copié au-dessus du calque courant (X), avec ses propres copies des dessins.
+    /// Dans le dossier du calque courant s'il y en a un ; un dossier copié se colle avec ses
+    /// calques, au-dessus du dossier courant (pas de dossier dans un dossier).
+    pub(crate) fn paste_layer(&mut self) {
+        let Some(clip) = self.layer_clipboard.clone() else {
+            self.status = "Aucun calque copié (W pour copier le calque courant).".into();
+            return;
+        };
+        self.end_stroke();
+        self.drop_bitmap_selection();
+        let snap = self.snapshot();
+        let mut copies: HashMap<CelId, CelId> = HashMap::new();
+        let mut layer = self.pasted_layer(&clip.layer, &clip, &mut copies);
+        let mut children: Vec<Layer> = Vec::new();
+        for c in &clip.children {
+            let mut child = self.pasted_layer(c, &clip, &mut copies);
+            child.parent = Some(layer.id);
+            children.push(child);
+        }
+        let cur = self.cur_layer;
+        let folder_of_current = crate::folders::parent_index(self.layers(), cur);
+        let at = match (layer.folder, folder_of_current) {
+            // Un dossier ne va pas dans un dossier : au-dessus du dossier du calque courant.
+            (true, Some(fi)) => fi + 1,
+            _ => cur + 1,
+        };
+        layer.parent = if layer.folder { None } else { folder_of_current.map(|fi| self.layers()[fi].id) };
         let name = layer.name.clone();
-        let at = self.cur_layer + 1;
-        self.layers_mut().insert(at, layer);
-        self.cur_layer = at;
+        let id = layer.id;
+        let block: Vec<Layer> = children.into_iter().chain(std::iter::once(layer)).collect();
+        for (k, l) in block.into_iter().enumerate() {
+            self.layers_mut().insert(at + k, l);
+        }
+        crate::folders::normalize(self.layers_mut());
+        self.cur_layer = self.layers().iter().position(|l| l.id == id).unwrap_or(at);
         self.vsel = None;
         self.commit_structure(snap);
-        self.status = format!("Calque « {name} » collé.");
+        self.status = format!("« {name} » collé.");
     }
 
     /// Fusionne le calque courant avec celui du dessous (Ctrl+E).
@@ -1870,7 +1936,7 @@ impl App {
     /// Pose une image (PNG/JPEG) au centre du dessin courant d'un calque bitmap.
     pub(crate) fn import_image(&mut self) {
         self.end_stroke();
-        if self.layer().kind != LayerKind::Bitmap {
+        if self.layer().kind != LayerKind::Bitmap || self.layer().folder {
             self.status = "Choisis un calque bitmap pour importer une image.".into();
             return;
         }
@@ -2204,6 +2270,13 @@ impl App {
             "calque.couper" => self.cut_layer(),
             "calque.coller_remplacer" => self.paste_layer_replacing(),
             "groupes.editer" => self.groups_window = !self.groups_window,
+            // Dossiers de calques (13b-5, `folders.rs`).
+            "dossier.nouveau" => self.new_folder(),
+            "dossier.ranger" => self.folder_from_chosen(),
+            "dossier.deposer" => self.drop_chosen_in_folder(),
+            "dossier.sortir" => self.take_chosen_out(),
+            "dossier.supprimer_seul" => self.delete_folders_only(),
+            "dossier.joindre" => self.join_chosen_folders(),
             "groupes.focus" => self.focus_current_group(),
             "panneau.couper" => self.split_current_panel(),
             "panneau.fusionner_suivant" => self.merge_next_panel(),

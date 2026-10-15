@@ -151,9 +151,9 @@ impl App {
         let frame = self.cur_frame;
         let accent = ui.visuals().selection.bg_fill;
         for li in (0..self.layers().len()).rev() {
-            let (id, visible, locked, kind, name, cel) = {
+            let (id, visible, locked, kind, name, cel, folder) = {
                 let l = &self.layers()[li];
-                (l.id, l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame))
+                (l.id, l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame), l.folder)
             };
             let current = li == self.cur_layer;
             let thumb = cel.and_then(|c| self.layer_thumb(ui.ctx(), c));
@@ -213,6 +213,7 @@ impl App {
                                 resp.on_hover_text("Double-clic ou clic droit : renommer").context_menu(|ui| self.layer_menu(ui, li, false));
                             }
                             let kind = match kind {
+                                _ if folder => "dossier",
                                 LayerKind::Vector => "vectoriel",
                                 LayerKind::Bitmap => "bitmap",
                             };

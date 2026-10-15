@@ -44,11 +44,9 @@ pub(crate) fn choose(layers: &[Layer], cur: usize, how: Choose) -> Vec<u64> {
         .collect()
 }
 
-/// Copie du calque `li` du plan `index`, avec ses propres copies des dessins, posée juste
-/// au-dessus de lui ; renvoie son rang.
-pub(crate) fn duplicate_layer(doc: &mut Document, index: usize, li: usize) -> usize {
-    let source = doc.panels[index].layers[li].clone();
-    let mut copies: HashMap<CelId, CelId> = HashMap::new();
+/// Copie d'un calque avec ses propres copies des dessins (`copies` : un même dessin n'est copié
+/// qu'une fois).
+fn layer_copy(doc: &mut Document, source: &Layer, copies: &mut HashMap<CelId, CelId>) -> Layer {
     let frames = source
         .frames
         .iter()
@@ -64,9 +62,31 @@ pub(crate) fn duplicate_layer(doc: &mut Document, index: usize, li: usize) -> us
         })
         .collect();
     // La copie d'un calque de toute la scène est un calque du seul plan.
-    let copy = Layer { id: fresh_layer_id(), name: format!("{} copie", source.name), frames, scene_wide: None, ..source };
-    doc.panels[index].layers.insert(li + 1, copy);
-    li + 1
+    Layer { id: fresh_layer_id(), frames, scene_wide: None, ..source.clone() }
+}
+
+/// Copie du calque `li` du plan `index`, avec ses propres copies des dessins, posée juste
+/// au-dessus de lui ; un dossier est copié avec ses calques, au-dessus de lui et de ses calques
+/// (13b-5). Renvoie le rang de la copie (du dossier copié).
+pub(crate) fn duplicate_layer(doc: &mut Document, index: usize, li: usize) -> usize {
+    let layers = &doc.panels[index].layers;
+    let source = layers[li].clone();
+    let children: Vec<Layer> = crate::folders::children_of(layers, li).into_iter().map(|i| layers[i].clone()).collect();
+    let mut copies: HashMap<CelId, CelId> = HashMap::new();
+    let mut copy = layer_copy(doc, &source, &mut copies);
+    copy.name = format!("{} copie", source.name);
+    let mut block: Vec<Layer> = Vec::new();
+    for c in &children {
+        let mut child = layer_copy(doc, c, &mut copies);
+        child.parent = Some(copy.id);
+        block.push(child);
+    }
+    block.push(copy);
+    let n = block.len();
+    for (k, l) in block.into_iter().enumerate() {
+        doc.panels[index].layers.insert(li + 1 + k, l);
+    }
+    li + n
 }
 
 /// Fusionne les calques `lis` du plan `index` en un seul, à la place du plus bas, dans l'ordre
@@ -74,7 +94,14 @@ pub(crate) fn duplicate_layer(doc: &mut Document, index: usize, li: usize) -> us
 /// rang. Rien ne change si l'une des fusions est refusée (calque caché, verrouillé, transformé…).
 pub(crate) fn merge_layers(doc: &mut Document, index: usize, lis: &[usize]) -> Result<usize, String> {
     let n = doc.panels.get(index).map_or(0, |p| p.layers.len());
-    let mut lis: Vec<usize> = lis.iter().copied().filter(|&l| l < n).collect();
+    // Un dossier choisi compte pour ses calques ; un dossier ne se fusionne pas lui-même.
+    let layers = doc.panels.get(index).map_or(&[][..], |p| &p.layers[..]);
+    let mut lis: Vec<usize> = lis
+        .iter()
+        .copied()
+        .filter(|&l| l < n)
+        .flat_map(|l| if layers[l].folder { crate::folders::children_of(layers, l) } else { vec![l] })
+        .collect();
     lis.sort_unstable();
     lis.dedup();
     if lis.len() < 2 {
@@ -142,6 +169,16 @@ impl App {
             self.action_item(ui, "Inverser tous les pochoirs", "calque.pochoirs_inverser");
         });
         ui.menu_button("Groupes", |ui| self.groups_menu(ui));
+        ui.menu_button("Dossiers", |ui| {
+            self.action_item(ui, "Nouveau dossier", "dossier.nouveau");
+            self.action_item(ui, "Placer les calques choisis dans un dossier", "dossier.ranger");
+            self.action_item(ui, "Déposer les calques choisis dans le dossier", "dossier.deposer");
+            self.action_item(ui, "Sortir les calques choisis de leur dossier", "dossier.sortir");
+            ui.separator();
+            self.action_item(ui, "Joindre les dossiers choisis dans le dossier courant", "dossier.joindre");
+            self.action_item(ui, "Supprimer uniquement le dossier", "dossier.supprimer_seul");
+            self.action_item(ui, "Supprimer le dossier et ses calques", "calque.supprimer");
+        });
         ui.separator();
         let lock = if self.layer().locked { "Déverrouiller le calque" } else { "Verrouiller le calque" };
         self.action_item(ui, lock, "calque.verrouiller");
@@ -221,7 +258,10 @@ impl App {
     pub(crate) fn duplicate_chosen_layers(&mut self) {
         self.end_stroke();
         self.drop_bitmap_selection();
-        let chosen = self.chosen_layers();
+        let mut chosen = self.chosen_layers();
+        // Un calque dont le dossier est aussi choisi part avec la copie du dossier.
+        let all = chosen.clone();
+        chosen.retain(|&li| crate::folders::parent_index(self.layers(), li).is_none_or(|fi| !all.contains(&fi)));
         let current = self.layer().id;
         let snap = self.snapshot();
         let mut copies = Vec::new();
@@ -243,10 +283,14 @@ impl App {
         self.status = if n == 1 { "Calque dupliqué.".into() } else { format!("{n} calques dupliqués.") };
     }
 
-    /// Supprime des calques du plan (il en reste au moins un).
+    /// Supprime des calques du plan (il en reste au moins un) ; un dossier part avec ses calques.
     fn delete_layers(&mut self, lis: &[usize], what: &str) {
         self.end_stroke();
         self.drop_bitmap_selection();
+        let mut lis: Vec<usize> = lis.iter().flat_map(|&li| crate::folders::block_of(self.layers(), li)).collect();
+        lis.sort_unstable();
+        lis.dedup();
+        let lis = &lis[..];
         if lis.is_empty() {
             self.status = format!("Aucun calque {what}.");
             return;
@@ -389,14 +433,24 @@ impl App {
             self.status = "Aucun calque copié (W pour copier le calque courant).".into();
             return;
         }
-        let old = self.cur_layer;
+        let old = self.layer().id;
         self.paste_layer();
-        // Le collé est juste au-dessus de l'ancien courant : on retire celui-ci, dans la même étape.
-        if self.cur_layer == old + 1 {
-            self.layers_mut().remove(old);
-            self.cur_layer = old;
-            self.renderer.invalidate_all();
-            self.status = "Calque collé à la place du calque courant.".into();
+        // L'ancien courant (un dossier : avec ses calques) part, dans la même étape d'annulation.
+        let pasted = self.layer().id;
+        let Some(oi) = self.layers().iter().position(|l| l.id == old) else { return };
+        if pasted == old {
+            return;
         }
+        let block = crate::folders::block_of(self.layers(), oi);
+        if block.len() >= self.layers().len() {
+            return;
+        }
+        for &li in block.iter().rev() {
+            self.layers_mut().remove(li);
+        }
+        crate::folders::normalize(self.layers_mut());
+        self.cur_layer = self.layers().iter().position(|l| l.id == pasted).unwrap_or(0);
+        self.renderer.invalidate_all();
+        self.status = "Calque collé à la place du calque courant.".into();
     }
 }

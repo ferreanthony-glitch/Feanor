@@ -824,6 +824,36 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
+action = "dossier.nouveau"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "dossier.ranger"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "dossier.deposer"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "dossier.sortir"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "dossier.supprimer_seul"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "dossier.joindre"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
 action = "groupes.editer"
 touches = []
 source = "TVPaint 12 sans touche"

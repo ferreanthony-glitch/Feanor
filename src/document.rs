@@ -246,8 +246,13 @@ pub struct Layer {
     pub position_locked: bool,
     /// Groupe de couleur (13b) : un des `groups::COUNT` groupes du projet, 0 = « Défaut ».
     pub group: u8,
-    /// Ligne réduite dans la timeline (13b).
+    /// Ligne réduite dans la timeline (13b) ; pour un dossier : ses calques n'y ont plus de ligne.
     pub collapsed: bool,
+    /// Dossier de calques (13b-5) : pas de dessin, il range les calques dont `parent` est son id
+    /// (voir `folders.rs`).
+    pub folder: bool,
+    /// Dossier du calque (id du calque-dossier), s'il est rangé dans un dossier.
+    pub parent: Option<u64>,
 }
 
 impl Layer {
@@ -271,12 +276,20 @@ impl Layer {
             position_locked: false,
             group: 0,
             collapsed: false,
+            folder: false,
+            parent: None,
         }
     }
 
-    /// On peut dessiner sur le calque : ni verrouillé, ni de position verrouillée (13b).
+    /// Nouveau dossier de calques (13b-5), vide.
+    pub fn new_folder(name: impl Into<String>) -> Self {
+        Self { folder: true, ..Self::new(name, LayerKind::Bitmap) }
+    }
+
+    /// On peut dessiner sur le calque : ni verrouillé, ni de position verrouillée (13b), et ce
+    /// n'est pas un dossier.
     pub fn drawable(&self) -> bool {
-        !self.locked && !self.position_locked
+        !self.locked && !self.position_locked && !self.folder
     }
 
     /// Plus proche que ça, le calque serait derrière la caméra.
@@ -1244,6 +1257,9 @@ impl Document {
             return Err("Il n'y a pas de calque en dessous.".into());
         }
         let (above, below) = (panel.layers[layer].clone(), panel.layers[layer - 1].clone());
+        if above.folder || below.folder {
+            return Err("Un dossier ne se fusionne pas : fusionne ses calques.".into());
+        }
         if !above.visible || !below.visible {
             return Err("Affiche les deux calques avant de les fusionner.".into());
         }

@@ -478,7 +478,14 @@ Décisions d'Anthony :
     cliquer ; menu Groupes en masse (tous / groupe courant / autres groupes : pelure, verrou,
     transparence, affichage, pochoir, fusion ; afficher / cacher les groupes, focus). Le mot de
     passe de groupe de TVPaint n'est pas repris.
-  - 13b-5. Dossiers.
+  - ✅ 13b-5. Dossiers (`folders.rs`, format 14), choix d'Anthony du 2026-10-15 : un seul
+    niveau ; pas de mode de fusion de dossier (l'opacité du dossier multiplie celle de ses
+    calques, un dossier caché les cache, un dossier verrouillé les verrouille) ; « joindre »
+    met les calques des dossiers choisis dans le dossier courant et efface les autres. Nouveau
+    dossier, placer / déposer / sortir les calques choisis, glisser une ligne dedans ou dehors,
+    ouvrir / fermer (lignes des calques), supprimer le dossier seul ou avec ses calques,
+    dupliquer / copier / coller un dossier avec ses calques, fusionner un dossier = fusionner
+    ses calques ; aucun outil de dessin sur un dossier.
 - 13c. Images et expositions (choix, glisser, insérer / supprimer avec modes de trou, couper /
   copier / coller, inverser, instances, noms, pré / post-comportement, faux-fixe, étirer).
 - 13d. Repères : marques, signets, entrée / sortie, boucle, image de départ, time code, zoom.

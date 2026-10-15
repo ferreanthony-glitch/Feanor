@@ -452,6 +452,15 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   la ligne d'en dessous, les calques sans ligne ne bougent pas). Commandes en masse par
   `Scope` (tous / groupe courant / autres) et `layers_in`. Les groupes sont dans `Structure` :
   noms, couleurs et filtre s'annulent comme le reste.
+- Dossiers (`folders.rs`, 13b-5) : un dossier est un `Layer` avec `folder` (aucun dessin) ;
+  un calque rangé a `parent` = l'id du dossier. Invariant tenu par `normalize` : un seul niveau,
+  les calques d'un dossier juste sous lui, d'un seul tenant (chaque opération qui touche à la
+  pile le rappelle). `effect` donne l'opacité d'un calque à l'image (la sienne × celle de son
+  dossier, rien si l'un des deux est caché) : `build_plan`, `render::plan_with_camera`, la
+  lecture anticipée, les pochoirs et le plateau 3D s'en servent. `move_step` déplace par
+  unités (un dossier et ses calques, ou un calque seul) ; `folder_at` décide si un calque
+  glissé entre dans un dossier. `drawable` est faux pour un dossier ; `refuse_on_folder` garde
+  les commandes de dessins et d'expositions.
 
 ## Pinceaux texturés (3d-2)
 
@@ -618,11 +627,11 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - Annulation : le repère fait partie de la structure (copie au début du geste, une étape au
   lâcher, comme l'outil Caméra).
 
-## Format de projet (version 13, dossier)
+## Format de projet (version 14, dossier)
 
 ```
 MonFilm/
-  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 13, "largeur",
+  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 14, "largeur",
                       "hauteur" (feuille), "cadre": [l, h], réglages,
                       "sequences": [{ "scenes": [{ "panneaux": [{ "calques": [{ "expositions": … }],
                       "marques": [{"id", "image", "action", …}] }]}]}]  (un panneau par scène),
@@ -635,6 +644,8 @@ MonFilm/
                       triangles, positions (3 × f32) puis triangles (3 × u32), petit-boutiste
 ```
 
+- Format 14 (13b-5) : `dossier` (le calque est un dossier) et `dans_dossier` (rang, dans le
+  plan, du dossier qui le range ; les id de calque ne sont pas enregistrés).
 - Format 13 (13b) : sur un calque `pelure`, `transparence`, `pochoir`, `pochoir_negatif`,
   `position_verrouillee`, `replie` (absents : faux), `groupe` (absent : 0) ; `groupes` (13
   groupes : `nom`, `couleur`, `montre`), absent tant qu'ils sont ceux d'un projet neuf.
@@ -731,6 +742,7 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 | Thème : couleurs de Spectrum reprises en constantes, police Segoe UI du système (12a) | l'allure dense et sombre du Studio, sans dépendance ni fichier ajouté | nul (police lue au démarrage, ≈ 1 Mo) | faible : sans Segoe UI (autre système), la police d'egui reste | oui : `theme::appliquer` et `polices` à retirer |
 | Ctrl+C / Ctrl+V / Ctrl+X / Suppr visent les panneaux après un clic dans le montage ou sur une vignette, le dessin après un clic dans le dessin (12e) | les touches habituelles servent pour les panneaux, sans nouveau raccourci à apprendre | un booléen (`App::panel_focus`) | moyen : Suppr après un clic dans le montage supprime des panneaux (Ctrl+Z les rend) | oui : retirer les gardes `panels_have_focus` dans `run_action` ; `panneau.copier` / `panneau.coller` restent |
 | Un plan = une scène à un seul panneau, plutôt qu'un nouveau type (13a) | tout ce qui travaille sur un panneau (rendu, caméra, calques, enregistrement, lecture) reste valable | un rang à tenir (`is_plans`, testé) | faible : une opération oubliée pourrait remettre deux panneaux dans une scène (le chargement les réunirait) | oui : le modèle n'a pas changé de forme |
+| Dossier = calque marqué `folder`, calques rangés par `parent`, gardés d'un seul tenant sous lui (13b-5) | rendu, timeline, enregistrement et annulation restent ceux d'une pile de calques ; pas d'arbre à parcourir | `normalize` à rappeler après chaque opération sur la pile (testé dans `folders_tests.rs`) | faible : un oubli remet au pire un calque hors de son dossier | oui : passer à un arbre ne changerait que `folders.rs` et le format (`dans_dossier`) |
 | Les débuts d'anciens panneaux deviennent des marques d'image avec leurs textes (13a, choix d'Anthony) | aucun dessin ni texte de storyboard perdu ; vignettes et PDF gardent leurs images | un champ par plan (`marques`, format 12) | faible | oui : retirer une marque ne touche pas aux dessins |
 | Copie de panneaux avec une copie de leurs dessins, au moment de la copie (12e) | coller donne ce qu'on a copié, même si l'original a changé ou disparu | mémoire des dessins copiés, tant que le presse-papiers les garde | faible | oui |
 | `src-tauri` projet Cargo à part, pas membre d'un espace de travail (10b) | Tauri ne change aucune version des dépendances de Pelure | le noyau est compilé deux fois (deux dossiers `target`) | faible | oui : en faire un membre plus tard |

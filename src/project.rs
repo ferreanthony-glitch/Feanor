@@ -53,7 +53,9 @@ pub const FORMAT: &str = "pelure-projet";
 /// 13 (13b) : réglages de l'en-tête des calques (pelure d'oignon du calque, préserver la
 /// transparence, pochoir, position verrouillée, groupe, ligne réduite) et groupes de couleur
 /// (`groupes`), qu'une version précédente perdrait.
-pub const VERSION: u32 = 13;
+/// 14 (13b-5) : dossiers de calques (`dossier`, `dans_dossier`) ; une version précédente en
+/// ferait des calques vides et perdrait l'opacité et l'affichage des dossiers.
+pub const VERSION: u32 = 14;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Modèles 3D de repère (2d), dans le format de Pelure.
@@ -340,6 +342,12 @@ struct LayerEntry {
     groupe: u8,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     replie: bool,
+    /// Dossier de calques (format 14 ; absent : calque ordinaire), et rang dans le plan du
+    /// dossier qui range ce calque (absent : hors dossier).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    dossier: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    dans_dossier: Option<usize>,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -782,6 +790,8 @@ fn manifest_of(doc: &Document) -> Manifest {
                     position_verrouillee: l.position_locked,
                     groupe: l.group,
                     replie: l.collapsed,
+                    dossier: l.folder,
+                    dans_dossier: l.parent.and_then(|p| panel.layers.iter().position(|f| f.folder && f.id == p)),
                     expositions: to_exposures(&l.frames),
                 })
                 .collect(),
@@ -1085,6 +1095,7 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
             // Numéros des calques de toute la scène : neufs pour la session.
             let mut keys: HashMap<u64, u64> = HashMap::new();
             for p in scene.panneaux {
+                let parents: Vec<Option<usize>> = p.calques.iter().map(|l| l.dans_dossier).collect();
                 let mut layers: Vec<Layer> = p
                     .calques
                     .into_iter()
@@ -1131,8 +1142,17 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                         position_locked: l.position_verrouillee,
                         group: if (l.groupe as usize) < crate::groups::COUNT { l.groupe } else { 0 },
                         collapsed: l.replie,
+                        folder: l.dossier,
+                        parent: None,
                     })
                     .collect();
+                // Dossiers (format 14) : le rang du dossier devient l'id de son calque.
+                for (i, fi) in parents.into_iter().enumerate() {
+                    if let Some(id) = fi.and_then(|fi| layers.get(fi)).filter(|f| f.folder).map(|f| f.id) {
+                        layers[i].parent = Some(id);
+                    }
+                }
+                crate::folders::normalize(&mut layers);
                 if layers.is_empty() {
                     layers.push(Layer::new("Dessin", LayerKind::Vector));
                 }

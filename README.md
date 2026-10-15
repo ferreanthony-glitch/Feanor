@@ -160,6 +160,19 @@ courant est dans un groupe caché, l'en-tête l'annonce, et un clic sur la coule
 groupe. Le menu Groupes agit en une fois sur tous les calques, ceux du groupe courant ou ceux des
 autres groupes : pelure, verrou, transparence, affichage, pochoir, fusion, et focus sur le groupe.
 
+**Dossiers de calques** (icône du dossier + dans l'en-tête, ou ☰ > Dossiers). Un dossier range des
+calques, sur un seul niveau. Son œil cache ses calques, son cadenas les verrouille, et son
+opacité s'ajoute à la leur. Chaque calque garde son mode de fusion. On s'en sert ainsi :
+- le triangle ferme le dossier : ses calques n'ont plus de ligne, mais restent à l'image ;
+- « Placer les calques choisis dans un dossier » en crée un autour d'eux ;
+- glisser une ligne entre les calques d'un dossier l'y fait entrer, la glisser ailleurs l'en
+  fait sortir ;
+- « Joindre » met les calques des dossiers choisis dans le dossier courant ;
+- supprimer, dupliquer, copier ou coller un dossier emmène ses calques. « Supprimer uniquement
+  le dossier » les garde, hors dossier.
+
+On ne dessine pas sur un dossier.
+
 ## Le reste
 
 - **Tablette** : la pression module la taille et/ou l'opacité. Elle passe par Windows Ink : sur une

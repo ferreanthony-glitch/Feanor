@@ -234,7 +234,7 @@ fn header_settings_and_groups_are_saved() {
     assert!(l.onion && l.keep_alpha && l.stencil && l.stencil_negative && l.position_locked && l.collapsed);
     assert_eq!(l.group, 7);
     assert_eq!(back.groups, doc.groups);
-    assert!(text.contains("\"version\": 13"), "format 13");
+    assert!(text.contains(&format!("\"version\": {}", project::VERSION)), "format courant");
 
     // Un projet sans ces réglages les relit éteints, avec les groupes d'un projet neuf.
     let plain = Document::new(64, 64, 24);

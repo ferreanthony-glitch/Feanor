@@ -48,6 +48,10 @@ Sens confirmés par Anthony le 2026-10-15 (les textes de TVPaint ne font que les
   positif = seulement dans sa forme, négatif = seulement hors de sa forme.
 - **Verrouiller la position** : l'outil Transformer et le déplacement en 3D ne bougent plus le
   calque, et on ne peut plus dessiner dessus.
+- **Dossiers** (choix du 2026-10-15, les textes ne font que nommer les fonctions) : un seul
+  niveau ; pas de mode de fusion de dossier, chaque calque garde le sien et l'opacité du dossier
+  s'ajoute à la sienne ; « Joindre les dossiers » met les calques des dossiers dans un seul et
+  efface les autres (celui qui reste est le dossier courant).
 
 ## 2. Sortes de calques
 

@@ -65,7 +65,8 @@ pub fn upcoming_cels(doc: &Document, at: Position, shown: &Plan, cap: usize) -> 
         return out;
     }
     for (p, f) in upcoming_frames(doc, at) {
-        for layer in doc.panels[p].layers.iter().filter(|l| l.visible) {
+        let layers = &doc.panels[p].layers;
+        for layer in (0..layers.len()).filter(|&li| crate::folders::effect(layers, li).is_some()).map(|li| &layers[li]) {
             let Some(id) = layer.cel_at(f) else { continue };
             if out.contains(&id) || shown.items.iter().any(|i| i.cel == id) {
                 continue;

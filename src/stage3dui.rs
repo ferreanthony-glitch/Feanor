@@ -160,8 +160,9 @@ impl App {
         let cam = self.current_camera();
         let mut points: Vec<V3> = vec![world.eye(&cam)];
         points.extend(world.frame_corners(&cam));
-        for l in self.layers().iter().filter(|l| l.visible) {
-            points.extend(world.plane_corners(l.depth));
+        let layers = self.layers();
+        for i in (0..layers.len()).filter(|&i| crate::folders::effect(layers, i).is_some()) {
+            points.extend(world.plane_corners(layers[i].depth));
         }
         points.extend(world.plane_corners(0.0));
         let rect = self.canvas_rect;
@@ -262,7 +263,8 @@ impl App {
 
         let cam = self.current_camera();
         let eye = world.eye(&cam);
-        let visible: Vec<usize> = (0..self.layers().len()).filter(|&i| self.layers()[i].visible).collect();
+        // Calques qui entrent dans l'image (ni cachés, ni dans un dossier caché, ni dossiers).
+        let visible: Vec<usize> = (0..self.layers().len()).filter(|&i| crate::folders::effect(self.layers(), i).is_some()).collect();
         let far_z = visible.iter().map(|&i| world.plane_z(self.layers()[i].depth)).fold(0.0_f32, f32::min);
         let near_z = visible.iter().map(|&i| world.plane_z(self.layers()[i].depth)).fold(0.0_f32, f32::max);
 
@@ -472,8 +474,9 @@ impl App {
 
     /// Calque visible sous le point `at` de l'écran.
     fn pick3d(&self, world: &World, proj: &Projector, at: Pos2) -> Option<usize> {
+        let layers = self.layers();
         let planes: Vec<(usize, f32)> =
-            self.layers().iter().enumerate().filter(|(_, l)| l.visible).map(|(i, l)| (i, l.depth)).collect();
+            (0..layers.len()).filter(|&i| crate::folders::effect(layers, i).is_some()).map(|i| (i, layers[i].depth)).collect();
         let (o, d) = proj.ray(at);
         stage3d::pick(world, o, d, &planes, |i, p| self.layer_drawn_at(i, p))
     }

@@ -272,12 +272,14 @@ fn plan_with_camera(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera:
         items: panel
             .layers
             .iter()
-            .filter(|l| l.visible)
-            .filter_map(|l| {
+            .enumerate()
+            .filter_map(|(li, l)| {
+                // Caché (lui ou son dossier, 13b-5) : rien ; l'opacité du dossier s'ajoute.
+                let opacity = crate::folders::effect(&panel.layers, li)?;
                 let t = l.transform_seen(camera)?;
                 l.cel_at(frame).map(|cel| PlanItem {
                     cel,
-                    opacity: (l.opacity.clamp(0.0, 1.0) * 255.0).round() as u8,
+                    opacity: (opacity * 255.0).round() as u8,
                     tint: None,
                     transform: (!t.is_identity()).then_some(t),
                     blend: l.blend,
