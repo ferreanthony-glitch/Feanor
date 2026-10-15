@@ -143,6 +143,8 @@ pub fn densifier(style: &mut egui::Style) {
     s.window_margin = Margin::same(6);
     s.menu_margin = Margin::same(4);
     s.scroll = egui::style::ScrollStyle::thin();
+    // Bulles d'aide : seulement quand la souris reste une seconde sur un bouton (12d).
+    style.interaction.tooltip_delay = crate::bulles::DELAI;
     let p = FontFamily::Proportional;
     style.text_styles = [
         (TextStyle::Small, FontId::new(10.5, p.clone())),

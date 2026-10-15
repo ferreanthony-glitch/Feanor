@@ -357,27 +357,48 @@ impl App {
     /// Boutons des images clés de caméra, compacts (barre de la timeline, 12c) : clés début / ici /
     /// fin, retirer, adoucir ; le détail est dans la fenêtre de la caméra (outil Caméra).
     pub(crate) fn camera_keys_ui(&mut self, ui: &mut egui::Ui) {
+        use crate::bulles::{bulle, etat_si, TAILLE};
         use egui_phosphor::regular as ph;
         let here = self.camera_key_here().copied();
-        let item = |app: &mut App, ui: &mut egui::Ui, text: &str, hover: &str, action: &str, enabled: bool| {
-            let key = app.keymap.label(action);
-            let hover = if key.is_empty() { hover.to_string() } else { format!("{hover}   {key}") };
-            if ui.add_enabled(enabled, egui::Button::new(text)).on_hover_text(hover).clicked() {
-                app.run_action(action);
-            }
-        };
-        ui.label(RichText::new(ph::VIDEO_CAMERA).size(15.0).color(crate::theme::CAMERA)).on_hover_text("Images clés de la caméra");
-        item(self, ui, &format!("{} début", ph::DIAMOND), "Image clé de caméra au début du panneau", "camera.cle_debut", true);
-        item(self, ui, &format!("{} ici", ph::DIAMOND), "Image clé de caméra à l'image courante", "camera.cle_ici", here.is_none());
-        item(self, ui, &format!("{} fin", ph::DIAMOND), "Image clé de caméra à la fin du panneau", "camera.cle_fin", true);
-        item(self, ui, ph::X_CIRCLE, "Retirer l'image clé de cette image", "camera.cle_supprimer", here.is_some());
-        let mut smooth = here.is_some_and(|k| k.smooth);
-        let resp = ui
-            .add_enabled(here.is_some(), egui::Checkbox::new(&mut smooth, ph::WAVE_SINE))
-            .on_hover_text("Adoucir : la caméra arrive à cette clé et en repart en douceur (réglage fin en images dans la fenêtre de la caméra)");
-        if resp.changed() {
+        let resp = ui.label(RichText::new(ph::VIDEO_CAMERA).size(TAILLE).color(crate::theme::CAMERA));
+        bulle(resp, "Images clés de la caméra", "Position, focale et adoucis en détail : réglages de l'outil Caméra.", "");
+        if let Some(a) = self.camera_key_buttons(ui, here.is_some()) {
+            self.run_action(a);
+        }
+        if self.bouton_si(ui, here.is_some(), ph::X_CIRCLE, "Retirer la clé", "Retirer l'image clé de cette image.", "camera.cle_supprimer").clicked() {
+            self.run_action("camera.cle_supprimer");
+        }
+        let smooth = here.is_some_and(|k| k.smooth);
+        let resp = etat_si(
+            ui,
+            here.is_some(),
+            smooth,
+            ph::WAVE_SINE,
+            "Adoucir",
+            "La caméra arrive à cette clé et en repart en douceur ; réglage fin en images dans les réglages de l'outil Caméra.",
+            "",
+        );
+        if resp.clicked() {
             self.toggle_camera_key_smooth();
         }
+    }
+
+    /// Boutons « clé au début », « clé ici », « clé à la fin » (« ici » grisé s'il y a déjà une
+    /// clé à cette image) ; renvoie l'action du bouton cliqué.
+    fn camera_key_buttons(&self, ui: &mut egui::Ui, key_here: bool) -> Option<&'static str> {
+        use egui_phosphor::regular as ph;
+        let buttons = [
+            (format!("|{}", ph::DIAMOND), "Clé au début", "Image clé de caméra sur la première image du panneau.", "camera.cle_debut", true),
+            (ph::DIAMOND.to_string(), "Clé ici", "Image clé de caméra à l'image courante.", "camera.cle_ici", !key_here),
+            (format!("{}|", ph::DIAMOND), "Clé à la fin", "Image clé de caméra sur la dernière image du panneau.", "camera.cle_fin", true),
+        ];
+        let mut clicked = None;
+        for (icon, name, description, action, enabled) in buttons {
+            if self.bouton_si(ui, enabled, &icon, name, description, action).clicked() {
+                clicked = Some(action);
+            }
+        }
+        clicked
     }
 
     /// Paramètres de la caméra (outil Caméra, 9c), sur le modèle d'une fenêtre de propriétés de
@@ -401,32 +422,16 @@ impl App {
         let mut eases: Option<(f32, f32)> = None;
         section(ui, "Images clés", &mut |ui| {
             ui.horizontal_wrapped(|ui| {
-                let key = |a: &str, k: &crate::keymap::Keymap| {
-                    let l = k.label(a);
-                    if l.is_empty() { String::new() } else { format!(" ({l})") }
-                };
-                if ui.button(format!("{} Début", ph::DIAMOND)).on_hover_text(format!("Image clé au début du panneau{}", key("camera.cle_debut", &self.keymap))).clicked() {
-                    action = Some("camera.cle_debut");
-                }
-                if ui
-                    .add_enabled(here.is_none(), egui::Button::new(format!("{} Ici", ph::DIAMOND)))
-                    .on_hover_text(format!("Image clé à l'image courante{}", key("camera.cle_ici", &self.keymap)))
-                    .clicked()
-                {
-                    action = Some("camera.cle_ici");
-                }
-                if ui.button(format!("{} Fin", ph::DIAMOND)).on_hover_text(format!("Image clé à la fin du panneau{}", key("camera.cle_fin", &self.keymap))).clicked() {
-                    action = Some("camera.cle_fin");
-                }
+                action = self.camera_key_buttons(ui, here.is_some());
                 let prev = keys.iter().rev().find(|&&f| f < self.cur_frame).copied();
                 let next = keys.iter().find(|&&f| f > self.cur_frame).copied();
-                if ui.add_enabled(prev.is_some(), egui::Button::new(ph::CARET_LEFT)).on_hover_text("Clé précédente").clicked() {
+                if crate::bulles::icone_si(ui, prev.is_some(), ph::CARET_LEFT, "Clé précédente", "Aller à l'image clé d'avant.", "").clicked() {
                     goto = prev;
                 }
-                if ui.add_enabled(next.is_some(), egui::Button::new(ph::CARET_RIGHT)).on_hover_text("Clé suivante").clicked() {
+                if crate::bulles::icone_si(ui, next.is_some(), ph::CARET_RIGHT, "Clé suivante", "Aller à l'image clé d'après.", "").clicked() {
                     goto = next;
                 }
-                if ui.add_enabled(here.is_some(), egui::Button::new(ph::TRASH)).on_hover_text("Retirer la clé de cette image").clicked() {
+                if self.bouton_si(ui, here.is_some(), ph::TRASH, "Retirer la clé", "Retirer l'image clé de cette image.", "camera.cle_supprimer").clicked() {
                     action = Some("camera.cle_supprimer");
                 }
             });
@@ -521,7 +526,8 @@ impl App {
                     if self.edited(&r) {
                         next = Some(Camera { angle, ..cam });
                     }
-                    if ui.small_button("Réinitialiser").on_hover_text("Caméra au centre, sans zoom, avancée ni rotation").clicked() {
+                    let resp = crate::bulles::icone(ui, ph::ARROW_COUNTER_CLOCKWISE, "Réinitialiser la caméra", "Au centre, sans zoom, avancée ni rotation.", "");
+                    if resp.clicked() {
                         self.reset_camera();
                     }
                 });
@@ -559,13 +565,17 @@ impl App {
 
         // Vue et durées.
         section(ui, "Vue", &mut |ui| {
-            let mut on = self.camera_view;
-            if ui.checkbox(&mut on, "Vue à travers la caméra").changed() {
-                self.set_camera_view(on);
-            }
-            ui.checkbox(&mut self.camera_mask, "Estomper le hors-champ");
-            ui.checkbox(&mut self.layout.safe_frames, "Zones de sécurité");
-            ui.horizontal(|ui| self.frame_format_ui(ui));
+            ui.horizontal(|ui| {
+                use crate::bulles::interrupteur;
+                let on = self.camera_view;
+                if self.bouton_etat(ui, on, ph::FRAME_CORNERS, "Vue à travers la caméra", "Voir ce que filme la caméra du panneau.", "camera.vue").clicked() {
+                    self.set_camera_view(!on);
+                }
+                interrupteur(ui, &mut self.camera_mask, ph::SELECTION_INVERSE, "Estomper le hors-champ", "Voiler ce qui est hors du cadre de la caméra.", "");
+                let key = self.raccourci("vue.cadres_securite");
+                interrupteur(ui, &mut self.layout.safe_frames, ph::SELECTION, "Zones de sécurité", "Action 93 %, titres 90 %, tracées dans le cadre.", &key);
+                self.frame_format_ui(ui);
+            });
         });
         let (s, e) = self.doc.scene_run(self.cur_panel);
         let scene_len: usize = self.doc.panels[s..e].iter().map(|p| p.frame_count()).sum();

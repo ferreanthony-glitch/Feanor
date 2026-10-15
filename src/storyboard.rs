@@ -290,6 +290,7 @@ impl App {
     }
 
     fn montage_toolbar(&mut self, ui: &mut egui::Ui, total: usize, fps: u32) {
+        use crate::bulles::{bulle, choix, interrupteur, TAILLE};
         use egui_phosphor::regular as ph;
         ui.spacing_mut().item_spacing.x = 3.0;
         let sep = |ui: &mut egui::Ui| {
@@ -297,99 +298,78 @@ impl App {
             ui.separator();
             ui.add_space(3.0);
         };
-        let hint = |app: &App, text: &str, action: &str| {
-            let key = app.keymap.label(action);
-            if key.is_empty() {
-                text.to_string()
-            } else {
-                format!("{text}   {key}")
-            }
-        };
 
         // Lecture.
-        if self.icon_button(ui, ph::SKIP_BACK, "Début du montage", "image.premiere") {
+        if self.bouton(ui, ph::SKIP_BACK, "Début du montage", "Revenir à la première image du film.", "image.premiere").clicked() {
             self.goto_global(0);
         }
         let play = if self.playing { ph::PAUSE } else { ph::PLAY };
-        if self.icon_button(ui, play, "Lire le montage / pause", "lecture.basculer") {
+        if self.bouton(ui, play, "Lire le montage / pause", "Tout le film à la suite (animatique), avec le son.", "lecture.basculer").clicked() {
             self.toggle_play();
         }
-        ui.toggle_value(&mut self.looping, RichText::new(ph::REPEAT).size(15.0)).on_hover_text("Lecture en boucle");
-        ui.label(RichText::new(format!("{} / {}", timecode(self.global_frame(), fps), timecode(total, fps))).monospace())
-            .on_hover_text("Position / durée du montage");
+        interrupteur(ui, &mut self.looping, ph::REPEAT, "Lecture en boucle", "Reprendre au début une fois à la fin.", "");
+        let resp = ui.label(RichText::new(format!("{} / {}", timecode(self.global_frame(), fps), timecode(total, fps))).monospace());
+        bulle(resp, "Position", "Image courante / durée du montage (minutes:secondes:images).", "");
         sep(ui);
 
         // Panneaux, scènes, séquences.
-        if ui
-            .button(format!("{} Panneau", ph::PLUS))
-            .on_hover_text(hint(self, "Nouveau panneau après le panneau courant", "panneau.nouveau"))
-            .clicked()
-        {
+        if self.bouton(ui, ph::PLUS_SQUARE, "Nouveau panneau", "Après le panneau courant, dans la même scène.", "panneau.nouveau").clicked() {
             self.new_panel();
         }
-        if ui
-            .button(format!("{} Scène", ph::PLUS))
-            .on_hover_text(hint(self, "Nouvelle scène après la scène courante", "scene.nouvelle"))
-            .clicked()
-        {
+        if self.bouton(ui, ph::FOLDER_SIMPLE_PLUS, "Nouvelle scène", "Après la scène courante.", "scene.nouvelle").clicked() {
             self.new_scene();
         }
-        if ui
-            .button(format!("{} Séquence", ph::PLUS))
-            .on_hover_text(hint(self, "Nouvelle séquence après la séquence courante", "sequence.nouvelle"))
-            .clicked()
-        {
+        if self.bouton(ui, ph::STACK_PLUS, "Nouvelle séquence", "Après la séquence courante.", "sequence.nouvelle").clicked() {
             self.new_sequence();
         }
-        ui.menu_button(RichText::new(ph::DOTS_THREE).size(15.0), |ui| {
-            let item = |app: &mut App, ui: &mut egui::Ui, text: &str, action: &str| {
-                let key = app.keymap.label(action);
-                if ui.add(egui::Button::new(text).shortcut_text(key)).clicked() {
-                    ui.close_menu();
-                    app.run_action(action);
-                }
-            };
-            item(self, ui, "Dupliquer le panneau", "panneau.dupliquer");
-            item(self, ui, "Supprimer le panneau", "panneau.supprimer");
-            item(self, ui, "Couper le panneau à l'image courante", "panneau.couper");
-            item(self, ui, "Réunir le panneau et le suivant", "panneau.fusionner_suivant");
-            ui.separator();
-            item(self, ui, "Dupliquer la scène", "scene.dupliquer");
-            item(self, ui, "Supprimer la scène", "scene.supprimer");
-            item(self, ui, "Couper la scène au panneau courant", "scene.couper");
-            item(self, ui, "Joindre la scène à la précédente", "scene.joindre_precedente");
-        })
-        .response
-        .on_hover_text("Autres opérations sur les panneaux et les scènes");
-        if self.icon_button(ui, ph::CARET_DOUBLE_LEFT, "Avancer le panneau (plus tôt dans le montage)", "") {
+        let resp = ui
+            .menu_button(RichText::new(ph::DOTS_THREE).size(TAILLE), |ui| {
+                let item = |app: &mut App, ui: &mut egui::Ui, text: &str, action: &str| {
+                    let key = app.keymap.label(action);
+                    if ui.add(egui::Button::new(text).shortcut_text(key)).clicked() {
+                        ui.close_menu();
+                        app.run_action(action);
+                    }
+                };
+                item(self, ui, "Dupliquer le panneau", "panneau.dupliquer");
+                item(self, ui, "Supprimer le panneau", "panneau.supprimer");
+                item(self, ui, "Couper le panneau à l'image courante", "panneau.couper");
+                item(self, ui, "Réunir le panneau et le suivant", "panneau.fusionner_suivant");
+                ui.separator();
+                item(self, ui, "Dupliquer la scène", "scene.dupliquer");
+                item(self, ui, "Supprimer la scène", "scene.supprimer");
+                item(self, ui, "Couper la scène au panneau courant", "scene.couper");
+                item(self, ui, "Joindre la scène à la précédente", "scene.joindre_precedente");
+            })
+            .response;
+        bulle(resp, "Panneaux et scènes", "Dupliquer, supprimer, couper, réunir.", "");
+        if self.bouton(ui, ph::CARET_DOUBLE_LEFT, "Avancer le panneau", "Le placer plus tôt dans le montage.", "").clicked() {
             self.shift_panel(false);
         }
-        if self.icon_button(ui, ph::CARET_DOUBLE_RIGHT, "Reculer le panneau (plus tard dans le montage)", "") {
+        if self.bouton(ui, ph::CARET_DOUBLE_RIGHT, "Reculer le panneau", "Le placer plus tard dans le montage.", "").clicked() {
             self.shift_panel(true);
         }
         sep(ui);
 
         // Son.
-        if self.icon_button(
-            ui,
-            ph::MUSIC_NOTES_PLUS,
-            "Importer un son (WAV, MP3, FLAC, OGG) à l'image courante ; on peut aussi lâcher le fichier sur la fenêtre",
-            "son.importer",
-        ) {
+        if self
+            .bouton(
+                ui,
+                ph::MUSIC_NOTES_PLUS,
+                "Importer un son",
+                "WAV, MP3, FLAC ou OGG, à l'image courante ; on peut aussi lâcher le fichier sur la fenêtre.",
+                "son.importer",
+            )
+            .clicked()
+        {
             self.import_sound(None, None);
         }
-        ui.menu_button(RichText::new(ph::SPEAKER_HIGH).size(15.0), |ui| self.sound_menu(ui))
-            .response
-            .on_hover_text("Pistes son, son au défilement et pendant la lecture");
+        let resp = ui.menu_button(RichText::new(ph::SPEAKER_HIGH).size(TAILLE), |ui| self.sound_menu(ui)).response;
+        bulle(resp, "Son", "Pistes son, son au défilement et pendant la lecture.", "");
         sep(ui);
 
-        if ui
-            .button(RichText::new(format!("{} Animer", ph::FILM_SLATE)).strong())
-            .on_hover_text(hint(
-                self,
-                "Entrer dans le panneau courant pour l'animer, ou double-clic sur le panneau",
-                "mode.basculer",
-            ))
+        if self
+            .bouton(ui, ph::FILM_SLATE, "Animer ce panneau", "Entrer dans le panneau courant pour l'animer (ou double-clic sur le panneau).", "mode.basculer")
             .clicked()
         {
             self.enter_animation(self.cur_panel);
@@ -397,17 +377,16 @@ impl App {
         sep(ui);
 
         // Vue : dessin du panneau, ou vignettes de tous les panneaux.
-        ui.selectable_value(&mut self.board_view, BoardView::Scene, RichText::new(ph::PAINT_BRUSH).size(15.0))
-            .on_hover_text(hint(self, "Dessiner le panneau courant", "vue.planches"));
-        ui.selectable_value(&mut self.board_view, BoardView::Panels, RichText::new(ph::SQUARES_FOUR).size(15.0))
-            .on_hover_text(hint(self, "Vignettes : vue d'ensemble des panneaux, rangés par scène", "vue.planches"));
+        let key = self.raccourci("vue.planches");
+        choix(ui, &mut self.board_view, BoardView::Scene, ph::PAINT_BRUSH, "Vue dessin", "Dessiner le panneau courant.", &key);
+        choix(ui, &mut self.board_view, BoardView::Panels, ph::SQUARES_FOUR, "Vue vignettes", "Tous les panneaux en planche, rangés par scène.", &key);
         sep(ui);
-        ui.label(RichText::new(ph::MAGNIFYING_GLASS).size(14.0)).on_hover_text("Zoom du montage");
+        let resp = ui.label(RichText::new(ph::MAGNIFYING_GLASS).size(TAILLE));
+        bulle(resp, "Zoom du montage", "", "");
         ui.spacing_mut().slider_width = 80.0;
-        ui.add(egui::Slider::new(&mut self.montage_zoom, 0.5..=16.0).logarithmic(true).show_value(false))
-            .on_hover_text("Zoom du montage");
+        let resp = ui.add(egui::Slider::new(&mut self.montage_zoom, 0.5..=16.0).logarithmic(true).show_value(false));
+        bulle(resp, "Zoom du montage", "Largeur d'une image dans la bande.", "");
     }
-
     /// Menu « Son… » de la barre du montage.
     pub(crate) fn sound_menu(&mut self, ui: &mut egui::Ui) {
         let item = |app: &mut App, ui: &mut egui::Ui, text: &str, action: &str| {

@@ -2,7 +2,7 @@
 //! ou vue caméra (ce que filme la caméra du panneau), et cadres de composition tracés dans le
 //! cadre de la caméra : zones de sécurité et cadre d'un format de diffusion (9:16, 1:1…).
 
-use eframe::egui::{self, vec2, Align2, Color32, FontId, Pos2, Rect, RichText, Shape, Stroke, Vec2};
+use eframe::egui::{self, vec2, Align2, Color32, FontId, Pos2, Rect, Shape, Stroke, Vec2};
 
 use crate::app::App;
 use crate::frames;
@@ -127,20 +127,10 @@ impl App {
             ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
             ui.add_space(4.0);
             let cam = self.camera_view;
-            let hint = self.command_hint("camera.vue", "Basculer vue du plateau / vue caméra");
-            let tab = |ui: &mut egui::Ui, on: bool, icon: &str, text: &str| {
-                ui.add(egui::SelectableLabel::new(on, RichText::new(format!("{icon} {text}"))))
-            };
-            if tab(ui, !cam, ph::BOUNDING_BOX, "Plateau")
-                .on_hover_text(format!("Vue du plateau : toute la feuille, avec le cadre de la caméra.\n{hint}"))
-                .clicked()
-            {
+            if self.bouton_etat(ui, !cam, ph::BOUNDING_BOX, "Vue du plateau", "Toute la feuille, avec le cadre de la caméra.", "camera.vue").clicked() {
                 self.set_camera_view(false);
             }
-            if tab(ui, cam, ph::VIDEO_CAMERA, "Caméra")
-                .on_hover_text(format!("Vue caméra : ce que filme la caméra du panneau.\n{hint}"))
-                .clicked()
-            {
+            if self.bouton_etat(ui, cam, ph::VIDEO_CAMERA, "Vue caméra", "Ce que filme la caméra du panneau.", "camera.vue").clicked() {
                 self.set_camera_view(true);
             }
             ui.add_space(6.0);
@@ -148,12 +138,7 @@ impl App {
             ui.add_space(6.0);
             // Plateau en 3D (9e) et ses outils.
             let in3d = self.stage3d.on && !cam;
-            let hint = self.command_hint("vue.3d", "Plateau en 3D : les calques à leur profondeur, la caméra, le sol");
-            if ui
-                .add(egui::SelectableLabel::new(in3d, RichText::new(format!("{} 3D", ph::CUBE_FOCUS))))
-                .on_hover_text(hint)
-                .clicked()
-            {
+            if self.bouton_etat(ui, in3d, ph::CUBE_FOCUS, "Plateau en 3D", "Les calques à leur profondeur, la caméra et le sol, vus en 3D.", "vue.3d").clicked() {
                 self.run_action("vue.3d");
             }
             if in3d {
@@ -163,10 +148,8 @@ impl App {
             ui.add_space(6.0);
             ui.separator();
             ui.add_space(6.0);
-            let hint = self.command_hint("vue.cadres_securite", "Zones de sécurité : action 93 %, titres 90 %");
-            if ui
-                .add(egui::SelectableLabel::new(self.layout.safe_frames, format!("{} Sécurité", ph::SELECTION)))
-                .on_hover_text(hint)
+            if self
+                .bouton_etat(ui, self.layout.safe_frames, ph::SELECTION, "Zones de sécurité", "Action 93 %, titres 90 %, tracées dans le cadre.", "vue.cadres_securite")
                 .clicked()
             {
                 self.run_action("vue.cadres_securite");
@@ -186,9 +169,9 @@ impl App {
             Some(_) if custom => "Personnalisé".to_string(),
             Some(r) => frames::label(r),
         };
-        egui::ComboBox::from_id_salt(ui.id().with("format_cadre"))
-            .selected_text(format!("{} Format : {shown}", egui_phosphor::regular::CROP))
-            .width(150.0)
+        let resp = egui::ComboBox::from_id_salt(ui.id().with("format_cadre"))
+            .selected_text(format!("{} {shown}", egui_phosphor::regular::CROP))
+            .width(96.0)
             .show_ui(ui, |ui| {
                 if ui.selectable_label(current.is_none(), "Aucun").clicked() {
                     self.layout.frame_format = None;
@@ -205,8 +188,8 @@ impl App {
                     self.format_custom = true;
                 }
             })
-            .response
-            .on_hover_text("Cadre d'un format de diffusion, tracé dans le cadre de la caméra (hors-format estompé)");
+            .response;
+        crate::bulles::bulle(resp, "Format", "Cadre d'un format de diffusion, tracé dans le cadre de la caméra (hors-format estompé).", "");
         if let (true, Some(mut r)) = (custom, current) {
             fn drag(v: &mut f32) -> egui::DragValue<'_> {
                 egui::DragValue::new(v).range(0.01..=1000.0).speed(0.01).max_decimals(2)

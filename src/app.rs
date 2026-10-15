@@ -112,6 +112,30 @@ impl Tool {
         }
     }
 
+    /// Petite description, pour la bulle d'aide de son bouton (12d).
+    pub fn description(self) -> &'static str {
+        match self {
+            Tool::Brush => "Peindre ; la taille peut suivre la pression du stylet.",
+            Tool::Pencil => "Dessiner au crayon.",
+            Tool::Eraser => "Effacer ; sur un calque vectoriel, des bouts de trait ou des traits entiers.",
+            Tool::Fill => "Remplir une zone avec la couleur courante.",
+            Tool::Line => "Tracer une droite, une courbe ou une courbe en S.",
+            Tool::Rect => "Tracer un rectangle, vide ou plein.",
+            Tool::Ellipse => "Tracer une ellipse, vide ou pleine.",
+            Tool::Polyline => "Tracer une suite de segments, clic après clic.",
+            Tool::Select => "Choisir une zone (lasso ou rectangle) pour la déplacer, la copier ou l'effacer.",
+            Tool::Picker => "Prendre une couleur sur le dessin.",
+            Tool::Pan => "Déplacer la vue.",
+            Tool::Camera => "Régler le cadre de la caméra du panneau : déplacer, zoomer par un coin, tourner.",
+            Tool::Transform => "Déplacer, agrandir ou tourner le calque entier (tous ses dessins).",
+            Tool::Ref3d => "Un modèle 3D en fil de fer comme guide, vu depuis le cadre du panneau.",
+            Tool::Text => "Clic : poser un texte ; Ctrl + Entrée pour le valider.",
+            Tool::Stamp => "Poser des images le long du trait, dans l'ordre ou au hasard.",
+            Tool::Clone => "Ctrl + clic pour la source, puis peindre : recopie une autre partie du dessin.",
+            Tool::Perspective => "Tirer les quatre coins du dessin pour le mettre en perspective.",
+        }
+    }
+
     /// Icône de l'outil (police d'icônes Phosphor, chargée au démarrage).
     pub fn icon(self) -> &'static str {
         use egui_phosphor::regular as ph;

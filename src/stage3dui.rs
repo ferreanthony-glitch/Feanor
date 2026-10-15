@@ -50,16 +50,25 @@ impl Nav3d {
 
     pub(crate) fn label(self) -> &'static str {
         match self {
-            Nav3d::Orbit => "Tourner autour du plateau",
+            Nav3d::Orbit => "Orbite",
             Nav3d::Pan => "Glisser la vue",
-            Nav3d::Dolly => "Avancer / reculer (glisser vers le haut ou le bas)",
-            Nav3d::Move => {
-                "Déplacer un calque dans son plan (Maj : en profondeur), ou la caméra par son œil (Maj : avancée ; \
-                 Ctrl : la tourner, panoramique et bascule)"
-            }
+            Nav3d::Dolly => "Avancer / reculer",
+            Nav3d::Move => "Déplacer",
         }
     }
 
+    /// Petite description, pour la bulle d'aide (12d).
+    pub(crate) fn description(self) -> &'static str {
+        match self {
+            Nav3d::Orbit => "Tourner autour du plateau.",
+            Nav3d::Pan => "Déplacer la vue sans la tourner.",
+            Nav3d::Dolly => "Glisser vers le haut ou le bas pour avancer ou reculer.",
+            Nav3d::Move => {
+                "Un calque dans son plan (Maj : en profondeur), ou la caméra par son œil (Maj : avancée ; \
+                 Ctrl : la tourner, panoramique et bascule)."
+            }
+        }
+    }
     pub(crate) fn icon(self) -> &'static str {
         use egui_phosphor::regular as ph;
         match self {
@@ -164,37 +173,30 @@ impl App {
         use egui_phosphor::regular as ph;
         ui.add_space(6.0);
         for t in Nav3d::ALL {
-            let hint = self.command_hint(t.action(), t.label());
-            if ui
-                .add(egui::SelectableLabel::new(self.stage3d.tool == t, egui::RichText::new(t.icon()).size(15.0)))
-                .on_hover_text(hint)
-                .clicked()
-            {
+            if self.bouton_etat(ui, self.stage3d.tool == t, t.icon(), t.label(), t.description(), t.action()).clicked() {
                 self.stage3d.tool = t;
             }
         }
         ui.add_space(6.0);
         ui.separator();
         ui.add_space(6.0);
-        let hint = self.command_hint("vue3d.recadrer", "Recadrer sur tout le plateau");
-        if ui.button(egui::RichText::new(ph::CORNERS_OUT).size(15.0)).on_hover_text(hint).clicked() {
+        if self.bouton(ui, ph::CORNERS_OUT, "Recadrer", "Tout le plateau dans la vue.", "vue3d.recadrer").clicked() {
             self.fit_stage3d(35.0, 20.0);
         }
-        let views: [(&str, &str, f32, f32); 3] = [
-            ("Face", "Vue de face, du côté de la caméra", 0.0, 0.0),
-            ("Dessus", "Vue de dessus : les profondeurs", 0.0, crate::view3d::MAX_ELEVATION),
-            ("Côté", "Vue de côté", 90.0, 0.0),
+        let views: [(&str, &str, &str, f32, f32); 3] = [
+            (ph::SQUARE, "Vue de face", "Du côté de la caméra.", 0.0, 0.0),
+            (ph::ARROW_FAT_LINES_DOWN, "Vue de dessus", "Pour voir les profondeurs.", 0.0, crate::view3d::MAX_ELEVATION),
+            (ph::ARROWS_HORIZONTAL, "Vue de côté", "", 90.0, 0.0),
         ];
-        for (name, hint, az, el) in views {
-            if ui.small_button(name).on_hover_text(hint).clicked() {
+        for (icon, name, description, az, el) in views {
+            if crate::bulles::icone(ui, icon, name, description, "").clicked() {
                 self.fit_stage3d(az, el);
             }
         }
-        if ui.small_button("Par la caméra").on_hover_text("La vue 3D à l'œil de la caméra du panneau, avec sa focale").clicked() {
+        if crate::bulles::icone(ui, ph::VIDEO_CAMERA, "Par la caméra", "La vue 3D à l'œil de la caméra du panneau, avec sa focale.", "").clicked() {
             self.stage3d_through_camera();
         }
     }
-
     /// La vue 3D placée à l'œil de la caméra du panneau.
     pub(crate) fn stage3d_through_camera(&mut self) {
         self.stage3d.cam = Some(self.world().look_through(&self.current_camera()));

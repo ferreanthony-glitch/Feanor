@@ -46,10 +46,11 @@ impl App {
             });
     }
 
-    /// Barre de la timeline, sur une seule ligne (12c) : les commandes en icônes, leur nom et leur
-    /// raccourci au survol ; si la fenêtre est trop étroite, la ligne défile au lieu de passer à la
+    /// Barre de la timeline, sur une seule ligne (12c) : les commandes en icônes, leur nom, leur
+    /// raccourci et une description dans une bulle (12d) ; si la fenêtre est trop étroite, la ligne défile au lieu de passer à la
     /// ligne.
     fn timeline_toolbar(&mut self, ui: &mut egui::Ui) {
+        use crate::bulles::{bulle, interrupteur};
         use egui_phosphor::regular as ph;
         let count = self.frame_count();
         let fps = self.doc.fps;
@@ -64,96 +65,82 @@ impl App {
                         ui.separator();
                         ui.add_space(3.0);
                     };
-                    if ui
-                        .button(format!("{} Storyboard", ph::ARROW_LEFT))
-                        .on_hover_text("Revenir au montage des panneaux (Tab)")
-                        .clicked()
-                    {
+                    if self.bouton(ui, ph::ARROW_U_UP_LEFT, "Retour au storyboard", "Revenir au montage des panneaux.", "mode.basculer").clicked() {
                         self.set_mode(Mode::Storyboard);
                     }
-                    ui.label(RichText::new(crate::storyboard::panel_title(&self.doc, self.cur_panel)).strong())
-                        .on_hover_text(crate::storyboard::panel_long_title(&self.doc, self.cur_panel));
-                    self.panel_length_field(ui, "").on_hover_text(format!("Durée du panneau : {}", duration_label(count, fps)));
+                    let resp = ui.label(RichText::new(crate::storyboard::panel_title(&self.doc, self.cur_panel)).strong());
+                    bulle(resp, &crate::storyboard::panel_long_title(&self.doc, self.cur_panel), "Le panneau que l'on anime.", "");
+                    let resp = self.panel_length_field(ui, "");
+                    bulle(resp, "Durée du panneau", &format!("{} ; glisser ou taper pour la changer.", duration_label(count, fps)), "");
                     sep(ui);
 
                     // Lecture.
-                    if self.icon_button(ui, ph::SKIP_BACK, "Première image", "image.premiere") {
+                    if self.bouton(ui, ph::SKIP_BACK, "Première image", "Première image du panneau.", "image.premiere").clicked() {
                         self.goto_frame(0);
                     }
-                    if self.icon_button(ui, ph::CARET_LEFT, "Image précédente", "image.precedente") {
+                    if self.bouton(ui, ph::CARET_LEFT, "Image précédente", "", "image.precedente").clicked() {
                         self.goto_frame(self.cur_frame.saturating_sub(1));
                     }
                     let play = if self.playing { ph::PAUSE } else { ph::PLAY };
-                    if self.icon_button(ui, play, "Lecture du panneau / pause", "lecture.basculer") {
+                    if self.bouton(ui, play, "Lecture / pause", "Lire le panneau.", "lecture.basculer").clicked() {
                         self.toggle_play();
                     }
-                    if self.icon_button(ui, ph::CARET_RIGHT, "Image suivante", "image.suivante") {
+                    if self.bouton(ui, ph::CARET_RIGHT, "Image suivante", "", "image.suivante").clicked() {
                         self.goto_frame(self.cur_frame + 1);
                     }
-                    if self.icon_button(ui, ph::SKIP_FORWARD, "Dernière image", "image.derniere") {
+                    if self.bouton(ui, ph::SKIP_FORWARD, "Dernière image", "Dernière image du panneau.", "image.derniere").clicked() {
                         self.goto_frame(count - 1);
                     }
-                    ui.toggle_value(&mut self.looping, RichText::new(ph::REPEAT).size(15.0)).on_hover_text("Lecture en boucle");
+                    interrupteur(ui, &mut self.looping, ph::REPEAT, "Lecture en boucle", "Reprendre au début une fois à la fin.", "");
                     let mut fps = self.doc.fps;
-                    let resp = ui.add(egui::DragValue::new(&mut fps).range(1..=120).suffix(" i/s")).on_hover_text("Cadence du projet");
+                    let resp = ui.add(egui::DragValue::new(&mut fps).range(1..=120).suffix(" i/s"));
+                    let resp = bulle(resp, "Cadence", "Images par seconde, pour tout le projet.", "");
                     if self.edited(&resp) {
                         self.doc.fps = fps;
                     }
-                    ui.label(RichText::new(format!("{} / {}", self.cur_frame + 1, count)).monospace())
-                        .on_hover_text("Image courante / images du panneau");
+                    let resp = ui.label(RichText::new(format!("{} / {}", self.cur_frame + 1, count)).monospace());
+                    bulle(resp, "Image courante", "Image courante / nombre d'images du panneau.", "");
                     sep(ui);
 
                     // Dessins et expositions.
-                    if self.icon_button(ui, ph::FILE_PLUS, "Nouveau dessin après l'exposition courante", "dessin.nouveau") {
+                    if self.bouton(ui, ph::FILE_PLUS, "Nouveau dessin", "Un dessin vide après l'exposition courante.", "dessin.nouveau").clicked() {
                         self.new_image(false);
                     }
-                    if self.icon_button(ui, ph::COPY, "Dupliquer le dessin", "dessin.dupliquer") {
+                    if self.bouton(ui, ph::COPY, "Dupliquer le dessin", "Une copie du dessin courant, après lui.", "dessin.dupliquer").clicked() {
                         self.new_image(true);
                     }
-                    if self.icon_button(ui, ph::PLUS, "Tenir le dessin une image de plus", "exposition.allonger") {
+                    if self.bouton(ui, ph::PLUS, "Allonger l'exposition", "Tenir le dessin une image de plus.", "exposition.allonger").clicked() {
                         self.exposure_plus();
                     }
-                    if self.icon_button(ui, ph::MINUS, "Tenir le dessin une image de moins", "exposition.raccourcir") {
+                    if self.bouton(ui, ph::MINUS, "Raccourcir l'exposition", "Tenir le dessin une image de moins.", "exposition.raccourcir").clicked() {
                         self.exposure_minus();
                     }
-                    if self.icon_button(ui, ph::TRASH, "Retirer le dessin et ses expositions de la timeline", "dessin.supprimer") {
+                    if self.bouton(ui, ph::TRASH, "Supprimer le dessin", "Retirer le dessin et ses expositions de la timeline.", "dessin.supprimer").clicked() {
                         self.delete_image();
                     }
-                    if self.icon_button(ui, ph::ERASER, "Vider le dessin", "edition.supprimer") {
+                    if self.bouton(ui, ph::ERASER, "Vider le dessin", "Effacer tout ce qu'il contient ; il reste exposé.", "edition.supprimer").clicked() {
                         self.clear_image();
                     }
-                    ui.add(egui::DragValue::new(&mut self.default_exposure).range(1..=12).prefix("en "))
-                        .on_hover_text("Nombre d'images que tient chaque nouveau dessin (« en 1 », « en 2 »…)");
+                    let resp = ui.add(egui::DragValue::new(&mut self.default_exposure).range(1..=12).prefix("en "));
+                    bulle(resp, "Exposition des nouveaux dessins", "Nombre d'images que tient chaque nouveau dessin (« en 1 », « en 2 »…).", "");
                     sep(ui);
 
                     self.camera_keys_ui(ui);
                     sep(ui);
 
                     // Pelure d'oignon.
-                    let key = self.keymap.label("vue.pelure");
-                    let hint = if key.is_empty() { "Pelure d'oignon".to_string() } else { format!("Pelure d'oignon   {key}") };
-                    ui.toggle_value(&mut self.onion.enabled, RichText::new(ph::CIRCLES_THREE).size(15.0)).on_hover_text(hint);
+                    let key = self.raccourci("vue.pelure");
+                    interrupteur(ui, &mut self.onion.enabled, ph::CIRCLES_THREE, "Pelure d'oignon", "Montrer les dessins d'avant et d'après.", &key);
                     let max = crate::onion::MAX_NEIGHBOURS;
-                    ui.add(egui::DragValue::new(&mut self.onion.before).range(0..=max).prefix("‹ "))
-                        .on_hover_text("Dessins (ou images) montrés avant");
-                    ui.add(egui::DragValue::new(&mut self.onion.after).range(0..=max).suffix(" ›"))
-                        .on_hover_text("Dessins (ou images) montrés après");
-                    ui.menu_button(RichText::new(ph::GEAR).size(15.0), |ui| self.onion_settings_ui(ui))
-                        .response
-                        .on_hover_text("Réglages de la pelure d'oignon");
+                    let resp = ui.add(egui::DragValue::new(&mut self.onion.before).range(0..=max).prefix("‹ "));
+                    bulle(resp, "Avant", "Nombre de dessins (ou d'images) montrés avant.", "");
+                    let resp = ui.add(egui::DragValue::new(&mut self.onion.after).range(0..=max).suffix(" ›"));
+                    bulle(resp, "Après", "Nombre de dessins (ou d'images) montrés après.", "");
+                    let resp = ui.menu_button(RichText::new(ph::GEAR).size(crate::bulles::TAILLE), |ui| self.onion_settings_ui(ui)).response;
+                    bulle(resp, "Réglages de la pelure", "Compter par dessin ou par image, opacité, couleurs.", "");
                 });
             });
     }
-
-    /// Bouton icône d'une barre ; `action` : son raccourci, montré au survol avec `name`.
-    pub(crate) fn icon_button(&self, ui: &mut egui::Ui, icon: &str, name: &str, action: &str) -> bool {
-        let key = if action.is_empty() { String::new() } else { self.keymap.label(action) };
-        let hint = if key.is_empty() { name.to_string() } else { format!("{name}   {key}") };
-        ui.add(egui::Button::new(RichText::new(icon).size(15.0)).min_size(vec2(24.0, 0.0)))
-            .on_hover_text(hint)
-            .clicked()
-    }
-
     /// Réglages détaillés de la pelure d'oignon (menu de la timeline).
     fn onion_settings_ui(&mut self, ui: &mut egui::Ui) {
         use crate::onion::{OnionMode, OnionSettings};
