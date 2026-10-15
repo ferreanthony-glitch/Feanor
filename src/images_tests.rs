@@ -171,6 +171,53 @@ fn auto_settings_are_saved_and_keys_go_to_instances() {
 }
 
 #[test]
+fn fake_hold_replays_instances() {
+    use crate::images::{fake_hold, Cycle};
+    // Trois dessins en 2 : 1 1 2 2 3 3, puis un 9 qui doit reculer.
+    let base = vec![Some(1), Some(1), Some(2), Some(2), Some(3), Some(3), Some(9)];
+    let mut f = base.clone();
+    assert_eq!(fake_hold(&mut f, 0, 6, Cycle::Loop, 2, 1), 6);
+    assert_eq!(&f[6..13], [Some(1), Some(1), Some(2), Some(2), Some(3), Some(3), Some(9)]);
+
+    let mut f = base.clone();
+    fake_hold(&mut f, 0, 6, Cycle::PingPong, 3, 1);
+    // 1 2 3 | 2 1 2 | 3 2 1 : chaque dessin garde son exposition en 2.
+    let after: Vec<_> = f[6..18].chunks(2).map(|c| c[0].unwrap()).collect();
+    assert_eq!(after, [2, 1, 2, 3, 2, 1]);
+    assert_eq!(f[18], Some(9));
+
+    let mut f = base.clone();
+    let n = fake_hold(&mut f, 0, 6, Cycle::Random, 3, 7);
+    assert_eq!(n, 12);
+    let picks: Vec<_> = f[6..18].chunks(2).map(|c| c[0].unwrap()).collect();
+    assert!(picks.iter().all(|p| [1, 2, 3].contains(p)));
+    assert!(picks.windows(2).all(|w| w[0] != w[1]), "pas deux fois de suite le même");
+    assert!(f[6..18].chunks(2).all(|c| c[0] == c[1]), "les expositions sont gardées");
+}
+
+#[test]
+fn stretching_and_dropping_images() {
+    use crate::images::{drop_frames, stretch_frames, DropMode, Stretch};
+    let f = vec![None, Some(1), Some(2)];
+    assert_eq!(stretch_frames(&f, 6, Stretch::HoldLast), [None, Some(1), Some(2), Some(2), Some(2), Some(2)]);
+    assert_eq!(stretch_frames(&f, 6, Stretch::Loop), [None, Some(1), Some(2), Some(1), Some(2), Some(1)]);
+    assert_eq!(stretch_frames(&f, 2, Stretch::Loop), f, "déjà assez long : rien ne change");
+
+    // A B C D E : on prend B C (images 1 et 2) et on les pose à l'image 3.
+    let base = vec![Some(1), Some(2), Some(3), Some(4), Some(5)];
+    let row = [Some(2), Some(3)];
+    let mut f = base.clone();
+    drop_frames(&mut f, 1, 3, 3, DropMode::Move, &row);
+    assert_eq!(f, [Some(1), None, None, Some(2), Some(3)]);
+    let mut f = base.clone();
+    drop_frames(&mut f, 1, 3, 3, DropMode::Copy, &row);
+    assert_eq!(f, [Some(1), Some(2), Some(3), Some(2), Some(3)]);
+    let mut f = base.clone();
+    drop_frames(&mut f, 1, 3, 3, DropMode::Insert, &row);
+    assert_eq!(f, [Some(1), Some(4), Some(5), Some(2), Some(3)]);
+}
+
+#[test]
 fn behaviours_are_saved() {
     let mut doc = Document::new(16, 16, 24);
     let cel = doc.new_cel(LayerKind::Bitmap);

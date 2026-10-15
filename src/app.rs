@@ -307,6 +307,10 @@ pub struct App {
     pub(crate) image_clipboard: Option<crate::images::ImageClip>,
     pub(crate) hole: crate::images::Hole,
     pub(crate) images_focus: bool,
+    /// Faux-fixe : nombre de fois que les images choisies sont jouées en tout (13c).
+    pub(crate) fake_hold_times: usize,
+    /// Glisser d'images choisies en cours : colonne du clic, colonne sous la souris (13c).
+    pub(crate) image_drag: Option<(usize, usize)>,
     /// Aperçus des réglages de pinceau (grille du panneau Réglages, 6d).
     pub(crate) brush_previews: crate::brushui::BrushPreviews,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
@@ -533,6 +537,8 @@ impl App {
             image_clipboard: None,
             hole: Default::default(),
             images_focus: false,
+            fake_hold_times: 2,
+            image_drag: None,
             brush_previews: Default::default(),
             ref3d: Default::default(),
             camera_view: false,
@@ -2325,6 +2331,13 @@ impl App {
             "instance.ajouter_avant" => self.add_instance_before(),
             "instance.exposition_plus" => self.change_chosen_exposures(true),
             "instance.exposition_moins" => self.change_chosen_exposures(false),
+            "images.faux_fixe_boucle" => self.fake_hold_chosen(crate::images::Cycle::Loop),
+            "images.faux_fixe_va_et_vient" => self.fake_hold_chosen(crate::images::Cycle::PingPong),
+            "images.faux_fixe_hasard" => self.fake_hold_chosen(crate::images::Cycle::Random),
+            "calque.etirer_tenir" => self.stretch_chosen(crate::images::Stretch::HoldLast),
+            "calque.etirer_boucle" => self.stretch_chosen(crate::images::Stretch::Loop),
+            "calque.etirer_va_et_vient" => self.stretch_chosen(crate::images::Stretch::PingPong),
+            "calque.couper_apres" => self.cut_layers_after_current(),
             // Dossiers de calques (13b-5, `folders.rs`).
             "dossier.nouveau" => self.new_folder(),
             "dossier.ranger" => self.folder_from_chosen(),

@@ -506,7 +506,11 @@ Décisions d'Anthony :
     l'image courante, une exposition de plus / de moins à chaque instance choisie, nouveau
     dessin avant l'instance ; par calque, cassure automatique (dessiner sur une image tenue
     fait une copie jusqu'à la fin de l'exposition) et création automatique (format 15).
-  - 13c-3b. Faux-fixe, étirer le calque, glisser-déposer des images.
+  - ✅ 13c-3b. Faux-fixe (les instances choisies rejouées N fois en tout : en boucle, en
+    va-et-vient, au hasard sans deux fois de suite la même ; chacune garde son exposition),
+    étirer le calque jusqu'à la fin du plan (tenir la dernière image, boucle, va-et-vient) ou
+    le couper après l'image courante, glisser-déposer des images choisies (sans touche :
+    déplacer ; Ctrl : copier, avec des copies des dessins ; Maj : insérer).
   - 13c-4. Noms d'instance (renommer, effacer, tout renommer, renommage intelligent), retourner.
 - 13d. Repères : marques, signets, entrée / sortie, boucle, image de départ, time code, zoom.
 - 13e. Onglets du bas et vue Projet : notes dessinées, son par plan, arrière-plan, propriétés.

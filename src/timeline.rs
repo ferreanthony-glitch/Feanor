@@ -508,7 +508,37 @@ impl App {
             self.panel_focus = false;
         }
         let shift = ui.input(|i| i.modifiers.shift);
-        if (resp.clicked() || resp.dragged()) && !holding_key {
+        // Glisser les images choisies (13c-3) : on les prend dans leur cadre ; lâchées sans
+        // touche elles sont déplacées, avec Ctrl copiées, avec Maj insérées.
+        let col_of = |x: f32| ((x - r.left()) / CELL_W).floor().max(0.0) as usize;
+        if resp.drag_started() && !holding_key {
+            if let (Some((a, b)), Some(p)) = (self.frame_sel, ui.input(|i| i.pointer.press_origin())) {
+                let c = col_of(p.x);
+                let on_chosen = row_at(&rows, p.y - grid_top).is_some_and(|row| self.is_chosen_layer(row.li));
+                if c >= a && c < b && on_chosen {
+                    self.image_drag = Some((c, c));
+                }
+            }
+        }
+        if let Some((c0, _)) = self.image_drag {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+            if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
+                self.image_drag = Some((c0, col_of(p.x)));
+            }
+            if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
+                let (c0, c1) = self.image_drag.take().unwrap_or((c0, c0));
+                let m = ui.input(|i| i.modifiers);
+                let mode = if m.command {
+                    crate::images::DropMode::Copy
+                } else if m.shift {
+                    crate::images::DropMode::Insert
+                } else {
+                    crate::images::DropMode::Move
+                };
+                self.drop_images(c1 as isize - c0 as isize, mode);
+            }
+        }
+        if (resp.clicked() || resp.dragged()) && !holding_key && self.image_drag.is_none() && !resp.drag_stopped() {
             if let Some(p) = resp.interact_pointer_pos() {
                 let col = ((p.x - r.left()) / CELL_W).floor().max(0.0) as usize;
                 if shift {
@@ -538,6 +568,12 @@ impl App {
                     pos2(r.left() + b as f32 * CELL_W, grid_top + row.top + row.h - 1.0),
                 );
                 painter.rect(sel, 2.0, Color32::from_white_alpha(28), Stroke::new(1.5_f32, Color32::WHITE), StrokeKind::Inside);
+                // Pendant un glisser : là où elles vont se poser.
+                if let Some((c0, c1)) = self.image_drag.filter(|(c0, c1)| c0 != c1) {
+                    let dx = (c1 as f32 - c0 as f32) * CELL_W;
+                    let ghost = sel.translate(vec2(dx, 0.0));
+                    painter.rect(ghost, 2.0, theme::MARQUE.gamma_multiply(0.25), Stroke::new(1.5_f32, theme::MARQUE), StrokeKind::Inside);
+                }
             }
         }
 

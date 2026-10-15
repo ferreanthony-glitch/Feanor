@@ -936,6 +936,41 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
+action = "images.faux_fixe_boucle"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "images.faux_fixe_va_et_vient"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "images.faux_fixe_hasard"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.etirer_tenir"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.etirer_boucle"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.etirer_va_et_vient"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.couper_apres"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
 action = "dossier.nouveau"
 touches = []
 source = "TVPaint 12 sans touche"

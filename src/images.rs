@@ -203,6 +203,132 @@ pub(crate) fn change_exposures(frames: &mut Frames, a: usize, b: usize, more: bo
     n
 }
 
+/// Comment le faux-fixe enchaîne les instances.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Cycle {
+    Loop,
+    PingPong,
+    Random,
+}
+
+/// Instances (dessin, nombre d'images) des images [a, b).
+fn runs_in(frames: &Frames, a: usize, b: usize) -> Vec<(Option<CelId>, usize)> {
+    let mut out: Vec<(Option<CelId>, usize)> = Vec::new();
+    for f in a..b {
+        let v = frames.get(f).copied().flatten();
+        match out.last_mut() {
+            Some((w, n)) if *w == v => *n += 1,
+            _ => out.push((v, 1)),
+        }
+    }
+    out
+}
+
+/// Faux-fixe (choix d'Anthony) : les instances des images [a, b) sont rejouées `times` fois en
+/// tout, à la suite (insérées juste après), en boucle, en va-et-vient ou au hasard (`seed`) ;
+/// chaque instance garde son exposition et son dessin. Renvoie le nombre d'images ajoutées.
+pub(crate) fn fake_hold(frames: &mut Frames, a: usize, b: usize, cycle: Cycle, times: usize, seed: u32) -> usize {
+    let runs = runs_in(frames, a, b);
+    let r = runs.len();
+    if r == 0 || times < 2 {
+        return 0;
+    }
+    let mut rng = seed.max(1);
+    let mut last = r - 1;
+    let mut row: Frames = Vec::new();
+    for i in 0..(times - 1) * r {
+        let idx = match cycle {
+            Cycle::Loop => i % r,
+            Cycle::PingPong if r == 1 => 0,
+            Cycle::PingPong => {
+                let period = 2 * r - 2;
+                let m = (r + i) % period;
+                if m < r { m } else { period - m }
+            }
+            Cycle::Random => {
+                rng ^= rng << 13;
+                rng ^= rng >> 17;
+                rng ^= rng << 5;
+                let mut k = rng as usize % r;
+                // Pas deux fois de suite la même instance, s'il y en a d'autres.
+                if r > 1 && k == last {
+                    k = (k + 1) % r;
+                }
+                k
+            }
+        };
+        last = idx;
+        row.extend(std::iter::repeat_n(runs[idx].0, runs[idx].1));
+    }
+    let n = row.len();
+    insert_frames(frames, b, &row);
+    n
+}
+
+/// Comment étirer un calque jusqu'à une longueur.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Stretch {
+    HoldLast,
+    Loop,
+    PingPong,
+}
+
+/// Étire un calque jusqu'à `len` images après sa dernière image dessinée : en tenant celle-ci,
+/// ou en rejouant ses images en boucle ou en va-et-vient (comme le post-comportement, mais posé
+/// dans la timeline, où l'on peut ensuite le retoucher).
+pub(crate) fn stretch_frames(frames: &Frames, len: usize, how: Stretch) -> Frames {
+    use crate::document::{Behaviour, Layer, LayerKind};
+    let mut tmp = Layer::new("", LayerKind::Bitmap);
+    tmp.frames = frames.clone();
+    tmp.post = match how {
+        Stretch::HoldLast => Behaviour::Hold,
+        Stretch::Loop => Behaviour::Loop,
+        Stretch::PingPong => Behaviour::PingPong,
+    };
+    let Some(last) = frames.iter().rposition(Option::is_some) else { return frames.clone() };
+    let mut out = frames.clone();
+    out.truncate(last + 1);
+    for f in last + 1..len {
+        out.push(tmp.shown_at(f));
+    }
+    out
+}
+
+/// Où va un bloc d'images glissé.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DropMode {
+    /// Sans touche : déplacé (sa place se vide, il recouvre ce qu'il y a là où on le pose).
+    Move,
+    /// Ctrl : copié (il recouvre ce qu'il y a là où on le pose).
+    Copy,
+    /// Maj : inséré (il quitte sa place, la suite recule, puis il s'insère là où on le pose).
+    Insert,
+}
+
+/// Pose les images [a, b) à partir de l'image `to`, selon `mode` ; `row` : les images posées
+/// (les mêmes, ou leurs copies).
+pub(crate) fn drop_frames(frames: &mut Frames, a: usize, b: usize, to: usize, mode: DropMode, row: &[Option<CelId>]) {
+    match mode {
+        DropMode::Insert => {
+            delete_frames(frames, a, b, Hole::FromRight);
+            insert_frames(frames, to, row);
+        }
+        DropMode::Move | DropMode::Copy => {
+            if mode == DropMode::Move {
+                let end = b.min(frames.len());
+                if a < end {
+                    frames[a..end].fill(None);
+                }
+            }
+            if frames.len() < to + row.len() {
+                frames.resize(to + row.len(), None);
+            }
+            frames[to..to + row.len()].copy_from_slice(row);
+            trim(frames);
+        }
+    }
+}
+
 /// Images copiées : une rangée par calque (du plus bas au plus haut) et leurs dessins.
 #[derive(Clone)]
 pub(crate) struct ImageClip {
@@ -485,6 +611,86 @@ impl App {
         self.done(snap, "Nouveau dessin avant l'instance.".into());
     }
 
+    /// Faux-fixe des images visées sur les calques choisis : rejouées `fake_hold_times` fois en
+    /// tout, à la suite.
+    pub(crate) fn fake_hold_chosen(&mut self, cycle: Cycle) {
+        self.end_stroke();
+        let (a, b) = self.image_range();
+        let times = self.fake_hold_times.max(2);
+        let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.subsec_nanos());
+        let snap = self.snapshot();
+        let mut added = 0;
+        for li in self.image_layers() {
+            added = added.max(fake_hold(&mut self.layers_mut()[li].frames, a, b, cycle, times, seed));
+        }
+        if added == 0 {
+            self.status = "Rien à rejouer : choisis des images dessinées (Maj + clic).".into();
+            return;
+        }
+        self.frame_sel = Some((b, b + added));
+        let how = match cycle {
+            Cycle::Loop => "en boucle",
+            Cycle::PingPong => "en va-et-vient",
+            Cycle::Random => "au hasard",
+        };
+        self.done(snap, format!("Faux-fixe {how} : {added} images ajoutées."));
+    }
+
+    /// Étire les calques choisis jusqu'à la fin du plan.
+    pub(crate) fn stretch_chosen(&mut self, how: Stretch) {
+        self.end_stroke();
+        let len = self.frame_count();
+        let snap = self.snapshot();
+        for li in self.image_layers() {
+            let frames = stretch_frames(&self.layers()[li].frames, len, how);
+            self.layers_mut()[li].frames = frames;
+        }
+        self.done(snap, "Calque étiré jusqu'à la fin du plan.".into());
+    }
+
+    /// Coupe les calques choisis après l'image courante.
+    pub(crate) fn cut_layers_after_current(&mut self) {
+        self.end_stroke();
+        let keep = self.cur_frame + 1;
+        let snap = self.snapshot();
+        for li in self.image_layers() {
+            let frames = &mut self.layers_mut()[li].frames;
+            frames.truncate(keep);
+            trim(frames);
+        }
+        self.done(snap, "Calque coupé après l'image courante.".into());
+    }
+
+    /// Fin d'un glisser d'images choisies : posées à partir de leur nouvelle place, selon
+    /// `mode` (une copie a ses propres dessins).
+    pub(crate) fn drop_images(&mut self, delta: isize, mode: DropMode) {
+        let (a, b) = self.image_range();
+        let to = (a as isize + delta).max(0) as usize;
+        if to == a && mode != DropMode::Copy {
+            return;
+        }
+        self.end_stroke();
+        let snap = self.snapshot();
+        let mut copies: HashMap<CelId, CelId> = HashMap::new();
+        for li in self.image_layers() {
+            let mut row = frames_in(&self.layers()[li].frames, a, b);
+            if mode == DropMode::Copy {
+                for f in row.iter_mut() {
+                    *f = f.map(|old| *copies.entry(old).or_insert_with(|| self.doc.duplicate_cel(old)));
+                }
+            }
+            drop_frames(&mut self.layers_mut()[li].frames, a, b, to, mode, &row);
+        }
+        self.frame_sel = Some((to, to + (b - a)));
+        self.cur_frame = to;
+        let what = match mode {
+            DropMode::Move => "déplacées",
+            DropMode::Copy => "copiées",
+            DropMode::Insert => "insérées",
+        };
+        self.done(snap, format!("Images {what}."));
+    }
+
     /// Menu « Images » (barre de la timeline, menu Animation).
     pub(crate) fn images_menu(&mut self, ui: &mut egui::Ui) {
         let (a, b) = self.image_range();
@@ -517,6 +723,23 @@ impl App {
             self.action_item(ui, "Une exposition de plus à chaque instance choisie", "instance.exposition_plus");
             self.action_item(ui, "Une exposition de moins à chaque instance choisie", "instance.exposition_moins");
         });
+        ui.menu_button("Faux-fixe (rejouer les images choisies)", |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Jouées en tout");
+                ui.add(egui::DragValue::new(&mut self.fake_hold_times).range(2..=50).suffix(" fois"));
+            });
+            self.action_item(ui, "À la suite, en boucle", "images.faux_fixe_boucle");
+            self.action_item(ui, "En va-et-vient", "images.faux_fixe_va_et_vient");
+            self.action_item(ui, "Au hasard", "images.faux_fixe_hasard");
+        });
+        ui.menu_button("Étirer le calque jusqu'à la fin du plan", |ui| {
+            self.action_item(ui, "En tenant sa dernière image", "calque.etirer_tenir");
+            self.action_item(ui, "En rejouant ses images en boucle", "calque.etirer_boucle");
+            self.action_item(ui, "En rejouant ses images en va-et-vient", "calque.etirer_va_et_vient");
+            ui.separator();
+            self.action_item(ui, "Couper le calque après l'image courante", "calque.couper_apres");
+        });
+        ui.label(egui::RichText::new("Glisser les images choisies : déplacer ; avec Ctrl : copier ; avec Maj : insérer.").weak().small());
         ui.separator();
         self.action_item(ui, "Choisir toutes les images", "images.tout_choisir");
         ui.menu_button("Trou laissé par une suppression", |ui| {
