@@ -382,7 +382,7 @@ impl App {
     // ------------------------------------------------------------------ sélection
 
     pub(crate) fn select_press(&mut self, p: Pos2, screen: Pos2, shift: bool) {
-        if self.layer().locked {
+        if !self.layer().drawable() {
             self.layer_editable();
             return;
         }

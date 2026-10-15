@@ -26,6 +26,10 @@ use crate::vector::{Affine, Element, VectorDrawing};
 use crate::view::View;
 use crate::vtools::{VDrag, VSelection, VectorErase, VectorStroke};
 
+/// Ce qu'on dit quand un outil bute sur un calque de position verrouillée (13b).
+pub(crate) const POSITION_LOCKED: &str =
+    "La position de ce calque est verrouillée : on ne peut ni le déplacer ni dessiner dessus.";
+
 /// Storyboard : on monte les plans. Animation : on est entré dans un plan.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
@@ -768,7 +772,8 @@ impl App {
             // Derrière la caméra (elle a avancé au-delà) : on ne le voit pas.
             let Some(seen) = layer.transform_seen(&camera) else { continue };
             let transform = (!seen.is_identity()).then_some(seen);
-            if onion && self.onion.enabled && !self.playing && li == self.cur_layer {
+            // Pelure d'oignon : le calque courant, et ceux qui ont la leur (13b).
+            if onion && self.onion.enabled && !self.playing && (li == self.cur_layer || layer.onion) {
                 let s = &self.onion;
                 let (before, after) = crate::onion::neighbours(layer, frame, s);
                 // Sous le dessin courant, du plus lointain au plus proche (le plus proche au-dessus).
@@ -977,6 +982,10 @@ impl App {
             self.status = format!("Ce calque est verrouillé ({key} pour le déverrouiller).");
             return false;
         }
+        if self.layer().position_locked {
+            self.status = POSITION_LOCKED.into();
+            return false;
+        }
         if self.layer().visible {
             return true;
         }
@@ -1016,7 +1025,10 @@ impl App {
             StrokeMode::Paint(self.color)
         };
         let textures = self.brushes.textures(&settings);
-        let mut stroke = StrokeState::new(cel, mode, settings, prefix, pen).with_textures(textures);
+        let stencil = self.stencil_for(cel);
+        let mut stroke = StrokeState::new(cel, mode, settings, prefix, pen)
+            .with_textures(textures)
+            .on_layer(self.layer().keep_alpha, stencil);
         let mut dirty = Vec::new();
         if let Some(c) = self.doc.cels.get_mut(&cel) {
             stroke.add_point(&mut c.raster, p, pressure, &mut dirty);
@@ -1024,6 +1036,39 @@ impl App {
         self.renderer.invalidate_tiles(&dirty);
         self.stroke = Some(stroke);
         self.modified = true;
+    }
+
+    /// Pochoirs des autres calques visibles du plan, à l'image courante (13b), pour un trait sur
+    /// le dessin `painted` du calque courant ; aucun : on peint partout.
+    pub(crate) fn stencil_for(&self, painted: CelId) -> Option<crate::stencil::Stencil> {
+        let seen = self.doc.camera_seen(self.cur_panel, self.cur_frame);
+        let mine = self.layer_seen();
+        let center = self.doc.stage_center();
+        let empty = crate::raster::Raster::new(self.doc.width, self.doc.height);
+        let mut stencil = None;
+        for (li, l) in self.layers().iter().enumerate() {
+            if li == self.cur_layer || !l.stencil || !l.visible {
+                continue;
+            }
+            let cel = l.cel_at(self.cur_frame);
+            if cel == Some(painted) {
+                continue;
+            }
+            // Derrière la caméra, on ne le voit pas : il ne cache rien.
+            let Some(theirs) = l.transform_seen(&seen) else { continue };
+            let to_stencil = if theirs == mine {
+                None
+            } else {
+                let Some(inv) = theirs.affine(center).inverse() else { continue };
+                Some(mine.affine(center).then(&inv))
+            };
+            // Image vide : un pochoir positif ne laisse rien passer, un négatif laisse tout.
+            let raster = cel.and_then(|c| self.doc.cels.get(&c)).map_or(&empty, |c| &c.raster);
+            stencil
+                .get_or_insert_with(|| crate::stencil::Stencil::new(self.doc.width, self.doc.height))
+                .add(raster, l.stencil_negative, to_stencil);
+        }
+        stencil
     }
 
     pub(crate) fn stroke_to(&mut self, p: Pos2, pressure: f32) {
@@ -1327,7 +1372,7 @@ impl App {
     pub(crate) fn clear_image(&mut self) {
         self.end_stroke();
         self.drop_bitmap_selection();
-        if self.layer().locked {
+        if !self.layer().drawable() {
             self.layer_editable();
             return;
         }

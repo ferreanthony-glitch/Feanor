@@ -45,6 +45,7 @@ mod frames;
 #[cfg(test)]
 mod frames_tests;
 mod gpu;
+mod groups;
 mod guides;
 #[cfg(test)]
 mod guides_tests;
@@ -53,6 +54,8 @@ mod io;
 mod keymap;
 #[cfg(test)]
 mod latency_tests;
+#[cfg(test)]
+mod layerflags_tests;
 mod layersui;
 mod layertools;
 #[cfg(test)]
@@ -113,6 +116,7 @@ mod text;
 #[cfg(test)]
 mod text_tests;
 mod texttools;
+mod stencil;
 mod stage3d;
 #[cfg(test)]
 mod stage3d_tests;

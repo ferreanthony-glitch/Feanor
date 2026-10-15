@@ -231,6 +231,23 @@ pub struct Layer {
     pub scene_wide: Option<SceneWide>,
     /// Mode de fusion avec ce qui est dessous (8).
     pub blend: crate::blend::BlendMode,
+    /// Pelure d'oignon du calque (13b) : quand la pelure d'oignon est allumée, ses images
+    /// voisines sont montrées même s'il n'est pas le calque courant.
+    pub onion: bool,
+    /// Préserver la transparence (13b) : le pinceau ne colore que ce qui est déjà dessiné (le
+    /// vide reste vide) ; la gomme gomme normalement.
+    pub keep_alpha: bool,
+    /// Pochoir (13b) : le dessin du calque limite où l'on peint sur les autres calques ;
+    /// positif = seulement dans sa forme, négatif (`stencil_negative`) = seulement hors d'elle.
+    pub stencil: bool,
+    pub stencil_negative: bool,
+    /// Position verrouillée (13b) : ni l'outil Transformer ni le déplacement en 3D ne bougent
+    /// le calque, et on ne peut plus dessiner dessus.
+    pub position_locked: bool,
+    /// Groupe de couleur (13b) : un des `groups::COUNT` groupes du projet, 0 = « Défaut ».
+    pub group: u8,
+    /// Ligne réduite dans la timeline (13b).
+    pub collapsed: bool,
 }
 
 impl Layer {
@@ -247,7 +264,19 @@ impl Layer {
             frames: Vec::new(),
             scene_wide: None,
             blend: Default::default(),
+            onion: false,
+            keep_alpha: false,
+            stencil: false,
+            stencil_negative: false,
+            position_locked: false,
+            group: 0,
+            collapsed: false,
         }
+    }
+
+    /// On peut dessiner sur le calque : ni verrouillé, ni de position verrouillée (13b).
+    pub fn drawable(&self) -> bool {
+        !self.locked && !self.position_locked
     }
 
     /// Plus proche que ça, le calque serait derrière la caméra.
@@ -534,6 +563,8 @@ pub struct Structure {
     pub fps: u32,
     /// Notes de la planche (vue Vignettes, phase 7).
     pub board: crate::board::Board,
+    /// Groupes de couleur des calques (13b).
+    pub groups: Vec<crate::groups::LayerGroup>,
 }
 
 pub struct Document {
@@ -561,6 +592,8 @@ pub struct Document {
     pub guides: Vec<Guide>,
     /// Notes de la planche (vue Vignettes, phase 7).
     pub board: crate::board::Board,
+    /// Groupes de couleur des calques (13b), toujours `groups::COUNT`.
+    pub groups: Vec<crate::groups::LayerGroup>,
     next_id: u64,
 }
 
@@ -589,6 +622,7 @@ impl Document {
             models: HashMap::new(),
             guides: Vec::new(),
             board: Default::default(),
+            groups: crate::groups::defaults(),
             next_id: 1,
         };
         let seq = doc.new_sequence();
@@ -633,6 +667,7 @@ impl Document {
             models: HashMap::new(),
             guides: structure.guides,
             board: structure.board,
+            groups: crate::groups::completed(structure.groups),
             next_id: max_id + 1,
         };
         doc.normalize();
@@ -731,6 +766,7 @@ impl Document {
             paper: self.paper,
             fps: self.fps,
             board: self.board.clone(),
+            groups: self.groups.clone(),
         }
     }
 
@@ -744,6 +780,7 @@ impl Document {
             paper: std::mem::replace(&mut self.paper, s.paper),
             fps: std::mem::replace(&mut self.fps, s.fps),
             board: std::mem::replace(&mut self.board, s.board),
+            groups: std::mem::replace(&mut self.groups, s.groups),
         }
     }
 

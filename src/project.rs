@@ -50,7 +50,10 @@ pub const FORMAT: &str = "pelure-projet";
 /// précédente ignorerait (le film changerait sans prévenir).
 /// 12 (13a) : un seul panneau par scène, le plan (les panneaux d'un projet plus ancien sont mis
 /// bout à bout à l'ouverture), et marques d'image (`marques`) qu'une version précédente perdrait.
-pub const VERSION: u32 = 12;
+/// 13 (13b) : réglages de l'en-tête des calques (pelure d'oignon du calque, préserver la
+/// transparence, pochoir, position verrouillée, groupe, ligne réduite) et groupes de couleur
+/// (`groupes`), qu'une version précédente perdrait.
+pub const VERSION: u32 = 13;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Modèles 3D de repère (2d), dans le format de Pelure.
@@ -92,6 +95,18 @@ struct Manifest {
     /// Textes de la planche (format 9).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     planche_textes: Vec<NoteTextEntry>,
+    /// Groupes de couleur des calques (format 13 ; absents : ceux d'un projet neuf).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    groupes: Vec<GroupEntry>,
+}
+
+/// Un groupe de couleur des calques (format 13), dans l'ordre des numéros de groupe.
+#[derive(Serialize, Deserialize)]
+struct GroupEntry {
+    nom: String,
+    couleur: [u8; 3],
+    #[serde(default = "yes")]
+    montre: bool,
 }
 
 /// Un trait de note : couleur et points (x, y, rayon), en coordonnées de la planche, ou, s'il
@@ -308,6 +323,23 @@ struct LayerEntry {
     /// Mode de fusion (format 9 ; absent : normal).
     #[serde(default, skip_serializing_if = "is_normal")]
     fusion: crate::blend::BlendMode,
+    /// Réglages de l'en-tête du calque (format 13 ; absents : éteints, groupe 0) : pelure
+    /// d'oignon du calque, préserver la transparence, pochoir (et négatif), position
+    /// verrouillée, groupe de couleur, ligne réduite dans la timeline.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pelure: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    transparence: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pochoir: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pochoir_negatif: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    position_verrouillee: bool,
+    #[serde(default, skip_serializing_if = "is_zero_u8")]
+    groupe: u8,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    replie: bool,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -743,6 +775,13 @@ fn manifest_of(doc: &Document) -> Manifest {
                     profondeur: l.depth,
                     toute_la_scene: l.scene_wide.map(|w| w.key),
                     fusion: l.blend,
+                    pelure: l.onion,
+                    transparence: l.keep_alpha,
+                    pochoir: l.stencil,
+                    pochoir_negatif: l.stencil_negative,
+                    position_verrouillee: l.position_locked,
+                    groupe: l.group,
+                    replie: l.collapsed,
                     expositions: to_exposures(&l.frames),
                 })
                 .collect(),
@@ -862,6 +901,14 @@ fn manifest_of(doc: &Document) -> Manifest {
                 attache: t.anchor,
             })
             .collect(),
+        groupes: if doc.groups == crate::groups::defaults() {
+            Vec::new()
+        } else {
+            doc.groups
+                .iter()
+                .map(|g| GroupEntry { nom: g.name.clone(), couleur: g.color, montre: g.shown })
+                .collect()
+        },
     }
 }
 
@@ -1016,6 +1063,13 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                 })
                 .collect(),
         },
+        groups: crate::groups::completed(
+            manifest
+                .groupes
+                .into_iter()
+                .map(|g| crate::groups::LayerGroup { name: g.nom, color: g.couleur, shown: g.montre })
+                .collect(),
+        ),
     };
     for seq in manifest.sequences {
         structure.sequences.push(Sequence {
@@ -1070,6 +1124,13 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                             .into_iter()
                             .map(|f| f.filter(|id| !missing.contains(id)))
                             .collect(),
+                        onion: l.pelure,
+                        keep_alpha: l.transparence,
+                        stencil: l.pochoir,
+                        stencil_negative: l.pochoir_negatif,
+                        position_locked: l.position_verrouillee,
+                        group: if (l.groupe as usize) < crate::groups::COUNT { l.groupe } else { 0 },
+                        collapsed: l.replie,
                     })
                     .collect();
                 if layers.is_empty() {

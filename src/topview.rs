@@ -206,6 +206,8 @@ impl App {
                 if resp.drag_started() {
                     if self.layers()[li].locked {
                         self.status = "Calque verrouillé : déverrouille-le pour changer sa profondeur.".into();
+                    } else if self.layers()[li].position_locked {
+                        self.status = "Position verrouillée : déverrouille-la pour changer la profondeur du calque.".into();
                     } else {
                         let y = fit.to_screen(rect, 0.0, items[li].shown).y;
                         self.top_drag = Some(TopDrag {
@@ -335,7 +337,7 @@ impl App {
             if it.d > FAR {
                 text.push_str(" (au loin)");
             }
-            if l.locked {
+            if l.locked || l.position_locked {
                 text.push_str(" 🔒");
             }
             // Étiquettes empilées quand plusieurs calques sont à la même distance.

@@ -41,6 +41,14 @@ gauche = réduire / agrandir.
 - Verrouiller la position 000025210/211 (erreurs 095191005, 012002853/854).
 - Par calque : création automatique d'image 011085171, cassure automatique d'instance 011085172.
 
+Sens confirmés par Anthony le 2026-10-15 (les textes de TVPaint ne font que les nommer) :
+- **Préserver la transparence** : le pinceau ne colore que ce qui est déjà dessiné (le vide reste
+  vide) ; la gomme gomme normalement.
+- **Pochoir** : le dessin du calque-pochoir limite où l'on peint sur les autres calques ;
+  positif = seulement dans sa forme, négatif = seulement hors de sa forme.
+- **Verrouiller la position** : l'outil Transformer et le déplacement en 3D ne bougent plus le
+  calque, et on ne peut plus dessiner dessus.
+
 ## 2. Sortes de calques
 
 Animation 000025198 ; image (statique) 000025197 ; exposition / feuille d'exposition 000025144

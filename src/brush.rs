@@ -162,6 +162,10 @@ pub struct StrokeState {
     textures: BrushTextures,
     /// Hasard (angle, taille des empreintes), le même à chaque fois pour un même trait.
     rng: u32,
+    /// Préserver la transparence (13b) : le pinceau ne colore que ce qui est déjà dessiné.
+    keep_alpha: bool,
+    /// Pochoirs (13b) : où le trait peut peindre ; aucun : partout.
+    stencil: Option<crate::stencil::Stencil>,
 }
 
 impl StrokeState {
@@ -187,7 +191,16 @@ impl StrokeState {
             since_dab: 0.0,
             textures: BrushTextures::default(),
             rng: 0x9E37_79B9,
+            keep_alpha: false,
+            stencil: None,
         }
+    }
+
+    /// Réglages du calque peint (13b) : préserver la transparence, pochoirs des autres calques.
+    pub fn on_layer(mut self, keep_alpha: bool, stencil: Option<crate::stencil::Stencil>) -> Self {
+        self.keep_alpha = keep_alpha;
+        self.stencil = stencil;
+        self
     }
 
     /// Bout du trait : le dernier point posé, la pointe réelle du stylet et son rayon. Le
@@ -367,10 +380,16 @@ impl StrokeState {
             }
         };
 
+        // Préserver la transparence : on ne peint que sur ce qui est déjà dessiné (13b).
+        let keep_alpha = self.keep_alpha && matches!(mode, StrokeMode::Paint(_));
+        let stencil = self.stencil.as_ref();
         for ty in y0 / TILE..=(y1 - 1) / TILE {
             for tx in x0 / TILE..=(x1 - 1) / TILE {
                 let idx = ty * raster.tiles_x + tx;
-                if matches!(mode, StrokeMode::Erase) && raster.tiles[idx].is_none() {
+                if (matches!(mode, StrokeMode::Erase) || keep_alpha) && raster.tiles[idx].is_none() {
+                    continue;
+                }
+                if stencil.is_some_and(|st| st.blocks(idx)) {
                     continue;
                 }
                 let (ox, oy) = (tx * TILE, ty * TILE);
@@ -394,14 +413,16 @@ impl StrokeState {
                         }
                         // Grain du papier, fixe sur le dessin.
                         let grain = paper.as_ref().map_or(1.0, |p| grain_factor(p.tiled(px, py), pressure, s.grain));
-                        let v = cov * flow * grain;
                         let i = (py - oy) * TILE + (px - ox);
+                        let through = stencil.map_or(1.0, |st| st.at(idx, i));
+                        let v = cov * flow * grain * through;
                         if v <= mask[i] {
                             continue;
                         }
                         mask[i] = v;
                         let b = before.map_or(Color32::TRANSPARENT, |t| t[i]);
                         tile[i] = match mode {
+                            StrokeMode::Paint(rgb) if keep_alpha => paint_over(b, rgb, v * s.opacity),
                             StrokeMode::Paint(rgb) => paint(b, rgb, v * s.opacity),
                             StrokeMode::Erase => erase(b, v * s.opacity),
                         };
@@ -438,6 +459,16 @@ pub(crate) fn paint(b: Color32, rgb: [u8; 3], a: f32) -> Color32 {
         ch(rgb[2], b.b()),
         (255.0 * a + b.a() as f32 * ia + 0.5) as u8,
     )
+}
+
+/// Comme `paint`, mais l'opacité du pixel ne change pas (préserver la transparence, 13b) : seule
+/// sa couleur va vers `rgb`. Un pixel vide reste vide.
+pub(crate) fn paint_over(b: Color32, rgb: [u8; 3], a: f32) -> Color32 {
+    let a = a.clamp(0.0, 1.0);
+    let ia = 1.0 - a;
+    let k = b.a() as f32 / 255.0;
+    let ch = |c: u8, d: u8| ((c as f32 * k * a + d as f32 * ia + 0.5) as u8).min(b.a());
+    Color32::from_rgba_premultiplied(ch(rgb[0], b.r()), ch(rgb[1], b.g()), ch(rgb[2], b.b()), b.a())
 }
 
 fn erase(b: Color32, a: f32) -> Color32 {

@@ -13,7 +13,7 @@ use image::codecs::png::{CompressionType, FilterType, PngEncoder};
 use image::ImageEncoder;
 use serde::{Deserialize, Serialize};
 
-use crate::document::{fresh_layer_id, Cel, Document, Layer, LayerKind, Panel, Scene, Sequence, Structure};
+use crate::document::{Cel, Document, Layer, LayerKind, Panel, Scene, Sequence, Structure};
 use crate::raster::{unpremultiply, Raster};
 use crate::vector::VectorDrawing;
 
@@ -142,21 +142,14 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
         let mut layers: Vec<Layer> = entries
             .into_iter()
             .map(|l| Layer {
-                id: fresh_layer_id(),
-                name: l.name,
-                kind: l.kind,
                 visible: l.visible,
                 opacity: l.opacity.clamp(0.0, 1.0),
-                locked: false,
-                transform: Default::default(),
-                depth: 0.0,
                 frames: l
                     .frames
                     .into_iter()
                     .map(|f| f.filter(|id| cels.contains_key(id)))
                     .collect(),
-                scene_wide: None,
-                blend: Default::default(),
+                ..Layer::new(l.name, l.kind)
             })
             .collect();
         if layers.is_empty() {
@@ -190,6 +183,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
         paper: manifest.paper,
         fps: manifest.fps.max(1),
         board: Default::default(),
+        groups: crate::groups::defaults(),
     };
     let mut shots = manifest.shots;
     if shots.is_empty() {

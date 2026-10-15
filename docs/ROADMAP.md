@@ -453,6 +453,15 @@ Décisions d'Anthony :
   storyboard ; barre de séquence seule au-dessus du montage ; « Plan » partout à l'écran ; calque
   de fond ordinaire (un dessin tenu sur tout le plan) ; export par séquence ou par plan.
 - 13b. En-têtes de calques et opérations sur les calques dans la timeline, dossiers, groupes.
+  - ✅ 13b-1. Réglages des calques et leurs effets (format 13) : pelure d'oignon par calque,
+    préserver la transparence, pochoir positif / négatif (calques visibles, pinceau, crayon et
+    gomme bitmap ; la gomme aussi est retenue par le pochoir), position verrouillée (ni
+    Transformer, ni profondeur, ni 3D, ni dessin), groupe de couleur (13 groupes du projet),
+    ligne réduite.
+  - 13b-2. En-tête des calques dans la timeline (icônes, vignette, opacité, mode, groupes).
+  - 13b-3. Opérations sur les calques (nouveau, dupliquer, supprimer, fusionner, choisir,
+    naviguer).
+  - 13b-4. Panneau des groupes. 13b-5. Dossiers.
 - 13c. Images et expositions (choix, glisser, insérer / supprimer avec modes de trou, couper /
   copier / coller, inverser, instances, noms, pré / post-comportement, faux-fixe, étirer).
 - 13d. Repères : marques, signets, entrée / sortie, boucle, image de départ, time code, zoom.
@@ -460,8 +469,9 @@ Décisions d'Anthony :
 - 13f. Table lumineuse complète.
 - 13g et suivantes, une étape chacune : feuille d'exposition, flips, clés d'effets, calques CTG,
   Puppet, vidéo, interpolation d'images.
-Le faux-fixe et le pochoir n'ont que leur nom dans les textes de TVPaint : à faire décrire par
-Anthony avant de les implanter.
+Le faux-fixe n'a que son nom dans les textes de TVPaint : à faire décrire par Anthony avant de
+l'implanter (le pochoir, la transparence préservée et la position verrouillée ont été décrits
+le 2026-10-15, voir `docs/TIMELINE-TVPAINT.md`).
 
 ## Phase 14 — Échange avec Storyboard Pro (après la phase 13)
 

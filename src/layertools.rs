@@ -88,7 +88,7 @@ impl App {
     pub(crate) fn transform_press(&mut self, stage: Pos2, screen: Pos2) {
         self.end_stroke();
         self.playing = false;
-        if self.layer().locked {
+        if !self.layer().drawable() {
             self.layer_editable();
             return;
         }
@@ -177,6 +177,10 @@ impl App {
             self.status = "Ce calque n'est pas transformé.".into();
             return;
         }
+        if self.layer().position_locked {
+            self.status = crate::app::POSITION_LOCKED.into();
+            return;
+        }
         self.record_step();
         let li = self.cur_layer;
         self.layers_mut()[li].transform = LayerTransform::default();
@@ -210,6 +214,10 @@ impl App {
     pub(crate) fn transform_fields(&mut self, ui: &mut egui::Ui) {
         if self.layer().locked {
             ui.label("Calque verrouillé : déverrouille-le pour le transformer.");
+            return;
+        }
+        if self.layer().position_locked {
+            ui.label("Position verrouillée : déverrouille-la pour transformer le calque.");
             return;
         }
         let t = self.layer().transform;

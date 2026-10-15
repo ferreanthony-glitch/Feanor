@@ -501,8 +501,12 @@ impl App {
         };
         self.select_layer(li);
         let layer = &self.layers()[li];
-        if layer.locked {
-            self.status = format!("Le calque « {} » est verrouillé.", layer.name);
+        if layer.locked || layer.position_locked {
+            self.status = if layer.locked {
+                format!("Le calque « {} » est verrouillé.", layer.name)
+            } else {
+                format!("La position du calque « {} » est verrouillée.", layer.name)
+            };
             self.stage3d.drag = Some(Drag3d::View);
             return;
         }

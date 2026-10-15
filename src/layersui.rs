@@ -303,7 +303,7 @@ impl App {
             ui.close_menu();
             return;
         };
-        let (id, name, mut depth, locked) = (l.id, l.name.clone(), l.depth, l.locked);
+        let (id, name, mut depth, locked, fixed) = (l.id, l.name.clone(), l.depth, l.locked, l.position_locked);
         if ui.button("Renommer…").clicked() {
             ui.close_menu();
             self.layer_rename = Some((id, name, false));
@@ -311,7 +311,11 @@ impl App {
         let resp = ui
             .horizontal(|ui| {
                 ui.label("Profondeur");
-                ui.add(egui::DragValue::new(&mut depth).speed(0.01).range(crate::document::Layer::MIN_DEPTH..=1000.0).max_decimals(2))
+                // Position verrouillée (13b) : la profondeur ne bouge plus non plus.
+                ui.add_enabled(
+                    !fixed,
+                    egui::DragValue::new(&mut depth).speed(0.01).range(crate::document::Layer::MIN_DEPTH..=1000.0).max_decimals(2),
+                )
             })
             .inner
             .on_hover_text(

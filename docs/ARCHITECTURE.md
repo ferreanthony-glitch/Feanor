@@ -417,6 +417,26 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   calque ordinaire dont un seul dessin est tenu sur tout le plan. `sync_scene_layers` reste pour
   les projets en cours d'ouverture, sans effet sur un projet en plans.
 
+## Réglages des calques (phase 13b)
+
+- `Layer` : `onion` (pelure d'oignon du calque : `build_plan` montre ses voisines comme pour le
+  calque courant), `keep_alpha`, `stencil` / `stencil_negative`, `position_locked`, `group`
+  (0 à 12), `collapsed`. `Layer::drawable` = ni verrouillé ni de position verrouillée ;
+  `layer_editable`, Transformer (`transform_press`, `transform_fields`, Ctrl+R), sélection,
+  vue de dessus, plateau 3D et profondeur du menu de calque le respectent
+  (`app::POSITION_LOCKED`).
+- `Document::groups` (`groups.rs`, toujours 13, dans `Structure` pour l'annulation).
+- Préserver la transparence : `StrokeState::on_layer(keep_alpha, …)` ; `brush::paint_over`
+  change la couleur sans toucher à l'opacité du pixel ; une tuile vide est sautée ; la gomme
+  n'est pas concernée.
+- Pochoir (`stencil.rs`) : `App::stencil_for` construit au début du trait un `Stencil`, facteur
+  0–255 par pixel du dessin peint, produit de tous les calques-pochoirs visibles du plan (sauf le
+  calque peint) à l'image courante ; une tuile entière vaut une seule valeur tant qu'aucune forme
+  ne la touche. Un pochoir déplacé (transformation, multiplan) est lu à travers
+  `affine(peint) puis inverse(affine(pochoir))`. Le facteur multiplie la couverture de chaque
+  empreinte, pour le pinceau, le crayon et la gomme bitmap. Calques vectoriels, pot de peinture,
+  formes, tampons et texte ne sont pas encore concernés.
+
 ## Pinceaux texturés (3d-2)
 
 - `brush.rs` : chaque empreinte calcule une couverture par pixel — disque (dureté) ou pointe en
@@ -582,11 +602,11 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - Annulation : le repère fait partie de la structure (copie au début du geste, une étape au
   lâcher, comme l'outil Caméra).
 
-## Format de projet (version 12, dossier)
+## Format de projet (version 13, dossier)
 
 ```
 MonFilm/
-  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 12, "largeur",
+  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 13, "largeur",
                       "hauteur" (feuille), "cadre": [l, h], réglages,
                       "sequences": [{ "scenes": [{ "panneaux": [{ "calques": [{ "expositions": … }],
                       "marques": [{"id", "image", "action", …}] }]}]}]  (un panneau par scène),
@@ -599,6 +619,10 @@ MonFilm/
                       triangles, positions (3 × f32) puis triangles (3 × u32), petit-boutiste
 ```
 
+- Format 13 (13b) : sur un calque `pelure`, `transparence`, `pochoir`, `pochoir_negatif`,
+  `position_verrouillee`, `replie` (absents : faux), `groupe` (absent : 0) ; `groupes` (13
+  groupes : `nom`, `couleur`, `montre`), absent tant qu'ils sont ceux d'un projet neuf.
+- Format 12 (13a) : un panneau par scène ; `marques` sur un panneau.
 - Format 11 (9f) : `bascule`, `panoramique` (degrés) sur une clé de caméra, absents si nuls.
 - Format 10 (9c) : `avance`, `adoucir_entree`, `adoucir_sortie` sur une clé de caméra ; `fusion`
   peut valoir les 10 nouveaux modes (identifiants en français, ex. `lumiere_vive`).
