@@ -2,13 +2,15 @@ use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Pos2, Rect, RichTe
 
 use crate::app::{App, Mode};
 use crate::document::LayerKind;
+use crate::layerheads::{row_at, rows_height, rows_of, Row, HEAD_W};
 use crate::storyboard::duration_label;
 use crate::theme;
 
 const CELL_W: f32 = 16.0;
-const ROW_H: f32 = 24.0;
+const ROW_H: f32 = crate::layerheads::ROW_SMALL;
 const HEADER_H: f32 = 20.0;
-const NAMES_W: f32 = 170.0;
+/// Largeur de l'en-tête des calques (13b).
+const NAMES_W: f32 = HEAD_W;
 /// Ligne du son sous les calques (forme d'onde du montage pendant le panneau).
 const SOUND_H: f32 = 30.0;
 /// Ligne des images clés de la caméra, sous les calques.
@@ -38,6 +40,7 @@ impl App {
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
                     self.timeline_names(ui);
+                    ui.add_space(2.0);
                     egui::ScrollArea::horizontal()
                         .id_salt("timeline_h")
                         .auto_shrink([false, true])
@@ -188,16 +191,15 @@ impl App {
         }
     }
 
+    /// En-tête des calques (13b, `layerheads.rs`), puis les noms des lignes caméra et son.
     fn timeline_names(&mut self, ui: &mut egui::Ui) {
-        let rows = self.layers().len();
+        let rows_h = rows_height(&rows_of(self.layers()));
         let sound_h = self.sound_row_h();
-        let size = vec2(NAMES_W, HEADER_H + rows as f32 * ROW_H + CAM_H + sound_h);
-        let (resp, painter) = ui.allocate_painter(size, Sense::click());
-        let r = resp.rect;
+        let r = self.timeline_heads(ui, HEADER_H, CAM_H + sound_h);
+        let painter = ui.painter_at(r);
         let visuals = ui.visuals();
-        painter.rect_filled(Rect::from_min_size(r.min, vec2(NAMES_W, HEADER_H)), 0.0, theme::REGLE);
         {
-            let y = r.top() + HEADER_H + rows as f32 * ROW_H;
+            let y = r.top() + HEADER_H + rows_h;
             let row = Rect::from_min_size(pos2(r.left(), y), vec2(NAMES_W, CAM_H)).shrink2(vec2(0.0, 1.0));
             painter.rect_filled(row, 2.0, theme::RANGEE_SOMBRE);
             let n = self.panel().camera.len();
@@ -225,96 +227,17 @@ impl App {
                 visuals.weak_text_color(),
             );
         }
-        painter.text(
-            pos2(r.left() + 6.0, r.top() + HEADER_H * 0.5),
-            Align2::LEFT_CENTER,
-            "Calques",
-            FontId::proportional(11.0),
-            visuals.weak_text_color(),
-        );
-        for row in 0..rows {
-            let li = rows - 1 - row;
-            let layer = &self.layers()[li];
-            let y = r.top() + HEADER_H + row as f32 * ROW_H;
-            let row_rect = Rect::from_min_size(pos2(r.left(), y), vec2(NAMES_W, ROW_H)).shrink2(vec2(0.0, 1.0));
-            let bg = if li == self.cur_layer {
-                visuals.selection.bg_fill
-            } else {
-                theme::ETIQUETTE
-            };
-            painter.rect_filled(row_rect, 2.0, bg);
-            // Sur le bleu du calque courant, le texte passe en blanc (le seul lisible sur l'accent).
-            let current = li == self.cur_layer;
-            let text_color = match (layer.visible, current) {
-                (true, true) => visuals.selection.stroke.color,
-                (true, false) => visuals.text_color(),
-                (false, _) => visuals.weak_text_color(),
-            };
-            painter.text(
-                pos2(r.left() + ROW_H * 0.5, row_rect.center().y),
-                Align2::CENTER_CENTER,
-                if layer.visible { "👁" } else { "·" },
-                FontId::proportional(13.0),
-                text_color,
-            );
-            let badge = match layer.kind {
-                _ if current => visuals.selection.stroke.color,
-                LayerKind::Vector => theme::DESSIN_VECTORIEL,
-                LayerKind::Bitmap => theme::DESSIN_BITMAP,
-            };
-            painter.text(
-                pos2(r.left() + ROW_H + 2.0, row_rect.center().y),
-                Align2::LEFT_CENTER,
-                layer.kind.badge(),
-                FontId::monospace(11.0),
-                badge,
-            );
-            painter.text(
-                pos2(r.left() + ROW_H + 16.0, row_rect.center().y),
-                Align2::LEFT_CENTER,
-                &layer.name,
-                FontId::proportional(13.0),
-                text_color,
-            );
-            // Cadenas à droite : plein si le calque est verrouillé, à peine visible sinon.
-            painter.text(
-                pos2(r.right() - ROW_H * 0.5, row_rect.center().y),
-                Align2::CENTER_CENTER,
-                "🔒",
-                FontId::proportional(12.0),
-                if layer.locked {
-                    visuals.text_color()
-                } else {
-                    visuals.weak_text_color().gamma_multiply(0.35)
-                },
-            );
-        }
-        if resp.clicked() {
-            if let Some(p) = resp.interact_pointer_pos() {
-                let row = ((p.y - r.top() - HEADER_H) / ROW_H).floor();
-                if row >= 0.0 && (row as usize) < rows {
-                    let li = rows - 1 - row as usize;
-                    if p.x < r.left() + ROW_H {
-                        self.record_step();
-                        let layer = &mut self.layers_mut()[li];
-                        layer.visible = !layer.visible;
-                    } else if p.x > r.right() - ROW_H {
-                        self.toggle_layer_lock(li);
-                    } else {
-                        self.select_layer(li);
-                    }
-                }
-            }
-        }
     }
 
     fn timeline_grid(&mut self, ui: &mut egui::Ui) {
         let count = self.frame_count();
-        let rows = self.layers().len();
+        // Lignes des calques, de hauteurs différentes (réduites ou complètes, 13b).
+        let rows = rows_of(self.layers());
+        let rows_h = rows_height(&rows);
         let visible_cols = (ui.available_width() / CELL_W) as usize + 1;
         let cols = (count + 48).max(self.cur_frame + 24).max(visible_cols);
         let sound_h = self.sound_row_h();
-        let size = vec2(cols as f32 * CELL_W, HEADER_H + rows as f32 * ROW_H + CAM_H + sound_h);
+        let size = vec2(cols as f32 * CELL_W, HEADER_H + rows_h + CAM_H + sound_h);
         let (resp, painter) = ui.allocate_painter(size, Sense::click_and_drag());
         let r = resp.rect;
         let visuals = ui.visuals().clone();
@@ -325,7 +248,7 @@ impl App {
         // Images clés de la caméra : losanges (ronds si le mouvement y est adouci), reliés par un
         // trait là où la caméra bouge.
         {
-            let y = grid_top + rows as f32 * ROW_H;
+            let y = grid_top + rows_h;
             let row = Rect::from_min_size(pos2(r.left(), y), vec2(size.x, CAM_H)).shrink2(vec2(0.0, 1.0));
             painter.rect_filled(row, 0.0, theme::RANGEE_SOMBRE);
             let keys = &self.panel().camera;
@@ -396,10 +319,9 @@ impl App {
         }
 
         // Fond des lignes, calque courant en surbrillance.
-        for row in 0..rows {
-            let li = rows - 1 - row;
-            let y = grid_top + row as f32 * ROW_H;
-            let rect = Rect::from_min_size(pos2(r.left(), y), vec2(size.x, ROW_H)).shrink2(vec2(0.0, 1.0));
+        for row in &rows {
+            let li = row.li;
+            let rect = Rect::from_min_size(pos2(r.left(), grid_top + row.top), vec2(size.x, row.h)).shrink2(vec2(0.0, 1.0));
             let bg = if li == self.cur_layer {
                 visuals.selection.bg_fill.gamma_multiply(0.35)
             } else {
@@ -441,17 +363,16 @@ impl App {
         }
 
         // Dessins : un bloc par exposition, pastille au début du dessin.
-        for row in 0..rows {
-            let li = rows - 1 - row;
-            let layer = &self.layers()[li];
-            let y = grid_top + row as f32 * ROW_H;
+        for row in &rows {
+            let layer = &self.layers()[row.li];
+            let y = grid_top + row.top;
             let mut f = 0;
             while f < layer.frames.len() {
                 let (start, end) = layer.run_bounds(f);
                 if let Some(id) = layer.frames[start] {
                     let block = Rect::from_min_max(
                         pos2(r.left() + start as f32 * CELL_W + 1.0, y + 4.0),
-                        pos2(r.left() + end as f32 * CELL_W - 1.0, y + ROW_H - 4.0),
+                        pos2(r.left() + end as f32 * CELL_W - 1.0, y + row.h - 4.0),
                     );
                     let empty = self.doc.cels.get(&id).is_none_or(|c| c.is_empty());
                     let mut fill = match (empty, layer.kind) {
@@ -513,7 +434,7 @@ impl App {
         );
 
         // Clés de caméra : on les prend et les fait glisser le long de leur rangée (12e).
-        let cam_row = Rect::from_min_size(pos2(r.left(), grid_top + rows as f32 * ROW_H), vec2(size.x, CAM_H));
+        let cam_row = Rect::from_min_size(pos2(r.left(), grid_top + rows_h), vec2(size.x, CAM_H));
         let key_x = |f: usize| r.left() + (f as f32 + 0.5) * CELL_W;
         let key_under = |app: &App, p: Pos2| {
             cam_row.contains(p).then(|| crate::camtools::camera_key_at(&app.panel().camera, p.x, key_x, CELL_W * 0.5 + 2.0)).flatten()
@@ -546,20 +467,16 @@ impl App {
                     self.set_frame_free(col);
                 }
                 if resp.clicked() || resp.drag_started() {
-                    let row = ((p.y - grid_top) / ROW_H).floor();
-                    if row >= 0.0 && (row as usize) < rows {
-                        self.select_layer(rows - 1 - row as usize);
+                    if let Some(row) = row_at(&rows, p.y - grid_top) {
+                        self.select_layer(row.li);
                     }
                 }
             }
         }
 
         if self.follow_frame {
-            let row = rows - 1 - self.cur_layer.min(rows - 1);
-            let target = Rect::from_min_size(
-                pos2(cx - CELL_W * 2.0, grid_top + row as f32 * ROW_H),
-                vec2(CELL_W * 5.0, ROW_H),
-            );
+            let row = rows.iter().find(|r| r.li == self.cur_layer).copied().unwrap_or(Row { li: 0, top: 0.0, h: ROW_H });
+            let target = Rect::from_min_size(pos2(cx - CELL_W * 2.0, grid_top + row.top), vec2(CELL_W * 5.0, row.h));
             ui.scroll_to_rect(target, None);
             self.follow_frame = false;
         }

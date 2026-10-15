@@ -140,6 +140,33 @@ fn a_position_locked_layer_cannot_be_drawn_on() {
 }
 
 #[test]
+fn header_rows_follow_collapsed_layers() {
+    use crate::layerheads::{row_at, rows_height, rows_of, ROW_FULL, ROW_SMALL};
+    let mut layers: Vec<Layer> = (0..3).map(|i| Layer::new(format!("C{i}"), LayerKind::Bitmap)).collect();
+    layers[1].collapsed = true;
+    let rows = rows_of(&layers);
+    // Le calque le plus haut (le dernier) en premier.
+    assert_eq!(rows.iter().map(|r| r.li).collect::<Vec<_>>(), [2, 1, 0]);
+    assert_eq!(rows[1].top, ROW_FULL);
+    assert_eq!(rows[1].h, ROW_SMALL);
+    assert_eq!(rows[2].top, ROW_FULL + ROW_SMALL);
+    assert_eq!(rows_height(&rows), ROW_FULL * 2.0 + ROW_SMALL);
+    assert_eq!(row_at(&rows, ROW_FULL + 1.0).map(|r| r.li), Some(1));
+    assert_eq!(row_at(&rows, rows_height(&rows) + 1.0), None);
+}
+
+#[test]
+fn a_dragged_header_row_lands_between_rows() {
+    use crate::layerheads::{drop_index, rows_of, ROW_FULL};
+    let layers: Vec<Layer> = (0..3).map(|i| Layer::new(format!("C{i}"), LayerKind::Bitmap)).collect();
+    let rows = rows_of(&layers);
+    assert_eq!(drop_index(&rows, 0, 1.0), 2, "le plus bas lâché tout en haut devient le plus haut");
+    assert_eq!(drop_index(&rows, 2, ROW_FULL * 3.0), 0, "le plus haut lâché tout en bas devient le plus bas");
+    assert_eq!(drop_index(&rows, 2, ROW_FULL * 0.9), 2, "juste sous lui-même : il ne bouge pas");
+    assert_eq!(drop_index(&rows, 0, ROW_FULL * 1.2), 1, "entre le premier et le deuxième");
+}
+
+#[test]
 fn groups_are_always_thirteen() {
     assert_eq!(groups::defaults().len(), groups::COUNT);
     let mut few = groups::defaults();

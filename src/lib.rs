@@ -56,6 +56,7 @@ mod keymap;
 mod latency_tests;
 #[cfg(test)]
 mod layerflags_tests;
+mod layerheads;
 mod layersui;
 mod layertools;
 #[cfg(test)]

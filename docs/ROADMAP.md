@@ -458,7 +458,10 @@ Décisions d'Anthony :
     gomme bitmap ; la gomme aussi est retenue par le pochoir), position verrouillée (ni
     Transformer, ni profondeur, ni 3D, ni dessin), groupe de couleur (13 groupes du projet),
     ligne réduite.
-  - 13b-2. En-tête des calques dans la timeline (icônes, vignette, opacité, mode, groupes).
+  - ✅ 13b-2. En-tête des calques dans la timeline (`layerheads.rs`) : ligne complète (vignette,
+    nom, ⋮ options, 8 réglages en icônes, barre d'opacité, mode avec précédent / suivant) ou
+    réduite, tout réduire / agrandir, glisser une ligne pour changer le rang, double-clic sur le
+    nom pour renommer, menu de groupe.
   - 13b-3. Opérations sur les calques (nouveau, dupliquer, supprimer, fusionner, choisir,
     naviguer).
   - 13b-4. Panneau des groupes. 13b-5. Dossiers.

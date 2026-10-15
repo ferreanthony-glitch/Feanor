@@ -22,9 +22,24 @@ pub(crate) struct LayerThumbs {
     cache: HashMap<CelId, (u64, TextureHandle)>,
 }
 
+/// Renommage d'un calque en cours : le calque, le nom tapé, le champ a déjà pris le clavier, et
+/// où est le champ (en-tête de la timeline, 13b, ou panneau Calques).
+pub(crate) struct LayerRename {
+    pub id: u64,
+    pub name: String,
+    pub focused: bool,
+    pub in_timeline: bool,
+}
+
+impl LayerRename {
+    pub(crate) fn new(id: u64, name: &str, in_timeline: bool) -> Self {
+        Self { id, name: name.to_string(), focused: false, in_timeline }
+    }
+}
+
 impl App {
     /// Vignette du dessin `cel` : la partie filmée (le cadre), sur fond blanc.
-    fn layer_thumb(&mut self, ctx: &egui::Context, cel: CelId) -> Option<TextureHandle> {
+    pub(crate) fn layer_thumb(&mut self, ctx: &egui::Context, cel: CelId) -> Option<TextureHandle> {
         let c = self.doc.cels.get(&cel)?;
         if let Some((v, t)) = self.layer_thumbs.cache.get(&cel) {
             if *v == c.version {
@@ -181,29 +196,11 @@ impl App {
                         if resp.clicked() || resp.secondary_clicked() {
                             select = Some(li);
                         }
-                        resp.context_menu(|ui| self.layer_menu(ui, li));
+                        resp.context_menu(|ui| self.layer_menu(ui, li, false));
                         ui.vertical(|ui| {
-                            let renaming = self.layer_rename.as_ref().is_some_and(|r| r.0 == id);
+                            let renaming = self.layer_rename.as_ref().is_some_and(|r| r.id == id && !r.in_timeline);
                             if renaming {
-                                let (_, buffer, focused) = self.layer_rename.as_mut().expect("renommage en cours");
-                                let mut out = egui::TextEdit::singleline(buffer).desired_width(120.0).show(ui);
-                                let resp = out.response.clone();
-                                if !*focused {
-                                    // Tout le nom choisi : on tape le nouveau directement.
-                                    resp.request_focus();
-                                    let n = buffer.chars().count();
-                                    out.state.cursor.set_char_range(Some(egui::text::CCursorRange::two(
-                                        egui::text::CCursor::new(0),
-                                        egui::text::CCursor::new(n),
-                                    )));
-                                    out.state.store(ui.ctx(), resp.id);
-                                    *focused = true;
-                                }
-                                if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                                    rename_done = Some(false);
-                                } else if resp.lost_focus() {
-                                    rename_done = Some(true);
-                                }
+                                rename_done = self.layer_rename_field(ui, 120.0);
                             } else {
                                 let text = if visible { RichText::new(&name) } else { RichText::new(&name).weak() };
                                 let resp = ui.add(egui::Label::new(text).sense(Sense::click()).truncate());
@@ -211,9 +208,9 @@ impl App {
                                     select = Some(li);
                                 }
                                 if resp.double_clicked() {
-                                    self.layer_rename = Some((id, name.clone(), false));
+                                    self.layer_rename = Some(LayerRename::new(id, &name, false));
                                 }
-                                resp.on_hover_text("Double-clic ou clic droit : renommer").context_menu(|ui| self.layer_menu(ui, li));
+                                resp.on_hover_text("Double-clic ou clic droit : renommer").context_menu(|ui| self.layer_menu(ui, li, false));
                             }
                             let kind = match kind {
                                 LayerKind::Vector => "vectoriel",
@@ -235,11 +232,7 @@ impl App {
         if let Some(li) = select {
             self.select_layer(li);
         }
-        match rename_done {
-            Some(true) => self.commit_layer_rename(),
-            Some(false) => self.layer_rename = None,
-            None => {}
-        }
+        self.finish_layer_rename(rename_done);
 
         // Commandes en icônes.
         ui.add_space(4.0);
@@ -285,9 +278,44 @@ impl App {
             }
         });
     }
+    /// Champ du nouveau nom du calque en cours de renommage ; renvoie `Some(true)` quand on le
+    /// valide (Entrée, clic ailleurs), `Some(false)` quand on abandonne (Échap).
+    pub(crate) fn layer_rename_field(&mut self, ui: &mut egui::Ui, width: f32) -> Option<bool> {
+        let r = self.layer_rename.as_mut()?;
+        let mut out = egui::TextEdit::singleline(&mut r.name).desired_width(width).show(ui);
+        let resp = out.response.clone();
+        if !r.focused {
+            // Tout le nom choisi : on tape le nouveau directement.
+            resp.request_focus();
+            let n = r.name.chars().count();
+            out.state.cursor.set_char_range(Some(egui::text::CCursorRange::two(
+                egui::text::CCursor::new(0),
+                egui::text::CCursor::new(n),
+            )));
+            out.state.store(ui.ctx(), resp.id);
+            r.focused = true;
+        }
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            Some(false)
+        } else if resp.lost_focus() {
+            Some(true)
+        } else {
+            None
+        }
+    }
+
+    /// Fin du renommage : `Some(true)` pose le nom, `Some(false)` l'abandonne.
+    pub(crate) fn finish_layer_rename(&mut self, done: Option<bool>) {
+        match done {
+            Some(true) => self.commit_layer_rename(),
+            Some(false) => self.layer_rename = None,
+            None => {}
+        }
+    }
+
     /// Pose le nouveau nom du calque en cours de renommage (une étape d'annulation).
     fn commit_layer_rename(&mut self) {
-        let Some((id, name, _)) = self.layer_rename.take() else { return };
+        let Some(LayerRename { id, name, .. }) = self.layer_rename.take() else { return };
         let name = name.trim().to_string();
         let Some(li) = self.layers().iter().position(|l| l.id == id) else { return };
         if !name.is_empty() && self.layers()[li].name != name {
@@ -297,8 +325,9 @@ impl App {
     }
 
     /// Menu d'un calque (clic droit) : renommer, profondeur, dupliquer,
-    /// verrouiller, supprimer.
-    fn layer_menu(&mut self, ui: &mut egui::Ui, li: usize) {
+    /// verrouiller, supprimer. `in_timeline` : ouvert depuis l'en-tête de la timeline (13b),
+    /// où se fait alors le renommage.
+    pub(crate) fn layer_menu(&mut self, ui: &mut egui::Ui, li: usize, in_timeline: bool) {
         let Some(l) = self.layers().get(li) else {
             ui.close_menu();
             return;
@@ -306,7 +335,7 @@ impl App {
         let (id, name, mut depth, locked, fixed) = (l.id, l.name.clone(), l.depth, l.locked, l.position_locked);
         if ui.button("Renommer…").clicked() {
             ui.close_menu();
-            self.layer_rename = Some((id, name, false));
+            self.layer_rename = Some(LayerRename::new(id, &name, in_timeline));
         }
         let resp = ui
             .horizontal(|ui| {
