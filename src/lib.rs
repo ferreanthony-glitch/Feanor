@@ -54,6 +54,8 @@ mod guides;
 #[cfg(test)]
 mod guides_tests;
 mod history;
+#[cfg(test)]
+mod images_tests;
 mod io;
 mod keymap;
 #[cfg(test)]

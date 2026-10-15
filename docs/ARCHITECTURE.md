@@ -627,11 +627,11 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - Annulation : le repère fait partie de la structure (copie au début du geste, une étape au
   lâcher, comme l'outil Caméra).
 
-## Format de projet (version 14, dossier)
+## Format de projet (version 15, dossier)
 
 ```
 MonFilm/
-  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 14, "largeur",
+  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 15, "largeur",
                       "hauteur" (feuille), "cadre": [l, h], réglages,
                       "sequences": [{ "scenes": [{ "panneaux": [{ "calques": [{ "expositions": … }],
                       "marques": [{"id", "image", "action", …}] }]}]}]  (un panneau par scène),
@@ -644,6 +644,8 @@ MonFilm/
                       triangles, positions (3 × f32) puis triangles (3 × u32), petit-boutiste
 ```
 
+- Format 15 (13c) : `avant`, `apres` sur un calque (`rien`, `boucle`, `va_et_vient`,
+  `maintenir` ; absents : rien). Le rendu lit `Layer::shown_at` ; les outils, `cel_at`.
 - Format 14 (13b-5) : `dossier` (le calque est un dossier) et `dans_dossier` (rang, dans le
   plan, du dossier qui le range ; les id de calque ne sont pas enregistrés).
 - Format 13 (13b) : sur un calque `pelure`, `transparence`, `pochoir`, `pochoir_negatif`,

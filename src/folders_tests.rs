@@ -138,7 +138,7 @@ fn folders_are_saved() {
     let text = std::fs::read_to_string(&manifest).unwrap();
     let back = project::load(&manifest).unwrap().doc;
     std::fs::remove_dir_all(&dir).ok();
-    assert!(text.contains("\"version\": 14"));
+    assert!(text.contains(&format!("\"version\": {}", project::VERSION)));
     let l = &back.panels[0].layers;
     assert_eq!(names(l), ["A", "b1", "b2", "F", "C"]);
     assert!(l[3].folder);

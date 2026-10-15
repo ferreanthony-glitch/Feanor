@@ -12,7 +12,7 @@ use egui_phosphor::regular as ph;
 use crate::app::App;
 use crate::blend::BlendMode;
 use crate::bulles::bulle;
-use crate::document::{Layer, LayerKind};
+use crate::document::{Behaviour, Layer, LayerKind};
 use crate::groups::LayerGroup;
 use crate::theme;
 
@@ -615,6 +615,26 @@ impl App {
             self.modified = true;
         }
         ui.menu_button("Groupe", |ui| self.group_menu(ui, li));
+        // Pré / post-comportement (13c).
+        if let Some((pre, post)) = self.layers().get(li).filter(|l| !l.folder).map(|l| (l.pre, l.post)) {
+            ui.separator();
+            ui.menu_button(format!("Avant la première image : {}", pre.label()), |ui| {
+                for b in Behaviour::ALL {
+                    if ui.radio(b == pre, b.label()).clicked() {
+                        ui.close_menu();
+                        self.set_layer_flag(li, |l| l.pre = b);
+                    }
+                }
+            });
+            ui.menu_button(format!("Après la dernière image : {}", post.label()), |ui| {
+                for b in Behaviour::ALL {
+                    if ui.radio(b == post, b.label()).clicked() {
+                        ui.close_menu();
+                        self.set_layer_flag(li, |l| l.post = b);
+                    }
+                }
+            });
+        }
     }
 
     /// Change le rang du calque `from` : il prend la place `to` (les autres se décalent). Le

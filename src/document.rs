@@ -253,6 +253,39 @@ pub struct Layer {
     pub folder: bool,
     /// Dossier du calque (id du calque-dossier), s'il est rangé dans un dossier.
     pub parent: Option<u64>,
+    /// Pré / post-comportement (13c) : ce que le calque montre avant sa première image dessinée
+    /// et après sa dernière (voir `shown_at`).
+    pub pre: Behaviour,
+    pub post: Behaviour,
+}
+
+/// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
+/// image (après la dernière), il montre rien, la boucle de ses images, un va-et-vient, ou sa
+/// première (dernière) image maintenue.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Behaviour {
+    #[default]
+    #[serde(rename = "rien")]
+    Nothing,
+    #[serde(rename = "boucle")]
+    Loop,
+    #[serde(rename = "va_et_vient")]
+    PingPong,
+    #[serde(rename = "maintenir")]
+    Hold,
+}
+
+impl Behaviour {
+    pub const ALL: [Behaviour; 4] = [Behaviour::Nothing, Behaviour::Loop, Behaviour::PingPong, Behaviour::Hold];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Behaviour::Nothing => "Rien",
+            Behaviour::Loop => "Boucle",
+            Behaviour::PingPong => "Va-et-vient",
+            Behaviour::Hold => "Maintenir",
+        }
+    }
 }
 
 impl Layer {
@@ -278,6 +311,8 @@ impl Layer {
             collapsed: false,
             folder: false,
             parent: None,
+            pre: Behaviour::Nothing,
+            post: Behaviour::Nothing,
         }
     }
 
@@ -330,6 +365,37 @@ impl Layer {
 
     pub fn cel_at(&self, frame: usize) -> Option<CelId> {
         self.frames.get(frame).copied().flatten()
+    }
+
+    /// Dessin que l'image `frame` montre (13c) : celui de la timeline entre la première et la
+    /// dernière image dessinée du calque ; avant et après, selon le pré / post-comportement
+    /// (rien, la boucle des images, un va-et-vient, la première / dernière image maintenue).
+    /// Les outils de dessin, eux, travaillent sur `cel_at`.
+    pub fn shown_at(&self, frame: usize) -> Option<CelId> {
+        let first = self.frames.iter().position(Option::is_some)?;
+        let last = self.frames.iter().rposition(Option::is_some)?;
+        let how = if frame < first {
+            self.pre
+        } else if frame > last {
+            self.post
+        } else {
+            return self.cel_at(frame);
+        };
+        let len = (last - first + 1) as i64;
+        let k = frame as i64 - first as i64;
+        let index = match how {
+            Behaviour::Nothing => return None,
+            Behaviour::Hold => if frame < first { first } else { last },
+            Behaviour::Loop => first + k.rem_euclid(len) as usize,
+            Behaviour::PingPong if len == 1 => first,
+            Behaviour::PingPong => {
+                let period = 2 * len - 2;
+                let m = k.rem_euclid(period);
+                let offset = if m < len { m } else { period - m };
+                first + offset as usize
+            }
+        };
+        self.cel_at(index)
     }
 
     /// Bornes [début, fin) de l'exposition qui contient `frame`.

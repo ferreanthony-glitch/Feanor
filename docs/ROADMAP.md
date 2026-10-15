@@ -488,6 +488,19 @@ Décisions d'Anthony :
     ses calques ; aucun outil de dessin sur un dossier.
 - 13c. Images et expositions (choix, glisser, insérer / supprimer avec modes de trou, couper /
   copier / coller, inverser, instances, noms, pré / post-comportement, faux-fixe, étirer).
+  Choix d'Anthony (2026-10-15) : modes de trou = laisser vide, combler depuis la gauche (le
+  dessin d'avant est tenu), combler depuis la droite (la suite recule), garder en l'état ;
+  faux-fixe = répéter les images choisies à la suite, en boucle, en va-et-vient ou au hasard ;
+  cassure automatique = dessiner sur une image tenue en crée une nouvelle.
+  - ✅ 13c-1. Pré / post-comportement par calque (`Layer::shown_at`, format 15) : rendu, export,
+    lecture, pochoirs, plateau 3D ; blocs pâles dans la timeline ; menu ⋮ et fenêtre « Nouveau
+    calque ». Les outils de dessin restent sur les vraies images (`cel_at`).
+  - 13c-2. Images choisies et opérations (supprimer avec modes de trou, insérer, couper /
+    copier / coller en insérant ou en remplaçant, dupliquer, inverser, tout choisir).
+  - 13c-3. Instances : précédente / suivante, tête / queue, casser, expositions par image
+    choisie, ajouter des instances, cassure / création automatiques, faux-fixe, étirer le
+    calque, glisser-déposer des images.
+  - 13c-4. Noms d'instance (renommer, effacer, tout renommer, renommage intelligent), retourner.
 - 13d. Repères : marques, signets, entrée / sortie, boucle, image de départ, time code, zoom.
 - 13e. Onglets du bas et vue Projet : notes dessinées, son par plan, arrière-plan, propriétés.
 - 13f. Table lumineuse complète.

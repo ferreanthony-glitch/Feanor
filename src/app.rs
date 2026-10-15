@@ -807,7 +807,7 @@ impl App {
                     }
                 }
             }
-            if let Some(cel) = layer.cel_at(frame) {
+            if let Some(cel) = layer.shown_at(frame) {
                 items.push(PlanItem {
                     cel,
                     transform,
@@ -1086,7 +1086,7 @@ impl App {
             if li == self.cur_layer || !l.stencil || crate::folders::effect(self.layers(), li).is_none() {
                 continue;
             }
-            let cel = l.cel_at(self.cur_frame);
+            let cel = l.shown_at(self.cur_frame);
             if cel == Some(painted) {
                 continue;
             }

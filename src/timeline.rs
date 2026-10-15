@@ -371,6 +371,35 @@ impl App {
         for row in &rows {
             let layer = &self.layers()[row.li];
             let y = grid_top + row.top;
+            // Avant la première image et après la dernière (pré / post-comportement, 13c) : les
+            // images montrées, en blocs pâles bordés.
+            let first = layer.frames.iter().position(Option::is_some);
+            let last = layer.frames.iter().rposition(Option::is_some);
+            if let (Some(first), Some(last)) = (first, last) {
+                let base = match layer.kind {
+                    LayerKind::Vector => theme::DESSIN_VECTORIEL,
+                    LayerKind::Bitmap => theme::DESSIN_BITMAP,
+                };
+                let ranges = [(0, first), (last + 1, cols)];
+                for (a, b) in ranges {
+                    let mut f = a;
+                    while f < b {
+                        let shown = layer.shown_at(f);
+                        let mut g = f + 1;
+                        while g < b && layer.shown_at(g) == shown {
+                            g += 1;
+                        }
+                        if shown.is_some() {
+                            let block = Rect::from_min_max(
+                                pos2(r.left() + f as f32 * CELL_W + 1.0, y + 6.0),
+                                pos2(r.left() + g as f32 * CELL_W - 1.0, y + row.h - 6.0),
+                            );
+                            painter.rect(block, 3.0, base.gamma_multiply(0.18), Stroke::new(1.0_f32, base.gamma_multiply(0.7)), StrokeKind::Inside);
+                        }
+                        f = g;
+                    }
+                }
+            }
             let mut f = 0;
             while f < layer.frames.len() {
                 let (start, end) = layer.run_bounds(f);

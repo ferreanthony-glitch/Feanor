@@ -30,7 +30,7 @@ impl App {
     /// Boîte du contenu du calque `li` à l'image `frame`, en coordonnées de son dessin (rien s'il
     /// est vide). Bitmap : à la tuile près.
     pub(crate) fn layer_content_box(&self, li: usize, frame: usize) -> Option<Rect> {
-        let id = self.layers().get(li)?.cel_at(frame)?;
+        let id = self.layers().get(li)?.shown_at(frame)?;
         let cel = self.doc.cels.get(&id)?;
         let r = match &cel.vector {
             Some(d) => d.elements.iter().fold(Rect::NOTHING, |r, e| r.union(e.bounds())),

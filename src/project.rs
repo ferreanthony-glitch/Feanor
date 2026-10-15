@@ -22,7 +22,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::document::{
-    fresh_layer_id, AudioTrack, Cel, CelId, Document, Layer, LayerKind, LayerTransform, Panel, Ref3d, Scene, SceneWide,
+    fresh_layer_id, AudioTrack, Behaviour, Cel, CelId, Document, Layer, LayerKind, LayerTransform, Panel, Ref3d, Scene, SceneWide,
     Sequence, Sound, SoundClip, Structure,
 };
 use crate::brushtex::{GrayImage, TextureKind};
@@ -55,7 +55,9 @@ pub const FORMAT: &str = "pelure-projet";
 /// (`groupes`), qu'une version précédente perdrait.
 /// 14 (13b-5) : dossiers de calques (`dossier`, `dans_dossier`) ; une version précédente en
 /// ferait des calques vides et perdrait l'opacité et l'affichage des dossiers.
-pub const VERSION: u32 = 14;
+/// 15 (13c) : pré / post-comportement des calques (`avant`, `apres`), qu'une version
+/// précédente ignorerait (le film changerait sans prévenir).
+pub const VERSION: u32 = 15;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Modèles 3D de repère (2d), dans le format de Pelure.
@@ -348,6 +350,11 @@ struct LayerEntry {
     dossier: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     dans_dossier: Option<usize>,
+    /// Pré / post-comportement (format 15 ; absents : rien).
+    #[serde(default, skip_serializing_if = "is_nothing")]
+    avant: Behaviour,
+    #[serde(default, skip_serializing_if = "is_nothing")]
+    apres: Behaviour,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -386,6 +393,10 @@ fn one() -> f32 {
 
 fn is_zero(v: &f32) -> bool {
     *v == 0.0
+}
+
+fn is_nothing(b: &Behaviour) -> bool {
+    *b == Behaviour::Nothing
 }
 
 fn is_normal(m: &crate::blend::BlendMode) -> bool {
@@ -792,6 +803,8 @@ fn manifest_of(doc: &Document) -> Manifest {
                     replie: l.collapsed,
                     dossier: l.folder,
                     dans_dossier: l.parent.and_then(|p| panel.layers.iter().position(|f| f.folder && f.id == p)),
+                    avant: l.pre,
+                    apres: l.post,
                     expositions: to_exposures(&l.frames),
                 })
                 .collect(),
@@ -1144,6 +1157,8 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                         collapsed: l.replie,
                         folder: l.dossier,
                         parent: None,
+                        pre: l.avant,
+                        post: l.apres,
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.

@@ -224,7 +224,7 @@ impl App {
     /// Le calque `li` a quelque chose de dessiné près du point `p` de la feuille (image courante).
     fn layer_drawn_at(&self, li: usize, p: Pos2) -> bool {
         let Some(layer) = self.layers().get(li) else { return false };
-        let Some(cel) = layer.cel_at(self.cur_frame).and_then(|c| self.doc.cels.get(&c)) else { return false };
+        let Some(cel) = layer.shown_at(self.cur_frame).and_then(|c| self.doc.cels.get(&c)) else { return false };
         let Some(inv) = layer.transform.affine(self.doc.stage_center()).inverse() else { return false };
         let q = inv.apply(p);
         const R: f32 = 8.0;
@@ -325,7 +325,7 @@ impl App {
         let layer = &self.layers()[li];
         let (depth, opacity, name) = (layer.depth, layer.opacity.clamp(0.0, 1.0), layer.name.clone());
         let own: Affine = layer.transform.affine(self.doc.stage_center());
-        let cel = layer.cel_at(self.cur_frame);
+        let cel = layer.shown_at(self.cur_frame);
         let current = li == self.cur_layer;
         let [w, h] = world.stage;
         let sheet = |u: f32, v: f32| world.at_depth(pos2(u * w, v * h), depth);

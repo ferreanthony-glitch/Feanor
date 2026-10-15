@@ -1,12 +1,12 @@
-//! Fenêtre « Nouveau calque » (13b) : nom, sorte, groupe de couleur, mode de fusion, et place
-//! dans la pile (sur / sous le calque courant, tout en haut / en bas, sur / sous le groupe du
-//! calque courant). Le pré / post-comportement viendra avec les images (13c).
+//! Fenêtre « Nouveau calque » (13b) : nom, sorte, groupe de couleur, mode de fusion,
+//! pré / post-comportement (13c), et place dans la pile (sur / sous le calque courant, tout en
+//! haut / en bas, sur / sous le groupe du calque courant).
 
 use eframe::egui::{self, Align2, RichText};
 
 use crate::app::App;
 use crate::blend::BlendMode;
-use crate::document::{Layer, LayerKind};
+use crate::document::{Behaviour, Layer, LayerKind};
 
 /// Où poser le nouveau calque.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -60,6 +60,9 @@ pub(crate) struct NewLayerForm {
     pub same_group: bool,
     pub blend: BlendMode,
     pub place: Place,
+    /// Pré / post-comportement (13c).
+    pub pre: Behaviour,
+    pub post: Behaviour,
     focused: bool,
 }
 
@@ -74,6 +77,8 @@ impl App {
             same_group: false,
             blend: BlendMode::Normal,
             place: Place::AboveCurrent,
+            pre: Behaviour::Nothing,
+            post: Behaviour::Nothing,
             focused: false,
         });
     }
@@ -89,6 +94,8 @@ impl App {
         };
         let mut layer = Layer::new(name.clone(), f.kind);
         layer.blend = f.blend;
+        layer.pre = f.pre;
+        layer.post = f.post;
         layer.group = if f.same_group { self.layer().group } else { f.group };
         let at = insert_index(self.layers(), self.cur_layer, f.place);
         self.layers_mut().insert(at, layer);
@@ -166,6 +173,16 @@ impl App {
                         }
                     });
                     ui.end_row();
+
+                    for (label, value, salt) in [("Avant la 1re image", &mut f.pre, "avant_nouveau_calque"), ("Après la dernière", &mut f.post, "apres_nouveau_calque")] {
+                        ui.label(label);
+                        egui::ComboBox::from_id_salt(salt).selected_text(value.label()).width(200.0).show_ui(ui, |ui| {
+                            for b in Behaviour::ALL {
+                                ui.selectable_value(value, b, b.label());
+                            }
+                        });
+                        ui.end_row();
+                    }
 
                     ui.label("Place");
                     egui::ComboBox::from_id_salt("place_nouveau_calque").selected_text(f.place.label()).width(200.0).show_ui(ui, |ui| {
