@@ -7,7 +7,7 @@ use crate::document::Document;
 use crate::render::{self, Plan};
 
 /// Ce qui fait changer une vignette : sa composition, la version de chaque dessin et la caméra.
-type Key = (Plan, Vec<u64>, [u32; 4]);
+type Key = (Plan, Vec<u64>, [u32; 5]);
 
 struct Entry {
     key: Key,
@@ -61,7 +61,7 @@ impl Thumbs {
             .map(|i| doc.cels.get(&i.cel).map_or(0, |c| c.version))
             .collect();
         let cam = doc.panel_camera(panel, 0);
-        let key = (plan, versions, [cam.x, cam.y, cam.zoom, cam.angle].map(f32::to_bits));
+        let key = (plan, versions, [cam.x, cam.y, cam.zoom, cam.angle, cam.dolly].map(f32::to_bits));
         let fresh = self.entries.get(&slot).is_some_and(|e| e.key == key);
         if fresh || Instant::now() >= deadline {
             if !fresh {

@@ -9,6 +9,11 @@ use crate::render;
 
 const RED: Color32 = Color32::from_rgb(220, 20, 20);
 
+/// Caméra décalée de `offset`, sans avancée.
+fn pan(offset: Vec2) -> crate::document::CameraSeen {
+    crate::document::CameraSeen { offset, dolly: 0.0, d0: 1000.0 }
+}
+
 /// Feuille 64×48 avec un point rouge en (10, 10) et une caméra fixe décalée de (8, 0).
 fn doc_with_camera(depth: f32) -> Document {
     let mut doc = Document::new(64, 48, 24);
@@ -35,19 +40,19 @@ fn red_at(doc: &Document) -> Option<(usize, usize)> {
 fn perspective_and_seen_transform() {
     let mut l = Layer::new("L", LayerKind::Bitmap);
     assert_eq!(l.perspective(), 1.0);
-    assert_eq!(l.transform_seen(vec2(30.0, 0.0)), l.transform, "plan de référence : pas de décalage");
+    assert_eq!(l.transform_seen(&pan(vec2(30.0, 0.0))).unwrap(), l.transform, "plan de référence : pas de décalage");
     l.depth = 1.0;
     assert_eq!(l.perspective(), 0.5);
-    assert_eq!(l.transform_seen(Vec2::ZERO), l.transform, "caméra au centre : rien ne bouge");
-    let t = l.transform_seen(vec2(30.0, -10.0));
+    assert_eq!(l.transform_seen(&pan(Vec2::ZERO)).unwrap(), l.transform, "caméra au centre : rien ne bouge");
+    let t = l.transform_seen(&pan(vec2(30.0, -10.0))).unwrap();
     assert_eq!((t.x, t.y), (15.0, -5.0), "deux fois plus loin : suit la caméra à moitié");
     // Premier plan : défile plus vite que la caméra, dans l'autre sens.
     l.depth = -0.5;
-    let t = l.transform_seen(vec2(10.0, 0.0));
+    let t = l.transform_seen(&pan(vec2(10.0, 0.0))).unwrap();
     assert!((t.x + 10.0).abs() < 1e-4);
     // La profondeur ne touche ni l'échelle ni la rotation du calque.
     l.transform = LayerTransform { x: 3.0, scale: 2.0, angle: 45.0, ..Default::default() };
-    let t = l.transform_seen(vec2(10.0, 0.0));
+    let t = l.transform_seen(&pan(vec2(10.0, 0.0))).unwrap();
     assert_eq!((t.scale, t.angle), (2.0, 45.0));
     assert!((t.x - (3.0 - 10.0)).abs() < 1e-4);
     // Trop près : bornée pour ne pas diviser par zéro.

@@ -353,21 +353,7 @@ impl App {
                 );
             }
             Tool::Ref3d => self.ref3d_panel(ui),
-            Tool::Camera => {
-                self.camera_fields(ui);
-                ui.horizontal_wrapped(|ui| self.camera_keys_ui(ui));
-                let was = self.camera_view;
-                ui.checkbox(&mut self.camera_view, "Vue à travers la caméra");
-                if was && !self.camera_view {
-                    self.fit_pending = true;
-                }
-                ui.checkbox(&mut self.camera_mask, "Estomper le hors-champ");
-                note(
-                    ui,
-                    "Glisser dans le cadre : déplacer (Maj : à l'horizontale ou à la verticale). Coin : \
-                     zoomer. Poignée ronde : tourner (Maj : par 15°). La caméra appartient au panneau.",
-                );
-            }
+            Tool::Camera => self.camera_panel(ui),
         }
         if self.current_brush().is_some_and(|b| b.pressure_size || b.pressure_opacity) {
             note(ui, "La pression vient du stylet (Windows Ink). À la souris, elle vaut 100 %.");

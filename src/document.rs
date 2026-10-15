@@ -182,6 +182,15 @@ impl LayerTransform {
     }
 }
 
+/// Où est la caméra, pour le multiplan (`Layer::transform_seen`) : son décalage depuis le centre
+/// de la feuille, son avancée, et la distance de référence (pixels de la feuille).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CameraSeen {
+    pub offset: Vec2,
+    pub dolly: f32,
+    pub d0: f32,
+}
+
 /// Calque de toute la scène (6f), comme un décor : chaque panneau de la scène `scene` en a un
 /// exemplaire, réglé pareil, qui montre le même dessin pendant tout le panneau. `key` relie les
 /// exemplaires d'un panneau à l'autre (chaque calque garde son propre `id`).
@@ -240,19 +249,32 @@ impl Layer {
         1.0 / (1.0 + self.depth.max(Self::MIN_DEPTH))
     }
 
-    /// Transformation affichée quand la caméra est décalée de `camera_offset` (pixels de la feuille)
-    /// par rapport au centre : un calque lointain suit en partie la caméra (il défile moins vite),
-    /// un premier plan part en sens inverse (il défile plus vite).
-    pub fn transform_seen(&self, camera_offset: Vec2) -> LayerTransform {
-        if self.depth == 0.0 || camera_offset == Vec2::ZERO {
-            return self.transform;
+    /// Transformation affichée quand la caméra est en `seen` : décalée par rapport au centre, un
+    /// calque lointain suit en partie la caméra (il défile moins vite), un premier plan part en
+    /// sens inverse (il défile plus vite) ; avancée vers la feuille, un calque grossit d'autant
+    /// plus qu'il est proche. Aucune : le calque est derrière la caméra (on ne le voit pas).
+    ///
+    /// Le calque de profondeur d est à la distance D(1 + d) de la caméra de référence (D : distance
+    /// de référence), agrandi de (1 + d) pour qu'elle le voie tel qu'il est dessiné. Vu de la
+    /// caméra avancée de z et décalée de o, puis ramené sur le plan de référence : son dessin est
+    /// agrandi de s(1 + d) autour du centre et décalé de (1 − s) o, avec s = (D − z) / (D(1 + d) − z).
+    pub fn transform_seen(&self, seen: &CameraSeen) -> Option<LayerTransform> {
+        if self.depth == 0.0 || (seen.offset == Vec2::ZERO && seen.dolly == 0.0) {
+            return Some(self.transform);
         }
-        let k = 1.0 - self.perspective();
-        LayerTransform {
-            x: self.transform.x + camera_offset.x * k,
-            y: self.transform.y + camera_offset.y * k,
+        let d = self.depth.max(Self::MIN_DEPTH);
+        let dist = seen.d0 * (1.0 + d) - seen.dolly;
+        if dist <= seen.d0 * 0.02 {
+            return None;
+        }
+        let s = (seen.d0 - seen.dolly) / dist;
+        let k = s * (1.0 + d);
+        Some(LayerTransform {
+            x: self.transform.x * k + seen.offset.x * (1.0 - s),
+            y: self.transform.y * k + seen.offset.y * (1.0 - s),
+            scale: self.transform.scale * k,
             ..self.transform
-        }
+        })
     }
 
     pub fn cel_at(&self, frame: usize) -> Option<CelId> {
@@ -632,19 +654,30 @@ impl Document {
         Camera::centered(self.width, self.height)
     }
 
-    /// Caméra du panneau `index` à son image `frame`.
+    /// Caméra du panneau `index` à son image `frame`. Un panneau sans image clé garde la caméra
+    /// où le panneau d'avant (dans la scène) l'a laissée, sinon celle où le panneau d'après la
+    /// prend : la caméra ne revient pas au centre en passant d'un panneau à l'autre (9c).
     pub fn panel_camera(&self, index: usize, frame: usize) -> Camera {
-        match self.panels.get(index) {
-            Some(p) => camera::camera_at(&p.camera, frame, self.default_camera()),
-            None => self.default_camera(),
+        let default = self.default_camera();
+        let Some(p) = self.panels.get(index) else { return default };
+        if !p.camera.is_empty() {
+            return camera::camera_at(&p.camera, frame, default);
         }
+        let (start, end) = self.scene_run(index);
+        if let Some(q) = self.panels[start..index].iter().rev().find(|q| !q.camera.is_empty()) {
+            return camera::camera_at(&q.camera, q.frame_count().saturating_sub(1), default);
+        }
+        if let Some(q) = self.panels[index + 1..end].iter().find(|q| !q.camera.is_empty()) {
+            return camera::camera_at(&q.camera, 0, default);
+        }
+        default
     }
 
-    /// Décalage de la caméra du panneau `index` à l'image `frame`, depuis le centre de la feuille
-    /// (c'est lui qui fait défiler les plans du multiplan).
-    pub fn camera_offset(&self, index: usize, frame: usize) -> Vec2 {
+    /// Où est la caméra du panneau `index` à l'image `frame`, pour le multiplan : décalage depuis
+    /// le centre de la feuille, avancée, distance de référence.
+    pub fn camera_seen(&self, index: usize, frame: usize) -> CameraSeen {
         let c = self.panel_camera(index, frame);
-        pos2(c.x, c.y) - self.stage_center()
+        CameraSeen { offset: pos2(c.x, c.y) - self.stage_center(), dolly: c.dolly, d0: camera::ref_distance(self.frame) }
     }
 
     pub fn structure(&self) -> Structure {
@@ -1048,12 +1081,13 @@ impl Document {
         if index + 1 >= self.panels.len() || self.panels[index].scene != self.panels[index + 1].scene {
             return None;
         }
+        // Caméras qu'ils montraient (un panneau sans clé hérite de ses voisins) : gardées.
+        let (cam_a, cam_b) = (self.panel_camera(index, 0), self.panel_camera(index + 1, 0));
         let next = self.panels.remove(index + 1);
         let next_len = next.frame_count();
-        let default = self.default_camera();
         let a = &mut self.panels[index];
         let a_len = a.frame_count();
-        a.camera = camera::join_keys(&a.camera, a_len, &next.camera, next_len, default);
+        a.camera = camera::join_keys(&a.camera, a_len, cam_a, &next.camera, next_len, cam_b);
         // Les calques de toute la scène sont déjà dans le premier : seuls les autres se suivent,
         // rang pour rang parmi les calques propres au panneau.
         let own: Vec<usize> = (0..a.layers.len()).filter(|&k| a.layers[k].scene_wide.is_none()).collect();

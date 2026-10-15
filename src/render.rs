@@ -1,8 +1,8 @@
-use eframe::egui::{self, Color32, ColorImage, TextureFilter, TextureHandle, TextureOptions, Vec2};
+use eframe::egui::{self, Color32, ColorImage, TextureFilter, TextureHandle, TextureOptions};
 
 use crate::blend::{blend_over, BlendMode};
 use crate::camera::Camera;
-use crate::document::{CelId, Document, LayerTransform, Panel};
+use crate::document::{CameraSeen, CelId, Document, LayerTransform, Panel};
 use crate::raster::{tile_bounds, tiles_across, Raster, TILE, TILE_PIXELS};
 use crate::vector::Affine;
 
@@ -258,10 +258,10 @@ pub fn composite_pixel(doc: &Document, plan: &Plan, x: usize, y: usize) -> Color
 /// Plan de l'image `frame` du panneau `index` tel que la caméra le filme (vignettes, export) :
 /// les calques en profondeur défilent selon le décalage de la caméra (multiplan).
 pub fn panel_plan_at(doc: &Document, index: usize, frame: usize, paper: Option<[u8; 3]>) -> Plan {
-    plan_with_offset(&doc.panels[index], frame, paper, doc.camera_offset(index, frame))
+    plan_with_camera(&doc.panels[index], frame, paper, &doc.camera_seen(index, frame))
 }
 
-fn plan_with_offset(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, offset: Vec2) -> Plan {
+fn plan_with_camera(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen) -> Plan {
     Plan {
         paper,
         items: panel
@@ -269,7 +269,7 @@ fn plan_with_offset(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, offset:
             .iter()
             .filter(|l| l.visible)
             .filter_map(|l| {
-                let t = l.transform_seen(offset);
+                let t = l.transform_seen(camera)?;
                 l.cel_at(frame).map(|cel| PlanItem {
                     cel,
                     opacity: (l.opacity.clamp(0.0, 1.0) * 255.0).round() as u8,

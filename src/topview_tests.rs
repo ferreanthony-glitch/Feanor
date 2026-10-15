@@ -5,6 +5,11 @@ use eframe::egui::vec2;
 use crate::document::{Layer, LayerKind};
 use crate::topview::{depth_of, distance, half_field, world_x};
 
+/// Caméra décalée de `offset`, sans avancée.
+fn pan(offset: eframe::egui::Vec2) -> crate::document::CameraSeen {
+    crate::document::CameraSeen { offset, dolly: 0.0, d0: 1000.0 }
+}
+
 #[test]
 fn distance_and_depth_go_both_ways() {
     for z in [-0.9, -0.3, 0.0, 0.5, 1.0, 7.25, 1000.0] {
@@ -24,7 +29,7 @@ fn top_view_matches_the_multiplane_shift() {
         l.depth = z;
         let d = distance(z);
         for cam_x in [960.0, 1210.0, 500.0] {
-            let seen = l.transform_seen(vec2(cam_x - c0, 0.0));
+            let seen = l.transform_seen(&pan(vec2(cam_x - c0, 0.0))).unwrap();
             for x in [100.0, 960.0, 1700.0] {
                 // Multiplan : position du point dans le cadre, par rapport au centre de la caméra.
                 let in_frame = x + seen.x - cam_x;
@@ -49,6 +54,6 @@ fn field_of_view_edges_are_the_frame_edges() {
     l.depth = 2.0;
     let edge_world = (cam_x - c0) + half_field(fw, zoom, d);
     let x = edge_world / d + c0;
-    let seen = l.transform_seen(vec2(cam_x - c0, 0.0));
+    let seen = l.transform_seen(&pan(vec2(cam_x - c0, 0.0))).unwrap();
     assert!(((x + seen.x - cam_x) - fw / (2.0 * zoom)).abs() < 1e-3);
 }

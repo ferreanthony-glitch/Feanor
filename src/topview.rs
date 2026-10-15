@@ -106,6 +106,11 @@ impl App {
         }
     }
 
+    /// Avancée de la caméra en distances de la vue de dessus (1 : jusqu'au plan de référence).
+    fn camera_advance(&self, cam: &crate::camera::Camera) -> f32 {
+        cam.dolly / crate::camera::ref_distance(self.doc.frame)
+    }
+
     fn top_items(&self) -> Vec<Item> {
         let cx = self.doc.stage_center().x;
         let pivot = self.doc.stage_center();
@@ -135,7 +140,7 @@ impl App {
         let d_max = items.iter().map(|it| it.shown).fold(1.5_f32, f32::max) * 1.12;
         let cam = self.doc.panel_camera(self.cur_panel, self.cur_frame);
         let cam_x = cam.x - self.doc.stage_center().x;
-        let half = half_field(unit, cam.zoom, d_max);
+        let half = half_field(unit, cam.zoom, d_max - self.camera_advance(&cam));
         let (mut lo, mut hi) = (cam_x - half, cam_x + half);
         for it in items {
             lo = lo.min(it.x0);
@@ -268,9 +273,11 @@ impl App {
         let cone = |frame: usize| {
             let cam = self.doc.panel_camera(self.cur_panel, frame);
             let x = cam.x - cx;
-            let half = half_field(unit, cam.zoom, d_top);
+            // La caméra avancée (travelling) est plus haut, plus près des calques.
+            let from = self.camera_advance(&cam);
+            let half = half_field(unit, cam.zoom, d_top - from);
             [
-                fit.to_screen(rect, x, 0.0),
+                fit.to_screen(rect, x, from),
                 fit.to_screen(rect, x - half, d_top),
                 fit.to_screen(rect, x + half, d_top),
             ]

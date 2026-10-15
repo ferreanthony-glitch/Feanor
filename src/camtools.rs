@@ -32,7 +32,7 @@ pub(crate) struct CamDrag {
 
 /// Vue de l'écran qui montre exactement le cadre de la caméra `cam` dans la zone `rect`.
 pub(crate) fn view_through(cam: &Camera, frame: [usize; 2], stage: Vec2, rect: Rect) -> View {
-    let zoom_cam = cam.zoom.max(0.01);
+    let zoom_cam = cam.magnification(frame);
     let (w, h) = (frame[0] as f32 / zoom_cam, frame[1] as f32 / zoom_cam);
     let zoom = (rect.width() / w).min(rect.height() / h) * 0.96;
     // (0 et non -0 : la vue affiche sa rotation en degrés.)
@@ -340,6 +340,180 @@ impl App {
         if resp.changed() {
             self.toggle_camera_key_smooth();
         }
+    }
+
+    /// Paramètres de la caméra (outil Caméra, 9c), sur le modèle d'une fenêtre de propriétés de
+    /// caméra : images clés et adoucis, position (X, Y, Z), objectif et rotation, durées.
+    pub(crate) fn camera_panel(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
+        let section = |ui: &mut egui::Ui, title: &str, body: &mut dyn FnMut(&mut egui::Ui)| {
+            egui::Frame::group(ui.style()).inner_margin(6.0).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.label(RichText::new(title).small().weak());
+                body(ui);
+            });
+        };
+        let fps = self.doc.fps;
+        let here = self.camera_key_here().copied();
+        let keys: Vec<usize> = self.doc.panels[self.cur_panel].camera.iter().map(|k| k.frame).collect();
+
+        // Images clés : poser, aller de l'une à l'autre, retirer ; adoucis de la clé courante.
+        let mut action = None;
+        let mut goto = None;
+        let mut eases: Option<(f32, f32)> = None;
+        section(ui, "Images clés", &mut |ui| {
+            ui.horizontal_wrapped(|ui| {
+                let key = |a: &str, k: &crate::keymap::Keymap| {
+                    let l = k.label(a);
+                    if l.is_empty() { String::new() } else { format!(" ({l})") }
+                };
+                if ui.button(format!("{} Début", ph::DIAMOND)).on_hover_text(format!("Image clé au début du panneau{}", key("camera.cle_debut", &self.keymap))).clicked() {
+                    action = Some("camera.cle_debut");
+                }
+                if ui
+                    .add_enabled(here.is_none(), egui::Button::new(format!("{} Ici", ph::DIAMOND)))
+                    .on_hover_text(format!("Image clé à l'image courante{}", key("camera.cle_ici", &self.keymap)))
+                    .clicked()
+                {
+                    action = Some("camera.cle_ici");
+                }
+                if ui.button(format!("{} Fin", ph::DIAMOND)).on_hover_text(format!("Image clé à la fin du panneau{}", key("camera.cle_fin", &self.keymap))).clicked() {
+                    action = Some("camera.cle_fin");
+                }
+                let prev = keys.iter().rev().find(|&&f| f < self.cur_frame).copied();
+                let next = keys.iter().find(|&&f| f > self.cur_frame).copied();
+                if ui.add_enabled(prev.is_some(), egui::Button::new(ph::CARET_LEFT)).on_hover_text("Clé précédente").clicked() {
+                    goto = prev;
+                }
+                if ui.add_enabled(next.is_some(), egui::Button::new(ph::CARET_RIGHT)).on_hover_text("Clé suivante").clicked() {
+                    goto = next;
+                }
+                if ui.add_enabled(here.is_some(), egui::Button::new(ph::TRASH)).on_hover_text("Retirer la clé de cette image").clicked() {
+                    action = Some("camera.cle_supprimer");
+                }
+            });
+            ui.add_enabled_ui(here.is_some(), |ui| {
+                let mut values = here.map_or([0.0, 0.0], |k| [k.ease_in, k.ease_out]);
+                let mut changed = false;
+                egui::Grid::new("adoucis_camera").num_columns(3).show(ui, |ui| {
+                    let rows = [
+                        ("Adoucir l'entrée", "La caméra ralentit en arrivant sur cette clé, sur ce nombre d'images."),
+                        ("Adoucir la sortie", "La caméra repart doucement de cette clé, sur ce nombre d'images."),
+                    ];
+                    for (k, (label, hint)) in rows.into_iter().enumerate() {
+                        ui.label(label);
+                        let r = ui
+                            .add(egui::DragValue::new(&mut values[k]).range(0.0..=10_000.0).speed(0.2).max_decimals(0).suffix(" i"))
+                            .on_hover_text(hint);
+                        ui.label(RichText::new(crate::storyboard::timecode(values[k].round() as usize, fps)).small().weak());
+                        changed |= self.edited(&r);
+                        ui.end_row();
+                    }
+                });
+                if changed {
+                    eases = Some((values[0], values[1]));
+                }
+            });
+            if here.is_none() {
+                ui.label(RichText::new("Place-toi sur une image clé pour régler ses adoucis.").small().weak());
+            }
+        });
+        if let Some((ein, eout)) = eases {
+            let frame = self.cur_frame;
+            if let Some(k) = self.doc.panels[self.cur_panel].camera.iter_mut().find(|k| k.frame == frame) {
+                (k.ease_in, k.ease_out) = (ein.max(0.0), eout.max(0.0));
+                // Les nouveaux adoucis remplacent l'ancien « adoucir ».
+                k.smooth = false;
+            }
+        }
+        if let Some(a) = action {
+            self.run_action(a);
+        }
+        if let Some(f) = goto {
+            self.cur_frame = f;
+        }
+
+        // Position, objectif, rotation : la caméra à l'image courante.
+        let cam = self.current_camera();
+        let frame = self.doc.frame;
+        let (cx, cy) = (self.doc.width as f32 / 2.0, self.doc.height as f32 / 2.0);
+        let d0 = camera::ref_distance(frame);
+        let (mut x, mut y, mut z, mut focal, mut angle) = (cam.x - cx, cam.y - cy, cam.distance(frame), cam.focal(), cam.angle);
+        let mut next = None;
+        section(ui, "Caméra à cette image", &mut |ui| {
+            egui::Grid::new("caméra_position").num_columns(2).show(ui, |ui| {
+                ui.label("Position");
+                ui.horizontal(|ui| {
+                    let r = ui.add(egui::DragValue::new(&mut x).speed(2.0).prefix("X ").max_decimals(0)).on_hover_text("Décalage horizontal depuis le centre de la feuille (px)");
+                    if self.edited(&r) {
+                        next = Some(Camera { x: cx + x, ..cam });
+                    }
+                    let r = ui.add(egui::DragValue::new(&mut y).speed(2.0).prefix("Y ").max_decimals(0)).on_hover_text("Décalage vertical depuis le centre de la feuille (px)");
+                    if self.edited(&r) {
+                        next = Some(Camera { y: cy + y, ..cam });
+                    }
+                    let r = ui
+                        .add(egui::DragValue::new(&mut z).speed(4.0).range(d0 * 0.05..=d0 * 20.0).prefix("Z ").max_decimals(0))
+                        .on_hover_text(
+                            "Distance de la caméra au plan de référence (px). Moins : la caméra avance \
+                             (travelling) et les calques proches grossissent plus que les lointains.",
+                        );
+                    if self.edited(&r) {
+                        next = Some(Camera { dolly: d0 - z, ..cam });
+                    }
+                });
+                ui.end_row();
+                ui.label("Focale");
+                ui.horizontal(|ui| {
+                    let r = ui
+                        .add(egui::DragValue::new(&mut focal).speed(0.2).range(2.0..=1000.0).suffix(" mm").max_decimals(1))
+                        .on_hover_text(format!("Objectif (zoom) : {:.0} mm = 100 %.", camera::REF_FOCAL));
+                    if self.edited(&r) {
+                        next = Some(Camera { zoom: (focal / camera::REF_FOCAL).clamp(0.05, 50.0), ..cam });
+                    }
+                    ui.label(RichText::new(format!("grossissement {:.0} %", cam.magnification(frame) * 100.0)).small().weak());
+                });
+                ui.end_row();
+                ui.label("Rotation");
+                ui.horizontal(|ui| {
+                    let r = ui.add(egui::DragValue::new(&mut angle).speed(0.5).suffix("°").max_decimals(1));
+                    if self.edited(&r) {
+                        next = Some(Camera { angle, ..cam });
+                    }
+                    if ui.small_button("Réinitialiser").on_hover_text("Caméra au centre, sans zoom, avancée ni rotation").clicked() {
+                        self.reset_camera();
+                    }
+                });
+                ui.end_row();
+            });
+        });
+        if let Some(c) = next {
+            self.set_current_camera(c);
+        }
+
+        // Vue et durées.
+        section(ui, "Vue", &mut |ui| {
+            let was = self.camera_view;
+            ui.checkbox(&mut self.camera_view, "Vue à travers la caméra");
+            if was && !self.camera_view {
+                self.fit_pending = true;
+            }
+            ui.checkbox(&mut self.camera_mask, "Estomper le hors-champ");
+        });
+        let (s, e) = self.doc.scene_run(self.cur_panel);
+        let scene_len: usize = self.doc.panels[s..e].iter().map(|p| p.frame_count()).sum();
+        section(ui, "Durées", &mut |ui| {
+            ui.label(format!("Scène : {}", crate::storyboard::duration_label(scene_len, fps)));
+            ui.label(format!("Panneau : {}", crate::storyboard::duration_label(self.frame_count(), fps)));
+        });
+        ui.label(
+            RichText::new(
+                "Glisser dans le cadre : déplacer (Maj : à l'horizontale ou à la verticale). Coin : zoomer. \
+                 Poignée ronde : tourner (Maj : par 15°). Un panneau sans clé garde la caméra du panneau d'avant.",
+            )
+            .small()
+            .weak(),
+        );
     }
 
     /// Réglages de la caméra du panneau courant (fiche du panneau et outil Caméra).

@@ -45,7 +45,8 @@ pub const FORMAT: &str = "pelure-projet";
 /// dessins, textures dans `textures/`), qu'une version précédente perdrait.
 /// 9 (phase 8) : notes attachées à une vignette (`attache`), textes de la planche
 /// (`planche_textes`), mode de fusion des calques (`fusion`).
-pub const VERSION: u32 = 9;
+/// 10 (phase 9) : caméra avancée (`avance`) et adoucis en images (`adoucir_entree`, `adoucir_sortie`).
+pub const VERSION: u32 = 10;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Modèles 3D de repère (2d), dans le format de Pelure.
@@ -239,6 +240,14 @@ struct CameraEntry {
     /// Mouvement adouci à cette clé.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     doux: bool,
+    /// Avancée de la caméra vers la feuille, en pixels (format 10 ; absent : 0).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    avance: f32,
+    /// Adoucis d'entrée et de sortie, en images (format 10 ; absent : 0).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    adoucir_entree: f32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    adoucir_sortie: f32,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -716,6 +725,9 @@ fn manifest_of(doc: &Document) -> Manifest {
                     zoom: k.cam.zoom,
                     rotation: k.cam.angle,
                     doux: k.smooth,
+                    avance: k.cam.dolly,
+                    adoucir_entree: k.ease_in,
+                    adoucir_sortie: k.ease_out,
                 })
                 .collect(),
             repere3d: panel.ref3d.as_ref().map(|r| Ref3dEntry {
@@ -1020,16 +1032,20 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                 }
                 let mut camera: Vec<CameraKey> = Vec::new();
                 for k in &p.camera {
-                    if k.x.is_finite() && k.y.is_finite() && k.zoom.is_finite() && k.rotation.is_finite() {
+                    let finite = [k.x, k.y, k.zoom, k.rotation, k.avance, k.adoucir_entree, k.adoucir_sortie];
+                    if finite.iter().all(|v| v.is_finite()) {
                         let cam = Camera {
                             x: k.x,
                             y: k.y,
                             zoom: k.zoom.clamp(0.05, 50.0),
                             angle: k.rotation,
+                            dolly: k.avance,
                         };
                         crate::camera::set_key(&mut camera, k.image, cam);
                         if let Some(x) = camera.iter_mut().find(|x| x.frame == k.image) {
                             x.smooth = k.doux;
+                            x.ease_in = k.adoucir_entree.max(0.0);
+                            x.ease_out = k.adoucir_sortie.max(0.0);
                         }
                     }
                 }

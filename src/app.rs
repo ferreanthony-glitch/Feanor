@@ -633,7 +633,8 @@ impl App {
     /// Transformation du calque courant telle qu'on la voit à l'image courante : la sienne, plus le
     /// défilement multiplan si le calque est en profondeur et la caméra décalée.
     pub(crate) fn layer_seen(&self) -> crate::document::LayerTransform {
-        self.layer().transform_seen(self.doc.camera_offset(self.cur_panel, self.cur_frame))
+        let seen = self.doc.camera_seen(self.cur_panel, self.cur_frame);
+        self.layer().transform_seen(&seen).unwrap_or(self.layer().transform)
     }
 
     /// Transformation du calque courant (de son dessin vers la feuille).
@@ -706,7 +707,7 @@ impl App {
         // Table lumineuse : les autres calques sont estompés, le calque courant reste net.
         let washed = onion && self.light_table && !self.playing;
         // Multiplan : les calques en profondeur défilent selon la position de la caméra.
-        let offset = self.doc.camera_offset(self.cur_panel, frame);
+        let camera = self.doc.camera_seen(self.cur_panel, frame);
         for (li, layer) in self.layers().iter().enumerate() {
             if !layer.visible {
                 continue;
@@ -715,7 +716,8 @@ impl App {
             if washed && li != self.cur_layer {
                 opacity *= self.light_table_strength.clamp(0.05, 1.0);
             }
-            let seen = layer.transform_seen(offset);
+            // Derrière la caméra (elle a avancé au-delà) : on ne le voit pas.
+            let Some(seen) = layer.transform_seen(&camera) else { continue };
             let transform = (!seen.is_identity()).then_some(seen);
             if onion && self.onion.enabled && !self.playing && li == self.cur_layer {
                 let s = &self.onion;
