@@ -871,12 +871,12 @@ impl App {
                 });
                 // Du plus lointain au plus proche (le plus proche au-dessus) ; une image cachée
                 // garde sa place dans le rang des autres.
-                for (side, list, color, tint) in [(false, &before, s.before_color, s.tint_before), (true, &after, s.after_color, s.tint_after)] {
+                for (side, list) in [(false, &before), (true, &after)] {
                     for &(cel, k) in list.iter().rev().filter(|&&(_, k)| s.shown(side, k)) {
                         onion_items.push(PlanItem {
                             cel,
                             opacity: s.alpha(side, k),
-                            tint: tint.then_some(color),
+                            tint: s.tint_of(side, k),
                             transform: shifted.or(transform),
                             blend: Default::default(),
                         });

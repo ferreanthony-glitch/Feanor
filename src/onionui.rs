@@ -24,10 +24,18 @@ fn side_ui(ui: &mut egui::Ui, s: &mut OnionSettings, after: bool) {
         bulle(resp, "Nombre d'images", "Combien d'images de ce côté.", "");
     });
     ui.horizontal(|ui| {
-        let (tint, color) = if after { (&mut s.tint_after, &mut s.after_color) } else { (&mut s.tint_before, &mut s.before_color) };
+        let (tint, color, gradient, color2) = if after {
+            (&mut s.tint_after, &mut s.after_color, &mut s.gradient_after, &mut s.after_color2)
+        } else {
+            (&mut s.tint_before, &mut s.before_color, &mut s.gradient_before, &mut s.before_color2)
+        };
         let what = if after { "suivantes" } else { "précédentes" };
         ui.checkbox(tint, "Coloriser").on_hover_text(format!("Montrer les images {what} dans la couleur choisie (sinon : leurs vraies couleurs)."));
-        ui.add_enabled_ui(*tint, |ui| ui.color_edit_button_srgb(color));
+        ui.add_enabled_ui(*tint, |ui| {
+            ui.color_edit_button_srgb(color);
+            ui.checkbox(gradient, "Dégradé").on_hover_text("De la première couleur pour l'image la plus proche à la seconde pour la plus lointaine.");
+            ui.add_enabled_ui(*gradient, |ui| ui.color_edit_button_srgb(color2));
+        });
     });
     let n = if after { s.after } else { s.before };
     for k in 0..n {

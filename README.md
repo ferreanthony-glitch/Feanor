@@ -280,7 +280,8 @@ choisies…). Elle allume aussi les croix sur les instances vides et les miniatu
   pelure (aussi : clic droit sur la pelure d'un calque). On y trouve :
   - le mode : instance, image, signet ou marque de couleur ;
   - « Devant » : par-dessus le dessin courant ;
-  - la colorisation avant et après, chacune à part ;
+  - la colorisation avant et après, chacune à part, d'une couleur ou en dégradé de deux
+    couleurs (de l'image la plus proche à la plus lointaine) ;
   - chaque image montrée ou cachée, avec son opacité, et l'opacité globale ;
   - les curseurs liés : l'opacité décroît en ligne droite ;
   - activer ou désactiver tout ;

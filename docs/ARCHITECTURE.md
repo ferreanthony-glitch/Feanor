@@ -550,7 +550,8 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   garde son panneau. Par rang (0 = l'image la plus proche, jusqu'à `MAX_NEIGHBOURS`) :
   `show_before/after` et `before/after_opacity` ; liés, seule l'opacité du rang 0 compte et les
   autres suivent `ramp` (en ligne droite), ce qui redonne exactement l'ancien `fade` ; délier
-  recopie ce qu'on voyait. Opacité finale = globale × celle du rang. `migrate` reprend l'ancien
+  recopie ce qu'on voyait. Opacité finale = globale × celle du rang ; couleur : `tint_of`
+  (dégradé linéaire de la couleur 1 au rang 0 à la couleur 2 au dernier rang). `migrate` reprend l'ancien
   `tinted` des deux côtés. Les modes signet et marque ne retiennent que les images aux signets
   du plan ou dont le dessin porte une marque de couleur. « Devant » pose les images de la
   pelure après le dessin du calque dans `build_plan`. Le décalage (`App::onion_offset`, en

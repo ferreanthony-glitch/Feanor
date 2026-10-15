@@ -569,9 +569,10 @@ Décisions d'Anthony :
   son opacité ; opacité globale ; curseurs liés (opacité linéaire) ; « Devant » ; modes
   instance, image, signet, marque de couleur ; activer / désactiver tout ; réglages rangés sous
   un nom (le Bin) ; décaler temporairement les images de la pelure en glissant sur le dessin,
-  puis « Remettre ». Réglages de l'application (pas du projet) ; les anciens sont repris. Pas
-  repris : le mode « clé de rig » (il n'y a pas de calque Puppet) et le « Dégradé » (nom
-  seulement dans les textes, à faire décrire par Anthony).
+  puis « Remettre ». Réglages de l'application (pas du projet) ; les anciens sont repris.
+  « Dégradé » (nom seulement dans les textes de TVPaint) : au choix d'Anthony, celui de
+  Photoshop, deux couleurs de l'image la plus proche à la plus lointaine. Pas repris : le mode
+  « clé de rig » (il n'y a pas de calque Puppet).
 - 13g et suivantes, une étape chacune : feuille d'exposition, flips, clés d'effets, calques CTG,
   Puppet, vidéo, interpolation d'images.
 Le faux-fixe n'a que son nom dans les textes de TVPaint : à faire décrire par Anthony avant de

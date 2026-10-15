@@ -7,8 +7,9 @@
 //! colorisation avant et après chacune à part ; chaque image montrée ou cachée ; une opacité par
 //! image et une opacité globale ; curseurs liés (opacité linéaire d'une image à l'autre) ;
 //! « Devant » (par-dessus le dessin courant) ; modes instance, image, signet, marque d'image ;
-//! réglages rangés sous un nom (le « Bin »). Le mode « clé de rig » (calques Puppet) et le
-//! « Dégradé » (nom seulement dans les textes) ne sont pas repris.
+//! réglages rangés sous un nom (le « Bin »). Le « Dégradé » (nom seulement dans les textes de
+//! TVPaint) suit, au choix d'Anthony, celui de Photoshop : deux couleurs, de la plus proche à la
+//! plus lointaine. Le mode « clé de rig » (calques Puppet) n'est pas repris.
 
 use serde::{Deserialize, Serialize};
 
@@ -73,6 +74,13 @@ pub struct OnionSettings {
     pub tint_after: bool,
     pub before_color: [u8; 3],
     pub after_color: [u8; 3],
+    /// Dégradé (13f, sur le modèle de Photoshop : un dégradé linéaire entre deux couleurs) :
+    /// l'image la plus proche prend la couleur ci-dessus, la plus lointaine la seconde couleur,
+    /// celles du milieu une couleur entre les deux.
+    pub gradient_before: bool,
+    pub gradient_after: bool,
+    pub before_color2: [u8; 3],
+    pub after_color2: [u8; 3],
     /// Chaque image d'avant, d'après (par rang, 0 = la plus proche) : montrée ou cachée (13f).
     pub show_before: Vec<bool>,
     pub show_after: Vec<bool>,
@@ -108,6 +116,10 @@ impl Default for OnionSettings {
             tint_after: true,
             before_color: [255, 0, 0],
             after_color: [0, 255, 0],
+            gradient_before: false,
+            gradient_after: false,
+            before_color2: [255, 200, 0],
+            after_color2: [0, 140, 255],
             show_before: vec![true; MAX_NEIGHBOURS],
             show_after: vec![true; MAX_NEIGHBOURS],
             before_opacity: vec![1.0; MAX_NEIGHBOURS],
@@ -190,6 +202,23 @@ impl OnionSettings {
     pub fn show_all(&mut self, on: bool) {
         self.show_before = vec![on; MAX_NEIGHBOURS];
         self.show_after = vec![on; MAX_NEIGHBOURS];
+    }
+
+    /// Couleur de l'image de rang `k` d'avant ou d'après ; rien si ce côté n'est pas colorisé.
+    pub fn tint_of(&self, after: bool, k: usize) -> Option<[u8; 3]> {
+        let (on, gradient, c1, c2, n) = if after {
+            (self.tint_after, self.gradient_after, self.after_color, self.after_color2, self.after)
+        } else {
+            (self.tint_before, self.gradient_before, self.before_color, self.before_color2, self.before)
+        };
+        if !on {
+            return None;
+        }
+        if !gradient || n < 2 {
+            return Some(c1);
+        }
+        let t = k.min(n - 1) as f32 / (n - 1) as f32;
+        Some(std::array::from_fn(|i| (c1[i] as f32 + (c2[i] as f32 - c1[i] as f32) * t).round() as u8))
     }
 
     /// Opacité finale (0 à 255) de l'image de rang `k` : globale × la sienne.

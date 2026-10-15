@@ -78,6 +78,21 @@ fn opacity_per_image_global_and_linked_sliders() {
 }
 
 #[test]
+fn gradient_goes_from_the_nearest_colour_to_the_farthest() {
+    let mut s = OnionSettings { before: 3, before_color: [255, 0, 0], before_color2: [255, 200, 0], ..Default::default() };
+    assert_eq!(s.tint_of(false, 2), Some([255, 0, 0]), "sans dégradé : une seule couleur");
+    s.gradient_before = true;
+    assert_eq!(s.tint_of(false, 0), Some([255, 0, 0]));
+    assert_eq!(s.tint_of(false, 1), Some([255, 100, 0]));
+    assert_eq!(s.tint_of(false, 2), Some([255, 200, 0]));
+    s.before = 1;
+    assert_eq!(s.tint_of(false, 0), Some([255, 0, 0]), "une seule image : la première couleur");
+    s.tint_before = false;
+    assert_eq!(s.tint_of(false, 0), None, "vraies couleurs");
+    assert_eq!(s.tint_of(true, 0), Some([0, 255, 0]));
+}
+
+#[test]
 fn each_image_can_be_hidden_and_all_shown_again() {
     let mut s = OnionSettings::default();
     s.show_after[1] = false;
