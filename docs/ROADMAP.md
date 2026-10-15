@@ -520,7 +520,7 @@ Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans 
 | Outil formes | Alt+R | |
 | Outil main | H | |
 | Image précédente / suivante (second) | Flèches gauche / droite | |
-| Début / fin du montage | Ctrl+Origine / Ctrl+Fin | Origine / Fin = panneau (preset) |
+| Début / fin du montage | Ctrl+Origine / Ctrl+Fin | Origine / Fin = panneau (preset) ; en storyboard seulement depuis 13b |
 | Panneau précédent / suivant (second) | Pg préc. / Pg suiv. | |
 | Nouveau panneau (second, storyboard) | Inser | |
 | Supprimer le panneau (storyboard) | Ctrl+Suppr | |
@@ -534,11 +534,12 @@ Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans 
 ### Touches TVPaint 12 (13b) qui prendraient celle d'une fonction de Pelure
 
 Tes raccourcis TVPaint 12 libres dans Pelure sont posés (Maj + Haut / Bas : choisir en montant ou
-descendant ; Ctrl + Haut / Bas : monter / descendre le calque). Ceux-ci attendent ta décision :
+descendant ; Ctrl + Haut / Bas : monter / descendre le calque). Pour les autres, décision
+d'Anthony du 2026-10-15 :
 
-| Action | Ta touche TVPaint | Déjà prise dans Pelure par |
-|---|---|---|
-| Pelure d'oignon du calque | Ctrl+L | « Lier les clips au panneau » (en réserve, non implémenté, sans objet depuis les plans) |
-| Premier / dernier calque | Ctrl+Origine / Ctrl+Fin | Début / fin du montage (proposition) ; possible en mode Animation seulement |
-| Afficher tous les calques | = | + (ajouter une image au plan) : même touche en AZERTY |
-| Nouveau calque d'animation | Ctrl+N | Nouveau projet (Storyboard Pro) |
+| Action | Ta touche TVPaint | Déjà prise dans Pelure par | Décision |
+|---|---|---|---|
+| Pelure d'oignon du calque | Ctrl+L | « Lier les clips au panneau » (en réserve, sans objet depuis les plans) | ✅ Ctrl+L, la réserve n'a plus de touche |
+| Premier / dernier calque | Ctrl+Origine / Ctrl+Fin | Début / fin du montage | ✅ en Animation ; le montage les garde en Storyboard |
+| Afficher tous les calques | = | + (ajouter une image au plan) : même touche en AZERTY | sans touche |
+| Nouveau calque d'animation | Ctrl+N | Nouveau projet | sans touche |

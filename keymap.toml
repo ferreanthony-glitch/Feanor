@@ -464,11 +464,14 @@ source = "Storyboard Pro 27 : LAST_FRAME_KEY"
 action = "montage.debut"
 touches = ["Ctrl+Origine"]
 source = "proposition"
+# En animation, Ctrl+Origine / Ctrl+Fin vont au premier / dernier calque (13b, validé).
+contexte = "storyboard"
 
 [[raccourci]]
 action = "montage.fin"
 touches = ["Ctrl+Fin"]
 source = "proposition"
+contexte = "storyboard"
 
 [[raccourci]]
 action = "panneau.precedent"
@@ -710,13 +713,15 @@ source = "TVPaint 12 (perso) : LayerMoveDown"
 
 [[raccourci]]
 action = "calque.premier"
-touches = []
-source = "TVPaint 12 (perso) : FirstLayer = Ctrl+Origine, déjà pris par montage.debut"
+touches = ["Ctrl+Origine"]
+source = "TVPaint 12 (perso) : FirstLayer"
+contexte = "animation"
 
 [[raccourci]]
 action = "calque.dernier"
-touches = []
-source = "TVPaint 12 (perso) : LastLayer = Ctrl+Fin, déjà pris par montage.fin"
+touches = ["Ctrl+Fin"]
+source = "TVPaint 12 (perso) : LastLayer"
+contexte = "animation"
 
 [[raccourci]]
 action = "calque.tous_visibles"
@@ -725,8 +730,8 @@ source = "TVPaint 12 (perso) : DisplayAllLayer = « = », déjà pris par pannea
 
 [[raccourci]]
 action = "calque.pelure"
-touches = []
-source = "TVPaint 12 (perso) : LayerTogglePelureMode = Ctrl+L, réservé à clips.lier_au_panneau"
+touches = ["Ctrl+L"]
+source = "TVPaint 12 (perso) : LayerTogglePelureMode"
 
 [[raccourci]]
 action = "calque.nouveau"
@@ -1057,7 +1062,9 @@ source = "Storyboard Pro 27 sans touche par défaut : TOGGLE_SOUND_KEY"
 
 [[raccourci]]
 action = "clips.lier_au_panneau"
-touches = ["Ctrl+L"]
+# Ctrl+L de Storyboard Pro, laissé à la pelure d'oignon du calque (13b, validé) : sans objet
+# depuis qu'il n'y a plus de panneaux.
+touches = []
 source = "Storyboard Pro 27 : LINK_CLIP_AND_PANEL"
 etat = "non implémenté"
 

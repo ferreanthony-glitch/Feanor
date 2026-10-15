@@ -113,7 +113,13 @@ fn tvpaint_layer_keys_are_in_place() {
     assert_eq!(press(Key::ArrowUp, Modifiers::SHIFT).as_deref(), Some("calque.choisir_dessus"));
     assert_eq!(press(Key::ArrowDown, Modifiers::SHIFT).as_deref(), Some("calque.choisir_dessous"));
     assert_eq!(press(Key::ArrowUp, Modifiers::NONE).as_deref(), Some("calque.dessus"));
-    // Touches TVPaint déjà prises dans Pelure : elles gardent leur fonction.
+    // Validées par Anthony : Ctrl+L, et Ctrl+Origine / Fin en animation (le montage les garde
+    // en storyboard).
+    assert_eq!(press(Key::L, ctrl).as_deref(), Some("calque.pelure"));
+    assert_eq!(press(Key::Home, ctrl).as_deref(), Some("calque.premier"));
+    assert_eq!(press(Key::End, ctrl).as_deref(), Some("calque.dernier"));
+    let in_storyboard = map.find(Key::End, Some(Key::End), ctrl, Mode::Storyboard);
+    assert_eq!(in_storyboard, Some("montage.fin"));
+    // Ctrl+N reste « Nouveau projet ».
     assert_eq!(press(Key::N, ctrl).as_deref(), Some("fichier.nouveau"));
-    assert_eq!(press(Key::End, ctrl).as_deref(), Some("montage.fin"));
 }
