@@ -231,7 +231,8 @@ choisies…). Elle allume aussi les croix sur les instances vides et les miniatu
 **Vue Projet** :
 - **Nouveau plan avant le plan courant** (menu Storyboard, menu ⋯ du montage).
 - **Cadenas du montage** : il verrouille le storyboard. L'ordre, le nombre et la durée des plans
-  ne changent plus ; on dessine toujours dedans.
+  ne changent plus, et on n'y dessine plus : ni trait, ni commande d'images, ni calque ajouté
+  ou supprimé. Restent permis l'affichage des calques, les repères, les notes et les noms.
 - **Propriétés du projet** (Fichier) : titre, information, auteur, notes et copyright. On y voit
   aussi les dates de création et de dernière modification.
 - **Nouveau projet à partir des plans choisis** (Fichier) : sans le son.

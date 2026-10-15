@@ -204,7 +204,9 @@ impl App {
             if let Some(li) = pointer.and_then(|p| self.top_hit(rect, &fit, &items, p)) {
                 self.select_layer(li);
                 if resp.drag_started() {
-                    if self.layers()[li].locked {
+                    if self.content_refuses() {
+                        // Storyboard verrouillé (13e) : le message est posé.
+                    } else if self.layers()[li].locked {
                         self.status = "Calque verrouillé : déverrouille-le pour changer sa profondeur.".into();
                     } else if self.layers()[li].position_locked {
                         self.status = "Position verrouillée : déverrouille-la pour changer la profondeur du calque.".into();

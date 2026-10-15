@@ -459,11 +459,8 @@ impl App {
     /// selon le mode de trou. Sur tout le plan et en reculant la suite, le plan raccourcit et
     /// ses clés de caméra et marques suivent.
     pub(crate) fn delete_images(&mut self, all: bool) {
-        if !all && self.refuse_on_folder() {
-            return;
-        }
-        // Sur tout le plan, sa durée change : refusé si le storyboard est verrouillé (13e).
-        if all && self.hole == Hole::FromRight && self.storyboard_refuses() {
+        // Storyboard verrouillé (13e) : ni les images ni la durée du plan ne changent.
+        if self.content_refuses() || (!all && self.refuse_on_folder()) {
             return;
         }
         self.end_stroke();
@@ -490,7 +487,7 @@ impl App {
     /// Insère `n` images vides avant (ou après) les images visées : sur les calques choisis, ou
     /// (`all`) sur tout le plan, qui s'allonge d'autant.
     pub(crate) fn insert_images(&mut self, before: bool, n: usize, all: bool) {
-        if all && self.storyboard_refuses() {
+        if self.content_refuses() {
             return;
         }
         self.end_stroke();
@@ -619,6 +616,9 @@ impl App {
             self.status = "Choisis plusieurs images à inverser (Maj + clic dans la timeline).".into();
             return;
         }
+        if self.content_refuses() {
+            return;
+        }
         self.end_stroke();
         let snap = self.snapshot();
         for li in self.image_layers() {
@@ -675,6 +675,9 @@ impl App {
 
     /// Une exposition de plus (`more`) ou de moins à chaque instance des images visées.
     pub(crate) fn change_chosen_exposures(&mut self, more: bool) {
+        if self.content_refuses() {
+            return;
+        }
         self.end_stroke();
         let (a, b) = self.image_range();
         let snap = self.snapshot();
@@ -712,6 +715,9 @@ impl App {
     /// Faux-fixe des images visées sur les calques choisis : rejouées `fake_hold_times` fois en
     /// tout, à la suite.
     pub(crate) fn fake_hold_chosen(&mut self, cycle: Cycle) {
+        if self.content_refuses() {
+            return;
+        }
         self.end_stroke();
         let (a, b) = self.image_range();
         let times = self.fake_hold_times.max(2);
@@ -736,6 +742,9 @@ impl App {
 
     /// Étire les calques choisis jusqu'à la fin du plan.
     pub(crate) fn stretch_chosen(&mut self, how: Stretch) {
+        if self.content_refuses() {
+            return;
+        }
         self.end_stroke();
         let len = self.frame_count();
         let snap = self.snapshot();
@@ -748,6 +757,9 @@ impl App {
 
     /// Coupe les calques choisis après l'image courante.
     pub(crate) fn cut_layers_after_current(&mut self) {
+        if self.content_refuses() {
+            return;
+        }
         self.end_stroke();
         let keep = self.cur_frame + 1;
         let snap = self.snapshot();
@@ -765,6 +777,9 @@ impl App {
         let (a, b) = self.image_range();
         let to = (a as isize + delta).max(0) as usize;
         if to == a && mode != DropMode::Copy {
+            return;
+        }
+        if self.content_refuses() {
             return;
         }
         self.end_stroke();
@@ -889,6 +904,9 @@ impl App {
     /// Retourne les images visées : chaque dessin touché est remplacé, sur ces images, par une
     /// copie retournée (ailleurs, l'original reste).
     pub(crate) fn flip_images(&mut self, h: bool, v: bool) {
+        if self.content_refuses() {
+            return;
+        }
         self.end_stroke();
         self.drop_bitmap_selection();
         let (a, b) = self.image_range();

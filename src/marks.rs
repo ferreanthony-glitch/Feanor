@@ -64,7 +64,10 @@ pub(crate) fn step_mark(starts: &[usize], f: usize, forward: bool, repeat: bool)
 impl App {
     /// Change les marques du calque courant (une étape d'annulation).
     fn change_marks(&mut self, change: impl FnOnce(&mut Layer) -> usize, what: &str) {
-        if self.refuse_on_folder() {
+        // Pas `refuse_on_folder` : une marque n'est qu'un repère, permise sous le storyboard
+        // verrouillé (13e).
+        if self.layer().folder {
+            self.status = crate::app::FOLDER_NOT_DRAWABLE.into();
             return;
         }
         self.record_step();

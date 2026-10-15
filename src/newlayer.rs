@@ -85,6 +85,9 @@ impl App {
 
     /// Crée le calque réglé dans la fenêtre (une étape d'annulation).
     fn create_layer_from(&mut self, f: &NewLayerForm) {
+        if self.content_refuses() {
+            return;
+        }
         self.end_stroke();
         self.drop_bitmap_selection();
         let snap = self.snapshot();

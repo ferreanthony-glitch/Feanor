@@ -491,7 +491,9 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - Vue Projet (`projetui.rs`, 13e-4) : `Document::storyboard_locked` est dans `Structure` (une
   annulation le rétablit avec le reste ; le basculer est une étape). `App::storyboard_refuses`
   garde `structure_op` et les autres chemins qui changent l'ordre, le nombre ou la durée des
-  plans (suppression, durée, glissés du montage et de la planche, images sur tout le plan). Les
+  plans (suppression, durée, glissés du montage et de la planche) ; `App::content_refuses`,
+  appelé par `layer_editable`, `refuse_on_folder` et les commandes d'images et de calques, garde
+  le contenu (choix d'Anthony : on ne dessine pas sous le cadenas). Les
   propriétés aussi sont dans `Structure` (champs suivis par `edited`, une étape par geste) ;
   `modified` est posé par `save_to`, `created` par `Document::created_now` (projet neuf). Les
   dates s'affichent en temps universel (`civil_from_days`) : l'heure locale demanderait un appel

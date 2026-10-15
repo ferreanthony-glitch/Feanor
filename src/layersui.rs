@@ -91,6 +91,9 @@ impl App {
 
     /// Nouveau calque bitmap « Fond » tout en bas (13a) : un seul dessin, tenu sur tout le plan.
     pub(crate) fn add_scene_background(&mut self) {
+        if self.content_refuses() {
+            return;
+        }
         self.end_stroke();
         self.drop_bitmap_selection();
         let snap = self.snapshot();

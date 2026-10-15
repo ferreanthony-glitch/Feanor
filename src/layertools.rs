@@ -88,6 +88,9 @@ impl App {
     pub(crate) fn transform_press(&mut self, stage: Pos2, screen: Pos2) {
         self.end_stroke();
         self.playing = false;
+        if self.content_refuses() {
+            return;
+        }
         if !self.layer().drawable() {
             self.layer_editable();
             return;
@@ -179,6 +182,9 @@ impl App {
         }
         if self.layer().position_locked {
             self.status = crate::app::POSITION_LOCKED.into();
+            return;
+        }
+        if self.content_refuses() {
             return;
         }
         self.record_step();

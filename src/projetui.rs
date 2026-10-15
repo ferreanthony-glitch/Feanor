@@ -2,16 +2,22 @@
 //! encore. On peut ajouter un plan avant le plan courant, verrouiller le storyboard, remplir les
 //! propriétés du projet, et faire un nouveau projet des plans choisis.
 //!
-//! Le storyboard verrouillé refuse ce qui change l'ordre, le nombre ou la durée des plans ; on
-//! dessine toujours dans les plans. Le mot de passe du verrou de TVPaint n'est pas repris.
+//! Le storyboard verrouillé refuse ce qui change l'ordre, le nombre ou la durée des plans, et
+//! (choix d'Anthony, 2026-10-15) ce qui change leurs dessins, leurs expositions ou leurs
+//! calques. Restent permis : l'affichage (visibilité, pelure, opacité), les repères, les notes,
+//! les noms et les marques de couleur. Le mot de passe du verrou de TVPaint n'est pas repris.
 
 use eframe::egui::{self, vec2, Align2, RichText};
 
 use crate::app::App;
 
-/// Message des opérations refusées par le storyboard verrouillé.
+/// Message des opérations de montage refusées par le storyboard verrouillé.
 pub(crate) const STORYBOARD_LOCKED: &str =
     "Le storyboard est verrouillé : l'ordre, le nombre et la durée des plans ne changent pas (Storyboard > Déverrouiller le storyboard).";
+
+/// Message des dessins et commandes d'images refusés par le storyboard verrouillé.
+pub(crate) const CONTENT_LOCKED: &str =
+    "Le storyboard est verrouillé : on ne dessine plus, et les images et les calques des plans ne changent pas (Storyboard > Déverrouiller le storyboard).";
 
 /// Date du jour `days` compté depuis le 1er janvier 1970 : (année, mois, jour), calendrier
 /// grégorien.
@@ -48,6 +54,15 @@ impl App {
         self.doc.storyboard_locked
     }
 
+    /// Refuse (avec un message) ce qui changerait les dessins, les expositions ou les calques
+    /// des plans quand le storyboard est verrouillé.
+    pub(crate) fn content_refuses(&mut self) -> bool {
+        if self.doc.storyboard_locked {
+            self.status = CONTENT_LOCKED.into();
+        }
+        self.doc.storyboard_locked
+    }
+
     /// Verrouille ou déverrouille le storyboard (une étape d'annulation).
     pub(crate) fn toggle_storyboard_lock(&mut self) {
         self.end_stroke();
@@ -55,7 +70,7 @@ impl App {
         self.record_step();
         self.doc.storyboard_locked = !self.doc.storyboard_locked;
         self.status = if self.doc.storyboard_locked {
-            "Storyboard verrouillé : l'ordre, le nombre et la durée des plans ne changent plus.".into()
+            "Storyboard verrouillé : les plans, leurs dessins et leurs calques ne changent plus.".into()
         } else {
             "Storyboard déverrouillé.".into()
         };

@@ -553,8 +553,11 @@ Décisions d'Anthony :
   - ✅ 13e-4 (`projetui.rs`, format 17). Vue Projet : nouveau plan avant le plan courant ;
     storyboard verrouillé (cadenas du montage, menu Storyboard) qui refuse ce qui change l'ordre,
     le nombre ou la durée des plans (nouveau, dupliquer, coller, supprimer, déplacer, couper,
-    réunir, durée, images insérées / supprimées sur tout le plan) — on dessine toujours dans les
-    plans ; le mot de passe du verrou de TVPaint n'est pas repris. Propriétés du projet (Fichier) :
+    réunir, durée, glissés du montage et de la planche) et, choix d'Anthony, ce qui change le
+    contenu des plans : dessin (tous les outils, effacer, transformer, déplacer en 3D), commandes
+    d'images et d'expositions, ajout / suppression / fusion / collage de calques. Restent permis
+    l'affichage (visibilité, pelure, opacité), les repères, notes, noms et marques de couleur. Le
+    mot de passe du verrou de TVPaint n'est pas repris. Propriétés du projet (Fichier) :
     titre, information, auteur, notes, copyright ; date de création (projet neuf) et de dernière
     modification (à chaque enregistrement), montrées en temps universel. Nouveau projet à partir
     des plans choisis (Fichier) : il remplace le projet ouvert (après « enregistrer ? »), garde

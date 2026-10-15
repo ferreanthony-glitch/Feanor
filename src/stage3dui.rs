@@ -503,6 +503,10 @@ impl App {
             return;
         };
         self.select_layer(li);
+        if self.content_refuses() {
+            self.stage3d.drag = Some(Drag3d::View);
+            return;
+        }
         let layer = &self.layers()[li];
         if layer.locked || layer.position_locked {
             self.status = if layer.locked {

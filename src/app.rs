@@ -1071,6 +1071,9 @@ impl App {
     }
 
     pub(crate) fn layer_editable(&mut self) -> bool {
+        if self.content_refuses() {
+            return false;
+        }
         if self.layer().folder {
             self.status = FOLDER_NOT_DRAWABLE.into();
             return false;
@@ -1100,9 +1103,12 @@ impl App {
         false
     }
 
-    /// Le calque courant est un dossier : les commandes de dessins et d'expositions ne s'y
-    /// appliquent pas (le message le dit).
+    /// Le calque courant est un dossier, ou le storyboard est verrouillé (13e) : les commandes de
+    /// dessins et d'expositions ne s'y appliquent pas (le message le dit).
     pub(crate) fn refuse_on_folder(&mut self) -> bool {
+        if self.content_refuses() {
+            return true;
+        }
         if self.layers().get(self.cur_layer).is_some_and(|l| l.folder) {
             self.status = FOLDER_NOT_DRAWABLE.into();
             return true;
@@ -1501,6 +1507,9 @@ impl App {
     pub(crate) fn clear_image(&mut self) {
         self.end_stroke();
         self.drop_bitmap_selection();
+        if self.content_refuses() {
+            return;
+        }
         if !self.layer().drawable() {
             self.layer_editable();
             return;
@@ -1531,6 +1540,9 @@ impl App {
     }
 
     pub(crate) fn add_layer(&mut self, kind: LayerKind) {
+        if self.content_refuses() {
+            return;
+        }
         self.end_stroke();
         let snap = self.snapshot();
         let n = self.layers().len() + 1;
@@ -1550,6 +1562,9 @@ impl App {
 
     /// Duplique le calque courant ; la copie, juste au-dessus, devient le calque courant.
     pub(crate) fn duplicate_layer(&mut self) {
+        if self.content_refuses() {
+            return;
+        }
         self.end_stroke();
         let snap = self.snapshot();
         self.cur_layer = crate::layerops::duplicate_layer(&mut self.doc, self.cur_panel, self.cur_layer);
@@ -1648,6 +1663,9 @@ impl App {
     /// Dans le dossier du calque courant s'il y en a un ; un dossier copié se colle avec ses
     /// calques, au-dessus du dossier courant (pas de dossier dans un dossier).
     pub(crate) fn paste_layer(&mut self) {
+        if self.content_refuses() {
+            return;
+        }
         let Some(clip) = self.layer_clipboard.clone() else {
             self.status = "Aucun calque copié (W pour copier le calque courant).".into();
             return;
@@ -1686,6 +1704,9 @@ impl App {
 
     /// Fusionne le calque courant avec celui du dessous (Ctrl+E).
     pub(crate) fn merge_layer_down(&mut self) {
+        if self.content_refuses() {
+            return;
+        }
         self.end_stroke();
         self.drop_bitmap_selection();
         let (li, kinds) = (self.cur_layer, self.layers().get(self.cur_layer.wrapping_sub(1)).map(|b| (b.kind, self.layer().kind)));

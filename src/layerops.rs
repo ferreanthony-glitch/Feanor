@@ -259,6 +259,9 @@ impl App {
 
     /// Duplique les calques choisis ; chaque copie va juste au-dessus de son calque.
     pub(crate) fn duplicate_chosen_layers(&mut self) {
+        if self.content_refuses() {
+            return;
+        }
         self.end_stroke();
         self.drop_bitmap_selection();
         let mut chosen = self.chosen_layers();
@@ -288,6 +291,9 @@ impl App {
 
     /// Supprime des calques du plan (il en reste au moins un) ; un dossier part avec ses calques.
     fn delete_layers(&mut self, lis: &[usize], what: &str) {
+        if self.content_refuses() {
+            return;
+        }
         self.end_stroke();
         self.drop_bitmap_selection();
         let mut lis: Vec<usize> = lis.iter().flat_map(|&li| crate::folders::block_of(self.layers(), li)).collect();
@@ -337,6 +343,9 @@ impl App {
 
     /// Fusionne des calques du plan en un seul.
     pub(crate) fn merge_layer_list(&mut self, lis: Vec<usize>) {
+        if self.content_refuses() {
+            return;
+        }
         self.end_stroke();
         self.drop_bitmap_selection();
         let snap = self.snapshot();
@@ -420,6 +429,9 @@ impl App {
 
     /// Coupe le calque courant : copié (W), puis supprimé.
     pub(crate) fn cut_layer(&mut self) {
+        if self.content_refuses() {
+            return;
+        }
         if self.layers().len() <= 1 {
             self.status = "Il faut garder au moins un calque.".into();
             return;
