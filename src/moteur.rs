@@ -72,6 +72,14 @@ impl Pinceaux {
         let p = self.lib.presets.get(numero)?;
         Some(stroke_preview(&p.settings, self.lib.textures(&p.settings), largeur.max(8), hauteur.max(8)))
     }
+
+    /// Le même aperçu en PNG : le trait dans la couleur `couleur`, sur fond transparent.
+    pub fn apercu_png(&self, numero: usize, largeur: usize, hauteur: usize, couleur: [u8; 3]) -> Option<Vec<u8>> {
+        let (l, h) = (largeur.max(8), hauteur.max(8));
+        let couverture = self.apercu(numero, l, h)?;
+        let rgba: Vec<u8> = couverture.iter().flat_map(|&a| [couleur[0], couleur[1], couleur[2], a]).collect();
+        crate::io::encode_png(&rgba, l, h).ok()
+    }
 }
 
 /// Un dessin : une image RGBA prémultipliée en tuiles de 64×64, allouées où l'on dessine.

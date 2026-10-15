@@ -31,6 +31,9 @@ fn the_brushes_of_pelure_are_listed_with_their_previews() {
     assert_eq!(apercu.len(), 120 * 40);
     assert!(apercu.iter().any(|&a| a > 200), "le trait de l'aperçu est visible");
     assert!(p.apercu(999, 10, 10).is_none());
+    let png = p.apercu_png(0, 120, 40, [230, 230, 230]).unwrap();
+    let img = image::load_from_memory(&png).unwrap();
+    assert_eq!((img.width(), img.height()), (120, 40));
 }
 
 #[test]
