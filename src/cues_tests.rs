@@ -50,7 +50,7 @@ fn bookmarks_toggle_and_follow_their_images() {
 
     let mut doc = Document::new(16, 16, 24);
     let p = &mut doc.panels[0];
-    p.cues = Cues { bookmarks: vec![2, 8, 15], in_point: Some(5), out_point: Some(20) };
+    p.cues = Cues { bookmarks: vec![2, 8, 15], in_point: Some(5), out_point: Some(20), ..Default::default() };
     crate::images::shift_panel(p, 6, 3, false);
     assert_eq!(p.cues.bookmarks, [2, 11, 18]);
     assert_eq!((p.cues.in_point, p.cues.out_point), (Some(5), Some(23)));
@@ -63,7 +63,7 @@ fn bookmarks_toggle_and_follow_their_images() {
 fn cues_and_start_frame_are_saved() {
     let mut doc = Document::new(16, 16, 24);
     doc.start_frame = 101;
-    doc.panels[0].cues = Cues { bookmarks: vec![4, 9], in_point: Some(2), out_point: Some(30) };
+    doc.panels[0].cues = Cues { bookmarks: vec![4, 9], in_point: Some(2), out_point: Some(30), ..Default::default() };
     let dir = std::env::temp_dir().join(format!("pelure-test-reperes-{}", std::process::id()));
     std::fs::remove_dir_all(&dir).ok();
     std::fs::create_dir_all(&dir).unwrap();

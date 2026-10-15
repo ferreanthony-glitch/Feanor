@@ -185,6 +185,8 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
         board: Default::default(),
         groups: crate::groups::defaults(),
         start_frame: 1,
+        background: Default::default(),
+        paper_b: crate::document::DEFAULT_PAPER_B,
     };
     let mut shots = manifest.shots;
     if shots.is_empty() {

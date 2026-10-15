@@ -538,6 +538,17 @@ Décisions d'Anthony :
     seulement les couleurs utilisées. Une instance vide ne porte pas de marque (une marque
     tient à un dessin).
 - 13e. Onglets du bas et vue Projet : notes dessinées, son par plan, arrière-plan, propriétés.
+  - ✅ 13e-1 / 13e-2 (`bottomtabs.rs`, `notes.rs`, format 17) : onglets du bas de la timeline
+    (Notes, Son, Groupes, Arrière-plan, Image de départ ; un clic ouvre la bande, un second la
+    ferme). Arrière-plan : aucun (noir à l'écran, transparent à l'export), couleur (le papier,
+    exporté), damier A / B (transparent à l'export). Notes dessinées dans une rangée de la
+    grille alignée sur les images : crayon bleu / rouge / noir, gomme de la couleur, gomme
+    globale, teinte, position, découper, effacer / teinter une couleur, tout effacer, grille
+    toutes les n images ; montrées par-dessus l'image pendant la lecture (en haut, en bas, au
+    centre, taille) ; jamais exportées ; elles suivent les images insérées / supprimées.
+  - 13e-3. Son : verrou de piste, Ctrl + glisser l'onde pour décaler, défilement.
+  - 13e-4. Vue Projet : plan avant, verrou du storyboard, propriétés du projet, nouveau projet
+    à partir des plans choisis.
 - 13f. Table lumineuse complète.
 - 13g et suivantes, une étape chacune : feuille d'exposition, flips, clés d'effets, calques CTG,
   Puppet, vidéo, interpolation d'images.

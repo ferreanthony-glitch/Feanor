@@ -328,6 +328,10 @@ pub struct App {
     pub(crate) mark_repeat: bool,
     pub(crate) mark_next_layer: bool,
     pub(crate) mark_used_only: bool,
+    /// Onglet du bas ouvert dans la timeline, damier de l'arrière-plan, notes dessinées (13e).
+    pub(crate) bottom_tab: Option<crate::bottomtabs::BottomTab>,
+    pub(crate) checker: crate::bottomtabs::Checker,
+    pub(crate) notes: crate::notes::NotesState,
     /// Aperçus des réglages de pinceau (grille du panneau Réglages, 6d).
     pub(crate) brush_previews: crate::brushui::BrushPreviews,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
@@ -567,6 +571,9 @@ impl App {
             mark_repeat: false,
             mark_next_layer: false,
             mark_used_only: false,
+            bottom_tab: None,
+            checker: Default::default(),
+            notes: Default::default(),
             brush_previews: Default::default(),
             ref3d: Default::default(),
             camera_view: false,
@@ -862,7 +869,8 @@ impl App {
             }
         }
         Plan {
-            paper: paper.then_some(self.doc.paper),
+            // Arrière-plan (13e) : le papier seulement si c'est une couleur.
+            paper: if paper { self.doc.render_paper() } else { None },
             items,
         }
     }
@@ -2415,6 +2423,15 @@ impl App {
             "marque_couleur.suivante" => self.goto_color_mark(true, false),
             "marque_couleur.precedente_couleur" => self.goto_color_mark(false, true),
             "marque_couleur.suivante_couleur" => self.goto_color_mark(true, true),
+            // Onglets du bas et arrière-plan (13e).
+            "onglet.notes" => self.toggle_bottom_tab(crate::bottomtabs::BottomTab::Notes),
+            "onglet.son" => self.toggle_bottom_tab(crate::bottomtabs::BottomTab::Sound),
+            "onglet.groupes" => self.toggle_bottom_tab(crate::bottomtabs::BottomTab::Groups),
+            "onglet.arriere_plan" => self.toggle_bottom_tab(crate::bottomtabs::BottomTab::Background),
+            "onglet.image_depart" => self.toggle_bottom_tab(crate::bottomtabs::BottomTab::StartFrame),
+            "fond.aucun" => self.set_background(crate::document::BackgroundKind::None),
+            "fond.couleur" => self.set_background(crate::document::BackgroundKind::Color),
+            "fond.damier" => self.set_background(crate::document::BackgroundKind::Checker),
             // Dossiers de calques (13b-5, `folders.rs`).
             "dossier.nouveau" => self.new_folder(),
             "dossier.ranger" => self.folder_from_chosen(),

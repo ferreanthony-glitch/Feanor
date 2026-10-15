@@ -712,7 +712,8 @@ impl ExportJob {
 
     fn render(&mut self, doc: &Document, i: usize) -> Image {
         let (p, f) = self.frames[i];
-        let plan = render::panel_plan_at(doc, p, f, self.paper.then_some(doc.paper));
+        // Arrière-plan (13e) : aucun ou damier → image transparente.
+        let plan = render::panel_plan_at(doc, p, f, if self.paper { doc.render_paper() } else { None });
         let cam = doc.panel_camera(p, f);
         if let Some((lp, lc, img)) = &self.last {
             if *lp == plan && *lc == cam {

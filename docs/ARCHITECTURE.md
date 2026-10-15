@@ -482,6 +482,12 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   depuis `Document::start_frame`. `images::shift_panel` déplace aussi signets et points.
   Zoom : `App::timeline_cell` (largeur d'une image), `timeline_fit` en attente pour
   « Adapter » (posé à l'image suivante, quand la largeur visible est connue).
+- Onglets du bas (`bottomtabs.rs`, 13e) : un `TopBottomPanel::show_inside` en bas du panneau
+  Timeline (une mise en page « de bas en haut » ne connaît pas la hauteur à l'avance). Le
+  damier est un maillage à texture 2 × 2 répétée (`TextureWrapMode::Repeat`) sous les calques ;
+  « aucun » : un quadrilatère noir. Notes (`notes.rs`) : une rangée de la grille (sous la
+  caméra) quand l'onglet Notes est ouvert ; un geste qui y commence ne touche ni la tête de
+  lecture ni les images ; `paint_notes_overlay` dessine une bande centrée sur l'image courante.
 - Marques de couleur (`marks.rs`, 13d) : `Layer::color_marks` (dessin → couleur), comme les
   noms d'instance (elles suivent les copies via `relink_copies`) ; `marked_starts`,
   `step_mark`.
@@ -651,11 +657,11 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - Annulation : le repère fait partie de la structure (copie au début du geste, une étape au
   lâcher, comme l'outil Caméra).
 
-## Format de projet (version 16, dossier)
+## Format de projet (version 17, dossier)
 
 ```
 MonFilm/
-  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 16, "largeur",
+  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 17, "largeur",
                       "hauteur" (feuille), "cadre": [l, h], réglages,
                       "sequences": [{ "scenes": [{ "panneaux": [{ "calques": [{ "expositions": … }],
                       "marques": [{"id", "image", "action", …}] }]}]}]  (un panneau par scène),
@@ -668,6 +674,10 @@ MonFilm/
                       triangles, positions (3 × f32) puis triangles (3 × u32), petit-boutiste
 ```
 
+- Format 17 (13e) : `fond` (`sorte` : `aucun`, `couleur`, `damier` ; `couleur_b`) dans le
+  manifeste ; `notes_dessinees` (couleur, épaisseur, points [image, hauteur]) sur un panneau.
+  En mémoire : `Document::background`, `paper_b`, `render_paper()` (le papier seulement pour
+  une couleur), `Cues::notes`.
 - Format 16 (13d) : sur un panneau `signets`, `entree`, `sortie` (images du plan) ; dans le
   manifeste `image_de_depart` (absent : 1). En mémoire : `Panel::cues` (`Cues`) et
   `Document::start_frame` (dans `Structure`).

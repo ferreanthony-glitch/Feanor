@@ -129,6 +129,21 @@ pub(crate) fn shift_panel(panel: &mut Panel, at: usize, n: usize, removed: bool)
     // Un point dont l'image disparaît se pose sur le bord du trou.
     cues.in_point = cues.in_point.map(|f| moved(f).unwrap_or(at));
     cues.out_point = cues.out_point.map(|f| moved(f).unwrap_or(at.saturating_sub(1)));
+    // Notes dessinées (13e) : elles suivent le temps ; dans un trou, elles se serrent au bord.
+    let (a, nf) = (at as f32, n as f32);
+    for note in &mut cues.notes {
+        for p in &mut note.points {
+            if removed {
+                if p[0] >= a + nf {
+                    p[0] -= nf;
+                } else if p[0] > a {
+                    p[0] = a;
+                }
+            } else if p[0] >= a {
+                p[0] += nf;
+            }
+        }
+    }
 }
 
 /// Bornes [début, fin) de l'instance (un dessin et ses expositions) qui contient `f`.

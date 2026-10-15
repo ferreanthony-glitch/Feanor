@@ -61,7 +61,9 @@ pub const FORMAT: &str = "pelure-projet";
 /// 16 (13d) : signets et points d'entrée / sortie des plans (`signets`, `entree`, `sortie`),
 /// image de départ du projet (`image_de_depart`), marques de couleur des dessins
 /// (`marques_couleur`).
-pub const VERSION: u32 = 16;
+/// 17 (13e) : arrière-plan (`fond` : aucun, couleur ou damier, couleur B), notes dessinées des
+/// plans (`notes_dessinees`), verrou du storyboard et propriétés du projet.
+pub const VERSION: u32 = 17;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Modèles 3D de repère (2d), dans le format de Pelure.
@@ -109,6 +111,34 @@ struct Manifest {
     /// Numéro de la première image (format 16 ; absent : 1).
     #[serde(default = "one_usize", skip_serializing_if = "is_one_usize")]
     image_de_depart: usize,
+    /// Arrière-plan (format 17 ; absent : la couleur du papier).
+    #[serde(default, skip_serializing_if = "BackgroundEntry::is_default")]
+    fond: BackgroundEntry,
+}
+
+/// Arrière-plan (format 17) : sorte et couleur B du damier (la couleur A est `papier`).
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq)]
+struct BackgroundEntry {
+    #[serde(default)]
+    sorte: crate::document::BackgroundKind,
+    #[serde(default = "default_paper_b")]
+    couleur_b: [u8; 3],
+}
+
+impl Default for BackgroundEntry {
+    fn default() -> Self {
+        Self { sorte: Default::default(), couleur_b: crate::document::DEFAULT_PAPER_B }
+    }
+}
+
+impl BackgroundEntry {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+fn default_paper_b() -> [u8; 3] {
+    crate::document::DEFAULT_PAPER_B
 }
 
 fn one_usize() -> usize {
@@ -260,6 +290,18 @@ struct PanelEntry {
     entree: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sortie: Option<usize>,
+    /// Notes dessinées sur la timeline (format 17 ; absentes : aucune).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    notes_dessinees: Vec<TimeNoteEntry>,
+}
+
+/// Une note dessinée (format 17) : couleur (0 bleu, 1 rouge, 2 noir), épaisseur, points
+/// (image, hauteur de 0 à 1).
+#[derive(Serialize, Deserialize)]
+struct TimeNoteEntry {
+    couleur: u8,
+    epaisseur: f32,
+    points: Vec<[f32; 2]>,
 }
 
 /// Une marque d'image (13a) : une image de storyboard à l'image `image` du plan, avec ses textes.
@@ -895,6 +937,12 @@ fn manifest_of(doc: &Document) -> Manifest {
             signets: panel.cues.bookmarks.clone(),
             entree: panel.cues.in_point,
             sortie: panel.cues.out_point,
+            notes_dessinees: panel
+                .cues
+                .notes
+                .iter()
+                .map(|n| TimeNoteEntry { couleur: n.color, epaisseur: n.width, points: n.points.clone() })
+                .collect(),
         });
     }
     let used = used_sounds(doc);
@@ -979,6 +1027,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                 .collect()
         },
         image_de_depart: doc.start_frame,
+        fond: BackgroundEntry { sorte: doc.background, couleur_b: doc.paper_b },
     }
 }
 
@@ -1141,6 +1190,8 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                 .collect(),
         ),
         start_frame: manifest.image_de_depart.min(1_000_000),
+        background: manifest.fond.sorte,
+        paper_b: manifest.fond.couleur_b,
     };
     for seq in manifest.sequences {
         structure.sequences.push(Sequence {
@@ -1265,6 +1316,16 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                         },
                         in_point: p.entree,
                         out_point: p.sortie,
+                        notes: p
+                            .notes_dessinees
+                            .into_iter()
+                            .filter(|n| n.epaisseur.is_finite() && n.points.iter().flatten().all(|v| v.is_finite()))
+                            .map(|n| crate::document::TimeNote {
+                                color: n.couleur.min(2),
+                                width: n.epaisseur.clamp(0.5, 40.0),
+                                points: n.points.into_iter().map(|[x, y]| [x, y.clamp(0.0, 1.0)]).collect(),
+                            })
+                            .collect(),
                     },
                 });
             }

@@ -32,10 +32,24 @@ impl App {
         }
     }
 
+    /// Hauteur de la rangée des notes dessinées (13e) : seulement quand l'onglet Notes est ouvert.
+    fn notes_row_h(&self) -> f32 {
+        if self.bottom_tab == Some(crate::bottomtabs::BottomTab::Notes) {
+            crate::notes::NOTES_H
+        } else {
+            0.0
+        }
+    }
+
     pub(crate) fn timeline_panel(&mut self, ui: &mut egui::Ui) {
         ui.add_space(2.0);
         self.timeline_toolbar(ui);
         ui.separator();
+        // Onglets du bas (13e) tout en bas, la grille dans la place qui reste.
+        egui::TopBottomPanel::bottom("onglets_timeline")
+            .resizable(false)
+            .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(0, 2)))
+            .show_inside(ui, |ui| self.bottom_tabs(ui));
         egui::ScrollArea::vertical()
             .id_salt("timeline_v")
             .auto_shrink([false, false])
@@ -224,9 +238,15 @@ impl App {
     fn timeline_names(&mut self, ui: &mut egui::Ui) {
         let rows_h = rows_height(&rows_of(self.layers(), &self.doc.groups));
         let sound_h = self.sound_row_h();
-        let r = self.timeline_heads(ui, HEADER_H, CAM_H + sound_h);
+        let notes_h = self.notes_row_h();
+        let r = self.timeline_heads(ui, HEADER_H, CAM_H + notes_h + sound_h);
         let painter = ui.painter_at(r);
         let visuals = ui.visuals();
+        if notes_h > 0.0 {
+            let row = Rect::from_min_size(pos2(r.left(), r.top() + HEADER_H + rows_h + CAM_H), vec2(NAMES_W, notes_h)).shrink2(vec2(0.0, 1.0));
+            painter.rect_filled(row, 2.0, theme::RANGEE_SOMBRE);
+            painter.text(pos2(r.left() + 8.0, row.center().y), Align2::LEFT_CENTER, "Notes (jamais exportées)", FontId::proportional(11.0), visuals.weak_text_color());
+        }
         {
             let y = r.top() + HEADER_H + rows_h;
             let row = Rect::from_min_size(pos2(r.left(), y), vec2(NAMES_W, CAM_H)).shrink2(vec2(0.0, 1.0));
@@ -274,7 +294,8 @@ impl App {
         let visible_cols = (ui.available_width() / cell) as usize + 1;
         let cols = (count + 48).max(self.cur_frame + 24).max(visible_cols);
         let sound_h = self.sound_row_h();
-        let size = vec2(cols as f32 * cell, HEADER_H + rows_h + CAM_H + sound_h);
+        let notes_h = self.notes_row_h();
+        let size = vec2(cols as f32 * cell, HEADER_H + rows_h + CAM_H + notes_h + sound_h);
         let (resp, painter) = ui.allocate_painter(size, Sense::click_and_drag());
         let r = resp.rect;
         if let Some((a, b)) = fit {
@@ -650,6 +671,14 @@ impl App {
             Color32::BLACK,
         );
 
+        // Notes dessinées (13e) : leur rangée sous la caméra ; un geste qui y commence ne bouge
+        // ni la tête de lecture ni les images.
+        let notes_row = Rect::from_min_size(pos2(r.left(), grid_top + rows_h + CAM_H), vec2(size.x, notes_h));
+        let in_notes = notes_h > 0.0 && ui.input(|i| i.pointer.press_origin()).is_some_and(|p| notes_row.contains(p));
+        if notes_h > 0.0 {
+            self.notes_row(ui, &painter, notes_row.shrink2(vec2(0.0, 1.0)), r.left(), cell, &resp);
+        }
+
         // Clés de caméra : on les prend et les fait glisser le long de leur rangée (12e).
         let cam_row = Rect::from_min_size(pos2(r.left(), grid_top + rows_h), vec2(size.x, CAM_H));
         let key_x = |f: usize| r.left() + (f as f32 + 0.5) * cell;
@@ -686,7 +715,7 @@ impl App {
         // Glisser les images choisies (13c-3) : on les prend dans leur cadre ; lâchées sans
         // touche elles sont déplacées, avec Ctrl copiées, avec Maj insérées.
         let col_of = |x: f32| ((x - r.left()) / cell).floor().max(0.0) as usize;
-        if resp.drag_started() && !holding_key {
+        if resp.drag_started() && !holding_key && !in_notes {
             if let (Some((a, b)), Some(p)) = (self.frame_sel, ui.input(|i| i.pointer.press_origin())) {
                 let c = col_of(p.x);
                 let on_chosen = row_at(&rows, p.y - grid_top).is_some_and(|row| self.is_chosen_layer(row.li));
@@ -713,7 +742,7 @@ impl App {
                 self.drop_images(c1 as isize - c0 as isize, mode);
             }
         }
-        if (resp.clicked() || resp.dragged()) && !holding_key && self.image_drag.is_none() && !resp.drag_stopped() {
+        if (resp.clicked() || resp.dragged()) && !holding_key && self.image_drag.is_none() && !resp.drag_stopped() && !in_notes {
             if let Some(p) = resp.interact_pointer_pos() {
                 let col = ((p.x - r.left()) / cell).floor().max(0.0) as usize;
                 if shift {

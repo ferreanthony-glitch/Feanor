@@ -515,6 +515,35 @@ pub fn relink_copies(layers: &mut [Layer], old_ids: &[u64], cels: &HashMap<CelId
     }
 }
 
+/// Couleur B du damier d'un projet neuf.
+pub const DEFAULT_PAPER_B: [u8; 3] = [204, 204, 204];
+
+/// Arrière-plan du projet (13e), comme celui de TVPaint : aucun (transparent, montré noir),
+/// une couleur (le papier, qui sort à l'export), ou un damier des couleurs A et B pour voir les
+/// transparences (l'export est alors transparent).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum BackgroundKind {
+    #[serde(rename = "aucun")]
+    None,
+    #[default]
+    #[serde(rename = "couleur")]
+    Color,
+    #[serde(rename = "damier")]
+    Checker,
+}
+
+impl BackgroundKind {
+    pub const ALL: [BackgroundKind; 3] = [BackgroundKind::None, BackgroundKind::Color, BackgroundKind::Checker];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            BackgroundKind::None => "Aucun (transparent)",
+            BackgroundKind::Color => "Couleur",
+            BackgroundKind::Checker => "Damier",
+        }
+    }
+}
+
 /// Repères d'un plan (13d) : signets (images repérées, triées) et points d'entrée / de sortie
 /// (la lecture en boucle reste entre eux).
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -522,6 +551,20 @@ pub struct Cues {
     pub bookmarks: Vec<usize>,
     pub in_point: Option<usize>,
     pub out_point: Option<usize>,
+    /// Notes dessinées sur la timeline du plan (13e) : vues pendant la lecture, jamais
+    /// exportées.
+    pub notes: Vec<TimeNote>,
+}
+
+/// Une note dessinée sur la timeline (13e) : un trait dont chaque point est en images (x, la
+/// position dans le temps) et en hauteur de la bande des notes (y, de 0 en haut à 1 en bas).
+#[derive(Clone, Debug, PartialEq)]
+pub struct TimeNote {
+    /// 0 : bleu, 1 : rouge, 2 : noir.
+    pub color: u8,
+    /// Épaisseur, en points d'écran.
+    pub width: f32,
+    pub points: Vec<[f32; 2]>,
 }
 
 /// Marque d'image d'un plan (13a) : une image de storyboard à l'image `frame` du plan (le début
@@ -685,6 +728,9 @@ pub struct Structure {
     pub groups: Vec<crate::groups::LayerGroup>,
     /// Numéro de la première image (13d, « image de départ ») : 1 par défaut.
     pub start_frame: usize,
+    /// Arrière-plan (13e) et couleur B du damier (la couleur A est `paper`).
+    pub background: BackgroundKind,
+    pub paper_b: [u8; 3],
 }
 
 pub struct Document {
@@ -716,6 +762,10 @@ pub struct Document {
     pub groups: Vec<crate::groups::LayerGroup>,
     /// Numéro affiché de la première image de chaque plan (13d, « image de départ du projet »).
     pub start_frame: usize,
+    /// Arrière-plan (13e) : aucun, la couleur `paper` (couleur A), ou un damier de `paper` et
+    /// `paper_b`.
+    pub background: BackgroundKind,
+    pub paper_b: [u8; 3],
     next_id: u64,
 }
 
@@ -746,6 +796,8 @@ impl Document {
             board: Default::default(),
             groups: crate::groups::defaults(),
             start_frame: 1,
+            background: BackgroundKind::Color,
+            paper_b: DEFAULT_PAPER_B,
             next_id: 1,
         };
         let seq = doc.new_sequence();
@@ -792,6 +844,8 @@ impl Document {
             board: structure.board,
             groups: crate::groups::completed(structure.groups),
             start_frame: structure.start_frame,
+            background: structure.background,
+            paper_b: structure.paper_b,
             next_id: max_id + 1,
         };
         doc.normalize();
@@ -892,7 +946,15 @@ impl Document {
             board: self.board.clone(),
             groups: self.groups.clone(),
             start_frame: self.start_frame,
+            background: self.background,
+            paper_b: self.paper_b,
         }
+    }
+
+    /// Papier sous les calques à l'export et à l'écran : la couleur A si l'arrière-plan est une
+    /// couleur, sinon rien (transparent ; le damier n'est qu'un affichage).
+    pub fn render_paper(&self) -> Option<[u8; 3]> {
+        (self.background == BackgroundKind::Color).then_some(self.paper)
     }
 
     pub fn replace_structure(&mut self, s: Structure) -> Structure {
@@ -907,6 +969,8 @@ impl Document {
             board: std::mem::replace(&mut self.board, s.board),
             groups: std::mem::replace(&mut self.groups, s.groups),
             start_frame: std::mem::replace(&mut self.start_frame, s.start_frame),
+            background: std::mem::replace(&mut self.background, s.background),
+            paper_b: std::mem::replace(&mut self.paper_b, s.paper_b),
         }
     }
 

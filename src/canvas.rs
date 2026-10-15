@@ -64,6 +64,8 @@ impl App {
                 Stroke::NONE,
             ));
         }
+        // Arrière-plan (13e) : aucun → noir ; damier → cases des couleurs A et B sous les calques.
+        self.paint_background(ui.ctx(), &painter, corners, size);
         // Dessins des images qui viennent, à envoyer d'avance à la carte graphique.
         let ahead = match &self.gpu {
             Some(gpu) => crate::playback::upcoming_cels(
@@ -109,6 +111,8 @@ impl App {
 
         self.paint_ref3d(&painter, rect);
         self.paint_camera(&painter, rect);
+        // Notes dessinées par-dessus l'image pendant la lecture (13e).
+        self.paint_notes_overlay(&painter, rect);
         if !self.in_card {
             self.paint_frame_overlays(&painter, rect);
         }

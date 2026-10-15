@@ -13,6 +13,7 @@ mod board;
 #[cfg(test)]
 mod board_tests;
 mod boardui;
+mod bottomtabs;
 mod brush;
 mod brushtex;
 #[cfg(test)]
@@ -81,6 +82,7 @@ mod model3d;
 mod montagerows;
 pub mod moteur;
 mod newlayer;
+mod notes;
 #[cfg(test)]
 mod moteur_tests;
 pub mod noyau;
@@ -133,6 +135,8 @@ mod text;
 mod text_tests;
 mod texttools;
 mod stencil;
+#[cfg(test)]
+mod tabs_tests;
 mod stage3d;
 #[cfg(test)]
 mod stage3d_tests;

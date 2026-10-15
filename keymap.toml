@@ -1146,6 +1146,46 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
+action = "onglet.notes"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "onglet.son"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "onglet.groupes"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "onglet.arriere_plan"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "onglet.image_depart"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "fond.aucun"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "fond.couleur"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "fond.damier"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
 action = "dossier.nouveau"
 touches = []
 source = "TVPaint 12 sans touche"
