@@ -30,10 +30,10 @@ fn background_is_saved() {
     let mut doc = Document::new(16, 16, 24);
     doc.background = BackgroundKind::Checker;
     doc.paper_b = [10, 20, 30];
-    let back = round_trip(&doc, "fond");
+    let back = round_trip(&doc, "arriere-plan");
     assert_eq!(back.background, BackgroundKind::Checker);
     assert_eq!(back.paper_b, [10, 20, 30]);
-    let plain = round_trip(&Document::new(16, 16, 24), "fond2");
+    let plain = round_trip(&Document::new(16, 16, 24), "arriere-plan-2");
     assert_eq!(plain.background, BackgroundKind::Color, "un projet sans réglage garde sa couleur de papier");
 }
 
@@ -42,7 +42,7 @@ fn drawn_notes_are_saved_and_follow_the_images() {
     let mut doc = Document::new(16, 16, 24);
     let note = TimeNote { color: 1, width: 3.0, points: vec![[2.0, 0.5], [6.0, 0.25], [12.0, 0.75]] };
     doc.panels[0].cues.notes.push(note.clone());
-    let back = round_trip(&doc, "notes");
+    let back = round_trip(&doc, "notes-dessinees");
     assert_eq!(back.panels[0].cues.notes, vec![note]);
 
     // Trois images insérées à l'image 5 : ce qui est après recule de trois.
