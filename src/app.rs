@@ -292,6 +292,11 @@ pub struct App {
     /// image courante qu'elle a suivie.
     pub(crate) xsheet: crate::xsheet::XSheetSettings,
     pub(crate) xsheet_seen_frame: Option<usize>,
+    /// Rôles des images (13g-2) : affichage dans la timeline ; menu du clic droit ouvert sur
+    /// une case de calque (timeline, feuille d'exposition).
+    pub(crate) roles_view: crate::rolesui::RolesView,
+    pub(crate) role_menu: bool,
+    pub(crate) xsheet_role_menu: bool,
     /// Table lumineuse : les calques autres que le calque courant sont estompés.
     pub(crate) light_table: bool,
     /// Opacité gardée par les calques estompés (0 à 1).
@@ -565,6 +570,9 @@ impl App {
             onion_preset_name: String::new(),
             xsheet: settings.xsheet.clone(),
             xsheet_seen_frame: None,
+            roles_view: Default::default(),
+            role_menu: false,
+            xsheet_role_menu: false,
             light_table: false,
             light_table_strength: 0.3,
             guides: GuideState::default(),
@@ -1504,6 +1512,7 @@ impl App {
         let snap = self.snapshot();
         let layer = &mut self.layers_mut()[li];
         layer.frames.remove(end - 1);
+        crate::roles::shift(&mut layer.roles, end - 1, 1, true);
         layer.trim();
         if self.cur_frame >= end - 1 && self.cur_frame > start {
             self.cur_frame = end - 2;
@@ -1526,6 +1535,7 @@ impl App {
         let layer = &mut self.layers_mut()[li];
         let (start, end) = layer.run_bounds(f);
         layer.frames.drain(start..end);
+        crate::roles::shift(&mut layer.roles, start, end - start, true);
         layer.trim();
         self.cur_frame = start;
         self.vsel = None;
@@ -1678,6 +1688,7 @@ impl App {
         layer.color_marks = source.color_marks.iter().filter_map(|(c, k)| copies.get(c).map(|d| (*d, *k))).collect();
         let n = self.frame_count();
         let held = source.frames.len() >= clip.panel_len && source.frames.last().is_some_and(Option::is_some);
+        layer.roles.retain(|f, _| *f < n);
         if layer.frames.len() > n {
             layer.frames.truncate(n);
         } else if held {
@@ -2515,6 +2526,16 @@ impl App {
             "pelure.remettre" => self.reset_onion_offset(),
             // Feuille d'exposition (13g, `xsheetui.rs`).
             "vue.feuille_exposition" => self.toggle_pane(crate::dock::Pane::XSheet),
+            // Rôles des images (13g-2, `rolesui.rs`).
+            "role.cle" => self.set_role(Some(crate::roles::Role::Key)),
+            "role.breakdown" => self.set_role(Some(crate::roles::Role::Breakdown)),
+            "role.intervalle" => self.set_role(Some(crate::roles::Role::Inbetween)),
+            "role.intervalle_complete" => self.set_role(Some(crate::roles::Role::InbetweenDone)),
+            "role.intervalle_special" => self.set_role(Some(crate::roles::Role::Special)),
+            "role.intervalle_special_complete" => self.set_role(Some(crate::roles::Role::SpecialDone)),
+            "role.aucun" => self.set_role(None),
+            "role.timeline" => self.roles_view.shown = !self.roles_view.shown,
+            "role.calque_courant" => self.roles_view.current_only = !self.roles_view.current_only,
             // Dossiers de calques (13b-5, `folders.rs`).
             "dossier.nouveau" => self.new_folder(),
             "dossier.ranger" => self.folder_from_chosen(),

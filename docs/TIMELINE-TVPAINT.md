@@ -201,8 +201,10 @@ Caméra : clés par paramètre, courbes de vitesse, interpolation linéaire / sp
 - Distinct : le calque XSheet, à sources (calque, clip, séquence) 000029800–831.
 
 Fait en 13g-1 : la vue occidentale (colonnes Image, Son, Calques, Caméra, Action,
-Dialogues/Notes ; infos affichées ; ligne de séparation). Le reste attend les réponses
-d'Anthony.
+Dialogues/Notes ; infos affichées ; ligne de séparation). En 13g-2 : les rôles. Choix
+d'Anthony le 2026-10-15 : un rôle se pose sur une image (une case), même vide, et rien ne le
+passe à « complété » tout seul. Pas de mémo, d'export PDF, d'affichage japonais, de vue par
+pages, de XDTS ni de textes image par image.
 
 ## 10. Raccourcis (configuration TVPaint 12 d'Anthony, section `[keyboard]`)
 

@@ -120,6 +120,10 @@ mod recovery_tests;
 mod recoveryui;
 mod ref3dtool;
 mod render;
+pub mod roles;
+#[cfg(test)]
+mod roles_tests;
+mod rolesui;
 #[cfg(test)]
 mod scenelayer_tests;
 mod settings;

@@ -269,6 +269,8 @@ pub struct Layer {
     /// Marques de couleur (13d, les « marques d'image » de TVPaint) : dessin → rang de sa couleur
     /// dans `marks::COLORS`.
     pub color_marks: std::collections::BTreeMap<CelId, u8>,
+    /// Rôles des images (13g-2) : image du calque → rôle, même sur une image vide.
+    pub roles: crate::roles::Roles,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -329,6 +331,7 @@ impl Layer {
             auto_create: true,
             names: Default::default(),
             color_marks: Default::default(),
+            roles: Default::default(),
         }
     }
 
@@ -453,6 +456,17 @@ impl Layer {
             self.frames.resize(at, None);
         }
         self.frames.splice(at..at, std::iter::repeat_n(cel, count));
+        // Les rôles des images d'après suivent (13g-2).
+        crate::roles::shift(&mut self.roles, at, count, false);
+    }
+
+    /// Ajoute à la fin du calque, à partir de l'image `at`, les images `frames` d'un autre calque
+    /// et ses rôles (réunion de plans).
+    pub fn append_at(&mut self, at: usize, frames: Vec<Option<CelId>>, roles: &crate::roles::Roles) {
+        self.frames.resize(at, None);
+        self.frames.extend(frames);
+        self.roles.retain(|f, _| *f < at);
+        self.roles.extend(roles.iter().map(|(f, r)| (f + at, *r)));
     }
 
     /// Retire les images vides en fin de calque.
@@ -1409,6 +1423,8 @@ impl Document {
             let mut l = Layer {
                 id: fresh_layer_id(),
                 frames,
+                // Les rôles d'après la coupe passent au second (13g-2).
+                roles: layer.roles.range(at..).map(|(f, r)| (f - at, *r)).collect(),
                 ..layer.clone()
             };
             l.trim();
@@ -1435,6 +1451,7 @@ impl Document {
         let first = &mut self.panels[index];
         for l in &mut first.layers {
             l.frames.truncate(at);
+            l.roles.retain(|f, _| *f < at);
             l.trim();
         }
         first.length = at;
@@ -1463,12 +1480,11 @@ impl Document {
         for (i, lb) in next.layers.into_iter().filter(|l| l.scene_wide.is_none()).enumerate() {
             if let Some(&k) = own.get(i).filter(|&&k| a.layers[k].kind == lb.kind) {
                 let la = &mut a.layers[k];
-                la.frames.resize(a_len, None);
-                la.frames.extend(lb.frames);
+                la.append_at(a_len, lb.frames, &lb.roles);
                 la.trim();
             } else {
                 let mut l = lb;
-                l.frames.splice(0..0, std::iter::repeat_n(None, a_len));
+                l.insert(0, None, a_len);
                 l.trim();
                 a.layers.push(l);
             }
@@ -1883,14 +1899,16 @@ impl Document {
         }
         for l in &mut a.layers {
             l.frames.resize(a_len, None);
+            l.roles.retain(|f, _| *f < a_len);
         }
         // Calque d'arrivée de chaque calque de `b`, par son id (les ajouts décalent les rangs).
         let mut dest: Vec<u64> = Vec::with_capacity(b.layers.len());
         for (j, mut lb) in b.layers.into_iter().enumerate() {
             lb.frames.truncate(b_len);
+            lb.roles.retain(|f, _| *f < b_len);
             match target[j] {
                 Some(k) => {
-                    a.layers[k].frames.extend(lb.frames);
+                    a.layers[k].append_at(a_len, lb.frames, &lb.roles);
                     dest.push(a.layers[k].id);
                 }
                 None => {
@@ -1898,7 +1916,7 @@ impl Document {
                         Some(below) => a.layers.iter().position(|l| l.id == *below).map_or(a.layers.len(), |k| k + 1),
                         None => 0,
                     };
-                    lb.frames.splice(0..0, std::iter::repeat_n(None, a_len));
+                    lb.insert(0, None, a_len);
                     dest.push(lb.id);
                     a.layers.insert(at, lb);
                 }

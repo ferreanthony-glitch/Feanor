@@ -104,6 +104,21 @@ impl App {
                     self.click_xsheet(p, origin, header, &cols, len);
                 }
             }
+            // Clic droit sur une case de calque : le menu des rôles (13g-2).
+            if resp.secondary_clicked() {
+                self.xsheet_role_menu = false;
+                if let Some(p) = resp.interact_pointer_pos() {
+                    let row = ((p.y - origin.y - HEADER_H) / ROW_H).floor();
+                    if let (Some(Col::Layer(li)), false, true) = (Self::xsheet_col_at(&cols, origin.x, p.x), header.contains(p), row >= 0.0 && (row as usize) < len) {
+                        self.aim_cell(li, row as usize);
+                        self.xsheet_seen_frame = Some(row as usize);
+                        self.xsheet_role_menu = true;
+                    }
+                }
+            }
+            if self.xsheet_role_menu {
+                resp.context_menu(|ui| self.roles_menu(ui));
+            }
         });
     }
 
@@ -292,6 +307,10 @@ impl App {
                                 painter.text(r.center(), Align2::CENTER_CENTER, format!("({label})"), mono.clone(), theme::TEXTE_DOUX);
                             }
                             Cell::Blank => {}
+                        }
+                        // Rôle de l'image (13g-2), à droite de la case.
+                        if let Some(&role) = self.layers()[li].roles.get(&f) {
+                            crate::roles::paint_symbol(painter, pos2(r.right() - 7.0, r.center().y), 8.0, role, 1.0);
                         }
                     }
                 }

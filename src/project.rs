@@ -63,7 +63,8 @@ pub const FORMAT: &str = "pelure-projet";
 /// (`marques_couleur`).
 /// 17 (13e) : arrière-plan (`fond` : aucun, couleur ou damier, couleur B), notes dessinées des
 /// plans (`notes_dessinees`), verrou du storyboard et propriétés du projet.
-pub const VERSION: u32 = 17;
+/// 18 (13g-2) : rôles des images d'un calque (`roles` : image → clé, breakdown, intervalle…).
+pub const VERSION: u32 = 18;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Modèles 3D de repère (2d), dans le format de Pelure.
@@ -476,6 +477,9 @@ struct LayerEntry {
     /// Marques de couleur (format 16) : numéro de dessin → rang de la couleur.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     marques_couleur: std::collections::BTreeMap<u64, u8>,
+    /// Rôles des images (format 18) : image du calque → rôle.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    roles: crate::roles::Roles,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -935,6 +939,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                     // Seulement les noms des dessins encore dans la timeline du calque.
                     noms: l.names.iter().filter(|(id, _)| l.frames.contains(&Some(**id))).map(|(id, n)| (*id, n.clone())).collect(),
                     marques_couleur: l.color_marks.iter().filter(|(id, _)| l.frames.contains(&Some(**id))).map(|(id, k)| (*id, *k)).collect(),
+                    roles: l.roles.clone(),
                     expositions: to_exposures(&l.frames),
                 })
                 .collect(),
@@ -1337,6 +1342,7 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                         auto_create: l.creation_auto,
                         names: l.noms,
                         color_marks: l.marques_couleur.into_iter().filter(|(_, k)| (*k as usize) < crate::marks::COLORS.len()).collect(),
+                        roles: l.roles,
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.

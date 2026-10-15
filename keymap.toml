@@ -1266,6 +1266,51 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
+action = "role.cle"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "role.breakdown"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "role.intervalle"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "role.intervalle_complete"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "role.intervalle_special"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "role.intervalle_special_complete"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "role.aucun"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "role.timeline"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "role.calque_courant"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
 action = "dossier.nouveau"
 touches = []
 source = "TVPaint 12 sans touche"

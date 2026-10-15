@@ -14,6 +14,7 @@ use eframe::egui;
 
 use crate::app::{App, Mode};
 use crate::document::{Cel, CelId, Panel};
+use crate::roles;
 
 /// Ce que devient la place d'images supprimées.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -425,6 +426,8 @@ pub(crate) struct InstanceRename {
 pub(crate) struct ImageClip {
     pub rows: Vec<Frames>,
     pub cels: HashMap<CelId, Cel>,
+    /// Les rôles des images copiées (13g-2), une rangée par calque, à partir de 0.
+    pub roles: Vec<Vec<(usize, crate::roles::Role)>>,
 }
 
 impl App {
@@ -470,7 +473,12 @@ impl App {
         let hole = self.hole;
         let snap = self.snapshot();
         for li in lis {
-            delete_frames(&mut self.layers_mut()[li].frames, a, b, hole);
+            let layer = &mut self.layers_mut()[li];
+            delete_frames(&mut layer.frames, a, b, hole);
+            // En reculant la suite, les rôles des images supprimées partent, les autres suivent.
+            if hole == Hole::FromRight {
+                roles::shift(&mut layer.roles, a, b - a, true);
+            }
         }
         let n = b - a;
         if all && hole == Hole::FromRight {
@@ -497,7 +505,9 @@ impl App {
         let snap = self.snapshot();
         let row = vec![None; n];
         for li in lis {
-            insert_frames(&mut self.layers_mut()[li].frames, at, &row);
+            let layer = &mut self.layers_mut()[li];
+            insert_frames(&mut layer.frames, at, &row);
+            roles::shift(&mut layer.roles, at, n, false);
         }
         if all {
             let panel = self.panel_mut();
@@ -514,6 +524,8 @@ impl App {
     pub(crate) fn copy_images(&mut self) {
         let (a, b) = self.image_range();
         let rows: Vec<Frames> = self.image_layers().into_iter().map(|li| frames_in(&self.layers()[li].frames, a, b)).collect();
+        // Les rôles des images partent avec elles (13g-2).
+        let role_rows = self.image_layers().into_iter().map(|li| roles::take(&self.layers()[li].roles, a, b)).collect();
         let cels = rows
             .iter()
             .flatten()
@@ -521,7 +533,7 @@ impl App {
             .filter_map(|id| self.doc.cels.get(id).map(|c| (*id, c.clone())))
             .collect();
         let (n, k) = (b - a, rows.len());
-        self.image_clipboard = Some(ImageClip { rows, cels });
+        self.image_clipboard = Some(ImageClip { rows, cels, roles: role_rows });
         self.status = format!("{n} image{} de {k} calque{} copiée{}.", s(n), s(k), s(n));
     }
 
@@ -549,7 +561,7 @@ impl App {
         let at = if replace { a } else { self.cur_frame };
         let snap = self.snapshot();
         let mut copies: HashMap<CelId, CelId> = HashMap::new();
-        for (row, &li) in clip.rows.iter().zip(&targets) {
+        for (k, (row, &li)) in clip.rows.iter().zip(&targets).enumerate() {
             let pasted: Frames = row
                 .iter()
                 .map(|f| {
@@ -563,11 +575,14 @@ impl App {
                     })
                 })
                 .collect();
-            let frames = &mut self.layers_mut()[li].frames;
+            let layer = &mut self.layers_mut()[li];
             if replace {
-                delete_frames(frames, a, b, Hole::FromRight);
+                delete_frames(&mut layer.frames, a, b, Hole::FromRight);
+                roles::shift(&mut layer.roles, a, b - a, true);
             }
-            insert_frames(frames, at, &pasted);
+            insert_frames(&mut layer.frames, at, &pasted);
+            roles::shift(&mut layer.roles, at, pasted.len(), false);
+            roles::put(&mut layer.roles, at, pasted.len(), clip.roles.get(k).map_or(&[][..], Vec::as_slice));
         }
         let n = clip.rows.first().map_or(0, Vec::len);
         self.frame_sel = Some((at, at + n));
@@ -603,7 +618,12 @@ impl App {
                     })
                 })
                 .collect();
-            insert_frames(&mut self.layers_mut()[li].frames, b, &dup);
+            let layer = &mut self.layers_mut()[li];
+            insert_frames(&mut layer.frames, b, &dup);
+            // Les copies gardent les rôles des images dupliquées.
+            let row = roles::take(&layer.roles, a, b);
+            roles::shift(&mut layer.roles, b, b - a, false);
+            roles::put(&mut layer.roles, b, b - a, &row);
         }
         self.frame_sel = Some((b, b + (b - a)));
         self.done(snap, "Images dupliquées après elles-mêmes.".into());
@@ -622,7 +642,9 @@ impl App {
         self.end_stroke();
         let snap = self.snapshot();
         for li in self.image_layers() {
-            reverse_frames(&mut self.layers_mut()[li].frames, a, b);
+            let layer = &mut self.layers_mut()[li];
+            reverse_frames(&mut layer.frames, a, b);
+            roles::reverse(&mut layer.roles, a, b);
         }
         self.done(snap, "Ordre des images inversé.".into());
     }
@@ -706,7 +728,9 @@ impl App {
         let id = self.doc.new_cel(kind);
         let n = self.default_exposure.max(1);
         let li = self.cur_layer;
-        insert_frames(&mut self.layers_mut()[li].frames, at, &vec![Some(id); n]);
+        let layer = &mut self.layers_mut()[li];
+        insert_frames(&mut layer.frames, at, &vec![Some(id); n]);
+        roles::shift(&mut layer.roles, at, n, false);
         self.cur_frame = at;
         self.follow_frame = true;
         self.done(snap, "Nouveau dessin avant l'instance.".into());
@@ -725,7 +749,10 @@ impl App {
         let snap = self.snapshot();
         let mut added = 0;
         for li in self.image_layers() {
-            added = added.max(fake_hold(&mut self.layers_mut()[li].frames, a, b, cycle, times, seed));
+            let layer = &mut self.layers_mut()[li];
+            let k = fake_hold(&mut layer.frames, a, b, cycle, times, seed);
+            roles::shift(&mut layer.roles, b, k, false);
+            added = added.max(k);
         }
         if added == 0 {
             self.status = "Rien à rejouer : choisis des images dessinées (Maj + clic).".into();
@@ -764,9 +791,10 @@ impl App {
         let keep = self.cur_frame + 1;
         let snap = self.snapshot();
         for li in self.image_layers() {
-            let frames = &mut self.layers_mut()[li].frames;
-            frames.truncate(keep);
-            trim(frames);
+            let layer = &mut self.layers_mut()[li];
+            layer.frames.truncate(keep);
+            trim(&mut layer.frames);
+            layer.roles.retain(|f, _| *f < keep);
         }
         self.done(snap, "Calque coupé après l'image courante.".into());
     }
@@ -792,7 +820,20 @@ impl App {
                     *f = f.map(|old| *copies.entry(old).or_insert_with(|| self.doc.duplicate_cel(old)));
                 }
             }
-            drop_frames(&mut self.layers_mut()[li].frames, a, b, to, mode, &row);
+            let layer = &mut self.layers_mut()[li];
+            drop_frames(&mut layer.frames, a, b, to, mode, &row);
+            // Les rôles des images posées vont avec elles.
+            let moved = roles::take(&layer.roles, a, b);
+            let n = b - a;
+            match mode {
+                DropMode::Insert => {
+                    roles::shift(&mut layer.roles, a, n, true);
+                    roles::shift(&mut layer.roles, to, n, false);
+                }
+                DropMode::Move => roles::put(&mut layer.roles, a, n, &[]),
+                DropMode::Copy => {}
+            }
+            roles::put(&mut layer.roles, to, n, &moved);
         }
         self.frame_sel = Some((to, to + (b - a)));
         self.cur_frame = to;

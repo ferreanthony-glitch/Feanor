@@ -495,6 +495,13 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   Affichage par `ScrollArea::show_viewport` : seules les lignes visibles sont peintes, l'en-tête
   est peint en haut de la partie visible. `XSheetSettings` est un réglage de l'application
   (`[feuille_expo]`).
+- Rôles des images (`roles.rs`, `rolesui.rs`, 13g-2) : `Layer::roles`, image → rôle, comme une
+  case de la feuille (même vide, même après la fin du calque). Ils ne suivent pas tout seuls les
+  images : chaque opération qui en déplace le fait (`roles::shift`, `reverse`, `take` / `put`),
+  ainsi que `Layer::insert`, `Layer::append_at` et la coupe / réunion de plans. Les autres
+  réarrangements (une exposition de plus à chaque instance) les laissent à leur image.
+  Décision : rangés par image plutôt que par dessin, parce qu'un intervalle « à faire » se pose
+  là où rien n'est encore dessiné (choix d'Anthony).
 - Vue Projet (`projetui.rs`, 13e-4) : `Document::storyboard_locked` est dans `Structure` (une
   annulation le rétablit avec le reste ; le basculer est une étape). `App::storyboard_refuses`
   garde `structure_op` et les autres chemins qui changent l'ordre, le nombre ou la durée des
@@ -705,6 +712,8 @@ MonFilm/
                       triangles, positions (3 × f32) puis triangles (3 × u32), petit-boutiste
 ```
 
+- Format 18 (13g-2) : `roles` sur un calque (image → `cle`, `breakdown`, `intervalle`,
+  `intervalle_complete`, `intervalle_special`, `intervalle_special_complete` ; absent : aucun).
 - Format 17 (13e) : `fond` (`sorte` : `aucun`, `couleur`, `damier` ; `couleur_b`) dans le
   manifeste ; `notes_dessinees` (couleur, épaisseur, points [image, hauteur]) sur un panneau.
   En mémoire : `Document::background`, `paper_b`, `render_paper()` (le papier seulement pour

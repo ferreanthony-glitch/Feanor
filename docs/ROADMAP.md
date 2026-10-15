@@ -592,9 +592,23 @@ Décisions d'Anthony :
     - un trait épais chaque seconde ou toutes les N images ;
     - un clic va à l'image et au calque, et la feuille suit l'image courante ;
     - les réglages sont retenus.
-  - 13g-2 et suivantes, à décider avec Anthony : rôles des cellules (keyframe, breakdown,
-    inbetween à faire / complété…), mémo et export PDF, affichage japonais, vue par pages,
-    import / export XDTS, textes Action / Dialogue saisis image par image.
+  - ✅ 13g-2 (`roles.rs`, `rolesui.rs`, format 18). Rôles des images, ceux de TVPaint : clé,
+    breakdown, intervalle à faire / complété, intervalle spécial à faire / complété.
+    - Choix d'Anthony : un rôle se pose sur une case (calque, image), même vide, et ne change
+      que si on le change.
+    - On le pose par le clic droit dans la timeline (menu Rôle, puis le menu Images) ou dans
+      la feuille, ou par les actions `role.*` (sans touche). Il vise les images choisies des
+      calques choisis, sinon la case cliquée.
+    - Chaque rôle a son symbole (propre à Pelure) : disque, triangle, cercle vide / pointé,
+      carré vide / plein.
+    - Dans la timeline : montrer / cacher les rôles, sur le calque courant seulement, opacité.
+    - Les rôles suivent les images insérées, supprimées, inversées, dupliquées, déplacées,
+      copiées / collées, et les plans coupés ou réunis. « Une exposition de plus / de moins à
+      chaque instance » ne les déplace pas.
+    - Permis sous le storyboard verrouillé, comme les marques de couleur.
+  - Pas repris, choix d'Anthony : mémo et export PDF de la feuille, affichage japonais, vue
+    par pages, XDTS, textes Action / Dialogue image par image. Restent [N] : associer marques
+    et rôles. Les flips par rôle iront avec les flips.
 - 13h et suivantes, une étape chacune : flips, clés d'effets, calques CTG, Puppet, vidéo,
   interpolation d'images.
 Le faux-fixe n'a que son nom dans les textes de TVPaint : à faire décrire par Anthony avant de

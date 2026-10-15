@@ -562,6 +562,42 @@ impl App {
             }
         }
 
+        // Rôles des images (13g-2) : un symbole en bas de la case, sur une pastille sombre.
+        let view = self.roles_view;
+        if view.shown {
+            let s = (cell - 3.0).clamp(4.0, 9.0);
+            for row in &rows {
+                if view.current_only && row.li != self.cur_layer {
+                    continue;
+                }
+                for (&f, &role) in self.layers()[row.li].roles.range(0..cols) {
+                    let c = pos2(r.left() + (f as f32 + 0.5) * cell, grid_top + row.top + row.h - s * 0.5 - 3.0);
+                    painter.circle_filled(c, s * 0.5 + 1.5, theme::FOND.gamma_multiply(view.opacity));
+                    crate::roles::paint_symbol(&painter, c, s, role, view.opacity);
+                }
+            }
+        }
+
+        // Clic droit sur une case de calque : elle est visée (sauf dans le choix), puis le menu
+        // des rôles et des images.
+        if resp.secondary_clicked() {
+            self.role_menu = false;
+            if let Some(p) = resp.interact_pointer_pos() {
+                let col = ((p.x - r.left()) / cell).floor().max(0.0) as usize;
+                if let Some(row) = row_at(&rows, p.y - grid_top).filter(|row| !self.layers()[row.li].folder) {
+                    self.aim_cell(row.li, col);
+                    self.role_menu = true;
+                }
+            }
+        }
+        if self.role_menu {
+            resp.context_menu(|ui| {
+                ui.menu_button("Rôle", |ui| self.roles_menu(ui));
+                ui.separator();
+                self.images_menu(ui);
+            });
+        }
+
         // Double-clic sur un dessin : renommer son instance (13c) ; le champ se pose sur le bloc.
         if resp.double_clicked() {
             if let Some(p) = resp.interact_pointer_pos() {

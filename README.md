@@ -239,6 +239,13 @@ colonnes, une ligne par image. On y trouve :
 
 Un clic va à l'image et au calque. L'œil choisit les colonnes et le trait de séparation.
 
+**Rôles des images** (clic droit sur une case de la timeline ou de la feuille > Rôle) :
+- les rôles : clé (disque), breakdown (triangle), intervalle à faire / complété (cercle
+  vide / pointé), intervalle spécial à faire / complété (carré vide / plein) ;
+- ils se posent sur les images choisies des calques choisis, même vides ;
+- ils suivent les images qu'on insère, supprime ou déplace ;
+- le même menu montre ou cache les rôles dans la timeline, ou les limite au calque courant.
+
 **Vue Projet** :
 - **Nouveau plan avant le plan courant** (menu Storyboard, menu ⋯ du montage).
 - **Cadenas du montage** : il verrouille le storyboard. L'ordre, le nombre et la durée des plans
@@ -431,6 +438,7 @@ en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le 
 | `bottomtabs.rs`, `notes.rs` | Onglets du bas de la timeline, notes dessinées (13e) |
 | `projetui.rs` | Vue Projet : plan avant, storyboard verrouillé, propriétés, projet fait de plans (13e) |
 | `xsheet.rs`, `xsheetui.rs` | Feuille d'exposition : ce que montre chaque case, le panneau (13g) |
+| `roles.rs`, `rolesui.rs` | Rôles des images : modèle, suivi des images, symboles, menu (13g-2) |
 | `fill.rs` | Remplissage par zone et débord |
 | `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra |
 | `gpu.rs` | Composition et affichage par la carte graphique, envoi des dessins par tuiles |
