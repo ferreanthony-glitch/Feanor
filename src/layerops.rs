@@ -64,7 +64,8 @@ fn layer_copy(doc: &mut Document, source: &Layer, copies: &mut HashMap<CelId, Ce
     // La copie d'un calque de toute la scène est un calque du seul plan ; les noms d'instance
     // suivent les copies des dessins.
     let names = source.names.iter().map(|(c, n)| (copies.get(c).copied().unwrap_or(*c), n.clone())).collect();
-    Layer { id: fresh_layer_id(), frames, scene_wide: None, names, ..source.clone() }
+    let color_marks = source.color_marks.iter().map(|(c, k)| (copies.get(c).copied().unwrap_or(*c), *k)).collect();
+    Layer { id: fresh_layer_id(), frames, scene_wide: None, names, color_marks, ..source.clone() }
 }
 
 /// Copie du calque `li` du plan `index`, avec ses propres copies des dessins, posée juste

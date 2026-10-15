@@ -322,6 +322,12 @@ pub struct App {
     pub(crate) timeline_fit: Option<(usize, usize)>,
     pub(crate) empty_x: bool,
     pub(crate) timeline_thumbs: bool,
+    /// Marques de couleur (13d) : couleur choisie, « Répéter », « Continuer sur le calque
+    /// suivant », seulement les couleurs utilisées.
+    pub(crate) mark_color: u8,
+    pub(crate) mark_repeat: bool,
+    pub(crate) mark_next_layer: bool,
+    pub(crate) mark_used_only: bool,
     /// Aperçus des réglages de pinceau (grille du panneau Réglages, 6d).
     pub(crate) brush_previews: crate::brushui::BrushPreviews,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
@@ -557,6 +563,10 @@ impl App {
             timeline_fit: None,
             empty_x: true,
             timeline_thumbs: true,
+            mark_color: 9,
+            mark_repeat: false,
+            mark_next_layer: false,
+            mark_used_only: false,
             brush_previews: Default::default(),
             ref3d: Default::default(),
             camera_view: false,
@@ -1605,6 +1615,7 @@ impl App {
             });
         }
         layer.names = source.names.iter().filter_map(|(c, n)| copies.get(c).map(|d| (*d, n.clone()))).collect();
+        layer.color_marks = source.color_marks.iter().filter_map(|(c, k)| copies.get(c).map(|d| (*d, *k))).collect();
         let n = self.frame_count();
         let held = source.frames.len() >= clip.panel_len && source.frames.last().is_some_and(Option::is_some);
         if layer.frames.len() > n {
@@ -2393,6 +2404,17 @@ impl App {
             "timeline.adapter_image" => self.fit_timeline(crate::cues::Fit::Image),
             "timeline.adapter_cles" => self.fit_timeline(crate::cues::Fit::Keys),
             "timeline.tout_voir" => self.fit_timeline(crate::cues::Fit::All),
+            // Marques de couleur (13d, `marks.rs`).
+            "marque_couleur.basculer" => self.toggle_color_mark(),
+            "marque_couleur.retirer" => self.remove_color_mark(),
+            "marque_couleur.toutes" => self.mark_all_instances(false),
+            "marque_couleur.non_marquees" => self.mark_all_instances(true),
+            "marque_couleur.effacer_calque" => self.clear_color_marks(false),
+            "marque_couleur.effacer_plan" => self.clear_color_marks(true),
+            "marque_couleur.precedente" => self.goto_color_mark(false, false),
+            "marque_couleur.suivante" => self.goto_color_mark(true, false),
+            "marque_couleur.precedente_couleur" => self.goto_color_mark(false, true),
+            "marque_couleur.suivante_couleur" => self.goto_color_mark(true, true),
             // Dossiers de calques (13b-5, `folders.rs`).
             "dossier.nouveau" => self.new_folder(),
             "dossier.ranger" => self.folder_from_chosen(),

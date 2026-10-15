@@ -480,6 +480,11 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   `tick_playback`, au son (`play_range` de `soundtrack.rs`) et à la lecture anticipée
   (`playback::Position::range`). `frame_label` / `parse_frame` : image, time code, trame,
   depuis `Document::start_frame`. `images::shift_panel` déplace aussi signets et points.
+  Zoom : `App::timeline_cell` (largeur d'une image), `timeline_fit` en attente pour
+  « Adapter » (posé à l'image suivante, quand la largeur visible est connue).
+- Marques de couleur (`marks.rs`, 13d) : `Layer::color_marks` (dessin → couleur), comme les
+  noms d'instance (elles suivent les copies via `relink_copies`) ; `marked_starts`,
+  `step_mark`.
 
 ## Pinceaux texturés (3d-2)
 

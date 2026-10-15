@@ -266,6 +266,9 @@ pub struct Layer {
     pub auto_create: bool,
     /// Noms d'instance (13c) : le nom donné à un dessin du calque (montré dans la timeline).
     pub names: std::collections::BTreeMap<CelId, String>,
+    /// Marques de couleur (13d, les « marques d'image » de TVPaint) : dessin → rang de sa couleur
+    /// dans `marks::COLORS`.
+    pub color_marks: std::collections::BTreeMap<CelId, u8>,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -325,6 +328,7 @@ impl Layer {
             auto_break: false,
             auto_create: true,
             names: Default::default(),
+            color_marks: Default::default(),
         }
     }
 
@@ -507,6 +511,7 @@ pub fn relink_copies(layers: &mut [Layer], old_ids: &[u64], cels: &HashMap<CelId
     for l in layers.iter_mut() {
         l.parent = l.parent.map(|p| ids.get(&p).copied().unwrap_or(p));
         l.names = l.names.iter().map(|(c, n)| (cels.get(c).copied().unwrap_or(*c), n.clone())).collect();
+        l.color_marks = l.color_marks.iter().map(|(c, k)| (cels.get(c).copied().unwrap_or(*c), *k)).collect();
     }
 }
 

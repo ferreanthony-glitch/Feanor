@@ -530,7 +530,13 @@ Décisions d'Anthony :
     s'espacent), « Adapter » au plan, au calque, aux images choisies, à l'image, aux clés de
     caméra, tout voir ; croix sur les instances vides ; miniatures des dessins dans les blocs
     des lignes complètes (deux cases à cocher du menu loupe).
-  - 13d-3. Marques de couleur sur les dessins d'un calque (les « marques d'image » de TVPaint).
+  - ✅ 13d-3. Marques de couleur sur les dessins d'un calque (`marks.rs`, les « marques
+    d'image » de TVPaint, renommées pour ne pas les confondre avec les images de storyboard
+    de 13a) : 12 couleurs, poser / retirer sur l'instance courante, sur toutes les instances
+    ou sur les non marquées, retirer celles du calque ou du plan, précédente / suivante
+    (toutes ou de la couleur choisie), « Répéter », « Continuer sur le calque suivant »,
+    seulement les couleurs utilisées. Une instance vide ne porte pas de marque (une marque
+    tient à un dessin).
 - 13e. Onglets du bas et vue Projet : notes dessinées, son par plan, arrière-plan, propriétés.
 - 13f. Table lumineuse complète.
 - 13g et suivantes, une étape chacune : feuille d'exposition, flips, clés d'effets, calques CTG,

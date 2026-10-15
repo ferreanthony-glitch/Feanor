@@ -284,6 +284,7 @@ impl App {
         self.action_item(ui, "Signet suivant", "signet.suivant");
         self.action_item(ui, "Enlever les signets des images choisies", "signets.enlever_choisis");
         self.action_item(ui, "Enlever tous les signets", "signets.tout_enlever");
+        ui.menu_button("Marques de couleur (sur les dessins du calque)", |ui| self.color_marks_menu(ui));
         ui.separator();
         ui.label(egui::RichText::new("Entrée / sortie (lecture du plan)").strong());
         self.action_item(ui, "Point d'entrée à l'image courante", "entree.poser");

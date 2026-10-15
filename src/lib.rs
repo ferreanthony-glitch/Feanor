@@ -72,6 +72,7 @@ mod layerops;
 mod layerops_tests;
 mod layersui;
 mod layertools;
+mod marks;
 #[cfg(test)]
 mod keymap_tests;
 #[cfg(test)]

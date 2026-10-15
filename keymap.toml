@@ -1096,6 +1096,56 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
+action = "marque_couleur.basculer"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "marque_couleur.retirer"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "marque_couleur.toutes"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "marque_couleur.non_marquees"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "marque_couleur.effacer_calque"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "marque_couleur.effacer_plan"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "marque_couleur.precedente"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "marque_couleur.suivante"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "marque_couleur.precedente_couleur"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "marque_couleur.suivante_couleur"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
 action = "dossier.nouveau"
 touches = []
 source = "TVPaint 12 sans touche"

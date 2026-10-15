@@ -76,6 +76,38 @@ fn cues_and_start_frame_are_saved() {
 }
 
 #[test]
+fn color_marks_are_found_stepped_and_saved() {
+    use crate::document::{Layer, LayerKind};
+    use crate::marks::{marked_starts, step_mark};
+    let mut l = Layer::new("C", LayerKind::Bitmap);
+    // 1 1 2 . 3 3 1 : le dessin 1 revient (deux instances, une marque).
+    l.frames = vec![Some(1), Some(1), Some(2), None, Some(3), Some(3), Some(1)];
+    l.color_marks.insert(1, 4);
+    l.color_marks.insert(3, 7);
+    assert_eq!(marked_starts(&l, None), [0, 4, 6]);
+    assert_eq!(marked_starts(&l, Some(7)), [4]);
+    let s = marked_starts(&l, None);
+    assert_eq!(step_mark(&s, 2, true, false), Some(4));
+    assert_eq!(step_mark(&s, 6, true, false), None);
+    assert_eq!(step_mark(&s, 6, true, true), Some(0), "Répéter : on revient à la première");
+    assert_eq!(step_mark(&s, 0, false, true), Some(6));
+
+    let mut doc = Document::new(16, 16, 24);
+    let cel = doc.new_cel(LayerKind::Bitmap);
+    let layer = &mut doc.panels[0].layers[0];
+    layer.frames = vec![Some(cel)];
+    layer.color_marks.insert(cel, 10);
+    let dir = std::env::temp_dir().join(format!("pelure-test-marques-{}", std::process::id()));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).unwrap();
+    let manifest = dir.join("M.pelure");
+    project::save(&doc, &manifest, &mut Default::default()).unwrap();
+    let back = project::load(&manifest).unwrap().doc;
+    std::fs::remove_dir_all(&dir).ok();
+    assert_eq!(back.panels[0].layers[0].color_marks.get(&cel), Some(&10));
+}
+
+#[test]
 fn tvpaint_bookmark_keys_are_in_place() {
     use crate::app::Mode;
     use crate::keymap::{Keymap, DEFAULT_KEYMAP};

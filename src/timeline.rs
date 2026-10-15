@@ -525,6 +525,11 @@ impl App {
                         2.5,
                         theme::FOND,
                     );
+                    // Marque de couleur (13d) : un trait de sa couleur en haut du bloc.
+                    if let Some(&k) = layer.color_marks.get(&id) {
+                        let strip = Rect::from_min_size(block.min, vec2(block.width(), 4.0));
+                        painter.rect_filled(strip, 2.0, crate::marks::color(k));
+                    }
                     // Miniature (13d) : dans une ligne complète, si le bloc est assez large.
                     let mut text_x = block.left() + cell - 1.0;
                     if self.timeline_thumbs && row.h >= 40.0 && block.width() >= cell + 26.0 {

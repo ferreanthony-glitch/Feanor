@@ -59,7 +59,8 @@ pub const FORMAT: &str = "pelure-projet";
 /// précédente ignorerait (le film changerait sans prévenir) ; cassure et création automatiques
 /// (`cassure_auto`, `creation_auto`) ; noms d'instance (`noms`).
 /// 16 (13d) : signets et points d'entrée / sortie des plans (`signets`, `entree`, `sortie`),
-/// image de départ du projet (`image_de_depart`).
+/// image de départ du projet (`image_de_depart`), marques de couleur des dessins
+/// (`marques_couleur`).
 pub const VERSION: u32 = 16;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
@@ -385,6 +386,9 @@ struct LayerEntry {
     /// Noms d'instance (format 15) : numéro de dessin → nom.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     noms: std::collections::BTreeMap<u64, String>,
+    /// Marques de couleur (format 16) : numéro de dessin → rang de la couleur.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    marques_couleur: std::collections::BTreeMap<u64, u8>,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -843,6 +847,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                     creation_auto: l.auto_create,
                     // Seulement les noms des dessins encore dans la timeline du calque.
                     noms: l.names.iter().filter(|(id, _)| l.frames.contains(&Some(**id))).map(|(id, n)| (*id, n.clone())).collect(),
+                    marques_couleur: l.color_marks.iter().filter(|(id, _)| l.frames.contains(&Some(**id))).map(|(id, k)| (*id, *k)).collect(),
                     expositions: to_exposures(&l.frames),
                 })
                 .collect(),
@@ -1205,6 +1210,7 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                         auto_break: l.cassure_auto,
                         auto_create: l.creation_auto,
                         names: l.noms,
+                        color_marks: l.marques_couleur.into_iter().filter(|(_, k)| (*k as usize) < crate::marks::COLORS.len()).collect(),
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.

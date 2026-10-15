@@ -203,6 +203,20 @@ même menu Images contient aussi :
 Par calque (menu ⋮), deux réglages : la **cassure automatique**, où dessiner sur une image tenue
 en fait un nouveau dessin, et la **création automatique** d'image.
 
+**Repères** (bouton signet de la timeline) :
+- **signets** : Ctrl+Maj+Haut en pose ou en retire un, Ctrl+Maj+Gauche / Droite va au
+  précédent / suivant ;
+- **points d'entrée et de sortie** : la lecture du plan reste entre eux, en boucle ou non.
+  « Boucle entre les images choisies » les pose sur les images choisies ;
+- **marques de couleur** sur les dessins d'un calque, pour s'y retrouver, avec précédente /
+  suivante ;
+- **numérotation** des images, en image, time code ou trame, à partir de l'image de départ du
+  projet.
+
+Le champ d'image courante de la barre accepte un numéro ou un time code. La loupe règle le
+zoom de la timeline (aussi Ctrl + molette) et « Adapter » (au plan, au calque, aux images
+choisies…). Elle allume aussi les croix sur les instances vides et les miniatures des dessins.
+
 ## Le reste
 
 - **Tablette** : la pression module la taille et/ou l'opacité. Elle passe par Windows Ink : sur une
