@@ -520,6 +520,15 @@ Décisions d'Anthony :
     taille différente » (Pelure n'a qu'une taille de feuille), Ctrl pendant le tracé (chaque
     touche du pinceau sur l'image suivante), interpolation d'images.
 - 13d. Repères : marques, signets, entrée / sortie, boucle, image de départ, time code, zoom.
+  - ✅ 13d-1 (`cues.rs`, format 16) : signets (Ctrl+Maj+Haut / Gauche / Droite, tes touches
+    TVPaint ; enlever tous ou ceux des images choisies), points d'entrée et de sortie (la
+    lecture du plan reste entre eux, en boucle ou non ; refus si les deux tombent sur la même
+    image), boucle entre les images choisies, image de départ du projet, numéros en image,
+    time code ou trame, champ d'image courante où l'on tape un numéro ou un time code.
+    Signets et points suivent les images insérées / supprimées dans tout le plan.
+  - 13d-2. Zoom de la timeline et « Adapter » ; instances vides marquées d'une croix ;
+    miniatures dans les blocs.
+  - 13d-3. Marques de couleur sur les dessins d'un calque (les « marques d'image » de TVPaint).
 - 13e. Onglets du bas et vue Projet : notes dessinées, son par plan, arrière-plan, propriétés.
 - 13f. Table lumineuse complète.
 - 13g et suivantes, une étape chacune : feuille d'exposition, flips, clés d'effets, calques CTG,

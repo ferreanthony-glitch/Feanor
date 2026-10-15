@@ -75,9 +75,10 @@ impl App {
         if self.play_montage {
             (self.global_frame(), (0, self.doc.total_frames()))
         } else {
+            // Entre les points d'entrée et de sortie du plan (13d).
             let s = self.doc.panel_start(self.cur_panel);
-            let n = self.frame_count();
-            (s + self.cur_frame.min(n - 1), (s, s + n))
+            let (a, b) = self.plan_play_range();
+            (s + self.cur_frame.clamp(a, b - 1), (s + a, s + b))
         }
     }
 

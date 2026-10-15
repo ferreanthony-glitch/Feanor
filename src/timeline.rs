@@ -101,8 +101,24 @@ impl App {
                     if self.edited(&resp) {
                         self.doc.fps = fps;
                     }
-                    let resp = ui.label(RichText::new(format!("{} / {}", self.cur_frame + 1, count)).monospace());
-                    bulle(resp, "Image courante", "Image courante / nombre d'images du plan.", "");
+                    // Image courante (13d) : on y tape un numéro ou un time code pour y aller.
+                    let (start, fps, how) = (self.doc.start_frame, self.doc.fps, self.time_display);
+                    let mut f = self.cur_frame as f64;
+                    let resp = ui.add(
+                        egui::DragValue::new(&mut f)
+                            .range(0.0..=(count.max(1) - 1) as f64)
+                            .speed(0.2)
+                            .custom_formatter(move |v, _| crate::cues::frame_label(v.max(0.0) as usize, start, fps, how))
+                            .custom_parser(move |s| crate::cues::parse_frame(s, start, fps, how).map(|f| f as f64)),
+                    );
+                    let resp = bulle(resp, "Image courante", "Glisser, ou taper un numéro (ou un time code) pour y aller.", "");
+                    if resp.changed() {
+                        self.goto_frame(f.max(0.0) as usize);
+                    }
+                    let resp = ui.label(RichText::new(format!("/ {}", self.frame_label(count.max(1) - 1))).monospace());
+                    bulle(resp, "Dernière image du plan", "", "");
+                    let resp = ui.menu_button(RichText::new(ph::BOOKMARK_SIMPLE).size(crate::bulles::TAILLE), |ui| self.cues_menu(ui)).response;
+                    bulle(resp, "Repères", "Signets, points d'entrée et de sortie, boucle, numéros (image, time code, trame), image de départ.", "");
                     sep(ui);
 
                     // Dessins et expositions.
@@ -353,15 +369,51 @@ impl App {
                 theme::GRADUATION
             };
             painter.line_segment([pos2(x, grid_top), pos2(x, r.bottom())], Stroke::new(1.0_f32, color));
-            if c < cols && (c == 0 || (c + 1) % 5 == 0) {
+            // Numéros (13d) : toutes les 5 images, ou chaque seconde en time code.
+            let time_code = self.time_display == crate::cues::TimeDisplay::TimeCode;
+            let shown = if time_code { c % fps == 0 } else { c == 0 || (c + 1) % 5 == 0 };
+            if c < cols && shown {
                 painter.text(
-                    pos2(x + CELL_W * 0.5, r.top() + HEADER_H * 0.5),
-                    Align2::CENTER_CENTER,
-                    (c + 1).to_string(),
+                    pos2(x + if time_code { 2.0 } else { CELL_W * 0.5 }, r.top() + HEADER_H * 0.5),
+                    if time_code { Align2::LEFT_CENTER } else { Align2::CENTER_CENTER },
+                    self.frame_label(c),
                     FontId::monospace(9.0),
                     visuals.weak_text_color(),
                 );
             }
+        }
+
+        // Points d'entrée et de sortie (13d) : crochets dans la règle, le reste du plan assombri.
+        let cues = self.panel().cues.clone();
+        if cues.in_point.is_some() || cues.out_point.is_some() {
+            let (a, b) = self.plan_play_range();
+            let shade = Color32::from_black_alpha(80);
+            painter.rect_filled(Rect::from_min_max(pos2(r.left(), grid_top), pos2(r.left() + a as f32 * CELL_W, r.bottom())), 0.0, shade);
+            painter.rect_filled(Rect::from_min_max(pos2(r.left() + b as f32 * CELL_W, grid_top), r.max), 0.0, shade);
+            let bracket = Stroke::new(2.0_f32, theme::IMAGE_COURANTE);
+            if let Some(f) = cues.in_point {
+                let x = r.left() + f as f32 * CELL_W + 1.0;
+                painter.line_segment([pos2(x, r.top() + 2.0), pos2(x, r.top() + HEADER_H - 2.0)], bracket);
+                painter.line_segment([pos2(x, r.top() + 2.0), pos2(x + 5.0, r.top() + 2.0)], bracket);
+                painter.line_segment([pos2(x, r.top() + HEADER_H - 2.0), pos2(x + 5.0, r.top() + HEADER_H - 2.0)], bracket);
+            }
+            if let Some(f) = cues.out_point {
+                let x = r.left() + (f + 1) as f32 * CELL_W - 1.0;
+                painter.line_segment([pos2(x, r.top() + 2.0), pos2(x, r.top() + HEADER_H - 2.0)], bracket);
+                painter.line_segment([pos2(x, r.top() + 2.0), pos2(x - 5.0, r.top() + 2.0)], bracket);
+                painter.line_segment([pos2(x, r.top() + HEADER_H - 2.0), pos2(x - 5.0, r.top() + HEADER_H - 2.0)], bracket);
+            }
+        }
+        // Signets (13d) : un petit fanion bleu en bas de la règle.
+        let bookmark = Color32::from_rgb(95, 170, 255);
+        for &f in &cues.bookmarks {
+            let x = r.left() + (f as f32 + 0.5) * CELL_W;
+            painter.add(egui::Shape::convex_polygon(
+                vec![pos2(x - 4.0, r.top() + HEADER_H - 1.0), pos2(x + 4.0, r.top() + HEADER_H - 1.0), pos2(x, r.top() + HEADER_H - 7.0)],
+                bookmark,
+                Stroke::NONE,
+            ));
+            painter.line_segment([pos2(x, grid_top), pos2(x, r.bottom())], Stroke::new(1.0_f32, bookmark.gamma_multiply(0.5)));
         }
 
         // Marques d'image (13a) : un triangle dans la règle et un trait au début de l'image.
@@ -527,7 +579,13 @@ impl App {
         painter.text(
             pos2(cx + CELL_W * 0.5, r.top() + HEADER_H * 0.5),
             Align2::CENTER_CENTER,
-            (self.cur_frame + 1).to_string(),
+            // En time code, seule l'image dans la seconde tient dans la case.
+            match self.time_display {
+                crate::cues::TimeDisplay::TimeCode => {
+                    ((self.cur_frame + self.doc.start_frame).saturating_sub(1) % self.doc.fps.max(1) as usize).to_string()
+                }
+                _ => self.frame_label(self.cur_frame),
+            },
             FontId::monospace(9.0),
             Color32::BLACK,
         );

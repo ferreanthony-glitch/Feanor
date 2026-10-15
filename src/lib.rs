@@ -29,6 +29,9 @@ mod canvas;
 #[cfg(test)]
 mod color_tests;
 mod colorui;
+mod cues;
+#[cfg(test)]
+mod cues_tests;
 #[cfg(test)]
 mod depth_tests;
 mod dock;

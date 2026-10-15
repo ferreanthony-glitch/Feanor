@@ -58,7 +58,9 @@ pub const FORMAT: &str = "pelure-projet";
 /// 15 (13c) : pré / post-comportement des calques (`avant`, `apres`), qu'une version
 /// précédente ignorerait (le film changerait sans prévenir) ; cassure et création automatiques
 /// (`cassure_auto`, `creation_auto`) ; noms d'instance (`noms`).
-pub const VERSION: u32 = 15;
+/// 16 (13d) : signets et points d'entrée / sortie des plans (`signets`, `entree`, `sortie`),
+/// image de départ du projet (`image_de_depart`).
+pub const VERSION: u32 = 16;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Modèles 3D de repère (2d), dans le format de Pelure.
@@ -103,6 +105,17 @@ struct Manifest {
     /// Groupes de couleur des calques (format 13 ; absents : ceux d'un projet neuf).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     groupes: Vec<GroupEntry>,
+    /// Numéro de la première image (format 16 ; absent : 1).
+    #[serde(default = "one_usize", skip_serializing_if = "is_one_usize")]
+    image_de_depart: usize,
+}
+
+fn one_usize() -> usize {
+    1
+}
+
+fn is_one_usize(v: &usize) -> bool {
+    *v == 1
 }
 
 /// Un groupe de couleur des calques (format 13), dans l'ordre des numéros de groupe.
@@ -239,6 +252,13 @@ struct PanelEntry {
     /// Marques d'image du plan (format 12 ; absent : aucune).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     marques: Vec<MarkEntry>,
+    /// Signets, points d'entrée et de sortie (format 16 ; absents : aucun).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    signets: Vec<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    entree: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sortie: Option<usize>,
 }
 
 /// Une marque d'image (13a) : une image de storyboard à l'image `image` du plan, avec ses textes.
@@ -867,6 +887,9 @@ fn manifest_of(doc: &Document) -> Manifest {
                     notes: m.notes.clone(),
                 })
                 .collect(),
+            signets: panel.cues.bookmarks.clone(),
+            entree: panel.cues.in_point,
+            sortie: panel.cues.out_point,
         });
     }
     let used = used_sounds(doc);
@@ -950,6 +973,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                 .map(|g| GroupEntry { nom: g.name.clone(), couleur: g.color, montre: g.shown })
                 .collect()
         },
+        image_de_depart: doc.start_frame,
     }
 }
 
@@ -1111,6 +1135,7 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                 .map(|g| crate::groups::LayerGroup { name: g.nom, color: g.couleur, shown: g.montre })
                 .collect(),
         ),
+        start_frame: manifest.image_de_depart.min(1_000_000),
     };
     for seq in manifest.sequences {
         structure.sequences.push(Sequence {
@@ -1225,6 +1250,16 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                     camera,
                     ref3d: p.repere3d.as_ref().filter(|r| models.contains_key(&r.modele)).and_then(ref3d_of),
                     marks: marks_of(p.marques),
+                    cues: crate::document::Cues {
+                        bookmarks: {
+                            let mut b = p.signets;
+                            b.sort_unstable();
+                            b.dedup();
+                            b
+                        },
+                        in_point: p.entree,
+                        out_point: p.sortie,
+                    },
                 });
             }
         }

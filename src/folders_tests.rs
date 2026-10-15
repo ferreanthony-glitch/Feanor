@@ -149,6 +149,23 @@ fn folders_are_saved() {
 }
 
 #[test]
+fn a_duplicated_plan_keeps_its_folders_and_instance_names() {
+    let mut doc = Document::new(32, 32, 24);
+    let cel = doc.new_cel(LayerKind::Bitmap);
+    let mut layers = stack();
+    layers[1].frames = vec![Some(cel)];
+    layers[1].names.insert(cel, "marche".into());
+    doc.panels[0].layers = layers;
+    let copy = doc.duplicate_panel(0);
+    let l = &copy.layers;
+    assert_eq!(l[1].parent, Some(l[3].id), "le calque rangé suit le dossier copié");
+    assert_ne!(l[3].id, 100);
+    let new_cel = l[1].frames[0].unwrap();
+    assert_ne!(new_cel, cel);
+    assert_eq!(l[1].names.get(&new_cel).map(String::as_str), Some("marche"), "le nom suit le dessin copié");
+}
+
+#[test]
 fn a_closed_folder_hides_the_rows_of_its_layers() {
     let mut layers = stack();
     let rows: Vec<usize> = rows_of(&layers, &groups::defaults()).iter().map(|r| r.li).collect();

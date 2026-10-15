@@ -15,6 +15,8 @@ pub struct Position {
     /// Lecture de tout le montage (sinon : du panneau seul).
     pub montage: bool,
     pub looping: bool,
+    /// Lecture du plan seul : images [début, fin) lues (points d'entrée et de sortie, 13d).
+    pub range: (usize, usize),
 }
 
 /// Images (panneau, image) qui viennent : en lecture, la seconde qui suit (en bouclant si la
@@ -25,18 +27,18 @@ pub fn upcoming_frames(doc: &Document, at: Position) -> Vec<(usize, usize)> {
     let count = doc.panels[at.panel].frame_count();
     if at.playing {
         let n = doc.fps.max(1) as usize;
-        let (start, total) = if at.montage {
-            (doc.panel_start(at.panel) + at.frame, doc.total_frames())
+        let (start, (first, total)) = if at.montage {
+            (doc.panel_start(at.panel) + at.frame, (0, doc.total_frames()))
         } else {
-            (at.frame, count)
+            (at.frame, (at.range.0.min(count.saturating_sub(1)), at.range.1.min(count).max(1)))
         };
         for k in 1..=n {
             let mut h = start + k;
             if h >= total {
-                if !at.looping {
+                if !at.looping || total <= first {
                     break;
                 }
-                h %= total;
+                h = first + (h - total) % (total - first);
             }
             frames.push(if at.montage { doc.locate(h) } else { (at.panel, h) });
         }
@@ -88,6 +90,7 @@ impl App {
             playing: self.playing,
             montage: self.play_montage,
             looping: self.looping,
+            range: self.plan_play_range(),
         }
     }
 }

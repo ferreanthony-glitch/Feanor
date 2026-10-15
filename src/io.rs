@@ -184,6 +184,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
         fps: manifest.fps.max(1),
         board: Default::default(),
         groups: crate::groups::defaults(),
+        start_frame: 1,
     };
     let mut shots = manifest.shots;
     if shots.is_empty() {
@@ -215,6 +216,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
             camera: Vec::new(),
             ref3d: None,
             marks: Vec::new(),
+            cues: Default::default(),
         });
     }
     Ok(Document::from_parts(w, h, structure, cels, HashMap::new()))

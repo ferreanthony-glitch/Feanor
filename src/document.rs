@@ -495,6 +495,28 @@ pub struct Panel {
     pub ref3d: Option<Ref3d>,
     /// Marques d'image (13a), triées par image, toutes après la première image du plan.
     pub marks: Vec<ImageMark>,
+    /// Signets, points d'entrée et de sortie (13d).
+    pub cues: Cues,
+}
+
+/// Après une copie de calques (de nouveaux id de calques, `old_ids` dans le même ordre, et des
+/// copies de dessins `cels`) : les calques rangés suivent leur dossier copié (13b-5) et les
+/// noms d'instance suivent leurs dessins copiés (13c).
+pub fn relink_copies(layers: &mut [Layer], old_ids: &[u64], cels: &HashMap<CelId, CelId>) {
+    let ids: HashMap<u64, u64> = old_ids.iter().zip(layers.iter()).map(|(o, l)| (*o, l.id)).collect();
+    for l in layers.iter_mut() {
+        l.parent = l.parent.map(|p| ids.get(&p).copied().unwrap_or(p));
+        l.names = l.names.iter().map(|(c, n)| (cels.get(c).copied().unwrap_or(*c), n.clone())).collect();
+    }
+}
+
+/// Repères d'un plan (13d) : signets (images repérées, triées) et points d'entrée / de sortie
+/// (la lecture en boucle reste entre eux).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Cues {
+    pub bookmarks: Vec<usize>,
+    pub in_point: Option<usize>,
+    pub out_point: Option<usize>,
 }
 
 /// Marque d'image d'un plan (13a) : une image de storyboard à l'image `frame` du plan (le début
@@ -656,6 +678,8 @@ pub struct Structure {
     pub board: crate::board::Board,
     /// Groupes de couleur des calques (13b).
     pub groups: Vec<crate::groups::LayerGroup>,
+    /// Numéro de la première image (13d, « image de départ ») : 1 par défaut.
+    pub start_frame: usize,
 }
 
 pub struct Document {
@@ -685,6 +709,8 @@ pub struct Document {
     pub board: crate::board::Board,
     /// Groupes de couleur des calques (13b), toujours `groups::COUNT`.
     pub groups: Vec<crate::groups::LayerGroup>,
+    /// Numéro affiché de la première image de chaque plan (13d, « image de départ du projet »).
+    pub start_frame: usize,
     next_id: u64,
 }
 
@@ -714,6 +740,7 @@ impl Document {
             guides: Vec::new(),
             board: Default::default(),
             groups: crate::groups::defaults(),
+            start_frame: 1,
             next_id: 1,
         };
         let seq = doc.new_sequence();
@@ -759,6 +786,7 @@ impl Document {
             guides: structure.guides,
             board: structure.board,
             groups: crate::groups::completed(structure.groups),
+            start_frame: structure.start_frame,
             next_id: max_id + 1,
         };
         doc.normalize();
@@ -858,6 +886,7 @@ impl Document {
             fps: self.fps,
             board: self.board.clone(),
             groups: self.groups.clone(),
+            start_frame: self.start_frame,
         }
     }
 
@@ -872,6 +901,7 @@ impl Document {
             fps: std::mem::replace(&mut self.fps, s.fps),
             board: std::mem::replace(&mut self.board, s.board),
             groups: std::mem::replace(&mut self.groups, s.groups),
+            start_frame: std::mem::replace(&mut self.start_frame, s.start_frame),
         }
     }
 
@@ -1221,6 +1251,8 @@ impl Document {
             l.trim();
             layers.push(l);
         }
+        let old_ids: Vec<u64> = source.layers.iter().map(|l| l.id).collect();
+        relink_copies(&mut layers, &old_ids, &copies);
         let (keys_before, keys_after) = camera::split_keys(&source.camera, at, self.default_camera());
         let second = Panel {
             id: self.alloc(),
@@ -1233,6 +1265,9 @@ impl Document {
             camera: keys_after,
             ref3d: source.ref3d.clone(),
             marks: Vec::new(),
+            // Les signets d'après la coupe passent au nouveau plan ; les points d'entrée et de
+            // sortie restent au premier.
+            cues: Cues { bookmarks: source.cues.bookmarks.iter().filter(|&&b| b >= at).map(|b| b - at).collect(), ..Cues::default() },
         };
         let first = &mut self.panels[index];
         for l in &mut first.layers {
@@ -1241,6 +1276,7 @@ impl Document {
         }
         first.length = at;
         first.camera = keys_before;
+        first.cues.bookmarks.retain(|&b| b < at);
         Some(self.insert_and_normalize(index + 1, vec![second]))
     }
 
@@ -1468,6 +1504,7 @@ impl Document {
             camera: Vec::new(),
             ref3d: None,
             marks: Vec::new(),
+            cues: Cues::default(),
         }
     }
 
@@ -1501,6 +1538,7 @@ impl Document {
         for m in &mut panel.marks {
             m.id = self.alloc();
         }
+        let old_ids: Vec<u64> = panel.layers.iter().map(|l| l.id).collect();
         let mut copies: HashMap<CelId, CelId> = HashMap::new();
         for layer in &mut panel.layers {
             layer.id = fresh_layer_id();
@@ -1518,6 +1556,7 @@ impl Document {
                 };
             }
         }
+        relink_copies(&mut panel.layers, &old_ids, &copies);
         panel
     }
 
@@ -1559,6 +1598,7 @@ impl Document {
                 m.id = self.alloc();
             }
             panel.scene = scene;
+            let old_ids: Vec<u64> = panel.layers.iter().map(|l| l.id).collect();
             for layer in &mut panel.layers {
                 layer.id = fresh_layer_id();
                 if layer.scene_wide.is_some() {
@@ -1575,6 +1615,7 @@ impl Document {
                     });
                 }
             }
+            relink_copies(&mut panel.layers, &old_ids, &copies);
             pasted.push(panel);
         }
         Some(self.insert_and_normalize(index + 1, pasted))

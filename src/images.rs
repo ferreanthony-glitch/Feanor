@@ -115,6 +115,20 @@ pub(crate) fn shift_panel(panel: &mut Panel, at: usize, n: usize, removed: bool)
     }
     // Une marque ne peut pas être sur la première image (c'est le début du plan).
     panel.marks.retain(|m| m.frame > 0);
+    // Signets, points d'entrée et de sortie (13d) : ils suivent leurs images.
+    let moved = |f: usize| -> Option<usize> {
+        match (removed, f >= at) {
+            (_, false) => Some(f),
+            (false, true) => Some(f + n),
+            (true, true) if f < at + n => None,
+            (true, true) => Some(f - n),
+        }
+    };
+    let cues = &mut panel.cues;
+    cues.bookmarks = cues.bookmarks.iter().filter_map(|&b| moved(b)).collect();
+    // Un point dont l'image disparaît se pose sur le bord du trou.
+    cues.in_point = cues.in_point.map(|f| moved(f).unwrap_or(at));
+    cues.out_point = cues.out_point.map(|f| moved(f).unwrap_or(at.saturating_sub(1)));
 }
 
 /// Bornes [début, fin) de l'instance (un dessin et ses expositions) qui contient `f`.

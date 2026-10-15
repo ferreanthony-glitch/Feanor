@@ -473,6 +473,13 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   `ensure_cel`, que tous les outils de dessin appellent ; la création automatique est gardée
   par `layer_editable`. Noms d'instance : `Layer::names` (dessin → nom), le renommage
   intelligent dans `smart_rename`. Retourner : `Document::flipped_cel` (une copie).
+- Copies de calques et de plans : `document::relink_copies` remet les `parent` (dossiers) et
+  les noms d'instance sur les nouveaux id (dupliquer / couper / coller un plan, dupliquer ou
+  coller un calque).
+- Repères (`cues.rs`, 13d) : `play_range` (entrée / sortie) sert à `toggle_play`,
+  `tick_playback`, au son (`play_range` de `soundtrack.rs`) et à la lecture anticipée
+  (`playback::Position::range`). `frame_label` / `parse_frame` : image, time code, trame,
+  depuis `Document::start_frame`. `images::shift_panel` déplace aussi signets et points.
 
 ## Pinceaux texturés (3d-2)
 
@@ -639,11 +646,11 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - Annulation : le repère fait partie de la structure (copie au début du geste, une étape au
   lâcher, comme l'outil Caméra).
 
-## Format de projet (version 15, dossier)
+## Format de projet (version 16, dossier)
 
 ```
 MonFilm/
-  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 15, "largeur",
+  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 16, "largeur",
                       "hauteur" (feuille), "cadre": [l, h], réglages,
                       "sequences": [{ "scenes": [{ "panneaux": [{ "calques": [{ "expositions": … }],
                       "marques": [{"id", "image", "action", …}] }]}]}]  (un panneau par scène),
@@ -656,6 +663,9 @@ MonFilm/
                       triangles, positions (3 × f32) puis triangles (3 × u32), petit-boutiste
 ```
 
+- Format 16 (13d) : sur un panneau `signets`, `entree`, `sortie` (images du plan) ; dans le
+  manifeste `image_de_depart` (absent : 1). En mémoire : `Panel::cues` (`Cues`) et
+  `Document::start_frame` (dans `Structure`).
 - Format 15 (13c) : `avant`, `apres` sur un calque (`rien`, `boucle`, `va_et_vient`,
   `maintenir` ; absents : rien). Le rendu lit `Layer::shown_at` ; les outils, `cel_at`.
 - Format 14 (13b-5) : `dossier` (le calque est un dossier) et `dans_dossier` (rang, dans le

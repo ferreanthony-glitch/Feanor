@@ -1006,6 +1006,66 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
+action = "signet.basculer"
+touches = ["Ctrl+Maj+Flèche haut"]
+source = "TVPaint 12 (perso) : BookmarkToggle"
+
+[[raccourci]]
+action = "signet.precedent"
+touches = ["Ctrl+Maj+Flèche gauche"]
+source = "TVPaint 12 (perso) : BookmarkPrev"
+
+[[raccourci]]
+action = "signet.suivant"
+touches = ["Ctrl+Maj+Flèche droite"]
+source = "TVPaint 12 (perso) : BookmarkNext"
+
+[[raccourci]]
+action = "signets.enlever_choisis"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "signets.tout_enlever"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "entree.poser"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "entree.basculer"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "sortie.poser"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "sortie.basculer"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "entree_sortie.enlever"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "boucle.limites_choisies"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "boucle.images_choisies"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
 action = "dossier.nouveau"
 touches = []
 source = "TVPaint 12 sans touche"

@@ -314,6 +314,8 @@ pub struct App {
     /// Instance en cours de renommage dans la timeline, fenêtre du renommage intelligent (13c).
     pub(crate) instance_rename: Option<crate::images::InstanceRename>,
     pub(crate) smart_rename: Option<crate::images::SmartRename>,
+    /// Numérotation des images dans la timeline : image, time code ou trame (13d).
+    pub(crate) time_display: crate::cues::TimeDisplay,
     /// Aperçus des réglages de pinceau (grille du panneau Réglages, 6d).
     pub(crate) brush_previews: crate::brushui::BrushPreviews,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
@@ -544,6 +546,7 @@ impl App {
             image_drag: None,
             instance_rename: None,
             smart_rename: None,
+            time_display: Default::default(),
             brush_previews: Default::default(),
             ref3d: Default::default(),
             camera_view: false,
@@ -933,16 +936,20 @@ impl App {
         }
         self.end_stroke();
         self.play_montage = self.mode == Mode::Storyboard;
+        // Dans le plan : entre les points d'entrée et de sortie (13d).
+        let (start, end) = self.plan_play_range();
         let at_end = if self.play_montage {
             self.global_frame() + 1 >= self.doc.total_frames()
         } else {
-            self.cur_frame + 1 >= self.frame_count()
+            self.cur_frame + 1 >= end || self.cur_frame < start
         };
         if at_end {
             if self.play_montage {
                 self.set_panel(0);
+                self.cur_frame = 0;
+            } else {
+                self.cur_frame = start;
             }
-            self.cur_frame = 0;
         }
         self.playing = true;
         self.last_time = None;
@@ -966,7 +973,8 @@ impl App {
         let frame_duration = 1.0 / self.doc.fps.max(1) as f64;
         while self.play_accum >= frame_duration {
             self.play_accum -= frame_duration;
-            if self.cur_frame + 1 < self.frame_count() {
+            let (start, end) = if self.play_montage { (0, self.frame_count()) } else { self.plan_play_range() };
+            if self.cur_frame + 1 < end {
                 self.cur_frame += 1;
             } else if self.play_montage && self.cur_panel + 1 < self.doc.panels.len() {
                 let next = self.cur_panel + 1;
@@ -975,7 +983,7 @@ impl App {
                 if self.play_montage {
                     self.set_panel(0);
                 }
-                self.cur_frame = 0;
+                self.cur_frame = start;
             } else {
                 self.playing = false;
                 break;
@@ -1586,6 +1594,7 @@ impl App {
                 Some(c)
             });
         }
+        layer.names = source.names.iter().filter_map(|(c, n)| copies.get(c).map(|d| (*d, n.clone()))).collect();
         let n = self.frame_count();
         let held = source.frames.len() >= clip.panel_len && source.frames.last().is_some_and(Option::is_some);
         if layer.frames.len() > n {
@@ -2355,6 +2364,19 @@ impl App {
             "instance.renommer_intelligemment" => {
                 self.smart_rename = Some(crate::images::SmartRename { empty: true, numbers: true, texts: true, ..Default::default() })
             }
+            // Repères du plan (13d, `cues.rs`).
+            "signet.basculer" => self.toggle_bookmark_here(),
+            "signet.precedent" => self.goto_bookmark(false),
+            "signet.suivant" => self.goto_bookmark(true),
+            "signets.enlever_choisis" => self.clear_chosen_bookmarks(),
+            "signets.tout_enlever" => self.clear_bookmarks(),
+            "entree.poser" => self.set_cue_point(false, false),
+            "entree.basculer" => self.set_cue_point(false, true),
+            "sortie.poser" => self.set_cue_point(true, false),
+            "sortie.basculer" => self.set_cue_point(true, true),
+            "entree_sortie.enlever" => self.clear_cue_points(),
+            "boucle.limites_choisies" => self.chosen_to_loop_limits(),
+            "boucle.images_choisies" => self.toggle_loop_on_chosen(),
             // Dossiers de calques (13b-5, `folders.rs`).
             "dossier.nouveau" => self.new_folder(),
             "dossier.ranger" => self.folder_from_chosen(),

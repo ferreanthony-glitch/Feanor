@@ -21,7 +21,8 @@ fn doc() -> Document {
 }
 
 fn at(panel: usize, frame: usize, playing: bool, montage: bool, looping: bool) -> Position {
-    Position { panel, frame, playing, montage, looping }
+    // Tout le plan (pas de points d'entrée ni de sortie, 13d).
+    Position { panel, frame, playing, montage, looping, range: (0, usize::MAX) }
 }
 
 #[test]
