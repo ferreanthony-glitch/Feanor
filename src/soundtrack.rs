@@ -20,6 +20,8 @@ pub(crate) const TRACK_H: f32 = 42.0;
 pub(crate) const HEADERS_W: f32 = 104.0;
 /// Espace entre les panneaux et la première piste son.
 pub(crate) const LANE_GAP: f32 = 4.0;
+/// Ce qu'on dit quand on touche à une piste verrouillée (13e).
+const TRACK_LOCKED: &str = "Cette piste son est verrouillée : déverrouille-la pour la changer.";
 
 /// Partie d'un extrait saisie à la souris.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -269,6 +271,10 @@ impl App {
     }
 
     pub(crate) fn delete_audio_track(&mut self, track: usize) {
+        if self.doc.audio_tracks.get(track).is_some_and(|t| t.locked) {
+            self.status = TRACK_LOCKED.into();
+            return;
+        }
         self.audio_op(|d| {
             if track < d.audio_tracks.len() {
                 d.audio_tracks.remove(track);
@@ -279,7 +285,32 @@ impl App {
         });
     }
 
+    /// Copie de la piste `track` et de ses extraits, juste en dessous (13e).
+    pub(crate) fn duplicate_track(&mut self, track: usize) {
+        if self.audio_op(|d| d.duplicate_audio_track(track).is_some()) {
+            self.status = "Piste son dupliquée.".into();
+        }
+    }
+
+    /// Ctrl + glisser l'onde dans la timeline (13e) : l'extrait de la piste `track` sous la
+    /// souris se décale ; `lanes_top` suit la souris pour que la piste ne change pas.
+    pub(crate) fn drag_timeline_sound(&mut self, track: usize, p: Pos2, ppf: f32) {
+        let lanes_top = p.y - (track as f32 + 0.5) * TRACK_H;
+        self.update_clip_drag(p, ppf, lanes_top);
+    }
+
+    /// Fin d'un glisser d'extrait commencé dans la timeline.
+    pub(crate) fn end_timeline_sound_drag(&mut self) {
+        if let Some(MontageDrag::Clip(d)) = self.montage_drag.take() {
+            self.finish_clip_drag(d);
+        }
+    }
+
     pub(crate) fn delete_clip(&mut self, id: u64) {
+        if self.doc.clip_locked(id) {
+            self.status = TRACK_LOCKED.into();
+            return;
+        }
         if self.audio_op(|d| d.remove_clip(id)) && self.sel_clip == Some(id) {
             self.sel_clip = None;
         }
@@ -294,11 +325,14 @@ impl App {
                 .doc
                 .audio_tracks
                 .iter()
+                // Une piste verrouillée (13e) ne se coupe pas.
+                .filter(|t| !t.locked)
                 .flat_map(|t| t.clips.iter())
                 .filter(|c| c.start < at && at < c.end())
                 .map(|c| c.id)
                 .collect(),
         };
+        let ids: Vec<u64> = ids.into_iter().filter(|&id| !self.doc.clip_locked(id)).collect();
         let done = self.audio_op(|d| ids.iter().fold(false, |any, &id| d.split_clip(id, at).is_some() || any));
         self.status = if done {
             format!("Son coupé à {}.", timecode(at, self.doc.fps))
@@ -344,6 +378,10 @@ impl App {
 
     pub(crate) fn begin_clip_drag(&mut self, id: u64, edge: ClipEdge, origin: Pos2) {
         self.sel_clip = Some(id);
+        if self.doc.clip_locked(id) {
+            self.status = TRACK_LOCKED.into();
+            return;
+        }
         self.montage_drag = Some(MontageDrag::Clip(ClipDrag {
             id,
             edge,
@@ -499,6 +537,9 @@ impl App {
                 },
             );
             painter.text(mute.center(), Align2::CENTER_CENTER, "M", FontId::monospace(10.0), Color32::WHITE);
+            if track.locked {
+                painter.text(pos2(lane.right() - 6.0, lane.top() + 3.0), Align2::RIGHT_TOP, "🔒", FontId::proportional(11.0), visuals.text_color());
+            }
             painter.text(
                 pos2(mute.right() + 6.0, mute.center().y),
                 Align2::LEFT_CENTER,
@@ -541,6 +582,11 @@ impl App {
         if self.edited(&resp) {
             self.doc.audio_tracks[t].muted = muted;
         }
+        let mut locked = self.doc.audio_tracks[t].locked;
+        let resp = ui.checkbox(&mut locked, "Piste verrouillée").on_hover_text("Ses extraits ne se déplacent, ne se coupent ni ne se suppriment plus.");
+        if self.edited(&resp) {
+            self.doc.audio_tracks[t].locked = locked;
+        }
         let resp = ui.add(egui::Slider::new(&mut pct, 0.0..=200.0).suffix(" %").text("Volume"));
         if self.edited(&resp) {
             self.doc.audio_tracks[t].volume = pct / 100.0;
@@ -553,6 +599,10 @@ impl App {
         if ui.button("Nouvelle piste son").clicked() {
             ui.close_menu();
             self.new_audio_track();
+        }
+        if ui.button("Dupliquer la piste").clicked() {
+            ui.close_menu();
+            self.duplicate_track(t);
         }
         if ui.button("Supprimer la piste").clicked() {
             ui.close_menu();

@@ -679,6 +679,35 @@ impl App {
             self.notes_row(ui, &painter, notes_row.shrink2(vec2(0.0, 1.0)), r.left(), cell, &resp);
         }
 
+        // Son (13e) : Ctrl + glisser l'onde décale l'extrait sous la souris (comme dans TVPaint).
+        let sound_row = Rect::from_min_max(pos2(r.left(), r.bottom() - sound_h), r.max);
+        let origin = ui.input(|i| i.pointer.press_origin());
+        if sound_h > 0.0 && resp.drag_started() && ui.input(|i| i.modifiers.command) {
+            if let Some(p) = origin.filter(|p| sound_row.contains(*p)) {
+                let g = self.doc.panel_start(self.cur_panel) + ((p.x - r.left()) / cell).floor().max(0.0) as usize;
+                let hit = self.doc.audio_tracks.iter().enumerate().find_map(|(t, tr)| {
+                    tr.clips.iter().find(|c| c.start <= g && g < c.end()).map(|c| (t, c.id))
+                });
+                if let Some((t, id)) = hit {
+                    self.begin_clip_drag(id, crate::soundtrack::ClipEdge::Move, p);
+                    if self.montage_drag.is_some() {
+                        self.timeline_sound_track = Some(t);
+                    }
+                }
+            }
+        }
+        if let Some(t) = self.timeline_sound_track {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+            if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
+                self.drag_timeline_sound(t, p, cell);
+            }
+            if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
+                self.timeline_sound_track = None;
+                self.end_timeline_sound_drag();
+            }
+        }
+        let in_notes = in_notes || self.timeline_sound_track.is_some();
+
         // Clés de caméra : on les prend et les fait glisser le long de leur rangée (12e).
         let cam_row = Rect::from_min_size(pos2(r.left(), grid_top + rows_h), vec2(size.x, CAM_H));
         let key_x = |f: usize| r.left() + (f as f32 + 0.5) * cell;

@@ -332,6 +332,8 @@ pub struct App {
     pub(crate) bottom_tab: Option<crate::bottomtabs::BottomTab>,
     pub(crate) checker: crate::bottomtabs::Checker,
     pub(crate) notes: crate::notes::NotesState,
+    /// Extrait son glissé depuis la timeline (Ctrl + glisser l'onde, 13e) : sa piste.
+    pub(crate) timeline_sound_track: Option<usize>,
     /// Aperçus des réglages de pinceau (grille du panneau Réglages, 6d).
     pub(crate) brush_previews: crate::brushui::BrushPreviews,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
@@ -574,6 +576,7 @@ impl App {
             bottom_tab: None,
             checker: Default::default(),
             notes: Default::default(),
+            timeline_sound_track: None,
             brush_previews: Default::default(),
             ref3d: Default::default(),
             camera_view: false,

@@ -114,6 +114,13 @@ struct Manifest {
     /// Arrière-plan (format 17 ; absent : la couleur du papier).
     #[serde(default, skip_serializing_if = "BackgroundEntry::is_default")]
     fond: BackgroundEntry,
+    /// Volume général du son, piste maîtresse (format 17 ; absent : 1).
+    #[serde(default = "one", skip_serializing_if = "is_one_f32")]
+    volume_general: f32,
+}
+
+fn is_one_f32(v: &f32) -> bool {
+    *v == 1.0
 }
 
 /// Arrière-plan (format 17) : sorte et couleur B du damier (la couleur A est `papier`).
@@ -232,6 +239,9 @@ struct TrackEntry {
     volume: f32,
     #[serde(default)]
     extraits: Vec<ClipEntry>,
+    /// Piste verrouillée (format 17 ; absent : non).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    verrouillee: bool,
 }
 
 /// Un extrait de son, en images du montage.
@@ -974,6 +984,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                 nom: t.name.clone(),
                 muette: t.muted,
                 volume: t.volume,
+                verrouillee: t.locked,
                 extraits: t
                     .clips
                     .iter()
@@ -1028,6 +1039,7 @@ fn manifest_of(doc: &Document) -> Manifest {
         },
         image_de_depart: doc.start_frame,
         fond: BackgroundEntry { sorte: doc.background, couleur_b: doc.paper_b },
+        volume_general: doc.master_volume,
     }
 }
 
@@ -1138,6 +1150,7 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                     length: c.duree,
                 })
                 .collect(),
+            locked: t.verrouillee,
         })
         .collect();
 
@@ -1192,6 +1205,7 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
         start_frame: manifest.image_de_depart.min(1_000_000),
         background: manifest.fond.sorte,
         paper_b: manifest.fond.couleur_b,
+        master_volume: if manifest.volume_general.is_finite() { manifest.volume_general.clamp(0.0, 4.0) } else { 1.0 },
     };
     for seq in manifest.sequences {
         structure.sequences.push(Sequence {

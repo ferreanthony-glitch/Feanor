@@ -704,6 +704,8 @@ pub struct AudioTrack {
     /// Gain linéaire (1 = inchangé).
     pub volume: f32,
     pub clips: Vec<SoundClip>,
+    /// Verrouillée (13e) : ses extraits ne se déplacent, ne se coupent ni ne se suppriment plus.
+    pub locked: bool,
 }
 
 /// Séquences, scènes, panneaux et pistes son : tout ce qu'une opération de montage peut changer.
@@ -731,6 +733,8 @@ pub struct Structure {
     /// Arrière-plan (13e) et couleur B du damier (la couleur A est `paper`).
     pub background: BackgroundKind,
     pub paper_b: [u8; 3],
+    /// Volume général du son (13e, la piste maîtresse).
+    pub master_volume: f32,
 }
 
 pub struct Document {
@@ -766,6 +770,8 @@ pub struct Document {
     /// `paper_b`.
     pub background: BackgroundKind,
     pub paper_b: [u8; 3],
+    /// Volume général du son (13e, la piste maîtresse de TVPaint) : multiplie celui des pistes.
+    pub master_volume: f32,
     next_id: u64,
 }
 
@@ -798,6 +804,7 @@ impl Document {
             start_frame: 1,
             background: BackgroundKind::Color,
             paper_b: DEFAULT_PAPER_B,
+            master_volume: 1.0,
             next_id: 1,
         };
         let seq = doc.new_sequence();
@@ -846,6 +853,7 @@ impl Document {
             start_frame: structure.start_frame,
             background: structure.background,
             paper_b: structure.paper_b,
+            master_volume: structure.master_volume,
             next_id: max_id + 1,
         };
         doc.normalize();
@@ -948,6 +956,7 @@ impl Document {
             start_frame: self.start_frame,
             background: self.background,
             paper_b: self.paper_b,
+            master_volume: self.master_volume,
         }
     }
 
@@ -971,6 +980,7 @@ impl Document {
             start_frame: std::mem::replace(&mut self.start_frame, s.start_frame),
             background: std::mem::replace(&mut self.background, s.background),
             paper_b: std::mem::replace(&mut self.paper_b, s.paper_b),
+            master_volume: std::mem::replace(&mut self.master_volume, s.master_volume),
         }
     }
 
@@ -2221,8 +2231,28 @@ impl Document {
             muted: false,
             volume: 1.0,
             clips: Vec::new(),
+            locked: false,
         });
         id
+    }
+
+    /// Copie de la piste `track` (13e), avec ses extraits, juste en dessous d'elle. Renvoie son
+    /// rang.
+    pub fn duplicate_audio_track(&mut self, track: usize) -> Option<usize> {
+        let mut copy = self.audio_tracks.get(track)?.clone();
+        copy.id = self.alloc();
+        copy.name = format!("{} copie", copy.name);
+        copy.locked = false;
+        for c in &mut copy.clips {
+            c.id = self.alloc();
+        }
+        self.audio_tracks.insert(track + 1, copy);
+        Some(track + 1)
+    }
+
+    /// L'extrait `id` est sur une piste verrouillée (13e).
+    pub fn clip_locked(&self, id: u64) -> bool {
+        self.find_clip(id).is_some_and(|(t, _)| self.audio_tracks[t].locked)
     }
 
     /// Fin (exclue) du dernier extrait son, en images du montage.

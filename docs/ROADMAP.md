@@ -546,7 +546,10 @@ Décisions d'Anthony :
     globale, teinte, position, découper, effacer / teinter une couleur, tout effacer, grille
     toutes les n images ; montrées par-dessus l'image pendant la lecture (en haut, en bas, au
     centre, taille) ; jamais exportées ; elles suivent les images insérées / supprimées.
-  - 13e-3. Son : verrou de piste, Ctrl + glisser l'onde pour décaler, défilement.
+  - ✅ 13e-3. Son : piste verrouillée (ses extraits ne se déplacent, ne se coupent ni ne se
+    suppriment plus), dupliquer une piste, volume général (piste maîtresse, format 17),
+    Ctrl + glisser l'onde dans la timeline pour décaler l'extrait sous la souris ; onglet Son
+    (son à la lecture, au défilement, pistes).
   - 13e-4. Vue Projet : plan avant, verrou du storyboard, propriétés du projet, nouveau projet
     à partir des plans choisis.
 - 13f. Table lumineuse complète.

@@ -84,15 +84,33 @@ impl App {
         self.status = format!("Arrière-plan : {}.", kind.label().to_lowercase());
     }
 
-    /// Onglet Son : chaque piste, muette ou non, et son volume.
+    /// Onglet Son : volume général, son à la lecture et au défilement ; chaque piste (muette,
+    /// verrouillée, volume, dupliquer, supprimer). Ctrl + glisser l'onde dans la timeline décale
+    /// un extrait.
     fn sound_tab_ui(&mut self, ui: &mut egui::Ui) {
+        let mut master = self.doc.master_volume * 100.0;
+        let resp = ui.add(egui::DragValue::new(&mut master).range(0.0..=400.0).suffix(" %").prefix("volume général "));
+        if self.edited(&resp) {
+            self.doc.master_volume = master / 100.0;
+        }
+        let mut on = self.sound_on;
+        if ui.checkbox(&mut on, "à la lecture").changed() {
+            self.run_action("son.lecture");
+        }
+        let mut scrub = self.sound_scrub;
+        if ui.checkbox(&mut scrub, "au défilement").changed() {
+            self.run_action("son.defilement");
+        }
+        ui.separator();
         if self.doc.audio_tracks.is_empty() {
             ui.label("Aucune piste son.");
         }
+        let mut delete = None;
+        let mut duplicate = None;
         for ti in 0..self.doc.audio_tracks.len() {
-            let (name, muted, volume) = {
+            let (name, muted, locked, volume) = {
                 let t = &self.doc.audio_tracks[ti];
-                (t.name.clone(), t.muted, t.volume)
+                (t.name.clone(), t.muted, t.locked, t.volume)
             };
             ui.label(RichText::new(if name.is_empty() { format!("Piste {}", ti + 1) } else { name }).strong());
             let mut m = muted;
@@ -100,14 +118,32 @@ impl App {
                 self.record_step();
                 self.doc.audio_tracks[ti].muted = m;
             }
-            let mut v = volume;
-            let resp = ui.add(egui::Slider::new(&mut v, 0.0..=4.0).text("volume").max_decimals(2));
+            let mut l = locked;
+            if ui.checkbox(&mut l, ph::LOCK_SIMPLE).on_hover_text("Verrouillée : ses extraits ne bougent plus.").changed() {
+                self.record_step();
+                self.doc.audio_tracks[ti].locked = l;
+            }
+            let mut v = volume * 100.0;
+            let resp = ui.add(egui::DragValue::new(&mut v).range(0.0..=400.0).suffix(" %"));
             if self.edited(&resp) {
-                self.doc.audio_tracks[ti].volume = v;
+                self.doc.audio_tracks[ti].volume = v / 100.0;
+            }
+            if ui.small_button(ph::COPY).on_hover_text("Dupliquer la piste").clicked() {
+                duplicate = Some(ti);
+            }
+            if ui.small_button(ph::TRASH).on_hover_text("Supprimer la piste").clicked() {
+                delete = Some(ti);
             }
             ui.separator();
         }
+        if let Some(t) = duplicate {
+            self.duplicate_track(t);
+        }
+        if let Some(t) = delete {
+            self.delete_audio_track(t);
+        }
         self.action_item(ui, "Importer un son…", "son.importer");
+        ui.label(RichText::new("Ctrl + glisser l'onde dans la timeline : décaler l'extrait.").weak().small());
     }
 
     fn background_ui(&mut self, ui: &mut egui::Ui) {

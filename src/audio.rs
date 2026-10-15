@@ -167,7 +167,8 @@ pub fn mix_clips(doc: &Document) -> Vec<MixClip> {
     doc.audio_tracks
         .iter()
         .filter(|t| !t.muted)
-        .flat_map(|t| t.clips.iter().map(move |c| (t.volume, c)))
+        // Volume de la piste × volume général (13e).
+        .flat_map(|t| t.clips.iter().map(move |c| (t.volume * doc.master_volume, c)))
         .filter_map(|(gain, c)| {
             let sound = doc.sounds.get(&c.sound)?;
             Some(MixClip {

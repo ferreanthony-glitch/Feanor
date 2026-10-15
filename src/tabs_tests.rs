@@ -55,6 +55,30 @@ fn drawn_notes_are_saved_and_follow_the_images() {
 }
 
 #[test]
+fn sound_tracks_lock_duplicate_and_master_volume() {
+    use crate::document::SoundClip;
+    let mut doc = Document::new(16, 16, 24);
+    doc.add_audio_track();
+    doc.audio_tracks[0].clips.push(SoundClip { id: 900, sound: 1, start: 4, offset: 0, length: 10 });
+    assert!(!doc.clip_locked(900));
+    doc.audio_tracks[0].locked = true;
+    assert!(doc.clip_locked(900));
+    let at = doc.duplicate_audio_track(0).unwrap();
+    assert_eq!(at, 1);
+    let copy = &doc.audio_tracks[1];
+    assert!(!copy.locked, "la copie n'est pas verrouillée");
+    assert_ne!(copy.clips[0].id, 900, "ses extraits ont leur propre numéro");
+    assert_eq!((copy.clips[0].start, copy.clips[0].length), (4, 10));
+
+    doc.master_volume = 0.5;
+    doc.audio_tracks.truncate(1);
+    doc.audio_tracks[0].clips.clear();
+    let back = round_trip(&doc, "pistes-son");
+    assert_eq!(back.master_volume, 0.5);
+    assert!(back.audio_tracks[0].locked);
+}
+
+#[test]
 fn position_and_cut_slide_notes() {
     use crate::notes::slide_notes;
     let mut notes = vec![

@@ -187,6 +187,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
         start_frame: 1,
         background: Default::default(),
         paper_b: crate::document::DEFAULT_PAPER_B,
+        master_volume: 1.0,
     };
     let mut shots = manifest.shots;
     if shots.is_empty() {
