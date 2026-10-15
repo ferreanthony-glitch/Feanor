@@ -148,16 +148,20 @@ impl App {
         }
         ui.add_space(2.0);
 
+        // La liste : un rang par calque, le plus haut en premier. Clic droit : renommer, toute la
+        // scène, profondeur, dupliquer, verrouiller, supprimer (9b) ; double-clic sur le nom :
+        // renommer.
         let mut select = None;
         let mut toggle = None;
         let mut lock = None;
+        let mut rename_done: Option<bool> = None;
         let lock_hint = self.layer_hint("Verrouiller / déverrouiller : on ne peut plus dessiner sur le calque", "calque.verrouiller");
         let frame = self.cur_frame;
         let accent = ui.visuals().selection.bg_fill;
         for li in (0..self.layers().len()).rev() {
-            let (visible, locked, kind, name, cel, wide) = {
+            let (id, visible, locked, kind, name, cel, wide) = {
                 let l = &self.layers()[li];
-                (l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame), l.scene_wide.is_some())
+                (l.id, l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame), l.scene_wide.is_some())
             };
             let current = li == self.cur_layer;
             let thumb = cel.and_then(|c| self.layer_thumb(ui.ctx(), c));
@@ -199,13 +203,42 @@ impl App {
                         }
                         let border = if current { Stroke::new(2.0_f32, Color32::WHITE) } else { Stroke::new(1.0_f32, Color32::from_gray(80)) };
                         ui.painter().rect_stroke(rect, 0.0, border, StrokeKind::Inside);
-                        if resp.clicked() {
+                        if resp.clicked() || resp.secondary_clicked() {
                             select = Some(li);
                         }
+                        resp.context_menu(|ui| self.layer_menu(ui, li));
                         ui.vertical(|ui| {
-                            let text = if visible { RichText::new(&name) } else { RichText::new(&name).weak() };
-                            if ui.add(egui::Label::new(text).sense(Sense::click()).truncate()).clicked() {
-                                select = Some(li);
+                            let renaming = self.layer_rename.as_ref().is_some_and(|r| r.0 == id);
+                            if renaming {
+                                let (_, buffer, focused) = self.layer_rename.as_mut().expect("renommage en cours");
+                                let mut out = egui::TextEdit::singleline(buffer).desired_width(120.0).show(ui);
+                                let resp = out.response.clone();
+                                if !*focused {
+                                    // Tout le nom choisi : on tape le nouveau directement.
+                                    resp.request_focus();
+                                    let n = buffer.chars().count();
+                                    out.state.cursor.set_char_range(Some(egui::text::CCursorRange::two(
+                                        egui::text::CCursor::new(0),
+                                        egui::text::CCursor::new(n),
+                                    )));
+                                    out.state.store(ui.ctx(), resp.id);
+                                    *focused = true;
+                                }
+                                if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                                    rename_done = Some(false);
+                                } else if resp.lost_focus() {
+                                    rename_done = Some(true);
+                                }
+                            } else {
+                                let text = if visible { RichText::new(&name) } else { RichText::new(&name).weak() };
+                                let resp = ui.add(egui::Label::new(text).sense(Sense::click()).truncate());
+                                if resp.clicked() || resp.secondary_clicked() {
+                                    select = Some(li);
+                                }
+                                if resp.double_clicked() {
+                                    self.layer_rename = Some((id, name.clone(), false));
+                                }
+                                resp.on_hover_text("Double-clic ou clic droit : renommer").context_menu(|ui| self.layer_menu(ui, li));
                             }
                             let kind = match kind {
                                 LayerKind::Vector => "vectoriel",
@@ -231,6 +264,11 @@ impl App {
         }
         if let Some(li) = select {
             self.select_layer(li);
+        }
+        match rename_done {
+            Some(true) => self.commit_layer_rename(),
+            Some(false) => self.layer_rename = None,
+            None => {}
         }
 
         // Commandes en icônes.
@@ -276,24 +314,31 @@ impl App {
                 self.merge_layer_down();
             }
         });
+    }
 
-        // Réglages du calque courant : on modifie des copies, `edited` enregistre l'annulation.
-        ui.separator();
-        let li = self.cur_layer;
-        let layer = &self.layers()[li];
-        let (mut name, mut visible, mut depth) = (layer.name.clone(), layer.visible, layer.depth);
-        ui.horizontal(|ui| {
-            ui.label("Nom");
-            let resp = ui.text_edit_singleline(&mut name);
-            if self.edited(&resp) {
-                self.layers_mut()[li].name = name;
-            }
-        });
-        let resp = ui.checkbox(&mut visible, "Visible");
-        if self.edited(&resp) {
-            self.layers_mut()[li].visible = visible;
+    /// Pose le nouveau nom du calque en cours de renommage (une étape d'annulation).
+    fn commit_layer_rename(&mut self) {
+        let Some((id, name, _)) = self.layer_rename.take() else { return };
+        let name = name.trim().to_string();
+        let Some(li) = self.layers().iter().position(|l| l.id == id) else { return };
+        if !name.is_empty() && self.layers()[li].name != name {
+            self.record_step();
+            self.layers_mut()[li].name = name;
         }
-        let mut wide = self.layers()[li].scene_wide.is_some();
+    }
+
+    /// Menu d'un calque (clic droit) : renommer, toute la scène, profondeur, dupliquer,
+    /// verrouiller, supprimer.
+    fn layer_menu(&mut self, ui: &mut egui::Ui, li: usize) {
+        let Some(l) = self.layers().get(li) else {
+            ui.close_menu();
+            return;
+        };
+        let (id, name, mut wide, mut depth, locked) = (l.id, l.name.clone(), l.scene_wide.is_some(), l.depth, l.locked);
+        if ui.button("Renommer…").clicked() {
+            ui.close_menu();
+            self.layer_rename = Some((id, name, false));
+        }
         if ui
             .checkbox(&mut wide, "Toute la scène")
             .on_hover_text(
@@ -302,6 +347,7 @@ impl App {
             )
             .changed()
         {
+            self.select_layer(li);
             self.toggle_scene_wide();
         }
         let resp = ui
@@ -314,11 +360,25 @@ impl App {
                 "Distance du calque quand la caméra se déplace (multiplan) :\n\
                  0 = plan de référence, défile avec la caméra ;\n\
                  1 = deux fois plus loin, défile deux fois moins vite ;\n\
-                 négatif = premier plan, défile plus vite.\n\
-                 Le zoom de la caméra n'en tient pas compte.",
+                 négatif = premier plan, défile plus vite.",
             );
         if self.edited(&resp) {
             self.layers_mut()[li].depth = depth;
+        }
+        ui.separator();
+        if ui.button("Dupliquer").clicked() {
+            ui.close_menu();
+            self.select_layer(li);
+            self.duplicate_layer();
+        }
+        if ui.button(if locked { "Déverrouiller" } else { "Verrouiller" }).clicked() {
+            ui.close_menu();
+            self.toggle_layer_lock(li);
+        }
+        if ui.button("Supprimer").clicked() {
+            ui.close_menu();
+            self.select_layer(li);
+            self.delete_layer();
         }
     }
 }

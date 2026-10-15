@@ -34,10 +34,44 @@ fn default_layout_has_every_panel_once() {
     let DockNode::Row { gauche: center, droite: side, .. } = &**haut else { panic!() };
     assert_eq!(**center, tabs(&[Pane::Canvas]));
     let DockNode::Row { gauche: layers, droite: tools, .. } = &**side else { panic!() };
-    assert!(format!("{layers:?}").contains("Layers") && format!("{layers:?}").contains("Sheet"));
+    assert_eq!(**layers, tabs(&[Pane::Layers]), "les calques sur toute la hauteur");
     for p in [Pane::ToolOptions, Pane::View, Pane::Guides, Pane::Color] {
         assert!(format!("{tools:?}").contains(&format!("{p:?}")), "{p:?} à droite");
     }
+    // La fiche est un onglet des réglages (9b).
+    assert!(format!("{tools:?}").contains("Tabs { panneaux: [ToolOptions, View, Guides, Sheet]"), "{tools:?}");
+}
+
+#[test]
+fn layouts_from_before_9b_put_the_sheet_with_the_settings() {
+    // Disposition 6a : la fiche sous les calques.
+    let mut old = DockLayout::from_legacy(&Layout::default());
+    old.close(Pane::Sheet);
+    let mut v1 = old.clone();
+    v1.version = 1;
+    // On remet la fiche sous les calques, à la main.
+    fn put_below(n: &mut DockNode) -> bool {
+        match n {
+            DockNode::Tabs { panneaux, .. } if panneaux == &vec![Pane::Layers] => {
+                *n = DockNode::Column {
+                    part: 0.6,
+                    haut: Box::new(DockNode::Tabs { panneaux: vec![Pane::Layers], actif: 0 }),
+                    bas: Box::new(DockNode::Tabs { panneaux: vec![Pane::Sheet], actif: 0 }),
+                };
+                true
+            }
+            DockNode::Tabs { .. } => false,
+            DockNode::Row { gauche: a, droite: b, .. } | DockNode::Column { haut: a, bas: b, .. } => put_below(a) || put_below(b),
+        }
+    }
+    assert!(put_below(&mut v1.principal));
+    let l = Layout { panneaux: Some(v1), ..Layout::default() };
+    assert!(!l.is_before_6a());
+    let d = l.dock_layout();
+    assert_eq!(d.version, dock::LAYOUT_VERSION);
+    let s = format!("{:?}", d.principal);
+    assert!(s.contains("Tabs { panneaux: [ToolOptions, View, Guides, Sheet]"), "{s}");
+    assert_eq!(count(&d, Pane::Sheet), 1);
 }
 
 #[test]
@@ -108,19 +142,16 @@ fn closing_and_reopening_a_panel_puts_it_back_with_its_group() {
     let mut l = DockLayout::from_legacy(&Layout::default());
     l.close(Pane::Canvas);
     assert!(l.contains(Pane::Canvas), "le dessin ne se ferme pas");
-    l.close(Pane::Layers);
-    assert!(!l.contains(Pane::Layers) && l.contains(Pane::Sheet));
-    l.open(Pane::Layers);
-    // Revenu dans le groupe de la fiche.
-    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Sheet, Layers]"), "{:?}", l.principal);
-    // Plus rien du groupe : une colonne recréée à droite du dessin.
     l.close(Pane::Sheet);
+    assert!(!l.contains(Pane::Sheet) && l.contains(Pane::Layers));
+    l.open(Pane::Sheet);
+    // Revenue avec les onglets des réglages (pas avec la couleur).
+    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [ToolOptions, View, Guides, Sheet]"), "{:?}", l.principal);
+    // Plus rien du groupe : une colonne recréée à droite du dessin.
     l.close(Pane::Layers);
     l.open(Pane::Layers);
     let s = format!("{:?}", l.principal);
     assert!(s.contains("Row { part: 0.78, gauche: Tabs { panneaux: [Canvas]"), "{s}");
-    l.open(Pane::Sheet);
-    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Layers, Sheet]"));
     // La bande revient en bas de tout.
     l.close(Pane::Strip);
     l.open(Pane::Strip);

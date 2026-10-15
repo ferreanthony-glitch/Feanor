@@ -108,8 +108,8 @@ impl Pane {
     pub fn group(self) -> Group {
         match self {
             Pane::Canvas => Group::Center,
-            Pane::Tools | Pane::Color | Pane::ToolOptions | Pane::View | Pane::Guides => Group::Left,
-            Pane::Sheet | Pane::Layers => Group::Right,
+            Pane::Tools | Pane::Color | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet => Group::Left,
+            Pane::Layers => Group::Right,
             Pane::Strip => Group::Bottom,
         }
     }
@@ -208,17 +208,16 @@ fn left_column(only: &[Pane]) -> Option<DockNode> {
         let list: Vec<Pane> = list.into_iter().filter(|p| only.contains(p)).collect();
         (!list.is_empty()).then(|| tabs(list))
     };
-    let parts = [
-        (0.3, keep(vec![Pane::Tools])),
-        (0.6, keep(vec![Pane::ToolOptions, Pane::View, Pane::Guides])),
-        (1.0, keep(vec![Pane::Color])),
-    ];
+    let parts = [(0.3, keep(vec![Pane::Tools])), (0.6, keep(SETTINGS_TABS.to_vec())), (1.0, keep(vec![Pane::Color]))];
     stack(&parts)
 }
 
+/// Les onglets des réglages : réglages de l'outil, vue, guides, fiche du panneau (9b).
+const SETTINGS_TABS: [Pane; 4] = [Pane::ToolOptions, Pane::View, Pane::Guides, Pane::Sheet];
+
 /// Version de la disposition : 1 depuis 6a (outils dans la barre verticale, calques à côté du
-/// dessin, réglages et couleur à droite).
-pub const LAYOUT_VERSION: u32 = 1;
+/// dessin, réglages et couleur à droite) ; 2 depuis 9b (la fiche avec les réglages).
+pub const LAYOUT_VERSION: u32 = 2;
 
 /// Empile de haut en bas des parties (part de chacune dans ce qui reste), en sautant les absentes.
 fn stack(parts: &[(f32, Option<DockNode>)]) -> Option<DockNode> {
@@ -231,19 +230,17 @@ fn stack(parts: &[(f32, Option<DockNode>)]) -> Option<DockNode> {
     Some(node)
 }
 
-/// Colonne des calques (6a, à droite du dessin) : les calques, la fiche du panneau dessous.
+/// Colonne des calques (6a, à droite du dessin), sur toute la hauteur depuis 9b.
 fn right_column(only: &[Pane]) -> Option<DockNode> {
-    let sheet = only.contains(&Pane::Sheet).then(|| tabs(vec![Pane::Sheet]));
-    let layers = only.contains(&Pane::Layers).then(|| tabs(vec![Pane::Layers]));
-    stack(&[(0.6, layers), (1.0, sheet)])
+    only.contains(&Pane::Layers).then(|| tabs(vec![Pane::Layers]))
 }
 
 /// Taille de fenêtre de référence pour passer des tailles en pixels (anciennes dispositions) aux
 /// parts de la nouvelle (largeur hors barre d'outils verticale).
 const REF_WIDTH: f32 = 1454.0;
 const REF_HEIGHT: f32 = 820.0;
-/// Largeur de la colonne des réglages.
-const TOOLS_WIDTH: f32 = 290.0;
+/// Largeur de la colonne des réglages (quatre onglets depuis 9b).
+const TOOLS_WIDTH: f32 = 350.0;
 
 impl DockNode {
     fn collect(&self, out: &mut Vec<Pane>) {
@@ -301,6 +298,19 @@ impl DockNode {
         }
     }
 
+    /// Le groupe d'onglets qui contient un des panneaux `panes`, s'il y en a un.
+    fn tabs_with(&mut self, panes: &[Pane]) -> Option<&mut Vec<Pane>> {
+        match self {
+            DockNode::Tabs { panneaux, .. } => panneaux.iter().any(|p| panes.contains(p)).then_some(panneaux),
+            DockNode::Row { gauche: a, droite: b, .. } | DockNode::Column { haut: a, bas: b, .. } => {
+                match a.tabs_with(panes) {
+                    Some(t) => Some(t),
+                    None => b.tabs_with(panes),
+                }
+            }
+        }
+    }
+
     /// Le groupe d'onglets qui contient un panneau de `group`, s'il y en a un.
     fn tabs_of_group(&mut self, group: Group) -> Option<&mut Vec<Pane>> {
         match self {
@@ -335,8 +345,15 @@ impl DockLayout {
     /// pixels), ou celle d'un espace de travail de Pelure.
     pub fn from_legacy(l: &Layout) -> DockLayout {
         let mut center = tabs(vec![Pane::Canvas]);
-        // À droite du dessin : les calques (et la fiche), puis les réglages et la couleur.
-        let tools = if l.tools { left_column(&[Pane::ToolOptions, Pane::View, Pane::Guides, Pane::Color]) } else { None };
+        // À droite du dessin : les calques, puis les réglages (avec la fiche) et la couleur.
+        let mut settings = Vec::new();
+        if l.tools {
+            settings.extend([Pane::ToolOptions, Pane::View, Pane::Guides, Pane::Color]);
+            if l.sheet {
+                settings.push(Pane::Sheet);
+            }
+        }
+        let tools = left_column(&settings);
         let layers = if l.sheet { right_column(&Group::Right.panes()) } else { None };
         let layers_w = l.sheet_width.clamp(160.0, 900.0);
         let side = match (layers, tools) {
@@ -353,6 +370,20 @@ impl DockLayout {
             center = column(part, center, tabs(vec![Pane::Strip]));
         }
         DockLayout { principal: center, ..DockLayout::empty() }.sanitized()
+    }
+
+    /// Une disposition enregistrée par une version précédente, mise à jour : avant 6a, le
+    /// panneau Outils part (barre verticale) ; avant 9b, la fiche rejoint les onglets des réglages.
+    pub fn upgraded(mut self) -> DockLayout {
+        if self.version < 1 {
+            self.close(Pane::Tools);
+        }
+        if self.version < 2 && self.contains(Pane::Sheet) && !self.detachees.iter().any(|d| d.panneau == Pane::Sheet) {
+            self.close(Pane::Sheet);
+            self.open(Pane::Sheet);
+        }
+        self.version = LAYOUT_VERSION;
+        self.sanitized()
     }
 
     /// Le dessin seul.
@@ -452,6 +483,17 @@ impl DockLayout {
             return;
         }
         let group = pane.group();
+        // Un onglet des réglages revient avec les autres onglets des réglages.
+        if SETTINGS_TABS.contains(&pane) {
+            if let Some(t) = self.principal.tabs_with(&SETTINGS_TABS) {
+                t.push(pane);
+                return;
+            }
+            if let Some(t) = self.fenetres.iter_mut().find_map(|w| w.panneaux.tabs_with(&SETTINGS_TABS)) {
+                t.push(pane);
+                return;
+            }
+        }
         if group != Group::Bottom {
             if let Some(t) = self.principal.tabs_of_group(group) {
                 t.push(pane);

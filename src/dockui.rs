@@ -16,7 +16,7 @@ impl egui_dock::TabViewer for Panes<'_> {
     type Tab = Pane;
 
     fn title(&mut self, tab: &mut Pane) -> WidgetText {
-        format!("{}  {}", tab.icon(), self.app.pane_title(*tab)).into()
+        format!("{} {}", tab.icon(), self.app.pane_title(*tab)).into()
     }
 
     fn id(&mut self, tab: &mut Pane) -> Id {

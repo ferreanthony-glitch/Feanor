@@ -258,6 +258,8 @@ pub struct App {
     pub(crate) layer_drag: Option<LayerDrag>,
     /// Vignettes des calques (panneau Calques, 6c).
     pub(crate) layer_thumbs: crate::layersui::LayerThumbs,
+    /// Calque en cours de renommage (9b) : id, nom tapé, saisie déjà activée.
+    pub(crate) layer_rename: Option<(u64, String, bool)>,
     /// Aperçus des réglages de pinceau (grille du panneau Réglages, 6d).
     pub(crate) brush_previews: crate::brushui::BrushPreviews,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
@@ -457,6 +459,7 @@ impl App {
             cam_drag: None,
             layer_drag: None,
             layer_thumbs: Default::default(),
+            layer_rename: None,
             brush_previews: Default::default(),
             ref3d: Default::default(),
             camera_view: false,
