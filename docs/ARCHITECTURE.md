@@ -550,6 +550,19 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   Seules les zones touchées sont parcourues. Sources enregistrées par leur rang dans le plan
   (format 20), refaites en id au chargement, et suivies par `relink_copies` quand on copie un
   plan.
+- Calque vidéo (`video.rs`, `videoui.rs`, 13k) : `Layer::video` (`VideoClip` : id, nom,
+  nombre d'images, cadence, début, extension) ; pas de dessins. `video::cel_at` donne, à une
+  image du plan, un numéro de dessin propre à cette image de la vidéo (`frame_id`, bit 62),
+  retenu dans une table. `fx::shown`, ne le trouvant pas dans `doc.cels`, lit l'image
+  (`video::shown` : fichier → feuille, image centrée dans le cadre ; 24 images gardées au plus).
+  Où sont les images de chaque vidéo : une table (`register_dir`) — dossier temporaire après
+  l'import, `videos/<id>/` du projet au chargement. `SaveJob` recopie dans le projet celles qui
+  y manquent.
+
+  Décision : coût — décoder une fois à l'import (ffmpeg, sur un autre fil) plutôt qu'à chaque
+  image : la lecture d'une image JPEG est rapide, et rien ne reste en mémoire. Les images
+  prennent de la place sur le disque (environ 100 à 200 ko par image HD). Risque : ffmpeg doit
+  être là (celui de l'export). Réversible : « Transformer en calque d'animation ».
 - Vue Projet (`projetui.rs`, 13e-4) : `Document::storyboard_locked` est dans `Structure` (une
   annulation le rétablit avec le reste ; le basculer est une étape). `App::storyboard_refuses`
   garde `structure_op` et les autres chemins qui changent l'ordre, le nombre ou la durée des
@@ -760,6 +773,8 @@ MonFilm/
                       triangles, positions (3 × f32) puis triangles (3 × u32), petit-boutiste
 ```
 
+- Format 21 (13k) : `video` sur un calque, { `id`, `nom`, `images`, `ips`, `debut`, `ext` } ; ses
+  images dans `videos/<id>/000001.<ext>`… ; absent : calque ordinaire.
 - Format 20 (13j) : `ctg` sur un calque, { `sources` : rangs des calques sources dans le plan
   (vide : tous les autres calques de dessin), `trou` : fermeture des trous en pixels (absent :
   4) } ; absent : calque ordinaire.

@@ -66,9 +66,13 @@ pub const FORMAT: &str = "pelure-projet";
 /// 18 (13g-2) : rôles des images d'un calque (`roles` : image → clé, breakdown, intervalle…).
 /// 19 (13i) : pile d'effets d'un calque (`effets` : sorte, actif, valeurs, clés).
 /// 20 (13j) : calque CTG (`ctg` : rangs des calques sources).
-pub const VERSION: u32 = 20;
+/// 21 (13k) : calque vidéo (`video` : id, nom, images, ips, début, extension ; images dans
+/// `videos/<id>/`).
+pub const VERSION: u32 = 21;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
+/// Images des calques vidéo (13k) : `videos/<id>/000001.jpg`…
+const VIDEOS: &str = "videos";
 /// Modèles 3D de repère (2d), dans le format de Pelure.
 const MODELS: &str = "modeles";
 /// Textures des traits vectoriels texturés (7b) : `pointe_<clé>.png`, `papier_<clé>.png`, la clé
@@ -489,9 +493,23 @@ struct LayerEntry {
     /// autres calques de dessin) ; absent : calque ordinaire.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     ctg: Option<CtgEntry>,
+    /// Calque vidéo (format 21) ; absent : calque ordinaire.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    video: Option<VideoEntry>,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+struct VideoEntry {
+    id: u64,
+    nom: String,
+    images: usize,
+    ips: f64,
+    #[serde(default)]
+    debut: usize,
+    ext: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -585,7 +603,7 @@ pub fn check_target(manifest: &Path, current: Option<&Path>) -> Result<(), Strin
             manifest.display()
         ));
     }
-    for sub in [DRAWINGS, SOUNDS, MODELS] {
+    for sub in [DRAWINGS, SOUNDS, MODELS, VIDEOS] {
         if dir.join(sub).exists() {
             return Err(format!(
                 "le dossier {} contient déjà un dossier « {sub} ». Choisis un autre nom.",
@@ -718,6 +736,8 @@ pub struct SaveJob {
     sounds: Vec<(PathBuf, Arc<Vec<u8>>)>,
     models: Vec<(PathBuf, Arc<Model3d>)>,
     textures: Vec<(PathBuf, GrayImage)>,
+    /// Images des calques vidéo à recopier dans le dossier du projet (13k) : d'où, vers où.
+    videos: Vec<(crate::video::VideoClip, PathBuf, PathBuf)>,
     manifest: Vec<u8>,
     used: BTreeSet<CelId>,
     used_sounds: BTreeSet<u64>,
@@ -781,6 +801,16 @@ pub fn prepare_save(
         .filter(|(path, _, _)| !path.exists())
         .filter_map(|(path, kind, key)| crate::brushtex::shared_image(kind, key).map(|img| (path, img)))
         .collect();
+    // Images des calques vidéo : recopiées si elles ne sont pas déjà dans ce dossier.
+    let mut videos = Vec::new();
+    for v in doc.panels.iter().flat_map(|p| &p.layers).filter_map(|l| l.video.as_ref()) {
+        let to = dir.join(VIDEOS).join(v.id.to_string());
+        if let Some(from) = crate::video::dir_of(v.id).filter(|from| *from != to) {
+            if !videos.iter().any(|(w, _, _): &(crate::video::VideoClip, PathBuf, PathBuf)| w.id == v.id) {
+                videos.push((v.clone(), from, to));
+            }
+        }
+    }
     let manifest = serde_json::to_vec_pretty(&manifest_of(doc)).map_err(|e| e.to_string())?;
     Ok(SaveJob {
         manifest_path: manifest_path.to_path_buf(),
@@ -788,6 +818,7 @@ pub fn prepare_save(
         sounds,
         models,
         textures,
+        videos,
         manifest,
         used,
         used_sounds,
@@ -836,6 +867,9 @@ impl SaveJob {
             gray.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).map_err(|e| e.to_string())?;
             write_atomic(path, &bytes)?;
             count += 1;
+        }
+        for (clip, from, to) in &self.videos {
+            count += crate::video::copy_frames(clip, from, to)?;
         }
         write_atomic(&self.manifest_path, &self.manifest)?;
         let removed = remove_unused(dir, &self.used)
@@ -967,6 +1001,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                         sources: c.sources.iter().filter_map(|id| panel.layers.iter().position(|s| s.id == *id)).collect(),
                         trou: c.gap,
                     }),
+                    video: l.video.as_ref().map(|v| VideoEntry { id: v.id, nom: v.name.clone(), images: v.frames, ips: v.fps, debut: v.start, ext: v.ext.clone() }),
                     expositions: to_exposures(&l.frames),
                 })
                 .collect(),
@@ -1373,6 +1408,11 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                         roles: l.roles,
                         fx: l.effets,
                         ctg: None,
+                        // Calque vidéo (format 21) : ses images dans `videos/<id>/`.
+                        video: l.video.filter(|v| v.images > 0 && v.ips > 0.0 && matches!(v.ext.as_str(), "jpg" | "png")).map(|v| {
+                            crate::video::register_dir(v.id, dir.join(VIDEOS).join(v.id.to_string()));
+                            crate::video::VideoClip { id: v.id, name: v.nom, frames: v.images, fps: v.ips, start: v.debut, ext: v.ext }
+                        }),
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.

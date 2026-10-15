@@ -177,6 +177,10 @@ mod topview_tests;
 #[cfg(test)]
 mod transform_tests;
 mod vector;
+pub mod video;
+#[cfg(test)]
+mod video_tests;
+mod videoui;
 mod view;
 mod view3d;
 #[cfg(test)]

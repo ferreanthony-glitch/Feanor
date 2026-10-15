@@ -60,8 +60,10 @@ Animation 000025198 ; image (statique) 000025197 ; exposition / feuille d'exposi
 111020100–107, appliquer les changements 011085181, charger la structure 011085140/141,
 extraire les couleurs 011085142–201 ; tout [N] : principe confirmé par Anthony le 2026-10-16,
 fait en 13j) ; dossier 012002562 ; fond
-012002844 ; Puppet 012103645 ; calque caméra 129582142 ; calque vidéo 000020117–119 ; calque
-préchargé 000025127. Pas de calque papier ni de calque son (le son a son onglet).
+012002844 ; Puppet 012103645 (écarté par Anthony le 2026-10-16) ; calque caméra 129582142 ;
+calque vidéo 000020117–119, transformé en calque d'animation 000024902, charger une séquence
+011085035 (fait en 13k : vidéo lue depuis des images décodées une fois, choix d'Anthony) ;
+calque préchargé 000025127. Pas de calque papier ni de calque son (le son a son onglet).
 
 ## 3. Opérations sur les calques
 

@@ -276,6 +276,8 @@ pub struct Layer {
     /// Calque CTG (13j) : ses dessins sont des graffitis de couleur, qui remplissent les zones
     /// fermées par les traits de ses sources.
     pub ctg: Option<crate::ctg::Ctg>,
+    /// Calque vidéo (13k) : il montre les images de cette vidéo, pas de dessins.
+    pub video: Option<crate::video::VideoClip>,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -339,6 +341,7 @@ impl Layer {
             roles: Default::default(),
             fx: Vec::new(),
             ctg: None,
+            video: None,
         }
     }
 

@@ -92,6 +92,8 @@ impl App {
                 if menu_item(ui, "Importer une image (calque bitmap)…", "") {
                     self.import_image();
                 }
+                self.action_item(ui, "Importer une vidéo (calque vidéo)…", "fichier.importer_video");
+                self.action_item(ui, "Importer une séquence d'images (calque vidéo)…", "fichier.importer_sequence");
                 self.action_item(ui, "Importer un modèle 3D (glTF) comme repère…", "fichier.importer_modele3d");
                 ui.separator();
                 self.action_item(ui, "Exporter le film (vidéo)…", "fichier.exporter_film");

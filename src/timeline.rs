@@ -470,6 +470,31 @@ impl App {
         for row in &rows {
             let layer = &self.layers()[row.li];
             let y = grid_top + row.top;
+            // Calque vidéo (13k) : une bande de film de sa durée, avec son nom.
+            if let Some(v) = &layer.video {
+                let (a, b) = (v.start, v.end(self.doc.fps).min(cols));
+                if a < b {
+                    let block = Rect::from_min_max(pos2(r.left() + a as f32 * cell + 1.0, y + 4.0), pos2(r.left() + b as f32 * cell - 1.0, y + row.h - 4.0));
+                    let fill = if layer.visible { theme::SON_EXTRAIT } else { theme::SON_EXTRAIT.gamma_multiply(0.5) };
+                    painter.rect_filled(block, 3.0, fill);
+                    // Perforations, comme une pellicule.
+                    let mut x = block.left() + 4.0;
+                    while x < block.right() - 4.0 {
+                        for yy in [block.top() + 2.0, block.bottom() - 4.0] {
+                            painter.rect_filled(Rect::from_min_size(pos2(x, yy), vec2(3.0, 2.0)), 0.5, theme::FOND.gamma_multiply(0.6));
+                        }
+                        x += 8.0;
+                    }
+                    painter.with_clip_rect(block.shrink(1.0)).text(
+                        pos2(block.left() + 6.0, block.center().y),
+                        Align2::LEFT_CENTER,
+                        format!("{}  {}", egui_phosphor::regular::FILM_STRIP, v.name),
+                        FontId::proportional(10.0),
+                        theme::TEXTE_FORT,
+                    );
+                }
+                continue;
+            }
             let content = layer.frames.iter().position(Option::is_some).zip(layer.frames.iter().rposition(Option::is_some));
             // Avant la première image et après la dernière (pré / post-comportement, 13c) : les
             // images montrées, en blocs pâles bordés.

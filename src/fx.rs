@@ -473,7 +473,8 @@ pub fn shown<'a>(doc: &'a Document, item: &crate::render::PlanItem) -> Option<Sh
 /// Le dessin `cel`, rempli d'après `ctg` (dessins des sources, trous) s'il est d'un calque CTG, puis passé par
 /// les effets `steps` (calculé une fois, puis gardé tant qu'aucun de ces dessins ne change).
 pub fn shown_with<'a>(doc: &'a Document, cel: CelId, steps: &[FxStep], ctg: Option<&crate::ctg::CtgInput>) -> Option<Shown<'a>> {
-    let src = doc.cels.get(&cel)?;
+    // Pas un dessin du projet : une image de calque vidéo (13k), lue à la demande.
+    let Some(src) = doc.cels.get(&cel) else { return crate::video::shown(doc, cel).map(Shown::Fx) };
     if steps.is_empty() && ctg.is_none() {
         return Some(Shown::Plain(src));
     }

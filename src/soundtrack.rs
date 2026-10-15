@@ -253,11 +253,14 @@ impl App {
         self.status = msg;
     }
 
-    /// Fichiers son lâchés sur la fenêtre : importés à l'image courante.
+    /// Fichiers son lâchés sur la fenêtre : importés à l'image courante ; une vidéo devient un
+    /// calque vidéo (13k).
     pub(crate) fn handle_dropped_files(&mut self, ctx: &egui::Context) {
         let paths: Vec<_> = ctx.input(|i| i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect());
         for path in paths {
-            self.import_sound_path(&path, None, None);
+            if !self.import_dropped_video(&path) {
+                self.import_sound_path(&path, None, None);
+            }
         }
     }
 

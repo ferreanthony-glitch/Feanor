@@ -622,6 +622,10 @@ impl App {
         if self.layers().get(li).is_some_and(|l| l.ctg.is_some()) {
             ui.menu_button("Calque CTG", |ui| self.ctg_menu(ui, li));
         }
+        // Calque vidéo (13k) : son début, et le transformer en calque d'animation.
+        if self.layers().get(li).is_some_and(|l| l.video.is_some()) {
+            ui.menu_button("Calque vidéo", |ui| self.video_menu(ui, li));
+        }
         // Pré / post-comportement (13c).
         if let Some((pre, post)) = self.layers().get(li).filter(|l| !l.folder).map(|l| (l.pre, l.post)) {
             ui.separator();

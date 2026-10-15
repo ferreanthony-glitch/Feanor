@@ -277,6 +277,14 @@ traits.
   offre « Charger la structure à partir des sources », qui donne un dessin de graffitis par
   dessin des traits.
 
+**Calque vidéo** (Fichier > Importer une vidéo, ou une séquence d'images ; une vidéo peut
+aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'animatique.
+- La vidéo est mise à la taille du cadre et rangée avec le projet. Elle se lit image par image,
+  sans occuper la mémoire.
+- Son son va sur une piste son.
+- Le menu de la ligne du calque règle son début et « Transformer en calque d'animation » en
+  fait des dessins. Il faut ffmpeg, le même que pour l'export.
+
 **Vue Projet** :
 - **Nouveau plan avant le plan courant** (menu Storyboard, menu ⋯ du montage).
 - **Cadenas du montage** : il verrouille le storyboard. L'ordre, le nombre et la durée des plans
@@ -473,6 +481,7 @@ en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le 
 | `flips.rs`, `flipsui.rs` | Flips : limites, checkpoints, pas, panneau et flip en cours (13h) |
 | `fx.rs`, `fxui.rs` | Pile d'effets : clés, flous, dessins dérivés en cache, panneau (13i) |
 | `ctg.rs`, `ctgui.rs` | Calque CTG : remplissage par graffitis, sources, structure (13j) |
+| `video.rs`, `videoui.rs` | Calque vidéo : import par ffmpeg, images lues à la demande (13k) |
 | `fill.rs` | Remplissage par zone et débord |
 | `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra |
 | `gpu.rs` | Composition et affichage par la carte graphique, envoi des dessins par tuiles |

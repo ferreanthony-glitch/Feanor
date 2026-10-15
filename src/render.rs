@@ -269,10 +269,10 @@ pub fn composite_pixel(doc: &Document, plan: &Plan, x: usize, y: usize) -> Color
 /// Plan de l'image `frame` du panneau `index` tel que la caméra le filme (vignettes, export) :
 /// les calques en profondeur défilent selon le décalage de la caméra (multiplan).
 pub fn panel_plan_at(doc: &Document, index: usize, frame: usize, paper: Option<[u8; 3]>) -> Plan {
-    plan_with_camera(&doc.panels[index], frame, paper, &doc.camera_seen(index, frame))
+    plan_with_camera(&doc.panels[index], frame, paper, &doc.camera_seen(index, frame), doc.fps)
 }
 
-fn plan_with_camera(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen) -> Plan {
+fn plan_with_camera(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, fps: u32) -> Plan {
     Plan {
         paper,
         items: panel
@@ -283,7 +283,8 @@ fn plan_with_camera(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera:
                 // Caché (lui ou son dossier, 13b-5) : rien ; l'opacité du dossier s'ajoute.
                 let opacity = crate::folders::effect(&panel.layers, li)?;
                 let t = l.transform_seen(camera)?;
-                l.shown_at(frame).map(|cel| PlanItem {
+                // Calque vidéo (13k) : l'image de la vidéo qui tombe là.
+                crate::video::cel_at(l, frame, fps).map(|cel| PlanItem {
                     cel,
                     opacity: (opacity * 255.0).round() as u8,
                     tint: None,

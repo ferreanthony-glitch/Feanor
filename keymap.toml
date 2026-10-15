@@ -1416,6 +1416,21 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
+action = "fichier.importer_video"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "fichier.importer_sequence"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.video_en_animation"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
 action = "dossier.nouveau"
 touches = []
 source = "TVPaint 12 sans touche"

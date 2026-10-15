@@ -309,6 +309,8 @@ pub struct App {
     pub(crate) fx_auto_key: bool,
     pub(crate) fx_keys_shown: bool,
     pub(crate) fx_selected: usize,
+    /// Import vidéo en cours (13k, `videoui.rs`).
+    pub(crate) video_import: Option<crate::videoui::VideoImport>,
     /// Table lumineuse : les calques autres que le calque courant sont estompés.
     pub(crate) light_table: bool,
     /// Opacité gardée par les calques estompés (0 à 1).
@@ -593,6 +595,7 @@ impl App {
             fx_auto_key: false,
             fx_keys_shown: true,
             fx_selected: 0,
+            video_import: None,
             light_table: false,
             light_table_strength: 0.3,
             guides: GuideState::default(),
@@ -924,7 +927,8 @@ impl App {
             if !front {
                 items.append(&mut onion_items);
             }
-            if let Some(cel) = layer.shown_at(frame) {
+            // Calque vidéo (13k) : l'image de la vidéo qui tombe là.
+            if let Some(cel) = crate::video::cel_at(layer, frame, self.doc.fps) {
                 items.push(PlanItem {
                     cel,
                     transform,
@@ -1143,6 +1147,10 @@ impl App {
         }
         if self.layer().folder {
             self.status = FOLDER_NOT_DRAWABLE.into();
+            return false;
+        }
+        if self.layer().video.is_some() {
+            self.status = "Un calque vidéo ne se dessine pas : « Transformer en calque d'animation » d'abord (menu de sa ligne), ou dessine sur un calque au-dessus.".into();
             return false;
         }
         if self.layer().locked {
@@ -2589,6 +2597,10 @@ impl App {
             "calque.desactiver_ctg" => self.disable_ctg(),
             "ctg.charger_structure" => self.load_ctg_structure(false),
             "ctg.charger_structure_effacer" => self.load_ctg_structure(true),
+            // Calque vidéo (13k, `videoui.rs`).
+            "fichier.importer_video" => self.import_video(),
+            "fichier.importer_sequence" => self.import_sequence(),
+            "calque.video_en_animation" => self.video_to_animation(),
             // Dossiers de calques (13b-5, `folders.rs`).
             "dossier.nouveau" => self.new_folder(),
             "dossier.ranger" => self.folder_from_chosen(),
@@ -2843,6 +2855,7 @@ impl eframe::App for App {
         }
         self.tick_playback(ctx);
         self.tick_flip(ctx);
+        self.tick_video_import(ctx);
         if self.playing {
             let now = ctx.input(|i| i.time);
             let g = self.global_frame();

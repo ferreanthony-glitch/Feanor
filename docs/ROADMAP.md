@@ -664,8 +664,26 @@ Décisions d'Anthony :
   - Pas repris (choix d'Anthony) : graffitis répétés sur les instances vides ou de même nom,
     extraire les couleurs, réglages d'affichage des graffitis. Pas fait non plus :
     « Appliquer les changements » (le remplissage est toujours à jour).
-- 13k et suivantes, une étape chacune : autres effets (au choix d'Anthony), Puppet, vidéo,
-  interpolation d'images.
+- ✅ 13k (`video.rs`, `videoui.rs`, format 21). Calque vidéo (TVPaint 000020117–119,
+  000024902, 011085035).
+  - Choix d'Anthony : vidéo lue depuis le fichier, légère en mémoire, plus séquences d'images
+    et son de la vidéo.
+  - Import (Fichier > Importer une vidéo / une séquence d'images, ou vidéo lâchée sur la
+    fenêtre) : ffmpeg (celui de l'export) décode la vidéo une fois en images JPEG à la taille
+    du cadre, sur un autre fil (la barre d'état suit). Une séquence est mise à la taille du
+    cadre en PNG.
+  - Les images sont rangées avec le projet (`videos/<id>/`) à l'enregistrement. Le calque lit
+    à chaque image du plan l'image de la vidéo qui tombe là (cadences de la vidéo et du
+    projet), à la demande, avec un petit cache.
+  - Le son de la vidéo va sur une piste son, calé sur le calque. Le plan s'allonge à la durée
+    de la vidéo (sauf storyboard verrouillé).
+  - Menu de la ligne du calque : début du calque ; « Transformer en calque d'animation »
+    (chaque image devient un dessin, pour dessiner dessus). On ne dessine pas sur un calque
+    vidéo.
+  - Bande de film dans la timeline.
+  - Pas fait : entrée vidéo (capture), le calque préchargé.
+- 13l et suivantes, une étape chacune : interpolation d'images, autres effets (au choix
+  d'Anthony). Pas de calque Puppet (choix d'Anthony, 2026-10-16).
 Le faux-fixe n'a que son nom dans les textes de TVPaint : à faire décrire par Anthony avant de
 l'implanter (le pochoir, la transparence préservée et la position verrouillée ont été décrits
 le 2026-10-15, voir `docs/TIMELINE-TVPAINT.md`).
