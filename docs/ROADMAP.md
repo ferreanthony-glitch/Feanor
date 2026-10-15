@@ -285,6 +285,26 @@ textures pour les pinceaux vectoriels. Choix : tout le fond de la planche est un
   pointes importées) ; le trait reste modifiable. Textures enregistrées avec le projet.
   Pas encore : l'opacité selon la pression n'est pas gardée par le trait vectoriel texturé.
 
+## Phase 8 — Planche en pages, notes souples, modes de fusion ✅
+
+Demandée par Anthony (capture d'une page de vignettes de Storyboard Pro, en inspiration
+fonctionnelle) : des plans qui se suivent sur la même ligne, un nombre de vignettes réglable
+(6 au plus par ligne) ; choisir, déplacer, écrire et attacher les notes ; des modes de fusion
+pour les calques, comme dans les logiciels de retouche.
+
+- ✅ 8a. Planche en pages blanches numérotées : colonnes (1 à 6), lignes par page (ou une seule
+  page), écart, « Scène à la ligne » au choix ; cases vides numérotées au bout de la dernière
+  page ; la disposition ne dépend plus de la taille de la fenêtre (les notes restent à leur
+  place). Notes : outil Sélection pour les choisir (clic, Ctrl + clic, lasso) et les glisser ;
+  outil Texte pour écrire (double-clic : modifier) ; « Attacher les notes » (ou clic droit sur des
+  notes) : une note suit sa vignette et grandit avec elle ; détacher, couleur courante, taille du
+  texte, Suppr. Format de projet 9.
+- ✅ 8b. Modes de fusion des calques (menu en haut du panneau Calques) : Normal, Produit,
+  Superposition, Incrustation, Obscurcir, Éclaircir, Densité couleur + / −, Densité linéaire −,
+  Lumière crue, Lumière tamisée, Différence, Exclusion, Teinte, Saturation, Couleur, Luminosité.
+  Même image à l'écran (carte graphique) et à l'export (vérifié pixel à pixel à 100 %).
+  Pas encore : les modes Fondu, Lumière vive / linéaire / ponctuelle, Soustraction, Division.
+
 ## Raccourcis proposés, à valider
 
 Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans `keymap.toml`) :

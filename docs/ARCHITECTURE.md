@@ -225,6 +225,20 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   d'après le rayon, puis pose le résultat dans la zone demandée. Transformer un trait met à
   l'échelle la taille du pinceau.
 
+## Planche en pages et modes de fusion (phase 8)
+
+- `board::layout` range les vignettes d'après `BoardSettings` (taille, colonnes ≤ 6, lignes par
+  page, écart, scène à la ligne), sans dépendre de la vue. Notes (`Board`) : traits et textes ;
+  une note attachée (`anchor` : id du panneau) garde ses coordonnées relatives à la vignette, en
+  largeurs de vignette — elle suit la vignette et change d'échelle avec elle. Les opérations qui
+  retirent des panneaux libèrent leurs notes à leur dernière place (`release_removed_notes`,
+  appelé par `structure_op` et la suppression multiple).
+- `blend.rs` : `BlendMode` (17 modes, formules W3C en valeurs gamma) et `blend_over` pour la
+  composition sur le processeur (`render.rs` : export, vignettes, pipette ; `merged_cel`). Sur la
+  carte graphique, un calque en mode de fusion arrête la passe de composition, copie l'image
+  composée dans une texture « fond », puis est dessiné par `fs_blend` (lecture du fond au même
+  pixel, résultat qui remplace). Coût : une copie de l'image par calque concerné.
+
 ## Pinceaux texturés (3d-2)
 
 - `brush.rs` : chaque empreinte calcule une couverture par pixel — disque (dureté) ou pointe en
@@ -389,11 +403,11 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - Annulation : le repère fait partie de la structure (copie au début du geste, une étape au
   lâcher, comme l'outil Caméra).
 
-## Format de projet (version 8, dossier)
+## Format de projet (version 9, dossier)
 
 ```
 MonFilm/
-  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 8, "largeur",
+  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 9, "largeur",
                       "hauteur" (feuille), "cadre": [l, h], réglages,
                       "sequences": [{ "scenes": [{ "panneaux": [{ "calques": [{ "expositions": … }]}]}]}],
                       "sons": [{"id", "nom", "fichier"}], "pistes_son": [{ "extraits": [{"son", "debut",
@@ -405,6 +419,8 @@ MonFilm/
                       triangles, positions (3 × f32) puis triangles (3 × u32), petit-boutiste
 ```
 
+- Format 9 (8) : `fusion` sur un calque (absent : normal) ; `attache` sur une note (id du
+  panneau ; points relatifs à la vignette) ; `planche_textes` (texte, position, taille, couleur).
 - Format 8 (7) : `planche` (notes : couleur et points x, y, rayon) ; `pinceau` sur un trait
   vectoriel texturé ; `textures/pointe_<clé>.png`, `textures/papier_<clé>.png` (gris 8 bits),
   écrites seulement si elles manquent (la clé vient du contenu), effacées quand plus rien ne les cite.
@@ -480,6 +496,8 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 | Icônes Phosphor (egui-phosphor, MIT) (5a, choix d'Anthony) | jeu complet et cohérent, dans la police de l'interface | ≈ 1 Mo d'exécutable | faible | oui : `Tool::icon`, `Pane::icon` |
 | Panneaux par egui_dock 0.16 (MIT), disposition dans un format de Pelure (5b) | aimantation, onglets, panneaux flottants déjà faits et éprouvés ; format à nous pour ne pas dépendre de la version | refonte de l'affichage des panneaux | moyen : accessibilité coupée (plantage d'accesskit) | oui : le format `DockLayout` ne dépend pas de la bibliothèque |
 | Calque de toute la scène = un exemplaire par panneau, accordés à chaque image (6f) | rendu, export, vignettes, outils et annulation inchangés | une passe sur les calques à chaque image (négligeable) ; règles à suivre dans les opérations de scène | moyen : une opération de montage oubliée pourrait mélanger deux fonds (couvert par `scenelayer_tests.rs`) | oui : le fichier ne garde qu'un numéro par calque ; un vrai calque de scène pourrait le remplacer |
+| Modes de fusion : copie de l'image composée avant chaque calque concerné, plutôt qu'un mélange matériel (8b) | seuls quelques modes existent en mélange matériel ; la copie permet les 17 avec les mêmes formules que le processeur | une copie de l'image (quelques Mo) par calque en mode de fusion | faible | oui : un calque normal ne coûte rien de plus |
+| Notes attachées en coordonnées relatives à la vignette (8a) | la note suit et grandit avec la vignette, quel que soit le réglage de la planche | nul | faible | oui : détacher la remet en coordonnées de la planche |
 | Notes de la planche libres, pas attachées aux vignettes (7, choix d'Anthony) | la planche est un espace de travail à part entière | nul | une note peut ne plus montrer le bon panneau après un déplacement | oui : une ancre par note pourrait s'ajouter (champ en plus) |
 | Textures des traits vectoriels par clé de contenu, embarquées dans le projet (7b) | les numéros de la bibliothèque changent d'une machine à l'autre ; les dessins déjà écrits restent valables | un petit PNG par texture utilisée | faible (collision de clé sur 31 bits négligeable) | oui |
 | Dessin dans la vignette = le même `canvas_panel` dans un `Ui` enfant (6e) | aucun second chemin de dessin | nul | faible | oui |

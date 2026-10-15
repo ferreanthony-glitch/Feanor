@@ -30,13 +30,18 @@ ouvrir d'un double-clic).
     scène. Une scène ou une séquence peut recevoir un nom ou un numéro à soi (fiche à droite).
   - Chaque panneau a sa durée et ses champs Action / Dialogue / Notes.
   - « Lire le montage » enchaîne tout (animatique), en boucle si on veut, avec le son.
-  - Vue « Vignettes » (Maj+Tab) : une **planche** gris clair où les panneaux sont rangés par
-    scène, et où l'on note librement autour (pinceau ou crayon : un trait de note ; gomme : efface
-    les notes touchées ; elles restent où on les a dessinées).
+  - Vue « Vignettes » (Maj+Tab) : une **planche** de pages blanches où les panneaux se suivent,
+    numérotés, de gauche à droite. En haut : taille des vignettes, colonnes (6 au plus), lignes
+    par page (« toutes » : une seule page), écart, « Scène à la ligne », « Attacher les notes ».
     - On dessine directement dans la vignette du panneau courant ; avec l'outil Caméra, elle
       montre la feuille et le cadre pour recadrer.
+    - Notes, partout sur la planche : pinceau ou crayon, un trait ; outil Texte, un texte (Ctrl +
+      Entrée pour le poser, double-clic pour le modifier) ; gomme, efface les traits touchés ;
+      outil Sélection, choisir des notes (clic, Ctrl + clic, lasso) et les glisser. Une note libre
+      reste où on l'a posée ; une note attachée suit sa vignette et grandit avec elle (clic droit
+      sur des notes : attacher, détacher, couleur courante, taille du texte, supprimer ; Suppr).
     - Molette : défiler ; Ctrl + molette : zoom ; Espace, bouton du milieu ou outil Main :
-      déplacer la planche ; « Taille » : taille des vignettes ; le bouton « 100 % » revient au début.
+      déplacer la planche ; le bouton du zoom met la page à la largeur de la vue.
     - Clic : choisir un panneau ; Ctrl + clic : en ajouter ; Maj + clic : une suite ; outil
       Sélection : lasso. Glisser les panneaux choisis (le courant par son titre) les place avant
       ou après d'autres, dans une autre scène aussi. Clic droit : animer, nouveau panneau,
@@ -104,7 +109,11 @@ calque (cadenas) : on ne peut plus dessiner dessus. Ctrl+E le fusionne avec le c
 deux calques vectoriels restent vectoriels, sinon le résultat est bitmap ; les deux calques doivent
 être visibles et non verrouillés.
 
-Le panneau Calques montre la vignette de chaque calque à l'image courante. **« + Fond »** crée,
+Le panneau Calques montre la vignette de chaque calque à l'image courante. En haut, le **mode de
+fusion** du calque (Produit, Superposition, Incrustation, Lumière tamisée, Différence, Couleur,
+Luminosité…, comme dans les logiciels de retouche) : le calque se mélange à ce qui est dessous,
+à l'écran comme à l'export. Fusionner un tel calque avec celui du dessous applique le mode aux
+pixels. **« + Fond »** crée,
 tout en bas, un calque bitmap commun à toute la scène (un décor) : ce qu'on y dessine se voit dans
 chaque panneau de la scène, pendant tout le panneau. La case « Toute la scène » étend n'importe
 quel calque de la même façon, ou le rend à son panneau (chaque panneau garde alors sa copie).
@@ -255,7 +264,8 @@ en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le 
 | `model3d.rs`, `view3d.rs`, `ref3dtool.rs` | Repère 3D : lecture glTF, arêtes utiles ; caméra en orbite, fil de fer, arêtes cachées ; outil et affichage |
 | `thumbs.rs` | Cache des vignettes de panneaux |
 | `history.rs` | Annuler / rétablir |
-| `project.rs` | Projet en dossier (format 8), enregistrement préparé puis écrit |
+| `project.rs` | Projet en dossier (format 9), enregistrement préparé puis écrit |
+| `blend.rs` | Modes de fusion des calques (formules, composition d'un pixel) |
 | `board.rs`, `boardui.rs` | Planche de la vue Vignettes : disposition, notes, gestes, menus |
 | `recovery.rs`, `recoveryui.rs` | Copie de secours, récupération après plantage |
 | `workspace.rs`, `workspaceui.rs` | Espaces de travail, disposition retenue |
