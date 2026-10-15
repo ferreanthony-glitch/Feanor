@@ -316,6 +316,12 @@ pub struct App {
     pub(crate) smart_rename: Option<crate::images::SmartRename>,
     /// Numérotation des images dans la timeline : image, time code ou trame (13d).
     pub(crate) time_display: crate::cues::TimeDisplay,
+    /// Zoom de la timeline (largeur d'une image), « Adapter » en attente (images [a, b) à faire
+    /// tenir), croix sur les instances vides, miniatures dans les blocs (13d).
+    pub(crate) timeline_cell: f32,
+    pub(crate) timeline_fit: Option<(usize, usize)>,
+    pub(crate) empty_x: bool,
+    pub(crate) timeline_thumbs: bool,
     /// Aperçus des réglages de pinceau (grille du panneau Réglages, 6d).
     pub(crate) brush_previews: crate::brushui::BrushPreviews,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
@@ -547,6 +553,10 @@ impl App {
             instance_rename: None,
             smart_rename: None,
             time_display: Default::default(),
+            timeline_cell: crate::timeline::CELL_W,
+            timeline_fit: None,
+            empty_x: true,
+            timeline_thumbs: true,
             brush_previews: Default::default(),
             ref3d: Default::default(),
             camera_view: false,
@@ -2377,6 +2387,12 @@ impl App {
             "entree_sortie.enlever" => self.clear_cue_points(),
             "boucle.limites_choisies" => self.chosen_to_loop_limits(),
             "boucle.images_choisies" => self.toggle_loop_on_chosen(),
+            "timeline.adapter_plan" => self.fit_timeline(crate::cues::Fit::Plan),
+            "timeline.adapter_calque" => self.fit_timeline(crate::cues::Fit::Layer),
+            "timeline.adapter_choix" => self.fit_timeline(crate::cues::Fit::Selection),
+            "timeline.adapter_image" => self.fit_timeline(crate::cues::Fit::Image),
+            "timeline.adapter_cles" => self.fit_timeline(crate::cues::Fit::Keys),
+            "timeline.tout_voir" => self.fit_timeline(crate::cues::Fit::All),
             // Dossiers de calques (13b-5, `folders.rs`).
             "dossier.nouveau" => self.new_folder(),
             "dossier.ranger" => self.folder_from_chosen(),

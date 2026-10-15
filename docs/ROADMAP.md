@@ -526,8 +526,10 @@ Décisions d'Anthony :
     image), boucle entre les images choisies, image de départ du projet, numéros en image,
     time code ou trame, champ d'image courante où l'on tape un numéro ou un time code.
     Signets et points suivent les images insérées / supprimées dans tout le plan.
-  - 13d-2. Zoom de la timeline et « Adapter » ; instances vides marquées d'une croix ;
-    miniatures dans les blocs.
+  - ✅ 13d-2. Zoom de la timeline (Ctrl + molette sur la grille, curseur ; les numéros
+    s'espacent), « Adapter » au plan, au calque, aux images choisies, à l'image, aux clés de
+    caméra, tout voir ; croix sur les instances vides ; miniatures des dessins dans les blocs
+    des lignes complètes (deux cases à cocher du menu loupe).
   - 13d-3. Marques de couleur sur les dessins d'un calque (les « marques d'image » de TVPaint).
 - 13e. Onglets du bas et vue Projet : notes dessinées, son par plan, arrière-plan, propriétés.
 - 13f. Table lumineuse complète.

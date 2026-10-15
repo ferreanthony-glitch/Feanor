@@ -1066,6 +1066,36 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
+action = "timeline.adapter_plan"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "timeline.adapter_calque"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "timeline.adapter_choix"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "timeline.adapter_image"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "timeline.adapter_cles"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "timeline.tout_voir"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
 action = "dossier.nouveau"
 touches = []
 source = "TVPaint 12 sans touche"

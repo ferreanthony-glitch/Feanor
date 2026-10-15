@@ -6,7 +6,10 @@ use crate::layerheads::{row_at, rows_height, rows_of, Row, HEAD_W};
 use crate::storyboard::duration_label;
 use crate::theme;
 
-const CELL_W: f32 = 16.0;
+/// Largeur d'une image dans la grille : par défaut, et bornes du zoom de la timeline (13d).
+pub(crate) const CELL_W: f32 = 16.0;
+pub(crate) const CELL_MIN: f32 = 3.0;
+pub(crate) const CELL_MAX: f32 = 64.0;
 const ROW_H: f32 = crate::layerheads::ROW_SMALL;
 const HEADER_H: f32 = 20.0;
 /// Largeur de l'en-tête des calques (13b).
@@ -119,6 +122,8 @@ impl App {
                     bulle(resp, "Dernière image du plan", "", "");
                     let resp = ui.menu_button(RichText::new(ph::BOOKMARK_SIMPLE).size(crate::bulles::TAILLE), |ui| self.cues_menu(ui)).response;
                     bulle(resp, "Repères", "Signets, points d'entrée et de sortie, boucle, numéros (image, time code, trame), image de départ.", "");
+                    let resp = ui.menu_button(RichText::new(ph::MAGNIFYING_GLASS).size(crate::bulles::TAILLE), |ui| self.timeline_view_menu(ui)).response;
+                    bulle(resp, "Affichage de la timeline", "Zoom (aussi Ctrl + molette), Adapter, croix des instances vides, miniatures.", "");
                     sep(ui);
 
                     // Dessins et expositions.
@@ -254,16 +259,35 @@ impl App {
     }
 
     fn timeline_grid(&mut self, ui: &mut egui::Ui) {
+        // Largeur d'une image : le zoom de la timeline (13d).
+        // « Adapter » (13d) : les images demandées tiennent dans la largeur visible.
+        let view_w = ui.clip_rect().width().max(50.0);
+        let fit = self.timeline_fit.take();
+        if let Some((a, b)) = fit {
+            self.timeline_cell = (view_w / (b.saturating_sub(a)).max(1) as f32).clamp(CELL_MIN, CELL_MAX);
+        }
+        let cell = self.timeline_cell.clamp(CELL_MIN, CELL_MAX);
         let count = self.frame_count();
         // Lignes des calques, de hauteurs différentes (réduites ou complètes, 13b).
         let rows = rows_of(self.layers(), &self.doc.groups);
         let rows_h = rows_height(&rows);
-        let visible_cols = (ui.available_width() / CELL_W) as usize + 1;
+        let visible_cols = (ui.available_width() / cell) as usize + 1;
         let cols = (count + 48).max(self.cur_frame + 24).max(visible_cols);
         let sound_h = self.sound_row_h();
-        let size = vec2(cols as f32 * CELL_W, HEADER_H + rows_h + CAM_H + sound_h);
+        let size = vec2(cols as f32 * cell, HEADER_H + rows_h + CAM_H + sound_h);
         let (resp, painter) = ui.allocate_painter(size, Sense::click_and_drag());
         let r = resp.rect;
+        if let Some((a, b)) = fit {
+            let target = Rect::from_min_max(pos2(r.left() + a as f32 * cell, r.top()), pos2(r.left() + b as f32 * cell, r.top() + HEADER_H));
+            ui.scroll_to_rect(target, Some(egui::Align::Min));
+        }
+        // Ctrl + molette sur la grille : zoom de la timeline.
+        if resp.hovered() {
+            let zoom = ui.input(|i| i.zoom_delta());
+            if zoom != 1.0 {
+                self.timeline_cell = (self.timeline_cell * zoom).clamp(CELL_MIN, CELL_MAX);
+            }
+        }
         let visuals = ui.visuals().clone();
         let grid_top = r.top() + HEADER_H;
         // Règle des images.
@@ -276,7 +300,7 @@ impl App {
             let row = Rect::from_min_size(pos2(r.left(), y), vec2(size.x, CAM_H)).shrink2(vec2(0.0, 1.0));
             painter.rect_filled(row, 0.0, theme::RANGEE_SOMBRE);
             let keys = &self.panel().camera;
-            let cx = |f: usize| r.left() + (f as f32 + 0.5) * CELL_W;
+            let cx = |f: usize| r.left() + (f as f32 + 0.5) * cell;
             if keys.len() >= 2 {
                 painter.line_segment(
                     [pos2(cx(keys[0].frame), row.center().y), pos2(cx(keys[keys.len() - 1].frame), row.center().y)],
@@ -309,7 +333,7 @@ impl App {
             let row = Rect::from_min_max(pos2(r.left(), r.bottom() - sound_h), r.max).shrink2(vec2(0.0, 1.0));
             painter.rect_filled(row, 0.0, theme::RANGEE_SOMBRE);
             let start = self.doc.panel_start(self.cur_panel);
-            let left = r.left() - start as f32 * CELL_W;
+            let left = r.left() - start as f32 * cell;
             let fps = self.doc.fps;
             for track in &self.doc.audio_tracks {
                 let color = if track.muted {
@@ -319,8 +343,8 @@ impl App {
                 };
                 for clip in &track.clips {
                     let cr = Rect::from_min_max(
-                        pos2(left + clip.start as f32 * CELL_W, row.top() + 2.0),
-                        pos2(left + clip.end() as f32 * CELL_W, row.bottom() - 2.0),
+                        pos2(left + clip.start as f32 * cell, row.top() + 2.0),
+                        pos2(left + clip.end() as f32 * cell, row.bottom() - 2.0),
                     )
                     .intersect(row);
                     if !cr.is_positive() {
@@ -333,7 +357,7 @@ impl App {
                             &sound.pcm,
                             clip,
                             left,
-                            CELL_W,
+                            cell,
                             fps,
                             color,
                         );
@@ -362,19 +386,22 @@ impl App {
         // Graduations : une seconde = trait plus marqué.
         let fps = self.doc.fps.max(1) as usize;
         for c in 0..=cols {
-            let x = r.left() + c as f32 * CELL_W;
+            let x = r.left() + c as f32 * cell;
             let color = if c % fps == 0 {
                 theme::GRADUATION_SECONDE
             } else {
                 theme::GRADUATION
             };
             painter.line_segment([pos2(x, grid_top), pos2(x, r.bottom())], Stroke::new(1.0_f32, color));
-            // Numéros (13d) : toutes les 5 images, ou chaque seconde en time code.
+            // Numéros (13d) : assez espacés pour se lire (toutes les 5 images au zoom normal), ou
+            // chaque seconde (ou plus) en time code.
             let time_code = self.time_display == crate::cues::TimeDisplay::TimeCode;
-            let shown = if time_code { c % fps == 0 } else { c == 0 || (c + 1) % 5 == 0 };
+            let step = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000].into_iter().find(|s| *s as f32 * cell >= 70.0).unwrap_or(2000);
+            let seconds = [1, 2, 5, 10, 30, 60].into_iter().find(|s| (*s * fps) as f32 * cell >= 80.0).unwrap_or(120);
+            let shown = if time_code { c % (fps * seconds) == 0 } else { c == 0 || (c + 1) % step == 0 };
             if c < cols && shown {
                 painter.text(
-                    pos2(x + if time_code { 2.0 } else { CELL_W * 0.5 }, r.top() + HEADER_H * 0.5),
+                    pos2(x + if time_code { 2.0 } else { cell * 0.5 }, r.top() + HEADER_H * 0.5),
                     if time_code { Align2::LEFT_CENTER } else { Align2::CENTER_CENTER },
                     self.frame_label(c),
                     FontId::monospace(9.0),
@@ -388,17 +415,17 @@ impl App {
         if cues.in_point.is_some() || cues.out_point.is_some() {
             let (a, b) = self.plan_play_range();
             let shade = Color32::from_black_alpha(80);
-            painter.rect_filled(Rect::from_min_max(pos2(r.left(), grid_top), pos2(r.left() + a as f32 * CELL_W, r.bottom())), 0.0, shade);
-            painter.rect_filled(Rect::from_min_max(pos2(r.left() + b as f32 * CELL_W, grid_top), r.max), 0.0, shade);
+            painter.rect_filled(Rect::from_min_max(pos2(r.left(), grid_top), pos2(r.left() + a as f32 * cell, r.bottom())), 0.0, shade);
+            painter.rect_filled(Rect::from_min_max(pos2(r.left() + b as f32 * cell, grid_top), r.max), 0.0, shade);
             let bracket = Stroke::new(2.0_f32, theme::IMAGE_COURANTE);
             if let Some(f) = cues.in_point {
-                let x = r.left() + f as f32 * CELL_W + 1.0;
+                let x = r.left() + f as f32 * cell + 1.0;
                 painter.line_segment([pos2(x, r.top() + 2.0), pos2(x, r.top() + HEADER_H - 2.0)], bracket);
                 painter.line_segment([pos2(x, r.top() + 2.0), pos2(x + 5.0, r.top() + 2.0)], bracket);
                 painter.line_segment([pos2(x, r.top() + HEADER_H - 2.0), pos2(x + 5.0, r.top() + HEADER_H - 2.0)], bracket);
             }
             if let Some(f) = cues.out_point {
-                let x = r.left() + (f + 1) as f32 * CELL_W - 1.0;
+                let x = r.left() + (f + 1) as f32 * cell - 1.0;
                 painter.line_segment([pos2(x, r.top() + 2.0), pos2(x, r.top() + HEADER_H - 2.0)], bracket);
                 painter.line_segment([pos2(x, r.top() + 2.0), pos2(x - 5.0, r.top() + 2.0)], bracket);
                 painter.line_segment([pos2(x, r.top() + HEADER_H - 2.0), pos2(x - 5.0, r.top() + HEADER_H - 2.0)], bracket);
@@ -407,7 +434,7 @@ impl App {
         // Signets (13d) : un petit fanion bleu en bas de la règle.
         let bookmark = Color32::from_rgb(95, 170, 255);
         for &f in &cues.bookmarks {
-            let x = r.left() + (f as f32 + 0.5) * CELL_W;
+            let x = r.left() + (f as f32 + 0.5) * cell;
             painter.add(egui::Shape::convex_polygon(
                 vec![pos2(x - 4.0, r.top() + HEADER_H - 1.0), pos2(x + 4.0, r.top() + HEADER_H - 1.0), pos2(x, r.top() + HEADER_H - 7.0)],
                 bookmark,
@@ -418,7 +445,7 @@ impl App {
 
         // Marques d'image (13a) : un triangle dans la règle et un trait au début de l'image.
         for m in &self.panel().marks {
-            let x = r.left() + m.frame as f32 * CELL_W;
+            let x = r.left() + m.frame as f32 * cell;
             painter.line_segment([pos2(x, grid_top), pos2(x, r.bottom())], Stroke::new(1.5_f32, theme::MARQUE));
             painter.add(egui::Shape::convex_polygon(
                 vec![pos2(x, r.top() + 2.0), pos2(x + 7.0, r.top() + 2.0), pos2(x, r.top() + HEADER_H - 2.0)],
@@ -427,10 +454,13 @@ impl App {
             ));
         }
 
-        // Dessins : un bloc par exposition, pastille au début du dessin.
+        // Dessins : un bloc par exposition, pastille au début du dessin ; miniature du dessin
+        // dans les lignes complètes (13d), posée après la boucle (elle a besoin de `self`).
+        let mut thumbs: Vec<(Rect, crate::document::CelId, bool)> = Vec::new();
         for row in &rows {
             let layer = &self.layers()[row.li];
             let y = grid_top + row.top;
+            let content = layer.frames.iter().position(Option::is_some).zip(layer.frames.iter().rposition(Option::is_some));
             // Avant la première image et après la dernière (pré / post-comportement, 13c) : les
             // images montrées, en blocs pâles bordés.
             let first = layer.frames.iter().position(Option::is_some);
@@ -451,8 +481,8 @@ impl App {
                         }
                         if shown.is_some() {
                             let block = Rect::from_min_max(
-                                pos2(r.left() + f as f32 * CELL_W + 1.0, y + 6.0),
-                                pos2(r.left() + g as f32 * CELL_W - 1.0, y + row.h - 6.0),
+                                pos2(r.left() + f as f32 * cell + 1.0, y + 6.0),
+                                pos2(r.left() + g as f32 * cell - 1.0, y + row.h - 6.0),
                             );
                             painter.rect(block, 3.0, base.gamma_multiply(0.18), Stroke::new(1.0_f32, base.gamma_multiply(0.7)), StrokeKind::Inside);
                         }
@@ -463,10 +493,22 @@ impl App {
             let mut f = 0;
             while f < layer.frames.len() {
                 let (start, end) = layer.run_bounds(f);
+                // Instance vide entre deux dessins (13d) : une croix, si on le veut.
+                let inside = content.is_some_and(|(a, b)| start > a && end <= b);
+                if layer.frames[start].is_none() && self.empty_x && inside {
+                    let cross = Rect::from_min_max(
+                        pos2(r.left() + start as f32 * cell + 2.0, y + 6.0),
+                        pos2(r.left() + end as f32 * cell - 2.0, y + row.h - 6.0),
+                    );
+                    let stroke = Stroke::new(1.0_f32, theme::TEXTE_DOUX.gamma_multiply(0.6));
+                    painter.rect_stroke(cross, 2.0, stroke, StrokeKind::Inside);
+                    painter.line_segment([cross.left_top(), cross.right_bottom()], stroke);
+                    painter.line_segment([cross.left_bottom(), cross.right_top()], stroke);
+                }
                 if let Some(id) = layer.frames[start] {
                     let block = Rect::from_min_max(
-                        pos2(r.left() + start as f32 * CELL_W + 1.0, y + 4.0),
-                        pos2(r.left() + end as f32 * CELL_W - 1.0, y + row.h - 4.0),
+                        pos2(r.left() + start as f32 * cell + 1.0, y + 4.0),
+                        pos2(r.left() + end as f32 * cell - 1.0, y + row.h - 4.0),
                     );
                     let empty = self.doc.cels.get(&id).is_none_or(|c| c.is_empty());
                     let mut fill = match (empty, layer.kind) {
@@ -479,41 +521,54 @@ impl App {
                     }
                     painter.rect_filled(block, 3.0, fill);
                     painter.circle_filled(
-                        pos2(block.left() + CELL_W * 0.5 - 1.0, block.center().y),
+                        pos2(block.left() + cell * 0.5 - 1.0, block.center().y),
                         2.5,
                         theme::FOND,
                     );
+                    // Miniature (13d) : dans une ligne complète, si le bloc est assez large.
+                    let mut text_x = block.left() + cell - 1.0;
+                    if self.timeline_thumbs && row.h >= 40.0 && block.width() >= cell + 26.0 {
+                        let h = block.height() - 6.0;
+                        let w = (h * 16.0 / 9.0).min(block.width() - cell - 4.0);
+                        let at = Rect::from_min_size(pos2(block.left() + cell, block.top() + 3.0), vec2(w, h));
+                        thumbs.push((at, id, layer.visible));
+                        text_x = at.right() + 3.0;
+                    }
                     // Nom d'instance (13c) dans le bloc, sinon le trait de l'exposition.
                     match layer.names.get(&id) {
                         Some(name) => {
                             painter.with_clip_rect(block.shrink(1.0)).text(
-                                pos2(block.left() + CELL_W - 1.0, block.center().y),
+                                pos2(text_x, block.center().y),
                                 Align2::LEFT_CENTER,
                                 name,
                                 FontId::proportional(10.0),
                                 theme::FOND,
                             );
                         }
-                        None if end - start > 1 => {
+                        None if end - start > 1 && text_x < block.right() - 6.0 => {
                             painter.line_segment(
-                                [
-                                    pos2(block.left() + CELL_W - 1.0, block.center().y),
-                                    pos2(block.right() - 4.0, block.center().y),
-                                ],
+                                [pos2(text_x, block.center().y), pos2(block.right() - 4.0, block.center().y)],
                                 Stroke::new(1.0_f32, theme::ENTETE),
                             );
                         }
-                        None => {}
+                        _ => {}
                     }
                 }
                 f = end;
+            }
+        }
+        for (at, id, visible) in thumbs {
+            if let Some(t) = self.layer_thumb(ui.ctx(), id) {
+                let tint = if visible { Color32::WHITE } else { Color32::from_gray(120) };
+                painter.image(t.id(), at, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), tint);
+                painter.rect_stroke(at, 0.0, Stroke::new(1.0_f32, Color32::from_black_alpha(90)), StrokeKind::Inside);
             }
         }
 
         // Double-clic sur un dessin : renommer son instance (13c) ; le champ se pose sur le bloc.
         if resp.double_clicked() {
             if let Some(p) = resp.interact_pointer_pos() {
-                let col = ((p.x - r.left()) / CELL_W).floor().max(0.0) as usize;
+                let col = ((p.x - r.left()) / cell).floor().max(0.0) as usize;
                 if let Some(row) = row_at(&rows, p.y - grid_top) {
                     if let Some(cel) = self.layers()[row.li].cel_at(col) {
                         self.start_instance_rename(row.li, cel);
@@ -526,7 +581,7 @@ impl App {
             let found = rows.iter().find(|row| self.layers()[row.li].id == layer_id).and_then(|row| {
                 let l = &self.layers()[row.li];
                 let start = l.frames.iter().position(|f| *f == Some(cel))?;
-                Some(Rect::from_min_size(pos2(r.left() + start as f32 * CELL_W, grid_top + row.top + (row.h - 20.0) * 0.5), vec2(120.0, 20.0)))
+                Some(Rect::from_min_size(pos2(r.left() + start as f32 * cell, grid_top + row.top + (row.h - 20.0) * 0.5), vec2(120.0, 20.0)))
             });
             match found {
                 Some(at) => {
@@ -555,7 +610,7 @@ impl App {
         }
 
         // Au-delà de la fin du plan.
-        let end_x = r.left() + count as f32 * CELL_W;
+        let end_x = r.left() + count as f32 * cell;
         painter.rect_filled(
             Rect::from_min_max(pos2(end_x, grid_top), r.max),
             0.0,
@@ -567,17 +622,17 @@ impl App {
         );
 
         // Image courante.
-        let cx = r.left() + self.cur_frame as f32 * CELL_W;
-        let column = Rect::from_min_size(pos2(cx, r.top()), vec2(CELL_W, size.y));
+        let cx = r.left() + self.cur_frame as f32 * cell;
+        let column = Rect::from_min_size(pos2(cx, r.top()), vec2(cell, size.y));
         painter.rect_filled(column, 0.0, CUR_FRAME.gamma_multiply(0.18));
         painter.rect_stroke(column, 0.0, Stroke::new(1.0_f32, CUR_FRAME), StrokeKind::Inside);
         painter.rect_filled(
-            Rect::from_min_size(pos2(cx, r.top()), vec2(CELL_W, HEADER_H)),
+            Rect::from_min_size(pos2(cx, r.top()), vec2(cell, HEADER_H)),
             0.0,
             CUR_FRAME,
         );
         painter.text(
-            pos2(cx + CELL_W * 0.5, r.top() + HEADER_H * 0.5),
+            pos2(cx + cell * 0.5, r.top() + HEADER_H * 0.5),
             Align2::CENTER_CENTER,
             // En time code, seule l'image dans la seconde tient dans la case.
             match self.time_display {
@@ -592,9 +647,9 @@ impl App {
 
         // Clés de caméra : on les prend et les fait glisser le long de leur rangée (12e).
         let cam_row = Rect::from_min_size(pos2(r.left(), grid_top + rows_h), vec2(size.x, CAM_H));
-        let key_x = |f: usize| r.left() + (f as f32 + 0.5) * CELL_W;
+        let key_x = |f: usize| r.left() + (f as f32 + 0.5) * cell;
         let key_under = |app: &App, p: Pos2| {
-            cam_row.contains(p).then(|| crate::camtools::camera_key_at(&app.panel().camera, p.x, key_x, CELL_W * 0.5 + 2.0)).flatten()
+            cam_row.contains(p).then(|| crate::camtools::camera_key_at(&app.panel().camera, p.x, key_x, cell * 0.5 + 2.0)).flatten()
         };
         if resp.drag_started() {
             let origin = ui.input(|i| i.pointer.press_origin());
@@ -607,7 +662,7 @@ impl App {
         if holding_key {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
             if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
-                self.drag_camera_key(((p.x - r.left()) / CELL_W).floor().max(0.0) as usize);
+                self.drag_camera_key(((p.x - r.left()) / cell).floor().max(0.0) as usize);
             }
             if resp.drag_stopped() {
                 self.end_camera_key_drag();
@@ -625,7 +680,7 @@ impl App {
         let shift = ui.input(|i| i.modifiers.shift);
         // Glisser les images choisies (13c-3) : on les prend dans leur cadre ; lâchées sans
         // touche elles sont déplacées, avec Ctrl copiées, avec Maj insérées.
-        let col_of = |x: f32| ((x - r.left()) / CELL_W).floor().max(0.0) as usize;
+        let col_of = |x: f32| ((x - r.left()) / cell).floor().max(0.0) as usize;
         if resp.drag_started() && !holding_key {
             if let (Some((a, b)), Some(p)) = (self.frame_sel, ui.input(|i| i.pointer.press_origin())) {
                 let c = col_of(p.x);
@@ -655,7 +710,7 @@ impl App {
         }
         if (resp.clicked() || resp.dragged()) && !holding_key && self.image_drag.is_none() && !resp.drag_stopped() {
             if let Some(p) = resp.interact_pointer_pos() {
-                let col = ((p.x - r.left()) / CELL_W).floor().max(0.0) as usize;
+                let col = ((p.x - r.left()) / cell).floor().max(0.0) as usize;
                 if shift {
                     let (a, b) = (col.min(self.cur_frame), col.max(self.cur_frame) + 1);
                     self.frame_sel = Some((a, b));
@@ -679,13 +734,13 @@ impl App {
         if let Some((a, b)) = self.frame_sel {
             for row in rows.iter().filter(|row| self.is_chosen_layer(row.li) && !self.layers()[row.li].folder) {
                 let sel = Rect::from_min_max(
-                    pos2(r.left() + a as f32 * CELL_W, grid_top + row.top + 1.0),
-                    pos2(r.left() + b as f32 * CELL_W, grid_top + row.top + row.h - 1.0),
+                    pos2(r.left() + a as f32 * cell, grid_top + row.top + 1.0),
+                    pos2(r.left() + b as f32 * cell, grid_top + row.top + row.h - 1.0),
                 );
                 painter.rect(sel, 2.0, Color32::from_white_alpha(28), Stroke::new(1.5_f32, Color32::WHITE), StrokeKind::Inside);
                 // Pendant un glisser : là où elles vont se poser.
                 if let Some((c0, c1)) = self.image_drag.filter(|(c0, c1)| c0 != c1) {
-                    let dx = (c1 as f32 - c0 as f32) * CELL_W;
+                    let dx = (c1 as f32 - c0 as f32) * cell;
                     let ghost = sel.translate(vec2(dx, 0.0));
                     painter.rect(ghost, 2.0, theme::MARQUE.gamma_multiply(0.25), Stroke::new(1.5_f32, theme::MARQUE), StrokeKind::Inside);
                 }
@@ -694,7 +749,7 @@ impl App {
 
         if self.follow_frame {
             let row = rows.iter().find(|r| r.li == self.cur_layer).copied().unwrap_or(Row { li: 0, top: 0.0, h: ROW_H });
-            let target = Rect::from_min_size(pos2(cx - CELL_W * 2.0, grid_top + row.top), vec2(CELL_W * 5.0, row.h));
+            let target = Rect::from_min_size(pos2(cx - cell * 2.0, grid_top + row.top), vec2(cell * 5.0, row.h));
             ui.scroll_to_rect(target, None);
             self.follow_frame = false;
         }

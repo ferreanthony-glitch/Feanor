@@ -30,6 +30,17 @@ impl TimeDisplay {
     }
 }
 
+/// Ce que « Adapter » fait tenir dans la timeline (13d).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Fit {
+    Plan,
+    Layer,
+    Selection,
+    Image,
+    Keys,
+    All,
+}
+
 /// Images [début, fin) que lit la lecture du plan : entre les points d'entrée et de sortie
 /// (tout le plan s'ils manquent ou se croisent).
 pub(crate) fn play_range(cues: &Cues, count: usize) -> (usize, usize) {
@@ -210,6 +221,59 @@ impl App {
                 self.status = "Lecture en boucle entre les images choisies.".into();
             }
         }
+    }
+
+    /// « Adapter » (13d) : le zoom de la timeline fait tenir ces images dans la largeur visible.
+    pub(crate) fn fit_timeline(&mut self, what: Fit) {
+        let n = self.frame_count();
+        let range = match what {
+            Fit::Plan => Some((0, n)),
+            Fit::Layer => {
+                let f = &self.layer().frames;
+                f.iter().position(Option::is_some).zip(f.iter().rposition(Option::is_some)).map(|(a, b)| (a, b + 1))
+            }
+            Fit::Selection => Some(self.image_range()),
+            Fit::Image => Some((self.cur_frame, self.cur_frame + 1)),
+            Fit::Keys => {
+                let keys = &self.panel().camera;
+                keys.first().zip(keys.last()).map(|(a, b)| (a.frame, b.frame + 1)).filter(|(a, b)| b > a)
+            }
+            Fit::All => {
+                let longest = self.layers().iter().map(|l| l.frames.len()).max().unwrap_or(0);
+                let cues = &self.panel().cues;
+                let last_cue = cues.bookmarks.iter().chain(cues.out_point.iter()).max().map_or(0, |f| f + 1);
+                Some((0, n.max(longest).max(last_cue)))
+            }
+        };
+        match range {
+            Some(r) => self.timeline_fit = Some(r),
+            None => self.status = "Rien à adapter.".into(),
+        }
+    }
+
+    /// Menu d'affichage de la timeline : zoom, « Adapter », croix des instances vides,
+    /// miniatures.
+    pub(crate) fn timeline_view_menu(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Zoom");
+            ui.add(
+                egui::Slider::new(&mut self.timeline_cell, crate::timeline::CELL_MIN..=crate::timeline::CELL_MAX)
+                    .logarithmic(true)
+                    .suffix(" px par image"),
+            );
+        });
+        ui.label(egui::RichText::new("Ctrl + molette sur la grille : zoomer.").weak().small());
+        ui.separator();
+        ui.label(egui::RichText::new("Adapter").strong());
+        self.action_item(ui, "Le plan", "timeline.adapter_plan");
+        self.action_item(ui, "Le calque courant", "timeline.adapter_calque");
+        self.action_item(ui, "Les images choisies", "timeline.adapter_choix");
+        self.action_item(ui, "L'image courante", "timeline.adapter_image");
+        self.action_item(ui, "Les clés de caméra", "timeline.adapter_cles");
+        self.action_item(ui, "Tout voir", "timeline.tout_voir");
+        ui.separator();
+        ui.checkbox(&mut self.empty_x, "Croix sur les instances vides");
+        ui.checkbox(&mut self.timeline_thumbs, "Miniatures des dessins (lignes complètes)");
     }
 
     /// Menu « Repères » (barre de la timeline).
