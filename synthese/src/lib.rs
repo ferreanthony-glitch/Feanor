@@ -220,22 +220,23 @@ pub fn synthesize(style: &Image, style_weight: f32, guides: &[GuidePair], params
     for g in guides {
         weights.extend(std::iter::repeat(g.weight / g.source.channels as f32).take(g.source.channels));
     }
-    let interleave = |w: usize, h: usize, first: Option<&Image>, pick: &dyn Fn(&GuidePair) -> &Image| {
+    // La cible n'a pas encore de style : des zéros, que le premier vote remplace.
+    let interleave = |w: usize, h: usize, style: Option<&Image>| {
         let mut data = Vec::with_capacity(w * h * c);
         for i in 0..w * h {
-            match first {
+            match style {
                 Some(s) => data.extend_from_slice(&s.data[i * ns..(i + 1) * ns]),
                 None => data.extend(std::iter::repeat(0).take(ns)),
             }
             for g in guides {
-                let im = pick(g);
+                let im = if style.is_some() { g.source } else { g.target };
                 data.extend_from_slice(&im.data[i * im.channels..(i + 1) * im.channels]);
             }
         }
         Plane { w, h, c, data }
     };
-    let full_source = interleave(sw, sh, Some(style), &|g| g.source);
-    let mut full_target = Some(interleave(tw, th, None, &|g| g.target));
+    let full_source = interleave(sw, sh, Some(style));
+    let mut full_target = Some(interleave(tw, th, None));
 
     let mut rng = Rng::new(params.seed);
     let mut prev_nnf: Option<(Vec<[i32; 2]>, usize, usize)> = None;
@@ -267,7 +268,7 @@ pub fn synthesize(style: &Image, style_weight: f32, guides: &[GuidePair], params
             vote(target, source, ns, nnf, patch_size, threads);
             for _ in 0..params.search_vote_iters {
                 let search = Search {
-                    target,
+                    target: &*target,
                     source,
                     weights: &weights,
                     patch_size,
