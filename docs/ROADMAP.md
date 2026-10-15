@@ -369,7 +369,11 @@ crates Tauri, paquets npm).
 Demandée par Anthony (option A) : brancher le moteur de pinceau de Pelure derrière le stylet de
 Pelure Studio (`..\pelure-studio`).
 
-- ✅ 11a. `moteur.rs` : bibliothèque de pinceaux, dessins en tuiles, traits, annulation ; testé.
+- ✅ 11a. `moteur.rs` : bibliothèque de pinceaux, dessins en tuiles, traits, annulation, aperçus
+  PNG ; testé.
+- ✅ 11b. Branché dans Pelure Studio (commit a9efdbb de son dépôt) : chaque paquet du stylet est
+  peint par ce moteur, les tuiles changées repartent vers la toile ; annuler / rétablir ; panneau
+  Pinceaux. Aller-retour mesuré : 1,6 à 5,6 ms (plus le compositeur de WebView2).
 
 ## Raccourcis proposés, à valider
 
