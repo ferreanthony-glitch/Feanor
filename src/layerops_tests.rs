@@ -87,6 +87,22 @@ fn empty_layers_and_choices() {
 }
 
 #[test]
+fn a_new_layer_goes_where_it_is_asked() {
+    use crate::newlayer::{insert_index, Place};
+    let mut doc = plan();
+    let layers = &mut doc.panels[0].layers;
+    // Groupe 2 : C1 et C2 ; le calque courant est C1.
+    layers[1].group = 2;
+    layers[2].group = 2;
+    assert_eq!(insert_index(layers, 1, Place::AboveCurrent), 2);
+    assert_eq!(insert_index(layers, 1, Place::BelowCurrent), 1);
+    assert_eq!(insert_index(layers, 1, Place::Top), 4);
+    assert_eq!(insert_index(layers, 1, Place::Bottom), 0);
+    assert_eq!(insert_index(layers, 1, Place::AboveGroup), 3, "au-dessus de C2, le plus haut du groupe");
+    assert_eq!(insert_index(layers, 1, Place::BelowGroup), 1, "sous C1, le plus bas du groupe");
+}
+
+#[test]
 fn tvpaint_layer_keys_are_in_place() {
     let map = Keymap::from_texts(DEFAULT_KEYMAP, None);
     assert!(map.warnings.is_empty(), "{:#?}", map.warnings);

@@ -151,6 +151,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("calque.reinit_transformation", "Annuler la transformation du calque", true, false),
     act("calque.dessus", "Calque du dessus", true, true),
     act("calque.dessous", "Calque du dessous", true, true),
+    act("calque.nouveau", "Nouveau calque… (nom, sorte, groupe, mode, place)", true, false),
     act("calque.dupliquer", "Dupliquer les calques choisis", true, false),
     act("calque.supprimer_vides", "Supprimer les calques vides", true, false),
     act("calque.supprimer_caches", "Supprimer les calques cachés", true, false),

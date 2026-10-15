@@ -69,6 +69,7 @@ mod ops_tests;
 mod model3d;
 mod montagerows;
 pub mod moteur;
+mod newlayer;
 #[cfg(test)]
 mod moteur_tests;
 pub mod noyau;

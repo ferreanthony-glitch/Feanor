@@ -729,6 +729,11 @@ touches = []
 source = "TVPaint 12 (perso) : LayerTogglePelureMode = Ctrl+L, réservé à clips.lier_au_panneau"
 
 [[raccourci]]
+action = "calque.nouveau"
+touches = []
+source = "TVPaint 12 (perso) : nouveau calque d'animation = Ctrl+N, déjà pris par fichier.nouveau"
+
+[[raccourci]]
 action = "calque.dupliquer"
 touches = []
 source = "TVPaint 12 sans touche"

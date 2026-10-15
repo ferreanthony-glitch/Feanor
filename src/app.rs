@@ -428,6 +428,8 @@ pub struct App {
     pub(crate) modified: bool,
     pub(crate) status: String,
     pub(crate) new_dialog: Option<NewDocDialog>,
+    /// Fenêtre « Nouveau calque » ouverte (13b).
+    pub(crate) new_layer_dialog: Option<crate::newlayer::NewLayerForm>,
     pub(crate) pending: Option<Pending>,
     pub(crate) show_help: bool,
     allow_close: bool,
@@ -600,6 +602,7 @@ impl App {
             modified: false,
             status: "Storyboard : dessine le premier plan ; P pour un nouveau plan, double-clic sur un plan pour l'animer (F1 : raccourcis).".into(),
             new_dialog: None,
+            new_layer_dialog: None,
             pending: None,
             show_help: false,
             allow_close: false,
@@ -2169,6 +2172,7 @@ impl App {
             "calque.dessus" => self.select_layer(self.cur_layer + 1),
             "calque.dessous" => self.select_layer(self.cur_layer.saturating_sub(1)),
             // Calques choisis et opérations sur plusieurs calques (13b, `layerops.rs`).
+            "calque.nouveau" => self.open_new_layer_dialog(),
             "calque.dupliquer" => self.duplicate_chosen_layers(),
             "calque.supprimer_vides" => self.delete_empty_layers(),
             "calque.supprimer_caches" => self.delete_hidden_layers(),

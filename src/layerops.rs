@@ -102,6 +102,7 @@ impl App {
     /// Menu des opérations sur les calques (menu Calques, et bouton ☰ de l'en-tête de la timeline).
     pub(crate) fn layer_ops_menu(&mut self, ui: &mut egui::Ui) {
         let n = self.chosen_layers().len();
+        self.action_item(ui, "Nouveau calque…", "calque.nouveau");
         self.action_item(ui, "Nouveau calque vectoriel", "calque.nouveau_vectoriel");
         self.action_item(ui, "Nouveau calque bitmap", "calque.nouveau_bitmap");
         self.action_item(ui, "Nouveau calque de fond", "calque.nouveau_fond");

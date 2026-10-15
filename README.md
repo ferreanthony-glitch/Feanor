@@ -150,7 +150,8 @@ pour le renommer. Ctrl + clic choisit d'autres calques, Maj + clic une suite (Ma
 clavier). Le menu ☰ (ou le menu Calques) agit sur les calques choisis : dupliquer, supprimer,
 fusionner (les choisis, les visibles, tous). On y trouve aussi : choisir par groupe, tout
 afficher, le calque courant seul, supprimer les calques vides ou cachés, éteindre ou inverser les
-pochoirs, couper, coller à la place. Ctrl + Haut / Bas monte ou descend le calque.
+pochoirs, couper, coller à la place. Ctrl + Haut / Bas monte ou descend le calque. **Nouveau
+calque…** ouvre une fenêtre : nom, sorte, groupe, mode de fusion, et place dans la pile.
 
 ## Le reste
 
