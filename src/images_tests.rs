@@ -55,6 +55,71 @@ fn empty_frames_inside_stay_empty_and_drawing_tools_see_the_timeline() {
 }
 
 #[test]
+fn deleting_images_leaves_the_chosen_hole() {
+    use crate::images::{delete_frames, Hole};
+    let base = vec![Some(1), Some(1), Some(2), Some(3), Some(3), Some(4)];
+    let mut f = base.clone();
+    delete_frames(&mut f, 2, 4, Hole::Empty);
+    assert_eq!(f, [Some(1), Some(1), None, None, Some(3), Some(4)]);
+    let mut f = base.clone();
+    delete_frames(&mut f, 2, 4, Hole::FromLeft);
+    assert_eq!(f, [Some(1), Some(1), Some(1), Some(1), Some(3), Some(4)], "le dessin d'avant est tenu");
+    let mut f = base.clone();
+    delete_frames(&mut f, 2, 4, Hole::FromRight);
+    assert_eq!(f, [Some(1), Some(1), Some(3), Some(4)], "la suite recule");
+    let mut f = base.clone();
+    delete_frames(&mut f, 4, 99, Hole::Empty);
+    assert_eq!(f, [Some(1), Some(1), Some(2), Some(3)], "les vides de la fin sont retirés");
+}
+
+#[test]
+fn inserting_and_reversing_images() {
+    use crate::images::{frames_in, insert_frames, reverse_frames};
+    let mut f = vec![Some(1), Some(2), Some(3)];
+    insert_frames(&mut f, 1, &[None, Some(9)]);
+    assert_eq!(f, [Some(1), None, Some(9), Some(2), Some(3)]);
+    insert_frames(&mut f, 10, &[None]);
+    assert_eq!(f.len(), 5, "des images vides après la fin ne changent rien");
+    insert_frames(&mut f, 7, &[Some(5)]);
+    assert_eq!(f, [Some(1), None, Some(9), Some(2), Some(3), None, None, Some(5)]);
+    reverse_frames(&mut f, 0, 3);
+    assert_eq!(&f[..3], [Some(9), None, Some(1)]);
+    assert_eq!(frames_in(&f, 6, 10), [None, Some(5), None, None]);
+}
+
+#[test]
+fn plan_wide_changes_move_camera_keys_and_marks() {
+    use crate::camera::{Camera, CameraKey};
+    use crate::document::ImageMark;
+    use crate::images::shift_panel;
+    let mut doc = Document::new(16, 16, 24);
+    let p = &mut doc.panels[0];
+    let key = |frame| CameraKey::new(frame, Camera::centered(16, 16));
+    p.camera = vec![key(0), key(5), key(10)];
+    p.marks = vec![ImageMark { id: 1, frame: 4, ..Default::default() }, ImageMark { id: 2, frame: 8, ..Default::default() }];
+    shift_panel(p, 3, 2, false);
+    assert_eq!(p.camera.iter().map(|k| k.frame).collect::<Vec<_>>(), [0, 7, 12]);
+    assert_eq!(p.marks.iter().map(|m| m.frame).collect::<Vec<_>>(), [6, 10]);
+    shift_panel(p, 6, 4, true);
+    assert_eq!(p.camera.iter().map(|k| k.frame).collect::<Vec<_>>(), [0, 8], "la clé de l'image 7 part avec elle");
+    assert_eq!(p.marks.iter().map(|m| m.frame).collect::<Vec<_>>(), [6], "la marque de l'image 6 aussi");
+}
+
+#[test]
+fn tvpaint_image_keys_are_in_place() {
+    use crate::app::Mode;
+    use crate::keymap::{Keymap, DEFAULT_KEYMAP};
+    use eframe::egui::{Key, Modifiers};
+    let map = Keymap::from_texts(DEFAULT_KEYMAP, None);
+    assert!(map.warnings.is_empty(), "{:#?}", map.warnings);
+    let press = |key, m, mode| map.find(key, Some(key), m, mode).map(str::to_string);
+    assert_eq!(press(Key::I, Modifiers::NONE, Mode::Animation).as_deref(), Some("images.ajouter"));
+    assert_eq!(press(Key::I, Modifiers::SHIFT, Mode::Animation).as_deref(), Some("images.inserer"));
+    assert_eq!(press(Key::F5, Modifiers::SHIFT, Mode::Animation).as_deref(), Some("images.supprimer_plan"));
+    assert_eq!(press(Key::I, Modifiers::NONE, Mode::Storyboard), None, "en storyboard, rien");
+}
+
+#[test]
 fn behaviours_are_saved() {
     let mut doc = Document::new(16, 16, 24);
     let cel = doc.new_cel(LayerKind::Bitmap);

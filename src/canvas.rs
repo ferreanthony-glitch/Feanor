@@ -31,6 +31,7 @@ impl App {
         // Un clic dans le dessin reprend la main au montage : l'édition vise de nouveau le dessin.
         if response.is_pointer_button_down_on() {
             self.panel_focus = false;
+            self.images_focus = false;
         }
         self.canvas_rect = rect;
         let size = self.canvas_size();

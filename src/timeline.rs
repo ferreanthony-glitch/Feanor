@@ -126,6 +126,14 @@ impl App {
                     }
                     let resp = ui.add(egui::DragValue::new(&mut self.default_exposure).range(1..=12).prefix("en "));
                     bulle(resp, "Exposition des nouveaux dessins", "Nombre d'images que tient chaque nouveau dessin (« en 1 », « en 2 »…).", "");
+                    // Images (13c) : opérations sur les images choisies (Maj + clic dans la grille).
+                    let resp = ui.menu_button(RichText::new(ph::FILM_STRIP).size(crate::bulles::TAILLE), |ui| self.images_menu(ui)).response;
+                    bulle(
+                        resp,
+                        "Images",
+                        "Supprimer, couper, copier, coller, dupliquer, inverser, insérer… Maj + clic dans la grille pour choisir des images.",
+                        "",
+                    );
                     sep(ui);
 
                     self.camera_keys_ui(ui);
@@ -493,18 +501,43 @@ impl App {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
         }
 
-        // Clic et glisser : choisir l'image (et le calque au clic).
+        // Clic et glisser : choisir l'image (et le calque au clic). Avec Maj : choisir les images
+        // entre l'image courante et celle sous la souris, sur les calques choisis (13c-2).
+        if resp.is_pointer_button_down_on() {
+            self.images_focus = true;
+            self.panel_focus = false;
+        }
+        let shift = ui.input(|i| i.modifiers.shift);
         if (resp.clicked() || resp.dragged()) && !holding_key {
             if let Some(p) = resp.interact_pointer_pos() {
                 let col = ((p.x - r.left()) / CELL_W).floor().max(0.0) as usize;
-                if col != self.cur_frame || self.playing {
-                    self.set_frame_free(col);
-                }
-                if resp.clicked() || resp.drag_started() {
-                    if let Some(row) = row_at(&rows, p.y - grid_top) {
-                        self.select_layer(row.li);
+                if shift {
+                    let (a, b) = (col.min(self.cur_frame), col.max(self.cur_frame) + 1);
+                    self.frame_sel = Some((a, b));
+                } else {
+                    if resp.clicked() || resp.drag_started() {
+                        self.frame_sel = None;
+                    }
+                    if col != self.cur_frame || self.playing {
+                        self.set_frame_free(col);
+                    }
+                    if resp.clicked() || resp.drag_started() {
+                        if let Some(row) = row_at(&rows, p.y - grid_top) {
+                            self.select_layer(row.li);
+                        }
                     }
                 }
+            }
+        }
+
+        // Images choisies : un cadre blanc sur les calques choisis.
+        if let Some((a, b)) = self.frame_sel {
+            for row in rows.iter().filter(|row| self.is_chosen_layer(row.li) && !self.layers()[row.li].folder) {
+                let sel = Rect::from_min_max(
+                    pos2(r.left() + a as f32 * CELL_W, grid_top + row.top + 1.0),
+                    pos2(r.left() + b as f32 * CELL_W, grid_top + row.top + row.h - 1.0),
+                );
+                painter.rect(sel, 2.0, Color32::from_white_alpha(28), Stroke::new(1.5_f32, Color32::WHITE), StrokeKind::Inside);
             }
         }
 

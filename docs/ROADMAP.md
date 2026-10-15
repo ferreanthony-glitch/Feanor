@@ -495,8 +495,12 @@ Décisions d'Anthony :
   - ✅ 13c-1. Pré / post-comportement par calque (`Layer::shown_at`, format 15) : rendu, export,
     lecture, pochoirs, plateau 3D ; blocs pâles dans la timeline ; menu ⋮ et fenêtre « Nouveau
     calque ». Les outils de dessin restent sur les vraies images (`cel_at`).
-  - 13c-2. Images choisies et opérations (supprimer avec modes de trou, insérer, couper /
-    copier / coller en insérant ou en remplaçant, dupliquer, inverser, tout choisir).
+  - ✅ 13c-2. Images choisies (Maj + clic / glisser dans la grille, sur les calques choisis ;
+    Ctrl+X / C / V et Suppr les visent ensuite) et opérations (`images.rs`) : supprimer avec
+    un mode de trou (laisser vide, combler depuis la gauche, combler depuis la droite),
+    insérer, couper / copier / coller en insérant ou en remplaçant, dupliquer, inverser, tout
+    choisir ; sur tout le plan avec tes touches TVPaint I / Maj+I / Maj+F5 (la durée du plan,
+    ses clés de caméra et ses marques suivent). « Garder en l'état » attend sa description.
   - 13c-3. Instances : précédente / suivante, tête / queue, casser, expositions par image
     choisie, ajouter des instances, cassure / création automatiques, faux-fixe, étirer le
     calque, glisser-déposer des images.

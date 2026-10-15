@@ -173,6 +173,22 @@ opacité s'ajoute à la leur. Chaque calque garde son mode de fusion. On s'en se
 
 On ne dessine pas sur un dossier.
 
+**Pré / post-comportement** (menu ⋮ d'un calque, ou fenêtre « Nouveau calque… »). Avant la
+première image dessinée du calque et après la dernière, il montre rien, la boucle de ses images,
+un va-et-vient ou la première / dernière image maintenue. La timeline montre ces images en blocs
+pâles ; on dessine toujours sur les vraies images.
+
+**Images** (bouton pellicule de la timeline, ou menu Animation > Images). Maj + clic ou Maj +
+glisser dans la grille choisit des images, sur les calques choisis ; Ctrl+X / C / V et Suppr
+les visent ensuite. On peut :
+- les supprimer, en choisissant le trou laissé : vide, comblé par le dessin d'avant, ou la suite
+  qui recule ;
+- les couper, les copier, les coller avant l'image courante ou à la place des images choisies ;
+- les dupliquer, inverser leur ordre, insérer des images vides.
+
+Sur tout le plan, ses clés de caméra et ses marques suivent : I ajoute une image après l'image
+courante, Maj+I en insère une avant, et Maj+F5 supprime l'image.
+
 ## Le reste
 
 - **Tablette** : la pression module la taille et/ou l'opacité. Elle passe par Windows Ink : sur une

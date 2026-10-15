@@ -159,6 +159,8 @@ impl App {
                 self.action_item(ui, "Allonger l'exposition", "exposition.allonger");
                 self.action_item(ui, "Raccourcir l'exposition", "exposition.raccourcir");
                 self.action_item(ui, "Retirer le dessin de la timeline", "dessin.supprimer");
+                ui.separator();
+                ui.menu_button("Images", |ui| self.images_menu(ui));
             });
             ui.menu_button("Affichage", |ui| {
                 self.action_item(ui, "Ajuster à la fenêtre", "vue.ajuster");

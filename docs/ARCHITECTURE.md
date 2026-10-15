@@ -461,6 +461,12 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   unités (un dossier et ses calques, ou un calque seul) ; `folder_at` décide si un calque
   glissé entre dans un dossier. `drawable` est faux pour un dossier ; `refuse_on_folder` garde
   les commandes de dessins et d'expositions.
+- Images (`images.rs`, 13c) : `App::frame_sel` [début, fin) sur les calques choisis ;
+  `images_focus` (un clic dans la grille) fait viser les images par Ctrl+X / C / V et Suppr,
+  comme `panel_focus` pour le montage. Fonctions sur une timeline de calque (`delete_frames`
+  et son `Hole`, `insert_frames`, `reverse_frames`, `frames_in`) ; `shift_panel` décale les
+  clés de caméra et les marques quand tout le plan change de durée. `ImageClip` garde une
+  copie des dessins ; chaque collage en refait.
 
 ## Pinceaux texturés (3d-2)
 

@@ -824,6 +824,75 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
+action = "images.ajouter"
+touches = ["I"]
+source = "TVPaint 12 (perso) : UserAppendImageProject"
+contexte = "animation"
+
+[[raccourci]]
+action = "images.inserer"
+touches = ["Maj+I"]
+source = "TVPaint 12 (perso) : UserInsertImageProject"
+contexte = "animation"
+
+[[raccourci]]
+action = "images.supprimer_plan"
+touches = ["Maj+F5"]
+source = "TVPaint 12 (perso) : DeleteImageProject"
+contexte = "animation"
+
+[[raccourci]]
+action = "images.supprimer"
+# Suppr (et Ctrl+X / C / V) visent les images choisies après un Maj + clic dans la timeline.
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "images.couper"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "images.copier"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "images.coller"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "images.coller_remplacer"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "images.dupliquer"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "images.inverser"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "images.inserer_avant_calques"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "images.inserer_apres_calques"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "images.tout_choisir"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
 action = "dossier.nouveau"
 touches = []
 source = "TVPaint 12 sans touche"

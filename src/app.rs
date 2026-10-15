@@ -301,6 +301,12 @@ pub struct App {
     /// Fenêtre des groupes de calques ouverte, et n'y montrer que les groupes utilisés (13b-4).
     pub(crate) groups_window: bool,
     pub(crate) groups_used_only: bool,
+    /// Images choisies [début, fin) sur les calques choisis (13c-2), images copiées, trou
+    /// laissé par une suppression, et dernier clic dans la grille de la timeline.
+    pub(crate) frame_sel: Option<(usize, usize)>,
+    pub(crate) image_clipboard: Option<crate::images::ImageClip>,
+    pub(crate) hole: crate::images::Hole,
+    pub(crate) images_focus: bool,
     /// Aperçus des réglages de pinceau (grille du panneau Réglages, 6d).
     pub(crate) brush_previews: crate::brushui::BrushPreviews,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
@@ -523,6 +529,10 @@ impl App {
             layer_sel: Vec::new(),
             groups_window: false,
             groups_used_only: false,
+            frame_sel: None,
+            image_clipboard: None,
+            hole: Default::default(),
+            images_focus: false,
             brush_previews: Default::default(),
             ref3d: Default::default(),
             camera_view: false,
@@ -2099,6 +2109,13 @@ impl App {
             "edition.couper" if self.panels_have_focus() => self.cut_panels(),
             "edition.copier" if self.panels_have_focus() => self.copy_panels(),
             "edition.coller" if self.panels_have_focus() && self.panel_clipboard.is_some() => self.paste_panels(),
+            // Après un Maj + clic dans la grille de la timeline, l'édition vise les images choisies (13c).
+            "edition.couper" if self.images_have_focus() => self.cut_images(),
+            "edition.copier" if self.images_have_focus() => self.copy_images(),
+            "edition.coller" if self.images_focus && self.mode == Mode::Animation && self.image_clipboard.is_some() => {
+                self.paste_images(false)
+            }
+            "edition.supprimer" if self.images_have_focus() => self.delete_images(false),
             "edition.couper" if self.bsel.is_some() => self.bitmap_cut(),
             "edition.couper" => self.cut_selection(),
             "edition.copier" if self.bsel.is_some() => {
@@ -2270,6 +2287,20 @@ impl App {
             "calque.couper" => self.cut_layer(),
             "calque.coller_remplacer" => self.paste_layer_replacing(),
             "groupes.editer" => self.groups_window = !self.groups_window,
+            // Images de la timeline (13c-2, `images.rs`).
+            "images.supprimer" => self.delete_images(false),
+            "images.couper" => self.cut_images(),
+            "images.copier" => self.copy_images(),
+            "images.coller" => self.paste_images(false),
+            "images.coller_remplacer" => self.paste_images(true),
+            "images.dupliquer" => self.duplicate_images(),
+            "images.inverser" => self.reverse_images(),
+            "images.inserer_avant_calques" => self.insert_images(true, 1, false),
+            "images.inserer_apres_calques" => self.insert_images(false, 1, false),
+            "images.ajouter" => self.insert_images(false, 1, true),
+            "images.inserer" => self.insert_images(true, 1, true),
+            "images.supprimer_plan" => self.delete_images(true),
+            "images.tout_choisir" => self.select_all_images(),
             // Dossiers de calques (13b-5, `folders.rs`).
             "dossier.nouveau" => self.new_folder(),
             "dossier.ranger" => self.folder_from_chosen(),

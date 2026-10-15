@@ -54,6 +54,7 @@ mod guides;
 #[cfg(test)]
 mod guides_tests;
 mod history;
+mod images;
 #[cfg(test)]
 mod images_tests;
 mod io;
