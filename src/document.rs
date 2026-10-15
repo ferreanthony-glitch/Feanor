@@ -373,6 +373,23 @@ pub struct Panel {
     pub camera: Vec<CameraKey>,
     /// Repère 3D (2d) : modèle importé vu par sa propre caméra, en fil de fer dans le cadre.
     pub ref3d: Option<Ref3d>,
+    /// Marques d'image (13a), triées par image, toutes après la première image du plan.
+    pub marks: Vec<ImageMark>,
+}
+
+/// Marque d'image d'un plan (13a) : une image de storyboard à l'image `frame` du plan (le début
+/// d'un ancien panneau, ou posée à la main), avec ses propres textes. Le plan lui-même est sa
+/// première image de storyboard : ses textes sont ceux du plan. Son `id` est unique dans le
+/// document, comme celui d'un plan : une note de la planche peut s'y attacher.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct ImageMark {
+    pub id: u64,
+    pub frame: usize,
+    /// Couleur : rang dans la palette des marques.
+    pub color: u8,
+    pub action: String,
+    pub dialogue: String,
+    pub notes: String,
 }
 
 /// Repère 3D d'un panneau : un modèle de `Document::models`, vu par sa caméra, dessiné en fil
@@ -423,6 +440,20 @@ impl Panel {
         }
         self.length = n;
     }
+}
+
+/// Clés d'une partie de `len` images qui tient sa caméra jusqu'à ses bords (13a) : ses clés dans
+/// la partie, plus une clé au début et une à la fin s'il n'y en a pas (`cams` : caméras montrées
+/// au début et à la fin).
+fn held_keys(keys: &[CameraKey], len: usize, cams: (Camera, Camera)) -> Vec<CameraKey> {
+    let mut v: Vec<CameraKey> = keys.iter().filter(|k| k.frame < len).copied().collect();
+    if v.first().is_none_or(|k| k.frame > 0) {
+        v.insert(0, CameraKey::new(0, cams.0));
+    }
+    if len > 1 && v.last().is_some_and(|k| k.frame < len - 1) {
+        v.push(CameraKey::new(len - 1, cams.1));
+    }
+    v
 }
 
 /// Images d'un panneau sans compter ses calques de toute la scène (qui suivent sa durée).
@@ -1072,6 +1103,7 @@ impl Document {
             notes: String::new(),
             camera: keys_after,
             ref3d: source.ref3d.clone(),
+            marks: Vec::new(),
         };
         let first = &mut self.panels[index];
         for l in &mut first.layers {
@@ -1303,6 +1335,7 @@ impl Document {
             notes: String::new(),
             camera: Vec::new(),
             ref3d: None,
+            marks: Vec::new(),
         }
     }
 
@@ -1333,6 +1366,9 @@ impl Document {
     pub fn duplicate_panel(&mut self, index: usize) -> Panel {
         let mut panel = self.panels[index].clone();
         panel.id = self.alloc();
+        for m in &mut panel.marks {
+            m.id = self.alloc();
+        }
         let mut copies: HashMap<CelId, CelId> = HashMap::new();
         for layer in &mut panel.layers {
             layer.id = fresh_layer_id();
@@ -1387,6 +1423,9 @@ impl Document {
         for source in &clip.panels {
             let mut panel = source.clone();
             panel.id = self.alloc();
+            for m in &mut panel.marks {
+                m.id = self.alloc();
+            }
             panel.scene = scene;
             for layer in &mut panel.layers {
                 layer.id = fresh_layer_id();
@@ -1407,6 +1446,260 @@ impl Document {
             pasted.push(panel);
         }
         Some(self.insert_and_normalize(index + 1, pasted))
+    }
+
+    // ---------------------------------------------------------------- plans (13a)
+
+    /// Vrai si chaque scène a exactement un panneau : un plan (13a).
+    pub fn is_plans(&self) -> bool {
+        self.scenes.iter().all(|s| self.panels.iter().filter(|p| p.scene == s.id).count() == 1)
+    }
+
+    /// Plans (13a) : chaque scène devient un seul plan, ses panneaux mis bout à bout (le début
+    /// de chacun devient une marque d'image qui garde ses textes) ; les calques de toute la scène
+    /// deviennent des calques ordinaires, leur dessin tenu sur tout le plan. Renvoie ce qui n'a
+    /// pas pu être gardé tel quel.
+    pub fn into_plans(&mut self) -> Vec<String> {
+        self.flatten_scene_layers();
+        let mut warnings = Vec::new();
+        let mut i = 0;
+        while i < self.panels.len() {
+            while i + 1 < self.panels.len() && self.panels[i + 1].scene == self.panels[i].scene {
+                warnings.extend(self.append_next(i));
+            }
+            i += 1;
+        }
+        self.normalize();
+        warnings
+    }
+
+    /// Les calques de toute la scène deviennent des calques ordinaires de chaque panneau, leur
+    /// dessin tenu sur tout le panneau.
+    fn flatten_scene_layers(&mut self) {
+        for p in &mut self.panels {
+            let n = own_frame_count(p);
+            for l in &mut p.layers {
+                if l.scene_wide.take().is_some() {
+                    let cel = l.frames.iter().flatten().next().copied();
+                    l.frames = cel.map_or(Vec::new(), |c| vec![Some(c); n]);
+                }
+            }
+        }
+    }
+
+    /// Met le plan (ou panneau) `index + 1` au bout du plan `index` (voir `append_plan`).
+    fn append_next(&mut self, index: usize) -> Option<String> {
+        let last = |d: &Document, i: usize| d.panels[i].frame_count() - 1;
+        let cams_a = (self.panel_camera(index, 0), self.panel_camera(index, last(self, index)));
+        let cams_b = (self.panel_camera(index + 1, 0), self.panel_camera(index + 1, last(self, index + 1)));
+        let b = self.panels.remove(index + 1);
+        self.append_plan(index, b, cams_a, cams_b)
+    }
+
+    /// Met le plan `b` (déjà retiré du document) au bout du plan `index`.
+    /// - Ses images viennent après, calque par calque : un calque de `b` va avec le calque de
+    ///   même nom (sinon de même rang) s'ils sont réglés pareil (sorte, visibilité, opacité,
+    ///   mode, transformation, profondeur), pour que rien ne change à l'écran ; sinon il
+    ///   s'ajoute, juste au-dessus du calque où va celui qui est sous lui.
+    /// - La caméra ne bouge pas aux jointures : des clés tiennent la caméra à la fin de l'un et
+    ///   au début de l'autre (`cams_a`, `cams_b` : caméras montrées au début et à la fin).
+    /// - Le début de `b` devient une marque d'image avec ses textes ; ses marques suivent.
+    /// - Les notes de la planche attachées à `b` s'attachent à cette marque.
+    ///
+    /// Renvoie un avertissement si le repère 3D de `b` n'a pas pu être gardé.
+    fn append_plan(&mut self, index: usize, b: Panel, cams_a: (Camera, Camera), cams_b: (Camera, Camera)) -> Option<String> {
+        let mark_id = self.alloc();
+        let label = self.scene_label(self.panels[index].scene);
+        let a_len = self.panels[index].frame_count();
+        let b_len = b.frame_count();
+        let a = &mut self.panels[index];
+
+        // Caméra : chaque partie tient sa caméra jusqu'à ses bords.
+        if !(a.camera.is_empty() && b.camera.is_empty() && cams_a == cams_b) {
+            let mut keys = held_keys(&a.camera, a_len, cams_a);
+            keys.extend(held_keys(&b.camera, b_len, cams_b).into_iter().map(|k| CameraKey { frame: k.frame + a_len, ..k }));
+            a.camera = keys;
+        }
+
+        // Calques : par nom, puis par rang, s'ils sont réglés pareil.
+        let same = |x: &Layer, y: &Layer| {
+            x.kind == y.kind
+                && x.visible == y.visible
+                && x.opacity == y.opacity
+                && x.blend == y.blend
+                && x.transform == y.transform
+                && x.depth == y.depth
+        };
+        let mut used = vec![false; a.layers.len()];
+        let mut target: Vec<Option<usize>> = Vec::with_capacity(b.layers.len());
+        for lb in &b.layers {
+            let k = (0..a.layers.len()).find(|&k| !used[k] && a.layers[k].name == lb.name && same(&a.layers[k], lb));
+            if let Some(k) = k {
+                used[k] = true;
+            }
+            target.push(k);
+        }
+        for (j, lb) in b.layers.iter().enumerate() {
+            if target[j].is_none() && j < a.layers.len() && !used[j] && same(&a.layers[j], lb) {
+                used[j] = true;
+                target[j] = Some(j);
+            }
+        }
+        for l in &mut a.layers {
+            l.frames.resize(a_len, None);
+        }
+        // Calque d'arrivée de chaque calque de `b`, par son id (les ajouts décalent les rangs).
+        let mut dest: Vec<u64> = Vec::with_capacity(b.layers.len());
+        for (j, mut lb) in b.layers.into_iter().enumerate() {
+            lb.frames.truncate(b_len);
+            match target[j] {
+                Some(k) => {
+                    a.layers[k].frames.extend(lb.frames);
+                    dest.push(a.layers[k].id);
+                }
+                None => {
+                    let at = match j.checked_sub(1).and_then(|p| dest.get(p)) {
+                        Some(below) => a.layers.iter().position(|l| l.id == *below).map_or(a.layers.len(), |k| k + 1),
+                        None => 0,
+                    };
+                    lb.frames.splice(0..0, std::iter::repeat_n(None, a_len));
+                    dest.push(lb.id);
+                    a.layers.insert(at, lb);
+                }
+            }
+        }
+        for l in &mut a.layers {
+            l.trim();
+        }
+
+        // Le début de `b` : une marque d'image avec ses textes ; puis ses propres marques.
+        a.marks.push(ImageMark { id: mark_id, frame: a_len, color: 0, action: b.action, dialogue: b.dialogue, notes: b.notes });
+        a.marks.extend(b.marks.into_iter().map(|m| ImageMark { frame: m.frame + a_len, ..m }));
+        a.length = a_len + b_len;
+        let warning = match (&a.ref3d, b.ref3d) {
+            (None, r) => {
+                a.ref3d = r;
+                None
+            }
+            (Some(x), Some(y)) if *x != y => Some(format!(
+                "Plan {label} : il garde son repère 3D ; celui de la partie qui commence à l'image {} n'est pas repris.",
+                a_len + 1
+            )),
+            _ => None,
+        };
+        self.reanchor_notes(b.id, mark_id);
+        warning
+    }
+
+    /// Les notes de la planche attachées à `from` (un plan ou une marque) s'attachent à `to`.
+    fn reanchor_notes(&mut self, from: u64, to: u64) {
+        for s in &mut self.board.strokes {
+            if s.anchor == Some(from) {
+                s.anchor = Some(to);
+            }
+        }
+        for t in &mut self.board.texts {
+            if t.anchor == Some(from) {
+                t.anchor = Some(to);
+            }
+        }
+    }
+
+    /// Réunit le plan `index` et le suivant de la même séquence : les images du suivant viennent
+    /// après (voir `append_plan`). Rien si le suivant est dans une autre séquence.
+    pub fn join_next_plan(&mut self, index: usize) -> Option<usize> {
+        if index + 1 >= self.panels.len() || self.sequence_of(index) != self.sequence_of(index + 1) {
+            return None;
+        }
+        self.append_next(index);
+        let id = self.panels[index].id;
+        Some(self.normalize_keeping(id))
+    }
+
+    /// Coupe le plan `index` à son image `at` : il garde [0, at) ; un nouveau plan, juste après
+    /// dans la même séquence, reçoit [at, fin) avec ses propres copies des dessins. Les marques
+    /// d'après suivent ; une marque à l'image `at` devient le début du nouveau plan (ses textes
+    /// deviennent ceux du plan). L'inverse de `join_next_plan`. Renvoie l'indice du nouveau.
+    pub fn split_plan(&mut self, index: usize, at: usize) -> Option<usize> {
+        let n = self.panels.get(index)?.frame_count();
+        if at == 0 || at >= n {
+            return None;
+        }
+        let first_id = self.panels[index].id;
+        let marks = std::mem::take(&mut self.panels[index].marks);
+        let second = self.split_panel(index, at)?;
+        let scene = self.new_scene(self.sequence_of(second));
+        let (before, after): (Vec<ImageMark>, Vec<ImageMark>) = marks.into_iter().partition(|m| m.frame < at);
+        if let Some(first) = self.panels.iter_mut().find(|p| p.id == first_id) {
+            first.marks = before;
+        }
+        let mut start = None;
+        let p = &mut self.panels[second];
+        p.scene = scene;
+        for m in after {
+            if m.frame == at {
+                (p.action, p.dialogue, p.notes) = (m.action, m.dialogue, m.notes);
+                start = Some(m.id);
+            } else {
+                p.marks.push(ImageMark { frame: m.frame - at, ..m });
+            }
+        }
+        let id = p.id;
+        if let Some(mark) = start {
+            self.reanchor_notes(mark, id);
+        }
+        Some(self.normalize_keeping(id))
+    }
+
+    /// Déplace les plans `ids` (gardés dans l'ordre du film) devant le plan `before` (aucun : à la
+    /// fin). Chaque plan reste un plan ; il garde sa séquence s'il retombe à côté d'elle, sinon il
+    /// rejoint celle du plan devant lequel on le pose (ou du dernier, tout à la fin). Renvoie
+    /// l'indice du premier plan déplacé, ou rien si rien n'a changé.
+    pub fn move_plans(&mut self, ids: &[u64], before: Option<u64>) -> Option<usize> {
+        let order = |d: &Document| -> Vec<(u64, u64)> { d.panels.iter().map(|p| (p.id, d.scene(p.scene).map_or(0, |s| s.sequence))).collect() };
+        let was = order(self);
+        let (moved, mut kept): (Vec<Panel>, Vec<Panel>) = std::mem::take(&mut self.panels).into_iter().partition(|p| ids.contains(&p.id));
+        if moved.is_empty() {
+            self.panels = kept;
+            return None;
+        }
+        let at = before.and_then(|b| kept.iter().position(|p| p.id == b)).unwrap_or(kept.len());
+        let seq_of = |d: &Document, p: Option<&Panel>| p.and_then(|p| d.scene(p.scene)).map(|s| s.sequence);
+        let left = seq_of(self, at.checked_sub(1).and_then(|i| kept.get(i)));
+        let right = seq_of(self, kept.get(at));
+        for p in &moved {
+            let own = self.scene(p.scene).map(|s| s.sequence);
+            let target = if own.is_some() && (own == left || own == right) { own } else { right.or(left) };
+            if let (Some(seq), Some(s)) = (target, self.scene_mut(p.scene)) {
+                s.sequence = seq;
+            }
+        }
+        let first = moved[0].id;
+        kept.splice(at..at, moved);
+        self.panels = kept;
+        let index = self.normalize_keeping(first);
+        (order(self) != was).then_some(index)
+    }
+
+    /// Colle les plans copiés juste après le plan `index`, chacun dans sa propre scène de la
+    /// même séquence (voir `paste_panels`). Renvoie l'indice du premier plan collé.
+    pub fn paste_plans(&mut self, clip: &PanelClip, index: usize) -> Option<usize> {
+        let first = self.paste_panels(clip, index)?;
+        let seq = self.sequence_of(first);
+        let ids: Vec<u64> = self.panels[first..first + clip.panels.len()].iter().map(|p| p.id).collect();
+        for id in &ids {
+            let scene = self.new_scene(seq);
+            if let Some(p) = self.panels.iter_mut().find(|p| p.id == *id) {
+                p.scene = scene;
+            }
+        }
+        Some(self.normalize_keeping(ids[0]))
+    }
+
+    /// Image de storyboard à l'image `frame` du plan `index` : la marque d'image à cette image ou
+    /// avant, sinon le plan lui-même (`None`).
+    pub fn board_mark_at(&self, index: usize, frame: usize) -> Option<&ImageMark> {
+        self.panels.get(index)?.marks.iter().rev().find(|m| m.frame <= frame)
     }
 
     // ---------------------------------------------------------------- calques de toute la scène (6f)

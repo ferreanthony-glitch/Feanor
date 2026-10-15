@@ -1071,6 +1071,7 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                     notes: p.notes,
                     camera,
                     ref3d: p.repere3d.as_ref().filter(|r| models.contains_key(&r.modele)).and_then(ref3d_of),
+                    marks: Vec::new(),
                 });
             }
         }

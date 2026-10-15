@@ -220,6 +220,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
             notes: s.notes,
             camera: Vec::new(),
             ref3d: None,
+            marks: Vec::new(),
         });
     }
     Ok(Document::from_parts(w, h, structure, cels, HashMap::new()))

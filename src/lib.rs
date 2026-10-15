@@ -87,6 +87,8 @@ mod pixsel;
 #[cfg(test)]
 mod pixsel_tests;
 mod pixtools;
+#[cfg(test)]
+mod plans_tests;
 mod project;
 mod raster;
 mod recovery;
