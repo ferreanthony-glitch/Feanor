@@ -56,7 +56,8 @@ pub const FORMAT: &str = "pelure-projet";
 /// 14 (13b-5) : dossiers de calques (`dossier`, `dans_dossier`) ; une version précédente en
 /// ferait des calques vides et perdrait l'opacité et l'affichage des dossiers.
 /// 15 (13c) : pré / post-comportement des calques (`avant`, `apres`), qu'une version
-/// précédente ignorerait (le film changerait sans prévenir).
+/// précédente ignorerait (le film changerait sans prévenir) ; cassure et création automatiques
+/// (`cassure_auto`, `creation_auto`).
 pub const VERSION: u32 = 15;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
@@ -355,6 +356,12 @@ struct LayerEntry {
     avant: Behaviour,
     #[serde(default, skip_serializing_if = "is_nothing")]
     apres: Behaviour,
+    /// Cassure automatique d'instance (absente : non) et création automatique d'image
+    /// (absente : oui), format 15.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    cassure_auto: bool,
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    creation_auto: bool,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -393,6 +400,10 @@ fn one() -> f32 {
 
 fn is_zero(v: &f32) -> bool {
     *v == 0.0
+}
+
+fn is_true(b: &bool) -> bool {
+    *b
 }
 
 fn is_nothing(b: &Behaviour) -> bool {
@@ -805,6 +816,8 @@ fn manifest_of(doc: &Document) -> Manifest {
                     dans_dossier: l.parent.and_then(|p| panel.layers.iter().position(|f| f.folder && f.id == p)),
                     avant: l.pre,
                     apres: l.post,
+                    cassure_auto: l.auto_break,
+                    creation_auto: l.auto_create,
                     expositions: to_exposures(&l.frames),
                 })
                 .collect(),
@@ -1159,6 +1172,8 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                         parent: None,
                         pre: l.avant,
                         post: l.apres,
+                        auto_break: l.cassure_auto,
+                        auto_create: l.creation_auto,
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.

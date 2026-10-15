@@ -501,9 +501,12 @@ Décisions d'Anthony :
     insérer, couper / copier / coller en insérant ou en remplaçant, dupliquer, inverser, tout
     choisir ; sur tout le plan avec tes touches TVPaint I / Maj+I / Maj+F5 (la durée du plan,
     ses clés de caméra et ses marques suivent). « Garder en l'état » attend sa description.
-  - 13c-3. Instances : précédente / suivante, tête / queue, casser, expositions par image
-    choisie, ajouter des instances, cassure / création automatiques, faux-fixe, étirer le
-    calque, glisser-déposer des images.
+  - ✅ 13c-3a. Instances : précédente / suivante (Ctrl + Gauche / Droite, tes touches
+    TVPaint ; « a » / « f » restent panneau précédent / suivant), tête / queue, casser à
+    l'image courante, une exposition de plus / de moins à chaque instance choisie, nouveau
+    dessin avant l'instance ; par calque, cassure automatique (dessiner sur une image tenue
+    fait une copie jusqu'à la fin de l'exposition) et création automatique (format 15).
+  - 13c-3b. Faux-fixe, étirer le calque, glisser-déposer des images.
   - 13c-4. Noms d'instance (renommer, effacer, tout renommer, renommage intelligent), retourner.
 - 13d. Repères : marques, signets, entrée / sortie, boucle, image de départ, time code, zoom.
 - 13e. Onglets du bas et vue Projet : notes dessinées, son par plan, arrière-plan, propriétés.

@@ -634,6 +634,22 @@ impl App {
                     }
                 }
             });
+            // Cassure et création automatiques (13c).
+            let (brk, create) = (self.layers()[li].auto_break, self.layers()[li].auto_create);
+            if ui
+                .checkbox(&mut brk.clone(), "Cassure automatique de l'instance")
+                .on_hover_text("Dessiner sur une image tenue en fait un nouveau dessin (copie du tenu) jusqu'à la fin de l'exposition.")
+                .clicked()
+            {
+                self.set_layer_flag(li, |l| l.auto_break = !brk);
+            }
+            if ui
+                .checkbox(&mut create.clone(), "Création automatique d'image")
+                .on_hover_text("Dessiner sur une image vide crée un dessin ; éteinte, il faut d'abord un « Nouveau dessin ».")
+                .clicked()
+            {
+                self.set_layer_flag(li, |l| l.auto_create = !create);
+            }
         }
     }
 

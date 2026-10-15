@@ -257,6 +257,13 @@ pub struct Layer {
     /// et après sa dernière (voir `shown_at`).
     pub pre: Behaviour,
     pub post: Behaviour,
+    /// Cassure automatique de l'instance (13c) : dessiner sur une image tenue (ailleurs qu'au
+    /// début de son exposition) en fait un nouveau dessin, copie du tenu, jusqu'à la fin de
+    /// l'exposition.
+    pub auto_break: bool,
+    /// Création automatique d'image (13c) : dessiner sur une image vide crée un dessin (sinon :
+    /// refusé, il faut d'abord un « Nouveau dessin »).
+    pub auto_create: bool,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -313,6 +320,8 @@ impl Layer {
             parent: None,
             pre: Behaviour::Nothing,
             post: Behaviour::Nothing,
+            auto_break: false,
+            auto_create: true,
         }
     }
 

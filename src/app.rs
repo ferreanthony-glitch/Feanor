@@ -981,6 +981,17 @@ impl App {
     /// en animation, sur le nombre d'images choisi (« sur 1 », « sur 2 »…).
     pub(crate) fn ensure_cel(&mut self) -> (CelId, Option<Edit>) {
         if let Some(id) = self.cel_here() {
+            // Cassure automatique (13c) : sur une image tenue, ailleurs qu'au début de son
+            // exposition, on dessine sur une copie, jusqu'à la fin de l'exposition.
+            let f = self.cur_frame;
+            if self.layer().auto_break && self.layer().run_bounds(f).0 < f {
+                let snap = self.snapshot();
+                let copy = self.doc.duplicate_cel(id);
+                let li = self.cur_layer;
+                crate::images::break_instance(&mut self.layers_mut()[li].frames, f, copy);
+                self.status = "Cassure automatique : un nouveau dessin à partir de cette image.".into();
+                return (copy, Some(snap));
+            }
             return (id, None);
         }
         let (li, f) = (self.cur_layer, self.cur_frame);
@@ -1020,6 +1031,11 @@ impl App {
         }
         if self.layer().position_locked {
             self.status = POSITION_LOCKED.into();
+            return false;
+        }
+        if !self.layer().auto_create && self.cel_here().is_none() {
+            let key = self.keymap.label("dessin.nouveau");
+            self.status = format!("Pas de dessin à cette image, et la création automatique est éteinte : Nouveau dessin ({key}) d'abord.");
             return false;
         }
         if crate::folders::effect(self.layers(), self.cur_layer).is_some() {
@@ -2301,6 +2317,14 @@ impl App {
             "images.inserer" => self.insert_images(true, 1, true),
             "images.supprimer_plan" => self.delete_images(true),
             "images.tout_choisir" => self.select_all_images(),
+            "instance.precedente" => self.goto_instance(false),
+            "instance.suivante" => self.goto_instance(true),
+            "instance.tete" => self.goto_instance_end(false),
+            "instance.queue" => self.goto_instance_end(true),
+            "instance.casser" => self.break_instance_here(),
+            "instance.ajouter_avant" => self.add_instance_before(),
+            "instance.exposition_plus" => self.change_chosen_exposures(true),
+            "instance.exposition_moins" => self.change_chosen_exposures(false),
             // Dossiers de calques (13b-5, `folders.rs`).
             "dossier.nouveau" => self.new_folder(),
             "dossier.ranger" => self.folder_from_chosen(),

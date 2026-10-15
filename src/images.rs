@@ -117,6 +117,92 @@ pub(crate) fn shift_panel(panel: &mut Panel, at: usize, n: usize, removed: bool)
     panel.marks.retain(|m| m.frame > 0);
 }
 
+/// Bornes [début, fin) de l'instance (un dessin et ses expositions) qui contient `f`.
+fn run_at(frames: &Frames, f: usize) -> (usize, usize) {
+    let v = frames.get(f).copied().flatten();
+    let mut s = f;
+    while s > 0 && frames.get(s - 1).copied().flatten() == v {
+        s -= 1;
+    }
+    let mut e = f + 1;
+    while e < frames.len() && frames[e] == v {
+        e += 1;
+    }
+    (s, e)
+}
+
+/// Début de l'instance dessinée suivante (après celle qui contient `f`).
+pub(crate) fn next_instance(frames: &Frames, f: usize) -> Option<usize> {
+    let (_, mut e) = run_at(frames, f);
+    while e < frames.len() {
+        if frames[e].is_some() {
+            return Some(e);
+        }
+        e = run_at(frames, e).1;
+    }
+    None
+}
+
+/// Début de l'instance dessinée précédente : celle qui contient `f` si l'on n'est pas à son
+/// début, sinon celle d'avant.
+pub(crate) fn prev_instance(frames: &Frames, f: usize) -> Option<usize> {
+    let (s, _) = run_at(frames, f);
+    if s < f && frames.get(f).copied().flatten().is_some() {
+        return Some(s);
+    }
+    let mut g = s;
+    while g > 0 {
+        let (s2, _) = run_at(frames, g - 1);
+        if frames[s2].is_some() {
+            return Some(s2);
+        }
+        g = s2;
+    }
+    None
+}
+
+/// Casse l'instance à l'image `f` : de `f` à la fin de l'instance, le dessin `copy` (une copie)
+/// remplace l'ancien. Faux si `f` est le début de l'instance ou une image vide.
+pub(crate) fn break_instance(frames: &mut Frames, f: usize, copy: CelId) -> bool {
+    if frames.get(f).copied().flatten().is_none() {
+        return false;
+    }
+    let (s, e) = run_at(frames, f);
+    if s == f {
+        return false;
+    }
+    frames[f..e].fill(Some(copy));
+    true
+}
+
+/// Allonge (`more`) ou raccourcit d'une image chaque instance dessinée qui commence dans
+/// [a, b) (ou qui contient `a`) ; une instance d'une seule image ne raccourcit pas. Renvoie le
+/// nombre d'instances changées.
+pub(crate) fn change_exposures(frames: &mut Frames, a: usize, b: usize, more: bool) -> usize {
+    let mut runs = Vec::new();
+    let mut f = run_at(frames, a.min(frames.len().saturating_sub(1))).0;
+    while f < b.min(frames.len()) {
+        let (s, e) = run_at(frames, f);
+        if frames[s].is_some() {
+            runs.push((s, e));
+        }
+        f = e;
+    }
+    let mut n = 0;
+    for &(s, e) in runs.iter().rev() {
+        if more {
+            let v = frames[s];
+            frames.insert(e, v);
+            n += 1;
+        } else if e - s > 1 {
+            frames.remove(e - 1);
+            n += 1;
+        }
+    }
+    trim(frames);
+    n
+}
+
 /// Images copiées : une rangée par calque (du plus bas au plus haut) et leurs dessins.
 #[derive(Clone)]
 pub(crate) struct ImageClip {
@@ -324,6 +410,81 @@ impl App {
         self.status = "Toutes les images du plan sont choisies.".into();
     }
 
+    /// Va au début de l'instance précédente (`next` : suivante) du calque courant.
+    pub(crate) fn goto_instance(&mut self, next: bool) {
+        let frames = &self.layer().frames;
+        let to = if next { next_instance(frames, self.cur_frame) } else { prev_instance(frames, self.cur_frame) };
+        match to {
+            Some(f) => self.goto_frame(f),
+            None => self.status = if next { "Pas d'instance après." } else { "Pas d'instance avant." }.into(),
+        }
+    }
+
+    /// Va à la tête (première image) ou à la queue (dernière image) de l'instance courante.
+    pub(crate) fn goto_instance_end(&mut self, tail: bool) {
+        let (s, e) = run_at(&self.layer().frames, self.cur_frame);
+        self.goto_frame(if tail { e - 1 } else { s });
+    }
+
+    /// Casse l'instance à l'image courante : la suite de l'exposition devient un nouveau
+    /// dessin, copie de celui-ci.
+    pub(crate) fn break_instance_here(&mut self) {
+        if self.refuse_on_folder() {
+            return;
+        }
+        self.end_stroke();
+        let Some(id) = self.cel_here() else {
+            self.status = "Pas de dessin à cette image.".into();
+            return;
+        };
+        let (s, _) = run_at(&self.layer().frames, self.cur_frame);
+        if s == self.cur_frame {
+            self.status = "C'est déjà le début de l'instance.".into();
+            return;
+        }
+        let snap = self.snapshot();
+        let copy = self.doc.duplicate_cel(id);
+        let (f, li) = (self.cur_frame, self.cur_layer);
+        break_instance(&mut self.layers_mut()[li].frames, f, copy);
+        self.done(snap, "Instance cassée : la suite est un nouveau dessin.".into());
+    }
+
+    /// Une exposition de plus (`more`) ou de moins à chaque instance des images visées.
+    pub(crate) fn change_chosen_exposures(&mut self, more: bool) {
+        self.end_stroke();
+        let (a, b) = self.image_range();
+        let snap = self.snapshot();
+        let mut n = 0;
+        for li in self.image_layers() {
+            n += change_exposures(&mut self.layers_mut()[li].frames, a, b, more);
+        }
+        if n == 0 {
+            self.status = "Aucune instance à changer.".into();
+            return;
+        }
+        let what = if more { "allongée" } else { "raccourcie" };
+        self.done(snap, format!("{n} instance{} {what}{} d'une image.", s(n), s(n)));
+    }
+
+    /// Nouveau dessin vide avant l'instance courante (exposé selon « en N »).
+    pub(crate) fn add_instance_before(&mut self) {
+        if self.refuse_on_folder() {
+            return;
+        }
+        self.end_stroke();
+        let (start, _) = run_at(&self.layer().frames, self.cur_frame);
+        let at = if self.cel_here().is_some() { start } else { self.cur_frame };
+        let snap = self.snapshot();
+        let kind = self.layer().kind;
+        let id = self.doc.new_cel(kind);
+        let n = self.default_exposure.max(1);
+        let li = self.cur_layer;
+        insert_frames(&mut self.layers_mut()[li].frames, at, &vec![Some(id); n]);
+        self.cur_frame = at;
+        self.follow_frame = true;
+        self.done(snap, "Nouveau dessin avant l'instance.".into());
+    }
+
     /// Menu « Images » (barre de la timeline, menu Animation).
     pub(crate) fn images_menu(&mut self, ui: &mut egui::Ui) {
         let (a, b) = self.image_range();
@@ -343,6 +504,19 @@ impl App {
         self.action_item(ui, "Ajouter une image après l'image courante", "images.ajouter");
         self.action_item(ui, "Insérer une image avant l'image courante", "images.inserer");
         self.action_item(ui, "Supprimer l'image (ou les images choisies)", "images.supprimer_plan");
+        ui.menu_button("Instances (dessin et ses expositions)", |ui| {
+            self.action_item(ui, "Instance précédente", "instance.precedente");
+            self.action_item(ui, "Instance suivante", "instance.suivante");
+            self.action_item(ui, "Tête de l'instance", "instance.tete");
+            self.action_item(ui, "Queue de l'instance", "instance.queue");
+            ui.separator();
+            self.action_item(ui, "Casser l'instance à l'image courante", "instance.casser");
+            self.action_item(ui, "Nouveau dessin avant l'instance", "instance.ajouter_avant");
+            self.action_item(ui, "Nouveau dessin après l'instance", "dessin.nouveau");
+            ui.separator();
+            self.action_item(ui, "Une exposition de plus à chaque instance choisie", "instance.exposition_plus");
+            self.action_item(ui, "Une exposition de moins à chaque instance choisie", "instance.exposition_moins");
+        });
         ui.separator();
         self.action_item(ui, "Choisir toutes les images", "images.tout_choisir");
         ui.menu_button("Trou laissé par une suppression", |ui| {

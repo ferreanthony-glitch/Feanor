@@ -120,6 +120,57 @@ fn tvpaint_image_keys_are_in_place() {
 }
 
 #[test]
+fn instances_are_found_broken_and_exposed() {
+    use crate::images::{break_instance, change_exposures, next_instance, prev_instance};
+    // 1 1 . . 2 2 2 3
+    let mut f = vec![Some(1), Some(1), None, None, Some(2), Some(2), Some(2), Some(3)];
+    assert_eq!(next_instance(&f, 0), Some(4), "le vide est sauté");
+    assert_eq!(next_instance(&f, 5), Some(7));
+    assert_eq!(next_instance(&f, 7), None);
+    assert_eq!(prev_instance(&f, 6), Some(4), "au milieu : le début de l'instance");
+    assert_eq!(prev_instance(&f, 4), Some(0), "au début : l'instance d'avant");
+    assert_eq!(prev_instance(&f, 0), None);
+
+    assert!(!break_instance(&mut f, 4, 9), "au début de l'instance, rien à casser");
+    assert!(break_instance(&mut f, 5, 9));
+    assert_eq!(&f[4..8], [Some(2), Some(9), Some(9), Some(3)]);
+
+    // Chaque instance qui commence entre les images 4 et 7 prend une image de plus.
+    let n = change_exposures(&mut f, 4, 8, true);
+    assert_eq!(n, 3);
+    assert_eq!(f, [Some(1), Some(1), None, None, Some(2), Some(2), Some(9), Some(9), Some(9), Some(3), Some(3)]);
+    let n = change_exposures(&mut f, 0, 2, false);
+    assert_eq!(n, 1);
+    assert_eq!(&f[..3], [Some(1), None, None]);
+}
+
+#[test]
+fn auto_settings_are_saved_and_keys_go_to_instances() {
+    use crate::app::Mode;
+    use crate::keymap::{Keymap, DEFAULT_KEYMAP};
+    use eframe::egui::{Key, Modifiers};
+    let map = Keymap::from_texts(DEFAULT_KEYMAP, None);
+    let press = |key| map.find(key, Some(key), Modifiers::COMMAND, Mode::Animation).map(str::to_string);
+    assert_eq!(press(Key::ArrowLeft).as_deref(), Some("instance.precedente"));
+    assert_eq!(press(Key::ArrowRight).as_deref(), Some("instance.suivante"));
+
+    let mut doc = Document::new(16, 16, 24);
+    let l = &mut doc.panels[0].layers[0];
+    l.auto_break = true;
+    l.auto_create = false;
+    let dir = std::env::temp_dir().join(format!("pelure-test-auto-{}", std::process::id()));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).unwrap();
+    let manifest = dir.join("A.pelure");
+    project::save(&doc, &manifest, &mut Default::default()).unwrap();
+    let back = project::load(&manifest).unwrap().doc;
+    std::fs::remove_dir_all(&dir).ok();
+    let l = &back.panels[0].layers[0];
+    assert!(l.auto_break && !l.auto_create);
+    assert!(Layer::new("x", LayerKind::Bitmap).auto_create, "création automatique par défaut");
+}
+
+#[test]
 fn behaviours_are_saved() {
     let mut doc = Document::new(16, 16, 24);
     let cel = doc.new_cel(LayerKind::Bitmap);

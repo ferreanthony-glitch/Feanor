@@ -893,6 +893,49 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
+action = "instance.precedente"
+# Tes touches TVPaint « a » / « f » sont déjà « panneau précédent / suivant » (Storyboard Pro).
+touches = ["Ctrl+Flèche gauche"]
+source = "TVPaint 12 (perso) : PrevInstance"
+contexte = "animation"
+
+[[raccourci]]
+action = "instance.suivante"
+touches = ["Ctrl+Flèche droite"]
+source = "TVPaint 12 (perso) : NextInstance"
+contexte = "animation"
+
+[[raccourci]]
+action = "instance.tete"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "instance.queue"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "instance.casser"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "instance.ajouter_avant"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "instance.exposition_plus"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "instance.exposition_moins"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
 action = "dossier.nouveau"
 touches = []
 source = "TVPaint 12 sans touche"
