@@ -409,7 +409,20 @@ aperçus de pinceaux dans la couleur courante.
   du curseur qu'ils concernent.
   Restent en texte, volontairement : les menus et menus contextuels, les fenêtres de dialogue
   (export, enregistrer, nouveau projet, secours), les noms de réglages devant les curseurs, et
-  « Storyboard » / « Animation » en haut à droite (on voit d'un coup d'œil où l'on est).
+  « Storyboard » / « Animation » en haut à droite (on voit d'un coup d'œil où l'on est) ;
+  Anthony a confirmé de les garder en texte.
+- ✅ 12e. Demandé par Anthony : copier, coller, supprimer des panneaux dans le montage, et
+  déplacer les clés de caméra à la souris.
+  - Choix de plusieurs panneaux dans la bande (Ctrl + clic, Maj + clic, comme sur la planche) ;
+    glisser l'un d'eux déplace le groupe.
+  - Après un clic dans le montage ou sur une vignette : Ctrl+C copie les panneaux choisis
+    (avec une copie de leurs dessins), Ctrl+V les colle après le panneau courant, Ctrl+X les
+    coupe, Suppr les supprime ; un clic dans le dessin rend ces touches au dessin. Icônes de la
+    barre du montage, clic droit, menu Storyboard (`panneau.copier`, `panneau.coller`, sans
+    touche à eux ; `panneau.supprimer` vise désormais les panneaux choisis).
+  - Clés de caméra : on les fait glisser dans la rangée Caméra de la timeline et la piste
+    Caméra du montage ; une clé ne passe pas par-dessus sa voisine ; une étape d'annulation par
+    glisser.
 
 ## Raccourcis proposés, à valider
 

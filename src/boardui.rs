@@ -119,7 +119,7 @@ impl App {
     }
 
     /// Les panneaux choisis, dans l'ordre du film (le panneau courant en fait toujours partie).
-    fn board_selection(&self) -> Vec<u64> {
+    pub(crate) fn board_selection(&self) -> Vec<u64> {
         let cur = self.doc.panels[self.cur_panel].id;
         self.doc.panels.iter().map(|p| p.id).filter(|id| *id == cur || self.board_sel.contains(id)).collect()
     }
@@ -733,6 +733,10 @@ impl App {
         // Gestes : le titre seulement sur le panneau courant (son image sert à dessiner).
         let hit = if live { header } else { card }.intersect(view);
         let resp = ui.interact(hit, ui.id().with(("planche_carte", id)), Sense::click_and_drag());
+        // Un clic sur une vignette donne la main aux panneaux : copier, coller, supprimer (12e).
+        if resp.is_pointer_button_down_on() {
+            self.panel_focus = true;
+        }
         if pan_mode || resp.dragged_by(PointerButton::Middle) {
             if resp.dragged() {
                 self.board_pan += resp.drag_delta();
@@ -792,7 +796,6 @@ impl App {
 
     /// Menu d'une vignette (clic droit) : sur ce panneau, ou sur tous les panneaux choisis.
     fn card_menu(&mut self, ui: &mut egui::Ui, i: usize) {
-        let ids = self.board_selection();
         let item = |app: &mut App, ui: &mut egui::Ui, text: &str, f: &dyn Fn(&mut App)| {
             if ui.button(text).clicked() {
                 ui.close_menu();
@@ -803,11 +806,8 @@ impl App {
         item(self, ui, "Animer ce panneau", &|a| a.enter_animation(a.cur_panel));
         item(self, ui, "Nouveau panneau après", &|a| a.new_panel());
         item(self, ui, "Dupliquer le panneau", &|a| a.duplicate_panel());
-        let label = if ids.len() > 1 { format!("Supprimer les {} panneaux choisis", ids.len()) } else { "Supprimer le panneau".into() };
-        if ui.button(label).clicked() {
-            ui.close_menu();
-            self.delete_panels(&ids);
-        }
+        ui.separator();
+        self.panel_clipboard_items(ui);
         ui.separator();
         item(self, ui, "Nouvelle scène à partir de ce panneau", &|a| a.run_action("scene.couper"));
         item(self, ui, "Recadrer (outil Caméra)", &|a| a.set_tool(Tool::Camera));

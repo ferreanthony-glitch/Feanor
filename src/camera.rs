@@ -338,6 +338,26 @@ pub fn set_key(keys: &mut Vec<CameraKey>, frame: usize, cam: Camera) {
     }
 }
 
+/// Images où la clé `index` peut aller (12e) : entre ses voisines (elle ne passe pas par-dessus
+/// une autre clé), dans un panneau de `len` images.
+pub fn key_range(keys: &[CameraKey], index: usize, len: usize) -> (usize, usize) {
+    let lo = index.checked_sub(1).and_then(|i| keys.get(i)).map_or(0, |k| k.frame + 1);
+    let hi = keys.get(index + 1).map_or(len.saturating_sub(1), |k| k.frame.saturating_sub(1));
+    (lo, hi.max(lo))
+}
+
+/// Déplace la clé `index` vers l'image `frame`, bornée par `key_range` ; les clés restent
+/// triées. Renvoie l'image où elle est.
+pub fn move_key(keys: &mut [CameraKey], index: usize, frame: usize, len: usize) -> usize {
+    if index >= keys.len() {
+        return frame;
+    }
+    let (lo, hi) = key_range(keys, index, len);
+    let to = frame.clamp(lo, hi);
+    keys[index].frame = to;
+    to
+}
+
 /// Coupe les clés d'un panneau à l'image `at` : celles d'avant, et celles d'après ramenées à 0.
 /// Le mouvement est gardé : chaque partie reçoit une clé à la coupure si la caméra y bougeait.
 pub fn split_keys(keys: &[CameraKey], at: usize, default: Camera) -> (Vec<CameraKey>, Vec<CameraKey>) {

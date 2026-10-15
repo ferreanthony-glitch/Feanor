@@ -28,6 +28,10 @@ impl App {
             }
         }
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
+        // Un clic dans le dessin reprend la main au montage : l'édition vise de nouveau le dessin.
+        if response.is_pointer_button_down_on() {
+            self.panel_focus = false;
+        }
         self.canvas_rect = rect;
         let size = self.canvas_size();
         // En vue caméra, la vue suit la caméra du panneau (avant de lire la souris).

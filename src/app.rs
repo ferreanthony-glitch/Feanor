@@ -374,6 +374,13 @@ pub struct App {
     pub(crate) pixel_clipboard: Option<Floating>,
     /// Calque copié (W / X).
     pub(crate) layer_clipboard: Option<LayerClip>,
+    /// Panneaux copiés (12e).
+    pub(crate) panel_clipboard: Option<crate::document::PanelClip>,
+    /// Le montage (ou la planche des vignettes) a la main : on y a cliqué en dernier, pas dans le
+    /// dessin. Copier, coller et supprimer y visent alors les panneaux choisis (12e).
+    pub(crate) panel_focus: bool,
+    /// Clé de caméra que l'on fait glisser dans la timeline ou le montage (12e).
+    pub(crate) cam_key_drag: Option<crate::camtools::CamKeyDrag>,
     pub(crate) shape_drag: Option<(Pos2, Pos2)>,
     /// Forme en plusieurs gestes : ligne à courber, polyligne en cours (5c).
     pub(crate) shape_edit: Option<crate::shapes::ShapeEdit>,
@@ -551,6 +558,9 @@ impl App {
             select_rect: false,
             pixel_clipboard: None,
             layer_clipboard: None,
+            panel_clipboard: None,
+            panel_focus: false,
+            cam_key_drag: None,
             shape_drag: None,
             shape_edit: None,
             text_edit: None,
@@ -2001,6 +2011,10 @@ impl App {
             "fichier.importer_modele3d" => self.import_model3d(),
             "edition.annuler" => self.undo(),
             "edition.retablir" => self.redo(),
+            // Après un clic dans le montage (ou la planche), l'édition vise les panneaux choisis (12e).
+            "edition.couper" if self.panels_have_focus() => self.cut_panels(),
+            "edition.copier" if self.panels_have_focus() => self.copy_panels(),
+            "edition.coller" if self.panels_have_focus() && self.panel_clipboard.is_some() => self.paste_panels(),
             "edition.couper" if self.bsel.is_some() => self.bitmap_cut(),
             "edition.couper" => self.cut_selection(),
             "edition.copier" if self.bsel.is_some() => {
@@ -2024,6 +2038,8 @@ impl App {
             "edition.supprimer" => {
                 if let Some(id) = self.sel_clip.filter(|&id| board && self.doc.clip(id).is_some()) {
                     self.delete_clip(id);
+                } else if self.panels_have_focus() {
+                    self.delete_chosen_panels();
                 } else if self.bsel.is_some() {
                     self.bitmap_erase(true);
                 } else if self.tool == Tool::Select && self.vsel.is_some() {
@@ -2126,7 +2142,9 @@ impl App {
             "scene.precedente" => self.step_scene(false),
             "scene.suivante" => self.step_scene(true),
             "sequence.nouvelle" => self.new_sequence(),
-            "panneau.supprimer" => self.delete_panel(),
+            "panneau.supprimer" => self.delete_chosen_panels(),
+            "panneau.copier" => self.copy_panels(),
+            "panneau.coller" => self.paste_panels(),
             "panneau.ajouter_image" => self.nudge_panel_length(1),
             "panneau.retirer_image" => self.nudge_panel_length(-1),
             "dessin.nouveau" => self.new_image(false),

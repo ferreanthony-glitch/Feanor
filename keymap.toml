@@ -585,6 +585,18 @@ touches = ["Ctrl+Suppr"]
 contexte = "storyboard"
 source = "proposition"
 
+# Copier / coller des panneaux (12e) : pas de touche à eux. Après un clic dans le montage ou sur
+# une vignette, Ctrl+C, Ctrl+X, Ctrl+V et Suppr (edition.*) visent les panneaux choisis.
+[[raccourci]]
+action = "panneau.copier"
+touches = []
+source = "Pelure (Ctrl+C après un clic dans le montage)"
+
+[[raccourci]]
+action = "panneau.coller"
+touches = []
+source = "Pelure (Ctrl+V après un clic dans le montage)"
+
 # ------------------------------------------------------------------------------------ Animation
 
 [[raccourci]]

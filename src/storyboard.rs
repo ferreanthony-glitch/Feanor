@@ -5,7 +5,7 @@ use eframe::egui::{
     self, pos2, vec2, Align2, Color32, CursorIcon, FontId, Pos2, Rect, RichText, Sense, Stroke, StrokeKind,
 };
 
-use crate::app::{App, BoardView};
+use crate::app::{App, BoardView, Mode};
 use crate::document::{Document, Panel};
 use crate::history::Edit;
 use crate::soundtrack::{ClipDrag, ClipEdge, MenuTarget};
@@ -117,17 +117,85 @@ impl App {
         self.structure_op(|d, i| Some(d.duplicate_scene_after(i)));
     }
 
-    pub(crate) fn delete_panel(&mut self) {
-        if !self.structure_op(|d, i| d.remove_panel(i)) {
-            self.status = "Il faut garder au moins un panneau.".into();
-        }
-    }
-
     /// Supprime la scène courante et tous ses panneaux.
     pub(crate) fn delete_scene(&mut self) {
         if !self.structure_op(|d, i| d.remove_scene(i)) {
             self.status = "Impossible de supprimer la seule scène du projet.".into();
         }
+    }
+
+    // ------------------------------------------------------------------ panneaux choisis (12e)
+
+    /// Le montage (ou la planche) a la main, en storyboard : copier, coller et supprimer y visent
+    /// les panneaux choisis.
+    pub(crate) fn panels_have_focus(&self) -> bool {
+        self.panel_focus && self.mode == Mode::Storyboard
+    }
+
+    /// Copie les panneaux choisis (le panneau courant en fait toujours partie).
+    pub(crate) fn copy_panels(&mut self) {
+        let ids = self.board_selection();
+        let Some(clip) = self.doc.copy_panels(&ids) else { return };
+        self.status = match clip.panels.len() {
+            1 => format!("Panneau {} copié.", panel_title(&self.doc, self.cur_panel)),
+            n => format!("{n} panneaux copiés."),
+        };
+        self.panel_clipboard = Some(clip);
+    }
+
+    /// Copie les panneaux choisis, puis les retire.
+    pub(crate) fn cut_panels(&mut self) {
+        self.copy_panels();
+        let ids = self.board_selection();
+        self.delete_panels(&ids);
+    }
+
+    /// Colle les panneaux copiés juste après le panneau courant, dans sa scène ; ils deviennent
+    /// les panneaux choisis.
+    pub(crate) fn paste_panels(&mut self) {
+        let Some(clip) = self.panel_clipboard.take() else {
+            self.status = "Aucun panneau copié.".into();
+            return;
+        };
+        let n = clip.panels.len();
+        let after = panel_title(&self.doc, self.cur_panel);
+        if self.structure_op(|d, i| d.paste_panels(&clip, i)) {
+            let end = (self.cur_panel + n).min(self.doc.panels.len());
+            self.board_sel = self.doc.panels[self.cur_panel..end].iter().map(|p| p.id).collect();
+            self.status = match n {
+                1 => format!("Panneau collé après {after}."),
+                n => format!("{n} panneaux collés après {after}."),
+            };
+        } else {
+            self.status = "Ces panneaux viennent d'un projet d'une autre taille : ils ne se collent pas ici.".into();
+        }
+        self.panel_clipboard = Some(clip);
+    }
+
+    /// Supprime les panneaux choisis (une étape d'annulation).
+    pub(crate) fn delete_chosen_panels(&mut self) {
+        let ids = self.board_selection();
+        self.delete_panels(&ids);
+    }
+
+    /// Déplace les panneaux `ids` (dont le panneau `dragged`) à la place `slot` de la bande. Comme
+    /// un panneau seul, le groupe reste dans la scène du panneau tiré s'il retombe à côté d'elle ;
+    /// sinon il rejoint la scène du panneau devant lequel on le pose (ou du dernier, à la fin).
+    fn move_chosen_panels(&mut self, ids: &[u64], dragged: usize, slot: usize) {
+        let own = self.doc.panels[dragged].scene;
+        let left = slot.checked_sub(1).and_then(|i| self.doc.panels.get(i)).map(|p| p.scene);
+        let right = self.doc.panels.get(slot).map(|p| (p.scene, p.id));
+        let scene = if left == Some(own) || right.is_some_and(|r| r.0 == own) {
+            own
+        } else {
+            right.map(|r| r.0).or(left).unwrap_or(own)
+        };
+        let current = self.panel().id;
+        let ids = ids.to_vec();
+        self.structure_op(|d, _| {
+            d.move_panels(&ids, scene, right.map(|r| r.1))?;
+            d.panels.iter().position(|p| p.id == current)
+        });
     }
 
     /// Déplace le panneau `from` à la place `slot` (voir `Document::move_panel`).
@@ -247,6 +315,7 @@ impl App {
 
     /// Abandonne un glissé en cours dans la bande de montage (la durée revient à l'original).
     pub(crate) fn cancel_montage_drag(&mut self) {
+        self.cancel_camera_key_drag();
         match self.montage_drag.take() {
             Some(MontageDrag::Trim { panel, original, .. }) => {
                 if self.doc.panels.get(panel).is_some_and(|s| s.id == original.id) {
@@ -322,6 +391,19 @@ impl App {
         if self.bouton(ui, ph::STACK_PLUS, "Nouvelle séquence", "Après la séquence courante.", "sequence.nouvelle").clicked() {
             self.new_sequence();
         }
+        // Panneaux choisis (Ctrl ou Maj + clic dans la bande) : copier, coller, supprimer (12e).
+        let n = self.board_selection().len();
+        let chosen = if n > 1 { format!("Les {n} panneaux choisis.") } else { "Le panneau courant ; Ctrl ou Maj + clic pour en choisir plusieurs.".to_string() };
+        if self.bouton(ui, ph::COPY, "Copier les panneaux", &chosen, "edition.copier").clicked() {
+            self.copy_panels();
+        }
+        let can_paste = self.panel_clipboard.is_some();
+        if self.bouton_si(ui, can_paste, ph::CLIPBOARD, "Coller les panneaux", "Après le panneau courant, dans sa scène.", "edition.coller").clicked() {
+            self.paste_panels();
+        }
+        if self.bouton(ui, ph::TRASH, "Supprimer les panneaux", &chosen, "edition.supprimer").clicked() {
+            self.delete_chosen_panels();
+        }
         let resp = ui
             .menu_button(RichText::new(ph::DOTS_THREE).size(TAILLE), |ui| {
                 let item = |app: &mut App, ui: &mut egui::Ui, text: &str, action: &str| {
@@ -332,7 +414,9 @@ impl App {
                     }
                 };
                 item(self, ui, "Dupliquer le panneau", "panneau.dupliquer");
-                item(self, ui, "Supprimer le panneau", "panneau.supprimer");
+                ui.separator();
+                self.panel_clipboard_items(ui);
+                ui.separator();
                 item(self, ui, "Couper le panneau à l'image courante", "panneau.couper");
                 item(self, ui, "Réunir le panneau et le suivant", "panneau.fusionner_suivant");
                 ui.separator();
@@ -386,6 +470,7 @@ impl App {
         let resp = ui.add(egui::Slider::new(&mut self.montage_zoom, 0.5..=16.0).logarithmic(true).show_value(false));
         bulle(resp, "Zoom du montage", "Largeur d'une image dans la bande.", "");
     }
+
     /// Menu « Son… » de la barre du montage.
     pub(crate) fn sound_menu(&mut self, ui: &mut egui::Ui) {
         let item = |app: &mut App, ui: &mut egui::Ui, text: &str, action: &str| {
@@ -417,6 +502,32 @@ impl App {
         }
     }
 
+    /// Copier, coller, supprimer les panneaux choisis : entrées des menus du montage et des
+    /// vignettes (12e). Les raccourcis montrés sont ceux qui valent quand le montage a la main.
+    pub(crate) fn panel_clipboard_items(&mut self, ui: &mut egui::Ui) {
+        let n = self.board_selection().len();
+        let what = |verb: &str| if n > 1 { format!("{verb} les {n} panneaux choisis") } else { format!("{verb} le panneau") };
+        let copy = self.raccourci("edition.copier");
+        if ui.add(egui::Button::new(what("Copier")).shortcut_text(copy)).clicked() {
+            ui.close_menu();
+            self.copy_panels();
+        }
+        let paste = self.raccourci("edition.coller");
+        let label = match self.panel_clipboard.as_ref().map(|c| c.panels.len()) {
+            Some(k) if k > 1 => format!("Coller {k} panneaux après le panneau courant"),
+            _ => "Coller après le panneau courant".to_string(),
+        };
+        if ui.add_enabled(self.panel_clipboard.is_some(), egui::Button::new(label).shortcut_text(paste)).clicked() {
+            ui.close_menu();
+            self.paste_panels();
+        }
+        let delete = self.raccourci("edition.supprimer");
+        if ui.add(egui::Button::new(what("Supprimer")).shortcut_text(delete)).clicked() {
+            ui.close_menu();
+            self.delete_chosen_panels();
+        }
+    }
+
     /// Menu du clic droit sur un panneau de la bande de montage.
     fn panel_menu(&mut self, ui: &mut egui::Ui, index: usize) {
         if ui.button("Animer ce panneau").clicked() {
@@ -431,10 +542,9 @@ impl App {
             ui.close_menu();
             self.duplicate_panel();
         }
-        if ui.button("Supprimer le panneau").clicked() {
-            ui.close_menu();
-            self.delete_panel();
-        }
+        ui.separator();
+        self.panel_clipboard_items(ui);
+        ui.separator();
         if ui.button("Couper le panneau à l'image courante").clicked() {
             ui.close_menu();
             self.split_current_panel();
@@ -473,6 +583,10 @@ impl App {
         let lanes_top = r.top() + rows.lanes_top();
         let in_blocks = |p: Pos2| p.y >= top && p.y <= top + block_h;
         let visuals = ui.visuals().clone();
+        // Un clic dans la bande lui donne la main : copier, coller, supprimer visent ses panneaux.
+        if resp.is_pointer_button_down_on() {
+            self.panel_focus = true;
+        }
 
         // Règle : une graduation par seconde, un repère lisible tous les ~60 pixels.
         painter.rect_filled(Rect::from_min_max(r.min, pos2(r.right(), bands_top)), 0.0, theme::REGLE);
@@ -510,8 +624,12 @@ impl App {
             blocks.push(rect);
             start += len;
             let selected = i == self.cur_panel;
+            // Choisi avec lui (Ctrl ou Maj + clic) : un ton d'accent plus léger.
+            let chosen = !selected && self.board_sel.contains(&self.doc.panels[i].id);
             let bg = if selected {
                 visuals.selection.bg_fill.gamma_multiply(0.55)
+            } else if chosen {
+                visuals.selection.bg_fill.gamma_multiply(0.3)
             } else {
                 theme::BLOC
             };
@@ -539,11 +657,11 @@ impl App {
             }
             let at = pos2(rect.left() + 5.0, rect.bottom() - 4.0 - title.size().y);
             clip.galley(at, title, visuals.text_color());
-            if selected {
+            if selected || chosen {
                 painter.rect_stroke(
                     rect,
                     4.0,
-                    Stroke::new(2.0_f32, visuals.selection.stroke.color),
+                    Stroke::new(if selected { 2.0_f32 } else { 1.0_f32 }, visuals.selection.stroke.color),
                     StrokeKind::Inside,
                 );
             }
@@ -628,7 +746,9 @@ impl App {
             let origin = ui.input(|i| i.pointer.press_origin()).unwrap_or(r.center());
             // Sans recentrer la bande : le bord tiré doit rester sous le pointeur.
             self.playing = false;
-            if let Some((_, Some((id, edge)))) = self.lane_hit(origin, left, ppf, lanes_top) {
+            if let Some((i, k)) = self.montage_camera_key_at(origin, r.top(), &blocks, ppf, rows) {
+                self.begin_camera_key_drag(i, k);
+            } else if let Some((_, Some((id, edge)))) = self.lane_hit(origin, left, ppf, lanes_top) {
                 self.begin_clip_drag(id, edge, origin);
             } else {
                 let drag = if !in_blocks(origin) {
@@ -643,6 +763,10 @@ impl App {
                         snap: self.snapshot(),
                     }
                 } else if let Some(i) = panel_at(origin.x) {
+                    // Un panneau qui n'était pas choisi part seul ; sinon tout le groupe le suit.
+                    if !self.board_selection().contains(&self.doc.panels[i].id) {
+                        self.board_sel.clear();
+                    }
                     self.set_panel(i);
                     MontageDrag::Move { panel: i, target: i }
                 } else {
@@ -652,7 +776,22 @@ impl App {
             }
         }
 
-        if resp.dragged() {
+        if self.cam_key_drag.is_some() {
+            ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
+            if let (true, Some(p)) = (resp.dragged(), resp.interact_pointer_pos()) {
+                if let Some(i) = self.doc.panels.iter().position(|q| self.is_dragged_camera_key_panel(q.id)) {
+                    let start = self.doc.panel_start(i);
+                    self.drag_camera_key(((p.x - x_of(start)) / ppf).floor().max(0.0) as usize);
+                }
+            }
+            if resp.drag_stopped() {
+                self.end_camera_key_drag();
+            }
+        } else if resp.hover_pos().is_some_and(|p| self.montage_camera_key_at(p, r.top(), &blocks, ppf, rows).is_some()) {
+            ui.ctx().set_cursor_icon(CursorIcon::Grab);
+        }
+
+        if resp.dragged() && self.cam_key_drag.is_none() {
             if let Some(p) = resp.interact_pointer_pos() {
                 match &mut self.montage_drag {
                     Some(MontageDrag::Scrub) => {
@@ -689,7 +828,14 @@ impl App {
                         self.modified = true;
                     }
                 }
-                Some(MontageDrag::Move { panel, target }) => self.move_panel(panel, target),
+                Some(MontageDrag::Move { panel, target }) => {
+                    let ids = self.board_selection();
+                    if ids.len() > 1 {
+                        self.move_chosen_panels(&ids, panel, target);
+                    } else {
+                        self.move_panel(panel, target);
+                    }
+                }
                 Some(MontageDrag::Clip(d)) => self.finish_clip_drag(d),
                 _ => {}
             }
@@ -710,10 +856,35 @@ impl App {
                     self.goto_global(frame_at(p.x));
                 } else {
                     self.sel_clip = None;
+                    let mods = ui.input(|i| i.modifiers);
+                    let block = in_blocks(p).then(|| panel_at(p.x)).flatten();
                     // Clic sur une barre de scène ou de séquence : son premier panneau.
-                    match runs.iter().find(|(rect, _)| rect.contains(p)) {
-                        Some(&(_, start)) => self.select_panel(start),
-                        None => self.goto_global(frame_at(p.x)),
+                    match (runs.iter().find(|(rect, _)| rect.contains(p)), block) {
+                        (Some(&(_, start)), _) => {
+                            self.board_sel.clear();
+                            self.select_panel(start);
+                        }
+                        // Ctrl + clic : ajouter ou retirer un panneau du choix ; Maj + clic : une suite.
+                        (None, Some(i)) if mods.command => {
+                            let id = self.doc.panels[i].id;
+                            match self.board_sel.iter().position(|s| *s == id) {
+                                Some(k) => {
+                                    self.board_sel.remove(k);
+                                }
+                                None if i != self.cur_panel => self.board_sel.push(id),
+                                None => {}
+                            }
+                        }
+                        (None, Some(i)) if mods.shift => {
+                            let (a, b) = (self.cur_panel.min(i), self.cur_panel.max(i));
+                            self.board_sel = self.doc.panels[a..=b].iter().map(|p| p.id).collect();
+                        }
+                        (None, block) => {
+                            if block.is_some() {
+                                self.board_sel.clear();
+                            }
+                            self.goto_global(frame_at(p.x));
+                        }
                     }
                 }
             }
@@ -739,6 +910,9 @@ impl App {
                     })
                 } else if in_blocks(p) {
                     panel_at(p.x).map(|i| {
+                        if !self.board_selection().contains(&self.doc.panels[i].id) {
+                            self.board_sel.clear();
+                        }
                         self.select_panel(i);
                         MenuTarget::Panel(i)
                     })

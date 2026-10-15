@@ -27,6 +27,12 @@ ouvrir d'un double-clic).
   - On réordonne les panneaux en les faisant glisser. Un panneau posé dans une autre scène la
     rejoint (à la frontière entre deux scènes : celle qui suit). Le bord droit d'un panneau règle
     sa durée.
+  - Plusieurs panneaux : Ctrl + clic en ajoute ou en retire un, Maj + clic choisit une suite ;
+    glisser l'un d'eux déplace tout le groupe. Après un clic dans le montage (ou sur une
+    vignette), Ctrl+C copie les panneaux choisis, Ctrl+V les colle après le panneau courant (avec
+    leurs propres copies des dessins), Ctrl+X les coupe et Suppr les supprime ; un clic dans le
+    dessin rend ces touches au dessin. Mêmes commandes : icônes de la barre du montage, clic droit,
+    menu Storyboard. Ctrl+Z annule.
   - Numérotation automatique : scènes 1, 2, 3… dans l'ordre du film, panneaux 1, 2… dans chaque
     scène. Une scène ou une séquence peut recevoir un nom ou un numéro à soi (fiche à droite).
   - Chaque panneau a sa durée et ses champs Action / Dialogue / Notes.
@@ -250,7 +256,8 @@ vignettes montrent l'image en perspective.
 Caméra) posent des images clés ; on règle la caméra sur chacune, elle va de l'une à l'autre. Les
 adoucis la font accélérer en partant et freiner en arrivant. Avancer (Z) agrandit chaque calque
 selon sa profondeur : le premier plan vient plus vite que le décor. Les clés apparaissent dans la
-ligne « Caméra » de la timeline et en petits losanges dans la bande de montage.
+ligne « Caméra » de la timeline et en petits losanges dans la bande de montage ; on les y déplace
+en les faisant glisser (une clé ne passe pas par-dessus sa voisine ; Ctrl+Z annule).
 
 **Plateau, caméra, 3D** (barre au-dessus du dessin) : « Plateau » montre toute la feuille avec le
 cadre de la caméra ; « Caméra » montre ce qui sera filmé (on peut y dessiner) ; en revenant au

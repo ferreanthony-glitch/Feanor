@@ -70,6 +70,8 @@ mod noyau_tests;
 mod onion;
 #[cfg(test)]
 mod onion_tests;
+#[cfg(test)]
+mod panelclip_tests;
 mod panels;
 mod pdf;
 #[cfg(test)]

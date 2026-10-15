@@ -119,6 +119,15 @@ impl Cel {
 
 static NEXT_LAYER_ID: AtomicU64 = AtomicU64::new(1);
 
+/// Panneaux copiés (12e) : les panneaux tels qu'ils étaient, une copie de leurs dessins, et la
+/// taille du projet d'où ils viennent (un dessin n'a de sens qu'à cette taille).
+#[derive(Clone)]
+pub struct PanelClip {
+    pub panels: Vec<Panel>,
+    pub cels: HashMap<CelId, Cel>,
+    pub size: [usize; 2],
+}
+
 /// Identifiant de calque, unique pendant la session (il n'est pas enregistré).
 pub fn fresh_layer_id() -> u64 {
     NEXT_LAYER_ID.fetch_add(1, Ordering::Relaxed)
@@ -1342,6 +1351,62 @@ impl Document {
             }
         }
         panel
+    }
+
+    // ---------------------------------------------------------------- copier, coller des panneaux (12e)
+
+    /// Copie des panneaux `ids`, dans l'ordre du film, avec une copie de leurs dessins (les
+    /// modifier ensuite ne change pas ce qui sera collé). Rien si aucun n'existe.
+    pub fn copy_panels(&self, ids: &[u64]) -> Option<PanelClip> {
+        let panels: Vec<Panel> = self.panels.iter().filter(|p| ids.contains(&p.id)).cloned().collect();
+        if panels.is_empty() {
+            return None;
+        }
+        let cels = panels
+            .iter()
+            .flat_map(|p| &p.layers)
+            .filter(|l| l.scene_wide.is_none())
+            .flat_map(|l| l.frames.iter().flatten())
+            .filter_map(|id| self.cels.get(id).map(|c| (*id, c.clone())))
+            .collect();
+        Some(PanelClip { panels, cels, size: [self.width, self.height] })
+    }
+
+    /// Colle les panneaux copiés juste après le panneau `index`, dans sa scène, chacun avec ses
+    /// propres dessins. Un calque de toute la scène suit la règle d'un panneau déplacé : collé
+    /// dans sa scène, il en garde le dessin ; ailleurs, il est retiré et le panneau prend le fond
+    /// de sa nouvelle scène (`sync_scene_layers`). Renvoie l'indice du premier panneau collé, ou
+    /// rien si la copie vient d'un projet d'une autre taille.
+    pub fn paste_panels(&mut self, clip: &PanelClip, index: usize) -> Option<usize> {
+        if clip.panels.is_empty() || clip.size != [self.width, self.height] {
+            return None;
+        }
+        let scene = self.panels[index.min(self.panels.len() - 1)].scene;
+        let mut copies: HashMap<CelId, CelId> = HashMap::new();
+        let mut pasted = Vec::with_capacity(clip.panels.len());
+        for source in &clip.panels {
+            let mut panel = source.clone();
+            panel.id = self.alloc();
+            panel.scene = scene;
+            for layer in &mut panel.layers {
+                layer.id = fresh_layer_id();
+                if layer.scene_wide.is_some() {
+                    continue;
+                }
+                for f in layer.frames.iter_mut() {
+                    *f = f.and_then(|old| match copies.get(&old) {
+                        Some(&c) => Some(c),
+                        None => {
+                            let c = self.add_cel(clip.cels.get(&old)?.clone());
+                            copies.insert(old, c);
+                            Some(c)
+                        }
+                    });
+                }
+            }
+            pasted.push(panel);
+        }
+        Some(self.insert_and_normalize(index + 1, pasted))
     }
 
     // ---------------------------------------------------------------- calques de toute la scène (6f)

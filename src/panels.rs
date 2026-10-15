@@ -124,7 +124,9 @@ impl App {
                 self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
                 ui.separator();
                 self.action_item(ui, "Dupliquer le panneau", "panneau.dupliquer");
-                self.action_item(ui, "Supprimer le panneau", "panneau.supprimer");
+                self.action_item(ui, "Copier les panneaux choisis", "panneau.copier");
+                self.action_item(ui, "Coller les panneaux après le panneau courant", "panneau.coller");
+                self.action_item(ui, "Supprimer les panneaux choisis", "panneau.supprimer");
                 self.action_item(ui, "Allonger le panneau d'une image", "panneau.ajouter_image");
                 self.action_item(ui, "Raccourcir le panneau d'une image", "panneau.retirer_image");
                 ui.separator();

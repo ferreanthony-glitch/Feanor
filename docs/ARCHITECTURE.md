@@ -364,6 +364,20 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   impaire)`) : `timeline.rs`, `montagerows.rs`, `soundtrack.rs`, `storyboard.rs`. Les deux
   barres d'outils sont une `ScrollArea` horizontale autour d'une seule ligne ;
   les boutons viennent de `bulles.rs` (12d).
+- Panneaux choisis et presse-papiers (12e) : le choix est `App::board_sel` (partagé par le
+  montage et la planche ; `board_selection()` y ajoute toujours le panneau courant).
+  `Document::copy_panels` copie les panneaux et leurs dessins dans un `PanelClip` (avec la taille
+  du projet) ; `paste_panels` les insère après un panneau, dans sa scène, avec de nouveaux ids et
+  de nouveaux dessins (un calque de toute la scène n'est gardé que dans sa scène :
+  `sync_scene_layers`). `App::panel_focus` dit où vont Ctrl+C / Ctrl+V / Ctrl+X / Suppr : vrai
+  après un appui dans la bande de montage ou sur une vignette, faux après un appui dans le dessin
+  (`canvas_panel`). Glisser un panneau choisi déplace le groupe (`move_chosen_panels`, par
+  `Document::move_panels`).
+- Glisser une clé de caméra (12e) : `camera::move_key` (bornée entre ses voisines, testée),
+  `camtools::CamKeyDrag` (panneau, clé, image de départ, état d'avant pour une seule étape
+  d'annulation), dans la rangée Caméra de la timeline et la piste Caméra du montage. Échap,
+  Ctrl+Z ou un changement de mode pendant le geste remettent la clé où elle était
+  (`cancel_montage_drag`).
 - Boutons icônes et bulles (12d) : `bulles.rs`. Fonctions libres (`icone`, `icone_si`, `etat`,
   `etat_si`, `interrupteur`, `choix`, `etiquette`, `bulle`) qui prennent le texte du raccourci ;
   méthodes d'`App` (`bouton`, `bouton_si`, `bouton_etat`, `aide`, `raccourci`) qui prennent
@@ -644,6 +658,8 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 | Appli compagnon Tauri à côté de Pelure, pas à la place de l'interface egui (10, choix d'Anthony) | le storyboard profite d'une interface web ; la toile de dessin (carte graphique, stylet, latence) reste où elle est rapide | Node.js + ≈ 300 crates de plus à la compilation du compagnon seulement ; un noyau à tenir | faible : Pelure inchangée ; deux applis peuvent enregistrer le même projet l'une sur l'autre | oui : supprimer `src-tauri/` et `src-frontend/` |
 | **Pelure egui reste le logiciel principal** ; Pelure Studio (Tauri) = banc d'essai d'interface (11, choix d'Anthony) | la toile native (egui + wgpu, même processus, affichage réglé) garde la meilleure latence et partage la carte graphique avec le rendu ; dans un WebView, chaque trait traverse l'IPC (1,6 à 5,6 ms mesurés) puis le compositeur de WebView2, et les pixels sont copiés (8 Mo par calque pour une opération sur toute l'image) | nul | faible : les idées d'interface du Studio sont à reporter dans egui à la main | oui : `moteur.rs` reste disponible pour une autre interface |
 | Thème : couleurs de Spectrum reprises en constantes, police Segoe UI du système (12a) | l'allure dense et sombre du Studio, sans dépendance ni fichier ajouté | nul (police lue au démarrage, ≈ 1 Mo) | faible : sans Segoe UI (autre système), la police d'egui reste | oui : `theme::appliquer` et `polices` à retirer |
+| Ctrl+C / Ctrl+V / Ctrl+X / Suppr visent les panneaux après un clic dans le montage ou sur une vignette, le dessin après un clic dans le dessin (12e) | les touches habituelles servent pour les panneaux, sans nouveau raccourci à apprendre | un booléen (`App::panel_focus`) | moyen : Suppr après un clic dans le montage supprime des panneaux (Ctrl+Z les rend) | oui : retirer les gardes `panels_have_focus` dans `run_action` ; `panneau.copier` / `panneau.coller` restent |
+| Copie de panneaux avec une copie de leurs dessins, au moment de la copie (12e) | coller donne ce qu'on a copié, même si l'original a changé ou disparu | mémoire des dessins copiés, tant que le presse-papiers les garde | faible | oui |
 | `src-tauri` projet Cargo à part, pas membre d'un espace de travail (10b) | Tauri ne change aucune version des dépendances de Pelure | le noyau est compilé deux fois (deux dossiers `target`) | faible | oui : en faire un membre plus tard |
 | Bascule et panoramique = homographie du plan de référence déjà composé (9f) | exact (le multiplan ne dépend que de l'œil), sans toucher à la composition ni aux calques | une homographie par image ; vue caméra par la carte graphique avec un w par coin | faible : au ras de l'horizon, la feuille est très étirée (bornée à 5°) ; hors de la feuille, rien | oui : caméra droite = calcul d'avant ; deux champs du manifeste |
 | Cadres de composition dans la disposition, pas dans le projet (9d) | ce sont des réglages de la vue, comme le zoom | nul | un format de diffusion propre au projet n'est pas transmis avec lui | oui : un champ du manifeste pourrait s'ajouter |

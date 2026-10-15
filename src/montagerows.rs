@@ -148,13 +148,15 @@ impl App {
                     painter.rect_filled(bar, 1.0, CAM_COLOR.gamma_multiply(0.5));
                 }
             }
-            for k in keys {
-                let c = pos2(x0 + k.frame as f32 * ppf + ppf * 0.5, y);
+            for (k, key) in keys.iter().enumerate() {
+                let c = pos2(x0 + key.frame as f32 * ppf + ppf * 0.5, y);
                 let d = 4.0;
+                // La clé que l'on fait glisser : cerclée de blanc.
+                let outline = if self.is_dragged_camera_key(i, k) { Stroke::new(1.5_f32, Color32::WHITE) } else { Stroke::NONE };
                 painter.add(egui::Shape::convex_polygon(
                     vec![c + vec2(0.0, -d), c + vec2(d, 0.0), c + vec2(0.0, d), c + vec2(-d, 0.0)],
                     CAM_COLOR,
-                    Stroke::NONE,
+                    outline,
                 ));
             }
         }
@@ -209,6 +211,24 @@ impl App {
                 i = e;
             }
         }
+    }
+
+    /// Clé de caméra sous le point `p` dans la piste Caméra : (panneau, clé). `top` : haut de la
+    /// bande ; `blocks` : les panneaux à l'écran.
+    pub(crate) fn montage_camera_key_at(&self, p: Pos2, top: f32, blocks: &[Rect], ppf: f32, rows: &Rows) -> Option<(usize, usize)> {
+        let y = p.y - top;
+        if y < rows.camera_top() || y > rows.camera_top() + CAM_H {
+            return None;
+        }
+        let tol = (ppf * 0.5).max(5.0);
+        blocks
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| p.x >= b.left() - tol - 1.0 && p.x <= b.right() + tol + 1.0)
+            .find_map(|(i, b)| {
+                let x0 = b.left() - 1.0;
+                crate::camtools::camera_key_at(&self.doc.panels[i].camera, p.x, |f| x0 + f as f32 * ppf + ppf * 0.5, tol).map(|k| (i, k))
+            })
     }
 
     /// Calque visé dans les pistes de calques ou de fond : (panneau, calque). `top` : haut de la bande.

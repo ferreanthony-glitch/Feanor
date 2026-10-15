@@ -1,4 +1,4 @@
-use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Rect, RichText, Sense, Stroke, StrokeKind};
+use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Pos2, Rect, RichText, Sense, Stroke, StrokeKind};
 
 use crate::app::{App, Mode};
 use crate::document::LayerKind;
@@ -321,16 +321,22 @@ impl App {
                     Stroke::new(2.0_f32, CAM_KEY.gamma_multiply(0.45)),
                 );
             }
-            for k in keys {
+            for (i, k) in keys.iter().enumerate() {
                 let c = pos2(cx(k.frame), row.center().y);
+                // La clé que l'on fait glisser : cerclée de blanc.
+                let outline = if self.is_dragged_camera_key(self.cur_panel, i) {
+                    Stroke::new(1.5_f32, Color32::WHITE)
+                } else {
+                    Stroke::new(1.0_f32, Color32::from_black_alpha(140))
+                };
                 if k.smooth {
-                    painter.circle_filled(c, 4.5, CAM_KEY);
+                    painter.circle(c, 4.5, CAM_KEY, outline);
                 } else {
                     let d = 5.0;
                     painter.add(egui::Shape::convex_polygon(
                         vec![c + vec2(0.0, -d), c + vec2(d, 0.0), c + vec2(0.0, d), c + vec2(-d, 0.0)],
                         CAM_KEY,
-                        Stroke::new(1.0_f32, Color32::from_black_alpha(140)),
+                        outline,
                     ));
                 }
             }
@@ -480,8 +486,34 @@ impl App {
             Color32::BLACK,
         );
 
+        // Clés de caméra : on les prend et les fait glisser le long de leur rangée (12e).
+        let cam_row = Rect::from_min_size(pos2(r.left(), grid_top + rows as f32 * ROW_H), vec2(size.x, CAM_H));
+        let key_x = |f: usize| r.left() + (f as f32 + 0.5) * CELL_W;
+        let key_under = |app: &App, p: Pos2| {
+            cam_row.contains(p).then(|| crate::camtools::camera_key_at(&app.panel().camera, p.x, key_x, CELL_W * 0.5 + 2.0)).flatten()
+        };
+        if resp.drag_started() {
+            let origin = ui.input(|i| i.pointer.press_origin());
+            if let Some(k) = origin.and_then(|p| key_under(self, p)) {
+                self.begin_camera_key_drag(self.cur_panel, k);
+            }
+        }
+        // Tant qu'on tient une clé, la tête de lecture ne bouge pas.
+        let holding_key = self.cam_key_drag.is_some();
+        if holding_key {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+            if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
+                self.drag_camera_key(((p.x - r.left()) / CELL_W).floor().max(0.0) as usize);
+            }
+            if resp.drag_stopped() {
+                self.end_camera_key_drag();
+            }
+        } else if resp.hover_pos().is_some_and(|p| key_under(self, p).is_some()) {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+        }
+
         // Clic et glisser : choisir l'image (et le calque au clic).
-        if resp.clicked() || resp.dragged() {
+        if (resp.clicked() || resp.dragged()) && !holding_key {
             if let Some(p) = resp.interact_pointer_pos() {
                 let col = ((p.x - r.left()) / CELL_W).floor().max(0.0) as usize;
                 if col != self.cur_frame || self.playing {
