@@ -563,7 +563,15 @@ Décisions d'Anthony :
     des plans choisis (Fichier) : il remplace le projet ouvert (après « enregistrer ? »), garde
     feuille, cadre, cadence, papier, arrière-plan, groupes, guides, séquences et notes de planche
     attachées ; le son n'est pas repris.
-- 13f. Table lumineuse complète.
+- ✅ 13f (`onion.rs`, `onionui.rs`). Table lumineuse complète (la pelure d'oignon de Pelure ;
+  textes TVPaint 000050050–124) : panneau (engrenage de la timeline, clic droit sur la pelure
+  d'un calque) ; colorisation avant / après chacune à part ; chaque image montrée ou cachée et
+  son opacité ; opacité globale ; curseurs liés (opacité linéaire) ; « Devant » ; modes
+  instance, image, signet, marque de couleur ; activer / désactiver tout ; réglages rangés sous
+  un nom (le Bin) ; décaler temporairement les images de la pelure en glissant sur le dessin,
+  puis « Remettre ». Réglages de l'application (pas du projet) ; les anciens sont repris. Pas
+  repris : le mode « clé de rig » (il n'y a pas de calque Puppet) et le « Dégradé » (nom
+  seulement dans les textes, à faire décrire par Anthony).
 - 13g et suivantes, une étape chacune : feuille d'exposition, flips, clés d'effets, calques CTG,
   Puppet, vidéo, interpolation d'images.
 Le faux-fixe n'a que son nom dans les textes de TVPaint : à faire décrire par Anthony avant de

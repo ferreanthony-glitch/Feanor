@@ -91,6 +91,7 @@ mod noyau_tests;
 mod onion;
 #[cfg(test)]
 mod onion_tests;
+mod onionui;
 pub mod projetui;
 #[cfg(test)]
 mod panelclip_tests;

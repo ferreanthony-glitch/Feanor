@@ -59,10 +59,12 @@ impl Settings {
 
     /// Réglages enregistrés ; défauts si le fichier manque ou se lit mal.
     pub fn load() -> Settings {
-        Self::path()
+        let mut s: Settings = Self::path()
             .and_then(|p| std::fs::read_to_string(p).ok())
             .and_then(|t| toml::from_str(&t).ok())
-            .unwrap_or_default()
+            .unwrap_or_default();
+        s.onion.migrate();
+        s
     }
 
     pub fn save(&self) -> Result<(), String> {

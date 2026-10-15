@@ -1206,6 +1206,61 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
+action = "pelure.panneau"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "pelure.devant"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "pelure.lier"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "pelure.activer_tout"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "pelure.desactiver_tout"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "pelure.mode_instance"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "pelure.mode_image"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "pelure.mode_signet"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "pelure.mode_marque"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "pelure.decaler"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "pelure.remettre"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
 action = "dossier.nouveau"
 touches = []
 source = "TVPaint 12 sans touche"

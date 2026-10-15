@@ -545,6 +545,17 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   vignettes), les calques autres que le calque courant sont composés avec une opacité réduite.
   C'est notre lecture de la « Light Table » de Storyboard Pro (autres calques estompés) ; la table
   lumineuse de TVPaint, qui montre d'autres images, correspond plutôt à notre pelure d'oignon.
+- **Pelure d'oignon complète** (13f, `onion.rs`, `onionui.rs`) : `OnionSettings` reste un
+  réglage de l'application (`reglages.toml`, table `[pelure]`), pas du projet, comme TVPaint
+  garde son panneau. Par rang (0 = l'image la plus proche, jusqu'à `MAX_NEIGHBOURS`) :
+  `show_before/after` et `before/after_opacity` ; liés, seule l'opacité du rang 0 compte et les
+  autres suivent `ramp` (en ligne droite), ce qui redonne exactement l'ancien `fade` ; délier
+  recopie ce qu'on voyait. Opacité finale = globale × celle du rang. `migrate` reprend l'ancien
+  `tinted` des deux côtés. Les modes signet et marque ne retiennent que les images aux signets
+  du plan ou dont le dessin porte une marque de couleur. « Devant » pose les images de la
+  pelure après le dessin du calque dans `build_plan`. Le décalage (`App::onion_offset`, en
+  pixels de la feuille) s'ajoute au `LayerTransform` des seules images de la pelure ; il n'est
+  pas enregistré.
 - **Guides** (`guides.rs`) : un guide = 1, 2 ou 3 points de fuite en pixels du dessin, enregistrés
   dans le manifeste (`"guides"`) et annulables comme le reste. Réglages d'affichage (actif, aligné,
   verrouillé, lignes de référence) gardés dans l'application, pas dans le projet. Trait aligné : au départ du trait on

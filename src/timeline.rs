@@ -197,43 +197,14 @@ impl App {
                     bulle(resp, "Avant", "Nombre de dessins (ou d'images) montrés avant.", "");
                     let resp = ui.add(egui::DragValue::new(&mut self.onion.after).range(0..=max).suffix(" ›"));
                     bulle(resp, "Après", "Nombre de dessins (ou d'images) montrés après.", "");
-                    let resp = ui.menu_button(RichText::new(ph::GEAR).size(crate::bulles::TAILLE), |ui| self.onion_settings_ui(ui)).response;
-                    bulle(resp, "Réglages de la pelure", "Compter par dessin ou par image, opacité, couleurs.", "");
+                    let key = self.raccourci("pelure.panneau");
+                    let resp = ui.add(egui::Button::new(RichText::new(ph::GEAR).size(crate::bulles::TAILLE)).selected(self.onion_window).frame(false));
+                    if bulle(resp, "Panneau de la pelure", "Mode, devant, couleurs, chaque image et son opacité, réglages rangés, décalage.", &key).clicked() {
+                        self.onion_window = !self.onion_window;
+                    }
                 });
             });
     }
-    /// Réglages détaillés de la pelure d'oignon (menu de la timeline).
-    fn onion_settings_ui(&mut self, ui: &mut egui::Ui) {
-        use crate::onion::{OnionMode, OnionSettings};
-        let s = &mut self.onion;
-        ui.label(RichText::new("Compter").strong());
-        ui.radio_value(&mut s.mode, OnionMode::Drawings, "par dessin : les dessins différents les plus proches")
-            .on_hover_text("« 3 avant » = les 3 dessins précédents, quelle que soit leur durée.");
-        ui.radio_value(&mut s.mode, OnionMode::Frames, "par image : les images voisines de la timeline")
-            .on_hover_text("« 3 avant » = les 3 images précédentes : un dessin tenu longtemps cache les autres.");
-        ui.separator();
-        ui.add(egui::Slider::new(&mut s.opacity, 0.05..=1.0).text("opacité du plus proche"));
-        ui.checkbox(&mut s.tinted, "Teinter (sinon : vraies couleurs)");
-        ui.add_enabled_ui(s.tinted, |ui| {
-            ui.horizontal(|ui| {
-                ui.color_edit_button_srgb(&mut s.before_color);
-                ui.label("avant");
-                ui.add_space(12.0);
-                ui.color_edit_button_srgb(&mut s.after_color);
-                ui.label("après");
-            });
-        });
-        ui.separator();
-        if ui
-            .button("Valeurs par défaut")
-            .on_hover_text("3 avant en rouge, 3 après en vert, par dessin (tes préférences Storyboard Pro).")
-            .clicked()
-        {
-            let enabled = s.enabled;
-            *s = OnionSettings { enabled, ..OnionSettings::default() };
-        }
-    }
-
     /// En-tête des calques (13b, `layerheads.rs`), puis les noms des lignes caméra et son.
     fn timeline_names(&mut self, ui: &mut egui::Ui) {
         let rows_h = rows_height(&rows_of(self.layers(), &self.doc.groups));

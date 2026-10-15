@@ -2,21 +2,57 @@
 //! en plus pâles avec la distance. Valeurs par défaut reprises des préférences Storyboard Pro
 //! d'Anthony (`docs/reference/sbpro_presets/STB_Preferences.xml`) : 3 avant, 3 après, rouge avant,
 //! vert après, teinté, sous le dessin. Réglages de l'application, retenus d'une séance à l'autre.
+//!
+//! 13f : tout ce que le panneau « Table lumineuse » de TVPaint 12 décrit (textes 000050050–124) :
+//! colorisation avant et après chacune à part ; chaque image montrée ou cachée ; une opacité par
+//! image et une opacité globale ; curseurs liés (opacité linéaire d'une image à l'autre) ;
+//! « Devant » (par-dessus le dessin courant) ; modes instance, image, signet, marque d'image ;
+//! réglages rangés sous un nom (le « Bin »). Le mode « clé de rig » (calques Puppet) et le
+//! « Dégradé » (nom seulement dans les textes) ne sont pas repris.
 
 use serde::{Deserialize, Serialize};
 
 use crate::document::{CelId, Layer};
 
-/// Ce que compte « 3 avant » : 3 dessins différents, ou 3 images de la timeline.
+/// Ce que compte « 3 avant ».
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum OnionMode {
-    /// Les dessins différents les plus proches, quelle que soit leur durée d'exposition.
+    /// Les dessins différents les plus proches, quelle que soit leur durée d'exposition
+    /// (« mode instance »).
     #[serde(rename = "dessins")]
     Drawings,
     /// Les images voisines dans la timeline : un dessin tenu longtemps peut n'en couvrir aucune
     /// autre ; un dessin vu à plusieurs de ces images n'est montré qu'une fois, au plus près.
     #[serde(rename = "images")]
     Frames,
+    /// Les dessins aux signets du plan (13d) les plus proches.
+    #[serde(rename = "signets")]
+    Bookmarks,
+    /// Les dessins portant une marque de couleur (13d) les plus proches.
+    #[serde(rename = "marques")]
+    Marks,
+}
+
+impl OnionMode {
+    pub const ALL: [OnionMode; 4] = [OnionMode::Drawings, OnionMode::Frames, OnionMode::Bookmarks, OnionMode::Marks];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            OnionMode::Drawings => "Instance",
+            OnionMode::Frames => "Image",
+            OnionMode::Bookmarks => "Signet",
+            OnionMode::Marks => "Marque de couleur",
+        }
+    }
+
+    pub fn help(self) -> &'static str {
+        match self {
+            OnionMode::Drawings => "« 3 avant » = les 3 dessins précédents, quelle que soit leur durée.",
+            OnionMode::Frames => "« 3 avant » = les 3 images précédentes : un dessin tenu longtemps cache les autres.",
+            OnionMode::Bookmarks => "Seulement les dessins aux signets du plan.",
+            OnionMode::Marks => "Seulement les dessins qui portent une marque de couleur.",
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -25,13 +61,38 @@ pub struct OnionSettings {
     pub enabled: bool,
     pub before: usize,
     pub after: usize,
-    /// Opacité du voisin le plus proche (les suivants pâlissent).
+    /// Opacité globale (13f) : multiplie celle de chaque image. Avant 13f : l'opacité du voisin le
+    /// plus proche, ce qui revient au même avec les curseurs liés.
     pub opacity: f32,
     pub mode: OnionMode,
-    /// Teinter les voisins (sinon : leurs vraies couleurs, en transparence).
-    pub tinted: bool,
+    /// Ancien réglage unique de colorisation (avant 13f) : lu une fois, repris des deux côtés.
+    #[serde(skip_serializing)]
+    pub tinted: Option<bool>,
+    /// Coloriser les images d'avant, d'après (13f ; sinon : leurs vraies couleurs).
+    pub tint_before: bool,
+    pub tint_after: bool,
     pub before_color: [u8; 3],
     pub after_color: [u8; 3],
+    /// Chaque image d'avant, d'après (par rang, 0 = la plus proche) : montrée ou cachée (13f).
+    pub show_before: Vec<bool>,
+    pub show_after: Vec<bool>,
+    /// Opacité de chaque image d'avant, d'après (par rang ; 13f).
+    pub before_opacity: Vec<f32>,
+    pub after_opacity: Vec<f32>,
+    /// Curseurs liés (13f) : l'opacité décroît en ligne droite de la plus proche à la plus
+    /// lointaine ; tirer un curseur les règle tous.
+    pub linked: bool,
+    /// Devant (13f) : les images de la pelure par-dessus le dessin courant.
+    pub front: bool,
+    /// Réglages rangés sous un nom (13f, le « Bin » de TVPaint).
+    pub bin: Vec<OnionPreset>,
+}
+
+/// Des réglages de pelure rangés sous un nom.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct OnionPreset {
+    pub name: String,
+    pub settings: OnionSettings,
 }
 
 impl Default for OnionSettings {
@@ -42,9 +103,18 @@ impl Default for OnionSettings {
             after: 3,
             opacity: 0.45,
             mode: OnionMode::Drawings,
-            tinted: true,
+            tinted: None,
+            tint_before: true,
+            tint_after: true,
             before_color: [255, 0, 0],
             after_color: [0, 255, 0],
+            show_before: vec![true; MAX_NEIGHBOURS],
+            show_after: vec![true; MAX_NEIGHBOURS],
+            before_opacity: vec![1.0; MAX_NEIGHBOURS],
+            after_opacity: vec![1.0; MAX_NEIGHBOURS],
+            linked: true,
+            front: false,
+            bin: Vec::new(),
         }
     }
 }
@@ -52,9 +122,106 @@ impl Default for OnionSettings {
 /// Plus grand nombre de voisins de chaque côté.
 pub const MAX_NEIGHBOURS: usize = 12;
 
+/// Part de l'opacité de l'image de rang `k` sur `n` quand les curseurs sont liés : 1 au plus
+/// près, puis en ligne droite jusqu'à 1/n pour la plus lointaine.
+pub fn ramp(k: usize, n: usize) -> f32 {
+    let n = n.max(1);
+    (n - k.min(n - 1)) as f32 / n as f32
+}
+
+impl OnionSettings {
+    /// Reprend l'ancien réglage de colorisation (avant 13f) et complète les listes par rang.
+    pub fn migrate(&mut self) {
+        if let Some(t) = self.tinted.take() {
+            self.tint_before = t;
+            self.tint_after = t;
+        }
+        for list in [&mut self.show_before, &mut self.show_after] {
+            list.resize(MAX_NEIGHBOURS, true);
+        }
+        for list in [&mut self.before_opacity, &mut self.after_opacity] {
+            list.resize(MAX_NEIGHBOURS, 1.0);
+        }
+    }
+
+    /// Opacité propre (0 à 1, sans l'opacité globale) de l'image de rang `k` d'avant ou d'après.
+    pub fn rank_opacity(&self, after: bool, k: usize) -> f32 {
+        let (ops, n) = if after { (&self.after_opacity, self.after) } else { (&self.before_opacity, self.before) };
+        let v = if self.linked { ops.first().copied().unwrap_or(1.0) * ramp(k, n) } else { ops.get(k).copied().unwrap_or(1.0) };
+        v.clamp(0.0, 1.0)
+    }
+
+    /// Règle l'opacité de l'image de rang `k` ; liés, les curseurs bougent ensemble (la plus
+    /// proche est réglée pour que la ligne passe par `v` au rang `k`).
+    pub fn set_rank_opacity(&mut self, after: bool, k: usize, v: f32) {
+        let n = if after { self.after } else { self.before };
+        let linked = self.linked;
+        let ops = if after { &mut self.after_opacity } else { &mut self.before_opacity };
+        ops.resize(MAX_NEIGHBOURS, 1.0);
+        if linked {
+            ops[0] = (v / ramp(k, n)).clamp(0.0, 1.0);
+        } else if k < ops.len() {
+            ops[k] = v.clamp(0.0, 1.0);
+        }
+    }
+
+    /// Lie ou délie les curseurs ; délier garde les opacités qu'on voyait.
+    pub fn set_linked(&mut self, linked: bool) {
+        if !linked && self.linked {
+            for after in [false, true] {
+                let values: Vec<f32> = (0..MAX_NEIGHBOURS).map(|k| self.rank_opacity(after, k)).collect();
+                if after {
+                    self.after_opacity = values;
+                } else {
+                    self.before_opacity = values;
+                }
+            }
+        }
+        self.linked = linked;
+    }
+
+    /// L'image de rang `k` d'avant ou d'après est-elle montrée ?
+    pub fn shown(&self, after: bool, k: usize) -> bool {
+        let list = if after { &self.show_after } else { &self.show_before };
+        list.get(k).copied().unwrap_or(true)
+    }
+
+    /// Montre (ou cache) toutes les images, des deux côtés (« Activer / Désactiver tout »).
+    pub fn show_all(&mut self, on: bool) {
+        self.show_before = vec![on; MAX_NEIGHBOURS];
+        self.show_after = vec![on; MAX_NEIGHBOURS];
+    }
+
+    /// Opacité finale (0 à 255) de l'image de rang `k` : globale × la sienne.
+    pub fn alpha(&self, after: bool, k: usize) -> u8 {
+        (self.opacity.clamp(0.0, 1.0) * self.rank_opacity(after, k) * 255.0).round() as u8
+    }
+
+    /// Range les réglages courants sous `name` (remplace un rangement du même nom).
+    pub fn store(&mut self, name: &str) {
+        let mut settings = self.clone();
+        settings.bin.clear();
+        let preset = OnionPreset { name: name.to_string(), settings };
+        match self.bin.iter_mut().find(|p| p.name == name) {
+            Some(p) => *p = preset,
+            None => self.bin.push(preset),
+        }
+    }
+
+    /// Reprend les réglages rangés sous `name` (la pelure reste allumée ou éteinte, le Bin reste).
+    pub fn recall(&mut self, name: &str) -> bool {
+        let Some(stored) = self.bin.iter().find(|p| p.name == name).map(|p| p.settings.clone()) else { return false };
+        let (enabled, bin) = (self.enabled, std::mem::take(&mut self.bin));
+        *self = OnionSettings { enabled, bin, ..stored };
+        self.migrate();
+        true
+    }
+}
+
 /// Voisins du dessin de l'image `frame` : (dessin, rang), rang 0 = le plus proche. Le dessin
-/// courant et les images vides ne sont jamais montrés.
-pub fn neighbours(layer: &Layer, frame: usize, s: &OnionSettings) -> (Vec<(CelId, usize)>, Vec<(CelId, usize)>) {
+/// courant et les images vides ne sont jamais montrés. `bookmarks` : les signets du plan (mode
+/// signet).
+pub fn neighbours(layer: &Layer, frame: usize, s: &OnionSettings, bookmarks: &[usize]) -> (Vec<(CelId, usize)>, Vec<(CelId, usize)>) {
     let current = layer.cel_at(frame);
     let len = layer.frames.len();
     let mut before: Vec<(CelId, usize)> = Vec::new();
@@ -91,13 +258,27 @@ pub fn neighbours(layer: &Layer, frame: usize, s: &OnionSettings) -> (Vec<(CelId
                 }
             }
         }
+        // Seulement certaines images : les signets, ou celles dont le dessin porte une marque.
+        OnionMode::Bookmarks | OnionMode::Marks => {
+            let stop = |f: usize| match s.mode {
+                OnionMode::Bookmarks => bookmarks.contains(&f),
+                _ => layer.cel_at(f).is_some_and(|id| layer.color_marks.contains_key(&id)),
+            };
+            for f in (0..frame.min(len)).rev().filter(|&f| stop(f)) {
+                if before.len() >= s.before {
+                    break;
+                }
+                let rank = before.len();
+                add(&mut before, f, rank);
+            }
+            for f in (frame + 1..len).filter(|&f| stop(f)) {
+                if after.len() >= s.after {
+                    break;
+                }
+                let rank = after.len();
+                add(&mut after, f, rank);
+            }
+        }
     }
     (before, after)
-}
-
-/// Opacité (0 à 255) du voisin de rang `k` sur `n` : `opacity` au plus près, puis de moins en
-/// moins, jusqu'à `opacity / n` pour le plus lointain.
-pub fn fade(opacity: f32, k: usize, n: usize) -> u8 {
-    let n = n.max(1);
-    (opacity.clamp(0.0, 1.0) * (n - k.min(n - 1)) as f32 / n as f32 * 255.0).round() as u8
 }

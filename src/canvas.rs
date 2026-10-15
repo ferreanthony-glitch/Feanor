@@ -194,6 +194,15 @@ impl App {
         {
             self.view.pan += response.drag_delta();
         }
+        // « Décaler la pelure » (13f) : glisser déplace les images de la pelure, pas le dessin.
+        let shifting = self.onion_shift && !panning;
+        if shifting && response.dragged_by(PointerButton::Primary) {
+            if let Some(p) = response.interact_pointer_pos() {
+                let now = self.view.to_canvas(rect, size, p);
+                let before = self.view.to_canvas(rect, size, p - response.drag_delta());
+                self.onion_offset += now - before;
+            }
+        }
 
         // Partie visible seulement (une vignette de la planche peut dépasser de la vue).
         let on_canvas = |pos: Pos2| {
@@ -220,7 +229,7 @@ impl App {
                     ..
                 } => {
                     let pen = std::mem::take(&mut self.pen_touch);
-                    if modal || panning || !on_canvas(*pos) {
+                    if modal || panning || shifting || !on_canvas(*pos) {
                         continue;
                     }
                     // `stage` : point de la feuille (guides, caméra, pipette) ; `p` : point du dessin
@@ -420,6 +429,11 @@ impl App {
             } else {
                 CursorIcon::Grab
             });
+            return;
+        }
+        // « Décaler la pelure » (13f) : pas de curseur d'outil, on ne dessine pas.
+        if self.onion_shift {
+            ctx.set_cursor_icon(CursorIcon::Move);
             return;
         }
         if alt || matches!(self.tool, Tool::Picker | Tool::Fill) || self.tool.is_shape() {

@@ -421,11 +421,14 @@ impl App {
         let resp = bulle(
             resp,
             "Pelure d'oignon du calque",
-            "Quand la pelure d'oignon est allumée, montrer aussi les dessins voisins de ce calque, même s'il n'est pas le calque courant.",
+            "Quand la pelure d'oignon est allumée, montrer aussi les dessins voisins de ce calque, même s'il n'est pas le calque courant. Clic droit : le panneau de la pelure.",
             "",
         );
         if resp.clicked() {
             self.set_layer_flag(li, |l| l.onion = !l.onion);
+        }
+        if resp.secondary_clicked() {
+            self.onion_window = true;
         }
         let resp = icon_at(ui, slot(3), ph::CHECKERBOARD, shade(h.keep_alpha));
         let resp = bulle(

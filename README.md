@@ -276,9 +276,19 @@ choisies…). Elle allume aussi les croix sur les instances vides et les miniatu
   Boom (`.xml`, par exemple `STB_TextureBrushes_preset.xml`) : ses pinceaux, pointes et papiers
   s'ajoutent à la liste et restent pour les fois suivantes.
 - **Pelure d'oignon** (Alt+O) : par défaut 3 dessins avant en rouge et 3 après en vert, de plus en
-  plus pâles. Dans la timeline : nombre avant / après, et l'engrenage (compter par dessin ou par
-  image, opacité, teinte ou vraies couleurs, couleurs). Les réglages sont retenus pour la prochaine
-  fois.
+  plus pâles. Dans la timeline : nombre avant / après, et l'engrenage, qui ouvre le panneau de la
+  pelure (aussi : clic droit sur la pelure d'un calque). On y trouve :
+  - le mode : instance, image, signet ou marque de couleur ;
+  - « Devant » : par-dessus le dessin courant ;
+  - la colorisation avant et après, chacune à part ;
+  - chaque image montrée ou cachée, avec son opacité, et l'opacité globale ;
+  - les curseurs liés : l'opacité décroît en ligne droite ;
+  - activer ou désactiver tout ;
+  - des réglages rangés sous un nom ;
+  - « Décaler » : glisser sur le dessin déplace les images de la pelure, sans toucher aux
+    dessins, et « Remettre » les replace.
+
+  Les réglages sont retenus pour la prochaine fois.
 - **Table lumineuse** (panneau Vue, ou menu Affichage) : les autres calques du panneau sont
   estompés, le calque sur lequel on dessine reste net.
 - **Guides de perspective** (panneau Guides) : 1, 2 ou 3 points de fuite, que l'on déplace à la
@@ -405,6 +415,9 @@ en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le 
 | `brushtex.rs`, `brushui.rs` | Pointes, papiers, réglages nommés ; leur panneau |
 | `tbbrush.rs` | Import des pinceaux Toon Boom (XML) |
 | `onion.rs` | Pelure d'oignon |
+| `onionui.rs` | Panneau de la pelure d'oignon (13f) |
+| `bottomtabs.rs`, `notes.rs` | Onglets du bas de la timeline, notes dessinées (13e) |
+| `projetui.rs` | Vue Projet : plan avant, storyboard verrouillé, propriétés, projet fait de plans (13e) |
 | `fill.rs` | Remplissage par zone et débord |
 | `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra |
 | `gpu.rs` | Composition et affichage par la carte graphique, envoi des dessins par tuiles |

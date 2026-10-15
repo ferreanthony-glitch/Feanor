@@ -170,7 +170,10 @@ Image, Groupe, Notes, Son, Groupes, Arrière-plan, Image de départ 011085130–
 ## 9. Le reste
 
 Table lumineuse complète 000050000–134 [A] (couleurs avant / après, chaque image, opacité par
-image et globale, curseurs liés, « Devant », modes instance / image / signet / marque / clé).
+image et globale, curseurs liés, « Devant », modes instance / image / signet / marque / clé ;
+Bin 000050102–110 ; déplacer temporairement / remettre les images 000050064/065). Modes de
+colorisation « Coul. / Image / Dég. » 000050010–019 : couleur et couleur de l'image reprises
+(Coloriser oui / non), « Dégradé » [N]. Fait en 13f, sauf le mode clé de rig et le dégradé.
 Caméra : clés par paramètre, courbes de vitesse, interpolation linéaire / spline. Feuille
 d'exposition (rôles, colonnes, export PDF / XDTS). Flips 011074000–063 [A].
 

@@ -282,6 +282,12 @@ pub struct App {
     pub(crate) ppp: f32,
     /// Pelure d'oignon (réglage de l'application, retenu dans `settings`).
     pub(crate) onion: crate::onion::OnionSettings,
+    /// Panneau de la pelure ouvert ; décalage temporaire de ses images (sur la feuille) et mode
+    /// « Décaler » (glisser sur le dessin les déplace) ; nom proposé pour ranger (13f).
+    pub(crate) onion_window: bool,
+    pub(crate) onion_offset: Vec2,
+    pub(crate) onion_shift: bool,
+    pub(crate) onion_preset_name: String,
     /// Table lumineuse : les calques autres que le calque courant sont estompés.
     pub(crate) light_table: bool,
     /// Opacité gardée par les calques estompés (0 à 1).
@@ -549,6 +555,10 @@ impl App {
             canvas_rect: Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0)),
             ppp: 1.0,
             onion: settings.onion.clone(),
+            onion_window: false,
+            onion_offset: Vec2::ZERO,
+            onion_shift: false,
+            onion_preset_name: String::new(),
             light_table: false,
             light_table_strength: 0.3,
             guides: GuideState::default(),
@@ -850,21 +860,33 @@ impl App {
             let Some(seen) = layer.transform_seen(&camera) else { continue };
             let transform = (!seen.is_identity()).then_some(seen);
             // Pelure d'oignon : le calque courant, et ceux qui ont la leur (13b).
+            let mut onion_items = Vec::new();
             if onion && self.onion.enabled && !self.playing && (li == self.cur_layer || layer.onion) {
                 let s = &self.onion;
-                let (before, after) = crate::onion::neighbours(layer, frame, s);
-                // Sous le dessin courant, du plus lointain au plus proche (le plus proche au-dessus).
-                for (list, n, color) in [(&before, s.before, s.before_color), (&after, s.after, s.after_color)] {
-                    for &(cel, k) in list.iter().rev() {
-                        items.push(PlanItem {
+                let (before, after) = crate::onion::neighbours(layer, frame, s, &self.panel().cues.bookmarks);
+                // Décalage temporaire des images de la pelure (13f), sur la feuille.
+                let shifted = (self.onion_offset != Vec2::ZERO).then(|| {
+                    let t = transform.unwrap_or_default();
+                    crate::document::LayerTransform { x: t.x + self.onion_offset.x, y: t.y + self.onion_offset.y, ..t }
+                });
+                // Du plus lointain au plus proche (le plus proche au-dessus) ; une image cachée
+                // garde sa place dans le rang des autres.
+                for (side, list, color, tint) in [(false, &before, s.before_color, s.tint_before), (true, &after, s.after_color, s.tint_after)] {
+                    for &(cel, k) in list.iter().rev().filter(|&&(_, k)| s.shown(side, k)) {
+                        onion_items.push(PlanItem {
                             cel,
-                            opacity: crate::onion::fade(s.opacity, k, n),
-                            tint: s.tinted.then_some(color),
-                            transform,
+                            opacity: s.alpha(side, k),
+                            tint: tint.then_some(color),
+                            transform: shifted.or(transform),
                             blend: Default::default(),
                         });
                     }
                 }
+            }
+            // Sous le dessin courant, ou devant (« Devant », 13f).
+            let front = self.onion.front;
+            if !front {
+                items.append(&mut onion_items);
             }
             if let Some(cel) = layer.shown_at(frame) {
                 items.push(PlanItem {
@@ -875,6 +897,7 @@ impl App {
                     blend: layer.blend,
                 });
             }
+            items.append(&mut onion_items);
         }
         Plan {
             // Arrière-plan (13e) : le papier seulement si c'est une couleur.
@@ -2469,6 +2492,21 @@ impl App {
             "storyboard.verrouiller" => self.toggle_storyboard_lock(),
             "projet.proprietes" => self.properties_window = !self.properties_window,
             "projet.nouveau_depuis_plans" => self.request(Pending::FromChosen),
+            // Panneau de la pelure d'oignon (13f, `onionui.rs`).
+            "pelure.panneau" => self.onion_window = !self.onion_window,
+            "pelure.devant" => self.onion.front = !self.onion.front,
+            "pelure.lier" => {
+                let linked = !self.onion.linked;
+                self.onion.set_linked(linked);
+            }
+            "pelure.activer_tout" => self.onion.show_all(true),
+            "pelure.desactiver_tout" => self.onion.show_all(false),
+            "pelure.mode_instance" => self.set_onion_mode(crate::onion::OnionMode::Drawings),
+            "pelure.mode_image" => self.set_onion_mode(crate::onion::OnionMode::Frames),
+            "pelure.mode_signet" => self.set_onion_mode(crate::onion::OnionMode::Bookmarks),
+            "pelure.mode_marque" => self.set_onion_mode(crate::onion::OnionMode::Marks),
+            "pelure.decaler" => self.onion_shift = !self.onion_shift,
+            "pelure.remettre" => self.reset_onion_offset(),
             // Dossiers de calques (13b-5, `folders.rs`).
             "dossier.nouveau" => self.new_folder(),
             "dossier.ranger" => self.folder_from_chosen(),
