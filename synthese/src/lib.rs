@@ -1,5 +1,6 @@
 //! Synthèse d'image par l'exemple (phase « propagation », étape a) : portage en Rust de la version
 //! processeur d'ebsynth (Ondřej Jamriška, domaine public, https://github.com/jamriska/ebsynth).
+//! Étape b : `flow` (flux optique) et `propagation` (une image clé propagée sur une vidéo).
 //!
 //! On donne une image de style (la peinture) et des paires de guides (source, cible) : la synthèse
 //! fabrique une image de la taille des guides cibles en recopiant des morceaux carrés (patchs) du
@@ -19,7 +20,13 @@
 //! Attention : PatchMatch est breveté par Adobe (brevet américain 8,861,869), comme le signale le
 //! README d'ebsynth. À vérifier avant de distribuer ou de vendre Pelure.
 
+pub mod flow;
 mod patchmatch;
+pub mod propagation;
+#[cfg(test)]
+mod flow_tests;
+#[cfg(test)]
+mod propagation_tests;
 #[cfg(test)]
 mod tests;
 

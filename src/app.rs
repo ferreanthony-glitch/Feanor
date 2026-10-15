@@ -311,6 +311,8 @@ pub struct App {
     pub(crate) fx_selected: usize,
     /// Import vidéo en cours (13k, `videoui.rs`).
     pub(crate) video_import: Option<crate::videoui::VideoImport>,
+    /// Fenêtre d'interpolation ouverte (13l, `tweenui.rs`).
+    pub(crate) tween_dialog: Option<crate::tweenui::TweenDialog>,
     /// Table lumineuse : les calques autres que le calque courant sont estompés.
     pub(crate) light_table: bool,
     /// Opacité gardée par les calques estompés (0 à 1).
@@ -596,6 +598,7 @@ impl App {
             fx_keys_shown: true,
             fx_selected: 0,
             video_import: None,
+            tween_dialog: None,
             light_table: false,
             light_table_strength: 0.3,
             guides: GuideState::default(),
@@ -2601,6 +2604,12 @@ impl App {
             "fichier.importer_video" => self.import_video(),
             "fichier.importer_sequence" => self.import_sequence(),
             "calque.video_en_animation" => self.video_to_animation(),
+            // Interpolation d'images (13l, `tweenui.rs`).
+            "images.intermediaire" => self.insert_intermediates(1),
+            "images.intermediaires" => self.open_tween_dialog(crate::tweenui::TweenKind::Insert),
+            "images.intervalles" => self.fill_gaps(),
+            "images.etirer_interpoler" => self.open_tween_dialog(crate::tweenui::TweenKind::Stretch),
+            "projet.changer_cadence" => self.open_tween_dialog(crate::tweenui::TweenKind::Fps),
             // Dossiers de calques (13b-5, `folders.rs`).
             "dossier.nouveau" => self.new_folder(),
             "dossier.ranger" => self.folder_from_chosen(),

@@ -682,8 +682,22 @@ Décisions d'Anthony :
     vidéo.
   - Bande de film dans la timeline.
   - Pas fait : entrée vidéo (capture), le calque préchargé.
-- 13l et suivantes, une étape chacune : interpolation d'images, autres effets (au choix
-  d'Anthony). Pas de calque Puppet (choix d'Anthony, 2026-10-16).
+- ✅ 13l (`tween.rs`, `tweenui.rs`). Interpolation d'images (TVPaint 000020927–929,
+  000025580, 000022168). Choix d'Anthony (2026-10-16) : les deux.
+  - Calque vectoriel : de vrais intervalles. Les traits et remplissages qui se correspondent
+    (même rang, même sorte) passent d'une forme à l'autre ; un trait dessiné dans l'autre sens
+    est retourné ; les autres éléments se fondent.
+  - Calque bitmap : un fondu, comme TVPaint.
+  - Commandes (menu Images > Interpolation), sur les calques choisis :
+    - insérer une / des images intermédiaires entre le dessin courant et le suivant
+      (exposées selon « en N ») ;
+    - remplir les images vides entre deux dessins par des intervalles (images choisies, sinon
+      autour de l'image courante) ;
+    - étirer des images à une nouvelle durée en interpolant (ou en tenant) ;
+    - changer la cadence du projet en gardant les durées. Images, durées des plans, clés de
+      caméra, marques, repères, notes, rôles, clés d'effets, vidéos et sons suivent.
+- 13m et suivantes : autres effets (au choix d'Anthony). Pas de calque Puppet (choix
+  d'Anthony, 2026-10-16). Puis la phase 14.
 Le faux-fixe n'a que son nom dans les textes de TVPaint : à faire décrire par Anthony avant de
 l'implanter (le pochoir, la transparence préservée et la position verrouillée ont été décrits
 le 2026-10-15, voir `docs/TIMELINE-TVPAINT.md`).

@@ -1431,6 +1431,31 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
+action = "images.intermediaire"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "images.intermediaires"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "images.intervalles"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "images.etirer_interpoler"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "projet.changer_cadence"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
 action = "dossier.nouveau"
 touches = []
 source = "TVPaint 12 sans touche"

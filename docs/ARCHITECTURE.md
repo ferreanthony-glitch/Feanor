@@ -563,6 +563,18 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   image : la lecture d'une image JPEG est rapide, et rien ne reste en mémoire. Les images
   prennent de la place sur le disque (environ 100 à 200 ko par image HD). Risque : ffmpeg doit
   être là (celui de l'export). Réversible : « Transformer en calque d'animation ».
+- Interpolation (`tween.rs`, `tweenui.rs`, 13l). Calcul pur :
+  - `tween_vector` : les éléments sont appariés par rang. Les traits sont rééchantillonnés à
+    longueur égale (le plus grand nombre de points des deux, au plus 512) ; leur sens est
+    comparé par les extrémités. Les remplissages sont appariés contour par contour, et les
+    éléments sans correspondant voient leur opacité multipliée par t ou 1 − t.
+  - `blend_raster` : un fondu prémultiplié, tuile par tuile.
+  - `resample` : n images étirées sur m, au 1/64 d'image près. Un intervalle seulement entre
+    deux dessins différents qui se suivent ; jamais avec une image vide.
+
+  Les intervalles sont des dessins neufs (vectoriels si les deux sont vectoriels), donc
+  modifiables. Changer la cadence passe tout le projet au même facteur (`rescale_frame`) en
+  une étape d'annulation : la cadence et les extraits de son sont dans `Structure`.
 - Vue Projet (`projetui.rs`, 13e-4) : `Document::storyboard_locked` est dans `Structure` (une
   annulation le rétablit avec le reste ; le basculer est une étape). `App::storyboard_refuses`
   garde `structure_op` et les autres chemins qui changent l'ordre, le nombre ou la durée des

@@ -11,9 +11,10 @@ description = "Synthèse d'image par l'exemple pour Pelure : portage en Rust d'e
 # Aucune dépendance : la bibliothèque ne travaille que sur des tampons d'octets.
 [dependencies]
 
-# Lecture et écriture des PNG, seulement pour les outils en ligne de commande (examples/) et les essais.
+# Lecture et écriture des images, seulement pour les outils en ligne de commande (examples/) et les
+# essais. JPEG : Pelure range les images des vidéos importées en JPEG (videos/<id>/000001.jpg…).
 [dev-dependencies]
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 # Calcul pixel : même en debug on optimise, sinon les essais sur de vraies images durent des minutes.
 [profile.dev]

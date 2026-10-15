@@ -285,6 +285,14 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
 - Le menu de la ligne du calque règle son début et « Transformer en calque d'animation » en
   fait des dessins. Il faut ffmpeg, le même que pour l'export.
 
+**Interpolation** (menu Images > Interpolation) :
+- Sur un calque vectoriel, de vrais intervalles : les traits passent d'une forme à l'autre.
+  Sur un calque bitmap, un fondu.
+- « Insérer une image intermédiaire » entre le dessin courant et le suivant.
+- « Remplir les vides par des intervalles » entre deux clés.
+- « Étirer en interpolant » donne une nouvelle durée aux images choisies.
+- « Changer la cadence » passe le projet à une autre cadence en gardant les durées.
+
 **Vue Projet** :
 - **Nouveau plan avant le plan courant** (menu Storyboard, menu ⋯ du montage).
 - **Cadenas du montage** : il verrouille le storyboard. L'ordre, le nombre et la durée des plans
@@ -482,6 +490,7 @@ en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le 
 | `fx.rs`, `fxui.rs` | Pile d'effets : clés, flous, dessins dérivés en cache, panneau (13i) |
 | `ctg.rs`, `ctgui.rs` | Calque CTG : remplissage par graffitis, sources, structure (13j) |
 | `video.rs`, `videoui.rs` | Calque vidéo : import par ffmpeg, images lues à la demande (13k) |
+| `tween.rs`, `tweenui.rs` | Interpolation : intervalles vectoriels, fondus, étirement, cadence (13l) |
 | `fill.rs` | Remplissage par zone et débord |
 | `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra |
 | `gpu.rs` | Composition et affichage par la carte graphique, envoi des dessins par tuiles |

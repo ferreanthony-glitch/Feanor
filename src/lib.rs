@@ -174,6 +174,10 @@ mod toolbars;
 mod topview;
 #[cfg(test)]
 mod topview_tests;
+pub mod tween;
+#[cfg(test)]
+mod tween_tests;
+mod tweenui;
 #[cfg(test)]
 mod transform_tests;
 mod vector;

@@ -148,7 +148,7 @@ pub(crate) fn shift_panel(panel: &mut Panel, at: usize, n: usize, removed: bool)
 }
 
 /// Bornes [début, fin) de l'instance (un dessin et ses expositions) qui contient `f`.
-fn run_at(frames: &Frames, f: usize) -> (usize, usize) {
+pub(crate) fn run_at(frames: &Frames, f: usize) -> (usize, usize) {
     let v = frames.get(f).copied().flatten();
     let mut s = f;
     while s > 0 && frames.get(s - 1).copied().flatten() == v {
@@ -437,7 +437,7 @@ impl App {
     }
 
     /// Calques visés : les calques choisis, sans les dossiers.
-    fn image_layers(&self) -> Vec<usize> {
+    pub(crate) fn image_layers(&self) -> Vec<usize> {
         self.chosen_layers().into_iter().filter(|&li| !self.layers()[li].folder).collect()
     }
 
@@ -1015,6 +1015,16 @@ impl App {
             self.action_item(ui, "En rejouant ses images en va-et-vient", "calque.etirer_va_et_vient");
             ui.separator();
             self.action_item(ui, "Couper le calque après l'image courante", "calque.couper_apres");
+        });
+        // Interpolation (13l) : vrais intervalles en vectoriel, fondus en bitmap.
+        ui.menu_button("Interpolation", |ui| {
+            self.action_item(ui, "Insérer une image intermédiaire", "images.intermediaire");
+            self.action_item(ui, "Insérer des images intermédiaires…", "images.intermediaires");
+            self.action_item(ui, "Remplir les vides par des intervalles", "images.intervalles");
+            self.action_item(ui, "Étirer en interpolant…", "images.etirer_interpoler");
+            ui.separator();
+            self.action_item(ui, "Changer la cadence du projet (durées gardées)…", "projet.changer_cadence");
+            ui.label(egui::RichText::new("Calque vectoriel : les traits passent d'une forme à l'autre ; calque bitmap : fondu.").weak().small());
         });
         ui.menu_button("Retourner", |ui| {
             self.action_item(ui, "Horizontalement", "images.retourner_h");
