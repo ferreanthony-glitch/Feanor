@@ -8,7 +8,7 @@
 //! combler depuis la gauche (le dessin d'avant est tenu), combler depuis la droite (la suite
 //! recule).
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use eframe::egui;
 
@@ -327,6 +327,68 @@ pub(crate) fn drop_frames(frames: &mut Frames, a: usize, b: usize, to: usize, mo
             trim(frames);
         }
     }
+}
+
+/// Dessins d'une timeline dans l'ordre où ils apparaissent, chacun une fois : le premier est
+/// l'instance 1.
+pub(crate) fn drawings_in_order(frames: &Frames) -> Vec<CelId> {
+    let mut out: Vec<CelId> = Vec::new();
+    for id in frames.iter().flatten() {
+        if !out.contains(id) {
+            out.push(*id);
+        }
+    }
+    out
+}
+
+/// Noms d'instance : « Tout renommer » numérote les dessins dans l'ordre (1, 2, 3…).
+pub(crate) fn renumber(names: &mut BTreeMap<CelId, String>, order: &[CelId]) {
+    for (k, id) in order.iter().enumerate() {
+        names.insert(*id, (k + 1).to_string());
+    }
+}
+
+/// Renommage intelligent (TVPaint) : un préfixe et un suffixe ajoutés aux noms des instances
+/// des sortes choisies — sans nom (leur numéro sert de base), nommées par un nombre, nommées
+/// par un texte (au moins une lettre).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct SmartRename {
+    pub prefix: String,
+    pub suffix: String,
+    pub empty: bool,
+    pub numbers: bool,
+    pub texts: bool,
+}
+
+/// Applique le renommage intelligent ; renvoie le nombre de noms changés.
+pub(crate) fn smart_rename(names: &mut BTreeMap<CelId, String>, order: &[CelId], opts: &SmartRename) -> usize {
+    let mut n = 0;
+    for (k, id) in order.iter().enumerate() {
+        let name = names.get(id).cloned().unwrap_or_default();
+        let wanted = if name.trim().is_empty() {
+            opts.empty
+        } else if name.chars().any(char::is_alphabetic) {
+            opts.texts
+        } else {
+            opts.numbers
+        };
+        if !wanted {
+            continue;
+        }
+        let base = if name.trim().is_empty() { (k + 1).to_string() } else { name };
+        names.insert(*id, format!("{}{}{}", opts.prefix, base, opts.suffix));
+        n += 1;
+    }
+    n
+}
+
+/// Renommage d'une instance en cours dans la timeline : calque, dessin, nom tapé, champ déjà
+/// activé.
+pub(crate) struct InstanceRename {
+    pub layer: u64,
+    pub cel: CelId,
+    pub name: String,
+    pub focused: bool,
 }
 
 /// Images copiées : une rangée par calque (du plus bas au plus haut) et leurs dessins.
@@ -691,6 +753,126 @@ impl App {
         self.done(snap, format!("Images {what}."));
     }
 
+    /// Renommer l'instance du dessin `cel` du calque `li` (double-clic dans la timeline).
+    pub(crate) fn start_instance_rename(&mut self, li: usize, cel: CelId) {
+        let Some(l) = self.layers().get(li) else { return };
+        let name = l.names.get(&cel).cloned().unwrap_or_default();
+        self.instance_rename = Some(InstanceRename { layer: l.id, cel, name, focused: false });
+    }
+
+    /// Pose le nom tapé (vide : le nom est retiré), une étape d'annulation.
+    pub(crate) fn commit_instance_rename(&mut self) {
+        let Some(r) = self.instance_rename.take() else { return };
+        let Some(li) = self.layers().iter().position(|l| l.id == r.layer) else { return };
+        let name = r.name.trim().to_string();
+        if self.layers()[li].names.get(&r.cel).map_or("", String::as_str) == name {
+            return;
+        }
+        self.record_step();
+        let names = &mut self.layers_mut()[li].names;
+        if name.is_empty() {
+            names.remove(&r.cel);
+        } else {
+            names.insert(r.cel, name);
+        }
+    }
+
+    /// Change les noms d'instance des calques choisis (une étape d'annulation).
+    fn change_names(&mut self, change: impl Fn(&mut BTreeMap<CelId, String>, &[CelId]) -> usize, status: &str) {
+        self.record_step();
+        let mut n = 0;
+        for li in self.image_layers() {
+            let order = drawings_in_order(&self.layers()[li].frames);
+            n += change(&mut self.layers_mut()[li].names, &order);
+        }
+        self.status = format!("{status} ({n}).");
+    }
+
+    /// Efface les noms d'instance des calques choisis.
+    pub(crate) fn clear_instance_names(&mut self) {
+        self.change_names(
+            |names, _| {
+                let n = names.len();
+                names.clear();
+                n
+            },
+            "Noms d'instance effacés",
+        );
+    }
+
+    /// Numérote les instances des calques choisis dans l'ordre (1, 2, 3…).
+    pub(crate) fn renumber_instances(&mut self) {
+        self.change_names(
+            |names, order| {
+                renumber(names, order);
+                order.len()
+            },
+            "Instances renommées 1, 2, 3…",
+        );
+    }
+
+    /// Fenêtre du renommage intelligent, si elle est ouverte.
+    pub(crate) fn smart_rename_window(&mut self, ctx: &egui::Context) {
+        let Some(mut opts) = self.smart_rename.take() else { return };
+        let mut keep = true;
+        let mut apply = false;
+        egui::Window::new("Renommer intelligemment les instances")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                egui::Grid::new("grille_renommage").num_columns(2).show(ui, |ui| {
+                    ui.label("Préfixe");
+                    ui.text_edit_singleline(&mut opts.prefix);
+                    ui.end_row();
+                    ui.label("Suffixe");
+                    ui.text_edit_singleline(&mut opts.suffix);
+                    ui.end_row();
+                });
+                ui.checkbox(&mut opts.empty, "Les instances sans nom (leur numéro sert de base)");
+                ui.checkbox(&mut opts.numbers, "Les instances nommées par un nombre");
+                ui.checkbox(&mut opts.texts, "Les instances nommées par un texte (au moins une lettre)");
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Renommer").clicked() {
+                        apply = true;
+                    }
+                    if ui.button("Annuler").clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                        keep = false;
+                    }
+                });
+            });
+        if apply {
+            let o = opts.clone();
+            self.change_names(move |names, order| smart_rename(names, order, &o), "Instances renommées");
+        } else if keep {
+            self.smart_rename = Some(opts);
+        }
+    }
+
+    /// Retourne les images visées : chaque dessin touché est remplacé, sur ces images, par une
+    /// copie retournée (ailleurs, l'original reste).
+    pub(crate) fn flip_images(&mut self, h: bool, v: bool) {
+        self.end_stroke();
+        self.drop_bitmap_selection();
+        let (a, b) = self.image_range();
+        let snap = self.snapshot();
+        let mut flipped: HashMap<CelId, CelId> = HashMap::new();
+        for li in self.image_layers() {
+            let end = b.min(self.layers()[li].frames.len());
+            for f in a..end {
+                let Some(old) = self.layers()[li].frames[f] else { continue };
+                let new = *flipped.entry(old).or_insert_with(|| self.doc.flipped_cel(old, h, v));
+                self.layers_mut()[li].frames[f] = Some(new);
+            }
+        }
+        if flipped.is_empty() {
+            self.status = "Aucun dessin à retourner sur ces images.".into();
+            return;
+        }
+        self.done(snap, format!("{} dessin{} retourné{}.", flipped.len(), s(flipped.len()), s(flipped.len())));
+    }
+
     /// Menu « Images » (barre de la timeline, menu Animation).
     pub(crate) fn images_menu(&mut self, ui: &mut egui::Ui) {
         let (a, b) = self.image_range();
@@ -738,6 +920,18 @@ impl App {
             self.action_item(ui, "En rejouant ses images en va-et-vient", "calque.etirer_va_et_vient");
             ui.separator();
             self.action_item(ui, "Couper le calque après l'image courante", "calque.couper_apres");
+        });
+        ui.menu_button("Retourner", |ui| {
+            self.action_item(ui, "Horizontalement", "images.retourner_h");
+            self.action_item(ui, "Verticalement", "images.retourner_v");
+            self.action_item(ui, "Horizontalement et verticalement", "images.retourner_hv");
+        });
+        ui.menu_button("Noms d'instance", |ui| {
+            self.action_item(ui, "Renommer l'instance courante", "instance.renommer");
+            self.action_item(ui, "Effacer les noms", "instance.effacer_noms");
+            self.action_item(ui, "Tout renommer (1, 2, 3…)", "instance.tout_renommer");
+            self.action_item(ui, "Renommer intelligemment…", "instance.renommer_intelligemment");
+            ui.label(egui::RichText::new("Double-clic sur un dessin de la timeline : le renommer.").weak().small());
         });
         ui.label(egui::RichText::new("Glisser les images choisies : déplacer ; avec Ctrl : copier ; avec Maj : insérer.").weak().small());
         ui.separator();

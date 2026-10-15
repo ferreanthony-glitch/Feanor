@@ -218,6 +218,65 @@ fn stretching_and_dropping_images() {
 }
 
 #[test]
+fn instance_names_and_smart_rename() {
+    use crate::images::{drawings_in_order, renumber, smart_rename, SmartRename};
+    use std::collections::BTreeMap;
+    let frames = vec![Some(7), Some(7), None, Some(3), Some(9), Some(7)];
+    let order = drawings_in_order(&frames);
+    assert_eq!(order, [7, 3, 9], "chaque dessin une fois, dans l'ordre d'apparition");
+    let mut names = BTreeMap::new();
+    renumber(&mut names, &order);
+    assert_eq!(names[&3], "2");
+
+    // 7 sans nom, 3 nommé « 12 », 9 nommé « marche ».
+    let mut names = BTreeMap::from([(3, "12".to_string()), (9, "marche".to_string())]);
+    let opts = SmartRename { prefix: "A-".into(), suffix: "".into(), empty: true, numbers: false, texts: true };
+    assert_eq!(smart_rename(&mut names, &order, &opts), 2);
+    assert_eq!(names[&7], "A-1", "sans nom : son numéro sert de base");
+    assert_eq!(names[&3], "12", "les nombres n'étaient pas demandés");
+    assert_eq!(names[&9], "A-marche");
+}
+
+#[test]
+fn a_flipped_drawing_is_a_new_mirrored_drawing() {
+    use eframe::egui::Color32;
+    let mut doc = Document::new(100, 50, 24);
+    let cel = doc.new_cel(LayerKind::Bitmap);
+    {
+        let r = &mut doc.cels.get_mut(&cel).unwrap().raster;
+        let idx = r.tile_index_of(10, 5);
+        r.tile_mut(idx)[5 * crate::raster::TILE + 10] = Color32::RED;
+    }
+    let flipped = doc.flipped_cel(cel, true, false);
+    assert_ne!(flipped, cel);
+    assert_eq!(doc.cels[&flipped].raster.get(89, 5), Color32::RED, "de gauche à droite");
+    assert_eq!(doc.cels[&cel].raster.get(10, 5), Color32::RED, "l'original ne bouge pas");
+    let both = doc.flipped_cel(cel, true, true);
+    assert_eq!(doc.cels[&both].raster.get(89, 44), Color32::RED);
+}
+
+#[test]
+fn instance_names_are_saved() {
+    let mut doc = Document::new(16, 16, 24);
+    let a = doc.new_cel(LayerKind::Bitmap);
+    let gone = 999_999;
+    let l = &mut doc.panels[0].layers[0];
+    l.frames = vec![Some(a)];
+    l.names.insert(a, "marche 1".into());
+    l.names.insert(gone, "oublié".into());
+    let dir = std::env::temp_dir().join(format!("pelure-test-noms-{}", std::process::id()));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).unwrap();
+    let manifest = dir.join("N.pelure");
+    project::save(&doc, &manifest, &mut Default::default()).unwrap();
+    let back = project::load(&manifest).unwrap().doc;
+    std::fs::remove_dir_all(&dir).ok();
+    let l = &back.panels[0].layers[0];
+    assert_eq!(l.names.get(&a).map(String::as_str), Some("marche 1"));
+    assert!(!l.names.contains_key(&gone), "le nom d'un dessin qui n'est plus là n'est pas gardé");
+}
+
+#[test]
 fn behaviours_are_saved() {
     let mut doc = Document::new(16, 16, 24);
     let cel = doc.new_cel(LayerKind::Bitmap);

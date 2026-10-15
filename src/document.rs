@@ -264,6 +264,8 @@ pub struct Layer {
     /// Création automatique d'image (13c) : dessiner sur une image vide crée un dessin (sinon :
     /// refusé, il faut d'abord un « Nouveau dessin »).
     pub auto_create: bool,
+    /// Noms d'instance (13c) : le nom donné à un dessin du calque (montré dans la timeline).
+    pub names: std::collections::BTreeMap<CelId, String>,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -322,6 +324,7 @@ impl Layer {
             post: Behaviour::Nothing,
             auto_break: false,
             auto_create: true,
+            names: Default::default(),
         }
     }
 
@@ -1989,6 +1992,48 @@ impl Document {
     pub fn new_cel(&mut self, kind: LayerKind) -> CelId {
         let id = self.alloc();
         self.cels.insert(id, Cel::new(self.width, self.height, kind));
+        id
+    }
+
+    /// Nouveau dessin : `source` retourné (13c) de gauche à droite (`h`) et / ou de haut en bas
+    /// (`v`), autour du centre de la feuille.
+    pub fn flipped_cel(&mut self, source: CelId, h: bool, v: bool) -> CelId {
+        let id = self.duplicate_cel(source);
+        let (w, hh) = (self.width, self.height);
+        let cel = self.cels.get_mut(&id).expect("dessin copié juste avant");
+        match cel.vector.as_mut() {
+            Some(d) => {
+                let flip = crate::vector::Affine {
+                    a: if h { -1.0 } else { 1.0 },
+                    d: if v { -1.0 } else { 1.0 },
+                    tx: if h { w as f32 } else { 0.0 },
+                    ty: if v { hh as f32 } else { 0.0 },
+                    ..crate::vector::Affine::IDENTITY
+                };
+                for e in &mut d.elements {
+                    *e = e.transformed(&flip);
+                }
+                cel.raster = Raster::new(w, hh);
+                cel.rerender();
+            }
+            None => {
+                let old = std::mem::replace(&mut cel.raster, Raster::new(w, hh));
+                for (idx, tile) in old.tiles.iter().enumerate() {
+                    let Some(tile) = tile else { continue };
+                    let (ox, oy, _, _) = old.tile_bounds(idx);
+                    for (i, &px) in tile.iter().enumerate() {
+                        let (x, y) = (ox + i % crate::raster::TILE, oy + i / crate::raster::TILE);
+                        if px.a() == 0 || x >= w || y >= hh {
+                            continue;
+                        }
+                        let (nx, ny) = (if h { w - 1 - x } else { x }, if v { hh - 1 - y } else { y });
+                        let t = cel.raster.tile_index_of(nx, ny);
+                        cel.raster.tile_mut(t)[(ny % crate::raster::TILE) * crate::raster::TILE + nx % crate::raster::TILE] = px;
+                    }
+                }
+                cel.version += 1;
+            }
+        }
         id
     }
 

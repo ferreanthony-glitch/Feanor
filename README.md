@@ -189,6 +189,20 @@ les visent ensuite. On peut :
 Sur tout le plan, ses clés de caméra et ses marques suivent : I ajoute une image après l'image
 courante, Maj+I en insère une avant, et Maj+F5 supprime l'image.
 
+Glisser les images choisies les déplace ; avec Ctrl elles sont copiées, avec Maj insérées. Le
+même menu Images contient aussi :
+- **Instances** (un dessin et ses expositions) : précédente / suivante (Ctrl + Gauche /
+  Droite), tête / queue, casser à l'image courante, une exposition de plus ou de moins à chaque
+  instance choisie ;
+- **Faux-fixe** : rejouer les instances choisies N fois, en boucle, en va-et-vient ou au hasard ;
+- **Étirer le calque** jusqu'à la fin du plan, ou le couper après l'image courante ;
+- **Retourner** les images, horizontalement et / ou verticalement ;
+- **Noms d'instance** : double-clic sur un dessin de la timeline pour le nommer, tout
+  renommer, renommage intelligent.
+
+Par calque (menu ⋮), deux réglages : la **cassure automatique**, où dessiner sur une image tenue
+en fait un nouveau dessin, et la **création automatique** d'image.
+
 ## Le reste
 
 - **Tablette** : la pression module la taille et/ou l'opacité. Elle passe par Windows Ink : sur une

@@ -431,17 +431,74 @@ impl App {
                         2.5,
                         theme::FOND,
                     );
-                    if end - start > 1 {
-                        painter.line_segment(
-                            [
+                    // Nom d'instance (13c) dans le bloc, sinon le trait de l'exposition.
+                    match layer.names.get(&id) {
+                        Some(name) => {
+                            painter.with_clip_rect(block.shrink(1.0)).text(
                                 pos2(block.left() + CELL_W - 1.0, block.center().y),
-                                pos2(block.right() - 4.0, block.center().y),
-                            ],
-                            Stroke::new(1.0_f32, theme::ENTETE),
-                        );
+                                Align2::LEFT_CENTER,
+                                name,
+                                FontId::proportional(10.0),
+                                theme::FOND,
+                            );
+                        }
+                        None if end - start > 1 => {
+                            painter.line_segment(
+                                [
+                                    pos2(block.left() + CELL_W - 1.0, block.center().y),
+                                    pos2(block.right() - 4.0, block.center().y),
+                                ],
+                                Stroke::new(1.0_f32, theme::ENTETE),
+                            );
+                        }
+                        None => {}
                     }
                 }
                 f = end;
+            }
+        }
+
+        // Double-clic sur un dessin : renommer son instance (13c) ; le champ se pose sur le bloc.
+        if resp.double_clicked() {
+            if let Some(p) = resp.interact_pointer_pos() {
+                let col = ((p.x - r.left()) / CELL_W).floor().max(0.0) as usize;
+                if let Some(row) = row_at(&rows, p.y - grid_top) {
+                    if let Some(cel) = self.layers()[row.li].cel_at(col) {
+                        self.start_instance_rename(row.li, cel);
+                    }
+                }
+            }
+        }
+        let renaming = self.instance_rename.as_ref().map(|n| (n.layer, n.cel));
+        if let Some((layer_id, cel)) = renaming {
+            let found = rows.iter().find(|row| self.layers()[row.li].id == layer_id).and_then(|row| {
+                let l = &self.layers()[row.li];
+                let start = l.frames.iter().position(|f| *f == Some(cel))?;
+                Some(Rect::from_min_size(pos2(r.left() + start as f32 * CELL_W, grid_top + row.top + (row.h - 20.0) * 0.5), vec2(120.0, 20.0)))
+            });
+            match found {
+                Some(at) => {
+                    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(at).id_salt("nom_instance"));
+                    let n = self.instance_rename.as_mut().expect("renommage en cours");
+                    let mut out = egui::TextEdit::singleline(&mut n.name).desired_width(at.width()).show(&mut child);
+                    let field = out.response.clone();
+                    if !n.focused {
+                        field.request_focus();
+                        let len = n.name.chars().count();
+                        out.state.cursor.set_char_range(Some(egui::text::CCursorRange::two(
+                            egui::text::CCursor::new(0),
+                            egui::text::CCursor::new(len),
+                        )));
+                        out.state.store(ui.ctx(), field.id);
+                        n.focused = true;
+                    }
+                    if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                        self.instance_rename = None;
+                    } else if field.lost_focus() {
+                        self.commit_instance_rename();
+                    }
+                }
+                None => self.instance_rename = None,
             }
         }
 

@@ -311,6 +311,9 @@ pub struct App {
     pub(crate) fake_hold_times: usize,
     /// Glisser d'images choisies en cours : colonne du clic, colonne sous la souris (13c).
     pub(crate) image_drag: Option<(usize, usize)>,
+    /// Instance en cours de renommage dans la timeline, fenêtre du renommage intelligent (13c).
+    pub(crate) instance_rename: Option<crate::images::InstanceRename>,
+    pub(crate) smart_rename: Option<crate::images::SmartRename>,
     /// Aperçus des réglages de pinceau (grille du panneau Réglages, 6d).
     pub(crate) brush_previews: crate::brushui::BrushPreviews,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
@@ -539,6 +542,8 @@ impl App {
             images_focus: false,
             fake_hold_times: 2,
             image_drag: None,
+            instance_rename: None,
+            smart_rename: None,
             brush_previews: Default::default(),
             ref3d: Default::default(),
             camera_view: false,
@@ -2338,6 +2343,18 @@ impl App {
             "calque.etirer_boucle" => self.stretch_chosen(crate::images::Stretch::Loop),
             "calque.etirer_va_et_vient" => self.stretch_chosen(crate::images::Stretch::PingPong),
             "calque.couper_apres" => self.cut_layers_after_current(),
+            "images.retourner_h" => self.flip_images(true, false),
+            "images.retourner_v" => self.flip_images(false, true),
+            "images.retourner_hv" => self.flip_images(true, true),
+            "instance.renommer" => match self.cel_here() {
+                Some(cel) => self.start_instance_rename(self.cur_layer, cel),
+                None => self.status = "Pas de dessin à cette image.".into(),
+            },
+            "instance.effacer_noms" => self.clear_instance_names(),
+            "instance.tout_renommer" => self.renumber_instances(),
+            "instance.renommer_intelligemment" => {
+                self.smart_rename = Some(crate::images::SmartRename { empty: true, numbers: true, texts: true, ..Default::default() })
+            }
             // Dossiers de calques (13b-5, `folders.rs`).
             "dossier.nouveau" => self.new_folder(),
             "dossier.ranger" => self.folder_from_chosen(),

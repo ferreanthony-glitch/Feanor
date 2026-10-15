@@ -511,7 +511,14 @@ Décisions d'Anthony :
     étirer le calque jusqu'à la fin du plan (tenir la dernière image, boucle, va-et-vient) ou
     le couper après l'image courante, glisser-déposer des images choisies (sans touche :
     déplacer ; Ctrl : copier, avec des copies des dessins ; Maj : insérer).
-  - 13c-4. Noms d'instance (renommer, effacer, tout renommer, renommage intelligent), retourner.
+  - ✅ 13c-4. Noms d'instance (`Layer::names`, par dessin, format 15) : double-clic sur un
+    dessin de la timeline pour le renommer, effacer, tout renommer (1, 2, 3…), renommage
+    intelligent (préfixe / suffixe sur les instances sans nom, nommées par un nombre ou par un
+    texte) ; retourner les images choisies (horizontalement, verticalement, les deux : une
+    copie retournée de chaque dessin, l'original reste ailleurs).
+  - Restent de 13c : « Garder en l'état » (mode de trou, à décrire), la copie « images de
+    taille différente » (Pelure n'a qu'une taille de feuille), Ctrl pendant le tracé (chaque
+    touche du pinceau sur l'image suivante), interpolation d'images.
 - 13d. Repères : marques, signets, entrée / sortie, boucle, image de départ, time code, zoom.
 - 13e. Onglets du bas et vue Projet : notes dessinées, son par plan, arrière-plan, propriétés.
 - 13f. Table lumineuse complète.

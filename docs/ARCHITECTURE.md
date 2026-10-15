@@ -466,7 +466,13 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   comme `panel_focus` pour le montage. Fonctions sur une timeline de calque (`delete_frames`
   et son `Hole`, `insert_frames`, `reverse_frames`, `frames_in`) ; `shift_panel` décale les
   clés de caméra et les marques quand tout le plan change de durée. `ImageClip` garde une
-  copie des dessins ; chaque collage en refait.
+  copie des dessins ; chaque collage en refait. Instances (`next_instance`, `prev_instance`,
+  `break_instance`, `change_exposures`), faux-fixe (`fake_hold`, par instances, hasard
+  déterministe à graine), `stretch_frames` (le post-comportement posé dans la timeline),
+  `drop_frames` (déplacer / copier / insérer). La cassure automatique se fait dans
+  `ensure_cel`, que tous les outils de dessin appellent ; la création automatique est gardée
+  par `layer_editable`. Noms d'instance : `Layer::names` (dessin → nom), le renommage
+  intelligent dans `smart_rename`. Retourner : `Document::flipped_cel` (une copie).
 
 ## Pinceaux texturés (3d-2)
 

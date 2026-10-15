@@ -971,6 +971,41 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
+action = "images.retourner_h"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "images.retourner_v"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "images.retourner_hv"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "instance.renommer"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "instance.effacer_noms"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "instance.tout_renommer"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "instance.renommer_intelligemment"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
 action = "dossier.nouveau"
 touches = []
 source = "TVPaint 12 sans touche"

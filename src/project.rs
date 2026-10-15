@@ -57,7 +57,7 @@ pub const FORMAT: &str = "pelure-projet";
 /// ferait des calques vides et perdrait l'opacité et l'affichage des dossiers.
 /// 15 (13c) : pré / post-comportement des calques (`avant`, `apres`), qu'une version
 /// précédente ignorerait (le film changerait sans prévenir) ; cassure et création automatiques
-/// (`cassure_auto`, `creation_auto`).
+/// (`cassure_auto`, `creation_auto`) ; noms d'instance (`noms`).
 pub const VERSION: u32 = 15;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
@@ -362,6 +362,9 @@ struct LayerEntry {
     cassure_auto: bool,
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     creation_auto: bool,
+    /// Noms d'instance (format 15) : numéro de dessin → nom.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    noms: std::collections::BTreeMap<u64, String>,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -818,6 +821,8 @@ fn manifest_of(doc: &Document) -> Manifest {
                     apres: l.post,
                     cassure_auto: l.auto_break,
                     creation_auto: l.auto_create,
+                    // Seulement les noms des dessins encore dans la timeline du calque.
+                    noms: l.names.iter().filter(|(id, _)| l.frames.contains(&Some(**id))).map(|(id, n)| (*id, n.clone())).collect(),
                     expositions: to_exposures(&l.frames),
                 })
                 .collect(),
@@ -1174,6 +1179,7 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                         post: l.apres,
                         auto_break: l.cassure_auto,
                         auto_create: l.creation_auto,
+                        names: l.noms,
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.
