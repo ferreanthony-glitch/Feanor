@@ -265,6 +265,9 @@ struct LayerEntry {
     /// panneau de la scène, portent le même numéro.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     toute_la_scene: Option<u64>,
+    /// Mode de fusion (format 9 ; absent : normal).
+    #[serde(default, skip_serializing_if = "is_normal")]
+    fusion: crate::blend::BlendMode,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -303,6 +306,10 @@ fn one() -> f32 {
 
 fn is_zero(v: &f32) -> bool {
     *v == 0.0
+}
+
+fn is_normal(m: &crate::blend::BlendMode) -> bool {
+    *m == crate::blend::BlendMode::Normal
 }
 
 /// Dossier et manifeste correspondant au nom choisi dans la boîte « Enregistrer sous ».
@@ -695,6 +702,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                     }),
                     profondeur: l.depth,
                     toute_la_scene: l.scene_wide.map(|w| w.key),
+                    fusion: l.blend,
                     expositions: to_exposures(&l.frames),
                 })
                 .collect(),
@@ -970,6 +978,7 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                     .calques
                     .into_iter()
                     .map(|l| Layer {
+                        blend: l.fusion,
                         scene_wide: l.toute_la_scene.map(|k| SceneWide {
                             key: *keys.entry(k).or_insert_with(fresh_layer_id),
                             scene: scene.id,

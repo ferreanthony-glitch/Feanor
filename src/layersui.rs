@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use eframe::egui::{self, vec2, Color32, RichText, Sense, Stroke, StrokeKind, TextureHandle};
 
 use crate::app::App;
+use crate::blend::BlendMode;
 use crate::document::{CelId, LayerKind};
 use crate::render::over;
 
@@ -117,13 +118,34 @@ impl App {
         // Opacité du calque courant (comme en haut d'une liste de calques).
         let li = self.cur_layer;
         let mut opacity = self.layers()[li].opacity * 100.0;
+        let mut mode = self.layers()[li].blend;
         ui.horizontal(|ui| {
+            // Mode de fusion (8), comme dans les logiciels de retouche.
+            egui::ComboBox::from_id_salt("fusion_calque")
+                .selected_text(mode.label())
+                .width(120.0)
+                .show_ui(ui, |ui| {
+                    for (k, m) in BlendMode::ALL.into_iter().enumerate() {
+                        // Groupes : normal, assombrir, éclaircir, contraste, écarts, couleur.
+                        if [1, 2, 3, 11, 13].contains(&k) {
+                            ui.separator();
+                        }
+                        ui.selectable_value(&mut mode, m, m.label()).on_hover_text(m.hint());
+                    }
+                })
+                .response
+                .on_hover_text(format!("Mode de fusion : {}", mode.hint()));
             ui.label("Opacité");
             let resp = ui.add(egui::DragValue::new(&mut opacity).range(0.0..=100.0).max_decimals(0).suffix(" %").speed(0.5));
             if self.edited(&resp) {
                 self.layers_mut()[li].opacity = opacity / 100.0;
             }
         });
+        if mode != self.layers()[li].blend {
+            self.record_step();
+            self.layers_mut()[li].blend = mode;
+            self.renderer.invalidate_all();
+        }
         ui.add_space(2.0);
 
         let mut select = None;

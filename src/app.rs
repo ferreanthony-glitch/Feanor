@@ -725,6 +725,7 @@ impl App {
                             opacity: crate::onion::fade(s.opacity, k, n),
                             tint: s.tinted.then_some(color),
                             transform,
+                            blend: Default::default(),
                         });
                     }
                 }
@@ -735,6 +736,7 @@ impl App {
                     transform,
                     opacity: (opacity * 255.0).round() as u8,
                     tint: None,
+                    blend: layer.blend,
                 });
             }
         }

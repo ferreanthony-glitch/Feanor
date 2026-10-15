@@ -50,7 +50,7 @@ fn upcoming_cels_skip_shown_ones_and_respect_the_cap() {
     let shown_cel = doc.panels[0].layers[0].cel_at(3).unwrap();
     let shown = Plan {
         paper: None,
-        items: vec![crate::render::PlanItem { cel: shown_cel, opacity: 255, tint: None, transform: None }],
+        items: vec![crate::render::PlanItem { cel: shown_cel, opacity: 255, tint: None, transform: None, blend: Default::default() }],
     };
     // Depuis l'image 1 du panneau 0 : images 2, 3 (dessin affiché, ignoré), puis panneau 1.
     let cels = upcoming_cels(&doc, at(0, 1, true, true, true), &shown, 10);

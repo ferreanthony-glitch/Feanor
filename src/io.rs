@@ -156,6 +156,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
                     .map(|f| f.filter(|id| cels.contains_key(id)))
                     .collect(),
                 scene_wide: None,
+                blend: Default::default(),
             })
             .collect();
         if layers.is_empty() {

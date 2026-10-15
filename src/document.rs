@@ -6,6 +6,7 @@ use eframe::egui::{pos2, vec2, Pos2, Rect, Vec2};
 use serde::{Deserialize, Serialize};
 
 use crate::audio::Pcm;
+use crate::blend::BlendMode;
 use crate::camera::{self, Camera, CameraKey};
 use crate::guides::Guide;
 use crate::raster::Raster;
@@ -210,6 +211,8 @@ pub struct Layer {
     pub frames: Vec<Option<CelId>>,
     /// Calque de toute la scène (6f) ; aucun : calque du seul panneau.
     pub scene_wide: Option<SceneWide>,
+    /// Mode de fusion avec ce qui est dessous (8).
+    pub blend: crate::blend::BlendMode,
 }
 
 impl Layer {
@@ -225,6 +228,7 @@ impl Layer {
             depth: 0.0,
             frames: Vec::new(),
             scene_wide: None,
+            blend: Default::default(),
         }
     }
 
@@ -1142,7 +1146,8 @@ impl Document {
         if above.scene_wide.is_some() || below.scene_wide.is_some() {
             return Err("Un calque de toute la scène ne se fusionne pas avec un autre.".into());
         }
-        let vector = above.kind == LayerKind::Vector && below.kind == LayerKind::Vector;
+        // Un calque du dessus en mode de fusion se fond dans les pixels : le résultat est bitmap.
+        let vector = above.kind == LayerKind::Vector && below.kind == LayerKind::Vector && above.blend == BlendMode::Normal;
         let n = above.frames.len().max(below.frames.len());
         let mut made: HashMap<(Option<CelId>, Option<CelId>), Option<CelId>> = HashMap::new();
         let mut frames = Vec::with_capacity(n);
@@ -1151,7 +1156,7 @@ impl Document {
             let cel = match made.get(&key) {
                 Some(&c) => c,
                 None => {
-                    let c = self.merged_cel(key, below.opacity, above.opacity, vector);
+                    let c = self.merged_cel(key, below.opacity, above.opacity, vector, above.blend);
                     made.insert(key, c);
                     c
                 }
@@ -1171,21 +1176,28 @@ impl Document {
         Ok(())
     }
 
-    /// Nouveau dessin : `below` puis `above` par-dessus, chacun avec son opacité.
-    fn merged_cel(&mut self, (below, above): (Option<CelId>, Option<CelId>), ob: f32, oa: f32, vector: bool) -> Option<CelId> {
+    /// Nouveau dessin : `below` puis `above` par-dessus (selon `mode`), chacun avec son opacité.
+    fn merged_cel(
+        &mut self,
+        (below, above): (Option<CelId>, Option<CelId>),
+        ob: f32,
+        oa: f32,
+        vector: bool,
+        mode: BlendMode,
+    ) -> Option<CelId> {
         if below.is_none() && above.is_none() {
             return None;
         }
-        let sources: Vec<(Cel, f32)> = [(below, ob), (above, oa)]
+        let sources: Vec<(Cel, f32, BlendMode)> = [(below, ob, BlendMode::Normal), (above, oa, mode)]
             .into_iter()
-            .filter_map(|(c, o)| c.and_then(|c| self.cels.get(&c)).map(|cel| (cel.clone(), o.clamp(0.0, 1.0))))
+            .filter_map(|(c, o, m)| c.and_then(|c| self.cels.get(&c)).map(|cel| (cel.clone(), o.clamp(0.0, 1.0), m)))
             .collect();
         let kind = if vector { LayerKind::Vector } else { LayerKind::Bitmap };
         let id = self.new_cel(kind);
         let cel = self.cels.get_mut(&id).expect("dessin créé juste avant");
         if vector {
             let drawing = cel.vector.get_or_insert_with(VectorDrawing::default);
-            for (src, o) in sources {
+            for (src, o, _) in sources {
                 for mut e in src.vector.map(|d| d.elements).unwrap_or_default() {
                     match &mut e {
                         crate::vector::Element::Stroke { opacity, .. }
@@ -1198,13 +1210,13 @@ impl Document {
             cel.rerender();
         } else {
             let opacity = |o: f32| (o * 255.0).round() as u8;
-            for (src, o) in sources {
+            for (src, o, m) in sources {
                 for (idx, tile) in src.raster.tiles.iter().enumerate() {
                     let Some(tile) = tile else { continue };
                     let dst = cel.raster.tile_mut(idx);
                     for (d, &s) in dst.iter_mut().zip(tile.iter()) {
                         if s.a() != 0 {
-                            *d = crate::render::over(*d, s, opacity(o), None);
+                            *d = crate::blend::blend_over(*d, s, opacity(o), None, m);
                         }
                     }
                 }

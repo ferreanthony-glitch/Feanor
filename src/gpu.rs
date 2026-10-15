@@ -60,6 +60,117 @@ fn vs(@builtin(vertex_index) i: u32) -> VOut {
 
 // Composer. Couleurs prémultipliées, en valeurs gamma, comme les dessins. params.x : opacité ;
 // params.y : 1 = dessin, 0 = papier ; color.w : 1 = teinte de pelure d'oignon (color.rgb).
+// Fond pour les modes de fusion (8) : ce qui est déjà composé, copié avant le calque.
+@group(2) @binding(0) var back_tex: texture_2d<f32>;
+
+// Modes de fusion : formules de la norme W3C « Compositing and Blending », comme `blend.rs`
+// (même numérotation que `BlendMode::ALL`).
+fn lum(c: vec3<f32>) -> f32 {
+    return dot(c, vec3<f32>(0.3, 0.59, 0.11));
+}
+fn clip_color(c: vec3<f32>) -> vec3<f32> {
+    let l = lum(c);
+    let n = min(min(c.r, c.g), c.b);
+    let x = max(max(c.r, c.g), c.b);
+    var o = c;
+    if (n < 0.0) {
+        o = vec3<f32>(l) + (o - vec3<f32>(l)) * l / max(l - n, 1e-6);
+    }
+    if (x > 1.0) {
+        o = vec3<f32>(l) + (o - vec3<f32>(l)) * (1.0 - l) / max(x - l, 1e-6);
+    }
+    return o;
+}
+fn set_lum(c: vec3<f32>, l: f32) -> vec3<f32> {
+    return clip_color(c + vec3<f32>(l - lum(c)));
+}
+fn sat(c: vec3<f32>) -> f32 {
+    return max(max(c.r, c.g), c.b) - min(min(c.r, c.g), c.b);
+}
+fn set_sat(c: vec3<f32>, s: f32) -> vec3<f32> {
+    let mx = max(max(c.r, c.g), c.b);
+    let mn = min(min(c.r, c.g), c.b);
+    if (mx <= mn) {
+        return vec3<f32>(0.0);
+    }
+    return (c - vec3<f32>(mn)) * s / (mx - mn);
+}
+fn hard_light(cb: f32, cs: f32) -> f32 {
+    if (cs <= 0.5) {
+        return cb * 2.0 * cs;
+    }
+    let s = 2.0 * cs - 1.0;
+    return cb + s - cb * s;
+}
+fn channel(mode: u32, cb: f32, cs: f32) -> f32 {
+    switch mode {
+        case 1u: { return cb * cs; }
+        case 2u: { return cb + cs - cb * cs; }
+        case 3u: { return hard_light(cs, cb); }
+        case 4u: { return min(cb, cs); }
+        case 5u: { return max(cb, cs); }
+        case 6u: {
+            if (cb >= 1.0) { return 1.0; }
+            if (cs <= 0.0) { return 0.0; }
+            return 1.0 - min((1.0 - cb) / cs, 1.0);
+        }
+        case 7u: {
+            if (cb <= 0.0) { return 0.0; }
+            if (cs >= 1.0) { return 1.0; }
+            return min(cb / (1.0 - cs), 1.0);
+        }
+        case 8u: { return min(cb + cs, 1.0); }
+        case 9u: { return hard_light(cb, cs); }
+        case 10u: {
+            if (cs <= 0.5) {
+                return cb - (1.0 - 2.0 * cs) * cb * (1.0 - cb);
+            }
+            var d = sqrt(cb);
+            if (cb <= 0.25) {
+                d = ((16.0 * cb - 12.0) * cb + 4.0) * cb;
+            }
+            return cb + (2.0 * cs - 1.0) * (d - cb);
+        }
+        case 11u: { return abs(cb - cs); }
+        case 12u: { return cb + cs - 2.0 * cb * cs; }
+        default: { return cs; }
+    }
+}
+fn mix_rgb(mode: u32, cb: vec3<f32>, cs: vec3<f32>) -> vec3<f32> {
+    switch mode {
+        case 13u: { return set_lum(set_sat(cs, sat(cb)), lum(cb)); }
+        case 14u: { return set_lum(set_sat(cb, sat(cs)), lum(cb)); }
+        case 15u: { return set_lum(cs, lum(cb)); }
+        case 16u: { return set_lum(cb, lum(cs)); }
+        default: {
+            return vec3<f32>(channel(mode, cb.r, cs.r), channel(mode, cb.g, cs.g), channel(mode, cb.b, cs.b));
+        }
+    }
+}
+
+// Composer un calque en mode de fusion : le fond est lu au même pixel et le résultat le
+// remplace (pas de mélange matériel). params.x : opacité ; params.z : le mode.
+@fragment
+fn fs_blend(v: VOut) -> @location(0) vec4<f32> {
+    let raw = textureSample(tex, samp, v.uv);
+    let b = textureLoad(back_tex, vec2<i32>(floor(v.pos.xy)), 0);
+    let sa = raw.a * item.params.x;
+    if (sa <= 0.0) {
+        return b;
+    }
+    let cs = min(raw.rgb / raw.a, vec3<f32>(1.0));
+    let ab = b.a;
+    var cb = vec3<f32>(0.0);
+    if (ab > 0.0) {
+        cb = min(b.rgb / ab, vec3<f32>(1.0));
+    }
+    let mixed = clamp(mix_rgb(u32(item.params.z + 0.5), cb, cs), vec3<f32>(0.0), vec3<f32>(1.0));
+    let c = (1.0 - ab) * cs + ab * mixed;
+    let co = sa * c + (1.0 - sa) * ab * cb;
+    let ao = sa + ab * (1.0 - sa);
+    return vec4<f32>(co, ao);
+}
+
 @fragment
 fn fs_compose(v: VOut) -> @location(0) vec4<f32> {
     let s = textureSample(tex, samp, v.uv);
@@ -121,14 +232,20 @@ struct CelTexture {
 /// Image composée, à la taille du projet.
 struct Frame {
     size: (u32, u32),
+    texture: wgpu::Texture,
     target: wgpu::TextureView,
     /// Lecture en sRGB pour l'affichage.
     display_group: wgpu::BindGroup,
+    /// Copie de l'image composée jusque-là, lue par les calques en mode de fusion (8).
+    backdrop: wgpu::Texture,
+    backdrop_group: wgpu::BindGroup,
 }
 
 /// Ressources gardées par egui-wgpu d'une image à l'autre.
 struct CanvasResources {
     compose: wgpu::RenderPipeline,
+    /// Composer un calque en mode de fusion (lit le fond, remplace).
+    blend: wgpu::RenderPipeline,
     display: wgpu::RenderPipeline,
     uniform_layout: wgpu::BindGroupLayout,
     texture_layout: wgpu::BindGroupLayout,
@@ -227,6 +344,37 @@ impl GpuCanvas {
         };
         let compose = pipeline("fs_compose", FRAME_FORMAT);
         let display = pipeline("fs_display", rs.target_format);
+        // Modes de fusion : un troisième groupe pour le fond, et pas de mélange matériel.
+        let blend_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("calques fusion"),
+            bind_group_layouts: &[&uniform_layout, &texture_layout, &texture_layout],
+            push_constant_ranges: &[],
+        });
+        let blend = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("fs_blend"),
+            layout: Some(&blend_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_blend"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: FRAME_FORMAT,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
         // Bilinéaire : un calque transformé est lissé ; un calque tel quel tombe pile sur les pixels.
         let nearest = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("composer"),
@@ -248,6 +396,7 @@ impl GpuCanvas {
         let white = texture_group(device, &texture_layout, &white_tex.create_view(&Default::default()), &nearest);
         rs.renderer.write().callback_resources.insert(CanvasResources {
             compose,
+            blend,
             display,
             uniform_layout,
             texture_layout,
@@ -351,7 +500,9 @@ impl GpuCanvas {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: FRAME_FORMAT,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_SRC,
                 view_formats: &[wgpu::TextureFormat::Rgba8UnormSrgb],
             });
             let target = texture.create_view(&Default::default());
@@ -360,10 +511,25 @@ impl GpuCanvas {
                 ..Default::default()
             });
             let display_group = texture_group(&rs.device, &res.texture_layout, &srgb, &res.smooth);
+            let backdrop = rs.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("fond des modes de fusion"),
+                size: extent(size.0, size.1),
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: FRAME_FORMAT,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            let backdrop_group =
+                texture_group(&rs.device, &res.texture_layout, &backdrop.create_view(&Default::default()), &res.nearest);
             res.frame = Some(Frame {
                 size,
+                texture,
                 target,
                 display_group,
+                backdrop,
+                backdrop_group,
             });
         }
     }
@@ -392,6 +558,7 @@ impl GpuCanvas {
                 corners: full,
                 color: [p[0] as f32 / 255.0, p[1] as f32 / 255.0, p[2] as f32 / 255.0, 0.0],
                 params: [1.0, 0.0, 0.0, 0.0],
+                blend: 0,
             });
         }
         for item in &plan.items {
@@ -399,11 +566,14 @@ impl GpuCanvas {
                 Some(t) => ([t[0] as f32 / 255.0, t[1] as f32 / 255.0, t[2] as f32 / 255.0], 1.0),
                 None => ([0.0; 3], 0.0),
             };
+            // La pelure d'oignon (teinte) reste en mode normal.
+            let blend = if item.tint.is_some() { 0 } else { item.blend.index() };
             items.push(GpuItem {
                 cel: Some(item.cel),
                 corners: item.transform.as_ref().map_or(full, placed),
                 color: [color[0], color[1], color[2], tinted],
-                params: [item.opacity as f32 / 255.0, 1.0, 0.0, 0.0],
+                params: [item.opacity as f32 / 255.0, 1.0, blend as f32, 0.0],
+                blend,
             });
         }
         // Afficher : positions en points ; elles passent en coordonnées de l'écran entier au moment
@@ -419,6 +589,26 @@ struct GpuItem {
     corners: [[f32; 4]; 4],
     color: [f32; 4],
     params: [f32; 4],
+    /// Mode de fusion (0 : normal, voir `BlendMode::index`).
+    blend: u32,
+}
+
+/// Passe qui compose dans l'image `target` (effacée d'abord, ou reprise telle quelle).
+fn compose_pass<'a>(encoder: &'a mut wgpu::CommandEncoder, target: &'a wgpu::TextureView, clear: bool) -> wgpu::RenderPass<'a> {
+    encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("composer les calques"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view: target,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: if clear { wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT) } else { wgpu::LoadOp::Load },
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+    })
 }
 
 struct CanvasPaint {
@@ -464,22 +654,10 @@ impl CallbackTrait for CanvasPaint {
         put_item(&mut bytes[self.items.len() * stride..], &on_screen, &[0.0; 4], &[1.0, 1.0, 0.0, 0.0]);
         queue.write_buffer(&res.uniforms, 0, &bytes);
 
-        // Composer dans l'image à la taille du projet.
+        // Composer dans l'image à la taille du projet. Un calque en mode de fusion lit ce qui est
+        // déjà composé : on le copie à part avant (fin de passe, copie, nouvelle passe).
         let Some(frame) = &res.frame else { return Vec::new() };
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("composer les calques"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &frame.target,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-        });
+        let mut pass = compose_pass(encoder, &frame.target, true);
         pass.set_pipeline(&res.compose);
         for (i, item) in self.items.iter().enumerate() {
             let group = match item.cel {
@@ -489,9 +667,23 @@ impl CallbackTrait for CanvasPaint {
                     None => continue,
                 },
             };
+            if item.blend != 0 {
+                drop(pass);
+                encoder.copy_texture_to_texture(
+                    frame.texture.as_image_copy(),
+                    frame.backdrop.as_image_copy(),
+                    extent(frame.size.0, frame.size.1),
+                );
+                pass = compose_pass(encoder, &frame.target, false);
+                pass.set_pipeline(&res.blend);
+                pass.set_bind_group(2, &frame.backdrop_group, &[]);
+            }
             pass.set_bind_group(0, &res.uniform_group, &[(i * stride) as u32]);
             pass.set_bind_group(1, group, &[]);
             pass.draw(0..6, 0..1);
+            if item.blend != 0 {
+                pass.set_pipeline(&res.compose);
+            }
         }
         Vec::new()
     }

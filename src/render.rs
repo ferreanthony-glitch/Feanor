@@ -1,5 +1,6 @@
 use eframe::egui::{self, Color32, ColorImage, TextureFilter, TextureHandle, TextureOptions, Vec2};
 
+use crate::blend::{blend_over, BlendMode};
 use crate::camera::Camera;
 use crate::document::{CelId, Document, LayerTransform, Panel};
 use crate::raster::{tile_bounds, tiles_across, Raster, TILE, TILE_PIXELS};
@@ -13,6 +14,8 @@ pub struct PlanItem {
     pub opacity: u8,
     pub tint: Option<[u8; 3]>,
     pub transform: Option<LayerTransform>,
+    /// Mode de fusion de son calque (8).
+    pub blend: BlendMode,
 }
 
 /// Couleur du dessin au point (`x`, `y`) de ses pixels (interpolation bilinéaire, prémultipliée).
@@ -112,7 +115,7 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
                     let p = inv.apply(egui::pos2((ox + x) as f32 + 0.5, (oy + y) as f32 + 0.5));
                     let src = sample(&cel.raster, p.x, p.y);
                     if src.a() != 0 {
-                        *d = over(*d, src, item.opacity, item.tint);
+                        *d = blend_over(*d, src, item.opacity, item.tint, item.blend);
                     }
                 }
             }
@@ -127,7 +130,7 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
             let row = &tile[y * TILE..y * TILE + tw];
             for (d, &src) in buf[s..s + tw].iter_mut().zip(row) {
                 if src.a() != 0 {
-                    *d = over(*d, src, item.opacity, item.tint);
+                    *d = blend_over(*d, src, item.opacity, item.tint, item.blend);
                 }
             }
         }
@@ -245,7 +248,7 @@ pub fn composite_pixel(doc: &Document, plan: &Plan, x: usize, y: usize) -> Color
                 None => cel.raster.get(x, y),
             };
             if s.a() != 0 {
-                c = over(c, s, item.opacity, item.tint);
+                c = blend_over(c, s, item.opacity, item.tint, item.blend);
             }
         }
     }
@@ -272,6 +275,7 @@ fn plan_with_offset(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, offset:
                     opacity: (l.opacity.clamp(0.0, 1.0) * 255.0).round() as u8,
                     tint: None,
                     transform: (!t.is_identity()).then_some(t),
+                    blend: l.blend,
                 })
             })
             .collect(),
