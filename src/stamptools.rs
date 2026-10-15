@@ -288,6 +288,8 @@ impl App {
 
     /// Réglages de l'outil Tampon (panneau Réglages).
     pub(crate) fn stamp_options_ui(&mut self, ui: &mut egui::Ui) {
+        use crate::bulles::{choix, interrupteur};
+        use egui_phosphor::regular as ph;
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
             for i in 0..self.stamps.images.len() {
@@ -295,9 +297,8 @@ impl App {
                 let selected = self.stamps.selected.contains(&i);
                 let name = self.stamps.images[i].name.clone();
                 let img = egui::Image::new((tex.id(), vec2(36.0, 36.0)));
-                let resp = ui.add(egui::ImageButton::new(img).selected(selected)).on_hover_text(format!(
-                    "{name}\nClic : choisir ce tampon · Ctrl + clic : l'ajouter au cycle"
-                ));
+                let resp = ui.add(egui::ImageButton::new(img).selected(selected));
+                let resp = crate::bulles::bulle(resp, &name, "Clic : choisir ce tampon. Ctrl + clic : l'ajouter au cycle.", "");
                 if resp.clicked() {
                     if ui.input(|i| i.modifiers.command) {
                         if selected && self.stamps.selected.len() > 1 {
@@ -310,10 +311,12 @@ impl App {
                     }
                 }
             }
+            // Importer, au bout des tampons.
+            let resp = crate::bulles::icone(ui, ph::IMAGES, "Importer des images", "PNG avec transparence, ou JPEG ; gardées pour les fois suivantes.", "");
+            if resp.clicked() {
+                self.import_stamps();
+            }
         });
-        if ui.button("Importer des images…").on_hover_text("PNG avec transparence, ou JPEG ; gardées pour les fois suivantes").clicked() {
-            self.import_stamps();
-        }
         let s = &mut self.stamps.settings;
         let pct = |v: f64, _: std::ops::RangeInclusive<usize>| format!("{:.0} %", v * 100.0);
         ui.add(egui::Slider::new(&mut s.size, 2.0..=1000.0).logarithmic(true).text("Taille max"));
@@ -327,20 +330,24 @@ impl App {
         ui.add(egui::Slider::new(&mut s.random_spacing, 0.0..=1.0).custom_formatter(pct).text("Espacement"));
         ui.add(egui::Slider::new(&mut s.opacity, 0.0..=1.0).custom_formatter(pct).text("Opacité"));
         ui.horizontal(|ui| {
-            ui.checkbox(&mut s.flip_x, "Miroir ↔");
-            ui.checkbox(&mut s.flip_y, "Miroir ↕");
+            interrupteur(ui, &mut s.flip_x, ph::FLIP_HORIZONTAL, "Miroir horizontal", "Retourner l'image de gauche à droite.", "");
+            interrupteur(ui, &mut s.flip_y, ph::FLIP_VERTICAL, "Miroir vertical", "Retourner l'image de haut en bas.", "");
+            interrupteur(
+                ui,
+                &mut s.tint,
+                ph::PALETTE,
+                "Teinter les images en couleurs",
+                "Les tampons blancs de Pelure prennent toujours la couleur courante ; une image importée garde ses couleurs, sauf avec ce bouton.",
+                "",
+            );
         });
-        ui.checkbox(&mut s.tint, "Teinter les images en couleurs").on_hover_text(
-            "Les tampons blancs de Pelure prennent toujours la couleur courante ; une image importée garde \
-             ses couleurs, sauf avec cette case.",
-        );
         if self.stamps.selected.len() > 1 {
             ui.horizontal(|ui| {
                 ui.label("Cycle");
-                ui.selectable_value(&mut s.cycle, Cycle::InOrder, "Dans l'ordre");
-                ui.selectable_value(&mut s.cycle, Cycle::Random, "Au hasard");
+                choix(ui, &mut s.cycle, Cycle::InOrder, ph::LIST_NUMBERS, "Dans l'ordre", "Les tampons choisis l'un après l'autre.", "");
+                choix(ui, &mut s.cycle, Cycle::Random, ph::SHUFFLE, "Au hasard", "Un tampon choisi au hasard à chaque fois.", "");
+                interrupteur(ui, &mut s.reset_cycle, ph::ARROW_COUNTER_CLOCKWISE, "Reprendre le cycle à chaque trait", "Chaque trait recommence au premier tampon.", "");
             });
-            ui.checkbox(&mut s.reset_cycle, "Reprendre le cycle à chaque trait");
         }
         ui.label(
             egui::RichText::new("Sur un calque bitmap. Ctrl + clic sur un tampon : plusieurs images en cycle.")
@@ -351,17 +358,20 @@ impl App {
 
     /// Réglages du tampon de duplication (panneau Réglages).
     pub(crate) fn clone_options_ui(&mut self, ui: &mut egui::Ui) {
+        use crate::bulles::{choix, interrupteur};
+        use egui_phosphor::regular as ph;
         let c = &mut self.clone;
         let pct = |v: f64, _: std::ops::RangeInclusive<usize>| format!("{:.0} %", v * 100.0);
         ui.add(egui::Slider::new(&mut c.size, 1.0..=500.0).logarithmic(true).text("Taille"));
         ui.add(egui::Slider::new(&mut c.hardness, 0.0..=1.0).text("Dureté"));
         ui.add(egui::Slider::new(&mut c.opacity, 0.0..=1.0).custom_formatter(pct).text("Opacité"));
-        ui.checkbox(&mut c.aligned, "Aligné").on_hover_text(
-            "La source suit le pinceau d'un trait à l'autre ; sinon chaque trait repart de la source.",
-        );
-        ui.label("Copier :");
-        ui.radio_value(&mut c.sample_all, false, "le calque courant");
-        ui.radio_value(&mut c.sample_all, true, "tous les calques visibles");
+        ui.horizontal(|ui| {
+            interrupteur(ui, &mut c.aligned, ph::LINK_SIMPLE, "Aligné", "La source suit le pinceau d'un trait à l'autre ; sinon chaque trait repart de la source.", "");
+            ui.separator();
+            ui.label("Copier");
+            choix(ui, &mut c.sample_all, false, ph::STACK_SIMPLE, "Le calque courant", "Recopier seulement le calque où l'on peint.", "");
+            choix(ui, &mut c.sample_all, true, ph::STACK, "Tous les calques visibles", "Recopier ce que l'on voit.", "");
+        });
         ui.label(
             egui::RichText::new(match c.source {
                 Some(_) => "Peins : ce qui est sous le viseur orange est recopié sous le pinceau. Ctrl + clic : \

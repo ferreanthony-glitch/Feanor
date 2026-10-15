@@ -235,13 +235,15 @@ impl App {
                 next = Some(LayerTransform { angle, ..t });
             }
         });
-        let key = self.keymap.label("calque.reinit_transformation");
-        let label = if key.is_empty() {
-            "Annuler la transformation".to_string()
-        } else {
-            format!("Annuler la transformation ({key})")
-        };
-        if ui.add_enabled(!t.is_identity(), egui::Button::new(label)).clicked() {
+        let resp = self.bouton_si(
+            ui,
+            !t.is_identity(),
+            egui_phosphor::regular::ARROW_COUNTER_CLOCKWISE,
+            "Annuler la transformation",
+            "Le calque revient à sa place, à sa taille, sans rotation ; ses dessins n'ont jamais changé.",
+            "calque.reinit_transformation",
+        );
+        if resp.clicked() {
             self.reset_layer_transform();
         }
         if let Some(t) = next {

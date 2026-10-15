@@ -364,14 +364,38 @@ impl App {
         let note = |ui: &mut egui::Ui, text: &str| {
             ui.label(RichText::new(text).small().weak());
         };
-        if ui
-            .button("Importer un modèle 3D…")
-            .on_hover_text("glTF (.glb ou .gltf). Depuis Blender : Fichier > Exporter > glTF 2.0.")
-            .clicked()
-        {
+        use crate::bulles::{bulle, icone, icone_si, interrupteur};
+        use egui_phosphor::regular as ph;
+        let mut models: Vec<(u64, String)> = self.doc.models.values().map(|m| (m.id, m.name.clone())).collect();
+        models.sort();
+        let current = self.current_ref3d().map(|r| r.model);
+        let mut chosen = None;
+        let mut import = false;
+        // Importer, et le modèle du panneau, sur une ligne.
+        ui.horizontal(|ui| {
+            import = icone(ui, ph::FILE_ARROW_DOWN, "Importer un modèle 3D", "glTF (.glb ou .gltf). Depuis Blender : Fichier > Exporter > glTF 2.0.", "").clicked();
+            if models.is_empty() {
+                return;
+            }
+            let shown = current.and_then(|id| models.iter().find(|m| m.0 == id)).map_or("Aucun".to_string(), |m| m.1.clone());
+            let stats = current
+                .and_then(|id| self.doc.models.get(&id))
+                .map(|m| format!("{} triangles, {} arêtes dessinées.", m.mesh.triangles.len(), m.edges.len()));
+            let combo = egui::ComboBox::from_id_salt("repere3d_modele").selected_text(shown).width(130.0).show_ui(ui, |ui| {
+                if ui.selectable_label(current.is_none(), "Aucun").clicked() {
+                    chosen = Some(None);
+                }
+                for (id, name) in &models {
+                    if ui.selectable_label(current == Some(*id), name).clicked() {
+                        chosen = Some(Some(*id));
+                    }
+                }
+            });
+            bulle(combo.response, "Modèle du panneau", stats.as_deref().unwrap_or(""), "");
+        });
+        if import {
             self.import_model3d();
         }
-        let mut models: Vec<(u64, String)> = self.doc.models.values().map(|m| (m.id, m.name.clone())).collect();
         if models.is_empty() {
             note(
                 ui,
@@ -379,29 +403,6 @@ impl App {
                  puis importe-le : il s'affiche en fil de fer dans le cadre, comme un guide.",
             );
             return;
-        }
-        models.sort();
-        let current = self.current_ref3d().map(|r| r.model);
-        let shown = current
-            .and_then(|id| models.iter().find(|m| m.0 == id))
-            .map_or("Aucun".to_string(), |m| m.1.clone());
-        let mut chosen = None;
-        let stats = current
-            .and_then(|id| self.doc.models.get(&id))
-            .map(|m| format!("{} triangles, {} arêtes dessinées", m.mesh.triangles.len(), m.edges.len()));
-        let combo = egui::ComboBox::from_label("Modèle").selected_text(shown).width(130.0);
-        let combo = combo.show_ui(ui, |ui| {
-            if ui.selectable_label(current.is_none(), "Aucun").clicked() {
-                chosen = Some(None);
-            }
-            for (id, name) in &models {
-                if ui.selectable_label(current == Some(*id), name).clicked() {
-                    chosen = Some(Some(*id));
-                }
-            }
-        });
-        if let Some(stats) = stats {
-            combo.response.on_hover_text(stats);
         }
         if let Some(c) = chosen.filter(|c| *c != current) {
             self.set_panel_model(c);
@@ -413,23 +414,19 @@ impl App {
         let mut next = r.clone();
         let mut changed = false;
         ui.horizontal(|ui| {
-            let resp = ui.checkbox(&mut next.visible, "Visible");
+            let resp = interrupteur(ui, &mut next.visible, ph::EYE, "Visible", "Montrer le repère dans le cadre.", "");
             changed |= self.edited(&resp);
-            let resp = ui.color_edit_button_srgb(&mut next.color).on_hover_text("Couleur du repère");
-            changed |= self.edited(&resp);
+            let resp = ui.color_edit_button_srgb(&mut next.color);
+            changed |= self.edited(&bulle(resp, "Couleur du repère", "", ""));
             let mut percent = next.opacity * 100.0;
-            let resp = ui
-                .add(egui::DragValue::new(&mut percent).speed(1.0).range(5.0..=100.0).max_decimals(0).suffix(" %"))
-                .on_hover_text("Opacité du repère");
-            if self.edited(&resp) {
+            let resp = ui.add(egui::DragValue::new(&mut percent).speed(1.0).range(5.0..=100.0).max_decimals(0).suffix(" %"));
+            if self.edited(&bulle(resp, "Opacité du repère", "", "")) {
                 next.opacity = percent / 100.0;
                 changed = true;
             }
+            let resp = interrupteur(ui, &mut next.hidden_lines, ph::CUBE, "Masquer les arêtes cachées", "Les arêtes derrière une face ne sont pas dessinées (calcul plus long).", "");
+            changed |= self.edited(&resp);
         });
-        let resp = ui
-            .checkbox(&mut next.hidden_lines, "Masquer les arêtes cachées")
-            .on_hover_text("Les arêtes derrière une face ne sont pas dessinées (calcul plus long).");
-        changed |= self.edited(&resp);
         egui::Grid::new("repere3d_camera").num_columns(2).spacing([6.0, 3.0]).show(ui, |ui| {
             let cam = &mut next.cam;
             ui.label("Azimut");
@@ -456,8 +453,9 @@ impl App {
             next.cam.azimuth = next.cam.azimuth.rem_euclid(360.0);
             self.doc.panels[self.cur_panel].ref3d = Some(next);
         }
+        let mut bake = false;
         ui.horizontal_wrapped(|ui| {
-            if ui.button("Cadrer le modèle").on_hover_text("Le modèle entier dans le cadre").clicked() {
+            if icone(ui, ph::CORNERS_OUT, "Cadrer le modèle", "Le modèle entier dans le cadre.", "").clicked() {
                 if let Some(m) = self.doc.models.get(&r.model) {
                     let cam = Cam3d::fit(m.bounds, self.frame_f());
                     self.record_step();
@@ -467,23 +465,23 @@ impl App {
                 }
             }
             let previous = self.cur_panel.checked_sub(1).and_then(|i| self.doc.panels[i].ref3d.clone());
-            if ui
-                .add_enabled(previous.is_some(), egui::Button::new("Comme le panneau précédent"))
-                .on_hover_text("Même modèle, même point de vue que le panneau d'avant")
-                .clicked()
-            {
+            if icone_si(ui, previous.is_some(), ph::ARROW_BEND_UP_LEFT, "Comme le panneau précédent", "Même modèle, même point de vue que le panneau d'avant.", "").clicked() {
                 self.record_step();
                 self.doc.panels[self.cur_panel].ref3d = previous;
             }
-            if ui.button("Retirer").on_hover_text("Ce panneau n'a plus de repère 3D").clicked() {
+            if icone(ui, ph::X_CIRCLE, "Retirer", "Ce panneau n'a plus de repère 3D.", "").clicked() {
                 self.set_panel_model(None);
             }
+            bake = icone(
+                ui,
+                ph::PENCIL_LINE,
+                "Dessiner dans un calque",
+                "Le fil de fer devient un dessin bitmap (calque « Repère 3D », tout en bas), qui s'exporte.",
+                "",
+            )
+            .clicked();
         });
-        if ui
-            .button("Dessiner dans un calque")
-            .on_hover_text("Le fil de fer devient un dessin bitmap (calque « Repère 3D », tout en bas), qui s'exporte")
-            .clicked()
-        {
+        if bake {
             self.bake_ref3d();
         }
         note(

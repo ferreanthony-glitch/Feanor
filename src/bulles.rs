@@ -43,6 +43,12 @@ fn texte(symbole: &str) -> RichText {
     RichText::new(symbole).size(TAILLE)
 }
 
+/// Icône à la place du nom d'un réglage (devant un curseur ou une valeur), avec sa bulle.
+pub(crate) fn etiquette(ui: &mut Ui, symbole: &str, nom: &str, description: &str) -> Response {
+    let resp = ui.label(texte(symbole).color(theme::TEXTE_DOUX));
+    bulle(resp, nom, description, "")
+}
+
 /// Bouton icône.
 pub(crate) fn icone(ui: &mut Ui, symbole: &str, nom: &str, description: &str, raccourci: &str) -> Response {
     icone_si(ui, true, symbole, nom, description, raccourci)

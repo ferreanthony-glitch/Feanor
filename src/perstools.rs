@@ -207,7 +207,8 @@ impl App {
     pub(crate) fn persp_options_ui(&mut self, ui: &mut egui::Ui) {
         let editing = self.persp.is_some();
         ui.horizontal(|ui| {
-            if ui.add_enabled(editing, egui::Button::new("Remettre droit")).on_hover_text("Les coins reviennent à leur place").clicked() {
+            use egui_phosphor::regular as ph;
+            if crate::bulles::icone_si(ui, editing, ph::ARROW_COUNTER_CLOCKWISE, "Remettre droit", "Les coins reviennent à leur place.", "").clicked() {
                 if let Some(e) = &mut self.persp {
                     let s = e.src;
                     e.drag = Some((Grip::All, Pos2::ZERO, e.quad));
@@ -215,7 +216,7 @@ impl App {
                 }
                 self.persp_release();
             }
-            if ui.add_enabled(editing, egui::Button::new("Terminer")).on_hover_text("Entrée").clicked() {
+            if crate::bulles::icone_si(ui, editing, ph::CHECK, "Terminer", "Garder la déformation et quitter (Entrée).", "").clicked() {
                 self.persp = None;
             }
         });

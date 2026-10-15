@@ -18,7 +18,7 @@ ouvrir d'un double-clic).
 - **Storyboard** (au démarrage) : le film est une suite de **séquences**, découpées en **scènes**,
   découpées en **panneaux**. En bas, la bande de montage montre les panneaux (vignette, largeur
   proportionnelle à la durée) sous deux barres : séquences et scènes.
-  - « + Panneau » (P), « + Scène » (Maj+P), « + Séquence » ; le menu « … » à côté duplique ou
+  - Nouveau panneau (P), nouvelle scène (Maj+P), nouvelle séquence : icônes de la barre du montage ; le menu « … » à côté duplique ou
     supprime un panneau ou une scène entière. Les barres du montage et de la timeline tiennent sur
     une ligne : des icônes, dont le nom et le raccourci s'affichent au survol.
   - F5 coupe le panneau à l'image courante (la suite devient un nouveau panneau, avec ses propres
@@ -116,7 +116,7 @@ Densité couleur +, Superposition, Lumière vive, Différence, Soustraction, Div
 Luminosité…), rangés par famille ; le calque se mélange à ce qui est dessous, à l'écran comme à
 l'export. Fusionner un tel calque avec celui du dessous applique le mode aux pixels. Double-clic
 sur le nom, ou clic droit > « Renommer… », pour renommer ; le clic droit donne aussi Toute la
-scène, Profondeur, Dupliquer, Verrouiller, Supprimer. **« + Fond »** crée,
+scène, Profondeur, Dupliquer, Verrouiller, Supprimer. **Nouveau calque de fond** (icône des montagnes) crée,
 tout en bas, un calque bitmap commun à toute la scène (un décor) : ce qu'on y dessine se voit dans
 chaque panneau de la scène, pendant tout le panneau. « Toute la scène » étend n'importe
 quel calque de la même façon, ou le rend à son panneau (chaque panneau garde alors sa copie).
@@ -135,12 +135,13 @@ prend le fond de celle-ci.
   onglet), ou ailleurs pour qu'il flotte. Tire les bords entre panneaux pour les redimensionner.
   La croix d'un onglet le ferme ; Affichage > Panneaux le fait revenir à sa place. Clic droit
   sur un onglet : « Dans une fenêtre à part », pour le poser sur un autre écran (le fermer le
-  remet à sa place). Les outils sont des icônes : leur nom et leur raccourci s'affichent au survol.
+  remet à sa place). Les commandes sont des icônes, partout où c'est possible : la souris posée
+  une seconde sur l'une d'elles ouvre une bulle avec son nom, son raccourci et ce qu'elle fait.
   En haut, une barre de commandes ; à gauche, la barre d'outils verticale (Affichage > Panneaux
   pour les masquer). Couleur : teinte, saturation, valeur et nuancier. Réglages du pinceau : une
   grille de réglages, chacun avec l'aperçu de son trait et sa taille. Panneau **Pinceaux** (onglet
   à côté de Couleur) : les mêmes réglages en liste, avec un grand aperçu du trait, la taille, et
-  « texture » / « importé » ; ceux de la gomme quand la gomme est choisie ; « Importer… » pour
+  « texture » / « importé » ; ceux de la gomme quand la gomme est choisie ; l'icône d'import pour
   les pinceaux Toon Boom. Les aperçus montrent le trait dans la couleur courante, sur le papier.
   L'interface est sombre et dense (gris et bleu d'accent repris de Pelure Studio, police Segoe
   UI). Les pinceaux texturés
@@ -157,7 +158,7 @@ prend le fond de celle-ci.
 - **Perspective** : clic sur le dessin, puis tirer ses coins (Ctrl+Z annule chaque geste).
 - **Pinceaux texturés** (calque bitmap, panneau Réglages) : liste de réglages (pinceau rond, crayon à
   papier, craie grasse, encre, gommes) ; « Papier » et « Grain » donnent un grain fixe sur le
-  dessin, que la couleur remplit quand on appuie. « Importer… » lit un fichier de pinceaux Toon
+  dessin, que la couleur remplit quand on appuie. L'icône d'import lit un fichier de pinceaux Toon
   Boom (`.xml`, par exemple `STB_TextureBrushes_preset.xml`) : ses pinceaux, pointes et papiers
   s'ajoutent à la liste et restent pour les fois suivantes.
 - **Pelure d'oignon** (Alt+O) : par défaut 3 dessins avant en rouge et 3 après en vert, de plus en

@@ -470,10 +470,11 @@ impl App {
                     }
                     let (enter, esc) = ui.input(|i| (i.modifiers.ctrl && i.key_pressed(Key::Enter), i.key_pressed(Key::Escape)));
                     ui.horizontal(|ui| {
-                        if ui.button("Poser").on_hover_text("Ctrl + Entrée").clicked() || enter {
+                        use egui_phosphor::regular as ph;
+                        if crate::bulles::icone(ui, ph::CHECK, "Poser la note", "Ctrl + Entrée.", "").clicked() || enter {
                             done = Some(true);
                         }
-                        if ui.button("Annuler").on_hover_text("Échap").clicked() || esc {
+                        if crate::bulles::icone(ui, ph::X, "Annuler", "Annuler la saisie (Échap).", "").clicked() || esc {
                             done = Some(false);
                         }
                     });
@@ -487,40 +488,49 @@ impl App {
     }
 
     fn board_toolbar(&mut self, ui: &mut egui::Ui) {
+        use crate::bulles::{bulle, etiquette, interrupteur};
+        use egui_phosphor::regular as ph;
         ui.horizontal_wrapped(|ui| {
             ui.add_space(6.0);
-            ui.label("Taille");
+            etiquette(ui, ph::ARROWS_OUT_SIMPLE, "Taille des vignettes", "");
             let mut size = self.layout.card_size;
-            if ui
-                .add(egui::Slider::new(&mut size, CARD_MIN..=CARD_MAX).show_value(false))
-                .on_hover_text("Taille des vignettes")
-                .changed()
-            {
+            let resp = ui.add(egui::Slider::new(&mut size, CARD_MIN..=CARD_MAX).show_value(false));
+            if bulle(resp, "Taille des vignettes", "", "").changed() {
                 self.layout.card_size = size;
             }
-            ui.label("Colonnes");
-            ui.add(egui::DragValue::new(&mut self.layout.board_columns).range(1..=MAX_COLUMNS).speed(0.05))
-                .on_hover_text("Vignettes par ligne (6 au plus)");
-            ui.label("Lignes");
-            ui.add(
+            etiquette(ui, ph::COLUMNS, "Colonnes", "Vignettes par ligne (6 au plus).");
+            let resp = ui.add(egui::DragValue::new(&mut self.layout.board_columns).range(1..=MAX_COLUMNS).speed(0.05));
+            bulle(resp, "Colonnes", "Vignettes par ligne (6 au plus).", "");
+            etiquette(ui, ph::ROWS, "Lignes par page", "« toutes » : une seule page.");
+            let resp = ui.add(
                 egui::DragValue::new(&mut self.layout.board_rows)
                     .range(0..=MAX_ROWS)
                     .speed(0.05)
                     .custom_formatter(|v, _| if v < 0.5 { "toutes".into() } else { format!("{v:.0}") }),
-            )
-            .on_hover_text("Lignes par page (« toutes » : une seule page)");
-            ui.label("Écart");
-            ui.add(egui::DragValue::new(&mut self.layout.board_spacing).range(0.0..=MAX_SPACING).speed(0.5).max_decimals(0))
-                .on_hover_text("Écart entre les vignettes");
-            ui.checkbox(&mut self.layout.board_scene_breaks, "Scène à la ligne")
-                .on_hover_text("Chaque scène commence une nouvelle ligne (sinon les plans se suivent)");
-            ui.checkbox(&mut self.layout.board_attach, format!("{} Attacher les notes", egui_phosphor::regular::PAPERCLIP))
-                .on_hover_text("Les nouvelles notes suivent la vignette la plus proche quand on la déplace ou la redimensionne");
-            if ui
-                .button(format!("{:.0} %", self.board_zoom * 100.0))
-                .on_hover_text("Zoom de la planche (Ctrl + molette). Clic : la page à la largeur de la vue.")
-                .clicked()
-            {
+            );
+            bulle(resp, "Lignes par page", "« toutes » : une seule page.", "");
+            etiquette(ui, ph::ARROWS_OUT_LINE_HORIZONTAL, "Écart", "Entre les vignettes.");
+            let resp = ui.add(egui::DragValue::new(&mut self.layout.board_spacing).range(0.0..=MAX_SPACING).speed(0.5).max_decimals(0));
+            bulle(resp, "Écart", "Entre les vignettes.", "");
+            ui.separator();
+            interrupteur(
+                ui,
+                &mut self.layout.board_scene_breaks,
+                ph::KEY_RETURN,
+                "Scène à la ligne",
+                "Chaque scène commence une nouvelle ligne (sinon les plans se suivent).",
+                "",
+            );
+            interrupteur(
+                ui,
+                &mut self.layout.board_attach,
+                ph::PAPERCLIP,
+                "Attacher les notes",
+                "Les nouvelles notes suivent la vignette la plus proche quand on la déplace ou la redimensionne.",
+                "",
+            );
+            let resp = ui.button(format!("{:.0} %", self.board_zoom * 100.0));
+            if bulle(resp, "Zoom de la planche", "Ctrl + molette. Clic : la page à la largeur de la vue.", "").clicked() {
                 self.board_fit();
             }
             let n = self.board_selection().len();
@@ -532,7 +542,6 @@ impl App {
             }
         });
     }
-
     /// Garde un bout de la planche dans la vue.
     fn clamp_board_pan(&mut self, view: Rect, size: Vec2) {
         let s = size * self.board_zoom;

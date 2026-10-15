@@ -302,28 +302,22 @@ impl App {
 
     /// Réglages et liste des guides (panneau d'outils).
     pub(crate) fn guides_ui(&mut self, ui: &mut egui::Ui) {
-        let key = |app: &App, action: &str| {
-            let k = app.keymap.label(action);
-            if k.is_empty() {
-                String::new()
-            } else {
-                format!(" ({k})")
-            }
-        };
-        let labels = [
-            format!("Afficher et utiliser{}", key(self, "guide.activer")),
-            format!("Aligner les traits{}", key(self, "guide.aligner")),
-            format!("Verrouiller{}", key(self, "guide.verrouiller")),
-            format!("Lignes de référence{}", key(self, "guide.lignes_reference")),
-        ];
+        use crate::bulles::{icone, interrupteur};
+        use egui_phosphor::regular as ph;
+        let keys: Vec<String> = ["guide.activer", "guide.aligner", "guide.verrouiller", "guide.lignes_reference", "guide.gomme", "guide.curseur_complet"]
+            .iter()
+            .map(|a| self.raccourci(a))
+            .collect();
         let s = &mut self.guides;
-        ui.checkbox(&mut s.enabled, &labels[0]);
-        ui.add_enabled_ui(s.enabled, |ui| {
-            ui.checkbox(&mut s.align, &labels[1]);
-            ui.checkbox(&mut s.locked, &labels[2]);
-            ui.checkbox(&mut s.reference, &labels[3]);
-            ui.checkbox(&mut s.eraser, "Aligner aussi la gomme");
-            ui.checkbox(&mut s.full_cursor, "Lignes du curseur jusqu'au bord");
+        ui.horizontal_wrapped(|ui| {
+            interrupteur(ui, &mut s.enabled, ph::PERSPECTIVE, "Afficher et utiliser le guide", "Le guide de perspective courant, sur le dessin.", &keys[0]);
+            ui.add_enabled_ui(s.enabled, |ui| {
+                interrupteur(ui, &mut s.align, ph::MAGNET, "Aligner les traits", "Le trait suit la fuyante, la verticale ou l'horizontale la plus proche du geste.", &keys[1]);
+                interrupteur(ui, &mut s.locked, ph::LOCK_SIMPLE, "Verrouiller", "Les points de fuite ne bougent plus à la souris.", &keys[2]);
+                interrupteur(ui, &mut s.reference, ph::ASTERISK, "Lignes de référence", "Des lignes en éventail depuis les points de fuite.", &keys[3]);
+                interrupteur(ui, &mut s.eraser, ph::ERASER, "Aligner aussi la gomme", "La gomme suit le guide comme les traits.", &keys[4]);
+                interrupteur(ui, &mut s.full_cursor, ph::CROSSHAIR, "Lignes du curseur jusqu'au bord", "Les lignes qui suivent le curseur vont jusqu'au bord du dessin.", &keys[5]);
+            });
         });
         let mut pick = None;
         for (i, g) in self.doc.guides.iter().enumerate() {
@@ -338,31 +332,35 @@ impl App {
         if self.doc.guides.is_empty() {
             ui.label(egui::RichText::new("Aucun guide dans ce projet.").small().weak());
         }
+        let current = self.guides.current;
+        let name = self.doc.guides.get(current).map(|g| g.name.clone());
+        let mut delete = false;
         ui.horizontal(|ui| {
-            for (n, text) in [(1, "+ 1 point"), (2, "+ 2 points"), (3, "+ 3 points")] {
-                if ui.button(text).clicked() {
+            let new = [
+                (1, ph::NUMBER_SQUARE_ONE, "Nouveau guide à 1 point de fuite"),
+                (2, ph::NUMBER_SQUARE_TWO, "Nouveau guide à 2 points de fuite"),
+                (3, ph::NUMBER_SQUARE_THREE, "Nouveau guide à 3 points de fuite"),
+            ];
+            for (n, icon, text) in new {
+                if icone(ui, icon, text, "Il devient le guide courant.", "").clicked() {
                     self.add_guide(n);
                 }
             }
-        });
-        let current = self.guides.current;
-        if let Some(mut name) = self.doc.guides.get(current).map(|g| g.name.clone()) {
-            let mut delete = false;
-            ui.horizontal(|ui| {
-                ui.label("Nom");
+            // Nom du guide courant, et le supprimer.
+            if let Some(mut name) = name {
+                ui.separator();
                 let resp = ui.add(egui::TextEdit::singleline(&mut name).desired_width(110.0));
-                if self.edited(&resp) {
+                if self.edited(&crate::bulles::bulle(resp, "Nom du guide", "", "")) {
                     self.doc.guides[current].name = name;
                 }
-                delete = ui.button("Supprimer").clicked();
-            });
-            if delete {
-                self.delete_guide();
+                delete = icone(ui, ph::TRASH, "Supprimer le guide", "", "").clicked();
             }
+        });
+        if delete {
+            self.delete_guide();
         }
     }
 }
-
 /// Directions de `n` lignes de référence partant de `vp`, réparties sur l'angle sous lequel on voit
 /// le dessin (tout le tour si le point est dedans).
 fn fan(vp: Pos2, frame: Rect, n: usize) -> Vec<Vec2> {

@@ -240,24 +240,32 @@ impl App {
         let note = |ui: &mut egui::Ui, text: &str| {
             ui.label(egui::RichText::new(text).small().weak());
         };
+        use crate::bulles::{choix, interrupteur};
+        use egui_phosphor::regular as ph;
         if self.tool == Tool::Line {
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.shape.line_mode, LineMode::Straight, "Droite");
-                ui.selectable_value(&mut self.shape.line_mode, LineMode::Curve, "Courbe");
-                ui.selectable_value(&mut self.shape.line_mode, LineMode::SCurve, "Courbe en S");
+                let key = |a: &str| self.raccourci(a);
+                let (k1, k2, k3) = (key("outil.ligne_droite"), key("outil.ligne_courbe"), key("outil.ligne_s"));
+                let mode = &mut self.shape.line_mode;
+                choix(ui, mode, LineMode::Straight, ph::LINE_SEGMENT, "Droite", "Un segment droit.", &k1);
+                choix(ui, mode, LineMode::Curve, ph::BEZIER_CURVE, "Courbe", "Un arc qui passe par le pointeur.", &k2);
+                choix(ui, mode, LineMode::SCurve, ph::WAVE_SINE, "Courbe en S", "Une courbe à deux bosses.", &k3);
             });
         }
+        // Épaisseur, puis les interrupteurs de la forme au bout de la même ligne.
         let filled = self.shape.filled;
-        ui.add_enabled(
-            !(filled && self.tool != Tool::Line),
-            egui::Slider::new(&mut self.shape.width, 0.5..=100.0).logarithmic(true).text("Épaisseur"),
-        );
-        if self.tool == Tool::Polyline {
-            ui.checkbox(&mut self.shape.closed, "Fermer la forme en la terminant");
-        }
-        if matches!(self.tool, Tool::Rect | Tool::Ellipse) || (self.tool == Tool::Polyline && self.shape.closed) {
-            ui.checkbox(&mut self.shape.filled, "Forme pleine");
-        }
+        ui.horizontal(|ui| {
+            ui.add_enabled(
+                !(filled && self.tool != Tool::Line),
+                egui::Slider::new(&mut self.shape.width, 0.5..=100.0).logarithmic(true).text("Épaisseur"),
+            );
+            if self.tool == Tool::Polyline {
+                interrupteur(ui, &mut self.shape.closed, ph::POLYGON, "Fermer la forme", "Relier le dernier point au premier en terminant.", "");
+            }
+            if matches!(self.tool, Tool::Rect | Tool::Ellipse) || (self.tool == Tool::Polyline && self.shape.closed) {
+                interrupteur(ui, &mut self.shape.filled, ph::SQUARE_HALF, "Forme pleine", "Remplie de la couleur courante, sans contour.", "");
+            }
+        });
         note(
             ui,
             match self.tool {

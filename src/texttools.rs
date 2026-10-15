@@ -229,8 +229,9 @@ impl App {
                     }
                     cancel |= escape;
                     ui.horizontal(|ui| {
-                        done |= ui.button("Poser").on_hover_text("Ctrl+Entrée").clicked();
-                        cancel |= ui.button("Annuler").on_hover_text("Échap").clicked();
+                        use egui_phosphor::regular as ph;
+                        done |= crate::bulles::icone(ui, ph::CHECK, "Poser le texte", "Ctrl + Entrée, ou un clic ailleurs.", "").clicked();
+                        cancel |= crate::bulles::icone(ui, ph::X, "Annuler", "Annuler la saisie (Échap).", "").clicked();
                     });
                 });
             });

@@ -290,7 +290,7 @@ impl App {
     }
 
     fn montage_toolbar(&mut self, ui: &mut egui::Ui, total: usize, fps: u32) {
-        use crate::bulles::{bulle, choix, interrupteur, TAILLE};
+        use crate::bulles::{bulle, choix, etiquette, interrupteur, TAILLE};
         use egui_phosphor::regular as ph;
         ui.spacing_mut().item_spacing.x = 3.0;
         let sep = |ui: &mut egui::Ui| {
@@ -381,8 +381,7 @@ impl App {
         choix(ui, &mut self.board_view, BoardView::Scene, ph::PAINT_BRUSH, "Vue dessin", "Dessiner le panneau courant.", &key);
         choix(ui, &mut self.board_view, BoardView::Panels, ph::SQUARES_FOUR, "Vue vignettes", "Tous les panneaux en planche, rangés par scène.", &key);
         sep(ui);
-        let resp = ui.label(RichText::new(ph::MAGNIFYING_GLASS).size(TAILLE));
-        bulle(resp, "Zoom du montage", "", "");
+        etiquette(ui, ph::MAGNIFYING_GLASS, "Zoom du montage", "");
         ui.spacing_mut().slider_width = 80.0;
         let resp = ui.add(egui::Slider::new(&mut self.montage_zoom, 0.5..=16.0).logarithmic(true).show_value(false));
         bulle(resp, "Zoom du montage", "Largeur d'une image dans la bande.", "");

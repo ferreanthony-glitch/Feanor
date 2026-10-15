@@ -363,8 +363,15 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   plus sourdes, sous les panneaux, `IMAGE_COURANTE`, `CAMERA`, `SON_*`, `barre(séquence,
   impaire)`) : `timeline.rs`, `montagerows.rs`, `soundtrack.rs`, `storyboard.rs`. Les deux
   barres d'outils sont une `ScrollArea` horizontale autour d'une seule ligne ;
-  `App::icon_button` (timeline.rs) fait un bouton icône dont l'infobulle donne le nom et le
-  raccourci lu dans le fichier de raccourcis.
+  les boutons viennent de `bulles.rs` (12d).
+- Boutons icônes et bulles (12d) : `bulles.rs`. Fonctions libres (`icone`, `icone_si`, `etat`,
+  `etat_si`, `interrupteur`, `choix`, `etiquette`, `bulle`) qui prennent le texte du raccourci ;
+  méthodes d'`App` (`bouton`, `bouton_si`, `bouton_etat`, `aide`, `raccourci`) qui prennent
+  l'identifiant de l'action et lisent son raccourci dans le fichier de raccourcis. Une bulle :
+  nom, raccourci, description. Délai d'une seconde : `theme::densifier` règle
+  `interaction.tooltip_delay` sur `bulles::DELAI`. Descriptions des outils :
+  `Tool::description`, `Nav3d::description`. Un test parcourt les sources et vérifie que chaque
+  action citée par un bouton existe dans le fichier de raccourcis.
 
 ## Pinceaux texturés (3d-2)
 

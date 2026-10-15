@@ -19,6 +19,8 @@ mod brushtex;
 mod brushtex_tests;
 mod brushui;
 mod bulles;
+#[cfg(test)]
+mod bulles_tests;
 mod camera;
 #[cfg(test)]
 mod camera_tests;

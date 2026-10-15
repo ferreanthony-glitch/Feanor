@@ -400,6 +400,16 @@ aperçus de pinceaux dans la couleur courante.
   ligne défile si la fenêtre est trop étroite. Contrastes testés (noms sur les extraits et les
   calques ≥ 4,5:1, repères sur les rangées ≥ 3:1 : le test a éclairci le « dessin vide »).
   Le calque courant écrit en blanc dans la colonne des noms.
+- ✅ 12d. Icônes partout où c'est possible, demandé par Anthony : barres (commandes, outils,
+  timeline, montage, vue, plateau 3D), panneaux (Calques, Couleur, Vue, Outils, Pinceaux) et
+  réglages des outils (sélection, formes, tampons, texte, perspective, transformer, caméra,
+  guides, repère 3D, planche des vignettes). Chaque bouton a une bulle — nom, raccourci du
+  fichier de raccourcis, petite description — qui ne s'ouvre que si la souris reste une seconde
+  dessus. Les interrupteurs des réglages (pression, pixels nets, forme pleine…) passent au bout
+  du curseur qu'ils concernent.
+  Restent en texte, volontairement : les menus et menus contextuels, les fenêtres de dialogue
+  (export, enregistrer, nouveau projet, secours), les noms de réglages devant les curseurs, et
+  « Storyboard » / « Animation » en haut à droite (on voit d'un coup d'œil où l'on est).
 
 ## Raccourcis proposés, à valider
 

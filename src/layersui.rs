@@ -126,8 +126,7 @@ impl App {
                 })
                 .response;
             crate::bulles::bulle(resp, "Mode de fusion", mode.hint(), "");
-            let resp = ui.label(RichText::new(ph::CIRCLE_HALF).size(crate::bulles::TAILLE));
-            crate::bulles::bulle(resp, "Opacité du calque", "", "");
+            crate::bulles::etiquette(ui, ph::CIRCLE_HALF, "Opacité du calque", "");
             let resp = ui.add(egui::DragValue::new(&mut opacity).range(0.0..=100.0).max_decimals(0).suffix(" %").speed(0.5));
             let resp = crate::bulles::bulle(resp, "Opacité du calque", "Glisser ou taper une valeur.", "");
             if self.edited(&resp) {

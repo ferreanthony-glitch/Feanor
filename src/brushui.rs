@@ -18,6 +18,9 @@ const PREVIEW: Vec2 = vec2(54.0, 30.0);
 const WIDE_HEIGHT: f32 = 38.0;
 const WIDE_STEP: f32 = 24.0;
 
+/// Bulle du bouton « Importer des pinceaux » (Réglages et panneau Pinceaux).
+const IMPORT_HINT: &str = "D'un fichier de préréglages Toon Boom (.xml) ; ils restent pour les fois suivantes.";
+
 /// Aperçus des réglages (par numéro de réglage), refaits quand le réglage ou l'échelle de
 /// l'écran change : petits pour la grille des Réglages, grands pour le panneau Pinceaux.
 #[derive(Default)]
@@ -62,11 +65,7 @@ impl App {
         ui.horizontal(|ui| {
             ui.label(RichText::new(selected).strong());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui
-                    .small_button("Importer…")
-                    .on_hover_text("Importer des pinceaux d'un fichier de préréglages Toon Boom (.xml)")
-                    .clicked()
-                {
+                if crate::bulles::icone(ui, egui_phosphor::regular::FILE_ARROW_DOWN, "Importer des pinceaux", IMPORT_HINT, "").clicked() {
                     self.import_brushes();
                 }
             });
@@ -142,7 +141,7 @@ impl App {
             egui::FontId::proportional(11.0),
             ink,
         );
-        resp.on_hover_text(format!("{name}\n{source}"))
+        crate::bulles::bulle(resp, &name, &source, "")
     }
 
     /// Panneau Pinceaux (11c) : les réglages nommés en liste, chacun avec un grand aperçu de son
@@ -158,11 +157,7 @@ impl App {
         ui.horizontal(|ui| {
             ui.label(RichText::new(if target == Target::Eraser { "Gommes" } else { "Pinceaux" }).strong());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui
-                    .small_button("Importer…")
-                    .on_hover_text("Importer des pinceaux d'un fichier de préréglages Toon Boom (.xml) ; ils restent pour les fois suivantes")
-                    .clicked()
-                {
+                if crate::bulles::icone(ui, egui_phosphor::regular::FILE_ARROW_DOWN, "Importer des pinceaux", IMPORT_HINT, "").clicked() {
                     self.import_brushes();
                 }
             });
@@ -270,7 +265,7 @@ impl App {
         let (papier, trait_) = self.preview_colors(index);
         painter.rect_filled(image, 3.0, papier);
         painter.image(tex, image, egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), trait_);
-        resp.on_hover_text(format!("{name}\n{source}"))
+        crate::bulles::bulle(resp, &name, &source, "")
     }
 
     /// Couleurs d'un aperçu (12b) : le papier du projet, et le trait dans la couleur courante ; une
@@ -302,13 +297,13 @@ impl App {
             });
         });
         if b.paper.is_some() {
-            ui.add(egui::Slider::new(&mut b.grain, 0.0..=1.0).text("Grain"))
-                .on_hover_text("Le grain reste fixe sur le dessin ; appuyer plus fort remplit les creux du papier.");
+            let resp = ui.add(egui::Slider::new(&mut b.grain, 0.0..=1.0).text("Grain"));
+            crate::bulles::bulle(resp, "Grain", "Le grain reste fixe sur le dessin ; appuyer plus fort remplit les creux du papier.", "");
         }
         if let Some(tip) = tip_name {
             ui.horizontal(|ui| {
                 ui.label(RichText::new(format!("Pointe : {tip}")).small());
-                if ui.small_button("ronde").on_hover_text("Revenir à une pointe ronde").clicked() {
+                if crate::bulles::icone(ui, egui_phosphor::regular::CIRCLE, "Pointe ronde", "Revenir à une pointe ronde.", "").clicked() {
                     b.tip = None;
                 }
             });

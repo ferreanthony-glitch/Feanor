@@ -526,7 +526,7 @@ impl App {
                     if self.edited(&r) {
                         next = Some(Camera { angle, ..cam });
                     }
-                    let resp = crate::bulles::icone(ui, ph::ARROW_COUNTER_CLOCKWISE, "Réinitialiser la caméra", "Au centre, sans zoom, avancée ni rotation.", "");
+                    let resp = self.bouton(ui, ph::ARROW_COUNTER_CLOCKWISE, "Réinitialiser la caméra", "Au centre, sans zoom, avancée ni rotation.", "camera.reinitialiser");
                     if resp.clicked() {
                         self.reset_camera();
                     }
@@ -571,7 +571,8 @@ impl App {
                 if self.bouton_etat(ui, on, ph::FRAME_CORNERS, "Vue à travers la caméra", "Voir ce que filme la caméra du panneau.", "camera.vue").clicked() {
                     self.set_camera_view(!on);
                 }
-                interrupteur(ui, &mut self.camera_mask, ph::SELECTION_INVERSE, "Estomper le hors-champ", "Voiler ce qui est hors du cadre de la caméra.", "");
+                let key = self.raccourci("camera.masque");
+                interrupteur(ui, &mut self.camera_mask, ph::SELECTION_INVERSE, "Estomper le hors-champ", "Voiler ce qui est hors du cadre de la caméra.", &key);
                 let key = self.raccourci("vue.cadres_securite");
                 interrupteur(ui, &mut self.layout.safe_frames, ph::SELECTION, "Zones de sécurité", "Action 93 %, titres 90 %, tracées dans le cadre.", &key);
                 self.frame_format_ui(ui);
@@ -618,7 +619,14 @@ impl App {
             if self.edited(&r) {
                 next = Some(Camera { angle, ..cam });
             }
-            if ui.small_button("Réinitialiser").clicked() {
+            let resp = self.bouton(
+                ui,
+                egui_phosphor::regular::ARROW_COUNTER_CLOCKWISE,
+                "Réinitialiser la caméra",
+                "Au centre, sans zoom, avancée ni rotation.",
+                "camera.reinitialiser",
+            );
+            if resp.clicked() {
                 self.reset_camera();
             }
         });
