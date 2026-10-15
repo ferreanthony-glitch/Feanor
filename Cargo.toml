@@ -4,6 +4,13 @@ version = "0.1.0"
 edition = "2021"
 description = "Logiciel d'animation 2D bitmap image par image, inspiré de TVPaint"
 
+# 10a : Pelure est aussi une bibliothèque, utilisée par l'appli compagnon Tauri (src-tauri/) ;
+# l'exécutable (src/main.rs) ne fait que la lancer. src-tauri/ est un projet Cargo à part (son
+# propre Cargo.lock) : Tauri ne change aucune version des dépendances de Pelure.
+[lib]
+name = "pelure"
+path = "src/lib.rs"
+
 [dependencies]
 # « wgpu » : affichage par la carte graphique (Direct3D 12 / Vulkan) ; « glow » (OpenGL) reste en
 # secours. Fonctions par défaut d'eframe, sauf l'accessibilité (accesskit) : elle plante quand un
