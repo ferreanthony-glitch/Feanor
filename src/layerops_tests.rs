@@ -87,6 +87,18 @@ fn empty_layers_and_choices() {
 }
 
 #[test]
+fn group_commands_reach_the_right_layers() {
+    use crate::groupsui::{layers_in, Scope};
+    let mut doc = plan();
+    let layers = &mut doc.panels[0].layers;
+    layers[0].group = 5;
+    layers[3].group = 5;
+    assert_eq!(layers_in(layers, 5, Scope::CurrentGroup), [0, 3]);
+    assert_eq!(layers_in(layers, 5, Scope::OtherGroups), [1, 2]);
+    assert_eq!(layers_in(layers, 5, Scope::All), [0, 1, 2, 3]);
+}
+
+#[test]
 fn a_new_layer_goes_where_it_is_asked() {
     use crate::newlayer::{insert_index, Place};
     let mut doc = plan();

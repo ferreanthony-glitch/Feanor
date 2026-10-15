@@ -153,6 +153,13 @@ afficher, le calque courant seul, supprimer les calques vides ou cachés, étein
 pochoirs, couper, coller à la place. Ctrl + Haut / Bas monte ou descend le calque. **Nouveau
 calque…** ouvre une fenêtre : nom, sorte, groupe, mode de fusion, et place dans la pile.
 
+**Groupes de couleur** (icône des nuanciers dans l'en-tête, ou menu Calques > Groupes > Éditer
+les groupes…). Chacun des 13 groupes a un nom et une couleur, modifiables. On peut le cacher de la
+timeline : ses calques restent dans l'image, seules leurs lignes disparaissent. Si le calque
+courant est dans un groupe caché, l'en-tête l'annonce, et un clic sur la couleur remontre le
+groupe. Le menu Groupes agit en une fois sur tous les calques, ceux du groupe courant ou ceux des
+autres groupes : pelure, verrou, transparence, affichage, pochoir, fusion, et focus sur le groupe.
+
 ## Le reste
 
 - **Tablette** : la pression module la taille et/ou l'opacité. Elle passe par Windows Ink : sur une

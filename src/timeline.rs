@@ -193,7 +193,7 @@ impl App {
 
     /// En-tête des calques (13b, `layerheads.rs`), puis les noms des lignes caméra et son.
     fn timeline_names(&mut self, ui: &mut egui::Ui) {
-        let rows_h = rows_height(&rows_of(self.layers()));
+        let rows_h = rows_height(&rows_of(self.layers(), &self.doc.groups));
         let sound_h = self.sound_row_h();
         let r = self.timeline_heads(ui, HEADER_H, CAM_H + sound_h);
         let painter = ui.painter_at(r);
@@ -232,7 +232,7 @@ impl App {
     fn timeline_grid(&mut self, ui: &mut egui::Ui) {
         let count = self.frame_count();
         // Lignes des calques, de hauteurs différentes (réduites ou complètes, 13b).
-        let rows = rows_of(self.layers());
+        let rows = rows_of(self.layers(), &self.doc.groups);
         let rows_h = rows_height(&rows);
         let visible_cols = (ui.available_width() / CELL_W) as usize + 1;
         let cols = (count + 48).max(self.cur_frame + 24).max(visible_cols);

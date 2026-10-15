@@ -177,6 +177,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("calque.pelure", "Pelure d'oignon du calque courant (allumer / éteindre)", true, false),
     act("calque.couper", "Couper le calque", true, false),
     act("calque.coller_remplacer", "Coller le calque à la place du calque courant", true, false),
+    act("groupes.editer", "Groupes de calques (noms, couleurs, montrés dans la timeline)", true, false),
+    act("groupes.focus", "Focus sur le groupe du calque courant (la timeline ne montre que lui)", true, false),
     act("outil.camera", "Outil caméra", true, false),
     act("outil.transformer", "Outil transformer le calque", true, false),
     act("camera.vue", "Vue à travers la caméra", true, false),

@@ -553,6 +553,7 @@ impl App {
 
     pub(crate) fn dialogs(&mut self, ctx: &egui::Context) {
         self.new_layer_window(ctx);
+        self.groups_window_ui(ctx);
         if let Some(mut d) = self.new_dialog.take() {
             let mut keep = true;
             let mut create = false;

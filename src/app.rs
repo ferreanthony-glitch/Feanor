@@ -293,6 +293,9 @@ pub struct App {
     pub(crate) head_drag: Option<usize>,
     /// Calques choisis en plus du calque courant (ids, Ctrl + clic dans l'en-tête, 13b).
     pub(crate) layer_sel: Vec<u64>,
+    /// Fenêtre des groupes de calques ouverte, et n'y montrer que les groupes utilisés (13b-4).
+    pub(crate) groups_window: bool,
+    pub(crate) groups_used_only: bool,
     /// Aperçus des réglages de pinceau (grille du panneau Réglages, 6d).
     pub(crate) brush_previews: crate::brushui::BrushPreviews,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
@@ -513,6 +516,8 @@ impl App {
             layer_rename: None,
             head_drag: None,
             layer_sel: Vec::new(),
+            groups_window: false,
+            groups_used_only: false,
             brush_previews: Default::default(),
             ref3d: Default::default(),
             camera_view: false,
@@ -2198,6 +2203,8 @@ impl App {
             "calque.pelure" => self.toggle_layer_onion(),
             "calque.couper" => self.cut_layer(),
             "calque.coller_remplacer" => self.paste_layer_replacing(),
+            "groupes.editer" => self.groups_window = !self.groups_window,
+            "groupes.focus" => self.focus_current_group(),
             "panneau.couper" => self.split_current_panel(),
             "panneau.fusionner_suivant" => self.merge_next_panel(),
             "scene.couper" => self.split_current_panel(),

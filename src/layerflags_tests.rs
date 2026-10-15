@@ -144,7 +144,7 @@ fn header_rows_follow_collapsed_layers() {
     use crate::layerheads::{row_at, rows_height, rows_of, ROW_FULL, ROW_SMALL};
     let mut layers: Vec<Layer> = (0..3).map(|i| Layer::new(format!("C{i}"), LayerKind::Bitmap)).collect();
     layers[1].collapsed = true;
-    let rows = rows_of(&layers);
+    let rows = rows_of(&layers, &groups::defaults());
     // Le calque le plus haut (le dernier) en premier.
     assert_eq!(rows.iter().map(|r| r.li).collect::<Vec<_>>(), [2, 1, 0]);
     assert_eq!(rows[1].top, ROW_FULL);
@@ -158,12 +158,37 @@ fn header_rows_follow_collapsed_layers() {
 #[test]
 fn a_dragged_header_row_lands_between_rows() {
     use crate::layerheads::{drop_index, rows_of, ROW_FULL};
-    let layers: Vec<Layer> = (0..3).map(|i| Layer::new(format!("C{i}"), LayerKind::Bitmap)).collect();
-    let rows = rows_of(&layers);
+    let mut layers: Vec<Layer> = (0..3).map(|i| Layer::new(format!("C{i}"), LayerKind::Bitmap)).collect();
+    let rows = rows_of(&layers, &groups::defaults());
     assert_eq!(drop_index(&rows, 0, 1.0), 2, "le plus bas lâché tout en haut devient le plus haut");
     assert_eq!(drop_index(&rows, 2, ROW_FULL * 3.0), 0, "le plus haut lâché tout en bas devient le plus bas");
     assert_eq!(drop_index(&rows, 2, ROW_FULL * 0.9), 2, "juste sous lui-même : il ne bouge pas");
     assert_eq!(drop_index(&rows, 0, ROW_FULL * 1.2), 1, "entre le premier et le deuxième");
+
+    // C1 dans un groupe caché de la timeline : seules C2 et C0 ont une ligne.
+    let mut hidden = groups::defaults();
+    hidden[4].shown = false;
+    layers.push(Layer::new("C3", LayerKind::Bitmap));
+    layers[1].group = 4;
+    let rows = rows_of(&layers, &hidden);
+    assert_eq!(rows.iter().map(|r| r.li).collect::<Vec<_>>(), [3, 2, 0]);
+    // C0 lâché entre C3 et C2 : juste au-dessus de C2 (C1, sans ligne, ne bouge pas).
+    assert_eq!(drop_index(&rows, 0, ROW_FULL * 1.2), 2);
+    // C3 lâché tout en bas : sous C0.
+    assert_eq!(drop_index(&rows, 3, ROW_FULL * 3.0), 0);
+}
+
+#[test]
+fn hiding_a_group_hides_its_rows_only() {
+    use crate::layerheads::rows_of;
+    let mut layers: Vec<Layer> = (0..4).map(|i| Layer::new(format!("C{i}"), LayerKind::Bitmap)).collect();
+    layers[0].group = 2;
+    layers[2].group = 2;
+    let mut g = groups::defaults();
+    g[2].shown = false;
+    let shown: Vec<usize> = rows_of(&layers, &g).iter().map(|r| r.li).collect();
+    assert_eq!(shown, [3, 1]);
+    assert!(layers.iter().all(|l| l.visible), "le filtre ne cache rien à l'image");
 }
 
 #[test]

@@ -141,6 +141,7 @@ impl App {
             self.action_item(ui, "Éteindre tous les pochoirs", "calque.pochoirs_eteindre");
             self.action_item(ui, "Inverser tous les pochoirs", "calque.pochoirs_inverser");
         });
+        ui.menu_button("Groupes", |ui| self.groups_menu(ui));
         ui.separator();
         let lock = if self.layer().locked { "Déverrouiller le calque" } else { "Verrouiller le calque" };
         self.action_item(ui, lock, "calque.verrouiller");
@@ -288,7 +289,7 @@ impl App {
     }
 
     /// Fusionne des calques du plan en un seul.
-    fn merge_layer_list(&mut self, lis: Vec<usize>) {
+    pub(crate) fn merge_layer_list(&mut self, lis: Vec<usize>) {
         self.end_stroke();
         self.drop_bitmap_selection();
         let snap = self.snapshot();

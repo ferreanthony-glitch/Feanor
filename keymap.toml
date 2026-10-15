@@ -823,6 +823,16 @@ action = "calque.coller_remplacer"
 touches = []
 source = "TVPaint 12 sans touche"
 
+[[raccourci]]
+action = "groupes.editer"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "groupes.focus"
+touches = []
+source = "TVPaint 12 sans touche"
+
 # ------------------------------------------------------------------------------------ Caméra
 # Storyboard Pro 27 a ces fonctions sans touche par défaut.
 

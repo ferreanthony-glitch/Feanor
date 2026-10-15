@@ -13,6 +13,7 @@ use crate::app::App;
 use crate::blend::BlendMode;
 use crate::bulles::bulle;
 use crate::document::{Layer, LayerKind};
+use crate::groups::LayerGroup;
 use crate::theme;
 
 /// Largeur de l'en-tête des calques.
@@ -33,13 +34,15 @@ pub(crate) struct Row {
     pub h: f32,
 }
 
-/// Lignes des calques, du plus haut au plus bas.
-pub(crate) fn rows_of(layers: &[Layer]) -> Vec<Row> {
+/// Lignes des calques, du plus haut au plus bas ; les calques d'un groupe caché de la timeline
+/// (filtre de groupe, 13b-4) n'en ont pas.
+pub(crate) fn rows_of(layers: &[Layer], groups: &[LayerGroup]) -> Vec<Row> {
     let mut top = 0.0;
     layers
         .iter()
         .enumerate()
         .rev()
+        .filter(|(_, l)| groups.get(l.group as usize).is_none_or(|g| g.shown))
         .map(|(li, l)| {
             let h = if l.collapsed { ROW_SMALL } else { ROW_FULL };
             let row = Row { li, top, h };
@@ -60,16 +63,24 @@ pub(crate) fn row_at(rows: &[Row], y: f32) -> Option<Row> {
 }
 
 /// Rang que prend le calque `from` lâché à `y` (depuis le haut des lignes) : il se glisse entre
-/// les deux lignes dont les milieux encadrent `y`.
+/// les deux lignes dont les milieux encadrent `y`, juste au-dessus du calque de la ligne d'en
+/// dessous (ou juste sous la dernière ligne). Des calques sans ligne (groupe caché) peuvent
+/// être entre deux lignes : ils ne bougent pas.
 pub(crate) fn drop_index(rows: &[Row], from: usize, y: f32) -> usize {
-    let n = rows.len();
-    if n == 0 || from >= n {
+    if rows.is_empty() {
         return from;
     }
     let slot = rows.iter().filter(|r| r.top + r.h * 0.5 < y).count();
-    let shown_from = n - 1 - from;
-    let shown_to = if slot > shown_from { slot - 1 } else { slot };
-    n - 1 - shown_to.min(n - 1)
+    // Lâché juste au-dessus ou juste au-dessous de lui-même : il ne bouge pas.
+    if rows.get(slot).is_some_and(|r| r.li == from) || (slot > 0 && rows[slot - 1].li == from) {
+        return from;
+    }
+    // Rang du voisin une fois le calque retiré de la pile.
+    let after_removal = |li: usize| if from < li { li - 1 } else { li };
+    match rows.get(slot) {
+        Some(below) => after_removal(below.li) + 1,
+        None => after_removal(rows[rows.len() - 1].li),
+    }
 }
 
 /// Couleur d'un groupe.
@@ -105,18 +116,48 @@ impl App {
     /// L'en-tête des calques, à gauche de la grille de la timeline : bande du haut (`header_h`),
     /// une ligne par calque, puis la place des lignes caméra et son (`below`).
     pub(crate) fn timeline_heads(&mut self, ui: &mut Ui, header_h: f32, below: f32) -> Rect {
-        let rows = rows_of(self.layers());
+        let rows = rows_of(self.layers(), &self.doc.groups);
         let size = vec2(HEAD_W, header_h + rows_height(&rows) + below);
         let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
         let painter = ui.painter_at(rect);
         painter.rect_filled(Rect::from_min_size(rect.min, vec2(HEAD_W, header_h)), 0.0, theme::REGLE);
-        painter.text(
-            pos2(rect.left() + 6.0, rect.top() + header_h * 0.5),
-            Align2::LEFT_CENTER,
-            "Calques",
-            FontId::proportional(11.0),
-            ui.visuals().weak_text_color(),
-        );
+        // Le calque courant est dans un groupe caché de la timeline : on le dit, et un clic sur
+        // la couleur de son groupe le remontre.
+        let hidden_group = self.layers().get(self.cur_layer).map(|l| l.group as usize).filter(|&g| !self.doc.groups[g].shown);
+        match hidden_group {
+            Some(g) => {
+                let group = self.doc.groups[g].clone();
+                let swatch = Rect::from_min_size(pos2(rect.left() + 4.0, rect.top() + 3.0), vec2(14.0, header_h - 6.0));
+                let resp = ui.interact(swatch, egui::Id::new("groupe_cache_courant"), Sense::click());
+                painter.rect_filled(swatch, 2.0, group_color(group.color));
+                painter.text(
+                    pos2(swatch.right() + 6.0, rect.top() + header_h * 0.5),
+                    Align2::LEFT_CENTER,
+                    "Calque courant caché",
+                    FontId::proportional(11.0),
+                    theme::MARQUE,
+                );
+                let tip = format!("Il est dans le groupe « {} », caché de la timeline. Clic sur la couleur pour montrer ce groupe.", group.name);
+                if bulle(resp, "Le calque est caché", &tip, "").clicked() {
+                    self.set_group_shown(g, true);
+                }
+            }
+            None => {
+                painter.text(
+                    pos2(rect.left() + 6.0, rect.top() + header_h * 0.5),
+                    Align2::LEFT_CENTER,
+                    "Calques",
+                    FontId::proportional(11.0),
+                    ui.visuals().weak_text_color(),
+                );
+            }
+        }
+        // Groupes de couleur (13b-4).
+        let r = Rect::from_min_size(pos2(rect.right() - 66.0, rect.top()), vec2(20.0, header_h));
+        let resp = icon_at(ui, r, ph::SWATCHES, theme::TEXTE_DOUX);
+        if self.aide(resp, "Groupes de calques", "Noms, couleurs, et quels groupes la timeline montre.", "groupes.editer").clicked() {
+            self.groups_window = !self.groups_window;
+        }
         // Menu des opérations sur les calques.
         let r = Rect::from_min_size(pos2(rect.right() - 44.0, rect.top()), vec2(20.0, header_h));
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt("menu_calques_timeline"));
@@ -151,12 +192,9 @@ impl App {
         if let Some(from) = self.head_drag {
             let pointer = ui.input(|i| i.pointer.interact_pos());
             if let Some(p) = pointer {
-                let to = drop_index(&rows, from, p.y - top);
-                let y = match rows.iter().find(|r| r.li == to) {
-                    Some(r) if to > from => top + r.top,
-                    Some(r) => top + r.top + r.h,
-                    None => top,
-                };
+                // Le trait est entre les deux lignes où le calque va se glisser.
+                let slot = rows.iter().filter(|r| r.top + r.h * 0.5 < p.y - top).count();
+                let y = top + rows.get(slot).map_or(rows_height(&rows), |r| r.top);
                 painter.line_segment([pos2(rect.left(), y), pos2(rect.right(), y)], Stroke::new(2.0_f32, Color32::WHITE));
             }
             if ui.input(|i| !i.pointer.any_down()) {
@@ -459,6 +497,11 @@ impl App {
                     self.set_layer_flag(li, |l| l.group = g as u8);
                 }
             }
+        }
+        ui.separator();
+        if ui.button("Éditer les groupes…").clicked() {
+            ui.close_menu();
+            self.groups_window = true;
         }
     }
 

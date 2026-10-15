@@ -446,7 +446,12 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   (`chosen_layers`) ; fonctions sur le document `duplicate_layer`, `merge_layers` (rassemble les
   choisis au-dessus du plus bas puis `merge_layer_down` en chaîne ; tout est remis si une fusion
   est refusée), `choose`, `is_empty_layer` ; `layer_ops_menu` sert au menu Calques et au ☰ de
-  l'en-tête.
+  l'en-tête. `newlayer.rs` : fenêtre « Nouveau calque… » et `insert_index` (place choisie).
+- Groupes (`groupsui.rs`) : `LayerGroup::shown` est un filtre de la timeline seulement
+  (`rows_of` saute ces calques ; `drop_index` pose un calque glissé juste au-dessus du calque de
+  la ligne d'en dessous, les calques sans ligne ne bougent pas). Commandes en masse par
+  `Scope` (tous / groupe courant / autres) et `layers_in`. Les groupes sont dans `Structure` :
+  noms, couleurs et filtre s'annulent comme le reste.
 
 ## Pinceaux texturés (3d-2)
 

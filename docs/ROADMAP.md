@@ -471,7 +471,14 @@ Décisions d'Anthony :
   - ✅ 13b-3b. Fenêtre « Nouveau calque… » (`newlayer.rs`) : nom, sorte, groupe (ou celui du
     calque courant), mode, place (sur / sous le calque courant, tout en haut / en bas, sur /
     sous le groupe du calque courant). Le pré / post-comportement viendra en 13c.
-  - 13b-4. Panneau des groupes. 13b-5. Dossiers.
+  - ✅ 13b-4. Groupes (`groupsui.rs`) : fenêtre des 13 groupes (couleur, nom, montré dans la
+    timeline, nombre de calques, appliquer au calque, choisir / verrouiller ses calques, cacher
+    les calques des autres groupes, activer / désactiver les autres, seulement les couleurs
+    utilisées) ; filtre de la timeline (`rows_of`) et « Calque courant caché » avec sa couleur à
+    cliquer ; menu Groupes en masse (tous / groupe courant / autres groupes : pelure, verrou,
+    transparence, affichage, pochoir, fusion ; afficher / cacher les groupes, focus). Le mot de
+    passe de groupe de TVPaint n'est pas repris.
+  - 13b-5. Dossiers.
 - 13c. Images et expositions (choix, glisser, insérer / supprimer avec modes de trou, couper /
   copier / coller, inverser, instances, noms, pré / post-comportement, faux-fixe, étirer).
 - 13d. Repères : marques, signets, entrée / sortie, boucle, image de départ, time code, zoom.
