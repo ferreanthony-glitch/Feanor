@@ -267,6 +267,14 @@ Les flips par rôle feuillettent les clés, les breakdowns ou les intervalles du
 - On peut les animer par clés : « Créer une clé » à une image, puis à une autre, et les
   paramètres vont de l'une à l'autre. Les clés sont des losanges violets dans la timeline.
 
+**Calque CTG** (Calques > Calque CTG > Nouveau calque CTG) : un calque de couleur sous les
+traits.
+- Griffonne une couleur dans une zone fermée par les traits de ses sources : toute la zone se
+  remplit, sous les traits.
+- Retouche les traits ou les graffitis : le remplissage suit.
+- Le menu de la ligne du calque CTG choisit ses sources et « Charger la structure à partir
+  des sources », qui donne un dessin de graffitis par dessin des traits.
+
 **Vue Projet** :
 - **Nouveau plan avant le plan courant** (menu Storyboard, menu ⋯ du montage).
 - **Cadenas du montage** : il verrouille le storyboard. L'ordre, le nombre et la durée des plans
@@ -462,6 +470,7 @@ en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le 
 | `roles.rs`, `rolesui.rs` | Rôles des images : modèle, suivi des images, symboles, menu (13g-2) |
 | `flips.rs`, `flipsui.rs` | Flips : limites, checkpoints, pas, panneau et flip en cours (13h) |
 | `fx.rs`, `fxui.rs` | Pile d'effets : clés, flous, dessins dérivés en cache, panneau (13i) |
+| `ctg.rs`, `ctgui.rs` | Calque CTG : remplissage par graffitis, sources, structure (13j) |
 | `fill.rs` | Remplissage par zone et débord |
 | `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra |
 | `gpu.rs` | Composition et affichage par la carte graphique, envoi des dessins par tuiles |

@@ -83,23 +83,23 @@ fn motion_blur_spreads_along_its_direction_only() {
 fn derived_drawings_are_kept_until_the_drawing_changes() {
     let (mut doc, id) = dot();
     let steps = vec![FxStep { kind: EffectKind::GaussianBlur, values: vec![4.0] }];
-    let a = match fx::shown(&doc, id, &steps).unwrap() {
+    let a = match fx::shown_with(&doc, id, &steps, None).unwrap() {
         fx::Shown::Fx(c) => c,
         fx::Shown::Plain(_) => panic!("un dessin dérivé"),
     };
-    let b = match fx::shown(&doc, id, &steps).unwrap() {
+    let b = match fx::shown_with(&doc, id, &steps, None).unwrap() {
         fx::Shown::Fx(c) => c,
         fx::Shown::Plain(_) => panic!(),
     };
     assert!(std::sync::Arc::ptr_eq(&a, &b), "calculé une fois");
     assert_ne!(fx::fx_id(id, &steps), id);
     doc.cels.get_mut(&id).unwrap().version += 1;
-    let c = match fx::shown(&doc, id, &steps).unwrap() {
+    let c = match fx::shown_with(&doc, id, &steps, None).unwrap() {
         fx::Shown::Fx(c) => c,
         fx::Shown::Plain(_) => panic!(),
     };
     assert!(!std::sync::Arc::ptr_eq(&a, &c), "recalculé quand le dessin change");
-    assert!(matches!(fx::shown(&doc, id, &[]).unwrap(), fx::Shown::Plain(_)), "sans effet : le dessin lui-même");
+    assert!(matches!(fx::shown_with(&doc, id, &[], None).unwrap(), fx::Shown::Plain(_)), "sans effet : le dessin lui-même");
 }
 
 #[test]

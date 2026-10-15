@@ -65,7 +65,8 @@ pub const FORMAT: &str = "pelure-projet";
 /// plans (`notes_dessinees`), verrou du storyboard et propriétés du projet.
 /// 18 (13g-2) : rôles des images d'un calque (`roles` : image → clé, breakdown, intervalle…).
 /// 19 (13i) : pile d'effets d'un calque (`effets` : sorte, actif, valeurs, clés).
-pub const VERSION: u32 = 19;
+/// 20 (13j) : calque CTG (`ctg` : rangs des calques sources).
+pub const VERSION: u32 = 20;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Modèles 3D de repère (2d), dans le format de Pelure.
@@ -484,9 +485,19 @@ struct LayerEntry {
     /// Pile d'effets (format 19) : sorte, actif, valeurs, clés (image, valeurs).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     effets: Vec<crate::fx::Effect>,
+    /// Calque CTG (format 20) : rangs de ses calques sources dans le plan (aucun : tous les
+    /// autres calques de dessin) ; absent : calque ordinaire.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ctg: Option<CtgEntry>,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+struct CtgEntry {
+    #[serde(default)]
+    sources: Vec<usize>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
@@ -945,6 +956,9 @@ fn manifest_of(doc: &Document) -> Manifest {
                     marques_couleur: l.color_marks.iter().filter(|(id, _)| l.frames.contains(&Some(**id))).map(|(id, k)| (*id, *k)).collect(),
                     roles: l.roles.clone(),
                     effets: l.fx.clone(),
+                    ctg: l.ctg.as_ref().map(|c| CtgEntry {
+                        sources: c.sources.iter().filter_map(|id| panel.layers.iter().position(|s| s.id == *id)).collect(),
+                    }),
                     expositions: to_exposures(&l.frames),
                 })
                 .collect(),
@@ -1293,6 +1307,7 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
             let mut keys: HashMap<u64, u64> = HashMap::new();
             for p in scene.panneaux {
                 let parents: Vec<Option<usize>> = p.calques.iter().map(|l| l.dans_dossier).collect();
+                let ctg_sources: Vec<Option<Vec<usize>>> = p.calques.iter().map(|l| l.ctg.as_ref().map(|c| c.sources.clone())).collect();
                 let mut layers: Vec<Layer> = p
                     .calques
                     .into_iter()
@@ -1349,12 +1364,20 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                         color_marks: l.marques_couleur.into_iter().filter(|(_, k)| (*k as usize) < crate::marks::COLORS.len()).collect(),
                         roles: l.roles,
                         fx: l.effets,
+                        ctg: None,
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.
                 for (i, fi) in parents.into_iter().enumerate() {
                     if let Some(id) = fi.and_then(|fi| layers.get(fi)).filter(|f| f.folder).map(|f| f.id) {
                         layers[i].parent = Some(id);
+                    }
+                }
+                // Calques CTG (format 20) : les rangs des sources deviennent leurs id.
+                for (i, sources) in ctg_sources.into_iter().enumerate() {
+                    if let Some(sources) = sources {
+                        let ids = sources.into_iter().filter(|&k| k != i).filter_map(|k| layers.get(k).map(|l| l.id)).collect();
+                        layers[i].ctg = Some(crate::ctg::Ctg { sources: ids });
                     }
                 }
                 crate::folders::normalize(&mut layers);

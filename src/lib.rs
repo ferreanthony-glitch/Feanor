@@ -39,6 +39,10 @@ mod dock;
 #[cfg(test)]
 mod dock_tests;
 mod dockui;
+pub mod ctg;
+#[cfg(test)]
+mod ctg_tests;
+mod ctgui;
 mod document;
 mod export;
 #[cfg(test)]

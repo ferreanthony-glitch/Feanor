@@ -406,6 +406,9 @@ fn motion(raster: &Raster, length: f32, angle: f32) -> Raster {
 
 /// Le dessin `raster` passé par les effets `steps`, dans l'ordre.
 pub fn apply(raster: &Raster, steps: &[FxStep]) -> Raster {
+    if steps.is_empty() {
+        return raster.clone();
+    }
     let mut cur = raster.clone();
     for s in steps {
         cur = match s.kind {
@@ -445,22 +448,72 @@ impl std::ops::Deref for Shown<'_> {
     }
 }
 
-/// Le dessin `cel` tel que les effets `steps` le montrent (calculé une fois, puis gardé tant
-/// que le dessin ne change pas).
-pub fn shown<'a>(doc: &'a Document, cel: CelId, steps: &[FxStep]) -> Option<Shown<'a>> {
+/// Numéro du dessin dérivé d'un élément du plan : le dessin lui-même sans effet ni remplissage
+/// CTG, sinon un numéro propre à ce dessin, ces effets et ces sources.
+pub fn shown_id(item: &crate::render::PlanItem) -> CelId {
+    match &item.ctg {
+        None if item.fx.is_empty() => item.cel,
+        None => fx_id(item.cel, &item.fx),
+        Some(sources) => {
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            fx_id(item.cel, &item.fx).hash(&mut h);
+            "ctg".hash(&mut h);
+            sources.hash(&mut h);
+            h.finish() | (1 << 63)
+        }
+    }
+}
+
+/// Le dessin d'un élément du plan tel qu'il s'affiche : effets (13i) et remplissage CTG (13j)
+/// compris.
+pub fn shown<'a>(doc: &'a Document, item: &crate::render::PlanItem) -> Option<Shown<'a>> {
+    shown_with(doc, item.cel, &item.fx, item.ctg.as_deref())
+}
+
+/// Le dessin `cel`, rempli d'après les dessins `ctg` s'il est d'un calque CTG, puis passé par
+/// les effets `steps` (calculé une fois, puis gardé tant qu'aucun de ces dessins ne change).
+pub fn shown_with<'a>(doc: &'a Document, cel: CelId, steps: &[FxStep], ctg: Option<&[CelId]>) -> Option<Shown<'a>> {
     let src = doc.cels.get(&cel)?;
-    if steps.is_empty() {
+    if steps.is_empty() && ctg.is_none() {
         return Some(Shown::Plain(src));
     }
-    let id = fx_id(cel, steps);
+    let item = crate::render::PlanItem {
+        cel,
+        opacity: 255,
+        tint: None,
+        transform: None,
+        blend: Default::default(),
+        fx: steps.to_vec(),
+        ctg: ctg.map(<[CelId]>::to_vec),
+    };
+    let id = shown_id(&item);
+    // Version : celle du dessin, et celles des sources du remplissage.
+    let version = match ctg {
+        None => src.version,
+        Some(sources) => {
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            src.version.hash(&mut h);
+            for s in sources {
+                doc.cels.get(s).map_or(0, |c| c.version).hash(&mut h);
+            }
+            h.finish()
+        }
+    };
     let tick = TICK.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(e) = cache.get_mut(&id).filter(|e| e.version == src.version) {
+    if let Some(e) = cache.get_mut(&id).filter(|e| e.version == version) {
         e.used = tick;
         return Some(Shown::Fx(e.cel.clone()));
     }
-    let derived = Arc::new(Cel { raster: apply(&src.raster, steps), vector: None, version: src.version });
-    cache.insert(id, Entry { version: src.version, cel: derived.clone(), used: tick });
+    let base = match ctg {
+        None => src.raster.clone(),
+        Some(sources) => {
+            let rasters: Vec<&Raster> = sources.iter().filter_map(|s| doc.cels.get(s)).map(|c| &c.raster).collect();
+            crate::ctg::fill(&rasters, &src.raster)
+        }
+    };
+    let derived = Arc::new(Cel { raster: apply(&base, steps), vector: None, version });
+    cache.insert(id, Entry { version, cel: derived.clone(), used: tick });
     if cache.len() > CACHE_MAX {
         if let Some(old) = cache.iter().min_by_key(|(_, e)| e.used).map(|(k, _)| *k) {
             cache.remove(&old);

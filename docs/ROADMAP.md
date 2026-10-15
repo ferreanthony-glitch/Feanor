@@ -644,8 +644,25 @@ Décisions d'Anthony :
   - Refusé sous le storyboard verrouillé.
   - Pas de « appliquer la pile » (inscrire les effets dans les dessins), puisque les effets
     sont vivants.
-- 13j et suivantes, une étape chacune : autres effets (au choix d'Anthony), calques CTG,
-  Puppet, vidéo, interpolation d'images.
+- ✅ 13j (`ctg.rs`, `ctgui.rs`, format 20). Calque CTG, principe confirmé par Anthony
+  (2026-10-16).
+  - On griffonne des couleurs (graffitis) sur le calque CTG. Chaque zone fermée par les traits
+    de ses calques sources, touchée par un graffiti, se remplit de sa couleur (la plus
+    présente), sous les traits.
+  - Remplissage vivant (choix d'Anthony) : il suit toute retouche des traits ou des graffitis,
+    à l'affichage comme à l'export.
+  - Calque CTG courant : ses graffitis restent visibles, pâles, par-dessus (à l'écran
+    seulement).
+  - Calques > Calque CTG : nouveau calque CTG (sous le calque courant, qui devient sa
+    source), transformer le calque courant, désactiver.
+  - Menu de la ligne du calque CTG : choisir ses sources (aucune : tous les autres calques de
+    dessin) ; « Charger la structure à partir des sources » (et « (effacer) »), seule commande
+    retenue par Anthony.
+  - Pas repris (choix d'Anthony) : graffitis répétés sur les instances vides ou de même nom,
+    extraire les couleurs, réglages d'affichage des graffitis. Pas fait non plus :
+    « Appliquer les changements » (le remplissage est toujours à jour).
+- 13k et suivantes, une étape chacune : autres effets (au choix d'Anthony), Puppet, vidéo,
+  interpolation d'images.
 Le faux-fixe n'a que son nom dans les textes de TVPaint : à faire décrire par Anthony avant de
 l'implanter (le pochoir, la transparence préservée et la position verrouillée ont été décrits
 le 2026-10-15, voir `docs/TIMELINE-TVPAINT.md`).

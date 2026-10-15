@@ -125,6 +125,7 @@ fn onion_tint_and_opacity() {
             transform: None,
             blend: Default::default(),
             fx: Vec::new(),
+            ctg: None,
         }],
     };
     let c = render::composite_pixel(&doc, &plan, 0, 0);

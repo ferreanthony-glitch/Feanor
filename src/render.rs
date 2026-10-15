@@ -18,6 +18,9 @@ pub struct PlanItem {
     pub blend: BlendMode,
     /// Effets de la pile du calque à cette image (13i) ; vide : le dessin tel quel.
     pub fx: Vec<crate::fx::FxStep>,
+    /// Calque CTG (13j) : les dessins de ses sources à cette image (le dessin est rempli d'après
+    /// leurs traits) ; rien pour un calque ordinaire.
+    pub ctg: Option<Vec<CelId>>,
 }
 
 /// Couleur du dessin au point (`x`, `y`) de ses pixels (interpolation bilinéaire, prémultipliée).
@@ -110,7 +113,7 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
     for item in &plan.items {
         // Calque transformé : chaque pixel va chercher le point correspondant du dessin.
         if let Some(inv) = inverse_of(doc, &item.transform) {
-            let Some(cel) = crate::fx::shown(doc, item.cel, &item.fx) else { continue };
+            let Some(cel) = crate::fx::shown(doc, item) else { continue };
             for y in 0..th {
                 let s = at(ox, oy + y);
                 for (x, d) in buf[s..s + tw].iter_mut().enumerate() {
@@ -123,7 +126,7 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
             }
             continue;
         }
-        let Some(cel) = crate::fx::shown(doc, item.cel, &item.fx) else { continue };
+        let Some(cel) = crate::fx::shown(doc, item) else { continue };
         let Some(tile) = cel.raster.tiles[idx].as_ref() else {
             continue;
         };
@@ -247,7 +250,7 @@ pub fn camera_image(doc: &Document, plan: &Plan, cam: &Camera) -> Vec<Color32> {
 pub fn composite_pixel(doc: &Document, plan: &Plan, x: usize, y: usize) -> Color32 {
     let mut c = paper_color(plan);
     for item in &plan.items {
-        if let Some(cel) = crate::fx::shown(doc, item.cel, &item.fx) {
+        if let Some(cel) = crate::fx::shown(doc, item) {
             let s = match inverse_of(doc, &item.transform) {
                 Some(inv) => {
                     let p = inv.apply(egui::pos2(x as f32 + 0.5, y as f32 + 0.5));
@@ -287,6 +290,7 @@ fn plan_with_camera(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera:
                     transform: (!t.is_identity()).then_some(t),
                     blend: l.blend,
                     fx: crate::fx::steps_at(&l.fx, frame),
+                    ctg: l.ctg.as_ref().map(|_| crate::ctg::source_cels(&panel.layers, li, frame)),
                 })
             })
             .collect(),

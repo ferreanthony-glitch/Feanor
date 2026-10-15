@@ -56,7 +56,10 @@ Sens confirmés par Anthony le 2026-10-15 (les textes de TVPaint ne font que les
 ## 2. Sortes de calques
 
 Animation 000025198 ; image (statique) 000025197 ; exposition / feuille d'exposition 000025144
-(000029815/816, 000029800 [A]) ; CTG (couleur et texture) 012002845 ; dossier 012002562 ; fond
+(000029815/816, 000029800 [A]) ; CTG 012002845 (sources 011085175, graffitis 011085182–186,
+111020100–107, appliquer les changements 011085181, charger la structure 011085140/141,
+extraire les couleurs 011085142–201 ; tout [N] : principe confirmé par Anthony le 2026-10-16,
+fait en 13j) ; dossier 012002562 ; fond
 012002844 ; Puppet 012103645 ; calque caméra 129582142 ; calque vidéo 000020117–119 ; calque
 préchargé 000025127. Pas de calque papier ni de calque son (le son a son onglet).
 

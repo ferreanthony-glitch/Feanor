@@ -495,8 +495,8 @@ impl GpuCanvas {
         let mut up = Uploads::default();
         for item in &plan.items {
             // Un dessin passé par des effets (13i) : son dessin dérivé, sous son propre numéro.
-            let Some(cel) = crate::fx::shown(doc, item.cel, &item.fx) else { continue };
-            let id = if item.fx.is_empty() { item.cel } else { crate::fx::fx_id(item.cel, &item.fx) };
+            let Some(cel) = crate::fx::shown(doc, item) else { continue };
+            let id = crate::fx::shown_id(item);
             let entry = ensure_texture(rs, res, id, cel.raster.tiles.len(), size);
             if all || entry.version != cel.version {
                 // Un envoi d'avance commencé pour cette version reprend où il en était.
@@ -508,7 +508,7 @@ impl GpuCanvas {
                 up.add(id, entry, &cel.raster, &rest);
                 entry.version = cel.version;
                 entry.partial = None;
-            } else if !tiles.is_empty() && item.fx.is_empty() {
+            } else if !tiles.is_empty() && id == item.cel {
                 up.add(id, entry, &cel.raster, tiles);
             }
             entry.last_used = tick;
@@ -631,7 +631,7 @@ impl GpuCanvas {
             // La pelure d'oignon (teinte) reste en mode normal.
             let blend = if item.tint.is_some() { 0 } else { item.blend.index() };
             items.push(GpuItem {
-                cel: Some(if item.fx.is_empty() { item.cel } else { crate::fx::fx_id(item.cel, &item.fx) }),
+                cel: Some(crate::fx::shown_id(item)),
                 corners: item.transform.as_ref().map_or(full, placed),
                 color: [color[0], color[1], color[2], tinted],
                 params: [item.opacity as f32 / 255.0, 1.0, blend as f32, 0.0],

@@ -273,6 +273,9 @@ pub struct Layer {
     pub roles: crate::roles::Roles,
     /// Pile d'effets (13i) : appliqués à l'affichage et à l'export, dans l'ordre.
     pub fx: Vec<crate::fx::Effect>,
+    /// Calque CTG (13j) : ses dessins sont des graffitis de couleur, qui remplissent les zones
+    /// fermées par les traits de ses sources.
+    pub ctg: Option<crate::ctg::Ctg>,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -335,6 +338,7 @@ impl Layer {
             color_marks: Default::default(),
             roles: Default::default(),
             fx: Vec::new(),
+            ctg: None,
         }
     }
 
@@ -535,6 +539,12 @@ pub fn relink_copies(layers: &mut [Layer], old_ids: &[u64], cels: &HashMap<CelId
         l.parent = l.parent.map(|p| ids.get(&p).copied().unwrap_or(p));
         l.names = l.names.iter().map(|(c, n)| (cels.get(c).copied().unwrap_or(*c), n.clone())).collect();
         l.color_marks = l.color_marks.iter().map(|(c, k)| (cels.get(c).copied().unwrap_or(*c), *k)).collect();
+        // Sources d'un calque CTG copié avec elles : les copies (13j).
+        if let Some(ctg) = &mut l.ctg {
+            for s in &mut ctg.sources {
+                *s = ids.get(s).copied().unwrap_or(*s);
+            }
+        }
     }
 }
 

@@ -136,6 +136,16 @@ impl App {
         self.action_item(ui, "Nouveau calque vectoriel", "calque.nouveau_vectoriel");
         self.action_item(ui, "Nouveau calque bitmap", "calque.nouveau_bitmap");
         self.action_item(ui, "Nouveau calque de fond", "calque.nouveau_fond");
+        // Calque CTG (13j).
+        ui.menu_button("Calque CTG", |ui| {
+            self.action_item(ui, "Nouveau calque CTG (sous le calque courant)", "calque.nouveau_ctg");
+            self.action_item(ui, "Transformer le calque courant en calque CTG", "calque.transformer_ctg");
+            self.action_item(ui, "Désactiver le calque CTG", "calque.desactiver_ctg");
+            ui.separator();
+            self.action_item(ui, "Charger la structure à partir des sources", "ctg.charger_structure");
+            self.action_item(ui, "Charger la structure à partir des sources (effacer)", "ctg.charger_structure_effacer");
+            ui.label(egui::RichText::new("Sur le calque CTG, griffonner une couleur remplit la zone des traits des sources.").weak().small());
+        });
         ui.separator();
         let many = |one: &str, all: &str| if n > 1 { format!("{all} ({n})") } else { one.to_string() };
         self.action_item(ui, &many("Dupliquer le calque", "Dupliquer les calques choisis"), "calque.dupliquer");

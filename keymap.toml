@@ -1391,6 +1391,31 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
+action = "calque.nouveau_ctg"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.transformer_ctg"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.desactiver_ctg"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "ctg.charger_structure"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "ctg.charger_structure_effacer"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
 action = "dossier.nouveau"
 touches = []
 source = "TVPaint 12 sans touche"

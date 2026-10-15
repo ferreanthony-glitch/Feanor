@@ -914,6 +914,7 @@ impl App {
                             transform: shifted.or(transform),
                             blend: Default::default(),
                             fx: Vec::new(),
+                            ctg: None,
                         });
                     }
                 }
@@ -932,7 +933,13 @@ impl App {
                     blend: layer.blend,
                     // Pile d'effets du calque (13i).
                     fx: crate::fx::steps_at(&layer.fx, frame),
+                    // Calque CTG (13j) : rempli d'après les traits de ses sources.
+                    ctg: layer.ctg.as_ref().map(|_| crate::ctg::source_cels(self.layers(), li, frame)),
                 });
+                // Calque CTG courant, à l'écran seulement : ses graffitis, pâles, par-dessus.
+                if onion && layer.ctg.is_some() && li == self.cur_layer && !self.playing {
+                    items.push(PlanItem { cel, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None });
+                }
             }
             items.append(&mut onion_items);
         }
@@ -2576,6 +2583,12 @@ impl App {
                 self.status = format!("Création automatique des clés d'effets : {}.", if self.fx_auto_key { "oui" } else { "non" });
             }
             "fx.cles_timeline" => self.fx_keys_shown = !self.fx_keys_shown,
+            // Calque CTG (13j, `ctgui.rs`).
+            "calque.nouveau_ctg" => self.new_ctg_layer(),
+            "calque.transformer_ctg" => self.convert_to_ctg(),
+            "calque.desactiver_ctg" => self.disable_ctg(),
+            "ctg.charger_structure" => self.load_ctg_structure(false),
+            "ctg.charger_structure_effacer" => self.load_ctg_structure(true),
             // Dossiers de calques (13b-5, `folders.rs`).
             "dossier.nouveau" => self.new_folder(),
             "dossier.ranger" => self.folder_from_chosen(),

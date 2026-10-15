@@ -618,6 +618,10 @@ impl App {
             self.modified = true;
         }
         ui.menu_button("Groupe", |ui| self.group_menu(ui, li));
+        // Calque CTG (13j) : ses sources et sa structure.
+        if self.layers().get(li).is_some_and(|l| l.ctg.is_some()) {
+            ui.menu_button("Calque CTG", |ui| self.ctg_menu(ui, li));
+        }
         // Pré / post-comportement (13c).
         if let Some((pre, post)) = self.layers().get(li).filter(|l| !l.folder).map(|l| (l.pre, l.post)) {
             ui.separator();

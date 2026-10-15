@@ -532,6 +532,21 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   le flou n'est refait qu'à la fin. Risque faible : les dessins ne changent jamais.
   Réversible : retirer l'effet suffit. Les clés suivent les images insérées / supprimées
   (`Layer::shift_frames`, avec les rôles).
+- Calque CTG (`ctg.rs`, `ctgui.rs`, 13j) : `Layer::ctg` (sources : id de calques). Le plan
+  porte, pour un calque CTG, les dessins de ses sources à cette image (`PlanItem::ctg`).
+  `fx::shown` en fait un dessin dérivé (le remplissage, puis les effets), gardé dans le même
+  cache sous `shown_id`, et refait quand la version du dessin de graffitis ou d'une source
+  change.
+
+  Le remplissage, `ctg::fill` :
+  - un trait est un pixel des sources d'opacité au moins 128 ;
+  - depuis chaque graffiti, une zone est remplie de proche en proche (4 voisins) hors des
+    traits, et prend la couleur la plus présente parmi ses graffitis ;
+  - la couleur gagne ensuite 2 pixels sous les traits voisins.
+
+  Seules les zones touchées sont parcourues. Sources enregistrées par leur rang dans le plan
+  (format 20), refaites en id au chargement, et suivies par `relink_copies` quand on copie un
+  plan.
 - Vue Projet (`projetui.rs`, 13e-4) : `Document::storyboard_locked` est dans `Structure` (une
   annulation le rétablit avec le reste ; le basculer est une étape). `App::storyboard_refuses`
   garde `structure_op` et les autres chemins qui changent l'ordre, le nombre ou la durée des
@@ -742,6 +757,8 @@ MonFilm/
                       triangles, positions (3 × f32) puis triangles (3 × u32), petit-boutiste
 ```
 
+- Format 20 (13j) : `ctg` sur un calque, { `sources` : rangs des calques sources dans le plan
+  (vide : tous les autres calques de dessin) } ; absent : calque ordinaire.
 - Format 19 (13i) : `effets` sur un calque, une liste de { `sorte` (`flou_gaussien`,
   `flou_mouvement`), `actif`, `valeurs`, `cles` : [{ `image`, `valeurs` }] } ; absent : aucun.
 - Format 18 (13g-2) : `roles` sur un calque (image → `cle`, `breakdown`, `intervalle`,
