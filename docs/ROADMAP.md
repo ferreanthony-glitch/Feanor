@@ -424,6 +424,41 @@ aperçus de pinceaux dans la couleur courante.
     Caméra du montage ; une clé ne passe pas par-dessus sa voisine ; une étape d'annulation par
     glisser.
 
+## Phase 13 — Séquences et plans, timeline à la TVPaint
+
+Demandée par Anthony (2026-10-15) : plus de panneaux, seulement des séquences et des plans ; une
+timeline inspirée de TVPaint, avec le réglage des calques depuis la timeline et des icônes à
+gauche, et toutes les possibilités de la timeline de TVPaint. Référence des fonctions (tirée des
+textes de TVPaint 12, sans rien inventer) : `docs/TIMELINE-TVPAINT.md`.
+
+Décisions d'Anthony :
+- un plan = une scène d'avant ; ses panneaux sont mis bout à bout (une seule timeline) ;
+- la suppression des panneaux reste directe, sans confirmation ;
+- en Storyboard, le bas de l'écran montre la vue Projet (les plans côte à côte par séquence) ;
+  en Animation, la timeline complète du plan ;
+- les dessins des anciens panneaux restent des images de storyboard : chaque début d'ancien
+  panneau devient une marque d'image du plan, et vignettes / PDF montrent une image par marque
+  (une par plan s'il n'y en a pas) ;
+- raccourcis des nouvelles fonctions : ceux de sa configuration TVPaint 12 quand ils ne cassent
+  pas un raccourci de Pelure, sinon proposés à valider ;
+- pré / post-comportement : avant la première image et après la dernière, le calque montre rien,
+  la boucle de ses images, un va-et-vient, ou sa première / dernière image maintenue.
+
+Étapes :
+- 13a. Plans : un panneau par scène (le plan) ; conversion des projets (format 12) ; marques
+  d'image ; opérations de plan ; vignettes, fiche et PDF par image de storyboard ; « Plan »
+  partout à l'écran.
+- 13b. En-têtes de calques et opérations sur les calques dans la timeline, dossiers, groupes.
+- 13c. Images et expositions (choix, glisser, insérer / supprimer avec modes de trou, couper /
+  copier / coller, inverser, instances, noms, pré / post-comportement, faux-fixe, étirer).
+- 13d. Repères : marques, signets, entrée / sortie, boucle, image de départ, time code, zoom.
+- 13e. Onglets du bas et vue Projet : notes dessinées, son par plan, arrière-plan, propriétés.
+- 13f. Table lumineuse complète.
+- 13g et suivantes, une étape chacune : feuille d'exposition, flips, clés d'effets, calques CTG,
+  Puppet, vidéo, interpolation d'images.
+Le faux-fixe et le pochoir n'ont que leur nom dans les textes de TVPaint : à faire décrire par
+Anthony avant de les implanter.
+
 ## Raccourcis proposés, à valider
 
 Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans `keymap.toml`) :
