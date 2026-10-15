@@ -493,12 +493,13 @@ impl App {
 
         // Vue et durées.
         section(ui, "Vue", &mut |ui| {
-            let was = self.camera_view;
-            ui.checkbox(&mut self.camera_view, "Vue à travers la caméra");
-            if was && !self.camera_view {
-                self.fit_pending = true;
+            let mut on = self.camera_view;
+            if ui.checkbox(&mut on, "Vue à travers la caméra").changed() {
+                self.set_camera_view(on);
             }
             ui.checkbox(&mut self.camera_mask, "Estomper le hors-champ");
+            ui.checkbox(&mut self.layout.safe_frames, "Zones de sécurité");
+            ui.horizontal(|ui| self.frame_format_ui(ui));
         });
         let (s, e) = self.doc.scene_run(self.cur_panel);
         let scene_len: usize = self.doc.panels[s..e].iter().map(|p| p.frame_count()).sum();

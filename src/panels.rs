@@ -189,6 +189,7 @@ impl App {
                 ui.separator();
                 self.action_item(ui, "Vue à travers la caméra", "camera.vue");
                 self.action_item(ui, "Estomper le hors-champ", "camera.masque");
+                self.action_item(ui, "Zones de sécurité", "vue.cadres_securite");
                 self.action_item(ui, "Vue de dessus (profondeur des calques)", "vue.dessus");
                 self.action_item(ui, "Réinitialiser la caméra du panneau", "camera.reinitialiser");
                 ui.separator();
@@ -391,6 +392,11 @@ impl App {
                     .custom_formatter(|v, _| format!("{:.0} %", v * 100.0)),
             );
         }
+        // Cadres de composition (9d), aussi dans la barre au-dessus du dessin.
+        ui.separator();
+        ui.checkbox(&mut self.layout.safe_frames, "Zones de sécurité")
+            .on_hover_text("Action dans 93 % du cadre, titres dans 90 % (EBU R 95)");
+        ui.horizontal(|ui| self.frame_format_ui(ui));
     }
 
     /// Options de l'outil Sélection sur un calque bitmap.

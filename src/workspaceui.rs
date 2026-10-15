@@ -21,9 +21,15 @@ impl App {
         }
     }
 
-    /// Applique une disposition : panneaux et leur place, vue vignettes, vue de dessus.
+    /// Applique une disposition : panneaux et leur place, vue vignettes, vue de dessus. Les cadres
+    /// de composition (9d) restent ceux qu'on a choisis : ce sont des réglages de la vue.
     pub(crate) fn apply_layout(&mut self, layout: Layout) {
-        let layout = layout.sanitized();
+        let layout = Layout {
+            safe_frames: self.layout.safe_frames,
+            frame_format: self.layout.frame_format,
+            ..layout
+        }
+        .sanitized();
         self.top_view = layout.top_view;
         self.board_view = if layout.vignettes { BoardView::Panels } else { BoardView::Scene };
         self.set_dock_layout(layout.dock_layout());

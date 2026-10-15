@@ -266,6 +266,10 @@ pub struct App {
     pub(crate) ref3d: crate::ref3dtool::Ref3dState,
     /// Vue à travers la caméra du panneau (sinon : la feuille, avec le cadre tracé).
     pub(crate) camera_view: bool,
+    /// Vue du plateau laissée en passant à la vue caméra, remise au retour (9d).
+    pub(crate) stage_view: Option<View>,
+    /// Cadre de format personnalisé choisi (même s'il vaut l'un des formats proposés).
+    pub(crate) format_custom: bool,
     /// Le dessin est affiché dans la vignette choisie de la vue Vignettes (6e).
     pub(crate) in_card: bool,
     /// Planche de la vue Vignettes (7) : zoom, décalage, panneaux choisis (ids), geste en cours.
@@ -463,6 +467,8 @@ impl App {
             brush_previews: Default::default(),
             ref3d: Default::default(),
             camera_view: false,
+            stage_view: None,
+            format_custom: false,
             in_card: false,
             // Nul : la page sera mise à la largeur de la vue au premier affichage.
             board_zoom: 0.0,
@@ -586,6 +592,9 @@ impl App {
                     ..crate::workspace::Layout::default()
                 };
             }
+            // (Les cadres de composition de la dernière fois aussi.)
+            app.layout.safe_frames = layout.safe_frames;
+            app.layout.frame_format = layout.frame_format;
             app.apply_layout(layout);
         }
         app
@@ -2111,13 +2120,8 @@ impl App {
             "outil.repere3d" => self.set_tool(Tool::Ref3d),
             "outil.transformer" => self.set_tool(Tool::Transform),
             "calque.reinit_transformation" => self.reset_layer_transform(),
-            "camera.vue" => {
-                self.camera_view = !self.camera_view;
-                if !self.camera_view {
-                    self.fit_pending = true;
-                }
-                self.status = format!("Vue à travers la caméra : {}.", if self.camera_view { "oui" } else { "non" });
-            }
+            "camera.vue" => self.set_camera_view(!self.camera_view),
+            "vue.cadres_securite" => self.layout.safe_frames = !self.layout.safe_frames,
             "camera.masque" => self.camera_mask = !self.camera_mask,
             "camera.reinitialiser" => self.reset_camera(),
             "camera.cle_debut" => self.add_camera_key(0),

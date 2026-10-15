@@ -58,6 +58,12 @@ pub struct Layout {
     pub board_scene_breaks: bool,
     #[serde(rename = "attacher_notes")]
     pub board_attach: bool,
+    /// Cadres de composition sur le dessin (9d) : zones de sécurité, et cadre d'un format de
+    /// diffusion (largeur:hauteur ; absent : aucun).
+    #[serde(rename = "cadres_securite")]
+    pub safe_frames: bool,
+    #[serde(rename = "cadre_format", skip_serializing_if = "Option::is_none")]
+    pub frame_format: Option<[f32; 2]>,
 }
 
 impl Default for Layout {
@@ -80,6 +86,8 @@ impl Default for Layout {
             board_spacing: 18.0,
             board_scene_breaks: false,
             board_attach: false,
+            safe_frames: false,
+            frame_format: None,
         }
     }
 }
@@ -100,6 +108,7 @@ impl Layout {
         self.board_spacing =
             if self.board_spacing.is_finite() { self.board_spacing.clamp(0.0, crate::board::MAX_SPACING) } else { 18.0 };
         self.panneaux = self.panneaux.map(DockLayout::sanitized);
+        self.frame_format = self.frame_format.and_then(crate::frames::sanitized);
         self
     }
 

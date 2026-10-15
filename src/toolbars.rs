@@ -16,7 +16,7 @@ pub(crate) const TOOL_GROUPS: &[&[Tool]] = &[
 
 impl App {
     /// Bulle d'une commande : son nom et son raccourci.
-    fn command_hint(&self, action: &str, name: &str) -> String {
+    pub(crate) fn command_hint(&self, action: &str, name: &str) -> String {
         let key = self.keymap.label(action);
         if key.is_empty() {
             name.to_string()

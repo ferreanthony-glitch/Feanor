@@ -36,6 +36,9 @@ mod export;
 mod export_tests;
 mod exportui;
 mod fill;
+mod frames;
+#[cfg(test)]
+mod frames_tests;
 mod gpu;
 mod guides;
 #[cfg(test)]
@@ -114,6 +117,7 @@ mod view;
 mod view3d;
 #[cfg(test)]
 mod view3d_tests;
+mod viewbar;
 #[cfg(test)]
 mod vtexture_tests;
 mod vtools;

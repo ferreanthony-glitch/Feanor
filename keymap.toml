@@ -730,6 +730,11 @@ action = "vue.dessus"
 touches = []
 source = "Pelure (fenêtre Vue de dessus ; aucune commande équivalente dans sb_shortcuts.xml de Storyboard Pro 27)"
 
+[[raccourci]]
+action = "vue.cadres_securite"
+touches = []
+source = "Pelure (zones de sécurité EBU R 95 ; aucune touche choisie)"
+
 # ------------------------------------------------------------------------------------ Repère 3D
 
 [[raccourci]]

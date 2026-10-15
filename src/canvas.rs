@@ -12,7 +12,14 @@ const ACCENT: Color32 = Color32::from_rgb(70, 165, 255);
 
 impl App {
     pub(crate) fn canvas_panel(&mut self, ui: &mut egui::Ui) {
-        let rect = ui.available_rect_before_wrap();
+        let mut rect = ui.available_rect_before_wrap();
+        // Barre de la vue (plateau / caméra, cadres de composition), sauf dans une vignette.
+        if !self.in_card {
+            let bar = Rect::from_min_size(rect.min, vec2(rect.width(), crate::viewbar::VIEW_BAR_H));
+            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(bar).id_salt("barre_vue"));
+            self.view_bar(&mut child);
+            rect.min.y = bar.max.y;
+        }
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
         self.canvas_rect = rect;
         let size = self.canvas_size();
@@ -78,6 +85,9 @@ impl App {
 
         self.paint_ref3d(&painter, rect);
         self.paint_camera(&painter, rect);
+        if !self.in_card {
+            self.paint_frame_overlays(&painter, rect);
+        }
         self.paint_layer_transform(&painter);
         let shift = ui.input(|i| i.modifiers.shift);
         self.paint_guides(&painter, rect, self.hover_canvas);
