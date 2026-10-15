@@ -56,7 +56,7 @@ impl egui_dock::TabViewer for Panes<'_> {
     /// Le dessin et la bande gèrent eux-mêmes leur place ; les autres défilent.
     fn scroll_bars(&self, tab: &Pane) -> [bool; 2] {
         match tab {
-            Pane::Canvas | Pane::Strip => [false, false],
+            Pane::Canvas | Pane::Strip | Pane::XSheet => [false, false],
             _ => [false, true],
         }
     }
@@ -102,6 +102,7 @@ impl App {
                 Mode::Storyboard => self.montage_panel(ui),
                 Mode::Animation => self.timeline_panel(ui),
             },
+            Pane::XSheet => self.xsheet_panel(ui),
         }
     }
 
@@ -144,7 +145,7 @@ impl App {
             let pane = d.panneau;
             let (closed, rect) = ctx.show_viewport_immediate(id, builder, |ctx, _class| {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    if matches!(pane, Pane::Strip) {
+                    if matches!(pane, Pane::Strip | Pane::XSheet) {
                         self.pane_ui(ui, pane);
                     } else {
                         egui::ScrollArea::vertical().show(ui, |ui| self.pane_ui(ui, pane));
@@ -206,12 +207,19 @@ impl App {
     /// Affiche ou masque un panneau (menu Affichage > Panneaux).
     pub(crate) fn toggle_pane(&mut self, pane: Pane) {
         let mut layout = self.dock_layout();
-        if layout.contains(pane) {
-            layout.close(pane);
-        } else {
+        let opening = !layout.contains(pane);
+        if opening {
             layout.open(pane);
+        } else {
+            layout.close(pane);
         }
         self.set_dock_layout(layout);
+        // Un panneau qu'on ouvre passe devant les onglets de son groupe.
+        if let (true, Some(state)) = (opening, self.dock.as_mut()) {
+            if let Some(at) = state.find_tab(&pane) {
+                state.set_active_tab(at);
+            }
+        }
     }
 
     /// Affiche ou masque un groupe de panneaux (actions de 4b : outils, fiche, bande).

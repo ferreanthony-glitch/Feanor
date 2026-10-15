@@ -288,6 +288,10 @@ pub struct App {
     pub(crate) onion_offset: Vec2,
     pub(crate) onion_shift: bool,
     pub(crate) onion_preset_name: String,
+    /// Feuille d'exposition (13g) : ce qu'elle montre (retenu dans `settings`), et la dernière
+    /// image courante qu'elle a suivie.
+    pub(crate) xsheet: crate::xsheet::XSheetSettings,
+    pub(crate) xsheet_seen_frame: Option<usize>,
     /// Table lumineuse : les calques autres que le calque courant sont estompés.
     pub(crate) light_table: bool,
     /// Opacité gardée par les calques estompés (0 à 1).
@@ -559,6 +563,8 @@ impl App {
             onion_offset: Vec2::ZERO,
             onion_shift: false,
             onion_preset_name: String::new(),
+            xsheet: settings.xsheet.clone(),
+            xsheet_seen_frame: None,
             light_table: false,
             light_table_strength: 0.3,
             guides: GuideState::default(),
@@ -2507,6 +2513,8 @@ impl App {
             "pelure.mode_marque" => self.set_onion_mode(crate::onion::OnionMode::Marks),
             "pelure.decaler" => self.onion_shift = !self.onion_shift,
             "pelure.remettre" => self.reset_onion_offset(),
+            // Feuille d'exposition (13g, `xsheetui.rs`).
+            "vue.feuille_exposition" => self.toggle_pane(crate::dock::Pane::XSheet),
             // Dossiers de calques (13b-5, `folders.rs`).
             "dossier.nouveau" => self.new_folder(),
             "dossier.ranger" => self.folder_from_chosen(),
@@ -2803,9 +2811,11 @@ impl eframe::App for App {
         if self.thumbs.pending {
             ctx.request_repaint();
         }
-        // Réglages de la pelure : enregistrés quand ils changent (pas pendant un glissé).
-        if self.onion != self.settings.onion && !ctx.input(|i| i.pointer.any_down()) {
+        // Réglages de la pelure et de la feuille d'exposition : enregistrés quand ils changent
+        // (pas pendant un glissé).
+        if (self.onion != self.settings.onion || self.xsheet != self.settings.xsheet) && !ctx.input(|i| i.pointer.any_down()) {
             self.settings.onion = self.onion.clone();
+            self.settings.xsheet = self.xsheet.clone();
             if let Err(e) = self.settings.save() {
                 self.status = format!("Réglages non enregistrés : {e}");
             }

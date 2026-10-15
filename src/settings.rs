@@ -23,6 +23,9 @@ pub struct Settings {
     /// Pelure d'oignon.
     #[serde(default, rename = "pelure")]
     pub onion: OnionSettings,
+    /// Ce que montre la feuille d'exposition (13g).
+    #[serde(default, rename = "feuille_expo")]
+    pub xsheet: crate::xsheet::XSheetSettings,
     /// Disposition de la fenêtre à la dernière fermeture.
     #[serde(default, rename = "disposition", skip_serializing_if = "Option::is_none")]
     pub layout: Option<Layout>,
@@ -46,6 +49,7 @@ impl Default for Settings {
             autosave_minutes: default_autosave(),
             system_cursor: true,
             onion: OnionSettings::default(),
+            xsheet: Default::default(),
             layout: None,
             workspaces: Vec::new(),
         }

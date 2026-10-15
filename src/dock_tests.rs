@@ -13,9 +13,28 @@ fn count(layout: &DockLayout, pane: Pane) -> usize {
     layout.panes().iter().filter(|p| **p == pane).count()
 }
 
-/// Panneaux d'une disposition par défaut : tous, sauf les icônes des outils (barre verticale).
+/// Panneaux d'une disposition par défaut : tous, sauf les icônes des outils (barre verticale) et
+/// la feuille d'exposition (ouverte à la demande, 13g).
 fn default_panes() -> impl Iterator<Item = Pane> {
-    Pane::ALL.into_iter().filter(|p| *p != Pane::Tools)
+    Pane::ALL.into_iter().filter(|p| !matches!(p, Pane::Tools | Pane::XSheet))
+}
+
+#[test]
+fn the_exposure_sheet_opens_next_to_the_layers() {
+    let mut l = DockLayout::from_legacy(&Layout::default());
+    assert_eq!(count(&l, Pane::XSheet), 0, "fermée par défaut");
+    l.open(Pane::XSheet);
+    assert_eq!(count(&l, Pane::XSheet), 1);
+    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Layers, XSheet]"), "{:?}", l.principal);
+    // Sans les calques : une colonne à elle.
+    let mut l = DockLayout::from_legacy(&Layout::default());
+    l.close(Pane::Layers);
+    l.open(Pane::XSheet);
+    assert_eq!(count(&l, Pane::XSheet), 1);
+    // Rouvrir le groupe des calques ne l'ouvre pas.
+    l.close(Pane::XSheet);
+    l.toggle_group(Group::Right);
+    assert_eq!((count(&l, Pane::Layers), count(&l, Pane::XSheet)), (1, 0));
 }
 
 #[test]

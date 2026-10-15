@@ -176,8 +176,33 @@ colorisation « Coul. / Image / Dég. » 000050010–019 : couleur et couleur de
 (Coloriser oui / non), « Dégradé » [N] : sens choisi par Anthony le 2026-10-15, celui de
 Photoshop (deux couleurs, de l'image la plus proche à la plus lointaine). Fait en 13f, sauf le
 mode clé de rig.
-Caméra : clés par paramètre, courbes de vitesse, interpolation linéaire / spline. Feuille
-d'exposition (rôles, colonnes, export PDF / XDTS). Flips 011074000–063 [A].
+Caméra : clés par paramètre, courbes de vitesse, interpolation linéaire / spline. Flips
+011074000–063 [A].
+
+**Feuille d'exposition** (« Timesheet », 012103925–012104348 ; inventaire du 2026-10-15) :
+- Colonnes 012103964–983 : Image, Action, Audio, Cell, Caméra (position, rotation, taille,
+  zoom), Calques, Dialogues/Notes, Piste maître. Affichage japonais / occidental 012103932/933,
+  « Lier les colonnes Action et Cell (layout japonais uniquement) » 012104340 [N].
+- « Modifier infos affichées » 012103950–963, 012104128/129 : tête de lecture, entrée, sortie ;
+  colonnes Audio, Dialogue, Caméra, Calques (animation, CTG, Puppet, inactifs) ; pré- /
+  post-comportement. Ligne de séparation 012103934, réinitialiser la taille des colonnes,
+  vue Page / Défilement, page précédente / suivante 012103937–942 [N].
+- Mémo 012103973–978 : titre de travail, épisode n°, scène n°, durée scène, nom animateur ;
+  « Modifier données » 012103984 [N].
+- Rôles 012103926–931, 012104158/160 : aucun, keyframe, inbetween, complété, breakdown,
+  inbetween spécial, à faire ; aide 012103990 [A] : un rôle s'assigne aux cellules depuis la
+  Timesheet ou la timeline (clic droit), chacun a son symbole ; « Cellule d'exposition »,
+  « Cellule vide sans rôle » 012103992/993. Associer marques d'image et rôles 012104169/170,
+  rôles sur la timeline 012104116–119, transparence des rôles 012104130/131, flips par rôle
+  012104150–159 [N].
+- Export PDF 012103996–022 (mémo, action, dialogues/notes, cell, caméra, entrée / sortie,
+  pré- / post-comportement en images ou icônes) ; XDTS : import (ajouter et garder, mettre à
+  jour et garder, remplacer) et export (colonne Action ou Cell) 012103943–948, 012104042–046 [N].
+- Distinct : le calque XSheet, à sources (calque, clip, séquence) 000029800–831.
+
+Fait en 13g-1 : la vue occidentale (colonnes Image, Son, Calques, Caméra, Action,
+Dialogues/Notes ; infos affichées ; ligne de séparation). Le reste attend les réponses
+d'Anthony.
 
 ## 10. Raccourcis (configuration TVPaint 12 d'Anthony, section `[keyboard]`)
 

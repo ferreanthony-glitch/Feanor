@@ -173,6 +173,10 @@ mod workspace;
 #[cfg(test)]
 mod workspace_tests;
 mod workspaceui;
+mod xsheet;
+#[cfg(test)]
+mod xsheet_tests;
+mod xsheetui;
 
 /// Lance Pelure (l'application egui). Un projet passé en argument (ou par double-clic sur un
 /// .pelure) est ouvert au démarrage.

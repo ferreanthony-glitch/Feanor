@@ -1261,6 +1261,11 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
+action = "vue.feuille_exposition"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
 action = "dossier.nouveau"
 touches = []
 source = "TVPaint 12 sans touche"

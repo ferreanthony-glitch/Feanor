@@ -573,8 +573,30 @@ Décisions d'Anthony :
   « Dégradé » (nom seulement dans les textes de TVPaint) : au choix d'Anthony, celui de
   Photoshop, deux couleurs de l'image la plus proche à la plus lointaine. Pas repris : le mode
   « clé de rig » (il n'y a pas de calque Puppet).
-- 13g et suivantes, une étape chacune : feuille d'exposition, flips, clés d'effets, calques CTG,
-  Puppet, vidéo, interpolation d'images.
+- 13g. Feuille d'exposition (« Timesheet » de TVPaint 12 ; inventaire dans
+  `docs/TIMELINE-TVPAINT.md`).
+  - ✅ 13g-1 (`xsheet.rs`, `xsheetui.rs`). Panneau « Feuille d'exposition » (Affichage >
+    Panneaux, ouvert à la demande, en onglet à côté des calques), affichage occidental, une
+    ligne par image du plan courant. Colonnes :
+    - Image : numéro selon l'affichage choisi, signets, entrée / sortie ;
+    - Son : niveau par image ;
+    - une colonne par calque, dans l'ordre de la timeline : le nom ou numéro du dessin à sa
+      première image, un trait tant qu'il est tenu, une croix au début des images vides, la
+      marque de couleur, ce que montrent les pré- et post-comportements ;
+    - Caméra : clés et mouvement ;
+    - Action et Dialogues / Notes : les textes de chaque image de storyboard.
+
+    Le reste du panneau :
+    - « Infos affichées » : chaque colonne, calques cachés, comportements, image courante,
+      repères ;
+    - un trait épais chaque seconde ou toutes les N images ;
+    - un clic va à l'image et au calque, et la feuille suit l'image courante ;
+    - les réglages sont retenus.
+  - 13g-2 et suivantes, à décider avec Anthony : rôles des cellules (keyframe, breakdown,
+    inbetween à faire / complété…), mémo et export PDF, affichage japonais, vue par pages,
+    import / export XDTS, textes Action / Dialogue saisis image par image.
+- 13h et suivantes, une étape chacune : flips, clés d'effets, calques CTG, Puppet, vidéo,
+  interpolation d'images.
 Le faux-fixe n'a que son nom dans les textes de TVPaint : à faire décrire par Anthony avant de
 l'implanter (le pochoir, la transparence préservée et la position verrouillée ont été décrits
 le 2026-10-15, voir `docs/TIMELINE-TVPAINT.md`).

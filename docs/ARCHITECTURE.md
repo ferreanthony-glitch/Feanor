@@ -488,6 +488,13 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   « aucun » : un quadrilatère noir. Notes (`notes.rs`) : une rangée de la grille (sous la
   caméra) quand l'onglet Notes est ouvert ; un geste qui y commence ne touche ni la tête de
   lecture ni les images ; `paint_notes_overlay` dessine une bande centrée sur l'image courante.
+- Feuille d'exposition (`xsheet.rs`, `xsheetui.rs`, 13g-1) : un panneau ancrable de plus
+  (`Pane::XSheet`, `"feuille_expo"`, groupe des calques, absent de la disposition par défaut ;
+  `toggle_pane` rend actif un panneau qu'on ouvre). Rien de nouveau dans le projet : chaque case
+  se calcule à partir du plan (`layer_cells`, `camera_cells`, `story_rows`, `audio_levels`).
+  Affichage par `ScrollArea::show_viewport` : seules les lignes visibles sont peintes, l'en-tête
+  est peint en haut de la partie visible. `XSheetSettings` est un réglage de l'application
+  (`[feuille_expo]`).
 - Vue Projet (`projetui.rs`, 13e-4) : `Document::storyboard_locked` est dans `Structure` (une
   annulation le rétablit avec le reste ; le basculer est une étape). `App::storyboard_refuses`
   garde `structure_op` et les autres chemins qui changent l'ordre, le nombre ou la durée des

@@ -263,6 +263,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("pelure.mode_marque", "Pelure : mode marque de couleur", true, false),
     act("pelure.decaler", "Décaler les images de la pelure (glisser sur le dessin)", true, false),
     act("pelure.remettre", "Remettre les images de la pelure en place", true, false),
+    act("vue.feuille_exposition", "Panneau Feuille d'exposition (ouvrir / fermer)", true, false),
     act("dossier.nouveau", "Nouveau dossier de calques", true, false),
     act("dossier.ranger", "Placer les calques choisis dans un nouveau dossier", true, false),
     act("dossier.deposer", "Déposer les calques choisis dans le dossier", true, false),

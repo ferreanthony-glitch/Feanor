@@ -228,6 +228,17 @@ choisies…). Elle allume aussi les croix sur les instances vides et les miniatu
   transparences ; l'export est alors transparent).
 - **Image de départ** : le numéro de la première image.
 
+**Feuille d'exposition** (Affichage > Panneaux > Feuille d'exposition) : le plan courant en
+colonnes, une ligne par image. On y trouve :
+- le numéro de l'image, les signets, l'entrée et la sortie ;
+- le niveau du son ;
+- une colonne par calque : le nom ou le numéro du dessin à sa première image, un trait tant
+  qu'il est tenu, une croix au début des images vides ;
+- les clés de caméra ;
+- les textes Action et Dialogues / Notes du storyboard.
+
+Un clic va à l'image et au calque. L'œil choisit les colonnes et le trait de séparation.
+
 **Vue Projet** :
 - **Nouveau plan avant le plan courant** (menu Storyboard, menu ⋯ du montage).
 - **Cadenas du montage** : il verrouille le storyboard. L'ordre, le nombre et la durée des plans
@@ -419,6 +430,7 @@ en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le 
 | `onionui.rs` | Panneau de la pelure d'oignon (13f) |
 | `bottomtabs.rs`, `notes.rs` | Onglets du bas de la timeline, notes dessinées (13e) |
 | `projetui.rs` | Vue Projet : plan avant, storyboard verrouillé, propriétés, projet fait de plans (13e) |
+| `xsheet.rs`, `xsheetui.rs` | Feuille d'exposition : ce que montre chaque case, le panneau (13g) |
 | `fill.rs` | Remplissage par zone et débord |
 | `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra |
 | `gpu.rs` | Composition et affichage par la carte graphique, envoi des dessins par tuiles |

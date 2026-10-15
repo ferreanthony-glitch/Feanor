@@ -43,6 +43,9 @@ pub enum Pane {
     /// Bande de montage (storyboard) ou timeline (animation).
     #[serde(rename = "bande")]
     Strip,
+    /// Feuille d'exposition du plan (13g). Fermée dans la disposition par défaut.
+    #[serde(rename = "feuille_expo")]
+    XSheet,
 }
 
 /// Où un panneau se range quand on le rouvre.
@@ -58,7 +61,7 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 10] = [
+    pub const ALL: [Pane; 11] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
@@ -69,6 +72,7 @@ impl Pane {
         Pane::Sheet,
         Pane::Layers,
         Pane::Strip,
+        Pane::XSheet,
     ];
 
     pub fn name(self) -> &'static str {
@@ -83,6 +87,7 @@ impl Pane {
             Pane::Sheet => "Fiche du plan",
             Pane::Layers => "Calques",
             Pane::Strip => "Montage et timeline",
+            Pane::XSheet => "Feuille d'exposition",
         }
     }
 
@@ -91,6 +96,7 @@ impl Pane {
         match self {
             Pane::ToolOptions => "Réglages",
             Pane::Sheet => "Fiche",
+            Pane::XSheet => "Exposition",
             p => p.name(),
         }
     }
@@ -108,6 +114,7 @@ impl Pane {
             Pane::Sheet => ph::CLIPBOARD_TEXT,
             Pane::Layers => ph::STACK,
             Pane::Strip => ph::FILM_STRIP,
+            Pane::XSheet => ph::TABLE,
         }
     }
 
@@ -115,7 +122,7 @@ impl Pane {
         match self {
             Pane::Canvas => Group::Center,
             Pane::Tools | Pane::Color | Pane::Brushes | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet => Group::Left,
-            Pane::Layers => Group::Right,
+            Pane::Layers | Pane::XSheet => Group::Right,
             Pane::Strip => Group::Bottom,
         }
     }
@@ -240,9 +247,11 @@ fn stack(parts: &[(f32, Option<DockNode>)]) -> Option<DockNode> {
     Some(node)
 }
 
-/// Colonne des calques (6a, à droite du dessin), sur toute la hauteur depuis 9b.
+/// Colonne des calques (6a, à droite du dessin), sur toute la hauteur depuis 9b ; la feuille
+/// d'exposition (13g) y vient en onglet.
 fn right_column(only: &[Pane]) -> Option<DockNode> {
-    only.contains(&Pane::Layers).then(|| tabs(vec![Pane::Layers]))
+    let list: Vec<Pane> = [Pane::Layers, Pane::XSheet].into_iter().filter(|p| only.contains(p)).collect();
+    (!list.is_empty()).then(|| tabs(list))
 }
 
 /// Taille de fenêtre de référence pour passer des tailles en pixels (anciennes dispositions) aux
@@ -364,7 +373,8 @@ impl DockLayout {
             }
         }
         let tools = left_column(&settings);
-        let layers = if l.sheet { right_column(&Group::Right.panes()) } else { None };
+        // La feuille d'exposition n'est pas ouverte d'office.
+        let layers = if l.sheet { right_column(&[Pane::Layers]) } else { None };
         let layers_w = l.sheet_width.clamp(160.0, 900.0);
         let side = match (layers, tools) {
             (Some(a), Some(b)) => Some((row(layers_w / (layers_w + TOOLS_WIDTH), a, b), layers_w + TOOLS_WIDTH)),
@@ -533,6 +543,8 @@ impl DockLayout {
                 self.close(p);
             }
         } else {
+            // La feuille d'exposition ne s'ouvre qu'à la demande (13g).
+            let panes: Vec<Pane> = panes.into_iter().filter(|p| *p != Pane::XSheet).collect();
             self.insert_group(group, &panes);
         }
     }
