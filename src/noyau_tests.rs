@@ -49,6 +49,43 @@ fn thumbnails_are_png_at_the_asked_width() {
     assert_eq!(img.to_rgba8().get_pixel(10, 10).0, [255, 255, 255, 255]);
 }
 
+/// Projet d'exemple pour essayer l'appli compagnon : quatre panneaux dessinés, deux scènes.
+/// `PELURE_EXEMPLE=<dossier>\Exemple.pelure cargo test --release ecrire_un_projet_exemple -- --ignored`
+#[test]
+#[ignore]
+fn ecrire_un_projet_exemple() {
+    use crate::document::{Layer, LayerKind};
+    use eframe::egui::Color32;
+    let manifest = std::path::PathBuf::from(std::env::var("PELURE_EXEMPLE").expect("PELURE_EXEMPLE"));
+    std::fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+    let mut p = Projet::nouveau(640, 360, 24);
+    for i in 0..3 {
+        p.ajouter_panneau(i).unwrap();
+    }
+    p.doc.split_scene(2).unwrap();
+    let couleurs = [Color32::from_rgb(220, 60, 50), Color32::from_rgb(50, 120, 220), Color32::from_rgb(60, 170, 90), Color32::from_rgb(240, 170, 40)];
+    let textes = ["Le bus arrive au loin.", "Gros plan : le chauffeur.", "La porte s'ouvre.", "Tout le monde monte."];
+    for (i, (c, t)) in couleurs.iter().zip(textes).enumerate() {
+        p.doc.panels[i].layers = vec![Layer::new("Dessin", LayerKind::Bitmap)];
+        let cel = p.doc.new_cel(LayerKind::Bitmap);
+        let r = &mut p.doc.cels.get_mut(&cel).unwrap().raster;
+        // Un disque qui se décale d'un panneau à l'autre (feuille 1280×720, cadre au centre).
+        let (cx, cy, rayon) = (480.0 + 110.0 * i as f32, 360.0, 90.0);
+        for y in 260..460 {
+            for x in 380..900 {
+                if ((x as f32 - cx).powi(2) + (y as f32 - cy).powi(2)).sqrt() <= rayon {
+                    let idx = r.tile_index_of(x, y);
+                    r.tile_mut(idx)[(y % 64) * 64 + x % 64] = *c;
+                }
+            }
+        }
+        let n = p.doc.panels[i].frame_count();
+        p.doc.panels[i].layers[0].frames = vec![Some(cel); n];
+        p.modifier_textes(i, t.to_string(), String::new(), String::new()).unwrap();
+    }
+    crate::project::save(&p.doc, &manifest, &mut Default::default()).unwrap();
+}
+
 #[test]
 fn a_project_is_saved_reopened_and_exported() {
     let dir = std::env::temp_dir().join(format!("pelure-test-noyau-{}", std::process::id()));

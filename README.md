@@ -188,6 +188,12 @@ prend le fond de celle-ci.
     durée, action, dialogue et notes ; une nouvelle page à chaque séquence.
   - Image courante (PNG), et storyboard en page HTML (une planche par panneau).
 
+## Appli compagnon (Tauri)
+
+`src-tauri/` + `src-frontend/` : une seconde appli (Tauri 2, React, Tailwind) sur le même noyau
+que Pelure, pour le storyboard (panneaux, textes, durées, ordre, PDF) ; le dessin reste dans
+Pelure. Lancer : `cd src-frontend` puis `npm run tauri dev`. Détails : `docs/COMPAGNON.md`.
+
 ## Raccourcis clavier
 
 Ils sont repris de Storyboard Pro 27 (raccourcis par défaut) et de tes réglages personnels, et
@@ -266,6 +272,8 @@ en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le 
 
 | Fichier | Rôle |
 |---|---|
+| `lib.rs`, `main.rs` | Bibliothèque (tous les modules, `lancer`) ; l'exécutable ne fait que la lancer |
+| `noyau.rs` | Noyau pour l'appli compagnon : projet, résumé, vignettes PNG, panneaux, textes, PDF |
 | `document.rs` | Séquences, scènes, panneaux, calques, expositions, dessins ; opérations de montage |
 | `raster.rs` | Images en tuiles de 64×64 allouées à la demande |
 | `vector.rs` | Éléments vectoriels : rendu, sélection, transformations, gomme, contours de remplissage |

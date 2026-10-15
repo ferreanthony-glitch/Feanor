@@ -1,0 +1,27 @@
+[package]
+name = "pelure-compagnon"
+version = "0.1.0"
+edition = "2021"
+description = "Appli compagnon de Pelure (Tauri) : le storyboard en React, sur le noyau de Pelure"
+
+# Projet Cargo à part (son propre Cargo.lock et son dossier target) : les dépendances de Tauri ne
+# changent aucune version de celles de Pelure.
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Fenêtres « Ouvrir » / « Enregistrer » du système (la même bibliothèque que Pelure).
+rfd = "0.15"
+# Le noyau de Pelure : projet, rendu des vignettes, export PDF.
+pelure = { path = ".." }
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3

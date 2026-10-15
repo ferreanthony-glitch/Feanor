@@ -350,6 +350,20 @@ voir le plateau dans l'espace, naviguer et y déplacer les objets.
   la taille du pinceau ne suit pas la perspective ; en secours sans carte graphique, l'image en
   perspective est approchée (maillage), à l'export elle est exacte.
 
+## Phase 10 — Appli compagnon Tauri
+
+Demandée par Anthony : intégrer Tauri 2 pour une interface moderne (Vite, React, Tailwind),
+exposer les fonctions Rust par des commandes. Choix d'Anthony : une appli **compagnon** qui
+partage le noyau de Pelure (le dessin reste dans Pelure) ; installations validées (Node.js LTS,
+crates Tauri, paquets npm).
+
+- ✅ 10a. Pelure en bibliothèque (`lib.rs`, `pelure::lancer`) et noyau (`noyau.rs`) testé.
+- ✅ 10b. `src-tauri/` (commandes, état, configuration, icônes) et `src-frontend/` (planche par
+  scène, vignettes, fiche du panneau : textes, durée, ajouter, dupliquer, déplacer, supprimer ;
+  enregistrer ; PDF). Lancement : `docs/COMPAGNON.md`.
+  Pas encore : « Enregistrer sous » d'un projet neuf, annuler / rétablir, son, notes de la
+  planche, ouvrir le panneau dans Pelure.
+
 ## Raccourcis proposés, à valider
 
 Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans `keymap.toml`) :

@@ -1,2 +1,7 @@
 /target
 *.pelure.tmp
+# Appli compagnon Tauri (10b) : compilation Rust, schémas générés, paquets npm, frontend construit.
+/src-tauri/target
+/src-tauri/gen/schemas
+/src-frontend/node_modules
+/src-frontend/dist

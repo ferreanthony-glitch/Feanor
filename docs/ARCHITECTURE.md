@@ -308,6 +308,26 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   Testé : caméra droite = calcul d'avant, inverse, visée (E·tan φ), trapèze, vue 3D « par la
   caméra » (repère `Cam3d` calculé à part) qui voit le cadre aux coins de l'écran, image filmée.
 
+## Appli compagnon Tauri (phase 10)
+
+- **Bibliothèque** (10a) : `src/lib.rs` déclare tous les modules et `pelure::lancer()` démarre
+  l'application egui ; `src/main.rs` ne fait que l'appeler. Les modules restent privés à la
+  bibliothèque ; seul `noyau` est public.
+- **Noyau** (`noyau.rs`) : `Projet` (document, manifeste, dessins déjà écrits pour
+  l'enregistrement incrémental, « modifié ») et des fonctions en données simples, sérialisables
+  (`ResumeProjet` > `ResumeSequence` > `ResumeScene` > `ResumePanneau`) : ouvrir, nouveau,
+  enregistrer, résumé, vignette PNG (`render::thumbnail` + `io::encode_png`), panneaux (ajouter,
+  dupliquer, déplacer, supprimer), textes, durée, PDF (même chemin que l'export de Pelure, sur un
+  seul fil). Aucune dépendance à egui dans son API.
+- **`src-tauri/`** (10b) : projet Cargo indépendant (`[workspace]` vide : son `Cargo.lock`, son
+  `target`), qui dépend de `pelure` par chemin. État : `Mutex<Option<Projet>>` géré par Tauri ;
+  commandes `#[tauri::command]` enregistrées par `generate_handler!` ; les lentes sont
+  `async` ; la vignette part en octets (`ipc::Response`). Fenêtres de fichiers par `rfd`.
+- **`src-frontend/`** : Vite 8, React 19, TypeScript 5.9, Tailwind 4 (extension Vite). `api.ts`
+  type chaque commande ; `App.tsx` : accueil, planche par séquence et scène, fiche du panneau.
+  Après chaque commande, Rust renvoie tout le résumé (quelques Ko) : pas d'état à synchroniser.
+  Détails et lancement : `docs/COMPAGNON.md`.
+
 ## Pinceaux texturés (3d-2)
 
 - `brush.rs` : chaque empreinte calcule une couverture par pixel — disque (dureté) ou pointe en
@@ -576,6 +596,8 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 | Dessin dans la vignette = le même `canvas_panel` dans un `Ui` enfant (6e) | aucun second chemin de dessin | nul | faible | oui |
 | Caméra d'un panneau sans clé = celle du voisin dans la scène (9c) | la caméra ne saute plus d'un panneau à l'autre, sans toucher aux panneaux qui ont des clés | nul | faible : un panneau sans clé change si l'on règle son voisin (c'est le but) | oui : poser une clé fige le panneau |
 | Avancée de la caméra dans le multiplan, pas de bascule ni de panoramique (9c) | le rendu reste un empilement de plans 2D, exact et rapide | nul | les mouvements X/Y de la caméra manquent | oui : un rendu en perspective pourra s'ajouter (champs en plus) |
+| Appli compagnon Tauri à côté de Pelure, pas à la place de l'interface egui (10, choix d'Anthony) | le storyboard profite d'une interface web ; la toile de dessin (carte graphique, stylet, latence) reste où elle est rapide | Node.js + ≈ 300 crates de plus à la compilation du compagnon seulement ; un noyau à tenir | faible : Pelure inchangée ; deux applis peuvent enregistrer le même projet l'une sur l'autre | oui : supprimer `src-tauri/` et `src-frontend/` |
+| `src-tauri` projet Cargo à part, pas membre d'un espace de travail (10b) | Tauri ne change aucune version des dépendances de Pelure | le noyau est compilé deux fois (deux dossiers `target`) | faible | oui : en faire un membre plus tard |
 | Bascule et panoramique = homographie du plan de référence déjà composé (9f) | exact (le multiplan ne dépend que de l'œil), sans toucher à la composition ni aux calques | une homographie par image ; vue caméra par la carte graphique avec un w par coin | faible : au ras de l'horizon, la feuille est très étirée (bornée à 5°) ; hors de la feuille, rien | oui : caméra droite = calcul d'avant ; deux champs du manifeste |
 | Cadres de composition dans la disposition, pas dans le projet (9d) | ce sont des réglages de la vue, comme le zoom | nul | un format de diffusion propre au projet n'est pas transmis avec lui | oui : un champ du manifeste pourrait s'ajouter |
 | Plateau 3D dessiné par egui (maillages subdivisés, textures réduites), pas par une passe wgpu à part (9e) | aucun shader ni pipeline de plus ; marche aussi en OpenGL | ≈ 600 triangles par calque ; texture refaite (≈ 10 ms) quand un dessin change | faible : pas de tampon de profondeur (plans parallèles triés, suffisant) | oui : `stage3dui.rs` seul à remplacer |

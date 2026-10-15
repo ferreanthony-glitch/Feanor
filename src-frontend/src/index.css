@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+/* Fond sombre comme Pelure, texte lisible. */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #1e1e20;
+  color: #e6e6e6;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
