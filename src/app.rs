@@ -1790,10 +1790,12 @@ impl App {
              .label{{font-weight:600}}h2.seq{{font-size:18px;margin:28px 0 10px;break-after:avoid}}\
              </style></head><body><h1>{title} — storyboard</h1>"
         );
-        let ([w, h], fps) = (self.doc.frame, self.doc.fps);
-        for (i, panel) in self.doc.panels.iter().enumerate() {
+        let [w, h] = self.doc.frame;
+        let all: Vec<usize> = (0..self.doc.panels.len()).collect();
+        let (frames, boards) = crate::export::storyboard_of(&self.doc, &all);
+        for (k, ((i, f), board)) in frames.into_iter().zip(boards).enumerate() {
             // Intertitre au début de chaque séquence.
-            if self.doc.sequence_run(i).0 == i {
+            if f == 0 && self.doc.sequence_run(i).0 == i {
                 if i > 0 {
                     html += "</main>";
                 }
@@ -1802,19 +1804,19 @@ impl App {
                     io::html_escape(&self.doc.sequence_label(self.doc.sequence_of(i)))
                 );
             }
-            let plan = render::panel_plan_at(&self.doc, i, 0, Some(self.doc.paper));
-            let pixels = render::camera_image(&self.doc, &plan, &self.doc.panel_camera(i, 0));
-            let file = format!("planche_{:03}.png", i + 1);
+            let plan = render::panel_plan_at(&self.doc, i, f, Some(self.doc.paper));
+            let pixels = render::camera_image(&self.doc, &plan, &self.doc.panel_camera(i, f));
+            let file = format!("planche_{:03}.png", k + 1);
             if let Err(e) = io::write_png_scaled(&dir.join(&file), &pixels, w, h, 960) {
                 self.status = format!("Échec de l'export : {e}");
                 return;
             }
             html += &format!(
                 "<section><img src=\"{file}\"><h2>{}</h2><p class=\"dur\">{}</p>",
-                io::html_escape(&crate::storyboard::panel_long_title(&self.doc, i)),
-                crate::storyboard::duration_label(panel.frame_count(), fps)
+                io::html_escape(&board.title),
+                board.duration
             );
-            for (label, text) in [("Action", &panel.action), ("Dialogue", &panel.dialogue), ("Notes", &panel.notes)] {
+            for (label, text) in [("Action", &board.action), ("Dialogue", &board.dialogue), ("Notes", &board.notes)] {
                 if !text.trim().is_empty() {
                     html += &format!("<p><span class=\"label\">{label} :</span> {}</p>", io::html_escape(text));
                 }
@@ -2136,9 +2138,9 @@ impl App {
             "panneau.suivant" => self.select_panel(self.cur_panel + 1),
             "panneau.nouveau" => self.new_panel(),
             "panneau.dupliquer" => self.duplicate_panel(),
-            "scene.nouvelle" => self.new_scene(),
-            "scene.dupliquer" => self.duplicate_scene(),
-            "scene.supprimer" => self.delete_scene(),
+            "scene.nouvelle" => self.new_panel(),
+            "scene.dupliquer" => self.duplicate_panel(),
+            "scene.supprimer" => self.delete_chosen_panels(),
             "scene.precedente" => self.step_scene(false),
             "scene.suivante" => self.step_scene(true),
             "sequence.nouvelle" => self.new_sequence(),
@@ -2159,7 +2161,7 @@ impl App {
             "calque.dessous" => self.select_layer(self.cur_layer.saturating_sub(1)),
             "panneau.couper" => self.split_current_panel(),
             "panneau.fusionner_suivant" => self.merge_next_panel(),
-            "scene.couper" => self.split_current_scene(),
+            "scene.couper" => self.split_current_panel(),
             "scene.joindre_precedente" => self.join_previous_scene(),
             "calque.copier" => self.copy_layer(),
             "calque.coller" => self.paste_layer(),

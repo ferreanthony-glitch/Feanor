@@ -124,7 +124,14 @@ impl App {
         self.doc.panels.iter().map(|p| p.id).filter(|id| *id == cur || self.board_sel.contains(id)).collect()
     }
 
-    /// Retire les panneaux `ids` (une étape d'annulation).
+    /// Rend courante l'image de storyboard qui commence à l'image `frame` du plan `i`.
+    fn select_board(&mut self, i: usize, frame: usize) {
+        self.select_panel(i);
+        self.cur_frame = frame;
+        self.follow_frame = true;
+    }
+
+    /// Retire les plans `ids` (une étape d'annulation).
     pub(crate) fn delete_panels(&mut self, ids: &[u64]) {
         self.end_stroke();
         let snap = self.snapshot();
@@ -310,8 +317,8 @@ impl App {
             );
         }
         let deadline = Instant::now() + crate::thumbs::THUMB_TIME;
-        for place in &layout.cards {
-            self.board_card(ui, &painter, view, xf, place, pan_mode, mods, deadline);
+        for (k, place) in layout.cards.iter().enumerate() {
+            self.board_card(ui, &painter, view, xf, k + 1, place, pan_mode, mods, deadline);
         }
 
         // Notes par-dessus, puis ce qui est choisi, puis les repères du geste.
@@ -517,8 +524,8 @@ impl App {
                 ui,
                 &mut self.layout.board_scene_breaks,
                 ph::KEY_RETURN,
-                "Scène à la ligne",
-                "Chaque scène commence une nouvelle ligne (sinon les plans se suivent).",
+                "Plan à la ligne",
+                "Chaque plan commence une nouvelle ligne (sinon ses images suivent celles du plan d'avant).",
                 "",
             );
             interrupteur(
@@ -612,13 +619,13 @@ impl App {
                 let before = t.before.map(|i| self.doc.panels[i].id);
                 let cur = self.doc.panels[self.cur_panel].id;
                 let snap = self.snapshot();
-                if self.doc.move_panels(&ids, t.scene, before).is_some() {
+                if self.doc.move_plans(&ids, before).is_some() {
                     self.commit_structure(snap);
                     self.cur_panel = self.doc.panels.iter().position(|p| p.id == cur).unwrap_or(0);
                     self.clamp_nav();
                     self.status = match ids.len() {
-                        1 => "Panneau déplacé.".into(),
-                        n => format!("{n} panneaux déplacés."),
+                        1 => "Plan déplacé.".into(),
+                        n => format!("{n} plans déplacés."),
                     };
                 }
             }
@@ -652,8 +659,8 @@ impl App {
         }
     }
 
-    /// Une vignette : numéro et titre, image (ou le dessin lui-même pour le panneau courant),
-    /// cadre, gestes.
+    /// Une vignette (une image de storyboard, 13a) : numéro et titre, image (ou le dessin lui-même
+    /// pour l'image courante), cadre, gestes. Choisir, glisser, supprimer : le plan entier.
     #[allow(clippy::too_many_arguments)]
     fn board_card(
         &mut self,
@@ -661,6 +668,7 @@ impl App {
         painter: &egui::Painter,
         view: Rect,
         xf: Xf,
+        number: usize,
         place: &CardPlace,
         pan_mode: bool,
         mods: Modifiers,
@@ -673,9 +681,14 @@ impl App {
         let thumb = xf.rect(place.thumb);
         let header = Rect::from_min_max(card.min, pos2(card.right(), thumb.top()));
         let i = place.panel;
-        let id = place.id;
-        let current = i == self.cur_panel;
-        let chosen = current || self.board_sel.contains(&id);
+        let id = place.plan;
+        let plan_current = i == self.cur_panel;
+        // L'image courante : celle du plan courant où est la tête de lecture.
+        let current = plan_current && {
+            let f = self.cur_frame.min(self.frame_count().saturating_sub(1));
+            (place.frame..place.end).contains(&f)
+        };
+        let chosen = plan_current || self.board_sel.contains(&id);
         let accent = ui.visuals().selection.bg_fill;
 
         let head_ink = if chosen {
@@ -687,13 +700,18 @@ impl App {
         let font = (11.0 * xf.zoom).clamp(6.0, 26.0);
         if header.height() >= 8.0 {
             let clip = painter.with_clip_rect(header.intersect(view));
-            let number = clip.layout_no_wrap((i + 1).to_string(), FontId::proportional(font), head_ink);
+            let number = clip.layout_no_wrap(number.to_string(), FontId::proportional(font), head_ink);
             let w = number.size().x;
             let left = header.left() + 3.0 * xf.zoom.min(1.5);
             clip.galley(pos2(left, header.center().y - number.size().y * 0.5), number, head_ink);
-            // Début de scène : son titre en gras (tracé deux fois, un demi-point à côté).
-            let first = i == 0 || self.doc.panels[i - 1].scene != place.scene;
-            let galley = clip.layout_no_wrap(panel_title(&self.doc, i), FontId::proportional(font), head_ink);
+            // Début de plan : son titre en gras (tracé deux fois, un demi-point à côté) ; les
+            // images suivantes du plan : « Plan 3 · 2 ».
+            let first = place.starts_plan();
+            let title = match self.doc.panels[i].marks.iter().position(|m| m.id == place.id) {
+                Some(k) => format!("{} · {}", panel_title(&self.doc, i), k + 2),
+                None => panel_title(&self.doc, i),
+            };
+            let galley = clip.layout_no_wrap(title, FontId::proportional(font), head_ink);
             let at = pos2(left + w + 6.0 * xf.zoom.min(1.5), header.center().y - galley.size().y * 0.5);
             if first {
                 clip.galley(at + vec2(0.6, 0.0), galley.clone(), head_ink);
@@ -702,7 +720,7 @@ impl App {
             clip.text(
                 pos2(header.right() - 3.0 * xf.zoom.min(1.5), header.center().y),
                 Align2::RIGHT_CENTER,
-                duration_label(self.doc.panels[i].frame_count(), self.doc.fps),
+                duration_label(place.end - place.frame, self.doc.fps),
                 FontId::monospace(font * 0.85),
                 head_ink,
             );
@@ -720,7 +738,8 @@ impl App {
         } else {
             painter.rect_filled(thumb, 0.0, Color32::WHITE);
             let px = thumb.width() * ui.ctx().pixels_per_point();
-            if let Some(tex) = self.thumbs.texture(ui.ctx(), &self.doc, i, crate::thumbs::width_for(px), deadline) {
+            let width = crate::thumbs::width_for(px);
+            if let Some(tex) = self.thumbs.texture_at(ui.ctx(), &self.doc, i, place.frame, place.id, width, deadline) {
                 painter.image(tex, thumb, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
             }
         }
@@ -744,7 +763,7 @@ impl App {
         } else if resp.drag_started_by(PointerButton::Primary) {
             if !chosen {
                 self.board_sel = vec![id];
-                self.select_panel(i);
+                self.select_board(i, place.frame);
             }
             let ids = self.board_selection();
             let at = xf.to_board(resp.interact_pointer_pos().unwrap_or(card.center()));
@@ -765,17 +784,18 @@ impl App {
                 self.board_sel = self.doc.panels[a..=b].iter().map(|p| p.id).collect();
             } else {
                 self.board_sel = vec![id];
-                self.select_panel(i);
+                self.select_board(i, place.frame);
             }
         }
         if resp.double_clicked() {
             self.enter_animation(i);
+            self.cur_frame = place.frame;
         }
         if resp.secondary_clicked() && !chosen {
             self.board_sel = vec![id];
-            self.select_panel(i);
+            self.select_board(i, place.frame);
         }
-        resp.context_menu(|ui| self.card_menu(ui, i));
+        resp.context_menu(|ui| self.card_menu(ui, i, place.frame));
     }
 
     /// Le dessin dans la vignette du panneau courant : vue à travers la caméra, cadrée sur la
@@ -794,22 +814,29 @@ impl App {
         (self.view, self.camera_view, self.canvas_rect) = (view, camera_view, canvas_rect);
     }
 
-    /// Menu d'une vignette (clic droit) : sur ce panneau, ou sur tous les panneaux choisis.
-    fn card_menu(&mut self, ui: &mut egui::Ui, i: usize) {
+    /// Menu d'une vignette (clic droit) : sur son plan (l'image qui commence à `frame`), ou sur
+    /// tous les plans choisis.
+    fn card_menu(&mut self, ui: &mut egui::Ui, i: usize, frame: usize) {
         let item = |app: &mut App, ui: &mut egui::Ui, text: &str, f: &dyn Fn(&mut App)| {
             if ui.button(text).clicked() {
                 ui.close_menu();
-                app.select_panel(i);
+                app.select_board(i, frame);
                 f(app);
             }
         };
-        item(self, ui, "Animer ce panneau", &|a| a.enter_animation(a.cur_panel));
-        item(self, ui, "Nouveau panneau après", &|a| a.new_panel());
-        item(self, ui, "Dupliquer le panneau", &|a| a.duplicate_panel());
+        item(self, ui, "Animer cette image", &|a| {
+            a.set_mode(crate::app::Mode::Animation);
+        });
+        item(self, ui, "Nouveau plan après", &|a| a.new_panel());
+        item(self, ui, "Dupliquer le plan", &|a| a.duplicate_panel());
         ui.separator();
         self.panel_clipboard_items(ui);
         ui.separator();
-        item(self, ui, "Nouvelle scène à partir de ce panneau", &|a| a.run_action("scene.couper"));
+        if frame > 0 {
+            item(self, ui, "Faire de cette image un nouveau plan", &|a| a.split_current_panel());
+        } else if i > 0 {
+            item(self, ui, "Réunir avec le plan précédent", &|a| a.join_previous_scene());
+        }
         item(self, ui, "Recadrer (outil Caméra)", &|a| a.set_tool(Tool::Camera));
         item(self, ui, "Réinitialiser le cadrage", &|a| a.run_action("camera.reinitialiser"));
     }
@@ -857,16 +884,12 @@ impl App {
             }
             ui.separator();
         }
-        if ui.button("Nouveau panneau").clicked() {
+        if ui.button("Nouveau plan").clicked() {
             ui.close_menu();
             self.new_panel();
         }
-        if ui.button("Nouvelle scène").clicked() {
-            ui.close_menu();
-            self.new_scene();
-        }
         ui.separator();
-        if ui.button("Tout choisir (panneaux)").clicked() {
+        if ui.button("Tout choisir (plans)").clicked() {
             ui.close_menu();
             self.board_sel = self.doc.panels.iter().map(|p| p.id).collect();
         }

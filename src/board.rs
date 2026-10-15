@@ -1,10 +1,10 @@
 //! Planche de la vue Vignettes (phases 7 et 8), sans interface : où se placent les vignettes, où
-//! tombent les panneaux qu'on lâche, et les notes (traits et textes) posées sur la planche.
+//! tombent les plans qu'on lâche, et les notes (traits et textes) posées sur la planche.
 //!
 //! La planche a ses propres coordonnées (des points d'écran au zoom 1). Les vignettes y sont
-//! rangées comme sur des pages de vignettes : de gauche à droite, les plans à la suite (une scène
-//! peut revenir à la ligne), `colonnes` par ligne (6 au plus), `lignes` par page (0 : une seule
-//! page). Une note libre reste où on l'a posée (choix d'Anthony) ; une note attachée à une
+//! rangées comme sur des pages de vignettes : une par image de storyboard (13a : le début de
+//! chaque plan, puis chacune de ses marques d'image), de gauche à droite (un plan peut revenir à
+//! la ligne), `colonnes` par ligne (6 au plus), `lignes` par page (0 : une seule page). Une note libre reste où on l'a posée (choix d'Anthony) ; une note attachée à une
 //! vignette la suit, à son échelle.
 
 use eframe::egui::{pos2, vec2, Pos2, Rect, Vec2};
@@ -12,7 +12,7 @@ use eframe::egui::{pos2, vec2, Pos2, Rect, Vec2};
 use crate::document::Document;
 use crate::vector::VPoint;
 
-/// Bande du titre (numéro, « Sc 1 · P 2 », durée) au-dessus de chaque vignette.
+/// Bande du titre (numéro, « Plan 3 », durée) au-dessus de chaque vignette.
 pub const HEADER_H: f32 = 18.0;
 /// Marge autour des pages, sur la planche ; marge intérieure d'une page ; écart entre deux pages.
 pub const MARGIN: f32 = 28.0;
@@ -34,7 +34,7 @@ pub struct BoardSettings {
     /// Lignes par page ; 0 : une seule page, aussi longue qu'il faut.
     pub rows: usize,
     pub spacing: f32,
-    /// Chaque scène commence une nouvelle ligne.
+    /// Chaque plan commence une nouvelle ligne.
     pub scene_breaks: bool,
 }
 
@@ -44,15 +44,27 @@ impl Default for BoardSettings {
     }
 }
 
-/// Une vignette sur la planche : le panneau (indice et id), sa scène, son numéro dans le film, la
-/// carte entière (titre compris) et l'image.
+/// Une vignette sur la planche (13a : une par image de storyboard) : le plan (indice, id), la
+/// vignette (`id` : celui du plan pour sa première image, sinon celui de la marque d'image), les
+/// images du plan qu'elle couvre [`frame`, `end`), sa scène, la carte entière (titre compris) et
+/// l'image.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CardPlace {
     pub panel: usize,
+    pub plan: u64,
     pub id: u64,
+    pub frame: usize,
+    pub end: usize,
     pub scene: u64,
     pub card: Rect,
     pub thumb: Rect,
+}
+
+impl CardPlace {
+    /// La première vignette de son plan.
+    pub fn starts_plan(&self) -> bool {
+        self.frame == 0
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -70,6 +82,14 @@ impl BoardLayout {
     }
 }
 
+/// Images de storyboard du plan `index` : (id de la vignette, première image, fin).
+pub fn plan_boards(doc: &Document, index: usize) -> Vec<(u64, usize, usize)> {
+    let p = &doc.panels[index];
+    let n = p.frame_count();
+    let starts: Vec<(u64, usize)> = std::iter::once((p.id, 0)).chain(p.marks.iter().filter(|m| m.frame < n).map(|m| (m.id, m.frame))).collect();
+    (0..starts.len()).map(|k| (starts[k].0, starts[k].1, starts.get(k + 1).map_or(n, |s| s.1))).collect()
+}
+
 /// Range les vignettes sur des pages (voir le début du fichier). Ne dépend pas de la taille de la
 /// vue : les notes libres restent à leur place quand la fenêtre change.
 pub fn layout(doc: &Document, s: &BoardSettings) -> BoardLayout {
@@ -78,12 +98,16 @@ pub fn layout(doc: &Document, s: &BoardSettings) -> BoardLayout {
     let gap = s.spacing.clamp(0.0, MAX_SPACING);
     let thumb_h = card_w * doc.frame[1] as f32 / doc.frame[0].max(1) as f32;
     let card_h = HEADER_H + thumb_h;
-    // Ligne et colonne de chaque panneau.
-    let mut slots: Vec<(usize, usize)> = Vec::with_capacity(doc.panels.len());
-    let (mut row, mut col) = (0, 0);
+    // Ligne et colonne de chaque vignette ; « plan à la ligne » : chaque plan commence une ligne.
+    let mut boards: Vec<(usize, u64, usize, usize)> = Vec::new();
     for i in 0..doc.panels.len() {
-        let new_scene = i > 0 && s.scene_breaks && doc.panels[i].scene != doc.panels[i - 1].scene;
-        if i > 0 && (col == cols || new_scene) {
+        boards.extend(plan_boards(doc, i).into_iter().map(|(id, frame, end)| (i, id, frame, end)));
+    }
+    let mut slots: Vec<(usize, usize)> = Vec::with_capacity(boards.len());
+    let (mut row, mut col) = (0, 0);
+    for (k, &(_, _, frame, _)) in boards.iter().enumerate() {
+        let new_plan = k > 0 && s.scene_breaks && frame == 0;
+        if k > 0 && (col == cols || new_plan) {
             row += 1;
             col = 0;
         }
@@ -102,10 +126,11 @@ pub fn layout(doc: &Document, s: &BoardSettings) -> BoardLayout {
         Rect::from_min_size(min, vec2(card_w, card_h))
     };
     let mut out = BoardLayout::default();
-    for (i, &(r, c)) in slots.iter().enumerate() {
+    for (&(i, id, frame, end), &(r, c)) in boards.iter().zip(&slots) {
         let card = cell(r, c);
         let thumb = Rect::from_min_max(pos2(card.left(), card.top() + HEADER_H), card.max);
-        out.cards.push(CardPlace { panel: i, id: doc.panels[i].id, scene: doc.panels[i].scene, card, thumb });
+        let p = &doc.panels[i];
+        out.cards.push(CardPlace { panel: i, plan: p.id, id, frame, end, scene: p.scene, card, thumb });
     }
     out.pages = (0..pages).map(|p| Rect::from_min_size(pos2(MARGIN, page_top(p)), vec2(page_w, page_h))).collect();
     // Cases vides : la fin de la dernière ligne, puis les lignes restantes de la dernière page.
@@ -121,35 +146,37 @@ pub fn layout(doc: &Document, s: &BoardSettings) -> BoardLayout {
     out
 }
 
-/// Où vont des panneaux lâchés : dans la scène `scene`, devant le panneau `before` (indice dans
-/// le film), ou à la fin de la scène. `line` : où montrer le repère (un trait vertical).
+/// Où vont des plans lâchés : devant le plan `before` (indice dans le film), ou à la fin.
+/// `line` : où montrer le repère (un trait vertical).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DropTarget {
-    pub scene: u64,
     pub before: Option<usize>,
     pub line: (Pos2, Pos2),
 }
 
-/// La place visée par le point `p` : à côté de la vignette la plus proche, dans sa scène (devant
-/// elle si l'on vise sa moitié gauche, après elle sinon).
+/// La place visée par le point `p` : à côté du plan de la vignette la plus proche — devant lui si
+/// l'on vise la moitié gauche de sa première vignette, après lui sinon.
 pub fn drop_target(layout: &BoardLayout, p: Pos2, gap: f32) -> Option<DropTarget> {
     let k = (0..layout.cards.len()).min_by(|&a, &b| {
         layout.cards[a].card.distance_to_pos(p).total_cmp(&layout.cards[b].card.distance_to_pos(p))
     })?;
     let c = &layout.cards[k];
-    let line = |x: f32| (pos2(x, c.card.top() - 4.0), pos2(x, c.card.bottom() + 4.0));
-    if p.x < c.card.center().x {
-        return Some(DropTarget { scene: c.scene, before: Some(c.panel), line: line(c.card.left() - gap * 0.5) });
+    let line = |card: Rect, x: f32| (pos2(x, card.top() - 4.0), pos2(x, card.bottom() + 4.0));
+    if c.starts_plan() && p.x < c.card.center().x {
+        return Some(DropTarget { before: Some(c.panel), line: line(c.card, c.card.left() - gap * 0.5) });
     }
-    let next = layout.cards.get(k + 1).filter(|n| n.scene == c.scene).map(|n| n.panel);
-    Some(DropTarget { scene: c.scene, before: next, line: line(c.card.right() + gap * 0.5) })
+    let last = layout.cards.iter().rev().find(|x| x.panel == c.panel).unwrap_or(c);
+    let next = layout.cards.iter().find(|x| x.panel == c.panel + 1).map(|x| x.panel);
+    Some(DropTarget { before: next, line: line(last.card, last.card.right() + gap * 0.5) })
 }
 
-/// Vignettes que touche le rectangle `r` (sélection au lasso rectangulaire).
+/// Plans dont une vignette touche le rectangle `r` (sélection au lasso rectangulaire), sans
+/// doublon, dans l'ordre du film.
 pub fn cards_in(layout: &BoardLayout, r: Rect) -> Vec<usize> {
-    layout.cards.iter().filter(|c| c.card.intersects(r)).map(|c| c.panel).collect()
+    let mut plans: Vec<usize> = layout.cards.iter().filter(|c| c.card.intersects(r)).map(|c| c.panel).collect();
+    plans.dedup();
+    plans
 }
-
 // ---------------------------------------------------------------- notes
 
 /// Un trait de note. Libre : points en coordonnées de la planche. Attaché (`anchor` : id du

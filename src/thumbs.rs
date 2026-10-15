@@ -17,7 +17,7 @@ struct Entry {
 /// Temps accordé aux vignettes par image d'écran (au moins une est refaite à chaque fois).
 pub const THUMB_TIME: Duration = Duration::from_millis(6);
 
-/// Vignettes des plans (première image), refaites seulement quand leur contenu change,
+/// Vignettes des plans et de leurs images de storyboard, refaites seulement quand leur contenu change,
 /// et seulement quelques millisecondes par image d'écran pour ne pas saccader l'interface.
 /// Une vignette par plan et par largeur demandée (la bande et la planche n'ont pas la même).
 #[derive(Default)]
@@ -44,6 +44,7 @@ pub fn width_for(pixels: f32) -> usize {
 }
 
 impl Thumbs {
+    /// Vignette de la première image du plan `panel`.
     pub fn texture(
         &mut self,
         ctx: &egui::Context,
@@ -52,15 +53,31 @@ impl Thumbs {
         width: usize,
         deadline: Instant,
     ) -> Option<TextureId> {
-        let s = &doc.panels[panel];
-        let slot = (s.id, width);
-        let plan = render::panel_plan_at(doc, panel, 0, Some(doc.paper));
+        let id = doc.panels[panel].id;
+        self.texture_at(ctx, doc, panel, 0, id, width, deadline)
+    }
+
+    /// Vignette de l'image `frame` du plan `panel`, rangée sous `id` (le plan, ou une marque
+    /// d'image : une image de storyboard, 13a).
+    #[allow(clippy::too_many_arguments)]
+    pub fn texture_at(
+        &mut self,
+        ctx: &egui::Context,
+        doc: &Document,
+        panel: usize,
+        frame: usize,
+        id: u64,
+        width: usize,
+        deadline: Instant,
+    ) -> Option<TextureId> {
+        let slot = (id, width);
+        let plan = render::panel_plan_at(doc, panel, frame, Some(doc.paper));
         let versions = plan
             .items
             .iter()
             .map(|i| doc.cels.get(&i.cel).map_or(0, |c| c.version))
             .collect();
-        let cam = doc.panel_camera(panel, 0);
+        let cam = doc.panel_camera(panel, frame);
         let key = (plan, versions, [cam.x, cam.y, cam.zoom, cam.angle, cam.dolly, cam.tilt, cam.pan].map(f32::to_bits));
         let fresh = self.entries.get(&slot).is_some_and(|e| e.key == key);
         if fresh || Instant::now() >= deadline {
@@ -71,7 +88,7 @@ impl Thumbs {
             return self
                 .entries
                 .get(&slot)
-                .or_else(|| self.entries.iter().find(|(k, _)| k.0 == s.id).map(|(_, e)| e))
+                .or_else(|| self.entries.iter().find(|(k, _)| k.0 == id).map(|(_, e)| e))
                 .map(|e| e.texture.id());
         }
         let (tw, th) = thumb_size(doc, width);
@@ -82,7 +99,7 @@ impl Thumbs {
                 e.key = key;
             }
             None => {
-                let texture = ctx.load_texture(format!("vignette-{}-{width}", s.id), image, TextureOptions::LINEAR);
+                let texture = ctx.load_texture(format!("vignette-{id}-{width}"), image, TextureOptions::LINEAR);
                 self.entries.insert(slot, Entry { key, texture });
             }
         }
@@ -90,7 +107,7 @@ impl Thumbs {
     }
 
     pub fn prune(&mut self, doc: &Document) {
-        self.entries.retain(|(id, _), _| doc.panels.iter().any(|s| s.id == *id));
+        self.entries.retain(|(id, _), _| doc.panels.iter().any(|s| s.id == *id || s.marks.iter().any(|m| m.id == *id)));
     }
 
     pub fn clear(&mut self) {

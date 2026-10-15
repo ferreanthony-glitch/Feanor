@@ -190,9 +190,8 @@ impl App {
             }
             Format::Pdf => {
                 let Some(out) = save_dialog(&base, Format::Pdf) else { return };
-                let panels = export::panels_of(&frames);
-                let boards = panels.iter().map(|&p| export::board_of(&self.doc, p)).collect();
-                self.export_job = Some(ExportJob::pdf(&out, &base, &panels, boards, self.doc.frame));
+                let (shots, boards) = export::storyboard_of(&self.doc, &export::panels_of(&frames));
+                self.export_job = Some(ExportJob::pdf(&out, &base, shots, boards, self.doc.frame));
             }
             Format::Mp4 | Format::ProRes => {
                 let Some((ffmpeg, Ok(enc))) = self.ffmpeg_info().cloned() else {

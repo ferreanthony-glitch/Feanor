@@ -49,22 +49,21 @@ pub fn duration_label(frames: usize, fps: u32) -> String {
     }
 }
 
-/// « Sc 3 · P 2 » : numéro de scène et de panneau, pour les vignettes.
+/// « Plan 3 » : le numéro (ou le nom) du plan, pour les vignettes et les barres (13a).
 pub(crate) fn panel_title(doc: &Document, index: usize) -> String {
-    let (n, _) = doc.panel_number(index);
-    format!("Sc {} · P {}", doc.scene_label(doc.panels[index].scene), n)
+    format!("Plan {}", doc.scene_label(doc.panels[index].scene))
 }
 
-/// « Scène 3 — panneau 2/4 » : pour la fiche et la barre d'état.
+/// « Séquence 1 — plan 3 » : pour la fiche et la barre d'état.
 pub fn panel_long_title(doc: &Document, index: usize) -> String {
-    let (n, count) = doc.panel_number(index);
-    format!("Scène {} — panneau {n}/{count}", doc.scene_label(doc.panels[index].scene))
+    let seq = doc.sequence_of(index);
+    format!("Séquence {} — plan {}", doc.sequence_label(seq), doc.scene_label(doc.panels[index].scene))
 }
 
 impl App {
-    // ------------------------------------------------------------------ opérations sur les panneaux
+    // ------------------------------------------------------------------ opérations sur les plans
 
-    /// Applique une opération de montage du modèle (avec annulation) et rend courant le panneau
+    /// Applique une opération de montage du modèle (avec annulation) et rend courant le plan
     /// qu'elle désigne. `None` = opération refusée.
     fn structure_op(&mut self, op: impl FnOnce(&mut Document, usize) -> Option<usize>) -> bool {
         self.end_stroke();
@@ -75,7 +74,7 @@ impl App {
         let Some(index) = op(&mut self.doc, self.cur_panel) else {
             return false;
         };
-        // Les notes attachées à un panneau qui n'est plus là restent sur la planche, libres.
+        // Les notes attachées à une image qui n'est plus là restent sur la planche, libres.
         self.release_removed_notes(&board_before);
         if self.doc.panels[index].id != before {
             self.cur_frame = 0;
@@ -88,19 +87,14 @@ impl App {
         true
     }
 
-    /// Nouveau panneau juste après le panneau courant, dans la même scène.
+    /// Nouveau plan juste après le plan courant, dans la même séquence.
     pub(crate) fn new_panel(&mut self) {
-        self.structure_op(|d, i| Some(d.add_panel_after(i)));
-    }
-
-    /// Nouvelle scène (avec un panneau) après la scène courante, dans la même séquence.
-    pub(crate) fn new_scene(&mut self) {
         if self.structure_op(|d, i| Some(d.add_scene_after(i))) {
-            self.status = format!("Nouvelle scène {}.", self.doc.scene_label(self.panel().scene));
+            self.status = format!("Nouveau {}.", panel_title(&self.doc, self.cur_panel).to_lowercase());
         }
     }
 
-    /// Nouvelle séquence (une scène, un panneau) après la séquence courante.
+    /// Nouvelle séquence (avec un plan) après la séquence courante.
     pub(crate) fn new_sequence(&mut self) {
         if self.structure_op(|d, i| Some(d.add_sequence_after(i))) {
             let seq = self.doc.sequence_of(self.cur_panel);
@@ -108,104 +102,80 @@ impl App {
         }
     }
 
+    /// Copie du plan courant, juste après lui.
     pub(crate) fn duplicate_panel(&mut self) {
-        self.structure_op(|d, i| Some(d.duplicate_panel_after(i)));
-    }
-
-    /// Copie de toute la scène courante, placée juste après elle.
-    pub(crate) fn duplicate_scene(&mut self) {
         self.structure_op(|d, i| Some(d.duplicate_scene_after(i)));
     }
 
-    /// Supprime la scène courante et tous ses panneaux.
-    pub(crate) fn delete_scene(&mut self) {
-        if !self.structure_op(|d, i| d.remove_scene(i)) {
-            self.status = "Impossible de supprimer la seule scène du projet.".into();
-        }
-    }
-
-    // ------------------------------------------------------------------ panneaux choisis (12e)
+    // ------------------------------------------------------------------ plans choisis (12e)
 
     /// Le montage (ou la planche) a la main, en storyboard : copier, coller et supprimer y visent
-    /// les panneaux choisis.
+    /// les plans choisis.
     pub(crate) fn panels_have_focus(&self) -> bool {
         self.panel_focus && self.mode == Mode::Storyboard
     }
 
-    /// Copie les panneaux choisis (le panneau courant en fait toujours partie).
+    /// Copie les plans choisis (le plan courant en fait toujours partie).
     pub(crate) fn copy_panels(&mut self) {
         let ids = self.board_selection();
         let Some(clip) = self.doc.copy_panels(&ids) else { return };
         self.status = match clip.panels.len() {
-            1 => format!("Panneau {} copié.", panel_title(&self.doc, self.cur_panel)),
-            n => format!("{n} panneaux copiés."),
+            1 => format!("{} copié.", panel_title(&self.doc, self.cur_panel)),
+            n => format!("{n} plans copiés."),
         };
         self.panel_clipboard = Some(clip);
     }
 
-    /// Copie les panneaux choisis, puis les retire.
+    /// Copie les plans choisis, puis les retire.
     pub(crate) fn cut_panels(&mut self) {
         self.copy_panels();
         let ids = self.board_selection();
         self.delete_panels(&ids);
     }
 
-    /// Colle les panneaux copiés juste après le panneau courant, dans sa scène ; ils deviennent
-    /// les panneaux choisis.
+    /// Colle les plans copiés juste après le plan courant ; ils deviennent les plans choisis.
     pub(crate) fn paste_panels(&mut self) {
         let Some(clip) = self.panel_clipboard.take() else {
-            self.status = "Aucun panneau copié.".into();
+            self.status = "Aucun plan copié.".into();
             return;
         };
         let n = clip.panels.len();
         let after = panel_title(&self.doc, self.cur_panel);
-        if self.structure_op(|d, i| d.paste_panels(&clip, i)) {
+        if self.structure_op(|d, i| d.paste_plans(&clip, i)) {
             let end = (self.cur_panel + n).min(self.doc.panels.len());
             self.board_sel = self.doc.panels[self.cur_panel..end].iter().map(|p| p.id).collect();
             self.status = match n {
-                1 => format!("Panneau collé après {after}."),
-                n => format!("{n} panneaux collés après {after}."),
+                1 => format!("Plan collé après le {}.", after.to_lowercase()),
+                n => format!("{n} plans collés après le {}.", after.to_lowercase()),
             };
         } else {
-            self.status = "Ces panneaux viennent d'un projet d'une autre taille : ils ne se collent pas ici.".into();
+            self.status = "Ces plans viennent d'un projet d'une autre taille : ils ne se collent pas ici.".into();
         }
         self.panel_clipboard = Some(clip);
     }
 
-    /// Supprime les panneaux choisis (une étape d'annulation).
+    /// Supprime les plans choisis (une étape d'annulation).
     pub(crate) fn delete_chosen_panels(&mut self) {
         let ids = self.board_selection();
         self.delete_panels(&ids);
     }
 
-    /// Déplace les panneaux `ids` (dont le panneau `dragged`) à la place `slot` de la bande. Comme
-    /// un panneau seul, le groupe reste dans la scène du panneau tiré s'il retombe à côté d'elle ;
-    /// sinon il rejoint la scène du panneau devant lequel on le pose (ou du dernier, à la fin).
-    fn move_chosen_panels(&mut self, ids: &[u64], dragged: usize, slot: usize) {
-        let own = self.doc.panels[dragged].scene;
-        let left = slot.checked_sub(1).and_then(|i| self.doc.panels.get(i)).map(|p| p.scene);
-        let right = self.doc.panels.get(slot).map(|p| (p.scene, p.id));
-        let scene = if left == Some(own) || right.is_some_and(|r| r.0 == own) {
-            own
-        } else {
-            right.map(|r| r.0).or(left).unwrap_or(own)
-        };
+    /// Déplace les plans `ids` à la place `slot` de la bande (voir `Document::move_plans`) ; le
+    /// plan courant reste courant.
+    fn move_chosen_panels(&mut self, ids: &[u64], slot: usize) {
+        let before = self.doc.panels.get(slot).map(|p| p.id);
         let current = self.panel().id;
         let ids = ids.to_vec();
         self.structure_op(|d, _| {
-            d.move_panels(&ids, scene, right.map(|r| r.1))?;
+            d.move_plans(&ids, before)?;
             d.panels.iter().position(|p| p.id == current)
         });
     }
 
-    /// Déplace le panneau `from` à la place `slot` (voir `Document::move_panel`).
+    /// Déplace le plan `from` à la place `slot` (0 = au début, nombre de plans = à la fin).
     pub(crate) fn move_panel(&mut self, from: usize, slot: usize) {
-        let current = self.panel().id;
-        self.structure_op(|d, _| {
-            d.move_panel(from, slot)?;
-            // Le panneau courant reste courant, même si ce n'est pas lui qu'on a déplacé.
-            d.panels.iter().position(|p| p.id == current)
-        });
+        let id = self.doc.panels[from].id;
+        self.move_chosen_panels(&[id], slot);
     }
 
     pub(crate) fn shift_panel(&mut self, later: bool) {
@@ -217,56 +187,46 @@ impl App {
         }
     }
 
-    /// Coupe le panneau courant à l'image courante (F5).
+    /// Coupe le plan courant à l'image courante (F5) : la suite devient un nouveau plan.
     pub(crate) fn split_current_panel(&mut self) {
         let at = self.cur_frame;
-        if self.structure_op(|d, i| d.split_panel(i, at)) {
-            self.status = format!("Panneau coupé : la suite est {}.", panel_long_title(&self.doc, self.cur_panel));
+        if self.structure_op(|d, i| d.split_plan(i, at)) {
+            self.status = format!("Plan coupé : la suite est le {}.", panel_title(&self.doc, self.cur_panel).to_lowercase());
         } else {
-            self.status = "Place la tête de lecture dans le panneau, après sa première image, pour le couper.".into();
+            self.status = "Place la tête de lecture dans le plan, après sa première image, pour le couper.".into();
         }
     }
 
-    /// Réunit le panneau courant et le suivant (de la même scène).
+    /// Réunit le plan courant et le suivant (de la même séquence) : le début du suivant devient
+    /// une marque d'image.
     pub(crate) fn merge_next_panel(&mut self) {
-        if self.structure_op(|d, i| d.merge_with_next(i)) {
-            self.status = format!("Panneaux réunis : {}.", panel_long_title(&self.doc, self.cur_panel));
+        if self.structure_op(|d, i| d.join_next_plan(i)) {
+            self.status = format!("Plans réunis : {}.", panel_title(&self.doc, self.cur_panel));
         } else {
-            self.status = "Pas de panneau suivant dans cette scène.".into();
+            self.status = "Pas de plan suivant dans cette séquence.".into();
         }
     }
 
-    /// Le panneau courant et les suivants de sa scène forment une nouvelle scène.
-    pub(crate) fn split_current_scene(&mut self) {
-        if self.structure_op(|d, i| d.split_scene(i)) {
-            self.status = format!("Scène coupée : nouvelle scène {}.", self.doc.scene_label(self.panel().scene));
-        } else {
-            self.status = "Le panneau courant est le premier de sa scène : rien à couper.".into();
-        }
-    }
-
-    /// La scène courante rejoint la scène précédente.
+    /// Réunit le plan précédent (de la même séquence) et le plan courant.
     pub(crate) fn join_previous_scene(&mut self) {
-        if self.structure_op(|d, i| d.join_previous_scene(i)) {
-            self.status = format!("Scènes réunies : scène {}.", self.doc.scene_label(self.panel().scene));
+        if self.structure_op(|d, i| d.join_next_plan(i.checked_sub(1)?)) {
+            self.status = format!("Plans réunis : {}.", panel_title(&self.doc, self.cur_panel));
         } else {
-            self.status = "Pas de scène précédente dans cette séquence.".into();
+            self.status = "Pas de plan précédent dans cette séquence.".into();
         }
     }
 
-    /// Premier panneau de la scène précédente (ou suivante).
+    /// Plan précédent (ou suivant).
     pub(crate) fn step_scene(&mut self, forward: bool) {
-        let (start, end) = self.doc.scene_run(self.cur_panel);
         let target = if forward {
-            (end < self.doc.panels.len()).then_some(end)
+            (self.cur_panel + 1 < self.doc.panels.len()).then_some(self.cur_panel + 1)
         } else {
-            start.checked_sub(1).map(|i| self.doc.scene_run(i).0)
+            self.cur_panel.checked_sub(1)
         };
         if let Some(i) = target {
             self.select_panel(i);
         }
     }
-
     /// Durée du plan courant. Chaque valeur repart du plan tel qu'il était au début du geste
     /// (raccourcir puis rallonger ne perd rien), avec une seule étape d'annulation par geste.
     pub(crate) fn edit_panel_length(&mut self, n: usize) {
@@ -381,17 +341,14 @@ impl App {
         bulle(resp, "Position", "Image courante / durée du montage (minutes:secondes:images).", "");
         sep(ui);
 
-        // Panneaux, scènes, séquences.
-        if self.bouton(ui, ph::PLUS_SQUARE, "Nouveau panneau", "Après le panneau courant, dans la même scène.", "panneau.nouveau").clicked() {
+        // Plans et séquences.
+        if self.bouton(ui, ph::PLUS_SQUARE, "Nouveau plan", "Après le plan courant, dans la même séquence.", "panneau.nouveau").clicked() {
             self.new_panel();
         }
-        if self.bouton(ui, ph::FOLDER_SIMPLE_PLUS, "Nouvelle scène", "Après la scène courante.", "scene.nouvelle").clicked() {
-            self.new_scene();
-        }
-        if self.bouton(ui, ph::STACK_PLUS, "Nouvelle séquence", "Après la séquence courante.", "sequence.nouvelle").clicked() {
+        if self.bouton(ui, ph::STACK_PLUS, "Nouvelle séquence", "Après la séquence courante, avec un plan.", "sequence.nouvelle").clicked() {
             self.new_sequence();
         }
-        // Panneaux choisis (Ctrl ou Maj + clic dans la bande) : copier, coller, supprimer (12e).
+        // Plans choisis (Ctrl ou Maj + clic dans la bande) : copier, coller, supprimer (12e).
         let n = self.board_selection().len();
         let chosen = if n > 1 { format!("Les {n} panneaux choisis.") } else { "Le panneau courant ; Ctrl ou Maj + clic pour en choisir plusieurs.".to_string() };
         if self.bouton(ui, ph::COPY, "Copier les panneaux", &chosen, "edition.copier").clicked() {
@@ -831,7 +788,7 @@ impl App {
                 Some(MontageDrag::Move { panel, target }) => {
                     let ids = self.board_selection();
                     if ids.len() > 1 {
-                        self.move_chosen_panels(&ids, panel, target);
+                        self.move_chosen_panels(&ids, target);
                     } else {
                         self.move_panel(panel, target);
                     }
@@ -987,7 +944,11 @@ impl App {
     pub(crate) fn panel_inspector(&mut self, ui: &mut egui::Ui) {
         let i = self.cur_panel;
         let fps = self.doc.fps;
-        let (n, count) = self.doc.panel_number(i);
+        // Image de storyboard sous la tête de lecture (13a) : le début du plan ou une marque d'image.
+        let f = self.cur_frame.min(self.frame_count().saturating_sub(1));
+        let mark = self.doc.board_mark_at(i, f).map(|m| m.id);
+        let boards = 1 + self.doc.panels[i].marks.len();
+        let k = mark.and_then(|id| self.doc.panels[i].marks.iter().position(|m| m.id == id)).map_or(1, |p| p + 2);
         let scene = self.doc.panels[i].scene;
         let seq = self.doc.sequence_of(i);
         let scene_number = self.doc.scene_number(scene).to_string();
@@ -1013,7 +974,7 @@ impl App {
                 }
             }
             ui.end_row();
-            ui.label("Scène");
+            ui.label("Plan");
             if let Some(mut name) = self.doc.scene(scene).map(|s| s.name.clone()) {
                 let resp = ui
                     .add(
@@ -1021,7 +982,7 @@ impl App {
                             .hint_text(scene_number)
                             .desired_width(150.0),
                     )
-                    .on_hover_text("Numéro ou nom de la scène (vide = numéro automatique)");
+                    .on_hover_text("Numéro ou nom du plan (vide = numéro automatique)");
                 if self.edited(&resp) {
                     if let Some(s) = self.doc.scene_mut(scene) {
                         s.name = name;
@@ -1029,8 +990,9 @@ impl App {
                 }
             }
             ui.end_row();
-            ui.label("Panneau");
-            ui.label(format!("{n} sur {count}"));
+            ui.label("Image");
+            ui.label(format!("{k} sur {boards}"))
+                .on_hover_text("Images de storyboard du plan : son début, puis chacune de ses marques d'image. Les textes ci-dessous sont ceux de l'image où est la tête de lecture.");
             ui.end_row();
             ui.label("Durée");
             ui.horizontal(|ui| {
@@ -1043,7 +1005,10 @@ impl App {
         self.camera_fields(ui);
         for (label, field, rows) in [("Action", 0, 3), ("Dialogue", 1, 2), ("Notes", 2, 2)] {
             let p = &self.doc.panels[i];
-            let mut text = [&p.action, &p.dialogue, &p.notes][field].clone();
+            let mut text = match p.marks.iter().find(|m| Some(m.id) == mark) {
+                Some(m) => [&m.action, &m.dialogue, &m.notes][field].clone(),
+                None => [&p.action, &p.dialogue, &p.notes][field].clone(),
+            };
             ui.label(label);
             let resp = ui.add(
                 egui::TextEdit::multiline(&mut text)
@@ -1052,7 +1017,10 @@ impl App {
             );
             if self.edited(&resp) {
                 let p = &mut self.doc.panels[i];
-                *[&mut p.action, &mut p.dialogue, &mut p.notes][field] = text;
+                match p.marks.iter_mut().find(|m| Some(m.id) == mark) {
+                    Some(m) => *[&mut m.action, &mut m.dialogue, &mut m.notes][field] = text,
+                    None => *[&mut p.action, &mut p.dialogue, &mut p.notes][field] = text,
+                }
             }
         }
     }

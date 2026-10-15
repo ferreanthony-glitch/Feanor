@@ -384,19 +384,36 @@ pub fn panels_of(frames: &[(usize, usize)]) -> Vec<usize> {
     out
 }
 
-/// Ce que le PDF écrit du panneau `index`.
-pub fn board_of(doc: &Document, index: usize) -> pdf::Board {
-    let panel = &doc.panels[index];
-    pdf::Board {
-        title: crate::storyboard::panel_long_title(doc, index),
-        duration: crate::storyboard::duration_label(panel.frame_count(), doc.fps),
-        sequence: doc.sequence_label(doc.sequence_of(index)),
-        action: panel.action.clone(),
-        dialogue: panel.dialogue.clone(),
-        notes: panel.notes.clone(),
+/// Images de storyboard des plans `panels` (13a) : le début de chaque plan, puis chacune de ses
+/// marques d'image ; pour chacune, l'image à rendre (plan, image du plan) et ce que le PDF en
+/// écrit (ses textes à elle).
+pub fn storyboard_of(doc: &Document, panels: &[usize]) -> (Vec<(usize, usize)>, Vec<pdf::Board>) {
+    let mut frames = Vec::new();
+    let mut boards = Vec::new();
+    for &i in panels {
+        let p = &doc.panels[i];
+        for (k, (id, start, end)) in crate::board::plan_boards(doc, i).into_iter().enumerate() {
+            let (action, dialogue, notes) = match p.marks.iter().find(|m| m.id == id) {
+                Some(m) => (m.action.clone(), m.dialogue.clone(), m.notes.clone()),
+                None => (p.action.clone(), p.dialogue.clone(), p.notes.clone()),
+            };
+            let mut title = crate::storyboard::panel_long_title(doc, i);
+            if k > 0 {
+                title = format!("{title} · image {}", k + 1);
+            }
+            frames.push((i, start));
+            boards.push(pdf::Board {
+                title,
+                duration: crate::storyboard::duration_label(end - start, doc.fps),
+                sequence: doc.sequence_label(doc.sequence_of(i)),
+                action,
+                dialogue,
+                notes,
+            });
+        }
     }
+    (frames, boards)
 }
-
 enum Sent {
     Ok,
     Full(Image),
@@ -626,8 +643,9 @@ impl ExportJob {
         ))
     }
 
-    /// Storyboard PDF `out` : une planche par panneau de `boards` (image de début de panneau).
-    pub fn pdf(out: &Path, title: &str, panels: &[usize], boards: Vec<pdf::Board>, frame: [usize; 2]) -> ExportJob {
+    /// Storyboard PDF `out` : une planche par image de storyboard de `boards`, rendue à l'image
+    /// `frames` correspondante (plan, image du plan ; voir `storyboard_of`).
+    pub fn pdf(out: &Path, title: &str, frames: Vec<(usize, usize)>, boards: Vec<pdf::Board>, frame: [usize; 2]) -> ExportJob {
         let (tx, rx) = sync_channel::<(usize, Image)>(QUEUE);
         let cancelled = Arc::new(AtomicBool::new(false));
         let (stop, path, name) = (cancelled.clone(), out.to_path_buf(), title.to_string());
@@ -649,9 +667,9 @@ impl ExportJob {
             std::fs::write(&path, bytes).map_err(|e| format!("{} : {e}", path.display()))
         });
         let mut job = ExportJob::new(
-            format!("Export du storyboard ({n} panneaux)"),
+            format!("Export du storyboard ({n} images)"),
             out.to_path_buf(),
-            panels.iter().map(|&p| (p, 0)).collect(),
+            frames,
             true,
             Sink::Pdf {
                 tx: Some(tx),
@@ -659,7 +677,7 @@ impl ExportJob {
                 cancelled,
             },
         );
-        job.unit = "Panneau";
+        job.unit = "Image de storyboard";
         job
     }
 

@@ -123,8 +123,9 @@ fn pdf_export_job() {
     let frames = export::frames_for(&doc, Range::Montage, 0);
     let panels = export::panels_of(&frames);
     assert_eq!(panels, (0..8).collect::<Vec<_>>());
-    let boards = panels.iter().map(|&p| export::board_of(&doc, p)).collect();
-    let mut job = ExportJob::pdf(&out, "Essai", &panels, boards, doc.frame);
+    let (shots, boards) = export::storyboard_of(&doc, &panels);
+    assert_eq!(shots.len(), 8, "sans marque d'image : une planche par plan");
+    let mut job = ExportJob::pdf(&out, "Essai", shots, boards, doc.frame);
     let t = std::time::Instant::now();
     while job.outcome.is_none() {
         job.step(&doc, Duration::from_millis(20));
@@ -134,12 +135,12 @@ fn pdf_export_job() {
     assert!(matches!(job.outcome, Some(Ok(_))), "{:?}", job.outcome);
     let bytes = std::fs::read(&out).unwrap();
     let text = String::from_utf8_lossy(&bytes);
-    assert_eq!(text.matches("/Type /Page /Parent").count(), 2, "8 panneaux = 2 pages");
+    assert_eq!(text.matches("/Type /Page /Parent").count(), 2, "8 planches = 2 pages");
     assert_eq!(text.matches("/Filter /DCTDecode").count(), 8);
     // Annuler : pas de fichier.
     let out2 = dir.join("annule.pdf");
-    let boards = panels.iter().map(|&p| export::board_of(&doc, p)).collect();
-    let mut job = ExportJob::pdf(&out2, "Essai", &panels, boards, doc.frame);
+    let (shots, boards) = export::storyboard_of(&doc, &panels);
+    let mut job = ExportJob::pdf(&out2, "Essai", shots, boards, doc.frame);
     job.step(&doc, Duration::from_millis(5));
     job.cancel();
     assert!(!out2.exists());

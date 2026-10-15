@@ -11,7 +11,7 @@ fn a_new_project_is_summed_up() {
     assert_eq!(r.sequences[0].scenes.len(), 1);
     let panneaux = &r.sequences[0].scenes[0].panneaux;
     assert_eq!(panneaux.len(), 1);
-    assert_eq!(panneaux[0].titre, "Sc 1 · P 1");
+    assert_eq!(panneaux[0].titre, "Plan 1");
     assert_eq!(panneaux[0].debut, "0:00:00");
     assert_eq!(r.images, panneaux[0].images);
 }

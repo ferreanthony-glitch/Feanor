@@ -202,16 +202,16 @@ impl Projet {
         Ok(self.doc.panels[index].frame_count())
     }
 
-    /// Storyboard PDF de tout le projet dans `sortie` (une planche par panneau, comme le menu
-    /// Fichier de Pelure).
+    /// Storyboard PDF de tout le projet dans `sortie` (une planche par image de storyboard, comme
+    /// le menu Fichier de Pelure).
     pub fn exporter_pdf(&self, sortie: &Path, titre: &str) -> Result<(), String> {
         let doc = &self.doc;
-        let mut boards = Vec::with_capacity(doc.panels.len());
-        let mut images = Vec::with_capacity(doc.panels.len());
-        for i in 0..doc.panels.len() {
-            boards.push(export::board_of(doc, i));
-            let plan = render::panel_plan_at(doc, i, 0, Some(doc.paper));
-            let img = render::camera_image(doc, &plan, &doc.panel_camera(i, 0));
+        let all: Vec<usize> = (0..doc.panels.len()).collect();
+        let (frames, boards) = export::storyboard_of(doc, &all);
+        let mut images = Vec::with_capacity(frames.len());
+        for (i, f) in frames {
+            let plan = render::panel_plan_at(doc, i, f, Some(doc.paper));
+            let img = render::camera_image(doc, &plan, &doc.panel_camera(i, f));
             images.push(export::board_image(&img, doc.frame)?);
         }
         let aspect = doc.frame[0] as f32 / doc.frame[1].max(1) as f32;
