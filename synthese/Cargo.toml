@@ -1,0 +1,23 @@
+[package]
+name = "synthese"
+version = "0.1.0"
+edition = "2021"
+description = "Synthèse d'image par l'exemple pour Pelure : portage en Rust d'ebsynth (version processeur)"
+
+# Projet Cargo à part (son propre Cargo.lock et son dossier target), comme src-tauri/ : Pelure
+# l'utilisera par son chemin quand la propagation arrivera dans l'interface.
+[workspace]
+
+# Aucune dépendance : la bibliothèque ne travaille que sur des tampons d'octets.
+[dependencies]
+
+# Lecture et écriture des PNG, seulement pour les outils en ligne de commande (examples/) et les essais.
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+# Calcul pixel : même en debug on optimise, sinon les essais sur de vraies images durent des minutes.
+[profile.dev]
+opt-level = 3
+
+[profile.release]
+opt-level = 3

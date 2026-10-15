@@ -658,6 +658,9 @@ Décisions d'Anthony :
   - Menu de la ligne du calque CTG : choisir ses sources (aucune : tous les autres calques de
     dessin) ; « Charger la structure à partir des sources » (et « (effacer) »), seule commande
     retenue par Anthony.
+  - Fermeture automatique des trous (demandée par Anthony) : un trou des traits jusqu'à
+    8 pixels par défaut (réglable par calque CTG, menu de sa ligne) ne laisse pas fuir la
+    couleur.
   - Pas repris (choix d'Anthony) : graffitis répétés sur les instances vides ou de même nom,
     extraire les couleurs, réglages d'affichage des graffitis. Pas fait non plus :
     « Appliquer les changements » (le remplissage est toujours à jour).

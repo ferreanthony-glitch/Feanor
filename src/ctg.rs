@@ -20,10 +20,35 @@ use crate::document::{CelId, Layer};
 use crate::raster::{Raster, TILE};
 
 /// Réglages d'un calque CTG : ses calques sources (id de calque ; aucun : tous les autres
-/// calques de dessin du plan).
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+/// calques de dessin du plan), et la fermeture automatique des trous (demandée par Anthony le
+/// 2026-10-16) : un trou des traits jusqu'à `2 × gap` pixels ne laisse pas fuir la couleur
+/// (0 : pas de fermeture).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Ctg {
     pub sources: Vec<u64>,
+    #[serde(default = "default_gap")]
+    pub gap: u8,
+}
+
+/// Fermeture des trous d'un calque CTG neuf, en pixels de chaque côté du trou.
+pub const DEFAULT_GAP: u8 = 4;
+
+fn default_gap() -> u8 {
+    DEFAULT_GAP
+}
+
+impl Default for Ctg {
+    fn default() -> Self {
+        Ctg { sources: Vec::new(), gap: DEFAULT_GAP }
+    }
+}
+
+/// Ce que le remplissage d'un calque CTG lit à une image : les dessins de ses sources et sa
+/// fermeture des trous.
+#[derive(Clone, Debug, PartialEq, Hash)]
+pub struct CtgInput {
+    pub sources: Vec<CelId>,
+    pub gap: u8,
 }
 
 /// Opacité à partir de laquelle un pixel des sources est un trait (il ferme les zones).
@@ -46,9 +71,43 @@ pub fn source_cels(layers: &[Layer], li: usize, frame: usize) -> Vec<CelId> {
     source_layers(layers, li).into_iter().filter_map(|k| layers[k].shown_at(frame)).collect()
 }
 
+/// Ce que lit le remplissage du calque CTG `li` à l'image `frame` ; rien pour un calque ordinaire.
+pub fn input(layers: &[Layer], li: usize, frame: usize) -> Option<CtgInput> {
+    let ctg = layers.get(li)?.ctg.as_ref()?;
+    Some(CtgInput { sources: source_cels(layers, li, frame), gap: ctg.gap })
+}
+
+/// Les traits épaissis de `r` pixels (carré) : les pixels à moins de `r` d'un trait, en lignes
+/// puis en colonnes (deux balayages par sens).
+fn thicken(line: &[bool], w: usize, h: usize, r: usize) -> Vec<bool> {
+    let pass = |src: &[bool], n: usize, len: usize, at: &dyn Fn(usize, usize) -> usize| -> Vec<bool> {
+        let mut out = vec![false; src.len()];
+        for k in 0..n {
+            // Distance au dernier trait vu, de gauche à droite puis de droite à gauche.
+            let mut d = usize::MAX;
+            for i in 0..len {
+                d = if src[at(k, i)] { 0 } else { d.saturating_add(1) };
+                if d <= r {
+                    out[at(k, i)] = true;
+                }
+            }
+            d = usize::MAX;
+            for i in (0..len).rev() {
+                d = if src[at(k, i)] { 0 } else { d.saturating_add(1) };
+                if d <= r {
+                    out[at(k, i)] = true;
+                }
+            }
+        }
+        out
+    };
+    let rows = pass(line, h, w, &|y, x| y * w + x);
+    pass(&rows, w, h, &|x, y| y * w + x)
+}
+
 /// Le remplissage : les zones fermées par les traits de `sources`, touchées par `graffiti`,
-/// remplies de leur couleur.
-pub fn fill(sources: &[&Raster], graffiti: &Raster) -> Raster {
+/// remplies de leur couleur. `gap` : les trous des traits jusqu'à `2 × gap` pixels sont fermés.
+pub fn fill(sources: &[&Raster], graffiti: &Raster, gap: usize) -> Raster {
     let (w, h) = (graffiti.width, graffiti.height);
     let mut out = Raster::new(w, h);
     if w == 0 || h == 0 {
@@ -69,6 +128,9 @@ pub fn fill(sources: &[&Raster], graffiti: &Raster) -> Raster {
             }
         }
     }
+    // Murs des zones : les traits, épaissis de `gap` pixels pour fermer les trous.
+    let solid: Vec<bool> = line.iter().map(|&a| a >= LINE_ALPHA).collect();
+    let wall = if gap > 0 { thicken(&solid, w, h, gap) } else { solid.clone() };
     // Couleur de chaque pixel : 0 = rien, sinon rang + 1 dans `colors`.
     let mut colors: Vec<Color32> = Vec::new();
     let mut color_of = vec![0u32; w * h];
@@ -84,7 +146,7 @@ pub fn fill(sources: &[&Raster], graffiti: &Raster) -> Raster {
                     continue;
                 }
                 let start = (oy + y) * w + ox + x;
-                if seen[start] || line[start] >= LINE_ALPHA {
+                if seen[start] || wall[start] {
                     continue;
                 }
                 // La zone de ce graffiti, et les couleurs des graffitis qui la touchent.
@@ -101,7 +163,7 @@ pub fn fill(sources: &[&Raster], graffiti: &Raster) -> Raster {
                     }
                     let (px, py) = (p % w, p / w);
                     let mut visit = |q: usize| {
-                        if !seen[q] && line[q] < LINE_ALPHA {
+                        if !seen[q] && !wall[q] {
                             seen[q] = true;
                             stack.push(q);
                         }
@@ -131,22 +193,10 @@ pub fn fill(sources: &[&Raster], graffiti: &Raster) -> Raster {
     if colors.is_empty() {
         return out;
     }
-    // Sous les traits : la couleur gagne les pixels de trait voisins, `UNDER` fois d'un pixel.
-    for _ in 0..UNDER {
-        let before = color_of.clone();
-        for y in 0..h {
-            for x in 0..w {
-                let p = y * w + x;
-                if before[p] != 0 || line[p] == 0 {
-                    continue;
-                }
-                let near = [(x > 0).then(|| p - 1), (x + 1 < w).then(|| p + 1), (y > 0).then(|| p - w), (y + 1 < h).then(|| p + w)];
-                if let Some(k) = near.into_iter().flatten().map(|q| before[q]).find(|&k| k != 0) {
-                    color_of[p] = k;
-                }
-            }
-        }
-    }
+    // La couleur regagne la bande d'épaississement (hors des vrais traits), puis passe sous les
+    // traits voisins (`UNDER` pixels).
+    grow(&mut color_of, w, h, gap, |p| !solid[p]);
+    grow(&mut color_of, w, h, UNDER, |p| line[p] != 0);
     for (p, &k) in color_of.iter().enumerate() {
         if k != 0 {
             let (x, y) = (p % w, p / w);
@@ -155,6 +205,30 @@ pub fn fill(sources: &[&Raster], graffiti: &Raster) -> Raster {
         }
     }
     out
+}
+
+/// `times` fois : chaque pixel sans couleur où `can` permet d'aller prend la couleur d'un voisin.
+fn grow(color_of: &mut [u32], w: usize, h: usize, times: usize, can: impl Fn(usize) -> bool) {
+    for _ in 0..times {
+        let before = color_of.to_vec();
+        let mut changed = false;
+        for y in 0..h {
+            for x in 0..w {
+                let p = y * w + x;
+                if before[p] != 0 || !can(p) {
+                    continue;
+                }
+                let near = [(x > 0).then(|| p - 1), (x + 1 < w).then(|| p + 1), (y > 0).then(|| p - w), (y + 1 < h).then(|| p + w)];
+                if let Some(k) = near.into_iter().flatten().map(|q| before[q]).find(|&k| k != 0) {
+                    color_of[p] = k;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
 }
 
 /// « Charger la structure à partir des sources » : les expositions du calque CTG suivent celles

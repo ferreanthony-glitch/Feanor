@@ -540,9 +540,12 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 
   Le remplissage, `ctg::fill` :
   - un trait est un pixel des sources d'opacité au moins 128 ;
+  - fermeture des trous (`Ctg::gap`, 4 par défaut) : les traits sont épaissis de `gap`
+    pixels (deux balayages de distance par sens, carré) pour chercher les zones ;
   - depuis chaque graffiti, une zone est remplie de proche en proche (4 voisins) hors des
-    traits, et prend la couleur la plus présente parmi ses graffitis ;
-  - la couleur gagne ensuite 2 pixels sous les traits voisins.
+    traits épaissis, et prend la couleur la plus présente parmi ses graffitis ;
+  - la couleur regagne la bande d'épaississement (`gap` pas, sans traverser un vrai trait),
+    puis 2 pixels sous les traits voisins.
 
   Seules les zones touchées sont parcourues. Sources enregistrées par leur rang dans le plan
   (format 20), refaites en id au chargement, et suivies par `relink_copies` quand on copie un
@@ -758,7 +761,8 @@ MonFilm/
 ```
 
 - Format 20 (13j) : `ctg` sur un calque, { `sources` : rangs des calques sources dans le plan
-  (vide : tous les autres calques de dessin) } ; absent : calque ordinaire.
+  (vide : tous les autres calques de dessin), `trou` : fermeture des trous en pixels (absent :
+  4) } ; absent : calque ordinaire.
 - Format 19 (13i) : `effets` sur un calque, une liste de { `sorte` (`flou_gaussien`,
   `flou_mouvement`), `actif`, `valeurs`, `cles` : [{ `image`, `valeurs` }] } ; absent : aucun.
 - Format 18 (13g-2) : `roles` sur un calque (image → `cle`, `breakdown`, `intervalle`,

@@ -498,6 +498,13 @@ struct LayerEntry {
 struct CtgEntry {
     #[serde(default)]
     sources: Vec<usize>,
+    /// Fermeture automatique des trous, en pixels (absente : celle d'un calque CTG neuf).
+    #[serde(default = "default_ctg_gap")]
+    trou: u8,
+}
+
+fn default_ctg_gap() -> u8 {
+    crate::ctg::DEFAULT_GAP
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
@@ -958,6 +965,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                     effets: l.fx.clone(),
                     ctg: l.ctg.as_ref().map(|c| CtgEntry {
                         sources: c.sources.iter().filter_map(|id| panel.layers.iter().position(|s| s.id == *id)).collect(),
+                        trou: c.gap,
                     }),
                     expositions: to_exposures(&l.frames),
                 })
@@ -1307,7 +1315,7 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
             let mut keys: HashMap<u64, u64> = HashMap::new();
             for p in scene.panneaux {
                 let parents: Vec<Option<usize>> = p.calques.iter().map(|l| l.dans_dossier).collect();
-                let ctg_sources: Vec<Option<Vec<usize>>> = p.calques.iter().map(|l| l.ctg.as_ref().map(|c| c.sources.clone())).collect();
+                let ctg_sources: Vec<Option<(Vec<usize>, u8)>> = p.calques.iter().map(|l| l.ctg.as_ref().map(|c| (c.sources.clone(), c.trou))).collect();
                 let mut layers: Vec<Layer> = p
                     .calques
                     .into_iter()
@@ -1374,10 +1382,10 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                     }
                 }
                 // Calques CTG (format 20) : les rangs des sources deviennent leurs id.
-                for (i, sources) in ctg_sources.into_iter().enumerate() {
-                    if let Some(sources) = sources {
+                for (i, entry) in ctg_sources.into_iter().enumerate() {
+                    if let Some((sources, gap)) = entry {
                         let ids = sources.into_iter().filter(|&k| k != i).filter_map(|k| layers.get(k).map(|l| l.id)).collect();
-                        layers[i].ctg = Some(crate::ctg::Ctg { sources: ids });
+                        layers[i].ctg = Some(crate::ctg::Ctg { sources: ids, gap: gap.min(50) });
                     }
                 }
                 crate::folders::normalize(&mut layers);

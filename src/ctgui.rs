@@ -22,7 +22,7 @@ impl App {
         let n = self.layers().iter().filter(|l| l.ctg.is_some()).count() + 1;
         let snap = self.snapshot();
         let mut layer = Layer::new(format!("CTG {n}"), LayerKind::Bitmap);
-        layer.ctg = Some(Ctg { sources });
+        layer.ctg = Some(Ctg { sources, ..Ctg::default() });
         layer.parent = parent;
         let at = self.cur_layer;
         self.layers_mut().insert(at, layer);
@@ -97,11 +97,23 @@ impl App {
     /// Les sources du calque CTG `li` (menu de la ligne du calque).
     pub(crate) fn ctg_menu(&mut self, ui: &mut egui::Ui, li: usize) {
         let Some(ctg) = self.layers().get(li).and_then(|l| l.ctg.clone()) else { return };
+        // Fermeture automatique des trous (une étape d'annulation par geste).
+        ui.horizontal(|ui| {
+            ui.label("Fermer les trous jusqu'à");
+            let mut gap = ctg.gap as u32 * 2;
+            let resp = ui.add(egui::DragValue::new(&mut gap).range(0..=100).suffix(" px")).on_hover_text("Un trou des traits plus petit que cela ne laisse pas fuir la couleur (0 : pas de fermeture).");
+            if self.edited(&resp) {
+                if let Some(c) = self.layers_mut()[li].ctg.as_mut() {
+                    c.gap = (gap / 2) as u8;
+                }
+            }
+        });
+        ui.separator();
         ui.label(egui::RichText::new("Sources (leurs traits ferment les zones) :").weak());
         let all = ctg.sources.is_empty();
         if ui.radio(all, "Tous les autres calques de dessin").clicked() && !all {
             self.record_step();
-            self.layers_mut()[li].ctg = Some(Ctg::default());
+            self.layers_mut()[li].ctg = Some(Ctg { sources: Vec::new(), ..ctg.clone() });
         }
         let candidates: Vec<(u64, String)> = self
             .layers()
@@ -121,7 +133,7 @@ impl App {
                 } else {
                     sources.retain(|s| *s != id);
                 }
-                self.layers_mut()[li].ctg = Some(Ctg { sources });
+                self.layers_mut()[li].ctg = Some(Ctg { sources, ..ctg.clone() });
             }
         }
         ui.separator();

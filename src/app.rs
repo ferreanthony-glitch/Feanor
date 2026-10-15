@@ -934,7 +934,7 @@ impl App {
                     // Pile d'effets du calque (13i).
                     fx: crate::fx::steps_at(&layer.fx, frame),
                     // Calque CTG (13j) : rempli d'après les traits de ses sources.
-                    ctg: layer.ctg.as_ref().map(|_| crate::ctg::source_cels(self.layers(), li, frame)),
+                    ctg: crate::ctg::input(self.layers(), li, frame),
                 });
                 // Calque CTG courant, à l'écran seulement : ses graffitis, pâles, par-dessus.
                 if onion && layer.ctg.is_some() && li == self.cur_layer && !self.playing {

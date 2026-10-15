@@ -20,7 +20,7 @@ pub struct PlanItem {
     pub fx: Vec<crate::fx::FxStep>,
     /// Calque CTG (13j) : les dessins de ses sources à cette image (le dessin est rempli d'après
     /// leurs traits) ; rien pour un calque ordinaire.
-    pub ctg: Option<Vec<CelId>>,
+    pub ctg: Option<crate::ctg::CtgInput>,
 }
 
 /// Couleur du dessin au point (`x`, `y`) de ses pixels (interpolation bilinéaire, prémultipliée).
@@ -290,7 +290,7 @@ fn plan_with_camera(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera:
                     transform: (!t.is_identity()).then_some(t),
                     blend: l.blend,
                     fx: crate::fx::steps_at(&l.fx, frame),
-                    ctg: l.ctg.as_ref().map(|_| crate::ctg::source_cels(&panel.layers, li, frame)),
+                    ctg: crate::ctg::input(&panel.layers, li, frame),
                 })
             })
             .collect(),

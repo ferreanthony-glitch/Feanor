@@ -454,11 +454,11 @@ pub fn shown_id(item: &crate::render::PlanItem) -> CelId {
     match &item.ctg {
         None if item.fx.is_empty() => item.cel,
         None => fx_id(item.cel, &item.fx),
-        Some(sources) => {
+        Some(input) => {
             let mut h = std::collections::hash_map::DefaultHasher::new();
             fx_id(item.cel, &item.fx).hash(&mut h);
             "ctg".hash(&mut h);
-            sources.hash(&mut h);
+            input.hash(&mut h);
             h.finish() | (1 << 63)
         }
     }
@@ -467,12 +467,12 @@ pub fn shown_id(item: &crate::render::PlanItem) -> CelId {
 /// Le dessin d'un élément du plan tel qu'il s'affiche : effets (13i) et remplissage CTG (13j)
 /// compris.
 pub fn shown<'a>(doc: &'a Document, item: &crate::render::PlanItem) -> Option<Shown<'a>> {
-    shown_with(doc, item.cel, &item.fx, item.ctg.as_deref())
+    shown_with(doc, item.cel, &item.fx, item.ctg.as_ref())
 }
 
-/// Le dessin `cel`, rempli d'après les dessins `ctg` s'il est d'un calque CTG, puis passé par
+/// Le dessin `cel`, rempli d'après `ctg` (dessins des sources, trous) s'il est d'un calque CTG, puis passé par
 /// les effets `steps` (calculé une fois, puis gardé tant qu'aucun de ces dessins ne change).
-pub fn shown_with<'a>(doc: &'a Document, cel: CelId, steps: &[FxStep], ctg: Option<&[CelId]>) -> Option<Shown<'a>> {
+pub fn shown_with<'a>(doc: &'a Document, cel: CelId, steps: &[FxStep], ctg: Option<&crate::ctg::CtgInput>) -> Option<Shown<'a>> {
     let src = doc.cels.get(&cel)?;
     if steps.is_empty() && ctg.is_none() {
         return Some(Shown::Plain(src));
@@ -484,16 +484,16 @@ pub fn shown_with<'a>(doc: &'a Document, cel: CelId, steps: &[FxStep], ctg: Opti
         transform: None,
         blend: Default::default(),
         fx: steps.to_vec(),
-        ctg: ctg.map(<[CelId]>::to_vec),
+        ctg: ctg.cloned(),
     };
     let id = shown_id(&item);
     // Version : celle du dessin, et celles des sources du remplissage.
     let version = match ctg {
         None => src.version,
-        Some(sources) => {
+        Some(input) => {
             let mut h = std::collections::hash_map::DefaultHasher::new();
             src.version.hash(&mut h);
-            for s in sources {
+            for s in &input.sources {
                 doc.cels.get(s).map_or(0, |c| c.version).hash(&mut h);
             }
             h.finish()
@@ -507,9 +507,9 @@ pub fn shown_with<'a>(doc: &'a Document, cel: CelId, steps: &[FxStep], ctg: Opti
     }
     let base = match ctg {
         None => src.raster.clone(),
-        Some(sources) => {
-            let rasters: Vec<&Raster> = sources.iter().filter_map(|s| doc.cels.get(s)).map(|c| &c.raster).collect();
-            crate::ctg::fill(&rasters, &src.raster)
+        Some(input) => {
+            let rasters: Vec<&Raster> = input.sources.iter().filter_map(|s| doc.cels.get(s)).map(|c| &c.raster).collect();
+            crate::ctg::fill(&rasters, &src.raster, input.gap as usize)
         }
     };
     let derived = Arc::new(Cel { raster: apply(&base, steps), vector: None, version });

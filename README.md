@@ -272,8 +272,10 @@ traits.
 - Griffonne une couleur dans une zone fermée par les traits de ses sources : toute la zone se
   remplit, sous les traits.
 - Retouche les traits ou les graffitis : le remplissage suit.
-- Le menu de la ligne du calque CTG choisit ses sources et « Charger la structure à partir
-  des sources », qui donne un dessin de graffitis par dessin des traits.
+- Un petit trou dans les traits ne laisse pas fuir la couleur (jusqu'à 8 pixels, réglable).
+- Le menu de la ligne du calque CTG règle la fermeture des trous, choisit ses sources, et
+  offre « Charger la structure à partir des sources », qui donne un dessin de graffitis par
+  dessin des traits.
 
 **Vue Projet** :
 - **Nouveau plan avant le plan courant** (menu Storyboard, menu ⋯ du montage).
