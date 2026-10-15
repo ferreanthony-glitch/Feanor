@@ -19,6 +19,74 @@ pub(crate) fn veil(a: u8) -> Color32 {
     Color32::from_rgba_premultiplied(a, a, a, a)
 }
 
+/// Polygone convexe `poly` coupé au rectangle `r` (le morceau qui est dedans, convexe aussi).
+pub(crate) fn clip_to_rect(poly: &[Pos2], r: Rect) -> Vec<Pos2> {
+    let mut pts = poly.to_vec();
+    // Quatre demi-plans : x ≥ gauche, x ≤ droite, y ≥ haut, y ≤ bas.
+    let sides: [(fn(Pos2) -> f32, f32, f32); 4] = [(|p| p.x, r.min.x, 1.0), (|p| p.x, r.max.x, -1.0), (|p| p.y, r.min.y, 1.0), (|p| p.y, r.max.y, -1.0)];
+    for (coord, limit, sign) in sides {
+        if pts.is_empty() {
+            break;
+        }
+        let inside = |p: Pos2| (coord(p) - limit) * sign >= 0.0;
+        let mut out = Vec::with_capacity(pts.len() + 2);
+        for k in 0..pts.len() {
+            let (a, b) = (pts[k], pts[(k + 1) % pts.len()]);
+            if inside(a) {
+                out.push(a);
+            }
+            if inside(a) != inside(b) {
+                let t = (limit - coord(a)) / (coord(b) - coord(a));
+                out.push(a + (b - a) * t);
+            }
+        }
+        pts = out;
+    }
+    pts
+}
+
+/// Bande entre deux polygones convexes, `inner` dans `outer`, d'une couleur : on fait le tour des
+/// deux ensemble autour d'un point intérieur, un triangle à chaque sommet rencontré.
+pub(crate) fn nested_band(outer: &[Pos2], inner: &[Pos2], color: Color32) -> Shape {
+    let mut mesh = egui::Mesh::default();
+    if inner.len() < 3 {
+        for p in outer {
+            mesh.colored_vertex(*p, color);
+        }
+        for k in 1..outer.len().saturating_sub(1) {
+            mesh.add_triangle(0, k as u32, k as u32 + 1);
+        }
+        return Shape::mesh(mesh);
+    }
+    let c = inner.iter().fold(Vec2::ZERO, |s, p| s + p.to_vec2()) / inner.len() as f32;
+    let sorted = |pts: &[Pos2]| {
+        let mut v: Vec<(f32, Pos2)> = pts.iter().map(|p| ((p.y - c.y).atan2(p.x - c.x), *p)).collect();
+        v.sort_by(|a, b| a.0.total_cmp(&b.0));
+        v
+    };
+    let (o, n) = (sorted(outer), sorted(inner));
+    for (_, p) in o.iter().chain(n.iter()) {
+        mesh.colored_vertex(*p, color);
+    }
+    let (no, ni) = (o.len(), n.len());
+    // Angle du k-ième sommet en continuant après un tour.
+    let turn = |v: &[(f32, Pos2)], k: usize| v[k % v.len()].0 + if k >= v.len() { std::f32::consts::TAU } else { 0.0 };
+    let (oi, ii) = (|k: usize| (k % no) as u32, |k: usize| (no + k % ni) as u32);
+    let (mut i, mut j) = (0, 0);
+    while i < no || j < ni {
+        let next_o = if i < no { turn(&o, i + 1) } else { f32::INFINITY };
+        let next_i = if j < ni { turn(&n, j + 1) } else { f32::INFINITY };
+        if next_o <= next_i {
+            mesh.add_triangle(oi(i), oi(i + 1), ii(j));
+            i += 1;
+        } else {
+            mesh.add_triangle(oi(i), ii(j + 1), ii(j));
+            j += 1;
+        }
+    }
+    Shape::mesh(mesh)
+}
+
 /// Bande entre deux quadrilatères (l'un dans l'autre), d'une couleur.
 pub(crate) fn band(outer: [Pos2; 4], inner: [Pos2; 4], color: Color32) -> Shape {
     let mut mesh = egui::Mesh::default();

@@ -51,9 +51,17 @@ struct VOut {
 @vertex
 fn vs(@builtin(vertex_index) i: u32) -> VOut {
     var order = array<u32, 6>(0u, 1u, 2u, 0u, 2u, 3u);
-    let c = item.corners[order[i]];
+    let k = order[i];
+    let c = item.corners[k];
+    // Affichage en perspective (caméra tournée, 9f) : params.w = 1 et le w de chaque coin dans
+    // color ; la carte graphique interpole alors la texture en perspective et coupe ce qui
+    // passe derrière la caméra.
+    var w = 1.0;
+    if (item.params.w > 0.5) {
+        w = item.color[k];
+    }
     var out: VOut;
-    out.pos = vec4<f32>(c.xy, 0.0, 1.0);
+    out.pos = vec4<f32>(c.xy * w, 0.0, w);
     out.uv = c.zw;
     return out;
 }
@@ -587,8 +595,9 @@ impl GpuCanvas {
 
     /// Commande de dessin : composer le papier et les calques du plan, puis afficher l'image.
     /// `corners` : les coins du dessin à l'écran, en points (haut-gauche, haut-droite, bas-droite,
-    /// bas-gauche) ; `rect` : la zone d'affichage (ce qui dépasse est coupé).
-    pub fn paint(&self, plan: &Plan, corners: [Pos2; 4], rect: Rect, stage: [usize; 2]) -> egui::PaintCallback {
+    /// bas-gauche), avec leur w si la vue est en perspective (9f) ; `rect` : la zone d'affichage
+    /// (ce qui dépasse est coupé).
+    pub fn paint(&self, plan: &Plan, corners: [Pos2; 4], ws: Option<[f32; 4]>, rect: Rect, stage: [usize; 2]) -> egui::PaintCallback {
         // Composer : l'image entière, en coordonnées normalisées.
         let full = [[-1.0, 1.0, 0.0, 0.0], [1.0, 1.0, 1.0, 0.0], [1.0, -1.0, 1.0, 1.0], [-1.0, -1.0, 0.0, 1.0]];
         let (w, h) = (stage[0] as f32, stage[1] as f32);
@@ -631,7 +640,15 @@ impl GpuCanvas {
         // du dessin (taille exacte en pixels), pour tomber sur les mêmes pixels que l'ancien affichage.
         let uv = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
         let screen = std::array::from_fn(|i| [corners[i].x, corners[i].y, uv[i][0], uv[i][1]]);
-        egui_wgpu::Callback::new_paint_callback(rect, CanvasPaint { items, screen })
+        // w ramenés autour de 1 (une homographie vaut à un facteur positif près).
+        let ws = ws.map(|w| {
+            let m = w.iter().fold(0.0_f32, |m, v| m.max(v.abs())).max(1e-12);
+            w.map(|v| {
+                let v = v / m;
+                if v.abs() < 1e-6 { 1e-6_f32.copysign(v) } else { v }
+            })
+        });
+        egui_wgpu::Callback::new_paint_callback(rect, CanvasPaint { items, screen, ws })
     }
 }
 
@@ -667,6 +684,8 @@ struct CanvasPaint {
     items: Vec<GpuItem>,
     /// Coins de l'image à l'écran, en points.
     screen: [[f32; 4]; 4],
+    /// Leur w, en perspective.
+    ws: Option<[f32; 4]>,
 }
 
 fn put_item(bytes: &mut [u8], corners: &[[f32; 4]; 4], color: &[f32; 4], params: &[f32; 4]) {
@@ -702,7 +721,11 @@ impl CallbackTrait for CanvasPaint {
         let [w, h] = screen.size_in_pixels.map(|v| v.max(1) as f32);
         let ppp = screen.pixels_per_point;
         let on_screen = self.screen.map(|c| [c[0] * ppp / w * 2.0 - 1.0, 1.0 - c[1] * ppp / h * 2.0, c[2], c[3]]);
-        put_item(&mut bytes[self.items.len() * stride..], &on_screen, &[0.0; 4], &[1.0, 1.0, 0.0, 0.0]);
+        let (ws, persp) = match self.ws {
+            Some(w) => (w, 1.0),
+            None => ([0.0; 4], 0.0),
+        };
+        put_item(&mut bytes[self.items.len() * stride..], &on_screen, &ws, &[1.0, 1.0, 0.0, persp]);
         queue.write_buffer(&res.uniforms, 0, &bytes);
 
         // Composer dans l'image à la taille du projet. Un calque en mode de fusion lit ce qui est

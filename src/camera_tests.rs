@@ -10,7 +10,7 @@ use crate::render;
 const RED: Color32 = Color32::from_rgb(220, 20, 20);
 
 fn cam(x: f32, zoom: f32, angle: f32) -> Camera {
-    Camera { x, y: 50.0, zoom, angle, dolly: 0.0 }
+    Camera { x, y: 50.0, zoom, angle, dolly: 0.0, tilt: 0.0, pan: 0.0 }
 }
 
 #[test]
@@ -195,6 +195,125 @@ fn dolly_moves_the_camera_into_the_set() {
 }
 
 #[test]
+fn a_level_camera_is_the_flat_camera_of_before() {
+    // Sans bascule ni panoramique, l'homographie redonne exactement l'ancien calcul, et son
+    // inverse ramène chaque point.
+    let frame = [1920, 1080];
+    for c in [
+        Camera::centered(3840, 2160),
+        Camera { x: 1500.0, y: 900.0, zoom: 1.7, angle: 23.0, dolly: 300.0, tilt: 0.0, pan: 0.0 },
+        Camera { x: 2500.0, y: 1200.0, zoom: 0.6, angle: -140.0, dolly: -800.0, tilt: 0.0, pan: 0.0 },
+    ] {
+        let (h, inv) = (c.homography(frame), c.homography_inverse(frame));
+        for (u, v) in [(0.0, 0.0), (1920.0, 0.0), (960.0, 540.0), (300.0, 1000.0)] {
+            let want = c.to_stage(frame, u, v);
+            let got = crate::persp::apply(&h, pos2(u, v));
+            assert!(got.distance(want) < 0.02, "{c:?} ({u}, {v}) : {got:?} ≠ {want:?}");
+            let back = crate::persp::apply(&inv, got);
+            assert!(back.distance(pos2(u, v)) < 0.02, "inverse : {back:?}");
+        }
+    }
+}
+
+#[test]
+fn tilt_and_pan_turn_the_camera_in_place() {
+    let frame = [1920, 1080];
+    let c = Camera { x: 1920.0, y: 1080.0, ..Camera::centered(3840, 2160) };
+    let e = c.distance(frame);
+    let centre = |cam: &Camera| cam.to_stage(frame, 960.0, 540.0);
+    // Panoramique de 20° à droite : le centre du cadre vise E·tan 20° plus à droite.
+    let pan = Camera { pan: 20.0, ..c };
+    let p = centre(&pan);
+    assert!((p.x - (c.x + e * 20f32.to_radians().tan())).abs() < 0.05 && (p.y - c.y).abs() < 0.05, "{p:?}");
+    // Bascule de 15° vers le haut : il vise plus haut sur la feuille.
+    let tilt = Camera { tilt: 15.0, ..c };
+    let t = centre(&tilt);
+    assert!((t.y - (c.y - e * 15f32.to_radians().tan())).abs() < 0.05 && (t.x - c.x).abs() < 0.05, "{t:?}");
+    // Les deux : le panoramique tourne autour de la verticale, la bascule ensuite.
+    let both = Camera { pan: 20.0, tilt: 15.0, ..c };
+    let b = centre(&both);
+    let (tp, tt) = (20f32.to_radians(), 15f32.to_radians());
+    assert!((b.x - (c.x + e * tp.tan())).abs() < 0.05 && (b.y - (c.y - e * tt.tan() / tp.cos())).abs() < 0.05, "{b:?}");
+    // Bascule : le cadre filmé est un trapèze, plus large du côté le plus loin (en haut), bords
+    // haut et bas horizontaux.
+    let k = tilt.corners(frame);
+    assert!((k[0].y - k[1].y).abs() < 0.01 && (k[2].y - k[3].y).abs() < 0.01);
+    assert!(k[1].x - k[0].x > k[2].x - k[3].x + 10.0, "{k:?}");
+    // Inverse.
+    let (h, inv) = (both.homography(frame), both.homography_inverse(frame));
+    for (u, v) in [(0.0, 0.0), (1920.0, 1080.0), (700.0, 200.0)] {
+        let back = crate::persp::apply(&inv, crate::persp::apply(&h, pos2(u, v)));
+        assert!(back.distance(pos2(u, v)) < 0.05, "{back:?}");
+    }
+}
+
+#[test]
+fn a_turned_camera_keeps_the_horizon_out_of_the_frame() {
+    let frame = [1920, 1080];
+    let c = Camera::centered(3840, 2160);
+    assert!(Camera { tilt: 30.0, pan: -40.0, ..c }.sees_reference(frame));
+    let too_far = Camera { tilt: 80.0, ..c };
+    assert!(!too_far.sees_reference(frame));
+    let ok = too_far.limited(frame);
+    assert!(ok.sees_reference(frame) && ok.tilt > 50.0 && ok.tilt < 80.0, "{ok:?}");
+    assert_eq!(c.limited(frame), c);
+    // Rayons au-dessus de l'horizon : rien de filmé.
+    let map = Camera { tilt: 80.0, ..c }.frame_map(frame);
+    assert!(map.at(960.0, 0.0).is_none());
+}
+
+#[test]
+fn the_camera_view_of_a_turned_camera_frames_the_shot() {
+    use crate::camtools::{turned_view, view_through};
+    use eframe::egui::{vec2, Rect};
+    let frame = [1920, 1080];
+    let stage = vec2(3840.0, 2160.0);
+    let rect = Rect::from_min_size(pos2(50.0, 80.0), vec2(1000.0, 700.0));
+    // Presque droite (et roulis de 30°) : la même vue que la caméra droite.
+    let c = Camera { x: 1700.0, y: 1200.0, zoom: 1.4, angle: 30.0, dolly: 250.0, ..Camera::centered(3840, 2160) };
+    let (flat, turned) = (view_through(&c, frame, stage, rect), turned_view(&Camera { tilt: 1e-4, ..c }, frame, rect));
+    for p in [pos2(1700.0, 1200.0), pos2(1400.0, 1000.0), pos2(2100.0, 1500.0)] {
+        let (a, b) = (flat.to_screen(rect, stage, p), turned.to_screen(rect, stage, p));
+        assert!(a.distance(b) < 0.1, "{a:?} ≠ {b:?}");
+    }
+    // Tournée : les coins du cadre filmé tombent aux coins de l'image à l'écran, et l'écran
+    // revient à la feuille.
+    let t = Camera { tilt: 18.0, pan: -25.0, ..c };
+    let view = view_through(&t, frame, stage, rect);
+    assert!(view.persp.is_some());
+    let z = (rect.width() / 1920.0).min(rect.height() / 1080.0) * 0.96;
+    let shown = Rect::from_center_size(rect.center(), vec2(1920.0, 1080.0) * z);
+    for (k, s) in t.corners(frame).iter().zip([shown.left_top(), shown.right_top(), shown.right_bottom(), shown.left_bottom()]) {
+        let on_screen = view.to_screen(rect, stage, *k);
+        assert!(on_screen.distance(s) < 0.05, "{on_screen:?} ≠ {s:?}");
+        assert!(view.to_canvas(rect, stage, on_screen).distance(*k) < 0.5);
+        assert!(view.to_screen_h(rect, stage, *k).1 > 0.0, "devant la caméra");
+    }
+}
+
+#[test]
+fn camera_image_through_a_turned_camera() {
+    // Feuille 40×20, cadre 20×10 ; un bloc rouge à droite du centre.
+    let mut doc = Document::with_frame(20, 10, 24);
+    doc.panels[0].layers = vec![Layer::new("B", LayerKind::Bitmap)];
+    let b = doc.new_cel(LayerKind::Bitmap);
+    let r = &mut doc.cels.get_mut(&b).unwrap().raster;
+    for y in 7..14 {
+        for x in 24..32 {
+            let idx = r.tile_index_of(x, y);
+            r.tile_mut(idx)[(y % 64) * 64 + x % 64] = RED;
+        }
+    }
+    doc.panels[0].layers[0].frames = vec![Some(b)];
+    let plan = render::panel_plan_at(&doc, 0, 0, None);
+    let red = |img: &[Color32]| img[5 * 20 + 10].r() > 150 && img[5 * 20 + 10].g() < 100;
+    assert!(!red(&render::camera_image(&doc, &plan, &doc.default_camera())), "caméra droite : le centre est vide");
+    // Panoramique de 20° : le centre du cadre vise E·tan 20° ≈ 7 px plus à droite, dans le bloc.
+    let turned = Camera { pan: 20.0, ..doc.default_camera() };
+    assert!(red(&render::camera_image(&doc, &plan, &turned)));
+}
+
+#[test]
 fn cameras_are_saved_and_follow_the_stage() {
     let dir = std::env::temp_dir().join(format!("pelure-test-camera-{}", std::process::id()));
     std::fs::remove_dir_all(&dir).ok();
@@ -202,8 +321,8 @@ fn cameras_are_saved_and_follow_the_stage() {
     let manifest = dir.join("C.pelure");
     let mut doc = Document::with_frame(32, 24, 24);
     doc.panels[0].camera = vec![
-        CameraKey::new(0, Camera { x: 10.0, y: 12.0, zoom: 1.5, angle: -12.5, dolly: 0.0 }),
-        CameraKey::new(20, Camera { x: 40.0, y: 30.0, zoom: 0.8, angle: 3.0, dolly: 6.5 }),
+        CameraKey::new(0, Camera { x: 10.0, y: 12.0, zoom: 1.5, angle: -12.5, dolly: 0.0, tilt: 0.0, pan: 0.0 }),
+        CameraKey::new(20, Camera { x: 40.0, y: 30.0, zoom: 0.8, angle: 3.0, dolly: 6.5, tilt: 7.5, pan: -12.0 }),
     ];
     doc.panels[0].camera[1].smooth = true;
     doc.panels[0].camera[0].ease_out = 4.0;

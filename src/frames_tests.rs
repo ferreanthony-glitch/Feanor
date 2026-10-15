@@ -47,6 +47,32 @@ fn formats_are_named_and_checked() {
 }
 
 #[test]
+fn the_dimmed_band_is_the_sheet_minus_the_shot() {
+    use crate::viewbar::{clip_to_rect, nested_band};
+    use eframe::egui::{Color32, Shape};
+    let area = |p: &[eframe::egui::Pos2]| {
+        0.5 * (0..p.len()).map(|i| p[i].x * p[(i + 1) % p.len()].y - p[(i + 1) % p.len()].x * p[i].y).sum::<f32>().abs()
+    };
+    let sheet = Rect::from_min_size(pos2(0.0, 0.0), vec2(400.0, 200.0));
+    // Un trapèze qui déborde de la feuille en haut à droite.
+    let shot = [pos2(150.0, 60.0), pos2(520.0, -80.0), pos2(480.0, 150.0), pos2(170.0, 140.0)];
+    let inside = clip_to_rect(&shot, sheet);
+    assert!(inside.iter().all(|p| sheet.expand(1e-3).contains(*p)), "{inside:?}");
+    assert!(inside.len() >= 4);
+    let outer = [sheet.left_top(), sheet.right_top(), sheet.right_bottom(), sheet.left_bottom()];
+    let Shape::Mesh(mesh) = nested_band(&outer, &inside, Color32::BLACK) else { panic!() };
+    let covered: f32 = mesh
+        .indices
+        .chunks(3)
+        .map(|t| area(&[mesh.vertices[t[0] as usize].pos, mesh.vertices[t[1] as usize].pos, mesh.vertices[t[2] as usize].pos]))
+        .sum();
+    assert!((covered - (area(&outer) - area(&inside))).abs() < 1.0, "{covered} ≠ {}", area(&outer) - area(&inside));
+    // Cadre hors de la feuille : toute la feuille est estompée.
+    let away = clip_to_rect(&[pos2(500.0, 0.0), pos2(600.0, 0.0), pos2(600.0, 50.0), pos2(500.0, 50.0)], sheet);
+    assert!(away.is_empty());
+}
+
+#[test]
 fn frames_are_kept_with_the_layout() {
     let l = Layout { safe_frames: true, frame_format: Some([4.0, 5.0]), ..Layout::default() };
     let text = toml::to_string(&l).unwrap();

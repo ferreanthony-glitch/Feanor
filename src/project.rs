@@ -46,7 +46,9 @@ pub const FORMAT: &str = "pelure-projet";
 /// 9 (phase 8) : notes attachées à une vignette (`attache`), textes de la planche
 /// (`planche_textes`), mode de fusion des calques (`fusion`).
 /// 10 (phase 9) : caméra avancée (`avance`) et adoucis en images (`adoucir_entree`, `adoucir_sortie`).
-pub const VERSION: u32 = 10;
+/// 11 (9f) : bascule et panoramique de la caméra (`bascule`, `panoramique`), qu'une version
+/// précédente ignorerait (le film changerait sans prévenir).
+pub const VERSION: u32 = 11;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Modèles 3D de repère (2d), dans le format de Pelure.
@@ -248,6 +250,11 @@ struct CameraEntry {
     adoucir_entree: f32,
     #[serde(default, skip_serializing_if = "is_zero")]
     adoucir_sortie: f32,
+    /// Bascule (vers le haut) et panoramique (vers la droite), en degrés (format 11 ; absents : 0).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    bascule: f32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    panoramique: f32,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -728,6 +735,8 @@ fn manifest_of(doc: &Document) -> Manifest {
                     avance: k.cam.dolly,
                     adoucir_entree: k.ease_in,
                     adoucir_sortie: k.ease_out,
+                    bascule: k.cam.tilt,
+                    panoramique: k.cam.pan,
                 })
                 .collect(),
             repere3d: panel.ref3d.as_ref().map(|r| Ref3dEntry {
@@ -1032,7 +1041,8 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                 }
                 let mut camera: Vec<CameraKey> = Vec::new();
                 for k in &p.camera {
-                    let finite = [k.x, k.y, k.zoom, k.rotation, k.avance, k.adoucir_entree, k.adoucir_sortie];
+                    let finite =
+                        [k.x, k.y, k.zoom, k.rotation, k.avance, k.adoucir_entree, k.adoucir_sortie, k.bascule, k.panoramique];
                     if finite.iter().all(|v| v.is_finite()) {
                         let cam = Camera {
                             x: k.x,
@@ -1040,6 +1050,8 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                             zoom: k.zoom.clamp(0.05, 50.0),
                             angle: k.rotation,
                             dolly: k.avance,
+                            tilt: k.bascule.clamp(-85.0, 85.0),
+                            pan: k.panoramique.clamp(-85.0, 85.0),
                         };
                         crate::camera::set_key(&mut camera, k.image, cam);
                         if let Some(x) = camera.iter_mut().find(|x| x.frame == k.image) {

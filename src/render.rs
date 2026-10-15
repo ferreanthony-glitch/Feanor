@@ -180,9 +180,14 @@ pub fn camera_image(doc: &Document, plan: &Plan, cam: &Camera) -> Vec<Color32> {
     let [fw, fh] = doc.frame;
     let mut out = vec![Color32::TRANSPARENT; fw * fh];
     let (w, h) = (doc.width, doc.height);
+    let map = cam.frame_map(doc.frame);
     let corners = cam.corners(doc.frame);
-    let lo = corners.iter().fold((f32::MAX, f32::MAX), |(x, y), c| (x.min(c.x), y.min(c.y)));
-    let hi = corners.iter().fold((f32::MIN, f32::MIN), |(x, y), c| (x.max(c.x), y.max(c.y)));
+    let mut lo = corners.iter().fold((f32::MAX, f32::MAX), |(x, y), c| (x.min(c.x), y.min(c.y)));
+    let mut hi = corners.iter().fold((f32::MIN, f32::MIN), |(x, y), c| (x.max(c.x), y.max(c.y)));
+    // Caméra tournée qui frôle l'horizon : la zone filmée n'est plus bornée par ses coins.
+    if !cam.sees_reference(doc.frame) {
+        (lo, hi) = ((0.0, 0.0), (w as f32, h as f32));
+    }
     if w == 0 || h == 0 || hi.0 + 2.0 < 0.0 || hi.1 + 2.0 < 0.0 || lo.0 - 2.0 >= w as f32 || lo.1 - 2.0 >= h as f32 {
         return out;
     }
@@ -218,7 +223,7 @@ pub fn camera_image(doc: &Document, plan: &Plan, cam: &Camera) -> Vec<Color32> {
     par_chunks(&mut out, fw * ROWS, |chunk, rows| {
         for (k, px_out) in rows.iter_mut().enumerate() {
             let (u, v) = (k % fw, chunk * ROWS + k / fw);
-            let p = cam.to_stage(doc.frame, u as f32 + 0.5, v as f32 + 0.5);
+            let Some(p) = map.at(u as f32 + 0.5, v as f32 + 0.5) else { continue };
             let (fx, fy) = (p.x - 0.5, p.y - 0.5);
             let (ix, iy) = (fx.floor(), fy.floor());
             let (tx, ty) = (fx - ix, fy - iy);
@@ -286,16 +291,17 @@ fn plan_with_camera(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera:
 pub fn thumbnail(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize) -> ColorImage {
     let [fw, fh] = doc.frame;
     let (sx, sy) = (fw as f32 / tw as f32, fh as f32 / th as f32);
+    let map = cam.frame_map(doc.frame);
     let mut pixels = Vec::with_capacity(tw * th);
     for y in 0..th {
         for x in 0..tw {
             let mut acc = [0u32; 4];
             for (ox, oy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
-                let p = cam.to_stage(doc.frame, (x as f32 + ox) * sx, (y as f32 + oy) * sy);
-                let c = if p.x < 0.0 || p.y < 0.0 || p.x >= doc.width as f32 || p.y >= doc.height as f32 {
-                    Color32::TRANSPARENT
-                } else {
-                    composite_pixel(doc, plan, p.x as usize, p.y as usize)
+                let c = match map.at((x as f32 + ox) * sx, (y as f32 + oy) * sy) {
+                    Some(p) if p.x >= 0.0 && p.y >= 0.0 && p.x < doc.width as f32 && p.y < doc.height as f32 => {
+                        composite_pixel(doc, plan, p.x as usize, p.y as usize)
+                    }
+                    _ => Color32::TRANSPARENT,
                 };
                 for (a, v) in acc.iter_mut().zip(c.to_array()) {
                     *a += v as u32;

@@ -32,6 +32,9 @@ pub(crate) struct CamDrag {
 
 /// Vue de l'écran qui montre exactement le cadre de la caméra `cam` dans la zone `rect`.
 pub(crate) fn view_through(cam: &Camera, frame: [usize; 2], stage: Vec2, rect: Rect) -> View {
+    if !cam.is_level() {
+        return turned_view(cam, frame, rect);
+    }
     let zoom_cam = cam.magnification(frame);
     let (w, h) = (frame[0] as f32 / zoom_cam, frame[1] as f32 / zoom_cam);
     let zoom = (rect.width() / w).min(rect.height() / h) * 0.96;
@@ -45,6 +48,28 @@ pub(crate) fn view_through(cam: &Camera, frame: [usize; 2], stage: Vec2, rect: R
         rotation,
         flip: false,
         pan: -turned * zoom,
+        persp: None,
+    }
+}
+
+/// Vue à travers une caméra basculée ou en panoramique (9f) : l'image finale centrée dans
+/// `rect` (à 96 %), et la feuille vue par la caméra, en perspective.
+pub(crate) fn turned_view(cam: &Camera, frame: [usize; 2], rect: Rect) -> View {
+    use crate::persp;
+    let (fw, fh) = (frame[0] as f32, frame[1] as f32);
+    let z = (rect.width() / fw).min(rect.height() / fh) * 0.96;
+    let (ox, oy) = (rect.center().x - z * fw / 2.0, rect.center().y - z * fh / 2.0);
+    let frame_to_screen: persp::Homography = [z, 0.0, ox, 0.0, z, oy, 0.0, 0.0, 1.0];
+    let screen_to_frame: persp::Homography = [1.0 / z, 0.0, -ox / z, 0.0, 1.0 / z, -oy / z, 0.0, 0.0, 1.0];
+    View {
+        zoom: z * cam.magnification(frame),
+        rotation: if cam.angle == 0.0 { 0.0 } else { -cam.angle.to_radians() },
+        flip: false,
+        pan: Vec2::ZERO,
+        persp: Some(crate::view::Persp {
+            to_screen: persp::mul(&frame_to_screen, &cam.homography_inverse(frame)),
+            to_stage: persp::mul(&cam.homography(frame), &screen_to_frame),
+        }),
     }
 }
 
@@ -58,6 +83,8 @@ impl App {
     /// cette caméra. Caméra animée (plusieurs clés) : on règle la clé de l'image courante (créée
     /// au besoin).
     pub(crate) fn set_current_camera(&mut self, cam: Camera) {
+        // Tournée, elle doit encore voir le plan de référence par les quatre coins du cadre.
+        let cam = cam.limited(self.doc.frame);
         let frame = self.cur_frame.min(self.frame_count().saturating_sub(1));
         let keys = &mut self.doc.panels[self.cur_panel].camera;
         if keys.len() >= 2 {
@@ -174,7 +201,9 @@ impl App {
     pub(crate) fn camera_drag(&mut self, p: Pos2, shift: bool) {
         let Some(d) = &mut self.cam_drag else { return };
         let (cam0, start) = (d.cam0, d.start);
-        let c = pos2(cam0.x, cam0.y);
+        // Centre du cadre filmé (caméra tournée : le point visé, pas l'aplomb de l'œil).
+        let [fw, fh] = self.doc.frame;
+        let c = cam0.to_stage(self.doc.frame, fw as f32 / 2.0, fh as f32 / 2.0);
         let cam = match d.handle {
             CamHandle::Move => {
                 let mut delta = p - start;
@@ -252,7 +281,13 @@ impl App {
         } else {
             70
         };
-        if alpha > 0 {
+        // Caméra tournée, sur la feuille : le cadre filmé (un trapèze) peut déborder de la
+        // feuille ; on estompe la feuille moins le cadre coupé à la feuille (9f).
+        if alpha > 0 && !self.camera_view && !cam.is_level() {
+            let outer = [stage.left_top(), stage.right_top(), stage.right_bottom(), stage.left_bottom()].map(to_s);
+            let inner: Vec<Pos2> = crate::viewbar::clip_to_rect(&corners, stage).into_iter().map(to_s).collect();
+            painter.add(crate::viewbar::nested_band(&outer, &inner, Color32::from_black_alpha(alpha)));
+        } else if alpha > 0 {
             let outer: [Pos2; 4] = if self.camera_view {
                 [rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom()]
             } else {
@@ -311,8 +346,9 @@ impl App {
                     egui::StrokeKind::Middle,
                 );
             }
-            // Centre du cadre.
-            let c = to_s(pos2(cam.x, cam.y));
+            // Centre du cadre (caméra tournée : le point visé).
+            let [fw, fh] = self.doc.frame;
+            let c = to_s(cam.to_stage(self.doc.frame, fw as f32 / 2.0, fh as f32 / 2.0));
             painter.line_segment([c - vec2(6.0, 0.0), c + vec2(6.0, 0.0)], Stroke::new(1.0_f32, CAMERA));
             painter.line_segment([c - vec2(0.0, 6.0), c + vec2(0.0, 6.0)], Stroke::new(1.0_f32, CAMERA));
         }
@@ -439,6 +475,7 @@ impl App {
         let (cx, cy) = (self.doc.width as f32 / 2.0, self.doc.height as f32 / 2.0);
         let d0 = camera::ref_distance(frame);
         let (mut x, mut y, mut z, mut focal, mut angle) = (cam.x - cx, cam.y - cy, cam.distance(frame), cam.focal(), cam.angle);
+        let (mut tilt, mut pan) = (cam.tilt, cam.pan);
         let mut next = None;
         section(ui, "Caméra à cette image", &mut |ui| {
             egui::Grid::new("caméra_position").num_columns(2).show(ui, |ui| {
@@ -476,7 +513,9 @@ impl App {
                 ui.end_row();
                 ui.label("Rotation");
                 ui.horizontal(|ui| {
-                    let r = ui.add(egui::DragValue::new(&mut angle).speed(0.5).suffix("°").max_decimals(1));
+                    let r = ui
+                        .add(egui::DragValue::new(&mut angle).speed(0.5).suffix("°").max_decimals(1))
+                        .on_hover_text("Roulis : le cadre tourne autour de l'axe de visée (sens horaire à l'écran)");
                     if self.edited(&r) {
                         next = Some(Camera { angle, ..cam });
                     }
@@ -485,7 +524,32 @@ impl App {
                     }
                 });
                 ui.end_row();
+                // Bascule et panoramique (9f) : la caméra tourne sur elle-même, sans bouger.
+                ui.label("Bascule");
+                ui.horizontal(|ui| {
+                    let r = ui
+                        .add(egui::DragValue::new(&mut tilt).speed(0.2).range(-85.0..=85.0).suffix("°").max_decimals(1))
+                        .on_hover_text("Rotation autour de l'axe horizontal (X) : positive, la caméra regarde vers le haut");
+                    if self.edited(&r) {
+                        next = Some(Camera { tilt, ..cam });
+                    }
+                    ui.label("Panoramique");
+                    let r = ui
+                        .add(egui::DragValue::new(&mut pan).speed(0.2).range(-85.0..=85.0).suffix("°").max_decimals(1))
+                        .on_hover_text("Rotation autour de l'axe vertical (Y) : positif, la caméra regarde vers la droite");
+                    if self.edited(&r) {
+                        next = Some(Camera { pan, ..cam });
+                    }
+                });
+                ui.end_row();
             });
+            if !cam.is_level() {
+                ui.label(
+                    RichText::new("Caméra tournée : le cadre filmé sur la feuille est un trapèze (vue caméra en perspective).")
+                        .small()
+                        .weak(),
+                );
+            }
         });
         if let Some(c) = next {
             self.set_current_camera(c);

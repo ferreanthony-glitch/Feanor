@@ -53,7 +53,10 @@ impl Nav3d {
             Nav3d::Orbit => "Tourner autour du plateau",
             Nav3d::Pan => "Glisser la vue",
             Nav3d::Dolly => "Avancer / reculer (glisser vers le haut ou le bas)",
-            Nav3d::Move => "Déplacer un calque dans son plan (Maj : en profondeur), ou la caméra par son œil (Maj : avancée)",
+            Nav3d::Move => {
+                "Déplacer un calque dans son plan (Maj : en profondeur), ou la caméra par son œil (Maj : avancée ; \
+                 Ctrl : la tourner, panoramique et bascule)"
+            }
         }
     }
 
@@ -76,6 +79,8 @@ enum Drag3d {
     Layer { id: u64, along: bool, z0: f32, depth0: f32, hit0: V3, screen0: Pos2, t0: LayerTransform, snap: Edit, changed: bool },
     /// La caméra : dans son plan ou, `along`, en avancée.
     Camera { along: bool, hit0: V3, screen0: Pos2, cam0: Camera, snap: Edit, changed: bool },
+    /// La caméra tournée sur elle-même (Ctrl, 9f) : panoramique et bascule.
+    Aim { screen0: Pos2, cam0: Camera, snap: Edit, changed: bool },
 }
 
 /// État de la vue 3D.
@@ -368,8 +373,15 @@ impl App {
                 line(far[k], far[(k + 1) % 4], faint);
             }
         }
-        // Objectif : petit cadre près de l'œil, et l'œil.
-        let lens = corners.map(|c| stage3d::lerp3(eye, c, 0.07));
+        // Objectif : petit cadre près de l'œil, face à la visée (panoramique, bascule), et l'œil.
+        let (st, ct) = cam.tilt.to_radians().sin_cos();
+        let (sp, cp) = cam.pan.to_radians().sin_cos();
+        let forward = [ct * sp, st, -ct * cp];
+        let reach = world.d0 * 0.07;
+        let lens = corners.map(|c| {
+            let ahead = (0..3).map(|k| (c[k] - eye[k]) * forward[k]).sum::<f32>().max(1e-3);
+            stage3d::lerp3(eye, c, reach / ahead)
+        });
         for k in 0..4 {
             line(lens[k], lens[(k + 1) % 4], strong);
         }
@@ -392,7 +404,7 @@ impl App {
     fn stage3d_cursor(&self, ctx: &egui::Context, response: &egui::Response, proj: &Projector, world: &World) {
         let Some(p) = response.hover_pos() else { return };
         let icon = match (&self.stage3d.drag, self.stage3d.tool) {
-            (Some(Drag3d::Layer { .. } | Drag3d::Camera { .. }), _) => CursorIcon::Grabbing,
+            (Some(Drag3d::Layer { .. } | Drag3d::Camera { .. } | Drag3d::Aim { .. }), _) => CursorIcon::Grabbing,
             (Some(Drag3d::View), _) => CursorIcon::Grabbing,
             (None, Nav3d::Move) => {
                 let on_eye = proj.project(world.eye(&self.current_camera())).is_some_and(|e| e.distance(p) <= GRAB);
@@ -422,7 +434,7 @@ impl App {
         if response.drag_started_by(PointerButton::Primary) {
             let at = press.or(response.interact_pointer_pos()).unwrap_or(rect.center());
             if self.stage3d.tool == Nav3d::Move && !mods.alt {
-                self.press3d(world, &Projector::new(&cam, rect), at, mods.shift);
+                self.press3d(world, &Projector::new(&cam, rect), at, mods.shift, mods.command || mods.ctrl);
             } else {
                 self.stage3d.drag = Some(Drag3d::View);
             }
@@ -466,10 +478,15 @@ impl App {
 
     /// Début d'un geste de l'outil Déplacer : la caméra si l'on prend son œil, sinon le calque
     /// sous la souris ; rien dessous : on tourne autour.
-    fn press3d(&mut self, world: &World, proj: &Projector, at: Pos2, along: bool) {
+    fn press3d(&mut self, world: &World, proj: &Projector, at: Pos2, along: bool, aim: bool) {
         let cam = self.current_camera();
         let eye = world.eye(&cam);
         let (o, d) = proj.ray(at);
+        if aim && proj.project(eye).is_some_and(|e| e.distance(at) <= GRAB) {
+            let snap = self.snapshot();
+            self.stage3d.drag = Some(Drag3d::Aim { screen0: at, cam0: cam, snap, changed: false });
+            return;
+        }
         if proj.project(eye).is_some_and(|e| e.distance(at) <= GRAB) {
             let hit0 = stage3d::ray_plane_z(o, d, eye[2]).map_or(eye, |h| h.0);
             let snap = self.snapshot();
@@ -532,13 +549,28 @@ impl App {
                     world.d0 - cam.dolly
                 );
             }
+            Some(Drag3d::Aim { screen0, cam0, changed, .. }) => {
+                // Vers la droite : panoramique à droite ; vers le haut : bascule vers le haut.
+                let m = p - *screen0;
+                let cam = Camera {
+                    pan: (cam0.pan + m.x * 0.25).clamp(-85.0, 85.0),
+                    tilt: (cam0.tilt - m.y * 0.25).clamp(-85.0, 85.0),
+                    ..*cam0
+                };
+                *changed = true;
+                self.set_current_camera(cam);
+                let cam = self.current_camera();
+                self.status = format!("Caméra : panoramique {:+.1}°, bascule {:+.1}°", cam.pan, cam.tilt);
+            }
             _ => {}
         }
     }
 
     fn finish_drag3d(&mut self) {
         match self.stage3d.drag.take() {
-            Some(Drag3d::Layer { snap, changed: true, .. }) | Some(Drag3d::Camera { snap, changed: true, .. }) => {
+            Some(Drag3d::Layer { snap, changed: true, .. })
+            | Some(Drag3d::Camera { snap, changed: true, .. })
+            | Some(Drag3d::Aim { snap, changed: true, .. }) => {
                 self.history.push(snap);
                 self.modified = true;
             }

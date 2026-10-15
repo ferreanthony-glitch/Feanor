@@ -3,7 +3,7 @@
 use eframe::egui::vec2;
 
 use crate::document::{Layer, LayerKind};
-use crate::topview::{depth_of, distance, half_field, world_x};
+use crate::topview::{depth_of, distance, field_edges, half_field, world_x};
 
 /// Caméra décalée de `offset`, sans avancée.
 fn pan(offset: eframe::egui::Vec2) -> crate::document::CameraSeen {
@@ -39,6 +39,22 @@ fn top_view_matches_the_multiplane_shift() {
             }
         }
     }
+}
+
+#[test]
+fn the_field_turns_with_the_pan() {
+    let (unit, zoom) = (1920.0, 1.5);
+    // Sans panoramique : les bords du champ de toujours.
+    let [(a, da), (b, db)] = field_edges(100.0, 0.2, 3.0, zoom, 0.0, unit);
+    let half = half_field(unit, zoom, 3.0 - 0.2);
+    assert!((a - (100.0 - half)).abs() < 0.01 && (b - (100.0 + half)).abs() < 0.01);
+    assert!((da - 3.0).abs() < 1e-4 && (db - 3.0).abs() < 1e-4);
+    // Panoramique à droite : les deux bords partent à droite, le champ garde son ouverture.
+    let [(a2, _), (b2, _)] = field_edges(100.0, 0.2, 3.0, zoom, 15.0, unit);
+    assert!(a2 > a && b2 > b);
+    // Très fort : le bord droit ne monte plus jusqu'en haut, il est arrêté sur sa direction.
+    let [_, (_, d_far)] = field_edges(0.0, 0.0, 2.0, 1.0, 80.0, unit);
+    assert!(d_far < 2.0);
 }
 
 #[test]

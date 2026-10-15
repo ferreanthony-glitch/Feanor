@@ -47,18 +47,18 @@ impl App {
 
         let plan = self.build_plan(self.cur_frame, true, true);
         let painter = ui.painter_at(rect);
-        let corners = [
-            pos2(0.0, 0.0),
-            pos2(size.x, 0.0),
-            pos2(size.x, size.y),
-            pos2(0.0, size.y),
-        ]
-        .map(|p| self.view.to_screen(rect, size, p));
-        painter.add(Shape::convex_polygon(
-            corners.iter().map(|p| *p + vec2(4.0, 5.0)).collect(),
-            Color32::from_black_alpha(110),
-            Stroke::NONE,
-        ));
+        let stage_corners = [pos2(0.0, 0.0), pos2(size.x, 0.0), pos2(size.x, size.y), pos2(0.0, size.y)];
+        let corners_h = stage_corners.map(|p| self.view.to_screen_h(rect, size, p));
+        let corners = corners_h.map(|c| c.0);
+        // Vue en perspective (caméra tournée, 9f) : w des coins pour la carte graphique.
+        let ws = self.view.persp.is_some().then(|| corners_h.map(|c| c.1));
+        if ws.is_none() {
+            painter.add(Shape::convex_polygon(
+                corners.iter().map(|p| *p + vec2(4.0, 5.0)).collect(),
+                Color32::from_black_alpha(110),
+                Stroke::NONE,
+            ));
+        }
         // Dessins des images qui viennent, à envoyer d'avance à la carte graphique.
         let ahead = match &self.gpu {
             Some(gpu) => crate::playback::upcoming_cels(
@@ -73,20 +73,32 @@ impl App {
             // Les calques sont superposés par la carte graphique, directement à leur place.
             let (all, tiles) = self.renderer.take_gpu_dirty();
             gpu.sync(&self.doc, &plan, all, &tiles, &ahead);
-            painter.add(gpu.paint(&plan, corners, rect, [self.doc.width, self.doc.height]));
+            painter.add(gpu.paint(&plan, corners, ws, rect, [self.doc.width, self.doc.height]));
         } else {
             let texture = self.renderer.update(ui.ctx(), &self.doc, plan);
             let mut mesh = egui::Mesh::with_texture(texture);
-            let uvs = [pos2(0.0, 0.0), pos2(1.0, 0.0), pos2(1.0, 1.0), pos2(0.0, 1.0)];
-            for (pos, uv) in corners.into_iter().zip(uvs) {
-                mesh.vertices.push(egui::epaint::Vertex {
-                    pos,
-                    uv,
-                    color: Color32::WHITE,
-                });
+            // En perspective, egui plaque la texture par triangle (sans perspective) : on
+            // subdivise, et on laisse ce qui passe derrière la caméra.
+            let n = if ws.is_some() { 24 } else { 1 };
+            let mut front = Vec::with_capacity((n + 1) * (n + 1));
+            for j in 0..=n {
+                for i in 0..=n {
+                    let uv = pos2(i as f32 / n as f32, j as f32 / n as f32);
+                    let (pos, w) = self.view.to_screen_h(rect, size, pos2(uv.x * size.x, uv.y * size.y));
+                    front.push(w > 0.0);
+                    mesh.vertices.push(egui::epaint::Vertex { pos, uv, color: Color32::WHITE });
+                }
             }
-            mesh.add_triangle(0, 1, 2);
-            mesh.add_triangle(0, 2, 3);
+            for j in 0..n {
+                for i in 0..n {
+                    let a = j * (n + 1) + i;
+                    let (b, c, d) = (a + 1, a + n + 1, a + n + 2);
+                    if front[a] && front[b] && front[c] && front[d] {
+                        mesh.add_triangle(a as u32, b as u32, d as u32);
+                        mesh.add_triangle(a as u32, d as u32, c as u32);
+                    }
+                }
+            }
             painter.add(Shape::mesh(mesh));
         }
 

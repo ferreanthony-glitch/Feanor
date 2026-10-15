@@ -41,7 +41,8 @@ pub fn square_to_quad(q: [Pos2; 4]) -> Option<Homography> {
     ])
 }
 
-fn mul(a: &Homography, b: &Homography) -> Homography {
+/// Produit de deux homographies : `a` après `b`.
+pub fn mul(a: &Homography, b: &Homography) -> Homography {
     let mut m = [0.0; 9];
     for r in 0..3 {
         for c in 0..3 {

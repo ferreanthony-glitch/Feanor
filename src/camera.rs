@@ -10,8 +10,16 @@
 //! panneau d'avant (ou d'après) dans la scène, sinon au centre ; avec une seule, elle est fixe ;
 //! avec plusieurs, elle va de l'une à l'autre (positions, avancée et rotation en ligne droite, zoom
 //! à vitesse régulière), ralentie au départ et à l'arrivée selon les adoucis de sortie et d'entrée.
+//!
+//! Bascule et panoramique (9f) : la caméra tourne sur elle-même, à sa place (son œil ne bouge
+//! pas). Tous les calques étant déjà ramenés sur le plan de référence tels que l'œil les voit
+//! (multiplan), ce que filme la caméra tournée est ce plan vu en perspective : le passage de
+//! l'image finale à la feuille devient une homographie (`homography`), le cadre filmé un
+//! trapèze. Le multiplan, lui, ne dépend que de la place de l'œil et ne change pas.
 
 use eframe::egui::{pos2, vec2, Pos2, Vec2};
+
+use crate::persp::{self, Homography};
 
 /// Focale du zoom 100 %, en mm (capteur de 36 mm de large).
 pub const REF_FOCAL: f32 = 35.0;
@@ -33,6 +41,37 @@ pub struct Camera {
     pub angle: f32,
     /// Avancée de la caméra vers la feuille (travelling avant), en pixels ; négative : recul.
     pub dolly: f32,
+    /// Bascule, en degrés : positive, la caméra regarde vers le haut.
+    pub tilt: f32,
+    /// Panoramique, en degrés : positif, la caméra regarde vers la droite.
+    pub pan: f32,
+}
+
+/// Une caméra tournée doit encore voir le plan de référence par les quatre coins du cadre, sous
+/// au moins cet angle (degrés) : au-delà, le cadre filmerait l'horizon.
+pub const MIN_GRAZING: f32 = 5.0;
+
+/// Passage de l'image finale à la feuille, calculé une fois pour beaucoup de points.
+#[derive(Clone, Copy, Debug)]
+pub enum FrameMap {
+    /// Caméra droite : le calcul de toujours (`Camera::to_stage`).
+    Level(Camera, [usize; 2]),
+    /// Caméra basculée ou en panoramique : homographie (w > 0 devant la caméra).
+    Turned(Homography),
+}
+
+impl FrameMap {
+    /// Point de la feuille filmé au point (`u`, `v`) de l'image ; rien si ce rayon ne rencontre
+    /// pas le plan de référence.
+    pub fn at(&self, u: f32, v: f32) -> Option<Pos2> {
+        match self {
+            FrameMap::Level(cam, frame) => Some(cam.to_stage(*frame, u, v)),
+            FrameMap::Turned(h) => {
+                let w = h[6] * u + h[7] * v + h[8];
+                (w > 1e-9).then(|| pos2((h[0] * u + h[1] * v + h[2]) / w, (h[3] * u + h[4] * v + h[5]) / w))
+            }
+        }
+    }
 }
 
 impl Camera {
@@ -44,7 +83,104 @@ impl Camera {
             zoom: 1.0,
             angle: 0.0,
             dolly: 0.0,
+            tilt: 0.0,
+            pan: 0.0,
         }
+    }
+
+    /// Ni bascule ni panoramique : le cadre filmé est un rectangle.
+    pub fn is_level(&self) -> bool {
+        self.tilt == 0.0 && self.pan == 0.0
+    }
+
+    /// Homographie de l'image finale (pixels) vers la feuille, pour n'importe quelle caméra ; w
+    /// est positif pour un rayon qui rencontre le plan de référence devant la caméra.
+    ///
+    /// Un point (u, v) de l'image donne un rayon de la caméra : (u − l/2, v − h/2) tourné du roulis
+    /// (`angle`), puis (x, −y, −f) avec f = zoom × D (focale en pixels), tourné de la bascule
+    /// (autour de l'axe horizontal de la caméra) puis du panoramique (autour de la verticale). Il
+    /// rencontre le plan z = 0 depuis l'œil (à la distance E) au point
+    /// (x_c − E·dx/dz, y_c + E·dy/dz) de la feuille (y vers le bas sur la feuille, vers le haut
+    /// dans le monde). Caméra droite : c'est exactement `to_stage`.
+    pub fn homography(&self, frame: [usize; 2]) -> Homography {
+        let (fw, fh) = (frame[0] as f32, frame[1] as f32);
+        let f = self.zoom.max(0.01) * ref_distance(frame);
+        let e = self.distance(frame);
+        let (sr, cr) = self.angle.to_radians().sin_cos();
+        let (st, ct) = self.tilt.to_radians().sin_cos();
+        let (sp, cp) = self.pan.to_radians().sin_cos();
+        let center: Homography = [1.0, 0.0, -fw / 2.0, 0.0, 1.0, -fh / 2.0, 0.0, 0.0, 1.0];
+        let roll: Homography = [cr, -sr, 0.0, sr, cr, 0.0, 0.0, 0.0, 1.0];
+        let lens: Homography = [1.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, -f];
+        let tilt: Homography = [1.0, 0.0, 0.0, 0.0, ct, -st, 0.0, st, ct];
+        let pan: Homography = [cp, 0.0, -sp, 0.0, 1.0, 0.0, sp, 0.0, cp];
+        // Signe changé (une homographie est la même à un facteur près) : w > 0 devant.
+        let ground: Homography = [e, 0.0, -self.x, 0.0, -e, -self.y, 0.0, 0.0, -1.0];
+        [pan, tilt, lens, roll, center].iter().fold(ground, |m, b| persp::mul(&m, b))
+    }
+
+    /// Homographie inverse (feuille → image finale), composée des inverses de chaque étape (plus
+    /// précis que d'inverser la matrice) ; w est positif pour un point devant la caméra.
+    pub fn homography_inverse(&self, frame: [usize; 2]) -> Homography {
+        let (fw, fh) = (frame[0] as f32, frame[1] as f32);
+        let f = self.zoom.max(0.01) * ref_distance(frame);
+        let e = self.distance(frame);
+        let (sr, cr) = self.angle.to_radians().sin_cos();
+        let (st, ct) = self.tilt.to_radians().sin_cos();
+        let (sp, cp) = self.pan.to_radians().sin_cos();
+        let ground: Homography = [1.0 / e, 0.0, -self.x / e, 0.0, -1.0 / e, self.y / e, 0.0, 0.0, -1.0];
+        let pan: Homography = [cp, 0.0, sp, 0.0, 1.0, 0.0, -sp, 0.0, cp];
+        let tilt: Homography = [1.0, 0.0, 0.0, 0.0, ct, st, 0.0, -st, ct];
+        let lens: Homography = [1.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, -1.0 / f];
+        let roll: Homography = [cr, sr, 0.0, -sr, cr, 0.0, 0.0, 0.0, 1.0];
+        let center: Homography = [1.0, 0.0, fw / 2.0, 0.0, 1.0, fh / 2.0, 0.0, 0.0, 1.0];
+        [roll, lens, tilt, pan, ground].iter().fold(center, |m, b| persp::mul(&m, b))
+    }
+
+    /// Passage de l'image finale à la feuille.
+    pub fn frame_map(&self, frame: [usize; 2]) -> FrameMap {
+        if self.is_level() {
+            FrameMap::Level(*self, frame)
+        } else {
+            FrameMap::Turned(self.homography(frame))
+        }
+    }
+
+    /// Les quatre coins du cadre voient le plan de référence sous au moins `MIN_GRAZING` degrés.
+    pub fn sees_reference(&self, frame: [usize; 2]) -> bool {
+        if self.is_level() {
+            return true;
+        }
+        let h = self.homography(frame);
+        let (fw, fh) = (frame[0] as f32, frame[1] as f32);
+        let f = self.zoom.max(0.01) * ref_distance(frame);
+        let min = MIN_GRAZING.to_radians().sin();
+        [(0.0, 0.0), (fw, 0.0), (fw, fh), (0.0, fh)].iter().all(|&(u, v)| {
+            // w = −dz pour un rayon de longueur √((u − l/2)² + (v − h/2)² + f²) : w / longueur est le
+            // sinus de l'angle sous lequel il rencontre le plan.
+            let w = h[6] * u + h[7] * v + h[8];
+            let len = ((u - fw / 2.0).powi(2) + (v - fh / 2.0).powi(2) + f * f).sqrt();
+            w / len > min
+        })
+    }
+
+    /// La même caméra, bascule et panoramique réduits ensemble autant qu'il faut pour que le cadre
+    /// voie encore le plan de référence (`sees_reference`).
+    pub fn limited(&self, frame: [usize; 2]) -> Camera {
+        if self.sees_reference(frame) {
+            return *self;
+        }
+        let turned = |k: f32| Camera { tilt: self.tilt * k, pan: self.pan * k, ..*self };
+        let (mut lo, mut hi) = (0.0_f32, 1.0_f32);
+        for _ in 0..24 {
+            let mid = (lo + hi) / 2.0;
+            if turned(mid).sees_reference(frame) {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        turned(lo)
     }
 
     fn rotate(&self, v: Vec2) -> Vec2 {
@@ -69,8 +205,12 @@ impl Camera {
         self.zoom * REF_FOCAL
     }
 
-    /// Point de la feuille filmé au point (`u`, `v`) de l'image finale `frame`.
+    /// Point de la feuille filmé au point (`u`, `v`) de l'image finale `frame` (caméra tournée :
+    /// par l'homographie ; pour beaucoup de points, `frame_map`).
     pub fn to_stage(&self, frame: [usize; 2], u: f32, v: f32) -> Pos2 {
+        if !self.is_level() {
+            return crate::persp::apply(&self.homography(frame), pos2(u, v));
+        }
         let zoom = self.magnification(frame);
         let d = vec2(u - frame[0] as f32 / 2.0, v - frame[1] as f32 / 2.0) / zoom;
         pos2(self.x, self.y) + self.rotate(d)
@@ -92,6 +232,8 @@ impl Camera {
             zoom: (a.zoom.max(0.01).ln() + (b.zoom.max(0.01).ln() - a.zoom.max(0.01).ln()) * t).exp(),
             angle: mix(a.angle, b.angle),
             dolly: mix(a.dolly, b.dolly),
+            tilt: mix(a.tilt, b.tilt),
+            pan: mix(a.pan, b.pan),
         }
     }
 

@@ -22,7 +22,7 @@ fn the_panel_camera_sees_each_plane_where_the_2d_render_puts_it() {
     let c0 = pos2(1200.0, 675.0);
     for depth in [-0.5, 0.0, 0.7, 3.0] {
         for (ox, oy, dolly) in [(0.0, 0.0, 0.0), (150.0, -40.0, 0.0), (-80.0, 60.0, 300.0), (0.0, 0.0, -500.0)] {
-            let cam = Camera { x: c0.x + ox, y: c0.y + oy, zoom: 1.0, angle: 0.0, dolly };
+            let cam = Camera { x: c0.x + ox, y: c0.y + oy, zoom: 1.0, angle: 0.0, dolly, tilt: 0.0, pan: 0.0 };
             let mut l = Layer::new("L", LayerKind::Bitmap);
             l.depth = depth;
             l.transform = LayerTransform { x: 30.0, y: -12.0, scale: 1.5, angle: 20.0 };
@@ -42,14 +42,18 @@ fn the_panel_camera_sees_each_plane_where_the_2d_render_puts_it() {
 #[test]
 fn looking_through_the_camera_frames_the_shot() {
     let w = world();
-    for (zoom, dolly) in [(1.0, 0.0), (2.0, 0.0), (1.0, 400.0), (1.5, -300.0)] {
-        let cam = Camera { x: 1300.0, y: 600.0, zoom, angle: 0.0, dolly };
+    // Avec bascule et panoramique (9f) : la vue 3D (repère calculé à part, `Cam3d::basis`) voit
+    // les coins du cadre filmé — un trapèze sur la feuille — aux coins de l'écran.
+    for (zoom, dolly, tilt, pan) in
+        [(1.0, 0.0, 0.0, 0.0), (2.0, 0.0, 0.0, 0.0), (1.0, 400.0, 0.0, 0.0), (1.5, -300.0, 0.0, 0.0), (1.0, 0.0, 15.0, 0.0), (1.0, 0.0, 0.0, -30.0), (1.3, 200.0, -12.0, 25.0)]
+    {
+        let cam = Camera { x: 1300.0, y: 600.0, zoom, angle: 0.0, dolly, tilt, pan };
         let rect = screen();
         let proj = Projector::new(&w.look_through(&cam), rect);
         let corners = w.frame_corners(&cam);
         for (c, r) in corners.iter().zip([rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom()]) {
             let s = proj.project(*c).unwrap();
-            assert!(s.distance(r) < 0.5, "zoom {zoom}, avancée {dolly} : {s:?} ≠ {r:?}");
+            assert!(s.distance(r) < 0.5, "zoom {zoom}, avancée {dolly}, bascule {tilt}, panoramique {pan} : {s:?} ≠ {r:?}");
         }
     }
 }
@@ -57,7 +61,7 @@ fn looking_through_the_camera_frames_the_shot() {
 #[test]
 fn picking_takes_the_nearest_drawing_under_the_pointer() {
     let w = world();
-    let cam = Camera { x: 1200.0, y: 675.0, zoom: 1.0, angle: 0.0, dolly: 0.0 };
+    let cam = Camera { x: 1200.0, y: 675.0, zoom: 1.0, angle: 0.0, dolly: 0.0, tilt: 0.0, pan: 0.0 };
     let rect = screen();
     let proj = Projector::new(&w.look_through(&cam), rect);
     let (o, d) = proj.ray(rect.center());

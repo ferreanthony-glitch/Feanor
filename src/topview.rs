@@ -36,9 +36,25 @@ pub fn world_x(x: f32, stage_cx: f32, d: f32) -> f32 {
     (x - stage_cx) * d
 }
 
-/// Demi-largeur du champ de la caméra à la distance `d`.
+/// Demi-largeur du champ de la caméra à la distance `d` (sans panoramique).
+#[cfg(test)]
 pub fn half_field(frame_w: f32, zoom: f32, d: f32) -> f32 {
     d * frame_w / (2.0 * zoom.max(1e-3))
+}
+
+/// Bords gauche et droit du champ vus de dessus, jusqu'à la distance `d` : points (x, distance).
+/// La caméra est en `x`, à la distance `from`, tournée de `pan` degrés (9f) ; une distance vaut
+/// `unit` pixels de feuille. Un bord que le panoramique écarte trop pour qu'il atteigne `d` est
+/// arrêté loin sur sa direction.
+pub fn field_edges(x: f32, from: f32, d: f32, zoom: f32, pan: f32, unit: f32) -> [(f32, f32); 2] {
+    let half = (1.0 / (2.0 * zoom.max(1e-3))).atan();
+    let span = (d - from).max(0.0) * unit;
+    [-half, half].map(|a| {
+        let b = pan.to_radians() + a;
+        let (s, c) = b.sin_cos();
+        let t = if c > 0.05 { span / c } else { span * 3.0 };
+        (x + t * s, from + t * c / unit)
+    })
 }
 
 /// Cadrage de la vue de dessus : gardé tel quel pendant un glisser, pour que le calque reste sous
@@ -140,8 +156,8 @@ impl App {
         let d_max = items.iter().map(|it| it.shown).fold(1.5_f32, f32::max) * 1.12;
         let cam = self.doc.panel_camera(self.cur_panel, self.cur_frame);
         let cam_x = cam.x - self.doc.stage_center().x;
-        let half = half_field(unit, cam.zoom, d_max - self.camera_advance(&cam));
-        let (mut lo, mut hi) = (cam_x - half, cam_x + half);
+        let [(a, _), (b, _)] = field_edges(cam_x, self.camera_advance(&cam), d_max, cam.zoom, cam.pan, unit);
+        let (mut lo, mut hi) = (a.min(b).min(cam_x), a.max(b).max(cam_x));
         for it in items {
             lo = lo.min(it.x0);
             hi = hi.max(it.x1);
@@ -273,14 +289,11 @@ impl App {
         let cone = |frame: usize| {
             let cam = self.doc.panel_camera(self.cur_panel, frame);
             let x = cam.x - cx;
-            // La caméra avancée (travelling) est plus haut, plus près des calques.
+            // La caméra avancée (travelling) est plus haut, plus près des calques ; le
+            // panoramique tourne son champ.
             let from = self.camera_advance(&cam);
-            let half = half_field(unit, cam.zoom, d_top - from);
-            [
-                fit.to_screen(rect, x, from),
-                fit.to_screen(rect, x - half, d_top),
-                fit.to_screen(rect, x + half, d_top),
-            ]
+            let [(xa, da), (xb, db)] = field_edges(x, from, d_top, cam.zoom, cam.pan, unit);
+            [fit.to_screen(rect, x, from), fit.to_screen(rect, xa, da), fit.to_screen(rect, xb, db)]
         };
         if self.panel().camera.len() > 1 {
             for f in [0, self.frame_count().saturating_sub(1)] {

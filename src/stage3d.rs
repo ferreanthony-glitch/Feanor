@@ -108,12 +108,22 @@ impl World {
         Some(self.to_stage(lerp3(e, w, t), 0.0))
     }
 
-    /// Vue 3D placée à l'œil de la caméra du panneau, qui regarde droit devant avec sa focale :
-    /// elle voit le cadre (rotation de la caméra mise à part).
+    /// Vue 3D placée à l'œil de la caméra du panneau, qui regarde comme elle (panoramique, bascule)
+    /// avec sa focale : elle voit le cadre (roulis de la caméra mis à part).
     pub fn look_through(&self, cam: &Camera) -> Cam3d {
         let eye = self.eye(cam);
         let distance = (self.d0 - cam.dolly).max(1.0);
-        Cam3d { target: [eye[0], eye[1], eye[2] - distance], azimuth: 0.0, elevation: 0.0, distance, focal: cam.focal() }
+        let (st, ct) = cam.tilt.to_radians().sin_cos();
+        let (sp, cp) = cam.pan.to_radians().sin_cos();
+        // Visée : (0, 0, −1) tourné de la bascule puis du panoramique.
+        let forward = [ct * sp, st, -ct * cp];
+        Cam3d {
+            target: [eye[0] + forward[0] * distance, eye[1] + forward[1] * distance, eye[2] + forward[2] * distance],
+            azimuth: -cam.pan,
+            elevation: -cam.tilt,
+            distance,
+            focal: cam.focal(),
+        }
     }
 }
 
