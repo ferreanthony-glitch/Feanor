@@ -1311,6 +1311,61 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
+action = "flip.panneau"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "flip.jouer"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "flip.precedent"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "flip.suivant"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "flip.changer"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "flip.cles"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "flip.breakdowns"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "flip.intervalles"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "flip.intervalles_completes"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "flip.speciaux"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "flip.speciaux_completes"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
 action = "dossier.nouveau"
 touches = []
 source = "TVPaint 12 sans touche"

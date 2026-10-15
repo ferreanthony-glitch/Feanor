@@ -609,7 +609,27 @@ Décisions d'Anthony :
   - Pas repris, choix d'Anthony : mémo et export PDF de la feuille, affichage japonais, vue
     par pages, XDTS, textes Action / Dialogue image par image. Restent [N] : associer marques
     et rôles. Les flips par rôle iront avec les flips.
-- 13h et suivantes, une étape chacune : flips, clés d'effets, calques CTG, Puppet, vidéo,
+- ✅ 13h (`flips.rs`, `flipsui.rs`). Flips, ceux de TVPaint 12 (textes 011074000–063, flips
+  par rôle 012104150–159) : feuilleter vite des images pour juger un mouvement.
+  - Panneau « Flips » (icône livre de la timeline, action `flip.panneau`) : choisir, créer,
+    renommer, supprimer un flip (il en reste toujours un).
+  - Chaque flip a une sorte (basique, directionnel, manuel), des limites (plan, calque
+    courant, entrée / sortie, signets, marques de couleur, un rôle, ou N images de chaque
+    côté), des checkpoints (toutes les images, les dessins du calque, signets, marques de
+    couleur, un rôle). S'y ajoutent les flips par seconde (basique), la direction, le sens et
+    la distance en pixels (directionnel), et deux options : boucler entre les limites, revenir
+    à l'image de départ.
+  - Basique et directionnel durent tant qu'on tient le bouton du panneau ou la touche de
+    `flip.jouer`. Le manuel avance par `flip.precedent` / `flip.suivant` ou les flèches du
+    panneau.
+  - Flips par rôle (clés, breakdowns, intervalles et spéciaux à faire / complétés) : tenir
+    leur bouton ou leur touche.
+  - Réglage de l'application, comme chez TVPaint. Le flip par défaut est celui de la
+    configuration d'Anthony : manuel, calque courant, de dessin en dessin, 30 par seconde,
+    retour au départ. Aucune touche : sa configuration TVPaint n'en a pas.
+  - Mécanique des trois sortes : notre lecture des réglages décrits par les textes. Pas
+    repris : « En dehors des tenons » et « Multiple » (noms seulement).
+- 13i et suivantes, une étape chacune : clés d'effets, calques CTG, Puppet, vidéo,
   interpolation d'images.
 Le faux-fixe n'a que son nom dans les textes de TVPaint : à faire décrire par Anthony avant de
 l'implanter (le pochoir, la transparence préservée et la position verrouillée ont été décrits

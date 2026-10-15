@@ -297,6 +297,12 @@ pub struct App {
     pub(crate) roles_view: crate::rolesui::RolesView,
     pub(crate) role_menu: bool,
     pub(crate) xsheet_role_menu: bool,
+    /// Flips (13h, `flipsui.rs`) : la liste (retenue dans `settings`), le flip en cours, le
+    /// départ et la dernière image d'un flip manuel, le panneau ouvert.
+    pub(crate) flips: crate::flips::FlipSettings,
+    pub(crate) flip_run: Option<crate::flipsui::FlipRun>,
+    pub(crate) flip_manual: Option<(usize, usize)>,
+    pub(crate) flips_window: bool,
     /// Table lumineuse : les calques autres que le calque courant sont estompés.
     pub(crate) light_table: bool,
     /// Opacité gardée par les calques estompés (0 à 1).
@@ -573,6 +579,10 @@ impl App {
             roles_view: Default::default(),
             role_menu: false,
             xsheet_role_menu: false,
+            flips: settings.flips.clone(),
+            flip_run: None,
+            flip_manual: None,
+            flips_window: false,
             light_table: false,
             light_table_strength: 0.3,
             guides: GuideState::default(),
@@ -2536,6 +2546,14 @@ impl App {
             "role.aucun" => self.set_role(None),
             "role.timeline" => self.roles_view.shown = !self.roles_view.shown,
             "role.calque_courant" => self.roles_view.current_only = !self.roles_view.current_only,
+            // Flips (13h, `flipsui.rs`) : `flip.jouer` et les flips par rôle durent tant que leur
+            // touche est tenue.
+            "flip.panneau" => self.flips_window = !self.flips_window,
+            "flip.jouer" => self.hold_current_flip("flip.jouer"),
+            "flip.precedent" => self.flip_step(-1),
+            "flip.suivant" => self.flip_step(1),
+            "flip.changer" => self.next_flip(),
+            a if a.starts_with("flip.") && self.role_flip_action(a) => {}
             // Dossiers de calques (13b-5, `folders.rs`).
             "dossier.nouveau" => self.new_folder(),
             "dossier.ranger" => self.folder_from_chosen(),
@@ -2789,6 +2807,7 @@ impl eframe::App for App {
             self.handle_dropped_files(ctx);
         }
         self.tick_playback(ctx);
+        self.tick_flip(ctx);
         if self.playing {
             let now = ctx.input(|i| i.time);
             let g = self.global_frame();
@@ -2832,11 +2851,13 @@ impl eframe::App for App {
         if self.thumbs.pending {
             ctx.request_repaint();
         }
-        // Réglages de la pelure et de la feuille d'exposition : enregistrés quand ils changent
-        // (pas pendant un glissé).
-        if (self.onion != self.settings.onion || self.xsheet != self.settings.xsheet) && !ctx.input(|i| i.pointer.any_down()) {
+        // Réglages de la pelure, de la feuille d'exposition et des flips : enregistrés quand ils
+        // changent (pas pendant un glissé).
+        let changed = self.onion != self.settings.onion || self.xsheet != self.settings.xsheet || self.flips != self.settings.flips;
+        if changed && !ctx.input(|i| i.pointer.any_down()) {
             self.settings.onion = self.onion.clone();
             self.settings.xsheet = self.xsheet.clone();
+            self.settings.flips = self.flips.clone();
             if let Err(e) = self.settings.save() {
                 self.status = format!("Réglages non enregistrés : {e}");
             }

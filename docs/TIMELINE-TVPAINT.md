@@ -176,8 +176,25 @@ colorisation « Coul. / Image / Dég. » 000050010–019 : couleur et couleur de
 (Coloriser oui / non), « Dégradé » [N] : sens choisi par Anthony le 2026-10-15, celui de
 Photoshop (deux couleurs, de l'image la plus proche à la plus lointaine). Fait en 13f, sauf le
 mode clé de rig.
-Caméra : clés par paramètre, courbes de vitesse, interpolation linéaire / spline. Flips
-011074000–063 [A].
+Caméra : clés par paramètre, courbes de vitesse, interpolation linéaire / spline.
+
+**Flips** 011074000–063 (inventaire du 2026-10-15) :
+- Sortes : basique, directionnel, manuel 011074002–004.
+- Limites 011074045 [A] : durée du clip ou du calque courant, points d'entrée / sortie,
+  signets, marques d'image, ou personnalisées (images à gauche / à droite 011074046/047 [A]).
+- Checkpoints 011074049 [A] : images, instances, marques, signets. Le `config.ini` d'Anthony
+  ajoute rôles et marques (`keyrolesid`, `limitroleid`).
+- Flips par seconde 011074055 [A], boucler entre les limites 011074054 [A], revenir à l'image
+  de départ 011074060 [A], direction horizontale / verticale, en avant / en arrière, distance
+  tolérée en pixels 011074062 [A], touches gauche / droite / du flip 011074052–059 [A].
+- « En dehors des tenons » 011074051 et « Multiple » 011074063 : [N].
+- Flips par rôle 012104150–159 : keyframes, inbetweens à faire, breakdowns, inbetweens
+  terminés, spéciaux à faire / terminés.
+- Le `flips.conf` livré et la configuration d'Anthony : un seul flip, manuel, sans touche.
+
+Fait en 13h, sauf les deux [N]. La mécanique des trois sortes est notre lecture : le basique
+parcourt ses checkpoints tant qu'on le tient, le directionnel avance d'un checkpoint tous les
+N pixels de souris tant qu'on le tient, le manuel avance par deux touches.
 
 **Feuille d'exposition** (« Timesheet », 012103925–012104348 ; inventaire du 2026-10-15) :
 - Colonnes 012103964–983 : Image, Action, Audio, Cell, Caméra (position, rotation, taille,

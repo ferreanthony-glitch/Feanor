@@ -502,6 +502,17 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   réarrangements (une exposition de plus à chaque instance) les laissent à leur image.
   Décision : rangés par image plutôt que par dessin, parce qu'un intervalle « à faire » se pose
   là où rien n'est encore dessiné (choix d'Anthony).
+- Flips (`flips.rs`, `flipsui.rs`, 13h) : `FlipScope` calcule les limites autour de l'image de
+  départ et les checkpoints (calcul pur, testé) ; `next_point`, `step` et `played` donnent
+  l'image suivante. Le flip en cours (`App::flip_run`) avance dans `tick_flip`, à chaque
+  image d'affichage :
+  - basique : selon le temps écoulé ;
+  - directionnel : selon le déplacement de la souris.
+
+  Il finit dès que sa touche (`Keymap::held`) ou le bouton de la souris n'est plus tenu. Un
+  flip manuel garde son image de départ (`flip_manual`) tant qu'on n'a pas bougé l'image
+  courante autrement. `FlipSettings` est un réglage de l'application (`[flips]`), pas du
+  projet.
 - Vue Projet (`projetui.rs`, 13e-4) : `Document::storyboard_locked` est dans `Structure` (une
   annulation le rétablit avec le reste ; le basculer est une étape). `App::storyboard_refuses`
   garde `structure_op` et les autres chemins qui changent l'ordre, le nombre ou la durée des

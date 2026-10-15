@@ -564,6 +564,7 @@ impl App {
         self.groups_window_ui(ctx);
         self.properties_window_ui(ctx);
         self.onion_window_ui(ctx);
+        self.flips_window_ui(ctx);
         self.smart_rename_window(ctx);
         if let Some(mut d) = self.new_dialog.take() {
             let mut keep = true;

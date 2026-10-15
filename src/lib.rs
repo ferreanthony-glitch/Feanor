@@ -88,6 +88,10 @@ mod moteur_tests;
 pub mod noyau;
 #[cfg(test)]
 mod noyau_tests;
+pub mod flips;
+#[cfg(test)]
+mod flips_tests;
+mod flipsui;
 mod onion;
 #[cfg(test)]
 mod onion_tests;

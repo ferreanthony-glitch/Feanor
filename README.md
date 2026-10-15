@@ -246,6 +246,20 @@ Un clic va à l'image et au calque. L'œil choisit les colonnes et le trait de s
 - ils suivent les images qu'on insère, supprime ou déplace ;
 - le même menu montre ou cache les rôles dans la timeline, ou les limite au calque courant.
 
+**Flips** (icône livre de la timeline) : feuilleter vite des images pour juger un mouvement.
+Chaque flip a une sorte :
+- basique : il défile tant qu'on tient le bouton ou la touche ;
+- directionnel : on tient et on glisse la souris ;
+- manuel : deux flèches pour l'image d'avant et d'après.
+
+On règle aussi :
+- ses limites : le plan, le calque, l'entrée / sortie, les signets, les marques, un rôle, ou
+  N images autour ;
+- ses checkpoints : toutes les images, les dessins, les signets, les marques, un rôle ;
+- sa vitesse, la boucle, le retour à l'image de départ.
+
+Les flips par rôle feuillettent les clés, les breakdowns ou les intervalles du calque.
+
 **Vue Projet** :
 - **Nouveau plan avant le plan courant** (menu Storyboard, menu ⋯ du montage).
 - **Cadenas du montage** : il verrouille le storyboard. L'ordre, le nombre et la durée des plans
@@ -439,6 +453,7 @@ en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le 
 | `projetui.rs` | Vue Projet : plan avant, storyboard verrouillé, propriétés, projet fait de plans (13e) |
 | `xsheet.rs`, `xsheetui.rs` | Feuille d'exposition : ce que montre chaque case, le panneau (13g) |
 | `roles.rs`, `rolesui.rs` | Rôles des images : modèle, suivi des images, symboles, menu (13g-2) |
+| `flips.rs`, `flipsui.rs` | Flips : limites, checkpoints, pas, panneau et flip en cours (13h) |
 | `fill.rs` | Remplissage par zone et débord |
 | `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra |
 | `gpu.rs` | Composition et affichage par la carte graphique, envoi des dessins par tuiles |

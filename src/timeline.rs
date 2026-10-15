@@ -202,6 +202,15 @@ impl App {
                     if bulle(resp, "Panneau de la pelure", "Mode, devant, couleurs, chaque image et son opacité, réglages rangés, décalage.", &key).clicked() {
                         self.onion_window = !self.onion_window;
                     }
+                    sep(ui);
+
+                    // Flips (13h).
+                    let key = self.raccourci("flip.panneau");
+                    let resp = ui.add(egui::Button::new(RichText::new(ph::BOOK_OPEN).size(crate::bulles::TAILLE)).selected(self.flips_window).frame(false));
+                    let what = format!("Feuilleter vite des images pour juger un mouvement. Flip courant : « {} ».", self.flips.current().name);
+                    if bulle(resp, "Flips", &what, &key).clicked() {
+                        self.flips_window = !self.flips_window;
+                    }
                 });
             });
     }

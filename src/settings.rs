@@ -26,6 +26,9 @@ pub struct Settings {
     /// Ce que montre la feuille d'exposition (13g).
     #[serde(default, rename = "feuille_expo")]
     pub xsheet: crate::xsheet::XSheetSettings,
+    /// Les flips (13h).
+    #[serde(default, rename = "flips")]
+    pub flips: crate::flips::FlipSettings,
     /// Disposition de la fenêtre à la dernière fermeture.
     #[serde(default, rename = "disposition", skip_serializing_if = "Option::is_none")]
     pub layout: Option<Layout>,
@@ -50,6 +53,7 @@ impl Default for Settings {
             system_cursor: true,
             onion: OnionSettings::default(),
             xsheet: Default::default(),
+            flips: Default::default(),
             layout: None,
             workspaces: Vec::new(),
         }
