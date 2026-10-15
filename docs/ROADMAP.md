@@ -468,7 +468,9 @@ Décisions d'Anthony :
     calque courant seul, supprimer les vides / cachés, pochoirs éteints / inversés, couper,
     coller à la place, monter / descendre (Ctrl + Haut / Bas), premier / dernier, pelure du
     calque ; menu ☰ de l'en-tête = menu Calques.
-  - 13b-3b. Fenêtre « Nouveau calque » (nom, sorte, groupe, mode, position).
+  - ✅ 13b-3b. Fenêtre « Nouveau calque… » (`newlayer.rs`) : nom, sorte, groupe (ou celui du
+    calque courant), mode, place (sur / sous le calque courant, tout en haut / en bas, sur /
+    sous le groupe du calque courant). Le pré / post-comportement viendra en 13c.
   - 13b-4. Panneau des groupes. 13b-5. Dossiers.
 - 13c. Images et expositions (choix, glisser, insérer / supprimer avec modes de trou, couper /
   copier / coller, inverser, instances, noms, pré / post-comportement, faux-fixe, étirer).
