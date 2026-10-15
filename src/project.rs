@@ -48,7 +48,9 @@ pub const FORMAT: &str = "pelure-projet";
 /// 10 (phase 9) : caméra avancée (`avance`) et adoucis en images (`adoucir_entree`, `adoucir_sortie`).
 /// 11 (9f) : bascule et panoramique de la caméra (`bascule`, `panoramique`), qu'une version
 /// précédente ignorerait (le film changerait sans prévenir).
-pub const VERSION: u32 = 11;
+/// 12 (13a) : un seul panneau par scène, le plan (les panneaux d'un projet plus ancien sont mis
+/// bout à bout à l'ouverture), et marques d'image (`marques`) qu'une version précédente perdrait.
+pub const VERSION: u32 = 12;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Modèles 3D de repère (2d), dans le format de Pelure.
@@ -214,6 +216,28 @@ struct PanelEntry {
     /// Repère 3D (format 5 ; absent : aucun).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     repere3d: Option<Ref3dEntry>,
+    /// Marques d'image du plan (format 12 ; absent : aucune).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    marques: Vec<MarkEntry>,
+}
+
+/// Une marque d'image (13a) : une image de storyboard à l'image `image` du plan, avec ses textes.
+#[derive(Serialize, Deserialize)]
+struct MarkEntry {
+    id: u64,
+    image: usize,
+    #[serde(default, skip_serializing_if = "is_zero_u8")]
+    couleur: u8,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    action: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    dialogue: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    notes: String,
+}
+
+fn is_zero_u8(v: &u8) -> bool {
+    *v == 0
 }
 
 #[derive(Serialize, Deserialize)]
@@ -751,6 +775,18 @@ fn manifest_of(doc: &Document) -> Manifest {
                 couleur: r.color,
                 opacite: r.opacity,
             }),
+            marques: panel
+                .marks
+                .iter()
+                .map(|m| MarkEntry {
+                    id: m.id,
+                    image: m.frame,
+                    couleur: m.color,
+                    action: m.action.clone(),
+                    dialogue: m.dialogue.clone(),
+                    notes: m.notes.clone(),
+                })
+                .collect(),
         });
     }
     let used = used_sounds(doc);
@@ -1071,7 +1107,7 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                     notes: p.notes,
                     camera,
                     ref3d: p.repere3d.as_ref().filter(|r| models.contains_key(&r.modele)).and_then(ref3d_of),
-                    marks: Vec::new(),
+                    marks: marks_of(p.marques),
                 });
             }
         }
@@ -1084,6 +1120,15 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
     let mut doc = Document::from_parts(w, h, structure, cels, sounds);
     for model in models.into_values() {
         doc.insert_model(model);
+    }
+    // Projet d'avant les plans (13a) : chaque scène devient un plan, ses panneaux bout à bout.
+    if !doc.is_plans() {
+        let n = doc.panels.len();
+        warnings.extend(doc.into_plans());
+        warnings.push(format!(
+            "Projet converti en plans : {n} panneaux mis bout à bout en {} plans ; le début de chaque ancien panneau est une marque d'image.",
+            doc.panels.len()
+        ));
     }
     let converted = match frame {
         Some([fw, fh]) if fw > 0 && fh > 0 && fw <= w && fh <= h => {
@@ -1105,6 +1150,25 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
         warnings,
         converted,
     })
+}
+
+/// Marques d'image relues du manifeste : triées, après la première image, une seule par image.
+fn marks_of(entries: Vec<MarkEntry>) -> Vec<crate::document::ImageMark> {
+    let mut marks: Vec<crate::document::ImageMark> = entries
+        .into_iter()
+        .filter(|m| m.image > 0)
+        .map(|m| crate::document::ImageMark {
+            id: m.id,
+            frame: m.image,
+            color: m.couleur,
+            action: m.action,
+            dialogue: m.dialogue,
+            notes: m.notes,
+        })
+        .collect();
+    marks.sort_by_key(|m| m.frame);
+    marks.dedup_by_key(|m| m.frame);
+    marks
 }
 
 /// Repère 3D relu du manifeste ; `None` si ses valeurs sont absurdes.

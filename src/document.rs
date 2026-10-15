@@ -609,6 +609,7 @@ impl Document {
             .panels
             .iter()
             .map(|p| p.id)
+            .chain(structure.panels.iter().flat_map(|p| p.marks.iter().map(|m| m.id)))
             .chain(structure.scenes.iter().map(|s| s.id))
             .chain(structure.sequences.iter().map(|s| s.id))
             .chain(structure.audio_tracks.iter().map(|t| t.id))
@@ -1658,12 +1659,17 @@ impl Document {
     pub fn move_plans(&mut self, ids: &[u64], before: Option<u64>) -> Option<usize> {
         let order = |d: &Document| -> Vec<(u64, u64)> { d.panels.iter().map(|p| (p.id, d.scene(p.scene).map_or(0, |s| s.sequence))).collect() };
         let was = order(self);
+        // Le plan devant lequel poser : `before`, ou le premier qui ne bouge pas après lui.
+        let anchor = before.and_then(|b| {
+            let i = self.panels.iter().position(|p| p.id == b)?;
+            self.panels[i..].iter().find(|p| !ids.contains(&p.id)).map(|p| p.id)
+        });
         let (moved, mut kept): (Vec<Panel>, Vec<Panel>) = std::mem::take(&mut self.panels).into_iter().partition(|p| ids.contains(&p.id));
         if moved.is_empty() {
             self.panels = kept;
             return None;
         }
-        let at = before.and_then(|b| kept.iter().position(|p| p.id == b)).unwrap_or(kept.len());
+        let at = anchor.and_then(|b| kept.iter().position(|p| p.id == b)).unwrap_or(kept.len());
         let seq_of = |d: &Document, p: Option<&Panel>| p.and_then(|p| d.scene(p.scene)).map(|s| s.sequence);
         let left = seq_of(self, at.checked_sub(1).and_then(|i| kept.get(i)));
         let right = seq_of(self, kept.get(at));

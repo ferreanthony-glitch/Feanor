@@ -152,18 +152,18 @@ impl Projet {
         crate::io::encode_png(&rgba, tw, th)
     }
 
-    /// Nouveau panneau après `index` (dans sa scène) ; rend son rang.
+    /// Nouveau plan après le plan `index` (13a : un panneau = un plan) ; rend son rang.
     pub fn ajouter_panneau(&mut self, index: usize) -> Result<usize, String> {
         let index = self.panneau(index)?;
         self.modifie = true;
-        Ok(self.doc.add_panel_after(index))
+        Ok(self.doc.add_scene_after(index))
     }
 
-    /// Copie du panneau `index` juste après lui ; rend son rang.
+    /// Copie du plan `index` juste après lui ; rend son rang.
     pub fn dupliquer_panneau(&mut self, index: usize) -> Result<usize, String> {
         let index = self.panneau(index)?;
         self.modifie = true;
-        Ok(self.doc.duplicate_panel_after(index))
+        Ok(self.doc.duplicate_scene_after(index))
     }
 
     /// Supprime le panneau `index` (jamais le dernier du projet) ; rend le rang du panneau voisin.
@@ -178,7 +178,9 @@ impl Projet {
     /// fin) ; rend son nouveau rang.
     pub fn deplacer_panneau(&mut self, index: usize, place: usize) -> Result<usize, String> {
         let index = self.panneau(index)?;
-        let at = self.doc.move_panel(index, place.min(self.doc.panels.len())).ok_or("Déplacement impossible.")?;
+        let before = self.doc.panels.get(place).map(|p| p.id);
+        let id = self.doc.panels[index].id;
+        let at = self.doc.move_plans(&[id], before).ok_or("Déplacement impossible.")?;
         self.modifie = true;
         Ok(at)
     }

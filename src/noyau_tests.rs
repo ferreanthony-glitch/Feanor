@@ -27,10 +27,12 @@ fn panels_are_added_moved_written_and_removed() {
     // Le second passe devant.
     let id = p.doc.panels[1].id;
     assert_eq!(p.deplacer_panneau(1, 0).unwrap(), 0);
+    // Un plan par scène (13a).
     let r = p.resume();
-    let panneaux = &r.sequences[0].scenes[0].panneaux;
-    assert_eq!((panneaux[0].id, panneaux[0].action.as_str(), panneaux[0].images), (id, "Il court", 36));
-    assert_eq!(panneaux[1].debut, "0:01:12", "le second commence après 36 images");
+    let plans: Vec<_> = r.sequences[0].scenes.iter().map(|s| &s.panneaux[0]).collect();
+    assert!(r.sequences[0].scenes.iter().all(|s| s.panneaux.len() == 1));
+    assert_eq!((plans[0].id, plans[0].action.as_str(), plans[0].images), (id, "Il court", 36));
+    assert_eq!(plans[1].debut, "0:01:12", "le second commence après 36 images");
     assert_eq!(p.dupliquer_panneau(0).unwrap(), 1);
     assert_eq!(p.doc.panels[1].dialogue, "« Vite ! »");
     p.supprimer_panneau(1).unwrap();
@@ -49,7 +51,7 @@ fn thumbnails_are_png_at_the_asked_width() {
     assert_eq!(img.to_rgba8().get_pixel(10, 10).0, [255, 255, 255, 255]);
 }
 
-/// Projet d'exemple pour essayer l'appli compagnon : quatre panneaux dessinés, deux scènes.
+/// Projet d'exemple pour essayer l'appli compagnon : quatre plans dessinés.
 /// `PELURE_EXEMPLE=<dossier>\Exemple.pelure cargo test --release ecrire_un_projet_exemple -- --ignored`
 #[test]
 #[ignore]
@@ -62,7 +64,6 @@ fn ecrire_un_projet_exemple() {
     for i in 0..3 {
         p.ajouter_panneau(i).unwrap();
     }
-    p.doc.split_scene(2).unwrap();
     let couleurs = [Color32::from_rgb(220, 60, 50), Color32::from_rgb(50, 120, 220), Color32::from_rgb(60, 170, 90), Color32::from_rgb(240, 170, 40)];
     let textes = ["Le bus arrive au loin.", "Gros plan : le chauffeur.", "La porte s'ouvre.", "Tout le monde monte."];
     for (i, (c, t)) in couleurs.iter().zip(textes).enumerate() {
@@ -101,7 +102,7 @@ fn a_project_is_saved_reopened_and_exported() {
     assert!(warnings.is_empty());
     let r = back.resume();
     assert_eq!(r.nom, "Bus");
-    assert_eq!(r.sequences[0].scenes[0].panneaux.len(), 2);
+    assert_eq!(r.sequences[0].scenes.len(), 2, "deux plans");
     assert_eq!(r.sequences[0].scenes[0].panneaux[0].action, "Le bus arrive");
     back.modifier_textes(1, String::new(), "Bonjour".into(), String::new()).unwrap();
     back.enregistrer().unwrap();

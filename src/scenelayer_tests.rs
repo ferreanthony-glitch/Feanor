@@ -139,13 +139,16 @@ fn backgrounds_are_saved() {
     project::save(&doc, &manifest, &mut Default::default()).unwrap();
     let mut back = project::load(&manifest).unwrap().doc;
     std::fs::remove_dir_all(&dir).ok();
-    let w = back.panels[0].layers[0].scene_wide.expect("fond relu");
-    let cel = back.panels[0].layers[0].frames[0];
+    // Relu en plans (13a) : la scène 1 est un seul plan ; son fond y devient un calque ordinaire,
+    // le même dessin tenu sur tout le plan.
+    assert!(back.is_plans());
+    assert_eq!(back.panels.len(), 2);
+    let fond = &back.panels[0].layers[0];
+    assert!(fond.scene_wide.is_none());
+    let cel = fond.frames[0];
     assert!(cel.is_some());
-    for p in 0..3 {
-        assert_eq!(back.panels[p].layers[0].scene_wide, Some(w));
-        assert_eq!(back.panels[p].layers[0].frames[0], cel, "un seul dessin, partagé");
-    }
-    assert!(back.panels[3].layers.iter().all(|l| l.scene_wide.is_none()));
-    assert!(!back.sync_scene_layers(0, 0), "relu déjà accordé");
+    assert_eq!(fond.frames.len(), back.panels[0].frame_count());
+    assert!(fond.frames.iter().all(|f| *f == cel), "un seul dessin, tenu");
+    assert!(back.panels[1].layers.iter().all(|l| l.scene_wide.is_none()));
+    assert!(!back.sync_scene_layers(0, 0), "plus de calque de toute la scène");
 }

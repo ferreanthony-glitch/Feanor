@@ -210,7 +210,16 @@ fn notes_are_undone_and_saved() {
     std::fs::create_dir_all(&dir).unwrap();
     let manifest = dir.join("P.pelure");
     project::save(&doc, &manifest, &mut Default::default()).unwrap();
+    // Projet d'avant les plans (13a) : relu en plans ; la note attachée au troisième panneau de la
+    // scène suit son image de storyboard, devenue la deuxième marque du plan.
     let back = project::load(&manifest).unwrap().doc;
+    assert_eq!(back.board.strokes, doc.board.strokes);
+    assert_eq!(back.board.texts[0].text, doc.board.texts[0].text);
+    assert_eq!(back.board.texts[0].anchor, Some(back.panels[0].marks[1].id));
+    // Projet en plans : relu tel quel, marques comprises.
+    project::save(&back, &manifest, &mut Default::default()).unwrap();
+    let again = project::load(&manifest).unwrap().doc;
     std::fs::remove_dir_all(&dir).ok();
-    assert_eq!(back.board, doc.board, "traits, textes et attaches relus");
+    assert_eq!(again.board, back.board, "traits, textes et attaches relus");
+    assert_eq!(again.panels[0].marks, back.panels[0].marks);
 }
