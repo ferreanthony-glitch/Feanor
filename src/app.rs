@@ -406,9 +406,12 @@ pub struct App {
 
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        cc.egui_ctx.set_visuals(egui::Visuals::dark());
-        // Icônes (Phosphor) : ajoutées à la police de l'interface, utilisables dans tout texte.
+        // Thème sombre et dense, repris de Pelure Studio (12a).
+        crate::theme::appliquer(&cc.egui_ctx);
+        // Police de l'interface (Segoe UI si Windows l'a) et icônes (Phosphor), utilisables dans
+        // tout texte.
         let mut fonts = egui::FontDefinitions::default();
+        crate::theme::polices(&mut fonts);
         egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
         cc.egui_ctx.set_fonts(fonts);
         // Polices du poste (outil Texte) : lues sur un autre fil dès le démarrage.

@@ -345,6 +345,20 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   grands aperçus (`stroke_preview`) en cache (`BrushPreviews::wide`) par réglage et taille en
   pixels de l'écran, largeur par paliers de 24 points pour ne pas les refaire en tirant un bord.
 
+## Thème (phase 12)
+
+- `theme.rs` : la palette (gris 25 à 900 et bleus 800 / 900 du thème sombre de Spectrum, valeurs
+  de @spectrum-css/tokens 16) en constantes ; `visuels` (egui : panneaux, champs, contrôles au
+  repos / survolés / enfoncés, sélection), `densifier` (espacements, tailles de texte),
+  `polices` (Segoe UI lue dans `%WINDIR%\Fonts`, en tête de la famille proportionnelle ; les
+  polices d'egui et les icônes restent derrière), `dock` (onglets et séparations d'egui_dock).
+  Appliqué au démarrage (`App::new`) et à chaque image pour les onglets (`show_dock`). Les fonds
+  dessinés à la main (autour de la feuille, barre de la vue, masque de la vue caméra) prennent
+  `theme::FOND` / `ENTETE`. `contraste` (WCAG) sert aux tests.
+- Aperçus des pinceaux (12b) : la texture d'aperçu reste une couverture en gris (en cache) ; la
+  couleur est donnée au dessin (`preview_colors` : papier du projet, couleur courante, gris pour
+  une gomme) — changer de couleur ne refait aucun aperçu.
+
 ## Pinceaux texturés (3d-2)
 
 - `brush.rs` : chaque empreinte calcule une couverture par pixel — disque (dureté) ou pointe en
@@ -615,6 +629,7 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 | Avancée de la caméra dans le multiplan, pas de bascule ni de panoramique (9c) | le rendu reste un empilement de plans 2D, exact et rapide | nul | les mouvements X/Y de la caméra manquent | oui : un rendu en perspective pourra s'ajouter (champs en plus) |
 | Appli compagnon Tauri à côté de Pelure, pas à la place de l'interface egui (10, choix d'Anthony) | le storyboard profite d'une interface web ; la toile de dessin (carte graphique, stylet, latence) reste où elle est rapide | Node.js + ≈ 300 crates de plus à la compilation du compagnon seulement ; un noyau à tenir | faible : Pelure inchangée ; deux applis peuvent enregistrer le même projet l'une sur l'autre | oui : supprimer `src-tauri/` et `src-frontend/` |
 | **Pelure egui reste le logiciel principal** ; Pelure Studio (Tauri) = banc d'essai d'interface (11, choix d'Anthony) | la toile native (egui + wgpu, même processus, affichage réglé) garde la meilleure latence et partage la carte graphique avec le rendu ; dans un WebView, chaque trait traverse l'IPC (1,6 à 5,6 ms mesurés) puis le compositeur de WebView2, et les pixels sont copiés (8 Mo par calque pour une opération sur toute l'image) | nul | faible : les idées d'interface du Studio sont à reporter dans egui à la main | oui : `moteur.rs` reste disponible pour une autre interface |
+| Thème : couleurs de Spectrum reprises en constantes, police Segoe UI du système (12a) | l'allure dense et sombre du Studio, sans dépendance ni fichier ajouté | nul (police lue au démarrage, ≈ 1 Mo) | faible : sans Segoe UI (autre système), la police d'egui reste | oui : `theme::appliquer` et `polices` à retirer |
 | `src-tauri` projet Cargo à part, pas membre d'un espace de travail (10b) | Tauri ne change aucune version des dépendances de Pelure | le noyau est compilé deux fois (deux dossiers `target`) | faible | oui : en faire un membre plus tard |
 | Bascule et panoramique = homographie du plan de référence déjà composé (9f) | exact (le multiplan ne dépend que de l'œil), sans toucher à la composition ni aux calques | une homographie par image ; vue caméra par la carte graphique avec un w par coin | faible : au ras de l'horizon, la feuille est très étirée (bornée à 5°) ; hors de la feuille, rien | oui : caméra droite = calcul d'avant ; deux champs du manifeste |
 | Cadres de composition dans la disposition, pas dans le projet (9d) | ce sont des réglages de la vue, comme le zoom | nul | un format de diffusion propre au projet n'est pas transmis avec lui | oui : un champ du manifeste pourrait s'ajouter |

@@ -122,7 +122,7 @@ impl App {
     /// La barre : onglets de vue à gauche, puis les cadres de composition.
     pub(crate) fn view_bar(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
-        ui.painter().rect_filled(ui.max_rect(), 0.0, Color32::from_gray(34));
+        ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::ENTETE);
         ui.horizontal_centered(|ui| {
             ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
             ui.add_space(4.0);

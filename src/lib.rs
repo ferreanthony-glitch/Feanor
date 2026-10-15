@@ -116,6 +116,9 @@ mod storyboard;
 mod tbbrush;
 #[cfg(test)]
 mod tests;
+mod theme;
+#[cfg(test)]
+mod theme_tests;
 mod thumbs;
 mod timeline;
 mod toolbars;

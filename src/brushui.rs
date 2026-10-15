@@ -131,7 +131,9 @@ impl App {
         let painter = ui.painter();
         painter.rect_filled(rect, 4.0, bg);
         let image = egui::Rect::from_min_size(rect.min + vec2((TILE.x - PREVIEW.x) * 0.5, 2.0), PREVIEW);
-        painter.image(tex, image, egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), ink);
+        let (papier, trait_) = self.preview_colors(index);
+        painter.rect_filled(image, 2.0, papier);
+        painter.image(tex, image, egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), trait_);
         let size = if settings.size < 10.0 { format!("{:.1}", settings.size) } else { format!("{:.0}", settings.size) };
         painter.text(
             pos2(rect.center().x, rect.bottom() - 8.0),
@@ -265,8 +267,20 @@ impl App {
         painter.text(pos2(rect.right() - 8.0, y), egui::Align2::RIGHT_CENTER, size, small, weak);
         // L'aperçu du trait.
         let image = egui::Rect::from_min_size(pos2(rect.left() + 6.0, rect.top() + 22.0), vec2(shown, WIDE_HEIGHT));
-        painter.image(tex, image, egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), ink);
+        let (papier, trait_) = self.preview_colors(index);
+        painter.rect_filled(image, 3.0, papier);
+        painter.image(tex, image, egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), trait_);
         resp.on_hover_text(format!("{name}\n{source}"))
+    }
+
+    /// Couleurs d'un aperçu (12b) : le papier du projet, et le trait dans la couleur courante ; une
+    /// gomme en gris (le trait qu'elle enlève).
+    fn preview_colors(&self, index: usize) -> (Color32, Color32) {
+        let [r, g, b] = self.doc.paper;
+        let gomme = self.brushes.presets.get(index).is_some_and(|p| p.target == Target::Eraser);
+        let [cr, cg, cb] = self.color;
+        let trait_ = if gomme { Color32::from_gray(150) } else { Color32::from_rgb(cr, cg, cb) };
+        (Color32::from_rgb(r, g, b), trait_)
     }
 
     /// Papier, grain et pointe en image du pinceau courant.

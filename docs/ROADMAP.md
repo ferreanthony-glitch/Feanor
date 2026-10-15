@@ -381,6 +381,21 @@ Pelure Studio (`..\pelure-studio`).
 - Décision d'Anthony (après ce bilan) : **Pelure egui reste le logiciel principal** (toile
   native : latence, carte graphique partagée) ; Pelure Studio sert de banc d'essai d'interface.
 
+## Phase 12 — Thème du Studio dans Pelure
+
+Demandée par Anthony : reprendre dans Pelure le thème et la densité de Pelure Studio, et les
+aperçus de pinceaux dans la couleur courante.
+
+- ✅ 12a. `theme.rs` : gris sombres et bleu d'accent du thème sombre de Spectrum (couleurs
+  seulement), interface dense (espacements, tailles de texte), Segoe UI si Windows l'a ; onglets
+  des panneaux assortis ; fond autour de la feuille, barre de la vue et masque de la vue caméra
+  aux couleurs du thème. Contrastes testés (texte ≥ 7:1, texte secondaire et accent ≥ 4,5:1 ;
+  le test a fait passer le texte sur l'accent en blanc pur).
+- ✅ 12b. Aperçus des pinceaux (grille des Réglages et panneau Pinceaux) : le trait dans la
+  couleur courante, sur le papier du projet ; une gomme en gris.
+  Pas encore : les couleurs propres à la timeline et au montage (rangées, barres) n'ont pas
+  toutes été reprises ; la barre de la timeline passe sur deux lignes dans une fenêtre étroite.
+
 ## Raccourcis proposés, à valider
 
 Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans `keymap.toml`) :

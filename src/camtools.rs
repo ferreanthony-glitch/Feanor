@@ -297,7 +297,7 @@ impl App {
             let mut mesh = egui::Mesh::default();
             // En vue caméra, rien ne doit transparaître hors du cadre : couleur du fond, opaque.
             let color = if self.camera_view {
-                Color32::from_gray(42)
+                crate::theme::FOND
             } else {
                 Color32::from_black_alpha(alpha)
             };

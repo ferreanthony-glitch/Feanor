@@ -140,7 +140,9 @@ prend le fond de celle-ci.
   grille de réglages, chacun avec l'aperçu de son trait et sa taille. Panneau **Pinceaux** (onglet
   à côté de Couleur) : les mêmes réglages en liste, avec un grand aperçu du trait, la taille, et
   « texture » / « importé » ; ceux de la gomme quand la gomme est choisie ; « Importer… » pour
-  les pinceaux Toon Boom. Les pinceaux texturés
+  les pinceaux Toon Boom. Les aperçus montrent le trait dans la couleur courante, sur le papier.
+  L'interface est sombre et dense (gris et bleu d'accent repris de Pelure Studio, police Segoe
+  UI). Les pinceaux texturés
   (pointe en image, grain du papier, pinceaux importés) marchent aussi sur un calque vectoriel :
   le trait reste modifiable, et ses textures sont enregistrées avec le projet.
 - **Formes** : Ligne (droite, courbe : tracer puis glisser pour courber ; courbe en S : deux

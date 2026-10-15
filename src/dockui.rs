@@ -2,7 +2,7 @@
 //! egui_dock, ouverture et fermeture des panneaux ; panneaux dans leur propre fenêtre Windows
 //! (5g, par exemple sur un deuxième écran).
 
-use eframe::egui::{self, Color32, Id, WidgetText};
+use eframe::egui::{self, Id, WidgetText};
 
 use crate::app::{App, BoardView, Mode};
 use crate::dock::{self, DetachedPanel, DockLayout, Group, Pane};
@@ -83,7 +83,7 @@ impl App {
     pub(crate) fn pane_ui(&mut self, ui: &mut egui::Ui, pane: Pane) {
         match pane {
             Pane::Canvas => {
-                ui.painter().rect_filled(ui.max_rect(), 0.0, Color32::from_gray(42));
+                ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::FOND);
                 if self.mode == Mode::Storyboard && self.board_view == BoardView::Panels {
                     self.board_view(ui);
                 } else {
@@ -109,7 +109,7 @@ impl App {
     /// leur propre fenêtre.
     pub(crate) fn show_dock(&mut self, ctx: &egui::Context) {
         let mut state = self.dock.take().unwrap_or_else(|| dock::to_state(&self.layout.dock_layout()));
-        let style = egui_dock::Style::from_egui(ctx.style().as_ref());
+        let style = crate::theme::dock(egui_dock::Style::from_egui(ctx.style().as_ref()));
         egui_dock::DockArea::new(&mut state)
             .id(Id::new("panneaux"))
             .style(style)
