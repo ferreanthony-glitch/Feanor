@@ -102,26 +102,28 @@ fn hard_light(cb: f32, cs: f32) -> f32 {
     let s = 2.0 * cs - 1.0;
     return cb + s - cb * s;
 }
+fn color_burn(cb: f32, cs: f32) -> f32 {
+    if (cb >= 1.0) { return 1.0; }
+    if (cs <= 0.0) { return 0.0; }
+    return 1.0 - min((1.0 - cb) / cs, 1.0);
+}
+fn color_dodge(cb: f32, cs: f32) -> f32 {
+    if (cb <= 0.0) { return 0.0; }
+    if (cs >= 1.0) { return 1.0; }
+    return min(cb / (1.0 - cs), 1.0);
+}
 fn channel(mode: u32, cb: f32, cs: f32) -> f32 {
     switch mode {
-        case 1u: { return cb * cs; }
-        case 2u: { return cb + cs - cb * cs; }
-        case 3u: { return hard_light(cs, cb); }
-        case 4u: { return min(cb, cs); }
-        case 5u: { return max(cb, cs); }
-        case 6u: {
-            if (cb >= 1.0) { return 1.0; }
-            if (cs <= 0.0) { return 0.0; }
-            return 1.0 - min((1.0 - cb) / cs, 1.0);
-        }
-        case 7u: {
-            if (cb <= 0.0) { return 0.0; }
-            if (cs >= 1.0) { return 1.0; }
-            return min(cb / (1.0 - cs), 1.0);
-        }
-        case 8u: { return min(cb + cs, 1.0); }
-        case 9u: { return hard_light(cb, cs); }
-        case 10u: {
+        case 2u: { return min(cb, cs); }
+        case 3u: { return cb * cs; }
+        case 4u: { return color_burn(cb, cs); }
+        case 5u: { return max(cb + cs - 1.0, 0.0); }
+        case 7u: { return max(cb, cs); }
+        case 8u: { return cb + cs - cb * cs; }
+        case 9u: { return color_dodge(cb, cs); }
+        case 10u: { return min(cb + cs, 1.0); }
+        case 12u: { return hard_light(cs, cb); }
+        case 13u: {
             if (cs <= 0.5) {
                 return cb - (1.0 - 2.0 * cs) * cb * (1.0 - cb);
             }
@@ -131,21 +133,61 @@ fn channel(mode: u32, cb: f32, cs: f32) -> f32 {
             }
             return cb + (2.0 * cs - 1.0) * (d - cb);
         }
-        case 11u: { return abs(cb - cs); }
-        case 12u: { return cb + cs - 2.0 * cb * cs; }
+        case 14u: { return hard_light(cb, cs); }
+        case 15u: {
+            if (cs <= 0.5) { return color_burn(cb, 2.0 * cs); }
+            return color_dodge(cb, 2.0 * cs - 1.0);
+        }
+        case 16u: { return clamp(cb + 2.0 * cs - 1.0, 0.0, 1.0); }
+        case 17u: {
+            if (cs <= 0.5) { return min(cb, 2.0 * cs); }
+            return max(cb, 2.0 * cs - 1.0);
+        }
+        case 18u: {
+            if (cb + cs >= 1.0) { return 1.0; }
+            return 0.0;
+        }
+        case 19u: { return abs(cb - cs); }
+        case 20u: { return cb + cs - 2.0 * cb * cs; }
+        case 21u: { return max(cb - cs, 0.0); }
+        case 22u: {
+            if (cs <= 0.0) {
+                if (cb > 0.0) { return 1.0; }
+                return 0.0;
+            }
+            return min(cb / cs, 1.0);
+        }
         default: { return cs; }
     }
 }
 fn mix_rgb(mode: u32, cb: vec3<f32>, cs: vec3<f32>) -> vec3<f32> {
     switch mode {
-        case 13u: { return set_lum(set_sat(cs, sat(cb)), lum(cb)); }
-        case 14u: { return set_lum(set_sat(cb, sat(cs)), lum(cb)); }
-        case 15u: { return set_lum(cs, lum(cb)); }
-        case 16u: { return set_lum(cb, lum(cs)); }
+        case 6u: {
+            if (lum(cs) < lum(cb)) { return cs; }
+            return cb;
+        }
+        case 11u: {
+            if (lum(cs) > lum(cb)) { return cs; }
+            return cb;
+        }
+        case 23u: { return set_lum(set_sat(cs, sat(cb)), lum(cb)); }
+        case 24u: { return set_lum(set_sat(cb, sat(cs)), lum(cb)); }
+        case 25u: { return set_lum(cs, lum(cb)); }
+        case 26u: { return set_lum(cb, lum(cs)); }
         default: {
             return vec3<f32>(channel(mode, cb.r, cs.r), channel(mode, cb.g, cs.g), channel(mode, cb.b, cs.b));
         }
     }
+}
+// Bruit du Fondu au pixel (x, y) : le même calcul que `blend::dissolve_noise`.
+fn dissolve_noise(x: u32, y: u32) -> f32 {
+    var h = (x * 0x8da6b343u) ^ (y * 0xd8163841u);
+    h = h ^ (h >> 16u);
+    h = h * 0x7feb352du;
+    h = h ^ (h >> 15u);
+    h = h * 0x846ca68bu;
+    h = h ^ (h >> 16u);
+    return f32(h >> 8u) / 16777216.0;
 }
 
 // Composer un calque en mode de fusion : le fond est lu au même pixel et le résultat le
@@ -159,12 +201,21 @@ fn fs_blend(v: VOut) -> @location(0) vec4<f32> {
         return b;
     }
     let cs = min(raw.rgb / raw.a, vec3<f32>(1.0));
+    let mode = u32(item.params.z + 0.5);
+    // Fondu : un point plein, ou le fond.
+    if (mode == 1u) {
+        let p = vec2<u32>(floor(v.pos.xy));
+        if (dissolve_noise(p.x, p.y) < sa) {
+            return vec4<f32>(cs, 1.0);
+        }
+        return b;
+    }
     let ab = b.a;
     var cb = vec3<f32>(0.0);
     if (ab > 0.0) {
         cb = min(b.rgb / ab, vec3<f32>(1.0));
     }
-    let mixed = clamp(mix_rgb(u32(item.params.z + 0.5), cb, cs), vec3<f32>(0.0), vec3<f32>(1.0));
+    let mixed = clamp(mix_rgb(mode, cb, cs), vec3<f32>(0.0), vec3<f32>(1.0));
     let c = (1.0 - ab) * cs + ab * mixed;
     let co = sa * c + (1.0 - sa) * ab * cb;
     let ao = sa + ab * (1.0 - sa);

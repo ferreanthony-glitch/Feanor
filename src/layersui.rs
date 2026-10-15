@@ -125,9 +125,9 @@ impl App {
                 .selected_text(mode.label())
                 .width(120.0)
                 .show_ui(ui, |ui| {
-                    for (k, m) in BlendMode::ALL.into_iter().enumerate() {
-                        // Groupes : normal, assombrir, éclaircir, contraste, écarts, couleur.
-                        if [1, 2, 3, 11, 13].contains(&k) {
+                    for m in BlendMode::ALL {
+                        // Familles : normal, assombrir, éclaircir, contraste, écarts, couleur.
+                        if BlendMode::FAMILY_STARTS.contains(&m) {
                             ui.separator();
                         }
                         ui.selectable_value(&mut mode, m, m.label()).on_hover_text(m.hint());

@@ -115,7 +115,7 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
                     let p = inv.apply(egui::pos2((ox + x) as f32 + 0.5, (oy + y) as f32 + 0.5));
                     let src = sample(&cel.raster, p.x, p.y);
                     if src.a() != 0 {
-                        *d = blend_over(*d, src, item.opacity, item.tint, item.blend);
+                        *d = blend_over(*d, src, item.opacity, item.tint, item.blend, (ox + x, oy + y));
                     }
                 }
             }
@@ -128,9 +128,9 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
         for y in 0..th {
             let s = at(ox, oy + y);
             let row = &tile[y * TILE..y * TILE + tw];
-            for (d, &src) in buf[s..s + tw].iter_mut().zip(row) {
+            for (x, (d, &src)) in buf[s..s + tw].iter_mut().zip(row).enumerate() {
                 if src.a() != 0 {
-                    *d = blend_over(*d, src, item.opacity, item.tint, item.blend);
+                    *d = blend_over(*d, src, item.opacity, item.tint, item.blend, (ox + x, oy + y));
                 }
             }
         }
@@ -248,7 +248,7 @@ pub fn composite_pixel(doc: &Document, plan: &Plan, x: usize, y: usize) -> Color
                 None => cel.raster.get(x, y),
             };
             if s.a() != 0 {
-                c = blend_over(c, s, item.opacity, item.tint, item.blend);
+                c = blend_over(c, s, item.opacity, item.tint, item.blend, (x, y));
             }
         }
     }

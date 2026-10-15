@@ -1213,10 +1213,12 @@ impl Document {
             for (src, o, m) in sources {
                 for (idx, tile) in src.raster.tiles.iter().enumerate() {
                     let Some(tile) = tile else { continue };
+                    let (ox, oy, _, _) = cel.raster.tile_bounds(idx);
                     let dst = cel.raster.tile_mut(idx);
-                    for (d, &s) in dst.iter_mut().zip(tile.iter()) {
+                    for (i, (d, &s)) in dst.iter_mut().zip(tile.iter()).enumerate() {
                         if s.a() != 0 {
-                            *d = crate::blend::blend_over(*d, s, opacity(o), None, m);
+                            let at = (ox + i % crate::raster::TILE, oy + i / crate::raster::TILE);
+                            *d = crate::blend::blend_over(*d, s, opacity(o), None, m, at);
                         }
                     }
                 }
