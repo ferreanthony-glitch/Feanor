@@ -20,7 +20,8 @@
 # etat = "désactivé" : le raccourci est ignoré.
 # source : d'où vient le raccourci.
 #   « Storyboard Pro 27 » = raccourci par défaut lu dans sb_shortcuts.xml de Storyboard Pro 27 ;
-#   « perso » = vos réglages (STB_Shortcuts.xml) ; « proposition » = proposé par Pelure, à valider.
+#   « perso » = vos réglages (STB_Shortcuts.xml) ; « proposition » = proposé par Pelure, à valider ;
+#   « TVPaint 12 (perso) » = vos raccourcis TVPaint 12 (config.ini, section [keyboard]).
 
 version = 1
 
@@ -677,12 +678,140 @@ source = "Storyboard Pro 27 : RESET_LAYER_TRANSFORM_KEY"
 [[raccourci]]
 action = "calque.dessus"
 touches = ["Flèche haut"]
-source = "proposition"
+source = "TVPaint 12 (perso) : LayerUp"
 
 [[raccourci]]
 action = "calque.dessous"
 touches = ["Flèche bas"]
-source = "proposition"
+source = "TVPaint 12 (perso) : LayerDown"
+
+# Calques choisis et opérations sur plusieurs calques (13b). Les touches TVPaint qui prendraient
+# celle d'une autre fonction de Pelure sont proposées dans docs/ROADMAP.md, pas posées ici.
+
+[[raccourci]]
+action = "calque.choisir_dessus"
+touches = ["Maj+Flèche haut"]
+source = "TVPaint 12 (perso) : LayerUpSelection"
+
+[[raccourci]]
+action = "calque.choisir_dessous"
+touches = ["Maj+Flèche bas"]
+source = "TVPaint 12 (perso) : LayerDownSelection"
+
+[[raccourci]]
+action = "calque.monter"
+touches = ["Ctrl+Flèche haut"]
+source = "TVPaint 12 (perso) : LayerMoveUp"
+
+[[raccourci]]
+action = "calque.descendre"
+touches = ["Ctrl+Flèche bas"]
+source = "TVPaint 12 (perso) : LayerMoveDown"
+
+[[raccourci]]
+action = "calque.premier"
+touches = []
+source = "TVPaint 12 (perso) : FirstLayer = Ctrl+Origine, déjà pris par montage.debut"
+
+[[raccourci]]
+action = "calque.dernier"
+touches = []
+source = "TVPaint 12 (perso) : LastLayer = Ctrl+Fin, déjà pris par montage.fin"
+
+[[raccourci]]
+action = "calque.tous_visibles"
+touches = []
+source = "TVPaint 12 (perso) : DisplayAllLayer = « = », déjà pris par panneau.ajouter_image (+)"
+
+[[raccourci]]
+action = "calque.pelure"
+touches = []
+source = "TVPaint 12 (perso) : LayerTogglePelureMode = Ctrl+L, réservé à clips.lier_au_panneau"
+
+[[raccourci]]
+action = "calque.dupliquer"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.supprimer_vides"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.supprimer_caches"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.fusionner_choisis"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.fusionner_visibles"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.fusionner_tout"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.choisir_tout"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.choisir_visibles"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.choisir_groupe"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.choisir_autres_groupes"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.choisir_aucun"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.tous_caches"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.courant_seul"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.pochoirs_eteindre"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.pochoirs_inverser"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.couper"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "calque.coller_remplacer"
+touches = []
+source = "TVPaint 12 sans touche"
 
 # ------------------------------------------------------------------------------------ Caméra
 # Storyboard Pro 27 a ces fonctions sans touche par défaut.

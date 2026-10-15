@@ -6,6 +6,7 @@ use eframe::egui::{self, vec2, Color32, Event, Key, Pos2, Rect, Vec2};
 use crate::audio::AudioEngine;
 use crate::brush::{BrushSettings, StrokeMode, StrokeState};
 use crate::camtools::CamDrag;
+use crate::layerops::Choose;
 use crate::layertools::LayerDrag;
 use crate::document::{fresh_layer_id, CelId, Document, Layer, LayerKind, Panel};
 use crate::fill::{self, FillSettings};
@@ -290,6 +291,8 @@ pub struct App {
     pub(crate) layer_rename: Option<crate::layersui::LayerRename>,
     /// Calque que l'on fait glisser dans l'en-tête de la timeline pour changer son rang (13b).
     pub(crate) head_drag: Option<usize>,
+    /// Calques choisis en plus du calque courant (ids, Ctrl + clic dans l'en-tête, 13b).
+    pub(crate) layer_sel: Vec<u64>,
     /// Aperçus des réglages de pinceau (grille du panneau Réglages, 6d).
     pub(crate) brush_previews: crate::brushui::BrushPreviews,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
@@ -507,6 +510,7 @@ impl App {
             layer_thumbs: Default::default(),
             layer_rename: None,
             head_drag: None,
+            layer_sel: Vec::new(),
             brush_previews: Default::default(),
             ref3d: Default::default(),
             camera_view: false,
@@ -1419,56 +1423,12 @@ impl App {
         self.commit_structure(snap);
     }
 
+    /// Duplique le calque courant ; la copie, juste au-dessus, devient le calque courant.
     pub(crate) fn duplicate_layer(&mut self) {
         self.end_stroke();
         let snap = self.snapshot();
-        let source = self.layer().clone();
-        let mut copies: HashMap<CelId, CelId> = HashMap::new();
-        let mut frames = Vec::with_capacity(source.frames.len());
-        for f in &source.frames {
-            frames.push(match f {
-                Some(id) => Some(match copies.get(id) {
-                    Some(&c) => c,
-                    None => {
-                        let c = self.doc.duplicate_cel(*id);
-                        copies.insert(*id, c);
-                        c
-                    }
-                }),
-                None => None,
-            });
-        }
-        // La copie d'un calque de toute la scène est un calque du seul panneau.
-        let layer = Layer {
-            id: fresh_layer_id(),
-            name: format!("{} copie", source.name),
-            frames,
-            scene_wide: None,
-            ..source
-        };
-        let at = self.cur_layer + 1;
-        self.layers_mut().insert(at, layer);
-        self.cur_layer = at;
-        self.vsel = None;
-        self.commit_structure(snap);
-    }
-
-    pub(crate) fn delete_layer(&mut self) {
-        self.end_stroke();
-        if self.layers().len() <= 1 {
-            self.status = "Il faut garder au moins un calque.".into();
-            return;
-        }
-        let snap = self.snapshot();
-        let at = self.cur_layer;
-        // Un calque de toute la scène part de tous ses panneaux.
-        match self.layer().scene_wide {
-            Some(w) => self.doc.remove_scene_layer(w),
-            None => {
-                self.layers_mut().remove(at);
-            }
-        }
-        self.cur_layer = at.min(self.layers().len() - 1);
+        self.cur_layer = crate::layerops::duplicate_layer(&mut self.doc, self.cur_panel, self.cur_layer);
+        self.layer_sel.clear();
         self.vsel = None;
         self.commit_structure(snap);
     }
@@ -2205,9 +2165,35 @@ impl App {
             "exposition.raccourcir" => self.exposure_minus(),
             "calque.nouveau_vectoriel" => self.add_layer(LayerKind::Vector),
             "calque.nouveau_bitmap" => self.add_layer(LayerKind::Bitmap),
-            "calque.supprimer" => self.delete_layer(),
+            "calque.supprimer" => self.delete_chosen_layers(),
             "calque.dessus" => self.select_layer(self.cur_layer + 1),
             "calque.dessous" => self.select_layer(self.cur_layer.saturating_sub(1)),
+            // Calques choisis et opérations sur plusieurs calques (13b, `layerops.rs`).
+            "calque.dupliquer" => self.duplicate_chosen_layers(),
+            "calque.supprimer_vides" => self.delete_empty_layers(),
+            "calque.supprimer_caches" => self.delete_hidden_layers(),
+            "calque.fusionner_choisis" => self.merge_chosen_layers(),
+            "calque.fusionner_visibles" => self.merge_visible_layers(),
+            "calque.fusionner_tout" => self.merge_all_layers(),
+            "calque.choisir_tout" => self.choose_layers(Choose::All),
+            "calque.choisir_visibles" => self.choose_layers(Choose::Visible),
+            "calque.choisir_groupe" => self.choose_layers(Choose::SameGroup),
+            "calque.choisir_autres_groupes" => self.choose_layers(Choose::OtherGroups),
+            "calque.choisir_aucun" => self.choose_layers(Choose::Nothing),
+            "calque.choisir_dessus" => self.extend_layer_choice(true),
+            "calque.choisir_dessous" => self.extend_layer_choice(false),
+            "calque.monter" => self.move_layer(true),
+            "calque.descendre" => self.move_layer(false),
+            "calque.premier" => self.select_end_layer(false),
+            "calque.dernier" => self.select_end_layer(true),
+            "calque.tous_visibles" => self.show_all_layers(),
+            "calque.tous_caches" => self.hide_all_layers(),
+            "calque.courant_seul" => self.show_current_layer_only(),
+            "calque.pochoirs_eteindre" => self.stencils_off(),
+            "calque.pochoirs_inverser" => self.stencils_invert(),
+            "calque.pelure" => self.toggle_layer_onion(),
+            "calque.couper" => self.cut_layer(),
+            "calque.coller_remplacer" => self.paste_layer_replacing(),
             "panneau.couper" => self.split_current_panel(),
             "panneau.fusionner_suivant" => self.merge_next_panel(),
             "scene.couper" => self.split_current_panel(),

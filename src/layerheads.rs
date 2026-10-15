@@ -117,6 +117,17 @@ impl App {
             FontId::proportional(11.0),
             ui.visuals().weak_text_color(),
         );
+        // Menu des opérations sur les calques.
+        let r = Rect::from_min_size(pos2(rect.right() - 44.0, rect.top()), vec2(20.0, header_h));
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt("menu_calques_timeline"));
+        let button = egui::Button::new(RichText::new(ph::LIST).size(13.0).color(theme::TEXTE_DOUX)).frame(false);
+        let resp = egui::menu::menu_custom_button(&mut child, button, |ui| self.layer_ops_menu(ui)).response;
+        bulle(
+            resp,
+            "Opérations sur les calques",
+            "Nouveau, dupliquer, supprimer, fusionner, choisir, afficher, pochoirs… Ctrl + clic sur une ligne pour choisir plusieurs calques, Maj + clic pour une suite.",
+            "",
+        );
         // Tout réduire / tout agrandir.
         let all_small = self.layers().iter().all(|l| l.collapsed);
         let r = Rect::from_min_size(pos2(rect.right() - 22.0, rect.top()), vec2(20.0, header_h));
@@ -185,7 +196,13 @@ impl App {
         let visuals = ui.visuals().clone();
         let r = rect.shrink2(vec2(0.0, 1.0));
         let painter = ui.painter_at(r);
-        painter.rect_filled(r, 2.0, if current { visuals.selection.bg_fill } else { theme::ETIQUETTE });
+        // Calque courant : l'accent ; calques choisis en plus (Ctrl + clic) : l'accent atténué.
+        let bg = match (current, self.is_chosen_layer(li)) {
+            (true, _) => visuals.selection.bg_fill,
+            (false, true) => visuals.selection.bg_fill.gamma_multiply(0.45),
+            (false, false) => theme::ETIQUETTE,
+        };
+        painter.rect_filled(r, 2.0, bg);
         // Sur le bleu du calque courant, tout passe en blanc (le seul lisible sur l'accent).
         let fg = match (current, h.visible) {
             (true, _) => visuals.selection.stroke.color,
@@ -203,7 +220,8 @@ impl App {
         let x0 = if h.collapsed { r.left() + 40.0 } else { r.left() + 74.0 };
         let name_rect = Rect::from_min_max(pos2(x0 + 14.0, r.top() + 2.0), pos2(r.right() - 22.0, r.top() + 20.0_f32.min(r.height())));
         if resp.clicked() {
-            self.select_layer(li);
+            let m = ui.input(|i| i.modifiers);
+            self.click_layer_head(li, m.command, m.shift);
         }
         if resp.double_clicked() && resp.interact_pointer_pos().is_some_and(|p| name_rect.contains(p)) {
             self.layer_rename = Some(crate::layersui::LayerRename::new(h.id, &h.name, true));

@@ -137,6 +137,21 @@ sur le nom, ou clic droit > « Renommer… », pour renommer ; le clic droit don
 Dupliquer, Verrouiller, Supprimer. **Nouveau calque de fond** (icône des montagnes) crée, tout en
 bas, un calque bitmap avec un seul dessin tenu sur tout le plan (un décor).
 
+**En-tête des calques de la timeline** (13b, comme dans TVPaint). Chaque ligne montre :
+- la vignette, le nom et le menu ⋮ ;
+- en icônes : afficher, verrouiller, pelure d'oignon du calque, préserver la transparence (le
+  pinceau ne colore que ce qui est déjà dessiné), pochoir et son sens + / − (le dessin du
+  calque limite où l'on peint ailleurs), position verrouillée (ni Transformer, ni 3D, ni
+  dessin), groupe de couleur ;
+- la barre d'opacité à tirer, et le mode de fusion avec ◀ ▶.
+
+Le triangle réduit la ligne. Glisser une ligne change le rang du calque ; double-clic sur le nom
+pour le renommer. Ctrl + clic choisit d'autres calques, Maj + clic une suite (Maj + Haut / Bas au
+clavier). Le menu ☰ (ou le menu Calques) agit sur les calques choisis : dupliquer, supprimer,
+fusionner (les choisis, les visibles, tous). On y trouve aussi : choisir par groupe, tout
+afficher, le calque courant seul, supprimer les calques vides ou cachés, éteindre ou inverser les
+pochoirs, couper, coller à la place. Ctrl + Haut / Bas monte ou descend le calque.
+
 ## Le reste
 
 - **Tablette** : la pression module la taille et/ou l'opacité. Elle passe par Windows Ink : sur une

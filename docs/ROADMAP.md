@@ -462,8 +462,13 @@ Décisions d'Anthony :
     nom, ⋮ options, 8 réglages en icônes, barre d'opacité, mode avec précédent / suivant) ou
     réduite, tout réduire / agrandir, glisser une ligne pour changer le rang, double-clic sur le
     nom pour renommer, menu de groupe.
-  - 13b-3. Opérations sur les calques (nouveau, dupliquer, supprimer, fusionner, choisir,
-    naviguer).
+  - ✅ 13b-3. Opérations sur les calques (`layerops.rs`) : calques choisis (Ctrl / Maj + clic,
+    Maj + Haut / Bas), dupliquer / supprimer les choisis, fusionner les choisis / visibles /
+    tous, choisir (tous, visibles, même groupe, autres groupes, aucun), tout afficher / cacher,
+    calque courant seul, supprimer les vides / cachés, pochoirs éteints / inversés, couper,
+    coller à la place, monter / descendre (Ctrl + Haut / Bas), premier / dernier, pelure du
+    calque ; menu ☰ de l'en-tête = menu Calques.
+  - 13b-3b. Fenêtre « Nouveau calque » (nom, sorte, groupe, mode, position).
   - 13b-4. Panneau des groupes. 13b-5. Dossiers.
 - 13c. Images et expositions (choix, glisser, insérer / supprimer avec modes de trou, couper /
   copier / coller, inverser, instances, noms, pré / post-comportement, faux-fixe, étirer).
@@ -522,4 +527,16 @@ Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans 
 | Retirer le dessin (animation) | Ctrl+Suppr | |
 | Allonger / raccourcir l'exposition | Alt++ / Alt+− | + / − = durée du panneau (preset) |
 | Nouveau calque bitmap | Maj+B | Maj+S (perso) = vectoriel |
-| Calque du dessus / dessous | Flèches haut / bas | |
+| Calque du dessus / dessous | Flèches haut / bas | ✅ ce sont aussi tes touches TVPaint 12 (LayerUp / LayerDown) |
+
+### Touches TVPaint 12 (13b) qui prendraient celle d'une fonction de Pelure
+
+Tes raccourcis TVPaint 12 libres dans Pelure sont posés (Maj + Haut / Bas : choisir en montant ou
+descendant ; Ctrl + Haut / Bas : monter / descendre le calque). Ceux-ci attendent ta décision :
+
+| Action | Ta touche TVPaint | Déjà prise dans Pelure par |
+|---|---|---|
+| Pelure d'oignon du calque | Ctrl+L | « Lier les clips au panneau » (en réserve, non implémenté, sans objet depuis les plans) |
+| Premier / dernier calque | Ctrl+Origine / Ctrl+Fin | Début / fin du montage (proposition) ; possible en mode Animation seulement |
+| Afficher tous les calques | = | + (ajouter une image au plan) : même touche en AZERTY |
+| Nouveau calque d'animation | Ctrl+N | Nouveau projet (Storyboard Pro) |

@@ -250,16 +250,19 @@ impl App {
             {
                 self.add_scene_background();
             }
-            if self.bouton(ui, ph::COPY_SIMPLE, "Dupliquer le calque", "Une copie du calque courant et de ses dessins.", "").clicked() {
-                self.duplicate_layer();
+            if self
+                .bouton(ui, ph::COPY_SIMPLE, "Dupliquer les calques choisis", "Une copie de chaque calque choisi et de ses dessins, juste au-dessus de lui.", "calque.dupliquer")
+                .clicked()
+            {
+                self.duplicate_chosen_layers();
             }
-            if self.bouton(ui, ph::TRASH, "Supprimer le calque", "", "calque.supprimer").clicked() {
-                self.delete_layer();
+            if self.bouton(ui, ph::TRASH, "Supprimer les calques choisis", "Le calque courant et ceux choisis par Ctrl + clic dans la timeline.", "calque.supprimer").clicked() {
+                self.delete_chosen_layers();
             }
-            if self.bouton(ui, ph::ARROW_UP, "Monter le calque", "D'un rang vers le haut.", "").clicked() {
+            if self.bouton(ui, ph::ARROW_UP, "Monter le calque", "D'un rang vers le haut.", "calque.monter").clicked() {
                 self.move_layer(true);
             }
-            if self.bouton(ui, ph::ARROW_DOWN, "Descendre le calque", "D'un rang vers le bas.", "").clicked() {
+            if self.bouton(ui, ph::ARROW_DOWN, "Descendre le calque", "D'un rang vers le bas.", "calque.descendre").clicked() {
                 self.move_layer(false);
             }
             if self.bouton(ui, ph::COPY, "Copier le calque", "", "calque.copier").clicked() {
@@ -368,8 +371,10 @@ impl App {
         }
         if ui.button("Supprimer").clicked() {
             ui.close_menu();
+            // Ce calque seul, même si d'autres sont choisis.
+            self.layer_sel.clear();
             self.select_layer(li);
-            self.delete_layer();
+            self.delete_chosen_layers();
         }
     }
 }

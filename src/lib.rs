@@ -57,6 +57,9 @@ mod latency_tests;
 #[cfg(test)]
 mod layerflags_tests;
 mod layerheads;
+mod layerops;
+#[cfg(test)]
+mod layerops_tests;
 mod layersui;
 mod layertools;
 #[cfg(test)]

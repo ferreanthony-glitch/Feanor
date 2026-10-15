@@ -436,6 +436,17 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   `affine(peint) puis inverse(affine(pochoir))`. Le facteur multiplie la couverture de chaque
   empreinte, pour le pinceau, le crayon et la gomme bitmap. Calques vectoriels, pot de peinture,
   formes, tampons et texte ne sont pas encore concernés.
+- En-tête de la timeline (`layerheads.rs`) : `rows_of` donne les lignes (calque, haut, hauteur :
+  `ROW_FULL` ou `ROW_SMALL` si `collapsed`), utilisées par l'en-tête et par la grille
+  (`timeline.rs`) pour rester alignées. Chaque ligne : un `interact` de fond (choisir, glisser,
+  menu, double-clic sur le nom), puis les boutons posés dessus (`ui.put`, enfants `new_child`
+  pour les menus et le mode). Glisser : `App::head_drag`, `drop_index`, `move_layer_to` (une
+  étape). Renommage partagé avec le panneau Calques (`LayerRename::in_timeline`).
+- Opérations (`layerops.rs`) : `App::layer_sel` (ids) + le calque courant = calques choisis
+  (`chosen_layers`) ; fonctions sur le document `duplicate_layer`, `merge_layers` (rassemble les
+  choisis au-dessus du plus bas puis `merge_layer_down` en chaîne ; tout est remis si une fusion
+  est refusée), `choose`, `is_empty_layer` ; `layer_ops_menu` sert au menu Calques et au ☰ de
+  l'en-tête.
 
 ## Pinceaux texturés (3d-2)
 

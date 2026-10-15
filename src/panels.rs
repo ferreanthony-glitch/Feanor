@@ -146,23 +146,7 @@ impl App {
                 self.action_item(ui, "Vue dessin / vignettes", "vue.planches");
             });
             ui.menu_button("Son", |ui| self.sound_menu(ui));
-            ui.menu_button("Calques", |ui| {
-                self.action_item(ui, "Nouveau calque vectoriel", "calque.nouveau_vectoriel");
-                self.action_item(ui, "Nouveau calque bitmap", "calque.nouveau_bitmap");
-                self.action_item(ui, "Supprimer le calque", "calque.supprimer");
-                ui.separator();
-                self.action_item(ui, "Copier le calque", "calque.copier");
-                self.action_item(ui, "Coller le calque", "calque.coller");
-                ui.separator();
-                let lock = if self.layer().locked { "Déverrouiller le calque" } else { "Verrouiller le calque" };
-                self.action_item(ui, lock, "calque.verrouiller");
-                self.action_item(ui, "Fusionner avec le calque du dessous", "calque.fusionner_dessous");
-                ui.separator();
-                self.action_item(ui, "Nouveau calque de fond", "calque.nouveau_fond");
-                ui.separator();
-                self.action_item(ui, "Calque du dessus", "calque.dessus");
-                self.action_item(ui, "Calque du dessous", "calque.dessous");
-            });
+            ui.menu_button("Calques", |ui| self.layer_ops_menu(ui));
             ui.menu_button("Animation", |ui| {
                 self.action_item(ui, "Lecture / pause", "lecture.basculer");
                 self.action_item(ui, "Image précédente", "image.precedente");
