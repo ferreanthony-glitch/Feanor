@@ -33,6 +33,46 @@ pub const TEXTE_FORT: Color32 = gris(242);
 pub const ACCENT: Color32 = Color32::from_rgb(64, 105, 253);
 pub const ACCENT_TEXTE: Color32 = Color32::from_rgb(86, 129, 255);
 
+// ------------------------------------------------------------ timeline et montage (12c)
+
+/// Règle des images (au-dessus des rangées).
+pub const REGLE: Color32 = ENTETE;
+/// Rangée d'un calque ; rangées de la caméra, du son et des pistes, plus sombres.
+pub const RANGEE: Color32 = gris(40);
+pub const RANGEE_SOMBRE: Color32 = gris(30);
+/// Étiquette d'une rangée dans la colonne des noms, case d'un calque sous un panneau.
+pub const ETIQUETTE: Color32 = ELEVE;
+/// Graduations : une image, une seconde.
+pub const GRADUATION: Color32 = BORD;
+pub const GRADUATION_SECONDE: Color32 = gris(82);
+/// Bloc d'un panneau dans le montage, et sa poignée de durée.
+pub const BLOC: Color32 = CONTROLE;
+pub const POIGNEE: Color32 = TEXTE_DOUX;
+/// Dessins exposés (timeline) : vectoriel (blue-900), bitmap (seafoam-900), dessin vide.
+pub const DESSIN_VECTORIEL: Color32 = Color32::from_rgb(86, 129, 255);
+pub const DESSIN_BITMAP: Color32 = Color32::from_rgb(10, 154, 128);
+pub const DESSIN_VIDE: Color32 = gris(115);
+/// Les mêmes, plus sourds, sous les panneaux du montage (blue-700, seafoam-700).
+pub const CALQUE_VECTORIEL: Color32 = Color32::from_rgb(52, 91, 248);
+pub const CALQUE_BITMAP: Color32 = Color32::from_rgb(6, 122, 103);
+/// Image courante (red-900), clés de caméra (le jaune du cadre de la caméra).
+pub const IMAGE_COURANTE: Color32 = Color32::from_rgb(252, 67, 46);
+pub const CAMERA: Color32 = Color32::from_rgb(255, 196, 60);
+/// Son : extrait (cyan-600, cyan-700 choisi), forme d'onde, piste muette (red-800).
+pub const SON_EXTRAIT: Color32 = Color32::from_rgb(3, 99, 140);
+pub const SON_CHOISI: Color32 = Color32::from_rgb(8, 115, 168);
+pub const SON_ONDE: Color32 = Color32::from_rgb(140, 205, 240);
+pub const SON_MUET: Color32 = Color32::from_rgb(223, 52, 34);
+/// Barres des séquences et des scènes, alternées pour qu'on voie les limites.
+pub const fn barre(sequence: bool, impaire: bool) -> Color32 {
+    match (sequence, impaire) {
+        (true, false) => gris(40),
+        (true, true) => gris(52),
+        (false, false) => gris(52),
+        (false, true) => gris(64),
+    }
+}
+
 /// Rapport de contraste (WCAG) entre deux couleurs opaques : de 1 (pareil) à 21 (noir et blanc).
 #[cfg(test)]
 pub fn contraste(a: Color32, b: Color32) -> f32 {

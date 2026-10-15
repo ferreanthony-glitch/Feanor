@@ -393,8 +393,13 @@ aperçus de pinceaux dans la couleur courante.
   le test a fait passer le texte sur l'accent en blanc pur).
 - ✅ 12b. Aperçus des pinceaux (grille des Réglages et panneau Pinceaux) : le trait dans la
   couleur courante, sur le papier du projet ; une gomme en gris.
-  Pas encore : les couleurs propres à la timeline et au montage (rangées, barres) n'ont pas
-  toutes été reprises ; la barre de la timeline passe sur deux lignes dans une fenêtre étroite.
+- ✅ 12c. Timeline et montage harmonisés : mêmes couleurs dans les deux (règle, rangées, calques
+  vectoriels en bleu et bitmap en vert, image courante, clés de caméra, extraits son, barres de
+  séquence et de scène), prises dans `theme.rs`. Barres de la timeline et du montage sur une
+  seule ligne : commandes en icônes (nom et raccourci du fichier de raccourcis au survol), la
+  ligne défile si la fenêtre est trop étroite. Contrastes testés (noms sur les extraits et les
+  calques ≥ 4,5:1, repères sur les rangées ≥ 3:1 : le test a éclairci le « dessin vide »).
+  Le calque courant écrit en blanc dans la colonne des noms.
 
 ## Raccourcis proposés, à valider
 

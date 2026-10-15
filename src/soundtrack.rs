@@ -12,6 +12,7 @@ use crate::document::{AudioTrack, Document, SoundClip};
 use crate::history::Edit;
 use crate::project::SOUND_EXTS;
 use crate::storyboard::{duration_label, timecode, MontageDrag};
+use crate::theme;
 
 /// Hauteur d'une piste son dans la bande de montage.
 pub(crate) const TRACK_H: f32 = 42.0;
@@ -419,7 +420,7 @@ impl App {
         for (t, track) in self.doc.audio_tracks.iter().enumerate() {
             let y = lanes_top + t as f32 * TRACK_H;
             let lane = Rect::from_min_max(pos2(r.left(), y + 1.0), pos2(r.right(), y + TRACK_H - 1.0));
-            painter.rect_filled(lane, 0.0, Color32::from_gray(36));
+            painter.rect_filled(lane, 0.0, theme::RANGEE_SOMBRE);
             for clip in &track.clips {
                 let cr = Rect::from_min_max(
                     pos2(left + clip.start as f32 * ppf + 0.5, lane.top() + 1.0),
@@ -430,16 +431,16 @@ impl App {
                 }
                 let selected = self.sel_clip == Some(clip.id);
                 let fill = match (track.muted, selected) {
-                    (true, _) => Color32::from_gray(62),
-                    (false, true) => Color32::from_rgb(58, 118, 150),
-                    (false, false) => Color32::from_rgb(44, 88, 108),
+                    (true, _) => theme::CONTROLE,
+                    (false, true) => theme::SON_CHOISI,
+                    (false, false) => theme::SON_EXTRAIT,
                 };
                 painter.rect_filled(cr, 3.0, fill);
                 if let Some(sound) = self.doc.sounds.get(&clip.sound) {
                     let wave = if track.muted {
-                        Color32::from_gray(115)
+                        theme::TEXTE_DOUX
                     } else {
-                        Color32::from_rgb(150, 215, 235)
+                        theme::SON_ONDE
                     };
                     let inner = cr.shrink2(vec2(0.0, 2.0));
                     paint_wave(&painter.with_clip_rect(inner), inner, &sound.pcm, clip, left, ppf, fps, wave);
@@ -448,7 +449,7 @@ impl App {
                         Align2::LEFT_TOP,
                         &sound.name,
                         FontId::proportional(10.0),
-                        Color32::from_gray(230),
+                        theme::TEXTE_FORT,
                     );
                 }
                 if selected {
@@ -474,7 +475,7 @@ impl App {
                 vec2(HEADERS_W - 8.0, TRACK_H - 2.0),
             );
             let mute = Rect::from_min_size(pos2(lane.left() + 5.0, lane.bottom() - 18.0), vec2(20.0, 15.0));
-            painter.rect_filled(lane, 3.0, Color32::from_gray(50));
+            painter.rect_filled(lane, 3.0, theme::ETIQUETTE);
             let text = if track.muted {
                 visuals.weak_text_color()
             } else {
@@ -491,12 +492,12 @@ impl App {
                 mute,
                 2.0,
                 if track.muted {
-                    Color32::from_rgb(196, 78, 58)
+                    theme::SON_MUET
                 } else {
-                    Color32::from_gray(74)
+                    theme::CONTROLE_SURVOL
                 },
             );
-            painter.text(mute.center(), Align2::CENTER_CENTER, "M", FontId::monospace(10.0), Color32::from_gray(235));
+            painter.text(mute.center(), Align2::CENTER_CENTER, "M", FontId::monospace(10.0), Color32::WHITE);
             painter.text(
                 pos2(mute.right() + 6.0, mute.center().y),
                 Align2::LEFT_CENTER,

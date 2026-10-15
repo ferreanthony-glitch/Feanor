@@ -9,6 +9,7 @@ use crate::app::{App, BoardView};
 use crate::document::{Document, Panel};
 use crate::history::Edit;
 use crate::soundtrack::{ClipDrag, ClipEdge, MenuTarget};
+use crate::theme;
 use crate::timeline::CUR_FRAME;
 
 pub(crate) enum MontageDrag {
@@ -58,15 +59,6 @@ pub(crate) fn panel_title(doc: &Document, index: usize) -> String {
 pub fn panel_long_title(doc: &Document, index: usize) -> String {
     let (n, count) = doc.panel_number(index);
     format!("Scène {} — panneau {n}/{count}", doc.scene_label(doc.panels[index].scene))
-}
-
-/// Couleur d'une barre de scène ou de séquence (alternée pour qu'on voie les limites).
-fn band_color(number: usize, base: u8) -> Color32 {
-    if number % 2 == 0 {
-        Color32::from_gray(base)
-    } else {
-        Color32::from_gray(base + 18)
-    }
 }
 
 impl App {
@@ -273,111 +265,11 @@ impl App {
         ui.add_space(2.0);
         let total = self.doc.total_frames();
         let fps = self.doc.fps;
-        ui.horizontal_wrapped(|ui| {
-            if ui.button("⏮").on_hover_text("Début du montage (Origine)").clicked() {
-                self.goto_global(0);
-            }
-            let play = if self.playing { "⏸ Pause" } else { "▶ Lire le montage" };
-            if ui.button(play).on_hover_text("Lecture / pause (Entrée)").clicked() {
-                self.toggle_play();
-            }
-            ui.checkbox(&mut self.looping, "Boucle");
-            ui.label(
-                RichText::new(format!("{} / {}", timecode(self.global_frame(), fps), timecode(total, fps)))
-                    .monospace(),
-            );
-            ui.separator();
-            let hint = |app: &App, text: &str, action: &str| {
-                let key = app.keymap.label(action);
-                if key.is_empty() {
-                    text.to_string()
-                } else {
-                    format!("{text} ({key})")
-                }
-            };
-            if ui
-                .button("+ Panneau")
-                .on_hover_text(hint(self, "Nouveau panneau après le panneau courant", "panneau.nouveau"))
-                .clicked()
-            {
-                self.new_panel();
-            }
-            if ui
-                .button("+ Scène")
-                .on_hover_text(hint(self, "Nouvelle scène après la scène courante", "scene.nouvelle"))
-                .clicked()
-            {
-                self.new_scene();
-            }
-            if ui
-                .button("+ Séquence")
-                .on_hover_text(hint(self, "Nouvelle séquence après la séquence courante", "sequence.nouvelle"))
-                .clicked()
-            {
-                self.new_sequence();
-            }
-            ui.menu_button("Panneau…", |ui| {
-                let item = |app: &mut App, ui: &mut egui::Ui, text: &str, action: &str| {
-                    let key = app.keymap.label(action);
-                    if ui.add(egui::Button::new(text).shortcut_text(key)).clicked() {
-                        ui.close_menu();
-                        app.run_action(action);
-                    }
-                };
-                item(self, ui, "Dupliquer le panneau", "panneau.dupliquer");
-                item(self, ui, "Supprimer le panneau", "panneau.supprimer");
-                item(self, ui, "Couper le panneau à l'image courante", "panneau.couper");
-                item(self, ui, "Réunir le panneau et le suivant", "panneau.fusionner_suivant");
-                ui.separator();
-                item(self, ui, "Dupliquer la scène", "scene.dupliquer");
-                item(self, ui, "Supprimer la scène", "scene.supprimer");
-                item(self, ui, "Couper la scène au panneau courant", "scene.couper");
-                item(self, ui, "Joindre la scène à la précédente", "scene.joindre_precedente");
-            });
-            if ui.button("< Avancer").on_hover_text("Place le panneau plus tôt dans le montage").clicked() {
-                self.shift_panel(false);
-            }
-            if ui.button("Reculer >").on_hover_text("Place le panneau plus tard dans le montage").clicked() {
-                self.shift_panel(true);
-            }
-            ui.separator();
-            if ui
-                .button("+ Son…")
-                .on_hover_text(hint(
-                    self,
-                    "Importer un son (WAV, MP3, FLAC, OGG) à l'image courante ; on peut aussi lâcher le fichier sur la fenêtre",
-                    "son.importer",
-                ))
-                .clicked()
-            {
-                self.import_sound(None, None);
-            }
-            ui.menu_button("Son…", |ui| self.sound_menu(ui));
-            ui.separator();
-            if ui
-                .button(RichText::new("Animer ce panneau").strong())
-                .on_hover_text(hint(
-                    self,
-                    "Entrer dans le panneau pour l'animer, ou double-clic sur le panneau",
-                    "mode.basculer",
-                ))
-                .clicked()
-            {
-                self.enter_animation(self.cur_panel);
-            }
-            ui.separator();
-            ui.selectable_value(&mut self.board_view, BoardView::Scene, "Dessin")
-                .on_hover_text(hint(self, "Dessiner le panneau courant", "vue.planches"));
-            ui.selectable_value(&mut self.board_view, BoardView::Panels, "Vignettes")
-                .on_hover_text(hint(self, "Vue d'ensemble des panneaux, rangés par scène", "vue.planches"));
-            ui.separator();
-            ui.add(
-                egui::Slider::new(&mut self.montage_zoom, 0.5..=16.0)
-                    .logarithmic(true)
-                    .show_value(false)
-                    .text("zoom"),
-            );
-        });
+        // Une seule ligne, comme la barre de la timeline (12c) : elle défile si la fenêtre est étroite.
+        egui::ScrollArea::horizontal()
+            .id_salt("barre_montage")
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
+            .show(ui, |ui| ui.horizontal(|ui| self.montage_toolbar(ui, total, fps)));
         ui.separator();
         // Hauteur des panneaux : ce qui reste une fois la règle, les barres et les pistes placées.
         let rows = self.montage_rows(ui.available_height());
@@ -395,6 +287,125 @@ impl App {
                         .show(ui, |ui| self.montage_strip(ui, &rows));
                 });
             });
+    }
+
+    fn montage_toolbar(&mut self, ui: &mut egui::Ui, total: usize, fps: u32) {
+        use egui_phosphor::regular as ph;
+        ui.spacing_mut().item_spacing.x = 3.0;
+        let sep = |ui: &mut egui::Ui| {
+            ui.add_space(3.0);
+            ui.separator();
+            ui.add_space(3.0);
+        };
+        let hint = |app: &App, text: &str, action: &str| {
+            let key = app.keymap.label(action);
+            if key.is_empty() {
+                text.to_string()
+            } else {
+                format!("{text}   {key}")
+            }
+        };
+
+        // Lecture.
+        if self.icon_button(ui, ph::SKIP_BACK, "Début du montage", "image.premiere") {
+            self.goto_global(0);
+        }
+        let play = if self.playing { ph::PAUSE } else { ph::PLAY };
+        if self.icon_button(ui, play, "Lire le montage / pause", "lecture.basculer") {
+            self.toggle_play();
+        }
+        ui.toggle_value(&mut self.looping, RichText::new(ph::REPEAT).size(15.0)).on_hover_text("Lecture en boucle");
+        ui.label(RichText::new(format!("{} / {}", timecode(self.global_frame(), fps), timecode(total, fps))).monospace())
+            .on_hover_text("Position / durée du montage");
+        sep(ui);
+
+        // Panneaux, scènes, séquences.
+        if ui
+            .button(format!("{} Panneau", ph::PLUS))
+            .on_hover_text(hint(self, "Nouveau panneau après le panneau courant", "panneau.nouveau"))
+            .clicked()
+        {
+            self.new_panel();
+        }
+        if ui
+            .button(format!("{} Scène", ph::PLUS))
+            .on_hover_text(hint(self, "Nouvelle scène après la scène courante", "scene.nouvelle"))
+            .clicked()
+        {
+            self.new_scene();
+        }
+        if ui
+            .button(format!("{} Séquence", ph::PLUS))
+            .on_hover_text(hint(self, "Nouvelle séquence après la séquence courante", "sequence.nouvelle"))
+            .clicked()
+        {
+            self.new_sequence();
+        }
+        ui.menu_button(RichText::new(ph::DOTS_THREE).size(15.0), |ui| {
+            let item = |app: &mut App, ui: &mut egui::Ui, text: &str, action: &str| {
+                let key = app.keymap.label(action);
+                if ui.add(egui::Button::new(text).shortcut_text(key)).clicked() {
+                    ui.close_menu();
+                    app.run_action(action);
+                }
+            };
+            item(self, ui, "Dupliquer le panneau", "panneau.dupliquer");
+            item(self, ui, "Supprimer le panneau", "panneau.supprimer");
+            item(self, ui, "Couper le panneau à l'image courante", "panneau.couper");
+            item(self, ui, "Réunir le panneau et le suivant", "panneau.fusionner_suivant");
+            ui.separator();
+            item(self, ui, "Dupliquer la scène", "scene.dupliquer");
+            item(self, ui, "Supprimer la scène", "scene.supprimer");
+            item(self, ui, "Couper la scène au panneau courant", "scene.couper");
+            item(self, ui, "Joindre la scène à la précédente", "scene.joindre_precedente");
+        })
+        .response
+        .on_hover_text("Autres opérations sur les panneaux et les scènes");
+        if self.icon_button(ui, ph::CARET_DOUBLE_LEFT, "Avancer le panneau (plus tôt dans le montage)", "") {
+            self.shift_panel(false);
+        }
+        if self.icon_button(ui, ph::CARET_DOUBLE_RIGHT, "Reculer le panneau (plus tard dans le montage)", "") {
+            self.shift_panel(true);
+        }
+        sep(ui);
+
+        // Son.
+        if self.icon_button(
+            ui,
+            ph::MUSIC_NOTES_PLUS,
+            "Importer un son (WAV, MP3, FLAC, OGG) à l'image courante ; on peut aussi lâcher le fichier sur la fenêtre",
+            "son.importer",
+        ) {
+            self.import_sound(None, None);
+        }
+        ui.menu_button(RichText::new(ph::SPEAKER_HIGH).size(15.0), |ui| self.sound_menu(ui))
+            .response
+            .on_hover_text("Pistes son, son au défilement et pendant la lecture");
+        sep(ui);
+
+        if ui
+            .button(RichText::new(format!("{} Animer", ph::FILM_SLATE)).strong())
+            .on_hover_text(hint(
+                self,
+                "Entrer dans le panneau courant pour l'animer, ou double-clic sur le panneau",
+                "mode.basculer",
+            ))
+            .clicked()
+        {
+            self.enter_animation(self.cur_panel);
+        }
+        sep(ui);
+
+        // Vue : dessin du panneau, ou vignettes de tous les panneaux.
+        ui.selectable_value(&mut self.board_view, BoardView::Scene, RichText::new(ph::PAINT_BRUSH).size(15.0))
+            .on_hover_text(hint(self, "Dessiner le panneau courant", "vue.planches"));
+        ui.selectable_value(&mut self.board_view, BoardView::Panels, RichText::new(ph::SQUARES_FOUR).size(15.0))
+            .on_hover_text(hint(self, "Vignettes : vue d'ensemble des panneaux, rangés par scène", "vue.planches"));
+        sep(ui);
+        ui.label(RichText::new(ph::MAGNIFYING_GLASS).size(14.0)).on_hover_text("Zoom du montage");
+        ui.spacing_mut().slider_width = 80.0;
+        ui.add(egui::Slider::new(&mut self.montage_zoom, 0.5..=16.0).logarithmic(true).show_value(false))
+            .on_hover_text("Zoom du montage");
     }
 
     /// Menu « Son… » de la barre du montage.
@@ -486,13 +497,14 @@ impl App {
         let visuals = ui.visuals().clone();
 
         // Règle : une graduation par seconde, un repère lisible tous les ~60 pixels.
+        painter.rect_filled(Rect::from_min_max(r.min, pos2(r.right(), bands_top)), 0.0, theme::REGLE);
         let label_every = ((60.0 / (fps as f32 * ppf)).ceil() as usize).max(1);
         for s in 0..=(shown / fps + 2) {
             let x = x_of(s * fps);
             let major = s % label_every == 0;
             painter.line_segment(
                 [pos2(x, r.top() + if major { 3.0 } else { 10.0 }), pos2(x, bands_top)],
-                Stroke::new(1.0_f32, Color32::from_gray(90)),
+                Stroke::new(1.0_f32, theme::GRADUATION_SECONDE),
             );
             if major {
                 painter.text(
@@ -523,7 +535,7 @@ impl App {
             let bg = if selected {
                 visuals.selection.bg_fill.gamma_multiply(0.55)
             } else {
-                Color32::from_gray(58)
+                theme::BLOC
             };
             painter.rect_filled(rect, 4.0, bg);
             let clip = painter.with_clip_rect(rect.shrink(2.0).intersect(r));
@@ -561,7 +573,7 @@ impl App {
             painter.rect_filled(
                 Rect::from_min_max(pos2(rect.right() - 4.0, rect.top() + 10.0), pos2(rect.right() - 1.0, rect.bottom() - 10.0)),
                 1.0,
-                Color32::from_gray(130),
+                theme::POIGNEE,
             );
         }
 
@@ -590,7 +602,7 @@ impl App {
                 let fill = if current {
                     visuals.selection.bg_fill.gamma_multiply(if band == 0 { 0.45 } else { 0.7 })
                 } else {
-                    band_color(number, if band == 0 { 48 } else { 62 })
+                    theme::barre(band == 0, number % 2 == 1)
                 };
                 painter.rect_filled(rect, 3.0, fill);
                 painter.with_clip_rect(rect.shrink(1.0)).text(

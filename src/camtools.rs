@@ -354,25 +354,27 @@ impl App {
         }
     }
 
-    /// Boutons des images clés de caméra (timeline d'animation et outil Caméra).
+    /// Boutons des images clés de caméra, compacts (barre de la timeline, 12c) : clés début / ici /
+    /// fin, retirer, adoucir ; le détail est dans la fenêtre de la caméra (outil Caméra).
     pub(crate) fn camera_keys_ui(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
         let here = self.camera_key_here().copied();
         let item = |app: &mut App, ui: &mut egui::Ui, text: &str, hover: &str, action: &str, enabled: bool| {
             let key = app.keymap.label(action);
-            let hover = if key.is_empty() { hover.to_string() } else { format!("{hover} ({key})") };
+            let hover = if key.is_empty() { hover.to_string() } else { format!("{hover}   {key}") };
             if ui.add_enabled(enabled, egui::Button::new(text)).on_hover_text(hover).clicked() {
                 app.run_action(action);
             }
         };
-        ui.label(RichText::new("Caméra").weak());
-        item(self, ui, "Clé début", "Image clé de caméra au début du panneau", "camera.cle_debut", true);
-        item(self, ui, "Clé ici", "Image clé de caméra à l'image courante", "camera.cle_ici", here.is_none());
-        item(self, ui, "Clé fin", "Image clé de caméra à la fin du panneau", "camera.cle_fin", true);
-        item(self, ui, "Retirer", "Retirer l'image clé de cette image", "camera.cle_supprimer", here.is_some());
+        ui.label(RichText::new(ph::VIDEO_CAMERA).size(15.0).color(crate::theme::CAMERA)).on_hover_text("Images clés de la caméra");
+        item(self, ui, &format!("{} début", ph::DIAMOND), "Image clé de caméra au début du panneau", "camera.cle_debut", true);
+        item(self, ui, &format!("{} ici", ph::DIAMOND), "Image clé de caméra à l'image courante", "camera.cle_ici", here.is_none());
+        item(self, ui, &format!("{} fin", ph::DIAMOND), "Image clé de caméra à la fin du panneau", "camera.cle_fin", true);
+        item(self, ui, ph::X_CIRCLE, "Retirer l'image clé de cette image", "camera.cle_supprimer", here.is_some());
         let mut smooth = here.is_some_and(|k| k.smooth);
         let resp = ui
-            .add_enabled(here.is_some(), egui::Checkbox::new(&mut smooth, "Adoucir"))
-            .on_hover_text("La caméra arrive à cette clé et en repart en douceur");
+            .add_enabled(here.is_some(), egui::Checkbox::new(&mut smooth, ph::WAVE_SINE))
+            .on_hover_text("Adoucir : la caméra arrive à cette clé et en repart en douceur (réglage fin en images dans la fenêtre de la caméra)");
         if resp.changed() {
             self.toggle_camera_key_smooth();
         }

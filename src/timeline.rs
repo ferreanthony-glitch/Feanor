@@ -3,6 +3,7 @@ use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Rect, RichText, Se
 use crate::app::{App, Mode};
 use crate::document::LayerKind;
 use crate::storyboard::duration_label;
+use crate::theme;
 
 const CELL_W: f32 = 16.0;
 const ROW_H: f32 = 24.0;
@@ -12,9 +13,9 @@ const NAMES_W: f32 = 170.0;
 const SOUND_H: f32 = 30.0;
 /// Ligne des images clés de la caméra, sous les calques.
 const CAM_H: f32 = 18.0;
-const CAM_KEY: Color32 = Color32::from_rgb(255, 196, 60);
+const CAM_KEY: Color32 = theme::CAMERA;
 
-pub(crate) const CUR_FRAME: Color32 = Color32::from_rgb(255, 96, 72);
+pub(crate) const CUR_FRAME: Color32 = theme::IMAGE_COURANTE;
 
 impl App {
     /// Hauteur de la ligne du son (rien s'il n'y a aucun son dans le projet).
@@ -45,93 +46,112 @@ impl App {
             });
     }
 
+    /// Barre de la timeline, sur une seule ligne (12c) : les commandes en icônes, leur nom et leur
+    /// raccourci au survol ; si la fenêtre est trop étroite, la ligne défile au lieu de passer à la
+    /// ligne.
     fn timeline_toolbar(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
         let count = self.frame_count();
         let fps = self.doc.fps;
-        ui.horizontal_wrapped(|ui| {
-            if ui
-                .button(RichText::new("< Storyboard").strong())
-                .on_hover_text("Revenir au montage des panneaux (Tab)")
-                .clicked()
-            {
-                self.set_mode(Mode::Storyboard);
-            }
-            let title = crate::storyboard::panel_long_title(&self.doc, self.cur_panel);
-            ui.label(RichText::new(title).strong());
-            self.panel_length_field(ui, "durée ")
-                .on_hover_text(duration_label(count, fps));
-            ui.separator();
+        egui::ScrollArea::horizontal()
+            .id_salt("barre_timeline")
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 3.0;
+                    let sep = |ui: &mut egui::Ui| {
+                        ui.add_space(3.0);
+                        ui.separator();
+                        ui.add_space(3.0);
+                    };
+                    if ui
+                        .button(format!("{} Storyboard", ph::ARROW_LEFT))
+                        .on_hover_text("Revenir au montage des panneaux (Tab)")
+                        .clicked()
+                    {
+                        self.set_mode(Mode::Storyboard);
+                    }
+                    ui.label(RichText::new(crate::storyboard::panel_title(&self.doc, self.cur_panel)).strong())
+                        .on_hover_text(crate::storyboard::panel_long_title(&self.doc, self.cur_panel));
+                    self.panel_length_field(ui, "").on_hover_text(format!("Durée du panneau : {}", duration_label(count, fps)));
+                    sep(ui);
 
-            if ui.button("⏮").on_hover_text("Première image (Origine)").clicked() {
-                self.goto_frame(0);
-            }
-            if ui.button("⏪").on_hover_text("Image précédente (flèche gauche)").clicked() {
-                self.goto_frame(self.cur_frame.saturating_sub(1));
-            }
-            let play = if self.playing { "⏸ Pause" } else { "▶ Lecture" };
-            if ui.button(play).on_hover_text("Lecture du panneau en boucle (Entrée)").clicked() {
-                self.toggle_play();
-            }
-            if ui.button("⏩").on_hover_text("Image suivante (flèche droite)").clicked() {
-                self.goto_frame(self.cur_frame + 1);
-            }
-            if ui.button("⏭").on_hover_text("Dernière image (Fin)").clicked() {
-                self.goto_frame(count - 1);
-            }
-            ui.checkbox(&mut self.looping, "Boucle");
-            let mut fps = self.doc.fps;
-            let resp = ui.add(egui::DragValue::new(&mut fps).range(1..=120).suffix(" i/s"));
-            if self.edited(&resp) {
-                self.doc.fps = fps;
-            }
-            ui.label(format!("Image {} / {}", self.cur_frame + 1, count));
+                    // Lecture.
+                    if self.icon_button(ui, ph::SKIP_BACK, "Première image", "image.premiere") {
+                        self.goto_frame(0);
+                    }
+                    if self.icon_button(ui, ph::CARET_LEFT, "Image précédente", "image.precedente") {
+                        self.goto_frame(self.cur_frame.saturating_sub(1));
+                    }
+                    let play = if self.playing { ph::PAUSE } else { ph::PLAY };
+                    if self.icon_button(ui, play, "Lecture du panneau / pause", "lecture.basculer") {
+                        self.toggle_play();
+                    }
+                    if self.icon_button(ui, ph::CARET_RIGHT, "Image suivante", "image.suivante") {
+                        self.goto_frame(self.cur_frame + 1);
+                    }
+                    if self.icon_button(ui, ph::SKIP_FORWARD, "Dernière image", "image.derniere") {
+                        self.goto_frame(count - 1);
+                    }
+                    ui.toggle_value(&mut self.looping, RichText::new(ph::REPEAT).size(15.0)).on_hover_text("Lecture en boucle");
+                    let mut fps = self.doc.fps;
+                    let resp = ui.add(egui::DragValue::new(&mut fps).range(1..=120).suffix(" i/s")).on_hover_text("Cadence du projet");
+                    if self.edited(&resp) {
+                        self.doc.fps = fps;
+                    }
+                    ui.label(RichText::new(format!("{} / {}", self.cur_frame + 1, count)).monospace())
+                        .on_hover_text("Image courante / images du panneau");
+                    sep(ui);
 
-            ui.separator();
-            if ui
-                .button("Nouvelle image")
-                .on_hover_text("Insère un dessin vide après l'exposition courante (Inser)")
-                .clicked()
-            {
-                self.new_image(false);
-            }
-            if ui.button("Dupliquer").on_hover_text("Copie du dessin courant (Ctrl+D)").clicked() {
-                self.new_image(true);
-            }
-            if ui.button("+ Expo").on_hover_text("Tenir le dessin une image de plus (+)").clicked() {
-                self.exposure_plus();
-            }
-            if ui.button("− Expo").on_hover_text("Tenir le dessin une image de moins (−)").clicked() {
-                self.exposure_minus();
-            }
-            if ui
-                .button("Supprimer")
-                .on_hover_text("Retire le dessin et ses expositions de la timeline (Ctrl+Suppr)")
-                .clicked()
-            {
-                self.delete_image();
-            }
-            if ui.button("Effacer").on_hover_text("Vide le dessin (Suppr)").clicked() {
-                self.clear_image();
-            }
-            ui.add(
-                egui::DragValue::new(&mut self.default_exposure)
-                    .range(1..=12)
-                    .prefix("nouveaux dessins sur "),
-            )
-            .on_hover_text("Nombre d'images que tient chaque nouveau dessin (1 = « en 1 », 2 = « en 2 »…)");
+                    // Dessins et expositions.
+                    if self.icon_button(ui, ph::FILE_PLUS, "Nouveau dessin après l'exposition courante", "dessin.nouveau") {
+                        self.new_image(false);
+                    }
+                    if self.icon_button(ui, ph::COPY, "Dupliquer le dessin", "dessin.dupliquer") {
+                        self.new_image(true);
+                    }
+                    if self.icon_button(ui, ph::PLUS, "Tenir le dessin une image de plus", "exposition.allonger") {
+                        self.exposure_plus();
+                    }
+                    if self.icon_button(ui, ph::MINUS, "Tenir le dessin une image de moins", "exposition.raccourcir") {
+                        self.exposure_minus();
+                    }
+                    if self.icon_button(ui, ph::TRASH, "Retirer le dessin et ses expositions de la timeline", "dessin.supprimer") {
+                        self.delete_image();
+                    }
+                    if self.icon_button(ui, ph::ERASER, "Vider le dessin", "edition.supprimer") {
+                        self.clear_image();
+                    }
+                    ui.add(egui::DragValue::new(&mut self.default_exposure).range(1..=12).prefix("en "))
+                        .on_hover_text("Nombre d'images que tient chaque nouveau dessin (« en 1 », « en 2 »…)");
+                    sep(ui);
 
-            ui.separator();
-            self.camera_keys_ui(ui);
+                    self.camera_keys_ui(ui);
+                    sep(ui);
 
-            ui.separator();
-            let key = self.keymap.label("vue.pelure");
-            let label = if key.is_empty() { "Pelure d'oignon".to_string() } else { format!("Pelure d'oignon ({key})") };
-            ui.checkbox(&mut self.onion.enabled, label);
-            let max = crate::onion::MAX_NEIGHBOURS;
-            ui.add(egui::DragValue::new(&mut self.onion.before).range(0..=max).prefix("avant "));
-            ui.add(egui::DragValue::new(&mut self.onion.after).range(0..=max).prefix("après "));
-            ui.menu_button("Réglages…", |ui| self.onion_settings_ui(ui));
-        });
+                    // Pelure d'oignon.
+                    let key = self.keymap.label("vue.pelure");
+                    let hint = if key.is_empty() { "Pelure d'oignon".to_string() } else { format!("Pelure d'oignon   {key}") };
+                    ui.toggle_value(&mut self.onion.enabled, RichText::new(ph::CIRCLES_THREE).size(15.0)).on_hover_text(hint);
+                    let max = crate::onion::MAX_NEIGHBOURS;
+                    ui.add(egui::DragValue::new(&mut self.onion.before).range(0..=max).prefix("‹ "))
+                        .on_hover_text("Dessins (ou images) montrés avant");
+                    ui.add(egui::DragValue::new(&mut self.onion.after).range(0..=max).suffix(" ›"))
+                        .on_hover_text("Dessins (ou images) montrés après");
+                    ui.menu_button(RichText::new(ph::GEAR).size(15.0), |ui| self.onion_settings_ui(ui))
+                        .response
+                        .on_hover_text("Réglages de la pelure d'oignon");
+                });
+            });
+    }
+
+    /// Bouton icône d'une barre ; `action` : son raccourci, montré au survol avec `name`.
+    pub(crate) fn icon_button(&self, ui: &mut egui::Ui, icon: &str, name: &str, action: &str) -> bool {
+        let key = if action.is_empty() { String::new() } else { self.keymap.label(action) };
+        let hint = if key.is_empty() { name.to_string() } else { format!("{name}   {key}") };
+        ui.add(egui::Button::new(RichText::new(icon).size(15.0)).min_size(vec2(24.0, 0.0)))
+            .on_hover_text(hint)
+            .clicked()
     }
 
     /// Réglages détaillés de la pelure d'oignon (menu de la timeline).
@@ -173,10 +193,11 @@ impl App {
         let (resp, painter) = ui.allocate_painter(size, Sense::click());
         let r = resp.rect;
         let visuals = ui.visuals();
+        painter.rect_filled(Rect::from_min_size(r.min, vec2(NAMES_W, HEADER_H)), 0.0, theme::REGLE);
         {
             let y = r.top() + HEADER_H + rows as f32 * ROW_H;
             let row = Rect::from_min_size(pos2(r.left(), y), vec2(NAMES_W, CAM_H)).shrink2(vec2(0.0, 1.0));
-            painter.rect_filled(row, 2.0, Color32::from_gray(34));
+            painter.rect_filled(row, 2.0, theme::RANGEE_SOMBRE);
             let n = self.panel().camera.len();
             let label = match n {
                 0 => "Caméra".to_string(),
@@ -193,7 +214,7 @@ impl App {
         }
         if sound_h > 0.0 {
             let row = Rect::from_min_max(pos2(r.left(), r.bottom() - sound_h), r.max).shrink2(vec2(0.0, 1.0));
-            painter.rect_filled(row, 2.0, Color32::from_gray(36));
+            painter.rect_filled(row, 2.0, theme::RANGEE_SOMBRE);
             painter.text(
                 pos2(r.left() + 8.0, row.center().y),
                 Align2::LEFT_CENTER,
@@ -217,13 +238,15 @@ impl App {
             let bg = if li == self.cur_layer {
                 visuals.selection.bg_fill
             } else {
-                visuals.faint_bg_color
+                theme::ETIQUETTE
             };
             painter.rect_filled(row_rect, 2.0, bg);
-            let text_color = if layer.visible {
-                visuals.text_color()
-            } else {
-                visuals.weak_text_color()
+            // Sur le bleu du calque courant, le texte passe en blanc (le seul lisible sur l'accent).
+            let current = li == self.cur_layer;
+            let text_color = match (layer.visible, current) {
+                (true, true) => visuals.selection.stroke.color,
+                (true, false) => visuals.text_color(),
+                (false, _) => visuals.weak_text_color(),
             };
             painter.text(
                 pos2(r.left() + ROW_H * 0.5, row_rect.center().y),
@@ -233,8 +256,9 @@ impl App {
                 text_color,
             );
             let badge = match layer.kind {
-                LayerKind::Vector => Color32::from_rgb(70, 165, 255),
-                LayerKind::Bitmap => Color32::from_gray(150),
+                _ if current => visuals.selection.stroke.color,
+                LayerKind::Vector => theme::DESSIN_VECTORIEL,
+                LayerKind::Bitmap => theme::DESSIN_BITMAP,
             };
             painter.text(
                 pos2(r.left() + ROW_H + 2.0, row_rect.center().y),
@@ -293,13 +317,15 @@ impl App {
         let r = resp.rect;
         let visuals = ui.visuals().clone();
         let grid_top = r.top() + HEADER_H;
+        // Règle des images.
+        painter.rect_filled(Rect::from_min_size(r.min, vec2(size.x, HEADER_H)), 0.0, theme::REGLE);
 
         // Images clés de la caméra : losanges (ronds si le mouvement y est adouci), reliés par un
         // trait là où la caméra bouge.
         {
             let y = grid_top + rows as f32 * ROW_H;
             let row = Rect::from_min_size(pos2(r.left(), y), vec2(size.x, CAM_H)).shrink2(vec2(0.0, 1.0));
-            painter.rect_filled(row, 0.0, Color32::from_gray(30));
+            painter.rect_filled(row, 0.0, theme::RANGEE_SOMBRE);
             let keys = &self.panel().camera;
             let cx = |f: usize| r.left() + (f as f32 + 0.5) * CELL_W;
             if keys.len() >= 2 {
@@ -326,15 +352,15 @@ impl App {
         // Le son du montage pendant ce panneau (toutes pistes superposées), en lecture seule.
         if sound_h > 0.0 {
             let row = Rect::from_min_max(pos2(r.left(), r.bottom() - sound_h), r.max).shrink2(vec2(0.0, 1.0));
-            painter.rect_filled(row, 0.0, Color32::from_gray(32));
+            painter.rect_filled(row, 0.0, theme::RANGEE_SOMBRE);
             let start = self.doc.panel_start(self.cur_panel);
             let left = r.left() - start as f32 * CELL_W;
             let fps = self.doc.fps;
             for track in &self.doc.audio_tracks {
                 let color = if track.muted {
-                    Color32::from_gray(90)
+                    theme::TEXTE_DOUX
                 } else {
-                    Color32::from_rgb(120, 190, 215)
+                    theme::SON_ONDE
                 };
                 for clip in &track.clips {
                     let cr = Rect::from_min_max(
@@ -369,7 +395,7 @@ impl App {
             let bg = if li == self.cur_layer {
                 visuals.selection.bg_fill.gamma_multiply(0.35)
             } else {
-                visuals.faint_bg_color
+                theme::RANGEE
             };
             painter.rect_filled(rect, 0.0, bg);
         }
@@ -379,9 +405,9 @@ impl App {
         for c in 0..=cols {
             let x = r.left() + c as f32 * CELL_W;
             let color = if c % fps == 0 {
-                Color32::from_gray(85)
+                theme::GRADUATION_SECONDE
             } else {
-                Color32::from_gray(52)
+                theme::GRADUATION
             };
             painter.line_segment([pos2(x, grid_top), pos2(x, r.bottom())], Stroke::new(1.0_f32, color));
             if c < cols && (c == 0 || (c + 1) % 5 == 0) {
@@ -410,9 +436,9 @@ impl App {
                     );
                     let empty = self.doc.cels.get(&id).is_none_or(|c| c.is_empty());
                     let mut fill = match (empty, layer.kind) {
-                        (true, _) => Color32::from_rgb(92, 96, 108),
-                        (false, LayerKind::Vector) => Color32::from_rgb(96, 168, 220),
-                        (false, LayerKind::Bitmap) => Color32::from_rgb(120, 146, 210),
+                        (true, _) => theme::DESSIN_VIDE,
+                        (false, LayerKind::Vector) => theme::DESSIN_VECTORIEL,
+                        (false, LayerKind::Bitmap) => theme::DESSIN_BITMAP,
                     };
                     if !layer.visible {
                         fill = fill.gamma_multiply(0.5);
@@ -421,7 +447,7 @@ impl App {
                     painter.circle_filled(
                         pos2(block.left() + CELL_W * 0.5 - 1.0, block.center().y),
                         2.5,
-                        Color32::from_gray(25),
+                        theme::FOND,
                     );
                     if end - start > 1 {
                         painter.line_segment(
@@ -429,7 +455,7 @@ impl App {
                                 pos2(block.left() + CELL_W - 1.0, block.center().y),
                                 pos2(block.right() - 4.0, block.center().y),
                             ],
-                            Stroke::new(1.0_f32, Color32::from_gray(40)),
+                            Stroke::new(1.0_f32, theme::ENTETE),
                         );
                     }
                 }
@@ -446,7 +472,7 @@ impl App {
         );
         painter.line_segment(
             [pos2(end_x, r.top()), pos2(end_x, r.bottom())],
-            Stroke::new(1.5_f32, Color32::from_gray(140)),
+            Stroke::new(1.5_f32, theme::TEXTE_DOUX),
         );
 
         // Image courante.

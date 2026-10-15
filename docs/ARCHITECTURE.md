@@ -358,6 +358,13 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - Aperçus des pinceaux (12b) : la texture d'aperçu reste une couverture en gris (en cache) ; la
   couleur est donnée au dessin (`preview_colors` : papier du projet, couleur courante, gris pour
   une gomme) — changer de couleur ne refait aucun aperçu.
+- Timeline et montage (12c) : leurs couleurs dessinées à la main viennent toutes de `theme.rs`
+  (`REGLE`, `RANGEE` / `RANGEE_SOMBRE`, `ETIQUETTE`, `DESSIN_*` dans la timeline et `CALQUE_*`,
+  plus sourdes, sous les panneaux, `IMAGE_COURANTE`, `CAMERA`, `SON_*`, `barre(séquence,
+  impaire)`) : `timeline.rs`, `montagerows.rs`, `soundtrack.rs`, `storyboard.rs`. Les deux
+  barres d'outils sont une `ScrollArea` horizontale autour d'une seule ligne ;
+  `App::icon_button` (timeline.rs) fait un bouton icône dont l'infobulle donne le nom et le
+  raccourci lu dans le fichier de raccourcis.
 
 ## Pinceaux texturés (3d-2)
 

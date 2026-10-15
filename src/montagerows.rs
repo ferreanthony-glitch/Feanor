@@ -12,13 +12,14 @@ use crate::document::{Layer, LayerKind, Panel};
 use crate::layersui::SCENE_WIDE;
 use crate::soundtrack::{HEADERS_W, LANE_GAP, TRACK_H};
 use crate::storyboard::{BANDS_H, RULER_H};
+use crate::theme;
 
 /// Hauteur de la piste Caméra et d'une piste de calque.
 pub(crate) const CAM_H: f32 = 16.0;
 pub(crate) const LAYER_H: f32 = 18.0;
 /// Au-delà, les calques du dessous ne sont pas montrés dans le montage.
 const MAX_LAYER_ROWS: usize = 8;
-const CAM_COLOR: Color32 = Color32::from_rgb(255, 196, 60);
+const CAM_COLOR: Color32 = theme::CAMERA;
 
 /// Rangées de la bande, en distance depuis son haut.
 pub(crate) struct Rows {
@@ -80,7 +81,7 @@ impl App {
         let visuals = ui.visuals().clone();
         let lane = |y: f32, h: f32| Rect::from_min_size(pos2(rect.left() + 2.0, rect.top() + y + 1.0), vec2(HEADERS_W - 8.0, h - 2.0));
         let label = |lane: Rect, text: &str, color: Color32| {
-            painter.rect_filled(lane, 3.0, Color32::from_gray(46));
+            painter.rect_filled(lane, 3.0, theme::ETIQUETTE);
             painter.with_clip_rect(lane.shrink(1.0)).text(
                 pos2(lane.left() + 6.0, lane.center().y),
                 Align2::LEFT_CENTER,
@@ -133,7 +134,7 @@ impl App {
 
         // Caméra : une clé = un losange ; un mouvement = une barre de la première à la dernière.
         let cam = lane(rows.camera_top(), CAM_H);
-        painter.rect_filled(cam, 0.0, Color32::from_gray(34));
+        painter.rect_filled(cam, 0.0, theme::RANGEE_SOMBRE);
         for (i, b) in blocks.iter().enumerate() {
             let keys = &self.doc.panels[i].camera;
             let x0 = b.left() - 1.0;
@@ -161,7 +162,7 @@ impl App {
         // Calques propres aux panneaux.
         for row in 0..rows.layer_rows {
             let lr = lane(rows.layers_top() + row as f32 * LAYER_H, LAYER_H);
-            painter.rect_filled(lr, 0.0, Color32::from_gray(34));
+            painter.rect_filled(lr, 0.0, theme::RANGEE_SOMBRE);
             for (i, b) in blocks.iter().enumerate() {
                 let p = &self.doc.panels[i];
                 let Some(k) = layer_in_row(p, row) else { continue };
@@ -176,7 +177,7 @@ impl App {
         // Fond : une barre par scène qui en a un.
         if rows.background {
             let lr = lane(rows.background_top(), LAYER_H);
-            painter.rect_filled(lr, 0.0, Color32::from_gray(34));
+            painter.rect_filled(lr, 0.0, theme::RANGEE_SOMBRE);
             let mut i = 0;
             while i < blocks.len() {
                 let (s, e) = self.doc.scene_run(i);
@@ -188,7 +189,7 @@ impl App {
                     let fill = match (drawn, visible) {
                         (true, true) => SCENE_WIDE.gamma_multiply(0.6),
                         (true, false) => SCENE_WIDE.gamma_multiply(0.25),
-                        _ => Color32::from_gray(52),
+                        _ => theme::CONTROLE,
                     };
                     painter.rect_filled(cell, 2.0, fill);
                     let names: Vec<&str> = wide.iter().map(|l| l.name.as_str()).collect();
@@ -197,7 +198,7 @@ impl App {
                         Align2::LEFT_CENTER,
                         names.join(", "),
                         FontId::proportional(10.0),
-                        Color32::from_gray(235),
+                        theme::TEXTE_FORT,
                     );
                     let current = (s..e).contains(&self.cur_panel)
                         && self.doc.panels[self.cur_panel].layers.get(self.cur_layer).is_some_and(|l| l.scene_wide.is_some());
@@ -231,10 +232,10 @@ impl App {
 
 /// Un calque sous un panneau : un bloc par dessin exposé (tenu sur plusieurs images), son nom.
 fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, current: bool, visuals: &Visuals) {
-    painter.rect_filled(cell, 2.0, Color32::from_gray(48));
+    painter.rect_filled(cell, 2.0, theme::ETIQUETTE);
     let fill = match layer.kind {
-        LayerKind::Vector => Color32::from_rgb(78, 116, 166),
-        LayerKind::Bitmap => Color32::from_rgb(86, 140, 100),
+        LayerKind::Vector => theme::CALQUE_VECTORIEL,
+        LayerKind::Bitmap => theme::CALQUE_BITMAP,
     };
     let fill = if layer.visible { fill } else { fill.gamma_multiply(0.35) };
     let x0 = cell.left() - 1.0;
@@ -253,7 +254,7 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, curr
         f = e;
     }
     if cell.width() > 28.0 {
-        let text = if layer.visible { Color32::from_gray(228) } else { Color32::from_gray(140) };
+        let text = if layer.visible { theme::TEXTE_FORT } else { theme::TEXTE_DOUX };
         painter.with_clip_rect(cell.shrink(1.0)).text(
             pos2(cell.left() + 4.0, cell.center().y),
             Align2::LEFT_CENTER,

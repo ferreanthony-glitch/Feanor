@@ -29,6 +29,36 @@ fn texts_stay_readable_on_their_backgrounds() {
 }
 
 #[test]
+fn timeline_and_montage_stay_readable() {
+    // Noms écrits sur les extraits son, les calques sous les panneaux, le « M » d'une piste muette,
+    // les barres de séquence et de scène : au moins 4,5:1.
+    for fond in [theme::SON_EXTRAIT, theme::SON_CHOISI, theme::CALQUE_VECTORIEL, theme::CALQUE_BITMAP] {
+        assert!(contraste(theme::TEXTE_FORT, fond) >= 4.5, "{fond:?} : {}", contraste(theme::TEXTE_FORT, fond));
+    }
+    assert!(contraste(Color32::WHITE, theme::SON_MUET) >= 4.5);
+    for (sequence, impaire) in [(true, false), (true, true), (false, false), (false, true)] {
+        assert!(contraste(theme::TEXTE, theme::barre(sequence, impaire)) >= 7.0);
+    }
+    // Repères dessinés sur les rangées (dessins exposés, image courante, clés de caméra, forme
+    // d'onde) : au moins 3:1, le minimum pour un élément graphique.
+    for fond in [theme::RANGEE, theme::RANGEE_SOMBRE] {
+        for marque in [theme::DESSIN_VECTORIEL, theme::DESSIN_BITMAP, theme::DESSIN_VIDE, theme::IMAGE_COURANTE, theme::CAMERA] {
+            assert!(contraste(marque, fond) >= 3.0, "{marque:?} sur {fond:?} : {}", contraste(marque, fond));
+        }
+    }
+    assert!(contraste(theme::SON_ONDE, theme::SON_EXTRAIT) >= 3.0);
+}
+
+#[test]
+fn bands_alternate_so_limits_show() {
+    for sequence in [true, false] {
+        assert_ne!(theme::barre(sequence, false), theme::barre(sequence, true));
+    }
+    // Les séquences, au-dessus, sont plus sombres que les scènes.
+    assert!(theme::barre(true, false).r() < theme::barre(false, false).r());
+}
+
+#[test]
 fn the_visuals_use_the_palette() {
     let v = theme::visuels();
     assert!(v.dark_mode);

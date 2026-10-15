@@ -18,18 +18,19 @@ ouvrir d'un double-clic).
 - **Storyboard** (au démarrage) : le film est une suite de **séquences**, découpées en **scènes**,
   découpées en **panneaux**. En bas, la bande de montage montre les panneaux (vignette, largeur
   proportionnelle à la durée) sous deux barres : séquences et scènes.
-  - « + Panneau » (P), « + Scène » (Maj+P), « + Séquence » ; le menu « Panneau… » duplique ou
-    supprime un panneau ou une scène entière.
+  - « + Panneau » (P), « + Scène » (Maj+P), « + Séquence » ; le menu « … » à côté duplique ou
+    supprime un panneau ou une scène entière. Les barres du montage et de la timeline tiennent sur
+    une ligne : des icônes, dont le nom et le raccourci s'affichent au survol.
   - F5 coupe le panneau à l'image courante (la suite devient un nouveau panneau, avec ses propres
     copies des dessins) ; « Réunir le panneau et le suivant » fait l'inverse. Une scène se coupe
-    au panneau courant, ou se joint à la précédente (menus Storyboard et « Panneau… »).
+    au panneau courant, ou se joint à la précédente (menu Storyboard, ou « … » du montage).
   - On réordonne les panneaux en les faisant glisser. Un panneau posé dans une autre scène la
     rejoint (à la frontière entre deux scènes : celle qui suit). Le bord droit d'un panneau règle
     sa durée.
   - Numérotation automatique : scènes 1, 2, 3… dans l'ordre du film, panneaux 1, 2… dans chaque
     scène. Une scène ou une séquence peut recevoir un nom ou un numéro à soi (fiche à droite).
   - Chaque panneau a sa durée et ses champs Action / Dialogue / Notes.
-  - « Lire le montage » enchaîne tout (animatique), en boucle si on veut, avec le son.
+  - La lecture du montage (▶ de sa barre) enchaîne tout (animatique), en boucle si on veut, avec le son.
   - Vue « Vignettes » (Maj+Tab) : une **planche** de pages blanches où les panneaux se suivent,
     numérotés, de gauche à droite. En haut : taille des vignettes, colonnes (6 au plus), lignes
     par page (« toutes » : une seule page), écart, « Scène à la ligne », « Attacher les notes ».
@@ -52,7 +53,7 @@ ouvrir d'un double-clic).
   - On dessine directement sur le panneau dans la vue « Dessin » : un nouveau dessin y est tenu
     sur toute la durée du panneau.
 - **Son** : sous les panneaux, des pistes son.
-  - « + Son… » (ou un fichier lâché sur la fenêtre) importe un WAV, MP3, FLAC ou OGG à l'image
+  - « Importer un son » (bouton des notes de musique, ou un fichier lâché sur la fenêtre) importe un WAV, MP3, FLAC ou OGG à l'image
     courante, sur la première piste libre.
   - Chaque extrait montre sa forme d'onde. On le déplace en le faisant glisser (aussi d'une piste à
     l'autre) ; ses bords cachent ou montrent le début ou la fin du son.
@@ -160,7 +161,7 @@ prend le fond de celle-ci.
   Boom (`.xml`, par exemple `STB_TextureBrushes_preset.xml`) : ses pinceaux, pointes et papiers
   s'ajoutent à la liste et restent pour les fois suivantes.
 - **Pelure d'oignon** (Alt+O) : par défaut 3 dessins avant en rouge et 3 après en vert, de plus en
-  plus pâles. Dans la timeline : nombre avant / après, et « Réglages… » (compter par dessin ou par
+  plus pâles. Dans la timeline : nombre avant / après, et l'engrenage (compter par dessin ou par
   image, opacité, teinte ou vraies couleurs, couleurs). Les réglages sont retenus pour la prochaine
   fois.
 - **Table lumineuse** (panneau Vue, ou menu Affichage) : les autres calques du panneau sont
