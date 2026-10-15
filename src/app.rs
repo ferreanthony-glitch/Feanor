@@ -126,9 +126,9 @@ impl Tool {
             Tool::Select => "Choisir une zone (lasso ou rectangle) pour la déplacer, la copier ou l'effacer.",
             Tool::Picker => "Prendre une couleur sur le dessin.",
             Tool::Pan => "Déplacer la vue.",
-            Tool::Camera => "Régler le cadre de la caméra du panneau : déplacer, zoomer par un coin, tourner.",
+            Tool::Camera => "Régler le cadre de la caméra du plan : déplacer, zoomer par un coin, tourner.",
             Tool::Transform => "Déplacer, agrandir ou tourner le calque entier (tous ses dessins).",
-            Tool::Ref3d => "Un modèle 3D en fil de fer comme guide, vu depuis le cadre du panneau.",
+            Tool::Ref3d => "Un modèle 3D en fil de fer comme guide, vu depuis le cadre du plan.",
             Tool::Text => "Clic : poser un texte ; Ctrl + Entrée pour le valider.",
             Tool::Stamp => "Poser des images le long du trait, dans l'ordre ou au hasard.",
             Tool::Clone => "Ctrl + clic pour la source, puis peindre : recopie une autre partie du dessin.",
@@ -288,7 +288,7 @@ pub struct App {
     pub(crate) brush_previews: crate::brushui::BrushPreviews,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
     pub(crate) ref3d: crate::ref3dtool::Ref3dState,
-    /// Vue à travers la caméra du panneau (sinon : la feuille, avec le cadre tracé).
+    /// Vue à travers la caméra du plan (sinon : la feuille, avec le cadre tracé).
     pub(crate) camera_view: bool,
     /// Vue du plateau laissée en passant à la vue caméra, remise au retour (9d).
     pub(crate) stage_view: Option<View>,
@@ -587,7 +587,7 @@ impl App {
             import_source: None,
             written: HashMap::new(),
             modified: false,
-            status: "Storyboard : dessine le premier panneau ; P pour un nouveau panneau, double-clic sur un panneau pour l'animer (F1 : raccourcis).".into(),
+            status: "Storyboard : dessine le premier plan ; P pour un nouveau plan, double-clic sur un plan pour l'animer (F1 : raccourcis).".into(),
             new_dialog: None,
             pending: None,
             show_help: false,
@@ -868,7 +868,7 @@ impl App {
         }
         self.follow_frame = true;
         self.status = match mode {
-            Mode::Storyboard => "Storyboard : montage des panneaux.".into(),
+            Mode::Storyboard => "Storyboard : montage des plans.".into(),
             Mode::Animation => format!("Animation de {} (Tab : retour au storyboard).", crate::storyboard::panel_long_title(&self.doc, self.cur_panel)),
         };
     }
@@ -1465,7 +1465,7 @@ impl App {
             .flatten()
             .filter_map(|id| self.doc.cels.get(id).map(|c| (*id, c.clone())))
             .collect();
-        self.status = format!("Calque « {} » copié : X pour le coller dans un autre panneau.", layer.name);
+        self.status = format!("Calque « {} » copié : X pour le coller dans un autre plan.", layer.name);
         self.layer_clipboard = Some(LayerClip {
             layer,
             cels,
@@ -2146,6 +2146,7 @@ impl App {
             "sequence.nouvelle" => self.new_sequence(),
             "panneau.supprimer" => self.delete_chosen_panels(),
             "panneau.copier" => self.copy_panels(),
+            "marque.basculer" => self.toggle_mark(),
             "panneau.coller" => self.paste_panels(),
             "panneau.ajouter_image" => self.nudge_panel_length(1),
             "panneau.retirer_image" => self.nudge_panel_length(-1),
@@ -2168,7 +2169,7 @@ impl App {
             "calque.verrouiller" => self.toggle_layer_lock(self.cur_layer),
             "calque.fusionner_dessous" => self.merge_layer_down(),
             "calque.nouveau_fond" => self.add_scene_background(),
-            "calque.toute_la_scene" => self.toggle_scene_wide(),
+
             "outil.camera" => self.set_tool(Tool::Camera),
             "outil.repere3d" => self.set_tool(Tool::Ref3d),
             "outil.transformer" => self.set_tool(Tool::Transform),
@@ -2262,7 +2263,7 @@ impl App {
         self.view.zoom_around(rect, size, rect.center(), factor);
     }
 
-    /// Va à une image du panneau courant (dans le montage en mode storyboard).
+    /// Va à une image du plan courant (dans le montage en mode storyboard).
     fn goto_panel_frame(&mut self, frame: usize) {
         match self.mode {
             Mode::Storyboard => self.goto_global(self.doc.panel_start(self.cur_panel) + frame),
@@ -2282,7 +2283,7 @@ impl App {
         self.length_origin = None;
         self.commit_structure(snap);
         self.status = format!(
-            "Durée du panneau : {}",
+            "Durée du plan : {}",
             crate::storyboard::duration_label(n, self.doc.fps)
         );
     }

@@ -18,7 +18,7 @@ const MOUSE_GESTURES: [(&str, &str); 7] = [
     ("Molette", "zoom autour du curseur"),
     ("Maj + molette", "rotation de la vue"),
     ("Bouton du milieu + glisser", "déplacer la vue"),
-    ("Double-clic sur un panneau", "entrer dans le panneau pour l'animer"),
+    ("Double-clic sur un plan", "entrer dans le plan pour l'animer"),
     ("Sélection : glisser dans le vide", "lasso (Maj : ajouter / retirer)"),
     ("Sélection : poignées", "échelle (Maj : proportionnelle), rotation (Maj : par 15°)"),
 ];
@@ -119,32 +119,27 @@ impl App {
                 self.action_item(ui, "Supprimer la sélection ou effacer le dessin", "edition.supprimer");
             });
             ui.menu_button("Storyboard", |ui| {
-                self.action_item(ui, "Nouveau panneau", "panneau.nouveau");
-                self.action_item(ui, "Nouvelle scène", "scene.nouvelle");
+                self.action_item(ui, "Nouveau plan", "panneau.nouveau");
                 self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
                 ui.separator();
-                self.action_item(ui, "Dupliquer le panneau", "panneau.dupliquer");
-                self.action_item(ui, "Copier les panneaux choisis", "panneau.copier");
-                self.action_item(ui, "Coller les panneaux après le panneau courant", "panneau.coller");
-                self.action_item(ui, "Supprimer les panneaux choisis", "panneau.supprimer");
-                self.action_item(ui, "Allonger le panneau d'une image", "panneau.ajouter_image");
-                self.action_item(ui, "Raccourcir le panneau d'une image", "panneau.retirer_image");
+                self.action_item(ui, "Dupliquer le plan", "panneau.dupliquer");
+                self.action_item(ui, "Copier les plans choisis", "panneau.copier");
+                self.action_item(ui, "Coller les plans après le plan courant", "panneau.coller");
+                self.action_item(ui, "Supprimer les plans choisis", "panneau.supprimer");
+                self.action_item(ui, "Allonger le plan d'une image", "panneau.ajouter_image");
+                self.action_item(ui, "Raccourcir le plan d'une image", "panneau.retirer_image");
                 ui.separator();
-                self.action_item(ui, "Couper le panneau à l'image courante", "panneau.couper");
-                self.action_item(ui, "Réunir le panneau et le suivant", "panneau.fusionner_suivant");
+                self.action_item(ui, "Couper le plan à l'image courante", "panneau.couper");
+                self.action_item(ui, "Réunir le plan et le suivant", "panneau.fusionner_suivant");
+                self.action_item(ui, "Réunir avec le plan précédent", "scene.joindre_precedente");
                 ui.separator();
-                self.action_item(ui, "Dupliquer la scène", "scene.dupliquer");
-                self.action_item(ui, "Supprimer la scène", "scene.supprimer");
-                self.action_item(ui, "Couper la scène au panneau courant", "scene.couper");
-                self.action_item(ui, "Joindre la scène à la précédente", "scene.joindre_precedente");
+                self.action_item(ui, "Marque d'image ici (ajouter / retirer)", "marque.basculer");
                 ui.separator();
-                self.action_item(ui, "Panneau précédent", "panneau.precedent");
-                self.action_item(ui, "Panneau suivant", "panneau.suivant");
-                self.action_item(ui, "Scène précédente", "scene.precedente");
-                self.action_item(ui, "Scène suivante", "scene.suivante");
+                self.action_item(ui, "Plan précédent", "panneau.precedent");
+                self.action_item(ui, "Plan suivant", "panneau.suivant");
                 ui.separator();
                 let label = match self.mode {
-                    Mode::Storyboard => "Animer ce panneau",
+                    Mode::Storyboard => "Animer ce plan",
                     Mode::Animation => "Retour au storyboard",
                 };
                 self.action_item(ui, label, "mode.basculer");
@@ -163,13 +158,7 @@ impl App {
                 self.action_item(ui, lock, "calque.verrouiller");
                 self.action_item(ui, "Fusionner avec le calque du dessous", "calque.fusionner_dessous");
                 ui.separator();
-                self.action_item(ui, "Nouveau fond pour toute la scène", "calque.nouveau_fond");
-                let wide = if self.layer().scene_wide.is_some() {
-                    "Rendre le calque à ce seul panneau"
-                } else {
-                    "Étendre le calque à toute la scène"
-                };
-                self.action_item(ui, wide, "calque.toute_la_scene");
+                self.action_item(ui, "Nouveau calque de fond", "calque.nouveau_fond");
                 ui.separator();
                 self.action_item(ui, "Calque du dessus", "calque.dessus");
                 self.action_item(ui, "Calque du dessous", "calque.dessous");
@@ -178,8 +167,8 @@ impl App {
                 self.action_item(ui, "Lecture / pause", "lecture.basculer");
                 self.action_item(ui, "Image précédente", "image.precedente");
                 self.action_item(ui, "Image suivante", "image.suivante");
-                self.action_item(ui, "Première image du panneau", "image.premiere");
-                self.action_item(ui, "Dernière image du panneau", "image.derniere");
+                self.action_item(ui, "Première image du plan", "image.premiere");
+                self.action_item(ui, "Dernière image du plan", "image.derniere");
                 ui.separator();
                 self.action_item(ui, "Nouveau dessin", "dessin.nouveau");
                 self.action_item(ui, "Dupliquer le dessin", "dessin.dupliquer");
@@ -204,7 +193,7 @@ impl App {
                 self.action_item(ui, "Zones de sécurité", "vue.cadres_securite");
                 self.action_item(ui, "Plateau en 3D", "vue.3d");
                 self.action_item(ui, "Vue de dessus (profondeur des calques)", "vue.dessus");
-                self.action_item(ui, "Réinitialiser la caméra du panneau", "camera.reinitialiser");
+                self.action_item(ui, "Réinitialiser la caméra du plan", "camera.reinitialiser");
                 ui.separator();
                 self.action_item(ui, "Guide : afficher et utiliser", "guide.activer");
                 self.action_item(ui, "Guide : aligner les traits", "guide.aligner");
@@ -250,12 +239,12 @@ impl App {
                 // Les deux niveaux restent écrits en toutes lettres : on voit d'un coup d'œil où
                 // l'on est.
                 let animation = ui.selectable_label(self.mode == Mode::Animation, RichText::new(" Animation ").strong());
-                let animation = self.aide(animation, "Animation", "Animer le panneau courant, image par image.", "mode.basculer");
+                let animation = self.aide(animation, "Animation", "Animer le plan courant, image par image.", "mode.basculer");
                 if animation.clicked() && self.mode != Mode::Animation {
                     self.set_mode(Mode::Animation);
                 }
                 let board = ui.selectable_label(self.mode == Mode::Storyboard, RichText::new(" Storyboard ").strong());
-                let board = self.aide(board, "Storyboard", "Monter les panneaux, les scènes et les séquences.", "mode.basculer");
+                let board = self.aide(board, "Storyboard", "Monter les plans et les séquences.", "mode.basculer");
                 if board.clicked() && self.mode != Mode::Storyboard {
                     self.set_mode(Mode::Storyboard);
                 }
@@ -401,7 +390,7 @@ impl App {
         }
         ui.horizontal(|ui| {
             let key = self.raccourci("vue.table_lumineuse");
-            interrupteur(ui, &mut self.light_table, ph::LIGHTBULB, "Table lumineuse", "Les autres calques du panneau estompés ; le calque courant reste net.", &key);
+            interrupteur(ui, &mut self.light_table, ph::LIGHTBULB, "Table lumineuse", "Les autres calques du plan estompés ; le calque courant reste net.", &key);
             if self.light_table {
                 let resp = ui.add(
                     egui::Slider::new(&mut self.light_table_strength, 0.05..=0.8)

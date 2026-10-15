@@ -58,6 +58,8 @@ pub const CALQUE_BITMAP: Color32 = Color32::from_rgb(6, 122, 103);
 /// Image courante (red-900), clés de caméra (le jaune du cadre de la caméra).
 pub const IMAGE_COURANTE: Color32 = Color32::from_rgb(252, 67, 46);
 pub const CAMERA: Color32 = Color32::from_rgb(255, 196, 60);
+/// Marques d'image (13a) : orange (orange-900), distinct du jaune des clés de caméra.
+pub const MARQUE: Color32 = Color32::from_rgb(244, 129, 12);
 /// Son : extrait (cyan-600, cyan-700 choisi), forme d'onde, piste muette (red-800).
 pub const SON_EXTRAIT: Color32 = Color32::from_rgb(3, 99, 140);
 pub const SON_CHOISI: Color32 = Color32::from_rgb(8, 115, 168);

@@ -207,7 +207,7 @@ impl App {
         self.end_stroke();
         self.playing = false;
         let Some(r) = self.current_ref3d() else {
-            self.status = "Pas de repère 3D dans ce panneau : Fichier > Importer un modèle 3D (glTF)…, \
+            self.status = "Pas de repère 3D dans ce plan : Fichier > Importer un modèle 3D (glTF)…, \
                            ou choisis un modèle déjà importé dans le panneau Outils."
                 .into();
             return;
@@ -391,7 +391,7 @@ impl App {
                     }
                 }
             });
-            bulle(combo.response, "Modèle du panneau", stats.as_deref().unwrap_or(""), "");
+            bulle(combo.response, "Modèle du plan", stats.as_deref().unwrap_or(""), "");
         });
         if import {
             self.import_model3d();
@@ -408,7 +408,7 @@ impl App {
             self.set_panel_model(c);
         }
         let Some(r) = self.current_ref3d().cloned() else {
-            note(ui, "Ce panneau n'a pas de repère 3D : choisis un modèle.");
+            note(ui, "Ce plan n'a pas de repère 3D : choisis un modèle.");
             return;
         };
         let mut next = r.clone();
@@ -465,11 +465,11 @@ impl App {
                 }
             }
             let previous = self.cur_panel.checked_sub(1).and_then(|i| self.doc.panels[i].ref3d.clone());
-            if icone_si(ui, previous.is_some(), ph::ARROW_BEND_UP_LEFT, "Comme le panneau précédent", "Même modèle, même point de vue que le panneau d'avant.", "").clicked() {
+            if icone_si(ui, previous.is_some(), ph::ARROW_BEND_UP_LEFT, "Comme le plan précédent", "Même modèle, même point de vue que le plan d'avant.", "").clicked() {
                 self.record_step();
                 self.doc.panels[self.cur_panel].ref3d = previous;
             }
-            if icone(ui, ph::X_CIRCLE, "Retirer", "Ce panneau n'a plus de repère 3D.", "").clicked() {
+            if icone(ui, ph::X_CIRCLE, "Retirer", "Ce plan n'a plus de repère 3D.", "").clicked() {
                 self.set_panel_model(None);
             }
             bake = icone(

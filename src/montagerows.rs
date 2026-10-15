@@ -106,7 +106,7 @@ impl App {
                 painter.rect_stroke(r, 3.0, Stroke::new(1.5_f32, visuals.selection.stroke.color), StrokeKind::Inside);
             }
             let resp = ui.interact(r, ui.id().with(("piste_calque", row)), Sense::click());
-            if resp.on_hover_text("Calque du panneau courant : clic pour le rendre courant").clicked() {
+            if resp.on_hover_text("Calque du plan courant : clic pour le rendre courant").clicked() {
                 pick = Some(k);
             }
         }

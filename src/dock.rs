@@ -80,7 +80,7 @@ impl Pane {
             Pane::ToolOptions => "Réglages de l'outil",
             Pane::View => "Vue",
             Pane::Guides => "Guides",
-            Pane::Sheet => "Fiche du panneau",
+            Pane::Sheet => "Fiche du plan",
             Pane::Layers => "Calques",
             Pane::Strip => "Montage et timeline",
         }

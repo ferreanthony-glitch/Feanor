@@ -1,7 +1,8 @@
 # Pelure
 
-Logiciel d'animation 2D écrit en Rust avec egui : storyboard en séquences, scènes et panneaux façon
-Storyboard Pro, animation image par image façon TVPaint, et dessin vectoriel modifiable.
+Logiciel d'animation 2D écrit en Rust avec egui : storyboard en séquences et plans (chaque plan,
+une timeline de calques façon TVPaint, ses images de storyboard marquées), animation image par
+image, et dessin vectoriel modifiable.
 
 ## Lancer
 
@@ -15,32 +16,43 @@ ouvrir d'un double-clic).
 
 ## Deux niveaux : storyboard et animation
 
-- **Storyboard** (au démarrage) : le film est une suite de **séquences**, découpées en **scènes**,
-  découpées en **panneaux**. En bas, la bande de montage montre les panneaux (vignette, largeur
-  proportionnelle à la durée) sous deux barres : séquences et scènes.
-  - Nouveau panneau (P), nouvelle scène (Maj+P), nouvelle séquence : icônes de la barre du montage ; le menu « … » à côté duplique ou
-    supprime un panneau ou une scène entière. Les barres du montage et de la timeline tiennent sur
-    une ligne : des icônes, dont le nom et le raccourci s'affichent au survol.
-  - F5 coupe le panneau à l'image courante (la suite devient un nouveau panneau, avec ses propres
-    copies des dessins) ; « Réunir le panneau et le suivant » fait l'inverse. Une scène se coupe
-    au panneau courant, ou se joint à la précédente (menu Storyboard, ou « … » du montage).
-  - On réordonne les panneaux en les faisant glisser. Un panneau posé dans une autre scène la
-    rejoint (à la frontière entre deux scènes : celle qui suit). Le bord droit d'un panneau règle
-    sa durée.
-  - Plusieurs panneaux : Ctrl + clic en ajoute ou en retire un, Maj + clic choisit une suite ;
+- **Storyboard** (au démarrage) : le film est une suite de **séquences**, découpées en **plans**
+  (13a : plus de panneaux). Chaque plan a une seule timeline de calques, comme un plan de TVPaint.
+  En bas, la bande de montage montre les plans (vignette, largeur proportionnelle à la durée) sous
+  la barre des séquences.
+  - **Images de storyboard** : le début d'un plan est sa première image ; une **marque d'image**
+    (drapeau orange, bouton de la timeline ou menu Storyboard) en pose une de plus à l'image
+    courante, avec ses propres textes Action / Dialogue / Notes. Vignettes et PDF montrent une
+    image par marque (une par plan sans marque).
+  - **Projets d'avant les plans** : à l'ouverture, chaque ancienne scène devient un plan, ses
+    panneaux mis bout à bout ; le début de chaque ancien panneau devient une marque d'image avec
+    ses textes ; la caméra ne bouge pas aux jointures ; les calques se suivent par nom ; un fond
+    « toute la scène » devient un calque ordinaire tenu sur tout le plan. Rien ne change à l'écran
+    ni dans le temps (le son reste calé). Le fichier n'est réécrit qu'à l'enregistrement (format
+    12, qu'une version plus ancienne de Pelure n'ouvre pas : garde une copie de tes projets).
+  - Nouveau plan (P), nouvelle séquence : icônes de la barre du montage ; le menu « … » à côté
+    duplique, copie, coupe ou réunit des plans. Les barres du montage et de la timeline tiennent
+    sur une ligne : des icônes, dont le nom et le raccourci s'affichent au survol.
+  - F5 coupe le plan à l'image courante (la suite devient un nouveau plan, avec ses propres
+    copies des dessins ; une marque à cette image devient le début du nouveau plan) ; « Réunir le
+    plan et le suivant » fait l'inverse (le début du suivant devient une marque d'image).
+  - On réordonne les plans en les faisant glisser ; un plan reste un plan (il rejoint la séquence
+    où on le pose). Le bord droit d'un plan règle sa durée.
+  - Plusieurs plans : Ctrl + clic en ajoute ou en retire un, Maj + clic choisit une suite ;
     glisser l'un d'eux déplace tout le groupe. Après un clic dans le montage (ou sur une
-    vignette), Ctrl+C copie les panneaux choisis, Ctrl+V les colle après le panneau courant (avec
+    vignette), Ctrl+C copie les plans choisis, Ctrl+V les colle après le plan courant (avec
     leurs propres copies des dessins), Ctrl+X les coupe et Suppr les supprime ; un clic dans le
     dessin rend ces touches au dessin. Mêmes commandes : icônes de la barre du montage, clic droit,
     menu Storyboard. Ctrl+Z annule.
-  - Numérotation automatique : scènes 1, 2, 3… dans l'ordre du film, panneaux 1, 2… dans chaque
-    scène. Une scène ou une séquence peut recevoir un nom ou un numéro à soi (fiche à droite).
-  - Chaque panneau a sa durée et ses champs Action / Dialogue / Notes.
+  - Numérotation automatique : plans 1, 2, 3… dans l'ordre du film. Un plan ou une séquence peut
+    recevoir un nom ou un numéro à soi (fiche à droite).
+  - La fiche montre les textes de l'image de storyboard où est la tête de lecture.
   - La lecture du montage (▶ de sa barre) enchaîne tout (animatique), en boucle si on veut, avec le son.
-  - Vue « Vignettes » (Maj+Tab) : une **planche** de pages blanches où les panneaux se suivent,
-    numérotés, de gauche à droite. En haut : taille des vignettes, colonnes (6 au plus), lignes
-    par page (« toutes » : une seule page), écart, « Scène à la ligne », « Attacher les notes ».
-    - On dessine directement dans la vignette du panneau courant ; avec l'outil Caméra, elle
+  - Vue « Vignettes » (Maj+Tab) : une **planche** de pages blanches où les images de storyboard
+    se suivent, numérotées, de gauche à droite. En haut : taille des vignettes, colonnes (6 au
+    plus), lignes par page (« toutes » : une seule page), écart, « Plan à la ligne », « Attacher
+    les notes ».
+    - On dessine directement dans la vignette de l'image courante ; avec l'outil Caméra, elle
       montre la feuille et le cadre pour recadrer.
     - Notes, partout sur la planche : pinceau ou crayon, un trait ; outil Texte, un texte (Ctrl +
       Entrée pour le poser, double-clic pour le modifier) ; gomme, efface les traits touchés ;
@@ -49,16 +61,16 @@ ouvrir d'un double-clic).
       sur des notes : attacher, détacher, couleur courante, taille du texte, supprimer ; Suppr).
     - Molette : défiler ; Ctrl + molette : zoom ; Espace, bouton du milieu ou outil Main :
       déplacer la planche ; le bouton du zoom met la page à la largeur de la vue.
-    - Clic : choisir un panneau ; Ctrl + clic : en ajouter ; Maj + clic : une suite ; outil
-      Sélection : lasso. Glisser les panneaux choisis (le courant par son titre) les place avant
-      ou après d'autres, dans une autre scène aussi. Clic droit : animer, nouveau panneau,
-      dupliquer, supprimer les panneaux choisis, nouvelle scène, recadrer.
-  - Sous la bande : une piste par calque (le calque de chaque panneau à ce rang, ses dessins
-    exposés), une piste « Fond » par scène, et au-dessus des panneaux la piste Caméra (clés,
-    mouvements). Un clic sur un calque, dans sa piste ou dans les noms à gauche, le rend courant.
-  - On dessine directement sur le panneau dans la vue « Dessin » : un nouveau dessin y est tenu
-    sur toute la durée du panneau.
-- **Son** : sous les panneaux, des pistes son.
+    - Clic : choisir une image (et son plan) ; Ctrl + clic : ajouter un plan ; Maj + clic : une
+      suite ; outil Sélection : lasso. Glisser des plans choisis (le courant par son titre) les
+      place avant ou après d'autres plans. Clic droit : animer, nouveau plan, dupliquer, copier,
+      coller, supprimer, faire d'une image un nouveau plan, réunir avec le plan précédent,
+      recadrer.
+  - Sous la bande : une piste par calque (le calque de chaque plan à ce rang, ses dessins
+    exposés), et au-dessus des plans la piste Caméra (clés, mouvements). Un clic sur un calque,
+    dans sa piste ou dans les noms à gauche, le rend courant.
+  - On dessine directement sur le plan dans la vue « Dessin » : un nouveau dessin y est tenu
+    jusqu'à la fin du plan.- **Son** : sous les plans, des pistes son.
   - « Importer un son » (bouton des notes de musique, ou un fichier lâché sur la fenêtre) importe un WAV, MP3, FLAC ou OGG à l'image
     courante, sur la première piste libre.
   - Chaque extrait montre sa forme d'onde. On le déplace en le faisant glisser (aussi d'une piste à
@@ -69,13 +81,13 @@ ouvrir d'un double-clic).
     entend une image de son (« son au défilement », menu Son).
   - Pendant la lecture, la barre d'état indique la cadence vraiment affichée (« Lecture 24,0 i/s ») ;
     elle passe en orange si la machine saute des images pour rester calée sur le son.
-  - Le son est en temps de montage : déplacer ou rallonger un panneau ne déplace pas le son.
-- **Animation** (Tab, ou double-clic sur un panneau) : on entre dans le panneau, avec sa timeline,
+  - Le son est en temps de montage : déplacer ou rallonger un plan ne déplace pas le son.
+- **Animation** (Tab, ou double-clic sur un plan) : on entre dans le plan, avec sa timeline,
   ses calques, ses expositions, la pelure d'oignon et la lecture en boucle. Tab ramène au storyboard.
 
 ## Calques vectoriels et bitmap
 
-Chaque panneau a ses calques, de deux sortes :
+Chaque plan a ses calques, de deux sortes :
 
 - **Vectoriel** (V, par défaut, façon Storyboard Pro) : les traits restent des objets modifiables.
   - Pinceau et crayon tracent des traits à épaisseur variable (pression du stylet comprise).
@@ -86,7 +98,7 @@ Chaque panneau a ses calques, de deux sortes :
   - L'outil Sélection (Alt+S) prend au clic ou au lasso (Maj pour ajouter). Ses poignées servent à
     déplacer, mettre à l'échelle (Maj : proportionnel) et tourner (Maj : par 15°). On peut aussi
     appliquer la couleur courante, épaissir, affiner, faire un miroir, passer devant ou derrière,
-    supprimer. Copier, couper et coller (Ctrl+C/X/V) marchent d'un panneau à l'autre.
+    supprimer. Copier, couper et coller (Ctrl+C/X/V) marchent d'un plan à l'autre.
 - **Bitmap** (B, façon TVPaint) : peinture en pixels, avec le pinceau, le crayon à pixels nets,
   la gomme, le remplissage avec débord sous le trait et l'import d'images PNG/JPEG.
   - L'outil Sélection y découpe une zone au lasso ou au rectangle (Maj : ajouter). On la déplace
@@ -111,7 +123,7 @@ Affichage > Vue de dessus montre la caméra, son champ et chaque calque à sa di
 calque vers le haut l'éloigne, vers le bas le rapproche (Maj : par pas de 0,1).
 
 Calques (menu Calques, panneau de droite) : W copie le calque courant et X le colle dans un autre
-panneau (avec ses dessins et sa timeline, ajustée à la durée du panneau). Alt+L verrouille le
+plan (avec ses dessins et sa timeline, ajustée à la durée du plan). Alt+L verrouille le
 calque (cadenas) : on ne peut plus dessiner dessus. Ctrl+E le fusionne avec le calque du dessous :
 deux calques vectoriels restent vectoriels, sinon le résultat est bitmap ; les deux calques doivent
 être visibles et non verrouillés.
@@ -121,13 +133,9 @@ fusion** du calque et son opacité : les 27 modes des logiciels de retouche (Fon
 Densité couleur +, Superposition, Lumière vive, Différence, Soustraction, Division, Teinte,
 Luminosité…), rangés par famille ; le calque se mélange à ce qui est dessous, à l'écran comme à
 l'export. Fusionner un tel calque avec celui du dessous applique le mode aux pixels. Double-clic
-sur le nom, ou clic droit > « Renommer… », pour renommer ; le clic droit donne aussi Toute la
-scène, Profondeur, Dupliquer, Verrouiller, Supprimer. **Nouveau calque de fond** (icône des montagnes) crée,
-tout en bas, un calque bitmap commun à toute la scène (un décor) : ce qu'on y dessine se voit dans
-chaque panneau de la scène, pendant tout le panneau. « Toute la scène » étend n'importe
-quel calque de la même façon, ou le rend à son panneau (chaque panneau garde alors sa copie).
-Couper ou copier une scène lui donne son propre fond ; un panneau déplacé dans une autre scène
-prend le fond de celle-ci.
+sur le nom, ou clic droit > « Renommer… », pour renommer ; le clic droit donne aussi Profondeur,
+Dupliquer, Verrouiller, Supprimer. **Nouveau calque de fond** (icône des montagnes) crée, tout en
+bas, un calque bitmap avec un seul dessin tenu sur tout le plan (un décor).
 
 ## Le reste
 
@@ -193,18 +201,19 @@ prend le fond de celle-ci.
 - **Export** (menu Fichier) :
   - « Exporter le film / des images / le son… » ouvre une fenêtre : film MP4 (pour regarder,
     envoyer) ou MOV ProRes (pour un logiciel de montage), images PNG, ou son seul (WAV) ; tout le
-    montage, la scène ou le panneau courant ; vidéo en taille réelle ou moitié, avec ou sans son.
+    montage, la séquence ou le plan courant ; vidéo en taille réelle ou moitié, avec ou sans son.
     Une barre de progression indique le temps restant ; « Annuler » arrête et efface la vidéo
     inachevée. La vidéo est fabriquée par **ffmpeg**, que Pelure cherche sur le poste (il est
     installé avec Krita, par exemple) ; « Choisir un autre ffmpeg… » sinon.
-  - « Exporter le storyboard (PDF)… » : planches A4 paysage, 6 panneaux par page, avec titre,
-    durée, action, dialogue et notes ; une nouvelle page à chaque séquence.
-  - Image courante (PNG), et storyboard en page HTML (une planche par panneau).
+  - « Exporter le storyboard (PDF)… » : planches A4 paysage, 6 images de storyboard par page (le
+    début de chaque plan, puis ses marques d'image), avec titre, durée, action, dialogue et notes ;
+    une nouvelle page à chaque séquence.
+  - Image courante (PNG), et storyboard en page HTML (une planche par image de storyboard).
 
 ## Appli compagnon (Tauri)
 
 `src-tauri/` + `src-frontend/` : une seconde appli (Tauri 2, React, Tailwind) sur le même noyau
-que Pelure, pour le storyboard (panneaux, textes, durées, ordre, PDF) ; le dessin reste dans
+que Pelure, pour le storyboard (plans, textes, durées, ordre, PDF) ; le dessin reste dans
 Pelure. Lancer : `cd src-frontend` puis `npm run tauri dev`. Détails : `docs/COMPAGNON.md`.
 
 ## Raccourcis clavier
@@ -222,7 +231,7 @@ Documentation technique : `docs/ARCHITECTURE.md` ; avancement : `docs/ROADMAP.md
 
 ```
 Bus/
-  Bus.pelure        manifeste lisible (réglages, séquences > scènes > panneaux > calques)
+  Bus.pelure        manifeste lisible (réglages, séquences > plans > calques, marques d'image)
   dessins/12.png    un fichier par dessin bitmap
   dessins/13.json   un fichier par dessin vectoriel
   sons/14.mp3       les sons importés, copiés tels quels
@@ -232,7 +241,7 @@ Bus/
 On ouvre le projet en choisissant `Bus.pelure`. Un enregistrement n'écrit que les dessins modifiés,
 et chaque fichier est écrit à côté puis renommé : un plantage pendant l'enregistrement n'abîme pas la
 version précédente. Les anciens fichiers `.pelure` (un seul fichier) s'ouvrent toujours : chaque
-ancien « plan » devient une scène d'un panneau, et le premier « Enregistrer » crée le dossier.
+ancien « plan » devient un plan de Pelure, et le premier « Enregistrer » crée le dossier.
 
 **Cadre et feuille** : la feuille de dessin est deux fois plus grande que le cadre de la caméra (la
 taille de l'image finale, choisie à la création du projet). Le cadre est tracé (« Caméra »), le
@@ -241,14 +250,13 @@ les vignettes montrent ce que voit la caméra. Un projet enregistré avant cette
 à l'ouverture (feuille agrandie, même cadrage) et passe au nouveau format au premier
 « Enregistrer » ; une version plus ancienne de Pelure ne pourra plus l'ouvrir.
 
-**Caméra** : chaque panneau a sa caméra. Un panneau sans image clé garde la caméra du panneau
-d'avant dans la scène (elle ne revient plus au centre en changeant de panneau). Avec l'outil
+**Caméra** : chaque plan a sa caméra (sans image clé : au centre, cadre entier). Avec l'outil
 Caméra, on glisse dans le cadre pour le déplacer, on tire un coin pour zoomer, la poignée ronde
 pour tourner (Maj : par 15°). Le panneau Réglages de l'outil Caméra est sa fenêtre : images clés
 (début, ici, fin, précédente, suivante, retirer), « Adoucir l'entrée / la sortie » en images,
 position X, Y et Z (Z : distance au plan de référence, pour avancer dans le décor), focale en mm,
 rotation, bascule (regarder vers le haut ou le bas) et panoramique (vers la gauche ou la
-droite), vue, durées de la scène et du panneau. Tournée, la caméra filme la feuille en
+droite), vue, durée du plan. Tournée, la caméra filme la feuille en
 perspective : sur le plateau, son cadre devient un trapèze ; la vue caméra, l'export et les
 vignettes montrent l'image en perspective.
 
@@ -266,7 +274,7 @@ plateau, la vue est celle qu'on avait laissée. « Sécurité » trace les zones
 de la caméra, le reste estompé, pour composer une version pour les réseaux. Ces cadres suivent la
 caméra et ne s'exportent pas.
 
-**Plateau en 3D** (bouton 3D, barre de commandes ou barre de la vue) : les calques du panneau
+**Plateau en 3D** (bouton 3D, barre de commandes ou barre de la vue) : les calques du plan
 sont des plans posés à leur profondeur, la caméra une pyramide de vision (avec sa course si elle
 bouge), sur un sol quadrillé. Outils : tourner autour, glisser la vue, avancer / reculer ; partout,
 molette = avancer, bouton du milieu = glisser, clic droit ou Alt + glisser = tourner. Outil
@@ -278,8 +286,8 @@ recadrer. Pour dessiner, on revient au plateau à plat (bouton 3D).
 puis Fichier > « Importer un modèle 3D (glTF) comme repère… ». Il apparaît en fil de fer sur la
 feuille, comme un guide pour dessiner (il ne s'exporte pas). Outil « Repère 3D » : glisser pour
 tourner autour, Maj + glisser pour déplacer, Ctrl + glisser pour avancer ou reculer ; azimut,
-hauteur, distance et focale se règlent aussi en chiffres. Chaque panneau a son point de vue
-(« Comme le panneau précédent » le recopie). « Dessiner dans un calque » transforme le fil de fer
+hauteur, distance et focale se règlent aussi en chiffres. Chaque plan a son point de vue
+(« Comme le plan précédent » le recopie). « Dessiner dans un calque » transforme le fil de fer
 en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le projet (`modeles/`).
 
 ## Organisation du code

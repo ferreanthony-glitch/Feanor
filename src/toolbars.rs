@@ -48,14 +48,13 @@ impl App {
             self.command_button(ui, ph::COPY, "edition.copier", "Copier", "Copier la sélection.", None);
             self.command_button(ui, ph::CLIPBOARD, "edition.coller", "Coller", "Coller ce qui a été copié.", None);
             sep(ui);
-            self.command_button(ui, ph::PLUS_SQUARE, "panneau.nouveau", "Nouveau panneau", "Après le panneau courant, dans la même scène.", None);
-            self.command_button(ui, ph::FOLDER_SIMPLE_PLUS, "scene.nouvelle", "Nouvelle scène", "Après la scène courante.", None);
-            self.command_button(ui, ph::COPY_SIMPLE, "panneau.dupliquer", "Dupliquer le panneau", "Une copie du panneau courant.", None);
-            self.command_button(ui, ph::TRASH, "panneau.supprimer", "Supprimer le panneau", "Retirer le panneau courant du montage.", None);
+            self.command_button(ui, ph::PLUS_SQUARE, "panneau.nouveau", "Nouveau plan", "Après le plan courant, dans la même séquence.", None);
+            self.command_button(ui, ph::COPY_SIMPLE, "panneau.dupliquer", "Dupliquer le plan", "Une copie du plan courant, juste après lui.", None);
+            self.command_button(ui, ph::TRASH, "panneau.supprimer", "Supprimer les plans choisis", "Le plan courant, et ceux choisis avec Ctrl ou Maj + clic.", None);
             sep(ui);
             let thumbs = self.board_view == BoardView::Panels && self.mode == Mode::Storyboard;
-            self.command_button(ui, ph::SQUARES_FOUR, "vue.planches", "Vue dessin / vignettes", "Dessiner le panneau, ou voir tous les panneaux en planche.", Some(thumbs));
-            self.command_button(ui, ph::FRAME_CORNERS, "camera.vue", "Vue à travers la caméra", "Voir ce que filme la caméra du panneau.", Some(self.camera_view));
+            self.command_button(ui, ph::SQUARES_FOUR, "vue.planches", "Vue dessin / vignettes", "Dessiner le plan, ou voir toutes ses images de storyboard en planche.", Some(thumbs));
+            self.command_button(ui, ph::FRAME_CORNERS, "camera.vue", "Vue à travers la caméra", "Voir ce que filme la caméra du plan.", Some(self.camera_view));
             let in3d = self.stage3d.on && !self.camera_view;
             self.command_button(ui, ph::CUBE_FOCUS, "vue.3d", "Plateau en 3D", "Les calques à leur profondeur, la caméra et le sol, vus en 3D.", Some(in3d));
             self.command_button(ui, ph::ARROWS_OUT, "vue.ajuster", "Ajuster à la fenêtre", "Toute la feuille dans la vue.", None);
@@ -67,12 +66,12 @@ impl App {
             self.command_button(ui, ph::CIRCLES_THREE, "vue.pelure", "Pelure d'oignon", "Par défaut, les dessins d'avant en rouge, ceux d'après en vert.", Some(self.onion.enabled));
             self.command_button(ui, ph::LIGHTBULB, "vue.table_lumineuse", "Table lumineuse", "Les autres calques estompés, le calque courant net.", Some(self.light_table));
             sep(ui);
-            self.command_button(ui, ph::SKIP_BACK, "image.premiere", "Première image", "Première image du panneau.", None);
+            self.command_button(ui, ph::SKIP_BACK, "image.premiere", "Première image", "Première image du plan.", None);
             self.command_button(ui, ph::CARET_LEFT, "image.precedente", "Image précédente", "", None);
             let play = if self.playing { ph::PAUSE } else { ph::PLAY };
             self.command_button(ui, play, "lecture.basculer", "Lecture / pause", "", None);
             self.command_button(ui, ph::CARET_RIGHT, "image.suivante", "Image suivante", "", None);
-            self.command_button(ui, ph::SKIP_FORWARD, "image.derniere", "Dernière image", "Dernière image du panneau.", None);
+            self.command_button(ui, ph::SKIP_FORWARD, "image.derniere", "Dernière image", "Dernière image du plan.", None);
             let looping = self.looping;
             let resp = ui.add_sized([28.0, 26.0], egui::SelectableLabel::new(looping, RichText::new(ph::REPEAT).size(17.0)));
             if crate::bulles::bulle(resp, "Lecture en boucle", "Reprendre au début une fois à la fin.", "").clicked() {

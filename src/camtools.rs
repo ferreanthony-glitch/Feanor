@@ -100,7 +100,7 @@ impl App {
         self.doc.panel_camera(self.cur_panel, self.cur_frame)
     }
 
-    /// Règle la caméra du panneau courant. Caméra fixe (aucune ou une image clé) : on change
+    /// Règle la caméra du plan courant. Caméra fixe (aucune ou une image clé) : on change
     /// cette caméra. Caméra animée (plusieurs clés) : on règle la clé de l'image courante (créée
     /// au besoin).
     pub(crate) fn set_current_camera(&mut self, cam: Camera) {
@@ -131,7 +131,7 @@ impl App {
         camera::set_key(keys, frame, cam);
         let n = keys.len();
         self.status = format!(
-            "Image clé de caméra à l'image {} ({n} clé{} dans ce panneau). Règle la caméra avec l'outil Caméra.",
+            "Image clé de caméra à l'image {} ({n} clé{} dans ce plan). Règle la caméra avec l'outil Caméra.",
             frame + 1,
             if n > 1 { "s" } else { "" }
         );
@@ -467,9 +467,9 @@ impl App {
     fn camera_key_buttons(&self, ui: &mut egui::Ui, key_here: bool) -> Option<&'static str> {
         use egui_phosphor::regular as ph;
         let buttons = [
-            (format!("|{}", ph::DIAMOND), "Clé au début", "Image clé de caméra sur la première image du panneau.", "camera.cle_debut", true),
+            (format!("|{}", ph::DIAMOND), "Clé au début", "Image clé de caméra sur la première image du plan.", "camera.cle_debut", true),
             (ph::DIAMOND.to_string(), "Clé ici", "Image clé de caméra à l'image courante.", "camera.cle_ici", !key_here),
-            (format!("{}|", ph::DIAMOND), "Clé à la fin", "Image clé de caméra sur la dernière image du panneau.", "camera.cle_fin", true),
+            (format!("{}|", ph::DIAMOND), "Clé à la fin", "Image clé de caméra sur la dernière image du plan.", "camera.cle_fin", true),
         ];
         let mut clicked = None;
         for (icon, name, description, action, enabled) in buttons {
@@ -647,7 +647,7 @@ impl App {
             ui.horizontal(|ui| {
                 use crate::bulles::interrupteur;
                 let on = self.camera_view;
-                if self.bouton_etat(ui, on, ph::FRAME_CORNERS, "Vue à travers la caméra", "Voir ce que filme la caméra du panneau.", "camera.vue").clicked() {
+                if self.bouton_etat(ui, on, ph::FRAME_CORNERS, "Vue à travers la caméra", "Voir ce que filme la caméra du plan.", "camera.vue").clicked() {
                     self.set_camera_view(!on);
                 }
                 let key = self.raccourci("camera.masque");
@@ -657,23 +657,23 @@ impl App {
                 self.frame_format_ui(ui);
             });
         });
-        let (s, e) = self.doc.scene_run(self.cur_panel);
-        let scene_len: usize = self.doc.panels[s..e].iter().map(|p| p.frame_count()).sum();
+        let (s, e) = self.doc.sequence_run(self.cur_panel);
+        let sequence_len: usize = self.doc.panels[s..e].iter().map(|p| p.frame_count()).sum();
         section(ui, "Durées", &mut |ui| {
-            ui.label(format!("Scène : {}", crate::storyboard::duration_label(scene_len, fps)));
-            ui.label(format!("Panneau : {}", crate::storyboard::duration_label(self.frame_count(), fps)));
+            ui.label(format!("Séquence : {}", crate::storyboard::duration_label(sequence_len, fps)));
+            ui.label(format!("Plan : {}", crate::storyboard::duration_label(self.frame_count(), fps)));
         });
         ui.label(
             RichText::new(
                 "Glisser dans le cadre : déplacer (Maj : à l'horizontale ou à la verticale). Coin : zoomer. \
-                 Poignée ronde : tourner (Maj : par 15°). Un panneau sans clé garde la caméra du panneau d'avant.",
+                 Poignée ronde : tourner (Maj : par 15°). Un plan sans clé : caméra au centre, cadre entier.",
             )
             .small()
             .weak(),
         );
     }
 
-    /// Réglages de la caméra du panneau courant (fiche du panneau et outil Caméra).
+    /// Réglages de la caméra du plan courant (fiche du panneau et outil Caméra).
     pub(crate) fn camera_fields(&mut self, ui: &mut egui::Ui) {
         let cam = self.current_camera();
         let (cx, cy) = (self.doc.width as f32 / 2.0, self.doc.height as f32 / 2.0);

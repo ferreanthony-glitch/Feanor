@@ -799,6 +799,13 @@ source = "Pelure (calque de fond commun aux panneaux d'une scène ; aucune comma
 [[raccourci]]
 action = "calque.toute_la_scene"
 touches = []
+etat = "non implémenté"
+source = "Pelure (plus utilisé depuis les plans, phase 13a)"
+
+# Marque d'image (13a) : une image de storyboard de plus dans le plan ; pas de touche à elle.
+[[raccourci]]
+action = "marque.basculer"
+touches = []
 source = "Pelure"
 
 # ------------------------------------------------------------------------------------ Espaces de travail

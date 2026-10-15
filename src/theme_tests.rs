@@ -42,7 +42,7 @@ fn timeline_and_montage_stay_readable() {
     // Repères dessinés sur les rangées (dessins exposés, image courante, clés de caméra, forme
     // d'onde) : au moins 3:1, le minimum pour un élément graphique.
     for fond in [theme::RANGEE, theme::RANGEE_SOMBRE] {
-        for marque in [theme::DESSIN_VECTORIEL, theme::DESSIN_BITMAP, theme::DESSIN_VIDE, theme::IMAGE_COURANTE, theme::CAMERA] {
+        for marque in [theme::DESSIN_VECTORIEL, theme::DESSIN_BITMAP, theme::DESSIN_VIDE, theme::IMAGE_COURANTE, theme::CAMERA, theme::MARQUE] {
             assert!(contraste(marque, fond) >= 3.0, "{marque:?} sur {fond:?} : {}", contraste(marque, fond));
         }
     }

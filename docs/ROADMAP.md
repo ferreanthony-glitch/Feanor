@@ -445,9 +445,13 @@ Décisions d'Anthony :
   la boucle de ses images, un va-et-vient, ou sa première / dernière image maintenue.
 
 Étapes :
-- 13a. Plans : un panneau par scène (le plan) ; conversion des projets (format 12) ; marques
-  d'image ; opérations de plan ; vignettes, fiche et PDF par image de storyboard ; « Plan »
-  partout à l'écran.
+- ✅ 13a. Plans : un panneau par scène (le plan) ; conversion des projets (format 12) sans
+  rien perdre ni changer à l'écran (caméra tenue aux jointures, calques par nom, débuts des
+  anciens panneaux en marques d'image avec leurs textes, notes ré-attachées) ; marques d'image
+  (drapeau orange : poser / retirer) ; opérations de plan (nouveau, dupliquer, copier / coller,
+  couper à l'image, réunir, déplacer) ; vignettes, fiche, PDF et page HTML par image de
+  storyboard ; barre de séquence seule au-dessus du montage ; « Plan » partout à l'écran ; calque
+  de fond ordinaire (un dessin tenu sur tout le plan) ; export par séquence ou par plan.
 - 13b. En-têtes de calques et opérations sur les calques dans la timeline, dossiers, groupes.
 - 13c. Images et expositions (choix, glisser, insérer / supprimer avec modes de trou, couper /
   copier / coller, inverser, instances, noms, pré / post-comportement, faux-fixe, étirer).
@@ -458,6 +462,23 @@ Décisions d'Anthony :
   Puppet, vidéo, interpolation d'images.
 Le faux-fixe et le pochoir n'ont que leur nom dans les textes de TVPaint : à faire décrire par
 Anthony avant de les implanter.
+
+## Phase 14 — Échange avec Storyboard Pro (après la phase 13)
+
+Demandé par Anthony (2026-10-15) : ouvrir un projet Storyboard Pro dans Pelure et en ressortir
+quelque chose que Storyboard Pro ouvre. Constat (projet `BRAWLIDAYS_predec PART 1`, lu sans le
+modifier) : le `.sboard` est du XML lisible (séquences, plans, panneaux, durées, calques, textes,
+caméra, son) ; les dessins sont des `.tvg`, format de Toon Boom non documenté, compressé et marqué
+d'un certificat de licence Toon Boom : ni leur lecture ni une écriture acceptée par Storyboard Pro
+ne sont garanties.
+
+Choix d'Anthony : passer par les imports officiels de Storyboard Pro.
+- Vers Pelure : lire le `.sboard` (structure, durées, textes, caméra, son) ; les dessins, à partir
+  des images que Storyboard Pro exporte (« Export: Bitmap »).
+- Vers Storyboard Pro : un dossier que ses propres commandes réimportent — images par plan et par
+  calque (« Import Images as Shots », « Import Images as Layers »), textes (« Update Captions from
+  CSV »), son (« Import AudioTracks »), montage (EDL / AAF / XML, « Conformation: Import Animatic
+  Project ») — à vérifier commande par commande dans Storyboard Pro 27 avant d'écrire le code.
 
 ## Raccourcis proposés, à valider
 

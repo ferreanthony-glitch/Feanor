@@ -34,7 +34,7 @@ impl App {
         }
         self.canvas_rect = rect;
         let size = self.canvas_size();
-        // En vue caméra, la vue suit la caméra du panneau (avant de lire la souris).
+        // En vue caméra, la vue suit la caméra du plan (avant de lire la souris).
         self.apply_camera_view(rect);
         if self.fit_pending && !self.camera_view {
             // On cadre la caméra (centrée sur la feuille), avec un peu de hors-champ autour.

@@ -387,6 +387,36 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   `Tool::description`, `Nav3d::description`. Un test parcourt les sources et vérifie que chaque
   action citée par un bouton existe dans le fichier de raccourcis.
 
+## Séquences et plans (phase 13a)
+
+- Un plan est une `Scene` qui a exactement un `Panel` (`Document::is_plans`) : le modèle et ses
+  fonctions (calques, caméra, rendu, lecture, enregistrement) restent ceux d'un panneau ; à
+  l'écran, « plan » partout. Les opérations de plan gardent ce rang : `add_scene_after` (nouveau
+  plan), `duplicate_scene_after`, `paste_plans` (chaque plan collé dans sa propre scène),
+  `split_plan` (F5 : la suite devient un nouveau plan), `join_next_plan` (réunir),
+  `move_plans` (un plan garde sa séquence s'il retombe à côté d'elle, sinon rejoint celle du
+  plan devant lequel on le pose), `remove_panels`. Les anciennes fonctions qui créaient plusieurs
+  panneaux par scène (`add_panel_after`, `split_panel`, `merge_with_next`, `move_panel(s)`,
+  `split_scene`, `join_previous_scene`) ne servent plus qu'en interne et aux tests.
+- Marques d'image : `Panel::marks` (`ImageMark` : id unique dans le document, image, couleur,
+  textes), triées, après la première image. Une image de storyboard = le début du plan, ou une
+  marque ; `board::plan_boards` les donne avec leur étendue. La planche fait une vignette par
+  image (`CardPlace` : plan, id de la vignette, [frame, end)), la fiche édite les textes de
+  l'image sous la tête de lecture (`Document::board_mark_at`), `export::storyboard_of` fait le
+  PDF et la page HTML, `Thumbs::texture_at` les vignettes à une image donnée. Les notes de la
+  planche s'attachent à l'id d'une vignette (plan ou marque).
+- Conversion (`Document::into_plans`, appelée par `project::load` si `!is_plans()`) : les
+  calques de toute la scène deviennent ordinaires (`flatten_scene_layers`), puis chaque scène est
+  réunie en un plan par `append_plan` : caméra tenue aux jointures (`held_keys`, clés au début
+  et à la fin de chaque partie), calques appariés par nom puis par rang s'ils sont réglés pareil
+  (sinon un calque de plus, juste au-dessus de celui où va le calque d'en dessous), début de
+  chaque partie = marque d'image avec ses textes, notes ré-attachées (`reanchor_notes`), repère
+  3D du premier gardé (avertissement sinon). Durée totale inchangée : le son reste calé.
+  `split_plan` fait l'inverse (une marque à l'image de coupe redevient le début du plan).
+- Les calques de toute la scène (6f) ne se créent plus : « Nouveau calque de fond » fait un
+  calque ordinaire dont un seul dessin est tenu sur tout le plan. `sync_scene_layers` reste pour
+  les projets en cours d'ouverture, sans effet sur un projet en plans.
+
 ## Pinceaux texturés (3d-2)
 
 - `brush.rs` : chaque empreinte calcule une couverture par pixel — disque (dureté) ou pointe en
@@ -552,13 +582,14 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - Annulation : le repère fait partie de la structure (copie au début du geste, une étape au
   lâcher, comme l'outil Caméra).
 
-## Format de projet (version 11, dossier)
+## Format de projet (version 12, dossier)
 
 ```
 MonFilm/
-  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 11, "largeur",
+  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 12, "largeur",
                       "hauteur" (feuille), "cadre": [l, h], réglages,
-                      "sequences": [{ "scenes": [{ "panneaux": [{ "calques": [{ "expositions": … }]}]}]}],
+                      "sequences": [{ "scenes": [{ "panneaux": [{ "calques": [{ "expositions": … }],
+                      "marques": [{"id", "image", "action", …}] }]}]}]  (un panneau par scène),
                       "sons": [{"id", "nom", "fichier"}], "pistes_son": [{ "extraits": [{"son", "debut",
                       "decalage", "duree"}] }], "modeles": [{"id", "nom"}]}
   dessins/<id>.png    dessin bitmap (RGBA non prémultiplié)
@@ -659,6 +690,8 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 | **Pelure egui reste le logiciel principal** ; Pelure Studio (Tauri) = banc d'essai d'interface (11, choix d'Anthony) | la toile native (egui + wgpu, même processus, affichage réglé) garde la meilleure latence et partage la carte graphique avec le rendu ; dans un WebView, chaque trait traverse l'IPC (1,6 à 5,6 ms mesurés) puis le compositeur de WebView2, et les pixels sont copiés (8 Mo par calque pour une opération sur toute l'image) | nul | faible : les idées d'interface du Studio sont à reporter dans egui à la main | oui : `moteur.rs` reste disponible pour une autre interface |
 | Thème : couleurs de Spectrum reprises en constantes, police Segoe UI du système (12a) | l'allure dense et sombre du Studio, sans dépendance ni fichier ajouté | nul (police lue au démarrage, ≈ 1 Mo) | faible : sans Segoe UI (autre système), la police d'egui reste | oui : `theme::appliquer` et `polices` à retirer |
 | Ctrl+C / Ctrl+V / Ctrl+X / Suppr visent les panneaux après un clic dans le montage ou sur une vignette, le dessin après un clic dans le dessin (12e) | les touches habituelles servent pour les panneaux, sans nouveau raccourci à apprendre | un booléen (`App::panel_focus`) | moyen : Suppr après un clic dans le montage supprime des panneaux (Ctrl+Z les rend) | oui : retirer les gardes `panels_have_focus` dans `run_action` ; `panneau.copier` / `panneau.coller` restent |
+| Un plan = une scène à un seul panneau, plutôt qu'un nouveau type (13a) | tout ce qui travaille sur un panneau (rendu, caméra, calques, enregistrement, lecture) reste valable | un rang à tenir (`is_plans`, testé) | faible : une opération oubliée pourrait remettre deux panneaux dans une scène (le chargement les réunirait) | oui : le modèle n'a pas changé de forme |
+| Les débuts d'anciens panneaux deviennent des marques d'image avec leurs textes (13a, choix d'Anthony) | aucun dessin ni texte de storyboard perdu ; vignettes et PDF gardent leurs images | un champ par plan (`marques`, format 12) | faible | oui : retirer une marque ne touche pas aux dessins |
 | Copie de panneaux avec une copie de leurs dessins, au moment de la copie (12e) | coller donne ce qu'on a copié, même si l'original a changé ou disparu | mémoire des dessins copiés, tant que le presse-papiers les garde | faible | oui |
 | `src-tauri` projet Cargo à part, pas membre d'un espace de travail (10b) | Tauri ne change aucune version des dépendances de Pelure | le noyau est compilé deux fois (deux dossiers `target`) | faible | oui : en faire un membre plus tard |
 | Bascule et panoramique = homographie du plan de référence déjà composé (9f) | exact (le multiplan ne dépend que de l'œil), sans toucher à la composition ni aux calques | une homographie par image ; vue caméra par la carte graphique avec un w par coin | faible : au ras de l'horizon, la feuille est très étirée (bornée à 5°) ; hors de la feuille, rien | oui : caméra droite = calcul d'avant ; deux champs du manifeste |

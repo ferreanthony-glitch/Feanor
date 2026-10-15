@@ -66,8 +66,8 @@ impl App {
         let count = |range| export::frames_for(&self.doc, range, self.cur_panel).len();
         let ranges = [
             (Range::Montage, "Tout le montage", count(Range::Montage)),
-            (Range::Scene, "Scène courante", count(Range::Scene)),
-            (Range::Panel, "Panneau courant", count(Range::Panel)),
+            (Range::Scene, "Séquence courante", count(Range::Scene)),
+            (Range::Panel, "Plan courant", count(Range::Panel)),
         ];
         // Le son de l'étendue choisie (pour griser « avec le son » s'il n'y en a pas).
         let frames = export::frames_for(&self.doc, s.range, self.cur_panel);
@@ -90,7 +90,7 @@ impl App {
                     ui.radio_value(&mut s.format, Format::ProRes, "Film MOV (ProRes 422 HQ) : pour le montage");
                     ui.radio_value(&mut s.format, Format::Png, "Images PNG (une par image)");
                     ui.radio_value(&mut s.format, Format::Wav, "Son seul (WAV)");
-                    ui.radio_value(&mut s.format, Format::Pdf, "Storyboard PDF (A4 paysage, 6 panneaux par page)");
+                    ui.radio_value(&mut s.format, Format::Pdf, "Storyboard PDF (A4 paysage, 6 images par page)");
                 });
                 ui.end_row();
                 ui.label("Étendue");

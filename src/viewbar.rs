@@ -1,5 +1,5 @@
 //! Barre au-dessus du dessin (9d) : vue du plateau (toute la feuille, avec le cadre de la caméra)
-//! ou vue caméra (ce que filme la caméra du panneau), et cadres de composition tracés dans le
+//! ou vue caméra (ce que filme la caméra du plan), et cadres de composition tracés dans le
 //! cadre de la caméra : zones de sécurité et cadre d'un format de diffusion (9:16, 1:1…).
 
 use eframe::egui::{self, vec2, Align2, Color32, FontId, Pos2, Rect, Shape, Stroke, Vec2};
@@ -130,7 +130,7 @@ impl App {
             if self.bouton_etat(ui, !cam, ph::BOUNDING_BOX, "Vue du plateau", "Toute la feuille, avec le cadre de la caméra.", "camera.vue").clicked() {
                 self.set_camera_view(false);
             }
-            if self.bouton_etat(ui, cam, ph::VIDEO_CAMERA, "Vue caméra", "Ce que filme la caméra du panneau.", "camera.vue").clicked() {
+            if self.bouton_etat(ui, cam, ph::VIDEO_CAMERA, "Vue caméra", "Ce que filme la caméra du plan.", "camera.vue").clicked() {
                 self.set_camera_view(true);
             }
             ui.add_space(6.0);

@@ -137,7 +137,7 @@ impl Projet {
     }
 
     fn panneau(&self, index: usize) -> Result<usize, String> {
-        (index < self.doc.panels.len()).then_some(index).ok_or_else(|| format!("Pas de panneau n° {}.", index + 1))
+        (index < self.doc.panels.len()).then_some(index).ok_or_else(|| format!("Pas de plan n° {}.", index + 1))
     }
 
     /// Vignette PNG du panneau `index` (sa première image, vue par sa caméra, sur le papier),
@@ -169,7 +169,7 @@ impl Projet {
     /// Supprime le panneau `index` (jamais le dernier du projet) ; rend le rang du panneau voisin.
     pub fn supprimer_panneau(&mut self, index: usize) -> Result<usize, String> {
         let index = self.panneau(index)?;
-        let next = self.doc.remove_panel(index).ok_or("Il faut garder au moins un panneau.")?;
+        let next = self.doc.remove_panel(index).ok_or("Il faut garder au moins un plan.")?;
         self.modifie = true;
         Ok(next)
     }

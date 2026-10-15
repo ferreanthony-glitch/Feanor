@@ -55,7 +55,9 @@ impl Format {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Range {
     Montage,
+    /// La séquence courante (13a : les scènes sont devenues des plans).
     Scene,
+    /// Le plan courant.
     Panel,
 }
 
@@ -87,7 +89,8 @@ impl Default for ExportSettings {
 pub fn frames_for(doc: &Document, range: Range, panel: usize) -> Vec<(usize, usize)> {
     let (a, b) = match range {
         Range::Montage => (0, doc.panels.len()),
-        Range::Scene => doc.scene_run(panel),
+        // Un plan est une scène (13a) : « Scene » est la séquence courante.
+        Range::Scene => doc.sequence_run(panel),
         Range::Panel => (panel, panel + 1),
     };
     (a..b).flat_map(|p| (0..doc.panels[p].frame_count()).map(move |f| (p, f))).collect()
@@ -752,7 +755,7 @@ impl ExportJob {
         self.sink.close();
         if let Some(result) = self.sink.poll() {
             let n = self.frames.len();
-            let what = if self.unit == "Panneau" { "panneaux exportés" } else { "images exportées" };
+            let what = if self.unit == "Image de storyboard" { "images de storyboard exportées" } else { "images exportées" };
             self.outcome = Some(result.map(|()| format!("{n} {what} : {}", self.target.display())));
         }
     }

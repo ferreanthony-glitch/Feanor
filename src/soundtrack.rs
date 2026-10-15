@@ -245,7 +245,7 @@ impl App {
             timecode(start, fps)
         );
         if start + len > self.doc.total_frames() {
-            msg.push_str(" Il dépasse la fin des panneaux : la lecture s'arrête à la fin des panneaux.");
+            msg.push_str(" Il dépasse la fin des plans : la lecture s'arrête à la fin des plans.");
         }
         self.status = msg;
     }

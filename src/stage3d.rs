@@ -1,5 +1,5 @@
-//! Vue du plateau en 3D (9e) : les calques du panneau sont des plans posés à leur profondeur, la
-//! caméra du panneau est une pyramide de vision, un sol quadrillé donne l'échelle. On tourne
+//! Vue du plateau en 3D (9e) : les calques du plan sont des plans posés à leur profondeur, la
+//! caméra du plan est une pyramide de vision, un sol quadrillé donne l'échelle. On tourne
 //! autour (orbite), on glisse la vue, on avance ; l'outil Déplacer bouge un calque dans son plan
 //! ou en profondeur, ou la caméra.
 //!
@@ -7,7 +7,7 @@
 //! droite, y vers le haut, z vers la caméra, origine au centre de la feuille. Le plan de
 //! référence (profondeur 0) est z = 0 et la caméra de référence est en z = D (distance de
 //! référence). Un calque de profondeur d est en z = −D·d, agrandi de (1 + d) autour de l'axe de la
-//! caméra de référence : vu par la caméra du panneau, il tombe là où le rendu 2D le met.
+//! caméra de référence : vu par la caméra du plan, il tombe là où le rendu 2D le met.
 
 use eframe::egui::{pos2, vec2, Pos2, Rect, Vec2};
 
@@ -85,7 +85,7 @@ impl World {
         [pos2(0.0, 0.0), pos2(w, 0.0), pos2(w, h), pos2(0.0, h)].map(|p| self.at_depth(p, depth))
     }
 
-    /// Œil de la caméra du panneau.
+    /// Œil de la caméra du plan.
     pub fn eye(&self, cam: &Camera) -> V3 {
         [cam.x - self.stage[0] / 2.0, -(cam.y - self.stage[1] / 2.0), self.d0 - cam.dolly]
     }
@@ -95,7 +95,7 @@ impl World {
         cam.corners(self.frame).map(|p| self.at_depth(p, 0.0))
     }
 
-    /// Le point `w` vu par la caméra du panneau, ramené sur le plan de référence (pixels de la
+    /// Le point `w` vu par la caméra du plan, ramené sur le plan de référence (pixels de la
     /// feuille) : là où le rendu 2D le montre. Rien s'il n'est pas devant la caméra.
     #[cfg(test)]
     pub fn seen_on_reference(&self, cam: &Camera, w: V3) -> Option<Pos2> {
@@ -108,7 +108,7 @@ impl World {
         Some(self.to_stage(lerp3(e, w, t), 0.0))
     }
 
-    /// Vue 3D placée à l'œil de la caméra du panneau, qui regarde comme elle (panoramique, bascule)
+    /// Vue 3D placée à l'œil de la caméra du plan, qui regarde comme elle (panoramique, bascule)
     /// avec sa focale : elle voit le cadre (roulis de la caméra mis à part).
     pub fn look_through(&self, cam: &Camera) -> Cam3d {
         let eye = self.eye(cam);

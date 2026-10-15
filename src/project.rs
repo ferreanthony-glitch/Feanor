@@ -1113,7 +1113,7 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
         }
     }
     if structure.panels.is_empty() {
-        return Err("le projet ne contient aucun panneau".into());
+        return Err("le projet ne contient aucun plan".into());
     }
     let frame = manifest.cadre;
     let mut written: HashMap<CelId, u64> = cels.keys().map(|&id| (id, 0)).collect();

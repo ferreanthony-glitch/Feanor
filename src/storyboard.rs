@@ -30,9 +30,8 @@ pub(crate) enum MontageDrag {
 }
 
 pub(crate) const RULER_H: f32 = 18.0;
-const SEQ_H: f32 = 15.0;
-const SCENE_H: f32 = 18.0;
-pub(crate) const BANDS_H: f32 = SEQ_H + SCENE_H + 2.0;
+const SEQ_H: f32 = 17.0;
+pub(crate) const BANDS_H: f32 = SEQ_H + 2.0;
 
 pub fn timecode(frames: usize, fps: u32) -> String {
     let fps = fps.max(1) as usize;
@@ -216,6 +215,23 @@ impl App {
         }
     }
 
+    /// Pose ou retire une marque d'image à l'image courante du plan (une image de storyboard de
+    /// plus ou de moins dans les vignettes et le PDF).
+    pub(crate) fn toggle_mark(&mut self) {
+        let frame = self.cur_frame.min(self.frame_count().saturating_sub(1));
+        let mut placed = None;
+        let done = self.structure_op(|d, i| {
+            placed = d.toggle_mark(i, frame);
+            placed.map(|_| i)
+        });
+        self.cur_frame = frame;
+        self.status = match (done, placed) {
+            (true, Some(true)) => format!("Marque d'image à l'image {} : une image de storyboard de plus.", frame + 1),
+            (true, _) => format!("Marque d'image retirée de l'image {}.", frame + 1),
+            _ => "La première image est déjà le début du plan : place-toi plus loin pour poser une marque.".into(),
+        };
+    }
+
     /// Plan précédent (ou suivant).
     pub(crate) fn step_scene(&mut self, forward: bool) {
         let target = if forward {
@@ -350,15 +366,15 @@ impl App {
         }
         // Plans choisis (Ctrl ou Maj + clic dans la bande) : copier, coller, supprimer (12e).
         let n = self.board_selection().len();
-        let chosen = if n > 1 { format!("Les {n} panneaux choisis.") } else { "Le panneau courant ; Ctrl ou Maj + clic pour en choisir plusieurs.".to_string() };
-        if self.bouton(ui, ph::COPY, "Copier les panneaux", &chosen, "edition.copier").clicked() {
+        let chosen = if n > 1 { format!("Les {n} plans choisis.") } else { "Le plan courant ; Ctrl ou Maj + clic pour en choisir plusieurs.".to_string() };
+        if self.bouton(ui, ph::COPY, "Copier les plans", &chosen, "edition.copier").clicked() {
             self.copy_panels();
         }
         let can_paste = self.panel_clipboard.is_some();
-        if self.bouton_si(ui, can_paste, ph::CLIPBOARD, "Coller les panneaux", "Après le panneau courant, dans sa scène.", "edition.coller").clicked() {
+        if self.bouton_si(ui, can_paste, ph::CLIPBOARD, "Coller les plans", "Après le plan courant, dans sa séquence.", "edition.coller").clicked() {
             self.paste_panels();
         }
-        if self.bouton(ui, ph::TRASH, "Supprimer les panneaux", &chosen, "edition.supprimer").clicked() {
+        if self.bouton(ui, ph::TRASH, "Supprimer les plans", &chosen, "edition.supprimer").clicked() {
             self.delete_chosen_panels();
         }
         let resp = ui
@@ -370,24 +386,22 @@ impl App {
                         app.run_action(action);
                     }
                 };
-                item(self, ui, "Dupliquer le panneau", "panneau.dupliquer");
+                item(self, ui, "Dupliquer le plan", "panneau.dupliquer");
                 ui.separator();
                 self.panel_clipboard_items(ui);
                 ui.separator();
-                item(self, ui, "Couper le panneau à l'image courante", "panneau.couper");
-                item(self, ui, "Réunir le panneau et le suivant", "panneau.fusionner_suivant");
+                item(self, ui, "Couper le plan à l'image courante", "panneau.couper");
+                item(self, ui, "Réunir le plan et le suivant", "panneau.fusionner_suivant");
+                item(self, ui, "Réunir avec le plan précédent", "scene.joindre_precedente");
                 ui.separator();
-                item(self, ui, "Dupliquer la scène", "scene.dupliquer");
-                item(self, ui, "Supprimer la scène", "scene.supprimer");
-                item(self, ui, "Couper la scène au panneau courant", "scene.couper");
-                item(self, ui, "Joindre la scène à la précédente", "scene.joindre_precedente");
+                item(self, ui, "Marque d'image ici (ajouter / retirer)", "marque.basculer");
             })
             .response;
-        bulle(resp, "Panneaux et scènes", "Dupliquer, supprimer, couper, réunir.", "");
-        if self.bouton(ui, ph::CARET_DOUBLE_LEFT, "Avancer le panneau", "Le placer plus tôt dans le montage.", "").clicked() {
+        bulle(resp, "Plans", "Dupliquer, copier, couper, réunir, marques d'image.", "");
+        if self.bouton(ui, ph::CARET_DOUBLE_LEFT, "Avancer le plan", "Le placer plus tôt dans le montage.", "").clicked() {
             self.shift_panel(false);
         }
-        if self.bouton(ui, ph::CARET_DOUBLE_RIGHT, "Reculer le panneau", "Le placer plus tard dans le montage.", "").clicked() {
+        if self.bouton(ui, ph::CARET_DOUBLE_RIGHT, "Reculer le plan", "Le placer plus tard dans le montage.", "").clicked() {
             self.shift_panel(true);
         }
         sep(ui);
@@ -410,17 +424,17 @@ impl App {
         sep(ui);
 
         if self
-            .bouton(ui, ph::FILM_SLATE, "Animer ce panneau", "Entrer dans le panneau courant pour l'animer (ou double-clic sur le panneau).", "mode.basculer")
+            .bouton(ui, ph::FILM_SLATE, "Animer ce plan", "Entrer dans le plan courant pour l'animer (ou double-clic sur le plan).", "mode.basculer")
             .clicked()
         {
             self.enter_animation(self.cur_panel);
         }
         sep(ui);
 
-        // Vue : dessin du panneau, ou vignettes de tous les panneaux.
+        // Vue : dessin du plan, ou vignettes de toutes les images de storyboard.
         let key = self.raccourci("vue.planches");
-        choix(ui, &mut self.board_view, BoardView::Scene, ph::PAINT_BRUSH, "Vue dessin", "Dessiner le panneau courant.", &key);
-        choix(ui, &mut self.board_view, BoardView::Panels, ph::SQUARES_FOUR, "Vue vignettes", "Tous les panneaux en planche, rangés par scène.", &key);
+        choix(ui, &mut self.board_view, BoardView::Scene, ph::PAINT_BRUSH, "Vue dessin", "Dessiner le plan courant.", &key);
+        choix(ui, &mut self.board_view, BoardView::Panels, ph::SQUARES_FOUR, "Vue vignettes", "Toutes les images de storyboard en planche : le début de chaque plan, puis ses marques d'image.", &key);
         sep(ui);
         etiquette(ui, ph::MAGNIFYING_GLASS, "Zoom du montage", "");
         ui.spacing_mut().slider_width = 80.0;
@@ -463,7 +477,7 @@ impl App {
     /// vignettes (12e). Les raccourcis montrés sont ceux qui valent quand le montage a la main.
     pub(crate) fn panel_clipboard_items(&mut self, ui: &mut egui::Ui) {
         let n = self.board_selection().len();
-        let what = |verb: &str| if n > 1 { format!("{verb} les {n} panneaux choisis") } else { format!("{verb} le panneau") };
+        let what = |verb: &str| if n > 1 { format!("{verb} les {n} plans choisis") } else { format!("{verb} le plan") };
         let copy = self.raccourci("edition.copier");
         if ui.add(egui::Button::new(what("Copier")).shortcut_text(copy)).clicked() {
             ui.close_menu();
@@ -471,8 +485,8 @@ impl App {
         }
         let paste = self.raccourci("edition.coller");
         let label = match self.panel_clipboard.as_ref().map(|c| c.panels.len()) {
-            Some(k) if k > 1 => format!("Coller {k} panneaux après le panneau courant"),
-            _ => "Coller après le panneau courant".to_string(),
+            Some(k) if k > 1 => format!("Coller {k} plans après le plan courant"),
+            _ => "Coller après le plan courant".to_string(),
         };
         if ui.add_enabled(self.panel_clipboard.is_some(), egui::Button::new(label).shortcut_text(paste)).clicked() {
             ui.close_menu();
@@ -485,33 +499,33 @@ impl App {
         }
     }
 
-    /// Menu du clic droit sur un panneau de la bande de montage.
+    /// Menu du clic droit sur un plan de la bande de montage.
     fn panel_menu(&mut self, ui: &mut egui::Ui, index: usize) {
-        if ui.button("Animer ce panneau").clicked() {
+        if ui.button("Animer ce plan").clicked() {
             ui.close_menu();
             self.enter_animation(index);
         }
-        if ui.button("Nouveau panneau après").clicked() {
+        if ui.button("Nouveau plan après").clicked() {
             ui.close_menu();
             self.new_panel();
         }
-        if ui.button("Dupliquer le panneau").clicked() {
+        if ui.button("Dupliquer le plan").clicked() {
             ui.close_menu();
             self.duplicate_panel();
         }
         ui.separator();
         self.panel_clipboard_items(ui);
         ui.separator();
-        if ui.button("Couper le panneau à l'image courante").clicked() {
+        if ui.button("Couper le plan à l'image courante").clicked() {
             ui.close_menu();
             self.split_current_panel();
         }
-        if ui.button("Réunir avec le panneau suivant").clicked() {
+        if ui.button("Réunir avec le plan suivant").clicked() {
             ui.close_menu();
             self.merge_next_panel();
         }
         ui.separator();
-        if ui.button("Importer un son au début du panneau…").clicked() {
+        if ui.button("Importer un son au début du plan…").clicked() {
             ui.close_menu();
             let at = self.doc.panel_start(index.min(self.doc.panels.len() - 1));
             self.import_sound(None, Some(at));
@@ -523,7 +537,7 @@ impl App {
         let ppf = self.montage_zoom;
         let fps = self.doc.fps.max(1) as usize;
         let total = self.doc.total_frames();
-        // Le son peut dépasser la fin des panneaux : on le montre en entier.
+        // Le son peut dépasser la fin des plans : on le montre en entier.
         let shown = total.max(self.doc.audio_end());
         let n_tracks = self.doc.audio_tracks.len();
         if self.sel_clip.is_some_and(|id| self.doc.clip(id).is_none()) {
@@ -614,6 +628,16 @@ impl App {
             }
             let at = pos2(rect.left() + 5.0, rect.bottom() - 4.0 - title.size().y);
             clip.galley(at, title, visuals.text_color());
+            // Marques d'image (13a) : chacune, une image de storyboard de plus dans le plan.
+            for m in self.doc.panels[i].marks.iter().filter(|m| m.frame < len) {
+                let x = rect.left() - 1.0 + m.frame as f32 * ppf;
+                clip.line_segment([pos2(x, rect.top() + 2.0), pos2(x, rect.bottom() - 2.0)], Stroke::new(1.0_f32, theme::MARQUE));
+                clip.add(egui::Shape::convex_polygon(
+                    vec![pos2(x - 4.0, rect.top() + 2.0), pos2(x + 4.0, rect.top() + 2.0), pos2(x, rect.top() + 8.0)],
+                    theme::MARQUE,
+                    Stroke::NONE,
+                ));
+            }
             if selected || chosen {
                 painter.rect_stroke(
                     rect,
@@ -630,9 +654,9 @@ impl App {
             );
         }
 
-        // Barres des séquences et des scènes au-dessus des panneaux.
+        // Barre des séquences au-dessus des plans (13a : un plan = un bloc, plus de barre de scène).
         let mut runs: Vec<(Rect, usize)> = Vec::new();
-        for (band, y0, h) in [(0, bands_top, SEQ_H), (1, bands_top + SEQ_H, SCENE_H)] {
+        for (band, y0, h) in [(0, bands_top, SEQ_H)] {
             let mut i = 0;
             while i < self.doc.panels.len() {
                 let (start, end) = if band == 0 {
@@ -670,7 +694,7 @@ impl App {
             }
         }
 
-        // Caméra au-dessus des panneaux, calques et fond dessous (6f), puis les pistes son.
+        // Caméra au-dessus des plans, calques dessous (6f), puis les pistes son.
         self.paint_track_rows(&painter, r, &blocks, ppf, rows, &visuals);
         self.paint_lanes(&painter, r, left, ppf, lanes_top, visuals.selection.stroke.color);
 
@@ -682,7 +706,7 @@ impl App {
             blocks.iter().position(|b| (p.x - b.right()).abs() <= 5.0)
         };
         let frame_at = |x: f32| (((x - left) / ppf).floor().max(0.0) as usize).min(total - 1);
-        // Sans limite à la fin des panneaux (on peut poser un son plus loin).
+        // Sans limite à la fin des plans (on peut poser un son plus loin).
         let free_frame_at = |x: f32| ((x - left) / ppf).floor().max(0.0) as usize;
 
         if let Some(p) = resp.hover_pos() {

@@ -65,30 +65,30 @@ impl App {
                         ui.separator();
                         ui.add_space(3.0);
                     };
-                    if self.bouton(ui, ph::ARROW_U_UP_LEFT, "Retour au storyboard", "Revenir au montage des panneaux.", "mode.basculer").clicked() {
+                    if self.bouton(ui, ph::ARROW_U_UP_LEFT, "Retour au storyboard", "Revenir au montage des plans.", "mode.basculer").clicked() {
                         self.set_mode(Mode::Storyboard);
                     }
                     let resp = ui.label(RichText::new(crate::storyboard::panel_title(&self.doc, self.cur_panel)).strong());
-                    bulle(resp, &crate::storyboard::panel_long_title(&self.doc, self.cur_panel), "Le panneau que l'on anime.", "");
+                    bulle(resp, &crate::storyboard::panel_long_title(&self.doc, self.cur_panel), "Le plan que l'on anime.", "");
                     let resp = self.panel_length_field(ui, "");
-                    bulle(resp, "Durée du panneau", &format!("{} ; glisser ou taper pour la changer.", duration_label(count, fps)), "");
+                    bulle(resp, "Durée du plan", &format!("{} ; glisser ou taper pour la changer.", duration_label(count, fps)), "");
                     sep(ui);
 
                     // Lecture.
-                    if self.bouton(ui, ph::SKIP_BACK, "Première image", "Première image du panneau.", "image.premiere").clicked() {
+                    if self.bouton(ui, ph::SKIP_BACK, "Première image", "Première image du plan.", "image.premiere").clicked() {
                         self.goto_frame(0);
                     }
                     if self.bouton(ui, ph::CARET_LEFT, "Image précédente", "", "image.precedente").clicked() {
                         self.goto_frame(self.cur_frame.saturating_sub(1));
                     }
                     let play = if self.playing { ph::PAUSE } else { ph::PLAY };
-                    if self.bouton(ui, play, "Lecture / pause", "Lire le panneau.", "lecture.basculer").clicked() {
+                    if self.bouton(ui, play, "Lecture / pause", "Lire le plan.", "lecture.basculer").clicked() {
                         self.toggle_play();
                     }
                     if self.bouton(ui, ph::CARET_RIGHT, "Image suivante", "", "image.suivante").clicked() {
                         self.goto_frame(self.cur_frame + 1);
                     }
-                    if self.bouton(ui, ph::SKIP_FORWARD, "Dernière image", "Dernière image du panneau.", "image.derniere").clicked() {
+                    if self.bouton(ui, ph::SKIP_FORWARD, "Dernière image", "Dernière image du plan.", "image.derniere").clicked() {
                         self.goto_frame(count - 1);
                     }
                     interrupteur(ui, &mut self.looping, ph::REPEAT, "Lecture en boucle", "Reprendre au début une fois à la fin.", "");
@@ -99,7 +99,7 @@ impl App {
                         self.doc.fps = fps;
                     }
                     let resp = ui.label(RichText::new(format!("{} / {}", self.cur_frame + 1, count)).monospace());
-                    bulle(resp, "Image courante", "Image courante / nombre d'images du panneau.", "");
+                    bulle(resp, "Image courante", "Image courante / nombre d'images du plan.", "");
                     sep(ui);
 
                     // Dessins et expositions.
@@ -126,6 +126,21 @@ impl App {
                     sep(ui);
 
                     self.camera_keys_ui(ui);
+                    sep(ui);
+
+                    // Marque d'image (13a) : une image de storyboard de plus dans le plan.
+                    let here = self.panel().marks.iter().any(|m| m.frame == self.cur_frame);
+                    let resp = self.bouton_etat(
+                        ui,
+                        here,
+                        ph::FLAG_PENNANT,
+                        "Marque d'image",
+                        "Une image de storyboard de plus dans le plan, à l'image courante (vignettes, PDF). Clic : poser ou retirer.",
+                        "marque.basculer",
+                    );
+                    if resp.clicked() {
+                        self.toggle_mark();
+                    }
                     sep(ui);
 
                     // Pelure d'oignon.
@@ -412,6 +427,17 @@ impl App {
                     visuals.weak_text_color(),
                 );
             }
+        }
+
+        // Marques d'image (13a) : un triangle dans la règle et un trait au début de l'image.
+        for m in &self.panel().marks {
+            let x = r.left() + m.frame as f32 * CELL_W;
+            painter.line_segment([pos2(x, grid_top), pos2(x, r.bottom())], Stroke::new(1.5_f32, theme::MARQUE));
+            painter.add(egui::Shape::convex_polygon(
+                vec![pos2(x, r.top() + 2.0), pos2(x + 7.0, r.top() + 2.0), pos2(x, r.top() + HEADER_H - 2.0)],
+                theme::MARQUE,
+                Stroke::NONE,
+            ));
         }
 
         // Dessins : un bloc par exposition, pastille au début du dessin.

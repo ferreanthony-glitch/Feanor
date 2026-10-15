@@ -74,36 +74,21 @@ impl App {
         }
     }
 
-    /// Nouveau calque bitmap « Fond » tout en bas, commun à tous les panneaux de la scène.
+    /// Nouveau calque bitmap « Fond » tout en bas (13a) : un seul dessin, tenu sur tout le plan.
     pub(crate) fn add_scene_background(&mut self) {
         self.end_stroke();
         self.drop_bitmap_selection();
         let snap = self.snapshot();
-        self.layers_mut().insert(0, crate::document::Layer::new("Fond", LayerKind::Bitmap));
-        self.doc.set_scene_wide(self.cur_panel, 0, self.cur_frame, true);
+        let n = self.frame_count();
+        let cel = self.doc.new_cel(LayerKind::Bitmap);
+        let mut fond = crate::document::Layer::new("Fond", LayerKind::Bitmap);
+        fond.frames = vec![Some(cel); n];
+        self.layers_mut().insert(0, fond);
         self.cur_layer = 0;
         self.vsel = None;
         self.commit_structure(snap);
-        self.status = "Calque « Fond » : ce qu'on y dessine se voit dans tous les panneaux de la scène.".into();
+        self.status = "Calque « Fond » : un seul dessin, tenu sur tout le plan.".into();
     }
-
-    /// Étend le calque courant à toute la scène, ou le rend à ce seul panneau (les autres panneaux
-    /// gardent alors leur copie).
-    pub(crate) fn toggle_scene_wide(&mut self) {
-        self.end_stroke();
-        self.drop_bitmap_selection();
-        let snap = self.snapshot();
-        let on = self.layer().scene_wide.is_none();
-        self.doc.set_scene_wide(self.cur_panel, self.cur_layer, self.cur_frame, on);
-        self.commit_structure(snap);
-        let name = self.layer().name.clone();
-        self.status = if on {
-            format!("Calque « {name} » étendu à toute la scène : un seul dessin, dans chaque panneau.")
-        } else {
-            format!("Calque « {name} » rendu à ce panneau ; les autres panneaux gardent leur copie.")
-        };
-    }
-
     pub(crate) fn layers_panel(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         // Opacité du calque courant (comme en haut d'une liste de calques).
@@ -151,9 +136,9 @@ impl App {
         let frame = self.cur_frame;
         let accent = ui.visuals().selection.bg_fill;
         for li in (0..self.layers().len()).rev() {
-            let (id, visible, locked, kind, name, cel, wide) = {
+            let (id, visible, locked, kind, name, cel) = {
                 let l = &self.layers()[li];
-                (l.id, l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame), l.scene_wide.is_some())
+                (l.id, l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame))
             };
             let current = li == self.cur_layer;
             let thumb = cel.and_then(|c| self.layer_thumb(ui.ctx(), c));
@@ -234,12 +219,7 @@ impl App {
                                 LayerKind::Vector => "vectoriel",
                                 LayerKind::Bitmap => "bitmap",
                             };
-                            if wide {
-                                ui.label(RichText::new(format!("{kind} · toute la scène")).small().color(SCENE_WIDE))
-                                    .on_hover_text("Le même dessin dans tous les panneaux de la scène");
-                            } else {
-                                ui.label(RichText::new(kind).small().weak());
-                            }
+                            ui.label(RichText::new(kind).small().weak());
                         });
                     });
                 });
@@ -272,7 +252,7 @@ impl App {
                 self.add_layer(LayerKind::Bitmap);
             }
             if self
-                .bouton(ui, ph::MOUNTAINS, "Nouveau calque de fond", "Tout en bas, commun à tous les panneaux de la scène (décor).", "calque.nouveau_fond")
+                .bouton(ui, ph::MOUNTAINS, "Nouveau calque de fond", "Tout en bas, un seul dessin tenu sur tout le plan (décor).", "calque.nouveau_fond")
                 .clicked()
             {
                 self.add_scene_background();
@@ -316,28 +296,17 @@ impl App {
         }
     }
 
-    /// Menu d'un calque (clic droit) : renommer, toute la scène, profondeur, dupliquer,
+    /// Menu d'un calque (clic droit) : renommer, profondeur, dupliquer,
     /// verrouiller, supprimer.
     fn layer_menu(&mut self, ui: &mut egui::Ui, li: usize) {
         let Some(l) = self.layers().get(li) else {
             ui.close_menu();
             return;
         };
-        let (id, name, mut wide, mut depth, locked) = (l.id, l.name.clone(), l.scene_wide.is_some(), l.depth, l.locked);
+        let (id, name, mut depth, locked) = (l.id, l.name.clone(), l.depth, l.locked);
         if ui.button("Renommer…").clicked() {
             ui.close_menu();
             self.layer_rename = Some((id, name, false));
-        }
-        if ui
-            .checkbox(&mut wide, "Toute la scène")
-            .on_hover_text(
-                "Un seul dessin, montré dans chaque panneau de la scène (un décor, par exemple). \
-                 Décoché : chaque panneau garde sa propre copie.",
-            )
-            .changed()
-        {
-            self.select_layer(li);
-            self.toggle_scene_wide();
         }
         let resp = ui
             .horizontal(|ui| {

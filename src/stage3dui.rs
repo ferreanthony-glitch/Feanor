@@ -1,5 +1,5 @@
 //! Vue du plateau en 3D dans l'application (9e) : affichage (sol, plans des calques texturés par
-//! leur dessin, caméra du panneau), navigation (orbite, glisser, avancer), et outil Déplacer : un
+//! leur dessin, caméra du plan), navigation (orbite, glisser, avancer), et outil Déplacer : un
 //! calque dans son plan (Maj : en profondeur), ou la caméra en prenant son œil (Maj : avancée).
 
 use std::collections::HashMap;
@@ -193,11 +193,11 @@ impl App {
                 self.fit_stage3d(az, el);
             }
         }
-        if crate::bulles::icone(ui, ph::VIDEO_CAMERA, "Par la caméra", "La vue 3D à l'œil de la caméra du panneau, avec sa focale.", "").clicked() {
+        if crate::bulles::icone(ui, ph::VIDEO_CAMERA, "Par la caméra", "La vue 3D à l'œil de la caméra du plan, avec sa focale.", "").clicked() {
             self.stage3d_through_camera();
         }
     }
-    /// La vue 3D placée à l'œil de la caméra du panneau.
+    /// La vue 3D placée à l'œil de la caméra du plan.
     pub(crate) fn stage3d_through_camera(&mut self) {
         self.stage3d.cam = Some(self.world().look_through(&self.current_camera()));
     }

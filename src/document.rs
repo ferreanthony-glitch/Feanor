@@ -714,7 +714,7 @@ impl Document {
         default
     }
 
-    /// Où est la caméra du panneau `index` à l'image `frame`, pour le multiplan : décalage depuis
+    /// Où est la caméra du plan `index` à l'image `frame`, pour le multiplan : décalage depuis
     /// le centre de la feuille, avancée, distance de référence.
     pub fn camera_seen(&self, index: usize, frame: usize) -> CameraSeen {
         let c = self.panel_camera(index, frame);
@@ -1700,6 +1700,24 @@ impl Document {
             }
         }
         Some(self.normalize_keeping(ids[0]))
+    }
+
+    /// Pose une marque d'image (une image de storyboard) à l'image `frame` du plan `index`, ou la
+    /// retire s'il y en a déjà une. Rien à la première image : c'est déjà le début du plan.
+    /// Renvoie vrai si une marque a été posée, faux si elle a été retirée.
+    pub fn toggle_mark(&mut self, index: usize, frame: usize) -> Option<bool> {
+        if frame == 0 || index >= self.panels.len() {
+            return None;
+        }
+        if let Some(k) = self.panels[index].marks.iter().position(|m| m.frame == frame) {
+            self.panels[index].marks.remove(k);
+            return Some(false);
+        }
+        let id = self.alloc();
+        let marks = &mut self.panels[index].marks;
+        let at = marks.iter().position(|m| m.frame > frame).unwrap_or(marks.len());
+        marks.insert(at, ImageMark { id, frame, ..Default::default() });
+        Some(true)
     }
 
     /// Image de storyboard à l'image `frame` du plan `index` : la marque d'image à cette image ou

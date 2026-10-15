@@ -145,11 +145,11 @@ impl App {
                 self.board_sel.clear();
                 self.thumbs.prune(&self.doc);
                 self.status = match ids.len() {
-                    1 => "Panneau supprimé.".into(),
-                    n => format!("{n} panneaux supprimés."),
+                    1 => "Plan supprimé.".into(),
+                    n => format!("{n} plans supprimés."),
                 };
             }
-            None => self.status = "Il faut garder au moins un panneau.".into(),
+            None => self.status = "Il faut garder au moins un plan.".into(),
         }
     }
 
@@ -542,7 +542,7 @@ impl App {
             }
             let n = self.board_selection().len();
             if n > 1 {
-                ui.label(RichText::new(format!("{n} panneaux choisis")).strong());
+                ui.label(RichText::new(format!("{n} plans choisis")).strong());
             }
             if !self.board_notes.is_empty() {
                 ui.label(RichText::new(format!("{} note(s) choisie(s)", self.board_notes.len())).strong());
@@ -922,8 +922,8 @@ impl App {
                     painter.line_segment([xf.to_screen(t.line.0), xf.to_screen(t.line.1)], Stroke::new(4.0_f32, accent));
                 }
                 let label = match ids.len() {
-                    1 => "1 panneau".to_string(),
-                    n => format!("{n} panneaux"),
+                    1 => "1 plan".to_string(),
+                    n => format!("{n} plans"),
                 };
                 let p = xf.to_screen(*at) + vec2(14.0, 10.0);
                 let galley = painter.layout_no_wrap(label, FontId::proportional(13.0), Color32::WHITE);
