@@ -735,6 +735,36 @@ action = "vue.cadres_securite"
 touches = []
 source = "Pelure (zones de sécurité EBU R 95 ; aucune touche choisie)"
 
+[[raccourci]]
+action = "vue.3d"
+touches = []
+source = "Pelure (plateau en 3D ; aucune touche choisie)"
+
+[[raccourci]]
+action = "vue3d.recadrer"
+touches = []
+source = "Pelure (plateau en 3D ; aucune touche choisie)"
+
+[[raccourci]]
+action = "outil3d.orbite"
+touches = []
+source = "Pelure (plateau en 3D ; aucune touche choisie)"
+
+[[raccourci]]
+action = "outil3d.glisser"
+touches = []
+source = "Pelure (plateau en 3D ; aucune touche choisie)"
+
+[[raccourci]]
+action = "outil3d.avancer"
+touches = []
+source = "Pelure (plateau en 3D ; aucune touche choisie)"
+
+[[raccourci]]
+action = "outil3d.deplacer"
+touches = []
+source = "Pelure (plateau en 3D ; aucune touche choisie)"
+
 # ------------------------------------------------------------------------------------ Repère 3D
 
 [[raccourci]]

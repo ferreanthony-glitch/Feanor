@@ -67,6 +67,8 @@ impl App {
             let thumbs = self.board_view == BoardView::Panels && self.mode == Mode::Storyboard;
             self.command_button(ui, ph::SQUARES_FOUR, "vue.planches", "Vue dessin / vignettes", Some(thumbs));
             self.command_button(ui, ph::FRAME_CORNERS, "camera.vue", "Vue à travers la caméra", Some(self.camera_view));
+            let in3d = self.stage3d.on && !self.camera_view;
+            self.command_button(ui, ph::CUBE_FOCUS, "vue.3d", "Plateau en 3D", Some(in3d));
             self.command_button(ui, ph::ARROWS_OUT, "vue.ajuster", "Ajuster à la fenêtre", None);
             self.command_button(ui, ph::MAGNIFYING_GLASS_PLUS, "vue.zoom_avant", "Zoom avant", None);
             self.command_button(ui, ph::MAGNIFYING_GLASS_MINUS, "vue.zoom_arriere", "Zoom arrière", None);

@@ -103,10 +103,15 @@ impl Cam3d {
     /// assez pour que les 8 coins de la boîte tiennent dans le cadre (à 92 %). Un décor plat et
     /// large remplit ainsi le cadre, au lieu d'y tenir dans une sphère qui l'entoure.
     pub fn fit(bounds: (V3, V3), frame: [f32; 2]) -> Cam3d {
+        Self::fit_at(bounds, frame, 35.0, 20.0)
+    }
+
+    /// Même cadrage, vu sous l'angle donné (degrés : `azimuth` autour, `elevation` au-dessus).
+    pub fn fit_at(bounds: (V3, V3), frame: [f32; 2], azimuth: f32, elevation: f32) -> Cam3d {
         let (lo, hi) = bounds;
         let center = scale(add(lo, hi), 0.5);
         let radius = (dot(sub(hi, lo), sub(hi, lo)).sqrt() / 2.0).max(1e-3);
-        let mut cam = Cam3d { target: center, azimuth: 35.0, elevation: 20.0, distance: 1.0, focal: 35.0 };
+        let mut cam = Cam3d { target: center, azimuth, elevation, distance: 1.0, focal: 35.0 };
         let (r, u, f) = cam.basis();
         let s = cam.pixels_per_unit(frame[0]);
         let (hw, hh) = ((frame[0] * 0.46).max(1.0), (frame[1] * 0.46).max(1.0));

@@ -19,6 +19,13 @@ impl App {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(bar).id_salt("barre_vue"));
             self.view_bar(&mut child);
             rect.min.y = bar.max.y;
+            // Plateau en 3D (9e) : à la place du dessin à plat.
+            if self.stage3d.on && !self.camera_view {
+                let response = ui.allocate_rect(rect, Sense::click_and_drag());
+                self.canvas_rect = rect;
+                self.stage3d_panel(ui, rect, &response);
+                return;
+            }
         }
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
         self.canvas_rect = rect;

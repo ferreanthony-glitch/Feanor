@@ -190,6 +190,7 @@ impl App {
                 self.action_item(ui, "Vue à travers la caméra", "camera.vue");
                 self.action_item(ui, "Estomper le hors-champ", "camera.masque");
                 self.action_item(ui, "Zones de sécurité", "vue.cadres_securite");
+                self.action_item(ui, "Plateau en 3D", "vue.3d");
                 self.action_item(ui, "Vue de dessus (profondeur des calques)", "vue.dessus");
                 self.action_item(ui, "Réinitialiser la caméra du panneau", "camera.reinitialiser");
                 ui.separator();

@@ -13,6 +13,12 @@ pub(crate) const VIEW_BAR_H: f32 = 26.0;
 const SAFE: Color32 = Color32::from_rgb(0, 165, 195);
 const FORMAT: Color32 = Color32::from_rgb(230, 60, 160);
 
+/// Voile blanc d'opacité `a` (couleur prémultipliée : `Color32::from_white_alpha` passe par
+/// l'espace linéaire et donne un voile bien plus clair).
+pub(crate) fn veil(a: u8) -> Color32 {
+    Color32::from_rgba_premultiplied(a, a, a, a)
+}
+
 /// Bande entre deux quadrilatères (l'un dans l'autre), d'une couleur.
 pub(crate) fn band(outer: [Pos2; 4], inner: [Pos2; 4], color: Color32) -> Shape {
     let mut mesh = egui::Mesh::default();
@@ -68,6 +74,23 @@ impl App {
                 .clicked()
             {
                 self.set_camera_view(true);
+            }
+            ui.add_space(6.0);
+            ui.separator();
+            ui.add_space(6.0);
+            // Plateau en 3D (9e) et ses outils.
+            let in3d = self.stage3d.on && !cam;
+            let hint = self.command_hint("vue.3d", "Plateau en 3D : les calques à leur profondeur, la caméra, le sol");
+            if ui
+                .add(egui::SelectableLabel::new(in3d, RichText::new(format!("{} 3D", ph::CUBE_FOCUS))))
+                .on_hover_text(hint)
+                .clicked()
+            {
+                self.run_action("vue.3d");
+            }
+            if in3d {
+                self.stage3d_tools(ui);
+                return;
             }
             ui.add_space(6.0);
             ui.separator();
@@ -157,7 +180,7 @@ impl App {
             for (part, name, corner) in [(frames::ACTION_SAFE, "action", 0), (frames::TITLE_SAFE, "titres", 3)] {
                 let q = quad(frames::safe_rect(inside, part));
                 let pts = vec![q[0], q[1], q[2], q[3], q[0]];
-                painter.add(Shape::line(pts.clone(), Stroke::new(2.5_f32, Color32::from_white_alpha(40))));
+                painter.add(Shape::line(pts.clone(), Stroke::new(2.5_f32, veil(40))));
                 painter.extend(Shape::dashed_line(&pts, Stroke::new(1.2_f32, SAFE), 6.0, 4.0));
                 let (at, align) = if corner == 0 {
                     (q[0] + vec2(3.0, 2.0), Align2::LEFT_TOP)

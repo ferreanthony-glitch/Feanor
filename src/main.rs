@@ -98,6 +98,10 @@ mod text;
 #[cfg(test)]
 mod text_tests;
 mod texttools;
+mod stage3d;
+#[cfg(test)]
+mod stage3d_tests;
+mod stage3dui;
 #[cfg(test)]
 mod stage_tests;
 mod storyboard;

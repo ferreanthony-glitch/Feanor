@@ -315,6 +315,31 @@ pub fn thumbnail(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize
     }
 }
 
+/// Le dessin entier réduit à `max_w` pixels de large au plus (moyenne de 4 échantillons par
+/// pixel) : texture des plans de la vue du plateau en 3D (9e).
+pub fn cel_image(raster: &Raster, max_w: usize) -> ColorImage {
+    let (w, h) = (raster.width.max(1), raster.height.max(1));
+    let tw = w.min(max_w.max(1));
+    let th = ((h as f32 * tw as f32 / w as f32).round() as usize).max(1);
+    let (sx, sy) = (w as f32 / tw as f32, h as f32 / th as f32);
+    let mut pixels = vec![Color32::TRANSPARENT; tw * th];
+    const ROWS: usize = 16;
+    par_chunks(&mut pixels, tw * ROWS, |chunk, rows| {
+        for (k, px) in rows.iter_mut().enumerate() {
+            let (x, y) = (k % tw, chunk * ROWS + k / tw);
+            let mut acc = [0u32; 4];
+            for (ox, oy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
+                let c = sample(raster, (x as f32 + ox) * sx, (y as f32 + oy) * sy);
+                for (a, v) in acc.iter_mut().zip(c.to_array()) {
+                    *a += v as u32;
+                }
+            }
+            *px = Color32::from_rgba_premultiplied((acc[0] / 4) as u8, (acc[1] / 4) as u8, (acc[2] / 4) as u8, (acc[3] / 4) as u8);
+        }
+    });
+    ColorImage { size: [tw, th], pixels }
+}
+
 fn texture_options() -> TextureOptions {
     TextureOptions {
         magnification: TextureFilter::Nearest,
