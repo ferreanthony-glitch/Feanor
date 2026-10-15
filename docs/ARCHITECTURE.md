@@ -328,6 +328,17 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   Après chaque commande, Rust renvoie tout le résumé (quelques Ko) : pas d'état à synchroniser.
   Détails et lancement : `docs/COMPAGNON.md`.
 
+## Moteur de dessin partagé (phase 11)
+
+- `moteur.rs` (public, testé dans `moteur_tests.rs`) : le moteur de pinceau de Pelure pour une
+  autre interface — Pelure Studio (`..\pelure-studio`, projet à part qui en dépend par chemin).
+  `Pinceaux` (la `BrushLibrary`, avec les pinceaux importés de `%APPDATA%\Pelure\pinceaux`, lus
+  seulement), `Reglage` (nom, gomme, taille, opacité, texture) et `apercu` (`stroke_preview`) ;
+  `Dessin` (un `Raster` : tuiles 64 × 64, `tuile_rgba`) ; `Trait` (`StrokeState` : `commencer`
+  avec un `Outil` — réglage, couleur, taille / opacité / pression retouchées, gomme —, `point`,
+  `pointe` pour relier le trait au stylet, `finir`) ; `Annulation` (les tuiles d'avant ;
+  `appliquer` défait et rend de quoi refaire). Le moteur lui-même n'a pas changé.
+
 ## Pinceaux texturés (3d-2)
 
 - `brush.rs` : chaque empreinte calcule une couverture par pixel — disque (dureté) ou pointe en

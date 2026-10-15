@@ -364,6 +364,13 @@ crates Tauri, paquets npm).
   Pas encore : « Enregistrer sous » d'un projet neuf, annuler / rétablir, son, notes de la
   planche, ouvrir le panneau dans Pelure.
 
+## Phase 11 — Moteur de pinceau partagé
+
+Demandée par Anthony (option A) : brancher le moteur de pinceau de Pelure derrière le stylet de
+Pelure Studio (`..\pelure-studio`).
+
+- ✅ 11a. `moteur.rs` : bibliothèque de pinceaux, dessins en tuiles, traits, annulation ; testé.
+
 ## Raccourcis proposés, à valider
 
 Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans `keymap.toml`) :

@@ -58,6 +58,9 @@ mod keymap_tests;
 mod ops_tests;
 mod model3d;
 mod montagerows;
+pub mod moteur;
+#[cfg(test)]
+mod moteur_tests;
 pub mod noyau;
 #[cfg(test)]
 mod noyau_tests;
