@@ -338,6 +338,12 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   avec un `Outil` — réglage, couleur, taille / opacité / pression retouchées, gomme —, `point`,
   `pointe` pour relier le trait au stylet, `finir`) ; `Annulation` (les tuiles d'avant ;
   `appliquer` défait et rend de quoi refaire). Le moteur lui-même n'a pas changé.
+- Panneau **Pinceaux** (11c, repris du Studio) : `Pane::Brushes`, en onglet avec la couleur
+  (`dock::COLOR_TABS` ; `open` l'y remet). `LAYOUT_VERSION` 3 : `upgraded` l'ajoute aux
+  dispositions enregistrées avant (s'il manque) ; fermé ensuite, il le reste.
+  `brushui::brushes_panel` : réglages de la cible de l'outil (gomme, sinon pinceau), en liste ;
+  grands aperçus (`stroke_preview`) en cache (`BrushPreviews::wide`) par réglage et taille en
+  pixels de l'écran, largeur par paliers de 24 points pour ne pas les refaire en tirant un bord.
 
 ## Pinceaux texturés (3d-2)
 

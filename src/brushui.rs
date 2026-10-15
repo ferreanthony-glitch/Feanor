@@ -13,11 +13,17 @@ use crate::brushtex::{BrushLibrary, Target};
 const TILE: Vec2 = vec2(58.0, 48.0);
 const PREVIEW: Vec2 = vec2(54.0, 30.0);
 
+/// Hauteur d'un grand aperçu du panneau Pinceaux (11c), en points ; sa largeur suit le panneau,
+/// par paliers de `WIDE_STEP` (pour ne pas refaire les aperçus à chaque point quand on tire un bord).
+const WIDE_HEIGHT: f32 = 38.0;
+const WIDE_STEP: f32 = 24.0;
+
 /// Aperçus des réglages (par numéro de réglage), refaits quand le réglage ou l'échelle de
-/// l'écran change.
+/// l'écran change : petits pour la grille des Réglages, grands pour le panneau Pinceaux.
 #[derive(Default)]
 pub(crate) struct BrushPreviews {
     cache: HashMap<usize, (BrushSettings, f32, TextureHandle)>,
+    wide: HashMap<usize, (BrushSettings, [usize; 2], TextureHandle)>,
 }
 
 impl App {
@@ -134,6 +140,132 @@ impl App {
             egui::FontId::proportional(11.0),
             ink,
         );
+        resp.on_hover_text(format!("{name}\n{source}"))
+    }
+
+    /// Panneau Pinceaux (11c) : les réglages nommés en liste, chacun avec un grand aperçu de son
+    /// trait tracé par le moteur, son nom, sa taille, et s'il est texturé ou importé. Ceux de la
+    /// gomme avec la gomme, sinon ceux du pinceau ; en choisir un avec un autre outil que le
+    /// pinceau ou la gomme prend le pinceau. Le choix est le même que dans la grille des Réglages.
+    pub(crate) fn brushes_panel(&mut self, ui: &mut egui::Ui) {
+        let target = if self.tool == Tool::Eraser { Target::Eraser } else { Target::Brush };
+        let current = match target {
+            Target::Eraser => self.eraser,
+            Target::Brush => self.brush,
+        };
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(if target == Target::Eraser { "Gommes" } else { "Pinceaux" }).strong());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .small_button("Importer…")
+                    .on_hover_text("Importer des pinceaux d'un fichier de préréglages Toon Boom (.xml) ; ils restent pour les fois suivantes")
+                    .clicked()
+                {
+                    self.import_brushes();
+                }
+            });
+        });
+        let presets: Vec<(usize, String, String)> = self
+            .brushes
+            .presets
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.target == target)
+            .map(|(i, p)| (i, p.name.clone(), p.source.clone()))
+            .collect();
+        let mut pick = None;
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            let mut last_source = String::new();
+            for (i, name, source) in &presets {
+                if *source != last_source {
+                    ui.add_space(4.0);
+                    let title = if source == "Pelure" { "Pelure".to_string() } else { format!("Importés de {source}") };
+                    ui.label(RichText::new(title).small().weak());
+                    last_source = source.clone();
+                }
+                if self.preset_row(ui, *i, name, source, current).clicked() {
+                    pick = Some(*i);
+                }
+            }
+            if presets.is_empty() {
+                ui.label(RichText::new("Aucun réglage pour cet outil.").weak());
+            }
+        });
+        if let Some(i) = pick {
+            let settings = self.brushes.presets[i].settings;
+            match target {
+                Target::Eraser => self.eraser = settings,
+                Target::Brush => {
+                    self.brush = settings;
+                    if self.tool != Tool::Brush {
+                        self.set_tool(Tool::Brush);
+                    }
+                }
+            }
+            self.status = format!("Réglage « {} ».", self.brushes.presets[i].name);
+        }
+    }
+
+    /// Ligne d'un réglage du panneau Pinceaux : nom, étiquettes, taille, puis l'aperçu du trait
+    /// sur toute la largeur.
+    fn preset_row(&mut self, ui: &mut egui::Ui, index: usize, name: &str, source: &str, current: BrushSettings) -> egui::Response {
+        let settings = self.brushes.presets[index].settings;
+        let ppp = ui.ctx().pixels_per_point();
+        let width = ui.available_width().max(60.0);
+        // Largeur de l'aperçu par paliers ; taille en pixels réels de l'écran.
+        let shown = ((width - 12.0) / WIDE_STEP).floor().max(2.0) * WIDE_STEP;
+        let px = [(shown * ppp).round() as usize, (WIDE_HEIGHT * ppp).round() as usize];
+        let fresh = self.brush_previews.wide.get(&index).is_some_and(|(s, size, _)| *s == settings && *size == px);
+        if !fresh {
+            let alpha = stroke_preview(&settings, self.brushes.textures(&settings), px[0], px[1]);
+            let pixels = alpha.iter().map(|&a| Color32::from_rgba_premultiplied(a, a, a, a)).collect();
+            let tex = ui.ctx().load_texture(format!("pinceau large {index}"), egui::ColorImage { size: px, pixels }, egui::TextureOptions::LINEAR);
+            self.brush_previews.wide.insert(index, (settings, px, tex));
+        }
+        let tex = self.brush_previews.wide[&index].2.id();
+        let textured = settings.tip.is_some() || (settings.paper.is_some() && settings.grain > 0.0);
+        let (rect, resp) = ui.allocate_exact_size(vec2(width, 22.0 + WIDE_HEIGHT + 6.0), Sense::click());
+        let v = ui.visuals();
+        let chosen = settings == current;
+        let bg = if chosen {
+            v.selection.bg_fill
+        } else if resp.hovered() {
+            v.widgets.hovered.weak_bg_fill
+        } else {
+            v.extreme_bg_color
+        };
+        let ink = if chosen { v.selection.stroke.color } else { v.text_color() };
+        // Sur la ligne choisie (fond de sélection), le texte secondaire prend la couleur du nom.
+        let weak = if chosen { ink } else { v.weak_text_color() };
+        let painter = ui.painter();
+        painter.rect_filled(rect.shrink2(vec2(0.0, 1.0)), 4.0, bg);
+        // Nom, étiquettes, taille.
+        let font = egui::FontId::proportional(13.0);
+        let small = egui::FontId::proportional(10.5);
+        let mut x = rect.left() + 8.0;
+        let y = rect.top() + 12.0;
+        let galley = painter.layout_no_wrap(name.to_string(), font, ink);
+        let w = galley.size().x;
+        painter.galley(pos2(x, y - galley.size().y / 2.0), galley, ink);
+        x += w + 8.0;
+        let mut tag = |text: &str| {
+            let g = painter.layout_no_wrap(text.to_string(), small.clone(), weak);
+            let r = egui::Rect::from_min_size(pos2(x, y - 7.0), g.size() + vec2(8.0, 2.0));
+            painter.rect_filled(r, 3.0, v.widgets.noninteractive.bg_fill);
+            painter.galley(r.min + vec2(4.0, 1.0), g, weak);
+            x = r.right() + 4.0;
+        };
+        if textured {
+            tag("texture");
+        }
+        if source != "Pelure" {
+            tag("importé");
+        }
+        let size = if settings.size < 10.0 { format!("{:.1} px", settings.size) } else { format!("{:.0} px", settings.size) };
+        painter.text(pos2(rect.right() - 8.0, y), egui::Align2::RIGHT_CENTER, size, small, weak);
+        // L'aperçu du trait.
+        let image = egui::Rect::from_min_size(pos2(rect.left() + 6.0, rect.top() + 22.0), vec2(shown, WIDE_HEIGHT));
+        painter.image(tex, image, egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), ink);
         resp.on_hover_text(format!("{name}\n{source}"))
     }
 

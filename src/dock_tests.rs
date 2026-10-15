@@ -75,6 +75,28 @@ fn layouts_from_before_9b_put_the_sheet_with_the_settings() {
 }
 
 #[test]
+fn the_brushes_panel_sits_with_the_colour() {
+    // Disposition par défaut : couleur et pinceaux en onglets (11c).
+    let d = DockLayout::from_legacy(&Layout::default());
+    assert!(format!("{:?}", d.principal).contains("Tabs { panneaux: [Color, Brushes]"), "{:?}", d.principal);
+    // Disposition enregistrée avant 11c (sans le panneau) : il arrive à côté de la couleur.
+    let mut v2 = d.clone();
+    v2.close(Pane::Brushes);
+    v2.version = 2;
+    let l = Layout { panneaux: Some(v2), ..Layout::default() };
+    let up = l.dock_layout();
+    assert_eq!(up.version, dock::LAYOUT_VERSION);
+    assert_eq!(count(&up, Pane::Brushes), 1);
+    assert!(format!("{:?}", up.principal).contains("Tabs { panneaux: [Color, Brushes]"), "{:?}", up.principal);
+    // Fermé puis rouvert : il revient avec la couleur ; fermé par l'utilisateur, il le reste.
+    let mut closed = up.clone();
+    closed.close(Pane::Brushes);
+    assert!(!closed.clone().upgraded().contains(Pane::Brushes), "fermé par l'utilisateur : il le reste");
+    closed.open(Pane::Brushes);
+    assert!(format!("{:?}", closed.principal).contains("Tabs { panneaux: [Color, Brushes]"));
+}
+
+#[test]
 fn layouts_from_before_6a_lose_the_tools_panel() {
     let mut old = DockLayout::from_legacy(&Layout::default());
     old.open(Pane::Tools);

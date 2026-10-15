@@ -23,6 +23,9 @@ pub enum Pane {
     Tools,
     #[serde(rename = "couleur")]
     Color,
+    /// Réglages de pinceau, chacun avec l'aperçu de son trait (11c), en onglet avec la couleur.
+    #[serde(rename = "pinceaux")]
+    Brushes,
     /// Réglages de l'outil courant.
     #[serde(rename = "reglages")]
     ToolOptions,
@@ -55,10 +58,11 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 9] = [
+    pub const ALL: [Pane; 10] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
+        Pane::Brushes,
         Pane::ToolOptions,
         Pane::View,
         Pane::Guides,
@@ -72,6 +76,7 @@ impl Pane {
             Pane::Canvas => "Dessin",
             Pane::Tools => "Outils",
             Pane::Color => "Couleur",
+            Pane::Brushes => "Pinceaux",
             Pane::ToolOptions => "Réglages de l'outil",
             Pane::View => "Vue",
             Pane::Guides => "Guides",
@@ -96,6 +101,7 @@ impl Pane {
             Pane::Canvas => ph::FRAME_CORNERS,
             Pane::Tools => ph::TOOLBOX,
             Pane::Color => ph::PALETTE,
+            Pane::Brushes => ph::PAINT_BRUSH,
             Pane::ToolOptions => ph::SLIDERS_HORIZONTAL,
             Pane::View => ph::MAGNIFYING_GLASS,
             Pane::Guides => ph::RULER,
@@ -108,7 +114,7 @@ impl Pane {
     pub fn group(self) -> Group {
         match self {
             Pane::Canvas => Group::Center,
-            Pane::Tools | Pane::Color | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet => Group::Left,
+            Pane::Tools | Pane::Color | Pane::Brushes | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet => Group::Left,
             Pane::Layers => Group::Right,
             Pane::Strip => Group::Bottom,
         }
@@ -208,16 +214,20 @@ fn left_column(only: &[Pane]) -> Option<DockNode> {
         let list: Vec<Pane> = list.into_iter().filter(|p| only.contains(p)).collect();
         (!list.is_empty()).then(|| tabs(list))
     };
-    let parts = [(0.3, keep(vec![Pane::Tools])), (0.6, keep(SETTINGS_TABS.to_vec())), (1.0, keep(vec![Pane::Color]))];
+    let parts = [(0.3, keep(vec![Pane::Tools])), (0.6, keep(SETTINGS_TABS.to_vec())), (1.0, keep(COLOR_TABS.to_vec()))];
     stack(&parts)
 }
 
 /// Les onglets des réglages : réglages de l'outil, vue, guides, fiche du panneau (9b).
 const SETTINGS_TABS: [Pane; 4] = [Pane::ToolOptions, Pane::View, Pane::Guides, Pane::Sheet];
 
+/// Les onglets du bas de la colonne : couleur et pinceaux (11c).
+const COLOR_TABS: [Pane; 2] = [Pane::Color, Pane::Brushes];
+
 /// Version de la disposition : 1 depuis 6a (outils dans la barre verticale, calques à côté du
-/// dessin, réglages et couleur à droite) ; 2 depuis 9b (la fiche avec les réglages).
-pub const LAYOUT_VERSION: u32 = 2;
+/// dessin, réglages et couleur à droite) ; 2 depuis 9b (la fiche avec les réglages) ; 3 depuis 11c
+/// (le panneau Pinceaux, en onglet avec la couleur).
+pub const LAYOUT_VERSION: u32 = 3;
 
 /// Empile de haut en bas des parties (part de chacune dans ce qui reste), en sautant les absentes.
 fn stack(parts: &[(f32, Option<DockNode>)]) -> Option<DockNode> {
@@ -348,7 +358,7 @@ impl DockLayout {
         // À droite du dessin : les calques, puis les réglages (avec la fiche) et la couleur.
         let mut settings = Vec::new();
         if l.tools {
-            settings.extend([Pane::ToolOptions, Pane::View, Pane::Guides, Pane::Color]);
+            settings.extend([Pane::ToolOptions, Pane::View, Pane::Guides, Pane::Color, Pane::Brushes]);
             if l.sheet {
                 settings.push(Pane::Sheet);
             }
@@ -373,7 +383,8 @@ impl DockLayout {
     }
 
     /// Une disposition enregistrée par une version précédente, mise à jour : avant 6a, le
-    /// panneau Outils part (barre verticale) ; avant 9b, la fiche rejoint les onglets des réglages.
+    /// panneau Outils part (barre verticale) ; avant 9b, la fiche rejoint les onglets des réglages ;
+    /// avant 11c, le panneau Pinceaux arrive à côté de la couleur.
     pub fn upgraded(mut self) -> DockLayout {
         if self.version < 1 {
             self.close(Pane::Tools);
@@ -381,6 +392,9 @@ impl DockLayout {
         if self.version < 2 && self.contains(Pane::Sheet) && !self.detachees.iter().any(|d| d.panneau == Pane::Sheet) {
             self.close(Pane::Sheet);
             self.open(Pane::Sheet);
+        }
+        if self.version < 3 && !self.contains(Pane::Brushes) {
+            self.open(Pane::Brushes);
         }
         self.version = LAYOUT_VERSION;
         self.sanitized()
@@ -483,13 +497,17 @@ impl DockLayout {
             return;
         }
         let group = pane.group();
-        // Un onglet des réglages revient avec les autres onglets des réglages.
-        if SETTINGS_TABS.contains(&pane) {
-            if let Some(t) = self.principal.tabs_with(&SETTINGS_TABS) {
+        // Un onglet des réglages revient avec les autres onglets des réglages ; les pinceaux et la
+        // couleur, ensemble.
+        for family in [&SETTINGS_TABS[..], &COLOR_TABS[..]] {
+            if !family.contains(&pane) {
+                continue;
+            }
+            if let Some(t) = self.principal.tabs_with(family) {
                 t.push(pane);
                 return;
             }
-            if let Some(t) = self.fenetres.iter_mut().find_map(|w| w.panneaux.tabs_with(&SETTINGS_TABS)) {
+            if let Some(t) = self.fenetres.iter_mut().find_map(|w| w.panneaux.tabs_with(family)) {
                 t.push(pane);
                 return;
             }

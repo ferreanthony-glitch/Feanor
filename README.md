@@ -128,8 +128,8 @@ prend le fond de celle-ci.
   Wacom, l'option « Utiliser Windows Ink » doit être cochée dans les propriétés de la tablette.
   Sur le dessin, la croix de Windows marque la pointe sans retard, le cercle autour montre la
   taille du pinceau (Affichage > « Croix du système sur le pinceau » pour n'avoir que le cercle).
-- **Panneaux** : chaque panneau (Outils, Couleur, Réglages, Vue, Guides, Fiche, Calques, Montage
-  ou Timeline) est un onglet. Glisse un onglet : des boutons apparaissent au milieu du panneau
+- **Panneaux** : chaque panneau (Outils, Couleur, Pinceaux, Réglages, Vue, Guides, Fiche,
+  Calques, Montage ou Timeline) est un onglet. Glisse un onglet : des boutons apparaissent au milieu du panneau
   survolé, lâche-le sur l'un d'eux pour l'aimanter (à gauche, à droite, dessus, dessous, ou en
   onglet), ou ailleurs pour qu'il flotte. Tire les bords entre panneaux pour les redimensionner.
   La croix d'un onglet le ferme ; Affichage > Panneaux le fait revenir à sa place. Clic droit
@@ -137,7 +137,10 @@ prend le fond de celle-ci.
   remet à sa place). Les outils sont des icônes : leur nom et leur raccourci s'affichent au survol.
   En haut, une barre de commandes ; à gauche, la barre d'outils verticale (Affichage > Panneaux
   pour les masquer). Couleur : teinte, saturation, valeur et nuancier. Réglages du pinceau : une
-  grille de réglages, chacun avec l'aperçu de son trait et sa taille. Les pinceaux texturés
+  grille de réglages, chacun avec l'aperçu de son trait et sa taille. Panneau **Pinceaux** (onglet
+  à côté de Couleur) : les mêmes réglages en liste, avec un grand aperçu du trait, la taille, et
+  « texture » / « importé » ; ceux de la gomme quand la gomme est choisie ; « Importer… » pour
+  les pinceaux Toon Boom. Les pinceaux texturés
   (pointe en image, grain du papier, pinceaux importés) marchent aussi sur un calque vectoriel :
   le trait reste modifiable, et ses textures sont enregistrées avec le projet.
 - **Formes** : Ligne (droite, courbe : tracer puis glisser pour courber ; courbe en S : deux

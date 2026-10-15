@@ -92,6 +92,7 @@ impl App {
             }
             Pane::Tools => self.tool_bar(ui),
             Pane::Color => self.color_panel(ui),
+            Pane::Brushes => self.brushes_panel(ui),
             Pane::ToolOptions => self.tool_options_panel(ui),
             Pane::View => self.view_panel(ui),
             Pane::Guides => self.guides_ui(ui),

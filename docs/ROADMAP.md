@@ -374,6 +374,10 @@ Pelure Studio (`..\pelure-studio`).
 - ✅ 11b. Branché dans Pelure Studio (commit a9efdbb de son dépôt) : chaque paquet du stylet est
   peint par ce moteur, les tuiles changées repartent vers la toile ; annuler / rétablir ; panneau
   Pinceaux. Aller-retour mesuré : 1,6 à 5,6 ms (plus le compositeur de WebView2).
+- ✅ 11c. Repris du Studio : panneau **Pinceaux** (onglet avec Couleur) — les réglages en liste,
+  chacun avec un grand aperçu de son trait (moteur de Pelure), son nom, sa taille, « texture »,
+  « importé » ; les gommes avec la gomme ; Importer… ; même choix que la grille des Réglages.
+  Disposition version 3 : les dispositions enregistrées reçoivent le panneau.
 - Décision d'Anthony (après ce bilan) : **Pelure egui reste le logiciel principal** (toile
   native : latence, carte graphique partagée) ; Pelure Studio sert de banc d'essai d'interface.
 
