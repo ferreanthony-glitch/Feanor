@@ -129,20 +129,13 @@ impl App {
             ui.label("Nuancier");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let here = self.swatches.iter().position(|c| *c == self.color);
-                if ui
-                    .add_enabled(here.is_some(), egui::Button::new("−").small())
-                    .on_hover_text("Retirer la couleur courante du nuancier")
-                    .clicked()
-                {
+                use egui_phosphor::regular as ph;
+                if crate::bulles::icone_si(ui, here.is_some(), ph::MINUS, "Retirer du nuancier", "Retirer la couleur courante du nuancier.", "").clicked() {
                     if let Some(i) = here {
                         self.swatches.remove(i);
                     }
                 }
-                if ui
-                    .add_enabled(here.is_none(), egui::Button::new("+").small())
-                    .on_hover_text("Ajouter la couleur courante au nuancier")
-                    .clicked()
-                {
+                if crate::bulles::icone_si(ui, here.is_none(), ph::PLUS, "Ajouter au nuancier", "Ajouter la couleur courante au nuancier.", "").clicked() {
                     self.swatches.push(self.color);
                 }
             });

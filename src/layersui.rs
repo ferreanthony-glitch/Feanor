@@ -104,15 +104,6 @@ impl App {
         };
     }
 
-    fn layer_hint(&self, text: &str, action: &str) -> String {
-        let key = self.keymap.label(action);
-        if key.is_empty() {
-            text.to_string()
-        } else {
-            format!("{text} ({key})")
-        }
-    }
-
     pub(crate) fn layers_panel(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         // Opacité du calque courant (comme en haut d'une liste de calques).
@@ -121,7 +112,7 @@ impl App {
         let mut mode = self.layers()[li].blend;
         ui.horizontal(|ui| {
             // Mode de fusion (8), comme dans les logiciels de retouche.
-            egui::ComboBox::from_id_salt("fusion_calque")
+            let resp = egui::ComboBox::from_id_salt("fusion_calque")
                 .selected_text(mode.label())
                 .width(120.0)
                 .show_ui(ui, |ui| {
@@ -133,10 +124,12 @@ impl App {
                         ui.selectable_value(&mut mode, m, m.label()).on_hover_text(m.hint());
                     }
                 })
-                .response
-                .on_hover_text(format!("Mode de fusion : {}", mode.hint()));
-            ui.label("Opacité");
+                .response;
+            crate::bulles::bulle(resp, "Mode de fusion", mode.hint(), "");
+            let resp = ui.label(RichText::new(ph::CIRCLE_HALF).size(crate::bulles::TAILLE));
+            crate::bulles::bulle(resp, "Opacité du calque", "", "");
             let resp = ui.add(egui::DragValue::new(&mut opacity).range(0.0..=100.0).max_decimals(0).suffix(" %").speed(0.5));
+            let resp = crate::bulles::bulle(resp, "Opacité du calque", "Glisser ou taper une valeur.", "");
             if self.edited(&resp) {
                 self.layers_mut()[li].opacity = opacity / 100.0;
             }
@@ -155,7 +148,7 @@ impl App {
         let mut toggle = None;
         let mut lock = None;
         let mut rename_done: Option<bool> = None;
-        let lock_hint = self.layer_hint("Verrouiller / déverrouiller : on ne peut plus dessiner sur le calque", "calque.verrouiller");
+        let lock_key = self.raccourci("calque.verrouiller");
         let frame = self.cur_frame;
         let accent = ui.visuals().selection.bg_fill;
         for li in (0..self.layers().len()).rev() {
@@ -173,17 +166,15 @@ impl App {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = vec2(3.0, 0.0);
                         let eye = if visible { ph::EYE } else { ph::EYE_SLASH };
-                        if ui
-                            .add(egui::Button::new(RichText::new(eye).size(15.0)).frame(false).min_size(vec2(20.0, 36.0)))
-                            .on_hover_text("Afficher / masquer")
-                            .clicked()
-                        {
+                        let resp = ui.add(egui::Button::new(RichText::new(eye).size(15.0)).frame(false).min_size(vec2(20.0, 36.0)));
+                        if crate::bulles::bulle(resp, "Afficher / masquer", "Montrer ou cacher le calque.", "").clicked() {
                             toggle = Some(li);
                         }
                         let pad = if locked { ph::LOCK_SIMPLE } else { ph::LOCK_SIMPLE_OPEN };
                         let pad = RichText::new(pad).size(14.0);
                         let pad = if locked { pad } else { pad.weak() };
-                        if ui.add(egui::Button::new(pad).frame(false).min_size(vec2(18.0, 36.0))).on_hover_text(&lock_hint).clicked() {
+                        let resp = ui.add(egui::Button::new(pad).frame(false).min_size(vec2(18.0, 36.0)));
+                        if crate::bulles::bulle(resp, "Verrouiller / déverrouiller", "Un calque verrouillé ne peut plus être dessiné.", &lock_key).clicked() {
                             lock = Some(li);
                         }
                         // Vignette du dessin à l'image courante (vide : cadre gris).
@@ -275,47 +266,46 @@ impl App {
         ui.add_space(4.0);
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
-            let icon = |s: &str| RichText::new(s).size(16.0);
-            if ui.button(RichText::new(format!("{} V", ph::PLUS))).on_hover_text("Nouveau calque vectoriel (traits modifiables)").clicked() {
+            if self.bouton(ui, ph::BEZIER_CURVE, "Nouveau calque vectoriel", "Des traits qui restent modifiables.", "calque.nouveau_vectoriel").clicked() {
                 self.add_layer(LayerKind::Vector);
             }
-            if ui.button(RichText::new(format!("{} B", ph::PLUS))).on_hover_text("Nouveau calque bitmap (peinture en pixels)").clicked() {
+            if self.bouton(ui, ph::PAINT_BRUSH_BROAD, "Nouveau calque bitmap", "De la peinture en pixels, pinceaux texturés.", "calque.nouveau_bitmap").clicked() {
                 self.add_layer(LayerKind::Bitmap);
             }
-            let fond_hint = self.layer_hint(
-                "Nouveau calque de fond, tout en bas, commun à tous les panneaux de la scène (décor)",
-                "calque.nouveau_fond",
-            );
-            if ui.button(RichText::new(format!("{} Fond", ph::PLUS))).on_hover_text(fond_hint).clicked() {
+            if self
+                .bouton(ui, ph::MOUNTAINS, "Nouveau calque de fond", "Tout en bas, commun à tous les panneaux de la scène (décor).", "calque.nouveau_fond")
+                .clicked()
+            {
                 self.add_scene_background();
             }
-            if ui.button(icon(ph::COPY_SIMPLE)).on_hover_text("Dupliquer le calque").clicked() {
+            if self.bouton(ui, ph::COPY_SIMPLE, "Dupliquer le calque", "Une copie du calque courant et de ses dessins.", "").clicked() {
                 self.duplicate_layer();
             }
-            if ui.button(icon(ph::TRASH)).on_hover_text("Supprimer le calque").clicked() {
+            if self.bouton(ui, ph::TRASH, "Supprimer le calque", "", "calque.supprimer").clicked() {
                 self.delete_layer();
             }
-            if ui.button(icon(ph::ARROW_UP)).on_hover_text("Monter le calque").clicked() {
+            if self.bouton(ui, ph::ARROW_UP, "Monter le calque", "D'un rang vers le haut.", "").clicked() {
                 self.move_layer(true);
             }
-            if ui.button(icon(ph::ARROW_DOWN)).on_hover_text("Descendre le calque").clicked() {
+            if self.bouton(ui, ph::ARROW_DOWN, "Descendre le calque", "D'un rang vers le bas.", "").clicked() {
                 self.move_layer(false);
             }
-            let copy_hint = self.layer_hint("Copier le calque", "calque.copier");
-            if ui.button(icon(ph::COPY)).on_hover_text(copy_hint).clicked() {
+            if self.bouton(ui, ph::COPY, "Copier le calque", "", "calque.copier").clicked() {
                 self.copy_layer();
             }
-            let paste_hint = self.layer_hint("Coller le calque copié au-dessus du calque courant", "calque.coller");
-            if ui.add_enabled(self.layer_clipboard.is_some(), egui::Button::new(icon(ph::CLIPBOARD))).on_hover_text(paste_hint).clicked() {
+            let can_paste = self.layer_clipboard.is_some();
+            if self.bouton_si(ui, can_paste, ph::CLIPBOARD, "Coller le calque", "Le calque copié, au-dessus du calque courant.", "calque.coller").clicked() {
                 self.paste_layer();
             }
-            let merge_hint = self.layer_hint("Fusionner avec le calque du dessous", "calque.fusionner_dessous");
-            if ui.add_enabled(self.cur_layer > 0, egui::Button::new(icon(ph::ARROWS_IN_SIMPLE))).on_hover_text(merge_hint).clicked() {
+            let can_merge = self.cur_layer > 0;
+            if self
+                .bouton_si(ui, can_merge, ph::ARROWS_IN_SIMPLE, "Fusionner avec le calque du dessous", "Les deux calques n'en font plus qu'un.", "calque.fusionner_dessous")
+                .clicked()
+            {
                 self.merge_layer_down();
             }
         });
     }
-
     /// Pose le nouveau nom du calque en cours de renommage (une étape d'annulation).
     fn commit_layer_rename(&mut self) {
         let Some((id, name, _)) = self.layer_rename.take() else { return };

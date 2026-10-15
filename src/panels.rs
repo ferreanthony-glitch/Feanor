@@ -37,27 +37,37 @@ fn note(ui: &mut egui::Ui, text: &str) {
     ui.label(RichText::new(text).small().weak());
 }
 
+/// Réglages d'un pinceau : chaque curseur avec, au bout, l'interrupteur qui le concerne (12d) —
+/// la pression du stylet à côté de la taille et de l'opacité, les pixels nets à côté de la dureté.
 fn brush_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
-    ui.add(egui::Slider::new(&mut s.size, 0.5..=400.0).logarithmic(true).text("Taille"));
-    ui.add(egui::Slider::new(&mut s.opacity, 0.0..=1.0).text("Opacité"));
-    if !s.aliased || vector {
-        ui.add(egui::Slider::new(&mut s.hardness, 0.0..=1.0).text("Dureté"));
+    use crate::bulles::{bulle, interrupteur};
+    use egui_phosphor::regular as ph;
+    ui.horizontal(|ui| {
+        ui.add(egui::Slider::new(&mut s.size, 0.5..=400.0).logarithmic(true).text("Taille"));
+        interrupteur(ui, &mut s.pressure_size, ph::PEN_NIB, "Taille selon la pression", "Plus on appuie avec le stylet, plus le trait est gros.", "");
+    });
+    if s.pressure_size {
+        let resp = ui.add(egui::Slider::new(&mut s.min_size, 0.0..=1.0).text("Taille mini"));
+        bulle(resp, "Taille mini", "Taille quand on effleure, en part de la taille.", "");
     }
+    ui.horizontal(|ui| {
+        ui.add(egui::Slider::new(&mut s.opacity, 0.0..=1.0).text("Opacité"));
+        interrupteur(ui, &mut s.pressure_opacity, ph::PEN_NIB, "Opacité selon la pression", "Plus on appuie avec le stylet, plus le trait couvre.", "");
+    });
+    if s.pressure_opacity {
+        let resp = ui.add(egui::Slider::new(&mut s.min_opacity, 0.0..=1.0).text("Opacité mini"));
+        bulle(resp, "Opacité mini", "Opacité quand on effleure, en part de l'opacité.", "");
+    }
+    ui.horizontal(|ui| {
+        if !s.aliased || vector {
+            ui.add(egui::Slider::new(&mut s.hardness, 0.0..=1.0).text("Dureté"));
+        }
+        if !vector {
+            interrupteur(ui, &mut s.aliased, ph::CHECKERBOARD, "Pixels nets", "Sans anticrénelage : un bord net, pixel par pixel (sans dureté).", "");
+        }
+    });
     ui.add(egui::Slider::new(&mut s.spacing, 0.02..=1.0).text("Espacement"));
     ui.add(egui::Slider::new(&mut s.smoothing, 0.0..=0.95).text("Lissage"));
-    ui.checkbox(&mut s.pressure_size, "Taille selon la pression");
-    if s.pressure_size {
-        ui.add(egui::Slider::new(&mut s.min_size, 0.0..=1.0).text("Taille mini"))
-            .on_hover_text("Taille quand on effleure, en part de la taille");
-    }
-    ui.checkbox(&mut s.pressure_opacity, "Opacité selon la pression");
-    if s.pressure_opacity {
-        ui.add(egui::Slider::new(&mut s.min_opacity, 0.0..=1.0).text("Opacité mini"))
-            .on_hover_text("Opacité quand on effleure, en part de l'opacité");
-    }
-    if !vector {
-        ui.checkbox(&mut s.aliased, "Pixels nets (sans anticrénelage)");
-    }
 }
 
 impl App {
@@ -235,15 +245,15 @@ impl App {
             });
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let animation = ui
-                    .selectable_label(self.mode == Mode::Animation, RichText::new(" Animation ").strong())
-                    .on_hover_text("Animer le panneau courant (Tab)");
+                // Les deux niveaux restent écrits en toutes lettres : on voit d'un coup d'œil où
+                // l'on est.
+                let animation = ui.selectable_label(self.mode == Mode::Animation, RichText::new(" Animation ").strong());
+                let animation = self.aide(animation, "Animation", "Animer le panneau courant, image par image.", "mode.basculer");
                 if animation.clicked() && self.mode != Mode::Animation {
                     self.set_mode(Mode::Animation);
                 }
-                let board = ui
-                    .selectable_label(self.mode == Mode::Storyboard, RichText::new(" Storyboard ").strong())
-                    .on_hover_text("Monter les panneaux (Tab)");
+                let board = ui.selectable_label(self.mode == Mode::Storyboard, RichText::new(" Storyboard ").strong());
+                let board = self.aide(board, "Storyboard", "Monter les panneaux, les scènes et les séquences.", "mode.basculer");
                 if board.clicked() && self.mode != Mode::Storyboard {
                     self.set_mode(Mode::Storyboard);
                 }
@@ -251,29 +261,19 @@ impl App {
         });
     }
 
-    /// Panneau Outils : une icône par outil ; nom et raccourci au survol.
+    /// Panneau Outils : une icône par outil ; nom, raccourci et description dans la bulle.
     pub(crate) fn tool_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
             for tool in Tool::ALL {
-                let shortcut = self.keymap.label(tool.action());
-                let hint = if shortcut.is_empty() {
-                    format!("{} (pas de raccourci)", tool.label())
-                } else {
-                    format!("{}   {shortcut}", tool.label())
-                };
                 let icon = RichText::new(tool.icon()).size(21.0);
-                if ui
-                    .add_sized([38.0, 34.0], egui::SelectableLabel::new(self.tool == tool, icon))
-                    .on_hover_text(hint)
-                    .clicked()
-                {
+                let resp = ui.add_sized([38.0, 34.0], egui::SelectableLabel::new(self.tool == tool, icon));
+                if self.aide(resp, tool.label(), tool.description(), tool.action()).clicked() {
                     self.set_tool(tool);
                 }
             }
         });
     }
-
     /// Panneau des réglages de l'outil courant.
     pub(crate) fn tool_options_panel(&mut self, ui: &mut egui::Ui) {
         let vector = self.layer().kind == LayerKind::Vector;
@@ -307,7 +307,14 @@ impl App {
             Tool::Eraser => {
                 brush_ui(ui, &mut self.eraser, vector);
                 if vector {
-                    ui.checkbox(&mut self.vector_erase_whole, "Effacer des traits entiers");
+                    crate::bulles::interrupteur(
+                        ui,
+                        &mut self.vector_erase_whole,
+                        egui_phosphor::regular::PATH,
+                        "Effacer des traits entiers",
+                        "La gomme retire chaque trait touché en entier au lieu de le couper.",
+                        "",
+                    );
                     note(
                         ui,
                         "Sur un calque vectoriel, la gomme coupe les traits. Les zones remplies \
@@ -318,9 +325,13 @@ impl App {
             Tool::Fill => {
                 ui.add(egui::Slider::new(&mut self.fill.tolerance, 0.0..=1.0).text("Tolérance"));
                 ui.add(egui::Slider::new(&mut self.fill.expand, 0..=4).text("Débord (px)"));
-                ui.label("Contours pris sur :");
-                ui.radio_value(&mut self.fill.sample_all, false, "le calque courant");
-                ui.radio_value(&mut self.fill.sample_all, true, "tous les calques visibles");
+                ui.horizontal(|ui| {
+                    use egui_phosphor::regular as ph;
+                    ui.label("Contours pris sur");
+                    let sample = &mut self.fill.sample_all;
+                    crate::bulles::choix(ui, sample, false, ph::STACK_SIMPLE, "Le calque courant", "Les contours du seul calque où l'on remplit.", "");
+                    crate::bulles::choix(ui, sample, true, ph::STACK, "Tous les calques visibles", "Trait sur un calque, couleurs sur un autre.", "");
+                });
                 if vector {
                     note(ui, "Sur un trait ou une zone déjà peinte : change sa couleur.");
                 } else {
@@ -364,14 +375,16 @@ impl App {
 
     /// Panneau Vue : cadrage, zoom, miroir, rotation, table lumineuse.
     pub(crate) fn view_panel(&mut self, ui: &mut egui::Ui) {
+        use crate::bulles::interrupteur;
+        use egui_phosphor::regular as ph;
         ui.horizontal(|ui| {
-            if ui.button("Ajuster").clicked() {
+            if self.bouton(ui, ph::ARROWS_OUT, "Ajuster à la fenêtre", "Toute la feuille dans la vue.", "vue.ajuster").clicked() {
                 self.fit_pending = true;
             }
-            if ui.button("100 %").clicked() {
+            if self.bouton(ui, ph::MAGNIFYING_GLASS, "Zoom 100 %", "Un pixel du dessin pour un pixel de l'écran.", "vue.reinit_zoom").clicked() {
                 self.zoom_actual();
             }
-            if ui.selectable_label(self.view.flip, "Miroir").clicked() {
+            if self.bouton_etat(ui, self.view.flip, ph::FLIP_HORIZONTAL, "Miroir de la vue", "Voir le dessin retourné ; le dessin ne change pas.", "vue.miroir").clicked() {
                 self.flip_view();
             }
         });
@@ -384,27 +397,34 @@ impl App {
             let (rect, size) = (self.canvas_rect, self.canvas_size());
             self.view.rotate_around(rect, size, rect.center(), delta);
         }
-        ui.checkbox(&mut self.light_table, "Table lumineuse")
-            .on_hover_text("Les autres calques du panneau sont estompés ; le calque courant reste net.");
-        if self.light_table {
-            ui.add(
-                egui::Slider::new(&mut self.light_table_strength, 0.05..=0.8)
-                    .text("autres")
-                    .custom_formatter(|v, _| format!("{:.0} %", v * 100.0)),
-            );
-        }
+        ui.horizontal(|ui| {
+            let key = self.raccourci("vue.table_lumineuse");
+            interrupteur(ui, &mut self.light_table, ph::LIGHTBULB, "Table lumineuse", "Les autres calques du panneau estompés ; le calque courant reste net.", &key);
+            if self.light_table {
+                let resp = ui.add(
+                    egui::Slider::new(&mut self.light_table_strength, 0.05..=0.8)
+                        .text("autres")
+                        .custom_formatter(|v, _| format!("{:.0} %", v * 100.0)),
+                );
+                crate::bulles::bulle(resp, "Autres calques", "Combien ils restent visibles.", "");
+            }
+        });
         // Cadres de composition (9d), aussi dans la barre au-dessus du dessin.
         ui.separator();
-        ui.checkbox(&mut self.layout.safe_frames, "Zones de sécurité")
-            .on_hover_text("Action dans 93 % du cadre, titres dans 90 % (EBU R 95)");
-        ui.horizontal(|ui| self.frame_format_ui(ui));
+        ui.horizontal(|ui| {
+            let key = self.raccourci("vue.cadres_securite");
+            interrupteur(ui, &mut self.layout.safe_frames, ph::SELECTION, "Zones de sécurité", "Action dans 93 % du cadre, titres dans 90 % (EBU R 95).", &key);
+            self.frame_format_ui(ui);
+        });
     }
 
     /// Options de l'outil Sélection sur un calque bitmap.
     fn bitmap_selection_ui(&mut self, ui: &mut egui::Ui) {
+        use crate::bulles::choix;
+        use egui_phosphor::regular as ph;
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.select_rect, false, "Lasso");
-            ui.selectable_value(&mut self.select_rect, true, "Rectangle");
+            choix(ui, &mut self.select_rect, false, ph::LASSO, "Lasso", "Entourer la zone à main levée.", "");
+            choix(ui, &mut self.select_rect, true, ph::RECTANGLE_DASHED, "Rectangle", "Tirer un rectangle.", "");
         });
         let has = self.bsel.is_some();
         ui.label(match self.bsel.as_ref().map(|s| s.lifted.is_some()) {
@@ -412,39 +432,34 @@ impl App {
             Some(false) => "Zone sélectionnée.",
             Some(true) => "Zone soulevée : elle sera posée en quittant la sélection.",
         });
-        ui.add_enabled_ui(has, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                if ui.button("Miroir H").clicked() {
-                    self.bitmap_flip(true);
-                }
-                if ui.button("Miroir V").clicked() {
-                    self.bitmap_flip(false);
-                }
-                if ui.button("Copier").clicked() {
-                    self.bitmap_copy();
-                }
-                if ui.button("Couper").clicked() {
-                    self.bitmap_cut();
-                }
-                if ui.button("Effacer dedans").clicked() {
-                    self.bitmap_erase(true);
-                }
-                if ui.button("Effacer autour").clicked() {
-                    self.bitmap_erase(false);
-                }
-                if ui.button("Poser").on_hover_text("Repose la zone et quitte la sélection (Échap)").clicked() {
-                    self.drop_bitmap_selection();
-                }
-            });
-        });
-        ui.horizontal(|ui| {
-            if ui.button("Tout sélectionner").clicked() {
+        ui.horizontal_wrapped(|ui| {
+            if self.bouton_si(ui, has, ph::FLIP_HORIZONTAL, "Miroir horizontal", "Retourner la zone de gauche à droite.", "selection.miroir_h").clicked() {
+                self.bitmap_flip(true);
+            }
+            if self.bouton_si(ui, has, ph::FLIP_VERTICAL, "Miroir vertical", "Retourner la zone de haut en bas.", "selection.miroir_v").clicked() {
+                self.bitmap_flip(false);
+            }
+            if self.bouton_si(ui, has, ph::COPY, "Copier", "Copier la zone.", "edition.copier").clicked() {
+                self.bitmap_copy();
+            }
+            if self.bouton_si(ui, has, ph::SCISSORS, "Couper", "Copier la zone et l'effacer.", "edition.couper").clicked() {
+                self.bitmap_cut();
+            }
+            if self.bouton_si(ui, has, ph::ERASER, "Effacer dedans", "Effacer ce qui est dans la zone.", "").clicked() {
+                self.bitmap_erase(true);
+            }
+            if self.bouton_si(ui, has, ph::SELECTION_INVERSE, "Effacer autour", "Effacer tout ce qui est hors de la zone.", "").clicked() {
+                self.bitmap_erase(false);
+            }
+            if self.bouton_si(ui, has, ph::CHECK, "Poser", "Reposer la zone et quitter la sélection (Échap).", "").clicked() {
+                self.drop_bitmap_selection();
+            }
+            ui.separator();
+            if self.bouton(ui, ph::SELECTION_ALL, "Tout sélectionner", "Tout le dessin.", "edition.tout_selectionner").clicked() {
                 self.bitmap_select_all();
             }
-            if ui
-                .add_enabled(self.pixel_clipboard.is_some(), egui::Button::new("Coller"))
-                .clicked()
-            {
+            let can_paste = self.pixel_clipboard.is_some();
+            if self.bouton_si(ui, can_paste, ph::CLIPBOARD, "Coller", "Coller la zone copiée.", "edition.coller").clicked() {
                 self.bitmap_paste();
             }
         });
@@ -456,6 +471,7 @@ impl App {
     }
 
     fn selection_ui(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
         if self.layer().kind != LayerKind::Vector {
             self.bitmap_selection_ui(ui);
             return;
@@ -466,45 +482,41 @@ impl App {
         } else {
             format!("{n} élément(s) sélectionné(s).")
         });
-        ui.add_enabled_ui(n > 0, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                if ui.button("Couleur courante").clicked() {
-                    self.recolor_selection();
-                }
-                if ui.button("Plus épais").clicked() {
-                    self.scale_selection_width(1.25);
-                }
-                if ui.button("Plus fin").clicked() {
-                    self.scale_selection_width(0.8);
-                }
-                if ui.button("Miroir H").clicked() {
-                    self.flip_selection(true);
-                }
-                if ui.button("Miroir V").clicked() {
-                    self.flip_selection(false);
-                }
-                if ui.button("Devant").clicked() {
-                    self.order_selection(true);
-                }
-                if ui.button("Derrière").clicked() {
-                    self.order_selection(false);
-                }
-                if ui.button("Copier").clicked() {
-                    self.copy_selection();
-                }
-                if ui.button("Supprimer").clicked() {
-                    self.delete_selection();
-                }
-            });
-        });
-        ui.horizontal(|ui| {
-            if ui.button("Tout sélectionner").clicked() {
+        let has = n > 0;
+        ui.horizontal_wrapped(|ui| {
+            if self.bouton_si(ui, has, ph::DROP, "Couleur courante", "Donner la couleur courante aux éléments choisis.", "").clicked() {
+                self.recolor_selection();
+            }
+            if self.bouton_si(ui, has, ph::PLUS_CIRCLE, "Trait plus épais", "", "").clicked() {
+                self.scale_selection_width(1.25);
+            }
+            if self.bouton_si(ui, has, ph::MINUS_CIRCLE, "Trait plus fin", "", "").clicked() {
+                self.scale_selection_width(0.8);
+            }
+            if self.bouton_si(ui, has, ph::FLIP_HORIZONTAL, "Miroir horizontal", "Retourner de gauche à droite.", "selection.miroir_h").clicked() {
+                self.flip_selection(true);
+            }
+            if self.bouton_si(ui, has, ph::FLIP_VERTICAL, "Miroir vertical", "Retourner de haut en bas.", "selection.miroir_v").clicked() {
+                self.flip_selection(false);
+            }
+            if self.bouton_si(ui, has, ph::ARROW_LINE_UP, "Devant", "Passer devant les autres éléments du dessin.", "").clicked() {
+                self.order_selection(true);
+            }
+            if self.bouton_si(ui, has, ph::ARROW_LINE_DOWN, "Derrière", "Passer derrière les autres éléments du dessin.", "").clicked() {
+                self.order_selection(false);
+            }
+            if self.bouton_si(ui, has, ph::COPY, "Copier", "", "edition.copier").clicked() {
+                self.copy_selection();
+            }
+            if self.bouton_si(ui, has, ph::TRASH, "Supprimer", "", "edition.supprimer").clicked() {
+                self.delete_selection();
+            }
+            ui.separator();
+            if self.bouton(ui, ph::SELECTION_ALL, "Tout sélectionner", "Tous les éléments du dessin.", "edition.tout_selectionner").clicked() {
                 self.select_all();
             }
-            if ui
-                .add_enabled(!self.clipboard.is_empty(), egui::Button::new("Coller"))
-                .clicked()
-            {
+            let can_paste = !self.clipboard.is_empty();
+            if self.bouton_si(ui, can_paste, ph::CLIPBOARD, "Coller", "", "edition.coller").clicked() {
                 self.paste();
             }
         });
@@ -514,7 +526,6 @@ impl App {
              Poignées : échelle (Maj : proportionnelle) et rotation (Maj : par 15°).",
         );
     }
-
     pub(crate) fn status_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             let where_ = match self.mode {
@@ -670,8 +681,9 @@ impl App {
                     };
                     ui.horizontal_wrapped(|ui| {
                         ui.label(RichText::new(file).small());
-                        edit = ui.button("Modifier…").clicked();
-                        reload = ui.button("Recharger").clicked();
+                        use egui_phosphor::regular as ph;
+                        edit = crate::bulles::icone(ui, ph::PENCIL_SIMPLE, "Modifier", "Ouvrir le fichier de raccourcis dans le Bloc-notes.", "").clicked();
+                        reload = crate::bulles::icone(ui, ph::ARROW_CLOCKWISE, "Recharger", "Relire le fichier après l'avoir modifié.", "").clicked();
                     });
                     for w in &self.keymap.warnings {
                         ui.colored_label(Color32::from_rgb(240, 170, 60), format!("⚠ {w}"));
