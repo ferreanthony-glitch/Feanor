@@ -285,8 +285,28 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   (`stage3d::pick` : d'abord un plan dessiné à cet endroit, sinon la feuille la plus proche) ;
   dans son plan, le déplacement monde ÷ (1 + d) va dans `Layer::transform` ; avec Maj, la
   profondeur suit la souris le long de l'axe z (`z_motion`). La caméra se prend par son œil
-  (déplacement dans son plan, Maj : avancée). Une étape d'annulation au lâcher. Les modes de
-  fusion ne sont pas appliqués dans la vue 3D.
+  (déplacement dans son plan, Maj : avancée, Ctrl : panoramique et bascule). Une étape
+  d'annulation au lâcher. Les modes de fusion ne sont pas appliqués dans la vue 3D.
+- **Bascule et panoramique** (9f, `camera.rs`) : `Camera::tilt`, `Camera::pan` (degrés). Le
+  multiplan ramène déjà chaque calque sur le plan de référence tel que l'œil le voit, et cette
+  projection ne dépend que de la place de l'œil, pas de son orientation : une caméra qui tourne
+  sur elle-même filme donc ce plan en perspective. Le passage image finale → feuille devient une
+  homographie (`Camera::homography` : centrage, roulis, focale f = zoom × D, bascule autour de X,
+  panoramique autour de la verticale, rencontre du plan z = 0 depuis l'œil ; w > 0 devant la
+  caméra), son inverse est composé des inverses de chaque étape (`homography_inverse`). Caméra
+  droite : l'ancien calcul affine, inchangé (`FrameMap::Level`). Rien d'autre ne change dans le
+  rendu : `camera_image` et `thumbnail` lisent la feuille composée par `FrameMap::at`.
+  Affichage : la vue caméra est une `View` avec `persp` (homographies feuille ↔ écran,
+  `camtools::turned_view`) ; tous les `to_screen` / `to_canvas` (outils, repères, curseur) y
+  passent. Carte graphique : le w de chaque coin de la feuille va au shader (`color` de l'élément
+  d'affichage, `params.w` = 1), qui sort `(xy·w, 0, w)` : interpolation de la texture en
+  perspective et découpe de ce qui passe derrière la caméra par le matériel. Secours sans carte
+  graphique : maillage 24 × 24 (approché). Sur le plateau, le cadre filmé est un trapèze ; le
+  hors-champ estompé est la feuille moins le cadre coupé à la feuille (`viewbar::clip_to_rect`,
+  `nested_band`). `Camera::limited` (appelé par `set_current_camera`) réduit bascule et
+  panoramique tant qu'un coin du cadre ne voit pas le plan sous au moins `MIN_GRAZING` = 5°.
+  Testé : caméra droite = calcul d'avant, inverse, visée (E·tan φ), trapèze, vue 3D « par la
+  caméra » (repère `Cam3d` calculé à part) qui voit le cadre aux coins de l'écran, image filmée.
 
 ## Pinceaux texturés (3d-2)
 
@@ -453,11 +473,11 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - Annulation : le repère fait partie de la structure (copie au début du geste, une étape au
   lâcher, comme l'outil Caméra).
 
-## Format de projet (version 10, dossier)
+## Format de projet (version 11, dossier)
 
 ```
 MonFilm/
-  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 10, "largeur",
+  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 11, "largeur",
                       "hauteur" (feuille), "cadre": [l, h], réglages,
                       "sequences": [{ "scenes": [{ "panneaux": [{ "calques": [{ "expositions": … }]}]}]}],
                       "sons": [{"id", "nom", "fichier"}], "pistes_son": [{ "extraits": [{"son", "debut",
@@ -469,6 +489,7 @@ MonFilm/
                       triangles, positions (3 × f32) puis triangles (3 × u32), petit-boutiste
 ```
 
+- Format 11 (9f) : `bascule`, `panoramique` (degrés) sur une clé de caméra, absents si nuls.
 - Format 10 (9c) : `avance`, `adoucir_entree`, `adoucir_sortie` sur une clé de caméra ; `fusion`
   peut valoir les 10 nouveaux modes (identifiants en français, ex. `lumiere_vive`).
 - Format 9 (8) : `fusion` sur un calque (absent : normal) ; `attache` sur une note (id du
@@ -555,6 +576,7 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 | Dessin dans la vignette = le même `canvas_panel` dans un `Ui` enfant (6e) | aucun second chemin de dessin | nul | faible | oui |
 | Caméra d'un panneau sans clé = celle du voisin dans la scène (9c) | la caméra ne saute plus d'un panneau à l'autre, sans toucher aux panneaux qui ont des clés | nul | faible : un panneau sans clé change si l'on règle son voisin (c'est le but) | oui : poser une clé fige le panneau |
 | Avancée de la caméra dans le multiplan, pas de bascule ni de panoramique (9c) | le rendu reste un empilement de plans 2D, exact et rapide | nul | les mouvements X/Y de la caméra manquent | oui : un rendu en perspective pourra s'ajouter (champs en plus) |
+| Bascule et panoramique = homographie du plan de référence déjà composé (9f) | exact (le multiplan ne dépend que de l'œil), sans toucher à la composition ni aux calques | une homographie par image ; vue caméra par la carte graphique avec un w par coin | faible : au ras de l'horizon, la feuille est très étirée (bornée à 5°) ; hors de la feuille, rien | oui : caméra droite = calcul d'avant ; deux champs du manifeste |
 | Cadres de composition dans la disposition, pas dans le projet (9d) | ce sont des réglages de la vue, comme le zoom | nul | un format de diffusion propre au projet n'est pas transmis avec lui | oui : un champ du manifeste pourrait s'ajouter |
 | Plateau 3D dessiné par egui (maillages subdivisés, textures réduites), pas par une passe wgpu à part (9e) | aucun shader ni pipeline de plus ; marche aussi en OpenGL | ≈ 600 triangles par calque ; texture refaite (≈ 10 ms) quand un dessin change | faible : pas de tampon de profondeur (plans parallèles triés, suffisant) | oui : `stage3dui.rs` seul à remplacer |
 | Repère 3D : lecteur glTF et fil de fer écrits pour Pelure, sur le processeur (2d) | glTF = format ouvert que Blender exporte ; pas de bibliothèque ni de passe GPU à ajouter pour un guide en fil de fer | ≈ 900 lignes ; calcul 0,15 s par vue sur un gros décor (sur un autre fil) | faible : mauvais fichier → message | oui : affichage par la carte graphique ou rendu ombré possibles plus tard, le format `.pelure3d` ne change pas |

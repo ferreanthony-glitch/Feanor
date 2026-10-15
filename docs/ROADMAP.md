@@ -327,8 +327,7 @@ voir le plateau dans l'espace, naviguer et y déplacer les objets.
   focale en mm. Fenêtre de la caméra (outil Caméra) : clés début / ici / fin, clé précédente /
   suivante, adoucis, position X Y Z, focale, rotation, vue, durées de la scène et du panneau.
   Format de projet 10.
-  Pas encore : rotation de la caméra autour des axes X et Y (bascule, panoramique) : le rendu est
-  un multiplan 2D, il faudrait une vraie perspective.
+  Bascule et panoramique : faits en 9f.
 - ✅ 9d. Barre au-dessus du dessin : onglets Plateau (la feuille, la vue y est retrouvée telle
   qu'on l'a laissée) et Caméra ; zones de sécurité (action 93 %, titres 90 %, EBU R 95) ; cadre de
   format 16:9, 9:16, 4:5, 1:1 ou personnalisé, centré dans le cadre de la caméra, hors-format
@@ -341,6 +340,15 @@ voir le plateau dans l'espace, naviguer et y déplacer les objets.
   caméra. Même géométrie que le multiplan (testée).
   Pas encore : modes de fusion dans la vue 3D (tout y est en Normal), repère 3D (glTF) dans la
   vue 3D, échelle et rotation d'un calque dans la vue 3D (outil Transformer en 2D).
+- ✅ 9f. Bascule et panoramique de la caméra (demandés par Anthony) : la caméra tourne sur
+  elle-même. Fenêtre de la caméra (Bascule, Panoramique, interpolés entre les clés), vue 3D
+  (outil Déplacer, Ctrl + glisser l'œil). Vue caméra, export et vignettes en perspective ; sur le
+  plateau, le cadre filmé est un trapèze ; zones de sécurité et cadre de format suivent ; la vue
+  de dessus tourne le champ avec le panoramique. Bornés pour que le cadre ne filme jamais
+  l'horizon (au moins 5° sous lui). Format de projet 11.
+  Pas encore : dessiner en vue caméra tournée marche (la souris passe par la perspective), mais
+  la taille du pinceau ne suit pas la perspective ; en secours sans carte graphique, l'image en
+  perspective est approchée (maillage), à l'export elle est exacte.
 
 ## Raccourcis proposés, à valider
 

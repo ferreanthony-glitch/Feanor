@@ -228,7 +228,10 @@ Caméra, on glisse dans le cadre pour le déplacer, on tire un coin pour zoomer,
 pour tourner (Maj : par 15°). Le panneau Réglages de l'outil Caméra est sa fenêtre : images clés
 (début, ici, fin, précédente, suivante, retirer), « Adoucir l'entrée / la sortie » en images,
 position X, Y et Z (Z : distance au plan de référence, pour avancer dans le décor), focale en mm,
-rotation, vue, durées de la scène et du panneau.
+rotation, bascule (regarder vers le haut ou le bas) et panoramique (vers la gauche ou la
+droite), vue, durées de la scène et du panneau. Tournée, la caméra filme la feuille en
+perspective : sur le plateau, son cadre devient un trapèze ; la vue caméra, l'export et les
+vignettes montrent l'image en perspective.
 
 **Mouvements de caméra** : « Clé début », « Clé ici », « Clé fin » (timeline d'animation ou outil
 Caméra) posent des images clés ; on règle la caméra sur chacune, elle va de l'une à l'autre. Les
@@ -248,7 +251,7 @@ sont des plans posés à leur profondeur, la caméra une pyramide de vision (ave
 bouge), sur un sol quadrillé. Outils : tourner autour, glisser la vue, avancer / reculer ; partout,
 molette = avancer, bouton du milieu = glisser, clic droit ou Alt + glisser = tourner. Outil
 Déplacer : glisser un calque le déplace dans son plan, Maj + glisser change sa profondeur ; prendre
-l'œil de la caméra la déplace (Maj : avancée). Boutons Face, Dessus, Côté, « Par la caméra », et
+l'œil de la caméra la déplace (Maj : avancée ; Ctrl : la tourner, panoramique et bascule). Boutons Face, Dessus, Côté, « Par la caméra », et
 recadrer. Pour dessiner, on revient au plateau à plat (bouton 3D).
 
 **Repère 3D** : exporte ton décor en glTF depuis Blender (Fichier > Exporter > glTF 2.0, `.glb`),
@@ -287,7 +290,7 @@ en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le 
 | `model3d.rs`, `view3d.rs`, `ref3dtool.rs` | Repère 3D : lecture glTF, arêtes utiles ; caméra en orbite, fil de fer, arêtes cachées ; outil et affichage |
 | `thumbs.rs` | Cache des vignettes de panneaux |
 | `history.rs` | Annuler / rétablir |
-| `project.rs` | Projet en dossier (format 10), enregistrement préparé puis écrit |
+| `project.rs` | Projet en dossier (format 11), enregistrement préparé puis écrit |
 | `blend.rs` | Modes de fusion des calques (formules, composition d'un pixel) |
 | `board.rs`, `boardui.rs` | Planche de la vue Vignettes : disposition, notes, gestes, menus |
 | `recovery.rs`, `recoveryui.rs` | Copie de secours, récupération après plantage |
