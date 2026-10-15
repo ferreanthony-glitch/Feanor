@@ -1,6 +1,6 @@
 # Architecture de Pelure
 
-Document tenu à jour à chaque étape. Dernière mise à jour : phase 2d (octobre 2026).
+Document tenu à jour à chaque étape. Dernière mise à jour : phase 9 (octobre 2026).
 
 ## Vue d'ensemble
 
@@ -233,11 +233,60 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   largeurs de vignette — elle suit la vignette et change d'échelle avec elle. Les opérations qui
   retirent des panneaux libèrent leurs notes à leur dernière place (`release_removed_notes`,
   appelé par `structure_op` et la suppression multiple).
-- `blend.rs` : `BlendMode` (17 modes, formules W3C en valeurs gamma) et `blend_over` pour la
+- `blend.rs` : `BlendMode` (17 modes, 27 depuis 9a ; formules W3C en valeurs gamma) et `blend_over` pour la
   composition sur le processeur (`render.rs` : export, vignettes, pipette ; `merged_cel`). Sur la
   carte graphique, un calque en mode de fusion arrête la passe de composition, copie l'image
   composée dans une texture « fond », puis est dessiné par `fs_blend` (lecture du fond au même
   pixel, résultat qui remplace). Coût : une copie de l'image par calque concerné.
+
+## Phase 9 : fusion complète, caméra continue, cadres, plateau en 3D
+
+- **Modes de fusion** (9a) : 27 dans `BlendMode::ALL`, dont l'ordre est le numéro passé au
+  shader (Normal 0, Fondu 1… Luminosité 26) ; `FAMILY_STARTS` sépare les familles dans le menu.
+  Fondu : un bruit entier par pixel de la feuille (`dissolve_noise`), le même sur le processeur et
+  la carte graphique ; le pixel du calque est pris si le bruit est sous son opacité.
+- **Calques et fiche** (9b) : `layersui.rs` sans zone de réglages en bas (menu du calque au clic
+  droit, renommage en place). La fiche est un onglet de la colonne des réglages
+  (`dock::SETTINGS_TABS`) ; `LAYOUT_VERSION` 2, `DockLayout::upgraded` y range la fiche des
+  dispositions enregistrées avant.
+- **Caméra continue** (9c, `camera.rs`, `Document::panel_camera`) : un panneau sans clé prend la
+  caméra du panneau précédent de la scène, à sa dernière image (sinon celle du suivant, à sa
+  première image). Les panneaux qui ont des clés ne changent pas : c'est le choix le moins risqué
+  pour les projets existants (une interpolation à l'échelle de la scène aurait tout modifié).
+  `Camera::dolly` : avancée vers le décor, en pixels de la feuille ; la caméra de référence est à
+  D = largeur du cadre × 35 / 36 (`ref_distance`, focale de référence 35 mm pour 36 mm de large) ;
+  grossissement = zoom × D / (D − avancée), focale = 35 mm × zoom. Multiplan : un calque de
+  profondeur d, vu de la caméra décalée de o et avancée de z, est agrandi de k = s(1 + d) et
+  décalé de (1 − s) o, avec s = (D − z) / (D(1 + d) − z) ; derrière la caméra, il n'est pas
+  dessiné (`Layer::transform_seen` → `None`). Adoucis en images (`CameraKey::ease_in/out`) : vitesse
+  en trapèze (accélération, palier, freinage), `camera::ease` ; l'ancien « doux » vaut des adoucis
+  d'une demi-durée. Fenêtre de la caméra : `camtools::camera_panel`.
+- **Barre de la vue et cadres** (9d, `viewbar.rs`, `frames.rs`) : au-dessus du dessin (pas dans
+  les vignettes). Plateau / Caméra : `App::set_camera_view` garde la vue du plateau
+  (`stage_view`) et la rend au retour. Cadres tracés par-dessus, dans le repère du cadre de la
+  caméra (`Camera::to_stage`) : ils suivent sa position, son zoom, sa rotation. Format : le plus
+  grand rectangle du rapport voulu, centré (`format_rect`) ; zones de sécurité 93 % / 90 % du
+  cadre du format s'il y en a un, sinon du cadre de la caméra. Réglages de la vue : gardés avec la
+  disposition (`Layout::safe_frames`, `frame_format`), pas dans le projet ; changer d'espace de
+  travail ne les change pas.
+- **Plateau en 3D** (9e, `stage3d.rs` : géométrie testée ; `stage3dui.rs` : affichage et
+  gestes). Monde en pixels de la feuille, x à droite, y en haut, z vers la caméra ; plan de
+  référence z = 0, caméra de référence en z = D. Un calque de profondeur d est le plan
+  z = −D·d, agrandi de (1 + d) : vu de l'œil de la caméra (`World::eye`, z = D − avancée), il
+  tombe exactement là où le rendu 2D le met (testé avec décalage, avancée, transformation du
+  calque). Affichage par egui : plans en maillages subdivisés 16 × 16 (la texture est plaquée
+  par triangle ; sans subdivision la perspective tordrait le dessin), peints du plus loin au plus
+  proche de l'œil de la vue (plans parallèles : cet ordre suffit) ; morceaux derrière l'œil
+  retirés, segments coupés (`Projector::segment`). Textures : chaque dessin réduit à 1024 px de
+  large sur le processeur (`render::cel_image`, réparti sur les cœurs), en cache par dessin et
+  version ; la transformation du calque est appliquée aux sommets, pas à la texture (déplacer un
+  calque ne la refait pas). La vue réutilise `view3d::Cam3d` (orbite, glisser, avancer,
+  `fit_at`). Outil Déplacer : rayon de la souris (`Projector::ray`) coupé avec les plans
+  (`stage3d::pick` : d'abord un plan dessiné à cet endroit, sinon la feuille la plus proche) ;
+  dans son plan, le déplacement monde ÷ (1 + d) va dans `Layer::transform` ; avec Maj, la
+  profondeur suit la souris le long de l'axe z (`z_motion`). La caméra se prend par son œil
+  (déplacement dans son plan, Maj : avancée). Une étape d'annulation au lâcher. Les modes de
+  fusion ne sont pas appliqués dans la vue 3D.
 
 ## Pinceaux texturés (3d-2)
 
@@ -340,9 +389,9 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   z négatif défile plus vite (premier plan). Borne : z ≥ −0,9.
 - Ce glissement s'ajoute à la transformation du calque au moment de composer
   (`render::panel_plan_at`, `App::build_plan`) : rien n'est enregistré en plus, et caméra centrée
-  = aucun effet. Le zoom et la rotation de la caméra n'en tiennent pas compte (zoom d'objectif,
-  pas de travelling avant). C'est le choix le moins coûteux et réversible : un vrai rendu en
-  perspective (taille qui change avec la distance) pourra venir avec la vue 3D.
+  = aucun effet. Le zoom et la rotation de la caméra n'en tiennent pas compte (zoom d'objectif).
+  Depuis 9c, l'avancée de la caméra (travelling avant) agrandit chaque calque selon sa
+  distance (voir « Phase 9 »).
 - Dessiner sur un calque en profondeur : la souris passe par la transformation **vue**
   (`App::layer_seen`), le trait tombe donc sous le curseur quelle que soit la position de la
   caméra à l'image courante.
@@ -368,8 +417,9 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   d'habitude. Hors du cadre : masque opaque.
 - **Export, vignettes, planches** : `render::camera_image` prend chaque pixel de l'image finale au
   point filmé de la feuille (bilinéaire) ; caméra centrée sans zoom ni rotation = pixels exacts.
-- Manifeste : `"camera": [{"image", "x", "y", "zoom", "rotation", "doux"}]` par panneau (absent si
-  aucune clé).
+- Manifeste : `"camera": [{"image", "x", "y", "zoom", "rotation", "doux", "avance",
+  "adoucir_entree", "adoucir_sortie"}]` par panneau (absent si aucune clé ; les trois derniers
+  depuis le format 10, absents si nuls).
 - **Courbes** (2b-3) : entre deux clés, l'avancement suit une courbe de Hermite dont la pente
   vaut 0 au départ et/ou à l'arrivée si la clé correspondante est « adoucie », 1 sinon (deux clés
   non adoucies = mouvement régulier). C'est un choix de Pelure : la façon dont Storyboard Pro règle
@@ -403,11 +453,11 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - Annulation : le repère fait partie de la structure (copie au début du geste, une étape au
   lâcher, comme l'outil Caméra).
 
-## Format de projet (version 9, dossier)
+## Format de projet (version 10, dossier)
 
 ```
 MonFilm/
-  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 9, "largeur",
+  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 10, "largeur",
                       "hauteur" (feuille), "cadre": [l, h], réglages,
                       "sequences": [{ "scenes": [{ "panneaux": [{ "calques": [{ "expositions": … }]}]}]}],
                       "sons": [{"id", "nom", "fichier"}], "pistes_son": [{ "extraits": [{"son", "debut",
@@ -419,6 +469,8 @@ MonFilm/
                       triangles, positions (3 × f32) puis triangles (3 × u32), petit-boutiste
 ```
 
+- Format 10 (9c) : `avance`, `adoucir_entree`, `adoucir_sortie` sur une clé de caméra ; `fusion`
+  peut valoir les 10 nouveaux modes (identifiants en français, ex. `lumiere_vive`).
 - Format 9 (8) : `fusion` sur un calque (absent : normal) ; `attache` sur une note (id du
   panneau ; points relatifs à la vignette) ; `planche_textes` (texte, position, taille, couleur).
 - Format 8 (7) : `planche` (notes : couleur et points x, y, rayon) ; `pinceau` sur un trait
@@ -501,4 +553,8 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 | Notes de la planche libres, pas attachées aux vignettes (7, choix d'Anthony) | la planche est un espace de travail à part entière | nul | une note peut ne plus montrer le bon panneau après un déplacement | oui : une ancre par note pourrait s'ajouter (champ en plus) |
 | Textures des traits vectoriels par clé de contenu, embarquées dans le projet (7b) | les numéros de la bibliothèque changent d'une machine à l'autre ; les dessins déjà écrits restent valables | un petit PNG par texture utilisée | faible (collision de clé sur 31 bits négligeable) | oui |
 | Dessin dans la vignette = le même `canvas_panel` dans un `Ui` enfant (6e) | aucun second chemin de dessin | nul | faible | oui |
+| Caméra d'un panneau sans clé = celle du voisin dans la scène (9c) | la caméra ne saute plus d'un panneau à l'autre, sans toucher aux panneaux qui ont des clés | nul | faible : un panneau sans clé change si l'on règle son voisin (c'est le but) | oui : poser une clé fige le panneau |
+| Avancée de la caméra dans le multiplan, pas de bascule ni de panoramique (9c) | le rendu reste un empilement de plans 2D, exact et rapide | nul | les mouvements X/Y de la caméra manquent | oui : un rendu en perspective pourra s'ajouter (champs en plus) |
+| Cadres de composition dans la disposition, pas dans le projet (9d) | ce sont des réglages de la vue, comme le zoom | nul | un format de diffusion propre au projet n'est pas transmis avec lui | oui : un champ du manifeste pourrait s'ajouter |
+| Plateau 3D dessiné par egui (maillages subdivisés, textures réduites), pas par une passe wgpu à part (9e) | aucun shader ni pipeline de plus ; marche aussi en OpenGL | ≈ 600 triangles par calque ; texture refaite (≈ 10 ms) quand un dessin change | faible : pas de tampon de profondeur (plans parallèles triés, suffisant) | oui : `stage3dui.rs` seul à remplacer |
 | Repère 3D : lecteur glTF et fil de fer écrits pour Pelure, sur le processeur (2d) | glTF = format ouvert que Blender exporte ; pas de bibliothèque ni de passe GPU à ajouter pour un guide en fil de fer | ≈ 900 lignes ; calcul 0,15 s par vue sur un gros décor (sur un autre fil) | faible : mauvais fichier → message | oui : affichage par la carte graphique ou rendu ombré possibles plus tard, le format `.pelure3d` ne change pas |

@@ -97,7 +97,7 @@ L'outil **Transformer** déplace, agrandit ou tourne un calque entier (tous ses 
 dans la boîte, tirer un coin, tirer la poignée ronde (Maj : contraintes). Les dessins ne sont pas
 modifiés, Ctrl+R annule la transformation, et on peut continuer à dessiner sur le calque.
 
-**Multiplan** : le réglage « Profondeur » d'un calque (sous Visible) fixe sa distance. Quand la
+**Multiplan** : le réglage « Profondeur » d'un calque (clic droit sur le calque) fixe sa distance. Quand la
 caméra se déplace, un décor à 1 défile deux fois moins vite, un premier plan à −0,3 défile plus
 vite ; à 0, rien ne change. Visible à l'écran, en vue caméra, à l'export et dans les vignettes.
 Affichage > Vue de dessus montre la caméra, son champ et chaque calque à sa distance : glisser un
@@ -110,12 +110,14 @@ deux calques vectoriels restent vectoriels, sinon le résultat est bitmap ; les 
 être visibles et non verrouillés.
 
 Le panneau Calques montre la vignette de chaque calque à l'image courante. En haut, le **mode de
-fusion** du calque (Produit, Superposition, Incrustation, Lumière tamisée, Différence, Couleur,
-Luminosité…, comme dans les logiciels de retouche) : le calque se mélange à ce qui est dessous,
-à l'écran comme à l'export. Fusionner un tel calque avec celui du dessous applique le mode aux
-pixels. **« + Fond »** crée,
+fusion** du calque et son opacité : les 27 modes des logiciels de retouche (Fondu, Produit,
+Densité couleur +, Superposition, Lumière vive, Différence, Soustraction, Division, Teinte,
+Luminosité…), rangés par famille ; le calque se mélange à ce qui est dessous, à l'écran comme à
+l'export. Fusionner un tel calque avec celui du dessous applique le mode aux pixels. Double-clic
+sur le nom, ou clic droit > « Renommer… », pour renommer ; le clic droit donne aussi Toute la
+scène, Profondeur, Dupliquer, Verrouiller, Supprimer. **« + Fond »** crée,
 tout en bas, un calque bitmap commun à toute la scène (un décor) : ce qu'on y dessine se voit dans
-chaque panneau de la scène, pendant tout le panneau. La case « Toute la scène » étend n'importe
+chaque panneau de la scène, pendant tout le panneau. « Toute la scène » étend n'importe
 quel calque de la même façon, ou le rend à son panneau (chaque panneau garde alors sa copie).
 Couper ou copier une scène lui donne son propre fond ; un panneau déplacé dans une autre scène
 prend le fond de celle-ci.
@@ -220,15 +222,34 @@ les vignettes montrent ce que voit la caméra. Un projet enregistré avant cette
 à l'ouverture (feuille agrandie, même cadrage) et passe au nouveau format au premier
 « Enregistrer » ; une version plus ancienne de Pelure ne pourra plus l'ouvrir.
 
-**Caméra** : chaque panneau a sa caméra. Avec l'outil Caméra, on glisse dans le cadre pour le
-déplacer, on tire un coin pour zoomer, la poignée ronde pour tourner (Maj : par 15°) ; la fiche du
-panneau donne les valeurs exactes et « Réinitialiser ». « Vue à travers la caméra » (outil Caméra
-ou menu Affichage) montre ce qui sera filmé ; on peut y dessiner.
+**Caméra** : chaque panneau a sa caméra. Un panneau sans image clé garde la caméra du panneau
+d'avant dans la scène (elle ne revient plus au centre en changeant de panneau). Avec l'outil
+Caméra, on glisse dans le cadre pour le déplacer, on tire un coin pour zoomer, la poignée ronde
+pour tourner (Maj : par 15°). Le panneau Réglages de l'outil Caméra est sa fenêtre : images clés
+(début, ici, fin, précédente, suivante, retirer), « Adoucir l'entrée / la sortie » en images,
+position X, Y et Z (Z : distance au plan de référence, pour avancer dans le décor), focale en mm,
+rotation, vue, durées de la scène et du panneau.
 
 **Mouvements de caméra** : « Clé début », « Clé ici », « Clé fin » (timeline d'animation ou outil
-Caméra) posent des images clés ; on règle la caméra sur chacune, elle va de l'une à l'autre.
-« Adoucir » fait arriver et repartir la caméra en douceur à une clé. Les clés apparaissent dans la
+Caméra) posent des images clés ; on règle la caméra sur chacune, elle va de l'une à l'autre. Les
+adoucis la font accélérer en partant et freiner en arrivant. Avancer (Z) agrandit chaque calque
+selon sa profondeur : le premier plan vient plus vite que le décor. Les clés apparaissent dans la
 ligne « Caméra » de la timeline et en petits losanges dans la bande de montage.
+
+**Plateau, caméra, 3D** (barre au-dessus du dessin) : « Plateau » montre toute la feuille avec le
+cadre de la caméra ; « Caméra » montre ce qui sera filmé (on peut y dessiner) ; en revenant au
+plateau, la vue est celle qu'on avait laissée. « Sécurité » trace les zones de sécurité (action
+93 %, titres 90 %) ; « Format » trace un cadre 16:9, 9:16, 4:5, 1:1 ou personnalisé dans le cadre
+de la caméra, le reste estompé, pour composer une version pour les réseaux. Ces cadres suivent la
+caméra et ne s'exportent pas.
+
+**Plateau en 3D** (bouton 3D, barre de commandes ou barre de la vue) : les calques du panneau
+sont des plans posés à leur profondeur, la caméra une pyramide de vision (avec sa course si elle
+bouge), sur un sol quadrillé. Outils : tourner autour, glisser la vue, avancer / reculer ; partout,
+molette = avancer, bouton du milieu = glisser, clic droit ou Alt + glisser = tourner. Outil
+Déplacer : glisser un calque le déplace dans son plan, Maj + glisser change sa profondeur ; prendre
+l'œil de la caméra la déplace (Maj : avancée). Boutons Face, Dessus, Côté, « Par la caméra », et
+recadrer. Pour dessiner, on revient au plateau à plat (bouton 3D).
 
 **Repère 3D** : exporte ton décor en glTF depuis Blender (Fichier > Exporter > glTF 2.0, `.glb`),
 puis Fichier > « Importer un modèle 3D (glTF) comme repère… ». Il apparaît en fil de fer sur la
@@ -258,13 +279,15 @@ en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le 
 | `export.rs`, `exportui.rs` | Exports : film (ffmpeg), images, son, PDF ; fenêtres de choix et de progression |
 | `pdf.rs` | Écriture du PDF de storyboard : texte, images, mise en page |
 | `settings.rs` | Réglages de l'application (emplacement de ffmpeg) |
-| `camera.rs`, `camtools.rs` | Caméra du panneau : images clés, courbes ; outil Caméra, vue caméra |
+| `camera.rs`, `camtools.rs` | Caméra du panneau : images clés, adoucis, avancée, focale ; outil Caméra, sa fenêtre, vue caméra |
+| `viewbar.rs`, `frames.rs` | Barre au-dessus du dessin (plateau / caméra / 3D) ; zones de sécurité, cadre de format |
+| `stage3d.rs`, `stage3dui.rs` | Plateau en 3D : géométrie (plans, caméra, rayons) ; affichage, navigation, outil Déplacer |
 | `layertools.rs` | Outil Transformer (calque entier) |
 | `topview.rs` | Vue de dessus (profondeur des calques) |
 | `model3d.rs`, `view3d.rs`, `ref3dtool.rs` | Repère 3D : lecture glTF, arêtes utiles ; caméra en orbite, fil de fer, arêtes cachées ; outil et affichage |
 | `thumbs.rs` | Cache des vignettes de panneaux |
 | `history.rs` | Annuler / rétablir |
-| `project.rs` | Projet en dossier (format 9), enregistrement préparé puis écrit |
+| `project.rs` | Projet en dossier (format 10), enregistrement préparé puis écrit |
 | `blend.rs` | Modes de fusion des calques (formules, composition d'un pixel) |
 | `board.rs`, `boardui.rs` | Planche de la vue Vignettes : disposition, notes, gestes, menus |
 | `recovery.rs`, `recoveryui.rs` | Copie de secours, récupération après plantage |
@@ -289,7 +312,8 @@ en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le 
 `cargo test --release` lance les tests (pinceau, vectoriel, remplissage, séquences/scènes/panneaux,
 annulation, projet en dossier, anciens fichiers, raccourcis, son, caméra, transformation,
 profondeur, vue de dessus, lecture, repère 3D, formes, texte, tampons, perspective, couleur,
-panneaux modulables, calques de toute la scène).
+panneaux modulables, calques de toute la scène, planche, modes de fusion, cadres de composition,
+plateau en 3D).
 
 ## Compilation (Windows)
 

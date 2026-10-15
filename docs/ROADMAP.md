@@ -303,7 +303,44 @@ pour les calques, comme dans les logiciels de retouche.
   Superposition, Incrustation, Obscurcir, Éclaircir, Densité couleur + / −, Densité linéaire −,
   Lumière crue, Lumière tamisée, Différence, Exclusion, Teinte, Saturation, Couleur, Luminosité.
   Même image à l'écran (carte graphique) et à l'export (vérifié pixel à pixel à 100 %).
-  Pas encore : les modes Fondu, Lumière vive / linéaire / ponctuelle, Soustraction, Division.
+  Pas encore : les modes Fondu, Lumière vive / linéaire / ponctuelle, Soustraction, Division
+  (faits en 9a).
+
+## Phase 9 — Fusion complète, caméra continue, plateau en 3D ✅
+
+Demandée par Anthony (quatre captures annotées) : les modes de fusion manquants ; un panneau
+Calques plus compact (renommer au clic droit) ; la fiche dans les onglets des réglages ; une
+caméra qui ne se réinitialise plus d'un panneau à l'autre, avec une fenêtre de réglages (clés,
+adoucis, position x/y/z, focale, rotation, durées) ; des onglets vue du plateau / vue caméra ; des
+cadres de sécurité et un cadre réglable (9:16, 4:5, 1:1, 16:9, personnalisé) ; un bouton 3D pour
+voir le plateau dans l'espace, naviguer et y déplacer les objets.
+
+- ✅ 9a. Les 27 modes de fusion (ajout de Fondu, Densité linéaire +, Couleur plus foncée / claire,
+  Lumière vive, linéaire, ponctuelle, Mélange maximal, Soustraction, Division), rangés par
+  famille. Carte graphique = processeur (vérifié pixel à pixel, Fondu compris).
+- ✅ 9b. Panneau Calques compact : fusion et opacité en haut, la zone de réglages du bas retirée ;
+  double-clic ou clic droit → Renommer, et le menu du calque (toute la scène, profondeur,
+  dupliquer, verrouiller, supprimer). Fiche dans les onglets Réglages / Vue / Guides (les
+  dispositions enregistrées sont mises à jour).
+- ✅ 9c. Caméra continue : un panneau sans clé reprend la caméra du panneau d'avant dans la scène
+  (sinon celle du suivant). Adoucir l'entrée / la sortie en images ; avancée (Z) dans le décor ;
+  focale en mm. Fenêtre de la caméra (outil Caméra) : clés début / ici / fin, clé précédente /
+  suivante, adoucis, position X Y Z, focale, rotation, vue, durées de la scène et du panneau.
+  Format de projet 10.
+  Pas encore : rotation de la caméra autour des axes X et Y (bascule, panoramique) : le rendu est
+  un multiplan 2D, il faudrait une vraie perspective.
+- ✅ 9d. Barre au-dessus du dessin : onglets Plateau (la feuille, la vue y est retrouvée telle
+  qu'on l'a laissée) et Caméra ; zones de sécurité (action 93 %, titres 90 %, EBU R 95) ; cadre de
+  format 16:9, 9:16, 4:5, 1:1 ou personnalisé, centré dans le cadre de la caméra, hors-format
+  estompé. Retenus avec la disposition.
+  Pas encore : décaler le cadre de format dans le cadre de la caméra.
+- ✅ 9e. Plateau en 3D (bouton 3D) : plans des calques à leur profondeur, texturés par leur
+  dessin ; caméra en pyramide de vision (et sa course si elle bouge) ; sol quadrillé. Outils :
+  tourner autour, glisser la vue, avancer ; Déplacer un calque dans son plan (Maj : en
+  profondeur) ou la caméra par son œil (Maj : avancée). Vues de face, de dessus, de côté, par la
+  caméra. Même géométrie que le multiplan (testée).
+  Pas encore : modes de fusion dans la vue 3D (tout y est en Normal), repère 3D (glTF) dans la
+  vue 3D, échelle et rotation d'un calque dans la vue 3D (outil Transformer en 2D).
 
 ## Raccourcis proposés, à valider
 
