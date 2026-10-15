@@ -116,7 +116,11 @@ préchargé 000025127. Pas de calque papier ni de calque son (le son a son ongle
 - Faux-Fixe 000025208 : répéter / va et vient / aléatoire 000028474–476 [N].
 - Intervalles : insérer des images intermédiaires 000020927/928 [N] ; ajouter / supprimer des
   intervalles 000029817–820 [A].
-- Clés d'effets sur la timeline 000025109/110, 000025314/315 [A], clé auto 000025316 [A].
+- Clés d'effets sur la timeline 000025109/110, 000025314/315 [A], clé auto 000025316 [A] ;
+  pile FX : appliquer 000025903 [A] (inscrit les effets dans les images), zone d'application
+  000025970–981, tout réinitialiser / supprimer 000020956/957. Fait en 13i en effets vivants
+  (choix d'Anthony : rien n'est inscrit dans les dessins), avec le flou gaussien et le flou de
+  mouvement.
 - Ctrl pendant le tracé : chaque coup de pinceau sur l'image suivante 000121132 [A].
 
 ## 5. Pré / post-comportement

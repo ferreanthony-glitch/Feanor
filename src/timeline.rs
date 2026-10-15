@@ -211,6 +211,15 @@ impl App {
                     if bulle(resp, "Flips", &what, &key).clicked() {
                         self.flips_window = !self.flips_window;
                     }
+
+                    // Pile d'effets du calque courant (13i).
+                    let key = self.raccourci("fx.panneau");
+                    let resp = ui.add(egui::Button::new(RichText::new(ph::MAGIC_WAND).size(crate::bulles::TAILLE)).selected(self.fx_window).frame(false));
+                    let n = self.layer().fx.len();
+                    let what = format!("Effets du calque courant, animables par clés (flous). {n} effet{} sur ce calque.", if n > 1 { "s" } else { "" });
+                    if bulle(resp, "Pile d'effets", &what, &key).clicked() {
+                        self.fx_window = !self.fx_window;
+                    }
                 });
             });
     }
@@ -583,6 +592,23 @@ impl App {
                     let c = pos2(r.left() + (f as f32 + 0.5) * cell, grid_top + row.top + row.h - s * 0.5 - 3.0);
                     painter.circle_filled(c, s * 0.5 + 1.5, theme::FOND.gamma_multiply(view.opacity));
                     crate::roles::paint_symbol(&painter, c, s, role, view.opacity);
+                }
+            }
+        }
+
+        // Clés d'effets (13i) : un petit losange violet en haut de la ligne du calque.
+        if self.fx_keys_shown {
+            let fx_color = Color32::from_rgb(182, 103, 230);
+            for row in &rows {
+                let layer = &self.layers()[row.li];
+                for f in layer.fx.iter().flat_map(|e| e.keys.iter().map(|k| k.frame)).filter(|&f| f < cols) {
+                    let c = pos2(r.left() + (f as f32 + 0.5) * cell, grid_top + row.top + 4.0);
+                    let d = 3.5;
+                    painter.add(egui::Shape::convex_polygon(
+                        vec![c + vec2(0.0, -d), c + vec2(d, 0.0), c + vec2(0.0, d), c + vec2(-d, 0.0)],
+                        fx_color,
+                        Stroke::new(1.0_f32, theme::FOND),
+                    ));
                 }
             }
         }

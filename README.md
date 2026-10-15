@@ -260,6 +260,13 @@ On règle aussi :
 
 Les flips par rôle feuillettent les clés, les breakdowns ou les intervalles du calque.
 
+**Pile d'effets** (baguette de la timeline) : des effets sur le calque courant, vus à l'écran et
+à l'export, sans toucher aux dessins.
+- Effets : flou gaussien (rayon) et flou de mouvement (longueur, angle).
+- On les active, les ordonne ou les retire à tout moment.
+- On peut les animer par clés : « Créer une clé » à une image, puis à une autre, et les
+  paramètres vont de l'une à l'autre. Les clés sont des losanges violets dans la timeline.
+
 **Vue Projet** :
 - **Nouveau plan avant le plan courant** (menu Storyboard, menu ⋯ du montage).
 - **Cadenas du montage** : il verrouille le storyboard. L'ordre, le nombre et la durée des plans
@@ -454,6 +461,7 @@ en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le 
 | `xsheet.rs`, `xsheetui.rs` | Feuille d'exposition : ce que montre chaque case, le panneau (13g) |
 | `roles.rs`, `rolesui.rs` | Rôles des images : modèle, suivi des images, symboles, menu (13g-2) |
 | `flips.rs`, `flipsui.rs` | Flips : limites, checkpoints, pas, panneau et flip en cours (13h) |
+| `fx.rs`, `fxui.rs` | Pile d'effets : clés, flous, dessins dérivés en cache, panneau (13i) |
 | `fill.rs` | Remplissage par zone et débord |
 | `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra |
 | `gpu.rs` | Composition et affichage par la carte graphique, envoi des dessins par tuiles |

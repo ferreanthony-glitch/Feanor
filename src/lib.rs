@@ -46,6 +46,10 @@ mod export_tests;
 mod exportui;
 mod fill;
 mod folders;
+pub mod fx;
+#[cfg(test)]
+mod fx_tests;
+mod fxui;
 #[cfg(test)]
 mod folders_tests;
 mod frames;

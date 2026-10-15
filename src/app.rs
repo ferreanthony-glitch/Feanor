@@ -303,6 +303,12 @@ pub struct App {
     pub(crate) flip_run: Option<crate::flipsui::FlipRun>,
     pub(crate) flip_manual: Option<(usize, usize)>,
     pub(crate) flips_window: bool,
+    /// Pile d'effets (13i, `fxui.rs`) : panneau ouvert, création automatique des clés, clés
+    /// montrées dans la timeline, effet choisi dans la pile du calque courant.
+    pub(crate) fx_window: bool,
+    pub(crate) fx_auto_key: bool,
+    pub(crate) fx_keys_shown: bool,
+    pub(crate) fx_selected: usize,
     /// Table lumineuse : les calques autres que le calque courant sont estompés.
     pub(crate) light_table: bool,
     /// Opacité gardée par les calques estompés (0 à 1).
@@ -583,6 +589,10 @@ impl App {
             flip_run: None,
             flip_manual: None,
             flips_window: false,
+            fx_window: false,
+            fx_auto_key: false,
+            fx_keys_shown: true,
+            fx_selected: 0,
             light_table: false,
             light_table_strength: 0.3,
             guides: GuideState::default(),
@@ -903,6 +913,7 @@ impl App {
                             tint: s.tint_of(side, k),
                             transform: shifted.or(transform),
                             blend: Default::default(),
+                            fx: Vec::new(),
                         });
                     }
                 }
@@ -919,6 +930,8 @@ impl App {
                     opacity: (opacity * 255.0).round() as u8,
                     tint: None,
                     blend: layer.blend,
+                    // Pile d'effets du calque (13i).
+                    fx: crate::fx::steps_at(&layer.fx, frame),
                 });
             }
             items.append(&mut onion_items);
@@ -1522,7 +1535,7 @@ impl App {
         let snap = self.snapshot();
         let layer = &mut self.layers_mut()[li];
         layer.frames.remove(end - 1);
-        crate::roles::shift(&mut layer.roles, end - 1, 1, true);
+        layer.shift_frames(end - 1, 1, true);
         layer.trim();
         if self.cur_frame >= end - 1 && self.cur_frame > start {
             self.cur_frame = end - 2;
@@ -1545,7 +1558,7 @@ impl App {
         let layer = &mut self.layers_mut()[li];
         let (start, end) = layer.run_bounds(f);
         layer.frames.drain(start..end);
-        crate::roles::shift(&mut layer.roles, start, end - start, true);
+        layer.shift_frames(start, end - start, true);
         layer.trim();
         self.cur_frame = start;
         self.vsel = None;
@@ -2554,6 +2567,15 @@ impl App {
             "flip.suivant" => self.flip_step(1),
             "flip.changer" => self.next_flip(),
             a if a.starts_with("flip.") && self.role_flip_action(a) => {}
+            // Pile d'effets (13i, `fxui.rs`).
+            "fx.panneau" => self.fx_window = !self.fx_window,
+            "fx.cle_creer" => self.fx_create_key(),
+            "fx.cle_supprimer" => self.fx_delete_key(),
+            "fx.cle_auto" => {
+                self.fx_auto_key = !self.fx_auto_key;
+                self.status = format!("Création automatique des clés d'effets : {}.", if self.fx_auto_key { "oui" } else { "non" });
+            }
+            "fx.cles_timeline" => self.fx_keys_shown = !self.fx_keys_shown,
             // Dossiers de calques (13b-5, `folders.rs`).
             "dossier.nouveau" => self.new_folder(),
             "dossier.ranger" => self.folder_from_chosen(),

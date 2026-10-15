@@ -477,7 +477,7 @@ impl App {
             delete_frames(&mut layer.frames, a, b, hole);
             // En reculant la suite, les rôles des images supprimées partent, les autres suivent.
             if hole == Hole::FromRight {
-                roles::shift(&mut layer.roles, a, b - a, true);
+                layer.shift_frames(a, b - a, true);
             }
         }
         let n = b - a;
@@ -507,7 +507,7 @@ impl App {
         for li in lis {
             let layer = &mut self.layers_mut()[li];
             insert_frames(&mut layer.frames, at, &row);
-            roles::shift(&mut layer.roles, at, n, false);
+            layer.shift_frames(at, n, false);
         }
         if all {
             let panel = self.panel_mut();
@@ -578,10 +578,10 @@ impl App {
             let layer = &mut self.layers_mut()[li];
             if replace {
                 delete_frames(&mut layer.frames, a, b, Hole::FromRight);
-                roles::shift(&mut layer.roles, a, b - a, true);
+                layer.shift_frames(a, b - a, true);
             }
             insert_frames(&mut layer.frames, at, &pasted);
-            roles::shift(&mut layer.roles, at, pasted.len(), false);
+            layer.shift_frames(at, pasted.len(), false);
             roles::put(&mut layer.roles, at, pasted.len(), clip.roles.get(k).map_or(&[][..], Vec::as_slice));
         }
         let n = clip.rows.first().map_or(0, Vec::len);
@@ -622,7 +622,7 @@ impl App {
             insert_frames(&mut layer.frames, b, &dup);
             // Les copies gardent les rôles des images dupliquées.
             let row = roles::take(&layer.roles, a, b);
-            roles::shift(&mut layer.roles, b, b - a, false);
+            layer.shift_frames(b, b - a, false);
             roles::put(&mut layer.roles, b, b - a, &row);
         }
         self.frame_sel = Some((b, b + (b - a)));
@@ -730,7 +730,7 @@ impl App {
         let li = self.cur_layer;
         let layer = &mut self.layers_mut()[li];
         insert_frames(&mut layer.frames, at, &vec![Some(id); n]);
-        roles::shift(&mut layer.roles, at, n, false);
+        layer.shift_frames(at, n, false);
         self.cur_frame = at;
         self.follow_frame = true;
         self.done(snap, "Nouveau dessin avant l'instance.".into());
@@ -751,7 +751,7 @@ impl App {
         for li in self.image_layers() {
             let layer = &mut self.layers_mut()[li];
             let k = fake_hold(&mut layer.frames, a, b, cycle, times, seed);
-            roles::shift(&mut layer.roles, b, k, false);
+            layer.shift_frames(b, k, false);
             added = added.max(k);
         }
         if added == 0 {
@@ -827,8 +827,8 @@ impl App {
             let n = b - a;
             match mode {
                 DropMode::Insert => {
-                    roles::shift(&mut layer.roles, a, n, true);
-                    roles::shift(&mut layer.roles, to, n, false);
+                    layer.shift_frames(a, n, true);
+                    layer.shift_frames(to, n, false);
                 }
                 DropMode::Move => roles::put(&mut layer.roles, a, n, &[]),
                 DropMode::Copy => {}

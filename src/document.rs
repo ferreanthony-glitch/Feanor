@@ -271,6 +271,8 @@ pub struct Layer {
     pub color_marks: std::collections::BTreeMap<CelId, u8>,
     /// Rôles des images (13g-2) : image du calque → rôle, même sur une image vide.
     pub roles: crate::roles::Roles,
+    /// Pile d'effets (13i) : appliqués à l'affichage et à l'export, dans l'ordre.
+    pub fx: Vec<crate::fx::Effect>,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -332,6 +334,7 @@ impl Layer {
             names: Default::default(),
             color_marks: Default::default(),
             roles: Default::default(),
+            fx: Vec::new(),
         }
     }
 
@@ -456,8 +459,14 @@ impl Layer {
             self.frames.resize(at, None);
         }
         self.frames.splice(at..at, std::iter::repeat_n(cel, count));
-        // Les rôles des images d'après suivent (13g-2).
-        crate::roles::shift(&mut self.roles, at, count, false);
+        self.shift_frames(at, count, false);
+    }
+
+    /// `n` images insérées à l'image `at` (`removed` : retirées de `at` à `at + n`) : les rôles
+    /// (13g-2) et les clés d'effets (13i) des images d'après suivent.
+    pub fn shift_frames(&mut self, at: usize, n: usize, removed: bool) {
+        crate::roles::shift(&mut self.roles, at, n, removed);
+        crate::fx::shift_keys(&mut self.fx, at, n, removed);
     }
 
     /// Ajoute à la fin du calque, à partir de l'image `at`, les images `frames` d'un autre calque
@@ -1423,8 +1432,9 @@ impl Document {
             let mut l = Layer {
                 id: fresh_layer_id(),
                 frames,
-                // Les rôles d'après la coupe passent au second (13g-2).
+                // Les rôles d'après la coupe passent au second (13g-2), comme les clés d'effets (13i).
                 roles: layer.roles.range(at..).map(|(f, r)| (f - at, *r)).collect(),
+                fx: crate::fx::keys_from(&layer.fx, at),
                 ..layer.clone()
             };
             l.trim();
@@ -1452,6 +1462,9 @@ impl Document {
         for l in &mut first.layers {
             l.frames.truncate(at);
             l.roles.retain(|f, _| *f < at);
+            for e in &mut l.fx {
+                e.keys.retain(|k| k.frame < at);
+            }
             l.trim();
         }
         first.length = at;

@@ -513,6 +513,25 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   flip manuel garde son image de départ (`flip_manual`) tant qu'on n'a pas bougé l'image
   courante autrement. `FlipSettings` est un réglage de l'application (`[flips]`), pas du
   projet.
+- Pile d'effets (`fx.rs`, `fxui.rs`, 13i) : `Layer::fx`, effets vivants. `PlanItem::fx` porte
+  les effets à appliquer à cette image (`steps_at`). Les moteurs lisent les dessins par
+  `fx::shown`, qui rend :
+  - le dessin lui-même s'il n'y a pas d'effet ;
+  - sinon un dessin dérivé, calculé une fois et gardé dans un cache (48 au plus, les plus
+    anciens partent). Le cache est indexé par `fx_id` (dessin + paramètres, bit de poids fort
+    mis) et refait quand la version du dessin change.
+
+  La carte graphique garde la texture du dérivé sous ce même numéro. Les flous ne travaillent
+  que sur la zone dessinée, marge comprise :
+  - flou gaussien : trois flous en boîte par sommes glissantes, en lignes puis en colonnes
+    (transposition) ;
+  - flou de mouvement : jusqu'à 64 échantillons bilinéaires le long du segment, répartis sur
+    les cœurs.
+
+  Décision : coût — le calcul se fait à chaque nouveau jeu de paramètres, et pendant un trait
+  le flou n'est refait qu'à la fin. Risque faible : les dessins ne changent jamais.
+  Réversible : retirer l'effet suffit. Les clés suivent les images insérées / supprimées
+  (`Layer::shift_frames`, avec les rôles).
 - Vue Projet (`projetui.rs`, 13e-4) : `Document::storyboard_locked` est dans `Structure` (une
   annulation le rétablit avec le reste ; le basculer est une étape). `App::storyboard_refuses`
   garde `structure_op` et les autres chemins qui changent l'ordre, le nombre ou la durée des
@@ -723,6 +742,8 @@ MonFilm/
                       triangles, positions (3 × f32) puis triangles (3 × u32), petit-boutiste
 ```
 
+- Format 19 (13i) : `effets` sur un calque, une liste de { `sorte` (`flou_gaussien`,
+  `flou_mouvement`), `actif`, `valeurs`, `cles` : [{ `image`, `valeurs` }] } ; absent : aucun.
 - Format 18 (13g-2) : `roles` sur un calque (image → `cle`, `breakdown`, `intervalle`,
   `intervalle_complete`, `intervalle_special`, `intervalle_special_complete` ; absent : aucun).
 - Format 17 (13e) : `fond` (`sorte` : `aucun`, `couleur`, `damier` ; `couleur_b`) dans le

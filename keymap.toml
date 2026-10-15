@@ -1366,6 +1366,31 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
+action = "fx.panneau"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "fx.cle_creer"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "fx.cle_supprimer"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "fx.cle_auto"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "fx.cles_timeline"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
 action = "dossier.nouveau"
 touches = []
 source = "TVPaint 12 sans touche"

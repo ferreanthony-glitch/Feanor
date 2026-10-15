@@ -16,6 +16,8 @@ pub struct PlanItem {
     pub transform: Option<LayerTransform>,
     /// Mode de fusion de son calque (8).
     pub blend: BlendMode,
+    /// Effets de la pile du calque à cette image (13i) ; vide : le dessin tel quel.
+    pub fx: Vec<crate::fx::FxStep>,
 }
 
 /// Couleur du dessin au point (`x`, `y`) de ses pixels (interpolation bilinéaire, prémultipliée).
@@ -108,7 +110,7 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
     for item in &plan.items {
         // Calque transformé : chaque pixel va chercher le point correspondant du dessin.
         if let Some(inv) = inverse_of(doc, &item.transform) {
-            let Some(cel) = doc.cels.get(&item.cel) else { continue };
+            let Some(cel) = crate::fx::shown(doc, item.cel, &item.fx) else { continue };
             for y in 0..th {
                 let s = at(ox, oy + y);
                 for (x, d) in buf[s..s + tw].iter_mut().enumerate() {
@@ -121,7 +123,8 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
             }
             continue;
         }
-        let Some(tile) = doc.cels.get(&item.cel).and_then(|c| c.raster.tiles[idx].as_ref()) else {
+        let Some(cel) = crate::fx::shown(doc, item.cel, &item.fx) else { continue };
+        let Some(tile) = cel.raster.tiles[idx].as_ref() else {
             continue;
         };
         let tile: &[Color32; TILE_PIXELS] = tile;
@@ -151,7 +154,7 @@ pub fn composite_full(doc: &Document, plan: &Plan) -> Vec<Color32> {
 
 /// Traite `buf` par morceaux de `chunk` éléments, répartis sur les cœurs du processeur
 /// (`f` reçoit le numéro du morceau et le morceau).
-fn par_chunks<T: Send>(buf: &mut [T], chunk: usize, f: impl Fn(usize, &mut [T]) + Sync) {
+pub(crate) fn par_chunks<T: Send>(buf: &mut [T], chunk: usize, f: impl Fn(usize, &mut [T]) + Sync) {
     let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(1, 16);
     let mut groups: Vec<Vec<(usize, &mut [T])>> = (0..threads).map(|_| Vec::new()).collect();
     // En alternance : les zones chargées (souvent groupées) se répartissent entre les fils.
@@ -244,7 +247,7 @@ pub fn camera_image(doc: &Document, plan: &Plan, cam: &Camera) -> Vec<Color32> {
 pub fn composite_pixel(doc: &Document, plan: &Plan, x: usize, y: usize) -> Color32 {
     let mut c = paper_color(plan);
     for item in &plan.items {
-        if let Some(cel) = doc.cels.get(&item.cel) {
+        if let Some(cel) = crate::fx::shown(doc, item.cel, &item.fx) {
             let s = match inverse_of(doc, &item.transform) {
                 Some(inv) => {
                     let p = inv.apply(egui::pos2(x as f32 + 0.5, y as f32 + 0.5));
@@ -283,6 +286,7 @@ fn plan_with_camera(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera:
                     tint: None,
                     transform: (!t.is_identity()).then_some(t),
                     blend: l.blend,
+                    fx: crate::fx::steps_at(&l.fx, frame),
                 })
             })
             .collect(),

@@ -629,8 +629,23 @@ Décisions d'Anthony :
     retour au départ. Aucune touche : sa configuration TVPaint n'en a pas.
   - Mécanique des trois sortes : notre lecture des réglages décrits par les textes. Pas
     repris : « En dehors des tenons » et « Multiple » (noms seulement).
-- 13i et suivantes, une étape chacune : clés d'effets, calques CTG, Puppet, vidéo,
-  interpolation d'images.
+- ✅ 13i (`fx.rs`, `fxui.rs`, format 19). Pile d'effets d'un calque et ses clés, la « pile FX »
+  de TVPaint (000025314–316, 000025345).
+  - Choix d'Anthony (2026-10-16) : des effets vivants, appliqués à l'affichage et à l'export,
+    sans toucher aux dessins. Premiers effets : flou gaussien (rayon) et flou de mouvement
+    (longueur, angle).
+  - Panneau « Pile d'effets » (baguette de la timeline, action `fx.panneau`) : ajouter, activer,
+    ordonner, retirer ; tout réinitialiser, tout supprimer.
+  - Clés : créer, supprimer, aller à la précédente / suivante, création automatique. Avec des
+    clés, changer un paramètre pose la clé de l'image courante ; entre deux clés, les
+    paramètres vont en ligne droite.
+  - Les clés se voient dans la timeline (losanges violets, à montrer / cacher). Elles suivent
+    les images insérées / supprimées et les plans coupés.
+  - Refusé sous le storyboard verrouillé.
+  - Pas de « appliquer la pile » (inscrire les effets dans les dessins), puisque les effets
+    sont vivants.
+- 13j et suivantes, une étape chacune : autres effets (au choix d'Anthony), calques CTG,
+  Puppet, vidéo, interpolation d'images.
 Le faux-fixe n'a que son nom dans les textes de TVPaint : à faire décrire par Anthony avant de
 l'implanter (le pochoir, la transparence préservée et la position verrouillée ont été décrits
 le 2026-10-15, voir `docs/TIMELINE-TVPAINT.md`).
