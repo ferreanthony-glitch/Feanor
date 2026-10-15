@@ -64,7 +64,10 @@ impl App {
 
     /// Applique une opération de montage du modèle (avec annulation) et rend courant le plan
     /// qu'elle désigne. `None` = opération refusée.
-    fn structure_op(&mut self, op: impl FnOnce(&mut Document, usize) -> Option<usize>) -> bool {
+    pub(crate) fn structure_op(&mut self, op: impl FnOnce(&mut Document, usize) -> Option<usize>) -> bool {
+        if self.storyboard_refuses() {
+            return false;
+        }
         self.end_stroke();
         self.playing = false;
         let snap = self.snapshot();
@@ -134,6 +137,9 @@ impl App {
 
     /// Colle les plans copiés juste après le plan courant ; ils deviennent les plans choisis.
     pub(crate) fn paste_panels(&mut self) {
+        if self.storyboard_refuses() {
+            return;
+        }
         let Some(clip) = self.panel_clipboard.take() else {
             self.status = "Aucun plan copié.".into();
             return;
@@ -188,6 +194,9 @@ impl App {
 
     /// Coupe le plan courant à l'image courante (F5) : la suite devient un nouveau plan.
     pub(crate) fn split_current_panel(&mut self) {
+        if self.storyboard_refuses() {
+            return;
+        }
         let at = self.cur_frame;
         if self.structure_op(|d, i| d.split_plan(i, at)) {
             self.status = format!("Plan coupé : la suite est le {}.", panel_title(&self.doc, self.cur_panel).to_lowercase());
@@ -199,6 +208,9 @@ impl App {
     /// Réunit le plan courant et le suivant (de la même séquence) : le début du suivant devient
     /// une marque d'image.
     pub(crate) fn merge_next_panel(&mut self) {
+        if self.storyboard_refuses() {
+            return;
+        }
         if self.structure_op(|d, i| d.join_next_plan(i)) {
             self.status = format!("Plans réunis : {}.", panel_title(&self.doc, self.cur_panel));
         } else {
@@ -208,6 +220,9 @@ impl App {
 
     /// Réunit le plan précédent (de la même séquence) et le plan courant.
     pub(crate) fn join_previous_scene(&mut self) {
+        if self.storyboard_refuses() {
+            return;
+        }
         if self.structure_op(|d, i| d.join_next_plan(i.checked_sub(1)?)) {
             self.status = format!("Plans réunis : {}.", panel_title(&self.doc, self.cur_panel));
         } else {
@@ -246,6 +261,9 @@ impl App {
     /// Durée du plan courant. Chaque valeur repart du plan tel qu'il était au début du geste
     /// (raccourcir puis rallonger ne perd rien), avec une seule étape d'annulation par geste.
     pub(crate) fn edit_panel_length(&mut self, n: usize) {
+        if self.storyboard_refuses() {
+            return;
+        }
         self.length_field_active = true;
         let id = self.panel().id;
         if self.length_origin.as_ref().is_none_or(|s| s.id != id) {
@@ -386,6 +404,7 @@ impl App {
                         app.run_action(action);
                     }
                 };
+                item(self, ui, "Nouveau plan avant le plan courant", "plan.nouveau_avant");
                 item(self, ui, "Dupliquer le plan", "panneau.dupliquer");
                 ui.separator();
                 self.panel_clipboard_items(ui);
@@ -403,6 +422,12 @@ impl App {
         }
         if self.bouton(ui, ph::CARET_DOUBLE_RIGHT, "Reculer le plan", "Le placer plus tard dans le montage.", "").clicked() {
             self.shift_panel(true);
+        }
+        let locked = self.doc.storyboard_locked;
+        let icon = if locked { ph::LOCK } else { ph::LOCK_OPEN };
+        let what = "Verrouillé, l'ordre, le nombre et la durée des plans ne changent plus ; on dessine toujours dans les plans.";
+        if self.bouton_etat(ui, locked, icon, "Verrouiller le storyboard", what, "storyboard.verrouiller").clicked() {
+            self.toggle_storyboard_lock();
         }
         sep(ui);
 
@@ -733,6 +758,10 @@ impl App {
                 self.begin_clip_drag(id, edge, origin);
             } else {
                 let drag = if !in_blocks(origin) {
+                    MontageDrag::Scrub
+                } else if self.doc.storyboard_locked && (edge_at(origin).is_some() || panel_at(origin.x).is_some()) {
+                    // Storyboard verrouillé (13e) : ni durée ni place des plans ne bougent.
+                    self.status = crate::projetui::STORYBOARD_LOCKED.into();
                     MontageDrag::Scrub
                 } else if let Some(i) = edge_at(origin) {
                     self.set_panel(i);

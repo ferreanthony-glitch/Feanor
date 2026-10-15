@@ -550,8 +550,16 @@ Décisions d'Anthony :
     suppriment plus), dupliquer une piste, volume général (piste maîtresse, format 17),
     Ctrl + glisser l'onde dans la timeline pour décaler l'extrait sous la souris ; onglet Son
     (son à la lecture, au défilement, pistes).
-  - 13e-4. Vue Projet : plan avant, verrou du storyboard, propriétés du projet, nouveau projet
-    à partir des plans choisis.
+  - ✅ 13e-4 (`projetui.rs`, format 17). Vue Projet : nouveau plan avant le plan courant ;
+    storyboard verrouillé (cadenas du montage, menu Storyboard) qui refuse ce qui change l'ordre,
+    le nombre ou la durée des plans (nouveau, dupliquer, coller, supprimer, déplacer, couper,
+    réunir, durée, images insérées / supprimées sur tout le plan) — on dessine toujours dans les
+    plans ; le mot de passe du verrou de TVPaint n'est pas repris. Propriétés du projet (Fichier) :
+    titre, information, auteur, notes, copyright ; date de création (projet neuf) et de dernière
+    modification (à chaque enregistrement), montrées en temps universel. Nouveau projet à partir
+    des plans choisis (Fichier) : il remplace le projet ouvert (après « enregistrer ? »), garde
+    feuille, cadre, cadence, papier, arrière-plan, groupes, guides, séquences et notes de planche
+    attachées ; le son n'est pas repris.
 - 13f. Table lumineuse complète.
 - 13g et suivantes, une étape chacune : feuille d'exposition, flips, clés d'effets, calques CTG,
   Puppet, vidéo, interpolation d'images.

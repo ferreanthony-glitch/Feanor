@@ -462,6 +462,10 @@ impl App {
         if !all && self.refuse_on_folder() {
             return;
         }
+        // Sur tout le plan, sa durée change : refusé si le storyboard est verrouillé (13e).
+        if all && self.hole == Hole::FromRight && self.storyboard_refuses() {
+            return;
+        }
         self.end_stroke();
         self.drop_bitmap_selection();
         let (a, b) = self.image_range();
@@ -486,6 +490,9 @@ impl App {
     /// Insère `n` images vides avant (ou après) les images visées : sur les calques choisis, ou
     /// (`all`) sur tout le plan, qui s'allonge d'autant.
     pub(crate) fn insert_images(&mut self, before: bool, n: usize, all: bool) {
+        if all && self.storyboard_refuses() {
+            return;
+        }
         self.end_stroke();
         let (a, b) = self.image_range();
         let at = if before { a } else { b };

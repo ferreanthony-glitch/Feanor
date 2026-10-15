@@ -1186,6 +1186,26 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
+action = "plan.nouveau_avant"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "storyboard.verrouiller"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "projet.proprietes"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
+action = "projet.nouveau_depuis_plans"
+touches = []
+source = "TVPaint 12 sans touche"
+
+[[raccourci]]
 action = "dossier.nouveau"
 touches = []
 source = "TVPaint 12 sans touche"

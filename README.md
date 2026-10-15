@@ -217,6 +217,25 @@ Le champ d'image courante de la barre accepte un numéro ou un time code. La lou
 zoom de la timeline (aussi Ctrl + molette) et « Adapter » (au plan, au calque, aux images
 choisies…). Elle allume aussi les croix sur les instances vides et les miniatures des dessins.
 
+**Onglets du bas de la timeline** (un clic ouvre la bande, un second la ferme) :
+- **Notes** : on dessine des notes dans une rangée alignée sur les images (crayon bleu, rouge ou
+  noir, gommes, teinte, déplacer, découper). Elles suivent les images insérées ou supprimées et
+  peuvent s'afficher par-dessus l'image pendant la lecture ; elles ne sont jamais exportées.
+- **Son** : volume général, son à la lecture et au défilement. Par piste : muette, verrouillée,
+  volume, dupliquer, supprimer. Ctrl + glisser l'onde dans la timeline décale l'extrait.
+- **Groupes**.
+- **Arrière-plan** : aucun, couleur (le papier, exporté) ou damier (pour voir les
+  transparences ; l'export est alors transparent).
+- **Image de départ** : le numéro de la première image.
+
+**Vue Projet** :
+- **Nouveau plan avant le plan courant** (menu Storyboard, menu ⋯ du montage).
+- **Cadenas du montage** : il verrouille le storyboard. L'ordre, le nombre et la durée des plans
+  ne changent plus ; on dessine toujours dedans.
+- **Propriétés du projet** (Fichier) : titre, information, auteur, notes et copyright. On y voit
+  aussi les dates de création et de dernière modification.
+- **Nouveau projet à partir des plans choisis** (Fichier) : sans le son.
+
 ## Le reste
 
 - **Tablette** : la pression module la taille et/ou l'opacité. Elle passe par Windows Ink : sur une

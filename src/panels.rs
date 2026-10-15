@@ -86,6 +86,8 @@ impl App {
                 self.action_item(ui, "Ouvrir…", "fichier.ouvrir");
                 self.action_item(ui, "Enregistrer", "fichier.enregistrer");
                 self.action_item(ui, "Enregistrer sous…", "fichier.enregistrer_sous");
+                self.action_item(ui, "Nouveau projet à partir des plans choisis", "projet.nouveau_depuis_plans");
+                self.action_item(ui, "Propriétés du projet…", "projet.proprietes");
                 ui.separator();
                 if menu_item(ui, "Importer une image (calque bitmap)…", "") {
                     self.import_image();
@@ -120,7 +122,11 @@ impl App {
             });
             ui.menu_button("Storyboard", |ui| {
                 self.action_item(ui, "Nouveau plan", "panneau.nouveau");
+                self.action_item(ui, "Nouveau plan avant le plan courant", "plan.nouveau_avant");
                 self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
+                ui.separator();
+                let lock = if self.doc.storyboard_locked { "Déverrouiller le storyboard" } else { "Verrouiller le storyboard" };
+                self.action_item(ui, lock, "storyboard.verrouiller");
                 ui.separator();
                 self.action_item(ui, "Dupliquer le plan", "panneau.dupliquer");
                 self.action_item(ui, "Copier les plans choisis", "panneau.copier");
@@ -556,6 +562,7 @@ impl App {
     pub(crate) fn dialogs(&mut self, ctx: &egui::Context) {
         self.new_layer_window(ctx);
         self.groups_window_ui(ctx);
+        self.properties_window_ui(ctx);
         self.smart_rename_window(ctx);
         if let Some(mut d) = self.new_dialog.take() {
             let mut keep = true;
@@ -598,7 +605,7 @@ impl App {
                     });
                 });
             if create {
-                self.load_doc(Document::with_frame(d.width, d.height, d.fps));
+                self.load_doc(Document::with_frame(d.width, d.height, d.fps).created_now());
                 self.status = format!(
                     "Nouveau projet : cadre {}×{} à {} i/s, feuille de dessin {}×{}.",
                     d.width,

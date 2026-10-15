@@ -133,6 +133,9 @@ impl App {
 
     /// Retire les plans `ids` (une étape d'annulation).
     pub(crate) fn delete_panels(&mut self, ids: &[u64]) {
+        if self.storyboard_refuses() {
+            return;
+        }
         self.end_stroke();
         let snap = self.snapshot();
         let before = self.board_layout();
@@ -615,6 +618,9 @@ impl App {
                 self.doc.board.add_stroke(layout, points, self.color, anchor);
             }
             Some(BoardDrag::Move { ids, at }) => {
+                if self.storyboard_refuses() {
+                    return;
+                }
                 let Some(t) = board::drop_target(layout, at, gap) else { return };
                 let before = t.before.map(|i| self.doc.panels[i].id);
                 let cur = self.doc.panels[self.cur_panel].id;

@@ -117,6 +117,41 @@ struct Manifest {
     /// Volume général du son, piste maîtresse (format 17 ; absent : 1).
     #[serde(default = "one", skip_serializing_if = "is_one_f32")]
     volume_general: f32,
+    /// Storyboard verrouillé (format 17 ; absent : non).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    storyboard_verrouille: bool,
+    /// Propriétés du projet (format 17 ; absentes : vides).
+    #[serde(default, skip_serializing_if = "PropertiesEntry::is_empty")]
+    proprietes: PropertiesEntry,
+}
+
+/// Propriétés du projet (format 17). Dates en secondes depuis 1970.
+#[derive(Serialize, Deserialize, Default, Clone, PartialEq)]
+struct PropertiesEntry {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    titre: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    informations: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    auteur: String,
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    cree: u64,
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    modifie: u64,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    notes: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    copyright: String,
+}
+
+impl PropertiesEntry {
+    fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+fn is_zero_u64(v: &u64) -> bool {
+    *v == 0
 }
 
 fn is_one_f32(v: &f32) -> bool {
@@ -1040,6 +1075,19 @@ fn manifest_of(doc: &Document) -> Manifest {
         image_de_depart: doc.start_frame,
         fond: BackgroundEntry { sorte: doc.background, couleur_b: doc.paper_b },
         volume_general: doc.master_volume,
+        storyboard_verrouille: doc.storyboard_locked,
+        proprietes: {
+            let p = &doc.properties;
+            PropertiesEntry {
+                titre: p.title.clone(),
+                informations: p.info.clone(),
+                auteur: p.author.clone(),
+                cree: p.created,
+                modifie: p.modified,
+                notes: p.notes.clone(),
+                copyright: p.copyright.clone(),
+            }
+        },
     }
 }
 
@@ -1206,6 +1254,19 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
         background: manifest.fond.sorte,
         paper_b: manifest.fond.couleur_b,
         master_volume: if manifest.volume_general.is_finite() { manifest.volume_general.clamp(0.0, 4.0) } else { 1.0 },
+        storyboard_locked: manifest.storyboard_verrouille,
+        properties: {
+            let p = manifest.proprietes;
+            crate::document::Properties {
+                title: p.titre,
+                info: p.informations,
+                author: p.auteur,
+                created: p.cree,
+                modified: p.modifie,
+                notes: p.notes,
+                copyright: p.copyright,
+            }
+        },
     };
     for seq in manifest.sequences {
         structure.sequences.push(Sequence {

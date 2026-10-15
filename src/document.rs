@@ -515,6 +515,19 @@ pub fn relink_copies(layers: &mut [Layer], old_ids: &[u64], cels: &HashMap<CelId
     }
 }
 
+/// Propriétés du projet (13e) : ce que montre la fenêtre « Propriétés du projet ». Les dates
+/// sont en secondes depuis 1970 (0 : inconnue).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Properties {
+    pub title: String,
+    pub info: String,
+    pub author: String,
+    pub created: u64,
+    pub modified: u64,
+    pub notes: String,
+    pub copyright: String,
+}
+
 /// Couleur B du damier d'un projet neuf.
 pub const DEFAULT_PAPER_B: [u8; 3] = [204, 204, 204];
 
@@ -735,6 +748,9 @@ pub struct Structure {
     pub paper_b: [u8; 3],
     /// Volume général du son (13e, la piste maîtresse).
     pub master_volume: f32,
+    /// Storyboard verrouillé (13e) et propriétés du projet.
+    pub storyboard_locked: bool,
+    pub properties: Properties,
 }
 
 pub struct Document {
@@ -772,6 +788,10 @@ pub struct Document {
     pub paper_b: [u8; 3],
     /// Volume général du son (13e, la piste maîtresse de TVPaint) : multiplie celui des pistes.
     pub master_volume: f32,
+    /// Storyboard verrouillé (13e) : l'ordre, le nombre et la durée des plans ne changent plus.
+    pub storyboard_locked: bool,
+    /// Propriétés du projet (13e).
+    pub properties: Properties,
     next_id: u64,
 }
 
@@ -781,6 +801,12 @@ impl Document {
         let mut doc = Self::new(frame_w * 2, frame_h * 2, fps);
         doc.frame = [frame_w, frame_h];
         doc
+    }
+
+    /// Le même projet, avec maintenant pour date de création (13e, propriétés du projet).
+    pub fn created_now(mut self) -> Self {
+        self.properties.created = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+        self
     }
 
     /// Projet neuf : une séquence, une scène, un panneau ; feuille et cadre de même taille.
@@ -805,6 +831,8 @@ impl Document {
             background: BackgroundKind::Color,
             paper_b: DEFAULT_PAPER_B,
             master_volume: 1.0,
+            storyboard_locked: false,
+            properties: Properties::default(),
             next_id: 1,
         };
         let seq = doc.new_sequence();
@@ -854,6 +882,8 @@ impl Document {
             background: structure.background,
             paper_b: structure.paper_b,
             master_volume: structure.master_volume,
+            storyboard_locked: structure.storyboard_locked,
+            properties: structure.properties,
             next_id: max_id + 1,
         };
         doc.normalize();
@@ -957,6 +987,8 @@ impl Document {
             background: self.background,
             paper_b: self.paper_b,
             master_volume: self.master_volume,
+            storyboard_locked: self.storyboard_locked,
+            properties: self.properties.clone(),
         }
     }
 
@@ -981,6 +1013,8 @@ impl Document {
             background: std::mem::replace(&mut self.background, s.background),
             paper_b: std::mem::replace(&mut self.paper_b, s.paper_b),
             master_volume: std::mem::replace(&mut self.master_volume, s.master_volume),
+            storyboard_locked: std::mem::replace(&mut self.storyboard_locked, s.storyboard_locked),
+            properties: std::mem::replace(&mut self.properties, s.properties),
         }
     }
 
@@ -1168,6 +1202,56 @@ impl Document {
         let scene = self.new_scene(self.sequence_of(index));
         let panel = self.make_panel(scene);
         self.insert_and_normalize(end, vec![panel])
+    }
+
+    /// Nouvelle scène (un panneau) juste avant celle du panneau `index`, dans la même séquence
+    /// (13e, « ajouter un plan avant le plan courant »). Renvoie l'indice du nouveau panneau.
+    pub fn add_scene_before(&mut self, index: usize) -> usize {
+        let (start, _) = self.scene_run(index);
+        let scene = self.new_scene(self.sequence_of(index));
+        let panel = self.make_panel(scene);
+        self.insert_and_normalize(start, vec![panel])
+    }
+
+    /// Nouveau projet fait des plans `ids` (13e, « nouveau projet à partir des plans choisis »),
+    /// dans l'ordre du film : même feuille, cadre, cadence, papier, arrière-plan, groupes,
+    /// guides et image de départ ; chaque plan garde ses dessins, sa séquence et les notes de
+    /// planche qui lui sont attachées. Le son n'est pas repris (il est en temps du montage, pas
+    /// dans les plans). Des propriétés, seuls l'auteur et le copyright suivent. Rien si aucun des
+    /// plans n'existe.
+    pub fn from_plans(&self, ids: &[u64]) -> Option<Document> {
+        use std::collections::HashSet;
+        let mut s = self.structure();
+        s.panels.retain(|p| ids.contains(&p.id));
+        if s.panels.is_empty() {
+            return None;
+        }
+        let scenes: HashSet<u64> = s.panels.iter().map(|p| p.scene).collect();
+        s.scenes.retain(|x| scenes.contains(&x.id));
+        let sequences: HashSet<u64> = s.scenes.iter().map(|x| x.sequence).collect();
+        s.sequences.retain(|x| sequences.contains(&x.id));
+        s.audio_tracks.clear();
+        let cards: HashSet<u64> = s.panels.iter().flat_map(|p| std::iter::once(p.id).chain(p.marks.iter().map(|m| m.id))).collect();
+        let kept = |anchor: Option<u64>| anchor.is_some_and(|a| cards.contains(&a));
+        s.board.strokes.retain(|n| kept(n.anchor));
+        s.board.texts.retain(|n| kept(n.anchor));
+        s.storyboard_locked = false;
+        s.properties = Properties {
+            author: self.properties.author.clone(),
+            copyright: self.properties.copyright.clone(),
+            ..Default::default()
+        };
+        let cels = s
+            .panels
+            .iter()
+            .flat_map(|p| &p.layers)
+            .flat_map(|l| l.frames.iter().flatten())
+            .filter_map(|id| self.cels.get(id).map(|c| (*id, c.clone())))
+            .collect();
+        let mut doc = Document::from_parts(self.width, self.height, s, cels, HashMap::new());
+        doc.frame = self.frame;
+        doc.models = self.models.clone();
+        Some(doc)
     }
 
     /// Nouvelle séquence (une scène, un panneau) après la séquence du panneau `index`.

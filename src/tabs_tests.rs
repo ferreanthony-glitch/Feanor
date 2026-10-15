@@ -1,4 +1,5 @@
-//! Onglets du bas (13e) : arrière-plan (aucun, couleur, damier) et notes dessinées.
+//! Onglets du bas et vue Projet (13e) : arrière-plan (aucun, couleur, damier), notes dessinées,
+//! pistes son, propriétés du projet, storyboard verrouillé, plan avant, projet fait de plans.
 
 use crate::document::{BackgroundKind, Document, TimeNote};
 use crate::project;
@@ -76,6 +77,86 @@ fn sound_tracks_lock_duplicate_and_master_volume() {
     let back = round_trip(&doc, "pistes-son");
     assert_eq!(back.master_volume, 0.5);
     assert!(back.audio_tracks[0].locked);
+}
+
+#[test]
+fn properties_and_storyboard_lock_are_saved() {
+    let mut doc = Document::new(16, 16, 24).created_now();
+    assert!(doc.properties.created > 1_700_000_000, "date de création posée");
+    doc.properties.title = "Brawlidays".into();
+    doc.properties.info = "Animatique\nversion 2".into();
+    doc.properties.author = "A. F.".into();
+    doc.properties.modified = 1_760_000_000;
+    doc.properties.notes = "À revoir".into();
+    doc.properties.copyright = "©".into();
+    doc.storyboard_locked = true;
+    let back = round_trip(&doc, "proprietes-projet");
+    assert_eq!(back.properties, doc.properties);
+    assert!(back.storyboard_locked);
+    let plain = round_trip(&Document::new(16, 16, 24), "proprietes-projet-2");
+    assert_eq!(plain.properties, Default::default());
+    assert!(!plain.storyboard_locked);
+}
+
+#[test]
+fn a_plan_is_added_before_the_current_one() {
+    let mut doc = Document::new(16, 16, 24);
+    doc.add_sequence_after(0);
+    // Plan 1 = premier plan de la 2e séquence : le nouveau plan se met devant lui, dans sa séquence.
+    let (old, seq) = (doc.panels[1].id, doc.sequence_of(1));
+    let at = doc.add_scene_before(1);
+    assert_eq!(at, 1);
+    assert_eq!(doc.panels.len(), 3);
+    assert_eq!(doc.panels[2].id, old);
+    assert_eq!(doc.sequence_of(1), seq, "dans la séquence du plan courant");
+    assert_ne!(doc.panels[1].scene, doc.panels[2].scene, "un plan à lui");
+    assert!(doc.is_plans());
+}
+
+#[test]
+fn a_project_is_made_of_the_chosen_plans() {
+    use crate::board::NoteText;
+    use crate::document::{Layer, LayerKind};
+    use eframe::egui::pos2;
+    let mut doc = Document::with_frame(16, 12, 25);
+    doc.add_scene_after(0);
+    doc.add_sequence_after(1);
+    doc.paper = [1, 2, 3];
+    doc.start_frame = 101;
+    doc.storyboard_locked = true;
+    doc.properties.author = "A. F.".into();
+    doc.properties.title = "Source".into();
+    doc.add_audio_track();
+    let cel = doc.new_cel(LayerKind::Bitmap);
+    let mut l = Layer::new("Trait", LayerKind::Bitmap);
+    l.set(0, Some(cel));
+    doc.panels[2].layers.push(l);
+    let (a, c) = (doc.panels[0].id, doc.panels[2].id);
+    let note = |anchor| NoteText { pos: pos2(0.0, 0.0), text: "n".into(), size: 16.0, color: [0, 0, 0], anchor };
+    doc.board.texts = vec![note(Some(a)), note(Some(doc.panels[1].id)), note(None)];
+
+    let new = doc.from_plans(&[c, a]).expect("deux plans");
+    assert_eq!(new.panels.iter().map(|p| p.id).collect::<Vec<_>>(), vec![a, c], "dans l'ordre du film");
+    assert_eq!(new.sequences.len(), 2, "chaque plan garde sa séquence");
+    assert_eq!((new.width, new.height, new.frame, new.fps), (doc.width, doc.height, doc.frame, 25));
+    assert_eq!((new.paper, new.start_frame), ([1, 2, 3], 101));
+    assert!(new.cels.contains_key(&cel), "les dessins suivent");
+    assert!(new.audio_tracks.is_empty(), "le son n'est pas repris");
+    assert_eq!(new.board.texts.len(), 1, "seules les notes attachées aux plans repris");
+    assert!(!new.storyboard_locked);
+    assert_eq!(new.properties.author, "A. F.");
+    assert_eq!(new.properties.title, "");
+    assert!(doc.from_plans(&[]).is_none());
+}
+
+#[test]
+fn dates_are_shown_in_the_gregorian_calendar() {
+    use crate::projetui::{civil_from_days, date_label};
+    assert_eq!(civil_from_days(0), (1970, 1, 1));
+    assert_eq!(civil_from_days(11_016), (2000, 2, 29));
+    assert_eq!(civil_from_days(20_741), (2026, 10, 15));
+    assert_eq!(date_label(0), "inconnue");
+    assert_eq!(date_label(20_741 * 86_400 + 14 * 3600 + 5 * 60 + 9), "15/10/2026, 14:05 UTC");
 }
 
 #[test]

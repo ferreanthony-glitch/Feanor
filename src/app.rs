@@ -235,6 +235,8 @@ pub enum Pending {
     New,
     Open,
     Quit,
+    /// Nouveau projet fait des plans choisis (13e).
+    FromChosen,
 }
 
 /// Calque copié (W) : sa timeline, ses dessins, et la durée du panneau d'où il vient.
@@ -334,6 +336,8 @@ pub struct App {
     pub(crate) notes: crate::notes::NotesState,
     /// Extrait son glissé depuis la timeline (Ctrl + glisser l'onde, 13e) : sa piste.
     pub(crate) timeline_sound_track: Option<usize>,
+    /// Fenêtre « Propriétés du projet » ouverte (13e, `projetui.rs`).
+    pub(crate) properties_window: bool,
     /// Aperçus des réglages de pinceau (grille du panneau Réglages, 6d).
     pub(crate) brush_previews: crate::brushui::BrushPreviews,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
@@ -506,7 +510,7 @@ impl App {
         let settings = crate::settings::Settings::load();
         let mut app = Self {
             ctx: cc.egui_ctx.clone(),
-            doc: Document::with_frame(1920, 1080, 24),
+            doc: Document::with_frame(1920, 1080, 24).created_now(),
             mode: Mode::Storyboard,
             board_view: BoardView::Scene,
             cur_panel: 0,
@@ -577,6 +581,7 @@ impl App {
             checker: Default::default(),
             notes: Default::default(),
             timeline_sound_track: None,
+            properties_window: false,
             brush_previews: Default::default(),
             ref3d: Default::default(),
             camera_view: false,
@@ -1764,6 +1769,7 @@ impl App {
                 })
             }
             Pending::Open => self.open_dialog(),
+            Pending::FromChosen => self.new_project_from_chosen(),
             Pending::Quit => {
                 self.allow_close = true;
                 self.ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -1806,6 +1812,8 @@ impl App {
     }
 
     fn save_to(&mut self, manifest: PathBuf) -> bool {
+        // Dernière modification (13e, propriétés du projet).
+        self.doc.properties.modified = crate::recovery::now_secs();
         match project::save(&self.doc, &manifest, &mut self.written) {
             Ok(report) => {
                 self.status = format!(
@@ -2435,6 +2443,11 @@ impl App {
             "fond.aucun" => self.set_background(crate::document::BackgroundKind::None),
             "fond.couleur" => self.set_background(crate::document::BackgroundKind::Color),
             "fond.damier" => self.set_background(crate::document::BackgroundKind::Checker),
+            // Vue Projet (13e-4, `projetui.rs`).
+            "plan.nouveau_avant" => self.new_panel_before(),
+            "storyboard.verrouiller" => self.toggle_storyboard_lock(),
+            "projet.proprietes" => self.properties_window = !self.properties_window,
+            "projet.nouveau_depuis_plans" => self.request(Pending::FromChosen),
             // Dossiers de calques (13b-5, `folders.rs`).
             "dossier.nouveau" => self.new_folder(),
             "dossier.ranger" => self.folder_from_chosen(),
@@ -2556,6 +2569,9 @@ impl App {
 
     /// Allonge ou raccourcit le panneau d'une image (une étape d'annulation par appui).
     fn nudge_panel_length(&mut self, delta: i64) {
+        if self.storyboard_refuses() {
+            return;
+        }
         let n = (self.frame_count() as i64 + delta).max(1) as usize;
         if n == self.frame_count() {
             return;

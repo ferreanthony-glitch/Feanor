@@ -488,6 +488,16 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   « aucun » : un quadrilatère noir. Notes (`notes.rs`) : une rangée de la grille (sous la
   caméra) quand l'onglet Notes est ouvert ; un geste qui y commence ne touche ni la tête de
   lecture ni les images ; `paint_notes_overlay` dessine une bande centrée sur l'image courante.
+- Vue Projet (`projetui.rs`, 13e-4) : `Document::storyboard_locked` est dans `Structure` (une
+  annulation le rétablit avec le reste ; le basculer est une étape). `App::storyboard_refuses`
+  garde `structure_op` et les autres chemins qui changent l'ordre, le nombre ou la durée des
+  plans (suppression, durée, glissés du montage et de la planche, images sur tout le plan). Les
+  propriétés aussi sont dans `Structure` (champs suivis par `edited`, une étape par geste) ;
+  `modified` est posé par `save_to`, `created` par `Document::created_now` (projet neuf). Les
+  dates s'affichent en temps universel (`civil_from_days`) : l'heure locale demanderait un appel
+  au système, sans dépendance ni code `unsafe` aujourd'hui. `Document::from_plans` construit le
+  projet des plans choisis par `from_parts` (mêmes id de plans, calques et dessins) ;
+  `Pending::FromChosen` le fait passer par « enregistrer ? ».
 - Marques de couleur (`marks.rs`, 13d) : `Layer::color_marks` (dessin → couleur), comme les
   noms d'instance (elles suivent les copies via `relink_copies`) ; `marked_starts`,
   `step_mark`.
@@ -677,7 +687,9 @@ MonFilm/
 - Format 17 (13e) : `fond` (`sorte` : `aucun`, `couleur`, `damier` ; `couleur_b`) dans le
   manifeste ; `notes_dessinees` (couleur, épaisseur, points [image, hauteur]) sur un panneau.
   En mémoire : `Document::background`, `paper_b`, `render_paper()` (le papier seulement pour
-  une couleur), `Cues::notes`.
+  une couleur), `Cues::notes`. Aussi `volume_general`, `verrouillee` sur une piste son,
+  `storyboard_verrouille` et `proprietes` (`titre`, `informations`, `auteur`, `cree`,
+  `modifie` en secondes depuis 1970, `notes`, `copyright` ; absents : vides, date inconnue).
 - Format 16 (13d) : sur un panneau `signets`, `entree`, `sortie` (images du plan) ; dans le
   manifeste `image_de_depart` (absent : 1). En mémoire : `Panel::cues` (`Cues`) et
   `Document::start_frame` (dans `Structure`).
