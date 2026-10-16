@@ -2,6 +2,7 @@ use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Pos2, Rect, RichTe
 
 use crate::app::{App, Mode};
 use crate::document::LayerKind;
+use crate::handles::{GridMenu, Handle};
 use crate::layerheads::{row_at, rows_height, rows_of, Row, HEAD_W};
 use crate::storyboard::duration_label;
 use crate::theme;
@@ -70,7 +71,7 @@ impl App {
     /// raccourci et une description dans une bulle (12d) ; si la fenêtre est trop étroite, la ligne défile au lieu de passer à la
     /// ligne.
     fn timeline_toolbar(&mut self, ui: &mut egui::Ui) {
-        use crate::bulles::{bulle, interrupteur};
+        use crate::bulles::bulle;
         use egui_phosphor::regular as ph;
         let count = self.frame_count();
         let fps = self.doc.fps;
@@ -111,7 +112,8 @@ impl App {
                     if self.bouton(ui, ph::SKIP_FORWARD, "Dernière image", "Dernière image du plan.", "image.derniere").clicked() {
                         self.goto_frame(count - 1);
                     }
-                    interrupteur(ui, &mut self.looping, ph::REPEAT, "Lecture en boucle", "Reprendre au début une fois à la fin.", "");
+                    let key = self.raccourci("lecture.boucle");
+                    crate::bulles::interrupteur_a(ui, &mut self.looping, ph::REPEAT, "Lecture en boucle", "Reprendre au début une fois à la fin.", &key, "lecture.boucle");
                     let mut fps = self.doc.fps;
                     let resp = ui.add(egui::DragValue::new(&mut fps).range(1..=120).suffix(" i/s"));
                     let resp = bulle(resp, "Cadence", "Images par seconde, pour tout le projet.", "");
@@ -191,7 +193,7 @@ impl App {
 
                     // Pelure d'oignon.
                     let key = self.raccourci("vue.pelure");
-                    interrupteur(ui, &mut self.onion.enabled, ph::CIRCLES_THREE, "Pelure d'oignon", "Montrer les dessins d'avant et d'après.", &key);
+                    crate::bulles::interrupteur_a(ui, &mut self.onion.enabled, ph::CIRCLES_THREE, "Pelure d'oignon", "Montrer les dessins d'avant et d'après.", &key, "vue.pelure");
                     let max = crate::onion::MAX_NEIGHBOURS;
                     let resp = ui.add(egui::DragValue::new(&mut self.onion.before).range(0..=max).prefix("‹ "));
                     bulle(resp, "Avant", "Nombre de dessins (ou d'images) montrés avant.", "");
@@ -230,11 +232,17 @@ impl App {
         let notes_h = self.notes_row_h();
         let r = self.timeline_heads(ui, HEADER_H, CAM_H + notes_h + sound_h);
         let painter = ui.painter_at(r);
-        let visuals = ui.visuals();
+        let visuals = ui.visuals().clone();
+        // Clic droit sur le nom d'une ligne : son menu (passe interface).
+        let menu_on = |app: &mut App, ui: &mut egui::Ui, row: Rect, salt: &str, m: GridMenu| {
+            let resp = ui.interact(row, ui.id().with(("nom_ligne", salt)), Sense::click());
+            resp.context_menu(|ui| app.grid_menu_ui(ui, m));
+        };
         if notes_h > 0.0 {
             let row = Rect::from_min_size(pos2(r.left(), r.top() + HEADER_H + rows_h + CAM_H), vec2(NAMES_W, notes_h)).shrink2(vec2(0.0, 1.0));
             painter.rect_filled(row, 2.0, theme::RANGEE_SOMBRE);
             painter.text(pos2(r.left() + 8.0, row.center().y), Align2::LEFT_CENTER, "Notes (jamais exportées)", FontId::proportional(11.0), visuals.weak_text_color());
+            menu_on(self, ui, row, "notes", GridMenu::NotesHeader);
         }
         {
             let y = r.top() + HEADER_H + rows_h;
@@ -253,6 +261,7 @@ impl App {
                 FontId::proportional(11.0),
                 visuals.weak_text_color(),
             );
+            menu_on(self, ui, row, "camera", GridMenu::Camera);
         }
         if sound_h > 0.0 {
             let row = Rect::from_min_max(pos2(r.left(), r.bottom() - sound_h), r.max).shrink2(vec2(0.0, 1.0));
@@ -264,6 +273,7 @@ impl App {
                 FontId::proportional(12.0),
                 visuals.weak_text_color(),
             );
+            menu_on(self, ui, row, "son", GridMenu::SoundHeader);
         }
     }
 
@@ -639,22 +649,47 @@ impl App {
         }
 
         // Clic droit sur une case de calque : elle est visée (sauf dans le choix), puis le menu
-        // des rôles et des images.
+        // des rôles et des images. Ailleurs (passe interface) : la règle, une clé d'effet, la
+        // caméra, le son ont leur menu (`handles::GridMenu`).
         if resp.secondary_clicked() {
             self.role_menu = false;
+            self.grid_menu = None;
             if let Some(p) = resp.interact_pointer_pos() {
                 let col = ((p.x - r.left()) / cell).floor().max(0.0) as usize;
-                if let Some(row) = row_at(&rows, p.y - grid_top).filter(|row| !self.layers()[row.li].folder) {
-                    self.aim_cell(row.li, col);
-                    self.role_menu = true;
+                let y = p.y - grid_top;
+                if p.y < grid_top {
+                    self.set_frame_free(col);
+                    self.grid_menu = Some(GridMenu::Ruler);
+                } else if y < rows_h {
+                    if let Some(Handle::FxKey { layer, effect, key }) = self.timeline_handle_at(p, r, cell, &rows, grid_top) {
+                        let f = self.layers()[layer].fx[effect].keys[key].frame;
+                        self.select_layer(layer);
+                        self.fx_selected = effect;
+                        self.set_frame_free(f);
+                        self.grid_menu = Some(GridMenu::FxKey);
+                    } else if let Some(row) = row_at(&rows, y).filter(|row| !self.layers()[row.li].folder) {
+                        self.aim_cell(row.li, col);
+                        self.role_menu = true;
+                    }
+                } else if y < rows_h + CAM_H {
+                    self.set_frame_free(col);
+                    self.grid_menu = Some(GridMenu::Camera);
+                } else if sound_h > 0.0 && p.y >= r.bottom() - sound_h {
+                    let g = self.doc.panel_start(self.cur_panel) + col;
+                    let hit = self.doc.audio_tracks.iter().enumerate().find_map(|(t, tr)| tr.clips.iter().find(|c| c.start <= g && g < c.end()).map(|c| (t, c.id)));
+                    let (track, clip) = hit.map_or((0, None), |(t, id)| (t, Some(id)));
+                    self.grid_menu = Some(GridMenu::Sound { track, clip, frame: g });
                 }
             }
         }
-        if self.role_menu {
-            resp.context_menu(|ui| {
-                ui.menu_button("Rôle", |ui| self.roles_menu(ui));
-                ui.separator();
-                self.images_menu(ui);
+        if self.role_menu || self.grid_menu.is_some() {
+            resp.context_menu(|ui| match self.grid_menu {
+                Some(m) => self.grid_menu_ui(ui, m),
+                None => {
+                    ui.menu_button("Rôle", |ui| self.roles_menu(ui));
+                    ui.separator();
+                    self.images_menu(ui);
+                }
             });
         }
 
@@ -801,6 +836,34 @@ impl App {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
         }
 
+        // Poignées (passe interface, `handles.rs`) : marques, signets, entrée et sortie dans la
+        // règle ; clés d'effets et bord droit des dessins dans les lignes des calques.
+        if resp.drag_started() && !holding_key && !in_notes {
+            if let Some(h) = ui.input(|i| i.pointer.press_origin()).and_then(|p| self.timeline_handle_at(p, r, cell, &rows, grid_top)) {
+                self.begin_handle_drag(h);
+            }
+        }
+        let cursor_for = |h: Handle, held: bool| match h {
+            Handle::Exposure { .. } | Handle::In | Handle::Out => egui::CursorIcon::ResizeHorizontal,
+            _ if held => egui::CursorIcon::Grabbing,
+            _ => egui::CursorIcon::Grab,
+        };
+        if let Some(h) = self.handle_drag.as_ref().map(|d| d.handle) {
+            ui.ctx().set_cursor_icon(cursor_for(h, true));
+            if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
+                let x = ((p.x - r.left()) / cell).max(0.0);
+                self.drag_handle(x.floor() as usize, x.round() as usize);
+            }
+            if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
+                self.end_handle_drag();
+            }
+        } else if !holding_key && self.image_drag.is_none() {
+            if let Some(h) = resp.hover_pos().and_then(|p| self.timeline_handle_at(p, r, cell, &rows, grid_top)) {
+                ui.ctx().set_cursor_icon(cursor_for(h, false));
+            }
+        }
+        let holding_key = holding_key || self.handle_drag.is_some();
+
         // Clic et glisser : choisir l'image (et le calque au clic). Avec Maj : choisir les images
         // entre l'image courante et celle sous la souris, sur les calques choisis (13c-2).
         if resp.is_pointer_button_down_on() {
@@ -883,5 +946,48 @@ impl App {
             ui.scroll_to_rect(target, None);
             self.follow_frame = false;
         }
+    }
+
+    /// Poignée sous le point `p` de la grille (`r` : la grille, `cell` : largeur d'une image).
+    /// Dans la règle : un signet (en bas), l'entrée ou la sortie, une marque d'image. Dans une
+    /// ligne de calque : une clé d'effet (en haut), le bord droit d'un dessin.
+    fn timeline_handle_at(&self, p: Pos2, r: Rect, cell: f32, rows: &[Row], grid_top: f32) -> Option<Handle> {
+        let x = |f: usize| r.left() + f as f32 * cell;
+        let near = |at: f32, tol: f32| (p.x - at).abs() <= tol;
+        let panel = self.panel();
+        if p.y >= r.top() && p.y < grid_top {
+            if p.y >= grid_top - 9.0 {
+                if let Some(i) = panel.cues.bookmarks.iter().position(|&f| near(x(f) + cell * 0.5, (cell * 0.5).max(5.0))) {
+                    return Some(Handle::Bookmark(i));
+                }
+            }
+            if panel.cues.in_point.is_some_and(|f| near(x(f) + 2.0, 5.0)) {
+                return Some(Handle::In);
+            }
+            if panel.cues.out_point.is_some_and(|f| near(x(f + 1) - 2.0, 5.0)) {
+                return Some(Handle::Out);
+            }
+            return panel.marks.iter().position(|m| p.x >= x(m.frame) - 3.0 && p.x <= x(m.frame) + 8.0).map(Handle::Mark);
+        }
+        let row = row_at(rows, p.y - grid_top)?;
+        let layer = self.layers().get(row.li)?;
+        if layer.folder || layer.video.is_some() {
+            return None;
+        }
+        if self.fx_keys_shown && p.y - grid_top - row.top <= 9.0 {
+            for (e, effect) in layer.fx.iter().enumerate() {
+                if let Some(k) = effect.keys.iter().position(|k| near(x(k.frame) + cell * 0.5, (cell * 0.5).max(4.0))) {
+                    return Some(Handle::FxKey { layer: row.li, effect: e, key: k });
+                }
+            }
+        }
+        let b = ((p.x - r.left()) / cell).round().max(0.0) as usize;
+        if b >= 1 && near(x(b), (cell * 0.3).clamp(2.0, 5.0)) {
+            let (s, e) = layer.run_bounds(b - 1);
+            if e == b && layer.frames.get(s).is_some_and(Option::is_some) {
+                return Some(Handle::Exposure { layer: row.li, start: s, end: e });
+            }
+        }
+        None
     }
 }

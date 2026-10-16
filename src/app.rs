@@ -373,8 +373,11 @@ pub struct App {
     pub(crate) notes: crate::notes::NotesState,
     /// Extrait son glissé depuis la timeline (Ctrl + glisser l'onde, 13e) : sa piste.
     pub(crate) timeline_sound_track: Option<usize>,
-    /// Fenêtre « Propriétés du projet » ouverte (13e, `projetui.rs`).
+    /// Fenêtre « Réglages du projet » ouverte (13e, `projetui.rs`), son onglet, et la résolution en
+    /// cours de réglage.
     pub(crate) properties_window: bool,
+    pub(crate) settings_tab: crate::projetui::SettingsTab,
+    pub(crate) res_edit: Option<crate::projetui::ResolutionEdit>,
     /// Aperçus des réglages de pinceau (grille du panneau Réglages, 6d).
     pub(crate) brush_previews: crate::brushui::BrushPreviews,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
@@ -472,6 +475,10 @@ pub struct App {
     pub(crate) panel_focus: bool,
     /// Clé de caméra que l'on fait glisser dans la timeline ou le montage (12e).
     pub(crate) cam_key_drag: Option<crate::camtools::CamKeyDrag>,
+    /// Poignée tenue dans la timeline du plan (passe interface, `handles.rs`).
+    pub(crate) handle_drag: Option<crate::handles::HandleDrag>,
+    /// Menu du dernier clic droit dans la timeline hors des cases (`handles::GridMenu`).
+    pub(crate) grid_menu: Option<crate::handles::GridMenu>,
     pub(crate) shape_drag: Option<(Pos2, Pos2)>,
     /// Forme en plusieurs gestes : ligne à courber, polyligne en cours (5c).
     pub(crate) shape_edit: Option<crate::shapes::ShapeEdit>,
@@ -644,6 +651,8 @@ impl App {
             notes: Default::default(),
             timeline_sound_track: None,
             properties_window: false,
+            settings_tab: Default::default(),
+            res_edit: None,
             brush_previews: Default::default(),
             ref3d: Default::default(),
             camera_view: false,
@@ -705,6 +714,8 @@ impl App {
             panel_clipboard: None,
             panel_focus: false,
             cam_key_drag: None,
+            handle_drag: None,
+            grid_menu: None,
             shape_drag: None,
             shape_edit: None,
             text_edit: None,
@@ -2046,6 +2057,27 @@ impl App {
         self.length_origin = None;
     }
 
+    /// Après un changement de taille de la feuille (Fichier > Réglages du projet) : ce qui
+    /// pointait dans l'ancienne feuille est oublié, l'historique vidé (il ne saurait pas revenir
+    /// à l'ancienne taille), la vue recadrée.
+    pub(crate) fn after_stage_change(&mut self) {
+        self.stroke = None;
+        self.vstroke = None;
+        self.verase = None;
+        self.vsel = None;
+        self.vdrag = None;
+        self.bsel = None;
+        self.bdrag = None;
+        self.history.clear();
+        self.thumbs.clear();
+        self.renderer.invalidate_all();
+        self.fit_pending = true;
+        self.stage_view = None;
+        self.stage3d.cam = None;
+        self.length_origin = None;
+        self.modified = true;
+    }
+
     pub(crate) fn base_name(&self) -> String {
         self.base_name_or("image")
     }
@@ -2570,6 +2602,13 @@ impl App {
             "fond.damier" => self.set_background(crate::document::BackgroundKind::Checker),
             // Vue Projet (13e-4, `projetui.rs`).
             "plan.nouveau_avant" => self.new_panel_before(),
+            // Passe interface : des icônes qui n'avaient pas d'action (et donc pas de raccourci).
+            "plan.avancer" => self.shift_panel(false),
+            "plan.reculer" => self.shift_panel(true),
+            "lecture.boucle" => {
+                self.looping = !self.looping;
+                self.status = if self.looping { "Lecture en boucle.".into() } else { "Lecture une seule fois.".into() };
+            }
             "storyboard.verrouiller" => self.toggle_storyboard_lock(),
             "projet.proprietes" => self.properties_window = !self.properties_window,
             "projet.nouveau_depuis_plans" => self.request(Pending::FromChosen),

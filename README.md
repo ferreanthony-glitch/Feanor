@@ -476,6 +476,21 @@ hauteur, distance et focale se règlent aussi en chiffres. Chaque plan a son poi
 (« Comme le plan précédent » le recopie). « Dessiner dans un calque » transforme le fil de fer
 en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le projet (`modeles/`).
 
+**Réglages du projet** (Fichier) :
+- **onglet Réglages** : titre, information, auteur, notes, copyright, numéro de la première
+  image, dates ;
+- **onglet Résolution** : des préréglages (HD 1080, HD 720, 4K UHD, 2K / 4K DCI, 1,85:1, Scope
+  2,39:1, 4:3, carré, 4:5, vertical 9:16, PAL), la largeur et la hauteur (liées ou non), la
+  cadence.
+
+Une nouvelle taille met les dessins à l'échelle : dessins, caméra, guides et placement des
+calques suivent, et avec d'autres proportions le dessin remplit le cadre sans être déformé. On
+peut aussi les garder à leur taille en pixels : seul le cadre change, centré. Ce changement ne
+s'annule pas : l'historique est vidé.
+
+Une nouvelle cadence garde les durées en secondes (comme « Changer la cadence », avec ou sans
+intervalles) ou garde les images.
+
 **Projet Storyboard Pro** : Fichier > « Importer un projet Storyboard Pro (.sboard)… », ou glisser
 le `.sboard` sur la fenêtre. Le fichier est seulement lu. Plans, séquences, panneaux (devenus les
 images de storyboard de chaque plan, avec leurs légendes), durées, cadence, taille, noms des

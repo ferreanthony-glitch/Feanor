@@ -62,6 +62,9 @@ mod frames_tests;
 mod gpu;
 mod groups;
 mod groupsui;
+mod handles;
+#[cfg(test)]
+mod handles_tests;
 mod guides;
 #[cfg(test)]
 mod guides_tests;
@@ -137,6 +140,8 @@ mod recovery_tests;
 mod recoveryui;
 mod ref3dtool;
 mod render;
+#[cfg(test)]
+mod resize_tests;
 pub mod sboard;
 #[cfg(test)]
 mod sboard_tests;

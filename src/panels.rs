@@ -4,14 +4,6 @@ use crate::app::{App, Mode, Tool};
 use crate::brush::BrushSettings;
 use crate::document::{Document, LayerKind};
 
-const PRESETS: [(&str, usize, usize); 5] = [
-    ("HD 1920×1080", 1920, 1080),
-    ("1280×720", 1280, 720),
-    ("4K 3840×2160", 3840, 2160),
-    ("Carré 1080", 1080, 1080),
-    ("Vertical 1080×1920", 1080, 1920),
-];
-
 /// Gestes à la souris et au stylet (hors fichier de raccourcis).
 pub(crate) const MOUSE_GESTURES: [(&str, &str); 8] = [
     ("Clic droit sur une commande", "lui assigner un raccourci"),
@@ -94,7 +86,7 @@ impl App {
                 self.action_item(ui, "Enregistrer", "fichier.enregistrer");
                 self.action_item(ui, "Enregistrer sous…", "fichier.enregistrer_sous");
                 self.action_item(ui, "Nouveau projet à partir des plans choisis", "projet.nouveau_depuis_plans");
-                self.action_item(ui, "Propriétés du projet…", "projet.proprietes");
+                self.action_item(ui, "Réglages du projet (propriétés, résolution, cadence)…", "projet.proprietes");
                 self.action_item(ui, "Raccourcis clavier…", "aide.raccourcis");
                 ui.separator();
                 if menu_item(ui, "Importer une image (calque bitmap)…", "") {
@@ -369,7 +361,6 @@ impl App {
 
     /// Panneau Vue : cadrage, zoom, miroir, rotation, table lumineuse.
     pub(crate) fn view_panel(&mut self, ui: &mut egui::Ui) {
-        use crate::bulles::interrupteur;
         use egui_phosphor::regular as ph;
         ui.horizontal(|ui| {
             if self.bouton(ui, ph::ARROWS_OUT, "Ajuster à la fenêtre", "Toute la feuille dans la vue.", "vue.ajuster").clicked() {
@@ -393,7 +384,7 @@ impl App {
         }
         ui.horizontal(|ui| {
             let key = self.raccourci("vue.table_lumineuse");
-            interrupteur(ui, &mut self.light_table, ph::LIGHTBULB, "Table lumineuse", "Les autres calques du plan estompés ; le calque courant reste net.", &key);
+            crate::bulles::interrupteur_a(ui, &mut self.light_table, ph::LIGHTBULB, "Table lumineuse", "Les autres calques du plan estompés ; le calque courant reste net.", &key, "vue.table_lumineuse");
             if self.light_table {
                 let resp = ui.add(
                     egui::Slider::new(&mut self.light_table_strength, 0.05..=0.8)
@@ -407,7 +398,7 @@ impl App {
         ui.separator();
         ui.horizontal(|ui| {
             let key = self.raccourci("vue.cadres_securite");
-            interrupteur(ui, &mut self.layout.safe_frames, ph::SELECTION, "Zones de sécurité", "Action dans 93 % du cadre, titres dans 90 % (EBU R 95).", &key);
+            crate::bulles::interrupteur_a(ui, &mut self.layout.safe_frames, ph::SELECTION, "Zones de sécurité", "Action dans 93 % du cadre, titres dans 90 % (EBU R 95).", &key, "vue.cadres_securite");
             self.frame_format_ui(ui);
         });
     }
@@ -589,8 +580,9 @@ impl App {
                 .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
                 .show(ctx, |ui| {
                     ui.horizontal_wrapped(|ui| {
-                        for (label, w, h) in PRESETS {
-                            if ui.selectable_label(d.width == w && d.height == h, label).clicked() {
+                        for (label, w, h) in crate::projetui::RESOLUTIONS {
+                            let resp = ui.selectable_label(d.width == w && d.height == h, label).on_hover_text(format!("{w}×{h}"));
+                            if resp.clicked() {
                                 d.width = w;
                                 d.height = h;
                             }

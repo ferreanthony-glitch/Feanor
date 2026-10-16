@@ -575,6 +575,22 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   Les intervalles sont des dessins neufs (vectoriels si les deux sont vectoriels), donc
   modifiables. Changer la cadence passe tout le projet au même facteur (`rescale_frame`) en
   une étape d'annulation : la cadence et les extraits de son sont dans `Structure`.
+- Taille de l'image (passe interface, Fichier > Réglages du projet, onglet Résolution).
+  `Document::resize_frame(w, h, scale)` fait l'une de deux choses :
+  - avec `scale` : `scale_stage(s)`, où `s` est le plus grand des deux rapports (le dessin
+    remplit le cadre). Il multiplie les dessins bitmap (`Raster::scaled` : seul le rectangle des
+    tuiles dessinées est recalculé, filtre triangle en réduction, Catmull-Rom en agrandissement),
+    les éléments vectoriels (`Affine::scale_about`, épaisseurs comprises), les guides, les clés
+    de caméra (position, avancée) et le placement des calques ;
+  - sans `scale` : seul le cadre change. Puis la feuille est agrandie (`enlarge_stage`, centrée)
+    pour rester au moins le double du cadre.
+
+  Décision : coût — ne pas passer par l'historique (tous les dessins changent) ;
+  `App::after_stage_change` vide l'historique et oublie ce qui pointait dans l'ancienne feuille.
+  Risque : pas de Ctrl+Z ; la fenêtre le dit avant « Appliquer ». Restent à leur taille : les
+  images d'un calque vidéo (lues à la taille de l'import), le rayon des flous et la fermeture des
+  trous du CTG (en pixels). Réversible : on peut revenir à l'ancienne taille, au prix d'un
+  rééchantillonnage.
 - Import Storyboard Pro (14a) :
   - `xml.rs` lit un document XML en arbre (`Element` : nom, attributs décodés, enfants), avec
     quick-xml. quick-xml était déjà dans `Cargo.lock`, par wayland : rien n'est téléchargé.
