@@ -476,6 +476,11 @@ hauteur, distance et focale se règlent aussi en chiffres. Chaque plan a son poi
 (« Comme le plan précédent » le recopie). « Dessiner dans un calque » transforme le fil de fer
 en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le projet (`modeles/`).
 
+**Propager une peinture sur une vidéo** (façon EbSynth) : on peint quelques images clés sur un
+calque posé au-dessus d'un calque vidéo, puis clic droit sur la ligne de ce calque > « Propager la
+peinture sur la vidéo… ». Les autres images suivent le mouvement de la vidéo. Détails :
+`docs/PROPAGATION.md`.
+
 **Glisser et clic droit** (passe interface) :
 - **Timeline du plan** : on prend à la souris les marques d'image (triangles de la règle), les
   signets, les crochets d'entrée et de sortie, les clés d'effets (losanges violets) et le bord droit
@@ -569,6 +574,7 @@ le `pelure.txt` du dossier sur la fenêtre), puis « Importer ».
 | `audio.rs` | Décodage des sons, formes d'onde, mixage et sortie audio |
 | `keymap.rs` | Raccourcis : actions, lecture de `keymap.toml`, touche tapée, fichier personnel |
 | `raccourcisui.rs` | Clic droit « Assigner un raccourci… », fenêtre d'assignation, liste des raccourcis |
+| `propager.rs`, `propagerui.rs` | Propagation de la peinture sur une vidéo, façon EbSynth (voir `docs/PROPAGATION.md`) |
 | `handles.rs` | Poignées de la timeline (marques, signets, entrée / sortie, clés d'effets, expositions) et menus de la grille |
 | `app.rs` | État de l'application, actions, raccourcis |
 | `vtools.rs` | Outils des calques vectoriels |

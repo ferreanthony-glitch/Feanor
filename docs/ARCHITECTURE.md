@@ -575,6 +575,9 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   Les intervalles sont des dessins neufs (vectoriels si les deux sont vectoriels), donc
   modifiables. Changer la cadence passe tout le projet au même facteur (`rescale_frame`) en
   une étape d'annulation : la cadence et les extraits de son sont dans `Structure`.
+- Propagation façon EbSynth (`propager.rs` sans interface, `propagerui.rs` fenêtre et tâche,
+  moteur dans la caisse `synthese/`, sur la carte graphique d'eframe) : voir
+  `docs/PROPAGATION.md`.
 - Poignées et menus (passe interface, `handles.rs`).
   - `Handle` désigne ce que l'on tient : une marque, un signet, l'entrée, la sortie, une clé
     d'effet ou le bord d'une exposition.

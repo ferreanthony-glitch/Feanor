@@ -750,6 +750,14 @@ ECMAScript 3), elle, est documentée (aide `help/storyboard`). Choix d'Anthony (
   interface).
 - Caméra de Storyboard Pro (plus tard).
 
+## Propagation façon EbSynth (menée dans une session parallèle)
+
+- ✅ Étapes a à d : la caisse `synthese/` (synthèse par l'exemple, flux optique, mélange des clés,
+  carte graphique).
+- ✅ Étape e (fusionnée le 2026-10-16, cdb93d2) : « Propager la peinture sur la vidéo… », au clic
+  droit sur la ligne d'un calque peint au-dessus d'un calque vidéo (commande `calque.propager`).
+  Tout est décrit dans `docs/PROPAGATION.md`.
+
 ## Passe interface (demandée par Anthony le 2026-10-16, avant 14b)
 
 Simplifier l'interface et combler ce qui manque :
