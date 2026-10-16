@@ -277,9 +277,8 @@ pub struct App {
     pub(crate) color: [u8; 3],
     /// La couleur en teinte, saturation, valeur (panneau Couleur, 6b).
     pub(crate) hsv: [f32; 3],
-    pub(crate) swatches: Vec<[u8; 3]>,
-    /// Couleur d'arrière-plan et réglages du panneau Couleur (passe couleur, `colorui.rs`) ;
-    /// `color` reste la couleur d'avant-plan, celle des outils.
+    /// Couleur d'arrière-plan, nuanciers et réglages du panneau Couleur (passe couleur,
+    /// `colorui.rs`) ; `color` reste la couleur d'avant-plan, celle des outils.
     pub(crate) couleurs: crate::colorui::ColorState,
     pub(crate) view: View,
     pub(crate) fit_pending: bool,
@@ -591,18 +590,6 @@ impl App {
             color: settings.colors.front,
             hsv: crate::colorui::rgb_to_hsv(settings.colors.front),
             couleurs: crate::colorui::ColorState::new(settings.colors.clone()),
-            swatches: vec![
-                [24, 24, 28],
-                [255, 255, 255],
-                [128, 128, 128],
-                [205, 45, 45],
-                [240, 150, 40],
-                [245, 215, 60],
-                [60, 160, 80],
-                [50, 110, 200],
-                [130, 70, 170],
-                [235, 190, 160],
-            ],
             view: View::default(),
             fit_pending: true,
             canvas_rect: Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0)),

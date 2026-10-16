@@ -97,6 +97,10 @@ mod montagerows;
 pub mod moteur;
 mod newlayer;
 mod notes;
+mod nuancier;
+#[cfg(test)]
+mod nuancier_tests;
+mod nuancierui;
 #[cfg(test)]
 mod moteur_tests;
 pub mod noyau;

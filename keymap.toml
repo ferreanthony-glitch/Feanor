@@ -455,6 +455,57 @@ action = "pastille.arriere_plan"
 touches = []
 source = "Pelure"
 
+[[raccourci]]
+action = "pastille.renommer"
+touches = []
+source = "Pelure"
+
+[[raccourci]]
+action = "pastille.remplacer"
+touches = []
+source = "Pelure"
+
+[[raccourci]]
+action = "pastille.retirer"
+touches = []
+source = "Pelure"
+
+# Nuanciers personnels.
+[[raccourci]]
+action = "nuancier.ajouter"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : COLOR_ADD (« New Colour Swatch », correspondance par le nom)"
+
+[[raccourci]]
+action = "nuancier.nouveau"
+touches = []
+source = "Pelure"
+
+[[raccourci]]
+action = "nuancier.renommer"
+touches = []
+source = "Pelure"
+
+[[raccourci]]
+action = "nuancier.dupliquer"
+touches = []
+source = "Pelure"
+
+[[raccourci]]
+action = "nuancier.supprimer"
+touches = []
+source = "Pelure"
+
+[[raccourci]]
+action = "nuancier.importer"
+touches = []
+source = "Pelure"
+
+[[raccourci]]
+action = "nuancier.exporter"
+touches = []
+source = "Pelure"
+
 # ------------------------------------------------------------------------------------ Dessin
 
 [[raccourci]]

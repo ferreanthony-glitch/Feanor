@@ -13,10 +13,33 @@ pub use crate::couleur::{hsv_to_rgb, rgb_to_hsv};
 use crate::couleur::{self, hsl_to_hsv, hsv_to_hsl, ColorSettings, SliderMode};
 use crate::roue::{Wheel, WheelShape, Zone};
 
-/// Une pastille que vise une commande : une couleur récente (rang dans la rangée).
+/// Une pastille que vise une commande : une couleur récente (rang dans la rangée), ou une pastille
+/// du nuancier montré (son rang).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Target {
     Recent(usize),
+    Palette(usize),
+}
+
+/// Ce dont on tape le nom : un nuancier (rang), ou une pastille (rang du nuancier, rang).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Renamed {
+    Palette(usize),
+    Swatch(usize, usize),
+}
+
+/// Un nom en cours de saisie (`nuancierui.rs`).
+pub(crate) struct Rename {
+    pub what: Renamed,
+    pub text: String,
+    /// Le champ a déjà pris le clavier (tout le texte choisi à l'ouverture).
+    pub focused: bool,
+}
+
+impl Rename {
+    pub fn new(what: Renamed, text: String) -> Rename {
+        Rename { what, text, focused: false }
+    }
 }
 
 /// Ce que le panneau Couleur garde en plus de la couleur d'avant-plan (`App::color`, `App::hsv`).
@@ -35,10 +58,17 @@ pub(crate) struct ColorState {
     menu_now: Option<Target>,
     hovered: Option<Target>,
     hovered_now: Option<Target>,
+    /// Pastille du nuancier que l'on fait glisser : la grille où le geste a commencé, son rang.
+    pub drag: Option<(Id, usize)>,
+    /// Nom en cours de saisie (nuancier ou pastille).
+    pub rename: Option<Rename>,
+    /// Nuancier dont on demande la suppression (confirmation sous son nom).
+    pub confirm_delete: Option<usize>,
 }
 
 impl ColorState {
     pub fn new(prefs: ColorSettings) -> ColorState {
+        let prefs = prefs.sanitized();
         ColorState {
             back_hsv: rgb_to_hsv(prefs.back),
             prefs,
@@ -47,6 +77,9 @@ impl ColorState {
             menu_now: None,
             hovered: None,
             hovered_now: None,
+            drag: None,
+            rename: None,
+            confirm_delete: None,
         }
     }
 }
@@ -81,7 +114,7 @@ fn channel_rows(ui: &mut egui::Ui, channels: &[Channel]) -> Option<(usize, f32)>
 }
 
 /// Une pastille de `side` points : sa couleur, bordée de blanc si `chosen`.
-fn swatch_cell(ui: &mut egui::Ui, c: [u8; 3], side: f32, chosen: bool, sense: Sense) -> Response {
+pub(crate) fn swatch_cell(ui: &mut egui::Ui, c: [u8; 3], side: f32, chosen: bool, sense: Sense) -> Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(side, side), sense);
     ui.painter().rect_filled(rect, 2.0, to_color(c));
     let border = if chosen { Stroke::new(2.0_f32, Color32::WHITE) } else { Stroke::new(1.0_f32, Color32::from_gray(70)) };
@@ -207,23 +240,25 @@ impl App {
                 Some(c) => self.set_back(c),
                 None => self.no_target(),
             },
-            _ => return false,
+            // Nuanciers et pastilles du nuancier (`nuancierui.rs`).
+            _ => return self.palette_action(action),
         }
         true
     }
 
     /// La pastille visée : celle du menu ouvert, sinon celle sous la souris.
-    fn target(&self) -> Option<Target> {
+    pub(crate) fn target(&self) -> Option<Target> {
         self.couleurs.menu.or(self.couleurs.hovered)
     }
 
     fn target_color(&self) -> Option<[u8; 3]> {
         match self.target()? {
             Target::Recent(i) => self.couleurs.prefs.recent.get(i).copied(),
+            Target::Palette(i) => self.shown_palette().swatches.get(i).map(|s| s.color),
         }
     }
 
-    fn no_target(&mut self) {
+    pub(crate) fn no_target(&mut self) {
         self.status = "Vise d'abord une pastille : la souris dessus, ou clic droit.".into();
     }
 
@@ -311,6 +346,7 @@ impl App {
         self.action_item(ui, "Couleurs par défaut (noir, blanc)", "couleur.defaut");
         ui.separator();
         self.action_item(ui, "Copier le code de la couleur d'avant-plan", "couleur.copier_code");
+        self.action_item(ui, "Ajouter la couleur d'avant-plan au nuancier", "nuancier.ajouter");
     }
 
     /// Champ du code hexadécimal de la couleur d'avant-plan : le texte tapé est gardé tant que le
@@ -556,11 +592,16 @@ impl App {
         });
     }
 
-    /// Ce que fait une pastille visée (couleur récente) : clic, avant-plan ; souris dessus ou
-    /// clic droit, elle devient la pastille visée par les commandes « pastille.* ».
-    fn target_cell(&mut self, resp: Response, target: Target, c: [u8; 3], name: &str) {
+    /// Ce que fait une pastille (couleur récente ou du nuancier) : clic, avant-plan ; souris
+    /// dessus ou clic droit, elle devient la pastille visée par les commandes « pastille.* ». Sa
+    /// bulle : son nom et son code.
+    pub(crate) fn target_cell(&mut self, resp: Response, target: Target, c: [u8; 3], name: &str) {
         let title = if name.is_empty() { couleur::hex(c) } else { format!("{name} · {}", couleur::hex(c)) };
-        let resp = crate::bulles::bulle(resp, &title, "Clic : couleur d'avant-plan ; clic droit : menu.", "");
+        let help = match target {
+            Target::Recent(_) => "Clic : couleur d'avant-plan ; clic droit : menu.",
+            Target::Palette(_) => "Clic : couleur d'avant-plan ; glisser : la ranger ailleurs ; clic droit : menu (nommer, retirer…).",
+        };
+        let resp = crate::bulles::bulle(resp, &title, help, "");
         if resp.hovered() {
             self.couleurs.hovered_now = Some(target);
         }
@@ -578,9 +619,11 @@ impl App {
         self.action_item(ui, "Couleur d'arrière-plan", "pastille.arriere_plan");
         match target {
             Target::Recent(_) => {
+                self.action_item(ui, "Ajouter au nuancier", "nuancier.ajouter");
                 ui.separator();
                 self.action_item(ui, "Effacer les couleurs récentes", "couleur.recentes_effacer");
             }
+            Target::Palette(_) => self.palette_swatch_menu(ui),
         }
     }
 
@@ -592,44 +635,8 @@ impl App {
         ui.add_space(2.0);
         self.recent_row(ui);
         ui.add_space(6.0);
-        ui.horizontal(|ui| {
-            ui.label("Nuancier");
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let here = self.swatches.iter().position(|c| *c == self.color);
-                if crate::bulles::icone_si(ui, here.is_some(), ph::MINUS, "Retirer du nuancier", "Retirer la couleur courante du nuancier.", "").clicked() {
-                    if let Some(i) = here {
-                        self.swatches.remove(i);
-                    }
-                }
-                if crate::bulles::icone_si(ui, here.is_none(), ph::PLUS, "Ajouter au nuancier", "Ajouter la couleur courante au nuancier.", "").clicked() {
-                    self.swatches.push(self.color);
-                }
-            });
-        });
-        let mut remove = None;
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
-            for (i, c) in self.swatches.iter().enumerate() {
-                let (rect, resp) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::click());
-                ui.painter().rect_filled(rect, 2.0, to_color(*c));
-                let border = if *c == self.color {
-                    Stroke::new(2.0_f32, Color32::WHITE)
-                } else {
-                    Stroke::new(1.0_f32, Color32::from_gray(70))
-                };
-                ui.painter().rect_stroke(rect, 2.0, border, StrokeKind::Inside);
-                let resp = resp.on_hover_text("Clic : choisir · clic droit : retirer");
-                if resp.clicked() {
-                    self.color = *c;
-                }
-                if resp.secondary_clicked() {
-                    remove = Some(i);
-                }
-            }
-        });
-        if let Some(i) = remove {
-            self.swatches.remove(i);
-        }
+        // Nuanciers personnels (`nuancierui.rs`).
+        self.palette_section(ui);
     }
 
     /// À chaque image : les réglages de la couleur sont enregistrés quand ils changent (pas
@@ -669,6 +676,11 @@ impl App {
                     self.front_back_row(ui);
                     ui.add_space(4.0);
                     self.color_picker(ui, 200.0);
+                    ui.add_space(2.0);
+                    self.recent_row(ui);
+                    ui.add_space(4.0);
+                    // Les pastilles du nuancier montré (ses commandes sont dans le panneau Couleur).
+                    self.swatch_grid(ui);
                 });
             });
         let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));

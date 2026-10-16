@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::nuancier::Palette;
 use crate::roue::WheelShape;
 
 pub const NOIR: [u8; 3] = [0, 0, 0];
@@ -70,6 +71,30 @@ pub fn rgb_to_hsl(c: [u8; 3]) -> [f32; 3] {
 
 pub fn hsl_to_rgb(hsl: [f32; 3]) -> [u8; 3] {
     hsv_to_rgb(hsl_to_hsv(hsl))
+}
+
+/// CIE L*a*b* (L de 0 à 100 ; blanc de référence D50, celui des fichiers de Photoshop) vers RVB
+/// (sRGB) : Lab → XYZ, puis la matrice XYZ (D50) → sRGB linéaire déjà adaptée par Bradford
+/// (valeurs publiées par Bruce Lindbloom), puis la courbe sRGB. Hors du sRGB : bornée.
+pub fn lab_to_rgb(l: f32, a: f32, b: f32) -> [u8; 3] {
+    const WHITE: [f32; 3] = [0.964_22, 1.0, 0.825_21];
+    const M: [[f32; 3]; 3] = [
+        [3.133_856_1, -1.616_866_7, -0.490_614_6],
+        [-0.978_768_4, 1.916_141_5, 0.033_454_0],
+        [0.071_945_3, -0.228_991_4, 1.405_242_7],
+    ];
+    let fy = (l + 16.0) / 116.0;
+    let f = [fy + a / 500.0, fy, fy - b / 200.0];
+    let inv = |t: f32| {
+        let d = 6.0 / 29.0;
+        if t > d { t * t * t } else { 3.0 * d * d * (t - 4.0 / 29.0) }
+    };
+    let xyz = [0, 1, 2].map(|k| WHITE[k] * inv(f[k]));
+    let gamma = |c: f32| {
+        let c = c.clamp(0.0, 1.0);
+        if c <= 0.003_130_8 { 12.92 * c } else { 1.055 * c.powf(1.0 / 2.4) - 0.055 }
+    };
+    M.map(|row| ((gamma(row[0] * xyz[0] + row[1] * xyz[1] + row[2] * xyz[2]) * 255.0).round().clamp(0.0, 255.0)) as u8)
 }
 
 /// TSV de `c`, en gardant ce que `c` ne dit pas : la teinte d'avant pour un gris (saturation
@@ -152,6 +177,12 @@ pub struct ColorSettings {
     /// Dernières couleurs avec lesquelles on a dessiné, la plus récente d'abord.
     #[serde(rename = "recentes")]
     pub recent: Vec<[u8; 3]>,
+    /// Rang du nuancier montré dans le panneau.
+    #[serde(rename = "nuancier_affiche")]
+    pub shown: usize,
+    /// Les nuanciers personnels (une table chacun : en dernier).
+    #[serde(rename = "nuanciers")]
+    pub palettes: Vec<Palette>,
 }
 
 impl Default for ColorSettings {
@@ -163,6 +194,21 @@ impl Default for ColorSettings {
             wheel: WheelShape::Square,
             sliders: SliderMode::Hsv,
             recent: Vec::new(),
+            shown: 0,
+            palettes: vec![Palette::pelure()],
         }
+    }
+}
+
+impl ColorSettings {
+    /// Réglages relus réparés : au moins un nuancier, un nuancier montré qui existe, pas plus
+    /// de `RECENT_MAX` couleurs récentes.
+    pub fn sanitized(mut self) -> ColorSettings {
+        if self.palettes.is_empty() {
+            self.palettes.push(Palette::pelure());
+        }
+        self.shown = self.shown.min(self.palettes.len() - 1);
+        self.recent.truncate(RECENT_MAX);
+        self
     }
 }
