@@ -83,6 +83,7 @@ impl App {
             ui.menu_button("Fichier", |ui| {
                 self.action_item(ui, "Nouveau…", "fichier.nouveau");
                 self.action_item(ui, "Ouvrir…", "fichier.ouvrir");
+                self.action_item(ui, "Ouvrir un projet Storyboard Pro (.sboard)…", "fichier.importer_sboard");
                 self.action_item(ui, "Enregistrer", "fichier.enregistrer");
                 self.action_item(ui, "Enregistrer sous…", "fichier.enregistrer_sous");
                 self.action_item(ui, "Nouveau projet à partir des plans choisis", "projet.nouveau_depuis_plans");
@@ -95,7 +96,6 @@ impl App {
                 self.action_item(ui, "Importer une vidéo (calque vidéo)…", "fichier.importer_video");
                 self.action_item(ui, "Importer une séquence d'images (calque vidéo)…", "fichier.importer_sequence");
                 self.action_item(ui, "Importer un modèle 3D (glTF) comme repère…", "fichier.importer_modele3d");
-                self.action_item(ui, "Importer un projet Storyboard Pro (.sboard)…", "fichier.importer_sboard");
                 ui.separator();
                 self.action_item(ui, "Exporter le film (vidéo)…", "fichier.exporter_film");
                 self.action_item(ui, "Exporter des images (PNG)…", "fichier.exporter_images");
