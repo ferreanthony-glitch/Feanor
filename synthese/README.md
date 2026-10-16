@@ -1,8 +1,10 @@
 # synthese : synthèse d'image par l'exemple
 
-Première brique de la propagation façon EbSynth (étape a) : on peint une image clé, la synthèse
-la recopie par morceaux sur une autre image en suivant des guides. Ce dossier est un projet Cargo
-à part (comme `src-tauri/`), sans dépendance ; Pelure l'utilisera par son chemin à l'étape e.
+La propagation façon EbSynth : on peint une image clé, et elle est recopiée par morceaux sur les
+autres images de la vidéo en suivant des guides. Étape a : la synthèse guidée (ci-dessous).
+Étape b : le flux optique et la propagation d'une clé sur une vidéo (plus bas). Ce dossier est
+un projet Cargo à part (comme `src-tauri/`), sans dépendance ; Pelure l'utilisera par son chemin
+à l'étape e.
 
 C'est un portage en Rust de la version processeur d'[ebsynth](https://github.com/jamriska/ebsynth)
 (Ondřej Jamriška, domaine public) : pyramide d'images, PatchMatch avec uniformité, vote simple,
@@ -85,9 +87,61 @@ facestyle sur un seul fil : 43 s.
 Un style de bruit pur avec un guide de position décalé fait échouer l'original comme le portage
 (écart 82 pour les deux). Sur un style qui a des formes, les deux suivent le guide (écart 13).
 
+## Étape b : propager une clé sur une vidéo
+
+```rust
+use synthese::propagation::{propagate, PropagateParams};
+
+// load(i) lit l'image i de la vidéo ; each(i, image) reçoit chaque image fabriquée (false = arrêter).
+propagate(load, cle, &peinture, 0..nombre, &PropagateParams::default(), |i, im| { …; true })?;
+```
+
+On part de la clé et on avance, puis on recule, d'une image à la fois. Chaque image est
+synthétisée depuis la clé avec trois guides (« Stylizing Video by Example », Jamriška et al.,
+SIGGRAPH 2019). Leurs poids par défaut sont ceux d'EbSynth :
+
+| Guide | Source (la clé) | Cible (l'image à fabriquer) | Poids |
+|---|---|---|---|
+| vidéo | l'image de la vidéo sous la clé | l'image de la vidéo | 4 |
+| position (« Mapping ») | x, y de chaque pixel | d'où vient le pixel dans la clé, suivi par le flux | 10 |
+| temporel (« De-flicker ») | la clé peinte | l'image fabriquée juste avant, déplacée par le flux | 1 |
+
+Le style lui-même (la clé) a le poids 1.
+
+**Flux optique** (`flow.rs`) : méthode DIS (Kroeger et al., ECCV 2016), celle d'OpenCV, sans son
+raffinement variationnel.
+- Pyramide filtrée par [1 3 3 1] / 8. Une moyenne 2×2 laissait des fausses ondes qui faisaient
+  rater les grands mouvements.
+- Patchs 8×8 tous les 4 pixels, Lucas-Kanade inverse compositionnel (16 itérations).
+- Passe aller, puis passe retour qui reprend les quatre voisins, toutes bandes de fils
+  confondues. Sans elle, des rangées entières restaient fausses aux frontières entre fils.
+- Moyenne pondérée des patchs qui couvrent chaque pixel, puis filtre médian 5×5 à chaque niveau.
+
+Erreur sur des mouvements connus (tests) : moins de 0,1 pixel pour une translation de 4 px, moins
+de 0,3 pour 25 px ou pour une rotation de 3° avec zoom de 4 %.
+
+**Outils** :
+- `propager.exe -images <dossier> -cle <n> <cle.png> -sortie <dossier> [-de <n>] [-a <n>]`
+  propage une clé. Les images sont celles d'un dossier numéroté, comme celui que Pelure remplit
+  en important une vidéo (`videos/<id>/000001.jpg`…). Les numéros commencent à 1. Options :
+  `-poids <clé> <vidéo> <position> <temporel>`, `-flux <dossier>` (le flux en couleurs).
+- `scintillement.exe <vidéo> <fabriquées> <de> <à>` mesure la stabilité. Chaque image fabriquée
+  est comparée à la précédente, déplacée par le flux. La même mesure sur la vidéo donne ce que le
+  flux n'explique pas.
+
+**Essai sur une vraie vidéo (16 octobre 2026).** Images 30 à 60 de l'animatique BRAWLIDAYS
+(`BS_BLD_Seq01_V01.mov`) en 960×540 : un travelling latéral sur des piles de livres, avec de la
+parallaxe et du flou de mise au point. La clé est l'image 30 « peinte » par la synthèse elle-même :
+la peinture à l'huile de l'exemple facestyle, guidée par la luminosité.
+- 31 images en 2 min 23 s, environ 4,6 s par image.
+- La peinture suit le mouvement 30 images durant, et les traits restent nets. Les zones qui entrent
+  dans le champ (fenêtre, personnage) reçoivent une peinture plausible.
+- Le premier plan flou s'étire un peu à l'horizontale.
+- Scintillement moyen 1,71, contre 1,46 pour la vidéo. Sans le guide temporel (images 30 à 42) :
+  2,05 contre 1,76 avec, pour une vidéo à 1,17.
+
 ## Suite
 
-- b. Flux optique et guides vidéo : propagation d'une clé sur une plage d'images.
 - c. Plusieurs clés et mélange entre elles.
 - d. Calcul sur la carte graphique (wgpu).
 - e. Dans Pelure : un calque vidéo, des clés, « Propager », des cels en sortie (annulables).

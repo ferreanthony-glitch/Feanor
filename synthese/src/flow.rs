@@ -145,13 +145,16 @@ pub struct FlowParams {
     pub iters: usize,
     /// Niveau le plus fin calculé (0 = pleine taille, 1 = moitié…), le flux est ensuite agrandi.
     pub finest_level: usize,
+    /// Rayon du filtre médian passé sur le flux à chaque niveau (0 = aucun) : il enlève les
+    /// taches isolées fausses (lignes parallèles, zones unies).
+    pub median: usize,
     /// Nombre de fils de calcul ; 0 = tous les cœurs.
     pub threads: usize,
 }
 
 impl Default for FlowParams {
     fn default() -> FlowParams {
-        FlowParams { patch_size: 8, stride: 4, iters: 16, finest_level: 0, threads: 0 }
+        FlowParams { patch_size: 8, stride: 4, iters: 16, finest_level: 0, median: 2, threads: 0 }
     }
 }
 
@@ -180,7 +183,8 @@ pub fn flow(from: &Gray, to: &Gray, params: &FlowParams) -> Flow {
             Some(f) => f.resized(i0.width, i0.height),
             None => Flow::zero(i0.width, i0.height),
         };
-        current = Some(level_flow(i0, i1, &init, patch, params.stride.max(1), params.iters, threads));
+        let f = level_flow(i0, i1, &init, patch, params.stride.max(1), params.iters, threads);
+        current = Some(if params.median > 0 { median(&f, params.median, threads) } else { f });
     }
     let result = current.expect("au moins un niveau");
     if finest == 0 {
@@ -188,6 +192,44 @@ pub fn flow(from: &Gray, to: &Gray, params: &FlowParams) -> Flow {
     } else {
         result.resized(from.width, from.height)
     }
+}
+
+/// Filtre médian du flux, chaque composante à part, sur un carré de côté 2 × rayon + 1.
+fn median(f: &Flow, radius: usize, threads: usize) -> Flow {
+    let (w, r) = (f.width, radius as i32);
+    let mut data = vec![[0f32; 2]; f.data.len()];
+    let rows_per_band = f.height.div_ceil(threads.max(1)).max(1);
+    let band = |y0: usize, rows: &mut [[f32; 2]]| {
+        let (mut xs, mut ys) = (Vec::new(), Vec::new());
+        for (dy, row) in rows.chunks_mut(w).enumerate() {
+            let y = (y0 + dy) as i32;
+            for (x, out) in row.iter_mut().enumerate() {
+                xs.clear();
+                ys.clear();
+                for j in -r..=r {
+                    for i in -r..=r {
+                        let u = f.at(x as i32 + i, y + j);
+                        xs.push(u[0]);
+                        ys.push(u[1]);
+                    }
+                }
+                let mid = xs.len() / 2;
+                let pick = |v: &mut Vec<f32>| *v.select_nth_unstable_by(mid, |a, b| a.total_cmp(b)).1;
+                *out = [pick(&mut xs), pick(&mut ys)];
+            }
+        }
+    };
+    if threads <= 1 {
+        band(0, &mut data);
+    } else {
+        std::thread::scope(|scope| {
+            for (b, rows) in data.chunks_mut(rows_per_band * w).enumerate() {
+                let band = &band;
+                scope.spawn(move || band(b * rows_per_band, rows));
+            }
+        });
+    }
+    Flow { width: f.width, height: f.height, data }
 }
 
 /// Positions des patchs sur une ligne de `len` pixels : tous les `stride`, le dernier collé au bord.
