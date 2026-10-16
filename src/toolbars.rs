@@ -74,7 +74,7 @@ impl App {
             self.command_button(ui, ph::SKIP_FORWARD, "image.derniere", "Dernière image", "Dernière image du plan.", None);
             let looping = self.looping;
             let resp = ui.add_sized([28.0, 26.0], egui::SelectableLabel::new(looping, RichText::new(ph::REPEAT).size(17.0)));
-            if crate::bulles::bulle(resp, "Lecture en boucle", "Reprendre au début une fois à la fin.", "").clicked() {
+            if self.aide(resp, "Lecture en boucle", "Reprendre au début une fois à la fin.", "lecture.boucle").clicked() {
                 self.looping = !self.looping;
             }
             let sound = self.sound_on;
