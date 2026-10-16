@@ -353,6 +353,14 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   dessin, que la couleur remplit quand on appuie. L'icône d'import lit un fichier de pinceaux Toon
   Boom (`.xml`, par exemple `STB_TextureBrushes_preset.xml`) : ses pinceaux, pointes et papiers
   s'ajoutent à la liste et restent pour les fois suivantes.
+- **Connexions** (bas des réglages du pinceau, du crayon et de la gomme) : la taille, l'opacité,
+  l'angle et la rondeur de la pointe peuvent suivre l'appui, la vitesse du trait, sa direction,
+  un fondu le long du trait ou le hasard.
+  - Chaque connexion a sa courbe de réponse : glisser un point, double-clic pour en ajouter un,
+    clic droit pour le retirer. Elle a aussi « Inverser » et une réponse minimale.
+  - Exemples : une pointe plate dont l'angle suit la direction, un feutre qui s'affine quand on
+    va vite (taille → vitesse, inversé), un trait qui s'éteint (taille → fondu, inversé).
+  - L'aperçu des pinceaux trace lentement aux bouts et vite au milieu.
 - **Pelure d'oignon** (Alt+O) : par défaut 3 dessins avant en rouge et 3 après en vert, de plus en
   plus pâles. Dans la timeline : nombre avant / après, et l'engrenage, qui ouvre le panneau de la
   pelure (aussi : clic droit sur la pelure d'un calque). On y trouve :
@@ -574,6 +582,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `xml.rs`, `sboard.rs` | Lecture d'un XML en arbre ; lecture d'un projet Storyboard Pro (14a) |
 | `sbscript.rs`, `sbimport.rs`, `sbui.rs` | Script d'export des dessins et sa liste ; projet Pelure construit ; fenêtre d'ouverture (14a) |
 | `sbbatch.rs`, `sbvector.rs` | Storyboard Pro lancé en batch sur une copie du projet ; ses dessins vectoriels refaits en éléments Pelure (14a-2) |
+| `dynui.rs` | Connexions d'un pinceau : sources, courbes de réponse (moteur de dessin, étape 2) |
 | `sbexport.rs`, `sbexportui.rs` | Export vers Storyboard Pro : images des calques, sons, script de construction ; sa fenêtre (14b-1) |
 | `stretch.rs` | Vitesse d'un son : rééchantillonnage, tempo sans changer la hauteur (WSOLA) (14a) |
 | `fill.rs` | Remplissage par zone et débord |

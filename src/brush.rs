@@ -54,6 +54,235 @@ pub struct BrushSettings {
     /// Variation de taille au hasard, en part de la taille.
     #[serde(rename = "taille_hasard")]
     pub size_jitter: f32,
+    /// Connexions (moteur de dessin, étape 2) : taille, opacité, angle et rondeur qui suivent la
+    /// pression, la vitesse, la direction du trait, un fondu ou le hasard, par une courbe.
+    #[serde(rename = "dynamique")]
+    pub dynamics: Dynamics,
+}
+
+/// Ce qu'une connexion suit : les « connexions » de TVPaint (pression, vitesse, direction,
+/// fondu, hasard… relevées dans ses fichiers) et la « dynamique » de Procreate. L'inclinaison
+/// du stylet viendra quand Pelure saura la lire.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum Source {
+    #[default]
+    #[serde(rename = "aucune")]
+    None,
+    #[serde(rename = "pression")]
+    Pressure,
+    #[serde(rename = "vitesse")]
+    Speed,
+    #[serde(rename = "direction")]
+    Direction,
+    #[serde(rename = "fondu")]
+    Fade,
+    #[serde(rename = "hasard")]
+    Random,
+}
+
+impl Source {
+    pub const ALL: [Source; 6] = [Source::None, Source::Pressure, Source::Speed, Source::Direction, Source::Fade, Source::Random];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Source::None => "Aucune",
+            Source::Pressure => "Pression",
+            Source::Speed => "Vitesse",
+            Source::Direction => "Direction",
+            Source::Fade => "Fondu",
+            Source::Random => "Hasard",
+        }
+    }
+
+    pub fn help(self) -> &'static str {
+        match self {
+            Source::None => "Le réglage ne bouge pas.",
+            Source::Pressure => "L'appui du stylet.",
+            Source::Speed => "La vitesse du trait (jusqu'à la vitesse max).",
+            Source::Direction => "La direction du trait : un tour complet va de 0 à 1.",
+            Source::Fade => "La longueur déjà tracée (jusqu'à la longueur du fondu).",
+            Source::Random => "Une valeur au hasard à chaque empreinte.",
+        }
+    }
+}
+
+/// Courbe de réponse d'une connexion : de 2 à `Curve::MAX` points, x croissant de 0 à 1, y de 0
+/// à 1, en ligne droite entre eux. Taille fixe : les réglages restent copiables tels quels.
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
+#[serde(from = "Vec<[f32; 2]>", into = "Vec<[f32; 2]>")]
+pub struct Curve {
+    n: u8,
+    pts: [[f32; 2]; Curve::MAX],
+}
+
+impl Curve {
+    pub const MAX: usize = 8;
+
+    /// La droite de (0, 0) à (1, 1) : la réponse suit l'entrée.
+    pub fn linear() -> Self {
+        Self::from_points(&[[0.0, 0.0], [1.0, 1.0]])
+    }
+
+    /// Une courbe faite de `pts`, remis en ordre : x et y bornés à 0..1, x croissant, le premier à
+    /// x = 0 et le dernier à x = 1, au plus `MAX` points.
+    pub fn from_points(pts: &[[f32; 2]]) -> Self {
+        let mut v: Vec<[f32; 2]> = pts.iter().map(|p| [p[0].clamp(0.0, 1.0), p[1].clamp(0.0, 1.0)]).filter(|p| p[0].is_finite() && p[1].is_finite()).collect();
+        v.sort_by(|a, b| a[0].total_cmp(&b[0]));
+        v.truncate(Self::MAX);
+        match v.len() {
+            0 => v = vec![[0.0, 0.0], [1.0, 1.0]],
+            1 => v = vec![[0.0, v[0][1]], [1.0, v[0][1]]],
+            _ => {}
+        }
+        let last = v.len() - 1;
+        v[0][0] = 0.0;
+        v[last][0] = 1.0;
+        let mut c = Curve { n: v.len() as u8, pts: [[0.0; 2]; Self::MAX] };
+        c.pts[..v.len()].copy_from_slice(&v);
+        c
+    }
+
+    pub fn points(&self) -> &[[f32; 2]] {
+        &self.pts[..self.n as usize]
+    }
+
+    /// La réponse à l'entrée `x` (0 à 1).
+    pub fn eval(&self, x: f32) -> f32 {
+        let p = self.points();
+        let x = x.clamp(0.0, 1.0);
+        for w in p.windows(2) {
+            let ([x0, y0], [x1, y1]) = (w[0], w[1]);
+            if x <= x1 {
+                let t = if x1 - x0 > 1e-6 { (x - x0) / (x1 - x0) } else { 1.0 };
+                return y0 + (y1 - y0) * t;
+            }
+        }
+        p.last().map_or(x, |q| q[1])
+    }
+}
+
+impl Default for Curve {
+    fn default() -> Self {
+        Self::linear()
+    }
+}
+
+impl From<Vec<[f32; 2]>> for Curve {
+    fn from(v: Vec<[f32; 2]>) -> Self {
+        Curve::from_points(&v)
+    }
+}
+
+impl From<Curve> for Vec<[f32; 2]> {
+    fn from(c: Curve) -> Self {
+        c.points().to_vec()
+    }
+}
+
+/// Un réglage relié à une source : sa réponse va de `min` (la courbe donne 0) à 1 (la courbe
+/// donne 1), en part de la valeur réglée ; `invert` retourne l'entrée.
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Connection {
+    pub source: Source,
+    #[serde(rename = "inverser")]
+    pub invert: bool,
+    #[serde(rename = "courbe")]
+    pub curve: Curve,
+    pub min: f32,
+}
+
+impl Default for Connection {
+    fn default() -> Self {
+        Connection { source: Source::None, invert: false, curve: Curve::linear(), min: 0.0 }
+    }
+}
+
+impl Connection {
+    pub fn active(&self) -> bool {
+        self.source != Source::None
+    }
+
+    /// Réponse (de `min` à 1) à l'entrée `x` (0 à 1).
+    pub fn response(&self, x: f32) -> f32 {
+        let x = x.clamp(0.0, 1.0);
+        let x = if self.invert { 1.0 - x } else { x };
+        let min = self.min.clamp(0.0, 1.0);
+        min + (1.0 - min) * self.curve.eval(x)
+    }
+
+    /// Réponse aux entrées d'une empreinte.
+    pub fn at(&self, inp: &Inputs) -> f32 {
+        self.response(inp.get(self.source))
+    }
+}
+
+/// La dynamique d'une brosse : une connexion par réglage, et les échelles de la vitesse et du
+/// fondu (TVPaint : « Limit » de la vitesse, longueur du fondu en pixels).
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Dynamics {
+    #[serde(rename = "taille")]
+    pub size: Connection,
+    #[serde(rename = "opacite")]
+    pub opacity: Connection,
+    pub angle: Connection,
+    #[serde(rename = "rondeur")]
+    pub roundness: Connection,
+    /// Vitesse du trait (pixels du dessin par seconde) à laquelle l'entrée « vitesse » vaut 1.
+    #[serde(rename = "vitesse_max")]
+    pub speed_max: f32,
+    /// Longueur tracée (pixels du dessin) au bout de laquelle l'entrée « fondu » vaut 1.
+    #[serde(rename = "fondu_longueur")]
+    pub fade_length: f32,
+}
+
+impl Default for Dynamics {
+    fn default() -> Self {
+        Dynamics {
+            size: Connection::default(),
+            opacity: Connection::default(),
+            angle: Connection::default(),
+            roundness: Connection::default(),
+            speed_max: 2000.0,
+            fade_length: 300.0,
+        }
+    }
+}
+
+impl Dynamics {
+    pub fn uses(&self, s: Source) -> bool {
+        [self.size, self.opacity, self.angle, self.roundness].iter().any(|c| c.source == s)
+    }
+}
+
+/// Ce que mesure le trait à une empreinte : les entrées des connexions, de 0 à 1.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Inputs {
+    pub pressure: f32,
+    pub speed: f32,
+    pub direction: f32,
+    pub fade: f32,
+    pub random: f32,
+}
+
+impl Inputs {
+    /// Seulement l'appui (les autres entrées au repos).
+    pub fn pressure(p: f32) -> Self {
+        Inputs { pressure: p, random: 0.5, ..Default::default() }
+    }
+
+    pub fn get(&self, s: Source) -> f32 {
+        match s {
+            Source::None => 1.0,
+            Source::Pressure => self.pressure,
+            Source::Speed => self.speed,
+            Source::Direction => self.direction,
+            Source::Fade => self.fade,
+            Source::Random => self.random,
+        }
+        .clamp(0.0, 1.0)
+    }
 }
 
 impl Default for BrushSettings {
@@ -82,7 +311,51 @@ impl BrushSettings {
             angle: 0.0,
             angle_jitter: 0.0,
             size_jitter: 0.0,
+            dynamics: Dynamics::default(),
         }
+    }
+
+    /// La connexion de la taille : celle de la dynamique si elle est choisie, sinon « taille
+    /// selon la pression » (droite de la taille mini à la taille).
+    pub fn size_connection(&self) -> Option<Connection> {
+        if self.dynamics.size.active() {
+            Some(self.dynamics.size)
+        } else {
+            self.pressure_size.then(|| Connection { source: Source::Pressure, min: self.min_size, ..Default::default() })
+        }
+    }
+
+    /// La connexion de l'opacité, comme celle de la taille.
+    pub fn opacity_connection(&self) -> Option<Connection> {
+        if self.dynamics.opacity.active() {
+            Some(self.dynamics.opacity)
+        } else {
+            self.pressure_opacity.then(|| Connection { source: Source::Pressure, min: self.min_opacity, ..Default::default() })
+        }
+    }
+
+    /// Part de la taille à une empreinte (jamais moins de 3 %).
+    pub fn size_factor(&self, inp: &Inputs) -> f32 {
+        self.size_connection().map_or(1.0, |c| c.at(inp).max(0.03))
+    }
+
+    /// Part de l'opacité à une empreinte.
+    pub fn flow(&self, inp: &Inputs) -> f32 {
+        self.opacity_connection().map_or(1.0, |c| c.at(inp))
+    }
+
+    /// Angle de la pointe à une empreinte, en degrés, sans le hasard : l'angle réglé, plus un
+    /// tour complet fois la réponse de sa connexion (la direction, telle quelle, fait suivre le
+    /// trait à la pointe).
+    pub fn angle_at(&self, inp: &Inputs) -> f32 {
+        let c = self.dynamics.angle;
+        self.angle + if c.active() { 360.0 * c.at(inp) } else { 0.0 }
+    }
+
+    /// Rondeur de la pointe à une empreinte.
+    pub fn roundness_at(&self, inp: &Inputs) -> f32 {
+        let c = self.dynamics.roundness;
+        self.roundness * if c.active() { c.at(inp) } else { 1.0 }
     }
 
     pub fn pencil() -> Self {
@@ -107,9 +380,10 @@ impl BrushSettings {
 }
 
 /// Aperçu d'un réglage (grille des pinceaux) : un trait en vague tracé par le vrai moteur dans
-/// une image `w`×`h`, effleuré aux bouts et appuyé au milieu. Renvoie la couverture (0 à 255)
-/// de chaque pixel, ligne par ligne. La taille est ramenée à ce qui tient dans l'image ; une
-/// gomme est montrée comme le trait qu'elle enlève.
+/// une image `w`×`h`, effleuré et lent aux bouts, appuyé et rapide au milieu (une connexion à
+/// la vitesse se voit aussi). Renvoie la couverture (0 à 255) de chaque pixel, ligne par ligne.
+/// La taille est ramenée à ce qui tient dans l'image ; une gomme est montrée comme le trait
+/// qu'elle enlève.
 pub fn stroke_preview(settings: &BrushSettings, textures: BrushTextures, w: usize, h: usize) -> Vec<u8> {
     let mut s = *settings;
     s.size = s.size.clamp(1.0, h as f32 * 0.5);
@@ -120,13 +394,20 @@ pub fn stroke_preview(settings: &BrushSettings, textures: BrushTextures, w: usiz
     let margin = s.size * 0.5 + 2.0;
     let swing = (h as f32 * 0.5 - margin).max(0.0) * 0.7;
     let n = 64;
+    let mut time = 0.0f64;
+    let mut prev: Option<Pos2> = None;
     for k in 0..=n {
         let t = k as f32 / n as f32;
+        let bell = (t * std::f32::consts::PI).sin();
         let p = Pos2::new(
             margin + t * (w as f32 - 2.0 * margin),
             h as f32 * 0.5 - (t * std::f32::consts::TAU).sin() * swing,
         );
-        stroke.add_point(&mut raster, p, (t * std::f32::consts::PI).sin().max(0.15), &mut dirty);
+        // De 10 % à 100 % de la vitesse max de la brosse, au plus vite au milieu.
+        let v = s.dynamics.speed_max.max(1.0) * (0.1 + 0.9 * bell);
+        time += prev.map_or(0.0, |q| (q.distance(p) / v) as f64);
+        prev = Some(p);
+        stroke.add_point_at(&mut raster, p, bell.max(0.15), time, &mut dirty);
     }
     stroke.finish(&mut raster, &mut dirty);
     (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).map(|(x, y)| raster.get(x, y).a()).collect()
@@ -166,6 +447,14 @@ pub struct StrokeState {
     keep_alpha: bool,
     /// Pochoirs (13b) : où le trait peut peindre ; aucun : partout.
     stencil: Option<crate::stencil::Stencil>,
+    /// Vitesse : instant de la dernière mesure, distance faite depuis (plusieurs points peuvent
+    /// arriver au même instant), vitesse lissée en pixels par seconde.
+    clock: Option<f64>,
+    since_clock: f32,
+    speed: f32,
+    /// Longueur déjà tracée (pour le fondu) et direction du dernier segment (0 à 1, un tour).
+    travel: f32,
+    direction: f32,
 }
 
 impl StrokeState {
@@ -193,6 +482,24 @@ impl StrokeState {
             rng: 0x9E37_79B9,
             keep_alpha: false,
             stencil: None,
+            clock: None,
+            since_clock: 0.0,
+            speed: 0.0,
+            travel: 0.0,
+            direction: 0.0,
+        }
+    }
+
+    /// Les entrées des connexions pour l'appui `pressure`, à `ahead` pixels après le dernier point
+    /// posé (le hasard au repos : il est tiré à l'empreinte).
+    fn inputs(&self, pressure: f32, ahead: f32) -> Inputs {
+        let d = &self.settings.dynamics;
+        Inputs {
+            pressure,
+            speed: self.speed / d.speed_max.max(1.0),
+            direction: self.direction,
+            fade: (self.travel + ahead) / d.fade_length.max(1.0),
+            random: 0.5,
         }
     }
 
@@ -209,7 +516,7 @@ impl StrokeState {
     pub fn tip(&self) -> Option<(Pos2, Pos2, f32)> {
         let (last, _) = self.last?;
         let (raw, pressure) = self.raw?;
-        Some((last, raw, self.settings.size * 0.5 * self.size_factor(pressure)))
+        Some((last, raw, self.settings.size * 0.5 * self.settings.size_factor(&self.inputs(pressure, 0.0))))
     }
 
     /// Couleur et opacité du trait à la pointe (aucune pour la gomme).
@@ -217,11 +524,7 @@ impl StrokeState {
         let StrokeMode::Paint(rgb) = self.mode else { return None };
         let s = self.settings;
         let pressure = self.raw.map_or(1.0, |r| r.1);
-        let flow = if s.pressure_opacity {
-            s.min_opacity + (1.0 - s.min_opacity) * pressure.clamp(0.0, 1.0)
-        } else {
-            1.0
-        };
+        let flow = s.flow(&self.inputs(pressure, 0.0));
         Some((rgb, (s.opacity * flow).clamp(0.0, 1.0)))
     }
 
@@ -241,6 +544,26 @@ impl StrokeState {
         (x as f32 / u32::MAX as f32) - 0.5
     }
 
+    /// Comme `add_point`, avec l'instant (en secondes) où le stylet y était : la vitesse du trait
+    /// en vient. Plusieurs points au même instant (une image d'écran) comptent ensemble.
+    pub fn add_point_at(&mut self, raster: &mut Raster, pos: Pos2, pressure: f32, time: f64, dirty: &mut Vec<usize>) {
+        if let Some((prev, _)) = self.raw {
+            self.since_clock += prev.distance(pos);
+        }
+        match self.clock {
+            Some(t0) if time > t0 => {
+                let v = self.since_clock / (time - t0) as f32;
+                // Lissée : un à-coup du système ne fait pas sauter le trait.
+                self.speed = if self.speed > 0.0 { self.speed * 0.5 + v * 0.5 } else { v };
+                self.clock = Some(time);
+                self.since_clock = 0.0;
+            }
+            Some(_) => {}
+            None => self.clock = Some(time),
+        }
+        self.add_point(raster, pos, pressure, dirty);
+    }
+
     pub fn add_point(&mut self, raster: &mut Raster, pos: Pos2, pressure: f32, dirty: &mut Vec<usize>) {
         self.raw = Some((pos, pressure));
         let follow = 1.0 - self.settings.smoothing.clamp(0.0, 0.95);
@@ -254,7 +577,7 @@ impl StrokeState {
     }
 
     fn record(&mut self, p: Pos2, pressure: f32) {
-        let r = self.settings.size * 0.5 * self.size_factor(pressure);
+        let r = self.settings.size * 0.5 * self.settings.size_factor(&self.inputs(pressure, 0.0));
         self.path.push(VPoint { x: p.x, y: p.y, r });
     }
 
@@ -278,24 +601,16 @@ impl StrokeState {
         }
     }
 
-    fn size_factor(&self, pressure: f32) -> f32 {
-        if self.settings.pressure_size {
-            let min = self.settings.min_size.clamp(0.0, 1.0);
-            (min + (1.0 - min) * pressure.clamp(0.0, 1.0)).max(0.03)
-        } else {
-            1.0
-        }
-    }
-
-    fn step(&self, pressure: f32) -> f32 {
-        let diameter = self.settings.size * self.size_factor(pressure);
+    fn step(&self, inp: &Inputs) -> f32 {
+        let diameter = self.settings.size * self.settings.size_factor(inp);
         (diameter * self.settings.spacing).max(0.3)
     }
 
     /// Pose des empreintes régulièrement espacées du dernier point jusqu'à `to`.
     fn move_to(&mut self, raster: &mut Raster, to: Pos2, pressure: f32, dirty: &mut Vec<usize>) {
         let Some((from, p0)) = self.last else {
-            self.dab(raster, to, pressure, dirty);
+            let inp = self.inputs(pressure, 0.0);
+            self.dab(raster, to, inp, dirty);
             self.last = Some((to, pressure));
             self.since_dab = 0.0;
             return;
@@ -305,35 +620,38 @@ impl StrokeState {
             self.last = Some((from, pressure));
             return;
         }
+        let d = to - from;
+        self.direction = (d.y.atan2(d.x) / std::f32::consts::TAU).rem_euclid(1.0);
         let mut travelled = 0.0;
         loop {
             let pr = p0 + (pressure - p0) * (travelled / dist);
-            let need = (self.step(pr) - self.since_dab).max(0.0);
+            let need = (self.step(&self.inputs(pr, travelled)) - self.since_dab).max(0.0);
             if travelled + need > dist {
                 self.since_dab += dist - travelled;
                 break;
             }
             travelled += need;
             let t = travelled / dist;
-            self.dab(raster, from + (to - from) * t, p0 + (pressure - p0) * t, dirty);
+            let inp = self.inputs(p0 + (pressure - p0) * t, travelled);
+            self.dab(raster, from + (to - from) * t, inp, dirty);
             self.since_dab = 0.0;
         }
+        self.travel += dist;
         self.last = Some((to, pressure));
     }
 
-    fn dab(&mut self, raster: &mut Raster, c: Pos2, pressure: f32, dirty: &mut Vec<usize>) {
+    fn dab(&mut self, raster: &mut Raster, c: Pos2, mut inp: Inputs, dirty: &mut Vec<usize>) {
         let s = self.settings;
         let mode = self.mode;
-        let mut radius = s.size * 0.5 * self.size_factor(pressure);
+        if s.dynamics.uses(Source::Random) {
+            inp.random = self.jitter() + 0.5;
+        }
+        let pressure = inp.pressure;
+        let mut radius = s.size * 0.5 * s.size_factor(&inp);
         if s.size_jitter > 0.0 {
             radius *= (1.0 + s.size_jitter * 2.0 * self.jitter()).max(0.05);
         }
-        let mut flow = if s.pressure_opacity {
-            let min = s.min_opacity.clamp(0.0, 1.0);
-            min + (1.0 - min) * pressure.clamp(0.0, 1.0)
-        } else {
-            1.0
-        };
+        let mut flow = s.flow(&inp);
         if s.aliased {
             radius = radius.max(0.71);
         } else if radius < 0.75 {
@@ -346,9 +664,9 @@ impl StrokeState {
         }
         let inner = (radius * s.hardness.clamp(0.0, 1.0)).min(radius - 0.5).max(0.0);
         // Pointe aplatie ou tournée : on mesure chaque pixel dans le repère de la pointe.
-        let angle = (s.angle + s.angle_jitter * self.jitter()).to_radians();
+        let angle = (s.angle_at(&inp) + s.angle_jitter * self.jitter()).to_radians();
         let (sin, cos) = angle.sin_cos();
-        let squash = s.roundness.clamp(0.05, 1.0);
+        let squash = s.roundness_at(&inp).clamp(0.05, 1.0);
         let shaped = squash < 1.0 || self.textures.tip.is_some();
         let tip = self.textures.tip.clone();
         let tip = tip.as_ref().map(|t| t.level(radius * 2.0));

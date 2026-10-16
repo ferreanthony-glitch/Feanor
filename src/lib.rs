@@ -19,6 +19,9 @@ mod brushtex;
 #[cfg(test)]
 mod brushtex_tests;
 mod brushui;
+mod dynui;
+#[cfg(test)]
+mod dynamics_tests;
 mod bulles;
 #[cfg(test)]
 mod bulles_tests;

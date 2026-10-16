@@ -219,6 +219,7 @@ pub fn pen_to_preset(pen: &Element, tips: &HashMap<String, u32>, papers: &HashMa
         angle: pen.num(&format!("{shape}/angle")).unwrap_or(0.0),
         angle_jitter: pen.num(&format!("{shape}/randomAngle")).unwrap_or(0.0).clamp(0.0, 360.0),
         size_jitter: pct(&format!("{size_range}/randomPercentage"), 0.0).clamp(0.0, 1.0),
+        dynamics: Default::default(),
     };
     Preset {
         name,

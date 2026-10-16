@@ -200,8 +200,9 @@ impl App {
         let textures = if brush.is_some() { self.brushes.textures(&settings) } else { Default::default() };
         let mut stroke = StrokeState::new(cel, StrokeMode::Paint(self.color), settings, None, pen).with_textures(textures);
         let mut dirty = Vec::new();
+        let time = self.ctx.input(|i| i.time);
         if let Some(c) = self.doc.cels.get_mut(&cel) {
-            stroke.add_point(&mut c.raster, p, pressure, &mut dirty);
+            stroke.add_point_at(&mut c.raster, p, pressure, time, &mut dirty);
         }
         self.renderer.invalidate_tiles(&dirty);
         self.stroke = Some(stroke);

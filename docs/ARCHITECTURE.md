@@ -597,6 +597,28 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     `action_item`, donc chacune peut recevoir un raccourci.
   - Glisser un calque : `layerheads::drop_index` et `move_layer_to` (déjà ceux de l'en-tête de
     la timeline), avec les lignes de l'image en cours (`panel_layer_drag`, `montage_layer_drag`).
+- Connexions des brosses (moteur de dessin, étape 2).
+  - `BrushSettings::dynamics : Dynamics` contient une `Connection` (source, inverser, courbe,
+    minimum) pour la taille, l'opacité, l'angle et la rondeur, plus la vitesse max et la
+    longueur du fondu.
+  - `Curve` est de taille fixe (8 points au plus) : `BrushSettings` reste `Copy`, on le copie
+    partout tel quel. Elle s'enregistre en liste de points (`serde(from/into)`), ordonnée et
+    bornée à la lecture.
+  - `StrokeState` mesure les entrées (`Inputs`) à chaque empreinte :
+    - l'appui, interpolé ;
+    - la vitesse, en pixels par seconde, d'après les instants passés par `add_point_at` (l'image
+      d'écran), lissée de moitié ;
+    - la direction du segment (un tour = 1) et la longueur déjà tracée (fondu) ;
+    - le hasard, tiré seulement si une connexion s'en sert, pour garder le même trait qu'avant.
+  - `size_connection` / `opacity_connection` rendent la connexion effective : celle de la
+    dynamique, sinon la pression simple d'avant (droite de `min` à 1). C'est ce qui garantit le
+    même trait pour les anciens réglages (test).
+  - Panneau : `dynui.rs` (source, Inverser, Mini, éditeur de courbe : glisser, double-clic,
+    clic droit), à la fin des réglages du pinceau.
+
+    Décision : coût — courbe linéaire par morceaux plutôt que spline, simple et sûre, et TVPaint
+    en a aussi. Risque : une courbe douce demande plus de points. Réversible : un mode
+    d'interpolation pourra s'ajouter au format.
 - Poignées de calque, fin de plan, Échap, choix au rectangle (chantiers 1 à 4 de l'audit).
   - Nouvelles poignées : `Handle::LayerStart`, `LayerEnd`, `LayerMove` (la barre dessinée sous les
     dessins, `BAR_H`) et `PlanEnd` (prise au bout de la règle). Leurs fonctions pures sont testées :

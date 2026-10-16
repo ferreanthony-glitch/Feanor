@@ -887,6 +887,52 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
   timeline et montage visibles ensemble, montrer qui a la main (plans / images / dessin),
   navigation de calques à la TVPaint, fenêtre « Agrandir / rétrécir le calque », finitions.
 
+## Moteur de dessin façon TVPaint, brosses façon Procreate, import de brosses (2026-10-16)
+
+Anthony : « revois les outils de dessin pour avoir une sensation de dessin équivalente à celle de
+TVPaint […] Ajoute des paramètres supplémentaires aux brosses […] comme dans Procreate […]
+importer des brush Photoshop, Procreate ou autre. »
+
+Fable a fait l'étude, en lecture seule. Ses sources :
+- les fichiers de TVPaint 12 (`english.tvpaint.loc`, `defaulttools.conf`, 175 réglages de brosses
+  `.ini`, papiers) ;
+- la documentation officielle de TVPaint et sa référence George ;
+- le manuel de Procreate.
+
+Ses constats :
+- **Connexions** : les sources pression, vitesse, direction, orientation, fondu, hasard,
+  inclinaison et molette, chacune avec sa courbe. Les codes viennent de George : 10 pression,
+  4 vitesse, 5 direction, 6 orientation, 7 fondu, 8 hasard, 11 altitude, 12 azimut.
+- **Power** (débit qui s'accumule), plafonné par l'opacité.
+- **Séchage**, étalement et décalage de la couleur, profil de pointe.
+- **Papier** : dureté, taille, angle, inversion, double papier.
+- **Lissage** de trois types.
+- **Fichiers** : `.tvpx` est une archive tar, `.dip` une image IFF DEEP.
+
+Choix d'Anthony :
+- reproduire les quatre familles d'outils : crayons, Pen Brush, Custom Brush, peinture ;
+- Power et Opacité réglables par brosse, le Pinceau rond inchangé ;
+- la sensation d'abord, puis l'éditeur de brosses, puis les imports.
+
+Étapes : 1 banc de traits ; 2 connexions ; 3 profil de pointe ; 4 Power ; 5 lissage ;
+6 dispersion ; 7 papier ; 8 pointes multiples et animées ; 9 éditeur de brosses ; 10 imports
+(TVPaint, `.abr`, Krita et MyPaint, Procreate) ; puis peinture humide et inclinaison du stylet.
+
+- ✅ 2. Connexions :
+  - **réglages connectés** : taille, opacité, angle et rondeur de la pointe ;
+  - **sources** : pression, vitesse du trait, direction, fondu sur la longueur tracée, hasard ;
+  - **chaque connexion** a une courbe de réponse de 2 à 8 points, « Inverser » et une réponse
+    minimale ;
+  - **vitesse** : mesurée d'une image d'écran à l'autre, avec une vitesse max réglable ;
+  - **fondu** : longueur en pixels.
+
+  Ce sont les « connexions » de TVPaint et la « dynamique » de Procreate.
+  - Les anciens réglages (taille et opacité selon la pression, avec leur minimum) donnent
+    exactement le même trait ; une connexion choisie les remplace.
+  - L'aperçu des brosses trace lentement aux bouts et vite au milieu.
+  - Pas encore : l'orientation et l'inclinaison du stylet, que Pelure ne lit pas. Sur un calque
+    vectoriel, le trait gardé ne retient que la taille.
+
 ## Raccourcis proposés, à valider
 
 Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans `keymap.toml`) :

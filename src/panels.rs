@@ -68,6 +68,7 @@ fn brush_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
     });
     ui.add(egui::Slider::new(&mut s.spacing, 0.02..=1.0).text("Espacement"));
     ui.add(egui::Slider::new(&mut s.smoothing, 0.0..=0.95).text("Lissage"));
+    crate::dynui::dynamics_ui(ui, s, vector);
 }
 
 impl App {

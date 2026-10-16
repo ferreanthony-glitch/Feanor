@@ -1277,8 +1277,10 @@ impl App {
             .with_textures(textures)
             .on_layer(self.layer().keep_alpha, stencil);
         let mut dirty = Vec::new();
+        // L'instant de l'image d'écran : la vitesse du trait en vient (connexions).
+        let time = self.ctx.input(|i| i.time);
         if let Some(c) = self.doc.cels.get_mut(&cel) {
-            stroke.add_point(&mut c.raster, p, pressure, &mut dirty);
+            stroke.add_point_at(&mut c.raster, p, pressure, time, &mut dirty);
         }
         self.renderer.invalidate_tiles(&dirty);
         self.stroke = Some(stroke);
@@ -1319,10 +1321,11 @@ impl App {
     }
 
     pub(crate) fn stroke_to(&mut self, p: Pos2, pressure: f32) {
+        let time = self.ctx.input(|i| i.time);
         let Some(stroke) = self.stroke.as_mut() else { return };
         let Some(c) = self.doc.cels.get_mut(&stroke.cel) else { return };
         let mut dirty = Vec::new();
-        stroke.add_point(&mut c.raster, p, pressure, &mut dirty);
+        stroke.add_point_at(&mut c.raster, p, pressure, time, &mut dirty);
         self.renderer.invalidate_tiles(&dirty);
     }
 

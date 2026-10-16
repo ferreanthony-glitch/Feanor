@@ -1,0 +1,145 @@
+//! Connexions des brosses (moteur de dessin, étape 2) : courbes, sources (pression, vitesse,
+//! direction, fondu, hasard), et les anciens réglages qui donnent le même trait.
+
+use eframe::egui::pos2;
+
+use crate::brush::{stroke_preview, BrushSettings, Connection, Curve, Source, StrokeMode, StrokeState};
+use crate::raster::Raster;
+
+#[test]
+fn curves_are_kept_in_order_and_read_between_points() {
+    let c = Curve::from_points(&[[0.8, 0.9], [0.2, 0.1], [2.0, 1.5]]);
+    assert_eq!(c.points(), &[[0.0, 0.1], [0.8, 0.9], [1.0, 1.0]], "triés, bornés, bouts aux bords");
+    assert!((c.eval(0.4) - 0.5).abs() < 1e-5, "entre deux points : en ligne droite");
+    assert!((c.eval(0.9) - 0.95).abs() < 1e-5);
+    assert_eq!(Curve::from_points(&[]).points(), Curve::linear().points());
+    let flat = Curve::from_points(&[[0.3, 0.6]]);
+    assert_eq!(flat.eval(0.0), 0.6);
+    assert_eq!(flat.eval(1.0), 0.6);
+    let many: Vec<[f32; 2]> = (0..20).map(|i| [i as f32 / 19.0, 0.5]).collect();
+    assert_eq!(Curve::from_points(&many).points().len(), Curve::MAX);
+    // Réponse : de `min` à 1 ; inverser retourne l'entrée.
+    let conn = Connection { source: Source::Pressure, invert: true, curve: Curve::linear(), min: 0.2 };
+    assert!((conn.response(1.0) - 0.2).abs() < 1e-5);
+    assert!((conn.response(0.0) - 1.0).abs() < 1e-5);
+}
+
+#[test]
+fn the_old_pressure_settings_draw_the_same_stroke() {
+    let mut old = BrushSettings::brush();
+    old.pressure_size = true;
+    old.min_size = 0.3;
+    old.pressure_opacity = true;
+    old.min_opacity = 0.4;
+    let mut new = old;
+    new.pressure_size = false;
+    new.pressure_opacity = false;
+    new.dynamics.size = Connection { source: Source::Pressure, min: 0.3, ..Default::default() };
+    new.dynamics.opacity = Connection { source: Source::Pressure, min: 0.4, ..Default::default() };
+    let tex = Default::default;
+    assert_eq!(stroke_preview(&old, tex(), 160, 48), stroke_preview(&new, tex(), 160, 48));
+    // Une connexion choisie remplace la pression simple.
+    let mut both = old;
+    both.dynamics.size = Connection { source: Source::Random, ..Default::default() };
+    assert_eq!(both.size_connection().map(|c| c.source), Some(Source::Random));
+}
+
+/// Un trait de `a` à `b` en `n` points, `dt` secondes entre deux points, à l'appui `pressure` ;
+/// renvoie la feuille.
+fn draw(s: BrushSettings, a: (f32, f32), b: (f32, f32), n: usize, dt: f64, pressure: f32) -> Raster {
+    let mut raster = Raster::new(320, 320);
+    let mut stroke = StrokeState::new(0, StrokeMode::Paint([0, 0, 0]), s, None, true);
+    let mut dirty = Vec::new();
+    for k in 0..=n {
+        let t = k as f32 / n as f32;
+        let p = pos2(a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
+        stroke.add_point_at(&mut raster, p, pressure, k as f64 * dt, &mut dirty);
+    }
+    stroke.finish(&mut raster, &mut dirty);
+    raster
+}
+
+/// Pixels encrés (plus qu'à moitié) de la colonne `x`, ou de la ligne `y`.
+fn column(r: &Raster, x: usize) -> usize {
+    (0..r.height).filter(|&y| r.get(x, y).a() > 128).count()
+}
+fn row(r: &Raster, y: usize) -> usize {
+    (0..r.width).filter(|&x| r.get(x, y).a() > 128).count()
+}
+
+fn plain(size: f32) -> BrushSettings {
+    BrushSettings { size, smoothing: 0.0, pressure_size: false, pressure_opacity: false, hardness: 1.0, ..BrushSettings::brush() }
+}
+
+#[test]
+fn a_fast_stroke_is_thinner_when_size_follows_speed_inverted() {
+    let mut s = plain(20.0);
+    s.dynamics.size = Connection { source: Source::Speed, invert: true, min: 0.2, ..Default::default() };
+    s.dynamics.speed_max = 1000.0;
+    // 200 pixels en 20 points : 10 px tous les 0,1 s (100 px/s) ou tous les 0,005 s (2000 px/s).
+    let slow = draw(s, (60.0, 160.0), (260.0, 160.0), 20, 0.1, 1.0);
+    let fast = draw(s, (60.0, 160.0), (260.0, 160.0), 20, 0.005, 1.0);
+    let (ws, wf) = (column(&slow, 200), column(&fast, 200));
+    assert!(ws >= 16 && wf <= 6, "lent {ws} px, rapide {wf} px");
+    // Sans instants (rejeu), la vitesse reste nulle : trait plein.
+    let mut raster = Raster::new(320, 320);
+    let mut st = StrokeState::new(0, StrokeMode::Paint([0, 0, 0]), s, None, true);
+    let mut dirty = Vec::new();
+    for k in 0..=20 {
+        st.add_point(&mut raster, pos2(60.0 + 10.0 * k as f32, 160.0), 1.0, &mut dirty);
+    }
+    assert!(column(&raster, 200) >= 16);
+}
+
+#[test]
+fn a_flat_tip_follows_the_direction_of_the_stroke() {
+    let mut s = plain(24.0);
+    s.roundness = 0.2;
+    s.angle = 90.0;
+    let horizontal = |s| draw(s, (40.0, 160.0), (280.0, 160.0), 24, 0.02, 1.0);
+    let vertical = |s| draw(s, (160.0, 40.0), (160.0, 280.0), 24, 0.02, 1.0);
+    // Angle fixe : la pointe plate est en travers d'un trait, dans le sens de l'autre.
+    let (h, v) = (column(&horizontal(s), 160), row(&vertical(s), 160));
+    assert!(h >= 20 && v <= 8, "sans connexion : {h} / {v}");
+    // L'angle suit la direction : les deux traits ont la même épaisseur.
+    s.dynamics.angle = Connection { source: Source::Direction, ..Default::default() };
+    let (h, v) = (column(&horizontal(s), 160), row(&vertical(s), 160));
+    assert!(h >= 20 && v >= 20 && h.abs_diff(v) <= 2, "avec connexion : {h} / {v}");
+}
+
+#[test]
+fn a_fade_thins_the_stroke_along_its_length() {
+    let mut s = plain(24.0);
+    s.dynamics.size = Connection { source: Source::Fade, invert: true, min: 0.1, ..Default::default() };
+    s.dynamics.fade_length = 200.0;
+    let r = draw(s, (40.0, 160.0), (280.0, 160.0), 24, 0.02, 1.0);
+    let (start, end) = (column(&r, 50), column(&r, 250));
+    assert!(start >= 20 && end <= 4, "début {start} px, fin {end} px");
+}
+
+#[test]
+fn random_sizes_vary_but_the_same_stroke_comes_out_the_same() {
+    let mut s = plain(20.0);
+    s.spacing = 0.6;
+    s.dynamics.size = Connection { source: Source::Random, min: 0.1, ..Default::default() };
+    let a = draw(s, (40.0, 160.0), (280.0, 160.0), 24, 0.02, 1.0);
+    let b = draw(s, (40.0, 160.0), (280.0, 160.0), 24, 0.02, 1.0);
+    let widths: Vec<usize> = (50..270).step_by(6).map(|x| column(&a, x)).collect();
+    let (lo, hi) = (*widths.iter().min().unwrap(), *widths.iter().max().unwrap());
+    assert!(hi - lo >= 6, "des tailles différentes : {widths:?}");
+    assert!((0..320).all(|x| column(&a, x) == column(&b, x)), "même hasard pour le même trait");
+}
+
+#[test]
+fn old_brush_settings_read_without_dynamics_and_curves_round_trip() {
+    let old = r#"{"taille":12.0,"opacite":0.8,"pression_taille":true,"taille_min":0.25}"#;
+    let s: BrushSettings = serde_json::from_str(old).unwrap();
+    assert_eq!(s.size, 12.0);
+    assert!(!s.dynamics.size.active() && s.dynamics.speed_max == 2000.0);
+    let mut s2 = s;
+    s2.dynamics.angle = Connection { source: Source::Direction, invert: true, curve: Curve::from_points(&[[0.0, 0.0], [0.5, 0.8], [1.0, 1.0]]), min: 0.1 };
+    let text = serde_json::to_string(&s2).unwrap();
+    assert!(text.contains("\"dynamique\"") && text.contains("\"direction\"") && text.contains("[0.5,0.8]"), "{text}");
+    let back: BrushSettings = serde_json::from_str(&text).unwrap();
+    assert_eq!(back, s2);
+}
