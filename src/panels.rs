@@ -5,7 +5,7 @@ use crate::brush::BrushSettings;
 use crate::document::{Document, LayerKind};
 
 /// Gestes à la souris et au stylet (hors fichier de raccourcis).
-pub(crate) const MOUSE_GESTURES: [(&str, &str); 8] = [
+pub(crate) const MOUSE_GESTURES: [(&str, &str); 15] = [
     ("Clic droit sur une commande", "lui assigner un raccourci"),
     ("Alt + clic", "prélever une couleur"),
     ("Molette", "zoom autour du curseur"),
@@ -14,6 +14,13 @@ pub(crate) const MOUSE_GESTURES: [(&str, &str); 8] = [
     ("Double-clic sur un plan", "entrer dans le plan pour l'animer"),
     ("Sélection : glisser dans le vide", "lasso (Maj : ajouter / retirer)"),
     ("Sélection : poignées", "échelle (Maj : proportionnelle), rotation (Maj : par 15°)"),
+    ("Timeline : glisser sur les cases", "choisir des images et des calques"),
+    ("Timeline : glisser des images choisies", "les déplacer (Ctrl : copier, Maj : insérer)"),
+    ("Timeline : barre sous un calque", "décaler tout le calque dans le temps"),
+    ("Timeline : début ou fin d'un calque", "rogner ou allonger (tient le premier / dernier dessin)"),
+    ("Timeline : bord droit d'un dessin", "étirer ou raccourcir son exposition"),
+    ("Timeline : prise au bout de la règle", "changer la durée du plan"),
+    ("Échap ou Ctrl+Z pendant un glisser", "abandonner le geste"),
 ];
 
 fn menu_item(ui: &mut egui::Ui, label: &str, shortcut: &str) -> bool {

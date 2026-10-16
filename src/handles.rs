@@ -1,14 +1,21 @@
 //! Poignées de la timeline du plan (passe interface, demandée par Anthony le 2026-10-16) : on y
 //! prend à la souris et on fait glisser dans le temps les marques d'image, les signets, les
 //! points d'entrée et de sortie et les clés d'effets ; le bord droit d'un dessin étire ou
-//! raccourcit son exposition (ce qui suit glisse d'autant, comme dans TVPaint). Une étape
-//! d'annulation par geste, seulement si quelque chose a bougé ; Échap remet tout comme avant.
-//! (Les clés de caméra se prenaient déjà : `camtools`.)
+//! raccourcit son exposition (ce qui suit glisse d'autant). Une étape d'annulation par geste,
+//! seulement si quelque chose a bougé ; Échap (ou Ctrl+Z) pendant le geste remet tout comme
+//! avant. (Les clés de caméra se prenaient déjà : `camtools`.)
+//!
+//! Poignées de calque (chantier 1 de l'audit, choix d'Anthony le 2026-10-16) : la barre sous les
+//! dessins d'un calque le décale dans le temps ; son début et sa fin se rognent ou s'allongent
+//! (allonger tient le premier ou le dernier dessin). Ces poignées ne changent jamais la durée du
+//! plan : elles s'arrêtent à sa fin, et un calque raccourci la laisse telle quelle. La durée se
+//! change par sa propre poignée, au bout de la règle (chantier 4), qui prévient quand les plans
+//! suivants se décalent par rapport au son.
 
 use eframe::egui;
 
 use crate::app::App;
-use crate::document::{ImageMark, Layer, Panel};
+use crate::document::{Document, ImageMark, Layer, Panel};
 use crate::fx::FxKey;
 use crate::history::Edit;
 
@@ -25,6 +32,24 @@ pub(crate) enum Handle {
     FxKey { layer: usize, effect: usize, key: usize },
     /// Bord droit du dessin exposé de `start` à `end` (exclu) sur le calque `layer`.
     Exposure { layer: usize, start: usize, end: usize },
+    /// Début du calque (sa première image dessinée).
+    LayerStart { layer: usize },
+    /// Fin du calque (après sa dernière image dessinée).
+    LayerEnd { layer: usize },
+    /// Le calque entier, pris par sa barre à l'image `grab`.
+    LayerMove { layer: usize, grab: usize },
+    /// Fin du plan : sa durée.
+    PlanEnd,
+}
+
+impl Handle {
+    /// Une poignée qui change les dessins d'un calque : elle ne change pas la durée du plan.
+    fn layer(self) -> Option<usize> {
+        match self {
+            Handle::Exposure { layer, .. } | Handle::LayerStart { layer } | Handle::LayerEnd { layer } | Handle::LayerMove { layer, .. } => Some(layer),
+            _ => None,
+        }
+    }
 }
 
 /// Où l'on a cliqué droit dans la timeline du plan (en dehors des cases des calques, qui ont
@@ -109,13 +134,93 @@ pub fn set_run_length(layer: &mut Layer, start: usize, end: usize, len: usize) {
     layer.trim();
 }
 
+/// Le contenu d'un calque : de sa première image dessinée à la fin de sa dernière (exclue) ;
+/// aucun s'il n'a pas de dessin.
+pub fn content_bounds(layer: &Layer) -> Option<(usize, usize)> {
+    let first = layer.frames.iter().position(Option::is_some)?;
+    let last = layer.frames.iter().rposition(Option::is_some)?;
+    Some((first, last + 1))
+}
+
+/// Le début du calque amené à l'image `to` (avant sa fin) : plus tôt, son premier dessin est
+/// tenu dès `to` ; plus tard, les images d'avant `to` sont vidées. La suite ne bouge pas.
+pub fn set_layer_start(layer: &mut Layer, to: usize) {
+    let Some((a, b)) = content_bounds(layer) else { return };
+    let to = to.min(b - 1);
+    if to < a {
+        let cel = layer.frames[a];
+        for f in &mut layer.frames[to..a] {
+            *f = cel;
+        }
+    } else if to > a {
+        for f in &mut layer.frames[a..to] {
+            *f = None;
+        }
+        layer.roles.retain(|f, _| *f < a || *f >= to);
+    }
+}
+
+/// La fin du calque amenée à `to` (après son début ; au plus `max`, la fin du plan, sauf si le
+/// calque allait déjà plus loin) : plus loin, son dernier dessin est tenu jusque-là ; plus près,
+/// les images d'après sont coupées.
+pub fn set_layer_end(layer: &mut Layer, to: usize, max: usize) {
+    let Some((a, b)) = content_bounds(layer) else { return };
+    let to = to.clamp(a + 1, max.max(b));
+    layer.frames.truncate(b);
+    if to > b {
+        let cel = layer.frames[b - 1];
+        layer.frames.resize(to, cel);
+    } else if to < b {
+        layer.frames.truncate(to);
+        layer.roles.retain(|f, _| *f < to);
+    }
+    layer.trim();
+}
+
+/// Le calque entier décalé de `delta` images, sans passer avant la première image du plan ni
+/// après `max`, sa fin (sauf s'il allait déjà plus loin) : ses dessins, leurs rôles et les clés
+/// d'effets suivent. Renvoie le décalage fait.
+pub fn move_layer(layer: &mut Layer, delta: isize, max: usize) -> isize {
+    let Some((a, b)) = content_bounds(layer) else { return 0 };
+    let room = max.saturating_sub(b) as isize;
+    let d = delta.clamp(-(a as isize), room);
+    if d > 0 {
+        layer.insert(0, None, d as usize);
+    } else if d < 0 {
+        let n = d.unsigned_abs();
+        layer.frames.drain(0..n);
+        layer.shift_frames(0, n, true);
+    }
+    layer.trim();
+    d
+}
+
+/// Changer la durée du plan `i` de `old` à `new` images décale les plans suivants : s'il y a
+/// du son à partir de là, la phrase qui prévient (le son, lui, ne bouge pas).
+pub fn sound_shift_note(doc: &Document, i: usize, old: usize, new: usize) -> Option<String> {
+    if old == new || i >= doc.panels.len() {
+        return None;
+    }
+    let at = doc.panel_start(i) + old.min(new);
+    let sound_after = doc.audio_tracks.iter().any(|t| t.clips.iter().any(|c| c.end() > at));
+    let d = new as isize - old as isize;
+    sound_after.then(|| {
+        format!(
+            "Les plans suivants se décalent de {d:+} image{} par rapport au son, qui reste en place.",
+            if d.abs() > 1 { "s" } else { "" }
+        )
+    })
+}
+
 impl App {
     /// Prend une poignée du plan courant (refusé sous le verrou du storyboard, sauf les signets
     /// et les points d'entrée et de sortie).
     pub(crate) fn begin_handle_drag(&mut self, handle: Handle) -> bool {
         let refused = match handle {
-            Handle::Mark(_) => self.storyboard_refuses(),
-            Handle::FxKey { .. } | Handle::Exposure { .. } => self.content_refuses(),
+            Handle::Mark(_) | Handle::PlanEnd => self.storyboard_refuses(),
+            Handle::FxKey { .. } | Handle::Exposure { .. } | Handle::LayerStart { .. } | Handle::LayerEnd { .. } | Handle::LayerMove { .. } => {
+                self.content_refuses()
+            }
             _ => false,
         };
         if refused {
@@ -149,17 +254,19 @@ impl App {
                 let f = move_bookmark(&mut self.doc.panels[pi].cues.bookmarks, i, frame, len);
                 format!("Signet : image {}.", label(self, f))
             }
-            // L'entrée reste avant (ou sur) la sortie, et inversement ; la sortie est la dernière
-            // image jouée.
+            // L'entrée reste avant la sortie, et inversement (jamais sur la même image, comme
+            // quand on les pose) ; la sortie est la dernière image jouée.
             Handle::In => {
                 let cues = &mut self.doc.panels[pi].cues;
-                let f = frame.min(cues.out_point.unwrap_or(len.saturating_sub(1)));
+                let last = cues.out_point.map_or(len.saturating_sub(1), |o| o.saturating_sub(1));
+                let f = frame.min(last);
                 cues.in_point = Some(f);
                 format!("Point d'entrée : image {}.", label(self, f))
             }
             Handle::Out => {
                 let cues = &mut self.doc.panels[pi].cues;
-                let f = frame.min(len.saturating_sub(1)).max(cues.in_point.unwrap_or(0));
+                let first = cues.in_point.map_or(0, |i| i + 1);
+                let f = frame.min(len.saturating_sub(1)).max(first);
                 cues.out_point = Some(f);
                 format!("Point de sortie : image {}.", label(self, f))
             }
@@ -170,16 +277,77 @@ impl App {
                 format!("Clé d'effet : image {}.", label(self, f))
             }
             Handle::Exposure { layer, start, end } => {
-                let Some(original) = self.handle_drag.as_ref().and_then(|d| d.before.layers.get(layer)).cloned() else { return };
-                let mut l = original;
-                set_run_length(&mut l, start, end, edge.saturating_sub(start));
-                self.doc.panels[pi].layers[layer] = l;
+                let Some((mut l, plan_len)) = self.layer_before(layer) else { return };
+                // Ce qui suit glisse d'autant, sans dépasser la fin du plan.
+                let room = plan_len.saturating_sub(l.frames.len());
+                let want = edge.saturating_sub(start).max(1);
+                let n = want.min(end - start + room);
+                set_run_length(&mut l, start, end, n);
+                self.put_layer(pi, layer, l, plan_len);
+                let s = if n > 1 { "s" } else { "" };
+                if want > n {
+                    format!("Exposition : {n} image{s} (fin du plan : l'allonger d'abord par la poignée au bout de la règle).")
+                } else {
+                    format!("Exposition : {n} image{s}.")
+                }
+            }
+            Handle::LayerStart { layer } => {
+                let Some((mut l, plan_len)) = self.layer_before(layer) else { return };
+                set_layer_start(&mut l, edge);
+                let a = content_bounds(&l).map_or(0, |(a, _)| a);
+                self.put_layer(pi, layer, l, plan_len);
+                format!("Début du calque : image {}.", label(self, a))
+            }
+            Handle::LayerEnd { layer } => {
+                let Some((mut l, plan_len)) = self.layer_before(layer) else { return };
+                let reached = edge > plan_len;
+                set_layer_end(&mut l, edge, plan_len);
+                let b = content_bounds(&l).map_or(0, |(_, b)| b);
+                self.put_layer(pi, layer, l, plan_len);
+                let end = format!("Fin du calque : image {}", label(self, b.saturating_sub(1)));
+                if reached {
+                    format!("{end} (fin du plan : l'allonger d'abord par la poignée au bout de la règle).")
+                } else {
+                    format!("{end}.")
+                }
+            }
+            Handle::LayerMove { layer, grab } => {
+                let Some((mut l, plan_len)) = self.layer_before(layer) else { return };
+                let d = move_layer(&mut l, frame as isize - grab as isize, plan_len);
+                self.put_layer(pi, layer, l, plan_len);
+                format!("Calque décalé de {d:+} image{}.", if d.abs() > 1 { "s" } else { "" })
+            }
+            Handle::PlanEnd => {
+                let Some(before) = self.handle_drag.as_ref().map(|d| d.before.clone()) else { return };
+                let (old, n) = (before.frame_count(), edge.max(1));
+                let mut p = before;
+                p.set_length(n);
+                self.doc.panels[pi] = p;
                 self.renderer.invalidate_all();
-                let n = edge.saturating_sub(start).max(1);
-                format!("Exposition : {n} image{}.", if n > 1 { "s" } else { "" })
+                let base = format!("Durée du plan : {}", crate::storyboard::duration_label(n, self.doc.fps));
+                match sound_shift_note(&self.doc, pi, old, n) {
+                    Some(note) => format!("{base}. {note}"),
+                    None => format!("{base}."),
+                }
             }
         };
         self.status = status;
+    }
+
+    /// Le calque `layer` tel qu'il était au début du geste, et la durée du plan d'alors.
+    fn layer_before(&self, layer: usize) -> Option<(Layer, usize)> {
+        let d = self.handle_drag.as_ref()?;
+        Some((d.before.layers.get(layer)?.clone(), d.before.frame_count()))
+    }
+
+    /// Pose le calque changé par une poignée : le plan garde sa durée d'avant le geste.
+    fn put_layer(&mut self, pi: usize, layer: usize, l: Layer, plan_len: usize) {
+        let p = &mut self.doc.panels[pi];
+        p.layers[layer] = l;
+        if p.frame_count() < plan_len {
+            p.length = plan_len;
+        }
+        self.renderer.invalidate_all();
     }
 
     /// Lâche la poignée : une étape d'annulation si quelque chose a bougé.
@@ -189,13 +357,25 @@ impl App {
         let changed = match d.handle {
             Handle::Mark(_) => p.marks != d.before.marks,
             Handle::Bookmark(_) | Handle::In | Handle::Out => p.cues != d.before.cues,
-            Handle::FxKey { layer, .. } | Handle::Exposure { layer, .. } => {
-                p.layers.get(layer).map(|l| (&l.frames, &l.fx, &l.roles)) != d.before.layers.get(layer).map(|l| (&l.frames, &l.fx, &l.roles))
+            Handle::PlanEnd => p.frame_count() != d.before.frame_count(),
+            h => {
+                let layer = h.layer().or(match h {
+                    Handle::FxKey { layer, .. } => Some(layer),
+                    _ => None,
+                });
+                layer.is_some_and(|layer| {
+                    p.layers.get(layer).map(|l| (&l.frames, &l.fx, &l.roles)) != d.before.layers.get(layer).map(|l| (&l.frames, &l.fx, &l.roles))
+                })
             }
         };
         if changed {
             self.history.push(d.snap);
             self.modified = true;
+            // La note du son reste lisible après le geste ; la durée vue est à jour.
+            self.plan_len_seen = Some((d.panel, p.frame_count()));
+        } else if let Some(p) = self.doc.panels.iter_mut().find(|p| p.id == d.panel) {
+            // Rien n'a changé : le plan reprend exactement son état (durée minimale comprise).
+            *p = d.before;
         }
     }
 
@@ -255,4 +435,79 @@ impl App {
             self.renderer.invalidate_all();
         }
     }
+
+    /// Un glisser est en cours : poignée, clé de caméra, montage (durée, place d'un plan, son),
+    /// images choisies, choix au rectangle, ligne de calque.
+    pub(crate) fn dragging(&self) -> bool {
+        self.handle_drag.is_some()
+            || self.cam_key_drag.is_some()
+            || self.montage_drag.is_some()
+            || self.image_drag.is_some()
+            || self.grid_select.is_some()
+            || self.timeline_sound_track.is_some()
+            || self.head_drag.is_some()
+            || self.panel_layer_drag.is_some()
+            || self.montage_layer_drag.is_some()
+    }
+
+    /// Échap (ou Ctrl+Z) pendant un glisser (chantier 2) : tout revient comme avant le geste ;
+    /// rien n'est enregistré. Le choix fait au rectangle reste celui d'avant.
+    pub(crate) fn cancel_drags(&mut self) {
+        self.cancel_montage_drag();
+        self.image_drag = None;
+        if let Some(g) = self.grid_select.take() {
+            self.frame_sel = g.before_frames;
+            self.layer_sel = g.before_layers;
+        }
+        self.timeline_sound_track = None;
+        self.head_drag = None;
+        self.panel_layer_drag = None;
+        self.montage_layer_drag = None;
+        self.status = "Geste abandonné : tout revient comme avant.".into();
+    }
+
+    /// Après l'interface, une fois par image d'écran : un glisser dont la vue n'est plus montrée
+    /// (bouton déjà relâché) ne reste pas en cours, sinon il bloquerait les raccourcis.
+    pub(crate) fn drop_stale_drags(&mut self, pointer_down: bool) {
+        if pointer_down {
+            return;
+        }
+        self.grid_select = None;
+        self.image_drag = None;
+        self.head_drag = None;
+        self.panel_layer_drag = None;
+        self.montage_layer_drag = None;
+        if self.handle_drag.is_some() {
+            self.end_handle_drag();
+        }
+    }
+
+    /// Une fois par image d'écran (chantier 4) : si la durée du plan courant a changé hors d'un
+    /// glisser (touche +, dessin après la fin, collage…) et que des plans suivants se décalent par
+    /// rapport au son, la barre d'état le dit.
+    pub(crate) fn watch_plan_length(&mut self) {
+        let Some(p) = self.doc.panels.get(self.cur_panel) else { return };
+        let now = (p.id, p.frame_count());
+        if self.dragging() {
+            return;
+        }
+        if let Some((id, old)) = self.plan_len_seen {
+            if id == now.0 && old != now.1 {
+                if let Some(note) = sound_shift_note(&self.doc, self.cur_panel, old, now.1) {
+                    let title = crate::storyboard::panel_title(&self.doc, self.cur_panel);
+                    self.status = format!("{title} : {} images. {note}", now.1);
+                }
+            }
+        }
+        self.plan_len_seen = Some(now);
+    }
+}
+
+/// Choix d'images au rectangle (chantier 3) : la case du clic, et le choix d'avant (rendu par
+/// Échap).
+pub(crate) struct GridSelect {
+    pub col: usize,
+    pub row: usize,
+    pub before_frames: Option<(usize, usize)>,
+    pub before_layers: Vec<u64>,
 }

@@ -356,6 +356,11 @@ pub struct App {
     pub(crate) fake_hold_times: usize,
     /// Glisser d'images choisies en cours : colonne du clic, colonne sous la souris (13c).
     pub(crate) image_drag: Option<(usize, usize)>,
+    /// Choix d'images au rectangle en cours dans la grille de la timeline (chantier 3).
+    pub(crate) grid_select: Option<crate::handles::GridSelect>,
+    /// Plan courant (id) et sa durée à l'image d'écran d'avant : un changement de durée qui
+    /// décale les plans suivants par rapport au son est signalé (chantier 4).
+    pub(crate) plan_len_seen: Option<(u64, usize)>,
     /// Instance en cours de renommage dans la timeline, fenêtre du renommage intelligent (13c).
     pub(crate) instance_rename: Option<crate::images::InstanceRename>,
     pub(crate) smart_rename: Option<crate::images::SmartRename>,
@@ -644,6 +649,8 @@ impl App {
             images_focus: false,
             fake_hold_times: 2,
             image_drag: None,
+            grid_select: None,
+            plan_len_seen: None,
             instance_rename: None,
             smart_rename: None,
             time_display: Default::default(),
@@ -1037,6 +1044,8 @@ impl App {
         self.cur_layer = self.cur_layer.min(self.layers().len() - 1);
         self.cur_frame = 0;
         self.vsel = None;
+        // Les images choisies étaient celles de l'autre plan (audit A4).
+        self.frame_sel = None;
     }
 
     pub(crate) fn select_panel(&mut self, index: usize) {
@@ -1846,6 +1855,8 @@ impl App {
 
     pub(crate) fn undo(&mut self) {
         self.cancel_montage_drag();
+        // Une durée rendue par l'annulation n'est pas signalée.
+        self.plan_len_seen = None;
         self.end_stroke();
         // Une zone bitmap déplacée est d'abord reposée : l'annulation défait alors ce déplacement.
         self.drop_bitmap_selection();
@@ -1862,6 +1873,7 @@ impl App {
 
     pub(crate) fn redo(&mut self) {
         self.cancel_montage_drag();
+        self.plan_len_seen = None;
         self.end_stroke();
         self.drop_bitmap_selection();
         let mut nav = Nav {
@@ -2281,8 +2293,26 @@ impl App {
         if self.capture_shortcut(ctx) {
             return;
         }
-        // Pas de raccourci pendant une saisie, un dialogue, ou un glissé dans la bande de montage.
-        if ctx.wants_keyboard_input() || self.modal_open() || self.montage_drag.is_some() {
+        // Pas de raccourci pendant une saisie ou un dialogue.
+        if ctx.wants_keyboard_input() || self.modal_open() {
+            self.pending_keys.clear();
+            return;
+        }
+        // Pendant un glisser (chantier 2) : Échap ou Ctrl+Z l'abandonnent, tout revient comme
+        // avant ; les autres touches attendent la fin du geste.
+        if self.dragging() {
+            let cancel = ctx.input(|i| {
+                i.events.iter().any(|e| match e {
+                    Event::Key { key, physical_key, pressed: true, modifiers, .. } => {
+                        (*key == Key::Escape && !modifiers.any())
+                            || self.keymap.find(*key, *physical_key, *modifiers, self.mode).is_some_and(|a| a == "edition.annuler")
+                    }
+                    _ => false,
+                })
+            });
+            if cancel {
+                self.cancel_drags();
+            }
             self.pending_keys.clear();
             return;
         }
@@ -2365,6 +2395,9 @@ impl App {
                 self.paste_images(false)
             }
             "edition.supprimer" if self.images_have_focus() => self.delete_images(false),
+            // Après un clic dans la grille, sans images choisies : Suppr supprime l'image courante
+            // des calques choisis (audit A3) ; le dessin se vide après un clic dans le dessin.
+            "edition.supprimer" if self.images_focus && self.mode == Mode::Animation && !self.panels_have_focus() => self.delete_images(false),
             "edition.couper" if self.bsel.is_some() => self.bitmap_cut(),
             "edition.couper" => self.cut_selection(),
             "edition.copier" if self.bsel.is_some() => {
@@ -2407,6 +2440,8 @@ impl App {
                     self.status = "Rien de sélectionné : rien à garder.".into();
                 }
             }
+            // Dans la timeline : toutes les images de tous les calques (audit A2).
+            "edition.tout_selectionner" if self.images_focus && self.mode == Mode::Animation => self.select_whole_timeline(),
             "edition.tout_selectionner" => self.select_all(),
             "edition.tout_deselectionner" => {
                 self.end_stroke();
@@ -2987,6 +3022,8 @@ impl eframe::App for App {
         self.recovery_window(ctx);
         self.workspace_name_window(ctx);
         self.scrub_audio();
+        self.drop_stale_drags(ctx.input(|i| i.pointer.any_down()));
+        self.watch_plan_length();
         if self.thumbs.pending {
             ctx.request_repaint();
         }

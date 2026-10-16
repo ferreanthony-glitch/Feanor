@@ -178,9 +178,22 @@ première image dessinée du calque et après la dernière, il montre rien, la b
 un va-et-vient ou la première / dernière image maintenue. La timeline montre ces images en blocs
 pâles ; on dessine toujours sur les vraies images.
 
-**Images** (bouton pellicule de la timeline, ou menu Animation > Images). Maj + clic ou Maj +
-glisser dans la grille choisit des images, sur les calques choisis ; Ctrl+X / C / V et Suppr
-les visent ensuite. On peut :
+**Poignées de calque** (timeline). Sous les dessins de chaque calque, une barre :
+- la glisser décale tout le calque dans le temps ;
+- tirer son début ou sa fin rogne le calque, ou l'allonge en tenant son premier ou son dernier
+  dessin ;
+- le bord droit d'un dessin étire son exposition (la suite glisse).
+
+Ces poignées s'arrêtent à la fin du plan : sa durée se change par la prise au bout de la règle
+(ou par le champ de durée). Quand une durée change et que du son suit, la barre d'état prévient
+que les plans suivants se décalent par rapport au son. Échap (ou Ctrl+Z) pendant un glisser
+remet tout comme avant.
+
+**Images** (bouton pellicule de la timeline, ou menu Animation > Images). Glisser sur les cases
+choisit les images et les calques couverts. Maj + clic choisit les images entre l'image courante
+et le clic, sur les calques choisis. Ctrl+A dans la timeline choisit tout. Ctrl+X / C / V et
+Suppr les visent ensuite (Suppr seul, après un clic dans la grille, supprime l'image courante).
+On peut :
 - les supprimer, en choisissant le trou laissé : vide, comblé par le dessin d'avant, ou la suite
   qui recule ;
 - les couper, les copier, les coller avant l'image courante ou à la place des images choisies ;

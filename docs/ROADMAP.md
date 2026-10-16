@@ -847,6 +847,46 @@ Simplifier l'interface et combler ce qui manque :
   - étirer une exposition dans les pistes du montage (la timeline du plan le fait) ;
   - les rôles, qui suivent leurs images.
 
+## Audit du cœur par Fable et chantiers de la timeline (2026-10-16)
+
+Anthony : « J'aimerais avancer plus sur le corps du logiciel plutôt que les exports. » Fable a
+audité le cœur, en lecture seule. Constat : rien d'annoncé sans effet, aucun plantage trouvé, mais
+le geste de base de TVPaint manquait : prendre le bloc d'un calque pour le déplacer, le rogner ou
+l'allonger. Fable a proposé dix chantiers ; Anthony a lancé les quatre premiers. Ses choix :
+allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du plan.
+
+- ✅ 1. Poignées de calque dans la timeline :
+  - **barre sous les dessins** d'un calque : la glisser décale tout le calque, avec ses rôles et
+    ses clés d'effets ;
+  - **début** : plus tôt, le premier dessin est tenu ; plus tard, les images d'avant se vident,
+    la suite ne bouge pas ;
+  - **fin** : plus loin, le dernier dessin est tenu ; plus près, la fin est coupée ;
+  - le bord droit d'un dessin du milieu étire son exposition, et la suite glisse.
+
+  Aucune de ces poignées ne change la durée du plan : elles s'arrêtent à sa fin, et un calque
+  raccourci laisse au plan sa durée. Un aperçu en direct, une étape d'annulation par geste.
+- ✅ 2. Échap ou Ctrl+Z pendant n'importe quel glisser l'abandonnent : poignée, clé de caméra,
+  durée ou place d'un plan, son, images, choix au rectangle, ligne de calque. Tout revient comme
+  avant. Avant, les raccourcis étaient coupés pendant un glisser du montage.
+- ✅ 3. Choisir des images :
+  - glisser sur les cases choisit les images et les calques couverts (rectangle) ; glisser dans la
+    règle fait toujours défiler ;
+  - Ctrl+A dans la timeline choisit toutes les images de tous les calques ;
+  - Suppr après un clic dans la grille supprime les images visées (l'image courante s'il n'y a pas
+    de choix) au lieu de vider le dessin ;
+  - le choix d'images est vidé au changement de plan (il visait l'autre plan) ;
+  - les gestes de la timeline sont dans la liste des gestes de la souris (F1).
+- ✅ 4. Durée du plan :
+  - une prise au bout de la règle (et le trait de fin dans la ligne de la caméra) change la durée
+    du plan ;
+  - quand une durée change, que ce soit par la poignée, le montage, la touche +, un dessin posé
+    après la fin ou un collage, et que du son suit, la barre d'état prévient : les plans suivants
+    se décalent par rapport au son, qui reste en place. Le point d'entrée ne peut plus être posé
+    sur le point de sortie par sa poignée.
+- Restent (ordre de Fable) : pistes du montage modifiables (au-delà de 8 calques, par nom),
+  timeline et montage visibles ensemble, montrer qui a la main (plans / images / dessin),
+  navigation de calques à la TVPaint, fenêtre « Agrandir / rétrécir le calque », finitions.
+
 ## Raccourcis proposés, à valider
 
 Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans `keymap.toml`) :

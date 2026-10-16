@@ -2,7 +2,7 @@ use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Pos2, Rect, RichTe
 
 use crate::app::{App, Mode};
 use crate::document::LayerKind;
-use crate::handles::{GridMenu, Handle};
+use crate::handles::{GridMenu, GridSelect, Handle};
 use crate::layerheads::{row_at, rows_height, rows_of, Row, HEAD_W};
 use crate::storyboard::duration_label;
 use crate::theme;
@@ -20,6 +20,16 @@ const SOUND_H: f32 = 30.0;
 /// Ligne des images clés de la caméra, sous les calques.
 const CAM_H: f32 = 18.0;
 const CAM_KEY: Color32 = theme::CAMERA;
+/// Barre d'un calque, sous ses dessins (chantier 1) : on la prend pour décaler le calque, par
+/// ses bouts pour le rogner ou l'allonger.
+const BAR_H: f32 = 4.0;
+/// Prise de la fin du plan, au bout de la règle (chantier 4).
+const PLAN_END_W: f32 = 9.0;
+
+/// Bas des dessins d'une ligne qui commence en `y` (la barre du calque est dessous).
+fn body_bottom(y: f32, h: f32) -> f32 {
+    y + h - BAR_H - 3.0
+}
 
 pub(crate) const CUR_FRAME: Color32 = theme::IMAGE_COURANTE;
 
@@ -310,6 +320,12 @@ impl App {
         }
         let visuals = ui.visuals().clone();
         let grid_top = r.top() + HEADER_H;
+        // Poignée sous la souris ou tenue : sa barre ou sa prise s'éclaire.
+        let lit = self
+            .handle_drag
+            .as_ref()
+            .map(|d| d.handle)
+            .or_else(|| resp.hover_pos().and_then(|p| self.timeline_handle_at(p, r, cell, &rows, grid_top)));
         // Règle des images.
         painter.rect_filled(Rect::from_min_size(r.min, vec2(size.x, HEADER_H)), 0.0, theme::REGLE);
 
@@ -526,8 +542,8 @@ impl App {
                         }
                         if shown.is_some() {
                             let block = Rect::from_min_max(
-                                pos2(r.left() + f as f32 * cell + 1.0, y + 6.0),
-                                pos2(r.left() + g as f32 * cell - 1.0, y + row.h - 6.0),
+                                pos2(r.left() + f as f32 * cell + 1.0, y + 5.0),
+                                pos2(r.left() + g as f32 * cell - 1.0, body_bottom(y, row.h) - 2.0),
                             );
                             painter.rect(block, 3.0, base.gamma_multiply(0.18), Stroke::new(1.0_f32, base.gamma_multiply(0.7)), StrokeKind::Inside);
                         }
@@ -542,8 +558,8 @@ impl App {
                 let inside = content.is_some_and(|(a, b)| start > a && end <= b);
                 if layer.frames[start].is_none() && self.empty_x && inside {
                     let cross = Rect::from_min_max(
-                        pos2(r.left() + start as f32 * cell + 2.0, y + 6.0),
-                        pos2(r.left() + end as f32 * cell - 2.0, y + row.h - 6.0),
+                        pos2(r.left() + start as f32 * cell + 2.0, y + 5.0),
+                        pos2(r.left() + end as f32 * cell - 2.0, body_bottom(y, row.h) - 2.0),
                     );
                     let stroke = Stroke::new(1.0_f32, theme::TEXTE_DOUX.gamma_multiply(0.6));
                     painter.rect_stroke(cross, 2.0, stroke, StrokeKind::Inside);
@@ -552,8 +568,8 @@ impl App {
                 }
                 if let Some(id) = layer.frames[start] {
                     let block = Rect::from_min_max(
-                        pos2(r.left() + start as f32 * cell + 1.0, y + 4.0),
-                        pos2(r.left() + end as f32 * cell - 1.0, y + row.h - 4.0),
+                        pos2(r.left() + start as f32 * cell + 1.0, y + 3.0),
+                        pos2(r.left() + end as f32 * cell - 1.0, body_bottom(y, row.h)),
                     );
                     let empty = self.doc.cels.get(&id).is_none_or(|c| c.is_empty());
                     let mut fill = match (empty, layer.kind) {
@@ -605,6 +621,45 @@ impl App {
                     }
                 }
                 f = end;
+            }
+        }
+        // Barre de chaque calque (chantier 1) : de son premier dessin à la fin du dernier ; ses
+        // bouts sont plus clairs. Elle s'éclaire sous la souris et pendant le geste.
+        for row in &rows {
+            let layer = &self.layers()[row.li];
+            if layer.folder || layer.video.is_some() {
+                continue;
+            }
+            let Some((a, b)) = crate::handles::content_bounds(layer) else { continue };
+            let y = grid_top + row.top;
+            let bar = Rect::from_min_max(
+                pos2(r.left() + a as f32 * cell + 1.0, body_bottom(y, row.h) + 1.0),
+                pos2(r.left() + b.min(cols) as f32 * cell - 1.0, body_bottom(y, row.h) + 1.0 + BAR_H),
+            );
+            if !bar.is_positive() {
+                continue;
+            }
+            let base = match layer.kind {
+                LayerKind::Vector => theme::DESSIN_VECTORIEL,
+                LayerKind::Bitmap => theme::DESSIN_BITMAP,
+            };
+            let on = |h: Option<Handle>| match h {
+                Some(Handle::LayerMove { layer, .. }) => layer == row.li,
+                _ => false,
+            };
+            let (start_lit, end_lit) = (lit == Some(Handle::LayerStart { layer: row.li }), lit == Some(Handle::LayerEnd { layer: row.li }));
+            let fill = if on(lit) { base } else { base.gamma_multiply(0.5) };
+            painter.rect_filled(bar, 1.5, fill);
+            let cap = (bar.width() * 0.5).min(4.0);
+            for (x0, x1, hot) in [(bar.left(), bar.left() + cap, start_lit), (bar.right() - cap, bar.right(), end_lit)] {
+                let c = if hot { Color32::WHITE } else { theme::TEXTE_FORT.gamma_multiply(0.7) };
+                painter.rect_filled(Rect::from_min_max(pos2(x0, bar.top()), pos2(x1, bar.bottom())), 1.0, c);
+            }
+            // Un bout pris : un trait sur toute la hauteur de la ligne, là où il est.
+            for (hot, x) in [(start_lit, bar.left() - 1.0), (end_lit, bar.right() + 1.0)] {
+                if hot {
+                    painter.line_segment([pos2(x, y + 1.0), pos2(x, y + row.h - 1.0)], Stroke::new(1.5_f32, Color32::WHITE));
+                }
             }
         }
         for (at, id, visible) in thumbs {
@@ -744,10 +799,21 @@ impl App {
             0.0,
             Color32::from_black_alpha(70),
         );
+        let end_lit = lit == Some(Handle::PlanEnd);
         painter.line_segment(
             [pos2(end_x, r.top()), pos2(end_x, r.bottom())],
-            Stroke::new(1.5_f32, theme::TEXTE_DOUX),
+            Stroke::new(if end_lit { 2.0_f32 } else { 1.5_f32 }, if end_lit { Color32::WHITE } else { theme::TEXTE_DOUX }),
         );
+        // La prise de la fin du plan, au bout de la règle (chantier 4) : on la tire pour changer
+        // la durée du plan.
+        let tab = Rect::from_min_size(pos2(end_x, r.top() + 2.0), vec2(PLAN_END_W - 2.0, HEADER_H - 4.0));
+        painter.rect_filled(tab, 2.0, if end_lit { Color32::WHITE } else { theme::TEXTE_DOUX });
+        for dy in [-3.0, 0.0, 3.0] {
+            painter.line_segment(
+                [pos2(tab.left() + 2.0, tab.center().y + dy), pos2(tab.right() - 2.0, tab.center().y + dy)],
+                Stroke::new(1.0_f32, theme::REGLE),
+            );
+        }
 
         // Image courante.
         let cx = r.left() + self.cur_frame as f32 * cell;
@@ -844,7 +910,9 @@ impl App {
             }
         }
         let cursor_for = |h: Handle, held: bool| match h {
-            Handle::Exposure { .. } | Handle::In | Handle::Out => egui::CursorIcon::ResizeHorizontal,
+            Handle::Exposure { .. } | Handle::In | Handle::Out | Handle::LayerStart { .. } | Handle::LayerEnd { .. } | Handle::PlanEnd => {
+                egui::CursorIcon::ResizeHorizontal
+            }
             _ if held => egui::CursorIcon::Grabbing,
             _ => egui::CursorIcon::Grab,
         };
@@ -901,7 +969,51 @@ impl App {
                 self.drop_images(c1 as isize - c0 as isize, mode);
             }
         }
-        if (resp.clicked() || resp.dragged()) && !holding_key && self.image_drag.is_none() && !resp.drag_stopped() && !in_notes {
+        // Choisir au rectangle (chantier 3) : un glisser qui part d'une case d'un calque (hors
+        // poignée et hors des images déjà choisies) choisit les images et les calques couverts ;
+        // la tête de lecture reste sur la case du départ. Glisser dans la règle fait défiler.
+        if resp.drag_started() && !holding_key && !in_notes && self.image_drag.is_none() && !shift {
+            if let Some(p) = ui.input(|i| i.pointer.press_origin()) {
+                let y = p.y - grid_top;
+                if let Some(k) = rows.iter().position(|row| y >= row.top && y < row.top + row.h) {
+                    let col = col_of(p.x);
+                    let (before_frames, before_layers) = (self.frame_sel, self.layer_sel.clone());
+                    self.set_frame_free(col);
+                    self.layer_sel.clear();
+                    self.select_layer(rows[k].li);
+                    self.frame_sel = Some((col, col + 1));
+                    self.grid_select = Some(GridSelect { col, row: k, before_frames, before_layers });
+                }
+            }
+        }
+        if let Some((c0, k0)) = self.grid_select.as_ref().map(|g| (g.col, g.row)) {
+            if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
+                let c = col_of(p.x);
+                let y = (p.y - grid_top).clamp(0.0, (rows_h - 0.5).max(0.0));
+                let k = rows.iter().position(|row| y >= row.top && y < row.top + row.h).unwrap_or(k0);
+                self.frame_sel = Some((c0.min(c), c0.max(c) + 1));
+                let (lo, hi) = (k0.min(k), k0.max(k));
+                let cur = self.cur_layer;
+                let ids: Vec<u64> = rows[lo..=hi]
+                    .iter()
+                    .map(|row| row.li)
+                    .filter(|&li| li != cur && !self.layers()[li].folder)
+                    .map(|li| self.layers()[li].id)
+                    .collect();
+                self.layer_sel = ids;
+            }
+            if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
+                self.grid_select = None;
+                let (a, b) = self.image_range();
+                let (n, m) = (b - a, self.image_layers().len());
+                self.status = format!(
+                    "{n} image{} × {m} calque{} choisis : les glisser pour les déplacer (Ctrl : copier, Maj : insérer), Suppr pour les supprimer, Échap pendant le geste pour l'abandonner.",
+                    if n > 1 { "s" } else { "" },
+                    if m > 1 { "s" } else { "" }
+                );
+            }
+        }
+        if (resp.clicked() || resp.dragged()) && !holding_key && self.image_drag.is_none() && self.grid_select.is_none() && !resp.drag_stopped() && !in_notes {
             if let Some(p) = resp.interact_pointer_pos() {
                 let col = ((p.x - r.left()) / cell).floor().max(0.0) as usize;
                 if shift {
@@ -949,13 +1061,22 @@ impl App {
     }
 
     /// Poignée sous le point `p` de la grille (`r` : la grille, `cell` : largeur d'une image).
-    /// Dans la règle : un signet (en bas), l'entrée ou la sortie, une marque d'image. Dans une
-    /// ligne de calque : une clé d'effet (en haut), le bord droit d'un dessin.
+    /// Dans la règle : la fin du plan (sa prise au bout), un signet (en bas), l'entrée ou la
+    /// sortie, une marque d'image. Dans une ligne de calque : une clé d'effet (en haut), le début
+    /// ou la fin du calque, sa barre (en bas), le bord droit d'un dessin.
     fn timeline_handle_at(&self, p: Pos2, r: Rect, cell: f32, rows: &[Row], grid_top: f32) -> Option<Handle> {
         let x = |f: usize| r.left() + f as f32 * cell;
         let near = |at: f32, tol: f32| (p.x - at).abs() <= tol;
         let panel = self.panel();
-        if p.y >= r.top() && p.y < grid_top {
+        let end_x = x(panel.frame_count());
+        let rows_h = rows_height(rows);
+        // La fin du plan : sa prise dans la règle, ou son trait dans la ligne de la caméra.
+        let in_ruler = p.y >= r.top() && p.y < grid_top;
+        let in_cam = p.y >= grid_top + rows_h && p.y < grid_top + rows_h + CAM_H;
+        if (in_ruler && p.x >= end_x - 1.0 && p.x <= end_x + PLAN_END_W) || (in_cam && near(end_x, 4.0)) {
+            return Some(Handle::PlanEnd);
+        }
+        if in_ruler {
             if p.y >= grid_top - 9.0 {
                 if let Some(i) = panel.cues.bookmarks.iter().position(|&f| near(x(f) + cell * 0.5, (cell * 0.5).max(5.0))) {
                     return Some(Handle::Bookmark(i));
@@ -981,8 +1102,23 @@ impl App {
                 }
             }
         }
+        let tol = (cell * 0.3).clamp(2.0, 5.0);
+        // Le début et la fin du calque, puis sa barre (chantier 1).
+        if let Some((a, b)) = crate::handles::content_bounds(layer) {
+            if near(x(a), tol) {
+                return Some(Handle::LayerStart { layer: row.li });
+            }
+            if near(x(b), tol) {
+                return Some(Handle::LayerEnd { layer: row.li });
+            }
+            let in_bar = p.y - grid_top - row.top >= body_bottom(0.0, row.h);
+            if in_bar && p.x > x(a) && p.x < x(b) {
+                let grab = ((p.x - r.left()) / cell).floor().max(0.0) as usize;
+                return Some(Handle::LayerMove { layer: row.li, grab });
+            }
+        }
         let b = ((p.x - r.left()) / cell).round().max(0.0) as usize;
-        if b >= 1 && near(x(b), (cell * 0.3).clamp(2.0, 5.0)) {
+        if b >= 1 && near(x(b), tol) {
             let (s, e) = layer.run_bounds(b - 1);
             if e == b && layer.frames.get(s).is_some_and(Option::is_some) {
                 return Some(Handle::Exposure { layer: row.li, start: s, end: e });

@@ -656,6 +656,15 @@ impl App {
         self.status = "Toutes les images du plan sont choisies.".into();
     }
 
+    /// Ctrl+A dans la timeline : toutes les images du plan, sur tous ses calques.
+    pub(crate) fn select_whole_timeline(&mut self) {
+        let ids: Vec<u64> = self.layers().iter().filter(|l| !l.folder).map(|l| l.id).collect();
+        self.layer_sel = ids;
+        self.frame_sel = Some((0, self.frame_count()));
+        self.images_focus = true;
+        self.status = "Toutes les images de tous les calques sont choisies.".into();
+    }
+
     /// Va au début de l'instance précédente (`next` : suivante) du calque courant.
     pub(crate) fn goto_instance(&mut self, next: bool) {
         let frames = &self.layer().frames;

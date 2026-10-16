@@ -1044,11 +1044,16 @@ impl App {
             self.montage_drag = None;
             return;
         }
+        let old = original.frame_count();
         let mut s = original.clone();
         s.set_length(n);
         self.doc.panels[i] = s;
         self.renderer.invalidate_all();
         self.status = format!("{} : {}", panel_long_title(&self.doc, i), duration_label(n, fps));
+        // Les plans suivants se décalent par rapport au son (chantier 4).
+        if let Some(note) = crate::handles::sound_shift_note(&self.doc, i, old, n) {
+            self.status = format!("{}. {note}", self.status);
+        }
     }
 
     // ------------------------------------------------------------------ fiche du plan

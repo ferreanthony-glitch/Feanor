@@ -2,7 +2,7 @@
 
 use crate::document::{ImageMark, Layer, LayerKind};
 use crate::fx::{Effect, EffectKind, FxKey};
-use crate::handles::{between, move_bookmark, move_fx_key, move_mark, set_run_length};
+use crate::handles::{between, content_bounds, move_bookmark, move_fx_key, move_layer, move_mark, set_layer_end, set_layer_start, set_run_length, sound_shift_note};
 
 fn mark(frame: usize) -> ImageMark {
     ImageMark { frame, ..Default::default() }
@@ -52,4 +52,90 @@ fn exposure_stretches_and_what_follows_slides() {
     assert_eq!(l.frames.len(), 7);
     set_run_length(&mut l, 1, 7, 0);
     assert_eq!(l.frames, vec![Some(1), Some(2)], "au moins une image");
+}
+
+/// Un calque : vide 2 images, A 3 images, B 2 images ; un rôle sur B et une clé d'effet à
+/// l'image 5.
+fn layer_ab() -> Layer {
+    let mut l = Layer::new("L", LayerKind::Vector);
+    l.frames = vec![None, None, Some(1), Some(1), Some(1), Some(2), Some(2)];
+    l.roles.insert(5, crate::roles::Role::Key);
+    let mut e = Effect::new(EffectKind::GaussianBlur);
+    e.keys.push(FxKey { frame: 5, values: vec![3.0] });
+    l.fx.push(e);
+    l
+}
+
+#[test]
+fn layer_start_is_trimmed_or_held_earlier() {
+    let mut l = layer_ab();
+    assert_eq!(content_bounds(&l), Some((2, 7)));
+    // Plus tôt : le premier dessin est tenu dès l'image 0.
+    set_layer_start(&mut l, 0);
+    assert_eq!(&l.frames[..3], &[Some(1), Some(1), Some(1)]);
+    // Plus tard : les images d'avant se vident, la suite ne bouge pas.
+    let mut l = layer_ab();
+    set_layer_start(&mut l, 5);
+    assert_eq!(l.frames, vec![None, None, None, None, None, Some(2), Some(2)]);
+    assert!(l.roles.contains_key(&5), "le rôle de B reste");
+    // Jamais au-delà de la dernière image.
+    let mut l = layer_ab();
+    set_layer_start(&mut l, 50);
+    assert_eq!(content_bounds(&l), Some((6, 7)));
+    assert!(content_bounds(&Layer::new("vide", LayerKind::Bitmap)).is_none());
+}
+
+#[test]
+fn layer_end_holds_the_last_drawing_and_stops_at_the_plan_end() {
+    let mut l = layer_ab();
+    set_layer_end(&mut l, 9, 10);
+    assert_eq!(&l.frames[7..], &[Some(2), Some(2)], "le dernier dessin est tenu");
+    let mut l = layer_ab();
+    set_layer_end(&mut l, 40, 10);
+    assert_eq!(l.frames.len(), 10, "la poignée s'arrête à la fin du plan");
+    // Plus court : coupé, rôle compris.
+    let mut l = layer_ab();
+    set_layer_end(&mut l, 4, 10);
+    assert_eq!(l.frames, vec![None, None, Some(1), Some(1)]);
+    assert!(l.roles.is_empty());
+    // Jamais avant le début.
+    let mut l = layer_ab();
+    set_layer_end(&mut l, 0, 10);
+    assert_eq!(content_bounds(&l), Some((2, 3)));
+    // Un calque qui dépassait déjà la fin du plan ne s'allonge plus, mais se raccourcit.
+    let mut l = layer_ab();
+    set_layer_end(&mut l, 9, 5);
+    assert_eq!(l.frames.len(), 7);
+}
+
+#[test]
+fn a_layer_moves_with_its_roles_and_effect_keys() {
+    let mut l = layer_ab();
+    assert_eq!(move_layer(&mut l, 2, 12), 2);
+    assert_eq!(content_bounds(&l), Some((4, 9)));
+    assert!(l.roles.contains_key(&7), "le rôle suit");
+    assert_eq!(l.fx[0].keys[0].frame, 7, "la clé d'effet suit");
+    // Vers la gauche : pas avant la première image du plan.
+    let mut l = layer_ab();
+    assert_eq!(move_layer(&mut l, -5, 12), -2);
+    assert_eq!(content_bounds(&l), Some((0, 5)));
+    assert!(l.roles.contains_key(&3));
+    // Vers la droite : pas après la fin du plan.
+    let mut l = layer_ab();
+    assert_eq!(move_layer(&mut l, 9, 10), 3);
+    assert_eq!(content_bounds(&l), Some((5, 10)));
+}
+
+#[test]
+fn a_plan_length_change_warns_only_with_sound_after_it() {
+    let mut doc = crate::export_tests::doc_with_drawing(2, 10);
+    assert!(sound_shift_note(&doc, 0, 10, 14).is_none(), "pas de son");
+    doc.add_audio_track();
+    let pcm = crate::audio::Pcm::from_interleaved(&vec![0.1f32; 2 * 48_000], 2, 48_000);
+    let s = doc.add_sound("a.wav".into(), "wav".into(), std::sync::Arc::new(Vec::new()), std::sync::Arc::new(pcm));
+    doc.add_clip(0, s, 12, 0, 6).unwrap();
+    let note = sound_shift_note(&doc, 0, 10, 14).expect("du son après la fin du plan 1");
+    assert!(note.contains("+4 images"), "{note}");
+    assert!(sound_shift_note(&doc, 0, 10, 10).is_none(), "même durée");
+    assert!(sound_shift_note(&doc, 1, 10, 12).is_none(), "le son finit avant la fin du plan 2");
 }

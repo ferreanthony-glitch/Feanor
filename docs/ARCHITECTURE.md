@@ -597,6 +597,29 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     `action_item`, donc chacune peut recevoir un raccourci.
   - Glisser un calque : `layerheads::drop_index` et `move_layer_to` (déjà ceux de l'en-tête de
     la timeline), avec les lignes de l'image en cours (`panel_layer_drag`, `montage_layer_drag`).
+- Poignées de calque, fin de plan, Échap, choix au rectangle (chantiers 1 à 4 de l'audit).
+  - Nouvelles poignées : `Handle::LayerStart`, `LayerEnd`, `LayerMove` (la barre dessinée sous les
+    dessins, `BAR_H`) et `PlanEnd` (prise au bout de la règle). Leurs fonctions pures sont testées :
+    `content_bounds`, `set_layer_start`, `set_layer_end`, `move_layer` (par `Layer::insert` /
+    `shift_frames`, rôles et clés d'effets suivent).
+  - Chaque mouvement repart du plan d'avant le geste.
+  - `put_layer` garde au plan sa durée d'avant : `length` est relevé si le calque raccourci
+    était le plus long.
+  - Un geste sans effet rend le plan exactement comme avant.
+
+    Décision : coût — une borne simple, la fin du plan, plutôt qu'un mode « décaler la suite du
+    montage ». Risque : allonger un calque au-delà demande d'allonger d'abord le plan. Réversible :
+    une touche pourra lever la borne.
+  - `App::dragging` réunit tous les glissers. `handle_shortcuts` les teste avant tout autre
+    raccourci : Échap, ou la touche liée à `edition.annuler`, appelle `cancel_drags`, les autres
+    touches attendent. `drop_stale_drags`, après l'interface, oublie un glisser dont la vue
+    n'est plus montrée, bouton relâché : sinon il couperait les raccourcis.
+  - Choix au rectangle : `GridSelect` garde la case du départ et le choix d'avant (rendu par
+    Échap). Il remplit `frame_sel` et `layer_sel` avec les lignes couvertes, sans les dossiers. Le
+    défilement à la souris reste dans la règle.
+  - `sound_shift_note` dit si changer la durée d'un plan décale les plans suivants par rapport
+    au son. Elle sert à la poignée de fin, au `Trim` du montage et à `watch_plan_length`, qui
+    compare la durée du plan courant d'une image d'écran à l'autre ; l'annulation est exclue.
     Un geste de glisser seul : les clics restent aux boutons.
 - Taille de l'image (passe interface, Fichier > Réglages du projet, onglet Résolution).
   `Document::resize_frame(w, h, scale)` fait l'une de deux choses :
