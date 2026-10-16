@@ -333,6 +333,10 @@ pub struct App {
     pub(crate) layer_rename: Option<crate::layersui::LayerRename>,
     /// Calque que l'on fait glisser dans l'en-tête de la timeline pour changer son rang (13b).
     pub(crate) head_drag: Option<usize>,
+    /// Calque que l'on fait glisser dans le panneau Calques (passe interface).
+    pub(crate) panel_layer_drag: Option<usize>,
+    /// Calque que l'on fait glisser dans les noms des pistes du montage (passe interface).
+    pub(crate) montage_layer_drag: Option<usize>,
     /// Calques choisis en plus du calque courant (ids, Ctrl + clic dans l'en-tête, 13b).
     pub(crate) layer_sel: Vec<u64>,
     /// Fenêtre des groupes de calques ouverte, et n'y montrer que les groupes utilisés (13b-4).
@@ -623,6 +627,8 @@ impl App {
             layer_thumbs: Default::default(),
             layer_rename: None,
             head_drag: None,
+            panel_layer_drag: None,
+            montage_layer_drag: None,
             layer_sel: Vec::new(),
             groups_window: false,
             groups_used_only: false,

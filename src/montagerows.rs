@@ -90,28 +90,63 @@ impl App {
                 color,
             );
         };
-        label(lane(rows.camera_top(), CAM_H), "Caméra", visuals.text_color());
+        let cam = lane(rows.camera_top(), CAM_H);
+        label(cam, "Caméra", visuals.text_color());
+        // Clic droit sur « Caméra » : le menu de la caméra (passe interface).
+        ui.interact(cam, ui.id().with("nom_piste_camera"), Sense::click()).context_menu(|ui| self.grid_menu_ui(ui, crate::handles::GridMenu::Camera));
         let header = lane(rows.blocks_top(), rows.block_h);
         painter.rect_filled(header, 3.0, theme::ETIQUETTE);
         self.project_header(ui, header);
-        let panel = &self.doc.panels[self.cur_panel];
+        // Calques du plan courant : clic, il devient courant ; glisser, il monte ou descend ;
+        // clic droit, son menu (passe interface).
+        let names: Vec<(usize, Option<(usize, String)>)> = {
+            let panel = &self.doc.panels[self.cur_panel];
+            (0..rows.layer_rows).map(|row| (row, layer_in_row(panel, row).map(|k| (k, panel.layers[k].name.clone())))).collect()
+        };
         let mut pick = None;
-        for row in 0..rows.layer_rows {
+        let mut grid: Vec<crate::layerheads::Row> = Vec::new();
+        for (row, item) in names {
             let r = lane(rows.layers_top() + row as f32 * LAYER_H, LAYER_H);
-            let Some(k) = layer_in_row(panel, row) else {
+            let Some((k, name)) = item else {
                 label(r, "", visuals.weak_text_color());
                 continue;
             };
+            grid.push(crate::layerheads::Row { li: k, top: row as f32 * LAYER_H, h: LAYER_H });
             let current = k == self.cur_layer;
-            label(r, &panel.layers[k].name, if current { visuals.strong_text_color() } else { visuals.text_color() });
+            label(r, &name, if current { visuals.strong_text_color() } else { visuals.text_color() });
             if current {
                 painter.rect_stroke(r, 3.0, Stroke::new(1.5_f32, visuals.selection.stroke.color), StrokeKind::Inside);
             }
-            let resp = ui.interact(r, ui.id().with(("piste_calque", row)), Sense::click());
-            if resp.on_hover_text("Calque du plan courant : clic pour le rendre courant").clicked() {
+            let resp = ui.interact(r, ui.id().with(("piste_calque", row)), Sense::click_and_drag());
+            if resp.drag_started() {
+                self.montage_layer_drag = Some(k);
+            }
+            let resp = resp.on_hover_text("Calque du plan courant : clic, il devient courant ; glisser, il monte ou descend ; clic droit, son menu.");
+            if resp.clicked() || resp.secondary_clicked() {
                 pick = Some(k);
             }
+            resp.context_menu(|ui| self.layer_menu(ui, k, false));
         }
+        if let Some(from) = self.montage_layer_drag {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+            let base = rect.top() + rows.layers_top();
+            let pointer = ui.input(|i| i.pointer.interact_pos());
+            if let Some(p) = pointer {
+                let slot = grid.iter().filter(|g| g.top + g.h * 0.5 < p.y - base).count();
+                let y = base + grid.get(slot).map_or(grid.len() as f32 * LAYER_H, |g| g.top);
+                painter.line_segment([pos2(rect.left() + 2.0, y), pos2(rect.left() + HEADERS_W - 6.0, y)], Stroke::new(2.0_f32, Color32::WHITE));
+            }
+            if ui.input(|i| !i.pointer.any_down()) {
+                self.montage_layer_drag = None;
+                if let Some(p) = pointer {
+                    let to = crate::layerheads::drop_index(&grid, from, p.y - base);
+                    if to != from && !self.content_refuses() {
+                        self.move_layer_to(from, to);
+                    }
+                }
+            }
+        }
+        let panel = &self.doc.panels[self.cur_panel];
         if rows.background {
             let r = lane(rows.background_top(), LAYER_H);
             label(r, "Fond (scène)", SCENE_WIDE);

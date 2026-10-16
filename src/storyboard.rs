@@ -928,6 +928,24 @@ impl App {
                         self.select_panel(i);
                         MenuTarget::Panel(i)
                     })
+                } else if let Some((i, k)) = self.layer_row_hit(p, r.top(), &blocks, rows) {
+                    // Une piste de calque : ce plan, cette image, ce calque, et son menu.
+                    self.sel_clip = None;
+                    self.goto_global(frame_at(p.x));
+                    (self.cur_panel == i).then(|| {
+                        self.select_layer(k);
+                        MenuTarget::Layer(k)
+                    })
+                } else if let Some(&(_, start)) = runs.iter().find(|(rect, _)| rect.contains(p)) {
+                    self.board_sel.clear();
+                    self.select_panel(start);
+                    Some(MenuTarget::Sequence)
+                } else if p.y < bands_top {
+                    self.goto_global(frame_at(p.x));
+                    Some(MenuTarget::Ruler)
+                } else if (r.top() + rows.camera_top()..=r.top() + rows.camera_top() + crate::montagerows::CAM_H).contains(&p.y) {
+                    self.goto_global(frame_at(p.x));
+                    Some(MenuTarget::Camera)
                 } else {
                     None
                 };
@@ -937,6 +955,22 @@ impl App {
             resp.context_menu(|ui| match target {
                 MenuTarget::Panel(i) => self.panel_menu(ui, i),
                 MenuTarget::Lane { track, clip, frame } => self.lane_menu(ui, track, clip, frame),
+                MenuTarget::Layer(k) => self.layer_menu(ui, k, false),
+                MenuTarget::Camera => self.grid_menu_ui(ui, crate::handles::GridMenu::Camera),
+                MenuTarget::Sequence => {
+                    self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
+                    self.action_item(ui, "Nouveau plan", "panneau.nouveau");
+                    self.action_item(ui, "Nouveau plan avant le plan courant", "plan.nouveau_avant");
+                    ui.separator();
+                    self.action_item(ui, "Verrouiller / déverrouiller le storyboard", "storyboard.verrouiller");
+                }
+                MenuTarget::Ruler => {
+                    self.action_item(ui, "Marque d'image ici (ajouter / retirer)", "marque.basculer");
+                    self.action_item(ui, "Couper le plan ici", "panneau.couper");
+                    self.action_item(ui, "Signet du plan ici (poser / retirer)", "signet.basculer");
+                    ui.separator();
+                    self.action_item(ui, "Importer un son ici…", "son.importer");
+                }
             });
         }
 

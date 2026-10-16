@@ -46,6 +46,12 @@ pub(crate) struct ClipDrag {
 pub(crate) enum MenuTarget {
     Panel(usize),
     Lane { track: usize, clip: Option<u64>, frame: usize },
+    /// Passe interface : une piste de calque (le calque du plan courant), la piste Caméra, la
+    /// barre d'une séquence, la règle.
+    Layer(usize),
+    Camera,
+    Sequence,
+    Ruler,
 }
 
 impl App {
