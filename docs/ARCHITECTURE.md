@@ -575,6 +575,26 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   Les intervalles sont des dessins neufs (vectoriels si les deux sont vectoriels), donc
   modifiables. Changer la cadence passe tout le projet au même facteur (`rescale_frame`) en
   une étape d'annulation : la cadence et les extraits de son sont dans `Structure`.
+- Poignées et menus (passe interface, `handles.rs`).
+  - `Handle` désigne ce que l'on tient : une marque, un signet, l'entrée, la sortie, une clé
+    d'effet ou le bord d'une exposition.
+  - `HandleDrag` garde le plan d'avant (Échap via `cancel_montage_drag`) et l'étape d'annulation
+    du geste, poussée au lâcher seulement si quelque chose a changé : le modèle des clés de
+    caméra (`CamKeyDrag`).
+  - Les déplacements sont des fonctions pures testées (`between`, `move_mark`, `move_bookmark`,
+    `move_fx_key`, `set_run_length`) ; chaque élément reste entre ses voisins, l'ordre ne change
+    pas.
+  - Une exposition repart à chaque mouvement du calque d'origine (comme le `Trim` du montage), et
+    `Layer::insert` / `shift_frames` font glisser rôles et clés d'effets.
+  - La timeline cherche une poignée (`timeline_handle_at`) avant le glisser d'images et le
+    défilement.
+  - Clic droit : `GridMenu` (règle, caméra, clé d'effet, son, noms des lignes) dans la timeline,
+    et de nouvelles cibles dans `MenuTarget` (piste de calque, caméra, séquence, règle) dans le
+    montage. Le panneau Calques et le dessin ont aussi leurs menus. Les entrées passent par
+    `action_item`, donc chacune peut recevoir un raccourci.
+  - Glisser un calque : `layerheads::drop_index` et `move_layer_to` (déjà ceux de l'en-tête de
+    la timeline), avec les lignes de l'image en cours (`panel_layer_drag`, `montage_layer_drag`).
+    Un geste de glisser seul : les clics restent aux boutons.
 - Taille de l'image (passe interface, Fichier > Réglages du projet, onglet Résolution).
   `Document::resize_frame(w, h, scale)` fait l'une de deux choses :
   - avec `scale` : `scale_stage(s)`, où `s` est le plus grand des deux rapports (le dessin

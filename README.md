@@ -476,6 +476,17 @@ hauteur, distance et focale se règlent aussi en chiffres. Chaque plan a son poi
 (« Comme le plan précédent » le recopie). « Dessiner dans un calque » transforme le fil de fer
 en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le projet (`modeles/`).
 
+**Glisser et clic droit** (passe interface) :
+- **Timeline du plan** : on prend à la souris les marques d'image (triangles de la règle), les
+  signets, les crochets d'entrée et de sortie, les clés d'effets (losanges violets) et le bord droit
+  d'un dessin, qui étire ou raccourcit son exposition (ce qui suit glisse d'autant).
+- **Montage** : les marques d'image se glissent aussi dans les blocs des plans.
+- **Calques** : on les monte ou les descend en les glissant, dans le panneau Calques, dans les noms
+  des pistes du montage ou dans l'en-tête de la timeline.
+- **Clic droit** : partout il ouvre un menu (règle, caméra, son, pistes, séquences, calques, dessin).
+  Un clic droit sur une entrée de ces menus lui donne un raccourci.
+- Échap abandonne un glisser en cours ; Ctrl+Z défait chaque geste en une fois.
+
 **Réglages du projet** (Fichier) :
 - **onglet Réglages** : titre, information, auteur, notes, copyright, numéro de la première
   image, dates ;
@@ -558,6 +569,7 @@ le `pelure.txt` du dossier sur la fenêtre), puis « Importer ».
 | `audio.rs` | Décodage des sons, formes d'onde, mixage et sortie audio |
 | `keymap.rs` | Raccourcis : actions, lecture de `keymap.toml`, touche tapée, fichier personnel |
 | `raccourcisui.rs` | Clic droit « Assigner un raccourci… », fenêtre d'assignation, liste des raccourcis |
+| `handles.rs` | Poignées de la timeline (marques, signets, entrée / sortie, clés d'effets, expositions) et menus de la grille |
 | `app.rs` | État de l'application, actions, raccourcis |
 | `vtools.rs` | Outils des calques vectoriels |
 | `storyboard.rs` | Bande de montage, vue vignettes, fiche du panneau |
