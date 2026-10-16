@@ -507,14 +507,19 @@ s'annule pas : l'historique est vidé.
 Une nouvelle cadence garde les durées en secondes (comme « Changer la cadence », avec ou sans
 intervalles) ou garde les images.
 
-**Projet Storyboard Pro** : Fichier > « Importer un projet Storyboard Pro (.sboard)… », ou glisser
-le `.sboard` sur la fenêtre. Le fichier est seulement lu. Plans, séquences, panneaux (devenus les
-images de storyboard de chaque plan, avec leurs légendes), durées, cadence, taille, noms des
-calques et son arrivent tels quels ; la caméra n'est pas reprise. Pour les dessins : « Créer le
-script… » écrit un script dans un dossier et le copie ; dans Storyboard Pro, projet ouvert, vue
-Script Editor, choisir Sandbox, coller, puis Run : chaque calque de chaque panneau est exporté en
-PNG dans ce dossier (le projet est remis comme avant). Revenir à Pelure, « Relire » (ou glisser
-le `pelure.txt` du dossier sur la fenêtre), puis « Importer ».
+**Projet Storyboard Pro** : Fichier > Ouvrir (le choix accepte les `.sboard`), « Ouvrir un projet
+Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est seulement lu.
+- Ce qui arrive tel quel : plans, séquences, panneaux (devenus les images de storyboard de chaque
+  plan, avec leurs légendes), durées, cadence, taille, calques (vectoriels ou bitmap) et son. La
+  caméra n'est pas reprise.
+- Les dessins, si Storyboard Pro est installé : Pelure le lance tout seul, sans fenêtre, sur une
+  copie du projet (l'original n'est jamais touché). Il exporte chaque calque de chaque panneau, en
+  image et, pour un calque vectoriel, en traits ; l'ouverture suit.
+- Un calque vectoriel revient vectoriel (zones et traits modifiables) quand ses traits ont pu être
+  lus et recouvrent bien son image. Sinon il garde l'image, et le compte rendu le dit.
+- « Arrêter » ouvre le projet sans les dessins.
+- À la main : « Dessins à la main » écrit le script à coller dans Storyboard Pro (vue Script
+  Editor, Sandbox, Run).
 
 ## Organisation du code
 
@@ -542,7 +547,8 @@ le `pelure.txt` du dossier sur la fenêtre), puis « Importer ».
 | `video.rs`, `videoui.rs` | Calque vidéo : import par ffmpeg, images lues à la demande (13k) |
 | `tween.rs`, `tweenui.rs` | Interpolation : intervalles vectoriels, fondus, étirement, cadence (13l) |
 | `xml.rs`, `sboard.rs` | Lecture d'un XML en arbre ; lecture d'un projet Storyboard Pro (14a) |
-| `sbscript.rs`, `sbimport.rs`, `sbui.rs` | Script d'export des dessins et sa liste ; projet Pelure construit ; fenêtre d'import (14a) |
+| `sbscript.rs`, `sbimport.rs`, `sbui.rs` | Script d'export des dessins et sa liste ; projet Pelure construit ; fenêtre d'ouverture (14a) |
+| `sbbatch.rs`, `sbvector.rs` | Storyboard Pro lancé en batch sur une copie du projet ; ses dessins vectoriels refaits en éléments Pelure (14a-2) |
 | `stretch.rs` | Vitesse d'un son : rééchantillonnage, tempo sans changer la hauteur (WSOLA) (14a) |
 | `fill.rs` | Remplissage par zone et débord |
 | `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra |

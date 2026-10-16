@@ -614,6 +614,24 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   images d'un calque vidéo (lues à la taille de l'import), le rayon des flous et la fermeture des
   trous du CTG (en pixels). Réversible : on peut revenir à l'ancienne taille, au prix d'un
   rééchantillonnage.
+- Ouverture automatique et dessins vectoriels de Storyboard Pro (14a-2).
+  - `sbbatch` : `find_storyboard_pro` cherche l'installation la plus récente. `copy_project`
+    copie le projet sans `logs/` ni `.lock`. `Batch::start` lance, sur un autre fil,
+    `StoryboardPro -scene … -batch -compile …` dans un dossier temporaire, avec le journal
+    (sortie) et l'arrêt possible.
+  - `PELURE_SANS_STORYBOARD_PRO` le désactive (essais), `PELURE_STORYBOARD_PRO` désigne
+    l'exécutable.
+  - `sbvector` lit le JSON des traits. Bézier : 0, 1 ou 2 points de contrôle par segment. Une
+    zone = les traits dont un seul côté porte sa couleur, mis bout à bout par leurs jointures ; en
+    pair-impair, l'appariement aux jointures ne change pas la zone.
+  - Calage (`fit_to_image`) : boîtes du dessin et des pixels opaques de l'image, échelle commune
+    (proportions à 20 % près), axe vertical essayé dans les deux sens. On garde le sens au meilleur
+    recouvrement (intersection sur union), et les vecteurs seulement à 60 % ou plus.
+
+    Décision : coût — caler sur l'image plutôt que convertir les unités Toon Boom (caméra du
+    panneau, placement du calque, champs) qu'on ne peut pas vérifier ici. Risque : un calque
+    tourné ou très déformé reste en image. Réversible : on pourra ajouter la conversion exacte
+    plus tard.
 - Import Storyboard Pro (14a) :
   - `xml.rs` lit un document XML en arbre (`Element` : nom, attributs décodés, enfants), avec
     quick-xml. quick-xml était déjà dans `Cargo.lock`, par wayland : rien n'est téléchargé.
