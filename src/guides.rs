@@ -302,21 +302,19 @@ impl App {
 
     /// Réglages et liste des guides (panneau d'outils).
     pub(crate) fn guides_ui(&mut self, ui: &mut egui::Ui) {
-        use crate::bulles::{icone, interrupteur};
+        use crate::bulles::{icone, interrupteur_a};
         use egui_phosphor::regular as ph;
-        let keys: Vec<String> = ["guide.activer", "guide.aligner", "guide.verrouiller", "guide.lignes_reference", "guide.gomme", "guide.curseur_complet"]
-            .iter()
-            .map(|a| self.raccourci(a))
-            .collect();
+        let ids = ["guide.activer", "guide.aligner", "guide.verrouiller", "guide.lignes_reference", "guide.gomme", "guide.curseur_complet"];
+        let keys: Vec<String> = ids.iter().map(|a| self.raccourci(a)).collect();
         let s = &mut self.guides;
         ui.horizontal_wrapped(|ui| {
-            interrupteur(ui, &mut s.enabled, ph::PERSPECTIVE, "Afficher et utiliser le guide", "Le guide de perspective courant, sur le dessin.", &keys[0]);
+            interrupteur_a(ui, &mut s.enabled, ph::PERSPECTIVE, "Afficher et utiliser le guide", "Le guide de perspective courant, sur le dessin.", &keys[0], ids[0]);
             ui.add_enabled_ui(s.enabled, |ui| {
-                interrupteur(ui, &mut s.align, ph::MAGNET, "Aligner les traits", "Le trait suit la fuyante, la verticale ou l'horizontale la plus proche du geste.", &keys[1]);
-                interrupteur(ui, &mut s.locked, ph::LOCK_SIMPLE, "Verrouiller", "Les points de fuite ne bougent plus à la souris.", &keys[2]);
-                interrupteur(ui, &mut s.reference, ph::ASTERISK, "Lignes de référence", "Des lignes en éventail depuis les points de fuite.", &keys[3]);
-                interrupteur(ui, &mut s.eraser, ph::ERASER, "Aligner aussi la gomme", "La gomme suit le guide comme les traits.", &keys[4]);
-                interrupteur(ui, &mut s.full_cursor, ph::CROSSHAIR, "Lignes du curseur jusqu'au bord", "Les lignes qui suivent le curseur vont jusqu'au bord du dessin.", &keys[5]);
+                interrupteur_a(ui, &mut s.align, ph::MAGNET, "Aligner les traits", "Le trait suit la fuyante, la verticale ou l'horizontale la plus proche du geste.", &keys[1], ids[1]);
+                interrupteur_a(ui, &mut s.locked, ph::LOCK_SIMPLE, "Verrouiller", "Les points de fuite ne bougent plus à la souris.", &keys[2], ids[2]);
+                interrupteur_a(ui, &mut s.reference, ph::ASTERISK, "Lignes de référence", "Des lignes en éventail depuis les points de fuite.", &keys[3], ids[3]);
+                interrupteur_a(ui, &mut s.eraser, ph::ERASER, "Aligner aussi la gomme", "La gomme suit le guide comme les traits.", &keys[4], ids[4]);
+                interrupteur_a(ui, &mut s.full_cursor, ph::CROSSHAIR, "Lignes du curseur jusqu'au bord", "Les lignes qui suivent le curseur vont jusqu'au bord du dessin.", &keys[5], ids[5]);
             });
         });
         let mut pick = None;

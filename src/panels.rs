@@ -361,7 +361,6 @@ impl App {
 
     /// Panneau Vue : cadrage, zoom, miroir, rotation, table lumineuse.
     pub(crate) fn view_panel(&mut self, ui: &mut egui::Ui) {
-        use crate::bulles::interrupteur;
         use egui_phosphor::regular as ph;
         ui.horizontal(|ui| {
             if self.bouton(ui, ph::ARROWS_OUT, "Ajuster à la fenêtre", "Toute la feuille dans la vue.", "vue.ajuster").clicked() {
@@ -385,7 +384,7 @@ impl App {
         }
         ui.horizontal(|ui| {
             let key = self.raccourci("vue.table_lumineuse");
-            interrupteur(ui, &mut self.light_table, ph::LIGHTBULB, "Table lumineuse", "Les autres calques du plan estompés ; le calque courant reste net.", &key);
+            crate::bulles::interrupteur_a(ui, &mut self.light_table, ph::LIGHTBULB, "Table lumineuse", "Les autres calques du plan estompés ; le calque courant reste net.", &key, "vue.table_lumineuse");
             if self.light_table {
                 let resp = ui.add(
                     egui::Slider::new(&mut self.light_table_strength, 0.05..=0.8)
@@ -399,7 +398,7 @@ impl App {
         ui.separator();
         ui.horizontal(|ui| {
             let key = self.raccourci("vue.cadres_securite");
-            interrupteur(ui, &mut self.layout.safe_frames, ph::SELECTION, "Zones de sécurité", "Action dans 93 % du cadre, titres dans 90 % (EBU R 95).", &key);
+            crate::bulles::interrupteur_a(ui, &mut self.layout.safe_frames, ph::SELECTION, "Zones de sécurité", "Action dans 93 % du cadre, titres dans 90 % (EBU R 95).", &key, "vue.cadres_securite");
             self.frame_format_ui(ui);
         });
     }

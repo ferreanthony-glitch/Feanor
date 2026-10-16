@@ -70,7 +70,7 @@ impl App {
     /// raccourci et une description dans une bulle (12d) ; si la fenêtre est trop étroite, la ligne défile au lieu de passer à la
     /// ligne.
     fn timeline_toolbar(&mut self, ui: &mut egui::Ui) {
-        use crate::bulles::{bulle, interrupteur};
+        use crate::bulles::bulle;
         use egui_phosphor::regular as ph;
         let count = self.frame_count();
         let fps = self.doc.fps;
@@ -111,7 +111,8 @@ impl App {
                     if self.bouton(ui, ph::SKIP_FORWARD, "Dernière image", "Dernière image du plan.", "image.derniere").clicked() {
                         self.goto_frame(count - 1);
                     }
-                    interrupteur(ui, &mut self.looping, ph::REPEAT, "Lecture en boucle", "Reprendre au début une fois à la fin.", "");
+                    let key = self.raccourci("lecture.boucle");
+                    crate::bulles::interrupteur_a(ui, &mut self.looping, ph::REPEAT, "Lecture en boucle", "Reprendre au début une fois à la fin.", &key, "lecture.boucle");
                     let mut fps = self.doc.fps;
                     let resp = ui.add(egui::DragValue::new(&mut fps).range(1..=120).suffix(" i/s"));
                     let resp = bulle(resp, "Cadence", "Images par seconde, pour tout le projet.", "");
@@ -191,7 +192,7 @@ impl App {
 
                     // Pelure d'oignon.
                     let key = self.raccourci("vue.pelure");
-                    interrupteur(ui, &mut self.onion.enabled, ph::CIRCLES_THREE, "Pelure d'oignon", "Montrer les dessins d'avant et d'après.", &key);
+                    crate::bulles::interrupteur_a(ui, &mut self.onion.enabled, ph::CIRCLES_THREE, "Pelure d'oignon", "Montrer les dessins d'avant et d'après.", &key, "vue.pelure");
                     let max = crate::onion::MAX_NEIGHBOURS;
                     let resp = ui.add(egui::DragValue::new(&mut self.onion.before).range(0..=max).prefix("‹ "));
                     bulle(resp, "Avant", "Nombre de dessins (ou d'images) montrés avant.", "");

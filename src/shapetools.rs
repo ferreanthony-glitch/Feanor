@@ -240,16 +240,16 @@ impl App {
         let note = |ui: &mut egui::Ui, text: &str| {
             ui.label(egui::RichText::new(text).small().weak());
         };
-        use crate::bulles::{choix, interrupteur};
+        use crate::bulles::interrupteur;
         use egui_phosphor::regular as ph;
         if self.tool == Tool::Line {
             ui.horizontal(|ui| {
                 let key = |a: &str| self.raccourci(a);
                 let (k1, k2, k3) = (key("outil.ligne_droite"), key("outil.ligne_courbe"), key("outil.ligne_s"));
                 let mode = &mut self.shape.line_mode;
-                choix(ui, mode, LineMode::Straight, ph::LINE_SEGMENT, "Droite", "Un segment droit.", &k1);
-                choix(ui, mode, LineMode::Curve, ph::BEZIER_CURVE, "Courbe", "Un arc qui passe par le pointeur.", &k2);
-                choix(ui, mode, LineMode::SCurve, ph::WAVE_SINE, "Courbe en S", "Une courbe à deux bosses.", &k3);
+                crate::bulles::choix_a(ui, mode, LineMode::Straight, ph::LINE_SEGMENT, "Droite", "Un segment droit.", &k1, "outil.ligne_droite");
+                crate::bulles::choix_a(ui, mode, LineMode::Curve, ph::BEZIER_CURVE, "Courbe", "Un arc qui passe par le pointeur.", &k2, "outil.ligne_courbe");
+                crate::bulles::choix_a(ui, mode, LineMode::SCurve, ph::WAVE_SINE, "Courbe en S", "Une courbe à deux bosses.", &k3, "outil.ligne_s");
             });
         }
         // Épaisseur, puis les interrupteurs de la forme au bout de la même ligne.

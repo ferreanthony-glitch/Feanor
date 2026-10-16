@@ -81,6 +81,21 @@ pub(crate) fn interrupteur(ui: &mut Ui, valeur: &mut bool, symbole: &str, nom: &
     resp
 }
 
+/// `interrupteur` d'une commande liée à `action` : clic droit, lui assigner un raccourci.
+pub(crate) fn interrupteur_a(ui: &mut Ui, valeur: &mut bool, symbole: &str, nom: &str, description: &str, raccourci: &str, action: &str) -> Response {
+    let resp = interrupteur(ui, valeur, symbole, nom, description, raccourci);
+    crate::raccourcisui::shortcut_menu(&resp, action, raccourci);
+    resp
+}
+
+/// `choix` d'une commande liée à `action` : clic droit, lui assigner un raccourci.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn choix_a<T: PartialEq>(ui: &mut Ui, valeur: &mut T, cette: T, symbole: &str, nom: &str, description: &str, raccourci: &str, action: &str) -> Response {
+    let resp = choix(ui, valeur, cette, symbole, nom, description, raccourci);
+    crate::raccourcisui::shortcut_menu(&resp, action, raccourci);
+    resp
+}
+
 /// Choix entre des valeurs : un bouton icône par valeur, enfoncé quand c'est la valeur courante.
 pub(crate) fn choix<T: PartialEq>(ui: &mut Ui, valeur: &mut T, cette: T, symbole: &str, nom: &str, description: &str, raccourci: &str) -> Response {
     let mut resp = etat(ui, *valeur == cette, symbole, nom, description, raccourci);

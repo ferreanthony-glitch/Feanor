@@ -645,15 +645,14 @@ impl App {
         // Vue et durées.
         section(ui, "Vue", &mut |ui| {
             ui.horizontal(|ui| {
-                use crate::bulles::interrupteur;
                 let on = self.camera_view;
                 if self.bouton_etat(ui, on, ph::FRAME_CORNERS, "Vue à travers la caméra", "Voir ce que filme la caméra du plan.", "camera.vue").clicked() {
                     self.set_camera_view(!on);
                 }
                 let key = self.raccourci("camera.masque");
-                interrupteur(ui, &mut self.camera_mask, ph::SELECTION_INVERSE, "Estomper le hors-champ", "Voiler ce qui est hors du cadre de la caméra.", &key);
+                crate::bulles::interrupteur_a(ui, &mut self.camera_mask, ph::SELECTION_INVERSE, "Estomper le hors-champ", "Voiler ce qui est hors du cadre de la caméra.", &key, "camera.masque");
                 let key = self.raccourci("vue.cadres_securite");
-                interrupteur(ui, &mut self.layout.safe_frames, ph::SELECTION, "Zones de sécurité", "Action 93 %, titres 90 %, tracées dans le cadre.", &key);
+                crate::bulles::interrupteur_a(ui, &mut self.layout.safe_frames, ph::SELECTION, "Zones de sécurité", "Action 93 %, titres 90 %, tracées dans le cadre.", &key, "vue.cadres_securite");
                 self.frame_format_ui(ui);
             });
         });

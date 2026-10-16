@@ -353,7 +353,7 @@ impl App {
     }
 
     fn montage_toolbar(&mut self, ui: &mut egui::Ui, total: usize, fps: u32) {
-        use crate::bulles::{bulle, choix, etiquette, interrupteur, TAILLE};
+        use crate::bulles::{bulle, etiquette, TAILLE};
         use egui_phosphor::regular as ph;
         ui.spacing_mut().item_spacing.x = 3.0;
         let sep = |ui: &mut egui::Ui| {
@@ -370,7 +370,8 @@ impl App {
         if self.bouton(ui, play, "Lire le montage / pause", "Tout le film à la suite (animatique), avec le son.", "lecture.basculer").clicked() {
             self.toggle_play();
         }
-        interrupteur(ui, &mut self.looping, ph::REPEAT, "Lecture en boucle", "Reprendre au début une fois à la fin.", "");
+        let key = self.raccourci("lecture.boucle");
+        crate::bulles::interrupteur_a(ui, &mut self.looping, ph::REPEAT, "Lecture en boucle", "Reprendre au début une fois à la fin.", &key, "lecture.boucle");
         let resp = ui.label(RichText::new(format!("{} / {}", timecode(self.global_frame(), fps), timecode(total, fps))).monospace());
         bulle(resp, "Position", "Image courante / durée du montage (minutes:secondes:images).", "");
         sep(ui);
@@ -417,10 +418,10 @@ impl App {
             })
             .response;
         bulle(resp, "Plans", "Dupliquer, copier, couper, réunir, marques d'image.", "");
-        if self.bouton(ui, ph::CARET_DOUBLE_LEFT, "Avancer le plan", "Le placer plus tôt dans le montage.", "").clicked() {
+        if self.bouton(ui, ph::CARET_DOUBLE_LEFT, "Avancer le plan", "Le placer plus tôt dans le montage.", "plan.avancer").clicked() {
             self.shift_panel(false);
         }
-        if self.bouton(ui, ph::CARET_DOUBLE_RIGHT, "Reculer le plan", "Le placer plus tard dans le montage.", "").clicked() {
+        if self.bouton(ui, ph::CARET_DOUBLE_RIGHT, "Reculer le plan", "Le placer plus tard dans le montage.", "plan.reculer").clicked() {
             self.shift_panel(true);
         }
         let locked = self.doc.storyboard_locked;
@@ -458,8 +459,8 @@ impl App {
 
         // Vue : dessin du plan, ou vignettes de toutes les images de storyboard.
         let key = self.raccourci("vue.planches");
-        choix(ui, &mut self.board_view, BoardView::Scene, ph::PAINT_BRUSH, "Vue dessin", "Dessiner le plan courant.", &key);
-        choix(ui, &mut self.board_view, BoardView::Panels, ph::SQUARES_FOUR, "Vue vignettes", "Toutes les images de storyboard en planche : le début de chaque plan, puis ses marques d'image.", &key);
+        crate::bulles::choix_a(ui, &mut self.board_view, BoardView::Scene, ph::PAINT_BRUSH, "Vue dessin", "Dessiner le plan courant.", &key, "vue.planches");
+        crate::bulles::choix_a(ui, &mut self.board_view, BoardView::Panels, ph::SQUARES_FOUR, "Vue vignettes", "Toutes les images de storyboard en planche : le début de chaque plan, puis ses marques d'image.", &key, "vue.planches");
         sep(ui);
         etiquette(ui, ph::MAGNIFYING_GLASS, "Zoom du montage", "");
         ui.spacing_mut().slider_width = 80.0;

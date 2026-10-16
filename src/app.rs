@@ -2592,6 +2592,13 @@ impl App {
             "fond.damier" => self.set_background(crate::document::BackgroundKind::Checker),
             // Vue Projet (13e-4, `projetui.rs`).
             "plan.nouveau_avant" => self.new_panel_before(),
+            // Passe interface : des icônes qui n'avaient pas d'action (et donc pas de raccourci).
+            "plan.avancer" => self.shift_panel(false),
+            "plan.reculer" => self.shift_panel(true),
+            "lecture.boucle" => {
+                self.looping = !self.looping;
+                self.status = if self.looping { "Lecture en boucle.".into() } else { "Lecture une seule fois.".into() };
+            }
             "storyboard.verrouiller" => self.toggle_storyboard_lock(),
             "projet.proprietes" => self.properties_window = !self.properties_window,
             "projet.nouveau_depuis_plans" => self.request(Pending::FromChosen),

@@ -9,7 +9,7 @@ use eframe::egui::{self, vec2, Align2, RichText, Vec2};
 use egui_phosphor::regular as ph;
 
 use crate::app::App;
-use crate::bulles::{bulle, interrupteur};
+use crate::bulles::bulle;
 use crate::onion::{OnionMode, OnionSettings, MAX_NEIGHBOURS};
 
 /// Nom proposé pour ranger des réglages.
@@ -80,7 +80,7 @@ impl App {
     fn onion_panel(&mut self, ui: &mut egui::Ui) {
         let key = self.raccourci("vue.pelure");
         ui.horizontal(|ui| {
-            interrupteur(ui, &mut self.onion.enabled, ph::CIRCLES_THREE, "Pelure d'oignon", "Montrer les dessins d'avant et d'après.", &key);
+            crate::bulles::interrupteur_a(ui, &mut self.onion.enabled, ph::CIRCLES_THREE, "Pelure d'oignon", "Montrer les dessins d'avant et d'après.", &key, "vue.pelure");
             let s = &mut self.onion;
             egui::ComboBox::from_id_salt("mode_pelure").selected_text(format!("Mode {}", s.mode.label().to_lowercase())).show_ui(ui, |ui| {
                 for m in OnionMode::ALL {
@@ -120,7 +120,7 @@ impl App {
         // Décalage temporaire.
         ui.horizontal(|ui| {
             let key = self.raccourci("pelure.decaler");
-            interrupteur(ui, &mut self.onion_shift, ph::ARROWS_OUT_CARDINAL, "Décaler la pelure", "Glisser sur le dessin déplace les images de la pelure, pas le dessin (rien n'est enregistré).", &key);
+            crate::bulles::interrupteur_a(ui, &mut self.onion_shift, ph::ARROWS_OUT_CARDINAL, "Décaler la pelure", "Glisser sur le dessin déplace les images de la pelure, pas le dessin (rien n'est enregistré).", &key, "pelure.decaler");
             let moved = self.onion_offset != Vec2::ZERO;
             if ui.add_enabled(moved, egui::Button::new("Remettre")).on_hover_text("Les images de la pelure reviennent à leur place.").clicked() {
                 self.reset_onion_offset();
