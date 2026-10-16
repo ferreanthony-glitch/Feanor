@@ -165,6 +165,9 @@ pub mod roles;
 #[cfg(test)]
 mod roles_tests;
 mod rolesui;
+mod roue;
+#[cfg(test)]
+mod roue_tests;
 #[cfg(test)]
 mod scenelayer_tests;
 mod settings;

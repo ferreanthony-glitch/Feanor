@@ -5,12 +5,13 @@
 //! (deux carrés qui se chevauchent ; un clic sur celui de derrière les échange). Les outils
 //! dessinent avec la couleur d'avant-plan, `App::color`. Les conversions sont dans `couleur.rs`.
 
-use eframe::egui::{self, pos2, vec2, Color32, Id, Rect, Response, Sense, Shape, Stroke, StrokeKind};
+use eframe::egui::{self, pos2, vec2, Color32, Id, Rect, Response, Sense, Shape, Stroke, StrokeKind, Vec2};
 use egui_phosphor::regular as ph;
 
 use crate::app::App;
 pub use crate::couleur::{hsv_to_rgb, rgb_to_hsv};
 use crate::couleur::{self, ColorSettings};
+use crate::roue::{Wheel, WheelShape, Zone};
 
 /// Ce que le panneau Couleur garde en plus de la couleur d'avant-plan (`App::color`, `App::hsv`).
 pub(crate) struct ColorState {
@@ -61,6 +62,54 @@ fn gradient_bar(ui: &mut egui::Ui, value: f32, colors: &[Color32]) -> Option<f32
     (resp.dragged() || resp.clicked()).then(|| ((p.x - rect.left()) / rect.width()).clamp(0.0, 1.0))
 }
 
+/// Roue chromatique de `size` points de côté, sur la couleur `hsv` : un clic ou un glissé dans
+/// l'anneau change la teinte, dedans la saturation et la valeur ; le geste garde la partie où il
+/// a commencé (on peut sortir de l'anneau sans changer de partie). Dessinée à chaque image
+/// d'après `hsv` : les repères suivent la couleur, d'où qu'elle change.
+pub(crate) fn wheel_ui(ui: &mut egui::Ui, size: f32, hsv: &mut [f32; 3], shape: WheelShape) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(size), Sense::click_and_drag());
+    let wheel = Wheel::in_rect(rect);
+    // La partie visée est retenue à l'appui, pour tout le geste.
+    let zone_id = resp.id.with("partie");
+    // Bouton gauche seulement : le droit ouvre le menu sans toucher à la couleur.
+    let held = resp.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_down());
+    if held || resp.clicked() {
+        let zone = match ui.data(|d| d.get_temp::<Option<Zone>>(zone_id)) {
+            Some(z) => z,
+            None => {
+                let z = resp.interact_pointer_pos().and_then(|p| wheel.zone(p));
+                ui.data_mut(|d| d.insert_temp(zone_id, z));
+                z
+            }
+        };
+        if let (Some(zone), Some(p)) = (zone, resp.interact_pointer_pos()) {
+            match zone {
+                Zone::Ring => hsv[0] = wheel.hue_at(p),
+                Zone::Inside => (hsv[1], hsv[2]) = wheel.sv_at(shape, hsv[0], p),
+            }
+        }
+    }
+    if !held {
+        ui.data_mut(|d| d.remove::<Option<Zone>>(zone_id));
+    }
+    let [h, s, v] = *hsv;
+    let painter = ui.painter_at(rect.expand(2.0));
+    painter.add(Shape::mesh(wheel.ring_mesh(96)));
+    painter.add(Shape::mesh(match shape {
+        WheelShape::Square => wheel.square_mesh(h, 24),
+        WheelShape::Triangle => wheel.triangle_mesh(h, 24),
+    }));
+    // Repères : un trait en travers de l'anneau, un rond dedans (noir et blanc : visibles sur
+    // toute couleur).
+    let seg = wheel.ring_segment(h);
+    painter.line_segment(seg, Stroke::new(4.0_f32, Color32::BLACK));
+    painter.line_segment(seg, Stroke::new(2.0_f32, Color32::WHITE));
+    let p = wheel.sv_point(shape, h, s, v);
+    painter.circle_stroke(p, 5.5, Stroke::new(3.0_f32, Color32::BLACK));
+    painter.circle_stroke(p, 5.5, Stroke::new(1.5_f32, Color32::WHITE));
+    resp
+}
+
 /// Un carré de couleur bordé (sombre dehors, clair dedans : il se voit sur tout fond).
 fn color_square(painter: &egui::Painter, rect: Rect, c: [u8; 3]) {
     painter.rect_filled(rect, 1.0, to_color(c));
@@ -78,6 +127,15 @@ impl App {
                 let code = couleur::hex(self.color);
                 self.ctx.copy_text(code.clone());
                 self.status = format!("Code {code} copié.");
+            }
+            "couleur.roue" => self.couleurs.prefs.wheel_shown = !self.couleurs.prefs.wheel_shown,
+            "couleur.roue_carre" => {
+                self.couleurs.prefs.wheel = WheelShape::Square;
+                self.couleurs.prefs.wheel_shown = true;
+            }
+            "couleur.roue_triangle" => {
+                self.couleurs.prefs.wheel = WheelShape::Triangle;
+                self.couleurs.prefs.wheel_shown = true;
             }
             _ => return false,
         }
@@ -208,12 +266,67 @@ impl App {
         });
     }
 
-    /// Curseurs de la couleur d'avant-plan.
-    fn color_sliders(&mut self, ui: &mut egui::Ui) {
-        // TSV gardé à part : la teinte d'un gris ou d'un noir ne se perd pas.
+    /// TSV gardé à part : la teinte d'un gris ou d'un noir ne se perd pas. Il ne suit la couleur
+    /// que si elle a changé ailleurs (pipette, nuancier, texte…).
+    fn sync_hsv(&mut self) {
         if hsv_to_rgb(self.hsv) != self.color {
             self.hsv = rgb_to_hsv(self.color);
         }
+    }
+
+    /// Roue chromatique de la couleur d'avant-plan (`wheel_ui`), avec sa bulle et son menu.
+    fn color_wheel(&mut self, ui: &mut egui::Ui, size: f32) {
+        self.sync_hsv();
+        let mut hsv = self.hsv;
+        let resp = wheel_ui(ui, size, &mut hsv, self.couleurs.prefs.wheel);
+        if hsv != self.hsv {
+            self.hsv = hsv;
+            self.color = hsv_to_rgb(hsv);
+        }
+        let resp = crate::bulles::bulle(
+            resp,
+            "Roue chromatique",
+            "Anneau : la teinte ; dedans : saturation et valeur. Clic droit : carré ou triangle.",
+            "",
+        );
+        resp.context_menu(|ui| self.wheel_menu(ui));
+    }
+
+    /// Menu de la roue (clic droit), aussi dans le menu des options.
+    fn wheel_menu(&mut self, ui: &mut egui::Ui) {
+        self.action_item(ui, "Carré saturation / valeur", "couleur.roue_carre");
+        self.action_item(ui, "Triangle saturation / valeur", "couleur.roue_triangle");
+        ui.separator();
+        let text = if self.couleurs.prefs.wheel_shown { "Cacher la roue" } else { "Montrer la roue" };
+        self.action_item(ui, text, "couleur.roue");
+    }
+
+    /// Réglages de la roue : la montrer, carré ou triangle.
+    fn wheel_options(&mut self, ui: &mut egui::Ui) {
+        let p = &mut self.couleurs.prefs;
+        let (roue, carre, triangle) = (self.keymap.label("couleur.roue"), self.keymap.label("couleur.roue_carre"), self.keymap.label("couleur.roue_triangle"));
+        crate::bulles::interrupteur_a(ui, &mut p.wheel_shown, ph::CIRCLE_HALF, "Roue chromatique", "Montrer ou cacher la roue des teintes.", &roue, "couleur.roue");
+        if p.wheel_shown {
+            crate::bulles::choix_a(ui, &mut p.wheel, WheelShape::Square, ph::SQUARE, "Carré", "Dans l'anneau, un carré : saturation de gauche à droite, valeur de bas en haut.", &carre, "couleur.roue_carre");
+            crate::bulles::choix_a(ui, &mut p.wheel, WheelShape::Triangle, ph::TRIANGLE, "Triangle", "Dans l'anneau, un triangle : la teinte pure, le blanc et le noir à ses sommets.", &triangle, "couleur.roue_triangle");
+        }
+    }
+
+    /// Choisir la couleur d'avant-plan : réglages de la roue, la roue (`wheel` points de large au
+    /// plus), les curseurs.
+    fn color_picker(&mut self, ui: &mut egui::Ui, wheel: f32) {
+        ui.horizontal(|ui| self.wheel_options(ui));
+        if self.couleurs.prefs.wheel_shown {
+            let size = ui.available_width().clamp(100.0, wheel);
+            ui.vertical_centered(|ui| self.color_wheel(ui, size));
+            ui.add_space(4.0);
+        }
+        self.color_sliders(ui);
+    }
+
+    /// Curseurs de la couleur d'avant-plan.
+    fn color_sliders(&mut self, ui: &mut egui::Ui) {
+        self.sync_hsv();
         let [h, s, v] = self.hsv;
         let mut next = self.hsv;
         let hues: Vec<Color32> = (0..=12).map(|k| to_color(hsv_to_rgb([k as f32 * 30.0, 1.0, 1.0]))).collect();
@@ -247,7 +360,7 @@ impl App {
     pub(crate) fn color_panel(&mut self, ui: &mut egui::Ui) {
         self.front_back_row(ui);
         ui.add_space(4.0);
-        self.color_sliders(ui);
+        self.color_picker(ui, 240.0);
         ui.add_space(6.0);
         ui.horizontal(|ui| {
             ui.label("Nuancier");
@@ -322,7 +435,7 @@ impl App {
                     ui.set_width(250.0);
                     self.front_back_row(ui);
                     ui.add_space(4.0);
-                    self.color_sliders(ui);
+                    self.color_picker(ui, 200.0);
                 });
             });
         let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));

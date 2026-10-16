@@ -5,6 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::roue::WheelShape;
+
 pub const NOIR: [u8; 3] = [0, 0, 0];
 pub const BLANC: [u8; 3] = [255, 255, 255];
 /// Couleur d'avant-plan au premier lancement : l'encre de Pelure depuis 6b.
@@ -76,10 +78,15 @@ pub struct ColorSettings {
     /// Couleur d'arrière-plan, que l'on échange avec l'avant-plan (comme dans Photoshop).
     #[serde(rename = "arriere_plan")]
     pub back: [u8; 3],
+    /// Roue chromatique : montrée, et ce qu'il y a dans l'anneau (carré ou triangle).
+    #[serde(rename = "roue_visible")]
+    pub wheel_shown: bool,
+    #[serde(rename = "roue")]
+    pub wheel: WheelShape,
 }
 
 impl Default for ColorSettings {
     fn default() -> Self {
-        ColorSettings { front: ENCRE, back: BLANC }
+        ColorSettings { front: ENCRE, back: BLANC, wheel_shown: true, wheel: WheelShape::Square }
     }
 }

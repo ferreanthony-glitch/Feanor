@@ -408,6 +408,21 @@ action = "couleur.copier_code"
 touches = []
 source = "Pelure"
 
+[[raccourci]]
+action = "couleur.roue"
+touches = []
+source = "Pelure"
+
+[[raccourci]]
+action = "couleur.roue_carre"
+touches = []
+source = "Pelure"
+
+[[raccourci]]
+action = "couleur.roue_triangle"
+touches = []
+source = "Pelure"
+
 # ------------------------------------------------------------------------------------ Dessin
 
 [[raccourci]]
