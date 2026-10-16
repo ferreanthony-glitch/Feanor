@@ -263,7 +263,9 @@ qualité.
 **Outils** : `ebsynth -backend gpu`, `propager -gpu`. `propager` sépare le temps de synthèse, celui
 du mélange et le reste.
 
-## Suite
+## Étape e : dans Pelure
 
-- e. Dans Pelure : le calque vidéo comme source, des clés, « Propager », des cels en sortie
-  (annulables), la synthèse sur le périphérique wgpu de Pelure.
+Faite : voir [docs/PROPAGATION.md](../docs/PROPAGATION.md). On peint des clés sur un calque posé
+sur un calque vidéo. « Propager » (menu de la ligne du calque) remplit ce calque sur la durée de la
+vidéo, en une étape d'annulation, sur le périphérique wgpu de l'affichage. `Gpu::fits` vérifie
+d'abord qu'une image tient dans ses limites.

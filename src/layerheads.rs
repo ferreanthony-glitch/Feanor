@@ -626,6 +626,8 @@ impl App {
         if self.layers().get(li).is_some_and(|l| l.video.is_some()) {
             ui.menu_button("Calque vidéo", |ui| self.video_menu(ui, li));
         }
+        // Propager la peinture sur la vidéo (façon EbSynth, `propagerui.rs`).
+        self.propagation_menu(ui, li);
         // Pré / post-comportement (13c).
         if let Some((pre, post)) = self.layers().get(li).filter(|l| !l.folder).map(|l| (l.pre, l.post)) {
             ui.separator();

@@ -313,6 +313,8 @@ pub struct App {
     pub(crate) fx_selected: usize,
     /// Import vidéo en cours (13k, `videoui.rs`).
     pub(crate) video_import: Option<crate::videoui::VideoImport>,
+    /// Propagation d'une peinture sur la vidéo, façon EbSynth (`propagerui.rs`).
+    pub(crate) propagation: crate::propagerui::Propagation,
     /// Fenêtre d'import d'un projet Storyboard Pro et import en cours (14a, `sbui.rs`).
     pub(crate) sb_window: Option<crate::sbui::SbWindow>,
     /// Fenêtre d'interpolation ouverte (13l, `tweenui.rs`).
@@ -606,6 +608,7 @@ impl App {
             fx_keys_shown: true,
             fx_selected: 0,
             video_import: None,
+            propagation: crate::propagerui::Propagation::new(cc.wgpu_render_state.as_ref()),
             sb_window: None,
             tween_dialog: None,
             light_table: false,
@@ -866,6 +869,7 @@ impl App {
             || !self.orphans.is_empty()
             || self.workspace_name.is_some()
             || self.assign.is_some()
+            || self.propagation.running()
     }
 
     pub(crate) fn current_brush(&self) -> Option<&BrushSettings> {
@@ -2624,6 +2628,7 @@ impl App {
             "fichier.importer_sboard" => self.open_sb_window(),
             "fichier.importer_sequence" => self.import_sequence(),
             "calque.video_en_animation" => self.video_to_animation(),
+            "calque.propager" => self.open_propagation(),
             // Interpolation d'images (13l, `tweenui.rs`).
             "images.intermediaire" => self.insert_intermediates(1),
             "images.intermediaires" => self.open_tween_dialog(crate::tweenui::TweenKind::Insert),
@@ -2885,6 +2890,7 @@ impl eframe::App for App {
         self.tick_playback(ctx);
         self.tick_flip(ctx);
         self.tick_video_import(ctx);
+        self.propagation_ui(ctx);
         if self.playing {
             let now = ctx.input(|i| i.time);
             let g = self.global_frame();

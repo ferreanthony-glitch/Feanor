@@ -208,6 +208,9 @@ impl Gpu {
     /// vise une erreur 1000 fois plus petite, avec une marge de 4.
     fn solve(&self, s: &crate::blend::System) -> Result<Vec<Vec<f32>>, Error> {
         let (w, h, c) = (s.width, s.height, s.rhs.len());
+        if !self.fits(w, h, 0, 16) {
+            return Err(Error::Gpu("image trop grande pour les limites de ce périphérique".into()));
+        }
         let pack = |v: &[Vec<f32>]| {
             let mut out = vec![0f32; w * h * 4];
             for (ch, plane) in v.iter().enumerate() {
@@ -261,6 +264,16 @@ impl Gpu {
     /// Nom de la carte et de l'interface (Vulkan, Direct3D 12…).
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// Une image `width` × `height` avec ces nombres de canaux de style et de guides tient-elle
+    /// dans les limites du périphérique ? (Celles par défaut de wgpu, 128 Mo par tampon, laissent
+    /// passer la HD mais pas la 4K.)
+    pub fn fits(&self, width: usize, height: usize, style_channels: usize, guide_channels: usize) -> bool {
+        let words = style_channels.div_ceil(4) + guide_channels.div_ceil(4);
+        let bytes = (width * height * words.max(4) * 4) as u64;
+        let limits = self.device.limits();
+        words <= 16 && bytes <= limits.max_storage_buffer_binding_size as u64 && bytes <= limits.max_buffer_size
     }
 
     fn storage(&self, data: &[u8]) -> wgpu::Buffer {
@@ -365,6 +378,10 @@ impl Synthesizer for Gpu {
         let (style_words, words) = (ns.div_ceil(4), ns.div_ceil(4) + ng.div_ceil(4));
         if words > 16 {
             return Err(Error::TooManyChannels);
+        }
+        // Une erreur de validation de wgpu arrêterait le programme : on vérifie avant.
+        if !self.fits(sw.max(tw), sh.max(th), ns, ng) {
+            return Err(Error::Gpu("image trop grande pour les limites de ce périphérique".into()));
         }
 
         // Poids par canal, rangés comme les mots.

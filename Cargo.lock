@@ -2389,6 +2389,7 @@ dependencies = [
  "serde",
  "serde_json",
  "symphonia",
+ "synthese",
  "toml",
  "ttf-parser",
  "winit",
@@ -3193,6 +3194,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "synthese"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "pollster",
+ "wgpu",
 ]
 
 [[package]]

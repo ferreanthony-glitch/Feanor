@@ -125,6 +125,10 @@ mod pixtools;
 #[cfg(test)]
 mod plans_tests;
 mod project;
+mod propager;
+#[cfg(test)]
+mod propager_tests;
+mod propagerui;
 mod raccourcisui;
 mod raster;
 mod recovery;
