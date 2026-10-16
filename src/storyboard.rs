@@ -425,7 +425,7 @@ impl App {
         }
         let locked = self.doc.storyboard_locked;
         let icon = if locked { ph::LOCK } else { ph::LOCK_OPEN };
-        let what = "Verrouillé, l'ordre, le nombre et la durée des plans ne changent plus ; on dessine toujours dans les plans.";
+        let what = "Verrouillé : l'ordre, le nombre et la durée des plans, leurs dessins et leurs calques ne changent plus.";
         if self.bouton_etat(ui, locked, icon, "Verrouiller le storyboard", what, "storyboard.verrouiller").clicked() {
             self.toggle_storyboard_lock();
         }

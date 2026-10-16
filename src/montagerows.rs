@@ -91,7 +91,9 @@ impl App {
             );
         };
         label(lane(rows.camera_top(), CAM_H), "Caméra", visuals.text_color());
-        label(lane(rows.blocks_top(), rows.block_h), "Storyboard", visuals.strong_text_color());
+        let header = lane(rows.blocks_top(), rows.block_h);
+        painter.rect_filled(header, 3.0, theme::ETIQUETTE);
+        self.project_header(ui, header);
         let panel = &self.doc.panels[self.cur_panel];
         let mut pick = None;
         for row in 0..rows.layer_rows {
@@ -124,6 +126,59 @@ impl App {
         }
         if let Some(k) = pick {
             self.select_layer(k);
+        }
+    }
+
+    /// À la place du mot « Storyboard », en face des plans (choix d'Anthony, 2026-10-16, comme
+    /// la colonne de gauche du panneau Projet de TVPaint) : les commandes des plans et le nom du
+    /// projet, qui ouvre ses réglages.
+    fn project_header(&mut self, ui: &mut egui::Ui, r: Rect) {
+        use egui_phosphor::regular as ph;
+        let inner = r.shrink2(vec2(4.0, 3.0));
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner).id_salt("entete_projet").layout(egui::Layout::top_down(egui::Align::Min)));
+        child.set_clip_rect(r.intersect(ui.clip_rect()));
+        child.spacing_mut().item_spacing = vec2(3.0, 3.0);
+        let ui = &mut child;
+        let mut run: Option<&str> = None;
+        ui.horizontal(|ui| {
+            if self.bouton(ui, ph::PLUS_SQUARE, "Nouveau plan", "Après le plan courant, dans la même séquence.", "panneau.nouveau").clicked() {
+                run = Some("panneau.nouveau");
+            }
+            if self.bouton(ui, ph::ARROW_LINE_LEFT, "Nouveau plan avant", "Avant le plan courant, dans la même séquence.", "plan.nouveau_avant").clicked() {
+                run = Some("plan.nouveau_avant");
+            }
+            if self.bouton(ui, ph::COPY_SIMPLE, "Dupliquer le plan", "Une copie du plan courant, juste après lui.", "panneau.dupliquer").clicked() {
+                run = Some("panneau.dupliquer");
+            }
+        });
+        ui.horizontal(|ui| {
+            if self.bouton(ui, ph::TRASH, "Supprimer les plans", "Les plans choisis, sinon le plan courant.", "panneau.supprimer").clicked() {
+                run = Some("panneau.supprimer");
+            }
+            if self.bouton(ui, ph::STACK_PLUS, "Nouvelle séquence", "Après la séquence courante, avec un plan.", "sequence.nouvelle").clicked() {
+                run = Some("sequence.nouvelle");
+            }
+            let locked = self.doc.storyboard_locked;
+            let icon = if locked { ph::LOCK } else { ph::LOCK_OPEN };
+            let what = "Verrouillé : l'ordre, le nombre et la durée des plans, leurs dessins et leurs calques ne changent plus.";
+            if self.bouton_etat(ui, locked, icon, "Verrouiller le storyboard", what, "storyboard.verrouiller").clicked() {
+                run = Some("storyboard.verrouiller");
+            }
+        });
+        let title = self.doc.properties.title.trim().to_string();
+        let name = if title.is_empty() { self.base_name_or("Sans titre") } else { title };
+        let plans = self.doc.panels.len();
+        ui.horizontal(|ui| {
+            if self.bouton(ui, ph::GEAR_SIX, "Réglages du projet", "Propriétés, résolution, cadence.", "projet.proprietes").clicked() {
+                run = Some("projet.proprietes");
+            }
+            let resp = ui.add(egui::Label::new(egui::RichText::new(&name).small().strong()).truncate().sense(Sense::click()));
+            if resp.on_hover_text(format!("{name} : {plans} plan(s). Clic : réglages du projet.")).clicked() {
+                run = Some("projet.proprietes");
+            }
+        });
+        if let Some(action) = run {
+            self.run_action(action);
         }
     }
 
