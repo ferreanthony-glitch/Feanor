@@ -84,11 +84,11 @@ fn outline_finds_the_range_and_the_keys() {
     paint_square(&mut doc, 4, 20, 10, 8);
     let guide = video_guide(&doc);
     assert_eq!(propager::default_guide(&doc, 0, 1), guide);
-    let o = propager::outline(&doc, 0, 1, guide).unwrap();
+    let o = propager::outline(&doc, 0, 1, guide, None).unwrap();
     assert_eq!((o.guide, o.range.clone(), o.keys.clone(), o.outputs()), (guide, 0..6, vec![0, 4], 4));
     // Des images marquées « Clé » : ce sont elles, les clés (pour repropager).
     doc.panels[0].layers[1].roles.insert(4, Role::Key);
-    assert_eq!(propager::outline(&doc, 0, 1, guide).unwrap().keys, [4]);
+    assert_eq!(propager::outline(&doc, 0, 1, guide, None).unwrap().keys, [4]);
     std::fs::remove_dir_all(dir).ok();
 }
 
@@ -111,17 +111,17 @@ fn the_guides_offered() {
 fn what_cannot_be_propagated() {
     let (mut doc, dir) = project("refus", 3);
     let guide = video_guide(&doc);
-    assert!(propager::outline(&doc, 0, 1, guide).unwrap_err().contains("clé"), "pas de dessin");
-    assert!(propager::outline(&doc, 0, 0, Guide::Below).unwrap_err().contains("calque vidéo"), "le calque vidéo lui-même");
+    assert!(propager::outline(&doc, 0, 1, guide, None).unwrap_err().contains("clé"), "pas de dessin");
+    assert!(propager::outline(&doc, 0, 0, Guide::Below, None).unwrap_err().contains("calque vidéo"), "le calque vidéo lui-même");
     for f in 0..3 {
         paint_square(&mut doc, f, 4, 4, 4);
     }
-    assert!(propager::outline(&doc, 0, 1, guide).unwrap_err().contains("rien à propager"), "que des clés");
+    assert!(propager::outline(&doc, 0, 1, guide, None).unwrap_err().contains("rien à propager"), "que des clés");
     let paint_id = doc.panels[0].layers[1].id;
-    assert!(propager::outline(&doc, 0, 1, Guide::Layer(paint_id)).unwrap_err().contains("lui-même"));
+    assert!(propager::outline(&doc, 0, 1, Guide::Layer(paint_id), None).unwrap_err().contains("lui-même"));
     doc.panels[0].layers.remove(0);
-    assert!(propager::outline(&doc, 0, 0, guide).unwrap_err().contains("plus dans le plan"));
-    assert!(propager::outline(&doc, 0, 0, Guide::Below).unwrap_err().contains("Rien sous ce calque"));
+    assert!(propager::outline(&doc, 0, 0, guide, None).unwrap_err().contains("plus dans le plan"));
+    assert!(propager::outline(&doc, 0, 0, Guide::Below, None).unwrap_err().contains("Rien sous ce calque"));
     std::fs::remove_dir_all(dir).ok();
 }
 
@@ -129,7 +129,7 @@ fn what_cannot_be_propagated() {
 fn the_key_is_taken_in_the_working_rectangle() {
     let (mut doc, dir) = project("cle", 3);
     paint_square(&mut doc, 0, 10, 12, 6);
-    let plan = propager::plan(&doc, 0, 1, video_guide(&doc)).unwrap();
+    let plan = propager::plan(&doc, 0, 1, video_guide(&doc), None).unwrap();
     assert_eq!((plan.origin, plan.size), (ORIGIN, (W, H)));
     assert!(matches!(&plan.frames, propager::Frames::Files(f) if f.len() == 3));
     let s = &plan.styles[0];
@@ -141,7 +141,7 @@ fn the_key_is_taken_in_the_working_rectangle() {
     assert_eq!(propager::crop(&r, plan.origin, plan.size), *s);
     assert!(r.tiles.iter().filter(|t| t.is_some()).count() < r.tiles.len());
     // Un guide fait de calques : le cadre.
-    let plan = propager::plan(&doc, 0, 1, Guide::Below).unwrap();
+    let plan = propager::plan(&doc, 0, 1, Guide::Below, None).unwrap();
     assert!(matches!(plan.frames, propager::Frames::Rendered));
     assert_eq!((plan.origin, plan.size), (ORIGIN, (W, H)));
     std::fs::remove_dir_all(dir).ok();
@@ -200,7 +200,7 @@ fn check_follows(made: &[(usize, Image)], frames: usize) {
 fn the_paint_follows_the_video_and_fills_the_layer() {
     let (mut doc, dir) = project("suit", 5);
     paint_square(&mut doc, 0, 10, 10, 10);
-    let plan = propager::plan(&doc, 0, 1, video_guide(&doc)).unwrap();
+    let plan = propager::plan(&doc, 0, 1, video_guide(&doc), None).unwrap();
     let mut made = Vec::new();
     let cancel = AtomicBool::new(false);
     propager::run(&plan, &Cpu, &PropagateParams::default(), &cancel, |f| plan.load_file(f), |f, im| made.push((f, im))).unwrap();
@@ -212,7 +212,7 @@ fn the_paint_follows_the_video_and_fills_the_layer() {
     assert!((1..5).all(|f| layer.cel_at(f).is_some() && layer.cel_at(f) != layer.cel_at(0)));
     assert_eq!(layer.roles.get(&0), Some(&Role::Key));
     // Repropager garde la clé marquée, et refait les quatre autres.
-    assert_eq!(propager::outline(&doc, 0, 1, video_guide(&doc)).unwrap().keys, [0]);
+    assert_eq!(propager::outline(&doc, 0, 1, video_guide(&doc), None).unwrap().keys, [0]);
     std::fs::remove_dir_all(dir).ok();
 }
 
@@ -239,12 +239,110 @@ fn the_paint_follows_an_animation_without_video() {
     }
     paint_square(&mut doc, 0, 10, 10, 10);
     let guide = Guide::Layer(doc.panels[0].layers[2].id);
-    let plan = propager::plan(&doc, 0, 1, guide).unwrap();
+    let plan = propager::plan(&doc, 0, 1, guide, None).unwrap();
     assert_eq!(plan.outline.range, 0..5);
     let mut made = Vec::new();
     let load = |f: usize| Ok(propager::render_guide(&doc, 0, 1, guide, f));
     propager::run(&plan, &Cpu, &PropagateParams::default(), &AtomicBool::new(false), load, |f, im| made.push((f, im))).unwrap();
     check_follows(&made, 5);
+}
+
+/// Les images du calque peint (`Some` : un dessin), de 0 à `n`.
+fn exposures(doc: &Document, n: usize) -> Vec<Option<CelId>> {
+    (0..n).map(|f| doc.panels[0].layers[1].cel_at(f)).collect()
+}
+
+#[test]
+fn a_chosen_range_only_remakes_its_frames() {
+    // Un ancien dessin exposé partout, la clé (marquée) à l'image 2 ; on refait les images 1 à 4.
+    let (mut doc, dir) = project("plage", 8);
+    let old = square(&mut doc, 1, 0, (0, 0, 4), Color32::from_rgba_premultiplied(0, 100, 0, 100));
+    for f in 1..8 {
+        doc.panels[0].layers[1].set(f, Some(old));
+    }
+    let key = paint_square(&mut doc, 2, 14, 10, 10);
+    doc.panels[0].layers[1].roles.insert(2, Role::Key);
+    let plan = propager::plan(&doc, 0, 1, video_guide(&doc), Some(1..5)).unwrap();
+    let o = &plan.outline;
+    assert_eq!((o.range.clone(), o.keys.clone(), o.ignored.clone(), o.outputs()), (1..5, vec![2], vec![], 3));
+    // Les images de la vidéo sont prises à partir du début de la plage.
+    assert!(matches!(&plan.frames, propager::Frames::Files(f) if f.len() == 4));
+    let fourth = image::open(video::frame_file(&dir, 3, "png")).unwrap().to_rgb8().into_raw();
+    assert_eq!(plan.load_file(3).unwrap().data, fourth);
+    let mut made = Vec::new();
+    propager::run(&plan, &Cpu, &PropagateParams::default(), &AtomicBool::new(false), |f| plan.load_file(f), |f, im| made.push((f, im))).unwrap();
+    let mut got: Vec<usize> = made.iter().map(|(f, _)| *f).collect();
+    got.sort();
+    assert_eq!(got, [1, 3, 4]);
+    for (f, im) in &made {
+        let (cx, want) = (paint_center_x(im), 18.5 + 2.0 * (*f as f32 - 2.0));
+        assert!((cx - want).abs() < 2.0, "image {f} : centre {cx}, attendu {want}");
+    }
+    let before = exposures(&doc, 8);
+    propager::apply(&mut doc, 0, 1, plan.origin, &plan.outline.keys, made);
+    let after = exposures(&doc, 8);
+    for f in [0, 5, 6, 7] {
+        assert_eq!(after[f], Some(old), "image {f} hors plage : intacte");
+    }
+    assert_eq!(after[2], Some(key));
+    for f in [1, 3, 4] {
+        assert!(after[f].is_some() && after[f] != before[f] && after[f] != Some(key), "image {f} refaite");
+    }
+    std::fs::remove_dir_all(dir).ok();
+}
+
+#[test]
+fn keys_outside_the_range_are_ignored() {
+    // Deux dessins sans rôle : bleu à l'image 1 (exposé jusqu'à la 5), rouge à la 6 (jusqu'à la 7).
+    let (mut doc, dir) = project("hors-plage", 8);
+    let blue = square(&mut doc, 1, 1, (10, 10, 10), Color32::from_rgba_premultiplied(0, 0, 128, 128));
+    for f in 2..6 {
+        doc.panels[0].layers[1].set(f, Some(blue));
+    }
+    let red = paint_square(&mut doc, 6, 20, 10, 10);
+    doc.panels[0].layers[1].set(7, Some(red));
+    // La plage déborde de celle du guide : on garde ce qui est dedans. L'exposition du bleu à
+    // l'image 3 n'est pas une clé.
+    let plan = propager::plan(&doc, 0, 1, video_guide(&doc), Some(3..20)).unwrap();
+    let o = &plan.outline;
+    assert_eq!((o.range.clone(), o.keys.clone(), o.ignored.clone()), (3..8, vec![6], vec![1]));
+    assert_eq!(plan.styles.len(), 1);
+    let mut made = Vec::new();
+    propager::run(&plan, &Cpu, &PropagateParams::default(), &AtomicBool::new(false), |f| plan.load_file(f), |f, im| made.push((f, im))).unwrap();
+    let mut got: Vec<usize> = made.iter().map(|(f, _)| *f).collect();
+    got.sort();
+    assert_eq!(got, [3, 4, 5, 7]);
+    for (f, im) in &made {
+        assert!(im.data.chunks_exact(4).all(|p| p[2] == 0), "image {f} : rien du bleu, clé hors plage");
+        let (cx, want) = (paint_center_x(im), 24.5 + 2.0 * (*f as f32 - 6.0));
+        assert!((cx - want).abs() < 2.0, "image {f} : centre {cx}, attendu {want}");
+    }
+    // Toutes les clés sont marquées, la bleue aussi : une propagation sur les premières images la
+    // retrouve.
+    let keys = [&plan.outline.keys[..], &plan.outline.ignored[..]].concat();
+    propager::apply(&mut doc, 0, 1, plan.origin, &keys, made);
+    let after = exposures(&doc, 8);
+    assert_eq!(after[..3], [None, Some(blue), Some(blue)]);
+    assert_eq!(after[6], Some(red));
+    assert_eq!(doc.panels[0].layers[1].roles.get(&1), Some(&Role::Key));
+    let o = propager::outline(&doc, 0, 1, video_guide(&doc), Some(0..3)).unwrap();
+    assert_eq!((o.keys, o.ignored), (vec![1], vec![6]));
+    std::fs::remove_dir_all(dir).ok();
+}
+
+#[test]
+fn no_key_in_the_chosen_range_is_refused() {
+    let (mut doc, dir) = project("sans-cle", 8);
+    paint_square(&mut doc, 0, 10, 10, 10);
+    let guide = video_guide(&doc);
+    let e = propager::outline(&doc, 0, 1, guide, Some(3..6)).unwrap_err();
+    assert!(e.contains("Aucune clé dans la plage"), "{e}");
+    assert!(propager::plan(&doc, 0, 1, guide, Some(3..6)).is_err());
+    assert!(propager::outline(&doc, 0, 1, guide, Some(10..20)).unwrap_err().contains("hors des images"));
+    assert!(propager::outline(&doc, 0, 1, guide, Some(0..1)).unwrap_err().contains("rien à propager"), "que la clé");
+    // Sans plage choisie, toute celle du guide.
+    assert_eq!(propager::outline(&doc, 0, 1, guide, None).unwrap().range, propager::span(&doc, 0, 1, guide).unwrap());
+    std::fs::remove_dir_all(dir).ok();
 }
 
 /// Fabrique un projet de démonstration pour essayer « Propager » dans l'appli :
@@ -291,7 +389,7 @@ fn demo_project() {
 fn stopping_gives_an_error_and_nothing_else() {
     let (mut doc, dir) = project("arret", 4);
     paint_square(&mut doc, 0, 10, 10, 10);
-    let plan = propager::plan(&doc, 0, 1, video_guide(&doc)).unwrap();
+    let plan = propager::plan(&doc, 0, 1, video_guide(&doc), None).unwrap();
     let mut made = 0;
     let r = propager::run(&plan, &Cpu, &PropagateParams::default(), &AtomicBool::new(true), |f| plan.load_file(f), |_, _| made += 1);
     assert!(r.is_err());

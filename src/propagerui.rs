@@ -1,6 +1,7 @@
 //! « Propager » dans l'interface (propagation façon EbSynth, étape e). Trois temps :
 //! - la fenêtre dit ce qui va se passer (guide, images, clés), propose le guide (calque vidéo,
-//!   ce qu'on voit dessous, un calque choisi) et donne les réglages ;
+//!   ce qu'on voit dessous, un calque choisi), la plage à refaire (toute celle du guide, à la
+//!   main, ou l'entrée et la sortie de la timeline) et donne les réglages ;
 //! - la tâche tourne sur un autre fil : progression, aperçu de la dernière image fabriquée,
 //!   « Arrêter ». Les images d'un guide fait de calques sont composées ici, sur le fil de
 //!   l'interface, à la demande de la tâche (le document ne quitte pas ce fil) ;
@@ -9,6 +10,7 @@
 //! Le calcul se fait sur la carte graphique de l'affichage (le périphérique wgpu d'eframe,
 //! partagé), sinon sur le processeur. Voir `propager.rs`.
 
+use std::ops::Range;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -36,6 +38,9 @@ pub(crate) struct Propagation {
     on_gpu: bool,
     /// Le guide choisi dans la fenêtre (aucun : celui proposé d'abord).
     guide: Option<Guide>,
+    /// Les images à refaire choisies dans la fenêtre, et pour quel plan, calque et guide
+    /// (identifiants) ; aucune : toute la plage du guide.
+    range: Option<((u64, u64, Guide), Range<usize>)>,
     params: PropagateParams,
     job: Option<Job>,
 }
@@ -47,6 +52,7 @@ struct Job {
     layer: u64,
     guide: Guide,
     origin: (usize, usize),
+    /// Les clés à marquer : celles de la plage et celles hors plage.
     keys: Vec<usize>,
     total: usize,
     cancel: Arc<AtomicBool>,
@@ -68,7 +74,7 @@ impl Propagation {
             let info = rs.adapter.get_info();
             (rs.device.clone(), rs.queue.clone(), format!("{} ({:?})", info.name, info.backend))
         });
-        Propagation { on_gpu: device.is_some(), device, window: false, guide: None, params: PropagateParams::default(), job: None }
+        Propagation { on_gpu: device.is_some(), device, window: false, guide: None, range: None, params: PropagateParams::default(), job: None }
     }
 
     /// Une propagation tourne : le reste de l'interface attend.
@@ -90,6 +96,16 @@ fn preview(im: &Image, max: usize) -> egui::ColorImage {
     egui::ColorImage::from_rgba_premultiplied([w, h], &data)
 }
 
+/// Un champ de numéro d'image dans `span`, numéroté comme la timeline : on glisse, ou on tape un
+/// numéro (ou un time code).
+fn frame_field<'a>(app: &'a App, value: &'a mut usize, span: &Range<usize>) -> egui::DragValue<'a> {
+    egui::DragValue::new(value)
+        .range(span.start..=span.end - 1)
+        .speed(0.2)
+        .custom_formatter(move |v, _| app.frame_label(v.max(0.0) as usize))
+        .custom_parser(move |s| crate::cues::parse_frame(s, app.doc.start_frame, app.doc.fps, app.time_display).map(|f| f as f64))
+}
+
 impl App {
     /// Le guide de la propagation du calque courant : celui choisi s'il est encore possible, sinon
     /// celui proposé d'abord.
@@ -99,6 +115,18 @@ impl App {
             Some(g) if choices.iter().any(|(c, _)| *c == g) => g,
             _ => propager::default_guide(&self.doc, self.cur_panel, self.cur_layer),
         }
+    }
+
+    /// La plage du guide `guide` pour le calque courant, et les images à refaire : celles choisies
+    /// dans la fenêtre pour ce plan, ce calque et ce guide, ramenées dans la plage du guide ;
+    /// sinon toute cette plage.
+    fn propagation_ranges(&self, guide: Guide) -> Result<(Range<usize>, Range<usize>), String> {
+        let span = propager::span(&self.doc, self.cur_panel, self.cur_layer, guide)?;
+        let chosen = match &self.propagation.range {
+            Some((at, r)) if *at == (self.panel().id, self.layer().id, guide) => r.start.max(span.start)..r.end.min(span.end),
+            _ => span.clone(),
+        };
+        Ok(if chosen.is_empty() { (span.clone(), span) } else { (span, chosen) })
     }
 
     /// Action « calque.propager » : la fenêtre, si le calque courant peut être propagé.
@@ -137,23 +165,43 @@ impl App {
     fn propagation_window(&mut self, ctx: &egui::Context) {
         let guide = self.propagation_guide();
         let choices = propager::guides(&self.doc, self.cur_panel, self.cur_layer);
-        let outline = propager::outline(&self.doc, self.cur_panel, self.cur_layer, guide);
+        let ranges = self.propagation_ranges(guide);
+        let outline = ranges.clone().and_then(|(_, r)| propager::outline(&self.doc, self.cur_panel, self.cur_layer, guide, Some(r)));
+        let labels = |frames: &[usize]| frames.iter().map(|&k| self.frame_label(k)).collect::<Vec<_>>().join(", ");
         let summary = outline.as_ref().map(|o| {
-            let keys: Vec<String> = o.keys.iter().map(|&k| self.frame_label(k)).collect();
-            format!(
+            let mut text = format!(
                 "Images {} à {} : {} {} ({}), {} images à fabriquer.",
                 self.frame_label(o.range.start),
                 self.frame_label(o.range.end - 1),
                 o.keys.len(),
                 if o.keys.len() > 1 { "clés" } else { "clé" },
-                keys.join(", "),
+                labels(&o.keys),
                 o.outputs()
-            )
+            );
+            if !o.ignored.is_empty() {
+                text += &format!(" Hors de la plage, ignorées : {} {}.", if o.ignored.len() > 1 { "clés" } else { "clé" }, labels(&o.ignored));
+            }
+            text
+        });
+        // Sans clé dans la plage choisie : où sont celles du calque.
+        let summary = summary.map_err(|e| match propager::outline(&self.doc, self.cur_panel, self.cur_layer, guide, None) {
+            Ok(all) if ranges.as_ref().is_ok_and(|(span, r)| span != r) => format!("{e} Clés du calque : {}.", labels(&all.keys)),
+            _ => e.clone(),
+        });
+        // L'entrée et la sortie de la timeline, ramenées dans la plage du guide.
+        let cues = &self.panel().cues;
+        let marked_io = cues.in_point.is_some() || cues.out_point.is_some();
+        let in_out = ranges.as_ref().ok().and_then(|(span, _)| {
+            let (a, b) = self.plan_play_range();
+            let r = a.max(span.start)..b.min(span.end);
+            (marked_io && !r.is_empty()).then_some(r)
         });
         let layer_name = self.layer().name.clone();
         let device = self.propagation.device.as_ref().map(|d| d.2.clone());
         let (mut params, mut on_gpu, mut chosen) = (self.propagation.params.clone(), self.propagation.on_gpu, guide);
         let (mut open, mut go) = (true, false);
+        let mut picked: Option<Range<usize>> = None;
+        let app: &App = self;
         egui::Window::new("Propager la peinture")
             .collapsible(false)
             .resizable(false)
@@ -171,6 +219,37 @@ impl App {
                         }
                     });
                 });
+                // La plage à refaire, numérotée comme la timeline (image, time code ou trame).
+                if let Ok((span, range)) = &ranges {
+                    let (mut first, mut last) = (range.start, range.end - 1);
+                    ui.horizontal(|ui| {
+                        ui.label("De l'image");
+                        let from = ui.add(frame_field(app, &mut first, span)).changed();
+                        ui.label("à l'image");
+                        let to = ui.add(frame_field(app, &mut last, span)).changed();
+                        if from || to {
+                            // Les deux bornes restent dans l'ordre : celle qu'on bouge pousse l'autre.
+                            if first > last {
+                                (first, last) = if from { (first, first) } else { (last, last) };
+                            }
+                            picked = Some(first..last + 1);
+                        }
+                        if ui.add_enabled(*range != *span, egui::Button::new("Tout")).on_hover_text("Toute la plage du guide.").clicked() {
+                            picked = Some(span.clone());
+                        }
+                        let io = ui
+                            .add_enabled(in_out.is_some(), egui::Button::new("Entrée → sortie"))
+                            .on_hover_text("Reprendre les points d'entrée et de sortie de la timeline.")
+                            .on_disabled_hover_text(if marked_io {
+                                "Les points d'entrée et de sortie sont hors des images que le guide couvre."
+                            } else {
+                                "Pas de point d'entrée ni de sortie dans la timeline."
+                            });
+                        if io.clicked() {
+                            picked = in_out.clone();
+                        }
+                    });
+                }
                 match &summary {
                     Err(e) => {
                         ui.label(e.as_str());
@@ -179,8 +258,8 @@ impl App {
                         ui.label(frames);
                         ui.label(
                             egui::RichText::new(
-                                "Les autres images du calque sont remplacées par des dessins fabriqués ; les clés sont marquées « Clé » \
-                                 (retouche une clé puis repropage). Une seule étape d'annulation.",
+                                "Les autres images de la plage sont remplacées par des dessins fabriqués ; celles hors plage ne changent \
+                                 pas. Les clés sont marquées « Clé » (retouche une clé puis repropage). Une seule étape d'annulation.",
                             )
                             .weak()
                             .small(),
@@ -218,6 +297,9 @@ impl App {
             });
         (self.propagation.params, self.propagation.on_gpu, self.propagation.window) = (params, on_gpu, open);
         self.propagation.guide = Some(chosen);
+        if let Some(r) = picked {
+            self.propagation.range = Some(((self.panel().id, self.layer().id, guide), r));
+        }
         if go {
             self.start_propagation(ctx);
         }
@@ -230,7 +312,8 @@ impl App {
         self.end_stroke();
         self.playing = false;
         let guide = self.propagation_guide();
-        let plan = match propager::plan(&self.doc, self.cur_panel, self.cur_layer, guide) {
+        let chosen = self.propagation_ranges(guide).ok().map(|(_, r)| r);
+        let plan = match propager::plan(&self.doc, self.cur_panel, self.cur_layer, guide, chosen) {
             Ok(p) => p,
             Err(e) => {
                 self.status = e;
@@ -239,7 +322,8 @@ impl App {
         };
         let device = if self.propagation.on_gpu { self.propagation.device.clone() } else { None };
         let params = self.propagation.params.clone();
-        let (origin, keys, total) = (plan.origin, plan.outline.keys.clone(), plan.outline.outputs());
+        // Toutes les clés seront marquées, celles hors plage aussi (voir `propager::apply`).
+        let (origin, keys, total) = (plan.origin, [&plan.outline.keys[..], &plan.outline.ignored[..]].concat(), plan.outline.outputs());
         let cancel = Arc::new(AtomicBool::new(false));
         let made = Arc::new(Mutex::new(Vec::new()));
         let (stop, sink, wake) = (cancel.clone(), made.clone(), ctx.clone());

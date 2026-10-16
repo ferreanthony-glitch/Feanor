@@ -9,7 +9,9 @@
 //!   dans Pelure, sans le décor).
 //!
 //! Les clés sont les images marquées « Clé » qui ont un dessin, s'il y en a ; sinon chaque image
-//! où un dessin commence. On travaille dans un rectangle de la feuille, en RVBA prémultiplié (les
+//! où un dessin commence. On refait toute la plage du guide, ou la plage choisie à la main (dans
+//! celle du guide) : les images hors plage restent telles quelles, et les clés hors plage ne
+//! servent pas. On travaille dans un rectangle de la feuille, en RVBA prémultiplié (les
 //! moyennes des patchs restent justes au bord de la peinture) : celui où `video::read_frame` pose
 //! les images de la vidéo, ou le cadre pour les autres guides. La peinture hors de ce rectangle
 //! n'est pas propagée.
@@ -44,10 +46,12 @@ pub enum Guide {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Outline {
     pub guide: Guide,
-    /// Images du plan à couvrir : celles où la vidéo a une image, ou tout le plan.
+    /// Images du plan refaites : la plage du guide (`span`), ou la partie choisie à la main.
     pub range: Range<usize>,
-    /// Images clés du calque peint.
+    /// Images clés du calque peint dans la plage.
     pub keys: Vec<usize>,
+    /// Les clés hors de la plage : elles ne servent pas.
+    pub ignored: Vec<usize>,
 }
 
 impl Outline {
@@ -125,9 +129,10 @@ fn layer_index(doc: &Document, panel: usize, id: u64) -> Option<usize> {
     doc.panels.get(panel)?.layers.iter().position(|l| l.id == id)
 }
 
-/// La propagation du calque `paint` du plan `panel` en suivant `guide` est-elle possible, et que
-/// fera-t-elle ?
-pub fn outline(doc: &Document, panel: usize, paint: usize, guide: Guide) -> Result<Outline, String> {
+/// Les images que le guide `guide` couvre pour le calque peint `paint` du plan `panel` : celles où
+/// la vidéo a une image, ou du début du plan à la dernière image des calques du guide. Erreur si
+/// ce calque ne peut pas être propagé avec ce guide.
+pub fn span(doc: &Document, panel: usize, paint: usize, guide: Guide) -> Result<Range<usize>, String> {
     let p = doc.panels.get(panel).ok_or("Plan introuvable.")?;
     let layer = p.layers.get(paint).ok_or("Calque introuvable.")?;
     if layer.video.is_some() {
@@ -136,14 +141,14 @@ pub fn outline(doc: &Document, panel: usize, paint: usize, guide: Guide) -> Resu
     if layer.folder || layer.kind != LayerKind::Bitmap {
         return Err("La propagation se fait sur un calque bitmap.".into());
     }
-    let range = match guide {
+    match guide {
         Guide::Video(id) => {
             let clip = layer_index(doc, panel, id).and_then(|i| p.layers[i].video.as_ref()).ok_or("Ce calque vidéo n'est plus dans le plan.")?;
             let shown: Vec<usize> = (0..p.frame_count()).filter(|&f| clip.index_at(f, doc.fps).is_some()).collect();
             let (Some(&first), Some(&last)) = (shown.first(), shown.last()) else {
                 return Err("La vidéo ne couvre aucune image de ce plan.".into());
             };
-            first..last + 1
+            Ok(first..last + 1)
         }
         Guide::Below if paint == 0 => return Err("Rien sous ce calque : choisis un autre guide.".into()),
         Guide::Layer(id) if layer_index(doc, panel, id).is_none() => return Err("Ce calque n'est plus dans le plan.".into()),
@@ -164,28 +169,49 @@ pub fn outline(doc: &Document, panel: usize, paint: usize, guide: Guide) -> Resu
             if end == 0 {
                 return Err("Le guide est vide : rien à suivre.".into());
             }
-            0..end
+            Ok(0..end)
         }
+    }
+}
+
+/// La propagation du calque `paint` du plan `panel` en suivant `guide`, sur les images `chosen`
+/// (dans la plage du guide ; aucune : toute cette plage), est-elle possible, et que fera-t-elle ?
+pub fn outline(doc: &Document, panel: usize, paint: usize, guide: Guide, chosen: Option<Range<usize>>) -> Result<Outline, String> {
+    let span = span(doc, panel, paint, guide)?;
+    let range = match chosen {
+        Some(c) => c.start.max(span.start)..c.end.min(span.end),
+        None => span.clone(),
     };
-    let marked: Vec<usize> = range.clone().filter(|&f| layer.roles.get(&f) == Some(&Role::Key) && layer.cel_at(f).is_some()).collect();
-    let keys = if marked.is_empty() {
-        range.clone().filter(|&f| layer.cel_at(f).is_some() && (f == range.start || layer.cel_at(f - 1) != layer.cel_at(f))).collect()
+    if range.is_empty() {
+        return Err("La plage choisie est hors des images que le guide couvre.".into());
+    }
+    // Les clés du calque sur toute la plage du guide (une exposition commencée avant la plage
+    // choisie n'est pas une clé), puis celles de la plage choisie.
+    let layer = &doc.panels[panel].layers[paint];
+    let marked: Vec<usize> = span.clone().filter(|&f| layer.roles.get(&f) == Some(&Role::Key) && layer.cel_at(f).is_some()).collect();
+    let all: Vec<usize> = if marked.is_empty() {
+        span.clone().filter(|&f| layer.cel_at(f).is_some() && (f == span.start || layer.cel_at(f - 1) != layer.cel_at(f))).collect()
     } else {
         marked
     };
-    if keys.is_empty() {
+    if all.is_empty() {
         return Err("Peins au moins une image clé sur ce calque.".into());
     }
-    let outline = Outline { guide, range, keys };
+    let (keys, ignored): (Vec<usize>, Vec<usize>) = all.into_iter().partition(|f| range.contains(f));
+    if keys.is_empty() {
+        return Err("Aucune clé dans la plage choisie : élargis-la jusqu'à une clé, ou peins une clé dedans.".into());
+    }
+    let outline = Outline { guide, range, keys, ignored };
     if outline.outputs() == 0 {
         return Err("Toutes les images sont des clés : rien à propager.".into());
     }
     Ok(outline)
 }
 
-/// Relève tout ce qu'il faut pour propager le calque `paint` du plan `panel` en suivant `guide`.
-pub fn plan(doc: &Document, panel: usize, paint: usize, guide: Guide) -> Result<Plan, String> {
-    let outline = outline(doc, panel, paint, guide)?;
+/// Relève tout ce qu'il faut pour propager le calque `paint` du plan `panel` en suivant `guide`,
+/// sur les images `chosen` (aucune : toute la plage du guide).
+pub fn plan(doc: &Document, panel: usize, paint: usize, guide: Guide, chosen: Option<Range<usize>>) -> Result<Plan, String> {
+    let outline = outline(doc, panel, paint, guide, chosen)?;
     let p = &doc.panels[panel];
     let (frames, origin, size) = match guide {
         Guide::Video(id) => {
@@ -330,7 +356,9 @@ pub fn run(
 }
 
 /// Pose les images fabriquées `made` dans le calque `paint` du plan `panel` (des dessins neufs) et
-/// marque ses clés « Clé ». (L'appelant prend l'instantané pour l'annulation.)
+/// marque ses clés « Clé » : celles de la plage, et aussi celles hors plage (`Outline::ignored`),
+/// sinon une prochaine propagation, ne voyant plus que les clés marquées, les perdrait.
+/// (L'appelant prend l'instantané pour l'annulation.)
 pub fn apply(doc: &mut Document, panel: usize, paint: usize, origin: (usize, usize), keys: &[usize], made: Vec<(usize, Image)>) {
     for (f, im) in made {
         let raster = to_raster(doc.width, doc.height, &im, origin);

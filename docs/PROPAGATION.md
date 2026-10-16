@@ -24,8 +24,14 @@ optique, mélange des clés, carte graphique. L'intégration dans Pelure est dan
      l'affichage ;
    - **un calque seul**, même caché : par exemple la ligne de l'animation, sans le décor.
 
-   La fenêtre dit aussi ce qui va se passer : les images, les clés, le nombre d'images à fabriquer.
-   On y choisit le calcul (carte graphique ou processeur) et les réglages.
+   Puis **les images à refaire** : « De l'image … à l'image … » (numérotées comme la timeline :
+   image, time code ou trame ; on glisse ou on tape). Par défaut, toute la plage du guide.
+   « Tout » y revient ; « Entrée → sortie » reprend les points d'entrée et de sortie de la timeline.
+   Les images hors de la plage ne changent pas. Le choix est gardé pour ce calque et ce guide.
+
+   La fenêtre dit aussi ce qui va se passer : les images, les clés (et celles hors plage, ignorées),
+   le nombre d'images à fabriquer. On y choisit le calcul (carte graphique ou processeur) et les
+   réglages.
 5. « Propager » : une fenêtre montre la progression, le temps restant et la dernière image
    fabriquée. « Arrêter » abandonne sans rien changer.
 6. À la fin, les images sont posées en une seule étape d'annulation (Ctrl+Z).
@@ -44,14 +50,21 @@ optique, mélange des clés, carte graphique. L'intégration dans Pelure est dan
 ## Comment
 
 - **Les clés.** Ce sont les images marquées « Clé » qui ont un dessin, s'il y en a. Sinon, chaque
-  image où un dessin commence (une exposition de plusieurs images compte une fois).
-- **La plage.**
+  image où un dessin commence (une exposition de plusieurs images compte une fois). Elles sont
+  cherchées sur toute la plage du guide : une exposition commencée avant la plage choisie n'est
+  pas une clé.
+- **La plage du guide** (`propager::span`).
   - Avec une vidéo : les images du plan où elle a une image.
   - Avec des calques : du début du plan jusqu'à la dernière image dessinée de ces calques (ou la fin
     de leur vidéo). Au-delà, le guide ne bouge plus.
+- **La plage refaite.** Toute celle du guide, ou celle choisie à la main, ramenée dans celle du
+  guide. Il faut au moins une clé dedans, sinon la fenêtre refuse et dit où sont les clés du
+  calque. Les clés hors plage ne servent pas, mais elles sont marquées « Clé » elles aussi : sans
+  ça, après une propagation partielle, la suivante ne verrait plus que les clés marquées et les
+  perdrait.
 
-  Dans les deux cas, on recule avant la première clé, on avance après la dernière, et on mélange
-  entre deux clés.
+  On recule avant la première clé de la plage, on avance après la dernière, et on mélange entre
+  deux clés.
 - **L'espace de travail.** On travaille en RVBA prémultiplié : les moyennes des patchs restent
   justes au bord de la peinture.
   - Avec une vidéo : le rectangle où `video::read_frame` pose ses images (au centre du cadre).
@@ -92,6 +105,8 @@ l'interface. Sur le processeur, compter environ 4,6 s par image en 960×540, et 
 
 - `src/propager_tests.rs` couvre :
   - la plage, les clés (dessins ou rôles « Clé »), les guides proposés et les refus ;
+  - la plage choisie à la main : seules ses images sont refaites, les clés hors plage sont
+    ignorées (mais marquées), refus sans clé dans la plage ;
   - le rectangle de travail et l'aller-retour entre dessin et image ;
   - la composition des guides (calques dessous ; un calque seul, même caché) ;
   - de vraies propagations : sur une petite vidéo, et sans vidéo sur une animation faite de dessins
@@ -107,7 +122,11 @@ cargo test demo_project -- --ignored
 
 ## Limites
 
-- Toute la plage est refaite, sauf les clés. Il n'y a pas encore de plage choisie à la main.
+- Dans la plage refaite, toutes les images sont remplacées, sauf les clés : pour garder une image,
+  la marquer « Clé » ou la laisser hors de la plage. La sélection d'images de la timeline n'est pas
+  encore reprise comme plage (seulement l'entrée et la sortie).
+- Au bord de la plage, l'image refaite ne tient pas compte de sa voisine hors plage : un saut peut
+  se voir au raccord si on ne refait qu'une partie d'une propagation.
 - La peinture hors du rectangle de travail (dans la marge de la feuille) n'est pas propagée.
 - Le calque peint est pris tel quel sur la feuille : sa propre transformation n'est pas comptée.
 - Calques bitmap seulement pour la peinture. Le guide, lui, peut être vectoriel.
