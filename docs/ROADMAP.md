@@ -932,6 +932,10 @@ Choix d'Anthony :
   - L'aperçu des brosses trace lentement aux bouts et vite au milieu.
   - Pas encore : l'orientation et l'inclinaison du stylet, que Pelure ne lit pas. Sur un calque
     vectoriel, le trait gardé ne retient que la taille.
+- ✅ 3. Profil de la pointe (le « Profile » de TVPaint) : une courbe de la couverture, du centre au
+  bord, à la place de la dureté.
+  - Il part de la dureté réglée, quand on l'allume ; préréglages Dur, Doux, Diffus.
+  - Il se garde aussi sur un trait vectoriel (rejoué comme un pinceau texturé).
 - ✅ 4. Débit (« Power » de TVPaint), à côté de l'opacité, qui en reste le plafond :
   - « Accumuler » éteint (par défaut, le Pinceau rond inchangé) : le trait reste uniforme, au débit
     fois l'opacité ;
@@ -939,7 +943,8 @@ Choix d'Anthony :
     l'opacité.
 
   Le dépôt de chaque empreinte est réglé d'après leur nombre au même point (diamètre ÷ pas) : un
-  choix de Pelure, à comparer avec TVPaint, dont la formule n'est pas publiée.
+  choix de Pelure, à comparer avec TVPaint, dont la formule n'est pas publiée. Autre point à
+  comparer : d'après sa documentation, un Power à 0 ne rend pas la brosse transparente.
 
 ## Raccourcis proposés, à valider
 

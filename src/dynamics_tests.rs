@@ -191,3 +191,45 @@ fn the_default_power_draws_like_before() {
     let old: BrushSettings = serde_json::from_str(r#"{"taille":8.0}"#).unwrap();
     assert_eq!((old.power, old.build_up), (1.0, false));
 }
+
+/// Une seule empreinte de diamètre 40 au centre d'une feuille.
+fn one_dab(s: BrushSettings) -> Raster {
+    let mut raster = Raster::new(80, 80);
+    let mut stroke = StrokeState::new(0, StrokeMode::Paint([0, 0, 0]), s, None, true);
+    let mut dirty = Vec::new();
+    stroke.add_point(&mut raster, pos2(40.0, 40.0), 1.0, &mut dirty);
+    stroke.finish(&mut raster, &mut dirty);
+    raster
+}
+
+#[test]
+fn the_tip_profile_shapes_the_dab_and_can_mimic_the_hardness() {
+    let mut s = plain(40.0);
+    s.hardness = 0.5;
+    // Le profil tiré de la dureté donne presque la même empreinte.
+    let hard = one_dab(s);
+    s.profile = Some(BrushSettings::profile_from_hardness(0.5));
+    let prof = one_dab(s);
+    let worst = (0..80).flat_map(|y| (0..80).map(move |x| (x, y))).map(|(x, y)| hard.get(x, y).a().abs_diff(prof.get(x, y).a())).max().unwrap();
+    assert!(worst <= 24, "écart au pire {worst}");
+    // Un profil diffus : plein au centre, bien plus léger à mi-rayon qu'un profil dur.
+    s.profile = Some(Curve::from_points(&[[0.0, 1.0], [0.15, 0.6], [0.4, 0.25], [0.7, 0.07], [1.0, 0.0]]));
+    let diffuse = one_dab(s);
+    s.profile = Some(Curve::from_points(&[[0.0, 1.0], [0.9, 1.0], [1.0, 0.0]]));
+    let solid = one_dab(s);
+    // (Le pixel du centre est à 0,7 pixel du centre exact : le profil diffus y descend déjà un peu.)
+    assert!(diffuse.get(40, 40).a() >= 220 && solid.get(40, 40).a() >= 250);
+    let (d, h) = (diffuse.get(50, 40).a(), solid.get(50, 40).a());
+    assert!(h >= 250 && d <= 120, "à mi-rayon : diffus {d}, dur {h}");
+    assert_eq!(solid.get(65, 40).a(), 0, "rien au-delà du bord");
+}
+
+#[test]
+fn a_profile_is_saved_only_when_set() {
+    let s = BrushSettings::brush();
+    assert!(!serde_json::to_string(&s).unwrap().contains("profil"));
+    let mut s2 = s;
+    s2.profile = Some(BrushSettings::profile_from_hardness(0.3));
+    let back: BrushSettings = serde_json::from_str(&serde_json::to_string(&s2).unwrap()).unwrap();
+    assert_eq!(back.profile, s2.profile);
+}

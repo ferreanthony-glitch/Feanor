@@ -619,6 +619,12 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     Décision : coût — courbe linéaire par morceaux plutôt que spline, simple et sûre, et TVPaint
     en a aussi. Risque : une courbe douce demande plus de points. Réversible : un mode
     d'interpolation pourra s'ajouter au format.
+- Profil de pointe (moteur de dessin, étape 3) : `BrushSettings::profile : Option<Curve>`.
+  - Pour chaque empreinte, une table de 65 valeurs (`profile_lut`), lue par `profile_coverage`,
+    avec le bord anticrénelé sur un pixel (franc en pixels nets).
+  - `profile_from_hardness` reproduit la dureté (plein, puis smoothstep), à quelques niveaux
+    près (test).
+  - `for_vector` garde le réglage d'un trait vectoriel qui a un profil, comme pour une texture.
 - Débit et accumulation (moteur de dessin, étape 4) : `BrushSettings::power` (« debit ») et
   `build_up` (« accumuler »).
   - Sans accumuler, le masque du trait garde le maximum de `couverture × débit` : le modèle

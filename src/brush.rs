@@ -28,6 +28,11 @@ pub struct BrushSettings {
     /// 0 = bord très flou, 1 = bord net.
     #[serde(rename = "durete")]
     pub hardness: f32,
+    /// Profil de la pointe (moteur de dessin, étape 3 ; le « Profile » de TVPaint, « vue de côté
+    /// de la pointe ») : la couverture (y) du centre (x = 0) au bord (x = 1). Il remplace la
+    /// dureté ; aucun : la dureté.
+    #[serde(rename = "profil", skip_serializing_if = "Option::is_none")]
+    pub profile: Option<Curve>,
     /// Distance entre deux empreintes, en fraction du diamètre.
     #[serde(rename = "espacement")]
     pub spacing: f32,
@@ -307,6 +312,7 @@ impl BrushSettings {
             power: 1.0,
             build_up: false,
             hardness: 0.85,
+            profile: None,
             spacing: 0.08,
             smoothing: 0.3,
             pressure_size: true,
@@ -360,6 +366,19 @@ impl BrushSettings {
     pub fn angle_at(&self, inp: &Inputs) -> f32 {
         let c = self.dynamics.angle;
         self.angle + if c.active() { 360.0 * c.at(inp) } else { 0.0 }
+    }
+
+    /// Le profil de pointe qui reproduit la dureté `hardness` (plein jusqu'à `hardness` du rayon,
+    /// puis une chute douce) : le point de départ quand on choisit d'éditer le profil.
+    pub fn profile_from_hardness(hardness: f32) -> Curve {
+        let h = hardness.clamp(0.0, 0.98);
+        let mut pts = vec![[0.0, 1.0]];
+        for k in 0..=5 {
+            let x = h + (1.0 - h) * k as f32 / 5.0;
+            let t = (x - h) / (1.0 - h);
+            pts.push([x, 1.0 - t * t * (3.0 - 2.0 * t)]);
+        }
+        Curve::from_points(&pts)
     }
 
     /// Rondeur de la pointe à une empreinte.
@@ -692,6 +711,7 @@ impl StrokeState {
         let tip = self.textures.tip.clone();
         let tip = tip.as_ref().map(|t| t.level(radius * 2.0));
         let paper = self.textures.paper.clone().filter(|_| s.grain > 0.0);
+        let profile = s.profile.map(|c| profile_lut(&c));
         // Une pointe en image tournée déborde du cercle : on couvre le carré qui la contient.
         let reach = if tip.is_some() { radius * std::f32::consts::SQRT_2 } else { radius };
 
@@ -715,7 +735,10 @@ impl StrokeState {
                     let v = (ly / (2.0 * radius) + 0.5) * img.height as f32;
                     img.sample(u, v)
                 }
-                None => coverage((lx * lx + ly * ly).sqrt(), radius, inner, s.aliased),
+                None => match &profile {
+                    Some(lut) => profile_coverage((lx * lx + ly * ly).sqrt(), radius, lut, s.aliased),
+                    None => coverage((lx * lx + ly * ly).sqrt(), radius, inner, s.aliased),
+                },
             }
         };
 
@@ -781,6 +804,29 @@ impl StrokeState {
             }
         }
     }
+}
+
+/// Points de la table d'un profil (du centre au bord).
+const PROFILE_STEPS: usize = 64;
+
+/// Le profil lu d'avance en table (une empreinte en lit beaucoup de pixels).
+pub(crate) fn profile_lut(c: &Curve) -> [f32; PROFILE_STEPS + 1] {
+    std::array::from_fn(|i| c.eval(i as f32 / PROFILE_STEPS as f32).clamp(0.0, 1.0))
+}
+
+/// Couverture d'un pixel à la distance `d` du centre d'une empreinte de rayon `radius`, d'après un
+/// profil : la table entre ses points, et le bord anticrénelé sur un pixel (franc en pixels nets).
+pub(crate) fn profile_coverage(d: f32, radius: f32, lut: &[f32; PROFILE_STEPS + 1], aliased: bool) -> f32 {
+    if d > radius + 0.5 {
+        return 0.0;
+    }
+    let x = (d / radius.max(1e-3)).clamp(0.0, 1.0) * PROFILE_STEPS as f32;
+    let i = (x as usize).min(PROFILE_STEPS - 1);
+    let v = lut[i] + (lut[i + 1] - lut[i]) * (x - i as f32);
+    if aliased {
+        return if d <= radius && v >= 0.5 { 1.0 } else { 0.0 };
+    }
+    v.min((radius - d + 0.5).clamp(0.0, 1.0))
 }
 
 pub(crate) fn coverage(d: f32, radius: f32, inner: f32, aliased: bool) -> f32 {

@@ -64,13 +64,36 @@ fn brush_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
         interrupteur(ui, &mut s.build_up, ph::STACK, "Accumuler", "Repasser dans le même trait fonce, jusqu'à l'opacité. Éteint : le trait reste uniforme.", "");
     });
     ui.horizontal(|ui| {
-        if !s.aliased || vector {
+        if (!s.aliased || vector) && s.profile.is_none() {
             ui.add(egui::Slider::new(&mut s.hardness, 0.0..=1.0).text("Dureté"));
         }
         if !vector {
             interrupteur(ui, &mut s.aliased, ph::CHECKERBOARD, "Pixels nets", "Sans anticrénelage : un bord net, pixel par pixel (sans dureté).", "");
         }
+        // Profil de la pointe (moteur de dessin, étape 3) : il part de la dureté réglée.
+        let mut on = s.profile.is_some();
+        if interrupteur(ui, &mut on, ph::CHART_LINE, "Profil de la pointe", "Régler en courbe la couverture de la pointe, du centre au bord (remplace la dureté).", "").clicked() {
+            s.profile = on.then(|| BrushSettings::profile_from_hardness(s.hardness));
+        }
     });
+    if let Some(profile) = &mut s.profile {
+        ui.horizontal(|ui| {
+            let resp = crate::dynui::curve_editor(ui, profile, "profil");
+            bulle(resp, "Profil de la pointe", "Couverture du centre (à gauche) au bord (à droite). Glisser un point ; double-clic : ajouter ; clic droit : retirer.", "");
+            ui.vertical(|ui| {
+                let presets: [(&str, &str, &[[f32; 2]]); 3] = [
+                    ("Dur", "Plein jusqu'au bord.", &[[0.0, 1.0], [0.9, 1.0], [1.0, 0.0]]),
+                    ("Doux", "Plein au centre, chute douce jusqu'au bord.", &[[0.0, 1.0], [0.2, 0.95], [0.5, 0.5], [0.8, 0.05], [1.0, 0.0]]),
+                    ("Diffus", "Peu de cœur, un large halo.", &[[0.0, 1.0], [0.15, 0.6], [0.4, 0.25], [0.7, 0.07], [1.0, 0.0]]),
+                ];
+                for (name, help, pts) in presets {
+                    if ui.small_button(name).on_hover_text(help).clicked() {
+                        *profile = crate::brush::Curve::from_points(pts);
+                    }
+                }
+            });
+        });
+    }
     ui.add(egui::Slider::new(&mut s.spacing, 0.02..=1.0).text("Espacement"));
     ui.add(egui::Slider::new(&mut s.smoothing, 0.0..=0.95).text("Lissage"));
     crate::dynui::dynamics_ui(ui, s, vector);

@@ -451,7 +451,8 @@ impl BrushLibrary {
     /// Le réglage `s` (numéros de la bibliothèque) pour un trait vectoriel : pointe et papier
     /// désignés par leur clé de contenu. Aucun : le réglage n'a pas de texture.
     pub fn for_vector(&self, s: &BrushSettings) -> Option<BrushSettings> {
-        let textured = s.tip.is_some() || (s.paper.is_some() && s.grain > 0.0);
+        // Un profil de pointe se rejoue aussi (moteur de dessin, étape 3).
+        let textured = s.tip.is_some() || (s.paper.is_some() && s.grain > 0.0) || s.profile.is_some();
         if !textured {
             return None;
         }

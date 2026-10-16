@@ -353,6 +353,9 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   dessin, que la couleur remplit quand on appuie. L'icône d'import lit un fichier de pinceaux Toon
   Boom (`.xml`, par exemple `STB_TextureBrushes_preset.xml`) : ses pinceaux, pointes et papiers
   s'ajoutent à la liste et restent pour les fois suivantes.
+- **Profil de la pointe** (bouton courbe à côté de la Dureté) : la couverture de la pointe du
+  centre au bord, en courbe, à la place de la dureté. Il part de la dureté réglée ; préréglages
+  Dur, Doux, Diffus.
 - **Débit** (réglages du pinceau) : la peinture déposée à chaque empreinte (le « Power » de
   TVPaint) ; l'opacité en reste le plafond. Avec « Accumuler », repasser dans le même trait fonce,
   comme un crayon ou une craie ; sans, le trait reste uniforme.
