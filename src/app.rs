@@ -1978,7 +1978,9 @@ impl App {
 
     fn open_dialog(&mut self) {
         let Some(path) = rfd::FileDialog::new()
+            .add_filter("Projet Pelure ou Storyboard Pro", &["pelure", "sboard"])
             .add_filter("Projet Pelure", &["pelure"])
+            .add_filter("Projet Storyboard Pro", &["sboard"])
             .pick_file()
         else {
             return;
@@ -1986,8 +1988,12 @@ impl App {
         self.open_path(path);
     }
 
-    /// Ouvre un projet en dossier, ou importe un ancien fichier `.pelure`.
+    /// Ouvre un projet en dossier, ou importe un ancien fichier `.pelure`. Un projet Storyboard
+    /// Pro (`.sboard`) ouvre la fenêtre d'import avec lui (14a).
     pub(crate) fn open_path(&mut self, path: PathBuf) {
+        if self.import_dropped_sboard(&path) {
+            return;
+        }
         if io::is_legacy_file(&path) {
             match io::load_legacy(&path) {
                 Ok(mut doc) => {
