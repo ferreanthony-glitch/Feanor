@@ -36,9 +36,18 @@ pub struct BrushSettings {
     /// Distance entre deux empreintes, en fraction du diamètre.
     #[serde(rename = "espacement")]
     pub spacing: f32,
-    /// Stabilisation du trait (0 = aucune).
+    /// Stabilisation du trait (0 = aucune), pour le lissage « Suivi ».
     #[serde(rename = "lissage")]
     pub smoothing: f32,
+    /// Type de lissage (moteur de dessin, étape 5 ; les types de « Line Smoothing » de TVPaint).
+    #[serde(rename = "lissage_type")]
+    pub smooth_kind: SmoothKind,
+    /// Longueur de la corde, ou distance de la moyenne, en pixels du dessin.
+    #[serde(rename = "lissage_px")]
+    pub smooth_px: f32,
+    /// Nombre de points de la moyenne sur des points.
+    #[serde(rename = "lissage_points")]
+    pub smooth_points: u32,
     #[serde(rename = "pression_taille")]
     pub pressure_size: bool,
     #[serde(rename = "pression_opacite")]
@@ -71,6 +80,50 @@ pub struct BrushSettings {
     /// pression, la vitesse, la direction du trait, un fondu ou le hasard, par une courbe.
     #[serde(rename = "dynamique")]
     pub dynamics: Dynamics,
+}
+
+/// Comment le trait suit la pointe du stylet. « Suivi » : le lissage d'avant (le point posé
+/// rattrape la pointe d'une part fixe à chaque mouvement). Les trois autres reprennent les noms
+/// du « Line Smoothing » de TVPaint, leur calcul est celui de Pelure :
+/// - corde tirée : le point posé ne bouge que lorsque la pointe s'en éloigne de plus que la
+///   longueur de la corde, et il la suit alors à cette distance ;
+/// - moyenne sur des points : la moyenne des N dernières positions de la pointe ;
+/// - moyenne sur une distance : la moyenne des positions de la pointe sur ses derniers pixels.
+///
+/// À la fin du trait, le point posé rattrape toujours la pointe.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum SmoothKind {
+    #[default]
+    #[serde(rename = "suivi")]
+    Follow,
+    #[serde(rename = "corde")]
+    PulledString,
+    #[serde(rename = "moyenne_points")]
+    AveragePoints,
+    #[serde(rename = "moyenne_distance")]
+    AverageDistance,
+}
+
+impl SmoothKind {
+    pub const ALL: [SmoothKind; 4] = [SmoothKind::Follow, SmoothKind::PulledString, SmoothKind::AveragePoints, SmoothKind::AverageDistance];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            SmoothKind::Follow => "Suivi",
+            SmoothKind::PulledString => "Corde tirée",
+            SmoothKind::AveragePoints => "Moyenne (points)",
+            SmoothKind::AverageDistance => "Moyenne (distance)",
+        }
+    }
+
+    pub fn help(self) -> &'static str {
+        match self {
+            SmoothKind::Follow => "Le trait rattrape la pointe d'une part à chaque mouvement.",
+            SmoothKind::PulledString => "Le trait suit la pointe au bout d'une corde : les petits tremblements ne le bougent pas (encrage).",
+            SmoothKind::AveragePoints => "Le trait passe par la moyenne des dernières positions de la pointe.",
+            SmoothKind::AverageDistance => "Le trait passe par la moyenne des positions sur les derniers pixels parcourus.",
+        }
+    }
 }
 
 /// Ce qu'une connexion suit : les « connexions » de TVPaint (pression, vitesse, direction,
@@ -315,6 +368,9 @@ impl BrushSettings {
             profile: None,
             spacing: 0.08,
             smoothing: 0.3,
+            smooth_kind: SmoothKind::Follow,
+            smooth_px: 8.0,
+            smooth_points: 6,
             pressure_size: true,
             pressure_opacity: false,
             aliased: false,
@@ -417,6 +473,7 @@ pub fn stroke_preview(settings: &BrushSettings, textures: BrushTextures, w: usiz
     let mut s = *settings;
     s.size = s.size.clamp(1.0, h as f32 * 0.5);
     s.smoothing = 0.0;
+    s.smooth_kind = SmoothKind::Follow;
     let mut raster = Raster::new(w, h);
     let mut stroke = StrokeState::new(0, StrokeMode::Paint([0, 0, 0]), s, None, true).with_textures(textures);
     let mut dirty = Vec::new();
@@ -484,6 +541,8 @@ pub struct StrokeState {
     /// Longueur déjà tracée (pour le fondu) et direction du dernier segment (0 à 1, un tour).
     travel: f32,
     direction: f32,
+    /// Dernières positions de la pointe (lissages par moyenne).
+    history: std::collections::VecDeque<Pos2>,
 }
 
 impl StrokeState {
@@ -516,6 +575,56 @@ impl StrokeState {
             speed: 0.0,
             travel: 0.0,
             direction: 0.0,
+            history: std::collections::VecDeque::new(),
+        }
+    }
+
+    /// Le point posé pour une nouvelle position `pos` de la pointe, selon le type de lissage.
+    fn smooth(&mut self, pos: Pos2) -> Pos2 {
+        let s = self.settings;
+        let Some(prev) = self.smoothed else {
+            self.history.push_back(pos);
+            return pos;
+        };
+        match s.smooth_kind {
+            SmoothKind::Follow => prev + (pos - prev) * (1.0 - s.smoothing.clamp(0.0, 0.95)),
+            SmoothKind::PulledString => {
+                let len = s.smooth_px.max(0.0);
+                let d = pos - prev;
+                let dist = d.length();
+                if dist > len {
+                    prev + d * ((dist - len) / dist)
+                } else {
+                    prev
+                }
+            }
+            SmoothKind::AveragePoints => {
+                self.history.push_back(pos);
+                let n = (s.smooth_points.max(1)) as usize;
+                while self.history.len() > n {
+                    self.history.pop_front();
+                }
+                mean(self.history.iter())
+            }
+            SmoothKind::AverageDistance => {
+                self.history.push_back(pos);
+                // On garde les positions des derniers `smooth_px` pixels parcourus.
+                let span = s.smooth_px.max(0.0);
+                let mut keep = 1;
+                let mut run = 0.0;
+                let pts: Vec<Pos2> = self.history.iter().rev().copied().collect();
+                for w in pts.windows(2) {
+                    run += w[0].distance(w[1]);
+                    if run > span {
+                        break;
+                    }
+                    keep += 1;
+                }
+                while self.history.len() > keep {
+                    self.history.pop_front();
+                }
+                mean(self.history.iter())
+            }
         }
     }
 
@@ -595,11 +704,7 @@ impl StrokeState {
 
     pub fn add_point(&mut self, raster: &mut Raster, pos: Pos2, pressure: f32, dirty: &mut Vec<usize>) {
         self.raw = Some((pos, pressure));
-        let follow = 1.0 - self.settings.smoothing.clamp(0.0, 0.95);
-        let target = match self.smoothed {
-            Some(s) => s + (pos - s) * follow,
-            None => pos,
-        };
+        let target = self.smooth(pos);
         self.smoothed = Some(target);
         self.record(target, pressure);
         self.move_to(raster, target, pressure, dirty);
@@ -803,6 +908,21 @@ impl StrokeState {
                 }
             }
         }
+    }
+}
+
+/// Moyenne de positions (au moins une).
+fn mean<'a>(pts: impl Iterator<Item = &'a Pos2>) -> Pos2 {
+    let (mut x, mut y, mut n) = (0.0, 0.0, 0.0);
+    for p in pts {
+        x += p.x;
+        y += p.y;
+        n += 1.0;
+    }
+    if n == 0.0 {
+        Pos2::ZERO
+    } else {
+        Pos2::new(x / n, y / n)
     }
 }
 

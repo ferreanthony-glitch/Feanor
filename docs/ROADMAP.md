@@ -936,6 +936,13 @@ Choix d'Anthony :
   bord, à la place de la dureté.
   - Il part de la dureté réglée, quand on l'allume ; préréglages Dur, Doux, Diffus.
   - Il se garde aussi sur un trait vectoriel (rejoué comme un pinceau texturé).
+- ✅ 5. Lissage : les types du « Line Smoothing » de TVPaint, avec un calcul propre à Pelure :
+  - Suivi : le lissage d'avant, par défaut ;
+  - Corde tirée (longueur en pixels) ;
+  - Moyenne sur des points, ou sur une distance.
+
+  À la fin du trait, il rattrape la pointe. Pas encore : le rattrapage pendant une pause, et
+  l'affichage de la corde.
 - ✅ 4. Débit (« Power » de TVPaint), à côté de l'opacité, qui en reste le plafond :
   - « Accumuler » éteint (par défaut, le Pinceau rond inchangé) : le trait reste uniforme, au débit
     fois l'opacité ;

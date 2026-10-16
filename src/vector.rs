@@ -551,7 +551,7 @@ pub fn render_element_clipped(raster: &mut Raster, e: &Element, clip: Rect) {
 /// seulement. La pression de chaque point se retrouve d'après son rayon (rayon = taille / 2 ×
 /// facteur de pression) ; une pointe ou un papier introuvable donne une pointe ronde, un papier lisse.
 fn paint_textured(raster: &mut Raster, points: &[VPoint], color: [u8; 3], opacity: f32, b: &BrushSettings, region: Rect) {
-    let settings = BrushSettings { opacity, smoothing: 0.0, aliased: false, ..*b };
+    let settings = BrushSettings { opacity, smoothing: 0.0, smooth_kind: crate::brush::SmoothKind::Follow, aliased: false, ..*b };
     let textures = crate::brushtex::shared_textures(&settings);
     let mut sheet = Raster::new(raster.width, raster.height);
     let mut stroke = StrokeState::new(0, StrokeMode::Paint(color), settings, None, true).with_textures(textures);

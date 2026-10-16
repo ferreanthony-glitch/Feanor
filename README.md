@@ -353,6 +353,9 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   dessin, que la couleur remplit quand on appuie. L'icône d'import lit un fichier de pinceaux Toon
   Boom (`.xml`, par exemple `STB_TextureBrushes_preset.xml`) : ses pinceaux, pointes et papiers
   s'ajoutent à la liste et restent pour les fois suivantes.
+- **Lissage** (réglages du pinceau) : Suivi (comme avant), Corde tirée (le trait suit la pointe
+  au bout d'une corde : les petits tremblements ne le bougent pas, pour l'encrage), Moyenne sur
+  des points ou sur une distance.
 - **Profil de la pointe** (bouton courbe à côté de la Dureté) : la couverture de la pointe du
   centre au bord, en courbe, à la place de la dureté. Il part de la dureté réglée ; préréglages
   Dur, Doux, Diffus.

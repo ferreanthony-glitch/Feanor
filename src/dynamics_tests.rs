@@ -233,3 +233,21 @@ fn a_profile_is_saved_only_when_set() {
     let back: BrushSettings = serde_json::from_str(&serde_json::to_string(&s2).unwrap()).unwrap();
     assert_eq!(back.profile, s2.profile);
 }
+
+#[test]
+fn a_pulled_string_ignores_small_wobbles() {
+    let mut s = plain(4.0);
+    s.smooth_kind = crate::brush::SmoothKind::PulledString;
+    s.smooth_px = 12.0;
+    let mut raster = Raster::new(320, 320);
+    let mut st = StrokeState::new(0, StrokeMode::Paint([0, 0, 0]), s, None, true);
+    let mut dirty = Vec::new();
+    // Un trait horizontal qui tremble de ± 4 pixels.
+    for k in 0..=60 {
+        let y = 160.0 + if k % 2 == 0 { 4.0 } else { -4.0 };
+        st.add_point(&mut raster, pos2(40.0 + 4.0 * k as f32, y), 1.0, &mut dirty);
+    }
+    let ys: Vec<f32> = st.path.iter().skip(5).map(|p| p.y).collect();
+    let (lo, hi) = ys.iter().fold((f32::MAX, f32::MIN), |(a, b), &y| (a.min(y), b.max(y)));
+    assert!(hi - lo < 3.0, "le tremblement est gommé : {lo}..{hi}");
+}
