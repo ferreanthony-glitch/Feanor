@@ -4,13 +4,13 @@
 //!
 //! Options d'ebsynth : -style, -guide, -weight (pour le style ou le guide qui précède), -output,
 //! -uniformity, -patchsize, -pyramidlevels, -searchvoteiters, -patchmatchiters, -extrapass3x3,
-//! -stopthreshold (acceptée, sans effet : la version processeur d'ebsynth ne s'en sert pas non
-//! plus), -backend cpu. En plus : -threads <n> et -seed <n>.
+//! -stopthreshold (pour la carte graphique seulement, comme ebsynth), -backend cpu|gpu (gpu : avec
+//! la fonction « gpu », `--features gpu`). En plus : -threads <n> et -seed <n>.
 
 use std::process::ExitCode;
 use std::time::Instant;
 
-use synthese::{max_pyramid_levels, synthesize, GuidePair, Image, Params};
+use synthese::{max_pyramid_levels, Cpu, GuidePair, Image, Params, Synthesizer};
 
 struct Guide {
     source: String,
@@ -29,6 +29,7 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut guides: Vec<Guide> = Vec::new();
     let mut output = "output.png".to_string();
     let mut params = Params::default();
+    let mut backend = "cpu".to_string();
     // Le dernier -style ou -guide lu : c'est à lui que s'applique -weight.
     let mut last_is_style: Option<bool> = None;
 
@@ -76,13 +77,13 @@ fn run(args: &[String]) -> Result<(), String> {
                 params.patchmatch_iters = number("-patchmatchiters", value("-patchmatchiters", &mut it)?)?
             }
             "-stopthreshold" => {
-                let _: u32 = number("-stopthreshold", value("-stopthreshold", &mut it)?)?;
+                params.stop_threshold = number("-stopthreshold", value("-stopthreshold", &mut it)?)?;
             }
             "-extrapass3x3" => params.extra_pass_3x3 = true,
             "-backend" => {
-                let b = value("-backend", &mut it)?;
-                if b != "cpu" {
-                    return Err(format!("seul le calcul sur le processeur existe (pas '{b}')"));
+                backend = value("-backend", &mut it)?;
+                if backend != "cpu" && (backend != "gpu" || !cfg!(feature = "gpu")) {
+                    return Err(format!("calcul '{backend}' inconnu (cpu, ou gpu avec --features gpu)"));
                 }
             }
             "-threads" => params.threads = number("-threads", value("-threads", &mut it)?)?,
@@ -121,8 +122,21 @@ fn run(args: &[String]) -> Result<(), String> {
     println!("extrapass3x3: {}", if params.extra_pass_3x3 { "yes" } else { "no" });
     println!("channels: style {}, guides {}", style.channels, pairs.iter().map(|p| p.0.channels).sum::<usize>());
 
+    let synth: Box<dyn Synthesizer> = match backend.as_str() {
+        #[cfg(feature = "gpu")]
+        "gpu" => {
+            let start = Instant::now();
+            let gpu = synthese::gpu::Gpu::new()?;
+            println!("backend: gpu, {} (ouverte en {:.2} s)", gpu.name(), start.elapsed().as_secs_f32());
+            Box::new(gpu)
+        }
+        _ => {
+            println!("backend: cpu");
+            Box::new(Cpu)
+        }
+    };
     let start = Instant::now();
-    let out = synthesize(&style, style_weight.unwrap_or(1.0), &refs, &params).map_err(|e| e.to_string())?;
+    let out = synth.synthesize(&style, style_weight.unwrap_or(1.0), &refs, &params).map_err(|e| e.to_string())?;
     println!("time: {:.2} s", start.elapsed().as_secs_f32());
 
     let im = &out.image;

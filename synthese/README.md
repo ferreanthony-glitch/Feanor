@@ -3,8 +3,9 @@
 La propagation façon EbSynth : on peint une image clé, et elle est recopiée par morceaux sur les
 autres images de la vidéo en suivant des guides. Étape a : la synthèse guidée (ci-dessous).
 Étape b : le flux optique et la propagation d'une clé sur une vidéo. Étape c : plusieurs clés et
-leur mélange (plus bas). Ce dossier est un projet Cargo à part (comme `src-tauri/`), sans
-dépendance ; Pelure l'utilisera par son chemin à l'étape e.
+leur mélange. Étape d : la carte graphique (plus bas). Ce dossier est un projet Cargo à part
+(comme `src-tauri/`), sans dépendance ; avec la fonction `gpu`, il dépend de wgpu 24 (celui de
+Pelure). Pelure l'utilisera par son chemin à l'étape e.
 
 C'est un portage en Rust de la version processeur d'[ebsynth](https://github.com/jamriska/ebsynth)
 (Ondřej Jamriška, domaine public) : pyramide d'images, PatchMatch avec uniformité, vote simple,
@@ -29,7 +30,7 @@ let out = synthesize(&style, 1.0, &[GuidePair { source: &guide_src, target: &gui
 
 `Params` : `uniformity` (3500), `patch_size` (5), `pyramid_levels` (le maximum possible),
 `search_vote_iters` (6), `patchmatch_iters` (4), `extra_pass_3x3`, `threads` (0 = tous les cœurs),
-`seed`.
+`seed`, `stop_threshold` (5, carte graphique seulement).
 
 ## Différences avec l'original
 
@@ -47,6 +48,9 @@ Lancer cargo depuis ce dossier, pour que `../rust-toolchain.toml` choisisse MSVC
 cargo test
 cargo build --release --examples
 ```
+
+Avec la carte graphique (étape d) : `cargo test --features gpu` et
+`cargo build --release --features gpu --examples`.
 
 Deux outils en ligne de commande :
 
@@ -195,7 +199,71 @@ Sur les images 30 à 60, avec des clés en 30 et 60 peintes séparément, comme 
 **Outils** : `propager` accepte plusieurs `-cle <n> <cle.png>`, plus `-douceur <x>`, `-attache <x>`
 et `-fondu` (simple fondu enchaîné, pour comparer). `ecart -detail a.png …` mesure le détail.
 
+## Étape d : la carte graphique
+
+```rust
+use synthese::gpu::Gpu;                 // fonction « gpu » de la caisse
+use synthese::{propagation::propagate_keys_on, Synthesizer};
+
+let gpu = Gpu::new()?;                  // ou Gpu::with_device(device, queue, nom) : celui de Pelure
+let out = gpu.synthesize(&style, 1.0, &guides, &Params::default())?;
+propagate_keys_on(&gpu, load, &cles, 0..nombre, &PropagateParams::default(), |i, im| { …; true })?;
+```
+
+Le trait `Synthesizer` (`synthesize` et `blend`) est rempli par `Cpu` et par `Gpu`. La propagation
+prend l'un ou l'autre.
+
+**Synthèse** (`gpu.rs`, `synthese.wgsl`) : l'algorithme de la version CUDA d'ebsynth.
+- PatchMatch « de Jacobi » : tous les pixels à la fois essaient leurs voisins à 4, 2 puis 1 pixel,
+  puis des tirages au hasard dans des carrés de rayon 1, 2, 4….
+- Occupation du style (uniformité) en additions atomiques.
+- Masque des pixels dont le style ne bouge plus de `Params::stop_threshold` (5, comme ebsynth).
+- Chaque pixel est rangé en mots de 4 octets (le style, puis les guides).
+- Toute la pyramide reste sur la carte : on envoie les deux images entières, on relit le
+  résultat, ses correspondances et son erreur.
+- Les envois sont coupés tous les 64 passages, pour ne jamais approcher les 2 s au bout desquelles
+  Windows relance le pilote.
+- Seulement 8 tampons de stockage, la limite par défaut : on peut partager le périphérique de
+  Pelure.
+
+**Mélange** (`blend.wgsl`) : le second membre est construit sur le processeur. Le système
+(λ + Laplacien) x = b est résolu sur la carte par Gauss-Seidel rouge-noir sur-relaxé : facteur
+optimal 2 / (1 + √(1 − ρ²)) avec ρ = 4 / (4 + λ), soit 62 passes pour λ = 0,1. L'écart avec le
+gradient conjugué du processeur est d'au plus 2 niveaux (test).
+
+**Flux optique** : resté sur le processeur (0,11 s par image en 960×540), mais celui de l'image
+suivante est calculé sur un autre fil pendant la synthèse de l'image courante. Il ne dépend que de
+la vidéo. Avec la carte graphique, il ne coûte presque plus rien.
+
+**Mesures** (RTX 2080 SUPER par Vulkan, contre i7-10700K) :
+
+| | Processeur | Carte graphique |
+|---|---|---|
+| stylit (1200×912), synthèse seule | 10 à 11 s | 0,79 s |
+| animatique 960×540, 2 clés, images 30 à 60 | 5 min 15 s | 17 s |
+| animatique 1920×1080, 1 clé, 16 images | environ 18 s par image | 0,9 s par image |
+
+Pour l'animatique à deux clés sur la carte, les 17 s se répartissent ainsi : synthèse 13,1 s,
+mélange 1,6 s (13 s environ quand il tournait sur le processeur), le reste 2,3 s. L'ouverture de la
+carte prend environ 0,5 s, une seule fois.
+
+**Qualité.** Écart moyen par canal sur les exemples d'ebsynth, à comparer à l'écart d'une graine à
+l'autre :
+
+| Exemple | Carte / carte, autre graine | Carte / processeur | Carte / original | Processeur / processeur, autre graine |
+|---|---|---|---|---|
+| texbynum | 9,4 | 11,0 | 10,8 | 10,6 |
+| stylit | 9,8 | 9,6 | 9,1 | 10,0 |
+| facestyle | 2,4 | 5,3 | 3,6 | 5,3 |
+
+Sur l'animatique à deux clés : scintillement 1,86 (1,84 au processeur), détail 4,60 (4,62). Sans
+le masque (`-stopthreshold 0`), stylit passe de 1,36 s à 2,35 s (programme entier) pour la même
+qualité.
+
+**Outils** : `ebsynth -backend gpu`, `propager -gpu`. `propager` sépare le temps de synthèse, celui
+du mélange et le reste.
+
 ## Suite
 
-- d. Calcul sur la carte graphique (wgpu).
-- e. Dans Pelure : un calque vidéo, des clés, « Propager », des cels en sortie (annulables).
+- e. Dans Pelure : le calque vidéo comme source, des clés, « Propager », des cels en sortie
+  (annulables), la synthèse sur le périphérique wgpu de Pelure.

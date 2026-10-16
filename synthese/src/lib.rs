@@ -2,6 +2,7 @@
 //! processeur d'ebsynth (Ondřej Jamriška, domaine public, https://github.com/jamriska/ebsynth).
 //! Étape b : `flow` (flux optique) et `propagation` (une image clé propagée sur une vidéo).
 //! Étape c : plusieurs clés, `blend` (mélange des séquences venues de deux clés).
+//! Étape d : `gpu` (fonction « gpu » de la caisse), la même synthèse sur la carte graphique.
 //!
 //! On donne une image de style (la peinture) et des paires de guides (source, cible) : la synthèse
 //! fabrique une image de la taille des guides cibles en recopiant des morceaux carrés (patchs) du
@@ -23,12 +24,16 @@
 
 pub mod blend;
 pub mod flow;
+#[cfg(feature = "gpu")]
+pub mod gpu;
 mod patchmatch;
 pub mod propagation;
 #[cfg(test)]
 mod blend_tests;
 #[cfg(test)]
 mod flow_tests;
+#[cfg(all(test, feature = "gpu"))]
+mod gpu_tests;
 #[cfg(test)]
 mod propagation_tests;
 #[cfg(test)]
@@ -122,6 +127,9 @@ pub struct Params {
     pub threads: usize,
     /// Graine du hasard.
     pub seed: u64,
+    /// Carte graphique seulement, comme dans ebsynth : un pixel dont le style a bougé de moins de
+    /// ce seuil au dernier vote (ni aucun de son patch) n'est plus cherché. 0 = tous cherchés.
+    pub stop_threshold: u32,
 }
 
 impl Default for Params {
@@ -135,6 +143,7 @@ impl Default for Params {
             extra_pass_3x3: false,
             threads: 0,
             seed: 0,
+            stop_threshold: 5,
         }
     }
 }
@@ -161,6 +170,10 @@ pub enum Error {
     ChannelMismatch(usize),
     /// Images plus petites que 2 × patch + 1 pixels de côté.
     TooSmall,
+    /// Carte graphique : plus de 64 canaux en tout.
+    TooManyChannels,
+    /// Carte graphique : erreur du pilote.
+    Gpu(String),
 }
 
 impl fmt::Display for Error {
@@ -174,29 +187,35 @@ impl fmt::Display for Error {
                 write!(f, "les deux images du guide {} n'ont pas le même nombre de canaux", i + 1)
             }
             Error::TooSmall => write!(f, "images trop petites pour cette taille de patch"),
+            Error::TooManyChannels => write!(f, "trop de canaux pour la carte graphique (64 au plus)"),
+            Error::Gpu(e) => write!(f, "carte graphique : {e}"),
         }
     }
 }
 
 impl std::error::Error for Error {}
 
-/// Nombre de niveaux de pyramide possibles : le plus petit côté du niveau le plus grossier doit
-/// garder au moins 2 × patch + 1 pixels, pour la source comme pour la cible (comme ebsynth).
-pub fn max_pyramid_levels(source: (usize, usize), target: (usize, usize), patch_size: usize) -> usize {
-    let w = source.0.min(target.0);
-    let h = source.1.min(target.1);
-    (0..=32)
-        .rev()
-        .find(|&level| {
-            let f = 2f32.powi(-level);
-            ((w as f32 * f) as usize).min((h as f32 * f) as usize) > 2 * patch_size
-        })
-        .map_or(0, |level| level as usize + 1)
+/// Ce qui fabrique une image : le processeur (`Cpu`) ou la carte graphique (`gpu::Gpu`).
+pub trait Synthesizer {
+    fn synthesize(&self, style: &Image, style_weight: f32, guides: &[GuidePair], params: &Params) -> Result<Output, Error>;
+
+    /// Mélange de deux séquences (étape c), sur le processeur sauf si la carte le fait.
+    fn blend(&self, a: &Image, ea: &blend::ErrorMap, b: &Image, eb: &blend::ErrorMap, alpha: f32, params: &blend::BlendParams) -> Image {
+        blend::blend(a, ea, b, eb, alpha, params)
+    }
 }
 
-/// Fabrique l'image : le style recopié par morceaux pour que les guides cibles ressemblent aux
-/// guides sources. `style_weight` est le poids total du style, partagé entre ses canaux.
-pub fn synthesize(style: &Image, style_weight: f32, guides: &[GuidePair], params: &Params) -> Result<Output, Error> {
+/// La synthèse sur le processeur (`synthesize`).
+pub struct Cpu;
+
+impl Synthesizer for Cpu {
+    fn synthesize(&self, style: &Image, style_weight: f32, guides: &[GuidePair], params: &Params) -> Result<Output, Error> {
+        synthesize(style, style_weight, guides, params)
+    }
+}
+
+/// Vérifie les entrées d'une synthèse ; renvoie le nombre de niveaux de la pyramide.
+fn check(style: &Image, style_weight: f32, guides: &[GuidePair], params: &Params) -> Result<usize, Error> {
     if guides.is_empty() {
         return Err(Error::NoGuide);
     }
@@ -220,7 +239,29 @@ pub fn synthesize(style: &Image, style_weight: f32, guides: &[GuidePair], params
     if max_levels == 0 {
         return Err(Error::TooSmall);
     }
-    let levels = params.pyramid_levels.unwrap_or(max_levels).clamp(1, max_levels);
+    Ok(params.pyramid_levels.unwrap_or(max_levels).clamp(1, max_levels))
+}
+
+/// Nombre de niveaux de pyramide possibles : le plus petit côté du niveau le plus grossier doit
+/// garder au moins 2 × patch + 1 pixels, pour la source comme pour la cible (comme ebsynth).
+pub fn max_pyramid_levels(source: (usize, usize), target: (usize, usize), patch_size: usize) -> usize {
+    let w = source.0.min(target.0);
+    let h = source.1.min(target.1);
+    (0..=32)
+        .rev()
+        .find(|&level| {
+            let f = 2f32.powi(-level);
+            ((w as f32 * f) as usize).min((h as f32 * f) as usize) > 2 * patch_size
+        })
+        .map_or(0, |level| level as usize + 1)
+}
+
+/// Fabrique l'image : le style recopié par morceaux pour que les guides cibles ressemblent aux
+/// guides sources. `style_weight` est le poids total du style, partagé entre ses canaux.
+pub fn synthesize(style: &Image, style_weight: f32, guides: &[GuidePair], params: &Params) -> Result<Output, Error> {
+    let levels = check(style, style_weight, guides, params)?;
+    let (sw, sh) = (style.width, style.height);
+    let (tw, th) = (guides[0].target.width, guides[0].target.height);
     let threads = match params.threads {
         0 => std::thread::available_parallelism().map_or(1, |n| n.get()),
         n => n,

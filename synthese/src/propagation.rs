@@ -17,9 +17,9 @@
 use std::fmt;
 use std::ops::Range;
 
-use crate::blend::{blend, BlendParams, ErrorMap};
+use crate::blend::{BlendParams, ErrorMap};
 use crate::flow::{flow, Flow, FlowParams, Gray};
-use crate::{synthesize, Error, GuidePair, Image, Output, Params};
+use crate::{Cpu, Error, GuidePair, Image, Output, Params, Synthesizer};
 
 /// Poids des guides de la propagation.
 #[derive(Clone, Debug, PartialEq)]
@@ -153,6 +153,18 @@ pub fn propagate(
 /// reculant), celles entre deux clés (en reculant depuis la seconde, une fois la séquence depuis
 /// la première faite), celles après la dernière clé (en avançant).
 pub fn propagate_keys(
+    load: impl FnMut(usize) -> Result<Image, String>,
+    keys: &[Key],
+    range: Range<usize>,
+    params: &PropagateParams,
+    each: impl FnMut(usize, &Image) -> bool,
+) -> Result<(), PropagateError> {
+    propagate_keys_on(&Cpu, load, keys, range, params, each)
+}
+
+/// `propagate_keys` avec une synthèse au choix : `Cpu` ou la carte graphique (`gpu::Gpu`).
+pub fn propagate_keys_on(
+    synth: &dyn Synthesizer,
     mut load: impl FnMut(usize) -> Result<Image, String>,
     keys: &[Key],
     range: Range<usize>,
@@ -183,29 +195,32 @@ pub fn propagate_keys(
     for k in &keys {
         emit(k.frame, k.style)?;
     }
-    chain(&mut load, first, &frames[0], (range.start..first.frame).rev(), params, |t, o| emit(t, &o.image))?;
+    chain(synth, &mut load, first, &frames[0], (range.start..first.frame).rev(), params, |t, o| emit(t, &o.image))?;
     for (i, pair) in keys.windows(2).enumerate() {
         let (k1, k2) = (pair[0], pair[1]);
         let mut from_first: Vec<(Image, ErrorMap)> = Vec::with_capacity(k2.frame - k1.frame);
-        chain(&mut load, k1, &frames[i], k1.frame + 1..k2.frame, params, |_, o| {
+        chain(synth, &mut load, k1, &frames[i], k1.frame + 1..k2.frame, params, |_, o| {
             let e = ErrorMap::new(&o.error, o.image.width, o.image.height, ERROR_CELL);
             from_first.push((o.image, e));
             Ok(())
         })?;
         let span = (k2.frame - k1.frame) as f32;
-        chain(&mut load, k2, &frames[i + 1], (k1.frame + 1..k2.frame).rev(), params, |t, o| {
+        chain(synth, &mut load, k2, &frames[i + 1], (k1.frame + 1..k2.frame).rev(), params, |t, o| {
             let (a, ea) = &from_first[t - k1.frame - 1];
             let eb = ErrorMap::new(&o.error, o.image.width, o.image.height, ERROR_CELL);
-            emit(t, &blend(a, ea, &o.image, &eb, (t - k1.frame) as f32 / span, &params.blend))
+            emit(t, &synth.blend(a, ea, &o.image, &eb, (t - k1.frame) as f32 / span, &params.blend))
         })?;
     }
-    chain(&mut load, last, &frames[keys.len() - 1], last.frame + 1..range.end, params, |t, o| emit(t, &o.image))
+    chain(synth, &mut load, last, &frames[keys.len() - 1], last.frame + 1..range.end, params, |t, o| emit(t, &o.image))
 }
 
 /// Une séquence depuis la clé `key` (sur l'image de la vidéo `key_frame`) : les images `steps`,
 /// chacune voisine de la précédente (la première voisine de la clé). `out(t, résultat)` reçoit
-/// chacune.
+/// chacune. Le flux optique de l'image suivante (qui ne dépend que de la vidéo) est calculé sur
+/// un autre fil pendant la synthèse de l'image courante : avec la carte graphique, il ne coûte
+/// presque plus rien.
 fn chain(
+    synth: &dyn Synthesizer,
     load: &mut impl FnMut(usize) -> Result<Image, String>,
     key: Key,
     key_frame: &Image,
@@ -216,15 +231,28 @@ fn chain(
     let (w, h, style) = (key_frame.width, key_frame.height, key.style);
     let key_position = position_guide(&identity(w, h));
     let wt = &params.weights;
-    let (mut prev_gray, mut prev_out, mut pos) = (Gray::from_image(key_frame), style.clone(), identity(w, h));
-    for t in steps {
+    let mut load_checked = |t: usize| {
         let frame = load(t).map_err(|e| PropagateError::Load(t, e))?;
         if (frame.width, frame.height, frame.channels) != (w, h, key_frame.channels) {
             return Err(PropagateError::Size(t));
         }
+        Ok(frame)
+    };
+    // L'image t, sa luminance et, pour chacun de ses pixels, où il était dans l'image d'avant.
+    let prepare = |frame: Image, before: &Gray| {
         let gray = Gray::from_image(&frame);
-        // Pour chaque pixel de l'image t, où il était dans l'image d'avant.
-        let back = flow(&gray, &prev_gray, &params.flow);
+        let back = flow(&gray, before, &params.flow);
+        (frame, gray, back)
+    };
+    let steps: Vec<usize> = steps.collect();
+    let (mut prev_gray, mut prev_out, mut pos) = (Gray::from_image(key_frame), style.clone(), identity(w, h));
+    let mut ready = None;
+    for (k, &t) in steps.iter().enumerate() {
+        let (frame, gray, back) = match ready.take() {
+            Some(r) => r,
+            None => prepare(load_checked(t)?, &prev_gray),
+        };
+        let following = steps.get(k + 1).map(|&u| load_checked(u)).transpose()?;
         pos = warp_positions(&pos, &back);
         let position = position_guide(&pos);
         let temporal = warp(&prev_out, &back);
@@ -238,7 +266,16 @@ fn chain(
         if wt.temporal > 0.0 {
             guides.push(GuidePair { source: style, target: &temporal, weight: wt.temporal });
         }
-        let result = synthesize(style, wt.style, &guides, &params.synth).map_err(|e| PropagateError::Synth(t, e))?;
+        let (result, next) = std::thread::scope(|scope| {
+            let next = following.map(|f| {
+                let (prepare, gray) = (&prepare, &gray);
+                scope.spawn(move || prepare(f, gray))
+            });
+            let result = synth.synthesize(style, wt.style, &guides, &params.synth);
+            (result, next.map(|n| n.join().expect("flux optique")))
+        });
+        let result = result.map_err(|e| PropagateError::Synth(t, e))?;
+        ready = next;
         (prev_gray, prev_out) = (gray, result.image.clone());
         out(t, result)?;
     }

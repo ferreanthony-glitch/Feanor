@@ -2,14 +2,14 @@ use super::*;
 use crate::patchmatch as pm;
 
 /// Bruit déterministe : chaque patch 5×5 est différent de tous les autres.
-fn noise(w: usize, h: usize, channels: usize, seed: u64) -> Image {
+pub(crate) fn noise(w: usize, h: usize, channels: usize, seed: u64) -> Image {
     let mut rng = pm::Rng::new(seed);
     let data = (0..w * h * channels).map(|_| rng.next_u32() as u8).collect();
     Image::new(w, h, channels, data)
 }
 
 /// Guide de position : rouge = x, vert = y, sur toute la plage 0..255.
-fn position(w: usize, h: usize, dx: i32, dy: i32) -> Image {
+pub(crate) fn position(w: usize, h: usize, dx: i32, dy: i32) -> Image {
     let mut data = Vec::with_capacity(w * h * 3);
     for y in 0..h as i32 {
         for x in 0..w as i32 {
@@ -27,7 +27,7 @@ fn single_thread(seed: u64) -> Params {
 
 /// Écart moyen (0..255) entre `a` et `b` décalée de (dx, dy), sur l'intérieur `margin` pixels
 /// loin des bords, et part des pixels identiques.
-fn interior_diff(a: &Image, b: &Image, dx: i32, dy: i32, margin: usize) -> (f32, f32) {
+pub(crate) fn interior_diff(a: &Image, b: &Image, dx: i32, dy: i32, margin: usize) -> (f32, f32) {
     let (mut sum, mut same, mut n) = (0u64, 0u64, 0u64);
     for y in margin..a.height - margin {
         for x in margin..a.width - margin {
@@ -147,7 +147,7 @@ fn same_guides_give_back_the_style() {
 }
 
 /// Image douce (ondes de couleur) : un style qui a des formes, comme une peinture.
-fn waves(w: usize, h: usize) -> Image {
+pub(crate) fn waves(w: usize, h: usize) -> Image {
     let mut data = Vec::with_capacity(w * h * 3);
     for y in 0..h {
         for x in 0..w {

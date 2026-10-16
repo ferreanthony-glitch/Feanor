@@ -10,17 +10,44 @@
 //! <position> <temporel>` (par défaut 1 4 10 1, ceux d'EbSynth), `-uniformity`, `-patchsize`,
 //! `-threads`, `-seed`, `-attache <poids>` (du fondu enchaîné dans le mélange, 0,1 par défaut),
 //! `-douceur <largeur>` (de la bascule d'une clé à l'autre, voir `BlendParams::softness`),
-//! `-fondu` (simple fondu enchaîné entre les clés, pour comparer), `-flux <dossier>` (écrit aussi
+//! `-fondu` (simple fondu enchaîné entre les clés, pour comparer), `-gpu` (synthèse sur la carte
+//! graphique, avec `--features gpu`), `-flux <dossier>` (écrit aussi
 //! le flux optique de chaque image en couleurs : la teinte donne la direction, l'intensité la
 //! longueur).
 
+use std::cell::Cell;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
+use synthese::blend::{BlendParams, ErrorMap};
 use synthese::flow::{flow, Flow, Gray};
-use synthese::propagation::{propagate_keys, Key, PropagateParams};
-use synthese::Image;
+use synthese::propagation::{propagate_keys_on, Key, PropagateParams};
+use synthese::{Cpu, Error, GuidePair, Image, Output, Params, Synthesizer};
+
+/// La synthèse choisie, chronométrée, ainsi que le mélange (le reste du temps : flux optique quand
+/// il n'est pas caché derrière la synthèse, fichiers).
+struct Timed {
+    inner: Box<dyn Synthesizer>,
+    spent: Cell<Duration>,
+    blending: Cell<Duration>,
+}
+
+impl Synthesizer for Timed {
+    fn synthesize(&self, style: &Image, w: f32, guides: &[GuidePair], params: &Params) -> Result<Output, Error> {
+        let start = Instant::now();
+        let out = self.inner.synthesize(style, w, guides, params);
+        self.spent.set(self.spent.get() + start.elapsed());
+        out
+    }
+
+    fn blend(&self, a: &Image, ea: &ErrorMap, b: &Image, eb: &ErrorMap, alpha: f32, params: &BlendParams) -> Image {
+        let start = Instant::now();
+        let out = self.inner.blend(a, ea, b, eb, alpha, params);
+        self.blending.set(self.blending.get() + start.elapsed());
+        out
+    }
+}
 
 fn frames_in(dir: &Path) -> Result<Vec<PathBuf>, String> {
     let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
@@ -80,6 +107,7 @@ fn flow_colors(f: &Flow) -> Image {
 
 fn run(args: &[String]) -> Result<(), String> {
     let (mut images, mut output, mut flow_dir) = (None, None, None);
+    let mut on_gpu = false;
     let mut keys: Vec<(usize, PathBuf)> = Vec::new();
     let (mut from, mut to) = (None, None);
     let mut params = PropagateParams::default();
@@ -98,6 +126,7 @@ fn run(args: &[String]) -> Result<(), String> {
             "-attache" => params.blend.screen = number(next(&mut it, arg)?, arg)?,
             "-douceur" => params.blend.softness = number(next(&mut it, arg)?, arg)?,
             "-fondu" => params.blend.linear = true,
+            "-gpu" => on_gpu = true,
             "-sortie" => output = Some(PathBuf::from(next(&mut it, arg)?)),
             "-de" => from = Some(number::<usize>(next(&mut it, arg)?, arg)?),
             "-a" => to = Some(number::<usize>(next(&mut it, arg)?, arg)?),
@@ -144,16 +173,34 @@ fn run(args: &[String]) -> Result<(), String> {
     if let Some(dir) = &flow_dir {
         // Flux de chaque image vers la précédente.
         std::fs::create_dir_all(dir).map_err(|e| format!("{} : {e}", dir.display()))?;
+        let (mut spent, mut n) = (Duration::ZERO, 0);
         for t in first + 1..=last {
-            let f = flow(&Gray::from_image(&load(t - 1)?), &Gray::from_image(&load(t - 2)?), &params.flow);
+            let (a, b) = (Gray::from_image(&load(t - 1)?), Gray::from_image(&load(t - 2)?));
+            let start = Instant::now();
+            let f = flow(&a, &b, &params.flow);
+            (spent, n) = (spent + start.elapsed(), n + 1);
             save(&dir.join(format!("{t:06}.png")), &flow_colors(&f))?;
         }
+        println!("flux optique : {:.3} s par image", spent.as_secs_f32() / n.max(1) as f32);
     }
+    let inner: Box<dyn Synthesizer> = if on_gpu {
+        #[cfg(feature = "gpu")]
+        {
+            let gpu = synthese::gpu::Gpu::new()?;
+            println!("carte graphique : {}", gpu.name());
+            Box::new(gpu)
+        }
+        #[cfg(not(feature = "gpu"))]
+        return Err("-gpu demande --features gpu".into());
+    } else {
+        Box::new(Cpu)
+    };
+    let synth = Timed { inner, spent: Cell::new(Duration::ZERO), blending: Cell::new(Duration::ZERO) };
     let key_list: Vec<Key> = keys.iter().zip(&styles).map(|((n, _), style)| Key { frame: n - 1, style }).collect();
     let start = Instant::now();
     let mut last_time = Instant::now();
     let mut failed = None;
-    let result = propagate_keys(load, &key_list, first - 1..last, &params, |i, im| {
+    let result = propagate_keys_on(&synth, load, &key_list, first - 1..last, &params, |i, im| {
         if let Err(e) = save(&output.join(format!("{:06}.png", i + 1)), im) {
             failed = Some(e);
             return false;
@@ -166,7 +213,12 @@ fn run(args: &[String]) -> Result<(), String> {
         return Err(e);
     }
     result.map_err(|e| e.to_string())?;
-    println!("fini en {:.1} s", start.elapsed().as_secs_f32());
+    let total = start.elapsed().as_secs_f32();
+    let (synth_time, blend_time) = (synth.spent.get().as_secs_f32(), synth.blending.get().as_secs_f32());
+    println!(
+        "fini en {total:.1} s : synthèse {synth_time:.1} s, mélange {blend_time:.1} s, le reste (flux, fichiers) {:.1} s",
+        total - synth_time - blend_time
+    );
     Ok(())
 }
 

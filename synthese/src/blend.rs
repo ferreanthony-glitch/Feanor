@@ -96,19 +96,58 @@ pub fn selection(ea: &ErrorMap, eb: &ErrorMap, alpha: f32, softness: f32) -> Vec
     out
 }
 
+/// Le système (λ + Laplacien) x = rhs de chaque canal, avec son point de départ (le fondu).
+pub(crate) struct System {
+    pub width: usize,
+    pub height: usize,
+    pub lambda: f32,
+    pub start: Vec<Vec<f32>>,
+    pub rhs: Vec<Vec<f32>>,
+}
+
 /// Mélange A et B à l'instant `alpha` (0 = A, 1 = B) d'après leurs erreurs de synthèse.
 pub fn blend(a: &Image, ea: &ErrorMap, b: &Image, eb: &ErrorMap, alpha: f32, params: &BlendParams) -> Image {
+    if params.linear {
+        return fade(a, b, alpha);
+    }
+    let system = system(a, ea, b, eb, alpha, params);
+    let mut channels: Vec<Vec<f32>> = vec![Vec::new(); a.channels];
+    std::thread::scope(|scope| {
+        for ((out, rhs), start) in channels.iter_mut().zip(&system.rhs).zip(&system.start) {
+            let s = &system;
+            scope.spawn(move || *out = solve_screened(s.width, s.height, s.lambda, rhs, start.clone(), params.iters));
+        }
+    });
+    to_image(a.width, a.height, &channels)
+}
+
+/// Simple fondu enchaîné.
+pub(crate) fn fade(a: &Image, b: &Image, alpha: f32) -> Image {
+    assert_eq!((a.width, a.height, a.channels), (b.width, b.height, b.channels), "deux images pareilles");
+    let data = a.data.iter().zip(&b.data).map(|(x, y)| ((1.0 - alpha) * *x as f32 + alpha * *y as f32 + 0.5).clamp(0.0, 255.0) as u8);
+    Image::new(a.width, a.height, a.channels, data.collect())
+}
+
+/// Les canaux résolus remis en image (arrondis, bornés).
+pub(crate) fn to_image(w: usize, h: usize, channels: &[Vec<f32>]) -> Image {
+    let mut data = Vec::with_capacity(w * h * channels.len());
+    for p in 0..w * h {
+        for ch in channels {
+            data.push((ch[p] + 0.5).clamp(0.0, 255.0) as u8);
+        }
+    }
+    Image::new(w, h, channels.len(), data)
+}
+
+/// Construit le système de chaque canal (un fil par canal).
+pub(crate) fn system(a: &Image, ea: &ErrorMap, b: &Image, eb: &ErrorMap, alpha: f32, params: &BlendParams) -> System {
     assert_eq!((a.width, a.height, a.channels), (b.width, b.height, b.channels), "deux images pareilles");
     let (w, h, c) = (a.width, a.height, a.channels);
-    let fade = |k: usize| (1.0 - alpha) * a.data[k] as f32 + alpha * b.data[k] as f32;
-    if params.linear {
-        let data = (0..a.data.len()).map(|k| (fade(k) + 0.5).clamp(0.0, 255.0) as u8).collect();
-        return Image::new(w, h, c, data);
-    }
+    let lambda = params.screen.max(1e-4);
     let from_a = selection(ea, eb, alpha, params.softness);
-    let mut channels: Vec<Vec<f32>> = vec![Vec::new(); c];
+    let mut parts: Vec<(Vec<f32>, Vec<f32>)> = vec![(Vec::new(), Vec::new()); c];
     std::thread::scope(|scope| {
-        for (ch, out) in channels.iter_mut().enumerate() {
+        for (ch, out) in parts.iter_mut().enumerate() {
             let from_a = &from_a;
             scope.spawn(move || {
                 let px = |im: &Image, p: usize| im.data[p * c + ch] as f32;
@@ -118,8 +157,7 @@ pub fn blend(a: &Image, ea: &ErrorMap, b: &Image, eb: &ErrorMap, alpha: f32, par
                     let share = 0.5 * (from_a[p] + from_a[q]);
                     share * (px(a, q) - px(a, p)) + (1.0 - share) * (px(b, q) - px(b, p))
                 };
-                let lambda = params.screen.max(1e-4);
-                let start: Vec<f32> = (0..w * h).map(|p| fade(p * c + ch)).collect();
+                let start: Vec<f32> = (0..w * h).map(|p| (1.0 - alpha) * px(a, p) + alpha * px(b, p)).collect();
                 let mut rhs: Vec<f32> = start.iter().map(|v| lambda * v).collect();
                 for y in 0..h {
                     for x in 0..w {
@@ -136,17 +174,12 @@ pub fn blend(a: &Image, ea: &ErrorMap, b: &Image, eb: &ErrorMap, alpha: f32, par
                         }
                     }
                 }
-                *out = solve_screened(w, h, lambda, &rhs, start, params.iters);
+                *out = (start, rhs);
             });
         }
     });
-    let mut data = Vec::with_capacity(w * h * c);
-    for p in 0..w * h {
-        for ch in &channels {
-            data.push((ch[p] + 0.5).clamp(0.0, 255.0) as u8);
-        }
-    }
-    Image::new(w, h, c, data)
+    let (start, rhs) = parts.into_iter().unzip();
+    System { width: w, height: h, lambda, start, rhs }
 }
 
 /// (λ + Laplacien) appliqué à x, bords sans voisin (Neumann).
