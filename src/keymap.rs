@@ -250,7 +250,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("fond.damier", "Arrière-plan : damier", true, false),
     act("plan.nouveau_avant", "Nouveau plan avant le plan courant", true, false),
     act("storyboard.verrouiller", "Verrouiller / déverrouiller le storyboard", true, false),
-    act("projet.proprietes", "Propriétés du projet", true, false),
+    act("projet.proprietes", "Réglages du projet (propriétés, résolution, cadence)", true, false),
     act("projet.nouveau_depuis_plans", "Nouveau projet à partir des plans choisis", true, false),
     act("pelure.panneau", "Panneau de la pelure d'oignon (ouvrir / fermer)", true, false),
     act("pelure.devant", "Pelure d'oignon devant le dessin (oui / non)", true, false),

@@ -19,6 +19,66 @@ pub(crate) const STORYBOARD_LOCKED: &str =
 pub(crate) const CONTENT_LOCKED: &str =
     "Le storyboard est verrouillé : on ne dessine plus, et les images et les calques des plans ne changent pas (Storyboard > Déverrouiller le storyboard).";
 
+/// Onglet de la fenêtre « Réglages du projet ».
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum SettingsTab {
+    #[default]
+    Settings,
+    Resolution,
+}
+
+/// Taille de l'image et cadence en cours de réglage (onglet Résolution), appliquées d'un coup.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ResolutionEdit {
+    pub w: usize,
+    pub h: usize,
+    pub fps: u32,
+    /// Largeur et hauteur liées (mêmes proportions).
+    pub linked: bool,
+    /// Mettre les dessins à l'échelle (sinon : le cadre seul change).
+    pub scale: bool,
+    /// Nouvelle cadence : garder les durées en secondes (sinon : les mêmes images).
+    pub keep_seconds: bool,
+    pub interpolate: bool,
+}
+
+/// Tailles d'image proposées (nouveau projet, réglages du projet).
+pub(crate) const RESOLUTIONS: [(&str, usize, usize); 12] = [
+    ("HD 1080", 1920, 1080),
+    ("HD 720", 1280, 720),
+    ("4K UHD", 3840, 2160),
+    ("2K DCI", 2048, 1080),
+    ("4K DCI", 4096, 2160),
+    ("Cinéma 1,85:1", 1998, 1080),
+    ("Scope 2,39:1", 1920, 804),
+    ("4:3", 1440, 1080),
+    ("Carré", 1080, 1080),
+    ("Portrait 4:5", 1080, 1350),
+    ("Vertical 9:16", 1080, 1920),
+    ("PAL 4:3", 768, 576),
+];
+
+/// Cadences proposées.
+const FPS_PRESETS: [u32; 8] = [12, 15, 24, 25, 30, 48, 50, 60];
+
+/// Proportions d'une image : « 16:9 » quand c'est simple, sinon « 2,39:1 ».
+pub fn ratio_label(w: usize, h: usize) -> String {
+    fn gcd(a: usize, b: usize) -> usize {
+        if b == 0 {
+            a
+        } else {
+            gcd(b, a % b)
+        }
+    }
+    let g = gcd(w, h).max(1);
+    let (a, b) = (w / g, h / g);
+    if a <= 32 && b <= 32 {
+        format!("{a}:{b}")
+    } else {
+        format!("{:.2}:1", w as f64 / h.max(1) as f64).replace('.', ",")
+    }
+}
+
 /// Date du jour `days` compté depuis le 1er janvier 1970 : (année, mois, jour), calendrier
 /// grégorien.
 pub fn civil_from_days(days: i64) -> (i64, u32, u32) {
@@ -102,21 +162,149 @@ impl App {
         self.status = format!("Nouveau projet fait de {n} plan{s} (le son n'est pas repris). « Enregistrer sous » pour le garder.");
     }
 
-    /// La fenêtre « Propriétés du projet », si elle est ouverte.
+    /// La fenêtre « Réglages du projet » (Fichier), si elle est ouverte : un onglet Réglages (les
+    /// propriétés de 13e) et un onglet Résolution (taille de l'image, cadence).
     pub(crate) fn properties_window_ui(&mut self, ctx: &egui::Context) {
         if !self.properties_window {
+            self.res_edit = None;
             return;
         }
         let mut open = true;
-        egui::Window::new("Propriétés du projet")
+        egui::Window::new("Réglages du projet")
             .open(&mut open)
             .resizable(false)
             .collapsible(false)
-            .default_pos(ctx.screen_rect().center() - vec2(230.0, 220.0))
+            .default_pos(ctx.screen_rect().center() - vec2(240.0, 260.0))
             .pivot(Align2::LEFT_TOP)
-            .show(ctx, |ui| self.properties_ui(ui));
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut self.settings_tab, SettingsTab::Settings, RichText::new("Réglages").strong());
+                    ui.selectable_value(&mut self.settings_tab, SettingsTab::Resolution, RichText::new("Résolution").strong());
+                });
+                ui.separator();
+                match self.settings_tab {
+                    SettingsTab::Settings => self.properties_ui(ui),
+                    SettingsTab::Resolution => self.resolution_ui(ui),
+                }
+            });
         if !open {
             self.properties_window = false;
+            self.res_edit = None;
+        }
+    }
+
+    /// L'onglet Résolution : taille de l'image et cadence, appliquées ensemble.
+    fn resolution_ui(&mut self, ui: &mut egui::Ui) {
+        let (frame, fps) = (self.doc.frame, self.doc.fps);
+        let current = ResolutionEdit { w: frame[0], h: frame[1], fps, linked: true, scale: true, keep_seconds: true, interpolate: false };
+        let mut e = self.res_edit.unwrap_or(current);
+        let warn = egui::Color32::from_rgb(240, 170, 60);
+        ui.set_width(440.0);
+        ui.label(RichText::new("Préréglages").strong());
+        egui::ScrollArea::vertical().max_height(160.0).id_salt("prereglages_resolution").show(ui, |ui| {
+            for (name, w, h) in RESOLUTIONS {
+                if ui.selectable_label(e.w == w && e.h == h, format!("{name}  —  {w}×{h}")).clicked() {
+                    e.w = w;
+                    e.h = h;
+                }
+            }
+        });
+        ui.add_space(4.0);
+        let ratio = e.h as f32 / e.w.max(1) as f32;
+        ui.horizontal(|ui| {
+            ui.label("Largeur");
+            if ui.add(egui::DragValue::new(&mut e.w).range(16..=4096).suffix(" px")).changed() && e.linked {
+                e.h = ((e.w as f32 * ratio).round() as usize).clamp(16, 4096);
+            }
+            crate::bulles::interrupteur(ui, &mut e.linked, egui_phosphor::regular::LINK, "Lier", "Garder les proportions en changeant la largeur ou la hauteur.", "");
+            ui.label("Hauteur");
+            if ui.add(egui::DragValue::new(&mut e.h).range(16..=4096).suffix(" px")).changed() && e.linked {
+                e.w = ((e.h as f32 / ratio.max(1e-6)).round() as usize).clamp(16, 4096);
+            }
+        });
+        ui.label(RichText::new(format!("Proportions {}  ·  actuellement {}×{} ({})", ratio_label(e.w, e.h), frame[0], frame[1], ratio_label(frame[0], frame[1]))).weak());
+        let resized = [e.w, e.h] != frame;
+        if resized {
+            ui.add_space(4.0);
+            ui.radio_value(&mut e.scale, true, "Mettre les dessins à l'échelle");
+            let mut text = "Dessins, caméra, guides et placement des calques suivent la nouvelle taille.".to_string();
+            if e.w * frame[1] != e.h * frame[0] {
+                text += " Autres proportions : le dessin remplit le nouveau cadre sans être déformé ; ce qui dépasse sort du cadre.";
+            }
+            ui.label(RichText::new(text).weak().small());
+            ui.radio_value(&mut e.scale, false, "Garder les dessins à leur taille");
+            ui.label(RichText::new("Seul le cadre change, centré : il montre plus ou moins de la feuille.").weak().small());
+        }
+        ui.separator();
+        ui.horizontal(|ui| {
+            ui.label("Cadence");
+            egui::ComboBox::from_id_salt("cadence_prereglee").selected_text(format!("{} i/s", e.fps)).width(80.0).show_ui(ui, |ui| {
+                for f in FPS_PRESETS {
+                    ui.selectable_value(&mut e.fps, f, format!("{f} i/s"));
+                }
+            });
+            ui.add(egui::DragValue::new(&mut e.fps).range(1..=120).suffix(" i/s"));
+        });
+        if e.fps != fps {
+            ui.radio_value(&mut e.keep_seconds, true, "Garder les durées en secondes");
+            ui.horizontal(|ui| {
+                ui.add_space(18.0);
+                ui.add_enabled(e.keep_seconds, egui::Checkbox::new(&mut e.interpolate, "Interpoler les images ajoutées (sinon : dessins tenus)"));
+            });
+            ui.radio_value(&mut e.keep_seconds, false, "Garder les images (le film va plus vite ou plus lentement)");
+        }
+        if resized {
+            ui.add_space(4.0);
+            ui.colored_label(warn, "Changer la taille ne s'annule pas (Ctrl+Z) : l'historique d'annulation est vidé.");
+        }
+        let mut apply = false;
+        ui.horizontal(|ui| {
+            apply = ui.add_enabled(resized || e.fps != fps, egui::Button::new("Appliquer")).clicked();
+            if ui.button("Remettre").on_hover_text("Revenir aux valeurs du projet.").clicked() {
+                e = current;
+            }
+        });
+        if apply {
+            self.res_edit = None;
+            self.apply_resolution(e);
+        } else {
+            self.res_edit = Some(e);
+        }
+    }
+
+    /// Applique la cadence puis la taille réglées dans l'onglet Résolution.
+    pub(crate) fn apply_resolution(&mut self, e: ResolutionEdit) {
+        let mut msgs = Vec::new();
+        if e.fps != self.doc.fps {
+            if e.keep_seconds {
+                self.change_fps(e.fps, e.interpolate);
+                msgs.push(self.status.clone());
+            } else {
+                self.end_stroke();
+                self.record_step();
+                self.doc.fps = e.fps;
+                msgs.push(format!("Cadence {} i/s : mêmes images, le film va à une autre vitesse.", e.fps));
+            }
+        }
+        if [e.w, e.h] != self.doc.frame {
+            if self.content_refuses() {
+                return;
+            }
+            self.end_stroke();
+            self.playing = false;
+            self.doc.resize_frame(e.w, e.h, e.scale);
+            self.after_stage_change();
+            msgs.push(format!(
+                "Image {}×{}{} (feuille {}×{}). L'historique d'annulation est vidé.",
+                self.doc.frame[0],
+                self.doc.frame[1],
+                if e.scale { ", dessins mis à l'échelle" } else { ", dessins gardés à leur taille" },
+                self.doc.width,
+                self.doc.height
+            ));
+        }
+        if !msgs.is_empty() {
+            self.status = msgs.join(" ");
         }
     }
 
@@ -160,6 +348,13 @@ impl App {
             ui.label("Copyright");
             if let Some(v) = self.property_field(ui, &p.copyright, 1) {
                 self.doc.properties.copyright = v;
+            }
+            ui.end_row();
+            ui.label("Numéro de la première image");
+            let mut first = self.doc.start_frame;
+            let resp = ui.add(egui::DragValue::new(&mut first).range(0..=100_000));
+            if self.edited(&resp) {
+                self.doc.start_frame = first;
             }
             ui.end_row();
         });

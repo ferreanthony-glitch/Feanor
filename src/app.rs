@@ -371,8 +371,11 @@ pub struct App {
     pub(crate) notes: crate::notes::NotesState,
     /// Extrait son glissé depuis la timeline (Ctrl + glisser l'onde, 13e) : sa piste.
     pub(crate) timeline_sound_track: Option<usize>,
-    /// Fenêtre « Propriétés du projet » ouverte (13e, `projetui.rs`).
+    /// Fenêtre « Réglages du projet » ouverte (13e, `projetui.rs`), son onglet, et la résolution en
+    /// cours de réglage.
     pub(crate) properties_window: bool,
+    pub(crate) settings_tab: crate::projetui::SettingsTab,
+    pub(crate) res_edit: Option<crate::projetui::ResolutionEdit>,
     /// Aperçus des réglages de pinceau (grille du panneau Réglages, 6d).
     pub(crate) brush_previews: crate::brushui::BrushPreviews,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
@@ -641,6 +644,8 @@ impl App {
             notes: Default::default(),
             timeline_sound_track: None,
             properties_window: false,
+            settings_tab: Default::default(),
+            res_edit: None,
             brush_previews: Default::default(),
             ref3d: Default::default(),
             camera_view: false,
@@ -2040,6 +2045,27 @@ impl App {
         self.import_source = None;
         self.written.clear();
         self.length_origin = None;
+    }
+
+    /// Après un changement de taille de la feuille (Fichier > Réglages du projet) : ce qui
+    /// pointait dans l'ancienne feuille est oublié, l'historique vidé (il ne saurait pas revenir
+    /// à l'ancienne taille), la vue recadrée.
+    pub(crate) fn after_stage_change(&mut self) {
+        self.stroke = None;
+        self.vstroke = None;
+        self.verase = None;
+        self.vsel = None;
+        self.vdrag = None;
+        self.bsel = None;
+        self.bdrag = None;
+        self.history.clear();
+        self.thumbs.clear();
+        self.renderer.invalidate_all();
+        self.fit_pending = true;
+        self.stage_view = None;
+        self.stage3d.cam = None;
+        self.length_origin = None;
+        self.modified = true;
     }
 
     pub(crate) fn base_name(&self) -> String {

@@ -85,6 +85,53 @@ impl Raster {
         out
     }
 
+    /// Même image, agrandie ou réduite `s` fois, dans une feuille `width`×`height` (le coin en
+    /// haut à gauche reste en place). Seule la partie dessinée est recalculée.
+    pub fn scaled(&self, width: usize, height: usize, s: f32) -> Raster {
+        let mut out = Raster::new(width, height);
+        // Rectangle des tuiles dessinées.
+        let mut bbox: Option<(usize, usize, usize, usize)> = None;
+        for (idx, t) in self.tiles.iter().enumerate() {
+            if t.is_none() {
+                continue;
+            }
+            let (ox, oy, tw, th) = self.tile_bounds(idx);
+            bbox = Some(match bbox {
+                None => (ox, oy, ox + tw, oy + th),
+                Some((a, b, c, d)) => (a.min(ox), b.min(oy), c.max(ox + tw), d.max(oy + th)),
+            });
+        }
+        let Some((x0, y0, x1, y1)) = bbox else { return out };
+        let (bw, bh) = (x1 - x0, y1 - y0);
+        let mut rgba = vec![0u8; bw * bh * 4];
+        for y in 0..bh {
+            for x in 0..bw {
+                let p = unpremultiply(self.get(x0 + x, y0 + y));
+                rgba[(y * bw + x) * 4..(y * bw + x) * 4 + 4].copy_from_slice(&p);
+            }
+        }
+        let Some(img) = image::RgbaImage::from_raw(bw as u32, bh as u32, rgba) else { return out };
+        let (nw, nh) = (((bw as f32 * s).round() as u32).max(1), ((bh as f32 * s).round() as u32).max(1));
+        let filter = if s < 1.0 { image::imageops::FilterType::Triangle } else { image::imageops::FilterType::CatmullRom };
+        let img = image::imageops::resize(&img, nw, nh, filter);
+        let (dx, dy) = ((x0 as f32 * s).round() as usize, (y0 as f32 * s).round() as usize);
+        for (y, row) in img.rows().enumerate() {
+            let sy = dy + y;
+            if sy >= height {
+                break;
+            }
+            for (x, p) in row.enumerate() {
+                let sx = dx + x;
+                if sx >= width || p[3] == 0 {
+                    continue;
+                }
+                let i = out.tile_index_of(sx, sy);
+                out.tile_mut(i)[(sy % TILE) * TILE + sx % TILE] = premultiply(p[0], p[1], p[2], p[3]);
+            }
+        }
+        out
+    }
+
     /// Copie l'image dans un tableau plein, ligne par ligne.
     pub fn to_flat(&self) -> Vec<Color32> {
         let mut out = vec![Color32::TRANSPARENT; self.width * self.height];

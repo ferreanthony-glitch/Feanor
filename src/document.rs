@@ -972,6 +972,72 @@ impl Document {
         self.height = height;
     }
 
+    /// Nouvelle taille d'image `w`×`h` (le cadre ; passe interface, Fichier > Réglages du projet).
+    /// - `scale` : tout ce qui est en pixels est agrandi ou réduit (dessins, guides, caméra,
+    ///   placement des calques) pour que le dessin remplisse le nouveau cadre sans être déformé ;
+    ///   avec d'autres proportions, ce qui dépasse sort du cadre.
+    /// - sinon : les dessins gardent leur taille en pixels, le cadre change autour d'eux (centré).
+    ///
+    /// La feuille reste au moins le double du cadre. Ne s'annule pas : l'appelant vide l'historique.
+    pub fn resize_frame(&mut self, w: usize, h: usize, scale: bool) {
+        let (w, h) = (w.clamp(16, 4096), h.clamp(16, 4096));
+        let [fw, fh] = self.frame;
+        if scale {
+            let s = (w as f32 / fw.max(1) as f32).max(h as f32 / fh.max(1) as f32);
+            if (s - 1.0).abs() > 1e-6 {
+                self.scale_stage(s);
+            }
+        }
+        self.frame = [w, h];
+        let (sw, sh) = (self.width.max(w * 2), self.height.max(h * 2));
+        // Agrandir garde le centre ; avec des parités différentes, un pixel de plus suffit.
+        let (sw, sh) = (sw + (sw - self.width) % 2, sh + (sh - self.height) % 2);
+        if sw > self.width || sh > self.height {
+            self.enlarge_stage(sw, sh);
+        }
+    }
+
+    /// Multiplie par `s` tout ce qui est en pixels de la feuille, feuille comprise.
+    fn scale_stage(&mut self, s: f32) {
+        let nw = ((self.width as f32 * s).round() as usize).max(1);
+        let nh = ((self.height as f32 * s).round() as usize).max(1);
+        let m = crate::vector::Affine::scale_about(pos2(0.0, 0.0), s, s);
+        for cel in self.cels.values_mut() {
+            match &mut cel.vector {
+                Some(d) => {
+                    for e in &mut d.elements {
+                        *e = e.transformed(&m);
+                    }
+                    cel.raster = Raster::new(nw, nh);
+                    cel.rerender();
+                }
+                None => {
+                    cel.raster = cel.raster.scaled(nw, nh, s);
+                    cel.version += 1;
+                }
+            }
+        }
+        for g in &mut self.guides {
+            for p in &mut g.points {
+                p[0] *= s;
+                p[1] *= s;
+            }
+        }
+        for panel in &mut self.panels {
+            for k in &mut panel.camera {
+                k.cam.x *= s;
+                k.cam.y *= s;
+                k.cam.dolly *= s;
+            }
+            for l in &mut panel.layers {
+                l.transform.x *= s;
+                l.transform.y *= s;
+            }
+        }
+        self.width = nw;
+        self.height = nh;
+    }
+
     /// Centre de la feuille (pivot des transformations de calque).
     pub fn stage_center(&self) -> Pos2 {
         pos2(self.width as f32 / 2.0, self.height as f32 / 2.0)
