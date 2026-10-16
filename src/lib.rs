@@ -30,6 +30,9 @@ mod canvas;
 #[cfg(test)]
 mod color_tests;
 mod colorui;
+mod couleur;
+#[cfg(test)]
+mod couleur_tests;
 mod cues;
 #[cfg(test)]
 mod cues_tests;

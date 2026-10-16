@@ -100,6 +100,10 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("outil.epaisseur_crayon", "Outil épaisseur du trait de crayon", false, false),
     act("outil.taille_plus", "Pinceau plus gros", true, true),
     act("outil.taille_moins", "Pinceau plus fin", true, true),
+    // Couleur (passe couleur, `colorui.rs`).
+    act("couleur.intervertir", "Intervertir les couleurs d'avant-plan et d'arrière-plan", true, false),
+    act("couleur.defaut", "Couleurs par défaut (noir à l'avant-plan, blanc à l'arrière-plan)", true, false),
+    act("couleur.copier_code", "Copier le code hexadécimal de la couleur d'avant-plan", true, false),
     act("selection.miroir_h", "Retourner la sélection horizontalement", true, false),
     act("selection.miroir_v", "Retourner la sélection verticalement", true, false),
     act("dessin.supprimer_hors_selection", "Effacer ce qui est hors de la sélection", true, false),

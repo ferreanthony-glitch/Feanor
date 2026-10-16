@@ -278,6 +278,9 @@ pub struct App {
     /// La couleur en teinte, saturation, valeur (panneau Couleur, 6b).
     pub(crate) hsv: [f32; 3],
     pub(crate) swatches: Vec<[u8; 3]>,
+    /// Couleur d'arrière-plan et réglages du panneau Couleur (passe couleur, `colorui.rs`) ;
+    /// `color` reste la couleur d'avant-plan, celle des outils.
+    pub(crate) couleurs: crate::colorui::ColorState,
     pub(crate) view: View,
     pub(crate) fit_pending: bool,
     pub(crate) canvas_rect: Rect,
@@ -584,8 +587,10 @@ impl App {
                 last: Tool::Rect,
             },
             vector_erase_whole: false,
-            color: [24, 24, 28],
-            hsv: crate::colorui::rgb_to_hsv([24, 24, 28]),
+            // Les couleurs de la dernière fois (passe couleur).
+            color: settings.colors.front,
+            hsv: crate::colorui::rgb_to_hsv(settings.colors.front),
+            couleurs: crate::colorui::ColorState::new(settings.colors.clone()),
             swatches: vec![
                 [24, 24, 28],
                 [255, 255, 255],
@@ -2335,6 +2340,10 @@ impl App {
         if self.workspace_action(action) {
             return;
         }
+        // Couleurs et nuanciers (passe couleur, `colorui.rs`).
+        if self.color_action(action) {
+            return;
+        }
         let board = self.mode == Mode::Storyboard;
         match action {
             "fichier.nouveau" => self.request(Pending::New),
@@ -3001,6 +3010,8 @@ impl eframe::App for App {
                 self.status = format!("Réglages non enregistrés : {e}");
             }
         }
+        // Couleurs et nuanciers : enregistrés quand ils changent (passe couleur).
+        self.color_tick(ctx);
         self.tick_recovery(ctx);
         self.remember_layout(ctx);
     }

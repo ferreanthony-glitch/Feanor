@@ -36,6 +36,10 @@ pub struct Settings {
     /// Les flips (13h).
     #[serde(default, rename = "flips")]
     pub flips: crate::flips::FlipSettings,
+    /// Couleurs d'avant-plan et d'arrière-plan, curseurs, roue, couleurs récentes et nuanciers
+    /// (passe couleur).
+    #[serde(default, rename = "couleurs")]
+    pub colors: crate::couleur::ColorSettings,
     /// Disposition de la fenêtre à la dernière fermeture.
     #[serde(default, rename = "disposition", skip_serializing_if = "Option::is_none")]
     pub layout: Option<Layout>,
@@ -63,6 +67,7 @@ impl Default for Settings {
             onion: OnionSettings::default(),
             xsheet: Default::default(),
             flips: Default::default(),
+            colors: Default::default(),
             layout: None,
             workspaces: Vec::new(),
         }

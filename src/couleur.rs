@@ -1,0 +1,85 @@
+//! Couleurs (passe couleur, demandée par Anthony le 2026-10-16), sans interface : conversions
+//! entre RVB, TSV et TSL, code hexadécimal, et les réglages du panneau Couleur gardés dans
+//! `%APPDATA%\Pelure\reglages.toml` (table `[couleurs]`). Les couleurs ne vont pas dans le
+//! projet : son format ne change pas.
+
+use serde::{Deserialize, Serialize};
+
+pub const NOIR: [u8; 3] = [0, 0, 0];
+pub const BLANC: [u8; 3] = [255, 255, 255];
+/// Couleur d'avant-plan au premier lancement : l'encre de Pelure depuis 6b.
+pub const ENCRE: [u8; 3] = [24, 24, 28];
+
+/// Teinte (0 à 360), saturation et valeur (0 à 1) d'une couleur.
+pub fn rgb_to_hsv(c: [u8; 3]) -> [f32; 3] {
+    let [r, g, b] = c.map(|v| v as f32 / 255.0);
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
+    let d = max - min;
+    let h = if d <= 0.0 {
+        0.0
+    } else if max == r {
+        60.0 * ((g - b) / d).rem_euclid(6.0)
+    } else if max == g {
+        60.0 * ((b - r) / d + 2.0)
+    } else {
+        60.0 * ((r - g) / d + 4.0)
+    };
+    [h, if max <= 0.0 { 0.0 } else { d / max }, max]
+}
+
+pub fn hsv_to_rgb(hsv: [f32; 3]) -> [u8; 3] {
+    let h = hsv[0].rem_euclid(360.0) / 60.0;
+    let (s, v) = (hsv[1].clamp(0.0, 1.0), hsv[2].clamp(0.0, 1.0));
+    let c = v * s;
+    let x = c * (1.0 - (h % 2.0 - 1.0).abs());
+    let (r, g, b) = match h as u32 {
+        0 => (c, x, 0.0),
+        1 => (x, c, 0.0),
+        2 => (0.0, c, x),
+        3 => (0.0, x, c),
+        4 => (x, 0.0, c),
+        _ => (c, 0.0, x),
+    };
+    let m = v - c;
+    [r, g, b].map(|t| ((t + m) * 255.0).round().clamp(0.0, 255.0) as u8)
+}
+
+/// Code hexadécimal « #RRGGBB ».
+pub fn hex(c: [u8; 3]) -> String {
+    format!("#{:02X}{:02X}{:02X}", c[0], c[1], c[2])
+}
+
+/// Lit un code hexadécimal : « #RRGGBB », « RRGGBB », ou la forme courte « #RGB » / « RGB »
+/// (chaque chiffre doublé, comme en CSS) ; majuscules ou minuscules, espaces autour permis.
+pub fn parse_hex(text: &str) -> Option<[u8; 3]> {
+    let digits = text.trim().trim_start_matches('#');
+    if !digits.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    let v = u32::from_str_radix(digits, 16).ok()?;
+    match digits.len() {
+        6 => Some([(v >> 16) as u8, (v >> 8) as u8, v as u8]),
+        3 => Some([(v >> 8) & 0xF, (v >> 4) & 0xF, v & 0xF].map(|d| (d * 17) as u8)),
+        _ => None,
+    }
+}
+
+/// Ce que le panneau Couleur retient d'une séance à l'autre (`[couleurs]` dans `reglages.toml`).
+/// Valeurs simples d'abord, tables ensuite (ordre du TOML).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ColorSettings {
+    /// Couleur d'avant-plan : celle avec laquelle les outils dessinent.
+    #[serde(rename = "avant_plan")]
+    pub front: [u8; 3],
+    /// Couleur d'arrière-plan, que l'on échange avec l'avant-plan (comme dans Photoshop).
+    #[serde(rename = "arriere_plan")]
+    pub back: [u8; 3],
+}
+
+impl Default for ColorSettings {
+    fn default() -> Self {
+        ColorSettings { front: ENCRE, back: BLANC }
+    }
+}

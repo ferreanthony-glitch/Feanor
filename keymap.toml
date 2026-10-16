@@ -388,6 +388,26 @@ action = "outil.taille_moins"
 touches = ["["]
 source = "Storyboard Pro 27 : DRAWING_DECREMENT_BRUSH_SIZE"
 
+# ------------------------------------------------------------------------------------ Couleur
+# Passe couleur (2026-10-16). Deux couleurs, avant-plan et arrière-plan, comme dans Photoshop.
+# Les touches de Photoshop n'y sont que si elles sont libres dans ce fichier, dans les deux modes :
+# D est libre ; X ne l'est pas (calque.coller, ton réglage perso PASTE_LAYERS_KEY).
+
+[[raccourci]]
+action = "couleur.intervertir"
+touches = []
+source = "proposition : aucune touche (X, celle de Photoshop, colle le calque : PASTE_LAYERS_KEY de tes réglages)"
+
+[[raccourci]]
+action = "couleur.defaut"
+touches = ["D"]
+source = "proposition (D, la touche de Photoshop, libre dans Pelure)"
+
+[[raccourci]]
+action = "couleur.copier_code"
+touches = []
+source = "Pelure"
+
 # ------------------------------------------------------------------------------------ Dessin
 
 [[raccourci]]
