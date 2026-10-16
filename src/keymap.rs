@@ -301,7 +301,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("fichier.importer_sboard", "Importer un projet Storyboard Pro", true, false),
     act("fichier.importer_sequence", "Importer une séquence d'images (calque vidéo)", true, false),
     act("calque.video_en_animation", "Transformer le calque vidéo en calque d'animation", true, false),
-    act("calque.propager", "Propager la peinture du calque sur la vidéo (façon EbSynth)", true, false),
+    act("calque.propager", "Propager la peinture du calque en suivant une vidéo ou une animation (façon EbSynth)", true, false),
     act("images.intermediaire", "Insérer une image intermédiaire (entre le dessin courant et le suivant)", true, false),
     act("images.intermediaires", "Insérer des images intermédiaires…", true, false),
     act("images.intervalles", "Remplir les images vides par des intervalles", true, false),

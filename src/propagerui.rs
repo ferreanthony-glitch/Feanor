@@ -1,13 +1,16 @@
 //! « Propager » dans l'interface (propagation façon EbSynth, étape e). Trois temps :
-//! - la fenêtre dit ce qui va se passer (calque vidéo, images, clés) et donne les réglages ;
+//! - la fenêtre dit ce qui va se passer (guide, images, clés), propose le guide (calque vidéo,
+//!   ce qu'on voit dessous, un calque choisi) et donne les réglages ;
 //! - la tâche tourne sur un autre fil : progression, aperçu de la dernière image fabriquée,
-//!   « Arrêter » ;
+//!   « Arrêter ». Les images d'un guide fait de calques sont composées ici, sur le fil de
+//!   l'interface, à la demande de la tâche (le document ne quitte pas ce fil) ;
 //! - à la fin, les dessins sont posés en une seule étape d'annulation.
 //!
 //! Le calcul se fait sur la carte graphique de l'affichage (le périphérique wgpu d'eframe,
 //! partagé), sinon sur le processeur. Voir `propager.rs`.
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -19,9 +22,9 @@ use synthese::{Cpu, Image, Synthesizer};
 
 use crate::app::App;
 use crate::document::LayerKind;
-use crate::propager;
+use crate::propager::{self, Frames, Guide};
 
-/// Canaux de la synthèse : le style (RVBA), les guides (vidéo 3, position 2, temporel 4).
+/// Canaux de la synthèse : le style (RVBA), les guides (image 3, position 2, temporel 4).
 const STYLE_CHANNELS: usize = 4;
 const GUIDE_CHANNELS: usize = 9;
 
@@ -31,6 +34,8 @@ pub(crate) struct Propagation {
     device: Option<(wgpu::Device, wgpu::Queue, String)>,
     window: bool,
     on_gpu: bool,
+    /// Le guide choisi dans la fenêtre (aucun : celui proposé d'abord).
+    guide: Option<Guide>,
     params: PropagateParams,
     job: Option<Job>,
 }
@@ -40,12 +45,16 @@ struct Job {
     /// Plan et calque (identifiants : on les retrouve même si l'ordre a changé).
     panel: u64,
     layer: u64,
+    guide: Guide,
     origin: (usize, usize),
     keys: Vec<usize>,
     total: usize,
     cancel: Arc<AtomicBool>,
     /// Les images fabriquées, au fur et à mesure.
     made: Arc<Mutex<Vec<(usize, Image)>>>,
+    /// Images du guide demandées par la tâche (calques composés), et la réponse.
+    requests: Receiver<usize>,
+    answers: Sender<Result<Image, String>>,
     /// Le nom du calcul (carte ou processeur), ou l'erreur.
     handle: JoinHandle<Result<String, String>>,
     started: Instant,
@@ -59,7 +68,7 @@ impl Propagation {
             let info = rs.adapter.get_info();
             (rs.device.clone(), rs.queue.clone(), format!("{} ({:?})", info.name, info.backend))
         });
-        Propagation { on_gpu: device.is_some(), device, window: false, params: PropagateParams::default(), job: None }
+        Propagation { on_gpu: device.is_some(), device, window: false, guide: None, params: PropagateParams::default(), job: None }
     }
 
     /// Une propagation tourne : le reste de l'interface attend.
@@ -82,21 +91,37 @@ fn preview(im: &Image, max: usize) -> egui::ColorImage {
 }
 
 impl App {
-    /// Action « calque.propager » : la fenêtre, si la propagation du calque courant est possible.
-    pub(crate) fn open_propagation(&mut self) {
-        match propager::outline(&self.doc, self.cur_panel, self.cur_layer) {
-            Ok(_) => self.propagation.window = true,
-            Err(e) => self.status = e,
+    /// Le guide de la propagation du calque courant : celui choisi s'il est encore possible, sinon
+    /// celui proposé d'abord.
+    fn propagation_guide(&self) -> Guide {
+        let choices = propager::guides(&self.doc, self.cur_panel, self.cur_layer);
+        match self.propagation.guide {
+            Some(g) if choices.iter().any(|(c, _)| *c == g) => g,
+            _ => propager::default_guide(&self.doc, self.cur_panel, self.cur_layer),
         }
     }
 
-    /// Dans le menu d'une ligne de calque : « Propager… », pour un calque bitmap d'un plan qui a un
-    /// calque vidéo.
+    /// Action « calque.propager » : la fenêtre, si le calque courant peut être propagé.
+    pub(crate) fn open_propagation(&mut self) {
+        let layer = self.layer();
+        if layer.video.is_some() || layer.folder || layer.kind != LayerKind::Bitmap {
+            self.status = "La propagation se fait sur un calque bitmap (peint au-dessus d'une vidéo ou d'une animation).".into();
+            return;
+        }
+        if propager::guides(&self.doc, self.cur_panel, self.cur_layer).is_empty() {
+            self.status = "Rien à suivre : il faut un autre calque dans le plan (vidéo, animation…).".into();
+            return;
+        }
+        self.propagation.window = true;
+    }
+
+    /// Dans le menu d'une ligne de calque : « Propager… », pour un calque bitmap d'un plan qui a
+    /// d'autres calques à suivre.
     pub(crate) fn propagation_menu(&mut self, ui: &mut egui::Ui, li: usize) {
         let paintable = self.layers().get(li).is_some_and(|l| l.video.is_none() && !l.folder && l.kind == LayerKind::Bitmap);
-        if paintable && propager::video_layer(&self.doc, self.cur_panel, li).is_some() {
+        if paintable && !propager::guides(&self.doc, self.cur_panel, li).is_empty() {
             ui.separator();
-            self.action_item(ui, "Propager la peinture sur la vidéo…", "calque.propager");
+            self.action_item(ui, "Propager la peinture…", "calque.propager");
         }
     }
 
@@ -110,44 +135,52 @@ impl App {
     }
 
     fn propagation_window(&mut self, ctx: &egui::Context) {
-        let outline = propager::outline(&self.doc, self.cur_panel, self.cur_layer);
+        let guide = self.propagation_guide();
+        let choices = propager::guides(&self.doc, self.cur_panel, self.cur_layer);
+        let outline = propager::outline(&self.doc, self.cur_panel, self.cur_layer, guide);
         let summary = outline.as_ref().map(|o| {
-            let video = self.layers()[o.video].name.clone();
             let keys: Vec<String> = o.keys.iter().map(|&k| self.frame_label(k)).collect();
-            (
-                format!("Calque « {} » sur la vidéo « {video} ».", self.layer().name),
-                format!(
-                    "Images {} à {} : {} {} ({}), {} images à fabriquer.",
-                    self.frame_label(o.range.start),
-                    self.frame_label(o.range.end - 1),
-                    o.keys.len(),
-                    if o.keys.len() > 1 { "clés" } else { "clé" },
-                    keys.join(", "),
-                    o.outputs()
-                ),
+            format!(
+                "Images {} à {} : {} {} ({}), {} images à fabriquer.",
+                self.frame_label(o.range.start),
+                self.frame_label(o.range.end - 1),
+                o.keys.len(),
+                if o.keys.len() > 1 { "clés" } else { "clé" },
+                keys.join(", "),
+                o.outputs()
             )
         });
+        let layer_name = self.layer().name.clone();
         let device = self.propagation.device.as_ref().map(|d| d.2.clone());
-        let (mut params, mut on_gpu) = (self.propagation.params.clone(), self.propagation.on_gpu);
+        let (mut params, mut on_gpu, mut chosen) = (self.propagation.params.clone(), self.propagation.on_gpu, guide);
         let (mut open, mut go) = (true, false);
         egui::Window::new("Propager la peinture")
             .collapsible(false)
             .resizable(false)
-            .default_pos(ctx.screen_rect().center() - vec2(220.0, 140.0))
+            .default_pos(ctx.screen_rect().center() - vec2(220.0, 160.0))
             .pivot(Align2::LEFT_TOP)
             .show(ctx, |ui| {
-                ui.set_width(440.0);
+                ui.set_width(460.0);
+                ui.label(format!("Calque peint : « {layer_name} »."));
+                ui.horizontal(|ui| {
+                    ui.label("Suivre");
+                    let current = choices.iter().find(|(g, _)| *g == chosen).map_or("", |(_, n)| n.as_str());
+                    egui::ComboBox::from_id_salt("guide_propagation").width(360.0).selected_text(current).show_ui(ui, |ui| {
+                        for (g, name) in &choices {
+                            ui.selectable_value(&mut chosen, *g, name);
+                        }
+                    });
+                });
                 match &summary {
                     Err(e) => {
                         ui.label(e.as_str());
                     }
-                    Ok((what, frames)) => {
-                        ui.label(what);
+                    Ok(frames) => {
                         ui.label(frames);
                         ui.label(
                             egui::RichText::new(
-                                "Les autres images du calque, sur la durée de la vidéo, sont remplacées par des dessins fabriqués ; \
-                                 les clés sont marquées « Clé » (retouche une clé puis repropage). Une seule étape d'annulation.",
+                                "Les autres images du calque sont remplacées par des dessins fabriqués ; les clés sont marquées « Clé » \
+                                 (retouche une clé puis repropage). Une seule étape d'annulation.",
                             )
                             .weak()
                             .small(),
@@ -166,7 +199,7 @@ impl App {
                 }
                 ui.collapsing("Réglages", |ui| {
                     let w = &mut params.weights;
-                    ui.add(egui::Slider::new(&mut w.video, 0.0..=20.0).text("Fidélité à la vidéo"));
+                    ui.add(egui::Slider::new(&mut w.video, 0.0..=20.0).text("Fidélité au guide"));
                     ui.add(egui::Slider::new(&mut w.position, 0.0..=40.0).text("Suivi du mouvement"));
                     ui.add(egui::Slider::new(&mut w.temporal, 0.0..=5.0).text("Anti-scintillement"));
                     ui.add(egui::Slider::new(&mut params.synth.uniformity, 500.0..=15000.0).text("Diversité"));
@@ -184,18 +217,20 @@ impl App {
                 });
             });
         (self.propagation.params, self.propagation.on_gpu, self.propagation.window) = (params, on_gpu, open);
+        self.propagation.guide = Some(chosen);
         if go {
-            self.start_propagation();
+            self.start_propagation(ctx);
         }
     }
 
-    fn start_propagation(&mut self) {
+    fn start_propagation(&mut self, ctx: &egui::Context) {
         if self.content_refuses() {
             return;
         }
         self.end_stroke();
         self.playing = false;
-        let plan = match propager::plan(&self.doc, self.cur_panel, self.cur_layer) {
+        let guide = self.propagation_guide();
+        let plan = match propager::plan(&self.doc, self.cur_panel, self.cur_layer, guide) {
             Ok(p) => p,
             Err(e) => {
                 self.status = e;
@@ -207,7 +242,9 @@ impl App {
         let (origin, keys, total) = (plan.origin, plan.outline.keys.clone(), plan.outline.outputs());
         let cancel = Arc::new(AtomicBool::new(false));
         let made = Arc::new(Mutex::new(Vec::new()));
-        let (stop, sink) = (cancel.clone(), made.clone());
+        let (stop, sink, wake) = (cancel.clone(), made.clone(), ctx.clone());
+        let (ask, requests) = channel::<usize>();
+        let (answers, replies) = channel::<Result<Image, String>>();
         let handle = std::thread::spawn(move || -> Result<String, String> {
             let (w, h) = plan.size;
             // La carte de l'affichage ; une image trop grande pour ses limites (la 4K) passe sur un
@@ -229,7 +266,19 @@ impl App {
                 }
                 None => (Box::new(Cpu), "processeur".into()),
             };
-            propager::run(&plan, synth.as_ref(), &params, &stop, |f, im| {
+            // Les images du guide : les fichiers de la vidéo, ou des calques composés demandés au
+            // fil de l'interface (réveillé pour répondre tout de suite).
+            let load = |f: usize| -> Result<Image, String> {
+                match plan.frames {
+                    Frames::Files(_) => plan.load_file(f),
+                    Frames::Rendered => {
+                        ask.send(f).map_err(|_| "l'interface ne répond plus".to_string())?;
+                        wake.request_repaint();
+                        replies.recv().map_err(|_| "l'interface ne répond plus".to_string())?
+                    }
+                }
+            };
+            propager::run(&plan, synth.as_ref(), &params, &stop, load, |f, im| {
                 sink.lock().unwrap_or_else(|e| e.into_inner()).push((f, im));
             })?;
             Ok(name)
@@ -238,11 +287,14 @@ impl App {
         self.propagation.job = Some(Job {
             panel: self.panel().id,
             layer: self.layer().id,
+            guide,
             origin,
             keys,
             total,
             cancel,
             made,
+            requests,
+            answers,
             handle,
             started: Instant::now(),
             preview: None,
@@ -251,6 +303,18 @@ impl App {
     }
 
     fn propagation_progress(&mut self, ctx: &egui::Context) {
+        // Les images de guide demandées par la tâche : composées ici, seul fil qui touche au
+        // document.
+        if let Some(job) = self.propagation.job.as_ref() {
+            let place = self.doc.panels.iter().position(|p| p.id == job.panel).and_then(|pi| {
+                let li = self.doc.panels[pi].layers.iter().position(|l| l.id == job.layer)?;
+                Some((pi, li))
+            });
+            while let Ok(f) = job.requests.try_recv() {
+                let image = place.map(|(pi, li)| propager::render_guide(&self.doc, pi, li, job.guide, f)).ok_or_else(|| "le calque a disparu".to_string());
+                let _ = job.answers.send(image);
+            }
+        }
         let Some(job) = self.propagation.job.as_mut() else { return };
         {
             let made = job.made.lock().unwrap_or_else(|e| e.into_inner());
