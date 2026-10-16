@@ -66,7 +66,7 @@ fn the_painting_follows_the_motion() {
 #[test]
 fn from_a_middle_key_both_ways() {
     let (order, out) = run(2, 5);
-    assert_eq!(order, [2, 3, 4, 1, 0]);
+    assert_eq!(order, [2, 1, 0, 3, 4]);
     for (t, im) in out.iter().enumerate() {
         let got = mean_diff(im.as_ref().unwrap(), &paint(&frame(t, W, H)), 12);
         assert!(got < 6.0, "image {t} : écart {got}");
@@ -78,7 +78,15 @@ fn errors_and_cancel() {
     let style = paint(&frame(0, W, H));
     let p = PropagateParams::default();
     let r = propagate(|t| Ok(frame(t, W, H)), 5, &style, 0..3, &p, |_, _| true);
-    assert!(matches!(r, Err(PropagateError::KeyOutsideRange)));
+    assert!(matches!(r, Err(PropagateError::KeyOutsideRange(5))));
+    let r = propagate_keys(|t| Ok(frame(t, W, H)), &[], 0..3, &p, |_, _| true);
+    assert!(matches!(r, Err(PropagateError::NoKey)));
+    let twice = [Key { frame: 1, style: &style }, Key { frame: 1, style: &style }];
+    let r = propagate_keys(|t| Ok(frame(t, W, H)), &twice, 0..3, &p, |_, _| true);
+    assert!(matches!(r, Err(PropagateError::DuplicateKey(1))));
+    let small = paint(&frame(0, W - 2, H));
+    let r = propagate_keys(|t| Ok(frame(t, W, H)), &[Key { frame: 0, style: &style }, Key { frame: 2, style: &small }], 0..3, &p, |_, _| true);
+    assert!(matches!(r, Err(PropagateError::Size(2))));
     let mut calls = 0;
     let r = propagate(|t| Ok(frame(t, W, H)), 0, &style, 0..5, &p, |_, _| {
         calls += 1;
@@ -90,6 +98,50 @@ fn errors_and_cancel() {
     assert!(matches!(r, Err(PropagateError::Size(1))));
     let r = propagate(|t| if t == 2 { Err("illisible".into()) } else { Ok(frame(t, W, H)) }, 0, &style, 0..3, &p, |_, _| true);
     assert!(matches!(r, Err(PropagateError::Load(2, _))));
+}
+
+/// Une autre « peinture », pour distinguer ce qui vient de chaque clé.
+fn paint2(im: &Image) -> Image {
+    let data = im.data.chunks_exact(3).flat_map(|p| [p[2], 255 - p[0], p[1]]).collect();
+    Image::new(im.width, im.height, 3, data)
+}
+
+/// Propage les clés données (image, peinture) sur 0..frames ; chaque image doit sortir une fois.
+fn run_keys(keys: &[(usize, Image)], frames: usize) -> Vec<Image> {
+    let keys: Vec<Key> = keys.iter().map(|(f, s)| Key { frame: *f, style: s }).collect();
+    let mut out = vec![None; frames];
+    propagate_keys(|t| Ok(frame(t, W, H)), &keys, 0..frames, &PropagateParams::default(), |t, im| {
+        assert!(out[t].is_none(), "image {t} deux fois");
+        out[t] = Some(im.clone());
+        true
+    })
+    .unwrap();
+    out.into_iter().map(|o| o.expect("chaque image")).collect()
+}
+
+#[test]
+fn two_keys_of_the_same_painting() {
+    let keys = [(0, paint(&frame(0, W, H))), (6, paint(&frame(6, W, H)))];
+    let out = run_keys(&keys, 8);
+    for (t, im) in out.iter().enumerate() {
+        let got = mean_diff(im, &paint(&frame(t, W, H)), 12);
+        assert!(got < 6.0, "image {t} : écart {got}");
+    }
+}
+
+#[test]
+fn two_different_paintings_hand_over() {
+    // Clé 0 peinte d'une façon, clé 6 d'une autre, aux couleurs toutes différentes. Les couleurs
+    // d'ensemble suivent le fondu enchaîné : on passe régulièrement de l'une à l'autre (écarts
+    // mesurés : 0, 15, 24, 34, 43, 54, 71 avec la première, l'inverse avec la seconde).
+    let keys = [(0, paint(&frame(0, W, H))), (6, paint2(&frame(6, W, H)))];
+    let out = run_keys(&keys, 7);
+    let d1 = |t: usize| mean_diff(&out[t], &paint(&frame(t, W, H)), 12);
+    let d2 = |t: usize| mean_diff(&out[t], &paint2(&frame(t, W, H)), 12);
+    for t in 0..6 {
+        assert!(d1(t) < d1(t + 1) && d2(t + 1) < d2(t), "image {t} : {} {} / {} {}", d1(t), d1(t + 1), d2(t), d2(t + 1));
+    }
+    assert!(d1(2) < d2(2) && d2(4) < d1(4), "passage au milieu : {} {} / {} {}", d1(2), d2(2), d1(4), d2(4));
 }
 
 #[test]

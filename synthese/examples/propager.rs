@@ -1,21 +1,25 @@
-//! Propager une image clé peinte sur les images d'une vidéo :
+//! Propager des images clés peintes sur les images d'une vidéo :
 //!
-//! cargo run --release --example propager -- -images <dossier> -cle <n> <cle.png> -sortie <dossier>
+//! cargo run --release --example propager -- -images <dossier> -cle <n> <cle.png> [-cle …] -sortie <dossier>
 //!
 //! `-images` : un dossier d'images numérotées (JPEG ou PNG), comme celui que Pelure remplit en
 //! important une vidéo (`videos/<id>/000001.jpg`…), dans l'ordre des noms. Les numéros comptent
-//! à partir de 1 (le premier fichier). `-cle <n> <cle.png>` : l'image n peinte, de la même taille.
+//! à partir de 1 (le premier fichier). `-cle <n> <cle.png>` : l'image n peinte, de la même taille ;
+//! autant de clés qu'on veut, mélangées entre elles.
 //! Options : `-de <n>` et `-a <n>` (plage, par défaut toute la vidéo), `-poids <clé> <vidéo>
 //! <position> <temporel>` (par défaut 1 4 10 1, ceux d'EbSynth), `-uniformity`, `-patchsize`,
-//! `-threads`, `-seed`, `-flux <dossier>` (écrit aussi le flux optique de chaque image en
-//! couleurs : la teinte donne la direction, l'intensité la longueur).
+//! `-threads`, `-seed`, `-attache <poids>` (du fondu enchaîné dans le mélange, 0,1 par défaut),
+//! `-douceur <largeur>` (de la bascule d'une clé à l'autre, voir `BlendParams::softness`),
+//! `-fondu` (simple fondu enchaîné entre les clés, pour comparer), `-flux <dossier>` (écrit aussi
+//! le flux optique de chaque image en couleurs : la teinte donne la direction, l'intensité la
+//! longueur).
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Instant;
 
 use synthese::flow::{flow, Flow, Gray};
-use synthese::propagation::{propagate, PropagateParams};
+use synthese::propagation::{propagate_keys, Key, PropagateParams};
 use synthese::Image;
 
 fn frames_in(dir: &Path) -> Result<Vec<PathBuf>, String> {
@@ -75,7 +79,8 @@ fn flow_colors(f: &Flow) -> Image {
 }
 
 fn run(args: &[String]) -> Result<(), String> {
-    let (mut images, mut key, mut output, mut flow_dir) = (None, None, None, None);
+    let (mut images, mut output, mut flow_dir) = (None, None, None);
+    let mut keys: Vec<(usize, PathBuf)> = Vec::new();
     let (mut from, mut to) = (None, None);
     let mut params = PropagateParams::default();
     let mut it = args.iter();
@@ -88,8 +93,11 @@ fn run(args: &[String]) -> Result<(), String> {
             "-images" => images = Some(PathBuf::from(next(&mut it, arg)?)),
             "-cle" => {
                 let n: usize = number(next(&mut it, arg)?, arg)?;
-                key = Some((n, PathBuf::from(next(&mut it, arg)?)));
+                keys.push((n, PathBuf::from(next(&mut it, arg)?)));
             }
+            "-attache" => params.blend.screen = number(next(&mut it, arg)?, arg)?,
+            "-douceur" => params.blend.softness = number(next(&mut it, arg)?, arg)?,
+            "-fondu" => params.blend.linear = true,
             "-sortie" => output = Some(PathBuf::from(next(&mut it, arg)?)),
             "-de" => from = Some(number::<usize>(next(&mut it, arg)?, arg)?),
             "-a" => to = Some(number::<usize>(next(&mut it, arg)?, arg)?),
@@ -112,36 +120,40 @@ fn run(args: &[String]) -> Result<(), String> {
         }
     }
     let files = frames_in(&images.ok_or("il faut -images <dossier>")?)?;
-    let (key_n, key_path) = key.ok_or("il faut -cle <n> <cle.png>")?;
+    if keys.is_empty() {
+        return Err("il faut au moins une -cle <n> <cle.png>".into());
+    }
     let output = output.ok_or("il faut -sortie <dossier>")?;
     std::fs::create_dir_all(&output).map_err(|e| format!("{} : {e}", output.display()))?;
     let (first, last) = (from.unwrap_or(1).max(1), to.unwrap_or(files.len()).min(files.len()));
-    if !(first..=last).contains(&key_n) {
-        return Err(format!("la clé {key_n} n'est pas dans la plage {first}..{last}"));
+    if let Some((n, _)) = keys.iter().find(|(n, _)| !(first..=last).contains(n)) {
+        return Err(format!("la clé {n} n'est pas dans la plage {first}..{last}"));
     }
-    let (kw, kh, rgba) = load_rgba(&key_path)?;
-    let style = Image::from_rgba(kw, kh, &rgba, Image::channels_needed(&rgba));
-    println!("{} images, clé {key_n}, plage {first} à {last}, {kw}×{kh}", files.len());
+    let mut styles = Vec::new();
+    for (_, path) in &keys {
+        let (kw, kh, rgba) = load_rgba(path)?;
+        styles.push(Image::from_rgba(kw, kh, &rgba, Image::channels_needed(&rgba)));
+    }
+    let numbers: Vec<String> = keys.iter().map(|(n, _)| n.to_string()).collect();
+    println!("{} images, clés {}, plage {first} à {last}, {}×{}", files.len(), numbers.join(", "), styles[0].width, styles[0].height);
 
     let load = |i: usize| -> Result<Image, String> {
         let (w, h, rgba) = load_rgba(&files[i])?;
         Ok(Image::from_rgba(w, h, &rgba, 3))
     };
     if let Some(dir) = &flow_dir {
+        // Flux de chaque image vers la précédente.
         std::fs::create_dir_all(dir).map_err(|e| format!("{} : {e}", dir.display()))?;
-        for t in first..=last {
-            if t == key_n {
-                continue;
-            }
-            let prev = if t > key_n { t - 1 } else { t + 1 };
-            let f = flow(&Gray::from_image(&load(t - 1)?), &Gray::from_image(&load(prev - 1)?), &params.flow);
+        for t in first + 1..=last {
+            let f = flow(&Gray::from_image(&load(t - 1)?), &Gray::from_image(&load(t - 2)?), &params.flow);
             save(&dir.join(format!("{t:06}.png")), &flow_colors(&f))?;
         }
     }
+    let key_list: Vec<Key> = keys.iter().zip(&styles).map(|((n, _), style)| Key { frame: n - 1, style }).collect();
     let start = Instant::now();
     let mut last_time = Instant::now();
     let mut failed = None;
-    let result = propagate(load, key_n - 1, &style, first - 1..last, &params, |i, im| {
+    let result = propagate_keys(load, &key_list, first - 1..last, &params, |i, im| {
         if let Err(e) = save(&output.join(format!("{:06}.png", i + 1)), im) {
             failed = Some(e);
             return false;
@@ -161,7 +173,7 @@ fn run(args: &[String]) -> Result<(), String> {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() {
-        println!("usage : propager -images <dossier> -cle <n> <cle.png> -sortie <dossier> [-de <n>] [-a <n>] [-poids <clé> <vidéo> <position> <temporel>] [-flux <dossier>]");
+        println!("usage : propager -images <dossier> -cle <n> <cle.png> [-cle …] -sortie <dossier> [-de <n>] [-a <n>] [-poids <clé> <vidéo> <position> <temporel>] [-attache <poids>] [-fondu] [-flux <dossier>]");
         return ExitCode::from(1);
     }
     match run(&args) {

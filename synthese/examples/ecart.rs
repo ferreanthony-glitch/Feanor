@@ -5,6 +5,9 @@
 //!     patchs qui change d'une passe à l'autre) et part des pixels qui diffèrent de plus de 32.
 //! cargo run --release --example ecart -- -montage sortie.png a.png b.png …
 //!     les images côte à côte, pour les regarder.
+//! cargo run --release --example ecart -- -detail a.png b.png …
+//!     le contraste du détail de chaque image : écart moyen entre pixels voisins (un fondu
+//!     enchaîné de deux textures différentes le fait baisser).
 
 use std::process::ExitCode;
 
@@ -12,6 +15,26 @@ use image::{GenericImage, RgbImage};
 
 fn load(path: &str) -> Result<RgbImage, String> {
     Ok(image::open(path).map_err(|e| format!("impossible de lire '{path}' : {e}"))?.to_rgb8())
+}
+
+fn detail(paths: &[String]) -> Result<(), String> {
+    for p in paths {
+        let im = load(p)?;
+        let (w, h) = (im.width() as usize, im.height() as usize);
+        let px = im.as_raw();
+        let (mut s, mut n) = (0f64, 0u64);
+        for y in 0..h - 1 {
+            for x in 0..w - 1 {
+                for k in 0..3 {
+                    let v = px[(y * w + x) * 3 + k] as f64;
+                    s += (px[(y * w + x + 1) * 3 + k] as f64 - v).abs() + (px[((y + 1) * w + x) * 3 + k] as f64 - v).abs();
+                    n += 2;
+                }
+            }
+        }
+        println!("{p} : détail {:.2}", s / n as f64);
+    }
+    Ok(())
 }
 
 /// Flou en boîte (2r+1)², bords répétés.
@@ -73,6 +96,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.as_slice() {
         [flag, out, rest @ ..] if flag == "-montage" && !rest.is_empty() => montage(out, rest),
+        [flag, rest @ ..] if flag == "-detail" && !rest.is_empty() => detail(rest),
         [a, b] => compare(a, b),
         _ => Err("usage : ecart a.png b.png   ou   ecart -montage sortie.png a.png b.png …".into()),
     };

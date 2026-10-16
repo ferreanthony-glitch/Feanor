@@ -1,6 +1,7 @@
 //! Synthèse d'image par l'exemple (phase « propagation », étape a) : portage en Rust de la version
 //! processeur d'ebsynth (Ondřej Jamriška, domaine public, https://github.com/jamriska/ebsynth).
 //! Étape b : `flow` (flux optique) et `propagation` (une image clé propagée sur une vidéo).
+//! Étape c : plusieurs clés, `blend` (mélange des séquences venues de deux clés).
 //!
 //! On donne une image de style (la peinture) et des paires de guides (source, cible) : la synthèse
 //! fabrique une image de la taille des guides cibles en recopiant des morceaux carrés (patchs) du
@@ -20,9 +21,12 @@
 //! Attention : PatchMatch est breveté par Adobe (brevet américain 8,861,869), comme le signale le
 //! README d'ebsynth. À vérifier avant de distribuer ou de vendre Pelure.
 
+pub mod blend;
 pub mod flow;
 mod patchmatch;
 pub mod propagation;
+#[cfg(test)]
+mod blend_tests;
 #[cfg(test)]
 mod flow_tests;
 #[cfg(test)]
@@ -136,11 +140,14 @@ impl Default for Params {
 }
 
 /// Résultat : l'image fabriquée (canaux du style, taille des guides cibles) et, pour chacun de ses
-/// pixels, le centre du patch du style qui lui a été attribué (`nnf[y * largeur + x] = [x, y]`).
+/// pixels, le centre du patch du style qui lui a été attribué (`nnf[y * largeur + x] = [x, y]`)
+/// et le coût de ce patch (`error` : écarts pondérés du style et des guides, sans l'uniformité ;
+/// plus il est grand, moins le pixel ressemble à ce que demandent les guides).
 #[derive(Clone, Debug)]
 pub struct Output {
     pub image: Image,
     pub nnf: Vec<[i32; 2]>,
+    pub error: Vec<f32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -293,7 +300,7 @@ pub fn synthesize(style: &Image, style_weight: f32, guides: &[GuidePair], params
         }
         if last {
             let data = target.data.chunks_exact(c).flat_map(|p| &p[..ns]).copied().collect();
-            result = Some(Output { image: Image::new(tw, th, ns, data), nnf });
+            result = Some(Output { image: Image::new(tw, th, ns, data), nnf, error: errors });
         } else {
             prev_nnf = Some((nnf, ltw, lth));
         }

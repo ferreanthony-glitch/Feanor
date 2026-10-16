@@ -10,12 +10,16 @@
 //!
 //! Poids par défaut ceux d'EbSynth : clé 1, vidéo 4, position (« Mapping ») 10, temporel
 //! (« De-flicker ») 1.
+//!
+//! Plusieurs clés (étape c) : avant la première et après la dernière, une seule séquence ; entre
+//! deux clés, une séquence depuis chacune, mélangées image par image (`blend`).
 
 use std::fmt;
 use std::ops::Range;
 
+use crate::blend::{blend, BlendParams, ErrorMap};
 use crate::flow::{flow, Flow, FlowParams, Gray};
-use crate::{synthesize, Error, GuidePair, Image, Params};
+use crate::{synthesize, Error, GuidePair, Image, Output, Params};
 
 /// Poids des guides de la propagation.
 #[derive(Clone, Debug, PartialEq)]
@@ -37,16 +41,27 @@ pub struct PropagateParams {
     pub weights: Weights,
     pub synth: Params,
     pub flow: FlowParams,
+    pub blend: BlendParams,
+}
+
+/// Une image clé : la peinture `style` de l'image `frame` de la vidéo.
+#[derive(Clone, Copy, Debug)]
+pub struct Key<'a> {
+    pub frame: usize,
+    pub style: &'a Image,
 }
 
 #[derive(Debug)]
 pub enum PropagateError {
     /// L'image n'a pas pu être lue.
     Load(usize, String),
-    /// L'image n'a pas la taille (ou le nombre de canaux) de l'image clé.
+    /// L'image n'a pas la taille (ou le nombre de canaux) des autres.
     Size(usize),
-    /// La clé n'est pas dans la plage d'images à fabriquer.
-    KeyOutsideRange,
+    NoKey,
+    /// Cette clé n'est pas dans la plage d'images à fabriquer.
+    KeyOutsideRange(usize),
+    /// Deux clés sur la même image.
+    DuplicateKey(usize),
     Synth(usize, Error),
     /// `each` a demandé d'arrêter.
     Cancelled,
@@ -56,8 +71,10 @@ impl fmt::Display for PropagateError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             PropagateError::Load(i, e) => write!(f, "image {} : {e}", i + 1),
-            PropagateError::Size(i) => write!(f, "l'image {} n'a pas la taille de l'image clé", i + 1),
-            PropagateError::KeyOutsideRange => write!(f, "l'image clé n'est pas dans la plage"),
+            PropagateError::Size(i) => write!(f, "l'image {} n'a pas la taille des autres", i + 1),
+            PropagateError::NoKey => write!(f, "il faut au moins une image clé"),
+            PropagateError::KeyOutsideRange(i) => write!(f, "la clé de l'image {} n'est pas dans la plage", i + 1),
+            PropagateError::DuplicateKey(i) => write!(f, "deux clés sur l'image {}", i + 1),
             PropagateError::Synth(i, e) => write!(f, "image {} : {e}", i + 1),
             PropagateError::Cancelled => write!(f, "propagation arrêtée"),
         }
@@ -114,62 +131,116 @@ fn identity(width: usize, height: usize) -> Flow {
     Flow { width, height, data: (0..width * height).map(|i| [(i % width) as f32, (i / width) as f32]).collect() }
 }
 
+/// Taille des carrés de l'erreur réduite qui décide du mélange.
+const ERROR_CELL: usize = 8;
+
 /// Propage la clé `style`, peinte sur l'image `key` de la vidéo, sur les images `range` (qui
-/// contient `key`). `load(i)` lit l'image `i` de la vidéo ; `each(i, image)` reçoit chaque image
-/// fabriquée (la clé elle-même pour `key`, puis en avançant, puis en reculant depuis la clé) et
-/// renvoie `false` pour arrêter.
+/// contient `key`) : `propagate_keys` avec une seule clé.
 pub fn propagate(
-    mut load: impl FnMut(usize) -> Result<Image, String>,
+    load: impl FnMut(usize) -> Result<Image, String>,
     key: usize,
     style: &Image,
     range: Range<usize>,
     params: &PropagateParams,
+    each: impl FnMut(usize, &Image) -> bool,
+) -> Result<(), PropagateError> {
+    propagate_keys(load, &[Key { frame: key, style }], range, params, each)
+}
+
+/// Propage les clés `keys` sur les images `range` (qui les contient toutes). `load(i)` lit l'image
+/// `i` de la vidéo ; `each(i, image)` reçoit chaque image fabriquée, une fois chacune, et renvoie
+/// `false` pour arrêter. Ordre : les clés elles-mêmes, les images avant la première clé (en
+/// reculant), celles entre deux clés (en reculant depuis la seconde, une fois la séquence depuis
+/// la première faite), celles après la dernière clé (en avançant).
+pub fn propagate_keys(
+    mut load: impl FnMut(usize) -> Result<Image, String>,
+    keys: &[Key],
+    range: Range<usize>,
+    params: &PropagateParams,
     mut each: impl FnMut(usize, &Image) -> bool,
 ) -> Result<(), PropagateError> {
-    if !range.contains(&key) {
-        return Err(PropagateError::KeyOutsideRange);
+    let mut keys = keys.to_vec();
+    keys.sort_by_key(|k| k.frame);
+    let (Some(first), Some(last)) = (keys.first().copied(), keys.last().copied()) else {
+        return Err(PropagateError::NoKey);
+    };
+    if let Some(k) = keys.iter().find(|k| !range.contains(&k.frame)) {
+        return Err(PropagateError::KeyOutsideRange(k.frame));
     }
-    let key_frame = load(key).map_err(|e| PropagateError::Load(key, e))?;
-    let (w, h) = (key_frame.width, key_frame.height);
-    if (style.width, style.height) != (w, h) {
-        return Err(PropagateError::Size(key));
+    if let Some(pair) = keys.windows(2).find(|p| p[0].frame == p[1].frame) {
+        return Err(PropagateError::DuplicateKey(pair[0].frame));
     }
-    if !each(key, style) {
-        return Err(PropagateError::Cancelled);
+    let mut frames = Vec::with_capacity(keys.len());
+    for k in &keys {
+        let f = load(k.frame).map_err(|e| PropagateError::Load(k.frame, e))?;
+        let size = |im: &Image| (im.width, im.height);
+        if size(k.style) != size(&f) || frames.first().is_some_and(|f0: &Image| (size(f0), f0.channels) != (size(&f), f.channels)) {
+            return Err(PropagateError::Size(k.frame));
+        }
+        frames.push(f);
     }
-    let key_gray = Gray::from_image(&key_frame);
+    let mut emit = |t: usize, im: &Image| if each(t, im) { Ok(()) } else { Err(PropagateError::Cancelled) };
+    for k in &keys {
+        emit(k.frame, k.style)?;
+    }
+    chain(&mut load, first, &frames[0], (range.start..first.frame).rev(), params, |t, o| emit(t, &o.image))?;
+    for (i, pair) in keys.windows(2).enumerate() {
+        let (k1, k2) = (pair[0], pair[1]);
+        let mut from_first: Vec<(Image, ErrorMap)> = Vec::with_capacity(k2.frame - k1.frame);
+        chain(&mut load, k1, &frames[i], k1.frame + 1..k2.frame, params, |_, o| {
+            let e = ErrorMap::new(&o.error, o.image.width, o.image.height, ERROR_CELL);
+            from_first.push((o.image, e));
+            Ok(())
+        })?;
+        let span = (k2.frame - k1.frame) as f32;
+        chain(&mut load, k2, &frames[i + 1], (k1.frame + 1..k2.frame).rev(), params, |t, o| {
+            let (a, ea) = &from_first[t - k1.frame - 1];
+            let eb = ErrorMap::new(&o.error, o.image.width, o.image.height, ERROR_CELL);
+            emit(t, &blend(a, ea, &o.image, &eb, (t - k1.frame) as f32 / span, &params.blend))
+        })?;
+    }
+    chain(&mut load, last, &frames[keys.len() - 1], last.frame + 1..range.end, params, |t, o| emit(t, &o.image))
+}
+
+/// Une séquence depuis la clé `key` (sur l'image de la vidéo `key_frame`) : les images `steps`,
+/// chacune voisine de la précédente (la première voisine de la clé). `out(t, résultat)` reçoit
+/// chacune.
+fn chain(
+    load: &mut impl FnMut(usize) -> Result<Image, String>,
+    key: Key,
+    key_frame: &Image,
+    steps: impl Iterator<Item = usize>,
+    params: &PropagateParams,
+    mut out: impl FnMut(usize, Output) -> Result<(), PropagateError>,
+) -> Result<(), PropagateError> {
+    let (w, h, style) = (key_frame.width, key_frame.height, key.style);
     let key_position = position_guide(&identity(w, h));
     let wt = &params.weights;
-    let directions: [Vec<usize>; 2] = [(key + 1..range.end).collect(), (range.start..key).rev().collect()];
-    for steps in directions {
-        let (mut prev_gray, mut prev_out, mut pos) = (key_gray.clone(), style.clone(), identity(w, h));
-        for t in steps {
-            let frame = load(t).map_err(|e| PropagateError::Load(t, e))?;
-            if (frame.width, frame.height, frame.channels) != (w, h, key_frame.channels) {
-                return Err(PropagateError::Size(t));
-            }
-            let gray = Gray::from_image(&frame);
-            // Pour chaque pixel de l'image t, où il était dans l'image d'avant.
-            let back = flow(&gray, &prev_gray, &params.flow);
-            pos = warp_positions(&pos, &back);
-            let position = position_guide(&pos);
-            let temporal = warp(&prev_out, &back);
-            let mut guides = Vec::new();
-            if wt.video > 0.0 {
-                guides.push(GuidePair { source: &key_frame, target: &frame, weight: wt.video });
-            }
-            if wt.position > 0.0 {
-                guides.push(GuidePair { source: &key_position, target: &position, weight: wt.position });
-            }
-            if wt.temporal > 0.0 {
-                guides.push(GuidePair { source: style, target: &temporal, weight: wt.temporal });
-            }
-            let out = synthesize(style, wt.style, &guides, &params.synth).map_err(|e| PropagateError::Synth(t, e))?;
-            if !each(t, &out.image) {
-                return Err(PropagateError::Cancelled);
-            }
-            (prev_gray, prev_out) = (gray, out.image);
+    let (mut prev_gray, mut prev_out, mut pos) = (Gray::from_image(key_frame), style.clone(), identity(w, h));
+    for t in steps {
+        let frame = load(t).map_err(|e| PropagateError::Load(t, e))?;
+        if (frame.width, frame.height, frame.channels) != (w, h, key_frame.channels) {
+            return Err(PropagateError::Size(t));
         }
+        let gray = Gray::from_image(&frame);
+        // Pour chaque pixel de l'image t, où il était dans l'image d'avant.
+        let back = flow(&gray, &prev_gray, &params.flow);
+        pos = warp_positions(&pos, &back);
+        let position = position_guide(&pos);
+        let temporal = warp(&prev_out, &back);
+        let mut guides = Vec::new();
+        if wt.video > 0.0 {
+            guides.push(GuidePair { source: key_frame, target: &frame, weight: wt.video });
+        }
+        if wt.position > 0.0 {
+            guides.push(GuidePair { source: &key_position, target: &position, weight: wt.position });
+        }
+        if wt.temporal > 0.0 {
+            guides.push(GuidePair { source: style, target: &temporal, weight: wt.temporal });
+        }
+        let result = synthesize(style, wt.style, &guides, &params.synth).map_err(|e| PropagateError::Synth(t, e))?;
+        (prev_gray, prev_out) = (gray, result.image.clone());
+        out(t, result)?;
     }
     Ok(())
 }

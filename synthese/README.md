@@ -2,9 +2,9 @@
 
 La propagation façon EbSynth : on peint une image clé, et elle est recopiée par morceaux sur les
 autres images de la vidéo en suivant des guides. Étape a : la synthèse guidée (ci-dessous).
-Étape b : le flux optique et la propagation d'une clé sur une vidéo (plus bas). Ce dossier est
-un projet Cargo à part (comme `src-tauri/`), sans dépendance ; Pelure l'utilisera par son chemin
-à l'étape e.
+Étape b : le flux optique et la propagation d'une clé sur une vidéo. Étape c : plusieurs clés et
+leur mélange (plus bas). Ce dossier est un projet Cargo à part (comme `src-tauri/`), sans
+dépendance ; Pelure l'utilisera par son chemin à l'étape e.
 
 C'est un portage en Rust de la version processeur d'[ebsynth](https://github.com/jamriska/ebsynth)
 (Ondřej Jamriška, domaine public) : pyramide d'images, PatchMatch avec uniformité, vote simple,
@@ -140,8 +140,62 @@ la peinture à l'huile de l'exemple facestyle, guidée par la luminosité.
 - Scintillement moyen 1,71, contre 1,46 pour la vidéo. Sans le guide temporel (images 30 à 42) :
   2,05 contre 1,76 avec, pour une vidéo à 1,17.
 
+## Étape c : plusieurs clés
+
+```rust
+use synthese::propagation::{propagate_keys, Key, PropagateParams};
+
+let cles = [Key { frame: 29, style: &peinture_30 }, Key { frame: 59, style: &peinture_60 }];
+propagate_keys(load, &cles, 0..nombre, &PropagateParams::default(), |i, im| { …; true })?;
+```
+
+- Avant la première clé et après la dernière : une seule séquence, comme à l'étape b.
+- Entre deux clés : une séquence depuis chacune (A depuis la clé d'avant, B depuis celle
+  d'après), puis un mélange image par image (`blend.rs`).
+- Chaque image sort une fois. Une séquence A est gardée en mémoire le temps de faire B.
+
+**Mélange** (« Stylizing Video by Example », section sur le mélange des clés). Un fondu enchaîné
+(1 − α)·A + α·B double les traits et délave la texture là où A et B diffèrent. On mélange plutôt
+dans le domaine des gradients :
+- La synthèse rend son erreur par pixel (`Output::error`), moyennée par carrés de 8 pixels.
+- Chaque pixel prend ses détails de A tant que la part d'erreur de A, ea / (ea + eb), reste sous
+  1 − α. C'est donc d'abord là où B est meilleure qu'on passe à B.
+- La bascule est étalée (`softness`, 0,5 par défaut) pour éviter un saut de texture d'une image à
+  l'autre.
+- Les couleurs d'ensemble suivent le fondu (attache `screen` = 0,1 : les formes de plus d'environ
+  20 pixels).
+- L'image est la solution de l'équation de Poisson écrantée, trouvée par gradient conjugué (au
+  plus 300 itérations, un fil par canal).
+
+Mesures sur l'animatique (clés « peintes » 40 et 50, images 40 à 50 ; la vidéo seule est à 1,77) :
+
+| Mélange | Scintillement | Détail à l'image 45 |
+|---|---|---|
+| bascule nette (`softness` 0) | 2,33 | 4,63 |
+| `softness` 0,3 | 2,25 | 4,61 |
+| `softness` 0,6 | 2,19 | 4,59 |
+| fondu enchaîné | 2,01 | 4,46 |
+
+Le « détail » est l'écart moyen entre pixels voisins (`ecart -detail`). Il est dominé par les
+traits noirs, communs à A et B. À l'œil, le fondu dédouble un peu les contours, et la bascule
+nette garde la touche la plus franche. Plus la bascule est douce, moins ça scintille, et moins il
+reste de détail.
+
+Sur les images 30 à 60, avec des clés en 30 et 60 peintes séparément, comme le ferait un artiste :
+- 31 images en 5 min 15 s : entre deux clés, chaque image est synthétisée deux fois.
+- Près de l'image 60, la seconde clé remplace la peinture étirée du premier plan.
+
+| Version | Scintillement (vidéo 1,46) | Détail à l'image 45 |
+|---|---|---|
+| une clé (30) | 1,71 | 4,71 |
+| deux clés, bascule nette | 1,88 | 4,64 |
+| deux clés, `softness` 0,5 (par défaut) | 1,84 | 4,62 |
+| deux clés, fondu enchaîné | 1,66 | 4,51 |
+
+**Outils** : `propager` accepte plusieurs `-cle <n> <cle.png>`, plus `-douceur <x>`, `-attache <x>`
+et `-fondu` (simple fondu enchaîné, pour comparer). `ecart -detail a.png …` mesure le détail.
+
 ## Suite
 
-- c. Plusieurs clés et mélange entre elles.
 - d. Calcul sur la carte graphique (wgpu).
 - e. Dans Pelure : un calque vidéo, des clés, « Propager », des cels en sortie (annulables).
