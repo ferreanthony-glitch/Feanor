@@ -310,6 +310,7 @@ impl App {
     /// Abandonne un glissé en cours dans la bande de montage (la durée revient à l'original).
     pub(crate) fn cancel_montage_drag(&mut self) {
         self.cancel_camera_key_drag();
+        self.cancel_handle_drag();
         match self.montage_drag.take() {
             Some(MontageDrag::Trim { panel, original, .. }) => {
                 if self.doc.panels.get(panel).is_some_and(|s| s.id == original.id) {

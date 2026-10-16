@@ -473,6 +473,10 @@ pub struct App {
     pub(crate) panel_focus: bool,
     /// Clé de caméra que l'on fait glisser dans la timeline ou le montage (12e).
     pub(crate) cam_key_drag: Option<crate::camtools::CamKeyDrag>,
+    /// Poignée tenue dans la timeline du plan (passe interface, `handles.rs`).
+    pub(crate) handle_drag: Option<crate::handles::HandleDrag>,
+    /// Menu du dernier clic droit dans la timeline hors des cases (`handles::GridMenu`).
+    pub(crate) grid_menu: Option<crate::handles::GridMenu>,
     pub(crate) shape_drag: Option<(Pos2, Pos2)>,
     /// Forme en plusieurs gestes : ligne à courber, polyligne en cours (5c).
     pub(crate) shape_edit: Option<crate::shapes::ShapeEdit>,
@@ -707,6 +711,8 @@ impl App {
             panel_clipboard: None,
             panel_focus: false,
             cam_key_drag: None,
+            handle_drag: None,
+            grid_menu: None,
             shape_drag: None,
             shape_edit: None,
             text_edit: None,

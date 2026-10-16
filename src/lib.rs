@@ -62,6 +62,9 @@ mod frames_tests;
 mod gpu;
 mod groups;
 mod groupsui;
+mod handles;
+#[cfg(test)]
+mod handles_tests;
 mod guides;
 #[cfg(test)]
 mod guides_tests;

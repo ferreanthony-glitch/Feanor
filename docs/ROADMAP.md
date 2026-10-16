@@ -746,8 +746,34 @@ ECMAScript 3), elle, est documentée (aide `help/storyboard`). Choix d'Anthony (
   - Vérifié sur les projets BRAWLIDAYS (partie 1 : 12 plans, 39 panneaux, 834 images ; partie 2 :
     45 plans, 322 panneaux, 3 323 images, lue en 0,2 s). Le script n'a pas pu être essayé ici
     (Storyboard Pro n'est jamais lancé par Claude) : à essayer par Anthony.
-- 14b. Vers Storyboard Pro : le script qui reconstruit le projet (à faire).
+- 14b. Vers Storyboard Pro : le script qui reconstruit le projet (à faire, après la passe
+  interface).
 - Caméra de Storyboard Pro (plus tard).
+
+## Passe interface (demandée par Anthony le 2026-10-16, avant 14b)
+
+Simplifier l'interface et combler ce qui manque :
+- poignées pour glisser les clés dans la timeline, étirer les calques, les monter ou les
+  descendre en les glissant ;
+- clic droit partout où c'est possible, et sur chaque icône, « Assigner un raccourci » ;
+- dans Fichier, la résolution du projet et une fenêtre des raccourcis.
+
+- ✅ Raccourcis :
+  - clic droit sur une icône, un interrupteur ou une entrée de menu → « Assigner un
+    raccourci… » : on tape la combinaison, Pelure signale celle qui est déjà prise, puis
+    Remplacer, Ajouter, Retirer ou Par défaut ;
+  - Fichier > Raccourcis clavier… (F1) : toutes les commandes, avec une recherche ;
+  - fichier personnel écrit par Pelure ;
+  - nouvelles actions pour des icônes qui n'en avaient pas : lecture en boucle, avancer / reculer
+    le plan.
+- ✅ Fichier > Réglages du projet :
+  - onglet Réglages : les propriétés, plus le numéro de la première image ;
+  - onglet Résolution : préréglages, largeur et hauteur liées, dessins à l'échelle ou cadre seul
+    (choix d'Anthony : les deux), cadence en gardant les secondes ou les images.
+- ✅ Montage : la case « Storyboard » devient la colonne du projet (choix d'Anthony : « seulement
+  les boutons », comme la colonne de gauche du panneau Projet de TVPaint) : nouveau plan, plan
+  avant, dupliquer, supprimer, nouvelle séquence, verrou, réglages, nom du projet.
+- Poignées et glissés dans la timeline et le montage, menus au clic droit partout : en cours.
 
 ## Raccourcis proposés, à valider
 
