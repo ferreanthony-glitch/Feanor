@@ -91,8 +91,12 @@ fn exported(raw: &[Element], s: f32, ox: f32, oy: f32) -> Raster {
 fn drawing_is_fitted_on_the_exported_image() {
     let raw = raw_elements(&tutorial());
     let target = exported(&raw, 0.3, 800.0, 600.0);
-    let (placed, score) = fit_to_image(&raw, &target).expect("calé");
+    let fit = fit_to_image(&raw, &target).expect("calé");
+    let (placed, score) = (&fit.elements, fit.score);
     assert!(score > 0.85, "recouvrement {score}");
+    // La mesure : 0,3 pixel par unité, axe vers le haut, origine posée en (800, 600).
+    assert!((fit.scale - 0.3).abs() < 0.01 && fit.y_up, "échelle {} {}", fit.scale, fit.y_up);
+    assert!((fit.origin[0] - 800.0).abs() < 3.0 && (fit.origin[1] - 600.0).abs() < 3.0, "origine {:?}", fit.origin);
     // Le coin (-1333.5, 619.4) du modèle tombe en (800 - 400, 600 - 186).
     let Element::Fill { contours, .. } = &placed[0] else { panic!() };
     let p = contours[0][0];

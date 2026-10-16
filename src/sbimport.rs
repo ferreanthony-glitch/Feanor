@@ -82,6 +82,7 @@ pub fn build(sb: &SbProject, project_dir: &Path, drawings: Option<&Drawings>, pr
         }
         warnings.push(w);
     }
+    warnings.extend(measure_note(&stats.measures));
     warnings.extend(doc.into_plans());
     add_sounds(&mut doc, sb, &project_dir.join("audio"), &mut warnings);
     progress(1.0);
@@ -149,7 +150,7 @@ fn panel_layers(
                 layer.visible = dl.visible;
                 layer.locked = dl.locked;
                 if let Some(file) = &dl.file {
-                    match cel_from_export(doc, file, dl.traits.as_deref(), cels) {
+                    match cel_from_export(doc, file, dl.traits.as_deref(), cels, &mut stats.measures) {
                         Ok((cel, vector)) => {
                             layer.frames = vec![Some(cel); p.frames];
                             layer.kind = if vector { LayerKind::Vector } else { LayerKind::Bitmap };
@@ -185,11 +186,41 @@ struct VectorStats {
     tried: usize,
     kept: usize,
     notes: Vec<String>,
+    /// Calage de chaque dessin gardé en vecteurs.
+    measures: Vec<Measure>,
+}
+
+/// Calage d'un dessin vectoriel sur son image (`sbvector::Fit`) : pixels du cadre par unité
+/// de Storyboard Pro, sens de l'axe vertical, origine (0, 0) par rapport au centre du cadre.
+struct Measure {
+    scale: f32,
+    y_up: bool,
+    origin: [f32; 2],
+}
+
+/// La mesure retenue (médiane des calages) en une phrase, pour l'export des vecteurs (14b-2).
+fn measure_note(m: &[Measure]) -> Option<String> {
+    if m.is_empty() {
+        return None;
+    }
+    let median = |mut v: Vec<f32>| {
+        v.sort_by(f32::total_cmp);
+        v[v.len() / 2]
+    };
+    let s = median(m.iter().map(|x| x.scale).collect());
+    let ox = median(m.iter().map(|x| x.origin[0]).collect());
+    let oy = median(m.iter().map(|x| x.origin[1]).collect());
+    let up = m.iter().filter(|x| x.y_up).count() * 2 >= m.len();
+    Some(format!(
+        "Mesure des dessins vectoriels ({} calage(s)) : 1 unité de Storyboard Pro = {s:.4} pixel, axe vertical vers le {}, origine à ({ox:.1}, {oy:.1}) pixels du centre du cadre.",
+        m.len(),
+        if up { "haut" } else { "bas" }
+    ))
 }
 
 /// Le dessin d'un calque exporté (le même pour deux exports identiques) : vectoriel si ses
 /// traits ont pu être lus et calés sur l'image (`sbvector`), sinon l'image. Vrai : vectoriel.
-fn cel_from_export(doc: &mut Document, png: &Path, traits: Option<&Path>, cels: &mut HashMap<u64, CelId>) -> Result<(CelId, bool), String> {
+fn cel_from_export(doc: &mut Document, png: &Path, traits: Option<&Path>, cels: &mut HashMap<u64, CelId>, measures: &mut Vec<Measure>) -> Result<(CelId, bool), String> {
     let bytes = std::fs::read(png).map_err(|e| format!("image illisible ({e})"))?;
     let traits_text = traits.and_then(|t| std::fs::read(t).ok());
     let mut h = DefaultHasher::new();
@@ -208,8 +239,10 @@ fn cel_from_export(doc: &mut Document, png: &Path, traits: Option<&Path>, cels: 
         .filter(|raw| !raw.is_empty())
         .and_then(|raw| crate::sbvector::fit_to_image(&raw, &raster));
     let (cel, vector) = match fitted {
-        Some((elements, _)) => {
-            let mut cel = Cel { raster: Raster::new(doc.width, doc.height), vector: Some(crate::vector::VectorDrawing { elements }), version: 0 };
+        Some(fit) => {
+            let c = doc.frame_rect().center();
+            measures.push(Measure { scale: fit.scale, y_up: fit.y_up, origin: [fit.origin[0] - c.x, fit.origin[1] - c.y] });
+            let mut cel = Cel { raster: Raster::new(doc.width, doc.height), vector: Some(crate::vector::VectorDrawing { elements: fit.elements }), version: 0 };
             cel.rerender();
             (cel, true)
         }

@@ -299,6 +299,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("ctg.charger_structure_effacer", "Calque CTG : charger la structure à partir des sources (effacer)", true, false),
     act("fichier.importer_video", "Importer une vidéo (calque vidéo)", true, false),
     act("fichier.importer_sboard", "Importer un projet Storyboard Pro", true, false),
+    act("fichier.exporter_sboard", "Exporter vers Storyboard Pro", true, false),
     act("fichier.importer_sequence", "Importer une séquence d'images (calque vidéo)", true, false),
     act("calque.video_en_animation", "Transformer le calque vidéo en calque d'animation", true, false),
     act("calque.propager", "Propager la peinture du calque en suivant une vidéo ou une animation (façon EbSynth)", true, false),

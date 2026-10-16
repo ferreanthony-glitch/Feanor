@@ -762,8 +762,35 @@ ECMAScript 3), elle, est documentée (aide `help/storyboard`). Choix d'Anthony (
   - **Non vérifié ici** : le mode batch et la lecture des traits n'ont pas pu l'être (Claude ne
     lance jamais Storyboard Pro). La façon de désigner le dessin d'un calque n'est décrite que pour
     Harmony : le script en essaie plusieurs et note dans la liste celle qui marche.
-- 14b. Vers Storyboard Pro : le script qui reconstruit le projet (à faire, après la passe
-  interface).
+- ✅ 14b-1. Exporter vers Storyboard Pro (Fichier > « Exporter vers Storyboard Pro… »). Choix
+  d'Anthony : partir de son projet modèle (choisi une fois, gardé dans les réglages), dessins en
+  vecteurs si possible ; 14b-1 les envoie en images, les vecteurs viennent en 14b-2.
+  - **Pelure prépare** dans un dossier temporaire une image PNG par calque et par image de
+    storyboard : le cadre vu par la caméra au centre, à la première image de l'image de
+    storyboard, à pleine opacité. Deux images identiques ne font qu'un fichier. Il écrit aussi un
+    WAV par extrait de son, au volume de sa piste, et le script de construction, données
+    comprises.
+  - **Storyboard Pro construit** (batch, sur une copie du modèle) :
+    - un plan par plan, un panneau par image de storyboard (durée, légendes Dialog / Action Notes
+      / Notes, ajoutées si le modèle ne les a pas) ;
+    - les calques, du fond au premier plan : image importée, ou calque vide du même genre ;
+      nom, visibilité, opacité ; les calques vides du panneau neuf sont enlevés ;
+    - les séquences (s'il y en a plusieurs, ou une qui a un nom) et les sons ;
+    - puis il enlève les plans et les pistes du modèle et enregistre le projet (« Enregistrer
+      sous » dans le dossier choisi ; à défaut, Pelure y copie le projet enregistré sur place).
+  - **Compte rendu** de ce qui n'est pas repris tel quel : l'animation dans une image de
+    storyboard (premier dessin seulement), la caméra, les modes de fusion, les dossiers (mis à
+    plat), les pistes coupées (exportées quand même).
+  - **Vérifié** : la préparation (tests) ; le script, exécuté sous Node contre une imitation de
+    l'interface de script écrite d'après sa documentation ; sa syntaxe ES3 (JScript) ; la fenêtre
+    avec un faux Storyboard Pro. **Non vérifié** : Storyboard Pro lui-même (jamais lancé par
+    Claude) — à essayer par Anthony. Points incertains, documentation muette : taille donnée par
+    Storyboard Pro à une image importée, nom des légendes en HTML ou en texte, nom du `.sboard`
+    après « Enregistrer sous ».
+  - L'import note maintenant la mesure du calage des vecteurs (pixels par unité, sens de l'axe,
+    origine) : elle servira à 14b-2.
+- 14b-2. Les calques vectoriels en vecteurs (`DrawingTools.createLayers`), quand l'essai de
+  l'import aura dit quelle façon de désigner un dessin marche et l'échelle mesurée.
 - Caméra de Storyboard Pro (plus tard).
 
 ## Propagation façon EbSynth (menée dans une session parallèle)

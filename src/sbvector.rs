@@ -282,8 +282,8 @@ fn overlap(a: &Raster, b: &Raster) -> f32 {
 /// Le dessin `raw` calé sur l'image `target` (une feuille de Pelure) : mêmes boîtes, même
 /// échelle sur les deux axes, axe vertical dans le sens qui recouvre le mieux l'image. Rien si
 /// les proportions ne correspondent pas (dessin tourné, déformé) ou si le recouvrement est
-/// trop faible : le calque gardera l'image. Renvoie aussi le recouvrement obtenu.
-pub fn fit_to_image(raw: &[Element], target: &Raster) -> Option<(Vec<Element>, f32)> {
+/// trop faible : le calque gardera l'image.
+pub fn fit_to_image(raw: &[Element], target: &Raster) -> Option<Fit> {
     let (tx0, ty0, tx1, ty1) = alpha_box(target)?;
     let rb = raw.iter().fold(egui_rect_nothing(), |r, e| r.union(e.bounds()));
     if !rb.is_positive() {
@@ -294,7 +294,7 @@ pub fn fit_to_image(raw: &[Element], target: &Raster) -> Option<(Vec<Element>, f
     if !s.is_finite() || s <= 0.0 || (sx - sy).abs() / s > 0.2 {
         return None;
     }
-    let mut best: Option<(Vec<Element>, f32)> = None;
+    let mut best: Option<Fit> = None;
     for y_up in [true, false] {
         let place = |p: [f32; 2]| -> [f32; 2] {
             let x = tx0 + (p[0] - rb.min.x) * s;
@@ -328,11 +328,22 @@ pub fn fit_to_image(raw: &[Element], target: &Raster) -> Option<(Vec<Element>, f
         let drawing = VectorDrawing { elements: placed };
         let rendered = drawing.render(target.width, target.height);
         let score = overlap(&rendered, target);
-        if best.as_ref().is_none_or(|(_, b)| score > *b) {
-            best = Some((drawing.elements, score));
+        if best.as_ref().is_none_or(|b| score > b.score) {
+            best = Some(Fit { elements: drawing.elements, score, scale: s, y_up, origin: place([0.0, 0.0]) });
         }
     }
-    best.filter(|(_, score)| *score >= MIN_OVERLAP)
+    best.filter(|f| f.score >= MIN_OVERLAP)
+}
+
+/// Un dessin calé (`fit_to_image`) : ses éléments sur la feuille, le recouvrement obtenu, et
+/// la mesure du calage, qui servira à l'export des vecteurs (14b-2) : pixels de la feuille par
+/// unité de Storyboard Pro, sens de l'axe vertical, et où tombe l'origine (0, 0) sur la feuille.
+pub struct Fit {
+    pub elements: Vec<Element>,
+    pub score: f32,
+    pub scale: f32,
+    pub y_up: bool,
+    pub origin: [f32; 2],
 }
 
 fn egui_rect_nothing() -> eframe::egui::Rect {

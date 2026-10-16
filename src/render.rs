@@ -272,6 +272,32 @@ pub fn panel_plan_at(doc: &Document, index: usize, frame: usize, paper: Option<[
     plan_with_camera(&doc.panels[index], frame, paper, &doc.camera_seen(index, frame), doc.fps)
 }
 
+/// Le calque `li` du plan `index` seul, à l'image `frame`, tel que la caméra au centre le voit
+/// (export vers Storyboard Pro, 14b) : en mode normal, à pleine opacité et même caché (sa
+/// visibilité et son opacité sont reprises à part), effets compris. Aucun : un dossier, ou rien
+/// à cette image.
+pub fn layer_plan_at(doc: &Document, index: usize, li: usize, frame: usize) -> Option<Plan> {
+    let panel = doc.panels.get(index)?;
+    let l = panel.layers.get(li)?;
+    if l.folder {
+        return None;
+    }
+    let cel = crate::video::cel_at(l, frame, doc.fps)?;
+    let t = l.transform;
+    Some(Plan {
+        paper: None,
+        items: vec![PlanItem {
+            cel,
+            opacity: 255,
+            tint: None,
+            transform: (!t.is_identity()).then_some(t),
+            blend: BlendMode::Normal,
+            fx: crate::fx::steps_at(&l.fx, frame),
+            ctg: crate::ctg::input(&panel.layers, li, frame),
+        }],
+    })
+}
+
 fn plan_with_camera(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, fps: u32) -> Plan {
     Plan {
         paper,

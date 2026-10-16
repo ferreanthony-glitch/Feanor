@@ -317,6 +317,8 @@ pub struct App {
     pub(crate) propagation: crate::propagerui::Propagation,
     /// Fenêtre d'import d'un projet Storyboard Pro et import en cours (14a, `sbui.rs`).
     pub(crate) sb_window: Option<crate::sbui::SbWindow>,
+    /// Fenêtre « Exporter vers Storyboard Pro » (14b, `sbexportui.rs`).
+    pub(crate) sb_export: Option<crate::sbexportui::SbExportWindow>,
     /// Fenêtre d'interpolation ouverte (13l, `tweenui.rs`).
     pub(crate) tween_dialog: Option<crate::tweenui::TweenDialog>,
     /// Table lumineuse : les calques autres que le calque courant sont estompés.
@@ -621,6 +623,7 @@ impl App {
             video_import: None,
             propagation: crate::propagerui::Propagation::new(cc.wgpu_render_state.as_ref()),
             sb_window: None,
+            sb_export: None,
             tween_dialog: None,
             light_table: false,
             light_table_strength: 0.3,
@@ -887,6 +890,7 @@ impl App {
             || self.workspace_name.is_some()
             || self.assign.is_some()
             || self.propagation.running()
+            || self.sb_export.as_ref().is_some_and(crate::sbexportui::SbExportWindow::rendering)
     }
 
     pub(crate) fn current_brush(&self) -> Option<&BrushSettings> {
@@ -2677,6 +2681,7 @@ impl App {
             // Calque vidéo (13k, `videoui.rs`).
             "fichier.importer_video" => self.import_video(),
             "fichier.importer_sboard" => self.open_sb_window(),
+            "fichier.exporter_sboard" => self.open_sb_export(),
             "fichier.importer_sequence" => self.import_sequence(),
             "calque.video_en_animation" => self.video_to_animation(),
             "calque.propager" => self.open_propagation(),

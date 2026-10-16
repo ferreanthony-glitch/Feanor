@@ -101,6 +101,7 @@ impl App {
                 self.action_item(ui, "Exporter des images (PNG)…", "fichier.exporter_images");
                 self.action_item(ui, "Exporter le son (WAV)…", "fichier.exporter_son");
                 self.action_item(ui, "Exporter le storyboard (PDF)…", "fichier.exporter_pdf");
+                self.action_item(ui, "Exporter vers Storyboard Pro…", "fichier.exporter_sboard");
                 self.action_item(ui, "Exporter l'image courante (PNG)…", "fichier.exporter_image_courante");
                 if menu_item(ui, "Exporter le storyboard (page HTML + planches)…", "") {
                     self.export_storyboard();
@@ -570,6 +571,7 @@ impl App {
         self.fx_window_ui(ctx);
         self.tween_window_ui(ctx);
         self.sb_window_ui(ctx);
+        self.sb_export_ui(ctx);
         self.smart_rename_window(ctx);
         if let Some(mut d) = self.new_dialog.take() {
             let mut keep = true;

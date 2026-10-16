@@ -143,6 +143,10 @@ mod render;
 #[cfg(test)]
 mod resize_tests;
 pub mod sbbatch;
+pub mod sbexport;
+#[cfg(test)]
+mod sbexport_tests;
+mod sbexportui;
 pub mod sboard;
 #[cfg(test)]
 mod sboard_tests;

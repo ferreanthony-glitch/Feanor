@@ -614,6 +614,31 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   images d'un calque vidéo (lues à la taille de l'import), le rayon des flous et la fermeture des
   trous du CTG (en pixels). Réversible : on peut revenir à l'ancienne taille, au prix d'un
   rééchantillonnage.
+- Export vers Storyboard Pro (14b-1).
+  - `sbexport::prepare` décrit ce qui part (`SbOut`) : plans → plans, images de storyboard
+    (`board::plan_boards`) → panneaux avec leurs textes, calques sans les dossiers (visibilité et
+    opacité du dossier reportées), extraits de son. Il note ce qui n'est pas repris.
+  - `SbExportJob` calcule les images comme l'export d'images : quelques-unes par image d'écran
+    (le projet est figé pendant ce temps, `modal_open`), PNG écrits par des fils. Chaque image est
+    `render::layer_plan_at` (le calque seul, mode normal, pleine opacité, même caché) vu par
+    `doc.default_camera()`. Les images vides sont sautées ; deux images identiques (même hachage)
+    ne font qu'un fichier.
+  - Le script : les données en littéral JavaScript (`serde_json`, U+2028/2029 échappés pour
+    ECMAScript 3), puis des fonctions documentées seulement. Chaque calque créé prend d'abord un
+    nom provisoire (`pelure~rang`), retrouvé en comparant les listes de noms avant et après.
+    Ainsi rien ne suppose où Storyboard Pro range un calque neuf. Les calques vides d'origine du
+    panneau sont enlevés ensuite. Un nom de plan déjà pris par le modèle passe par un nom
+    provisoire, rétabli après la suppression des plans du modèle.
+  - `sbbatch` est devenu générique : `Batch<T>::spawn` (travail sur un autre fil) et `launch`
+    (Storyboard Pro en batch, journal, arrêt). L'avancement vient de `avancement.txt`, le
+    résultat de `resultat.txt` (`parse_result`).
+  - Réglages : `modele_storyboard_pro` et `dossier_export_storyboard_pro` dans `reglages.toml`.
+    `sboard::read_template` lit un modèle sans panneau (l'import le refuse toujours).
+
+    Décision : coût — des images plutôt que des vecteurs pour commencer, parce que l'import d'image
+    est documenté et que l'écriture de traits ne l'est que pour Harmony. Risque : calques non
+    modifiables en traits dans Storyboard Pro. Réversible : 14b-2 remplacera l'image par les
+    traits, calque par calque, sans changer le reste.
 - Ouverture automatique et dessins vectoriels de Storyboard Pro (14a-2).
   - `sbbatch` : `find_storyboard_pro` cherche l'installation la plus récente. `copy_project`
     copie le projet sans `logs/` ni `.lock`. `Batch::start` lance, sur un autre fil,

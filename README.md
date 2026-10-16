@@ -521,6 +521,18 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 - À la main : « Dessins à la main » écrit le script à coller dans Storyboard Pro (vue Script
   Editor, Sandbox, Run).
 
+**Exporter vers Storyboard Pro** : Fichier > « Exporter vers Storyboard Pro… ».
+- Choisir une fois le projet modèle : un projet Storyboard Pro vide, à tes réglages (résolution,
+  cadence, légendes). Puis choisir le dossier et le titre, et « Exporter ».
+- Pelure lance Storyboard Pro tout seul, sans fenêtre, sur une copie du modèle (le modèle n'est
+  pas touché). Il y construit le projet, l'enregistre dans le dossier sous le titre, et rend un
+  compte rendu.
+- Chaque plan devient un plan. Chaque image de storyboard devient un panneau (durée, légendes).
+  Chaque calque devient un calque : son dessin en image, son nom, sa visibilité, son opacité.
+  Les séquences et le son suivent.
+- Pas encore : les calques vectoriels en traits (ils arrivent en images), la caméra, l'animation
+  dans un panneau (premier dessin seulement).
+
 ## Organisation du code
 
 | Fichier | Rôle |
@@ -549,6 +561,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `xml.rs`, `sboard.rs` | Lecture d'un XML en arbre ; lecture d'un projet Storyboard Pro (14a) |
 | `sbscript.rs`, `sbimport.rs`, `sbui.rs` | Script d'export des dessins et sa liste ; projet Pelure construit ; fenêtre d'ouverture (14a) |
 | `sbbatch.rs`, `sbvector.rs` | Storyboard Pro lancé en batch sur une copie du projet ; ses dessins vectoriels refaits en éléments Pelure (14a-2) |
+| `sbexport.rs`, `sbexportui.rs` | Export vers Storyboard Pro : images des calques, sons, script de construction ; sa fenêtre (14b-1) |
 | `stretch.rs` | Vitesse d'un son : rééchantillonnage, tempo sans changer la hauteur (WSOLA) (14a) |
 | `fill.rs` | Remplissage par zone et débord |
 | `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra |

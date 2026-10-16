@@ -10,6 +10,9 @@
 //! 4. lit la liste écrite par le script. Ce que Storyboard Pro a écrit est gardé dans
 //!    `journal.txt` (montré si l'export échoue).
 //!
+//! Le même lancement sert à l'export vers Storyboard Pro (14b, `sbexport`) : `Batch::spawn` fait
+//! tourner un travail sur un autre fil, `launch` lance Storyboard Pro en mode batch et l'attend.
+//!
 //! `PELURE_STORYBOARD_PRO` peut désigner l'exécutable ; `PELURE_SANS_STORYBOARD_PRO` désactive le
 //! lancement (essais de Pelure).
 
@@ -90,7 +93,7 @@ fn count_exported(dest: &Path) -> usize {
 }
 
 /// La fin du journal de Storyboard Pro, pour un message d'erreur.
-fn journal_tail(dest: &Path) -> String {
+pub fn journal_tail(dest: &Path) -> String {
     let text = std::fs::read(dest.join("journal.txt")).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
     let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
     let tail = lines[lines.len().saturating_sub(4)..].join(" / ");
@@ -101,53 +104,107 @@ fn journal_tail(dest: &Path) -> String {
     }
 }
 
-/// Un export en cours, sur un autre fil.
-pub struct Batch {
+/// Un travail de Storyboard Pro en cours, sur un autre fil : l'export des dessins à l'ouverture
+/// d'un projet (`Batch<Drawings>`, 14a-2), ou la construction d'un projet exporté par Pelure
+/// (14b, `sbexport`).
+pub struct Batch<T = Drawings> {
     /// L'étape en cours, à montrer.
     pub stage: Arc<Mutex<String>>,
-    /// Panneaux exportés jusqu'ici, sur `total`.
+    /// Éléments faits jusqu'ici (panneaux exportés, plans construits), sur `total`.
     pub done: Arc<AtomicUsize>,
     pub total: usize,
     cancel: Arc<AtomicBool>,
-    result: Arc<Mutex<Option<Result<Drawings, String>>>>,
+    result: Arc<Mutex<Option<Result<T, String>>>>,
     /// Dossier de travail (copie du projet, dessins exportés, journal).
     pub work: PathBuf,
 }
 
-impl Batch {
+/// Un dossier de travail neuf pour le projet `stem`, dans le dossier temporaire.
+pub fn work_dir(stem: &str) -> PathBuf {
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis());
+    let safe: String = stem.chars().map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
+    std::env::temp_dir().join("pelure-storyboard-pro").join(format!("{safe}-{stamp}"))
+}
+
+impl Batch<Drawings> {
     /// Lance l'export du projet `sboard` (`total` : nombre de panneaux du projet) avec
     /// Storyboard Pro `exe`, dans un dossier temporaire neuf.
     pub fn start(exe: PathBuf, sboard: PathBuf, total: usize) -> Batch {
-        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis());
         let stem = sboard.file_stem().map_or_else(|| "projet".into(), |s| s.to_string_lossy().into_owned());
-        let safe: String = stem.chars().map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
-        let work = std::env::temp_dir().join("pelure-storyboard-pro").join(format!("{safe}-{stamp}"));
+        let work = work_dir(&stem);
+        let w = work.clone();
+        Batch::spawn(work, total, "Copie du projet…", move |set, done, cancel| run(&exe, &sboard, &w, set, done, cancel))
+    }
+}
+
+impl<T: Send + 'static> Batch<T> {
+    /// Lance `job` sur un autre fil ; il reçoit de quoi montrer l'étape et l'avancement, et
+    /// la demande d'arrêt.
+    pub fn spawn(
+        work: PathBuf,
+        total: usize,
+        first_stage: &str,
+        job: impl FnOnce(&dyn Fn(&str), &AtomicUsize, &AtomicBool) -> Result<T, String> + Send + 'static,
+    ) -> Batch<T> {
         let batch = Batch {
-            stage: Arc::new(Mutex::new("Copie du projet…".into())),
+            stage: Arc::new(Mutex::new(first_stage.into())),
             done: Arc::new(AtomicUsize::new(0)),
             total,
             cancel: Arc::new(AtomicBool::new(false)),
             result: Arc::new(Mutex::new(None)),
-            work: work.clone(),
+            work,
         };
         let (stage, done, cancel, result) = (batch.stage.clone(), batch.done.clone(), batch.cancel.clone(), batch.result.clone());
         std::thread::spawn(move || {
             let set = |s: &str| *stage.lock().unwrap_or_else(|e| e.into_inner()) = s.to_string();
-            let res = run(&exe, &sboard, &work, &set, &done, &cancel);
+            let res = job(&set, &done, &cancel);
             *result.lock().unwrap_or_else(|e| e.into_inner()) = Some(res);
         });
         batch
     }
 
-    /// Arrête l'export (Storyboard Pro est arrêté).
+    /// Arrête le travail (Storyboard Pro est arrêté).
     pub fn cancel(&self) {
         self.cancel.store(true, Ordering::Relaxed);
     }
 
-    /// Le résultat, une fois l'export fini.
-    pub fn finished(&self) -> Option<Result<Drawings, String>> {
+    /// Le résultat, une fois le travail fini.
+    pub fn finished(&self) -> Option<Result<T, String>> {
         self.result.lock().unwrap_or_else(|e| e.into_inner()).take()
     }
+}
+
+/// Lance Storyboard Pro `exe` en mode batch sur le projet `scene` avec le script `script` ; ce
+/// qu'il écrit va dans `journal`. Attend qu'il ait fini, en comptant ce qui est fait avec
+/// `count` ; l'arrête si `cancel` passe à vrai (erreur « arrêté »).
+pub fn launch(exe: &Path, scene: &Path, script: &Path, journal: &Path, cancel: &AtomicBool, done: &AtomicUsize, count: &dyn Fn() -> usize) -> Result<(), String> {
+    let log = std::fs::File::create(journal).map_err(|e| format!("journal impossible ({e})"))?;
+    let log2 = log.try_clone().map_err(|e| format!("journal impossible ({e})"))?;
+    let mut cmd = std::process::Command::new(exe);
+    cmd.args(batch_args(scene, script)).stdin(std::process::Stdio::null()).stdout(log).stderr(log2);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // Pas de fenêtre de console.
+        cmd.creation_flags(0x0800_0000);
+    }
+    let mut child = cmd.spawn().map_err(|e| format!("Storyboard Pro ne démarre pas ({e})"))?;
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("arrêté".into());
+        }
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) => {}
+            Err(e) => return Err(format!("Storyboard Pro : {e}")),
+        }
+        done.store(count(), Ordering::Relaxed);
+        std::thread::sleep(std::time::Duration::from_millis(400));
+    }
+    done.store(count(), Ordering::Relaxed);
+    Ok(())
 }
 
 fn run(exe: &Path, sboard: &Path, work: &Path, set: &dyn Fn(&str), done: &AtomicUsize, cancel: &AtomicBool) -> Result<Drawings, String> {
@@ -163,32 +220,13 @@ fn run(exe: &Path, sboard: &Path, work: &Path, set: &dyn Fn(&str), done: &Atomic
     let script = dest.join(sbscript::SCRIPT);
     std::fs::write(&script, sbscript::script(&dest)).map_err(|e| format!("écriture du script impossible ({e})"))?;
     set("Storyboard Pro exporte les dessins…");
-    let log = std::fs::File::create(dest.join("journal.txt")).map_err(|e| format!("journal impossible ({e})"))?;
-    let log2 = log.try_clone().map_err(|e| format!("journal impossible ({e})"))?;
-    let mut cmd = std::process::Command::new(exe);
-    cmd.args(batch_args(&copy.join(name), &script)).stdin(std::process::Stdio::null()).stdout(log).stderr(log2);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        // Pas de fenêtre de console.
-        cmd.creation_flags(0x0800_0000);
-    }
-    let mut child = cmd.spawn().map_err(|e| format!("Storyboard Pro ne démarre pas ({e})"))?;
-    loop {
-        if cancel.load(Ordering::Relaxed) {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err("export arrêté".into());
+    launch(exe, &copy.join(name), &script, &dest.join("journal.txt"), cancel, done, &|| count_exported(&dest)).map_err(|e| {
+        if e == "arrêté" {
+            "export arrêté".to_string()
+        } else {
+            e
         }
-        match child.try_wait() {
-            Ok(Some(_)) => break,
-            Ok(None) => {}
-            Err(e) => return Err(format!("Storyboard Pro : {e}")),
-        }
-        done.store(count_exported(&dest), Ordering::Relaxed);
-        std::thread::sleep(std::time::Duration::from_millis(400));
-    }
-    done.store(count_exported(&dest), Ordering::Relaxed);
+    })?;
     set("Lecture des dessins…");
     sbscript::read_manifest(&dest).map_err(|e| format!("{e} Journal de Storyboard Pro : {}", journal_tail(&dest)))
 }

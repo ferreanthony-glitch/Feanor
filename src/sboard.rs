@@ -113,8 +113,24 @@ pub fn read(path: &Path) -> Result<SbProject, String> {
     parse(&String::from_utf8_lossy(&bytes), &stem)
 }
 
+/// Lit un projet modèle (export vers Storyboard Pro, 14b) : comme `read`, mais un projet sans
+/// aucun panneau (un modèle vide) se lit aussi.
+pub fn read_template(path: &Path) -> Result<SbProject, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("lecture de « {} » impossible : {e}", path.display()))?;
+    let stem = path.file_stem().map_or_else(String::new, |s| s.to_string_lossy().into_owned());
+    parse_any(&String::from_utf8_lossy(&bytes), &stem)
+}
+
 /// Lit le texte XML d'un projet ; `fallback_title` sert si le projet n'a pas de titre.
 pub fn parse(src: &str, fallback_title: &str) -> Result<SbProject, String> {
+    let sb = parse_any(src, fallback_title)?;
+    if sb.shots.is_empty() {
+        return Err("le film de ce projet ne contient aucun panneau".into());
+    }
+    Ok(sb)
+}
+
+fn parse_any(src: &str, fallback_title: &str) -> Result<SbProject, String> {
     let root = xml::parse(src)?;
     if root.name != "project" {
         return Err("ce fichier n'est pas un projet Storyboard Pro".into());
@@ -164,9 +180,6 @@ pub fn parse(src: &str, fallback_title: &str) -> Result<SbProject, String> {
             continue;
         }
         sb.shots.push(SbShot { id, name, sequence, start: range.map_or(0, |r| r.0), panels });
-    }
-    if sb.shots.is_empty() {
-        return Err("le film de ce projet ne contient aucun panneau".into());
     }
     sb.tracks = read_tracks(top, &mut sb.warnings);
     Ok(sb)

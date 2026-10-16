@@ -20,6 +20,13 @@ pub struct Settings {
     /// le stylet bouge, sans attendre l'image suivante (le cercle, dessiné par Pelure, la suit).
     #[serde(default = "yes", rename = "curseur_systeme")]
     pub system_cursor: bool,
+    /// Projet modèle de Storyboard Pro (14b) : l'export vers Storyboard Pro part d'une copie de ce
+    /// projet vide (résolution, cadence, légendes, réglages), choisi une fois par Anthony.
+    #[serde(default, rename = "modele_storyboard_pro", skip_serializing_if = "Option::is_none")]
+    pub sboard_template: Option<PathBuf>,
+    /// Dossier du dernier export vers Storyboard Pro.
+    #[serde(default, rename = "dossier_export_storyboard_pro", skip_serializing_if = "Option::is_none")]
+    pub sboard_export_dir: Option<PathBuf>,
     /// Pelure d'oignon.
     #[serde(default, rename = "pelure")]
     pub onion: OnionSettings,
@@ -51,6 +58,8 @@ impl Default for Settings {
             ffmpeg: None,
             autosave_minutes: default_autosave(),
             system_cursor: true,
+            sboard_template: None,
+            sboard_export_dir: None,
             onion: OnionSettings::default(),
             xsheet: Default::default(),
             flips: Default::default(),
