@@ -109,6 +109,38 @@ fn colors_are_kept_in_the_settings_file() {
     assert_eq!(back.colors, s.colors);
 }
 
+/// Les textes entre guillemets d'une source qui ressemblent à une commande des couleurs
+/// (« couleur.… », « nuancier.… », « pastille.… »).
+fn color_actions_in(file: &str) -> Vec<String> {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join(file);
+    let text = std::fs::read_to_string(path).unwrap();
+    let mut out = Vec::new();
+    for (i, part) in text.split('"').enumerate() {
+        let family = part.split('.').next().unwrap_or("");
+        let looks = part.split('.').count() == 2 && part.chars().all(|c| c.is_ascii_lowercase() || c == '_' || c == '.');
+        if i % 2 == 1 && looks && ["couleur", "nuancier", "pastille"].contains(&family) {
+            out.push(part.to_string());
+        }
+    }
+    out
+}
+
+#[test]
+fn every_color_command_is_known_mapped_and_handled() {
+    let map = Keymap::from_texts(DEFAULT_KEYMAP, None);
+    let mut cited: Vec<String> = color_actions_in("colorui.rs");
+    cited.extend(color_actions_in("nuancierui.rs"));
+    assert!(cited.len() > 20, "{cited:?}");
+    for id in &cited {
+        assert!(crate::keymap::action_info(id).is_some_and(|a| a.implemented), "{id} n'est pas dans keymap::ACTIONS");
+        assert!(map.bindings.iter().any(|b| &b.action == id), "{id} n'est pas dans keymap.toml");
+    }
+    // Et chaque commande des couleurs déclarée est traitée (citée dans un des deux fichiers).
+    for a in crate::keymap::ACTIONS.iter().filter(|a| ["couleur.", "nuancier.", "pastille."].iter().any(|f| a.id.starts_with(f))) {
+        assert!(cited.iter().any(|c| c == a.id), "{} n'est traitée nulle part", a.id);
+    }
+}
+
 #[test]
 fn photoshop_keys_only_where_free() {
     let map = Keymap::from_texts(DEFAULT_KEYMAP, None);

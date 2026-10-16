@@ -94,14 +94,17 @@ struct Channel<'a> {
 }
 
 /// Les curseurs (barre dégradée et chiffres) ; renvoie le rang du curseur changé et sa nouvelle
-/// valeur (0 à 1).
-fn channel_rows(ui: &mut egui::Ui, channels: &[Channel]) -> Option<(usize, f32)> {
+/// valeur (0 à 1), et les réponses des lettres et des barres (pour leur clic droit).
+fn channel_rows(ui: &mut egui::Ui, channels: &[Channel]) -> (Option<(usize, f32)>, Vec<Response>) {
     let mut out = None;
+    let mut parts = Vec::new();
     for (k, c) in channels.iter().enumerate() {
         ui.horizontal(|ui| {
-            let label = ui.add(egui::Label::new(egui::RichText::new(c.letter).monospace()).sense(Sense::hover()));
-            crate::bulles::bulle(label, c.name, "", "");
-            if let Some(t) = gradient_bar(ui, c.value, &c.colors) {
+            let label = ui.add(egui::Label::new(egui::RichText::new(c.letter).monospace()).sense(Sense::click()));
+            parts.push(crate::bulles::bulle(label, c.name, "Clic droit : TSV, RVB ou TSL.", ""));
+            let (bar, moved) = gradient_bar(ui, c.value, &c.colors);
+            parts.push(bar);
+            if let Some(t) = moved {
                 out = Some((k, t));
             }
             let mut shown = c.value * c.scale;
@@ -110,7 +113,7 @@ fn channel_rows(ui: &mut egui::Ui, channels: &[Channel]) -> Option<(usize, f32)>
             }
         });
     }
-    out
+    (out, parts)
 }
 
 /// Une pastille de `side` points : sa couleur, bordée de blanc si `chosen`.
@@ -126,9 +129,9 @@ pub(crate) fn to_color(c: [u8; 3]) -> Color32 {
     Color32::from_rgb(c[0], c[1], c[2])
 }
 
-/// Barre dégradée que l'on clique ou glisse ; `colors` : couleurs le long de la barre (au moins
-/// deux). Renvoie la nouvelle position (0 à 1) si elle a changé.
-fn gradient_bar(ui: &mut egui::Ui, value: f32, colors: &[Color32]) -> Option<f32> {
+/// Barre dégradée que l'on clique ou glisse (bouton gauche) ; `colors` : couleurs le long de la
+/// barre (au moins deux). Renvoie sa réponse, et la nouvelle position (0 à 1) si elle a changé.
+fn gradient_bar(ui: &mut egui::Ui, value: f32, colors: &[Color32]) -> (Response, Option<f32>) {
     let width = (ui.available_width() - 64.0).max(60.0);
     let (rect, resp) = ui.allocate_exact_size(vec2(width, 16.0), Sense::click_and_drag());
     let painter = ui.painter_at(rect.expand(4.0));
@@ -149,8 +152,11 @@ fn gradient_bar(ui: &mut egui::Ui, value: f32, colors: &[Color32]) -> Option<f32
     let x = rect.left() + rect.width() * value.clamp(0.0, 1.0);
     let mark = Rect::from_center_size(pos2(x, rect.center().y), vec2(5.0, rect.height() + 6.0));
     painter.rect(mark, 1.0, Color32::from_black_alpha(80), Stroke::new(1.5_f32, Color32::WHITE), StrokeKind::Middle);
-    let p = resp.interact_pointer_pos()?;
-    (resp.dragged() || resp.clicked()).then(|| ((p.x - rect.left()) / rect.width()).clamp(0.0, 1.0))
+    let moved = resp
+        .interact_pointer_pos()
+        .filter(|_| resp.dragged_by(egui::PointerButton::Primary) || resp.clicked())
+        .map(|p| ((p.x - rect.left()) / rect.width()).clamp(0.0, 1.0));
+    (resp, moved)
 }
 
 /// Roue chromatique de `size` points de côté, sur la couleur `hsv` : un clic ou un glissé dans
@@ -306,8 +312,9 @@ impl App {
     /// Les deux couleurs, comme dans Photoshop : le carré d'avant-plan devant, celui
     /// d'arrière-plan derrière, décalé. Un clic sur celui de derrière les échange ; clic droit :
     /// intervertir, couleurs par défaut, copier le code. `side` : côté d'un carré. Renvoie la
-    /// réponse du carré d'avant-plan (à chacun de décider ce que fait son clic).
-    pub(crate) fn front_back(&mut self, ui: &mut egui::Ui, side: f32) -> Response {
+    /// réponse du carré d'avant-plan : à chacun de décider ce que fait son clic, que `click` dit
+    /// dans sa bulle.
+    pub(crate) fn front_back(&mut self, ui: &mut egui::Ui, side: f32, click: &str) -> Response {
         let (rect, _) = ui.allocate_exact_size(vec2(side * 1.5, side * 1.5), Sense::hover());
         let front_rect = Rect::from_min_size(rect.min, vec2(side, side));
         let back_rect = Rect::from_min_size(rect.min + vec2(side * 0.5, side * 0.5), vec2(side, side));
@@ -329,7 +336,7 @@ impl App {
         let front = crate::bulles::bulle(
             front,
             "Couleur d'avant-plan",
-            &format!("{} · les outils dessinent avec elle ; clic droit : menu.", couleur::hex(self.color)),
+            &format!("{} · les outils dessinent avec elle ; {click}clic droit : menu.", couleur::hex(self.color)),
             "",
         );
         if back.clicked() {
@@ -368,13 +375,30 @@ impl App {
         } else if self.couleurs.hex_edit.as_ref().is_some_and(|(owner, _)| *owner == id) {
             self.couleurs.hex_edit = None;
         }
-        crate::bulles::bulle(resp, "Code hexadécimal", "#RRGGBB, ou #RGB en abrégé ; la couleur change dès que le code est complet.", "");
+        let resp = crate::bulles::bulle(resp, "Code hexadécimal", "#RRGGBB, ou #RGB en abrégé ; la couleur change dès que le code est complet. Clic droit : copier.", "");
+        resp.context_menu(|ui| self.action_item(ui, "Copier le code de la couleur d'avant-plan", "couleur.copier_code"));
+    }
+
+    /// Sous-menu « Couleur » du menu Édition : les commandes des couleurs et des nuanciers.
+    pub(crate) fn color_menu(&mut self, ui: &mut egui::Ui) {
+        ui.menu_button("Couleur", |ui| {
+            self.action_item(ui, "Intervertir les couleurs d'avant-plan et d'arrière-plan", "couleur.intervertir");
+            self.action_item(ui, "Couleurs par défaut (noir, blanc)", "couleur.defaut");
+            self.action_item(ui, "Copier le code de la couleur d'avant-plan", "couleur.copier_code");
+            ui.separator();
+            self.action_item(ui, "Ajouter la couleur d'avant-plan au nuancier", "nuancier.ajouter");
+            self.action_item(ui, "Nouveau nuancier", "nuancier.nouveau");
+            self.action_item(ui, "Importer un nuancier (GIMP .gpl, Photoshop .aco)…", "nuancier.importer");
+            self.action_item(ui, "Exporter le nuancier (GIMP .gpl, Photoshop .aco)…", "nuancier.exporter");
+            ui.separator();
+            self.action_item(ui, "Effacer les couleurs récentes", "couleur.recentes_effacer");
+        });
     }
 
     /// Les deux carrés, leurs boutons et le code hexadécimal, sur une ligne.
     fn front_back_row(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            self.front_back(ui, 30.0);
+            self.front_back(ui, 30.0, "");
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
                 ui.horizontal(|ui| {
@@ -473,18 +497,20 @@ impl App {
         let hsv = |c: [f32; 3]| to_color(hsv_to_rgb(c));
         let hues: Vec<Color32> = (0..=12).map(|k| hsv([k as f32 * 30.0, 1.0, 1.0])).collect();
         let hue = |colors: Vec<Color32>| Channel { letter: "T", name: "Teinte", value: h / 360.0, scale: 360.0, colors };
-        match self.couleurs.prefs.sliders {
+        let parts = match self.couleurs.prefs.sliders {
             SliderMode::Hsv => {
                 let rows = [
                     hue(hues),
                     Channel { letter: "S", name: "Saturation", value: s, scale: 100.0, colors: vec![hsv([h, 0.0, v]), hsv([h, 1.0, v])] },
                     Channel { letter: "V", name: "Valeur (clarté)", value: v, scale: 100.0, colors: vec![Color32::BLACK, hsv([h, s, 1.0])] },
                 ];
-                if let Some((k, t)) = channel_rows(ui, &rows) {
+                let (changed, parts) = channel_rows(ui, &rows);
+                if let Some((k, t)) = changed {
                     let mut next = self.hsv;
                     next[k] = t * if k == 0 { 360.0 } else { 1.0 };
                     self.set_hsv(next);
                 }
+                parts
             }
             SliderMode::Rgb => {
                 let c = self.color;
@@ -505,11 +531,13 @@ impl App {
                         colors: vec![with(k, 0), with(k, 255)],
                     })
                     .collect();
-                if let Some((k, t)) = channel_rows(ui, &rows) {
+                let (changed, parts) = channel_rows(ui, &rows);
+                if let Some((k, t)) = changed {
                     let mut next = c;
                     next[k] = (t * 255.0).round().clamp(0.0, 255.0) as u8;
                     self.set_front(next);
                 }
+                parts
             }
             SliderMode::Hsl => {
                 let [_, sl, l] = hsv_to_hsl(self.hsv);
@@ -525,13 +553,26 @@ impl App {
                         colors: vec![Color32::BLACK, hsl([h, sl, 0.5]), Color32::WHITE],
                     },
                 ];
-                if let Some((k, t)) = channel_rows(ui, &rows) {
+                let (changed, parts) = channel_rows(ui, &rows);
+                if let Some((k, t)) = changed {
                     let mut next = [h, sl, l];
                     next[k] = t * if k == 0 { 360.0 } else { 1.0 };
                     self.set_hsv(hsl_to_hsv(next));
                 }
+                parts
             }
+        };
+        // Clic droit sur une lettre ou une barre : changer de curseurs.
+        for part in parts {
+            part.context_menu(|ui| self.slider_menu(ui));
         }
+    }
+
+    /// Menu des curseurs (clic droit sur une lettre ou une barre).
+    fn slider_menu(&mut self, ui: &mut egui::Ui) {
+        self.action_item(ui, "Curseurs TSV (teinte, saturation, valeur)", "couleur.curseurs_tsv");
+        self.action_item(ui, "Curseurs RVB (rouge, vert, bleu)", "couleur.curseurs_rvb");
+        self.action_item(ui, "Curseurs TSL (teinte, saturation, luminosité)", "couleur.curseurs_tsl");
     }
 
     /// Opacité : la couleur n'en a pas, le pinceau et le crayon si (la même que dans leurs
@@ -553,7 +594,7 @@ impl App {
             );
             match brush {
                 Some(b) => {
-                    if let Some(t) = gradient_bar(ui, b.opacity, &[Color32::TRANSPARENT, color]) {
+                    if let (_, Some(t)) = gradient_bar(ui, b.opacity, &[Color32::TRANSPARENT, color]) {
                         b.opacity = t;
                     }
                     let mut pct = b.opacity * 100.0;
@@ -572,13 +613,14 @@ impl App {
     fn recent_row(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
-            let label = ui.add(egui::Label::new(egui::RichText::new(ph::CLOCK_COUNTER_CLOCKWISE).size(crate::bulles::TAILLE)).sense(Sense::hover()));
-            crate::bulles::bulle(
+            let label = ui.add(egui::Label::new(egui::RichText::new(ph::CLOCK_COUNTER_CLOCKWISE).size(crate::bulles::TAILLE)).sense(Sense::click()));
+            let label = crate::bulles::bulle(
                 label,
                 "Couleurs récentes",
-                "Les dernières couleurs avec lesquelles on a dessiné (pinceau, crayon, remplissage, formes, texte). Clic : avant-plan ; clic droit : menu.",
+                "Les dernières couleurs avec lesquelles on a dessiné (pinceau, crayon, remplissage, formes, texte). Clic sur une couleur : avant-plan ; clic droit : menu.",
                 "",
             );
+            label.context_menu(|ui| self.action_item(ui, "Effacer les couleurs récentes", "couleur.recentes_effacer"));
             let side = 16.0;
             let fits = ((ui.available_width() + 2.0) / (side + 2.0)).floor().max(0.0) as usize;
             let recent = self.couleurs.prefs.recent.clone();
@@ -657,7 +699,7 @@ impl App {
     /// Au pied de la barre d'outils : les deux couleurs ; un clic sur l'avant-plan ouvre, à côté,
     /// le code et les curseurs.
     pub(crate) fn tool_bar_colors(&mut self, ui: &mut egui::Ui) {
-        let front = self.front_back(ui, 22.0);
+        let front = self.front_back(ui, 22.0, "clic : la roue, les curseurs et le nuancier à côté ; ");
         let popup = Id::new("couleur_barre_outils");
         if front.clicked() {
             ui.memory_mut(|m| m.toggle_popup(popup));
