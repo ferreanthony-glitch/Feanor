@@ -2384,6 +2384,7 @@ dependencies = [
  "egui-phosphor",
  "egui_dock",
  "image",
+ "quick-xml",
  "rfd",
  "serde",
  "serde_json",

@@ -237,6 +237,8 @@ pub enum Pending {
     Quit,
     /// Nouveau projet fait des plans choisis (13e).
     FromChosen,
+    /// Import d'un projet Storyboard Pro (14a), qui remplace le projet ouvert.
+    SbImport,
 }
 
 /// Calque copié (W) : sa timeline, ses dessins, et la durée du panneau d'où il vient.
@@ -311,6 +313,8 @@ pub struct App {
     pub(crate) fx_selected: usize,
     /// Import vidéo en cours (13k, `videoui.rs`).
     pub(crate) video_import: Option<crate::videoui::VideoImport>,
+    /// Fenêtre d'import d'un projet Storyboard Pro et import en cours (14a, `sbui.rs`).
+    pub(crate) sb_window: Option<crate::sbui::SbWindow>,
     /// Fenêtre d'interpolation ouverte (13l, `tweenui.rs`).
     pub(crate) tween_dialog: Option<crate::tweenui::TweenDialog>,
     /// Table lumineuse : les calques autres que le calque courant sont estompés.
@@ -598,6 +602,7 @@ impl App {
             fx_keys_shown: true,
             fx_selected: 0,
             video_import: None,
+            sb_window: None,
             tween_dialog: None,
             light_table: false,
             light_table_strength: 0.3,
@@ -1872,6 +1877,7 @@ impl App {
             }
             Pending::Open => self.open_dialog(),
             Pending::FromChosen => self.new_project_from_chosen(),
+            Pending::SbImport => self.start_sb_import(),
             Pending::Quit => {
                 self.allow_close = true;
                 self.ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -1890,7 +1896,9 @@ impl App {
     /// « Enregistrer sous » : on choisit un nom, Pelure crée le dossier du projet à ce nom.
     pub(crate) fn save_as(&mut self) -> bool {
         self.end_stroke();
-        let name = format!("{}.pelure", self.base_name_or("Mon film"));
+        // Sans nom de fichier : le titre du projet (un projet importé, 14a), sinon « Mon film ».
+        let title: String = self.doc.properties.title.trim().chars().map(|c| if r#"<>:"/\|?*"#.contains(c) { '_' } else { c }).collect();
+        let name = format!("{}.pelure", self.base_name_or(if title.is_empty() { "Mon film" } else { &title }));
         let mut dialog = rfd::FileDialog::new()
             .set_title("Enregistrer le projet (un dossier à ce nom sera créé)")
             .add_filter("Projet Pelure", &["pelure"])
@@ -2602,6 +2610,7 @@ impl App {
             "ctg.charger_structure_effacer" => self.load_ctg_structure(true),
             // Calque vidéo (13k, `videoui.rs`).
             "fichier.importer_video" => self.import_video(),
+            "fichier.importer_sboard" => self.open_sb_window(),
             "fichier.importer_sequence" => self.import_sequence(),
             "calque.video_en_animation" => self.video_to_animation(),
             // Interpolation d'images (13l, `tweenui.rs`).

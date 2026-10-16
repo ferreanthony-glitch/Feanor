@@ -33,6 +33,8 @@ egui-phosphor = "0.9"
 # Texte (5d) : lecture des polices (noms, contours des lettres). Déjà utilisé par egui.
 ttf-parser = "0.25"
 egui_dock = "0.16"
+# 14a : lecture des projets Storyboard Pro (.sboard, du XML). Version déjà dans Cargo.lock.
+quick-xml = "0.41"
 
 # Le dessin et la composition sont du calcul pixel : même en debug on optimise,
 # sinon le pinceau rame.

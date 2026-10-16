@@ -95,6 +95,7 @@ impl App {
                 self.action_item(ui, "Importer une vidéo (calque vidéo)…", "fichier.importer_video");
                 self.action_item(ui, "Importer une séquence d'images (calque vidéo)…", "fichier.importer_sequence");
                 self.action_item(ui, "Importer un modèle 3D (glTF) comme repère…", "fichier.importer_modele3d");
+                self.action_item(ui, "Importer un projet Storyboard Pro (.sboard)…", "fichier.importer_sboard");
                 ui.separator();
                 self.action_item(ui, "Exporter le film (vidéo)…", "fichier.exporter_film");
                 self.action_item(ui, "Exporter des images (PNG)…", "fichier.exporter_images");
@@ -569,6 +570,7 @@ impl App {
         self.flips_window_ui(ctx);
         self.fx_window_ui(ctx);
         self.tween_window_ui(ctx);
+        self.sb_window_ui(ctx);
         self.smart_rename_window(ctx);
         if let Some(mut d) = self.new_dialog.take() {
             let mut keep = true;

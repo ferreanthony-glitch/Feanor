@@ -696,8 +696,8 @@ Décisions d'Anthony :
     - étirer des images à une nouvelle durée en interpolant (ou en tenant) ;
     - changer la cadence du projet en gardant les durées. Images, durées des plans, clés de
       caméra, marques, repères, notes, rôles, clés d'effets, vidéos et sons suivent.
-- 13m et suivantes : autres effets (au choix d'Anthony). Pas de calque Puppet (choix
-  d'Anthony, 2026-10-16). Puis la phase 14.
+- 13m et suivantes : autres effets (au choix d'Anthony), laissés pour plus tard : Anthony est
+  passé à la phase 14 le 2026-10-16. Pas de calque Puppet (choix d'Anthony, 2026-10-16).
 Le faux-fixe n'a que son nom dans les textes de TVPaint : à faire décrire par Anthony avant de
 l'implanter (le pochoir, la transparence préservée et la position verrouillée ont été décrits
 le 2026-10-15, voir `docs/TIMELINE-TVPAINT.md`).
@@ -718,6 +718,36 @@ Choix d'Anthony : passer par les imports officiels de Storyboard Pro.
   calque (« Import Images as Shots », « Import Images as Layers »), textes (« Update Captions from
   CSV »), son (« Import AudioTracks »), montage (EDL / AAF / XML, « Conformation: Import Animatic
   Project ») — à vérifier commande par commande dans Storyboard Pro 27 avant d'écrire le code.
+
+Relevé dans Storyboard Pro 27 (lu, jamais lancé) : le format CSV des légendes et les règles de
+nommage de « Images as Shots » ne sont pas décrits ; son interface de script (Qt Script,
+ECMAScript 3), elle, est documentée (aide `help/storyboard`). Choix d'Anthony (2026-10-16) :
+- vers Storyboard Pro : un script Storyboard Pro écrit par Pelure (plans, panneaux, durées, un
+  calque par calque, légendes, sons) ;
+- depuis Storyboard Pro : un script d'export des dessins écrit par Pelure ; Pelure lit le
+  `.sboard` pour le reste ;
+- d'abord le sens Storyboard Pro → Pelure ; la caméra plus tard (unités Toon Boom à convertir).
+
+- ✅ 14a. Importer un projet Storyboard Pro (Fichier, ou glisser le `.sboard` sur la fenêtre).
+  - Le `.sboard` est lu (jamais modifié) : chaque plan devient un plan, dans une séquence du même
+    nom ; ses panneaux, mis bout à bout, deviennent ses images de storyboard avec leurs légendes
+    (Dialog → dialogue, Action Notes → action, les autres → notes, préfixées de leur nom) ;
+    cadence et taille du projet ; calques par leur nom, du fond au premier plan.
+  - Dessins : « Créer le script… » écrit `export_pelure.js` dans un dossier choisi et le copie ;
+    dans Storyboard Pro (vue Script Editor, Sandbox, coller, Run), il ne laisse voir qu'un calque
+    à la fois, exporte chaque panneau en PNG transparent, remet les calques comme avant (et annule
+    tout à la fin), puis écrit la liste `pelure.txt`. Pelure range ces images sur les calques
+    (deux images identiques ne font qu'un dessin ; une image à une autre résolution, de mêmes
+    proportions, est remise à la taille du cadre). L'opacité des calques est dans les images.
+  - Son : les pistes et leurs extraits (début, fin, découpe) ; un extrait au volume, au tempo
+    (« WSOLATempo », vitesse sans changer la hauteur) ou à la vitesse (« Resample ») changés
+    devient son propre son, calculé à l'import. Enveloppes de volume, réverbération et changement
+    de hauteur ne sont pas repris (signalés dans le compte rendu).
+  - Vérifié sur les projets BRAWLIDAYS (partie 1 : 12 plans, 39 panneaux, 834 images ; partie 2 :
+    45 plans, 322 panneaux, 3 323 images, lue en 0,2 s). Le script n'a pas pu être essayé ici
+    (Storyboard Pro n'est jamais lancé par Claude) : à essayer par Anthony.
+- 14b. Vers Storyboard Pro : le script qui reconstruit le projet (à faire).
+- Caméra de Storyboard Pro (plus tard).
 
 ## Raccourcis proposés, à valider
 

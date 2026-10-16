@@ -295,6 +295,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("ctg.charger_structure", "Calque CTG : charger la structure à partir des sources", true, false),
     act("ctg.charger_structure_effacer", "Calque CTG : charger la structure à partir des sources (effacer)", true, false),
     act("fichier.importer_video", "Importer une vidéo (calque vidéo)", true, false),
+    act("fichier.importer_sboard", "Importer un projet Storyboard Pro", true, false),
     act("fichier.importer_sequence", "Importer une séquence d'images (calque vidéo)", true, false),
     act("calque.video_en_animation", "Transformer le calque vidéo en calque d'animation", true, false),
     act("images.intermediaire", "Insérer une image intermédiaire (entre le dessin courant et le suivant)", true, false),

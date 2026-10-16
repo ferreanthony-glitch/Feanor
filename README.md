@@ -466,6 +466,15 @@ hauteur, distance et focale se règlent aussi en chiffres. Chaque plan a son poi
 (« Comme le plan précédent » le recopie). « Dessiner dans un calque » transforme le fil de fer
 en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le projet (`modeles/`).
 
+**Projet Storyboard Pro** : Fichier > « Importer un projet Storyboard Pro (.sboard)… », ou glisser
+le `.sboard` sur la fenêtre. Le fichier est seulement lu. Plans, séquences, panneaux (devenus les
+images de storyboard de chaque plan, avec leurs légendes), durées, cadence, taille, noms des
+calques et son arrivent tels quels ; la caméra n'est pas reprise. Pour les dessins : « Créer le
+script… » écrit un script dans un dossier et le copie ; dans Storyboard Pro, projet ouvert, vue
+Script Editor, choisir Sandbox, coller, puis Run : chaque calque de chaque panneau est exporté en
+PNG dans ce dossier (le projet est remis comme avant). Revenir à Pelure, « Relire » (ou glisser
+le `pelure.txt` du dossier sur la fenêtre), puis « Importer ».
+
 ## Organisation du code
 
 | Fichier | Rôle |
@@ -491,6 +500,9 @@ en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le 
 | `ctg.rs`, `ctgui.rs` | Calque CTG : remplissage par graffitis, sources, structure (13j) |
 | `video.rs`, `videoui.rs` | Calque vidéo : import par ffmpeg, images lues à la demande (13k) |
 | `tween.rs`, `tweenui.rs` | Interpolation : intervalles vectoriels, fondus, étirement, cadence (13l) |
+| `xml.rs`, `sboard.rs` | Lecture d'un XML en arbre ; lecture d'un projet Storyboard Pro (14a) |
+| `sbscript.rs`, `sbimport.rs`, `sbui.rs` | Script d'export des dessins et sa liste ; projet Pelure construit ; fenêtre d'import (14a) |
+| `stretch.rs` | Vitesse d'un son : rééchantillonnage, tempo sans changer la hauteur (WSOLA) (14a) |
 | `fill.rs` | Remplissage par zone et débord |
 | `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra |
 | `gpu.rs` | Composition et affichage par la carte graphique, envoi des dessins par tuiles |

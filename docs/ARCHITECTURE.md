@@ -575,6 +575,31 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   Les intervalles sont des dessins neufs (vectoriels si les deux sont vectoriels), donc
   modifiables. Changer la cadence passe tout le projet au même facteur (`rescale_frame`) en
   une étape d'annulation : la cadence et les extraits de son sont dans `Structure`.
+- Import Storyboard Pro (14a) :
+  - `xml.rs` lit un document XML en arbre (`Element` : nom, attributs décodés, enfants), avec
+    quick-xml. quick-xml était déjà dans `Cargo.lock`, par wayland : rien n'est téléchargé.
+  - `sboard.rs` en tire un `SbProject`. Plans dans l'ordre du film (colonne de type 0 de la
+    scène racine, `warpSeq`), panneaux, légendes (`caption_text` : le HTML de Qt devient du texte),
+    modules `READ` = calques, pistes son (`soundSequence`, effets `WSOLATempo` et `Resample`).
+  - `sbscript.rs` écrit le script d'export (ECMAScript 3, fonctions documentées de l'interface de
+    script de Storyboard Pro seulement) et relit sa liste `pelure.txt`, en lignes à tabulations :
+    le moteur de script n'a pas de JSON.
+  - `sbimport::build` construit des panneaux à l'ancienne (un par panneau de Storyboard Pro, plan
+    = scène), puis appelle `Document::into_plans` (13a). Les panneaux mis bout à bout, les marques
+    avec leurs textes et les calques réunis par nom viennent ainsi du code déjà testé de 13a.
+  - Panneaux du script ↔ panneaux du `.sboard` : par identifiant, sinon par rang.
+  - Une image identique (même contenu) ne fait qu'un dessin. Un calque de fond répété d'un panneau
+    à l'autre est donc tenu, pas copié.
+  - Son : un extrait simple garde le son d'origine (début arrondi à l'image). Un extrait à effet
+    ou à volume devient son propre son, en WAV : `stretch::resample` (vitesse et hauteur), puis
+    `stretch::wsola` (tempo seul), puis `stretch::gain`.
+
+    Décision : coût — calculer une fois à l'import plutôt qu'ajouter vitesse et volume par
+    extrait au modèle, au mixeur et au format. Risque : ces extraits ne se rallongent plus au-delà
+    de ce qui a été calculé. Réversible : un vrai réglage par extrait pourra venir ensuite.
+  - `sbui.rs` : la fenêtre d'import. L'import tourne sur un autre fil (`Document` est `Send`) et
+    passe par `Pending::SbImport` (« enregistrer ? »). Un `.sboard` ou un `pelure.txt` lâché sur la
+    fenêtre y est pris.
 - Vue Projet (`projetui.rs`, 13e-4) : `Document::storyboard_locked` est dans `Structure` (une
   annulation le rétablit avec le reste ; le basculer est une étape). `App::storyboard_refuses`
   garde `structure_op` et les autres chemins qui changent l'ordre, le nombre ou la durée des

@@ -132,6 +132,14 @@ mod recovery_tests;
 mod recoveryui;
 mod ref3dtool;
 mod render;
+pub mod sboard;
+#[cfg(test)]
+mod sboard_tests;
+mod sbimport;
+pub mod sbscript;
+mod sbui;
+pub mod stretch;
+pub mod xml;
 pub mod roles;
 #[cfg(test)]
 mod roles_tests;

@@ -2439,6 +2439,20 @@ impl Document {
         Some(id)
     }
 
+    /// Pose un extrait tel quel sur la piste `track` (14a, import) : `length` images du son
+    /// `sound`, à partir de son image `offset`, à l'image `start` du montage. Rien si la piste
+    /// n'existe pas.
+    pub fn add_clip(&mut self, track: usize, sound: u64, start: usize, offset: usize, length: usize) -> Option<u64> {
+        if track >= self.audio_tracks.len() {
+            return None;
+        }
+        let id = self.alloc();
+        let clips = &mut self.audio_tracks[track].clips;
+        clips.push(SoundClip { id, sound, start, offset, length: length.max(1) });
+        clips.sort_by_key(|c| c.start);
+        Some(id)
+    }
+
     pub fn remove_clip(&mut self, id: u64) -> bool {
         match self.find_clip(id) {
             Some((t, c)) => {
