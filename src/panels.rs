@@ -59,6 +59,11 @@ fn brush_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
         bulle(resp, "Opacité mini", "Opacité quand on effleure, en part de l'opacité.", "");
     }
     ui.horizontal(|ui| {
+        let resp = ui.add(egui::Slider::new(&mut s.power, 0.01..=1.0).text("Débit"));
+        bulle(resp, "Débit", "Peinture déposée à chaque empreinte (le « Power » de TVPaint) ; l'opacité en reste le plafond.", "");
+        interrupteur(ui, &mut s.build_up, ph::STACK, "Accumuler", "Repasser dans le même trait fonce, jusqu'à l'opacité. Éteint : le trait reste uniforme.", "");
+    });
+    ui.horizontal(|ui| {
         if !s.aliased || vector {
             ui.add(egui::Slider::new(&mut s.hardness, 0.0..=1.0).text("Dureté"));
         }

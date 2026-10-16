@@ -143,3 +143,51 @@ fn old_brush_settings_read_without_dynamics_and_curves_round_trip() {
     let back: BrushSettings = serde_json::from_str(&text).unwrap();
     assert_eq!(back, s2);
 }
+
+/// Un aller-retour (`passes` passages) sur la même ligne, en un seul trait.
+fn scribble(s: BrushSettings, passes: usize) -> Raster {
+    let mut raster = Raster::new(320, 320);
+    let mut stroke = StrokeState::new(0, StrokeMode::Paint([0, 0, 0]), s, None, true);
+    let mut dirty = Vec::new();
+    let mut t = 0.0;
+    for k in 0..passes {
+        let (a, b) = if k % 2 == 0 { (60.0, 260.0) } else { (260.0, 60.0) };
+        for i in 0..=20 {
+            let x = a + (b - a) * i as f32 / 20.0;
+            stroke.add_point_at(&mut raster, pos2(x, 160.0), 1.0, t, &mut dirty);
+            t += 0.01;
+        }
+    }
+    stroke.finish(&mut raster, &mut dirty);
+    raster
+}
+
+#[test]
+fn power_builds_up_when_passing_again_and_stops_at_the_opacity() {
+    let mut s = plain(16.0);
+    s.power = 0.3;
+    s.opacity = 0.8;
+    // Sans accumuler : repasser ne change rien, le trait reste au débit fois l'opacité.
+    let once = scribble(s, 1).get(160, 160).a();
+    let thrice = scribble(s, 3).get(160, 160).a();
+    assert_eq!(once, thrice);
+    assert!((once as f32 - 0.3 * 0.8 * 255.0).abs() <= 2.0, "{once}");
+    // En accumulant : chaque passage fonce, jamais au-delà de l'opacité.
+    s.build_up = true;
+    let one = scribble(s, 1).get(160, 160).a();
+    let three = scribble(s, 3).get(160, 160).a();
+    let many = scribble(s, 12).get(160, 160).a();
+    assert!((one as f32 - 0.3 * 0.8 * 255.0).abs() <= 12.0, "un passage dépose à peu près le débit : {one}");
+    assert!(one < three && three < many, "{one} < {three} < {many}");
+    assert!(many as f32 <= 0.8 * 255.0 + 1.0, "plafond de l'opacité : {many}");
+    assert!(many as f32 >= 0.75 * 255.0, "presque au plafond après 12 passages : {many}");
+}
+
+#[test]
+fn the_default_power_draws_like_before() {
+    let s = BrushSettings::brush();
+    assert_eq!((s.power, s.build_up), (1.0, false));
+    // Lu d'un ancien fichier : débit plein, pas d'accumulation.
+    let old: BrushSettings = serde_json::from_str(r#"{"taille":8.0}"#).unwrap();
+    assert_eq!((old.power, old.build_up), (1.0, false));
+}

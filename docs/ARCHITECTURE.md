@@ -619,6 +619,14 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     Décision : coût — courbe linéaire par morceaux plutôt que spline, simple et sûre, et TVPaint
     en a aussi. Risque : une courbe douce demande plus de points. Réversible : un mode
     d'interpolation pourra s'ajouter au format.
+- Débit et accumulation (moteur de dessin, étape 4) : `BrushSettings::power` (« debit ») et
+  `build_up` (« accumuler »).
+  - Sans accumuler, le masque du trait garde le maximum de `couverture × débit` : le modèle
+    d'avant.
+  - En accumulant, `masque += (1 − masque) × dépôt`, avec `dépôt = 1 − (1 − débit)^(1/n)`, où
+    `n` = diamètre ÷ pas est le nombre d'empreintes qui recouvrent un point.
+  - Le pixel est toujours recalculé depuis son état d'avant le trait, avec `masque × opacité` :
+    l'opacité reste le plafond.
 - Poignées de calque, fin de plan, Échap, choix au rectangle (chantiers 1 à 4 de l'audit).
   - Nouvelles poignées : `Handle::LayerStart`, `LayerEnd`, `LayerMove` (la barre dessinée sous les
     dessins, `BAR_H`) et `PlanEnd` (prise au bout de la règle). Leurs fonctions pures sont testées :

@@ -932,6 +932,14 @@ Choix d'Anthony :
   - L'aperçu des brosses trace lentement aux bouts et vite au milieu.
   - Pas encore : l'orientation et l'inclinaison du stylet, que Pelure ne lit pas. Sur un calque
     vectoriel, le trait gardé ne retient que la taille.
+- ✅ 4. Débit (« Power » de TVPaint), à côté de l'opacité, qui en reste le plafond :
+  - « Accumuler » éteint (par défaut, le Pinceau rond inchangé) : le trait reste uniforme, au débit
+    fois l'opacité ;
+  - allumé : un passage dépose à peu près le débit, et repasser dans le même trait fonce jusqu'à
+    l'opacité.
+
+  Le dépôt de chaque empreinte est réglé d'après leur nombre au même point (diamètre ÷ pas) : un
+  choix de Pelure, à comparer avec TVPaint, dont la formule n'est pas publiée.
 
 ## Raccourcis proposés, à valider
 

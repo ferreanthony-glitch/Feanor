@@ -17,6 +17,14 @@ pub struct BrushSettings {
     pub size: f32,
     #[serde(rename = "opacite")]
     pub opacity: f32,
+    /// Débit (moteur de dessin, étape 4) : la peinture déposée à chaque empreinte, le « Power »
+    /// de TVPaint ; l'opacité en reste le plafond.
+    #[serde(rename = "debit")]
+    pub power: f32,
+    /// Le débit s'accumule dans le trait : repasser fonce, jusqu'à l'opacité. Sinon (comme
+    /// avant), chaque pixel garde la plus forte empreinte reçue : le trait reste uniforme.
+    #[serde(rename = "accumuler")]
+    pub build_up: bool,
     /// 0 = bord très flou, 1 = bord net.
     #[serde(rename = "durete")]
     pub hardness: f32,
@@ -296,6 +304,8 @@ impl BrushSettings {
         Self {
             size: 6.0,
             opacity: 1.0,
+            power: 1.0,
+            build_up: false,
             hardness: 0.85,
             spacing: 0.08,
             smoothing: 0.3,
@@ -525,7 +535,7 @@ impl StrokeState {
         let s = self.settings;
         let pressure = self.raw.map_or(1.0, |r| r.1);
         let flow = s.flow(&self.inputs(pressure, 0.0));
-        Some((rgb, (s.opacity * flow).clamp(0.0, 1.0)))
+        Some((rgb, (s.opacity * flow * s.power).clamp(0.0, 1.0)))
     }
 
     /// Pointe et papier du trait (pinceaux texturés).
@@ -662,6 +672,17 @@ impl StrokeState {
         if flow <= 0.0 {
             return;
         }
+        // En accumulant, une empreinte dépose une part du débit : les empreintes qui se
+        // recouvrent au même point (environ diamètre ÷ pas) en déposent ensemble le débit, et
+        // chaque nouveau passage fonce. (Choix de Pelure : la formule de TVPaint n'est pas
+        // publiée.)
+        let deposit = if s.build_up {
+            let diameter = radius * 2.0;
+            let n = (diameter / (diameter * s.spacing).max(0.3)).max(1.0);
+            1.0 - (1.0 - s.power.clamp(0.0, 1.0)).powf(1.0 / n)
+        } else {
+            s.power.clamp(0.0, 1.0)
+        };
         let inner = (radius * s.hardness.clamp(0.0, 1.0)).min(radius - 0.5).max(0.0);
         // Pointe aplatie ou tournée : on mesure chaque pixel dans le repère de la pointe.
         let angle = (s.angle_at(&inp) + s.angle_jitter * self.jitter()).to_radians();
@@ -733,16 +754,23 @@ impl StrokeState {
                         let grain = paper.as_ref().map_or(1.0, |p| grain_factor(p.tiled(px, py), pressure, s.grain));
                         let i = (py - oy) * TILE + (px - ox);
                         let through = stencil.map_or(1.0, |st| st.at(idx, i));
-                        let v = cov * flow * grain * through;
-                        if v <= mask[i] {
+                        let v = cov * flow * grain * through * deposit;
+                        let m = if s.build_up {
+                            // Le débit s'ajoute à ce qui est déjà déposé dans le trait.
+                            mask[i] + (1.0 - mask[i]) * v
+                        } else {
+                            v
+                        };
+                        // (En accumulant, un ajout infime ne repeint pas le pixel.)
+                        if m <= mask[i] + if s.build_up { 1e-5 } else { 0.0 } {
                             continue;
                         }
-                        mask[i] = v;
+                        mask[i] = m;
                         let b = before.map_or(Color32::TRANSPARENT, |t| t[i]);
                         tile[i] = match mode {
-                            StrokeMode::Paint(rgb) if keep_alpha => paint_over(b, rgb, v * s.opacity),
-                            StrokeMode::Paint(rgb) => paint(b, rgb, v * s.opacity),
-                            StrokeMode::Erase => erase(b, v * s.opacity),
+                            StrokeMode::Paint(rgb) if keep_alpha => paint_over(b, rgb, m * s.opacity),
+                            StrokeMode::Paint(rgb) => paint(b, rgb, m * s.opacity),
+                            StrokeMode::Erase => erase(b, m * s.opacity),
                         };
                         changed = true;
                     }
