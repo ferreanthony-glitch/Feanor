@@ -8,10 +8,16 @@
 use eframe::egui::{self, pos2, vec2, Color32, Id, Rect, Response, Sense, Shape, Stroke, StrokeKind, Vec2};
 use egui_phosphor::regular as ph;
 
-use crate::app::App;
+use crate::app::{App, Tool};
 pub use crate::couleur::{hsv_to_rgb, rgb_to_hsv};
-use crate::couleur::{self, ColorSettings};
+use crate::couleur::{self, hsl_to_hsv, hsv_to_hsl, ColorSettings, SliderMode};
 use crate::roue::{Wheel, WheelShape, Zone};
+
+/// Une pastille que vise une commande : une couleur récente (rang dans la rangée).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Target {
+    Recent(usize),
+}
 
 /// Ce que le panneau Couleur garde en plus de la couleur d'avant-plan (`App::color`, `App::hsv`).
 pub(crate) struct ColorState {
@@ -23,12 +29,64 @@ pub(crate) struct ColorState {
     pub back_hsv: [f32; 3],
     /// Code hexadécimal en cours de saisie : le champ qui l'a, et le texte tapé.
     hex_edit: Option<(Id, String)>,
+    /// La pastille visée par les commandes « pastille.* » : celle dont le menu est ouvert, sinon
+    /// celle sous la souris (vues à l'image précédente ; `*_now` : pendant cette image).
+    menu: Option<Target>,
+    menu_now: Option<Target>,
+    hovered: Option<Target>,
+    hovered_now: Option<Target>,
 }
 
 impl ColorState {
     pub fn new(prefs: ColorSettings) -> ColorState {
-        ColorState { back_hsv: rgb_to_hsv(prefs.back), prefs, hex_edit: None }
+        ColorState {
+            back_hsv: rgb_to_hsv(prefs.back),
+            prefs,
+            hex_edit: None,
+            menu: None,
+            menu_now: None,
+            hovered: None,
+            hovered_now: None,
+        }
     }
+}
+
+/// Une ligne de curseur : lettre, nom, valeur (0 à 1), échelle des chiffres, dégradé.
+struct Channel<'a> {
+    letter: &'a str,
+    name: &'a str,
+    value: f32,
+    scale: f32,
+    colors: Vec<Color32>,
+}
+
+/// Les curseurs (barre dégradée et chiffres) ; renvoie le rang du curseur changé et sa nouvelle
+/// valeur (0 à 1).
+fn channel_rows(ui: &mut egui::Ui, channels: &[Channel]) -> Option<(usize, f32)> {
+    let mut out = None;
+    for (k, c) in channels.iter().enumerate() {
+        ui.horizontal(|ui| {
+            let label = ui.add(egui::Label::new(egui::RichText::new(c.letter).monospace()).sense(Sense::hover()));
+            crate::bulles::bulle(label, c.name, "", "");
+            if let Some(t) = gradient_bar(ui, c.value, &c.colors) {
+                out = Some((k, t));
+            }
+            let mut shown = c.value * c.scale;
+            if ui.add(egui::DragValue::new(&mut shown).range(0.0..=c.scale).max_decimals(0).speed(0.5)).changed() {
+                out = Some((k, shown / c.scale));
+            }
+        });
+    }
+    out
+}
+
+/// Une pastille de `side` points : sa couleur, bordée de blanc si `chosen`.
+fn swatch_cell(ui: &mut egui::Ui, c: [u8; 3], side: f32, chosen: bool, sense: Sense) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(side, side), sense);
+    ui.painter().rect_filled(rect, 2.0, to_color(c));
+    let border = if chosen { Stroke::new(2.0_f32, Color32::WHITE) } else { Stroke::new(1.0_f32, Color32::from_gray(70)) };
+    ui.painter().rect_stroke(rect, 2.0, border, StrokeKind::Inside);
+    resp
 }
 
 pub(crate) fn to_color(c: [u8; 3]) -> Color32 {
@@ -137,9 +195,41 @@ impl App {
                 self.couleurs.prefs.wheel = WheelShape::Triangle;
                 self.couleurs.prefs.wheel_shown = true;
             }
+            "couleur.curseurs_tsv" => self.couleurs.prefs.sliders = SliderMode::Hsv,
+            "couleur.curseurs_rvb" => self.couleurs.prefs.sliders = SliderMode::Rgb,
+            "couleur.curseurs_tsl" => self.couleurs.prefs.sliders = SliderMode::Hsl,
+            "couleur.recentes_effacer" => {
+                self.couleurs.prefs.recent.clear();
+                self.status = "Couleurs récentes effacées.".into();
+            }
+            "pastille.avant_plan" | "pastille.arriere_plan" => match self.target_color() {
+                Some(c) if action == "pastille.avant_plan" => self.set_front(c),
+                Some(c) => self.set_back(c),
+                None => self.no_target(),
+            },
             _ => return false,
         }
         true
+    }
+
+    /// La pastille visée : celle du menu ouvert, sinon celle sous la souris.
+    fn target(&self) -> Option<Target> {
+        self.couleurs.menu.or(self.couleurs.hovered)
+    }
+
+    fn target_color(&self) -> Option<[u8; 3]> {
+        match self.target()? {
+            Target::Recent(i) => self.couleurs.prefs.recent.get(i).copied(),
+        }
+    }
+
+    fn no_target(&mut self) {
+        self.status = "Vise d'abord une pastille : la souris dessus, ou clic droit.".into();
+    }
+
+    /// Une couleur vient de servir à dessiner : elle passe en tête des couleurs récentes.
+    pub(crate) fn color_used(&mut self, c: [u8; 3]) {
+        couleur::remember(&mut self.couleurs.prefs.recent, c);
     }
 
     /// Échange les couleurs d'avant-plan et d'arrière-plan.
@@ -147,12 +237,9 @@ impl App {
         std::mem::swap(&mut self.color, &mut self.couleurs.prefs.back);
         std::mem::swap(&mut self.hsv, &mut self.couleurs.back_hsv);
         // Une couleur changée ailleurs (pipette, texte…) : sa teinte suit.
-        if hsv_to_rgb(self.hsv) != self.color {
-            self.hsv = rgb_to_hsv(self.color);
-        }
-        if hsv_to_rgb(self.couleurs.back_hsv) != self.couleurs.prefs.back {
-            self.couleurs.back_hsv = rgb_to_hsv(self.couleurs.prefs.back);
-        }
+        self.sync_hsv();
+        let back = self.couleurs.prefs.back;
+        self.set_back(back);
     }
 
     /// Noir à l'avant-plan, blanc à l'arrière-plan.
@@ -164,16 +251,20 @@ impl App {
     /// Nouvelle couleur d'avant-plan.
     pub(crate) fn set_front(&mut self, c: [u8; 3]) {
         self.color = c;
-        if hsv_to_rgb(self.hsv) != c {
-            self.hsv = rgb_to_hsv(c);
-        }
+        self.sync_hsv();
+    }
+
+    /// Nouvelle couleur d'avant-plan, réglée en TSV (la teinte d'un gris reste).
+    fn set_hsv(&mut self, hsv: [f32; 3]) {
+        self.hsv = hsv;
+        self.color = hsv_to_rgb(hsv);
     }
 
     /// Nouvelle couleur d'arrière-plan.
     pub(crate) fn set_back(&mut self, c: [u8; 3]) {
         self.couleurs.prefs.back = c;
         if hsv_to_rgb(self.couleurs.back_hsv) != c {
-            self.couleurs.back_hsv = rgb_to_hsv(c);
+            self.couleurs.back_hsv = couleur::hsv_following(c, self.couleurs.back_hsv);
         }
     }
 
@@ -270,7 +361,7 @@ impl App {
     /// que si elle a changé ailleurs (pipette, nuancier, texte…).
     fn sync_hsv(&mut self) {
         if hsv_to_rgb(self.hsv) != self.color {
-            self.hsv = rgb_to_hsv(self.color);
+            self.hsv = couleur::hsv_following(self.color, self.hsv);
         }
     }
 
@@ -312,47 +403,184 @@ impl App {
         }
     }
 
-    /// Choisir la couleur d'avant-plan : réglages de la roue, la roue (`wheel` points de large au
-    /// plus), les curseurs.
+    /// Choix des curseurs : TSV, RVB ou TSL.
+    fn slider_modes(&mut self, ui: &mut egui::Ui) {
+        let labels = ["couleur.curseurs_tsv", "couleur.curseurs_rvb", "couleur.curseurs_tsl"].map(|a| self.keymap.label(a));
+        let p = &mut self.couleurs.prefs;
+        // De droite à gauche : le premier posé est le plus à droite.
+        crate::bulles::choix_a(ui, &mut p.sliders, SliderMode::Hsl, "TSL", "Curseurs TSL", "Teinte, saturation, luminosité : à mi-course, la couleur pure ; en haut, le blanc.", &labels[2], "couleur.curseurs_tsl");
+        crate::bulles::choix_a(ui, &mut p.sliders, SliderMode::Rgb, "RVB", "Curseurs RVB", "Rouge, vert, bleu, de 0 à 255.", &labels[1], "couleur.curseurs_rvb");
+        crate::bulles::choix_a(ui, &mut p.sliders, SliderMode::Hsv, "TSV", "Curseurs TSV", "Teinte, saturation, valeur (clarté).", &labels[0], "couleur.curseurs_tsv");
+    }
+
+    /// Choisir la couleur d'avant-plan : réglages de la roue et des curseurs, la roue (`wheel`
+    /// points de large au plus), les curseurs, l'opacité du pinceau.
     fn color_picker(&mut self, ui: &mut egui::Ui, wheel: f32) {
-        ui.horizontal(|ui| self.wheel_options(ui));
+        ui.horizontal(|ui| {
+            self.wheel_options(ui);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.slider_modes(ui));
+        });
         if self.couleurs.prefs.wheel_shown {
             let size = ui.available_width().clamp(100.0, wheel);
             ui.vertical_centered(|ui| self.color_wheel(ui, size));
             ui.add_space(4.0);
         }
         self.color_sliders(ui);
+        self.opacity_row(ui);
     }
 
-    /// Curseurs de la couleur d'avant-plan.
+    /// Curseurs de la couleur d'avant-plan : TSV, RVB ou TSL, chacun avec son dégradé et ses
+    /// chiffres (degrés pour la teinte, pour cent, ou 0 à 255).
     fn color_sliders(&mut self, ui: &mut egui::Ui) {
         self.sync_hsv();
         let [h, s, v] = self.hsv;
-        let mut next = self.hsv;
-        let hues: Vec<Color32> = (0..=12).map(|k| to_color(hsv_to_rgb([k as f32 * 30.0, 1.0, 1.0]))).collect();
-        let sats = [to_color(hsv_to_rgb([h, 0.0, v])), to_color(hsv_to_rgb([h, 1.0, v]))];
-        let vals = [Color32::BLACK, to_color(hsv_to_rgb([h, s, 1.0]))];
-        let rows: [(&str, f32, f32, &[Color32]); 3] =
-            [("T", h / 360.0, 360.0, &hues), ("S", s, 100.0, &sats), ("V", v, 100.0, &vals)];
-        for (k, (label, value, scale, colors)) in rows.into_iter().enumerate() {
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(label).monospace()).on_hover_text(match k {
-                    0 => "Teinte",
-                    1 => "Saturation",
-                    _ => "Valeur (clarté)",
-                });
-                if let Some(t) = gradient_bar(ui, value, colors) {
+        let hsv = |c: [f32; 3]| to_color(hsv_to_rgb(c));
+        let hues: Vec<Color32> = (0..=12).map(|k| hsv([k as f32 * 30.0, 1.0, 1.0])).collect();
+        let hue = |colors: Vec<Color32>| Channel { letter: "T", name: "Teinte", value: h / 360.0, scale: 360.0, colors };
+        match self.couleurs.prefs.sliders {
+            SliderMode::Hsv => {
+                let rows = [
+                    hue(hues),
+                    Channel { letter: "S", name: "Saturation", value: s, scale: 100.0, colors: vec![hsv([h, 0.0, v]), hsv([h, 1.0, v])] },
+                    Channel { letter: "V", name: "Valeur (clarté)", value: v, scale: 100.0, colors: vec![Color32::BLACK, hsv([h, s, 1.0])] },
+                ];
+                if let Some((k, t)) = channel_rows(ui, &rows) {
+                    let mut next = self.hsv;
                     next[k] = t * if k == 0 { 360.0 } else { 1.0 };
+                    self.set_hsv(next);
                 }
-                let mut shown = value * scale;
-                if ui.add(egui::DragValue::new(&mut shown).range(0.0..=scale).max_decimals(0).speed(0.5)).changed() {
-                    next[k] = if k == 0 { shown } else { shown / scale };
+            }
+            SliderMode::Rgb => {
+                let c = self.color;
+                let with = |k: usize, x: u8| {
+                    let mut c = c;
+                    c[k] = x;
+                    to_color(c)
+                };
+                let names = [("R", "Rouge"), ("V", "Vert"), ("B", "Bleu")];
+                let rows: Vec<Channel> = names
+                    .iter()
+                    .enumerate()
+                    .map(|(k, &(letter, name))| Channel {
+                        letter,
+                        name,
+                        value: c[k] as f32 / 255.0,
+                        scale: 255.0,
+                        colors: vec![with(k, 0), with(k, 255)],
+                    })
+                    .collect();
+                if let Some((k, t)) = channel_rows(ui, &rows) {
+                    let mut next = c;
+                    next[k] = (t * 255.0).round().clamp(0.0, 255.0) as u8;
+                    self.set_front(next);
                 }
-            });
+            }
+            SliderMode::Hsl => {
+                let [_, sl, l] = hsv_to_hsl(self.hsv);
+                let hsl = |c: [f32; 3]| to_color(couleur::hsl_to_rgb(c));
+                let rows = [
+                    hue(hues),
+                    Channel { letter: "S", name: "Saturation (TSL)", value: sl, scale: 100.0, colors: vec![hsl([h, 0.0, l]), hsl([h, 1.0, l])] },
+                    Channel {
+                        letter: "L",
+                        name: "Luminosité",
+                        value: l,
+                        scale: 100.0,
+                        colors: vec![Color32::BLACK, hsl([h, sl, 0.5]), Color32::WHITE],
+                    },
+                ];
+                if let Some((k, t)) = channel_rows(ui, &rows) {
+                    let mut next = [h, sl, l];
+                    next[k] = t * if k == 0 { 360.0 } else { 1.0 };
+                    self.set_hsv(hsl_to_hsv(next));
+                }
+            }
         }
-        if next != self.hsv {
-            self.hsv = next;
-            self.color = hsv_to_rgb(next);
+    }
+
+    /// Opacité : la couleur n'en a pas, le pinceau et le crayon si (la même que dans leurs
+    /// réglages). Pour un autre outil, la ligne est grisée.
+    fn opacity_row(&mut self, ui: &mut egui::Ui) {
+        let color = to_color(self.color);
+        let brush = match self.tool {
+            Tool::Brush => Some(&mut self.brush),
+            Tool::Pencil => Some(&mut self.pencil),
+            _ => None,
+        };
+        ui.horizontal(|ui| {
+            let label = ui.add(egui::Label::new(egui::RichText::new(ph::DROP_HALF).size(crate::bulles::TAILLE)).sense(Sense::hover()));
+            crate::bulles::bulle(
+                label,
+                "Opacité du pinceau",
+                "La couleur elle-même n'a pas d'opacité : c'est celle du pinceau ou du crayon, la même que dans leurs réglages.",
+                "",
+            );
+            match brush {
+                Some(b) => {
+                    if let Some(t) = gradient_bar(ui, b.opacity, &[Color32::TRANSPARENT, color]) {
+                        b.opacity = t;
+                    }
+                    let mut pct = b.opacity * 100.0;
+                    if ui.add(egui::DragValue::new(&mut pct).range(0.0..=100.0).max_decimals(0).speed(0.5).suffix(" %")).changed() {
+                        b.opacity = pct / 100.0;
+                    }
+                }
+                None => {
+                    ui.label(egui::RichText::new("pinceau et crayon seulement").weak());
+                }
+            }
+        });
+    }
+
+    /// Les dernières couleurs avec lesquelles on a dessiné, sur une rangée (autant qu'il en tient).
+    fn recent_row(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
+            let label = ui.add(egui::Label::new(egui::RichText::new(ph::CLOCK_COUNTER_CLOCKWISE).size(crate::bulles::TAILLE)).sense(Sense::hover()));
+            crate::bulles::bulle(
+                label,
+                "Couleurs récentes",
+                "Les dernières couleurs avec lesquelles on a dessiné (pinceau, crayon, remplissage, formes, texte). Clic : avant-plan ; clic droit : menu.",
+                "",
+            );
+            let side = 16.0;
+            let fits = ((ui.available_width() + 2.0) / (side + 2.0)).floor().max(0.0) as usize;
+            let recent = self.couleurs.prefs.recent.clone();
+            if recent.is_empty() {
+                ui.label(egui::RichText::new("aucune pour l'instant").weak());
+            }
+            for (i, c) in recent.into_iter().enumerate().take(fits) {
+                let resp = swatch_cell(ui, c, side, c == self.color, Sense::click());
+                self.target_cell(resp, Target::Recent(i), c, "");
+            }
+        });
+    }
+
+    /// Ce que fait une pastille visée (couleur récente) : clic, avant-plan ; souris dessus ou
+    /// clic droit, elle devient la pastille visée par les commandes « pastille.* ».
+    fn target_cell(&mut self, resp: Response, target: Target, c: [u8; 3], name: &str) {
+        let title = if name.is_empty() { couleur::hex(c) } else { format!("{name} · {}", couleur::hex(c)) };
+        let resp = crate::bulles::bulle(resp, &title, "Clic : couleur d'avant-plan ; clic droit : menu.", "");
+        if resp.hovered() {
+            self.couleurs.hovered_now = Some(target);
+        }
+        if resp.clicked() {
+            self.set_front(c);
+        }
+        resp.context_menu(|ui| self.target_menu(ui, target));
+    }
+
+    /// Menu d'une pastille visée.
+    fn target_menu(&mut self, ui: &mut egui::Ui, target: Target) {
+        self.couleurs.menu = Some(target);
+        self.couleurs.menu_now = Some(target);
+        self.action_item(ui, "Couleur d'avant-plan", "pastille.avant_plan");
+        self.action_item(ui, "Couleur d'arrière-plan", "pastille.arriere_plan");
+        match target {
+            Target::Recent(_) => {
+                ui.separator();
+                self.action_item(ui, "Effacer les couleurs récentes", "couleur.recentes_effacer");
+            }
         }
     }
 
@@ -361,6 +589,8 @@ impl App {
         self.front_back_row(ui);
         ui.add_space(4.0);
         self.color_picker(ui, 240.0);
+        ui.add_space(2.0);
+        self.recent_row(ui);
         ui.add_space(6.0);
         ui.horizontal(|ui| {
             ui.label("Nuancier");
@@ -405,6 +635,9 @@ impl App {
     /// À chaque image : les réglages de la couleur sont enregistrés quand ils changent (pas
     /// pendant un glissé ni une saisie).
     pub(crate) fn color_tick(&mut self, ctx: &egui::Context) {
+        // La pastille visée pour l'image suivante : menu ouvert, souris dessus.
+        self.couleurs.menu = self.couleurs.menu_now.take();
+        self.couleurs.hovered = self.couleurs.hovered_now.take();
         self.couleurs.prefs.front = self.color;
         if self.couleurs.prefs != self.settings.colors && !ctx.input(|i| i.pointer.any_down()) && !ctx.wants_keyboard_input() {
             self.settings.colors = self.couleurs.prefs.clone();

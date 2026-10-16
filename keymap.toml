@@ -423,6 +423,38 @@ action = "couleur.roue_triangle"
 touches = []
 source = "Pelure"
 
+[[raccourci]]
+action = "couleur.curseurs_tsv"
+touches = []
+source = "Pelure"
+
+[[raccourci]]
+action = "couleur.curseurs_rvb"
+touches = []
+source = "Pelure"
+
+[[raccourci]]
+action = "couleur.curseurs_tsl"
+touches = []
+source = "Pelure"
+
+[[raccourci]]
+action = "couleur.recentes_effacer"
+touches = []
+source = "Pelure"
+
+# Les commandes « pastille » visent la pastille dont le menu est ouvert, sinon celle sous la
+# souris (nuancier ou couleurs récentes).
+[[raccourci]]
+action = "pastille.avant_plan"
+touches = []
+source = "Pelure"
+
+[[raccourci]]
+action = "pastille.arriere_plan"
+touches = []
+source = "Pelure"
+
 # ------------------------------------------------------------------------------------ Dessin
 
 [[raccourci]]

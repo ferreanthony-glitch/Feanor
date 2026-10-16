@@ -1246,6 +1246,10 @@ impl App {
             return;
         }
         let erase = self.tool == Tool::Eraser;
+        if !erase {
+            // Elle rejoint les couleurs récentes (passe couleur).
+            self.color_used(self.color);
+        }
         if erase && self.cel_here().is_none() {
             self.guides.stroke = None;
             return;
@@ -1385,6 +1389,7 @@ impl App {
         if !self.layer_editable() {
             return;
         }
+        self.color_used(self.color);
         match self.layer().kind {
             LayerKind::Vector => self.fill_vector(p),
             LayerKind::Bitmap => self.fill_bitmap(p),
