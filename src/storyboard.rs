@@ -733,6 +733,13 @@ impl App {
             blocks.iter().position(|b| (p.x - b.right()).abs() <= 5.0)
         };
         let frame_at = |x: f32| (((x - left) / ppf).floor().max(0.0) as usize).min(total - 1);
+        // Marque d'image sous le point (son triangle en haut du plan) : (plan, rang de la marque).
+        let mark_at = |app: &App, p: Pos2| {
+            let i = blocks.iter().position(|b| p.x >= b.left() - 5.0 && p.x <= b.right() + 5.0 && p.y >= b.top() && p.y <= b.top() + 12.0)?;
+            let b = blocks[i];
+            let m = app.doc.panels[i].marks.iter().position(|m| (p.x - (b.left() - 1.0 + m.frame as f32 * ppf)).abs() <= 5.0)?;
+            Some((i, m))
+        };
         // Sans limite à la fin des plans (on peut poser un son plus loin).
         let free_frame_at = |x: f32| ((x - left) / ppf).floor().max(0.0) as usize;
 
@@ -758,6 +765,10 @@ impl App {
                 self.begin_camera_key_drag(i, k);
             } else if let Some((_, Some((id, edge)))) = self.lane_hit(origin, left, ppf, lanes_top) {
                 self.begin_clip_drag(id, edge, origin);
+            } else if let Some((i, m)) = mark_at(self, origin) {
+                // Une marque d'image se prend aussi dans le montage (passe interface).
+                self.set_panel(i);
+                self.begin_handle_drag(crate::handles::Handle::Mark(m));
             } else {
                 let drag = if !in_blocks(origin) {
                     MontageDrag::Scrub
@@ -802,8 +813,20 @@ impl App {
         } else if resp.hover_pos().is_some_and(|p| self.montage_camera_key_at(p, r.top(), &blocks, ppf, rows).is_some()) {
             ui.ctx().set_cursor_icon(CursorIcon::Grab);
         }
+        if self.handle_drag.is_some() {
+            ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
+            if let (true, Some(p)) = (resp.dragged(), resp.interact_pointer_pos()) {
+                let f = ((p.x - x_of(self.doc.panel_start(self.cur_panel))) / ppf).floor().max(0.0) as usize;
+                self.drag_handle(f, f);
+            }
+            if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
+                self.end_handle_drag();
+            }
+        } else if self.cam_key_drag.is_none() && resp.hover_pos().is_some_and(|p| mark_at(self, p).is_some()) {
+            ui.ctx().set_cursor_icon(CursorIcon::Grab);
+        }
 
-        if resp.dragged() && self.cam_key_drag.is_none() {
+        if resp.dragged() && self.cam_key_drag.is_none() && self.handle_drag.is_none() {
             if let Some(p) = resp.interact_pointer_pos() {
                 match &mut self.montage_drag {
                     Some(MontageDrag::Scrub) => {
@@ -928,6 +951,24 @@ impl App {
                         self.select_panel(i);
                         MenuTarget::Panel(i)
                     })
+                } else if let Some((i, k)) = self.layer_row_hit(p, r.top(), &blocks, rows) {
+                    // Une piste de calque : ce plan, cette image, ce calque, et son menu.
+                    self.sel_clip = None;
+                    self.goto_global(frame_at(p.x));
+                    (self.cur_panel == i).then(|| {
+                        self.select_layer(k);
+                        MenuTarget::Layer(k)
+                    })
+                } else if let Some(&(_, start)) = runs.iter().find(|(rect, _)| rect.contains(p)) {
+                    self.board_sel.clear();
+                    self.select_panel(start);
+                    Some(MenuTarget::Sequence)
+                } else if p.y < bands_top {
+                    self.goto_global(frame_at(p.x));
+                    Some(MenuTarget::Ruler)
+                } else if (r.top() + rows.camera_top()..=r.top() + rows.camera_top() + crate::montagerows::CAM_H).contains(&p.y) {
+                    self.goto_global(frame_at(p.x));
+                    Some(MenuTarget::Camera)
                 } else {
                     None
                 };
@@ -937,6 +978,22 @@ impl App {
             resp.context_menu(|ui| match target {
                 MenuTarget::Panel(i) => self.panel_menu(ui, i),
                 MenuTarget::Lane { track, clip, frame } => self.lane_menu(ui, track, clip, frame),
+                MenuTarget::Layer(k) => self.layer_menu(ui, k, false),
+                MenuTarget::Camera => self.grid_menu_ui(ui, crate::handles::GridMenu::Camera),
+                MenuTarget::Sequence => {
+                    self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
+                    self.action_item(ui, "Nouveau plan", "panneau.nouveau");
+                    self.action_item(ui, "Nouveau plan avant le plan courant", "plan.nouveau_avant");
+                    ui.separator();
+                    self.action_item(ui, "Verrouiller / déverrouiller le storyboard", "storyboard.verrouiller");
+                }
+                MenuTarget::Ruler => {
+                    self.action_item(ui, "Marque d'image ici (ajouter / retirer)", "marque.basculer");
+                    self.action_item(ui, "Couper le plan ici", "panneau.couper");
+                    self.action_item(ui, "Signet du plan ici (poser / retirer)", "signet.basculer");
+                    ui.separator();
+                    self.action_item(ui, "Importer un son ici…", "son.importer");
+                }
             });
         }
 

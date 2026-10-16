@@ -153,6 +153,10 @@ impl App {
         let lock_key = self.raccourci("calque.verrouiller");
         let frame = self.cur_frame;
         let accent = ui.visuals().selection.bg_fill;
+        // Glisser une ligne la monte ou la descend (passe interface) : les lignes de cette image,
+        // pour savoir où elle se pose.
+        let list_top = ui.cursor().top();
+        let mut drag_rows: Vec<crate::layerheads::Row> = Vec::new();
         for li in (0..self.layers().len()).rev() {
             let (id, visible, locked, kind, name, cel, folder) = {
                 let l = &self.layers()[li];
@@ -160,7 +164,7 @@ impl App {
             };
             let current = li == self.cur_layer;
             let thumb = cel.and_then(|c| self.layer_thumb(ui.ctx(), c));
-            egui::Frame::new()
+            let shown = egui::Frame::new()
                 .fill(if current { accent.gamma_multiply(0.55) } else { Color32::TRANSPARENT })
                 .corner_radius(3.0)
                 .inner_margin(egui::Margin::symmetric(3, 2))
@@ -169,16 +173,20 @@ impl App {
                         ui.spacing_mut().item_spacing = vec2(3.0, 0.0);
                         let eye = if visible { ph::EYE } else { ph::EYE_SLASH };
                         let resp = ui.add(egui::Button::new(RichText::new(eye).size(15.0)).frame(false).min_size(vec2(20.0, 36.0)));
-                        if crate::bulles::bulle(resp, "Afficher / masquer", "Montrer ou cacher le calque.", "").clicked() {
+                        let resp = crate::bulles::bulle(resp, "Afficher / masquer", "Montrer ou cacher le calque.", "");
+                        if resp.clicked() {
                             toggle = Some(li);
                         }
+                        resp.context_menu(|ui| self.layer_menu(ui, li, false));
                         let pad = if locked { ph::LOCK_SIMPLE } else { ph::LOCK_SIMPLE_OPEN };
                         let pad = RichText::new(pad).size(14.0);
                         let pad = if locked { pad } else { pad.weak() };
                         let resp = ui.add(egui::Button::new(pad).frame(false).min_size(vec2(18.0, 36.0)));
-                        if crate::bulles::bulle(resp, "Verrouiller / déverrouiller", "Un calque verrouillé ne peut plus être dessiné.", &lock_key).clicked() {
+                        let resp = crate::bulles::bulle(resp, "Verrouiller / déverrouiller", "Un calque verrouillé ne peut plus être dessiné.", &lock_key);
+                        if resp.clicked() {
                             lock = Some(li);
                         }
+                        resp.context_menu(|ui| self.layer_menu(ui, li, false));
                         // Vignette du dessin à l'image courante (vide : cadre gris).
                         let (rect, resp) = ui.allocate_exact_size(vec2(THUMB[0] as f32, THUMB[1] as f32), Sense::click());
                         match &thumb {
@@ -224,6 +232,32 @@ impl App {
                         });
                     });
                 });
+            let rect = shown.response.rect;
+            drag_rows.push(crate::layerheads::Row { li, top: rect.top() - list_top, h: rect.height() });
+            // Le glisser seul : les clics restent aux boutons et au nom.
+            let grip = ui.interact(rect, ui.id().with(("glisser_calque", id)), Sense::drag());
+            if grip.drag_started() && self.layer_rename.is_none() {
+                self.panel_layer_drag = Some(li);
+            }
+        }
+        if let Some(from) = self.panel_layer_drag {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+            let pointer = ui.input(|i| i.pointer.interact_pos());
+            if let Some(p) = pointer {
+                let slot = drag_rows.iter().filter(|r| r.top + r.h * 0.5 < p.y - list_top).count();
+                let y = list_top + drag_rows.get(slot).map_or_else(|| drag_rows.last().map_or(0.0, |r| r.top + r.h), |r| r.top);
+                let x = ui.max_rect().x_range();
+                ui.painter().line_segment([egui::pos2(x.min, y), egui::pos2(x.max, y)], Stroke::new(2.0_f32, Color32::WHITE));
+            }
+            if ui.input(|i| !i.pointer.any_down()) {
+                self.panel_layer_drag = None;
+                if let Some(p) = pointer {
+                    let to = crate::layerheads::drop_index(&drag_rows, from, p.y - list_top);
+                    if to != from && !self.content_refuses() {
+                        self.move_layer_to(from, to);
+                    }
+                }
+            }
         }
         if let Some(li) = toggle {
             self.record_step();
@@ -284,6 +318,18 @@ impl App {
                 self.merge_layer_down();
             }
         });
+        // Clic droit dans le vide sous la liste : de nouveaux calques.
+        let rest = ui.available_rect_before_wrap();
+        if rest.height() > 4.0 {
+            let resp = ui.interact(rest, ui.id().with("vide_calques"), Sense::click());
+            resp.context_menu(|ui| {
+                self.action_item(ui, "Nouveau calque vectoriel", "calque.nouveau_vectoriel");
+                self.action_item(ui, "Nouveau calque bitmap", "calque.nouveau_bitmap");
+                self.action_item(ui, "Nouveau calque de fond", "calque.nouveau_fond");
+                ui.separator();
+                self.action_item(ui, "Coller le calque", "calque.coller");
+            });
+        }
     }
     /// Champ du nouveau nom du calque en cours de renommage ; renvoie `Some(true)` quand on le
     /// valide (Entrée, clic ailleurs), `Some(false)` quand on abandonne (Échap).

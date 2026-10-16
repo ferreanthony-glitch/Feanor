@@ -773,7 +773,28 @@ Simplifier l'interface et combler ce qui manque :
 - ✅ Montage : la case « Storyboard » devient la colonne du projet (choix d'Anthony : « seulement
   les boutons », comme la colonne de gauche du panneau Projet de TVPaint) : nouveau plan, plan
   avant, dupliquer, supprimer, nouvelle séquence, verrou, réglages, nom du projet.
-- Poignées et glissés dans la timeline et le montage, menus au clic droit partout : en cours.
+- ✅ Poignées (glisser, une étape d'annulation par geste, Échap annule) :
+  - dans la timeline du plan : les marques d'image, les signets, l'entrée et la sortie, les clés
+    d'effets ; le bord droit d'un dessin étire ou raccourcit son exposition (ce qui suit glisse,
+    rôles et clés d'effets compris) ;
+  - dans le montage : les marques d'image ;
+  - les clés de caméra se prenaient déjà (12e).
+- ✅ Monter ou descendre un calque en le glissant :
+  - dans le panneau Calques et dans les noms des pistes du montage (un trait montre où il se
+    pose) ;
+  - les en-têtes de la timeline le faisaient déjà (13b).
+- ✅ Clic droit :
+  - **timeline** : règle (signet, marque, entrée et sortie, cadrage), caméra, clé d'effet, son,
+    noms des lignes ;
+  - **montage** : pistes de calques, caméra, barre de séquence, règle ;
+  - **panneau Calques** : toute la ligne et le vide (nouveaux calques) ;
+  - **dessin** : annuler, presse-papiers, sélection, vue, pelure, table lumineuse, caméra, mode.
+
+  Chaque entrée est une commande : un clic droit dessus lui donne un raccourci.
+- Pas faits :
+  - glisser le début d'un calque vidéo (son menu a un champ) ;
+  - étirer une exposition dans les pistes du montage (la timeline du plan le fait) ;
+  - les rôles, qui suivent leurs images.
 
 ## Raccourcis proposés, à valider
 

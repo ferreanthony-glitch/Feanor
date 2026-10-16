@@ -46,6 +46,11 @@ impl App {
         }
 
         self.canvas_input(ui.ctx(), &response, rect);
+        // Clic droit sur le dessin (passe interface) : les commandes courantes. Pas dans une
+        // vignette de la planche, qui a son propre menu.
+        if !self.in_card && !self.modal_open() {
+            response.context_menu(|ui| self.canvas_menu(ui));
+        }
         self.update_ref3d(ui.ctx());
         self.update_text_preview(ui.ctx());
         self.check_persp();
@@ -153,6 +158,32 @@ impl App {
             painter.line_segment([a, b], Stroke::new(2.0 * w, color));
         }
         painter.circle_filled(b, w, color);
+    }
+
+    /// Menu du clic droit sur le dessin. Chaque entrée est une commande : un clic droit dessus
+    /// lui donne un raccourci.
+    fn canvas_menu(&mut self, ui: &mut egui::Ui) {
+        self.action_item(ui, "Annuler", "edition.annuler");
+        self.action_item(ui, "Rétablir", "edition.retablir");
+        ui.separator();
+        self.action_item(ui, "Couper", "edition.couper");
+        self.action_item(ui, "Copier", "edition.copier");
+        self.action_item(ui, "Coller", "edition.coller");
+        self.action_item(ui, "Tout sélectionner", "edition.tout_selectionner");
+        self.action_item(ui, "Tout désélectionner", "edition.tout_deselectionner");
+        self.action_item(ui, "Supprimer la sélection ou effacer le dessin", "edition.supprimer");
+        ui.separator();
+        self.action_item(ui, "Ajuster à la fenêtre", "vue.ajuster");
+        self.action_item(ui, "Zoom 100 %", "vue.reinit_zoom");
+        self.action_item(ui, "Remettre la vue droite", "vue.reinit_rotation");
+        self.action_item(ui, "Miroir de la vue", "vue.miroir");
+        ui.separator();
+        self.action_item(ui, "Pelure d'oignon (oui / non)", "vue.pelure");
+        self.action_item(ui, "Table lumineuse (oui / non)", "vue.table_lumineuse");
+        self.action_item(ui, "Vue à travers la caméra", "camera.vue");
+        ui.separator();
+        let mode = if self.mode == crate::app::Mode::Storyboard { "Animer ce plan" } else { "Revenir au storyboard" };
+        self.action_item(ui, mode, "mode.basculer");
     }
 
     fn canvas_input(&mut self, ctx: &egui::Context, response: &egui::Response, rect: Rect) {
