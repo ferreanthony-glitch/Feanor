@@ -360,3 +360,77 @@ fn real_sboard_project_reads() {
         assert_eq!(doc.total_frames(), frames);
     }
 }
+
+#[test]
+fn project_copy_skips_logs_and_locks() {
+    let src = temp("copie-src");
+    std::fs::create_dir_all(src.join("elements/Draw")).unwrap();
+    std::fs::create_dir_all(src.join("logs")).unwrap();
+    std::fs::write(src.join("p.sboard"), b"x").unwrap();
+    std::fs::write(src.join("p.sboard.lock"), b"x").unwrap();
+    std::fs::write(src.join("elements/Draw/a.tvg"), b"xyz").unwrap();
+    std::fs::write(src.join("logs/l.txt"), b"x").unwrap();
+    let dest = temp("copie-dest");
+    let bytes = crate::sbbatch::copy_project(&src, &dest.join("projet")).unwrap();
+    let ok = (dest.join("projet/p.sboard").is_file(), dest.join("projet/elements/Draw/a.tvg").is_file());
+    let skipped = (dest.join("projet/p.sboard.lock").exists(), dest.join("projet/logs").exists());
+    std::fs::remove_dir_all(&src).ok();
+    std::fs::remove_dir_all(&dest).ok();
+    assert_eq!((ok, skipped, bytes), ((true, true), (false, false), 4));
+}
+
+#[test]
+fn batch_command_line_and_versions() {
+    let args = crate::sbbatch::batch_args(Path::new(r"C:\t\p.sboard"), Path::new(r"C:\t\s.js"));
+    let args: Vec<String> = args.iter().map(|a| a.to_string_lossy().into_owned()).collect();
+    assert_eq!(args, vec!["-scene", r"C:\t\p.sboard", "-batch", "-compile", r"C:\t\s.js"]);
+    let v = crate::sbbatch::version_of(Path::new(r"C:\PF\Toon Boom Animation\Toon Boom Storyboard Pro 27\win64\bin\StoryboardPro.exe"));
+    assert_eq!(v, 27);
+    // Le script n'ouvre aucune boîte (mode batch) et tente les traits vectoriels.
+    let s = sbscript::script(Path::new(r"C:\d"));
+    assert!(!s.contains("MessageBox") && s.contains("Drawing.query.getStrokes") && s.contains("getColorDataWithId"));
+}
+
+#[test]
+fn vector_layer_comes_back_as_vectors() {
+    // Un faux export : le dessin du tutoriel (traits) et son image, comme Storyboard Pro les écrirait.
+    let dir = temp("vecteurs");
+    std::fs::create_dir_all(dir.join("i")).unwrap();
+    let traits = crate::sbvector_tests::tutorial();
+    std::fs::write(dir.join("i/traits.json"), traits.to_string()).unwrap();
+    let raw = crate::sbvector::raw_elements(&traits);
+    // L'image à la taille du projet (64×32), dessin réduit et centré, axe vertical vers le bas.
+    let s = 0.015;
+    let tf = |x: f32, y: f32| [32.0 + (x + 555.0) * s, 16.0 - (y - 72.0) * s];
+    let elements: Vec<crate::vector::Element> = raw
+        .iter()
+        .map(|e| match e {
+            crate::vector::Element::Fill { contours, color, opacity } => crate::vector::Element::Fill {
+                contours: contours.iter().map(|c| c.iter().map(|p| tf(p[0], p[1])).collect()).collect(),
+                color: *color,
+                opacity: *opacity,
+            },
+            crate::vector::Element::Stroke { points, color, opacity, hardness, brush } => crate::vector::Element::Stroke {
+                points: points.iter().map(|p| { let q = tf(p.x, p.y); crate::vector::VPoint { x: q[0], y: q[1], r: (p.r * s).max(0.3) } }).collect(),
+                color: *color,
+                opacity: *opacity,
+                hardness: *hardness,
+                brush: brush.clone(),
+            },
+            other => other.clone(),
+        })
+        .collect();
+    let png = crate::vector::VectorDrawing { elements }.render(64, 32);
+    let rgba = png.to_rgba();
+    image::RgbaImage::from_raw(64, 32, rgba).unwrap().save(dir.join("i/a.png")).unwrap();
+    let manifest = "pelure-sboard\t1\npanneau\t0\tp1\tA\t01\t\t10\ncalque\t0\t0\tA\t1\t0\tv\ti/a.png\ti/traits.json\tok\n";
+    let drawings = sbscript::parse_manifest(manifest, &dir).unwrap();
+    let sb = sboard::parse(SBOARD, "x").unwrap();
+    let (doc, _) = crate::sbimport::build(&sb, &dir, Some(&drawings), &|_| {});
+    std::fs::remove_dir_all(&dir).ok();
+    let a = doc.panels[0].layers.iter().find(|l| l.name == "A").unwrap();
+    assert_eq!(a.kind, crate::document::LayerKind::Vector);
+    let cel = &doc.cels[&a.frames[0].unwrap()];
+    assert_eq!(cel.vector.as_ref().map(|v| v.elements.len()), Some(8), "deux zones et six traits, modifiables");
+    // Le calque vectoriel sans dessin du plan 02 reste vectoriel lui aussi (vide).
+}

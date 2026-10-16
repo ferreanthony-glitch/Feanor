@@ -142,12 +142,16 @@ mod ref3dtool;
 mod render;
 #[cfg(test)]
 mod resize_tests;
+pub mod sbbatch;
 pub mod sboard;
 #[cfg(test)]
 mod sboard_tests;
 mod sbimport;
 pub mod sbscript;
 mod sbui;
+pub mod sbvector;
+#[cfg(test)]
+mod sbvector_tests;
 pub mod stretch;
 pub mod xml;
 pub mod roles;

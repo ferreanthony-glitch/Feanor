@@ -37,6 +37,7 @@ pub fn build(sb: &SbProject, project_dir: &Path, drawings: Option<&Drawings>, pr
     let total: usize = sb.shots.iter().map(|s| s.panels.len()).sum();
     let matched = drawings.map(|d| match_panels(sb, d, &mut warnings));
     let mut cels: HashMap<u64, CelId> = HashMap::new();
+    let mut stats = VectorStats::default();
     let mut seq: Option<(String, u64)> = None;
     let mut g = 0;
     for shot in &sb.shots {
@@ -62,7 +63,7 @@ pub fn build(sb: &SbProject, project_dir: &Path, drawings: Option<&Drawings>, pr
             panel.dialogue = p.dialogue.clone();
             panel.action = p.action.clone();
             panel.notes = p.notes.clone();
-            let layers = panel_layers(&mut doc, p, dp, &mut cels, &mut warnings, &shot.name);
+            let layers = panel_layers(&mut doc, p, dp, &mut cels, &mut warnings, &mut stats, &shot.name);
             if !layers.is_empty() {
                 panel.layers = layers;
             }
@@ -70,6 +71,16 @@ pub fn build(sb: &SbProject, project_dir: &Path, drawings: Option<&Drawings>, pr
             g += 1;
             progress(0.8 * g as f32 / total.max(1) as f32);
         }
+    }
+    if stats.tried > stats.kept {
+        let mut w = format!(
+            "Dessins vectoriels : {} calque(s) sur {} gardé(s) en vecteurs ; les autres sont en images (traits illisibles, ou qui ne recouvrent pas l'image exportée).",
+            stats.kept, stats.tried
+        );
+        if !stats.notes.is_empty() {
+            w += &format!(" Script : {}", stats.notes.join(" ; "));
+        }
+        warnings.push(w);
     }
     warnings.extend(doc.into_plans());
     add_sounds(&mut doc, sb, &project_dir.join("audio"), &mut warnings);
@@ -119,6 +130,7 @@ fn panel_layers(
     dp: Option<&DPanel>,
     cels: &mut HashMap<u64, CelId>,
     warnings: &mut Vec<String>,
+    stats: &mut VectorStats,
     shot: &str,
 ) -> Vec<Layer> {
     let mut layers = Vec::new();
@@ -130,12 +142,26 @@ fn panel_layers(
             let mut list: Vec<_> = dp.layers.iter().enumerate().collect();
             list.sort_by_key(|(i, l)| (rank(&l.name).map_or(0, |r| r + 1), *i));
             for (_, dl) in list.into_iter().rev() {
-                let mut layer = Layer::new(dl.name.clone(), LayerKind::Bitmap);
+                // Un calque vectoriel de Storyboard Pro reste vectoriel (14a-2) : ses traits s'ils
+                // ont pu être lus et calés sur son image, sinon il garde l'image (calque bitmap).
+                let kind = if dl.vector { LayerKind::Vector } else { LayerKind::Bitmap };
+                let mut layer = Layer::new(dl.name.clone(), kind);
                 layer.visible = dl.visible;
                 layer.locked = dl.locked;
                 if let Some(file) = &dl.file {
-                    match cel_from_image(doc, file, cels) {
-                        Ok(cel) => layer.frames = vec![Some(cel); p.frames],
+                    match cel_from_export(doc, file, dl.traits.as_deref(), cels) {
+                        Ok((cel, vector)) => {
+                            layer.frames = vec![Some(cel); p.frames];
+                            layer.kind = if vector { LayerKind::Vector } else { LayerKind::Bitmap };
+                            if dl.vector {
+                                stats.tried += 1;
+                                if vector {
+                                    stats.kept += 1;
+                                } else if stats.notes.len() < 3 && !dl.note.is_empty() && !stats.notes.contains(&dl.note) {
+                                    stats.notes.push(dl.note.clone());
+                                }
+                            }
+                        }
                         Err(e) => warnings.push(format!("Plan {shot}, calque « {} » : {e}", dl.name)),
                     }
                 }
@@ -144,27 +170,54 @@ fn panel_layers(
         }
         None => {
             for l in p.layers.iter().rev() {
-                layers.push(Layer::new(l.name.clone(), LayerKind::Bitmap));
+                let kind = if l.vector { LayerKind::Vector } else { LayerKind::Bitmap };
+                layers.push(Layer::new(l.name.clone(), kind));
             }
         }
     }
     layers
 }
 
-/// Le dessin d'une image exportée (le même pour deux fichiers identiques).
-fn cel_from_image(doc: &mut Document, path: &Path, cels: &mut HashMap<u64, CelId>) -> Result<CelId, String> {
-    let bytes = std::fs::read(path).map_err(|e| format!("image illisible ({e})"))?;
+/// Bilan des dessins vectoriels : calques essayés, gardés en vecteurs, et quelques notes du
+/// script sur ceux qui n'ont pas pu l'être.
+#[derive(Default)]
+struct VectorStats {
+    tried: usize,
+    kept: usize,
+    notes: Vec<String>,
+}
+
+/// Le dessin d'un calque exporté (le même pour deux exports identiques) : vectoriel si ses
+/// traits ont pu être lus et calés sur l'image (`sbvector`), sinon l'image. Vrai : vectoriel.
+fn cel_from_export(doc: &mut Document, png: &Path, traits: Option<&Path>, cels: &mut HashMap<u64, CelId>) -> Result<(CelId, bool), String> {
+    let bytes = std::fs::read(png).map_err(|e| format!("image illisible ({e})"))?;
+    let traits_text = traits.and_then(|t| std::fs::read(t).ok());
     let mut h = DefaultHasher::new();
     bytes.hash(&mut h);
+    traits_text.hash(&mut h);
     let key = h.finish();
     if let Some(&c) = cels.get(&key) {
-        return Ok(c);
+        let vector = doc.cels.get(&c).is_some_and(|c| c.vector.is_some());
+        return Ok((c, vector));
     }
     let img = image::load_from_memory(&bytes).map_err(|e| format!("image illisible ({e})"))?.to_rgba8();
     let raster = place_image(doc, img);
-    let cel = doc.add_cel(Cel { raster, vector: None, version: 0 });
-    cels.insert(key, cel);
-    Ok(cel)
+    let fitted = traits_text
+        .and_then(|t| serde_json::from_slice::<serde_json::Value>(&t).ok())
+        .map(|json| crate::sbvector::raw_elements(&json))
+        .filter(|raw| !raw.is_empty())
+        .and_then(|raw| crate::sbvector::fit_to_image(&raw, &raster));
+    let (cel, vector) = match fitted {
+        Some((elements, _)) => {
+            let mut cel = Cel { raster: Raster::new(doc.width, doc.height), vector: Some(crate::vector::VectorDrawing { elements }), version: 0 };
+            cel.rerender();
+            (cel, true)
+        }
+        None => (Cel { raster, vector: None, version: 0 }, false),
+    };
+    let id = doc.add_cel(cel);
+    cels.insert(key, id);
+    Ok((id, vector))
 }
 
 /// Une image au centre du cadre ; à la taille du cadre si elle a ses proportions (un export à

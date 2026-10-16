@@ -746,6 +746,22 @@ ECMAScript 3), elle, est documentée (aide `help/storyboard`). Choix d'Anthony (
   - Vérifié sur les projets BRAWLIDAYS (partie 1 : 12 plans, 39 panneaux, 834 images ; partie 2 :
     45 plans, 322 panneaux, 3 323 images, lue en 0,2 s). Le script n'a pas pu être essayé ici
     (Storyboard Pro n'est jamais lancé par Claude) : à essayer par Anthony.
+- ✅ 14a-2. Ouvrir sans rien demander (Anthony : « il faut automatiser le script à l'ouverture du
+  fichier… c'est induit ») et garder les calques vectoriels.
+  - **Ouverture** : Fichier > Ouvrir accepte les `.sboard`, avec une entrée dédiée sous « Ouvrir… ».
+  - **Export automatique** : Pelure copie le projet dans un dossier temporaire (sans `logs/` ni
+    verrous), y lance Storyboard Pro en batch avec le script (syntaxe de sa documentation), suit
+    l'avancement, puis ouvre le projet. « Arrêter » ouvre sans les dessins.
+  - **Traits vectoriels** : le script lit ceux de chaque calque vectoriel avec l'interface de
+    script étendue de Storyboard Pro (`Drawing.query.getStrokes`, couleurs par
+    `ColorManager.getColorDataWithId`) et les écrit en JSON.
+  - **Reconstruction** : Pelure refait les zones colorées (bordées par les traits qui n'ont la
+    couleur que d'un côté) et les traits de crayon, puis les cale sur l'image du même calque.
+    Le calque reste vectoriel si le recouvrement atteint 60 % ; sinon il garde l'image.
+  - **Calques vides** : un calque vectoriel sans dessin reste vectoriel.
+  - **Non vérifié ici** : le mode batch et la lecture des traits n'ont pas pu l'être (Claude ne
+    lance jamais Storyboard Pro). La façon de désigner le dessin d'un calque n'est décrite que pour
+    Harmony : le script en essaie plusieurs et note dans la liste celle qui marche.
 - 14b. Vers Storyboard Pro : le script qui reconstruit le projet (à faire, après la passe
   interface).
 - Caméra de Storyboard Pro (plus tard).

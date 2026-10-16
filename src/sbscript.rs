@@ -11,8 +11,14 @@
 //! - `pelure-sboard	1`
 //! - `projet	<chemin>	<cadence>	<largeur>	<hauteur>`
 //! - `panneau	<rang>	<id>	<séquence>	<plan>	<nom>	<durée>`
-//! - `calque	<rang du panneau>	<rang du calque>	<nom>	<visible 0/1>	<verrouillé 0/1>	<v|b|3d>	<image>`
-//!   (`image` : chemin relatif au dossier, vide si le calque n'a pas de dessin).
+//! - `calque	<rang du panneau>	<rang du calque>	<nom>	<visible 0/1>	<verrouillé 0/1>	<v|b|3d>	<image>	<traits>	<note>`
+//!   (`image` : chemin relatif au dossier, vide si le calque n'a pas de dessin ; `traits` : le
+//!   dessin vectoriel en JSON, voir `sbvector`, vide s'il n'a pas pu être lu ; `note` : ce que
+//!   la lecture des traits a donné).
+//!
+//! Lancé par Pelure à l'ouverture d'un `.sboard` (14a-2), le script tourne en mode batch
+//! (`StoryboardPro -scene … -batch -compile …`, syntaxe de la documentation) sur une copie du
+//! projet : il n'affiche aucune boîte, il écrit dans le journal (`MessageLog.trace`).
 
 use std::path::{Path, PathBuf};
 
@@ -47,6 +53,12 @@ pub struct DLayer {
     pub locked: bool,
     /// Image du calque seul (chemin complet), s'il a un dessin.
     pub file: Option<PathBuf>,
+    /// Calque vectoriel dans Storyboard Pro.
+    pub vector: bool,
+    /// Ses traits vectoriels en JSON (chemin complet), s'ils ont pu être lus.
+    pub traits: Option<PathBuf>,
+    /// Ce que la lecture des traits a donné (vide : pas tentée).
+    pub note: String,
 }
 
 /// Le script, qui exporte dans le dossier `dest`.
@@ -99,12 +111,16 @@ pub fn parse_manifest(text: &str, dir: &Path) -> Result<Drawings, String> {
                 let Some(panel) = d.panels.iter_mut().rev().find(|x| x.index == p) else { continue };
                 let rel = f.get(7).map(|s| s.trim()).unwrap_or("");
                 let file = if rel.is_empty() { None } else { found_image(dir, rel) };
+                let traits = f.get(8).map(|s| s.trim()).filter(|s| !s.is_empty()).map(|s| dir.join(s)).filter(|p| p.is_file());
                 panel.layers.push(DLayer {
                     index,
                     name: f.get(3).unwrap_or(&"").to_string(),
                     visible: f.get(4).map(|v| v.trim()) != Some("0"),
                     locked: f.get(5).map(|v| v.trim()) == Some("1"),
                     file,
+                    vector: f.get(6).map(|v| v.trim()) == Some("v"),
+                    traits,
+                    note: f.get(9).map(|s| s.trim().to_string()).unwrap_or_default(),
                 });
             }
             _ => {}
@@ -132,12 +148,13 @@ fn found_image(dir: &Path, rel: &str) -> Option<PathBuf> {
     images.into_iter().next()
 }
 
-/// Le script (ECMAScript 3 : l'interface de script de Storyboard Pro est en Qt Script).
+/// Le script (ECMAScript 3 : l'interface de script de Storyboard Pro est en Qt Script ; il n'y
+/// est pas sûr que l'objet `JSON` existe, d'où `pelureJson`).
 const SCRIPT_TEXT: &str = r#"// Pelure : export des dessins de ce projet Storyboard Pro, calque par calque.
-// A lancer dans Storyboard Pro, le projet ouvert : vue Script Editor, Sandbox,
-// coller ce texte, puis Run. Le projet n'est pas modifie : la visibilite des
-// calques est remise comme avant, et toutes les etapes sont annulees a la fin.
-// Les images et la liste "pelure.txt" vont dans le dossier :
+// Lance par Pelure a l'ouverture du projet (mode batch, sur une copie du projet), ou a
+// la main : vue Script Editor, Sandbox, coller ce texte, puis Run. Le projet n'est pas
+// modifie : la visibilite des calques est remise comme avant, et toutes les etapes
+// sont annulees a la fin. Images, traits vectoriels et liste "pelure.txt" vont dans :
 var PELURE_DOSSIER = "@DOSSIER@";
 
 function pelureNettoie(s)
@@ -150,6 +167,104 @@ function pelureZeros(v, n)
   var s = "" + v;
   while (s.length < n) s = "0" + s;
   return s;
+}
+
+// Un objet en texte JSON.
+function pelureJson(v)
+{
+  if (v === null || v === undefined) return "null";
+  var t = typeof v;
+  if (t == "number") return isFinite(v) ? String(v) : "null";
+  if (t == "boolean") return v ? "true" : "false";
+  if (t == "string") return "\"" + v.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/[\r\n\t]/g, " ") + "\"";
+  if (t == "function") return "null";
+  var parts = new Array(0);
+  if (v instanceof Array || Object.prototype.toString.call(v) == "[object Array]")
+  {
+    for (var i = 0; i < v.length; ++i) parts.push(pelureJson(v[i]));
+    return "[" + parts.join(",") + "]";
+  }
+  for (var k in v)
+  {
+    if (typeof v[k] == "function") continue;
+    parts.push(pelureJson(String(k)) + ":" + pelureJson(v[k]));
+  }
+  return "{" + parts.join(",") + "}";
+}
+
+// Les traits vectoriels du dessin du calque j (interface de script etendue, Drawing.query) :
+// on essaie plusieurs facons de designer le dessin, la premiere qui donne des traits gagne.
+function pelureTraits(lm, panelId, j)
+{
+  if (typeof Drawing == "undefined" || !Drawing.query || !Drawing.query.getStrokes)
+    return { note: "interface Drawing absente" };
+  var el = lm.getLayerElementId(panelId, j);
+  var nom = String(lm.getLayerDrawingName(panelId, j, false));
+  var base = nom.replace(/^.*[\\\/]/, "").replace(/\.[^.]*$/, "");
+  var tiret = base.lastIndexOf("-");
+  var expo = tiret >= 0 ? base.substring(tiret + 1) : base;
+  var cles = new Array(0);
+  cles.push({ elementId: el, exposure: expo });
+  cles.push({ drawingId: expo, elementId: el });
+  cles.push({ elementId: el, exposure: base });
+  cles.push({ drawingId: base, elementId: el });
+  if (typeof Drawing.Key == "function")
+  {
+    try { cles.push(Drawing.Key({ elementId: el, exposure: expo })); } catch (e) {}
+  }
+  var erreurs = new Array(0);
+  for (var c = 0; c < cles.length; ++c)
+  {
+    var arts = new Array(0);
+    var total = 0;
+    for (var a = 0; a < 4; ++a)
+    {
+      try
+      {
+        var d = Drawing.query.getStrokes({ drawing: cles[c], art: a });
+        if (d && d.layers && !(d.drawing && d.drawing.isValid === false))
+        {
+          arts.push({ art: a, strokes: d });
+          total += d.layers.length;
+        }
+      }
+      catch (e) { erreurs.push("cle " + c + " art " + a + " : " + e); }
+    }
+    if (total > 0) return { arts: arts, note: "ok (cle " + c + ", " + nom + ", element " + el + ")" };
+  }
+  return { note: "aucune cle (" + nom + ", element " + el + ")" + (erreurs.length ? " : " + erreurs.slice(0, 2).join(" | ") : "") };
+}
+
+// Les couleurs de la palette citees par les traits : identifiant -> [r, g, b, a].
+function pelureCouleurs(arts)
+{
+  var cm = new ColorManager();
+  var vues = {};
+  var out = {};
+  var prends = function (id)
+  {
+    if (!id || vues[id]) return;
+    vues[id] = true;
+    try
+    {
+      var c = cm.getColorDataWithId(id);
+      if (c && c.isValid !== false && c.colorData)
+        out[id] = [c.colorData.r, c.colorData.g, c.colorData.b, c.colorData.a];
+    }
+    catch (e) {}
+  };
+  for (var i = 0; i < arts.length; ++i)
+  {
+    var layers = arts[i].strokes.layers;
+    for (var l = 0; l < layers.length; ++l)
+    {
+      var sh = layers[l].shaders || [];
+      for (var s = 0; s < sh.length; ++s) prends(sh[s].colorId);
+      var st = layers[l].strokes || [];
+      for (var s = 0; s < st.length; ++s) prends(st[s].pencilColorId);
+    }
+  }
+  return out;
 }
 
 function pelureExporte()
@@ -198,8 +313,11 @@ function pelureExporte()
       for (var j = 0; j < count; ++j)
       {
         if (!dessin[j]) continue;
-        var sorte = lm.isVectorLayer(panelId, j) ? "v" : (lm.isBitmapLayer(panelId, j) ? "b" : "3d");
+        var vecteur = lm.isVectorLayer(panelId, j);
+        var sorte = vecteur ? "v" : (lm.isBitmapLayer(panelId, j) ? "b" : "3d");
         var image = "";
+        var traits = "";
+        var note = "";
         if (!lm.isEmpty(panelId, j))
         {
           for (var o = 0; o < count; ++o)
@@ -220,14 +338,36 @@ function pelureExporte()
           exp.exportToBitmap(PELURE_DOSSIER + "/" + sous, "calque", "png");
           var noms = d.entryList("*.png");
           if (noms.length > 0) image = sous + "/" + noms[0];
+          if (vecteur)
+          {
+            try
+            {
+              var lu = pelureTraits(lm, panelId, j);
+              note = lu.note;
+              if (lu.arts)
+              {
+                var tf = new File(PELURE_DOSSIER + "/" + sous + "/traits.json");
+                tf.open(FileAccess.WriteOnly);
+                tf.write(pelureJson({ arts: lu.arts, colors: pelureCouleurs(lu.arts) }));
+                tf.close();
+                traits = sous + "/traits.json";
+              }
+            }
+            catch (e) { note = "erreur : " + e; }
+            MessageLog.trace("Pelure : traits du calque " + j + " : " + note);
+          }
         }
         lignes.push("calque\t" + k + "\t" + j + "\t" + pelureNettoie(lm.layerName(panelId, j))
           + "\t" + (visible[j] ? 1 : 0) + "\t" + (lm.getLayerLock(panelId, j) ? 1 : 0)
-          + "\t" + sorte + "\t" + image);
+          + "\t" + sorte + "\t" + image + "\t" + traits + "\t" + pelureNettoie(note));
       }
       for (var j = 0; j < count; ++j)
         lm.setLayerVisible(panelId, j, visible[j]);
     }
+  }
+  catch (e)
+  {
+    MessageLog.trace("Pelure : erreur " + e);
   }
   finally
   {
@@ -238,7 +378,7 @@ function pelureExporte()
   f.open(FileAccess.WriteOnly);
   for (var i = 0; i < lignes.length; ++i) f.writeLine(lignes[i]);
   f.close();
-  MessageBox.information("Pelure : " + n + " panneaux exportes dans " + PELURE_DOSSIER);
+  MessageLog.trace("Pelure : " + n + " panneaux exportes dans " + PELURE_DOSSIER);
 }
 
 pelureExporte();
