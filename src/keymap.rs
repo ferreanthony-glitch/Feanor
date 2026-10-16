@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 
 use eframe::egui::{Key, Modifiers};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::app::Mode;
 
@@ -492,6 +492,54 @@ fn digit(k: Key) -> Option<&'static str> {
     })
 }
 
+/// Le raccourci tapé (`key` : la touche lue selon la disposition du clavier ; `physical` : sa
+/// position), écrit comme dans le fichier (« Ctrl+Maj+K », « Alt+F5 », « Maj+1 »). Les lettres
+/// et les touches nommées sont reconnues par ce qu'elles écrivent, les chiffres et les signes
+/// par leur position. Rien pour Échap (il sert à annuler) ni pour une touche inconnue du fichier.
+pub fn combo_text(key: Key, physical: Option<Key>, m: Modifiers) -> Option<String> {
+    let name = key.name();
+    let named = match key {
+        Key::Escape => return None,
+        Key::Enter => "Entrée",
+        Key::Space => "Espace",
+        Key::Delete => "Suppr",
+        Key::Backspace => "Retour arrière",
+        Key::Tab => "Tab",
+        Key::Insert => "Inser",
+        Key::Home => "Origine",
+        Key::End => "Fin",
+        Key::PageUp => "PgPréc",
+        Key::PageDown => "PgSuiv",
+        Key::ArrowLeft => "Gauche",
+        Key::ArrowRight => "Droite",
+        Key::ArrowUp => "Haut",
+        Key::ArrowDown => "Bas",
+        _ => "",
+    };
+    let text = if !named.is_empty() {
+        named.to_string()
+    } else if name.len() == 1 && name.chars().all(|c| c.is_ascii_alphabetic()) {
+        name.to_string()
+    } else if name.len() > 1 && name.starts_with('F') && name[1..].chars().all(|c| c.is_ascii_digit()) {
+        name.to_string()
+    } else {
+        qwerty_glyph(physical.unwrap_or(key))?.to_string()
+    };
+    let mut s = String::new();
+    if m.command || m.ctrl {
+        s += "Ctrl+";
+    }
+    if m.shift {
+        s += "Maj+";
+    }
+    if m.alt {
+        s += "Alt+";
+    }
+    s += &text;
+    // Ce que le fichier sait relire seulement.
+    parse_combo(&s).ok().map(|_| s)
+}
+
 /// Lit une touche seule (« A », « F5 », « Entrée », « [ », « pos:, »…).
 /// Renvoie plusieurs façons de la reconnaître quand il y en a plusieurs (« + »).
 fn parse_key(name: &str) -> Option<(Vec<KeyMatch>, bool)> {
@@ -625,6 +673,8 @@ pub struct Binding {
     /// Marqué « non implémenté » dans le fichier.
     pub reserved: bool,
     pub source: String,
+    /// Vient du fichier personnel (il remplace le raccourci par défaut).
+    pub user: bool,
 }
 
 #[derive(Deserialize)]
@@ -634,16 +684,16 @@ struct FileFormat {
     raccourci: Vec<Entry>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, Clone)]
 struct Entry {
     action: String,
     #[serde(default)]
     touches: Vec<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     source: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     contexte: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     etat: Option<String>,
 }
 
@@ -692,6 +742,7 @@ fn parse_file(text: &str, warnings: &mut Vec<String>) -> Result<Vec<Binding>, St
             active: implemented && !reserved && !disabled,
             reserved: reserved || !implemented,
             source: e.source,
+            user: false,
         });
     }
     Ok(out)
@@ -722,7 +773,10 @@ impl Keymap {
         };
         if let Some(text) = user {
             match parse_file(text, &mut warnings) {
-                Ok(user_bindings) => {
+                Ok(mut user_bindings) => {
+                    for b in &mut user_bindings {
+                        b.user = true;
+                    }
                     let redefined: Vec<String> = user_bindings.iter().map(|b| b.action.clone()).collect();
                     bindings.retain(|b| !redefined.contains(&b.action));
                     // Placés devant : en cas de touche partagée, le fichier personnel l'emporte.
@@ -801,6 +855,114 @@ impl Keymap {
             .next()
             .map(Combo::label)
             .unwrap_or_default()
+    }
+
+    /// Touches d'une action, telles qu'écrites dans le fichier qui la définit.
+    pub fn keys_of(&self, action: &str) -> Vec<String> {
+        self.bindings.iter().filter(|b| b.action == action).flat_map(|b| b.keys.clone()).collect()
+    }
+
+    /// Tous les raccourcis lisibles d'une action (« Ctrl+K », « F5 »…), sans doublon.
+    pub fn labels_of(&self, action: &str) -> Vec<String> {
+        let mut v: Vec<String> = self
+            .bindings
+            .iter()
+            .filter(|b| b.active && b.action == action)
+            .flat_map(|b| b.combos.iter().map(Combo::label))
+            .collect();
+        v.dedup();
+        v
+    }
+
+    /// D'où vient le raccourci de l'action (le champ `source` du fichier).
+    pub fn source_of(&self, action: &str) -> &str {
+        self.bindings.iter().find(|b| b.action == action).map_or("", |b| b.source.as_str())
+    }
+
+    /// Vrai si le fichier personnel redéfinit l'action.
+    pub fn is_user(&self, action: &str) -> bool {
+        self.bindings.iter().any(|b| b.action == action && b.user)
+    }
+
+    /// Contexte (mode) où joue le raccourci de l'action ; partout s'il n'en a pas.
+    pub fn context_of(&self, action: &str) -> Option<Mode> {
+        self.bindings.iter().find(|b| b.action == action).and_then(|b| b.context)
+    }
+
+    /// Les autres actions actives que le raccourci `text` déclenche déjà là où joue `action`.
+    pub fn conflicts(&self, text: &str, action: &str) -> Vec<String> {
+        let Ok(combos) = parse_combo(text) else { return Vec::new() };
+        let context = self.context_of(action);
+        let mut out: Vec<String> = self
+            .bindings
+            .iter()
+            .filter(|b| b.active && b.action != action && contexts_overlap(b.context, context))
+            .filter(|b| b.combos.iter().any(|c| combos.contains(c)))
+            .map(|b| b.action.clone())
+            .collect();
+        out.dedup();
+        out
+    }
+
+    /// Texte du fichier personnel après ces changements : à chaque action, ses nouvelles touches
+    /// (une liste vide : plus de raccourci), ou `None` pour revenir au raccourci par défaut. Le
+    /// reste du fichier `current` est gardé, sauf ses commentaires.
+    pub fn edited_user_file(&self, current: Option<&str>, changes: &[(String, Option<Vec<String>>)]) -> Result<String, String> {
+        let mut entries: Vec<Entry> = match current {
+            Some(text) if !text.trim().is_empty() => {
+                toml::from_str::<FileFormat>(text).map_err(|e| format!("fichier de raccourcis illisible : {e}"))?.raccourci
+            }
+            _ => Vec::new(),
+        };
+        for (action, keys) in changes {
+            // Le contexte suit celui du raccourci actuel (par défaut ou personnel).
+            let contexte = match self.context_of(action) {
+                Some(Mode::Storyboard) => Some("storyboard".to_string()),
+                Some(Mode::Animation) => Some("animation".to_string()),
+                None => None,
+            };
+            entries.retain(|e| &e.action != action);
+            if let Some(keys) = keys {
+                entries.push(Entry {
+                    action: action.clone(),
+                    touches: keys.clone(),
+                    source: "choisi dans Pelure".into(),
+                    contexte,
+                    etat: None,
+                });
+            }
+        }
+        #[derive(Serialize)]
+        struct Out<'a> {
+            version: u32,
+            raccourci: &'a [Entry],
+        }
+        let body = toml::to_string(&Out { version: 1, raccourci: &entries }).map_err(|e| e.to_string())?;
+        Ok(format!(
+            "# Raccourcis personnels de Pelure : chacun remplace, action par action, celui du fichier\n\
+             # par défaut. Écrit par Pelure (clic droit sur une commande > « Assigner un raccourci »,\n\
+             # ou Fichier > Raccourcis clavier) ; on peut aussi le modifier à la main.\n\n{body}"
+        ))
+    }
+
+    /// Les changements qui donnent `text` à `action` (en plus de ses touches si `add`), et le
+    /// retirent des actions qui l'avaient déjà.
+    pub fn assign_changes(&self, action: &str, text: &str, add: bool) -> Vec<(String, Option<Vec<String>>)> {
+        let mut keys = if add { self.keys_of(action) } else { Vec::new() };
+        if !keys.iter().any(|k| k == text) {
+            keys.push(text.to_string());
+        }
+        let mut changes = vec![(action.to_string(), Some(keys))];
+        let combos = parse_combo(text).unwrap_or_default();
+        for other in self.conflicts(text, action) {
+            let rest: Vec<String> = self
+                .keys_of(&other)
+                .into_iter()
+                .filter(|k| !parse_combo(k).unwrap_or_default().iter().any(|c| combos.contains(c)))
+                .collect();
+            changes.push((other, Some(rest)));
+        }
+        changes
     }
 
     /// Touche de l'action actuellement maintenue (gestes « maintenir », comme Espace pour la main).

@@ -395,9 +395,19 @@ Pelure. Lancer : `cd src-frontend` puis `npm run tauri dev`. Détails : `docs/CO
 ## Raccourcis clavier
 
 Ils sont repris de Storyboard Pro 27 (raccourcis par défaut) et de tes réglages personnels, et
-rangés dans `keymap.toml`. F1 les affiche tous, avec leur origine. Pour les changer sans recompiler :
-« Aide > Modifier les raccourcis », puis « Aide > Recharger les raccourcis ». Détails et choix pour
-le clavier AZERTY : `docs/reference/sbpro_presets/README.md`.
+rangés dans `keymap.toml`. Pour en changer un :
+- **clic droit** sur une icône ou une entrée de menu, « Assigner un raccourci… », puis taper la
+  combinaison ;
+- Pelure dit si elle sert déjà (l'autre commande la perd), puis propose « Remplacer » ou « Ajouter » ;
+- la fenêtre a aussi « Retirer le raccourci » et « Raccourci par défaut ».
+
+Fichier > Raccourcis clavier… (ou F1) liste toutes les commandes. On y trouve une recherche, les
+mêmes boutons, et l'origine de chaque raccourci en bulle.
+
+Les choix vont dans un fichier personnel (`%APPDATA%\Pelure\keymap.toml`), qui remplace, action par
+action, le fichier par défaut. On peut aussi l'écrire à la main (« Aide > Modifier le fichier de
+raccourcis à la main », puis « Recharger »). Détails et choix pour le clavier AZERTY :
+`docs/reference/sbpro_presets/README.md`.
 
 Documentation technique : `docs/ARCHITECTURE.md` ; avancement : `docs/ROADMAP.md`.
 
@@ -531,7 +541,8 @@ le `pelure.txt` du dossier sur la fenêtre), puis « Importer ».
 | `settings.rs` | Réglages de l'application (ffmpeg, pelure, copie de secours, dispositions) |
 | `io.rs` | Anciens fichiers `.pelure`, écriture d'images |
 | `audio.rs` | Décodage des sons, formes d'onde, mixage et sortie audio |
-| `keymap.rs` | Raccourcis : actions, lecture de `keymap.toml` |
+| `keymap.rs` | Raccourcis : actions, lecture de `keymap.toml`, touche tapée, fichier personnel |
+| `raccourcisui.rs` | Clic droit « Assigner un raccourci… », fenêtre d'assignation, liste des raccourcis |
 | `app.rs` | État de l'application, actions, raccourcis |
 | `vtools.rs` | Outils des calques vectoriels |
 | `storyboard.rs` | Bande de montage, vue vignettes, fiche du panneau |

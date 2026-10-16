@@ -13,7 +13,8 @@ const PRESETS: [(&str, usize, usize); 5] = [
 ];
 
 /// Gestes à la souris et au stylet (hors fichier de raccourcis).
-const MOUSE_GESTURES: [(&str, &str); 7] = [
+pub(crate) const MOUSE_GESTURES: [(&str, &str); 8] = [
+    ("Clic droit sur une commande", "lui assigner un raccourci"),
     ("Alt + clic", "prélever une couleur"),
     ("Molette", "zoom autour du curseur"),
     ("Maj + molette", "rotation de la vue"),
@@ -72,10 +73,16 @@ fn brush_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
 
 impl App {
     /// Entrée de menu reliée à une action ; le raccourci affiché vient du fichier de raccourcis.
+    /// Clic droit : lui assigner un raccourci.
     pub(crate) fn action_item(&mut self, ui: &mut egui::Ui, text: &str, action: &str) {
         let shortcut = self.keymap.label(action);
-        if menu_item(ui, text, &shortcut) {
+        let resp = ui.add(egui::Button::new(text).shortcut_text(&shortcut));
+        if resp.clicked() {
+            ui.close_menu();
             self.run_action(action);
+        } else if resp.secondary_clicked() {
+            ui.close_menu();
+            self.start_assign(action);
         }
     }
 
@@ -88,6 +95,7 @@ impl App {
                 self.action_item(ui, "Enregistrer sous…", "fichier.enregistrer_sous");
                 self.action_item(ui, "Nouveau projet à partir des plans choisis", "projet.nouveau_depuis_plans");
                 self.action_item(ui, "Propriétés du projet…", "projet.proprietes");
+                self.action_item(ui, "Raccourcis clavier…", "aide.raccourcis");
                 ui.separator();
                 if menu_item(ui, "Importer une image (calque bitmap)…", "") {
                     self.import_image();
@@ -219,8 +227,8 @@ impl App {
                 });
             });
             ui.menu_button("Aide", |ui| {
-                self.action_item(ui, "Raccourcis clavier", "aide.raccourcis");
-                if menu_item(ui, "Modifier les raccourcis…", "") {
+                self.action_item(ui, "Raccourcis clavier…", "aide.raccourcis");
+                if menu_item(ui, "Modifier le fichier de raccourcis à la main…", "") {
                     self.edit_keymap();
                 }
                 if menu_item(ui, "Recharger les raccourcis", "") {
@@ -660,76 +668,7 @@ impl App {
             }
         }
 
-        if self.show_help {
-            let mut open = true;
-            let mut edit = false;
-            let mut reload = false;
-            egui::Window::new("Raccourcis clavier")
-                .open(&mut open)
-                .resizable(true)
-                .default_size([640.0, 560.0])
-                .default_pos(ctx.screen_rect().center() - vec2(320.0, 280.0))
-                .show(ctx, |ui| {
-                    let file = match &self.keymap.user_file {
-                        Some(p) => format!("Fichier : {}", p.display()),
-                        None => "Raccourcis par défaut (aucun fichier personnel).".into(),
-                    };
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(RichText::new(file).small());
-                        use egui_phosphor::regular as ph;
-                        edit = crate::bulles::icone(ui, ph::PENCIL_SIMPLE, "Modifier", "Ouvrir le fichier de raccourcis dans le Bloc-notes.", "").clicked();
-                        reload = crate::bulles::icone(ui, ph::ARROW_CLOCKWISE, "Recharger", "Relire le fichier après l'avoir modifié.", "").clicked();
-                    });
-                    for w in &self.keymap.warnings {
-                        ui.colored_label(Color32::from_rgb(240, 170, 60), format!("⚠ {w}"));
-                    }
-                    ui.separator();
-                    egui::ScrollArea::vertical().show(ui, |ui| {
-                        egui::Grid::new("grille_raccourcis")
-                            .num_columns(3)
-                            .striped(true)
-                            .show(ui, |ui| {
-                                for b in &self.keymap.bindings {
-                                    let info = crate::keymap::action_info(&b.action);
-                                    let mut keys = b.combos.iter().map(|c| c.label()).collect::<Vec<_>>();
-                                    keys.dedup();
-                                    // Un raccourci en réserve peut être un geste qu'on ne sait pas encore lire.
-                                    if keys.is_empty() {
-                                        keys = b.keys.clone();
-                                    }
-                                    let keys = if keys.is_empty() { "—".to_string() } else { keys.join("  ou  ") };
-                                    let why = if b.reserved { "non implémenté" } else { "désactivé" };
-                                    let mut label = info.map_or(b.action.clone(), |i| i.label.to_string());
-                                    match b.context {
-                                        Some(Mode::Storyboard) => label += " (storyboard)",
-                                        Some(Mode::Animation) => label += " (animation)",
-                                        None => {}
-                                    }
-                                    if b.active {
-                                        ui.label(RichText::new(keys).strong());
-                                        ui.label(label);
-                                    } else {
-                                        ui.label(RichText::new(keys).weak());
-                                        ui.label(RichText::new(format!("{label} — {why}")).weak());
-                                    }
-                                    ui.label(RichText::new(&b.source).small().weak());
-                                    ui.end_row();
-                                }
-                            });
-                        ui.add_space(8.0);
-                        ui.label(RichText::new("Souris et stylet").strong());
-                        for (geste, effet) in MOUSE_GESTURES {
-                            ui.label(format!("{geste} : {effet}"));
-                        }
-                    });
-                });
-            self.show_help = open;
-            if edit {
-                self.edit_keymap();
-            }
-            if reload {
-                self.reload_keymap();
-            }
-        }
+        // Raccourcis : l'assignation en cours et la liste (raccourcisui.rs).
+        self.shortcut_windows(ctx);
     }
 }

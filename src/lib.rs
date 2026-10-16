@@ -125,6 +125,7 @@ mod pixtools;
 #[cfg(test)]
 mod plans_tests;
 mod project;
+mod raccourcisui;
 mod raster;
 mod recovery;
 #[cfg(test)]

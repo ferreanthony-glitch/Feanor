@@ -101,23 +101,35 @@ impl App {
         }
     }
 
-    /// Bulle d'une commande liée à une action.
+    /// Bulle d'une commande liée à une action ; clic droit : lui assigner un raccourci.
     pub(crate) fn aide(&self, resp: Response, nom: &str, description: &str, action: &str) -> Response {
-        bulle(resp, nom, description, &self.raccourci(action))
+        let r = self.raccourci(action);
+        crate::raccourcisui::shortcut_menu(&resp, action, &r);
+        bulle(resp, nom, description, &r)
     }
 
-    /// Bouton icône d'une commande ; `action` : son raccourci, montré dans la bulle.
+    /// Bouton icône d'une commande ; `action` : son raccourci, montré dans la bulle (clic droit :
+    /// l'assigner).
     pub(crate) fn bouton(&self, ui: &mut Ui, symbole: &str, nom: &str, description: &str, action: &str) -> Response {
-        icone(ui, symbole, nom, description, &self.raccourci(action))
+        let r = self.raccourci(action);
+        let resp = icone(ui, symbole, nom, description, &r);
+        crate::raccourcisui::shortcut_menu(&resp, action, &r);
+        resp
     }
 
     /// Bouton icône d'une commande, grisé si `actif` est faux.
     pub(crate) fn bouton_si(&self, ui: &mut Ui, actif: bool, symbole: &str, nom: &str, description: &str, action: &str) -> Response {
-        icone_si(ui, actif, symbole, nom, description, &self.raccourci(action))
+        let r = self.raccourci(action);
+        let resp = icone_si(ui, actif, symbole, nom, description, &r);
+        crate::raccourcisui::shortcut_menu(&resp, action, &r);
+        resp
     }
 
     /// Bouton icône d'une commande qui montre un état (enfoncé quand `on`).
     pub(crate) fn bouton_etat(&self, ui: &mut Ui, on: bool, symbole: &str, nom: &str, description: &str, action: &str) -> Response {
-        etat(ui, on, symbole, nom, description, &self.raccourci(action))
+        let r = self.raccourci(action);
+        let resp = etat(ui, on, symbole, nom, description, &r);
+        crate::raccourcisui::shortcut_menu(&resp, action, &r);
+        resp
     }
 }

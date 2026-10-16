@@ -517,7 +517,11 @@ pub struct App {
     pub(crate) follow_frame: bool,
     pub(crate) hover_canvas: Option<Pos2>,
     /// Touches retirées des événements avant qu'egui ne s'en serve (Tab), traitées comme raccourcis.
-    pending_keys: Vec<(Key, Option<Key>, egui::Modifiers)>,
+    pub(crate) pending_keys: Vec<(Key, Option<Key>, egui::Modifiers)>,
+    /// Raccourci en cours d'assignation, et la recherche de la liste des raccourcis
+    /// (`raccourcisui.rs`).
+    pub(crate) assign: Option<crate::raccourcisui::Assign>,
+    pub(crate) keys_filter: String,
     pub(crate) keymap: Keymap,
     title: String,
     /// Moteur d'affichage utilisé (carte graphique et son interface, ou OpenGL).
@@ -734,6 +738,8 @@ impl App {
             follow_frame: false,
             hover_canvas: None,
             pending_keys: Vec::new(),
+            assign: None,
+            keys_filter: String::new(),
             keymap: Keymap::load(),
             title: String::new(),
             display_info: match &cc.wgpu_render_state {
@@ -859,6 +865,7 @@ impl App {
             || self.export_job.is_some()
             || !self.orphans.is_empty()
             || self.workspace_name.is_some()
+            || self.assign.is_some()
     }
 
     pub(crate) fn current_brush(&self) -> Option<&BrushSettings> {
@@ -2217,6 +2224,10 @@ impl App {
             if let Some(id) = ctx.memory(|m| m.focused()) {
                 ctx.memory_mut(|m| m.surrender_focus(id));
             }
+        }
+        // Un raccourci en cours d'assignation prend la touche tapée.
+        if self.capture_shortcut(ctx) {
+            return;
         }
         // Pas de raccourci pendant une saisie, un dialogue, ou un glissé dans la bande de montage.
         if ctx.wants_keyboard_input() || self.modal_open() || self.montage_drag.is_some() {

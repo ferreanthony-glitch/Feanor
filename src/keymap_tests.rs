@@ -226,3 +226,51 @@ fn conflicts_and_broken_files_are_reported() {
         "un fichier cassé ne casse pas les raccourcis par défaut"
     );
 }
+
+// ------------------------------------------------------- raccourcis choisis dans Pelure
+
+#[test]
+fn typed_shortcut_is_written_like_the_file() {
+    use crate::keymap::combo_text;
+    let ctrl_shift = Modifiers { ctrl: true, command: true, shift: true, ..NONE };
+    assert_eq!(combo_text(Key::K, Some(Key::K), ctrl_shift).as_deref(), Some("Ctrl+Maj+K"));
+    assert_eq!(combo_text(Key::F5, Some(Key::F5), NONE).as_deref(), Some("F5"));
+    assert_eq!(combo_text(Key::Enter, Some(Key::Enter), NONE).as_deref(), Some("Entrée"));
+    assert_eq!(combo_text(Key::ArrowLeft, Some(Key::ArrowLeft), Modifiers::ALT).as_deref(), Some("Alt+Gauche"));
+    assert_eq!(combo_text(Key::Escape, Some(Key::Escape), NONE), None, "Échap sert à annuler");
+    // Chiffres et signes : par leur position. En AZERTY, la touche « ; » est à la place du « , »
+    // du QWERTY : egui la lit Point-virgule, à la position Virgule.
+    assert_eq!(combo_text(Key::Num1, Some(Key::Num1), Modifiers::SHIFT).as_deref(), Some("Maj+1"));
+    let t = combo_text(Key::Semicolon, Some(Key::Comma), NONE).unwrap();
+    assert_eq!(t, ",");
+    let combos = parse_combo(&t).unwrap();
+    assert!(combos[0].matches(Key::Semicolon, Some(Key::Comma), NONE), "relu, il reconnaît la même touche");
+}
+
+#[test]
+fn assigned_shortcut_replaces_frees_and_returns_to_default() {
+    let map = default_map();
+    assert!(map.conflicts("F5", "fichier.importer_sboard").contains(&"panneau.couper".to_string()));
+    let changes = map.assign_changes("fichier.importer_sboard", "F5", false);
+    let text = map.edited_user_file(None, &changes).unwrap();
+    let map2 = Keymap::from_texts(DEFAULT_KEYMAP, Some(&text));
+    assert!(map2.warnings.is_empty(), "{:#?}", map2.warnings);
+    assert_eq!(press(&map2, Key::F5, Key::F5, NONE, Mode::Storyboard).as_deref(), Some("fichier.importer_sboard"));
+    assert!(map2.labels_of("panneau.couper").is_empty(), "F5 est retiré de l'action qui l'avait");
+    assert!(map2.is_user("fichier.importer_sboard") && map2.is_user("panneau.couper"));
+    // Ajouter une deuxième touche garde la première.
+    let text2 = map2.edited_user_file(Some(&text), &map2.assign_changes("fichier.importer_sboard", "Alt+F12", true)).unwrap();
+    let map3 = Keymap::from_texts(DEFAULT_KEYMAP, Some(&text2));
+    assert_eq!(map3.labels_of("fichier.importer_sboard"), vec!["F5".to_string(), "Alt+F12".to_string()]);
+    // Retour au défaut : la découpe retrouve F5 (et le conflit est signalé).
+    let text3 = map3.edited_user_file(Some(&text2), &[("panneau.couper".into(), None)]).unwrap();
+    let map4 = Keymap::from_texts(DEFAULT_KEYMAP, Some(&text3));
+    assert_eq!(map4.labels_of("panneau.couper"), vec!["F5".to_string()]);
+    assert!(!map4.is_user("panneau.couper"));
+    assert!(map4.warnings.iter().any(|w| w.contains("conflit")));
+    // Plus de raccourci du tout.
+    let text4 = map4.edited_user_file(Some(&text3), &[("fichier.importer_sboard".into(), Some(Vec::new()))]).unwrap();
+    assert!(Keymap::from_texts(DEFAULT_KEYMAP, Some(&text4)).labels_of("fichier.importer_sboard").is_empty());
+    // Un fichier personnel illisible n'est pas écrasé.
+    assert!(map.edited_user_file(Some("ceci n'est pas du toml ["), &changes).is_err());
+}

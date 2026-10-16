@@ -885,6 +885,21 @@ MonFilm/
 - Lettres = caractère tapé ; chiffres et ponctuation = position physique (clavier AZERTY).
   Détails : `docs/reference/sbpro_presets/README.md`.
 - Un fichier illisible ou une action inconnue ne bloque rien : remarques affichées dans l'aide (F1).
+- Raccourcis choisis dans Pelure (`raccourcisui.rs`, passe interface).
+  - Les boutons liés à une action (`App::bouton*`, `App::aide`) ont un menu au clic droit.
+    `action_item` fait de même pour les menus (clic droit direct).
+  - Une commande dessinée avec `&self` seulement dépose sa demande dans les données d'egui
+    (`ask_assign`) ; `shortcut_windows` la lit à l'image suivante.
+  - Pendant l'assignation, `capture_shortcut` prend la première touche, avant les raccourcis, y
+    compris Tab mis de côté pour egui. `keymap::combo_text` l'écrit comme le fichier : lettres et
+    touches nommées par ce qu'elles écrivent, chiffres et signes par leur position.
+  - `Keymap::assign_changes` retire la touche aux autres actions du même contexte.
+    `edited_user_file` réécrit le fichier personnel avec le crate `toml` : le contexte suit celui
+    du raccourci par défaut, les autres entrées sont gardées, les commentaires ne le sont pas. Puis
+    `reload_keymap`.
+  - Décision : coût — réécrire le fichier entier plutôt que le modifier ligne à ligne (simple,
+    testé). Risque : les commentaires d'un fichier écrit à la main se perdent, et un fichier
+    illisible n'est jamais écrasé. Réversible : le fichier reste du texte.
 
 ## Compilation
 
