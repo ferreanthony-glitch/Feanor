@@ -115,11 +115,13 @@ impl App {
         let li = self.cur_layer;
         let mut opacity = self.layers()[li].opacity * 100.0;
         let mut mode = self.layers()[li].blend;
-        ui.horizontal(|ui| {
+        // (À la ligne si le panneau est étroit ; la liste se resserre.)
+        let combo_w = (ui.available_width() - 90.0).clamp(60.0, 120.0);
+        ui.horizontal_wrapped(|ui| {
             // Mode de fusion (8), comme dans les logiciels de retouche.
             let resp = egui::ComboBox::from_id_salt("fusion_calque")
                 .selected_text(mode.label())
-                .width(120.0)
+                .width(combo_w)
                 .show_ui(ui, |ui| {
                     for m in BlendMode::ALL {
                         // Familles : normal, assombrir, éclaircir, contraste, écarts, couleur.
@@ -236,6 +238,9 @@ impl App {
         let lock_key = self.raccourci("calque.verrouiller");
         let frame = self.cur_frame;
         let accent = ui.visuals().selection.bg_fill;
+        // Vignette plus petite dans un panneau étroit : le nom reste lisible.
+        let thumb_w = (ui.available_width() * 0.3).clamp(32.0, THUMB[0] as f32);
+        let thumb_size = vec2(thumb_w, thumb_w * THUMB[1] as f32 / THUMB[0] as f32);
         // Glisser une ligne la monte ou la descend (passe interface) : les lignes de cette image,
         // pour savoir où elle se pose.
         let list_top = ui.cursor().top();
@@ -281,7 +286,7 @@ impl App {
                         }
                         resp.context_menu(|ui| self.layer_full_menu(ui, li, false));
                         // Vignette du dessin à l'image courante (vide : cadre gris).
-                        let (rect, resp) = ui.allocate_exact_size(vec2(THUMB[0] as f32, THUMB[1] as f32), Sense::click());
+                        let (rect, resp) = ui.allocate_exact_size(thumb_size, Sense::click());
                         match &thumb {
                             Some(t) => {
                                 ui.painter().image(

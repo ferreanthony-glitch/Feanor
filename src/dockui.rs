@@ -83,6 +83,9 @@ impl App {
 
     /// Le contenu d'un panneau (dans un onglet ou dans sa propre fenêtre).
     pub(crate) fn pane_ui(&mut self, ui: &mut egui::Ui, pane: Pane) {
+        if !matches!(pane, Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::XSheet) {
+            fit_to_pane(ui);
+        }
         match pane {
             Pane::Canvas => {
                 ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::FOND);
@@ -264,4 +267,21 @@ impl App {
     pub(crate) fn detached_panes(&self) -> Vec<DetachedPanel> {
         self.detached.clone()
     }
+}
+
+/// Un panneau de côté rétréci reste utilisable (Anthony, 2026-10-17 : « ces fenêtres ne sont pas
+/// optimisées pour rester lisibles et accessibles lorsqu'on réduit la taille ») : les curseurs et
+/// les listes déroulantes prennent la largeur du panneau au lieu d'une largeur fixe.
+pub(crate) fn fit_to_pane(ui: &mut egui::Ui) {
+    let w = ui.available_width();
+    let s = ui.spacing_mut();
+    // Un curseur, sa valeur et son nom tiennent dans la largeur.
+    s.slider_width = (w - 120.0).clamp(36.0, 160.0);
+    s.combo_width = (w * 0.55).clamp(60.0, 160.0);
+}
+
+/// Largeur d'une liste ou d'un champ : la place qui reste sur sa ligne, `max` au plus (au moins
+/// 48 points), pour qu'un panneau rétréci ne le coupe pas.
+pub(crate) fn fit_w(ui: &egui::Ui, max: f32) -> f32 {
+    (ui.available_width() - 4.0).clamp(48.0, max)
 }

@@ -100,7 +100,7 @@ impl App {
         let mut done = None;
         ui.horizontal(|ui| {
             ui.label(if edit.rename.is_some() { "Nouveau nom" } else { "Enregistrer sous" });
-            let resp = ui.add(egui::TextEdit::singleline(&mut edit.name).desired_width(140.0));
+            let resp = ui.add(egui::TextEdit::singleline(&mut edit.name).desired_width(crate::dockui::fit_w(ui, 140.0)));
             if !edit.focused {
                 resp.request_focus();
                 edit.focused = true;
@@ -445,7 +445,7 @@ impl App {
                 .paper
                 .and_then(|id| papers.iter().find(|p| p.0 == id))
                 .map_or("lisse".to_string(), |p| p.1.clone());
-            egui::ComboBox::from_id_salt("papier_pinceau").selected_text(name).width(120.0).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt("papier_pinceau").selected_text(name).width(crate::dockui::fit_w(ui, 120.0)).show_ui(ui, |ui| {
                 ui.selectable_value(&mut b.paper, None, "lisse");
                 for (id, name) in &papers {
                     ui.selectable_value(&mut b.paper, Some(*id), name);
@@ -487,7 +487,7 @@ impl App {
                 let resp = ui.add(egui::Slider::new(&mut b.tip_cells, 1..=64).text("Cases"));
                 crate::bulles::bulle(resp, "Cases", "Nombre de dessins côte à côte dans l'image de la pointe ; chaque empreinte en prend un.", "");
                 if b.tip_cells > 1 {
-                    egui::ComboBox::from_id_salt("pointe_ordre").selected_text(b.tip_order.label()).width(120.0).show_ui(ui, |ui| {
+                    egui::ComboBox::from_id_salt("pointe_ordre").selected_text(b.tip_order.label()).width(crate::dockui::fit_w(ui, 120.0)).show_ui(ui, |ui| {
                         for o in crate::brush::TipOrder::ALL {
                             ui.selectable_value(&mut b.tip_order, o, o.label());
                         }

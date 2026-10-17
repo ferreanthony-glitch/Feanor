@@ -347,7 +347,7 @@ impl App {
             // Nom du guide courant, et le supprimer.
             if let Some(mut name) = name {
                 ui.separator();
-                let resp = ui.add(egui::TextEdit::singleline(&mut name).desired_width(110.0));
+                let resp = ui.add(egui::TextEdit::singleline(&mut name).desired_width(crate::dockui::fit_w(ui, 110.0)));
                 if self.edited(&crate::bulles::bulle(resp, "Nom du guide", "", "")) {
                     self.doc.guides[current].name = name;
                 }

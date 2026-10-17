@@ -233,7 +233,7 @@ impl App {
                 let mut chosen = shown;
                 let resp = egui::ComboBox::from_id_salt("nuancier_montre")
                     .selected_text(&names[shown])
-                    .width(130.0)
+                    .width(crate::dockui::fit_w(ui, 130.0))
                     .show_ui(ui, |ui| {
                         for (i, n) in names.iter().enumerate() {
                             ui.selectable_value(&mut chosen, i, n);

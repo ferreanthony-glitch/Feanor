@@ -103,7 +103,7 @@ fn brush_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
     ui.add(egui::Slider::new(&mut s.spacing, 0.02..=1.0).text("Espacement"));
     // Lissage (moteur de dessin, étape 5) : son type, et le réglage qui va avec.
     ui.horizontal(|ui| {
-        egui::ComboBox::from_id_salt("lissage_type").selected_text(s.smooth_kind.label()).width(120.0).show_ui(ui, |ui| {
+        egui::ComboBox::from_id_salt("lissage_type").selected_text(s.smooth_kind.label()).width(crate::dockui::fit_w(ui, 120.0)).show_ui(ui, |ui| {
             for k in crate::brush::SmoothKind::ALL {
                 ui.selectable_value(&mut s.smooth_kind, k, k.label()).on_hover_text(k.help());
             }

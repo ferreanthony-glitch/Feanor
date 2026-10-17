@@ -118,7 +118,8 @@ impl App {
     fn fx_stack_ui(&mut self, ui: &mut egui::Ui) {
         let li = self.cur_layer;
         let f = self.cur_frame;
-        ui.horizontal(|ui| {
+        // (À la ligne quand le panneau est étroit.)
+        ui.horizontal_wrapped(|ui| {
             ui.menu_button(format!("{}  Ajouter un effet", ph::PLUS), |ui| {
                 // Par familles, comme le menu Filtre de Photoshop.
                 for family in FAMILIES {

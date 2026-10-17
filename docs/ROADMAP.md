@@ -1101,6 +1101,13 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         travail ») : panneau Effets (`Pane::Effects`, disposition version 7) sous les onglets des
         réglages, au lieu de la fenêtre flottante ; « Fenêtre Effets… » retiré du clic droit (à
         sa demande) ; la baguette de la timeline et Affichage > Panneaux l'ouvrent ;
+      - **panneaux rétrécis toujours utilisables** (Anthony : « ces fenêtres ne sont pas
+        optimisées pour rester lisibles et accessibles lorsqu'on réduit la taille ») : dans les
+        panneaux de côté, curseurs et listes à la largeur du panneau (`dockui::fit_to_pane`,
+        `fit_w`) ; onglets qui débordent : une barre de défilement ; Calques : mode et opacité à
+        la ligne, vignette plus petite ; Couleur : réglages de la roue et choix des curseurs sur
+        deux lignes au lieu de se chevaucher ; Effets : commandes à la ligne. Vérifié à 1050 ×
+        720. Reste : la réorganisation de l'espace de travail par défaut (à décider) ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,

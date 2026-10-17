@@ -179,6 +179,9 @@ pub fn dock(mut s: egui_dock::Style) -> egui_dock::Style {
     s.tab_bar.bg_fill = ENTETE;
     s.tab_bar.hline_color = ENTETE;
     s.tab_bar.height = 26.0;
+    // Des onglets qui ne tiennent plus dans un panneau rétréci : une petite barre pour les
+    // atteindre (Anthony, 2026-10-17 : « toujours utilisables même lorsqu'ils sont réduits »).
+    s.tab_bar.show_scroll_bar_on_overflow = true;
     s.tab_bar.corner_radius = CornerRadius::ZERO;
     let onglet = |fond: Color32, texte: Color32| egui_dock::TabInteractionStyle {
         outline_color: Color32::TRANSPARENT,

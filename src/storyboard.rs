@@ -1322,7 +1322,7 @@ impl App {
                     .add(
                         egui::TextEdit::singleline(&mut name)
                             .hint_text(seq_number)
-                            .desired_width(150.0),
+                            .desired_width(crate::dockui::fit_w(ui, 150.0)),
                     )
                     .on_hover_text("Vide = numéro automatique");
                 if self.edited(&resp) {
@@ -1338,7 +1338,7 @@ impl App {
                     .add(
                         egui::TextEdit::singleline(&mut name)
                             .hint_text(scene_number)
-                            .desired_width(150.0),
+                            .desired_width(crate::dockui::fit_w(ui, 150.0)),
                     )
                     .on_hover_text("Numéro ou nom du plan (vide = numéro automatique)");
                 if self.edited(&resp) {

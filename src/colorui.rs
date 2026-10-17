@@ -470,25 +470,40 @@ impl App {
         }
     }
 
-    /// Choix des curseurs : TSV, RVB ou TSL.
-    fn slider_modes(&mut self, ui: &mut egui::Ui) {
+    /// Choix des curseurs : TSV, RVB ou TSL (`rtl` : posés de droite à gauche, le premier le
+    /// plus à droite).
+    fn slider_modes(&mut self, ui: &mut egui::Ui, rtl: bool) {
         let labels = ["couleur.curseurs_tsv", "couleur.curseurs_rvb", "couleur.curseurs_tsl"].map(|a| self.keymap.label(a));
         let p = &mut self.couleurs.prefs;
-        // De droite à gauche : le premier posé est le plus à droite.
-        crate::bulles::choix_a(ui, &mut p.sliders, SliderMode::Hsl, "TSL", "Curseurs TSL", "Teinte, saturation, luminosité : à mi-course, la couleur pure ; en haut, le blanc.", &labels[2], "couleur.curseurs_tsl");
-        crate::bulles::choix_a(ui, &mut p.sliders, SliderMode::Rgb, "RVB", "Curseurs RVB", "Rouge, vert, bleu, de 0 à 255.", &labels[1], "couleur.curseurs_rvb");
-        crate::bulles::choix_a(ui, &mut p.sliders, SliderMode::Hsv, "TSV", "Curseurs TSV", "Teinte, saturation, valeur (clarté).", &labels[0], "couleur.curseurs_tsv");
+        let mut modes = [
+            (SliderMode::Hsv, "TSV", "Curseurs TSV", "Teinte, saturation, valeur (clarté).", 0, "couleur.curseurs_tsv"),
+            (SliderMode::Rgb, "RVB", "Curseurs RVB", "Rouge, vert, bleu, de 0 à 255.", 1, "couleur.curseurs_rvb"),
+            (SliderMode::Hsl, "TSL", "Curseurs TSL", "Teinte, saturation, luminosité : à mi-course, la couleur pure ; en haut, le blanc.", 2, "couleur.curseurs_tsl"),
+        ];
+        if rtl {
+            modes.reverse();
+        }
+        for (mode, short, name, hint, k, action) in modes {
+            crate::bulles::choix_a(ui, &mut p.sliders, mode, short, name, hint, &labels[k], action);
+        }
     }
 
     /// Choisir la couleur d'avant-plan : réglages de la roue et des curseurs, la roue (`wheel`
     /// points de large au plus), les curseurs, l'opacité du pinceau.
     fn color_picker(&mut self, ui: &mut egui::Ui, wheel: f32) {
-        ui.horizontal(|ui| {
-            self.wheel_options(ui);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.slider_modes(ui));
-        });
+        // Étroit (panneau rétréci) : les réglages de la roue, puis le choix des curseurs dessous,
+        // au lieu de se chevaucher.
+        if ui.available_width() >= 240.0 {
+            ui.horizontal(|ui| {
+                self.wheel_options(ui);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.slider_modes(ui, true));
+            });
+        } else {
+            ui.horizontal_wrapped(|ui| self.wheel_options(ui));
+            ui.horizontal_wrapped(|ui| self.slider_modes(ui, false));
+        }
         if self.couleurs.prefs.wheel_shown {
-            let size = ui.available_width().clamp(100.0, wheel);
+            let size = ui.available_width().clamp(60.0, wheel);
             ui.vertical_centered(|ui| self.color_wheel(ui, size));
             ui.add_space(4.0);
         }
