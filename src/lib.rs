@@ -81,6 +81,9 @@ mod fx_tests;
 mod fxfilters;
 #[cfg(test)]
 mod fxfilters_tests;
+mod fxwarp;
+#[cfg(test)]
+mod fxwarp_tests;
 mod fxui;
 #[cfg(test)]
 mod folders_tests;

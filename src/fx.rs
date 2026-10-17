@@ -61,6 +61,21 @@ pub enum EffectKind {
     DropShadow,
     #[serde(rename = "lueur")]
     Glow,
+    // Déformation et Rendu (`fxwarp.rs`, Anthony, 2026-10-17).
+    #[serde(rename = "onde")]
+    Wave,
+    #[serde(rename = "ondulation")]
+    Ripple,
+    #[serde(rename = "tourbillon")]
+    Twirl,
+    #[serde(rename = "pincement")]
+    Pinch,
+    #[serde(rename = "nuages")]
+    Clouds,
+    #[serde(rename = "eclairage")]
+    Lighting,
+    #[serde(rename = "degrade")]
+    Gradient,
 }
 
 const GAUSSIAN: [Param; 1] = [Param { name: "Rayon", min: 0.0, max: 200.0, default: 8.0, unit: " px" }];
@@ -102,12 +117,51 @@ const GLOW: [Param; 2] = [
     Param { name: "Intensité", min: 0.0, max: 200.0, default: 100.0, unit: " %" },
 ];
 
+const WAVE: [Param; 3] = [
+    Param { name: "Amplitude", min: 0.0, max: 200.0, default: 10.0, unit: " px" },
+    Param { name: "Longueur d'onde", min: 4.0, max: 1000.0, default: 120.0, unit: " px" },
+    Param { name: "Direction", min: -180.0, max: 180.0, default: 0.0, unit: "°" },
+];
+const RIPPLE: [Param; 4] = [
+    Param { name: "Amplitude", min: 0.0, max: 100.0, default: 8.0, unit: " px" },
+    Param { name: "Longueur d'onde", min: 4.0, max: 500.0, default: 60.0, unit: " px" },
+    Param { name: "Centre x", min: 0.0, max: 100.0, default: 50.0, unit: " %" },
+    Param { name: "Centre y", min: 0.0, max: 100.0, default: 50.0, unit: " %" },
+];
+const TWIRL: [Param; 4] = [
+    Param { name: "Angle", min: -720.0, max: 720.0, default: 90.0, unit: "°" },
+    Param { name: "Rayon", min: 1.0, max: 200.0, default: 60.0, unit: " %" },
+    Param { name: "Centre x", min: 0.0, max: 100.0, default: 50.0, unit: " %" },
+    Param { name: "Centre y", min: 0.0, max: 100.0, default: 50.0, unit: " %" },
+];
+const PINCH: [Param; 4] = [
+    Param { name: "Quantité", min: -100.0, max: 100.0, default: 50.0, unit: " %" },
+    Param { name: "Rayon", min: 1.0, max: 200.0, default: 60.0, unit: " %" },
+    Param { name: "Centre x", min: 0.0, max: 100.0, default: 50.0, unit: " %" },
+    Param { name: "Centre y", min: 0.0, max: 100.0, default: 50.0, unit: " %" },
+];
+const CLOUDS: [Param; 3] = [
+    Param { name: "Échelle", min: 2.0, max: 1000.0, default: 120.0, unit: " px" },
+    Param { name: "Quantité", min: 0.0, max: 100.0, default: 50.0, unit: " %" },
+    Param { name: "Graine", min: 1.0, max: 999.0, default: 1.0, unit: "" },
+];
+const LIGHTING: [Param; 4] = [
+    Param { name: "Centre x", min: 0.0, max: 100.0, default: 35.0, unit: " %" },
+    Param { name: "Centre y", min: 0.0, max: 100.0, default: 35.0, unit: " %" },
+    Param { name: "Rayon", min: 1.0, max: 300.0, default: 100.0, unit: " %" },
+    Param { name: "Intensité", min: 0.0, max: 100.0, default: 40.0, unit: " %" },
+];
+const GRADIENT: [Param; 2] = [
+    Param { name: "Direction", min: -180.0, max: 180.0, default: 90.0, unit: "°" },
+    Param { name: "Force", min: 0.0, max: 100.0, default: 50.0, unit: " %" },
+];
+
 /// Familles d'effets, dans l'ordre des menus (inspirées du menu Filtre et des réglages de
 /// Photoshop).
-pub const FAMILIES: [&str; 6] = ["Flou", "Réglages", "Netteté", "Bruit", "Pixéliser", "Styliser"];
+pub const FAMILIES: [&str; 8] = ["Flou", "Déformation", "Réglages", "Bruit", "Pixéliser", "Rendu", "Netteté", "Styliser"];
 
 impl EffectKind {
-    pub const ALL: [EffectKind; 14] = [
+    pub const ALL: [EffectKind; 21] = [
         EffectKind::GaussianBlur,
         EffectKind::MotionBlur,
         EffectKind::BrightnessContrast,
@@ -122,6 +176,13 @@ impl EffectKind {
         EffectKind::Mosaic,
         EffectKind::DropShadow,
         EffectKind::Glow,
+        EffectKind::Wave,
+        EffectKind::Ripple,
+        EffectKind::Twirl,
+        EffectKind::Pinch,
+        EffectKind::Clouds,
+        EffectKind::Lighting,
+        EffectKind::Gradient,
     ];
 
     pub fn label(self) -> &'static str {
@@ -140,6 +201,13 @@ impl EffectKind {
             EffectKind::Mosaic => "Mosaïque",
             EffectKind::DropShadow => "Ombre portée",
             EffectKind::Glow => "Lueur",
+            EffectKind::Wave => "Onde",
+            EffectKind::Ripple => "Ondulation",
+            EffectKind::Twirl => "Tourbillon",
+            EffectKind::Pinch => "Pincement",
+            EffectKind::Clouds => "Nuages",
+            EffectKind::Lighting => "Éclairage",
+            EffectKind::Gradient => "Dégradé",
         }
     }
 
@@ -158,6 +226,8 @@ impl EffectKind {
             EffectKind::Noise => "Bruit",
             EffectKind::Mosaic => "Pixéliser",
             EffectKind::DropShadow | EffectKind::Glow => "Styliser",
+            EffectKind::Wave | EffectKind::Ripple | EffectKind::Twirl | EffectKind::Pinch => "Déformation",
+            EffectKind::Clouds | EffectKind::Lighting | EffectKind::Gradient => "Rendu",
         }
     }
 
@@ -176,6 +246,13 @@ impl EffectKind {
             EffectKind::Mosaic => &MOSAIC,
             EffectKind::DropShadow => &SHADOW,
             EffectKind::Glow => &GLOW,
+            EffectKind::Wave => &WAVE,
+            EffectKind::Ripple => &RIPPLE,
+            EffectKind::Twirl => &TWIRL,
+            EffectKind::Pinch => &PINCH,
+            EffectKind::Clouds => &CLOUDS,
+            EffectKind::Lighting => &LIGHTING,
+            EffectKind::Gradient => &GRADIENT,
         }
     }
 
@@ -194,6 +271,11 @@ impl EffectKind {
             EffectKind::Mosaic => at(0) >= 2.0,
             EffectKind::DropShadow => at(3) > 0.0,
             EffectKind::Glow => at(1) > 0.0,
+            EffectKind::Wave | EffectKind::Ripple => at(0) > 0.0,
+            EffectKind::Twirl | EffectKind::Pinch => at(0) != 0.0,
+            EffectKind::Clouds => at(1) > 0.0,
+            EffectKind::Lighting => at(3) > 0.0,
+            EffectKind::Gradient => at(1) > 0.0,
         }
     }
 
@@ -562,6 +644,13 @@ pub fn apply(raster: &Raster, steps: &[FxStep]) -> Raster {
             EffectKind::Mosaic => f::mosaic(&cur, v[0]),
             EffectKind::DropShadow => f::drop_shadow(&cur, v[0], v[1], v[2], v[3]),
             EffectKind::Glow => f::glow(&cur, v[0], v[1]),
+            EffectKind::Wave => crate::fxwarp::wave(&cur, v[0], v[1], v[2]),
+            EffectKind::Ripple => crate::fxwarp::ripple(&cur, v[0], v[1], v[2], v[3]),
+            EffectKind::Twirl => crate::fxwarp::twirl(&cur, v[0], v[1], v[2], v[3]),
+            EffectKind::Pinch => crate::fxwarp::pinch(&cur, v[0], v[1], v[2], v[3]),
+            EffectKind::Clouds => crate::fxwarp::clouds(&cur, v[0], v[1], v[2]),
+            EffectKind::Lighting => crate::fxwarp::lighting(&cur, v[0], v[1], v[2], v[3]),
+            EffectKind::Gradient => crate::fxwarp::gradient(&cur, v[0], v[1]),
         };
     }
     cur

@@ -534,6 +534,10 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     `changes` dit quand un effet ne change rien (il n'est pas calculé). Menu du calque :
     `App::fx_menu_items` (familles en cases à cocher), `toggle_fx` (ajoute avec les réglages
     par défaut, sinon active ou désactive), `fx_on` ; fenêtre « Effets » (`fxui.rs`).
+  - Déformation et Rendu : `fxwarp.rs` (purs, testés). Déformations par lecture inverse
+    bilinéaire sur toute la feuille (`warp`, parallèle) : onde, ondulation, tourbillon,
+    pincement, centres en % de la feuille. Rendu sur la couleur des pixels dessinés (`shade`) :
+    nuages (bruit lissé, 4 octaves, graine), éclairage, dégradé.
 
   La carte graphique garde la texture du dérivé sous ce même numéro. Les flous ne travaillent
   que sur la zone dessinée, marge comprise :

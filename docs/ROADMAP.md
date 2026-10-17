@@ -1093,8 +1093,11 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         opacité, mode de fusion, puis Flou, Réglages, Netteté, Bruit, Pixéliser, Styliser en
         sous-menus de cases à cocher, « Fenêtre Effets… » (la pile d'effets de 13i, renommée,
         son « Ajouter » rangé par familles), et la propagation de la peinture. Douze effets
-        nouveaux (`fxfilters.rs`), avec les clés et le cache des flous. Pas faits : les
-        galeries (de filtres, de flous), la déformation, le rendu, la vidéo de Photoshop ;
+        nouveaux (`fxfilters.rs`), avec les clés et le cache des flous. Puis (« ajoute
+        Déformation et Rendu ») : onde, ondulation, tourbillon, pincement ; nuages, éclairage,
+        dégradé (`fxwarp.rs`) ; le rendu texture ou éclaire le dessin au lieu de remplir la
+        feuille (mon choix). Pas faits : les galeries (de filtres, de flous), la vidéo de
+        Photoshop, Liquéfier ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,

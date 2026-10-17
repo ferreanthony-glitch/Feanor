@@ -299,9 +299,11 @@ Les flips par rôle feuillettent les clés, les breakdowns ou les intervalles du
 effets sur le calque, vus à l'écran et à l'export, sans toucher aux dessins (non destructifs :
 on les coche et décoche, le dessin reste tel quel).
 - Par familles, comme le menu Filtre de Photoshop : **Flou** (gaussien, de mouvement),
+  **Déformation** (onde, ondulation, tourbillon, pincement — centre réglable, animable),
   **Réglages** (luminosité / contraste, niveaux, teinte / saturation, noir et blanc, négatif,
-  postérisation, seuil), **Netteté**, **Bruit**, **Pixéliser** (mosaïque), **Styliser** (ombre
-  portée, lueur).
+  postérisation, seuil), **Bruit**, **Pixéliser** (mosaïque), **Rendu** (nuages, éclairage,
+  dégradé : ils texturent ou éclairent le dessin), **Netteté**, **Styliser** (ombre portée,
+  lueur).
 - Au clic droit sur un calque, la partie « Effets » : opacité, mode de fusion, chaque famille
   en cases à cocher, la fenêtre Effets pour régler les paramètres.
 - On les active, les ordonne ou les retire à tout moment.
