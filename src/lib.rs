@@ -193,6 +193,8 @@ mod project;
 mod propager;
 #[cfg(test)]
 mod propager_tests;
+#[cfg(test)]
+mod propager_cadence_tests;
 mod propagerui;
 mod raccourcisui;
 mod raster;

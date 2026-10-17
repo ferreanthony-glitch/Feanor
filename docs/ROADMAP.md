@@ -1178,6 +1178,13 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         lumineuse quittent la barre du haut pour la barre sous le dessin (avec le 100 %, le
         curseur de rotation et la force de la table lumineuse) ; en 3D, la barre ne garde que les
         vues, pour en sortir ; panneau étroit : curseurs plus courts ;
+      - **propagation : cadence** (Anthony : « l'option de créer des images uniquement sur les clés
+        existantes ou de créer des images à différentes cadences d'images à choisir, avec l'option
+        de suivre les clés existantes ou non ») : une image toutes les N images, ou seulement aux
+        clés du guide ; « suivre les clés du guide » relance la cadence à chaque clé. Les autres
+        images tiennent l'image d'avant. Mon interprétation : « les clés existantes » = celles du
+        guide (l'animation suivie), les clés peintes restant les modèles ; à confirmer. Fait dans
+        `propager.rs` / `propagerui.rs` (session Propagation prévenue) ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,

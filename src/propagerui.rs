@@ -11,7 +11,7 @@
 //! partagé), sinon sur le processeur. Voir `propager.rs`.
 
 use std::ops::Range;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -24,7 +24,7 @@ use synthese::{Cpu, Image, Synthesizer};
 
 use crate::app::App;
 use crate::document::LayerKind;
-use crate::propager::{self, Frames, Guide};
+use crate::propager::{self, Cadence, Frames, Guide};
 
 /// Canaux de la synthèse : le style (RVBA), les guides (image 3, position 2, temporel 4).
 const STYLE_CHANNELS: usize = 4;
@@ -42,6 +42,8 @@ pub(crate) struct Propagation {
     /// (identifiants) ; aucune : toute la plage du guide.
     range: Option<((u64, u64, Guide), Range<usize>)>,
     params: PropagateParams,
+    /// Quelles images fabriquer : toutes, en 2, en 3…, ou seulement aux clés du guide.
+    cadence: Cadence,
     job: Option<Job>,
 }
 
@@ -54,7 +56,11 @@ struct Job {
     origin: (usize, usize),
     /// Les clés à marquer : celles de la plage et celles hors plage.
     keys: Vec<usize>,
+    /// Les images qui tiendront l'image d'avant (cadence plus lente que l'image par image).
+    held: Vec<usize>,
     total: usize,
+    /// Images calculées (toutes celles hors clés, gardées ou non) : la progression.
+    computed: Arc<AtomicUsize>,
     cancel: Arc<AtomicBool>,
     /// Les images fabriquées, au fur et à mesure.
     made: Arc<Mutex<Vec<(usize, Image)>>>,
@@ -74,7 +80,7 @@ impl Propagation {
             let info = rs.adapter.get_info();
             (rs.device.clone(), rs.queue.clone(), format!("{} ({:?})", info.name, info.backend))
         });
-        Propagation { on_gpu: device.is_some(), device, window: false, guide: None, range: None, params: PropagateParams::default(), job: None }
+        Propagation { on_gpu: device.is_some(), device, window: false, guide: None, range: None, params: PropagateParams::default(), cadence: Cadence::default(), job: None }
     }
 
     /// Une propagation tourne : le reste de l'interface attend.
@@ -168,20 +174,29 @@ impl App {
         let ranges = self.propagation_ranges(guide);
         let outline = ranges.clone().and_then(|(_, r)| propager::outline(&self.doc, self.cur_panel, self.cur_layer, guide, Some(r)));
         let labels = |frames: &[usize]| frames.iter().map(|&k| self.frame_label(k)).collect::<Vec<_>>().join(", ");
-        let summary = outline.as_ref().map(|o| {
+        // Les clés du guide (aucune pour une vidéo) et la cadence choisie : images fabriquées, tenues.
+        let guide_keys = propager::guide_keys(&self.doc, self.cur_panel, self.cur_layer, guide);
+        let mut cadence = self.propagation.cadence;
+        let summary = outline.as_ref().map_err(|e| e.clone()).and_then(|o| {
+            let made = propager::made_frames(o.range.clone(), &o.keys, guide_keys.as_deref(), cadence);
+            if made.is_empty() {
+                return Err("Aucune image à fabriquer avec ce choix (les clés du guide sont toutes des clés peintes).".to_string());
+            }
+            let held = o.outputs() - made.len();
             let mut text = format!(
-                "Images {} à {} : {} {} ({}), {} images à fabriquer.",
+                "Images {} à {} : {} {} ({}), {} images à fabriquer{}.",
                 self.frame_label(o.range.start),
                 self.frame_label(o.range.end - 1),
                 o.keys.len(),
                 if o.keys.len() > 1 { "clés" } else { "clé" },
                 labels(&o.keys),
-                o.outputs()
+                made.len(),
+                if held > 0 { format!(", {held} qui tiennent l'image d'avant") } else { String::new() }
             );
             if !o.ignored.is_empty() {
                 text += &format!(" Hors de la plage, ignorées : {} {}.", if o.ignored.len() > 1 { "clés" } else { "clé" }, labels(&o.ignored));
             }
-            text
+            Ok(text)
         });
         // Sans clé dans la plage choisie : où sont celles du calque.
         let summary = summary.map_err(|e| match propager::outline(&self.doc, self.cur_panel, self.cur_layer, guide, None) {
@@ -250,6 +265,33 @@ impl App {
                         }
                     });
                 }
+                // Quelles images fabriquer (Anthony, 2026-10-17).
+                ui.horizontal(|ui| {
+                    ui.label("Fabriquer");
+                    ui.radio_value(&mut cadence.keys_only, false, "une image toutes les");
+                    ui.add_enabled(
+                        !cadence.keys_only,
+                        egui::DragValue::new(&mut cadence.step).range(1..=8).speed(0.05).custom_formatter(|v, _| format!("{v:.0}")),
+                    )
+                    .on_hover_text("1 : chaque image ; 2 : en 2 ; 3 : en 3… Les autres images tiennent l'image d'avant.");
+                    ui.label("images");
+                });
+                ui.horizontal(|ui| {
+                    ui.add_space(62.0);
+                    let keys_note = "Une vidéo change à chaque image : elle n'a pas de clés.";
+                    ui.add_enabled_ui(guide_keys.is_some(), |ui| {
+                        ui.radio_value(&mut cadence.keys_only, true, "seulement aux clés du guide")
+                            .on_hover_text("Une image là où le dessin du guide change ; elle tient jusqu'à la clé suivante.")
+                            .on_disabled_hover_text(keys_note);
+                    });
+                });
+                ui.horizontal(|ui| {
+                    ui.add_space(62.0);
+                    let on = !cadence.keys_only && cadence.step > 1 && guide_keys.is_some();
+                    ui.add_enabled(on, egui::Checkbox::new(&mut cadence.follow_keys, "suivre les clés du guide"))
+                        .on_hover_text("Une image aussi à chaque clé du guide, et la cadence repart de là ; sinon la cadence va tout droit.")
+                        .on_disabled_hover_text("Avec une cadence plus lente que chaque image, et un guide qui a des clés.");
+                });
                 match &summary {
                     Err(e) => {
                         ui.label(e.as_str());
@@ -296,6 +338,7 @@ impl App {
                 });
             });
         (self.propagation.params, self.propagation.on_gpu, self.propagation.window) = (params, on_gpu, open);
+        self.propagation.cadence = cadence;
         self.propagation.guide = Some(chosen);
         if let Some(r) = picked {
             self.propagation.range = Some(((self.panel().id, self.layer().id, guide), r));
@@ -324,9 +367,16 @@ impl App {
         let params = self.propagation.params.clone();
         // Toutes les clés seront marquées, celles hors plage aussi (voir `propager::apply`).
         let (origin, keys, total) = (plan.origin, [&plan.outline.keys[..], &plan.outline.ignored[..]].concat(), plan.outline.outputs());
+        // La cadence : toutes les images sont calculées (le suivi du mouvement va d'une image à la
+        // suivante), seules celles choisies sont gardées.
+        let guide_keys = propager::guide_keys(&self.doc, self.cur_panel, self.cur_layer, guide);
+        let range = plan.outline.range.clone();
+        let keep = propager::made_frames(range.clone(), &plan.outline.keys, guide_keys.as_deref(), self.propagation.cadence);
+        let held = propager::held_frames(range, &plan.outline.keys, &keep);
         let cancel = Arc::new(AtomicBool::new(false));
         let made = Arc::new(Mutex::new(Vec::new()));
-        let (stop, sink, wake) = (cancel.clone(), made.clone(), ctx.clone());
+        let computed = Arc::new(AtomicUsize::new(0));
+        let (stop, sink, wake, count) = (cancel.clone(), made.clone(), ctx.clone(), computed.clone());
         let (ask, requests) = channel::<usize>();
         let (answers, replies) = channel::<Result<Image, String>>();
         let handle = std::thread::spawn(move || -> Result<String, String> {
@@ -363,7 +413,10 @@ impl App {
                 }
             };
             propager::run(&plan, synth.as_ref(), &params, &stop, load, |f, im| {
-                sink.lock().unwrap_or_else(|e| e.into_inner()).push((f, im));
+                count.fetch_add(1, Ordering::Relaxed);
+                if keep.binary_search(&f).is_ok() {
+                    sink.lock().unwrap_or_else(|e| e.into_inner()).push((f, im));
+                }
             })?;
             Ok(name)
         });
@@ -374,7 +427,9 @@ impl App {
             guide,
             origin,
             keys,
+            held,
             total,
+            computed,
             cancel,
             made,
             requests,
@@ -410,7 +465,7 @@ impl App {
             }
         }
         if !job.handle.is_finished() {
-            let (done, total) = (job.previewed, job.total.max(1));
+            let (done, total) = (job.computed.load(Ordering::Relaxed), job.total.max(1));
             let stopping = job.cancel.load(Ordering::Relaxed);
             let mut stop = false;
             egui::Modal::new(egui::Id::new("progression_propagation")).show(ctx, |ui| {
@@ -459,9 +514,11 @@ impl App {
                 let n = made.len();
                 let snap = self.snapshot();
                 propager::apply(&mut self.doc, pi, li, job.origin, &job.keys, made);
+                propager::hold(&mut self.doc, pi, li, &job.held);
                 self.renderer.invalidate_all();
                 self.commit_structure(snap);
-                self.status = format!("Propagation : {n} images fabriquées en {seconds:.0} s ({name}).");
+                let held = if job.held.is_empty() { String::new() } else { format!(", {} qui tiennent l'image d'avant", job.held.len()) };
+                self.status = format!("Propagation : {n} images fabriquées{held} en {seconds:.0} s ({name}).");
             }
         }
     }

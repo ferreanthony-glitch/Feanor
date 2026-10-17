@@ -29,6 +29,14 @@ optique, mélange des clés, carte graphique. L'intégration dans Pelure est dan
    « Tout » y revient ; « Entrée → sortie » reprend les points d'entrée et de sortie de la timeline.
    Les images hors de la plage ne changent pas. Le choix est gardé pour ce calque et ce guide.
 
+   Puis **quelles images fabriquer** (Anthony, 17 octobre 2026) : « une image toutes les N images »
+   (1 : chaque image, 2 : en 2, 3 : en 3…), ou « seulement aux clés du guide » (là où le dessin du
+   guide commence ou change ; pas pour une vidéo, qui change à chaque image). Avec une cadence, «
+   suivre les clés du guide » met aussi une image à chaque clé du guide et la cadence repart de là ;
+   sinon elle va tout droit (elle repart toujours des clés peintes). Les autres images tiennent
+   l'image d'avant, comme une exposition. Toutes les images restent calculées (le suivi du
+   mouvement va d'une image à la suivante) : seules celles choisies sont gardées.
+
    La fenêtre dit aussi ce qui va se passer : les images, les clés (et celles hors plage, ignorées),
    le nombre d'images à fabriquer. On y choisit le calcul (carte graphique ou processeur) et les
    réglages.

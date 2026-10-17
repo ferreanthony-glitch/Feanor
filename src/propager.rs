@@ -61,6 +61,80 @@ impl Outline {
     }
 }
 
+/// Quelles images de la plage fabriquer (Anthony, 2026-10-17 : « l'option de créer des images
+/// uniquement sur les clés existantes ou de créer des images à différentes cadences d'images à
+/// choisir, avec l'option de suivre les clés existantes ou non »). Les autres images de la plage
+/// (hors clés peintes) tiennent l'image d'avant, comme une exposition.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Cadence {
+    /// Seulement aux clés du guide : là où le dessin de ses calques change.
+    pub keys_only: bool,
+    /// Sinon une image toutes les `step` images (1 : toutes, 2 : en 2…).
+    pub step: usize,
+    /// Avec la cadence : une image aussi à chaque clé du guide, et la cadence repart de là.
+    pub follow_keys: bool,
+}
+
+impl Default for Cadence {
+    fn default() -> Self {
+        Self { keys_only: false, step: 1, follow_keys: true }
+    }
+}
+
+/// Les images à fabriquer dans `range`, dans l'ordre. `keys` : les clés peintes (jamais
+/// fabriquées ; la cadence repart de chacune) ; `guide_keys` : les clés du guide (aucune pour une
+/// vidéo, qui change à chaque image : « seulement aux clés » fabrique alors chaque image). Le
+/// début de la plage est toujours une image (ou une clé), pour que les suivantes aient quoi tenir.
+pub fn made_frames(range: Range<usize>, keys: &[usize], guide_keys: Option<&[usize]>, c: Cadence) -> Vec<usize> {
+    let mut out = Vec::new();
+    match guide_keys {
+        Some(gk) if c.keys_only => {
+            for f in range.clone() {
+                if (f == range.start || gk.contains(&f)) && !keys.contains(&f) {
+                    out.push(f);
+                }
+            }
+        }
+        _ => {
+            let step = if c.keys_only { 1 } else { c.step.max(1) };
+            let gk = guide_keys.unwrap_or(&[]);
+            let mut anchor = range.start;
+            for f in range.clone() {
+                if f == range.start || keys.contains(&f) || (c.follow_keys && gk.contains(&f)) {
+                    anchor = f;
+                }
+                if (f - anchor) % step == 0 && !keys.contains(&f) {
+                    out.push(f);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Les images de `range` qui ne sont ni des clés peintes ni fabriquées : elles tiendront l'image
+/// d'avant.
+pub fn held_frames(range: Range<usize>, keys: &[usize], made: &[usize]) -> Vec<usize> {
+    range.filter(|f| !keys.contains(f) && made.binary_search(f).is_err()).collect()
+}
+
+/// Les clés du guide : les images où le dessin d'un de ses calques commence ou change. Aucune
+/// pour un guide vidéo (chaque image change).
+pub fn guide_keys(doc: &Document, panel: usize, paint: usize, guide: Guide) -> Option<Vec<usize>> {
+    if matches!(guide, Guide::Video(_)) || panel >= doc.panels.len() {
+        return None;
+    }
+    let p = &doc.panels[panel];
+    let mut keys: Vec<usize> = Vec::new();
+    for li in guide_layers(doc, panel, paint, guide) {
+        let frames = &p.layers[li].frames;
+        keys.extend((0..frames.len()).filter(|&f| frames[f].is_some() && (f == 0 || frames[f - 1] != frames[f])));
+    }
+    keys.sort_unstable();
+    keys.dedup();
+    Some(keys)
+}
+
 /// D'où viennent les images du guide pendant la propagation.
 pub enum Frames {
     /// Les images de la vidéo, une par image de la plage.
@@ -368,5 +442,17 @@ pub fn apply(doc: &mut Document, panel: usize, paint: usize, origin: (usize, usi
     let layer = &mut doc.panels[panel].layers[paint];
     for &k in keys {
         layer.roles.insert(k, Role::Key);
+    }
+}
+
+/// Les images `held` (dans l'ordre) du calque `paint` tiennent le dessin de l'image d'avant (une
+/// cadence plus lente que l'image par image, `Cadence`) ; à poser après `apply`.
+pub fn hold(doc: &mut Document, panel: usize, paint: usize, held: &[usize]) {
+    let layer = &mut doc.panels[panel].layers[paint];
+    for &f in held {
+        if f > 0 {
+            let before = layer.frames.get(f - 1).copied().flatten();
+            layer.set(f, before);
+        }
     }
 }

@@ -803,6 +803,10 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     peint derrière) et refait la zone. `App::paint_behind`, `fill_shapes` (retenus dans
     `Settings`, enregistrés avec la pelure quand ils changent), `close_tolerance` (15 points
     d'écran) ; actions `pinceau.derriere`, `pinceau.remplir` (sans touche).
+  - Cadence de la propagation : `propager::Cadence`, `made_frames` (pur, testé : images gardées),
+    `held_frames`, `guide_keys` (images où un calque du guide change ; aucune pour une vidéo),
+    `hold` (après `apply` : les images tenues reprennent le dessin d'avant). `propagerui` calcule
+    tout, ne garde que `made_frames` (`Job::computed` pour la progression).
   - Journal de plantage (`plantage.rs`) : `install` (dans `lancer`) garde le crochet de panic
     par défaut puis écrit `report_text` (message, endroit, fil, pile `Backtrace::force_capture`) par
     `write_report` dans `%LOCALAPPDATA%\Pelure\plantages\plantage-<s>.txt` et `nouveau.txt` ; au
