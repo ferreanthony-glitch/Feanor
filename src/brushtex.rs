@@ -55,6 +55,28 @@ impl GrayImage {
         self.values[(y % self.height) * self.width + x % self.width]
     }
 
+    /// Valeur interpolée au point (`x`, `y`) de l'image répétée sans fin (papier mis à
+    /// l'échelle ou tourné).
+    pub fn sample_wrapped(&self, x: f32, y: f32) -> f32 {
+        let (w, h) = (self.width as i64, self.height as i64);
+        let (fx, fy) = (x - 0.5, y - 0.5);
+        let (ix, iy) = (fx.floor(), fy.floor());
+        let (tx, ty) = (fx - ix, fy - iy);
+        let (ix, iy) = (ix as i64, iy as i64);
+        let get = |x: i64, y: i64| self.values[(y.rem_euclid(h) * w + x.rem_euclid(w)) as usize];
+        let top = get(ix, iy) + (get(ix + 1, iy) - get(ix, iy)) * tx;
+        let bottom = get(ix, iy + 1) + (get(ix + 1, iy + 1) - get(ix, iy + 1)) * tx;
+        top + (bottom - top) * ty
+    }
+
+    /// Le gris d'une image (luminance, 0 à 1), réduite à `max` pixels de côté au plus : un
+    /// papier importé.
+    pub fn from_image(img: &image::DynamicImage, max: u32) -> GrayImage {
+        let img = if img.width() > max || img.height() > max { img.resize(max, max, image::imageops::FilterType::Triangle) } else { img.clone() };
+        let g = img.to_luma8();
+        GrayImage::new(g.width() as usize, g.height() as usize, g.pixels().map(|p| p.0[0] as f32 / 255.0).collect())
+    }
+
     /// Image moitié moins grande (moyenne de 2 × 2 texels).
     pub fn half(&self) -> GrayImage {
         let (w, h) = ((self.width / 2).max(1), (self.height / 2).max(1));

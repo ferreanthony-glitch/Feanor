@@ -353,6 +353,9 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   dessin, que la couleur remplit quand on appuie. L'icône d'import lit un fichier de pinceaux Toon
   Boom (`.xml`, par exemple `STB_TextureBrushes_preset.xml`) : ses pinceaux, pointes et papiers
   s'ajoutent à la liste et restent pour les fois suivantes.
+- **Papier** (panneau Pinceaux) : taille du grain, angle, « Inverser » (les creux deviennent des
+  sommets). L'icône image à côté de la liste prend n'importe quelle image (PNG, JPG…) comme papier,
+  par exemple un papier de TVPaint ; il reste pour les fois suivantes.
 - **Forme et dispersion** (réglages du pinceau) : rondeur et angle de la pointe, taille et angle
   au hasard, dispersion des empreintes en travers et le long du trait, nombre d'empreintes par
   pas, retournements au hasard d'une pointe en image (craies, matières).

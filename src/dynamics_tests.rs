@@ -274,3 +274,79 @@ fn scatter_spreads_the_dabs_across_the_stroke() {
     let r2 = draw(sc, (40.0, 160.0), (280.0, 160.0), 24, 0.02, 1.0);
     assert!((0..320).all(|x| column(&r, x) == column(&r2, x)));
 }
+
+/// Un papier à rayures verticales : 4 texels de sommet (1), 4 de creux (0).
+fn striped_paper() -> crate::brushtex::GrayImage {
+    let values = (0..8 * 8).map(|i| if (i % 8) < 4 { 1.0 } else { 0.0 }).collect();
+    crate::brushtex::GrayImage::new(8, 8, values)
+}
+
+/// Un trait horizontal large, appuyé à moitié, sur le papier rayé ; renvoie l'encre de la ligne
+/// du milieu, colonne par colonne (de 100 à 164).
+fn on_paper(s: BrushSettings) -> Vec<u8> {
+    let tex = crate::brushtex::BrushTextures { tip: None, paper: Some(std::sync::Arc::new(striped_paper())) };
+    let mut raster = Raster::new(320, 320);
+    let mut st = StrokeState::new(0, StrokeMode::Paint([0, 0, 0]), s, None, true).with_textures(tex);
+    let mut dirty = Vec::new();
+    for k in 0..=20 {
+        st.add_point(&mut raster, pos2(40.0 + 12.0 * k as f32, 160.0), 0.3, &mut dirty);
+    }
+    st.finish(&mut raster, &mut dirty);
+    (100..164).map(|x| raster.get(x, 160).a()).collect()
+}
+
+/// Longueur moyenne des plages encrées (plus qu'à moitié) d'une ligne.
+fn run_length(v: &[u8]) -> f32 {
+    let mut runs = Vec::new();
+    let mut n = 0;
+    for &a in v {
+        if a > 128 {
+            n += 1;
+        } else if n > 0 {
+            runs.push(n);
+            n = 0;
+        }
+    }
+    if runs.is_empty() {
+        return 0.0;
+    }
+    runs.iter().sum::<usize>() as f32 / runs.len() as f32
+}
+
+#[test]
+fn the_paper_grain_scales_turns_and_inverts() {
+    let mut s = plain(30.0);
+    s.paper = Some(0);
+    s.grain = 1.0;
+    let base = on_paper(s);
+    assert!((run_length(&base) - 4.0).abs() <= 1.0, "rayures de 4 : {base:?}");
+    // Deux fois plus grand : des plages deux fois plus longues.
+    s.paper_scale = 2.0;
+    let big = on_paper(s);
+    assert!((run_length(&big) - 8.0).abs() <= 1.5, "rayures de 8 : {}", run_length(&big));
+    // Inversé : l'encre passe dans les anciens creux.
+    s.paper_scale = 1.0;
+    s.paper_invert = true;
+    let inv = on_paper(s);
+    let same = base.iter().zip(&inv).filter(|(a, b)| (**a > 128) == (**b > 128)).count();
+    assert!(same <= 12, "inversé : {same} colonnes pareilles sur 64");
+    // Tourné d'un quart de tour : les rayures deviennent horizontales, la ligne est d'un seul ton.
+    s.paper_invert = false;
+    s.paper_angle = 90.0;
+    let turned = on_paper(s);
+    let inked = turned.iter().filter(|a| **a > 128).count();
+    assert!(inked == 0 || inked == 64, "une ligne d'un seul ton : {inked}");
+}
+
+#[test]
+fn an_image_becomes_a_wrapped_gray_paper() {
+    let img = image::DynamicImage::ImageRgb8(image::RgbImage::from_fn(4, 2, |x, _| if x < 2 { image::Rgb([255, 255, 255]) } else { image::Rgb([0, 0, 0]) }));
+    let g = crate::brushtex::GrayImage::from_image(&img, 1024);
+    assert_eq!((g.width, g.height), (4, 2));
+    assert_eq!((g.get(0, 0), g.get(3, 1)), (1.0, 0.0));
+    // Répétée sans fin, dans les deux sens.
+    assert!((g.sample_wrapped(4.5, 0.5) - 1.0).abs() < 1e-5 && (g.sample_wrapped(-0.5, 0.5) - 0.0).abs() < 1e-5);
+    let big = image::DynamicImage::ImageLuma8(image::GrayImage::new(3000, 1500));
+    let g = crate::brushtex::GrayImage::from_image(&big, 1024);
+    assert!(g.width <= 1024 && g.height <= 1024, "réduite : {}×{}", g.width, g.height);
+}

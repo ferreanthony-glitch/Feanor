@@ -282,6 +282,7 @@ impl App {
     fn grain_ui(&mut self, ui: &mut egui::Ui) {
         let papers = self.brushes.papers();
         let tip_name = self.tool_brush_mut().and_then(|b| b.tip).and_then(|id| self.brushes.tip_name(id).map(String::from));
+        let mut import = false;
         let Some(b) = self.tool_brush_mut() else { return };
         ui.horizontal(|ui| {
             ui.label("Papier");
@@ -295,10 +296,20 @@ impl App {
                     ui.selectable_value(&mut b.paper, Some(*id), name);
                 }
             });
+            // Une image comme papier (moteur de dessin, étape 7) : par exemple un papier PNG de
+            // TVPaint, choisi par Anthony.
+            import = crate::bulles::icone(ui, egui_phosphor::regular::IMAGE_SQUARE, "Importer un papier", "Une image (PNG, JPG…) devient un papier : son gris est le relief.", "").clicked();
         });
         if b.paper.is_some() {
             let resp = ui.add(egui::Slider::new(&mut b.grain, 0.0..=1.0).text("Grain"));
             crate::bulles::bulle(resp, "Grain", "Le grain reste fixe sur le dessin ; appuyer plus fort remplit les creux du papier.", "");
+            let resp = ui.add(egui::Slider::new(&mut b.paper_scale, 0.1..=8.0).logarithmic(true).text("Taille du papier"));
+            crate::bulles::bulle(resp, "Taille du papier", "Plus grand : un grain plus large.", "");
+            ui.horizontal(|ui| {
+                let resp = ui.add(egui::Slider::new(&mut b.paper_angle, -180.0..=180.0).suffix("°").text("Angle"));
+                crate::bulles::bulle(resp, "Angle du papier", "Tourne le grain du papier.", "");
+                ui.checkbox(&mut b.paper_invert, "Inverser").on_hover_text("Les creux du papier deviennent des sommets.");
+            });
         }
         if let Some(tip) = tip_name {
             ui.horizontal(|ui| {
@@ -308,6 +319,42 @@ impl App {
                 }
             });
         }
+        if import {
+            self.import_paper();
+        }
+    }
+
+    /// Une image choisie devient un papier de la bibliothèque, gardé pour les fois suivantes, et
+    /// le papier de l'outil courant.
+    fn import_paper(&mut self) {
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("Image à prendre comme papier")
+            .add_filter("Images", &["png", "jpg", "jpeg", "bmp", "tif", "tiff", "webp"])
+            .pick_file()
+        else {
+            return;
+        };
+        let img = match image::open(&path) {
+            Ok(i) => i,
+            Err(e) => {
+                self.status = format!("Image illisible : {e}");
+                return;
+            }
+        };
+        let name = path.file_stem().map_or("papier".into(), |n| n.to_string_lossy().into_owned());
+        let id = self.brushes.add_paper(&name, crate::brushtex::GrayImage::from_image(&img, 1024));
+        self.brushes.share();
+        if let Some(b) = self.tool_brush_mut() {
+            b.paper = Some(id);
+            if b.grain <= 0.0 {
+                b.grain = 1.0;
+            }
+        }
+        let saved = match BrushLibrary::user_dir() {
+            Some(dir) => self.brushes.save(&dir).err(),
+            None => Some("dossier %APPDATA% introuvable".into()),
+        };
+        self.status = format!("Papier « {name} » importé{}", saved.map_or(String::new(), |e| format!(" ; non gardé pour la prochaine fois : {e}")));
     }
 
     /// Importe un fichier de pinceaux Toon Boom ; réimporter le même fichier remplace ses pinceaux.

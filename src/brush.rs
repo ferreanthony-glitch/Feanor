@@ -60,8 +60,16 @@ pub struct BrushSettings {
     pub min_size: f32,
     #[serde(rename = "opacite_min")]
     pub min_opacity: f32,
-    /// Force du grain du papier (0 = papier lisse).
+    /// Force du grain du papier (0 = papier lisse ; la « Hardness » du papier de TVPaint).
     pub grain: f32,
+    /// Papier (moteur de dessin, étape 7) : sa taille (1 = un texel par pixel), son angle en
+    /// degrés, et son relief inversé (les creux deviennent des sommets).
+    #[serde(rename = "papier_taille")]
+    pub paper_scale: f32,
+    #[serde(rename = "papier_angle")]
+    pub paper_angle: f32,
+    #[serde(rename = "papier_inverser")]
+    pub paper_invert: bool,
     /// Papier et pointe en image (numéros dans `BrushLibrary`) ; pas de pointe : pointe ronde.
     #[serde(rename = "papier")]
     pub paper: Option<u32>,
@@ -392,6 +400,9 @@ impl BrushSettings {
             min_size: 0.0,
             min_opacity: 0.0,
             grain: 0.0,
+            paper_scale: 1.0,
+            paper_angle: 0.0,
+            paper_invert: false,
             paper: None,
             tip: None,
             roundness: 1.0,
@@ -864,6 +875,10 @@ impl StrokeState {
         let flip_v = tip.is_some() && s.flip_y && self.jitter() < 0.0;
         let paper = self.textures.paper.clone().filter(|_| s.grain > 0.0);
         let profile = s.profile.map(|c| profile_lut(&c));
+        // Papier tel quel (comme avant), ou mis à l'échelle et tourné.
+        let paper_plain = (s.paper_scale - 1.0).abs() < 1e-4 && s.paper_angle == 0.0;
+        let pscale = s.paper_scale.clamp(0.05, 20.0);
+        let (psin, pcos) = s.paper_angle.to_radians().sin_cos();
         // Une pointe en image tournée déborde du cercle : on couvre le carré qui la contient.
         let reach = if tip.is_some() { radius * std::f32::consts::SQRT_2 } else { radius };
 
@@ -926,8 +941,16 @@ impl StrokeState {
                         if cov <= 0.0 {
                             continue;
                         }
-                        // Grain du papier, fixe sur le dessin.
-                        let grain = paper.as_ref().map_or(1.0, |p| grain_factor(p.tiled(px, py), pressure, s.grain));
+                        // Grain du papier, fixe sur le dessin (à sa taille, son angle, inversé ou non).
+                        let grain = paper.as_ref().map_or(1.0, |p| {
+                            let h = if paper_plain {
+                                p.tiled(px, py)
+                            } else {
+                                let (x, y) = (px as f32 + 0.5, py as f32 + 0.5);
+                                p.sample_wrapped((x * pcos + y * psin) / pscale, (-x * psin + y * pcos) / pscale)
+                            };
+                            grain_factor(if s.paper_invert { 1.0 - h } else { h }, pressure, s.grain)
+                        });
                         let i = (py - oy) * TILE + (px - ox);
                         let through = stencil.map_or(1.0, |st| st.at(idx, i));
                         let v = cov * flow * grain * through * deposit;

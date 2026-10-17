@@ -943,6 +943,11 @@ Choix d'Anthony :
 
   À la fin du trait, il rattrape la pointe. Pas encore : le rattrapage pendant une pause, et
   l'affichage de la corde.
+- ✅ 7. Papier : taille du grain, angle, inversion (la « Hardness » de TVPaint est le curseur
+  Grain), et n'importe quelle image importée comme papier (son gris est le relief, réduite à
+  1024 pixels). Pelure ne copie aucun papier de TVPaint d'office : Anthony peut choisir lui-même
+  les PNG de son installation. Le papier tel quel suit exactement le même calcul qu'avant. Pas
+  encore : le double papier.
 - ✅ 6. Forme et dispersion :
   - dispersion des empreintes en travers et le long du trait (le « Jitter » de TVPaint, les
     « Jitter Lateral / Linear » de Procreate) ;
