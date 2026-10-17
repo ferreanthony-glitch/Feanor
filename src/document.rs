@@ -201,7 +201,8 @@ pub struct CameraSeen {
 }
 
 /// Calque de toute la scène (6f), comme un décor : chaque panneau de la scène `scene` en a un
-/// exemplaire, réglé pareil, qui montre le même dessin pendant tout le panneau. `key` relie les
+/// exemplaire, réglé pareil, avec les mêmes images (ses clés, depuis le 2026-10-17 ; avant : un
+/// seul dessin tenu sur tout le panneau). `key` relie les
 /// exemplaires d'un panneau à l'autre (chaque calque garde son propre `id`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SceneWide {
@@ -2174,10 +2175,10 @@ impl Document {
     // ---------------------------------------------------------------- calques de toute la scène (6f)
 
     /// Accorde les calques de toute la scène : chaque panneau de la scène a son exemplaire,
-    /// réglé comme le modèle, qui montre le même dessin pendant tout le panneau. Le modèle est
-    /// l'exemplaire du panneau `cur` s'il en a un (c'est lui qu'on modifie), sinon le premier
-    /// trouvé ; son dessin est celui de l'image `frame` (un nouveau dessin remplace donc l'ancien
-    /// partout). Un exemplaire égaré dans une autre scène (panneau déplacé, scènes réunies) est
+    /// réglé comme le modèle, avec ses images (coupées à la durée du panneau ; plus court, il tient
+    /// son dernier dessin). Le modèle est l'exemplaire du panneau `cur` s'il en a un (c'est lui
+    /// qu'on modifie), sinon le premier trouvé. (`frame` ne sert plus depuis que le fond a ses
+    /// clés.) Un exemplaire égaré dans une autre scène (panneau déplacé, scènes réunies) est
     /// retiré : le panneau prend le fond de sa nouvelle scène. Vrai si quelque chose a changé.
     pub fn sync_scene_layers(&mut self, cur: usize, frame: usize) -> bool {
         let mut changed = false;
@@ -2192,25 +2193,31 @@ impl Document {
                 }
             }
         }
-        // Modèles : l'exemplaire, son rang et son dessin.
-        let mut models: Vec<(Layer, usize, Option<CelId>)> = Vec::new();
+        // Modèles : l'exemplaire du panneau courant (sinon le premier) et son rang. Ses images
+        // vont telles quelles dans chaque panneau de la scène (depuis le 2026-10-17 : ses clés
+        // se posent et se déplacent dans le montage comme sur un autre calque), coupées à sa
+        // durée ; plus court, il tient son dernier dessin.
+        let _ = frame;
+        let mut models: Vec<(Layer, usize)> = Vec::new();
         for (pi, p) in self.panels.iter().enumerate() {
             for (k, l) in p.layers.iter().enumerate() {
                 let Some(w) = l.scene_wide else { continue };
-                let first = l.frames.iter().flatten().next().copied();
-                let cel = if pi == cur { l.cel_at(frame).or(first) } else { first };
                 match models.iter_mut().find(|m| m.0.scene_wide.is_some_and(|v| v.key == w.key)) {
-                    Some(m) if pi == cur => *m = (l.clone(), k, cel),
+                    Some(m) if pi == cur => *m = (l.clone(), k),
                     Some(_) => {}
-                    None => models.push((l.clone(), k, cel)),
+                    None => models.push((l.clone(), k)),
                 }
             }
         }
         for p in &mut self.panels {
             let n = own_frame_count(p);
-            for (model, rank, cel) in &models {
+            for (model, rank) in &models {
                 let Some(w) = model.scene_wide.filter(|w| w.scene == p.scene) else { continue };
-                let frames = cel.map_or(Vec::new(), |c| vec![Some(c); n]);
+                let mut frames = model.frames.clone();
+                frames.truncate(n);
+                if let Some(last) = frames.last().copied().flatten() {
+                    frames.resize(n, Some(last));
+                }
                 match p.layers.iter().position(|l| l.scene_wide == Some(w)) {
                     Some(k) => {
                         let want = Layer { id: p.layers[k].id, frames, ..model.clone() };

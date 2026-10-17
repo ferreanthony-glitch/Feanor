@@ -55,12 +55,13 @@ fn layers_of_the_same_name_in_one_plan_get_their_own_tracks() {
 }
 
 #[test]
-fn scene_wide_layers_stay_on_the_background_track() {
+fn scene_wide_layers_have_their_own_track() {
+    // Depuis le 2026-10-17, un calque de toute la scène (fond) a sa piste comme les autres.
     let mut a = plan(&["Perso", "Décor commun"]);
     a[0].scene_wide = Some(SceneWide { key: 1, scene: 1 });
     let tracks = layer_tracks([a.as_slice()]);
-    assert_eq!(names(&tracks), ["Perso"]);
-    assert_eq!(layer_on_track(&a, &key("Décor commun", 0)), None);
+    assert_eq!(names(&tracks), ["Perso", "Décor commun"]);
+    assert_eq!(layer_on_track(&a, &key("Décor commun", 0)), Some(0));
 }
 
 /// Un calque dessiné de l'image 2 à 8 (exclue) : un dessin tenu de 2 à 5, un autre de 5 à 8.

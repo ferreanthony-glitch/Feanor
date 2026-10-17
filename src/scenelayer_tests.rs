@@ -44,11 +44,15 @@ fn a_background_spans_its_scene() {
     assert!(doc.sync_scene_layers(1, 0));
     assert!((0..3).all(|p| copy(&doc, p, w).unwrap().opacity == 0.5));
     assert!(!doc.sync_scene_layers(1, 0), "stable");
-    // Un nouveau dessin à l'image courante du panneau courant remplace l'ancien partout.
+    // Une clé posée dans le panneau courant (à l'image 5) passe aux autres panneaux de la scène :
+    // depuis le 2026-10-17, les clés du fond se posent et se déplacent dans le montage.
     let other = doc.new_cel(LayerKind::Bitmap);
     doc.panels[2].layers[0].set(5, Some(other));
     doc.sync_scene_layers(2, 5);
-    assert!((0..3).all(|p| copy(&doc, p, w).unwrap().frames.iter().all(|f| *f == Some(other))));
+    assert!((0..3).all(|p| {
+        let f = &copy(&doc, p, w).unwrap().frames;
+        f[0] == Some(cel) && f[5] == Some(other)
+    }));
     // Le fond suit la durée du panneau, sans l'allonger lui-même.
     doc.panels[1].set_length(60);
     doc.sync_scene_layers(1, 0);
@@ -59,7 +63,7 @@ fn a_background_spans_its_scene() {
     // Un nouveau panneau de la scène reçoit le sien.
     let i = doc.add_panel_after(0);
     doc.sync_scene_layers(i, 0);
-    assert_eq!(copy(&doc, i, w).unwrap().frames[0], Some(other));
+    assert_eq!(copy(&doc, i, w).unwrap().frames[..6], [Some(cel), Some(cel), Some(cel), Some(cel), Some(cel), Some(other)]);
 }
 
 #[test]

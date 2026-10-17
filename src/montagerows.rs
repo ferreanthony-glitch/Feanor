@@ -4,7 +4,8 @@
 //! Chaque plan a ses propres calques. Depuis le chantier 5, une piste par nom de calque : le
 //! calque « Perso » de chaque plan est sur la même piste, où qu'il soit dans sa pile ; un plan
 //! sans calque de ce nom y laisse un trou. Toutes les pistes sont montrées (avant : 8 au plus,
-//! par rang). Le fond de scène tient une seule barre par scène.
+//! par rang). Un calque de toute la scène (fond) a sa piste comme les autres, teintée « fond »
+//! (avant le 2026-10-17 : une seule barre « Fond » par scène, en lecture seule).
 //!
 //! Les gestes de la timeline marchent dans les pistes (chantier 5) : le bord droit d'un dessin
 //! étire son exposition, la barre sous les dessins décale le calque, ses bouts le rognent ou
@@ -55,13 +56,13 @@ impl TrackKey {
 /// Les pistes de calques du montage, du haut vers le bas : chaque nom une fois (et chaque doublon
 /// d'un même plan). On suit les plans dans l'ordre, chacun du haut de sa pile vers le bas : un nom
 /// nouveau vient juste sous la piste du calque qui le précède dans son plan (tout en haut s'il est
-/// le premier). Les calques de toute la scène (fond) n'ont pas de piste ici.
+/// le premier). Les calques de toute la scène (fond) ont leur piste comme les autres.
 pub(crate) fn layer_tracks<'a>(plans: impl IntoIterator<Item = &'a [Layer]>) -> Vec<TrackKey> {
     let mut out: Vec<TrackKey> = Vec::new();
     for layers in plans {
         let mut after: Option<usize> = None;
         let mut seen: Vec<&str> = Vec::new();
-        for l in layers.iter().rev().filter(|l| l.scene_wide.is_none()) {
+        for l in layers.iter().rev() {
             let nth = seen.iter().filter(|n| **n == l.name).count();
             seen.push(&l.name);
             match out.iter().position(|t| t.nth == nth && t.name == l.name) {
@@ -79,15 +80,13 @@ pub(crate) fn layer_tracks<'a>(plans: impl IntoIterator<Item = &'a [Layer]>) -> 
 
 /// Le calque d'un plan (`layers`, du bas vers le haut) sur la piste `key`.
 pub(crate) fn layer_on_track(layers: &[Layer], key: &TrackKey) -> Option<usize> {
-    (0..layers.len()).rev().filter(|&k| layers[k].scene_wide.is_none() && layers[k].name == key.name).nth(key.nth)
+    (0..layers.len()).rev().filter(|&k| layers[k].name == key.name).nth(key.nth)
 }
 
 /// Rangées de la bande, en distance depuis son haut.
 pub(crate) struct Rows {
-    /// Pistes de calques (calques propres aux plans), du haut vers le bas.
+    /// Pistes de calques, du haut vers le bas (ceux de toute la scène compris).
     pub tracks: Vec<TrackKey>,
-    /// Une piste « Fond » (calques de toute la scène).
-    pub background: bool,
     pub block_h: f32,
 }
 
@@ -101,11 +100,12 @@ impl Rows {
     pub fn layers_top(&self) -> f32 {
         self.blocks_top() + self.block_h + 2.0
     }
+    /// Bas des pistes de calques.
     pub fn background_top(&self) -> f32 {
         self.layers_top() + self.tracks.len() as f32 * LAYER_H
     }
     pub fn lanes_top(&self) -> f32 {
-        self.background_top() + if self.background { LAYER_H } else { 0.0 } + LANE_GAP
+        self.background_top() + LANE_GAP
     }
     /// Hauteur totale, pistes son comprises.
     pub fn height(&self, sound_tracks: usize) -> f32 {
@@ -118,8 +118,7 @@ impl App {
     /// Rangées pour une bande haute de `available` : les panneaux prennent la place qui reste.
     pub(crate) fn montage_rows(&self, available: f32) -> Rows {
         let tracks = layer_tracks(self.doc.panels.iter().map(|p| p.layers.as_slice()));
-        let background = self.doc.panels.iter().any(|p| p.layers.iter().any(|l| l.scene_wide.is_some()));
-        let mut rows = Rows { tracks, background, block_h: 0.0 };
+        let mut rows = Rows { tracks, block_h: 0.0 };
         let fixed = rows.height(self.doc.audio_tracks.len()) + 12.0;
         rows.block_h = (available - fixed).clamp(56.0, 170.0);
         rows
@@ -166,7 +165,14 @@ impl App {
             };
             grid.push(crate::layerheads::Row { li: k, top: row as f32 * LAYER_H, h: LAYER_H });
             let current = k == self.cur_layer;
-            label(r, &name, if current { visuals.strong_text_color() } else { visuals.text_color() });
+            // Un calque de toute la scène : son nom teinté « fond ».
+            let wide = self.doc.panels[self.cur_panel].layers[k].scene_wide.is_some();
+            let color = match (wide, current) {
+                (true, _) => SCENE_WIDE,
+                (false, true) => visuals.strong_text_color(),
+                (false, false) => visuals.text_color(),
+            };
+            label(r, &name, color);
             if current {
                 painter.rect_stroke(r, 3.0, Stroke::new(1.5_f32, visuals.selection.stroke.color), StrokeKind::Inside);
             }
@@ -197,19 +203,6 @@ impl App {
                         self.move_layer_to(from, to);
                     }
                 }
-            }
-        }
-        let panel = &self.doc.panels[self.cur_panel];
-        if rows.background {
-            let r = lane(rows.background_top(), LAYER_H);
-            label(r, "Fond (scène)", SCENE_WIDE);
-            let wide = panel.layers.iter().position(|l| l.scene_wide.is_some());
-            if wide.is_some_and(|k| k == self.cur_layer) {
-                painter.rect_stroke(r, 3.0, Stroke::new(1.5_f32, visuals.selection.stroke.color), StrokeKind::Inside);
-            }
-            let resp = ui.interact(r, ui.id().with("piste_fond"), Sense::click());
-            if resp.on_hover_text("Calques de toute la scène : le même dessin dans chaque panneau").clicked() {
-                pick = wide;
             }
         }
         if let Some(k) = pick {
@@ -321,42 +314,6 @@ impl App {
                 paint_layer_cell(painter, cell, &p.layers[k], ppf, current, hot, visuals);
             }
         }
-
-        // Fond : une barre par scène qui en a un.
-        if rows.background {
-            let lr = lane(rows.background_top(), LAYER_H);
-            painter.rect_filled(lr, 0.0, theme::RANGEE_SOMBRE);
-            let mut i = 0;
-            while i < blocks.len() {
-                let (s, e) = self.doc.scene_run(i);
-                let wide: Vec<&Layer> = self.doc.panels[s].layers.iter().filter(|l| l.scene_wide.is_some()).collect();
-                if !wide.is_empty() {
-                    let cell = Rect::from_min_max(pos2(blocks[s].left(), lr.top()), pos2(blocks[e - 1].right(), lr.bottom()));
-                    let drawn = wide.iter().any(|l| l.frames.iter().any(Option::is_some));
-                    let visible = wide.iter().any(|l| l.visible);
-                    let fill = match (drawn, visible) {
-                        (true, true) => SCENE_WIDE.gamma_multiply(0.6),
-                        (true, false) => SCENE_WIDE.gamma_multiply(0.25),
-                        _ => theme::CONTROLE,
-                    };
-                    painter.rect_filled(cell, 2.0, fill);
-                    let names: Vec<&str> = wide.iter().map(|l| l.name.as_str()).collect();
-                    painter.with_clip_rect(cell.shrink(1.0)).text(
-                        pos2(cell.left() + 4.0, cell.center().y),
-                        Align2::LEFT_CENTER,
-                        names.join(", "),
-                        FontId::proportional(10.0),
-                        theme::TEXTE_FORT,
-                    );
-                    let current = (s..e).contains(&self.cur_panel)
-                        && self.doc.panels[self.cur_panel].layers.get(self.cur_layer).is_some_and(|l| l.scene_wide.is_some());
-                    if current {
-                        painter.rect_stroke(cell, 2.0, Stroke::new(1.5_f32, visuals.selection.stroke.color), StrokeKind::Inside);
-                    }
-                }
-                i = e;
-            }
-        }
     }
 
     /// Clé de caméra sous le point `p` dans la piste Caméra : (panneau, clé). `top` : haut de la
@@ -377,22 +334,20 @@ impl App {
             })
     }
 
-    /// Calque visé dans les pistes de calques ou de fond : (panneau, calque). `top` : haut de la bande.
+    /// Calque visé dans les pistes de calques : (panneau, calque). `top` : haut de la bande.
     pub(crate) fn layer_row_hit(&self, p: Pos2, top: f32, blocks: &[Rect], rows: &Rows) -> Option<(usize, usize)> {
+        let key = self.track_at(p, top, rows)?;
+        let i = blocks.iter().position(|b| p.x >= b.left() - 1.0 && p.x <= b.right() + 1.0)?;
+        Some((i, layer_on_track(&self.doc.panels[i].layers, key)?))
+    }
+
+    /// La piste de calque sous le point `p` (`top` : haut de la bande).
+    pub(crate) fn track_at<'a>(&self, p: Pos2, top: f32, rows: &'a Rows) -> Option<&'a TrackKey> {
         let y = p.y - top;
-        let in_layers = y >= rows.layers_top() && y < rows.background_top();
-        let in_background = rows.background && y >= rows.background_top() && y < rows.background_top() + LAYER_H;
-        if !in_layers && !in_background {
+        if y < rows.layers_top() || y >= rows.background_top() {
             return None;
         }
-        let i = blocks.iter().position(|b| p.x >= b.left() - 1.0 && p.x <= b.right() + 1.0)?;
-        let panel = &self.doc.panels[i];
-        let k = if in_layers {
-            layer_on_track(&panel.layers, rows.tracks.get(((y - rows.layers_top()) / LAYER_H) as usize)?)?
-        } else {
-            panel.layers.iter().position(|l| l.scene_wide.is_some())?
-        };
-        Some((i, k))
+        rows.tracks.get(((y - rows.layers_top()) / LAYER_H) as usize)
     }
 
     /// Poignée de calque sous le point `p`, dans les pistes de calques (chantier 5, les gestes de
@@ -457,9 +412,11 @@ pub(crate) fn cell_handle(layer: &Layer, k: usize, p: Pos2, x0: f32, lane_top: f
 fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, current: bool, hot: Option<(Handle, bool)>, visuals: &Visuals) {
     let (hot, held) = (hot.map(|h| h.0), hot.is_some_and(|h| h.1));
     painter.rect_filled(cell, 2.0, theme::ETIQUETTE);
-    let fill = match layer.kind {
-        LayerKind::Vector => theme::CALQUE_VECTORIEL,
-        LayerKind::Bitmap => theme::CALQUE_BITMAP,
+    // Un calque de toute la scène : ses dessins teintés « fond ».
+    let fill = match (layer.scene_wide.is_some(), layer.kind) {
+        (true, _) => SCENE_WIDE,
+        (false, LayerKind::Vector) => theme::CALQUE_VECTORIEL,
+        (false, LayerKind::Bitmap) => theme::CALQUE_BITMAP,
     };
     let fill = if layer.visible { fill } else { fill.gamma_multiply(0.35) };
     let x0 = cell.left() - 1.0;
