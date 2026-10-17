@@ -167,6 +167,11 @@ impl LayerTransform {
         *self == Self::default()
     }
 
+    /// Un étirement ramené entre 1 % et 100 fois, son signe gardé (négatif : calque retourné).
+    pub fn clamp_stretch(v: f32) -> f32 {
+        if v < 0.0 { -(-v).clamp(0.01, 100.0) } else { v.clamp(0.01, 100.0) }
+    }
+
     /// Du dessin du calque vers la feuille, la feuille ayant son centre en `pivot` : étirement,
     /// échelle, puis rotation.
     pub fn affine(&self, pivot: Pos2) -> crate::vector::Affine {

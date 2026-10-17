@@ -181,6 +181,10 @@ impl App {
             self.action_item(ui, "Coller le calque", "calque.coller");
         }
         self.action_item(ui, "Coller à la place du calque courant", "calque.coller_remplacer");
+        ui.menu_button("Retourner le calque", |ui| {
+            self.action_item(ui, "De gauche à droite", "calque.miroir_h");
+            self.action_item(ui, "De haut en bas", "calque.miroir_v");
+        });
         if all {
             // La propagation (façon EbSynth) du calque courant, aussi dans le menu Calques.
             self.propagation_item(ui, self.cur_layer);

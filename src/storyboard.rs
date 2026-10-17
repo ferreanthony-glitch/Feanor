@@ -459,6 +459,7 @@ impl App {
                 if n > 1 {
                     item(self, ui, &format!("Fusionner les {n} plans choisis"), "panneau.fusionner_choisis");
                 }
+                item(self, ui, if n > 1 { "Retourner les plans choisis" } else { "Retourner le plan" }, "plan.retourner");
                 ui.separator();
                 item(self, ui, "Marque d'image ici (ajouter / retirer)", "marque.basculer");
             })

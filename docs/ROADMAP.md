@@ -1213,6 +1213,13 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         coins en échelle libre (Maj : proportions), largeur et hauteur en chiffres.
         `LayerTransform::stretch_x` / `stretch_y`, format de projet 22. Comportement exact de
         l'outil de Storyboard Pro à vérifier. Reste : les poignées de Bézier des coins avec Ctrl ;
+      - **retourner** (Anthony : « créer la possibilité de flipper un plan, flipper un calque et
+        flipper une sélection ») : la sélection l'était déjà (Alt+H / Alt+V, maintenant aussi dans
+        Édition) ; le calque, sur place, par un étirement négatif (`calque.miroir_h` / `_v`, menu
+        Calques) ; les plans choisis de gauche à droite autour du milieu du cadre, calques et
+        caméra (`plan.retourner`, « Flip Selected Shots » de Storyboard Pro 27, sans touche ;
+        menus Storyboard et « … »). Mes choix : le calque autour du milieu de son contenu ; les
+        calques de toute la scène pas retournés (partagés avec les autres plans) ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,

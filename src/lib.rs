@@ -71,6 +71,9 @@ pub mod ctg;
 #[cfg(test)]
 mod ctg_tests;
 mod ctgui;
+mod flip;
+#[cfg(test)]
+mod flip_tests;
 mod pasteimage;
 mod plantage;
 #[cfg(test)]

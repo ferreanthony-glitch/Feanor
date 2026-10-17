@@ -48,8 +48,8 @@ pub(crate) fn stretched(t0: LayerTransform, pivot: Pos2, b: Rect, handle: BoxHan
         (fx, fy) = (f, f);
     }
     let t1 = LayerTransform {
-        stretch_x: (t0.stretch_x * fx).clamp(0.01, 100.0),
-        stretch_y: (t0.stretch_y * fy).clamp(0.01, 100.0),
+        stretch_x: LayerTransform::clamp_stretch(t0.stretch_x * fx),
+        stretch_y: LayerTransform::clamp_stretch(t0.stretch_y * fy),
         ..t0
     };
     // Le point opposé reste où il était sur la feuille.
@@ -220,8 +220,8 @@ impl App {
             "Calque : décalage {:+.0} × {:+.0} px, largeur {:.0} %, hauteur {:.0} %, rotation {:.1}°",
             t.x,
             t.y,
-            t.scale * t.stretch_x * 100.0,
-            t.scale * t.stretch_y * 100.0,
+            (t.scale * t.stretch_x * 100.0).abs(),
+            (t.scale * t.stretch_y * 100.0).abs(),
             t.angle
         );
     }
@@ -298,7 +298,8 @@ impl App {
         }
         let t = self.layer().transform;
         let (mut x, mut y, mut angle) = (t.x, t.y, t.angle);
-        let (mut width, mut height) = (t.scale * t.stretch_x * 100.0, t.scale * t.stretch_y * 100.0);
+        // En valeur absolue : un calque retourné garde son signe (`flip.rs`).
+        let (mut width, mut height) = ((t.scale * t.stretch_x * 100.0).abs(), (t.scale * t.stretch_y * 100.0).abs());
         let mut next = None;
         ui.horizontal(|ui| {
             let r = ui.add(egui::DragValue::new(&mut x).speed(2.0).prefix("x ").suffix(" px"));
@@ -314,11 +315,11 @@ impl App {
             // Largeur et hauteur : l'échelle du calque fois son étirement dans chaque sens.
             let r = ui.add(egui::DragValue::new(&mut width).speed(1.0).range(1.0..=10000.0).prefix("largeur ").suffix(" %"));
             if self.edited(&r) {
-                next = Some(LayerTransform { stretch_x: (width / 100.0 / t.scale).clamp(0.01, 100.0), ..t });
+                next = Some(LayerTransform { stretch_x: (width / 100.0 / t.scale).clamp(0.01, 100.0).copysign(t.stretch_x), ..t });
             }
             let r = ui.add(egui::DragValue::new(&mut height).speed(1.0).range(1.0..=10000.0).prefix("hauteur ").suffix(" %"));
             if self.edited(&r) {
-                next = Some(LayerTransform { stretch_y: (height / 100.0 / t.scale).clamp(0.01, 100.0), ..t });
+                next = Some(LayerTransform { stretch_y: (height / 100.0 / t.scale).clamp(0.01, 100.0).copysign(t.stretch_y), ..t });
             }
         });
         ui.horizontal(|ui| {

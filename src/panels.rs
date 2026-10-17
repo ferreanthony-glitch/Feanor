@@ -189,6 +189,8 @@ impl App {
                 self.action_item(ui, "Coller", "edition.coller");
                 self.action_item(ui, "Tout sélectionner", "edition.tout_selectionner");
                 self.action_item(ui, "Tout désélectionner", "edition.tout_deselectionner");
+                self.action_item(ui, "Retourner la sélection de gauche à droite", "selection.miroir_h");
+                self.action_item(ui, "Retourner la sélection de haut en bas", "selection.miroir_v");
                 ui.separator();
                 self.action_item(ui, "Supprimer la sélection ou effacer le dessin", "edition.supprimer");
                 ui.separator();
@@ -214,6 +216,7 @@ impl App {
                 self.action_item(ui, "Réunir le plan et le suivant", "panneau.fusionner_suivant");
                 self.action_item(ui, "Réunir avec le plan précédent", "scene.joindre_precedente");
                 self.action_item(ui, "Fusionner les plans choisis", "panneau.fusionner_choisis");
+                self.action_item(ui, "Retourner les plans choisis", "plan.retourner");
                 ui.separator();
                 self.action_item(ui, "Marque d'image ici (ajouter / retirer)", "marque.basculer");
                 ui.separator();

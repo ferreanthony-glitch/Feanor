@@ -508,6 +508,21 @@ source = "Pelure"
 # ------------------------------------------------------------------------------------ Dessin
 
 [[raccourci]]
+action = "calque.miroir_h"
+touches = []
+source = "Pelure (sans touche)"
+
+[[raccourci]]
+action = "calque.miroir_v"
+touches = []
+source = "Pelure (sans touche)"
+
+[[raccourci]]
+action = "plan.retourner"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : HORIZONTAL_FLIP_KEY (Flip Selected Shots)"
+
+[[raccourci]]
 action = "selection.miroir_h"
 touches = ["Alt+H"]
 source = "Storyboard Pro 27 : DRAWING_FLIP_HORIZONTAL_KEY"

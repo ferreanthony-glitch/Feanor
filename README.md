@@ -435,6 +435,10 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   « Image collée » au-dessus. Centrée dans le cadre (réduite pour y tenir), sélectionnée :
   déplacer, agrandir, tourner, puis Échap pour la poser. Après une copie dans Pelure, Ctrl+V colle
   de nouveau ce qui a été copié dans Pelure.
+- **Retourner** : la sélection (Alt+H, Alt+V, ou Édition), le calque sur place (menu Calques >
+  Retourner le calque, de gauche à droite ou de haut en bas ; ses dessins ne changent pas, Ctrl+R
+  annule), les plans choisis de gauche à droite autour du milieu du cadre, caméra comprise (menu
+  Storyboard ou « … » du montage ; les calques de toute la scène, partagés, ne sont pas retournés).
 - **Transformer** (calque entier, ses dessins ne changent pas) : glisser dans la boîte pour
   déplacer, un coin pour agrandir (Maj : proportions), le milieu d'un côté pour étirer en largeur ou
   en hauteur, la poignée ronde pour tourner ; largeur et hauteur aussi en chiffres. Ctrl+R annule.

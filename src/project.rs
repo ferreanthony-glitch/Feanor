@@ -1392,8 +1392,8 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                                 y: t.y,
                                 scale: t.echelle.clamp(0.01, 100.0),
                                 angle: t.rotation,
-                                stretch_x: t.etirement_x.clamp(0.01, 100.0),
-                                stretch_y: t.etirement_y.clamp(0.01, 100.0),
+                                stretch_x: LayerTransform::clamp_stretch(t.etirement_x),
+                                stretch_y: LayerTransform::clamp_stretch(t.etirement_y),
                             })
                             .unwrap_or_default(),
                         depth: if l.profondeur.is_finite() {
