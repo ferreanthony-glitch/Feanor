@@ -960,6 +960,19 @@ Choix d'Anthony :
     feutres.
   - **Devinés, à comparer dans TVPaint** : le sens d'un code négatif, l'ordre des modes
     d'animation, l'échelle de la dispersion et celle du papier.
+- ✅ 11. Peinture humide, première version, avec un modèle de Pelure (la formule de TVPaint n'est
+  pas publiée) :
+  - **Mélange** : à chaque empreinte, la brosse prend la couleur moyenne sous elle, la mêle à la
+    sienne et pose le mélange directement ; repasser mêle encore ;
+  - **Charge** : la peinture s'épuise selon la distance parcourue ; vide, la brosse ne fait
+    plus qu'étaler la couleur prise.
+
+  À 0 de mélange et charge pleine, le trait d'avant. Les imports s'en servent, en le notant dans
+  le compte rendu : l'estompe des brosses TVPaint, le smudge de MyPaint, le Wet Mix et la
+  charge de Procreate.
+
+  À comparer avec les outils de peinture de TVPaint (Oil, Wet, Water Color, Gouache). Pas encore :
+  le séchage entre deux traits (Drying), le décalage de couleur (Shift).
 - ✅ 10 (Procreate). Import des brosses `.brush` et des jeux `.brushset`. L'archive est un zip ;
   `Brush.archive` est une liste de propriétés binaire d'Apple au format NSKeyedArchiver, lue
   d'après le format publié par Apple.

@@ -418,3 +418,53 @@ fn my_brushes_are_kept_and_named_freely() {
     assert_eq!((p.name.as_str(), p.settings), ("Craie", s2));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn wet_paint_picks_up_the_color_under_it() {
+    use eframe::egui::Color32;
+    // La moitié gauche de la feuille est peinte en rouge.
+    let mut raster = Raster::new(320, 320);
+    for y in 140..180 {
+        for x in 0..160 {
+            let i = raster.tile_index_of(x, y);
+            raster.tile_mut(i)[(y % crate::raster::TILE) * crate::raster::TILE + x % crate::raster::TILE] = Color32::from_rgb(220, 0, 0);
+        }
+    }
+    let mut s = plain(16.0);
+    s.mix = 0.6;
+    // Un trait blanc qui part du rouge et va vers le vide.
+    let mut st = StrokeState::new(0, StrokeMode::Paint([255, 255, 255]), s, None, true);
+    let mut dirty = Vec::new();
+    for k in 0..=24 {
+        st.add_point(&mut raster, pos2(100.0 + 5.0 * k as f32, 160.0), 1.0, &mut dirty);
+    }
+    // Juste après le rouge, la peinture posée est rosée (du rouge entraîné), et bien posée.
+    let p = raster.get(175, 160);
+    assert!(p.a() > 200, "posée : {p:?}");
+    assert!(p.r() as i32 - p.g() as i32 > 40, "rosée : {p:?}");
+    // Sans mélange, la même brosse pose du blanc pur.
+    let mut raster2 = Raster::new(320, 320);
+    let mut st = StrokeState::new(0, StrokeMode::Paint([255, 255, 255]), plain(16.0), None, true);
+    for k in 0..=24 {
+        st.add_point(&mut raster2, pos2(100.0 + 5.0 * k as f32, 160.0), 1.0, &mut dirty);
+    }
+    assert_eq!(raster2.get(175, 160), Color32::WHITE);
+}
+
+#[test]
+fn a_brush_with_little_charge_runs_dry() {
+    let mut s = plain(16.0);
+    s.charge = 0.6;
+    let r = draw(s, (40.0, 160.0), (280.0, 160.0), 24, 0.02, 1.0);
+    let (start, end) = (r.get(50, 160).a(), r.get(270, 160).a());
+    assert!(start > 200 && end < start / 2, "début {start}, fin {end}");
+}
+
+#[test]
+fn wet_blending_keeps_coverage_when_asked() {
+    use eframe::egui::Color32;
+    let clear = Color32::TRANSPARENT;
+    assert_eq!(crate::brush::wet_blend(clear, [255.0, 0.0, 0.0], 1.0, 0.5, true), clear, "préserver la transparence");
+    let half = crate::brush::wet_blend(clear, [255.0, 0.0, 0.0], 1.0, 0.5, false);
+    assert!((half.a() as i32 - 128).abs() <= 1 && (half.r() as i32 - 128).abs() <= 1);
+}

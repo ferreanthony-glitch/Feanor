@@ -340,7 +340,8 @@ pub fn myb_settings(json: &serde_json::Value, notes: &mut Vec<String>) -> Result
     s.angle = base("elliptical_dab_angle", 90.0) - 90.0;
     s.scatter = (base("offset_by_random", 0.0) / 2.0).clamp(0.0, 4.0);
     if base("smudge", 0.0) > 0.0 {
-        notes.push("estompe (smudge) non reprise".into());
+        s.mix = base("smudge", 0.0).clamp(0.0, 1.0);
+        notes.push("estompe (smudge) prise comme le mélange de Pelure, à comparer".into());
     }
     if input("hardness", "pressure").is_some() {
         notes.push("dureté selon l'appui non reprise".into());

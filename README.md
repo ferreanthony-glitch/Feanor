@@ -421,6 +421,9 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
 - **Profil de la pointe** (bouton courbe à côté de la Dureté) : la couverture de la pointe du
   centre au bord, en courbe, à la place de la dureté. Il part de la dureté réglée ; préréglages
   Dur, Doux, Diffus.
+- **Peinture humide** (réglages du pinceau) : « Mélange » fait prendre à la brosse la couleur déjà
+  posée, la mêler à la sienne et l'entraîner. « Charge » épuise la peinture le long du trait,
+  après quoi la brosse ne fait plus qu'étaler. Calque bitmap.
 - **Débit** (réglages du pinceau) : la peinture déposée à chaque empreinte (le « Power » de
   TVPaint) ; l'opacité en reste le plafond. Avec « Accumuler », repasser dans le même trait fonce,
   comme un crayon ou une craie ; sans, le trait reste uniforme.

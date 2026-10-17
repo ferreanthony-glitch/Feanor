@@ -201,8 +201,12 @@ pub fn brush_settings(keys: &HashMap<String, Plist>, notes: &mut Vec<String>) ->
     if num("textureApplication").unwrap_or(1.0) == 0.0 {
         notes.push("grain qui suit le trait (« Moving ») pris comme grain fixe".into());
     }
-    if num("dynamicsMix").unwrap_or(0.0) > 0.0 || num("dynamicsWetAccumulation").unwrap_or(0.0) > 0.0 {
-        notes.push("mélange humide (Wet Mix) non repris".into());
+    if let Some(m) = num("dynamicsMix").filter(|m| *m > 0.0) {
+        s.mix = m.clamp(0.0, 1.0);
+        notes.push("mélange humide (Wet Mix) pris comme le mélange de Pelure, à comparer".into());
+    }
+    if let Some(l) = num("dynamicsLoad").filter(|l| *l > 0.0 && *l < 1.0) {
+        s.charge = l.clamp(0.0, 1.0);
     }
     if keys.get("dualBlendMode").is_some_and(|v| v.num().is_some_and(|n| n != 0.0)) {
         notes.push("double brosse non reprise".into());

@@ -221,9 +221,12 @@ pub fn custom_brush(ini: &HashMap<String, HashMap<String, String>>, tip_size: Op
     for k in skipped {
         notes.push(format!("connexion à {k} non reprise"));
     }
-    // L'estompe ne joue que dans les modes d'empreinte qui étalent (6 à 8, d'après George).
+    // L'estompe ne joue que dans les modes d'empreinte qui étalent (6 à 8, d'après George) : elle
+    // devient le mélange de la peinture humide de Pelure (étape 11).
     if matches!(num("stamp", 1.0) as i32, 6..=8) {
-        notes.push("estompe (empreinte qui étale la couleur) non reprise : la pointe dépose".into());
+        let smear = num("smear", 50.0);
+        s.mix = (smear / 100.0).clamp(0.05, 1.0);
+        notes.push(format!("estompe ({smear:.0}) prise comme le mélange de Pelure, à comparer"));
     }
     if num("shift", 0.0) > 0.0 {
         notes.push("décalage de couleur (shift) non repris".into());

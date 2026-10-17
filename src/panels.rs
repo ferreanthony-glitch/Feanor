@@ -120,6 +120,7 @@ fn brush_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
     .response
     .on_hover_text(s.smooth_kind.help());
     crate::dynui::shape_ui(ui, s);
+    crate::dynui::wet_ui(ui, s, vector);
     crate::dynui::dynamics_ui(ui, s, vector);
 }
 

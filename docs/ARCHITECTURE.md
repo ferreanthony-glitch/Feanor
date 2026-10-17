@@ -620,6 +620,17 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     Décision : coût — courbe linéaire par morceaux plutôt que spline, simple et sûre, et TVPaint
     en a aussi. Risque : une courbe douce demande plus de points. Réversible : un mode
     d'interpolation pourra s'ajouter au format.
+- Peinture humide (moteur de dessin, étape 11) : `BrushSettings::mix` (« melange ») et `charge`.
+  - Avec du mélange, ou une charge incomplète, l'empreinte prend un autre chemin :
+    1. la moyenne pondérée des pixels courants sous l'empreinte ;
+    2. la couleur de la brosse (`wet_rgb`) qui s'en approche de `mélange × couverture` ;
+    3. une pose directe par `wet_blend`, en lerp prémultiplié vers la couleur de la brosse, de
+       couverture `charge + (1 − charge) × couverture prise × mélange`.
+  - Il n'y a pas de masque : le grain, les pochoirs et « préserver la transparence » restent
+    pris en compte. L'annulation garde les tuiles d'avant, comme pour un trait ordinaire.
+  - La charge décroît en `exp(−0,3 × (1 − charge) × pas)`, le pas étant compté en diamètres :
+    l'épuisement suit la distance parcourue et non le nombre d'empreintes, ce qu'un test
+    vérifie.
 - Import Procreate (moteur de dessin, étape 10) : `procreate.rs`.
   - `read_bplist` lit une liste de propriétés binaire (« bplist00 ») : bloc final, table des
     positions, marqueurs de type, et une garde contre les boucles.

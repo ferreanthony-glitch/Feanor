@@ -42,6 +42,27 @@ pub(crate) fn shape_ui(ui: &mut egui::Ui, s: &mut BrushSettings) {
     });
 }
 
+/// La section « Peinture humide » (moteur de dessin, étape 11) : mélange avec la couleur déjà
+/// posée, et charge de la brosse.
+pub(crate) fn wet_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
+    let used = s.mix > 0.0 || s.charge < 1.0;
+    egui::CollapsingHeader::new("Peinture humide").id_salt("humide_brosse").default_open(used).show(ui, |ui| {
+        let resp = ui.add(egui::Slider::new(&mut s.mix, 0.0..=1.0).text("Mélange"));
+        bulle(resp, "Mélange", "La brosse prend la couleur déjà posée sous elle, la mêle à la sienne et l'entraîne (0 : peinture qui couvre, comme avant).", "");
+        let resp = ui.add(egui::Slider::new(&mut s.charge, 0.0..=1.0).text("Charge"));
+        bulle(resp, "Charge", "La peinture dans la brosse : 1, elle ne s'épuise pas ; moins, elle s'épuise le long du trait, puis la brosse ne fait plus qu'étaler.", "");
+        ui.label(
+            egui::RichText::new(if vector {
+                "Calque vectoriel : la peinture humide ne vaut que pendant le tracé ; elle est faite pour un calque bitmap."
+            } else {
+                "Modèle de Pelure (la formule de TVPaint n'est pas publiée) : à comparer avec tes outils de peinture."
+            })
+            .small()
+            .weak(),
+        );
+    });
+}
+
 /// La section « Connexions » des réglages d'une brosse. `vector` : calque vectoriel, où le trait
 /// gardé ne retient que la taille.
 pub(crate) fn dynamics_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {

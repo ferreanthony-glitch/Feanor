@@ -25,6 +25,14 @@ pub struct BrushSettings {
     /// avant), chaque pixel garde la plus forte empreinte reçue : le trait reste uniforme.
     #[serde(rename = "accumuler")]
     pub build_up: bool,
+    /// Peinture humide (moteur de dessin, étape 11 ; modèle de Pelure, à comparer avec TVPaint) :
+    /// la part de la couleur déjà posée que la brosse prend à chaque empreinte et entraîne
+    /// (0 : aucune, le trait d'avant).
+    #[serde(rename = "melange")]
+    pub mix: f32,
+    /// La peinture chargée dans la brosse : 1, elle ne s'épuise pas ; moins, elle s'épuise le long
+    /// du trait, et la brosse vide ne fait plus qu'étaler.
+    pub charge: f32,
     /// 0 = bord très flou, 1 = bord net.
     #[serde(rename = "durete")]
     pub hardness: f32,
@@ -434,6 +442,8 @@ impl BrushSettings {
             opacity: 1.0,
             power: 1.0,
             build_up: false,
+            mix: 0.0,
+            charge: 1.0,
             hardness: 0.85,
             profile: None,
             spacing: 0.08,
@@ -625,6 +635,10 @@ pub struct StrokeState {
     history: std::collections::VecDeque<Pos2>,
     /// Empreintes posées jusqu'ici (case d'une pointe en plusieurs cases, « à la suite »).
     dabs: u32,
+    /// Peinture humide : la couleur dans la brosse (0 à 255, sans prémultiplication) et ce qui
+    /// reste de sa charge (0 à 1).
+    wet_rgb: [f32; 3],
+    wet_load: f32,
 }
 
 impl StrokeState {
@@ -659,6 +673,11 @@ impl StrokeState {
             direction: 0.0,
             history: std::collections::VecDeque::new(),
             dabs: 0,
+            wet_rgb: match mode {
+                StrokeMode::Paint(rgb) => [rgb[0] as f32, rgb[1] as f32, rgb[2] as f32],
+                StrokeMode::Erase => [0.0; 3],
+            },
+            wet_load: 1.0,
         }
     }
 
@@ -941,6 +960,18 @@ impl StrokeState {
         let paper_plain = (s.paper_scale - 1.0).abs() < 1e-4 && s.paper_angle == 0.0;
         let pscale = s.paper_scale.clamp(0.05, 20.0);
         let (psin, pcos) = s.paper_angle.to_radians().sin_cos();
+        // Grain du papier en un pixel, fixe sur le dessin (à sa taille, son angle, inversé ou non).
+        let grain_at = |px: usize, py: usize| -> f32 {
+            paper.as_ref().map_or(1.0, |p| {
+                let h = if paper_plain {
+                    p.tiled(px, py)
+                } else {
+                    let (x, y) = (px as f32 + 0.5, py as f32 + 0.5);
+                    p.sample_wrapped((x * pcos + y * psin) / pscale, (-x * psin + y * pcos) / pscale)
+                };
+                grain_factor(if s.paper_invert { 1.0 - h } else { h }, pressure, s.grain)
+            })
+        };
         // Une pointe en image tournée déborde du cercle : on couvre le carré qui la contient.
         let reach = if tip.is_some() { radius * std::f32::consts::SQRT_2 } else { radius };
 
@@ -978,6 +1009,77 @@ impl StrokeState {
 
         // Préserver la transparence : on ne peint que sur ce qui est déjà dessiné (13b).
         let keep_alpha = self.keep_alpha && matches!(mode, StrokeMode::Paint(_));
+        // Peinture humide (étape 11) : la brosse prend la couleur sous elle, la mêle à la sienne
+        // et pose le mélange directement (pas de masque : repasser mêle encore).
+        if matches!(mode, StrokeMode::Paint(_)) && (s.mix > 0.0 || s.charge < 1.0) {
+            let (mut acc, mut wsum) = ([0f32; 4], 0f32);
+            for py in y0..y1 {
+                for px in x0..x1 {
+                    let cov = footprint(px as f32 + 0.5 - c.x, py as f32 + 0.5 - c.y);
+                    if cov <= 0.0 {
+                        continue;
+                    }
+                    let p = raster.get(px, py);
+                    acc[0] += p.r() as f32 * cov;
+                    acc[1] += p.g() as f32 * cov;
+                    acc[2] += p.b() as f32 * cov;
+                    acc[3] += p.a() as f32 * cov;
+                    wsum += cov;
+                }
+            }
+            // Couleur moyenne sous l'empreinte (sans prémultiplication) et sa couverture.
+            let under_a = if wsum > 0.0 { acc[3] / wsum / 255.0 } else { 0.0 };
+            if acc[3] > 0.0 {
+                let pick = s.mix.clamp(0.0, 1.0) * under_a;
+                for k in 0..3 {
+                    let under = acc[k] / acc[3] * 255.0;
+                    self.wet_rgb[k] += (under - self.wet_rgb[k]) * pick;
+                }
+            }
+            let load = self.wet_load;
+            // La charge s'épuise avec la distance (en diamètres, d'une empreinte à la suivante) :
+            // sans charge, il reste un vingtième de la peinture au bout de dix diamètres.
+            self.wet_load *= (-(1.0 - s.charge.clamp(0.0, 1.0)) * 0.3 * s.spacing.max(0.02)).exp();
+            // Ce que pose la brosse : sa charge, plus ce qu'elle entraîne de la peinture prise.
+            let target_a = (load + (1.0 - load) * under_a * s.mix.clamp(0.0, 1.0)).clamp(0.0, 1.0);
+            let rgb = self.wet_rgb;
+            let stencil = self.stencil.as_ref();
+            for ty in y0 / TILE..=(y1 - 1) / TILE {
+                for tx in x0 / TILE..=(x1 - 1) / TILE {
+                    let idx = ty * raster.tiles_x + tx;
+                    if (keep_alpha && raster.tiles[idx].is_none()) || stencil.is_some_and(|st| st.blocks(idx)) {
+                        continue;
+                    }
+                    let (ox, oy) = (tx * TILE, ty * TILE);
+                    if !self.before.contains_key(&idx) {
+                        self.before.insert(idx, raster.tiles[idx].clone());
+                    }
+                    let tile = raster.tile_mut(idx);
+                    let mut changed = false;
+                    for py in y0.max(oy)..y1.min(oy + TILE) {
+                        for px in x0.max(ox)..x1.min(ox + TILE) {
+                            let cov = footprint(px as f32 + 0.5 - c.x, py as f32 + 0.5 - c.y);
+                            if cov <= 0.0 {
+                                continue;
+                            }
+                            let grain = grain_at(px, py);
+                            let i = (py - oy) * TILE + (px - ox);
+                            let through = stencil.map_or(1.0, |st| st.at(idx, i));
+                            let amt = cov * flow * grain * through * s.opacity * s.power.clamp(0.0, 1.0);
+                            if amt <= 0.0 {
+                                continue;
+                            }
+                            tile[i] = wet_blend(tile[i], rgb, target_a, amt, keep_alpha);
+                            changed = true;
+                        }
+                    }
+                    if changed {
+                        dirty.push(idx);
+                    }
+                }
+            }
+            return;
+        }
         let stencil = self.stencil.as_ref();
         for ty in y0 / TILE..=(y1 - 1) / TILE {
             for tx in x0 / TILE..=(x1 - 1) / TILE {
@@ -1007,16 +1109,7 @@ impl StrokeState {
                         if cov <= 0.0 {
                             continue;
                         }
-                        // Grain du papier, fixe sur le dessin (à sa taille, son angle, inversé ou non).
-                        let grain = paper.as_ref().map_or(1.0, |p| {
-                            let h = if paper_plain {
-                                p.tiled(px, py)
-                            } else {
-                                let (x, y) = (px as f32 + 0.5, py as f32 + 0.5);
-                                p.sample_wrapped((x * pcos + y * psin) / pscale, (-x * psin + y * pcos) / pscale)
-                            };
-                            grain_factor(if s.paper_invert { 1.0 - h } else { h }, pressure, s.grain)
-                        });
+                        let grain = grain_at(px, py);
                         let i = (py - oy) * TILE + (px - ox);
                         let through = stencil.map_or(1.0, |st| st.at(idx, i));
                         let v = cov * flow * grain * through * deposit;
@@ -1046,6 +1139,26 @@ impl StrokeState {
             }
         }
     }
+}
+
+/// Peinture humide : le pixel `cur` mêlé de la quantité `amt` (0 à 1) à la peinture de couleur
+/// `rgb` (0 à 255) et de couverture `a` ; `keep_alpha` : sa couverture ne change pas.
+pub(crate) fn wet_blend(cur: Color32, rgb: [f32; 3], a: f32, amt: f32, keep_alpha: bool) -> Color32 {
+    let amt = amt.clamp(0.0, 1.0);
+    let alpha = if keep_alpha { cur.a() as f32 } else { cur.a() as f32 * (1.0 - amt) + 255.0 * a * amt };
+    let mix = |c: u8, t: f32| {
+        // Composantes prémultipliées : la cible est la couleur fois sa couverture.
+        let v = c as f32 * (1.0 - amt) + t * a * amt;
+        if keep_alpha {
+            // Seule la couleur change, ramenée à la couverture du pixel.
+            let k = cur.a() as f32 / 255.0;
+            (c as f32 * (1.0 - amt) + t * k * amt).min(cur.a() as f32)
+        } else {
+            v.min(alpha)
+        }
+    };
+    let (r, g, b) = (mix(cur.r(), rgb[0]), mix(cur.g(), rgb[1]), mix(cur.b(), rgb[2]));
+    Color32::from_rgba_premultiplied((r + 0.5) as u8, (g + 0.5) as u8, (b + 0.5) as u8, (alpha + 0.5).min(255.0) as u8)
 }
 
 /// Moyenne de positions (au moins une).
