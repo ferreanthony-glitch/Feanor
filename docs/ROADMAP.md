@@ -1011,10 +1011,9 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         curseur, zoom avant, tout voir) ; Ctrl + molette sur la bande ; raccourcis proposés
         Alt+1 (arrière), Alt+2 (avant), Alt+3 (tout voir), comme 1 et 2 pour le dessin : ils
         visent le montage en storyboard, la timeline en animation ;
-      - **F5 : nouveau dessin clé** à l'image courante du calque courant (Anthony : « pour moi
-        F5 ») : en animation, dans la timeline et après un clic sur la piste d'un calque du
-        montage ; sur le dessin en storyboard, F5 reste « couper le plan » (son raccourci de
-        Storyboard Pro) ;
+      - **F5 : nouveau dessin clé** à l'image courante du calque courant, partout (Anthony :
+        « pour moi F5 », puis « F5 pose une clé partout. F6 coupe le plan ») ; « couper le plan »
+        passe de F5 (son raccourci de Storyboard Pro) à F6 ;
       - **outils à ressort** (Anthony : « chaque outil peut être utilisé par pression continue
         d'une touche, au relâché on revient sur l'outil précédent ») : la touche d'un outil tenue
         (0,35 s au moins, ou l'outil utilisé pendant qu'on la tient) rend l'outil d'avant au

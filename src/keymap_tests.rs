@@ -29,7 +29,8 @@ const SBP27_IDS: [&str; 65] = [
 /// Tes 8 réglages personnels (STB_Shortcuts.xml).
 const PERSO: [(&str, &str, &[&str]); 8] = [
     ("TOGGLE_PLAYBACK_ALL_KEY", "lecture.basculer", &["Entrée"]),
-    ("SPLIT_PANEL_KEY", "panneau.couper", &["F5"]),
+    // F5 dans son Storyboard Pro ; F6 dans Pelure depuis le 2026-10-17 (F5 pose une clé).
+    ("SPLIT_PANEL_KEY", "panneau.couper", &["F6"]),
     ("ADD_VECTOR_LAYER_KEY", "calque.nouveau_vectoriel", &["Maj+S"]),
     ("COPY_LAYERS_KEY", "calque.copier", &["W"]),
     ("PASTE_LAYERS_KEY", "calque.coller", &["X"]),
@@ -167,7 +168,7 @@ fn modifiers_and_contexts() {
     // Ctrl+L, en réserve pour « lier les clips au panneau », va à la pelure du calque (13b).
     assert_eq!(press(&map, Key::L, Key::L, ctrl, Mode::Storyboard).as_deref(), Some("calque.pelure"));
     // Réglages perso devenus actifs en 1e.
-    assert_eq!(press(&map, Key::F5, Key::F5, NONE, Mode::Storyboard).as_deref(), Some("panneau.couper"));
+    assert_eq!(press(&map, Key::F6, Key::F6, NONE, Mode::Storyboard).as_deref(), Some("panneau.couper"));
     assert_eq!(press(&map, Key::W, Key::W, NONE, Mode::Animation).as_deref(), Some("calque.copier"));
     assert_eq!(press(&map, Key::E, Key::E, ctrl, Mode::Animation).as_deref(), Some("calque.fusionner_dessous"));
 }
@@ -250,22 +251,22 @@ fn typed_shortcut_is_written_like_the_file() {
 #[test]
 fn assigned_shortcut_replaces_frees_and_returns_to_default() {
     let map = default_map();
-    assert!(map.conflicts("F5", "fichier.importer_sboard").contains(&"panneau.couper".to_string()));
-    let changes = map.assign_changes("fichier.importer_sboard", "F5", false);
+    assert!(map.conflicts("F6", "fichier.importer_sboard").contains(&"panneau.couper".to_string()));
+    let changes = map.assign_changes("fichier.importer_sboard", "F6", false);
     let text = map.edited_user_file(None, &changes).unwrap();
     let map2 = Keymap::from_texts(DEFAULT_KEYMAP, Some(&text));
     assert!(map2.warnings.is_empty(), "{:#?}", map2.warnings);
-    assert_eq!(press(&map2, Key::F5, Key::F5, NONE, Mode::Storyboard).as_deref(), Some("fichier.importer_sboard"));
-    assert!(map2.labels_of("panneau.couper").is_empty(), "F5 est retiré de l'action qui l'avait");
+    assert_eq!(press(&map2, Key::F6, Key::F6, NONE, Mode::Storyboard).as_deref(), Some("fichier.importer_sboard"));
+    assert!(map2.labels_of("panneau.couper").is_empty(), "F6 est retiré de l'action qui l'avait");
     assert!(map2.is_user("fichier.importer_sboard") && map2.is_user("panneau.couper"));
     // Ajouter une deuxième touche garde la première.
     let text2 = map2.edited_user_file(Some(&text), &map2.assign_changes("fichier.importer_sboard", "Alt+F12", true)).unwrap();
     let map3 = Keymap::from_texts(DEFAULT_KEYMAP, Some(&text2));
-    assert_eq!(map3.labels_of("fichier.importer_sboard"), vec!["F5".to_string(), "Alt+F12".to_string()]);
-    // Retour au défaut : la découpe retrouve F5 (et le conflit est signalé).
+    assert_eq!(map3.labels_of("fichier.importer_sboard"), vec!["F6".to_string(), "Alt+F12".to_string()]);
+    // Retour au défaut : la découpe retrouve F6 (et le conflit est signalé).
     let text3 = map3.edited_user_file(Some(&text2), &[("panneau.couper".into(), None)]).unwrap();
     let map4 = Keymap::from_texts(DEFAULT_KEYMAP, Some(&text3));
-    assert_eq!(map4.labels_of("panneau.couper"), vec!["F5".to_string()]);
+    assert_eq!(map4.labels_of("panneau.couper"), vec!["F6".to_string()]);
     assert!(!map4.is_user("panneau.couper"));
     assert!(map4.warnings.iter().any(|w| w.contains("conflit")));
     // Plus de raccourci du tout.
@@ -310,9 +311,11 @@ fn the_strip_zooms_with_alt_and_the_zoom_keys() {
 }
 
 #[test]
-fn f5_cuts_the_plan_in_storyboard_and_lays_a_key_in_animation() {
+fn f5_lays_a_key_everywhere_and_f6_cuts_the_plan() {
+    // Anthony, 2026-10-17 : « F5 pose une clé partout. F6 coupe le plan ».
     let map = default_map();
-    assert_eq!(press(&map, Key::F5, Key::F5, NONE, Mode::Storyboard).as_deref(), Some("panneau.couper"));
-    // En animation, dans la timeline, et après un clic sur la piste d'un calque du montage.
-    assert_eq!(press(&map, Key::F5, Key::F5, NONE, Mode::Animation).as_deref(), Some("dessin.nouvelle_cle"));
+    for mode in [Mode::Storyboard, Mode::Animation] {
+        assert_eq!(press(&map, Key::F5, Key::F5, NONE, mode).as_deref(), Some("dessin.nouvelle_cle"));
+        assert_eq!(press(&map, Key::F6, Key::F6, NONE, mode).as_deref(), Some("panneau.couper"));
+    }
 }

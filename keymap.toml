@@ -699,17 +699,15 @@ etat = "non implémenté"
 
 [[raccourci]]
 action = "panneau.couper"
-touches = ["F5"]
-source = "perso : SPLIT_PANEL_KEY"
-# Depuis le 2026-10-17, F5 coupe le plan en storyboard ; en animation (et après un clic sur la
-# piste d'un calque du montage), F5 pose une clé (Anthony : « pour moi F5 »).
-contexte = "storyboard"
+touches = ["F6"]
+# F5 dans son Storyboard Pro ; F6 dans Pelure depuis le 2026-10-17 (Anthony : « F5 pose une clé
+# partout. F6 coupe le plan »).
+source = "perso : SPLIT_PANEL_KEY (F6 dans Pelure)"
 
 [[raccourci]]
 action = "dessin.nouvelle_cle"
 touches = ["F5"]
 source = "perso (Anthony, 2026-10-17)"
-contexte = "animation"
 
 [[raccourci]]
 action = "panneau.fusionner_suivant"
