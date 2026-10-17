@@ -119,7 +119,7 @@ impl App {
     }
 
     /// Soulève les pixels de la zone s'ils ne le sont pas encore.
-    fn lift_selection(&mut self) -> bool {
+    pub(crate) fn lift_selection(&mut self) -> bool {
         let Some(sel) = self.bsel.as_mut() else { return false };
         if sel.lifted.is_some() {
             return true;
@@ -154,7 +154,7 @@ impl App {
     }
 
     /// Pose les pixels soulevés avec la transformation `aff` (à la place de la précédente).
-    fn place_floating(&mut self, aff: Affine) {
+    pub(crate) fn place_floating(&mut self, aff: Affine) {
         let Some(sel) = self.bsel.as_mut() else { return };
         let Some(lifted) = sel.lifted.as_mut() else { return };
         let Some(c) = self.doc.cels.get_mut(&sel.cel) else { return };

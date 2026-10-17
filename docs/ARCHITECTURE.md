@@ -778,6 +778,15 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     `App::goto_key` (montage entier en storyboard, plan en animation) ; actions `cle.*`.
   - Timeline : `on_playhead` (la case de la tête de lecture dans la règle) passe avant
     `timeline_handle_at` au début d'un glisser et pour le curseur.
+  - `montage_panel` dessine la colonne de gauche dans un `new_child` à elle : chaque
+    `new_child` / `ui.put` fait avancer le compteur d'identifiants automatiques de la zone qui
+    le contient, et la bande (`allocate_painter`, identifiant automatique) changeait d'identité
+    quand le plan courant n'avait pas autant de calques, ce qui coupait le glisser en cours.
+  - Flèches : `nudge.rs`. `arrow_step` (pur, testé : 1 px, `BIG_STEP` avec Maj, rien avec Ctrl
+    ou Alt), `App::nudge_ready` (outil Sélection, sélection sur le dessin, le dessin a la main),
+    `nudge_selection` : en vectoriel, éléments translatés et `gesture_change(GESTURE, …)` (une
+    étape par flèche tenue, gardée vivante par `keep_gesture` dans `handle_shortcuts`) ; en
+    bitmap, `lift_selection` puis `place_floating` (étape au dépôt).
 - Pistes du montage modifiables (chantier 5).
   - `montagerows.rs` : `TrackKey { name, nth }` et `layer_tracks` remplacent la rangée par rang
     (`layer_in_row`, 8 au plus). Les plans sont parcourus dans l'ordre, chacun du haut de sa

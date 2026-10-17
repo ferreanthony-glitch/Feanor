@@ -351,8 +351,13 @@ impl App {
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
                     let headers = self.track_headers(ui, rows.lanes_top());
-                    self.row_headers(ui, headers, &rows);
-                    self.head_width_grip(ui, headers);
+                    // La colonne dans une zone à elle : ses boutons, en nombre variable selon les
+                    // calques du plan courant, ne changent pas l'identité de la bande qui suit
+                    // (sinon un glisser de la tête de lecture se perdait en entrant dans un plan
+                    // qui n'a pas autant de calques, 2026-10-17).
+                    let mut column = ui.new_child(egui::UiBuilder::new().max_rect(headers).id_salt("colonne_montage"));
+                    self.row_headers(&mut column, headers, &rows);
+                    self.head_width_grip(&mut column, headers);
                     egui::ScrollArea::horizontal()
                         .id_salt("montage_h")
                         .auto_shrink([false, true])

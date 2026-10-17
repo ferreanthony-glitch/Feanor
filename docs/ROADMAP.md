@@ -1059,6 +1059,16 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         fin du plan, sa case dans la règle prenait la prise au lieu de la tête ; la case de la
         tête passe maintenant avant. Dans le montage, deux essais (règle, piste Caméra) passent
         d'un plan à l'autre sans s'arrêter.
+        Puis (« de nouveau […] la tête de lecture qui s'arrête à l'entrée et sortie de chaque
+        plan ») : reproduit sur une copie de son projet. C'était une régression de la colonne
+        étirable (d09e2f3) : ses boutons, plus ou moins nombreux selon les calques du plan
+        courant, changeaient l'identité egui de la bande ; en entrant dans un plan qui n'avait
+        pas le même nombre de calques, le glisser ne la reconnaissait plus. La colonne est
+        maintenant dessinée dans sa propre zone (`new_child`) ;
+      - **déplacer la sélection aux flèches** (Anthony : « déplacement au pixel, déplacement par
+        10 pixels quand Maj est maintenu ») : outil Sélection, traits vectoriels choisis ou zone
+        bitmap, le dessin ayant la main ; Ctrl / Alt + flèches gardent leurs raccourcis ; sans
+        sélection, les flèches changent d'image ou de calque comme avant.
 
   Pas fait : ces gestes sur la piste « Fond ».
 - Restent (ordre de Fable) : navigation de calques à la TVPaint, fenêtre « Agrandir / rétrécir

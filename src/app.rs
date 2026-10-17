@@ -1598,6 +1598,21 @@ impl App {
         self.modified = true;
     }
 
+    /// Comme `note_change`, quand l'appelant enregistre lui-même l'étape (`push`, appelé seulement
+    /// au début du geste `key`) : une flèche tenue qui déplace la sélection = une étape.
+    pub(crate) fn gesture_change(&mut self, key: u64, push: impl FnOnce(&mut Self)) {
+        if self.gesture.needs_step(key, self.history.serial()) {
+            push(self);
+        }
+        self.gesture.started(key, self.history.serial());
+        self.modified = true;
+    }
+
+    /// Le geste `key` continue pendant cette image (`gesture_change`).
+    pub(crate) fn keep_gesture(&mut self, key: u64) {
+        self.gesture.keep(key);
+    }
+
     /// Un clic qui change un réglage (œil d'un calque, piste muette…) : une étape à lui seul.
     pub(crate) fn record_step(&mut self) {
         let snap = self.snapshot();
@@ -2434,9 +2449,19 @@ impl App {
                 }
             }
         });
+        // Une flèche tenue qui déplace la sélection reste une seule étape d'annulation.
+        if ctx.input(|i| crate::nudge::ARROWS.iter().any(|k| i.key_down(*k))) {
+            self.keep_gesture(crate::nudge::GESTURE);
+        }
         for (key, physical, m, repeat) in keys {
             // Entrée, Échap, Retour arrière servent d'abord à l'outil en cours (forme à finir…).
             if !m.any() && self.tool_key(key) {
+                continue;
+            }
+            // Une sélection sur le dessin : les flèches la déplacent (`nudge.rs`), avant de changer
+            // d'image ou de calque.
+            if let Some(d) = crate::nudge::arrow_step(key, m).filter(|_| self.nudge_ready()) {
+                self.nudge_selection(d);
                 continue;
             }
             // Les raccourcis suivent le panneau qui a la main (montage, timeline ou dessin).

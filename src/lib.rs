@@ -125,6 +125,9 @@ mod montagerows_tests;
 mod montagehead;
 #[cfg(test)]
 mod montagehead_tests;
+mod nudge;
+#[cfg(test)]
+mod nudge_tests;
 pub mod moteur;
 mod newlayer;
 mod notes;

@@ -112,7 +112,8 @@ Chaque plan a ses calques, de deux sortes :
 - **Bitmap** (B, façon TVPaint) : peinture en pixels, avec le pinceau, le crayon à pixels nets,
   la gomme, le remplissage avec débord sous le trait et l'import d'images PNG/JPEG.
   - L'outil Sélection y découpe une zone au lasso ou au rectangle (Maj : ajouter). On la déplace
-    en la faisant glisser (au pixel près, sans flou), ses poignées la mettent à l'échelle ou la
+    en la faisant glisser (au pixel près, sans flou) ou aux flèches (1 pixel, 10 avec Maj ; aussi
+    pour des traits vectoriels choisis), ses poignées la mettent à l'échelle ou la
     tournent, Alt+H / Alt+V la retournent. Tant que la zone reste sélectionnée, chaque
     transformation repart de l'image d'origine : tourner deux fois ne floute pas deux fois.
   - Suppr efface dedans, Maj+Suppr efface autour, Ctrl+C / X / V copient, coupent, collent
