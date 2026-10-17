@@ -4,7 +4,7 @@
 
 use eframe::egui::{self, vec2, Color32, RichText, Shape, Stroke};
 
-use crate::app::{App, BoardView, Mode, Tool};
+use crate::app::{App, Tool};
 
 /// Cases de la barre d'outils verticale, en groupes séparés par un trait. Une case à plusieurs
 /// outils montre le dernier pris (au début, le premier) et les affiche tous au clic maintenu
@@ -33,7 +33,7 @@ pub(crate) fn slot_tool(slot: &[Tool], current: Tool, recent: &[Tool]) -> Tool {
 
 impl App {
     /// Un bouton icône de la barre de commandes ; `on` : commande active (affichée enfoncée).
-    fn command_button(&mut self, ui: &mut egui::Ui, icon: &str, action: &str, name: &str, description: &str, on: Option<bool>) {
+    pub(crate) fn command_button(&mut self, ui: &mut egui::Ui, icon: &str, action: &str, name: &str, description: &str, on: Option<bool>) {
         let text = RichText::new(icon).size(17.0);
         let resp = match on {
             Some(on) => ui.add_sized([28.0, 26.0], egui::SelectableLabel::new(on, text)),
@@ -69,20 +69,7 @@ impl App {
             self.command_button(ui, ph::COPY_SIMPLE, "panneau.dupliquer", "Dupliquer le plan", "Une copie du plan courant, juste après lui.", None);
             self.command_button(ui, ph::TRASH, "panneau.supprimer", "Supprimer les plans choisis", "Le plan courant, et ceux choisis avec Ctrl ou Maj + clic.", None);
             sep(ui);
-            let thumbs = self.board_view == BoardView::Panels && self.mode == Mode::Storyboard;
-            self.command_button(ui, ph::SQUARES_FOUR, "vue.planches", "Vue dessin / vignettes", "Dessiner le plan, ou voir toutes ses images de storyboard en planche.", Some(thumbs));
-            self.command_button(ui, ph::FRAME_CORNERS, "camera.vue", "Vue à travers la caméra", "Voir ce que filme la caméra du plan.", Some(self.camera_view));
-            let in3d = self.stage3d.on && !self.camera_view;
-            self.command_button(ui, ph::CUBE_FOCUS, "vue.3d", "Plateau en 3D", "Les calques à leur profondeur, la caméra et le sol, vus en 3D.", Some(in3d));
-            self.command_button(ui, ph::ARROWS_OUT, "vue.ajuster", "Ajuster à la fenêtre", "Toute la feuille dans la vue.", None);
-            self.command_button(ui, ph::MAGNIFYING_GLASS_PLUS, "vue.zoom_avant", "Zoom avant", "", None);
-            self.command_button(ui, ph::MAGNIFYING_GLASS_MINUS, "vue.zoom_arriere", "Zoom arrière", "", None);
-            self.command_button(ui, ph::ARROW_ARC_LEFT, "vue.rotation_antihoraire", "Tourner la vue", "Dans le sens antihoraire ; le dessin ne change pas.", None);
-            self.command_button(ui, ph::ARROW_ARC_RIGHT, "vue.rotation_horaire", "Tourner la vue", "Dans le sens horaire ; le dessin ne change pas.", None);
-            self.command_button(ui, ph::FLIP_HORIZONTAL, "vue.miroir", "Miroir de la vue", "Voir le dessin retourné, pour vérifier ses proportions ; le dessin ne change pas.", Some(self.view.flip));
-            self.command_button(ui, ph::CIRCLES_THREE, "vue.pelure", "Pelure d'oignon", "Par défaut, les dessins d'avant en rouge, ceux d'après en vert.", Some(self.onion.enabled));
-            self.command_button(ui, ph::LIGHTBULB, "vue.table_lumineuse", "Table lumineuse", "Les autres calques estompés, le calque courant net.", Some(self.light_table));
-            sep(ui);
+            // Les commandes de la vue sont sous le dessin (`viewbar::view_tools_bar`).
             self.command_button(ui, ph::SKIP_BACK, "image.premiere", "Première image", "Première image du plan.", None);
             self.command_button(ui, ph::CARET_LEFT, "image.precedente", "Image précédente", "", None);
             let play = if self.playing { ph::PAUSE } else { ph::PLAY };

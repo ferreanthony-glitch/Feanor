@@ -526,8 +526,9 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   l'horizontale la plus proche de son départ), Maj+L verrouille les points, Maj+G montre des lignes
   de référence. Les guides sont enregistrés avec le projet.
 - **Vue** : zoom à la molette (ou 1 / 2), rotation (Maj + molette, ou V / C), miroir (M),
-  déplacement (Espace + glisser). La barre sous le dessin reprend ces outils : ajuster, 100 %,
-  miroir, rotation, table lumineuse et sa force.
+  déplacement (Espace + glisser). Toutes les commandes de la vue sont dans la barre sous le dessin :
+  planche, caméra, 3D ; ajuster, 100 %, zoom ; rotation ; miroir ; pelure d'oignon, table lumineuse
+  et sa force.
 - **Annuler / rétablir** (Ctrl+Z / Ctrl+Maj+Z) : 200 étapes, sur tout le projet : traits, vectoriel,
   sélections, panneaux, scènes, séquences, calques, sons, textes, noms, réglages des calques et des
   pistes, guides, papier, cadence. Une saisie ou un glissé de curseur compte pour une seule étape.

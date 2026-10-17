@@ -1173,6 +1173,11 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         d'état à la séance suivante ; numéros de ligne dans la pile (`debug = "line-tables-only"`,
         dans le .pdb). Une propagation simple (47 images) passe en essai sans planter : cause à
         trouver avec le premier rapport ;
+      - **commandes de la vue sous le dessin** (Anthony, capture : « change la disposition comme
+        ceci ») : planche, caméra, 3D, ajuster, zooms, rotations, miroir, pelure d'oignon, table
+        lumineuse quittent la barre du haut pour la barre sous le dessin (avec le 100 %, le
+        curseur de rotation et la force de la table lumineuse) ; en 3D, la barre ne garde que les
+        vues, pour en sortir ; panneau étroit : curseurs plus courts ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,

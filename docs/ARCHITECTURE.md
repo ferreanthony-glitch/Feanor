@@ -841,8 +841,9 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     `colorsel::similar` sur le dessin du calque, `PixelMask::from_bools`, contours par
     `vector::trace_contours` ; vectoriel : `same_color` (`Element::color`). Une poignée sous le
     pointeur passe la main à `select_press`.
-  - Outils de la vue : `viewbar::view_tools_bar`, sous le dessin dans `canvas_panel` (pas dans
-    la vue 3D) ; `Pane::View` reste pour lire les anciennes dispositions, `sanitized` l'enlève
+  - Commandes de la vue : `viewbar::view_tools_bar` (`TOOLS_BAR_H`), sous le dessin dans
+    `canvas_panel`, avec `toolbars::command_button` (les mêmes boutons que la barre du haut, qui ne
+    les a plus) ; en 3D, seulement planche / caméra / 3D ; `Pane::View` reste pour lire les anciennes dispositions, `sanitized` l'enlève
     (comme `Timeline`), il n'est plus dans `Pane::ALL` ni `SETTINGS_TABS`. Guides : au clic,
     `begin_paint` d'abord (il clôt le trait d'avant, ce qui vide `guides.stroke`), puis
     `begin_guided_stroke`, seulement si un trait ou un gommage a commencé.

@@ -19,13 +19,11 @@ impl App {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(bar).id_salt("barre_vue"));
             self.view_bar(&mut child);
             rect.min.y = bar.max.y;
-            // Dessous, les outils de la vue (à la place du panneau Vue), sauf en 3D.
-            if !(self.stage3d.on && !self.camera_view) {
-                let tools = Rect::from_min_max(egui::pos2(rect.left(), rect.bottom() - crate::viewbar::VIEW_BAR_H), rect.max);
-                let mut child = ui.new_child(egui::UiBuilder::new().max_rect(tools).id_salt("outils_vue"));
-                self.view_tools_bar(&mut child);
-                rect.max.y = tools.min.y;
-            }
+            // Dessous, les commandes de la vue (en 3D : seulement les vues, pour en sortir).
+            let tools = Rect::from_min_max(egui::pos2(rect.left(), rect.bottom() - crate::viewbar::TOOLS_BAR_H), rect.max);
+            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(tools).id_salt("outils_vue"));
+            self.view_tools_bar(&mut child);
+            rect.max.y = tools.min.y;
             // Plateau en 3D (9e) : à la place du dessin à plat.
             if self.stage3d.on && !self.camera_view {
                 let response = ui.allocate_rect(rect, Sense::click_and_drag());

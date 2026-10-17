@@ -9,6 +9,8 @@ use crate::frames;
 
 /// Hauteur de la barre.
 pub(crate) const VIEW_BAR_H: f32 = 26.0;
+/// Hauteur de la barre des commandes de la vue, sous le dessin.
+pub(crate) const TOOLS_BAR_H: f32 = 30.0;
 /// Couleurs des zones de sécurité et du cadre de format.
 const SAFE: Color32 = Color32::from_rgb(0, 165, 195);
 const FORMAT: Color32 = Color32::from_rgb(230, 60, 160);
@@ -102,29 +104,41 @@ pub(crate) fn band(outer: [Pos2; 4], inner: [Pos2; 4], color: Color32) -> Shape 
 }
 
 impl App {
-    /// Barre sous le dessin : les outils de la vue (Anthony, 2026-10-17 : « ajoute les outils de
-    /// la fenêtre Vue sous l'espace de travail. La fenêtre Vue devient inutile ») : ajuster, zoom
-    /// 100 %, miroir, rotation, table lumineuse. (Zones de sécurité et format : barre du haut.)
+    /// Barre sous le dessin : les commandes de la vue (Anthony, 2026-10-17 : « ajoute les outils
+    /// de la fenêtre Vue sous l'espace de travail » ; puis « change la disposition comme ceci » :
+    /// celles de la barre du haut y passent). Vues (planche, caméra, 3D) ; ajuster, 100 %, zoom ;
+    /// rotation ; miroir ; pelure d'oignon, table lumineuse. En 3D, seulement les vues. (Zones de
+    /// sécurité et format : barre au-dessus du dessin.)
     pub(crate) fn view_tools_bar(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::ENTETE);
+        let in3d = self.stage3d.on && !self.camera_view;
+        // Étroit : curseurs plus courts, sans la force de la table lumineuse.
+        let narrow = ui.available_width() < 700.0;
         ui.horizontal_centered(|ui| {
             ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
+            let sep = |ui: &mut egui::Ui| {
+                ui.add_space(3.0);
+                ui.separator();
+                ui.add_space(3.0);
+            };
             ui.add_space(4.0);
-            if self.bouton(ui, ph::ARROWS_OUT, "Ajuster à la fenêtre", "Toute la feuille dans la vue.", "vue.ajuster").clicked() {
-                self.fit_pending = true;
+            let thumbs = self.board_view == crate::app::BoardView::Panels && self.mode == crate::app::Mode::Storyboard;
+            self.command_button(ui, ph::SQUARES_FOUR, "vue.planches", "Vue dessin / vignettes", "Dessiner le plan, ou voir toutes ses images de storyboard en planche.", Some(thumbs));
+            self.command_button(ui, ph::FRAME_CORNERS, "camera.vue", "Vue à travers la caméra", "Voir ce que filme la caméra du plan.", Some(self.camera_view));
+            self.command_button(ui, ph::CUBE_FOCUS, "vue.3d", "Plateau en 3D", "Les calques à leur profondeur, la caméra et le sol, vus en 3D.", Some(in3d));
+            if in3d {
+                return;
             }
-            if self.bouton(ui, ph::MAGNIFYING_GLASS, "Zoom 100 %", "Un pixel du dessin pour un pixel de l'écran.", "vue.reinit_zoom").clicked() {
-                self.zoom_actual();
-            }
-            if self.bouton_etat(ui, self.view.flip, ph::FLIP_HORIZONTAL, "Miroir de la vue", "Voir le dessin retourné ; le dessin ne change pas.", "vue.miroir").clicked() {
-                self.flip_view();
-            }
-            ui.add_space(6.0);
-            ui.separator();
-            ui.add_space(6.0);
+            sep(ui);
+            self.command_button(ui, ph::ARROWS_OUT, "vue.ajuster", "Ajuster à la fenêtre", "Toute la feuille dans la vue.", None);
+            self.command_button(ui, ph::MAGNIFYING_GLASS, "vue.reinit_zoom", "Zoom 100 %", "Un pixel du dessin pour un pixel de l'écran.", None);
+            self.command_button(ui, ph::MAGNIFYING_GLASS_MINUS, "vue.zoom_arriere", "Zoom arrière", "", None);
+            self.command_button(ui, ph::MAGNIFYING_GLASS_PLUS, "vue.zoom_avant", "Zoom avant", "", None);
+            sep(ui);
+            self.command_button(ui, ph::ARROW_ARC_LEFT, "vue.rotation_antihoraire", "Tourner la vue", "Dans le sens antihoraire ; le dessin ne change pas.", None);
             // Rotation de la vue : un curseur court et sa valeur.
-            ui.spacing_mut().slider_width = 110.0;
+            ui.spacing_mut().slider_width = if narrow { 60.0 } else { 100.0 };
             let mut degrees = self.view.rotation.to_degrees();
             let resp = ui.add(egui::Slider::new(&mut degrees, -180.0..=180.0).suffix("°").fixed_decimals(0));
             if crate::bulles::bulle(resp, "Rotation de la vue", "Tourner la vue ; le dessin ne change pas. Double-clic sur la valeur pour taper un angle.", "").changed() {
@@ -132,13 +146,14 @@ impl App {
                 let (rect, size) = (self.canvas_rect, self.canvas_size());
                 self.view.rotate_around(rect, size, rect.center(), delta);
             }
-            ui.add_space(6.0);
-            ui.separator();
-            ui.add_space(6.0);
-            let key = self.raccourci("vue.table_lumineuse");
-            crate::bulles::interrupteur_a(ui, &mut self.light_table, ph::LIGHTBULB, "Table lumineuse", "Les autres calques du plan estompés ; le calque courant reste net.", &key, "vue.table_lumineuse");
-            if self.light_table {
-                ui.spacing_mut().slider_width = 80.0;
+            self.command_button(ui, ph::ARROW_ARC_RIGHT, "vue.rotation_horaire", "Tourner la vue", "Dans le sens horaire ; le dessin ne change pas.", None);
+            sep(ui);
+            self.command_button(ui, ph::FLIP_HORIZONTAL, "vue.miroir", "Miroir de la vue", "Voir le dessin retourné, pour vérifier ses proportions ; le dessin ne change pas.", Some(self.view.flip));
+            sep(ui);
+            self.command_button(ui, ph::CIRCLES_THREE, "vue.pelure", "Pelure d'oignon", "Par défaut, les dessins d'avant en rouge, ceux d'après en vert.", Some(self.onion.enabled));
+            self.command_button(ui, ph::LIGHTBULB, "vue.table_lumineuse", "Table lumineuse", "Les autres calques du plan estompés ; le calque courant reste net.", Some(self.light_table));
+            if self.light_table && !narrow {
+                ui.spacing_mut().slider_width = 70.0;
                 let resp = ui.add(egui::Slider::new(&mut self.light_table_strength, 0.05..=0.8).custom_formatter(|v, _| format!("{:.0} %", v * 100.0)));
                 crate::bulles::bulle(resp, "Autres calques", "Combien ils restent visibles.", "");
             }
