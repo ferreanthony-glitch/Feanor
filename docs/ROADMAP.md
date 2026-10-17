@@ -1228,8 +1228,10 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         plus denses pour se courber). Avec cet outil, Ctrl ne prend plus le lasso. Comportement
         exact de Storyboard Pro à vérifier. Puis (« l'enveloppe doit aussi pouvoir ne déformer que
         la sélection, comme l'outil Perspective le fait en vectoriel ») : Ctrl + un coin du cadre de
-        la sélection vectorielle ne déforme que les éléments choisis ; pas encore pour une zone
-        bitmap choisie ;
+        la sélection vectorielle ne déforme que les éléments choisis. Puis (« Ajoute ») : une zone
+        bitmap choisie aussi (seuls ses pixels, bords adoucis compris, `warp_raster_masked`) ;
+        Ctrl + coin du cadre de la sélection marche aussi avec l'outil Sélection (la zone bitmap
+        n'existe qu'avec lui ; une zone déjà déplacée est d'abord posée) ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,

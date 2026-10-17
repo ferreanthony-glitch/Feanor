@@ -7,7 +7,8 @@
 //! terminent. Sur un calque vectoriel avec des éléments choisis, Ctrl + un coin du cadre de la
 //! sélection ne déforme qu'eux (Anthony, 2026-10-18 : « l'enveloppe doit aussi pouvoir ne déformer
 //! que la sélection, comme l'outil Perspective le fait en vectoriel ») ; un coin du cadre du calque,
-//! tout le dessin. Comportement exact de Storyboard Pro à vérifier. Géométrie dans `envelope.rs`.
+//! tout le dessin. Avec l'outil Sélection aussi, Ctrl + un coin du cadre de la sélection (traits
+//! choisis ou zone bitmap : seuls ses pixels, bords adoucis compris, sont déformés). Comportement exact de Storyboard Pro à vérifier. Géométrie dans `envelope.rs`.
 
 use eframe::egui::{self, vec2, Color32, Key, Pos2, Rect, Shape, Stroke, StrokeKind};
 
@@ -26,6 +27,8 @@ enum Original {
     Bitmap(Raster),
     /// Le dessin, et les éléments déformés (tous si aucun).
     Vector(VectorDrawing, Option<Vec<usize>>),
+    /// Le dessin bitmap et la zone choisie, seule déformée.
+    Masked(Raster, crate::pixsel::PixelMask),
 }
 
 /// Ce que l'on tire : un coin, une poignée, ou toute l'enveloppe.
@@ -78,12 +81,21 @@ impl App {
         if !ctrl {
             return false;
         }
-        // Un coin du cadre de la sélection vectorielle : elle seule ; un coin du cadre du calque : tout
-        // le dessin.
-        let chosen = self.vsel.as_ref().filter(|s| Some(s.cel) == self.cel_here() && !s.items.is_empty() && self.bsel.is_none()).map(|s| s.items.clone());
-        let (k, items) = match (chosen, self.handle_at(screen)) {
-            (Some(items), Some(crate::vtools::Handle::Corner(k))) => (k, Some(items)),
-            _ => match self.transform_handle_at(screen) {
+        // Un coin du cadre de la sélection (traits choisis ou zone bitmap) : elle seule ; avec l'outil
+        // Transformer, un coin du cadre du calque : tout le dessin.
+        let here = self.cel_here();
+        let chosen = self.vsel.as_ref().filter(|s| Some(s.cel) == here && !s.items.is_empty() && self.bsel.is_none()).map(|s| s.items.clone());
+        let zone = self.bsel.as_ref().is_some_and(|s| Some(s.cel) == here);
+        let corner = match self.handle_at(screen) {
+            Some(crate::vtools::Handle::Corner(k)) if chosen.is_some() || zone => Some(k),
+            _ => None,
+        };
+        if zone && corner.is_some() {
+            return self.envelope_on_zone(corner.unwrap_or(0), p);
+        }
+        let (k, items) = match (chosen, corner) {
+            (Some(items), Some(k)) => (k, Some(items)),
+            _ => match self.transform_handle_at(screen).filter(|_| self.tool == crate::app::Tool::Transform) {
                 Some(crate::layertools::BoxHandle::Corner(k)) => (k, None),
                 _ => return false,
             },
@@ -123,6 +135,32 @@ impl App {
         true
     }
 
+    /// L'enveloppe sur la zone bitmap choisie, le coin `k` tiré depuis `p`. Une zone déjà déplacée
+    /// est d'abord posée là où on la voit.
+    fn envelope_on_zone(&mut self, k: usize, p: Pos2) -> bool {
+        let Some((cel, lifted, mask0)) = self.bsel.as_ref().map(|s| (s.cel, s.lifted.is_some(), s.mask.clone())) else { return true };
+        if !self.layer_editable() {
+            return true;
+        }
+        let mask = if lifted {
+            let outline = self.bitmap_selection_outline();
+            self.drop_bitmap_selection();
+            crate::pixsel::PixelMask::from_polygons(&outline, self.doc.width, self.doc.height)
+        } else {
+            Some(mask0)
+        };
+        self.bsel = None;
+        self.bdrag = None;
+        let (Some(mask), Some(c)) = (mask, self.doc.cels.get(&cel)) else { return true };
+        let src = mask.bounds();
+        let env = Envelope::identity(src);
+        self.envelope = Some(EnvelopeEdit { cel, src, env, original: Original::Masked(c.raster.clone(), mask), drag: Some((Grip::Corner(k), p, env)) });
+        self.status = "Enveloppe sur la zone choisie : tire les coins, et leurs poignées rondes pour courber les côtés ; \
+                       l'intérieur pour tout déplacer. Entrée, Échap ou clic ailleurs : terminer ; Ctrl+Z annule chaque geste."
+            .into();
+        true
+    }
+
     /// Mouvement du pointeur ; vrai si un coin, une poignée ou l'enveloppe est tiré.
     pub(crate) fn envelope_drag(&mut self, p: Pos2) -> bool {
         let Some(e) = &mut self.envelope else { return false };
@@ -146,9 +184,13 @@ impl App {
             return;
         }
         let (cel, src, env) = (e.cel, e.src, e.env);
-        match &e.original {
-            Original::Bitmap(orig) => {
-                let new = envelope::warp_raster(orig, src, &env);
+        let bitmap = match &e.original {
+            Original::Bitmap(orig) => Some(envelope::warp_raster(orig, src, &env)),
+            Original::Masked(orig, mask) => Some(envelope::warp_raster_masked(orig, mask, &env)),
+            Original::Vector(..) => None,
+        };
+        match (&e.original, bitmap) {
+            (_, Some(new)) => {
                 let Some(c) = self.doc.cels.get_mut(&cel) else { return };
                 let mut before: Vec<(usize, Option<Tile>)> = Vec::new();
                 let mut changed = Vec::new();
@@ -167,13 +209,14 @@ impl App {
                 self.history.push(Edit::Tiles { cel, tiles: before });
                 self.modified = true;
             }
-            Original::Vector(drawing, items) => {
+            (Original::Vector(drawing, items), None) => {
                 let new = envelope::warp_drawing(drawing, items.as_deref(), src, &env);
                 let Some(d) = self.drawing_mut(cel) else { return };
                 let before = std::mem::replace(d, new);
                 self.refresh_cel(cel);
                 self.push_vector(cel, before, None);
             }
+            _ => {}
         }
     }
 
@@ -189,7 +232,8 @@ impl App {
 
     /// L'enveloppe suit le dessin : changer d'image, de calque ou d'outil la termine.
     pub(crate) fn check_envelope(&mut self) {
-        if self.envelope.as_ref().is_some_and(|e| Some(e.cel) != self.cel_here() || self.tool != crate::app::Tool::Transform) {
+        let tool_ok = self.tool == crate::app::Tool::Transform || self.tool.is_select();
+        if self.envelope.as_ref().is_some_and(|e| Some(e.cel) != self.cel_here() || !tool_ok) {
             self.envelope = None;
         }
     }

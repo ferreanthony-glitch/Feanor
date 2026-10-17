@@ -807,7 +807,10 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     surface de Coons ; `warp_raster` par maillage de triangles et `persp::sample` ; `warp_drawing`
     densifie puis `persp::warp_element_with`) ; `envelopetools.rs` (`App::envelope`, comme
     `perstools` : `envelope_press` avant `transform_press`, `_drag`, `_release`, `_key`,
-    `check_envelope`, `paint_envelope_overlay`). `springtools` : pas de lasso de Ctrl avec Transformer.
+    `check_envelope`, `paint_envelope_overlay`) ; aussi dans l'outil Sélection (`envelope_press` avant
+    `select_press`) : `Original::Vector` avec les éléments choisis, `Original::Masked` (zone bitmap,
+    `envelope::warp_raster_masked`, `rasterize` partagé). `springtools` : pas de lasso de Ctrl avec
+    Transformer.
   - Retourner (`flip.rs`) : `mirror_transform_x` (miroir de la feuille : angle opposé, largeur
     négative, translation recalée sur le centre de la feuille), `flipped_in_place`, `mirror_camera_x`,
     purs et testés ; `LayerTransform::clamp_stretch` garde le signe.

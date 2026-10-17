@@ -301,8 +301,16 @@ impl App {
                         Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline => self.shape_press(p, modifiers.shift),
                         Tool::Text => self.text_press(p),
                         Tool::Perspective => self.persp_press(p, *pos),
-                        Tool::Select => self.select_press(p, *pos, modifiers.shift),
-                        Tool::SelectColor => self.color_select_press(p, *pos, modifiers.shift),
+                        // Ctrl + coin du cadre de la sélection : l'enveloppe de Bézier (`envelopetools.rs`).
+                        Tool::Select | Tool::SelectColor => {
+                            if !self.envelope_press(p, *pos, modifiers.command || modifiers.ctrl) {
+                                if self.tool == Tool::Select {
+                                    self.select_press(p, *pos, modifiers.shift);
+                                } else {
+                                    self.color_select_press(p, *pos, modifiers.shift);
+                                }
+                            }
+                        }
                         Tool::Cutter => self.cutter_press(p),
                         Tool::Camera => self.camera_press(stage, *pos),
                         Tool::Transform => {

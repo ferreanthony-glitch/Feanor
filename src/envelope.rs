@@ -5,9 +5,10 @@
 //! côtés (surface de Coons). Appliquée à une image (maillage de triangles, échantillonnage
 //! bilinéaire) ou aux points d'éléments vectoriels (rendus plus denses pour pouvoir se courber).
 
-use eframe::egui::{pos2, Pos2, Rect, Vec2};
+use eframe::egui::{pos2, Color32, Pos2, Rect, Vec2};
 
 use crate::persp;
+use crate::pixsel::PixelMask;
 use crate::raster::{Raster, TILE};
 use crate::vector::{Element, VPoint, VectorDrawing};
 
@@ -85,24 +86,12 @@ impl Envelope {
     }
 }
 
-/// L'image `original` dont le rectangle `src` est posé dans l'enveloppe `env` : le reste de l'image
-/// ne bouge pas, le rectangle d'origine est vidé. Chaque case d'un maillage est faite de deux
-/// triangles ; chaque pixel d'un triangle d'arrivée prend le pixel d'origine correspondant.
-pub fn warp_raster(original: &Raster, src: Rect, env: &Envelope) -> Raster {
-    let mut out = original.clone();
-    let (x0, y0) = (src.min.x.floor().max(0.0) as usize, src.min.y.floor().max(0.0) as usize);
-    let (x1, y1) = ((src.max.x.ceil().max(0.0) as usize).min(out.width), (src.max.y.ceil().max(0.0) as usize).min(out.height));
-    for y in y0..y1 {
-        for x in x0..x1 {
-            let idx = out.tile_index_of(x, y);
-            if out.tiles[idx].is_some() {
-                out.tile_mut(idx)[(y % TILE) * TILE + x % TILE] = eframe::egui::Color32::TRANSPARENT;
-            }
-        }
-    }
+/// Les pixels de la feuille (`width` × `height`) que couvre l'enveloppe `env`, chacun avec le point
+/// du rectangle `src` qui lui correspond : chaque case d'un maillage est faite de deux triangles.
+fn rasterize(src: Rect, env: &Envelope, width: usize, height: usize, mut put: impl FnMut(usize, usize, Pos2)) {
     // Des cases d'environ 12 pixels du rectangle d'origine.
     let n = ((src.width().max(src.height()) / 12.0).ceil() as usize).clamp(8, 96);
-    let (w, h) = (out.width as f32, out.height as f32);
+    let (w, h) = (width as f32, height as f32);
     let grid: Vec<Vec<(Pos2, Pos2)>> = (0..=n)
         .map(|j| {
             (0..=n)
@@ -133,13 +122,7 @@ pub fn warp_raster(original: &Raster, src: Rect, env: &Envelope) -> Raster {
                 if l1 < E || l2 < E || l3 < E {
                     continue;
                 }
-                let s = (a.0.to_vec2() * l1 + b.0.to_vec2() * l2 + c.0.to_vec2() * l3).to_pos2();
-                let col = persp::sample(original, s.x, s.y);
-                if col.a() == 0 {
-                    continue;
-                }
-                let idx = out.tile_index_of(x, y);
-                out.tile_mut(idx)[(y % TILE) * TILE + x % TILE] = col;
+                put(x, y, (a.0.to_vec2() * l1 + b.0.to_vec2() * l2 + c.0.to_vec2() * l3).to_pos2());
             }
         }
     };
@@ -150,6 +133,74 @@ pub fn warp_raster(original: &Raster, src: Rect, env: &Envelope) -> Raster {
             triangle(p00, p11, p01);
         }
     }
+}
+
+fn put_pixel(r: &mut Raster, x: usize, y: usize, c: Color32) {
+    let idx = r.tile_index_of(x, y);
+    r.tile_mut(idx)[(y % TILE) * TILE + x % TILE] = c;
+}
+
+/// Une couleur prémultipliée multipliée par `k` (0 à 1).
+fn scaled(c: Color32, k: f32) -> Color32 {
+    let m = |v: u8| (v as f32 * k).round().clamp(0.0, 255.0) as u8;
+    Color32::from_rgba_premultiplied(m(c.r()), m(c.g()), m(c.b()), m(c.a()))
+}
+
+/// L'image `original` dont le rectangle `src` est posé dans l'enveloppe `env` : le reste de l'image
+/// ne bouge pas, le rectangle d'origine est vidé.
+pub fn warp_raster(original: &Raster, src: Rect, env: &Envelope) -> Raster {
+    let mut out = original.clone();
+    let (x0, y0) = (src.min.x.floor().max(0.0) as usize, src.min.y.floor().max(0.0) as usize);
+    let (x1, y1) = ((src.max.x.ceil().max(0.0) as usize).min(out.width), (src.max.y.ceil().max(0.0) as usize).min(out.height));
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let idx = out.tile_index_of(x, y);
+            if out.tiles[idx].is_some() {
+                out.tile_mut(idx)[(y % TILE) * TILE + x % TILE] = Color32::TRANSPARENT;
+            }
+        }
+    }
+    let (w, h) = (out.width, out.height);
+    rasterize(src, env, w, h, |x, y, s| {
+        let c = persp::sample(original, s.x, s.y);
+        if c.a() > 0 {
+            put_pixel(&mut out, x, y, c);
+        }
+    });
+    out
+}
+
+/// Seulement la zone choisie `mask` de l'image `original` (Anthony, 2026-10-18 : l'enveloppe sur
+/// une zone bitmap choisie) : elle quitte sa place (en proportion de sa couverture : ses bords
+/// adoucis aussi) et se pose, déformée, par-dessus ce qui reste.
+pub fn warp_raster_masked(original: &Raster, mask: &PixelMask, env: &Envelope) -> Raster {
+    let src = mask.bounds();
+    let mut out = original.clone();
+    for y in mask.y0..(mask.y0 + mask.h).min(out.height) {
+        for x in mask.x0..(mask.x0 + mask.w).min(out.width) {
+            let m = mask.at(x, y);
+            let idx = out.tile_index_of(x, y);
+            if m > 0.0 && out.tiles[idx].is_some() {
+                let c = out.get(x, y);
+                put_pixel(&mut out, x, y, scaled(c, 1.0 - m));
+            }
+        }
+    }
+    let (w, h) = (out.width, out.height);
+    rasterize(src, env, w, h, |x, y, s| {
+        if s.x < 0.0 || s.y < 0.0 {
+            return;
+        }
+        let m = mask.at(s.x as usize, s.y as usize);
+        if m <= 0.0 {
+            return;
+        }
+        let c = scaled(persp::sample(original, s.x, s.y), m);
+        if c.a() > 0 {
+            let under = out.get(x, y);
+            put_pixel(&mut out, x, y, crate::render::over(under, c, 255, None));
+        }
+    });
     out
 }
 

@@ -104,3 +104,28 @@ fn only_the_chosen_elements_follow_the_envelope() {
     let Element::Stroke { points, .. } = &out.elements[1] else { panic!() };
     assert!(points.iter().all(|p| (p.y - 190.0).abs() < 1e-3), "le choisi suit l'enveloppe");
 }
+#[test]
+fn only_the_chosen_zone_of_a_bitmap_moves() {
+    use crate::envelope::warp_raster_masked;
+    use crate::pixsel::PixelMask;
+    let red = Color32::from_rgb(255, 0, 0);
+    let mut r = Raster::new(256, 256);
+    // Deux carrés : en (100, 100) choisi, en (150, 100) pas.
+    for (x0, y0) in [(100, 100), (150, 100)] {
+        for y in y0..y0 + 10 {
+            for x in x0..x0 + 10 {
+                let i = r.tile_index_of(x, y);
+                r.tile_mut(i)[(y % TILE) * TILE + x % TILE] = red;
+            }
+        }
+    }
+    let zone = Rect::from_min_max(pos2(95.0, 95.0), pos2(115.0, 115.0));
+    let poly = vec![zone.left_top(), zone.right_top(), zone.right_bottom(), zone.left_bottom()];
+    let mask = PixelMask::from_polygons(&[poly], 256, 256).expect("zone");
+    let mut e = Envelope::identity(mask.bounds());
+    e.translate(vec2(0.0, 60.0));
+    let out = warp_raster_masked(&r, &mask, &e);
+    assert_eq!(out.get(105, 165), red, "le carré choisi est descendu");
+    assert_eq!(out.get(105, 105).a(), 0, "sa place est vide");
+    assert_eq!(out.get(155, 105), red, "l'autre n'a pas bougé");
+}
