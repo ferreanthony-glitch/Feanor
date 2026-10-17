@@ -960,6 +960,14 @@ Choix d'Anthony :
     feutres.
   - **Devinés, à comparer dans TVPaint** : le sens d'un code négatif, l'ordre des modes
     d'animation, l'échelle de la dispersion et celle du papier.
+- ✅ 10 (Photoshop). Import des brosses `.abr`, d'après la structure que lisent GIMP et Krita :
+  - versions 1 et 2, pointes échantillonnées ;
+  - versions 6 et plus : les pointes (`samp`) et, au mieux, les préréglages (`desc` : nom,
+    diamètre, dureté, angle, rondeur, espacement, pointe liée, appui sur la taille et
+    l'opacité).
+
+  Testé sur des fichiers fabriqués seulement : aucune brosse Photoshop n'était sur le poste.
+  À essayer sur une vraie.
 - ✅ 10 (Krita, MyPaint). Import des réglages Krita (`.kpp`, et les paquets `.bundle` entiers) et
   MyPaint (`.myb`), plusieurs fichiers à la fois :
   - **Krita** : le réglage XML compressé dans le PNG ; seul le moteur « paintbrush » est repris.

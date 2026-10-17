@@ -19,7 +19,7 @@ const WIDE_HEIGHT: f32 = 38.0;
 const WIDE_STEP: f32 = 24.0;
 
 /// Bulle du bouton « Importer des pinceaux » (Réglages et panneau Pinceaux).
-const IMPORT_HINT: &str = "Brosses TVPaint (.tvpx, .bin, .ini), Krita (.kpp), MyPaint (.myb) ou Toon Boom (.xml), plusieurs fichiers à la fois ; elles restent pour les fois suivantes.";
+const IMPORT_HINT: &str = "Brosses TVPaint (.tvpx, .bin, .ini), Photoshop (.abr), Krita (.kpp, .bundle), MyPaint (.myb) ou Toon Boom (.xml), plusieurs fichiers à la fois ; elles restent pour les fois suivantes.";
 
 /// Nom d'un réglage en cours de saisie (moteur de dessin, étape 9) : enregistrer le réglage
 /// courant dans « Mes brosses », ou renommer le réglage `rename`.
@@ -625,7 +625,8 @@ impl App {
     pub(crate) fn import_brushes(&mut self) {
         let Some(paths) = rfd::FileDialog::new()
             .set_title("Brosses à importer")
-            .add_filter("Brosses (TVPaint, Krita, MyPaint, Toon Boom)", &["tvpx", "bin", "ini", "kpp", "bundle", "myb", "xml"])
+            .add_filter("Brosses (TVPaint, Photoshop, Krita, MyPaint, Toon Boom)", &["tvpx", "bin", "ini", "abr", "kpp", "bundle", "myb", "xml"])
+            .add_filter("Photoshop (.abr)", &["abr"])
             .add_filter("TVPaint (export de panneau, panneau, réglage)", &["tvpx", "bin", "ini"])
             .add_filter("Krita (réglage, paquet) et MyPaint", &["kpp", "bundle", "myb"])
             .add_filter("Préréglages Toon Boom (XML)", &["xml"])
@@ -702,6 +703,25 @@ impl App {
         let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
         if matches!(ext.as_str(), "tvpx" | "bin" | "ini") {
             self.import_tvpaint(&path, &ext);
+            return;
+        }
+        if ext == "abr" {
+            let source = path.file_name().map_or("import".into(), |n| n.to_string_lossy().into_owned());
+            self.brushes.presets.retain(|p| p.source != source);
+            match std::fs::read(&path).map_err(|e| format!("lecture impossible : {e}")).and_then(|b| crate::abr::import(&b, &source, &mut self.brushes)) {
+                Ok((n, tips, notes)) => {
+                    self.brushes.share();
+                    self.brush_previews = BrushPreviews::default();
+                    let saved = self.save_brushes();
+                    self.status = format!(
+                        "{n} brosse(s) Photoshop importée(s) ({tips} pointe(s)){}{}",
+                        if notes.is_empty() { String::new() } else { format!(" ; {} remarque(s) dans la fenêtre d'import", notes.len()) },
+                        saved.map_or(String::new(), |e| format!(" ; non gardées pour la prochaine fois : {e}")),
+                    );
+                    self.brush_import_notes = (!notes.is_empty()).then_some((source, notes));
+                }
+                Err(e) => self.status = format!("Import impossible : {e}"),
+            }
             return;
         }
         let text = match std::fs::read_to_string(&path) {

@@ -24,6 +24,9 @@ pub mod dip;
 pub mod tvpbrush;
 pub mod kritabrush;
 pub mod zipread;
+pub mod abr;
+#[cfg(test)]
+mod abr_tests;
 #[cfg(test)]
 mod kritabrush_tests;
 #[cfg(test)]

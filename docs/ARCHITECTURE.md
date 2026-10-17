@@ -620,6 +620,14 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     Décision : coût — courbe linéaire par morceaux plutôt que spline, simple et sûre, et TVPaint
     en a aussi. Risque : une courbe douce demande plus de points. Réversible : un mode
     d'interpolation pourra s'ajouter au format.
+- Import Photoshop (moteur de dessin, étape 10) : `abr.rs`.
+  - `Reader` lit en gros-boutiste. `sampled` lit une pointe : bornes, profondeur 8 ou 16 bits,
+    brute ou PackBits par ligne.
+  - `read_v12` lit les versions 1 et 2 ; `read_v6` les sections `8BIM`. Dans `samp`,
+    l'identifiant est une chaîne Pascal de 37 octets, suivie d'un préambule de 10 ou 264
+    octets, comme chez GIMP.
+  - `descriptor` / `value` lisent le descripteur d'actions de Photoshop (Objc, VlLs, doub,
+    UntF, long, bool, TEXT, enum…) ; un préréglage retrouve sa pointe par `sampledData`.
 - Import Krita et MyPaint (moteur de dessin, étape 10) : `kritabrush.rs`, `zipread.rs`.
   - `kpp_text` lit le bloc PNG `preset` (zTXt, iTXt ou tEXt ; zlib par flate2), `parse_preset`
     le XML (`crate::xml`, avec les CDATA), `sensor` les capteurs, `read_gbr` les pointes GIMP
