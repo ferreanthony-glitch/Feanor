@@ -4,7 +4,7 @@ use crate::document::{ImageMark, Layer, LayerKind};
 use crate::fx::{Effect, EffectKind, FxKey};
 use crate::handles::{
     between, content_bounds, duplicate_run, key_at, key_start_taken, move_bookmark, move_boundary, move_fx_key, move_layer, move_mark, overwrite_run, remove_run, reorder_run,
-    reorder_slot, set_layer_end, set_layer_start, set_run_length, sound_shift_note,
+    reorder_slot, set_layer_end, set_layer_start, set_run_length, shift_runs, sound_shift_note,
 };
 
 fn mark(frame: usize) -> ImageMark {
@@ -287,4 +287,37 @@ fn a_key_is_duplicated_in_place() {
     one.frames = vec![Some(1), None];
     assert_eq!(duplicate_run(&mut one, 0, 9), None);
     assert_eq!(duplicate_run(&mut one, 1, 9), None);
+}
+
+#[test]
+fn several_keys_slide_together() {
+    // A 0..2, B 2..4, C 4..6, D 6..8 (2 images chacune) ; un rôle au début de B.
+    let base = || {
+        let mut l = Layer::new("L", LayerKind::Bitmap);
+        l.frames = vec![Some(1), Some(1), Some(2), Some(2), Some(3), Some(3), Some(4), Some(4)];
+        l.roles.insert(2, crate::roles::Role::Key);
+        l
+    };
+    // Sans bouger : rien ne change.
+    let mut l = base();
+    assert_eq!(shift_runs(&mut l, &[2, 4], 0), vec![2, 4]);
+    assert_eq!(frames(&l), frames(&base()));
+    // B et C (à la suite) forment un bloc (milieu 4) : glissés de 3 (milieu 7, celui de D),
+    // ils restent avant D ; de 4, ils le passent ensemble, dans leur ordre.
+    let mut l = base();
+    assert_eq!(shift_runs(&mut l, &[2, 4], 3), vec![2, 4]);
+    let mut l = base();
+    assert_eq!(shift_runs(&mut l, &[2, 4], 4), vec![4, 6]);
+    assert_eq!(frames(&l), vec![Some(1), Some(1), Some(4), Some(4), Some(2), Some(2), Some(3), Some(3)]);
+    assert_eq!(l.roles.keys().copied().collect::<Vec<_>>(), vec![4], "le rôle suit B");
+    // A et C (séparées) glissées de 3 : chacune passe sa voisine (B, D).
+    let mut l = base();
+    assert_eq!(shift_runs(&mut l, &[0, 4], 3), vec![2, 6]);
+    assert_eq!(frames(&l), vec![Some(2), Some(2), Some(1), Some(1), Some(4), Some(4), Some(3), Some(3)]);
+    // Une seule : comme reorder_run.
+    let (mut a, mut b) = (base(), base());
+    shift_runs(&mut a, &[2], 3);
+    let slot = reorder_slot(&b, 2, 5);
+    reorder_run(&mut b, 2, slot);
+    assert_eq!(frames(&a), frames(&b));
 }

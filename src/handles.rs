@@ -289,6 +289,47 @@ pub fn reorder_run(layer: &mut Layer, start: usize, slot: usize) -> Option<usize
     Some(new_start)
 }
 
+/// Les dessins des expositions qui commencent aux images `chosen` glissés ensemble de `delta`
+/// images (plusieurs clés prises à la fois). Des clés choisies qui se suivent forment un bloc ;
+/// chaque bloc (ou clé seule) prend sa place parmi les autres expositions selon son milieu
+/// déplacé (comme `reorder_slot` pour une seule clé) ; toutes gardent leur durée et leur ordre
+/// dans le bloc, la durée du calque ne change pas, les rôles suivent leurs images. Renvoie le
+/// nouveau début de chacune, dans l'ordre de `chosen`.
+pub fn shift_runs(layer: &mut Layer, chosen: &[usize], delta: isize) -> Vec<usize> {
+    let all = runs(layer);
+    let picked = |s: usize, cel: Option<CelId>| cel.is_some() && chosen.contains(&s);
+    // Les blocs : (milieu, déplacé, expositions).
+    let mut units: Vec<(f32, bool, Vec<usize>)> = Vec::new();
+    for (i, &(s, _, cel)) in all.iter().enumerate() {
+        let p = picked(s, cel);
+        match units.last_mut() {
+            Some(u) if p && u.1 => u.2.push(i),
+            _ => units.push((0.0, p, vec![i])),
+        }
+    }
+    for u in &mut units {
+        let (s, e) = (all[u.2[0]].0, all[*u.2.last().unwrap_or(&u.2[0])].1);
+        u.0 = (s + e) as f32 * 0.5 + if u.1 { delta as f32 } else { 0.0 };
+    }
+    // À milieu égal, ce qu'on déplace passe devant (comme `reorder_slot`).
+    units.sort_by(|a, b| a.0.total_cmp(&b.0).then(b.1.cmp(&a.1)));
+    let mut frames = Vec::with_capacity(layer.frames.len());
+    let mut roles = crate::roles::Roles::new();
+    let mut moved: Vec<(usize, usize)> = Vec::new();
+    for i in units.iter().flat_map(|u| u.2.iter().copied()) {
+        let (s, e, cel) = all[i];
+        let at = frames.len();
+        if picked(s, cel) {
+            moved.push((s, at));
+        }
+        roles.extend(layer.roles.range(s..e).map(|(f, r)| (at + (f - s), *r)));
+        frames.extend(std::iter::repeat_n(cel, e - s));
+    }
+    layer.frames = frames;
+    layer.roles = roles;
+    chosen.iter().map(|c| moved.iter().find(|m| m.0 == *c).map_or(*c, |m| m.1)).collect()
+}
+
 /// La limite entre deux expositions, à l'image `at`, amenée à l'image `to` : celle de gauche
 /// s'allonge et celle de droite raccourcit d'autant, ou l'inverse (un dessin garde au moins une
 /// image, une plage vide peut disparaître) ; la suite ne bouge pas. Le rôle posé au début de
@@ -677,12 +718,14 @@ impl App {
             || self.head_drag.is_some()
             || self.panel_layer_drag.is_some()
             || self.montage_layer_drag.is_some()
+            || self.keys_drag.is_some()
     }
 
     /// Échap (ou Ctrl+Z) pendant un glisser (chantier 2) : tout revient comme avant le geste ;
     /// rien n'est enregistré. Le choix fait au rectangle reste celui d'avant.
     pub(crate) fn cancel_drags(&mut self) {
         self.cancel_montage_drag();
+        self.cancel_keys_drag();
         self.image_drag = None;
         if let Some(g) = self.grid_select.take() {
             self.frame_sel = g.before_frames;
@@ -708,6 +751,9 @@ impl App {
         self.montage_layer_drag = None;
         if self.handle_drag.is_some() {
             self.end_handle_drag();
+        }
+        if self.keys_drag.is_some() {
+            self.end_keys_drag();
         }
     }
 

@@ -4,13 +4,17 @@
 //!   retire ; Maj + clic choisit toutes les clés de la piste entre la dernière cliquée et
 //!   celle-ci, d'un plan à l'autre ; un clic à côté des dessins vide le choix. Ctrl+A : toutes
 //!   les clés du calque courant dans le plan courant.
+//! - Une clé choisie prise par son milieu emmène les autres clés choisies (`KeysDrag`) : toutes
+//!   glissent du même nombre d'images, chacune prend sa place parmi les autres expositions de son
+//!   calque (`shift_runs`), toutes gardent leur durée. Échap rend tout comme avant ; une étape
+//!   d'annulation.
 //! - Copier, coller, supprimer (la voisine remplace, ou un vide) et dupliquer sur place visent
 //!   les clés choisies, sinon la clé à l'image courante du calque courant. Collées, les clés
 //!   gardent leurs écarts et leurs durées, sur le calque courant à partir de l'image courante.
 
 use crate::app::App;
-use crate::document::{Cel, CelId, LayerKind};
-use crate::handles::{duplicate_run, overwrite_run, remove_run, runs};
+use crate::document::{Cel, CelId, Layer, LayerKind};
+use crate::handles::{duplicate_run, overwrite_run, remove_run, runs, shift_runs};
 use crate::montagerows::{layer_on_track, TrackKey};
 
 /// Une clé : plan (id), calque (id), image où commence son exposition.
@@ -33,6 +37,25 @@ pub(crate) struct ClipKey {
     pub len: usize,
     pub cel: Cel,
     pub kind: LayerKind,
+}
+
+/// Plusieurs clés prises à la fois dans le montage : chaque calque touché tel qu'il était, l'image
+/// du montage où on les a prises, le décalage en cours, l'étape d'annulation de tout le geste.
+pub(crate) struct KeysDrag {
+    layers: Vec<DragLayer>,
+    grab: usize,
+    delta: isize,
+    snap: crate::history::Edit,
+}
+
+/// Un calque touché : plan (id), calque (id), son état d'avant, la durée du plan, le début de
+/// ses clés prises.
+struct DragLayer {
+    panel: u64,
+    layer: u64,
+    before: Layer,
+    plan_len: usize,
+    starts: Vec<usize>,
 }
 
 /// Les clés `chosen` après un clic sur `key` (rien : à côté des dessins). `toggle` (Ctrl) :
@@ -92,6 +115,89 @@ impl App {
         if self.key_sel.len() > 1 {
             self.status = format!("{} clés choisies : Ctrl+C, Ctrl+V, Suppr, Ctrl+D (dupliquer) ; clic droit pour le reste.", self.key_sel.len());
         }
+    }
+
+    /// Commence à glisser les clés choisies, prises à l'image `grab` du montage. Faux si refusé
+    /// (storyboard verrouillé) ou si aucune n'est plus là.
+    pub(crate) fn begin_keys_drag(&mut self, grab: usize) -> bool {
+        if self.content_refuses() {
+            return false;
+        }
+        let mut layers: Vec<DragLayer> = Vec::new();
+        for k in self.key_sel.clone() {
+            let Some((pi, li, s, _)) = self.locate(k) else { continue };
+            match layers.iter_mut().find(|d| d.panel == k.panel && d.layer == k.layer) {
+                Some(d) => d.starts.push(s),
+                None => {
+                    let p = &self.doc.panels[pi];
+                    layers.push(DragLayer { panel: k.panel, layer: k.layer, before: p.layers[li].clone(), plan_len: p.frame_count(), starts: vec![s] });
+                }
+            }
+        }
+        if layers.is_empty() {
+            return false;
+        }
+        self.end_stroke();
+        self.playing = false;
+        let snap = self.snapshot();
+        self.keys_drag = Some(KeysDrag { layers, grab, delta: 0, snap });
+        true
+    }
+
+    /// Les clés prises suivent la souris, à l'image `at` du montage : chaque calque repart de son
+    /// état d'avant le geste.
+    pub(crate) fn drag_keys(&mut self, at: usize) {
+        let Some(d) = self.keys_drag.as_mut() else { return };
+        let delta = at as isize - d.grab as isize;
+        if delta == d.delta {
+            return;
+        }
+        d.delta = delta;
+        let work: Vec<(u64, u64, Layer, usize, Vec<usize>)> = d.layers.iter().map(|l| (l.panel, l.layer, l.before.clone(), l.plan_len, l.starts.clone())).collect();
+        let mut sel = Vec::new();
+        for (panel, layer, mut l, plan_len, starts) in work {
+            let new = shift_runs(&mut l, &starts, delta);
+            let Some(pi) = self.doc.panels.iter().position(|p| p.id == panel) else { continue };
+            let Some(li) = self.doc.panels[pi].layers.iter().position(|x| x.id == layer) else { continue };
+            let p = &mut self.doc.panels[pi];
+            p.layers[li] = l;
+            // La durée du plan reste celle d'avant le geste.
+            if p.frame_count() < plan_len {
+                p.length = plan_len;
+            }
+            sel.extend(new.into_iter().map(|start| KeyRef { panel, layer, start }));
+        }
+        let n = sel.len();
+        self.key_sel = sel;
+        self.renderer.invalidate_all();
+        self.status = format!("{n} clés glissées de {delta:+} image{} : chacune prend sa place parmi les autres, sa durée gardée.", if delta.abs() > 1 { "s" } else { "" });
+    }
+
+    /// Lâche les clés : une étape d'annulation si quelque chose a bougé.
+    pub(crate) fn end_keys_drag(&mut self) {
+        let Some(d) = self.keys_drag.take() else { return };
+        let changed = d.layers.iter().any(|l| {
+            self.doc.panels.iter().find(|p| p.id == l.panel).and_then(|p| p.layers.iter().find(|x| x.id == l.layer)).is_some_and(|x| x.frames != l.before.frames)
+        });
+        if changed {
+            self.history.push(d.snap);
+            self.modified = true;
+        }
+    }
+
+    /// Échap pendant le geste : chaque calque revient comme avant, le choix aussi.
+    pub(crate) fn cancel_keys_drag(&mut self) {
+        let Some(d) = self.keys_drag.take() else { return };
+        let mut sel = Vec::new();
+        for l in d.layers {
+            let Some(pi) = self.doc.panels.iter().position(|p| p.id == l.panel) else { continue };
+            if let Some(li) = self.doc.panels[pi].layers.iter().position(|x| x.id == l.layer) {
+                self.doc.panels[pi].layers[li] = l.before;
+            }
+            sel.extend(l.starts.into_iter().map(|start| KeyRef { panel: l.panel, layer: l.layer, start }));
+        }
+        self.key_sel = sel;
+        self.renderer.invalidate_all();
     }
 
     /// Les clés de la piste `track` entre `a` et `b` (comprises), d'un plan à l'autre.

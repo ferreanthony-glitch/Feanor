@@ -373,6 +373,8 @@ pub struct App {
     /// Clés choisies dans le montage, et la dernière cliquée (départ des Maj + clic).
     pub(crate) key_sel: Vec<crate::montagekeys::KeyRef>,
     pub(crate) key_anchor: Option<crate::montagekeys::KeyRef>,
+    /// Plusieurs clés choisies glissées à la fois dans le montage.
+    pub(crate) keys_drag: Option<crate::montagekeys::KeysDrag>,
     /// Le dernier clic dans le montage était sur la piste d'un calque : copier, coller et
     /// supprimer visent la clé à l'image courante du calque courant.
     pub(crate) key_focus: bool,
@@ -675,6 +677,7 @@ impl App {
             key_clipboard: None,
             key_sel: Vec::new(),
             key_anchor: None,
+            keys_drag: None,
             key_focus: false,
             hole: Default::default(),
             images_focus: false,

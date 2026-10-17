@@ -746,7 +746,7 @@ impl App {
         // calque tenue (sur le plan courant) ou survolée s'éclaire (chantier 5).
         let lit = match &self.handle_drag {
             Some(d) => Some((self.cur_panel, d.handle, true)),
-            None if self.montage_drag.is_none() && self.cam_key_drag.is_none() => resp
+            None if self.montage_drag.is_none() && self.cam_key_drag.is_none() && self.keys_drag.is_none() => resp
                 .hover_pos()
                 .and_then(|p| self.montage_layer_handle_at(p, r.top(), &blocks, ppf, rows))
                 .map(|(i, _, h)| (i, h, false)),
@@ -809,11 +809,19 @@ impl App {
                 self.begin_handle_drag(crate::handles::Handle::Mark(m));
             } else if let Some((i, k, h)) = self.montage_layer_handle_at(origin, r.top(), &blocks, ppf, rows) {
                 // Les gestes de la timeline dans les pistes de calques (chantier 5) : ce plan, ce
-                // calque, et sa poignée.
+                // calque, et sa poignée. Une clé choisie parmi d'autres emmène toutes les choisies.
                 self.sel_clip = None;
-                self.set_panel(i);
-                self.select_layer(k);
-                self.begin_handle_drag(h);
+                let group = match h {
+                    Handle::Key { grab, .. } => self.key_sel.len() > 1 && self.key_ref(i, k, grab).is_some_and(|key| self.key_sel.contains(&key)),
+                    _ => false,
+                };
+                if group {
+                    self.begin_keys_drag(free_frame_at(origin.x));
+                } else {
+                    self.set_panel(i);
+                    self.select_layer(k);
+                    self.begin_handle_drag(h);
+                }
             } else {
                 let drag = if !in_blocks(origin) {
                     MontageDrag::Scrub
@@ -873,7 +881,17 @@ impl App {
             ui.ctx().set_cursor_icon(CursorIcon::Grab);
         }
 
-        if resp.dragged() && self.cam_key_drag.is_none() && self.handle_drag.is_none() {
+        // Plusieurs clés choisies prises à la fois (`montagekeys`).
+        if self.keys_drag.is_some() {
+            ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
+            if let (true, Some(p)) = (resp.dragged(), resp.interact_pointer_pos()) {
+                self.drag_keys(free_frame_at(p.x));
+            }
+            if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
+                self.end_keys_drag();
+            }
+        }
+        if resp.dragged() && self.cam_key_drag.is_none() && self.handle_drag.is_none() && self.keys_drag.is_none() {
             if let Some(p) = resp.interact_pointer_pos() {
                 match &mut self.montage_drag {
                     Some(MontageDrag::Scrub) => {

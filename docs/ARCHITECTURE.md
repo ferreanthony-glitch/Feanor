@@ -713,6 +713,11 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     `duplicate_keys` (`duplicate_run`) visent les clés choisies, sinon celle de l'image
     courante. `App::key_focus` (un clic sur la piste d'un calque du montage) passe avant la main
     des plans dans `run_action`, et `key_mode_of` donne alors les raccourcis de l'animation.
+  - Glisser plusieurs clés : `handles::shift_runs` (blocs de clés choisies qui se suivent, placés
+    par leur milieu déplacé ; testé, et égal à `reorder_run` pour une seule) ; `montagekeys::
+    KeysDrag` garde chaque calque touché tel qu'avant (Échap, `cancel_keys_drag`) et l'étape
+    d'annulation (`end_keys_drag`, seulement si quelque chose a bougé) ; `dragging`,
+    `cancel_drags` et `drop_stale_drags` le connaissent.
   - Piste « Fond » : `layer_tracks` et `layer_on_track` prennent aussi les calques de toute la
     scène (la rangée « Fond » et `Rows::background` ne sont plus) ; `sync_scene_layers` copie
     les images du modèle (coupées à la durée du panneau, le dernier dessin tenu s'il est plus

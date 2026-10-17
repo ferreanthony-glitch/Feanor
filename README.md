@@ -364,7 +364,8 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   sur la piste d'un calque, Ctrl+C / Ctrl+V copient et collent la clé (le dessin et sa durée),
   Suppr la supprime (sa voisine la remplace), Ctrl+D la duplique sur place ; le clic droit
   propose aussi de la supprimer en laissant un vide. Ctrl ou Maj + clic choisissent plusieurs
-  clés à la fois (Ctrl+A : toutes celles du calque) : ces commandes les visent toutes. Les
+  clés à la fois (Ctrl+A : toutes celles du calque) : ces commandes les visent toutes, et une
+  clé choisie prise par son milieu les emmène toutes (chacune garde sa durée). Les
   calques de toute la scène (fond) ont leur piste, teintée, avec les mêmes gestes. La timeline sert à entrer dans le détail. Copier, Coller, Suppr et les raccourcis
   visent la bande quand on y a cliqué en dernier (un trait de couleur en haut, et la barre
   d'état le dit) ; un clic dans le dessin, Tab ou la vue Vignettes rendent la main au dessin. Glisse un onglet : des boutons apparaissent au milieu du panneau

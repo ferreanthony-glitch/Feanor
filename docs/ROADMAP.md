@@ -988,7 +988,13 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         les mêmes gestes ; il garde ses clés d'un plan à l'autre de la scène (avant : un seul
         dessin tenu, et une barre en lecture seule).
 
-      Pas fait : glisser plusieurs clés à la fois (seule celle qu'on prend bouge).
+      - puis **glisser plusieurs clés à la fois** (Anthony : « Maj pour sélectionner les clés
+        voulues à la suite, Ctrl pour des clés qui ne se suivent pas forcément », ce que fait le
+        choix) : une clé choisie prise par son milieu emmène les autres ; toutes glissent du même
+        nombre d'images, des clés choisies qui se suivent restent un bloc, chaque bloc (ou clé
+        seule) prend sa place parmi les autres selon son milieu, toutes gardent leur durée ; sur
+        plusieurs calques et plusieurs plans, chacun dans son calque. Échap pendant le geste rend
+        tout comme avant.
 
   Pas fait : ces gestes sur la piste « Fond ».
 - Restent (ordre de Fable) : navigation de calques à la TVPaint, fenêtre « Agrandir / rétrécir
