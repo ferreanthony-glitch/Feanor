@@ -527,6 +527,13 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   - sinon un dessin dérivé, calculé une fois et gardé dans un cache (48 au plus, les plus
     anciens partent). Le cache est indexé par `fx_id` (dessin + paramètres, bit de poids fort
     mis) et refait quand la version du dessin change.
+  - Au-delà des flous (2026-10-17) : `fxfilters.rs` (purs, testés) — réglages de couleur sur
+    les pixels dessinés (`map_colors`, couverture inchangée), netteté (différence avec
+    `fx::gaussian`), bruit (hasard fixe par pixel), mosaïque, ombre portée, lueur (débordent :
+    `fx::region_of` / `into_raster`). `EffectKind::family` / `FAMILIES` rangent les effets ;
+    `changes` dit quand un effet ne change rien (il n'est pas calculé). Menu du calque :
+    `App::fx_menu_items` (familles en cases à cocher), `toggle_fx` (ajoute avec les réglages
+    par défaut, sinon active ou désactive), `fx_on` ; fenêtre « Effets » (`fxui.rs`).
 
   La carte graphique garde la texture du dérivé sous ce même numéro. Les flous ne travaillent
   que sur la zone dessinée, marge comprise :

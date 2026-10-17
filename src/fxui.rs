@@ -10,9 +10,56 @@ use eframe::egui::{self, vec2, Align2, RichText};
 use egui_phosphor::regular as ph;
 
 use crate::app::App;
-use crate::fx::{Effect, EffectKind};
+use crate::fx::{Effect, EffectKind, FAMILIES};
 
 impl App {
+    /// L'effet `kind` est-il là et actif sur le calque `li` ?
+    pub(crate) fn fx_on(&self, li: usize, kind: EffectKind) -> bool {
+        self.layers().get(li).is_some_and(|l| l.fx.iter().any(|e| e.kind == kind && e.enabled))
+    }
+
+    /// Coche ou décoche l'effet `kind` du calque `li` (une étape d'annulation, le dessin ne
+    /// change pas) : absent, il s'ajoute avec ses réglages par défaut ; présent, il s'active ou
+    /// se désactive, ses réglages restent.
+    pub(crate) fn toggle_fx(&mut self, li: usize, kind: EffectKind) {
+        if li >= self.layers().len() || self.content_refuses() {
+            return;
+        }
+        let on = self.fx_on(li, kind);
+        self.record_step();
+        let fx = &mut self.layers_mut()[li].fx;
+        match fx.iter().position(|e| e.kind == kind) {
+            Some(_) if on => fx.iter_mut().filter(|e| e.kind == kind).for_each(|e| e.enabled = false),
+            Some(i) => fx[i].enabled = true,
+            None => fx.push(Effect::new(kind)),
+        }
+        if let Some(i) = self.layers()[li].fx.iter().position(|e| e.kind == kind) {
+            self.fx_selected = i;
+        }
+        self.renderer.invalidate_all();
+        self.status = format!("{} : {}.", kind.label(), if on { "décoché (le dessin n'a pas changé)" } else { "coché" });
+    }
+
+    /// Les effets par familles, en sous-menus de cases à cocher (menu d'un calque), puis la
+    /// fenêtre Effets pour les régler.
+    pub(crate) fn fx_menu_items(&mut self, ui: &mut egui::Ui, li: usize) {
+        for family in FAMILIES {
+            ui.menu_button(family, |ui| {
+                for kind in EffectKind::ALL.into_iter().filter(|k| k.family() == family) {
+                    let on = self.fx_on(li, kind);
+                    if ui.checkbox(&mut on.clone(), kind.label()).clicked() {
+                        self.toggle_fx(li, kind);
+                    }
+                }
+            });
+        }
+        if ui.button("Fenêtre Effets…").on_hover_text("Régler les effets du calque, les ordonner, leur poser des clés.").clicked() {
+            ui.close_menu();
+            self.select_layer(li);
+            self.fx_window = true;
+        }
+    }
+
     /// Pose ou met à jour la clé de l'effet `i` du calque courant à l'image courante, avec ses
     /// paramètres à cette image (une étape d'annulation).
     pub(crate) fn fx_create_key(&mut self) {
@@ -62,7 +109,7 @@ impl App {
             return;
         }
         let mut open = true;
-        egui::Window::new("Pile d'effets")
+        egui::Window::new("Effets")
             .open(&mut open)
             .resizable(false)
             .collapsible(false)
@@ -93,13 +140,18 @@ impl App {
         let f = self.cur_frame;
         ui.horizontal(|ui| {
             ui.menu_button(format!("{}  Ajouter un effet", ph::PLUS), |ui| {
-                for k in EffectKind::ALL {
-                    if ui.button(k.label()).clicked() {
-                        self.record_step();
-                        self.layers_mut()[li].fx.push(Effect::new(k));
-                        self.fx_selected = self.layers()[li].fx.len() - 1;
-                        ui.close_menu();
-                    }
+                // Par familles, comme le menu Filtre de Photoshop.
+                for family in FAMILIES {
+                    ui.menu_button(family, |ui| {
+                        for k in EffectKind::ALL.into_iter().filter(|k| k.family() == family) {
+                            if ui.button(k.label()).clicked() {
+                                self.record_step();
+                                self.layers_mut()[li].fx.push(Effect::new(k));
+                                self.fx_selected = self.layers()[li].fx.len() - 1;
+                                ui.close_menu();
+                            }
+                        }
+                    });
                 }
             });
             let any = !self.layers()[li].fx.is_empty();

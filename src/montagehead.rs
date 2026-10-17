@@ -239,8 +239,9 @@ impl App {
     ///
     /// Dans l'ordre (Anthony, 2026-10-17 : « en premier les fonctions simples, puis les fonctions
     /// d'état, ensuite les fonctions d'animation ») : renommer, dupliquer, verrouiller, supprimer ;
-    /// afficher, pelure, transparence, pochoir, position, opacité, mode, profondeur, groupe ;
-    /// avant / après ses images, cassure et création automatiques ; puis le reste.
+    /// afficher, pelure, transparence, pochoir, position, profondeur, groupe ; avant / après ses
+    /// images, cassure et création automatiques ; effets (opacité, mode, effets non destructifs
+    /// par familles, fenêtre Effets, propagation) ; puis le reste.
     pub(crate) fn layer_full_menu(&mut self, ui: &mut egui::Ui, li: usize, in_montage: bool) {
         let Some(l) = self.layers().get(li) else {
             ui.close_menu();
@@ -296,6 +297,17 @@ impl App {
                 self.set_layer_flag(li, |l| l.position_locked = !fixed);
             }
         }
+        self.depth_item(ui, li);
+        ui.menu_button("Groupe", |ui| self.group_menu(ui, li));
+        // Fonctions d'animation.
+        if !folder {
+            ui.separator();
+            self.behaviour_items(ui, li);
+        }
+        // Effets (Anthony, 2026-10-17 : « ajoute une partie effets ») : opacité et mode de fusion
+        // (dans le panneau Calques, son en-tête les a), les effets non destructifs par familles,
+        // cochés ou décochés, la fenêtre Effets, la propagation de la peinture.
+        ui.separator();
         if in_montage {
             let mut pct = opacity * 100.0;
             let resp = ui.horizontal(|ui| {
@@ -321,14 +333,9 @@ impl App {
                     }
                 });
             }
+            self.fx_menu_items(ui, li);
         }
-        self.depth_item(ui, li);
-        ui.menu_button("Groupe", |ui| self.group_menu(ui, li));
-        // Fonctions d'animation.
-        if !folder {
-            ui.separator();
-            self.behaviour_items(ui, li);
-        }
+        self.propagation_menu(ui, li);
         // Le reste : sortes de calques particulières, toutes les commandes.
         ui.separator();
         if ctg {
@@ -337,7 +344,6 @@ impl App {
         if video {
             ui.menu_button("Calque vidéo", |ui| self.video_menu(ui, li));
         }
-        self.propagation_menu(ui, li);
         let (label, from) = if in_montage {
             ("Toutes les commandes des calques", crate::layerops::OpsFrom::LayerMenu)
         } else {

@@ -3,7 +3,8 @@
 //! changent pas. Chaque effet a ses paramètres, et des clés (une image, tous les paramètres)
 //! entre lesquelles ils varient en ligne droite ; avant la première clé et après la dernière,
 //! ils valent ceux de cette clé. Premiers effets (choix d'Anthony) : flou gaussien et flou de
-//! mouvement.
+//! mouvement ; puis (2026-10-17) réglages de couleur, netteté, bruit, mosaïque, ombre portée et
+//! lueur (`fxfilters.rs`), rangés par familles comme le menu Filtre de Photoshop.
 //!
 //! Le rendu passe par des dessins dérivés : le dessin filtré est calculé une fois par jeu de
 //! paramètres et gardé dans un cache, sous un numéro à part (`fx_id`) ; les moteurs d'affichage
@@ -35,6 +36,31 @@ pub enum EffectKind {
     GaussianBlur,
     #[serde(rename = "flou_mouvement")]
     MotionBlur,
+    // Réglages, netteté, bruit, mosaïque, ombre, lueur (`fxfilters.rs`, Anthony, 2026-10-17).
+    #[serde(rename = "luminosite_contraste")]
+    BrightnessContrast,
+    #[serde(rename = "niveaux")]
+    Levels,
+    #[serde(rename = "teinte_saturation")]
+    HueSaturation,
+    #[serde(rename = "noir_et_blanc")]
+    BlackWhite,
+    #[serde(rename = "negatif")]
+    Invert,
+    #[serde(rename = "posterisation")]
+    Posterize,
+    #[serde(rename = "seuil")]
+    Threshold,
+    #[serde(rename = "nettete")]
+    Sharpen,
+    #[serde(rename = "bruit")]
+    Noise,
+    #[serde(rename = "mosaique")]
+    Mosaic,
+    #[serde(rename = "ombre_portee")]
+    DropShadow,
+    #[serde(rename = "lueur")]
+    Glow,
 }
 
 const GAUSSIAN: [Param; 1] = [Param { name: "Rayon", min: 0.0, max: 200.0, default: 8.0, unit: " px" }];
@@ -42,14 +68,96 @@ const MOTION: [Param; 2] = [
     Param { name: "Longueur", min: 0.0, max: 400.0, default: 30.0, unit: " px" },
     Param { name: "Angle", min: -180.0, max: 180.0, default: 0.0, unit: "°" },
 ];
+const BRIGHTNESS_CONTRAST: [Param; 2] = [
+    Param { name: "Luminosité", min: -100.0, max: 100.0, default: 0.0, unit: "" },
+    Param { name: "Contraste", min: -100.0, max: 100.0, default: 0.0, unit: "" },
+];
+const LEVELS: [Param; 3] = [
+    Param { name: "Noir", min: 0.0, max: 254.0, default: 0.0, unit: "" },
+    Param { name: "Blanc", min: 1.0, max: 255.0, default: 255.0, unit: "" },
+    Param { name: "Gamma", min: 0.1, max: 5.0, default: 1.0, unit: "" },
+];
+const HUE_SATURATION: [Param; 3] = [
+    Param { name: "Teinte", min: -180.0, max: 180.0, default: 0.0, unit: "°" },
+    Param { name: "Saturation", min: -100.0, max: 100.0, default: 0.0, unit: "" },
+    Param { name: "Luminosité", min: -100.0, max: 100.0, default: 0.0, unit: "" },
+];
+const AMOUNT: [Param; 1] = [Param { name: "Quantité", min: 0.0, max: 100.0, default: 100.0, unit: " %" }];
+const POSTERIZE: [Param; 1] = [Param { name: "Niveaux", min: 2.0, max: 32.0, default: 4.0, unit: "" }];
+const THRESHOLD: [Param; 1] = [Param { name: "Seuil", min: 0.0, max: 255.0, default: 128.0, unit: "" }];
+const SHARPEN: [Param; 2] = [
+    Param { name: "Gain", min: 0.0, max: 300.0, default: 100.0, unit: " %" },
+    Param { name: "Rayon", min: 0.5, max: 20.0, default: 2.0, unit: " px" },
+];
+const NOISE: [Param; 1] = [Param { name: "Quantité", min: 0.0, max: 100.0, default: 20.0, unit: " %" }];
+const MOSAIC: [Param; 1] = [Param { name: "Taille", min: 2.0, max: 100.0, default: 10.0, unit: " px" }];
+const SHADOW: [Param; 4] = [
+    Param { name: "Décalage x", min: -200.0, max: 200.0, default: 10.0, unit: " px" },
+    Param { name: "Décalage y", min: -200.0, max: 200.0, default: 10.0, unit: " px" },
+    Param { name: "Flou", min: 0.0, max: 100.0, default: 6.0, unit: " px" },
+    Param { name: "Opacité", min: 0.0, max: 100.0, default: 60.0, unit: " %" },
+];
+const GLOW: [Param; 2] = [
+    Param { name: "Rayon", min: 1.0, max: 100.0, default: 12.0, unit: " px" },
+    Param { name: "Intensité", min: 0.0, max: 200.0, default: 100.0, unit: " %" },
+];
+
+/// Familles d'effets, dans l'ordre des menus (inspirées du menu Filtre et des réglages de
+/// Photoshop).
+pub const FAMILIES: [&str; 6] = ["Flou", "Réglages", "Netteté", "Bruit", "Pixéliser", "Styliser"];
 
 impl EffectKind {
-    pub const ALL: [EffectKind; 2] = [EffectKind::GaussianBlur, EffectKind::MotionBlur];
+    pub const ALL: [EffectKind; 14] = [
+        EffectKind::GaussianBlur,
+        EffectKind::MotionBlur,
+        EffectKind::BrightnessContrast,
+        EffectKind::Levels,
+        EffectKind::HueSaturation,
+        EffectKind::BlackWhite,
+        EffectKind::Invert,
+        EffectKind::Posterize,
+        EffectKind::Threshold,
+        EffectKind::Sharpen,
+        EffectKind::Noise,
+        EffectKind::Mosaic,
+        EffectKind::DropShadow,
+        EffectKind::Glow,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
             EffectKind::GaussianBlur => "Flou gaussien",
             EffectKind::MotionBlur => "Flou de mouvement",
+            EffectKind::BrightnessContrast => "Luminosité / contraste",
+            EffectKind::Levels => "Niveaux",
+            EffectKind::HueSaturation => "Teinte / saturation",
+            EffectKind::BlackWhite => "Noir et blanc",
+            EffectKind::Invert => "Négatif",
+            EffectKind::Posterize => "Postérisation",
+            EffectKind::Threshold => "Seuil",
+            EffectKind::Sharpen => "Netteté",
+            EffectKind::Noise => "Bruit",
+            EffectKind::Mosaic => "Mosaïque",
+            EffectKind::DropShadow => "Ombre portée",
+            EffectKind::Glow => "Lueur",
+        }
+    }
+
+    /// Sa famille (`FAMILIES`).
+    pub fn family(self) -> &'static str {
+        match self {
+            EffectKind::GaussianBlur | EffectKind::MotionBlur => "Flou",
+            EffectKind::BrightnessContrast
+            | EffectKind::Levels
+            | EffectKind::HueSaturation
+            | EffectKind::BlackWhite
+            | EffectKind::Invert
+            | EffectKind::Posterize
+            | EffectKind::Threshold => "Réglages",
+            EffectKind::Sharpen => "Netteté",
+            EffectKind::Noise => "Bruit",
+            EffectKind::Mosaic => "Pixéliser",
+            EffectKind::DropShadow | EffectKind::Glow => "Styliser",
         }
     }
 
@@ -57,6 +165,35 @@ impl EffectKind {
         match self {
             EffectKind::GaussianBlur => &GAUSSIAN,
             EffectKind::MotionBlur => &MOTION,
+            EffectKind::BrightnessContrast => &BRIGHTNESS_CONTRAST,
+            EffectKind::Levels => &LEVELS,
+            EffectKind::HueSaturation => &HUE_SATURATION,
+            EffectKind::BlackWhite | EffectKind::Invert => &AMOUNT,
+            EffectKind::Posterize => &POSTERIZE,
+            EffectKind::Threshold => &THRESHOLD,
+            EffectKind::Sharpen => &SHARPEN,
+            EffectKind::Noise => &NOISE,
+            EffectKind::Mosaic => &MOSAIC,
+            EffectKind::DropShadow => &SHADOW,
+            EffectKind::Glow => &GLOW,
+        }
+    }
+
+    /// Avec ces paramètres, l'effet change-t-il quelque chose ? (Sinon il ne coûte rien.)
+    pub fn changes(self, v: &[f32]) -> bool {
+        let at = |k: usize| v.get(k).copied().unwrap_or(0.0);
+        match self {
+            EffectKind::GaussianBlur => at(0) >= 0.5,
+            EffectKind::MotionBlur => at(0) >= 1.0,
+            EffectKind::BrightnessContrast => at(0) != 0.0 || at(1) != 0.0,
+            EffectKind::Levels => at(0) > 0.0 || at(1) < 255.0 || (at(2) - 1.0).abs() > 1e-3,
+            EffectKind::HueSaturation => at(0) != 0.0 || at(1) != 0.0 || at(2) != 0.0,
+            EffectKind::BlackWhite | EffectKind::Invert | EffectKind::Noise => at(0) > 0.0,
+            EffectKind::Posterize | EffectKind::Threshold => true,
+            EffectKind::Sharpen => at(0) > 0.0,
+            EffectKind::Mosaic => at(0) >= 2.0,
+            EffectKind::DropShadow => at(3) > 0.0,
+            EffectKind::Glow => at(1) > 0.0,
         }
     }
 
@@ -191,10 +328,7 @@ pub fn steps_at(fx: &[Effect], frame: usize) -> Vec<FxStep> {
     fx.iter()
         .filter(|e| e.enabled)
         .map(|e| FxStep { kind: e.kind, values: e.values_at(frame) })
-        .filter(|s| match s.kind {
-            EffectKind::GaussianBlur => s.values[0] >= 0.5,
-            EffectKind::MotionBlur => s.values[0] >= 1.0,
-        })
+        .filter(|s| s.kind.changes(&s.values))
         .collect()
 }
 
@@ -215,17 +349,17 @@ pub fn fx_id(cel: CelId, steps: &[FxStep]) -> CelId {
 // ---------------------------------------------------------------------- calcul des flous
 
 /// Une zone de pixels prémultipliés, en ligne.
-struct Region {
-    x0: usize,
-    y0: usize,
-    w: usize,
-    h: usize,
-    px: Vec<Color32>,
+pub(crate) struct Region {
+    pub x0: usize,
+    pub y0: usize,
+    pub w: usize,
+    pub h: usize,
+    pub px: Vec<Color32>,
 }
 
 /// Les pixels dessinés de `raster`, avec une marge de `margin` pixels (dans la feuille). Rien si
 /// le dessin est vide.
-fn region_of(raster: &Raster, margin: usize) -> Option<Region> {
+pub(crate) fn region_of(raster: &Raster, margin: usize) -> Option<Region> {
     let mut lo = (usize::MAX, usize::MAX);
     let mut hi = (0, 0);
     for (idx, t) in raster.tiles.iter().enumerate() {
@@ -252,7 +386,7 @@ fn region_of(raster: &Raster, margin: usize) -> Option<Region> {
 
 /// La zone remise dans une feuille vide de la taille de `like` (tuiles toutes transparentes
 /// laissées vides).
-fn into_raster(r: &Region, like: &Raster) -> Raster {
+pub(crate) fn into_raster(r: &Region, like: &Raster) -> Raster {
     let mut out = Raster::new(like.width, like.height);
     let (tx0, ty0) = (r.x0 / TILE, r.y0 / TILE);
     let (tx1, ty1) = ((r.x0 + r.w).div_ceil(TILE), (r.y0 + r.h).div_ceil(TILE));
@@ -344,7 +478,7 @@ fn boxes_for(sigma: f32) -> [usize; 3] {
 }
 
 /// Flou gaussien : le rayon est la portée visible du flou (trois écarts types).
-fn gaussian(raster: &Raster, radius: f32) -> Raster {
+pub(crate) fn gaussian(raster: &Raster, radius: f32) -> Raster {
     let margin = radius.ceil() as usize + 2;
     let Some(mut r) = region_of(raster, margin) else { return Raster::new(raster.width, raster.height) };
     let boxes = boxes_for(radius / 3.0);
@@ -411,9 +545,23 @@ pub fn apply(raster: &Raster, steps: &[FxStep]) -> Raster {
     }
     let mut cur = raster.clone();
     for s in steps {
+        use crate::fxfilters as f;
+        let v = &s.values;
         cur = match s.kind {
-            EffectKind::GaussianBlur => gaussian(&cur, s.values[0]),
-            EffectKind::MotionBlur => motion(&cur, s.values[0], s.values[1]),
+            EffectKind::GaussianBlur => gaussian(&cur, v[0]),
+            EffectKind::MotionBlur => motion(&cur, v[0], v[1]),
+            EffectKind::BrightnessContrast => f::brightness_contrast(&cur, v[0], v[1]),
+            EffectKind::Levels => f::levels(&cur, v[0], v[1], v[2]),
+            EffectKind::HueSaturation => f::hue_saturation(&cur, v[0], v[1], v[2]),
+            EffectKind::BlackWhite => f::black_white(&cur, v[0]),
+            EffectKind::Invert => f::invert(&cur, v[0]),
+            EffectKind::Posterize => f::posterize(&cur, v[0]),
+            EffectKind::Threshold => f::threshold(&cur, v[0]),
+            EffectKind::Sharpen => f::sharpen(&cur, v[0], v[1]),
+            EffectKind::Noise => f::noise(&cur, v[0]),
+            EffectKind::Mosaic => f::mosaic(&cur, v[0]),
+            EffectKind::DropShadow => f::drop_shadow(&cur, v[0], v[1], v[2], v[3]),
+            EffectKind::Glow => f::glow(&cur, v[0], v[1]),
         };
     }
     cur

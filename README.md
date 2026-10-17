@@ -295,9 +295,15 @@ On règle aussi :
 
 Les flips par rôle feuillettent les clés, les breakdowns ou les intervalles du calque.
 
-**Pile d'effets** (baguette de la timeline) : des effets sur le calque courant, vus à l'écran et
-à l'export, sans toucher aux dessins.
-- Effets : flou gaussien (rayon) et flou de mouvement (longueur, angle).
+**Effets** (baguette de la timeline, ou « Fenêtre Effets… » au clic droit sur un calque) : des
+effets sur le calque, vus à l'écran et à l'export, sans toucher aux dessins (non destructifs :
+on les coche et décoche, le dessin reste tel quel).
+- Par familles, comme le menu Filtre de Photoshop : **Flou** (gaussien, de mouvement),
+  **Réglages** (luminosité / contraste, niveaux, teinte / saturation, noir et blanc, négatif,
+  postérisation, seuil), **Netteté**, **Bruit**, **Pixéliser** (mosaïque), **Styliser** (ombre
+  portée, lueur).
+- Au clic droit sur un calque, la partie « Effets » : opacité, mode de fusion, chaque famille
+  en cases à cocher, la fenêtre Effets pour régler les paramètres.
 - On les active, les ordonne ou les retire à tout moment.
 - On peut les animer par clés : « Créer une clé » à une image, puis à une autre, et les
   paramètres vont de l'une à l'autre. Les clés sont des losanges violets dans la timeline.

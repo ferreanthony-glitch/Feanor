@@ -1087,6 +1087,14 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         supprimer ; afficher, pelure, transparence, pochoir, position, opacité, mode, profondeur,
         groupe ; avant / après ses images, cassure et création automatiques ; puis le reste
         (`rename_item`, `depth_item`, `duplicate_lock_delete_items` sortis de `layer_menu_where`) ;
+      - **partie Effets** (Anthony : « ajoute une partie effets [avec] les flous, les niveaux,
+        contrastes, etc. Les effets s'inspirent de Photoshop et sont non destructifs […] Une
+        fenêtre effets peut être prévue ») : au clic droit sur un calque, après l'animation :
+        opacité, mode de fusion, puis Flou, Réglages, Netteté, Bruit, Pixéliser, Styliser en
+        sous-menus de cases à cocher, « Fenêtre Effets… » (la pile d'effets de 13i, renommée,
+        son « Ajouter » rangé par familles), et la propagation de la peinture. Douze effets
+        nouveaux (`fxfilters.rs`), avec les clés et le cache des flous. Pas faits : les
+        galeries (de filtres, de flous), la déformation, le rendu, la vidéo de Photoshop ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,

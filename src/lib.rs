@@ -78,6 +78,9 @@ mod folders;
 pub mod fx;
 #[cfg(test)]
 mod fx_tests;
+mod fxfilters;
+#[cfg(test)]
+mod fxfilters_tests;
 mod fxui;
 #[cfg(test)]
 mod folders_tests;
