@@ -34,6 +34,19 @@ pub(crate) const POSITION_LOCKED: &str =
 /// Ce qu'on dit quand un outil ou une commande de dessin vise un dossier (13b-5).
 pub(crate) const FOLDER_NOT_DRAWABLE: &str = "Un dossier ne se dessine pas : choisis un de ses calques.";
 
+/// Le mode des raccourcis (choix d'Anthony, 2026-10-17) : celui du panneau qui a la main. Le
+/// montage (ou la planche des vignettes) : storyboard ; la timeline : animation ; sinon (dernier
+/// clic dans le dessin, ou nulle part) : le mode du dessin.
+pub(crate) fn key_mode_of(mode: Mode, panel_focus: bool, images_focus: bool) -> Mode {
+    if panel_focus {
+        Mode::Storyboard
+    } else if images_focus {
+        Mode::Animation
+    } else {
+        mode
+    }
+}
+
 /// Storyboard : on monte les plans. Animation : on est entré dans un plan.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
@@ -1071,6 +1084,9 @@ impl App {
         self.end_stroke();
         self.playing = false;
         self.mode = mode;
+        // Le dessin change : c'est lui qui prend la main (les raccourcis suivent le nouveau mode).
+        self.panel_focus = false;
+        self.images_focus = false;
         if mode == Mode::Storyboard {
             // En storyboard, on reste dans les bornes du plan (la timeline permet d'aller au-delà).
             self.cur_frame = self.cur_frame.min(self.frame_count() - 1);
@@ -1090,9 +1106,15 @@ impl App {
         }
     }
 
-    /// Lecture / pause (touche) : tout le montage en storyboard, le plan en animation.
+    /// Lecture / pause (touche) : tout le montage si les raccourcis sont ceux du storyboard (le
+    /// montage a la main, ou le dessin en storyboard), sinon le plan.
     pub(crate) fn toggle_play(&mut self) {
-        self.toggle_play_scope(self.mode == Mode::Storyboard);
+        self.toggle_play_scope(self.key_mode() == Mode::Storyboard);
+    }
+
+    /// Le mode des raccourcis : celui du panneau qui a la main (`key_mode_of`).
+    pub(crate) fn key_mode(&self) -> Mode {
+        key_mode_of(self.mode, self.panel_focus, self.images_focus)
     }
 
     /// Lecture / pause du montage entier (`montage`) ou du plan courant : les boutons du montage et
@@ -2337,11 +2359,12 @@ impl App {
         // Pendant un glisser (chantier 2) : Échap ou Ctrl+Z l'abandonnent, tout revient comme
         // avant ; les autres touches attendent la fin du geste.
         if self.dragging() {
+            let mode = self.key_mode();
             let cancel = ctx.input(|i| {
                 i.events.iter().any(|e| match e {
                     Event::Key { key, physical_key, pressed: true, modifiers, .. } => {
                         (*key == Key::Escape && !modifiers.any())
-                            || self.keymap.find(*key, *physical_key, *modifiers, self.mode).is_some_and(|a| a == "edition.annuler")
+                            || self.keymap.find(*key, *physical_key, *modifiers, mode).is_some_and(|a| a == "edition.annuler")
                     }
                     _ => false,
                 })
@@ -2381,7 +2404,8 @@ impl App {
             if !m.any() && self.tool_key(key) {
                 continue;
             }
-            let Some(action) = self.keymap.find(key, physical, m, self.mode) else { continue };
+            // Les raccourcis suivent le panneau qui a la main (montage, timeline ou dessin).
+            let Some(action) = self.keymap.find(key, physical, m, self.key_mode()) else { continue };
             let action = action.to_string();
             if repeat && !keymap::action_info(&action).is_some_and(|a| a.repeat) {
                 continue;
@@ -2405,7 +2429,10 @@ impl App {
         if self.color_action(action) {
             return;
         }
-        let board = self.mode == Mode::Storyboard;
+        // `board` : les raccourcis sont ceux du storyboard (le montage a la main, ou le dessin en
+        // storyboard) ; `board_shown` : le dessin montre le storyboard (Tab, vue Vignettes).
+        let board = self.key_mode() == Mode::Storyboard;
+        let board_shown = self.mode == Mode::Storyboard;
         match action {
             "fichier.nouveau" => self.request(Pending::New),
             "fichier.ouvrir" => self.request(Pending::Open),
@@ -2506,7 +2533,7 @@ impl App {
             "vue.pelure" => self.onion.enabled = !self.onion.enabled,
             "vue.miroir" => self.flip_view(),
             "vue.planches" => {
-                if board {
+                if board_shown {
                     self.board_view = match self.board_view {
                         BoardView::Scene => BoardView::Panels,
                         BoardView::Panels => BoardView::Scene,
@@ -2516,7 +2543,7 @@ impl App {
                     self.board_view = BoardView::Panels;
                 }
             }
-            "mode.basculer" => self.set_mode(if board { Mode::Animation } else { Mode::Storyboard }),
+            "mode.basculer" => self.set_mode(if board_shown { Mode::Animation } else { Mode::Storyboard }),
             "aide.raccourcis" => self.show_help = !self.show_help,
             "outil.pinceau" => self.set_tool(Tool::Brush),
             "outil.crayon" => self.set_tool(Tool::Pencil),

@@ -585,6 +585,19 @@ impl App {
                 Mode::Animation => format!("Animation · {}", crate::storyboard::panel_long_title(&self.doc, self.cur_panel)),
             };
             ui.label(RichText::new(where_).strong());
+            // Le panneau qui a la main : copier, coller, supprimer et les raccourcis le visent.
+            let hand = if self.panels_have_focus() {
+                Some("raccourcis du montage")
+            } else if self.images_focus {
+                Some("raccourcis de la timeline")
+            } else {
+                None
+            };
+            if let Some(hand) = hand {
+                ui.label(RichText::new(hand).color(ui.visuals().selection.stroke.color)).on_hover_text(
+                    "Ce panneau a la main (trait de couleur en haut) : les raccourcis, copier, coller et supprimer le visent. Un clic dans le dessin la rend au dessin.",
+                );
+            }
             ui.separator();
             ui.label(format!(
                 "Cadre {}×{} · {} i/s",

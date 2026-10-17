@@ -895,8 +895,12 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
   - le bouton de mode de chaque barre fait entrer dans le plan ou revenir au storyboard ;
   - les deux panneaux suivent l'image courante.
 
-  Pas changé : les raccourcis dépendent toujours du mode (Tab), pas du panneau cliqué (les
-  flèches vont d'un plan à l'autre en storyboard, restent dans le plan en animation).
+  - **les raccourcis suivent le panneau qui a la main** (choix d'Anthony, 2026-10-17) : après
+    un clic dans le montage, ceux du storyboard (Insert : nouveau plan, flèches d'un plan à
+    l'autre, lecture du film) ; après un clic dans la timeline, ceux de l'animation (Insert :
+    nouveau dessin, flèches dans le plan, lecture du plan) ; après un clic dans le dessin, ceux
+    du mode du dessin, comme avant. Tab et la vue Vignettes changent le dessin et lui rendent la
+    main. La barre d'état dit « raccourcis du montage » ou « raccourcis de la timeline ».
 - ✅ 5. Pistes du montage modifiables (lancé par Anthony le 2026-10-17) :
   - **une piste par nom de calque** : le calque « Perso » de chaque plan est sur la même piste,
     où qu'il soit dans sa pile ; un plan qui n'en a pas y laisse un trou ; deux calques du même

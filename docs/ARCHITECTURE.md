@@ -723,7 +723,13 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     regardent plus le mode : la main est au dernier des deux cliqués (chaque clic retire l'autre).
     `focus_mark` trace un trait en haut du panneau qui a la main.
   - `toggle_play_scope(montage)` : le bouton du montage lit le film, celui de la timeline le
-    plan ; `toggle_play` (la touche) garde le choix par le mode.
+    plan ; `toggle_play` (la touche) suit le mode des raccourcis.
+  - Les raccourcis suivent le panneau qui a la main (choix d'Anthony) : `key_mode_of(mode,
+    panel_focus, images_focus)` (testée) donne le mode des raccourcis, storyboard si le montage
+    ou la planche a la main, animation si c'est la timeline, sinon le mode du dessin.
+    `handle_shortcuts` cherche les touches dans ce mode ; dans `run_action`, `board` (flèches,
+    suppression d'un extrait son) le suit aussi, tandis que `board_shown` (Tab, vue Vignettes)
+    reste le mode du dessin. `set_mode` rend la main au dessin.
   - `follow_frame` est pris une fois par image d'écran dans `following` au début de
     `show_dock` : les deux bandes amènent l'image courante en vue.
 

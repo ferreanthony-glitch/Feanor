@@ -355,8 +355,11 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   les changements de nuancier.
 - **Panneaux** : chaque panneau (Outils, Couleur, Pinceaux, Réglages, Vue, Guides, Fiche,
   Calques, Montage, Timeline) est un onglet. Le montage et la timeline sont l'un sous l'autre, en
-  bas, dans les deux modes ; Copier, Coller et Suppr visent celui où l'on a cliqué en dernier
-  (un trait de couleur en haut du panneau). Dans le montage, une piste par nom de calque ; on y
+  bas, dans les deux modes ; Copier, Coller, Suppr et les raccourcis visent celui où l'on a
+  cliqué en dernier (un trait de couleur en haut du panneau, et la barre d'état le dit) : après
+  un clic dans la timeline, Insert fait un nouveau dessin et les flèches restent dans le plan,
+  même en storyboard ; après un clic dans le montage, Insert fait un nouveau plan. Un clic dans
+  le dessin, Tab ou la vue Vignettes rendent la main au dessin. Dans le montage, une piste par nom de calque ; on y
   étire un dessin par son bord droit, on décale un calque par sa barre, on le rogne ou
   l'allonge par ses bouts, comme dans la timeline. Glisse un onglet : des boutons apparaissent au milieu du panneau
   survolé, lâche-le sur l'un d'eux pour l'aimanter (à gauche, à droite, dessus, dessous, ou en

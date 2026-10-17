@@ -274,3 +274,22 @@ fn assigned_shortcut_replaces_frees_and_returns_to_default() {
     // Un fichier personnel illisible n'est pas écrasé.
     assert!(map.edited_user_file(Some("ceci n'est pas du toml ["), &changes).is_err());
 }
+
+#[test]
+fn shortcuts_follow_the_pane_that_has_the_hand() {
+    use crate::app::key_mode_of;
+    let map = default_map();
+    let insert = |mode| press(&map, Key::Insert, Key::Insert, NONE, mode);
+    let left = |mode| press(&map, Key::Semicolon, Key::Comma, NONE, mode);
+    // Dernier clic dans le dessin (aucune bande n'a la main) : le mode du dessin, comme avant.
+    assert_eq!(key_mode_of(Mode::Storyboard, false, false), Mode::Storyboard);
+    assert_eq!(key_mode_of(Mode::Animation, false, false), Mode::Animation);
+    // La timeline a la main en storyboard : Insert fait un nouveau dessin, pas un nouveau plan.
+    let timeline = key_mode_of(Mode::Storyboard, false, true);
+    assert_eq!(insert(timeline).as_deref(), Some("dessin.nouveau"));
+    assert_eq!(left(timeline).as_deref(), Some("image.precedente"));
+    // Le montage a la main en animation : Insert fait un nouveau plan.
+    assert_eq!(insert(key_mode_of(Mode::Animation, true, false)).as_deref(), Some("panneau.nouveau"));
+    // Les deux à la fois ne devraient pas arriver (chaque clic retire l'autre) : le montage l'emporte.
+    assert_eq!(key_mode_of(Mode::Animation, true, true), Mode::Storyboard);
+}
