@@ -576,6 +576,12 @@ raccourcis à la main », puis « Recharger »). Détails et choix pour le clavi
 
 Documentation technique : `docs/ARCHITECTURE.md` ; avancement : `docs/ROADMAP.md`.
 
+## Plantage
+
+Si Pelure se ferme sur une erreur, un rapport est écrit dans `%LOCALAPPDATA%\Pelure\plantages\`, et la
+barre d'état le signale au démarrage suivant (envoie-le pour qu'on trouve la cause). Le projet est
+rattrapé par la copie de secours.
+
 ## Projet en dossier
 
 « Enregistrer » crée un dossier au nom du projet :

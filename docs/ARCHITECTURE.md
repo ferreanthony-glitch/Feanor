@@ -803,6 +803,11 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     peint derrière) et refait la zone. `App::paint_behind`, `fill_shapes` (retenus dans
     `Settings`, enregistrés avec la pelure quand ils changent), `close_tolerance` (15 points
     d'écran) ; actions `pinceau.derriere`, `pinceau.remplir` (sans touche).
+  - Journal de plantage (`plantage.rs`) : `install` (dans `lancer`) garde le crochet de panic
+    par défaut puis écrit `report_text` (message, endroit, fil, pile `Backtrace::force_capture`) par
+    `write_report` dans `%LOCALAPPDATA%\Pelure\plantages\plantage-<s>.txt` et `nouveau.txt` ; au
+    démarrage, `take_new` le signale une fois dans la barre d'état. Une erreur d'allocation (manque
+    de mémoire) arrête le programme sans passer par là.
   - Code couleur des calques : `theme::couleur_calque(kind, ctg)` (vif : repères, barres, bande et
     étiquette du panneau Calques, lettre de l'en-tête de la timeline) et `fond_calque` (sourd :
     dessins sous les panneaux du montage) ; `DESSIN_CTG` / `CALQUE_CTG` roses. Tous les endroits

@@ -55,3 +55,6 @@ opt-level = 3
 
 [profile.release]
 opt-level = 3
+# Numéros de ligne dans la pile des rapports de plantage (`plantage.rs`) ; dans le .pdb à côté de
+# l'exécutable, pas dans l'exécutable.
+debug = "line-tables-only"

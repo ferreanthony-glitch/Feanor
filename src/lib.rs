@@ -72,6 +72,9 @@ pub mod ctg;
 mod ctg_tests;
 mod ctgui;
 mod pasteimage;
+mod plantage;
+#[cfg(test)]
+mod plantage_tests;
 #[cfg(test)]
 mod pasteimage_tests;
 mod cutter;
@@ -289,6 +292,8 @@ mod xsheetui;
 /// Lance Pelure (l'application egui). Un projet passé en argument (ou par double-clic sur un
 /// .pelure) est ouvert au démarrage.
 pub fn lancer() -> eframe::Result<()> {
+    // Une erreur de programme laisse un rapport (`plantage.rs`).
+    plantage::install();
     let initial = std::env::args_os().nth(1).map(std::path::PathBuf::from);
     // Affichage par la carte graphique (wgpu). PELURE_AFFICHAGE=opengl force l'ancien moteur, et si
     // wgpu ne démarre pas sur cette machine, on repart avec OpenGL.
@@ -328,6 +333,10 @@ fn run(renderer: eframe::Renderer, initial: Option<std::path::PathBuf>) -> efram
             let mut app = app::App::new(cc);
             if let Some(path) = initial {
                 app.open_path(path);
+            }
+            // La séance d'avant s'est fermée sur une erreur : on le dit, avec où lire le rapport.
+            if let Some(report) = plantage::dir().and_then(|d| plantage::take_new(&d)) {
+                app.status = format!("La dernière séance s'est fermée sur une erreur : rapport dans {}.", report.display());
             }
             Ok(Box::new(app))
         }),

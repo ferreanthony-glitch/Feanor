@@ -1166,6 +1166,13 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         même bande ; dessins et barres du montage et de la timeline, lettre de la sorte dans
         l'en-tête de la timeline. Projet enregistré en dossier : gardé (choix d'Anthony, comme
         Storyboard Pro) ;
+      - **journal de plantage** (Anthony : « le logiciel crashe très vite lors de l'utilisation de
+        l'outil de propagation de la couleur ») : rien dans le journal de Windows, donc des erreurs
+        de programme (panic) qui fermaient Pelure sans trace. `plantage.rs` : le message, l'endroit
+        du code, le fil et la pile dans `%LOCALAPPDATA%\Pelure\plantages\`, signalé dans la barre
+        d'état à la séance suivante ; numéros de ligne dans la pile (`debug = "line-tables-only"`,
+        dans le .pdb). Une propagation simple (47 images) passe en essai sans planter : cause à
+        trouver avec le premier rapport ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,
