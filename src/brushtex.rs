@@ -69,6 +69,25 @@ impl GrayImage {
         top + (bottom - top) * ty
     }
 
+    /// Une pointe importée d'une image, réduite à `max` pixels de côté au plus : 1 où elle dépose.
+    /// Une image transparente donne sa transparence ; une image opaque, son noir (le noir dépose).
+    pub fn tip_from_image(img: &image::DynamicImage, max: u32) -> GrayImage {
+        let img = if img.width() > max || img.height() > max { img.resize(max, max, image::imageops::FilterType::Triangle) } else { img.clone() };
+        let rgba = img.to_rgba8();
+        let transparent = rgba.pixels().any(|p| p.0[3] < 250);
+        let values = rgba
+            .pixels()
+            .map(|p| {
+                if transparent {
+                    p.0[3] as f32 / 255.0
+                } else {
+                    1.0 - (0.2126 * p.0[0] as f32 + 0.7152 * p.0[1] as f32 + 0.0722 * p.0[2] as f32) / 255.0
+                }
+            })
+            .collect();
+        GrayImage::new(rgba.width() as usize, rgba.height() as usize, values)
+    }
+
     /// Le gris d'une image (luminance, 0 à 1), réduite à `max` pixels de côté au plus : un
     /// papier importé.
     pub fn from_image(img: &image::DynamicImage, max: u32) -> GrayImage {

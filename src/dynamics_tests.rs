@@ -350,3 +350,43 @@ fn an_image_becomes_a_wrapped_gray_paper() {
     let g = crate::brushtex::GrayImage::from_image(&big, 1024);
     assert!(g.width <= 1024 && g.height <= 1024, "réduite : {}×{}", g.width, g.height);
 }
+
+#[test]
+fn a_tip_in_cells_gives_one_drawing_per_dab() {
+    use crate::brush::TipOrder;
+    // L'ordre des cases : à la suite, au hasard, selon l'appui ou la direction.
+    let inp = |p: f32, d: f32| crate::brush::Inputs { pressure: p, direction: d, ..Default::default() };
+    assert_eq!((0..6).map(|n| TipOrder::Loop.cell(3, n, &inp(0.5, 0.0), 0.5)).collect::<Vec<_>>(), vec![0, 1, 2, 0, 1, 2]);
+    assert_eq!(TipOrder::Pressure.cell(4, 0, &inp(0.1, 0.0), 0.5), 0);
+    assert_eq!(TipOrder::Pressure.cell(4, 0, &inp(1.0, 0.0), 0.5), 3);
+    assert_eq!(TipOrder::Direction.cell(4, 0, &inp(0.0, 0.5), 0.5), 2);
+    assert_eq!(TipOrder::Random.cell(4, 0, &inp(0.0, 0.0), 0.99), 3);
+    // Une pointe de deux cases : la case de gauche pleine, celle de droite vide. Selon l'appui :
+    // effleurer prend la case pleine, appuyer la vide.
+    let values = (0..16 * 8).map(|i| if (i % 16) < 8 { 1.0 } else { 0.0 }).collect();
+    let tip = crate::brushtex::Tip::new(crate::brushtex::GrayImage::new(16, 8, values));
+    let tex = || crate::brushtex::BrushTextures { tip: Some(std::sync::Arc::new(crate::brushtex::Tip::new(tip.full().clone()))), paper: None };
+    let mut s = plain(20.0);
+    s.tip = Some(0);
+    s.tip_cells = 2;
+    s.tip_order = TipOrder::Pressure;
+    let dab = |pressure: f32| {
+        let mut raster = Raster::new(80, 80);
+        let mut st = StrokeState::new(0, StrokeMode::Paint([0, 0, 0]), s, None, true).with_textures(tex());
+        let mut dirty = Vec::new();
+        st.add_point(&mut raster, pos2(40.0, 40.0), pressure, &mut dirty);
+        raster.get(40, 40).a()
+    };
+    assert!(dab(0.2) >= 250, "effleuré : la case pleine");
+    assert_eq!(dab(0.9), 0, "appuyé : la case vide");
+}
+
+#[test]
+fn an_image_tip_takes_its_transparency_or_its_black() {
+    let clear = image::DynamicImage::ImageRgba8(image::RgbaImage::from_fn(2, 1, |x, _| image::Rgba([255, 0, 0, if x == 0 { 255 } else { 0 }])));
+    let g = crate::brushtex::GrayImage::tip_from_image(&clear, 64);
+    assert_eq!((g.get(0, 0), g.get(1, 0)), (1.0, 0.0));
+    let opaque = image::DynamicImage::ImageRgb8(image::RgbImage::from_fn(2, 1, |x, _| if x == 0 { image::Rgb([0, 0, 0]) } else { image::Rgb([255, 255, 255]) }));
+    let g = crate::brushtex::GrayImage::tip_from_image(&opaque, 64);
+    assert!((g.get(0, 0) - 1.0).abs() < 1e-5 && g.get(1, 0).abs() < 1e-5, "le noir dépose");
+}

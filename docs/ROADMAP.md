@@ -943,6 +943,11 @@ Choix d'Anthony :
 
   À la fin du trait, il rattrape la pointe. Pas encore : le rattrapage pendant une pause, et
   l'affichage de la corde.
+- ✅ 8. Pointes en plusieurs cases (les brosses animées de TVPaint, les `.gih` de GIMP) : l'image
+  de la pointe porte plusieurs dessins côte à côte. Chaque empreinte en prend un : à la suite, au
+  hasard, selon l'appui ou selon la direction. Une image peut être importée comme pointe : sa
+  transparence, ou son noir sur fond blanc. C'est la base des futurs imports de pointes
+  (`.gih`, brosses TVPaint).
 - ✅ 7. Papier : taille du grain, angle, inversion (la « Hardness » de TVPaint est le curseur
   Grain), et n'importe quelle image importée comme papier (son gris est le relief, réduite à
   1024 pixels). Pelure ne copie aucun papier de TVPaint d'office : Anthony peut choisir lui-même

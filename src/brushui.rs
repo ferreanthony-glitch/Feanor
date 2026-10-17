@@ -283,6 +283,7 @@ impl App {
         let papers = self.brushes.papers();
         let tip_name = self.tool_brush_mut().and_then(|b| b.tip).and_then(|id| self.brushes.tip_name(id).map(String::from));
         let mut import = false;
+        let mut import_tip = false;
         let Some(b) = self.tool_brush_mut() else { return };
         ui.horizontal(|ui| {
             ui.label("Papier");
@@ -311,17 +312,75 @@ impl App {
                 ui.checkbox(&mut b.paper_invert, "Inverser").on_hover_text("Les creux du papier deviennent des sommets.");
             });
         }
-        if let Some(tip) = tip_name {
+        ui.horizontal(|ui| {
+            match &tip_name {
+                Some(tip) => {
+                    ui.label(RichText::new(format!("Pointe : {tip}")).small());
+                    if crate::bulles::icone(ui, egui_phosphor::regular::CIRCLE, "Pointe ronde", "Revenir à une pointe ronde.", "").clicked() {
+                        b.tip = None;
+                    }
+                }
+                None => {
+                    ui.label(RichText::new("Pointe ronde").small());
+                }
+            }
+            // Une image comme pointe (moteur de dessin, étape 8) : une seule, ou plusieurs dessins
+            // côte à côte (pointe en plusieurs cases).
+            import_tip = crate::bulles::icone(ui, egui_phosphor::regular::PAINT_BRUSH_HOUSEHOLD, "Importer une pointe", "Une image devient la pointe : sa transparence, ou son noir sur fond blanc. Plusieurs dessins côte à côte : une pointe en plusieurs cases.", "").clicked();
+        });
+        if b.tip.is_some() {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(format!("Pointe : {tip}")).small());
-                if crate::bulles::icone(ui, egui_phosphor::regular::CIRCLE, "Pointe ronde", "Revenir à une pointe ronde.", "").clicked() {
-                    b.tip = None;
+                let resp = ui.add(egui::Slider::new(&mut b.tip_cells, 1..=16).text("Cases"));
+                crate::bulles::bulle(resp, "Cases", "Nombre de dessins côte à côte dans l'image de la pointe ; chaque empreinte en prend un.", "");
+                if b.tip_cells > 1 {
+                    egui::ComboBox::from_id_salt("pointe_ordre").selected_text(b.tip_order.label()).width(120.0).show_ui(ui, |ui| {
+                        for o in crate::brush::TipOrder::ALL {
+                            ui.selectable_value(&mut b.tip_order, o, o.label());
+                        }
+                    });
                 }
             });
         }
         if import {
             self.import_paper();
         }
+        if import_tip {
+            self.import_tip();
+        }
+    }
+
+    /// Une image choisie devient une pointe de la bibliothèque, gardée pour les fois suivantes, et
+    /// la pointe de l'outil courant.
+    fn import_tip(&mut self) {
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("Image à prendre comme pointe")
+            .add_filter("Images", &["png", "jpg", "jpeg", "bmp", "tif", "tiff", "webp"])
+            .pick_file()
+        else {
+            return;
+        };
+        let img = match image::open(&path) {
+            Ok(i) => i,
+            Err(e) => {
+                self.status = format!("Image illisible : {e}");
+                return;
+            }
+        };
+        let name = path.file_stem().map_or("pointe".into(), |n| n.to_string_lossy().into_owned());
+        let id = self.brushes.add_tip(&name, crate::brushtex::GrayImage::tip_from_image(&img, 2048));
+        self.brushes.share();
+        if let Some(b) = self.tool_brush_mut() {
+            b.tip = Some(id);
+            b.tip_cells = 1;
+        }
+        let saved = match BrushLibrary::user_dir() {
+            Some(dir) => self.brushes.save(&dir).err(),
+            None => Some("dossier %APPDATA% introuvable".into()),
+        };
+        self.status = format!(
+            "Pointe « {name} » importée (plusieurs dessins côte à côte : régler « Cases »){}",
+            saved.map_or(String::new(), |e| format!(" ; non gardée pour la prochaine fois : {e}"))
+        );
     }
 
     /// Une image choisie devient un papier de la bibliothèque, gardé pour les fois suivantes, et

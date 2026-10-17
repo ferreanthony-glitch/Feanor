@@ -75,6 +75,13 @@ pub struct BrushSettings {
     pub paper: Option<u32>,
     #[serde(rename = "pointe")]
     pub tip: Option<u32>,
+    /// Pointe en plusieurs cases (moteur de dessin, étape 8 ; les brosses animées de TVPaint, les
+    /// `.gih` de GIMP) : l'image est faite de `tip_cells` dessins côte à côte, et chaque empreinte
+    /// en prend un, dans l'ordre `tip_order`.
+    #[serde(rename = "pointe_cases")]
+    pub tip_cells: u32,
+    #[serde(rename = "pointe_ordre")]
+    pub tip_order: TipOrder,
     /// Pointe aplatie (1 = ronde) et tournée de `angle` degrés, plus un hasard de ± `angle_jitter`/2.
     #[serde(rename = "rondeur")]
     pub roundness: f32,
@@ -145,6 +152,46 @@ impl SmoothKind {
             SmoothKind::PulledString => "Le trait suit la pointe au bout d'une corde : les petits tremblements ne le bougent pas (encrage).",
             SmoothKind::AveragePoints => "Le trait passe par la moyenne des dernières positions de la pointe.",
             SmoothKind::AverageDistance => "Le trait passe par la moyenne des positions sur les derniers pixels parcourus.",
+        }
+    }
+}
+
+/// Quelle case d'une pointe en plusieurs cases prend chaque empreinte (les modes « Anim » de
+/// TVPaint : boucle, hasard, pression, direction).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum TipOrder {
+    #[default]
+    #[serde(rename = "boucle")]
+    Loop,
+    #[serde(rename = "hasard")]
+    Random,
+    #[serde(rename = "pression")]
+    Pressure,
+    #[serde(rename = "direction")]
+    Direction,
+}
+
+impl TipOrder {
+    pub const ALL: [TipOrder; 4] = [TipOrder::Loop, TipOrder::Random, TipOrder::Pressure, TipOrder::Direction];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            TipOrder::Loop => "À la suite",
+            TipOrder::Random => "Au hasard",
+            TipOrder::Pressure => "Selon l'appui",
+            TipOrder::Direction => "Selon la direction",
+        }
+    }
+
+    /// La case (de 0 à `cells` − 1) de la `n`-ième empreinte, pour ces entrées ; `random` de 0 à 1.
+    pub fn cell(self, cells: u32, n: u32, inp: &Inputs, random: f32) -> u32 {
+        let cells = cells.max(1);
+        let pick = |x: f32| ((x.clamp(0.0, 1.0) * cells as f32) as u32).min(cells - 1);
+        match self {
+            TipOrder::Loop => n % cells,
+            TipOrder::Random => pick(random),
+            TipOrder::Pressure => pick(inp.pressure),
+            TipOrder::Direction => pick(inp.direction),
         }
     }
 }
@@ -405,6 +452,8 @@ impl BrushSettings {
             paper_invert: false,
             paper: None,
             tip: None,
+            tip_cells: 1,
+            tip_order: TipOrder::Loop,
             roundness: 1.0,
             angle: 0.0,
             angle_jitter: 0.0,
@@ -574,6 +623,8 @@ pub struct StrokeState {
     direction: f32,
     /// Dernières positions de la pointe (lissages par moyenne).
     history: std::collections::VecDeque<Pos2>,
+    /// Empreintes posées jusqu'ici (case d'une pointe en plusieurs cases, « à la suite »).
+    dabs: u32,
 }
 
 impl StrokeState {
@@ -607,6 +658,7 @@ impl StrokeState {
             travel: 0.0,
             direction: 0.0,
             history: std::collections::VecDeque::new(),
+            dabs: 0,
         }
     }
 
@@ -869,7 +921,17 @@ impl StrokeState {
         let squash = s.roundness_at(&inp).clamp(0.05, 1.0);
         let shaped = squash < 1.0 || self.textures.tip.is_some();
         let tip = self.textures.tip.clone();
-        let tip = tip.as_ref().map(|t| t.level(radius * 2.0));
+        // Pointe en plusieurs cases : la case de cette empreinte (le hasard n'est tiré que pour
+        // l'ordre « au hasard »).
+        let cells = if tip.is_some() { s.tip_cells.clamp(1, 64) } else { 1 };
+        let cell = if cells > 1 {
+            let r = if s.tip_order == TipOrder::Random { self.jitter() + 0.5 } else { 0.5 };
+            s.tip_order.cell(cells, self.dabs, &inp, r)
+        } else {
+            0
+        };
+        self.dabs = self.dabs.wrapping_add(1);
+        let tip = tip.as_ref().map(|t| t.level(radius * 2.0 * cells as f32));
         // Retournements au hasard d'une pointe en image (tirés seulement s'ils sont demandés).
         let flip_u = tip.is_some() && s.flip_x && self.jitter() < 0.0;
         let flip_v = tip.is_some() && s.flip_y && self.jitter() < 0.0;
@@ -899,7 +961,11 @@ impl StrokeState {
             match tip {
                 Some(img) => {
                     let (lx, ly) = (if flip_u { -lx } else { lx }, if flip_v { -ly } else { ly });
-                    let u = (lx / (2.0 * radius) + 0.5) * img.width as f32;
+                    let fu = lx / (2.0 * radius) + 0.5;
+                    if cells > 1 && !(0.0..1.0).contains(&fu) {
+                        return 0.0;
+                    }
+                    let u = (fu + cell as f32) / cells as f32 * img.width as f32;
                     let v = (ly / (2.0 * radius) + 0.5) * img.height as f32;
                     img.sample(u, v)
                 }
