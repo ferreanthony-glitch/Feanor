@@ -21,6 +21,47 @@ const WIDE_STEP: f32 = 24.0;
 /// Bulle du bouton « Importer des pinceaux » (Réglages et panneau Pinceaux).
 const IMPORT_HINT: &str = "D'un fichier de préréglages Toon Boom (.xml) ; ils restent pour les fois suivantes.";
 
+/// Nom d'un réglage en cours de saisie (moteur de dessin, étape 9) : enregistrer le réglage
+/// courant dans « Mes brosses », ou renommer le réglage `rename`.
+pub(crate) struct PresetEdit {
+    pub name: String,
+    pub target: Target,
+    pub rename: Option<usize>,
+    focused: bool,
+}
+
+/// Ce que demande le menu d'un réglage (clic droit).
+#[derive(Clone, Copy)]
+enum PresetMenu {
+    Rename,
+    Duplicate,
+    Update,
+    Delete,
+}
+
+/// Le menu d'un réglage : renommer, dupliquer dans « Mes brosses », remplacer par le réglage
+/// courant, supprimer. Ceux de Pelure ne se dupliquent que.
+fn preset_menu(ui: &mut egui::Ui, source: &str) -> Option<PresetMenu> {
+    let mut out = None;
+    let own = source != "Pelure";
+    if own && ui.button("Renommer…").clicked() {
+        out = Some(PresetMenu::Rename);
+    }
+    if ui.button("Dupliquer dans « Mes brosses »").clicked() {
+        out = Some(PresetMenu::Duplicate);
+    }
+    if own && ui.button("Remplacer par le réglage courant").clicked() {
+        out = Some(PresetMenu::Update);
+    }
+    if own && ui.button("Supprimer").clicked() {
+        out = Some(PresetMenu::Delete);
+    }
+    if out.is_some() {
+        ui.close_menu();
+    }
+    out
+}
+
 /// Aperçus des réglages (par numéro de réglage), refaits quand le réglage ou l'échelle de
 /// l'écran change : petits pour la grille des Réglages, grands pour le panneau Pinceaux.
 #[derive(Default)]
@@ -36,6 +77,85 @@ impl App {
             Tool::Pencil => Some(&mut self.pencil),
             Tool::Eraser => Some(&mut self.eraser),
             _ => None,
+        }
+    }
+
+    /// Garde la bibliothèque (importés et « Mes brosses ») ; l'erreur s'il y en a une.
+    fn save_brushes(&self) -> Option<String> {
+        match BrushLibrary::user_dir() {
+            Some(dir) => self.brushes.save(&dir).err(),
+            None => Some("dossier %APPDATA% introuvable".into()),
+        }
+    }
+
+    /// Commence l'enregistrement du réglage courant dans « Mes brosses ».
+    fn start_save_preset(&mut self, target: Target) {
+        let name = self.brushes.free_name("Ma brosse", target);
+        self.preset_edit = Some(PresetEdit { name, target, rename: None, focused: false });
+    }
+
+    /// La ligne du nom en cours de saisie (enregistrer ou renommer), s'il y en a une pour cet outil.
+    fn preset_edit_row(&mut self, ui: &mut egui::Ui, target: Target, current: BrushSettings) {
+        let Some(edit) = self.preset_edit.as_mut().filter(|e| e.target == target) else { return };
+        let mut done = None;
+        ui.horizontal(|ui| {
+            ui.label(if edit.rename.is_some() { "Nouveau nom" } else { "Enregistrer sous" });
+            let resp = ui.add(egui::TextEdit::singleline(&mut edit.name).desired_width(140.0));
+            if !edit.focused {
+                resp.request_focus();
+                edit.focused = true;
+            }
+            let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if ui.button("OK").clicked() || enter {
+                done = Some(true);
+            }
+            if ui.button("Annuler").clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                done = Some(false);
+            }
+        });
+        if done == Some(true) {
+            let Some(edit) = self.preset_edit.take() else { return };
+            let name = edit.name.trim().to_string();
+            match edit.rename {
+                Some(i) if i < self.brushes.presets.len() && !name.is_empty() => self.brushes.presets[i].name = name.clone(),
+                Some(_) => {}
+                None => {
+                    self.brushes.save_mine(&name, target, current);
+                }
+            }
+            let err = self.save_brushes();
+            self.status = format!("Réglage « {name} » gardé dans « Mes brosses »{}", err.map_or(String::new(), |e| format!(" (pas pour la prochaine fois : {e})")));
+        } else if done == Some(false) {
+            self.preset_edit = None;
+        }
+    }
+
+    /// Fait ce que demande le menu du réglage `i`.
+    fn apply_preset_menu(&mut self, i: usize, action: PresetMenu, target: Target, current: BrushSettings) {
+        let Some(p) = self.brushes.presets.get(i).cloned() else { return };
+        match action {
+            PresetMenu::Rename => {
+                self.preset_edit = Some(PresetEdit { name: p.name, target, rename: Some(i), focused: false });
+                return;
+            }
+            PresetMenu::Duplicate => {
+                let name = self.brushes.free_name(&p.name, target);
+                self.brushes.save_mine(&name, target, p.settings);
+                self.status = format!("« {name} » ajouté à « Mes brosses ».");
+            }
+            PresetMenu::Update => {
+                self.brushes.presets[i].settings = current;
+                self.status = format!("« {} » prend le réglage courant.", p.name);
+            }
+            PresetMenu::Delete => {
+                self.brushes.presets.remove(i);
+                // Les aperçus sont rangés par rang : ils se refont.
+                self.brush_previews = BrushPreviews::default();
+                self.status = format!("« {} » supprimé.", p.name);
+            }
+        }
+        if let Some(e) = self.save_brushes() {
+            self.status = format!("{} (pas gardé pour la prochaine fois : {e})", self.status);
         }
     }
 
@@ -62,14 +182,21 @@ impl App {
             .find(|p| p.target == target && p.settings == current)
             .map_or("(réglé à la main)".to_string(), |p| p.name.clone());
         let mut pick = None;
+        let mut menu = None;
+        let mut save = false;
         ui.horizontal(|ui| {
             ui.label(RichText::new(selected).strong());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if crate::bulles::icone(ui, egui_phosphor::regular::FILE_ARROW_DOWN, "Importer des pinceaux", IMPORT_HINT, "").clicked() {
                     self.import_brushes();
                 }
+                save = crate::bulles::icone(ui, egui_phosphor::regular::FLOPPY_DISK, "Enregistrer le réglage", "Garder le réglage courant sous un nom, dans « Mes brosses » (clic droit sur un réglage : renommer, dupliquer, remplacer, supprimer).", "").clicked();
             });
         });
+        if save {
+            self.start_save_preset(target);
+        }
+        self.preset_edit_row(ui, target, current);
         // Grille des réglages, par provenance : aperçu du trait et taille.
         let several = presets.iter().any(|p| p.2 != presets[0].2);
         let mut start = 0;
@@ -82,9 +209,15 @@ impl App {
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
                 for (i, name, _) in &presets[start..end] {
-                    if self.preset_tile(ui, *i, name, &source, current).clicked() {
+                    let resp = self.preset_tile(ui, *i, name, &source, current);
+                    if resp.clicked() {
                         pick = Some(*i);
                     }
+                    resp.context_menu(|ui| {
+                        if let Some(a) = preset_menu(ui, &source) {
+                            menu = Some((*i, a));
+                        }
+                    });
                 }
             });
             start = end;
@@ -95,6 +228,9 @@ impl App {
             if let Some(b) = self.tool_brush_mut() {
                 *b = settings;
             }
+        }
+        if let Some((i, a)) = menu {
+            self.apply_preset_menu(i, a, target, current);
         }
         self.grain_ui(ui);
     }
@@ -154,14 +290,20 @@ impl App {
             Target::Eraser => self.eraser,
             Target::Brush => self.brush,
         };
+        let mut save = false;
         ui.horizontal(|ui| {
             ui.label(RichText::new(if target == Target::Eraser { "Gommes" } else { "Pinceaux" }).strong());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if crate::bulles::icone(ui, egui_phosphor::regular::FILE_ARROW_DOWN, "Importer des pinceaux", IMPORT_HINT, "").clicked() {
                     self.import_brushes();
                 }
+                save = crate::bulles::icone(ui, egui_phosphor::regular::FLOPPY_DISK, "Enregistrer le réglage", "Garder le réglage courant sous un nom, dans « Mes brosses » (clic droit sur un réglage : renommer, dupliquer, remplacer, supprimer).", "").clicked();
             });
         });
+        if save {
+            self.start_save_preset(target);
+        }
+        self.preset_edit_row(ui, target, current);
         let presets: Vec<(usize, String, String)> = self
             .brushes
             .presets
@@ -171,18 +313,25 @@ impl App {
             .map(|(i, p)| (i, p.name.clone(), p.source.clone()))
             .collect();
         let mut pick = None;
+        let mut menu = None;
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             let mut last_source = String::new();
             for (i, name, source) in &presets {
                 if *source != last_source {
                     ui.add_space(4.0);
-                    let title = if source == "Pelure" { "Pelure".to_string() } else { format!("Importés de {source}") };
+                    let title = if source == "Pelure" || source == crate::brushtex::MINE { source.clone() } else { format!("Importés de {source}") };
                     ui.label(RichText::new(title).small().weak());
                     last_source = source.clone();
                 }
-                if self.preset_row(ui, *i, name, source, current).clicked() {
+                let resp = self.preset_row(ui, *i, name, source, current);
+                if resp.clicked() {
                     pick = Some(*i);
                 }
+                resp.context_menu(|ui| {
+                    if let Some(a) = preset_menu(ui, source) {
+                        menu = Some((*i, a));
+                    }
+                });
             }
             if presets.is_empty() {
                 ui.label(RichText::new("Aucun réglage pour cet outil.").weak());
@@ -200,6 +349,9 @@ impl App {
                 }
             }
             self.status = format!("Réglage « {} ».", self.brushes.presets[i].name);
+        }
+        if let Some((i, a)) = menu {
+            self.apply_preset_menu(i, a, target, current);
         }
     }
 
@@ -255,7 +407,9 @@ impl App {
         if textured {
             tag("texture");
         }
-        if source != "Pelure" {
+        if source == crate::brushtex::MINE {
+            tag("à moi");
+        } else if source != "Pelure" {
             tag("importé");
         }
         let size = if settings.size < 10.0 { format!("{:.1} px", settings.size) } else { format!("{:.0} px", settings.size) };

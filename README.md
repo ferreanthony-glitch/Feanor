@@ -386,6 +386,9 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   dessin, que la couleur remplit quand on appuie. L'icône d'import lit un fichier de pinceaux Toon
   Boom (`.xml`, par exemple `STB_TextureBrushes_preset.xml`) : ses pinceaux, pointes et papiers
   s'ajoutent à la liste et restent pour les fois suivantes.
+- **Mes brosses** : l'icône disquette (grille des Réglages, panneau Pinceaux) garde le réglage
+  courant sous un nom. Clic droit sur un réglage : renommer, dupliquer, remplacer par le réglage
+  courant, supprimer. Elles restent pour les fois suivantes.
 - **Pointe en image** (panneau Pinceaux, icône pinceau) : une image devient la pointe, par sa
   transparence ou son noir sur fond blanc. Plusieurs dessins côte à côte donnent une pointe en
   plusieurs cases (« Cases ») ; chaque empreinte en prend un, à la suite, au hasard, selon l'appui

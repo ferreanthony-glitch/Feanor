@@ -944,6 +944,16 @@ Choix d'Anthony :
 
   À la fin du trait, il rattrape la pointe. Pas encore : le rattrapage pendant une pause, et
   l'affichage de la corde.
+- ✅ 9 (première partie). « Mes brosses » :
+  - l'icône disquette (grille des Réglages et panneau Pinceaux) garde le réglage courant sous un
+    nom ;
+  - clic droit sur un réglage : renommer, dupliquer dans « Mes brosses », remplacer par le
+    réglage courant, supprimer (ceux de Pelure se dupliquent seulement) ;
+  - les réglages restent d'une séance à l'autre, avec les importés.
+
+  Les sections des réglages (Forme et dispersion, Connexions, profil, lissage, débit, papier,
+  pointe) font déjà l'éditeur de brosse. Reste à voir avec Anthony s'il veut un « atelier » à
+  part, façon Procreate.
 - ✅ 8. Pointes en plusieurs cases (les brosses animées de TVPaint, les `.gih` de GIMP) : l'image
   de la pointe porte plusieurs dessins côte à côte. Chaque empreinte en prend un : à la suite, au
   hasard, selon l'appui ou selon la direction. Une image peut être importée comme pointe : sa

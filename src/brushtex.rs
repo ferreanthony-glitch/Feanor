@@ -351,6 +351,10 @@ pub struct BrushLibrary {
     next_id: u32,
 }
 
+/// Provenance des réglages enregistrés par Anthony (moteur de dessin, étape 9) : gardés comme
+/// les importés dans %APPDATA%\Pelure\pinceaux.
+pub const MINE: &str = "Mes brosses";
+
 /// Papiers de Pelure.
 pub const PAPER_FINE: u32 = 1;
 pub const PAPER_COARSE: u32 = 2;
@@ -555,6 +559,28 @@ impl BrushLibrary {
         lib.presets.extend(saved.presets);
         lib.share();
         lib
+    }
+
+    /// Enregistre `settings` sous le nom `name` dans « Mes brosses » ; renvoie son rang. Un nom
+    /// déjà pris dans « Mes brosses » (pour le même outil) est remplacé.
+    pub fn save_mine(&mut self, name: &str, target: Target, settings: BrushSettings) -> usize {
+        let name = name.trim();
+        let name = if name.is_empty() { "Sans nom" } else { name };
+        if let Some(i) = self.presets.iter().position(|p| p.source == MINE && p.target == target && p.name == name) {
+            self.presets[i].settings = settings;
+            return i;
+        }
+        self.presets.push(Preset { name: name.to_string(), target, settings, source: MINE.to_string() });
+        self.presets.len() - 1
+    }
+
+    /// Un nom libre dans « Mes brosses » pour ce `base` (« Craie », « Craie 2 »…).
+    pub fn free_name(&self, base: &str, target: Target) -> String {
+        let taken = |n: &str| self.presets.iter().any(|p| p.source == MINE && p.target == target && p.name == n);
+        if !taken(base) {
+            return base.to_string();
+        }
+        (2..).map(|k| format!("{base} {k}")).find(|n| !taken(n)).unwrap_or_else(|| base.to_string())
     }
 
     /// Garde dans `dir` les pinceaux importés et leurs textures.

@@ -390,3 +390,31 @@ fn an_image_tip_takes_its_transparency_or_its_black() {
     let g = crate::brushtex::GrayImage::tip_from_image(&opaque, 64);
     assert!((g.get(0, 0) - 1.0).abs() < 1e-5 && g.get(1, 0).abs() < 1e-5, "le noir dépose");
 }
+
+#[test]
+fn my_brushes_are_kept_and_named_freely() {
+    use crate::brushtex::{BrushLibrary, Target, MINE};
+    let dir = std::env::temp_dir().join(format!("pelure-mes-brosses-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut lib = BrushLibrary::load(None);
+    let mut s = plain(14.0);
+    s.build_up = true;
+    s.power = 0.4;
+    assert_eq!(lib.free_name("Craie", Target::Brush), "Craie");
+    let i = lib.save_mine("Craie", Target::Brush, s);
+    assert_eq!((lib.presets[i].source.as_str(), lib.presets[i].settings), (MINE, s));
+    assert_eq!(lib.free_name("Craie", Target::Brush), "Craie 2");
+    assert_eq!(lib.free_name("Craie", Target::Eraser), "Craie", "un autre outil a ses noms");
+    // Même nom : remplacé, pas doublé.
+    let mut s2 = s;
+    s2.size = 30.0;
+    let j = lib.save_mine("Craie", Target::Brush, s2);
+    assert_eq!(i, j);
+    assert_eq!(lib.presets.iter().filter(|p| p.source == MINE).count(), 1);
+    // Gardé sur le disque, relu au démarrage suivant.
+    lib.save(&dir).unwrap();
+    let back = BrushLibrary::load(Some(&dir));
+    let p = back.presets.iter().find(|p| p.source == MINE).expect("relu");
+    assert_eq!((p.name.as_str(), p.settings), ("Craie", s2));
+    let _ = std::fs::remove_dir_all(&dir);
+}

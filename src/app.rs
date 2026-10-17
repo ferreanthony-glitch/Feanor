@@ -393,6 +393,8 @@ pub struct App {
     pub(crate) res_edit: Option<crate::projetui::ResolutionEdit>,
     /// Aperçus des réglages de pinceau (grille du panneau Réglages, 6d).
     pub(crate) brush_previews: crate::brushui::BrushPreviews,
+    /// Nom d'un réglage de pinceau en cours de saisie (« Mes brosses », moteur de dessin, étape 9).
+    pub(crate) preset_edit: Option<crate::brushui::PresetEdit>,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
     pub(crate) ref3d: crate::ref3dtool::Ref3dState,
     /// Vue à travers la caméra du plan (sinon : la feuille, avec le cadre tracé).
@@ -662,6 +664,7 @@ impl App {
             settings_tab: Default::default(),
             res_edit: None,
             brush_previews: Default::default(),
+            preset_edit: None,
             ref3d: Default::default(),
             camera_view: false,
             stage_view: None,
