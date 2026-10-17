@@ -164,6 +164,10 @@ impl App {
             if current {
                 painter.rect_stroke(r, 3.0, Stroke::new(1.5_f32, visuals.selection.stroke.color), StrokeKind::Inside);
             }
+            // Choisi avec d'autres (Ctrl ou Maj + clic) : surligné plus légèrement.
+            if !current && self.is_chosen_layer(k) {
+                painter.rect_filled(r, 3.0, visuals.selection.bg_fill.gamma_multiply(0.3));
+            }
             let resp = ui.interact(r, ui.id().with(("piste_calque", row)), Sense::click_and_drag());
             if resp.drag_started() {
                 self.montage_layer_drag = Some(k);
@@ -172,7 +176,7 @@ impl App {
                 "Calque du plan courant : clic, il devient courant ; double-clic sur le nom, le renommer ; glisser, il monte ou descend ; clic droit, tout ce qui touche au calque. Tirer le bord droit de la colonne : ses réglages.",
             );
             if resp.clicked() || resp.secondary_clicked() {
-                pick = Some(k);
+                pick = Some((k, resp.secondary_clicked()));
             }
             if resp.double_clicked() && resp.interact_pointer_pos().is_some_and(|p| crate::montagehead::head_layout(r).name.contains(p)) {
                 let id = self.doc.panels[self.cur_panel].layers[k].id;
@@ -200,8 +204,13 @@ impl App {
                 }
             }
         }
-        if let Some(k) = pick {
-            self.select_layer(k);
+        if let Some((k, secondary)) = pick {
+            // Ctrl : ajouté au choix ou retiré ; Maj : ceux d'entre ; clic droit sur un calque déjà
+            // choisi : le choix reste (pour fusionner les calques choisis).
+            let m = ui.input(|i| i.modifiers);
+            if !(secondary && self.is_chosen_layer(k)) {
+                self.click_layer_head(k, m.command && !secondary, m.shift && !secondary);
+            }
         }
     }
 

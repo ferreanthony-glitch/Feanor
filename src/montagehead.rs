@@ -245,6 +245,13 @@ impl App {
             (l.name.clone(), l.visible, l.onion, l.keep_alpha, l.stencil, l.stencil_negative, l.position_locked, l.opacity, l.blend, l.folder);
         let (ctg, video) = (l.ctg.is_some(), l.video.is_some());
         ui.label(RichText::new(format!("Calque « {name} »")).weak().small());
+        // Plusieurs calques choisis (Ctrl ou Maj + clic) : les fusionner (Anthony, 2026-10-17). Dans
+        // le panneau Calques, c'est son bouton Fusionner.
+        let chosen = self.chosen_layers().len();
+        if in_montage && chosen > 1 && ui.button(format!("Fusionner les {chosen} calques choisis")).clicked() {
+            ui.close_menu();
+            self.merge_chosen_layers();
+        }
         if in_montage && ui.checkbox(&mut visible.clone(), "Afficher").clicked() {
             self.set_layer_flag(li, |l| l.visible = !visible);
         }

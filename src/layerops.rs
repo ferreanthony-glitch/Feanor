@@ -184,9 +184,10 @@ impl App {
         ui.separator();
         ui.menu_button("Fusionner", |ui| {
             if !panel {
+                // (Le bouton Fusionner du panneau fait l'un ou l'autre.)
                 self.action_item(ui, "Avec le calque du dessous", "calque.fusionner_dessous");
+                self.action_item(ui, &format!("Les calques choisis ({n})"), "calque.fusionner_choisis");
             }
-            self.action_item(ui, &format!("Les calques choisis ({n})"), "calque.fusionner_choisis");
             self.action_item(ui, "Les calques visibles", "calque.fusionner_visibles");
             self.action_item(ui, "Tous les calques", "calque.fusionner_tout");
         });

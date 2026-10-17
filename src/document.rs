@@ -2052,6 +2052,30 @@ impl Document {
         }
     }
 
+    /// Réunit les plans `ids` en un seul, le premier (Anthony, 2026-10-17 : « quand deux plans
+    /// ou plus sont sélectionnés, l'option de fusionner les plans doit être possible ») : comme
+    /// `join_next_plan` répété, le début de chaque plan suivant devient une marque d'image.
+    /// Ils doivent être au moins deux, se suivre et être dans une même séquence ; sinon rien.
+    /// Renvoie l'indice du plan réuni.
+    pub fn join_plans(&mut self, ids: &[u64]) -> Option<usize> {
+        let mut at: Vec<usize> = ids.iter().filter_map(|id| self.panels.iter().position(|p| p.id == *id)).collect();
+        at.sort_unstable();
+        at.dedup();
+        if at.len() < 2 || at.windows(2).any(|w| w[1] != w[0] + 1) {
+            return None;
+        }
+        let seq = self.sequence_of(at[0]);
+        if at.iter().any(|&i| self.sequence_of(i) != seq) {
+            return None;
+        }
+        let first = self.panels[at[0]].id;
+        for _ in 1..at.len() {
+            let i = self.panels.iter().position(|p| p.id == first)?;
+            self.join_next_plan(i)?;
+        }
+        self.panels.iter().position(|p| p.id == first)
+    }
+
     /// Réunit le plan `index` et le suivant de la même séquence : les images du suivant viennent
     /// après (voir `append_plan`). Rien si le suivant est dans une autre séquence.
     pub fn join_next_plan(&mut self, index: usize) -> Option<usize> {

@@ -1090,7 +1090,15 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         recoupe (sa boucle se remplit). Le remplissage est sous le trait, par-dessus le dessin
         d'avant (sous tout s'il peint derrière). Mes choix : ils valent aussi pour le crayon, ne
         sont pas retenus d'une séance à l'autre ; « Draw Behind » / « Auto Fill » de Storyboard
-        Pro : comportement exact à vérifier.
+        Pro : comportement exact à vérifier ;
+      - **fusionner les plans choisis, les calques choisis** (Anthony : « quand deux plans ou
+        plus sont sélectionnés, l'option de fusionner les plans doit être possible. De même pour
+        les calques ») : plans choisis par Ctrl ou Maj + clic dans le montage, qui se suivent
+        dans une même séquence : « Fusionner les N plans choisis » (clic droit sur un plan, menu
+        « … », menu Storyboard) ; le début de chacun devient une marque d'image
+        (`Document::join_plans`). Calques : Ctrl ou Maj + clic dans le panneau Calques et dans la
+        colonne du montage (comme dans la timeline) ; le bouton Fusionner du panneau fusionne les
+        choisis quand il y en a plusieurs, le menu de la colonne du montage aussi.
 
   Pas fait : ces gestes sur la piste « Fond ».
 - Restent (ordre de Fable) : navigation de calques à la TVPaint, fenêtre « Agrandir / rétrécir

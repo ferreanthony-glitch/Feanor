@@ -202,3 +202,29 @@ fn a_second_3d_reference_is_reported() {
     assert_eq!(warnings.len(), 1, "seul celui qui diffère est signalé : {warnings:?}");
     assert_eq!(doc.panels[0].ref3d, Some(r), "le plan garde le sien");
 }
+
+#[test]
+fn chosen_plans_that_follow_each_other_are_joined_into_one() {
+    // Anthony : « quand deux plans ou plus sont sélectionnés, l'option de fusionner les plans
+    // doit être possible ».
+    let mut doc = Document::with_frame(32, 24, 24);
+    doc.add_scene_after(0);
+    doc.add_scene_after(1);
+    doc.add_sequence_after(2);
+    assert!(doc.is_plans());
+    let ids: Vec<u64> = doc.panels.iter().map(|p| p.id).collect();
+    let lens: Vec<usize> = doc.panels.iter().map(|p| p.frame_count()).collect();
+    // Pas de trou, pas deux séquences, au moins deux plans.
+    assert!(doc.join_plans(&[ids[0], ids[2]]).is_none(), "ils doivent se suivre");
+    assert!(doc.join_plans(&[ids[2], ids[3]]).is_none(), "une seule séquence");
+    assert!(doc.join_plans(&[ids[1]]).is_none(), "au moins deux");
+    // Les trois de la première séquence (dans le désordre) : un seul plan, le premier, avec une
+    // marque d'image au début de chacun des suivants.
+    let at = doc.join_plans(&[ids[2], ids[0], ids[1]]).expect("réunis");
+    assert!(doc.is_plans());
+    assert_eq!(doc.panels.len(), 2);
+    let plan = &doc.panels[at];
+    assert_eq!(plan.id, ids[0]);
+    assert_eq!(plan.frame_count(), lens[0] + lens[1] + lens[2]);
+    assert_eq!(plan.marks.iter().map(|m| m.frame).collect::<Vec<_>>(), vec![lens[0], lens[0] + lens[1]]);
+}

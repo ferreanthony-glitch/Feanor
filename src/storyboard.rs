@@ -220,6 +220,26 @@ impl App {
         }
     }
 
+    /// Fusionne les plans choisis (deux ou plus, qui se suivent dans une même séquence) en un
+    /// seul : le début de chacun devient une marque d'image (`Document::join_plans`).
+    pub(crate) fn merge_chosen_panels(&mut self) {
+        if self.storyboard_refuses() {
+            return;
+        }
+        let ids = self.board_selection();
+        let n = ids.len();
+        if n < 2 {
+            self.status = "Choisis au moins deux plans (Ctrl ou Maj + clic dans le montage) pour les fusionner.".into();
+            return;
+        }
+        if self.structure_op(|d, _| d.join_plans(&ids)) {
+            self.board_sel.clear();
+            self.status = format!("{n} plans fusionnés : {}.", panel_title(&self.doc, self.cur_panel));
+        } else {
+            self.status = "Les plans choisis doivent se suivre, dans une même séquence.".into();
+        }
+    }
+
     /// Réunit le plan précédent (de la même séquence) et le plan courant.
     pub(crate) fn join_previous_scene(&mut self) {
         if self.storyboard_refuses() {
@@ -433,6 +453,10 @@ impl App {
                 item(self, ui, "Couper le plan à l'image courante", "panneau.couper");
                 item(self, ui, "Réunir le plan et le suivant", "panneau.fusionner_suivant");
                 item(self, ui, "Réunir avec le plan précédent", "scene.joindre_precedente");
+                let n = self.board_selection().len();
+                if n > 1 {
+                    item(self, ui, &format!("Fusionner les {n} plans choisis"), "panneau.fusionner_choisis");
+                }
                 ui.separator();
                 item(self, ui, "Marque d'image ici (ajouter / retirer)", "marque.basculer");
             })
@@ -594,6 +618,12 @@ impl App {
         if ui.button("Réunir avec le plan suivant").clicked() {
             ui.close_menu();
             self.merge_next_panel();
+        }
+        // Plusieurs plans choisis (Ctrl ou Maj + clic) : les fusionner en un seul.
+        let n = self.board_selection().len();
+        if n > 1 && ui.button(format!("Fusionner les {n} plans choisis")).on_hover_text("Ils doivent se suivre, dans une même séquence. Le début de chacun devient une marque d'image.").clicked() {
+            ui.close_menu();
+            self.merge_chosen_panels();
         }
         ui.separator();
         if ui.button("Importer un son au début du plan…").clicked() {

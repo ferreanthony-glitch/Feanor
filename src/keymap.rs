@@ -159,6 +159,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("panneau.proprietes", "Propriétés du plan", false, false),
     act("panneau.couper", "Couper le plan à l'image courante", true, false),
     act("panneau.fusionner_suivant", "Réunir le plan et le suivant", true, false),
+    act("panneau.fusionner_choisis", "Fusionner les plans choisis (qui se suivent)", true, false),
     act("scene.couper", "Couper le plan à l'image courante (comme F5)", true, false),
     act("scene.joindre_precedente", "Réunir avec le plan précédent", true, false),
     act("scene.aller_a", "Aller à un plan", false, false),

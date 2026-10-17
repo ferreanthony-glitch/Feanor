@@ -194,12 +194,29 @@ impl App {
             if self.bouton_si(ui, can_paste, ph::CLIPBOARD, "Coller le calque", "Le calque copié, au-dessus du calque courant.", "calque.coller").clicked() {
                 self.paste_layer();
             }
-            let can_merge = self.cur_layer > 0;
-            if self
-                .bouton_si(ui, can_merge, ph::ARROWS_IN_SIMPLE, "Fusionner avec le calque du dessous", "Les deux calques n'en font plus qu'un.", "calque.fusionner_dessous")
-                .clicked()
-            {
-                self.merge_layer_down();
+            // Plusieurs calques choisis (Ctrl ou Maj + clic) : ils fusionnent ; sinon, avec celui
+            // du dessous.
+            let n = self.chosen_layers().len();
+            if n > 1 {
+                let what = format!("Fusionner les {n} calques choisis");
+                if self.bouton(ui, ph::ARROWS_IN_SIMPLE, &what, "Ils n'en font plus qu'un (Ctrl ou Maj + clic pour en choisir plusieurs).", "calque.fusionner_choisis").clicked() {
+                    self.merge_chosen_layers();
+                }
+            } else {
+                let can_merge = self.cur_layer > 0;
+                if self
+                    .bouton_si(
+                        ui,
+                        can_merge,
+                        ph::ARROWS_IN_SIMPLE,
+                        "Fusionner avec le calque du dessous",
+                        "Les deux calques n'en font plus qu'un. Ctrl ou Maj + clic sur des calques pour en fusionner plusieurs.",
+                        "calque.fusionner_dessous",
+                    )
+                    .clicked()
+                {
+                    self.merge_layer_down();
+                }
             }
         });
     }
@@ -209,7 +226,10 @@ impl App {
     /// (`layer_full_menu`) ; double-clic sur le nom : renommer.
     fn layer_list(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
-        let mut select = None;
+        // Le calque cliqué, et comment : Ctrl l'ajoute ou le retire du choix, Maj choisit ceux
+        // d'entre (pour fusionner les calques choisis, Anthony, 2026-10-17) ; clic droit.
+        let mut select: Option<(usize, bool)> = None;
+        let mods = ui.input(|i| i.modifiers);
         let mut toggle = None;
         let mut lock = None;
         let mut rename_done: Option<bool> = None;
@@ -226,6 +246,7 @@ impl App {
                 (l.id, l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame), l.folder)
             };
             let current = li == self.cur_layer;
+            let chosen = !current && self.is_chosen_layer(li);
             let thumb = cel.and_then(|c| self.layer_thumb(ui.ctx(), c));
             // Le rang entier, posé avant ses boutons (à sa place de l'image d'écran d'avant) : les
             // boutons restent au-dessus et gardent leurs clics (posé après eux, ce fond qui se
@@ -233,7 +254,11 @@ impl App {
             let grip_id = ui.id().with(("glisser_calque", id));
             let grip = ui.ctx().data(|d| d.get_temp::<egui::Rect>(grip_id)).map(|r| ui.interact(r, grip_id, Sense::click_and_drag()));
             let shown = egui::Frame::new()
-                .fill(if current { accent.gamma_multiply(0.55) } else { Color32::TRANSPARENT })
+                .fill(match (current, chosen) {
+                    (true, _) => accent.gamma_multiply(0.55),
+                    (false, true) => accent.gamma_multiply(0.25),
+                    (false, false) => Color32::TRANSPARENT,
+                })
                 .corner_radius(3.0)
                 .inner_margin(egui::Margin::symmetric(3, 2))
                 .show(ui, |ui| {
@@ -273,7 +298,7 @@ impl App {
                         let border = if current { Stroke::new(2.0_f32, Color32::WHITE) } else { Stroke::new(1.0_f32, Color32::from_gray(80)) };
                         ui.painter().rect_stroke(rect, 0.0, border, StrokeKind::Inside);
                         if resp.clicked() || resp.secondary_clicked() {
-                            select = Some(li);
+                            select = Some((li, resp.secondary_clicked()));
                         }
                         resp.context_menu(|ui| self.layer_full_menu(ui, li, false));
                         ui.vertical(|ui| {
@@ -284,7 +309,7 @@ impl App {
                                 let text = if visible { RichText::new(&name) } else { RichText::new(&name).weak() };
                                 let resp = ui.add(egui::Label::new(text).sense(Sense::click()).truncate());
                                 if resp.clicked() || resp.secondary_clicked() {
-                                    select = Some(li);
+                                    select = Some((li, resp.secondary_clicked()));
                                 }
                                 if resp.double_clicked() {
                                     self.layer_rename = Some(LayerRename::new(id, &name, false));
@@ -308,7 +333,7 @@ impl App {
                     self.panel_layer_drag = Some(li);
                 }
                 if grip.clicked() || grip.secondary_clicked() {
-                    select = Some(li);
+                    select = Some((li, grip.secondary_clicked()));
                 }
                 grip.context_menu(|ui| self.layer_full_menu(ui, li, false));
             }
@@ -340,8 +365,11 @@ impl App {
         if let Some(li) = lock {
             self.toggle_layer_lock(li);
         }
-        if let Some(li) = select {
-            self.select_layer(li);
+        if let Some((li, secondary)) = select {
+            // Clic droit sur un calque déjà choisi : le choix reste (le menu vise les choisis).
+            if !(secondary && self.is_chosen_layer(li)) {
+                self.click_layer_head(li, mods.command && !secondary, mods.shift && !secondary);
+            }
         }
         self.finish_layer_rename(rename_done);
 
