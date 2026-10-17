@@ -962,7 +962,8 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
   - revu le même jour (Anthony : « faire glisser une clé avant ou après une autre. Permet
     d'étirer une clé pour changer sa durée d'exposition, même si ça change la durée
     d'exposition de la précédente ou la suivante ») :
-    - **pistes plus hautes** (26 points au lieu de 20) ;
+    - **pistes plus hautes** (26 points au lieu de 20, puis 40 avec une barre plus épaisse et
+      des noms plus grands : « la taille des calques n'a pas changé ») ;
     - **une clé prise par son milieu se place avant ou après les autres** : elle passe une
       voisine quand son milieu passe celui de la voisine ; chaque dessin garde sa durée, la
       durée du calque et du plan ne change pas ;

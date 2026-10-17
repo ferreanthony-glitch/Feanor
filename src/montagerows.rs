@@ -26,12 +26,12 @@ use crate::theme;
 
 /// Hauteur de la piste Caméra et d'une piste de calque.
 pub(crate) const CAM_H: f32 = 16.0;
-/// Une piste de calque : plus haute depuis que le montage est le banc principal (Anthony,
-/// 2026-10-17 : « pour rendre l'édition plus facile »).
-pub(crate) const LAYER_H: f32 = 26.0;
+/// Une piste de calque : haute depuis que le montage est le banc principal (Anthony,
+/// 2026-10-17 : « pour rendre la saisie des clés plus confortable » ; 20, puis 26, puis 40).
+pub(crate) const LAYER_H: f32 = 40.0;
 /// Barre d'un calque sous ses dessins (chantier 5, comme dans la timeline) : on la prend pour
 /// décaler le calque.
-const BAR_H: f32 = 3.0;
+const BAR_H: f32 = 5.0;
 const CAM_COLOR: Color32 = theme::CAMERA;
 
 /// Une piste de calque du montage (chantier 5) : un nom de calque et, quand un plan a plusieurs
@@ -136,7 +136,7 @@ impl App {
                 pos2(lane.left() + 6.0, lane.center().y),
                 Align2::LEFT_CENTER,
                 text,
-                FontId::proportional(11.0),
+                FontId::proportional(12.0),
                 color,
             );
         };
@@ -363,7 +363,7 @@ impl App {
         let row = ((y - rows.layers_top()) / LAYER_H) as usize;
         let key = rows.tracks.get(row)?;
         let lane_top = top + rows.layers_top() + row as f32 * LAYER_H;
-        let tol = (ppf * 0.3).clamp(2.0, 5.0);
+        let tol = (ppf * 0.3).clamp(3.0, 6.0);
         let strict = blocks.iter().position(|b| p.x >= b.left() - 1.0 && p.x <= b.right() + 1.0);
         let near = blocks.iter().enumerate().filter(|(i, b)| Some(*i) != strict && p.x >= b.left() - 1.0 - tol && p.x <= b.right() + 1.0 + tol).map(|(i, _)| i);
         strict.into_iter().chain(near).find_map(|i| {
@@ -487,7 +487,7 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, curr
             pos2(cell.left() + 4.0, cell.center().y),
             Align2::LEFT_CENTER,
             &layer.name,
-            FontId::proportional(10.0),
+            FontId::proportional(12.0),
             text,
         );
     }
