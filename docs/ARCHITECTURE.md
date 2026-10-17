@@ -620,6 +620,26 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     Décision : coût — courbe linéaire par morceaux plutôt que spline, simple et sûre, et TVPaint
     en a aussi. Risque : une courbe douce demande plus de points. Réversible : un mode
     d'interpolation pourra s'ajouter au format.
+- Import des brosses TVPaint (moteur de dessin, étape 10) : `dip.rs` et `tvpbrush.rs`.
+  - `dip::read` lit une image `.dip` : blocs IFF `DGBL`, `DPEL` (ordre des composantes, alpha
+    = 17), `DLOC`, `DBOD`, puis `DBAN` en différences, avec les sauts `0x80 k`.
+    `dip::tip_strip` met les images côte à côte en gris de dépôt (alpha), d'où une pointe en
+    plusieurs cases.
+  - `tvpbrush` :
+    - `read_tar` (ustar) pour `.tvpx`, `read_ini` (avec la marque UTF-8 des fichiers de
+      TVPaint), `george_args` pour les commandes `tv_*` ;
+    - `connection` (code de source, courbe), `custom_brush` (réglage `.ini`), `base_tool`
+      (outils de base) ;
+    - `import_panel` assemble les boutons du panneau en préréglages (`source` = le fichier) ;
+    - `find_paper` cherche les papiers dans l'installation (`tvpaint_resources`,
+      `PELURE_TVPAINT`).
+  - Essais ignorés (lecture seule de l'installation) : décodage exact des pointes, import des
+    panneaux Pencils, Chalks, Pens. Avec `PELURE_DIP_PNG`, ils écrivent des images à regarder.
+
+    Décision : coût — lire les fichiers de TVPaint plutôt que demander des exports, parce que
+    ses préréglages ne sortent qu'en `.tvpx`, `.bin` et `.ini`. Risque : quelques règles sont
+    devinées (dites dans le compte rendu). Réversible : chaque règle est une fonction testée, à
+    corriger après comparaison.
 - Profil de pointe (moteur de dessin, étape 3) : `BrushSettings::profile : Option<Curve>`.
   - Pour chaque empreinte, une table de 65 valeurs (`profile_lut`), lue par `profile_coverage`,
     avec le bord anticrénelé sur un pixel (franc en pixels nets).

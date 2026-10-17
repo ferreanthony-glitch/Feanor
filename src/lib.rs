@@ -20,6 +20,12 @@ mod brushtex;
 mod brushtex_tests;
 mod brushui;
 mod dynui;
+pub mod dip;
+pub mod tvpbrush;
+#[cfg(test)]
+mod tvpbrush_tests;
+#[cfg(test)]
+mod dip_tests;
 #[cfg(test)]
 mod dynamics_tests;
 mod bulles;

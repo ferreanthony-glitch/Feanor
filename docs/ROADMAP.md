@@ -944,6 +944,22 @@ Choix d'Anthony :
 
   À la fin du trait, il rattrape la pointe. Pas encore : le rattrapage pendant une pause, et
   l'affichage de la corde.
+- ✅ 10 (TVPaint). Import des brosses TVPaint : un export de panneau `.tvpx`, un panneau `.bin`
+  avec son dossier `.data`, ou un réglage `.ini` seul (bouton « Importer des pinceaux »).
+  - **Pointes `.dip`** : lues d'après les fichiers, sans spécification publiée. Le format est
+    IFF DEEP ; la première image est compressée par plages de pixels, les suivantes d'une
+    brosse animée sont des différences. Les 17 pointes essayées de TVPaint 12 se décodent
+    exactement, jusqu'à 180 images. Une brosse animée devient une pointe en plusieurs cases.
+  - **Réglages** : taille (% de la pointe), opacité, pas, dispersion, connexions et leurs
+    courbes (codes de la référence George), profil des outils de base, débit (Power).
+  - **Papier** : retrouvé par son nom dans les papiers de l'installation de TVPaint, en lecture
+    seule.
+  - **Compte rendu** de ce qui n'est pas repris : estompe, décalage de couleur, peinture qui ne
+    sèche pas, inclinaison et azimut, modes de dessin. Il s'affiche dans une fenêtre.
+  - Essayé sur les panneaux livrés : crayons (23 brosses, 21 pointes, 10 papiers), craies,
+    feutres.
+  - **Devinés, à comparer dans TVPaint** : le sens d'un code négatif, l'ordre des modes
+    d'animation, l'échelle de la dispersion et celle du papier.
 - ✅ 9 (première partie). « Mes brosses » :
   - l'icône disquette (grille des Réglages et panneau Pinceaux) garde le réglage courant sous un
     nom ;

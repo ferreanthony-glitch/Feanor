@@ -395,6 +395,8 @@ pub struct App {
     pub(crate) brush_previews: crate::brushui::BrushPreviews,
     /// Nom d'un réglage de pinceau en cours de saisie (« Mes brosses », moteur de dessin, étape 9).
     pub(crate) preset_edit: Option<crate::brushui::PresetEdit>,
+    /// Remarques du dernier import de brosses : le fichier, ce qui n'a pas été repris.
+    pub(crate) brush_import_notes: Option<(String, Vec<String>)>,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
     pub(crate) ref3d: crate::ref3dtool::Ref3dState,
     /// Vue à travers la caméra du plan (sinon : la feuille, avec le cadre tracé).
@@ -665,6 +667,7 @@ impl App {
             res_edit: None,
             brush_previews: Default::default(),
             preset_edit: None,
+            brush_import_notes: None,
             ref3d: Default::default(),
             camera_view: false,
             stage_view: None,

@@ -19,7 +19,7 @@ const WIDE_HEIGHT: f32 = 38.0;
 const WIDE_STEP: f32 = 24.0;
 
 /// Bulle du bouton « Importer des pinceaux » (Réglages et panneau Pinceaux).
-const IMPORT_HINT: &str = "D'un fichier de préréglages Toon Boom (.xml) ; ils restent pour les fois suivantes.";
+const IMPORT_HINT: &str = "Brosses TVPaint (.tvpx, panneau .bin, réglage .ini) ou préréglages Toon Boom (.xml) ; elles restent pour les fois suivantes.";
 
 /// Nom d'un réglage en cours de saisie (moteur de dessin, étape 9) : enregistrer le réglage
 /// courant dans « Mes brosses », ou renommer le réglage `rename`.
@@ -537,6 +537,56 @@ impl App {
         );
     }
 
+    /// Importe des brosses TVPaint ; le compte rendu (ce qui n'est pas repris) va dans la fenêtre
+    /// des remarques d'import.
+    fn import_tvpaint(&mut self, path: &std::path::Path, ext: &str) {
+        let source = path.file_name().map_or("import".into(), |n| n.to_string_lossy().into_owned());
+        self.brushes.presets.retain(|p| p.source != source);
+        let res = crate::tvpbrush::tvpaint_resources();
+        let result = match ext {
+            "tvpx" => std::fs::read(path)
+                .map_err(|e| format!("lecture impossible : {e}"))
+                .and_then(|b| crate::tvpbrush::Panel::from_tvpx(&b))
+                .map(|p| crate::tvpbrush::import_panel(&p, &source, &mut self.brushes, res.as_deref())),
+            "bin" => crate::tvpbrush::Panel::from_bin(path).map(|p| crate::tvpbrush::import_panel(&p, &source, &mut self.brushes, res.as_deref())),
+            _ => crate::tvpbrush::import_ini(path, &source, &mut self.brushes),
+        };
+        match result {
+            Ok(r) => {
+                self.brushes.share();
+                self.brush_previews = BrushPreviews::default();
+                let saved = self.save_brushes();
+                self.status = format!(
+                    "{} brosse(s) TVPaint importée(s) ({} pointe(s), {} papier(s)){}{}",
+                    r.presets,
+                    r.tips,
+                    r.papers,
+                    if r.notes.is_empty() { String::new() } else { format!(" ; {} remarque(s) dans la fenêtre d'import", r.notes.len()) },
+                    saved.map_or(String::new(), |e| format!(" ; non gardées pour la prochaine fois : {e}")),
+                );
+                self.brush_import_notes = (!r.notes.is_empty()).then(|| (source, r.notes));
+            }
+            Err(e) => self.status = format!("Import impossible : {e}"),
+        }
+    }
+
+    /// La fenêtre des remarques du dernier import de brosses (ce qui n'a pas pu être repris).
+    pub(crate) fn brush_import_window(&mut self, ctx: &egui::Context) {
+        let Some((source, notes)) = &self.brush_import_notes else { return };
+        let mut open = true;
+        egui::Window::new(format!("Import de « {source} »")).open(&mut open).resizable(true).default_width(460.0).show(ctx, |ui| {
+            ui.label(RichText::new("Ce qui n'a pas pu être repris tel quel :").strong());
+            egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+                for n in notes {
+                    ui.label(format!("• {n}"));
+                }
+            });
+        });
+        if !open {
+            self.brush_import_notes = None;
+        }
+    }
+
     /// Une image choisie devient un papier de la bibliothèque, gardé pour les fois suivantes, et
     /// le papier de l'outil courant.
     fn import_paper(&mut self) {
@@ -570,15 +620,23 @@ impl App {
         self.status = format!("Papier « {name} » importé{}", saved.map_or(String::new(), |e| format!(" ; non gardé pour la prochaine fois : {e}")));
     }
 
-    /// Importe un fichier de pinceaux Toon Boom ; réimporter le même fichier remplace ses pinceaux.
+    /// Importe un fichier de brosses : TVPaint (`.tvpx`, `.bin`, `.ini`, moteur de dessin,
+    /// étape 10) ou Toon Boom (`.xml`) ; réimporter le même fichier remplace ses pinceaux.
     pub(crate) fn import_brushes(&mut self) {
         let Some(path) = rfd::FileDialog::new()
-            .set_title("Pinceaux Toon Boom à importer")
-            .add_filter("Préréglages de pinceaux (XML)", &["xml"])
+            .set_title("Brosses à importer")
+            .add_filter("Brosses TVPaint et Toon Boom", &["tvpx", "bin", "ini", "xml"])
+            .add_filter("TVPaint (export de panneau, panneau, réglage)", &["tvpx", "bin", "ini"])
+            .add_filter("Préréglages Toon Boom (XML)", &["xml"])
             .pick_file()
         else {
             return;
         };
+        let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+        if matches!(ext.as_str(), "tvpx" | "bin" | "ini") {
+            self.import_tvpaint(&path, &ext);
+            return;
+        }
         let text = match std::fs::read_to_string(&path) {
             Ok(t) => t,
             Err(e) => {

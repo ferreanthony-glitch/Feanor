@@ -634,6 +634,7 @@ impl App {
         self.fx_window_ui(ctx);
         self.tween_window_ui(ctx);
         self.sb_window_ui(ctx);
+        self.brush_import_window(ctx);
         self.sb_export_ui(ctx);
         self.smart_rename_window(ctx);
         if let Some(mut d) = self.new_dialog.take() {

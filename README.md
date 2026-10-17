@@ -386,6 +386,13 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   dessin, que la couleur remplit quand on appuie. L'icône d'import lit un fichier de pinceaux Toon
   Boom (`.xml`, par exemple `STB_TextureBrushes_preset.xml`) : ses pinceaux, pointes et papiers
   s'ajoutent à la liste et restent pour les fois suivantes.
+- **Brosses TVPaint** (bouton « Importer des pinceaux ») : un export de panneau `.tvpx`, un
+  panneau `.bin` (avec son dossier `.data`) ou un réglage `.ini`. Arrivent :
+  - les pointes, y compris animées ;
+  - la taille, l'opacité, le pas, les connexions et leurs courbes ;
+  - le papier, retrouvé dans l'installation de TVPaint.
+
+  Une fenêtre dit ce qui n'a pas pu être repris (estompe, inclinaison…).
 - **Mes brosses** : l'icône disquette (grille des Réglages, panneau Pinceaux) garde le réglage
   courant sous un nom. Clic droit sur un réglage : renommer, dupliquer, remplacer par le réglage
   courant, supprimer. Elles restent pour les fois suivantes.
@@ -637,6 +644,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `xml.rs`, `sboard.rs` | Lecture d'un XML en arbre ; lecture d'un projet Storyboard Pro (14a) |
 | `sbscript.rs`, `sbimport.rs`, `sbui.rs` | Script d'export des dessins et sa liste ; projet Pelure construit ; fenêtre d'ouverture (14a) |
 | `sbbatch.rs`, `sbvector.rs` | Storyboard Pro lancé en batch sur une copie du projet ; ses dessins vectoriels refaits en éléments Pelure (14a-2) |
+| `dip.rs`, `tvpbrush.rs` | Images `.dip` de TVPaint ; import de ses brosses (`.tvpx`, `.bin`, `.ini`) |
 | `dynui.rs` | Connexions d'un pinceau : sources, courbes de réponse (moteur de dessin, étape 2) |
 | `sbexport.rs`, `sbexportui.rs` | Export vers Storyboard Pro : images des calques, sons, script de construction ; sa fenêtre (14b-1) |
 | `stretch.rs` | Vitesse d'un son : rééchantillonnage, tempo sans changer la hauteur (WSOLA) (14a) |
