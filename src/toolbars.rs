@@ -107,11 +107,9 @@ impl App {
                         }
                     }
                 }
-                // La couleur courante, au pied de la barre.
+                // Les couleurs d'avant-plan et d'arrière-plan, au pied de la barre (passe couleur).
                 ui.add_space(8.0);
-                ui.spacing_mut().interact_size = vec2(30.0, 24.0);
-                let resp = ui.color_edit_button_srgb(&mut self.color);
-                crate::bulles::bulle(resp, "Couleur courante", "Clic : la choisir.", "");
+                self.tool_bar_colors(ui);
             });
         });
     }

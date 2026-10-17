@@ -847,6 +847,7 @@ Simplifier l'interface et combler ce qui manque :
   - étirer une exposition dans les pistes du montage (la timeline du plan le fait) ;
   - les rôles, qui suivent leurs images.
 
+<<<<<<< HEAD
 ## Audit du cœur par Fable et chantiers de la timeline (2026-10-16)
 
 Anthony : « J'aimerais avancer plus sur le corps du logiciel plutôt que les exports. » Fable a
@@ -971,6 +972,39 @@ Choix d'Anthony :
   Le dépôt de chaque empreinte est réglé d'après leur nombre au même point (diamètre ÷ pas) : un
   choix de Pelure, à comparer avec TVPaint, dont la formule n'est pas publiée. Autre point à
   comparer : d'après sa documentation, un Power à 0 ne rend pas la brosse transparente.
+## Couleur (demandée par Anthony le 2026-10-16) ✅
+
+La demande : « Le nuancier seul ne suffit pas, il me faut également la possibilité de passer
+par une roue chromatique, de créer ses propres nuanciers, et tout ce qui est nécessaire pour
+paramétrer et choisir ses couleurs. La possibilité de choisir deux couleurs que l'on peut
+intervertir comme dans Photoshop est également une bonne idée. »
+
+Menée dans une session parallèle, branche `couleur` (à fusionner par la session principale).
+
+- ✅ Deux couleurs, avant-plan et arrière-plan, comme dans Photoshop : deux carrés qui se
+  chevauchent (panneau Couleur et pied de la barre d'outils) ; un clic sur celui de derrière les
+  échange ; « Intervertir les couleurs » et « Couleurs par défaut » (noir, blanc) ; les outils
+  dessinent avec l'avant-plan. D = couleurs par défaut (touche de Photoshop, libre dans Pelure,
+  à valider) ; intervertir n'a pas de touche (X, celle de Photoshop, colle le calque).
+- ✅ Roue chromatique : anneau des teintes, et dedans un carré ou un triangle saturation /
+  valeur, au choix ; clic ou glissé ; elle suit la couleur changée ailleurs.
+- ✅ Réglages : curseurs TSV, RVB ou TSL avec leurs chiffres, code hexadécimal (#RRGGBB, #RGB),
+  opacité du pinceau ou du crayon (la couleur elle-même n'en a pas), couleurs récentes (une
+  rangée des dernières couleurs avec lesquelles on a dessiné).
+- ✅ Nuanciers personnels : plusieurs, nommés ; créer, renommer, dupliquer, supprimer ; ajouter,
+  retirer, nommer, remplacer, ranger en glissant ; choisir celui qui est montré ; import et
+  export GIMP (`.gpl`) et Photoshop (`.aco`). Gardés dans `reglages.toml`, pas dans le projet.
+- ✅ Clic droit partout dans le panneau (carrés, roue, curseurs, code, récentes, pastilles, nom
+  du nuancier), chaque entrée étant une commande à laquelle on peut donner un raccourci ;
+  Édition > Couleur.
+- Vérifié par les tests (conversions, roue dans egui sans fenêtre, nuanciers, formats sur des
+  exemples écrits à la main, réglages, raccourcis). Pas vu à l'écran : à essayer par Anthony.
+- Pas faits :
+  - la couleur d'arrière-plan ne sert qu'à l'échange : aucun outil ne l'utilise encore ;
+  - la pipette prend toujours l'avant-plan (pas de touche pour prendre l'arrière-plan) ;
+  - les notes de la planche et le tampon ne nourrissent pas les couleurs récentes ;
+  - Ctrl+Z ne défait pas les changements de nuancier (la suppression est confirmée) ;
+  - pas d'import Adobe Swatch Exchange (`.ase`) ; `.aco` en CMJN ou Lab : sans profil de couleur.
 
 ## Raccourcis proposés, à valider
 
@@ -1002,6 +1036,7 @@ Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans 
 | Allonger / raccourcir l'exposition | Alt++ / Alt+− | + / − = durée du panneau (preset) |
 | Nouveau calque bitmap | Maj+B | Maj+S (perso) = vectoriel |
 | Calque du dessus / dessous | Flèches haut / bas | ✅ ce sont aussi tes touches TVPaint 12 (LayerUp / LayerDown) |
+| Couleurs par défaut (noir, blanc) | D | touche de Photoshop, libre dans les deux modes (passe couleur) ; « Intervertir les couleurs » reste sans touche : X, celle de Photoshop, est « coller le calque » (perso) |
 
 ### Touches TVPaint 12 (13b) qui prendraient celle d'une fonction de Pelure
 

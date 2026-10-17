@@ -185,7 +185,8 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 
 - `toolbars.rs` : barre de commandes (`TopBottomPanel`) et barre d'outils verticale (`SidePanel`
   de 44 points), outils groupés par `TOOL_GROUPS` ; elles ne sont pas des panneaux du dock.
-- `colorui.rs` : conversions teinte / saturation / valeur testées, curseurs dégradés.
+- `colorui.rs` : conversions teinte / saturation / valeur testées, curseurs dégradés (depuis la
+  passe couleur, les conversions sont dans `couleur.rs` : voir « Couleur »).
 - `layersui.rs` : panneau Calques ; vignettes de calque rendues sur le processeur (cadre du
   projet, 64 points de large), en cache par dessin et par `version`.
 - `brushui.rs` + `brush::stroke_preview` : l'aperçu d'un réglage est un vrai trait du moteur dans
@@ -757,6 +758,84 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   noms d'instance (elles suivent les copies via `relink_copies`) ; `marked_starts`,
   `step_mark`.
 
+## Couleur (passe couleur, demandée par Anthony le 2026-10-16)
+
+- Modules :
+  - `couleur.rs` (sans interface, testé dans `couleur_tests.rs`) : RVB ↔ TSV (venues de
+    `colorui.rs`, qui les réexporte), TSV ↔ TSL en nombres (la teinte reste telle quelle), Lab
+    (D50) → RVB, code hexadécimal (#RRGGBB, #RGB), `hsv_following` (un gris ou le noir garde la
+    teinte qu'on réglait), couleurs récentes (`remember` : en tête, sans doublon, 24 au plus),
+    `ColorSettings` (table `[couleurs]` de `reglages.toml`).
+  - `roue.rs` (testé dans `roue_tests.rs`) : la roue posée à l'écran (`Wheel` : centre, rayons de
+    l'anneau). Teinte 0 en haut, sens des aiguilles d'une montre. Carré : saturation de gauche à
+    droite, valeur de bas en haut. Triangle : sommets teinte pure (pointée vers sa place sur
+    l'anneau), blanc à +120°, noir à +240° ; point = noir + v (blanc − noir) + v s (teinte −
+    blanc), inversé par un système 2 × 2 puis borné. `zone` : anneau, intérieur ou rien.
+    Maillages colorés : anneau en 96 morceaux (multiple de 6 : les teintes pures sur des
+    sommets), carré et triangle en 24 × 24, chaque sommet avec sa couleur exacte.
+  - `nuancier.rs` (testé dans `nuancier_tests.rs`) : `Palette` (nom, `Swatch` : couleur, nom),
+    opérations sur la liste (créer, dupliquer, supprimer en gardant au moins un nuancier,
+    renommer sans doublon), `move_item` (fentes comptées avant le déplacement), `drop_slot`
+    (pastille la plus proche, moitié gauche ou droite), formats et fichiers.
+  - `colorui.rs` : `ColorState` (dans `App::couleurs`), les deux carrés, `wheel_ui` (testée
+    dans egui sans fenêtre : clic, glissés, clic droit), curseurs (`Channel`, `channel_rows`),
+    opacité, couleurs récentes, commandes `couleur.*` et `pastille.avant_plan` /
+    `pastille.arriere_plan`, enregistrement (`color_tick`), fenêtre de la barre d'outils, menu
+    Édition > Couleur.
+  - `nuancierui.rs` : le nuancier montré, ses commandes (`nuancier.*`, `pastille.renommer` /
+    `remplacer` / `retirer`), les noms en cours de saisie, la confirmation de suppression,
+    l'import et l'export (`rfd`).
+- Avant-plan = `App::color`, inchangé : tous les outils le lisaient déjà. `App::hsv` garde sa
+  teinte, et ne suit `color` que si elle a changé ailleurs (`sync_hsv`). L'arrière-plan
+  (`prefs.back`, et sa TSV `back_hsv`) et le reste sont dans `App::couleurs` ; l'échange échange
+  aussi les TSV. La roue et les curseurs sont redessinés à chaque image d'après `App::hsv` : ils
+  suivent la pipette, le nuancier, le code, le texte rouvert.
+- Roue : la partie visée est retenue à l'appui dans les données d'egui (clé de la roue), pour
+  tout le geste ; seul le bouton gauche change la couleur (le droit ouvre le menu).
+- Opacité : la couleur reste RVB (`StrokeMode::Paint([u8; 3])`, éléments vectoriels). La ligne
+  Opacité règle `BrushSettings::opacity` du pinceau ou du crayon : la même valeur que leurs
+  réglages, sans toucher au moteur de pinceau.
+- Couleurs récentes : `App::color_used`, appelé au début d'un trait de pinceau ou de crayon
+  (`begin_paint`), d'un remplissage (`fill_at`), à la pose d'une forme (`commit_shape_points`)
+  et d'un texte (`finish_text_edit`). Les notes de la planche et le tampon n'y passent pas.
+- Pastille visée (commandes `pastille.*`) : celle dont le menu est ouvert, sinon celle sous la
+  souris, vues à l'image précédente (`ColorState::menu` / `hovered`, renouvelés par
+  `color_tick` en fin d'image ; un panneau fermé n'en laisse donc aucune). Un raccourci agit
+  ainsi sur la pastille survolée. Retirer et nommer prennent, à défaut, la pastille de la
+  couleur d'avant-plan (c'est ce que fait le bouton −).
+- Glisser une pastille : `ColorState::drag` = (grille où le geste a commencé, rang). Le panneau
+  et la fenêtre de la barre d'outils ont chacun une grille ; chacune ne suit que ses glissés.
+- Enregistrement : `color_tick` recopie l'avant-plan dans `prefs`, compare à `Settings::colors`
+  et écrit `reglages.toml` quand ils diffèrent, hors glissé et hors saisie (comme la pelure).
+  `ColorSettings::sanitized` répare un fichier relu (au moins un nuancier, rang montré valide).
+  Ordre du TOML : valeurs simples (`avant_plan`, `arriere_plan`, `roue_visible`, `roue`,
+  `curseurs`, `recentes`, `nuancier_affiche`) puis `[[couleurs.nuanciers]]` et leurs
+  `[[couleurs.nuanciers.pastilles]]`. L'ancien nuancier (`App::swatches`, jamais enregistré)
+  devient le nuancier « Pelure », nommé couleur par couleur.
+- Annulation : les nuanciers sont des réglages de l'application, comme les espaces de travail ;
+  ils ne passent pas par l'historique. Supprimer un nuancier demande donc une confirmation.
+- Format du projet : inchangé (version 21) ; aucune couleur de ce panneau n'y entre.
+- Formats de nuancier :
+  - GIMP `.gpl` (texte) : `GIMP Palette`, `Name:`, `Columns:`, commentaires `#`, puis une ligne
+    `R G B<tab>nom` par couleur. Lecture tolérante : une colonne de plus après une tabulation
+    est ignorée, `Untitled` compte comme pas de nom, une ligne illisible est comptée et sautée.
+    Écrit comme GIMP (une couleur sans nom : rien après les chiffres).
+  - Photoshop `.aco`, d'après la spécification d'Adobe (« Photoshop File Formats
+    Specification », section « Color Swatches ») : entiers 16 bits, octet de poids fort
+    d'abord ; version 1 (espace et quatre valeurs par couleur), suivie de la version 2 (les
+    mêmes, plus le nom en UTF-16, longueur sur 32 bits, zéro final compris). Espaces lus : RVB,
+    TSV, CMJN (0 = 100 % d'encre ; produit simple, sans profil), Lab (L en centièmes, a et b
+    signés en centièmes ; blanc D50, matrice XYZ → sRGB adaptée par Bradford, valeurs publiées
+    par Bruce Lindbloom), gris (0 à 10000, 10000 = noir : la spécification ne dit pas le sens,
+    c'est la lecture de GIMP). Les nuanciers de fabricants (Pantone…) sont comptés et laissés de
+    côté. Écrit en version 1 puis 2, en RVB, comme Photoshop.
+- Raccourcis : D = `couleur.defaut` (touche de Photoshop, libre dans les deux modes, source
+  « proposition ») ; X, la touche d'échange de Photoshop, est `calque.coller` (réglage perso
+  PASTE_LAYERS_KEY) : `couleur.intervertir` n'a pas de touche. `nuancier.ajouter` correspond
+  par le nom à COLOR_ADD (« New Colour Swatch ») de Storyboard Pro 27, qui n'a pas de touche.
+  Les autres commandes sont de Pelure, sans touche. Un test vérifie que chaque commande des
+  couleurs citée dans `colorui.rs` et `nuancierui.rs` est déclarée et traitée.
+
 ## Pinceaux texturés (3d-2)
 
 - `brush.rs` : chaque empreinte calcule une couverture par pixel — disque (dureté) ou pointe en
@@ -1092,3 +1171,10 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 | Cadres de composition dans la disposition, pas dans le projet (9d) | ce sont des réglages de la vue, comme le zoom | nul | un format de diffusion propre au projet n'est pas transmis avec lui | oui : un champ du manifeste pourrait s'ajouter |
 | Plateau 3D dessiné par egui (maillages subdivisés, textures réduites), pas par une passe wgpu à part (9e) | aucun shader ni pipeline de plus ; marche aussi en OpenGL | ≈ 600 triangles par calque ; texture refaite (≈ 10 ms) quand un dessin change | faible : pas de tampon de profondeur (plans parallèles triés, suffisant) | oui : `stage3dui.rs` seul à remplacer |
 | Repère 3D : lecteur glTF et fil de fer écrits pour Pelure, sur le processeur (2d) | glTF = format ouvert que Blender exporte ; pas de bibliothèque ni de passe GPU à ajouter pour un guide en fil de fer | ≈ 900 lignes ; calcul 0,15 s par vue sur un gros décor (sur un autre fil) | faible : mauvais fichier → message | oui : affichage par la carte graphique ou rendu ombré possibles plus tard, le format `.pelure3d` ne change pas |
+| Couleurs et nuanciers dans les réglages de l'application, pas dans le projet (passe couleur) | ce sont les outils de celui qui dessine, d'un film à l'autre, comme les pinceaux importés ; le format du projet ne change pas | nul | un nuancier propre à un film ne voyage pas avec lui (on l'exporte en .gpl ou .aco) | oui : un champ du manifeste pourrait s'ajouter (format versionné) |
+| Avant-plan = `App::color`, l'existant ; arrière-plan à côté (passe couleur) | aucun outil à modifier : ils lisaient déjà `App::color` | nul | faible | oui |
+| Opacité = celle du pinceau, pas une couleur RVBA (passe couleur) | le moteur de pinceau (repris bientôt) et les éléments vectoriels ne connaissent qu'une couleur RVB, et le pinceau a déjà son opacité | nul | la même valeur se règle à deux endroits (panneau Couleur, réglages du pinceau) | oui : une couleur RVBA demanderait de changer `StrokeMode` et le format des dessins vectoriels |
+| Roue dessinée par le peintre d'egui en maillages subdivisés (passe couleur) | aucun shader ni texture ; couleurs exactes aux sommets ; marche aussi en OpenGL | ≈ 1 400 sommets par image d'écran quand le panneau est montré | faible | oui : `roue.rs` et `wheel_ui` seuls |
+| Commandes de pastille sur la pastille du menu ouvert, sinon celle sous la souris (passe couleur) | chaque commande passe par `action_item` et peut recevoir un raccourci, qui agit sur la pastille survolée | deux champs mis à jour à chaque image | faible : la souris doit être sur la pastille au moment de la touche | oui |
+| Nuanciers hors de l'annulation, suppression confirmée (passe couleur) | comme les espaces de travail : ce ne sont pas des données du projet | nul | une erreur sur une pastille ne se défait pas par Ctrl+Z | oui : un historique propre aux nuanciers pourrait s'ajouter |
+| `.aco` lu sans profil de couleur (CMJN simple, Lab D50) (passe couleur) | aucune bibliothèque de gestion des couleurs à ajouter ; RVB, TSV et gris exacts | nul | une couleur CMJN ou Lab peut différer un peu de ce que montre Photoshop | oui : seul `nuancier::aco_color` changerait |

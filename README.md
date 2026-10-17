@@ -321,6 +321,38 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   Wacom, l'option « Utiliser Windows Ink » doit être cochée dans les propriétés de la tablette.
   Sur le dessin, la croix de Windows marque la pointe sans retard, le cercle autour montre la
   taille du pinceau (Affichage > « Croix du système sur le pinceau » pour n'avoir que le cercle).
+- **Couleur** (panneau Couleur ; au pied de la barre d'outils, un clic sur le carré de devant
+  ouvre à côté la roue, les curseurs, les couleurs récentes et le nuancier ; menu Édition >
+  Couleur) :
+  - **deux couleurs**, comme dans Photoshop : l'avant-plan, avec laquelle on dessine, et
+    l'arrière-plan, derrière. Un clic sur le carré de derrière (ou l'icône des flèches) les
+    échange ; D remet le noir devant et le blanc derrière. Clic droit sur les carrés :
+    intervertir, couleurs par défaut, copier le code, ajouter au nuancier ;
+  - **roue chromatique** : l'anneau donne la teinte, le carré ou le triangle (au choix : icônes
+    au-dessus de la roue, ou clic droit dessus) la saturation et la valeur. On clique ou on
+    glisse ; le geste garde la partie où il a commencé. Elle suit la couleur prise ailleurs
+    (pipette, nuancier, code). L'icône du demi-cercle la cache ou la montre ;
+  - **curseurs** TSV, RVB ou TSL (teinte, saturation, luminosité) : boutons TSV / RVB / TSL, ou
+    clic droit sur un curseur. Chacun a ses chiffres ; le code hexadécimal accepte #RRGGBB ou
+    #RGB ;
+  - **opacité** : la couleur n'en a pas ; c'est celle du pinceau ou du crayon, la même que dans
+    leurs réglages (grisée pour les autres outils) ;
+  - **couleurs récentes** : une rangée des dernières couleurs avec lesquelles on a dessiné
+    (pinceau, crayon, remplissage, formes, texte). Clic : avant-plan ; clic droit : arrière-plan,
+    ajouter au nuancier, effacer les récentes ;
+  - **nuanciers** : autant qu'on veut, chacun nommé ; la liste choisit celui qui est montré.
+    + ajoute la couleur d'avant-plan, − retire sa pastille. Le menu ⋯ (ou clic droit sur le nom)
+    crée, renomme, duplique, supprime (après confirmation), importe ou exporte un nuancier aux
+    formats de GIMP (`.gpl`) et de Photoshop (`.aco`) ; à l'export, l'extension choisit le
+    format. Sur une pastille : clic, avant-plan ; glisser, la ranger ailleurs (Échap
+    abandonne) ; la bulle donne son nom ; clic droit : arrière-plan, nommer, remplacer par
+    l'avant-plan, retirer ;
+  - les commandes de pastille visent celle dont le menu est ouvert, sinon celle sous la souris :
+    un raccourci qu'on leur assigne agit sur la pastille survolée.
+
+  Les couleurs, la roue, les curseurs, les récentes et les nuanciers sont retenus pour la
+  prochaine fois (`%APPDATA%\Pelure\reglages.toml`), pas dans le projet. Ctrl+Z ne défait pas
+  les changements de nuancier.
 - **Panneaux** : chaque panneau (Outils, Couleur, Pinceaux, Réglages, Vue, Guides, Fiche,
   Calques, Montage ou Timeline) est un onglet. Glisse un onglet : des boutons apparaissent au milieu du panneau
   survolé, lâche-le sur l'un d'eux pour l'aimanter (à gauche, à droite, dessus, dessous, ou en
@@ -330,7 +362,8 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   remet à sa place). Les commandes sont des icônes, partout où c'est possible : la souris posée
   une seconde sur l'une d'elles ouvre une bulle avec son nom, son raccourci et ce qu'elle fait.
   En haut, une barre de commandes ; à gauche, la barre d'outils verticale (Affichage > Panneaux
-  pour les masquer). Couleur : teinte, saturation, valeur et nuancier. Réglages du pinceau : une
+  pour les masquer). Couleur : avant-plan et arrière-plan, roue, curseurs, couleurs récentes et
+  nuanciers (voir **Couleur** plus haut). Réglages du pinceau : une
   grille de réglages, chacun avec l'aperçu de son trait et sa taille. Panneau **Pinceaux** (onglet
   à côté de Couleur) : les mêmes réglages en liste, avec un grand aperçu du trait, la taille, et
   « texture » / « importé » ; ceux de la gomme quand la gomme est choisie ; l'icône d'import pour
@@ -629,7 +662,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `text.rs`, `texttools.rs` | Texte : polices du poste, mise en page, outil |
 | `stamp.rs`, `stamptools.rs` | Tampon et tampon de duplication |
 | `persp.rs`, `perstools.rs` | Déformer en perspective |
-| `settings.rs` | Réglages de l'application (ffmpeg, pelure, copie de secours, dispositions) |
+| `settings.rs` | Réglages de l'application (ffmpeg, pelure, copie de secours, dispositions, couleurs et nuanciers) |
 | `io.rs` | Anciens fichiers `.pelure`, écriture d'images |
 | `audio.rs` | Décodage des sons, formes d'onde, mixage et sortie audio |
 | `keymap.rs` | Raccourcis : actions, lecture de `keymap.toml`, touche tapée, fichier personnel |
@@ -641,14 +674,17 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `storyboard.rs` | Bande de montage, vue vignettes, fiche du panneau |
 | `montagerows.rs` | Pistes du montage : caméra, calques, fond de scène, noms des pistes |
 | `toolbars.rs`, `colorui.rs`, `layersui.rs`, `brushui.rs` | Barres de commandes et d'outils, panneau Couleur, panneau Calques, grille des pinceaux |
+| `couleur.rs` | Couleurs : conversions RVB, TSV, TSL, Lab, code hexadécimal, couleurs récentes, réglages retenus |
+| `roue.rs` | Roue chromatique : géométrie (anneau, carré, triangle) et maillages colorés |
+| `nuancier.rs`, `nuancierui.rs` | Nuanciers personnels : modèle, formats GIMP (.gpl) et Photoshop (.aco) ; leur place dans le panneau Couleur |
 | `soundtrack.rs` | Pistes son : import, lecture synchronisée, affichage, glisser des extraits |
 | `canvas.rs`, `panels.rs`, `timeline.rs` | Interface |
 
 `cargo test --release` lance les tests (pinceau, vectoriel, remplissage, séquences/scènes/panneaux,
 annulation, projet en dossier, anciens fichiers, raccourcis, son, caméra, transformation,
 profondeur, vue de dessus, lecture, repère 3D, formes, texte, tampons, perspective, couleur,
-panneaux modulables, calques de toute la scène, planche, modes de fusion, cadres de composition,
-plateau en 3D).
+roue chromatique, nuanciers et leurs formats, panneaux modulables, calques de toute la scène,
+planche, modes de fusion, cadres de composition, plateau en 3D).
 
 ## Compilation (Windows)
 

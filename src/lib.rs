@@ -33,6 +33,9 @@ mod canvas;
 #[cfg(test)]
 mod color_tests;
 mod colorui;
+mod couleur;
+#[cfg(test)]
+mod couleur_tests;
 mod cues;
 #[cfg(test)]
 mod cues_tests;
@@ -97,6 +100,10 @@ mod montagerows;
 pub mod moteur;
 mod newlayer;
 mod notes;
+mod nuancier;
+#[cfg(test)]
+mod nuancier_tests;
+mod nuancierui;
 #[cfg(test)]
 mod moteur_tests;
 pub mod noyau;
@@ -165,6 +172,9 @@ pub mod roles;
 #[cfg(test)]
 mod roles_tests;
 mod rolesui;
+mod roue;
+#[cfg(test)]
+mod roue_tests;
 #[cfg(test)]
 mod scenelayer_tests;
 mod settings;

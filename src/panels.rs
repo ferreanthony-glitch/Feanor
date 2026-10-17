@@ -183,6 +183,9 @@ impl App {
                 self.action_item(ui, "Tout désélectionner", "edition.tout_deselectionner");
                 ui.separator();
                 self.action_item(ui, "Supprimer la sélection ou effacer le dessin", "edition.supprimer");
+                ui.separator();
+                // Couleurs et nuanciers (passe couleur, `colorui.rs`).
+                self.color_menu(ui);
             });
             ui.menu_button("Storyboard", |ui| {
                 self.action_item(ui, "Nouveau plan", "panneau.nouveau");

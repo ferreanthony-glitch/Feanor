@@ -277,7 +277,9 @@ pub struct App {
     pub(crate) color: [u8; 3],
     /// La couleur en teinte, saturation, valeur (panneau Couleur, 6b).
     pub(crate) hsv: [f32; 3],
-    pub(crate) swatches: Vec<[u8; 3]>,
+    /// Couleur d'arrière-plan, nuanciers et réglages du panneau Couleur (passe couleur,
+    /// `colorui.rs`) ; `color` reste la couleur d'avant-plan, celle des outils.
+    pub(crate) couleurs: crate::colorui::ColorState,
     pub(crate) view: View,
     pub(crate) fit_pending: bool,
     pub(crate) canvas_rect: Rect,
@@ -589,20 +591,10 @@ impl App {
                 last: Tool::Rect,
             },
             vector_erase_whole: false,
-            color: [24, 24, 28],
-            hsv: crate::colorui::rgb_to_hsv([24, 24, 28]),
-            swatches: vec![
-                [24, 24, 28],
-                [255, 255, 255],
-                [128, 128, 128],
-                [205, 45, 45],
-                [240, 150, 40],
-                [245, 215, 60],
-                [60, 160, 80],
-                [50, 110, 200],
-                [130, 70, 170],
-                [235, 190, 160],
-            ],
+            // Les couleurs de la dernière fois (passe couleur).
+            color: settings.colors.front,
+            hsv: crate::colorui::rgb_to_hsv(settings.colors.front),
+            couleurs: crate::colorui::ColorState::new(settings.colors.clone()),
             view: View::default(),
             fit_pending: true,
             canvas_rect: Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0)),
@@ -1250,6 +1242,10 @@ impl App {
             return;
         }
         let erase = self.tool == Tool::Eraser;
+        if !erase {
+            // Elle rejoint les couleurs récentes (passe couleur).
+            self.color_used(self.color);
+        }
         if erase && self.cel_here().is_none() {
             self.guides.stroke = None;
             return;
@@ -1392,6 +1388,7 @@ impl App {
         if !self.layer_editable() {
             return;
         }
+        self.color_used(self.color);
         match self.layer().kind {
             LayerKind::Vector => self.fill_vector(p),
             LayerKind::Bitmap => self.fill_bitmap(p),
@@ -2368,6 +2365,10 @@ impl App {
         if self.workspace_action(action) {
             return;
         }
+        // Couleurs et nuanciers (passe couleur, `colorui.rs`).
+        if self.color_action(action) {
+            return;
+        }
         let board = self.mode == Mode::Storyboard;
         match action {
             "fichier.nouveau" => self.request(Pending::New),
@@ -3041,6 +3042,8 @@ impl eframe::App for App {
                 self.status = format!("Réglages non enregistrés : {e}");
             }
         }
+        // Couleurs et nuanciers : enregistrés quand ils changent (passe couleur).
+        self.color_tick(ctx);
         self.tick_recovery(ctx);
         self.remember_layout(ctx);
     }

@@ -105,6 +105,10 @@ impl App {
     pub(crate) fn finish_text_edit(&mut self) {
         let Some(st) = self.text_edit.take() else { return };
         let empty = st.text.trim().is_empty();
+        if !empty {
+            // Couleurs récentes (passe couleur).
+            self.color_used(st.color);
+        }
         match st.existing {
             Some((cel, i, before)) => {
                 if !empty {

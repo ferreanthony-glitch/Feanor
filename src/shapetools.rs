@@ -163,6 +163,7 @@ impl App {
     /// Ajoute la forme au dessin courant.
     pub(crate) fn commit_shape_points(&mut self, points: &[Pos2], closed: bool, filled: bool) {
         if let Some(element) = shapes::element(points, closed, filled, self.shape.width, self.color) {
+            self.color_used(self.color);
             self.commit_element(element);
         }
     }
