@@ -1182,8 +1182,8 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         existantes ou de créer des images à différentes cadences d'images à choisir, avec l'option
         de suivre les clés existantes ou non ») : une image toutes les N images, ou seulement aux
         clés du guide ; « suivre les clés du guide » relance la cadence à chaque clé. Les autres
-        images tiennent l'image d'avant. Mon interprétation : « les clés existantes » = celles du
-        guide (l'animation suivie), les clés peintes restant les modèles ; à confirmer. Fait dans
+        images tiennent l'image d'avant. « Les clés existantes » = celles du guide (l'animation
+        suivie), les clés peintes restant les modèles (confirmé par Anthony le 2026-10-18). Fait dans
         `propager.rs` / `propagerui.rs` (session Propagation prévenue) ;
       - **propagation plus solide** (relecture du code, aucun plantage reproduit en essai) : la
         synthèse avait lieu sur le périphérique de la carte de l'affichage, et wgpu fait de toute
