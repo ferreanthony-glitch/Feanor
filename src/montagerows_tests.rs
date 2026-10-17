@@ -106,3 +106,22 @@ fn a_drawing_is_taken_by_its_middle_in_the_montage() {
     // Avant le calque, rien.
     assert_eq!(cell_handle(&l, 4, pos2(60.0, mid), x0, top, ppf, tol), None);
 }
+
+#[test]
+fn keys_are_chosen_one_or_several_at_a_time() {
+    use crate::montagekeys::{choose, KeyRef};
+    let k = |start: usize| KeyRef { panel: 1, layer: 2, start };
+    // Un clic : elle seule ; Ctrl + clic : ajoutée, puis retirée.
+    let (sel, anchor) = choose(&[], None, Some(k(0)), false, None);
+    assert_eq!((sel.clone(), anchor), (vec![k(0)], Some(k(0))));
+    let (sel, _) = choose(&sel, anchor, Some(k(5)), true, None);
+    assert_eq!(sel, vec![k(0), k(5)]);
+    let (sel, _) = choose(&sel, anchor, Some(k(0)), true, None);
+    assert_eq!(sel, vec![k(5)]);
+    // Maj + clic : les clés d'entre (données par la piste), le départ reste.
+    let (sel, a) = choose(&sel, Some(k(0)), Some(k(9)), false, Some(vec![k(0), k(5), k(9)]));
+    assert_eq!((sel, a), (vec![k(0), k(5), k(9)], Some(k(0))));
+    // À côté des dessins : sans touche, le choix se vide ; avec Ctrl, il reste.
+    assert_eq!(choose(&[k(5)], None, None, true, None).0, vec![k(5)]);
+    assert!(choose(&[k(5)], None, None, false, None).0.is_empty());
+}

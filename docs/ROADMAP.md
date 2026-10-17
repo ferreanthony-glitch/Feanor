@@ -976,6 +976,19 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
       sinon celui d'après ; **supprimer en laissant un vide** (clic droit) : ses images restent
       vides, les autres clés ne bougent pas. Après un clic sur une piste, les raccourcis sont
       ceux de l'animation (la barre d'état dit « raccourcis des clés »).
+    - puis (Anthony, le même jour : « choix et sélection de plusieurs clés à la fois, dupliquer
+      une clé sur place, même geste sur la piste fond ») :
+      - **plusieurs clés** : clic, elle seule ; Ctrl + clic, une de plus ou de moins ; Maj +
+        clic, toutes celles de la piste entre la dernière cliquée et celle-ci, d'un plan à
+        l'autre ; Ctrl+A, toutes celles du calque courant. Copier, coller (écarts et durées
+        gardés), supprimer, dupliquer visent les clés choisies (cerclées de la couleur du choix) ;
+      - **dupliquer sur place** (Ctrl+D, ou clic droit) : la copie prend la seconde moitié de
+        l'exposition, la suite ne bouge pas (une clé d'une image : rien) ;
+      - **la piste « Fond »** : chaque calque de toute la scène a sa piste, teintée « fond », avec
+        les mêmes gestes ; il garde ses clés d'un plan à l'autre de la scène (avant : un seul
+        dessin tenu, et une barre en lecture seule).
+
+      Pas fait : glisser plusieurs clés à la fois (seule celle qu'on prend bouge).
 
   Pas fait : ces gestes sur la piste « Fond ».
 - Restent (ordre de Fable) : navigation de calques à la TVPaint, fenêtre « Agrandir / rétrécir

@@ -926,18 +926,25 @@ impl App {
         if resp.clicked() {
             if let Some(p) = resp.interact_pointer_pos() {
                 if let Some((i, k)) = self.layer_row_hit(p, r.top(), &blocks, rows) {
-                    // Clic dans une piste de calque : ce panneau, cette image, ce calque.
+                    // Clic dans une piste de calque : ce panneau, cette image, ce calque ; la clé
+                    // cliquée est choisie (Ctrl : ajoutée ou retirée ; Maj : celles d'entre).
                     self.sel_clip = None;
+                    let f = (((p.x - x_of(self.doc.panel_start(i))) / ppf).floor().max(0.0)) as usize;
+                    let key = self.key_ref(i, k, f);
+                    let track = self.track_at(p, r.top(), rows).cloned();
+                    let mods = ui.input(|i| i.modifiers);
                     self.goto_global(frame_at(p.x));
                     if self.cur_panel == i {
                         self.select_layer(k);
                     }
+                    self.click_key(key, track.as_ref(), mods.command, mods.shift);
                 } else if let Some((_, hit)) = self.lane_hit(p, left, ppf, lanes_top) {
                     // Clic dans une piste son : sélectionne l'extrait (ou rien) et y place la tête.
                     self.sel_clip = hit.map(|(id, _)| id);
                     self.goto_global(frame_at(p.x));
                 } else {
                     self.sel_clip = None;
+                    self.key_sel.clear();
                     let mods = ui.input(|i| i.modifiers);
                     let block = in_blocks(p).then(|| panel_at(p.x)).flatten();
                     // Clic sur une barre de scène ou de séquence : son premier panneau.
@@ -1005,8 +1012,14 @@ impl App {
                         MenuTarget::Panel(i)
                     })
                 } else if let Some((i, k)) = self.layer_row_hit(p, r.top(), &blocks, rows) {
-                    // Une piste de calque : ce plan, cette image, ce calque, et son menu.
+                    // Une piste de calque : ce plan, cette image, ce calque, et son menu. Une clé
+                    // qui n'était pas choisie l'est seule.
                     self.sel_clip = None;
+                    let f = (((p.x - x_of(self.doc.panel_start(i))) / ppf).floor().max(0.0)) as usize;
+                    if let Some(key) = self.key_ref(i, k, f).filter(|key| !self.key_sel.contains(key)) {
+                        self.key_sel = vec![key];
+                        self.key_anchor = Some(key);
+                    }
                     self.goto_global(frame_at(p.x));
                     (self.cur_panel == i).then(|| {
                         self.select_layer(k);
@@ -1040,26 +1053,36 @@ impl App {
                     }
                     self.key_focus = true;
                     let key = |app: &App, a: &str| app.keymap.label(a);
-                    if ui.add(egui::Button::new("Copier la clé").shortcut_text(key(self, "edition.copier"))).clicked() {
+                    let n = self.key_sel.len().max(1);
+                    let what = |one: &str, many: &str| if n > 1 { format!("{many} ({n})") } else { one.to_string() };
+                    if ui.add(egui::Button::new(what("Copier la clé", "Copier les clés")).shortcut_text(key(self, "edition.copier"))).clicked() {
                         ui.close_menu();
-                        self.copy_key();
+                        self.copy_keys();
                     }
                     let can_paste = self.key_clipboard.is_some();
-                    if ui.add_enabled(can_paste, egui::Button::new("Coller la clé ici").shortcut_text(key(self, "edition.coller"))).clicked() {
+                    if ui.add_enabled(can_paste, egui::Button::new("Coller ici").shortcut_text(key(self, "edition.coller"))).clicked() {
                         ui.close_menu();
-                        self.paste_key();
+                        self.paste_keys();
                     }
                     if ui
-                        .add(egui::Button::new("Supprimer la clé").shortcut_text(key(self, "edition.supprimer")))
+                        .add(egui::Button::new(what("Dupliquer la clé sur place", "Dupliquer les clés sur place")).shortcut_text(key(self, "dessin.dupliquer")))
+                        .on_hover_text("La copie prend la seconde moitié de l'exposition ; la suite ne bouge pas.")
+                        .clicked()
+                    {
+                        ui.close_menu();
+                        self.duplicate_keys();
+                    }
+                    if ui
+                        .add(egui::Button::new(what("Supprimer la clé", "Supprimer les clés")).shortcut_text(key(self, "edition.supprimer")))
                         .on_hover_text("Le dessin d'avant la remplace en tenant plus longtemps (sinon celui d'après).")
                         .clicked()
                     {
                         ui.close_menu();
-                        self.delete_key(false);
+                        self.delete_keys(false);
                     }
-                    if ui.button("Supprimer la clé en laissant un vide").on_hover_text("Ses images restent vides ; les autres clés ne bougent pas.").clicked() {
+                    if ui.button(what("Supprimer la clé en laissant un vide", "Supprimer les clés en laissant un vide")).on_hover_text("Leurs images restent vides ; les autres clés ne bougent pas.").clicked() {
                         ui.close_menu();
-                        self.delete_key(true);
+                        self.delete_keys(true);
                     }
                     ui.separator();
                     self.layer_menu(ui, k, false);

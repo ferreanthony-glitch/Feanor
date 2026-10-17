@@ -311,7 +311,8 @@ impl App {
                 let Some(k) = layer_on_track(&p.layers, key) else { continue };
                 let current = i == self.cur_panel && k == self.cur_layer;
                 let hot = lit.filter(|(pi, h, _)| *pi == i && h.layer() == Some(k)).map(|(_, h, held)| (h, held));
-                paint_layer_cell(painter, cell, &p.layers[k], ppf, current, hot, visuals);
+                let chosen: Vec<usize> = self.key_sel.iter().filter(|c| c.panel == p.id && c.layer == p.layers[k].id).map(|c| c.start).collect();
+                paint_layer_cell(painter, cell, &p.layers[k], ppf, current, hot, &chosen, visuals);
             }
         }
     }
@@ -408,8 +409,10 @@ pub(crate) fn cell_handle(layer: &Layer, k: usize, p: Pos2, x0: f32, lane_top: f
 }
 
 /// Un calque sous un plan : un bloc par dessin exposé (tenu sur plusieurs images), sa barre
-/// dessous (chantier 5), son nom. `hot` : sa poignée survolée ou tenue (vrai : tenue).
-fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, current: bool, hot: Option<(Handle, bool)>, visuals: &Visuals) {
+/// dessous (chantier 5), son nom. `hot` : sa poignée survolée ou tenue (vrai : tenue) ;
+/// `chosen` : début des clés choisies.
+#[allow(clippy::too_many_arguments)]
+fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, current: bool, hot: Option<(Handle, bool)>, chosen: &[usize], visuals: &Visuals) {
     let (hot, held) = (hot.map(|h| h.0), hot.is_some_and(|h| h.1));
     painter.rect_filled(cell, 2.0, theme::ETIQUETTE);
     // Un calque de toute la scène : ses dessins teintés « fond ».
@@ -430,7 +433,11 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, curr
             );
             if seg.width() > 0.0 {
                 painter.rect_filled(seg, 1.0, fill);
-                // Le dessin survolé (on le prend par son milieu pour le déplacer) : cerclé de blanc.
+                // Une clé choisie : cerclée de la couleur du choix ; survolée (on la prend par son
+                // milieu pour la déplacer) : de blanc.
+                if chosen.contains(&s) {
+                    painter.rect_stroke(seg, 1.0, Stroke::new(2.0_f32, visuals.selection.stroke.color), StrokeKind::Inside);
+                }
                 if matches!(hot, Some(Handle::Key { start, .. }) if start == s) {
                     painter.rect_stroke(seg, 1.0, Stroke::new(1.5_f32, Color32::WHITE), StrokeKind::Inside);
                 }

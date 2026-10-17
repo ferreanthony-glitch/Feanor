@@ -705,11 +705,18 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     (la suite refaite, chacune gardant sa durée, les rôles suivant leurs images) :
     `Handle::Key`. `move_boundary` (la limite entre deux expositions déplacée, chacune gardant
     au moins une image si c'est un dessin, le rôle de début suivant) : `Handle::Boundary`.
-  - Clés copiées, collées, supprimées : `KeyClip` (le dessin copié tel quel, sa durée, la sorte
-    du calque), `overwrite_run`, `remove_run(gap)` ; `App::copy_key`, `paste_key`, `delete_key`
-    visent la clé à l'image courante du calque courant. `App::key_focus` (un clic sur la piste
-    d'un calque du montage) passe avant la main des plans dans `run_action`, et
-    `key_mode_of` donne alors les raccourcis de l'animation.
+  - Clés choisies et leurs commandes : `montagekeys.rs`. `KeyRef` (plan, calque, début de
+    l'exposition), `App::key_sel` et `key_anchor` ; `choose` (pur, testé) applique un clic, Ctrl
+    ou Maj ; `keys_between` suit la piste (`TrackKey`) d'un plan à l'autre. `copy_keys`
+    (`KeyClip` : écarts en images du montage, durées, dessins copiés), `paste_keys`
+    (`overwrite_run`), `delete_keys(gap)` (`remove_run`, de la dernière à la première),
+    `duplicate_keys` (`duplicate_run`) visent les clés choisies, sinon celle de l'image
+    courante. `App::key_focus` (un clic sur la piste d'un calque du montage) passe avant la main
+    des plans dans `run_action`, et `key_mode_of` donne alors les raccourcis de l'animation.
+  - Piste « Fond » : `layer_tracks` et `layer_on_track` prennent aussi les calques de toute la
+    scène (la rangée « Fond » et `Rows::background` ne sont plus) ; `sync_scene_layers` copie
+    les images du modèle (coupées à la durée du panneau, le dernier dessin tenu s'il est plus
+    court) au lieu d'un dessin tenu.
   - `montagerows::cell_handle` : `Boundary` sur une limite intérieure, `Key` au milieu d'un
     dessin (le montage ne donne plus `Exposure`, que garde la timeline) ; `LAYER_H` = 26.
     `montage_strip` : double-clic sur une piste de calque, entrée « Nouveau dessin ici » du

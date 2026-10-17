@@ -3,7 +3,7 @@
 use crate::document::{ImageMark, Layer, LayerKind};
 use crate::fx::{Effect, EffectKind, FxKey};
 use crate::handles::{
-    between, content_bounds, key_at, key_start_taken, move_bookmark, move_boundary, move_fx_key, move_layer, move_mark, overwrite_run, remove_run, reorder_run,
+    between, content_bounds, duplicate_run, key_at, key_start_taken, move_bookmark, move_boundary, move_fx_key, move_layer, move_mark, overwrite_run, remove_run, reorder_run,
     reorder_slot, set_layer_end, set_layer_start, set_run_length, sound_shift_note,
 };
 
@@ -273,4 +273,18 @@ fn a_deleted_key_is_replaced_by_its_neighbour_or_leaves_a_gap() {
     assert_eq!(frames(&l), vec![Some(1), Some(1), Some(1), Some(2), Some(2)]);
     // Rien sur une image vide.
     assert_eq!(remove_run(&mut l, 7, false), None);
+}
+
+#[test]
+fn a_key_is_duplicated_in_place() {
+    // A sur 0..5, B sur 5..7 : A dupliquée, la copie (9) prend la seconde moitié de A ; B ne bouge pas.
+    let mut l = Layer::new("L", LayerKind::Vector);
+    l.frames = vec![Some(1), Some(1), Some(1), Some(1), Some(1), Some(2), Some(2)];
+    assert_eq!(duplicate_run(&mut l, 2, 9), Some(3));
+    assert_eq!(frames(&l), vec![Some(1), Some(1), Some(1), Some(9), Some(9), Some(2), Some(2)]);
+    // Une exposition d'une image ne se partage pas ; une image vide non plus.
+    let mut one = Layer::new("U", LayerKind::Vector);
+    one.frames = vec![Some(1), None];
+    assert_eq!(duplicate_run(&mut one, 0, 9), None);
+    assert_eq!(duplicate_run(&mut one, 1, 9), None);
 }

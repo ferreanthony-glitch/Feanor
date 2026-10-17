@@ -17,8 +17,9 @@
 //! d'animation (`key_at`) ; un dessin pris par son milieu se place avant ou après les autres,
 //! chacun gardant sa durée (`reorder_run`, `Handle::Key`) ; la limite entre deux dessins se
 //! déplace, l'un s'allonge, l'autre raccourcit (`move_boundary`, `Handle::Boundary`). Une clé se
-//! copie et se colle (`KeyClip`, `overwrite_run`) ; supprimée, sa voisine la remplace ou elle
-//! laisse un vide (`remove_run`).
+//! colle (`overwrite_run`), se supprime (sa voisine la remplace ou elle laisse un vide,
+//! `remove_run`), se duplique sur place (`duplicate_run`) ; le choix de plusieurs clés et ces
+//! commandes sont dans `montagekeys.rs`.
 
 use eframe::egui;
 
@@ -317,14 +318,19 @@ pub fn move_boundary(layer: &mut Layer, at: usize, to: usize) -> usize {
     layer.trim();
     to
 }
-/// Une clé copiée dans le montage : son dessin (copié tel qu'il était), sa durée, la sorte du
-/// calque d'où elle vient.
-pub(crate) struct KeyClip {
-    pub cel: crate::document::Cel,
-    pub len: usize,
-    pub kind: crate::document::LayerKind,
+/// Le dessin exposé à partir de `start` dupliqué sur place : la copie `cel` prend la seconde
+/// moitié de son exposition, le dessin garde la première ; la suite ne bouge pas. Rien si
+/// l'exposition n'a qu'une image. Renvoie où commence la copie.
+pub fn duplicate_run(layer: &mut Layer, start: usize, cel: CelId) -> Option<usize> {
+    layer.frames.get(start).copied().flatten()?;
+    let (s, e) = layer.run_bounds(start);
+    if e - s < 2 {
+        return None;
+    }
+    let mid = s + (e - s).div_ceil(2);
+    layer.frames[mid..e].fill(Some(cel));
+    Some(mid)
 }
-
 /// Le dessin `cel` posé sur `n` images à partir de l'image `f` (une clé collée) : ce qui y était
 /// est remplacé, la suite ne bouge pas ; les rôles de ces images partent.
 pub fn overwrite_run(layer: &mut Layer, f: usize, n: usize, cel: CelId) {
@@ -555,78 +561,6 @@ impl App {
         self.commit_structure(snap);
         let name = self.doc.panels[pi].layers[li].name.clone();
         self.status = format!("Nouveau dessin sur « {name} » : images {} à {}. On peut le dessiner tout de suite.", self.frame_label(f), self.frame_label(end - 1));
-    }
-
-    /// La clé à l'image courante du calque courant (le montage y met la tête au clic) : son
-    /// dessin, ses bornes. Sinon la barre d'état le dit.
-    fn current_key(&mut self) -> Option<(CelId, usize, usize)> {
-        let (f, layer) = (self.cur_frame, self.layer());
-        let found = layer.frames.get(f).copied().flatten().map(|id| {
-            let (s, e) = layer.run_bounds(f);
-            (id, s, e)
-        });
-        if found.is_none() {
-            self.status = "Pas de clé ici : cliquer sur un dessin de la piste.".into();
-        }
-        found
-    }
-
-    /// Copie la clé courante (montage, Ctrl+C après un clic sur la piste d'un calque).
-    pub(crate) fn copy_key(&mut self) {
-        let Some((id, s, e)) = self.current_key() else { return };
-        let Some(cel) = self.doc.cels.get(&id).cloned() else { return };
-        let kind = self.layer().kind;
-        self.key_clipboard = Some(KeyClip { cel, len: e - s, kind });
-        self.status = format!("Clé copiée ({} image{}) : Ctrl+V pour la coller à l'image courante d'un calque.", e - s, if e - s > 1 { "s" } else { "" });
-    }
-
-    /// Colle la clé copiée à l'image courante du calque courant, avec sa durée (sans dépasser la
-    /// fin du plan) : ce qui y était est remplacé, la suite ne bouge pas. Un nouveau dessin, copie
-    /// de celui de la clé.
-    pub(crate) fn paste_key(&mut self) {
-        let Some((kind, len)) = self.key_clipboard.as_ref().map(|c| (c.kind, c.len)) else { return };
-        if self.refuse_on_folder() {
-            return;
-        }
-        if self.layer().kind != kind {
-            self.status = match kind {
-                crate::document::LayerKind::Vector => "Une clé vectorielle se colle sur un calque vectoriel.".into(),
-                crate::document::LayerKind::Bitmap => "Une clé bitmap se colle sur un calque bitmap.".into(),
-            };
-            return;
-        }
-        self.end_stroke();
-        let plan = self.frame_count();
-        let f = self.cur_frame.min(plan.saturating_sub(1));
-        let n = len.min(plan - f).max(1);
-        let snap = self.snapshot();
-        let Some(cel) = self.key_clipboard.as_ref().map(|c| c.cel.clone()) else { return };
-        let id = self.doc.add_cel(cel);
-        let li = self.cur_layer;
-        overwrite_run(&mut self.layers_mut()[li], f, n, id);
-        self.vsel = None;
-        self.commit_structure(snap);
-        self.status = format!("Clé collée : images {} à {}.", self.frame_label(f), self.frame_label(f + n - 1));
-    }
-
-    /// Supprime la clé courante : sa voisine la remplace (celle d'avant, sinon celle d'après), ou
-    /// (`gap`) elle laisse un vide et les autres clés ne bougent pas.
-    pub(crate) fn delete_key(&mut self, gap: bool) {
-        if self.refuse_on_folder() {
-            return;
-        }
-        let Some(_) = self.current_key() else { return };
-        self.end_stroke();
-        let snap = self.snapshot();
-        let (li, f) = (self.cur_layer, self.cur_frame);
-        let Some((s, e)) = remove_run(&mut self.layers_mut()[li], f, gap) else { return };
-        self.vsel = None;
-        self.commit_structure(snap);
-        self.status = if gap {
-            format!("Clé supprimée : images {} à {} vides.", self.frame_label(s), self.frame_label(e - 1))
-        } else {
-            "Clé supprimée : sa voisine la remplace.".into()
-        };
     }
 
     /// Le calque `layer` tel qu'il était au début du geste, et la durée du plan d'alors.

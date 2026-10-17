@@ -368,8 +368,11 @@ pub struct App {
     /// laissé par une suppression, et dernier clic dans la grille de la timeline.
     pub(crate) frame_sel: Option<(usize, usize)>,
     pub(crate) image_clipboard: Option<crate::images::ImageClip>,
-    /// Clé copiée dans le montage (`handles::KeyClip`).
-    pub(crate) key_clipboard: Option<crate::handles::KeyClip>,
+    /// Clés copiées dans le montage (`montagekeys`).
+    pub(crate) key_clipboard: Option<crate::montagekeys::KeyClip>,
+    /// Clés choisies dans le montage, et la dernière cliquée (départ des Maj + clic).
+    pub(crate) key_sel: Vec<crate::montagekeys::KeyRef>,
+    pub(crate) key_anchor: Option<crate::montagekeys::KeyRef>,
     /// Le dernier clic dans le montage était sur la piste d'un calque : copier, coller et
     /// supprimer visent la clé à l'image courante du calque courant.
     pub(crate) key_focus: bool,
@@ -670,6 +673,8 @@ impl App {
             frame_sel: None,
             image_clipboard: None,
             key_clipboard: None,
+            key_sel: Vec::new(),
+            key_anchor: None,
             key_focus: false,
             hole: Default::default(),
             images_focus: false,
@@ -2464,14 +2469,17 @@ impl App {
             "fichier.importer_modele3d" => self.import_model3d(),
             "edition.annuler" => self.undo(),
             "edition.retablir" => self.redo(),
-            // Après un clic sur la piste d'un calque dans le montage : la clé de l'image courante.
-            "edition.copier" if self.key_focus => self.copy_key(),
+            // Après un clic sur la piste d'un calque dans le montage : les clés choisies, sinon
+            // celle de l'image courante du calque courant (`montagekeys`).
+            "edition.copier" if self.key_focus => self.copy_keys(),
             "edition.couper" if self.key_focus => {
-                self.copy_key();
-                self.delete_key(false);
+                self.copy_keys();
+                self.delete_keys(false);
             }
-            "edition.coller" if self.key_focus && self.key_clipboard.is_some() => self.paste_key(),
-            "edition.supprimer" if self.key_focus => self.delete_key(false),
+            "edition.coller" if self.key_focus && self.key_clipboard.is_some() => self.paste_keys(),
+            "edition.supprimer" if self.key_focus => self.delete_keys(false),
+            "dessin.dupliquer" if self.key_focus => self.duplicate_keys(),
+            "edition.tout_selectionner" if self.key_focus => self.choose_all_keys(),
             // Après un clic dans le montage (ou la planche), l'édition vise les panneaux choisis (12e).
             "edition.couper" if self.panels_have_focus() => self.cut_panels(),
             "edition.copier" if self.panels_have_focus() => self.copy_panels(),
