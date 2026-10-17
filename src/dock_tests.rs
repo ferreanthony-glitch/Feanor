@@ -33,8 +33,9 @@ fn the_exposure_sheet_opens_next_to_the_layers() {
     assert_eq!(count(&l, Pane::XSheet), 1);
     // Rouvrir le groupe des calques ne l'ouvre pas.
     l.close(Pane::XSheet);
+    l.close(Pane::Effects);
     l.toggle_group(Group::Right);
-    assert_eq!((count(&l, Pane::Layers), count(&l, Pane::XSheet)), (1, 0));
+    assert_eq!((count(&l, Pane::Layers), count(&l, Pane::XSheet), count(&l, Pane::Effects)), (1, 0, 1));
 }
 
 #[test]
@@ -54,7 +55,8 @@ fn default_layout_has_every_panel_once() {
     let DockNode::Row { gauche: center, droite: side, .. } = &**haut else { panic!() };
     assert_eq!(**center, tabs(&[Pane::Canvas]));
     let DockNode::Row { gauche: layers, droite: tools, .. } = &**side else { panic!() };
-    assert_eq!(**layers, tabs(&[Pane::Layers]), "les calques sur toute la hauteur");
+    // Les calques, les effets dessous (disposition 8, choix d'Anthony).
+    assert!(matches!(&**layers, DockNode::Column { haut, bas, .. } if **haut == tabs(&[Pane::Layers]) && **bas == tabs(&[Pane::Effects])), "{layers:?}");
     for p in [Pane::ToolOptions, Pane::View, Pane::Guides, Pane::Color] {
         assert!(format!("{tools:?}").contains(&format!("{p:?}")), "{p:?} à droite");
     }
@@ -189,11 +191,18 @@ fn closing_and_reopening_a_panel_puts_it_back_with_its_group() {
     l.open(Pane::Sheet);
     // Revenue avec les onglets des réglages (pas avec la couleur).
     assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [ToolOptions, View, Guides, Sheet]"), "{:?}", l.principal);
-    // Plus rien du groupe : une colonne recréée à droite du dessin.
+    // Les calques rouverts : au-dessus des effets restés à leur place.
     l.close(Pane::Layers);
     l.open(Pane::Layers);
     let s = format!("{:?}", l.principal);
+    assert!(s.contains("Column { part: 0.6, haut: Tabs { panneaux: [Layers], actif: 0 }, bas: Tabs { panneaux: [Effects]"), "{s}");
+    // Plus rien du groupe : une colonne recréée à droite du dessin.
+    l.close(Pane::Layers);
+    l.close(Pane::Effects);
+    l.open(Pane::Layers);
+    let s = format!("{:?}", l.principal);
     assert!(s.contains("Row { part: 0.78, gauche: Tabs { panneaux: [Canvas]"), "{s}");
+    l.open(Pane::Effects);
     // La bande revient en bas de tout ; l'ancienne timeline à part ne s'ouvre plus, c'est la bande.
     l.close(Pane::Montage);
     assert!(!l.contains(Pane::Montage));
@@ -354,9 +363,9 @@ fn panel_layouts_are_kept_in_the_settings() {
 }
 
 #[test]
-fn the_effects_pane_comes_under_the_settings() {
-    // Anthony : « la partie effets doit être une fenêtre dans l'espace de travail » (sous les
-    // réglages).
+fn the_effects_pane_comes_under_the_layers() {
+    // Anthony : « A, avec les Effets sous les Calques » : calques et effets dessous, puis
+    // réglages et couleur dessous. Une disposition de ce jour (6 ou 7) prend la nouvelle.
     let v6 = DockLayout {
         version: 6,
         principal: DockNode::Row { part: 0.8, gauche: Box::new(tabs(&[Pane::Canvas])), droite: Box::new(tabs(&[Pane::ToolOptions, Pane::Guides])) },
@@ -364,13 +373,13 @@ fn the_effects_pane_comes_under_the_settings() {
         detachees: Vec::new(),
     };
     let l = v6.upgraded();
-    assert_eq!(count(&l, Pane::Effects), 1);
-    let under = |l: &DockLayout| {
-        matches!(&l.principal, DockNode::Row { droite, .. }
-            if matches!(&**droite, DockNode::Column { haut, bas, .. } if **haut == tabs(&[Pane::ToolOptions, Pane::Guides]) && **bas == tabs(&[Pane::Effects])))
-    };
+    assert_eq!(l.principal, DockLayout::from_legacy(&Layout::default()).principal);
+    let under = |l: &DockLayout| format!("{:?}", l.principal).contains("haut: Tabs { panneaux: [Layers], actif: 0 }, bas: Tabs { panneaux: [Effects]");
     assert!(under(&l), "{:?}", l.principal);
-    // Fermé puis rouvert : il revient sous les réglages.
+    for pane in default_panes() {
+        assert_eq!(count(&l, pane), 1, "{pane:?}");
+    }
+    // Fermé puis rouvert : il revient sous les calques.
     let mut again = l.clone();
     again.close(Pane::Effects);
     assert!(!again.contains(Pane::Effects));

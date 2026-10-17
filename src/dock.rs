@@ -53,8 +53,8 @@ pub enum Pane {
     #[serde(rename = "feuille_expo")]
     XSheet,
     /// Effets du calque courant (pile d'effets non destructifs, 13i) : un panneau de l'espace de
-    /// travail, sous les réglages (Anthony, 2026-10-17 : « la partie effets doit être une fenêtre
-    /// dans l'espace de travail »).
+    /// travail (Anthony, 2026-10-17 : « la partie effets doit être une fenêtre dans l'espace de
+    /// travail »), sous les calques depuis la disposition 8 (son choix).
     #[serde(rename = "effets")]
     Effects,
 }
@@ -137,8 +137,8 @@ impl Pane {
     pub fn group(self) -> Group {
         match self {
             Pane::Canvas => Group::Center,
-            Pane::Tools | Pane::Color | Pane::Brushes | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet | Pane::Effects => Group::Left,
-            Pane::Layers | Pane::XSheet => Group::Right,
+            Pane::Tools | Pane::Color | Pane::Brushes | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet => Group::Left,
+            Pane::Layers | Pane::XSheet | Pane::Effects => Group::Right,
             Pane::Montage | Pane::Timeline => Group::Bottom,
         }
     }
@@ -237,12 +237,7 @@ fn left_column(only: &[Pane]) -> Option<DockNode> {
         let list: Vec<Pane> = list.into_iter().filter(|p| only.contains(p)).collect();
         (!list.is_empty()).then(|| tabs(list))
     };
-    let parts = [
-        (0.3, keep(vec![Pane::Tools])),
-        (0.45, keep(SETTINGS_TABS.to_vec())),
-        (0.4, keep(vec![Pane::Effects])),
-        (1.0, keep(COLOR_TABS.to_vec())),
-    ];
+    let parts = [(0.3, keep(vec![Pane::Tools])), (0.55, keep(SETTINGS_TABS.to_vec())), (1.0, keep(COLOR_TABS.to_vec()))];
     stack(&parts)
 }
 
@@ -257,8 +252,9 @@ const COLOR_TABS: [Pane; 2] = [Pane::Color, Pane::Brushes];
 /// (le panneau Pinceaux, en onglet avec la couleur) ; 4 depuis le chantier 6 (la timeline, panneau à
 /// part sous le montage) ; 5 le même jour (en onglets) ; 6 le même jour (une seule bande, comme
 /// avant : le montage en storyboard, la timeline en animation) ; 7 le même jour (le panneau
-/// Effets, sous les réglages).
-pub const LAYOUT_VERSION: u32 = 7;
+/// Effets, sous les réglages) ; 8 le même jour (choix d'Anthony : les calques avec les effets
+/// dessous, puis les réglages avec la couleur dessous).
+pub const LAYOUT_VERSION: u32 = 8;
 
 /// La bande du bas : une seule (Anthony, 2026-10-17 : « je ne veux pas de double timeline ») ;
 /// elle montre le montage en storyboard, la timeline en animation.
@@ -283,10 +279,13 @@ fn stack(parts: &[(f32, Option<DockNode>)]) -> Option<DockNode> {
 }
 
 /// Colonne des calques (6a, à droite du dessin), sur toute la hauteur depuis 9b ; la feuille
-/// d'exposition (13g) y vient en onglet.
+/// d'exposition (13g) y vient en onglet ; les effets dessous (disposition 8, choix d'Anthony :
+/// « A, avec les Effets sous les Calques »).
 fn right_column(only: &[Pane]) -> Option<DockNode> {
     let list: Vec<Pane> = [Pane::Layers, Pane::XSheet].into_iter().filter(|p| only.contains(p)).collect();
-    (!list.is_empty()).then(|| tabs(list))
+    let layers = (!list.is_empty()).then(|| tabs(list));
+    let effects = only.contains(&Pane::Effects).then(|| tabs(vec![Pane::Effects]));
+    stack(&[(0.6, layers), (1.0, effects)])
 }
 
 /// Taille de fenêtre de référence pour passer des tailles en pixels (anciennes dispositions) aux
@@ -428,14 +427,14 @@ impl DockLayout {
         // À droite du dessin : les calques, puis les réglages (avec la fiche) et la couleur.
         let mut settings = Vec::new();
         if l.tools {
-            settings.extend([Pane::ToolOptions, Pane::View, Pane::Guides, Pane::Color, Pane::Brushes, Pane::Effects]);
+            settings.extend([Pane::ToolOptions, Pane::View, Pane::Guides, Pane::Color, Pane::Brushes]);
             if l.sheet {
                 settings.push(Pane::Sheet);
             }
         }
         let tools = left_column(&settings);
         // La feuille d'exposition n'est pas ouverte d'office.
-        let layers = if l.sheet { right_column(&[Pane::Layers]) } else { None };
+        let layers = if l.sheet { right_column(&[Pane::Layers, Pane::Effects]) } else { None };
         let layers_w = l.sheet_width.clamp(160.0, 900.0);
         let side = match (layers, tools) {
             (Some(a), Some(b)) => Some((row(layers_w / (layers_w + TOOLS_WIDTH), a, b), layers_w + TOOLS_WIDTH)),
@@ -484,9 +483,14 @@ impl DockLayout {
                 w.panneaux = n.strips_as_tabs();
             }
         }
-        // Le panneau Effets arrive sous les réglages (version 7), une fois le reste converti.
-        if self.version < 7 && !self.contains(Pane::Effects) {
+        // Le panneau Effets arrive sous les calques (versions 7 et 8), une fois le reste converti.
+        if self.version < 6 && !self.contains(Pane::Effects) {
             self.open(Pane::Effects);
+        }
+        // Dispositions de ce jour (6, 7) : la nouvelle disposition choisie par Anthony (« A, avec
+        // les Effets sous les Calques ») ; les panneaux flottants ou dans leur fenêtre restent.
+        if (6..8).contains(&self.version) {
+            self.principal = DockLayout::from_legacy(&Layout::default()).principal;
         }
         self.version = LAYOUT_VERSION;
         self.sanitized()
@@ -616,16 +620,18 @@ impl DockLayout {
         if pane == Pane::Timeline {
             return self.open(Pane::Montage);
         }
-        // Les effets : sous les onglets des réglages (dans la fenêtre principale ou un panneau
-        // flottant), sinon dans la colonne des réglages.
-        if pane == Pane::Effects {
-            let under = |n: DockNode| column(0.55, n, tabs(vec![Pane::Effects]));
-            let anchor = SETTINGS_TABS.into_iter().find(|p| self.principal_has(*p));
-            if let Some(a) = anchor {
-                let mut f = under;
-                self.principal.wrap_tabs_of(a, &mut f);
-                return;
-            }
+        // Les effets : sous les calques (dans la fenêtre principale), sinon dans la colonne des
+        // calques.
+        if pane == Pane::Effects && self.principal_has(Pane::Layers) {
+            let mut under = |n: DockNode| column(0.6, n, tabs(vec![Pane::Effects]));
+            self.principal.wrap_tabs_of(Pane::Layers, &mut under);
+            return;
+        }
+        // Les calques rouverts quand les effets sont restés seuls : au-dessus d'eux.
+        if pane == Pane::Layers && self.principal_has(Pane::Effects) {
+            let mut above = |n: DockNode| column(0.6, tabs(vec![Pane::Layers]), n);
+            self.principal.wrap_tabs_of(Pane::Effects, &mut above);
+            return;
         }
         if group != Group::Bottom {
             if let Some(t) = self.principal.tabs_of_group(group) {

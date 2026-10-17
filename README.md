@@ -295,7 +295,7 @@ On règle aussi :
 
 Les flips par rôle feuillettent les clés, les breakdowns ou les intervalles du calque.
 
-**Effets** (un panneau de l'espace de travail, sous les réglages ; la baguette de la timeline
+**Effets** (un panneau de l'espace de travail, sous les calques ; la baguette de la timeline
 l'ouvre ou le ferme) : des
 effets sur le calque, vus à l'écran et à l'export, sans toucher aux dessins (non destructifs :
 on les coche et décoche, le dessin reste tel quel).

@@ -1107,7 +1107,10 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         `fit_w`) ; onglets qui débordent : une barre de défilement ; Calques : mode et opacité à
         la ligne, vignette plus petite ; Couleur : réglages de la roue et choix des curseurs sur
         deux lignes au lieu de se chevaucher ; Effets : commandes à la ligne. Vérifié à 1050 ×
-        720. Reste : la réorganisation de l'espace de travail par défaut (à décider) ;
+        720. Puis l'espace de travail réorganisé (choix d'Anthony : « A, avec les Effets sous les
+        Calques ») : à droite du dessin, les calques avec les effets dessous, puis les réglages
+        (vue, guides, fiche en onglets) avec la couleur et les pinceaux dessous ; disposition 8,
+        qui remplace celles de ce jour (6, 7) ; les espaces de travail enregistrés ne changent pas ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,
