@@ -1118,6 +1118,9 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         et sa force), sauf dans la vue 3D ; le panneau Vue disparaît des réglages et des
         dispositions enregistrées. Aimant : le début du trait oubliait le guide juste après l'avoir
         retenu ; vérifié en essai (trait ondulé redressé à l'horizontale) ;
+      - **tampons retirés** (Anthony : « supprime les outils tampon et tampon de duplication ») :
+        outils, réglages, actions `outil.tampon` / `outil.tampon_duplication` (un fichier de
+        raccourcis qui les nomme encore les ignore avec un avertissement) ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,

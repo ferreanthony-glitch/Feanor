@@ -429,9 +429,6 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   ou Entrée pour finir, clic sur le premier point pour fermer).
 - **Texte** : clic pour poser un texte, Ctrl+Entrée pour le valider ; police et taille dans
   Réglages. Sur un calque vectoriel il reste modifiable (clic dessus avec l'outil Texte).
-- **Tampon** (calque bitmap) : des images posées le long du trait (feuille, herbe, caillou…, ou
-  tes images importées), avec variations au hasard ; Ctrl + clic sur plusieurs tampons pour les
-  alterner. **Tampon de duplication** : Ctrl + clic pour la source, puis peindre.
 - **Perspective** : clic sur le dessin, puis tirer ses coins (Ctrl+Z annule chaque geste).
 - **Pinceaux texturés** (calque bitmap, panneau Réglages) : liste de réglages (pinceau rond, crayon à
   papier, craie grasse, encre, gommes) ; « Papier » et « Grain » donnent un grain fixe sur le
@@ -744,7 +741,6 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `dock.rs`, `dockui.rs` | Panneaux modulables : disposition (format de Pelure), contenu des onglets, fenêtres à part |
 | `shapes.rs`, `shapetools.rs` | Formes : ligne (courbes), rectangle, ellipse, polyligne |
 | `text.rs`, `texttools.rs` | Texte : polices du poste, mise en page, outil |
-| `stamp.rs`, `stamptools.rs` | Tampon et tampon de duplication |
 | `persp.rs`, `perstools.rs` | Déformer en perspective |
 | `settings.rs` | Réglages de l'application (ffmpeg, pelure, copie de secours, dispositions, couleurs et nuanciers) |
 | `io.rs` | Anciens fichiers `.pelure`, écriture d'images |
@@ -767,7 +763,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 
 `cargo test --release` lance les tests (pinceau, vectoriel, remplissage, séquences/scènes/panneaux,
 annulation, projet en dossier, anciens fichiers, raccourcis, son, caméra, transformation,
-profondeur, vue de dessus, lecture, repère 3D, formes, texte, tampons, perspective, couleur,
+profondeur, vue de dessus, lecture, repère 3D, formes, texte, perspective, couleur,
 roue chromatique, nuanciers et leurs formats, panneaux modulables, calques de toute la scène,
 planche, modes de fusion, cadres de composition, plateau en 3D).
 

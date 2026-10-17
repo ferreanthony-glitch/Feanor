@@ -223,10 +223,6 @@ mod shapes;
 mod shapes_tests;
 mod shapetools;
 mod soundtrack;
-mod stamp;
-#[cfg(test)]
-mod stamp_tests;
-mod stamptools;
 mod text;
 #[cfg(test)]
 mod text_tests;

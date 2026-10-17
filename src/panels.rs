@@ -8,7 +8,7 @@ use crate::document::{Document, LayerKind};
 pub(crate) const MOUSE_GESTURES: [(&str, &str); 21] = [
     ("Clic droit sur une commande", "lui assigner un raccourci"),
     ("Alt + clic", "prélever une couleur"),
-    ("Ctrl tenu sur le dessin", "le lasso le temps de le tenir (sauf avec le tampon de duplication)"),
+    ("Ctrl tenu sur le dessin", "le lasso le temps de le tenir"),
     ("Touche d'un outil tenue", "l'outil le temps de la tenir, puis retour au précédent (brève : il reste)"),
     ("Molette", "zoom autour du curseur"),
     ("Maj + molette", "rotation de la vue"),
@@ -429,8 +429,6 @@ impl App {
             }
             Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline => self.shape_options_ui(ui),
             Tool::Text => self.text_options_ui(ui),
-            Tool::Stamp => self.stamp_options_ui(ui),
-            Tool::Clone => self.clone_options_ui(ui),
             Tool::Perspective => self.persp_options_ui(ui),
             Tool::Select => self.selection_ui(ui),
             Tool::Picker => {

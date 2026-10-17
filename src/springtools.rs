@@ -6,9 +6,8 @@
 //!   d'outil, comme avant (sinon on ne pourrait plus changer d'outil d'une touche).
 //! - Ctrl tenu seul sur le dessin : l'outil Sélection (son lasso), le temps de le tenir. Une
 //!   autre touche (Ctrl+Z…) ou la molette pendant qu'on le tient : ce n'était pas pour le lasso.
-//!   Avec le tampon de duplication, Ctrl garde son sens (choisir la source). Une zone bitmap
-//!   choisie pendant qu'on le tient garde l'outil Sélection au relâché (elle n'existe qu'avec
-//!   lui) ; des traits vectoriels choisis restent choisis avec l'outil d'avant.
+//!   Une zone bitmap choisie pendant qu'on le tient garde l'outil Sélection au relâché (elle
+//!   n'existe qu'avec lui) ; des traits vectoriels choisis restent choisis avec l'outil d'avant.
 //! - Le retour à l'outil d'avant attend que le bouton de la souris soit relâché (un trait ou un
 //!   lasso en cours n'est pas coupé).
 
@@ -121,7 +120,7 @@ impl App {
         // Pas au milieu d'un trait : seulement souris relâchée, ou un appui qui commence.
         let free = !down || pressed;
         let ready = !taken && !spoiled && on_canvas && free && (pressed || now - since >= CTRL_DELAY);
-        if ready && !matches!(self.tool, Tool::Select | Tool::Clone) {
+        if ready && self.tool != Tool::Select {
             let prev = self.tool;
             self.set_tool(Tool::Select);
             if let Some(c) = &mut self.ctrl_lasso {

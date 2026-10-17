@@ -8,7 +8,7 @@ use crate::app::{App, BoardView, Mode, Tool};
 
 /// Groupes de la barre d'outils verticale (séparés par un trait).
 pub(crate) const TOOL_GROUPS: &[&[Tool]] = &[
-    &[Tool::Brush, Tool::Pencil, Tool::Eraser, Tool::Fill, Tool::Stamp, Tool::Clone],
+    &[Tool::Brush, Tool::Pencil, Tool::Eraser, Tool::Fill],
     &[Tool::Line, Tool::Rect, Tool::Ellipse, Tool::Polyline, Tool::Text],
     &[Tool::Select, Tool::Transform, Tool::Perspective, Tool::Picker],
     &[Tool::Pan, Tool::Camera, Tool::Ref3d],

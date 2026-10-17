@@ -84,21 +84,16 @@ pub enum Tool {
     Ref3d,
     /// Texte (5d).
     Text,
-    /// Tampon, comme dans Storyboard Pro, et tampon de duplication (5e).
-    Stamp,
-    Clone,
     /// Déformer en perspective (5f).
     Perspective,
 }
 
 impl Tool {
-    pub const ALL: [Tool; 18] = [
+    pub const ALL: [Tool; 16] = [
         Tool::Brush,
         Tool::Pencil,
         Tool::Eraser,
         Tool::Fill,
-        Tool::Stamp,
-        Tool::Clone,
         Tool::Line,
         Tool::Rect,
         Tool::Ellipse,
@@ -130,8 +125,6 @@ impl Tool {
             Tool::Transform => "Transformer",
             Tool::Ref3d => "Repère 3D",
             Tool::Text => "Texte",
-            Tool::Stamp => "Tampon",
-            Tool::Clone => "Tampon de duplication",
             Tool::Perspective => "Perspective",
         }
     }
@@ -154,8 +147,6 @@ impl Tool {
             Tool::Transform => "Déplacer, agrandir ou tourner le calque entier (tous ses dessins).",
             Tool::Ref3d => "Un modèle 3D en fil de fer comme guide, vu depuis le cadre du plan.",
             Tool::Text => "Clic : poser un texte ; Ctrl + Entrée pour le valider.",
-            Tool::Stamp => "Poser des images le long du trait, dans l'ordre ou au hasard.",
-            Tool::Clone => "Ctrl + clic pour la source, puis peindre : recopie une autre partie du dessin.",
             Tool::Perspective => "Tirer les quatre coins du dessin pour le mettre en perspective.",
         }
     }
@@ -179,8 +170,6 @@ impl Tool {
             Tool::Transform => ph::BOUNDING_BOX,
             Tool::Ref3d => ph::CUBE,
             Tool::Text => ph::TEXT_T,
-            Tool::Stamp => ph::STAMP,
-            Tool::Clone => ph::COPY,
             Tool::Perspective => ph::PERSPECTIVE,
         }
     }
@@ -203,8 +192,6 @@ impl Tool {
             Tool::Transform => "outil.transformer",
             Tool::Ref3d => "outil.repere3d",
             Tool::Text => "outil.texte",
-            Tool::Stamp => "outil.tampon",
-            Tool::Clone => "outil.tampon_duplication",
             Tool::Perspective => "outil.perspective",
         }
     }
@@ -544,11 +531,6 @@ pub struct App {
     pub(crate) text_size: f32,
     pub(crate) text_fonts: Option<Vec<String>>,
     pub(crate) text_font_filter: String,
-    /// Tampons (5e) : bibliothèque et réglages, trait en cours ; tampon de duplication.
-    pub(crate) stamps: crate::stamptools::StampLibrary,
-    pub(crate) stamp_stroke: Option<crate::stamptools::StampStroke>,
-    pub(crate) clone: crate::stamptools::CloneSettings,
-    pub(crate) clone_stroke: Option<crate::stamptools::CloneStrokeState>,
     /// Déformation en perspective en cours (5f).
     pub(crate) persp: Option<crate::perstools::PerspEdit>,
     pub(crate) clipboard: Vec<Element>,
@@ -799,10 +781,6 @@ impl App {
             text_size: 48.0,
             text_fonts: None,
             text_font_filter: String::new(),
-            stamps: crate::stamptools::StampLibrary::load(),
-            stamp_stroke: None,
-            clone: Default::default(),
-            clone_stroke: None,
             persp: None,
             clipboard: Vec::new(),
             renderer: Renderer::new(),
@@ -1465,7 +1443,6 @@ impl App {
         self.finish_camera_drag();
         self.finish_layer_drag();
         self.finish_ref3d_drag();
-        self.finish_stamps();
         self.guides.stroke = None;
         self.shape_drag = None;
     }
@@ -1564,11 +1541,7 @@ impl App {
     }
 
     pub(crate) fn resize_brush(&mut self, factor: f32) {
-        if self.tool == Tool::Stamp {
-            self.stamps.settings.size = (self.stamps.settings.size * factor).clamp(2.0, 1000.0);
-        } else if self.tool == Tool::Clone {
-            self.clone.size = (self.clone.size * factor).clamp(1.0, 500.0);
-        } else if self.tool.is_shape() {
+        if self.tool.is_shape() {
             self.shape.width = (self.shape.width * factor).clamp(0.5, 200.0);
         } else if let Some(b) = self.current_brush_mut() {
             b.size = (b.size * factor).clamp(0.5, 400.0);
@@ -2659,8 +2632,6 @@ impl App {
                 self.set_tool(Tool::Line);
             }
             "outil.texte" => self.set_tool(Tool::Text),
-            "outil.tampon" => self.set_tool(Tool::Stamp),
-            "outil.tampon_duplication" => self.set_tool(Tool::Clone),
             "outil.perspective" => self.set_tool(Tool::Perspective),
             "outil.rectangle" => self.set_tool(Tool::Rect),
             "outil.ellipse" => self.set_tool(Tool::Ellipse),

@@ -173,10 +173,8 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   des noms est lue au démarrage (sur un autre fil). Élément vectoriel `Text` (texte, police,
   taille, couleur, placement affine), dessiné par les contours des lettres (cache des mises en
   page) en règle non nulle, lettre par lettre.
-- **Tampons** (`stamp.rs`, `stamptools.rs`) : suite des tampons le long du trait (espacement en
-  part de la taille, hasard reproductible), pose par échantillonnage inverse bilinéaire, teinte
-  par `render::over`. Duplication : instantané de la source au début du trait, chaque pixel
-  reçoit au plus une fois la plus forte couverture (pas d'accumulation).
+- **Tampons** : retirés le 2026-10-17 à la demande d'Anthony (tampon et tampon de duplication ;
+  le code est dans l'historique git, `stamp.rs` / `stamptools.rs` avant ce retrait).
 - **Perspective** (`persp.rs`, `perstools.rs`) : homographie rectangle → quadrilatère ; l'image
   est refaite depuis l'original à chaque lâcher ; éléments vectoriels : points transformés
   (le texte prend l'affine la plus proche).
@@ -442,7 +440,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   ne la touche. Un pochoir déplacé (transformation, multiplan) est lu à travers
   `affine(peint) puis inverse(affine(pochoir))`. Le facteur multiplie la couverture de chaque
   empreinte, pour le pinceau, le crayon et la gomme bitmap. Calques vectoriels, pot de peinture,
-  formes, tampons et texte ne sont pas encore concernés.
+  formes et texte ne sont pas encore concernés.
 - En-tête de la timeline (`layerheads.rs`) : `rows_of` donne les lignes (calque, haut, hauteur :
   `ROW_FULL` ou `ROW_SMALL` si `collapsed`), utilisées par l'en-tête et par la grille
   (`timeline.rs`) pour rester alignées. Chaque ligne : un `interact` de fond (choisir, glisser,
@@ -1046,7 +1044,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   réglages, sans toucher au moteur de pinceau.
 - Couleurs récentes : `App::color_used`, appelé au début d'un trait de pinceau ou de crayon
   (`begin_paint`), d'un remplissage (`fill_at`), à la pose d'une forme (`commit_shape_points`)
-  et d'un texte (`finish_text_edit`). Les notes de la planche et le tampon n'y passent pas.
+  et d'un texte (`finish_text_edit`). Les notes de la planche n'y passent pas.
 - Pastille visée (commandes `pastille.*`) : celle dont le menu est ouvert, sinon celle sous la
   souris, vues à l'image précédente (`ColorState::menu` / `hovered`, renouvelés par
   `color_tick` en fin d'image ; un panneau fermé n'en laisse donc aucune). Un raccourci agit
