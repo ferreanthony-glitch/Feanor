@@ -1076,7 +1076,7 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
       - **panneau Calques** (Anthony : « la zone [des boutons] doit rester en haut. [Le verrou]
         ne fonctionne pas. Le clic droit sur les calques n'est pas disponible ») : les commandes
         passent sous le mode et l'opacité, seule la liste défile ; l'œil, le verrou, la vignette,
-        le nom et le clic droit marchaient plus depuis la « passe interface » (la zone de glisser
+        le nom et le clic droit ne marchaient plus depuis la « passe interface » (la zone de glisser
         de chaque rang, posée par-dessus, prenait leurs clics) ; le clic droit donne le menu
         complet du calque.
 
