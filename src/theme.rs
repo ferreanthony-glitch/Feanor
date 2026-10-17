@@ -5,6 +5,8 @@
 
 use eframe::egui::{self, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Margin, Shadow, Stroke, TextStyle, Vec2};
 
+use crate::document::LayerKind;
+
 const fn gris(v: u8) -> Color32 {
     Color32::from_rgb(v, v, v)
 }
@@ -55,7 +57,29 @@ pub const DESSIN_VIDE: Color32 = gris(115);
 /// Les mêmes, plus sourds, sous les panneaux du montage (blue-700, seafoam-700).
 pub const CALQUE_VECTORIEL: Color32 = Color32::from_rgb(52, 91, 248);
 pub const CALQUE_BITMAP: Color32 = Color32::from_rgb(6, 122, 103);
-/// Image courante (red-900), clés de caméra (le jaune du cadre de la caméra).
+/// Calque CTG (13j) : rose, vif et sourd (Anthony, 2026-10-17 : « code couleur selon type de
+/// calque : bitmap, vecto, CTG »).
+pub const DESSIN_CTG: Color32 = Color32::from_rgb(229, 91, 182);
+pub const CALQUE_CTG: Color32 = Color32::from_rgb(176, 52, 136);
+
+/// Couleur vive d'une sorte de calque (repères, barres, étiquettes) : bitmap vert, vectoriel
+/// bleu, CTG rose (`ctg` : le calque est un calque CTG).
+pub fn couleur_calque(kind: LayerKind, ctg: bool) -> Color32 {
+    match (ctg, kind) {
+        (true, _) => DESSIN_CTG,
+        (false, LayerKind::Vector) => DESSIN_VECTORIEL,
+        (false, LayerKind::Bitmap) => DESSIN_BITMAP,
+    }
+}
+
+/// La même, sourde : fond des dessins sous les panneaux du montage, où un nom s'écrit dessus.
+pub fn fond_calque(kind: LayerKind, ctg: bool) -> Color32 {
+    match (ctg, kind) {
+        (true, _) => CALQUE_CTG,
+        (false, LayerKind::Vector) => CALQUE_VECTORIEL,
+        (false, LayerKind::Bitmap) => CALQUE_BITMAP,
+    }
+}/// Image courante (red-900), clés de caméra (le jaune du cadre de la caméra).
 pub const IMAGE_COURANTE: Color32 = Color32::from_rgb(252, 67, 46);
 pub const CAMERA: Color32 = Color32::from_rgb(255, 196, 60);
 /// Marques d'image (13a) : orange (orange-900), distinct du jaune des clés de caméra.

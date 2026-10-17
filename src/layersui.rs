@@ -246,10 +246,12 @@ impl App {
         let list_top = ui.cursor().top();
         let mut drag_rows: Vec<crate::layerheads::Row> = Vec::new();
         for li in (0..self.layers().len()).rev() {
-            let (id, visible, locked, kind, name, cel, folder) = {
+            let (id, visible, locked, kind, name, cel, folder, ctg) = {
                 let l = &self.layers()[li];
-                (l.id, l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame), l.folder)
+                (l.id, l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame), l.folder, l.ctg.is_some())
             };
+            // Code couleur de sa sorte (bitmap vert, vectoriel bleu, CTG rose ; Anthony, 2026-10-17).
+            let hue = if folder { accent } else { crate::theme::couleur_calque(kind, ctg) };
             let current = li == self.cur_layer;
             let chosen = !current && self.is_chosen_layer(li);
             let thumb = cel.and_then(|c| self.layer_thumb(ui.ctx(), c));
@@ -260,8 +262,8 @@ impl App {
             let grip = ui.ctx().data(|d| d.get_temp::<egui::Rect>(grip_id)).map(|r| ui.interact(r, grip_id, Sense::click_and_drag()));
             let shown = egui::Frame::new()
                 .fill(match (current, chosen) {
-                    (true, _) => accent.gamma_multiply(0.55),
-                    (false, true) => accent.gamma_multiply(0.25),
+                    (true, _) => hue.gamma_multiply(0.55),
+                    (false, true) => hue.gamma_multiply(0.25),
                     (false, false) => Color32::TRANSPARENT,
                 })
                 .corner_radius(3.0)
@@ -323,14 +325,21 @@ impl App {
                             }
                             let kind = match kind {
                                 _ if folder => "dossier",
+                                _ if ctg => "CTG",
                                 LayerKind::Vector => "vectoriel",
                                 LayerKind::Bitmap => "bitmap",
                             };
-                            ui.label(RichText::new(kind).small().weak());
+                            let label = RichText::new(kind).small();
+                            ui.label(if folder || current { label.weak() } else { label.color(hue) });
                         });
                     });
                 });
             let rect = shown.response.rect;
+            if !folder {
+                // La bande de sa sorte, au bord gauche du rang.
+                let band = egui::Rect::from_min_size(rect.left_top() + vec2(0.0, 2.0), vec2(3.0, rect.height() - 4.0));
+                ui.painter().rect_filled(band, 1.0, hue);
+            }
             ui.ctx().data_mut(|d| d.insert_temp(grip_id, rect));
             drag_rows.push(crate::layerheads::Row { li, top: rect.top() - list_top, h: rect.height() });
             if let Some(grip) = grip {

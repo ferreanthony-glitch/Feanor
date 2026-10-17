@@ -803,6 +803,10 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     peint derrière) et refait la zone. `App::paint_behind`, `fill_shapes` (retenus dans
     `Settings`, enregistrés avec la pelure quand ils changent), `close_tolerance` (15 points
     d'écran) ; actions `pinceau.derriere`, `pinceau.remplir` (sans touche).
+  - Code couleur des calques : `theme::couleur_calque(kind, ctg)` (vif : repères, barres, bande et
+    étiquette du panneau Calques, lettre de l'en-tête de la timeline) et `fond_calque` (sourd :
+    dessins sous les panneaux du montage) ; `DESSIN_CTG` / `CALQUE_CTG` roses. Tous les endroits
+    qui choisissaient la couleur d'après `layer.kind` passent par eux.
   - Image du presse-papiers (`pasteimage.rs`) : `run_action("edition.coller")` commence par
     `clipboard_image` (arboard : rien si le texte commence par `MARK`, « Pelure : », écrit par les
     copies de Pelure) ; `paste_clipboard_image` : calque bitmap modifiable ou `add_layer`, `fit_size`

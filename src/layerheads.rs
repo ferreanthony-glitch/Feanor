@@ -132,6 +132,8 @@ struct Head {
     id: u64,
     name: String,
     kind: LayerKind,
+    /// Calque CTG (13j) : son code couleur est rose.
+    ctg: bool,
     visible: bool,
     locked: bool,
     onion: bool,
@@ -279,6 +281,7 @@ impl App {
                 id: l.id,
                 name: l.name.clone(),
                 kind: l.kind,
+                ctg: l.ctg.is_some(),
                 visible: l.visible,
                 locked: l.locked,
                 onion: l.onion,
@@ -367,11 +370,7 @@ impl App {
 
         // Nom (ou son champ quand on le renomme), sorte du calque, menu d'options.
         let line1 = r.top() + 11.0;
-        let badge = match h.kind {
-            _ if current => fg,
-            LayerKind::Vector => theme::DESSIN_VECTORIEL,
-            LayerKind::Bitmap => theme::DESSIN_BITMAP,
-        };
+        let badge = if current { fg } else { theme::couleur_calque(h.kind, h.ctg) };
         if h.collapsed && !h.folder {
             let eye = Rect::from_min_size(pos2(r.left() + 20.0, r.top() + 2.0), vec2(ICON_W, 18.0));
             self.eye_button(ui, eye, li, h.visible, fg);

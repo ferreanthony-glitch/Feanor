@@ -148,7 +148,8 @@ calque (cadenas) : on ne peut plus dessiner dessus. Ctrl+E le fusionne avec le c
 deux calques vectoriels restent vectoriels, sinon le résultat est bitmap ; les deux calques doivent
 être visibles et non verrouillés.
 
-Le panneau Calques montre la vignette de chaque calque à l'image courante. En haut, le **mode de
+Le panneau Calques montre la vignette de chaque calque à l'image courante. Chaque sorte de calque a
+sa couleur, partout (panneau Calques, montage, timeline) : bitmap vert, vectoriel bleu, CTG rose. En haut, le **mode de
 fusion** du calque et son opacité : les 27 modes des logiciels de retouche (Fondu, Produit,
 Densité couleur +, Superposition, Lumière vive, Différence, Soustraction, Division, Teinte,
 Luminosité…), rangés par famille ; le calque se mélange à ce qui est dessous, à l'écran comme à

@@ -32,7 +32,7 @@ fn texts_stay_readable_on_their_backgrounds() {
 fn timeline_and_montage_stay_readable() {
     // Noms écrits sur les extraits son, les calques sous les panneaux, le « M » d'une piste muette,
     // les barres de séquence et de scène : au moins 4,5:1.
-    for fond in [theme::SON_EXTRAIT, theme::SON_CHOISI, theme::CALQUE_VECTORIEL, theme::CALQUE_BITMAP] {
+    for fond in [theme::SON_EXTRAIT, theme::SON_CHOISI, theme::CALQUE_VECTORIEL, theme::CALQUE_BITMAP, theme::CALQUE_CTG] {
         assert!(contraste(theme::TEXTE_FORT, fond) >= 4.5, "{fond:?} : {}", contraste(theme::TEXTE_FORT, fond));
     }
     assert!(contraste(Color32::WHITE, theme::SON_MUET) >= 4.5);
@@ -42,11 +42,23 @@ fn timeline_and_montage_stay_readable() {
     // Repères dessinés sur les rangées (dessins exposés, image courante, clés de caméra, forme
     // d'onde) : au moins 3:1, le minimum pour un élément graphique.
     for fond in [theme::RANGEE, theme::RANGEE_SOMBRE] {
-        for marque in [theme::DESSIN_VECTORIEL, theme::DESSIN_BITMAP, theme::DESSIN_VIDE, theme::IMAGE_COURANTE, theme::CAMERA, theme::MARQUE] {
+        for marque in [theme::DESSIN_VECTORIEL, theme::DESSIN_BITMAP, theme::DESSIN_CTG, theme::DESSIN_VIDE, theme::IMAGE_COURANTE, theme::CAMERA, theme::MARQUE] {
             assert!(contraste(marque, fond) >= 3.0, "{marque:?} sur {fond:?} : {}", contraste(marque, fond));
         }
     }
     assert!(contraste(theme::SON_ONDE, theme::SON_EXTRAIT) >= 3.0);
+}
+
+#[test]
+fn each_kind_of_layer_has_its_colour() {
+    use crate::document::LayerKind;
+    // Anthony : bitmap vert, vectoriel bleu, CTG rose ; trois couleurs distinctes.
+    let (b, v, c) = (theme::couleur_calque(LayerKind::Bitmap, false), theme::couleur_calque(LayerKind::Vector, false), theme::couleur_calque(LayerKind::Bitmap, true));
+    assert!(b.g() > b.r() && b.g() > b.b() / 2, "bitmap vert");
+    assert!(v.b() > v.r() && v.b() > v.g(), "vectoriel bleu");
+    assert!(c.r() > c.g() && c.b() > c.g(), "CTG rose");
+    assert_eq!(theme::couleur_calque(LayerKind::Vector, true), c, "un CTG reste rose, quelle que soit sa sorte");
+    assert_eq!(theme::fond_calque(LayerKind::Vector, false), theme::CALQUE_VECTORIEL);
 }
 
 #[test]

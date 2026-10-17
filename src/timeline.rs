@@ -1,7 +1,6 @@
 use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Pos2, Rect, RichText, Sense, Stroke, StrokeKind};
 
 use crate::app::{App, Mode};
-use crate::document::LayerKind;
 use crate::handles::{GridMenu, GridSelect, Handle};
 use crate::layerheads::{row_at, rows_height, rows_of, Row, HEAD_W};
 use crate::storyboard::duration_label;
@@ -536,10 +535,7 @@ impl App {
             let first = layer.frames.iter().position(Option::is_some);
             let last = layer.frames.iter().rposition(Option::is_some);
             if let (Some(first), Some(last)) = (first, last) {
-                let base = match layer.kind {
-                    LayerKind::Vector => theme::DESSIN_VECTORIEL,
-                    LayerKind::Bitmap => theme::DESSIN_BITMAP,
-                };
+                let base = theme::couleur_calque(layer.kind, layer.ctg.is_some());
                 let ranges = [(0, first), (last + 1, cols)];
                 for (a, b) in ranges {
                     let mut f = a;
@@ -581,11 +577,7 @@ impl App {
                         pos2(r.left() + end as f32 * cell - 1.0, body_bottom(y, row.h)),
                     );
                     let empty = self.doc.cels.get(&id).is_none_or(|c| c.is_empty());
-                    let mut fill = match (empty, layer.kind) {
-                        (true, _) => theme::DESSIN_VIDE,
-                        (false, LayerKind::Vector) => theme::DESSIN_VECTORIEL,
-                        (false, LayerKind::Bitmap) => theme::DESSIN_BITMAP,
-                    };
+                    let mut fill = if empty { theme::DESSIN_VIDE } else { theme::couleur_calque(layer.kind, layer.ctg.is_some()) };
                     if !layer.visible {
                         fill = fill.gamma_multiply(0.5);
                     }
@@ -648,10 +640,7 @@ impl App {
             if !bar.is_positive() {
                 continue;
             }
-            let base = match layer.kind {
-                LayerKind::Vector => theme::DESSIN_VECTORIEL,
-                LayerKind::Bitmap => theme::DESSIN_BITMAP,
-            };
+            let base = theme::couleur_calque(layer.kind, layer.ctg.is_some());
             let on = |h: Option<Handle>| match h {
                 Some(Handle::LayerMove { layer, .. }) => layer == row.li,
                 _ => false,

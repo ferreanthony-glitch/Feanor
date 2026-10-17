@@ -1158,6 +1158,14 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         presse-papiers n'a pas de texte : le relâché de V avec Ctrl en tient lieu. `arboard`
         (déjà dans Cargo.lock, rien téléchargé). Vérifié en essai avec une image fabriquée (le
         presse-papiers d'Anthony n'est pas touché) ; la copie depuis un navigateur est à essayer ;
+      - **code couleur des sortes de calques** (Anthony, capture annotée : « code couleur selon
+        type de calque : bitmap, vecto, CTG ») : bitmap vert, vectoriel bleu (les couleurs que
+        le montage et la timeline avaient déjà), CTG rose (nouveau). Panneau Calques : le rang
+        courant (ou choisi) teinté de sa couleur au lieu du bleu d'accent, une bande à gauche de
+        chaque rang, « bitmap / vectoriel / CTG » écrit dans sa couleur ; en-tête du montage : la
+        même bande ; dessins et barres du montage et de la timeline, lettre de la sorte dans
+        l'en-tête de la timeline. Projet enregistré en dossier : gardé (choix d'Anthony, comme
+        Storyboard Pro) ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,
