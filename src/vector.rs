@@ -138,6 +138,13 @@ impl Element {
         r
     }
 
+    /// Couleur de l'élément (trait, zone ou texte).
+    pub fn color(&self) -> [u8; 3] {
+        match self {
+            Element::Stroke { color, .. } | Element::Fill { color, .. } | Element::Text { color, .. } => *color,
+        }
+    }
+
     pub fn set_color(&mut self, c: [u8; 3]) {
         match self {
             Element::Stroke { color, .. } | Element::Fill { color, .. } | Element::Text { color, .. } => *color = c,

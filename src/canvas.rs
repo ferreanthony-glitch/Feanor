@@ -302,6 +302,7 @@ impl App {
                         Tool::Text => self.text_press(p),
                         Tool::Perspective => self.persp_press(p, *pos),
                         Tool::Select => self.select_press(p, *pos, modifiers.shift),
+                        Tool::SelectColor => self.color_select_press(p, *pos, modifiers.shift),
                         Tool::Camera => self.camera_press(stage, *pos),
                         Tool::Transform => self.transform_press(stage, *pos),
                         Tool::Ref3d => self.ref3d_press(*pos, *modifiers),
@@ -501,7 +502,8 @@ impl App {
             });
             return;
         }
-        if self.tool == Tool::Select {
+        if self.tool.is_select() {
+            let pick = self.tool == Tool::SelectColor;
             let icon = match self.handle_at(p) {
                 Some(Handle::Rotate) => CursorIcon::Alias,
                 Some(Handle::Corner(0 | 2)) => CursorIcon::ResizeNwSe,
@@ -509,7 +511,8 @@ impl App {
                 Some(Handle::Edge(0 | 2)) => CursorIcon::ResizeVertical,
                 Some(Handle::Edge(_)) => CursorIcon::ResizeHorizontal,
                 _ => match (self.hover_canvas.map(|c| self.to_layer(c)), self.selection_bounds()) {
-                    (Some(c), Some(b)) if b.contains(c) => CursorIcon::Move,
+                    (Some(c), Some(b)) if b.contains(c) && !pick => CursorIcon::Move,
+                    _ if pick => CursorIcon::Crosshair,
                     _ => CursorIcon::Default,
                 },
             };

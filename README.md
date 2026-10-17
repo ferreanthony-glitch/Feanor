@@ -414,7 +414,9 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   remet à sa place). Les commandes sont des icônes, partout où c'est possible : la souris posée
   une seconde sur l'une d'elles ouvre une bulle avec son nom, son raccourci et ce qu'elle fait.
   En haut, une barre de commandes ; à gauche, la barre d'outils verticale (Affichage > Panneaux
-  pour les masquer). Couleur : avant-plan et arrière-plan, roue, curseurs, couleurs récentes et
+  pour les masquer). Une case à petit coin regroupe plusieurs outils : clic maintenu pour les
+  voir et en prendre un, la case montre ensuite le dernier pris (Sélection et Sélection par
+  couleur en haut ; Rectangle, Ligne, Ellipse et Polyligne dans une seule case). Couleur : avant-plan et arrière-plan, roue, curseurs, couleurs récentes et
   nuanciers (voir **Couleur** plus haut). Réglages du pinceau : une
   grille de réglages, chacun avec l'aperçu de son trait et sa taille. Panneau **Pinceaux** (onglet
   à côté de Couleur) : les mêmes réglages en liste, avec un grand aperçu du trait, la taille, et
@@ -427,6 +429,10 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
 - **Formes** : Ligne (droite, courbe : tracer puis glisser pour courber ; courbe en S : deux
   glissers), Rectangle, Ellipse (Maj : carré, cercle), Polyligne (un clic par point, double-clic
   ou Entrée pour finir, clic sur le premier point pour fermer).
+- **Sélection par couleur** (baguette, dans la case de la Sélection) : sur un calque bitmap, clic
+  sur une couleur pour choisir sa zone (tolérance ; pixels voisins seulement, ou toute l'image) ;
+  sur un calque vectoriel, tous les traits et zones de cette couleur. Maj : ajouter. Copier,
+  couper, effacer, flèches et poignées comme avec la Sélection.
 - **Texte** : clic pour poser un texte, Ctrl+Entrée pour le valider ; police et taille dans
   Réglages. Sur un calque vectoriel il reste modifiable (clic dessus avec l'outil Texte).
 - **Perspective** : clic sur le dessin, puis tirer ses coins (Ctrl+Z annule chaque geste).

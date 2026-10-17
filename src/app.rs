@@ -64,7 +64,7 @@ pub enum BoardView {
     Panels,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tool {
     Brush,
     Pencil,
@@ -76,6 +76,9 @@ pub enum Tool {
     Ellipse,
     Polyline,
     Select,
+    /// Sélection par couleur : la zone de la couleur cliquée (bitmap), ou tous les éléments de
+    /// cette couleur (vectoriel). Même case que Sélection dans la barre d'outils.
+    SelectColor,
     Picker,
     Pan,
     Camera,
@@ -89,7 +92,7 @@ pub enum Tool {
 }
 
 impl Tool {
-    pub const ALL: [Tool; 16] = [
+    pub const ALL: [Tool; 17] = [
         Tool::Brush,
         Tool::Pencil,
         Tool::Eraser,
@@ -100,6 +103,7 @@ impl Tool {
         Tool::Polyline,
         Tool::Text,
         Tool::Select,
+        Tool::SelectColor,
         Tool::Picker,
         Tool::Pan,
         Tool::Camera,
@@ -119,6 +123,7 @@ impl Tool {
             Tool::Ellipse => "Ellipse",
             Tool::Polyline => "Polyligne",
             Tool::Select => "Sélection",
+            Tool::SelectColor => "Sélection par couleur",
             Tool::Picker => "Pipette",
             Tool::Pan => "Main",
             Tool::Camera => "Caméra",
@@ -141,6 +146,7 @@ impl Tool {
             Tool::Ellipse => "Tracer une ellipse, vide ou pleine.",
             Tool::Polyline => "Tracer une suite de segments, clic après clic.",
             Tool::Select => "Choisir une zone (lasso ou rectangle) pour la déplacer, la copier ou l'effacer.",
+            Tool::SelectColor => "Clic sur une couleur : la zone de cette couleur (bitmap), ou tous les traits et zones de cette couleur (vectoriel). Maj : ajouter.",
             Tool::Picker => "Prendre une couleur sur le dessin.",
             Tool::Pan => "Déplacer la vue.",
             Tool::Camera => "Régler le cadre de la caméra du plan : déplacer, zoomer par un coin, tourner.",
@@ -164,6 +170,7 @@ impl Tool {
             Tool::Ellipse => ph::CIRCLE,
             Tool::Polyline => ph::LINE_SEGMENTS,
             Tool::Select => ph::LASSO,
+            Tool::SelectColor => ph::MAGIC_WAND,
             Tool::Picker => ph::EYEDROPPER,
             Tool::Pan => ph::HAND,
             Tool::Camera => ph::VIDEO_CAMERA,
@@ -186,6 +193,7 @@ impl Tool {
             Tool::Ellipse => "outil.ellipse",
             Tool::Polyline => "outil.polyligne",
             Tool::Select => "outil.selection",
+            Tool::SelectColor => "outil.selection_couleur",
             Tool::Picker => "outil.pipette",
             Tool::Pan => "outil.main",
             Tool::Camera => "outil.camera",
@@ -209,6 +217,11 @@ impl Tool {
     /// Un des outils de forme.
     pub fn is_shape(self) -> bool {
         self.shape_kind().is_some() || self == Tool::Polyline
+    }
+
+    /// Un des outils de sélection : la sélection reste affichée et modifiable avec lui.
+    pub fn is_select(self) -> bool {
+        matches!(self, Tool::Select | Tool::SelectColor)
     }
 }
 
@@ -531,6 +544,12 @@ pub struct App {
     pub(crate) text_size: f32,
     pub(crate) text_fonts: Option<Vec<String>>,
     pub(crate) text_font_filter: String,
+    /// Sélection par couleur : tolérance, pixels voisins seulement.
+    pub(crate) color_select: crate::colorsel::ColorSelectSettings,
+    /// Outils pris, du plus récent au plus ancien (cases de la barre d'outils), et case dont les
+    /// outils sont affichés (groupe, case, rectangle de la case).
+    pub(crate) tool_recent: Vec<Tool>,
+    pub(crate) tool_flyout: Option<(usize, usize, Rect)>,
     /// Déformation en perspective en cours (5f).
     pub(crate) persp: Option<crate::perstools::PerspEdit>,
     pub(crate) clipboard: Vec<Element>,
@@ -781,6 +800,9 @@ impl App {
             text_size: 48.0,
             text_fonts: None,
             text_font_filter: String::new(),
+            color_select: Default::default(),
+            tool_recent: Vec::new(),
+            tool_flyout: None,
             persp: None,
             clipboard: Vec::new(),
             renderer: Renderer::new(),
@@ -2562,7 +2584,7 @@ impl App {
                     self.delete_chosen_panels();
                 } else if self.bsel.is_some() {
                     self.bitmap_erase(true);
-                } else if self.tool == Tool::Select && self.vsel.is_some() {
+                } else if self.tool.is_select() && self.vsel.is_some() {
                     self.delete_selection();
                 } else {
                     self.clear_image();
@@ -2621,6 +2643,7 @@ impl App {
             "outil.remplissage" => self.set_tool(Tool::Fill),
             "outil.pipette" => self.set_tool(Tool::Picker),
             "outil.selection" => self.set_tool(Tool::Select),
+            "outil.selection_couleur" => self.set_tool(Tool::SelectColor),
             "outil.formes" => self.set_tool(self.shape.last),
             "outil.ligne" => self.set_tool(Tool::Line),
             "outil.ligne_droite" | "outil.ligne_courbe" | "outil.ligne_s" => {
@@ -2991,6 +3014,9 @@ impl App {
             if tool.is_shape() {
                 self.shape.last = tool;
             }
+            // La case de la barre d'outils montre le dernier outil pris parmi les siens.
+            self.tool_recent.retain(|t| *t != tool);
+            self.tool_recent.insert(0, tool);
         }
     }
 

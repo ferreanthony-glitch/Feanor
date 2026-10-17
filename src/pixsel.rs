@@ -33,6 +33,24 @@ impl PixelMask {
         (!mask.is_empty()).then_some(mask)
     }
 
+    /// Zone des pixels `true` d'une image `width` × `height` (sélection par couleur), ou rien.
+    pub fn from_bools(mask: &[bool], width: usize, height: usize) -> Option<Self> {
+        let (mut x0, mut y0, mut x1, mut y1) = (usize::MAX, usize::MAX, 0, 0);
+        for y in 0..height {
+            for x in 0..width {
+                if mask[y * width + x] {
+                    (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x + 1), y1.max(y + 1));
+                }
+            }
+        }
+        if x0 >= x1 {
+            return None;
+        }
+        let (w, h) = (x1 - x0, y1 - y0);
+        let data = (0..w * h).map(|i| if mask[(y0 + i / w) * width + x0 + i % w] { 1.0 } else { 0.0 }).collect();
+        Some(Self { x0, y0, w, h, data })
+    }
+
     pub fn is_empty(&self) -> bool {
         self.data.iter().all(|&m| m <= 0.0)
     }

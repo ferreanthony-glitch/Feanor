@@ -295,6 +295,11 @@ touches = ["Alt+S"]
 source = "Storyboard Pro 27 : DRAWING_SELECT_TOOL_KEY"
 
 [[raccourci]]
+action = "outil.selection_couleur"
+touches = []
+source = "Storyboard Pro 27 sans touche par défaut : DRAWING_SELECT_TOOL_BY_COLOR_KEY"
+
+[[raccourci]]
 action = "outil.cutter"
 touches = ["Alt+T"]
 source = "Storyboard Pro 27 : DRAWING_CUTTER_TOOL_KEY"

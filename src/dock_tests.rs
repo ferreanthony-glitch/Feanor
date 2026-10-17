@@ -307,7 +307,7 @@ fn damaged_layouts_are_repaired() {
 
 #[test]
 fn the_vertical_tool_bar_has_every_tool_once() {
-    let mut all: Vec<crate::app::Tool> = crate::toolbars::TOOL_GROUPS.iter().flat_map(|g| g.iter().copied()).collect();
+    let mut all: Vec<crate::app::Tool> = crate::toolbars::TOOL_GROUPS.iter().flat_map(|g| g.iter().flat_map(|s| s.iter().copied())).collect();
     assert_eq!(all.len(), crate::app::Tool::ALL.len());
     for t in crate::app::Tool::ALL {
         assert_eq!(all.iter().filter(|x| **x == t).count(), 1, "{}", t.label());
@@ -315,6 +315,23 @@ fn the_vertical_tool_bar_has_every_tool_once() {
     all.dedup();
 }
 
+#[test]
+fn grouped_tools_share_one_slot() {
+    use crate::app::Tool;
+    use crate::toolbars::{slot_tool, TOOL_GROUPS};
+    // Anthony : la sélection au-dessus du pinceau, avec la sélection par couleur ; les formes dans
+    // une seule case, au rectangle.
+    let first = TOOL_GROUPS[0];
+    assert_eq!(first[0], &[Tool::Select, Tool::SelectColor][..]);
+    assert_eq!(first[1], &[Tool::Brush][..]);
+    let shapes = TOOL_GROUPS.iter().flat_map(|g| g.iter()).find(|s| s.contains(&Tool::Line)).expect("case des formes");
+    assert_eq!(shapes.len(), 4);
+    assert_eq!(shapes[0], Tool::Rect, "le rectangle au début");
+    // Outil montré : le courant, sinon le plus récent de la case, sinon le premier.
+    assert_eq!(slot_tool(shapes, Tool::Brush, &[]), Tool::Rect);
+    assert_eq!(slot_tool(shapes, Tool::Ellipse, &[Tool::Ellipse]), Tool::Ellipse);
+    assert_eq!(slot_tool(shapes, Tool::Brush, &[Tool::Brush, Tool::Polyline, Tool::Line]), Tool::Polyline);
+}
 #[test]
 fn a_panel_can_have_its_own_window() {
     let mut l = DockLayout::from_legacy(&Layout::default());

@@ -51,6 +51,9 @@ mod camtools;
 mod canvas;
 #[cfg(test)]
 mod color_tests;
+mod colorsel;
+#[cfg(test)]
+mod colorsel_tests;
 mod colorui;
 mod couleur;
 #[cfg(test)]

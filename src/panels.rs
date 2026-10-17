@@ -430,7 +430,8 @@ impl App {
             Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline => self.shape_options_ui(ui),
             Tool::Text => self.text_options_ui(ui),
             Tool::Perspective => self.persp_options_ui(ui),
-            Tool::Select => self.selection_ui(ui),
+            Tool::Select => self.selection_ui(ui, true),
+            Tool::SelectColor => self.color_select_ui(ui),
             Tool::Picker => {
                 ui.label("Clique sur le dessin pour prélever une couleur.");
                 note(ui, "Avec les autres outils : Alt + clic.");
@@ -500,14 +501,17 @@ impl App {
         });
     }
 
-    /// Options de l'outil Sélection sur un calque bitmap.
-    fn bitmap_selection_ui(&mut self, ui: &mut egui::Ui) {
+    /// Options de l'outil Sélection sur un calque bitmap (`lasso` : avec le choix lasso /
+    /// rectangle et son mode d'emploi ; sans pour la sélection par couleur).
+    fn bitmap_selection_ui(&mut self, ui: &mut egui::Ui, lasso: bool) {
         use crate::bulles::choix;
         use egui_phosphor::regular as ph;
-        ui.horizontal(|ui| {
-            choix(ui, &mut self.select_rect, false, ph::LASSO, "Lasso", "Entourer la zone à main levée.", "");
-            choix(ui, &mut self.select_rect, true, ph::RECTANGLE_DASHED, "Rectangle", "Tirer un rectangle.", "");
-        });
+        if lasso {
+            ui.horizontal(|ui| {
+                choix(ui, &mut self.select_rect, false, ph::LASSO, "Lasso", "Entourer la zone à main levée.", "");
+                choix(ui, &mut self.select_rect, true, ph::RECTANGLE_DASHED, "Rectangle", "Tirer un rectangle.", "");
+            });
+        }
         let has = self.bsel.is_some();
         ui.label(match self.bsel.as_ref().map(|s| s.lifted.is_some()) {
             None => "Rien de sélectionné.",
@@ -545,17 +549,19 @@ impl App {
                 self.bitmap_paste();
             }
         });
-        note(
-            ui,
-            "Glisser : lasso ou rectangle (Maj : ajouter). Dans la zone : déplacer. Poignées : \
-             échelle (Maj : proportionnelle), rotation (Maj : par 15°). Échap ou autre outil : poser.",
-        );
+        if lasso {
+            note(
+                ui,
+                "Glisser : lasso ou rectangle (Maj : ajouter). Dans la zone : déplacer. Poignées : \
+                 échelle (Maj : proportionnelle), rotation (Maj : par 15°). Échap ou autre outil : poser.",
+            );
+        }
     }
 
-    fn selection_ui(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn selection_ui(&mut self, ui: &mut egui::Ui, lasso: bool) {
         use egui_phosphor::regular as ph;
         if self.layer().kind != LayerKind::Vector {
-            self.bitmap_selection_ui(ui);
+            self.bitmap_selection_ui(ui, lasso);
             return;
         }
         let n = self.vsel.as_ref().map_or(0, |s| s.items.len());
@@ -602,11 +608,13 @@ impl App {
                 self.paste();
             }
         });
-        note(
-            ui,
-            "Clic : un élément. Glisser dans le vide : lasso. Maj : ajouter / retirer. \
-             Poignées : échelle (Maj : proportionnelle) et rotation (Maj : par 15°).",
-        );
+        if lasso {
+            note(
+                ui,
+                "Clic : un élément. Glisser dans le vide : lasso. Maj : ajouter / retirer. \
+                 Poignées : échelle (Maj : proportionnelle) et rotation (Maj : par 15°).",
+            );
+        }
     }
     pub(crate) fn status_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {

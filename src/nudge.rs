@@ -11,7 +11,7 @@
 
 use eframe::egui::{vec2, Key, Modifiers, Vec2};
 
-use crate::app::{App, Tool};
+use crate::app::App;
 use crate::vector::Affine;
 
 /// Les quatre flèches.
@@ -46,7 +46,7 @@ impl App {
     pub(crate) fn nudge_ready(&self) -> bool {
         let drawing_has_focus = !self.panel_focus && !self.images_focus && !self.key_focus;
         let vector = self.vsel.as_ref().is_some_and(|s| !s.items.is_empty() && Some(s.cel) == self.cel_here());
-        let bitmap = self.bsel.is_some() && self.tool == Tool::Select;
+        let bitmap = self.bsel.is_some() && self.tool.is_select();
         drawing_has_focus && (vector || bitmap)
     }
 

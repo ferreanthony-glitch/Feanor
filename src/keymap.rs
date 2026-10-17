@@ -82,6 +82,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("outil.peindre_non_peint", "Outil peindre les zones non peintes", false, false),
     act("outil.pipette", "Outil pipette", true, false),
     act("outil.selection", "Outil sélection", true, false),
+    act("outil.selection_couleur", "Outil sélection par couleur", true, false),
     act("pinceau.derriere", "Pinceau et crayon : peint derrière (oui / non)", true, false),
     act("pinceau.remplir", "Pinceau et crayon : remplir la forme (oui / non)", true, false),
     act("outil.cutter", "Outil cutter", false, false),

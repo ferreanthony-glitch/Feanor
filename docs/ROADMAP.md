@@ -1121,6 +1121,18 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
       - **tampons retirés** (Anthony : « supprime les outils tampon et tampon de duplication ») :
         outils, réglages, actions `outil.tampon` / `outil.tampon_duplication` (un fichier de
         raccourcis qui les nomme encore les ignore avec un avertissement) ;
+      - **cases d'outils groupés, sélection par couleur** (Anthony : « les outils lignes,
+        rectangle, ellipse et polyligne sont dans un seul groupe qui s'affiche quand le clic est
+        maintenu sur l'icône de base (le rectangle). Ajouter l'outil sélection au-dessus du
+        pinceau. Dans le même groupe, l'outil de sélection par la couleur ») : une case de la
+        barre d'outils montre le dernier outil pris parmi les siens (mon choix, comme dans les
+        logiciels de dessin ; au début le rectangle, la sélection), un petit coin, et la liste au
+        clic maintenu (0,35 s ; pas au clic droit, qui sert à donner un raccourci). Outil
+        Sélection par couleur (`outil.selection_couleur`, sans touche comme dans Storyboard
+        Pro 27 : DRAWING_SELECT_TOOL_BY_COLOR_KEY) : bitmap, zone de la couleur cliquée (pixels
+        voisins ou toute l'image, tolérance) ; vectoriel, tous les éléments de cette couleur ;
+        comportement exact de Storyboard Pro à vérifier. Pour déplacer à la souris la zone choisie :
+        flèches, poignées ou outil Sélection ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,

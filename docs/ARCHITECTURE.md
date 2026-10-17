@@ -803,6 +803,17 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     peint derrière) et refait la zone. `App::paint_behind`, `fill_shapes` (retenus dans
     `Settings`, enregistrés avec la pelure quand ils changent), `close_tolerance` (15 points
     d'écran) ; actions `pinceau.derriere`, `pinceau.remplir` (sans touche).
+  - Barre d'outils (`toolbars.rs`) : `TOOL_GROUPS` = groupes de cases ; `slot_tool` (pur, testé)
+    donne l'outil montré (courant, sinon le plus récent de `App::tool_recent`, sinon le premier).
+    `tool_slot` ouvre `App::tool_flyout` (groupe, case, rectangle) quand le bouton est tenu
+    `FLYOUT_HOLD` ; `tool_flyout_ui` (une `Area` au premier plan) prend un outil au clic ou au
+    relâché dessus, se ferme sur un appui ailleurs ou Échap. Le relâché du clic maintenu n'est
+    pas un choix (`clicked` ignoré tant que la liste est ouverte).
+  - Sélection par couleur (`colorsel.rs`) : `Tool::SelectColor`, `Tool::is_select` (la zone
+    bitmap et les poignées restent avec les deux outils). Bitmap : `fill::flood` (voisins) ou
+    `colorsel::similar` sur le dessin du calque, `PixelMask::from_bools`, contours par
+    `vector::trace_contours` ; vectoriel : `same_color` (`Element::color`). Une poignée sous le
+    pointeur passe la main à `select_press`.
   - Outils de la vue : `viewbar::view_tools_bar`, sous le dessin dans `canvas_panel` (pas dans
     la vue 3D) ; `Pane::View` reste pour lire les anciennes dispositions, `sanitized` l'enlève
     (comme `Timeline`), il n'est plus dans `Pane::ALL` ni `SETTINGS_TABS`. Guides : au clic,
