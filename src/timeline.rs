@@ -96,8 +96,17 @@ impl App {
                         ui.separator();
                         ui.add_space(3.0);
                     };
-                    if self.bouton(ui, ph::ARROW_U_UP_LEFT, "Retour au storyboard", "Revenir au montage des plans.", "mode.basculer").clicked() {
-                        self.set_mode(Mode::Storyboard);
+                    // La timeline se voit aussi en storyboard (chantier 6) : le bouton fait alors
+                    // entrer dans le plan pour l'animer.
+                    let (icon, name, what) = match self.mode {
+                        Mode::Animation => (ph::ARROW_U_UP_LEFT, "Retour au storyboard", "Revenir au montage des plans."),
+                        Mode::Storyboard => (ph::FILM_SLATE, "Animer ce plan", "Le dessin montre ce plan pour l'animer."),
+                    };
+                    if self.bouton(ui, icon, name, what, "mode.basculer").clicked() {
+                        match self.mode {
+                            Mode::Animation => self.set_mode(Mode::Storyboard),
+                            Mode::Storyboard => self.enter_animation(self.cur_panel),
+                        }
                     }
                     let resp = ui.label(RichText::new(crate::storyboard::panel_title(&self.doc, self.cur_panel)).strong());
                     bulle(resp, &crate::storyboard::panel_long_title(&self.doc, self.cur_panel), "Le plan que l'on anime.", "");
@@ -114,7 +123,7 @@ impl App {
                     }
                     let play = if self.playing { ph::PAUSE } else { ph::PLAY };
                     if self.bouton(ui, play, "Lecture / pause", "Lire le plan.", "lecture.basculer").clicked() {
-                        self.toggle_play();
+                        self.toggle_play_scope(false);
                     }
                     if self.bouton(ui, ph::CARET_RIGHT, "Image suivante", "", "image.suivante").clicked() {
                         self.goto_frame(self.cur_frame + 1);
@@ -1052,11 +1061,10 @@ impl App {
             }
         }
 
-        if self.follow_frame {
+        if self.following {
             let row = rows.iter().find(|r| r.li == self.cur_layer).copied().unwrap_or(Row { li: 0, top: 0.0, h: ROW_H });
             let target = Rect::from_min_size(pos2(cx - cell * 2.0, grid_top + row.top), vec2(cell * 5.0, row.h));
             ui.scroll_to_rect(target, None);
-            self.follow_frame = false;
         }
     }
 

@@ -761,6 +761,7 @@ impl App {
         // Un clic sur une vignette donne la main aux panneaux : copier, coller, supprimer (12e).
         if resp.is_pointer_button_down_on() {
             self.panel_focus = true;
+            self.images_focus = false;
         }
         if pan_mode || resp.dragged_by(PointerButton::Middle) {
             if resp.dragged() {

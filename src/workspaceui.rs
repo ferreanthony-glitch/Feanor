@@ -13,7 +13,7 @@ impl App {
         Layout {
             tools: panes.contains(Pane::Tools),
             sheet: panes.contains(Pane::Sheet) || panes.contains(Pane::Layers),
-            strip: panes.contains(Pane::Strip),
+            strip: panes.contains(Pane::Montage) || panes.contains(Pane::Timeline),
             panneaux: Some(panes),
             top_view: self.top_view,
             vignettes: self.board_view == BoardView::Panels,
@@ -120,7 +120,7 @@ impl App {
             let groups = [
                 ("Colonne des réglages (et fiche)", "vue.panneau_outils", Group::Left),
                 ("Calques", "vue.panneau_fiche", Group::Right),
-                ("Montage / timeline", "vue.panneau_bande", Group::Bottom),
+                ("Montage et timeline", "vue.panneau_bande", Group::Bottom),
             ];
             for (label, action, group) in groups {
                 let mut on = group.panes().iter().any(|p| panes.contains(*p));

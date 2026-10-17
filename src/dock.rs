@@ -40,9 +40,13 @@ pub enum Pane {
     Sheet,
     #[serde(rename = "calques")]
     Layers,
-    /// Bande de montage (storyboard) ou timeline (animation).
+    /// Bande de montage : tous les plans, leurs pistes, le son. Elle est montrée dans les deux modes
+    /// depuis le chantier 6 (avant : seulement en storyboard, la timeline à sa place en animation).
     #[serde(rename = "bande")]
-    Strip,
+    Montage,
+    /// Timeline du plan courant (chantier 6 : un panneau à part, sous le montage, dans les deux modes).
+    #[serde(rename = "timeline")]
+    Timeline,
     /// Feuille d'exposition du plan (13g). Fermée dans la disposition par défaut.
     #[serde(rename = "feuille_expo")]
     XSheet,
@@ -55,13 +59,13 @@ pub enum Group {
     Left,
     /// Colonne de droite : fiche et calques.
     Right,
-    /// En bas, sur toute la largeur : montage ou timeline.
+    /// En bas, sur toute la largeur : le montage, la timeline dessous.
     Bottom,
     Center,
 }
 
 impl Pane {
-    pub const ALL: [Pane; 11] = [
+    pub const ALL: [Pane; 12] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
@@ -71,7 +75,8 @@ impl Pane {
         Pane::Guides,
         Pane::Sheet,
         Pane::Layers,
-        Pane::Strip,
+        Pane::Montage,
+        Pane::Timeline,
         Pane::XSheet,
     ];
 
@@ -86,7 +91,8 @@ impl Pane {
             Pane::Guides => "Guides",
             Pane::Sheet => "Fiche du plan",
             Pane::Layers => "Calques",
-            Pane::Strip => "Montage et timeline",
+            Pane::Montage => "Montage",
+            Pane::Timeline => "Timeline",
             Pane::XSheet => "Feuille d'exposition",
         }
     }
@@ -113,7 +119,8 @@ impl Pane {
             Pane::Guides => ph::RULER,
             Pane::Sheet => ph::CLIPBOARD_TEXT,
             Pane::Layers => ph::STACK,
-            Pane::Strip => ph::FILM_STRIP,
+            Pane::Montage => ph::FILM_STRIP,
+            Pane::Timeline => ph::ROWS,
             Pane::XSheet => ph::TABLE,
         }
     }
@@ -123,7 +130,7 @@ impl Pane {
             Pane::Canvas => Group::Center,
             Pane::Tools | Pane::Color | Pane::Brushes | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet => Group::Left,
             Pane::Layers | Pane::XSheet => Group::Right,
-            Pane::Strip => Group::Bottom,
+            Pane::Montage | Pane::Timeline => Group::Bottom,
         }
     }
 }
@@ -233,8 +240,25 @@ const COLOR_TABS: [Pane; 2] = [Pane::Color, Pane::Brushes];
 
 /// Version de la disposition : 1 depuis 6a (outils dans la barre verticale, calques à côté du
 /// dessin, réglages et couleur à droite) ; 2 depuis 9b (la fiche avec les réglages) ; 3 depuis 11c
-/// (le panneau Pinceaux, en onglet avec la couleur).
-pub const LAYOUT_VERSION: u32 = 3;
+/// (le panneau Pinceaux, en onglet avec la couleur) ; 4 depuis le chantier 6 (la timeline, panneau à
+/// part sous le montage).
+pub const LAYOUT_VERSION: u32 = 4;
+
+/// La bande du bas (chantier 6) : le montage, la timeline dessous, ou l'un des deux seul.
+/// `part` : la part du montage.
+fn bottom_band(panes: &[Pane], part: f32) -> Option<DockNode> {
+    match (panes.contains(&Pane::Montage), panes.contains(&Pane::Timeline)) {
+        (true, true) => Some(column(part, tabs(vec![Pane::Montage]), tabs(vec![Pane::Timeline]))),
+        (true, false) => Some(tabs(vec![Pane::Montage])),
+        (false, true) => Some(tabs(vec![Pane::Timeline])),
+        (false, false) => None,
+    }
+}
+
+/// Hauteur de la bande du bas quand le montage et la timeline y sont tous deux (en points de la
+/// fenêtre de référence), et la part du montage.
+const BAND_HEIGHT: f32 = 420.0;
+const BAND_MONTAGE_PART: f32 = 0.5;
 
 /// Empile de haut en bas des parties (part de chacune dans ce qui reste), en sautant les absentes.
 fn stack(parts: &[(f32, Option<DockNode>)]) -> Option<DockNode> {
@@ -386,15 +410,20 @@ impl DockLayout {
             center = row(1.0 - w / REF_WIDTH, center, side);
         }
         if l.strip {
-            let part = 1.0 - l.montage_height.clamp(140.0, 1200.0) / REF_HEIGHT;
-            center = column(part, center, tabs(vec![Pane::Strip]));
+            // Les deux ensemble (chantier 6) : un peu moins que leurs deux hauteurs d'avant, quand
+            // chacun avait la bande pour lui.
+            let (m, t) = (l.montage_height.clamp(140.0, 1200.0), l.timeline_height.clamp(110.0, 1200.0));
+            let h = ((m + t) * 0.84).min(REF_HEIGHT * 0.6);
+            let band = bottom_band(&[Pane::Montage, Pane::Timeline], BAND_MONTAGE_PART).unwrap_or_else(|| tabs(vec![Pane::Montage]));
+            center = column(1.0 - h / REF_HEIGHT, center, band);
         }
         DockLayout { principal: center, ..DockLayout::empty() }.sanitized()
     }
 
     /// Une disposition enregistrée par une version précédente, mise à jour : avant 6a, le
     /// panneau Outils part (barre verticale) ; avant 9b, la fiche rejoint les onglets des réglages ;
-    /// avant 11c, le panneau Pinceaux arrive à côté de la couleur.
+    /// avant 11c, le panneau Pinceaux arrive à côté de la couleur ; avant le chantier 6, la timeline
+    /// arrive sous le montage (la bande montrait l'un ou l'autre selon le mode).
     pub fn upgraded(mut self) -> DockLayout {
         if self.version < 1 {
             self.close(Pane::Tools);
@@ -405,6 +434,9 @@ impl DockLayout {
         }
         if self.version < 3 && !self.contains(Pane::Brushes) {
             self.open(Pane::Brushes);
+        }
+        if self.version < 4 && self.contains(Pane::Montage) && !self.contains(Pane::Timeline) {
+            self.open(Pane::Timeline);
         }
         self.version = LAYOUT_VERSION;
         self.sanitized()
@@ -522,6 +554,24 @@ impl DockLayout {
                 return;
             }
         }
+        // Le montage et la timeline (chantier 6) : l'un revient au-dessus ou au-dessous de l'autre.
+        if group == Group::Bottom {
+            let other = if pane == Pane::Montage { Pane::Timeline } else { Pane::Montage };
+            let mut new = Some(tabs(vec![pane]));
+            let mut put = |n: DockNode| {
+                let new = new.take().unwrap_or_else(|| tabs(Vec::new()));
+                if pane == Pane::Montage {
+                    column(BAND_MONTAGE_PART, new, n)
+                } else {
+                    column(BAND_MONTAGE_PART, n, new)
+                }
+            };
+            if self.principal.wrap_tabs_of(other, &mut put) || self.fenetres.iter_mut().any(|w| w.panneaux.wrap_tabs_of(other, &mut put)) {
+                let version = self.version;
+                *self = DockLayout { version, ..std::mem::replace(self, DockLayout::empty()) }.sanitized();
+                return;
+            }
+        }
         if group != Group::Bottom {
             if let Some(t) = self.principal.tabs_of_group(group) {
                 t.push(pane);
@@ -554,15 +604,17 @@ impl DockLayout {
         match group {
             Group::Center => {}
             Group::Bottom => {
+                let Some(band) = bottom_band(panes, BAND_MONTAGE_PART) else { return };
+                let h = if panes.len() > 1 { BAND_HEIGHT } else { 290.0 };
                 let main = std::mem::replace(&mut self.principal, tabs(Vec::new()));
-                self.principal = column(1.0 - 290.0 / REF_HEIGHT, main, tabs(panes.to_vec()));
+                self.principal = column(1.0 - h / REF_HEIGHT, main, band);
             }
             Group::Left => {
                 // La colonne des réglages, tout à droite (au-dessus de la bande s'il y en a une).
                 let Some(col) = left_column(panes) else { return };
                 let main = std::mem::replace(&mut self.principal, tabs(Vec::new()));
                 self.principal = match main {
-                    DockNode::Column { part, haut, bas } if bas.first_tabs().contains(&Pane::Strip) => {
+                    DockNode::Column { part, haut, bas } if bas.first_tabs().iter().any(|p| p.group() == Group::Bottom) => {
                         column(part, row(0.8, *haut, col), *bas)
                     }
                     other => row(0.8, other, col),

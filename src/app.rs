@@ -544,6 +544,9 @@ pub struct App {
     allow_close: bool,
     pub(crate) export_transparent: bool,
     pub(crate) follow_frame: bool,
+    /// Pendant l'affichage des panneaux : `follow_frame` de cette image d'écran. Le montage et la
+    /// timeline, visibles ensemble (chantier 6), amènent tous deux l'image courante en vue.
+    pub(crate) following: bool,
     pub(crate) hover_canvas: Option<Pos2>,
     /// Touches retirées des événements avant qu'egui ne s'en serve (Tab), traitées comme raccourcis.
     pub(crate) pending_keys: Vec<(Key, Option<Key>, egui::Modifiers)>,
@@ -768,6 +771,7 @@ impl App {
             allow_close: false,
             export_transparent: false,
             follow_frame: false,
+            following: false,
             hover_canvas: None,
             pending_keys: Vec::new(),
             assign: None,
@@ -803,7 +807,7 @@ impl App {
                 layout = crate::workspace::Layout {
                     tools: d.contains(crate::dock::Pane::ToolOptions),
                     sheet: d.contains(crate::dock::Pane::Layers) || d.contains(crate::dock::Pane::Sheet),
-                    strip: d.contains(crate::dock::Pane::Strip),
+                    strip: d.contains(crate::dock::Pane::Montage) || d.contains(crate::dock::Pane::Timeline),
                     panneaux: None,
                     ..crate::workspace::Layout::default()
                 };
@@ -1086,14 +1090,21 @@ impl App {
         }
     }
 
+    /// Lecture / pause (touche) : tout le montage en storyboard, le plan en animation.
     pub(crate) fn toggle_play(&mut self) {
+        self.toggle_play_scope(self.mode == Mode::Storyboard);
+    }
+
+    /// Lecture / pause du montage entier (`montage`) ou du plan courant : les boutons du montage et
+    /// de la timeline, qui se voient ensemble dans les deux modes (chantier 6).
+    pub(crate) fn toggle_play_scope(&mut self, montage: bool) {
         if self.playing {
             self.playing = false;
             self.stop_audio();
             return;
         }
         self.end_stroke();
-        self.play_montage = self.mode == Mode::Storyboard;
+        self.play_montage = montage;
         // Dans le plan : entre les points d'entrée et de sortie (13d).
         let (start, end) = self.plan_play_range();
         let at_end = if self.play_montage {
@@ -2420,13 +2431,13 @@ impl App {
             // Après un Maj + clic dans la grille de la timeline, l'édition vise les images choisies (13c).
             "edition.couper" if self.images_have_focus() => self.cut_images(),
             "edition.copier" if self.images_have_focus() => self.copy_images(),
-            "edition.coller" if self.images_focus && self.mode == Mode::Animation && self.image_clipboard.is_some() => {
+            "edition.coller" if self.images_focus && self.image_clipboard.is_some() => {
                 self.paste_images(false)
             }
             "edition.supprimer" if self.images_have_focus() => self.delete_images(false),
             // Après un clic dans la grille, sans images choisies : Suppr supprime l'image courante
             // des calques choisis (audit A3) ; le dessin se vide après un clic dans le dessin.
-            "edition.supprimer" if self.images_focus && self.mode == Mode::Animation && !self.panels_have_focus() => self.delete_images(false),
+            "edition.supprimer" if self.images_focus && !self.panels_have_focus() => self.delete_images(false),
             "edition.couper" if self.bsel.is_some() => self.bitmap_cut(),
             "edition.couper" => self.cut_selection(),
             "edition.copier" if self.bsel.is_some() => {
@@ -2470,7 +2481,7 @@ impl App {
                 }
             }
             // Dans la timeline : toutes les images de tous les calques (audit A2).
-            "edition.tout_selectionner" if self.images_focus && self.mode == Mode::Animation => self.select_whole_timeline(),
+            "edition.tout_selectionner" if self.images_focus => self.select_whole_timeline(),
             "edition.tout_selectionner" => self.select_all(),
             "edition.tout_deselectionner" => {
                 self.end_stroke();

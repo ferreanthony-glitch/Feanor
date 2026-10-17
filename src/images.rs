@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use eframe::egui;
 
-use crate::app::{App, Mode};
+use crate::app::App;
 use crate::document::{Cel, CelId, Panel};
 use crate::roles;
 
@@ -447,9 +447,10 @@ impl App {
     }
 
     /// Les images choisies visent la timeline : Ctrl+C / X / V et Suppr agissent sur elles
-    /// après un clic dans la grille (comme pour les plans dans le montage, 12e).
+    /// après un clic dans la grille (comme pour les plans dans le montage, 12e), dans les deux
+    /// modes depuis que la timeline se voit aussi en storyboard (chantier 6).
     pub(crate) fn images_have_focus(&self) -> bool {
-        self.images_focus && self.mode == Mode::Animation && self.frame_sel.is_some()
+        self.images_focus && self.frame_sel.is_some()
     }
 
     fn done(&mut self, snap: crate::history::Edit, status: String) {
@@ -653,6 +654,7 @@ impl App {
     pub(crate) fn select_all_images(&mut self) {
         self.frame_sel = Some((0, self.frame_count()));
         self.images_focus = true;
+        self.panel_focus = false;
         self.status = "Toutes les images du plan sont choisies.".into();
     }
 
@@ -662,6 +664,7 @@ impl App {
         self.layer_sel = ids;
         self.frame_sel = Some((0, self.frame_count()));
         self.images_focus = true;
+        self.panel_focus = false;
         self.status = "Toutes les images de tous les calques sont choisies.".into();
     }
 

@@ -111,10 +111,11 @@ impl App {
 
     // ------------------------------------------------------------------ plans choisis (12e)
 
-    /// Le montage (ou la planche) a la main, en storyboard : copier, coller et supprimer y visent
-    /// les plans choisis.
+    /// Le montage (ou la planche) a la main : copier, coller et supprimer y visent les plans
+    /// choisis. Dans les deux modes depuis que le montage se voit aussi en animation (chantier 6) ;
+    /// un clic dans la timeline ou dans le dessin lui reprend la main.
     pub(crate) fn panels_have_focus(&self) -> bool {
-        self.panel_focus && self.mode == Mode::Storyboard
+        self.panel_focus
     }
 
     /// Copie les plans choisis (le plan courant en fait toujours partie).
@@ -369,7 +370,7 @@ impl App {
         }
         let play = if self.playing { ph::PAUSE } else { ph::PLAY };
         if self.bouton(ui, play, "Lire le montage / pause", "Tout le film à la suite (animatique), avec le son.", "lecture.basculer").clicked() {
-            self.toggle_play();
+            self.toggle_play_scope(true);
         }
         let key = self.raccourci("lecture.boucle");
         crate::bulles::interrupteur_a(ui, &mut self.looping, ph::REPEAT, "Lecture en boucle", "Reprendre au début une fois à la fin.", &key, "lecture.boucle");
@@ -450,11 +451,16 @@ impl App {
         bulle(resp, "Son", "Pistes son, son au défilement et pendant la lecture.", "");
         sep(ui);
 
-        if self
-            .bouton(ui, ph::FILM_SLATE, "Animer ce plan", "Entrer dans le plan courant pour l'animer (ou double-clic sur le plan).", "mode.basculer")
-            .clicked()
-        {
-            self.enter_animation(self.cur_panel);
+        // Le montage se voit aussi en animation (chantier 6) : le bouton fait alors revenir.
+        let (icon, name, what) = match self.mode {
+            Mode::Storyboard => (ph::FILM_SLATE, "Animer ce plan", "Entrer dans le plan courant pour l'animer (ou double-clic sur le plan)."),
+            Mode::Animation => (ph::ARROW_U_UP_LEFT, "Retour au storyboard", "Le dessin montre de nouveau le storyboard (Vue dessin ou vignettes)."),
+        };
+        if self.bouton(ui, icon, name, what, "mode.basculer").clicked() {
+            match self.mode {
+                Mode::Storyboard => self.enter_animation(self.cur_panel),
+                Mode::Animation => self.set_mode(Mode::Storyboard),
+            }
         }
         sep(ui);
 
@@ -584,6 +590,7 @@ impl App {
         // Un clic dans la bande lui donne la main : copier, coller, supprimer visent ses panneaux.
         if resp.is_pointer_button_down_on() {
             self.panel_focus = true;
+            self.images_focus = false;
         }
 
         // Règle : une graduation par seconde, un repère lisible tous les ~60 pixels.
@@ -1016,12 +1023,11 @@ impl App {
             );
         }
 
-        if self.follow_frame {
+        if self.following {
             ui.scroll_to_rect(
                 Rect::from_center_size(pos2(gx, top + block_h * 0.5), vec2(ppf * 24.0, 10.0)),
                 None,
             );
-            self.follow_frame = false;
         }
     }
 

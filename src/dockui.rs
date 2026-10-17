@@ -56,7 +56,7 @@ impl egui_dock::TabViewer for Panes<'_> {
     /// Le dessin et la bande gèrent eux-mêmes leur place ; les autres défilent.
     fn scroll_bars(&self, tab: &Pane) -> [bool; 2] {
         match tab {
-            Pane::Canvas | Pane::Strip | Pane::XSheet => [false, false],
+            Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::XSheet => [false, false],
             _ => [false, true],
         }
     }
@@ -72,8 +72,7 @@ impl App {
     /// Nom affiché d'un panneau (la bande et le dessin changent selon ce qu'ils montrent).
     pub(crate) fn pane_title(&self, pane: Pane) -> &'static str {
         match pane {
-            Pane::Strip if self.mode == Mode::Storyboard => "Montage",
-            Pane::Strip => "Timeline",
+
             Pane::Canvas if self.mode == Mode::Storyboard && self.board_view == BoardView::Panels => "Vignettes",
             p => p.tab_name(),
         }
@@ -98,11 +97,27 @@ impl App {
             Pane::Guides => self.guides_ui(ui),
             Pane::Sheet => self.panel_inspector(ui),
             Pane::Layers => self.layers_panel(ui),
-            Pane::Strip => match self.mode {
-                Mode::Storyboard => self.montage_panel(ui),
-                Mode::Animation => self.timeline_panel(ui),
-            },
+            // Le montage et la timeline, chacun dans son panneau, dans les deux modes (chantier 6).
+            // Celui qui a la main (copier, coller, supprimer visent ses plans ou ses images) a un
+            // trait de couleur en haut.
+            Pane::Montage => {
+                self.montage_panel(ui);
+                self.focus_mark(ui, self.panels_have_focus());
+            }
+            Pane::Timeline => {
+                self.timeline_panel(ui);
+                self.focus_mark(ui, self.images_focus);
+            }
             Pane::XSheet => self.xsheet_panel(ui),
+        }
+    }
+
+    /// Le trait en haut du montage ou de la timeline quand il a la main (chantier 6).
+    fn focus_mark(&self, ui: &egui::Ui, on: bool) {
+        if on {
+            let r = ui.max_rect();
+            let color = ui.visuals().selection.stroke.color;
+            ui.painter().with_clip_rect(r).line_segment([r.left_top(), r.right_top()], egui::Stroke::new(3.0_f32, color));
         }
     }
 
@@ -110,6 +125,9 @@ impl App {
     /// leur propre fenêtre.
     pub(crate) fn show_dock(&mut self, ctx: &egui::Context) {
         let mut state = self.dock.take().unwrap_or_else(|| dock::to_state(&self.layout.dock_layout()));
+        // Le montage et la timeline suivent tous deux l'image courante (chantier 6) ; ce que l'on
+        // fait pendant l'affichage se suit à l'image d'écran d'après.
+        self.following = std::mem::take(&mut self.follow_frame);
         let style = crate::theme::dock(egui_dock::Style::from_egui(ctx.style().as_ref()));
         egui_dock::DockArea::new(&mut state)
             .id(Id::new("panneaux"))
@@ -127,6 +145,7 @@ impl App {
             self.set_dock_layout(layout);
         }
         self.show_detached(ctx);
+        self.following = false;
     }
 
     /// Chaque panneau détaché dans sa fenêtre Windows. La fermer remet le panneau à sa place.
@@ -145,7 +164,7 @@ impl App {
             let pane = d.panneau;
             let (closed, rect) = ctx.show_viewport_immediate(id, builder, |ctx, _class| {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    if matches!(pane, Pane::Strip | Pane::XSheet) {
+                    if matches!(pane, Pane::Montage | Pane::Timeline | Pane::XSheet) {
                         self.pane_ui(ui, pane);
                     } else {
                         egui::ScrollArea::vertical().show(ui, |ui| self.pane_ui(ui, pane));

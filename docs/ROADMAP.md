@@ -847,7 +847,6 @@ Simplifier l'interface et combler ce qui manque :
   - étirer une exposition dans les pistes du montage (la timeline du plan le fait) ;
   - les rôles, qui suivent leurs images.
 
-<<<<<<< HEAD
 ## Audit du cœur par Fable et chantiers de la timeline (2026-10-16)
 
 Anthony : « J'aimerais avancer plus sur le corps du logiciel plutôt que les exports. » Fable a
@@ -884,8 +883,21 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
     après la fin ou un collage, et que du son suit, la barre d'état prévient : les plans suivants
     se décalent par rapport au son, qui reste en place. Le point d'entrée ne peut plus être posé
     sur le point de sortie par sa poignée.
+- ✅ 6. Timeline et montage visibles ensemble (lancé par Anthony le 2026-10-17) :
+  - deux panneaux, **Montage** et **Timeline**, l'un sous l'autre en bas, dans les deux modes ;
+    avant, la bande montrait le montage en storyboard et la timeline en animation. Une
+    disposition enregistrée avant reçoit la timeline sous le montage. Chacun se ferme, se
+    déplace ou se détache comme les autres panneaux ;
+  - Copier, Coller, Suppr visent le dernier des deux où l'on a cliqué, quel que soit le mode ;
+    un trait de couleur en haut du panneau le montre (un clic dans le dessin le retire) ;
+  - le bouton Lecture du montage lit tout le film, celui de la timeline le plan ; la touche
+    Lecture garde son sens (le film en storyboard, le plan en animation) ;
+  - le bouton de mode de chaque barre fait entrer dans le plan ou revenir au storyboard ;
+  - les deux panneaux suivent l'image courante.
+
+  Pas changé : les raccourcis dépendent toujours du mode (Tab), pas du panneau cliqué (les
+  flèches vont d'un plan à l'autre en storyboard, restent dans le plan en animation).
 - Restent (ordre de Fable) : pistes du montage modifiables (au-delà de 8 calques, par nom),
-  timeline et montage visibles ensemble, montrer qui a la main (plans / images / dessin),
   navigation de calques à la TVPaint, fenêtre « Agrandir / rétrécir le calque », finitions.
 
 ## Moteur de dessin façon TVPaint, brosses façon Procreate, import de brosses (2026-10-16)

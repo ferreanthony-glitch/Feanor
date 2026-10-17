@@ -696,6 +696,22 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     `n` = diamètre ÷ pas est le nombre d'empreintes qui recouvrent un point.
   - Le pixel est toujours recalculé depuis son état d'avant le trait, avec `masque × opacité` :
     l'opacité reste le plafond.
+- Timeline et montage ensemble (chantier 6).
+  - `Pane::Strip` est devenu `Pane::Montage` (nom enregistré inchangé, « bande ») et
+    `Pane::Timeline` arrive (« timeline »), tous deux du groupe du bas. `bottom_band` les empile,
+    le montage au-dessus. `DockLayout::open` remet l'un au-dessus ou au-dessous de l'autre s'il
+    est là. `LAYOUT_VERSION` passe à 4 : `upgraded` ouvre la timeline sous le montage.
+  - `pane_ui` montre chacun dans les deux modes. `panels_have_focus` et `images_have_focus` ne
+    regardent plus le mode : la main est au dernier des deux cliqués (chaque clic retire l'autre).
+    `focus_mark` trace un trait en haut du panneau qui a la main.
+  - `toggle_play_scope(montage)` : le bouton du montage lit le film, celui de la timeline le
+    plan ; `toggle_play` (la touche) garde le choix par le mode.
+  - `follow_frame` est pris une fois par image d'écran dans `following` au début de
+    `show_dock` : les deux bandes amènent l'image courante en vue.
+
+    Décision : coût — deux panneaux du dock plutôt qu'une bande à deux étages. Risque : la place
+    du dessin diminue (la bande du bas passe de 290 à 420 points de référence). Réversible : chaque
+    panneau se ferme ou se détache, et la disposition se retient.
 - Poignées de calque, fin de plan, Échap, choix au rectangle (chantiers 1 à 4 de l'audit).
   - Nouvelles poignées : `Handle::LayerStart`, `LayerEnd`, `LayerMove` (la barre dessinée sous les
     dessins, `BAR_H`) et `PlanEnd` (prise au bout de la règle). Leurs fonctions pures sont testées :
