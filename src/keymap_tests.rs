@@ -322,5 +322,7 @@ fn f5_lays_a_key_everywhere_and_f6_cuts_the_plan() {
     for mode in [Mode::Storyboard, Mode::Animation] {
         assert_eq!(press(&map, Key::F5, Key::F5, NONE, mode).as_deref(), Some("dessin.nouvelle_cle"));
         assert_eq!(press(&map, Key::F6, Key::F6, NONE, mode).as_deref(), Some("panneau.couper"));
+        // La clé vide (Anthony : « avec un autre raccourci comme F4 »).
+        assert_eq!(press(&map, Key::F4, Key::F4, NONE, mode).as_deref(), Some("dessin.nouvelle_cle_vide"));
     }
 }

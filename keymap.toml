@@ -709,7 +709,13 @@ source = "perso : SPLIT_PANEL_KEY (F6 dans Pelure)"
 [[raccourci]]
 action = "dessin.nouvelle_cle"
 touches = ["F5"]
+# Copie du dessin montré (Anthony : « la clé ne doit pas être vide ») ; la clé vide est sur F4.
 source = "perso (Anthony, 2026-10-17)"
+
+[[raccourci]]
+action = "dessin.nouvelle_cle_vide"
+touches = ["F4"]
+source = "perso (Anthony, 2026-10-17 : « avec un autre raccourci comme F4 »)"
 
 [[raccourci]]
 action = "panneau.fusionner_suivant"

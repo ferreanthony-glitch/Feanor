@@ -379,7 +379,8 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   clé choisie prise par son milieu les emmène toutes (chacune garde sa durée) ; un repère montre
   où elles se poseront. Un glisser dans le vide des pistes choisit les clés au rectangle. Zoom
   de la bande : la petite barre en bas, Ctrl + molette, ou Alt+1 / Alt+2 / Alt+3 (tout voir). F5
-  pose une clé (nouveau dessin) à l'image courante ; F6 coupe le plan. Outils : la touche d'un
+  (ou double-clic sur la piste) pose une clé à l'image courante, copie du dessin montré (sinon du
+  dernier d'avant) ; F4 pose une clé vide ; F6 coupe le plan. Outils : la touche d'un
   outil tenue le prend le temps de la
   tenir ; Ctrl tenu sur le dessin donne le lasso. Les
   calques de toute la scène (fond) ont leur piste, teintée, avec les mêmes gestes. La timeline sert à entrer dans le détail. Copier, Coller, Suppr et les raccourcis

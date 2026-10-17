@@ -326,3 +326,16 @@ fn several_keys_slide_together() {
     assert_eq!(drop_marks(&base(), &[2, 4], 4), vec![8], "le bloc B-C après D : la fin de D");
     assert_eq!(drop_marks(&base(), &[0, 4], 3), vec![4, 8], "A après B, C après D");
 }
+#[test]
+fn a_new_key_starts_from_a_copy_of_the_drawing() {
+    use crate::handles::key_source;
+    // Anthony : « quand une clé est créée avec F5 sur un calque déjà dessiné, la clé ne doit pas
+    // être vide » : le dessin montré à l'image, sinon le dernier d'avant, sinon le premier d'après.
+    let mut l = Layer::new("Perso", LayerKind::Vector);
+    l.frames = vec![None, None, Some(1), Some(1), Some(1), None, None, Some(2), Some(2)];
+    assert_eq!(key_source(&l, 3), Some(1), "au milieu d'une exposition : son dessin");
+    assert_eq!(key_source(&l, 5), Some(1), "dans un trou : le dessin d'avant");
+    assert_eq!(key_source(&l, 12), Some(2), "après la fin du calque : le dernier dessin");
+    assert_eq!(key_source(&l, 0), Some(1), "avant le premier dessin : celui-ci");
+    assert_eq!(key_source(&Layer::new("Vide", LayerKind::Vector), 4), None, "calque vide : clé vide");
+}

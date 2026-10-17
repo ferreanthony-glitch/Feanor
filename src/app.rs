@@ -2502,10 +2502,11 @@ impl App {
             "edition.coller" if self.key_focus && self.key_clipboard.is_some() => self.paste_keys(),
             "edition.supprimer" if self.key_focus => self.delete_keys(false),
             "dessin.dupliquer" if self.key_focus => self.duplicate_keys(),
-            // Une clé à l'image courante du calque courant (montage, timeline, dessin en animation).
-            "dessin.nouvelle_cle" => {
+            // Une clé à l'image courante du calque courant (montage, timeline, dessin en animation) :
+            // une copie du dessin (F5), ou vide (F4).
+            "dessin.nouvelle_cle" | "dessin.nouvelle_cle_vide" => {
                 let (pi, li, f) = (self.cur_panel, self.cur_layer, self.cur_frame);
-                self.montage_new_key(pi, li, f);
+                self.montage_new_key(pi, li, f, action == "dessin.nouvelle_cle");
             }
             "edition.tout_selectionner" if self.key_focus => self.choose_all_keys(),
             // Après un clic dans le montage (ou la planche), l'édition vise les panneaux choisis (12e).

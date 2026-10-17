@@ -717,9 +717,10 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     touche d'une action `outil.*` change d'outil ; `update_springs` (avant les raccourcis, à
     chaque image d'écran) lit les touches relâchées et Ctrl ; `back_on_release` (testée) décide
     du retour ; `spring_used` (appui sur le dessin). Ctrl seul : `CtrlLasso`, gâché par une
-    autre touche ou la molette, jamais au milieu d'un trait. Action `dessin.nouvelle_cle`
-    (`montage_new_key` à l'image courante), F5 en contexte animation ; `panneau.couper` garde
-    F5 en contexte storyboard.
+    autre touche ou la molette, jamais au milieu d'un trait. Actions `dessin.nouvelle_cle` (F5)
+    et `dessin.nouvelle_cle_vide` (F4) : `montage_new_key(…, copy)` à l'image courante ; avec
+    `copy`, la clé est un `duplicate_cel` de `handles::key_source` (le dessin montré, sinon le
+    dernier d'avant, sinon le premier d'après ; pur, testé). `panneau.couper` : F6.
   - Choix au rectangle : `montagekeys::KeyRect` (coin de départ, choix d'avant, ajout),
     `keys_in_rect` / `drag_key_rect` ; `App::key_rect` connu de `dragging`, `cancel_drags`
     (rend le choix d'avant) et `drop_stale_drags`.

@@ -1070,9 +1070,10 @@ impl App {
                 if let Some(i) = in_blocks(p).then(|| panel_at(p.x)).flatten() {
                     self.enter_animation(i);
                 } else if let Some((i, k)) = self.layer_row_hit(p, r.top(), &blocks, rows).filter(|_| p.y < r.top() + rows.background_top()) {
-                    // Double-clic sur la piste d'un calque : un nouveau dessin (une clé) à cette image.
+                    // Double-clic sur la piste d'un calque : une nouvelle clé à cette image, copie du
+                    // dessin comme F5.
                     let f = (((p.x - x_of(self.doc.panel_start(i))) / ppf).floor().max(0.0)) as usize;
-                    self.montage_new_key(i, k, f);
+                    self.montage_new_key(i, k, f, true);
                 }
             }
         }
@@ -1134,13 +1135,18 @@ impl App {
                 MenuTarget::Layer(k) => {
                     // La piste d'un calque : les clés à l'image du clic, puis le menu du calque.
                     if ui
-                        .add(egui::Button::new("Nouveau dessin ici (clé)").shortcut_text(self.keymap.label("dessin.nouvelle_cle")))
-                        .on_hover_text("Ou double-clic sur la piste.")
+                        .add(egui::Button::new("Nouvelle clé ici (copie du dessin)").shortcut_text(self.keymap.label("dessin.nouvelle_cle")))
+                        .on_hover_text("Elle part du dessin montré ici (sinon du dernier d'avant). Ou double-clic sur la piste.")
                         .clicked()
                     {
                         ui.close_menu();
                         let (pi, f) = (self.cur_panel, self.cur_frame);
-                        self.montage_new_key(pi, k, f);
+                        self.montage_new_key(pi, k, f, true);
+                    }
+                    if ui.add(egui::Button::new("Nouvelle clé vide ici").shortcut_text(self.keymap.label("dessin.nouvelle_cle_vide"))).clicked() {
+                        ui.close_menu();
+                        let (pi, f) = (self.cur_panel, self.cur_frame);
+                        self.montage_new_key(pi, k, f, false);
                     }
                     self.key_focus = true;
                     let key = |app: &App, a: &str| app.keymap.label(a);

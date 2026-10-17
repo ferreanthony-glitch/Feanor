@@ -1013,7 +1013,11 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         visent le montage en storyboard, la timeline en animation ;
       - **F5 : nouveau dessin clé** à l'image courante du calque courant, partout (Anthony :
         « pour moi F5 », puis « F5 pose une clé partout. F6 coupe le plan ») ; « couper le plan »
-        passe de F5 (son raccourci de Storyboard Pro) à F6 ;
+        passe de F5 (son raccourci de Storyboard Pro) à F6. Puis (Anthony : « quand une clé est
+        créée avec F5 sur un calque déjà dessiné, la clé ne doit pas être vide » ; « l'option
+        d'une clé vide doit cependant exister, […] comme F4 ») : F5 et le double-clic sur une
+        piste copient le dessin montré à l'image (sinon le dernier d'avant, mon choix) ; F4 pose
+        une clé vide ; les deux au clic droit d'une piste ;
       - **outils à ressort** (Anthony : « chaque outil peut être utilisé par pression continue
         d'une touche, au relâché on revient sur l'outil précédent ») : la touche d'un outil tenue
         (0,35 s au moins, ou l'outil utilisé pendant qu'on la tient) rend l'outil d'avant au

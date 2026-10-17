@@ -221,6 +221,19 @@ pub fn key_start_taken(layer: &Layer, f: usize) -> bool {
     f < layer.frames.len() && layer.frames[f].is_some() && layer.run_bounds(f).0 == f
 }
 
+/// Le dessin que copie une nouvelle clé posée à l'image `f` (Anthony, 2026-10-17 : « quand une
+/// clé est créée avec F5 sur un calque déjà dessiné, la clé ne doit pas être vide ») : celui que
+/// montre l'image `f`, sinon le dernier dessin d'avant, sinon le premier d'après ; aucun sur un
+/// calque vide.
+pub fn key_source(layer: &Layer, f: usize) -> Option<CelId> {
+    let fr = &layer.frames;
+    fr.get(f)
+        .copied()
+        .flatten()
+        .or_else(|| fr[..f.min(fr.len())].iter().rev().find_map(|c| *c))
+        .or_else(|| fr.iter().skip(f + 1).find_map(|c| *c))
+}
+
 /// Un nouveau dessin `cel` posé à l'image `f` (une clé d'animation) : au milieu d'une
 /// exposition, elle est coupée là et la suite montre le nouveau dessin ; sur une image vide (ou
 /// après la fin du calque), il tient jusqu'au dessin suivant, au plus jusqu'à `max` (la fin du
@@ -574,8 +587,9 @@ impl App {
 
     /// Nouveau dessin (clé d'animation) posé depuis le montage : plan `pi`, calque `li`, image
     /// `f` du plan. Le plan, le calque et l'image deviennent courants : on dessine la clé tout
-    /// de suite. Une étape d'annulation.
-    pub(crate) fn montage_new_key(&mut self, pi: usize, li: usize, f: usize) {
+    /// de suite. `copy` : sur un calque déjà dessiné, la clé part d'une copie du dessin
+    /// (`key_source` ; F5, double-clic) ; sinon elle est vide (F4). Une étape d'annulation.
+    pub(crate) fn montage_new_key(&mut self, pi: usize, li: usize, f: usize, copy: bool) {
         if pi >= self.doc.panels.len() {
             return;
         }
@@ -599,13 +613,18 @@ impl App {
         self.end_stroke();
         self.playing = false;
         let snap = self.snapshot();
-        let cel = self.doc.new_cel(kind);
+        let source = key_source(&self.doc.panels[pi].layers[li], f).filter(|_| copy);
+        let cel = match source {
+            Some(src) => self.doc.duplicate_cel(src),
+            None => self.doc.new_cel(kind),
+        };
         let end = key_at(&mut self.doc.panels[pi].layers[li], f, cel, len).unwrap_or(f + 1);
         self.cur_frame = f;
         self.vsel = None;
         self.commit_structure(snap);
         let name = self.doc.panels[pi].layers[li].name.clone();
-        self.status = format!("Nouveau dessin sur « {name} » : images {} à {}. On peut le dessiner tout de suite.", self.frame_label(f), self.frame_label(end - 1));
+        let what = if source.is_some() { "une copie du dessin, à modifier" } else { "un dessin vide" };
+        self.status = format!("Nouvelle clé sur « {name} » : images {} à {}, {what}.", self.frame_label(f), self.frame_label(end - 1));
     }
 
     /// Le calque `layer` tel qu'il était au début du geste, et la durée du plan d'alors.
