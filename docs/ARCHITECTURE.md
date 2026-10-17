@@ -784,6 +784,15 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     `App::goto_key` (montage entier en storyboard, plan en animation) ; actions `cle.*`.
   - Timeline : `on_playhead` (la case de la tête de lecture dans la règle) passe avant
     `timeline_handle_at` au début d'un glisser et pour le curseur.
+  - Peint derrière / remplir la forme : `brushfill.rs` (purs, testés : `closed_outline` — bout
+    près du début, ou boucle d'un trait qui se recoupe —, `paint_under`, `over_premul`,
+    `fill_under_stroke`). `StrokeState::with_options(behind, fill_closed, close_tol)` : en
+    peinture normale `paint_under` ; en humide, la peinture sous le pixel ; `fill_shape` au début
+    de `finish` (le remplissage s'insère entre le trait, de couverture connue par son masque, et
+    le dessin d'avant ; tuiles ajoutées à l'annulation du trait). En vectoriel,
+    `commit_vector_stroke` insère un `Element::Fill` sous le trait (les deux à l'indice 0 s'il
+    peint derrière) et refait la zone. `App::paint_behind`, `fill_shapes`, `close_tolerance`
+    (15 points d'écran) ; actions `pinceau.derriere`, `pinceau.remplir` (sans touche).
   - `montage_panel` dessine la colonne de gauche dans un `new_child` à elle : chaque
     `new_child` / `ui.put` fait avancer le compteur d'identifiants automatiques de la zone qui
     le contient, et la bande (`allocate_painter`, identifiant automatique) changeait d'identité

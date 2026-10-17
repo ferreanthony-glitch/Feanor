@@ -650,6 +650,12 @@ pub struct StrokeState {
     next_time: f64,
     /// Couleur d'arrière-plan (B), mêlée à la couleur du trait par la connexion « couleur ».
     secondary: Option<[u8; 3]>,
+    /// Peint derrière (`brushfill`) : la peinture passe sous ce qui est déjà dessiné.
+    behind: bool,
+    /// Remplir la forme (`brushfill`) : au lâcher, un trait fermé (à `close_tol` près) remplit
+    /// son intérieur de sa couleur.
+    fill_closed: bool,
+    close_tol: f32,
 }
 
 impl StrokeState {
@@ -692,7 +698,19 @@ impl StrokeState {
             raw_log: Vec::new(),
             next_time: -1.0,
             secondary: None,
+            behind: false,
+            fill_closed: false,
+            close_tol: 0.0,
         }
+    }
+
+    /// Options du pinceau (`brushfill`) : peint derrière ; remplir la forme, un trait étant
+    /// fermé quand son bout revient à moins de `close_tol` pixels de son début.
+    pub fn with_options(mut self, behind: bool, fill_closed: bool, close_tol: f32) -> Self {
+        self.behind = behind;
+        self.fill_closed = fill_closed;
+        self.close_tol = close_tol;
+        self
     }
 
     /// La couleur d'arrière-plan (B), pour une brosse qui mêle deux couleurs.
@@ -868,6 +886,7 @@ impl StrokeState {
                 self.record(p, pr);
             }
         }
+        self.fill_shape(raster, dirty);
         let tiles: Vec<_> = std::mem::take(&mut self.before).into_iter().collect();
         let pixels = (!tiles.is_empty()).then_some(Edit::Tiles {
             cel: self.cel,
@@ -877,6 +896,68 @@ impl StrokeState {
             (Some(pre), Some(px)) => Some(Edit::Group(vec![pre, px])),
             (Some(pre), None) => Some(pre),
             (None, px) => px,
+        }
+    }
+
+    /// Remplir la forme (`brushfill`) : un trait fermé remplit son intérieur de sa couleur, sous
+    /// le trait et par-dessus le dessin d'avant (sous tout s'il peint derrière, ou en peinture
+    /// humide, dont la couverture n'est pas connue). Les pixels remplis entrent dans
+    /// l'annulation du trait. Rien pour un calque qui préserve sa transparence.
+    fn fill_shape(&mut self, raster: &mut Raster, dirty: &mut Vec<usize>) {
+        let StrokeMode::Paint(rgb) = self.mode else { return };
+        if !self.fill_closed || self.keep_alpha {
+            return;
+        }
+        let pts: Vec<Pos2> = self.path.iter().map(|p| p.pos()).collect();
+        let Some(outline) = crate::brushfill::closed_outline(&pts, self.close_tol) else { return };
+        let Some(area) = crate::pixsel::PixelMask::from_polygons(&[outline], raster.width, raster.height) else { return };
+        let b = area.bounds();
+        let (x0, y0) = (b.min.x.max(0.0) as usize, b.min.y.max(0.0) as usize);
+        let (x1, y1) = ((b.max.x.max(0.0).ceil() as usize).min(raster.width), (b.max.y.max(0.0).ceil() as usize).min(raster.height));
+        if x0 >= x1 || y0 >= y1 {
+            return;
+        }
+        let opacity = self.settings.opacity;
+        let under_all = self.behind || self.mask.is_empty();
+        for ty in y0 / TILE..=(y1 - 1) / TILE {
+            for tx in x0 / TILE..=(x1 - 1) / TILE {
+                let idx = ty * raster.tiles_x + tx;
+                let stencil = self.stencil.as_ref();
+                if stencil.is_some_and(|st| st.blocks(idx)) {
+                    continue;
+                }
+                let (ox, oy) = (tx * TILE, ty * TILE);
+                let mut cells: Vec<(usize, f32)> = Vec::new();
+                for py in y0.max(oy)..y1.min(oy + TILE) {
+                    for px in x0.max(ox)..x1.min(ox + TILE) {
+                        let i = (py - oy) * TILE + (px - ox);
+                        let cov = area.at(px, py) * stencil.map_or(1.0, |st| st.at(idx, i));
+                        if cov > 0.0 {
+                            cells.push((i, cov));
+                        }
+                    }
+                }
+                if cells.is_empty() {
+                    continue;
+                }
+                if !self.before.contains_key(&idx) {
+                    self.before.insert(idx, raster.tiles[idx].clone());
+                }
+                let before = self.before[&idx].clone();
+                let stroke = self.mask.get(&idx);
+                let tile = raster.tile_mut(idx);
+                for (i, cov) in cells {
+                    let fill = crate::brushfill::solid(rgb, opacity * cov);
+                    tile[i] = if under_all {
+                        crate::brushfill::over_premul(tile[i], fill)
+                    } else {
+                        let a = stroke.map_or(0.0, |m| m[i] * opacity);
+                        let b = before.as_deref().map_or(Color32::TRANSPARENT, |t| t[i]);
+                        crate::brushfill::fill_under_stroke(tile[i], b, a, fill)
+                    };
+                }
+                dirty.push(idx);
+            }
         }
     }
 
@@ -1097,6 +1178,7 @@ impl StrokeState {
             // Ce que pose la brosse : sa charge, plus ce qu'elle entraîne de la peinture prise.
             let target_a = (load + (1.0 - load) * under_a * s.mix.clamp(0.0, 1.0)).clamp(0.0, 1.0);
             let rgb = self.wet_rgb;
+            let behind = self.behind;
             let stencil = self.stencil.as_ref();
             for ty in y0 / TILE..=(y1 - 1) / TILE {
                 for tx in x0 / TILE..=(x1 - 1) / TILE {
@@ -1123,7 +1205,9 @@ impl StrokeState {
                             if amt <= 0.0 {
                                 continue;
                             }
-                            tile[i] = wet_blend(tile[i], rgb, target_a, amt, keep_alpha);
+                            let wet = wet_blend(tile[i], rgb, target_a, amt, keep_alpha);
+                            // Peint derrière : la peinture humide ne vient que sous ce qui est là.
+                            tile[i] = if behind { crate::brushfill::over_premul(tile[i], wet) } else { wet };
                             changed = true;
                         }
                     }
@@ -1135,6 +1219,7 @@ impl StrokeState {
             return;
         }
         let stencil = self.stencil.as_ref();
+        let behind = self.behind;
         for ty in y0 / TILE..=(y1 - 1) / TILE {
             for tx in x0 / TILE..=(x1 - 1) / TILE {
                 let idx = ty * raster.tiles_x + tx;
@@ -1181,6 +1266,7 @@ impl StrokeState {
                         let b = before.map_or(Color32::TRANSPARENT, |t| t[i]);
                         tile[i] = match mode {
                             StrokeMode::Paint(rgb) if keep_alpha => paint_over(b, rgb, m * s.opacity),
+                            StrokeMode::Paint(rgb) if behind => crate::brushfill::paint_under(b, rgb, m * s.opacity),
                             StrokeMode::Paint(rgb) => paint(b, rgb, m * s.opacity),
                             StrokeMode::Erase => erase(b, m * s.opacity),
                         };

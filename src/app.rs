@@ -290,6 +290,9 @@ pub struct App {
     pub(crate) fill: FillSettings,
     pub(crate) shape: ShapeSettings,
     pub(crate) vector_erase_whole: bool,
+    /// Options du pinceau et du crayon (`brushfill`) : peint derrière, remplir la forme.
+    pub(crate) paint_behind: bool,
+    pub(crate) fill_shapes: bool,
     pub(crate) color: [u8; 3],
     /// La couleur en teinte, saturation, valeur (panneau Couleur, 6b).
     pub(crate) hsv: [f32; 3],
@@ -642,6 +645,8 @@ impl App {
                 last: Tool::Rect,
             },
             vector_erase_whole: false,
+            paint_behind: false,
+            fill_shapes: false,
             // Les couleurs de la dernière fois (passe couleur).
             color: settings.colors.front,
             hsv: crate::colorui::rgb_to_hsv(settings.colors.front),
@@ -1347,10 +1352,13 @@ impl App {
         };
         let textures = self.brushes.textures(&settings);
         let stencil = self.stencil_for(cel);
+        let painting = self.tool != Tool::Eraser;
+        let (behind, fill, tol) = (painting && self.paint_behind, painting && self.fill_shapes, self.close_tolerance());
         let mut stroke = StrokeState::new(cel, mode, settings, prefix, pen)
             .with_textures(textures)
             .with_secondary(self.couleurs.prefs.back)
-            .on_layer(self.layer().keep_alpha, stencil);
+            .on_layer(self.layer().keep_alpha, stencil)
+            .with_options(behind, fill, tol);
         let mut dirty = Vec::new();
         // L'instant de l'image d'écran : la vitesse du trait en vient (connexions).
         let time = self.ctx.input(|i| i.time);
@@ -1611,6 +1619,12 @@ impl App {
     /// Le geste `key` continue pendant cette image (`gesture_change`).
     pub(crate) fn keep_gesture(&mut self, key: u64) {
         self.gesture.keep(key);
+    }
+
+    /// Distance (en pixels du dessin) sous laquelle le bout d'un trait rejoint son début : la
+    /// forme est fermée pour « remplir la forme » (15 points d'écran).
+    pub(crate) fn close_tolerance(&self) -> f32 {
+        15.0 / self.layer_zoom().max(1e-3)
     }
 
     /// Un clic qui change un réglage (œil d'un calque, piste muette…) : une étape à lui seul.
@@ -2739,6 +2753,14 @@ impl App {
             "instance.suivante" => self.goto_instance(true),
             "cle.precedente" => self.goto_key(false),
             "cle.suivante" => self.goto_key(true),
+            "pinceau.derriere" => {
+                self.paint_behind = !self.paint_behind;
+                self.status = if self.paint_behind { "Peint derrière : la peinture passe sous ce qui est déjà dessiné." } else { "Peint derrière : non." }.into();
+            }
+            "pinceau.remplir" => {
+                self.fill_shapes = !self.fill_shapes;
+                self.status = if self.fill_shapes { "Remplir la forme : un trait fermé remplit son intérieur, au lâcher." } else { "Remplir la forme : non." }.into();
+            }
             "instance.tete" => self.goto_instance_end(false),
             "instance.queue" => self.goto_instance_end(true),
             "instance.casser" => self.break_instance_here(),

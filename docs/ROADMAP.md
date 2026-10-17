@@ -1082,7 +1082,15 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         dans la fenêtre de calques ») : dans le panneau, ce menu n'a plus afficher, opacité, mode,
         dupliquer, supprimer, verrouiller, ni dans « Autres commandes » ce que font ses boutons ;
         ailleurs, le sous-menu des commandes ne répète plus ce que le menu du calque a déjà
-        (`layerops::OpsFrom`).
+        (`layerops::OpsFrom`) ;
+      - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
+        options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
+        forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,
+        bitmap et vectoriel. Fermé : le bout revient à 15 points d'écran du début, ou le trait se
+        recoupe (sa boucle se remplit). Le remplissage est sous le trait, par-dessus le dessin
+        d'avant (sous tout s'il peint derrière). Mes choix : ils valent aussi pour le crayon, ne
+        sont pas retenus d'une séance à l'autre ; « Draw Behind » / « Auto Fill » de Storyboard
+        Pro : comportement exact à vérifier.
 
   Pas fait : ces gestes sur la piste « Fond ».
 - Restent (ordre de Fable) : navigation de calques à la TVPaint, fenêtre « Agrandir / rétrécir

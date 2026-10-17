@@ -198,7 +198,12 @@ impl App {
         // Pinceau texturé : l'aperçu prend ses textures, le trait gardera le réglage (7b).
         let brush = self.brushes.for_vector(&settings).map(Box::new);
         let textures = if brush.is_some() { self.brushes.textures(&settings) } else { Default::default() };
-        let mut stroke = StrokeState::new(cel, StrokeMode::Paint(self.color), settings, None, pen).with_textures(textures).with_secondary(self.couleurs.prefs.back);
+        // Peint derrière : l'aperçu passe déjà sous les autres traits ; le remplissage, lui, est un
+        // élément vectoriel posé au lâcher (`commit_vector_stroke`).
+        let mut stroke = StrokeState::new(cel, StrokeMode::Paint(self.color), settings, None, pen)
+            .with_textures(textures)
+            .with_secondary(self.couleurs.prefs.back)
+            .with_options(self.paint_behind, false, 0.0);
         let mut dirty = Vec::new();
         let time = self.ctx.input(|i| i.time);
         if let Some(c) = self.doc.cels.get_mut(&cel) {
@@ -246,8 +251,33 @@ impl App {
             hardness: vs.hardness,
             brush: vs.brush,
         };
+        // Remplir la forme (`brushfill`) : une zone remplie de la couleur du trait, juste sous lui.
+        let fill = if self.fill_shapes && self.tool != Tool::Eraser {
+            let pts: Vec<Pos2> = path.iter().map(|p| p.pos()).collect();
+            crate::brushfill::closed_outline(&pts, self.close_tolerance()).map(|outline| Element::Fill {
+                contours: vec![outline.iter().map(|p| [p.x, p.y]).collect()],
+                color: vs.color,
+                opacity: vs.opacity,
+            })
+        } else {
+            None
+        };
+        let behind = self.paint_behind && self.tool != Tool::Eraser;
         if let Some(d) = self.drawing_mut(vs.cel) {
-            d.elements.push(element.clone());
+            // Peint derrière : la zone et le trait sous tous les autres éléments du dessin.
+            let at = if behind { 0 } else { d.elements.len() };
+            d.elements.insert(at, element.clone());
+            if let Some(f) = &fill {
+                d.elements.insert(at, f.clone());
+            }
+        }
+        // Sous les autres, ou avec sa zone : on refait la zone du trait (le raccourci ci-dessous
+        // suppose le trait seul, dessus tout le reste).
+        if behind || fill.is_some() {
+            let region = fill.as_ref().map_or(Rect::NOTHING, |f| f.bounds()).union(element.bounds()).union(vector::path_bounds(&path));
+            self.refresh_cel_region(vs.cel, region);
+            self.push_vector(vs.cel, vs.before, vs.prefix);
+            return;
         }
         match (preview, self.doc.cels.get_mut(&vs.cel)) {
             // Le nouveau trait est le dernier élément, donc dessus tout le reste : on remet les

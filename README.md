@@ -101,6 +101,10 @@ Chaque plan a ses calques, de deux sortes :
 
 - **Vectoriel** (V, par défaut, façon Storyboard Pro) : les traits restent des objets modifiables.
   - Pinceau et crayon tracent des traits à épaisseur variable (pression du stylet comprise).
+    Deux interrupteurs en haut de leurs réglages, aussi sur un calque bitmap : **Peint derrière**
+    (la peinture passe sous ce qui est déjà dessiné) et **Remplir la forme** (au lâcher, un trait
+    fermé, dont le bout revient près du début ou qui se recoupe, remplit son intérieur de sa
+    couleur, sous le trait ; en vectoriel, la zone reste modifiable).
   - La gomme coupe les traits, ou retire des traits entiers en mode « traits entiers ».
   - Le pot de peinture crée une zone remplie qui passe sous les traits. Sur un trait ou une zone
     déjà peinte, il en change la couleur.
