@@ -114,6 +114,7 @@ impl App {
                 }
             },
             Pane::XSheet => self.xsheet_panel(ui),
+            Pane::Effects => self.fx_panel(ui),
         }
     }
 
@@ -245,6 +246,12 @@ impl App {
             }
         }
     }
+
+    /// `pane` est-il dans l'espace de travail (affiché ou en onglet) ?
+    pub(crate) fn pane_shown(&self, pane: Pane) -> bool {
+        self.dock.as_ref().map_or_else(|| self.layout.dock_layout().contains(pane), |s| s.find_tab(&pane).is_some()) || self.detached.iter().any(|d| d.panneau == pane)
+    }
+
 
     /// Affiche ou masque un groupe de panneaux (actions de 4b : outils, fiche, bande).
     pub(crate) fn toggle_pane_group(&mut self, group: Group) {

@@ -352,3 +352,28 @@ fn panel_layouts_are_kept_in_the_settings() {
     let d = old.dock_layout();
     assert!(!d.contains(Pane::Sheet) && d.contains(Pane::Montage));
 }
+
+#[test]
+fn the_effects_pane_comes_under_the_settings() {
+    // Anthony : « la partie effets doit être une fenêtre dans l'espace de travail » (sous les
+    // réglages).
+    let v6 = DockLayout {
+        version: 6,
+        principal: DockNode::Row { part: 0.8, gauche: Box::new(tabs(&[Pane::Canvas])), droite: Box::new(tabs(&[Pane::ToolOptions, Pane::Guides])) },
+        fenetres: Vec::new(),
+        detachees: Vec::new(),
+    };
+    let l = v6.upgraded();
+    assert_eq!(count(&l, Pane::Effects), 1);
+    let under = |l: &DockLayout| {
+        matches!(&l.principal, DockNode::Row { droite, .. }
+            if matches!(&**droite, DockNode::Column { haut, bas, .. } if **haut == tabs(&[Pane::ToolOptions, Pane::Guides]) && **bas == tabs(&[Pane::Effects])))
+    };
+    assert!(under(&l), "{:?}", l.principal);
+    // Fermé puis rouvert : il revient sous les réglages.
+    let mut again = l.clone();
+    again.close(Pane::Effects);
+    assert!(!again.contains(Pane::Effects));
+    again.open(Pane::Effects);
+    assert!(under(&again), "{:?}", again.principal);
+}

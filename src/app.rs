@@ -326,9 +326,8 @@ pub struct App {
     pub(crate) flip_run: Option<crate::flipsui::FlipRun>,
     pub(crate) flip_manual: Option<(usize, usize)>,
     pub(crate) flips_window: bool,
-    /// Pile d'effets (13i, `fxui.rs`) : panneau ouvert, création automatique des clés, clés
+    /// Pile d'effets (13i, `fxui.rs`, panneau Effets) : création automatique des clés, clés
     /// montrées dans la timeline, effet choisi dans la pile du calque courant.
-    pub(crate) fx_window: bool,
     pub(crate) fx_auto_key: bool,
     pub(crate) fx_keys_shown: bool,
     pub(crate) fx_selected: usize,
@@ -670,7 +669,7 @@ impl App {
             flip_run: None,
             flip_manual: None,
             flips_window: false,
-            fx_window: false,
+
             fx_auto_key: false,
             fx_keys_shown: true,
             fx_selected: 0,
@@ -2879,7 +2878,7 @@ impl App {
             "flip.changer" => self.next_flip(),
             a if a.starts_with("flip.") && self.role_flip_action(a) => {}
             // Pile d'effets (13i, `fxui.rs`).
-            "fx.panneau" => self.fx_window = !self.fx_window,
+            "fx.panneau" => self.toggle_pane(crate::dock::Pane::Effects),
             "fx.cle_creer" => self.fx_create_key(),
             "fx.cle_supprimer" => self.fx_delete_key(),
             "fx.cle_auto" => {

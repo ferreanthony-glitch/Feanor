@@ -1097,7 +1097,10 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         Déformation et Rendu ») : onde, ondulation, tourbillon, pincement ; nuages, éclairage,
         dégradé (`fxwarp.rs`) ; le rendu texture ou éclaire le dessin au lieu de remplir la
         feuille (mon choix). Pas faits : les galeries (de filtres, de flous), la vidéo de
-        Photoshop, Liquéfier ;
+        Photoshop, Liquéfier. Puis (« la partie effets doit être une fenêtre dans l'espace de
+        travail ») : panneau Effets (`Pane::Effects`, disposition version 7) sous les onglets des
+        réglages, au lieu de la fenêtre flottante ; « Fenêtre Effets… » retiré du clic droit (à
+        sa demande) ; la baguette de la timeline et Affichage > Panneaux l'ouvrent ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,

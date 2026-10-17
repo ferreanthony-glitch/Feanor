@@ -681,7 +681,7 @@ impl App {
         self.properties_window_ui(ctx);
         self.onion_window_ui(ctx);
         self.flips_window_ui(ctx);
-        self.fx_window_ui(ctx);
+
         self.tween_window_ui(ctx);
         self.sb_window_ui(ctx);
         self.brush_import_window(ctx);

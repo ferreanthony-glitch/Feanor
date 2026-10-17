@@ -6,7 +6,7 @@
 //! Les clés d'effets se voient aussi dans la timeline : de petits losanges en haut de la ligne
 //! du calque.
 
-use eframe::egui::{self, vec2, Align2, RichText};
+use eframe::egui::{self, RichText};
 use egui_phosphor::regular as ph;
 
 use crate::app::App;
@@ -40,8 +40,9 @@ impl App {
         self.status = format!("{} : {}.", kind.label(), if on { "décoché (le dessin n'a pas changé)" } else { "coché" });
     }
 
-    /// Les effets par familles, en sous-menus de cases à cocher (menu d'un calque), puis la
-    /// fenêtre Effets pour les régler.
+    /// Les effets par familles, en sous-menus de cases à cocher (menu d'un calque) ; on les
+    /// règle dans le panneau Effets (Anthony, 2026-10-17 : « enlève Fenêtre Effets du clic
+    /// droit »).
     pub(crate) fn fx_menu_items(&mut self, ui: &mut egui::Ui, li: usize) {
         for family in FAMILIES {
             ui.menu_button(family, |ui| {
@@ -53,11 +54,7 @@ impl App {
                 }
             });
         }
-        if ui.button("Fenêtre Effets…").on_hover_text("Régler les effets du calque, les ordonner, leur poser des clés.").clicked() {
-            ui.close_menu();
-            self.select_layer(li);
-            self.fx_window = true;
-        }
+
     }
 
     /// Pose ou met à jour la clé de l'effet `i` du calque courant à l'image courante, avec ses
@@ -103,25 +100,8 @@ impl App {
         }
     }
 
-    /// Le panneau de la pile d'effets, s'il est ouvert.
-    pub(crate) fn fx_window_ui(&mut self, ctx: &egui::Context) {
-        if !self.fx_window {
-            return;
-        }
-        let mut open = true;
-        egui::Window::new("Effets")
-            .open(&mut open)
-            .resizable(false)
-            .collapsible(false)
-            .default_pos(ctx.screen_rect().center() - vec2(220.0, 200.0))
-            .pivot(Align2::LEFT_TOP)
-            .show(ctx, |ui| self.fx_panel(ui));
-        if !open {
-            self.fx_window = false;
-        }
-    }
 
-    fn fx_panel(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn fx_panel(&mut self, ui: &mut egui::Ui) {
         let layer = self.layer();
         ui.label(RichText::new(format!("Calque « {} », image {}", layer.name, self.frame_label(self.cur_frame))).strong());
         if layer.folder {

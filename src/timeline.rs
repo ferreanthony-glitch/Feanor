@@ -235,11 +235,11 @@ impl App {
 
                     // Pile d'effets du calque courant (13i).
                     let key = self.raccourci("fx.panneau");
-                    let resp = ui.add(egui::Button::new(RichText::new(ph::MAGIC_WAND).size(crate::bulles::TAILLE)).selected(self.fx_window).frame(false));
+                    let resp = ui.add(egui::Button::new(RichText::new(ph::MAGIC_WAND).size(crate::bulles::TAILLE)).selected(self.pane_shown(crate::dock::Pane::Effects)).frame(false));
                     let n = self.layer().fx.len();
-                    let what = format!("Effets du calque courant, animables par clés (flous). {n} effet{} sur ce calque.", if n > 1 { "s" } else { "" });
-                    if bulle(resp, "Pile d'effets", &what, &key).clicked() {
-                        self.fx_window = !self.fx_window;
+                    let what = format!("Le panneau des effets du calque courant (non destructifs, animables par clés). {n} effet{} sur ce calque.", if n > 1 { "s" } else { "" });
+                    if bulle(resp, "Effets", &what, &key).clicked() {
+                        self.toggle_pane(crate::dock::Pane::Effects);
                     }
                 });
             });

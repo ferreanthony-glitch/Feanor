@@ -52,6 +52,11 @@ pub enum Pane {
     /// Feuille d'exposition du plan (13g). Fermée dans la disposition par défaut.
     #[serde(rename = "feuille_expo")]
     XSheet,
+    /// Effets du calque courant (pile d'effets non destructifs, 13i) : un panneau de l'espace de
+    /// travail, sous les réglages (Anthony, 2026-10-17 : « la partie effets doit être une fenêtre
+    /// dans l'espace de travail »).
+    #[serde(rename = "effets")]
+    Effects,
 }
 
 /// Où un panneau se range quand on le rouvre.
@@ -67,7 +72,7 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 11] = [
+    pub const ALL: [Pane; 12] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
@@ -79,6 +84,7 @@ impl Pane {
         Pane::Layers,
         Pane::Montage,
         Pane::XSheet,
+        Pane::Effects,
     ];
 
     pub fn name(self) -> &'static str {
@@ -95,6 +101,7 @@ impl Pane {
             Pane::Montage => "Montage et timeline",
             Pane::Timeline => "Timeline",
             Pane::XSheet => "Feuille d'exposition",
+            Pane::Effects => "Effets",
         }
     }
 
@@ -123,13 +130,14 @@ impl Pane {
             Pane::Montage => ph::FILM_STRIP,
             Pane::Timeline => ph::ROWS,
             Pane::XSheet => ph::TABLE,
+            Pane::Effects => ph::MAGIC_WAND,
         }
     }
 
     pub fn group(self) -> Group {
         match self {
             Pane::Canvas => Group::Center,
-            Pane::Tools | Pane::Color | Pane::Brushes | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet => Group::Left,
+            Pane::Tools | Pane::Color | Pane::Brushes | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet | Pane::Effects => Group::Left,
             Pane::Layers | Pane::XSheet => Group::Right,
             Pane::Montage | Pane::Timeline => Group::Bottom,
         }
@@ -229,7 +237,12 @@ fn left_column(only: &[Pane]) -> Option<DockNode> {
         let list: Vec<Pane> = list.into_iter().filter(|p| only.contains(p)).collect();
         (!list.is_empty()).then(|| tabs(list))
     };
-    let parts = [(0.3, keep(vec![Pane::Tools])), (0.6, keep(SETTINGS_TABS.to_vec())), (1.0, keep(COLOR_TABS.to_vec()))];
+    let parts = [
+        (0.3, keep(vec![Pane::Tools])),
+        (0.45, keep(SETTINGS_TABS.to_vec())),
+        (0.4, keep(vec![Pane::Effects])),
+        (1.0, keep(COLOR_TABS.to_vec())),
+    ];
     stack(&parts)
 }
 
@@ -243,8 +256,9 @@ const COLOR_TABS: [Pane; 2] = [Pane::Color, Pane::Brushes];
 /// dessin, réglages et couleur à droite) ; 2 depuis 9b (la fiche avec les réglages) ; 3 depuis 11c
 /// (le panneau Pinceaux, en onglet avec la couleur) ; 4 depuis le chantier 6 (la timeline, panneau à
 /// part sous le montage) ; 5 le même jour (en onglets) ; 6 le même jour (une seule bande, comme
-/// avant : le montage en storyboard, la timeline en animation).
-pub const LAYOUT_VERSION: u32 = 6;
+/// avant : le montage en storyboard, la timeline en animation) ; 7 le même jour (le panneau
+/// Effets, sous les réglages).
+pub const LAYOUT_VERSION: u32 = 7;
 
 /// La bande du bas : une seule (Anthony, 2026-10-17 : « je ne veux pas de double timeline ») ;
 /// elle montre le montage en storyboard, la timeline en animation.
@@ -414,7 +428,7 @@ impl DockLayout {
         // À droite du dessin : les calques, puis les réglages (avec la fiche) et la couleur.
         let mut settings = Vec::new();
         if l.tools {
-            settings.extend([Pane::ToolOptions, Pane::View, Pane::Guides, Pane::Color, Pane::Brushes]);
+            settings.extend([Pane::ToolOptions, Pane::View, Pane::Guides, Pane::Color, Pane::Brushes, Pane::Effects]);
             if l.sheet {
                 settings.push(Pane::Sheet);
             }
@@ -461,6 +475,7 @@ impl DockLayout {
         if (4..6).contains(&self.version) && self.contains(Pane::Timeline) && !self.contains(Pane::Montage) {
             self.open(Pane::Montage);
         }
+
         if self.version < 5 {
             let principal = std::mem::replace(&mut self.principal, tabs(Vec::new()));
             self.principal = principal.strips_as_tabs();
@@ -468,6 +483,10 @@ impl DockLayout {
                 let n = std::mem::replace(&mut w.panneaux, tabs(Vec::new()));
                 w.panneaux = n.strips_as_tabs();
             }
+        }
+        // Le panneau Effets arrive sous les réglages (version 7), une fois le reste converti.
+        if self.version < 7 && !self.contains(Pane::Effects) {
+            self.open(Pane::Effects);
         }
         self.version = LAYOUT_VERSION;
         self.sanitized()
@@ -499,6 +518,13 @@ impl DockLayout {
 
     pub fn contains(&self, pane: Pane) -> bool {
         self.panes().contains(&pane)
+    }
+
+    /// `pane` est dans la fenêtre principale (pas flottant ni détaché).
+    fn principal_has(&self, pane: Pane) -> bool {
+        let mut out = Vec::new();
+        self.principal.collect(&mut out);
+        out.contains(&pane)
     }
 
     /// Chaque panneau une seule fois, le dessin toujours là (dans la fenêtre principale), parts
@@ -589,6 +615,17 @@ impl DockLayout {
         // L'ancienne timeline à part n'existe plus : c'est la bande.
         if pane == Pane::Timeline {
             return self.open(Pane::Montage);
+        }
+        // Les effets : sous les onglets des réglages (dans la fenêtre principale ou un panneau
+        // flottant), sinon dans la colonne des réglages.
+        if pane == Pane::Effects {
+            let under = |n: DockNode| column(0.55, n, tabs(vec![Pane::Effects]));
+            let anchor = SETTINGS_TABS.into_iter().find(|p| self.principal_has(*p));
+            if let Some(a) = anchor {
+                let mut f = under;
+                self.principal.wrap_tabs_of(a, &mut f);
+                return;
+            }
         }
         if group != Group::Bottom {
             if let Some(t) = self.principal.tabs_of_group(group) {
