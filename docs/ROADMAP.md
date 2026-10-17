@@ -1001,6 +1001,16 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         après quelle clé elle vient se déposer ») : pendant qu'on glisse une ou plusieurs clés,
         rien ne bouge ; un fantôme suit la souris et un repère (trait blanc à deux pointes) montre
         la limite entre deux clés où elles se poseront ; elles se posent au lâcher ;
+      - **choix au rectangle** : un glisser qui part d'un espace vide des pistes de calques (ou,
+        avec Ctrl ou Maj, de n'importe où dans les pistes) choisit les clés que le rectangle
+        touche, sur les pistes et les images couvertes ; Ctrl ou Maj les ajoute au choix ; Échap
+        rend le choix d'avant. (Glisser dans la règle fait toujours défiler.)
+      - **zoom de la bande** (Anthony : « il existe déjà, il faut le mettre en bas de la
+        timeline, pas en haut, et le rendre plus petit. Des raccourcis clavier seraient
+        pertinents ») : le curseur du montage passe dans une petite barre en bas (zoom arrière,
+        curseur, zoom avant, tout voir) ; Ctrl + molette sur la bande ; raccourcis proposés
+        Alt+1 (arrière), Alt+2 (avant), Alt+3 (tout voir), comme 1 et 2 pour le dessin : ils
+        visent le montage en storyboard, la timeline en animation ;
       - **collage multi-calques** : des clés copiées sur plusieurs calques se collent chacune sur
         le calque de même nom du plan courant (créé s'il manque, à la même place dans la pile),
         avec leurs écarts et leurs durées ; venues d'un seul calque, sur le calque courant.

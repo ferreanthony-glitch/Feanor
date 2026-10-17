@@ -375,6 +375,8 @@ pub struct App {
     pub(crate) key_anchor: Option<crate::montagekeys::KeyRef>,
     /// Plusieurs clés choisies glissées à la fois dans le montage.
     pub(crate) keys_drag: Option<crate::montagekeys::KeysDrag>,
+    /// Choix de clés au rectangle en cours dans le montage.
+    pub(crate) key_rect: Option<crate::montagekeys::KeyRect>,
     /// Une clé seule prise dans le montage (`Handle::Key`) : de combien d'images elle est glissée.
     /// Elle ne se pose qu'au lâcher ; d'ici là, un repère montre où (`montagekeys::drop_view`).
     pub(crate) key_drag_delta: isize,
@@ -548,6 +550,9 @@ pub struct App {
     pub(crate) renderer: Renderer,
     pub(crate) thumbs: Thumbs,
     pub(crate) montage_zoom: f32,
+    /// « Tout voir » demandé dans le montage : le zoom s'ajuste à la prochaine image d'écran (il
+    /// faut la largeur de la bande).
+    pub(crate) montage_fit: bool,
     pub(crate) montage_drag: Option<MontageDrag>,
     /// Plan tel qu'il était au début du réglage de sa durée : chaque valeur intermédiaire
     /// repart de lui, rien n'est perdu avant la fin du geste.
@@ -682,6 +687,7 @@ impl App {
             key_anchor: None,
             keys_drag: None,
             key_drag_delta: 0,
+            key_rect: None,
             key_focus: false,
             hole: Default::default(),
             images_focus: false,
@@ -789,6 +795,7 @@ impl App {
             renderer: Renderer::new(),
             thumbs: Thumbs::default(),
             montage_zoom: 4.0,
+            montage_fit: false,
             montage_drag: None,
             length_origin: None,
             length_field_active: false,
@@ -2734,6 +2741,11 @@ impl App {
             "timeline.adapter_image" => self.fit_timeline(crate::cues::Fit::Image),
             "timeline.adapter_cles" => self.fit_timeline(crate::cues::Fit::Keys),
             "timeline.tout_voir" => self.fit_timeline(crate::cues::Fit::All),
+            // Zoom de la bande du bas : le montage en storyboard, la timeline en animation.
+            "bande.zoom_avant" => self.zoom_strip(1.25),
+            "bande.zoom_arriere" => self.zoom_strip(1.0 / 1.25),
+            "bande.tout_voir" if board_shown => self.montage_fit = true,
+            "bande.tout_voir" => self.fit_timeline(crate::cues::Fit::All),
             // Marques de couleur (13d, `marks.rs`).
             "marque_couleur.basculer" => self.toggle_color_mark(),
             "marque_couleur.retirer" => self.remove_color_mark(),
@@ -2944,6 +2956,16 @@ impl App {
                 self.shape.last = tool;
             }
         }
+    }
+
+    /// Zoom de la bande du bas par le facteur `f` : le montage en storyboard, la timeline en
+    /// animation. L'image courante reste en vue.
+    pub(crate) fn zoom_strip(&mut self, f: f32) {
+        match self.mode {
+            Mode::Storyboard => self.montage_zoom = (self.montage_zoom * f).clamp(0.5, 16.0),
+            Mode::Animation => self.timeline_cell = (self.timeline_cell * f).clamp(crate::timeline::CELL_MIN, crate::timeline::CELL_MAX),
+        }
+        self.follow_frame = true;
     }
 
     /// Zoom par pas, autour du centre de la vue.

@@ -732,6 +732,7 @@ impl App {
             || self.panel_layer_drag.is_some()
             || self.montage_layer_drag.is_some()
             || self.keys_drag.is_some()
+            || self.key_rect.is_some()
     }
 
     /// Échap (ou Ctrl+Z) pendant un glisser (chantier 2) : tout revient comme avant le geste ;
@@ -739,6 +740,9 @@ impl App {
     pub(crate) fn cancel_drags(&mut self) {
         self.cancel_montage_drag();
         self.cancel_keys_drag();
+        if let Some(r) = self.key_rect.take() {
+            self.key_sel = r.before;
+        }
         self.image_drag = None;
         if let Some(g) = self.grid_select.take() {
             self.frame_sel = g.before_frames;
@@ -768,6 +772,7 @@ impl App {
         if self.keys_drag.is_some() {
             self.end_keys_drag();
         }
+        self.key_rect = None;
     }
 
     /// Une fois par image d'écran (chantier 4) : si la durée du plan courant a changé hors d'un

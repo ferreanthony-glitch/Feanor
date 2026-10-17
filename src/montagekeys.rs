@@ -4,6 +4,9 @@
 //!   retire ; Maj + clic choisit toutes les clés de la piste entre la dernière cliquée et
 //!   celle-ci, d'un plan à l'autre ; un clic à côté des dessins vide le choix. Ctrl+A : toutes
 //!   les clés du calque courant dans le plan courant.
+//! - Au rectangle : un glisser qui part d'un espace vide des pistes de calques (ou avec Ctrl ou
+//!   Maj, de n'importe où dans les pistes) choisit les clés que le rectangle touche ; avec Ctrl
+//!   ou Maj, il les ajoute au choix. Échap rend le choix d'avant (`KeyRect`).
 //! - Une clé choisie prise par son milieu emmène les autres clés choisies (`KeysDrag`) : toutes
 //!   glissent du même nombre d'images, chacune prend sa place parmi les autres expositions de son
 //!   calque (`shift_runs`), toutes gardent leur durée. Comme dans Storyboard Pro, rien ne bouge
@@ -63,6 +66,14 @@ struct DragLayer {
     before: Layer,
     plan_len: usize,
     starts: Vec<usize>,
+}
+
+/// Un choix au rectangle en cours : son coin de départ (à l'écran), le choix d'avant, et s'il
+/// s'y ajoute (Ctrl ou Maj).
+pub(crate) struct KeyRect {
+    pub origin: eframe::egui::Pos2,
+    pub before: Vec<KeyRef>,
+    pub add: bool,
 }
 
 /// Ce que montre le montage pendant qu'on glisse des clés, pour un calque d'un plan : les
@@ -278,6 +289,38 @@ impl App {
             start += p.frame_count();
         }
         out
+    }
+
+    /// Les clés des pistes `tracks` qui touchent les images `g0` à `g1` (comprises) du montage.
+    pub(crate) fn keys_in_rect(&self, tracks: &[TrackKey], g0: usize, g1: usize) -> Vec<KeyRef> {
+        let mut out = Vec::new();
+        let mut start = 0;
+        for p in &self.doc.panels {
+            for t in tracks {
+                if let Some(li) = layer_on_track(&p.layers, t) {
+                    let l = &p.layers[li];
+                    for (s, e, cel) in runs(l) {
+                        if cel.is_some() && start + s <= g1 && start + e > g0 {
+                            out.push(KeyRef { panel: p.id, layer: l.id, start: s });
+                        }
+                    }
+                }
+            }
+            start += p.frame_count();
+        }
+        out
+    }
+
+    /// Le choix au rectangle suit la souris : les clés des pistes `tracks`, images `g0` à `g1`.
+    pub(crate) fn drag_key_rect(&mut self, tracks: &[TrackKey], g0: usize, g1: usize) {
+        let Some((before, add)) = self.key_rect.as_ref().map(|r| (r.before.clone(), r.add)) else { return };
+        let mut sel = if add { before } else { Vec::new() };
+        for k in self.keys_in_rect(tracks, g0, g1) {
+            if !sel.contains(&k) {
+                sel.push(k);
+            }
+        }
+        self.key_sel = sel;
     }
 
     /// Ctrl+A après un clic sur une piste : toutes les clés du calque courant dans le plan courant.

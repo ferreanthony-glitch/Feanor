@@ -713,6 +713,14 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     `duplicate_keys` (`duplicate_run`) visent les clés choisies, sinon celle de l'image
     courante. `App::key_focus` (un clic sur la piste d'un calque du montage) passe avant la main
     des plans dans `run_action`, et `key_mode_of` donne alors les raccourcis de l'animation.
+  - Choix au rectangle : `montagekeys::KeyRect` (coin de départ, choix d'avant, ajout),
+    `keys_in_rect` / `drag_key_rect` ; `App::key_rect` connu de `dragging`, `cancel_drags`
+    (rend le choix d'avant) et `drop_stale_drags`.
+  - Zoom de la bande : `montage_zoom_bar` (petite barre en bas de `montage_panel`), actions
+    `bande.zoom_avant` / `bande.zoom_arriere` (`App::zoom_strip` : `montage_zoom` ou
+    `timeline_cell` selon le mode) et `bande.tout_voir` (`montage_fit`, appliqué dans
+    `montage_strip` qui connaît la largeur ; en animation, `fit_timeline`) ; Ctrl + molette sur
+    la bande (`zoom_delta`).
   - Repère de pose : rien ne bouge pendant le glisser d'une clé (`Handle::Key` garde son décalage
     dans `App::key_drag_delta`, posée par `end_handle_drag`) ou de plusieurs (`KeysDrag`, posées
     par `end_keys_drag`). `handles::drop_marks` (la limite où chaque bloc déplacé viendra, vue

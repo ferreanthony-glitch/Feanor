@@ -295,3 +295,16 @@ fn shortcuts_follow_the_pane_that_has_the_hand() {
     // Les deux à la fois ne devraient pas arriver (chaque clic retire l'autre) : le montage l'emporte.
     assert_eq!(key_mode_of(Mode::Animation, true, true, false), Mode::Storyboard);
 }
+
+#[test]
+fn the_strip_zooms_with_alt_and_the_zoom_keys() {
+    // Comme 1 et 2 pour le dessin (positions de touche) : Alt+1 arrière, Alt+2 avant, Alt+3 tout voir.
+    let map = default_map();
+    for mode in [Mode::Storyboard, Mode::Animation] {
+        assert_eq!(press(&map, Key::Num1, Key::Num1, Modifiers::ALT, mode).as_deref(), Some("bande.zoom_arriere"));
+        assert_eq!(press(&map, Key::Num2, Key::Num2, Modifiers::ALT, mode).as_deref(), Some("bande.zoom_avant"));
+        assert_eq!(press(&map, Key::Num3, Key::Num3, Modifiers::ALT, mode).as_deref(), Some("bande.tout_voir"));
+    }
+    // Sans Alt, 1 et 2 zooment toujours le dessin.
+    assert_eq!(press(&map, Key::Num1, Key::Num1, NONE, Mode::Storyboard).as_deref(), Some("vue.zoom_arriere"));
+}

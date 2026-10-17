@@ -591,6 +591,22 @@ touches = ["Ctrl+Fin"]
 source = "proposition"
 contexte = "storyboard"
 
+# Zoom de la bande du bas (le montage, ou la timeline en animation), comme 1 et 2 pour le dessin.
+[[raccourci]]
+action = "bande.zoom_arriere"
+touches = ["Alt+1"]
+source = "proposition"
+
+[[raccourci]]
+action = "bande.zoom_avant"
+touches = ["Alt+2"]
+source = "proposition"
+
+[[raccourci]]
+action = "bande.tout_voir"
+touches = ["Alt+3"]
+source = "proposition"
+
 [[raccourci]]
 action = "panneau.precedent"
 touches = ["A"]

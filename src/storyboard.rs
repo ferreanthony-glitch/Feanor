@@ -337,6 +337,11 @@ impl App {
             .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
             .show(ui, |ui| ui.horizontal(|ui| self.montage_toolbar(ui, total, fps)));
         ui.separator();
+        // Le zoom, petit, tout en bas de la bande.
+        egui::TopBottomPanel::bottom("zoom_montage")
+            .resizable(false)
+            .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(4, 1)))
+            .show_inside(ui, |ui| self.montage_zoom_bar(ui));
         // Hauteur des panneaux : ce qui reste une fois la règle, les barres et les pistes placées.
         let rows = self.montage_rows(ui.available_height());
         egui::ScrollArea::vertical()
@@ -356,7 +361,7 @@ impl App {
     }
 
     fn montage_toolbar(&mut self, ui: &mut egui::Ui, total: usize, fps: u32) {
-        use crate::bulles::{bulle, etiquette, TAILLE};
+        use crate::bulles::{bulle, TAILLE};
         use egui_phosphor::regular as ph;
         ui.spacing_mut().item_spacing.x = 3.0;
         let sep = |ui: &mut egui::Ui| {
@@ -475,11 +480,31 @@ impl App {
         let key = self.raccourci("vue.planches");
         crate::bulles::choix_a(ui, &mut self.board_view, BoardView::Scene, ph::PAINT_BRUSH, "Vue dessin", "Dessiner le plan courant.", &key, "vue.planches");
         crate::bulles::choix_a(ui, &mut self.board_view, BoardView::Panels, ph::SQUARES_FOUR, "Vue vignettes", "Toutes les images de storyboard en planche : le début de chaque plan, puis ses marques d'image.", &key, "vue.planches");
-        sep(ui);
-        etiquette(ui, ph::MAGNIFYING_GLASS, "Zoom du montage", "");
-        ui.spacing_mut().slider_width = 80.0;
-        let resp = ui.add(egui::Slider::new(&mut self.montage_zoom, 0.5..=16.0).logarithmic(true).show_value(false));
-        bulle(resp, "Zoom du montage", "Largeur d'une image dans la bande.", "");
+    }
+
+    /// Le zoom du montage, en bas de la bande et petit (Anthony, 2026-10-17 : « il faut le mettre
+    /// en bas de la timeline, pas en haut, et le rendre plus petit ») : arrière, curseur, avant,
+    /// tout voir ; Ctrl + molette sur la bande, Alt+1 / Alt+2 / Alt+3.
+    fn montage_zoom_bar(&mut self, ui: &mut egui::Ui) {
+        use crate::bulles::bulle;
+        use egui_phosphor::regular as ph;
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            ui.spacing_mut().slider_width = 70.0;
+            let small = |icon: &str| egui::Button::new(RichText::new(icon).size(11.0)).frame(false).min_size(vec2(16.0, 14.0));
+            let (out, inn, all) = (self.raccourci("bande.zoom_arriere"), self.raccourci("bande.zoom_avant"), self.raccourci("bande.tout_voir"));
+            if bulle(ui.add(small(ph::MAGNIFYING_GLASS_MINUS)), "Zoom arrière", "Ou Ctrl + molette sur la bande.", &out).clicked() {
+                self.run_action("bande.zoom_arriere");
+            }
+            let resp = ui.add(egui::Slider::new(&mut self.montage_zoom, 0.5..=16.0).logarithmic(true).show_value(false));
+            bulle(resp, "Zoom du montage", "Largeur d'une image dans la bande.", "");
+            if bulle(ui.add(small(ph::MAGNIFYING_GLASS_PLUS)), "Zoom avant", "Ou Ctrl + molette sur la bande.", &inn).clicked() {
+                self.run_action("bande.zoom_avant");
+            }
+            if bulle(ui.add(small(ph::ARROWS_OUT_LINE_HORIZONTAL)), "Tout voir", "Tout le film dans la largeur de la bande.", &all).clicked() {
+                self.run_action("bande.tout_voir");
+            }
+        });
     }
 
     /// Menu « Son… » de la barre du montage.
@@ -573,6 +598,11 @@ impl App {
     }
 
     fn montage_strip(&mut self, ui: &mut egui::Ui, rows: &crate::montagerows::Rows) {
+        // « Tout voir » : le film dans la largeur visible de la bande.
+        if std::mem::take(&mut self.montage_fit) {
+            let shown = self.doc.total_frames().max(self.doc.audio_end()).max(1);
+            self.montage_zoom = ((ui.available_width() - 40.0) / shown as f32).clamp(0.5, 16.0);
+        }
         let block_h = rows.block_h;
         let ppf = self.montage_zoom;
         let fps = self.doc.fps.max(1) as usize;
@@ -587,6 +617,15 @@ impl App {
         let height = rows.height(n_tracks);
         let (resp, painter) = ui.allocate_painter(vec2(width, height), Sense::click_and_drag());
         let r = resp.rect;
+        // Ctrl + molette sur la bande : zoom du montage (comme sur la grille de la timeline) ; il
+        // compte à l'image d'écran suivante, l'image courante reste en vue.
+        if resp.hovered() {
+            let zoom = ui.input(|i| i.zoom_delta());
+            if zoom != 1.0 {
+                self.montage_zoom = (self.montage_zoom * zoom).clamp(0.5, 16.0);
+                self.follow_frame = true;
+            }
+        }
         let left = r.left() + 6.0;
         let x_of = |g: usize| left + g as f32 * ppf;
         let bands_top = r.top() + RULER_H;
@@ -808,6 +847,18 @@ impl App {
                 // Une marque d'image se prend aussi dans le montage (passe interface).
                 self.set_panel(i);
                 self.begin_handle_drag(crate::handles::Handle::Mark(m));
+            } else if let Some(rect) = {
+                // Un choix au rectangle : depuis un espace vide des pistes de calques, ou avec Ctrl
+                // ou Maj depuis n'importe où dans les pistes (`montagekeys::KeyRect`).
+                let mods = ui.input(|i| i.modifiers);
+                let add = mods.command || mods.shift;
+                let in_tracks = self.track_at(origin, r.top(), rows).is_some();
+                let free = self.montage_layer_handle_at(origin, r.top(), &blocks, ppf, rows).is_none();
+                (in_tracks && (add || free)).then(|| crate::montagekeys::KeyRect { origin, before: self.key_sel.clone(), add })
+            } {
+                self.sel_clip = None;
+                self.key_focus = true;
+                self.key_rect = Some(rect);
             } else if let Some((i, k, h)) = self.montage_layer_handle_at(origin, r.top(), &blocks, ppf, rows) {
                 // Les gestes de la timeline dans les pistes de calques (chantier 5) : ce plan, ce
                 // calque, et sa poignée. Une clé choisie parmi d'autres emmène toutes les choisies.
@@ -882,6 +933,23 @@ impl App {
             ui.ctx().set_cursor_icon(CursorIcon::Grab);
         }
 
+        // Choix au rectangle : les pistes et les images couvertes ; le rectangle se dessine.
+        if let Some(o) = self.key_rect.as_ref().map(|k| k.origin) {
+            if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
+                let row = |y: f32| (((y - r.top() - rows.layers_top()) / crate::montagerows::LAYER_H).floor().max(0.0) as usize).min(rows.tracks.len().saturating_sub(1));
+                let (a, b) = (row(o.y.min(p.y)), row(o.y.max(p.y)));
+                let tracks: Vec<crate::montagerows::TrackKey> = rows.tracks.get(a..=b).map(|t| t.to_vec()).unwrap_or_default();
+                let (g0, g1) = (free_frame_at(o.x.min(p.x)), free_frame_at(o.x.max(p.x)));
+                self.drag_key_rect(&tracks, g0, g1);
+                let accent = visuals.selection.stroke.color;
+                painter.rect(Rect::from_two_pos(o, p), 2.0, accent.gamma_multiply(0.15), Stroke::new(1.5_f32, accent), StrokeKind::Inside);
+            }
+            if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
+                self.key_rect = None;
+                let n = self.key_sel.len();
+                self.status = format!("{n} clé{} choisie{} : Ctrl+C, Ctrl+V, Suppr, Ctrl+D ; une clé choisie prise par son milieu les emmène toutes.", if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" });
+            }
+        }
         // Plusieurs clés choisies prises à la fois (`montagekeys`).
         if self.keys_drag.is_some() {
             ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
@@ -892,7 +960,7 @@ impl App {
                 self.end_keys_drag();
             }
         }
-        if resp.dragged() && self.cam_key_drag.is_none() && self.handle_drag.is_none() && self.keys_drag.is_none() {
+        if resp.dragged() && self.cam_key_drag.is_none() && self.handle_drag.is_none() && self.keys_drag.is_none() && self.key_rect.is_none() {
             if let Some(p) = resp.interact_pointer_pos() {
                 match &mut self.montage_drag {
                     Some(MontageDrag::Scrub) => {
