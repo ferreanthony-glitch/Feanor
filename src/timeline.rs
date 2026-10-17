@@ -946,6 +946,7 @@ impl App {
         if resp.is_pointer_button_down_on() {
             self.images_focus = true;
             self.panel_focus = false;
+            self.key_focus = false;
         }
         let shift = ui.input(|i| i.modifiers.shift);
         // Glisser les images choisies (13c-3) : on les prend dans leur cadre ; lâchées sans

@@ -735,6 +735,13 @@ impl App {
             }
         }
 
+        // Un clic sur la piste d'un calque donne la main à ses clés (copier, coller, supprimer) ;
+        // ailleurs dans le montage, aux plans.
+        if resp.is_pointer_button_down_on() {
+            self.key_focus = ui.input(|i| i.pointer.press_origin()).is_some_and(|p| {
+                p.y < r.top() + rows.background_top() && self.layer_row_hit(p, r.top(), &blocks, rows).is_some()
+            });
+        }
         // Caméra au-dessus des plans, calques dessous (6f), puis les pistes son. La poignée de
         // calque tenue (sur le plan courant) ou survolée s'éclaire (chantier 5).
         let lit = match &self.handle_drag {
@@ -1025,11 +1032,34 @@ impl App {
                 MenuTarget::Panel(i) => self.panel_menu(ui, i),
                 MenuTarget::Lane { track, clip, frame } => self.lane_menu(ui, track, clip, frame),
                 MenuTarget::Layer(k) => {
-                    // La piste d'un calque : une clé à l'image du clic, puis le menu du calque.
+                    // La piste d'un calque : les clés à l'image du clic, puis le menu du calque.
                     if ui.button("Nouveau dessin ici (clé)").on_hover_text("Ou double-clic sur la piste.").clicked() {
                         ui.close_menu();
                         let (pi, f) = (self.cur_panel, self.cur_frame);
                         self.montage_new_key(pi, k, f);
+                    }
+                    self.key_focus = true;
+                    let key = |app: &App, a: &str| app.keymap.label(a);
+                    if ui.add(egui::Button::new("Copier la clé").shortcut_text(key(self, "edition.copier"))).clicked() {
+                        ui.close_menu();
+                        self.copy_key();
+                    }
+                    let can_paste = self.key_clipboard.is_some();
+                    if ui.add_enabled(can_paste, egui::Button::new("Coller la clé ici").shortcut_text(key(self, "edition.coller"))).clicked() {
+                        ui.close_menu();
+                        self.paste_key();
+                    }
+                    if ui
+                        .add(egui::Button::new("Supprimer la clé").shortcut_text(key(self, "edition.supprimer")))
+                        .on_hover_text("Le dessin d'avant la remplace en tenant plus longtemps (sinon celui d'après).")
+                        .clicked()
+                    {
+                        ui.close_menu();
+                        self.delete_key(false);
+                    }
+                    if ui.button("Supprimer la clé en laissant un vide").on_hover_text("Ses images restent vides ; les autres clés ne bougent pas.").clicked() {
+                        ui.close_menu();
+                        self.delete_key(true);
                     }
                     ui.separator();
                     self.layer_menu(ui, k, false);

@@ -589,7 +589,9 @@ impl App {
             };
             ui.label(RichText::new(where_).strong());
             // Le panneau qui a la main : copier, coller, supprimer et les raccourcis le visent.
-            let hand = if self.panels_have_focus() {
+            let hand = if self.key_focus {
+                Some("raccourcis des clés")
+            } else if self.panels_have_focus() {
                 Some("raccourcis du montage")
             } else if self.images_focus {
                 Some("raccourcis de la timeline")

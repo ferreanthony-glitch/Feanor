@@ -282,14 +282,16 @@ fn shortcuts_follow_the_pane_that_has_the_hand() {
     let insert = |mode| press(&map, Key::Insert, Key::Insert, NONE, mode);
     let left = |mode| press(&map, Key::Semicolon, Key::Comma, NONE, mode);
     // Dernier clic dans le dessin (aucune bande n'a la main) : le mode du dessin, comme avant.
-    assert_eq!(key_mode_of(Mode::Storyboard, false, false), Mode::Storyboard);
-    assert_eq!(key_mode_of(Mode::Animation, false, false), Mode::Animation);
+    assert_eq!(key_mode_of(Mode::Storyboard, false, false, false), Mode::Storyboard);
+    assert_eq!(key_mode_of(Mode::Animation, false, false, false), Mode::Animation);
+    // La piste d'un calque dans le montage : on travaille les clés, les raccourcis de l'animation.
+    assert_eq!(key_mode_of(Mode::Storyboard, true, false, true), Mode::Animation);
     // La timeline a la main en storyboard : Insert fait un nouveau dessin, pas un nouveau plan.
-    let timeline = key_mode_of(Mode::Storyboard, false, true);
+    let timeline = key_mode_of(Mode::Storyboard, false, true, false);
     assert_eq!(insert(timeline).as_deref(), Some("dessin.nouveau"));
     assert_eq!(left(timeline).as_deref(), Some("image.precedente"));
     // Le montage a la main en animation : Insert fait un nouveau plan.
-    assert_eq!(insert(key_mode_of(Mode::Animation, true, false)).as_deref(), Some("panneau.nouveau"));
+    assert_eq!(insert(key_mode_of(Mode::Animation, true, false, false)).as_deref(), Some("panneau.nouveau"));
     // Les deux à la fois ne devraient pas arriver (chaque clic retire l'autre) : le montage l'emporte.
-    assert_eq!(key_mode_of(Mode::Animation, true, true), Mode::Storyboard);
+    assert_eq!(key_mode_of(Mode::Animation, true, true, false), Mode::Storyboard);
 }

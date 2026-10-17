@@ -34,11 +34,14 @@ pub(crate) const POSITION_LOCKED: &str =
 /// Ce qu'on dit quand un outil ou une commande de dessin vise un dossier (13b-5).
 pub(crate) const FOLDER_NOT_DRAWABLE: &str = "Un dossier ne se dessine pas : choisis un de ses calques.";
 
-/// Le mode des raccourcis (choix d'Anthony, 2026-10-17) : celui du panneau qui a la main. Le
-/// montage (ou la planche des vignettes) : storyboard ; la timeline : animation ; sinon (dernier
-/// clic dans le dessin, ou nulle part) : le mode du dessin.
-pub(crate) fn key_mode_of(mode: Mode, panel_focus: bool, images_focus: bool) -> Mode {
-    if panel_focus {
+/// Le mode des raccourcis (choix d'Anthony, 2026-10-17) : celui du panneau qui a la main. La
+/// piste d'un calque dans le montage (`key_focus`, on y travaille les clés) ou la timeline :
+/// animation ; le montage (ou la planche des vignettes) : storyboard ; sinon (dernier clic dans
+/// le dessin, ou nulle part) : le mode du dessin.
+pub(crate) fn key_mode_of(mode: Mode, panel_focus: bool, images_focus: bool, key_focus: bool) -> Mode {
+    if key_focus {
+        Mode::Animation
+    } else if panel_focus {
         Mode::Storyboard
     } else if images_focus {
         Mode::Animation
@@ -365,6 +368,11 @@ pub struct App {
     /// laissé par une suppression, et dernier clic dans la grille de la timeline.
     pub(crate) frame_sel: Option<(usize, usize)>,
     pub(crate) image_clipboard: Option<crate::images::ImageClip>,
+    /// Clé copiée dans le montage (`handles::KeyClip`).
+    pub(crate) key_clipboard: Option<crate::handles::KeyClip>,
+    /// Le dernier clic dans le montage était sur la piste d'un calque : copier, coller et
+    /// supprimer visent la clé à l'image courante du calque courant.
+    pub(crate) key_focus: bool,
     pub(crate) hole: crate::images::Hole,
     pub(crate) images_focus: bool,
     /// Faux-fixe : nombre de fois que les images choisies sont jouées en tout (13c).
@@ -661,6 +669,8 @@ impl App {
             groups_used_only: false,
             frame_sel: None,
             image_clipboard: None,
+            key_clipboard: None,
+            key_focus: false,
             hole: Default::default(),
             images_focus: false,
             fake_hold_times: 2,
@@ -1089,6 +1099,7 @@ impl App {
         // Le dessin change : c'est lui qui prend la main (les raccourcis suivent le nouveau mode).
         self.panel_focus = false;
         self.images_focus = false;
+        self.key_focus = false;
         if mode == Mode::Storyboard {
             // En storyboard, on reste dans les bornes du plan (la timeline permet d'aller au-delà).
             self.cur_frame = self.cur_frame.min(self.frame_count() - 1);
@@ -1116,7 +1127,7 @@ impl App {
 
     /// Le mode des raccourcis : celui du panneau qui a la main (`key_mode_of`).
     pub(crate) fn key_mode(&self) -> Mode {
-        key_mode_of(self.mode, self.panel_focus, self.images_focus)
+        key_mode_of(self.mode, self.panel_focus, self.images_focus, self.key_focus)
     }
 
     /// Lecture / pause du montage entier (`montage`) ou du plan courant : les boutons du montage et
@@ -2453,6 +2464,14 @@ impl App {
             "fichier.importer_modele3d" => self.import_model3d(),
             "edition.annuler" => self.undo(),
             "edition.retablir" => self.redo(),
+            // Après un clic sur la piste d'un calque dans le montage : la clé de l'image courante.
+            "edition.copier" if self.key_focus => self.copy_key(),
+            "edition.couper" if self.key_focus => {
+                self.copy_key();
+                self.delete_key(false);
+            }
+            "edition.coller" if self.key_focus && self.key_clipboard.is_some() => self.paste_key(),
+            "edition.supprimer" if self.key_focus => self.delete_key(false),
             // Après un clic dans le montage (ou la planche), l'édition vise les panneaux choisis (12e).
             "edition.couper" if self.panels_have_focus() => self.cut_panels(),
             "edition.copier" if self.panels_have_focus() => self.copy_panels(),

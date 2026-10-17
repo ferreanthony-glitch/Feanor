@@ -969,6 +969,13 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
     - **étirer une clé** : la limite entre deux dessins se prend et se déplace ; l'un s'allonge,
       l'autre raccourcit d'autant (au moins une image), la suite ne bouge pas. (Dans la
       timeline, le bord droit d'un dessin garde son geste : la suite glisse.)
+    - puis (Anthony, le même jour) : **copier / coller une clé** (Ctrl+C, Ctrl+V après un clic
+      sur la piste d'un calque, ou clic droit) : elle se colle à l'image courante, avec sa
+      durée, à la place de ce qui y était (un nouveau dessin, copie du sien) ; **supprimer une
+      clé** (Suppr, ou clic droit) : le dessin d'avant la remplace en tenant plus longtemps,
+      sinon celui d'après ; **supprimer en laissant un vide** (clic droit) : ses images restent
+      vides, les autres clés ne bougent pas. Après un clic sur une piste, les raccourcis sont
+      ceux de l'animation (la barre d'état dit « raccourcis des clés »).
 
   Pas fait : ces gestes sur la piste « Fond ».
 - Restent (ordre de Fable) : navigation de calques à la TVPaint, fenêtre « Agrandir / rétrécir

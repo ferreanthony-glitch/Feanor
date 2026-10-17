@@ -3,8 +3,8 @@
 use crate::document::{ImageMark, Layer, LayerKind};
 use crate::fx::{Effect, EffectKind, FxKey};
 use crate::handles::{
-    between, content_bounds, key_at, key_start_taken, move_bookmark, move_boundary, move_fx_key, move_layer, move_mark, reorder_run, reorder_slot, set_layer_end,
-    set_layer_start, set_run_length, sound_shift_note,
+    between, content_bounds, key_at, key_start_taken, move_bookmark, move_boundary, move_fx_key, move_layer, move_mark, overwrite_run, remove_run, reorder_run,
+    reorder_slot, set_layer_end, set_layer_start, set_run_length, sound_shift_note,
 };
 
 fn mark(frame: usize) -> ImageMark {
@@ -228,4 +228,49 @@ fn stretching_a_key_changes_its_neighbour() {
     v.frames = vec![Some(1), None, None, Some(2)];
     assert_eq!(move_boundary(&mut v, 1, 3), 3);
     assert_eq!(frames(&v), vec![Some(1), Some(1), Some(1), Some(2)]);
+}
+
+#[test]
+fn a_pasted_key_replaces_what_was_there() {
+    // A tenu sur 0..8 ; la clé collée (2 images) à l'image 3 : A, la clé, puis A reprend.
+    let mut l = Layer::new("L", LayerKind::Vector);
+    l.frames = vec![Some(1); 8];
+    l.roles.insert(4, crate::roles::Role::Key);
+    overwrite_run(&mut l, 3, 2, 7);
+    assert_eq!(frames(&l), vec![Some(1), Some(1), Some(1), Some(7), Some(7), Some(1), Some(1), Some(1)]);
+    assert!(l.roles.is_empty(), "le rôle des images remplacées part");
+    // Après la fin du calque : il s'allonge.
+    overwrite_run(&mut l, 9, 2, 8);
+    assert_eq!(frames(&l)[8..], [None, Some(8), Some(8)]);
+}
+
+#[test]
+fn a_deleted_key_is_replaced_by_its_neighbour_or_leaves_a_gap() {
+    // A sur 0..3, B sur 3..5, C sur 5..8 ; un rôle au début de C.
+    let base = || {
+        let mut l = Layer::new("L", LayerKind::Bitmap);
+        l.frames = vec![Some(1), Some(1), Some(1), Some(2), Some(2), Some(3), Some(3), Some(3)];
+        l.roles.insert(5, crate::roles::Role::Key);
+        l
+    };
+    // B supprimée : A tient jusqu'à C, qui ne bouge pas.
+    let mut l = base();
+    assert_eq!(remove_run(&mut l, 4, false), Some((3, 5)));
+    assert_eq!(frames(&l), vec![Some(1), Some(1), Some(1), Some(1), Some(1), Some(3), Some(3), Some(3)]);
+    // A supprimée (rien avant) : B commence plus tôt, avec son rôle s'il en a.
+    let mut l = base();
+    l.roles.insert(3, crate::roles::Role::Key);
+    remove_run(&mut l, 0, false);
+    assert_eq!(frames(&l)[..5], [Some(2); 5]);
+    assert_eq!(l.roles.keys().copied().collect::<Vec<_>>(), vec![0, 5]);
+    // B supprimée en laissant un vide : A et C ne bougent pas.
+    let mut l = base();
+    remove_run(&mut l, 3, true);
+    assert_eq!(frames(&l), vec![Some(1), Some(1), Some(1), None, None, Some(3), Some(3), Some(3)]);
+    // C (la dernière) en laissant un vide : la fin vide est retirée.
+    let mut l = base();
+    remove_run(&mut l, 6, true);
+    assert_eq!(frames(&l), vec![Some(1), Some(1), Some(1), Some(2), Some(2)]);
+    // Rien sur une image vide.
+    assert_eq!(remove_run(&mut l, 7, false), None);
 }
