@@ -4,7 +4,10 @@
 //! et deux poignées par coin (rondes) qui courbent les côtés ; l'intérieur la déplace. Chaque lâcher
 //! refait la déformation depuis le dessin d'origine (pas de perte d'un geste à l'autre) et compte
 //! pour une étape d'annulation. Entrée, Échap, un clic ailleurs, un autre outil ou une autre image
-//! terminent. Comportement exact de Storyboard Pro à vérifier. Géométrie dans `envelope.rs`.
+//! terminent. Sur un calque vectoriel avec des éléments choisis, Ctrl + un coin du cadre de la
+//! sélection ne déforme qu'eux (Anthony, 2026-10-18 : « l'enveloppe doit aussi pouvoir ne déformer
+//! que la sélection, comme l'outil Perspective le fait en vectoriel ») ; un coin du cadre du calque,
+//! tout le dessin. Comportement exact de Storyboard Pro à vérifier. Géométrie dans `envelope.rs`.
 
 use eframe::egui::{self, vec2, Color32, Key, Pos2, Rect, Shape, Stroke, StrokeKind};
 
@@ -21,7 +24,8 @@ const ACCENT: Color32 = Color32::from_rgb(255, 150, 60);
 
 enum Original {
     Bitmap(Raster),
-    Vector(VectorDrawing),
+    /// Le dessin, et les éléments déformés (tous si aucun).
+    Vector(VectorDrawing, Option<Vec<usize>>),
 }
 
 /// Ce que l'on tire : un coin, une poignée, ou toute l'enveloppe.
@@ -71,10 +75,19 @@ impl App {
             self.status = "Enveloppe terminée.".into();
             return true;
         }
-        if !ctrl || !matches!(self.transform_handle_at(screen), Some(crate::layertools::BoxHandle::Corner(_))) {
+        if !ctrl {
             return false;
         }
-        let Some(crate::layertools::BoxHandle::Corner(k)) = self.transform_handle_at(screen) else { return false };
+        // Un coin du cadre de la sélection vectorielle : elle seule ; un coin du cadre du calque : tout
+        // le dessin.
+        let chosen = self.vsel.as_ref().filter(|s| Some(s.cel) == self.cel_here() && !s.items.is_empty() && self.bsel.is_none()).map(|s| s.items.clone());
+        let (k, items) = match (chosen, self.handle_at(screen)) {
+            (Some(items), Some(crate::vtools::Handle::Corner(k))) => (k, Some(items)),
+            _ => match self.transform_handle_at(screen) {
+                Some(crate::layertools::BoxHandle::Corner(k)) => (k, None),
+                _ => return false,
+            },
+        };
         self.end_stroke();
         self.playing = false;
         if !self.layer_editable() {
@@ -85,16 +98,28 @@ impl App {
             return true;
         };
         let Some(c) = self.doc.cels.get(&cel) else { return true };
+        let src = match &items {
+            Some(_) => match self.selection_bounds() {
+                Some(b) => b,
+                None => return true,
+            },
+            None => self.content_box(),
+        };
+        let n = items.as_ref().map(|i| i.len());
         let original = match &c.vector {
-            Some(d) => Original::Vector(d.clone()),
+            Some(d) => Original::Vector(d.clone(), items),
             None => Original::Bitmap(c.raster.clone()),
         };
-        let src = self.content_box();
         let env = Envelope::identity(src);
         self.envelope = Some(EnvelopeEdit { cel, src, env, original, drag: Some((Grip::Corner(k), p, env)) });
-        self.status = "Enveloppe : tire les coins, et leurs poignées rondes pour courber les côtés ; l'intérieur pour \
-                       tout déplacer. Entrée, Échap ou clic ailleurs : terminer ; Ctrl+Z annule chaque geste."
-            .into();
+        let what = match n {
+            Some(n) => format!("Enveloppe sur la sélection ({n} élément{})", if n > 1 { "s" } else { "" }),
+            None => "Enveloppe".to_string(),
+        };
+        self.status = format!(
+            "{what} : tire les coins, et leurs poignées rondes pour courber les côtés ; l'intérieur pour tout déplacer. \
+             Entrée, Échap ou clic ailleurs : terminer ; Ctrl+Z annule chaque geste."
+        );
         true
     }
 
@@ -142,8 +167,8 @@ impl App {
                 self.history.push(Edit::Tiles { cel, tiles: before });
                 self.modified = true;
             }
-            Original::Vector(drawing) => {
-                let new = envelope::warp_drawing(drawing, None, src, &env);
+            Original::Vector(drawing, items) => {
+                let new = envelope::warp_drawing(drawing, items.as_deref(), src, &env);
                 let Some(d) = self.drawing_mut(cel) else { return };
                 let before = std::mem::replace(d, new);
                 self.refresh_cel(cel);

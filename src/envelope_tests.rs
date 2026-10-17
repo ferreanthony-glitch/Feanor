@@ -86,3 +86,21 @@ fn a_bitmap_follows_the_envelope() {
     assert_eq!(moved.get(145, 105), Color32::from_rgb(255, 0, 0));
     assert_eq!(moved.get(105, 105).a(), 0, "l'ancienne place est vide");
 }
+
+#[test]
+fn only_the_chosen_elements_follow_the_envelope() {
+    let line = |y: f32| Element::Stroke {
+        points: vec![VPoint { x: 100.0, y, r: 2.0 }, VPoint { x: 200.0, y, r: 2.0 }],
+        color: [0, 0, 0],
+        opacity: 1.0,
+        hardness: 1.0,
+        brush: None,
+    };
+    let d = VectorDrawing { elements: vec![line(100.0), line(150.0)] };
+    let mut e = Envelope::identity(src());
+    e.translate(vec2(0.0, 40.0));
+    let out = warp_drawing(&d, Some(&[1]), src(), &e);
+    assert_eq!(out.elements[0], d.elements[0], "l'élément non choisi ne bouge pas");
+    let Element::Stroke { points, .. } = &out.elements[1] else { panic!() };
+    assert!(points.iter().all(|p| (p.y - 190.0).abs() < 1e-3), "le choisi suit l'enveloppe");
+}

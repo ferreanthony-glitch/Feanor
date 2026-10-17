@@ -1226,7 +1226,10 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         courant (4 coins, 2 poignées par coin ; surface de Coons), appliquée à chaque lâcher depuis
         le dessin d'origine (une étape d'annulation par geste), bitmap ou vectoriel (traits rendus
         plus denses pour se courber). Avec cet outil, Ctrl ne prend plus le lasso. Comportement
-        exact de Storyboard Pro à vérifier ;
+        exact de Storyboard Pro à vérifier. Puis (« l'enveloppe doit aussi pouvoir ne déformer que
+        la sélection, comme l'outil Perspective le fait en vectoriel ») : Ctrl + un coin du cadre de
+        la sélection vectorielle ne déforme que les éléments choisis ; pas encore pour une zone
+        bitmap choisie ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,
