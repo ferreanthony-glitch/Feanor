@@ -95,6 +95,11 @@ optique, mélange des clés, carte graphique. L'intégration dans Pelure est dan
 
 ## La carte graphique
 
+Depuis le 17 octobre 2026, la synthèse ouvre son propre périphérique sur la carte (avec toutes ses
+limites) au lieu de partager celui de l'affichage : une erreur de la carte arrête la propagation
+sans fermer Pelure (wgpu fait de toute erreur non rattrapée un plantage). Le périphérique de
+l'affichage ne sert plus que s'il ne s'ouvre pas.
+
 La synthèse tourne sur le périphérique wgpu de l'affichage, celui d'eframe, partagé avec
 l'affichage : il est pris dans `cc.wgpu_render_state` quand l'appli démarre. Ce périphérique garde
 les limites par défaut de wgpu (128 Mo par tampon) : une image HD y tient, une image 4K non.

@@ -338,7 +338,7 @@ fn run(renderer: eframe::Renderer, initial: Option<std::path::PathBuf>) -> efram
             }
             // La séance d'avant s'est fermée sur une erreur : on le dit, avec où lire le rapport.
             if let Some(report) = plantage::dir().and_then(|d| plantage::take_new(&d)) {
-                app.status = format!("La dernière séance s'est fermée sur une erreur : rapport dans {}.", report.display());
+                app.status = format!("Une erreur a été notée pendant la dernière séance : rapport dans {}.", report.display());
             }
             Ok(Box::new(app))
         }),

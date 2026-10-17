@@ -18,7 +18,7 @@ pub fn dir() -> Option<PathBuf> {
 /// Texte du rapport.
 pub fn report_text(message: &str, location: &str, thread: &str, backtrace: &str) -> String {
     format!(
-        "Pelure {} s'est fermé sur une erreur.\n\nErreur : {message}\nEndroit : {location}\nFil : {thread}\nQuand : {} s (horloge Unix)\n\nPile :\n{backtrace}\n",
+        "Pelure {} : une erreur de programme (une erreur rattrapée, par exemple dans la propagation, ne ferme pas Pelure).\n\nErreur : {message}\nEndroit : {location}\nFil : {thread}\nQuand : {} s (horloge Unix)\n\nPile :\n{backtrace}\n",
         env!("CARGO_PKG_VERSION"),
         crate::recovery::now_secs(),
     )
@@ -39,6 +39,19 @@ pub fn take_new(dir: &Path) -> Option<PathBuf> {
     let path = std::fs::read_to_string(&marker).ok()?;
     let _ = std::fs::remove_file(&marker);
     Some(PathBuf::from(path.trim()))
+}
+
+/// Une erreur de la carte graphique de l'affichage (sans plantage) : un rapport, le premier de la
+/// séance seulement (une erreur qui revient à chaque image ne remplit pas le disque).
+pub fn note_gpu_error(what: &str) {
+    static NOTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    eprintln!("{what}");
+    if NOTED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    if let Some(dir) = dir() {
+        let _ = write_report(&dir, &report_text(what, "carte graphique (affichage)", "wgpu", "(sans pile)"));
+    }
 }
 
 /// Pose le crochet : le message habituel (sur la console, s'il y en a une), puis le rapport.

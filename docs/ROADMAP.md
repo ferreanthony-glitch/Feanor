@@ -1185,6 +1185,15 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         images tiennent l'image d'avant. Mon interprétation : « les clés existantes » = celles du
         guide (l'animation suivie), les clés peintes restant les modèles ; à confirmer. Fait dans
         `propager.rs` / `propagerui.rs` (session Propagation prévenue) ;
+      - **propagation plus solide** (relecture du code, aucun plantage reproduit en essai) : la
+        synthèse avait lieu sur le périphérique de la carte de l'affichage, et wgpu fait de toute
+        erreur de la carte (manque de mémoire, perte du périphérique) un plantage de tout Pelure.
+        Elle a maintenant son propre périphérique (celui de l'affichage seulement s'il ne s'ouvre
+        pas) : une erreur arrête la propagation (« rien n'a changé ») sans fermer Pelure. Les
+        erreurs de la carte de l'affichage sont notées dans un rapport au lieu de tout fermer.
+        L'aperçu de progression est borné en hauteur. Reste à voir : la mémoire (toutes les images
+        fabriquées gardées entières jusqu'à la fin, dessins jamais purgés), le travail final sur le
+        fil de l'interface (longs plans : « ne répond pas »), un calque peint transformé (décalage) ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,

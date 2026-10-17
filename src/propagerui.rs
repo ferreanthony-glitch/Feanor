@@ -89,10 +89,11 @@ impl Propagation {
     }
 }
 
-/// Aperçu d'une image fabriquée (RVBA prémultiplié), réduite à `max` pixels de large au plus.
+/// Aperçu d'une image fabriquée (RVBA prémultiplié), réduite à `max` pixels de côté au plus (une
+/// image très haute dépassait la taille de texture permise, très large donnait 0 de haut).
 fn preview(im: &Image, max: usize) -> egui::ColorImage {
-    let step = im.width.div_ceil(max).max(1);
-    let (w, h) = (im.width / step, im.height / step);
+    let step = im.width.max(im.height).div_ceil(max).max(1);
+    let (w, h) = ((im.width / step).max(1).min(im.width), (im.height / step).max(1).min(im.height));
     let mut data = Vec::with_capacity(w * h * 4);
     for y in 0..h {
         for x in 0..w {
@@ -381,23 +382,26 @@ impl App {
         let (answers, replies) = channel::<Result<Image, String>>();
         let handle = std::thread::spawn(move || -> Result<String, String> {
             let (w, h) = plan.size;
-            // La carte de l'affichage ; une image trop grande pour ses limites (la 4K) passe sur un
-            // périphérique ouvert avec toutes les limites de la carte, sinon sur le processeur.
+            // Un périphérique de la carte à elle, ouvert avec toutes ses limites (la 4K y tient) :
+            // une erreur de la carte (manque de mémoire…) arrête alors la propagation sur ce fil
+            // sans toucher à l'affichage, que wgpu aurait fait planter avec tout Pelure (Anthony,
+            // 2026-10-17 : « le logiciel crashe très vite lors de l'utilisation de l'outil de
+            // propagation »). Celui de l'affichage s'il ne s'ouvre pas, sinon le processeur.
             let (synth, name): (Box<dyn Synthesizer>, String) = match device {
-                Some((device, queue, name)) => {
-                    let gpu = synthese::gpu::Gpu::with_device(device, queue, name.clone());
-                    if gpu.fits(w, h, STYLE_CHANNELS, GUIDE_CHANNELS) {
-                        (Box::new(gpu), format!("carte graphique, {name}"))
-                    } else {
-                        match synthese::gpu::Gpu::new() {
-                            Ok(g) if g.fits(w, h, STYLE_CHANNELS, GUIDE_CHANNELS) => {
-                                let n = format!("carte graphique, {}", g.name());
-                                (Box::new(g), n)
-                            }
-                            _ => (Box::new(Cpu), "processeur".into()),
+                Some((device, queue, name)) => match synthese::gpu::Gpu::new() {
+                    Ok(g) if g.fits(w, h, STYLE_CHANNELS, GUIDE_CHANNELS) => {
+                        let n = format!("carte graphique, {}", g.name());
+                        (Box::new(g), n)
+                    }
+                    _ => {
+                        let gpu = synthese::gpu::Gpu::with_device(device, queue, name.clone());
+                        if gpu.fits(w, h, STYLE_CHANNELS, GUIDE_CHANNELS) {
+                            (Box::new(gpu), format!("carte graphique, {name}"))
+                        } else {
+                            (Box::new(Cpu), "processeur".into())
                         }
                     }
-                }
+                },
                 None => (Box::new(Cpu), "processeur".into()),
             };
             // Les images du guide : les fichiers de la vidéo, ou des calques composés demandés au

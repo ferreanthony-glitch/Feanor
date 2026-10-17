@@ -631,6 +631,10 @@ impl App {
         if let Some(rs) = &cc.wgpu_render_state {
             let info = rs.adapter.get_info();
             eprintln!("affichage : wgpu, {} ({:?}, {:?})", info.name, info.backend, info.device_type);
+            // Une erreur de la carte graphique : wgpu en fait par défaut un plantage de tout
+            // Pelure ; elle est notée dans un rapport (`plantage.rs`) et l'on continue.
+            rs.device.on_uncaptured_error(Box::new(|e| crate::plantage::note_gpu_error(&format!("erreur de la carte graphique : {e}"))));
+            rs.device.set_device_lost_callback(|reason, message| crate::plantage::note_gpu_error(&format!("carte graphique perdue ({reason:?}) : {message}")));
         }
         let settings = crate::settings::Settings::load();
         let montage_head_w = crate::montagehead::clamp_head_w(settings.montage_head_w);

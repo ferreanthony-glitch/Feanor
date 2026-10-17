@@ -810,7 +810,9 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   - Journal de plantage (`plantage.rs`) : `install` (dans `lancer`) garde le crochet de panic
     par défaut puis écrit `report_text` (message, endroit, fil, pile `Backtrace::force_capture`) par
     `write_report` dans `%LOCALAPPDATA%\Pelure\plantages\plantage-<s>.txt` et `nouveau.txt` ; au
-    démarrage, `take_new` le signale une fois dans la barre d'état. Une erreur d'allocation (manque
+    démarrage, `take_new` le signale une fois dans la barre d'état. Erreurs de la carte de
+    l'affichage : `on_uncaptured_error` / `set_device_lost_callback` (`App::new`) appellent
+    `note_gpu_error` (un rapport par séance) au lieu du plantage par défaut de wgpu. Une erreur d'allocation (manque
     de mémoire) arrête le programme sans passer par là.
   - Code couleur des calques : `theme::couleur_calque(kind, ctg)` (vif : repères, barres, bande et
     étiquette du panneau Calques, lettre de l'en-tête de la timeline) et `fond_calque` (sourd :
