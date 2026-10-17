@@ -1066,9 +1066,13 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         pas le même nombre de calques, le glisser ne la reconnaissait plus. La colonne est
         maintenant dessinée dans sa propre zone (`new_child`) ;
       - **déplacer la sélection aux flèches** (Anthony : « déplacement au pixel, déplacement par
-        10 pixels quand Maj est maintenu ») : outil Sélection, traits vectoriels choisis ou zone
-        bitmap, le dessin ayant la main ; Ctrl / Alt + flèches gardent leurs raccourcis ; sans
-        sélection, les flèches changent d'image ou de calque comme avant.
+        10 pixels quand Maj est maintenu ») : traits vectoriels choisis ou zone bitmap, le
+        dessin ayant la main ; Ctrl / Alt + flèches gardent leurs raccourcis ; sans sélection,
+        les flèches changent d'image ou de calque comme avant. Corrigé après son essai (« ça ne
+        marche pas ») : choisis au lasso de Ctrl, Ctrl relâché, les traits restaient choisis
+        avec le pinceau revenu, mais les flèches n'agissaient qu'avec l'outil Sélection ; elles
+        agissent maintenant quel que soit l'outil. Une zone bitmap choisie au lasso de Ctrl
+        disparaissait au relâché : l'outil Sélection reste alors (mon choix).
 
   Pas fait : ces gestes sur la piste « Fond ».
 - Restent (ordre de Fable) : navigation de calques à la TVPaint, fenêtre « Agrandir / rétrécir

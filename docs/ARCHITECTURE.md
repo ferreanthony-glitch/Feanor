@@ -783,7 +783,9 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     le contient, et la bande (`allocate_painter`, identifiant automatique) changeait d'identité
     quand le plan courant n'avait pas autant de calques, ce qui coupait le glisser en cours.
   - Flèches : `nudge.rs`. `arrow_step` (pur, testé : 1 px, `BIG_STEP` avec Maj, rien avec Ctrl
-    ou Alt), `App::nudge_ready` (outil Sélection, sélection sur le dessin, le dessin a la main),
+    ou Alt), `App::nudge_ready` (traits choisis quel que soit l'outil, ou zone bitmap avec
+    l'outil Sélection ; le dessin a la main ; `update_springs` garde l'outil Sélection au relâché
+    de Ctrl quand une zone bitmap est choisie),
     `nudge_selection` : en vectoriel, éléments translatés et `gesture_change(GESTURE, …)` (une
     étape par flèche tenue, gardée vivante par `keep_gesture` dans `handle_shortcuts`) ; en
     bitmap, `lift_selection` puis `place_floating` (étape au dépôt).

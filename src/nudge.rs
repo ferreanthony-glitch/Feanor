@@ -1,8 +1,9 @@
 //! Déplacer la sélection aux flèches (Anthony, 2026-10-17 : « quand un objet est sélectionné,
 //! il faut rendre possible le déplacement par les flèches directionnelles : déplacement au
 //! pixel, déplacement par 10 pixels quand Maj est maintenu »).
-//! - Avec l'outil Sélection et une sélection sur le dessin (traits vectoriels choisis, ou zone
-//!   bitmap), et quand le dessin a la main (pas le montage ni la timeline) : une flèche déplace
+//! - Avec une sélection affichée sur le dessin (traits vectoriels choisis, quel que soit l'outil ;
+//!   zone bitmap, avec l'outil Sélection), et quand le dessin a la main (pas le montage ni la
+//!   timeline) : une flèche déplace
 //!   la sélection d'un pixel du dessin, Maj + flèche de 10. Les flèches avec Ctrl ou Alt gardent
 //!   leurs raccourcis ; sans sélection, les flèches changent d'image ou de calque comme avant.
 //! - Annulation : en vectoriel, une étape par flèche tenue (`App::gesture_change`) ; en bitmap,
@@ -37,12 +38,16 @@ pub(crate) fn arrow_step(key: Key, m: Modifiers) -> Option<Vec2> {
 }
 
 impl App {
-    /// Les flèches déplacent-elles la sélection ? Outil Sélection, une sélection sur le dessin, et
-    /// le dessin a la main.
+    /// Les flèches déplacent-elles la sélection ? Une sélection affichée sur le dessin, et le dessin
+    /// a la main. Des traits vectoriels choisis restent choisis (et affichés) avec un autre outil,
+    /// par exemple après le lasso de Ctrl, Ctrl relâché : les flèches les déplacent aussi (Anthony,
+    /// 2026-10-17 : « quand un objet est sous sélection, il n'est pas déplaçable en tapant sur les
+    /// flèches »). Une zone bitmap n'existe qu'avec l'outil Sélection.
     pub(crate) fn nudge_ready(&self) -> bool {
         let drawing_has_focus = !self.panel_focus && !self.images_focus && !self.key_focus;
-        let chosen = self.bsel.is_some() || self.vsel.as_ref().is_some_and(|s| !s.items.is_empty() && Some(s.cel) == self.cel_here());
-        self.tool == Tool::Select && drawing_has_focus && chosen
+        let vector = self.vsel.as_ref().is_some_and(|s| !s.items.is_empty() && Some(s.cel) == self.cel_here());
+        let bitmap = self.bsel.is_some() && self.tool == Tool::Select;
+        drawing_has_focus && (vector || bitmap)
     }
 
     /// Déplace la sélection de `d` pixels du dessin.
