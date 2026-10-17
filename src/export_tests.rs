@@ -70,7 +70,7 @@ pub(crate) fn doc_with_drawing(panels: usize, len: usize) -> Document {
             let mut l = Layer::new(format!("C{li}"), LayerKind::Bitmap);
             l.frames = vec![Some(id); len];
             if li == 1 {
-                l.transform = LayerTransform { x: 7.5, y: -4.0, scale: 0.8, angle: 12.0 };
+                l.transform = LayerTransform { x: 7.5, y: -4.0, scale: 0.8, angle: 12.0, ..Default::default() };
                 l.opacity = 0.6;
             }
             layers.push(l);

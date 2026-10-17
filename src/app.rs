@@ -969,7 +969,8 @@ impl App {
 
     /// Pixels d'écran par pixel du dessin du calque courant.
     pub(crate) fn layer_zoom(&self) -> f32 {
-        self.view.zoom * self.layer().transform.scale
+        let t = self.layer().transform;
+        self.view.zoom * t.scale * (t.stretch_x * t.stretch_y).abs().sqrt()
     }
 
     pub(crate) fn modal_open(&self) -> bool {

@@ -25,7 +25,7 @@ fn the_panel_camera_sees_each_plane_where_the_2d_render_puts_it() {
             let cam = Camera { x: c0.x + ox, y: c0.y + oy, zoom: 1.0, angle: 0.0, dolly, tilt: 0.0, pan: 0.0 };
             let mut l = Layer::new("L", LayerKind::Bitmap);
             l.depth = depth;
-            l.transform = LayerTransform { x: 30.0, y: -12.0, scale: 1.5, angle: 20.0 };
+            l.transform = LayerTransform { x: 30.0, y: -12.0, scale: 1.5, angle: 20.0, ..Default::default() };
             let seen = l.transform_seen(&CameraSeen { offset: vec2(ox, oy), dolly, d0: w.d0 }).unwrap();
             for p in [pos2(100.0, 200.0), c0, pos2(2000.0, 1100.0)] {
                 // Le point du dessin, posé sur son plan, vu par la caméra et ramené sur le plan de

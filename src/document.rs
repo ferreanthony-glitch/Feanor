@@ -143,6 +143,10 @@ pub struct LayerTransform {
     pub scale: f32,
     /// En degrés (sens horaire à l'écran).
     pub angle: f32,
+    /// Étirement en largeur et en hauteur, dans le repère du calque, en plus de `scale` (1 : aucun ;
+    /// Anthony, 2026-10-18 : « l'étirement latéral »).
+    pub stretch_x: f32,
+    pub stretch_y: f32,
 }
 
 impl Default for LayerTransform {
@@ -152,6 +156,8 @@ impl Default for LayerTransform {
             y: 0.0,
             scale: 1.0,
             angle: 0.0,
+            stretch_x: 1.0,
+            stretch_y: 1.0,
         }
     }
 }
@@ -161,11 +167,12 @@ impl LayerTransform {
         *self == Self::default()
     }
 
-    /// Du dessin du calque vers la feuille, la feuille ayant son centre en `pivot`.
+    /// Du dessin du calque vers la feuille, la feuille ayant son centre en `pivot` : étirement,
+    /// échelle, puis rotation.
     pub fn affine(&self, pivot: Pos2) -> crate::vector::Affine {
         let (s, c) = self.angle.to_radians().sin_cos();
-        let k = self.scale;
-        let (a, b, cc, d) = (k * c, -k * s, k * s, k * c);
+        let (kx, ky) = (self.scale * self.stretch_x, self.scale * self.stretch_y);
+        let (a, b, cc, d) = (kx * c, -ky * s, kx * s, ky * c);
         crate::vector::Affine {
             a,
             b,
@@ -187,6 +194,7 @@ impl LayerTransform {
             y: moved.y - pivot.y,
             scale: (self.scale * factor).clamp(0.01, 100.0),
             angle: self.angle + turn,
+            ..*self
         }
     }
 }

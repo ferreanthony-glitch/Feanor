@@ -68,7 +68,9 @@ pub const FORMAT: &str = "pelure-projet";
 /// 20 (13j) : calque CTG (`ctg` : rangs des calques sources).
 /// 21 (13k) : calque vidéo (`video` : id, nom, images, ips, début, extension ; images dans
 /// `videos/<id>/`).
-pub const VERSION: u32 = 21;
+/// 22 (2026-10-18) : étirement des calques (`etirement_x`, `etirement_y`), qu'une version précédente
+/// ignorerait (le calque reprendrait ses proportions sans prévenir).
+pub const VERSION: u32 = 22;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Images des calques vidéo (13k) : `videos/<id>/000001.jpg`…
@@ -385,6 +387,15 @@ struct TransformEntry {
     echelle: f32,
     #[serde(default)]
     rotation: f32,
+    /// Étirement en largeur et en hauteur (22 ; absent = aucun).
+    #[serde(default = "one", skip_serializing_if = "is_one")]
+    etirement_x: f32,
+    #[serde(default = "one", skip_serializing_if = "is_one")]
+    etirement_y: f32,
+}
+
+fn is_one(v: &f32) -> bool {
+    *v == 1.0
 }
 
 /// Une image clé de caméra : à l'image `image` du panneau, centre (`x`, `y`) en pixels de la
@@ -975,6 +986,8 @@ fn manifest_of(doc: &Document) -> Manifest {
                         y: l.transform.y,
                         echelle: l.transform.scale,
                         rotation: l.transform.angle,
+                        etirement_x: l.transform.stretch_x,
+                        etirement_y: l.transform.stretch_y,
                     }),
                     profondeur: l.depth,
                     toute_la_scene: l.scene_wide.map(|w| w.key),
@@ -1373,12 +1386,14 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                         transform: l
                             .transformation
                             .as_ref()
-                            .filter(|t| [t.x, t.y, t.echelle, t.rotation].iter().all(|v| v.is_finite()))
+                            .filter(|t| [t.x, t.y, t.echelle, t.rotation, t.etirement_x, t.etirement_y].iter().all(|v| v.is_finite()))
                             .map(|t| LayerTransform {
                                 x: t.x,
                                 y: t.y,
                                 scale: t.echelle.clamp(0.01, 100.0),
                                 angle: t.rotation,
+                                stretch_x: t.etirement_x.clamp(0.01, 100.0),
+                                stretch_y: t.etirement_y.clamp(0.01, 100.0),
                             })
                             .unwrap_or_default(),
                         depth: if l.profondeur.is_finite() {

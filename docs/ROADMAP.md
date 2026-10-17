@@ -1207,6 +1207,12 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         comme Storyboard Pro (F11 / `vue.plein_ecran` reste le vrai plein écran). Sous Windows, la
         fenêtre créée cachée était marquée maximisée sans en prendre la taille : on la remet à sa
         taille puis on la maximise, quelques images après l'ouverture ;
+      - **Transformer : étirement** (Anthony : « que l'outil de transformation ressemble plus à celui
+        de Storyboard Pro qui permet beaucoup plus de transformations comme l'étirement latéral ») :
+        poignées au milieu des côtés (étirer dans un seul sens, le côté opposé reste en place),
+        coins en échelle libre (Maj : proportions), largeur et hauteur en chiffres.
+        `LayerTransform::stretch_x` / `stretch_y`, format de projet 22. Comportement exact de
+        l'outil de Storyboard Pro à vérifier. Reste : les poignées de Bézier des coins avec Ctrl ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,

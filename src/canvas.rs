@@ -495,9 +495,21 @@ impl App {
             ctx.set_cursor_icon(if self.ref3d.dragging() { CursorIcon::Grabbing } else { CursorIcon::Grab });
             return;
         }
+        if self.tool == Tool::Transform {
+            use crate::layertools::BoxHandle;
+            ctx.set_cursor_icon(match self.transform_handle_at(p) {
+                Some(BoxHandle::Move) => CursorIcon::Move,
+                Some(BoxHandle::Corner(0 | 2)) => CursorIcon::ResizeNwSe,
+                Some(BoxHandle::Corner(_)) => CursorIcon::ResizeNeSw,
+                Some(BoxHandle::Edge(0 | 2)) => CursorIcon::ResizeVertical,
+                Some(BoxHandle::Edge(_)) => CursorIcon::ResizeHorizontal,
+                Some(BoxHandle::Rotate) => CursorIcon::Alias,
+                None => CursorIcon::Default,
+            });
+            return;
+        }
         let handle = match self.tool {
             Tool::Camera => Some(self.camera_handle_at(p)),
-            Tool::Transform => Some(self.transform_handle_at(p)),
             _ => None,
         };
         if let Some(h) = handle {

@@ -435,6 +435,9 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   « Image collée » au-dessus. Centrée dans le cadre (réduite pour y tenir), sélectionnée :
   déplacer, agrandir, tourner, puis Échap pour la poser. Après une copie dans Pelure, Ctrl+V colle
   de nouveau ce qui a été copié dans Pelure.
+- **Transformer** (calque entier, ses dessins ne changent pas) : glisser dans la boîte pour
+  déplacer, un coin pour agrandir (Maj : proportions), le milieu d'un côté pour étirer en largeur ou
+  en hauteur, la poignée ronde pour tourner ; largeur et hauteur aussi en chiffres. Ctrl+R annule.
 - **Cutter** (Alt+T, calque vectoriel) : glisser en travers des bouts de traits à enlever (ou
   cliquer sur l'un d'eux) ; chaque trait touché est coupé là où il croise les autres, seuls les
   morceaux touchés partent (un dépassement est coupé net au croisement). Un trait qui ne croise
