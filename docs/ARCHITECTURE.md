@@ -738,12 +738,18 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     KeysDrag` garde chaque calque touché tel qu'avant (Échap, `cancel_keys_drag`) et l'étape
     d'annulation (`end_keys_drag`, seulement si quelque chose a bougé) ; `dragging`,
     `cancel_drags` et `drop_stale_drags` le connaissent.
-  - Piste « Fond » : `layer_tracks` et `layer_on_track` prennent aussi les calques de toute la
-    scène (la rangée « Fond » et `Rows::background` ne sont plus) ; `sync_scene_layers` copie
+  - Ordre des calques propre à chaque plan (2026-10-17, choix d'Anthony) : `Rows::count` (le plan
+    qui a le plus de calques) et `layer_in_row` (la rangée r d'un plan : son r-ième calque en
+    partant du haut) remplacent les pistes par nom (`layer_tracks` n'est plus). `row_at`,
+    `layer_row_hit`, `montage_layer_handle_at`, `keys_between` (Maj + clic) et `keys_in_rect`
+    (rectangle) vont par rangée. `TrackKey`, `track_of` et `layer_on_track` (par nom) ne servent
+    plus qu'au collage sur plusieurs calques (`ensure_tracks`).
+  - Piste « Fond » : les calques de toute la scène ont leur rangée comme les autres (la rangée
+    « Fond » et `Rows::background` ne sont plus) ; `sync_scene_layers` copie
     les images du modèle (coupées à la durée du panneau, le dernier dessin tenu s'il est plus
     court) au lieu d'un dessin tenu.
   - `montagerows::cell_handle` : `Boundary` sur une limite intérieure, `Key` au milieu d'un
-    dessin (le montage ne donne plus `Exposure`, que garde la timeline) ; `LAYER_H` = 26.
+    dessin (le montage ne donne plus `Exposure`, que garde la timeline) ; `LAYER_H` = 40.
     `montage_strip` : double-clic sur une piste de calque, entrée « Nouveau dessin ici » du
     menu, bouton « Nouveau calque » de la barre.
 - Pistes du montage modifiables (chantier 5).

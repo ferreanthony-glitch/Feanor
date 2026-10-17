@@ -1,11 +1,12 @@
-//! Pistes de calques du montage (chantier 5) : une piste par nom, toutes montrées, et les poignées
-//! de la timeline sous la souris.
+//! Rangées de calques du montage : chaque plan montre ses calques dans son propre ordre (depuis
+//! le 2026-10-17), toutes les rangées ; les poignées de la timeline sous la souris ; la piste
+//! d'un calque (son nom) sert au collage sur plusieurs calques.
 
 use eframe::egui::pos2;
 
 use crate::document::{Layer, LayerKind, SceneWide};
 use crate::handles::Handle;
-use crate::montagerows::{cell_handle, layer_on_track, layer_tracks, TrackKey, LAYER_H};
+use crate::montagerows::{cell_handle, layer_in_row, layer_on_track, TrackKey, LAYER_H};
 
 /// Calques d'un plan, donnés du haut vers le bas (la pile est rangée du bas vers le haut).
 fn plan(names: &[&str]) -> Vec<Layer> {
@@ -16,54 +17,41 @@ fn key(name: &str, nth: usize) -> TrackKey {
     TrackKey { name: name.into(), nth }
 }
 
-fn names(tracks: &[TrackKey]) -> Vec<String> {
-    tracks.iter().map(TrackKey::label).collect()
+/// Les noms montrés à chaque rangée d'un plan, du haut vers le bas.
+fn rows_of(layers: &[Layer], count: usize) -> Vec<Option<&str>> {
+    (0..count).map(|r| layer_in_row(layers, r).map(|k| layers[k].name.as_str())).collect()
 }
 
 #[test]
-fn one_track_per_layer_name_whatever_its_place_in_each_plan() {
+fn each_plan_shows_its_layers_in_its_own_order() {
+    // Anthony : « l'organisation et l'ordre des calques indépendants d'un shot à un autre ».
     let a = plan(&["Perso", "Décor"]);
-    // Ici « Perso » est sous un calque nouveau, et « Décor » manque.
     let b = plan(&["Effets", "Perso"]);
-    let c = plan(&["Perso", "Ombre", "Décor"]);
-    let tracks = layer_tracks([a.as_slice(), b.as_slice(), c.as_slice()]);
-    assert_eq!(names(&tracks), ["Effets", "Perso", "Ombre", "Décor"]);
-    // Le calque de chaque plan sur la piste « Perso », quel que soit son rang.
-    assert_eq!(layer_on_track(&a, &key("Perso", 0)), Some(1));
-    assert_eq!(layer_on_track(&b, &key("Perso", 0)), Some(0));
-    assert_eq!(layer_on_track(&c, &key("Perso", 0)), Some(2));
-    // Un plan sans calque de ce nom : un trou dans la piste.
-    assert_eq!(layer_on_track(&b, &key("Décor", 0)), None);
-}
-
-#[test]
-fn every_layer_has_a_track_beyond_eight() {
+    let c = plan(&["Décor", "Ombre", "Perso"]);
+    assert_eq!(rows_of(&a, 3), [Some("Perso"), Some("Décor"), None], "pas de trou : ses calques, puis plus rien");
+    assert_eq!(rows_of(&b, 3), [Some("Effets"), Some("Perso"), None]);
+    assert_eq!(rows_of(&c, 3), [Some("Décor"), Some("Ombre"), Some("Perso")], "son ordre à lui");
+    // Un calque de toute la scène (fond) a sa rangée comme les autres.
+    let mut d = plan(&["Perso", "Décor commun"]);
+    d[0].scene_wide = Some(SceneWide { key: 1, scene: 1 });
+    assert_eq!(rows_of(&d, 2), [Some("Perso"), Some("Décor commun")]);
+    // Toutes les rangées, au-delà de 8.
     let many: Vec<String> = (1..=12).map(|i| format!("Calque {i}")).collect();
     let refs: Vec<&str> = many.iter().map(String::as_str).collect();
-    let p = plan(&refs);
-    assert_eq!(layer_tracks([p.as_slice()]).len(), 12, "avant le chantier 5 : 8 au plus");
+    assert_eq!(rows_of(&plan(&refs), 12).iter().flatten().count(), 12);
 }
 
 #[test]
-fn layers_of_the_same_name_in_one_plan_get_their_own_tracks() {
-    let a = plan(&["Trait", "Trait", "Fond"]);
-    let b = plan(&["Trait", "Fond"]);
-    let tracks = layer_tracks([a.as_slice(), b.as_slice()]);
-    assert_eq!(names(&tracks), ["Trait", "Trait (2)", "Fond"]);
-    assert_eq!(layer_on_track(&a, &tracks[1]), Some(1), "le deuxième « Trait » en partant du haut");
-    assert_eq!(layer_on_track(&b, &tracks[1]), None);
+fn a_layer_track_is_its_name_for_pasting() {
+    // Le collage sur plusieurs calques retrouve un calque par son nom, où qu'il soit dans la pile.
+    let a = plan(&["Perso", "Décor"]);
+    let b = plan(&["Effets", "Perso"]);
+    assert_eq!(layer_on_track(&a, &key("Perso", 0)), Some(1));
+    assert_eq!(layer_on_track(&b, &key("Perso", 0)), Some(0));
+    assert_eq!(layer_on_track(&b, &key("Décor", 0)), None);
+    let twice = plan(&["Trait", "Trait"]);
+    assert_eq!(layer_on_track(&twice, &key("Trait", 1)), Some(0), "le deuxième « Trait » en partant du haut");
 }
-
-#[test]
-fn scene_wide_layers_have_their_own_track() {
-    // Depuis le 2026-10-17, un calque de toute la scène (fond) a sa piste comme les autres.
-    let mut a = plan(&["Perso", "Décor commun"]);
-    a[0].scene_wide = Some(SceneWide { key: 1, scene: 1 });
-    let tracks = layer_tracks([a.as_slice()]);
-    assert_eq!(names(&tracks), ["Perso", "Décor commun"]);
-    assert_eq!(layer_on_track(&a, &key("Décor commun", 0)), Some(0));
-}
-
 /// Un calque dessiné de l'image 2 à 8 (exclue) : un dessin tenu de 2 à 5, un autre de 5 à 8.
 fn drawn() -> Layer {
     let mut l = Layer::new("Perso", LayerKind::Vector);

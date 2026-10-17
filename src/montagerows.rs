@@ -1,11 +1,12 @@
 //! Pistes de la bande de montage (6f) : la caméra au-dessus des panneaux, les calques et le fond
 //! de scène en dessous, puis les sons ; leurs noms dans la colonne de gauche.
 //!
-//! Chaque plan a ses propres calques. Depuis le chantier 5, une piste par nom de calque : le
-//! calque « Perso » de chaque plan est sur la même piste, où qu'il soit dans sa pile ; un plan
-//! sans calque de ce nom y laisse un trou. Toutes les pistes sont montrées (avant : 8 au plus,
-//! par rang). Un calque de toute la scène (fond) a sa piste comme les autres, teintée « fond »
-//! (avant le 2026-10-17 : une seule barre « Fond » par scène, en lecture seule).
+//! Chaque plan a ses propres calques, dans son propre ordre : la rangée r montre, sous chaque
+//! plan, son r-ième calque en partant du haut de sa pile (Anthony, 2026-10-17 : « l'organisation
+//! et l'ordre des calques indépendants d'un shot à un autre » ; au chantier 5, une piste par nom
+//! de calque les alignait d'un plan à l'autre ; avant, 8 rangées au plus). Le nom de chaque
+//! calque est dans sa case ; la colonne de gauche montre ceux du plan courant. Un calque de toute
+//! la scène (fond) a sa rangée comme les autres, teinté « fond ».
 //!
 //! Les gestes de la timeline marchent dans les pistes (chantier 5) : le bord droit d'un dessin
 //! étire son exposition, la barre sous les dessins décale le calque, ses bouts le rognent ou
@@ -42,42 +43,14 @@ pub(crate) struct TrackKey {
     pub nth: usize,
 }
 
-impl TrackKey {
-    /// Le nom affiché : « Perso », « Perso (2) » pour le deuxième calque « Perso » d'un plan.
-    pub fn label(&self) -> String {
-        if self.nth == 0 {
-            self.name.clone()
-        } else {
-            format!("{} ({})", self.name, self.nth + 1)
-        }
-    }
-}
 
-/// Les pistes de calques du montage, du haut vers le bas : chaque nom une fois (et chaque doublon
-/// d'un même plan). On suit les plans dans l'ordre, chacun du haut de sa pile vers le bas : un nom
-/// nouveau vient juste sous la piste du calque qui le précède dans son plan (tout en haut s'il est
-/// le premier). Les calques de toute la scène (fond) ont leur piste comme les autres.
-pub(crate) fn layer_tracks<'a>(plans: impl IntoIterator<Item = &'a [Layer]>) -> Vec<TrackKey> {
-    let mut out: Vec<TrackKey> = Vec::new();
-    for layers in plans {
-        let mut after: Option<usize> = None;
-        let mut seen: Vec<&str> = Vec::new();
-        for l in layers.iter().rev() {
-            let nth = seen.iter().filter(|n| **n == l.name).count();
-            seen.push(&l.name);
-            match out.iter().position(|t| t.nth == nth && t.name == l.name) {
-                Some(i) => after = Some(i),
-                None => {
-                    let at = after.map_or(0, |i| i + 1);
-                    out.insert(at, TrackKey { name: l.name.clone(), nth });
-                    after = Some(at);
-                }
-            }
-        }
-    }
-    out
+/// Le calque d'un plan (`layers`, du bas vers le haut) à la rangée `row` du montage (0 : en
+/// haut) : chaque plan montre ses calques dans son propre ordre, du haut de sa pile vers le bas
+/// (Anthony, 2026-10-17 : « l'organisation et l'ordre des calques indépendants d'un shot à un
+/// autre »).
+pub(crate) fn layer_in_row(layers: &[Layer], row: usize) -> Option<usize> {
+    layers.len().checked_sub(row + 1)
 }
-
 /// La piste du calque `li` d'un plan (`layers`, du bas vers le haut) : son nom, et son rang parmi
 /// les calques du même nom en partant du haut.
 pub(crate) fn track_of(layers: &[Layer], li: usize) -> TrackKey {
@@ -93,8 +66,8 @@ pub(crate) fn layer_on_track(layers: &[Layer], key: &TrackKey) -> Option<usize> 
 
 /// Rangées de la bande, en distance depuis son haut.
 pub(crate) struct Rows {
-    /// Pistes de calques, du haut vers le bas (ceux de toute la scène compris).
-    pub tracks: Vec<TrackKey>,
+    /// Rangées de calques : autant que le plan qui en a le plus.
+    pub count: usize,
     pub block_h: f32,
 }
 
@@ -110,7 +83,7 @@ impl Rows {
     }
     /// Bas des pistes de calques.
     pub fn background_top(&self) -> f32 {
-        self.layers_top() + self.tracks.len() as f32 * LAYER_H
+        self.layers_top() + self.count as f32 * LAYER_H
     }
     pub fn lanes_top(&self) -> f32 {
         self.background_top() + LANE_GAP
@@ -125,8 +98,8 @@ impl Rows {
 impl App {
     /// Rangées pour une bande haute de `available` : les panneaux prennent la place qui reste.
     pub(crate) fn montage_rows(&self, available: f32) -> Rows {
-        let tracks = layer_tracks(self.doc.panels.iter().map(|p| p.layers.as_slice()));
-        let mut rows = Rows { tracks, block_h: 0.0 };
+        let count = self.doc.panels.iter().map(|p| p.layers.len()).max().unwrap_or(0);
+        let mut rows = Rows { count, block_h: 0.0 };
         let fixed = rows.height(self.doc.audio_tracks.len()) + 12.0;
         rows.block_h = (available - fixed).clamp(56.0, 170.0);
         rows
@@ -155,11 +128,16 @@ impl App {
         let header = lane(rows.blocks_top(), rows.block_h);
         painter.rect_filled(header, 3.0, theme::ETIQUETTE);
         self.project_header(ui, header);
-        // Une piste par nom de calque (chantier 5). Celles du plan courant : clic, son calque
-        // devient courant ; glisser, il monte ou descend ; clic droit, son menu (passe interface).
+        // Les calques du plan courant, dans son ordre : clic, il devient courant ; glisser, il monte
+        // ou descend (dans ce plan seulement) ; clic droit, son menu (passe interface).
         let names: Vec<(usize, String, Option<usize>)> = {
             let panel = &self.doc.panels[self.cur_panel];
-            rows.tracks.iter().enumerate().map(|(row, t)| (row, t.label(), layer_on_track(&panel.layers, t))).collect()
+            (0..rows.count)
+                .map(|row| {
+                    let k = layer_in_row(&panel.layers, row);
+                    (row, k.map_or(String::new(), |k| panel.layers[k].name.clone()), k)
+                })
+                .collect()
         };
         let mut pick = None;
         let mut grid: Vec<crate::layerheads::Row> = Vec::new();
@@ -168,7 +146,7 @@ impl App {
             let Some(k) = item else {
                 label(r, &name, visuals.weak_text_color());
                 ui.interact(r, ui.id().with(("piste_calque_absente", row)), Sense::hover())
-                    .on_hover_text("Le plan courant n'a pas de calque de ce nom.");
+                    .on_hover_text("Le plan courant a moins de calques : cette rangée est à d'autres plans.");
                 continue;
             };
             grid.push(crate::layerheads::Row { li: k, top: row as f32 * LAYER_H, h: LAYER_H });
@@ -318,8 +296,8 @@ impl App {
             }
         }
 
-        // Calques propres aux plans : une piste par nom (chantier 5).
-        for (row, key) in rows.tracks.iter().enumerate() {
+        // Les calques de chaque plan, dans son ordre.
+        for row in 0..rows.count {
             let lr = lane(rows.layers_top() + row as f32 * LAYER_H, LAYER_H);
             painter.rect_filled(lr, 0.0, theme::RANGEE_SOMBRE);
             for (i, b) in blocks.iter().enumerate() {
@@ -328,7 +306,7 @@ impl App {
                     continue;
                 }
                 let p = &self.doc.panels[i];
-                let Some(k) = layer_on_track(&p.layers, key) else { continue };
+                let Some(k) = layer_in_row(&p.layers, row) else { continue };
                 let current = i == self.cur_panel && k == self.cur_layer;
                 let hot = lit.filter(|(pi, h, _)| *pi == i && h.layer() == Some(k)).map(|(_, h, held)| (h, held));
                 let chosen: Vec<usize> = self.key_sel.iter().filter(|c| c.panel == p.id && c.layer == p.layers[k].id).map(|c| c.start).collect();
@@ -362,18 +340,18 @@ impl App {
 
     /// Calque visé dans les pistes de calques : (panneau, calque). `top` : haut de la bande.
     pub(crate) fn layer_row_hit(&self, p: Pos2, top: f32, blocks: &[Rect], rows: &Rows) -> Option<(usize, usize)> {
-        let key = self.track_at(p, top, rows)?;
+        let row = self.row_at(p, top, rows)?;
         let i = blocks.iter().position(|b| p.x >= b.left() - 1.0 && p.x <= b.right() + 1.0)?;
-        Some((i, layer_on_track(&self.doc.panels[i].layers, key)?))
+        Some((i, layer_in_row(&self.doc.panels[i].layers, row)?))
     }
 
-    /// La piste de calque sous le point `p` (`top` : haut de la bande).
-    pub(crate) fn track_at<'a>(&self, p: Pos2, top: f32, rows: &'a Rows) -> Option<&'a TrackKey> {
+    /// La rangée de calques sous le point `p` (`top` : haut de la bande).
+    pub(crate) fn row_at(&self, p: Pos2, top: f32, rows: &Rows) -> Option<usize> {
         let y = p.y - top;
         if y < rows.layers_top() || y >= rows.background_top() {
             return None;
         }
-        rows.tracks.get(((y - rows.layers_top()) / LAYER_H) as usize)
+        Some(((y - rows.layers_top()) / LAYER_H) as usize).filter(|&r| r < rows.count)
     }
 
     /// Poignée de calque sous le point `p`, dans les pistes de calques (chantier 5, les gestes de
@@ -386,14 +364,16 @@ impl App {
             return None;
         }
         let row = ((y - rows.layers_top()) / LAYER_H) as usize;
-        let key = rows.tracks.get(row)?;
+        if row >= rows.count {
+            return None;
+        }
         let lane_top = top + rows.layers_top() + row as f32 * LAYER_H;
         let tol = (ppf * 0.3).clamp(3.0, 6.0);
         let strict = blocks.iter().position(|b| p.x >= b.left() - 1.0 && p.x <= b.right() + 1.0);
         let near = blocks.iter().enumerate().filter(|(i, b)| Some(*i) != strict && p.x >= b.left() - 1.0 - tol && p.x <= b.right() + 1.0 + tol).map(|(i, _)| i);
         strict.into_iter().chain(near).find_map(|i| {
             let layers = &self.doc.panels[i].layers;
-            let k = layer_on_track(layers, key)?;
+            let k = layer_in_row(layers, row)?;
             cell_handle(&layers[k], k, p, blocks[i].left() - 1.0, lane_top, ppf, tol).map(|h| (i, k, h))
         })
     }

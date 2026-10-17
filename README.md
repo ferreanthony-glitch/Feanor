@@ -356,7 +356,8 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
 - **Panneaux** : chaque panneau (Outils, Couleur, Pinceaux, Réglages, Vue, Guides, Fiche,
   Calques, Montage ou Timeline) est un onglet. La bande du bas montre le montage en storyboard,
   la timeline du plan en animation (double-clic sur un plan pour y entrer). Le montage est le banc
-  principal : une piste par nom de calque, et l'essentiel s'y fait sans entrer dans le plan :
+  principal : sous chaque plan, ses calques dans son propre ordre (du haut de sa pile vers le
+  bas), et l'essentiel s'y fait sans entrer dans le plan :
   nouveau calque (bouton de la barre), nouveau dessin à une image (double-clic sur la piste du
   calque, ou clic droit), placer un dessin avant ou après un autre (le prendre par son milieu ;
   chacun garde sa durée), étirer une clé (la limite entre deux dessins : l'un s'allonge, l'autre

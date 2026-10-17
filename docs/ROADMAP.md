@@ -1021,6 +1021,12 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         dessin : le lasso** (outil Sélection) le temps de le tenir ; Ctrl + une autre touche ou
         la molette n'y touche pas ; le tampon de duplication garde son Ctrl + clic. Le retour
         attend que la souris soit relâchée ;
+      - **ordre des calques propre à chaque plan** (Anthony : « l'organisation et l'ordre des
+        calques indépendants d'un shot à un autre ») : la rangée r montre, sous chaque plan, son
+        r-ième calque en partant du haut de sa pile ; plus de pistes par nom ni de trous ; le nom
+        de chaque calque est dans sa case, la colonne de gauche montre ceux du plan courant ;
+        monter ou descendre un calque ne change que son plan. Maj + clic et le rectangle vont
+        par rangée ;
       - **collage multi-calques** : des clés copiées sur plusieurs calques se collent chacune sur
         le calque de même nom du plan courant (créé s'il manque, à la même place dans la pile),
         avec leurs écarts et leurs durées ; venues d'un seul calque, sur le calque courant.

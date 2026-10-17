@@ -1,7 +1,7 @@
 //! Clés du montage choisies à plusieurs (Anthony, 2026-10-17 : « choix et sélection de
 //! plusieurs clés à la fois ») et leurs commandes.
 //! - Un clic sur un dessin de la piste d'un calque le choisit seul ; Ctrl + clic l'ajoute ou le
-//!   retire ; Maj + clic choisit toutes les clés de la piste entre la dernière cliquée et
+//!   retire ; Maj + clic choisit toutes les clés de la rangée entre la dernière cliquée et
 //!   celle-ci, d'un plan à l'autre ; un clic à côté des dessins vide le choix. Ctrl+A : toutes
 //!   les clés du calque courant dans le plan courant.
 //! - Au rectangle : un glisser qui part d'un espace vide des pistes de calques (ou avec Ctrl ou
@@ -22,7 +22,7 @@
 use crate::app::App;
 use crate::document::{Cel, CelId, Layer, LayerKind};
 use crate::handles::{drop_marks, duplicate_run, overwrite_run, remove_run, runs, shift_runs, Handle};
-use crate::montagerows::{layer_on_track, track_of, TrackKey};
+use crate::montagerows::{layer_in_row, layer_on_track, track_of, TrackKey};
 
 /// Une clé : plan (id), calque (id), image où commence son exposition.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -153,11 +153,11 @@ impl App {
     }
 
 
-    /// Un clic sur la piste `track` du montage, sur la clé `key` (rien : à côté des dessins),
-    /// avec Ctrl (`toggle`) ou Maj (`range`).
-    pub(crate) fn click_key(&mut self, key: Option<KeyRef>, track: Option<&TrackKey>, toggle: bool, range: bool) {
-        let between = match (range, key, self.key_anchor, track) {
-            (true, Some(k), Some(a), Some(t)) => Some(self.keys_between(a, k, t)),
+    /// Un clic sur la rangée `row` du montage, sur la clé `key` (rien : à côté des dessins), avec
+    /// Ctrl (`toggle`) ou Maj (`range`).
+    pub(crate) fn click_key(&mut self, key: Option<KeyRef>, row: Option<usize>, toggle: bool, range: bool) {
+        let between = match (range, key, self.key_anchor, row) {
+            (true, Some(k), Some(a), Some(row)) => Some(self.keys_between(a, k, row)),
             _ => None,
         };
         let (sel, anchor) = choose(&self.key_sel, self.key_anchor, key, toggle, between);
@@ -270,15 +270,15 @@ impl App {
         Vec::new()
     }
 
-    /// Les clés de la piste `track` entre `a` et `b` (comprises), d'un plan à l'autre.
-    fn keys_between(&self, a: KeyRef, b: KeyRef, track: &TrackKey) -> Vec<KeyRef> {
+    /// Les clés de la rangée `row` entre `a` et `b` (comprises), d'un plan à l'autre.
+    fn keys_between(&self, a: KeyRef, b: KeyRef, row: usize) -> Vec<KeyRef> {
         let global = |k: KeyRef| self.locate(k).map(|(pi, _, s, _)| self.doc.panel_start(pi) + s);
         let (Some(ga), Some(gb)) = (global(a), global(b)) else { return vec![b] };
         let (lo, hi) = (ga.min(gb), ga.max(gb));
         let mut out = Vec::new();
         let mut start = 0;
         for p in &self.doc.panels {
-            if let Some(li) = layer_on_track(&p.layers, track) {
+            if let Some(li) = layer_in_row(&p.layers, row) {
                 let l = &p.layers[li];
                 for (s, _, cel) in runs(l) {
                     if cel.is_some() && (lo..=hi).contains(&(start + s)) {
@@ -291,13 +291,13 @@ impl App {
         out
     }
 
-    /// Les clés des pistes `tracks` qui touchent les images `g0` à `g1` (comprises) du montage.
-    pub(crate) fn keys_in_rect(&self, tracks: &[TrackKey], g0: usize, g1: usize) -> Vec<KeyRef> {
+    /// Les clés des rangées `rows` qui touchent les images `g0` à `g1` (comprises) du montage.
+    pub(crate) fn keys_in_rect(&self, rows: std::ops::RangeInclusive<usize>, g0: usize, g1: usize) -> Vec<KeyRef> {
         let mut out = Vec::new();
         let mut start = 0;
         for p in &self.doc.panels {
-            for t in tracks {
-                if let Some(li) = layer_on_track(&p.layers, t) {
+            for row in rows.clone() {
+                if let Some(li) = layer_in_row(&p.layers, row) {
                     let l = &p.layers[li];
                     for (s, e, cel) in runs(l) {
                         if cel.is_some() && start + s <= g1 && start + e > g0 {
@@ -311,11 +311,11 @@ impl App {
         out
     }
 
-    /// Le choix au rectangle suit la souris : les clés des pistes `tracks`, images `g0` à `g1`.
-    pub(crate) fn drag_key_rect(&mut self, tracks: &[TrackKey], g0: usize, g1: usize) {
+    /// Le choix au rectangle suit la souris : les clés des rangées `rows`, images `g0` à `g1`.
+    pub(crate) fn drag_key_rect(&mut self, rows: std::ops::RangeInclusive<usize>, g0: usize, g1: usize) {
         let Some((before, add)) = self.key_rect.as_ref().map(|r| (r.before.clone(), r.add)) else { return };
         let mut sel = if add { before } else { Vec::new() };
-        for k in self.keys_in_rect(tracks, g0, g1) {
+        for k in self.keys_in_rect(rows, g0, g1) {
             if !sel.contains(&k) {
                 sel.push(k);
             }

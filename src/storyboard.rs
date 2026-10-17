@@ -852,7 +852,7 @@ impl App {
                 // ou Maj depuis n'importe où dans les pistes (`montagekeys::KeyRect`).
                 let mods = ui.input(|i| i.modifiers);
                 let add = mods.command || mods.shift;
-                let in_tracks = self.track_at(origin, r.top(), rows).is_some();
+                let in_tracks = self.row_at(origin, r.top(), rows).is_some();
                 let free = self.montage_layer_handle_at(origin, r.top(), &blocks, ppf, rows).is_none();
                 (in_tracks && (add || free)).then(|| crate::montagekeys::KeyRect { origin, before: self.key_sel.clone(), add })
             } {
@@ -936,11 +936,10 @@ impl App {
         // Choix au rectangle : les pistes et les images couvertes ; le rectangle se dessine.
         if let Some(o) = self.key_rect.as_ref().map(|k| k.origin) {
             if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
-                let row = |y: f32| (((y - r.top() - rows.layers_top()) / crate::montagerows::LAYER_H).floor().max(0.0) as usize).min(rows.tracks.len().saturating_sub(1));
+                let row = |y: f32| (((y - r.top() - rows.layers_top()) / crate::montagerows::LAYER_H).floor().max(0.0) as usize).min(rows.count.saturating_sub(1));
                 let (a, b) = (row(o.y.min(p.y)), row(o.y.max(p.y)));
-                let tracks: Vec<crate::montagerows::TrackKey> = rows.tracks.get(a..=b).map(|t| t.to_vec()).unwrap_or_default();
                 let (g0, g1) = (free_frame_at(o.x.min(p.x)), free_frame_at(o.x.max(p.x)));
-                self.drag_key_rect(&tracks, g0, g1);
+                self.drag_key_rect(a..=b, g0, g1);
                 let accent = visuals.selection.stroke.color;
                 painter.rect(Rect::from_two_pos(o, p), 2.0, accent.gamma_multiply(0.15), Stroke::new(1.5_f32, accent), StrokeKind::Inside);
             }
@@ -1018,13 +1017,13 @@ impl App {
                     self.sel_clip = None;
                     let f = (((p.x - x_of(self.doc.panel_start(i))) / ppf).floor().max(0.0)) as usize;
                     let key = self.key_ref(i, k, f);
-                    let track = self.track_at(p, r.top(), rows).cloned();
+                    let track = self.row_at(p, r.top(), rows);
                     let mods = ui.input(|i| i.modifiers);
                     self.goto_global(frame_at(p.x));
                     if self.cur_panel == i {
                         self.select_layer(k);
                     }
-                    self.click_key(key, track.as_ref(), mods.command, mods.shift);
+                    self.click_key(key, track, mods.command, mods.shift);
                 } else if let Some((_, hit)) = self.lane_hit(p, left, ppf, lanes_top) {
                     // Clic dans une piste son : sélectionne l'extrait (ou rien) et y place la tête.
                     self.sel_clip = hit.map(|(id, _)| id);
