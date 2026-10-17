@@ -807,6 +807,9 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     `held_frames`, `guide_keys` (images où un calque du guide change ; aucune pour une vidéo),
     `hold` (après `apply` : les images tenues reprennent le dessin d'avant). `propagerui` calcule
     tout, ne garde que `made_frames` (`Job::computed` pour la progression).
+  - Mémoire de la propagation : `Job::made` tient des `Raster` (`to_raster` sur le fil de la
+    tâche, `NOISE`), `Job::latest` la vignette ; `propager::apply_rasters` les pose (`apply`, sur
+    des `Image`, ne sert plus qu'aux essais). Dans la synthèse, `from_first` tient des `Sparse`.
   - Journal de plantage (`plantage.rs`) : `install` (dans `lancer`) garde le crochet de panic
     par défaut puis écrit `report_text` (message, endroit, fil, pile `Backtrace::force_capture`) par
     `write_report` dans `%LOCALAPPDATA%\Pelure\plantages\plantage-<s>.txt` et `nouveau.txt` ; au

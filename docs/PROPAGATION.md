@@ -93,6 +93,12 @@ optique, mélange des clés, carte graphique. L'intégration dans Pelure est dan
   on crée un dessin neuf par image (`propager::apply`), on marque les clés, puis
   `commit_structure` en fait une seule étape d'annulation.
 
+## Mémoire
+
+La séquence depuis la première clé d'une paire est gardée sans ses carreaux nuls (`Sparse`), et
+chaque image fabriquée devient tout de suite un dessin à tuiles : seules les zones peintes restent
+en mémoire. Le calcul d'une image demande encore environ 1 Go de mémoire de travail en 1080p.
+
 ## La carte graphique
 
 Depuis le 17 octobre 2026, la synthèse ouvre son propre périphérique sur la carte (avec toutes ses

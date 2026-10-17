@@ -21,6 +21,61 @@ use crate::blend::{BlendParams, ErrorMap};
 use crate::flow::{flow, Flow, FlowParams, Gray};
 use crate::{Cpu, Error, GuidePair, Image, Output, Params, Synthesizer};
 
+/// Côté des carreaux d'une image gardée en attendant le mélange (`Sparse`).
+const SPARSE_TILE: usize = 32;
+
+/// Une image gardée en attendant le mélange entre deux clés, sans ses carreaux entièrement nuls :
+/// la peinture ne couvre souvent qu'une partie de l'image (Anthony, 2026-10-18 : « allège la
+/// mémoire de la propagation »). Sans perte : `to_image` rend exactement l'image d'origine.
+pub struct Sparse {
+    width: usize,
+    height: usize,
+    channels: usize,
+    tiles: Vec<Option<Box<[u8]>>>,
+}
+
+impl Sparse {
+    pub fn from_image(im: &Image) -> Sparse {
+        let (w, h, c) = (im.width, im.height, im.channels);
+        let (tx, ty) = (w.div_ceil(SPARSE_TILE), h.div_ceil(SPARSE_TILE));
+        let mut tiles = Vec::with_capacity(tx * ty);
+        for j in 0..ty {
+            for i in 0..tx {
+                let (x0, y0) = (i * SPARSE_TILE, j * SPARSE_TILE);
+                let (x1, y1) = ((x0 + SPARSE_TILE).min(w), (y0 + SPARSE_TILE).min(h));
+                let rows = (y0..y1).map(|y| &im.data[(y * w + x0) * c..(y * w + x1) * c]);
+                if rows.clone().all(|r| r.iter().all(|&b| b == 0)) {
+                    tiles.push(None);
+                } else {
+                    tiles.push(Some(rows.flatten().copied().collect()));
+                }
+            }
+        }
+        Sparse { width: w, height: h, channels: c, tiles }
+    }
+
+    pub fn to_image(&self) -> Image {
+        let (w, h, c) = (self.width, self.height, self.channels);
+        let mut data = vec![0u8; w * h * c];
+        let tx = w.div_ceil(SPARSE_TILE);
+        for (k, tile) in self.tiles.iter().enumerate() {
+            let Some(tile) = tile else { continue };
+            let (x0, y0) = ((k % tx) * SPARSE_TILE, (k / tx) * SPARSE_TILE);
+            let x1 = (x0 + SPARSE_TILE).min(w);
+            let row = (x1 - x0) * c;
+            for (r, y) in (y0..(y0 + SPARSE_TILE).min(h)).enumerate() {
+                data[(y * w + x0) * c..(y * w + x1) * c].copy_from_slice(&tile[r * row..(r + 1) * row]);
+            }
+        }
+        Image::new(w, h, c, data)
+    }
+
+    /// Octets gardés (carreaux non nuls).
+    pub fn bytes(&self) -> usize {
+        self.tiles.iter().flatten().map(|t| t.len()).sum()
+    }
+}
+
 /// Poids des guides de la propagation.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Weights {
@@ -198,17 +253,19 @@ pub fn propagate_keys_on(
     chain(synth, &mut load, first, &frames[0], (range.start..first.frame).rev(), params, |t, o| emit(t, &o.image))?;
     for (i, pair) in keys.windows(2).enumerate() {
         let (k1, k2) = (pair[0], pair[1]);
-        let mut from_first: Vec<(Image, ErrorMap)> = Vec::with_capacity(k2.frame - k1.frame);
+        // La séquence depuis la première clé, gardée sans ses carreaux vides (`Sparse`) ; chaque
+        // image est rendue (et sa place libérée) quand la séquence depuis la seconde l'atteint.
+        let mut from_first: Vec<Option<(Sparse, ErrorMap)>> = Vec::with_capacity(k2.frame - k1.frame);
         chain(synth, &mut load, k1, &frames[i], k1.frame + 1..k2.frame, params, |_, o| {
             let e = ErrorMap::new(&o.error, o.image.width, o.image.height, ERROR_CELL);
-            from_first.push((o.image, e));
+            from_first.push(Some((Sparse::from_image(&o.image), e)));
             Ok(())
         })?;
         let span = (k2.frame - k1.frame) as f32;
         chain(synth, &mut load, k2, &frames[i + 1], (k1.frame + 1..k2.frame).rev(), params, |t, o| {
-            let (a, ea) = &from_first[t - k1.frame - 1];
+            let (a, ea) = from_first[t - k1.frame - 1].take().expect("image de la première séquence, rendue une fois");
             let eb = ErrorMap::new(&o.error, o.image.width, o.image.height, ERROR_CELL);
-            emit(t, &synth.blend(a, ea, &o.image, &eb, (t - k1.frame) as f32 / span, &params.blend))
+            emit(t, &synth.blend(&a.to_image(), &ea, &o.image, &eb, (t - k1.frame) as f32 / span, &params.blend))
         })?;
     }
     chain(synth, &mut load, last, &frames[keys.len() - 1], last.frame + 1..range.end, params, |t, o| emit(t, &o.image))

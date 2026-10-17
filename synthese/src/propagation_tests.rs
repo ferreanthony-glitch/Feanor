@@ -162,3 +162,23 @@ fn position_guide_spans_the_range() {
     assert_eq!(g.channels, 2);
     assert_eq!(g.data, [0, 0, 128, 0, 255, 0, 0, 255, 128, 255, 255, 255]);
 }
+
+#[test]
+fn a_kept_image_drops_its_empty_tiles_without_loss() {
+    // 70 × 40 en RVBA (carreaux de bord incomplets) : un seul petit carré peint.
+    let (w, h) = (70, 40);
+    let mut data = vec![0u8; w * h * 4];
+    for y in 33..38 {
+        for x in 64..69 {
+            data[(y * w + x) * 4..][..4].copy_from_slice(&[200, 10, 30, 255]);
+        }
+    }
+    let im = Image::new(w, h, 4, data);
+    let s = Sparse::from_image(&im);
+    assert_eq!(s.to_image().data, im.data, "sans perte");
+    assert!(s.bytes() <= 32 * 32 * 4, "un seul carreau gardé : {}", s.bytes());
+    // Une image vide ne garde rien ; une pleine, tout.
+    assert_eq!(Sparse::from_image(&Image::new(w, h, 4, vec![0; w * h * 4])).bytes(), 0);
+    let full = Image::new(w, h, 3, vec![7; w * h * 3]);
+    assert_eq!(Sparse::from_image(&full).to_image().data, full.data);
+}

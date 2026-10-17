@@ -387,15 +387,19 @@ pub fn crop(raster: &Raster, origin: (usize, usize), size: (usize, usize)) -> Im
     Image::new(size.0, size.1, 4, data)
 }
 
+/// Opacité en dessous de laquelle un pixel fabriqué compte pour vide (moins de 1 % : le bruit du
+/// mélange ne remplit pas de tuiles pour rien).
+const NOISE: u8 = 3;
+
 /// Une image fabriquée (RVBA prémultiplié) posée en `origin` sur une feuille `width` × `height` ;
-/// les zones transparentes restent sans tuile.
+/// les zones transparentes (ou presque, `NOISE`) restent sans tuile.
 pub fn to_raster(width: usize, height: usize, im: &Image, origin: (usize, usize)) -> Raster {
     let mut r = Raster::new(width, height);
     for y in 0..im.height {
         for x in 0..im.width {
             let p = &im.data[(y * im.width + x) * 4..][..4];
             let (sx, sy) = (origin.0 + x, origin.1 + y);
-            if p[3] == 0 || sx >= width || sy >= height {
+            if p[3] < NOISE || sx >= width || sy >= height {
                 continue;
             }
             // Le mélange peut dépasser de peu : une couleur prémultipliée reste sous son alpha.
@@ -432,10 +436,18 @@ pub fn run(
 /// Pose les images fabriquées `made` dans le calque `paint` du plan `panel` (des dessins neufs) et
 /// marque ses clés « Clé » : celles de la plage, et aussi celles hors plage (`Outline::ignored`),
 /// sinon une prochaine propagation, ne voyant plus que les clés marquées, les perdrait.
-/// (L'appelant prend l'instantané pour l'annulation.)
+/// (L'appelant prend l'instantané pour l'annulation.) Pelure passe par `apply_rasters`.
+#[cfg(test)]
 pub fn apply(doc: &mut Document, panel: usize, paint: usize, origin: (usize, usize), keys: &[usize], made: Vec<(usize, Image)>) {
-    for (f, im) in made {
-        let raster = to_raster(doc.width, doc.height, &im, origin);
+    let (w, h) = (doc.width, doc.height);
+    let rasters = made.into_iter().map(|(f, im)| (f, to_raster(w, h, &im, origin))).collect();
+    apply_rasters(doc, panel, paint, keys, rasters);
+}
+
+/// `apply` avec des images déjà converties en dessins (`to_raster`, sur le fil de la tâche, dès
+/// qu'elles arrivent : seules les zones peintes prennent de la place en mémoire).
+pub fn apply_rasters(doc: &mut Document, panel: usize, paint: usize, keys: &[usize], made: Vec<(usize, Raster)>) {
+    for (f, raster) in made {
         let cel = doc.add_cel(Cel { raster, vector: None, version: 0 });
         doc.panels[panel].layers[paint].set(f, Some(cel));
     }

@@ -25,6 +25,7 @@ use synthese::{Cpu, Image, Synthesizer};
 use crate::app::App;
 use crate::document::LayerKind;
 use crate::propager::{self, Cadence, Frames, Guide};
+use crate::raster::Raster;
 
 /// Canaux de la synthèse : le style (RVBA), les guides (image 3, position 2, temporel 4).
 const STYLE_CHANNELS: usize = 4;
@@ -53,7 +54,6 @@ struct Job {
     panel: u64,
     layer: u64,
     guide: Guide,
-    origin: (usize, usize),
     /// Les clés à marquer : celles de la plage et celles hors plage.
     keys: Vec<usize>,
     /// Les images qui tiendront l'image d'avant (cadence plus lente que l'image par image).
@@ -62,8 +62,10 @@ struct Job {
     /// Images calculées (toutes celles hors clés, gardées ou non) : la progression.
     computed: Arc<AtomicUsize>,
     cancel: Arc<AtomicBool>,
-    /// Les images fabriquées, au fur et à mesure.
-    made: Arc<Mutex<Vec<(usize, Image)>>>,
+    /// Les images fabriquées, déjà en dessins (seules les zones peintes prennent de la place), au
+    /// fur et à mesure ; et la vignette de la dernière, pour l'aperçu.
+    made: Arc<Mutex<Vec<(usize, Raster)>>>,
+    latest: Arc<Mutex<Option<egui::ColorImage>>>,
     /// Images du guide demandées par la tâche (calques composés), et la réponse.
     requests: Receiver<usize>,
     answers: Sender<Result<Image, String>>,
@@ -71,7 +73,6 @@ struct Job {
     handle: JoinHandle<Result<String, String>>,
     started: Instant,
     preview: Option<egui::TextureHandle>,
-    previewed: usize,
 }
 
 impl Propagation {
@@ -367,7 +368,7 @@ impl App {
         let device = if self.propagation.on_gpu { self.propagation.device.clone() } else { None };
         let params = self.propagation.params.clone();
         // Toutes les clés seront marquées, celles hors plage aussi (voir `propager::apply`).
-        let (origin, keys, total) = (plan.origin, [&plan.outline.keys[..], &plan.outline.ignored[..]].concat(), plan.outline.outputs());
+        let (keys, total) = ([&plan.outline.keys[..], &plan.outline.ignored[..]].concat(), plan.outline.outputs());
         // La cadence : toutes les images sont calculées (le suivi du mouvement va d'une image à la
         // suivante), seules celles choisies sont gardées.
         let guide_keys = propager::guide_keys(&self.doc, self.cur_panel, self.cur_layer, guide);
@@ -376,8 +377,10 @@ impl App {
         let held = propager::held_frames(range, &plan.outline.keys, &keep);
         let cancel = Arc::new(AtomicBool::new(false));
         let made = Arc::new(Mutex::new(Vec::new()));
+        let latest = Arc::new(Mutex::new(None));
         let computed = Arc::new(AtomicUsize::new(0));
-        let (stop, sink, wake, count) = (cancel.clone(), made.clone(), ctx.clone(), computed.clone());
+        let (stop, sink, wake, count, last) = (cancel.clone(), made.clone(), ctx.clone(), computed.clone(), latest.clone());
+        let sheet = (self.doc.width, self.doc.height);
         let (ask, requests) = channel::<usize>();
         let (answers, replies) = channel::<Result<Image, String>>();
         let handle = std::thread::spawn(move || -> Result<String, String> {
@@ -418,8 +421,11 @@ impl App {
             };
             propager::run(&plan, synth.as_ref(), &params, &stop, load, |f, im| {
                 count.fetch_add(1, Ordering::Relaxed);
+                *last.lock().unwrap_or_else(|e| e.into_inner()) = Some(preview(&im, 480));
                 if keep.binary_search(&f).is_ok() {
-                    sink.lock().unwrap_or_else(|e| e.into_inner()).push((f, im));
+                    // Tout de suite en dessin : l'image entière (8 Mo en 1080p) ne reste pas.
+                    let raster = propager::to_raster(sheet.0, sheet.1, &im, plan.origin);
+                    sink.lock().unwrap_or_else(|e| e.into_inner()).push((f, raster));
                 }
             })?;
             Ok(name)
@@ -429,19 +435,18 @@ impl App {
             panel: self.panel().id,
             layer: self.layer().id,
             guide,
-            origin,
             keys,
             held,
             total,
             computed,
             cancel,
             made,
+            latest,
             requests,
             answers,
             handle,
             started: Instant::now(),
             preview: None,
-            previewed: 0,
         });
     }
 
@@ -459,14 +464,8 @@ impl App {
             }
         }
         let Some(job) = self.propagation.job.as_mut() else { return };
-        {
-            let made = job.made.lock().unwrap_or_else(|e| e.into_inner());
-            if made.len() != job.previewed {
-                job.previewed = made.len();
-                if let Some((_, im)) = made.last() {
-                    job.preview = Some(ctx.load_texture("propagation", preview(im, 480), egui::TextureOptions::LINEAR));
-                }
-            }
+        if let Some(image) = job.latest.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            job.preview = Some(ctx.load_texture("propagation", image, egui::TextureOptions::LINEAR));
         }
         if !job.handle.is_finished() {
             let (done, total) = (job.computed.load(Ordering::Relaxed), job.total.max(1));
@@ -517,7 +516,7 @@ impl App {
                 }
                 let n = made.len();
                 let snap = self.snapshot();
-                propager::apply(&mut self.doc, pi, li, job.origin, &job.keys, made);
+                propager::apply_rasters(&mut self.doc, pi, li, &job.keys, made);
                 propager::hold(&mut self.doc, pi, li, &job.held);
                 self.renderer.invalidate_all();
                 self.commit_structure(snap);

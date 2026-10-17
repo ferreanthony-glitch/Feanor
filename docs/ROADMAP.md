@@ -1194,6 +1194,15 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         L'aperçu de progression est borné en hauteur. Reste à voir : la mémoire (toutes les images
         fabriquées gardées entières jusqu'à la fin, dessins jamais purgés), le travail final sur le
         fil de l'interface (longs plans : « ne répond pas »), un calque peint transformé (décalage) ;
+      - **mémoire de la propagation** (Anthony, 2026-10-18 : « allège la mémoire de la
+        propagation ») : la synthèse garde la séquence depuis la première clé sans ses carreaux
+        nuls (`synthese::propagation::Sparse`, sans perte) et libère chaque image au mélange ; Pelure
+        convertit chaque image gardée en dessin à tuiles dès qu'elle arrive (bruit sous 1 %
+        d'opacité ignoré) et ne garde que la vignette d'aperçu. Vérifié : une image fabriquée de 2
+        millions de pixels n'en a que 2 199 de peints. Mesure (48 images, deux clés, 1080p) : le pic
+        ne baisse pas (1,7 Go, 456 Mo au repos) ; il vient du calcul de chaque image (environ 0,8 Go
+        dès la première, puis +0,4 Go en cours de route, dans les deux versions). Prochaine piste :
+        la mémoire de travail de la synthèse (tampons refaits à chaque image) ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,
