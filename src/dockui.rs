@@ -56,7 +56,9 @@ impl egui_dock::TabViewer for Panes<'_> {
     /// Le dessin et la bande gèrent eux-mêmes leur place ; les autres défilent.
     fn scroll_bars(&self, tab: &Pane) -> [bool; 2] {
         match tab {
-            Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::XSheet => [false, false],
+            // Calques : l'en-tête (mode, opacité, commandes) reste en haut, seule la liste défile
+            // (`layers_panel`).
+            Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::XSheet | Pane::Layers => [false, false],
             _ => [false, true],
         }
     }

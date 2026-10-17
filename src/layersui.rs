@@ -144,138 +144,20 @@ impl App {
             self.renderer.invalidate_all();
         }
         ui.add_space(2.0);
+        // Les commandes, en haut et toujours visibles (Anthony, 2026-10-17 : « la zone [des
+        // boutons] doit rester en haut ») ; seule la liste défile.
+        self.layer_commands(ui);
+        ui.add_space(2.0);
+        ui.separator();
+        egui::ScrollArea::vertical()
+            .id_salt("liste_calques")
+            .auto_shrink([false, false])
+            .show(ui, |ui| self.layer_list(ui));
+    }
 
-        // La liste : un rang par calque, le plus haut en premier. Clic droit : renommer, toute la
-        // scène, profondeur, dupliquer, verrouiller, supprimer (9b) ; double-clic sur le nom :
-        // renommer.
-        let mut select = None;
-        let mut toggle = None;
-        let mut lock = None;
-        let mut rename_done: Option<bool> = None;
-        let lock_key = self.raccourci("calque.verrouiller");
-        let frame = self.cur_frame;
-        let accent = ui.visuals().selection.bg_fill;
-        // Glisser une ligne la monte ou la descend (passe interface) : les lignes de cette image,
-        // pour savoir où elle se pose.
-        let list_top = ui.cursor().top();
-        let mut drag_rows: Vec<crate::layerheads::Row> = Vec::new();
-        for li in (0..self.layers().len()).rev() {
-            let (id, visible, locked, kind, name, cel, folder) = {
-                let l = &self.layers()[li];
-                (l.id, l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame), l.folder)
-            };
-            let current = li == self.cur_layer;
-            let thumb = cel.and_then(|c| self.layer_thumb(ui.ctx(), c));
-            let shown = egui::Frame::new()
-                .fill(if current { accent.gamma_multiply(0.55) } else { Color32::TRANSPARENT })
-                .corner_radius(3.0)
-                .inner_margin(egui::Margin::symmetric(3, 2))
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing = vec2(3.0, 0.0);
-                        let eye = if visible { ph::EYE } else { ph::EYE_SLASH };
-                        let resp = ui.add(egui::Button::new(RichText::new(eye).size(15.0)).frame(false).min_size(vec2(20.0, 36.0)));
-                        let resp = crate::bulles::bulle(resp, "Afficher / masquer", "Montrer ou cacher le calque.", "");
-                        if resp.clicked() {
-                            toggle = Some(li);
-                        }
-                        resp.context_menu(|ui| self.layer_menu(ui, li, false));
-                        let pad = if locked { ph::LOCK_SIMPLE } else { ph::LOCK_SIMPLE_OPEN };
-                        let pad = RichText::new(pad).size(14.0);
-                        let pad = if locked { pad } else { pad.weak() };
-                        let resp = ui.add(egui::Button::new(pad).frame(false).min_size(vec2(18.0, 36.0)));
-                        let resp = crate::bulles::bulle(resp, "Verrouiller / déverrouiller", "Un calque verrouillé ne peut plus être dessiné.", &lock_key);
-                        if resp.clicked() {
-                            lock = Some(li);
-                        }
-                        resp.context_menu(|ui| self.layer_menu(ui, li, false));
-                        // Vignette du dessin à l'image courante (vide : cadre gris).
-                        let (rect, resp) = ui.allocate_exact_size(vec2(THUMB[0] as f32, THUMB[1] as f32), Sense::click());
-                        match &thumb {
-                            Some(t) => {
-                                ui.painter().image(
-                                    t.id(),
-                                    rect,
-                                    egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
-                                    if visible { Color32::WHITE } else { Color32::from_gray(120) },
-                                );
-                            }
-                            None => {
-                                ui.painter().rect_filled(rect, 0.0, Color32::from_gray(60));
-                            }
-                        }
-                        let border = if current { Stroke::new(2.0_f32, Color32::WHITE) } else { Stroke::new(1.0_f32, Color32::from_gray(80)) };
-                        ui.painter().rect_stroke(rect, 0.0, border, StrokeKind::Inside);
-                        if resp.clicked() || resp.secondary_clicked() {
-                            select = Some(li);
-                        }
-                        resp.context_menu(|ui| self.layer_menu(ui, li, false));
-                        ui.vertical(|ui| {
-                            let renaming = self.layer_rename.as_ref().is_some_and(|r| r.id == id && !r.in_timeline && !r.in_montage);
-                            if renaming {
-                                rename_done = self.layer_rename_field(ui, 120.0);
-                            } else {
-                                let text = if visible { RichText::new(&name) } else { RichText::new(&name).weak() };
-                                let resp = ui.add(egui::Label::new(text).sense(Sense::click()).truncate());
-                                if resp.clicked() || resp.secondary_clicked() {
-                                    select = Some(li);
-                                }
-                                if resp.double_clicked() {
-                                    self.layer_rename = Some(LayerRename::new(id, &name, false));
-                                }
-                                resp.on_hover_text("Double-clic ou clic droit : renommer").context_menu(|ui| self.layer_menu(ui, li, false));
-                            }
-                            let kind = match kind {
-                                _ if folder => "dossier",
-                                LayerKind::Vector => "vectoriel",
-                                LayerKind::Bitmap => "bitmap",
-                            };
-                            ui.label(RichText::new(kind).small().weak());
-                        });
-                    });
-                });
-            let rect = shown.response.rect;
-            drag_rows.push(crate::layerheads::Row { li, top: rect.top() - list_top, h: rect.height() });
-            // Le glisser seul : les clics restent aux boutons et au nom.
-            let grip = ui.interact(rect, ui.id().with(("glisser_calque", id)), Sense::drag());
-            if grip.drag_started() && self.layer_rename.is_none() {
-                self.panel_layer_drag = Some(li);
-            }
-        }
-        if let Some(from) = self.panel_layer_drag {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
-            let pointer = ui.input(|i| i.pointer.interact_pos());
-            if let Some(p) = pointer {
-                let slot = drag_rows.iter().filter(|r| r.top + r.h * 0.5 < p.y - list_top).count();
-                let y = list_top + drag_rows.get(slot).map_or_else(|| drag_rows.last().map_or(0.0, |r| r.top + r.h), |r| r.top);
-                let x = ui.max_rect().x_range();
-                ui.painter().line_segment([egui::pos2(x.min, y), egui::pos2(x.max, y)], Stroke::new(2.0_f32, Color32::WHITE));
-            }
-            if ui.input(|i| !i.pointer.any_down()) {
-                self.panel_layer_drag = None;
-                if let Some(p) = pointer {
-                    let to = crate::layerheads::drop_index(&drag_rows, from, p.y - list_top);
-                    if to != from && !self.content_refuses() {
-                        self.move_layer_to(from, to);
-                    }
-                }
-            }
-        }
-        if let Some(li) = toggle {
-            self.record_step();
-            let layer = &mut self.layers_mut()[li];
-            layer.visible = !layer.visible;
-        }
-        if let Some(li) = lock {
-            self.toggle_layer_lock(li);
-        }
-        if let Some(li) = select {
-            self.select_layer(li);
-        }
-        self.finish_layer_rename(rename_done);
-
-        // Commandes en icônes.
-        ui.add_space(4.0);
+    /// Les commandes des calques en icônes (nouveau, dupliquer, supprimer, monter, copier…).
+    fn layer_commands(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
             if self.bouton(ui, ph::BEZIER_CURVE, "Nouveau calque vectoriel", "Des traits qui restent modifiables.", "calque.nouveau_vectoriel").clicked() {
@@ -320,6 +202,149 @@ impl App {
                 self.merge_layer_down();
             }
         });
+    }
+
+    /// La liste : un rang par calque, le plus haut en premier. Clic sur le rang : il devient
+    /// courant ; glisser : il monte ou descend ; clic droit : tout ce qui touche au calque
+    /// (`layer_full_menu`) ; double-clic sur le nom : renommer.
+    fn layer_list(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
+        let mut select = None;
+        let mut toggle = None;
+        let mut lock = None;
+        let mut rename_done: Option<bool> = None;
+        let lock_key = self.raccourci("calque.verrouiller");
+        let frame = self.cur_frame;
+        let accent = ui.visuals().selection.bg_fill;
+        // Glisser une ligne la monte ou la descend (passe interface) : les lignes de cette image,
+        // pour savoir où elle se pose.
+        let list_top = ui.cursor().top();
+        let mut drag_rows: Vec<crate::layerheads::Row> = Vec::new();
+        for li in (0..self.layers().len()).rev() {
+            let (id, visible, locked, kind, name, cel, folder) = {
+                let l = &self.layers()[li];
+                (l.id, l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame), l.folder)
+            };
+            let current = li == self.cur_layer;
+            let thumb = cel.and_then(|c| self.layer_thumb(ui.ctx(), c));
+            // Le rang entier, posé avant ses boutons (à sa place de l'image d'écran d'avant) : les
+            // boutons restent au-dessus et gardent leurs clics (posé après eux, ce fond qui se
+            // glisse les rendait tous muets : œil, verrou, clic droit, 2026-10-17).
+            let grip_id = ui.id().with(("glisser_calque", id));
+            let grip = ui.ctx().data(|d| d.get_temp::<egui::Rect>(grip_id)).map(|r| ui.interact(r, grip_id, Sense::click_and_drag()));
+            let shown = egui::Frame::new()
+                .fill(if current { accent.gamma_multiply(0.55) } else { Color32::TRANSPARENT })
+                .corner_radius(3.0)
+                .inner_margin(egui::Margin::symmetric(3, 2))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = vec2(3.0, 0.0);
+                        let eye = if visible { ph::EYE } else { ph::EYE_SLASH };
+                        let resp = ui.add(egui::Button::new(RichText::new(eye).size(15.0)).frame(false).min_size(vec2(20.0, 36.0)));
+                        let resp = crate::bulles::bulle(resp, "Afficher / masquer", "Montrer ou cacher le calque.", "");
+                        if resp.clicked() {
+                            toggle = Some(li);
+                        }
+                        resp.context_menu(|ui| self.layer_full_menu(ui, li, false));
+                        let pad = if locked { ph::LOCK_SIMPLE } else { ph::LOCK_SIMPLE_OPEN };
+                        let pad = RichText::new(pad).size(14.0);
+                        let pad = if locked { pad } else { pad.weak() };
+                        let resp = ui.add(egui::Button::new(pad).frame(false).min_size(vec2(18.0, 36.0)));
+                        let resp = crate::bulles::bulle(resp, "Verrouiller / déverrouiller", "Un calque verrouillé ne peut plus être dessiné.", &lock_key);
+                        if resp.clicked() {
+                            lock = Some(li);
+                        }
+                        resp.context_menu(|ui| self.layer_full_menu(ui, li, false));
+                        // Vignette du dessin à l'image courante (vide : cadre gris).
+                        let (rect, resp) = ui.allocate_exact_size(vec2(THUMB[0] as f32, THUMB[1] as f32), Sense::click());
+                        match &thumb {
+                            Some(t) => {
+                                ui.painter().image(
+                                    t.id(),
+                                    rect,
+                                    egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                                    if visible { Color32::WHITE } else { Color32::from_gray(120) },
+                                );
+                            }
+                            None => {
+                                ui.painter().rect_filled(rect, 0.0, Color32::from_gray(60));
+                            }
+                        }
+                        let border = if current { Stroke::new(2.0_f32, Color32::WHITE) } else { Stroke::new(1.0_f32, Color32::from_gray(80)) };
+                        ui.painter().rect_stroke(rect, 0.0, border, StrokeKind::Inside);
+                        if resp.clicked() || resp.secondary_clicked() {
+                            select = Some(li);
+                        }
+                        resp.context_menu(|ui| self.layer_full_menu(ui, li, false));
+                        ui.vertical(|ui| {
+                            let renaming = self.layer_rename.as_ref().is_some_and(|r| r.id == id && !r.in_timeline && !r.in_montage);
+                            if renaming {
+                                rename_done = self.layer_rename_field(ui, 120.0);
+                            } else {
+                                let text = if visible { RichText::new(&name) } else { RichText::new(&name).weak() };
+                                let resp = ui.add(egui::Label::new(text).sense(Sense::click()).truncate());
+                                if resp.clicked() || resp.secondary_clicked() {
+                                    select = Some(li);
+                                }
+                                if resp.double_clicked() {
+                                    self.layer_rename = Some(LayerRename::new(id, &name, false));
+                                }
+                                resp.on_hover_text("Double-clic : renommer ; clic droit : tout ce qui touche au calque").context_menu(|ui| self.layer_full_menu(ui, li, false));
+                            }
+                            let kind = match kind {
+                                _ if folder => "dossier",
+                                LayerKind::Vector => "vectoriel",
+                                LayerKind::Bitmap => "bitmap",
+                            };
+                            ui.label(RichText::new(kind).small().weak());
+                        });
+                    });
+                });
+            let rect = shown.response.rect;
+            ui.ctx().data_mut(|d| d.insert_temp(grip_id, rect));
+            drag_rows.push(crate::layerheads::Row { li, top: rect.top() - list_top, h: rect.height() });
+            if let Some(grip) = grip {
+                if grip.drag_started() && self.layer_rename.is_none() {
+                    self.panel_layer_drag = Some(li);
+                }
+                if grip.clicked() || grip.secondary_clicked() {
+                    select = Some(li);
+                }
+                grip.context_menu(|ui| self.layer_full_menu(ui, li, false));
+            }
+        }
+        if let Some(from) = self.panel_layer_drag {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+            let pointer = ui.input(|i| i.pointer.interact_pos());
+            if let Some(p) = pointer {
+                let slot = drag_rows.iter().filter(|r| r.top + r.h * 0.5 < p.y - list_top).count();
+                let y = list_top + drag_rows.get(slot).map_or_else(|| drag_rows.last().map_or(0.0, |r| r.top + r.h), |r| r.top);
+                let x = ui.max_rect().x_range();
+                ui.painter().line_segment([egui::pos2(x.min, y), egui::pos2(x.max, y)], Stroke::new(2.0_f32, Color32::WHITE));
+            }
+            if ui.input(|i| !i.pointer.any_down()) {
+                self.panel_layer_drag = None;
+                if let Some(p) = pointer {
+                    let to = crate::layerheads::drop_index(&drag_rows, from, p.y - list_top);
+                    if to != from && !self.content_refuses() {
+                        self.move_layer_to(from, to);
+                    }
+                }
+            }
+        }
+        if let Some(li) = toggle {
+            self.record_step();
+            let layer = &mut self.layers_mut()[li];
+            layer.visible = !layer.visible;
+        }
+        if let Some(li) = lock {
+            self.toggle_layer_lock(li);
+        }
+        if let Some(li) = select {
+            self.select_layer(li);
+        }
+        self.finish_layer_rename(rename_done);
+
         // Clic droit dans le vide sous la liste : de nouveaux calques.
         let rest = ui.available_rect_before_wrap();
         if rest.height() > 4.0 {

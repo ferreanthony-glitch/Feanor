@@ -1072,7 +1072,13 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         marche pas ») : choisis au lasso de Ctrl, Ctrl relâché, les traits restaient choisis
         avec le pinceau revenu, mais les flèches n'agissaient qu'avec l'outil Sélection ; elles
         agissent maintenant quel que soit l'outil. Une zone bitmap choisie au lasso de Ctrl
-        disparaissait au relâché : l'outil Sélection reste alors (mon choix).
+        disparaissait au relâché : l'outil Sélection reste alors (mon choix) ;
+      - **panneau Calques** (Anthony : « la zone [des boutons] doit rester en haut. [Le verrou]
+        ne fonctionne pas. Le clic droit sur les calques n'est pas disponible ») : les commandes
+        passent sous le mode et l'opacité, seule la liste défile ; l'œil, le verrou, la vignette,
+        le nom et le clic droit marchaient plus depuis la « passe interface » (la zone de glisser
+        de chaque rang, posée par-dessus, prenait leurs clics) ; le clic droit donne le menu
+        complet du calque.
 
   Pas fait : ces gestes sur la piste « Fond ».
 - Restent (ordre de Fable) : navigation de calques à la TVPaint, fenêtre « Agrandir / rétrécir

@@ -188,7 +188,13 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - `colorui.rs` : conversions teinte / saturation / valeur testées, curseurs dégradés (depuis la
   passe couleur, les conversions sont dans `couleur.rs` : voir « Couleur »).
 - `layersui.rs` : panneau Calques ; vignettes de calque rendues sur le processeur (cadre du
-  projet, 64 points de large), en cache par dessin et par `version`.
+  projet, 64 points de large), en cache par dessin et par `version`. `layers_panel` : mode,
+  opacité et `layer_commands` en haut, puis `layer_list` dans sa propre `ScrollArea` (l'onglet
+  n'a plus de barre de défilement, `scroll_bars`). Chaque rang pose sa zone cliquable et
+  glissable (`glisser_calque`, rectangle de l'image d'écran d'avant, en mémoire egui) avant ses
+  boutons : posée après, elle prenait le dessus dans le test d'egui (un widget du dessus qui ne
+  sent que le glisser annule les clics de ceux du dessous) et rendait l'œil, le verrou et le
+  clic droit muets. Menus : `layer_full_menu(…, in_montage = false)`.
 - `brushui.rs` + `brush::stroke_preview` : l'aperçu d'un réglage est un vrai trait du moteur dans
   une petite image (taille ramenée à la hauteur), en cache par réglage et échelle d'écran.
 - Vue Vignettes (`storyboard::panels_view`) : la vignette du panneau choisi appelle `canvas_panel`

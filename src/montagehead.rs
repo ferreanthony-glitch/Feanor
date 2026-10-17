@@ -227,6 +227,12 @@ impl App {
     /// son ⋮, ou « Calque » au clic droit d'une piste) : ses réglages, avant / après ses images,
     /// son groupe, le renommer, le dupliquer, le supprimer, puis toutes les commandes des calques.
     pub(crate) fn montage_layer_menu(&mut self, ui: &mut egui::Ui, li: usize) {
+        self.layer_full_menu(ui, li, true);
+    }
+
+    /// Le même menu, ouvert ailleurs que dans le montage (panneau Calques) : `in_montage` dit où
+    /// se fait le renommage.
+    pub(crate) fn layer_full_menu(&mut self, ui: &mut egui::Ui, li: usize, in_montage: bool) {
         let Some(l) = self.layers().get(li) else {
             ui.close_menu();
             return;
@@ -293,7 +299,7 @@ impl App {
         }
         ui.menu_button("Groupe", |ui| self.group_menu(ui, li));
         ui.separator();
-        self.layer_menu_where(ui, li, false, true);
+        self.layer_menu_where(ui, li, false, in_montage);
         if ctg {
             ui.menu_button("Calque CTG", |ui| self.ctg_menu(ui, li));
         }
