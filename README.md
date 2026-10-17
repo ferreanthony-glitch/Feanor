@@ -384,7 +384,7 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   Les couleurs, la roue, les curseurs, les récentes et les nuanciers sont retenus pour la
   prochaine fois (`%APPDATA%\Pelure\reglages.toml`), pas dans le projet. Ctrl+Z ne défait pas
   les changements de nuancier.
-- **Panneaux** : chaque panneau (Outils, Couleur, Pinceaux, Réglages, Vue, Guides, Fiche,
+- **Panneaux** : chaque panneau (Outils, Couleur, Pinceaux, Réglages, Guides, Fiche, Effets,
   Calques, Montage ou Timeline) est un onglet. La bande du bas montre le montage en storyboard,
   la timeline du plan en animation (double-clic sur un plan pour y entrer). Le montage est le banc
   principal : sous chaque plan, ses calques dans son propre ordre (du haut de sa pile vers le
@@ -506,14 +506,15 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
     dessins, et « Remettre » les replace.
 
   Les réglages sont retenus pour la prochaine fois.
-- **Table lumineuse** (panneau Vue, ou menu Affichage) : les autres calques du panneau sont
+- **Table lumineuse** (barre sous le dessin, ou menu Affichage) : les autres calques du panneau sont
   estompés, le calque sur lequel on dessine reste net.
 - **Guides de perspective** (panneau Guides) : 1, 2 ou 3 points de fuite, que l'on déplace à la
   souris. G les affiche, Maj+A aligne les traits (le trait suit la fuyante, la verticale ou
   l'horizontale la plus proche de son départ), Maj+L verrouille les points, Maj+G montre des lignes
   de référence. Les guides sont enregistrés avec le projet.
 - **Vue** : zoom à la molette (ou 1 / 2), rotation (Maj + molette, ou V / C), miroir (M),
-  déplacement (Espace + glisser).
+  déplacement (Espace + glisser). La barre sous le dessin reprend ces outils : ajuster, 100 %,
+  miroir, rotation, table lumineuse et sa force.
 - **Annuler / rétablir** (Ctrl+Z / Ctrl+Maj+Z) : 200 étapes, sur tout le projet : traits, vectoriel,
   sélections, panneaux, scènes, séquences, calques, sons, textes, noms, réglages des calques et des
   pistes, guides, papier, cadence. Une saisie ou un glissé de curseur compte pour une seule étape.

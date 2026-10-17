@@ -29,7 +29,9 @@ pub enum Pane {
     /// Réglages de l'outil courant.
     #[serde(rename = "reglages")]
     ToolOptions,
-    /// Vue : ajuster, zoom, miroir, rotation, table lumineuse.
+    /// Ancien panneau Vue (ajuster, zoom, miroir, rotation, table lumineuse) : ses outils sont
+    /// sous le dessin depuis le 2026-10-17 (Anthony : « la fenêtre Vue devient inutile »). Gardé
+    /// pour lire les dispositions enregistrées ; `sanitized` l'enlève.
     #[serde(rename = "vue")]
     View,
     /// Guides de perspective.
@@ -72,13 +74,12 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 12] = [
+    pub const ALL: [Pane; 11] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
         Pane::Brushes,
         Pane::ToolOptions,
-        Pane::View,
         Pane::Guides,
         Pane::Sheet,
         Pane::Layers,
@@ -241,8 +242,9 @@ fn left_column(only: &[Pane]) -> Option<DockNode> {
     stack(&parts)
 }
 
-/// Les onglets des réglages : réglages de l'outil, vue, guides, fiche du panneau (9b).
-const SETTINGS_TABS: [Pane; 4] = [Pane::ToolOptions, Pane::View, Pane::Guides, Pane::Sheet];
+/// Les onglets des réglages : réglages de l'outil, guides, fiche du panneau (9b) ; la vue est
+/// sous le dessin depuis le 2026-10-17.
+const SETTINGS_TABS: [Pane; 3] = [Pane::ToolOptions, Pane::Guides, Pane::Sheet];
 
 /// Les onglets du bas de la colonne : couleur et pinceaux (11c).
 const COLOR_TABS: [Pane; 2] = [Pane::Color, Pane::Brushes];
@@ -427,7 +429,7 @@ impl DockLayout {
         // À droite du dessin : les calques, puis les réglages (avec la fiche) et la couleur.
         let mut settings = Vec::new();
         if l.tools {
-            settings.extend([Pane::ToolOptions, Pane::View, Pane::Guides, Pane::Color, Pane::Brushes]);
+            settings.extend([Pane::ToolOptions, Pane::Guides, Pane::Color, Pane::Brushes]);
             if l.sheet {
                 settings.push(Pane::Sheet);
             }
@@ -534,8 +536,9 @@ impl DockLayout {
     /// Chaque panneau une seule fois, le dessin toujours là (dans la fenêtre principale), parts
     /// bornées, panneaux flottants vides retirés.
     pub fn sanitized(self) -> DockLayout {
-        // L'ancienne timeline à part (versions 4 et 5) est enlevée partout.
-        let mut seen = vec![Pane::Timeline];
+        // L'ancienne timeline à part (versions 4 et 5) et l'ancien panneau Vue (ses outils sont
+        // sous le dessin) sont enlevés partout.
+        let mut seen = vec![Pane::Timeline, Pane::View];
         let mut principal = self.principal.sanitized(&mut seen);
         let mut fenetres = Vec::new();
         for mut w in self.fenetres {

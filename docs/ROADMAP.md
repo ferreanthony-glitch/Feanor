@@ -1111,6 +1111,13 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         Calques ») : à droite du dessin, les calques avec les effets dessous, puis les réglages
         (vue, guides, fiche en onglets) avec la couleur et les pinceaux dessous ; disposition 8,
         qui remplace celles de ce jour (6, 7) ; les espaces de travail enregistrés ne changent pas ;
+      - **outils de la vue sous le dessin, guides réparés** (Anthony : « ajoute les outils de la
+        fenêtre vue sous l'espace de travail. La fenêtre vue devient inutile. Les guides ne
+        fonctionnent pas, les traits ne s'alignent pas sur le guide quand l'aimant est
+        activé ») : une barre sous le dessin (ajuster, 100 %, miroir, rotation, table lumineuse
+        et sa force), sauf dans la vue 3D ; le panneau Vue disparaît des réglages et des
+        dispositions enregistrées. Aimant : le début du trait oubliait le guide juste après l'avoir
+        retenu ; vérifié en essai (trait ondulé redressé à l'horizontale) ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,

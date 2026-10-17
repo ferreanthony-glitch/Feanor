@@ -57,11 +57,11 @@ fn default_layout_has_every_panel_once() {
     let DockNode::Row { gauche: layers, droite: tools, .. } = &**side else { panic!() };
     // Les calques, les effets dessous (disposition 8, choix d'Anthony).
     assert!(matches!(&**layers, DockNode::Column { haut, bas, .. } if **haut == tabs(&[Pane::Layers]) && **bas == tabs(&[Pane::Effects])), "{layers:?}");
-    for p in [Pane::ToolOptions, Pane::View, Pane::Guides, Pane::Color] {
+    for p in [Pane::ToolOptions, Pane::Guides, Pane::Color] {
         assert!(format!("{tools:?}").contains(&format!("{p:?}")), "{p:?} à droite");
     }
     // La fiche est un onglet des réglages (9b).
-    assert!(format!("{tools:?}").contains("Tabs { panneaux: [ToolOptions, View, Guides, Sheet]"), "{tools:?}");
+    assert!(format!("{tools:?}").contains("Tabs { panneaux: [ToolOptions, Guides, Sheet]"), "{tools:?}");
 }
 
 #[test]
@@ -92,7 +92,7 @@ fn layouts_from_before_9b_put_the_sheet_with_the_settings() {
     let d = l.dock_layout();
     assert_eq!(d.version, dock::LAYOUT_VERSION);
     let s = format!("{:?}", d.principal);
-    assert!(s.contains("Tabs { panneaux: [ToolOptions, View, Guides, Sheet]"), "{s}");
+    assert!(s.contains("Tabs { panneaux: [ToolOptions, Guides, Sheet]"), "{s}");
     assert_eq!(count(&d, Pane::Sheet), 1);
 }
 
@@ -190,7 +190,7 @@ fn closing_and_reopening_a_panel_puts_it_back_with_its_group() {
     assert!(!l.contains(Pane::Sheet) && l.contains(Pane::Layers));
     l.open(Pane::Sheet);
     // Revenue avec les onglets des réglages (pas avec la couleur).
-    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [ToolOptions, View, Guides, Sheet]"), "{:?}", l.principal);
+    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [ToolOptions, Guides, Sheet]"), "{:?}", l.principal);
     // Les calques rouverts : au-dessus des effets restés à leur place.
     l.close(Pane::Layers);
     l.open(Pane::Layers);
@@ -330,17 +330,17 @@ fn a_panel_can_have_its_own_window() {
     l.close(Pane::Layers);
     assert!(!l.contains(Pane::Layers) && l.detachees.is_empty());
     // Une fenêtre à part de taille absurde sera replacée.
-    l.close(Pane::View);
-    let bad = dock::DetachedPanel { panneau: Pane::View, x: 10.0, y: 10.0, largeur: 5.0, hauteur: f32::NAN };
+    l.close(Pane::Guides);
+    let bad = dock::DetachedPanel { panneau: Pane::Guides, x: 10.0, y: 10.0, largeur: 5.0, hauteur: f32::NAN };
     l.detachees.push(bad.clone());
     let l = l.sanitized();
-    assert_eq!(count(&l, Pane::View), 1);
+    assert_eq!(count(&l, Pane::Guides), 1);
     assert_eq!((l.detachees[0].largeur, l.detachees[0].hauteur), (0.0, 0.0));
     // En double avec un onglet : l'onglet l'emporte.
     let mut twice = DockLayout::from_legacy(&Layout::default());
     twice.detachees.push(bad);
     let twice = twice.sanitized();
-    assert_eq!(count(&twice, Pane::View), 1);
+    assert_eq!(count(&twice, Pane::Guides), 1);
     assert!(twice.detachees.is_empty());
 }
 
@@ -348,8 +348,8 @@ fn a_panel_can_have_its_own_window() {
 fn panel_layouts_are_kept_in_the_settings() {
     let mut s = Settings::default();
     let mut l = DockLayout::from_legacy(&Layout::default());
-    l.close(Pane::View);
-    l.fenetres.push(FloatingPanel { panneaux: tabs(&[Pane::View]), x: 40.0, y: 50.0, largeur: 300.0, hauteur: 200.0 });
+    l.close(Pane::Guides);
+    l.fenetres.push(FloatingPanel { panneaux: tabs(&[Pane::Guides]), x: 40.0, y: 50.0, largeur: 300.0, hauteur: 200.0 });
     s.layout = Some(Layout { panneaux: Some(l.clone()), ..Layout::default() });
     workspace::save_workspace(&mut s.workspaces, "Le mien", Layout { panneaux: Some(l.clone()), ..Layout::default() });
     let text = toml::to_string(&s).unwrap();
@@ -385,4 +385,20 @@ fn the_effects_pane_comes_under_the_layers() {
     assert!(!again.contains(Pane::Effects));
     again.open(Pane::Effects);
     assert!(under(&again), "{:?}", again.principal);
+}
+#[test]
+fn the_old_view_pane_disappears_from_saved_layouts() {
+    // Anthony : « ajoute les outils de la fenêtre Vue sous l'espace de travail. La fenêtre Vue
+    // devient inutile » : ses outils sont sous le dessin ; le panneau part des dispositions.
+    let saved = DockLayout {
+        version: dock::LAYOUT_VERSION,
+        principal: DockNode::Row { part: 0.8, gauche: Box::new(tabs(&[Pane::Canvas])), droite: Box::new(tabs(&[Pane::ToolOptions, Pane::View])) },
+        fenetres: Vec::new(),
+        detachees: Vec::new(),
+    };
+    let l = saved.sanitized();
+    assert_eq!(count(&l, Pane::View), 0);
+    assert_eq!(count(&l, Pane::ToolOptions), 1);
+    assert!(!Pane::ALL.contains(&Pane::View), "plus dans la liste des panneaux");
+    assert_eq!(count(&DockLayout::from_legacy(&Layout::default()), Pane::View), 0);
 }

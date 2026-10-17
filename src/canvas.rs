@@ -19,6 +19,13 @@ impl App {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(bar).id_salt("barre_vue"));
             self.view_bar(&mut child);
             rect.min.y = bar.max.y;
+            // Dessous, les outils de la vue (à la place du panneau Vue), sauf en 3D.
+            if !(self.stage3d.on && !self.camera_view) {
+                let tools = Rect::from_min_max(egui::pos2(rect.left(), rect.bottom() - crate::viewbar::VIEW_BAR_H), rect.max);
+                let mut child = ui.new_child(egui::UiBuilder::new().max_rect(tools).id_salt("outils_vue"));
+                self.view_tools_bar(&mut child);
+                rect.max.y = tools.min.y;
+            }
             // Plateau en 3D (9e) : à la place du dessin à plat.
             if self.stage3d.on && !self.camera_view {
                 let response = ui.allocate_rect(rect, Sense::click_and_drag());
@@ -284,8 +291,12 @@ impl App {
                         Tool::Fill => self.fill_at(p),
                         Tool::Brush | Tool::Pencil | Tool::Eraser => {
                             let pressure = if pen { self.pen_pressure } else { 1.0 };
-                            self.begin_guided_stroke(stage);
+                            // Le trait d'abord (`begin_paint` clôt le précédent, ce qui oublie le
+                            // guide), puis le guide qu'il suit : sinon l'aimant ne servait jamais.
                             self.begin_paint(p, pressure, pen);
+                            if self.stroke.is_some() || self.erase_pen().is_some() {
+                                self.begin_guided_stroke(stage);
+                            }
                         }
                         Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline => self.shape_press(p, modifiers.shift),
                         Tool::Text => self.text_press(p),
