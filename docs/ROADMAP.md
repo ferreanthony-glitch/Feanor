@@ -960,6 +960,18 @@ Choix d'Anthony :
     feutres.
   - **Devinés, à comparer dans TVPaint** : le sens d'un code négatif, l'ordre des modes
     d'animation, l'échelle de la dispersion et celle du papier.
+- ✅ 10 (Krita, MyPaint). Import des réglages Krita (`.kpp`, et les paquets `.bundle` entiers) et
+  MyPaint (`.myb`), plusieurs fichiers à la fois :
+  - **Krita** : le réglage XML compressé dans le PNG ; seul le moteur « paintbrush » est repris.
+    La pointe est ronde (diamètre, rapport, fondu, espacement, angle) ou en image (`.gbr`,
+    `.png`), cherchée dans le réglage, dans le dossier `brushes`, puis dans les paquets. Les
+    capteurs pression, vitesse, angle du trait, fondu et hasard deviennent des connexions avec
+    leurs courbes.
+  - **MyPaint** : taille (rayon logarithmique et appui), opacité, dureté, pas, ellipse,
+    dispersion.
+  - Essayé sur les réglages de Krita de ce poste : 22 réglages sur 23 (le dernier est un autre
+    moteur), et les paquets par défaut (64 et 82 réglages, pointes comprises).
+  - Lecteur zip (`zipread.rs`, flate2), qui servira aussi pour Procreate.
 - ✅ 9 (première partie). « Mes brosses » :
   - l'icône disquette (grille des Réglages et panneau Pinceaux) garde le réglage courant sous un
     nom ;

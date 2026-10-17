@@ -19,7 +19,7 @@ const WIDE_HEIGHT: f32 = 38.0;
 const WIDE_STEP: f32 = 24.0;
 
 /// Bulle du bouton « Importer des pinceaux » (Réglages et panneau Pinceaux).
-const IMPORT_HINT: &str = "Brosses TVPaint (.tvpx, panneau .bin, réglage .ini) ou préréglages Toon Boom (.xml) ; elles restent pour les fois suivantes.";
+const IMPORT_HINT: &str = "Brosses TVPaint (.tvpx, .bin, .ini), Krita (.kpp), MyPaint (.myb) ou Toon Boom (.xml), plusieurs fichiers à la fois ; elles restent pour les fois suivantes.";
 
 /// Nom d'un réglage en cours de saisie (moteur de dessin, étape 9) : enregistrer le réglage
 /// courant dans « Mes brosses », ou renommer le réglage `rename`.
@@ -484,7 +484,7 @@ impl App {
         });
         if b.tip.is_some() {
             ui.horizontal(|ui| {
-                let resp = ui.add(egui::Slider::new(&mut b.tip_cells, 1..=16).text("Cases"));
+                let resp = ui.add(egui::Slider::new(&mut b.tip_cells, 1..=64).text("Cases"));
                 crate::bulles::bulle(resp, "Cases", "Nombre de dessins côte à côte dans l'image de la pointe ; chaque empreinte en prend un.", "");
                 if b.tip_cells > 1 {
                     egui::ComboBox::from_id_salt("pointe_ordre").selected_text(b.tip_order.label()).width(120.0).show_ui(ui, |ui| {
@@ -623,15 +623,82 @@ impl App {
     /// Importe un fichier de brosses : TVPaint (`.tvpx`, `.bin`, `.ini`, moteur de dessin,
     /// étape 10) ou Toon Boom (`.xml`) ; réimporter le même fichier remplace ses pinceaux.
     pub(crate) fn import_brushes(&mut self) {
-        let Some(path) = rfd::FileDialog::new()
+        let Some(paths) = rfd::FileDialog::new()
             .set_title("Brosses à importer")
-            .add_filter("Brosses TVPaint et Toon Boom", &["tvpx", "bin", "ini", "xml"])
+            .add_filter("Brosses (TVPaint, Krita, MyPaint, Toon Boom)", &["tvpx", "bin", "ini", "kpp", "bundle", "myb", "xml"])
             .add_filter("TVPaint (export de panneau, panneau, réglage)", &["tvpx", "bin", "ini"])
+            .add_filter("Krita (réglage, paquet) et MyPaint", &["kpp", "bundle", "myb"])
             .add_filter("Préréglages Toon Boom (XML)", &["xml"])
-            .pick_file()
+            .pick_files()
         else {
             return;
         };
+        // Krita et MyPaint : un réglage par fichier, souvent plusieurs à la fois.
+        let (krita, others): (Vec<_>, Vec<_>) = paths.into_iter().partition(|p| {
+            let e = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+            e == "kpp" || e == "myb" || e == "bundle"
+        });
+        if !krita.is_empty() {
+            self.import_krita(&krita);
+        }
+        for path in others {
+            self.import_brush_file(&path);
+        }
+    }
+
+    /// Importe des réglages Krita (`.kpp`) et MyPaint (`.myb`) ; un compte rendu commun.
+    fn import_krita(&mut self, paths: &[std::path::PathBuf]) {
+        let (mut presets, mut tips, mut notes, mut errors) = (0, 0, Vec::new(), Vec::new());
+        // Les pointes en image d'un réglage Krita : dans le dossier « brushes » de Krita, ou dans
+        // ses paquets (`.bundle`), à côté du dossier des réglages.
+        let mut bundles: Vec<Vec<u8>> = Vec::new();
+        if let Some(root) = paths.iter().find(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("kpp"))).and_then(|p| p.parent()).and_then(|d| d.parent()) {
+            if let Ok(rd) = std::fs::read_dir(root) {
+                bundles = rd.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("bundle"))).filter_map(|p| std::fs::read(p).ok()).collect();
+            }
+        }
+        let zips: Vec<crate::zipread::Zip> = bundles.iter().filter_map(|b| crate::zipread::Zip::open(b).ok()).collect();
+        for path in paths {
+            let source = path.file_name().map_or("import".into(), |n| n.to_string_lossy().into_owned());
+            self.brushes.presets.retain(|p| p.source != source);
+            let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+            let result = if ext == "kpp" {
+                let brushes = path.parent().and_then(|d| d.parent()).map(|d| d.join("brushes"));
+                let find = |f: &str| -> Option<Vec<u8>> { brushes.as_ref().and_then(|d| std::fs::read(d.join(f)).ok()).or_else(|| zips.iter().find_map(|z| z.find(f))) };
+                std::fs::read(path)
+                    .map_err(|e| format!("lecture impossible : {e}"))
+                    .and_then(|b| crate::kritabrush::import_kpp_with(&b, &source, &mut self.brushes, &find))
+            } else if ext == "bundle" {
+                std::fs::read(path).map_err(|e| format!("lecture impossible : {e}")).and_then(|b| crate::kritabrush::import_bundle(&b, &source, &mut self.brushes))
+            } else {
+                let name = path.file_stem().map_or("Brosse MyPaint".into(), |n| n.to_string_lossy().into_owned());
+                std::fs::read_to_string(path).map_err(|e| format!("lecture impossible : {e}")).and_then(|t| crate::kritabrush::import_myb(&t, &name, &source, &mut self.brushes))
+            };
+            match result {
+                Ok(r) => {
+                    presets += r.presets;
+                    tips += r.tips;
+                    notes.extend(r.notes);
+                }
+                Err(e) => errors.push(format!("{source} : {e}")),
+            }
+        }
+        self.brushes.share();
+        self.brush_previews = BrushPreviews::default();
+        let saved = self.save_brushes();
+        notes.extend(errors.iter().map(|e| format!("non importé — {e}")));
+        self.status = format!(
+            "{presets} réglage(s) Krita / MyPaint importé(s) ({tips} pointe(s)){}{}",
+            if notes.is_empty() { String::new() } else { format!(" ; {} remarque(s) dans la fenêtre d'import", notes.len()) },
+            saved.map_or(String::new(), |e| format!(" ; non gardés pour la prochaine fois : {e}")),
+        );
+        let title = if paths.len() == 1 { paths[0].file_name().map_or(String::new(), |n| n.to_string_lossy().into_owned()) } else { format!("{} fichiers", paths.len()) };
+        self.brush_import_notes = (!notes.is_empty()).then_some((title, notes));
+    }
+
+    /// Importe un fichier de brosses TVPaint ou Toon Boom.
+    fn import_brush_file(&mut self, path: &std::path::Path) {
+        let path = path.to_path_buf();
         let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
         if matches!(ext.as_str(), "tvpx" | "bin" | "ini") {
             self.import_tvpaint(&path, &ext);

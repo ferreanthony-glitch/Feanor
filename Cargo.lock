@@ -2383,6 +2383,7 @@ dependencies = [
  "eframe",
  "egui-phosphor",
  "egui_dock",
+ "flate2",
  "image",
  "quick-xml",
  "rfd",

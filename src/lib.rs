@@ -22,6 +22,10 @@ mod brushui;
 mod dynui;
 pub mod dip;
 pub mod tvpbrush;
+pub mod kritabrush;
+pub mod zipread;
+#[cfg(test)]
+mod kritabrush_tests;
 #[cfg(test)]
 mod tvpbrush_tests;
 #[cfg(test)]

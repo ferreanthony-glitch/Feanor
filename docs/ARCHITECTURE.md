@@ -620,6 +620,17 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     Décision : coût — courbe linéaire par morceaux plutôt que spline, simple et sûre, et TVPaint
     en a aussi. Risque : une courbe douce demande plus de points. Réversible : un mode
     d'interpolation pourra s'ajouter au format.
+- Import Krita et MyPaint (moteur de dessin, étape 10) : `kritabrush.rs`, `zipread.rs`.
+  - `kpp_text` lit le bloc PNG `preset` (zTXt, iTXt ou tEXt ; zlib par flate2), `parse_preset`
+    le XML (`crate::xml`, avec les CDATA), `sensor` les capteurs, `read_gbr` les pointes GIMP
+    (retournées si elles sont noires sur fond blanc).
+  - `import_kpp_with` cherche une pointe en image par une fonction, pour couvrir le réglage, le
+    dossier `brushes` et les paquets ; `import_bundle` passe tous les réglages d'un paquet.
+  - `myb_settings` convertit un réglage MyPaint : l'appui sur le rayon logarithmique devient
+    une courbe de la taille (exponentielle échantillonnée sur 8 points, ramenée au maximum).
+  - `zipread::Zip` : le répertoire central, méthodes 0 et 8.
+  - flate2 est maintenant une dépendance directe : la version 1.1.10 était déjà dans
+    `Cargo.lock`, par image et png, donc rien n'est téléchargé.
 - Import des brosses TVPaint (moteur de dessin, étape 10) : `dip.rs` et `tvpbrush.rs`.
   - `dip::read` lit une image `.dip` : blocs IFF `DGBL`, `DPEL` (ordre des composantes, alpha
     = 17), `DLOC`, `DBOD`, puis `DBAN` en différences, avec les sauts `0x80 k`.
