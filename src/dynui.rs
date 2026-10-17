@@ -13,6 +13,35 @@ use crate::theme;
 const CURVE_W: f32 = 132.0;
 const CURVE_H: f32 = 84.0;
 
+/// La section « Forme et dispersion » (moteur de dessin, étape 6) : rondeur et angle de la
+/// pointe, hasards de taille et d'angle, dispersion des empreintes, nombre par pas, retournements
+/// d'une pointe en image.
+pub(crate) fn shape_ui(ui: &mut egui::Ui, s: &mut BrushSettings) {
+    let used = s.roundness < 1.0 || s.angle != 0.0 || s.angle_jitter > 0.0 || s.size_jitter > 0.0 || s.scatter > 0.0 || s.scatter_along > 0.0 || s.count > 1 || s.flip_x || s.flip_y;
+    egui::CollapsingHeader::new("Forme et dispersion").id_salt("forme_brosse").default_open(used).show(ui, |ui| {
+        let resp = ui.add(egui::Slider::new(&mut s.roundness, 0.05..=1.0).text("Rondeur"));
+        bulle(resp, "Rondeur", "Pointe aplatie (petit) ou ronde (1).", "");
+        let resp = ui.add(egui::Slider::new(&mut s.angle, -180.0..=180.0).suffix("°").text("Angle"));
+        bulle(resp, "Angle", "Angle de la pointe aplatie ou en image.", "");
+        let resp = ui.add(egui::Slider::new(&mut s.angle_jitter, 0.0..=360.0).suffix("°").text("Angle au hasard"));
+        bulle(resp, "Angle au hasard", "Chaque empreinte tourne au hasard dans cet écart.", "");
+        let resp = ui.add(egui::Slider::new(&mut s.size_jitter, 0.0..=1.0).text("Taille au hasard"));
+        bulle(resp, "Taille au hasard", "Chaque empreinte grandit ou rapetisse au hasard, jusqu'à cette part de la taille.", "");
+        let resp = ui.add(egui::Slider::new(&mut s.scatter, 0.0..=4.0).text("Dispersion"));
+        bulle(resp, "Dispersion", "Chaque empreinte s'écarte au hasard en travers du trait, jusqu'à ce nombre de diamètres.", "");
+        let resp = ui.add(egui::Slider::new(&mut s.scatter_along, 0.0..=4.0).text("Dispersion le long"));
+        bulle(resp, "Dispersion le long", "Chaque empreinte s'écarte au hasard le long du trait.", "");
+        let resp = ui.add(egui::Slider::new(&mut s.count, 1..=16).text("Nombre"));
+        bulle(resp, "Nombre", "Empreintes posées à chaque pas, chacune dispersée à part.", "");
+        if s.tip.is_some() {
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut s.flip_x, "Retourner au hasard ↔").on_hover_text("La pointe en image est retournée horizontalement une empreinte sur deux, au hasard.");
+                ui.checkbox(&mut s.flip_y, "↕").on_hover_text("La pointe en image est retournée verticalement, au hasard.");
+            });
+        }
+    });
+}
+
 /// La section « Connexions » des réglages d'une brosse. `vector` : calque vectoriel, où le trait
 /// gardé ne retient que la taille.
 pub(crate) fn dynamics_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {

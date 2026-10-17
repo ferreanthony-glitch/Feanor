@@ -943,6 +943,15 @@ Choix d'Anthony :
 
   À la fin du trait, il rattrape la pointe. Pas encore : le rattrapage pendant une pause, et
   l'affichage de la corde.
+- ✅ 6. Forme et dispersion :
+  - dispersion des empreintes en travers et le long du trait (le « Jitter » de TVPaint, les
+    « Jitter Lateral / Linear » de Procreate) ;
+  - nombre d'empreintes par pas (le « Count » de Procreate) ;
+  - retournements au hasard d'une pointe en image.
+
+  Une section « Forme et dispersion » montre aussi la rondeur, l'angle et les hasards de taille et
+  d'angle, qui n'avaient pas de curseur (seuls les imports les remplissaient). Le hasard n'est
+  tiré que pour ce qui est demandé : les anciennes brosses tracent le même trait.
 - ✅ 4. Débit (« Power » de TVPaint), à côté de l'opacité, qui en reste le plafond :
   - « Accumuler » éteint (par défaut, le Pinceau rond inchangé) : le trait reste uniforme, au débit
     fois l'opacité ;

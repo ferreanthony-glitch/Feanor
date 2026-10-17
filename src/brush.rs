@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use eframe::egui::{Color32, Pos2};
+use eframe::egui::{self, Color32, Pos2};
 use serde::{Deserialize, Serialize};
 
 use crate::brushtex::{grain_factor, BrushTextures};
@@ -76,6 +76,21 @@ pub struct BrushSettings {
     /// Variation de taille au hasard, en part de la taille.
     #[serde(rename = "taille_hasard")]
     pub size_jitter: f32,
+    /// Dispersion (moteur de dessin, étape 6 ; le « Jitter » de TVPaint, les « Jitter Lateral /
+    /// Linear » de Procreate) : chaque empreinte s'écarte au hasard du trait, en travers et le
+    /// long, jusqu'à cette part du diamètre.
+    #[serde(rename = "dispersion")]
+    pub scatter: f32,
+    #[serde(rename = "dispersion_long")]
+    pub scatter_along: f32,
+    /// Empreintes posées à chaque pas (le « Count » de Procreate), chacune dispersée à part.
+    #[serde(rename = "nombre")]
+    pub count: u32,
+    /// Pointe en image retournée au hasard, horizontalement et verticalement.
+    #[serde(rename = "retourner_x")]
+    pub flip_x: bool,
+    #[serde(rename = "retourner_y")]
+    pub flip_y: bool,
     /// Connexions (moteur de dessin, étape 2) : taille, opacité, angle et rondeur qui suivent la
     /// pression, la vitesse, la direction du trait, un fondu ou le hasard, par une courbe.
     #[serde(rename = "dynamique")]
@@ -383,6 +398,11 @@ impl BrushSettings {
             angle: 0.0,
             angle_jitter: 0.0,
             size_jitter: 0.0,
+            scatter: 0.0,
+            scatter_along: 0.0,
+            count: 1,
+            flip_x: false,
+            flip_y: false,
             dynamics: Dynamics::default(),
         }
     }
@@ -767,11 +787,35 @@ impl StrokeState {
             travelled += need;
             let t = travelled / dist;
             let inp = self.inputs(p0 + (pressure - p0) * t, travelled);
-            self.dab(raster, from + (to - from) * t, inp, dirty);
+            self.scattered_dabs(raster, from + (to - from) * t, d / dist, inp, dirty);
             self.since_dab = 0.0;
         }
         self.travel += dist;
         self.last = Some((to, pressure));
+    }
+
+    /// Les empreintes d'un pas en `c` (trait dans la direction unitaire `dir`) : `count`
+    /// empreintes, chacune écartée au hasard en travers et le long du trait (rien n'est tiré si la
+    /// brosse ne disperse pas : le même trait qu'avant).
+    fn scattered_dabs(&mut self, raster: &mut Raster, c: Pos2, dir: egui::Vec2, inp: Inputs, dirty: &mut Vec<usize>) {
+        let s = self.settings;
+        let n = s.count.clamp(1, 16);
+        if n == 1 && s.scatter <= 0.0 && s.scatter_along <= 0.0 {
+            self.dab(raster, c, inp, dirty);
+            return;
+        }
+        let diameter = s.size * s.size_factor(&inp);
+        let across = egui::vec2(-dir.y, dir.x);
+        for _ in 0..n {
+            let mut p = c;
+            if s.scatter > 0.0 {
+                p += across * (s.scatter * diameter * 2.0 * self.jitter());
+            }
+            if s.scatter_along > 0.0 {
+                p += dir * (s.scatter_along * diameter * 2.0 * self.jitter());
+            }
+            self.dab(raster, p, inp, dirty);
+        }
     }
 
     fn dab(&mut self, raster: &mut Raster, c: Pos2, mut inp: Inputs, dirty: &mut Vec<usize>) {
@@ -815,6 +859,9 @@ impl StrokeState {
         let shaped = squash < 1.0 || self.textures.tip.is_some();
         let tip = self.textures.tip.clone();
         let tip = tip.as_ref().map(|t| t.level(radius * 2.0));
+        // Retournements au hasard d'une pointe en image (tirés seulement s'ils sont demandés).
+        let flip_u = tip.is_some() && s.flip_x && self.jitter() < 0.0;
+        let flip_v = tip.is_some() && s.flip_y && self.jitter() < 0.0;
         let paper = self.textures.paper.clone().filter(|_| s.grain > 0.0);
         let profile = s.profile.map(|c| profile_lut(&c));
         // Une pointe en image tournée déborde du cercle : on couvre le carré qui la contient.
@@ -836,6 +883,7 @@ impl StrokeState {
             };
             match tip {
                 Some(img) => {
+                    let (lx, ly) = (if flip_u { -lx } else { lx }, if flip_v { -ly } else { ly });
                     let u = (lx / (2.0 * radius) + 0.5) * img.width as f32;
                     let v = (ly / (2.0 * radius) + 0.5) * img.height as f32;
                     img.sample(u, v)

@@ -251,3 +251,26 @@ fn a_pulled_string_ignores_small_wobbles() {
     let (lo, hi) = ys.iter().fold((f32::MAX, f32::MIN), |(a, b), &y| (a.min(y), b.max(y)));
     assert!(hi - lo < 3.0, "le tremblement est gommé : {lo}..{hi}");
 }
+
+/// Lignes touchées par l'encre, de haut en bas.
+fn ink_rows(r: &Raster) -> (usize, usize) {
+    let rows: Vec<usize> = (0..r.height).filter(|&y| row(r, y) > 0).collect();
+    (*rows.first().unwrap_or(&0), *rows.last().unwrap_or(&0))
+}
+
+#[test]
+fn scatter_spreads_the_dabs_across_the_stroke() {
+    let s = plain(8.0);
+    let (a, b) = ink_rows(&draw(s, (40.0, 160.0), (280.0, 160.0), 24, 0.02, 1.0));
+    let mut sc = s;
+    sc.scatter = 2.0;
+    sc.count = 3;
+    let r = draw(sc, (40.0, 160.0), (280.0, 160.0), 24, 0.02, 1.0);
+    let (c, d) = ink_rows(&r);
+    assert!(b - a <= 10 && d - c >= 20, "sans dispersion {a}..{b}, avec {c}..{d}");
+    // La dispersion reste dans ±2 diamètres (plus le rayon).
+    assert!(c >= 160 - 16 - 5 && d <= 160 + 16 + 5, "{c}..{d}");
+    // Même trait, même hasard.
+    let r2 = draw(sc, (40.0, 160.0), (280.0, 160.0), 24, 0.02, 1.0);
+    assert!((0..320).all(|x| column(&r, x) == column(&r2, x)));
+}

@@ -204,15 +204,9 @@ pub fn pen_to_preset(pen: &Element, tips: &HashMap<String, u32>, papers: &HashMa
     let settings = BrushSettings {
         size: pen.num(&format!("{size_range}/maxValue")).unwrap_or(6.0).clamp(0.5, 400.0),
         opacity: opacity.clamp(0.0, 1.0),
-        power: 1.0,
-        build_up: false,
-        profile: None,
         hardness: (pen.num(&format!("{shape}/hardness")).unwrap_or(5.0) / 5.0).clamp(0.0, 1.0),
         spacing: pct(&format!("{shape}/spacing"), 8.0).clamp(0.02, 1.0),
         smoothing: pct("smooth", 30.0).clamp(0.0, 0.9),
-        smooth_kind: Default::default(),
-        smooth_px: 8.0,
-        smooth_points: 6,
         pressure_size: pressure(&size_range),
         pressure_opacity: op_pressure || flow_pressure,
         aliased: pen.flag("antialiasingEnabled") == Some(false),
@@ -225,7 +219,9 @@ pub fn pen_to_preset(pen: &Element, tips: &HashMap<String, u32>, papers: &HashMa
         angle: pen.num(&format!("{shape}/angle")).unwrap_or(0.0),
         angle_jitter: pen.num(&format!("{shape}/randomAngle")).unwrap_or(0.0).clamp(0.0, 360.0),
         size_jitter: pct(&format!("{size_range}/randomPercentage"), 0.0).clamp(0.0, 1.0),
-        dynamics: Default::default(),
+        // Ce que le fichier Toon Boom ne dit pas (débit, profil, lissage, connexions…) : comme le
+        // pinceau de base.
+        ..BrushSettings::brush()
     };
     Preset {
         name,
