@@ -1078,7 +1078,11 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         passent sous le mode et l'opacité, seule la liste défile ; l'œil, le verrou, la vignette,
         le nom et le clic droit ne marchaient plus depuis la « passe interface » (la zone de glisser
         de chaque rang, posée par-dessus, prenait leurs clics) ; le clic droit donne le menu
-        complet du calque.
+        complet du calque. Puis (« ne doit pas faire doublon avec les options déjà disponibles
+        dans la fenêtre de calques ») : dans le panneau, ce menu n'a plus afficher, opacité, mode,
+        dupliquer, supprimer, verrouiller, ni dans « Autres commandes » ce que font ses boutons ;
+        ailleurs, le sous-menu des commandes ne répète plus ce que le menu du calque a déjà
+        (`layerops::OpsFrom`).
 
   Pas fait : ces gestes sur la piste « Fond ».
 - Restent (ordre de Fable) : navigation de calques à la TVPaint, fenêtre « Agrandir / rétrécir

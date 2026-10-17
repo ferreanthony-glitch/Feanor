@@ -412,7 +412,8 @@ impl App {
     }
 
     /// `layer_menu`, ouvert depuis la colonne de gauche du montage si `in_montage` (le nom s'y
-    /// renomme).
+    /// renomme). Ni timeline ni montage : le panneau Calques, où ses boutons et son verrou font
+    /// dupliquer, verrouiller et supprimer (seulement renommer et la profondeur).
     pub(crate) fn layer_menu_where(&mut self, ui: &mut egui::Ui, li: usize, in_timeline: bool, in_montage: bool) {
         let Some(l) = self.layers().get(li) else {
             ui.close_menu();
@@ -441,6 +442,10 @@ impl App {
             );
         if self.edited(&resp) {
             self.layers_mut()[li].depth = depth;
+        }
+        // Dans le panneau Calques, ses boutons et son verrou font le reste (pas de doublon).
+        if !in_timeline && !in_montage {
+            return;
         }
         ui.separator();
         if ui.button("Dupliquer").clicked() {

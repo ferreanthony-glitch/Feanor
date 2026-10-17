@@ -230,8 +230,12 @@ impl App {
         self.layer_full_menu(ui, li, true);
     }
 
-    /// Le même menu, ouvert ailleurs que dans le montage (panneau Calques) : `in_montage` dit où
-    /// se fait le renommage.
+    /// Le même menu, depuis le montage (`in_montage`) ou le panneau Calques. Dans le panneau, rien
+    /// de ce qu'il montre déjà (Anthony, 2026-10-17 : « ne doit pas faire doublon avec les options
+    /// déjà disponibles dans la fenêtre de calques ») : ni afficher, ni opacité, ni mode de fusion
+    /// (son en-tête), ni dupliquer, supprimer, verrouiller (ses boutons et son verrou) ; le nom s'y
+    /// renomme. Le sous-menu des commandes ne répète pas non plus ce que le menu a déjà
+    /// (`OpsFrom`).
     pub(crate) fn layer_full_menu(&mut self, ui: &mut egui::Ui, li: usize, in_montage: bool) {
         let Some(l) = self.layers().get(li) else {
             ui.close_menu();
@@ -241,7 +245,7 @@ impl App {
             (l.name.clone(), l.visible, l.onion, l.keep_alpha, l.stencil, l.stencil_negative, l.position_locked, l.opacity, l.blend, l.folder);
         let (ctg, video) = (l.ctg.is_some(), l.video.is_some());
         ui.label(RichText::new(format!("Calque « {name} »")).weak().small());
-        if ui.checkbox(&mut visible.clone(), "Afficher").clicked() {
+        if in_montage && ui.checkbox(&mut visible.clone(), "Afficher").clicked() {
             self.set_layer_flag(li, |l| l.visible = !visible);
         }
         if !folder {
@@ -273,27 +277,31 @@ impl App {
                 self.set_layer_flag(li, |l| l.position_locked = !fixed);
             }
         }
-        let mut pct = opacity * 100.0;
-        let resp = ui.horizontal(|ui| {
-            ui.label("Opacité");
-            ui.add(egui::Slider::new(&mut pct, 0.0..=100.0).suffix(" %").fixed_decimals(0))
-        });
-        if self.edited(&resp.inner) {
-            self.layers_mut()[li].opacity = (pct / 100.0).clamp(0.0, 1.0);
-            self.renderer.invalidate_all();
+        if in_montage {
+            let mut pct = opacity * 100.0;
+            let resp = ui.horizontal(|ui| {
+                ui.label("Opacité");
+                ui.add(egui::Slider::new(&mut pct, 0.0..=100.0).suffix(" %").fixed_decimals(0))
+            });
+            if self.edited(&resp.inner) {
+                self.layers_mut()[li].opacity = (pct / 100.0).clamp(0.0, 1.0);
+                self.renderer.invalidate_all();
+            }
         }
         if !folder {
-            ui.menu_button(format!("Mode de fusion : {}", blend.label()), |ui| {
-                for m in BlendMode::ALL {
-                    if BlendMode::FAMILY_STARTS.contains(&m) {
-                        ui.separator();
+            if in_montage {
+                ui.menu_button(format!("Mode de fusion : {}", blend.label()), |ui| {
+                    for m in BlendMode::ALL {
+                        if BlendMode::FAMILY_STARTS.contains(&m) {
+                            ui.separator();
+                        }
+                        if ui.radio(m == blend, m.label()).on_hover_text(m.hint()).clicked() {
+                            ui.close_menu();
+                            self.set_layer_flag(li, |l| l.blend = m);
+                        }
                     }
-                    if ui.radio(m == blend, m.label()).on_hover_text(m.hint()).clicked() {
-                        ui.close_menu();
-                        self.set_layer_flag(li, |l| l.blend = m);
-                    }
-                }
-            });
+                });
+            }
             ui.separator();
             self.behaviour_items(ui, li);
         }
@@ -308,6 +316,11 @@ impl App {
         }
         self.propagation_menu(ui, li);
         ui.separator();
-        ui.menu_button("Toutes les commandes des calques", |ui| self.layer_ops_menu(ui));
+        let (label, from) = if in_montage {
+            ("Toutes les commandes des calques", crate::layerops::OpsFrom::LayerMenu)
+        } else {
+            ("Autres commandes des calques", crate::layerops::OpsFrom::LayersPanel)
+        };
+        ui.menu_button(label, |ui| self.layer_ops_menu_from(ui, from));
     }
 }

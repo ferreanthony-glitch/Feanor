@@ -145,9 +145,9 @@ Densité couleur +, Superposition, Lumière vive, Différence, Soustraction, Div
 Luminosité…), rangés par famille ; le calque se mélange à ce qui est dessous, à l'écran comme à
 l'export. Fusionner un tel calque avec celui du dessous applique le mode aux pixels. Juste
 dessous, les commandes en icônes restent en haut ; seule la liste défile. Double-clic sur le nom
-pour renommer ; le clic droit sur un calque donne tout ce qui le touche (afficher, pelure,
-pochoir, opacité, mode, avant / après ses images, groupe, renommer, profondeur, dupliquer,
-verrouiller, supprimer, puis toutes les commandes des calques). **Nouveau calque de fond** (icône des montagnes) crée, tout en
+pour renommer ; le clic droit sur un calque donne ce que le panneau ne montre pas déjà (pelure,
+préserver la transparence, pochoir, position verrouillée, avant / après ses images, groupe,
+renommer, profondeur, puis les autres commandes des calques). **Nouveau calque de fond** (icône des montagnes) crée, tout en
 bas, un calque bitmap avec un seul dessin tenu sur tout le plan (un décor).
 
 **En-tête des calques de la timeline** (13b, comme dans TVPaint). Chaque ligne montre :

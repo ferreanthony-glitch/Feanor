@@ -128,14 +128,37 @@ pub(crate) fn merge_layers(doc: &mut Document, index: usize, lis: &[usize]) -> R
     Ok(low)
 }
 
+/// D'où s'ouvrent les commandes des calques : ce qui s'y voit déjà n'est pas répété (Anthony,
+/// 2026-10-17 : le clic droit « ne doit pas faire doublon avec les options déjà disponibles dans
+/// la fenêtre de calques »).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OpsFrom {
+    /// Menu Calques de la barre, ☰ de la timeline : tout.
+    Everywhere,
+    /// Sous-menu du menu d'un calque, qui a déjà dupliquer, supprimer, verrouiller, pelure.
+    LayerMenu,
+    /// Sous-menu du clic droit dans le panneau Calques : sans non plus ce que font ses boutons
+    /// (nouveaux calques, dupliquer, supprimer, monter, descendre, copier, coller, fusionner
+    /// avec le dessous) et son verrou.
+    LayersPanel,
+}
+
 impl App {
     /// Menu des opérations sur les calques (menu Calques, et bouton ☰ de l'en-tête de la timeline).
     pub(crate) fn layer_ops_menu(&mut self, ui: &mut egui::Ui) {
+        self.layer_ops_menu_from(ui, OpsFrom::Everywhere);
+    }
+
+    /// `layer_ops_menu`, sans ce que l'endroit `from` montre déjà.
+    pub(crate) fn layer_ops_menu_from(&mut self, ui: &mut egui::Ui, from: OpsFrom) {
         let n = self.chosen_layers().len();
+        let (all, panel) = (from == OpsFrom::Everywhere, from == OpsFrom::LayersPanel);
         self.action_item(ui, "Nouveau calque…", "calque.nouveau");
-        self.action_item(ui, "Nouveau calque vectoriel", "calque.nouveau_vectoriel");
-        self.action_item(ui, "Nouveau calque bitmap", "calque.nouveau_bitmap");
-        self.action_item(ui, "Nouveau calque de fond", "calque.nouveau_fond");
+        if !panel {
+            self.action_item(ui, "Nouveau calque vectoriel", "calque.nouveau_vectoriel");
+            self.action_item(ui, "Nouveau calque bitmap", "calque.nouveau_bitmap");
+            self.action_item(ui, "Nouveau calque de fond", "calque.nouveau_fond");
+        }
         // Calque CTG (13j).
         ui.menu_button("Calque CTG", |ui| {
             self.action_item(ui, "Nouveau calque CTG (sous le calque courant)", "calque.nouveau_ctg");
@@ -147,16 +170,22 @@ impl App {
             ui.label(egui::RichText::new("Sur le calque CTG, griffonner une couleur remplit la zone des traits des sources.").weak().small());
         });
         ui.separator();
-        let many = |one: &str, all: &str| if n > 1 { format!("{all} ({n})") } else { one.to_string() };
-        self.action_item(ui, &many("Dupliquer le calque", "Dupliquer les calques choisis"), "calque.dupliquer");
-        self.action_item(ui, &many("Supprimer le calque", "Supprimer les calques choisis"), "calque.supprimer");
+        let many = |one: &str, several: &str| if n > 1 { format!("{several} ({n})") } else { one.to_string() };
+        if all {
+            self.action_item(ui, &many("Dupliquer le calque", "Dupliquer les calques choisis"), "calque.dupliquer");
+            self.action_item(ui, &many("Supprimer le calque", "Supprimer les calques choisis"), "calque.supprimer");
+        }
         self.action_item(ui, "Couper le calque", "calque.couper");
-        self.action_item(ui, "Copier le calque", "calque.copier");
-        self.action_item(ui, "Coller le calque", "calque.coller");
+        if !panel {
+            self.action_item(ui, "Copier le calque", "calque.copier");
+            self.action_item(ui, "Coller le calque", "calque.coller");
+        }
         self.action_item(ui, "Coller à la place du calque courant", "calque.coller_remplacer");
         ui.separator();
         ui.menu_button("Fusionner", |ui| {
-            self.action_item(ui, "Avec le calque du dessous", "calque.fusionner_dessous");
+            if !panel {
+                self.action_item(ui, "Avec le calque du dessous", "calque.fusionner_dessous");
+            }
             self.action_item(ui, &format!("Les calques choisis ({n})"), "calque.fusionner_choisis");
             self.action_item(ui, "Les calques visibles", "calque.fusionner_visibles");
             self.action_item(ui, "Tous les calques", "calque.fusionner_tout");
@@ -192,17 +221,21 @@ impl App {
             self.action_item(ui, "Supprimer uniquement le dossier", "dossier.supprimer_seul");
             self.action_item(ui, "Supprimer le dossier et ses calques", "calque.supprimer");
         });
-        ui.separator();
-        let lock = if self.layer().locked { "Déverrouiller le calque" } else { "Verrouiller le calque" };
-        self.action_item(ui, lock, "calque.verrouiller");
-        self.action_item(ui, "Pelure d'oignon du calque", "calque.pelure");
+        if all {
+            ui.separator();
+            let lock = if self.layer().locked { "Déverrouiller le calque" } else { "Verrouiller le calque" };
+            self.action_item(ui, lock, "calque.verrouiller");
+            self.action_item(ui, "Pelure d'oignon du calque", "calque.pelure");
+        }
         ui.separator();
         self.action_item(ui, "Calque du dessus", "calque.dessus");
         self.action_item(ui, "Calque du dessous", "calque.dessous");
         self.action_item(ui, "Premier calque", "calque.premier");
         self.action_item(ui, "Dernier calque", "calque.dernier");
-        self.action_item(ui, "Monter le calque", "calque.monter");
-        self.action_item(ui, "Descendre le calque", "calque.descendre");
+        if !panel {
+            self.action_item(ui, "Monter le calque", "calque.monter");
+            self.action_item(ui, "Descendre le calque", "calque.descendre");
+        }
     }
 
     /// Rangs des calques choisis du plan, du plus bas au plus haut ; le calque courant en est.
