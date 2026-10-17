@@ -23,17 +23,19 @@ pub(crate) struct LayerThumbs {
 }
 
 /// Renommage d'un calque en cours : le calque, le nom tapé, le champ a déjà pris le clavier, et
-/// où est le champ (en-tête de la timeline, 13b, ou panneau Calques).
+/// où est le champ (en-tête de la timeline, 13b ; colonne de gauche du montage ; sinon panneau
+/// Calques).
 pub(crate) struct LayerRename {
     pub id: u64,
     pub name: String,
     pub focused: bool,
     pub in_timeline: bool,
+    pub in_montage: bool,
 }
 
 impl LayerRename {
     pub(crate) fn new(id: u64, name: &str, in_timeline: bool) -> Self {
-        Self { id, name: name.to_string(), focused: false, in_timeline }
+        Self { id, name: name.to_string(), focused: false, in_timeline, in_montage: false }
     }
 }
 
@@ -209,7 +211,7 @@ impl App {
                         }
                         resp.context_menu(|ui| self.layer_menu(ui, li, false));
                         ui.vertical(|ui| {
-                            let renaming = self.layer_rename.as_ref().is_some_and(|r| r.id == id && !r.in_timeline);
+                            let renaming = self.layer_rename.as_ref().is_some_and(|r| r.id == id && !r.in_timeline && !r.in_montage);
                             if renaming {
                                 rename_done = self.layer_rename_field(ui, 120.0);
                             } else {
@@ -381,6 +383,12 @@ impl App {
     /// verrouiller, supprimer. `in_timeline` : ouvert depuis l'en-tête de la timeline (13b),
     /// où se fait alors le renommage.
     pub(crate) fn layer_menu(&mut self, ui: &mut egui::Ui, li: usize, in_timeline: bool) {
+        self.layer_menu_where(ui, li, in_timeline, false);
+    }
+
+    /// `layer_menu`, ouvert depuis la colonne de gauche du montage si `in_montage` (le nom s'y
+    /// renomme).
+    pub(crate) fn layer_menu_where(&mut self, ui: &mut egui::Ui, li: usize, in_timeline: bool, in_montage: bool) {
         let Some(l) = self.layers().get(li) else {
             ui.close_menu();
             return;
@@ -388,7 +396,7 @@ impl App {
         let (id, name, mut depth, locked, fixed) = (l.id, l.name.clone(), l.depth, l.locked, l.position_locked);
         if ui.button("Renommer…").clicked() {
             ui.close_menu();
-            self.layer_rename = Some(LayerRename::new(id, &name, in_timeline));
+            self.layer_rename = Some(LayerRename { in_montage, ..LayerRename::new(id, &name, in_timeline) });
         }
         let resp = ui
             .horizontal(|ui| {

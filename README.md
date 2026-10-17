@@ -33,11 +33,17 @@ ouvrir d'un double-clic).
   - Nouveau plan (P), nouvelle séquence : icônes de la barre du montage ; le menu « … » à côté
     duplique, copie, coupe ou réunit des plans. Les barres du montage et de la timeline tiennent
     sur une ligne : des icônes, dont le nom et le raccourci s'affichent au survol.
-  - F5 coupe le plan à l'image courante (la suite devient un nouveau plan, avec ses propres
+  - F6 coupe le plan à l'image courante (la suite devient un nouveau plan, avec ses propres
     copies des dessins ; une marque à cette image devient le début du nouveau plan) ; « Réunir le
     plan et le suivant » fait l'inverse (le début du suivant devient une marque d'image).
   - On réordonne les plans en les faisant glisser ; un plan reste un plan (il rejoint la séquence
     où on le pose). Le bord droit d'un plan règle sa durée.
+  - La colonne de gauche du montage (Caméra, plans, calques) s'élargit en tirant son bord droit
+    (double-clic : tout montrer, ou revenir étroite) ; sa largeur est retenue. Élargie, chaque
+    calque y montre afficher, verrouiller, pelure d'oignon, son opacité, son mode de fusion et ce
+    qu'il fait après sa dernière image (rien, boucle, va-et-vient, maintenir, en pâle dans ses
+    cases). Clic droit sur un calque (ou ⋮) : tout ce qui le touche ; double-clic sur son nom :
+    le renommer.
   - Plusieurs plans : Ctrl + clic en ajoute ou en retire un, Maj + clic choisit une suite ;
     glisser l'un d'eux déplace tout le groupe. Après un clic dans le montage (ou sur une
     vignette), Ctrl+C copie les plans choisis, Ctrl+V les colle après le plan courant (avec
@@ -724,6 +730,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `vtools.rs` | Outils des calques vectoriels |
 | `storyboard.rs` | Bande de montage, vue vignettes, fiche du panneau |
 | `montagerows.rs` | Pistes du montage : caméra, calques, fond de scène, noms des pistes |
+| `montagehead.rs` | Colonne de gauche du montage : largeur étirable, réglages des calques par rangée, menu de tout ce qui touche au calque |
 | `toolbars.rs`, `colorui.rs`, `layersui.rs`, `brushui.rs` | Barres de commandes et d'outils, panneau Couleur, panneau Calques, grille des pinceaux |
 | `couleur.rs` | Couleurs : conversions RVB, TSV, TSL, Lab, code hexadécimal, couleurs récentes, réglages retenus |
 | `roue.rs` | Roue chromatique : géométrie (anneau, carré, triangle) et maillages colorés |

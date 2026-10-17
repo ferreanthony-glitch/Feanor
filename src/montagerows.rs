@@ -18,10 +18,10 @@
 use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rect, Sense, Stroke, StrokeKind, Visuals};
 
 use crate::app::App;
-use crate::document::{Layer, LayerKind};
+use crate::document::{Behaviour, Layer, LayerKind};
 use crate::handles::{content_bounds, Handle};
 use crate::layersui::SCENE_WIDE;
-use crate::soundtrack::{HEADERS_W, LANE_GAP, TRACK_H};
+use crate::soundtrack::{LANE_GAP, TRACK_H};
 use crate::storyboard::{BANDS_H, RULER_H};
 use crate::theme;
 
@@ -110,7 +110,7 @@ impl App {
     pub(crate) fn row_headers(&mut self, ui: &mut egui::Ui, rect: Rect, rows: &Rows) {
         let painter = ui.painter_at(rect);
         let visuals = ui.visuals().clone();
-        let lane = |y: f32, h: f32| Rect::from_min_size(pos2(rect.left() + 2.0, rect.top() + y + 1.0), vec2(HEADERS_W - 8.0, h - 2.0));
+        let lane = |y: f32, h: f32| Rect::from_min_size(pos2(rect.left() + 2.0, rect.top() + y + 1.0), vec2(rect.width() - 8.0, h - 2.0));
         let label = |lane: Rect, text: &str, color: Color32| {
             painter.rect_filled(lane, 3.0, theme::ETIQUETTE);
             painter.with_clip_rect(lane.shrink(1.0)).text(
@@ -158,7 +158,9 @@ impl App {
                 (false, true) => visuals.strong_text_color(),
                 (false, false) => visuals.text_color(),
             };
-            label(r, &name, color);
+            // Le fond de la rangée (choisir, glisser, menu), puis le nom et les réglages qui tiennent
+            // dans la largeur de la colonne, au-dessus (`montagehead.rs`).
+            painter.rect_filled(r, 3.0, theme::ETIQUETTE);
             if current {
                 painter.rect_stroke(r, 3.0, Stroke::new(1.5_f32, visuals.selection.stroke.color), StrokeKind::Inside);
             }
@@ -166,11 +168,18 @@ impl App {
             if resp.drag_started() {
                 self.montage_layer_drag = Some(k);
             }
-            let resp = resp.on_hover_text("Calque du plan courant : clic, il devient courant ; glisser, il monte ou descend ; clic droit, son menu.");
+            let resp = resp.on_hover_text(
+                "Calque du plan courant : clic, il devient courant ; double-clic sur le nom, le renommer ; glisser, il monte ou descend ; clic droit, tout ce qui touche au calque. Tirer le bord droit de la colonne : ses réglages.",
+            );
             if resp.clicked() || resp.secondary_clicked() {
                 pick = Some(k);
             }
-            resp.context_menu(|ui| self.layer_menu(ui, k, false));
+            if resp.double_clicked() && resp.interact_pointer_pos().is_some_and(|p| crate::montagehead::head_layout(r).name.contains(p)) {
+                let id = self.doc.panels[self.cur_panel].layers[k].id;
+                self.layer_rename = Some(crate::layersui::LayerRename { in_montage: true, ..crate::layersui::LayerRename::new(id, &name, false) });
+            }
+            resp.context_menu(|ui| self.montage_layer_menu(ui, k));
+            self.montage_layer_head(ui, r, k, color);
         }
         if let Some(from) = self.montage_layer_drag {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
@@ -179,7 +188,7 @@ impl App {
             if let Some(p) = pointer {
                 let slot = grid.iter().filter(|g| g.top + g.h * 0.5 < p.y - base).count();
                 let y = base + grid.get(slot).map_or(grid.len() as f32 * LAYER_H, |g| g.top);
-                painter.line_segment([pos2(rect.left() + 2.0, y), pos2(rect.left() + HEADERS_W - 6.0, y)], Stroke::new(2.0_f32, Color32::WHITE));
+                painter.line_segment([pos2(rect.left() + 2.0, y), pos2(rect.right() - 6.0, y)], Stroke::new(2.0_f32, Color32::WHITE));
             }
             if ui.input(|i| !i.pointer.any_down()) {
                 self.montage_layer_drag = None;
@@ -468,6 +477,22 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, curr
             }
         }
         f = e;
+    }
+    // Avant la première image et après la dernière : ce que le calque y montre (boucle,
+    // va-et-vient, maintenir ; 13c), en pâle jusqu'au bord du plan, avec son icône.
+    if let Some((a, b)) = content_bounds(layer).filter(|_| !layer.folder && layer.video.is_none()) {
+        let (top, bottom) = (cell.top() + 2.0, cell.bottom() - 3.0 - BAR_H);
+        for (how, from, to) in [(layer.pre, cell.left(), x0 + a as f32 * ppf - 1.0), (layer.post, x0 + b as f32 * ppf, cell.right())] {
+            let band = Rect::from_min_max(pos2(from.max(cell.left()), top), pos2(to.min(cell.right()), bottom));
+            if how == Behaviour::Nothing || band.width() < 2.0 {
+                continue;
+            }
+            painter.rect_filled(band, 1.0, fill.gamma_multiply(0.3));
+            if band.width() > 14.0 {
+                let icon = crate::montagehead::behaviour_icon(how);
+                painter.with_clip_rect(band).text(pos2(band.right() - 3.0, band.top() + 1.0), Align2::RIGHT_TOP, icon, FontId::proportional(11.0), theme::TEXTE_FORT.gamma_multiply(0.8));
+            }
+        }
     }
     // La barre du calque, de son premier dessin à la fin du dernier ; ses bouts plus clairs. Elle
     // s'éclaire sous la souris et pendant le geste (comme dans la timeline).

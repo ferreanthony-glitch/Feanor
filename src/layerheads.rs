@@ -99,8 +99,32 @@ pub(crate) fn group_color(rgb: [u8; 3]) -> Color32 {
 }
 
 /// Icône sans cadre posée dans `rect`.
-fn icon_at(ui: &mut Ui, rect: Rect, icon: &str, color: Color32) -> egui::Response {
+pub(crate) fn icon_at(ui: &mut Ui, rect: Rect, icon: &str, color: Color32) -> egui::Response {
     ui.put(rect, egui::Button::new(RichText::new(icon).size(13.0).color(color)).frame(false))
+}
+
+/// Liste des modes de fusion posée dans `rect`, aussi basse que la barre d'opacité (en-têtes de
+/// la timeline et du montage) : le mode choisi, s'il a changé.
+pub(crate) fn blend_combo(ui: &mut Ui, rect: Rect, salt: egui::Id, blend: BlendMode) -> Option<BlendMode> {
+    let mut mode = blend;
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect).id_salt(salt.with("cadre")).layout(Layout::left_to_right(Align::Center)));
+    // Aussi bas que la barre d'opacité, pour tenir dans la ligne.
+    child.spacing_mut().interact_size.y = 16.0;
+    child.spacing_mut().button_padding = vec2(4.0, 0.0);
+    let resp = egui::ComboBox::from_id_salt(salt)
+        .selected_text(RichText::new(blend.label()).size(11.0))
+        .width(rect.width() - 4.0)
+        .show_ui(&mut child, |ui| {
+            for m in BlendMode::ALL {
+                if BlendMode::FAMILY_STARTS.contains(&m) {
+                    ui.separator();
+                }
+                ui.selectable_value(&mut mode, m, m.label()).on_hover_text(m.hint());
+            }
+        })
+        .response;
+    bulle(resp, "Mode de fusion", blend.hint(), "");
+    (mode != blend).then_some(mode)
 }
 
 /// Ce que la ligne d'un calque montre (copié pour ne pas garder le calque emprunté).
@@ -389,7 +413,7 @@ impl App {
             self.eye_button(ui, Rect::from_min_size(pos2(r.left() + 20.0, y2), vec2(ICON_W, 17.0)), li, h.visible, fg);
             self.lock_button(ui, Rect::from_min_size(pos2(r.left() + 20.0 + ICON_W, y2), vec2(ICON_W, 17.0)), li, h.locked, shade(h.locked));
             let bar = Rect::from_min_size(pos2(r.left() + 64.0, y2 + 2.0), vec2(108.0, 13.0));
-            self.opacity_bar(ui, &painter, bar, r, li, h.id, h.opacity, current, "Opacité du dossier", "Elle s'ajoute à celle de chacun de ses calques.");
+            self.opacity_bar(ui, &painter, bar, r, li, egui::Id::new(("opacite_calque", h.id)), h.opacity, current, "Opacité du dossier", "Elle s'ajoute à celle de chacun de ses calques.");
             let n = h.children;
             let count = format!("{n} calque{}", if n > 1 { "s" } else { "" });
             painter.text(pos2(bar.right() + 8.0, bar.center().y), Align2::LEFT_CENTER, count, FontId::proportional(11.0), off.gamma_multiply(2.0));
@@ -479,7 +503,7 @@ impl App {
         // Opacité : une barre qu'on tire.
         let y3 = r.top() + 38.0;
         let bar = Rect::from_min_size(pos2(x0, y3 + 2.0), vec2(108.0, 13.0));
-        self.opacity_bar(ui, &painter, bar, r, li, h.id, h.opacity, current, "Opacité du calque", "Cliquer ou tirer dans la barre.");
+        self.opacity_bar(ui, &painter, bar, r, li, egui::Id::new(("opacite_calque", h.id)), h.opacity, current, "Opacité du calque", "Cliquer ou tirer dans la barre.");
 
         // Mode de fusion, avec précédent / suivant.
         let modes = BlendMode::ALL;
@@ -490,25 +514,7 @@ impl App {
             mode = modes[(at + modes.len() - 1) % modes.len()];
         }
         let combo = Rect::from_min_max(pos2(prev.right(), y3), pos2(r.right() - 18.0, y3 + 17.0));
-        let mut child = ui.new_child(
-            egui::UiBuilder::new().max_rect(combo).id_salt(("fusion_calque", h.id)).layout(Layout::left_to_right(Align::Center)),
-        );
-        // Aussi bas que la barre d'opacité, pour tenir dans la ligne.
-        child.spacing_mut().interact_size.y = 16.0;
-        child.spacing_mut().button_padding = vec2(4.0, 0.0);
-        let resp = egui::ComboBox::from_id_salt(("fusion_tete", h.id))
-            .selected_text(RichText::new(h.blend.label()).size(11.0))
-            .width(combo.width() - 4.0)
-            .show_ui(&mut child, |ui| {
-                for m in BlendMode::ALL {
-                    if BlendMode::FAMILY_STARTS.contains(&m) {
-                        ui.separator();
-                    }
-                    ui.selectable_value(&mut mode, m, m.label()).on_hover_text(m.hint());
-                }
-            })
-            .response;
-        bulle(resp, "Mode de fusion", h.blend.hint(), "");
+        mode = blend_combo(ui, combo, egui::Id::new(("fusion_tete", h.id)), h.blend).unwrap_or(mode);
         let next = Rect::from_min_size(pos2(combo.right(), y3), vec2(14.0, 17.0));
         if bulle(icon_at(ui, next, ph::CARET_RIGHT, fg), "Mode suivant", "", "").clicked() {
             mode = modes[(at + 1) % modes.len()];
@@ -520,23 +526,23 @@ impl App {
         }
     }
 
-    /// Barre d'opacité du calque `li` (d'id `id`) qu'on clique ou qu'on tire ; une étape
-    /// d'annulation par geste. `clip` : la ligne (le texte n'en sort pas).
+    /// Barre d'opacité du calque `li` (identifiée par `key`) qu'on clique ou qu'on tire ; une
+    /// étape d'annulation par geste. `clip` : la ligne (le texte n'en sort pas).
     #[allow(clippy::too_many_arguments)]
-    fn opacity_bar(
+    pub(crate) fn opacity_bar(
         &mut self,
         ui: &mut Ui,
         painter: &egui::Painter,
         bar: Rect,
         clip: Rect,
         li: usize,
-        id: u64,
+        key: egui::Id,
         opacity: f32,
         current: bool,
         name: &str,
         description: &str,
     ) {
-        let mut resp = ui.interact(bar, egui::Id::new(("opacite_calque", id)), Sense::click_and_drag());
+        let mut resp = ui.interact(bar, key, Sense::click_and_drag());
         painter.rect_filled(bar, 2.0, Color32::from_gray(38));
         let fill = Rect::from_min_size(bar.min, vec2(bar.width() * opacity.clamp(0.0, 1.0), bar.height()));
         painter.rect_filled(fill, 2.0, Color32::from_gray(if current { 235 } else { 190 }));
@@ -561,14 +567,14 @@ impl App {
         }
     }
 
-    fn eye_button(&mut self, ui: &mut Ui, rect: Rect, li: usize, visible: bool, color: Color32) {
+    pub(crate) fn eye_button(&mut self, ui: &mut Ui, rect: Rect, li: usize, visible: bool, color: Color32) {
         let resp = icon_at(ui, rect, if visible { ph::EYE } else { ph::EYE_SLASH }, color);
         if bulle(resp, "Afficher / cacher", "Montrer ou cacher le calque.", "").clicked() {
             self.set_layer_flag(li, |l| l.visible = !l.visible);
         }
     }
 
-    fn lock_button(&mut self, ui: &mut Ui, rect: Rect, li: usize, locked: bool, color: Color32) {
+    pub(crate) fn lock_button(&mut self, ui: &mut Ui, rect: Rect, li: usize, locked: bool, color: Color32) {
         let resp = icon_at(ui, rect, if locked { ph::LOCK_SIMPLE } else { ph::LOCK_SIMPLE_OPEN }, color);
         if self.aide(resp, "Verrouiller / déverrouiller", "Un calque verrouillé ne peut plus être dessiné.", "calque.verrouiller").clicked() {
             self.toggle_layer_lock(li);
@@ -587,7 +593,7 @@ impl App {
     }
 
     /// Menu des groupes : ranger le calque `li` dans l'un d'eux.
-    fn group_menu(&mut self, ui: &mut Ui, li: usize) {
+    pub(crate) fn group_menu(&mut self, ui: &mut Ui, li: usize) {
         let now = self.layers().get(li).map_or(0, |l| l.group as usize);
         for (g, group) in self.doc.groups.clone().iter().enumerate() {
             let text = RichText::new(format!("{}  {}", ph::SQUARE, group.name)).color(group_color(group.color));
@@ -628,9 +634,16 @@ impl App {
         }
         // Propager la peinture sur la vidéo (façon EbSynth, `propagerui.rs`).
         self.propagation_menu(ui, li);
-        // Pré / post-comportement (13c).
-        if let Some((pre, post)) = self.layers().get(li).filter(|l| !l.folder).map(|l| (l.pre, l.post)) {
+        if self.layers().get(li).is_some_and(|l| !l.folder) {
             ui.separator();
+        }
+        self.behaviour_items(ui, li);
+    }
+
+    /// Pré / post-comportement du calque `li` (13c), et cassure et création automatiques : menus
+    /// des en-têtes de la timeline et du montage. Rien pour un dossier.
+    pub(crate) fn behaviour_items(&mut self, ui: &mut Ui, li: usize) {
+        if let Some((pre, post)) = self.layers().get(li).filter(|l| !l.folder).map(|l| (l.pre, l.post)) {
             ui.menu_button(format!("Avant la première image : {}", pre.label()), |ui| {
                 for b in Behaviour::ALL {
                     if ui.radio(b == pre, b.label()).clicked() {

@@ -1029,9 +1029,24 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         par rangée ;
       - **collage multi-calques** : des clés copiées sur plusieurs calques se collent chacune sur
         le calque de même nom du plan courant (créé s'il manque, à la même place dans la pile),
-        avec leurs écarts et leurs durées ; venues d'un seul calque, sur le calque courant.
+        avec leurs écarts et leurs durées ; venues d'un seul calque, sur le calque courant ;
+      - **colonne de gauche étirable et réglages des calques** (Anthony : « ajoute la
+        possibilité d'étirer la fenêtre caméra et calques en ajoutant […] les options de
+        calques, options de fusion, opacité, option d'animation en boucle, etc. En clic droit
+        tout ce qui a trait aux calques ») : une barre au bord droit de la colonne l'élargit
+        (largeur retenue ; double-clic : tout montrer ou revenir étroit). Selon la place, chaque
+        rangée de calque montre afficher, verrouiller, pelure d'oignon, le menu ⋮, l'opacité, le
+        mode de fusion et « après la dernière image » (rien, boucle, va-et-vient, maintenir) ;
+        la boucle se voit en pâle dans les cases du montage. Clic droit (ou ⋮) : tout ce qui
+        touche au calque, puis toutes les commandes des calques ; double-clic sur le nom : le
+        renommer sur place.
 
   Pas fait : ces gestes sur la piste « Fond ».
+  À éclaircir : « un premier dessin sur un calque vide remplit toute la timeline, pas à partir
+  de la tête de lecture » (Anthony, 2026-10-17). Pas reproduit : dans quatre essais (règle,
+  piste du calque, deuxième plan, après F6 ; storyboard et animation), le dessin part de la tête
+  de lecture ; en storyboard il tient jusqu'au dessin suivant ou la fin du plan, en animation
+  sur « en N » images. Gestes exacts à demander.
 - Restent (ordre de Fable) : navigation de calques à la TVPaint, fenêtre « Agrandir / rétrécir
   le calque », finitions.
 

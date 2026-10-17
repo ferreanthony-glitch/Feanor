@@ -46,10 +46,18 @@ pub struct Settings {
     /// Espaces de travail enregistrés.
     #[serde(default, rename = "espaces")]
     pub workspaces: Vec<Workspace>,
+    /// Largeur de la colonne de gauche du montage (caméra, plans, calques), qu'on étire pour
+    /// voir les réglages des calques (Anthony, 2026-10-17).
+    #[serde(default = "default_head_w", rename = "largeur_entetes_montage")]
+    pub montage_head_w: f32,
 }
 
 fn default_autosave() -> u32 {
     1
+}
+
+fn default_head_w() -> f32 {
+    crate::soundtrack::HEADERS_W
 }
 
 fn yes() -> bool {
@@ -70,6 +78,7 @@ impl Default for Settings {
             colors: Default::default(),
             layout: None,
             workspaces: Vec::new(),
+            montage_head_w: default_head_w(),
         }
     }
 }

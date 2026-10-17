@@ -16,7 +16,7 @@ use crate::theme;
 
 /// Hauteur d'une piste son dans la bande de montage.
 pub(crate) const TRACK_H: f32 = 42.0;
-/// Largeur de la colonne des noms de pistes.
+/// Largeur de la colonne des noms de pistes, la plus étroite (on l'étire : `montagehead.rs`).
 pub(crate) const HEADERS_W: f32 = 104.0;
 /// Espace entre les panneaux et la première piste son.
 pub(crate) const LANE_GAP: f32 = 4.0;
@@ -512,7 +512,9 @@ impl App {
     /// s'y ajoutent au-dessus).
     pub(crate) fn track_headers(&mut self, ui: &mut egui::Ui, lanes_top: f32) -> Rect {
         let n = self.doc.audio_tracks.len();
-        let (rect, _) = ui.allocate_exact_size(vec2(HEADERS_W, lanes_top + n as f32 * TRACK_H), Sense::hover());
+        // Large comme on l'a étirée (`montagehead.rs`).
+        let width = self.montage_head_w;
+        let (rect, _) = ui.allocate_exact_size(vec2(width, lanes_top + n as f32 * TRACK_H), Sense::hover());
         let visuals = ui.visuals().clone();
         let painter = ui.painter_at(rect);
         let mut toggle = None;
@@ -520,7 +522,7 @@ impl App {
             let track = &self.doc.audio_tracks[t];
             let lane = Rect::from_min_size(
                 pos2(rect.left() + 2.0, rect.top() + lanes_top + t as f32 * TRACK_H + 1.0),
-                vec2(HEADERS_W - 8.0, TRACK_H - 2.0),
+                vec2(width - 8.0, TRACK_H - 2.0),
             );
             let mute = Rect::from_min_size(pos2(lane.left() + 5.0, lane.bottom() - 18.0), vec2(20.0, 15.0));
             painter.rect_filled(lane, 3.0, theme::ETIQUETTE);

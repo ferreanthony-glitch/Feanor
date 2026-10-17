@@ -556,6 +556,8 @@ pub struct App {
     /// « Tout voir » demandé dans le montage : le zoom s'ajuste à la prochaine image d'écran (il
     /// faut la largeur de la bande).
     pub(crate) montage_fit: bool,
+    /// Largeur de la colonne de gauche du montage (`montagehead.rs`), retenue dans les réglages.
+    pub(crate) montage_head_w: f32,
     pub(crate) montage_drag: Option<MontageDrag>,
     /// Plan tel qu'il était au début du réglage de sa durée : chaque valeur intermédiaire
     /// repart de lui, rien n'est perdu avant la fin du geste.
@@ -617,6 +619,7 @@ impl App {
             eprintln!("affichage : wgpu, {} ({:?}, {:?})", info.name, info.backend, info.device_type);
         }
         let settings = crate::settings::Settings::load();
+        let montage_head_w = crate::montagehead::clamp_head_w(settings.montage_head_w);
         let mut app = Self {
             ctx: cc.egui_ctx.clone(),
             doc: Document::with_frame(1920, 1080, 24).created_now(),
@@ -801,6 +804,7 @@ impl App {
             thumbs: Thumbs::default(),
             montage_zoom: 4.0,
             montage_fit: false,
+            montage_head_w,
             montage_drag: None,
             length_origin: None,
             length_field_active: false,

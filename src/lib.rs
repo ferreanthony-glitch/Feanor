@@ -122,6 +122,9 @@ mod springtools_tests;
 mod montagerows;
 #[cfg(test)]
 mod montagerows_tests;
+mod montagehead;
+#[cfg(test)]
+mod montagehead_tests;
 pub mod moteur;
 mod newlayer;
 mod notes;

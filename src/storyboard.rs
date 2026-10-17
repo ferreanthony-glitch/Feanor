@@ -352,6 +352,7 @@ impl App {
                     ui.spacing_mut().item_spacing.x = 0.0;
                     let headers = self.track_headers(ui, rows.lanes_top());
                     self.row_headers(ui, headers, &rows);
+                    self.head_width_grip(ui, headers);
                     egui::ScrollArea::horizontal()
                         .id_salt("montage_h")
                         .auto_shrink([false, true])
@@ -1175,7 +1176,9 @@ impl App {
                         self.delete_keys(true);
                     }
                     ui.separator();
-                    self.layer_menu(ui, k, false);
+                    // Tout ce qui touche au calque, comme au clic droit sur son nom.
+                    let name = self.layers().get(k).map(|l| l.name.clone()).unwrap_or_default();
+                    ui.menu_button(format!("Calque « {name} »"), |ui| self.montage_layer_menu(ui, k));
                 }
                 MenuTarget::Camera => self.grid_menu_ui(ui, crate::handles::GridMenu::Camera),
                 MenuTarget::Sequence => {

@@ -752,6 +752,24 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     dessin (le montage ne donne plus `Exposure`, que garde la timeline) ; `LAYER_H` = 40.
     `montage_strip` : double-clic sur une piste de calque, entrée « Nouveau dessin ici » du
     menu, bouton « Nouveau calque » de la barre.
+  - Colonne de gauche étirable (2026-10-17, demande d'Anthony) : `montagehead.rs`.
+    `App::montage_head_w` (lu et écrit dans `Settings::montage_head_w`,
+    `largeur_entetes_montage`, borné par `clamp_head_w` entre `HEAD_MIN` = `HEADERS_W` et
+    `HEAD_MAX`) donne sa largeur à `track_headers` ; `row_headers` en tire celle des étiquettes.
+    `head_width_grip` (après la colonne, pour rester au-dessus) : tirer, double-clic
+    (`HEAD_ALL` / `HEAD_MIN`), enregistrement au lâcher.
+  - Rangée d'un calque : `head_layout` (pur, testé) place le nom, jusqu'à 3 icônes (afficher,
+    verrouiller, pelure), le menu ⋮, puis dessous l'opacité, le mode de fusion et le
+    post-comportement, selon la largeur. `montage_layer_head` les dessine dans une zone à part
+    (`new_child`) : les `ui.put` des icônes ne doivent pas faire avancer la mise en page, sinon la
+    bande recouvre la fin de la colonne. Il réutilise `layerheads` : `opacity_bar` (identifiée par
+    un `egui::Id`), `eye_button`, `lock_button`, `icon_at`, `blend_combo` (sorti de `layer_head`).
+  - Clic droit sur la rangée, ⋮, ou « Calque » au clic droit d'une piste : `montage_layer_menu`
+    (réglages, opacité, mode, `behaviour_items` sorti de `layer_head_menu`, groupe,
+    `layer_menu_where(…, in_montage)`, CTG, vidéo, propagation, puis `layer_ops_menu`).
+    `LayerRename::in_montage` : le renommage se fait dans la colonne (double-clic sur le nom).
+  - `paint_layer_cell` montre le pré / post-comportement (boucle, va-et-vient, maintenir) en
+    pâle avant le premier dessin et après le dernier, avec `behaviour_icon`.
 - Pistes du montage modifiables (chantier 5).
   - `montagerows.rs` : `TrackKey { name, nth }` et `layer_tracks` remplacent la rangée par rang
     (`layer_in_row`, 8 au plus). Les plans sont parcourus dans l'ordre, chacun du haut de sa
