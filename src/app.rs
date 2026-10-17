@@ -2087,8 +2087,12 @@ impl App {
         self.doc.properties.modified = crate::recovery::now_secs();
         match project::save(&self.doc, &manifest, &mut self.written) {
             Ok(report) => {
+                // Le projet est un dossier à son nom (comme un projet Storyboard Pro) : on le dit, le
+                // fichier n'est pas là où l'on pensait l'avoir mis (Anthony, 2026-10-17 : « quand
+                // j'enregistre un fichier Pelure, il n'apparaît pas dans l'explorateur »).
+                let folder = manifest.parent().and_then(|d| d.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
                 self.status = format!(
-                    "Enregistré : {} ({} dessin(s) écrit(s){}).",
+                    "Enregistré dans le dossier « {folder} » : {} ({} dessin(s) écrit(s){}). Fichier > Afficher le projet dans l'Explorateur.",
                     manifest.display(),
                     report.written,
                     if report.removed > 0 {
@@ -2514,6 +2518,10 @@ impl App {
             "fichier.enregistrer" => {
                 self.save();
             }
+            "fichier.afficher_explorateur" => match self.path.clone() {
+                Some(p) => crate::exportui::reveal_in_explorer(&p),
+                None => self.status = "Projet pas encore enregistré : Fichier > Enregistrer d'abord.".into(),
+            },
             "fichier.enregistrer_sous" => {
                 self.save_as();
             }

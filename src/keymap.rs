@@ -38,6 +38,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("fichier.ouvrir", "Ouvrir", true, false),
     act("fichier.enregistrer", "Enregistrer", true, false),
     act("fichier.enregistrer_sous", "Enregistrer sous", true, false),
+    act("fichier.afficher_explorateur", "Afficher le projet dans l'Explorateur Windows", true, false),
     act("fichier.fermer", "Fermer le projet", false, false),
     act("fichier.quitter", "Quitter", true, false),
     act("fichier.exporter_film", "Exporter le film (vidéo)", true, false),

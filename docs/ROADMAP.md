@@ -1133,6 +1133,15 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         voisins ou toute l'image, tolérance) ; vectoriel, tous les éléments de cette couleur ;
         comportement exact de Storyboard Pro à vérifier. Pour déplacer à la souris la zone choisie :
         flèches, poignées ou outil Sélection ;
+      - **enregistrement « introuvable », propagation « disparue »** (Anthony : « quand
+        j'enregistre un fichier Pelure, il n'apparaît pas dans l'explorateur Windows » ; « je ne
+        trouve plus la propagation de couleur ») : rien n'était perdu. Le projet est un dossier à
+        son nom (`Work\TEST PELURE\TEST PELURE.pelure`), la barre d'état le dit maintenant, et
+        Fichier > « Afficher le projet dans l'Explorateur » (`fichier.afficher_explorateur`) le
+        montre. La propagation n'était proposée que sur un calque bitmap ayant un autre calque à
+        suivre ; le calque par défaut est vectoriel. L'entrée est maintenant toujours là (menus du
+        calque, menu Calques), grisée avec la raison ; le fichier `propagerui.rs` (autre session)
+        n'est pas touché ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,

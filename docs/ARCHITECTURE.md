@@ -803,6 +803,10 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     peint derrière) et refait la zone. `App::paint_behind`, `fill_shapes` (retenus dans
     `Settings`, enregistrés avec la pelure quand ils changent), `close_tolerance` (15 points
     d'écran) ; actions `pinceau.derriere`, `pinceau.remplir` (sans touche).
+  - Propagation dans les menus : `montagehead::propagation_item` (montage, timeline, panneau
+    Calques, menu Calques) montre toujours l'entrée ; grisée avec la raison (vidéo, pas bitmap,
+    rien à suivre d'après `propager::guides`), sinon `propagation_menu` de `propagerui` pour le
+    calque courant ou, pour un autre calque, `select_layer` puis `calque.propager`.
   - Barre d'outils (`toolbars.rs`) : `TOOL_GROUPS` = groupes de cases ; `slot_tool` (pur, testé)
     donne l'outil montré (courant, sinon le plus récent de `App::tool_recent`, sinon le premier).
     `tool_slot` ouvre `App::tool_flyout` (groupe, case, rectangle) quand le bouton est tenu

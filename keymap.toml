@@ -48,6 +48,11 @@ touches = ["Ctrl+Maj+S"]
 source = "proposition (SAVE_AS_KEY n'a pas de touche par défaut)"
 
 [[raccourci]]
+action = "fichier.afficher_explorateur"
+touches = []
+source = "Pelure (sans touche)"
+
+[[raccourci]]
 action = "fichier.fermer"
 touches = ["Ctrl+W"]
 source = "Storyboard Pro 27 : CLOSE_KEY"

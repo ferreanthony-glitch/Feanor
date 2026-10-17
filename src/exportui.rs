@@ -315,7 +315,7 @@ fn save_dialog(base: &str, format: Format) -> Option<PathBuf> {
 }
 
 /// Ouvre l'explorateur Windows sur le fichier (sélectionné) ou le dossier.
-fn reveal_in_explorer(path: &std::path::Path) {
+pub(crate) fn reveal_in_explorer(path: &std::path::Path) {
     let mut c = std::process::Command::new("explorer.exe");
     #[cfg(windows)]
     {

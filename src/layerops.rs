@@ -181,6 +181,10 @@ impl App {
             self.action_item(ui, "Coller le calque", "calque.coller");
         }
         self.action_item(ui, "Coller à la place du calque courant", "calque.coller_remplacer");
+        if all {
+            // La propagation (façon EbSynth) du calque courant, aussi dans le menu Calques.
+            self.propagation_item(ui, self.cur_layer);
+        }
         ui.separator();
         ui.menu_button("Fusionner", |ui| {
             if !panel {

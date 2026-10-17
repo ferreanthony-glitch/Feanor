@@ -579,7 +579,10 @@ Bus/
   modeles/15.pelure3d  les modèles 3D de repère
 ```
 
-On ouvre le projet en choisissant `Bus.pelure`. Un enregistrement n'écrit que les dessins modifiés,
+Si tu enregistres « Bus.pelure » dans `Films`, le fichier est donc dans `Films\Bus\Bus.pelure`, pas
+directement dans `Films` : la barre d'état le dit après l'enregistrement, et Fichier > « Afficher le
+projet dans l'Explorateur » ouvre l'Explorateur sur lui. On ouvre le projet en choisissant
+`Bus.pelure`. Un enregistrement n'écrit que les dessins modifiés,
 et chaque fichier est écrit à côté puis renommé : un plantage pendant l'enregistrement n'abîme pas la
 version précédente. Les anciens fichiers `.pelure` (un seul fichier) s'ouvrent toujours : chaque
 ancien « plan » devient un plan de Pelure, et le premier « Enregistrer » crée le dossier.
@@ -632,8 +635,10 @@ hauteur, distance et focale se règlent aussi en chiffres. Chaque plan a son poi
 en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le projet (`modeles/`).
 
 **Propager une peinture sur une vidéo** (façon EbSynth) : on peint quelques images clés sur un
-calque posé au-dessus d'un calque vidéo, puis clic droit sur la ligne de ce calque > « Propager la
-peinture sur la vidéo… ». Les autres images suivent le mouvement de la vidéo. Détails :
+calque **bitmap** posé au-dessus d'un calque vidéo (ou d'une animation), puis clic droit sur ce
+calque (montage, timeline ou panneau Calques) ou menu Calques > « Propager la peinture… ». Sur un
+calque vectoriel (comme le calque « Dessin » d'un nouveau projet), l'entrée est grisée et sa bulle
+dit pourquoi. Les autres images suivent le mouvement de la vidéo. Détails :
 `docs/PROPAGATION.md`.
 
 **Glisser et clic droit** (passe interface) :

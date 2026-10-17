@@ -153,6 +153,7 @@ impl App {
                 self.action_item(ui, "Ouvrir un projet Storyboard Pro (.sboard)…", "fichier.importer_sboard");
                 self.action_item(ui, "Enregistrer", "fichier.enregistrer");
                 self.action_item(ui, "Enregistrer sous…", "fichier.enregistrer_sous");
+                self.action_item(ui, "Afficher le projet dans l'Explorateur", "fichier.afficher_explorateur");
                 self.action_item(ui, "Nouveau projet à partir des plans choisis", "projet.nouveau_depuis_plans");
                 self.action_item(ui, "Réglages du projet (propriétés, résolution, cadence)…", "projet.proprietes");
                 self.action_item(ui, "Raccourcis clavier…", "aide.raccourcis");

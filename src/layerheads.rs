@@ -632,8 +632,8 @@ impl App {
         if self.layers().get(li).is_some_and(|l| l.video.is_some()) {
             ui.menu_button("Calque vidéo", |ui| self.video_menu(ui, li));
         }
-        // Propager la peinture sur la vidéo (façon EbSynth, `propagerui.rs`).
-        self.propagation_menu(ui, li);
+        // Propager la peinture sur la vidéo (façon EbSynth, `propagerui.rs`), grisé s'il ne se peut pas.
+        self.propagation_item(ui, li);
         if self.layers().get(li).is_some_and(|l| !l.folder) {
             ui.separator();
         }

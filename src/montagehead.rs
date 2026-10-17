@@ -18,7 +18,7 @@ use egui_phosphor::regular as ph;
 use crate::app::App;
 use crate::blend::BlendMode;
 use crate::bulles::bulle;
-use crate::document::Behaviour;
+use crate::document::{Behaviour, LayerKind};
 use crate::layerheads::{blend_combo, icon_at};
 use crate::soundtrack::HEADERS_W;
 
@@ -237,6 +237,37 @@ impl App {
     /// renomme. Le sous-menu des commandes ne répète pas non plus ce que le menu a déjà
     /// (`OpsFrom`).
     ///
+    /// « Propager la peinture… » (`propagerui.rs`) pour le calque `li` : toujours dans le menu,
+    /// grisé avec la raison quand ce calque ne peut pas être propagé (Anthony, 2026-10-17 : « je
+    /// ne trouve plus la propagation de couleur » : l'entrée n'apparaissait que sur un calque
+    /// bitmap ayant un autre calque à suivre, et le calque par défaut est vectoriel).
+    pub(crate) fn propagation_item(&mut self, ui: &mut egui::Ui, li: usize) {
+        let blocker = match self.layers().get(li) {
+            None => Some("Aucun calque."),
+            Some(l) if l.video.is_some() => Some("C'est un calque vidéo : peins sur un calque bitmap au-dessus, puis propage ce calque-là."),
+            Some(l) if l.folder || l.kind != LayerKind::Bitmap => {
+                Some("La propagation se fait sur un calque bitmap : crée-en un (Calques > Nouveau calque bitmap) au-dessus de la vidéo ou de l'animation, et peins dessus.")
+            }
+            Some(_) if crate::propager::guides(&self.doc, self.cur_panel, li).is_empty() => Some("Rien à suivre : il faut un autre calque dans le plan (vidéo, animation…)."),
+            Some(_) => None,
+        };
+        if blocker.is_none() && li == self.cur_layer {
+            // L'entrée de `propagerui` (elle agit sur le calque courant).
+            self.propagation_menu(ui, li);
+            return;
+        }
+        ui.separator();
+        let shortcut = self.keymap.label("calque.propager");
+        let resp = ui.add_enabled(blocker.is_none(), egui::Button::new("Propager la peinture…").shortcut_text(&shortcut));
+        if let Some(why) = blocker {
+            resp.on_disabled_hover_text(why);
+        } else if resp.clicked() {
+            ui.close_menu();
+            self.select_layer(li);
+            self.run_action("calque.propager");
+        }
+    }
+
     /// Dans l'ordre (Anthony, 2026-10-17 : « en premier les fonctions simples, puis les fonctions
     /// d'état, ensuite les fonctions d'animation ») : renommer, dupliquer, verrouiller, supprimer ;
     /// afficher, pelure, transparence, pochoir, position, profondeur, groupe ; avant / après ses
@@ -335,7 +366,7 @@ impl App {
             }
             self.fx_menu_items(ui, li);
         }
-        self.propagation_menu(ui, li);
+        self.propagation_item(ui, li);
         // Le reste : sortes de calques particulières, toutes les commandes.
         ui.separator();
         if ctg {
