@@ -1082,7 +1082,11 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         dans la fenêtre de calques ») : dans le panneau, ce menu n'a plus afficher, opacité, mode,
         dupliquer, supprimer, verrouiller, ni dans « Autres commandes » ce que font ses boutons ;
         ailleurs, le sous-menu des commandes ne répète plus ce que le menu du calque a déjà
-        (`layerops::OpsFrom`) ;
+        (`layerops::OpsFrom`). Puis (« en premier les fonctions simples, puis les fonctions
+        d'état, ensuite les fonctions d'animation ») : renommer, dupliquer, verrouiller,
+        supprimer ; afficher, pelure, transparence, pochoir, position, opacité, mode, profondeur,
+        groupe ; avant / après ses images, cassure et création automatiques ; puis le reste
+        (`rename_item`, `depth_item`, `duplicate_lock_delete_items` sortis de `layer_menu_where`) ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,

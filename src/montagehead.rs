@@ -236,6 +236,11 @@ impl App {
     /// (son en-tête), ni dupliquer, supprimer, verrouiller (ses boutons et son verrou) ; le nom s'y
     /// renomme. Le sous-menu des commandes ne répète pas non plus ce que le menu a déjà
     /// (`OpsFrom`).
+    ///
+    /// Dans l'ordre (Anthony, 2026-10-17 : « en premier les fonctions simples, puis les fonctions
+    /// d'état, ensuite les fonctions d'animation ») : renommer, dupliquer, verrouiller, supprimer ;
+    /// afficher, pelure, transparence, pochoir, position, opacité, mode, profondeur, groupe ;
+    /// avant / après ses images, cassure et création automatiques ; puis le reste.
     pub(crate) fn layer_full_menu(&mut self, ui: &mut egui::Ui, li: usize, in_montage: bool) {
         let Some(l) = self.layers().get(li) else {
             ui.close_menu();
@@ -245,6 +250,11 @@ impl App {
             (l.name.clone(), l.visible, l.onion, l.keep_alpha, l.stencil, l.stencil_negative, l.position_locked, l.opacity, l.blend, l.folder);
         let (ctg, video) = (l.ctg.is_some(), l.video.is_some());
         ui.label(RichText::new(format!("Calque « {name} »")).weak().small());
+        // Fonctions simples.
+        self.rename_item(ui, li, false, in_montage);
+        if in_montage {
+            self.duplicate_lock_delete_items(ui, li);
+        }
         // Plusieurs calques choisis (Ctrl ou Maj + clic) : les fusionner (Anthony, 2026-10-17). Dans
         // le panneau Calques, c'est son bouton Fusionner.
         let chosen = self.chosen_layers().len();
@@ -252,6 +262,8 @@ impl App {
             ui.close_menu();
             self.merge_chosen_layers();
         }
+        // Fonctions d'état.
+        ui.separator();
         if in_montage && ui.checkbox(&mut visible.clone(), "Afficher").clicked() {
             self.set_layer_flag(li, |l| l.visible = !visible);
         }
@@ -309,12 +321,16 @@ impl App {
                     }
                 });
             }
+        }
+        self.depth_item(ui, li);
+        ui.menu_button("Groupe", |ui| self.group_menu(ui, li));
+        // Fonctions d'animation.
+        if !folder {
             ui.separator();
             self.behaviour_items(ui, li);
         }
-        ui.menu_button("Groupe", |ui| self.group_menu(ui, li));
+        // Le reste : sortes de calques particulières, toutes les commandes.
         ui.separator();
-        self.layer_menu_where(ui, li, false, in_montage);
         if ctg {
             ui.menu_button("Calque CTG", |ui| self.ctg_menu(ui, li));
         }
@@ -322,7 +338,6 @@ impl App {
             ui.menu_button("Calque vidéo", |ui| self.video_menu(ui, li));
         }
         self.propagation_menu(ui, li);
-        ui.separator();
         let (label, from) = if in_montage {
             ("Toutes les commandes des calques", crate::layerops::OpsFrom::LayerMenu)
         } else {

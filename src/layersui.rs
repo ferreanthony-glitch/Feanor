@@ -443,15 +443,32 @@ impl App {
     /// renomme). Ni timeline ni montage : le panneau Calques, où ses boutons et son verrou font
     /// dupliquer, verrouiller et supprimer (seulement renommer et la profondeur).
     pub(crate) fn layer_menu_where(&mut self, ui: &mut egui::Ui, li: usize, in_timeline: bool, in_montage: bool) {
-        let Some(l) = self.layers().get(li) else {
+        if self.layers().get(li).is_none() {
             ui.close_menu();
             return;
-        };
-        let (id, name, mut depth, locked, fixed) = (l.id, l.name.clone(), l.depth, l.locked, l.position_locked);
+        }
+        self.rename_item(ui, li, in_timeline, in_montage);
+        self.depth_item(ui, li);
+        // Dans le panneau Calques, ses boutons et son verrou font le reste (pas de doublon).
+        if !in_timeline && !in_montage {
+            return;
+        }
+        ui.separator();
+        self.duplicate_lock_delete_items(ui, li);
+    }
+
+    /// « Renommer… » (le champ vient dans la timeline, la colonne du montage ou le panneau).
+    pub(crate) fn rename_item(&mut self, ui: &mut egui::Ui, li: usize, in_timeline: bool, in_montage: bool) {
+        let Some((id, name)) = self.layers().get(li).map(|l| (l.id, l.name.clone())) else { return };
         if ui.button("Renommer…").clicked() {
             ui.close_menu();
             self.layer_rename = Some(LayerRename { in_montage, ..LayerRename::new(id, &name, in_timeline) });
         }
+    }
+
+    /// Profondeur du calque (multiplan).
+    pub(crate) fn depth_item(&mut self, ui: &mut egui::Ui, li: usize) {
+        let Some((mut depth, fixed)) = self.layers().get(li).map(|l| (l.depth, l.position_locked)) else { return };
         let resp = ui
             .horizontal(|ui| {
                 ui.label("Profondeur");
@@ -471,11 +488,11 @@ impl App {
         if self.edited(&resp) {
             self.layers_mut()[li].depth = depth;
         }
-        // Dans le panneau Calques, ses boutons et son verrou font le reste (pas de doublon).
-        if !in_timeline && !in_montage {
-            return;
-        }
-        ui.separator();
+    }
+
+    /// Dupliquer, verrouiller (ou déverrouiller), supprimer le calque `li`.
+    pub(crate) fn duplicate_lock_delete_items(&mut self, ui: &mut egui::Ui, li: usize) {
+        let Some(locked) = self.layers().get(li).map(|l| l.locked) else { return };
         if ui.button("Dupliquer").clicked() {
             ui.close_menu();
             self.select_layer(li);
