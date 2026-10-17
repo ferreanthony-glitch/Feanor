@@ -1281,6 +1281,7 @@ impl App {
         let stencil = self.stencil_for(cel);
         let mut stroke = StrokeState::new(cel, mode, settings, prefix, pen)
             .with_textures(textures)
+            .with_secondary(self.couleurs.prefs.back)
             .on_layer(self.layer().keep_alpha, stencil);
         let mut dirty = Vec::new();
         // L'instant de l'image d'écran : la vitesse du trait en vient (connexions).

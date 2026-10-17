@@ -468,3 +468,27 @@ fn wet_blending_keeps_coverage_when_asked() {
     let half = crate::brush::wet_blend(clear, [255.0, 0.0, 0.0], 1.0, 0.5, false);
     assert!((half.a() as i32 - 128).abs() <= 1 && (half.r() as i32 - 128).abs() <= 1);
 }
+
+#[test]
+fn a_two_color_brush_mixes_foreground_and_background() {
+    let mut s = plain(12.0);
+    s.dynamics.color = Connection { source: Source::Pressure, ..Default::default() };
+    let line = |s: BrushSettings, pressure: f32, secondary: bool| {
+        let mut raster = Raster::new(320, 320);
+        let mut st = StrokeState::new(0, StrokeMode::Paint([0, 0, 0]), s, None, true);
+        if secondary {
+            st = st.with_secondary([255, 255, 255]);
+        }
+        let mut dirty = Vec::new();
+        for k in 0..=10 {
+            st.add_point(&mut raster, pos2(100.0 + 10.0 * k as f32, 160.0), pressure, &mut dirty);
+        }
+        raster.get(150, 160)
+    };
+    // Effleuré : presque la couleur A (noir) ; appuyé : presque B (blanc).
+    let (light, heavy) = (line(s, 0.1, true), line(s, 0.95, true));
+    assert!(light.r() < 40 && heavy.r() > 215, "effleuré {light:?}, appuyé {heavy:?}");
+    // Sans couleur B (ou sans connexion) : la couleur A seule.
+    assert_eq!(line(s, 0.95, false).r(), 0);
+    assert_eq!(line(plain(12.0), 0.95, true).r(), 0);
+}

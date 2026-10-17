@@ -373,6 +373,10 @@ pub struct Dynamics {
     pub angle: Connection,
     #[serde(rename = "rondeur")]
     pub roundness: Connection,
+    /// Couleur (demande d'Anthony, 2026-10-17) : la part de la couleur d'arrière-plan (B) mêlée à
+    /// celle d'avant-plan (A) ; aucune source : la couleur A seule.
+    #[serde(rename = "couleur")]
+    pub color: Connection,
     /// Vitesse du trait (pixels du dessin par seconde) à laquelle l'entrée « vitesse » vaut 1.
     #[serde(rename = "vitesse_max")]
     pub speed_max: f32,
@@ -388,6 +392,7 @@ impl Default for Dynamics {
             opacity: Connection::default(),
             angle: Connection::default(),
             roundness: Connection::default(),
+            color: Connection::default(),
             speed_max: 2000.0,
             fade_length: 300.0,
         }
@@ -396,7 +401,7 @@ impl Default for Dynamics {
 
 impl Dynamics {
     pub fn uses(&self, s: Source) -> bool {
-        [self.size, self.opacity, self.angle, self.roundness].iter().any(|c| c.source == s)
+        [self.size, self.opacity, self.angle, self.roundness, self.color].iter().any(|c| c.source == s)
     }
 }
 
@@ -643,6 +648,8 @@ pub struct StrokeState {
     /// de traits (moteur de dessin, étape 1).
     pub raw_log: Vec<[f64; 4]>,
     next_time: f64,
+    /// Couleur d'arrière-plan (B), mêlée à la couleur du trait par la connexion « couleur ».
+    secondary: Option<[u8; 3]>,
 }
 
 impl StrokeState {
@@ -684,6 +691,25 @@ impl StrokeState {
             wet_load: 1.0,
             raw_log: Vec::new(),
             next_time: -1.0,
+            secondary: None,
+        }
+    }
+
+    /// La couleur d'arrière-plan (B), pour une brosse qui mêle deux couleurs.
+    pub fn with_secondary(mut self, rgb: [u8; 3]) -> Self {
+        self.secondary = Some(rgb);
+        self
+    }
+
+    /// La couleur posée à une empreinte : A, ou A mêlée à B par la connexion « couleur ».
+    fn paint_color(&self, a: [u8; 3], inp: &Inputs) -> [u8; 3] {
+        let c = self.settings.dynamics.color;
+        match self.secondary {
+            Some(b) if c.active() => {
+                let t = c.at(inp);
+                std::array::from_fn(|k| (a[k] as f32 + (b[k] as f32 - a[k] as f32) * t).round().clamp(0.0, 255.0) as u8)
+            }
+            _ => a,
         }
     }
 
@@ -1026,9 +1052,20 @@ impl StrokeState {
 
         // Préserver la transparence : on ne peint que sur ce qui est déjà dessiné (13b).
         let keep_alpha = self.keep_alpha && matches!(mode, StrokeMode::Paint(_));
+        // Couleur de cette empreinte (A, ou A mêlée à B).
+        let mode = match mode {
+            StrokeMode::Paint(a) => StrokeMode::Paint(self.paint_color(a, &inp)),
+            m => m,
+        };
         // Peinture humide (étape 11) : la brosse prend la couleur sous elle, la mêle à la sienne
         // et pose le mélange directement (pas de masque : repasser mêle encore).
         if matches!(mode, StrokeMode::Paint(_)) && (s.mix > 0.0 || s.charge < 1.0) {
+            // Une brosse à deux couleurs se recharge de la couleur de l'empreinte.
+            if let (StrokeMode::Paint(fresh), true) = (mode, s.dynamics.color.active()) {
+                for k in 0..3 {
+                    self.wet_rgb[k] += (fresh[k] as f32 - self.wet_rgb[k]) * self.wet_load;
+                }
+            }
             let (mut acc, mut wsum) = ([0f32; 4], 0f32);
             for py in y0..y1 {
                 for px in x0..x1 {

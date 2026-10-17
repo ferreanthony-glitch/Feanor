@@ -225,6 +225,12 @@ pub fn krita_settings(p: &KritaPreset, tip: Option<&GrayImage>, notes: &mut Vec<
             s.dynamics.angle = c;
         }
     }
+    // L'option « Mix » de Krita mêle la couleur d'avant-plan et celle d'arrière-plan.
+    if on("PressureMix") {
+        if let Some(c) = get("MixSensor").and_then(|x| sensor(x, &mut skipped)) {
+            s.dynamics.color = c;
+        }
+    }
     if on("PressureScatter") {
         s.scatter = num("ScatterValue", 0.0).clamp(0.0, 4.0);
     }

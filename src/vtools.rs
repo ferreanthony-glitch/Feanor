@@ -198,7 +198,7 @@ impl App {
         // Pinceau texturé : l'aperçu prend ses textures, le trait gardera le réglage (7b).
         let brush = self.brushes.for_vector(&settings).map(Box::new);
         let textures = if brush.is_some() { self.brushes.textures(&settings) } else { Default::default() };
-        let mut stroke = StrokeState::new(cel, StrokeMode::Paint(self.color), settings, None, pen).with_textures(textures);
+        let mut stroke = StrokeState::new(cel, StrokeMode::Paint(self.color), settings, None, pen).with_textures(textures).with_secondary(self.couleurs.prefs.back);
         let mut dirty = Vec::new();
         let time = self.ctx.input(|i| i.time);
         if let Some(c) = self.doc.cels.get_mut(&cel) {

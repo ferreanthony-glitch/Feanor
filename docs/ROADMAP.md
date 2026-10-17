@@ -960,6 +960,13 @@ Choix d'Anthony :
     feutres.
   - **Devinés, à comparer dans TVPaint** : le sens d'un code négatif, l'ordre des modes
     d'animation, l'échelle de la dispersion et celle du papier.
+- ✅ Deux couleurs (choix d'Anthony le 2026-10-17 : la couleur d'arrière-plan sert au mélange de
+  deux couleurs) : la connexion « Couleur A→B » mêle la couleur d'arrière-plan à celle
+  d'avant-plan, selon l'appui, la vitesse, la direction, le fondu ou le hasard. Elle vaut aussi
+  pour la peinture humide (la brosse se recharge de la couleur mêlée). L'option « Mix » des
+  réglages Krita s'y importe. Sur un calque vectoriel, le trait gardé a une seule couleur. Pas
+  de touche pour intervertir les couleurs, et les nuanciers restent hors de Ctrl+Z (réponses
+  d'Anthony).
 - ✅ 1. Banc de traits : Aide > « Enregistrer mes traits » garde chaque trait tel que le stylet le
   donne (positions, appui, instants) avec son réglage, dans
   `%APPDATA%\Pelure\traits\traits.jsonl`. Un essai ignoré (`PELURE_TRAITS`) les rejoue dans le

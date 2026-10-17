@@ -429,6 +429,8 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
 - **Débit** (réglages du pinceau) : la peinture déposée à chaque empreinte (le « Power » de
   TVPaint) ; l'opacité en reste le plafond. Avec « Accumuler », repasser dans le même trait fonce,
   comme un crayon ou une craie ; sans, le trait reste uniforme.
+- **Deux couleurs** : dans les Connexions, « Couleur A→B » mêle la couleur d'arrière-plan (B) à
+  celle d'avant-plan (A) selon l'appui, la vitesse, le fondu, la direction ou le hasard.
 - **Connexions** (bas des réglages du pinceau, du crayon et de la gomme) : la taille, l'opacité,
   l'angle et la rondeur de la pointe peuvent suivre l'appui, la vitesse du trait, sa direction,
   un fondu le long du trait ou le hasard.

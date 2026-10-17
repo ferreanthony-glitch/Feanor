@@ -66,7 +66,7 @@ pub(crate) fn wet_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
 /// La section « Connexions » des réglages d'une brosse. `vector` : calque vectoriel, où le trait
 /// gardé ne retient que la taille.
 pub(crate) fn dynamics_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
-    let n = [s.dynamics.size, s.dynamics.opacity, s.dynamics.angle, s.dynamics.roundness].iter().filter(|c| c.active()).count();
+    let n = [s.dynamics.size, s.dynamics.opacity, s.dynamics.angle, s.dynamics.roundness, s.dynamics.color].iter().filter(|c| c.active()).count();
     let title = if n > 0 { format!("Connexions ({n})") } else { "Connexions".to_string() };
     egui::CollapsingHeader::new(title).id_salt("connexions_brosse").default_open(n > 0).show(ui, |ui| {
         ui.label(
@@ -80,6 +80,10 @@ pub(crate) fn dynamics_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool
         connection_row(ui, "Opacité", "opacite", &mut s.dynamics.opacity, legacy_opacity.then_some(s.min_opacity));
         connection_row(ui, "Angle", "angle", &mut s.dynamics.angle, None);
         connection_row(ui, "Rondeur", "rondeur", &mut s.dynamics.roundness, None);
+        connection_row(ui, "Couleur A→B", "couleur", &mut s.dynamics.color, None);
+        if s.dynamics.color.active() {
+            note(ui, "Couleur A→B : la couleur d'arrière-plan (B) se mêle à celle d'avant-plan (A) selon la source.");
+        }
         if s.dynamics.uses(Source::Speed) {
             let resp = ui.add(egui::Slider::new(&mut s.dynamics.speed_max, 100.0..=8000.0).logarithmic(true).suffix(" px/s").text("Vitesse max"));
             bulle(resp, "Vitesse max", "Vitesse du trait à laquelle la source « Vitesse » est au plus haut.", "");
