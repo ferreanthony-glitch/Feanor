@@ -285,6 +285,8 @@ impl App {
             });
             ui.menu_button("Aide", |ui| {
                 self.action_item(ui, "Raccourcis clavier…", "aide.raccourcis");
+                let rec = if self.record_strokes.is_some() { "Arrêter d'enregistrer mes traits" } else { "Enregistrer mes traits (banc d'essai du moteur)" };
+                self.action_item(ui, rec, "pinceau.enregistrer_traits");
                 if menu_item(ui, "Modifier le fichier de raccourcis à la main…", "") {
                     self.edit_keymap();
                 }

@@ -397,6 +397,9 @@ pub struct App {
     pub(crate) preset_edit: Option<crate::brushui::PresetEdit>,
     /// Remarques du dernier import de brosses : le fichier, ce qui n'a pas été repris.
     pub(crate) brush_import_notes: Option<(String, Vec<String>)>,
+    /// Banc de traits (moteur de dessin, étape 1) : chaque trait est gardé, tel que reçu ; le
+    /// nombre de traits enregistrés depuis l'allumage.
+    pub(crate) record_strokes: Option<usize>,
     /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
     pub(crate) ref3d: crate::ref3dtool::Ref3dState,
     /// Vue à travers la caméra du plan (sinon : la feuille, avec le cadre tracé).
@@ -668,6 +671,7 @@ impl App {
             brush_previews: Default::default(),
             preset_edit: None,
             brush_import_notes: None,
+            record_strokes: None,
             ref3d: Default::default(),
             camera_view: false,
             stage_view: None,
@@ -1334,6 +1338,20 @@ impl App {
     /// Termine tout geste en cours : trait, gomme vectorielle, transformation, forme.
     pub(crate) fn end_stroke(&mut self) {
         if let Some(mut stroke) = self.stroke.take() {
+            // Banc de traits : le trait tel que reçu, avec son réglage.
+            if let Some(n) = self.record_strokes.as_mut() {
+                if stroke.raw_log.len() > 1 {
+                    if let Some(dir) = crate::banc::dir() {
+                        match crate::banc::append(&dir, &crate::banc::Recorded::of(&stroke)) {
+                            Ok(path) => {
+                                *n += 1;
+                                self.status = format!("Banc de traits : {} trait(s) enregistré(s) dans {}.", n, path.display());
+                            }
+                            Err(e) => self.status = format!("Banc de traits : {e}"),
+                        }
+                    }
+                }
+            }
             let cel = stroke.cel;
             let mut dirty = Vec::new();
             let edit = match self.doc.cels.get_mut(&cel) {
@@ -2727,6 +2745,18 @@ impl App {
             "fichier.importer_video" => self.import_video(),
             "fichier.importer_sboard" => self.open_sb_window(),
             "fichier.exporter_sboard" => self.open_sb_export(),
+            "pinceau.enregistrer_traits" => {
+                self.record_strokes = match self.record_strokes {
+                    Some(_) => {
+                        self.status = "Banc de traits arrêté.".into();
+                        None
+                    }
+                    None => {
+                        self.status = "Banc de traits : chaque trait est maintenant enregistré, tel que le stylet le donne (Aide > Enregistrer mes traits pour arrêter).".into();
+                        Some(0)
+                    }
+                };
+            }
             "fichier.importer_sequence" => self.import_sequence(),
             "calque.video_en_animation" => self.video_to_animation(),
             "calque.propager" => self.open_propagation(),

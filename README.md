@@ -421,6 +421,8 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
 - **Profil de la pointe** (bouton courbe à côté de la Dureté) : la couverture de la pointe du
   centre au bord, en courbe, à la place de la dureté. Il part de la dureté réglée ; préréglages
   Dur, Doux, Diffus.
+- **Banc de traits** (Aide > Enregistrer mes traits) : chaque trait est gardé tel que le stylet
+  le donne, avec son réglage, pour régler le moteur sur tes vrais gestes. Le même menu l'arrête.
 - **Peinture humide** (réglages du pinceau) : « Mélange » fait prendre à la brosse la couleur déjà
   posée, la mêler à la sienne et l'entraîner. « Charge » épuise la peinture le long du trait,
   après quoi la brosse ne fait plus qu'étaler. Calque bitmap.
@@ -660,6 +662,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `abr.rs` | Import des brosses Photoshop (`.abr`) |
 | `kritabrush.rs`, `zipread.rs` | Import des réglages Krita (`.kpp`, `.bundle`) et MyPaint (`.myb`) ; lecture des archives zip |
 | `dip.rs`, `tvpbrush.rs` | Images `.dip` de TVPaint ; import de ses brosses (`.tvpx`, `.bin`, `.ini`) |
+| `banc.rs` | Banc de traits : enregistrer les traits tels que reçus, les rejouer dans le moteur |
 | `dynui.rs` | Connexions d'un pinceau : sources, courbes de réponse (moteur de dessin, étape 2) |
 | `sbexport.rs`, `sbexportui.rs` | Export vers Storyboard Pro : images des calques, sons, script de construction ; sa fenêtre (14b-1) |
 | `stretch.rs` | Vitesse d'un son : rééchantillonnage, tempo sans changer la hauteur (WSOLA) (14a) |

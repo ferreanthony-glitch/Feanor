@@ -639,6 +639,10 @@ pub struct StrokeState {
     /// reste de sa charge (0 à 1).
     wet_rgb: [f32; 3],
     wet_load: f32,
+    /// Les points reçus tels quels (x, y, appui, instant ; −1 : instant inconnu), pour le banc
+    /// de traits (moteur de dessin, étape 1).
+    pub raw_log: Vec<[f64; 4]>,
+    next_time: f64,
 }
 
 impl StrokeState {
@@ -678,7 +682,18 @@ impl StrokeState {
                 StrokeMode::Erase => [0.0; 3],
             },
             wet_load: 1.0,
+            raw_log: Vec::new(),
+            next_time: -1.0,
         }
+    }
+
+    /// Le réglage et le mode du trait (banc de traits).
+    pub fn settings(&self) -> BrushSettings {
+        self.settings
+    }
+
+    pub fn mode(&self) -> StrokeMode {
+        self.mode
     }
 
     /// Le point posé pour une nouvelle position `pos` de la pointe, selon le type de lissage.
@@ -801,10 +816,12 @@ impl StrokeState {
             Some(_) => {}
             None => self.clock = Some(time),
         }
+        self.next_time = time;
         self.add_point(raster, pos, pressure, dirty);
     }
 
     pub fn add_point(&mut self, raster: &mut Raster, pos: Pos2, pressure: f32, dirty: &mut Vec<usize>) {
+        self.raw_log.push([pos.x as f64, pos.y as f64, pressure as f64, std::mem::replace(&mut self.next_time, -1.0)]);
         self.raw = Some((pos, pressure));
         let target = self.smooth(pos);
         self.smoothed = Some(target);

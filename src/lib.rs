@@ -20,6 +20,9 @@ mod brushtex;
 mod brushtex_tests;
 mod brushui;
 mod dynui;
+pub mod banc;
+#[cfg(test)]
+mod banc_tests;
 pub mod dip;
 pub mod tvpbrush;
 pub mod kritabrush;

@@ -960,6 +960,12 @@ Choix d'Anthony :
     feutres.
   - **Devinés, à comparer dans TVPaint** : le sens d'un code négatif, l'ordre des modes
     d'animation, l'échelle de la dispersion et celle du papier.
+- ✅ 1. Banc de traits : Aide > « Enregistrer mes traits » garde chaque trait tel que le stylet le
+  donne (positions, appui, instants) avec son réglage, dans
+  `%APPDATA%\Pelure\traits\traits.jsonl`. Un essai ignoré (`PELURE_TRAITS`) les rejoue dans le
+  moteur et les écrit en images : de quoi régler la sensation sur les vrais gestes d'Anthony et
+  comparer avec TVPaint. À faire par Anthony : quelques traits types (hachures, boucle rapide,
+  appui progressif, encrage), avec les mêmes gestes dans TVPaint.
 - ✅ 11. Peinture humide, première version, avec un modèle de Pelure (la formule de TVPaint n'est
   pas publiée) :
   - **Mélange** : à chaque empreinte, la brosse prend la couleur moyenne sous elle, la mêle à la

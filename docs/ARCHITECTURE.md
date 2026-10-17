@@ -620,6 +620,12 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     Décision : coût — courbe linéaire par morceaux plutôt que spline, simple et sûre, et TVPaint
     en a aussi. Risque : une courbe douce demande plus de points. Réversible : un mode
     d'interpolation pourra s'ajouter au format.
+- Banc de traits (moteur de dessin, étape 1) : `banc.rs`.
+  - `StrokeState::raw_log` garde les points reçus (x, y, appui, instant ; −1 : instant inconnu).
+  - `end_stroke` ajoute le trait au fichier quand le banc est allumé (`App::record_strokes`,
+    commande `pinceau.enregistrer_traits`).
+  - `replay` rejoue un trait sur une feuille à sa mesure, avec ses instants : la vitesse est la
+    même.
 - Peinture humide (moteur de dessin, étape 11) : `BrushSettings::mix` (« melange ») et `charge`.
   - Avec du mélange, ou une charge incomplète, l'empreinte prend un autre chemin :
     1. la moyenne pondérée des pixels courants sous l'empreinte ;
