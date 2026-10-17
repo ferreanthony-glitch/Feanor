@@ -375,6 +375,9 @@ pub struct App {
     pub(crate) key_anchor: Option<crate::montagekeys::KeyRef>,
     /// Plusieurs clés choisies glissées à la fois dans le montage.
     pub(crate) keys_drag: Option<crate::montagekeys::KeysDrag>,
+    /// Outil pris par une touche encore tenue, et lasso tant que Ctrl est tenu (`springtools`).
+    pub(crate) tool_spring: Option<crate::springtools::ToolSpring>,
+    pub(crate) ctrl_lasso: Option<crate::springtools::CtrlLasso>,
     /// Choix de clés au rectangle en cours dans le montage.
     pub(crate) key_rect: Option<crate::montagekeys::KeyRect>,
     /// Une clé seule prise dans le montage (`Handle::Key`) : de combien d'images elle est glissée.
@@ -688,6 +691,8 @@ impl App {
             keys_drag: None,
             key_drag_delta: 0,
             key_rect: None,
+            tool_spring: None,
+            ctrl_lasso: None,
             key_focus: false,
             hole: Default::default(),
             images_focus: false,
@@ -2442,7 +2447,13 @@ impl App {
             if repeat && !keymap::action_info(&action).is_some_and(|a| a.repeat) {
                 continue;
             }
+            // La touche d'un outil : tenue, elle le prend le temps de la tenir (`springtools`).
+            let before = self.tool;
             self.run_action(&action);
+            if !repeat && action.starts_with("outil.") {
+                let now = ctx.input(|i| i.time);
+                self.spring_after(key, before, now);
+            }
         }
     }
 
@@ -2493,6 +2504,11 @@ impl App {
             "edition.coller" if self.key_focus && self.key_clipboard.is_some() => self.paste_keys(),
             "edition.supprimer" if self.key_focus => self.delete_keys(false),
             "dessin.dupliquer" if self.key_focus => self.duplicate_keys(),
+            // Une clé à l'image courante du calque courant (montage, timeline, dessin en animation).
+            "dessin.nouvelle_cle" => {
+                let (pi, li, f) = (self.cur_panel, self.cur_layer, self.cur_frame);
+                self.montage_new_key(pi, li, f);
+            }
             "edition.tout_selectionner" if self.key_focus => self.choose_all_keys(),
             // Après un clic dans le montage (ou la planche), l'édition vise les panneaux choisis (12e).
             "edition.couper" if self.panels_have_focus() => self.cut_panels(),
@@ -3110,6 +3126,7 @@ impl eframe::App for App {
         self.end_length_gesture_if_idle();
         self.end_gesture_if_idle();
         self.handle_close_request(ctx);
+        self.update_springs(ctx);
         self.handle_shortcuts(ctx);
         self.sync_scene_layers();
         if !self.modal_open() {

@@ -33,6 +33,8 @@ impl App {
             self.panel_focus = false;
             self.images_focus = false;
             self.key_focus = false;
+            // L'outil pris par une touche tenue sert : au relâché, l'outil d'avant revient.
+            self.spring_used();
         }
         self.canvas_rect = rect;
         let size = self.canvas_size();

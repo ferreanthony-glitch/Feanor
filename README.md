@@ -367,7 +367,10 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   clés à la fois (Ctrl+A : toutes celles du calque) : ces commandes les visent toutes, et une
   clé choisie prise par son milieu les emmène toutes (chacune garde sa durée) ; un repère montre
   où elles se poseront. Un glisser dans le vide des pistes choisit les clés au rectangle. Zoom
-  de la bande : la petite barre en bas, Ctrl + molette, ou Alt+1 / Alt+2 / Alt+3 (tout voir). Les
+  de la bande : la petite barre en bas, Ctrl + molette, ou Alt+1 / Alt+2 / Alt+3 (tout voir). F5
+  pose une clé (nouveau dessin) à l'image courante en animation et après un clic sur une piste
+  (en storyboard, F5 coupe le plan). Outils : la touche d'un outil tenue le prend le temps de la
+  tenir ; Ctrl tenu sur le dessin donne le lasso. Les
   calques de toute la scène (fond) ont leur piste, teintée, avec les mêmes gestes. La timeline sert à entrer dans le détail. Copier, Coller, Suppr et les raccourcis
   visent la bande quand on y a cliqué en dernier (un trait de couleur en haut, et la barre
   d'état le dit) ; un clic dans le dessin, Tab ou la vue Vignettes rendent la main au dessin. Glisse un onglet : des boutons apparaissent au milieu du panneau

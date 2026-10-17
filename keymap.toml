@@ -701,6 +701,15 @@ etat = "non implémenté"
 action = "panneau.couper"
 touches = ["F5"]
 source = "perso : SPLIT_PANEL_KEY"
+# Depuis le 2026-10-17, F5 coupe le plan en storyboard ; en animation (et après un clic sur la
+# piste d'un calque du montage), F5 pose une clé (Anthony : « pour moi F5 »).
+contexte = "storyboard"
+
+[[raccourci]]
+action = "dessin.nouvelle_cle"
+touches = ["F5"]
+source = "perso (Anthony, 2026-10-17)"
+contexte = "animation"
 
 [[raccourci]]
 action = "panneau.fusionner_suivant"

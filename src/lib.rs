@@ -116,6 +116,9 @@ mod keymap_tests;
 mod ops_tests;
 mod model3d;
 mod montagekeys;
+mod springtools;
+#[cfg(test)]
+mod springtools_tests;
 mod montagerows;
 #[cfg(test)]
 mod montagerows_tests;

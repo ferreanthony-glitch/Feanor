@@ -163,6 +163,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("marque.basculer", "Marque d'image à l'image courante (ajouter / retirer)", true, false),
     act("dessin.nouveau", "Nouveau dessin après l'exposition", true, false),
     act("dessin.dupliquer", "Dupliquer le dessin", true, false),
+    act("dessin.nouvelle_cle", "Nouveau dessin clé à l'image courante (coupe l'exposition)", true, false),
     act("dessin.supprimer", "Retirer le dessin de la timeline", true, false),
     act("exposition.allonger", "Tenir le dessin une image de plus", true, true),
     act("exposition.raccourcir", "Tenir le dessin une image de moins", true, true),

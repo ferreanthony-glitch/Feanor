@@ -5,9 +5,11 @@ use crate::brush::BrushSettings;
 use crate::document::{Document, LayerKind};
 
 /// Gestes à la souris et au stylet (hors fichier de raccourcis).
-pub(crate) const MOUSE_GESTURES: [(&str, &str); 19] = [
+pub(crate) const MOUSE_GESTURES: [(&str, &str); 21] = [
     ("Clic droit sur une commande", "lui assigner un raccourci"),
     ("Alt + clic", "prélever une couleur"),
+    ("Ctrl tenu sur le dessin", "le lasso le temps de le tenir (sauf avec le tampon de duplication)"),
+    ("Touche d'un outil tenue", "l'outil le temps de la tenir, puis retour au précédent (brève : il reste)"),
     ("Molette", "zoom autour du curseur"),
     ("Maj + molette", "rotation de la vue"),
     ("Bouton du milieu + glisser", "déplacer la vue"),

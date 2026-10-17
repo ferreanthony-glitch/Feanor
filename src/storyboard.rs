@@ -1133,7 +1133,11 @@ impl App {
                 MenuTarget::Lane { track, clip, frame } => self.lane_menu(ui, track, clip, frame),
                 MenuTarget::Layer(k) => {
                     // La piste d'un calque : les clés à l'image du clic, puis le menu du calque.
-                    if ui.button("Nouveau dessin ici (clé)").on_hover_text("Ou double-clic sur la piste.").clicked() {
+                    if ui
+                        .add(egui::Button::new("Nouveau dessin ici (clé)").shortcut_text(self.keymap.label("dessin.nouvelle_cle")))
+                        .on_hover_text("Ou double-clic sur la piste.")
+                        .clicked()
+                    {
                         ui.close_menu();
                         let (pi, f) = (self.cur_panel, self.cur_frame);
                         self.montage_new_key(pi, k, f);

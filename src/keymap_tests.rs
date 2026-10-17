@@ -308,3 +308,11 @@ fn the_strip_zooms_with_alt_and_the_zoom_keys() {
     // Sans Alt, 1 et 2 zooment toujours le dessin.
     assert_eq!(press(&map, Key::Num1, Key::Num1, NONE, Mode::Storyboard).as_deref(), Some("vue.zoom_arriere"));
 }
+
+#[test]
+fn f5_cuts_the_plan_in_storyboard_and_lays_a_key_in_animation() {
+    let map = default_map();
+    assert_eq!(press(&map, Key::F5, Key::F5, NONE, Mode::Storyboard).as_deref(), Some("panneau.couper"));
+    // En animation, dans la timeline, et après un clic sur la piste d'un calque du montage.
+    assert_eq!(press(&map, Key::F5, Key::F5, NONE, Mode::Animation).as_deref(), Some("dessin.nouvelle_cle"));
+}
