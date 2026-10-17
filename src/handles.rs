@@ -11,11 +11,16 @@
 //! plan : elles s'arrêtent à sa fin, et un calque raccourci la laisse telle quelle. La durée se
 //! change par sa propre poignée, au bout de la règle (chantier 4), qui prévient quand les plans
 //! suivants se décalent par rapport au son.
+//!
+//! Depuis le montage (Anthony, 2026-10-17 : « tout doit pouvoir être fait depuis le banc de
+//! montage ») : un double-clic sur la piste d'un calque y pose un nouveau dessin, une clé
+//! d'animation (`key_at`) ; un dessin pris par son milieu glisse dans le temps en gardant sa
+//! durée (`move_run`, `Handle::Key`).
 
 use eframe::egui;
 
 use crate::app::App;
-use crate::document::{Document, ImageMark, Layer, Panel};
+use crate::document::{CelId, Document, ImageMark, Layer, Panel};
 use crate::fx::FxKey;
 use crate::history::Edit;
 
@@ -40,13 +45,20 @@ pub(crate) enum Handle {
     LayerMove { layer: usize, grab: usize },
     /// Fin du plan : sa durée.
     PlanEnd,
+    /// Le dessin exposé de `start` à `end` (exclu) sur le calque `layer`, pris par son milieu à
+    /// l'image `grab` : il glisse dans le temps (montage).
+    Key { layer: usize, start: usize, end: usize, grab: usize },
 }
 
 impl Handle {
     /// Une poignée qui change les dessins d'un calque : elle ne change pas la durée du plan.
     pub(crate) fn layer(self) -> Option<usize> {
         match self {
-            Handle::Exposure { layer, .. } | Handle::LayerStart { layer } | Handle::LayerEnd { layer } | Handle::LayerMove { layer, .. } => Some(layer),
+            Handle::Exposure { layer, .. }
+            | Handle::LayerStart { layer }
+            | Handle::LayerEnd { layer }
+            | Handle::LayerMove { layer, .. }
+            | Handle::Key { layer, .. } => Some(layer),
             _ => None,
         }
     }
@@ -195,6 +207,73 @@ pub fn move_layer(layer: &mut Layer, delta: isize, max: usize) -> isize {
     d
 }
 
+/// Un dessin commence déjà à l'image `f` du calque : on n'y pose pas de clé.
+pub fn key_start_taken(layer: &Layer, f: usize) -> bool {
+    f < layer.frames.len() && layer.frames[f].is_some() && layer.run_bounds(f).0 == f
+}
+
+/// Un nouveau dessin `cel` posé à l'image `f` (une clé d'animation) : au milieu d'une
+/// exposition, elle est coupée là et la suite montre le nouveau dessin ; sur une image vide (ou
+/// après la fin du calque), il tient jusqu'au dessin suivant, au plus jusqu'à `max` (la fin du
+/// plan). Rien si un dessin commence déjà à `f`. Renvoie la fin (exclue) du nouveau dessin.
+pub fn key_at(layer: &mut Layer, f: usize, cel: CelId, max: usize) -> Option<usize> {
+    if key_start_taken(layer, f) {
+        return None;
+    }
+    let end = if f < layer.frames.len() && layer.frames[f].is_some() {
+        layer.run_bounds(f).1
+    } else {
+        let mut e = f + 1;
+        while e < max.max(f + 1) && layer.frames.get(e).copied().flatten().is_none() {
+            e += 1;
+        }
+        e
+    };
+    for x in f..end {
+        layer.set(x, Some(cel));
+    }
+    Some(end)
+}
+
+/// Le dessin exposé de `start` à `end` (exclu) glissé de `delta` images, sa durée gardée (une
+/// clé déplacée) : le dessin d'avant tient plus ou moins longtemps, celui d'après commence plus
+/// tard ou plus tôt ; chacun garde au moins une image (une plage vide peut disparaître). Sans
+/// rien après lui, il ne dépasse pas `max` (la fin du plan). Ses rôles le suivent. Renvoie le
+/// décalage fait.
+pub fn move_run(layer: &mut Layer, start: usize, end: usize, delta: isize, max: usize) -> isize {
+    if start >= layer.frames.len() || layer.frames[start].is_none() || end <= start {
+        return 0;
+    }
+    let end = end.min(layer.frames.len());
+    let cel = layer.frames[start];
+    let prev = (start > 0).then(|| layer.run_bounds(start - 1));
+    let next = (end < layer.frames.len()).then(|| layer.run_bounds(end));
+    let room = |(s, e): (usize, usize), frames: &[Option<CelId>]| (e - s - usize::from(frames[s].is_some())) as isize;
+    let lo = prev.map_or(0, |r| -room(r, &layer.frames));
+    let hi = next.map_or(max.saturating_sub(end) as isize, |r| room(r, &layer.frames));
+    let d = delta.clamp(lo, hi.max(lo));
+    if d == 0 {
+        return 0;
+    }
+    let before = prev.and_then(|(s, _)| layer.frames[s]);
+    let after = next.and_then(|(s, _)| layer.frames[s]);
+    let (to, to_end) = ((start as isize + d) as usize, (end as isize + d) as usize);
+    if to_end > layer.frames.len() {
+        layer.frames.resize(to_end, None);
+    }
+    if d > 0 {
+        layer.frames[start..to].fill(before);
+    } else {
+        layer.frames[to_end..end].fill(after);
+    }
+    layer.frames[to..to_end].fill(cel);
+    let moved: Vec<(usize, crate::roles::Role)> = layer.roles.range(start..end).map(|(f, r)| (*f, *r)).collect();
+    layer.roles.retain(|f, _| !(start..end).contains(f) && !(to..to_end).contains(f));
+    layer.roles.extend(moved.into_iter().map(|(f, r)| ((f as isize + d) as usize, r)));
+    layer.trim();
+    d
+}
+
 /// Changer la durée du plan `i` de `old` à `new` images décale les plans suivants : s'il y a
 /// du son à partir de là, la phrase qui prévient (le son, lui, ne bouge pas).
 pub fn sound_shift_note(doc: &Document, i: usize, old: usize, new: usize) -> Option<String> {
@@ -218,9 +297,12 @@ impl App {
     pub(crate) fn begin_handle_drag(&mut self, handle: Handle) -> bool {
         let refused = match handle {
             Handle::Mark(_) | Handle::PlanEnd => self.storyboard_refuses(),
-            Handle::FxKey { .. } | Handle::Exposure { .. } | Handle::LayerStart { .. } | Handle::LayerEnd { .. } | Handle::LayerMove { .. } => {
-                self.content_refuses()
-            }
+            Handle::FxKey { .. }
+            | Handle::Exposure { .. }
+            | Handle::LayerStart { .. }
+            | Handle::LayerEnd { .. }
+            | Handle::LayerMove { .. }
+            | Handle::Key { .. } => self.content_refuses(),
             _ => false,
         };
         if refused {
@@ -317,6 +399,12 @@ impl App {
                 self.put_layer(pi, layer, l, plan_len);
                 format!("Calque décalé de {d:+} image{}.", if d.abs() > 1 { "s" } else { "" })
             }
+            Handle::Key { layer, start, end, grab } => {
+                let Some((mut l, plan_len)) = self.layer_before(layer) else { return };
+                let d = move_run(&mut l, start, end, frame as isize - grab as isize, plan_len);
+                self.put_layer(pi, layer, l, plan_len);
+                format!("Dessin déplacé de {d:+} image{} (sa durée est gardée).", if d.abs() > 1 { "s" } else { "" })
+            }
             Handle::PlanEnd => {
                 let Some(before) = self.handle_drag.as_ref().map(|d| d.before.clone()) else { return };
                 let (old, n) = (before.frame_count(), edge.max(1));
@@ -332,6 +420,42 @@ impl App {
             }
         };
         self.status = status;
+    }
+
+    /// Nouveau dessin (clé d'animation) posé depuis le montage : plan `pi`, calque `li`, image
+    /// `f` du plan. Le plan, le calque et l'image deviennent courants : on dessine la clé tout
+    /// de suite. Une étape d'annulation.
+    pub(crate) fn montage_new_key(&mut self, pi: usize, li: usize, f: usize) {
+        if pi >= self.doc.panels.len() {
+            return;
+        }
+        self.set_panel(pi);
+        self.select_layer(li);
+        if self.refuse_on_folder() {
+            return;
+        }
+        let len = self.doc.panels[pi].frame_count();
+        let f = f.min(len.saturating_sub(1));
+        let Some((kind, video, taken)) = self.doc.panels[pi].layers.get(li).map(|l| (l.kind, l.video.is_some(), key_start_taken(l, f))) else { return };
+        if video {
+            self.status = "Un calque vidéo n'a pas de dessins.".into();
+            return;
+        }
+        if taken {
+            self.cur_frame = f;
+            self.status = "Un dessin commence déjà ici : double-cliquer plus loin dans son exposition pour poser une nouvelle clé.".into();
+            return;
+        }
+        self.end_stroke();
+        self.playing = false;
+        let snap = self.snapshot();
+        let cel = self.doc.new_cel(kind);
+        let end = key_at(&mut self.doc.panels[pi].layers[li], f, cel, len).unwrap_or(f + 1);
+        self.cur_frame = f;
+        self.vsel = None;
+        self.commit_structure(snap);
+        let name = self.doc.panels[pi].layers[li].name.clone();
+        self.status = format!("Nouveau dessin sur « {name} » : images {} à {}. On peut le dessiner tout de suite.", self.frame_label(f), self.frame_label(end - 1));
     }
 
     /// Le calque `layer` tel qu'il était au début du geste, et la durée du plan d'alors.

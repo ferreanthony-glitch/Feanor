@@ -8,7 +8,9 @@
 //!
 //! Les gestes de la timeline marchent dans les pistes (chantier 5) : le bord droit d'un dessin
 //! étire son exposition, la barre sous les dessins décale le calque, ses bouts le rognent ou
-//! l'allongent (`handles.rs`, une étape d'annulation par geste).
+//! l'allongent (`handles.rs`, une étape d'annulation par geste). Depuis le 2026-10-17 aussi : un
+//! dessin pris par son milieu glisse dans le temps en gardant sa durée, un double-clic pose un
+//! nouveau dessin (une clé d'animation) à l'image visée.
 
 use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rect, Sense, Stroke, StrokeKind, Visuals};
 
@@ -440,6 +442,12 @@ pub(crate) fn cell_handle(layer: &Layer, k: usize, p: Pos2, x0: f32, lane_top: f
             return Some(Handle::Exposure { layer: k, start: s, end: e });
         }
     }
+    // Le milieu d'un dessin : il glisse dans le temps, sa durée gardée.
+    let grab = ((p.x - x0) / ppf).floor().max(0.0) as usize;
+    if layer.frames.get(grab).is_some_and(Option::is_some) {
+        let (s, e) = layer.run_bounds(grab);
+        return Some(Handle::Key { layer: k, start: s, end: e, grab });
+    }
     None
 }
 
@@ -463,6 +471,10 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, curr
             );
             if seg.width() > 0.0 {
                 painter.rect_filled(seg, 1.0, fill);
+                // Le dessin survolé (on le prend par son milieu pour le déplacer) : cerclé de blanc.
+                if matches!(hot, Some(Handle::Key { start, .. }) if start == s) {
+                    painter.rect_stroke(seg, 1.0, Stroke::new(1.5_f32, Color32::WHITE), StrokeKind::Inside);
+                }
             }
         }
         f = e;

@@ -2,7 +2,10 @@
 
 use crate::document::{ImageMark, Layer, LayerKind};
 use crate::fx::{Effect, EffectKind, FxKey};
-use crate::handles::{between, content_bounds, move_bookmark, move_fx_key, move_layer, move_mark, set_layer_end, set_layer_start, set_run_length, sound_shift_note};
+use crate::handles::{
+    between, content_bounds, key_at, key_start_taken, move_bookmark, move_fx_key, move_layer, move_mark, move_run, set_layer_end, set_layer_start, set_run_length,
+    sound_shift_note,
+};
 
 fn mark(frame: usize) -> ImageMark {
     ImageMark { frame, ..Default::default() }
@@ -138,4 +141,61 @@ fn a_plan_length_change_warns_only_with_sound_after_it() {
     assert!(note.contains("+4 images"), "{note}");
     assert!(sound_shift_note(&doc, 0, 10, 10).is_none(), "même durée");
     assert!(sound_shift_note(&doc, 1, 10, 12).is_none(), "le son finit avant la fin du plan 2");
+}
+
+fn frames(l: &Layer) -> Vec<Option<u64>> {
+    l.frames.clone()
+}
+
+#[test]
+fn a_key_drawing_is_laid_from_the_montage() {
+    // Un dessin A tenu sur tout le plan (10 images), comme souvent en storyboard.
+    let mut l = Layer::new("L", LayerKind::Vector);
+    l.frames = vec![Some(1); 10];
+    assert!(key_start_taken(&l, 0), "A commence à l'image 0");
+    assert_eq!(key_at(&mut l, 0, 9, 10), None, "rien sur un début de dessin");
+    // Une clé à l'image 4 : A jusqu'à 4, la clé B ensuite.
+    assert_eq!(key_at(&mut l, 4, 2, 10), Some(10));
+    assert_eq!(frames(&l), [vec![Some(1); 4], vec![Some(2); 6]].concat());
+    // Une clé à l'image 7 coupe B seulement.
+    assert_eq!(key_at(&mut l, 7, 3, 10), Some(10));
+    assert_eq!(frames(&l)[4..], [Some(2), Some(2), Some(2), Some(3), Some(3), Some(3)]);
+    // Sur des images vides : jusqu'au dessin suivant, ou jusqu'à la fin du plan.
+    let mut v = Layer::new("V", LayerKind::Vector);
+    v.frames = vec![None, None, None, Some(1), Some(1)];
+    assert_eq!(key_at(&mut v, 1, 2, 8), Some(3));
+    assert_eq!(frames(&v), vec![None, Some(2), Some(2), Some(1), Some(1)]);
+    assert_eq!(key_at(&mut v, 6, 3, 8), Some(8), "après la fin du calque : jusqu'à la fin du plan");
+    assert_eq!(frames(&v)[5..], [None, Some(3), Some(3)]);
+}
+
+#[test]
+fn a_drawing_slides_in_time_keeping_its_duration() {
+    // A sur 0..3, B sur 3..6, C sur 6..9 ; un rôle sur B.
+    let base = || {
+        let mut l = Layer::new("L", LayerKind::Bitmap);
+        l.frames = vec![Some(1), Some(1), Some(1), Some(2), Some(2), Some(2), Some(3), Some(3), Some(3)];
+        l.roles.insert(3, crate::roles::Role::Key);
+        l
+    };
+    // B deux images plus tard : A tient jusqu'à 5, B sur 5..8, C ne garde que l'image 8.
+    let mut l = base();
+    assert_eq!(move_run(&mut l, 3, 6, 2, 9), 2);
+    assert_eq!(frames(&l), vec![Some(1), Some(1), Some(1), Some(1), Some(1), Some(2), Some(2), Some(2), Some(3)]);
+    assert_eq!(l.roles.keys().copied().collect::<Vec<_>>(), vec![5], "le rôle suit B");
+    // Pas plus loin : C garde au moins une image.
+    let mut l = base();
+    assert_eq!(move_run(&mut l, 3, 6, 9, 9), 2);
+    // B plus tôt : A garde au moins une image, C commence plus tôt.
+    let mut l = base();
+    assert_eq!(move_run(&mut l, 3, 6, -5, 9), -2);
+    assert_eq!(frames(&l), vec![Some(1), Some(2), Some(2), Some(2), Some(3), Some(3), Some(3), Some(3), Some(3)]);
+    // Le dernier dessin, sans rien après : jusqu'à la fin du plan au plus ; une plage vide avant
+    // peut disparaître.
+    let mut l = Layer::new("L", LayerKind::Bitmap);
+    l.frames = vec![Some(1), None, None, Some(2), Some(2)];
+    assert_eq!(move_run(&mut l, 3, 5, 3, 6), 1, "fin du plan à 6");
+    assert_eq!(frames(&l), vec![Some(1), None, None, None, Some(2), Some(2)]);
+    assert_eq!(move_run(&mut l, 4, 6, -3, 6), -3, "la plage vide disparaît");
+    assert_eq!(frames(&l), vec![Some(1), Some(2), Some(2)], "la fin vidée est retirée");
 }

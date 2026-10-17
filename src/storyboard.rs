@@ -386,6 +386,12 @@ impl App {
         if self.bouton(ui, ph::STACK_PLUS, "Nouvelle séquence", "Après la séquence courante, avec un plan.", "sequence.nouvelle").clicked() {
             self.new_sequence();
         }
+        if self
+            .bouton(ui, ph::BEZIER_CURVE, "Nouveau calque", "Un calque vectoriel dans le plan courant, au-dessus du calque courant : une piste de plus.", "calque.nouveau_vectoriel")
+            .clicked()
+        {
+            self.add_layer(crate::document::LayerKind::Vector);
+        }
         // Plans choisis (Ctrl ou Maj + clic dans la bande) : copier, coller, supprimer (12e).
         let n = self.board_selection().len();
         let chosen = if n > 1 { format!("Les {n} plans choisis.") } else { "Le plan courant ; Ctrl ou Maj + clic pour en choisir plusieurs.".to_string() };
@@ -777,7 +783,7 @@ impl App {
                 Some(Handle::LayerStart { .. } | Handle::LayerEnd { .. } | Handle::Exposure { .. }) => {
                     ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal)
                 }
-                Some(Handle::LayerMove { .. }) => ui.ctx().set_cursor_icon(CursorIcon::Grab),
+                Some(Handle::LayerMove { .. } | Handle::Key { .. }) => ui.ctx().set_cursor_icon(CursorIcon::Grab),
                 _ => {}
             }
         }
@@ -959,8 +965,14 @@ impl App {
             }
         }
         if resp.double_clicked() {
-            if let Some(i) = resp.interact_pointer_pos().filter(|&p| in_blocks(p)).and_then(|p| panel_at(p.x)) {
-                self.enter_animation(i);
+            if let Some(p) = resp.interact_pointer_pos() {
+                if let Some(i) = in_blocks(p).then(|| panel_at(p.x)).flatten() {
+                    self.enter_animation(i);
+                } else if let Some((i, k)) = self.layer_row_hit(p, r.top(), &blocks, rows).filter(|_| p.y < r.top() + rows.background_top()) {
+                    // Double-clic sur la piste d'un calque : un nouveau dessin (une clé) à cette image.
+                    let f = (((p.x - x_of(self.doc.panel_start(i))) / ppf).floor().max(0.0)) as usize;
+                    self.montage_new_key(i, k, f);
+                }
             }
         }
 
@@ -1012,7 +1024,16 @@ impl App {
             resp.context_menu(|ui| match target {
                 MenuTarget::Panel(i) => self.panel_menu(ui, i),
                 MenuTarget::Lane { track, clip, frame } => self.lane_menu(ui, track, clip, frame),
-                MenuTarget::Layer(k) => self.layer_menu(ui, k, false),
+                MenuTarget::Layer(k) => {
+                    // La piste d'un calque : une clé à l'image du clic, puis le menu du calque.
+                    if ui.button("Nouveau dessin ici (clé)").on_hover_text("Ou double-clic sur la piste.").clicked() {
+                        ui.close_menu();
+                        let (pi, f) = (self.cur_panel, self.cur_frame);
+                        self.montage_new_key(pi, k, f);
+                    }
+                    ui.separator();
+                    self.layer_menu(ui, k, false);
+                }
                 MenuTarget::Camera => self.grid_menu_ui(ui, crate::handles::GridMenu::Camera),
                 MenuTarget::Sequence => {
                     self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");

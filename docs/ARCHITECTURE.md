@@ -696,6 +696,15 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     `n` = diamètre ÷ pas est le nombre d'empreintes qui recouvrent un point.
   - Le pixel est toujours recalculé depuis son état d'avant le trait, avec `masque × opacité` :
     l'opacité reste le plafond.
+- Le montage comme banc principal (5 bis, 2026-10-17).
+  - `handles.rs` : `key_at` (une clé : coupe l'exposition, ou remplit des images vides jusqu'au
+    dessin suivant ou la fin du plan ; refusée là où un dessin commence, `key_start_taken`),
+    `move_run` (un dessin glissé, sa durée gardée, voisins bornés à une image ; ses rôles le
+    suivent), `Handle::Key` et `App::montage_new_key` (une étape d'annulation, plan, calque et
+    image courants).
+  - `montagerows::cell_handle` donne `Handle::Key` au milieu d'un dessin ; `montage_strip` :
+    double-clic sur une piste de calque, entrée « Nouveau dessin ici » du menu, bouton « Nouveau
+    calque » de la barre.
 - Pistes du montage modifiables (chantier 5).
   - `montagerows.rs` : `TrackKey { name, nth }` et `layer_tracks` remplacent la rangée par rang
     (`layer_in_row`, 8 au plus). Les plans sont parcourus dans l'ordre, chacun du haut de sa

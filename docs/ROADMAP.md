@@ -947,6 +947,25 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
 
   Pas fait : la piste « Fond (scène) » reste en lecture seule (un même calque sur plusieurs
   plans) ; un nom de piste sans calque dans le plan courant ne se clique pas.
+- ✅ 5 bis. Le montage comme banc principal (Anthony, 2026-10-17 : « La timeline principale est
+  celle du montage avec séquence, shot et calques d'animation visibles. […] Tout doit pouvoir
+  être fait depuis le banc de montage. La timeline d'animation sert à rentrer dans la
+  précision ») ; ses choix : une image clé est un nouveau dessin, étirer un calque change sa
+  durée.
+  - **nouveau calque** : un bouton dans la barre du montage (calque vectoriel dans le plan
+    courant : une piste de plus) ;
+  - **nouveau dessin (clé)** : double-clic sur la piste d'un calque, ou clic droit « Nouveau
+    dessin ici » ; au milieu d'une exposition elle est coupée là, sur une image vide le dessin
+    tient jusqu'au suivant (ou la fin du plan). Le plan, le calque et l'image deviennent
+    courants : on dessine la clé tout de suite ;
+  - **déplacer un dessin** : le prendre par son milieu et le glisser ; il garde sa durée, le
+    dessin d'avant tient plus ou moins longtemps, celui d'après commence plus tard ou plus tôt
+    (au moins une image chacun) ; la durée du plan ne change pas ;
+  - **étirer un calque** : le bout de sa barre (déjà là, chantier 5) ; le bord droit d'un
+    dessin étire son exposition.
+
+  Choix à revoir si besoin : déplacer garde la durée du dessin (plutôt que de ne bouger que son
+  début). Pas fait : ces gestes sur la piste « Fond ».
 - Restent (ordre de Fable) : navigation de calques à la TVPaint, fenêtre « Agrandir / rétrécir
   le calque », finitions.
 

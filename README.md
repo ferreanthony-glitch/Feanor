@@ -355,14 +355,14 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   les changements de nuancier.
 - **Panneaux** : chaque panneau (Outils, Couleur, Pinceaux, Réglages, Vue, Guides, Fiche,
   Calques, Montage ou Timeline) est un onglet. La bande du bas montre le montage en storyboard,
-  la timeline du plan en animation (double-clic sur un plan pour y entrer). Copier, Coller, Suppr
-  et les raccourcis visent celui où l'on a
-  cliqué en dernier (un trait de couleur en haut du panneau, et la barre d'état le dit) : après
-  un clic dans la timeline, Insert fait un nouveau dessin et les flèches restent dans le plan,
-  même en storyboard ; après un clic dans le montage, Insert fait un nouveau plan. Un clic dans
-  le dessin, Tab ou la vue Vignettes rendent la main au dessin. Dans le montage, une piste par nom de calque ; on y
-  étire un dessin par son bord droit, on décale un calque par sa barre, on le rogne ou
-  l'allonge par ses bouts, comme dans la timeline. Glisse un onglet : des boutons apparaissent au milieu du panneau
+  la timeline du plan en animation (double-clic sur un plan pour y entrer). Le montage est le banc
+  principal : une piste par nom de calque, et l'essentiel s'y fait sans entrer dans le plan :
+  nouveau calque (bouton de la barre), nouveau dessin à une image (double-clic sur la piste du
+  calque, ou clic droit), déplacer un dessin (le prendre par son milieu, il garde sa durée),
+  étirer une exposition (son bord droit), décaler un calque (sa barre), le rogner ou l'allonger
+  (ses bouts). La timeline sert à entrer dans le détail. Copier, Coller, Suppr et les raccourcis
+  visent la bande quand on y a cliqué en dernier (un trait de couleur en haut, et la barre
+  d'état le dit) ; un clic dans le dessin, Tab ou la vue Vignettes rendent la main au dessin. Glisse un onglet : des boutons apparaissent au milieu du panneau
   survolé, lâche-le sur l'un d'eux pour l'aimanter (à gauche, à droite, dessus, dessous, ou en
   onglet), ou ailleurs pour qu'il flotte. Tire les bords entre panneaux pour les redimensionner.
   La croix d'un onglet le ferme ; Affichage > Panneaux le fait revenir à sa place. Clic droit

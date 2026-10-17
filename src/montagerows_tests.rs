@@ -87,10 +87,21 @@ fn the_timeline_handles_are_found_under_the_pointer() {
     assert_eq!(at(181.0, mid), Some(Handle::LayerEnd { layer: 4 }));
     assert_eq!(at(150.0, mid), Some(Handle::Exposure { layer: 4, start: 2, end: 5 }), "le bord droit du premier dessin");
     assert_eq!(at(135.0, bar), Some(Handle::LayerMove { layer: 4, grab: 3 }), "la barre, à l'image 3");
-    assert_eq!(at(135.0, mid), None, "le milieu d'un dessin : rien (on y fait défiler)");
     assert_eq!(at(60.0, mid), None, "avant le calque");
     // Un dossier ou un calque vidéo n'a pas de poignées.
     let mut folder = drawn();
     folder.folder = true;
     assert_eq!(cell_handle(&folder, 4, pos2(120.0, mid), x0, top, ppf, tol), None);
+}
+
+#[test]
+fn a_drawing_is_taken_by_its_middle_in_the_montage() {
+    let l = drawn();
+    let (x0, top, ppf, tol) = (100.0, 50.0, 10.0, 3.0);
+    let mid = top + 6.0;
+    // Au milieu du premier dessin (2..5) : on le prend pour le faire glisser.
+    assert_eq!(cell_handle(&l, 4, pos2(135.0, mid), x0, top, ppf, tol), Some(Handle::Key { layer: 4, start: 2, end: 5, grab: 3 }));
+    assert_eq!(cell_handle(&l, 4, pos2(165.0, mid), x0, top, ppf, tol), Some(Handle::Key { layer: 4, start: 5, end: 8, grab: 6 }));
+    // Avant le calque, rien.
+    assert_eq!(cell_handle(&l, 4, pos2(60.0, mid), x0, top, ppf, tol), None);
 }
