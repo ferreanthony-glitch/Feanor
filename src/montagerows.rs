@@ -9,8 +9,9 @@
 //! Les gestes de la timeline marchent dans les pistes (chantier 5) : le bord droit d'un dessin
 //! étire son exposition, la barre sous les dessins décale le calque, ses bouts le rognent ou
 //! l'allongent (`handles.rs`, une étape d'annulation par geste). Depuis le 2026-10-17 aussi : un
-//! dessin pris par son milieu glisse dans le temps en gardant sa durée, un double-clic pose un
-//! nouveau dessin (une clé d'animation) à l'image visée.
+//! dessin pris par son milieu se place avant ou après les autres (chacun garde sa durée), la
+//! limite entre deux dessins allonge l'un et raccourcit l'autre, un double-clic pose un nouveau
+//! dessin (une clé d'animation) à l'image visée.
 
 use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rect, Sense, Stroke, StrokeKind, Visuals};
 
@@ -24,7 +25,9 @@ use crate::theme;
 
 /// Hauteur de la piste Caméra et d'une piste de calque.
 pub(crate) const CAM_H: f32 = 16.0;
-pub(crate) const LAYER_H: f32 = 20.0;
+/// Une piste de calque : plus haute depuis que le montage est le banc principal (Anthony,
+/// 2026-10-17 : « pour rendre l'édition plus facile »).
+pub(crate) const LAYER_H: f32 = 26.0;
 /// Barre d'un calque sous ses dessins (chantier 5, comme dans la timeline) : on la prend pour
 /// décaler le calque.
 const BAR_H: f32 = 3.0;
@@ -268,8 +271,8 @@ impl App {
     }
 
     /// Pistes Caméra, calques et fond, dans la bande `r` ; `blocks` : les panneaux à l'écran ;
-    /// `lit` : la poignée de calque survolée ou tenue, et son plan.
-    pub(crate) fn paint_track_rows(&self, painter: &Painter, r: Rect, blocks: &[Rect], ppf: f32, rows: &Rows, visuals: &Visuals, lit: Option<(usize, Handle)>) {
+    /// `lit` : la poignée de calque survolée ou tenue (vrai : tenue), et son plan.
+    pub(crate) fn paint_track_rows(&self, painter: &Painter, r: Rect, blocks: &[Rect], ppf: f32, rows: &Rows, visuals: &Visuals, lit: Option<(usize, Handle, bool)>) {
         let top = r.top();
         let lane = |y: f32, h: f32| Rect::from_min_max(pos2(r.left(), top + y + 1.0), pos2(r.right(), top + y + h - 1.0));
 
@@ -314,7 +317,7 @@ impl App {
                 let p = &self.doc.panels[i];
                 let Some(k) = layer_on_track(&p.layers, key) else { continue };
                 let current = i == self.cur_panel && k == self.cur_layer;
-                let hot = lit.filter(|(pi, h)| *pi == i && h.layer() == Some(k)).map(|(_, h)| h);
+                let hot = lit.filter(|(pi, h, _)| *pi == i && h.layer() == Some(k)).map(|(_, h, held)| (h, held));
                 paint_layer_cell(painter, cell, &p.layers[k], ppf, current, hot, visuals);
             }
         }
@@ -435,14 +438,12 @@ pub(crate) fn cell_handle(layer: &Layer, k: usize, p: Pos2, x0: f32, lane_top: f
         let grab = ((p.x - x0) / ppf).floor().max(0.0) as usize;
         return Some(Handle::LayerMove { layer: k, grab });
     }
+    // La limite entre deux expositions : l'une s'allonge, l'autre raccourcit.
     let f = ((p.x - x0) / ppf).round().max(0.0) as usize;
-    if f >= 1 && near(x(f)) {
-        let (s, e) = layer.run_bounds(f - 1);
-        if e == f && layer.frames.get(s).is_some_and(Option::is_some) {
-            return Some(Handle::Exposure { layer: k, start: s, end: e });
-        }
+    if f >= 1 && near(x(f)) && f < layer.frames.len() && layer.frames[f - 1] != layer.frames[f] {
+        return Some(Handle::Boundary { layer: k, at: f });
     }
-    // Le milieu d'un dessin : il glisse dans le temps, sa durée gardée.
+    // Le milieu d'un dessin : il se place avant ou après les autres.
     let grab = ((p.x - x0) / ppf).floor().max(0.0) as usize;
     if layer.frames.get(grab).is_some_and(Option::is_some) {
         let (s, e) = layer.run_bounds(grab);
@@ -452,8 +453,9 @@ pub(crate) fn cell_handle(layer: &Layer, k: usize, p: Pos2, x0: f32, lane_top: f
 }
 
 /// Un calque sous un plan : un bloc par dessin exposé (tenu sur plusieurs images), sa barre
-/// dessous (chantier 5), son nom. `hot` : sa poignée survolée ou tenue.
-fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, current: bool, hot: Option<Handle>, visuals: &Visuals) {
+/// dessous (chantier 5), son nom. `hot` : sa poignée survolée ou tenue (vrai : tenue).
+fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, current: bool, hot: Option<(Handle, bool)>, visuals: &Visuals) {
+    let (hot, held) = (hot.map(|h| h.0), hot.is_some_and(|h| h.1));
     painter.rect_filled(cell, 2.0, theme::ETIQUETTE);
     let fill = match layer.kind {
         LayerKind::Vector => theme::CALQUE_VECTORIEL,
@@ -501,12 +503,12 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, curr
             }
         }
     }
-    // Un bord pris (début, fin, exposition) : un trait blanc sur la hauteur de la piste.
+    // Un bord pris (début, fin, limite entre deux dessins) : un trait blanc sur la hauteur de la
+    // piste (pendant le geste, la limite a bougé : le dessin le montre).
     let edge = match hot {
         Some(Handle::LayerStart { .. }) => content_bounds(layer).map(|(a, _)| a),
         Some(Handle::LayerEnd { .. }) => content_bounds(layer).map(|(_, b)| b),
-        // Pendant le geste, le dessin a déjà sa nouvelle durée.
-        Some(Handle::Exposure { start, .. }) => (start < layer.frames.len()).then(|| layer.run_bounds(start).1),
+        Some(Handle::Boundary { at, .. }) if !held => Some(at),
         _ => None,
     };
     if let Some(f) = edge {

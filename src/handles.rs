@@ -14,8 +14,9 @@
 //!
 //! Depuis le montage (Anthony, 2026-10-17 : « tout doit pouvoir être fait depuis le banc de
 //! montage ») : un double-clic sur la piste d'un calque y pose un nouveau dessin, une clé
-//! d'animation (`key_at`) ; un dessin pris par son milieu glisse dans le temps en gardant sa
-//! durée (`move_run`, `Handle::Key`).
+//! d'animation (`key_at`) ; un dessin pris par son milieu se place avant ou après les autres,
+//! chacun gardant sa durée (`reorder_run`, `Handle::Key`) ; la limite entre deux dessins se
+//! déplace, l'un s'allonge, l'autre raccourcit (`move_boundary`, `Handle::Boundary`).
 
 use eframe::egui;
 
@@ -46,8 +47,11 @@ pub(crate) enum Handle {
     /// Fin du plan : sa durée.
     PlanEnd,
     /// Le dessin exposé de `start` à `end` (exclu) sur le calque `layer`, pris par son milieu à
-    /// l'image `grab` : il glisse dans le temps (montage).
+    /// l'image `grab` : il se place avant ou après les autres (montage).
     Key { layer: usize, start: usize, end: usize, grab: usize },
+    /// La limite, à l'image `at`, entre deux expositions du calque `layer` : l'une s'allonge,
+    /// l'autre raccourcit (montage).
+    Boundary { layer: usize, at: usize },
 }
 
 impl Handle {
@@ -58,7 +62,8 @@ impl Handle {
             | Handle::LayerStart { layer }
             | Handle::LayerEnd { layer }
             | Handle::LayerMove { layer, .. }
-            | Handle::Key { layer, .. } => Some(layer),
+            | Handle::Key { layer, .. }
+            | Handle::Boundary { layer, .. } => Some(layer),
             _ => None,
         }
     }
@@ -235,45 +240,81 @@ pub fn key_at(layer: &mut Layer, f: usize, cel: CelId, max: usize) -> Option<usi
     Some(end)
 }
 
-/// Le dessin exposé de `start` à `end` (exclu) glissé de `delta` images, sa durée gardée (une
-/// clé déplacée) : le dessin d'avant tient plus ou moins longtemps, celui d'après commence plus
-/// tard ou plus tôt ; chacun garde au moins une image (une plage vide peut disparaître). Sans
-/// rien après lui, il ne dépasse pas `max` (la fin du plan). Ses rôles le suivent. Renvoie le
-/// décalage fait.
-pub fn move_run(layer: &mut Layer, start: usize, end: usize, delta: isize, max: usize) -> isize {
-    if start >= layer.frames.len() || layer.frames[start].is_none() || end <= start {
-        return 0;
+/// Les expositions du calque bout à bout, jusqu'à sa fin : (début, fin exclue, dessin) ; une
+/// plage vide en est une aussi (dessin `None`).
+pub fn runs(layer: &Layer) -> Vec<(usize, usize, Option<CelId>)> {
+    let mut out = Vec::new();
+    let mut f = 0;
+    while f < layer.frames.len() {
+        let (s, e) = layer.run_bounds(f);
+        out.push((s, e, layer.frames[f]));
+        f = e;
     }
-    let end = end.min(layer.frames.len());
-    let cel = layer.frames[start];
-    let prev = (start > 0).then(|| layer.run_bounds(start - 1));
-    let next = (end < layer.frames.len()).then(|| layer.run_bounds(end));
-    let room = |(s, e): (usize, usize), frames: &[Option<CelId>]| (e - s - usize::from(frames[s].is_some())) as isize;
-    let lo = prev.map_or(0, |r| -room(r, &layer.frames));
-    let hi = next.map_or(max.saturating_sub(end) as isize, |r| room(r, &layer.frames));
-    let d = delta.clamp(lo, hi.max(lo));
-    if d == 0 {
-        return 0;
-    }
-    let before = prev.and_then(|(s, _)| layer.frames[s]);
-    let after = next.and_then(|(s, _)| layer.frames[s]);
-    let (to, to_end) = ((start as isize + d) as usize, (end as isize + d) as usize);
-    if to_end > layer.frames.len() {
-        layer.frames.resize(to_end, None);
-    }
-    if d > 0 {
-        layer.frames[start..to].fill(before);
-    } else {
-        layer.frames[to_end..end].fill(after);
-    }
-    layer.frames[to..to_end].fill(cel);
-    let moved: Vec<(usize, crate::roles::Role)> = layer.roles.range(start..end).map(|(f, r)| (*f, *r)).collect();
-    layer.roles.retain(|f, _| !(start..end).contains(f) && !(to..to_end).contains(f));
-    layer.roles.extend(moved.into_iter().map(|(f, r)| ((f as isize + d) as usize, r)));
-    layer.trim();
-    d
+    out
 }
 
+/// Rang que prendrait, parmi les autres expositions, le dessin exposé à partir de `start` s'il
+/// commençait à `new_start` : le nombre d'autres expositions dont le milieu est avant le sien.
+pub fn reorder_slot(layer: &Layer, start: usize, new_start: isize) -> usize {
+    let all = runs(layer);
+    let Some(&(s, e, _)) = all.iter().find(|r| r.0 == start) else { return 0 };
+    let center = new_start as f32 + (e - s) as f32 * 0.5;
+    all.iter().filter(|r| r.0 != s && (r.0 + r.1) as f32 * 0.5 < center).count()
+}
+
+/// Le dessin exposé à partir de `start` placé au rang `slot` parmi les autres expositions (0 :
+/// en premier) : chacune garde sa durée, la durée du calque ne change pas, les rôles suivent
+/// leurs images. Renvoie le nouveau début du dessin (rien s'il n'y a pas de dessin à `start`).
+pub fn reorder_run(layer: &mut Layer, start: usize, slot: usize) -> Option<usize> {
+    let mut order = runs(layer);
+    let i = order.iter().position(|r| r.0 == start && r.2.is_some())?;
+    let moved = order.remove(i);
+    order.insert(slot.min(order.len()), moved);
+    let mut frames = Vec::with_capacity(layer.frames.len());
+    let mut roles = crate::roles::Roles::new();
+    let mut new_start = start;
+    for &(s, e, cel) in &order {
+        let at = frames.len();
+        if s == moved.0 {
+            new_start = at;
+        }
+        roles.extend(layer.roles.range(s..e).map(|(f, r)| (at + (f - s), *r)));
+        frames.extend(std::iter::repeat_n(cel, e - s));
+    }
+    layer.frames = frames;
+    layer.roles = roles;
+    Some(new_start)
+}
+
+/// La limite entre deux expositions, à l'image `at`, amenée à l'image `to` : celle de gauche
+/// s'allonge et celle de droite raccourcit d'autant, ou l'inverse (un dessin garde au moins une
+/// image, une plage vide peut disparaître) ; la suite ne bouge pas. Le rôle posé au début de
+/// l'exposition de droite la suit. Renvoie où est la limite.
+pub fn move_boundary(layer: &mut Layer, at: usize, to: usize) -> usize {
+    if at == 0 || at >= layer.frames.len() || layer.frames[at - 1] == layer.frames[at] {
+        return at;
+    }
+    let (left, right) = (layer.frames[at - 1], layer.frames[at]);
+    let lo = layer.run_bounds(at - 1).0 + usize::from(left.is_some());
+    let hi = layer.run_bounds(at).1 - usize::from(right.is_some());
+    let to = to.clamp(lo, hi.max(lo));
+    if to == at {
+        return at;
+    }
+    if to > at {
+        layer.frames[at..to].fill(left);
+    } else {
+        layer.frames[to..at].fill(right);
+    }
+    let role = layer.roles.remove(&at);
+    let (a, b) = (at.min(to), at.max(to));
+    layer.roles.retain(|f, _| !(a..b).contains(f));
+    if let Some(r) = role {
+        layer.roles.insert(to, r);
+    }
+    layer.trim();
+    to
+}
 /// Changer la durée du plan `i` de `old` à `new` images décale les plans suivants : s'il y a
 /// du son à partir de là, la phrase qui prévient (le son, lui, ne bouge pas).
 pub fn sound_shift_note(doc: &Document, i: usize, old: usize, new: usize) -> Option<String> {
@@ -302,7 +343,8 @@ impl App {
             | Handle::LayerStart { .. }
             | Handle::LayerEnd { .. }
             | Handle::LayerMove { .. }
-            | Handle::Key { .. } => self.content_refuses(),
+            | Handle::Key { .. }
+            | Handle::Boundary { .. } => self.content_refuses(),
             _ => false,
         };
         if refused {
@@ -401,9 +443,19 @@ impl App {
             }
             Handle::Key { layer, start, end, grab } => {
                 let Some((mut l, plan_len)) = self.layer_before(layer) else { return };
-                let d = move_run(&mut l, start, end, frame as isize - grab as isize, plan_len);
+                let slot = reorder_slot(&l, start, frame as isize - (grab as isize - start as isize));
+                let s = reorder_run(&mut l, start, slot).unwrap_or(start);
                 self.put_layer(pi, layer, l, plan_len);
-                format!("Dessin déplacé de {d:+} image{} (sa durée est gardée).", if d.abs() > 1 { "s" } else { "" })
+                let n = end - start;
+                format!("Dessin placé images {} à {} ({n} image{}, sa durée est gardée).", label(self, s), label(self, s + n - 1), if n > 1 { "s" } else { "" })
+            }
+            Handle::Boundary { layer, at } => {
+                let Some((mut l, plan_len)) = self.layer_before(layer) else { return };
+                let to = move_boundary(&mut l, at, edge);
+                let before = to - l.run_bounds(to.saturating_sub(1)).0;
+                let after = if to < l.frames.len() { l.run_bounds(to).1 - to } else { 0 };
+                self.put_layer(pi, layer, l, plan_len);
+                format!("Expositions : {before} image{} avant la limite, {after} après.", if before > 1 { "s" } else { "" })
             }
             Handle::PlanEnd => {
                 let Some(before) = self.handle_drag.as_ref().map(|d| d.before.clone()) else { return };

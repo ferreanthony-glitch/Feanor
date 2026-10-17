@@ -958,14 +958,19 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
     dessin ici » ; au milieu d'une exposition elle est coupée là, sur une image vide le dessin
     tient jusqu'au suivant (ou la fin du plan). Le plan, le calque et l'image deviennent
     courants : on dessine la clé tout de suite ;
-  - **déplacer un dessin** : le prendre par son milieu et le glisser ; il garde sa durée, le
-    dessin d'avant tient plus ou moins longtemps, celui d'après commence plus tard ou plus tôt
-    (au moins une image chacun) ; la durée du plan ne change pas ;
-  - **étirer un calque** : le bout de sa barre (déjà là, chantier 5) ; le bord droit d'un
-    dessin étire son exposition.
+  - **étirer un calque** : le bout de sa barre (déjà là, chantier 5) ;
+  - revu le même jour (Anthony : « faire glisser une clé avant ou après une autre. Permet
+    d'étirer une clé pour changer sa durée d'exposition, même si ça change la durée
+    d'exposition de la précédente ou la suivante ») :
+    - **pistes plus hautes** (26 points au lieu de 20) ;
+    - **une clé prise par son milieu se place avant ou après les autres** : elle passe une
+      voisine quand son milieu passe celui de la voisine ; chaque dessin garde sa durée, la
+      durée du calque et du plan ne change pas ;
+    - **étirer une clé** : la limite entre deux dessins se prend et se déplace ; l'un s'allonge,
+      l'autre raccourcit d'autant (au moins une image), la suite ne bouge pas. (Dans la
+      timeline, le bord droit d'un dessin garde son geste : la suite glisse.)
 
-  Choix à revoir si besoin : déplacer garde la durée du dessin (plutôt que de ne bouger que son
-  début). Pas fait : ces gestes sur la piste « Fond ».
+  Pas fait : ces gestes sur la piste « Fond ».
 - Restent (ordre de Fable) : navigation de calques à la TVPaint, fenêtre « Agrandir / rétrécir
   le calque », finitions.
 

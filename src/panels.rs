@@ -5,7 +5,7 @@ use crate::brush::BrushSettings;
 use crate::document::{Document, LayerKind};
 
 /// Gestes à la souris et au stylet (hors fichier de raccourcis).
-pub(crate) const MOUSE_GESTURES: [(&str, &str); 17] = [
+pub(crate) const MOUSE_GESTURES: [(&str, &str); 18] = [
     ("Clic droit sur une commande", "lui assigner un raccourci"),
     ("Alt + clic", "prélever une couleur"),
     ("Molette", "zoom autour du curseur"),
@@ -18,8 +18,9 @@ pub(crate) const MOUSE_GESTURES: [(&str, &str); 17] = [
     ("Timeline : glisser des images choisies", "les déplacer (Ctrl : copier, Maj : insérer)"),
     ("Timeline ou montage : barre sous un calque", "décaler tout le calque dans le temps"),
     ("Timeline ou montage : début ou fin d'un calque", "rogner ou allonger (tient le premier / dernier dessin)"),
-    ("Timeline ou montage : bord droit d'un dessin", "étirer ou raccourcir son exposition"),
-    ("Montage : milieu d'un dessin d'un calque", "le glisser dans le temps (sa durée est gardée)"),
+    ("Timeline : bord droit d'un dessin", "étirer ou raccourcir son exposition (la suite glisse)"),
+    ("Montage : limite entre deux dessins d'un calque", "allonger l'un, raccourcir l'autre"),
+    ("Montage : milieu d'un dessin d'un calque", "le placer avant ou après un autre (chacun garde sa durée)"),
     ("Montage : double-clic sur la piste d'un calque", "nouveau dessin (clé) à cette image"),
     ("Timeline : prise au bout de la règle", "changer la durée du plan"),
     ("Échap ou Ctrl+Z pendant un glisser", "abandonner le geste"),

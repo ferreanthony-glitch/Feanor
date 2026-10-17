@@ -3,8 +3,8 @@
 use crate::document::{ImageMark, Layer, LayerKind};
 use crate::fx::{Effect, EffectKind, FxKey};
 use crate::handles::{
-    between, content_bounds, key_at, key_start_taken, move_bookmark, move_fx_key, move_layer, move_mark, move_run, set_layer_end, set_layer_start, set_run_length,
-    sound_shift_note,
+    between, content_bounds, key_at, key_start_taken, move_bookmark, move_boundary, move_fx_key, move_layer, move_mark, reorder_run, reorder_slot, set_layer_end,
+    set_layer_start, set_run_length, sound_shift_note,
 };
 
 fn mark(frame: usize) -> ImageMark {
@@ -170,32 +170,62 @@ fn a_key_drawing_is_laid_from_the_montage() {
 }
 
 #[test]
-fn a_drawing_slides_in_time_keeping_its_duration() {
-    // A sur 0..3, B sur 3..6, C sur 6..9 ; un rôle sur B.
+fn a_key_moves_before_or_after_the_others() {
+    // A sur 0..3, B sur 3..5, C sur 5..9 ; un rôle au début de B et un sur C.
     let base = || {
         let mut l = Layer::new("L", LayerKind::Bitmap);
-        l.frames = vec![Some(1), Some(1), Some(1), Some(2), Some(2), Some(2), Some(3), Some(3), Some(3)];
+        l.frames = vec![Some(1), Some(1), Some(1), Some(2), Some(2), Some(3), Some(3), Some(3), Some(3)];
+        l.roles.insert(3, crate::roles::Role::Key);
+        l.roles.insert(6, crate::roles::Role::Key);
+        l
+    };
+    // B tiré vers la droite : il passe après C quand son milieu passe celui de C.
+    let l = base();
+    assert_eq!(reorder_slot(&l, 3, 3), 1, "sans bouger : sa place");
+    assert_eq!(reorder_slot(&l, 3, 5), 1, "le milieu de B (6) avant celui de C (7)");
+    assert_eq!(reorder_slot(&l, 3, 6), 1, "milieux égaux (7) : il reste avant");
+    assert_eq!(reorder_slot(&l, 3, 7), 2, "le milieu de B (8) passe celui de C (7) : après C");
+    assert_eq!(reorder_slot(&l, 3, -2), 0, "tout au début : avant A");
+    let mut l = base();
+    assert_eq!(reorder_run(&mut l, 3, 2), Some(7));
+    assert_eq!(frames(&l), vec![Some(1), Some(1), Some(1), Some(3), Some(3), Some(3), Some(3), Some(2), Some(2)], "A, C, B : chacun garde sa durée");
+    assert_eq!(l.roles.keys().copied().collect::<Vec<_>>(), vec![4, 7], "les rôles suivent leurs images");
+    // Devant tous les autres.
+    let mut l = base();
+    assert_eq!(reorder_run(&mut l, 3, 0), Some(0));
+    assert_eq!(frames(&l)[..5], [Some(2), Some(2), Some(1), Some(1), Some(1)]);
+    // Rien à prendre sur une plage vide.
+    let mut v = Layer::new("V", LayerKind::Bitmap);
+    v.frames = vec![Some(1), None, Some(2)];
+    assert_eq!(reorder_run(&mut v, 1, 0), None);
+}
+
+#[test]
+fn stretching_a_key_changes_its_neighbour() {
+    let base = || {
+        let mut l = Layer::new("L", LayerKind::Bitmap);
+        l.frames = vec![Some(1), Some(1), Some(1), Some(2), Some(2), Some(3), Some(3), Some(3)];
         l.roles.insert(3, crate::roles::Role::Key);
         l
     };
-    // B deux images plus tard : A tient jusqu'à 5, B sur 5..8, C ne garde que l'image 8.
+    // La fin de A (limite A|B à 3) amenée à 4 : A s'allonge, B raccourcit ; C ne bouge pas.
     let mut l = base();
-    assert_eq!(move_run(&mut l, 3, 6, 2, 9), 2);
-    assert_eq!(frames(&l), vec![Some(1), Some(1), Some(1), Some(1), Some(1), Some(2), Some(2), Some(2), Some(3)]);
-    assert_eq!(l.roles.keys().copied().collect::<Vec<_>>(), vec![5], "le rôle suit B");
-    // Pas plus loin : C garde au moins une image.
+    assert_eq!(move_boundary(&mut l, 3, 4), 4);
+    assert_eq!(frames(&l), vec![Some(1), Some(1), Some(1), Some(1), Some(2), Some(3), Some(3), Some(3)]);
+    assert_eq!(l.roles.keys().copied().collect::<Vec<_>>(), vec![4], "le rôle du début de B le suit");
+    // B garde au moins une image.
+    assert_eq!(move_boundary(&mut l, 4, 9), 4);
+    // La fin de B (limite B|C à 5) amenée à 7 : B s'allonge sur C, qui garde une image.
     let mut l = base();
-    assert_eq!(move_run(&mut l, 3, 6, 9, 9), 2);
-    // B plus tôt : A garde au moins une image, C commence plus tôt.
+    assert_eq!(move_boundary(&mut l, 5, 7), 7);
+    assert_eq!(frames(&l), vec![Some(1), Some(1), Some(1), Some(2), Some(2), Some(2), Some(2), Some(3)]);
+    // Vers la gauche : B commence plus tôt, A raccourcit (au moins une image).
     let mut l = base();
-    assert_eq!(move_run(&mut l, 3, 6, -5, 9), -2);
-    assert_eq!(frames(&l), vec![Some(1), Some(2), Some(2), Some(2), Some(3), Some(3), Some(3), Some(3), Some(3)]);
-    // Le dernier dessin, sans rien après : jusqu'à la fin du plan au plus ; une plage vide avant
-    // peut disparaître.
-    let mut l = Layer::new("L", LayerKind::Bitmap);
-    l.frames = vec![Some(1), None, None, Some(2), Some(2)];
-    assert_eq!(move_run(&mut l, 3, 5, 3, 6), 1, "fin du plan à 6");
-    assert_eq!(frames(&l), vec![Some(1), None, None, None, Some(2), Some(2)]);
-    assert_eq!(move_run(&mut l, 4, 6, -3, 6), -3, "la plage vide disparaît");
-    assert_eq!(frames(&l), vec![Some(1), Some(2), Some(2)], "la fin vidée est retirée");
+    assert_eq!(move_boundary(&mut l, 3, 0), 1);
+    assert_eq!(frames(&l)[..5], [Some(1), Some(2), Some(2), Some(2), Some(2)]);
+    // Une plage vide peut disparaître.
+    let mut v = Layer::new("V", LayerKind::Bitmap);
+    v.frames = vec![Some(1), None, None, Some(2)];
+    assert_eq!(move_boundary(&mut v, 1, 3), 3);
+    assert_eq!(frames(&v), vec![Some(1), Some(1), Some(1), Some(2)]);
 }

@@ -358,9 +358,9 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   la timeline du plan en animation (double-clic sur un plan pour y entrer). Le montage est le banc
   principal : une piste par nom de calque, et l'essentiel s'y fait sans entrer dans le plan :
   nouveau calque (bouton de la barre), nouveau dessin à une image (double-clic sur la piste du
-  calque, ou clic droit), déplacer un dessin (le prendre par son milieu, il garde sa durée),
-  étirer une exposition (son bord droit), décaler un calque (sa barre), le rogner ou l'allonger
-  (ses bouts). La timeline sert à entrer dans le détail. Copier, Coller, Suppr et les raccourcis
+  calque, ou clic droit), placer un dessin avant ou après un autre (le prendre par son milieu ;
+  chacun garde sa durée), étirer une clé (la limite entre deux dessins : l'un s'allonge, l'autre
+  raccourcit), décaler un calque (sa barre), le rogner ou l'allonger (ses bouts). La timeline sert à entrer dans le détail. Copier, Coller, Suppr et les raccourcis
   visent la bande quand on y a cliqué en dernier (un trait de couleur en haut, et la barre
   d'état le dit) ; un clic dans le dessin, Tab ou la vue Vignettes rendent la main au dessin. Glisse un onglet : des boutons apparaissent au milieu du panneau
   survolé, lâche-le sur l'un d'eux pour l'aimanter (à gauche, à droite, dessus, dessous, ou en

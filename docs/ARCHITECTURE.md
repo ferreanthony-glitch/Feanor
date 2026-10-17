@@ -699,12 +699,16 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - Le montage comme banc principal (5 bis, 2026-10-17).
   - `handles.rs` : `key_at` (une clé : coupe l'exposition, ou remplit des images vides jusqu'au
     dessin suivant ou la fin du plan ; refusée là où un dessin commence, `key_start_taken`),
-    `move_run` (un dessin glissé, sa durée gardée, voisins bornés à une image ; ses rôles le
-    suivent), `Handle::Key` et `App::montage_new_key` (une étape d'annulation, plan, calque et
-    image courants).
-  - `montagerows::cell_handle` donne `Handle::Key` au milieu d'un dessin ; `montage_strip` :
-    double-clic sur une piste de calque, entrée « Nouveau dessin ici » du menu, bouton « Nouveau
-    calque » de la barre.
+    `App::montage_new_key` (une étape d'annulation, plan, calque et image courants).
+  - `runs` (les expositions bout à bout, plages vides comprises), `reorder_slot` (le rang où
+    tombe le dessin : les autres expositions dont le milieu est avant le sien) et `reorder_run`
+    (la suite refaite, chacune gardant sa durée, les rôles suivant leurs images) :
+    `Handle::Key`. `move_boundary` (la limite entre deux expositions déplacée, chacune gardant
+    au moins une image si c'est un dessin, le rôle de début suivant) : `Handle::Boundary`.
+  - `montagerows::cell_handle` : `Boundary` sur une limite intérieure, `Key` au milieu d'un
+    dessin (le montage ne donne plus `Exposure`, que garde la timeline) ; `LAYER_H` = 26.
+    `montage_strip` : double-clic sur une piste de calque, entrée « Nouveau dessin ici » du
+    menu, bouton « Nouveau calque » de la barre.
 - Pistes du montage modifiables (chantier 5).
   - `montagerows.rs` : `TrackKey { name, nth }` et `layer_tracks` remplacent la rangée par rang
     (`layer_in_row`, 8 au plus). Les plans sont parcourus dans l'ordre, chacun du haut de sa

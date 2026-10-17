@@ -738,11 +738,11 @@ impl App {
         // Caméra au-dessus des plans, calques dessous (6f), puis les pistes son. La poignée de
         // calque tenue (sur le plan courant) ou survolée s'éclaire (chantier 5).
         let lit = match &self.handle_drag {
-            Some(d) => Some((self.cur_panel, d.handle)),
+            Some(d) => Some((self.cur_panel, d.handle, true)),
             None if self.montage_drag.is_none() && self.cam_key_drag.is_none() => resp
                 .hover_pos()
                 .and_then(|p| self.montage_layer_handle_at(p, r.top(), &blocks, ppf, rows))
-                .map(|(i, _, h)| (i, h)),
+                .map(|(i, _, h)| (i, h, false)),
             None => None,
         };
         self.paint_track_rows(&painter, r, &blocks, ppf, rows, &visuals, lit);
@@ -779,8 +779,8 @@ impl App {
                 ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
             }
             // Poignées des pistes de calques (chantier 5) : les bords s'étirent, la barre se prend.
-            match lit.filter(|_| self.handle_drag.is_none()).map(|(_, h)| h) {
-                Some(Handle::LayerStart { .. } | Handle::LayerEnd { .. } | Handle::Exposure { .. }) => {
+            match lit.filter(|_| self.handle_drag.is_none()).map(|(_, h, _)| h) {
+                Some(Handle::LayerStart { .. } | Handle::LayerEnd { .. } | Handle::Exposure { .. } | Handle::Boundary { .. }) => {
                     ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal)
                 }
                 Some(Handle::LayerMove { .. } | Handle::Key { .. }) => ui.ctx().set_cursor_icon(CursorIcon::Grab),
@@ -852,7 +852,7 @@ impl App {
             ui.ctx().set_cursor_icon(CursorIcon::Grab);
         }
         if let Some(h) = self.handle_drag.as_ref().map(|d| d.handle) {
-            let resize = matches!(h, Handle::LayerStart { .. } | Handle::LayerEnd { .. } | Handle::Exposure { .. });
+            let resize = matches!(h, Handle::LayerStart { .. } | Handle::LayerEnd { .. } | Handle::Exposure { .. } | Handle::Boundary { .. });
             ui.ctx().set_cursor_icon(if resize { CursorIcon::ResizeHorizontal } else { CursorIcon::Grabbing });
             if let (true, Some(p)) = (resp.dragged(), resp.interact_pointer_pos()) {
                 // L'image sous la souris, et le bord d'image le plus proche (expositions, bouts).

@@ -85,7 +85,7 @@ fn the_timeline_handles_are_found_under_the_pointer() {
     let bar = top + LAYER_H - 4.0;
     assert_eq!(at(120.0, mid), Some(Handle::LayerStart { layer: 4 }));
     assert_eq!(at(181.0, mid), Some(Handle::LayerEnd { layer: 4 }));
-    assert_eq!(at(150.0, mid), Some(Handle::Exposure { layer: 4, start: 2, end: 5 }), "le bord droit du premier dessin");
+    assert_eq!(at(150.0, mid), Some(Handle::Boundary { layer: 4, at: 5 }), "la limite entre les deux dessins");
     assert_eq!(at(135.0, bar), Some(Handle::LayerMove { layer: 4, grab: 3 }), "la barre, à l'image 3");
     assert_eq!(at(60.0, mid), None, "avant le calque");
     // Un dossier ou un calque vidéo n'a pas de poignées.
