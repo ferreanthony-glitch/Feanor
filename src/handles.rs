@@ -15,7 +15,8 @@
 //! Depuis le montage (Anthony, 2026-10-17 : « tout doit pouvoir être fait depuis le banc de
 //! montage ») : un double-clic sur la piste d'un calque y pose un nouveau dessin, une clé
 //! d'animation (`key_at`) ; un dessin pris par son milieu se place avant ou après les autres,
-//! chacun gardant sa durée (`reorder_run`, `Handle::Key`) ; la limite entre deux dessins se
+//! chacun gardant sa durée (`shift_runs`, `Handle::Key`, posé au lâcher, un repère montrant où :
+//! `drop_marks`) ; la limite entre deux dessins se
 //! déplace, l'un s'allonge, l'autre raccourcit (`move_boundary`, `Handle::Boundary`). Une clé se
 //! colle (`overwrite_run`), se supprime (sa voisine la remplace ou elle laisse un vide,
 //! `remove_run`), se duplique sur place (`duplicate_run`) ; le choix de plusieurs clés et ces
@@ -256,52 +257,16 @@ pub fn runs(layer: &Layer) -> Vec<(usize, usize, Option<CelId>)> {
     out
 }
 
-/// Rang que prendrait, parmi les autres expositions, le dessin exposé à partir de `start` s'il
-/// commençait à `new_start` : le nombre d'autres expositions dont le milieu est avant le sien.
-pub fn reorder_slot(layer: &Layer, start: usize, new_start: isize) -> usize {
+/// Les expositions du calque en blocs, rangées comme après un glisser de `delta` images des clés
+/// qui commencent aux images `chosen` : des clés choisies qui se suivent forment un bloc ; chaque
+/// bloc (ou clé seule, ou autre exposition) est placé selon son milieu, déplacé pour les blocs
+/// pris ; à milieu égal, ce qu'on déplace passe devant (comme `reorder_slot`). Renvoie les
+/// expositions et les blocs rangés : (pris, rangs des expositions).
+fn shifted_units(layer: &Layer, chosen: &[usize], delta: isize) -> (Vec<(usize, usize, Option<CelId>)>, Vec<(bool, Vec<usize>)>) {
     let all = runs(layer);
-    let Some(&(s, e, _)) = all.iter().find(|r| r.0 == start) else { return 0 };
-    let center = new_start as f32 + (e - s) as f32 * 0.5;
-    all.iter().filter(|r| r.0 != s && (r.0 + r.1) as f32 * 0.5 < center).count()
-}
-
-/// Le dessin exposé à partir de `start` placé au rang `slot` parmi les autres expositions (0 :
-/// en premier) : chacune garde sa durée, la durée du calque ne change pas, les rôles suivent
-/// leurs images. Renvoie le nouveau début du dessin (rien s'il n'y a pas de dessin à `start`).
-pub fn reorder_run(layer: &mut Layer, start: usize, slot: usize) -> Option<usize> {
-    let mut order = runs(layer);
-    let i = order.iter().position(|r| r.0 == start && r.2.is_some())?;
-    let moved = order.remove(i);
-    order.insert(slot.min(order.len()), moved);
-    let mut frames = Vec::with_capacity(layer.frames.len());
-    let mut roles = crate::roles::Roles::new();
-    let mut new_start = start;
-    for &(s, e, cel) in &order {
-        let at = frames.len();
-        if s == moved.0 {
-            new_start = at;
-        }
-        roles.extend(layer.roles.range(s..e).map(|(f, r)| (at + (f - s), *r)));
-        frames.extend(std::iter::repeat_n(cel, e - s));
-    }
-    layer.frames = frames;
-    layer.roles = roles;
-    Some(new_start)
-}
-
-/// Les dessins des expositions qui commencent aux images `chosen` glissés ensemble de `delta`
-/// images (plusieurs clés prises à la fois). Des clés choisies qui se suivent forment un bloc ;
-/// chaque bloc (ou clé seule) prend sa place parmi les autres expositions selon son milieu
-/// déplacé (comme `reorder_slot` pour une seule clé) ; toutes gardent leur durée et leur ordre
-/// dans le bloc, la durée du calque ne change pas, les rôles suivent leurs images. Renvoie le
-/// nouveau début de chacune, dans l'ordre de `chosen`.
-pub fn shift_runs(layer: &mut Layer, chosen: &[usize], delta: isize) -> Vec<usize> {
-    let all = runs(layer);
-    let picked = |s: usize, cel: Option<CelId>| cel.is_some() && chosen.contains(&s);
-    // Les blocs : (milieu, déplacé, expositions).
     let mut units: Vec<(f32, bool, Vec<usize>)> = Vec::new();
     for (i, &(s, _, cel)) in all.iter().enumerate() {
-        let p = picked(s, cel);
+        let p = cel.is_some() && chosen.contains(&s);
         match units.last_mut() {
             Some(u) if p && u.1 => u.2.push(i),
             _ => units.push((0.0, p, vec![i])),
@@ -311,25 +276,63 @@ pub fn shift_runs(layer: &mut Layer, chosen: &[usize], delta: isize) -> Vec<usiz
         let (s, e) = (all[u.2[0]].0, all[*u.2.last().unwrap_or(&u.2[0])].1);
         u.0 = (s + e) as f32 * 0.5 + if u.1 { delta as f32 } else { 0.0 };
     }
-    // À milieu égal, ce qu'on déplace passe devant (comme `reorder_slot`).
     units.sort_by(|a, b| a.0.total_cmp(&b.0).then(b.1.cmp(&a.1)));
+    (all, units.into_iter().map(|u| (u.1, u.2)).collect())
+}
+
+/// Les dessins des expositions qui commencent aux images `chosen` glissés ensemble de `delta`
+/// images (plusieurs clés prises à la fois, ou une seule). Des clés choisies qui se suivent
+/// forment un bloc ; chaque bloc prend sa place parmi les autres expositions selon son milieu
+/// déplacé (`shifted_units`) ; toutes gardent leur durée et leur ordre dans le bloc, la durée du
+/// calque ne change pas, les rôles suivent leurs images. Renvoie le nouveau début de chacune,
+/// dans l'ordre de `chosen`.
+pub fn shift_runs(layer: &mut Layer, chosen: &[usize], delta: isize) -> Vec<usize> {
+    let (all, units) = shifted_units(layer, chosen, delta);
     let mut frames = Vec::with_capacity(layer.frames.len());
     let mut roles = crate::roles::Roles::new();
     let mut moved: Vec<(usize, usize)> = Vec::new();
-    for i in units.iter().flat_map(|u| u.2.iter().copied()) {
-        let (s, e, cel) = all[i];
-        let at = frames.len();
-        if picked(s, cel) {
-            moved.push((s, at));
+    for (picked, members) in &units {
+        for &i in members {
+            let (s, e, cel) = all[i];
+            let at = frames.len();
+            if *picked {
+                moved.push((s, at));
+            }
+            roles.extend(layer.roles.range(s..e).map(|(f, r)| (at + (f - s), *r)));
+            frames.extend(std::iter::repeat_n(cel, e - s));
         }
-        roles.extend(layer.roles.range(s..e).map(|(f, r)| (at + (f - s), *r)));
-        frames.extend(std::iter::repeat_n(cel, e - s));
     }
     layer.frames = frames;
     layer.roles = roles;
     chosen.iter().map(|c| moved.iter().find(|m| m.0 == *c).map_or(*c, |m| m.1)).collect()
 }
 
+/// Où se poseront les clés des expositions `chosen` glissées de `delta` images (`shift_runs`),
+/// vu dans le calque tel qu'il est (comme le repère de Storyboard Pro entre deux panneaux) :
+/// pour chaque bloc qui change de place, l'image de la limite entre deux autres expositions où
+/// il viendra (0 : tout au début, la fin du calque : tout au bout). Rien pour un bloc qui reste.
+pub fn drop_marks(layer: &Layer, chosen: &[usize], delta: isize) -> Vec<usize> {
+    let (all, moved) = shifted_units(layer, chosen, delta);
+    let (_, still) = shifted_units(layer, chosen, 0);
+    // L'autre exposition (non prise) juste avant un bloc, dans un rangement.
+    let before = |units: &[(bool, Vec<usize>)], first: usize| -> Option<usize> {
+        let at = units.iter().position(|u| u.1[0] == first)?;
+        units[..at].iter().rev().find(|u| !u.0).map(|u| *u.1.last().unwrap_or(&u.1[0]))
+    };
+    let mut marks = Vec::new();
+    for (picked, members) in &moved {
+        if !*picked {
+            continue;
+        }
+        let first = members[0];
+        let (now, then) = (before(&moved, first), before(&still, first));
+        if now == then {
+            continue;
+        }
+        marks.push(now.map_or(0, |i| all[i].1));
+    }
+    marks
+}
 /// La limite entre deux expositions, à l'image `at`, amenée à l'image `to` : celle de gauche
 /// s'allonge et celle de droite raccourcit d'autant, ou l'inverse (un dessin garde au moins une
 /// image, une plage vide peut disparaître) ; la suite ne bouge pas. Le rôle posé au début de
@@ -535,13 +538,14 @@ impl App {
                 self.put_layer(pi, layer, l, plan_len);
                 format!("Calque décalé de {d:+} image{}.", if d.abs() > 1 { "s" } else { "" })
             }
-            Handle::Key { layer, start, end, grab } => {
-                let Some((mut l, plan_len)) = self.layer_before(layer) else { return };
-                let slot = reorder_slot(&l, start, frame as isize - (grab as isize - start as isize));
-                let s = reorder_run(&mut l, start, slot).unwrap_or(start);
-                self.put_layer(pi, layer, l, plan_len);
-                let n = end - start;
-                format!("Dessin placé images {} à {} ({n} image{}, sa durée est gardée).", label(self, s), label(self, s + n - 1), if n > 1 { "s" } else { "" })
+            // La clé ne se pose qu'au lâcher (`end_handle_drag`) ; d'ici là, un repère montre où.
+            Handle::Key { layer, start, grab, .. } => {
+                let Some((l, _)) = self.layer_before(layer) else { return };
+                self.key_drag_delta = frame as isize - grab as isize;
+                match drop_marks(&l, &[start], self.key_drag_delta).first() {
+                    Some(&m) => format!("Lâcher : la clé se pose à l'image {} (repère), sa durée gardée.", label(self, m)),
+                    None => "Lâcher ici : la clé reste à sa place.".into(),
+                }
             }
             Handle::Boundary { layer, at } => {
                 let Some((mut l, plan_len)) = self.layer_before(layer) else { return };
@@ -623,6 +627,14 @@ impl App {
     /// Lâche la poignée : une étape d'annulation si quelque chose a bougé.
     pub(crate) fn end_handle_drag(&mut self) {
         let Some(d) = self.handle_drag.take() else { return };
+        // Une clé prise se pose maintenant, au repère montré pendant le geste.
+        if let Handle::Key { layer, start, .. } = d.handle {
+            let delta = std::mem::take(&mut self.key_drag_delta);
+            if let Some(l) = self.doc.panels.iter_mut().find(|p| p.id == d.panel).and_then(|p| p.layers.get_mut(layer)) {
+                shift_runs(l, &[start], delta);
+            }
+            self.renderer.invalidate_all();
+        }
         let Some(p) = self.doc.panels.iter().find(|p| p.id == d.panel) else { return };
         let changed = match d.handle {
             Handle::Mark(_) => p.marks != d.before.marks,
@@ -699,6 +711,7 @@ impl App {
 
     /// Abandonne la poignée : le plan revient comme avant.
     pub(crate) fn cancel_handle_drag(&mut self) {
+        self.key_drag_delta = 0;
         let Some(d) = self.handle_drag.take() else { return };
         if let Some(p) = self.doc.panels.iter_mut().find(|p| p.id == d.panel) {
             *p = d.before;

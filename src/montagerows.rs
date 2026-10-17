@@ -272,8 +272,20 @@ impl App {
     }
 
     /// Pistes Caméra, calques et fond, dans la bande `r` ; `blocks` : les panneaux à l'écran ;
-    /// `lit` : la poignée de calque survolée ou tenue (vrai : tenue), et son plan.
-    pub(crate) fn paint_track_rows(&self, painter: &Painter, r: Rect, blocks: &[Rect], ppf: f32, rows: &Rows, visuals: &Visuals, lit: Option<(usize, Handle, bool)>) {
+    /// `lit` : la poignée de calque survolée ou tenue (vrai : tenue), et son plan ; `drops` : les
+    /// clés qu'on glisse (fantômes et repères, `montagekeys::drop_view`).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn paint_track_rows(
+        &self,
+        painter: &Painter,
+        r: Rect,
+        blocks: &[Rect],
+        ppf: f32,
+        rows: &Rows,
+        visuals: &Visuals,
+        lit: Option<(usize, Handle, bool)>,
+        drops: &[crate::montagekeys::DropCell],
+    ) {
         let top = r.top();
         let lane = |y: f32, h: f32| Rect::from_min_max(pos2(r.left(), top + y + 1.0), pos2(r.right(), top + y + h - 1.0));
 
@@ -321,6 +333,11 @@ impl App {
                 let hot = lit.filter(|(pi, h, _)| *pi == i && h.layer() == Some(k)).map(|(_, h, held)| (h, held));
                 let chosen: Vec<usize> = self.key_sel.iter().filter(|c| c.panel == p.id && c.layer == p.layers[k].id).map(|c| c.start).collect();
                 paint_layer_cell(painter, cell, &p.layers[k], ppf, current, hot, &chosen, visuals);
+                // Clés qu'on glisse : leur fantôme suit la souris, un repère montre où elles se
+                // poseront (comme le repère de Storyboard Pro entre deux panneaux).
+                if let Some(d) = drops.iter().find(|d| d.panel == p.id && d.layer == p.layers[k].id) {
+                    paint_drop(painter, cell, ppf, d, visuals);
+                }
             }
         }
     }
@@ -379,6 +396,25 @@ impl App {
             let k = layer_on_track(layers, key)?;
             cell_handle(&layers[k], k, p, blocks[i].left() - 1.0, lane_top, ppf, tol).map(|h| (i, k, h))
         })
+    }
+}
+
+/// Les fantômes des clés qu'on glisse (cadres translucides, coupés au plan) et les repères où
+/// elles se poseront (un trait épais sur la hauteur de la piste, avec deux pointes).
+fn paint_drop(painter: &Painter, cell: Rect, ppf: f32, d: &crate::montagekeys::DropCell, visuals: &Visuals) {
+    let x0 = cell.left() - 1.0;
+    let accent = visuals.selection.stroke.color;
+    let clip = painter.with_clip_rect(cell.expand(1.0).intersect(painter.clip_rect()));
+    for &(s, e) in &d.ghosts {
+        let ghost = Rect::from_min_max(pos2(x0 + s as f32 * ppf, cell.top() + 2.0), pos2(x0 + e as f32 * ppf - 1.0, cell.bottom() - 2.0));
+        clip.rect(ghost, 2.0, accent.gamma_multiply(0.25), Stroke::new(1.5_f32, accent), StrokeKind::Inside);
+    }
+    for &m in &d.marks {
+        let x = x0 + m as f32 * ppf;
+        clip.line_segment([pos2(x, cell.top()), pos2(x, cell.bottom())], Stroke::new(3.0_f32, Color32::WHITE));
+        let t = 5.0;
+        clip.add(egui::Shape::convex_polygon(vec![pos2(x - t, cell.top()), pos2(x + t, cell.top()), pos2(x, cell.top() + t)], Color32::WHITE, Stroke::NONE));
+        clip.add(egui::Shape::convex_polygon(vec![pos2(x - t, cell.bottom()), pos2(x, cell.bottom() - t), pos2(x + t, cell.bottom())], Color32::WHITE, Stroke::NONE));
     }
 }
 

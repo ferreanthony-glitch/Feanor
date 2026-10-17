@@ -6,8 +6,10 @@
 //!   les clés du calque courant dans le plan courant.
 //! - Une clé choisie prise par son milieu emmène les autres clés choisies (`KeysDrag`) : toutes
 //!   glissent du même nombre d'images, chacune prend sa place parmi les autres expositions de son
-//!   calque (`shift_runs`), toutes gardent leur durée. Échap rend tout comme avant ; une étape
-//!   d'annulation.
+//!   calque (`shift_runs`), toutes gardent leur durée. Comme dans Storyboard Pro, rien ne bouge
+//!   pendant le geste : un fantôme suit la souris et un repère montre avant ou après quelle clé
+//!   elles se poseront (`drop_view`, aussi pour une clé seule) ; elles se posent au lâcher. Échap
+//!   rend tout comme avant ; une étape d'annulation.
 //! - Copier, coller, supprimer (la voisine remplace, ou un vide) et dupliquer sur place visent
 //!   les clés choisies, sinon la clé à l'image courante du calque courant. Collées, les clés
 //!   gardent leurs écarts et leurs durées à partir de l'image courante : venues d'un seul calque,
@@ -16,7 +18,7 @@
 
 use crate::app::App;
 use crate::document::{Cel, CelId, Layer, LayerKind};
-use crate::handles::{duplicate_run, overwrite_run, remove_run, runs, shift_runs};
+use crate::handles::{drop_marks, duplicate_run, overwrite_run, remove_run, runs, shift_runs, Handle};
 use crate::montagerows::{layer_on_track, track_of, TrackKey};
 
 /// Une clé : plan (id), calque (id), image où commence son exposition.
@@ -61,6 +63,16 @@ struct DragLayer {
     before: Layer,
     plan_len: usize,
     starts: Vec<usize>,
+}
+
+/// Ce que montre le montage pendant qu'on glisse des clés, pour un calque d'un plan : les
+/// fantômes des clés prises (images [début, fin) une fois glissées, dans le plan) et les repères
+/// où elles se poseront.
+pub(crate) struct DropCell {
+    pub panel: u64,
+    pub layer: u64,
+    pub ghosts: Vec<(isize, isize)>,
+    pub marks: Vec<usize>,
 }
 
 /// Les clés `chosen` après un clic sur `key` (rien : à côté des dessins). `toggle` (Ctrl) :
@@ -172,8 +184,8 @@ impl App {
         true
     }
 
-    /// Les clés prises suivent la souris, à l'image `at` du montage : chaque calque repart de son
-    /// état d'avant le geste.
+    /// Les clés prises suivent la souris, à l'image `at` du montage : rien ne bouge encore, le
+    /// montage montre fantômes et repères (`drop_view`).
     pub(crate) fn drag_keys(&mut self, at: usize) {
         let Some(d) = self.keys_drag.as_mut() else { return };
         let delta = at as isize - d.grab as isize;
@@ -181,51 +193,70 @@ impl App {
             return;
         }
         d.delta = delta;
-        let work: Vec<(u64, u64, Layer, usize, Vec<usize>)> = d.layers.iter().map(|l| (l.panel, l.layer, l.before.clone(), l.plan_len, l.starts.clone())).collect();
-        let mut sel = Vec::new();
-        for (panel, layer, mut l, plan_len, starts) in work {
-            let new = shift_runs(&mut l, &starts, delta);
-            let Some(pi) = self.doc.panels.iter().position(|p| p.id == panel) else { continue };
-            let Some(li) = self.doc.panels[pi].layers.iter().position(|x| x.id == layer) else { continue };
-            let p = &mut self.doc.panels[pi];
-            p.layers[li] = l;
-            // La durée du plan reste celle d'avant le geste.
-            if p.frame_count() < plan_len {
-                p.length = plan_len;
-            }
-            sel.extend(new.into_iter().map(|start| KeyRef { panel, layer, start }));
-        }
-        let n = sel.len();
-        self.key_sel = sel;
-        self.renderer.invalidate_all();
-        self.status = format!("{n} clés glissées de {delta:+} image{} : chacune prend sa place parmi les autres, sa durée gardée.", if delta.abs() > 1 { "s" } else { "" });
+        let (n, marks) = (d.layers.iter().map(|l| l.starts.len()).sum::<usize>(), d.layers.iter().map(|l| drop_marks(&l.before, &l.starts, delta).len()).sum::<usize>());
+        self.status = match marks {
+            0 => format!("Lâcher ici : les {n} clés restent à leur place."),
+            _ => format!("Lâcher : les {n} clés se posent aux repères, leur durée gardée."),
+        };
     }
 
-    /// Lâche les clés : une étape d'annulation si quelque chose a bougé.
+    /// Lâche les clés : elles se posent (chaque calque repart de son état d'avant le geste) ;
+    /// une étape d'annulation si quelque chose a bougé.
     pub(crate) fn end_keys_drag(&mut self) {
         let Some(d) = self.keys_drag.take() else { return };
-        let changed = d.layers.iter().any(|l| {
-            self.doc.panels.iter().find(|p| p.id == l.panel).and_then(|p| p.layers.iter().find(|x| x.id == l.layer)).is_some_and(|x| x.frames != l.before.frames)
-        });
+        let mut sel = Vec::new();
+        let mut changed = false;
+        for dl in d.layers {
+            let mut l = dl.before.clone();
+            let new = shift_runs(&mut l, &dl.starts, d.delta);
+            changed |= l.frames != dl.before.frames;
+            if let Some(pi) = self.doc.panels.iter().position(|p| p.id == dl.panel) {
+                if let Some(li) = self.doc.panels[pi].layers.iter().position(|x| x.id == dl.layer) {
+                    let p = &mut self.doc.panels[pi];
+                    p.layers[li] = l;
+                    // La durée du plan reste celle d'avant le geste.
+                    if p.frame_count() < dl.plan_len {
+                        p.length = dl.plan_len;
+                    }
+                }
+            }
+            sel.extend(new.into_iter().map(|start| KeyRef { panel: dl.panel, layer: dl.layer, start }));
+        }
+        self.key_sel = sel;
         if changed {
             self.history.push(d.snap);
             self.modified = true;
+            self.renderer.invalidate_all();
         }
     }
 
-    /// Échap pendant le geste : chaque calque revient comme avant, le choix aussi.
+    /// Échap pendant le geste : rien n'a bougé, le choix reste.
     pub(crate) fn cancel_keys_drag(&mut self) {
-        let Some(d) = self.keys_drag.take() else { return };
-        let mut sel = Vec::new();
-        for l in d.layers {
-            let Some(pi) = self.doc.panels.iter().position(|p| p.id == l.panel) else { continue };
-            if let Some(li) = self.doc.panels[pi].layers.iter().position(|x| x.id == l.layer) {
-                self.doc.panels[pi].layers[li] = l.before;
-            }
-            sel.extend(l.starts.into_iter().map(|start| KeyRef { panel: l.panel, layer: l.layer, start }));
+        self.keys_drag = None;
+    }
+
+    /// Fantômes et repères à montrer pendant qu'on glisse des clés (plusieurs, ou une seule).
+    pub(crate) fn drop_view(&self) -> Vec<DropCell> {
+        if let Some(d) = &self.keys_drag {
+            return d
+                .layers
+                .iter()
+                .map(|l| DropCell {
+                    panel: l.panel,
+                    layer: l.layer,
+                    ghosts: l.starts.iter().map(|&s| (s as isize + d.delta, l.before.run_bounds(s).1 as isize + d.delta)).collect(),
+                    marks: drop_marks(&l.before, &l.starts, d.delta),
+                })
+                .collect();
         }
-        self.key_sel = sel;
-        self.renderer.invalidate_all();
+        if let Some(Handle::Key { layer, start, end, .. }) = self.handle_drag.as_ref().map(|h| h.handle) {
+            let p = &self.doc.panels[self.cur_panel];
+            if let Some(l) = p.layers.get(layer) {
+                let delta = self.key_drag_delta;
+                return vec![DropCell { panel: p.id, layer: l.id, ghosts: vec![(start as isize + delta, end as isize + delta)], marks: drop_marks(l, &[start], delta) }];
+            }
+        }
+        Vec::new()
     }
 
     /// Les clés de la piste `track` entre `a` et `b` (comprises), d'un plan à l'autre.

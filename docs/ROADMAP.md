@@ -996,6 +996,11 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         seule) prend sa place parmi les autres selon son milieu, toutes gardent leur durée ; sur
         plusieurs calques et plusieurs plans, chacun dans son calque. Échap pendant le geste rend
         tout comme avant.
+      - **repère de pose** (Anthony : « quand on déplace une clé, on ne voit rien à l'écran qui
+        indique où elle va venir se déposer. Un système sur Storyboard Pro indique avant ou
+        après quelle clé elle vient se déposer ») : pendant qu'on glisse une ou plusieurs clés,
+        rien ne bouge ; un fantôme suit la souris et un repère (trait blanc à deux pointes) montre
+        la limite entre deux clés où elles se poseront ; elles se posent au lâcher ;
       - **collage multi-calques** : des clés copiées sur plusieurs calques se collent chacune sur
         le calque de même nom du plan courant (créé s'il manque, à la même place dans la pile),
         avec leurs écarts et leurs durées ; venues d'un seul calque, sur le calque courant.

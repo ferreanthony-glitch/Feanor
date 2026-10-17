@@ -713,8 +713,13 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     `duplicate_keys` (`duplicate_run`) visent les clés choisies, sinon celle de l'image
     courante. `App::key_focus` (un clic sur la piste d'un calque du montage) passe avant la main
     des plans dans `run_action`, et `key_mode_of` donne alors les raccourcis de l'animation.
+  - Repère de pose : rien ne bouge pendant le glisser d'une clé (`Handle::Key` garde son décalage
+    dans `App::key_drag_delta`, posée par `end_handle_drag`) ou de plusieurs (`KeysDrag`, posées
+    par `end_keys_drag`). `handles::drop_marks` (la limite où chaque bloc déplacé viendra, vue
+    dans le calque tel qu'il est ; partage `shifted_units` avec `shift_runs`) ;
+    `montagekeys::drop_view` → `DropCell` (fantômes, repères) ; `montagerows::paint_drop`.
   - Glisser plusieurs clés : `handles::shift_runs` (blocs de clés choisies qui se suivent, placés
-    par leur milieu déplacé ; testé, et égal à `reorder_run` pour une seule) ; `montagekeys::
+    par leur milieu déplacé ; une seule clé est un bloc d'une clé) ; `montagekeys::
     KeysDrag` garde chaque calque touché tel qu'avant (Échap, `cancel_keys_drag`) et l'étape
     d'annulation (`end_keys_drag`, seulement si quelque chose a bougé) ; `dragging`,
     `cancel_drags` et `drop_stale_drags` le connaissent.

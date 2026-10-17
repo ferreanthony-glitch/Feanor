@@ -752,7 +752,8 @@ impl App {
                 .map(|(i, _, h)| (i, h, false)),
             None => None,
         };
-        self.paint_track_rows(&painter, r, &blocks, ppf, rows, &visuals, lit);
+        let drops = self.drop_view();
+        self.paint_track_rows(&painter, r, &blocks, ppf, rows, &visuals, lit, &drops);
         self.paint_lanes(&painter, r, left, ppf, lanes_top, visuals.selection.stroke.color);
 
         let panel_at = |x: f32| blocks.iter().position(|b| x >= b.left() - 1.0 && x <= b.right() + 1.0);

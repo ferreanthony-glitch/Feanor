@@ -375,6 +375,9 @@ pub struct App {
     pub(crate) key_anchor: Option<crate::montagekeys::KeyRef>,
     /// Plusieurs clés choisies glissées à la fois dans le montage.
     pub(crate) keys_drag: Option<crate::montagekeys::KeysDrag>,
+    /// Une clé seule prise dans le montage (`Handle::Key`) : de combien d'images elle est glissée.
+    /// Elle ne se pose qu'au lâcher ; d'ici là, un repère montre où (`montagekeys::drop_view`).
+    pub(crate) key_drag_delta: isize,
     /// Le dernier clic dans le montage était sur la piste d'un calque : copier, coller et
     /// supprimer visent la clé à l'image courante du calque courant.
     pub(crate) key_focus: bool,
@@ -678,6 +681,7 @@ impl App {
             key_sel: Vec::new(),
             key_anchor: None,
             keys_drag: None,
+            key_drag_delta: 0,
             key_focus: false,
             hole: Default::default(),
             images_focus: false,

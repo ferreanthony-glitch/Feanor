@@ -3,8 +3,8 @@
 use crate::document::{ImageMark, Layer, LayerKind};
 use crate::fx::{Effect, EffectKind, FxKey};
 use crate::handles::{
-    between, content_bounds, duplicate_run, key_at, key_start_taken, move_bookmark, move_boundary, move_fx_key, move_layer, move_mark, overwrite_run, remove_run, reorder_run,
-    reorder_slot, set_layer_end, set_layer_start, set_run_length, shift_runs, sound_shift_note,
+    between, content_bounds, drop_marks, duplicate_run, key_at, key_start_taken, move_bookmark, move_boundary, move_fx_key, move_layer, move_mark, overwrite_run,
+    remove_run, set_layer_end, set_layer_start, set_run_length, shift_runs, sound_shift_note,
 };
 
 fn mark(frame: usize) -> ImageMark {
@@ -179,25 +179,33 @@ fn a_key_moves_before_or_after_the_others() {
         l.roles.insert(6, crate::roles::Role::Key);
         l
     };
-    // B tiré vers la droite : il passe après C quand son milieu passe celui de C.
-    let l = base();
-    assert_eq!(reorder_slot(&l, 3, 3), 1, "sans bouger : sa place");
-    assert_eq!(reorder_slot(&l, 3, 5), 1, "le milieu de B (6) avant celui de C (7)");
-    assert_eq!(reorder_slot(&l, 3, 6), 1, "milieux égaux (7) : il reste avant");
-    assert_eq!(reorder_slot(&l, 3, 7), 2, "le milieu de B (8) passe celui de C (7) : après C");
-    assert_eq!(reorder_slot(&l, 3, -2), 0, "tout au début : avant A");
-    let mut l = base();
-    assert_eq!(reorder_run(&mut l, 3, 2), Some(7));
-    assert_eq!(frames(&l), vec![Some(1), Some(1), Some(1), Some(3), Some(3), Some(3), Some(3), Some(2), Some(2)], "A, C, B : chacun garde sa durée");
+    // B (milieu 4) tiré vers la droite : il passe après C (milieu 7) quand son milieu le passe.
+    let moved = |delta: isize| {
+        let mut l = base();
+        let s = shift_runs(&mut l, &[3], delta)[0];
+        (s, frames(&l), l)
+    };
+    assert_eq!(moved(0).0, 3, "sans bouger : sa place");
+    assert_eq!(moved(2).0, 3, "le milieu de B (6) avant celui de C (7)");
+    assert_eq!(moved(3).0, 3, "milieux égaux (7) : il reste avant");
+    let (s, f, l) = moved(4);
+    assert_eq!(s, 7, "le milieu de B (8) passe celui de C (7) : après C");
+    assert_eq!(f, vec![Some(1), Some(1), Some(1), Some(3), Some(3), Some(3), Some(3), Some(2), Some(2)], "A, C, B : chacun garde sa durée");
     assert_eq!(l.roles.keys().copied().collect::<Vec<_>>(), vec![4, 7], "les rôles suivent leurs images");
     // Devant tous les autres.
-    let mut l = base();
-    assert_eq!(reorder_run(&mut l, 3, 0), Some(0));
-    assert_eq!(frames(&l)[..5], [Some(2), Some(2), Some(1), Some(1), Some(1)]);
+    let (s, f, _) = moved(-5);
+    assert_eq!((s, &f[..5]), (0, &[Some(2), Some(2), Some(1), Some(1), Some(1)][..]));
+    // Le repère, vu dans le calque tel qu'il est : là où il se posera.
+    let l = base();
+    assert_eq!(drop_marks(&l, &[3], 0), Vec::<usize>::new(), "il reste : pas de repère");
+    assert_eq!(drop_marks(&l, &[3], 3), Vec::<usize>::new());
+    assert_eq!(drop_marks(&l, &[3], 4), vec![9], "après C : la fin de C");
+    assert_eq!(drop_marks(&l, &[3], -5), vec![0], "avant A : tout au début");
     // Rien à prendre sur une plage vide.
     let mut v = Layer::new("V", LayerKind::Bitmap);
     v.frames = vec![Some(1), None, Some(2)];
-    assert_eq!(reorder_run(&mut v, 1, 0), None);
+    assert_eq!(shift_runs(&mut v, &[1], 2), vec![1]);
+    assert_eq!(frames(&v), vec![Some(1), None, Some(2)]);
 }
 
 #[test]
@@ -314,10 +322,7 @@ fn several_keys_slide_together() {
     let mut l = base();
     assert_eq!(shift_runs(&mut l, &[0, 4], 3), vec![2, 6]);
     assert_eq!(frames(&l), vec![Some(2), Some(2), Some(1), Some(1), Some(4), Some(4), Some(3), Some(3)]);
-    // Une seule : comme reorder_run.
-    let (mut a, mut b) = (base(), base());
-    shift_runs(&mut a, &[2], 3);
-    let slot = reorder_slot(&b, 2, 5);
-    reorder_run(&mut b, 2, slot);
-    assert_eq!(frames(&a), frames(&b));
+    // Les repères : un par bloc qui change de place, vu dans le calque tel qu'il est.
+    assert_eq!(drop_marks(&base(), &[2, 4], 4), vec![8], "le bloc B-C après D : la fin de D");
+    assert_eq!(drop_marks(&base(), &[0, 4], 3), vec![4, 8], "A après B, C après D");
 }
