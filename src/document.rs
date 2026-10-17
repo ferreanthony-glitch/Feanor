@@ -2054,9 +2054,11 @@ impl Document {
 
     /// Réunit les plans `ids` en un seul, le premier (Anthony, 2026-10-17 : « quand deux plans
     /// ou plus sont sélectionnés, l'option de fusionner les plans doit être possible ») : comme
-    /// `join_next_plan` répété, le début de chaque plan suivant devient une marque d'image.
-    /// Ils doivent être au moins deux, se suivre et être dans une même séquence ; sinon rien.
-    /// Renvoie l'indice du plan réuni.
+    /// `join_next_plan` répété, mais sans laisser de marque d'image aux jointures (« fusionner
+    /// les deux plans laisse un repère sur la timeline, tu peux les enlever ? ») : les textes et
+    /// les notes de la planche du plan fusionné passent à l'image de storyboard d'avant. Ses
+    /// propres marques restent. Ils doivent être au moins deux, se suivre et être dans une même
+    /// séquence ; sinon rien. Renvoie l'indice du plan réuni.
     pub fn join_plans(&mut self, ids: &[u64]) -> Option<usize> {
         let mut at: Vec<usize> = ids.iter().filter_map(|id| self.panels.iter().position(|p| p.id == *id)).collect();
         at.sort_unstable();
@@ -2071,9 +2073,44 @@ impl Document {
         let first = self.panels[at[0]].id;
         for _ in 1..at.len() {
             let i = self.panels.iter().position(|p| p.id == first)?;
+            let joint = self.panels[i].frame_count();
             self.join_next_plan(i)?;
+            let i = self.panels.iter().position(|p| p.id == first)?;
+            self.drop_joint_mark(i, joint);
         }
         self.panels.iter().position(|p| p.id == first)
+    }
+
+    /// Retire la marque d'image laissée par une jointure à l'image `joint` du plan `index` : ses
+    /// textes s'ajoutent à ceux de l'image de storyboard d'avant (la marque précédente, sinon le
+    /// plan), ses notes de la planche s'y attachent.
+    fn drop_joint_mark(&mut self, index: usize, joint: usize) {
+        let Some(k) = self.panels[index].marks.iter().position(|m| m.frame == joint) else { return };
+        let m = self.panels[index].marks.remove(k);
+        let append = |dst: &mut String, src: &str| {
+            if !src.trim().is_empty() {
+                if !dst.trim().is_empty() {
+                    dst.push('\n');
+                }
+                dst.push_str(src);
+            }
+        };
+        let p = &mut self.panels[index];
+        let target = match p.marks.iter_mut().rev().find(|x| x.frame < joint) {
+            Some(prev) => {
+                append(&mut prev.action, &m.action);
+                append(&mut prev.dialogue, &m.dialogue);
+                append(&mut prev.notes, &m.notes);
+                prev.id
+            }
+            None => {
+                append(&mut p.action, &m.action);
+                append(&mut p.dialogue, &m.dialogue);
+                append(&mut p.notes, &m.notes);
+                p.id
+            }
+        };
+        self.reanchor_notes(m.id, target);
     }
 
     /// Réunit le plan `index` et le suivant de la même séquence : les images du suivant viennent

@@ -1095,8 +1095,11 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         plus sont sélectionnés, l'option de fusionner les plans doit être possible. De même pour
         les calques ») : plans choisis par Ctrl ou Maj + clic dans le montage, qui se suivent
         dans une même séquence : « Fusionner les N plans choisis » (clic droit sur un plan, menu
-        « … », menu Storyboard) ; le début de chacun devient une marque d'image
-        (`Document::join_plans`). Calques : Ctrl ou Maj + clic dans le panneau Calques et dans la
+        « … », menu Storyboard), sans repère aux jointures (Anthony : « fusionner les deux plans
+        laisse un repère sur la timeline, tu peux les enlever ? ») : les textes et notes de la
+        planche des plans fusionnés passent à l'image de storyboard d'avant
+        (`Document::join_plans`, `drop_joint_mark`) ; « Réunir le plan et le suivant », l'inverse
+        de « Couper », garde sa marque. Calques : Ctrl ou Maj + clic dans le panneau Calques et dans la
         colonne du montage (comme dans la timeline) ; le bouton Fusionner du panneau fusionne les
         choisis quand il y en a plusieurs, le menu de la colonne du montage aussi.
 

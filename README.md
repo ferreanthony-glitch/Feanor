@@ -39,8 +39,8 @@ ouvrir d'un double-clic).
   - On réordonne les plans en les faisant glisser ; un plan reste un plan (il rejoint la séquence
     où on le pose). Le bord droit d'un plan règle sa durée.
   - Plusieurs plans choisis (Ctrl ou Maj + clic) qui se suivent dans une même séquence :
-    « Fusionner les N plans choisis » (clic droit, menu « … ») en fait un seul ; le début de
-    chacun devient une marque d'image. Plusieurs calques choisis (Ctrl ou Maj + clic dans le
+    « Fusionner les N plans choisis » (clic droit, menu « … ») en fait un seul, sans repère aux
+    jointures (leurs textes rejoignent ceux du plan). Plusieurs calques choisis (Ctrl ou Maj + clic dans le
     panneau Calques, la colonne du montage ou la timeline) : le bouton Fusionner les réunit.
   - La colonne de gauche du montage (Caméra, plans, calques) s'élargit en tirant son bord droit
     (double-clic : tout montrer, ou revenir étroite) ; sa largeur est retenue. Élargie, chaque

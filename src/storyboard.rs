@@ -221,7 +221,7 @@ impl App {
     }
 
     /// Fusionne les plans choisis (deux ou plus, qui se suivent dans une même séquence) en un
-    /// seul : le début de chacun devient une marque d'image (`Document::join_plans`).
+    /// seul, sans repère aux jointures (`Document::join_plans`).
     pub(crate) fn merge_chosen_panels(&mut self) {
         if self.storyboard_refuses() {
             return;
@@ -621,7 +621,7 @@ impl App {
         }
         // Plusieurs plans choisis (Ctrl ou Maj + clic) : les fusionner en un seul.
         let n = self.board_selection().len();
-        if n > 1 && ui.button(format!("Fusionner les {n} plans choisis")).on_hover_text("Ils doivent se suivre, dans une même séquence. Le début de chacun devient une marque d'image.").clicked() {
+        if n > 1 && ui.button(format!("Fusionner les {n} plans choisis")).on_hover_text("Ils doivent se suivre, dans une même séquence. Pas de repère aux jointures : leurs textes rejoignent ceux du plan.").clicked() {
             ui.close_menu();
             self.merge_chosen_panels();
         }

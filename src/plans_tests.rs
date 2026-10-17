@@ -214,17 +214,21 @@ fn chosen_plans_that_follow_each_other_are_joined_into_one() {
     assert!(doc.is_plans());
     let ids: Vec<u64> = doc.panels.iter().map(|p| p.id).collect();
     let lens: Vec<usize> = doc.panels.iter().map(|p| p.frame_count()).collect();
+    doc.panels[0].action = "un".into();
+    doc.panels[2].action = "trois".into();
     // Pas de trou, pas deux séquences, au moins deux plans.
     assert!(doc.join_plans(&[ids[0], ids[2]]).is_none(), "ils doivent se suivre");
     assert!(doc.join_plans(&[ids[2], ids[3]]).is_none(), "une seule séquence");
     assert!(doc.join_plans(&[ids[1]]).is_none(), "au moins deux");
-    // Les trois de la première séquence (dans le désordre) : un seul plan, le premier, avec une
-    // marque d'image au début de chacun des suivants.
+    // Les trois de la première séquence (dans le désordre) : un seul plan, le premier, sans
+    // repère aux jointures (Anthony : « fusionner les deux plans laisse un repère sur la
+    // timeline, tu peux les enlever ? ») ; les textes des plans fusionnés le rejoignent.
     let at = doc.join_plans(&[ids[2], ids[0], ids[1]]).expect("réunis");
     assert!(doc.is_plans());
     assert_eq!(doc.panels.len(), 2);
     let plan = &doc.panels[at];
     assert_eq!(plan.id, ids[0]);
     assert_eq!(plan.frame_count(), lens[0] + lens[1] + lens[2]);
-    assert_eq!(plan.marks.iter().map(|m| m.frame).collect::<Vec<_>>(), vec![lens[0], lens[0] + lens[1]]);
+    assert!(plan.marks.is_empty(), "pas de marque d'image aux jointures");
+    assert_eq!(plan.action, "un\ntrois");
 }
