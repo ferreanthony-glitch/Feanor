@@ -7,6 +7,7 @@ use eframe::egui::{
 
 use crate::app::{App, BoardView, Mode};
 use crate::document::{Document, Panel};
+use crate::handles::Handle;
 use crate::history::Edit;
 use crate::soundtrack::{ClipDrag, ClipEdge, MenuTarget};
 use crate::theme;
@@ -728,8 +729,17 @@ impl App {
             }
         }
 
-        // Caméra au-dessus des plans, calques dessous (6f), puis les pistes son.
-        self.paint_track_rows(&painter, r, &blocks, ppf, rows, &visuals);
+        // Caméra au-dessus des plans, calques dessous (6f), puis les pistes son. La poignée de
+        // calque tenue (sur le plan courant) ou survolée s'éclaire (chantier 5).
+        let lit = match &self.handle_drag {
+            Some(d) => Some((self.cur_panel, d.handle)),
+            None if self.montage_drag.is_none() && self.cam_key_drag.is_none() => resp
+                .hover_pos()
+                .and_then(|p| self.montage_layer_handle_at(p, r.top(), &blocks, ppf, rows))
+                .map(|(i, _, h)| (i, h)),
+            None => None,
+        };
+        self.paint_track_rows(&painter, r, &blocks, ppf, rows, &visuals, lit);
         self.paint_lanes(&painter, r, left, ppf, lanes_top, visuals.selection.stroke.color);
 
         let panel_at = |x: f32| blocks.iter().position(|b| x >= b.left() - 1.0 && x <= b.right() + 1.0);
@@ -762,6 +772,14 @@ impl App {
             if edge_at(p).is_some() || clip_edge || resizing {
                 ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
             }
+            // Poignées des pistes de calques (chantier 5) : les bords s'étirent, la barre se prend.
+            match lit.filter(|_| self.handle_drag.is_none()).map(|(_, h)| h) {
+                Some(Handle::LayerStart { .. } | Handle::LayerEnd { .. } | Handle::Exposure { .. }) => {
+                    ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal)
+                }
+                Some(Handle::LayerMove { .. }) => ui.ctx().set_cursor_icon(CursorIcon::Grab),
+                _ => {}
+            }
         }
 
         if resp.drag_started() {
@@ -776,6 +794,13 @@ impl App {
                 // Une marque d'image se prend aussi dans le montage (passe interface).
                 self.set_panel(i);
                 self.begin_handle_drag(crate::handles::Handle::Mark(m));
+            } else if let Some((i, k, h)) = self.montage_layer_handle_at(origin, r.top(), &blocks, ppf, rows) {
+                // Les gestes de la timeline dans les pistes de calques (chantier 5) : ce plan, ce
+                // calque, et sa poignée.
+                self.sel_clip = None;
+                self.set_panel(i);
+                self.select_layer(k);
+                self.begin_handle_drag(h);
             } else {
                 let drag = if !in_blocks(origin) {
                     MontageDrag::Scrub
@@ -820,11 +845,13 @@ impl App {
         } else if resp.hover_pos().is_some_and(|p| self.montage_camera_key_at(p, r.top(), &blocks, ppf, rows).is_some()) {
             ui.ctx().set_cursor_icon(CursorIcon::Grab);
         }
-        if self.handle_drag.is_some() {
-            ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
+        if let Some(h) = self.handle_drag.as_ref().map(|d| d.handle) {
+            let resize = matches!(h, Handle::LayerStart { .. } | Handle::LayerEnd { .. } | Handle::Exposure { .. });
+            ui.ctx().set_cursor_icon(if resize { CursorIcon::ResizeHorizontal } else { CursorIcon::Grabbing });
             if let (true, Some(p)) = (resp.dragged(), resp.interact_pointer_pos()) {
-                let f = ((p.x - x_of(self.doc.panel_start(self.cur_panel))) / ppf).floor().max(0.0) as usize;
-                self.drag_handle(f, f);
+                // L'image sous la souris, et le bord d'image le plus proche (expositions, bouts).
+                let x = ((p.x - x_of(self.doc.panel_start(self.cur_panel))) / ppf).max(0.0);
+                self.drag_handle(x.floor() as usize, x.round() as usize);
             }
             if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
                 self.end_handle_drag();

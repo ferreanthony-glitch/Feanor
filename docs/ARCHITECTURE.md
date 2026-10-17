@@ -696,6 +696,24 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     `n` = diamètre ÷ pas est le nombre d'empreintes qui recouvrent un point.
   - Le pixel est toujours recalculé depuis son état d'avant le trait, avec `masque × opacité` :
     l'opacité reste le plafond.
+- Pistes du montage modifiables (chantier 5).
+  - `montagerows.rs` : `TrackKey { name, nth }` et `layer_tracks` remplacent la rangée par rang
+    (`layer_in_row`, 8 au plus). Les plans sont parcourus dans l'ordre, chacun du haut de sa
+    pile : un nom nouveau s'insère sous la piste du calque qui le précède dans son plan.
+    `layer_on_track` retrouve le calque d'un plan sans rien allouer (appelé pour chaque case à
+    l'écran).
+  - `montage_layer_handle_at` / `cell_handle` : début, fin, barre, bord d'exposition, avec les
+    mêmes `Handle` que la timeline ; le geste passe par `begin_handle_drag` / `drag_handle` /
+    `end_handle_drag` (plan d'avant, une étape d'annulation, Échap). Le montage donne
+    maintenant à `drag_handle` le bord d'image le plus proche (arrondi), pas l'image sous la
+    souris.
+  - `paint_layer_cell` dessine la barre (`BAR_H`) et éclaire la poignée survolée ou tenue
+    (`lit`). `LAYER_H` passe de 18 à 20 points.
+
+    Décision : coût — les pistes par nom réutilisent les poignées de la timeline telles
+    quelles. Risque : deux plans dont les calques ont des noms différents donnent des pistes
+    distinctes (c'est voulu). Réversible : l'ordre des pistes n'est pas enregistré, il se
+    recalcule.
 - Timeline et montage ensemble (chantier 6).
   - `Pane::Strip` est devenu `Pane::Montage` (nom enregistré inchangé, « bande ») et
     `Pane::Timeline` arrive (« timeline »), tous deux du groupe du bas. `bottom_band` les empile,

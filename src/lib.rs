@@ -116,6 +116,8 @@ mod keymap_tests;
 mod ops_tests;
 mod model3d;
 mod montagerows;
+#[cfg(test)]
+mod montagerows_tests;
 pub mod moteur;
 mod newlayer;
 mod notes;

@@ -356,7 +356,9 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
 - **Panneaux** : chaque panneau (Outils, Couleur, Pinceaux, Réglages, Vue, Guides, Fiche,
   Calques, Montage, Timeline) est un onglet. Le montage et la timeline sont l'un sous l'autre, en
   bas, dans les deux modes ; Copier, Coller et Suppr visent celui où l'on a cliqué en dernier
-  (un trait de couleur en haut du panneau). Glisse un onglet : des boutons apparaissent au milieu du panneau
+  (un trait de couleur en haut du panneau). Dans le montage, une piste par nom de calque ; on y
+  étire un dessin par son bord droit, on décale un calque par sa barre, on le rogne ou
+  l'allonge par ses bouts, comme dans la timeline. Glisse un onglet : des boutons apparaissent au milieu du panneau
   survolé, lâche-le sur l'un d'eux pour l'aimanter (à gauche, à droite, dessus, dessous, ou en
   onglet), ou ailleurs pour qu'il flotte. Tire les bords entre panneaux pour les redimensionner.
   La croix d'un onglet le ferme ; Affichage > Panneaux le fait revenir à sa place. Clic droit

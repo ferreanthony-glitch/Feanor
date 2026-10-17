@@ -44,7 +44,7 @@ pub(crate) enum Handle {
 
 impl Handle {
     /// Une poignée qui change les dessins d'un calque : elle ne change pas la durée du plan.
-    fn layer(self) -> Option<usize> {
+    pub(crate) fn layer(self) -> Option<usize> {
         match self {
             Handle::Exposure { layer, .. } | Handle::LayerStart { layer } | Handle::LayerEnd { layer } | Handle::LayerMove { layer, .. } => Some(layer),
             _ => None,

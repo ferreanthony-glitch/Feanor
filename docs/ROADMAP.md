@@ -844,7 +844,7 @@ Simplifier l'interface et combler ce qui manque :
   Chaque entrée est une commande : un clic droit dessus lui donne un raccourci.
 - Pas faits :
   - glisser le début d'un calque vidéo (son menu a un champ) ;
-  - étirer une exposition dans les pistes du montage (la timeline du plan le fait) ;
+  - ~~étirer une exposition dans les pistes du montage~~ (fait au chantier 5) ;
   - les rôles, qui suivent leurs images.
 
 ## Audit du cœur par Fable et chantiers de la timeline (2026-10-16)
@@ -897,8 +897,21 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
 
   Pas changé : les raccourcis dépendent toujours du mode (Tab), pas du panneau cliqué (les
   flèches vont d'un plan à l'autre en storyboard, restent dans le plan en animation).
-- Restent (ordre de Fable) : pistes du montage modifiables (au-delà de 8 calques, par nom),
-  navigation de calques à la TVPaint, fenêtre « Agrandir / rétrécir le calque », finitions.
+- ✅ 5. Pistes du montage modifiables (lancé par Anthony le 2026-10-17) :
+  - **une piste par nom de calque** : le calque « Perso » de chaque plan est sur la même piste,
+    où qu'il soit dans sa pile ; un plan qui n'en a pas y laisse un trou ; deux calques du même
+    nom dans un plan ont chacun leur piste (« Perso (2) »). Avant : une rangée par rang, 8 au
+    plus ;
+  - **toutes les pistes** sont montrées (la bande défile) ;
+  - **les gestes de la timeline** dans les pistes : le bord droit d'un dessin étire son
+    exposition (la suite glisse), la barre sous les dessins décale le calque, ses bouts le
+    rognent ou l'allongent. Le plan et le calque deviennent courants ; une étape d'annulation
+    par geste ; Échap pendant le geste l'abandonne ; refusé sous le verrou du storyboard.
+
+  Pas fait : la piste « Fond (scène) » reste en lecture seule (un même calque sur plusieurs
+  plans) ; un nom de piste sans calque dans le plan courant ne se clique pas.
+- Restent (ordre de Fable) : navigation de calques à la TVPaint, fenêtre « Agrandir / rétrécir
+  le calque », finitions.
 
 ## Moteur de dessin façon TVPaint, brosses façon Procreate, import de brosses (2026-10-16)
 
