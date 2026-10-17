@@ -430,6 +430,8 @@ impl App {
         keys.sort_by_key(|k| k.offset);
         let n = keys.len();
         self.key_clipboard = Some(KeyClip { keys });
+        // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau Pelure (`pasteimage`).
+        self.ctx.copy_text(format!("{}clés copiées", crate::pasteimage::MARK));
         self.status = format!("{n} clé{} copiée{} : Ctrl+V pour coller à l'image courante d'un calque.", s(n), s(n));
     }
 

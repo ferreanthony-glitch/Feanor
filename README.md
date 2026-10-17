@@ -429,6 +429,11 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
 - **Formes** : Ligne (droite, courbe : tracer puis glisser pour courber ; courbe en S : deux
   glissers), Rectangle, Ellipse (Maj : carré, cercle), Polyligne (un clic par point, double-clic
   ou Entrée pour finir, clic sur le premier point pour fermer).
+- **Coller une image** copiée ailleurs (navigateur, capture d'écran, autre logiciel) : Ctrl+V ou
+  Édition > Coller. Sur un calque bitmap, dans son dessin ; sinon sur un nouveau calque bitmap
+  « Image collée » au-dessus. Centrée dans le cadre (réduite pour y tenir), sélectionnée :
+  déplacer, agrandir, tourner, puis Échap pour la poser. Après une copie dans Pelure, Ctrl+V colle
+  de nouveau ce qui a été copié dans Pelure.
 - **Cutter** (Alt+T, calque vectoriel) : glisser en travers des bouts de traits à enlever (ou
   cliquer sur l'un d'eux) ; chaque trait touché est coupé là où il croise les autres, seuls les
   morceaux touchés partent (un dépassement est coupé net au croisement). Un trait qui ne croise

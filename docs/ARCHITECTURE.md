@@ -803,6 +803,13 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     peint derrière) et refait la zone. `App::paint_behind`, `fill_shapes` (retenus dans
     `Settings`, enregistrés avec la pelure quand ils changent), `close_tolerance` (15 points
     d'écran) ; actions `pinceau.derriere`, `pinceau.remplir` (sans touche).
+  - Image du presse-papiers (`pasteimage.rs`) : `run_action("edition.coller")` commence par
+    `clipboard_image` (arboard : rien si le texte commence par `MARK`, « Pelure : », écrit par les
+    copies de Pelure) ; `paste_clipboard_image` : calque bitmap modifiable ou `add_layer`, `fit_size`
+    au cadre (`imageops::resize`), `to_floating` (`raster::premultiply` ; sans aucune opacité :
+    opaque), puis `paste_floating` (le corps de `bitmap_paste`). `handle_shortcuts` : egui-winit
+    garde Ctrl+V sans texte dans le presse-papiers ; le relâché de V avec Ctrl, sans événement
+    `Paste` depuis l'appui (`App::paste_event`), compte comme Ctrl+V.
   - Cutter (`cutter.rs`) : `cut_strokes` (pur, testé) : traits que le geste croise (ou, pour un
     clic, le plus proche à `tol` près, `nearest`), coupés aux `crossings` avec les autres traits et
     avec eux-mêmes (segments non voisins) ; les morceaux (`piece`, entre deux coupes) qui

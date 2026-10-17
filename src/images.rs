@@ -560,6 +560,8 @@ impl App {
             .collect();
         let (n, k) = (b - a, rows.len());
         self.image_clipboard = Some(ImageClip { rows, cels, roles: role_rows });
+        // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau Pelure (`pasteimage`).
+        self.ctx.copy_text(format!("{}images copiées", crate::pasteimage::MARK));
         self.status = format!("{n} image{} de {k} calque{} copiée{}.", s(n), s(k), s(n));
     }
 

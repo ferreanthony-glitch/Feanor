@@ -38,6 +38,9 @@ quick-xml = "0.41"
 # Import des brosses Krita (réglages compressés dans le PNG) et plus tard Procreate (zip).
 # Version déjà dans Cargo.lock (par image / png) : rien n'est téléchargé.
 flate2 = "1"
+# Coller une image du presse-papiers de Windows. Version déjà dans Cargo.lock (egui-winit, avec la
+# lecture d'images) : rien n'est téléchargé.
+arboard = { version = "3.6", default-features = false, features = ["image-data"] }
 # Propagation façon EbSynth : la caisse synthese/ (projet Cargo à part), synthèse sur la carte
 # graphique avec wgpu 24, celui d'eframe : elle tourne sur le périphérique de l'affichage.
 synthese = { path = "synthese", features = ["gpu"] }

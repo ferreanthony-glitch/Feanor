@@ -557,6 +557,8 @@ pub struct App {
     /// outils sont affichés (groupe, case, rectangle de la case).
     pub(crate) tool_recent: Vec<Tool>,
     pub(crate) tool_flyout: Option<(usize, usize, Rect)>,
+    /// Un Ctrl+V a donné un événement de collage (texte) depuis l'appui sur V (`pasteimage`).
+    pub(crate) paste_event: bool,
     /// Geste du cutter en cours (points du dessin).
     pub(crate) cut_gesture: Option<Vec<Pos2>>,
     /// Déformation en perspective en cours (5f).
@@ -813,6 +815,7 @@ impl App {
             tool_recent: Vec::new(),
             tool_flyout: None,
             cut_gesture: None,
+            paste_event: false,
             persp: None,
             clipboard: Vec::new(),
             renderer: Renderer::new(),
@@ -2454,6 +2457,9 @@ impl App {
             .into_iter()
             .map(|(k, p, m)| (k, p, m, false))
             .collect();
+        // Ctrl+V sans texte dans le presse-papiers (une image copiée d'un navigateur) : egui garde
+        // la touche et n'envoie rien ; son relâché arrive, et sert alors de Ctrl+V (`pasteimage`).
+        let (mut paste_seen, mut v_up, mut v_up_ctrl) = (false, false, false);
         ctx.input(|i| {
             for e in &i.events {
                 match e {
@@ -2465,14 +2471,28 @@ impl App {
                         modifiers,
                         ..
                     } => keys.push((*key, *physical_key, *modifiers, *repeat)),
+                    Event::Key { key, physical_key, pressed: false, modifiers, .. } if *key == Key::V || *physical_key == Some(Key::V) => {
+                        v_up = true;
+                        v_up_ctrl |= modifiers.command;
+                    }
                     // egui transforme Ctrl+C / X / V en événements de presse-papiers.
                     Event::Copy => keys.push((Key::C, Some(Key::C), egui::Modifiers::COMMAND, false)),
                     Event::Cut => keys.push((Key::X, Some(Key::X), egui::Modifiers::COMMAND, false)),
-                    Event::Paste(_) => keys.push((Key::V, Some(Key::V), egui::Modifiers::COMMAND, false)),
+                    Event::Paste(_) => {
+                        paste_seen = true;
+                        keys.push((Key::V, Some(Key::V), egui::Modifiers::COMMAND, false));
+                    }
                     _ => {}
                 }
             }
         });
+        self.paste_event |= paste_seen;
+        if v_up {
+            if v_up_ctrl && !self.paste_event {
+                keys.push((Key::V, Some(Key::V), egui::Modifiers::COMMAND, false));
+            }
+            self.paste_event = false;
+        }
         // Une flèche tenue qui déplace la sélection reste une seule étape d'annulation.
         if ctx.input(|i| crate::nudge::ARROWS.iter().any(|k| i.key_down(*k))) {
             self.keep_gesture(crate::nudge::GESTURE);
@@ -2508,6 +2528,14 @@ impl App {
     pub(crate) fn run_action(&mut self, action: &str) {
         // Un texte en cours de saisie est posé avant toute commande (annuler, changer d'image…).
         self.finish_text_edit();
+        // Une image copiée ailleurs (navigateur…) passe avant le presse-papiers de Pelure, dont
+        // les copies écrivent « Pelure : … » dans celui de Windows (`pasteimage.rs`).
+        if action == "edition.coller" {
+            if let Some(image) = crate::pasteimage::clipboard_image() {
+                self.paste_clipboard_image(image);
+                return;
+            }
+        }
         // Annuler ou rétablir pendant une déformation : elle repartirait d'un dessin périmé.
         if matches!(action, "edition.annuler" | "edition.retablir") {
             self.persp = None;

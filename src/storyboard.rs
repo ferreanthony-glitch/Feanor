@@ -127,6 +127,8 @@ impl App {
             1 => format!("{} copié.", panel_title(&self.doc, self.cur_panel)),
             n => format!("{n} plans copiés."),
         };
+        // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau Pelure (`pasteimage`).
+        self.ctx.copy_text(format!("{}plans copiés", crate::pasteimage::MARK));
         self.panel_clipboard = Some(clip);
     }
 

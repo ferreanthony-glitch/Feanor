@@ -364,20 +364,28 @@ impl App {
     /// Colle la zone copiée à sa place d'origine, sélectionnée et prête à être déplacée.
     pub(crate) fn bitmap_paste(&mut self) {
         let Some(f) = self.pixel_clipboard.clone() else { return };
+        if self.paste_floating(f) {
+            self.status = "Zone collée : déplace-la, puis Échap ou change d'outil pour la poser.".into();
+        }
+    }
+
+    /// Pose les pixels `f` sur le dessin courant, soulevés et sélectionnés (outil Sélection),
+    /// prêts à être déplacés ; faux si le calque ne peut pas être modifié.
+    pub(crate) fn paste_floating(&mut self, f: Floating) -> bool {
         self.end_stroke();
         self.drop_bitmap_selection();
         if !self.layer_editable() {
-            return;
+            return false;
         }
         let (cel, prefix) = self.ensure_cel();
-        let Some(c) = self.doc.cels.get_mut(&cel) else { return };
+        let Some(c) = self.doc.cels.get_mut(&cel) else { return false };
         let before = c.raster.clone();
         let base = c.raster.clone();
         let placed = pixsel::stamp(&mut c.raster, &f, &Affine::IDENTITY);
         c.version += 1;
         let polygon = pixsel::rect_polygon(f.bounds());
         let Some(mask) = PixelMask::from_polygons(std::slice::from_ref(&polygon), self.doc.width, self.doc.height) else {
-            return;
+            return false;
         };
         self.bsel = Some(BSelection {
             cel,
@@ -395,6 +403,6 @@ impl App {
         self.tool = Tool::Select;
         self.modified = true;
         self.renderer.invalidate_all();
-        self.status = "Zone collée : déplace-la, puis Échap ou change d'outil pour la poser.".into();
+        true
     }
 }

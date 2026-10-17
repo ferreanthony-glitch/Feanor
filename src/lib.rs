@@ -71,6 +71,9 @@ pub mod ctg;
 #[cfg(test)]
 mod ctg_tests;
 mod ctgui;
+mod pasteimage;
+#[cfg(test)]
+mod pasteimage_tests;
 mod cutter;
 #[cfg(test)]
 mod cutter_tests;

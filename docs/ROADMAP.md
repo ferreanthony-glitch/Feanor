@@ -1149,6 +1149,15 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         partent ; un trait qui ne croise rien part en entier (mon choix) ; zones et textes ne
         bougent pas. Comportement exact du Cutter de Storyboard Pro (lasso, rectangle…) à
         vérifier. Vérifié en essai (dépassement d'un T coupé net) ;
+      - **coller une image du presse-papiers de Windows** (Anthony : « ajoute la possibilité de
+        coller une image copiée [dans] le presse-papiers de Windows, issue d'internet ou autre ») :
+        Ctrl+V / Édition > Coller prend l'image du presse-papiers si elle ne vient pas de Pelure
+        (les copies de Pelure y écrivent « Pelure : … », maintenant aussi celles des plans, des
+        images et des clés). Calque bitmap courant, sinon nouveau calque bitmap « Image collée » ;
+        centrée dans le cadre, réduite pour y tenir, sélectionnée. egui avale Ctrl+V quand le
+        presse-papiers n'a pas de texte : le relâché de V avec Ctrl en tient lieu. `arboard`
+        (déjà dans Cargo.lock, rien téléchargé). Vérifié en essai avec une image fabriquée (le
+        presse-papiers d'Anthony n'est pas touché) ; la copie depuis un navigateur est à essayer ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,
