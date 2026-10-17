@@ -125,3 +125,20 @@ fn keys_are_chosen_one_or_several_at_a_time() {
     assert_eq!(choose(&[k(5)], None, None, true, None).0, vec![k(5)]);
     assert!(choose(&[k(5)], None, None, false, None).0.is_empty());
 }
+
+#[test]
+fn keys_pasted_from_several_layers_find_or_create_their_layers() {
+    use crate::montagekeys::ensure_tracks;
+    use crate::montagerows::track_of;
+    // La pile d'origine, du haut vers le bas : Perso, Ombre, Décor. Le plan d'arrivée n'a que Décor.
+    let src = plan(&["Perso", "Ombre", "Décor"]);
+    let wanted: Vec<(TrackKey, LayerKind, usize)> = (0..3).map(|li| (track_of(&src, li), LayerKind::Vector, src.len() - 1 - li)).collect();
+    let mut dst = plan(&["Décor"]);
+    assert_eq!(ensure_tracks(&mut dst, &wanted), 2);
+    let names: Vec<&str> = dst.iter().rev().map(|l| l.name.as_str()).collect();
+    assert_eq!(names, ["Perso", "Ombre", "Décor"], "les calques créés gardent l'ordre d'origine, au-dessus");
+    assert_eq!(ensure_tracks(&mut dst, &wanted), 0, "rien à créer une seconde fois");
+    // La piste d'un calque : son nom et son rang parmi ceux du même nom, en partant du haut.
+    let twice = plan(&["Trait", "Trait"]);
+    assert_eq!((track_of(&twice, 1), track_of(&twice, 0)), (key("Trait", 0), key("Trait", 1)));
+}

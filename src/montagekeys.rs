@@ -10,12 +10,14 @@
 //!   d'annulation.
 //! - Copier, coller, supprimer (la voisine remplace, ou un vide) et dupliquer sur place visent
 //!   les clés choisies, sinon la clé à l'image courante du calque courant. Collées, les clés
-//!   gardent leurs écarts et leurs durées, sur le calque courant à partir de l'image courante.
+//!   gardent leurs écarts et leurs durées à partir de l'image courante : venues d'un seul calque,
+//!   sur le calque courant ; de plusieurs, chacune sur le calque de même nom du plan courant
+//!   (créé s'il manque, à la même place dans la pile).
 
 use crate::app::App;
 use crate::document::{Cel, CelId, Layer, LayerKind};
 use crate::handles::{duplicate_run, overwrite_run, remove_run, runs, shift_runs};
-use crate::montagerows::{layer_on_track, TrackKey};
+use crate::montagerows::{layer_on_track, track_of, TrackKey};
 
 /// Une clé : plan (id), calque (id), image où commence son exposition.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,12 +33,15 @@ pub(crate) struct KeyClip {
 }
 
 /// Une clé copiée : son écart à la première (en images du montage), sa durée, son dessin copié
-/// tel qu'il était, la sorte de son calque.
+/// tel qu'il était, la sorte de son calque, sa piste (nom du calque) et le rang de son calque
+/// en partant du haut de sa pile (pour recréer les calques manquants dans le même ordre).
 pub(crate) struct ClipKey {
     pub offset: usize,
     pub len: usize,
     pub cel: Cel,
     pub kind: LayerKind,
+    pub track: TrackKey,
+    pub rank: usize,
 }
 
 /// Plusieurs clés prises à la fois dans le montage : chaque calque touché tel qu'il était, l'image
@@ -80,6 +85,29 @@ pub(crate) fn choose(chosen: &[KeyRef], anchor: Option<KeyRef>, key: Option<KeyR
         return (out, Some(k));
     }
     (vec![k], Some(k))
+}
+
+/// Avant de coller des clés venues de plusieurs calques : les calques de leurs pistes `wanted`
+/// (piste, sorte, rang en partant du haut de leur pile d'origine) qui manquent dans `layers`
+/// sont créés, du plus bas au plus haut de leur pile d'origine, chacun posé en haut (ils gardent
+/// donc leur ordre) ; un deuxième calque du même nom va en bas. Renvoie le nombre de créés.
+pub(crate) fn ensure_tracks(layers: &mut Vec<Layer>, wanted: &[(TrackKey, LayerKind, usize)]) -> usize {
+    let mut missing: Vec<&(TrackKey, LayerKind, usize)> = Vec::new();
+    for w in wanted {
+        if layer_on_track(layers, &w.0).is_none() && !missing.iter().any(|m| m.0 == w.0) {
+            missing.push(w);
+        }
+    }
+    missing.sort_by_key(|m| std::cmp::Reverse(m.2));
+    for (track, kind, _) in &missing {
+        let layer = Layer::new(track.name.clone(), *kind);
+        if track.nth > 0 {
+            layers.insert(0, layer);
+        } else {
+            layers.push(layer);
+        }
+    }
+    missing.len()
 }
 
 impl App {
@@ -262,8 +290,9 @@ impl App {
         let mut keys = Vec::new();
         for &(pi, li, s, e) in &targets {
             let Some(cel) = self.key_cel(pi, li, s).and_then(|id| self.doc.cels.get(&id)).cloned() else { continue };
-            let kind = self.doc.panels[pi].layers[li].kind;
-            keys.push(ClipKey { offset: self.doc.panel_start(pi) + s - g0, len: e - s, cel, kind });
+            let layers = &self.doc.panels[pi].layers;
+            let (kind, track, rank) = (layers[li].kind, track_of(layers, li), layers.len() - 1 - li);
+            keys.push(ClipKey { offset: self.doc.panel_start(pi) + s - g0, len: e - s, cel, kind, track, rank });
         }
         keys.sort_by_key(|k| k.offset);
         let n = keys.len();
@@ -271,48 +300,96 @@ impl App {
         self.status = format!("{n} clé{} copiée{} : Ctrl+V pour coller à l'image courante d'un calque.", s(n), s(n));
     }
 
-    /// Colle les clés copiées sur le calque courant, à partir de l'image courante : chacune avec
-    /// son écart et sa durée (sans dépasser la fin du plan), à la place de ce qui y était ; de
-    /// nouveaux dessins, copies des siens. Les clés collées deviennent le choix.
+    /// Colle les clés copiées à partir de l'image courante, chacune avec son écart et sa durée
+    /// (sans dépasser la fin du plan), à la place de ce qui y était ; de nouveaux dessins, copies
+    /// des siens. Venues d'un seul calque : sur le calque courant. De plusieurs : chacune sur le
+    /// calque de même nom du plan courant, créé s'il manque. Les clés collées deviennent le choix.
     pub(crate) fn paste_keys(&mut self) {
         if self.key_clipboard.is_none() || self.refuse_on_folder() {
             return;
         }
-        let kind = self.layer().kind;
         let plan = self.frame_count();
         let f0 = self.cur_frame.min(plan.saturating_sub(1));
-        let li = self.cur_layer;
-        let wanted: Vec<(usize, usize, Cel)> = self
+        let (pi, cur) = (self.cur_panel, self.cur_layer);
+        // (image, durée, dessin, sorte, piste, rang) des clés qui tiennent dans le plan.
+        let wanted: Vec<(usize, usize, Cel, LayerKind, TrackKey, usize)> = self
             .key_clipboard
             .as_ref()
-            .map(|c| c.keys.iter().filter(|k| k.kind == kind && f0 + k.offset < plan).map(|k| (f0 + k.offset, k.len.min(plan - f0 - k.offset).max(1), k.cel.clone())).collect())
+            .map(|c| {
+                c.keys
+                    .iter()
+                    .filter(|k| f0 + k.offset < plan)
+                    .map(|k| (f0 + k.offset, k.len.min(plan - f0 - k.offset).max(1), k.cel.clone(), k.kind, k.track.clone(), k.rank))
+                    .collect()
+            })
             .unwrap_or_default();
         let total = self.key_clipboard.as_ref().map_or(0, |c| c.keys.len());
+        let mut tracks: Vec<TrackKey> = Vec::new();
+        for w in &wanted {
+            if !tracks.contains(&w.4) {
+                tracks.push(w.4.clone());
+            }
+        }
+        let several = tracks.len() > 1;
         if wanted.is_empty() {
-            self.status = "Rien à coller ici (calque d'une autre sorte, ou après la fin du plan).".into();
+            self.status = "Rien à coller ici : l'image courante est trop près de la fin du plan.".into();
             return;
         }
         self.end_stroke();
         let snap = self.snapshot();
-        let (panel, layer) = (self.doc.panels[self.cur_panel].id, self.layer().id);
+        // Plusieurs calques : ceux qui manquent sont créés (`ensure_tracks`).
+        let created = if several {
+            let specs: Vec<(TrackKey, LayerKind, usize)> = wanted.iter().map(|w| (w.4.clone(), w.3, w.5)).collect();
+            ensure_tracks(&mut self.doc.panels[pi].layers, &specs)
+        } else {
+            0
+        };
+        let panel = self.doc.panels[pi].id;
         let mut pasted = Vec::new();
-        for (f, n, cel) in wanted {
+        let mut layers_used: Vec<u64> = Vec::new();
+        let cur_kind = self.doc.panels[pi].layers.get(cur).map(|l| l.kind);
+        let cur_id = self.doc.panels[pi].layers.get(cur).map(|l| l.id);
+        for (f, n, cel, kind, track, _) in wanted {
+            let li = if several {
+                layer_on_track(&self.doc.panels[pi].layers, &track)
+            } else {
+                cur_id.and_then(|id| self.doc.panels[pi].layers.iter().position(|l| l.id == id))
+            };
+            let Some(li) = li else { continue };
+            let layer_kind = if several { self.doc.panels[pi].layers[li].kind } else { cur_kind.unwrap_or(kind) };
+            if layer_kind != kind || self.doc.panels[pi].layers[li].folder {
+                continue;
+            }
             let id = self.doc.add_cel(cel);
-            overwrite_run(&mut self.layers_mut()[li], f, n, id);
-            pasted.push(KeyRef { panel, layer, start: f });
+            let l = &mut self.doc.panels[pi].layers[li];
+            overwrite_run(l, f, n, id);
+            if !layers_used.contains(&l.id) {
+                layers_used.push(l.id);
+            }
+            pasted.push(KeyRef { panel, layer: l.id, start: f });
         }
-        let n = pasted.len();
+        // Le calque courant reste le même (des calques ont pu être créés dessous).
+        if let Some(i) = cur_id.and_then(|id| self.doc.panels[pi].layers.iter().position(|l| l.id == id)) {
+            self.cur_layer = i;
+        }
+        let (n, m) = (pasted.len(), layers_used.len());
+        if n == 0 && created == 0 {
+            self.status = "Rien collé : le calque n'est pas de la même sorte que les clés (vectoriel ou bitmap).".into();
+            return;
+        }
         self.key_sel = pasted;
         self.vsel = None;
         self.commit_structure(snap);
         let skipped = total - n;
-        self.status = if skipped > 0 {
-            format!("{n} clé{} collée{} ; {skipped} non (calque d'une autre sorte, ou après la fin du plan).", s(n), s(n))
-        } else {
-            format!("{n} clé{} collée{}.", s(n), s(n))
-        };
+        let mut msg = format!("{n} clé{} collée{} sur {m} calque{}", s(n), s(n), s(m));
+        if created > 0 {
+            msg += &format!(" ({created} créé{})", s(created));
+        }
+        if skipped > 0 {
+            msg += &format!(" ; {skipped} non (calque d'une autre sorte, ou après la fin du plan)");
+        }
+        self.status = msg + ".";
     }
-
     /// Supprime les clés visées : la voisine remplace chacune (celle d'avant, sinon celle
     /// d'après), ou (`gap`) elles laissent un vide et les autres clés ne bougent pas.
     pub(crate) fn delete_keys(&mut self, gap: bool) {

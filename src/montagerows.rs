@@ -78,6 +78,14 @@ pub(crate) fn layer_tracks<'a>(plans: impl IntoIterator<Item = &'a [Layer]>) -> 
     out
 }
 
+/// La piste du calque `li` d'un plan (`layers`, du bas vers le haut) : son nom, et son rang parmi
+/// les calques du même nom en partant du haut.
+pub(crate) fn track_of(layers: &[Layer], li: usize) -> TrackKey {
+    let name = layers[li].name.clone();
+    let nth = layers[li + 1..].iter().filter(|l| l.name == name).count();
+    TrackKey { name, nth }
+}
+
 /// Le calque d'un plan (`layers`, du bas vers le haut) sur la piste `key`.
 pub(crate) fn layer_on_track(layers: &[Layer], key: &TrackKey) -> Option<usize> {
     (0..layers.len()).rev().filter(|&k| layers[k].name == key.name).nth(key.nth)
