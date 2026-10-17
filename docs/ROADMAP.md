@@ -1039,14 +1039,24 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         mode de fusion et « après la dernière image » (rien, boucle, va-et-vient, maintenir) ;
         la boucle se voit en pâle dans les cases du montage. Clic droit (ou ⋮) : tout ce qui
         touche au calque, puis toutes les commandes des calques ; double-clic sur le nom : le
-        renommer sur place.
+        renommer sur place ;
+      - **premier dessin sur un calque vide : tout le plan** (Anthony : « quand je dessine sur
+        un plan vide, le calque se remplit du début à la fin du plan et pas à partir de la
+        position de la tête de lecture ») : en storyboard ; un calque qui a déjà un dessin
+        garde la règle d'avant (de la tête de lecture au dessin suivant ou la fin du plan) ; en
+        animation, toujours « en N » images à la tête de lecture, comme TVPaint (mon choix) ;
+      - **clé précédente / suivante, tous les calques** (Anthony : « passer d'une clé à une
+        autre, tous calques compris ») : PgPréc / PgSuiv (proposition ; dans son TVPaint 12, ce
+        sont LayerPrevKey / LayerNextKey, sur le seul calque courant ; ils étaient un second
+        raccourci de « plan précédent / suivant », qui garde A / F). En storyboard, dans tout le
+        montage ; en animation, dans le plan. Aussi dans le menu des instances ;
+      - **tête de lecture de la timeline** (Anthony : « elle s'arrête quand je la fais glisser
+        sur l'entrée ou la sortie d'un plan ») : posée sur l'entrée, la sortie, une marque ou la
+        fin du plan, sa case dans la règle prenait la prise au lieu de la tête ; la case de la
+        tête passe maintenant avant. Dans le montage, deux essais (règle, piste Caméra) passent
+        d'un plan à l'autre sans s'arrêter.
 
   Pas fait : ces gestes sur la piste « Fond ».
-  À éclaircir : « un premier dessin sur un calque vide remplit toute la timeline, pas à partir
-  de la tête de lecture » (Anthony, 2026-10-17). Pas reproduit : dans quatre essais (règle,
-  piste du calque, deuxième plan, après F6 ; storyboard et animation), le dessin part de la tête
-  de lecture ; en storyboard il tient jusqu'au dessin suivant ou la fin du plan, en animation
-  sur « en N » images. Gestes exacts à demander.
 - Restent (ordre de Fable) : navigation de calques à la TVPaint, fenêtre « Agrandir / rétrécir
   le calque », finitions.
 

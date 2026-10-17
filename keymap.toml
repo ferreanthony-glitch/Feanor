@@ -617,15 +617,18 @@ action = "panneau.suivant"
 touches = ["F"]
 source = "Storyboard Pro 27 : NEXT_PANEL_KEY"
 
+# PgPréc / PgSuiv étaient un second raccourci de « plan précédent / suivant » (A / F restent) :
+# ils vont de clé en clé, tous les calques compris (demande d'Anthony, 2026-10-17). Dans son
+# TVPaint 12, ce sont LayerPrevKey / LayerNextKey (clés du seul calque courant).
 [[raccourci]]
-action = "panneau.precedent"
+action = "cle.precedente"
 touches = ["PgPréc"]
-source = "proposition (second raccourci)"
+source = "proposition (comme TVPaint 12 (perso) : LayerPrevKey, mais tous les calques)"
 
 [[raccourci]]
-action = "panneau.suivant"
+action = "cle.suivante"
 touches = ["PgSuiv"]
-source = "proposition (second raccourci)"
+source = "proposition (comme TVPaint 12 (perso) : LayerNextKey, mais tous les calques)"
 
 [[raccourci]]
 action = "scene.precedente"

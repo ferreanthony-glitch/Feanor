@@ -191,6 +191,31 @@ pub(crate) fn prev_instance(frames: &Frames, f: usize) -> Option<usize> {
     None
 }
 
+/// Images [début, fin) d'un nouveau dessin posé à l'image vide `f` d'un calque (`frames`) d'un
+/// plan de `limit` images, « en `exposure` » :
+/// - après la fin du plan : `exposure` images à partir de `f` ;
+/// - en storyboard, calque vide dans tout le plan : le plan entier, du début à la fin (Anthony,
+///   2026-10-17 : « quand je dessine sur un plan vide, le calque se remplit du début à la fin du
+///   plan et pas à partir de la position de la tête de lecture ») ;
+/// - en storyboard sinon : de `f` jusqu'au dessin suivant ou la fin du plan ;
+/// - en animation : `exposure` images à partir de `f`, sans passer le dessin suivant (TVPaint).
+pub(crate) fn new_drawing_span(frames: &Frames, f: usize, limit: usize, storyboard: bool, exposure: usize) -> (usize, usize) {
+    let exposure = exposure.max(1);
+    if f >= limit {
+        return (f, f + exposure);
+    }
+    let drawn = |k: usize| frames.get(k).copied().flatten().is_some();
+    if storyboard && !(0..limit).any(drawn) {
+        return (0, limit);
+    }
+    let next = (f..limit).find(|&k| drawn(k)).unwrap_or(limit).max(f + 1);
+    if storyboard {
+        (f, next)
+    } else {
+        (f, next.min(f + exposure))
+    }
+}
+
 /// Casse l'instance à l'image `f` : de `f` à la fin de l'instance, le dessin `copy` (une copie)
 /// remplace l'ancien. Faux si `f` est le début de l'instance ou une image vide.
 pub(crate) fn break_instance(frames: &mut Frames, f: usize, copy: CelId) -> bool {
@@ -1002,6 +1027,8 @@ impl App {
         ui.menu_button("Instances (dessin et ses expositions)", |ui| {
             self.action_item(ui, "Instance précédente", "instance.precedente");
             self.action_item(ui, "Instance suivante", "instance.suivante");
+            self.action_item(ui, "Clé précédente (tous les calques)", "cle.precedente");
+            self.action_item(ui, "Clé suivante (tous les calques)", "cle.suivante");
             self.action_item(ui, "Tête de l'instance", "instance.tete");
             self.action_item(ui, "Queue de l'instance", "instance.queue");
             ui.separator();

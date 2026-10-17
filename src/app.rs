@@ -1228,8 +1228,9 @@ impl App {
     // ------------------------------------------------------------------ dessin
 
     /// Dessin de l'image courante, créé au besoin (avec l'état d'avant, pour l'annulation).
-    /// En storyboard, un nouveau dessin est tenu jusqu'au prochain dessin ou à la fin du plan ;
-    /// en animation, sur le nombre d'images choisi (« sur 1 », « sur 2 »…).
+    /// En storyboard, un premier dessin sur un calque vide remplit tout le plan ; sinon il est
+    /// tenu jusqu'au prochain dessin ou à la fin du plan ; en animation, sur le nombre d'images
+    /// choisi (« sur 1 », « sur 2 »…) : `images::new_drawing_span`.
     pub(crate) fn ensure_cel(&mut self) -> (CelId, Option<Edit>) {
         if let Some(id) = self.cel_here() {
             // Cassure automatique (13c) : sur une image tenue, ailleurs qu'au début de son
@@ -1250,17 +1251,10 @@ impl App {
         let kind = self.layer().kind;
         let id = self.doc.new_cel(kind);
         let limit = self.frame_count();
-        let end = if f >= limit {
-            f + self.default_exposure.max(1)
-        } else {
-            let run_end = self.layer().empty_run_end(f, limit);
-            match self.mode {
-                Mode::Storyboard => run_end,
-                Mode::Animation => run_end.min(f + self.default_exposure.max(1)),
-            }
-        };
+        let storyboard = self.mode == Mode::Storyboard;
+        let (start, end) = crate::images::new_drawing_span(&self.layer().frames, f, limit, storyboard, self.default_exposure);
         let layer = &mut self.layers_mut()[li];
-        for k in f..end {
+        for k in start..end {
             layer.set(k, Some(id));
         }
         (id, Some(snap))
@@ -2717,6 +2711,8 @@ impl App {
             "images.tout_choisir" => self.select_all_images(),
             "instance.precedente" => self.goto_instance(false),
             "instance.suivante" => self.goto_instance(true),
+            "cle.precedente" => self.goto_key(false),
+            "cle.suivante" => self.goto_key(true),
             "instance.tete" => self.goto_instance_end(false),
             "instance.queue" => self.goto_instance_end(true),
             "instance.casser" => self.break_instance_here(),

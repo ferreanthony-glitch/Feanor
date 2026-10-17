@@ -18,6 +18,8 @@
 //!   gardent leurs écarts et leurs durées à partir de l'image courante : venues d'un seul calque,
 //!   sur le calque courant ; de plusieurs, chacune sur le calque de même nom du plan courant
 //!   (créé s'il manque, à la même place dans la pile).
+//! - Clé précédente / suivante (PgPréc / PgSuiv) : la tête de lecture va au début de dessin
+//!   d'avant ou d'après, tous les calques compris (`goto_key`).
 
 use crate::app::App;
 use crate::document::{Cel, CelId, Layer, LayerKind};
@@ -133,7 +135,64 @@ pub(crate) fn ensure_tracks(layers: &mut Vec<Layer>, wanted: &[(TrackKey, LayerK
     missing.len()
 }
 
+/// Les clés d'un plan avant son image `limit` : les images où commence un dessin, sur n'importe
+/// lequel de ses calques (sauf dossiers et calques vidéo), dans l'ordre, sans doublon.
+pub(crate) fn key_starts(layers: &[Layer], limit: usize) -> Vec<usize> {
+    let mut out: Vec<usize> = layers
+        .iter()
+        .filter(|l| !l.folder && l.video.is_none())
+        .flat_map(|l| {
+            let fr = &l.frames;
+            (0..fr.len().min(limit)).filter(move |&k| fr[k].is_some() && (k == 0 || fr[k - 1] != fr[k]))
+        })
+        .collect();
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
+/// Parmi les clés `keys` (dans l'ordre), la première après `at`, ou la dernière avant.
+pub(crate) fn step_key(keys: &[usize], at: usize, forward: bool) -> Option<usize> {
+    if forward {
+        keys.iter().copied().find(|&k| k > at)
+    } else {
+        keys.iter().rev().copied().find(|&k| k < at)
+    }
+}
+
 impl App {
+    /// Clé suivante (ou précédente), tous les calques compris (Anthony, 2026-10-17 : « passer
+    /// d'une clé à une autre, tous calques compris ») : en storyboard, dans tout le montage, d'un
+    /// plan à l'autre ; en animation, dans le plan.
+    pub(crate) fn goto_key(&mut self, forward: bool) {
+        let found = match self.mode {
+            crate::app::Mode::Storyboard => {
+                let keys: Vec<usize> = (0..self.doc.panels.len())
+                    .flat_map(|i| {
+                        let (start, p) = (self.doc.panel_start(i), &self.doc.panels[i]);
+                        key_starts(&p.layers, p.frame_count()).into_iter().map(move |k| start + k)
+                    })
+                    .collect();
+                let found = step_key(&keys, self.global_frame(), forward);
+                if let Some(g) = found {
+                    self.goto_global(g);
+                }
+                found.is_some()
+            }
+            crate::app::Mode::Animation => {
+                let found = step_key(&key_starts(self.layers(), usize::MAX), self.cur_frame, forward);
+                if let Some(f) = found {
+                    self.set_frame_free(f);
+                    self.follow_frame = true;
+                }
+                found.is_some()
+            }
+        };
+        if !found {
+            self.status = if forward { "Pas de clé après la tête de lecture." } else { "Pas de clé avant la tête de lecture." }.into();
+        }
+    }
+
     /// La clé du plan `pi`, calque `li`, qui contient l'image `f` du plan.
     pub(crate) fn key_ref(&self, pi: usize, li: usize, f: usize) -> Option<KeyRef> {
         let p = self.doc.panels.get(pi)?;

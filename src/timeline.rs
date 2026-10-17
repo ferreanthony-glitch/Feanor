@@ -912,9 +912,16 @@ impl App {
         }
 
         // Poignées (passe interface, `handles.rs`) : marques, signets, entrée et sortie dans la
-        // règle ; clés d'effets et bord droit des dessins dans les lignes des calques.
+        // règle ; clés d'effets et bord droit des dessins dans les lignes des calques. La case de
+        // la tête de lecture, dans la règle, prend la tête (Anthony, 2026-10-17 : posée sur
+        // l'entrée ou la sortie, elle ne se laissait plus glisser : la prise passait avant).
+        let on_playhead = |p: Pos2| p.y >= r.top() && p.y < grid_top && p.x >= cx - 1.0 && p.x < cx + cell + 1.0;
         if resp.drag_started() && !holding_key && !in_notes {
-            if let Some(h) = ui.input(|i| i.pointer.press_origin()).and_then(|p| self.timeline_handle_at(p, r, cell, &rows, grid_top)) {
+            if let Some(h) = ui
+                .input(|i| i.pointer.press_origin())
+                .filter(|p| !on_playhead(*p))
+                .and_then(|p| self.timeline_handle_at(p, r, cell, &rows, grid_top))
+            {
                 self.begin_handle_drag(h);
             }
         }
@@ -935,7 +942,7 @@ impl App {
                 self.end_handle_drag();
             }
         } else if !holding_key && self.image_drag.is_none() {
-            if let Some(h) = resp.hover_pos().and_then(|p| self.timeline_handle_at(p, r, cell, &rows, grid_top)) {
+            if let Some(h) = resp.hover_pos().filter(|p| !on_playhead(*p)).and_then(|p| self.timeline_handle_at(p, r, cell, &rows, grid_top)) {
                 ui.ctx().set_cursor_icon(cursor_for(h, false));
             }
         }

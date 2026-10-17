@@ -219,6 +219,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("images.tout_choisir", "Choisir toutes les images du plan", true, false),
     act("instance.precedente", "Instance précédente (début du dessin d'avant)", true, true),
     act("instance.suivante", "Instance suivante (début du dessin d'après)", true, true),
+    act("cle.precedente", "Clé précédente (début de dessin d'avant, tous les calques)", true, true),
+    act("cle.suivante", "Clé suivante (début de dessin d'après, tous les calques)", true, true),
     act("instance.tete", "Tête de l'instance (sa première image)", true, false),
     act("instance.queue", "Queue de l'instance (sa dernière image)", true, false),
     act("instance.casser", "Casser l'instance à l'image courante", true, false),

@@ -296,3 +296,26 @@ fn behaviours_are_saved() {
     let l = &back.panels[0].layers[0];
     assert_eq!((l.pre, l.post), (Behaviour::PingPong, Behaviour::Hold));
 }
+
+#[test]
+fn a_first_drawing_on_an_empty_layer_fills_the_whole_plan_in_storyboard() {
+    use crate::images::new_drawing_span;
+    // Anthony : « quand je dessine sur un plan vide, le calque se remplit du début à la fin du
+    // plan et pas à partir de la position de la tête de lecture ».
+    let empty: Vec<Option<u64>> = Vec::new();
+    assert_eq!(new_drawing_span(&empty, 7, 24, true, 1), (0, 24), "tout le plan, où que soit la tête de lecture");
+    // Un calque qui a déjà un dessin : de la tête de lecture au dessin suivant (ou la fin).
+    let later = vec![None, None, None, None, None, None, None, None, None, None, Some(5)];
+    assert_eq!(new_drawing_span(&later, 3, 24, true, 1), (3, 10));
+    let before = vec![Some(5), Some(5), None, None];
+    assert_eq!(new_drawing_span(&before, 3, 24, true, 1), (3, 24));
+    // Un dessin au-delà du plan ne compte pas : dans le plan, le calque est vide.
+    let mut beyond = vec![None; 30];
+    beyond[28] = Some(9);
+    assert_eq!(new_drawing_span(&beyond, 5, 24, true, 1), (0, 24));
+    // En animation, « en N » images, comme TVPaint, même sur un calque vide.
+    assert_eq!(new_drawing_span(&empty, 7, 24, false, 2), (7, 9));
+    assert_eq!(new_drawing_span(&later, 9, 24, false, 3), (9, 10), "sans passer le dessin suivant");
+    // Après la fin du plan : « en N » images.
+    assert_eq!(new_drawing_span(&empty, 30, 24, true, 2), (30, 32));
+}

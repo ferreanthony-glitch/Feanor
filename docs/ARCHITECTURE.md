@@ -770,6 +770,13 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     `LayerRename::in_montage` : le renommage se fait dans la colonne (double-clic sur le nom).
   - `paint_layer_cell` montre le pré / post-comportement (boucle, va-et-vient, maintenir) en
     pâle avant le premier dessin et après le dernier, avec `behaviour_icon`.
+  - Nouveau dessin : `ensure_cel` prend ses images de `images::new_drawing_span` (pur, testé) :
+    en storyboard, tout le plan si le calque n'y a aucun dessin.
+  - Clé précédente / suivante : `montagekeys::key_starts` (débuts de dessins de tous les
+    calques d'un plan, sauf dossiers et vidéos) et `step_key` (purs, testés) ;
+    `App::goto_key` (montage entier en storyboard, plan en animation) ; actions `cle.*`.
+  - Timeline : `on_playhead` (la case de la tête de lecture dans la règle) passe avant
+    `timeline_handle_at` au début d'un glisser et pour le curseur.
 - Pistes du montage modifiables (chantier 5).
   - `montagerows.rs` : `TrackKey { name, nth }` et `layer_tracks` remplacent la rangée par rang
     (`layer_in_row`, 8 au plus). Les plans sont parcourus dans l'ordre, chacun du haut de sa

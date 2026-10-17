@@ -130,3 +130,34 @@ fn keys_pasted_from_several_layers_find_or_create_their_layers() {
     let twice = plan(&["Trait", "Trait"]);
     assert_eq!((track_of(&twice, 1), track_of(&twice, 0)), (key("Trait", 0), key("Trait", 1)));
 }
+#[test]
+fn keys_are_visited_one_after_the_other_across_all_layers() {
+    use crate::app::Mode;
+    use crate::keymap::{Keymap, DEFAULT_KEYMAP};
+    use crate::montagekeys::{key_starts, step_key};
+    use eframe::egui::{Key, Modifiers};
+    // Anthony : « passer d'une clé à une autre, tous calques compris ».
+    let mut a = Layer::new("Perso", LayerKind::Vector);
+    a.frames = vec![Some(1), Some(1), Some(2), Some(2), None, Some(3)];
+    let mut b = Layer::new("Décor", LayerKind::Vector);
+    b.frames = vec![None, Some(7), Some(7), Some(7), Some(8)];
+    let mut folder = Layer::new_folder("Dossier");
+    folder.frames = vec![None, None, None, Some(9)];
+    let layers = vec![a, b, folder];
+    assert_eq!(key_starts(&layers, 100), [0, 1, 2, 4, 5], "les débuts de dessins de tous les calques, une fois chacun, sans les dossiers");
+    assert_eq!(key_starts(&layers, 5), [0, 1, 2, 4], "rien après la fin du plan");
+    let keys = key_starts(&layers, 100);
+    assert_eq!(step_key(&keys, 1, true), Some(2));
+    assert_eq!(step_key(&keys, 3, true), Some(4), "depuis le milieu d'une exposition");
+    assert_eq!(step_key(&keys, 3, false), Some(2));
+    assert_eq!(step_key(&keys, 5, true), None);
+    assert_eq!(step_key(&keys, 0, false), None);
+    // PgPréc / PgSuiv, dans les deux modes (A / F gardent plan précédent / suivant).
+    let map = Keymap::from_texts(DEFAULT_KEYMAP, None);
+    for mode in [Mode::Storyboard, Mode::Animation] {
+        let press = |key| map.find(key, Some(key), Modifiers::NONE, mode).map(str::to_string);
+        assert_eq!(press(Key::PageUp).as_deref(), Some("cle.precedente"));
+        assert_eq!(press(Key::PageDown).as_deref(), Some("cle.suivante"));
+        assert_eq!(press(Key::F).as_deref(), Some("panneau.suivant"));
+    }
+}

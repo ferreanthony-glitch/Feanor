@@ -44,6 +44,10 @@ ouvrir d'un double-clic).
     qu'il fait après sa dernière image (rien, boucle, va-et-vient, maintenir, en pâle dans ses
     cases). Clic droit sur un calque (ou ⋮) : tout ce qui le touche ; double-clic sur son nom :
     le renommer.
+  - Le premier dessin sur un calque vide remplit tout le plan, du début à la fin, où que soit la
+    tête de lecture (en animation : « en N » images à la tête de lecture, comme TVPaint).
+  - PgPréc / PgSuiv : clé précédente / suivante, tous les calques compris (dans tout le montage
+    en storyboard, dans le plan en animation). A / F restent « plan précédent / suivant ».
   - Plusieurs plans : Ctrl + clic en ajoute ou en retire un, Maj + clic choisit une suite ;
     glisser l'un d'eux déplace tout le groupe. Après un clic dans le montage (ou sur une
     vignette), Ctrl+C copie les plans choisis, Ctrl+V les colle après le plan courant (avec
