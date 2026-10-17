@@ -559,6 +559,8 @@ pub struct App {
     pub(crate) tool_flyout: Option<(usize, usize, Rect)>,
     /// Un Ctrl+V a donné un événement de collage (texte) depuis l'appui sur V (`pasteimage`).
     pub(crate) paste_event: bool,
+    /// La fenêtre a reçu sa maximisation d'ouverture.
+    pub(crate) maximized_once: u8,
     /// Geste du cutter en cours (points du dessin).
     pub(crate) cut_gesture: Option<Vec<Pos2>>,
     /// Déformation en perspective en cours (5f).
@@ -820,6 +822,7 @@ impl App {
             tool_flyout: None,
             cut_gesture: None,
             paste_event: false,
+            maximized_once: 0,
             persp: None,
             clipboard: Vec::new(),
             renderer: Renderer::new(),
@@ -3207,6 +3210,18 @@ impl eframe::App for App {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Plein écran à l'ouverture (Anthony, 2026-10-18) : la fenêtre, créée cachée, perd la
+        // consigne de `with_maximized` sous Windows : elle est marquée maximisée mais garde sa taille.
+        // Une fois affichée, on la remet à sa taille, puis on la maximise vraiment.
+        if self.maximized_once < 4 {
+            self.maximized_once += 1;
+            match self.maximized_once {
+                3 => ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(false)),
+                4 => ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true)),
+                _ => {}
+            }
+            ctx.request_repaint();
+        }
         // Rythme des images : l'affichage n'attend plus la synchro de l'écran. Une image suit
         // chaque mouvement du stylet (500 par seconde au plus) ; sans entrée (lecture, export,
         // animations), 125 par seconde suffisent : la carte ne tourne pas pour rien.

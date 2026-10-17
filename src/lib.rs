@@ -314,7 +314,9 @@ fn run(renderer: eframe::Renderer, initial: Option<std::path::PathBuf>) -> efram
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Pelure")
             .with_inner_size([1500.0, 920.0])
-            .with_min_inner_size([960.0, 600.0]),
+            .with_min_inner_size([960.0, 600.0])
+            // Ouverture en plein écran (Anthony, 2026-10-18), fenêtre maximisée comme Storyboard Pro.
+            .with_maximized(true),
         renderer,
         // Affichage sans attente de la synchro de l'écran, une seule image d'avance : chaque
         // mouvement du stylet est affiché aussitôt, pour que le cercle et le trait restent collés

@@ -1203,6 +1203,10 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         ne baisse pas (1,7 Go, 456 Mo au repos) ; il vient du calcul de chaque image (environ 0,8 Go
         dès la première, puis +0,4 Go en cours de route, dans les deux versions). Prochaine piste :
         la mémoire de travail de la synthèse (tampons refaits à chaque image) ;
+      - **ouverture en plein écran** (Anthony, 2026-10-18) : fenêtre maximisée à l'ouverture,
+        comme Storyboard Pro (F11 / `vue.plein_ecran` reste le vrai plein écran). Sous Windows, la
+        fenêtre créée cachée était marquée maximisée sans en prendre la taille : on la remet à sa
+        taille puis on la maximise, quelques images après l'ouverture ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,
