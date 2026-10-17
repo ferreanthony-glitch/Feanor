@@ -777,8 +777,13 @@ ECMAScript 3), elle, est documentée (aide `help/storyboard`). Choix d'Anthony (
     - le `sequenceName` « 0 » des plans n'est plus une séquence quand la méta du projet
       `sequenceExists` est vide (projets NAJI, BRAWLIDAYS partie 1) ;
     - vérifié : les dessins lus par l'essai sont refaits en zones et rendus justes (essai ignoré
-      `real_getdata_drawings_from_the_test_script`, images avec `PELURE_SB_PNG`). Pas encore
-      vérifié : l'import complet en batch avec le nouveau script.
+      `real_getdata_drawings_from_the_test_script`, images avec `PELURE_SB_PNG`).
+  - **Essai d'Anthony de l'ouverture automatique (2026-10-17) : échoue.** Storyboard Pro démarre
+    en batch (son journal s'arrête après l'initialisation de ses greffons) mais le script ne
+    tourne pas : `pelure.txt` n'est jamais écrit. Mis de côté à sa demande (« laisse tomber »).
+    Pistes, non vérifiées : la ligne de commande batch, ou un script qu'on ne peut pas lancer
+    ainsi. Le script à la main (Script Editor, Sandbox, coller, puis le bouton Run, une icône
+    « ƒ » sans texte) a marché pour l'essai de lecture.
 - ✅ 14b-1. Exporter vers Storyboard Pro (Fichier > « Exporter vers Storyboard Pro… »). Choix
   d'Anthony : partir de son projet modèle (choisi une fois, gardé dans les réglages), dessins en
   vecteurs si possible ; 14b-1 les envoie en images, les vecteurs viennent en 14b-2.
@@ -901,10 +906,16 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
     se décalent par rapport au son, qui reste en place. Le point d'entrée ne peut plus être posé
     sur le point de sortie par sa poignée.
 - ✅ 6. Timeline et montage visibles ensemble (lancé par Anthony le 2026-10-17) :
-  - deux panneaux, **Montage** et **Timeline**, l'un sous l'autre en bas, dans les deux modes ;
-    avant, la bande montrait le montage en storyboard et la timeline en animation. Une
-    disposition enregistrée avant reçoit la timeline sous le montage. Chacun se ferme, se
-    déplace ou se détache comme les autres panneaux ;
+  - deux panneaux, **Montage** et **Timeline**, dans les deux modes ; avant, la bande montrait le
+    montage en storyboard et la timeline en animation. Chacun se ferme, se déplace ou se
+    détache comme les autres panneaux ;
+  - **revu le même jour** (Anthony : « on a perdu pas mal de choses en ajoutant cette timeline
+    sous la partie montage ») : l'un sous l'autre, chacun n'avait que la moitié de la hauteur
+    (2 pistes de calques sur 10 visibles dans le montage, 2 calques dans la timeline, le dessin
+    plus petit). Ils sont maintenant **en onglets** dans la bande, à la hauteur d'avant
+    (290 points) : l'onglet montré **suit le mode** (montage en storyboard, timeline en
+    animation). On peut sortir un onglet pour les voir ensemble. Une disposition enregistrée
+    l'un sous l'autre repasse en onglets ;
   - Copier, Coller, Suppr visent le dernier des deux où l'on a cliqué, quel que soit le mode ;
     un trait de couleur en haut du panneau le montre (un clic dans le dessin le retire) ;
   - le bouton Lecture du montage lit tout le film, celui de la timeline le plan ; la touche

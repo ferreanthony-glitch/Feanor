@@ -354,8 +354,10 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   prochaine fois (`%APPDATA%\Pelure\reglages.toml`), pas dans le projet. Ctrl+Z ne défait pas
   les changements de nuancier.
 - **Panneaux** : chaque panneau (Outils, Couleur, Pinceaux, Réglages, Vue, Guides, Fiche,
-  Calques, Montage, Timeline) est un onglet. Le montage et la timeline sont l'un sous l'autre, en
-  bas, dans les deux modes ; Copier, Coller, Suppr et les raccourcis visent celui où l'on a
+  Calques, Montage, Timeline) est un onglet. Le montage et la timeline sont deux onglets de la
+  bande du bas : celui du mode passe devant (le montage en storyboard, la timeline en animation),
+  et on peut en sortir un pour les voir ensemble. Copier, Coller, Suppr et les raccourcis visent
+  celui où l'on a
   cliqué en dernier (un trait de couleur en haut du panneau, et la barre d'état le dit) : après
   un clic dans la timeline, Insert fait un nouveau dessin et les flèches restent dans le plan,
   même en storyboard ; après un clic dans le montage, Insert fait un nouveau plan. Un clic dans

@@ -560,6 +560,9 @@ pub struct App {
     /// Pendant l'affichage des panneaux : `follow_frame` de cette image d'écran. Le montage et la
     /// timeline, visibles ensemble (chantier 6), amènent tous deux l'image courante en vue.
     pub(crate) following: bool,
+    /// À l'image d'écran suivante, l'onglet de la bande du bas qui va avec le mode passe devant
+    /// (le montage en storyboard, la timeline en animation) : au lancement et à chaque `set_mode`.
+    pub(crate) show_mode_strip: bool,
     pub(crate) hover_canvas: Option<Pos2>,
     /// Touches retirées des événements avant qu'egui ne s'en serve (Tab), traitées comme raccourcis.
     pub(crate) pending_keys: Vec<(Key, Option<Key>, egui::Modifiers)>,
@@ -785,6 +788,7 @@ impl App {
             export_transparent: false,
             follow_frame: false,
             following: false,
+            show_mode_strip: true,
             hover_canvas: None,
             pending_keys: Vec::new(),
             assign: None,
@@ -1087,6 +1091,7 @@ impl App {
         // Le dessin change : c'est lui qui prend la main (les raccourcis suivent le nouveau mode).
         self.panel_focus = false;
         self.images_focus = false;
+        self.show_mode_strip = true;
         if mode == Mode::Storyboard {
             // En storyboard, on reste dans les bornes du plan (la timeline permet d'aller au-delà).
             self.cur_frame = self.cur_frame.min(self.frame_count() - 1);

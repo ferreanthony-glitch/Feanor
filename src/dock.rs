@@ -241,24 +241,22 @@ const COLOR_TABS: [Pane; 2] = [Pane::Color, Pane::Brushes];
 /// Version de la disposition : 1 depuis 6a (outils dans la barre verticale, calques à côté du
 /// dessin, réglages et couleur à droite) ; 2 depuis 9b (la fiche avec les réglages) ; 3 depuis 11c
 /// (le panneau Pinceaux, en onglet avec la couleur) ; 4 depuis le chantier 6 (la timeline, panneau à
-/// part sous le montage).
-pub const LAYOUT_VERSION: u32 = 4;
+/// part sous le montage) ; 5 le même jour (le montage et la timeline en onglets dans la bande, à
+/// pleine hauteur : l'onglet montré suit le mode).
+pub const LAYOUT_VERSION: u32 = 5;
 
-/// La bande du bas (chantier 6) : le montage, la timeline dessous, ou l'un des deux seul.
-/// `part` : la part du montage.
-fn bottom_band(panes: &[Pane], part: f32) -> Option<DockNode> {
-    match (panes.contains(&Pane::Montage), panes.contains(&Pane::Timeline)) {
-        (true, true) => Some(column(part, tabs(vec![Pane::Montage]), tabs(vec![Pane::Timeline]))),
-        (true, false) => Some(tabs(vec![Pane::Montage])),
-        (false, true) => Some(tabs(vec![Pane::Timeline])),
-        (false, false) => None,
-    }
+/// La bande du bas : le montage et la timeline en onglets (Anthony, 2026-10-17 : l'un sous
+/// l'autre, chacun n'avait plus que la moitié de la place). L'onglet montré suit le mode
+/// (`App::show_mode_strip`) ; on peut en sortir un pour les voir ensemble.
+fn bottom_band(panes: &[Pane]) -> Option<DockNode> {
+    let list: Vec<Pane> = [Pane::Montage, Pane::Timeline].into_iter().filter(|p| panes.contains(p)).collect();
+    (!list.is_empty()).then(|| tabs(list))
 }
 
-/// Hauteur de la bande du bas quand le montage et la timeline y sont tous deux (en points de la
-/// fenêtre de référence), et la part du montage.
-const BAND_HEIGHT: f32 = 420.0;
-const BAND_MONTAGE_PART: f32 = 0.5;
+/// Hauteur de la bande du bas (en points de la fenêtre de référence), et celle de la version 4
+/// (montage et timeline l'un sous l'autre).
+const BAND_HEIGHT: f32 = 290.0;
+const BAND_HEIGHT_V4: f32 = 420.0;
 
 /// Empile de haut en bas des parties (part de chacune dans ce qui reste), en sautant les absentes.
 fn stack(parts: &[(f32, Option<DockNode>)]) -> Option<DockNode> {
@@ -301,6 +299,32 @@ impl DockNode {
         match self {
             DockNode::Tabs { panneaux, .. } => panneaux.clone(),
             DockNode::Row { gauche: a, .. } | DockNode::Column { haut: a, .. } => a.first_tabs(),
+        }
+    }
+
+    /// Le montage et la timeline posés l'un sous l'autre par la version 4 repassent en onglets ;
+    /// la bande retrouve sa hauteur d'avant si elle avait celle de la version 4.
+    fn strips_as_tabs(self) -> DockNode {
+        let pair = |n: &DockNode| match n {
+            DockNode::Column { haut, bas, .. } => {
+                let only = |n: &DockNode, p: Pane| matches!(n, DockNode::Tabs { panneaux, .. } if panneaux.as_slice() == [p]);
+                only(haut, Pane::Montage) && only(bas, Pane::Timeline)
+            }
+            _ => false,
+        };
+        let band = || tabs(vec![Pane::Montage, Pane::Timeline]);
+        if pair(&self) {
+            return band();
+        }
+        match self {
+            DockNode::Column { part, haut, bas } if pair(&bas) => {
+                let v4 = 1.0 - BAND_HEIGHT_V4 / REF_HEIGHT;
+                let part = if (part - v4).abs() < 0.02 { 1.0 - BAND_HEIGHT / REF_HEIGHT } else { part };
+                column(part, haut.strips_as_tabs(), band())
+            }
+            DockNode::Column { part, haut, bas } => column(part, haut.strips_as_tabs(), bas.strips_as_tabs()),
+            DockNode::Row { part, gauche, droite } => row(part, gauche.strips_as_tabs(), droite.strips_as_tabs()),
+            t => t,
         }
     }
 
@@ -410,11 +434,8 @@ impl DockLayout {
             center = row(1.0 - w / REF_WIDTH, center, side);
         }
         if l.strip {
-            // Les deux ensemble (chantier 6) : un peu moins que leurs deux hauteurs d'avant, quand
-            // chacun avait la bande pour lui.
-            let (m, t) = (l.montage_height.clamp(140.0, 1200.0), l.timeline_height.clamp(110.0, 1200.0));
-            let h = ((m + t) * 0.84).min(REF_HEIGHT * 0.6);
-            let band = bottom_band(&[Pane::Montage, Pane::Timeline], BAND_MONTAGE_PART).unwrap_or_else(|| tabs(vec![Pane::Montage]));
+            let h = l.montage_height.clamp(140.0, 1200.0);
+            let band = bottom_band(&[Pane::Montage, Pane::Timeline]).unwrap_or_else(|| tabs(vec![Pane::Montage]));
             center = column(1.0 - h / REF_HEIGHT, center, band);
         }
         DockLayout { principal: center, ..DockLayout::empty() }.sanitized()
@@ -423,7 +444,8 @@ impl DockLayout {
     /// Une disposition enregistrée par une version précédente, mise à jour : avant 6a, le
     /// panneau Outils part (barre verticale) ; avant 9b, la fiche rejoint les onglets des réglages ;
     /// avant 11c, le panneau Pinceaux arrive à côté de la couleur ; avant le chantier 6, la timeline
-    /// arrive sous le montage (la bande montrait l'un ou l'autre selon le mode).
+    /// arrive avec le montage (la bande montrait l'un ou l'autre selon le mode) ; en version 4, le
+    /// montage et la timeline posés l'un sous l'autre repassent en onglets, à la hauteur d'avant.
     pub fn upgraded(mut self) -> DockLayout {
         if self.version < 1 {
             self.close(Pane::Tools);
@@ -437,6 +459,14 @@ impl DockLayout {
         }
         if self.version < 4 && self.contains(Pane::Montage) && !self.contains(Pane::Timeline) {
             self.open(Pane::Timeline);
+        }
+        if self.version < 5 {
+            let principal = std::mem::replace(&mut self.principal, tabs(Vec::new()));
+            self.principal = principal.strips_as_tabs();
+            for w in &mut self.fenetres {
+                let n = std::mem::replace(&mut w.panneaux, tabs(Vec::new()));
+                w.panneaux = n.strips_as_tabs();
+            }
         }
         self.version = LAYOUT_VERSION;
         self.sanitized()
@@ -554,21 +584,19 @@ impl DockLayout {
                 return;
             }
         }
-        // Le montage et la timeline (chantier 6) : l'un revient au-dessus ou au-dessous de l'autre.
+        // Le montage et la timeline : l'un revient en onglet à côté de l'autre (le montage d'abord).
         if group == Group::Bottom {
             let other = if pane == Pane::Montage { Pane::Timeline } else { Pane::Montage };
-            let mut new = Some(tabs(vec![pane]));
-            let mut put = |n: DockNode| {
-                let new = new.take().unwrap_or_else(|| tabs(Vec::new()));
-                if pane == Pane::Montage {
-                    column(BAND_MONTAGE_PART, new, n)
-                } else {
-                    column(BAND_MONTAGE_PART, n, new)
-                }
+            let found = match self.principal.tabs_with(&[other]) {
+                Some(t) => Some(t),
+                None => self.fenetres.iter_mut().find_map(|w| w.panneaux.tabs_with(&[other])),
             };
-            if self.principal.wrap_tabs_of(other, &mut put) || self.fenetres.iter_mut().any(|w| w.panneaux.wrap_tabs_of(other, &mut put)) {
-                let version = self.version;
-                *self = DockLayout { version, ..std::mem::replace(self, DockLayout::empty()) }.sanitized();
+            if let Some(t) = found {
+                if pane == Pane::Montage {
+                    t.insert(0, pane);
+                } else {
+                    t.push(pane);
+                }
                 return;
             }
         }
@@ -604,10 +632,9 @@ impl DockLayout {
         match group {
             Group::Center => {}
             Group::Bottom => {
-                let Some(band) = bottom_band(panes, BAND_MONTAGE_PART) else { return };
-                let h = if panes.len() > 1 { BAND_HEIGHT } else { 290.0 };
+                let Some(band) = bottom_band(panes) else { return };
                 let main = std::mem::replace(&mut self.principal, tabs(Vec::new()));
-                self.principal = column(1.0 - h / REF_HEIGHT, main, band);
+                self.principal = column(1.0 - BAND_HEIGHT / REF_HEIGHT, main, band);
             }
             Group::Left => {
                 // La colonne des réglages, tout à droite (au-dessus de la bande s'il y en a une).

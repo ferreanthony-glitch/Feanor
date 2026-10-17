@@ -733,9 +733,12 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     Réversible : l'ancien format se lit toujours.
 - Timeline et montage ensemble (chantier 6).
   - `Pane::Strip` est devenu `Pane::Montage` (nom enregistré inchangé, « bande ») et
-    `Pane::Timeline` arrive (« timeline »), tous deux du groupe du bas. `bottom_band` les empile,
-    le montage au-dessus. `DockLayout::open` remet l'un au-dessus ou au-dessous de l'autre s'il
-    est là. `LAYOUT_VERSION` passe à 4 : `upgraded` ouvre la timeline sous le montage.
+    `Pane::Timeline` arrive (« timeline »), tous deux du groupe du bas. `bottom_band` les met en
+    onglets (d'abord l'un sous l'autre, version 4 ; revu le même jour, version 5 :
+    `strips_as_tabs` convertit, et rend à la bande sa hauteur de 290 points si elle avait celle
+    de la version 4). `DockLayout::open` remet l'un en onglet à côté de l'autre.
+  - `App::show_mode_strip` (au lancement et à chaque `set_mode`) : au début de `show_dock`,
+    l'onglet du mode passe devant (`find_tab`, `set_active_tab`).
   - `pane_ui` montre chacun dans les deux modes. `panels_have_focus` et `images_have_focus` ne
     regardent plus le mode : la main est au dernier des deux cliqués (chaque clic retire l'autre).
     `focus_mark` trace un trait en haut du panneau qui a la main.

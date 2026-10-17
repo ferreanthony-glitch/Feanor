@@ -125,6 +125,13 @@ impl App {
     /// leur propre fenêtre.
     pub(crate) fn show_dock(&mut self, ctx: &egui::Context) {
         let mut state = self.dock.take().unwrap_or_else(|| dock::to_state(&self.layout.dock_layout()));
+        // Le montage en storyboard, la timeline en animation : son onglet passe devant.
+        if std::mem::take(&mut self.show_mode_strip) {
+            let pane = if self.mode == Mode::Storyboard { Pane::Montage } else { Pane::Timeline };
+            if let Some(at) = state.find_tab(&pane) {
+                state.set_active_tab(at);
+            }
+        }
         // Le montage et la timeline suivent tous deux l'image courante (chantier 6) ; ce que l'on
         // fait pendant l'affichage se suit à l'image d'écran d'après.
         self.following = std::mem::take(&mut self.follow_frame);
