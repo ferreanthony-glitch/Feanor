@@ -72,7 +72,8 @@ impl App {
     /// Nom affiché d'un panneau (la bande et le dessin changent selon ce qu'ils montrent).
     pub(crate) fn pane_title(&self, pane: Pane) -> &'static str {
         match pane {
-
+            Pane::Montage | Pane::Timeline if self.mode == Mode::Animation => "Timeline",
+            Pane::Montage | Pane::Timeline => "Montage",
             Pane::Canvas if self.mode == Mode::Storyboard && self.board_view == BoardView::Panels => "Vignettes",
             p => p.tab_name(),
         }
@@ -97,17 +98,19 @@ impl App {
             Pane::Guides => self.guides_ui(ui),
             Pane::Sheet => self.panel_inspector(ui),
             Pane::Layers => self.layers_panel(ui),
-            // Le montage et la timeline, chacun dans son panneau, dans les deux modes (chantier 6).
-            // Celui qui a la main (copier, coller, supprimer visent ses plans ou ses images) a un
-            // trait de couleur en haut.
-            Pane::Montage => {
-                self.montage_panel(ui);
-                self.focus_mark(ui, self.panels_have_focus());
-            }
-            Pane::Timeline => {
-                self.timeline_panel(ui);
-                self.focus_mark(ui, self.images_focus);
-            }
+            // Une seule bande : le montage en storyboard, la timeline en animation. Quand elle a la
+            // main (copier, coller, supprimer visent ses plans ou ses images), un trait de couleur
+            // en haut.
+            Pane::Montage | Pane::Timeline => match self.mode {
+                Mode::Storyboard => {
+                    self.montage_panel(ui);
+                    self.focus_mark(ui, self.panels_have_focus());
+                }
+                Mode::Animation => {
+                    self.timeline_panel(ui);
+                    self.focus_mark(ui, self.images_focus);
+                }
+            },
             Pane::XSheet => self.xsheet_panel(ui),
         }
     }
@@ -125,15 +128,8 @@ impl App {
     /// leur propre fenêtre.
     pub(crate) fn show_dock(&mut self, ctx: &egui::Context) {
         let mut state = self.dock.take().unwrap_or_else(|| dock::to_state(&self.layout.dock_layout()));
-        // Le montage en storyboard, la timeline en animation : son onglet passe devant.
-        if std::mem::take(&mut self.show_mode_strip) {
-            let pane = if self.mode == Mode::Storyboard { Pane::Montage } else { Pane::Timeline };
-            if let Some(at) = state.find_tab(&pane) {
-                state.set_active_tab(at);
-            }
-        }
-        // Le montage et la timeline suivent tous deux l'image courante (chantier 6) ; ce que l'on
-        // fait pendant l'affichage se suit à l'image d'écran d'après.
+        // La bande suit l'image courante ; ce que l'on fait pendant l'affichage se suit à l'image
+        // d'écran d'après.
         self.following = std::mem::take(&mut self.follow_frame);
         let style = crate::theme::dock(egui_dock::Style::from_egui(ctx.style().as_ref()));
         egui_dock::DockArea::new(&mut state)

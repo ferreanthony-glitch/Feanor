@@ -40,11 +40,13 @@ pub enum Pane {
     Sheet,
     #[serde(rename = "calques")]
     Layers,
-    /// Bande de montage : tous les plans, leurs pistes, le son. Elle est montrée dans les deux modes
-    /// depuis le chantier 6 (avant : seulement en storyboard, la timeline à sa place en animation).
+    /// La bande du bas : le montage (tous les plans, leurs pistes, le son) en storyboard, la
+    /// timeline du plan en animation (on y entre par un double-clic sur le plan).
     #[serde(rename = "bande")]
     Montage,
-    /// Timeline du plan courant (chantier 6 : un panneau à part, sous le montage, dans les deux modes).
+    /// Ancienne timeline à part (chantier 6, le 2026-10-17) : retirée le même jour à la demande
+    /// d'Anthony (« je ne veux pas de double timeline »). Gardée pour lire les dispositions
+    /// enregistrées entre-temps ; `sanitized` l'enlève.
     #[serde(rename = "timeline")]
     Timeline,
     /// Feuille d'exposition du plan (13g). Fermée dans la disposition par défaut.
@@ -59,13 +61,13 @@ pub enum Group {
     Left,
     /// Colonne de droite : fiche et calques.
     Right,
-    /// En bas, sur toute la largeur : le montage, la timeline dessous.
+    /// En bas, sur toute la largeur : le montage ou la timeline, selon le mode.
     Bottom,
     Center,
 }
 
 impl Pane {
-    pub const ALL: [Pane; 12] = [
+    pub const ALL: [Pane; 11] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
@@ -76,7 +78,6 @@ impl Pane {
         Pane::Sheet,
         Pane::Layers,
         Pane::Montage,
-        Pane::Timeline,
         Pane::XSheet,
     ];
 
@@ -91,7 +92,7 @@ impl Pane {
             Pane::Guides => "Guides",
             Pane::Sheet => "Fiche du plan",
             Pane::Layers => "Calques",
-            Pane::Montage => "Montage",
+            Pane::Montage => "Montage et timeline",
             Pane::Timeline => "Timeline",
             Pane::XSheet => "Feuille d'exposition",
         }
@@ -241,16 +242,14 @@ const COLOR_TABS: [Pane; 2] = [Pane::Color, Pane::Brushes];
 /// Version de la disposition : 1 depuis 6a (outils dans la barre verticale, calques à côté du
 /// dessin, réglages et couleur à droite) ; 2 depuis 9b (la fiche avec les réglages) ; 3 depuis 11c
 /// (le panneau Pinceaux, en onglet avec la couleur) ; 4 depuis le chantier 6 (la timeline, panneau à
-/// part sous le montage) ; 5 le même jour (le montage et la timeline en onglets dans la bande, à
-/// pleine hauteur : l'onglet montré suit le mode).
-pub const LAYOUT_VERSION: u32 = 5;
+/// part sous le montage) ; 5 le même jour (en onglets) ; 6 le même jour (une seule bande, comme
+/// avant : le montage en storyboard, la timeline en animation).
+pub const LAYOUT_VERSION: u32 = 6;
 
-/// La bande du bas : le montage et la timeline en onglets (Anthony, 2026-10-17 : l'un sous
-/// l'autre, chacun n'avait plus que la moitié de la place). L'onglet montré suit le mode
-/// (`App::show_mode_strip`) ; on peut en sortir un pour les voir ensemble.
+/// La bande du bas : une seule (Anthony, 2026-10-17 : « je ne veux pas de double timeline ») ;
+/// elle montre le montage en storyboard, la timeline en animation.
 fn bottom_band(panes: &[Pane]) -> Option<DockNode> {
-    let list: Vec<Pane> = [Pane::Montage, Pane::Timeline].into_iter().filter(|p| panes.contains(p)).collect();
-    (!list.is_empty()).then(|| tabs(list))
+    (panes.contains(&Pane::Montage) || panes.contains(&Pane::Timeline)).then(|| tabs(vec![Pane::Montage]))
 }
 
 /// Hauteur de la bande du bas (en points de la fenêtre de référence), et celle de la version 4
@@ -435,7 +434,7 @@ impl DockLayout {
         }
         if l.strip {
             let h = l.montage_height.clamp(140.0, 1200.0);
-            let band = bottom_band(&[Pane::Montage, Pane::Timeline]).unwrap_or_else(|| tabs(vec![Pane::Montage]));
+            let band = bottom_band(&[Pane::Montage]).unwrap_or_else(|| tabs(vec![Pane::Montage]));
             center = column(1.0 - h / REF_HEIGHT, center, band);
         }
         DockLayout { principal: center, ..DockLayout::empty() }.sanitized()
@@ -457,8 +456,10 @@ impl DockLayout {
         if self.version < 3 && !self.contains(Pane::Brushes) {
             self.open(Pane::Brushes);
         }
-        if self.version < 4 && self.contains(Pane::Montage) && !self.contains(Pane::Timeline) {
-            self.open(Pane::Timeline);
+        // (Les versions 4 et 5 avaient une timeline à part, que `sanitized` enlève : si elle
+        // était seule en bas, le montage revient à sa place.)
+        if (4..6).contains(&self.version) && self.contains(Pane::Timeline) && !self.contains(Pane::Montage) {
+            self.open(Pane::Montage);
         }
         if self.version < 5 {
             let principal = std::mem::replace(&mut self.principal, tabs(Vec::new()));
@@ -503,7 +504,8 @@ impl DockLayout {
     /// Chaque panneau une seule fois, le dessin toujours là (dans la fenêtre principale), parts
     /// bornées, panneaux flottants vides retirés.
     pub fn sanitized(self) -> DockLayout {
-        let mut seen = Vec::new();
+        // L'ancienne timeline à part (versions 4 et 5) est enlevée partout.
+        let mut seen = vec![Pane::Timeline];
         let mut principal = self.principal.sanitized(&mut seen);
         let mut fenetres = Vec::new();
         for mut w in self.fenetres {
@@ -584,21 +586,9 @@ impl DockLayout {
                 return;
             }
         }
-        // Le montage et la timeline : l'un revient en onglet à côté de l'autre (le montage d'abord).
-        if group == Group::Bottom {
-            let other = if pane == Pane::Montage { Pane::Timeline } else { Pane::Montage };
-            let found = match self.principal.tabs_with(&[other]) {
-                Some(t) => Some(t),
-                None => self.fenetres.iter_mut().find_map(|w| w.panneaux.tabs_with(&[other])),
-            };
-            if let Some(t) = found {
-                if pane == Pane::Montage {
-                    t.insert(0, pane);
-                } else {
-                    t.push(pane);
-                }
-                return;
-            }
+        // L'ancienne timeline à part n'existe plus : c'est la bande.
+        if pane == Pane::Timeline {
+            return self.open(Pane::Montage);
         }
         if group != Group::Bottom {
             if let Some(t) = self.principal.tabs_of_group(group) {

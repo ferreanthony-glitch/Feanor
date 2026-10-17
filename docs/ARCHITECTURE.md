@@ -732,13 +732,12 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     approche du grain (l'image du calque reste exacte s'il n'est pas gardé en vecteurs).
     Réversible : l'ancien format se lit toujours.
 - Timeline et montage ensemble (chantier 6).
-  - `Pane::Strip` est devenu `Pane::Montage` (nom enregistré inchangé, « bande ») et
-    `Pane::Timeline` arrive (« timeline »), tous deux du groupe du bas. `bottom_band` les met en
-    onglets (d'abord l'un sous l'autre, version 4 ; revu le même jour, version 5 :
-    `strips_as_tabs` convertit, et rend à la bande sa hauteur de 290 points si elle avait celle
-    de la version 4). `DockLayout::open` remet l'un en onglet à côté de l'autre.
-  - `App::show_mode_strip` (au lancement et à chaque `set_mode`) : au début de `show_dock`,
-    l'onglet du mode passe devant (`find_tab`, `set_active_tab`).
+  - `Pane::Strip` est devenu `Pane::Montage` (nom enregistré inchangé, « bande »). Une
+    `Pane::Timeline` à part a existé le 2026-10-17 (versions 4 et 5 de la disposition : l'un sous
+    l'autre, puis en onglets) ; retirée le même jour à la demande d'Anthony, elle n'est gardée que
+    pour lire ces dispositions : `sanitized` l'enlève, `upgraded` remet le montage s'il manquait,
+    `strips_as_tabs` rend à la bande sa hauteur de 290 points. `pane_ui` montre dans la bande le
+    montage en storyboard, la timeline en animation (version 6, comme avant le chantier).
   - `pane_ui` montre chacun dans les deux modes. `panels_have_focus` et `images_have_focus` ne
     regardent plus le mode : la main est au dernier des deux cliqués (chaque clic retire l'autre).
     `focus_mark` trace un trait en haut du panneau qui a la main.

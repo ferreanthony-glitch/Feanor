@@ -916,6 +916,11 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
     (290 points) : l'onglet montré **suit le mode** (montage en storyboard, timeline en
     animation). On peut sortir un onglet pour les voir ensemble. Une disposition enregistrée
     l'un sous l'autre repasse en onglets ;
+  - **puis retiré** (Anthony, le même jour : « je ne veux pas de double timeline. La timeline
+    principale est celle du montage […]. La timeline d'animation est visible quand on double-clique
+    sur le shot comme avant ») : **une seule bande**, le montage en storyboard, la timeline en
+    animation, comme avant le chantier 6. Restent du chantier : la main au dernier clic (et son
+    trait), la lecture du film ou du plan selon le bouton, les raccourcis selon la main ;
   - Copier, Coller, Suppr visent le dernier des deux où l'on a cliqué, quel que soit le mode ;
     un trait de couleur en haut du panneau le montre (un clic dans le dessin le retire) ;
   - le bouton Lecture du montage lit tout le film, celui de la timeline le plan ; la touche

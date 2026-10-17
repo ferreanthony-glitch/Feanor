@@ -48,8 +48,8 @@ fn default_layout_has_every_panel_once() {
     // La bande en bas, sur toute la largeur ; au-dessus : dessin | calques et fiche | réglages
     // et couleur.
     let DockNode::Column { part, haut, bas } = &l.principal else { panic!("{:?}", l.principal) };
-    // Le montage et la timeline en onglets, à la hauteur de la bande d'avant le chantier 6.
-    assert_eq!(**bas, tabs(&[Pane::Montage, Pane::Timeline]));
+    // Une seule bande (le montage en storyboard, la timeline en animation), à 290 points.
+    assert_eq!(**bas, tabs(&[Pane::Montage]));
     assert!((part - (1.0 - 290.0 / 820.0)).abs() < 1e-4, "{part}");
     let DockNode::Row { gauche: center, droite: side, .. } = &**haut else { panic!() };
     assert_eq!(**center, tabs(&[Pane::Canvas]));
@@ -194,31 +194,23 @@ fn closing_and_reopening_a_panel_puts_it_back_with_its_group() {
     l.open(Pane::Layers);
     let s = format!("{:?}", l.principal);
     assert!(s.contains("Row { part: 0.78, gauche: Tabs { panneaux: [Canvas]"), "{s}");
-    // Le montage revient en onglet devant la timeline, la timeline derrière le montage.
-    let band = |a: Pane, b: Pane| tabs(&[a, b]);
+    // La bande revient en bas de tout ; l'ancienne timeline à part ne s'ouvre plus, c'est la bande.
     l.close(Pane::Montage);
-    assert!(matches!(&l.principal, DockNode::Column { bas, .. } if **bas == tabs(&[Pane::Timeline])), "{:?}", l.principal);
-    l.open(Pane::Montage);
-    assert!(matches!(&l.principal, DockNode::Column { bas, .. } if **bas == band(Pane::Montage, Pane::Timeline)), "{:?}", l.principal);
-    l.close(Pane::Timeline);
+    assert!(!l.contains(Pane::Montage));
     l.open(Pane::Timeline);
-    assert!(matches!(&l.principal, DockNode::Column { bas, .. } if **bas == band(Pane::Montage, Pane::Timeline)), "{:?}", l.principal);
-    // Plus rien en bas : la bande revient en bas de tout.
-    l.close(Pane::Montage);
-    l.close(Pane::Timeline);
-    l.open(Pane::Timeline);
-    assert!(matches!(&l.principal, DockNode::Column { bas, .. } if **bas == tabs(&[Pane::Timeline])));
-    for pane in default_panes().filter(|p| *p != Pane::Montage) {
+    assert!(matches!(&l.principal, DockNode::Column { bas, .. } if **bas == tabs(&[Pane::Montage])), "{:?}", l.principal);
+    assert_eq!(count(&l, Pane::Timeline), 0);
+    for pane in default_panes() {
         assert_eq!(count(&l, pane), 1, "{pane:?}");
     }
-    // Le bouton de la bande les ouvre tous les deux.
-    l.close(Pane::Timeline);
     l.toggle_group(Group::Bottom);
-    assert!(matches!(&l.principal, DockNode::Column { bas, .. } if **bas == band(Pane::Montage, Pane::Timeline)), "{:?}", l.principal);
+    assert!(!l.contains(Pane::Montage));
+    l.toggle_group(Group::Bottom);
+    assert!(matches!(&l.principal, DockNode::Column { bas, .. } if **bas == tabs(&[Pane::Montage])), "{:?}", l.principal);
 }
 
 #[test]
-fn a_layout_from_before_chantier_6_gets_the_timeline_next_to_the_montage() {
+fn layouts_with_a_separate_timeline_come_back_to_one_band() {
     // Version 3 : la bande montrait le montage ou la timeline selon le mode.
     let old = DockLayout {
         version: 3,
@@ -228,14 +220,8 @@ fn a_layout_from_before_chantier_6_gets_the_timeline_next_to_the_montage() {
     };
     let l = old.upgraded();
     assert_eq!(l.version, dock::LAYOUT_VERSION);
-    assert_eq!((count(&l, Pane::Montage), count(&l, Pane::Timeline)), (1, 1));
-    let s = format!("{:?}", l.principal);
-    assert!(s.contains("bas: Tabs { panneaux: [Montage, XSheet, Timeline], actif: 0 }"), "{s}");
-    // Sans bande : rien n'est ajouté.
-    let bare = DockLayout { version: 3, principal: tabs(&[Pane::Canvas]), fenetres: Vec::new(), detachees: Vec::new() };
-    assert!(!bare.upgraded().contains(Pane::Timeline));
-    // Version 4 : l'un sous l'autre, la bande haute de 420 points ; ils repassent en onglets, à
-    // 290 points. Une disposition arrangée autrement par l'utilisateur ne bouge pas.
+    assert_eq!((count(&l, Pane::Montage), count(&l, Pane::Timeline)), (1, 0), "version 3 : rien ne change");
+    // Version 4 : l'un sous l'autre, la bande haute de 420 points ; une seule bande, à 290 points.
     let v4 = DockLayout {
         version: 4,
         principal: DockNode::Column {
@@ -248,16 +234,24 @@ fn a_layout_from_before_chantier_6_gets_the_timeline_next_to_the_montage() {
     };
     let l = v4.upgraded();
     let DockNode::Column { part, bas, .. } = &l.principal else { panic!("{:?}", l.principal) };
-    assert_eq!(**bas, tabs(&[Pane::Montage, Pane::Timeline]));
+    assert_eq!(**bas, tabs(&[Pane::Montage]));
     assert!((part - (1.0 - 290.0 / 820.0)).abs() < 1e-4, "{part}");
-    let side_by_side = DockLayout {
-        version: 4,
-        principal: DockNode::Row { part: 0.5, gauche: Box::new(tabs(&[Pane::Canvas, Pane::Montage])), droite: Box::new(tabs(&[Pane::Timeline])) },
+    // Version 5 : en onglets ; la timeline part. Seule en bas : le montage revient à sa place.
+    let v5 = DockLayout {
+        version: 5,
+        principal: DockNode::Column { part: 0.7, haut: Box::new(tabs(&[Pane::Canvas])), bas: Box::new(tabs(&[Pane::Montage, Pane::Timeline])) },
         fenetres: Vec::new(),
         detachees: Vec::new(),
     };
-    let kept = side_by_side.clone().upgraded();
-    assert!(kept.close_to(&DockLayout { version: dock::LAYOUT_VERSION, ..side_by_side }), "{:?}", kept.principal);
+    assert!(matches!(&v5.upgraded().principal, DockNode::Column { bas, .. } if **bas == tabs(&[Pane::Montage])));
+    let alone = DockLayout {
+        version: 5,
+        principal: DockNode::Column { part: 0.7, haut: Box::new(tabs(&[Pane::Canvas])), bas: Box::new(tabs(&[Pane::Timeline])) },
+        fenetres: Vec::new(),
+        detachees: Vec::new(),
+    };
+    let l = alone.upgraded();
+    assert_eq!((count(&l, Pane::Montage), count(&l, Pane::Timeline)), (1, 0));
     // Le nom enregistré du montage ne change pas (« bande »), la timeline a le sien.
     assert_eq!(serde_json::to_string(&Pane::Montage).unwrap(), "\"bande\"");
     assert_eq!(serde_json::to_string(&Pane::Timeline).unwrap(), "\"timeline\"");

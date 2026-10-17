@@ -13,7 +13,7 @@ impl App {
         Layout {
             tools: panes.contains(Pane::Tools),
             sheet: panes.contains(Pane::Sheet) || panes.contains(Pane::Layers),
-            strip: panes.contains(Pane::Montage) || panes.contains(Pane::Timeline),
+            strip: panes.contains(Pane::Montage),
             panneaux: Some(panes),
             top_view: self.top_view,
             vignettes: self.board_view == BoardView::Panels,
