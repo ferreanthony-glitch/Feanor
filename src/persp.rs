@@ -115,7 +115,8 @@ pub fn raster_bounds(r: &Raster) -> Option<Rect> {
     b.is_positive().then_some(b)
 }
 
-fn sample(r: &Raster, x: f32, y: f32) -> Color32 {
+/// Couleur bilinéaire de l'image `r` au point (`x`, `y`) (aussi pour `envelope.rs`).
+pub(crate) fn sample(r: &Raster, x: f32, y: f32) -> Color32 {
     let (x, y) = (x - 0.5, y - 0.5);
     let (x0, y0) = (x.floor(), y.floor());
     let (fx, fy) = (x - x0, y - y0);
@@ -177,8 +178,13 @@ pub fn warp_raster(original: &Raster, src: Rect, quad: [Pos2; 4]) -> Option<Rast
 /// Un élément vectoriel déformé par `h` (traits : leurs points ; épaisseur à l'échelle moyenne
 /// `k` ; texte : la transformation affine la plus proche, prise sur sa boîte).
 pub fn warp_element(e: &Element, h: &Homography, k: f32) -> Element {
+    warp_element_with(e, &|p| apply(h, p), k)
+}
+
+/// `warp_element` avec une déformation quelconque `f` (l'enveloppe de Bézier, `envelope.rs`).
+pub fn warp_element_with(e: &Element, f: &impl Fn(Pos2) -> Pos2, k: f32) -> Element {
     let map = |x: f32, y: f32| {
-        let q = apply(h, pos2(x, y));
+        let q = f(pos2(x, y));
         [q.x, q.y]
     };
     match e {
@@ -204,7 +210,7 @@ pub fn warp_element(e: &Element, h: &Homography, k: f32) -> Element {
             let mut out = Element::Text { text: text.clone(), font: font.clone(), size: *size, color: *color, opacity: *opacity, place: *place };
             if let Some((corners, _)) = e.text_shape() {
                 // Coins haut-gauche, haut-droite, bas-gauche déformés : l'affine qui les y envoie.
-                let (o, x, y) = (apply(h, corners[0]), apply(h, corners[1]), apply(h, corners[3]));
+                let (o, x, y) = (f(corners[0]), f(corners[1]), f(corners[3]));
                 let a0 = Affine::from_array(*place);
                 if let Some(inv) = a0.inverse() {
                     let (lo, lx, ly) = (inv.apply(corners[0]), inv.apply(corners[1]), inv.apply(corners[3]));

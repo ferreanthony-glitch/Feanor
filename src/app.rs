@@ -563,6 +563,8 @@ pub struct App {
     pub(crate) maximized_once: u8,
     /// Geste du cutter en cours (points du dessin).
     pub(crate) cut_gesture: Option<Vec<Pos2>>,
+    /// Enveloppe de Bézier en cours (outil Transformer, Ctrl + coin).
+    pub(crate) envelope: Option<crate::envelopetools::EnvelopeEdit>,
     /// Déformation en perspective en cours (5f).
     pub(crate) persp: Option<crate::perstools::PerspEdit>,
     pub(crate) clipboard: Vec<Element>,
@@ -823,6 +825,7 @@ impl App {
             cut_gesture: None,
             paste_event: false,
             maximized_once: 0,
+            envelope: None,
             persp: None,
             clipboard: Vec::new(),
             renderer: Renderer::new(),
@@ -2547,6 +2550,7 @@ impl App {
         // Annuler ou rétablir pendant une déformation : elle repartirait d'un dessin périmé.
         if matches!(action, "edition.annuler" | "edition.retablir") {
             self.persp = None;
+            self.envelope = None;
         }
         if self.workspace_action(action) {
             return;
@@ -3059,7 +3063,7 @@ impl App {
 
     /// Touche pour l'outil en cours (voir `handle_shortcuts`) ; vrai si elle a servi.
     fn tool_key(&mut self, key: Key) -> bool {
-        self.shape_key(key) || self.persp_key(key)
+        self.shape_key(key) || self.persp_key(key) || self.envelope_key(key)
     }
 
     /// Change d'outil : la forme en cours (courbe, polyligne) est posée avant.
@@ -3068,6 +3072,7 @@ impl App {
             self.finish_shape_edit();
             self.finish_text_edit();
             self.persp = None;
+            self.envelope = None;
             self.end_stroke();
             self.tool = tool;
             if tool.is_shape() {

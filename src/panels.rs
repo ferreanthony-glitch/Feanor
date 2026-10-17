@@ -459,6 +459,8 @@ impl App {
                     "Glisser dans la boîte : déplacer le calque (Maj : à l'horizontale ou à la \
                      verticale). Coin : agrandir ou réduire (Maj : en gardant les proportions). Milieu \
                      d'un côté : étirer dans un seul sens. Poignée ronde : tourner (Maj : par 15°). \
+                     Ctrl + coin : enveloppe de Bézier qui déforme le dessin courant (poignées rondes : \
+                     courber les côtés ; Entrée : terminer). \
                      Les dessins ne sont pas modifiés : on peut annuler la transformation à tout moment.",
                 );
             }

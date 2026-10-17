@@ -442,6 +442,10 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
 - **Transformer** (calque entier, ses dessins ne changent pas) : glisser dans la boîte pour
   déplacer, un coin pour agrandir (Maj : proportions), le milieu d'un côté pour étirer en largeur ou
   en hauteur, la poignée ronde pour tourner ; largeur et hauteur aussi en chiffres. Ctrl+R annule.
+  **Ctrl + glisser un coin** : une enveloppe de Bézier sur le dessin courant (comme l'outil
+  Perspective, le dessin est vraiment déformé) : ses coins, et leurs poignées rondes pour courber les
+  côtés ; l'intérieur pour la déplacer ; Entrée, Échap ou un clic ailleurs pour terminer ; Ctrl+Z
+  annule chaque geste. Avec l'outil Transformer, Ctrl ne prend pas le lasso.
 - **Cutter** (Alt+T, calque vectoriel) : glisser en travers des bouts de traits à enlever (ou
   cliquer sur l'un d'eux) ; chaque trait touché est coupé là où il croise les autres, seuls les
   morceaux touchés partent (un dépassement est coupé net au croisement). Un trait qui ne croise

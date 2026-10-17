@@ -94,7 +94,7 @@ impl App {
     }
 
     /// Boîte du contenu du calque courant à l'image courante (le cadre de la caméra s'il est vide).
-    fn content_box(&self) -> Rect {
+    pub(crate) fn content_box(&self) -> Rect {
         self.layer_content_box(self.cur_layer, self.cur_frame)
             .unwrap_or_else(|| self.doc.frame_rect())
     }
@@ -255,7 +255,7 @@ impl App {
 
     /// Boîte et poignées de l'outil Transformer.
     pub(crate) fn paint_layer_transform(&self, painter: &egui::Painter) {
-        if self.tool != crate::app::Tool::Transform {
+        if self.tool != crate::app::Tool::Transform || self.envelope.is_some() {
             return;
         }
         let corners = self.box_corners();

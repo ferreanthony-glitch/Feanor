@@ -71,6 +71,10 @@ pub mod ctg;
 #[cfg(test)]
 mod ctg_tests;
 mod ctgui;
+mod envelope;
+#[cfg(test)]
+mod envelope_tests;
+mod envelopetools;
 mod flip;
 #[cfg(test)]
 mod flip_tests;

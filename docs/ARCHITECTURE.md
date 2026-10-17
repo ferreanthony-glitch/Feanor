@@ -803,6 +803,11 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     peint derrière) et refait la zone. `App::paint_behind`, `fill_shapes` (retenus dans
     `Settings`, enregistrés avec la pelure quand ils changent), `close_tolerance` (15 points
     d'écran) ; actions `pinceau.derriere`, `pinceau.remplir` (sans touche).
+  - Enveloppe de Bézier : `envelope.rs` (pur, testé : `Envelope` = coins + 8 poignées, `point`,
+    surface de Coons ; `warp_raster` par maillage de triangles et `persp::sample` ; `warp_drawing`
+    densifie puis `persp::warp_element_with`) ; `envelopetools.rs` (`App::envelope`, comme
+    `perstools` : `envelope_press` avant `transform_press`, `_drag`, `_release`, `_key`,
+    `check_envelope`, `paint_envelope_overlay`). `springtools` : pas de lasso de Ctrl avec Transformer.
   - Retourner (`flip.rs`) : `mirror_transform_x` (miroir de la feuille : angle opposé, largeur
     négative, translation recalée sur le centre de la feuille), `flipped_in_place`, `mirror_camera_x`,
     purs et testés ; `LayerTransform::clamp_stretch` garde le signe.

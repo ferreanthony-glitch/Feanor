@@ -1220,6 +1220,13 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         caméra (`plan.retourner`, « Flip Selected Shots » de Storyboard Pro 27, sans touche ;
         menus Storyboard et « … »). Mes choix : le calque autour du milieu de son contenu ; les
         calques de toute la scène pas retournés (partagés avec les autres plans) ;
+      - **enveloppe de Bézier** (Anthony : « maintenir Ctrl permet de saisir une poignée de Bézier
+        des coins pour transformer la forme » ; son choix : « B, comme l'outil Perspective ») : dans
+        l'outil Transformer, Ctrl + glisser un coin du cadre ouvre une enveloppe sur le dessin
+        courant (4 coins, 2 poignées par coin ; surface de Coons), appliquée à chaque lâcher depuis
+        le dessin d'origine (une étape d'annulation par geste), bitmap ou vectoriel (traits rendus
+        plus denses pour se courber). Avec cet outil, Ctrl ne prend plus le lasso. Comportement
+        exact de Storyboard Pro à vérifier ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,

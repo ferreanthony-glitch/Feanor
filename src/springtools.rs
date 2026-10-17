@@ -120,7 +120,8 @@ impl App {
         // Pas au milieu d'un trait : seulement souris relâchée, ou un appui qui commence.
         let free = !down || pressed;
         let ready = !taken && !spoiled && on_canvas && free && (pressed || now - since >= CTRL_DELAY);
-        if ready && self.tool != Tool::Select {
+        // Avec l'outil Transformer, Ctrl sert à l'enveloppe de Bézier (`envelopetools.rs`).
+        if ready && self.tool != Tool::Select && self.tool != Tool::Transform {
             let prev = self.tool;
             self.set_tool(Tool::Select);
             if let Some(c) = &mut self.ctrl_lasso {

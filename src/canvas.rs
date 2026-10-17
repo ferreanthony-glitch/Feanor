@@ -62,6 +62,7 @@ impl App {
         self.update_ref3d(ui.ctx());
         self.update_text_preview(ui.ctx());
         self.check_persp();
+        self.check_envelope();
 
         let plan = self.build_plan(self.cur_frame, true, true);
         let painter = ui.painter_at(rect);
@@ -135,6 +136,7 @@ impl App {
         self.paint_vector_overlay(&painter, rect, shift);
         self.paint_text_overlay(&painter);
         self.paint_persp_overlay(&painter);
+        self.paint_envelope_overlay(&painter);
         self.paint_stroke_tip(&painter);
         if !self.in_card {
             self.paint_canvas_title(&painter, rect);
@@ -303,7 +305,12 @@ impl App {
                         Tool::SelectColor => self.color_select_press(p, *pos, modifiers.shift),
                         Tool::Cutter => self.cutter_press(p),
                         Tool::Camera => self.camera_press(stage, *pos),
-                        Tool::Transform => self.transform_press(stage, *pos),
+                        Tool::Transform => {
+                            // Ctrl + coin : l'enveloppe de Bézier du dessin (`envelopetools.rs`).
+                            if !self.envelope_press(p, *pos, modifiers.command || modifiers.ctrl) {
+                                self.transform_press(stage, *pos);
+                            }
+                        }
                         Tool::Ref3d => self.ref3d_press(*pos, *modifiers),
                         Tool::Picker | Tool::Pan => {}
                     }
@@ -326,6 +333,7 @@ impl App {
                             self.erase_to(self.to_layer(q), pressure);
                         }
                     } else if self.cutter_drag(p) {
+                    } else if self.envelope_drag(p) {
                     } else if self.persp_drag(p) {
                     } else if self.shape_bend_move(p) {
                     } else if let Some((_, end)) = &mut self.shape_drag {
@@ -352,6 +360,7 @@ impl App {
                 | Event::PointerGone => {
                     self.shape_release(mods.shift);
                     self.persp_release();
+                    self.envelope_release();
                     if self.vdrag.is_some() {
                         self.finish_vdrag(mods.shift);
                     }
@@ -493,6 +502,10 @@ impl App {
         }
         if self.tool == Tool::Ref3d {
             ctx.set_cursor_icon(if self.ref3d.dragging() { CursorIcon::Grabbing } else { CursorIcon::Grab });
+            return;
+        }
+        if let Some(icon) = self.envelope_cursor(p) {
+            ctx.set_cursor_icon(icon);
             return;
         }
         if self.tool == Tool::Transform {
