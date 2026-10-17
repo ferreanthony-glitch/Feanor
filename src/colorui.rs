@@ -1,9 +1,16 @@
-//! Panneau Couleur (6b) : grande pastille de la couleur courante, curseurs teinte / saturation /
-//! valeur (TSV) avec leur dégradé, nuancier avec + et −.
+//! Panneau Couleur (6b : curseurs teinte / saturation / valeur avec leur dégradé, code
+//! hexadécimal, nuancier avec + et −).
 //!
-//! Passe couleur (2026-10-16) : deux couleurs, avant-plan et arrière-plan, comme dans Photoshop
-//! (deux carrés qui se chevauchent ; un clic sur celui de derrière les échange). Les outils
-//! dessinent avec la couleur d'avant-plan, `App::color`. Les conversions sont dans `couleur.rs`.
+//! Passe couleur (2026-10-16), de haut en bas :
+//! - deux couleurs, avant-plan et arrière-plan, comme dans Photoshop (deux carrés qui se
+//!   chevauchent ; un clic sur celui de derrière les échange) ; les outils dessinent avec
+//!   l'avant-plan, `App::color` ;
+//! - la roue chromatique (`wheel_ui`, géométrie dans `roue.rs`) ;
+//! - les curseurs TSV, RVB ou TSL, l'opacité du pinceau ;
+//! - les couleurs récentes ;
+//! - le nuancier montré (`nuancierui.rs`).
+//!
+//! Le même choix de couleur s'ouvre au pied de la barre d'outils. Conversions : `couleur.rs`.
 
 use eframe::egui::{self, pos2, vec2, Color32, Id, Rect, Response, Sense, Shape, Stroke, StrokeKind, Vec2};
 use egui_phosphor::regular as ph;
@@ -707,22 +714,27 @@ impl App {
         if !ui.memory(|m| m.is_popup_open(popup)) {
             return;
         }
+        // À droite de la barre d'outils, à la hauteur des carrés.
+        let at = pos2(ui.clip_rect().right().max(front.rect.right()) + 6.0, front.rect.top());
         let area = egui::Area::new(popup)
             .kind(egui::UiKind::Popup)
             .order(egui::Order::Foreground)
-            .fixed_pos(front.rect.right_top() + vec2(10.0, 0.0))
+            .fixed_pos(at)
             .constrain(true)
             .show(ui.ctx(), |ui| {
+                let max_height = (ui.ctx().screen_rect().height() - 40.0).max(200.0);
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.set_width(250.0);
-                    self.front_back_row(ui);
-                    ui.add_space(4.0);
-                    self.color_picker(ui, 200.0);
-                    ui.add_space(2.0);
-                    self.recent_row(ui);
-                    ui.add_space(4.0);
-                    // Les pastilles du nuancier montré (ses commandes sont dans le panneau Couleur).
-                    self.swatch_grid(ui);
+                    egui::ScrollArea::vertical().max_height(max_height).show(ui, |ui| {
+                        ui.set_width(250.0);
+                        self.front_back_row(ui);
+                        ui.add_space(4.0);
+                        self.color_picker(ui, 200.0);
+                        ui.add_space(2.0);
+                        self.recent_row(ui);
+                        ui.add_space(4.0);
+                        // Les pastilles du nuancier montré (ses commandes sont dans le panneau Couleur).
+                        self.swatch_grid(ui);
+                    });
                 });
             });
         let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
