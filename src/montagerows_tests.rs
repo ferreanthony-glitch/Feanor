@@ -152,12 +152,13 @@ fn keys_are_visited_one_after_the_other_across_all_layers() {
     assert_eq!(step_key(&keys, 3, false), Some(2));
     assert_eq!(step_key(&keys, 5, true), None);
     assert_eq!(step_key(&keys, 0, false), None);
-    // PgPréc / PgSuiv, dans les deux modes (A / F gardent plan précédent / suivant).
+    // A / F, dans les deux modes (choix d'Anthony) ; plan précédent / suivant sur PgPréc / PgSuiv.
     let map = Keymap::from_texts(DEFAULT_KEYMAP, None);
     for mode in [Mode::Storyboard, Mode::Animation] {
         let press = |key| map.find(key, Some(key), Modifiers::NONE, mode).map(str::to_string);
-        assert_eq!(press(Key::PageUp).as_deref(), Some("cle.precedente"));
-        assert_eq!(press(Key::PageDown).as_deref(), Some("cle.suivante"));
-        assert_eq!(press(Key::F).as_deref(), Some("panneau.suivant"));
+        assert_eq!(press(Key::A).as_deref(), Some("cle.precedente"));
+        assert_eq!(press(Key::F).as_deref(), Some("cle.suivante"));
+        assert_eq!(press(Key::PageUp).as_deref(), Some("panneau.precedent"));
+        assert_eq!(press(Key::PageDown).as_deref(), Some("panneau.suivant"));
     }
 }

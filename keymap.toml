@@ -607,28 +607,27 @@ action = "bande.tout_voir"
 touches = ["Alt+3"]
 source = "proposition"
 
+# Choix d'Anthony (2026-10-17) : A / F vont de clé en clé, tous les calques compris ; « plan
+# précédent / suivant » (A / F dans Storyboard Pro) passe sur PgPréc / PgSuiv.
 [[raccourci]]
 action = "panneau.precedent"
-touches = ["A"]
-source = "Storyboard Pro 27 : PREV_PANEL_KEY"
+touches = ["PgPréc"]
+source = "choix d'Anthony (Storyboard Pro 27 : PREV_PANEL_KEY est A, donné à la clé précédente)"
 
 [[raccourci]]
 action = "panneau.suivant"
-touches = ["F"]
-source = "Storyboard Pro 27 : NEXT_PANEL_KEY"
+touches = ["PgSuiv"]
+source = "choix d'Anthony (Storyboard Pro 27 : NEXT_PANEL_KEY est F, donné à la clé suivante)"
 
-# PgPréc / PgSuiv étaient un second raccourci de « plan précédent / suivant » (A / F restent) :
-# ils vont de clé en clé, tous les calques compris (demande d'Anthony, 2026-10-17). Dans son
-# TVPaint 12, ce sont LayerPrevKey / LayerNextKey (clés du seul calque courant).
 [[raccourci]]
 action = "cle.precedente"
-touches = ["PgPréc"]
-source = "proposition (comme TVPaint 12 (perso) : LayerPrevKey, mais tous les calques)"
+touches = ["A"]
+source = "choix d'Anthony (A de Storyboard Pro et de son TVPaint 12 : plan / instance précédents)"
 
 [[raccourci]]
 action = "cle.suivante"
-touches = ["PgSuiv"]
-source = "proposition (comme TVPaint 12 (perso) : LayerNextKey, mais tous les calques)"
+touches = ["F"]
+source = "choix d'Anthony (F de Storyboard Pro et de son TVPaint 12 : plan / instance suivants)"
 
 [[raccourci]]
 action = "scene.precedente"
@@ -1038,7 +1037,7 @@ source = "TVPaint 12 sans touche"
 
 [[raccourci]]
 action = "instance.precedente"
-# Tes touches TVPaint « a » / « f » sont déjà « panneau précédent / suivant » (Storyboard Pro).
+# Tes touches TVPaint « a » / « f » vont à la clé précédente / suivante, tous les calques.
 touches = ["Ctrl+Flèche gauche"]
 source = "TVPaint 12 (perso) : PrevInstance"
 contexte = "animation"

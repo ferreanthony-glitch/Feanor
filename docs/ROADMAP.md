@@ -1046,10 +1046,10 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         garde la règle d'avant (de la tête de lecture au dessin suivant ou la fin du plan) ; en
         animation, toujours « en N » images à la tête de lecture, comme TVPaint (mon choix) ;
       - **clé précédente / suivante, tous les calques** (Anthony : « passer d'une clé à une
-        autre, tous calques compris ») : PgPréc / PgSuiv (proposition ; dans son TVPaint 12, ce
-        sont LayerPrevKey / LayerNextKey, sur le seul calque courant ; ils étaient un second
-        raccourci de « plan précédent / suivant », qui garde A / F). En storyboard, dans tout le
-        montage ; en animation, dans le plan. Aussi dans le menu des instances ;
+        autre, tous calques compris ») : A / F (choix d'Anthony ; d'abord proposés sur PgPréc /
+        PgSuiv, qui passent à « plan précédent / suivant », A / F de Storyboard Pro). En
+        storyboard, dans tout le montage ; en animation, dans le plan. Aussi dans le menu des
+        instances ;
       - **tête de lecture de la timeline** (Anthony : « elle s'arrête quand je la fais glisser
         sur l'entrée ou la sortie d'un plan ») : posée sur l'entrée, la sortie, une marque ou la
         fin du plan, sa case dans la règle prenait la prise au lieu de la tête ; la case de la

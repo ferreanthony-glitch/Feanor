@@ -18,7 +18,7 @@
 //!   gardent leurs écarts et leurs durées à partir de l'image courante : venues d'un seul calque,
 //!   sur le calque courant ; de plusieurs, chacune sur le calque de même nom du plan courant
 //!   (créé s'il manque, à la même place dans la pile).
-//! - Clé précédente / suivante (PgPréc / PgSuiv) : la tête de lecture va au début de dessin
+//! - Clé précédente / suivante (A / F) : la tête de lecture va au début de dessin
 //!   d'avant ou d'après, tous les calques compris (`goto_key`).
 
 use crate::app::App;

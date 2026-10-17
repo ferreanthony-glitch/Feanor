@@ -76,6 +76,10 @@ fn storyboard_pro_sources_are_exact() {
     }
     // Le pinceau pochoir est cité via ton réglage perso (raccourci retiré).
     cited.insert("DRAWING_STENCIL_BRUSH_TOOL_KEY");
+    // A / F (plan précédent / suivant dans Storyboard Pro) vont à la clé précédente / suivante,
+    // tous les calques (choix d'Anthony, 2026-10-17) ; les plans passent sur PgPréc / PgSuiv.
+    cited.insert("PREV_PANEL_KEY");
+    cited.insert("NEXT_PANEL_KEY");
     let missing: Vec<_> = SBP27_IDS.iter().filter(|id| !cited.contains(*id)).collect();
     assert!(missing.is_empty(), "raccourcis Storyboard Pro 27 oubliés : {missing:?}");
 }
@@ -121,8 +125,9 @@ fn azerty_letters_follow_the_printed_letter() {
     let map = default_map();
     // Sur un AZERTY, la touche marquée Q est à la place du A d'un QWERTY.
     assert_eq!(press(&map, Key::Q, Key::A, NONE, Mode::Animation).as_deref(), Some("calque.supprimer"));
-    // La touche marquée A (place du Q QWERTY) : panneau précédent.
-    assert_eq!(press(&map, Key::A, Key::Q, NONE, Mode::Animation).as_deref(), Some("panneau.precedent"));
+    // La touche marquée A (place du Q QWERTY) : clé précédente (choix d'Anthony, 2026-10-17 ;
+    // avant, panneau précédent).
+    assert_eq!(press(&map, Key::A, Key::Q, NONE, Mode::Animation).as_deref(), Some("cle.precedente"));
     // W et X, comme dans tes réglages (W et X sont aux mêmes places en AZERTY et QWERTY, ou presque).
     assert_eq!(press(&map, Key::Z, Key::W, NONE, Mode::Animation), None, "Z AZERTY n'est pas W");
 }
