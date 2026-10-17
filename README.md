@@ -35,7 +35,8 @@ ouvrir d'un double-clic).
     sur une ligne : des icônes, dont le nom et le raccourci s'affichent au survol.
   - F6 coupe le plan à l'image courante (la suite devient un nouveau plan, avec ses propres
     copies des dessins ; une marque à cette image devient le début du nouveau plan) ; « Réunir le
-    plan et le suivant » fait l'inverse (le début du suivant devient une marque d'image).
+    plan et le suivant » fait l'inverse, sans laisser de repère (les textes du suivant rejoignent
+    ceux de l'image d'avant).
   - On réordonne les plans en les faisant glisser ; un plan reste un plan (il rejoint la séquence
     où on le pose). Le bord droit d'un plan règle sa durée.
   - Plusieurs plans choisis (Ctrl ou Maj + clic) qui se suivent dans une même séquence :

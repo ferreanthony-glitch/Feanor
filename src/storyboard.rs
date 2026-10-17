@@ -213,7 +213,7 @@ impl App {
         if self.storyboard_refuses() {
             return;
         }
-        if self.structure_op(|d, i| d.join_next_plan(i)) {
+        if self.structure_op(|d, i| d.join_next_plan_without_mark(i)) {
             self.status = format!("Plans réunis : {}.", panel_title(&self.doc, self.cur_panel));
         } else {
             self.status = "Pas de plan suivant dans cette séquence.".into();
@@ -245,7 +245,7 @@ impl App {
         if self.storyboard_refuses() {
             return;
         }
-        if self.structure_op(|d, i| d.join_next_plan(i.checked_sub(1)?)) {
+        if self.structure_op(|d, i| d.join_next_plan_without_mark(i.checked_sub(1)?)) {
             self.status = format!("Plans réunis : {}.", panel_title(&self.doc, self.cur_panel));
         } else {
             self.status = "Pas de plan précédent dans cette séquence.".into();

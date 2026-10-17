@@ -1098,8 +1098,9 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         « … », menu Storyboard), sans repère aux jointures (Anthony : « fusionner les deux plans
         laisse un repère sur la timeline, tu peux les enlever ? ») : les textes et notes de la
         planche des plans fusionnés passent à l'image de storyboard d'avant
-        (`Document::join_plans`, `drop_joint_mark`) ; « Réunir le plan et le suivant », l'inverse
-        de « Couper », garde sa marque. Calques : Ctrl ou Maj + clic dans le panneau Calques et dans la
+        (`Document::join_plans`, `drop_joint_mark`) ; « Réunir le plan et le suivant » et
+        « Réunir avec le plan précédent » non plus (choix d'Anthony ; `join_next_plan_without_mark`,
+        `join_next_plan` du modèle garde la marque). Calques : Ctrl ou Maj + clic dans le panneau Calques et dans la
         colonne du montage (comme dans la timeline) ; le bouton Fusionner du panneau fusionne les
         choisis quand il y en a plusieurs, le menu de la colonne du montage aussi.
 

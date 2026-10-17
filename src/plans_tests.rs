@@ -232,3 +232,16 @@ fn chosen_plans_that_follow_each_other_are_joined_into_one() {
     assert!(plan.marks.is_empty(), "pas de marque d'image aux jointures");
     assert_eq!(plan.action, "un\ntrois");
 }
+#[test]
+fn joining_a_plan_with_the_next_leaves_no_mark() {
+    // Anthony : « Réunir le plan et le suivant » ne garde pas de marque non plus.
+    let mut doc = Document::with_frame(32, 24, 24);
+    doc.add_scene_after(0);
+    let lens: Vec<usize> = doc.panels.iter().map(|p| p.frame_count()).collect();
+    doc.panels[1].dialogue = "réplique".into();
+    let at = doc.join_next_plan_without_mark(0).expect("réunis");
+    let plan = &doc.panels[at];
+    assert_eq!(plan.frame_count(), lens[0] + lens[1]);
+    assert!(plan.marks.is_empty());
+    assert_eq!(plan.dialogue, "réplique", "les textes du plan réuni sont gardés");
+}

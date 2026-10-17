@@ -2073,12 +2073,20 @@ impl Document {
         let first = self.panels[at[0]].id;
         for _ in 1..at.len() {
             let i = self.panels.iter().position(|p| p.id == first)?;
-            let joint = self.panels[i].frame_count();
-            self.join_next_plan(i)?;
-            let i = self.panels.iter().position(|p| p.id == first)?;
-            self.drop_joint_mark(i, joint);
+            self.join_next_plan_without_mark(i)?;
         }
         self.panels.iter().position(|p| p.id == first)
+    }
+
+    /// `join_next_plan` sans marque d'image à la jointure (Anthony, 2026-10-17, pour « Réunir le
+    /// plan et le suivant » comme pour « Fusionner les plans choisis ») ; voir `drop_joint_mark`.
+    pub fn join_next_plan_without_mark(&mut self, index: usize) -> Option<usize> {
+        let first = self.panels.get(index)?.id;
+        let joint = self.panels[index].frame_count();
+        self.join_next_plan(index)?;
+        let i = self.panels.iter().position(|p| p.id == first)?;
+        self.drop_joint_mark(i, joint);
+        Some(i)
     }
 
     /// Retire la marque d'image laissée par une jointure à l'image `joint` du plan `index` : ses
