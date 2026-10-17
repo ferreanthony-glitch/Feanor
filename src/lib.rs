@@ -25,6 +25,9 @@ pub mod tvpbrush;
 pub mod kritabrush;
 pub mod zipread;
 pub mod abr;
+pub mod procreate;
+#[cfg(test)]
+mod procreate_tests;
 #[cfg(test)]
 mod abr_tests;
 #[cfg(test)]

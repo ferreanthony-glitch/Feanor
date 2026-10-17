@@ -386,6 +386,9 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   dessin, que la couleur remplit quand on appuie. L'icône d'import lit un fichier de pinceaux Toon
   Boom (`.xml`, par exemple `STB_TextureBrushes_preset.xml`) : ses pinceaux, pointes et papiers
   s'ajoutent à la liste et restent pour les fois suivantes.
+- **Brosses Procreate** (même bouton) : `.brush`, `.brushset`. Arrivent la forme (pointe), le
+  grain (papier), la taille, l'opacité, l'espacement, la dispersion et l'appui. Pas encore
+  essayé sur une vraie brosse ; les échelles sont à vérifier.
 - **Brosses Photoshop** (même bouton) : `.abr`, pointes et préréglages (taille, dureté, angle,
   rondeur, espacement, appui). Pas encore essayé sur une vraie brosse.
 - **Brosses Krita et MyPaint** (même bouton, plusieurs fichiers à la fois) : réglages Krita
@@ -650,6 +653,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `xml.rs`, `sboard.rs` | Lecture d'un XML en arbre ; lecture d'un projet Storyboard Pro (14a) |
 | `sbscript.rs`, `sbimport.rs`, `sbui.rs` | Script d'export des dessins et sa liste ; projet Pelure construit ; fenêtre d'ouverture (14a) |
 | `sbbatch.rs`, `sbvector.rs` | Storyboard Pro lancé en batch sur une copie du projet ; ses dessins vectoriels refaits en éléments Pelure (14a-2) |
+| `procreate.rs` | Import des brosses Procreate (`.brush`, `.brushset`) : listes de propriétés binaires d'Apple |
 | `abr.rs` | Import des brosses Photoshop (`.abr`) |
 | `kritabrush.rs`, `zipread.rs` | Import des réglages Krita (`.kpp`, `.bundle`) et MyPaint (`.myb`) ; lecture des archives zip |
 | `dip.rs`, `tvpbrush.rs` | Images `.dip` de TVPaint ; import de ses brosses (`.tvpx`, `.bin`, `.ini`) |

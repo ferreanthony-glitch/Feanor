@@ -960,6 +960,15 @@ Choix d'Anthony :
     feutres.
   - **Devinés, à comparer dans TVPaint** : le sens d'un code négatif, l'ordre des modes
     d'animation, l'échelle de la dispersion et celle du papier.
+- ✅ 10 (Procreate). Import des brosses `.brush` et des jeux `.brushset`. L'archive est un zip ;
+  `Brush.archive` est une liste de propriétés binaire d'Apple au format NSKeyedArchiver, lue
+  d'après le format publié par Apple.
+  - Repris : `Shape.png` pour la pointe, `Grain.png` pour le papier ; le nom, la taille,
+    l'opacité, l'espacement, la dispersion, le nombre et la rondeur ; l'appui et la vitesse
+    sur la taille et l'opacité ; la rotation qui suit le trait.
+  - Les échelles sont devinées (aucune documentation de Procreate). Le mélange humide et la
+    double brosse ne sont pas repris.
+  - Testé sur des fichiers fabriqués seulement : aucune brosse Procreate n'était sur le poste.
 - ✅ 10 (Photoshop). Import des brosses `.abr`, d'après la structure que lisent GIMP et Krita :
   - versions 1 et 2, pointes échantillonnées ;
   - versions 6 et plus : les pointes (`samp`) et, au mieux, les préréglages (`desc` : nom,

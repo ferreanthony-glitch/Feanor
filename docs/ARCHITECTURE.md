@@ -620,6 +620,12 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     Décision : coût — courbe linéaire par morceaux plutôt que spline, simple et sûre, et TVPaint
     en a aussi. Risque : une courbe douce demande plus de points. Réversible : un mode
     d'interpolation pourra s'ajouter au format.
+- Import Procreate (moteur de dessin, étape 10) : `procreate.rs`.
+  - `read_bplist` lit une liste de propriétés binaire (« bplist00 ») : bloc final, table des
+    positions, marqueurs de type, et une garde contre les boucles.
+  - `keyed_root` déroule une archive NSKeyedArchiver (`$top` → `root` → `$objects`).
+  - `brush_settings` convertit les clés relevées par la communauté. Les dossiers `Reset/`
+    (réglages d'usine) et `Sub01/` (seconde brosse d'une double brosse) sont ignorés.
 - Import Photoshop (moteur de dessin, étape 10) : `abr.rs`.
   - `Reader` lit en gros-boutiste. `sampled` lit une pointe : bornes, profondeur 8 ou 16 bits,
     brute ou PackBits par ligne.
