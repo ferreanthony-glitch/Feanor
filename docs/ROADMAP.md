@@ -762,6 +762,23 @@ ECMAScript 3), elle, est documentée (aide `help/storyboard`). Choix d'Anthony (
   - **Non vérifié ici** : le mode batch et la lecture des traits n'ont pas pu l'être (Claude ne
     lance jamais Storyboard Pro). La façon de désigner le dessin d'un calque n'est décrite que pour
     Harmony : le script en essaie plusieurs et note dans la liste celle qui marche.
+  - **Corrigé après l'essai d'Anthony (2026-10-17)**, avec un script d'essai lancé par lui sur
+    son projet NAJI (`Documents\Work\analyse-sbpro`, analyse statique de Storyboard Pro faite
+    par un agent, sans le lancer) :
+    - le dessin d'un calque se désigne par l'élément du calque et le nom de son dessin
+      (« 27_1 »), en `exposure`, traduit par `Drawing.Key`. En `drawingId`, le nom désigne un
+      autre dessin (l'identifiant interne) : le script ne l'essaie plus, il aurait pu importer
+      le mauvais dessin sans rien dire ;
+    - le dessin est lu d'un coup par `Drawing.query.getData` : zones (une boucle fermée et sa
+      couleur), traits de crayon. Les dessins d'Anthony sont faits de zones (traits de brosse),
+      presque toutes d'une couleur texture ;
+    - les couleurs vont une fois dans `couleurs.json` ; une texture donne sa couleur moyenne
+      (pondérée par l'opacité de ses pixels, et pour opacité leur couverture) ;
+    - le `sequenceName` « 0 » des plans n'est plus une séquence quand la méta du projet
+      `sequenceExists` est vide (projets NAJI, BRAWLIDAYS partie 1) ;
+    - vérifié : les dessins lus par l'essai sont refaits en zones et rendus justes (essai ignoré
+      `real_getdata_drawings_from_the_test_script`, images avec `PELURE_SB_PNG`). Pas encore
+      vérifié : l'import complet en batch avec le nouveau script.
 - ✅ 14b-1. Exporter vers Storyboard Pro (Fichier > « Exporter vers Storyboard Pro… »). Choix
   d'Anthony : partir de son projet modèle (choisi une fois, gardé dans les réglages), dessins en
   vecteurs si possible ; 14b-1 les envoie en images, les vecteurs viennent en 14b-2.

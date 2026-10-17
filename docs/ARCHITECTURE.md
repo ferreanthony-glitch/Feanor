@@ -714,6 +714,23 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     quelles. Risque : deux plans dont les calques ont des noms différents donnent des pistes
     distinctes (c'est voulu). Réversible : l'ordre des pistes n'est pas enregistré, il se
     recalcule.
+- Import Storyboard Pro corrigé après l'essai d'Anthony (2026-10-17).
+  - `sbscript.rs` : `pelureTraits` désigne le dessin par `{elementId, exposure: nom}` passé par
+    `Drawing.Key`, jamais par `drawingId` ; il lit `Drawing.query.getData` et écrit
+    `{"format": "getData", box, arts}`. Les couleurs vont une fois dans `couleurs.json`
+    (`COLORS`), relu par `read_manifest` dans `Drawings::palette`.
+  - `sbvector.rs` : `palette` lit les couleurs simples (`[r,g,b,a]` ou `{r,g,b,a}`) et les
+    textures (`texture_color` : PNG en base64 décodé par `kritabrush::base64`, moyenne pondérée
+    par l'alpha, opacité = couverture). `raw_elements(json, palette)` lit les deux formats ; en
+    `getData`, les zones d'un calque sont rassemblées par couleur en un remplissage pair-impair
+    (calques plans), puis les traits de crayon (`pencil`, partagé avec l'ancien format).
+  - `sboard.rs` : `sequences_exist` lit la méta `sequenceExists` ; vide, `sequenceName` est
+    ignoré ; absente, il est gardé.
+
+    Décision : coût — un seul appel `getData` par dessin au lieu de quatre `getStrokes` et d'une
+    lecture de couleur par identifiant. Risque : la couleur moyenne d'une texture n'est qu'une
+    approche du grain (l'image du calque reste exacte s'il n'est pas gardé en vecteurs).
+    Réversible : l'ancien format se lit toujours.
 - Timeline et montage ensemble (chantier 6).
   - `Pane::Strip` est devenu `Pane::Montage` (nom enregistré inchangé, « bande ») et
     `Pane::Timeline` arrive (« timeline »), tous deux du groupe du bas. `bottom_band` les empile,

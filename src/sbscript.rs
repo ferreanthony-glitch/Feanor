@@ -16,16 +16,28 @@
 //!   dessin vectoriel en JSON, voir `sbvector`, vide s'il n'a pas pu être lu ; `note` : ce que
 //!   la lecture des traits a donné).
 //!
+//! Les couleurs citées par les dessins vont, une seule fois, dans `couleurs.json` (`COLORS`) :
+//! une couleur simple (`r`, `g`, `b`, `a`) ou une texture (`isTexture`, image PNG en
+//! `data:` base64), telles que `Drawing.query.getData` les donne.
+//!
+//! Le dessin d'un calque se désigne par l'élément du calque et le NOM de son dessin (« 27_1 »
+//! pour `Draw-27_1.tvg`), en `exposure` ; `Drawing.Key` le traduit en identifiant interne. Pas
+//! en `drawingId` : c'est l'identifiant interne, et le nom y désigne un autre dessin (essai
+//! d'Anthony sur son projet NAJI, 2026-10-17, `analyse-sbpro\essai-traits`).
+//!
 //! Lancé par Pelure à l'ouverture d'un `.sboard` (14a-2), le script tourne en mode batch
 //! (`StoryboardPro -scene … -batch -compile …`, syntaxe de la documentation) sur une copie du
 //! projet : il n'affiche aucune boîte, il écrit dans le journal (`MessageLog.trace`).
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// Nom de la liste écrite par le script.
 pub const MANIFEST: &str = "pelure.txt";
 /// Nom du script écrit par Pelure.
 pub const SCRIPT: &str = "export_pelure.js";
+/// Couleurs des dessins vectoriels, écrites une fois par le script.
+pub const COLORS: &str = "couleurs.json";
 
 /// Dessins exportés par le script.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -34,6 +46,9 @@ pub struct Drawings {
     pub fps: Option<f64>,
     pub size: Option<[usize; 2]>,
     pub panels: Vec<DPanel>,
+    /// Couleurs des dessins vectoriels (`couleurs.json`) : identifiant -> RVBA (une texture
+    /// donne sa couleur moyenne, `sbvector::palette`).
+    pub palette: HashMap<String, [f32; 4]>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -78,7 +93,12 @@ pub fn read_manifest(dir: &Path) -> Result<Drawings, String> {
         Ok(t) => t,
         Err(e) => e.into_bytes().iter().map(|&b| b as char).collect(),
     };
-    parse_manifest(&text, dir)
+    let mut d = parse_manifest(&text, dir)?;
+    // Absent (export d'avant, ou aucun dessin vectoriel lu) : les couleurs sont dans chaque dessin.
+    if let Some(json) = std::fs::read(dir.join(COLORS)).ok().and_then(|b| serde_json::from_slice(&b).ok()) {
+        d.palette = crate::sbvector::palette(&json);
+    }
+    Ok(d)
 }
 
 /// Lit le texte de la liste ; les images sont cherchées sous `dir`.
@@ -148,8 +168,9 @@ fn found_image(dir: &Path, rel: &str) -> Option<PathBuf> {
     images.into_iter().next()
 }
 
-/// Le script (ECMAScript 3 : l'interface de script de Storyboard Pro est en Qt Script ; il n'y
-/// est pas sûr que l'objet `JSON` existe, d'où `pelureJson`).
+/// Le script (ECMAScript 3 : l'interface de script de Storyboard Pro est en Qt Script). L'objet
+/// `JSON` existe dans Storyboard Pro 27 (essai d'Anthony) : on s'en sert, `pelureJson` reste en
+/// secours.
 const SCRIPT_TEXT: &str = r#"// Pelure : export des dessins de ce projet Storyboard Pro, calque par calque.
 // Lance par Pelure a l'ouverture du projet (mode batch, sur une copie du projet), ou a
 // la main : vue Script Editor, Sandbox, coller ce texte, puis Run. Le projet n'est pas
@@ -192,79 +213,65 @@ function pelureJson(v)
   return "{" + parts.join(",") + "}";
 }
 
-// Les traits vectoriels du dessin du calque j (interface de script etendue, Drawing.query) :
-// on essaie plusieurs facons de designer le dessin, la premiere qui donne des traits gagne.
+// Un objet en texte JSON : l'objet JSON de Storyboard Pro s'il existe, sinon pelureJson.
+function pelureEnJson(v)
+{
+  if (typeof JSON != "undefined" && typeof JSON.stringify == "function")
+  {
+    try { return JSON.stringify(v); } catch (e) {}
+  }
+  return pelureJson(v);
+}
+
+// Les couleurs citees par les dessins lus, ecrites une fois a la fin (couleurs.json).
+var PELURE_COULEURS = {};
+
+// Le dessin vectoriel du calque j (interface de script etendue, Drawing.query.getData : ses
+// zones, ses traits de crayon et leurs couleurs). Le dessin se designe par l'element du calque
+// et le NOM de son dessin ("27_1" pour Draw-27_1.tvg), en "exposure" ; Drawing.Key le traduit
+// en identifiant interne. Jamais en "drawingId" : c'est l'identifiant interne, et le nom y
+// designe un autre dessin.
 function pelureTraits(lm, panelId, j)
 {
-  if (typeof Drawing == "undefined" || !Drawing.query || !Drawing.query.getStrokes)
+  if (typeof Drawing == "undefined" || !Drawing.query || !Drawing.query.getData)
     return { note: "interface Drawing absente" };
   var el = lm.getLayerElementId(panelId, j);
   var nom = String(lm.getLayerDrawingName(panelId, j, false));
   var base = nom.replace(/^.*[\\\/]/, "").replace(/\.[^.]*$/, "");
-  var tiret = base.lastIndexOf("-");
-  var expo = tiret >= 0 ? base.substring(tiret + 1) : base;
-  var cles = new Array(0);
-  cles.push({ elementId: el, exposure: expo });
-  cles.push({ drawingId: expo, elementId: el });
-  cles.push({ elementId: el, exposure: base });
-  cles.push({ drawingId: base, elementId: el });
-  if (typeof Drawing.Key == "function")
-  {
-    try { cles.push(Drawing.Key({ elementId: el, exposure: expo })); } catch (e) {}
-  }
+  // Le nom du dessin suit "<element>-" ; si le nom de l'element a lui-meme un tiret, on
+  // essaie aussi apres le dernier.
+  var noms = new Array(0);
+  var premier = base.indexOf("-");
+  var dernier = base.lastIndexOf("-");
+  noms.push(premier >= 0 ? base.substring(premier + 1) : base);
+  if (dernier != premier) noms.push(base.substring(dernier + 1));
   var erreurs = new Array(0);
-  for (var c = 0; c < cles.length; ++c)
+  for (var c = 0; c < noms.length; ++c)
   {
-    var arts = new Array(0);
-    var total = 0;
-    for (var a = 0; a < 4; ++a)
+    var cle = { elementId: el, exposure: noms[c] };
+    if (typeof Drawing.Key == "function")
     {
-      try
-      {
-        var d = Drawing.query.getStrokes({ drawing: cles[c], art: a });
-        if (d && d.layers && !(d.drawing && d.drawing.isValid === false))
-        {
-          arts.push({ art: a, strokes: d });
-          total += d.layers.length;
-        }
-      }
-      catch (e) { erreurs.push("cle " + c + " art " + a + " : " + e); }
+      try { cle = Drawing.Key(cle); } catch (e) { erreurs.push("Key " + noms[c] + " : " + e); }
     }
-    if (total > 0) return { arts: arts, note: "ok (cle " + c + ", " + nom + ", element " + el + ")" };
-  }
-  return { note: "aucune cle (" + nom + ", element " + el + ")" + (erreurs.length ? " : " + erreurs.slice(0, 2).join(" | ") : "") };
-}
-
-// Les couleurs de la palette citees par les traits : identifiant -> [r, g, b, a].
-function pelureCouleurs(arts)
-{
-  var cm = new ColorManager();
-  var vues = {};
-  var out = {};
-  var prends = function (id)
-  {
-    if (!id || vues[id]) return;
-    vues[id] = true;
     try
     {
-      var c = cm.getColorDataWithId(id);
-      if (c && c.isValid !== false && c.colorData)
-        out[id] = [c.colorData.r, c.colorData.g, c.colorData.b, c.colorData.a];
+      var d = Drawing.query.getData({ drawing: cle });
+      if (d && d.arts && d.arts.length > 0) return { donnees: d, note: "ok (" + nom + ", dessin " + noms[c] + ", element " + el + ")" };
     }
-    catch (e) {}
-  };
-  for (var i = 0; i < arts.length; ++i)
-  {
-    var layers = arts[i].strokes.layers;
-    for (var l = 0; l < layers.length; ++l)
-    {
-      var sh = layers[l].shaders || [];
-      for (var s = 0; s < sh.length; ++s) prends(sh[s].colorId);
-      var st = layers[l].strokes || [];
-      for (var s = 0; s < st.length; ++s) prends(st[s].pencilColorId);
-    }
+    catch (e) { erreurs.push("dessin " + noms[c] + " : " + e); }
   }
-  return out;
+  return { note: "aucun trait lu (" + nom + ", element " + el + ")" + (erreurs.length ? " : " + erreurs.slice(0, 2).join(" | ") : "") };
+}
+
+// Garde les couleurs d'un dessin lu (une fois chacune).
+function pelureGardeCouleurs(couleurs)
+{
+  if (!couleurs) return;
+  for (var id in couleurs)
+  {
+    if (typeof couleurs[id] == "function" || PELURE_COULEURS[id]) continue;
+    PELURE_COULEURS[id] = couleurs[id];
+  }
 }
 
 function pelureExporte()
@@ -344,11 +351,12 @@ function pelureExporte()
             {
               var lu = pelureTraits(lm, panelId, j);
               note = lu.note;
-              if (lu.arts)
+              if (lu.donnees)
               {
+                pelureGardeCouleurs(lu.donnees.colors);
                 var tf = new File(PELURE_DOSSIER + "/" + sous + "/traits.json");
                 tf.open(FileAccess.WriteOnly);
-                tf.write(pelureJson({ arts: lu.arts, colors: pelureCouleurs(lu.arts) }));
+                tf.write(pelureEnJson({ format: "getData", box: lu.donnees.box, arts: lu.donnees.arts }));
                 tf.close();
                 traits = sous + "/traits.json";
               }
@@ -373,6 +381,11 @@ function pelureExporte()
   {
     project.cancelUndoRedoAccum();
   }
+
+  var cf = new File(PELURE_DOSSIER + "/couleurs.json");
+  cf.open(FileAccess.WriteOnly);
+  cf.write(pelureEnJson(PELURE_COULEURS));
+  cf.close();
 
   var f = new File(PELURE_DOSSIER + "/pelure.txt");
   f.open(FileAccess.WriteOnly);

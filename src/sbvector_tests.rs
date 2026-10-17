@@ -1,5 +1,7 @@
 //! Dessins vectoriels de Storyboard Pro (14a-2) : traits du modèle, zones colorées, calage.
 
+use std::collections::HashMap;
+
 use serde_json::{json, Value};
 
 use crate::raster::Raster;
@@ -33,7 +35,7 @@ pub(crate) fn tutorial() -> Value {
 
 #[test]
 fn colour_zones_are_rebuilt_from_their_borders() {
-    let raw = raw_elements(&tutorial());
+    let raw = raw_elements(&tutorial(), &HashMap::new());
     let fills: Vec<&Element> = raw.iter().filter(|e| matches!(e, Element::Fill { .. })).collect();
     let strokes = raw.iter().filter(|e| matches!(e, Element::Stroke { .. })).count();
     assert_eq!((fills.len(), strokes), (2, 6), "deux zones, six traits de crayon");
@@ -89,7 +91,7 @@ fn exported(raw: &[Element], s: f32, ox: f32, oy: f32) -> Raster {
 
 #[test]
 fn drawing_is_fitted_on_the_exported_image() {
-    let raw = raw_elements(&tutorial());
+    let raw = raw_elements(&tutorial(), &HashMap::new());
     let target = exported(&raw, 0.3, 800.0, 600.0);
     let fit = fit_to_image(&raw, &target).expect("calé");
     let (placed, score) = (&fit.elements, fit.score);
@@ -110,4 +112,130 @@ fn drawing_is_fitted_on_the_exported_image() {
         }
     }
     assert!(fit_to_image(&raw, &other).is_none());
+}
+
+/// Le texte base64 d'octets (pour fabriquer une texture comme Storyboard Pro l'écrit).
+fn base64(bytes: &[u8]) -> String {
+    const T: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut s = String::new();
+    for c in bytes.chunks(3) {
+        let n = (c[0] as u32) << 16 | (*c.get(1).unwrap_or(&0) as u32) << 8 | *c.get(2).unwrap_or(&0) as u32;
+        for k in 0..4 {
+            s.push(if k <= c.len() { T[(n >> (18 - 6 * k) & 63) as usize] as char } else { '=' });
+        }
+    }
+    s
+}
+
+/// Un dessin comme `Drawing.query.getData` le donne : un calque avec un carré troué (deux
+/// boucles de la couleur « grain », une texture) et un petit carré noir, puis un trait de crayon.
+fn data_drawing() -> Value {
+    let sq = |x0: f64, y0: f64, x1: f64, y1: f64| {
+        json!([{"x": x0, "y": y0, "onCurve": true}, {"x": x1, "y": y0, "onCurve": true}, {"x": x1, "y": y1, "onCurve": true}, {"x": x0, "y": y1, "onCurve": true}, {"x": x0, "y": y0, "onCurve": true}])
+    };
+    json!({
+        "format": "getData",
+        "box": {"x0": 0, "x1": 100, "y0": 0, "y1": 100},
+        "arts": [{"art": 2, "layers": [
+            {"contours": [
+                {"colorId": "grain", "path": sq(10.0, 10.0, 90.0, 90.0)},
+                {"colorId": "grain", "path": sq(40.0, 40.0, 60.0, 60.0)},
+                {"colorId": "noir", "path": sq(0.0, 0.0, 8.0, 8.0)}
+            ]},
+            {"contours": [], "thicknessPaths": [{"minThickness": 4, "maxThickness": 4, "keys": [{"t": 0, "leftThickness": 4, "rightThickness": 4}, {"t": 1, "leftThickness": 4, "rightThickness": 4}]}],
+             "strokes": [{"colorId": "noir", "thickness": {"minThickness": 4, "maxThickness": 4, "thicknessPath": 0}, "path": [{"x": 0, "y": 95, "onCurve": true}, {"x": 100, "y": 95, "onCurve": true}], "closed": false}]}
+        ]}]
+    })
+}
+
+#[test]
+fn getdata_drawings_become_fills_with_holes_and_texture_colours() {
+    // La texture « grain » : deux pixels rouges opaques, deux transparents.
+    let img = image::RgbaImage::from_fn(2, 2, |x, _| if x == 0 { image::Rgba([255, 0, 0, 255]) } else { image::Rgba([0, 0, 255, 0]) });
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgba8(img).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+    let colours = json!({
+        "grain": {"name": "Image", "isTexture": true, "image": format!("data:image/png;base64,{}", base64(&png))},
+        "noir": {"name": "Black", "r": 0, "g": 0, "b": 0, "a": 255}
+    });
+    let palette = crate::sbvector::palette(&colours);
+    let g = palette["grain"];
+    assert!((g[0] - 255.0).abs() < 0.5 && g[1] < 0.5 && g[2] < 0.5, "teinte des pixels visibles : {g:?}");
+    assert!((g[3] - 127.5).abs() < 0.5, "couverture moyenne : la moitié ({})", g[3]);
+
+    let raw = raw_elements(&data_drawing(), &palette);
+    let fills: Vec<&Element> = raw.iter().filter(|e| matches!(e, Element::Fill { .. })).collect();
+    assert_eq!((fills.len(), raw.len()), (2, 3), "deux zones (grain, noir), un trait de crayon");
+    let Element::Fill { contours, color, opacity } = fills[0] else { unreachable!() };
+    assert_eq!((contours.len(), *color), (2, [255, 0, 0]), "les deux boucles du grain ensemble");
+    assert!((opacity - 0.5).abs() < 0.01);
+    let Element::Stroke { points, color, .. } = &raw[2] else { panic!("le trait de crayon en dernier") };
+    assert_eq!(*color, [0, 0, 0]);
+    assert!((points[0].r - 2.0).abs() < 0.01, "rayon : le quart de gauche + droite");
+    // Le trou reste vide (pair-impair), l'anneau est rempli.
+    let r = VectorDrawing { elements: raw }.render(100, 100);
+    assert_eq!(r.get(50, 50).a(), 0, "le trou");
+    assert!(r.get(20, 50).a() > 0, "l'anneau");
+}
+
+/// Les dessins lus par l'essai d'Anthony (`analyse-sbpro\essai-traits`) : ils doivent donner des
+/// zones colorées. `PELURE_SB_PNG` : dossier où écrire chaque dessin rendu, pour le voir.
+#[test]
+#[ignore]
+fn real_getdata_drawings_from_the_test_script() {
+    let path = std::env::var("PELURE_SB_ESSAI").unwrap_or_else(|_| r"C:\Users\ferre\Documents\Work\analyse-sbpro\essai-traits\essai-traits-lecture.json".into());
+    let Ok(text) = std::fs::read_to_string(&path) else { return };
+    let report: Value = serde_json::from_str(&text).unwrap();
+    let mut drawings: Vec<(String, &Value)> = Vec::new();
+    if let Some(d) = report.pointer("/dessin_courant/donnees/valeur") {
+        drawings.push(("courant".into(), d));
+    }
+    for p in report["panneaux"].as_array().into_iter().flatten() {
+        for c in p["calques"].as_array().into_iter().flatten() {
+            if let Some(d) = c.get("donnees") {
+                drawings.push((format!("{}-{}", p["nom"].as_str().unwrap_or("?"), c["nom"].as_str().unwrap_or("?")), d));
+            }
+        }
+    }
+    assert!(!drawings.is_empty());
+    for (name, d) in drawings {
+        let mut json = d.clone();
+        json["format"] = json!("getData");
+        let t = std::time::Instant::now();
+        let raw = raw_elements(&json, &HashMap::new());
+        let fills = raw.iter().filter(|e| matches!(e, Element::Fill { .. })).count();
+        let black = raw.iter().filter(|e| matches!(e, Element::Fill { color: [0, 0, 0], .. })).count();
+        println!("{name} : {} éléments, {fills} zones ({black} noires), en {:?}", raw.len(), t.elapsed());
+        assert!(fills > 0, "{name} : aucune zone");
+        if let Ok(dir) = std::env::var("PELURE_SB_PNG") {
+            // Le dessin à 1600 pixels de large, axe vertical retourné (vers le haut dans le modèle).
+            let b = raw.iter().fold(eframe::egui::Rect::NOTHING, |r, e| r.union(e.bounds()));
+            let s = 1600.0 / b.width().max(1.0);
+            let h = (b.height() * s).ceil().max(1.0) as usize;
+            let tf = |p: [f32; 2]| [(p[0] - b.min.x) * s, (b.max.y - p[1]) * s];
+            let placed: Vec<Element> = raw
+                .iter()
+                .map(|e| match e {
+                    Element::Fill { contours, color, opacity } => Element::Fill { contours: contours.iter().map(|c| c.iter().map(|p| tf(*p)).collect()).collect(), color: *color, opacity: *opacity },
+                    other => other.clone(),
+                })
+                .collect();
+            let r = VectorDrawing { elements: placed }.render(1600, h);
+            let mut img = image::RgbaImage::from_pixel(1600, h as u32, image::Rgba([255, 255, 255, 255]));
+            for y in 0..h {
+                for x in 0..1600 {
+                    let c = r.get(x, y);
+                    if c.a() > 0 {
+                        let a = c.a() as f32 / 255.0;
+                        let px = img.get_pixel_mut(x as u32, y as u32);
+                        for (k, v) in [c.r(), c.g(), c.b()].into_iter().enumerate() {
+                            // Couleur prémultipliée posée sur le blanc.
+                            px[k] = (v as f32 + 255.0 * (1.0 - a)).min(255.0) as u8;
+                        }
+                    }
+                }
+            }
+            img.save(std::path::Path::new(&dir).join(format!("{name}.png"))).unwrap();
+        }
+    }
 }

@@ -146,6 +146,7 @@ fn parse_any(src: &str, fallback_title: &str) -> Result<SbProject, String> {
     }
     sb.title = project_title(&root).unwrap_or_else(|| fallback_title.to_string());
     let fields = field_names(&root);
+    let sequences = sequences_exist(&root);
 
     let scenes: HashMap<&str, &Element> = root
         .child("scenes")
@@ -161,7 +162,7 @@ fn parse_any(src: &str, fallback_title: &str) -> Result<SbProject, String> {
         };
         let info = meta(shot, "sceneInfo").and_then(|m| m.child("sceneInfo"));
         let name = info.and_then(|i| i.attr("name")).or(shot.attr("name")).unwrap_or("").to_string();
-        let sequence = info.and_then(|i| i.attr("sequenceName")).unwrap_or("").to_string();
+        let sequence = if sequences { info.and_then(|i| i.attr("sequenceName")).unwrap_or("").to_string() } else { String::new() };
         let mut panels = Vec::new();
         for (pid, prange) in sequence_of(shot) {
             let Some(p) = scenes.get(pid.as_str()) else {
@@ -283,6 +284,18 @@ fn read_tracks(top: &Element, warnings: &mut Vec<String>) -> Vec<SbTrack> {
 /// La méta `type` d'un élément (ses `metas/meta`).
 fn meta<'a>(e: &'a Element, kind: &str) -> Option<&'a Element> {
     e.child("metas")?.children_named("meta").find(|m| m.attr("type") == Some(kind))
+}
+
+/// Le projet a-t-il des séquences ? La méta `sequenceExists` vaut `true` quand il en a ; vide,
+/// le `sequenceName` des plans n'est qu'une valeur par défaut (« 0 », « 0_A »… dans les projets
+/// NAJI et BRAWLIDAYS partie 1, où Storyboard Pro ne montre aucune séquence). Sans cette méta
+/// (projets plus anciens), on garde les noms. Lu dans `analyse-sbpro` (2026-10-17), à confirmer
+/// dans Storyboard Pro.
+fn sequences_exist(root: &Element) -> bool {
+    let Some(m) = root.child("metas").and_then(|m| m.children_named("meta").find(|m| m.attr("name") == Some("sequenceExists"))) else {
+        return true;
+    };
+    m.child("bool").and_then(|b| b.attr("value")) == Some("true")
 }
 
 fn project_title(root: &Element) -> Option<String> {

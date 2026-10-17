@@ -38,6 +38,8 @@ pub fn build(sb: &SbProject, project_dir: &Path, drawings: Option<&Drawings>, pr
     let matched = drawings.map(|d| match_panels(sb, d, &mut warnings));
     let mut cels: HashMap<u64, CelId> = HashMap::new();
     let mut stats = VectorStats::default();
+    let no_palette = HashMap::new();
+    let palette = drawings.map_or(&no_palette, |d| &d.palette);
     let mut seq: Option<(String, u64)> = None;
     let mut g = 0;
     for shot in &sb.shots {
@@ -63,7 +65,7 @@ pub fn build(sb: &SbProject, project_dir: &Path, drawings: Option<&Drawings>, pr
             panel.dialogue = p.dialogue.clone();
             panel.action = p.action.clone();
             panel.notes = p.notes.clone();
-            let layers = panel_layers(&mut doc, p, dp, &mut cels, &mut warnings, &mut stats, &shot.name);
+            let layers = panel_layers(&mut doc, p, dp, palette, &mut cels, &mut warnings, &mut stats, &shot.name);
             if !layers.is_empty() {
                 panel.layers = layers;
             }
@@ -129,6 +131,7 @@ fn panel_layers(
     doc: &mut Document,
     p: &SbPanel,
     dp: Option<&DPanel>,
+    palette: &HashMap<String, [f32; 4]>,
     cels: &mut HashMap<u64, CelId>,
     warnings: &mut Vec<String>,
     stats: &mut VectorStats,
@@ -150,7 +153,7 @@ fn panel_layers(
                 layer.visible = dl.visible;
                 layer.locked = dl.locked;
                 if let Some(file) = &dl.file {
-                    match cel_from_export(doc, file, dl.traits.as_deref(), cels, &mut stats.measures) {
+                    match cel_from_export(doc, file, dl.traits.as_deref(), palette, cels, &mut stats.measures) {
                         Ok((cel, vector)) => {
                             layer.frames = vec![Some(cel); p.frames];
                             layer.kind = if vector { LayerKind::Vector } else { LayerKind::Bitmap };
@@ -220,7 +223,14 @@ fn measure_note(m: &[Measure]) -> Option<String> {
 
 /// Le dessin d'un calque exporté (le même pour deux exports identiques) : vectoriel si ses
 /// traits ont pu être lus et calés sur l'image (`sbvector`), sinon l'image. Vrai : vectoriel.
-fn cel_from_export(doc: &mut Document, png: &Path, traits: Option<&Path>, cels: &mut HashMap<u64, CelId>, measures: &mut Vec<Measure>) -> Result<(CelId, bool), String> {
+fn cel_from_export(
+    doc: &mut Document,
+    png: &Path,
+    traits: Option<&Path>,
+    palette: &HashMap<String, [f32; 4]>,
+    cels: &mut HashMap<u64, CelId>,
+    measures: &mut Vec<Measure>,
+) -> Result<(CelId, bool), String> {
     let bytes = std::fs::read(png).map_err(|e| format!("image illisible ({e})"))?;
     let traits_text = traits.and_then(|t| std::fs::read(t).ok());
     let mut h = DefaultHasher::new();
@@ -235,7 +245,7 @@ fn cel_from_export(doc: &mut Document, png: &Path, traits: Option<&Path>, cels: 
     let raster = place_image(doc, img);
     let fitted = traits_text
         .and_then(|t| serde_json::from_slice::<serde_json::Value>(&t).ok())
-        .map(|json| crate::sbvector::raw_elements(&json))
+        .map(|json| crate::sbvector::raw_elements(&json, palette))
         .filter(|raw| !raw.is_empty())
         .and_then(|raw| crate::sbvector::fit_to_image(&raw, &raster));
     let (cel, vector) = match fitted {

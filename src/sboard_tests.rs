@@ -386,9 +386,37 @@ fn batch_command_line_and_versions() {
     assert_eq!(args, vec!["-scene", r"C:\t\p.sboard", "-batch", "-compile", r"C:\t\s.js"]);
     let v = crate::sbbatch::version_of(Path::new(r"C:\PF\Toon Boom Animation\Toon Boom Storyboard Pro 27\win64\bin\StoryboardPro.exe"));
     assert_eq!(v, 27);
-    // Le script n'ouvre aucune boîte (mode batch) et tente les traits vectoriels.
+    // Le script n'ouvre aucune boîte (mode batch) et lit les dessins vectoriels par getData, le
+    // dessin désigné par son nom en « exposure » (traduit par Drawing.Key), jamais en
+    // « drawingId » (l'identifiant interne : le nom y désigne un autre dessin).
     let s = sbscript::script(Path::new(r"C:\d"));
-    assert!(!s.contains("MessageBox") && s.contains("Drawing.query.getStrokes") && s.contains("getColorDataWithId"));
+    assert!(!s.contains("MessageBox") && s.contains("Drawing.query.getData") && s.contains("Drawing.Key"));
+    assert!(s.contains("exposure: noms[c]") && !s.contains("drawingId:"), "aucune clé en drawingId");
+    assert!(s.contains("couleurs.json") && s.contains("\"getData\""));
+}
+
+#[test]
+fn default_sequence_names_are_not_sequences() {
+    // NAJI, BRAWLIDAYS partie 1 : « sequenceExists » vide, et « 0 » dans chaque plan.
+    let with = |v: &str| {
+        let meta = format!(" <meta type=\"bool\" name=\"sequenceExists\"><bool value=\"{v}\"/></meta>\n </metas>\n</project>");
+        sboard::parse(&SBOARD.replace(" </metas>\n</project>", &meta), "f").unwrap()
+    };
+    assert!(with("").shots.iter().all(|s| s.sequence.is_empty()), "pas de séquence");
+    assert!(with("true").shots.iter().all(|s| s.sequence == "A"), "les séquences du projet");
+    // Sans la méta (projets plus anciens) : les noms sont gardés.
+    assert!(sboard::parse(SBOARD, "f").unwrap().shots.iter().all(|s| s.sequence == "A"));
+}
+
+#[test]
+fn drawing_colours_are_read_once_from_their_file() {
+    let dir = temp("couleurs");
+    std::fs::write(dir.join(sbscript::MANIFEST), "pelure-sboard\t1\n").unwrap();
+    std::fs::write(dir.join(sbscript::COLORS), r#"{"noir": {"name": "Black", "r": 0, "g": 0, "b": 0, "a": 255}, "rouge": [255, 44, 0, 255]}"#).unwrap();
+    let d = sbscript::read_manifest(&dir).unwrap();
+    std::fs::remove_dir_all(&dir).ok();
+    assert_eq!(d.palette.get("noir"), Some(&[0.0, 0.0, 0.0, 255.0]));
+    assert_eq!(d.palette.get("rouge"), Some(&[255.0, 44.0, 0.0, 255.0]));
 }
 
 #[test]
@@ -398,7 +426,7 @@ fn vector_layer_comes_back_as_vectors() {
     std::fs::create_dir_all(dir.join("i")).unwrap();
     let traits = crate::sbvector_tests::tutorial();
     std::fs::write(dir.join("i/traits.json"), traits.to_string()).unwrap();
-    let raw = crate::sbvector::raw_elements(&traits);
+    let raw = crate::sbvector::raw_elements(&traits, &Default::default());
     // L'image à la taille du projet (64×32), dessin réduit et centré, axe vertical vers le bas.
     let s = 0.015;
     let tf = |x: f32, y: f32| [32.0 + (x + 555.0) * s, 16.0 - (y - 72.0) * s];

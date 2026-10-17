@@ -1,12 +1,19 @@
 //! Dessins vectoriels d'un projet Storyboard Pro (14a-2). Le script d'export lit chaque dessin
-//! vectoriel avec l'interface de script étendue de Storyboard Pro (`Drawing.query.getStrokes`,
-//! modèle vectoriel décrit dans sa documentation : arts, calques plans, traits en courbes de
-//! Bézier, zones colorées à gauche et à droite des traits) et l'écrit en JSON, avec les
-//! couleurs de la palette (`ColorManager.getColorDataWithId`). Pelure en refait des éléments
-//! vectoriels modifiables :
-//! - une zone colorée devient un remplissage dont les contours sont les traits qui la bordent
-//!   (une couleur d'un seul côté) ; Pelure remplit pair-impair, le sens des traits ne compte pas ;
+//! vectoriel avec l'interface de script étendue de Storyboard Pro et l'écrit en JSON ; Pelure en
+//! refait des éléments vectoriels modifiables.
+//!
+//! Depuis l'essai d'Anthony (2026-10-17), le script lit le dessin avec `Drawing.query.getData`
+//! (`"format": "getData"`) : par art, des calques plans faits de zones (`contours` : une boucle
+//! fermée en courbes de Bézier et sa couleur) et de traits de crayon (`strokes`, épaisseur par
+//! `thicknessPaths`). Les couleurs sont à part (`couleurs.json`, lues par `palette`) ; une
+//! texture, comme la plupart des couleurs des brosses d'Anthony, donne sa couleur moyenne.
+//! - les zones d'une même couleur dans un calque deviennent un remplissage pair-impair (un
+//!   calque est plan : ses zones ne se chevauchent pas, et un trou y est une boucle intérieure) ;
 //! - un trait de crayon (couleur et épaisseur) devient un trait à épaisseur variable.
+//!
+//! L'ancien format (`Drawing.query.getStrokes`, exports d'avant) se lit toujours : une zone
+//! colorée devient un remplissage dont les contours sont les traits qui la bordent (une couleur
+//! d'un seul côté) ; Pelure remplit pair-impair, le sens des traits ne compte pas.
 //!
 //! Les coordonnées du dessin ne sont pas en pixels, et la caméra du panneau ou le placement du
 //! calque les déplacent : on cale le dessin sur l'image du même calque exportée par Storyboard
@@ -23,37 +30,132 @@ use crate::vector::{Element, VPoint, VectorDrawing};
 /// Recouvrement minimal entre le dessin recalculé et l'image exportée pour garder les vecteurs.
 pub const MIN_OVERLAP: f32 = 0.6;
 
+/// Couleurs de `couleurs.json` (ou du champ `colors` d'un dessin) : identifiant -> RVBA (0 à
+/// 255). Une couleur simple : `[r, g, b, a]` (ancien format) ou `{r, g, b, a}` ; une texture
+/// (`isTexture`, image PNG en `data:` base64) : sa couleur moyenne (`texture_color`).
+pub fn palette(json: &Value) -> HashMap<String, [f32; 4]> {
+    let Some(map) = json.as_object() else { return HashMap::new() };
+    map.iter().filter_map(|(k, v)| Some((k.clone(), color_value(v)?))).collect()
+}
+
+fn color_value(v: &Value) -> Option<[f32; 4]> {
+    if let Some(a) = v.as_array() {
+        let c = |i: usize| a.get(i).and_then(Value::as_f64).unwrap_or(255.0) as f32;
+        return Some([c(0), c(1), c(2), c(3)]);
+    }
+    if v.get("isTexture").and_then(Value::as_bool) == Some(true) {
+        return v.get("image").and_then(Value::as_str).and_then(texture_color);
+    }
+    let c = |k: &str| v.get(k).and_then(Value::as_f64).map(|x| x as f32);
+    Some([c("r")?, c("g")?, c("b")?, c("a").unwrap_or(255.0)])
+}
+
+/// Couleur moyenne d'une texture donnée en `data:image/png;base64,…` : la teinte de ses pixels
+/// pondérée par leur opacité, et pour opacité leur couverture moyenne (un grain clairsemé
+/// donne une couleur plus légère).
+pub fn texture_color(data: &str) -> Option<[f32; 4]> {
+    let b64 = data.split_once(',').map_or(data, |(_, b)| b);
+    let bytes = crate::kritabrush::base64(b64.trim())?;
+    let img = image::load_from_memory(&bytes).ok()?.to_rgba8();
+    let (mut sum, mut alpha) = ([0f64; 3], 0f64);
+    for p in img.pixels() {
+        let a = p[3] as f64;
+        for (s, c) in sum.iter_mut().zip(p.0) {
+            *s += c as f64 * a;
+        }
+        alpha += a;
+    }
+    if alpha <= 0.0 {
+        return Some([0.0, 0.0, 0.0, 0.0]);
+    }
+    let n = (img.width() as f64 * img.height() as f64).max(1.0);
+    Some([(sum[0] / alpha) as f32, (sum[1] / alpha) as f32, (sum[2] / alpha) as f32, (alpha / n) as f32])
+}
+
 /// Éléments du dessin dans ses propres coordonnées (axe vertical vers le haut, comme le modèle
 /// de Storyboard Pro), du dessous au-dessus : arts du fond au premier plan, et dans chaque
-/// calque les remplissages puis les traits de crayon.
-pub fn raw_elements(json: &Value) -> Vec<Element> {
-    let colors: HashMap<String, [f32; 4]> = json
-        .get("colors")
-        .and_then(Value::as_object)
-        .map(|m| {
-            m.iter()
-                .filter_map(|(k, v)| {
-                    let a = v.as_array()?;
-                    let c = |i: usize| a.get(i).and_then(Value::as_f64).unwrap_or(255.0) as f32;
-                    Some((k.clone(), [c(0), c(1), c(2), c(3)]))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+/// calque les remplissages puis les traits de crayon. `shared` : les couleurs de
+/// `couleurs.json` (celles du dessin, s'il en a, s'y ajoutent).
+pub fn raw_elements(json: &Value, shared: &HashMap<String, [f32; 4]>) -> Vec<Element> {
+    let mut colors = shared.clone();
+    if let Some(own) = json.get("colors") {
+        colors.extend(palette(own));
+    }
     let color_of = |id: Option<&str>| -> ([u8; 3], f32) {
         let c = id.and_then(|id| colors.get(id)).copied().unwrap_or([0.0, 0.0, 0.0, 255.0]);
-        ([c[0] as u8, c[1] as u8, c[2] as u8], (c[3] / 255.0).clamp(0.0, 1.0))
+        let u = |v: f32| v.round().clamp(0.0, 255.0) as u8;
+        ([u(c[0]), u(c[1]), u(c[2])], (c[3] / 255.0).clamp(0.0, 1.0))
     };
+    let data = json.get("format").and_then(Value::as_str) == Some("getData");
     let mut arts: Vec<&Value> = json.get("arts").and_then(Value::as_array).map(|a| a.iter().collect()).unwrap_or_default();
     arts.sort_by_key(|a| a.get("art").and_then(Value::as_i64).unwrap_or(0));
     let mut out = Vec::new();
     for art in arts {
-        let layers = art.get("strokes").and_then(|s| s.get("layers")).and_then(Value::as_array);
-        for layer in layers.into_iter().flatten() {
-            layer_elements(layer, &color_of, &mut out);
+        let layers = if data { art.get("layers") } else { art.get("strokes").and_then(|s| s.get("layers")) };
+        for layer in layers.and_then(Value::as_array).into_iter().flatten() {
+            if data {
+                data_layer_elements(layer, &color_of, &mut out);
+            } else {
+                layer_elements(layer, &color_of, &mut out);
+            }
         }
     }
     out
+}
+
+/// Un calque lu par `getData` : ses zones, une boucle fermée chacune, rassemblées par couleur
+/// (pair-impair : un trou est une boucle intérieure), puis ses traits de crayon.
+fn data_layer_elements(layer: &Value, color_of: &dyn Fn(Option<&str>) -> ([u8; 3], f32), out: &mut Vec<Element>) {
+    let mut zones: Vec<(Option<&str>, Vec<Vec<[f32; 2]>>)> = Vec::new();
+    for c in layer.get("contours").and_then(Value::as_array).into_iter().flatten() {
+        let ring = bezier_points(c.get("path"));
+        if ring.len() < 3 {
+            continue;
+        }
+        let id = c.get("colorId").and_then(Value::as_str);
+        match zones.iter_mut().find(|(z, _)| *z == id) {
+            Some((_, rings)) => rings.push(ring),
+            None => zones.push((id, vec![ring])),
+        }
+    }
+    for (id, contours) in zones {
+        let (color, opacity) = color_of(id);
+        if opacity > 0.0 {
+            out.push(Element::Fill { contours, color, opacity });
+        }
+    }
+    let thickness_paths: Vec<&Value> = layer.get("thicknessPaths").and_then(Value::as_array).map(|a| a.iter().collect()).unwrap_or_default();
+    for s in layer.get("strokes").and_then(Value::as_array).into_iter().flatten() {
+        let path = bezier_points(s.get("path"));
+        if path.len() >= 2 {
+            out.push(pencil(s, s.get("colorId").and_then(Value::as_str), &path, &thickness_paths, color_of));
+        }
+    }
+}
+
+/// Un trait de crayon : sa couleur, et son épaisseur le long du trait (`thickness`, et la
+/// courbe d'épaisseur qu'il désigne dans `thickness_paths`).
+fn pencil(s: &Value, color: Option<&str>, path: &[[f32; 2]], thickness_paths: &[&Value], color_of: &dyn Fn(Option<&str>) -> ([u8; 3], f32)) -> Element {
+    let (color, opacity) = color_of(color);
+    let th = s.get("thickness");
+    let min = th.and_then(|t| t.get("minThickness")).and_then(Value::as_f64).unwrap_or(1.0) as f32;
+    let max = th.and_then(|t| t.get("maxThickness")).and_then(Value::as_f64).unwrap_or(min as f64) as f32;
+    let keys = th
+        .and_then(|t| t.get("thicknessPath"))
+        .and_then(Value::as_u64)
+        .and_then(|i| thickness_paths.get(i as usize))
+        .and_then(|p| p.get("keys"))
+        .and_then(Value::as_array);
+    let n = path.len();
+    let points = path
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let t = if n > 1 { i as f32 / (n - 1) as f32 } else { 0.0 };
+            VPoint { x: p[0], y: p[1], r: radius_at(keys, t).unwrap_or((min + max) * 0.25).max(0.1) }
+        })
+        .collect();
+    Element::Stroke { points, color, opacity, hardness: 1.0, brush: None }
 }
 
 /// Un trait du modèle : ses jointures de départ et d'arrivée, sa ligne échantillonnée.
@@ -90,27 +192,8 @@ fn layer_elements(layer: &Value, color_of: &dyn Fn(Option<&str>) -> ([u8; 3], f3
             left: int("shaderLeft"),
             right: int("shaderRight"),
         });
-        if let Some(pencil) = s.get("pencilColorId").and_then(Value::as_str) {
-            let (color, opacity) = color_of(Some(pencil));
-            let th = s.get("thickness");
-            let min = th.and_then(|t| t.get("minThickness")).and_then(Value::as_f64).unwrap_or(1.0) as f32;
-            let max = th.and_then(|t| t.get("maxThickness")).and_then(Value::as_f64).unwrap_or(min as f64) as f32;
-            let keys = th
-                .and_then(|t| t.get("thicknessPath"))
-                .and_then(Value::as_u64)
-                .and_then(|i| thickness_paths.get(i as usize))
-                .and_then(|p| p.get("keys"))
-                .and_then(Value::as_array);
-            let n = path.len();
-            let points = path
-                .iter()
-                .enumerate()
-                .map(|(i, p)| {
-                    let t = if n > 1 { i as f32 / (n - 1) as f32 } else { 0.0 };
-                    VPoint { x: p[0], y: p[1], r: radius_at(keys, t).unwrap_or((min + max) * 0.25).max(0.1) }
-                })
-                .collect();
-            pencils.push(Element::Stroke { points, color, opacity, hardness: 1.0, brush: None });
+        if let Some(id) = s.get("pencilColorId").and_then(Value::as_str) {
+            pencils.push(pencil(s, Some(id), &path, &thickness_paths, color_of));
         }
     }
     // Zones colorées : pour chaque couleur, les traits qui la bordent d'un seul côté.
