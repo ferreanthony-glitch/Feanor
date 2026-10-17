@@ -70,3 +70,19 @@ fn the_fill_slides_between_the_stroke_and_what_was_there() {
     assert_eq!(p.a(), 255);
     assert!(p.r() > 100 && p.r() < 140, "moitié noir, moitié jaune : {p:?}");
 }
+
+#[test]
+fn the_brush_options_are_remembered_between_sessions() {
+    // Anthony : « retiens-les, et garde-les pour le crayon ».
+    use crate::settings::Settings;
+    let mut s = Settings::default();
+    assert!(!s.paint_behind && !s.fill_shapes, "éteintes au premier lancement");
+    (s.paint_behind, s.fill_shapes) = (true, true);
+    let text = toml::to_string(&s).unwrap();
+    assert!(text.contains("peint_derriere = true") && text.contains("remplir_la_forme = true"));
+    let back: Settings = toml::from_str(&text).unwrap();
+    assert!(back.paint_behind && back.fill_shapes);
+    // Un fichier de réglages d'avant, sans ces lignes : éteintes.
+    let old: Settings = toml::from_str("copie_secours_minutes = 1").unwrap();
+    assert!(!old.paint_behind && !old.fill_shapes);
+}

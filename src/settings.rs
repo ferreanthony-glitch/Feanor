@@ -50,6 +50,12 @@ pub struct Settings {
     /// voir les réglages des calques (Anthony, 2026-10-17).
     #[serde(default = "default_head_w", rename = "largeur_entetes_montage")]
     pub montage_head_w: f32,
+    /// Pinceau et crayon : peint derrière, remplir la forme (`brushfill`), retenus d'une séance à
+    /// l'autre (Anthony, 2026-10-17).
+    #[serde(default, rename = "peint_derriere")]
+    pub paint_behind: bool,
+    #[serde(default, rename = "remplir_la_forme")]
+    pub fill_shapes: bool,
 }
 
 fn default_autosave() -> u32 {
@@ -79,6 +85,8 @@ impl Default for Settings {
             layout: None,
             workspaces: Vec::new(),
             montage_head_w: default_head_w(),
+            paint_behind: false,
+            fill_shapes: false,
         }
     }
 }

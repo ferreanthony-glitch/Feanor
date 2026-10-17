@@ -623,6 +623,7 @@ impl App {
         }
         let settings = crate::settings::Settings::load();
         let montage_head_w = crate::montagehead::clamp_head_w(settings.montage_head_w);
+        let (paint_behind, fill_shapes) = (settings.paint_behind, settings.fill_shapes);
         let mut app = Self {
             ctx: cc.egui_ctx.clone(),
             doc: Document::with_frame(1920, 1080, 24).created_now(),
@@ -645,8 +646,8 @@ impl App {
                 last: Tool::Rect,
             },
             vector_erase_whole: false,
-            paint_behind: false,
-            fill_shapes: false,
+            paint_behind,
+            fill_shapes,
             // Les couleurs de la dernière fois (passe couleur).
             color: settings.colors.front,
             hsv: crate::colorui::rgb_to_hsv(settings.colors.front),
@@ -3230,13 +3231,16 @@ impl eframe::App for App {
         if self.thumbs.pending {
             ctx.request_repaint();
         }
-        // Réglages de la pelure, de la feuille d'exposition et des flips : enregistrés quand ils
+        // Réglages de la pelure, de la feuille d'exposition, des flips et des options du pinceau
+        // (peint derrière, remplir la forme) : enregistrés quand ils
         // changent (pas pendant un glissé).
-        let changed = self.onion != self.settings.onion || self.xsheet != self.settings.xsheet || self.flips != self.settings.flips;
+        let options = (self.paint_behind, self.fill_shapes) != (self.settings.paint_behind, self.settings.fill_shapes);
+        let changed = self.onion != self.settings.onion || self.xsheet != self.settings.xsheet || self.flips != self.settings.flips || options;
         if changed && !ctx.input(|i| i.pointer.any_down()) {
             self.settings.onion = self.onion.clone();
             self.settings.xsheet = self.xsheet.clone();
             self.settings.flips = self.flips.clone();
+            (self.settings.paint_behind, self.settings.fill_shapes) = (self.paint_behind, self.fill_shapes);
             if let Err(e) = self.settings.save() {
                 self.status = format!("Réglages non enregistrés : {e}");
             }

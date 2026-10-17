@@ -791,8 +791,9 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     de `finish` (le remplissage s'insère entre le trait, de couverture connue par son masque, et
     le dessin d'avant ; tuiles ajoutées à l'annulation du trait). En vectoriel,
     `commit_vector_stroke` insère un `Element::Fill` sous le trait (les deux à l'indice 0 s'il
-    peint derrière) et refait la zone. `App::paint_behind`, `fill_shapes`, `close_tolerance`
-    (15 points d'écran) ; actions `pinceau.derriere`, `pinceau.remplir` (sans touche).
+    peint derrière) et refait la zone. `App::paint_behind`, `fill_shapes` (retenus dans
+    `Settings`, enregistrés avec la pelure quand ils changent), `close_tolerance` (15 points
+    d'écran) ; actions `pinceau.derriere`, `pinceau.remplir` (sans touche).
   - `montage_panel` dessine la colonne de gauche dans un `new_child` à elle : chaque
     `new_child` / `ui.put` fait avancer le compteur d'identifiants automatiques de la zone qui
     le contient, et la bande (`allocate_painter`, identifiant automatique) changeait d'identité

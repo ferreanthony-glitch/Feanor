@@ -1088,8 +1088,9 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,
         bitmap et vectoriel. Fermé : le bout revient à 15 points d'écran du début, ou le trait se
         recoupe (sa boucle se remplit). Le remplissage est sous le trait, par-dessus le dessin
-        d'avant (sous tout s'il peint derrière). Mes choix : ils valent aussi pour le crayon, ne
-        sont pas retenus d'une séance à l'autre ; « Draw Behind » / « Auto Fill » de Storyboard
+        d'avant (sous tout s'il peint derrière). Ils valent aussi pour le crayon et sont retenus
+        d'une séance à l'autre (choix d'Anthony, `reglages.toml` : `peint_derriere`,
+        `remplir_la_forme`) ; « Draw Behind » / « Auto Fill » de Storyboard
         Pro : comportement exact à vérifier ;
       - **fusionner les plans choisis, les calques choisis** (Anthony : « quand deux plans ou
         plus sont sélectionnés, l'option de fusionner les plans doit être possible. De même pour
