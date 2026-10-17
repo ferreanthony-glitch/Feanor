@@ -429,6 +429,10 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
 - **Formes** : Ligne (droite, courbe : tracer puis glisser pour courber ; courbe en S : deux
   glissers), Rectangle, Ellipse (Maj : carré, cercle), Polyligne (un clic par point, double-clic
   ou Entrée pour finir, clic sur le premier point pour fermer).
+- **Cutter** (Alt+T, calque vectoriel) : glisser en travers des bouts de traits à enlever (ou
+  cliquer sur l'un d'eux) ; chaque trait touché est coupé là où il croise les autres, seuls les
+  morceaux touchés partent (un dépassement est coupé net au croisement). Un trait qui ne croise
+  rien part en entier.
 - **Sélection par couleur** (baguette, dans la case de la Sélection) : sur un calque bitmap, clic
   sur une couleur pour choisir sa zone (tolérance ; pixels voisins seulement, ou toute l'image) ;
   sur un calque vectoriel, tous les traits et zones de cette couleur. Maj : ajouter. Copier,

@@ -13,7 +13,7 @@ use crate::app::{App, BoardView, Mode, Tool};
 /// « ajouter l'outil sélection au-dessus du pinceau. Dans le même groupe, l'outil de sélection
 /// par la couleur »).
 pub(crate) const TOOL_GROUPS: &[&[&[Tool]]] = &[
-    &[&[Tool::Select, Tool::SelectColor], &[Tool::Brush], &[Tool::Pencil], &[Tool::Eraser], &[Tool::Fill]],
+    &[&[Tool::Select, Tool::SelectColor], &[Tool::Brush], &[Tool::Pencil], &[Tool::Eraser], &[Tool::Cutter], &[Tool::Fill]],
     &[&[Tool::Rect, Tool::Line, Tool::Ellipse, Tool::Polyline], &[Tool::Text]],
     &[&[Tool::Transform], &[Tool::Perspective], &[Tool::Picker]],
     &[&[Tool::Pan], &[Tool::Camera], &[Tool::Ref3d]],

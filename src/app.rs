@@ -69,6 +69,8 @@ pub enum Tool {
     Brush,
     Pencil,
     Eraser,
+    /// Cutter : coupe les traits vectoriels à leurs croisements (`cutter.rs`).
+    Cutter,
     Fill,
     /// Formes (5c) : outils séparés, comme dans Storyboard Pro.
     Line,
@@ -92,10 +94,11 @@ pub enum Tool {
 }
 
 impl Tool {
-    pub const ALL: [Tool; 17] = [
+    pub const ALL: [Tool; 18] = [
         Tool::Brush,
         Tool::Pencil,
         Tool::Eraser,
+        Tool::Cutter,
         Tool::Fill,
         Tool::Line,
         Tool::Rect,
@@ -117,6 +120,7 @@ impl Tool {
             Tool::Brush => "Pinceau",
             Tool::Pencil => "Crayon",
             Tool::Eraser => "Gomme",
+            Tool::Cutter => "Cutter",
             Tool::Fill => "Remplir",
             Tool::Line => "Ligne",
             Tool::Rect => "Rectangle",
@@ -140,6 +144,7 @@ impl Tool {
             Tool::Brush => "Peindre ; la taille peut suivre la pression du stylet.",
             Tool::Pencil => "Dessiner au crayon.",
             Tool::Eraser => "Effacer ; sur un calque vectoriel, des bouts de trait ou des traits entiers.",
+            Tool::Cutter => "Glisser en travers des bouts de traits vectoriels à enlever : ils sont coupés là où ils croisent les autres traits.",
             Tool::Fill => "Remplir une zone avec la couleur courante.",
             Tool::Line => "Tracer une droite, une courbe ou une courbe en S.",
             Tool::Rect => "Tracer un rectangle, vide ou plein.",
@@ -164,6 +169,7 @@ impl Tool {
             Tool::Brush => ph::PAINT_BRUSH,
             Tool::Pencil => ph::PENCIL_SIMPLE,
             Tool::Eraser => ph::ERASER,
+            Tool::Cutter => ph::KNIFE,
             Tool::Fill => ph::PAINT_BUCKET,
             Tool::Line => ph::LINE_SEGMENT,
             Tool::Rect => ph::RECTANGLE,
@@ -187,6 +193,7 @@ impl Tool {
             Tool::Brush => "outil.pinceau",
             Tool::Pencil => "outil.crayon",
             Tool::Eraser => "outil.gomme",
+            Tool::Cutter => "outil.cutter",
             Tool::Fill => "outil.remplissage",
             Tool::Line => "outil.ligne",
             Tool::Rect => "outil.rectangle",
@@ -550,6 +557,8 @@ pub struct App {
     /// outils sont affichés (groupe, case, rectangle de la case).
     pub(crate) tool_recent: Vec<Tool>,
     pub(crate) tool_flyout: Option<(usize, usize, Rect)>,
+    /// Geste du cutter en cours (points du dessin).
+    pub(crate) cut_gesture: Option<Vec<Pos2>>,
     /// Déformation en perspective en cours (5f).
     pub(crate) persp: Option<crate::perstools::PerspEdit>,
     pub(crate) clipboard: Vec<Element>,
@@ -803,6 +812,7 @@ impl App {
             color_select: Default::default(),
             tool_recent: Vec::new(),
             tool_flyout: None,
+            cut_gesture: None,
             persp: None,
             clipboard: Vec::new(),
             renderer: Renderer::new(),
@@ -1456,6 +1466,7 @@ impl App {
             }
         }
         self.finish_vector_erase();
+        self.finish_cut();
         if self.vdrag.is_some() {
             self.finish_vdrag(false);
         }
@@ -2652,6 +2663,7 @@ impl App {
             "outil.pipette" => self.set_tool(Tool::Picker),
             "outil.selection" => self.set_tool(Tool::Select),
             "outil.selection_couleur" => self.set_tool(Tool::SelectColor),
+            "outil.cutter" => self.set_tool(Tool::Cutter),
             "outil.formes" => self.set_tool(self.shape.last),
             "outil.ligne" => self.set_tool(Tool::Line),
             "outil.ligne_droite" | "outil.ligne_courbe" | "outil.ligne_s" => {

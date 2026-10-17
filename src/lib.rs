@@ -71,6 +71,9 @@ pub mod ctg;
 #[cfg(test)]
 mod ctg_tests;
 mod ctgui;
+mod cutter;
+#[cfg(test)]
+mod cutter_tests;
 mod document;
 mod export;
 #[cfg(test)]

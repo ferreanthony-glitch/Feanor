@@ -303,6 +303,7 @@ impl App {
                         Tool::Perspective => self.persp_press(p, *pos),
                         Tool::Select => self.select_press(p, *pos, modifiers.shift),
                         Tool::SelectColor => self.color_select_press(p, *pos, modifiers.shift),
+                        Tool::Cutter => self.cutter_press(p),
                         Tool::Camera => self.camera_press(stage, *pos),
                         Tool::Transform => self.transform_press(stage, *pos),
                         Tool::Ref3d => self.ref3d_press(*pos, *modifiers),
@@ -326,6 +327,7 @@ impl App {
                         if let Some(q) = self.guided_point(stage) {
                             self.erase_to(self.to_layer(q), pressure);
                         }
+                    } else if self.cutter_drag(p) {
                     } else if self.persp_drag(p) {
                     } else if self.shape_bend_move(p) {
                     } else if let Some((_, end)) = &mut self.shape_drag {
@@ -394,6 +396,13 @@ impl App {
             let pts: Vec<Pos2> = points.iter().map(|p| to_s(*p)).collect();
             painter.add(Shape::closed_line(pts.clone(), Stroke::new(2.5_f32, Color32::from_black_alpha(120))));
             painter.add(Shape::closed_line(pts, Stroke::new(1.0_f32, ACCENT)));
+        }
+
+        // Geste du cutter en cours.
+        if let Some(g) = self.cut_gesture.as_ref().filter(|g| g.len() >= 2) {
+            let pts: Vec<Pos2> = g.iter().map(|p| to_s(*p)).collect();
+            painter.add(Shape::line(pts.clone(), Stroke::new(3.0_f32, Color32::from_black_alpha(120))));
+            painter.add(Shape::line(pts, Stroke::new(1.5_f32, Color32::from_rgb(240, 70, 60))));
         }
 
         // Contour de la zone bitmap sélectionnée : pointillés noirs et blancs.
@@ -472,7 +481,7 @@ impl App {
             ctx.set_cursor_icon(CursorIcon::Move);
             return;
         }
-        if alt || matches!(self.tool, Tool::Picker | Tool::Fill) || self.tool.is_shape() {
+        if alt || matches!(self.tool, Tool::Picker | Tool::Fill | Tool::Cutter) || self.tool.is_shape() {
             ctx.set_cursor_icon(CursorIcon::Crosshair);
             return;
         }

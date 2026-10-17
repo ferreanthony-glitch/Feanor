@@ -86,7 +86,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("outil.selection_couleur", "Outil sélection par couleur", true, false),
     act("pinceau.derriere", "Pinceau et crayon : peint derrière (oui / non)", true, false),
     act("pinceau.remplir", "Pinceau et crayon : remplir la forme (oui / non)", true, false),
-    act("outil.cutter", "Outil cutter", false, false),
+    act("outil.cutter", "Outil cutter", true, false),
     act("outil.pochoir", "Outil pinceau pochoir", false, false),
     act("outil.formes", "Outil formes (dernière forme utilisée)", true, false),
     act("outil.ligne", "Outil ligne", true, false),

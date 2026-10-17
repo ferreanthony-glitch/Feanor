@@ -1142,6 +1142,13 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         suivre ; le calque par défaut est vectoriel. L'entrée est maintenant toujours là (menus du
         calque, menu Calques), grisée avec la raison ; le fichier `propagerui.rs` (autre session)
         n'est pas touché ;
+      - **cutter** (Anthony : « ajoute l'outil cutter qui coupe les lignes vectorielles qui se
+        croisent ») : `outil.cutter`, Alt+T (touche de Storyboard Pro 27, déjà réservée), case
+        après la gomme. Glisser en travers des bouts de traits (ou un clic) : chaque trait touché
+        est coupé à ses croisements avec les autres traits et avec lui-même, les morceaux touchés
+        partent ; un trait qui ne croise rien part en entier (mon choix) ; zones et textes ne
+        bougent pas. Comportement exact du Cutter de Storyboard Pro (lasso, rectangle…) à
+        vérifier. Vérifié en essai (dépassement d'un T coupé net) ;
       - **peint derrière, remplir la forme** (Anthony : « pour le pinceau j'ai besoin de deux
         options : peint derrière et remplir la forme. Remplir la forme remplit par la couleur une
         forme fermée ») : deux interrupteurs en haut des réglages du pinceau et du crayon,

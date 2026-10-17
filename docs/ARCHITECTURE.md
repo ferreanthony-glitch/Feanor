@@ -803,6 +803,13 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     peint derrière) et refait la zone. `App::paint_behind`, `fill_shapes` (retenus dans
     `Settings`, enregistrés avec la pelure quand ils changent), `close_tolerance` (15 points
     d'écran) ; actions `pinceau.derriere`, `pinceau.remplir` (sans touche).
+  - Cutter (`cutter.rs`) : `cut_strokes` (pur, testé) : traits que le geste croise (ou, pour un
+    clic, le plus proche à `tol` près, `nearest`), coupés aux `crossings` avec les autres traits et
+    avec eux-mêmes (segments non voisins) ; les morceaux (`piece`, entre deux coupes) qui
+    contiennent un point touché partent. Endroits = indice du segment + fraction. Tout est calculé
+    sur les traits d'avant, les morceaux gardés remplacent le trait à sa place dans l'ordre.
+    `App::cut_gesture` (points du dessin), `cutter_press` / `cutter_drag` / `finish_cut` (une
+    étape d'annulation `push_vector`).
   - Propagation dans les menus : `montagehead::propagation_item` (montage, timeline, panneau
     Calques, menu Calques) montre toujours l'entrée ; grisée avec la raison (vidéo, pas bitmap,
     rien à suivre d'après `propager::guides`), sinon `propagation_menu` de `propagerui` pour le

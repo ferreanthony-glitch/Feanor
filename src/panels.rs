@@ -433,6 +433,14 @@ impl App {
             Tool::Perspective => self.persp_options_ui(ui),
             Tool::Select => self.selection_ui(ui, true),
             Tool::SelectColor => self.color_select_ui(ui),
+            Tool::Cutter => {
+                ui.label("Glisse en travers des bouts de traits à enlever, ou clique sur l'un d'eux.");
+                note(
+                    ui,
+                    "Calque vectoriel : chaque trait touché est coupé là où il croise les autres traits (et lui-même) ; \
+                     seuls les morceaux touchés partent. Un trait qui ne croise rien part en entier. Ctrl+Z annule.",
+                );
+            }
             Tool::Picker => {
                 ui.label("Clique sur le dessin pour prélever une couleur.");
                 note(ui, "Avec les autres outils : Alt + clic.");
