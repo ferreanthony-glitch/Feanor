@@ -12,6 +12,10 @@ type Key = (Plan, Vec<u64>, [u32; 7]);
 struct Entry {
     key: Key,
     texture: TextureHandle,
+    /// La vignette a été faite avec des effets pas encore calculés (le fil de fond les calcule,
+    /// `fxcache.rs`) : elle se refait quand un calcul de fond finit, pas avant. Contient le
+    /// compteur de calculs finis au moment où elle a été faite.
+    waiting: Option<u64>,
 }
 
 /// Temps accordé aux vignettes par image d'écran (au moins une est refaite à chaque fois).
@@ -79,7 +83,8 @@ impl Thumbs {
             .collect();
         let cam = doc.panel_camera(panel, frame);
         let key = (plan, versions, [cam.x, cam.y, cam.zoom, cam.angle, cam.dolly, cam.tilt, cam.pan].map(f32::to_bits));
-        let fresh = self.entries.get(&slot).is_some_and(|e| e.key == key);
+        let generation = crate::fxcache::generation();
+        let fresh = self.entries.get(&slot).is_some_and(|e| e.key == key && e.waiting.is_none_or(|g| g == generation));
         if fresh || Instant::now() >= deadline {
             if !fresh {
                 self.pending = true;
@@ -92,15 +97,19 @@ impl Thumbs {
                 .map(|e| e.texture.id());
         }
         let (tw, th) = thumb_size(doc, width);
-        let image = render::thumbnail(doc, &key.0, &cam, tw, th);
+        // Les effets non encore calculés ne bloquent pas l'écran : dernier résultat, ou dessin
+        // sans effet, et la vignette se refait quand le fil de fond a fini.
+        let (image, complete) = crate::fxcache::soft_scope(|| render::thumbnail(doc, &key.0, &cam, tw, th));
+        let waiting = (!complete).then_some(generation);
         match self.entries.get_mut(&slot) {
             Some(e) => {
                 e.texture.set(image, TextureOptions::LINEAR);
                 e.key = key;
+                e.waiting = waiting;
             }
             None => {
                 let texture = ctx.load_texture(format!("vignette-{id}-{width}"), image, TextureOptions::LINEAR);
-                self.entries.insert(slot, Entry { key, texture });
+                self.entries.insert(slot, Entry { key, texture, waiting });
             }
         }
         self.entries.get(&slot).map(|e| e.texture.id())

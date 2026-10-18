@@ -11,7 +11,7 @@ use crate::fx::{gaussian, into_raster, region_of, Region};
 use crate::raster::{Raster, TILE};
 
 /// Couleur sans prémultiplication (0 à 1) et couverture (0 à 1) d'un pixel.
-fn unpremul(p: Color32) -> ([f32; 3], f32) {
+pub(crate) fn unpremul(p: Color32) -> ([f32; 3], f32) {
     let a = p.a() as f32 / 255.0;
     if a <= 0.0 {
         return ([0.0; 3], 0.0);
@@ -20,7 +20,7 @@ fn unpremul(p: Color32) -> ([f32; 3], f32) {
 }
 
 /// Le pixel de couleur `rgb` (0 à 1) et de couverture `a`, prémultiplié.
-fn premul(rgb: [f32; 3], a: f32) -> Color32 {
+pub(crate) fn premul(rgb: [f32; 3], a: f32) -> Color32 {
     let a = a.clamp(0.0, 1.0);
     let ch = |c: f32| (c.clamp(0.0, 1.0) * a * 255.0 + 0.5) as u8;
     Color32::from_rgba_premultiplied(ch(rgb[0]), ch(rgb[1]), ch(rgb[2]), (a * 255.0 + 0.5) as u8)
@@ -32,24 +32,27 @@ fn luminance(c: [f32; 3]) -> f32 {
 
 /// Le dessin avec la couleur de chaque pixel dessiné passée par `f` (couleur, x, y) ; la
 /// couverture ne change pas.
-fn map_colors(raster: &Raster, f: impl Fn([f32; 3], usize, usize) -> [f32; 3]) -> Raster {
+pub(crate) fn map_colors(raster: &Raster, f: impl Fn([f32; 3], usize, usize) -> [f32; 3] + Sync) -> Raster {
     let mut out = raster.clone();
-    for idx in 0..out.tiles.len() {
-        if out.tiles[idx].is_none() {
-            continue;
-        }
-        let (ox, oy, tw, th) = out.tile_bounds(idx);
-        let tile = out.tile_mut(idx);
-        for y in 0..th {
-            for x in 0..tw {
-                let i = y * TILE + x;
-                let (rgb, a) = unpremul(tile[i]);
-                if a > 0.0 {
-                    tile[i] = premul(f(rgb, ox + x, oy + y), a);
+    let (width, height) = (out.width, out.height);
+    // Une rangée de tuiles par morceau, répartie sur les cœurs : chaque pixel ne dépend que de
+    // lui-même, le résultat ne dépend pas de la répartition.
+    let tiles_x = out.tiles_x.max(1);
+    crate::render::par_chunks(&mut out.tiles, tiles_x, |k, row| {
+        for (tx, tile) in row.iter_mut().enumerate() {
+            let Some(tile) = tile.as_mut() else { continue };
+            let (ox, oy, tw, th) = crate::raster::tile_bounds(width, height, k * tiles_x + tx);
+            for y in 0..th {
+                for x in 0..tw {
+                    let i = y * TILE + x;
+                    let (rgb, a) = unpremul(tile[i]);
+                    if a > 0.0 {
+                        tile[i] = premul(f(rgb, ox + x, oy + y), a);
+                    }
                 }
             }
         }
-    }
+    });
     out
 }
 
@@ -106,16 +109,35 @@ pub fn threshold(raster: &Raster, level: f32) -> Raster {
     map_colors(raster, |c, _, _| if luminance(c) * 255.0 >= level { [1.0; 3] } else { [0.0; 3] })
 }
 
+/// Le hasard (−1 à 1) du pixel (x, y) de la feuille : le même à chaque fois (le résultat du bruit
+/// ne change pas d'un affichage à l'autre).
+fn noise_at(x: usize, y: usize) -> f32 {
+    let mut h = (x as u32).wrapping_mul(0x9E37_79B1) ^ (y as u32).wrapping_mul(0x85EB_CA77);
+    h ^= h >> 15;
+    h = h.wrapping_mul(0x2C1B_3C6D);
+    h ^= h >> 12;
+    (h & 0xFFFF) as f32 / 32767.5 - 1.0
+}
+
 /// Bruit : chaque pixel dessiné s'éclaircit ou s'assombrit au hasard, jusqu'à `amount` (0 à
-/// 100 %) ; le même hasard à chaque fois (le résultat ne change pas d'un affichage à l'autre).
-pub fn noise(raster: &Raster, amount: f32) -> Raster {
+/// 100 %). Sur un dessin réduit `1 << level` fois (aperçu, `fxproxy.rs`) : chaque pixel prend la
+/// moyenne du hasard des pixels de la feuille qu'il couvre, comme l'affichage réduit ferait du
+/// bruit en pleine taille. `level` 0 : le bruit lui-même.
+pub fn noise_scaled(raster: &Raster, amount: f32, level: u8) -> Raster {
     let k = amount / 100.0 * 0.5;
+    let f = 1usize << level;
     map_colors(raster, |c, x, y| {
-        let mut h = (x as u32).wrapping_mul(0x9E37_79B1) ^ (y as u32).wrapping_mul(0x85EB_CA77);
-        h ^= h >> 15;
-        h = h.wrapping_mul(0x2C1B_3C6D);
-        h ^= h >> 12;
-        let n = (h & 0xFFFF) as f32 / 32767.5 - 1.0;
+        let n = if f == 1 {
+            noise_at(x, y)
+        } else {
+            let mut sum = 0.0;
+            for j in 0..f {
+                for i in 0..f {
+                    sum += noise_at(x * f + i, y * f + j);
+                }
+            }
+            sum / (f * f) as f32
+        };
         c.map(|v| v + n * k)
     })
 }
@@ -126,25 +148,27 @@ pub fn sharpen(raster: &Raster, gain: f32, radius: f32) -> Raster {
     let blur = gaussian(raster, radius.max(0.5));
     let g = gain / 100.0;
     let mut out = raster.clone();
-    for idx in 0..out.tiles.len() {
-        if out.tiles[idx].is_none() {
-            continue;
-        }
-        let (ox, oy, tw, th) = out.tile_bounds(idx);
-        let tile = out.tile_mut(idx);
-        for y in 0..th {
-            for x in 0..tw {
-                let i = y * TILE + x;
-                let (o, a) = unpremul(tile[i]);
-                if a <= 0.0 {
-                    continue;
+    let (width, height) = (out.width, out.height);
+    let tiles_x = out.tiles_x.max(1);
+    let blur = &blur;
+    crate::render::par_chunks(&mut out.tiles, tiles_x, |k, row| {
+        for (tx, tile) in row.iter_mut().enumerate() {
+            let Some(tile) = tile.as_mut() else { continue };
+            let (ox, oy, tw, th) = crate::raster::tile_bounds(width, height, k * tiles_x + tx);
+            for y in 0..th {
+                for x in 0..tw {
+                    let i = y * TILE + x;
+                    let (o, a) = unpremul(tile[i]);
+                    if a <= 0.0 {
+                        continue;
+                    }
+                    let (b, ba) = unpremul(blur.get(ox + x, oy + y));
+                    let b = if ba > 0.0 { b } else { o };
+                    tile[i] = premul([0, 1, 2].map(|k| o[k] + (o[k] - b[k]) * g), a);
                 }
-                let (b, ba) = unpremul(blur.get(ox + x, oy + y));
-                let b = if ba > 0.0 { b } else { o };
-                tile[i] = premul([0, 1, 2].map(|k| o[k] + (o[k] - b[k]) * g), a);
             }
         }
-    }
+    });
     out
 }
 
@@ -195,17 +219,21 @@ fn over(top: Color32, bottom: Color32) -> Color32 {
 /// Le dessin posé sur `under` (même taille), pixel par pixel.
 fn over_raster(raster: &Raster, under: &Raster) -> Raster {
     let mut out = under.clone();
-    for idx in 0..out.tiles.len() {
-        let Some(top) = raster.tiles[idx].as_ref() else { continue };
-        if out.tiles[idx].is_none() {
-            out.tiles[idx] = Some(top.clone());
-            continue;
+    let tiles_x = out.tiles_x.max(1);
+    // Une rangée de tuiles par morceau, répartie sur les cœurs.
+    crate::render::par_chunks(&mut out.tiles, tiles_x, |k, row| {
+        for (tx, slot) in row.iter_mut().enumerate() {
+            let Some(top) = raster.tiles[k * tiles_x + tx].as_ref() else { continue };
+            match slot {
+                None => *slot = Some(top.clone()),
+                Some(tile) => {
+                    for (i, p) in tile.iter_mut().enumerate() {
+                        *p = over(top[i], *p);
+                    }
+                }
+            }
         }
-        let tile = out.tile_mut(idx);
-        for (i, p) in tile.iter_mut().enumerate() {
-            *p = over(top[i], *p);
-        }
-    }
+    });
     out
 }
 
@@ -217,16 +245,25 @@ pub fn drop_shadow(raster: &Raster, dx: f32, dy: f32, blur: f32, opacity: f32) -
     let Some(r) = region_of(raster, margin) else { return Raster::new(raster.width, raster.height) };
     let k = (opacity / 100.0).clamp(0.0, 1.0);
     let mut px = vec![Color32::TRANSPARENT; r.w * r.h];
-    for y in 0..r.h as i64 {
-        for x in 0..r.w as i64 {
-            let (sx, sy) = (x - dx, y - dy);
-            if sx < 0 || sy < 0 || sx >= r.w as i64 || sy >= r.h as i64 {
+    let (rw, rh) = (r.w as i64, r.h as i64);
+    let src = &r.px;
+    crate::render::par_chunks(&mut px, r.w * 16, |chunk, rows| {
+        for (j, row) in rows.chunks_mut(r.w).enumerate() {
+            let y = (chunk * 16 + j) as i64;
+            let sy = y - dy;
+            if sy < 0 || sy >= rh {
                 continue;
             }
-            let a = r.px[sy as usize * r.w + sx as usize].a() as f32 * k;
-            px[y as usize * r.w + x as usize] = Color32::from_rgba_premultiplied(0, 0, 0, (a + 0.5) as u8);
+            for (x, d) in row.iter_mut().enumerate() {
+                let sx = x as i64 - dx;
+                if sx < 0 || sx >= rw {
+                    continue;
+                }
+                let a = src[sy as usize * r.w + sx as usize].a() as f32 * k;
+                *d = Color32::from_rgba_premultiplied(0, 0, 0, (a + 0.5) as u8);
+            }
         }
-    }
+    });
     let shadow = into_raster(&Region { px, ..r }, raster);
     let shadow = if blur >= 0.5 { gaussian(&shadow, blur) } else { shadow };
     over_raster(raster, &shadow)
@@ -237,14 +274,16 @@ pub fn drop_shadow(raster: &Raster, dx: f32, dy: f32, blur: f32, opacity: f32) -
 pub fn glow(raster: &Raster, radius: f32, intensity: f32) -> Raster {
     let mut halo = gaussian(raster, radius.max(1.0));
     let k = intensity / 100.0;
-    for t in halo.tiles.iter_mut().flatten() {
-        for p in t.iter_mut() {
-            let ch = |v: u8| (v as f32 * k).min(255.0);
-            let a = ch(p.a());
-            let c = |v: u8| ch(v).min(a) as u8;
-            *p = Color32::from_rgba_premultiplied(c(p.r()), c(p.g()), c(p.b()), a as u8);
+    crate::render::par_chunks(&mut halo.tiles, 32, |_, tiles| {
+        for t in tiles.iter_mut().flatten() {
+            for p in t.iter_mut() {
+                let ch = |v: u8| (v as f32 * k).min(255.0);
+                let a = ch(p.a());
+                let c = |v: u8| ch(v).min(a) as u8;
+                *p = Color32::from_rgba_premultiplied(c(p.r()), c(p.g()), c(p.b()), a as u8);
+            }
         }
-    }
+    });
     over_raster(raster, &halo)
 }
 

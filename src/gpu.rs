@@ -484,20 +484,30 @@ impl GpuCanvas {
     /// Met à jour les textures des dessins du plan. `all` : tout a pu changer ; `tiles` : tuiles
     /// touchées depuis l'image précédente (dans le dessin en cours de modification). `ahead` :
     /// dessins des images qui suivent (lecture, défilement), envoyés d'avance par petits morceaux,
-    /// pour qu'un changement de panneau ne fige pas l'image.
-    pub fn sync(&mut self, doc: &Document, plan: &Plan, all: bool, tiles: &[usize], ahead: &[CelId]) {
+    /// pour qu'un changement de panneau ne fige pas l'image. `level` : aperçu des effets (0 : pleine
+    /// résolution, `fx::draft_level`). Renvoie, pour chaque élément du plan, le numéro de la
+    /// texture à composer (celui du dessin dérivé, ou du dernier résultat tant que le fil de fond
+    /// calcule les effets, `fx::display`) ; rien : élément sans dessin.
+    pub fn sync(&mut self, doc: &Document, plan: &Plan, all: bool, tiles: &[usize], ahead: &[Ahead], level: u8) -> Vec<Option<CelId>> {
         let rs = &self.render_state;
         let mut renderer = rs.renderer.write();
-        let Some(res) = renderer.callback_resources.get_mut::<CanvasResources>() else { return };
+        let Some(res) = renderer.callback_resources.get_mut::<CanvasResources>() else { return Vec::new() };
         res.tick += 1;
         let tick = res.tick;
         let size = (doc.width as u32, doc.height as u32);
         let mut up = Uploads::default();
+        let mut resolved = Vec::with_capacity(plan.items.len());
         for item in &plan.items {
-            // Un dessin passé par des effets (13i) : son dessin dérivé, sous son propre numéro.
-            let Some(cel) = crate::fx::shown(doc, item) else { continue };
-            let id = crate::fx::shown_id(item);
-            let entry = ensure_texture(rs, res, id, cel.raster.tiles.len(), size);
+            // Un dessin passé par des effets (13i) : son dessin dérivé, sous son propre numéro ; en
+            // aperçu ou en attente du fil de fond, une texture plus petite ou plus ancienne.
+            let Some(shown) = crate::fx::display(doc, item, level) else {
+                resolved.push(None);
+                continue;
+            };
+            let (cel, id) = (shown.cel, shown.id);
+            resolved.push(Some(id));
+            let own = (cel.raster.width as u32, cel.raster.height as u32);
+            let entry = ensure_texture(rs, res, id, cel.raster.tiles.len(), own);
             if all || entry.version != cel.version {
                 // Un envoi d'avance commencé pour cette version reprend où il en était.
                 let start = match entry.partial {
@@ -517,12 +527,15 @@ impl GpuCanvas {
         // Envoi d'avance, borné à AHEAD_BYTES par image d'écran ; un dessin entamé reprend à sa
         // prochaine tuile à l'image suivante.
         let shown = up.data.len();
-        for &id in ahead {
+        for a in ahead {
             if up.data.len() >= shown + AHEAD_BYTES {
                 break;
             }
-            let Some(cel) = doc.cels.get(&id) else { continue };
-            let entry = ensure_texture(rs, res, id, cel.raster.tiles.len(), size);
+            let id = a.id;
+            // Un dessin dérivé déjà calculé par le fil de fond, ou un dessin du projet.
+            let Some(cel) = a.cel.as_deref().or_else(|| doc.cels.get(&id)) else { continue };
+            let own = (cel.raster.width as u32, cel.raster.height as u32);
+            let entry = ensure_texture(rs, res, id, cel.raster.tiles.len(), own);
             entry.last_used = tick;
             if entry.version == cel.version {
                 continue;
@@ -543,14 +556,21 @@ impl GpuCanvas {
             }
         }
         up.submit(rs, &res.textures);
-        // Mémoire de la carte graphique : on libère les textures les plus anciennes au-delà d'un Go.
-        let per = size.0 as u64 * size.1 as u64 * 4;
-        let max = (CACHE_BYTES / per.max(1)).max(plan.items.len() as u64 + 8) as usize;
-        if res.textures.len() > max {
+        // Mémoire de la carte graphique : on libère les textures les plus anciennes au-delà d'un Go
+        // (en octets : un aperçu réduit pèse le quart ou moins d'une texture de la taille du
+        // projet) ; celles de cette image restent.
+        let bytes_of = |t: &CelTexture| t.size.0 as u64 * t.size.1 as u64 * 4;
+        let mut total: u64 = res.textures.values().map(bytes_of).sum();
+        if total > CACHE_BYTES {
             let mut ages: Vec<(u64, CelId)> = res.textures.iter().map(|(&id, t)| (t.last_used, id)).collect();
             ages.sort_unstable();
-            for (_, id) in ages.into_iter().take(res.textures.len() - max) {
-                res.textures.remove(&id);
+            for (used, id) in ages {
+                if total <= CACHE_BYTES || used == tick {
+                    break;
+                }
+                if let Some(t) = res.textures.remove(&id) {
+                    total -= bytes_of(&t);
+                }
             }
         }
         // Image composée à la taille du projet.
@@ -594,13 +614,23 @@ impl GpuCanvas {
                 backdrop_group,
             });
         }
+        resolved
     }
 
     /// Commande de dessin : composer le papier et les calques du plan, puis afficher l'image.
-    /// `corners` : les coins du dessin à l'écran, en points (haut-gauche, haut-droite, bas-droite,
-    /// bas-gauche), avec leur w si la vue est en perspective (9f) ; `rect` : la zone d'affichage
-    /// (ce qui dépasse est coupé).
-    pub fn paint(&self, plan: &Plan, corners: [Pos2; 4], ws: Option<[f32; 4]>, rect: Rect, stage: [usize; 2]) -> egui::PaintCallback {
+    /// `resolved` : les textures des éléments du plan (renvoyées par `sync`). `corners` : les coins
+    /// du dessin à l'écran, en points (haut-gauche, haut-droite, bas-droite, bas-gauche), avec
+    /// leur w si la vue est en perspective (9f) ; `rect` : la zone d'affichage (ce qui dépasse est
+    /// coupé).
+    pub fn paint(
+        &self,
+        plan: &Plan,
+        resolved: &[Option<CelId>],
+        corners: [Pos2; 4],
+        ws: Option<[f32; 4]>,
+        rect: Rect,
+        stage: [usize; 2],
+    ) -> egui::PaintCallback {
         // Composer : l'image entière, en coordonnées normalisées.
         let full = [[-1.0, 1.0, 0.0, 0.0], [1.0, 1.0, 1.0, 0.0], [1.0, -1.0, 1.0, 1.0], [-1.0, -1.0, 0.0, 1.0]];
         let (w, h) = (stage[0] as f32, stage[1] as f32);
@@ -624,7 +654,9 @@ impl GpuCanvas {
                 blend: 0,
             });
         }
-        for item in &plan.items {
+        for (item, id) in plan.items.iter().zip(resolved) {
+            // Un élément sans dessin n'est pas composé.
+            let Some(id) = *id else { continue };
             let (color, tinted) = match item.tint {
                 Some(t) => ([t[0] as f32 / 255.0, t[1] as f32 / 255.0, t[2] as f32 / 255.0], 1.0),
                 None => ([0.0; 3], 0.0),
@@ -632,7 +664,7 @@ impl GpuCanvas {
             // La pelure d'oignon (teinte) reste en mode normal.
             let blend = if item.tint.is_some() { 0 } else { item.blend.index() };
             items.push(GpuItem {
-                cel: Some(crate::fx::shown_id(item)),
+                cel: Some(id),
                 corners: item.transform.as_ref().map_or(full, placed),
                 color: [color[0], color[1], color[2], tinted],
                 params: [item.opacity as f32 / 255.0, 1.0, blend as f32, 0.0],
@@ -653,6 +685,13 @@ impl GpuCanvas {
         });
         egui_wgpu::Callback::new_paint_callback(rect, CanvasPaint { items, screen, ws })
     }
+}
+
+/// Un dessin à envoyer d'avance à la carte graphique : un dessin du projet (`cel` rien), ou un
+/// dessin dérivé déjà calculé par le fil de fond des effets.
+pub struct Ahead {
+    pub id: CelId,
+    pub cel: Option<std::sync::Arc<crate::document::Cel>>,
 }
 
 struct GpuItem {

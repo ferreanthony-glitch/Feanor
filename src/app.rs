@@ -2423,6 +2423,9 @@ impl App {
 
     pub(crate) fn load_doc(&mut self, doc: Document) {
         self.doc = doc;
+        // (Ses dessins portent les numéros et les versions de ceux de l'ancien : les dessins
+        // dérivés des effets de l'ancien ne lui servent pas.)
+        crate::fx::forget_all();
         // (Un autre projet : l'effet choisi et les clés choisies étaient ceux de l'ancien.)
         self.fx_choice = None;
         self.fx_key_sel.clear();
@@ -3522,6 +3525,8 @@ impl eframe::App for App {
         }
         self.frame_start = Some(std::time::Instant::now());
         self.ppp = ctx.pixels_per_point();
+        // Effets de calque : l'horloge de leurs demandes avance (calculs de fond, `fxcache.rs`).
+        crate::fx::begin_frame(ctx);
         self.clamp_nav();
         self.end_length_gesture_if_idle();
         self.end_gesture_if_idle();

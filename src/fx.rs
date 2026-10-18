@@ -458,9 +458,20 @@ pub(crate) fn region_of(raster: &Raster, margin: usize) -> Option<Region> {
     let (x1, y1) = ((hi.0 + margin).min(raster.width), (hi.1 + margin).min(raster.height));
     let (w, h) = (x1 - x0, y1 - y0);
     let mut px = vec![Color32::TRANSPARENT; w * h];
-    for (y, row) in px.chunks_mut(w).enumerate() {
-        for (x, p) in row.iter_mut().enumerate() {
-            *p = raster.get(x0 + x, y0 + y);
+    // Tuile par tuile, ligne par ligne (les tuiles vides restent transparentes).
+    let (tx0, ty0) = (x0 / TILE, y0 / TILE);
+    let (tx1, ty1) = (x1.div_ceil(TILE), y1.div_ceil(TILE));
+    for ty in ty0..ty1 {
+        for tx in tx0..tx1 {
+            let idx = ty * raster.tiles_x + tx;
+            let Some(tile) = raster.tiles[idx].as_ref() else { continue };
+            let (ox, oy, tw, th) = raster.tile_bounds(idx);
+            let (cx0, cx1) = (ox.max(x0), (ox + tw).min(x1));
+            let (cy0, cy1) = (oy.max(y0), (oy + th).min(y1));
+            for y in cy0..cy1 {
+                let src = &tile[(y - oy) * TILE + (cx0 - ox)..(y - oy) * TILE + (cx1 - ox)];
+                px[(y - y0) * w + (cx0 - x0)..(y - y0) * w + (cx1 - x0)].copy_from_slice(src);
+            }
         }
     }
     Some(Region { x0, y0, w, h, px })
@@ -471,31 +482,41 @@ pub(crate) fn region_of(raster: &Raster, margin: usize) -> Option<Region> {
 pub(crate) fn into_raster(r: &Region, like: &Raster) -> Raster {
     let mut out = Raster::new(like.width, like.height);
     let (tx0, ty0) = (r.x0 / TILE, r.y0 / TILE);
-    let (tx1, ty1) = ((r.x0 + r.w).div_ceil(TILE), (r.y0 + r.h).div_ceil(TILE));
-    for ty in ty0..ty1 {
+    let (tx1, ty1) = ((r.x0 + r.w).div_ceil(TILE).min(out.tiles_x), (r.y0 + r.h).div_ceil(TILE));
+    if tx0 >= tx1 || ty0 >= ty1 {
+        return out;
+    }
+    let (width, height, tiles_x) = (out.width, out.height, out.tiles_x);
+    // Une rangée de tuiles par morceau, réparties sur les cœurs.
+    let rows = &mut out.tiles[ty0 * tiles_x..(ty1 * tiles_x).min(like.tiles.len())];
+    crate::render::par_chunks(rows, tiles_x, |k, row| {
+        let ty = ty0 + k;
         for tx in tx0..tx1 {
-            let idx = ty * out.tiles_x + tx;
-            let (ox, oy, tw, th) = out.tile_bounds(idx);
+            let idx = ty * tiles_x + tx;
+            let (ox, oy, tw, th) = crate::raster::tile_bounds(width, height, idx);
+            // Ce que la zone couvre de cette tuile.
+            let (cx0, cx1) = (ox.max(r.x0), (ox + tw).min(r.x0 + r.w));
+            let (cy0, cy1) = (oy.max(r.y0), (oy + th).min(r.y0 + r.h));
+            if cx0 >= cx1 || cy0 >= cy1 {
+                continue;
+            }
             let mut any = false;
             let mut tile = crate::raster::empty_tile();
-            for y in 0..th {
-                for x in 0..tw {
-                    let (sx, sy) = (ox + x, oy + y);
-                    if sx < r.x0 || sy < r.y0 || sx >= r.x0 + r.w || sy >= r.y0 + r.h {
-                        continue;
-                    }
-                    let c = r.px[(sy - r.y0) * r.w + (sx - r.x0)];
+            for y in cy0..cy1 {
+                let src = &r.px[(y - r.y0) * r.w + (cx0 - r.x0)..(y - r.y0) * r.w + (cx1 - r.x0)];
+                let dst = &mut tile[(y - oy) * TILE + (cx0 - ox)..(y - oy) * TILE + (cx1 - ox)];
+                for (d, &c) in dst.iter_mut().zip(src) {
                     if c.a() != 0 {
                         any = true;
-                        tile[y * TILE + x] = c;
+                        *d = c;
                     }
                 }
             }
             if any {
-                out.tiles[idx] = Some(tile);
+                row[tx] = Some(tile);
             }
         }
-    }
+    });
     out
 }
 
@@ -506,44 +527,69 @@ fn box_rows(px: &mut [Color32], w: usize, r: usize) {
         return;
     }
     let size = (2 * r + 1) as u32;
+    // Division par `size` (arrondie au plus proche) par une multiplication : exacte pour les
+    // sommes de ce flou (au plus 255 × 801 + 400).
+    let recip = (1u64 << 32) / size as u64 + 1;
+    let half = size / 2;
+    let div = move |v: u32| (((v + half) as u64 * recip) >> 32) as u8;
     crate::render::par_chunks(px, w * 16, |_, rows| {
         let mut line = vec![Color32::TRANSPARENT; w];
         for row in rows.chunks_mut(w) {
             line.copy_from_slice(row);
             let mut acc = [0u32; 4];
-            let add = |acc: &mut [u32; 4], c: Color32, sign: bool| {
-                for (k, v) in c.to_array().iter().enumerate() {
-                    if sign {
-                        acc[k] += *v as u32;
-                    } else {
-                        acc[k] -= *v as u32;
-                    }
-                }
-            };
             for c in line.iter().take(r.min(w - 1) + 1) {
-                add(&mut acc, *c, true);
+                acc[0] += c.r() as u32;
+                acc[1] += c.g() as u32;
+                acc[2] += c.b() as u32;
+                acc[3] += c.a() as u32;
             }
             for x in 0..w {
-                let m = |v: u32| ((v + size / 2) / size) as u8;
-                row[x] = Color32::from_rgba_premultiplied(m(acc[0]), m(acc[1]), m(acc[2]), m(acc[3]));
+                row[x] = Color32::from_rgba_premultiplied(div(acc[0]), div(acc[1]), div(acc[2]), div(acc[3]));
                 if x + r + 1 < w {
-                    add(&mut acc, line[x + r + 1], true);
+                    let c = line[x + r + 1];
+                    acc[0] += c.r() as u32;
+                    acc[1] += c.g() as u32;
+                    acc[2] += c.b() as u32;
+                    acc[3] += c.a() as u32;
                 }
                 if x >= r {
-                    add(&mut acc, line[x - r], false);
+                    let c = line[x - r];
+                    acc[0] -= c.r() as u32;
+                    acc[1] -= c.g() as u32;
+                    acc[2] -= c.b() as u32;
+                    acc[3] -= c.a() as u32;
                 }
             }
         }
     });
 }
 
+/// Division par `size` utilisée par `box_rows` (pour les tests : exacte comme `(v + size/2) / size`).
+#[cfg(test)]
+pub(crate) fn box_div_exact(size: u32) -> bool {
+    let recip = (1u64 << 32) / size as u64 + 1;
+    let half = size / 2;
+    (0..=255 * size).all(|v| (((v + half) as u64 * recip) >> 32) as u32 == (v + half) / size)
+}
+
+/// Le tableau `px` (largeur `w`, hauteur `h`) transposé : `out[x * h + y] = px[y * w + x]`. Par
+/// bandes de 16 colonnes, réparties sur les cœurs : les lignes de cache sont lues en entier.
 fn transpose(px: &[Color32], w: usize, h: usize) -> Vec<Color32> {
+    const BAND: usize = 16;
     let mut out = vec![Color32::TRANSPARENT; w * h];
-    for y in 0..h {
-        for x in 0..w {
-            out[x * h + y] = px[y * w + x];
-        }
+    if w == 0 || h == 0 {
+        return out;
     }
+    crate::render::par_chunks(&mut out, h * BAND, |k, band| {
+        let x0 = k * BAND;
+        let n = band.len() / h;
+        for y in 0..h {
+            let src = &px[y * w + x0..y * w + x0 + n];
+            for (i, &c) in src.iter().enumerate() {
+                band[i * h + y] = c;
+            }
+        }
+    });
     out
 }
 
@@ -622,52 +668,57 @@ fn motion(raster: &Raster, length: f32, angle: f32) -> Raster {
 
 /// Le dessin `raster` passé par les effets `steps`, dans l'ordre.
 pub fn apply(raster: &Raster, steps: &[FxStep]) -> Raster {
-    if steps.is_empty() {
-        return raster.clone();
-    }
-    let mut cur = raster.clone();
+    apply_scaled(raster, steps, 0)
+}
+
+/// Comme `apply`, sur un dessin réduit `1 << level` fois (aperçu pendant la lecture et les
+/// gestes, `fxproxy.rs`) : les paramètres en pixels sont réduits d'autant. `level` 0 : exact.
+pub fn apply_scaled(raster: &Raster, steps: &[FxStep], level: u8) -> Raster {
+    let mut cur: Option<Raster> = None;
     for s in steps {
         use crate::fxfilters as f;
-        let v = &s.values;
-        cur = match s.kind {
-            EffectKind::GaussianBlur => gaussian(&cur, v[0]),
-            EffectKind::MotionBlur => motion(&cur, v[0], v[1]),
-            EffectKind::BrightnessContrast => f::brightness_contrast(&cur, v[0], v[1]),
-            EffectKind::Levels => f::levels(&cur, v[0], v[1], v[2]),
-            EffectKind::HueSaturation => f::hue_saturation(&cur, v[0], v[1], v[2]),
-            EffectKind::BlackWhite => f::black_white(&cur, v[0]),
-            EffectKind::Invert => f::invert(&cur, v[0]),
-            EffectKind::Posterize => f::posterize(&cur, v[0]),
-            EffectKind::Threshold => f::threshold(&cur, v[0]),
-            EffectKind::Sharpen => f::sharpen(&cur, v[0], v[1]),
-            EffectKind::Noise => f::noise(&cur, v[0]),
-            EffectKind::Mosaic => f::mosaic(&cur, v[0]),
-            EffectKind::DropShadow => f::drop_shadow(&cur, v[0], v[1], v[2], v[3]),
-            EffectKind::Glow => f::glow(&cur, v[0], v[1]),
-            EffectKind::Wave => crate::fxwarp::wave(&cur, v[0], v[1], v[2]),
-            EffectKind::Ripple => crate::fxwarp::ripple(&cur, v[0], v[1], v[2], v[3]),
-            EffectKind::Twirl => crate::fxwarp::twirl(&cur, v[0], v[1], v[2], v[3]),
-            EffectKind::Pinch => crate::fxwarp::pinch(&cur, v[0], v[1], v[2], v[3]),
-            EffectKind::Clouds => crate::fxwarp::clouds(&cur, v[0], v[1], v[2]),
-            EffectKind::Lighting => crate::fxwarp::lighting(&cur, v[0], v[1], v[2], v[3]),
-            EffectKind::Gradient => crate::fxwarp::gradient(&cur, v[0], v[1]),
+        // (Le premier effet lit le dessin lui-même : pas de copie d'avance.)
+        let src = cur.as_ref().unwrap_or(raster);
+        let values = crate::fxproxy::scaled_values(s.kind, &s.values, level);
+        let v = &values;
+        let next = match s.kind {
+            EffectKind::GaussianBlur => gaussian(src, v[0]),
+            EffectKind::MotionBlur => motion(src, v[0], v[1]),
+            EffectKind::BrightnessContrast => f::brightness_contrast(src, v[0], v[1]),
+            EffectKind::Levels => f::levels(src, v[0], v[1], v[2]),
+            EffectKind::HueSaturation => f::hue_saturation(src, v[0], v[1], v[2]),
+            EffectKind::BlackWhite => f::black_white(src, v[0]),
+            EffectKind::Invert => f::invert(src, v[0]),
+            EffectKind::Posterize => f::posterize(src, v[0]),
+            EffectKind::Threshold => f::threshold(src, v[0]),
+            EffectKind::Sharpen => f::sharpen(src, v[0], v[1]),
+            EffectKind::Noise => f::noise_scaled(src, v[0], level),
+            EffectKind::Mosaic => f::mosaic(src, v[0]),
+            EffectKind::DropShadow => f::drop_shadow(src, v[0], v[1], v[2], v[3]),
+            EffectKind::Glow => f::glow(src, v[0], v[1]),
+            EffectKind::Wave => crate::fxwarp::wave(src, v[0], v[1], v[2]),
+            EffectKind::Ripple => crate::fxwarp::ripple(src, v[0], v[1], v[2], v[3]),
+            EffectKind::Twirl => crate::fxwarp::twirl(src, v[0], v[1], v[2], v[3]),
+            EffectKind::Pinch => crate::fxwarp::pinch(src, v[0], v[1], v[2], v[3]),
+            EffectKind::Clouds => crate::fxwarp::clouds(src, v[0], v[1], v[2]),
+            EffectKind::Lighting => crate::fxwarp::lighting(src, v[0], v[1], v[2], v[3]),
+            EffectKind::Gradient => crate::fxwarp::gradient(src, v[0], v[1]),
         };
+        cur = Some(next);
     }
-    cur
+    cur.unwrap_or_else(|| raster.clone())
 }
 
 // ---------------------------------------------------------------------- cache des dessins dérivés
 
-struct Entry {
-    version: u64,
-    cel: Arc<Cel>,
-    used: u64,
-}
-
-/// Dessins dérivés gardés : les plus anciens partent au-delà de `CACHE_MAX`.
-const CACHE_MAX: usize = 48;
-static CACHE: Mutex<BTreeMap<CelId, Entry>> = Mutex::new(BTreeMap::new());
+// Les dessins dérivés sont gardés par `fxcache.rs` (réserve en octets, calcul de fond).
 static TICK: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Vide le cache des dessins dérivés (mesures et tests).
+#[cfg(test)]
+pub(crate) fn clear_cache() {
+    crate::fxcache::clear();
+}
 
 /// Un dessin tel qu'il s'affiche : le vrai, ou le dérivé de ses effets.
 pub enum Shown<'a> {
@@ -711,11 +762,202 @@ pub fn shown_id(item: &crate::render::PlanItem) -> CelId {
 
 /// Le dessin d'un élément du plan tel qu'il s'affiche : effets (13i) et remplissage CTG (13j)
 /// compris.
+///
+/// Calcul bloquant et exact (export, vignettes enregistrées, tests), sauf en mode doux
+/// (`fxcache::soft_scope`, vignettes de l'écran) : les effets non encore calculés sont alors
+/// demandés au fil de fond et remplacés par leur dernier résultat.
 pub fn shown<'a>(doc: &'a Document, item: &crate::render::PlanItem) -> Option<Shown<'a>> {
+    if crate::fxcache::soft_active() {
+        // (Une vignette passe après l'image affichée.)
+        let d = display_with(doc, item, 0, THUMB_PRIO)?;
+        if !d.ready {
+            crate::fxcache::mark_incomplete();
+        }
+        return Some(d.cel);
+    }
+    shown_blocking(doc, item)
+}
+
+fn shown_blocking<'a>(doc: &'a Document, item: &crate::render::PlanItem) -> Option<Shown<'a>> {
     match item.fond {
         None => shown_with(doc, item.cel, &item.fx, item.ctg.as_ref()),
         Some(crate::render::FondPart::Forme(r)) => fond_shown(doc, item, &r),
     }
+}
+
+/// Un dessin pour l'affichage : ce qu'il faut montrer maintenant, sous quel numéro il est gardé
+/// (celui de l'élément du plan s'il est prêt ; un autre, celui du dernier résultat, ou le dessin
+/// lui-même, tant que le fil de fond calcule), et s'il est prêt.
+pub struct Display<'a> {
+    pub cel: Shown<'a>,
+    pub id: CelId,
+    pub ready: bool,
+}
+
+/// Numéro du dessin dérivé de `item` pour l'aperçu de niveau `level` (0 : pleine résolution,
+/// `shown_id`).
+fn display_id(item: &crate::render::PlanItem, level: u8) -> CelId {
+    if level == 0 {
+        return shown_id(item);
+    }
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    shown_id(item).hash(&mut h);
+    "aperçu".hash(&mut h);
+    level.hash(&mut h);
+    h.finish() | (1 << 63)
+}
+
+/// Ce que l'affichage demande pour `item` au niveau `level` : le dessin d'origine, et le niveau
+/// réellement servi (l'aperçu n'est admis que sans transformation, pour des effets qui le suivent).
+/// Rien si l'élément n'est pas un dessin passé par des effets seuls (CTG, fond, vidéo : calcul
+/// bloquant d'avant).
+fn wanted<'a>(doc: &'a Document, item: &crate::render::PlanItem, level: u8) -> Option<(&'a Cel, u8)> {
+    if item.fx.is_empty() || item.ctg.is_some() || item.fond.is_some() {
+        return None;
+    }
+    let src = doc.cels.get(&item.cel)?;
+    let level = if level > 0 && item.transform.is_none() && crate::fxproxy::proxyable(&item.fx) { level } else { 0 };
+    Some((src, level))
+}
+
+/// Le dessin de `item` pour l'écran, sans jamais calculer d'effet sur le fil appelant : prêt, ou
+/// demandé au fil de fond et remplacé en attendant par le dernier résultat du même dessin, ou le
+/// dessin sans effet (puis l'écran est redessiné quand le résultat arrive). `level` : aperçu
+/// réduit `1 << level` fois (0 : pleine résolution).
+pub fn display<'a>(doc: &'a Document, item: &crate::render::PlanItem, level: u8) -> Option<Display<'a>> {
+    display_with(doc, item, level, 0)
+}
+
+/// Priorité des calculs demandés pour les vignettes (après l'image affichée et les suivantes).
+const THUMB_PRIO: u32 = 100;
+
+fn display_with<'a>(doc: &'a Document, item: &crate::render::PlanItem, level: u8, prio: u32) -> Option<Display<'a>> {
+    let Some((src, level)) = wanted(doc, item, level) else {
+        return Some(Display { cel: shown_blocking(doc, item)?, id: shown_id(item), ready: true });
+    };
+    if let Some((id, cel)) = lookup(item, src, level) {
+        return Some(Display { cel: Shown::Fx(cel), id, ready: true });
+    }
+    // (Pendant un geste ou la lecture, les vignettes attendent : le calcul de fond sert l'image
+    // affichée ; elles se refont à la fin du geste, `draft_level`.)
+    if prio < THUMB_PRIO || !draft_active() {
+        crate::fxcache::request(job_for(item, src, display_id(item, level), level, prio));
+    }
+    Some(match crate::fxcache::fallback(item.cel) {
+        Some((last, cel)) => Display { cel: Shown::Fx(cel), id: last, ready: false },
+        None => Display { cel: Shown::Plain(src), id: item.cel, ready: false },
+    })
+}
+
+/// Le dessin dérivé de `item` s'il est gardé au niveau `level`, sinon en pleine résolution (déjà
+/// calculée au repos : plus nette, autant la montrer), avec son numéro.
+fn lookup(item: &crate::render::PlanItem, src: &Cel, level: u8) -> Option<(CelId, Arc<Cel>)> {
+    let both = [level, 0];
+    let levels = if level == 0 { &both[..1] } else { &both[..] };
+    levels.iter().find_map(|&l| {
+        let id = display_id(item, l);
+        crate::fxcache::get(id, src.version).map(|c| (id, c))
+    })
+}
+
+fn job_for(item: &crate::render::PlanItem, src: &Cel, id: CelId, level: u8, prio: u32) -> crate::fxcache::Job {
+    crate::fxcache::Job {
+        id,
+        version: src.version,
+        src: crate::fxcache::source(item.cel, src),
+        steps: item.fx.clone(),
+        level,
+        prio,
+        epoch: crate::fxcache::epoch(),
+        origin: item.cel,
+        seq: 0,
+        world: crate::fxcache::world(),
+    }
+}
+
+/// Un autre projet s'ouvre : les dessins dérivés de l'ancien sont oubliés (ses dessins portent les
+/// mêmes numéros et les mêmes versions que ceux du nouveau).
+pub fn forget_all() {
+    crate::fxcache::forget_all();
+    COVERS.lock().unwrap_or_else(|e| e.into_inner()).clear();
+}
+
+/// Demande d'avance les dessins dérivés de `items` (les images qui viennent, en lecture),
+/// `prio` : leur rang dans l'avenir (1 : la suivante). Rien pour ce qui est déjà gardé.
+pub fn prefetch(doc: &Document, items: &[crate::render::PlanItem], prio: u32, level: u8) {
+    for item in items {
+        let Some((src, level)) = wanted(doc, item, level) else { continue };
+        if lookup(item, src, level).is_some() {
+            continue;
+        }
+        crate::fxcache::request(job_for(item, src, display_id(item, level), level, prio));
+    }
+}
+
+/// Le dessin dérivé de `item` s'il est déjà calculé (pour l'envoyer d'avance à la carte
+/// graphique), avec le numéro sous lequel il est gardé.
+pub fn ready(doc: &Document, item: &crate::render::PlanItem, level: u8) -> Option<(CelId, Arc<Cel>)> {
+    let (src, level) = wanted(doc, item, level)?;
+    lookup(item, src, level)
+}
+
+/// Début d'une image d'écran : l'horloge des demandes avance, et le fil de fond sait quel écran
+/// redessiner quand il a fini.
+pub fn begin_frame(ctx: &eframe::egui::Context) {
+    crate::fxcache::begin_frame(ctx);
+    // L'aperçu vient de finir : les vignettes qui ont attendu se refont.
+    let active = draft_active();
+    if DRAFT_ON.swap(active, std::sync::atomic::Ordering::Relaxed) && !active {
+        crate::fxcache::bump_generation();
+    }
+}
+
+/// Dernier mouvement de l'image affichée ou d'un curseur d'effet (millisecondes depuis le
+/// lancement) ; l'aperçu dure `DRAFT_MS` après lui.
+static DRAFT_UNTIL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static LAST_SHOWN: Mutex<Option<(usize, usize)>> = Mutex::new(None);
+const DRAFT_MS: u64 = 250;
+
+fn now_ms() -> u64 {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    START.get_or_init(std::time::Instant::now).elapsed().as_millis() as u64
+}
+
+/// Un curseur d'effet bouge : l'image passe en aperçu le temps du geste.
+pub fn note_interaction(ctx: &eframe::egui::Context) {
+    DRAFT_UNTIL.store(now_ms() + DRAFT_MS, std::sync::atomic::Ordering::Relaxed);
+    // (Quand le geste finit, l'image se redessine en pleine résolution, même sans autre événement.)
+    ctx.request_repaint_after(std::time::Duration::from_millis(DRAFT_MS + 50));
+}
+
+/// Niveau d'aperçu à utiliser pour afficher l'image (`panel`, `frame`) à `zoom` pixels d'écran par
+/// pixel de la feuille : 0 (pleine résolution) au repos, réduit pendant la lecture, quand l'image
+/// affichée vient de changer (défilement) et le temps d'un geste sur un effet.
+pub fn draft_level(ctx: &eframe::egui::Context, panel: usize, frame: usize, playing: bool, zoom: f32) -> u8 {
+    let now = now_ms();
+    let moved = {
+        let mut last = LAST_SHOWN.lock().unwrap_or_else(|e| e.into_inner());
+        let moved = *last != Some((panel, frame));
+        *last = Some((panel, frame));
+        moved
+    };
+    if playing || moved {
+        DRAFT_UNTIL.store(now + DRAFT_MS, std::sync::atomic::Ordering::Relaxed);
+    }
+    if now < DRAFT_UNTIL.load(std::sync::atomic::Ordering::Relaxed) {
+        // Une fois le mouvement fini, l'image se redessine en pleine résolution.
+        ctx.request_repaint_after(std::time::Duration::from_millis(DRAFT_MS + 50));
+        crate::fxproxy::level_for_zoom(zoom)
+    } else {
+        0
+    }
+}
+
+static DRAFT_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// L'image est-elle en aperçu (lecture, défilement, geste sur un effet) ?
+fn draft_active() -> bool {
+    now_ms() < DRAFT_UNTIL.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Formes de fond gardées (`fond::silhouette`, pour refaire le fond tuile par tuile pendant qu'on
@@ -753,23 +995,14 @@ fn fond_shown<'a>(doc: &'a Document, item: &crate::render::PlanItem, r: &crate::
         src.fond.as_ref().map_or(0, |s| s.peinture.version + 1).hash(&mut h);
         h.finish()
     };
-    let tick = TICK.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(e) = cache.get_mut(&id).filter(|e| e.version == version) {
-        e.used = tick;
-        return Some(Shown::Fx(e.cel.clone()));
-    }
-    let (w, h) = (src.raster.width, src.raster.height);
-    let cover = cover_of(id, src, r, tick);
-    let strate = src.fond.as_deref();
-    let raster = crate::fond::compose(&cover, w, h, r.couleur, strate.map(|s| &s.peinture.raster), strate.map(|s| &s.coupe));
-    let derived = Arc::new(Cel { raster, vector: None, version, fond: None });
-    cache.insert(id, Entry { version, cel: derived.clone(), used: tick });
-    if cache.len() > CACHE_MAX {
-        if let Some(old) = cache.iter().min_by_key(|(_, e)| e.used).map(|(k, _)| *k) {
-            cache.remove(&old);
-        }
-    }
+    let derived = crate::fxcache::get_or_compute(id, version, None, || {
+        let tick = TICK.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let (w, h) = (src.raster.width, src.raster.height);
+        let cover = cover_of(id, src, r, tick);
+        let strate = src.fond.as_deref();
+        let raster = crate::fond::compose(&cover, w, h, r.couleur, strate.map(|s| &s.peinture.raster), strate.map(|s| &s.coupe));
+        Cel { raster, vector: None, version, fond: None }
+    });
     Some(Shown::Fx(derived))
 }
 
@@ -790,15 +1023,15 @@ pub fn fond_patch(doc: &Document, cel: CelId, r: &crate::fond::FondReglages, til
     };
     let id = shown_id(&item);
     let Some(cover) = COVERS.lock().unwrap_or_else(|e| e.into_inner()).get(&id).filter(|e| e.0 == src.version).map(|e| e.1.clone()) else { return };
-    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    let Some(e) = cache.get_mut(&id) else { return };
-    let mut raster = e.cel.raster.clone();
-    let strate = src.fond.as_deref();
-    let n = raster.tiles.len();
-    for &idx in tiles.iter().filter(|&&i| i < n) {
-        crate::fond::compose_tile(&mut raster, idx, &cover, r.couleur, strate.map(|s| &s.peinture.raster), strate.map(|s| &s.coupe));
-    }
-    e.cel = Arc::new(Cel { raster, vector: None, version: e.version, fond: None });
+    crate::fxcache::update(id, |old| {
+        let mut raster = old.raster.clone();
+        let strate = src.fond.as_deref();
+        let n = raster.tiles.len();
+        for &idx in tiles.iter().filter(|&&i| i < n) {
+            crate::fond::compose_tile(&mut raster, idx, &cover, r.couleur, strate.map(|s| &s.peinture.raster), strate.map(|s| &s.coupe));
+        }
+        Arc::new(Cel { raster, vector: None, version: old.version, fond: None })
+    });
 }
 
 /// Le dessin `cel`, rempli d'après `ctg` (dessins des sources, trous) s'il est d'un calque CTG, puis passé par
@@ -832,25 +1065,16 @@ pub fn shown_with<'a>(doc: &'a Document, cel: CelId, steps: &[FxStep], ctg: Opti
             h.finish()
         }
     };
-    let tick = TICK.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(e) = cache.get_mut(&id).filter(|e| e.version == version) {
-        e.used = tick;
-        return Some(Shown::Fx(e.cel.clone()));
-    }
-    let base = match ctg {
-        None => src.raster.clone(),
-        Some(input) => {
-            let rasters: Vec<&Raster> = input.sources.iter().filter_map(|s| doc.cels.get(s)).map(|c| &c.raster).collect();
-            crate::ctg::fill(&rasters, &src.raster, input.gap as usize)
-        }
-    };
-    let derived = Arc::new(Cel { raster: apply(&base, steps), vector: None, version, fond: None });
-    cache.insert(id, Entry { version, cel: derived.clone(), used: tick });
-    if cache.len() > CACHE_MAX {
-        if let Some(old) = cache.iter().min_by_key(|(_, e)| e.used).map(|(k, _)| *k) {
-            cache.remove(&old);
-        }
-    }
+    let derived = crate::fxcache::get_or_compute(id, version, ctg.is_none().then_some(cel), || {
+        let raster = match ctg {
+            // (Sans CTG, `apply` lit le dessin lui-même : pas de copie.)
+            None => apply(&src.raster, steps),
+            Some(input) => {
+                let rasters: Vec<&Raster> = input.sources.iter().filter_map(|s| doc.cels.get(s)).map(|c| &c.raster).collect();
+                apply(&crate::ctg::fill(&rasters, &src.raster, input.gap as usize), steps)
+            }
+        };
+        Cel { raster, vector: None, version, fond: None }
+    });
     Some(Shown::Fx(derived))
 }
