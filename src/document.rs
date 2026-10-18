@@ -38,6 +38,9 @@ pub struct Cel {
     pub vector: Option<VectorDrawing>,
     /// Augmente à chaque modification (sert à savoir quand refaire les vignettes).
     pub version: u64,
+    /// Strate Fond (`fond.rs`) : ce qu'on a peint dans le fond de ce dessin, sous le trait (un
+    /// dessin bitmap, avec sa propre version) ; rien tant qu'on n'y a pas peint.
+    pub fond: Option<Box<Cel>>,
 }
 
 impl Cel {
@@ -46,7 +49,13 @@ impl Cel {
             raster: Raster::new(width, height),
             vector: (kind == LayerKind::Vector).then(VectorDrawing::default),
             version: 0,
+            fond: None,
         }
+    }
+
+    /// Un dessin bitmap fait de `raster`.
+    pub fn bitmap(raster: Raster) -> Self {
+        Self { raster, vector: None, version: 0, fond: None }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -292,6 +301,9 @@ pub struct Layer {
     pub ctg: Option<crate::ctg::Ctg>,
     /// Calque vidéo (13k) : il montre les images de cette vidéo, pas de dessins.
     pub video: Option<crate::video::VideoClip>,
+    /// Fond sous le trait (`fond.rs`) : chaque dessin du calque a un fond déduit de son trait,
+    /// sous lui ; rien : pas de fond.
+    pub fond: Option<crate::fond::FondReglages>,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -356,6 +368,7 @@ impl Layer {
             fx: Vec::new(),
             ctg: None,
             video: None,
+            fond: None,
         }
     }
 

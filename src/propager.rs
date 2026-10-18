@@ -448,7 +448,7 @@ pub fn apply(doc: &mut Document, panel: usize, paint: usize, origin: (usize, usi
 /// qu'elles arrivent : seules les zones peintes prennent de la place en mémoire).
 pub fn apply_rasters(doc: &mut Document, panel: usize, paint: usize, keys: &[usize], made: Vec<(usize, Raster)>) {
     for (f, raster) in made {
-        let cel = doc.add_cel(Cel { raster, vector: None, version: 0 });
+        let cel = doc.add_cel(Cel::bitmap(raster));
         doc.panels[panel].layers[paint].set(f, Some(cel));
     }
     let layer = &mut doc.panels[panel].layers[paint];

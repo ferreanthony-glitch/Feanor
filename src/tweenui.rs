@@ -42,7 +42,7 @@ impl App {
                 c.rerender();
                 c
             }
-            _ => Cel { raster: tween::blend_raster(&ca.raster, &cb.raster, t), vector: None, version: 0 },
+            _ => Cel::bitmap(tween::blend_raster(&ca.raster, &cb.raster, t)),
         };
         Some(self.doc.add_cel(cel))
     }

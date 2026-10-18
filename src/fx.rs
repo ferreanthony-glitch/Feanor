@@ -750,7 +750,7 @@ pub fn shown_with<'a>(doc: &'a Document, cel: CelId, steps: &[FxStep], ctg: Opti
             crate::ctg::fill(&rasters, &src.raster, input.gap as usize)
         }
     };
-    let derived = Arc::new(Cel { raster: apply(&base, steps), vector: None, version });
+    let derived = Arc::new(Cel { raster: apply(&base, steps), vector: None, version, fond: None });
     cache.insert(id, Entry { version, cel: derived.clone(), used: tick });
     if cache.len() > CACHE_MAX {
         if let Some(old) = cache.iter().min_by_key(|(_, e)| e.used).map(|(k, _)| *k) {

@@ -24,6 +24,11 @@ pub enum Edit {
     },
     /// Dessin vectoriel complet avant modification.
     Vector { cel: CelId, drawing: VectorDrawing },
+    /// Tuiles de la strate Fond d'un dessin avant modification (`fond.rs`).
+    FondTiles {
+        cel: CelId,
+        tiles: Vec<(usize, Option<Tile>)>,
+    },
     /// Tout le document hors dessins : séquences, scènes, panneaux et leurs textes, calques
     /// (images, expositions, réglages), pistes son, guides, papier, cadence.
     Structure { structure: Structure, nav: Nav },
@@ -43,6 +48,17 @@ impl Edit {
                     .collect();
                 c.version += 1;
                 Edit::Tiles { cel, tiles }
+            }
+            Edit::FondTiles { cel, tiles } => {
+                let Some(c) = doc.cels.get_mut(&cel) else {
+                    return Edit::Group(Vec::new());
+                };
+                let (w, h) = (c.raster.width, c.raster.height);
+                let f = c.fond.get_or_insert_with(|| Box::new(crate::document::Cel::bitmap(crate::raster::Raster::new(w, h))));
+                let tiles = tiles.into_iter().map(|(i, t)| (i, std::mem::replace(&mut f.raster.tiles[i], t))).collect();
+                f.version += 1;
+                c.version += 1;
+                Edit::FondTiles { cel, tiles }
             }
             Edit::Vector { cel, drawing } => {
                 let Some(c) = doc.cels.get_mut(&cel) else {
@@ -134,6 +150,7 @@ fn kind_name(edit: &Edit) -> &'static str {
     match edit {
         Edit::Tiles { .. } => "Dessin",
         Edit::Vector { .. } => "Dessin vectoriel",
+        Edit::FondTiles { .. } => "Fond",
         Edit::Structure { .. } => "Modification",
         Edit::Group(edits) => edits.iter().map(kind_name).find(|n| *n != "Modification").unwrap_or("Modification"),
     }

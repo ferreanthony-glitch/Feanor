@@ -70,7 +70,9 @@ pub const FORMAT: &str = "pelure-projet";
 /// `videos/<id>/`).
 /// 22 (2026-10-18) : étirement des calques (`etirement_x`, `etirement_y`), qu'une version précédente
 /// ignorerait (le calque reprendrait ses proportions sans prévenir).
-pub const VERSION: u32 = 22;
+/// 23 (2026-10-18) : fond sous le trait (`fond` d'un calque ; la strate Fond d'un dessin dans
+/// `dessins/<id>_fond.png`).
+pub const VERSION: u32 = 23;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Images des calques vidéo (13k) : `videos/<id>/000001.jpg`…
@@ -507,6 +509,10 @@ struct LayerEntry {
     /// Calque vidéo (format 21) ; absent : calque ordinaire.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     video: Option<VideoEntry>,
+    /// Fond sous le trait (format 23) : couleur, débord, fermeture des trous, bord ; absent : pas
+    /// de fond. Ce qu'on a peint dans le fond d'un dessin : `dessins/<id>_fond.png`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    fond: Option<crate::fond::FondReglages>,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -633,6 +639,11 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     fs::rename(&tmp, path).map_err(|e| format!("{} : {e}", path.display()))
 }
 
+/// La strate Fond du dessin `id` (format 23), à côté de lui.
+fn fond_path(dir: &Path, id: CelId) -> PathBuf {
+    dir.join(DRAWINGS).join(format!("{id}_fond.png"))
+}
+
 fn drawing_path(dir: &Path, id: CelId, vector: bool) -> PathBuf {
     dir.join(DRAWINGS).join(format!("{id}.{}", if vector { "json" } else { "png" }))
 }
@@ -751,6 +762,8 @@ pub struct SaveJob {
     videos: Vec<(crate::video::VideoClip, PathBuf, PathBuf)>,
     manifest: Vec<u8>,
     used: BTreeSet<CelId>,
+    /// Dessins qui ont une strate Fond peinte (format 23).
+    fonds: BTreeSet<CelId>,
     used_sounds: BTreeSet<u64>,
     used_models: BTreeSet<u64>,
     used_textures: BTreeSet<(TextureKind, u32)>,
@@ -769,24 +782,30 @@ pub fn prepare_save(
     let used = doc.used_cels();
     written.retain(|id, _| used.contains(id));
     let mut drawings = Vec::new();
+    // Les dessins qui ont une strate Fond peinte (format 23) : les autres `<id>_fond.png` partent.
+    let fonds: BTreeSet<CelId> = used.iter().copied().filter(|id| doc.cels.get(id).and_then(|c| c.fond.as_ref()).is_some_and(|f| !f.is_empty())).collect();
     for &id in &used {
         let Some(cel) = doc.cels.get(&id) else { continue };
         let vector = cel.vector.is_some();
         let path = drawing_path(dir, id, vector);
-        if written.get(&id) == Some(&cel.version) && path.exists() {
+        if written.get(&id) == Some(&cel.version) && path.exists() && (!fonds.contains(&id) || fond_path(dir, id).exists()) {
             continue;
         }
-        let elsewhere = reuse_dir
-            .zip(reuse.as_ref())
-            .filter(|(_, r)| r.written.get(&id) == Some(&cel.version))
-            .map(|(d, _)| drawing_path(d, id, vector))
-            .filter(|p| p.exists());
+        let same_elsewhere = reuse_dir.zip(reuse.as_ref()).filter(|(_, r)| r.written.get(&id) == Some(&cel.version)).map(|(d, _)| d);
+        let elsewhere = same_elsewhere.map(|d| drawing_path(d, id, vector)).filter(|p| p.exists());
         let data = match (&cel.vector, elsewhere) {
             (_, Some(from)) => DrawingData::CopyFrom(from),
             (Some(v), None) => DrawingData::Bytes(serde_json::to_vec(v).map_err(|e| e.to_string())?),
             (None, None) => DrawingData::Raster(cel.raster.clone()),
         };
         drawings.push((path, data));
+        if let (true, Some(f)) = (fonds.contains(&id), cel.fond.as_ref()) {
+            let data = match same_elsewhere.map(|d| fond_path(d, id)).filter(|p| p.exists()) {
+                Some(from) => DrawingData::CopyFrom(from),
+                None => DrawingData::Raster(f.raster.clone()),
+            };
+            drawings.push((fond_path(dir, id), data));
+        }
         written.insert(id, cel.version);
     }
     // Un son ne change jamais : on ne l'écrit que s'il n'est pas déjà dans le dossier.
@@ -832,6 +851,7 @@ pub fn prepare_save(
         videos,
         manifest,
         used,
+        fonds,
         used_sounds,
         used_models,
         used_textures,
@@ -883,7 +903,7 @@ impl SaveJob {
             count += crate::video::copy_frames(clip, from, to)?;
         }
         write_atomic(&self.manifest_path, &self.manifest)?;
-        let removed = remove_unused(dir, &self.used)
+        let removed = remove_unused(dir, &self.used, &self.fonds)
             + remove_unused_sounds(dir, &self.used_sounds)
             + remove_unused_models(dir, &self.used_models)
             + remove_unused_textures(dir, &self.used_textures);
@@ -925,14 +945,22 @@ fn remove_unused_sounds(dir: &Path, used: &BTreeSet<u64>) -> usize {
     removed
 }
 
-/// Efface les dessins du dossier qui ne servent plus (seulement les fichiers « <nombre>.png/json »).
-fn remove_unused(dir: &Path, used: &BTreeSet<CelId>) -> usize {
+/// Efface les dessins du dossier qui ne servent plus (seulement les fichiers « <nombre>.png/json »),
+/// et les strates Fond « <nombre>_fond.png » des dessins qui n'en ont plus.
+fn remove_unused(dir: &Path, used: &BTreeSet<CelId>, fonds: &BTreeSet<CelId>) -> usize {
     let Ok(entries) = fs::read_dir(dir.join(DRAWINGS)) else { return 0 };
     let mut removed = 0;
     for entry in entries.flatten() {
         let path = entry.path();
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-        let id = path.file_stem().and_then(|s| s.to_str()).and_then(|s| s.parse::<CelId>().ok());
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        if let (Some(id), "png") = (stem.strip_suffix("_fond").and_then(|s| s.parse::<CelId>().ok()), ext) {
+            if !fonds.contains(&id) && fs::remove_file(&path).is_ok() {
+                removed += 1;
+            }
+            continue;
+        }
+        let id = stem.parse::<CelId>().ok();
         if let (Some(id), "png" | "json") = (id, ext) {
             if !used.contains(&id) && fs::remove_file(&path).is_ok() {
                 removed += 1;
@@ -1015,6 +1043,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                         trou: c.gap,
                     }),
                     video: l.video.as_ref().map(|v| VideoEntry { id: v.id, nom: v.name.clone(), images: v.frames, ips: v.fps, debut: v.start, ext: v.ext.clone() }),
+                    fond: l.fond,
                     expositions: to_exposures(&l.frames),
                 })
                 .collect(),
@@ -1428,6 +1457,8 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                             crate::video::register_dir(v.id, dir.join(VIDEOS).join(v.id.to_string()));
                             crate::video::VideoClip { id: v.id, name: v.nom, frames: v.images, fps: v.ips, start: v.debut, ext: v.ext }
                         }),
+                        // Fond sous le trait (format 23).
+                        fond: l.fond,
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.
@@ -1608,7 +1639,22 @@ fn load_sound(dir: &Path, entry: &SoundEntry) -> Result<Sound, String> {
     })
 }
 
+/// Le dessin `id`, avec sa strate Fond s'il en a une (format 23 ; illisible ou d'une autre taille :
+/// ignorée, le dessin reste).
 fn load_drawing(dir: &Path, id: CelId, w: usize, h: usize) -> Result<Cel, String> {
+    let mut cel = load_line(dir, id, w, h)?;
+    let path = fond_path(dir, id);
+    if path.exists() {
+        if let Ok(img) = image::open(&path).map(|i| i.to_rgba8()) {
+            if img.width() as usize == w && img.height() as usize == h {
+                cel.fond = Some(Box::new(Cel::bitmap(Raster::from_rgba(w, h, img.as_raw()))));
+            }
+        }
+    }
+    Ok(cel)
+}
+
+fn load_line(dir: &Path, id: CelId, w: usize, h: usize) -> Result<Cel, String> {
     let vector_path = drawing_path(dir, id, true);
     if vector_path.exists() {
         let text = fs::read_to_string(&vector_path).map_err(|e| format!("dessin {id} illisible : {e}"))?;
@@ -1618,6 +1664,7 @@ fn load_drawing(dir: &Path, id: CelId, w: usize, h: usize) -> Result<Cel, String
             raster: drawing.render(w, h),
             vector: Some(drawing),
             version: 0,
+            fond: None,
         });
     }
     let png_path = drawing_path(dir, id, false);
@@ -1628,11 +1675,7 @@ fn load_drawing(dir: &Path, id: CelId, w: usize, h: usize) -> Result<Cel, String
         if img.width() as usize != w || img.height() as usize != h {
             return Err(format!("dessin {id} : taille différente de celle du projet, ignoré"));
         }
-        return Ok(Cel {
-            raster: Raster::from_rgba(w, h, img.as_raw()),
-            vector: None,
-            version: 0,
-        });
+        return Ok(Cel::bitmap(Raster::from_rgba(w, h, img.as_raw())));
     }
     Err(format!("dessin {id} introuvable dans « {DRAWINGS} »"))
 }

@@ -252,11 +252,11 @@ fn cel_from_export(
         Some(fit) => {
             let c = doc.frame_rect().center();
             measures.push(Measure { scale: fit.scale, y_up: fit.y_up, origin: [fit.origin[0] - c.x, fit.origin[1] - c.y] });
-            let mut cel = Cel { raster: Raster::new(doc.width, doc.height), vector: Some(crate::vector::VectorDrawing { elements: fit.elements }), version: 0 };
+            let mut cel = Cel { raster: Raster::new(doc.width, doc.height), vector: Some(crate::vector::VectorDrawing { elements: fit.elements }), version: 0, fond: None };
             cel.rerender();
             (cel, true)
         }
-        None => (Cel { raster, vector: None, version: 0 }, false),
+        None => (Cel::bitmap(raster), false),
     };
     let id = doc.add_cel(cel);
     cels.insert(key, id);

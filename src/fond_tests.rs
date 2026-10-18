@@ -94,6 +94,41 @@ fn paint_stays_inside_the_shape_under_its_color() {
     assert_eq!(out.get(3, 0), Color32::WHITE, "le fond, de sa couleur");
 }
 
+#[test]
+fn the_fond_survives_save_and_reload() {
+    use crate::document::{Cel, Document, LayerKind};
+    use crate::project;
+    let dir = std::env::temp_dir().join(format!("pelure-test-fond-{}", std::process::id()));
+    std::fs::remove_dir_all(&dir).ok();
+    let manifest = dir.join("Film").join("Film.pelure");
+    std::fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+    let drawings = manifest.parent().unwrap().join("dessins");
+    let mut doc = Document::new(64, 48, 24);
+    let (a, b) = (doc.new_cel(LayerKind::Vector), doc.new_cel(LayerKind::Vector));
+    let reglages = FondReglages { couleur: [250, 240, 200], debord: 5, trous: 9, bord: false };
+    doc.panels[0].layers[0].frames = vec![Some(a), Some(b)];
+    doc.panels[0].layers[0].fond = Some(reglages);
+    let mut paint = Raster::new(64, 48);
+    put(&mut paint, 10, 10, Color32::RED);
+    doc.cels.get_mut(&a).unwrap().fond = Some(Box::new(Cel::bitmap(paint)));
+    project::save(&doc, &manifest, &mut Default::default()).unwrap();
+    assert!(drawings.join(format!("{a}_fond.png")).exists(), "la strate Fond à côté du dessin");
+    assert!(!drawings.join(format!("{b}_fond.png")).exists(), "rien de peint : pas de fichier");
+
+    let mut back = project::load(&manifest).unwrap().doc;
+    let layer = &back.panels[0].layers[0];
+    assert_eq!(layer.fond, Some(reglages), "les réglages du fond, avec le calque");
+    let ca = layer.frames[0].unwrap();
+    assert_eq!(back.cels[&ca].fond.as_ref().unwrap().raster.get(10, 10), Color32::RED, "la peinture du fond");
+    // Fond effacé : son fichier part à l'enregistrement suivant.
+    let c = back.cels.get_mut(&ca).unwrap();
+    c.fond = None;
+    c.version += 1;
+    project::save(&back, &manifest, &mut Default::default()).unwrap();
+    assert!(!drawings.join(format!("{ca}_fond.png")).exists());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// Mesure (ignorée) : un grand personnage sur une image 1920 × 1080.
 #[test]
 #[ignore]

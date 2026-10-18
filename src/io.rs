@@ -117,6 +117,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
                 raster: drawing.render(w, h),
                 vector: Some(drawing),
                 version: 0,
+                fond: None,
             },
             None => {
                 let bytes = blob
@@ -132,6 +133,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
                     raster: Raster::from_rgba(w, h, img.as_raw()),
                     vector: None,
                     version: 0,
+                    fond: None,
                 }
             }
         };
