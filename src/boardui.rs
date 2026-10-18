@@ -750,6 +750,13 @@ impl App {
             }
         }
         painter.rect_stroke(thumb, 0.0, Stroke::new(1.0_f32, Color32::from_gray(40)), StrokeKind::Outside);
+        // Couleur de repère du plan : un liseré dans la vignette et une bande sous l'en-tête.
+        if let Some(tag) = self.doc.panels[i].color {
+            let c = crate::marks::color(tag);
+            let w = (3.0 * xf.zoom).clamp(2.0, 6.0);
+            painter.rect_stroke(thumb, 0.0, Stroke::new(w, c), StrokeKind::Inside);
+            painter.rect_filled(Rect::from_min_max(pos2(header.left(), header.bottom() - w), header.right_bottom()), 0.0, c);
+        }
         if chosen {
             let w: f32 = if current { 3.0 } else { 2.0 };
             painter.rect_stroke(card.expand(1.0), 2.0, Stroke::new(w, accent), StrokeKind::Outside);
@@ -837,6 +844,7 @@ impl App {
         });
         item(self, ui, "Nouveau plan après", &|a| a.new_panel());
         item(self, ui, "Dupliquer le plan", &|a| a.duplicate_panel());
+        self.plan_color_menu(ui);
         ui.separator();
         self.panel_clipboard_items(ui);
         ui.separator();

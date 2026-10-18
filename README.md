@@ -669,6 +669,14 @@ fond du décor. La couleur d'un fond neuf se règle par projet (Fichier > Régla
 « Couleur des fonds sous le trait », par exemple un gris clair) ; « Aux fonds déjà posés » la
 donne à tous les fonds du projet.
 
+## Couleur des plans
+
+Pour repérer les plans d'un coup d'œil : clic droit sur un plan de la bande du montage (ou sur
+une vignette) > « Couleur du plan » > une pastille, ou « Aucune ». Ça vaut pour tous les plans
+choisis (Ctrl ou Maj + clic). Le bloc prend la couleur (fond teinté et bande en haut), la
+vignette un liseré ; la couleur suit le plan quand on le duplique, le copie ou le met dans un
+nouveau projet. Ctrl+Z l'annule.
+
 ## Menus courts
 
 Les menus montrent l'essentiel ; le reste est rangé dans un sous-menu (« Plans », « Importer »,

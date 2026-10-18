@@ -578,6 +578,8 @@ pub struct Panel {
     pub marks: Vec<ImageMark>,
     /// Signets, points d'entrée et de sortie (13d).
     pub cues: Cues,
+    /// Couleur de repère du plan : un rang dans `marks::COLORS` (rien : la couleur d'origine).
+    pub color: Option<u8>,
 }
 
 /// Après une copie de calques (de nouveaux id de calques, `old_ids` dans le même ordre, et des
@@ -1586,6 +1588,7 @@ impl Document {
             // Les signets d'après la coupe passent au nouveau plan ; les points d'entrée et de
             // sortie restent au premier.
             cues: Cues { bookmarks: source.cues.bookmarks.iter().filter(|&&b| b >= at).map(|b| b - at).collect(), ..Cues::default() },
+            color: source.color,
         };
         let first = &mut self.panels[index];
         for l in &mut first.layers {
@@ -1826,6 +1829,7 @@ impl Document {
             ref3d: None,
             marks: Vec::new(),
             cues: Cues::default(),
+            color: None,
         }
     }
 
@@ -1940,6 +1944,20 @@ impl Document {
             pasted.push(panel);
         }
         Some(self.insert_and_normalize(index + 1, pasted))
+    }
+
+    /// Donne la couleur de repère `color` (rang dans `marks::COLORS`, ou rien) aux plans `ids`.
+    /// Renvoie vrai si au moins un plan change ; un rang hors palette est refusé.
+    pub fn set_panels_color(&mut self, ids: &[u64], color: Option<u8>) -> bool {
+        if color.is_some_and(|k| k as usize >= crate::marks::COLORS.len()) {
+            return false;
+        }
+        let mut changed = false;
+        for p in self.panels.iter_mut().filter(|p| ids.contains(&p.id)) {
+            changed |= p.color != color;
+            p.color = color;
+        }
+        changed
     }
 
     // ---------------------------------------------------------------- plans (13a)

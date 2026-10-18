@@ -217,3 +217,55 @@ fn notes_are_undone_and_saved() {
     assert_eq!(back.board, doc.board, "traits, textes et attaches relus");
     assert_eq!(back.panels[0].marks, doc.panels[0].marks, "marques d'image relues");
 }
+
+#[test]
+fn plan_color_is_saved_copied_and_undone() {
+    let mut doc = doc();
+    let all = ids(&doc);
+    // Une couleur hors palette est refusée ; rien ne change si c'est la même.
+    assert!(!doc.set_panels_color(&all, Some(99)));
+    assert!(doc.set_panels_color(&all[1..3], Some(3)));
+    assert!(!doc.set_panels_color(&all[1..3], Some(3)));
+    assert_eq!(doc.panels.iter().map(|p| p.color).collect::<Vec<_>>(), vec![None, Some(3), Some(3), None]);
+
+    // Annulation : une étape d'avant le changement.
+    let snap = Edit::Structure { structure: doc.structure(), nav: Nav { panel: 0, layer: 0 } };
+    let mut history = History::default();
+    history.push(snap);
+    doc.set_panels_color(&all[1..2], None);
+    assert_eq!(doc.panels[1].color, None);
+    let mut nav = Nav { panel: 0, layer: 0 };
+    history.undo(&mut doc, &mut nav);
+    assert_eq!(doc.panels[1].color, Some(3), "Ctrl+Z rend la couleur");
+    history.redo(&mut doc, &mut nav);
+    assert_eq!(doc.panels[1].color, None);
+    history.undo(&mut doc, &mut nav);
+
+    // Copiée avec le plan : dupliquer, copier-coller, nouveau projet des plans choisis.
+    let copy = doc.duplicate_panel(1);
+    assert_eq!(copy.color, Some(3));
+    let clip = doc.copy_panels(&all[2..3]).unwrap();
+    let at = doc.paste_panels(&clip, 3).unwrap();
+    assert_eq!(doc.panels[at].color, Some(3));
+    let mut sub = doc.from_plans(&[all[1], all[3]]).unwrap();
+    assert_eq!(sub.panels.iter().map(|p| p.color).collect::<Vec<_>>(), vec![Some(3), None]);
+
+    // Enregistrée et relue.
+    let dir = std::env::temp_dir().join(format!("pelure-test-couleur-plan-{}", std::process::id()));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).unwrap();
+    let manifest = dir.join("P.pelure");
+    project::save(&sub, &manifest, &mut Default::default()).unwrap();
+    let back = project::load(&manifest).unwrap().doc;
+    assert_eq!(back.panels.iter().map(|p| p.color).collect::<Vec<_>>(), sub.panels.iter().map(|p| p.color).collect::<Vec<_>>());
+
+    // Un projet sans couleur n'écrit rien, et se relit sans couleur (comme un projet d'avant).
+    let all = ids(&sub);
+    sub.set_panels_color(&all, None);
+    project::save(&sub, &manifest, &mut Default::default()).unwrap();
+    let text = std::fs::read_to_string(&manifest).unwrap();
+    assert!(!text.contains("\"couleur\""), "pas de champ quand il n'y a pas de couleur");
+    let back = project::load(&manifest).unwrap().doc;
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(back.panels.iter().all(|p| p.color.is_none()));
+}
