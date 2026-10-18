@@ -699,11 +699,14 @@ impl App {
                 );
             }
             ui.separator();
-            ui.label(&self.status);
+            self.status_message(ui);
         });
     }
 
     pub(crate) fn dialogs(&mut self, ctx: &egui::Context) {
+        // Messages : historique et notifications (`messages.rs`).
+        self.track_messages(ctx);
+        self.messages_ui(ctx);
         self.new_layer_window(ctx);
         self.groups_window_ui(ctx);
         self.properties_window_ui(ctx);

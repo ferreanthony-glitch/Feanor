@@ -1237,7 +1237,8 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         plus, `reglages.toml` : `projets_recents`) et dernier projet rouvert au lancement
         (`rouvrir_dernier_projet`, pas si une séance interrompue attend) ; 2, palette de commandes
         (Ctrl+K, « proposition » : `palette.rs`, accents et casse ignorés, la commande elle-même
-        puis un mot placé tôt dans le nom) ;
+        puis un mot placé tôt dans le nom) ; 3, messages qui restent (historique au clic sur le
+        message, texte entier au survol, notifications pour les avis importants : `messages.rs`) ;
       - **enveloppe de Bézier** (Anthony : « maintenir Ctrl permet de saisir une poignée de Bézier
         des coins pour transformer la forme » ; son choix : « B, comme l'outil Perspective ») : dans
         l'outil Transformer, Ctrl + glisser un coin du cadre ouvre une enveloppe sur le dessin

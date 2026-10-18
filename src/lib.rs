@@ -71,6 +71,9 @@ pub mod ctg;
 #[cfg(test)]
 mod ctg_tests;
 mod ctgui;
+mod messages;
+#[cfg(test)]
+mod messages_tests;
 mod palette;
 #[cfg(test)]
 mod palette_tests;

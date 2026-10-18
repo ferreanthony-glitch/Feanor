@@ -563,6 +563,11 @@ pub struct App {
     pub(crate) tool_flyout: Option<(usize, usize, Rect)>,
     /// Un Ctrl+V a donné un événement de collage (texte) depuis l'appui sur V (`pasteimage`).
     pub(crate) paste_event: bool,
+    /// Messages : historique, dernier vu, notifications, fenêtre ouverte (`messages.rs`).
+    pub(crate) messages: Vec<(f64, String)>,
+    pub(crate) last_status: String,
+    pub(crate) toasts: Vec<(f64, String)>,
+    pub(crate) messages_window: bool,
     /// Palette de commandes ouverte (Ctrl+K, `palette.rs`).
     pub(crate) palette: Option<crate::palette::Palette>,
     /// Projet récent à ouvrir une fois « Enregistrer ? » réglé (`recents.rs`).
@@ -838,6 +843,10 @@ impl App {
             goto_plan: None,
             recent_to_open: None,
             palette: None,
+            messages: Vec::new(),
+            last_status: String::new(),
+            toasts: Vec::new(),
+            messages_window: false,
             envelope: None,
             persp: None,
             clipboard: Vec::new(),

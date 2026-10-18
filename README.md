@@ -590,6 +590,12 @@ raccourcis à la main », puis « Recharger »). Détails et choix pour le clavi
 
 Documentation technique : `docs/ARCHITECTURE.md` ; avancement : `docs/ROADMAP.md`.
 
+## Messages
+
+Les messages de la barre d'état ne se perdent plus : survole-le pour le lire en entier, clique
+pour voir les précédents. Les avis importants (enregistrement, ouverture, erreurs, fin de
+propagation, export) restent aussi quelques secondes en bas à droite ; un clic les ferme.
+
 ## Palette de commandes
 
 Ctrl+K (ou Aide > Palette de commandes) : tape quelques lettres du nom d'une commande (« persp »,
