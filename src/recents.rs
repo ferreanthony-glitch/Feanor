@@ -11,6 +11,51 @@ use crate::app::{App, Pending};
 /// Taille de la liste.
 pub const MAX: usize = 10;
 
+/// Les projets récents existent-ils encore ? Un `exists` par projet à chaque image d'écran (le menu
+/// ouvert, l'écran d'accueil) bloque l'interface tant que le disque répond : un projet sur un
+/// serveur éteint la figeait des secondes à chaque mouvement de souris. La vérification se fait
+/// sur un autre fil, au plus toutes les 3 secondes ; en attendant (ou si elle traîne), le projet
+/// passe pour présent.
+#[derive(Default)]
+pub struct Presence {
+    known: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<PathBuf, bool>>>,
+    checked: Option<std::time::Instant>,
+    busy: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl Presence {
+    /// Délai entre deux vérifications.
+    const EVERY: std::time::Duration = std::time::Duration::from_secs(3);
+
+    /// Lance la vérification de `paths` sur un autre fil si la dernière date de plus de 3 s (et
+    /// qu'aucune n'est en cours) ; `ctx` est réveillé si une réponse change.
+    pub fn refresh(&mut self, ctx: &egui::Context, paths: &[PathBuf]) {
+        use std::sync::atomic::Ordering;
+        if self.checked.is_some_and(|t| t.elapsed() < Self::EVERY) || self.busy.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        self.checked = Some(std::time::Instant::now());
+        let (known, busy, ctx, paths) = (self.known.clone(), self.busy.clone(), ctx.clone(), paths.to_vec());
+        std::thread::spawn(move || {
+            let mut changed = false;
+            for p in paths {
+                let now = p.exists();
+                let before = known.lock().unwrap_or_else(|e| e.into_inner()).insert(p, now);
+                changed |= before != Some(now);
+            }
+            busy.store(false, Ordering::Release);
+            if changed {
+                ctx.request_repaint();
+            }
+        });
+    }
+
+    /// Le projet est-il là ? (Inconnu : oui, jusqu'à la réponse.)
+    pub fn exists(&self, path: &Path) -> bool {
+        self.known.lock().unwrap_or_else(|e| e.into_inner()).get(path).copied().unwrap_or(true)
+    }
+}
+
 /// `path` passe en tête de la liste (sans doublon, la casse ignorée comme sous Windows).
 pub fn remember(list: &mut Vec<PathBuf>, path: &Path) {
     let key = |p: &Path| p.to_string_lossy().to_lowercase();
@@ -46,8 +91,9 @@ impl App {
         if list.is_empty() {
             ui.label(egui::RichText::new("Aucun projet récent.").weak());
         }
+        self.recent_presence.refresh(ui.ctx(), &list);
         for path in list {
-            let exists = path.exists();
+            let exists = self.recent_presence.exists(&path);
             let resp = ui.add_enabled(exists, egui::Button::new(label(&path))).on_hover_text(path.display().to_string());
             let resp = resp.on_disabled_hover_text(format!("Introuvable : {}", path.display()));
             if resp.clicked() {

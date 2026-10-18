@@ -626,6 +626,8 @@ pub struct App {
     pub(crate) fit_busy: bool,
     /// Projet récent à ouvrir une fois « Enregistrer ? » réglé (`recents.rs`).
     pub(crate) recent_to_open: Option<PathBuf>,
+    /// Les projets récents sont-ils encore là ? (Vérifié sur un autre fil : `recents.rs`.)
+    pub(crate) recent_presence: crate::recents::Presence,
     /// Projet en cours d'ouverture sur un autre fil (`ouverture.rs`).
     pub(crate) open_job: Option<crate::ouverture::OpenJob>,
     /// Fenêtre « Aller à un plan » ouverte, et ce qui y est tapé (`aller.rs`).
@@ -937,6 +939,7 @@ impl App {
             maximized_once: 0,
             goto_plan: None,
             recent_to_open: None,
+            recent_presence: Default::default(),
             open_job: None,
             palette: None,
             export_hub: false,
