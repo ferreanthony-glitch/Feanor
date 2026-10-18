@@ -1,6 +1,11 @@
-# Architecture de Pelure
+# Architecture de SHOT (anciennement Pelure)
 
 Document tenu à jour à chaque étape. Dernière mise à jour : phase 9 (octobre 2026).
+
+> Le logiciel s'appelle SHOT depuis le 2026-10-18. Ce document garde l'ancien nom dans son
+> historique : lire `%APPDATA%\Pelure` et `%LOCALAPPDATA%\Pelure` comme `...\SHOT` (voir
+> `src/donnees.rs`, qui reprend l'ancien dossier une fois). La caisse reste `pelure`, l'exécutable
+> est `shot.exe`, le logo se trace dans `src/logo.rs`. Voir `docs/ROADMAP.md` (« Pelure devient SHOT »).
 
 ## Vue d'ensemble
 

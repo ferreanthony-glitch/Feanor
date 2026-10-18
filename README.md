@@ -1,8 +1,16 @@
-# Pelure
+# SHOT — Frame the story
+
+*Anciennement Pelure.* Le logiciel s'appelle SHOT depuis le 2026-10-18 ; son logo est dans
+`assets/shot-logo.svg`.
 
 Logiciel d'animation 2D écrit en Rust avec egui : storyboard en séquences et plans (chaque plan,
 une timeline de calques façon TVPaint, ses images de storyboard marquées), animation image par
 image, et dessin vectoriel modifiable.
+
+Ce qui garde l'ancien nom, pour que rien d'existant ne casse : les projets (dossier du projet,
+fichier `.pelure`, format `pelure-projet`), la bibliothèque Rust (`pelure::`, la caisse reste
+`pelure`) et les variables d'environnement `PELURE_*`. La « pelure d'oignon » est un terme de
+dessin, pas l'ancien nom du logiciel.
 
 ## Lancer
 
@@ -10,9 +18,13 @@ image, et dessin vectoriel modifiable.
 cargo run --release
 ```
 
-L'exécutable est ensuite dans `target\release\pelure.exe`. On peut lui passer un projet :
-`pelure.exe "C:\Films\Bus\Bus.pelure"` (et donc associer les fichiers `.pelure` à Pelure pour les
+L'exécutable est ensuite dans `target\release\shot.exe`. On peut lui passer un projet :
+`shot.exe "C:\Films\Bus\Bus.pelure"` (et donc associer les fichiers `.pelure` à SHOT pour les
 ouvrir d'un double-clic).
+
+Les réglages, raccourcis, brosses importées, rapports d'erreur et copies de secours sont dans
+`%APPDATA%\SHOT` et `%LOCALAPPDATA%\SHOT`. Au premier lancement, ce que l'ancien nom avait rangé
+dans `...\Pelure` y est copié (jamais déplacé ni supprimé) s'il n'y a pas encore de dossier SHOT.
 
 ## Deux niveaux : storyboard et animation
 
@@ -401,7 +413,7 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
     un raccourci qu'on leur assigne agit sur la pastille survolée.
 
   Les couleurs, la roue, les curseurs, les récentes et les nuanciers sont retenus pour la
-  prochaine fois (`%APPDATA%\Pelure\reglages.toml`), pas dans le projet. Ctrl+Z ne défait pas
+  prochaine fois (`%APPDATA%\SHOT\reglages.toml`), pas dans le projet. Ctrl+Z ne défait pas
   les changements de nuancier.
 - **Panneaux** : chaque panneau (Outils, Couleur, Pinceaux, Réglages, Guides, Fiche, Effets,
   Calques, Montage ou Timeline) est un onglet. La bande du bas montre le montage en storyboard,
@@ -643,7 +655,7 @@ rangés dans `keymap.toml`. Pour en changer un :
 Fichier > Raccourcis clavier… (ou F1) liste toutes les commandes. On y trouve une recherche, les
 mêmes boutons, et l'origine de chaque raccourci en bulle.
 
-Les choix vont dans un fichier personnel (`%APPDATA%\Pelure\keymap.toml`), qui remplace, action par
+Les choix vont dans un fichier personnel (`%APPDATA%\SHOT\keymap.toml`), qui remplace, action par
 action, le fichier par défaut. On peut aussi l'écrire à la main (« Aide > Modifier le fichier de
 raccourcis à la main », puis « Recharger »). Détails et choix pour le clavier AZERTY :
 `docs/reference/sbpro_presets/README.md`.
