@@ -925,13 +925,10 @@ impl BrushLibrary {
     }
 
     /// Le réglage `s` (numéros de la bibliothèque) pour un trait vectoriel : pointe et papier
-    /// désignés par leur clé de contenu. Aucun : le réglage n'a pas de texture.
+    /// désignés par leur clé de contenu. Toujours donné depuis l'étape 5 du rendu (le trait
+    /// vectoriel rejoue le moteur bitmap avec son réglage complet, texturé ou non) ; avant, seuls
+    /// les réglages texturés étaient gardés.
     pub fn for_vector(&self, s: &BrushSettings) -> Option<BrushSettings> {
-        // Un profil de pointe se rejoue aussi (moteur de dessin, étape 3), et le grain du crayon.
-        let textured = s.tip.is_some() || (s.paper.is_some() && s.grain > 0.0) || s.profile.is_some() || s.pencil_grain != crate::brush::PencilGrain::None;
-        if !textured {
-            return None;
-        }
         // Une texture pas encore partagée (bibliothèque changée depuis) : on partage à nouveau.
         let key = |kind, id: Option<u32>| {
             id.and_then(|id| shared_key(kind, id).or_else(|| {

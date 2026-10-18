@@ -72,7 +72,11 @@ pub const FORMAT: &str = "pelure-projet";
 /// ignorerait (le calque reprendrait ses proportions sans prévenir).
 /// 23 (2026-10-18) : fond sous le trait (`fond` d'un calque ; la strate Fond d'un dessin dans
 /// `dessins/<id>_fond.png`).
-pub const VERSION: u32 = 23;
+/// 24 (2026-10-18, rendu des brosses, étape 5) : les traits vectoriels gardent leur `trace`
+/// (appui et instant par point, toucher, couleur B) et leur réglage complet, et sont rejoués par
+/// le moteur bitmap ; une version précédente les lirait sans la trace (rendu approché, l'appui
+/// retrouvé d'après les rayons).
+pub const VERSION: u32 = 24;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Images des calques vidéo (13k) : `videos/<id>/000001.jpg`…

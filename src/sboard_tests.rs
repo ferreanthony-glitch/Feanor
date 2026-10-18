@@ -438,12 +438,13 @@ fn vector_layer_comes_back_as_vectors() {
                 color: *color,
                 opacity: *opacity,
             },
-            crate::vector::Element::Stroke { points, color, opacity, hardness, brush } => crate::vector::Element::Stroke {
+            crate::vector::Element::Stroke { points, color, opacity, hardness, brush, trace } => crate::vector::Element::Stroke {
                 points: points.iter().map(|p| { let q = tf(p.x, p.y); crate::vector::VPoint { x: q[0], y: q[1], r: (p.r * s).max(0.3) } }).collect(),
                 color: *color,
                 opacity: *opacity,
                 hardness: *hardness,
                 brush: brush.clone(),
+                trace: trace.without_cache(),
             },
             other => other.clone(),
         })

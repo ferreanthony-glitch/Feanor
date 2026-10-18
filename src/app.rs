@@ -1634,7 +1634,7 @@ impl App {
                             Some(Edit::Tiles { tiles, .. }) => Some(tiles),
                             _ => None,
                         };
-                        self.commit_vector_stroke(vs, std::mem::take(&mut stroke.path), preview)
+                        self.commit_vector_stroke(vs, std::mem::take(&mut stroke.path), std::mem::take(&mut stroke.path_pressure), std::mem::take(&mut stroke.path_time), preview)
                     }
                     None => {
                         if let Some(c) = self.doc.cels.get_mut(&cel) {

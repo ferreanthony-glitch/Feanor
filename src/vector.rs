@@ -2,11 +2,12 @@
 //! qui restent modifiables (sélection, déplacement, rotation, couleur, gomme qui coupe les traits).
 
 use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 
-use eframe::egui::{pos2, vec2, Pos2, Rect, Vec2};
+use eframe::egui::{pos2, vec2, Color32, Pos2, Rect, Vec2};
 use serde::{Deserialize, Serialize};
 
-use crate::brush::{coverage, paint, BrushSettings, StrokeMode, StrokeState};
+use crate::brush::{coverage, paint, BrushSettings, Curve, StrokeMode, StrokeState, Toucher};
 use crate::raster::{Raster, TILE};
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -31,6 +32,209 @@ impl VPoint {
     }
 }
 
+/// La trace d'un trait vectoriel (rendu des brosses, étape 5, `docs/VECTORIEL-COMME-BITMAP.md`) :
+/// ce qu'il faut, avec le chemin et le réglage complet, pour rejouer ses empreintes par le moteur
+/// bitmap exactement comme pendant le geste — et ses pixels, gardés en mémoire une fois rendus.
+/// Un trait d'avant l'étape 5 (ou recoupé, interpolé) n'a pas d'appuis : ils se retrouvent
+/// d'après les rayons (`pressure_for_radius`).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Trace {
+    /// Appui de chaque point du chemin, après la courbe de pression du toucher ; vide : inconnu.
+    #[serde(rename = "appui", skip_serializing_if = "Vec::is_empty")]
+    pub pressure: Vec<f32>,
+    /// Instant de chaque point (secondes ; −1 : inconnu) ; vide : inconnus (vitesse nulle).
+    #[serde(rename = "instants", skip_serializing_if = "Vec::is_empty")]
+    pub time: Vec<f64>,
+    /// Le toucher du stylet au moment du trait (plancher de taille, trait fin, bord doux).
+    #[serde(rename = "toucher", skip_serializing_if = "Option::is_none")]
+    pub feel: Option<Toucher>,
+    /// La couleur B (connexion « couleur »).
+    #[serde(rename = "couleur_b", skip_serializing_if = "Option::is_none")]
+    pub secondary: Option<[u8; 3]>,
+    /// Les pixels du trait rendu seul, et la transformation appliquée depuis (jamais enregistrés).
+    #[serde(skip)]
+    pub cache: StrokeCache,
+}
+
+impl Trace {
+    /// La trace d'un trait dont les points ont été refaits (coupé, interpolé, densifié) : les
+    /// appuis ne correspondent plus, le toucher et la couleur B restent.
+    pub fn without_samples(&self) -> Trace {
+        Trace { pressure: Vec::new(), time: Vec::new(), feel: self.feel, secondary: self.secondary, cache: StrokeCache::default() }
+    }
+
+    /// La même trace, dont les pixels sont à refaire (points déplacés un à un, rayons changés).
+    pub fn without_cache(&self) -> Trace {
+        Trace { cache: StrokeCache::default(), ..self.clone() }
+    }
+
+    /// La trace d'un trait transformé (déplacé, tourné, mis à l'échelle) : les pixels en cache
+    /// suivent la transformation, en attendant un rendu exact.
+    pub fn transformed(&self, a: &Affine) -> Trace {
+        Trace { cache: self.cache.transformed(a), ..self.clone() }
+    }
+}
+
+/// Les pixels d'un trait rendu seul (prémultipliés), dans leur boîte, et la transformation que le
+/// trait avait quand ils ont été rendus.
+#[derive(Clone, Debug)]
+pub struct CachedPixels {
+    pub x0: i32,
+    pub y0: i32,
+    pub w: usize,
+    pub h: usize,
+    pub pixels: Vec<Color32>,
+    base: Affine,
+}
+
+/// Au-delà (8 Mo), un trait n'est pas gardé en cache : il est rejoué à chaque rendu.
+pub const MAX_CACHE_PIXELS: usize = 2_000_000;
+
+impl CachedPixels {
+    /// La boîte des pixels dessinés de `sheet` ; `None` si elle dépasse `MAX_CACHE_PIXELS`.
+    fn from_sheet(sheet: &Raster, base: Affine) -> Option<CachedPixels> {
+        let (mut x0, mut y0, mut x1, mut y1) = (usize::MAX, usize::MAX, 0usize, 0usize);
+        for (idx, tile) in sheet.tiles.iter().enumerate() {
+            let Some(tile) = tile else { continue };
+            let (ox, oy, tw, th) = sheet.tile_bounds(idx);
+            for y in 0..th {
+                for x in 0..tw {
+                    if tile[y * TILE + x].a() != 0 {
+                        x0 = x0.min(ox + x);
+                        y0 = y0.min(oy + y);
+                        x1 = x1.max(ox + x + 1);
+                        y1 = y1.max(oy + y + 1);
+                    }
+                }
+            }
+        }
+        if x0 == usize::MAX {
+            return Some(CachedPixels { x0: 0, y0: 0, w: 0, h: 0, pixels: Vec::new(), base });
+        }
+        let (w, h) = (x1 - x0, y1 - y0);
+        if w * h > MAX_CACHE_PIXELS {
+            return None;
+        }
+        let mut pixels = Vec::with_capacity(w * h);
+        for y in y0..y1 {
+            for x in x0..x1 {
+                pixels.push(sheet.get(x, y));
+            }
+        }
+        Some(CachedPixels { x0: x0 as i32, y0: y0 as i32, w, h, pixels, base })
+    }
+
+    pub fn bytes(&self) -> usize {
+        self.pixels.len() * 4
+    }
+
+    /// Pixel (`x`, `y`) de la boîte, transparent hors de la boîte.
+    fn at(&self, x: i64, y: i64) -> Color32 {
+        if x < 0 || y < 0 || x as usize >= self.w || y as usize >= self.h {
+            Color32::TRANSPARENT
+        } else {
+            self.pixels[y as usize * self.w + x as usize]
+        }
+    }
+
+    /// Couleur interpolée (prémultipliée) au point (`fx`, `fy`) de la boîte (centres de pixels à
+    /// 0,5).
+    fn sample(&self, fx: f32, fy: f32) -> Color32 {
+        let (gx, gy) = (fx - 0.5, fy - 0.5);
+        let (ix, iy) = (gx.floor(), gy.floor());
+        let (tx, ty) = (gx - ix, gy - iy);
+        let (ix, iy) = (ix as i64, iy as i64);
+        let mut acc = [0.0f32; 4];
+        for (dx, dy, wgt) in [(0, 0, (1.0 - tx) * (1.0 - ty)), (1, 0, tx * (1.0 - ty)), (0, 1, (1.0 - tx) * ty), (1, 1, tx * ty)] {
+            if wgt <= 0.0 {
+                continue;
+            }
+            let c = self.at(ix + dx, iy + dy);
+            acc[0] += c.r() as f32 * wgt;
+            acc[1] += c.g() as f32 * wgt;
+            acc[2] += c.b() as f32 * wgt;
+            acc[3] += c.a() as f32 * wgt;
+        }
+        Color32::from_rgba_premultiplied((acc[0] + 0.5) as u8, (acc[1] + 0.5) as u8, (acc[2] + 0.5) as u8, (acc[3] + 0.5) as u8)
+    }
+}
+
+/// Ce qu'un rendu a laissé : la signature du trait tel qu'il était (couleur, opacité, dureté,
+/// réglage, nombre de points) et ses pixels (aucun : trop grand pour le cache).
+struct Rendered {
+    sig: u64,
+    pixels: Option<CachedPixels>,
+}
+
+/// Le cache des pixels d'un trait : partagé entre les copies du trait (annulation, transformations
+/// en cours), rempli au premier rendu et refait si le trait a changé entre-temps (sa signature ne
+/// correspond plus), jamais comparé ni enregistré. `xf` : la transformation appliquée au trait
+/// depuis ce rendu.
+#[derive(Clone, Default)]
+pub struct StrokeCache {
+    cell: Arc<RwLock<Option<Rendered>>>,
+    xf: Affine,
+}
+
+impl PartialEq for StrokeCache {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl std::fmt::Debug for StrokeCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let bytes = self.bytes();
+        if bytes > 0 { write!(f, "cache {bytes} o") } else { write!(f, "cache vide") }
+    }
+}
+
+impl StrokeCache {
+    pub fn transformed(&self, a: &Affine) -> StrokeCache {
+        StrokeCache { cell: self.cell.clone(), xf: self.xf.then(a) }
+    }
+
+    /// Les pixels gardés, en octets.
+    pub fn bytes(&self) -> usize {
+        self.cell.read().ok().and_then(|r| r.as_ref().and_then(|r| r.pixels.as_ref().map(CachedPixels::bytes))).unwrap_or(0)
+    }
+}
+
+/// La signature d'un trait pour son cache : tout ce qui change ses pixels, sauf la place des points
+/// (les transformations passent par `xf`).
+fn stroke_signature(points: &[VPoint], color: [u8; 3], opacity: f32, hardness: f32, brush: Option<&BrushSettings>, trace: &Trace) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut eat = |b: &[u8]| {
+        for &x in b {
+            h ^= x as u64;
+            h = h.wrapping_mul(0x0100_0000_01b3);
+        }
+    };
+    eat(&color);
+    eat(&opacity.to_bits().to_le_bytes());
+    eat(&hardness.to_bits().to_le_bytes());
+    eat(&(points.len() as u64).to_le_bytes());
+    eat(&(trace.pressure.len() as u64).to_le_bytes());
+    eat(&(trace.time.len() as u64).to_le_bytes());
+    if let Some(s) = trace.secondary {
+        eat(&s);
+    }
+    if let Some(b) = brush {
+        if let Ok(bytes) = serde_json::to_vec(b) {
+            eat(&bytes);
+        }
+    } else {
+        eat(b"lisse");
+    }
+    if let Some(f) = &trace.feel {
+        if let Ok(bytes) = serde_json::to_vec(f) {
+            eat(&bytes);
+        }
+    }
+    h
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Element {
@@ -40,11 +244,14 @@ pub enum Element {
         color: [u8; 3],
         opacity: f32,
         hardness: f32,
-        /// Pinceau texturé (7b) : pointe en image, grain du papier (désignés par leur clé de
-        /// contenu, voir `brushtex::content_key`). Le trait est alors tracé par empreintes, comme
-        /// sur un calque bitmap, et reste modifiable. Aucun : trait lisse.
+        /// Le réglage complet du pinceau (pointe et papier désignés par leur clé de contenu, voir
+        /// `brushtex::content_key`) : le trait est rejoué par le moteur bitmap, empreinte par
+        /// empreinte, et reste modifiable. Aucun (traits d'avant 7b, formes) : trait lisse.
         #[serde(default, rename = "pinceau", skip_serializing_if = "Option::is_none")]
         brush: Option<Box<crate::brush::BrushSettings>>,
+        /// Appuis, instants, toucher, couleur B et pixels en cache (étape 5).
+        #[serde(default)]
+        trace: Trace,
     },
     /// Zone remplie, délimitée par un ou plusieurs contours (pair-impair : les trous restent vides).
     Fill {
@@ -115,8 +322,8 @@ impl Element {
         let mut r = Rect::NOTHING;
         match self {
             Element::Stroke { points, brush, .. } => {
-                // Un pinceau texturé peut grossir ses empreintes au hasard.
-                let grow = 1.0 + brush.as_ref().map_or(0.0, |b| b.size_jitter.max(0.0) * 0.5);
+                // Un pinceau texturé peut grossir ses empreintes au hasard, ou les disperser.
+                let grow = 1.0 + brush.as_ref().map_or(0.0, |b| b.size_jitter.max(0.0) * 0.5 + 2.0 * (b.scatter.max(0.0) + b.scatter_along.max(0.0)));
                 for p in points {
                     r = r.union(Rect::from_center_size(p.pos(), Vec2::splat(p.r * 2.0 * grow)));
                 }
@@ -149,10 +356,11 @@ impl Element {
         match self {
             Element::Stroke { color, .. } | Element::Fill { color, .. } | Element::Text { color, .. } => *color = c,
         }
+        self.invalidate_cache();
     }
 
     pub fn scale_width(&mut self, k: f32) {
-        if let Element::Stroke { points, brush, .. } = self {
+        if let Element::Stroke { points, brush, trace, .. } = self {
             for p in points {
                 p.r = (p.r * k).clamp(0.2, 200.0);
             }
@@ -160,6 +368,23 @@ impl Element {
             if let Some(b) = brush {
                 b.size *= k;
             }
+            trace.cache = StrokeCache::default();
+        }
+    }
+
+    /// Les pixels en cache du trait sont à refaire (après une transformation, au lâcher : le
+    /// prochain rendu rejoue le moteur exactement).
+    pub fn invalidate_cache(&mut self) {
+        if let Element::Stroke { trace, .. } = self {
+            trace.cache = StrokeCache::default();
+        }
+    }
+
+    /// Octets des pixels en cache de l'élément.
+    pub fn cache_bytes(&self) -> usize {
+        match self {
+            Element::Stroke { trace, .. } => trace.cache.bytes(),
+            _ => 0,
         }
     }
 
@@ -171,6 +396,7 @@ impl Element {
                 opacity,
                 hardness,
                 brush,
+                trace,
             } => {
                 let k = a.width_factor();
                 Element::Stroke {
@@ -185,6 +411,7 @@ impl Element {
                     opacity: *opacity,
                     hardness: *hardness,
                     brush: brush.as_ref().map(|b| Box::new(crate::brush::BrushSettings { size: b.size * k, ..**b })),
+                    trace: trace.transformed(a),
                 }
             }
             Element::Fill {
@@ -328,6 +555,12 @@ pub struct Affine {
     pub ty: f32,
 }
 
+impl Default for Affine {
+    fn default() -> Self {
+        Self::IDENTITY
+    }
+}
+
 impl Affine {
     pub const IDENTITY: Self = Self {
         a: 1.0,
@@ -337,6 +570,14 @@ impl Affine {
         tx: 0.0,
         ty: 0.0,
     };
+
+    /// Une translation d'un nombre entier de pixels (ou rien) : (dx, dy).
+    pub fn integer_translation(&self) -> Option<(i32, i32)> {
+        let eps = 1e-4;
+        let linear = (self.a - 1.0).abs() < eps && self.b.abs() < eps && self.c.abs() < eps && (self.d - 1.0).abs() < eps;
+        let (dx, dy) = (self.tx.round(), self.ty.round());
+        (linear && (self.tx - dx).abs() < 1e-3 && (self.ty - dy).abs() < 1e-3).then_some((dx as i32, dy as i32))
+    }
 
     pub fn translate(v: Vec2) -> Self {
         Self {
@@ -506,32 +747,44 @@ pub fn render_element(raster: &mut Raster, e: &Element) {
 }
 
 /// Dessine l'élément dans `clip` seulement (bords en pixels entiers) : chaque pixel du rectangle
-/// reçoit exactement ce qu'un rendu complet lui donnerait.
+/// reçoit exactement ce qu'un rendu complet lui donnerait. Un trait est rendu seul une fois (rejoué
+/// par le moteur bitmap avec sa trace, ou tracé lisse s'il n'a pas de réglage), ses pixels sont
+/// gardés dans sa trace, et les rendus suivants les posent tels quels — transformés si le trait l'a
+/// été depuis (déplacement : copie ; échelle, rotation : rééchantillonnage, exact au lâcher quand
+/// le cache est refait).
 pub fn render_element_clipped(raster: &mut Raster, e: &Element, clip: Rect) {
+    if let Element::Stroke { points, color, opacity, hardness, brush, trace } = e {
+        let sig = stroke_signature(points, *color, *opacity, *hardness, brush.as_deref(), trace);
+        if let Ok(cell) = trace.cache.cell.read() {
+            if let Some(r) = cell.as_ref().filter(|r| r.sig == sig) {
+                match &r.pixels {
+                    Some(px) => {
+                        let delta = px.base.inverse().unwrap_or(Affine::IDENTITY).then(&trace.cache.xf);
+                        blit_cache(raster, px, &delta, clip);
+                    }
+                    None => {
+                        // Trop grand pour le cache : rejoué à chaque fois, tel quel.
+                        let sheet = render_stroke_alone(raster.width, raster.height, points, *color, *opacity, *hardness, brush.as_deref(), trace);
+                        blit_sheet(raster, &sheet, clip);
+                    }
+                }
+                return;
+            }
+        }
+        // Premier rendu, ou le trait a changé depuis : rendu seul, gardé, posé.
+        let sheet = render_stroke_alone(raster.width, raster.height, points, *color, *opacity, *hardness, brush.as_deref(), trace);
+        let kept = CachedPixels::from_sheet(&sheet, trace.cache.xf);
+        blit_sheet(raster, &sheet, clip);
+        if let Ok(mut cell) = trace.cache.cell.write() {
+            *cell = Some(Rendered { sig, pixels: kept });
+        }
+        return;
+    }
     let Some(mut mask) = Mask::new(e.bounds().expand(1.5).intersect(clip), raster.width, raster.height) else {
         return;
     };
     match e {
-        Element::Stroke {
-            points,
-            color,
-            opacity,
-            brush: Some(b),
-            ..
-        } => {
-            let region = Rect::from_min_size(pos2(mask.x0 as f32, mask.y0 as f32), vec2(mask.w as f32, mask.h as f32));
-            paint_textured(raster, points, *color, *opacity, b, region);
-        }
-        Element::Stroke {
-            points,
-            color,
-            opacity,
-            hardness,
-            brush: None,
-        } => {
-            stamp_path(&mut mask, points, *hardness);
-            mask.composite(raster, *color, *opacity);
-        }
+        Element::Stroke { .. } => unreachable!("rendu plus haut"),
         Element::Fill {
             contours,
             color,
@@ -578,23 +831,59 @@ pub fn pressure_for_radius(s: &BrushSettings, r: f32) -> f32 {
     (0.5 * (lo + hi)).clamp(0.0, 1.0)
 }
 
-/// Trait vectoriel texturé (7b) : tracé par le moteur des pinceaux bitmap (empreintes de la
-/// pointe, grain du papier) sur une feuille à part, puis posé sur `raster` dans `region`
-/// seulement. La pression de chaque point se retrouve d'après son rayon (`pressure_for_radius`) ;
-/// une pointe ou un papier introuvable donne une pointe ronde, un papier lisse.
-fn paint_textured(raster: &mut Raster, points: &[VPoint], color: [u8; 3], opacity: f32, b: &BrushSettings, region: Rect) {
-    let settings = BrushSettings { opacity, smoothing: 0.0, smooth_kind: crate::brush::SmoothKind::Follow, aliased: false, ..*b };
+/// Le trait rendu seul sur une feuille `w`×`h` transparente. Avec un réglage : rejoué par le
+/// moteur des pinceaux bitmap, point par point, avec l'appui et l'instant de la trace (sinon
+/// l'appui d'après le rayon, `pressure_for_radius`) et le toucher du moment (sa courbe de pression
+/// et son seuil ont déjà joué : l'appui gardé est celui d'après la courbe). Le chemin gardé est la
+/// suite des points lissés que le moteur a reçus pendant le geste : rejoué sans lissage, il donne
+/// les mêmes empreintes, dans le même ordre, avec le même hasard — la même image que l'aperçu.
+/// Sans réglage (traits d'avant 7b, formes) : le trait lisse d'avant.
+fn render_stroke_alone(w: usize, h: usize, points: &[VPoint], color: [u8; 3], opacity: f32, hardness: f32, brush: Option<&BrushSettings>, trace: &Trace) -> Raster {
+    let mut sheet = Raster::new(w, h);
+    let Some(b) = brush else {
+        if let Some(mut mask) = Mask::new(path_bounds(points), w, h) {
+            stamp_path(&mut mask, points, hardness);
+            mask.composite(&mut sheet, color, opacity);
+        }
+        return sheet;
+    };
+    let settings = BrushSettings { opacity, smoothing: 0.0, smooth_kind: crate::brush::SmoothKind::Follow, smooth_deferred: false, aliased: false, ..*b };
     let textures = crate::brushtex::shared_textures(&settings);
-    let mut sheet = Raster::new(raster.width, raster.height);
-    let mut stroke = StrokeState::new(0, StrokeMode::Paint(color), settings, None, true).with_textures(textures);
+    let feel = trace.feel.unwrap_or_default();
+    let feel = Toucher { pressure_curve: Curve::linear(), threshold: 0.0, ..feel };
+    let mut stroke = StrokeState::new(0, StrokeMode::Paint(color), settings, None, true).with_textures(textures).with_feel(feel);
+    if let Some(b) = trace.secondary {
+        stroke = stroke.with_secondary(b);
+    }
+    let sampled = trace.pressure.len() == points.len();
+    let timed = trace.time.len() == points.len();
     let mut dirty = Vec::new();
-    for p in points {
-        stroke.add_point(&mut sheet, p.pos(), pressure_for_radius(&settings, p.r), &mut dirty);
+    for (i, p) in points.iter().enumerate() {
+        let pressure = match trace.pressure.get(i).filter(|_| sampled) {
+            Some(&v) if v >= 0.0 => v,
+            _ => pressure_for_radius(&settings, p.r),
+        };
+        match trace.time.get(i).filter(|_| timed) {
+            Some(&t) if t >= 0.0 => stroke.add_point_at(&mut sheet, p.pos(), pressure, t, &mut dirty),
+            _ => stroke.add_point(&mut sheet, p.pos(), pressure, &mut dirty),
+        }
     }
     stroke.finish(&mut sheet, &mut dirty);
-    let (x0, y0) = (region.min.x.max(0.0) as usize, region.min.y.max(0.0) as usize);
-    let x1 = (region.max.x.ceil().max(0.0) as usize).min(raster.width);
-    let y1 = (region.max.y.ceil().max(0.0) as usize).min(raster.height);
+    sheet
+}
+
+/// Bornes entières de `clip` dans une image `w`×`h` : (x0, y0, x1, y1), vides si rien.
+fn clip_bounds(clip: Rect, w: usize, h: usize) -> (usize, usize, usize, usize) {
+    let x0 = clip.min.x.max(0.0).floor() as usize;
+    let y0 = clip.min.y.max(0.0).floor() as usize;
+    let x1 = (clip.max.x.max(0.0).ceil() as usize).min(w);
+    let y1 = (clip.max.y.max(0.0).ceil() as usize).min(h);
+    (x0, y0, x1, y1)
+}
+
+/// Pose la feuille `sheet` (le trait seul) sur `raster`, dans `clip`.
+fn blit_sheet(raster: &mut Raster, sheet: &Raster, clip: Rect) {
+    let (x0, y0, x1, y1) = clip_bounds(clip, raster.width, raster.height);
     for idx in 0..sheet.tiles.len() {
         let Some(tile) = &sheet.tiles[idx] else { continue };
         let (tx, ty, tw, th) = sheet.tile_bounds(idx);
@@ -609,6 +898,55 @@ fn paint_textured(raster: &mut Raster, points: &[VPoint], color: [u8; 3], opacit
                 let dst = raster.tile_mut(di);
                 dst[i] = crate::render::over(dst[i], s, 255, None);
             }
+        }
+    }
+}
+
+/// Pose les pixels en cache d'un trait, transformés par `delta` (rien : tels quels ; une
+/// translation entière : copiés décalés ; sinon rééchantillonnés), dans `clip`.
+fn blit_cache(raster: &mut Raster, px: &CachedPixels, delta: &Affine, clip: Rect) {
+    if px.w == 0 || px.h == 0 {
+        return;
+    }
+    let (cx0, cy0, cx1, cy1) = clip_bounds(clip, raster.width, raster.height);
+    if cx0 >= cx1 || cy0 >= cy1 {
+        return;
+    }
+    if let Some((dx, dy)) = delta.integer_translation() {
+        let (ox, oy) = (px.x0 as i64 + dx as i64, px.y0 as i64 + dy as i64);
+        let y_from = (cy0 as i64).max(oy);
+        let y_to = (cy1 as i64).min(oy + px.h as i64);
+        let x_from = (cx0 as i64).max(ox);
+        let x_to = (cx1 as i64).min(ox + px.w as i64);
+        for y in y_from..y_to {
+            for x in x_from..x_to {
+                let s = px.pixels[(y - oy) as usize * px.w + (x - ox) as usize];
+                if s.a() == 0 {
+                    continue;
+                }
+                let (x, y) = (x as usize, y as usize);
+                let di = raster.tile_index_of(x, y);
+                let dst = raster.tile_mut(di);
+                let i = (y % TILE) * TILE + x % TILE;
+                dst[i] = crate::render::over(dst[i], s, 255, None);
+            }
+        }
+        return;
+    }
+    let Some(inv) = delta.inverse() else { return };
+    let dest = delta.apply_rect(Rect::from_min_size(pos2(px.x0 as f32, px.y0 as f32), vec2(px.w as f32, px.h as f32))).expand(1.0);
+    let (x0, y0, x1, y1) = clip_bounds(dest.intersect(Rect::from_min_max(pos2(cx0 as f32, cy0 as f32), pos2(cx1 as f32, cy1 as f32))), raster.width, raster.height);
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let s = inv.apply(pos2(x as f32 + 0.5, y as f32 + 0.5));
+            let c = px.sample(s.x - px.x0 as f32, s.y - px.y0 as f32);
+            if c.a() == 0 {
+                continue;
+            }
+            let di = raster.tile_index_of(x, y);
+            let dst = raster.tile_mut(di);
+            let i = (y % TILE) * TILE + x % TILE;
+            dst[i] = crate::render::over(dst[i], c, 255, None);
         }
     }
 }
@@ -985,6 +1323,7 @@ pub fn erase_circle(d: &mut VectorDrawing, c: Pos2, radius: f32, whole: bool) ->
                 opacity,
                 hardness,
                 brush,
+                trace,
             } => {
                 if whole {
                     e.hit(c, radius).then(Vec::new)
@@ -1015,6 +1354,7 @@ pub fn erase_circle(d: &mut VectorDrawing, c: Pos2, radius: f32, whole: bool) ->
                                 opacity: *opacity,
                                 hardness: *hardness,
                                 brush: brush.clone(),
+                                trace: trace.without_samples(),
                             })
                             .collect()
                     })

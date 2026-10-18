@@ -81,6 +81,7 @@ fn vector_points_follow() {
                 opacity: 1.0,
                 hardness: 1.0,
                 brush: None,
+                trace: Default::default(),
             },
             Element::Fill { contours: vec![vec![[0.0, 0.0], [100.0, 0.0], [100.0, 100.0]]], color: [1, 1, 1], opacity: 1.0 },
         ],

@@ -76,12 +76,13 @@ fn exported(raw: &[Element], s: f32, ox: f32, oy: f32) -> Raster {
                 color: *color,
                 opacity: *opacity,
             },
-            Element::Stroke { points, color, opacity, hardness, brush } => Element::Stroke {
+            Element::Stroke { points, color, opacity, hardness, brush, trace } => Element::Stroke {
                 points: points.iter().map(|p| { let q = tf(p.x, p.y); VPoint { x: q[0], y: q[1], r: p.r * s } }).collect(),
                 color: *color,
                 opacity: *opacity,
                 hardness: *hardness,
                 brush: brush.clone(),
+                trace: trace.without_cache(),
             },
             other => other.clone(),
         })

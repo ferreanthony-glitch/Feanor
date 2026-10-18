@@ -19,8 +19,11 @@ pub(crate) struct VectorStroke {
     pub color: [u8; 3],
     pub opacity: f32,
     pub hardness: f32,
-    /// Pinceau texturé (7b), textures désignées par leur clé de contenu.
+    /// Le réglage complet, textures désignées par leur clé de contenu (7b, étape 5).
     pub brush: Option<Box<crate::brush::BrushSettings>>,
+    /// Le toucher et la couleur B du moment : la trace du trait (étape 5).
+    pub feel: crate::brush::Toucher,
+    pub secondary: [u8; 3],
 }
 
 pub(crate) struct VectorErase {
@@ -195,9 +198,9 @@ impl App {
         }
         let (cel, prefix) = self.ensure_cel();
         let before = self.drawing(cel).cloned().unwrap_or_default();
-        // Pinceau texturé : l'aperçu prend ses textures, le trait gardera le réglage (7b).
+        // L'aperçu prend les textures du réglage, le trait gardera le réglage complet (7b, étape 5).
         let brush = self.brushes.for_vector(&settings).map(Box::new);
-        let textures = if brush.is_some() { self.brushes.textures(&settings) } else { Default::default() };
+        let textures = self.brushes.textures(&settings);
         // Peint derrière : l'aperçu passe déjà sous les autres traits ; le remplissage, lui, est un
         // élément vectoriel posé au lâcher (`commit_vector_stroke`).
         let mut stroke = StrokeState::new(cel, StrokeMode::Paint(self.color), settings, None, pen)
@@ -221,20 +224,27 @@ impl App {
             opacity: settings.opacity,
             hardness: settings.hardness,
             brush,
+            feel: self.toucher,
+            secondary: self.couleurs.prefs.back,
         });
         self.vsel = None;
         self.modified = true;
     }
 
     /// Pose le trait vectoriel tracé. `preview` : l'état des tuiles avant l'aperçu dessiné pendant
-    /// le geste.
+    /// le geste. `pressure` et `time` : l'appui et l'instant de chaque point de `path` (la trace,
+    /// étape 5) ; avec un réglage, le chemin est gardé tel quel (le simplifier déplacerait les
+    /// empreintes rejouées).
     pub(crate) fn commit_vector_stroke(
         &mut self,
         vs: VectorStroke,
         path: Vec<VPoint>,
+        pressure: Vec<f32>,
+        time: Vec<f64>,
         preview: Option<Vec<(usize, Option<crate::raster::Tile>)>>,
     ) {
-        let points = vector::simplify(&path, 0.25);
+        let replayed = vs.brush.is_some() && pressure.len() == path.len();
+        let points = if replayed { path.clone() } else { vector::simplify(&path, 0.25) };
         if points.is_empty() {
             // Rien à garder : on efface l'aperçu.
             if let (Some(tiles), Some(c)) = (preview, self.doc.cels.get_mut(&vs.cel)) {
@@ -246,12 +256,18 @@ impl App {
             }
             return;
         }
+        let trace = if replayed {
+            vector::Trace { pressure, time, feel: Some(vs.feel), secondary: Some(vs.secondary), cache: Default::default() }
+        } else {
+            vector::Trace::default()
+        };
         let element = Element::Stroke {
             points,
             color: vs.color,
             opacity: vs.opacity,
             hardness: vs.hardness,
             brush: vs.brush,
+            trace,
         };
         // Remplir la forme (`brushfill`) : une zone remplie de la couleur du trait, juste sous lui.
         let fill = if self.fill_shapes && self.tool != Tool::Eraser {
@@ -552,6 +568,21 @@ impl App {
                 cel, before, changed, ..
             } => {
                 if changed {
+                    // Pendant le glissé, les traits déplacés étaient posés depuis leurs pixels en
+                    // cache (copiés, ou rééchantillonnés s'ils ont tourné ou changé d'échelle) ; au
+                    // lâcher, un rendu exact : le moteur est rejoué une fois sur leur nouvelle place.
+                    let mut region = Rect::NOTHING;
+                    if let (Some(sel), Some(d)) = (self.vsel.as_ref(), self.doc.cels.get_mut(&cel).and_then(|c| c.vector.as_mut())) {
+                        for &i in &sel.items {
+                            if let Some(e) = d.elements.get_mut(i) {
+                                e.invalidate_cache();
+                                region = region.union(e.bounds().expand(1.5));
+                            }
+                        }
+                    }
+                    if region != Rect::NOTHING {
+                        self.refresh_cel_region(cel, region);
+                    }
                     self.push_vector(cel, before, None);
                 }
             }

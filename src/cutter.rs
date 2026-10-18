@@ -130,7 +130,7 @@ pub fn cut_strokes(d: &mut VectorDrawing, gesture: &[Pos2], tol: f32) -> Option<
     let mut region = Rect::NOTHING;
     let mut out = Vec::with_capacity(d.elements.len());
     for (i, e) in d.elements.iter().enumerate() {
-        let (Some(line), Element::Stroke { points, color, opacity, hardness, brush }) = (&lines[i], e) else {
+        let (Some(line), Element::Stroke { points, color, opacity, hardness, brush, trace }) = (&lines[i], e) else {
             out.push(e.clone());
             continue;
         };
@@ -167,7 +167,7 @@ pub fn cut_strokes(d: &mut VectorDrawing, gesture: &[Pos2], tol: f32) -> Option<
             }
             let kept = piece(points, from, to);
             if kept.len() >= 2 && length(&kept) >= MIN_PIECE {
-                out.push(Element::Stroke { points: kept, color: *color, opacity: *opacity, hardness: *hardness, brush: brush.clone() });
+                out.push(Element::Stroke { points: kept, color: *color, opacity: *opacity, hardness: *hardness, brush: brush.clone(), trace: trace.without_samples() });
             }
         }
         region = region.union(bounds);

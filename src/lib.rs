@@ -166,6 +166,8 @@ mod marks;
 #[cfg(test)]
 mod matiere_tests;
 #[cfg(test)]
+mod vecto_tests;
+#[cfg(test)]
 mod keymap_tests;
 #[cfg(test)]
 mod ops_tests;

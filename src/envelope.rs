@@ -239,7 +239,7 @@ pub fn warp_drawing(original: &VectorDrawing, items: Option<&[usize]>, src: Rect
             continue;
         }
         let dense = match e {
-            Element::Stroke { points, color, opacity, hardness, brush } => {
+            Element::Stroke { points, color, opacity, hardness, brush, trace } => {
                 let mut pts: Vec<VPoint> = Vec::with_capacity(points.len() * 2);
                 for (j, p) in points.iter().enumerate() {
                     if j > 0 {
@@ -252,7 +252,7 @@ pub fn warp_drawing(original: &VectorDrawing, items: Option<&[usize]>, src: Rect
                     }
                     pts.push(*p);
                 }
-                Element::Stroke { points: pts, color: *color, opacity: *opacity, hardness: *hardness, brush: brush.clone() }
+                Element::Stroke { points: pts, color: *color, opacity: *opacity, hardness: *hardness, brush: brush.clone(), trace: trace.without_samples() }
             }
             Element::Fill { contours, color, opacity } => Element::Fill {
                 contours: contours.iter().map(|c| densify_points(c, step, true)).collect(),

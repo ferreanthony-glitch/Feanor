@@ -71,7 +71,7 @@ fn faded(e: &Element, k: f32) -> Element {
 fn morph(a: &Element, b: &Element, t: f32) -> Option<Element> {
     match (a, b) {
         (
-            Element::Stroke { points: pa, color: ca, opacity: oa, hardness: ha, brush },
+            Element::Stroke { points: pa, color: ca, opacity: oa, hardness: ha, brush, trace },
             Element::Stroke { points: pb, color: cb, opacity: ob, hardness: hb, .. },
         ) => {
             let n = pa.len().max(pb.len()).clamp(2, 512);
@@ -83,7 +83,7 @@ fn morph(a: &Element, b: &Element, t: f32) -> Option<Element> {
                 rb.reverse();
             }
             let points = ra.iter().zip(&rb).map(|(p, q)| VPoint { x: lerp(p.x, q.x, t), y: lerp(p.y, q.y, t), r: lerp(p.r, q.r, t) }).collect();
-            Some(Element::Stroke { points, color: lerp_rgb(*ca, *cb, t), opacity: lerp(*oa, *ob, t), hardness: lerp(*ha, *hb, t), brush: brush.clone() })
+            Some(Element::Stroke { points, color: lerp_rgb(*ca, *cb, t), opacity: lerp(*oa, *ob, t), hardness: lerp(*ha, *hb, t), brush: brush.clone(), trace: trace.without_samples() })
         }
         (Element::Fill { contours: ka, color: ca, opacity: oa }, Element::Fill { contours: kb, color: cb, opacity: ob }) if ka.len() == kb.len() => {
             let contours = ka
