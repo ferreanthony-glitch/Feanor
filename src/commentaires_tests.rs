@@ -400,3 +400,58 @@ fn the_actions_exist() {
     }
     assert_eq!(crate::barrepanneaux::pane_de_action("vue.commentaires"), Some(crate::dock::Pane::Comments));
 }
+
+// ---------------------------------------------------------------------- liste et éditeur
+
+#[test]
+fn the_list_takes_what_is_left_above_the_editor_and_never_goes_under_it() {
+    use crate::commentairesui::list_height;
+    let pitch = 43.6;
+    let editor = 230.0;
+    // Un grand panneau, beaucoup de commentaires : la liste prend la place qui reste au-dessus de l'éditeur.
+    let h = list_height(700.0, editor, 50, pitch);
+    assert!(h > 3.0 * pitch && h + editor + 16.0 <= 700.0 + 1e-3, "{h}");
+    // Peu de commentaires : la liste est de leur taille, l'éditeur remonte juste dessous.
+    assert_eq!(list_height(700.0, editor, 2, pitch), 2.0 * pitch);
+    // Un panneau court : trois lignes au moins (le panneau défile), jamais une hauteur négative ni nulle.
+    for avail in [0.0, 50.0, 120.0, 200.0, 300.0] {
+        let h = list_height(avail, editor, 50, pitch);
+        assert!(h >= 3.0 * pitch - 1e-3, "{avail} : {h}");
+    }
+    // Moins de trois commentaires dans un panneau court : tous, sans plus.
+    assert_eq!(list_height(10.0, editor, 1, pitch), pitch);
+    assert_eq!(list_height(10.0, editor, 2, pitch), 2.0 * pitch);
+    // Sans éditeur (rien de choisi) la liste a presque tout le panneau.
+    assert!(list_height(400.0, 20.0, 50, pitch) > list_height(400.0, 230.0, 50, pitch));
+    // À toutes les tailles, quand le panneau est assez haut pour les deux, ils tiennent ensemble sans se recouvrir.
+    for avail in (380..900).step_by(7) {
+        let avail = avail as f32;
+        let h = list_height(avail, editor, 40, pitch);
+        assert!(h + editor <= avail, "{avail} : liste {h} + éditeur {editor}");
+    }
+}
+
+#[test]
+fn a_long_comment_stays_on_one_line_cut_by_an_ellipsis() {
+    use crate::commentairesui::one_line;
+    use eframe::egui::{self, Color32, FontId};
+    let ctx = egui::Context::default();
+    let long = "Un très long commentaire qui passerait à la ligne et déborderait sur la ligne suivante de la liste du panneau Commentaires, puis encore et encore";
+    let mut checked = false;
+    let _ = ctx.run(egui::RawInput::default(), |ctx| {
+        let painter = ctx.layer_painter(egui::LayerId::background());
+        for max_w in [60.0_f32, 140.0, 260.0] {
+            let g = one_line(&painter, long, FontId::proportional(11.5), Color32::WHITE, max_w);
+            assert_eq!(g.rows.len(), 1, "une seule ligne à {max_w} de large");
+            assert!(g.size().x <= max_w + 1.0, "{} > {max_w}", g.size().x);
+            assert!(g.rows[0].text().ends_with('…'), "coupé par une ellipse : {:?}", g.rows[0].text());
+        }
+        // Un texte court n'est pas touché.
+        let short = one_line(&painter, "Ok", FontId::proportional(11.5), Color32::WHITE, 200.0);
+        assert_eq!(short.rows[0].text(), "Ok");
+        // Une largeur nulle ou négative ne plante pas et reste sur une ligne.
+        assert_eq!(one_line(&painter, long, FontId::proportional(11.5), Color32::WHITE, -5.0).rows.len(), 1);
+        checked = true;
+    });
+    assert!(checked);
+}

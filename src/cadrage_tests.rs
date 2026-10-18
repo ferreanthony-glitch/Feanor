@@ -236,7 +236,7 @@ fn defaults_are_all_off_and_settings_are_kept() {
     assert!(!d.any_on() && !d.thirds && !d.phi_grid && !d.spiral && !d.diagonals && !d.cross);
     assert_eq!(d.spiral_variant, 0);
     assert_eq!(d.safe, SafeZones::Ebu);
-    assert!((d.opacity - 0.85).abs() < 1e-6 && d.width > 0.0);
+    assert!((d.opacity - cadrage::DEFAULT_OPACITY).abs() < 1e-6 && d.width > 0.0);
     // Un fichier de réglages sans la table des aides au cadrage : les valeurs par défaut.
     let old: Settings = toml::from_str("").expect("réglages vides");
     assert_eq!(old.framing, FramingAids::default());
@@ -244,7 +244,7 @@ fn defaults_are_all_off_and_settings_are_kept() {
     assert!(partial.framing.thirds && !partial.framing.spiral && partial.framing.opacity == d.opacity);
     // Écrire puis relire.
     let mut s = Settings::default();
-    s.framing = FramingAids { thirds: true, phi_grid: true, spiral: true, spiral_variant: 5, diagonals: true, cross: true, safe: SafeZones::Large, color: [1, 2, 3], opacity: 0.5, width: 2.5 };
+    s.framing = FramingAids { thirds: true, phi_grid: true, spiral: true, spiral_variant: 5, diagonals: true, cross: true, safe: SafeZones::Large, color: [1, 2, 3], opacity: 0.5, width: 2.5, ..Default::default() };
     let text = toml::to_string(&s).expect("écriture");
     assert!(text.contains("[aides_cadrage]") && text.contains("grille_or = true") && text.contains("spirale_orientation = 5"), "{text}");
     let back: Settings = toml::from_str(&text).expect("relecture");
@@ -252,8 +252,39 @@ fn defaults_are_all_off_and_settings_are_kept() {
     // Des valeurs absurdes sont ramenées dans les bornes.
     let wild = FramingAids { spiral_variant: 11, opacity: f32::NAN, width: -4.0, ..Default::default() }.sanitized();
     assert_eq!(wild.spiral_variant, 3);
-    assert!((wild.opacity - 0.85).abs() < 1e-6 && wild.width >= 0.5);
+    assert!((wild.opacity - cadrage::DEFAULT_OPACITY).abs() < 1e-6 && wild.width >= 0.5);
     assert!((FramingAids { opacity: 9.0, ..Default::default() }.sanitized().opacity - 1.0).abs() < 1e-6);
+}
+
+#[test]
+fn the_default_guides_are_thin_and_discreet() {
+    let d = FramingAids::default();
+    assert!(d.width <= 1.0, "épaisseur par défaut {} px", d.width);
+    assert!(d.opacity < 0.85);
+}
+
+#[test]
+fn an_old_settings_file_with_the_old_default_look_gets_the_new_default() {
+    // Un fichier d'avant : l'épaisseur (1,3) et l'opacité (0,85) de l'ancien défaut, sans version d'aspect.
+    let old = "[aides_cadrage]\ntiers = true\nepaisseur = 1.3\nopacite = 0.85\n";
+    let s: Settings = toml::from_str(old).expect("ancien fichier");
+    assert_eq!(s.framing.look_version, 0, "sans version : un fichier d'avant");
+    let m = s.framing.sanitized();
+    assert!(m.thirds, "les choix sont gardés");
+    assert_eq!((m.width, m.opacity), (cadrage::DEFAULT_WIDTH, cadrage::DEFAULT_OPACITY));
+    assert_eq!(m.look_version, 1);
+    // Un fichier d'avant où l'on avait choisi autre chose : on le garde.
+    let custom: Settings = toml::from_str("[aides_cadrage]\nepaisseur = 2.5\nopacite = 0.4\n").expect("réglages choisis");
+    let m = custom.framing.sanitized();
+    assert_eq!((m.width, m.opacity), (2.5, 0.4));
+    // Un fichier déjà migré qui garde 1,3 px par choix : on ne le retouche plus.
+    let chosen: Settings = toml::from_str("[aides_cadrage]\nepaisseur = 1.3\nversion_aspect = 1\n").expect("choix");
+    assert_eq!(chosen.framing.sanitized().width, 1.3);
+    // Les réglages écrits portent la version, et sans table du tout c'est le nouveau défaut.
+    let text = toml::to_string(&Settings::default()).expect("écriture");
+    assert!(text.contains("version_aspect = 1"), "{text}");
+    let none: Settings = toml::from_str("").expect("vide");
+    assert_eq!(none.framing.sanitized(), FramingAids::default());
 }
 
 #[test]

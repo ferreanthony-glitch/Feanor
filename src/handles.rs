@@ -138,7 +138,10 @@ pub fn move_fx_key(keys: &mut [FxKey], i: usize, frame: usize) -> usize {
 }
 
 /// Le dessin exposé de `start` à `end` (exclu) dure maintenant `len` images (au moins une) ;
-/// les images d'après, leurs rôles et les clés d'effets glissent d'autant.
+/// les images d'après, leurs rôles et les clés d'effets glissent d'autant. (La poignée
+/// d'exposition passe maintenant par `ripple_at`, qui fait de même à n'importe quelle limite et
+/// tient compte de la fin du plan ; celle-ci reste la référence des tests.)
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn set_run_length(layer: &mut Layer, start: usize, end: usize, len: usize) {
     let len = len.max(1);
     let old = end.saturating_sub(start);
@@ -348,6 +351,209 @@ pub fn drop_marks(layer: &Layer, chosen: &[usize], delta: isize) -> Vec<usize> {
     }
     marks
 }
+
+// ------------------------------------------------------------------ clés de dessins : décaler, déplacer
+
+/// Comment on fait glisser des clés de dessins dans une piste de calque (Anthony, 2026-10-19 :
+/// « quand je tire une image clé, les autres clés suivent ; avec Maj, seule l'image clé se
+/// déplace »). Une clé est le début d'une exposition : la déplacer allonge ou raccourcit
+/// l'exposition d'avant.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum KeyMove {
+    /// Par défaut : la clé prise (la première des clés choisies) et toutes les clés d'après
+    /// glissent ensemble, chacune gardant sa durée : `ripple_at`.
+    #[default]
+    Ripple,
+    /// Maj tenue : seules les clés choisies bougent, l'exposition d'avant s'allonge ou raccourcit
+    /// et la leur fait l'inverse, la suite ne bouge pas : `move_keys_only`.
+    Single,
+    /// Alt tenue : l'ancien geste, les clés prennent leur place parmi les autres expositions,
+    /// toutes gardent leur durée : `shift_runs`.
+    Reorder,
+}
+
+/// Le calque est tenu jusqu'à la fin du plan (`plan_len`) : sa dernière exposition en est la
+/// queue, qui absorbe le décalage au lieu d'allonger le plan.
+fn held_to_end(layer: &Layer, plan_len: usize) -> bool {
+    layer.frames.len() >= plan_len && layer.frames.last().is_some_and(Option::is_some)
+}
+
+/// De combien l'exposition qui précède la limite `at` peut raccourcir : elle garde au moins une
+/// image si c'est un dessin, une plage vide peut disparaître. Rien avant l'image 0.
+fn room_before(layer: &Layer, at: usize) -> isize {
+    if at == 0 || at > layer.frames.len() {
+        return 0;
+    }
+    let start = layer.run_bounds(at - 1).0;
+    (at - start - usize::from(layer.frames[at - 1].is_some())) as isize
+}
+
+/// Les bornes (mini ≤ 0 ≤ maxi) du décalage « en cascade » à la limite `at` : l'exposition d'avant
+/// ne raccourcit pas plus que `room_before` ; le calque ne dépasse pas le plan : tenu jusqu'à la
+/// fin du plan, sa dernière clé garde une image (la dernière exposition absorbe) ; sinon, la fin
+/// du contenu s'arrête à la fin du plan.
+pub fn ripple_bounds(layer: &Layer, at: usize, plan_len: usize) -> (isize, isize) {
+    let lo = -room_before(layer, at);
+    let len = layer.frames.len();
+    let hi = if at >= len || !held_to_end(layer, plan_len) {
+        plan_len.saturating_sub(len) as isize
+    } else {
+        let last_start = layer.run_bounds(len - 1).0;
+        plan_len.saturating_sub(1 + last_start) as isize
+    };
+    (lo, hi.max(0))
+}
+
+/// Le décalage `want` ramené dans `ripple_bounds`.
+pub fn clamp_ripple_delta(layer: &Layer, at: usize, want: isize, plan_len: usize) -> isize {
+    let (lo, hi) = ripple_bounds(layer, at, plan_len);
+    want.clamp(lo, hi)
+}
+
+/// La limite `at` (début d'une clé) glissée de `delta` images, ramenée d'abord dans
+/// `ripple_bounds` par l'appelant : l'exposition d'avant s'allonge (ou raccourcit) de `delta`,
+/// tout ce qui suit glisse d'autant avec ses durées, ses rôles et ses clés d'effets. La durée du
+/// plan ne change pas : un calque tenu jusqu'à sa fin y reste tenu (sa dernière exposition absorbe
+/// le décalage), un autre garde sa fin décalée.
+pub fn ripple_at(layer: &mut Layer, at: usize, delta: isize, plan_len: usize) {
+    let held = held_to_end(layer, plan_len);
+    if delta > 0 {
+        let fill = if at > 0 { layer.frames.get(at - 1).copied().flatten() } else { None };
+        layer.insert(at, fill, delta as usize);
+        if held {
+            layer.frames.truncate(plan_len);
+            layer.roles.retain(|f, _| *f < plan_len);
+        }
+    } else if delta < 0 {
+        let n = delta.unsigned_abs().min(at);
+        layer.frames.drain(at - n..at);
+        layer.shift_frames(at - n, n, true);
+        if held {
+            if let Some(&Some(last)) = layer.frames.last() {
+                layer.frames.resize(plan_len, Some(last));
+            }
+        }
+    }
+    layer.trim();
+}
+
+/// Les bornes du glissement des seules clés qui commencent aux images `starts` : chacune garde une
+/// image à son exposition et ne passe pas par-dessus l'exposition d'avant, sauf si celle-ci est une
+/// autre clé choisie qui glisse avec elle.
+pub fn single_bounds(layer: &Layer, starts: &[usize]) -> (isize, isize) {
+    let (mut lo, mut hi) = (isize::MIN, isize::MAX);
+    for &s in starts {
+        let before_is_chosen = s > 0 && starts.contains(&layer.run_bounds(s - 1).0);
+        if !before_is_chosen {
+            lo = lo.max(-room_before(layer, s));
+        }
+        let (_, e) = layer.run_bounds(s);
+        if !starts.contains(&e) {
+            hi = hi.min((e - s - 1) as isize);
+        }
+    }
+    if lo == isize::MIN {
+        lo = 0;
+    }
+    if hi == isize::MAX {
+        hi = 0;
+    }
+    (lo.min(0), hi.max(0))
+}
+
+/// Les clés qui commencent aux images `starts` glissées seules de `delta` images : la limite
+/// de chacune bouge (`move_boundary`), l'exposition d'avant s'allonge et la sienne raccourcit, la
+/// suite ne bouge pas. Une clé à l'image 0 qui avance laisse des images vides devant elle. Renvoie
+/// le début de chaque clé, dans l'ordre de `starts`.
+pub fn move_keys_only(layer: &mut Layer, starts: &[usize], delta: isize) -> Vec<usize> {
+    if delta == 0 {
+        return starts.to_vec();
+    }
+    // Les clés les plus loin dans le sens du geste d'abord : aucune ne gêne la suivante.
+    let mut order: Vec<usize> = starts.to_vec();
+    order.sort_unstable();
+    if delta > 0 {
+        order.reverse();
+    }
+    for s in order {
+        let to = (s as isize + delta).max(0) as usize;
+        if s > 0 {
+            move_boundary(layer, s, to);
+        } else if delta > 0 && layer.frames.first().is_some_and(Option::is_some) {
+            let n = (delta as usize).min(layer.run_bounds(0).1.saturating_sub(1));
+            let role = layer.roles.remove(&0);
+            layer.frames[..n].fill(None);
+            layer.roles.retain(|f, _| !(0..n).contains(f));
+            if let Some(r) = role {
+                layer.roles.insert(n, r);
+            }
+        }
+    }
+    layer.trim();
+    starts.iter().map(|&s| (s as isize + delta).max(0) as usize).collect()
+}
+
+/// Le glissement `want` des clés `starts` ramené dans ce que permet le geste `mode` : le plus
+/// proche de `want` dont chaque clé arrive vraiment où il l'envoie. `Reorder` n'a pas de borne.
+pub(crate) fn clamp_key_delta(layer: &Layer, starts: &[usize], want: isize, mode: KeyMove, plan_len: usize) -> isize {
+    match mode {
+        KeyMove::Reorder => want,
+        KeyMove::Ripple => starts.iter().copied().min().map_or(0, |m| clamp_ripple_delta(layer, m, want, plan_len)),
+        KeyMove::Single => {
+            let (lo, hi) = single_bounds(layer, starts);
+            let mut d = want.clamp(lo, hi);
+            // Vérifié sur une copie : les bornes ci-dessus ne voient pas les cas limites.
+            while d != 0 {
+                let mut probe = layer.clone();
+                let at = move_keys_only(&mut probe, starts, d);
+                if at.iter().all(|&a| probe.frames.get(a).is_some_and(Option::is_some) && probe.run_bounds(a).0 == a) {
+                    break;
+                }
+                d -= d.signum();
+            }
+            d
+        }
+    }
+}
+
+/// Les clés `starts` glissées de `delta` (déjà ramené dans les bornes par `clamp_key_delta`) selon
+/// `mode`. Renvoie le début de chacune, dans l'ordre de `starts`.
+pub(crate) fn apply_key_move(layer: &mut Layer, starts: &[usize], delta: isize, mode: KeyMove, plan_len: usize) -> Vec<usize> {
+    match mode {
+        KeyMove::Reorder => shift_runs(layer, starts, delta),
+        KeyMove::Single => move_keys_only(layer, starts, delta),
+        KeyMove::Ripple => {
+            if let Some(m) = starts.iter().copied().min() {
+                ripple_at(layer, m, delta, plan_len);
+            }
+            starts.iter().map(|&s| (s as isize + delta).max(0) as usize).collect()
+        }
+    }
+}
+
+/// Ce que montre le montage pendant le glissement (rien ne bouge avant le lâcher) : les
+/// fantômes des expositions déplacées (images [début, fin) une fois posées) et les repères où se
+/// posent les clés prises.
+pub(crate) fn key_preview(layer: &Layer, starts: &[usize], delta: isize, mode: KeyMove, plan_len: usize) -> (Vec<(isize, isize)>, Vec<usize>) {
+    if mode == KeyMove::Reorder {
+        let ghosts = starts.iter().map(|&s| (s as isize + delta, layer.run_bounds(s).1 as isize + delta)).collect();
+        return (ghosts, drop_marks(layer, starts, delta));
+    }
+    if delta == 0 {
+        return (Vec::new(), Vec::new());
+    }
+    let mut after = layer.clone();
+    let landed = apply_key_move(&mut after, starts, delta, mode, plan_len);
+    let ghosts = match mode {
+        KeyMove::Ripple => {
+            let first = landed.iter().copied().min().unwrap_or(0);
+            runs(&after).into_iter().filter(|r| r.2.is_some() && r.0 >= first).map(|r| (r.0 as isize, r.1 as isize)).collect()
+        }
+        _ => landed.iter().map(|&a| (a as isize, after.run_bounds(a).1 as isize)).collect(),
+    };
+    (ghosts, landed)
+}
+
 /// La limite entre deux expositions, à l'image `at`, amenée à l'image `to` : celle de gauche
 /// s'allonge et celle de droite raccourcit d'autant, ou l'inverse (un dessin garde au moins une
 /// image, une plage vide peut disparaître) ; la suite ne bouge pas. Le rôle posé au début de
@@ -512,19 +718,31 @@ impl App {
                 self.renderer.invalidate_all();
                 format!("Clé d'effet : image {}.", label(self, f))
             }
+            // Le bord droit d'un dessin est le début de la clé suivante. Par défaut les clés d'après
+            // suivent (`ripple_at`, ce que faisait déjà cette poignée) ; Maj tenue : seule cette
+            // limite bouge, la clé suivante raccourcit ou s'allonge et le reste ne bouge pas.
             Handle::Exposure { layer, start, end } => {
                 let Some((mut l, plan_len)) = self.layer_before(layer) else { return };
-                // Ce qui suit glisse d'autant, sans dépasser la fin du plan.
-                let room = plan_len.saturating_sub(l.frames.len());
-                let want = edge.saturating_sub(start).max(1);
-                let n = want.min(end - start + room);
-                set_run_length(&mut l, start, end, n);
-                self.put_layer(pi, layer, l, plan_len);
-                let s = if n > 1 { "s" } else { "" };
-                if want > n {
-                    format!("Exposition : {n} image{s} (fin du plan : l'allonger d'abord par la poignée au bout de la règle).")
+                let single = self.key_move_now() == KeyMove::Single && end < l.frames.len();
+                self.key_drag_mode = if single { KeyMove::Single } else { KeyMove::Ripple };
+                if single {
+                    let to = move_boundary(&mut l, end, edge.max(start + 1));
+                    self.put_layer(pi, layer, l, plan_len);
+                    format!("Limite à l'image {} : la clé suivante s'ajuste, la suite ne bouge pas (Maj tenue).", label(self, to))
                 } else {
-                    format!("Exposition : {n} image{s}.")
+                    // Ce qui suit glisse d'autant, sans allonger le plan : un calque tenu jusqu'à
+                    // sa fin le reste (sa dernière exposition absorbe).
+                    let want = edge.max(start + 1) as isize - end as isize;
+                    let d = clamp_ripple_delta(&l, end, want, plan_len);
+                    ripple_at(&mut l, end, d, plan_len);
+                    self.put_layer(pi, layer, l, plan_len);
+                    let n = (end - start) as isize + d;
+                    let s = if n > 1 { "s" } else { "" };
+                    if want > d {
+                        format!("Exposition : {n} image{s} (fin du plan : l'allonger d'abord par la poignée au bout de la règle).")
+                    } else {
+                        format!("Exposition : {n} image{s}.")
+                    }
                 }
             }
             Handle::LayerStart { layer } => {
@@ -554,17 +772,37 @@ impl App {
                 format!("Calque décalé de {d:+} image{}.", if d.abs() > 1 { "s" } else { "" })
             }
             // La clé ne se pose qu'au lâcher (`end_handle_drag`) ; d'ici là, un repère montre où.
+            // Par défaut la clé et tout ce qui la suit glissent ; Maj tenue : la clé seule ; Alt
+            // tenue : l'ancien geste, elle prend sa place parmi les autres (`KeyMove`).
             Handle::Key { layer, start, grab, .. } => {
-                let Some((l, _)) = self.layer_before(layer) else { return };
-                self.key_drag_delta = frame as isize - grab as isize;
-                match drop_marks(&l, &[start], self.key_drag_delta).first() {
-                    Some(&m) => format!("Lâcher : la clé se pose à l'image {} (repère), sa durée gardée.", label(self, m)),
-                    None => "Lâcher ici : la clé reste à sa place.".into(),
+                let Some((l, plan_len)) = self.layer_before(layer) else { return };
+                let mode = self.key_move_now();
+                self.key_drag_mode = mode;
+                self.key_drag_delta = clamp_key_delta(&l, &[start], frame as isize - grab as isize, mode, plan_len);
+                let marks = key_preview(&l, &[start], self.key_drag_delta, mode, plan_len).1;
+                let d = self.key_drag_delta;
+                match (mode, marks.first()) {
+                    (_, None) => "Lâcher ici : la clé reste à sa place.".into(),
+                    (KeyMove::Ripple, Some(&m)) => {
+                        format!("Lâcher : la clé passe à l'image {} ({d:+}) et tout ce qui la suit sur sa piste avec elle (Maj : seule, Alt : réordonner).", label(self, m))
+                    }
+                    (KeyMove::Single, Some(&m)) => format!("Lâcher : la clé seule passe à l'image {} (Maj tenue), la suite reste en place.", label(self, m)),
+                    (KeyMove::Reorder, Some(&m)) => format!("Lâcher : la clé se pose à l'image {} (repère), sa durée gardée (Alt tenue).", label(self, m)),
                 }
             }
+            // La limite entre deux expositions est le début d'une clé : par défaut les clés d'après
+            // suivent ; Maj tenue : la limite seule bouge, l'une s'allonge et l'autre raccourcit.
             Handle::Boundary { layer, at } => {
                 let Some((mut l, plan_len)) = self.layer_before(layer) else { return };
-                let to = move_boundary(&mut l, at, edge);
+                let single = self.key_move_now() == KeyMove::Single;
+                self.key_drag_mode = if single { KeyMove::Single } else { KeyMove::Ripple };
+                let to = if single {
+                    move_boundary(&mut l, at, edge)
+                } else {
+                    let d = clamp_ripple_delta(&l, at, edge as isize - at as isize, plan_len);
+                    ripple_at(&mut l, at, d, plan_len);
+                    (at as isize + d) as usize
+                };
                 let before = to - l.run_bounds(to.saturating_sub(1)).0;
                 let after = if to < l.frames.len() { l.run_bounds(to).1 - to } else { 0 };
                 self.put_layer(pi, layer, l, plan_len);
@@ -653,11 +891,19 @@ impl App {
         // Une clé prise se pose maintenant, au repère montré pendant le geste.
         if let Handle::Key { layer, start, .. } = d.handle {
             let delta = std::mem::take(&mut self.key_drag_delta);
-            if let Some(l) = self.doc.panels.iter_mut().find(|p| p.id == d.panel).and_then(|p| p.layers.get_mut(layer)) {
-                shift_runs(l, &[start], delta);
+            let plan_len = d.before.frame_count();
+            if let Some(p) = self.doc.panels.iter_mut().find(|p| p.id == d.panel) {
+                if let Some(l) = p.layers.get_mut(layer) {
+                    apply_key_move(l, &[start], delta, self.key_drag_mode, plan_len);
+                }
+                // La durée du plan reste celle d'avant le geste.
+                if p.frame_count() < plan_len {
+                    p.length = plan_len;
+                }
             }
             self.renderer.invalidate_all();
         }
+        let move_mode = std::mem::take(&mut self.key_drag_mode);
         let Some(p) = self.doc.panels.iter().find(|p| p.id == d.panel) else { return };
         let changed = match d.handle {
             Handle::Mark(_) => p.marks != d.before.marks,
@@ -673,11 +919,17 @@ impl App {
                 })
             }
         };
+        let plan_now = p.frame_count();
         if changed {
-            self.history.push(d.snap);
+            // Glisser une clé de dessin : « Décaler les clés », « Déplacer une clé »…
+            if matches!(d.handle, Handle::Key { .. } | Handle::Boundary { .. } | Handle::Exposure { .. }) {
+                self.commit_as(d.snap, crate::montagekeys::key_move_name(move_mode, false));
+            } else {
+                self.history.push(d.snap);
+            }
             self.modified = true;
             // La note du son reste lisible après le geste ; la durée vue est à jour.
-            self.plan_len_seen = Some((d.panel, p.frame_count()));
+            self.plan_len_seen = Some((d.panel, plan_now));
         } else if let Some(p) = self.doc.panels.iter_mut().find(|p| p.id == d.panel) {
             // Rien n'a changé : le plan reprend exactement son état (durée minimale comprise).
             *p = d.before;
@@ -737,6 +989,7 @@ impl App {
     /// Abandonne la poignée : le plan revient comme avant.
     pub(crate) fn cancel_handle_drag(&mut self) {
         self.key_drag_delta = 0;
+        self.key_drag_mode = KeyMove::Ripple;
         let Some(d) = self.handle_drag.take() else { return };
         if let Some(p) = self.doc.panels.iter_mut().find(|p| p.id == d.panel) {
             *p = d.before;
@@ -749,6 +1002,7 @@ impl App {
     pub(crate) fn dragging(&self) -> bool {
         self.handle_drag.is_some()
             || self.cam_keys_drag.is_some()
+            || self.cam_rect.is_some()
             || self.montage_drag.is_some()
             || self.image_drag.is_some()
             || self.grid_select.is_some()
@@ -769,6 +1023,7 @@ impl App {
         self.cancel_keys_drag();
         self.cancel_fx_keys_drag();
         self.cancel_cam_keys_drag();
+        self.cancel_cam_rect();
         self.cancel_comment_drag();
         if let Some(r) = self.key_rect.take() {
             self.key_sel = r.before;
@@ -807,6 +1062,9 @@ impl App {
         }
         if self.cam_keys_drag.is_some() {
             self.end_cam_keys_drag();
+        }
+        if self.cam_rect.is_some() {
+            self.end_cam_rect();
         }
         if self.comment_ui.drag.is_some() {
             self.end_comment_drag();

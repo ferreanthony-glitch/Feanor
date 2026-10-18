@@ -990,7 +990,9 @@ impl App {
             }
             // Un geste qui ne part pas d'un losange jaune lâche le choix des clés de caméra.
             let cam_hit = self.montage_camera_key_at(origin, r.top(), &blocks, ppf, rows).and_then(|(i, k)| Some((i, self.doc.panels[i].camera.get(k)?.frame)));
-            if cam_hit.is_none() {
+            // (Un geste qui part de la piste Caméra, hors d'un losange, trace un rectangle de choix.)
+            let cam_row = (r.top() + rows.camera_top()..=r.top() + rows.camera_top() + crate::montagerows::CAM_H).contains(&origin.y);
+            if cam_hit.is_none() && !cam_row {
                 self.clear_cam_keys();
             }
             if let Some((i, f)) = cam_hit {
@@ -998,6 +1000,12 @@ impl App {
                 self.sel_clip = None;
                 let grab = free_frame_at(origin.x);
                 self.begin_cam_keys_drag(i, f, grab);
+            } else if cam_row {
+                // Un rectangle de choix des clés de caméra (`camkeys::CamRect`) : Maj ajoute au choix,
+                // Ctrl bascule les clés touchées.
+                self.sel_clip = None;
+                let mods = ui.input(|i| i.modifiers);
+                self.begin_cam_rect(origin, mods.shift, mods.command && !mods.shift);
             } else if let Some((_, Some((id, edge)))) = self.lane_hit(origin, left, ppf, lanes_top) {
                 self.begin_clip_drag(id, edge, origin);
             } else if let Some((i, m)) = mark_at(self, origin) {
@@ -1078,6 +1086,22 @@ impl App {
         } else if resp.hover_pos().is_some_and(|p| self.montage_camera_key_at(p, r.top(), &blocks, ppf, rows).is_some()) {
             ui.ctx().set_cursor_icon(CursorIcon::Grab);
         }
+        // Choix au rectangle des clés de caméra : seule la largeur du rectangle compte (la piste
+        // est basse), il se dessine pendant le geste.
+        if let Some(o) = self.cam_rect.as_ref().map(|c| c.origin) {
+            ui.ctx().set_cursor_icon(CursorIcon::Crosshair);
+            if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
+                let rect = Rect::from_two_pos(o, p);
+                let y = r.top() + rows.camera_top() + crate::montagerows::CAM_H * 0.5;
+                let band = rect.union(Rect::from_center_size(pos2(rect.center().x, y), vec2(0.0, crate::montagerows::CAM_H)));
+                let picked = crate::camkeys::pick_in_rect(&self.montage_cam_diamonds(&blocks, ppf, y), band, crate::camkeys::DIAMOND_HALF);
+                self.drag_cam_rect(&picked);
+                crate::camkeys::paint_marquee(&painter, rect);
+            }
+            if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
+                self.end_cam_rect();
+            }
+        }
         if let Some(h) = self.handle_drag.as_ref().map(|d| d.handle) {
             let resize = matches!(h, Handle::LayerStart { .. } | Handle::LayerEnd { .. } | Handle::Exposure { .. } | Handle::Boundary { .. });
             ui.ctx().set_cursor_icon(if resize { CursorIcon::ResizeHorizontal } else { CursorIcon::Grabbing });
@@ -1106,7 +1130,7 @@ impl App {
             if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
                 self.key_rect = None;
                 let n = self.key_sel.len();
-                self.status = format!("{n} clé{} choisie{} : Ctrl+C, Ctrl+V, Suppr, Ctrl+D ; une clé choisie prise par son milieu les emmène toutes.", if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" });
+                self.status = format!("{n} clé{} choisie{} : Ctrl+C, Ctrl+V (insérer), Maj+Ctrl+V (sur la tête), Suppr, Ctrl+D ; une clé choisie prise par son milieu décale la suite avec elle (Maj : seules les clés choisies).", if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" });
             }
         }
         // Plusieurs clés choisies prises à la fois (`montagekeys`).
@@ -1369,9 +1393,21 @@ impl App {
                         self.copy_keys();
                     }
                     let can_paste = self.key_clipboard.is_some();
-                    if ui.add_enabled(can_paste, egui::Button::new("Coller ici").shortcut_text(key(self, "edition.coller"))).clicked() {
+                    if ui
+                        .add_enabled(can_paste, egui::Button::new("Coller les clés").shortcut_text(key(self, "edition.coller")))
+                        .on_hover_text("Insère les clés après la clé de la tête de lecture ; le reste de la piste est repoussé.")
+                        .clicked()
+                    {
                         ui.close_menu();
                         self.paste_keys();
+                    }
+                    if ui
+                        .add_enabled(can_paste, egui::Button::new("Coller à la tête de lecture").shortcut_text(key(self, "edition.coller_a_la_tete")))
+                        .on_hover_text("La première clé commence sur la tête de lecture, par-dessus ce qui y était ; rien n'est repoussé.")
+                        .clicked()
+                    {
+                        ui.close_menu();
+                        self.paste_keys_at_head();
                     }
                     if ui
                         .add(egui::Button::new(what("Dupliquer la clé sur place", "Dupliquer les clés sur place")).shortcut_text(key(self, "dessin.dupliquer")))

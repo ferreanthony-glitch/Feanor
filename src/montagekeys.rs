@@ -7,23 +7,35 @@
 //! - Au rectangle : un glisser qui part d'un espace vide des pistes de calques (ou avec Ctrl ou
 //!   Maj, de n'importe où dans les pistes) choisit les clés que le rectangle touche ; avec Ctrl
 //!   ou Maj, il les ajoute au choix. Échap rend le choix d'avant (`KeyRect`).
-//! - Une clé choisie prise par son milieu emmène les autres clés choisies (`KeysDrag`) : toutes
-//!   glissent du même nombre d'images, chacune prend sa place parmi les autres expositions de son
-//!   calque (`shift_runs`), toutes gardent leur durée. Comme dans Storyboard Pro, rien ne bouge
-//!   pendant le geste : un fantôme suit la souris et un repère montre avant ou après quelle clé
-//!   elles se poseront (`drop_view`, aussi pour une clé seule) ; elles se posent au lâcher. Échap
-//!   rend tout comme avant ; une étape d'annulation.
+//! - Une clé choisie prise par son milieu (ou la limite de deux expositions) emmène les autres clés
+//!   choisies (`KeysDrag`). Mêmes règles que les clés de caméra et d'effets (Anthony, 2026-10-19) :
+//!   par défaut la clé prise (la première des choisies de chaque calque) et TOUTES les clés d'après
+//!   sur son calque glissent du même nombre d'images, chacune gardant sa durée : l'exposition
+//!   d'avant s'allonge ou raccourcit (`KeyMove::Ripple`, « Décaler les clés »). Maj tenue : seules
+//!   les clés choisies bougent, la suite reste en place (`KeyMove::Single`, « Déplacer une clé »).
+//!   Alt tenue : l'ancien geste, les clés prennent leur place parmi les autres expositions
+//!   (`KeyMove::Reorder`, `shift_runs`, « Réordonner les clés »). La durée du plan ne change
+//!   jamais : un calque tenu jusqu'à la fin du plan le reste (sa dernière exposition absorbe le
+//!   décalage), sinon le contenu s'arrête à la fin du plan. Comme dans Storyboard Pro, rien ne
+//!   bouge pendant le geste : des fantômes suivent la souris et un repère montre où se pose la clé
+//!   (`drop_view`, aussi pour une clé seule) ; elles se posent au lâcher. Échap rend tout comme
+//!   avant ; une étape d'annulation. Refusé sous le verrou du storyboard.
 //! - Copier, coller, supprimer (la voisine remplace, ou un vide) et dupliquer sur place visent
-//!   les clés choisies, sinon la clé à l'image courante du calque courant. Collées, les clés
-//!   gardent leurs écarts et leurs durées à partir de l'image courante : venues d'un seul calque,
-//!   sur le calque courant ; de plusieurs, chacune sur le calque de même nom du plan courant
-//!   (créé s'il manque, à la même place dans la pile).
+//!   les clés choisies, sinon la clé à l'image courante du calque courant. Ctrl+V INSÈRE les clés
+//!   copiées après la clé sur laquelle est la tête de lecture du calque courant (sinon la dernière
+//!   d'avant elle) : le bloc garde les écarts et les durées, et le contenu d'après est repoussé de
+//!   la longueur du bloc (« Insérer des clés ») ; le plan ne s'allonge pas (la dernière exposition
+//!   absorbe) et rien n'est collé si une clé entière sortirait du plan. Maj+Ctrl+V colle « à la
+//!   tête de lecture » (`edition.coller_a_la_tete`) : le bloc commence exactement sur la tête, par-
+//!   dessus ce qui y était, sans rien repousser (« Coller les clés à la tête de lecture »). Venues
+//!   d'un seul calque, les clés vont sur le calque courant ; de plusieurs, chacune sur le calque de
+//!   même nom du plan courant (créé s'il manque, à la même place dans la pile).
 //! - Clé précédente / suivante (A / F) : la tête de lecture va au début de dessin
 //!   d'avant ou d'après, tous les calques compris (`goto_key`).
 
 use crate::app::App;
 use crate::document::{Cel, CelId, Layer, LayerKind};
-use crate::handles::{drop_marks, duplicate_run, overwrite_run, remove_run, runs, shift_runs, Handle};
+use crate::handles::{apply_key_move, clamp_key_delta, duplicate_run, key_preview, overwrite_run, remove_run, runs, Handle, KeyMove};
 use crate::montagerows::{layer_in_row, layer_on_track, track_of, TrackKey};
 
 /// Une clé : plan (id), calque (id), image où commence son exposition.
@@ -57,6 +69,8 @@ pub(crate) struct KeysDrag {
     layers: Vec<DragLayer>,
     grab: usize,
     delta: isize,
+    /// Le geste en cours (touches tenues à la dernière image d'écran).
+    mode: KeyMove,
     snap: crate::history::Edit,
 }
 
@@ -86,6 +100,16 @@ pub(crate) struct DropCell {
     pub layer: u64,
     pub ghosts: Vec<(isize, isize)>,
     pub marks: Vec<usize>,
+}
+
+/// Le nom de l'étape d'annulation d'un glissement de clés de dessins.
+pub(crate) fn key_move_name(mode: KeyMove, several: bool) -> &'static str {
+    match (mode, several) {
+        (KeyMove::Ripple, _) => "Décaler les clés",
+        (KeyMove::Single, false) => "Déplacer une clé",
+        (KeyMove::Single, true) => "Déplacer des clés",
+        (KeyMove::Reorder, _) => "Réordonner les clés",
+    }
 }
 
 /// Les clés `chosen` après un clic sur `key` (rien : à côté des dessins). `toggle` (Ctrl) :
@@ -173,6 +197,48 @@ pub(crate) fn key_starts(layers: &[Layer], limit: usize) -> Vec<usize> {
     out.sort_unstable();
     out.dedup();
     out
+}
+
+/// Où s'insèrent des clés collées sur `layer` (Ctrl+V) : la fin de l'exposition sur laquelle est
+/// la tête de lecture (`playhead`) ; sans dessin sous elle, la fin du dernier dessin d'avant ; sans
+/// dessin avant, la tête elle-même. Toujours une limite entre deux expositions.
+pub(crate) fn insert_point(layer: &Layer, playhead: usize) -> usize {
+    if layer.frames.get(playhead).copied().flatten().is_some() {
+        return layer.run_bounds(playhead).1;
+    }
+    let upto = playhead.min(layer.frames.len());
+    match layer.frames[..upto].iter().rposition(Option::is_some) {
+        Some(last) => layer.run_bounds(last).1,
+        None => playhead,
+    }
+}
+
+/// De combien d'images il manque de place pour ouvrir `n` images à l'image `at` de `layer` sans
+/// qu'une clé d'après sorte du plan (`plan_len`) : la dernière exposition peut perdre sa queue,
+/// mais son début doit rester dans le plan. 0 : ça tient.
+pub(crate) fn gap_short(layer: &Layer, at: usize, n: usize, plan_len: usize) -> usize {
+    let len = layer.frames.len();
+    if at >= len {
+        return 0;
+    }
+    let last_start = layer.run_bounds(len - 1).0;
+    if last_start < at {
+        return 0;
+    }
+    (last_start + n).saturating_sub(plan_len.saturating_sub(1))
+}
+
+/// Ouvre `n` images vides à l'image `at` : tout ce qui suit (dessins, rôles, clés d'effets) est
+/// repoussé de `n`. Le plan ne s'allonge pas : ce qui dépasse sa fin est coupé (la queue de la
+/// dernière exposition ; `gap_short` a vérifié qu'aucun début de clé n'est perdu).
+pub(crate) fn open_gap(layer: &mut Layer, at: usize, n: usize, plan_len: usize) {
+    if at >= layer.frames.len() || n == 0 {
+        return;
+    }
+    layer.insert(at, None, n);
+    layer.frames.truncate(plan_len);
+    layer.roles.retain(|f, _| *f < plan_len);
+    layer.trim();
 }
 
 /// Parmi les clés `keys` (dans l'ordre), la première après `at`, ou la dernière avant.
@@ -266,7 +332,10 @@ impl App {
         self.key_sel = sel;
         self.key_anchor = anchor;
         if self.key_sel.len() > 1 {
-            self.status = format!("{} clés choisies : Ctrl+C, Ctrl+V, Suppr, Ctrl+D (dupliquer) ; clic droit pour le reste.", self.key_sel.len());
+            self.status = format!(
+                "{} clés choisies : glisser pour décaler (Maj : seules celles-ci), Ctrl+C, Ctrl+V (insérer), Maj+Ctrl+V (sur la tête), Suppr, Ctrl+D (dupliquer) ; clic droit pour le reste.",
+                self.key_sel.len()
+            );
         }
     }
 
@@ -293,23 +362,51 @@ impl App {
         self.end_stroke();
         self.playing = false;
         let snap = self.snapshot();
-        self.keys_drag = Some(KeysDrag { layers, grab, delta: 0, snap });
+        self.keys_drag = Some(KeysDrag { layers, grab, delta: 0, mode: self.key_move_now(), snap });
         true
     }
 
+    /// Le geste que les touches tenues demandent : Alt, l'ancien (réordonner) ; Maj, la clé seule ;
+    /// sinon les clés d'après suivent.
+    pub(crate) fn key_move_now(&self) -> KeyMove {
+        self.ctx.input(|i| {
+            if i.modifiers.alt {
+                KeyMove::Reorder
+            } else if i.modifiers.shift {
+                KeyMove::Single
+            } else {
+                KeyMove::Ripple
+            }
+        })
+    }
+
     /// Les clés prises suivent la souris, à l'image `at` du montage : rien ne bouge encore, le
-    /// montage montre fantômes et repères (`drop_view`).
+    /// montage montre fantômes et repères (`drop_view`). Les touches Maj et Alt se lisent à
+    /// chaque image d'écran : on peut les presser ou les lâcher en cours de geste.
     pub(crate) fn drag_keys(&mut self, at: usize) {
+        let mode = self.key_move_now();
+        self.drag_keys_mode(at, mode);
+    }
+
+    pub(crate) fn drag_keys_mode(&mut self, at: usize, mode: KeyMove) {
         let Some(d) = self.keys_drag.as_mut() else { return };
-        let delta = at as isize - d.grab as isize;
-        if delta == d.delta {
+        let want = at as isize - d.grab as isize;
+        // Un seul décalage pour tous les calques : le plus serré décide.
+        let delta = d.layers.iter().fold(want, |acc, l| clamp_key_delta(&l.before, &l.starts, acc, mode, l.plan_len));
+        if delta == d.delta && mode == d.mode {
             return;
         }
         d.delta = delta;
-        let (n, marks) = (d.layers.iter().map(|l| l.starts.len()).sum::<usize>(), d.layers.iter().map(|l| drop_marks(&l.before, &l.starts, delta).len()).sum::<usize>());
-        self.status = match marks {
-            0 => format!("Lâcher ici : les {n} clés restent à leur place."),
-            _ => format!("Lâcher : les {n} clés se posent aux repères, leur durée gardée."),
+        d.mode = mode;
+        let n = d.layers.iter().map(|l| l.starts.len()).sum::<usize>();
+        let marks = d.layers.iter().map(|l| key_preview(&l.before, &l.starts, delta, mode, l.plan_len).1.len()).sum::<usize>();
+        let who = if n > 1 { format!("les {n} clés") } else { "la clé".to_string() };
+        let img = format!("{delta:+} image{}", if delta.abs() > 1 { "s" } else { "" });
+        self.status = match (mode, marks) {
+            (_, 0) => "Lâcher ici : rien ne bouge.".to_string(),
+            (KeyMove::Ripple, _) => format!("Lâcher : {img} pour {who} et tout ce qui suit sur sa piste (Maj : seule, Alt : réordonner)."),
+            (KeyMove::Single, _) => format!("Lâcher : {img} pour {who} seule{} (Maj tenue), la suite reste en place.", if n > 1 { "s" } else { "" }),
+            (KeyMove::Reorder, _) => format!("Lâcher : {who} se pose aux repères, durée gardée (Alt tenue)."),
         };
     }
 
@@ -319,9 +416,10 @@ impl App {
         let Some(d) = self.keys_drag.take() else { return };
         let mut sel = Vec::new();
         let mut changed = false;
+        let several = d.layers.iter().map(|l| l.starts.len()).sum::<usize>() > 1;
         for dl in d.layers {
             let mut l = dl.before.clone();
-            let new = shift_runs(&mut l, &dl.starts, d.delta);
+            let new = apply_key_move(&mut l, &dl.starts, d.delta, d.mode, dl.plan_len);
             changed |= l.frames != dl.before.frames;
             if let Some(pi) = self.doc.panels.iter().position(|p| p.id == dl.panel) {
                 if let Some(li) = self.doc.panels[pi].layers.iter().position(|x| x.id == dl.layer) {
@@ -337,9 +435,7 @@ impl App {
         }
         self.key_sel = sel;
         if changed {
-            self.history.push(d.snap);
-            self.modified = true;
-            self.renderer.invalidate_all();
+            self.commit_as(d.snap, key_move_name(d.mode, several));
         }
     }
 
@@ -354,19 +450,17 @@ impl App {
             return d
                 .layers
                 .iter()
-                .map(|l| DropCell {
-                    panel: l.panel,
-                    layer: l.layer,
-                    ghosts: l.starts.iter().map(|&s| (s as isize + d.delta, l.before.run_bounds(s).1 as isize + d.delta)).collect(),
-                    marks: drop_marks(&l.before, &l.starts, d.delta),
+                .map(|l| {
+                    let (ghosts, marks) = key_preview(&l.before, &l.starts, d.delta, d.mode, l.plan_len);
+                    DropCell { panel: l.panel, layer: l.layer, ghosts, marks }
                 })
                 .collect();
         }
-        if let Some(Handle::Key { layer, start, end, .. }) = self.handle_drag.as_ref().map(|h| h.handle) {
+        if let Some(Handle::Key { layer, start, .. }) = self.handle_drag.as_ref().map(|h| h.handle) {
             let p = &self.doc.panels[self.cur_panel];
             if let Some(l) = p.layers.get(layer) {
-                let delta = self.key_drag_delta;
-                return vec![DropCell { panel: p.id, layer: l.id, ghosts: vec![(start as isize + delta, end as isize + delta)], marks: drop_marks(l, &[start], delta) }];
+                let (ghosts, marks) = key_preview(l, &[start], self.key_drag_delta, self.key_drag_mode, p.frame_count());
+                return vec![DropCell { panel: p.id, layer: l.id, ghosts, marks }];
             }
         }
         Vec::new()
@@ -477,19 +571,37 @@ impl App {
         self.cam_clip_recent = false;
         // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau Pelure (`pasteimage`).
         self.ctx.copy_text(format!("{}clés copiées", crate::pasteimage::MARK));
-        self.status = format!("{n} clé{} copiée{} : Ctrl+V pour coller à l'image courante d'un calque.", s(n), s(n));
+        self.status = format!("{n} clé{} copiée{} : Ctrl+V pour les insérer après la clé de la tête de lecture, Maj+Ctrl+V pour les coller sur la tête.", s(n), s(n));
     }
 
-    /// Colle les clés copiées à partir de l'image courante, chacune avec son écart et sa durée
-    /// (sans dépasser la fin du plan), à la place de ce qui y était ; de nouveaux dessins, copies
-    /// des siens. Venues d'un seul calque : sur le calque courant. De plusieurs : chacune sur le
-    /// calque de même nom du plan courant, créé s'il manque. Les clés collées deviennent le choix.
+    /// Ctrl+V : insère les clés copiées après la clé sur laquelle est la tête de lecture, sur le
+    /// calque courant (`insert_point`), chacune avec son écart et sa durée ; tout ce qui suit sur
+    /// les calques touchés est repoussé de la longueur du bloc (`open_gap`).
     pub(crate) fn paste_keys(&mut self) {
+        self.paste_keys_with(true);
+    }
+
+    /// Maj+Ctrl+V (`edition.coller_a_la_tete`) : colle les clés copiées exactement à partir de la
+    /// tête de lecture, à la place de ce qui y était, sans rien repousser.
+    pub(crate) fn paste_keys_at_head(&mut self) {
+        self.paste_keys_with(false);
+    }
+
+    /// Colle les clés copiées, chacune avec son écart et sa durée (sans dépasser la fin du plan) ;
+    /// de nouveaux dessins, copies des siens. Venues d'un seul calque : sur le calque courant. De
+    /// plusieurs : chacune sur le calque de même nom du plan courant, créé s'il manque. Les clés
+    /// collées deviennent le choix. `insert` : après la clé de la tête de lecture, en repoussant la
+    /// suite ; sinon à la tête de lecture, à la place de ce qui y était.
+    fn paste_keys_with(&mut self, insert: bool) {
         if self.key_clipboard.is_none() || self.refuse_on_folder() {
             return;
         }
         let plan = self.frame_count();
-        let f0 = self.cur_frame.min(plan.saturating_sub(1));
+        let f0 = if insert {
+            self.layers().get(self.cur_layer).map_or(self.cur_frame, |l| insert_point(l, self.cur_frame))
+        } else {
+            self.cur_frame.min(plan.saturating_sub(1))
+        };
         let (pi, cur) = (self.cur_panel, self.cur_layer);
         // (image, durée, dessin, sorte, piste, rang) des clés qui tiennent dans le plan.
         let wanted: Vec<(usize, usize, Cel, LayerKind, TrackKey, usize)> = self
@@ -515,6 +627,21 @@ impl App {
             self.status = "Rien à coller ici : l'image courante est trop près de la fin du plan.".into();
             return;
         }
+        // Longueur du bloc (de sa première image à la fin de sa dernière clé) et place pour le
+        // repousser : le plan ne s'allonge pas, aucune clé d'après ne doit en sortir.
+        let block = wanted.iter().map(|w| w.0 + w.1 - f0).max().unwrap_or(0);
+        if insert {
+            let layers = &self.doc.panels[pi].layers;
+            let existing: Vec<usize> = if several { tracks.iter().filter_map(|t| layer_on_track(layers, t)).collect() } else { vec![cur] };
+            let short = existing.iter().filter_map(|&li| layers.get(li)).map(|l| gap_short(l, f0, block, plan)).max().unwrap_or(0);
+            if short > 0 {
+                self.status = format!(
+                    "Rien collé : les clés d'après sortiraient du plan ({short} image{} de trop). Maj+Ctrl+V colle sur la tête de lecture sans rien repousser.",
+                    s(short)
+                );
+                return;
+            }
+        }
         self.end_stroke();
         let snap = self.snapshot();
         // Plusieurs calques : ceux qui manquent sont créés (`ensure_tracks`).
@@ -527,6 +654,7 @@ impl App {
         let panel = self.doc.panels[pi].id;
         let mut pasted = Vec::new();
         let mut layers_used: Vec<u64> = Vec::new();
+        let mut opened: Vec<u64> = Vec::new();
         let cur_kind = self.doc.panels[pi].layers.get(cur).map(|l| l.kind);
         let cur_id = self.doc.panels[pi].layers.get(cur).map(|l| l.id);
         for (f, n, cel, kind, track, _) in wanted {
@@ -542,6 +670,11 @@ impl App {
             }
             let id = self.doc.add_cel(cel);
             let l = &mut self.doc.panels[pi].layers[li];
+            // Insertion : la place du bloc s'ouvre une fois par calque, avant sa première clé.
+            if insert && !opened.contains(&l.id) {
+                open_gap(l, f0, block, plan);
+                opened.push(l.id);
+            }
             overwrite_run(l, f, n, id);
             if !layers_used.contains(&l.id) {
                 layers_used.push(l.id);
@@ -559,9 +692,13 @@ impl App {
         }
         self.key_sel = pasted;
         self.vsel = None;
-        self.commit_structure(snap);
+        // Le plan garde sa durée : la queue de la dernière exposition a pu être coupée.
+        if self.doc.panels[pi].frame_count() < plan {
+            self.doc.panels[pi].length = plan;
+        }
+        self.commit_as(snap, if insert { "Insérer des clés" } else { "Coller les clés à la tête de lecture" });
         let skipped = total - n;
-        let mut msg = format!("{n} clé{} collée{} sur {m} calque{}", s(n), s(n), s(m));
+        let mut msg = format!("{n} clé{} {} sur {m} calque{}", s(n), if insert { format!("insérée{}", s(n)) } else { format!("collée{}", s(n)) }, s(m));
         if created > 0 {
             msg += &format!(" ({created} créé{})", s(created));
         }

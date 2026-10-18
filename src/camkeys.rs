@@ -6,22 +6,42 @@
 //! - un clic choisit le losange jaune (Ctrl : l'ajoute ou le retire ; Maj : toutes les clés
 //!   d'entre le dernier cliqué et lui, d'un plan à l'autre dans le montage) et place la tête de
 //!   lecture dessus ; les clés choisies sont cerclées du contour du thème ;
-//! - glisser un losange emmène toutes les clés choisies du même nombre d'images (une étape
-//!   d'annulation par geste, Échap l'abandonne). Comme avant, une clé ne passe pas par-dessus une
-//!   clé qui n'est pas choisie (ni avant l'image 0, ni après la fin de son plan) ;
-//! - Ctrl+C copie les clés choisies, Ctrl+V les colle à la tête de lecture en gardant leurs écarts :
-//!   dans le montage, elles peuvent passer d'un plan à l'autre (une clé de caméra est comptée
-//!   dans son plan, ses valeurs sont celles de la feuille) ; en animation, dans le plan courant
-//!   seulement. Une clé qui tomberait après la fin du dernier plan (ou du plan courant) est
-//!   laissée de côté, et dite. Suppr supprime les clés choisies, et rien sans clé choisie ;
+//! - au rectangle (Anthony, 2026-10-19 : « sélectionner les clés de caméra par une sélection par
+//!   zone ») : un glisser qui part d'un espace vide de la piste Caméra trace un rectangle et
+//!   choisit les clés qu'il touche ; Maj les ajoute au choix, Ctrl bascule celles qu'il touche,
+//!   Échap rend le choix d'avant ; un clic dans le vide lâche le choix (`CamRect`, `pick_in_rect`,
+//!   `rect_choice`) ;
+//! - glisser un losange (Anthony, 2026-10-19 : « quand je tire une image clé, les autres clés
+//!   suivent ; avec Maj, seule l'image clé se déplace ») : par défaut, la clé prise (ou la
+//!   première des clés choisies) et TOUTES les clés d'après, dans son plan, glissent du même
+//!   nombre d'images (« Décaler les clés de caméra ») ; les clés d'avant ne bougent pas, et la
+//!   première ne passe pas par-dessus la clé d'avant (`clamp_ripple`). Maj tenue (même en cours
+//!   de geste) : seules les clés choisies bougent, sans passer par-dessus une clé qui n'est pas
+//!   choisie (`clamp_delta`, « Déplacer une clé de caméra »). Dans les deux cas, ni avant
+//!   l'image 0 ni après la fin du plan ; une étape d'annulation par geste, Échap l'abandonne. Un
+//!   Maj + clic sans mouvement reste le choix d'une plage : c'est egui qui sépare le clic du
+//!   glisser (seuil d'environ 6 points) ;
+//! - Ctrl+C copie les clés choisies. Ctrl+V les INSÈRE juste après la clé sur laquelle est la tête
+//!   de lecture (sinon la dernière clé d'avant elle ; sans clé avant, à la tête de lecture), en
+//!   gardant leurs écarts : la première clé collée est à l'image d'après cette clé, et toutes les
+//!   clés d'après sont repoussées de la longueur du bloc (écart de la dernière clé collée + 1),
+//!   donc rien n'est écrasé (`paste_insert`, « Insérer des clés de caméra »). Maj+Ctrl+V colle
+//!   « à la tête de lecture » (`edition.coller_a_la_tete`) : la première clé tombe exactement
+//!   sur la tête, sans rien repousser, et remplace les clés qu'elle rencontre (`paste`, « Coller
+//!   les clés de caméra à la tête de lecture »). Dans le montage, le bloc peut passer d'un plan à
+//!   l'autre (une clé de caméra est comptée dans son plan, ses valeurs sont celles de la feuille) ;
+//!   en animation, dans le plan courant seulement. Une clé qui tomberait après la fin du dernier
+//!   plan (ou du plan courant) est laissée de côté, et dite ; si l'insertion repoussait une clé
+//!   hors de son plan, rien n'est collé (le plan ne s'allonge pas). Suppr supprime les clés
+//!   choisies, et rien sans clé choisie ;
 //! - le clic droit (piste Caméra) a les mêmes commandes ; chaque modification est une étape
 //!   d'annulation nommée.
 //!
-//! La logique est ici en fonctions pures (`choose`, `clamp_delta`, `shift`, `copy`, `paste`,
-//! `delete`), testées dans `camkeys_tests.rs` ; `impl App` ne fait que la brancher sur la souris,
+//! La logique est ici en fonctions pures (`choose`, `clamp_delta`, `clamp_ripple`, `shift`, `copy`,
+//! `paste`, `paste_insert`, `delete`), testées dans `camkeys_tests.rs` ; `impl App` ne fait que la brancher sur la souris,
 //! le clavier et l'historique.
 
-use eframe::egui::{self, Color32, Pos2, Stroke};
+use eframe::egui::{self, Color32, Pos2, Rect, Stroke};
 
 use crate::app::{App, Mode};
 use crate::camera::{self, CameraKey};
@@ -127,6 +147,50 @@ pub(crate) fn choose(chosen: &[CamKeyRef], anchor: Option<CamKeyRef>, clicked: C
     (vec![clicked], Some(clicked))
 }
 
+// ---------------------------------------------------------------------- choix au rectangle
+
+/// Un choix au rectangle en cours : son coin de départ (à l'écran), le choix d'avant (que Échap
+/// rend), et la touche tenue au départ : Maj ajoute au choix, Ctrl bascule les clés touchées.
+pub(crate) struct CamRect {
+    pub origin: Pos2,
+    pub before: Vec<CamKeyRef>,
+    pub before_anchor: Option<CamKeyRef>,
+    pub add: bool,
+    pub toggle: bool,
+}
+
+/// Les clés dont le losange (centre donné, `half` de demi-diagonale) touche `rect`.
+pub(crate) fn pick_in_rect(diamonds: &[(CamKeyRef, Pos2)], rect: Rect, half: f32) -> Vec<CamKeyRef> {
+    diamonds.iter().filter(|(_, c)| Rect::from_center_size(*c, egui::vec2(2.0 * half, 2.0 * half)).intersects(rect)).map(|(k, _)| *k).collect()
+}
+
+/// Le choix une fois le rectangle tendu sur `picked` : sans touche, ces clés seules ; `add` (Maj) :
+/// elles s'ajoutent au choix d'avant ; `toggle` (Ctrl) : celles du choix d'avant qu'il touche sont
+/// retirées, les autres ajoutées.
+pub(crate) fn rect_choice(before: &[CamKeyRef], picked: &[CamKeyRef], add: bool, toggle: bool) -> Vec<CamKeyRef> {
+    if toggle {
+        let mut out: Vec<CamKeyRef> = before.iter().copied().filter(|k| !picked.contains(k)).collect();
+        out.extend(picked.iter().copied().filter(|k| !before.contains(k)));
+        return out;
+    }
+    let mut out = if add { before.to_vec() } else { Vec::new() };
+    for k in picked {
+        if !out.contains(k) {
+            out.push(*k);
+        }
+    }
+    out
+}
+
+/// Demi-diagonale d'un losange de clé de caméra à l'écran, en points.
+pub(crate) const DIAMOND_HALF: f32 = 4.0;
+
+/// Le rectangle de choix tel qu'on le voit : un voile du contour du thème, cerclé.
+pub(crate) fn paint_marquee(painter: &egui::Painter, rect: Rect) {
+    let accent = crate::theme::contour();
+    painter.rect(rect, 2.0, accent.gamma_multiply(0.15), Stroke::new(1.5_f32, accent), egui::StrokeKind::Inside);
+}
+
 // ---------------------------------------------------------------------- déplacer
 
 /// Les clés d'un plan prises ensemble : ses images choisies, toutes ses images clés, sa durée.
@@ -155,6 +219,23 @@ pub(crate) fn clamp_delta(groups: &[Group], want: isize) -> isize {
         return 0;
     }
     want.clamp(lo, hi)
+}
+
+/// Les images qui suivent le geste « décaler » : la première image choisie et toutes les images
+/// clés d'après (choisies ou non), dans l'ordre.
+pub(crate) fn ripple_frames(all: &[usize], chosen: &[usize]) -> Vec<usize> {
+    let Some(first) = chosen.iter().copied().min() else { return Vec::new() };
+    let mut out: Vec<usize> = all.iter().copied().filter(|f| *f >= first).collect();
+    out.sort_unstable();
+    out
+}
+
+/// Comme `clamp_delta`, pour le geste « décaler » : toutes les clés d'après la première choisie
+/// glissent ensemble, donc la première s'arrête avant la clé d'avant (qui ne bouge pas) et la
+/// dernière du plan à son avant-dernière image.
+pub(crate) fn clamp_ripple(groups: &[Group], want: isize) -> isize {
+    let moved: Vec<Group> = groups.iter().map(|g| Group { chosen: ripple_frames(&g.all, &g.chosen), all: g.all.clone(), len: g.len }).collect();
+    clamp_delta(&moved, want)
 }
 
 /// Les clés de `keys` aux images `frames` déplacées de `delta` images (le décalage doit être
@@ -192,18 +273,34 @@ pub(crate) fn copy(doc: &Document, sel: &[CamKeyRef]) -> Option<CamClip> {
 /// clé qui en reçoit après son début garde d'abord sa caméra de continuité en place (comme une clé
 /// posée à la main).
 pub(crate) fn paste(doc: &mut Document, clip: &CamClip, at: usize, only: Option<usize>) -> Pasted {
-    let starts: Vec<(usize, usize)> = {
-        let mut s = 0;
-        doc.panels
-            .iter()
-            .map(|p| {
-                let r = (s, p.frame_count());
-                s += r.1;
-                r
-            })
-            .collect()
-    };
-    let mut targets: Vec<(usize, usize, CameraKey)> = Vec::new();
+    let starts = plan_ranges(doc);
+    let (targets, skipped) = resolve_targets(&starts, clip, at, only);
+    add_homes(doc, &targets);
+    let mut placed = Vec::new();
+    for (pi, frame, key) in targets {
+        camera::put_key(&mut doc.panels[pi].camera, CameraKey { frame, ..key });
+        placed.push(CamKeyRef { panel: doc.panels[pi].id, frame });
+    }
+    Pasted { placed, skipped }
+}
+
+/// (début dans le montage, durée) de chaque plan.
+fn plan_ranges(doc: &Document) -> Vec<(usize, usize)> {
+    let mut s = 0;
+    doc.panels
+        .iter()
+        .map(|p| {
+            let r = (s, p.frame_count());
+            s += r.1;
+            r
+        })
+        .collect()
+}
+
+/// Où va chaque clé de `clip` collée à l'image `at` du montage : (plan, image du plan, clé), et
+/// combien sont laissées de côté (après la fin du dernier plan, ou hors du plan `only`).
+fn resolve_targets(starts: &[(usize, usize)], clip: &CamClip, at: usize, only: Option<usize>) -> (Vec<(usize, usize, CameraKey)>, usize) {
+    let mut targets = Vec::new();
     let mut skipped = 0;
     for ck in &clip.keys {
         let g = at + ck.offset;
@@ -212,9 +309,14 @@ pub(crate) fn paste(doc: &mut Document, clip: &CamClip, at: usize, only: Option<
             _ => skipped += 1,
         }
     }
-    // Les caméras de continuité, avant d'écrire quoi que ce soit.
+    (targets, skipped)
+}
+
+/// Les caméras de continuité, avant d'écrire quoi que ce soit : un plan sans clé qui en reçoit
+/// après son début garde d'abord sa caméra d'alors, en clé à l'image 0.
+fn add_homes(doc: &mut Document, targets: &[(usize, usize, CameraKey)]) {
     let mut firsts: std::collections::BTreeMap<usize, usize> = std::collections::BTreeMap::new();
-    for t in &targets {
+    for t in targets {
         firsts.entry(t.0).and_modify(|f| *f = (*f).min(t.1)).or_insert(t.1);
     }
     let homes: Vec<(usize, camera::Camera)> =
@@ -222,12 +324,80 @@ pub(crate) fn paste(doc: &mut Document, clip: &CamClip, at: usize, only: Option<
     for (pi, cam) in homes {
         doc.panels[pi].camera.push(CameraKey::new(0, cam));
     }
+}
+
+/// L'image de la clé sur laquelle est la tête de lecture (`playhead`, image du plan), sinon la
+/// dernière clé d'avant elle ; rien s'il n'y en a pas.
+pub(crate) fn anchor_frame(keys: &[CameraKey], playhead: usize) -> Option<usize> {
+    keys.iter().map(|k| k.frame).filter(|f| *f <= playhead).max()
+}
+
+/// Ce que donne un collage par insertion.
+#[derive(Debug, PartialEq)]
+pub(crate) struct Inserted {
+    pub pasted: Pasted,
+    /// Clés d'après repoussées.
+    pub pushed: usize,
+}
+
+/// Une insertion qui repousserait des clés hors de leur plan : rien n'est fait. `short` : de
+/// combien d'images il manque de place, au plus juste.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct NoRoom {
+    pub short: usize,
+}
+
+/// Insère `clip` après la clé qui a la tête de lecture (`playhead`, image du montage) : la
+/// première clé collée va à l'image d'après cette clé (la dernière clé d'avant la tête si aucune
+/// n'est dessus, la tête elle-même s'il n'y en a pas avant, dans le plan de la tête), les autres
+/// gardent leurs écarts. Dans chaque plan qui reçoit des clés, toutes les clés à partir de la
+/// première collée sont repoussées de la longueur de ce qu'il reçoit (de sa première à sa dernière
+/// clé collée, comprises) : rien n'est écrasé. Même règles de plans que `paste` (`only`, clés laissées
+/// de côté, caméra de continuité). Si une clé d'après sortait de son plan, rien n'est fait.
+pub(crate) fn paste_insert(doc: &mut Document, clip: &CamClip, playhead: usize, only: Option<usize>) -> Result<Inserted, NoRoom> {
+    let empty = || Ok(Inserted { pasted: Pasted { placed: Vec::new(), skipped: clip.keys.len() }, pushed: 0 });
+    let starts = plan_ranges(doc);
+    let Some(head) = starts.iter().position(|&(s, len)| playhead >= s && playhead < s + len) else { return empty() };
+    let local = playhead - starts[head].0;
+    let at_local = match anchor_frame(&doc.panels[head].camera, local) {
+        Some(a) => a + 1,
+        None => local,
+    };
+    if at_local >= starts[head].1 {
+        return empty();
+    }
+    let (targets, skipped) = resolve_targets(&starts, clip, starts[head].0 + at_local, only);
+    // Par plan : première et dernière images collées.
+    let mut spans: std::collections::BTreeMap<usize, (usize, usize)> = std::collections::BTreeMap::new();
+    for t in &targets {
+        spans.entry(t.0).and_modify(|s| *s = (s.0.min(t.1), s.1.max(t.1))).or_insert((t.1, t.1));
+    }
+    // Y a-t-il la place ? La dernière clé repoussée doit rester dans son plan.
+    let mut short = 0;
+    for (&pi, &(first, last)) in &spans {
+        let room = last - first + 1;
+        if let Some(max) = doc.panels[pi].camera.iter().map(|k| k.frame).filter(|f| *f >= first).max() {
+            short = short.max((max + room).saturating_sub(starts[pi].1 - 1));
+        }
+    }
+    if short > 0 {
+        return Err(NoRoom { short });
+    }
+    add_homes(doc, &targets);
+    let mut pushed = 0;
+    for (&pi, &(first, last)) in &spans {
+        let room = last - first + 1;
+        for k in doc.panels[pi].camera.iter_mut().filter(|k| k.frame >= first) {
+            k.frame += room;
+            pushed += 1;
+        }
+    }
     let mut placed = Vec::new();
     for (pi, frame, key) in targets {
         camera::put_key(&mut doc.panels[pi].camera, CameraKey { frame, ..key });
         placed.push(CamKeyRef { panel: doc.panels[pi].id, frame });
     }
-    Pasted { placed, skipped }
+    Ok(Inserted { pasted: Pasted { placed, skipped }, pushed })
 }
 
 /// Supprime les clés choisies. Renvoie combien étaient là.
@@ -253,6 +423,8 @@ pub(crate) struct CamKeysDrag {
     panels: Vec<DragPanel>,
     grab: usize,
     delta: isize,
+    /// Les clés d'après suivent (par défaut) ; faux : Maj tenue, seules les clés choisies bougent.
+    ripple: bool,
     snap: Edit,
 }
 
@@ -351,7 +523,7 @@ impl App {
             "Plus aucune clé de caméra choisie.".into()
         } else {
             format!(
-                "{n} clé{} de caméra choisie{} (image {}) : glisser pour déplacer, Ctrl+C, Ctrl+V à l'image courante, Suppr ; clic droit pour le reste.",
+                "{n} clé{} de caméra choisie{} (image {}) : glisser pour décaler (Maj : cette clé seule), Ctrl+C, Ctrl+V insère après la clé (Maj+Ctrl+V : sur la tête), Suppr ; clic droit pour le reste.",
                 s(n),
                 s(n),
                 self.frame_label(frame)
@@ -381,6 +553,62 @@ impl App {
         self.give_cam_keys_focus();
     }
 
+    // ------------------------------------------------------------------ choix au rectangle
+
+    /// Les losanges de clés de caméra du montage à l'écran : `blocks` les plans, `ppf` la largeur
+    /// d'une image, `y` le milieu de la piste Caméra.
+    pub(crate) fn montage_cam_diamonds(&self, blocks: &[Rect], ppf: f32, y: f32) -> Vec<(CamKeyRef, Pos2)> {
+        let mut out = Vec::new();
+        for (p, b) in self.doc.panels.iter().zip(blocks) {
+            let x0 = b.left() - 1.0;
+            out.extend(p.camera.iter().map(|k| (CamKeyRef { panel: p.id, frame: k.frame }, egui::pos2(x0 + k.frame as f32 * ppf + ppf * 0.5, y))));
+        }
+        out
+    }
+
+    /// Commence un choix au rectangle depuis `origin`, un espace vide de la piste Caméra. Maj
+    /// ajoute au choix d'avant, Ctrl bascule les clés touchées ; sans touche, le choix repart de zéro.
+    pub(crate) fn begin_cam_rect(&mut self, origin: Pos2, add: bool, toggle: bool) {
+        self.end_stroke();
+        self.playing = false;
+        self.cam_rect = Some(CamRect { origin, before: self.cam_key_sel.clone(), before_anchor: self.cam_key_anchor, add, toggle });
+    }
+
+    /// Le rectangle suit la souris : le choix devient ce qu'il touche (`picked`) avec le choix d'avant.
+    pub(crate) fn drag_cam_rect(&mut self, picked: &[CamKeyRef]) {
+        let Some((before, add, toggle)) = self.cam_rect.as_ref().map(|r| (r.before.clone(), r.add, r.toggle)) else { return };
+        let sel = rect_choice(&before, picked, add, toggle);
+        self.cam_key_anchor = sel.last().copied();
+        self.cam_key_sel = sel;
+        if !self.cam_key_sel.is_empty() {
+            self.give_cam_keys_focus();
+        }
+    }
+
+    /// Lâche le rectangle : le choix reste, et la barre d'état le dit.
+    pub(crate) fn end_cam_rect(&mut self) {
+        if self.cam_rect.take().is_none() {
+            return;
+        }
+        let n = self.cam_targets().len();
+        if n > 0 {
+            self.give_cam_keys_focus();
+        }
+        self.status = if n == 0 {
+            "Plus aucune clé de caméra choisie.".into()
+        } else {
+            format!("{n} clé{} de caméra choisie{} : glisser pour décaler (Maj : seules celles-ci), Ctrl+C, Ctrl+V insère après la clé (Maj+Ctrl+V : sur la tête), Suppr.", s(n), s(n))
+        };
+    }
+
+    /// Échap pendant le rectangle : le choix d'avant revient.
+    pub(crate) fn cancel_cam_rect(&mut self) {
+        if let Some(r) = self.cam_rect.take() {
+            self.cam_key_sel = r.before;
+            self.cam_key_anchor = r.before_anchor;
+        }
+    }
+
     // ------------------------------------------------------------------ déplacer
 
     /// Commence à glisser les clés choisies, en prenant la clé de l'image `frame` du plan de rang
@@ -407,32 +635,43 @@ impl App {
         self.end_stroke();
         self.playing = false;
         let snap = self.snapshot();
-        self.cam_keys_drag = Some(CamKeysDrag { panels, grab, delta: 0, snap });
+        self.cam_keys_drag = Some(CamKeysDrag { panels, grab, delta: 0, ripple: true, snap });
         true
     }
 
     /// Les clés prises suivent la souris, à l'image `at` du montage : chaque plan repart de ses
-    /// clés d'avant le geste.
+    /// clés d'avant le geste. Maj tenue : seules les clés choisies bougent (on peut la presser ou
+    /// la lâcher en cours de geste) ; sinon les clés d'après les suivent.
     pub(crate) fn drag_cam_keys(&mut self, at: usize) {
+        let ripple = !self.ctx.input(|i| i.modifiers.shift);
+        self.drag_cam_keys_mode(at, ripple);
+    }
+
+    pub(crate) fn drag_cam_keys_mode(&mut self, at: usize, ripple: bool) {
         let Some(mut d) = self.cam_keys_drag.take() else { return };
         let groups: Vec<Group> =
             d.panels.iter().map(|p| Group { chosen: p.chosen.clone(), all: p.before.iter().map(|k| k.frame).collect(), len: p.len }).collect();
-        let delta = clamp_delta(&groups, at as isize - d.grab as isize);
-        if delta != d.delta {
+        let want = at as isize - d.grab as isize;
+        let delta = if ripple { clamp_ripple(&groups, want) } else { clamp_delta(&groups, want) };
+        if delta != d.delta || ripple != d.ripple {
             d.delta = delta;
-            for dp in &d.panels {
+            d.ripple = ripple;
+            for (dp, g) in d.panels.iter().zip(&groups) {
                 let Some(pi) = panel_index(&self.doc, dp.panel) else { continue };
                 let mut keys = dp.before.clone();
-                shift(&mut keys, &dp.chosen, delta);
+                let moving = if ripple { ripple_frames(&g.all, &g.chosen) } else { dp.chosen.clone() };
+                shift(&mut keys, &moving, delta);
                 self.doc.panels[pi].camera = keys;
             }
             let n: usize = d.panels.iter().map(|p| p.chosen.len()).sum();
-            self.status = format!("{n} clé{} de caméra : {delta:+} image{}.", s(n), if delta.abs() > 1 { "s" } else { "" });
+            let who = if ripple { "et les clés d'après".to_string() } else { "seule, Maj tenue".to_string() };
+            self.status = format!("{n} clé{} de caméra {who} : {delta:+} image{}.", s(n), if delta.abs() > 1 { "s" } else { "" });
         }
         self.cam_keys_drag = Some(d);
     }
 
-    /// Lâche les clés : une étape d'annulation, « Déplacer des clés de caméra », si quelque chose a bougé.
+    /// Lâche les clés : une étape d'annulation, « Décaler les clés de caméra » (les clés d'après
+    /// ont suivi) ou « Déplacer une clé de caméra » (Maj tenue), si quelque chose a bougé.
     pub(crate) fn end_cam_keys_drag(&mut self) {
         let Some(d) = self.cam_keys_drag.take() else { return };
         if d.delta == 0 {
@@ -442,9 +681,17 @@ impl App {
         for dp in &d.panels {
             sel.extend(dp.chosen.iter().map(|&f| CamKeyRef { panel: dp.panel, frame: (f as isize + d.delta).max(0) as usize }));
         }
+        let several = sel.len() > 1;
         self.cam_key_anchor = sel.first().copied();
         self.cam_key_sel = sel;
-        self.commit_as(d.snap, "Déplacer des clés de caméra");
+        let name = if d.ripple {
+            "Décaler les clés de caméra"
+        } else if several {
+            "Déplacer des clés de caméra"
+        } else {
+            "Déplacer une clé de caméra"
+        };
+        self.commit_as(d.snap, name);
     }
 
     /// Échap pendant le geste : les clés reviennent comme avant, le choix reste.
@@ -471,11 +718,54 @@ impl App {
         self.fx_clip_recent = false;
         // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau SHOT (`pasteimage`).
         self.ctx.copy_text(format!("{}clés de caméra copiées", crate::pasteimage::MARK));
-        self.status = format!("{n} clé{} de caméra copiée{} : Ctrl+V pour les coller à l'image courante.", s(n), s(n));
+        self.status = format!("{n} clé{} de caméra copiée{} : Ctrl+V pour les insérer après la clé de la tête de lecture, Maj+Ctrl+V pour les coller sur la tête.", s(n), s(n));
     }
 
-    /// Colle les clés de caméra copiées à l'image courante ; elles deviennent le choix.
+    /// Ctrl+V : insère les clés de caméra copiées après la clé de la tête de lecture (voir
+    /// `paste_insert`) ; les clés d'après sont repoussées. Elles deviennent le choix.
     pub(crate) fn paste_cam_keys(&mut self) {
+        let Some(clip) = self.cam_key_clipboard.clone() else {
+            self.status = "Aucune clé de caméra copiée.".into();
+            return;
+        };
+        let (at, only) = (self.global_frame(), (self.mode == Mode::Animation).then_some(self.cur_panel));
+        self.end_stroke();
+        let snap = self.snapshot();
+        let result = match paste_insert(&mut self.doc, &clip, at, only) {
+            Ok(r) => r,
+            Err(NoRoom { short }) => {
+                self.status = format!(
+                    "Rien collé : les clés d'après sortiraient du plan ({short} image{} de trop). Maj+Ctrl+V colle sur la tête de lecture sans rien repousser.",
+                    if short > 1 { "s" } else { "" }
+                );
+                return;
+            }
+        };
+        let pushed = result.pushed;
+        let result = result.pasted;
+        if result.placed.is_empty() {
+            self.status = if only.is_some() {
+                "Rien collé : la clé de la tête de lecture est trop près de la fin du plan (en animation, les clés restent dans le plan courant).".into()
+            } else {
+                "Rien collé : la clé de la tête de lecture est trop près de la fin du plan.".into()
+            };
+            return;
+        }
+        let n = result.placed.len();
+        let note = match (result.skipped, only.is_some()) {
+            (0, _) => String::new(),
+            (k, true) => format!(" ; {k} laissée{} de côté (hors du plan courant)", s(k)),
+            (k, false) => format!(" ; {k} laissée{} de côté (après la fin du montage)", s(k)),
+        };
+        let push = if pushed > 0 { format!(", {pushed} clé{} d'après repoussée{}", s(pushed), s(pushed)) } else { String::new() };
+        self.status = format!("{n} clé{} de caméra insérée{}{push}{note}.", s(n), s(n));
+        self.choose_cam_keys(result.placed);
+        self.commit_as(snap, "Insérer des clés de caméra");
+    }
+
+    /// Maj+Ctrl+V : colle les clés de caméra copiées à la tête de lecture, la première exactement
+    /// dessus, sans rien repousser (ce qu'elles rencontrent est remplacé) ; elles deviennent le choix.
+    pub(crate) fn paste_cam_keys_at_head(&mut self) {
         let Some(clip) = self.cam_key_clipboard.clone() else {
             self.status = "Aucune clé de caméra copiée.".into();
             return;
@@ -500,7 +790,7 @@ impl App {
         };
         self.status = format!("{n} clé{} de caméra collée{}{note}.", s(n), s(n));
         self.choose_cam_keys(result.placed);
-        self.commit_as(snap, "Coller des clés de caméra");
+        self.commit_as(snap, "Coller les clés de caméra à la tête de lecture");
     }
 
     /// Supprime les clés de caméra choisies (rien sans clé choisie).
@@ -529,12 +819,20 @@ impl App {
         }
         let can_paste = self.cam_key_clipboard.is_some();
         if ui
-            .add_enabled(can_paste, egui::Button::new("Coller les clés de caméra ici").shortcut_text(key(self, "edition.coller")))
-            .on_hover_text("À l'image courante, en gardant l'écart entre les clés ; dans le montage, d'un plan à l'autre.")
+            .add_enabled(can_paste, egui::Button::new("Coller les clés de caméra").shortcut_text(key(self, "edition.coller")))
+            .on_hover_text("Insère les clés après la clé de la tête de lecture, en gardant l'écart entre elles ; les clés d'après sont repoussées. Dans le montage, d'un plan à l'autre.")
             .clicked()
         {
             ui.close_menu();
             self.paste_cam_keys();
+        }
+        if ui
+            .add_enabled(can_paste, egui::Button::new("Coller à la tête de lecture").shortcut_text(key(self, "edition.coller_a_la_tete")))
+            .on_hover_text("La première clé tombe sur la tête de lecture ; rien n'est repoussé, les clés rencontrées sont remplacées.")
+            .clicked()
+        {
+            ui.close_menu();
+            self.paste_cam_keys_at_head();
         }
         if ui.add_enabled(n > 0, egui::Button::new(what("Supprimer la clé de caméra", "Supprimer les clés de caméra")).shortcut_text(key(self, "edition.supprimer"))).clicked() {
             ui.close_menu();

@@ -12,7 +12,37 @@ use egui_phosphor::regular as ph;
 use crate::app::App;
 use crate::fx::{Effect, EffectKind, FAMILIES};
 
+/// Pourquoi le tremblement du trait est grisé sur un calque bitmap (bulle des menus).
+pub(crate) const BOIL_VECTOR_ONLY: &str =
+    "Le tremblement du trait ne va que sur un calque vectoriel : il déplace un peu les points de chaque trait, d'une variante à l'autre. Choisis un calque vectoriel, ou crée-en un (Calques > Nouveau calque vectoriel).";
+
+/// Ce qu'un menu montre d'un effet pour un calque : rien (un dossier n'a pas d'effets), l'entrée
+/// grisée avec la raison (Anthony, 2026-10-19 : « je ne trouve pas l'effet de tremblement » — il
+/// ne se cachait que sur un calque bitmap), ou l'entrée utilisable.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Offer {
+    Absent,
+    Disabled(&'static str),
+    Enabled,
+}
+
+/// L'offre de l'effet `kind` pour un calque de la sorte `layer` (`folder` : c'est un dossier).
+pub(crate) fn offer(kind: EffectKind, layer: crate::document::LayerKind, folder: bool) -> Offer {
+    if folder {
+        Offer::Absent
+    } else if kind.vector_only() && layer != crate::document::LayerKind::Vector {
+        Offer::Disabled(BOIL_VECTOR_ONLY)
+    } else {
+        Offer::Enabled
+    }
+}
+
 impl App {
+    /// Ce que les menus montrent de l'effet `kind` pour le calque `li` (`offer`).
+    pub(crate) fn fx_offer(&self, li: usize, kind: EffectKind) -> Offer {
+        self.layers().get(li).map_or(Offer::Absent, |l| offer(kind, l.kind, l.folder))
+    }
+
     /// L'effet `kind` est-il là et actif sur le calque `li` ?
     pub(crate) fn fx_on(&self, li: usize, kind: EffectKind) -> bool {
         self.layers().get(li).is_some_and(|l| l.fx.iter().any(|e| e.kind == kind && e.enabled))
@@ -21,7 +51,7 @@ impl App {
     /// L'effet `kind` peut-il aller sur le calque `li` ? (Le tremblement du trait : calques
     /// vectoriels seulement.)
     pub(crate) fn fx_allowed(&self, li: usize, kind: EffectKind) -> bool {
-        self.layers().get(li).is_some_and(|l| !l.folder && (!kind.vector_only() || l.kind == crate::document::LayerKind::Vector))
+        self.fx_offer(li, kind) == Offer::Enabled
     }
 
     /// Un geste d'édition est en cours sur le calque courant : dessin, gomme, sélection,
@@ -102,16 +132,116 @@ impl App {
     pub(crate) fn fx_menu_items(&mut self, ui: &mut egui::Ui, li: usize) {
         for family in FAMILIES {
             ui.menu_button(family, |ui| {
-                let kinds: Vec<EffectKind> = EffectKind::ALL.into_iter().filter(|k| k.family() == family && self.fx_allowed(li, *k)).collect();
+                let kinds: Vec<EffectKind> = EffectKind::ALL.into_iter().filter(|k| k.family() == family).collect();
                 for kind in kinds {
-                    let on = self.fx_on(li, kind);
-                    if ui.checkbox(&mut on.clone(), kind.label()).clicked() {
-                        self.toggle_fx(li, kind);
+                    match self.fx_offer(li, kind) {
+                        Offer::Absent => {}
+                        // Grisé avec la raison plutôt que caché : on voit qu'il existe.
+                        Offer::Disabled(why) => {
+                            ui.add_enabled(false, egui::Checkbox::new(&mut false, kind.label())).on_disabled_hover_text(why);
+                        }
+                        Offer::Enabled => {
+                            let on = self.fx_on(li, kind);
+                            if ui.checkbox(&mut on.clone(), kind.label()).clicked() {
+                                self.toggle_fx(li, kind);
+                            }
+                        }
                     }
                 }
             });
         }
+    }
 
+    /// Le sous-menu « Effets » d'un calque, puis son tremblement du trait à découvert : les menus
+    /// d'un calque (panneau Calques, montage, timeline) ont tous ces deux entrées.
+    pub(crate) fn layer_fx_items(&mut self, ui: &mut egui::Ui, li: usize) {
+        if self.layers().get(li).is_none_or(|l| l.folder) {
+            return;
+        }
+        ui.menu_button("Effets", |ui| self.fx_menu_items(ui, li));
+        self.boil_menu_items(ui, li);
+    }
+
+    /// « Tremblement du trait » et « Animer à l'arrêt » (`tremblement.rs`) dans un menu de calque.
+    /// Sur un calque bitmap, l'entrée est grisée et dit pourquoi ; sur un dossier, absente.
+    pub(crate) fn boil_menu_items(&mut self, ui: &mut egui::Ui, li: usize) {
+        let kind = EffectKind::Boil;
+        let offer = self.fx_offer(li, kind);
+        if offer == Offer::Absent {
+            return;
+        }
+        let boil = self.fx_on(li, kind);
+        let key = self.raccourci("fx.tremblement");
+        let resp = ui.add_enabled(offer == Offer::Enabled, egui::Checkbox::new(&mut boil.clone(), format!("{}  Tremblement du trait", ph::WAVE_SINE)));
+        let resp = match offer {
+            Offer::Disabled(why) => resp.on_disabled_hover_text(why),
+            _ => resp.on_hover_text(format!(
+                "Le trait « bout » comme dans WigglyPaint : le dessin est montré en quelques variantes légèrement déplacées, qui se suivent. Les dessins ne changent pas ; intensité, fréquence, variantes et vitesse se règlent dans le panneau Effets. {key}"
+            )),
+        };
+        if offer == Offer::Enabled && resp.clicked() {
+            ui.close_menu();
+            self.toggle_fx(li, kind);
+        }
+        if boil && offer == Offer::Enabled {
+            let rest = self.boil_rest_on(li);
+            if ui
+                .checkbox(&mut rest.clone(), "Animer à l'arrêt")
+                .on_hover_text("Le dessin continue de trembler quand on ne lit pas (l'écran se redessine alors à la cadence du tremblement). Éteint : l'image fixe montre la variante de l'image courante.")
+                .clicked()
+            {
+                ui.close_menu();
+                self.set_boil_rest(li, !rest);
+            }
+        }
+    }
+
+    /// Le tremblement du trait dans « Ajouter un effet » : en tête du menu, avant les familles. Déjà
+    /// sur le calque, il est choisi dans la pile (actif) au lieu d'être ajouté une deuxième fois.
+    fn add_boil_entry(&mut self, ui: &mut egui::Ui, li: usize) {
+        let kind = EffectKind::Boil;
+        let offer = self.fx_offer(li, kind);
+        if offer == Offer::Absent {
+            return;
+        }
+        let resp = ui.add_enabled(offer == Offer::Enabled, egui::Button::new(format!("{}  {}", ph::WAVE_SINE, kind.label())));
+        let resp = match offer {
+            Offer::Disabled(why) => resp.on_disabled_hover_text(why),
+            _ => resp.on_hover_text("Le trait « bout » comme dans WigglyPaint (calques vectoriels). Les dessins ne changent pas."),
+        };
+        if offer == Offer::Enabled && resp.clicked() {
+            ui.close_menu();
+            if let Some(i) = self.layers()[li].fx.iter().position(|e| e.kind == kind) {
+                if !self.layers()[li].fx[i].enabled {
+                    self.toggle_fx(li, kind);
+                }
+                self.select_fx(i);
+            } else {
+                self.record_step();
+                self.layers_mut()[li].fx.push(Effect::new(kind));
+                self.select_fx(self.layers()[li].fx.len() - 1);
+            }
+        }
+        ui.separator();
+    }
+
+    /// Le réglage « tremblement du trait » des outils de dessin vectoriels (Réglages du pinceau et
+    /// du crayon) : un interrupteur pour le calque courant, comme l'action `fx.tremblement`.
+    pub(crate) fn boil_tool_toggle(&mut self, ui: &mut egui::Ui) {
+        let li = self.cur_layer;
+        if self.fx_offer(li, EffectKind::Boil) != Offer::Enabled {
+            return;
+        }
+        let on = self.fx_on(li, EffectKind::Boil);
+        ui.horizontal(|ui| {
+            if self
+                .bouton_etat(ui, on, ph::WAVE_SINE, "Tremblement du trait", "Le trait de ce calque vectoriel « bout » comme dans WigglyPaint (variantes légèrement déplacées). Les dessins ne changent pas ; les réglages sont dans le panneau Effets.", "fx.tremblement")
+                .clicked()
+            {
+                self.run_action("fx.tremblement");
+            }
+            ui.label(RichText::new(if on { "Le trait de ce calque bout." } else { "Le trait de ce calque est fixe." }).small().weak());
+        });
     }
 
     /// Pose ou met à jour la clé de l'effet `i` du calque courant à l'image courante, avec ses
@@ -189,10 +319,12 @@ impl App {
         // (À la ligne quand le panneau est étroit.)
         ui.horizontal_wrapped(|ui| {
             ui.menu_button(format!("{}  Ajouter un effet", ph::PLUS), |ui| {
-                // Par familles, comme le menu Filtre de Photoshop.
+                // Le tremblement du trait d'abord (calques vectoriels ; grisé sur un bitmap, avec la
+                // raison), puis par familles, comme le menu Filtre de Photoshop.
+                self.add_boil_entry(ui, li);
                 for family in FAMILIES {
                     ui.menu_button(family, |ui| {
-                        let kinds: Vec<EffectKind> = EffectKind::ALL.into_iter().filter(|k| k.family() == family && self.fx_allowed(li, *k)).collect();
+                        let kinds: Vec<EffectKind> = EffectKind::ALL.into_iter().filter(|k| k.family() == family && !k.vector_only() && self.fx_allowed(li, *k)).collect();
                         for k in kinds {
                             if ui.button(k.label()).clicked() {
                                 self.record_step();

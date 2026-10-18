@@ -2,7 +2,10 @@
 //! l'écart entre les clés, d'un plan à l'autre), la suppression, l'annulation.
 
 use crate::camera::{Camera, CameraKey};
-use crate::camkeys::{between, choose, clamp_delta, copy, delete, exists, global_of, live, paste, shift, CamClip, CamKeyRef, Group, Pasted};
+use crate::camkeys::{
+    between, choose, clamp_delta, clamp_ripple, copy, delete, exists, global_of, live, paste, paste_insert, ripple_frames, shift, CamClip, CamKeyRef, Group, Inserted, NoRoom,
+    Pasted,
+};
 use crate::document::Document;
 use crate::history::{Edit, History, Nav};
 
@@ -266,3 +269,292 @@ fn every_edit_is_one_named_undo_step_that_restores_the_keys() {
     }
     assert_eq!(frames(&doc, 1), vec![0, 6]);
 }
+
+// ---------------------------------------------------------------------- décaler (Anthony, 2026-10-19)
+
+/// Applique un glissement comme le fait l'interface : le décalage est ramené dans les bornes, puis
+/// les clés bougent (`ripple` : les clés d'après suivent ; sinon Maj, les clés choisies seules).
+fn drag(doc: &mut Document, pi: usize, chosen: &[usize], want: isize, ripple: bool) -> isize {
+    let all: Vec<usize> = doc.panels[pi].camera.iter().map(|k| k.frame).collect();
+    let g = [Group { chosen: chosen.to_vec(), all: all.clone(), len: 24 }];
+    let delta = if ripple { clamp_ripple(&g, want) } else { clamp_delta(&g, want) };
+    let moving = if ripple { ripple_frames(&all, chosen) } else { chosen.to_vec() };
+    shift(&mut doc.panels[pi].camera, &moving, delta);
+    delta
+}
+
+#[test]
+fn dragging_a_key_carries_every_later_key_and_leaves_the_earlier_ones() {
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[2, 6, 12, 18]);
+    keys(&mut doc, 1, &[3]);
+    // La clé 6 glisse de 3 : elle et les clés d'après (12, 18) avancent ; la 2 reste.
+    assert_eq!(drag(&mut doc, 0, &[6], 3, true), 3);
+    assert_eq!(frames(&doc, 0), vec![2, 9, 15, 21]);
+    assert_eq!(frames(&doc, 1), vec![3], "un autre plan ne bouge pas");
+    assert_eq!(doc.panels[0].camera[1].cam.x, 6.0, "la caméra suit sa clé");
+    // Plusieurs clés choisies : la première décide, toutes celles d'après suivent, choisies ou non.
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[2, 6, 12, 18]);
+    assert_eq!(drag(&mut doc, 0, &[6, 18], -2, true), -2);
+    assert_eq!(frames(&doc, 0), vec![2, 4, 10, 16], "la 12, non choisie, suit aussi");
+    // Une clé choisie après les autres ne pousse que ce qui la suit.
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[2, 6, 12, 18]);
+    drag(&mut doc, 0, &[18], -4, true);
+    assert_eq!(frames(&doc, 0), vec![2, 6, 12, 14]);
+}
+
+#[test]
+fn a_ripple_stops_at_the_previous_key_and_at_the_end_of_the_plan() {
+    let all = [2, 6, 12, 18];
+    let g = |chosen: &[usize]| [group(chosen, &all, 24)];
+    assert_eq!(clamp_ripple(&g(&[6]), -50), -3, "la clé choisie s'arrête juste après la clé d'avant (2)");
+    assert_eq!(clamp_ripple(&g(&[6]), 50), 5, "la dernière clé du plan (18) va jusqu'à l'image 23");
+    assert_eq!(clamp_ripple(&g(&[2]), -50), -2, "la première ne passe pas l'image 0");
+    assert_eq!(clamp_ripple(&g(&[12]), -50), -5);
+    assert_eq!(clamp_ripple(&g(&[18]), 50), 5);
+    // Plusieurs plans : le plus serré décide.
+    let both = [group(&[6], &all, 24), group(&[3], &[3, 4], 8)];
+    assert_eq!(clamp_ripple(&both, 50), 3, "le plan de 8 images : sa dernière clé (4) s'arrête à l'image 7");
+    assert_eq!(clamp_ripple(&both, -50), -3, "la clé 6 reste après la 2 (−3) ; la clé 3 irait jusqu'à l'image 0 (−3)");
+    assert_eq!(clamp_ripple(&[], 5), 0);
+    assert_eq!(ripple_frames(&all, &[6, 18]), vec![6, 12, 18]);
+    assert!(ripple_frames(&all, &[]).is_empty());
+}
+
+#[test]
+fn shift_held_moves_only_the_chosen_keys_between_their_neighbours() {
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[2, 6, 12, 18]);
+    assert_eq!(drag(&mut doc, 0, &[6], 3, false), 3);
+    assert_eq!(frames(&doc, 0), vec![2, 9, 12, 18], "les clés d'après ne bougent pas");
+    // Elle ne passe pas par-dessus la voisine.
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[2, 6, 12, 18]);
+    assert_eq!(drag(&mut doc, 0, &[6], 50, false), 5, "juste avant la 12");
+    assert_eq!(drag(&mut doc, 0, &[11], -50, false), -8, "juste après la 2 (la clé a bougé en 11)");
+    assert_eq!(frames(&doc, 0), vec![2, 3, 12, 18]);
+    // Un Maj + clic sans mouvement reste le choix d'une plage : `choose` avec l'ancre.
+    let (a, c) = (at(&doc, 0, 3), at(&doc, 0, 18));
+    let (chosen, _) = choose(&[a], Some(a), c, false, Some(between(&doc, a, c)));
+    assert_eq!(chosen, vec![a, at(&doc, 0, 12), c]);
+}
+
+#[test]
+fn both_gestures_are_one_undo_step_with_their_own_name() {
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[2, 6, 12]);
+    let original = doc.panels[0].camera.clone();
+    let mut nav = Nav { panel: 0, layer: 0 };
+    let mut history = History::default();
+    let mut step = |doc: &mut Document, name: &str, edit: &dyn Fn(&mut Document)| {
+        let snap = Edit::Structure { structure: doc.structure(), nav };
+        edit(doc);
+        let before = history.context.replace(name.to_string());
+        history.push(snap);
+        history.context = before;
+    };
+    step(&mut doc, "Décaler les clés de caméra", &|d| {
+        drag(d, 0, &[6], 4, true);
+    });
+    step(&mut doc, "Déplacer une clé de caméra", &|d| {
+        drag(d, 0, &[2], 2, false);
+    });
+    assert_eq!(frames(&doc, 0), vec![4, 10, 16]);
+    assert_eq!(history.names().0, vec!["Décaler les clés de caméra", "Déplacer une clé de caméra"]);
+    assert!(history.undo(&mut doc, &mut nav));
+    assert_eq!(frames(&doc, 0), vec![2, 10, 16]);
+    assert!(history.undo(&mut doc, &mut nav));
+    assert_eq!(doc.panels[0].camera, original, "annulé en deux étapes, caméra pour caméra");
+    assert!(history.redo(&mut doc, &mut nav) && history.redo(&mut doc, &mut nav));
+    assert_eq!(frames(&doc, 0), vec![4, 10, 16]);
+}
+
+// ---------------------------------------------------------------------- coller : insérer, ou sur la tête
+
+/// Un presse-papiers de deux clés espacées de 3 images (écarts 0 et 3), pris dans le plan 2.
+fn clip_0_3(doc: &mut Document) -> CamClip {
+    keys(doc, 2, &[1, 4]);
+    copy(doc, &[at(doc, 2, 1), at(doc, 2, 4)]).expect("deux clés")
+}
+
+#[test]
+fn ctrl_v_inserts_after_the_key_under_the_playhead_and_pushes_the_later_ones() {
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[2, 6, 12]);
+    let clip = clip_0_3(&mut doc);
+    // Tête sur la clé 6 : les clés vont en 7 et 10 ; la 12 est repoussée de 4 (longueur du bloc : 3 + 1).
+    let done = paste_insert(&mut doc, &clip, 6, None).expect("la place y est");
+    assert_eq!(done, Inserted { pasted: Pasted { placed: vec![at(&doc, 0, 7), at(&doc, 0, 10)], skipped: 0 }, pushed: 1 });
+    assert_eq!(frames(&doc, 0), vec![2, 6, 7, 10, 16]);
+    assert_eq!(doc.panels[0].camera[2].cam.x, 1.0, "la clé collée garde sa caméra");
+    assert_eq!(doc.panels[0].camera[4].cam.x, 12.0, "la clé repoussée garde la sienne");
+    // Tête entre deux clés : la dernière clé d'avant (6) est celle qui compte, pas la tête.
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[2, 6, 12]);
+    let clip = clip_0_3(&mut doc);
+    paste_insert(&mut doc, &clip, 9, None).unwrap();
+    assert_eq!(frames(&doc, 0), vec![2, 6, 7, 10, 16]);
+    // Aucune clé avant la tête : le bloc commence sur la tête elle-même, et pousse celles d'après.
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[5, 9]);
+    let clip = clip_0_3(&mut doc);
+    let done = paste_insert(&mut doc, &clip, 3, None).unwrap();
+    assert_eq!(frames(&doc, 0), vec![3, 6, 9, 13]);
+    assert_eq!(done.pushed, 2);
+    // Une clé collée tombée sur une clé d'après ne l'écrase jamais : elle est repoussée.
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[6, 7]);
+    let clip = clip_0_3(&mut doc);
+    paste_insert(&mut doc, &clip, 6, None).unwrap();
+    assert_eq!(frames(&doc, 0), vec![6, 7, 10, 11], "collées en 7 et 10 ; l'ancienne 7 est repoussée en 11");
+}
+
+#[test]
+fn an_insertion_that_would_push_a_key_out_of_its_plan_does_nothing() {
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[2, 21]);
+    let clip = clip_0_3(&mut doc);
+    let before = doc.panels[0].camera.clone();
+    // 21 + 4 = 25 > 23 : il manque 2 images.
+    assert_eq!(paste_insert(&mut doc, &clip, 2, None), Err(NoRoom { short: 2 }));
+    assert_eq!(doc.panels[0].camera, before, "rien n'a bougé");
+    // Maj+Ctrl+V, lui, ne repousse rien : il colle sur la tête.
+    let done = paste(&mut doc, &clip, 2, None);
+    assert_eq!(done.placed.len(), 2);
+    assert_eq!(frames(&doc, 0), vec![2, 5, 21]);
+    // Tête sur la dernière image du plan : pas de place pour la première clé, rien de collé.
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[23]);
+    let clip = clip_0_3(&mut doc);
+    let done = paste_insert(&mut doc, &clip, 23, None).unwrap();
+    assert!(done.pasted.placed.is_empty());
+    assert_eq!(frames(&doc, 0), vec![23]);
+}
+
+#[test]
+fn an_insertion_can_cross_plans_in_the_montage_and_each_plan_makes_room_for_what_it_gets() {
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[2, 20]);
+    keys(&mut doc, 1, &[5]);
+    let clip = CamClip { keys: vec![
+        crate::camkeys::CamClipKey { offset: 0, key: CameraKey::new(0, cam(100.0)) },
+        crate::camkeys::CamClipKey { offset: 5, key: CameraKey::new(0, cam(105.0)) },
+    ] };
+    // Tête sur la clé 20 du plan 0 : première clé en 21, la seconde (écart 5) en 26 = image 2 du plan 1.
+    let done = paste_insert(&mut doc, &clip, 20, None).unwrap();
+    assert_eq!(done.pasted.placed, vec![at(&doc, 0, 21), at(&doc, 1, 2)]);
+    assert_eq!(frames(&doc, 0), vec![2, 20, 21], "rien après la clé 20 : rien à repousser");
+    assert_eq!(frames(&doc, 1), vec![2, 6], "la clé 5 du plan 1 est repoussée d'une image (ce que le plan reçoit : une clé)");
+    // En animation (un seul plan permis), la clé du plan suivant est laissée de côté.
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[2, 20]);
+    let done = paste_insert(&mut doc, &clip, 20, Some(0)).unwrap();
+    assert_eq!((done.pasted.placed.len(), done.pasted.skipped), (1, 1));
+}
+
+#[test]
+fn ctrl_shift_v_pastes_on_the_playhead_replaces_and_pushes_nothing() {
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[2, 6, 10, 12]);
+    let clip = clip_0_3(&mut doc);
+    let done = paste(&mut doc, &clip, 6, None);
+    assert_eq!(done, Pasted { placed: vec![at(&doc, 0, 6), at(&doc, 0, 9)], skipped: 0 });
+    assert_eq!(frames(&doc, 0), vec![2, 6, 9, 10, 12], "la première clé est exactement sur la tête, les autres ne bougent pas");
+    assert_eq!(doc.panels[0].camera[1].cam.x, 1.0, "la clé qui y était est remplacée, avec sa caméra");
+}
+
+#[test]
+fn insert_and_paste_at_head_are_named_undo_steps() {
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[2, 6, 12]);
+    let clip = clip_0_3(&mut doc);
+    let original = doc.panels[0].camera.clone();
+    let mut nav = Nav { panel: 0, layer: 0 };
+    let mut history = History::default();
+    let mut step = |doc: &mut Document, name: &str, edit: &dyn Fn(&mut Document)| {
+        let snap = Edit::Structure { structure: doc.structure(), nav };
+        edit(doc);
+        let before = history.context.replace(name.to_string());
+        history.push(snap);
+        history.context = before;
+    };
+    step(&mut doc, "Insérer des clés de caméra", &|d| {
+        paste_insert(d, &clip, 6, None).unwrap();
+    });
+    step(&mut doc, "Coller les clés de caméra à la tête de lecture", &|d| {
+        paste(d, &clip, 0, None);
+    });
+    assert_eq!(frames(&doc, 0), vec![0, 2, 3, 6, 7, 10, 16]);
+    assert_eq!(history.names().0, vec!["Insérer des clés de caméra", "Coller les clés de caméra à la tête de lecture"]);
+    assert!(history.undo(&mut doc, &mut nav) && history.undo(&mut doc, &mut nav));
+    assert_eq!(doc.panels[0].camera, original);
+    assert!(history.redo(&mut doc, &mut nav));
+    assert_eq!(frames(&doc, 0), vec![2, 6, 7, 10, 16]);
+}
+
+// ---------------------------------------------------------------------- choix au rectangle
+
+/// Les losanges à l'écran : un par clé, à 10 points par image, sur la ligne y = 8, et 300 points
+/// plus loin par plan.
+fn diamonds(doc: &Document) -> Vec<(CamKeyRef, eframe::egui::Pos2)> {
+    let mut out = Vec::new();
+    for (pi, p) in doc.panels.iter().enumerate() {
+        for k in &p.camera {
+            out.push((CamKeyRef { panel: p.id, frame: k.frame }, eframe::egui::pos2(pi as f32 * 300.0 + k.frame as f32 * 10.0, 8.0)));
+        }
+    }
+    out
+}
+
+fn rect(x0: f32, y0: f32, x1: f32, y1: f32) -> eframe::egui::Rect {
+    eframe::egui::Rect::from_two_pos(eframe::egui::pos2(x0, y0), eframe::egui::pos2(x1, y1))
+}
+
+#[test]
+fn a_rectangle_picks_the_keys_it_touches_in_any_direction() {
+    use crate::camkeys::{pick_in_rect, DIAMOND_HALF};
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[2, 6, 12]);
+    keys(&mut doc, 1, &[1, 5]);
+    let d = diamonds(&doc);
+    // Les clés 6 et 12 du plan 0 (x = 60 et 120), pas la 2 (x = 20) : de gauche à droite…
+    let picked = pick_in_rect(&d, rect(50.0, 0.0, 130.0, 16.0), DIAMOND_HALF);
+    assert_eq!(picked, vec![at(&doc, 0, 6), at(&doc, 0, 12)]);
+    // … et de droite à gauche, en montant : le même rectangle.
+    assert_eq!(pick_in_rect(&d, rect(130.0, 16.0, 50.0, 0.0), DIAMOND_HALF), picked);
+    // D'un plan à l'autre (x = 310 et 350 pour le plan 1).
+    let across = pick_in_rect(&d, rect(100.0, 0.0, 320.0, 16.0), DIAMOND_HALF);
+    assert_eq!(across, vec![at(&doc, 0, 12), at(&doc, 1, 1)]);
+    // Le losange est touché dès que son bord entre dans le rectangle (demi-diagonale 4).
+    assert_eq!(pick_in_rect(&d, rect(63.0, 0.0, 70.0, 16.0), DIAMOND_HALF), vec![at(&doc, 0, 6)]);
+    assert!(pick_in_rect(&d, rect(65.0, 0.0, 70.0, 16.0), DIAMOND_HALF).is_empty());
+    // Hors de la hauteur de la piste : rien.
+    assert!(pick_in_rect(&d, rect(0.0, 40.0, 500.0, 60.0), DIAMOND_HALF).is_empty());
+    // Un rectangle entre deux clés ne choisit rien.
+    assert!(pick_in_rect(&d, rect(25.0, 0.0, 45.0, 16.0), DIAMOND_HALF).is_empty());
+}
+
+#[test]
+fn shift_adds_ctrl_toggles_and_no_key_starts_over() {
+    use crate::camkeys::rect_choice;
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[2, 6, 12, 18]);
+    let (a, b, c, d) = (at(&doc, 0, 2), at(&doc, 0, 6), at(&doc, 0, 12), at(&doc, 0, 18));
+    // Sans touche : le rectangle remplace le choix d'avant.
+    assert_eq!(rect_choice(&[a], &[b, c], false, false), vec![b, c]);
+    // Un rectangle dans le vide, sans touche : plus rien de choisi.
+    assert!(rect_choice(&[a], &[], false, false).is_empty());
+    // Maj : s'ajoute au choix d'avant, sans doublon.
+    assert_eq!(rect_choice(&[a, b], &[b, c], true, false), vec![a, b, c]);
+    // Maj dans le vide : le choix d'avant reste.
+    assert_eq!(rect_choice(&[a, b], &[], true, false), vec![a, b]);
+    // Ctrl : les clés touchées déjà choisies sont retirées, les autres ajoutées.
+    assert_eq!(rect_choice(&[a, b], &[b, c], false, true), vec![a, c]);
+    assert!(rect_choice(&[a, b], &[a, b], false, true).is_empty());
+    // Les clés choisies ainsi sont celles qui existent (le copier-coller les vise).
+    let kept = rect_choice(&[a], &[c, d], true, false);
+    assert_eq!(live(&doc, &kept), vec![a, c, d]);
+}
+

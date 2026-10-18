@@ -4,7 +4,8 @@
 use crate::document::Document;
 use crate::fx::{Effect, EffectKind};
 use crate::fxkeys::{
-    choose, clamp_delta, copy_keys, delete_keys, keys_between, marker_frames, marker_near, move_keys, paste_keys, rank_after_remove, rank_after_swap, refs_on, shown, FxClip, FxKeyRef, FxSel, Pasted,
+    choose, clamp_delta, clamp_ripple, copy_keys, delete_keys, keys_between, marker_frames, marker_near, move_keys, paste_insert_keys, paste_keys, rank_after_remove, rank_after_swap, refs_on,
+    ripple_keys, shown, FxClip, FxKeyRef, FxSel, Inserted, Pasted,
 };
 use crate::history::{Edit, History, Nav};
 
@@ -210,6 +211,141 @@ fn deleting_removes_only_the_chosen_keys() {
     let before = fx.clone();
     assert_eq!(delete_keys(&mut fx, &[]), 0);
     assert_eq!(fx, before);
+}
+
+// ---------------------------------------------------------------------- décaler, insérer (2026-10-19)
+
+/// Un flou aux clés 2, 6, 12 et 18 (plan de 24 images).
+fn blur_2_6_12_18() -> Effect {
+    let mut e = Effect::new(EffectKind::GaussianBlur);
+    for f in [2usize, 6, 12, 18] {
+        e.set_key(f, vec![f as f32]);
+    }
+    e
+}
+
+/// Comme l'interface : décalage ramené dans les bornes, puis les clés bougent. `ripple` : les clés
+/// d'après suivent ; sinon Maj tenue, les clés choisies seules.
+fn drag_fx(fx: &mut [Effect], chosen: &[usize], want: isize, ripple: bool) -> isize {
+    let keys: Vec<(usize, usize)> = chosen.iter().map(|&f| (0, f)).collect();
+    let (delta, moving) = if ripple {
+        let all = marker_frames(&fx[0]);
+        (clamp_ripple(&[(all, *chosen.iter().min().unwrap(), 24)], want), ripple_keys(fx, &keys))
+    } else {
+        (clamp_delta(&[(chosen.to_vec(), 24)], want), keys)
+    };
+    move_keys(fx, &moving, delta);
+    delta
+}
+
+#[test]
+fn dragging_an_effect_key_carries_the_later_keys_of_its_effect_only() {
+    let mut fx = stack();
+    fx.insert(0, blur_2_6_12_18());
+    // La clé 6 du premier flou glisse de 3 : elle et les clés d'après (12, 18) ; la 2 reste.
+    assert_eq!(drag_fx(&mut fx, &[6], 3, true), 3);
+    assert_eq!(frames(&fx[0]), vec![2, 9, 15, 21]);
+    assert_eq!(fx[0].keys[1].values, vec![6.0], "les paramètres suivent leur clé");
+    assert_eq!(frames(&fx[1]), vec![2, 6], "un autre effet ne bouge pas");
+    // Le décalage s'arrête après la clé d'avant, et la dernière clé reste dans le plan.
+    let mut fx = vec![blur_2_6_12_18()];
+    assert_eq!(drag_fx(&mut fx, &[6], -50, true), -3);
+    assert_eq!(frames(&fx[0]), vec![2, 3, 9, 15]);
+    assert_eq!(drag_fx(&mut fx, &[3], 50, true), 8, "la dernière clé (15) s'arrête à l'image 23");
+    assert_eq!(frames(&fx[0]), vec![2, 11, 17, 23]);
+    assert_eq!(clamp_ripple(&[(vec![2, 6, 12, 18], 2, 24)], -9), -2, "la première ne passe pas l'image 0");
+    assert_eq!(clamp_ripple(&[], 4), 0);
+    // Plusieurs choisies : la première décide.
+    let mut fx = vec![blur_2_6_12_18()];
+    drag_fx(&mut fx, &[6, 18], 2, true);
+    assert_eq!(frames(&fx[0]), vec![2, 8, 14, 20], "la 12, non choisie, suit aussi");
+}
+
+#[test]
+fn shift_held_moves_only_the_chosen_effect_keys() {
+    let mut fx = vec![blur_2_6_12_18()];
+    assert_eq!(drag_fx(&mut fx, &[6], 3, false), 3);
+    assert_eq!(frames(&fx[0]), vec![2, 9, 12, 18], "les clés d'après ne bougent pas");
+    // Comme avant, une clé choisie qui tombe sur une autre du même effet la remplace.
+    drag_fx(&mut fx, &[9], 3, false);
+    assert_eq!(frames(&fx[0]), vec![2, 12, 18]);
+    assert_eq!(fx[0].keys[1].values, vec![6.0], "c'est la clé déplacée qui reste");
+}
+
+#[test]
+fn ctrl_v_inserts_effect_keys_after_the_key_under_the_playhead() {
+    let clip = copy_keys(&blur_2_6_12_18(), &[6, 12]);
+    assert_eq!(clip.keys.iter().map(|k| k.offset).collect::<Vec<_>>(), vec![0, 6]);
+    // Tête sur la clé 6 : les clés vont en 7 et 13, la 12 et la 18 sont repoussées de 7 (6 + 1).
+    let mut e = blur_2_6_12_18();
+    let done = paste_insert_keys(&mut e, &clip, 6, 40).unwrap();
+    assert_eq!(done, Inserted { pasted: Pasted { placed: vec![7, 13], skipped: 0 }, pushed: 2 });
+    assert_eq!(frames(&e), vec![2, 6, 7, 13, 19, 25]);
+    assert_eq!(e.keys[2].values, vec![6.0], "les paramètres copiés");
+    assert_eq!(e.keys[4].values, vec![12.0], "la clé repoussée garde les siens");
+    // Tête entre deux clés : la dernière clé d'avant compte (6).
+    let mut e = blur_2_6_12_18();
+    paste_insert_keys(&mut e, &clip, 9, 40).unwrap();
+    assert_eq!(frames(&e), vec![2, 6, 7, 13, 19, 25]);
+    // Aucune clé avant la tête : sur la tête, celles d'après sont repoussées.
+    let mut e = blur_2_6_12_18();
+    paste_insert_keys(&mut e, &clip, 0, 40).unwrap();
+    assert_eq!(frames(&e), vec![0, 6, 9, 13, 19, 25]);
+    // Plan trop court pour la clé repoussée : rien ne change.
+    let mut e = blur_2_6_12_18();
+    assert_eq!(paste_insert_keys(&mut e, &clip, 6, 24), Err(crate::camkeys::NoRoom { short: 2 }), "18 + 7 = 25 > 23");
+    assert_eq!(e, blur_2_6_12_18());
+    // Un effet d'une autre sorte : rien n'est inséré.
+    let mut glow = Effect::new(EffectKind::Glow);
+    let done = paste_insert_keys(&mut glow, &clip, 3, 40).unwrap();
+    assert_eq!(done.pasted, Pasted { placed: vec![], skipped: 2 });
+    assert!(glow.keys.is_empty());
+}
+
+#[test]
+fn ctrl_shift_v_pastes_effect_keys_on_the_playhead_and_pushes_nothing() {
+    let clip = copy_keys(&blur_2_6_12_18(), &[2, 6]);
+    let mut e = blur_2_6_12_18();
+    let done = paste_keys(&mut e, &clip, 12, 40);
+    assert_eq!(done, Pasted { placed: vec![12, 16], skipped: 0 });
+    assert_eq!(frames(&e), vec![2, 6, 12, 16, 18]);
+    assert_eq!(e.keys[2].values, vec![2.0], "la clé qui était sur la tête est remplacée");
+}
+
+#[test]
+fn drag_insert_and_paste_at_head_of_effect_keys_undo_in_one_step_each() {
+    let mut doc = Document::new(64, 64, 24);
+    doc.panels[0].layers[0].fx = vec![blur_2_6_12_18()];
+    let original = doc.panels[0].layers[0].fx.clone();
+    let mut nav = Nav { panel: 0, layer: 0 };
+    let mut history = History::default();
+    let mut step = |doc: &mut Document, name: &str, edit: &dyn Fn(&mut Vec<Effect>)| {
+        let snap = Edit::Structure { structure: doc.structure(), nav };
+        edit(&mut doc.panels[0].layers[0].fx);
+        let before = history.context.replace(name.to_string());
+        history.push(snap);
+        history.context = before;
+    };
+    let clip = copy_keys(&blur_2_6_12_18(), &[2]);
+    step(&mut doc, "Décaler les clés d'effet", &|fx| {
+        drag_fx(fx, &[6], 2, true);
+    });
+    step(&mut doc, "Insérer des clés d'effet", &|fx| {
+        paste_insert_keys(&mut fx[0], &clip, 2, 24).unwrap();
+    });
+    step(&mut doc, "Coller les clés d'effet à la tête de lecture", &|fx| {
+        paste_keys(&mut fx[0], &clip, 0, 24);
+    });
+    assert_eq!(frames(&doc.panels[0].layers[0].fx[0]), vec![0, 2, 3, 9, 15, 21]);
+    assert_eq!(history.names().0, vec!["Décaler les clés d'effet", "Insérer des clés d'effet", "Coller les clés d'effet à la tête de lecture"]);
+    for _ in 0..3 {
+        assert!(history.undo(&mut doc, &mut nav));
+    }
+    assert_eq!(doc.panels[0].layers[0].fx, original);
+    for _ in 0..3 {
+        assert!(history.redo(&mut doc, &mut nav));
+    }
+    assert_eq!(frames(&doc.panels[0].layers[0].fx[0]), vec![0, 2, 3, 9, 15, 21]);
 }
 
 #[test]
