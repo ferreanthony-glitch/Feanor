@@ -760,6 +760,12 @@ impl App {
             );
             blocks.push(rect);
             start += len;
+            // Hors de la partie visible de la bande : ni dessin ni vignette (le bloc reste dans
+            // `blocks`, les gestes s'en servent). Sans cela, six cents plans coûtaient six cents
+            // vignettes cherchées et six cents titres mis en page à chaque image d'écran.
+            if !rect.expand(8.0).intersects(painter.clip_rect()) {
+                continue;
+            }
             let selected = i == self.cur_panel;
             // Choisi avec lui (Ctrl ou Maj + clic) : un ton d'accent plus léger.
             let chosen = !selected && self.board_sel.contains(&self.doc.panels[i].id);

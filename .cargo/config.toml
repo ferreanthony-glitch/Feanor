@@ -1,0 +1,16 @@
+# Réglages de compilation de SHOT (mesurés : docs/PERFORMANCE.md).
+#
+# `target-cpu=x86-64-v3` : instructions AVX2, FMA et BMI2 (tout processeur Intel depuis Haswell,
+# 2013, et AMD depuis Zen). Mesuré sans LTO, ni changement du nombre d'unités de génération :
+# construction de l'interface de l'application -19 %, encodage PNG d'une feuille -26 %, image
+# filmée à l'export -14 %, temps de compilation inchangé. SHOT tourne sur le poste d'Anthony (un
+# Core i7-10700K) ; un processeur plus ancien que Haswell ne lancerait pas le programme (erreur
+# « instruction illégale » au démarrage) : pour le compiler pour une telle machine, retirer ce
+# fichier, ou compiler avec `RUSTFLAGS=""` (la variable d'environnement l'emporte sur ce fichier).
+#
+# Choisi plutôt que `target-cpu=native` : mêmes gains, mais x86-64-v3 reste valable sur n'importe
+# quel poste récent. Le LTO (thin ou fat) et `codegen-units = 1` n'ont rien donné et coûtent le
+# double à plusieurs fois le temps de compilation ; `panic = "abort"` n'est pas retenu, car SHOT
+# compte sur les panics rattrapés (rejeu des traits, copie de secours, import vidéo).
+[build]
+rustflags = ["-C", "target-cpu=x86-64-v3"]

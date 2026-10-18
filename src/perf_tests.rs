@@ -478,6 +478,20 @@ fn perf_long_project() {
     scenario("dessin au pinceau, montage visible (8 pts/image)", &mut b, 60, 1.0 / 60.0, |_, k| trait_souris(k, 60, 8, zone));
     let apres = cel.map(|c| b.app.doc.cels[&c].version);
     println!("PERF le trait a bien été posé : version du dessin {avant:?} -> {apres:?}, projet modifié : {}", b.app.modified);
+    // La planche : une vignette par image de storyboard, ici cent plans.
+    b.app.board_view = crate::app::BoardView::Panels;
+    b.app.board_zoom = 0.0;
+    crate::perf::activer(true);
+    let (images, ms) = jusqu_au_repos(&mut b, 2000);
+    println!("PERF planche : {images} images et {ms:.0} ms avant le repos");
+    crate::perf::activer(false);
+    let zone = b.app.canvas_rect.shrink(100.0);
+    scenario("planche (100 vignettes), souris qui bouge", &mut b, 90, 1.0 / 60.0, |_, k| bouge(k, zone));
+    scenario("planche, molette (défilement)", &mut b, 90, 1.0 / 60.0, |b, k| {
+        let mut ev = b.souris(zone.center().x, zone.center().y);
+        ev.extend(b.molette(vec2(0.0, -80.0 + (k % 7) as f32 * 4.0), Modifiers::NONE));
+        ev
+    });
 }
 
 /// Un plan très chargé : 15 calques x 200 images, en animation (la timeline est sous les yeux).
@@ -535,6 +549,57 @@ fn perf_heavy_plan() {
     println!("PERF le trait a bien été posé : version du dessin {avant:?} -> {apres:?}, projet modifié : {}", b.app.modified);
 }
 
+/// Ce qui grandit avec le projet : une timeline de 2 000 images sur 15 calques, un montage de 600 plans.
+#[test]
+#[ignore]
+fn perf_scale() {
+    let zone = Rect::from_min_size(pos2(500.0, 880.0), vec2(900.0, 120.0));
+    let mut b = banc(plan_charge(15, 2000, 1), true);
+    b.app.set_mode(Mode::Animation);
+    jusqu_au_repos(&mut b, 400);
+    scenario("timeline de 2 000 images x 15 calques, souris", &mut b, 90, 1.0 / 60.0, |_, k| bouge(k, zone));
+    scenario("timeline de 2 000 images, tête de lecture", &mut b, 90, 1.0 / 60.0, |b, k| {
+        b.app.cur_frame = (k * 37) % 2000;
+        bouge(k, zone)
+    });
+    drop(b);
+    let mut b = banc(projet_long(600, 3, 24, 1), true);
+    jusqu_au_repos(&mut b, 3000);
+    scenario("montage de 600 plans x 3 calques, souris", &mut b, 90, 1.0 / 60.0, |_, k| bouge(k, zone));
+    let total = b.app.doc.total_frames();
+    scenario("montage de 600 plans, tête de lecture", &mut b, 90, 1.0 / 60.0, |b, k| {
+        b.app.goto_global((k * 977) % total);
+        bouge(k, zone)
+    });
+}
+
+/// Dessiner à la souris sur un calque vectoriel qui porte déjà trente traits larges et texturés
+/// (le cas d'Anthony), avec la gouache, le feutre et le fusain : coût de chaque image d'écran.
+#[test]
+#[ignore]
+fn perf_vector_drawing() {
+    let (w, h) = (1920, 1080);
+    let lib = crate::brushtex::BrushLibrary::builtin();
+    lib.share();
+    for name in ["Gouache", "Feutre", "Fusain"] {
+        let (mut doc, id) = crate::affichage_tests::doc_with(w, h, crate::affichage_tests::gros_traits(30, w, h, 7));
+        doc.panels[0].layers[0].frames = vec![Some(id); 48];
+        doc.panels[0].length = 48;
+        let mut b = banc(doc, true);
+        b.app.brush = lib.presets.iter().find(|p| p.name == name).expect("brosse").settings;
+        b.app.tool = crate::app::Tool::Brush;
+        b.app.set_mode(Mode::Animation);
+        b.chauffer(5);
+        let r = b.app.canvas_rect;
+        let zone = r.shrink2(vec2(r.width() * 0.2, r.height() * 0.3));
+        let avant = b.app.doc.cels[&id].vector.as_ref().map(|v| v.elements.len());
+        scenario(&format!("dessin vectoriel {name} (8 points/image)"), &mut b, 60, 1.0 / 60.0, |_, k| trait_souris(k, 60, 8, zone));
+        // Laisser le rejeu exact finir, puis relire.
+        let apres = b.app.doc.cels[&id].vector.as_ref().map(|v| v.elements.len());
+        println!("PERF traits du dessin : {avant:?} -> {apres:?}");
+    }
+}
+
 /// Les panneaux : Calques (60 calques), Pinceaux (400 pinceaux), Couleur, Réglages.
 #[test]
 #[ignore]
@@ -558,6 +623,65 @@ fn perf_panels() {
         println!("PERF {nom} : {images} images, {ms:.0} ms avant le repos");
         scenario(nom, &mut b, 90, 1.0 / 60.0, |_, k| bouge(k, zone));
     }
+}
+
+/// Quelques travaux de processeur, pour comparer des réglages de compilation (LTO, codegen-units,
+/// target-cpu) : le meilleur de cinq passages, en millisecondes, une ligne « BENCH » chacun.
+/// Lancé avec `--ignored --nocapture --test-threads=1`, sans autre travail sur la machine.
+#[test]
+#[ignore]
+fn perf_cpu_bench() {
+    fn best(name: &str, mut f: impl FnMut()) {
+        f();
+        let mut best = f64::MAX;
+        for _ in 0..5 {
+            let t = Instant::now();
+            f();
+            best = best.min(t.elapsed().as_secs_f64() * 1e3);
+        }
+        println!("BENCH {name:<44} {best:>9.2} ms");
+    }
+    // Composition sur processeur d'une feuille entière (vignettes, export, secours).
+    let doc = projet_long(1, 4, 6, 120);
+    let plan = crate::render::panel_plan_at(&doc, 0, 2, Some(doc.paper));
+    best("composition d'une feuille 3840x2160, 4 calques", || {
+        std::hint::black_box(crate::render::composite_full(&doc, &plan));
+    });
+    let cam = doc.panel_camera(0, 0);
+    best("image filmée (export) 1920x1080, 4 calques", || {
+        std::hint::black_box(crate::render::camera_image(&doc, &plan, &cam));
+    });
+    best("vignette 192x108, 4 calques", || {
+        std::hint::black_box(crate::render::thumbnail(&doc, &plan, &cam, 192, 108));
+    });
+    // Le moteur de pinceau : trente traits larges, texturés, qui se chevauchent.
+    best("trente traits texturés, rendu vectoriel 1920x1080", || {
+        let (w, h) = (1920, 1080);
+        let (d, _) = crate::affichage_tests::doc_with(w, h, crate::affichage_tests::gros_traits(30, w, h, 7));
+        std::hint::black_box(d);
+    });
+    // PNG : coder et décoder une feuille.
+    let r = &doc.cels[&doc.panels[0].layers[0].frames[0].unwrap()].raster;
+    let rgba = r.to_rgba();
+    let png = crate::io::encode_png(&rgba, r.width, r.height).unwrap();
+    best("PNG : coder une feuille 3840x2160", || {
+        std::hint::black_box(crate::io::encode_png(&rgba, r.width, r.height).unwrap());
+    });
+    best("PNG : décoder une feuille 3840x2160", || {
+        std::hint::black_box(image::load_from_memory(&png).unwrap().into_rgba8());
+    });
+    best("feuille -> octets RGBA puis tuiles", || {
+        let bytes = r.to_rgba();
+        std::hint::black_box(crate::raster::Raster::from_rgba(r.width, r.height, &bytes));
+    });
+    // L'interface : cent images de l'application (mise en page, découpage), 100 plans.
+    let mut b = banc(projet_long(100, 3, 48, 2), false);
+    let zone = Rect::from_min_size(pos2(500.0, 880.0), vec2(900.0, 120.0));
+    best("interface : 100 images, 100 plans, souris", || {
+        for k in 0..100 {
+            b.image(bouge(k, zone), 1.0 / 60.0);
+        }
+    });
 }
 
 /// Une vignette du montage (192 x 108) : plan de 3 calques, puis de 15.
