@@ -4,7 +4,7 @@
 use crate::document::Document;
 use crate::fx::{Effect, EffectKind};
 use crate::fxkeys::{
-    choose, clamp_delta, copy_keys, delete_keys, keys_between, keys_on, marker_frames, marker_near, move_keys, names_on, paste_keys, refs_on, FxClip, FxKeyRef, Pasted,
+    choose, clamp_delta, copy_keys, delete_keys, keys_between, marker_frames, marker_near, move_keys, paste_keys, rank_after_remove, rank_after_swap, refs_on, shown, FxClip, FxKeyRef, FxSel, Pasted,
 };
 use crate::history::{Edit, History, Nav};
 
@@ -26,16 +26,51 @@ fn key(panel: u64, layer: u64, effect: usize, frame: usize) -> FxKeyRef {
     FxKeyRef { panel, layer, effect, frame }
 }
 
+/// L'effet de rang `effect` du calque 7 du plan 1.
+fn sel(effect: usize) -> FxSel {
+    FxSel { panel: 1, layer: 7, effect }
+}
+
 #[test]
-fn one_marker_per_keyed_frame_whatever_the_effects() {
+fn one_marker_per_key_of_the_chosen_effect_only() {
     let fx = stack();
-    assert_eq!(marker_frames(&fx), vec![2, 6], "l'image 6 a les clés de deux effets : un seul losange");
-    assert_eq!(keys_on(&fx, 6), vec![(0, 6), (1, 6)]);
-    assert_eq!(keys_on(&fx, 2), vec![(0, 2)]);
-    assert!(keys_on(&fx, 3).is_empty());
-    assert_eq!(names_on(&fx, 6).len(), 2);
-    assert!(marker_frames(&[]).is_empty(), "sans effet : aucun losange");
-    assert!(marker_frames(&[Effect::new(EffectKind::Glow)]).is_empty(), "un effet sans clé n'en a pas");
+    assert_eq!(marker_frames(&fx[0]), vec![2, 6]);
+    assert_eq!(marker_frames(&fx[1]), vec![6], "le flou de mouvement n'a que sa clé : celles du flou ne s'y mêlent pas");
+    assert!(marker_frames(&fx[2]).is_empty(), "un effet sans clé n'a pas de losange");
+    assert!(marker_frames(&Effect::new(EffectKind::Glow)).is_empty());
+    // Un losange = la clé de l'effet choisi, jamais celles des autres effets de la même image.
+    assert_eq!(refs_on(sel(0), &fx[0], 6), vec![key(1, 7, 0, 6)]);
+    assert_eq!(refs_on(sel(1), &fx[1], 6), vec![key(1, 7, 1, 6)]);
+    assert!(refs_on(sel(0), &fx[0], 3).is_empty());
+}
+
+#[test]
+fn keys_show_only_for_the_chosen_effect_on_its_own_layer() {
+    let mut doc = Document::new(64, 64, 24);
+    doc.panels[0].layers[0].fx = stack();
+    let (panel, layer) = (doc.panels[0].id, doc.panels[0].layers[0].id);
+    let on = FxSel { panel, layer, effect: 0 };
+    let l = &doc.panels[0].layers[0];
+    assert_eq!(shown(Some(on), true, panel, l), Some(on));
+    assert_eq!(shown(None, true, panel, l), None, "aucun effet choisi : aucun losange");
+    assert_eq!(shown(Some(on), false, panel, l), None, "la case du panneau Effets est l'interrupteur général");
+    assert_eq!(shown(Some(FxSel { effect: 3, ..on }), true, panel, l), None, "un rang qui n'existe plus ne montre rien");
+    assert_eq!(shown(Some(FxSel { layer: layer + 1, ..on }), true, panel, l), None, "l'effet d'un autre calque ne montre rien ici");
+    assert_eq!(shown(Some(FxSel { panel: panel + 1, ..on }), true, panel, l), None, "ni celui d'un autre plan");
+    // Un calque sans effet, un dossier : rien.
+    let mut folder = l.clone();
+    folder.folder = true;
+    assert_eq!(shown(Some(on), true, panel, &folder), None);
+}
+
+#[test]
+fn the_chosen_rank_follows_swaps_and_removals() {
+    assert_eq!(rank_after_swap(0, 0, 1), 1);
+    assert_eq!(rank_after_swap(1, 0, 1), 0);
+    assert_eq!(rank_after_swap(2, 0, 1), 2);
+    assert_eq!(rank_after_remove(1, 1), None, "l'effet retiré n'est plus choisi");
+    assert_eq!(rank_after_remove(2, 0), Some(1), "il monte d'un rang");
+    assert_eq!(rank_after_remove(0, 2), Some(0));
 }
 
 #[test]
@@ -51,19 +86,19 @@ fn the_nearest_marker_under_the_pointer_wins() {
 #[test]
 fn a_click_chooses_one_marker_ctrl_toggles_shift_takes_the_range() {
     let fx = stack();
-    let (a, b, c) = (refs_on(1, 7, &fx, 2), refs_on(1, 7, &fx, 6), keys_between(1, 7, &fx, 2, 6));
+    let (a, b, c) = (refs_on(sel(0), &fx[0], 2), refs_on(sel(0), &fx[0], 6), keys_between(sel(0), &fx[0], 2, 6));
     assert_eq!(a, vec![key(1, 7, 0, 2)]);
-    assert_eq!(b, vec![key(1, 7, 0, 6), key(1, 7, 1, 6)], "un losange = les clés de tous ses effets");
-    assert_eq!(c.len(), 3);
+    assert_eq!(b, vec![key(1, 7, 0, 6)], "un losange = la clé de l'effet choisi");
+    assert_eq!(c.len(), 2, "Maj : les clés de cet effet seulement");
     // Un clic : lui seul.
-    let (sel, anchor) = choose(&[], None, &a, false, None);
-    assert_eq!((sel.clone(), anchor), (a.clone(), Some(a[0])));
-    let (sel, _) = choose(&sel, anchor, &b, false, None);
-    assert_eq!(sel, b, "un autre clic remplace le choix");
+    let (chosen, anchor) = choose(&[], None, &a, false, None);
+    assert_eq!((chosen.clone(), anchor), (a.clone(), Some(a[0])));
+    let (chosen, _) = choose(&chosen, anchor, &b, false, None);
+    assert_eq!(chosen, b, "un autre clic remplace le choix");
     // Ctrl : s'ajoute, puis se retire.
-    let (sel, anchor) = choose(&sel, anchor, &a, true, None);
-    assert_eq!(sel.len(), 3);
-    let (sel, _) = choose(&sel, anchor, &b, true, None);
+    let (chosen, anchor) = choose(&chosen, anchor, &a, true, None);
+    assert_eq!(chosen.len(), 2);
+    let (sel, _) = choose(&chosen, anchor, &b, true, None);
     assert_eq!(sel, a, "Ctrl + clic sur un losange entièrement choisi le retire");
     // Maj : tout ce qui est entre l'ancre et lui.
     let (sel, anchor) = choose(&sel, Some(a[0]), &b, false, Some(c.clone()));
@@ -125,52 +160,43 @@ fn moving_an_unselected_neighbour_is_left_alone_when_a_key_lands_beside_it() {
 }
 
 #[test]
-fn copied_keys_land_on_the_same_kind_of_effect_at_the_playhead() {
+fn copied_keys_land_on_the_chosen_effect_at_the_playhead() {
     let fx = stack();
-    // Copie : les trois clés du losange 2 et du losange 6.
-    let clip = copy_keys(&[(&fx, &[(0, 2), (0, 6), (1, 6)])]);
-    assert_eq!(clip.keys.len(), 3);
-    assert_eq!(clip.keys.iter().map(|k| k.offset).collect::<Vec<_>>(), vec![0, 4, 4]);
-    // Un autre calque : le même flou, le même flou de mouvement.
-    let mut other = vec![Effect::new(EffectKind::Glow), Effect::new(EffectKind::MotionBlur), Effect::new(EffectKind::GaussianBlur)];
-    let mut done = paste_keys(&mut other, &clip, 10, 40);
-    done.placed.sort();
-    assert_eq!(done, Pasted { placed: vec![(1, 14), (2, 10), (2, 14)], skipped: 0 });
-    assert_eq!(frames(&other[2]), vec![10, 14], "le flou, rangé troisième ici");
-    assert_eq!(other[2].keys[1].values, vec![12.0]);
-    assert_eq!(frames(&other[1]), vec![14]);
-    assert_eq!(other[1].keys[0].values, vec![20.0, 90.0]);
-    assert!(other[0].keys.is_empty());
+    // Copie : les deux clés du flou (2 et 6), dans le désordre.
+    let clip = copy_keys(&fx[0], &[6, 2]);
+    assert_eq!(clip.kind, EffectKind::GaussianBlur);
+    assert_eq!(clip.keys.iter().map(|k| k.offset).collect::<Vec<_>>(), vec![0, 4]);
+    // Un autre flou, sur un autre calque : les clés y vont à l'image courante, avec leurs paramètres.
+    let mut other = Effect::new(EffectKind::GaussianBlur);
+    let done = paste_keys(&mut other, &clip, 10, 40);
+    assert_eq!(done, Pasted { placed: vec![10, 14], skipped: 0 });
+    assert_eq!(frames(&other), vec![10, 14]);
+    assert_eq!(other.keys[0].values, vec![4.0]);
+    assert_eq!(other.keys[1].values, vec![12.0]);
+    // Une image absente de l'effet n'est pas copiée.
+    assert!(copy_keys(&fx[0], &[3]).keys.is_empty());
 }
 
 #[test]
 fn a_paste_replaces_a_key_on_the_same_frame_and_skips_what_does_not_fit() {
     let fx = stack();
-    let clip = copy_keys(&[(&fx, &[(0, 2), (0, 6)])]);
+    let clip = copy_keys(&fx[0], &[2, 6]);
     // Un plan de 12 images, collage à l'image 8 : la clé de l'écart 4 tomberait en 12, hors du plan.
-    let mut target = vec![Effect::new(EffectKind::GaussianBlur)];
-    target[0].set_key(8, vec![99.0]);
+    let mut target = Effect::new(EffectKind::GaussianBlur);
+    target.set_key(8, vec![99.0]);
     let done = paste_keys(&mut target, &clip, 8, 12);
-    assert_eq!(done, Pasted { placed: vec![(0, 8)], skipped: 1 });
-    assert_eq!(target[0].keys.len(), 1);
-    assert_eq!(target[0].keys[0].values, vec![4.0], "la clé collée remplace celle qui y était");
-    // Sans effet de la bonne sorte : rien n'est collé, tout est laissé de côté.
-    let mut none = vec![Effect::new(EffectKind::Glow)];
-    let done = paste_keys(&mut none, &clip, 0, 12);
+    assert_eq!(done, Pasted { placed: vec![8], skipped: 1 });
+    assert_eq!(target.keys.len(), 1);
+    assert_eq!(target.keys[0].values, vec![4.0], "la clé collée remplace celle qui y était");
+    // Un effet d'une autre sorte que celui copié : rien n'est collé, ses paramètres ne lui vont pas.
+    let mut other_kind = Effect::new(EffectKind::Glow);
+    let done = paste_keys(&mut other_kind, &clip, 0, 12);
     assert_eq!(done, Pasted { placed: vec![], skipped: 2 });
-    assert!(none[0].keys.is_empty());
-    // Deux flous : le premier copié va au premier, le second au second.
-    let mut two = vec![Effect::new(EffectKind::GaussianBlur), Effect::new(EffectKind::GaussianBlur)];
-    two[0].set_key(0, vec![1.0]);
-    two[1].set_key(0, vec![2.0]);
-    let clip2 = copy_keys(&[(&two, &[(0, 0), (1, 0)])]);
-    let mut fresh = vec![Effect::new(EffectKind::GaussianBlur), Effect::new(EffectKind::GaussianBlur)];
-    paste_keys(&mut fresh, &clip2, 5, 20);
-    assert_eq!((fresh[0].keys[0].values.clone(), fresh[1].keys[0].values.clone()), (vec![1.0], vec![2.0]));
+    assert!(other_kind.keys.is_empty());
     // Un presse-papiers vide ne fait rien.
-    let mut same = stack();
-    assert_eq!(paste_keys(&mut same, &FxClip { keys: vec![] }, 3, 10), Pasted { placed: vec![], skipped: 0 });
-    assert_eq!(same, stack());
+    let mut same = stack().remove(0);
+    assert_eq!(paste_keys(&mut same, &FxClip { kind: EffectKind::GaussianBlur, keys: vec![] }, 3, 10), Pasted { placed: vec![], skipped: 0 });
+    assert_eq!(same, stack().remove(0));
 }
 
 #[test]
@@ -205,9 +231,9 @@ fn every_edit_is_one_named_undo_step_that_restores_the_keys() {
     step(&mut doc, &mut history, nav, "Supprimer des clés d'effet", &|fx| {
         delete_keys(fx, &[(1, 6)]);
     });
-    let clip = copy_keys(&[(&stack(), &[(0, 2)])]);
+    let clip = copy_keys(&stack()[0], &[2]);
     step(&mut doc, &mut history, nav, "Coller des clés d'effet", &|fx| {
-        paste_keys(fx, &clip, 20, 40);
+        paste_keys(&mut fx[0], &clip, 20, 40);
     });
     assert_eq!(history.names().0, vec!["Déplacer des clés d'effet", "Supprimer des clés d'effet", "Coller des clés d'effet"]);
     assert_eq!(frames(&doc.panels[0].layers[0].fx[0]), vec![4, 8, 20]);

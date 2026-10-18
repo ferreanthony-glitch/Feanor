@@ -369,9 +369,7 @@ impl App {
     /// image du plan). `top` : haut de la bande ; `blocks` : les panneaux à l'écran. Il passe avant
     /// les poignées du dessin dessous (`fxkeys.rs`).
     pub(crate) fn montage_fx_key_at(&self, p: Pos2, top: f32, blocks: &[Rect], ppf: f32, rows: &Rows) -> Option<(usize, usize, usize)> {
-        if !self.fx_keys_shown {
-            return None;
-        }
+        self.fx_choice.filter(|_| self.fx_keys_shown)?;
         let y = p.y - top;
         if y < rows.layers_top() || y >= rows.background_top() {
             return None;
@@ -385,11 +383,9 @@ impl App {
             let panel = &self.doc.panels[i];
             let k = layer_in_row(&panel.layers, row)?;
             let l = &panel.layers[k];
-            if l.fx.is_empty() || l.folder || l.video.is_some() {
-                return None;
-            }
+            let sel = self.fx_shown(panel.id, l)?;
             let x0 = b.left() - 1.0;
-            let f = crate::fxkeys::marker_near(&crate::fxkeys::marker_frames(&l.fx), p.x, |f| x0 + f as f32 * ppf + ppf * 0.5, tol)?;
+            let f = crate::fxkeys::marker_near(&crate::fxkeys::marker_frames(&l.fx[sel.effect]), p.x, |f| x0 + f as f32 * ppf + ppf * 0.5, tol)?;
             (f < panel.frame_count()).then_some((i, k, f))
         })
     }

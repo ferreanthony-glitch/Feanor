@@ -349,10 +349,11 @@ pub struct App {
     pub(crate) flip_manual: Option<(usize, usize)>,
     pub(crate) flips_window: bool,
     /// Pile d'effets (13i, `fxui.rs`, panneau Effets) : création automatique des clés, clés
-    /// montrées dans la timeline, effet choisi dans la pile du calque courant.
+    /// montrées dans la timeline (interrupteur général), effet choisi (plan, calque, rang) : ses
+    /// clés seules se montrent dans la timeline et le montage ; aucun choisi, aucun losange.
     pub(crate) fx_auto_key: bool,
     pub(crate) fx_keys_shown: bool,
-    pub(crate) fx_selected: usize,
+    pub(crate) fx_choice: Option<crate::fxkeys::FxSel>,
     /// Clés d'effets choisies dans le montage ou la timeline (`fxkeys.rs`) et la dernière cliquée
     /// (départ des Maj + clic), clés copiées (`fx_clip_recent` : la dernière copie est la leur,
     /// Ctrl+V les vise), clés prises à la souris.
@@ -767,7 +768,7 @@ impl App {
 
             fx_auto_key: false,
             fx_keys_shown: true,
-            fx_selected: 0,
+            fx_choice: None,
             fx_key_sel: Vec::new(),
             fx_key_anchor: None,
             fx_key_clipboard: None,
@@ -2596,6 +2597,10 @@ impl App {
         self.rejeu_deferred.clear();
         crate::fx::fond_cancel_all();
         self.doc = doc;
+        // (Un autre projet : l'effet choisi et les clés choisies étaient ceux de l'ancien.)
+        self.fx_choice = None;
+        self.fx_key_sel.clear();
+        self.fx_key_anchor = None;
         self.mode = Mode::Storyboard;
         self.cur_panel = 0;
         self.cur_layer = self.layers().len() - 1;
@@ -3390,6 +3395,10 @@ impl App {
                 self.status = format!("Création automatique des clés d'effets : {}.", if self.fx_auto_key { "oui" } else { "non" });
             }
             "fx.cles_timeline" => self.fx_keys_shown = !self.fx_keys_shown,
+            "fx.choisir_aucun" => {
+                self.deselect_fx();
+                self.status = "Aucun effet choisi : plus de clé d'effet dans la timeline ni le montage.".into();
+            }
             // Calque CTG (13j, `ctgui.rs`).
             "calque.nouveau_ctg" => self.new_ctg_layer(),
             "calque.transformer_ctg" => self.convert_to_ctg(),

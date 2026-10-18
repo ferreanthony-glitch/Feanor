@@ -1353,6 +1353,18 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         est lâché par un clic ailleurs, une annulation, un changement d'ordre de la pile. Étapes
         d'annulation nommées « Déplacer / Coller / Supprimer des clés d'effet ». Logique en
         fonctions pures testées (`move_keys`, `paste_keys`, `clamp_delta`…) ;
+      - **clés d'effets : seulement celles de l'effet choisi** (Anthony : « elles n'apparaissent
+        que lorsque l'effet est sélectionné »). L'effet choisi (`App::fx_choice` : plan, calque,
+        rang) est celui du panneau Effets : un clic sur son nom le choisit (cadre de la couleur de
+        sélection, nom sur toute la largeur), un second le lâche ; « Créer une clé », un curseur,
+        « Ajouter un effet » ou cocher un effet du calque le choisissent aussi ; action
+        `fx.choisir_aucun`. Seules ses clés se dessinent et se prennent, sur son calque, dans le
+        montage et la timeline ; aucun effet choisi, aucun losange ; la case du panneau reste
+        l'interrupteur général. Plus de point sombre (un losange = une clé). Copier, coller (sur
+        l'effet choisi, de la même sorte que le copié, sinon dit et rien collé), supprimer
+        agissent sur ces clés ; changer d'effet choisi, ouvrir un projet ou vider la pile lâche
+        le choix des clés ; le rang suit un échange ou un retrait de la pile (`rank_after_swap`,
+        `rank_after_remove`, `shown`, testées) ;
       - **enveloppe de Bézier** (Anthony : « maintenir Ctrl permet de saisir une poignée de Bézier
         des coins pour transformer la forme » ; son choix : « B, comme l'outil Perspective ») : dans
         l'outil Transformer, Ctrl + glisser un coin du cadre ouvre une enveloppe sur le dessin
@@ -1721,9 +1733,10 @@ mise en avant ».
   aperçu ni texte (centaines de brosses importées).
 - ✅ Onglet « Réglages du pinceau » : sept catégories (la case allume ou éteint la dispersion, le
   grain et papier, la couleur et mélange, le lissage ; les valeurs sont gardées pour la rallumer),
-  aperçu du trait en bas, liste déroulante si le panneau est étroit. Les réglages sont ceux de
-  l'ancien panneau Réglages de l'outil (`dynui.rs` découpé par catégorie, `brush_ui` déplacé), qui
-  n'en garde qu'un résumé.
+  aperçu du trait en haut sous les onglets (2026-10-18, demande d'Anthony ; il était en bas),
+  liste déroulante si le panneau est étroit. Les réglages sont ceux de l'ancien panneau Réglages de
+  l'outil (`dynui.rs` découpé par catégorie, `brush_ui` déplacé), qui n'en garde qu'un résumé : nom,
+  taille, opacité (ses deux boutons vers le panneau Pinceaux retirés le 2026-10-18, « inutile »).
 - ✅ Retenus dans `reglages.toml` (`panneau_pinceaux`, `#[serde(default)]`) : onglet, liste ou
   vignettes, catégorie, dossiers ouverts ou repliés.
 - ✅ Logique sans écran dans `pinceaux.rs` (rangement, recherche, état, catégories), testée dans
