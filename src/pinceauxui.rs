@@ -77,10 +77,9 @@ impl App {
         }
     }
 
-    /// Panneau Pinceaux : la taille, puis l'un des deux onglets.
+    /// Panneau Pinceaux : les deux onglets en haut (Anthony, 2026-10-18), la taille, puis le
+    /// contenu de l'onglet choisi.
     pub(crate) fn brushes_panel(&mut self, ui: &mut egui::Ui) {
-        self.size_row(ui);
-        ui.add_space(2.0);
         let mut onglet = self.pinceaux.onglet;
         ui.columns(2, |cols| {
             for (i, (o, titre)) in [(Onglet::Pinceaux, "Pinceaux"), (Onglet::Reglages, "Réglages du pinceau")].into_iter().enumerate() {
@@ -91,6 +90,8 @@ impl App {
             }
         });
         self.pinceaux.onglet = onglet;
+        ui.add_space(2.0);
+        self.size_row(ui);
         ui.add_space(2.0);
         match onglet {
             Onglet::Pinceaux => self.library_tab(ui),
@@ -321,13 +322,16 @@ impl App {
 
     // ------------------------------------------------------------------ onglet Réglages du pinceau
 
-    /// Les catégories (à gauche, ou en liste déroulante si le panneau est étroit), les réglages de
-    /// la catégorie choisie, et en bas l'aperçu du trait courant.
+    /// L'aperçu du trait courant en haut, sous les onglets (Anthony, 2026-10-18 : on le voit
+    /// changer pendant qu'on règle), puis les catégories (à gauche, ou en liste déroulante si le
+    /// panneau est étroit) et les réglages de la catégorie choisie.
     fn settings_tab(&mut self, ui: &mut egui::Ui) {
         let vector = self.layer().kind == LayerKind::Vector;
         let cat = self.pinceaux.categorie;
         let wide = ui.available_width() >= NARROW;
-        let mut height = ui.available_height() - CURRENT_H - 10.0;
+        self.current_preview(ui);
+        ui.add_space(4.0);
+        let mut height = ui.available_height();
         if !height.is_finite() {
             height = 400.0;
         }
@@ -364,8 +368,6 @@ impl App {
                 self.category_ui(ui, cat, vector);
             }
         });
-        ui.add_space(4.0);
-        self.current_preview(ui);
     }
 
     /// Allume ou éteint une catégorie du réglage courant ; ses valeurs sont gardées pour la
@@ -638,20 +640,13 @@ impl App {
     // ------------------------------------------------------------------ résumé du panneau Réglages de l'outil
 
     /// Ce que garde le panneau Réglages de l'outil des réglages du pinceau, du crayon et de la
-    /// gomme : le nom du réglage, la taille et l'opacité, et deux boutons qui ouvrent le panneau
-    /// Pinceaux (la bibliothèque, tous les réglages).
+    /// gomme : le nom du réglage, la taille et l'opacité. Le panneau Pinceaux s'ouvre par la barre
+    /// des panneaux (Anthony, 2026-10-18 : les deux boutons qui l'ouvraient d'ici, « inutile »).
     pub(crate) fn brush_summary_ui(&mut self, ui: &mut egui::Ui) {
         let target = self.panel_target();
         let current = self.panel_brush();
         let name = choisi(&self.brushes.presets, target, &current).map_or("(réglé à la main)".to_string(), |i| self.brushes.presets[i].name.clone());
-        let (mut library, mut settings) = (false, false);
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(name).strong());
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                settings = icone(ui, ph::SLIDERS_HORIZONTAL, "Réglages du pinceau", "Tous les réglages de ce pinceau (pointe, appui, dispersion, grain, couleur, lissage, toucher) : panneau Pinceaux, onglet « Réglages du pinceau ».", "").clicked();
-                library = icone(ui, ph::PAINT_BRUSH, "Bibliothèque de pinceaux", "Les pinceaux rangés par dossier, avec leur aperçu : panneau Pinceaux.", "").clicked();
-            });
-        });
+        ui.label(RichText::new(name).strong());
         let s = self.panel_brush_mut();
         ui.horizontal(|ui| {
             ui.add(egui::Slider::new(&mut s.size, 0.5..=400.0).logarithmic(true).text("Taille"));
@@ -661,10 +656,6 @@ impl App {
             ui.add(egui::Slider::new(&mut s.opacity, 0.0..=1.0).text("Opacité"));
             interrupteur(ui, &mut s.pressure_opacity, ph::PEN_NIB, "Opacité selon la pression", "Plus on appuie avec le stylet, plus le trait couvre.", "");
         });
-        if library || settings {
-            self.pinceaux.onglet = if settings { Onglet::Reglages } else { Onglet::Pinceaux };
-            self.show_pane(crate::dock::Pane::Brushes);
-        }
     }
 }
 

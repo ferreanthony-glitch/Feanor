@@ -437,9 +437,10 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   brosse choisie (celles de Pelure restent). **Réglages du pinceau** : à gauche les catégories
   (Forme de la pointe, Taille et appui, Dispersion, Grain et papier, Couleur et mélange, Lissage,
   Toucher du stylet), dont quatre ont une case qui les allume ou les éteint sans perdre leurs
-  valeurs ; à droite les réglages de la catégorie ; en bas l'aperçu du trait courant. Panneau
-  étroit : les catégories passent au-dessus, en liste déroulante. Le panneau Réglages de l'outil
-  n'en garde qu'un résumé (nom, taille, opacité, deux boutons qui ouvrent le panneau Pinceaux).
+  valeurs ; à droite les réglages de la catégorie ; en haut, sous les onglets, l'aperçu du trait
+  courant. Panneau étroit : les catégories passent au-dessus, en liste déroulante. Le panneau
+  Réglages de l'outil n'en garde qu'un résumé (nom, taille, opacité) ; le panneau Pinceaux s'ouvre
+  par la barre des panneaux.
   L'onglet, liste ou vignettes, la catégorie et les dossiers ouverts sont retenus (`reglages.toml`,
   clé `panneau_pinceaux`). Les aperçus montrent le trait dans la couleur courante, sur le papier.
   L'interface est sombre et dense (gris et bleu d'accent repris de Pelure Studio, police Segoe

@@ -1639,9 +1639,10 @@ mise en avant ».
   aperçu ni texte (centaines de brosses importées).
 - ✅ Onglet « Réglages du pinceau » : sept catégories (la case allume ou éteint la dispersion, le
   grain et papier, la couleur et mélange, le lissage ; les valeurs sont gardées pour la rallumer),
-  aperçu du trait en bas, liste déroulante si le panneau est étroit. Les réglages sont ceux de
-  l'ancien panneau Réglages de l'outil (`dynui.rs` découpé par catégorie, `brush_ui` déplacé), qui
-  n'en garde qu'un résumé.
+  aperçu du trait en haut sous les onglets (2026-10-18, demande d'Anthony ; il était en bas),
+  liste déroulante si le panneau est étroit. Les réglages sont ceux de l'ancien panneau Réglages de
+  l'outil (`dynui.rs` découpé par catégorie, `brush_ui` déplacé), qui n'en garde qu'un résumé : nom,
+  taille, opacité (ses deux boutons vers le panneau Pinceaux retirés le 2026-10-18, « inutile »).
 - ✅ Retenus dans `reglages.toml` (`panneau_pinceaux`, `#[serde(default)]`) : onglet, liste ou
   vignettes, catégorie, dossiers ouverts ou repliés.
 - ✅ Logique sans écran dans `pinceaux.rs` (rangement, recherche, état, catégories), testée dans
