@@ -453,21 +453,20 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   couleur en haut ; Rectangle, Ligne, Ellipse et Polyligne dans une seule case). Couleur : avant-plan et arrière-plan, roue, curseurs, couleurs récentes et
   nuanciers (voir **Couleur** plus haut). Panneau **Pinceaux** (onglet à côté de Couleur) :
   en haut, toujours visible, la **taille** de l'outil courant (pinceau, crayon ou gomme) en grand
-  curseur et en champ px, la même valeur que les touches ^ et $ ; dessous deux onglets.
-  **Pinceaux** : une recherche par nom, une bascule liste / vignettes (liste : pastille de la
+  curseur et en champ px, la même valeur que les touches ^ et $ ; dessous la bibliothèque :
+  une recherche par nom, une bascule liste / vignettes (liste : pastille de la
   pointe avec sa taille, aperçu du trait, nom), et les réglages rangés en **dossiers repliables
   avec leur nombre** : Crayons, Encres et feutres, Peinture, Craie et fusain, Gommes (avec la
   gomme), Mes brosses, puis un dossier par fichier importé (les importés démarrent repliés). Clic :
   choisir ; clic droit : renommer, dupliquer, remplacer, supprimer. En bas, trois icônes :
   importer des pinceaux, nouvelle brosse (garde le réglage courant dans Mes brosses), supprimer la
-  brosse choisie (celles de Pelure restent). **Réglages du pinceau** : à gauche les catégories
-  (Forme de la pointe, Taille et appui, Dispersion, Grain et papier, Couleur et mélange, Lissage,
-  Toucher du stylet), dont quatre ont une case qui les allume ou les éteint sans perdre leurs
-  valeurs ; à droite les réglages de la catégorie ; en haut, sous les onglets, l'aperçu du trait
-  courant. Panneau étroit : les catégories passent au-dessus, en liste déroulante. Le panneau
-  Réglages de l'outil n'en garde qu'un résumé (nom, taille, opacité) ; le panneau Pinceaux s'ouvre
-  par la barre des panneaux.
-  L'onglet, liste ou vignettes, la catégorie et les dossiers ouverts sont retenus (`reglages.toml`,
+  brosse choisie (celles de Pelure restent). Les **réglages du pinceau** sont dans le panneau
+  **Réglages** de l'outil (pinceau, crayon, gomme), sous le nom, la taille et l'opacité : l'aperçu
+  du trait courant, puis à gauche les catégories (Forme de la pointe, Taille et appui, Dispersion,
+  Grain et papier, Couleur et mélange, Lissage, Toucher du stylet), dont quatre ont une case qui
+  les allume ou les éteint sans perdre leurs valeurs, et à droite les réglages de la catégorie.
+  Panneau étroit : les catégories passent au-dessus, en liste déroulante.
+  Liste ou vignettes, la catégorie et les dossiers ouverts sont retenus (`reglages.toml`,
   clé `panneau_pinceaux`). Les aperçus montrent le trait dans la couleur courante, sur le papier.
   L'interface est sombre et dense (gris et bleu d'accent repris de Pelure Studio, police Segoe
   UI). Les pinceaux texturés
@@ -767,6 +766,25 @@ Sans projet ouvert (au lancement, ou après « Fermer le projet »), un écran d
 - les projets récents.
 
 Il s'en va dès qu'un projet s'ouvre ou se crée, au premier trait, ou par « Commencer sans projet ».
+
+### Nouveau projet
+
+« Nouveau projet… » (l'accueil, ou Fichier > Nouveau, Ctrl+N) ouvre une fenêtre :
+- **Nom** et **dossier** : avec un nom, le projet est créé et enregistré tout de suite dans
+  `dossier\nom\` ; sans nom, « Enregistrer » demandera où le ranger plus tard.
+- **Préréglage**, groupé : Vidéo (HD 1080, HD 720, UHD 4K, 2K DCI, Scope 2,39, SD PAL 4:3 en pixels
+  carrés), Réseaux (vertical 9:16, carré 1:1, portrait 4:5) et Papier (A4, A3, A5, US Letter,
+  en paysage, calculés avec la résolution). Chacun porte sa cadence (24 i/s, 25 pour PAL). Dès
+  qu'une valeur change à la main, la liste affiche « Personnalisé ». La disquette garde le format
+  actuel sous un nom, la corbeille retire un préréglage à toi (pas ceux d'origine).
+- **Format** : largeur et hauteur en px, mm, cm ou in (le projet garde des pixels), orientation,
+  proportions reconnues, résolution (dpi, pour le papier et les unités ; elle n'est pas gardée dans
+  le projet) et cadence.
+- **Papier** (couleur, ou transparent), couleur des fonds sous le trait, durée du premier plan, et un
+  aperçu du cadre.
+
+Entrée valide, Échap annule. La fenêtre repart des dernières valeurs, du dernier dossier et de tes
+préréglages, retenus dans `%APPDATA%\Pelure\reglages.toml`.
 
 ## Plantage
 

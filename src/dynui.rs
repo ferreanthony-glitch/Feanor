@@ -1,4 +1,4 @@
-//! Réglages d'une brosse en sections (panneau Pinceaux, onglet Réglages du pinceau) : forme de la pointe, dispersion, peinture humide, et le panneau des connexions d'une brosse (moteur de dessin, étape 2) : pour la taille, l'opacité,
+//! Réglages d'une brosse en sections (panneau Réglages de l'outil, sous le résumé du pinceau) : forme de la pointe, dispersion, peinture humide, et le panneau des connexions d'une brosse (moteur de dessin, étape 2) : pour la taille, l'opacité,
 //! l'angle et la rondeur, la source suivie, « Inverser », la réponse minimale et la courbe de
 //! réponse, que l'on modifie à la souris (glisser un point ; double-clic : ajouter ; clic droit :
 //! retirer).

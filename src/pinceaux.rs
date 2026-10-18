@@ -3,7 +3,7 @@
 //! - le rangement des réglages nommés en dossiers (Crayons, Encres et feutres, Peinture, Craie et
 //!   fusain, Gommes, Mes brosses, puis un dossier par fichier importé) et la recherche par nom ;
 //! - l'état retenu d'une séance à l'autre (onglet, liste ou vignettes, dossiers ouverts) ;
-//! - les catégories de l'onglet « Réglages du pinceau », avec la case qui allume ou éteint
+//! - les catégories de réglages du pinceau (panneau Réglages de l'outil), avec la case qui allume ou éteint
 //!   celles qui s'allument (dispersion, grain, couleur et mélange, lissage).
 //!
 //! L'affichage est dans `pinceauxui.rs`.
@@ -121,7 +121,8 @@ pub fn ouvert_par_defaut(nom: &str) -> bool {
     nom == MINE || DOSSIERS_FOURNIS.contains(&nom)
 }
 
-/// Les deux onglets du panneau.
+/// Les deux onglets qu'a eus le panneau le 2026-10-18 (les réglages sont depuis passés dans le
+/// panneau Réglages de l'outil) : gardé pour relire les réglages de l'application écrits entre-temps.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
 pub enum Onglet {
     #[default]
@@ -138,7 +139,7 @@ pub struct Panneau {
     pub onglet: Onglet,
     /// Liste (vrai) ou vignettes (faux).
     pub liste: bool,
-    /// Catégorie de l'onglet « Réglages du pinceau ».
+    /// Catégorie de réglages du pinceau (panneau Réglages de l'outil).
     pub categorie: Categorie,
     /// État de chaque dossier que l'utilisateur a ouvert ou replié (vrai : ouvert) ; ceux qu'il
     /// n'a pas touchés suivent `ouvert_par_defaut`.
@@ -167,7 +168,7 @@ impl Panneau {
 
 // ---------------------------------------------------------------- catégories des réglages
 
-/// Les catégories de l'onglet « Réglages du pinceau ».
+/// Les catégories de réglages du pinceau (panneau Réglages de l'outil).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub enum Categorie {
     #[serde(rename = "pointe")]

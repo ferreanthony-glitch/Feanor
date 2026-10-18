@@ -78,6 +78,10 @@ pub struct Settings {
     /// dossiers ouverts ou repliés.
     #[serde(default, rename = "panneau_pinceaux")]
     pub brushes_panel: crate::pinceaux::Panneau,
+    /// Fenêtre « Nouveau projet » (2026-10-18) : dernières valeurs, dernier dossier et préréglages
+    /// de l'utilisateur (`nouveau.rs`).
+    #[serde(default, rename = "nouveau_projet")]
+    pub new_project: crate::nouveau::NewProjectSettings,
 }
 
 fn default_autosave() -> u32 {
@@ -116,6 +120,7 @@ impl Default for Settings {
             panes_fixed: Vec::new(),
             toucher: Default::default(),
             brushes_panel: Default::default(),
+            new_project: Default::default(),
         }
     }
 }

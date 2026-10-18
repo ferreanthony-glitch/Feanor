@@ -1296,6 +1296,20 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         projet »), une carte au milieu : nouveau projet, ouvrir (Pelure, Storyboard Pro), projets
         récents (huit), rouvrir le dernier au lancement, « Commencer sans projet ». Elle part dès
         qu'un projet s'ouvre ou se crée, ou au premier trait (`accueil.rs`, `App::welcome`) ;
+      - **fenêtre « Nouveau projet »** (Anthony, d'après l'organisation d'une fenêtre « Nouveau »
+        d'un logiciel de dessin, en version animation), ouverte par l'accueil et par Fichier >
+        Nouveau (`fichier.nouveau`) : nom et dossier (le projet est enregistré tout de suite dans
+        `dossier\nom\nom.pelure`, sans nom : « Enregistrer » demandera), préréglages groupés (Vidéo :
+        HD 1080, HD 720, UHD 4K, 2K DCI, Scope 2,39, SD PAL 4:3 en pixels carrés ; Réseaux : 9:16,
+        1:1, 4:5 ; Papier : A4, A3, A5, US Letter en paysage, calculés à la résolution), chacun avec
+        sa cadence (24 i/s, 25 pour PAL), « Personnalisé » dès qu'une valeur est changée à la main,
+        enregistrer / supprimer ses propres préréglages ; unités px, mm, cm, in (le projet garde des
+        pixels), orientation, proportions reconnues (16:9, 9:16, 2,39:1…), résolution (dpi),
+        cadence, couleur du papier (ou transparent), couleur des fonds sous le trait, durée du
+        premier plan, aperçu ; Entrée = OK, Échap = Annuler. Dernières valeurs, dernier dossier et
+        préréglages dans `reglages.toml` (`[nouveau_projet]`), la résolution jamais dans le projet :
+        format du projet inchangé. Un papier trop grand (A3 à 300 dpi) baisse la résolution pour
+        tenir dans 4096 px. Pas de 23,976 (la cadence est entière) (`nouveau.rs`, `nouveauui.rs`) ;
       - **menus courts** (Anthony : « certains menus contiennent trop de choses et noient les
         informations principales » ; « suis tes recommandations ») : barre de menus de 135 lignes
         de premier niveau à environ 75 (Fichier 25 → 12, Édition 13 → 10, Storyboard 22 → 9,
@@ -1688,6 +1702,10 @@ mise en avant ».
   liste déroulante si le panneau est étroit. Les réglages sont ceux de l'ancien panneau Réglages de
   l'outil (`dynui.rs` découpé par catégorie, `brush_ui` déplacé), qui n'en garde qu'un résumé : nom,
   taille, opacité (ses deux boutons vers le panneau Pinceaux retirés le 2026-10-18, « inutile »).
+- ✅ Le même soir, l'onglet est retiré (Anthony : « les réglages de pinceaux font doublon avec le
+  panneau Réglages, autant tout mettre dans le panneau Réglages ») : aperçu et catégories sous le
+  résumé du panneau Réglages de l'outil (`brush_settings_ui`) ; le panneau Pinceaux garde la
+  taille et la bibliothèque. `Onglet` reste dans `pinceaux.rs` pour relire les réglages écrits.
 - ✅ Retenus dans `reglages.toml` (`panneau_pinceaux`, `#[serde(default)]`) : onglet, liste ou
   vignettes, catégorie, dossiers ouverts ou repliés.
 - ✅ Logique sans écran dans `pinceaux.rs` (rangement, recherche, état, catégories), testée dans
