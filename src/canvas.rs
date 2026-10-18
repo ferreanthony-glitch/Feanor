@@ -4,7 +4,6 @@ use eframe::egui::{
 };
 
 use crate::app::{App, Tool};
-use crate::document::LayerKind;
 use crate::pixtools::BDrag;
 use crate::vtools::{Handle, VDrag};
 
@@ -592,15 +591,7 @@ impl App {
             painter.line_segment([p - vec2(4.0, 0.0), p + vec2(4.0, 0.0)], cross);
             painter.line_segment([p - vec2(0.0, 4.0), p + vec2(0.0, 4.0)], cross);
         }
-        if self.layer().kind == LayerKind::Vector {
-            // Petit repère « V » : le trait sera vectoriel.
-            painter.text(
-                p + vec2(r + 4.0, -r - 4.0),
-                egui::Align2::LEFT_BOTTOM,
-                "V",
-                egui::FontId::proportional(10.0),
-                ACCENT,
-            );
-        }
+        // (Le petit « V » qui suivait le curseur sur un calque vectoriel est retiré : Anthony,
+        // 2026-10-18 ; la sorte du calque se lit dans le panneau Calques et le panneau Réglages.)
     }
 }
