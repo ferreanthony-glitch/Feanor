@@ -1533,6 +1533,24 @@ Choix d'Anthony :
     l'aperçu bitmap.
   - Tout est à essayer à la tablette : la liste des A/B est à la fin de
     `docs/SENSATION-BROSSES.md`. Le banc de traits (étape 0) n'a encore aucun trait d'Anthony.
+- ✅ Audit du rendu des brosses (Fable, 2026-10-18, `docs/AUDIT-RENDU-BROSSES.md` ; Anthony :
+  « les brosses ne simulent toujours pas cet effet de dessin ou peinture traditionnelle », pareil
+  en bitmap) : un essai ignoré (`src/rendu_audit_tests.rs`) rend des planches PNG dans
+  `audit-rendu/` (réglages livrés, essais, outil TVPaint d'Anthony et panneaux TVPaint 12 importés,
+  Krita / MyPaint, papiers, pointes, bitmap contre vectoriel). Diagnostic : rubans lisses (empreinte
+  ronde dense à opacité pleine, rien qui s'accumule), papiers livrés qui sont du bruit par pixel,
+  grain à seuil binaire, aucune pointe en image livrée, grain propre du crayon TVPaint absent ; le
+  chantier « sensation » ne touchait pas la matière. Le crayon 2B de TVPaint importé prouve que le
+  moteur sait faire. Plan : pointes et papiers vrais, débit qui s'accumule, grain doux, grain du
+  crayon, mode Multiplier, puis peinture. Corrigé en passant : import TVPaint (`[ToolBox]` des
+  exports, `step` des outils de base en % — à vérifier —, grain du crayon noté), papiers importés
+  répartis par rang (`GrayImage::equalized`).
+- ✅ Étude « vectoriel comme bitmap » (Fable, 2026-10-18, `docs/VECTORIEL-COMME-BITMAP.md`) :
+  l'existant en images (le trait vectoriel perd au lâcher opacité ↔ appui, connexions, humide,
+  accumulation, et garde l'ancien bord), toutes les pistes (rejeu du moteur depuis le chemin avec
+  appui, instant, réglage complet et graine ; cache par trait ; GPU ; état de départ des morceaux ;
+  transformation ; tween ; format), les autres logiciels, et la recommandation : garder l'aperçu
+  au lâcher puis rejouer le moteur bitmap — rien n'est commencé.
 ## Couleur (demandée par Anthony le 2026-10-16) ✅
 
 La demande : « Le nuancier seul ne suffit pas, il me faut également la possibilité de passer

@@ -9,6 +9,28 @@ use crate::brushtex::{self, BrushLibrary, BrushTextures, GrayImage, Target, Tip}
 use crate::raster::Raster;
 use crate::tbbrush;
 
+/// Un papier importé est réparti par rang (audit du rendu) : les valeurs égales prennent le même
+/// rang moyen, un papier uniforme reste uniforme, et `add_paper` s'en sert.
+#[test]
+fn imported_papers_are_rank_equalized() {
+    let g = GrayImage::new(2, 2, vec![0.2, 0.9, 0.9, 0.5]).equalized();
+    let want = [0.0, 2.5 / 3.0, 2.5 / 3.0, 1.0 / 3.0];
+    for (v, w) in g.values.iter().zip(want) {
+        assert!((v - w).abs() < 1e-6, "{:?}", g.values);
+    }
+    let flat = GrayImage::new(3, 1, vec![0.4; 3]).equalized();
+    assert!(flat.values.iter().all(|v| (v - 0.5).abs() < 1e-6));
+    // Un papier « photographié » : presque tout dans les gris moyens. Réparti, un seuil à 0,3
+    // laisse 30 % de creux, comme pour un papier fabriqué.
+    let n = 1000;
+    let photo = GrayImage::new(n, 1, (0..n).map(|i| 0.45 + 0.1 * (i as f32 / n as f32)).collect());
+    let mut lib = BrushLibrary::builtin();
+    let id = lib.add_paper("photo", photo);
+    let paper = lib.textures(&BrushSettings { paper: Some(id), grain: 1.0, ..BrushSettings::brush() }).paper.unwrap();
+    let below = paper.values.iter().filter(|&&v| v < 0.3).count();
+    assert!((below as f32 / n as f32 - 0.3).abs() < 0.01, "{below} creux sur {n}");
+}
+
 /// `bundledFile` d'une image grise `w`×`h` (lignes complétées à 4 octets).
 fn bundled(w: usize, h: usize, pixel: impl Fn(usize, usize) -> u8) -> String {
     let stride = (w + 3) & !3;

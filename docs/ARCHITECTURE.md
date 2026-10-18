@@ -690,6 +690,19 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     par brosse avec `#[serde(default)]` (les anciens fichiers se relisent). Risque : la cadence de
     référence du Suivi et les défauts sont des choix à confirmer à la tablette. Réversible :
     « Ancien toucher » et les cases rendent le comportement d'avant.
+- Audit du rendu des brosses (2026-10-18, `docs/AUDIT-RENDU-BROSSES.md`, étude
+  `docs/VECTORIEL-COMME-BITMAP.md`) : `rendu_audit_tests.rs` (essai ignoré
+  `planches_rendu_audit`) trace quatre gestes synthétiques (rampe d'appui, hachures, S, passages
+  croisés) avec chaque réglage, en bitmap (`StrokeState`) et en vectoriel (`vector::simplify` +
+  `render_element`, comme `commit_vector_stroke`), et écrit des planches PNG dans `audit-rendu/`
+  (ignoré par git) avec `mesures.txt` (alpha le long de la rampe, aplat du S, accumulation,
+  écart bitmap / vectoriel). Les imports TVPaint (`.tvpx` d'Anthony, panneaux de l'installation),
+  Krita et MyPaint y passent aussi, en lecture seule.
+  - `tvpbrush::read_ini` met les sections en minuscules (`[ToolBox]` des exports) ; `base_tool`
+    prend `step` en pour cent de la taille (deviné, à vérifier) et note le `grain` du `tv_pencil`.
+  - `GrayImage::equalized` (rang, valeurs égales au rang moyen) remplace `normalized` pour les
+    papiers importés (`add_paper`, `load`) : le seuil de `grain_factor` suppose un relief réparti
+    uniformément, comme celui de `procedural_paper`.
 - Peinture humide (moteur de dessin, étape 11) : `BrushSettings::mix` (« melange ») et `charge`.
   - Avec du mélange, ou une charge incomplète, l'empreinte prend un autre chemin :
     1. la moyenne pondérée des pixels courants sous l'empreinte ;

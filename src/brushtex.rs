@@ -121,6 +121,36 @@ impl GrayImage {
         }
         self
     }
+
+    /// Chaque valeur remplacée par son rang (répartition uniforme de 0 à 1, les valeurs égales au
+    /// même rang moyen), comme pour les papiers fabriqués par `procedural_paper`. Le seuil du
+    /// grain (`grain_factor`) suppose cette répartition ; un papier importé — scanné ou
+    /// photographié, presque tout son relief dans les gris moyens — passait sinon d'un coup de
+    /// « rien » à « tout » entre deux appuis (audit du rendu, 2026-10-18, planche des papiers).
+    pub fn equalized(mut self) -> GrayImage {
+        let n = self.values.len();
+        if n < 2 {
+            return self;
+        }
+        let mut order: Vec<usize> = (0..n).collect();
+        order.sort_by(|&a, &b| self.values[a].total_cmp(&self.values[b]));
+        let d = (n - 1) as f32;
+        let mut ranked = vec![0.0f32; n];
+        let mut i = 0;
+        while i < n {
+            let mut j = i;
+            while j + 1 < n && self.values[order[j + 1]] == self.values[order[i]] {
+                j += 1;
+            }
+            let r = (i + j) as f32 / 2.0 / d;
+            for &k in &order[i..=j] {
+                ranked[k] = r;
+            }
+            i = j + 1;
+        }
+        self.values = ranked;
+        self
+    }
 }
 
 /// Pointe en image, avec ses réductions successives : une pointe de quelques pixels prend une
@@ -471,9 +501,11 @@ impl BrushLibrary {
         id
     }
 
+    /// Un papier importé : son relief est réparti uniformément (`equalized`), ce que le grain
+    /// suppose.
     pub fn add_paper(&mut self, name: &str, image: GrayImage) -> u32 {
         let id = self.take_id();
-        self.papers.insert(id, (name.into(), Arc::new(image.normalized())));
+        self.papers.insert(id, (name.into(), Arc::new(image.equalized())));
         id
     }
 
@@ -551,7 +583,7 @@ impl BrushLibrary {
                     lib.tips.insert(t.id, (t.name, Arc::new(Tip::new(image))));
                 }
                 TextureKind::Paper => {
-                    lib.papers.insert(t.id, (t.name, Arc::new(image.normalized())));
+                    lib.papers.insert(t.id, (t.name, Arc::new(image.equalized())));
                 }
             }
             lib.next_id = lib.next_id.max(t.id + 1);

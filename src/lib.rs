@@ -240,6 +240,8 @@ mod recoveryui;
 mod ref3dtool;
 mod render;
 #[cfg(test)]
+mod rendu_audit_tests;
+#[cfg(test)]
 mod resize_tests;
 pub mod sbbatch;
 pub mod sbexport;

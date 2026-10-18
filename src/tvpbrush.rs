@@ -67,14 +67,16 @@ pub fn read_tar(bytes: &[u8]) -> Result<HashMap<String, Vec<u8>>, String> {
 }
 
 /// Les clés d'un fichier INI : section → clé → valeur. (Les fichiers de TVPaint commencent par
-/// la marque UTF-8, BOM.)
+/// la marque UTF-8, BOM.) Les noms de section sont mis en minuscules : les panneaux livrés
+/// écrivent `[toolbox]`, un panneau exporté par TVPaint 12 (`.tvpx`) écrit `[ToolBox]` (audit du
+/// rendu, 2026-10-18 : l'export d'Anthony n'importait aucun outil).
 pub fn read_ini(text: &str) -> HashMap<String, HashMap<String, String>> {
     let mut out: HashMap<String, HashMap<String, String>> = HashMap::new();
     let mut section = String::new();
     for line in text.trim_start_matches('\u{feff}').lines() {
         let line = line.trim();
         if line.starts_with('[') && line.ends_with(']') {
-            section = line[1..line.len() - 1].to_string();
+            section = line[1..line.len() - 1].to_lowercase();
         } else if let Some((k, v)) = line.split_once('=') {
             out.entry(section.clone()).or_default().insert(k.trim().to_string(), v.trim().to_string());
         }
@@ -282,8 +284,17 @@ pub fn base_tool(cmd: &str, notes: &mut Vec<String>) -> Option<BrushSettings> {
     let power = (num("power", 100.0) / 100.0).clamp(0.01, 1.0);
     s.power = power;
     s.build_up = power < 1.0;
-    if let Some(step) = a.get("step").and_then(|v| v.parse::<f32>().ok()) {
-        s.spacing = (step / s.size.max(1.0)).clamp(0.02, 1.0);
+    // `step` : pris en pour cent de la taille, comme le `stepval` des brosses perso (12,5 par
+    // défaut dans les deux cas ; audit du rendu, 2026-10-18 : lu en pixels, le crayon 9,5 px
+    // d'Anthony à `step 12.5` posait une empreinte par diamètre, un trait en chapelet). Deviné,
+    // à vérifier dans TVPaint.
+    if let Some(step) = a.get("step").and_then(|v| v.parse::<f32>().ok()).filter(|v| *v > 0.0) {
+        s.spacing = (step / 100.0).clamp(0.02, 1.0);
+    }
+    if name == "tv_pencil" {
+        if let Some(g) = a.get("grain") {
+            notes.push(format!("grain du crayon TVPaint ({g} : Silk, Soft, Medium ou Hard) non repris, Pelure n'a pas de grain propre au crayon"));
+        }
     }
     if let Some(aspect) = a.get("aspect").and_then(|v| v.parse::<f32>().ok()) {
         s.roundness = (aspect / 100.0).clamp(0.05, 1.0);
