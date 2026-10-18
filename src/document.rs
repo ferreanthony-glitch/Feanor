@@ -1904,7 +1904,9 @@ impl Document {
     /// propres dessins. Un calque de toute la scène suit la règle d'un panneau déplacé : collé
     /// dans sa scène, il en garde le dessin ; ailleurs, il est retiré et le panneau prend le fond
     /// de sa nouvelle scène (`sync_scene_layers`). Renvoie l'indice du premier panneau collé, ou
-    /// rien si la copie vient d'un projet d'une autre taille.
+    /// rien si la copie vient d'un projet d'une autre taille. Les panneaux collés restent dans la
+    /// scène : ce n'est pas un collage de plans (l'application passe par `paste_plans`), et à la
+    /// relecture d'un projet enregistré ainsi, ils sont mis bout à bout avec le panneau voisin.
     pub fn paste_panels(&mut self, clip: &PanelClip, index: usize) -> Option<usize> {
         if clip.panels.is_empty() || clip.size != [self.width, self.height] {
             return None;

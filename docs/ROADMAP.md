@@ -1646,3 +1646,5 @@ d'Anthony du 2026-10-15 :
 | Premier / dernier calque | Ctrl+Origine / Ctrl+Fin | Début / fin du montage | ✅ en Animation ; le montage les garde en Storyboard |
 | Afficher tous les calques | = | + (ajouter une image au plan) : même touche en AZERTY | sans touche |
 | Nouveau calque d'animation | Ctrl+N | Nouveau projet | sans touche |
+
+- ✅ Perte de plan au collage ? Non reproduite : coller des plans (paste_plans) donne des ids neufs et survit à l'enregistrement (tests). L'écart « 5 à l'écriture, 4 à la relecture » venait de paste_panels (panneaux gardés dans la scène, mis bout à bout au chargement). Le chargement renumérote désormais les ids de plan, de scène et de séquence en double du manifeste, pour ne rien perdre.
