@@ -1244,6 +1244,15 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         timeline ; le dessin, plus discret) au lieu d'un fin trait blanc en haut ; 6, une zone bitmap
         choisie survit au passage sur Transformer, qui la déplace (glisser dedans), l'agrandit ou
         la tourne (ses poignées), l'enveloppe (Ctrl + coin) ; les flèches la poussent (`Tool::keeps_zone`) ;
+        8, panneaux qui s'ajustent (Anthony : « que les panneaux s'adaptent d'eux-mêmes en fonction
+        de ce qu'ils affichent ») : quand deux panneaux sont l'un sur l'autre, les réglages de
+        l'outil, les guides, la fiche, les effets et les icônes des outils prennent la hauteur de
+        leur contenu (mesurée à chaque image) ; la couleur, les pinceaux, les calques gagnent le
+        reste ; quand les deux débordent, chacun selon son contenu (la couleur est mesurée aussi).
+        Le bord glisse en quelques images. Un bord tiré à la main est retenu dans `reglages.toml`
+        (`panneaux_tires_a_la_main`) et n'est plus touché, jusqu'à Affichage > Panneaux >
+        Réajuster les panneaux (`vue.reajuster_panneaux`, sans touche) ; case « Ajuster les
+        panneaux à leur contenu » (`panneaux_ajustes`). `ajuste.rs` ;
       - **enveloppe de Bézier** (Anthony : « maintenir Ctrl permet de saisir une poignée de Bézier
         des coins pour transformer la forme » ; son choix : « B, comme l'outil Perspective ») : dans
         l'outil Transformer, Ctrl + glisser un coin du cadre ouvre une enveloppe sur le dessin

@@ -61,6 +61,12 @@ pub struct Settings {
     pub recent_projects: Vec<PathBuf>,
     #[serde(default = "yes", rename = "rouvrir_dernier_projet")]
     pub reopen_last: bool,
+    /// Les panneaux de réglages prennent la hauteur de leur contenu (`ajuste.rs`), sauf entre les
+    /// paires (premier panneau du haut, premier du bas) dont on a tiré le bord à la main.
+    #[serde(default = "yes", rename = "panneaux_ajustes")]
+    pub panes_fit: bool,
+    #[serde(default, rename = "panneaux_tires_a_la_main", skip_serializing_if = "Vec::is_empty")]
+    pub panes_fixed: Vec<(crate::dock::Pane, crate::dock::Pane)>,
 }
 
 fn default_autosave() -> u32 {
@@ -94,6 +100,8 @@ impl Default for Settings {
             fill_shapes: false,
             recent_projects: Vec::new(),
             reopen_last: true,
+            panes_fit: true,
+            panes_fixed: Vec::new(),
         }
     }
 }

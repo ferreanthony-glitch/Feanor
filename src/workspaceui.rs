@@ -38,7 +38,8 @@ impl App {
 
     /// Retient la disposition quand elle change (pas pendant qu'on tire un panneau).
     pub(crate) fn remember_layout(&mut self, ctx: &egui::Context) {
-        if ctx.input(|i| i.pointer.any_down()) {
+        // (Ni pendant qu'un panneau glisse vers la hauteur de son contenu : une fois arrêté.)
+        if ctx.input(|i| i.pointer.any_down()) || self.fit_busy {
             return;
         }
         let current = self.current_layout();
@@ -61,6 +62,7 @@ impl App {
             "vue.panneau_outils" => self.toggle_pane_group(Group::Left),
             "vue.panneau_fiche" => self.toggle_pane_group(Group::Right),
             "vue.panneau_bande" => self.toggle_pane_group(Group::Bottom),
+            "vue.reajuster_panneaux" => self.refit_panes(),
             _ => return false,
         }
         true
@@ -130,6 +132,19 @@ impl App {
                     self.workspace_action(action);
                 }
             }
+            ui.separator();
+            // Panneaux qui s'ajustent à leur contenu (`ajuste.rs`).
+            let resp = ui.checkbox(&mut self.settings.panes_fit, "Ajuster les panneaux à leur contenu").on_hover_text(
+                "Les réglages de l'outil, les guides, la fiche et les effets prennent la hauteur de ce \
+                 qu'ils montrent ; la couleur, les pinceaux et les calques gagnent le reste. Un bord \
+                 tiré à la main reste où on l'a mis.",
+            );
+            if resp.changed() {
+                let _ = self.settings.save();
+            }
+            let fixed = self.settings.panes_fixed.len();
+            let label = if fixed > 0 { format!("Réajuster les panneaux ({fixed} bord(s) tiré(s) à la main)") } else { "Réajuster les panneaux".to_string() };
+            self.action_item(ui, &label, "vue.reajuster_panneaux");
             ui.separator();
             ui.label(
                 egui::RichText::new(

@@ -597,6 +597,15 @@ Les messages de la barre d'état ne se perdent plus : survole-le pour le lire en
 pour voir les précédents. Les avis importants (enregistrement, ouverture, erreurs, fin de
 propagation, export) restent aussi quelques secondes en bas à droite ; un clic les ferme.
 
+## Panneaux qui s'ajustent
+
+Quand deux panneaux sont l'un sur l'autre, celui des réglages (réglages de l'outil, guides, fiche,
+effets) prend la hauteur de ce qu'il montre : avec la main ou la pipette, il se réduit et la
+couleur gagne la place ; avec le pinceau, il grandit (moitié-moitié si les deux débordent). Les
+effets sous les calques font de même. Tire un bord à la main : il reste où tu l'as mis, même
+après relance. Affichage > Panneaux > Réajuster les panneaux oublie ces bords ; la case « Ajuster
+les panneaux à leur contenu » coupe le tout.
+
 ## Palette de commandes
 
 Ctrl+K (ou Aide > Palette de commandes) : tape quelques lettres du nom d'une commande (« persp »,

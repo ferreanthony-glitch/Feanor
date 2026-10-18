@@ -24,7 +24,16 @@ impl egui_dock::TabViewer for Panes<'_> {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Pane) {
+        // La hauteur du contenu, pour les panneaux qui s'ajustent (`ajuste.rs`) : egui_dock étend
+        // la zone à tout l'onglet avant de nous la donner, on suit donc où le contenu s'arrête.
+        let top = ui.cursor().top();
         self.app.pane_ui(ui, *tab);
+        if crate::ajuste::measured(*tab) {
+            let h = ui.cursor().top() - top;
+            if h.is_finite() && h > 0.0 {
+                self.app.pane_heights.insert(*tab, h);
+            }
+        }
     }
 
     /// Clic droit sur un onglet : le panneau dans sa propre fenêtre.
@@ -143,6 +152,9 @@ impl App {
         // d'écran d'après.
         self.following = std::mem::take(&mut self.follow_frame);
         let style = crate::theme::dock(egui_dock::Style::from_egui(ctx.style().as_ref()));
+        let sep = style.separator.width;
+        let m = style.tab.tab_body.inner_margin;
+        let body_margin = (m.top + m.bottom) as f32;
         egui_dock::DockArea::new(&mut state)
             .id(Id::new("panneaux"))
             .style(style)
@@ -151,6 +163,7 @@ impl App {
             .show(ctx, &mut Panes { app: self });
         // (Un panneau peut avoir remplacé la disposition pendant l'affichage : on la garde.)
         if self.dock.is_none() {
+            self.fit_panes(ctx, &mut state, sep, body_margin);
             self.dock = Some(state);
         }
         if let Some(pane) = self.detach_request.take() {
@@ -235,6 +248,8 @@ impl App {
         let layout = layout.sanitized();
         self.detached = layout.detachees.clone();
         self.dock = Some(dock::to_state(&layout));
+        // Nouvelle disposition : ses parts ne sont pas des bords tirés à la main.
+        self.fit_set.clear();
     }
 
     /// Affiche ou masque un panneau (menu Affichage > Panneaux).

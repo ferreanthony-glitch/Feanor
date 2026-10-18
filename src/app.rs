@@ -576,6 +576,11 @@ pub struct App {
     pub(crate) messages_window: bool,
     /// Palette de commandes ouverte (Ctrl+K, `palette.rs`).
     pub(crate) palette: Option<crate::palette::Palette>,
+    /// Panneaux qui s'ajustent (`ajuste.rs`) : hauteur du contenu de chaque panneau à sa dernière
+    /// image affichée, part posée par paire de panneaux, un bord a glissé à cette image.
+    pub(crate) pane_heights: std::collections::HashMap<crate::dock::Pane, f32>,
+    pub(crate) fit_set: std::collections::HashMap<(crate::dock::Pane, crate::dock::Pane), f32>,
+    pub(crate) fit_busy: bool,
     /// Projet récent à ouvrir une fois « Enregistrer ? » réglé (`recents.rs`).
     pub(crate) recent_to_open: Option<PathBuf>,
     /// Fenêtre « Aller à un plan » ouverte, et ce qui y est tapé (`aller.rs`).
@@ -849,6 +854,9 @@ impl App {
             goto_plan: None,
             recent_to_open: None,
             palette: None,
+            pane_heights: Default::default(),
+            fit_set: Default::default(),
+            fit_busy: false,
             messages: Vec::new(),
             last_status: String::new(),
             toasts: Vec::new(),

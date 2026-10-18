@@ -154,6 +154,13 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - `dockui.rs` : le contenu de chaque onglet (les fonctions de panneau existantes), les menus.
   egui_dock 0.16 ne retient pas la place des panneaux flottants : on la lit dans la mémoire
   d'egui (`dock::window_id`), sans le cadre (sinon la taille grandirait à chaque ouverture).
+- `ajuste.rs` (panneaux qui s'ajustent) : `Panes::ui` note la hauteur du contenu des panneaux
+  mesurés (là où le curseur s'arrête : egui_dock étend la zone à tout l'onglet avant de la
+  donner) ; après `DockArea::show`, chaque nœud `Vertical` dont une partie s'ajuste reçoit une
+  nouvelle `fraction` (calcul pur `top_height`, testé), par petits pas. Une paire (premier
+  panneau du haut, premier du bas) dont la part n'est plus celle qu'on a posée a été tirée à la
+  main : elle rejoint `panneaux_tires_a_la_main`. `remember_layout` attend que le bord soit
+  arrêté (`fit_busy`) ; `set_dock_layout` oublie les parts posées.
 - `workspace::Layout` garde ses anciens champs (panneaux affichés, tailles en pixels) : ils
   décrivent les dispositions de Pelure et sont convertis (`DockLayout::from_legacy`) quand
   `panneaux` manque (espaces enregistrés avant 5b).
