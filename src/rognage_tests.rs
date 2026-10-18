@@ -324,6 +324,64 @@ fn undo_and_redo_restore_the_plan_its_reserve_and_its_comments() {
 }
 
 #[test]
+fn a_video_layer_keeps_its_sync_when_the_head_is_trimmed() {
+    use crate::document::Layer;
+    use crate::video::{self, VideoClip};
+    let mut doc = Document::new(16, 16, 24);
+    doc.panels[0].set_length(20);
+    let clip = VideoClip { id: video::new_id(), name: "v.mp4".into(), frames: 20, fps: 24.0, start: 2, ext: "png".into() };
+    let mut layer = Layer::new("Vidéo", LayerKind::Bitmap);
+    layer.video = Some(clip);
+    doc.panels[0].layers.push(layer);
+    let shown = |d: &Document, f: usize| d.panels[0].layers.last().unwrap().video.as_ref().unwrap().index_at(f, 24);
+    assert_eq!((shown(&doc, 1), shown(&doc, 2), shown(&doc, 7)), (None, Some(0), Some(5)));
+    // Le plan commence à l'image 5 de l'ancien : la vidéo, elle, a commencé avant (début négatif).
+    doc.rogner(0, Rogner::Head(5)).unwrap();
+    assert_eq!(doc.panels[0].layers.last().unwrap().video.as_ref().unwrap().start, -3);
+    assert_eq!((shown(&doc, 0), shown(&doc, 2)), (Some(3), Some(5)), "la même image de la vidéo sous la même image du contenu");
+    // Plus loin que la réserve : la vidéo suit le contenu décalé.
+    doc.rogner(0, Rogner::Head(-8)).unwrap();
+    assert_eq!(doc.panels[0].layers.last().unwrap().video.as_ref().unwrap().start, 5);
+    assert_eq!((shown(&doc, 4), shown(&doc, 5), shown(&doc, 7)), (None, Some(0), Some(2)));
+    // Revenu à zéro rogné : la vidéo est comme au début.
+    let mut again = Document::new(16, 16, 24);
+    again.panels[0].set_length(20);
+    let c = VideoClip { id: video::new_id(), name: "v.mp4".into(), frames: 20, fps: 24.0, start: 2, ext: "png".into() };
+    let mut l = Layer::new("Vidéo", LayerKind::Bitmap);
+    l.video = Some(c);
+    again.panels[0].layers.push(l);
+    again.rogner(0, Rogner::Head(5)).unwrap();
+    again.rogner(0, Rogner::Head(-5)).unwrap();
+    assert_eq!(again.panels[0].layers.last().unwrap().video.as_ref().unwrap().start, 2);
+}
+
+#[test]
+fn a_drag_replays_from_the_plan_as_it_was_whatever_the_path() {
+    use crate::rognageui::PlanBackup;
+    let (mut doc, _) = rich();
+    let before = sig(&doc.panels[0]);
+    let comments0 = sorted(&doc);
+    let backup = PlanBackup::capture(&doc, 0);
+    // Comme le geste : chaque position repart du plan d'avant, dans tous les sens.
+    for delta in [3, 9, 4, -2, -6, 0, 12, 1, -1] {
+        backup.restore(&mut doc);
+        doc.rogner(0, Rogner::Head(delta)).unwrap();
+    }
+    backup.restore(&mut doc);
+    assert_eq!(sig(&doc.panels[0]), before, "relâcher sans bouger : rien n'a changé");
+    assert_eq!(sorted(&doc), comments0);
+    assert!(doc.reserves.is_empty());
+    for delta in [-4, -9, 3] {
+        backup.restore(&mut doc);
+        doc.rogner(0, Rogner::Tail(delta)).unwrap();
+    }
+    backup.restore(&mut doc);
+    assert_eq!(sig(&doc.panels[0]), before);
+    assert_eq!(sorted(&doc), comments0);
+    assert!(doc.reserves.is_empty());
+}
+
+#[test]
 fn the_storyboard_lock_refuses_every_trim() {
     let (mut doc, _) = rich();
     let before = sig(&doc.panels[0]);
