@@ -98,7 +98,9 @@ impl Couleurs {
             fenetre: [56, 56, 56],
             widgets: [90, 90, 90],
             texte: [230, 230, 230],
-            accent: [61, 111, 180],
+            // Gris clair (Anthony, 2026-10-18 : l'accent et la sélection en gris clair plutôt
+            // qu'en bleu) ; ce qui s'écrit dessus passe en presque noir (`sur_accent`).
+            accent: [200, 200, 200],
             fond: [46, 46, 46],
             timeline: [72, 72, 72],
             bordure: [80, 80, 80],
