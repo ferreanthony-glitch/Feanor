@@ -151,45 +151,38 @@ impl App {
 
     /// `layer_ops_menu`, sans ce que l'endroit `from` montre déjà.
     pub(crate) fn layer_ops_menu_from(&mut self, ui: &mut egui::Ui, from: OpsFrom) {
+        // Menu court (Anthony, 2026-10-18 : « certains menus contiennent trop de choses ») : ce qui
+        // sert souvent en premier niveau, le reste sous « Plus ». Verrou et pelure d'oignon ont leur
+        // icône sur chaque ligne de calque (et Alt+L, Ctrl+L).
         let n = self.chosen_layers().len();
         let (all, panel) = (from == OpsFrom::Everywhere, from == OpsFrom::LayersPanel);
-        self.action_item(ui, "Nouveau calque…", "calque.nouveau");
-        if !panel {
-            self.action_item(ui, "Nouveau calque vectoriel", "calque.nouveau_vectoriel");
-            self.action_item(ui, "Nouveau calque bitmap", "calque.nouveau_bitmap");
-            self.action_item(ui, "Nouveau calque de fond", "calque.nouveau_fond");
-        }
-        // Calque CTG (13j).
-        ui.menu_button("Calque CTG", |ui| {
-            self.action_item(ui, "Nouveau calque CTG (sous le calque courant)", "calque.nouveau_ctg");
-            self.action_item(ui, "Transformer le calque courant en calque CTG", "calque.transformer_ctg");
-            self.action_item(ui, "Désactiver le calque CTG", "calque.desactiver_ctg");
+        ui.menu_button("Nouveau calque", |ui| {
+            if !panel {
+                self.action_item(ui, "Vectoriel", "calque.nouveau_vectoriel");
+                self.action_item(ui, "Bitmap", "calque.nouveau_bitmap");
+                self.action_item(ui, "De fond", "calque.nouveau_fond");
+            }
+            self.action_item(ui, "CTG (sous le calque courant)", "calque.nouveau_ctg");
             ui.separator();
-            self.action_item(ui, "Charger la structure à partir des sources", "ctg.charger_structure");
-            self.action_item(ui, "Charger la structure à partir des sources (effacer)", "ctg.charger_structure_effacer");
-            ui.label(egui::RichText::new("Sur le calque CTG, griffonner une couleur remplit la zone des traits des sources.").weak().small());
+            self.action_item(ui, "Choisir la sorte et le nom…", "calque.nouveau");
         });
-        ui.separator();
         let many = |one: &str, several: &str| if n > 1 { format!("{several} ({n})") } else { one.to_string() };
         if all {
             self.action_item(ui, &many("Dupliquer le calque", "Dupliquer les calques choisis"), "calque.dupliquer");
             self.action_item(ui, &many("Supprimer le calque", "Supprimer les calques choisis"), "calque.supprimer");
         }
-        self.action_item(ui, "Couper le calque", "calque.couper");
-        if !panel {
-            self.action_item(ui, "Copier le calque", "calque.copier");
-            self.action_item(ui, "Coller le calque", "calque.coller");
-        }
-        self.action_item(ui, "Coller à la place du calque courant", "calque.coller_remplacer");
+        ui.menu_button("Presse-papiers", |ui| {
+            self.action_item(ui, "Couper le calque", "calque.couper");
+            if !panel {
+                self.action_item(ui, "Copier le calque", "calque.copier");
+                self.action_item(ui, "Coller le calque", "calque.coller");
+            }
+            self.action_item(ui, "Coller à la place du calque courant", "calque.coller_remplacer");
+        });
         ui.menu_button("Retourner le calque", |ui| {
             self.action_item(ui, "De gauche à droite", "calque.miroir_h");
             self.action_item(ui, "De haut en bas", "calque.miroir_v");
         });
-        if all {
-            // La propagation (façon EbSynth) du calque courant, aussi dans le menu Calques.
-            self.propagation_item(ui, self.cur_layer);
-        }
-        ui.separator();
         ui.menu_button("Fusionner", |ui| {
             if !panel {
                 // (Le bouton Fusionner du panneau fait l'un ou l'autre.)
@@ -199,25 +192,21 @@ impl App {
             self.action_item(ui, "Les calques visibles", "calque.fusionner_visibles");
             self.action_item(ui, "Tous les calques", "calque.fusionner_tout");
         });
-        ui.menu_button("Choisir", |ui| {
-            self.action_item(ui, "Tous les calques", "calque.choisir_tout");
-            self.action_item(ui, "Les calques visibles", "calque.choisir_visibles");
-            self.action_item(ui, "Les calques du même groupe", "calque.choisir_groupe");
-            self.action_item(ui, "Les calques des autres groupes", "calque.choisir_autres_groupes");
-            self.action_item(ui, "Aucun (le calque courant seul)", "calque.choisir_aucun");
-        });
-        ui.menu_button("Afficher", |ui| {
-            self.action_item(ui, "Tous les calques", "calque.tous_visibles");
-            self.action_item(ui, "Aucun calque", "calque.tous_caches");
-            self.action_item(ui, "Le calque courant seul", "calque.courant_seul");
-        });
-        ui.menu_button("Nettoyer", |ui| {
-            self.action_item(ui, "Supprimer les calques vides", "calque.supprimer_vides");
-            self.action_item(ui, "Supprimer les calques cachés", "calque.supprimer_caches");
-        });
-        ui.menu_button("Pochoirs", |ui| {
-            self.action_item(ui, "Éteindre tous les pochoirs", "calque.pochoirs_eteindre");
-            self.action_item(ui, "Inverser tous les pochoirs", "calque.pochoirs_inverser");
+        if all {
+            // La propagation (façon EbSynth) du calque courant, aussi dans le menu Calques.
+            self.propagation_item(ui, self.cur_layer);
+        }
+        ui.separator();
+        ui.menu_button("Ordre", |ui| {
+            if !panel {
+                self.action_item(ui, "Monter le calque", "calque.monter");
+                self.action_item(ui, "Descendre le calque", "calque.descendre");
+                ui.separator();
+            }
+            self.action_item(ui, "Aller au calque du dessus", "calque.dessus");
+            self.action_item(ui, "Aller au calque du dessous", "calque.dessous");
+            self.action_item(ui, "Aller au premier calque", "calque.premier");
+            self.action_item(ui, "Aller au dernier calque", "calque.dernier");
         });
         ui.menu_button("Groupes", |ui| self.groups_menu(ui));
         ui.menu_button("Dossiers", |ui| {
@@ -230,21 +219,37 @@ impl App {
             self.action_item(ui, "Supprimer uniquement le dossier", "dossier.supprimer_seul");
             self.action_item(ui, "Supprimer le dossier et ses calques", "calque.supprimer");
         });
-        if all {
-            ui.separator();
-            let lock = if self.layer().locked { "Déverrouiller le calque" } else { "Verrouiller le calque" };
-            self.action_item(ui, lock, "calque.verrouiller");
-            self.action_item(ui, "Pelure d'oignon du calque", "calque.pelure");
-        }
-        ui.separator();
-        self.action_item(ui, "Calque du dessus", "calque.dessus");
-        self.action_item(ui, "Calque du dessous", "calque.dessous");
-        self.action_item(ui, "Premier calque", "calque.premier");
-        self.action_item(ui, "Dernier calque", "calque.dernier");
-        if !panel {
-            self.action_item(ui, "Monter le calque", "calque.monter");
-            self.action_item(ui, "Descendre le calque", "calque.descendre");
-        }
+        ui.menu_button("Plus", |ui| {
+            ui.menu_button("Choisir", |ui| {
+                self.action_item(ui, "Tous les calques", "calque.choisir_tout");
+                self.action_item(ui, "Les calques visibles", "calque.choisir_visibles");
+                self.action_item(ui, "Les calques du même groupe", "calque.choisir_groupe");
+                self.action_item(ui, "Les calques des autres groupes", "calque.choisir_autres_groupes");
+                self.action_item(ui, "Aucun (le calque courant seul)", "calque.choisir_aucun");
+            });
+            ui.menu_button("Afficher", |ui| {
+                self.action_item(ui, "Tous les calques", "calque.tous_visibles");
+                self.action_item(ui, "Aucun calque", "calque.tous_caches");
+                self.action_item(ui, "Le calque courant seul", "calque.courant_seul");
+            });
+            ui.menu_button("Pochoirs", |ui| {
+                self.action_item(ui, "Éteindre tous les pochoirs", "calque.pochoirs_eteindre");
+                self.action_item(ui, "Inverser tous les pochoirs", "calque.pochoirs_inverser");
+            });
+            ui.menu_button("Nettoyer", |ui| {
+                self.action_item(ui, "Supprimer les calques vides", "calque.supprimer_vides");
+                self.action_item(ui, "Supprimer les calques cachés", "calque.supprimer_caches");
+            });
+            // Calque CTG (13j).
+            ui.menu_button("Calque CTG", |ui| {
+                self.action_item(ui, "Transformer le calque courant en calque CTG", "calque.transformer_ctg");
+                self.action_item(ui, "Désactiver le calque CTG", "calque.desactiver_ctg");
+                ui.separator();
+                self.action_item(ui, "Charger la structure à partir des sources", "ctg.charger_structure");
+                self.action_item(ui, "Charger la structure à partir des sources (effacer)", "ctg.charger_structure_effacer");
+                ui.label(egui::RichText::new("Sur le calque CTG, griffonner une couleur remplit la zone des traits des sources.").weak().small());
+            });
+        });
     }
 
     /// Rangs des calques choisis du plan, du plus bas au plus haut ; le calque courant en est.

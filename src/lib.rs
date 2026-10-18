@@ -87,6 +87,7 @@ mod messages_tests;
 mod palette;
 #[cfg(test)]
 mod palette_tests;
+mod prefsui;
 mod recents;
 #[cfg(test)]
 mod recents_tests;

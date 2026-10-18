@@ -579,6 +579,9 @@ pub struct App {
     pub(crate) messages_window: bool,
     /// Palette de commandes ouverte (Ctrl+K, `palette.rs`).
     pub(crate) palette: Option<crate::palette::Palette>,
+    /// Fenêtres Exporter… et Préférences… ouvertes (`prefsui.rs`).
+    pub(crate) export_hub: bool,
+    pub(crate) prefs_window: bool,
     /// Panneaux qui s'ajustent (`ajuste.rs`) : hauteur du contenu de chaque panneau à sa dernière
     /// image affichée, part posée par paire de panneaux, un bord a glissé à cette image.
     pub(crate) pane_heights: std::collections::HashMap<crate::dock::Pane, f32>,
@@ -864,6 +867,8 @@ impl App {
             goto_plan: None,
             recent_to_open: None,
             palette: None,
+            export_hub: false,
+            prefs_window: false,
             pane_heights: Default::default(),
             fit_set: Default::default(),
             fit_busy: false,
@@ -2654,6 +2659,8 @@ impl App {
             "fichier.quitter" => self.request(Pending::Quit),
             "fichier.fermer" => self.request(Pending::Close),
             "aide.palette" => self.palette = Some(Default::default()),
+            "fichier.exporter" => self.export_hub = true,
+            "fichier.preferences" => self.prefs_window = true,
             // Le collage pose déjà les éléments et les zones à leur place d'origine.
             "edition.coller_sur_place" => self.run_action("edition.coller"),
             // Les propriétés du plan : la fiche (action, dialogue, notes, durée…).

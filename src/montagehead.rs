@@ -294,51 +294,17 @@ impl App {
             ui.close_menu();
             self.merge_chosen_layers();
         }
-        // Fonctions d'état.
+        // Ce qui sert souvent (menu court, Anthony, 2026-10-18) : afficher, pelure, opacité, mode
+        // de fusion (dans le panneau Calques, son en-tête les a), les effets non destructifs par
+        // familles, la propagation de la peinture ; les autres réglages d'état et d'animation dans
+        // deux sous-menus.
         ui.separator();
         if in_montage && ui.checkbox(&mut visible.clone(), "Afficher").clicked() {
             self.set_layer_flag(li, |l| l.visible = !visible);
         }
-        if !folder {
-            if ui.checkbox(&mut onion.clone(), "Pelure d'oignon du calque").clicked() {
-                self.set_layer_flag(li, |l| l.onion = !onion);
-            }
-            if ui
-                .checkbox(&mut keep_alpha.clone(), "Préserver la transparence")
-                .on_hover_text("Le pinceau ne colore que ce qui est déjà dessiné : le vide reste vide.")
-                .clicked()
-            {
-                self.set_layer_flag(li, |l| l.keep_alpha = !keep_alpha);
-            }
-            if ui.checkbox(&mut stencil.clone(), "Pochoir").on_hover_text("Le dessin de ce calque limite où l'on peint sur les autres calques.").clicked() {
-                self.set_layer_flag(li, |l| l.stencil = !stencil);
-            }
-            if ui
-                .add_enabled(stencil, egui::Checkbox::new(&mut negative.clone(), "Pochoir négatif"))
-                .on_hover_text("Positif : on ne peint que dans la forme du pochoir. Négatif : seulement en dehors.")
-                .clicked()
-            {
-                self.set_layer_flag(li, |l| l.stencil_negative = !negative);
-            }
-            if ui
-                .checkbox(&mut fixed.clone(), "Verrouiller la position")
-                .on_hover_text("L'outil Transformer et le déplacement en 3D ne bougent plus le calque, et on ne peut plus dessiner dessus.")
-                .clicked()
-            {
-                self.set_layer_flag(li, |l| l.position_locked = !fixed);
-            }
+        if !folder && ui.checkbox(&mut onion.clone(), "Pelure d'oignon du calque").clicked() {
+            self.set_layer_flag(li, |l| l.onion = !onion);
         }
-        self.depth_item(ui, li);
-        ui.menu_button("Groupe", |ui| self.group_menu(ui, li));
-        // Fonctions d'animation.
-        if !folder {
-            ui.separator();
-            self.behaviour_items(ui, li);
-        }
-        // Effets (Anthony, 2026-10-17 : « ajoute une partie effets ») : opacité et mode de fusion
-        // (dans le panneau Calques, son en-tête les a), les effets non destructifs par familles,
-        // cochés ou décochés, la fenêtre Effets, la propagation de la peinture.
-        ui.separator();
         if in_montage {
             let mut pct = opacity * 100.0;
             let resp = ui.horizontal(|ui| {
@@ -364,11 +330,45 @@ impl App {
                     }
                 });
             }
-            self.fx_menu_items(ui, li);
+            ui.menu_button("Effets", |ui| self.fx_menu_items(ui, li));
         }
         self.propagation_item(ui, li);
-        // Le reste : sortes de calques particulières, toutes les commandes.
+        // Fonctions d'état, puis d'animation (Anthony, 2026-10-17 : « en premier les fonctions
+        // simples, puis les fonctions d'état, ensuite les fonctions d'animation »).
         ui.separator();
+        ui.menu_button("Options du calque", |ui| {
+            if !folder {
+                if ui
+                    .checkbox(&mut keep_alpha.clone(), "Préserver la transparence")
+                    .on_hover_text("Le pinceau ne colore que ce qui est déjà dessiné : le vide reste vide.")
+                    .clicked()
+                {
+                    self.set_layer_flag(li, |l| l.keep_alpha = !keep_alpha);
+                }
+                if ui.checkbox(&mut stencil.clone(), "Pochoir").on_hover_text("Le dessin de ce calque limite où l'on peint sur les autres calques.").clicked() {
+                    self.set_layer_flag(li, |l| l.stencil = !stencil);
+                }
+                if ui
+                    .add_enabled(stencil, egui::Checkbox::new(&mut negative.clone(), "Pochoir négatif"))
+                    .on_hover_text("Positif : on ne peint que dans la forme du pochoir. Négatif : seulement en dehors.")
+                    .clicked()
+                {
+                    self.set_layer_flag(li, |l| l.stencil_negative = !negative);
+                }
+                if ui
+                    .checkbox(&mut fixed.clone(), "Verrouiller la position")
+                    .on_hover_text("L'outil Transformer et le déplacement en 3D ne bougent plus le calque, et on ne peut plus dessiner dessus.")
+                    .clicked()
+                {
+                    self.set_layer_flag(li, |l| l.position_locked = !fixed);
+                }
+            }
+            self.depth_item(ui, li);
+            ui.menu_button("Groupe", |ui| self.group_menu(ui, li));
+        });
+        if !folder {
+            ui.menu_button("Animation (avant, après, automatismes)", |ui| self.behaviour_items(ui, li));
+        }
         if ctg {
             ui.menu_button("Calque CTG", |ui| self.ctg_menu(ui, li));
         }

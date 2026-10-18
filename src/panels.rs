@@ -212,40 +212,58 @@ impl App {
         });
     }
 
+    /// Storyboard > Plans : ce qui se fait sur les plans choisis.
+    fn plans_menu(&mut self, ui: &mut egui::Ui) {
+        self.action_item(ui, "Nouveau plan avant le plan courant", "plan.nouveau_avant");
+        self.action_item(ui, "Dupliquer le plan", "panneau.dupliquer");
+        ui.separator();
+        self.action_item(ui, "Copier les plans choisis", "panneau.copier");
+        self.action_item(ui, "Coller les plans après le plan courant", "panneau.coller");
+        self.action_item(ui, "Supprimer les plans choisis", "panneau.supprimer");
+        ui.separator();
+        self.action_item(ui, "Allonger le plan d'une image", "panneau.ajouter_image");
+        self.action_item(ui, "Raccourcir le plan d'une image", "panneau.retirer_image");
+        ui.separator();
+        self.action_item(ui, "Couper le plan à l'image courante", "panneau.couper");
+        self.action_item(ui, "Réunir avec le plan suivant", "panneau.fusionner_suivant");
+        self.action_item(ui, "Réunir avec le plan précédent", "scene.joindre_precedente");
+        self.action_item(ui, "Fusionner les plans choisis", "panneau.fusionner_choisis");
+        self.action_item(ui, "Retourner les plans choisis", "plan.retourner");
+        ui.separator();
+        self.action_item(ui, "Nouveau projet à partir des plans choisis", "projet.nouveau_depuis_plans");
+    }
+
     pub(crate) fn menu_bar(&mut self, ui: &mut egui::Ui) {
         egui::menu::bar(ui, |ui| {
+            // Menus courts (Anthony, 2026-10-18 : « certains menus contiennent trop de choses et
+            // noient les informations principales ») : l'essentiel en premier niveau, le reste dans
+            // un sous-menu ou une fenêtre (Exporter, Préférences, `prefsui.rs`) ; ce qui a déjà un
+            // bouton toujours visible (vue sous le dessin) n'est plus répété. Toute commande reste
+            // trouvable par la palette (Ctrl+K).
             ui.menu_button("Fichier", |ui| {
                 self.action_item(ui, "Nouveau…", "fichier.nouveau");
                 self.action_item(ui, "Ouvrir…", "fichier.ouvrir");
                 ui.menu_button("Projets récents", |ui| self.recent_menu(ui));
-                self.action_item(ui, "Ouvrir un projet Storyboard Pro (.sboard)…", "fichier.importer_sboard");
                 self.action_item(ui, "Enregistrer", "fichier.enregistrer");
                 self.action_item(ui, "Enregistrer sous…", "fichier.enregistrer_sous");
-                self.action_item(ui, "Fermer le projet", "fichier.fermer");
                 self.action_item(ui, "Afficher le projet dans l'Explorateur", "fichier.afficher_explorateur");
-                self.action_item(ui, "Nouveau projet à partir des plans choisis", "projet.nouveau_depuis_plans");
-                self.action_item(ui, "Réglages du projet (propriétés, résolution, cadence)…", "projet.proprietes");
-                self.action_item(ui, "Raccourcis clavier…", "aide.raccourcis");
+                self.action_item(ui, "Fermer le projet", "fichier.fermer");
                 ui.separator();
-                if menu_item(ui, "Importer une image (calque bitmap)…", "") {
-                    self.import_image();
-                }
-                self.action_item(ui, "Importer une vidéo (calque vidéo)…", "fichier.importer_video");
-                self.action_item(ui, "Importer une séquence d'images (calque vidéo)…", "fichier.importer_sequence");
-                self.action_item(ui, "Importer un modèle 3D (glTF) comme repère…", "fichier.importer_modele3d");
+                ui.menu_button("Importer", |ui| {
+                    if menu_item(ui, "Une image (calque bitmap)…", "") {
+                        ui.close_menu();
+                        self.import_image();
+                    }
+                    self.action_item(ui, "Une vidéo (calque vidéo)…", "fichier.importer_video");
+                    self.action_item(ui, "Une séquence d'images (calque vidéo)…", "fichier.importer_sequence");
+                    self.action_item(ui, "Un modèle 3D (glTF) comme repère…", "fichier.importer_modele3d");
+                    ui.separator();
+                    self.action_item(ui, "Un projet Storyboard Pro (.sboard)…", "fichier.importer_sboard");
+                });
+                self.action_item(ui, "Exporter…", "fichier.exporter");
                 ui.separator();
-                self.action_item(ui, "Exporter le film (vidéo)…", "fichier.exporter_film");
-                self.action_item(ui, "Exporter des images (PNG)…", "fichier.exporter_images");
-                self.action_item(ui, "Exporter le son (WAV)…", "fichier.exporter_son");
-                self.action_item(ui, "Exporter le storyboard (PDF)…", "fichier.exporter_pdf");
-                self.action_item(ui, "Exporter vers Storyboard Pro…", "fichier.exporter_sboard");
-                self.action_item(ui, "Exporter l'image courante (PNG)…", "fichier.exporter_image_courante");
-                if menu_item(ui, "Exporter le storyboard (page HTML + planches)…", "") {
-                    self.export_storyboard();
-                }
-                ui.checkbox(&mut self.export_transparent, "Images PNG sans le papier (fond transparent)");
-                ui.separator();
-                self.autosave_menu_ui(ui);
+                self.action_item(ui, "Réglages du projet…", "projet.proprietes");
+                self.action_item(ui, "Préférences…", "fichier.preferences");
                 ui.separator();
                 self.action_item(ui, "Quitter", "fichier.quitter");
             });
@@ -254,64 +272,47 @@ impl App {
                 self.action_item(ui, "Rétablir", "edition.retablir");
                 self.action_item(ui, "Historique…", "vue.historique");
                 ui.separator();
-                self.action_item(ui, "Copier la sélection", "edition.copier");
-                self.action_item(ui, "Couper la sélection", "edition.couper");
+                self.action_item(ui, "Couper", "edition.couper");
+                self.action_item(ui, "Copier", "edition.copier");
                 self.action_item(ui, "Coller", "edition.coller");
                 self.action_item(ui, "Coller sur place", "edition.coller_sur_place");
+                self.action_item(ui, "Supprimer", "edition.supprimer");
+                ui.separator();
                 self.action_item(ui, "Tout sélectionner", "edition.tout_selectionner");
                 self.action_item(ui, "Tout désélectionner", "edition.tout_deselectionner");
-                self.action_item(ui, "Retourner la sélection de gauche à droite", "selection.miroir_h");
-                self.action_item(ui, "Retourner la sélection de haut en bas", "selection.miroir_v");
-                ui.separator();
-                self.action_item(ui, "Supprimer la sélection ou effacer le dessin", "edition.supprimer");
-                ui.separator();
-                // Couleurs et nuanciers (passe couleur, `colorui.rs`).
-                self.color_menu(ui);
+                ui.menu_button("Retourner la sélection", |ui| {
+                    self.action_item(ui, "De gauche à droite", "selection.miroir_h");
+                    self.action_item(ui, "De haut en bas", "selection.miroir_v");
+                });
             });
             ui.menu_button("Storyboard", |ui| {
                 self.action_item(ui, "Nouveau plan", "panneau.nouveau");
-                self.action_item(ui, "Nouveau plan avant le plan courant", "plan.nouveau_avant");
                 self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
                 ui.separator();
                 self.action_item(ui, "Aller à un plan…", "scene.aller_a");
                 self.action_item(ui, "Propriétés du plan", "panneau.proprietes");
+                ui.menu_button("Plans", |ui| self.plans_menu(ui));
+                self.action_item(ui, "Marque d'image ici (ajouter / retirer)", "marque.basculer");
                 ui.separator();
                 let lock = if self.doc.storyboard_locked { "Déverrouiller le storyboard" } else { "Verrouiller le storyboard" };
                 self.action_item(ui, lock, "storyboard.verrouiller");
-                ui.separator();
-                self.action_item(ui, "Dupliquer le plan", "panneau.dupliquer");
-                self.action_item(ui, "Copier les plans choisis", "panneau.copier");
-                self.action_item(ui, "Coller les plans après le plan courant", "panneau.coller");
-                self.action_item(ui, "Supprimer les plans choisis", "panneau.supprimer");
-                self.action_item(ui, "Allonger le plan d'une image", "panneau.ajouter_image");
-                self.action_item(ui, "Raccourcir le plan d'une image", "panneau.retirer_image");
-                ui.separator();
-                self.action_item(ui, "Couper le plan à l'image courante", "panneau.couper");
-                self.action_item(ui, "Réunir le plan et le suivant", "panneau.fusionner_suivant");
-                self.action_item(ui, "Réunir avec le plan précédent", "scene.joindre_precedente");
-                self.action_item(ui, "Fusionner les plans choisis", "panneau.fusionner_choisis");
-                self.action_item(ui, "Retourner les plans choisis", "plan.retourner");
-                ui.separator();
-                self.action_item(ui, "Marque d'image ici (ajouter / retirer)", "marque.basculer");
-                ui.separator();
-                self.action_item(ui, "Plan précédent", "panneau.precedent");
-                self.action_item(ui, "Plan suivant", "panneau.suivant");
                 ui.separator();
                 let label = match self.mode {
                     Mode::Storyboard => "Animer ce plan",
                     Mode::Animation => "Retour au storyboard",
                 };
                 self.action_item(ui, label, "mode.basculer");
-                self.action_item(ui, "Vue dessin / vignettes", "vue.planches");
             });
             ui.menu_button("Son", |ui| self.sound_menu(ui));
             ui.menu_button("Calques", |ui| self.layer_ops_menu(ui));
             ui.menu_button("Animation", |ui| {
                 self.action_item(ui, "Lecture / pause", "lecture.basculer");
-                self.action_item(ui, "Image précédente", "image.precedente");
-                self.action_item(ui, "Image suivante", "image.suivante");
-                self.action_item(ui, "Première image du plan", "image.premiere");
-                self.action_item(ui, "Dernière image du plan", "image.derniere");
+                ui.menu_button("Aller à", |ui| {
+                    self.action_item(ui, "Image précédente", "image.precedente");
+                    self.action_item(ui, "Image suivante", "image.suivante");
+                    self.action_item(ui, "Première image du plan", "image.premiere");
+                    self.action_item(ui, "Dernière image du plan", "image.derniere");
+                });
                 ui.separator();
                 self.action_item(ui, "Nouveau dessin", "dessin.nouveau");
                 self.action_item(ui, "Dupliquer le dessin", "dessin.dupliquer");
@@ -322,65 +323,38 @@ impl App {
                 ui.menu_button("Images", |ui| self.images_menu(ui));
             });
             ui.menu_button("Affichage", |ui| {
+                // Zoom, rotation, miroir, pelure, table lumineuse : boutons sous le dessin.
                 self.action_item(ui, "Ajuster à la fenêtre", "vue.ajuster");
                 self.action_item(ui, "Zoom 100 %", "vue.reinit_zoom");
-                self.action_item(ui, "Zoom avant", "vue.zoom_avant");
-                self.action_item(ui, "Zoom arrière", "vue.zoom_arriere");
-                self.action_item(ui, "Tourner (sens horaire)", "vue.rotation_horaire");
-                self.action_item(ui, "Tourner (sens antihoraire)", "vue.rotation_antihoraire");
                 self.action_item(ui, "Remettre la vue droite", "vue.reinit_rotation");
-                self.action_item(ui, "Miroir", "vue.miroir");
-                self.action_item(ui, "Pelure d'oignon", "vue.pelure");
-                self.action_item(ui, "Table lumineuse", "vue.table_lumineuse");
                 ui.separator();
-                self.action_item(ui, "Vue à travers la caméra", "camera.vue");
-                self.action_item(ui, "Estomper le hors-champ", "camera.masque");
-                self.action_item(ui, "Zones de sécurité", "vue.cadres_securite");
-                self.action_item(ui, "Plateau en 3D", "vue.3d");
-                self.action_item(ui, "Vue de dessus (profondeur des calques)", "vue.dessus");
-                self.action_item(ui, "Réinitialiser la caméra du plan", "camera.reinitialiser");
-                ui.separator();
-                self.action_item(ui, "Guide : afficher et utiliser", "guide.activer");
-                self.action_item(ui, "Guide : aligner les traits", "guide.aligner");
-                self.action_item(ui, "Guide : verrouiller", "guide.verrouiller");
-                self.action_item(ui, "Guide : lignes de référence", "guide.lignes_reference");
+                ui.menu_button("Caméra", |ui| {
+                    self.action_item(ui, "Vue à travers la caméra", "camera.vue");
+                    self.action_item(ui, "Estomper le hors-champ", "camera.masque");
+                    self.action_item(ui, "Zones de sécurité", "vue.cadres_securite");
+                    ui.separator();
+                    self.action_item(ui, "Réinitialiser la caméra du plan", "camera.reinitialiser");
+                });
+                ui.menu_button("Plateau", |ui| {
+                    self.action_item(ui, "Plateau en 3D", "vue.3d");
+                    self.action_item(ui, "Vue de dessus (profondeur des calques)", "vue.dessus");
+                });
+                ui.menu_button("Guides", |ui| {
+                    self.action_item(ui, "Afficher et utiliser", "guide.activer");
+                    self.action_item(ui, "Aligner les traits", "guide.aligner");
+                    self.action_item(ui, "Verrouiller", "guide.verrouiller");
+                    self.action_item(ui, "Lignes de référence", "guide.lignes_reference");
+                });
                 ui.separator();
                 self.workspace_menu(ui);
                 self.action_item(ui, "Plein écran", "vue.plein_ecran");
-                if ui
-                    .checkbox(&mut self.settings.system_cursor, "Croix du système sur le pinceau")
-                    .on_hover_text(
-                        "Affiche la croix de Windows à la pointe, en plus du cercle du pinceau : elle suit \
-                         le stylet sans retard (le cercle, dessiné par Pelure, arrive une image plus tard).",
-                    )
-                    .changed()
-                {
-                    let _ = self.settings.save();
-                }
-                ui.separator();
-                ui.horizontal(|ui| {
-                    ui.label("Couleur du papier");
-                    let mut paper = self.doc.paper;
-                    let resp = ui.color_edit_button_srgb(&mut paper);
-                    if self.edited(&resp) {
-                        self.doc.paper = paper;
-                        self.renderer.invalidate_all();
-                    }
-                });
             });
             ui.menu_button("Aide", |ui| {
                 self.action_item(ui, "Palette de commandes…", "aide.palette");
                 self.action_item(ui, "Raccourcis clavier…", "aide.raccourcis");
+                ui.separator();
                 let rec = if self.record_strokes.is_some() { "Arrêter d'enregistrer mes traits" } else { "Enregistrer mes traits (banc d'essai du moteur)" };
                 self.action_item(ui, rec, "pinceau.enregistrer_traits");
-                if menu_item(ui, "Modifier le fichier de raccourcis à la main…", "") {
-                    self.edit_keymap();
-                }
-                if menu_item(ui, "Recharger les raccourcis", "") {
-                    self.reload_keymap();
-                }
-                ui.separator();
-                ui.label(RichText::new(format!("Affichage : {}", self.display_info)).small().weak());
             });
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -778,6 +752,9 @@ impl App {
         // Messages : historique et notifications (`messages.rs`).
         self.track_messages(ctx);
         self.messages_ui(ctx);
+        // Exporter… et Préférences… (`prefsui.rs`).
+        self.export_hub_window(ctx);
+        self.preferences_window(ctx);
         self.new_layer_window(ctx);
         self.groups_window_ui(ctx);
         self.properties_window_ui(ctx);

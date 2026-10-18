@@ -633,10 +633,12 @@ impl App {
         }
         // Propager la peinture sur la vidéo (façon EbSynth, `propagerui.rs`), grisé s'il ne se peut pas.
         self.propagation_item(ui, li);
+        // Avant / après ses images, automatismes : dans un sous-menu, comme au montage (menus
+        // courts, 2026-10-18).
         if self.layers().get(li).is_some_and(|l| !l.folder) {
             ui.separator();
+            ui.menu_button("Animation (avant, après, automatismes)", |ui| self.behaviour_items(ui, li));
         }
-        self.behaviour_items(ui, li);
     }
 
     /// Pré / post-comportement du calque `li` (13c), et cassure et création automatiques : menus

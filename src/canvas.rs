@@ -172,6 +172,8 @@ impl App {
 
     /// Menu du clic droit sur le dessin. Chaque entrée est une commande : un clic droit dessus
     /// lui donne un raccourci.
+    /// Menu court (2026-10-18) : la vue (zoom, rotation, miroir, pelure, table lumineuse,
+    /// caméra) a ses boutons sous le dessin.
     fn canvas_menu(&mut self, ui: &mut egui::Ui) {
         self.action_item(ui, "Annuler", "edition.annuler");
         self.action_item(ui, "Rétablir", "edition.retablir");
@@ -179,18 +181,9 @@ impl App {
         self.action_item(ui, "Couper", "edition.couper");
         self.action_item(ui, "Copier", "edition.copier");
         self.action_item(ui, "Coller", "edition.coller");
-        self.action_item(ui, "Tout sélectionner", "edition.tout_selectionner");
-        self.action_item(ui, "Tout désélectionner", "edition.tout_deselectionner");
         self.action_item(ui, "Supprimer la sélection ou effacer le dessin", "edition.supprimer");
         ui.separator();
         self.action_item(ui, "Ajuster à la fenêtre", "vue.ajuster");
-        self.action_item(ui, "Zoom 100 %", "vue.reinit_zoom");
-        self.action_item(ui, "Remettre la vue droite", "vue.reinit_rotation");
-        self.action_item(ui, "Miroir de la vue", "vue.miroir");
-        ui.separator();
-        self.action_item(ui, "Pelure d'oignon (oui / non)", "vue.pelure");
-        self.action_item(ui, "Table lumineuse (oui / non)", "vue.table_lumineuse");
-        self.action_item(ui, "Vue à travers la caméra", "camera.vue");
         ui.separator();
         let mode = if self.mode == crate::app::Mode::Storyboard { "Animer ce plan" } else { "Revenir au storyboard" };
         self.action_item(ui, mode, "mode.basculer");

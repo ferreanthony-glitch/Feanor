@@ -386,22 +386,6 @@ impl App {
         resp.context_menu(|ui| self.action_item(ui, "Copier le code de la couleur d'avant-plan", "couleur.copier_code"));
     }
 
-    /// Sous-menu « Couleur » du menu Édition : les commandes des couleurs et des nuanciers.
-    pub(crate) fn color_menu(&mut self, ui: &mut egui::Ui) {
-        ui.menu_button("Couleur", |ui| {
-            self.action_item(ui, "Intervertir les couleurs d'avant-plan et d'arrière-plan", "couleur.intervertir");
-            self.action_item(ui, "Couleurs par défaut (noir, blanc)", "couleur.defaut");
-            self.action_item(ui, "Copier le code de la couleur d'avant-plan", "couleur.copier_code");
-            ui.separator();
-            self.action_item(ui, "Ajouter la couleur d'avant-plan au nuancier", "nuancier.ajouter");
-            self.action_item(ui, "Nouveau nuancier", "nuancier.nouveau");
-            self.action_item(ui, "Importer un nuancier (GIMP .gpl, Photoshop .aco)…", "nuancier.importer");
-            self.action_item(ui, "Exporter le nuancier (GIMP .gpl, Photoshop .aco)…", "nuancier.exporter");
-            ui.separator();
-            self.action_item(ui, "Effacer les couleurs récentes", "couleur.recentes_effacer");
-        });
-    }
-
     /// Les deux carrés, leurs boutons et le code hexadécimal, sur une ligne.
     fn front_back_row(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {

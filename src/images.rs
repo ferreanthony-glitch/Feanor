@@ -1011,21 +1011,26 @@ impl App {
     pub(crate) fn images_menu(&mut self, ui: &mut egui::Ui) {
         let (a, b) = self.image_range();
         let what = if b - a > 1 { format!("les {} images choisies", b - a) } else { "l'image courante".into() };
+        // Menu court (2026-10-18) : copier, couper, coller, dupliquer, supprimer en premier ; insérer
+        // (calques choisis ou tout le plan) dans un sous-menu ; le plus rare sous « Plus ».
         ui.label(egui::RichText::new(format!("Sur {what}, calques choisis :")).weak());
-        self.action_item(ui, "Supprimer", "images.supprimer");
         self.action_item(ui, "Couper", "images.couper");
         self.action_item(ui, "Copier", "images.copier");
         self.action_item(ui, "Coller (insérer avant l'image courante)", "images.coller");
         self.action_item(ui, "Coller (remplacer les images choisies)", "images.coller_remplacer");
         self.action_item(ui, "Dupliquer", "images.dupliquer");
-        self.action_item(ui, "Inverser l'ordre", "images.inverser");
-        self.action_item(ui, "Insérer une image avant", "images.inserer_avant_calques");
-        self.action_item(ui, "Insérer une image après", "images.inserer_apres_calques");
+        self.action_item(ui, "Supprimer", "images.supprimer");
         ui.separator();
-        ui.label(egui::RichText::new("Sur tout le plan (sa durée change) :").weak());
-        self.action_item(ui, "Ajouter une image après l'image courante", "images.ajouter");
-        self.action_item(ui, "Insérer une image avant l'image courante", "images.inserer");
-        self.action_item(ui, "Supprimer l'image (ou les images choisies)", "images.supprimer_plan");
+        ui.menu_button("Insérer ou retirer des images", |ui| {
+            ui.label(egui::RichText::new("Calques choisis :").weak().small());
+            self.action_item(ui, "Insérer une image avant", "images.inserer_avant_calques");
+            self.action_item(ui, "Insérer une image après", "images.inserer_apres_calques");
+            ui.separator();
+            ui.label(egui::RichText::new("Tout le plan (sa durée change) :").weak().small());
+            self.action_item(ui, "Ajouter une image après l'image courante", "images.ajouter");
+            self.action_item(ui, "Insérer une image avant l'image courante", "images.inserer");
+            self.action_item(ui, "Supprimer l'image (ou les images choisies)", "images.supprimer_plan");
+        });
         ui.menu_button("Instances (dessin et ses expositions)", |ui| {
             self.action_item(ui, "Instance précédente", "instance.precedente");
             self.action_item(ui, "Instance suivante", "instance.suivante");
@@ -1067,29 +1072,31 @@ impl App {
             self.action_item(ui, "Changer la cadence du projet (durées gardées)…", "projet.changer_cadence");
             ui.label(egui::RichText::new("Calque vectoriel : les traits passent d'une forme à l'autre ; calque bitmap : fondu.").weak().small());
         });
-        ui.menu_button("Retourner", |ui| {
-            self.action_item(ui, "Horizontalement", "images.retourner_h");
-            self.action_item(ui, "Verticalement", "images.retourner_v");
-            self.action_item(ui, "Horizontalement et verticalement", "images.retourner_hv");
-        });
-        ui.menu_button("Noms d'instance", |ui| {
-            self.action_item(ui, "Renommer l'instance courante", "instance.renommer");
-            self.action_item(ui, "Effacer les noms", "instance.effacer_noms");
-            self.action_item(ui, "Tout renommer (1, 2, 3…)", "instance.tout_renommer");
-            self.action_item(ui, "Renommer intelligemment…", "instance.renommer_intelligemment");
-            ui.label(egui::RichText::new("Double-clic sur un dessin de la timeline : le renommer.").weak().small());
+        ui.menu_button("Plus", |ui| {
+            self.action_item(ui, "Choisir toutes les images", "images.tout_choisir");
+            self.action_item(ui, "Inverser l'ordre", "images.inverser");
+            ui.menu_button("Retourner", |ui| {
+                self.action_item(ui, "Horizontalement", "images.retourner_h");
+                self.action_item(ui, "Verticalement", "images.retourner_v");
+                self.action_item(ui, "Horizontalement et verticalement", "images.retourner_hv");
+            });
+            ui.menu_button("Noms d'instance", |ui| {
+                self.action_item(ui, "Renommer l'instance courante", "instance.renommer");
+                self.action_item(ui, "Effacer les noms", "instance.effacer_noms");
+                self.action_item(ui, "Tout renommer (1, 2, 3…)", "instance.tout_renommer");
+                self.action_item(ui, "Renommer intelligemment…", "instance.renommer_intelligemment");
+                ui.label(egui::RichText::new("Double-clic sur un dessin de la timeline : le renommer.").weak().small());
+            });
+            ui.menu_button("Trou laissé par une suppression", |ui| {
+                for h in Hole::ALL {
+                    if ui.radio(self.hole == h, h.label()).clicked() {
+                        self.hole = h;
+                        ui.close_menu();
+                    }
+                }
+            });
         });
         ui.label(egui::RichText::new("Glisser les images choisies : déplacer ; avec Ctrl : copier ; avec Maj : insérer.").weak().small());
-        ui.separator();
-        self.action_item(ui, "Choisir toutes les images", "images.tout_choisir");
-        ui.menu_button("Trou laissé par une suppression", |ui| {
-            for h in Hole::ALL {
-                if ui.radio(self.hole == h, h.label()).clicked() {
-                    self.hole = h;
-                    ui.close_menu();
-                }
-            }
-        });
     }
 }
 
