@@ -131,6 +131,28 @@ fn doc() -> Document {
     doc
 }
 
+/// Un dessin plus petit que la feuille (le dernier aperçu réduit d'un effet, rendu par `fx::shown`
+/// tant que la vignette attend) se lit à l'échelle, sans sortir du dessin : lu comme une feuille
+/// entière, il fermait SHOT au lancement (vignettes du montage, 2026-10-18).
+#[test]
+fn a_smaller_drawing_is_read_to_scale() {
+    let mut doc = Document::new(300, 300, 24);
+    let cel = doc.new_cel(LayerKind::Bitmap);
+    let c = doc.cels.get_mut(&cel).unwrap();
+    // La moitié de la feuille : 2 × 2 tuiles au lieu de 3 × 3.
+    c.raster = crate::raster::Raster::new(150, 150);
+    for idx in 0..c.raster.tiles.len() {
+        c.raster.tile_mut(idx).fill(Color32::from_rgb(255, 0, 0));
+    }
+    let p = &mut doc.panels[0];
+    p.layers[0] = crate::document::Layer::new("Dessin", LayerKind::Bitmap);
+    p.layers[0].set(0, Some(cel));
+    let plan = render::panel_plan_at(&doc, 0, 0, Some([255, 255, 255]));
+    assert_eq!(render::composite_pixel(&doc, &plan, 299, 299), Color32::from_rgb(255, 0, 0));
+    let thumb = render::thumbnail(&doc, &plan, &doc.default_camera(), 16, 16);
+    assert_eq!(thumb.pixels.len(), 256);
+}
+
 #[test]
 fn render_and_merge() {
     let doc = doc();

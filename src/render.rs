@@ -356,17 +356,26 @@ fn shown_items<'a>(doc: &'a Document, plan: &Plan) -> Vec<Option<crate::fx::Show
     plan.items.iter().map(|item| crate::fx::shown(doc, item)).collect()
 }
 
-/// `composite_pixel` avec les dessins déjà cherchés (`shown_items`).
+/// `composite_pixel` avec les dessins déjà cherchés (`shown_items`). Un dessin peut être plus
+/// petit que la feuille : pendant qu'une vignette attend son effet, `fx::shown` rend le dernier
+/// résultat gardé, qui peut être un aperçu réduit (`fxproxy.rs`) ; on le lit à l'échelle (le
+/// lire comme une feuille entière sortait du dessin et fermait SHOT au lancement, 2026-10-18).
 fn composite_pixel_in(doc: &Document, plan: &Plan, shown: &[Option<crate::fx::Shown>], x: usize, y: usize) -> Color32 {
     let mut c = paper_color(plan);
     for (item, cel) in plan.items.iter().zip(shown) {
         if let Some(cel) = cel {
+            let r = &cel.raster;
+            let (kx, ky) = (r.width as f32 / doc.width.max(1) as f32, r.height as f32 / doc.height.max(1) as f32);
             let s = match inverse_of(doc, item) {
                 Some(inv) => {
                     let p = inv.apply(egui::pos2(x as f32 + 0.5, y as f32 + 0.5));
-                    sample(&cel.raster, p.x, p.y)
+                    sample(r, p.x * kx, p.y * ky)
                 }
-                None => cel.raster.get(x, y),
+                None if r.width == doc.width && r.height == doc.height => r.get(x, y),
+                None => {
+                    let (rx, ry) = (((x as f32 + 0.5) * kx) as usize, ((y as f32 + 0.5) * ky) as usize);
+                    if rx < r.width && ry < r.height { r.get(rx, ry) } else { Color32::TRANSPARENT }
+                }
             };
             if s.a() != 0 {
                 c = blend_over(c, s, item.opacity, item.tint, item.blend, (x, y));
