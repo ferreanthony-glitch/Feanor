@@ -449,19 +449,12 @@ impl App {
             return;
         };
         if let Some(sel) = &self.vsel {
-            if let Some(d) = self.drawing(sel.cel) {
-                // Geste en cours : les éléments n'ont pas bougé, leurs contours suivent la feuille.
-                let moved = self.flottante.as_ref().filter(|f| f.pending.is_none()).map(|f| f.aff).unwrap_or_default();
-                for e in sel.items.iter().filter_map(|&i| d.elements.get(i)) {
-                    for line in e.outline() {
-                        if line.len() >= 2 {
-                            painter.add(Shape::line(
-                                line.into_iter().map(|q| to_s(moved.apply(q))).collect(),
-                                Stroke::new(1.0_f32, ACCENT.gamma_multiply(0.85)),
-                            ));
-                        }
-                    }
-                }
+            // Geste en cours : les éléments n'ont pas bougé, leurs contours suivent la feuille.
+            // (Contours gardés d'une image à l'autre, simplifiés à l'écran : `contours.rs`.)
+            let gesture = self.flottante.as_ref().is_some_and(|f| f.pending.is_none());
+            let moved = self.flottante.as_ref().filter(|f| f.pending.is_none()).map(|f| f.aff).unwrap_or_default();
+            if let Some(shape) = self.selection_contours(sel.cel, &sel.items, moved, gesture, ACCENT.gamma_multiply(0.85)) {
+                painter.add(shape);
             }
         }
         let corners = [b.left_top(), b.right_top(), b.right_bottom(), b.left_bottom()].map(to_s);

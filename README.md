@@ -143,11 +143,14 @@ au plus par trait, 512 Mo en tout, au-delà les moins récents sont oubliés et 
 **Aucun geste n'attend le moteur** (règle d'Anthony, 2026-10-18 : « un logiciel qui réponde
 toujours très rapidement, sans latence ») : déplacer, tourner, agrandir une sélection vectorielle,
 la pousser aux flèches, la déformer à l'enveloppe ou en perspective pose ces pixels déformés à la
-volée (une cinquantaine de traits texturés : 2 ms par image au glissé, 9 ms à l'enveloppe), et le
-rendu exact arrive quelques instants après le lâcher, d'un fil de travail (`rejeu.rs`), sans rien
+volée (une cinquantaine de traits texturés : 2 ms par image au glissé ; à l'enveloppe et en
+perspective la carte graphique déforme la feuille par un maillage, 0,14 ms par image que ce
+soit 10, 40 ou 300 traits, au lieu de 10 à 37 ms), et le rendu exact arrive quelques instants après le lâcher, d'un fil de travail (`rejeu.rs`), sans rien
 bloquer ; au lever du stylet non plus, le trait n'est plus rejoué sur le fil de l'interface (174 ms
 pour 2400 points de gouache avant). Un trait qui dépasse de la feuille garde ce qui dépasse :
-déplacé vers l'intérieur, il se montre en entier. À l'ouverture d'un projet, les dessins texturés
+déplacé vers l'intérieur, il se montre en entier. Les contours bleus d'une grosse sélection (des
+centaines de traits) sont faits une fois, à la résolution de l'écran : 0,6 ms par image au lieu de
+13,5 ms pour 300 traits de 500 points. À l'ouverture d'un projet, les dessins texturés
 paraissent tout de suite en rendu rapide, puis exacts. Seule différence restante : la peinture humide (gouache) ne se mêle pas à ce que les
 traits précédents ont posé, chaque trait étant rejoué seul. Les anciens dessins (sans trace)
 rendent comme avant.

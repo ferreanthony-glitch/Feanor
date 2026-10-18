@@ -552,6 +552,9 @@ pub struct App {
     /// Feuille flottante de la sélection vectorielle qu'on déplace, tourne ou agrandit
     /// (`flottante.rs`).
     pub(crate) flottante: Option<crate::flottante::Flottante>,
+    /// Contours à l'écran de la sélection vectorielle, gardés d'une image à l'autre
+    /// (`contours.rs`) ; dans une `RefCell` : la peinture n'a que `&self`.
+    pub(crate) sel_contours: std::cell::RefCell<Option<crate::contours::Contours>>,
     /// Dessins dont le rendu exact est à redemander dès qu'aucun geste n'y travaille (`rejeu.rs`).
     pub(crate) rejeu_again: std::collections::BTreeSet<CelId>,
     /// Pour chaque dessin vectoriel regardé, la version dont on a vérifié que tous les traits
@@ -885,6 +888,7 @@ impl App {
             vsel: None,
             vdrag: None,
             flottante: None,
+            sel_contours: Default::default(),
             rejeu_again: Default::default(),
             rejeu_warm: Default::default(),
             rejeu_deferred: Vec::new(),
@@ -1898,6 +1902,11 @@ impl App {
             let waiting = self.flottante.as_ref().is_some_and(|f| f.pending.is_some() && f.src == done.cel);
             let Some(c) = self.doc.cels.get(&done.cel) else { continue };
             if !crate::rejeu::adoptable(c, &done) {
+                // Une enveloppe ou une perspective qu'on a reprise avant l'arrivée du rendu : un
+                // rendu plus récent est déjà demandé, la feuille déformée l'attend.
+                if waiting && self.flottante.as_ref().is_some_and(|f| f.for_warp) && self.rejeu.is_pending(done.cel) {
+                    continue;
+                }
                 // Le dessin a changé depuis : on termine à l'ancienne ce que la feuille montrait,
                 // et le rendu exact du dessin d'aujourd'hui est redemandé.
                 let vector = c.vector.is_some();

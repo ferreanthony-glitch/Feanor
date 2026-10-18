@@ -30,6 +30,8 @@ const ITEM_BYTES: u64 = 96;
 const CACHE_BYTES: u64 = 1 << 30;
 /// Envoi d'avance, par image d'écran : 4 Mo de tuiles (256 tuiles), quelques millisecondes.
 const AHEAD_BYTES: usize = 4 << 20;
+/// Un sommet de maillage : position normalisée et coordonnées de texture, 4 flottants.
+const MESH_VERTEX_BYTES: u64 = 16;
 /// Format des images composées : valeurs gamma, comme le calcul sur processeur.
 const FRAME_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
@@ -63,6 +65,20 @@ fn vs(@builtin(vertex_index) i: u32) -> VOut {
     var out: VOut;
     out.pos = vec4<f32>(c.xy * w, 0.0, w);
     out.uv = c.zw;
+    return out;
+}
+
+// Feuille déformée par un maillage (enveloppe, perspective ; `warp.rs`) : les sommets portent leur
+// place normalisée dans l'image composée et leurs coordonnées de texture ; mêmes fragments.
+struct MeshIn {
+    @location(0) v: vec4<f32>,
+};
+
+@vertex
+fn vs_mesh(m: MeshIn) -> VOut {
+    var out: VOut;
+    out.pos = vec4<f32>(m.v.xy, 0.0, 1.0);
+    out.uv = m.v.zw;
     return out;
 }
 
@@ -305,6 +321,11 @@ struct CanvasResources {
     compose: wgpu::RenderPipeline,
     /// Composer un calque en mode de fusion (lit le fond, remplace).
     blend: wgpu::RenderPipeline,
+    /// Les mêmes, pour une feuille posée par un maillage (sommets au lieu de quatre coins).
+    compose_mesh: wgpu::RenderPipeline,
+    blend_mesh: wgpu::RenderPipeline,
+    /// Sommets des maillages de l'image, et sa taille en octets.
+    mesh_vertices: Option<(wgpu::Buffer, u64)>,
     display: wgpu::RenderPipeline,
     uniform_layout: wgpu::BindGroupLayout,
     texture_layout: wgpu::BindGroupLayout,
@@ -434,6 +455,38 @@ impl GpuCanvas {
             multiview: None,
             cache: None,
         });
+        // Feuille posée par un maillage : sommets (x, y, u, v) en lieu de quatre coins.
+        let mesh_attributes = wgpu::vertex_attr_array![0 => Float32x4];
+        let mesh_buffers = [wgpu::VertexBufferLayout {
+            array_stride: MESH_VERTEX_BYTES,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &mesh_attributes,
+        }];
+        let mesh_pipeline = |entry: &str, layout: &wgpu::PipelineLayout, blend: Option<wgpu::BlendState>| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(entry),
+                layout: Some(layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_mesh"),
+                    buffers: &mesh_buffers,
+                    compilation_options: Default::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some(entry),
+                    targets: &[Some(wgpu::ColorTargetState { format: FRAME_FORMAT, blend, write_mask: wgpu::ColorWrites::ALL })],
+                    compilation_options: Default::default(),
+                }),
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+                cache: None,
+            })
+        };
+        let compose_mesh = mesh_pipeline("fs_compose", &layout, Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING));
+        let blend_mesh = mesh_pipeline("fs_blend", &blend_layout, None);
         // Bilinéaire : un calque transformé est lissé ; un calque tel quel tombe pile sur les pixels.
         let nearest = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("composer"),
@@ -456,6 +509,9 @@ impl GpuCanvas {
         rs.renderer.write().callback_resources.insert(CanvasResources {
             compose,
             blend,
+            compose_mesh,
+            blend_mesh,
+            mesh_vertices: None,
             display,
             uniform_layout,
             texture_layout,
@@ -624,6 +680,7 @@ impl GpuCanvas {
                 color: [p[0] as f32 / 255.0, p[1] as f32 / 255.0, p[2] as f32 / 255.0, 0.0],
                 params: [1.0, 0.0, 0.0, 0.0],
                 blend: 0,
+                mesh: None,
             });
         }
         for item in &plan.items {
@@ -633,12 +690,18 @@ impl GpuCanvas {
             };
             // La pelure d'oignon (teinte) reste en mode normal.
             let blend = if item.tint.is_some() { 0 } else { item.blend.index() };
+            // Feuille posée par un maillage : ses sommets, déjà à leur place dans l'image composée.
+            let mesh = item.warp(pivot).map(|(warp, layer)| {
+                let dims = item.pre.as_ref().and_then(|p| p.dims).map_or((stage[0], stage[1]), |d| (d[0], d[1]));
+                warp.gpu_vertices(dims, layer.as_ref(), |p| [p.x / w * 2.0 - 1.0, 1.0 - p.y / h * 2.0])
+            });
             items.push(GpuItem {
                 cel: Some(crate::fx::shown_id(item)),
-                corners: item.affine(pivot).map_or(full, |aff| placed(aff, item.pre.and_then(|p| p.dims))),
+                corners: item.affine(pivot).map_or(full, |aff| placed(aff, item.pre.as_ref().and_then(|p| p.dims))),
                 color: [color[0], color[1], color[2], tinted],
                 params: [item.opacity as f32 / 255.0, 1.0, blend as f32, 0.0],
                 blend,
+                mesh,
             });
         }
         // Afficher : positions en points ; elles passent en coordonnées de l'écran entier au moment
@@ -664,6 +727,8 @@ struct GpuItem {
     params: [f32; 4],
     /// Mode de fusion (0 : normal, voir `BlendMode::index`).
     blend: u32,
+    /// Sommets du maillage qui pose la feuille (`warp.rs`) : à la place des quatre coins.
+    mesh: Option<Vec<[f32; 4]>>,
 }
 
 /// Passe qui compose dans l'image `target` (effacée d'abord, ou reprise telle quelle).
@@ -733,11 +798,40 @@ impl CallbackTrait for CanvasPaint {
         put_item(&mut bytes[self.items.len() * stride..], &on_screen, &ws, &[1.0, 1.0, 0.0, persp]);
         queue.write_buffer(&res.uniforms, 0, &bytes);
 
+        // Les sommets des maillages (feuilles déformées), bout à bout dans un seul tampon : pour
+        // chaque dessin, sa plage de sommets.
+        let mut vertices: Vec<[f32; 4]> = Vec::new();
+        let ranges: Vec<Option<std::ops::Range<u32>>> = self
+            .items
+            .iter()
+            .map(|item| {
+                let mesh = item.mesh.as_ref().filter(|m| !m.is_empty())?;
+                let first = vertices.len() as u32;
+                vertices.extend_from_slice(mesh);
+                Some(first..vertices.len() as u32)
+            })
+            .collect();
+        if !vertices.is_empty() {
+            let bytes = vertices.len() as u64 * MESH_VERTEX_BYTES;
+            if res.mesh_vertices.as_ref().is_none_or(|(_, size)| *size < bytes) {
+                let size = bytes.next_power_of_two().max(1 << 16);
+                let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("maillages des feuilles déformées"),
+                    size,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+                res.mesh_vertices = Some((buffer, size));
+            }
+            if let Some((buffer, _)) = &res.mesh_vertices {
+                queue.write_buffer(buffer, 0, bytemuck::cast_slice(&vertices));
+            }
+        }
+
         // Composer dans l'image à la taille du projet. Un calque en mode de fusion lit ce qui est
         // déjà composé : on le copie à part avant (fin de passe, copie, nouvelle passe).
         let Some(frame) = &res.frame else { return Vec::new() };
         let mut pass = compose_pass(encoder, &frame.target, true);
-        pass.set_pipeline(&res.compose);
         for (i, item) in self.items.iter().enumerate() {
             let group = match item.cel {
                 None => &res.white,
@@ -746,6 +840,12 @@ impl CallbackTrait for CanvasPaint {
                     None => continue,
                 },
             };
+            // (Une feuille posée par un maillage sans rien à dessiner : rien.)
+            let meshed = item.mesh.is_some();
+            let range = ranges[i].clone();
+            if meshed && range.is_none() {
+                continue;
+            }
             if item.blend != 0 {
                 drop(pass);
                 encoder.copy_texture_to_texture(
@@ -754,14 +854,23 @@ impl CallbackTrait for CanvasPaint {
                     extent(frame.size.0, frame.size.1),
                 );
                 pass = compose_pass(encoder, &frame.target, false);
-                pass.set_pipeline(&res.blend);
                 pass.set_bind_group(2, &frame.backdrop_group, &[]);
             }
+            pass.set_pipeline(match (item.blend != 0, meshed) {
+                (false, false) => &res.compose,
+                (false, true) => &res.compose_mesh,
+                (true, false) => &res.blend,
+                (true, true) => &res.blend_mesh,
+            });
             pass.set_bind_group(0, &res.uniform_group, &[(i * stride) as u32]);
             pass.set_bind_group(1, group, &[]);
-            pass.draw(0..6, 0..1);
-            if item.blend != 0 {
-                pass.set_pipeline(&res.compose);
+            match range {
+                Some(range) => {
+                    let Some((buffer, _)) = &res.mesh_vertices else { continue };
+                    pass.set_vertex_buffer(0, buffer.slice(..));
+                    pass.draw(range, 0..1);
+                }
+                None => pass.draw(0..6, 0..1),
             }
         }
         Vec::new()

@@ -25,12 +25,15 @@
 //! marge et sa taille sont comptées dans la transformation du plan (`Pre`).
 
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
-use eframe::egui::vec2;
+use eframe::egui::{vec2, Pos2, Rect};
 
 use crate::document::{Cel, CelId, Document};
+use crate::raster::Raster;
 use crate::render::{PlanItem, Pre};
-use crate::vector::{Affine, Element};
+use crate::vector::{Affine, Element, VectorDrawing};
+use crate::warp::Warp;
 
 /// Le dessin sans les éléments choisis.
 pub const BASE_CEL: CelId = 1 << 62;
@@ -57,6 +60,50 @@ pub struct Flottante {
     pub margin: (usize, usize),
     /// Taille de l'image de la feuille si ce n'est pas celle du dessin.
     pub dims: Option<[usize; 2]>,
+    /// Enveloppe ou perspective : la feuille n'est pas posée par `aff` mais par ce maillage
+    /// (`warp.rs`), mis à jour à chaque image du geste ; la carte graphique le dessine.
+    pub warp: Option<Arc<Warp>>,
+    /// Cette feuille est celle d'une séance d'enveloppe ou de perspective (`App::warp_float`),
+    /// faite du dessin d'origine de la séance : elle sert à chaque geste de la séance.
+    pub for_warp: bool,
+}
+
+impl crate::app::App {
+    /// Un geste d'enveloppe ou de perspective sur la région `src` du dessin `cel` : la feuille
+    /// flottante des éléments `items` (tous si `None`) du dessin d'origine `drawing` est posée par
+    /// un maillage (`map` : où va chaque point de la région). La feuille est faite une fois (à la
+    /// première image du geste, depuis les pixels en cache des traits) et gardée tant que la séance
+    /// dure : un geste lâché dont le rendu exact n'est pas arrivé la garde aussi, le geste suivant
+    /// la reprend. Ne rejoue jamais le moteur sur le fil de l'interface.
+    pub(crate) fn warp_float(&mut self, cel: CelId, drawing: &VectorDrawing, items: Option<&[usize]>, src: Rect, min_cells: usize, map: impl Fn(Pos2) -> Pos2) {
+        if !self.flottante.as_ref().is_some_and(|f| f.src == cel && f.for_warp) {
+            // La feuille d'un autre geste (déplacer, tourner) se termine d'abord.
+            self.flush_flottante();
+            if self.flottante.take().is_some() {
+                Flottante::release(&mut self.doc);
+            }
+            let all: Vec<usize>;
+            let list = match items {
+                Some(list) => list,
+                None => {
+                    all = (0..drawing.elements.len()).collect();
+                    &all
+                }
+            };
+            self.flottante = Flottante::lift_from(&mut self.doc, cel, drawing, list);
+        }
+        if let Some(f) = self.flottante.as_mut() {
+            f.pending = None;
+            f.set_warp(src, min_cells, map);
+        }
+    }
+
+    /// Le geste est lâché : la feuille déformée attend le rendu exact (`App::poll_rejeu`).
+    pub(crate) fn warp_settle(&mut self, cel: CelId) {
+        if let Some(f) = self.flottante.as_mut().filter(|f| f.src == cel && f.for_warp) {
+            f.pending = Some(Pending { items: Vec::new(), originals: Vec::new() });
+        }
+    }
 }
 
 /// Ce qu'il faut pour terminer le travail d'un geste lâché sans attendre le rejeu.
@@ -72,8 +119,21 @@ impl Flottante {
     pub fn lift(doc: &mut Document, src: CelId, items: &[usize]) -> Option<Flottante> {
         let cel = doc.cels.get(&src)?;
         let d = cel.vector.as_ref()?;
-        let (w, h) = (cel.raster.width, cel.raster.height);
-        let (base, sheet, margin) = d.render_split_extended(items, w, h);
+        let split = d.render_split_extended(items, cel.raster.width, cel.raster.height);
+        Some(Self::store(doc, src, split))
+    }
+
+    /// Comme `lift`, mais depuis un autre état du dessin `src` que celui du document : l'enveloppe
+    /// et la perspective déforment toujours le dessin d'origine de leur séance (pas de perte d'un
+    /// geste à l'autre), alors que le dessin du document a déjà reçu la géométrie du geste d'avant.
+    pub fn lift_from(doc: &mut Document, src: CelId, drawing: &VectorDrawing, items: &[usize]) -> Option<Flottante> {
+        let cel = doc.cels.get(&src)?;
+        let split = drawing.render_split_extended(items, cel.raster.width, cel.raster.height);
+        Some(Flottante { for_warp: true, ..Self::store(doc, src, split) })
+    }
+
+    fn store(doc: &mut Document, src: CelId, (base, sheet, margin): (Raster, Raster, (usize, usize))) -> Flottante {
+        let (w, h) = (base.width, base.height);
         let dims = ((sheet.width, sheet.height) != (w, h)).then_some([sheet.width, sheet.height]);
         let version = VERSION.fetch_add(2, Ordering::Relaxed);
         for (id, raster, version) in [(BASE_CEL, base, version), (SHEET_CEL, sheet, version + 1)] {
@@ -81,7 +141,35 @@ impl Flottante {
             c.version = version;
             doc.cels.insert(id, c);
         }
-        Some(Flottante { src, aff: Affine::IDENTITY, pending: None, margin, dims })
+        Flottante { src, aff: Affine::IDENTITY, pending: None, margin, dims, warp: None, for_warp: false }
+    }
+
+    /// Le maillage du geste en cours : la région `src` du dessin (le cadre de l'enveloppe), chaque
+    /// point allant où `map` le met. Faux si le maillage est impossible (région vide).
+    pub fn set_warp(&mut self, src: Rect, min_cells: usize, map: impl Fn(Pos2) -> Pos2) -> bool {
+        match Warp::new(src, self.margin, min_cells, map) {
+            Some(w) => {
+                self.warp = Some(Arc::new(w));
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Terminer tout de suite un geste d'enveloppe ou de perspective lâché, sans attendre le rendu
+    /// exact : l'image du dessin devient le reste, avec la feuille posée par le maillage (calcul
+    /// sur processeur, quelques dizaines de ms ; arrive seulement si l'utilisateur agit dans la
+    /// seconde qui suit le lâcher). À appeler avant `release`. Rend les tuiles changées.
+    pub fn flatten_warp(doc: &mut Document, src: CelId, warp: &Warp) -> Vec<usize> {
+        let (Some(base), Some(sheet)) = (doc.cels.get(&BASE_CEL), doc.cels.get(&SHEET_CEL)) else { return Vec::new() };
+        let (w, h) = (base.raster.width, base.raster.height);
+        let mut img = base.raster.clone();
+        img.composite_over(&warp.rasterize(&sheet.raster, None, w, h));
+        let Some(c) = doc.cels.get_mut(&src) else { return Vec::new() };
+        let changed: Vec<usize> = (0..img.tiles.len()).filter(|&i| img.tiles[i].is_some() || c.raster.tiles.get(i).is_some_and(Option::is_some)).collect();
+        c.raster = img;
+        c.version += 1;
+        changed
     }
 
     /// Lâcher, sans rien refaire : la nouvelle géométrie des éléments choisis (`items`, d'états
@@ -126,12 +214,14 @@ impl Flottante {
     /// sélection, et sa feuille transformée par-dessus (mêmes opacité, mode et effets).
     pub fn items(&self, line: &PlanItem) -> [PlanItem; 2] {
         let base = PlanItem { cel: BASE_CEL, ..line.clone() };
-        // (Du pixel de la feuille élargie au point du dessin, puis le geste.)
+        // (Du pixel de la feuille élargie au point du dessin, puis le geste. Un maillage compte
+        // déjà la marge.)
         let aff = match self.margin {
             (0, 0) => self.aff,
+            _ if self.warp.is_some() => self.aff,
             (l, t) => Affine::translate(vec2(-(l as f32), -(t as f32))).then(&self.aff),
         };
-        let sheet = PlanItem { cel: SHEET_CEL, ctg: None, pre: Some(Pre { aff, dims: self.dims }), ..line.clone() };
+        let sheet = PlanItem { cel: SHEET_CEL, ctg: None, pre: Some(Pre { aff, dims: self.dims, warp: self.warp.clone() }), ..line.clone() };
         [base, sheet]
     }
 }
