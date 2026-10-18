@@ -203,7 +203,10 @@ pub fn krita_settings(p: &KritaPreset, tip: Option<&GrayImage>, notes: &mut Vec<
         }
     }
     s.opacity = num("OpacityValue", 1.0).clamp(0.0, 1.0);
+    // Le Flow de Krita est le dépôt de chaque empreinte, qui s'accumule dans le trait sous le
+    // plafond de l'opacité (rendu des brosses, étape 2).
     s.power = num("FlowValue", 1.0).clamp(0.01, 1.0);
+    s.build_up = s.power < 1.0;
     let mut skipped = Vec::new();
     if on("PressureSize") {
         if let Some(c) = get("SizeSensor").and_then(|x| sensor(x, &mut skipped)) {
@@ -333,7 +336,13 @@ pub fn myb_settings(json: &serde_json::Value, notes: &mut Vec<String>) -> Result
         }
         None => s.size = (2.0 * log_r.exp()).clamp(0.5, 400.0),
     }
-    s.opacity = base("opaque", 1.0).clamp(0.0, 1.0);
+    // `opaque` est le dépôt de chaque empreinte, composée par-dessus les autres (libmypaint) : un
+    // débit qui s'accumule dans le trait, pas un plafond (rendu des brosses, étape 2 : pris comme
+    // plafond, le Pencil 2B importé était presque invisible).
+    let opaque = base("opaque", 1.0).clamp(0.01, 1.0);
+    s.opacity = 1.0;
+    s.power = opaque;
+    s.build_up = opaque < 1.0;
     if let Some(pts) = input("opaque_multiply", "pressure").or_else(|| input("opaque", "pressure")) {
         let max = pts.iter().map(|p| p[1]).fold(f32::MIN, f32::max).max(1e-3);
         s.dynamics.opacity = Connection { source: Source::Pressure, curve: Curve::from_points(&pts.iter().map(|p| [p[0], (p[1] / max).clamp(0.0, 1.0)]).collect::<Vec<_>>()), ..Default::default() };

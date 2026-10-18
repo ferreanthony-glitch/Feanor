@@ -16,7 +16,11 @@ use eframe::egui::{pos2, vec2, Pos2};
 use image::{Rgb, RgbImage};
 
 use crate::brush::{BrushSettings, Connection, Curve, Source, StrokeMode, StrokeState, Toucher};
-use crate::brushtex::{grain_factor, procedural_paper, BrushLibrary, BrushTextures, GrayImage, Target, PAPER_COARSE};
+use crate::brush::PencilGrain;
+use crate::brushtex::{
+    grain_factor, pencil_grain_paper, procedural_paper, BrushLibrary, BrushTextures, GrayImage, Target, GRAIN_SOFTNESS_SOFT, PAPER_CANVAS, PAPER_COARSE, PAPER_DRAWING, PAPER_FINE, PAPER_LAID,
+    TIP_BRISTLES_FLAT, TIP_BRISTLES_ROUND, TIP_CHALK, TIP_CHARCOAL, TIP_GRAPHITE,
+};
 use crate::raster::Raster;
 use crate::vector::{self, Element, VPoint};
 
@@ -494,7 +498,7 @@ fn planche_bord(lib: &BrushLibrary) {
 /// Les réglages livrés avec Pelure, plus le crayon et le pinceau de la barre d'outils.
 fn cas_pelure(lib: &BrushLibrary) -> Vec<Cas> {
     let mut v = vec![
-        cas("Crayon (barre d'outils)", "01_pelure_crayon-barre.png", BrushSettings::pencil(), "BrushSettings::pencil()"),
+        cas("Crayon (barre d'outils) = Crayon graphite", "01_pelure_crayon-barre.png", BrushSettings::graphite(), "BrushSettings::graphite()"),
         cas("Pinceau (barre d'outils) = Pinceau rond", "02_pelure_pinceau-rond.png", BrushSettings::brush(), "BrushSettings::brush()"),
     ];
     // Le trait vectoriel du crayon de la barre garde une dureté de 1 (`begin_vector_stroke`).
@@ -507,6 +511,116 @@ fn cas_pelure(lib: &BrushLibrary) -> Vec<Cas> {
         v.push(cas(&p.name, &format!("{:02}_pelure_{slug}.png", 3 + k), p.settings, "réglage livré « Pelure »"));
     }
     v
+}
+
+/// Pose `r` à 50 % (moyenne de 2×2 pixels sur blanc) en (ox, oy) : le zoom de travail d'Anthony
+/// (projet 1920×1080 vu à moitié).
+fn poser_demi(img: &mut RgbImage, r: &Raster, ox: usize, oy: usize) {
+    for y in 0..r.height / 2 {
+        for x in 0..r.width / 2 {
+            let mut acc = [0u32; 3];
+            for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                let c = sur_blanc(r.get(2 * x + dx, 2 * y + dy));
+                for k in 0..3 {
+                    acc[k] += c[k] as u32;
+                }
+            }
+            let (px, py) = ((ox + x) as u32, (oy + y) as u32);
+            if px < img.width() && py < img.height() {
+                img.put_pixel(px, py, Rgb([(acc[0] / 4) as u8, (acc[1] / 4) as u8, (acc[2] / 4) as u8]));
+            }
+        }
+    }
+}
+
+/// Planche à 50 % : les rangées telles qu'Anthony les voit à son zoom de travail.
+fn planche_demi(titre: &str, sous_titre: &str, rangees: &[Rangee]) -> RgbImage {
+    let (cw, ch) = (CELL_W / 2, CELL_H / 2);
+    let w = GAUCHE + 4 * (cw + MARGE) + MARGE;
+    let h = ENTETE + 20 + rangees.len() * (ch + MARGE) + MARGE;
+    let mut img = RgbImage::from_pixel(w as u32, h as u32, Rgb([255, 255, 255]));
+    etiquette(&mut img, MARGE as f32, 4.0, titre, 17.0);
+    etiquette(&mut img, MARGE as f32, 24.0, sous_titre, 11.0);
+    for (c, n) in ["A rampe", "B hachures", "C courbe S", "D croisés"].iter().enumerate() {
+        etiquette(&mut img, (GAUCHE + c * (cw + MARGE) + 4) as f32, (ENTETE + 6) as f32, n, 11.0);
+    }
+    for (i, r) in rangees.iter().enumerate() {
+        let y = ENTETE + 20 + i * (ch + MARGE);
+        etiquette(&mut img, MARGE as f32, (y + 4) as f32, &format!("{} 50 %", r.nom), 11.0);
+        for (c, case) in r.cases.iter().enumerate() {
+            let x = GAUCHE + c * (cw + MARGE);
+            poser_demi(&mut img, case, x, y);
+            cadre(&mut img, x, y, cw, ch);
+        }
+    }
+    img
+}
+
+/// Planches avant / après des étapes 1 à 3 : l'ancien réglage et le nouveau, mêmes gestes, à 100 %
+/// avec gros plan, et à 50 %.
+fn planches_avant_apres(lib: &BrushLibrary) {
+    let base = BrushSettings::brush();
+    // Les réglages livrés d'avant l'audit (retirés de la liste).
+    let crayon_papier = BrushSettings { size: 4.0, hardness: 0.9, spacing: 0.06, smoothing: 0.2, min_size: 0.35, pressure_opacity: true, min_opacity: 0.15, grain: 0.85, paper: Some(PAPER_FINE), ..base };
+    let craie_grasse = BrushSettings { size: 18.0, hardness: 0.6, spacing: 0.05, smoothing: 0.25, min_size: 0.5, pressure_opacity: true, min_opacity: 0.3, grain: 1.0, paper: Some(PAPER_COARSE), ..base };
+    let encre_avant = BrushSettings { size: 5.0, hardness: 1.0, spacing: 0.05, smoothing: 0.4, min_size: 0.1, ..base };
+    let mut jeux: Vec<(String, String, Vec<(String, BrushSettings)>)> = vec![
+        (
+            "Outil Crayon : avant (Crayon net, Crayon à papier) / après (Crayon graphite, Crayon de couleur)".into(),
+            "70_avant_apres_crayon.png".into(),
+            vec![
+                ("avant : Crayon net".into(), BrushSettings::pencil()),
+                ("avant : Crayon à papier".into(), crayon_papier),
+                ("après : Crayon graphite".into(), BrushSettings::graphite()),
+                ("après : Crayon de couleur".into(), BrushSettings::colour_pencil()),
+            ],
+        ),
+        (
+            "Craie : avant (Craie grasse) / après (Craie, Fusain)".into(),
+            "71_avant_apres_craie.png".into(),
+            vec![("avant : Craie grasse".into(), craie_grasse), ("après : Craie".into(), BrushSettings::chalk()), ("après : Fusain".into(), BrushSettings::charcoal())],
+        ),
+        (
+            "Encre, feutre, gouache : avant (Encre) / après".into(),
+            "72_avant_apres_encre.png".into(),
+            vec![("avant : Encre".into(), encre_avant), ("après : Encre".into(), BrushSettings::ink()), ("après : Feutre".into(), BrushSettings::felt()), ("après : Gouache".into(), BrushSettings::gouache())],
+        ),
+    ];
+    // L'outil TVPaint d'Anthony importé : sans grain du crayon (avant l'étape 3) / avec.
+    if let Some(p) = lib.presets.iter().find(|p| p.name == "Trait" && p.source == "Mon TVPX") {
+        let s = BrushSettings { size: p.settings.size.min(TAILLE_MAX), ..p.settings };
+        jeux.push((
+            "TVPaint d'Anthony, « Trait » importé : avant (sans grain du crayon) / après (grain Doux)".into(),
+            "73_avant_apres_trait-anthony.png".into(),
+            vec![
+                ("avant : sans grain".into(), BrushSettings { pencil_grain: PencilGrain::None, ..s }),
+                ("après : grain Doux".into(), BrushSettings { pencil_grain: PencilGrain::Soft, ..s }),
+                ("essai : grain Dur".into(), BrushSettings { pencil_grain: PencilGrain::Hard, ..s }),
+            ],
+        ));
+    }
+    // Le Pencil 2B de MyPaint importé : `opaque` pris comme plafond (avant) / comme dépôt accumulé.
+    if let Some(p) = lib.presets.iter().find(|p| p.name.starts_with("Pencil 2B")) {
+        let s = p.settings;
+        jeux.push((
+            "MyPaint « Pencil 2B » importé : avant (opaque = plafond) / après (opaque = dépôt qui s'accumule)".into(),
+            "74_avant_apres_mypaint-2b.png".into(),
+            vec![("avant : plafond".into(), BrushSettings { opacity: s.power, power: 1.0, build_up: false, ..s }), ("après : dépôt accumulé".into(), s)],
+        ));
+    }
+    for (titre, fichier, rangees) in jeux {
+        let rows: Vec<Rangee> = rangees.iter().map(|(nom, s)| rangee_bitmap(nom, s, &lib.textures(s), Toucher::default()).0).collect();
+        save(&planche(&titre, "bitmap, mêmes gestes ; rangées du haut à 100 %, du bas en gros plan ×4", &rows), &fichier);
+        save(&planche_demi(&titre, "vu à 50 %, le zoom de travail (projet 1920×1080)", &rows), &fichier.replace(".png", "_50pc.png"));
+    }
+    // Toutes les brosses livrées, à 50 %.
+    let rows: Vec<Rangee> = lib
+        .presets
+        .iter()
+        .filter(|p| p.source == "Pelure" && p.target == Target::Brush)
+        .map(|p| rangee_bitmap(&p.name, &p.settings, &lib.textures(&p.settings), Toucher::default()).0)
+        .collect();
+    save(&planche_demi("Les brosses livrées avec Pelure, vues à 50 %", "bitmap, mêmes gestes", &rows), "75_brosses_pelure_50pc.png");
 }
 
 /// Essais : ce que les briques déjà là donnent avec d'autres valeurs (pas de nouveau code).
@@ -708,11 +822,17 @@ fn poser_gris(img: &mut RgbImage, g: &GrayImage, (fx, fy, fw, fh): (usize, usize
 
 /// Planche des papiers : ceux de Pelure et quelques papiers de TVPaint, à 1:1 et ×4, puis ce que
 /// chacun laisse comme grain à trois appuis (`grain_factor`, grain 1).
-fn planche_papiers(res: Option<&Path>, notes: &mut String) {
+fn planche_papiers(lib: &BrushLibrary, res: Option<&Path>, notes: &mut String) {
     let mut papiers: Vec<(String, GrayImage)> = vec![
-        ("Pelure « Grain fin » (bruit 256, flou 0)".into(), procedural_paper(256, 0, 11)),
-        ("Pelure « Grain gros » (bruit 256, flou 1)".into(), procedural_paper(256, 1, 29)),
+        ("Pelure « Grain fin » (bruit 256, flou 0, avant l'audit)".into(), procedural_paper(256, 0, 11)),
+        ("Pelure « Grain gros » (bruit 256, flou 1, avant l'audit)".into(), procedural_paper(256, 1, 29)),
     ];
+    for (id, nom) in [(PAPER_DRAWING, "Pelure « Papier à dessin » (étape 1)"), (PAPER_CANVAS, "Pelure « Toile » (étape 1)"), (PAPER_LAID, "Pelure « Vergé » (étape 1)")] {
+        if let Some(p) = lib.textures(&BrushSettings { paper: Some(id), ..BrushSettings::brush() }).paper {
+            papiers.push((nom.into(), p.as_ref().clone()));
+        }
+    }
+    papiers.push(("Pelure : grain propre du crayon (étape 3)".into(), pencil_grain_paper().as_ref().clone()));
     if let Some(res) = res {
         for name in ["Paper 33", "Paper 04", "cement_02", "noisy_009", "Noisy Hard"] {
             match crate::tvpbrush::find_paper(res, name) {
@@ -733,7 +853,7 @@ fn planche_papiers(res: Option<&Path>, notes: &mut String) {
     let w = GAUCHE + 160 + cols * (tw + MARGE);
     let h = ENTETE + 24 + papiers.len() * (th + MARGE);
     let mut img = RgbImage::from_pixel(w as u32, h as u32, Rgb([255, 255, 255]));
-    etiquette(&mut img, MARGE as f32, 4.0, "Papiers : relief à 1:1, gros plan ×4, puis le grain laissé à un appui de 20 %, 50 %, 90 % (grain 1)", 15.0);
+    etiquette(&mut img, MARGE as f32, 4.0, "Papiers : relief à 1:1, gros plan ×4, puis le grain laissé à un appui de 20 %, 50 %, 90 % (grain 1, douceur 0,3)", 15.0);
     for (c, n) in ["relief 1:1", "relief ×4 (32 px)", "appui 20 %", "appui 50 %", "appui 90 %"].iter().enumerate() {
         etiquette(&mut img, (GAUCHE + 160 + c * (tw + MARGE)) as f32, (ENTETE + 2) as f32, n, 11.0);
     }
@@ -748,7 +868,7 @@ fn planche_papiers(res: Option<&Path>, notes: &mut String) {
             for yy in 0..th {
                 for xx in 0..tw {
                     let hgt = p.get(xx % p.width, yy % p.height);
-                    let f = grain_factor(hgt, *pr, 1.0);
+                    let f = grain_factor(hgt, *pr, 1.0, GRAIN_SOFTNESS_SOFT);
                     let lum = (255.0 * (1.0 - f)) as u8;
                     img.put_pixel((x + xx) as u32, (y + yy) as u32, Rgb([lum, lum, lum]));
                 }
@@ -760,9 +880,21 @@ fn planche_papiers(res: Option<&Path>, notes: &mut String) {
 
 /// Planche des pointes : l'empreinte ronde de Pelure (dureté 0,85 et 1) et des pointes `.dip` de
 /// TVPaint (première image, puis la bande des images d'une pointe animée).
-fn planche_pointes(res: Option<&Path>, notes: &mut String) {
+fn planche_pointes(lib: &BrushLibrary, res: Option<&Path>, notes: &mut String) {
     let mut pointes: Vec<(String, GrayImage)> = Vec::new();
-    for (h, nom) in [(0.85f32, "Pelure : empreinte ronde, dureté 0,85 (Pinceau rond)"), (1.0, "Pelure : empreinte ronde, dureté 1 (Crayon, Encre)")] {
+    for (id, nom) in [
+        (TIP_GRAPHITE, "Pelure « Graphite » (étape 1, 8 cases)"),
+        (TIP_CHARCOAL, "Pelure « Fusain » (étape 1, 6 cases)"),
+        (TIP_CHALK, "Pelure « Craie » (étape 1, 6 cases)"),
+        (TIP_BRISTLES_FLAT, "Pelure « Poils plats » (étape 1, 4 cases)"),
+        (TIP_BRISTLES_ROUND, "Pelure « Poils ronds » (étape 1, 4 cases)"),
+    ] {
+        if let Some(t) = lib.tip(id) {
+            let g = t.full();
+            pointes.push((format!("{nom} — {}×{}", g.width, g.height), g.clone()));
+        }
+    }
+    for (h, nom) in [(0.85f32, "Pelure : empreinte ronde, dureté 0,85 (Pinceau rond)"), (1.0, "Pelure : empreinte ronde, dureté 1 (Crayon net, Encre)")] {
         let n = 64usize;
         let r = 26.0f32;
         let inner = r * h;
@@ -825,7 +957,7 @@ fn planches_rendu_audit() {
 
     // 0. Toucher ancien contre nouveau : la preuve que le chantier « sensation » change peu l'image.
     for (nom, fichier, s) in [
-        ("Crayon (barre) : toucher ancien / nouveau", "00_toucher_crayon.png", BrushSettings::pencil()),
+        ("Crayon net (l'outil Crayon d'avant l'audit) : toucher ancien / nouveau", "00_toucher_crayon.png", BrushSettings::pencil()),
         ("Pinceau rond : toucher ancien / nouveau", "00_toucher_pinceau-rond.png", BrushSettings::brush()),
     ] {
         let tex = lib.textures(&s);
@@ -855,8 +987,8 @@ fn planches_rendu_audit() {
     // 2. Papiers et pointes.
     let res = crate::tvpbrush::tvpaint_resources();
     let _ = writeln!(notes, "## Papiers et pointes");
-    planche_papiers(res.as_deref(), &mut notes);
-    planche_pointes(res.as_deref(), &mut notes);
+    planche_papiers(&lib, res.as_deref(), &mut notes);
+    planche_pointes(&lib, res.as_deref(), &mut notes);
     planche_bord(&lib);
 
     // 3. Les outils TVPaint d'Anthony et une sélection des panneaux livrés, puis Krita / MyPaint.
@@ -867,6 +999,9 @@ fn planches_rendu_audit() {
     for c in tvp.iter().chain(&krita) {
         rendre_cas(c, &lib, &mut notes);
     }
+
+    // 4. Avant / après des étapes 1 à 3, et la vue à 50 %.
+    planches_avant_apres(&lib);
 
     std::fs::write(out_dir().join("mesures.txt"), &notes).expect("mesures.txt");
     std::fs::write(
@@ -880,6 +1015,7 @@ fn planches_rendu_audit() {
          hachures, milieu du S, frontière des passages croisés). Papier blanc, encre presque noire.\n\
          00_ : toucher ancien / nouveau. 01–09 : réglages livrés. 10–12 : papiers, pointes, bord bitmap / vectoriel. 20– : essais.\n\
          30– : outils TVPaint d'Anthony importés. 40– : panneaux TVPaint 12 importés. 60– : Krita / MyPaint importés.\n\
+         70– : avant / après des étapes 1 à 3 (anciens et nouveaux réglages, mêmes gestes), avec une version _50pc vue à 50 %.\n\
          mesures.txt : réglages exacts et chiffres (alpha le long de la rampe, aplat du S, accumulation des croisés).\n",
     )
     .expect("LISEZMOI.txt");

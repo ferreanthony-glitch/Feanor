@@ -269,9 +269,9 @@ témoin « avant ». Les durées sont des ordres de grandeur.
 | # | Étape | Durée | Ce qu'Anthony verra | A/B à la tablette |
 |---|---|---|---|---|
 | 0 | **Fait** : import TVPaint réparé (`[ToolBox]`, `step` en %, grain noté), papiers importés répartis par rang (§6) | fait | ses panneaux TVPaint s'importent ; un papier TVPaint importé a du grain à tout appui | importer `raccourcis outils.tvpx` et `Resources\custompanels\Pencils_v1.bin` par « Importer des pinceaux », dessiner avec « Trait » et « 2B Pencil » sur un calque bitmap |
-| 1 | **Pointes et papiers vrais, livrés avec Pelure** : 5–6 pointes fabriquées dans Pelure (amas de grains pour graphite et fusain, craie, biseau de feutre, poils plats et ronds — par procédure ou dessinées, pas copiées de TVPaint), 3 papiers à structure (bruit à plusieurs échelles 2–8 px, « toile », « vergé ») ; les réglages livrés refaits avec (§3) | 1–2 j | le crayon fait du grain, la craie de la craie ; les aperçus de la grille changent | hachures légères, aplat appuyé, à comparer au 2B TVPaint importé et aux planches `01`/`04` |
-| 2 | **Grain à réponse douce et dépôt qui s'accumule** : largeur de transition du grain réglable (« dureté du papier », défaut ±0,3), débit 0,3–0,5 avec Accumuler sur les outils secs, opacité plafond 0,85–0,9, appui → débit ; import MyPaint/Krita : `opaque`/Flow → débit accumulé | 1 j | repasser fonce ; les hachures légères sont grises et granuleuses ; le Pencil 2B MyPaint devient visible | trois passages au même endroit ; rampe d'appui ; planche `60` avant/après |
-| 3 | **Grain propre du crayon** (Silk / Soft / Medium / Hard) : un bruit fin ancré à la feuille, appliqué même sans papier, pour l'outil Crayon et l'import `tv_pencil` | 1 j | l'outil « Trait » importé retrouve une texture ; le Crayon de la barre aussi | son Trait dans TVPaint et dans Pelure, même geste, PNG côte à côte |
+| 1 | **Fait (§6 bis)** — Pointes et papiers vrais, livrés avec Pelure : 5 pointes fabriquées dans Pelure (amas de grains, fusain, craie, poils plats et ronds), 3 papiers à structure (bruit à plusieurs échelles, « toile », « vergé ») ; les réglages livrés refaits avec (§3) | fait | le crayon fait du grain, la craie de la craie ; les aperçus de la grille changent | hachures légères, aplat appuyé, à comparer au 2B TVPaint importé et aux planches `70`, `71`, `72` |
+| 2 | **Fait (§6 bis)** — Grain à réponse douce (« Douceur du grain », 0,3 pour les brosses de Pelure) et dépôt qui s'accumule sous un plafond sur les outils secs, appui → débit ; import MyPaint/Krita : `opaque`/Flow → débit accumulé | fait | repasser fonce ; les hachures légères sont grises et granuleuses ; le Pencil 2B MyPaint devient visible | trois passages au même endroit ; rampe d'appui ; planche `74` |
+| 3 | **Fait (§6 bis)** — Grain propre du crayon (Soie / Doux / Moyen / Dur), collé à la feuille, même sans papier, pour l'outil Crayon et l'import `tv_pencil` | fait | l'outil « Trait » importé retrouve une texture ; le Crayon de la barre aussi | son Trait dans TVPaint et dans Pelure, même geste, PNG côte à côte ; planche `73` |
 | 4 | **Mode de fusion par trait** (Multiplier, puis Écran…) pour feutre et crayon de couleur, bitmap et vectoriel | 1 j | deux feutres croisés font une troisième couleur | croisement jaune/bleu |
 | 5 | **Vectoriel rejoué par le moteur bitmap** (`docs/VECTORIEL-COMME-BITMAP.md`) | 3–5 j | le trait ne change plus au lâcher sur un calque vectoriel | même geste bitmap / vectoriel, écart 0 |
 | 6 | **Peinture** : poils, charge plus lente, séchage on/off, puis bord foncé de l'aquarelle | 2–3 j (+1–2 j aquarelle) | gouache qui s'entraîne, lavis à bord foncé | bleu sur jaune frais / sec ; lavis superposés |
@@ -304,6 +304,93 @@ Petites, sûres, testées, chacune réversible en une ligne.
 4. `.gitignore` : `audit-rendu/` (planches refaites par l'essai).
 
 Les 574 tests d'avant passent, plus les 2 nouveaux (576), et l'essai ignoré `planches_rendu_audit`.
+
+## 6 bis. Étapes 1 à 3 faites (branche `rendu`, 2026-10-18)
+
+Anthony : « Fusionne et commence les étapes 1 à 3. » Ses réponses : projet 1920×1080 vu à 50 % ;
+il ne modifie pas ses traits vectoriels après coup ; son `.tvpx` s'importe. Décisions prises par
+défaut (réversibles) : grain collé à la feuille comme TVPaint (avec l'option « Le grain suit le
+trait ») ; crayon plafonné à 90 % d'opacité, on fonce en repassant ; brosses **propres à Pelure**
+(pointes et papiers fabriqués par le code au démarrage, rien de TVPaint, Krita, Procreate ou
+Photoshop dans le dépôt) ; le Pinceau rond ne change pas et reste le réglage de départ de l'outil
+Pinceau, les nouvelles brosses viennent juste après lui dans la liste ; l'outil Crayon part du
+Crayon graphite, l'ancien devient « Crayon net » ; « Mes brosses » intact, les anciens réglages se
+relisent à l'identique (`#[serde(default)]`, test de migration).
+
+### Ce qui a été fait
+
+| Étape | Fait | Où |
+|---|---|---|
+| 1 | Pointes fabriquées : « Graphite » (amas de grains, 8 cases), « Fusain » et « Craie » (bâtons déchiquetés et troués, 6 cases), « Poils plats » et « Poils ronds » (4 cases). Papiers fabriqués : « Papier à dessin » (bruit à 1, 2, 4 et 8 texels), « Toile » (fils dessus-dessous), « Vergé » (vergeures, pontuseaux). Tous déterministes (même clé de contenu dans les projets). Brosses : Crayon graphite, Crayon de couleur, Encre, Feutre, Fusain, Craie, Gouache, Crayon net ; Gomme à grain sur le papier à dessin. Listes « Pointe » et « Papier » dans les réglages. | `brushtex.rs` (`tip_grains`, `tip_stick`, `tip_bristles_flat`, `tip_bristles_round`, `multiscale_paper`, `canvas_paper`, `laid_paper`, `builtin`), `brush.rs` (`graphite`, `colour_pencil`, `ink`, `felt`, `charcoal`, `chalk`, `gouache`), `brushui.rs` |
+| 2 | « Douceur du grain » (`paper_softness`, largeur de la transition de `grain_factor` : 0,12 pour les anciens réglages, 0,3 pour les brosses de Pelure). Les outils secs déposent un débit qui s'accumule sous un plafond (graphite 0,85 → 0,9 ; fusain 0,8 → 0,95 ; craie 0,85 → 1), l'appui fait le débit par une courbe. Le débit tient compte du dépôt moyen de la pointe (`Tip::mean_coverage`) : une pointe clairsemée n'est plus condamnée à rester pâle. Imports MyPaint (`opaque`) et Krita (Flow) : dépôt par empreinte qui s'accumule, opacité pleine. | `brushtex.rs`, `brush.rs` (`dab`), `kritabrush.rs` |
+| 3 | « Grain du crayon » (`pencil_grain` : Soie, Doux, Moyen, Dur ; force 0,35 à 0,92, douceur 0,45 à 0,2), un papier fin fabriqué une fois, collé à la feuille, appliqué même sans papier ; `tv_pencil … grain N` importé → Soie / Doux / Moyen / Dur (ordre des libellés de TVPaint, deviné, **à vérifier** ; la note d'import le dit) ; le Crayon graphite est en « Doux ». Option « Le grain suit le trait » (`paper_follow`, pour le papier et le grain du crayon). | `brush.rs`, `brushtex.rs` (`pencil_grain_paper`), `tvpbrush.rs` |
+| vecto | Pour que tout cela tienne sur son calque vectoriel : l'appui d'un point est retrouvé d'après son rayon pour **toute** connexion de taille (`vector::pressure_for_radius`, dichotomie), plus seulement la pression simple. Son « Trait » importé (connexion) rend maintenant pareil en bitmap et en vectoriel (planche `30`). | `vector.rs` |
+
+Tests : `matiere_tests.rs` (pointes et papiers fabriqués, brosses listées, le graphite fonce en
+repassant et garde du grain, le grain du crayon texture une brosse nue, les anciens réglages se
+relisent tels quels, le papier qui suit le trait, l'appui retrouvé d'après le rayon) ;
+`kritabrush_tests`, `tvpbrush_tests`, `brushtex_tests`, `procreate_tests` mis à jour ; 582 tests
+passent.
+
+### Les planches avant / après (`audit-rendu/`, refaites par l'essai)
+
+- `70_avant_apres_crayon.png` et `70_avant_apres_crayon_50pc.png` : Crayon net et Crayon à papier
+  (avant) contre Crayon graphite et Crayon de couleur (après), mêmes gestes, à 100 % + ×4 et à 50 %.
+- `71_avant_apres_craie.png` (+ `_50pc`) : Craie grasse (avant) contre Craie et Fusain.
+- `72_avant_apres_encre.png` (+ `_50pc`) : Encre avant / après, Feutre, Gouache.
+- `73_avant_apres_trait-anthony.png` (+ `_50pc`) : son « Trait » TVPaint importé sans grain du
+  crayon / avec « Doux » / essai « Dur ».
+- `74_avant_apres_mypaint-2b.png` : le Pencil 2B MyPaint, `opaque` en plafond (avant) / en dépôt.
+- `75_brosses_pelure_50pc.png` : toutes les brosses livrées, vues à 50 %.
+- `10_papiers.png`, `11_pointes.png` : les papiers et pointes fabriqués à côté de ceux de TVPaint.
+
+### Ce que j'en juge, honnêtement
+
+- **Crayon graphite** : ce n'est plus un ruban. À 100 % et au ×4, le trait a un grain qui court
+  le long du trait, s'éclaircit quand on effleure, fonce quand on repasse ; à 50 %, c'est une
+  ligne de crayon tendre, un peu douce. Les hachures légères sont pâles (c'est le propre d'un
+  crayon effleuré, mais Anthony peut les vouloir plus présentes : monter le débit ou la courbe
+  d'appui). Le grain est plus doux et plus « nuageux » que le 2B de TVPaint (`43`), dont les
+  grains sont des points plus francs : si Anthony préfère ce mordant, la pointe « Graphite »
+  gagnera des grains plus petits et plus durs — un réglage de `tip_grains`.
+- **Fusain, Craie** : la craie a enfin l'air d'une craie (bâton, trous du papier, bords
+  déchiquetés) ; le fusain est cotonneux, un peu uniforme — il lui manque l'écrasement du bâton
+  selon l'appui (la taille suit l'appui, pas la forme).
+- **Encre** : les bouts effilés et le corps plein, ce qu'une encre doit être. **Feutre** : un
+  aplat gris qui fonce aux croisements par superposition ; le vrai feutre multiplie (étape 4).
+- **Gouache** : la matière vient surtout du mélange (le bleu entraîne le noir) et de la charge
+  qui baisse ; les stries des poils sont discrètes à 18 px, visibles au ×4. Sans séchage ni
+  relief (étape 6), ça reste une gouache « plate ».
+- **Son Trait TVPaint** : le grain « Doux » lui donne un toucher de mine sur papier qu'il n'avait
+  pas ; « Dur » est trop troué pour un crayon de storyboard. Le vrai grain de TVPaint n'est pas
+  connu : c'est à lui de dire si Doux ou Moyen s'en approche (**à vérifier** à la tablette).
+
+### À essayer à la tablette (A/B)
+
+1. Outil Crayon (Crayon graphite), calque bitmap puis vectoriel : hachures légères (grain ?),
+   trois passages au même endroit (ça fonce ?), appui à fond (gris très foncé, pas noir).
+   Comparer au réglage « Crayon net » et aux planches `70`.
+2. Son « Trait » importé : même geste dans TVPaint et dans Pelure, PNG côte à côte ; essayer
+   Soie / Doux / Moyen / Dur dans « Grain du crayon » et dire lequel est le plus proche.
+3. Craie, Fusain, Gouache : un aplat par passages croisés, deux couleurs.
+4. Papier : « Papier à dessin » taille 2 à 3 pour un projet 1920×1080 à 50 % ; monter la
+   « Douceur du grain » si le grain fait trop pochoir.
+
+### Ce qui ne passe pas en vectoriel (noté pour l'étape 5)
+
+- Tout ce qui a une pointe, un papier, un profil ou un grain du crayon est rejoué au lâcher par le
+  moteur bitmap : les nouvelles brosses rendent pareil en bitmap et en vectoriel (planches `01`,
+  `30`, écart faible), au détail près que le rejeu n'a pas les instants (une connexion à la
+  vitesse serait perdue) ni le toucher du moment.
+- **Encre** et **Feutre** (sans texture) : au lâcher, le trait vectoriel garde la largeur (le
+  rayon est dans le chemin) mais pas l'opacité selon l'appui ni le bord doux : l'Encre perd peu
+  (elle est pleine), le Feutre rien (opacité fixe). Le Pinceau rond : inchangé.
+- **Gouache** : le mélange et la charge sont gardés (pointe en image → rejoué), mais le rejeu
+  repart d'une brosse pleine à chaque élément : un trait coupé par la gomme vectorielle se
+  recharge au point de coupe.
+- Puisqu'Anthony ne modifie pas ses traits après coup, la recommandation de
+  `docs/VECTORIEL-COMME-BITMAP.md` se simplifie : au lâcher, garder les pixels de l'aperçu comme
+  cache du trait (identique par construction), et ne rejouer que si un trait est édité.
 
 ## 7. Questions pour Anthony
 

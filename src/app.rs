@@ -699,7 +699,9 @@ impl App {
             cur_frame: 0,
             tool: Tool::Brush,
             brush: BrushSettings::brush(),
-            pencil: BrushSettings::pencil(),
+            // L'outil Crayon part du crayon graphite (rendu des brosses, étape 1) ; le crayon net
+            // d'avant reste dans les réglages.
+            pencil: BrushSettings::graphite(),
             eraser: BrushSettings::eraser(),
             brushes: crate::brushtex::BrushLibrary::load(crate::brushtex::BrushLibrary::user_dir().as_deref()),
             fill: FillSettings::default(),

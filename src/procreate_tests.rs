@@ -129,11 +129,12 @@ fn a_brushset_becomes_brushes_with_shape_and_grain() {
     let mut lib = BrushLibrary::load(None);
     let (n, tips, papers, notes) = import(&set, "jeu.brushset", &mut lib).unwrap();
     assert_eq!((n, tips, papers), (2, 1, 1), "les réglages d'usine (Reset) ne comptent pas");
-    let craie = lib.presets.iter().find(|p| p.name == "Craie").unwrap().settings;
+    // (Pelure a maintenant ses propres « Craie » et « Fusain » : on cherche ceux du jeu importé.)
+    let craie = lib.presets.iter().find(|p| p.name == "Craie" && p.source == "jeu.brushset").unwrap().settings;
     assert!(craie.tip.is_some() && craie.paper.is_some());
     assert_eq!((craie.count, craie.dynamics.size.source), (3, Source::Pressure));
     assert!((craie.dynamics.size.min - 0.4).abs() < 1e-5 && (craie.spacing - 0.15).abs() < 1e-6);
-    let fusain = lib.presets.iter().find(|p| p.name == "Fusain").unwrap().settings;
+    let fusain = lib.presets.iter().find(|p| p.name == "Fusain" && p.source == "jeu.brushset").unwrap().settings;
     assert!(fusain.tip.is_none() && fusain.grain == 0.0);
     assert!(notes[0].contains("devinées"));
     assert!(import(&crate::kritabrush_tests::zip(&[("x.txt", b"x")]), "x", &mut lib).is_err());

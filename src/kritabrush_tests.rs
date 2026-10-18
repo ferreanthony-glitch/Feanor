@@ -48,6 +48,7 @@ fn a_krita_preset_becomes_a_brush() {
     let s = p.settings;
     assert_eq!((s.size, s.roundness, s.hardness), (24.0, 0.5, 0.8));
     assert!((s.spacing - 0.15).abs() < 1e-6 && (s.opacity - 0.7).abs() < 1e-6 && (s.power - 0.5).abs() < 1e-6);
+    assert!(s.build_up, "le Flow de Krita s'accumule dans le trait");
     assert_eq!((s.dynamics.size.source, s.dynamics.angle.source), (Source::Pressure, Source::Direction));
     assert!((s.dynamics.size.curve.eval(0.35) - 0.1).abs() < 1e-5, "la courbe de Krita");
     assert!(!s.dynamics.opacity.active());
@@ -105,7 +106,8 @@ fn a_mypaint_brush_becomes_a_brush() {
     // À l'appui nul, le rayon est e⁰ : un e-ième de la taille.
     assert_eq!(s.dynamics.size.source, Source::Pressure);
     assert!((s.dynamics.size.curve.eval(0.0) - (-1.0f32).exp()).abs() < 0.02);
-    assert!((s.opacity - 0.9).abs() < 1e-6 && s.dynamics.opacity.source == Source::Pressure);
+    // `opaque` 0,9 : un dépôt par empreinte qui s'accumule (rendu, étape 2), sous une opacité pleine.
+    assert!((s.power - 0.9).abs() < 1e-6 && s.build_up && s.opacity == 1.0 && s.dynamics.opacity.source == Source::Pressure);
     assert!((s.hardness - 0.6).abs() < 1e-6 && (s.spacing - 0.125).abs() < 1e-6);
     assert!((s.roundness - 0.5).abs() < 1e-6 && (s.angle - 30.0).abs() < 1e-4 && (s.scatter - 0.25).abs() < 1e-6);
     assert!(r.notes.join(" ").contains("dureté selon l'appui"));

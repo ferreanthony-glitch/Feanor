@@ -61,7 +61,7 @@ impl Pinceaux {
                 taille: p.settings.size,
                 opacite: p.settings.opacity,
                 pression_taille: p.settings.pressure_size,
-                texture: p.settings.tip.is_some() || (p.settings.paper.is_some() && p.settings.grain > 0.0),
+                texture: p.settings.tip.is_some() || (p.settings.paper.is_some() && p.settings.grain > 0.0) || p.settings.pencil_grain != crate::brush::PencilGrain::None,
             })
             .collect()
     }

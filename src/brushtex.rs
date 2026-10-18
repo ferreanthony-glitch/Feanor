@@ -158,20 +158,29 @@ impl GrayImage {
 #[derive(Debug)]
 pub struct Tip {
     levels: Vec<GrayImage>,
+    /// Dépôt moyen de l'image sur son carré (1 : une pointe pleine ; un amas de grains : 0,2 à 0,4).
+    mean: f32,
 }
 
 impl Tip {
     pub fn new(image: GrayImage) -> Tip {
+        let mean = image.values.iter().sum::<f32>() / image.values.len().max(1) as f32;
         let mut levels = vec![image];
         while levels.last().is_some_and(|l| l.width.min(l.height) > 4) {
             let next = levels.last().expect("au moins un niveau").half();
             levels.push(next);
         }
-        Tip { levels }
+        Tip { levels, mean }
     }
 
     pub fn full(&self) -> &GrayImage {
         &self.levels[0]
+    }
+
+    /// Dépôt moyen de la pointe sur son carré : ce qu'une pointe clairsemée pose par empreinte
+    /// par rapport à une pointe pleine (sert au débit qui s'accumule).
+    pub fn mean_coverage(&self) -> f32 {
+        self.mean
     }
 
     /// La plus petite réduction encore au moins aussi large que la pointe à l'écran.
@@ -186,16 +195,26 @@ impl Tip {
 
 /// Part de la couleur qui reste sur un point du papier de relief `height` : les sommets d'abord,
 /// les creux quand on appuie (`pressure`) ; `grain` = 0 : papier lisse, 1 : grain marqué.
-pub fn grain_factor(height: f32, pressure: f32, grain: f32) -> f32 {
+/// `softness` (rendu des brosses, étape 2) : largeur de la transition entre un creux vide et un
+/// sommet plein, en part du relief — 0,12 est le seuil presque net d'avant l'audit, 0,3 un grain
+/// qui répond en douceur comme un vrai papier.
+pub fn grain_factor(height: f32, pressure: f32, grain: f32, softness: f32) -> f32 {
     if grain <= 0.0 {
         return 1.0;
     }
     // Seuil : bas quand on appuie (seuls les creux profonds restent blancs), haut quand on
     // effleure (seuls les sommets prennent la couleur).
     let t = 0.15 + 0.6 * (1.0 - pressure.clamp(0.0, 1.0));
-    let fill = smoothstep(t - 0.12, t + 0.12, height);
+    let w = softness.clamp(0.02, 0.6);
+    let fill = smoothstep(t - w, t + w, height);
     1.0 - grain.clamp(0.0, 1.0) * (1.0 - fill)
 }
+
+/// La douceur du grain d'avant l'audit (le seuil presque net) : la valeur par défaut, pour que les
+/// anciens réglages ne changent pas.
+pub const GRAIN_SOFTNESS_OLD: f32 = 0.12;
+/// La douceur des brosses traditionnelles de Pelure.
+pub const GRAIN_SOFTNESS_SOFT: f32 = 0.3;
 
 fn smoothstep(a: f32, b: f32, x: f32) -> f32 {
     let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
@@ -247,6 +266,344 @@ pub fn procedural_paper(size: usize, blur: usize, seed: u32) -> GrayImage {
         ranked[i] = rank as f32 / n;
     }
     GrayImage::new(size, size, ranked)
+}
+
+// ------------------------------------------------- textures fabriquées par Pelure (rendu, étape 1)
+//
+// Pelure ne livre aucune image venue d'ailleurs : ses pointes et ses papiers sont fabriqués ici,
+// au démarrage, par des tirages déterministes (la même graine donne toujours la même image, donc la
+// même clé de contenu dans les projets). Tailles pensées pour un projet 1920×1080 vu à 50 % : le
+// grain doit se voir à moitié taille.
+
+/// Mélange de MurmurHash3 (`fmix32`).
+fn fmix(mut h: u32) -> u32 {
+    h ^= h >> 16;
+    h = h.wrapping_mul(0x85EB_CA6B);
+    h ^= h >> 13;
+    h = h.wrapping_mul(0xC2B2_AE35);
+    h ^ (h >> 16)
+}
+
+/// Bruit de 0 à 1 au texel (`x`, `y`) pour la graine `seed`, sans motif entre voisins.
+fn hash01(seed: u32, x: u32, y: u32) -> f32 {
+    let h = fmix(fmix(seed ^ x.wrapping_mul(0x9E37_79B1)) ^ y.wrapping_mul(0x85EB_CA77));
+    (h >> 8) as f32 / (1u32 << 24) as f32
+}
+
+/// Tirages déterministes (xorshift) pour fabriquer une pointe.
+struct Rng(u32);
+
+impl Rng {
+    fn new(seed: u32) -> Rng {
+        Rng(fmix(seed) | 1)
+    }
+
+    /// De 0 à 1.
+    fn next(&mut self) -> f32 {
+        let mut x = self.0;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        self.0 = x;
+        (x >> 8) as f32 / (1u32 << 24) as f32
+    }
+
+    fn range(&mut self, a: f32, b: f32) -> f32 {
+        a + (b - a) * self.next()
+    }
+}
+
+/// Flou en boîte de rayon `r` sur une image carrée qui se répète (deux passes : proche d'un flou
+/// gaussien), en place.
+fn blur_wrap(values: &mut [f32], size: usize, r: usize) {
+    if r == 0 {
+        return;
+    }
+    let r = r as isize;
+    for _ in 0..2 {
+        for vertical in [false, true] {
+            let src = values.to_vec();
+            for y in 0..size {
+                for x in 0..size {
+                    let mut sum = 0.0;
+                    for d in -r..=r {
+                        let (sx, sy) = if vertical { (x as isize, y as isize + d) } else { (x as isize + d, y as isize) };
+                        let (sx, sy) = (sx.rem_euclid(size as isize) as usize, sy.rem_euclid(size as isize) as usize);
+                        sum += src[sy * size + sx];
+                    }
+                    values[y * size + x] = sum / (2 * r + 1) as f32;
+                }
+            }
+        }
+    }
+}
+
+/// Ramène des valeurs à une moyenne nulle et un écart-type de 1 (un bruit flouté perd de
+/// l'amplitude ; on le remet à l'échelle avant de l'additionner à d'autres).
+fn standardize(values: &mut [f32]) {
+    let n = values.len().max(1) as f32;
+    let mean = values.iter().sum::<f32>() / n;
+    let var = values.iter().map(|v| (v - mean) * (v - mean)).sum::<f32>() / n;
+    let sd = var.sqrt().max(1e-6);
+    for v in values {
+        *v = (*v - mean) / sd;
+    }
+}
+
+/// Papier à plusieurs échelles : la somme de bruits adoucis sur `blur` texels, pondérés par
+/// `weight` (une octave par couple), répartie par rang. Un grain de papier à dessin a du relief à
+/// 1, 2, 4 et 8 texels à la fois, pas seulement à un.
+pub fn multiscale_paper(size: usize, seed: u32, octaves: &[(usize, f32)]) -> GrayImage {
+    let size = size.max(4);
+    let mut sum = vec![0.0f32; size * size];
+    for (k, &(blur, weight)) in octaves.iter().enumerate() {
+        let s = seed.wrapping_add((k as u32 + 1).wrapping_mul(0x9E37_79B9));
+        let mut v: Vec<f32> = (0..size * size).map(|i| hash01(s, (i % size) as u32, (i / size) as u32)).collect();
+        blur_wrap(&mut v, size, blur);
+        standardize(&mut v);
+        for (acc, x) in sum.iter_mut().zip(&v) {
+            *acc += weight * x;
+        }
+    }
+    GrayImage::new(size, size, sum).equalized()
+}
+
+/// Toile : des fils qui passent dessus-dessous tous les `period` texels, plus un peu de bruit.
+pub fn canvas_paper(size: usize, period: usize, seed: u32) -> GrayImage {
+    let size = size.max(4);
+    let period = period.max(2);
+    let mut noise: Vec<f32> = (0..size * size).map(|i| hash01(seed, (i % size) as u32, (i / size) as u32)).collect();
+    blur_wrap(&mut noise, size, 1);
+    standardize(&mut noise);
+    let tau = std::f32::consts::TAU;
+    let values = (0..size * size)
+        .map(|i| {
+            let (x, y) = (i % size, i / size);
+            let warp = ((x as f32 + 0.5) / period as f32 * tau).sin().abs();
+            let weft = ((y as f32 + 0.5) / period as f32 * tau).sin().abs();
+            let over = ((x / period) + (y / period)) % 2 == 0;
+            let weave = if over { 0.7 * warp + 0.3 * weft } else { 0.3 * warp + 0.7 * weft };
+            weave + 0.18 * noise[i]
+        })
+        .collect();
+    GrayImage::new(size, size, values).equalized()
+}
+
+/// Vergé : de fines lignes horizontales (vergeures) tous les 4 texels, des lignes verticales
+/// espacées (pontuseaux), et le grain du papier.
+pub fn laid_paper(size: usize, seed: u32) -> GrayImage {
+    let size = size.max(8);
+    let grain = multiscale_paper(size, seed, &[(0, 0.5), (1, 0.5), (3, 0.3)]);
+    let tau = std::f32::consts::TAU;
+    let chain = (size / 4).max(8);
+    let values = (0..size * size)
+        .map(|i| {
+            let (x, y) = (i % size, i / size);
+            let wobble = 0.35 * ((x as f32) / size as f32 * tau * 3.0).sin();
+            let lines = 0.5 + 0.5 * ((y as f32 + wobble) / 4.0 * tau).sin();
+            let dx = (x % chain) as f32 - chain as f32 * 0.5;
+            let posts = (-(dx * dx) / 2.0).exp();
+            0.55 * lines + 0.6 * grain.values[i] + 0.3 * posts
+        })
+        .collect();
+    GrayImage::new(size, size, values).equalized()
+}
+
+/// Pose un disque doux : plein jusqu'à `soft` du rayon, puis une chute jusqu'au bord ; ce qu'il
+/// dépose (`amount`) se cumule avec ce qui est déjà là, comme des couches de pigment.
+fn stamp_disc(v: &mut [f32], w: usize, h: usize, cx: f32, cy: f32, r: f32, soft: f32, amount: f32) {
+    let x0 = (cx - r - 1.0).floor().max(0.0) as usize;
+    let y0 = (cy - r - 1.0).floor().max(0.0) as usize;
+    let x1 = ((cx + r + 1.0).ceil().max(0.0) as usize).min(w);
+    let y1 = ((cy + r + 1.0).ceil().max(0.0) as usize).min(h);
+    let inner = r * soft.clamp(0.0, 1.0);
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let d = ((x as f32 + 0.5 - cx).powi(2) + (y as f32 + 0.5 - cy).powi(2)).sqrt();
+            if d >= r {
+                continue;
+            }
+            let t = ((d - inner) / (r - inner).max(1e-3)).clamp(0.0, 1.0);
+            let a = amount * (1.0 - t * t * (3.0 - 2.0 * t));
+            let p = &mut v[y * w + x];
+            *p = 1.0 - (1.0 - *p) * (1.0 - a.clamp(0.0, 1.0));
+        }
+    }
+}
+
+/// Pose un segment doux (un poil) de `a` à `b`, large de `thick`, de force `amount`.
+fn stamp_hair(v: &mut [f32], w: usize, h: usize, a: (f32, f32), b: (f32, f32), thick: f32, amount: f32) {
+    let x0 = (a.0.min(b.0) - thick - 1.0).floor().max(0.0) as usize;
+    let y0 = (a.1.min(b.1) - thick - 1.0).floor().max(0.0) as usize;
+    let x1 = ((a.0.max(b.0) + thick + 1.0).ceil().max(0.0) as usize).min(w);
+    let y1 = ((a.1.max(b.1) + thick + 1.0).ceil().max(0.0) as usize).min(h);
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let len2 = (dx * dx + dy * dy).max(1e-6);
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+            let t = (((px - a.0) * dx + (py - a.1) * dy) / len2).clamp(0.0, 1.0);
+            let d = ((px - a.0 - dx * t).powi(2) + (py - a.1 - dy * t).powi(2)).sqrt();
+            let k = ((thick - d) / 1.2).clamp(0.0, 1.0);
+            if k <= 0.0 {
+                continue;
+            }
+            // Un poil dépose plus au milieu de sa longueur qu'à ses bouts.
+            let along = (t * std::f32::consts::PI).sin().sqrt();
+            let p = &mut v[y * w + x];
+            *p = 1.0 - (1.0 - *p) * (1.0 - (amount * k * along).clamp(0.0, 1.0));
+        }
+    }
+}
+
+/// Bruit adouci (flou `blur`), étiré de 0 à 1, pour une case de pointe `size`×`size`.
+fn cell_noise(size: usize, blur: usize, seed: u32) -> Vec<f32> {
+    let mut n: Vec<f32> = (0..size * size).map(|i| hash01(seed, (i % size) as u32, (i / size) as u32)).collect();
+    blur_wrap(&mut n, size, blur);
+    let (lo, hi) = n.iter().fold((f32::MAX, f32::MIN), |(a, b), &v| (a.min(v), b.max(v)));
+    for v in &mut n {
+        *v = (*v - lo) / (hi - lo).max(1e-6);
+    }
+    n
+}
+
+/// Pointe « amas de grains » (graphite, crayon de couleur) : `cells` dessins côte à côte de
+/// `size` texels, chacun un corps faible, une quinzaine de grains francs (le dépôt de la mine sur
+/// les sommets du papier) et du sable plus fin, plus denses au centre. Les grains sont gros par
+/// rapport à la case : à 6 px de diamètre ils font encore un demi-pixel et se voient.
+pub fn tip_grains(size: usize, cells: usize, seed: u32) -> GrayImage {
+    let (size, cells) = (size.max(8), cells.max(1));
+    let (w, h) = (size * cells, size);
+    let mut v = vec![0.0f32; w * h];
+    let mut rng = Rng::new(seed);
+    let rad = size as f32 * 0.5;
+    for c in 0..cells {
+        let (cx, cy) = (c as f32 * size as f32 + rad, rad);
+        for _ in 0..3 {
+            let a = rng.next() * std::f32::consts::TAU;
+            let d = rng.next() * rad * 0.3;
+            stamp_disc(&mut v, w, h, cx + d * a.cos(), cy + d * a.sin(), rad * rng.range(0.3, 0.5), 0.0, 0.18);
+        }
+        for _ in 0..16 {
+            let a = rng.next() * std::f32::consts::TAU;
+            let d = rad * 0.8 * rng.next().powf(0.7);
+            let r = rad * rng.range(0.08, 0.18);
+            let amount = rng.range(0.6, 1.0) * (1.0 - 0.35 * d / rad);
+            stamp_disc(&mut v, w, h, cx + d * a.cos(), cy + d * a.sin(), r, 0.7, amount);
+        }
+        for _ in 0..24 {
+            let a = rng.next() * std::f32::consts::TAU;
+            let d = rad * 0.9 * rng.next().powf(0.6);
+            let r = rad * rng.range(0.03, 0.07);
+            stamp_disc(&mut v, w, h, cx + d * a.cos(), cy + d * a.sin(), r, 0.5, rng.range(0.4, 0.9));
+        }
+    }
+    GrayImage::new(w, h, clamped(v))
+}
+
+/// Valeurs ramenées entre 0 et 1 (les arrondis des cumuls peuvent déborder d'un rien).
+fn clamped(mut v: Vec<f32>) -> Vec<f32> {
+    for x in &mut v {
+        *x = if x.is_finite() { x.clamp(0.0, 1.0) } else { 0.0 };
+    }
+    v
+}
+
+/// Pointe de bâton (fusain, craie) : une forme pleine au bord déchiqueté, trouée là où le bruit
+/// est creux. `aspect` aplatit la forme (1 : ronde), `edge` la netteté du bord (0,8 : fusain
+/// cotonneux, 0,92 : craie nette), `holes` la part de trous (0,4 : fusain, 0,25 : craie).
+pub fn tip_stick(size: usize, cells: usize, seed: u32, aspect: f32, edge: f32, holes: f32) -> GrayImage {
+    let (size, cells) = (size.max(8), cells.max(1));
+    let (w, h) = (size * cells, size);
+    let mut v = vec![0.0f32; w * h];
+    let mut rng = Rng::new(seed);
+    let rad = size as f32 * 0.44;
+    let half = size as f32 * 0.5;
+    for c in 0..cells {
+        let phases = [rng.next(), rng.next(), rng.next()].map(|p| p * std::f32::consts::TAU);
+        let noise = cell_noise(size, 1, seed.wrapping_add(c as u32 * 7919));
+        let fine = cell_noise(size, 0, seed.wrapping_add(c as u32 * 104_729 + 17));
+        for y in 0..size {
+            for x in 0..size {
+                let (dx, dy) = (x as f32 + 0.5 - half, (y as f32 + 0.5 - half) / aspect.clamp(0.2, 1.0));
+                let theta = dy.atan2(dx);
+                let ragged = 1.0 + 0.12 * (3.0 * theta + phases[0]).sin() + 0.07 * (7.0 * theta + phases[1]).sin() + 0.05 * (11.0 * theta + phases[2]).sin();
+                let n = noise[y * size + x];
+                let d = (dx * dx + dy * dy).sqrt() / (rad * ragged) * (1.0 + 0.18 * (n - 0.5));
+                let body = 1.0 - smoothstep(edge, 1.0, d);
+                if body <= 0.0 {
+                    continue;
+                }
+                let open = smoothstep(holes * 0.5, holes.max(0.05) + 0.25, n);
+                let speck = 0.85 + 0.15 * fine[y * size + x];
+                v[y * w + x + c * size] = (body * open * speck).clamp(0.0, 1.0);
+            }
+        }
+    }
+    GrayImage::new(w, h, clamped(v))
+}
+
+/// Pointe à poils plats (gouache, huile) : des poils le long de la largeur, de longueurs et de
+/// forces inégales, dans une enveloppe aplatie ; la pointe suit la direction du trait.
+pub fn tip_bristles_flat(size: usize, cells: usize, seed: u32) -> GrayImage {
+    let (size, cells) = (size.max(8), cells.max(1));
+    let (w, h) = (size * cells, size);
+    let mut v = vec![0.0f32; w * h];
+    let mut rng = Rng::new(seed);
+    let s = size as f32;
+    for c in 0..cells {
+        let x0 = c as f32 * s;
+        // Une douzaine de poils assez gros pour rester des stries à 18 px de large.
+        let n = 12;
+        for k in 0..n {
+            let y = s * (0.14 + 0.72 * k as f32 / (n - 1) as f32) + rng.range(-0.02, 0.02) * s;
+            let len = s * rng.range(0.55, 0.92);
+            let xa = x0 + s * 0.5 - len * 0.5 + rng.range(-0.05, 0.05) * s;
+            let thick = s * rng.range(0.02, 0.045);
+            let amount = rng.range(0.3, 1.0);
+            stamp_hair(&mut v, w, h, (xa, y), (xa + len, y + rng.range(-0.012, 0.012) * s), thick, amount);
+        }
+        // Enveloppe : les poils s'effilent aux bouts de la touffe.
+        for y in 0..size {
+            for x in 0..size {
+                let (ex, ey) = ((x as f32 + 0.5 - s * 0.5) / (s * 0.47), (y as f32 + 0.5 - s * 0.5) / (s * 0.4));
+                let r = (ex * ex + ey * ey).sqrt();
+                v[y * w + x + c * size] *= 1.0 - smoothstep(0.8, 1.05, r);
+            }
+        }
+    }
+    GrayImage::new(w, h, clamped(v))
+}
+
+/// Pointe à poils ronds (pinceau rond chargé) : un nuage de poils vus de bout, plus denses au
+/// centre, sur un corps doux.
+pub fn tip_bristles_round(size: usize, cells: usize, seed: u32) -> GrayImage {
+    let (size, cells) = (size.max(8), cells.max(1));
+    let (w, h) = (size * cells, size);
+    let mut v = vec![0.0f32; w * h];
+    let mut rng = Rng::new(seed);
+    let rad = size as f32 * 0.5;
+    for c in 0..cells {
+        let (cx, cy) = (c as f32 * size as f32 + rad, rad);
+        stamp_disc(&mut v, w, h, cx, cy, rad * 0.7, 0.2, 0.3);
+        for _ in 0..48 {
+            let a = rng.next() * std::f32::consts::TAU;
+            let d = rad * 0.84 * rng.next().powf(0.6);
+            let r = rad * rng.range(0.04, 0.09);
+            stamp_disc(&mut v, w, h, cx + d * a.cos(), cy + d * a.sin(), r, 0.4, rng.range(0.4, 0.95));
+        }
+    }
+    GrayImage::new(w, h, clamped(v))
+}
+
+/// Le grain propre du crayon (rendu, étape 3 ; le « Grain » Silk / Soft / Medium / Hard du crayon
+/// de TVPaint) : un papier fin fabriqué une fois, collé à la feuille, que les crayons voient même
+/// sans papier. Relief sur 1 à 2 texels, un peu plus sur 4 : visible à 50 % de zoom sans faire
+/// de taches.
+static PENCIL_GRAIN: LazyLock<Arc<GrayImage>> = LazyLock::new(|| Arc::new(multiscale_paper(256, 0x5A17_C0DE, &[(0, 0.45), (1, 0.45), (2, 0.3)])));
+
+pub fn pencil_grain_paper() -> Arc<GrayImage> {
+    PENCIL_GRAIN.clone()
 }
 
 /// Textures d'un trait, prêtes à l'emploi.
@@ -385,11 +742,34 @@ pub struct BrushLibrary {
 /// les importés dans %APPDATA%\Pelure\pinceaux.
 pub const MINE: &str = "Mes brosses";
 
-/// Papiers de Pelure.
+/// Papiers de Pelure. Les deux premiers, des bruits par texel (d'avant l'audit du rendu), restent
+/// pour les réglages enregistrés qui s'en servent ; les suivants ont une structure.
 pub const PAPER_FINE: u32 = 1;
 pub const PAPER_COARSE: u32 = 2;
+/// « Papier à dessin » : relief à plusieurs échelles (2 à 8 texels), celui des crayons.
+pub const PAPER_DRAWING: u32 = 3;
+/// « Toile » : fils dessus-dessous.
+pub const PAPER_CANVAS: u32 = 4;
+/// « Vergé » : vergeures et pontuseaux.
+pub const PAPER_LAID: u32 = 5;
+/// Pointes de Pelure (fabriquées au démarrage).
+pub const TIP_GRAPHITE: u32 = 10;
+pub const TIP_CHARCOAL: u32 = 11;
+pub const TIP_CHALK: u32 = 12;
+pub const TIP_BRISTLES_FLAT: u32 = 13;
+pub const TIP_BRISTLES_ROUND: u32 = 14;
 /// Numéros des textures importées : à partir d'ici.
 const FIRST_IMPORTED: u32 = 100;
+
+/// Nombre de cases d'une pointe de Pelure (aucun : pointe importée).
+pub fn builtin_tip_cells(id: u32) -> Option<u32> {
+    match id {
+        TIP_GRAPHITE => Some(8),
+        TIP_CHARCOAL | TIP_CHALK => Some(6),
+        TIP_BRISTLES_FLAT | TIP_BRISTLES_ROUND => Some(4),
+        _ => None,
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 struct SavedTexture {
@@ -420,6 +800,16 @@ impl BrushLibrary {
         };
         lib.papers.insert(PAPER_FINE, ("Grain fin".into(), Arc::new(procedural_paper(256, 0, 11))));
         lib.papers.insert(PAPER_COARSE, ("Grain gros".into(), Arc::new(procedural_paper(256, 1, 29))));
+        // Papiers et pointes fabriqués (rendu, étape 1) : pour un projet 1920×1080 vu à 50 %.
+        lib.papers.insert(PAPER_DRAWING, ("Papier à dessin".into(), Arc::new(multiscale_paper(256, 0x0A11, &[(0, 0.25), (1, 0.45), (2, 0.55), (4, 0.35)]))));
+        lib.papers.insert(PAPER_CANVAS, ("Toile".into(), Arc::new(canvas_paper(256, 8, 0x70A1))));
+        lib.papers.insert(PAPER_LAID, ("Vergé".into(), Arc::new(laid_paper(256, 0x7E86))));
+        let tip = |img: GrayImage| Arc::new(Tip::new(img));
+        lib.tips.insert(TIP_GRAPHITE, ("Graphite".into(), tip(tip_grains(48, 8, 0x6A1))));
+        lib.tips.insert(TIP_CHARCOAL, ("Fusain".into(), tip(tip_stick(96, 6, 0xF05A, 0.9, 0.8, 0.4))));
+        lib.tips.insert(TIP_CHALK, ("Craie".into(), tip(tip_stick(96, 6, 0xC2A1, 0.75, 0.92, 0.22))));
+        lib.tips.insert(TIP_BRISTLES_FLAT, ("Poils plats".into(), tip(tip_bristles_flat(96, 4, 0x901A))));
+        lib.tips.insert(TIP_BRISTLES_ROUND, ("Poils ronds".into(), tip(tip_bristles_round(80, 4, 0x9014))));
         let pelure = |name: &str, target, settings| Preset {
             name: name.into(),
             target,
@@ -428,58 +818,27 @@ impl BrushLibrary {
         };
         let base = BrushSettings::brush();
         lib.presets = vec![
+            // Le Pinceau rond reste le premier et le réglage de départ de l'outil Pinceau (choix
+            // d'Anthony, 2026-10-16) ; les brosses traditionnelles viennent juste après.
             pelure("Pinceau rond", Target::Brush, base),
-            pelure(
-                "Crayon à papier",
-                Target::Brush,
-                BrushSettings {
-                    size: 4.0,
-                    hardness: 0.9,
-                    spacing: 0.06,
-                    smoothing: 0.2,
-                    min_size: 0.35,
-                    pressure_opacity: true,
-                    min_opacity: 0.15,
-                    grain: 0.85,
-                    paper: Some(PAPER_FINE),
-                    ..base
-                },
-            ),
-            pelure(
-                "Craie grasse",
-                Target::Brush,
-                BrushSettings {
-                    size: 18.0,
-                    hardness: 0.6,
-                    spacing: 0.05,
-                    smoothing: 0.25,
-                    min_size: 0.5,
-                    pressure_opacity: true,
-                    min_opacity: 0.3,
-                    grain: 1.0,
-                    paper: Some(PAPER_COARSE),
-                    ..base
-                },
-            ),
-            pelure(
-                "Encre",
-                Target::Brush,
-                BrushSettings {
-                    size: 5.0,
-                    hardness: 1.0,
-                    spacing: 0.05,
-                    smoothing: 0.4,
-                    min_size: 0.1,
-                    ..base
-                },
-            ),
+            pelure("Crayon graphite", Target::Brush, BrushSettings::graphite()),
+            pelure("Crayon de couleur", Target::Brush, BrushSettings::colour_pencil()),
+            pelure("Encre", Target::Brush, BrushSettings::ink()),
+            pelure("Feutre", Target::Brush, BrushSettings::felt()),
+            pelure("Fusain", Target::Brush, BrushSettings::charcoal()),
+            pelure("Craie", Target::Brush, BrushSettings::chalk()),
+            pelure("Gouache", Target::Brush, BrushSettings::gouache()),
+            // Le crayon net d'avant l'audit (anticrénelé, sans matière), gardé à portée de main.
+            pelure("Crayon net", Target::Brush, BrushSettings::pencil()),
             pelure("Gomme", Target::Eraser, BrushSettings::eraser()),
             pelure(
                 "Gomme à grain",
                 Target::Eraser,
                 BrushSettings {
                     grain: 0.8,
-                    paper: Some(PAPER_FINE),
+                    paper: Some(PAPER_DRAWING),
+                    paper_scale: 2.0,
+                    paper_softness: GRAIN_SOFTNESS_SOFT,
                     pressure_opacity: true,
                     min_opacity: 0.2,
                     ..BrushSettings::eraser()
@@ -487,6 +846,18 @@ impl BrushLibrary {
             ),
         ];
         lib
+    }
+
+    /// L'image d'une pointe de la bibliothèque (pour les planches et les aperçus).
+    pub fn tip(&self, id: u32) -> Option<Arc<Tip>> {
+        self.tips.get(&id).map(|t| t.1.clone())
+    }
+
+    /// Pointes, par numéro.
+    pub fn tips(&self) -> Vec<(u32, String)> {
+        let mut v: Vec<(u32, String)> = self.tips.iter().map(|(&id, (n, _))| (id, n.clone())).collect();
+        v.sort_by_key(|p| p.0);
+        v
     }
 
     fn take_id(&mut self) -> u32 {
@@ -528,8 +899,8 @@ impl BrushLibrary {
     /// Le réglage `s` (numéros de la bibliothèque) pour un trait vectoriel : pointe et papier
     /// désignés par leur clé de contenu. Aucun : le réglage n'a pas de texture.
     pub fn for_vector(&self, s: &BrushSettings) -> Option<BrushSettings> {
-        // Un profil de pointe se rejoue aussi (moteur de dessin, étape 3).
-        let textured = s.tip.is_some() || (s.paper.is_some() && s.grain > 0.0) || s.profile.is_some();
+        // Un profil de pointe se rejoue aussi (moteur de dessin, étape 3), et le grain du crayon.
+        let textured = s.tip.is_some() || (s.paper.is_some() && s.grain > 0.0) || s.profile.is_some() || s.pencil_grain != crate::brush::PencilGrain::None;
         if !textured {
             return None;
         }

@@ -435,6 +435,7 @@ impl App {
     /// Papier, grain et pointe en image du pinceau courant.
     fn grain_ui(&mut self, ui: &mut egui::Ui) {
         let papers = self.brushes.papers();
+        let tips = self.brushes.tips();
         let tip_name = self.tool_brush_mut().and_then(|b| b.tip).and_then(|id| self.brushes.tip_name(id).map(String::from));
         let mut import = false;
         let mut import_tip = false;
@@ -465,17 +466,38 @@ impl App {
                 crate::bulles::bulle(resp, "Angle du papier", "Tourne le grain du papier.", "");
                 ui.checkbox(&mut b.paper_invert, "Inverser").on_hover_text("Les creux du papier deviennent des sommets.");
             });
+            // Rendu des brosses, étape 2 : un grain qui répond en douceur.
+            let resp = ui.add(egui::Slider::new(&mut b.paper_softness, 0.05..=0.5).text("Douceur du grain"));
+            crate::bulles::bulle(resp, "Douceur du grain", "Largeur de la transition entre un creux vide et un sommet plein : petit = grain net et dur (0,12 : les anciens réglages), grand = grain qui répond en douceur (0,3 : les brosses de Pelure).", "");
+        }
+        // Rendu des brosses, étape 3 : le grain propre du crayon, même sans papier.
+        ui.horizontal(|ui| {
+            ui.label("Grain du crayon");
+            let resp = egui::ComboBox::from_id_salt("grain_crayon").selected_text(b.pencil_grain.label()).width(crate::dockui::fit_w(ui, 100.0)).show_ui(ui, |ui| {
+                for g in crate::brush::PencilGrain::ALL {
+                    ui.selectable_value(&mut b.pencil_grain, g, g.label());
+                }
+            });
+            crate::bulles::bulle(resp.response, "Grain du crayon", "Un grain fin collé à la feuille, même sans papier : le « Grain » Soie / Doux / Moyen / Dur du crayon de TVPaint, refait par Pelure.", "");
+        });
+        if b.paper.is_some() || b.pencil_grain != crate::brush::PencilGrain::None {
+            ui.checkbox(&mut b.paper_follow, "Le grain suit le trait").on_hover_text("Le relief est lu depuis le début du trait au lieu de rester collé à la feuille (collé, comme TVPaint : repasser retrouve les mêmes creux).");
         }
         ui.horizontal(|ui| {
-            match &tip_name {
-                Some(tip) => {
-                    ui.label(RichText::new(format!("Pointe : {tip}")).small());
-                    if crate::bulles::icone(ui, egui_phosphor::regular::CIRCLE, "Pointe ronde", "Revenir à une pointe ronde.", "").clicked() {
-                        b.tip = None;
-                    }
+            ui.label("Pointe");
+            let name = tip_name.clone().unwrap_or_else(|| "ronde".to_string());
+            let before = b.tip;
+            egui::ComboBox::from_id_salt("pointe_pinceau").selected_text(name).width(crate::dockui::fit_w(ui, 120.0)).show_ui(ui, |ui| {
+                ui.selectable_value(&mut b.tip, None, "ronde");
+                for (id, name) in &tips {
+                    ui.selectable_value(&mut b.tip, Some(*id), name);
                 }
-                None => {
-                    ui.label(RichText::new("Pointe ronde").small());
+            });
+            // Une pointe de Pelure vient avec son nombre de cases.
+            if b.tip != before {
+                if let Some(n) = b.tip.and_then(crate::brushtex::builtin_tip_cells) {
+                    b.tip_cells = n;
+                    b.tip_order = crate::brush::TipOrder::Random;
                 }
             }
             // Une image comme pointe (moteur de dessin, étape 8) : une seule, ou plusieurs dessins

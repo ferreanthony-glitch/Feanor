@@ -467,8 +467,27 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
 - **Texte** : clic pour poser un texte, Ctrl+Entrée pour le valider ; police et taille dans
   Réglages. Sur un calque vectoriel il reste modifiable (clic dessus avec l'outil Texte).
 - **Perspective** : clic sur le dessin, puis tirer ses coins (Ctrl+Z annule chaque geste).
-- **Pinceaux texturés** (calque bitmap, panneau Réglages) : liste de réglages (pinceau rond, crayon à
-  papier, craie grasse, encre, gommes) ; « Papier » et « Grain » donnent un grain fixe sur le
+- **Brosses traditionnelles** (2026-10-18, `docs/AUDIT-RENDU-BROSSES.md`) : dans la liste des
+  réglages (grille des Réglages, panneau Pinceaux), après le Pinceau rond — **Crayon graphite**
+  (le réglage de départ de l'outil Crayon : un amas de grains sur un papier à dessin, un dépôt qui
+  s'accumule jusqu'à 90 % d'opacité, on fonce en repassant), **Crayon de couleur**, **Encre**
+  (bouts effilés), **Feutre** (aplat à 70 %, biseau), **Fusain**, **Craie** (sur toile),
+  **Gouache** (poils plats qui suivent le trait, peinture qui se mêle à ce qui est dessous), et
+  **Crayon net** (le crayon d'avant, sans matière). Leurs pointes (« Graphite », « Fusain »,
+  « Craie », « Poils plats », « Poils ronds ») et papiers (« Papier à dessin », « Toile »,
+  « Vergé ») sont fabriqués par Pelure au démarrage, rien n'est copié d'un autre logiciel ; ils
+  se choisissent dans les listes « Pointe » et « Papier » de n'importe quel réglage. Pour les
+  essayer : outil Crayon sur un calque bitmap ou vectoriel, hachures légères (le grain), trois
+  passages au même endroit (ça fonce), puis comparer à « Crayon net ». Tailles pensées pour un
+  projet 1920×1080 vu à 50 %.
+  - **Douceur du grain** (sous le papier) : petit = grain net et dur (les anciens réglages),
+    grand = grain qui répond en douceur. **Grain du crayon** (Soie, Doux, Moyen, Dur) : un grain
+    fin collé à la feuille, même sans papier — le « Grain » du crayon de TVPaint, refait par
+    Pelure ; un crayon TVPaint importé le reçoit. **Le grain suit le trait** : le relief est lu
+    depuis le début du trait au lieu de rester collé à la feuille.
+  - Les brosses MyPaint et Krita importées (`opaque`, Flow) déposent maintenant une part par
+    empreinte qui s'accumule dans le trait, au lieu d'un plafond d'opacité.
+- **Pinceaux texturés** (panneau Réglages) : « Papier » et « Grain » donnent un grain fixe sur le
   dessin, que la couleur remplit quand on appuie. L'icône d'import lit un fichier de pinceaux Toon
   Boom (`.xml`, par exemple `STB_TextureBrushes_preset.xml`) : ses pinceaux, pointes et papiers
   s'ajoutent à la liste et restent pour les fois suivantes.
