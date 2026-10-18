@@ -6,7 +6,7 @@
 //!   chevauchent ; un clic sur celui de derrière les échange) ; les outils dessinent avec
 //!   l'avant-plan, `App::color` ;
 //! - la roue chromatique (`wheel_ui`, géométrie dans `roue.rs`) ;
-//! - les curseurs TSV, RVB ou TSL, l'opacité du pinceau ;
+//! - les curseurs TSV, RVB ou TSL (l'opacité du pinceau est dans le panneau Réglages) ;
 //! - les couleurs récentes ;
 //! - le nuancier montré (`nuancierui.rs`).
 //!
@@ -15,7 +15,7 @@
 use eframe::egui::{self, pos2, vec2, Color32, Id, Rect, Response, Sense, Shape, Stroke, StrokeKind, Vec2};
 use egui_phosphor::regular as ph;
 
-use crate::app::{App, Tool};
+use crate::app::App;
 pub use crate::couleur::{hsv_to_rgb, rgb_to_hsv};
 use crate::couleur::{self, hsl_to_hsv, hsv_to_hsl, ColorSettings, SliderMode};
 use crate::roue::{Wheel, WheelShape, Zone};
@@ -474,7 +474,8 @@ impl App {
     }
 
     /// Choisir la couleur d'avant-plan : réglages de la roue et des curseurs, la roue (`wheel`
-    /// points de large au plus), les curseurs, l'opacité du pinceau.
+    /// points de large au plus), les curseurs. L'opacité du pinceau n'est plus ici (Anthony,
+    /// 2026-10-18 : elle apparaissait deux fois) : elle est dans le panneau Réglages.
     fn color_picker(&mut self, ui: &mut egui::Ui, wheel: f32) {
         // Étroit (panneau rétréci) : les réglages de la roue, puis le choix des curseurs dessous,
         // au lieu de se chevaucher.
@@ -493,7 +494,6 @@ impl App {
             ui.add_space(4.0);
         }
         self.color_sliders(ui);
-        self.opacity_row(ui);
     }
 
     /// Curseurs de la couleur d'avant-plan : TSV, RVB ou TSL, chacun avec son dégradé et ses
@@ -580,40 +580,6 @@ impl App {
         self.action_item(ui, "Curseurs TSV (teinte, saturation, valeur)", "couleur.curseurs_tsv");
         self.action_item(ui, "Curseurs RVB (rouge, vert, bleu)", "couleur.curseurs_rvb");
         self.action_item(ui, "Curseurs TSL (teinte, saturation, luminosité)", "couleur.curseurs_tsl");
-    }
-
-    /// Opacité : la couleur n'en a pas, le pinceau et le crayon si (la même que dans leurs
-    /// réglages). Pour un autre outil, la ligne est grisée.
-    fn opacity_row(&mut self, ui: &mut egui::Ui) {
-        let color = to_color(self.color);
-        let brush = match self.tool {
-            Tool::Brush => Some(&mut self.brush),
-            Tool::Pencil => Some(&mut self.pencil),
-            _ => None,
-        };
-        ui.horizontal(|ui| {
-            let label = ui.add(egui::Label::new(egui::RichText::new(ph::DROP_HALF).size(crate::bulles::TAILLE)).sense(Sense::hover()));
-            crate::bulles::bulle(
-                label,
-                "Opacité du pinceau",
-                "La couleur elle-même n'a pas d'opacité : c'est celle du pinceau ou du crayon, la même que dans leurs réglages.",
-                "",
-            );
-            match brush {
-                Some(b) => {
-                    if let (_, Some(t)) = gradient_bar(ui, b.opacity, &[Color32::TRANSPARENT, color]) {
-                        b.opacity = t;
-                    }
-                    let mut pct = b.opacity * 100.0;
-                    if ui.add(egui::DragValue::new(&mut pct).range(0.0..=100.0).max_decimals(0).speed(0.5).suffix(" %")).changed() {
-                        b.opacity = pct / 100.0;
-                    }
-                }
-                None => {
-                    ui.label(egui::RichText::new("pinceau et crayon seulement").weak());
-                }
-            }
-        });
     }
 
     /// Les dernières couleurs avec lesquelles on a dessiné, sur une rangée (autant qu'il en tient).
