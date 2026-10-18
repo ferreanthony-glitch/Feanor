@@ -176,7 +176,7 @@ impl App {
                     if self.bouton(ui, ph::TRASH, "Supprimer le dessin", "Retirer le dessin et ses expositions de la timeline.", "dessin.supprimer").clicked() {
                         self.delete_image();
                     }
-                    if self.bouton(ui, ph::ERASER, "Vider le dessin", "Effacer tout ce qu'il contient ; il reste exposé.", "edition.supprimer").clicked() {
+                    if self.bouton(ui, ph::ERASER, "Vider le dessin", "Effacer tout ce qu'il contient ; il reste exposé.", "dessin.vider").clicked() {
                         self.clear_image();
                     }
                     let resp = ui.add(egui::DragValue::new(&mut self.default_exposure).range(1..=12).prefix("en "));

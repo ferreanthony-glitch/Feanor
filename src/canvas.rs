@@ -181,7 +181,7 @@ impl App {
         self.action_item(ui, "Couper", "edition.couper");
         self.action_item(ui, "Copier", "edition.copier");
         self.action_item(ui, "Coller", "edition.coller");
-        self.action_item(ui, "Supprimer la sélection ou effacer le dessin", "edition.supprimer");
+        self.action_item(ui, "Supprimer la sélection", "edition.supprimer");
         ui.separator();
         self.action_item(ui, "Ajuster à la fenêtre", "vue.ajuster");
         ui.separator();

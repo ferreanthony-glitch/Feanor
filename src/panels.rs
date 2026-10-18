@@ -277,6 +277,7 @@ impl App {
                 self.action_item(ui, "Coller", "edition.coller");
                 self.action_item(ui, "Coller sur place", "edition.coller_sur_place");
                 self.action_item(ui, "Supprimer", "edition.supprimer");
+                self.action_item(ui, "Vider le dessin", "dessin.vider");
                 ui.separator();
                 self.action_item(ui, "Tout sélectionner", "edition.tout_selectionner");
                 self.action_item(ui, "Tout désélectionner", "edition.tout_deselectionner");

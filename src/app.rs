@@ -2873,9 +2873,12 @@ impl App {
                     // efface alors la sélection, pas tout le dessin (Anthony, 2026-10-18).
                     self.delete_selection();
                 } else {
-                    self.clear_image();
+                    // Rien de choisi : Suppr ne fait rien (Anthony, 2026-10-18) ; vider tout le
+                    // dessin est une commande à part (`dessin.vider`).
+                    self.status = "Rien de sélectionné : Suppr n'efface rien (Édition > Vider le dessin pour tout effacer).".into();
                 }
             }
+            "dessin.vider" => self.clear_image(),
             "dessin.supprimer_hors_selection" => {
                 if self.bsel.is_some() {
                     self.bitmap_erase(false);
