@@ -725,8 +725,35 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   - Imports : `kritabrush` met `opaque` (MyPaint) et Flow (Krita) en débit accumulé ;
     `tvpbrush::base_tool` met le `grain` du `tv_pencil` en `PencilGrain` (ordre deviné).
   - `vector::pressure_for_radius` : l'appui d'un point vectoriel retrouvé pour toute connexion de
-    taille (dichotomie sur la réponse), utilisé par `paint_textured`.
+    taille (dichotomie sur la réponse), utilisé par le rejeu des traits sans appuis.
   - Tests : `matiere_tests.rs`.
+- Rendu des brosses, étape 5 : le trait vectoriel trait pour trait comme le bitmap (2026-10-18,
+  `docs/VECTORIEL-COMME-BITMAP.md` §3 bis).
+  - `vector::Trace` dans `Element::Stroke { trace }` (`#[serde(default)]`) : `pressure` et `time`
+    par point du chemin (vides : inconnus), `feel : Option<Toucher>`, `secondary : Option<[u8; 3]>`
+    (couleur B), et `cache : StrokeCache` (`#[serde(skip)]`). Le moteur les enregistre dans
+    `StrokeState::path_pressure` / `path_time` (`record`, avec `cur_time`) ;
+    `App::commit_vector_stroke(vs, path, pressure, time, preview)` les garde avec le réglage complet
+    (`BrushLibrary::for_vector` rend toujours le réglage) et ne simplifie plus le chemin.
+  - Rendu (`render_element_clipped`) : un trait est rendu seul sur une feuille
+    (`render_stroke_alone` : rejeu par `StrokeState` sans lissage, toucher à courbe droite et seuil
+    nul, appui de la trace ou `pressure_for_radius`, instant de la trace ou `add_point` ; sans
+    réglage, `Mask::stamp` comme avant), ses pixels gardés (`CachedPixels::from_sheet`, boîte des
+    pixels dessinés, RGBA prémultiplié, plafond `MAX_CACHE_PIXELS` = 2 M px) avec une signature
+    (`stroke_signature` : couleur, opacité, dureté, réglage, trace), puis posés (`blit_cache` :
+    copie pour une translation entière, rééchantillonnage bilinéaire sinon ; `blit_sheet` sans
+    cache). `StrokeCache { cell : Arc<RwLock<Option<Rendered>>>, xf : Affine }` : partagé entre
+    copies, jamais comparé (`PartialEq` toujours vrai) ni enregistré ; `Element::transformed`
+    compose `xf`, `invalidate_cache` / `set_color` / `scale_width` le vident.
+  - `vtools::finish_vdrag` : au lâcher d'une transformation, les éléments choisis sont invalidés
+    et la zone refaite (`refresh_cel_region`) : un rejeu exact, une fois. Pendant le glissé,
+    `select_drag` ne change pas (`rerender_region` pose les caches).
+  - `Element::bounds` tient compte de la dispersion (`scatter`) ; les morceaux (gomme, cutter,
+    enveloppe, tween) prennent `trace.without_samples()`, les traits déplacés point à point
+    (perspective, Storyboard Pro) `trace.without_cache()`.
+  - `project::VERSION` 24. Tests : `vecto_tests.rs` (dont l'essai ignoré
+    `vector_selection_drag_is_fast_with_the_pixel_cache` : 50 traits, ms par image avec et sans
+    cache, octets du cache).
 - Peinture humide (moteur de dessin, étape 11) : `BrushSettings::mix` (« melange ») et `charge`.
   - Avec du mélange, ou une charge incomplète, l'empreinte prend un autre chemin :
     1. la moyenne pondérée des pixels courants sous l'empreinte ;

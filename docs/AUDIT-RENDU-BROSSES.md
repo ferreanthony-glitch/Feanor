@@ -392,6 +392,32 @@ passent.
   `docs/VECTORIEL-COMME-BITMAP.md` se simplifie : au lâcher, garder les pixels de l'aperçu comme
   cache du trait (identique par construction), et ne rejouer que si un trait est édité.
 
+## 6 ter. Retour d'Anthony et étape 5 (branche `vecto`, 2026-10-18)
+
+Anthony, après essai : (a) le crayon doit mordre plus fort à faible appui (hachures légères trop
+pâles à 50 %) ; (b) un grain plus « sable », franc comme le 2B de TVPaint, moins nuageux ; (c)
+« Doux » pour son Trait importé (gardé) ; (d) l'étape 5, avec en priorité le déplacement d'une
+sélection vectorielle, très lent.
+
+- **(a)** Courbe appui → débit du graphite et du crayon de couleur relevée : `[0, 0.35] [0.4, 0.8]
+  [1, 1]` (avant `[0, 0.15] [0.5, 0.6] [1, 1]`) ; crayon de couleur débit 0,75.
+- **(b)** Pointe « Graphite » refaite (`tip_grains_with`, `GRAINS_SAND`) : presque pas de corps,
+  26 grains nets (bord à 0,92) et 30 grains de sable, au lieu de 16 grains doux sur un corps ;
+  papier à dessin avec plus de relief fin (poids 0,5 / 0,55 sur 1 et 2 texels) ; taille du papier
+  2 au lieu de 2,5. Les grains d'avant restent dans le code (`GRAINS_V1`) pour la planche.
+- **Planches** `76_graphite_sable.png` et `76_graphite_sable_50pc.png` : avant / après, graphite
+  et crayon de couleur. Ce que j'y vois : à 50 %, les hachures légères sont maintenant lisibles
+  (gris moyen au lieu de gris pâle), le trait appuyé est presque noir ; au ×4, le grain est un
+  piqueté de points francs le long du trait, plus proche du 2B de TVPaint que le nuage d'avant.
+  Le crayon de couleur garde un ton plus clair (plafond 0,8). À juger à la tablette : si c'est
+  trop dur, baisser « Grain » (0,85) ou monter « Douceur du grain ».
+- **(d) Étape 5** : faite, voir `docs/VECTORIEL-COMME-BITMAP.md` §3 bis. En deux mots : le trait
+  vectoriel garde sa trace et son réglage complet, rejoue le moteur bitmap trait pour trait (écart
+  0,0 sur toutes les brosses et son Trait importé, planches `01` à `11` et `30`), garde ses pixels
+  en cache, et une sélection déplacée pose ces pixels sans rejeu : **103,9 → 3,9 ms par image**
+  pour 50 traits de graphite (101 Ko de cache par trait). Reste : la peinture humide ne se mêle
+  pas d'un trait vectoriel à l'autre (planche `10_pelure_gouache.png`, croisements).
+
 ## 7. Questions pour Anthony
 
 1. Dans TVPaint, pour le storyboard, est-ce bien « Trait » (ton `tv_pencil` 9,5 px, grain Soft,

@@ -133,6 +133,18 @@ Chaque plan a ses calques, de deux sortes :
 Les traits vectoriels sont rendus à la résolution du projet : en zoomant très fort, on voit les pixels
 (comme à l'export), mais le trait reste modifiable.
 
+**Un trait vectoriel rend exactement comme le trait bitmap** (2026-10-18, étape 5 du rendu des
+brosses, `docs/VECTORIEL-COMME-BITMAP.md`) : au lâcher, le trait garde son réglage complet et sa
+trace (l'appui et l'instant de chaque point, le toucher, la couleur B) et rejoue le moteur des
+pinceaux bitmap, empreinte par empreinte — crayon graphite, fusain, gouache, brosses TVPaint
+importées, tout rend pareil sur les deux sortes de calques, et le trait ne change plus quand on lève
+le stylet. Ses pixels sont gardés en mémoire (environ 100 Ko par trait de crayon ; au-delà de 8 Mo,
+un trait n'est pas gardé) : déplacer, tourner ou agrandir une sélection vectorielle pose ces pixels
+sans rien rejouer (une cinquantaine de traits texturés : 4 ms par image au lieu de 100), et le rendu
+exact est refait une fois au lâcher. Seule différence restante : la peinture humide (gouache) ne se
+mêle pas à ce que les traits précédents ont posé, chaque trait étant rejoué seul. Les anciens
+dessins (sans trace) rendent comme avant.
+
 L'outil **Transformer** déplace, agrandit ou tourne un calque entier (tous ses dessins) : glisser
 dans la boîte, tirer un coin, tirer la poignée ronde (Maj : contraintes). Les dessins ne sont pas
 modifiés, Ctrl+R annule la transformation, et on peut continuer à dessiner sur le calque.
@@ -479,7 +491,9 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   se choisissent dans les listes « Pointe » et « Papier » de n'importe quel réglage. Pour les
   essayer : outil Crayon sur un calque bitmap ou vectoriel, hachures légères (le grain), trois
   passages au même endroit (ça fonce), puis comparer à « Crayon net ». Tailles pensées pour un
-  projet 1920×1080 vu à 50 %.
+  projet 1920×1080 vu à 50 %. Depuis le retour d'Anthony : le graphite et le crayon de couleur
+  mordent dès l'effleurement (courbe appui → débit relevée) et leur pointe est un « sable » de
+  grains francs plutôt qu'un nuage.
   - **Douceur du grain** (sous le papier) : petit = grain net et dur (les anciens réglages),
     grand = grain qui répond en douceur. **Grain du crayon** (Soie, Doux, Moyen, Dur) : un grain
     fin collé à la feuille, même sans papier — le « Grain » du crayon de TVPaint, refait par

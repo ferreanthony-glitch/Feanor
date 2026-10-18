@@ -1562,6 +1562,18 @@ Choix d'Anthony :
     (`vector::pressure_for_radius`).
   - Choix par défaut à confirmer à la tablette : grain collé à la feuille, crayon plafonné à 90 %,
     tailles pour 1920×1080 vu à 50 %. Planches avant / après : `audit-rendu/70_…` à `75_…`.
+- ✅ Retour d'Anthony sur les brosses et étape 5 du rendu (Fable, 2026-10-18, branche `vecto` ;
+  `docs/AUDIT-RENDU-BROSSES.md` §6 ter, `docs/VECTORIEL-COMME-BITMAP.md` §3 bis) :
+  - le graphite et le crayon de couleur **mordent dès l'effleurement** (courbe appui → débit) et
+    ont un grain **« sable »**, franc (`GRAINS_SAND`), papier à dessin plus fin ; planches `76_…` ;
+  - **le trait vectoriel rend trait pour trait comme le bitmap** : il garde sa trace (appui et
+    instant par point, toucher, couleur B, `vector::Trace`) et son réglage complet, et rejoue le
+    moteur bitmap ; écart 0,0 sur toutes les brosses et le Trait TVPaint importé ; format 24 ;
+  - **cache de pixels par trait** (`StrokeCache`, ≈ 100 Ko par trait de crayon, plafond 8 Mo par
+    trait) : déplacer une sélection vectorielle pose les pixels sans rejeu — 50 traits de
+    graphite : 103,9 → 3,9 ms par image ; rendu exact refait une fois au lâcher.
+  - Reste : la peinture humide ne se mêle pas d'un trait vectoriel à l'autre ; rotation / échelle
+    rééchantillonnées pendant le geste ; morceaux coupés repartent d'un état neuf.
 - ✅ Étude « vectoriel comme bitmap » (Fable, 2026-10-18, `docs/VECTORIEL-COMME-BITMAP.md`) :
   l'existant en images (le trait vectoriel perd au lâcher opacité ↔ appui, connexions, humide,
   accumulation, et garde l'ancien bord), toutes les pistes (rejeu du moteur depuis le chemin avec
