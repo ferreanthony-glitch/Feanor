@@ -119,7 +119,7 @@ fn a_panel_becomes_brushes_with_their_tips_and_notes() {
 /// Un panneau exporté par TVPaint 12 (`.tvpx`) écrit `[ToolBox]`, les panneaux livrés
 /// `[toolbox]` : les sections sont lues sans tenir compte de la casse (l'export d'Anthony
 /// n'importait rien). Le `step` d'un outil de base est pris en pour cent de la taille, et le
-/// grain du crayon est noté comme non repris.
+/// grain du crayon devient le grain propre du crayon de Pelure.
 #[test]
 fn an_exported_panel_with_capitalized_section_is_read() {
     let bin = "\u{feff}[ToolBox]\n0_cmd0=Tool:tv_pencil mode \"color\" size 9.500000 power 100 opacity 100 aspect 100 angle 35 step 12.500000 dry 1 gradient 0 grain 1 csize \"10;2 0 1 0 0 1 1 \" caspect \"0;2 0 1 0 0 1 1 \" cangle \"0;2 0 1 0 0 1 1 \" cpower \"10;2 0 1 0 0 1 1 \" profile \"3 1 1 0 0 0.0746112 0.737231 1 1 \" \n0_cmd1=cmd: tv_paper Active 0\n0_count=2\n0_text=Trait\n_name=Mon TVPX\n";
@@ -132,7 +132,9 @@ fn an_exported_panel_with_capitalized_section_is_read() {
     assert_eq!((s.dynamics.size.source, s.dynamics.opacity.source), (Source::Pressure, Source::Pressure));
     assert!(s.profile.is_some());
     assert!((s.spacing - 0.125).abs() < 1e-6, "step 12.5 → 12,5 % de la taille, pas 12,5 px ({})", s.spacing);
-    assert!(r.notes.iter().any(|n| n.contains("grain du crayon")), "{:?}", r.notes);
+    // Le grain 1 du crayon TVPaint devient le grain propre « Doux » de Pelure (rendu, étape 3).
+    assert_eq!(s.pencil_grain, crate::brush::PencilGrain::Soft);
+    assert!(r.notes.iter().any(|n| n.contains("grain du crayon") && n.contains("Doux")), "{:?}", r.notes);
 }
 
 /// Les panneaux livrés avec TVPaint 12, lus sans rien y écrire (`PELURE_TVPAINT` peut désigner

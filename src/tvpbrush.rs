@@ -22,7 +22,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::brush::{BrushSettings, Connection, Curve, Source, TipOrder};
+use crate::brush::{BrushSettings, Connection, Curve, PencilGrain, Source, TipOrder};
 use crate::brushtex::{BrushLibrary, GrayImage, Preset, Target};
 
 /// Ce que l'import a fait.
@@ -292,8 +292,17 @@ pub fn base_tool(cmd: &str, notes: &mut Vec<String>) -> Option<BrushSettings> {
         s.spacing = (step / 100.0).clamp(0.02, 1.0);
     }
     if name == "tv_pencil" {
-        if let Some(g) = a.get("grain") {
-            notes.push(format!("grain du crayon TVPaint ({g} : Silk, Soft, Medium ou Hard) non repris, Pelure n'a pas de grain propre au crayon"));
+        if let Some(g) = a.get("grain").and_then(|v| v.parse::<f32>().ok()) {
+            // Le menu « Grain » du crayon de TVPaint (Silk, Soft, Medium, Hard, dans l'ordre de ses
+            // libellés — deviné, à vérifier) devient le grain propre du crayon de Pelure (rendu,
+            // étape 3), dont le calcul est celui de Pelure.
+            s.pencil_grain = match g as i32 {
+                0 => PencilGrain::Silk,
+                1 => PencilGrain::Soft,
+                2 => PencilGrain::Medium,
+                _ => PencilGrain::Hard,
+            };
+            notes.push(format!("grain du crayon {g:.0} pris comme « {} » de Pelure (ordre Silk, Soft, Medium, Hard deviné, à vérifier)", s.pencil_grain.label()));
         }
     }
     if let Some(aspect) = a.get("aspect").and_then(|v| v.parse::<f32>().ok()) {
