@@ -2867,7 +2867,10 @@ impl App {
                     self.delete_chosen_panels();
                 } else if self.bsel.is_some() {
                     self.bitmap_erase(true);
-                } else if self.tool.is_select() && self.vsel.is_some() {
+                } else if self.vsel.as_ref().is_some_and(|s| !s.items.is_empty() && Some(s.cel) == self.cel_here()) {
+                    // Des éléments vectoriels choisis, quel que soit l'outil : après un lasso pris
+                    // avec Ctrl tenu, l'outil d'avant revient mais la sélection reste ; Suppr
+                    // efface alors la sélection, pas tout le dessin (Anthony, 2026-10-18).
                     self.delete_selection();
                 } else {
                     self.clear_image();
