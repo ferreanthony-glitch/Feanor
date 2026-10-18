@@ -67,9 +67,45 @@ fn ser_pressure<S: Serializer>(v: &Vec<f32>, s: S) -> Result<S::Ok, S::Error> {
     s.collect_seq(v.iter().map(|p| (p.clamp(0.0, 1.0) * 65535.0).round() as u16))
 }
 
+/// Un nombre du fichier, entier (quantifié) ou flottant : les deux formes ont été écrites sous la
+/// même version de fichier (le commit d01fffe écrivait des flottants), les deux se lisent.
+enum Nombre {
+    Entier(u64),
+    Flottant(f64),
+}
+
+impl<'de> Deserialize<'de> for Nombre {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct V;
+        impl serde::de::Visitor<'_> for V {
+            type Value = Nombre;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("un nombre")
+            }
+            fn visit_u64<E>(self, v: u64) -> Result<Nombre, E> {
+                Ok(Nombre::Entier(v))
+            }
+            fn visit_i64<E>(self, v: i64) -> Result<Nombre, E> {
+                // (Un instant inconnu s'écrivait −1.)
+                Ok(if v < 0 { Nombre::Flottant(v as f64) } else { Nombre::Entier(v as u64) })
+            }
+            fn visit_f64<E>(self, v: f64) -> Result<Nombre, E> {
+                Ok(Nombre::Flottant(v))
+            }
+        }
+        d.deserialize_any(V)
+    }
+}
+
 fn de_pressure<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<f32>, D::Error> {
-    let q: Vec<u16> = Vec::deserialize(d)?;
-    Ok(q.into_iter().map(|v| v as f32 / 65535.0).collect())
+    let q: Vec<Nombre> = Vec::deserialize(d)?;
+    Ok(q
+        .into_iter()
+        .map(|v| match v {
+            Nombre::Entier(v) => v.min(65535) as f32 / 65535.0,
+            Nombre::Flottant(v) => v as f32,
+        })
+        .collect())
 }
 
 fn ser_time<S: Serializer>(v: &Vec<f64>, s: S) -> Result<S::Ok, S::Error> {
@@ -78,8 +114,15 @@ fn ser_time<S: Serializer>(v: &Vec<f64>, s: S) -> Result<S::Ok, S::Error> {
 }
 
 fn de_time<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<f64>, D::Error> {
-    let q: Vec<u32> = Vec::deserialize(d)?;
-    Ok(q.into_iter().map(|v| if v == TIME_UNKNOWN { -1.0 } else { v as f64 / 10_000.0 }).collect())
+    let q: Vec<Nombre> = Vec::deserialize(d)?;
+    Ok(q
+        .into_iter()
+        .map(|v| match v {
+            Nombre::Entier(v) if v == TIME_UNKNOWN as u64 => -1.0,
+            Nombre::Entier(v) => v as f64 / 10_000.0,
+            Nombre::Flottant(v) => v,
+        })
+        .collect())
 }
 
 impl Trace {

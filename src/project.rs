@@ -14,7 +14,7 @@
 //! Chaque fichier est écrit à côté puis renommé : un plantage en cours d'enregistrement laisse
 //! l'ancienne version intacte. Les dessins qui ne servent plus sont effacés en dernier.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -775,6 +775,10 @@ pub struct SaveJob {
     /// Images des calques vidéo à recopier dans le dossier du projet (13k) : d'où, vers où.
     videos: Vec<(crate::video::VideoClip, PathBuf, PathBuf)>,
     manifest: Vec<u8>,
+    /// Des dessins du dossier n'ont pas pu être lus à l'ouverture : leurs fichiers (et les textures
+    /// qu'ils pourraient utiliser) ne sont pas effacés.
+    has_unreadable: bool,
+    /// Dessins à garder dans le dossier : ceux du projet, et les illisibles.
     used: BTreeSet<CelId>,
     /// Dessins qui ont une strate Fond peinte (format 23).
     fonds: BTreeSet<CelId>,
@@ -860,6 +864,7 @@ pub fn prepare_save(
         }
     }
     let manifest = serde_json::to_vec_pretty(&manifest_of(doc)).map_err(|e| e.to_string())?;
+    let unreadable = unreadable_in(dir);
     Ok(SaveJob {
         manifest_path: manifest_path.to_path_buf(),
         drawings,
@@ -868,8 +873,9 @@ pub fn prepare_save(
         textures,
         videos,
         manifest,
-        used,
-        fonds,
+        has_unreadable: !unreadable.is_empty(),
+        used: used.union(&unreadable).copied().collect(),
+        fonds: fonds.union(&unreadable).copied().collect(),
         used_sounds,
         used_models,
         used_textures,
@@ -924,7 +930,7 @@ impl SaveJob {
         let removed = remove_unused(dir, &self.used, &self.fonds)
             + remove_unused_sounds(dir, &self.used_sounds)
             + remove_unused_models(dir, &self.used_models)
-            + remove_unused_textures(dir, &self.used_textures);
+            + if self.has_unreadable { 0 } else { remove_unused_textures(dir, &self.used_textures) };
         Ok(SaveReport { written: count, removed })
     }
 }
@@ -1607,6 +1613,13 @@ fn load_with(manifest_path: &Path, quick: bool) -> Result<Loaded, String> {
             true
         }
     };
+    // Les dessins illisibles ne sont plus dans le projet, mais leurs fichiers restent : un
+    // enregistrement ne les efface jamais (on pourra les récupérer ou les rouvrir avec une
+    // version qui les lit).
+    keep_unreadable(dir, &missing);
+    if !missing.is_empty() {
+        warnings.push(format!("{} dessin(s) illisible(s) : leurs fichiers sont gardés dans le dossier du projet", missing.len()));
+    }
     Ok(Loaded {
         doc,
         written,
@@ -1614,6 +1627,23 @@ fn load_with(manifest_path: &Path, quick: bool) -> Result<Loaded, String> {
         converted,
         approx,
     })
+}
+
+/// Dessins dont le fichier n'a pas pu être lu à l'ouverture, par dossier de projet : le prochain
+/// enregistrement ne les efface pas.
+static UNREADABLE: std::sync::Mutex<BTreeMap<PathBuf, BTreeSet<CelId>>> = std::sync::Mutex::new(BTreeMap::new());
+
+fn keep_unreadable(dir: &Path, ids: &BTreeSet<CelId>) {
+    let mut m = UNREADABLE.lock().unwrap_or_else(|e| e.into_inner());
+    if ids.is_empty() {
+        m.remove(dir);
+    } else {
+        m.insert(dir.to_path_buf(), ids.clone());
+    }
+}
+
+fn unreadable_in(dir: &Path) -> BTreeSet<CelId> {
+    UNREADABLE.lock().unwrap_or_else(|e| e.into_inner()).get(dir).cloned().unwrap_or_default()
 }
 
 /// Marques d'image relues du manifeste : triées, après la première image, une seule par image.

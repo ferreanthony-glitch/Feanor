@@ -13,6 +13,8 @@ mod audio_tests;
 pub mod fond;
 #[cfg(test)]
 mod fond_tests;
+#[cfg(test)]
+mod perte_tests;
 mod fondui;
 mod blend;
 #[cfg(test)]
