@@ -1,7 +1,7 @@
 use eframe::egui::{self, vec2, Align, Align2, Color32, Layout, RichText};
 
 use crate::app::{App, Mode, Tool};
-use crate::document::{Document, LayerKind};
+use crate::document::LayerKind;
 
 /// Gestes à la souris et au stylet (hors fichier de raccourcis).
 pub(crate) const MOUSE_GESTURES: [(&str, &str); 21] = [
@@ -613,61 +613,8 @@ impl App {
         self.smart_rename_window(ctx);
         self.goto_window(ctx);
         self.palette_window(ctx);
-        if let Some(mut d) = self.new_dialog.take() {
-            let mut keep = true;
-            let mut create = false;
-            egui::Window::new("Nouveau projet")
-                .collapsible(false)
-                .resizable(false)
-                .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
-                .show(ctx, |ui| {
-                    ui.horizontal_wrapped(|ui| {
-                        for (label, w, h) in crate::projetui::RESOLUTIONS {
-                            let resp = ui.selectable_label(d.width == w && d.height == h, label).on_hover_text(format!("{w}×{h}"));
-                            if resp.clicked() {
-                                d.width = w;
-                                d.height = h;
-                            }
-                        }
-                    });
-                    ui.add_space(6.0);
-                    // Le cadre : taille de l'image finale. La feuille de dessin fait le double, pour
-                    // dessiner hors champ (limite : 4096 px de cadre, soit 8192 px de feuille).
-                    egui::Grid::new("grille_nouveau").num_columns(2).show(ui, |ui| {
-                        ui.label("Largeur du cadre");
-                        ui.add(egui::DragValue::new(&mut d.width).range(16..=4096).suffix(" px"));
-                        ui.end_row();
-                        ui.label("Hauteur du cadre");
-                        ui.add(egui::DragValue::new(&mut d.height).range(16..=4096).suffix(" px"));
-                        ui.end_row();
-                        ui.label("Cadence");
-                        ui.add(egui::DragValue::new(&mut d.fps).range(1..=120).suffix(" i/s"));
-                        ui.end_row();
-                    });
-                    ui.add_space(6.0);
-                    ui.horizontal(|ui| {
-                        if ui.button("Créer").clicked() {
-                            create = true;
-                        }
-                        if ui.button("Annuler").clicked() {
-                            keep = false;
-                        }
-                    });
-                });
-            if create {
-                self.load_doc(Document::with_frame(d.width, d.height, d.fps).created_now());
-                self.status = format!(
-                    "Nouveau projet : cadre {}×{} à {} i/s, feuille de dessin {}×{}.",
-                    d.width,
-                    d.height,
-                    d.fps,
-                    d.width * 2,
-                    d.height * 2
-                );
-            } else if keep {
-                self.new_dialog = Some(d);
-            }
-        }
+        // Nouveau projet (`nouveauui.rs`).
+        self.new_project_window(ctx);
 
         if let Some(action) = self.pending.take() {
             let mut choice = None;
