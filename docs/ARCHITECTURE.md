@@ -725,8 +725,52 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   - Imports : `kritabrush` met `opaque` (MyPaint) et Flow (Krita) en débit accumulé ;
     `tvpbrush::base_tool` met le `grain` du `tv_pencil` en `PencilGrain` (ordre deviné).
   - `vector::pressure_for_radius` : l'appui d'un point vectoriel retrouvé pour toute connexion de
-    taille (dichotomie sur la réponse), utilisé par `paint_textured`.
+    taille (dichotomie sur la réponse), utilisé par le rejeu des traits sans appuis.
   - Tests : `matiere_tests.rs`.
+- Rendu des brosses, étape 5 : le trait vectoriel trait pour trait comme le bitmap (2026-10-18,
+  `docs/VECTORIEL-COMME-BITMAP.md` §3 bis).
+  - `vector::Trace` dans `Element::Stroke { trace }` (`#[serde(default)]`) : `pressure` et `time`
+    par point du chemin (vides : inconnus), `feel : Option<Toucher>`, `secondary : Option<[u8; 3]>`
+    (couleur B), et `cache : StrokeCache` (`#[serde(skip)]`). Le moteur les enregistre dans
+    `StrokeState::path_pressure` / `path_time` (`record`, avec `cur_time`) ;
+    `App::commit_vector_stroke(vs, path, pressure, time, preview)` les garde avec le réglage complet
+    (`BrushLibrary::for_vector` rend toujours le réglage) et ne simplifie plus le chemin.
+  - Rendu (`render_element_clipped`) : un trait est rendu seul sur une feuille
+    (`render_stroke_alone` : rejeu par `StrokeState` sans lissage, toucher à courbe droite et seuil
+    nul, appui de la trace ou `pressure_for_radius`, instant de la trace ou `add_point` ; sans
+    réglage, `Mask::stamp` comme avant), ses pixels gardés (`CachedPixels::from_sheet` : les tuiles
+    64 × 64 dessinées, creuses, RGBA prémultiplié, plafond `MAX_CACHE_TILES` = 1024) avec une
+    signature (`stroke_signature` : couleur, opacité, dureté, réglage, trace), puis posés
+    (`blit_cache` : copie tuile à tuile pour une translation entière, rééchantillonnage bilinéaire
+    sinon ; `blit_sheet` sans cache ; toujours bornés à `bounds() + 1,5`). `StrokeCache { cell :
+    Arc<RwLock<Option<Rendered>>>, xf : Affine }` : partagé entre copies (l'historique ne duplique
+    rien), jamais comparé (`PartialEq` toujours vrai) ni enregistré. Budget global
+    `CACHE_BUDGET_BYTES` (512 Mo) tenu par `Registry` (octets et dernier usage par cache, `Weak` ;
+    au-dessus : caches des traits disparus oubliés, puis les moins récents vidés jusqu'à 90 %).
+  - Aperçu / exact : `Element::transformed` (et `set_color`, `scale_width`, `invalidate_cache`)
+    **vide** le cache ; `Element::transformed_preview` le garde et compose `xf` (translation
+    arrondie au pixel ; un aperçu — `xf` ≠ identité — pose son cache sans vérifier la signature, et
+    s'il le perd en plein geste le refait avec `xf` pour base). `Trace::sample` / `densify_traced` /
+    `piece_traced` / `with_samples` : les morceaux (gomme, cutter, enveloppe, tween) gardent appuis
+    et instants interpolés ; `without_samples` seulement quand ils ne peuvent pas suivre.
+    `render_split` (reste / choisis depuis les caches), `render_quick` (traits lisses sans rejeu).
+  - `rejeu.rs` : `Rejeu` = fil « rejeu » + `submit(cel, drawing, w, h) → gen` (copie aux caches
+    vidés), `cancel` / `cancel_all` (rendu direct, annulation), `poll` (résultats encore valables),
+    `wait` (essais). `App::rejeu_cel` demande, `App::poll_rejeu` (chaque image) adopte : image du
+    dessin remplacée et `Element::adopt_cache` sur chaque trait, si le dessin est toujours le même
+    (`same_as`). `refresh_cel*` annulent la demande du dessin ; `after_history` et `load_doc`, toutes.
+  - Gestes : `vtools::select_drag` → `transformed_preview` ; `finish_vdrag` et `nudge_selection`
+    → aperçu gardé + `rejeu_cel`. `envelopetools` / `perstools` : à l'ouverture, `Original::split`
+    (deux feuilles : `envelope::split_rect` / `split_masked` / `render_split`) ; à chaque image,
+    `envelope::warp_raster_fast(sheet, src, map)` (grille de 8 px, plus proche voisin par blocs
+    couvrant l'agrandissement local) posé sur le reste (`Raster::composite_over`) ; au lâcher,
+    bitmap exact (`warp_raster`, historique des tuiles contre l'original) ou géométrie vectorielle +
+    `rejeu_cel`. `project::load_quick` (appli) rend les dessins texturés avec `render_quick` et les
+    liste dans `Loaded::approx` ; `project::load` reste exact.
+  - `project::VERSION` 24 (`appui` u16, `instants` u32 relatifs). Tests : `vecto_tests.rs`,
+    `revue_tests.rs` (un essai par constat de la revue ; ignorés :
+    `envelope_then_drag_is_fast_on_the_ui_thread`, `loading_a_big_project_is_measured`),
+    `vector::budget_tests`.
 - Peinture humide (moteur de dessin, étape 11) : `BrushSettings::mix` (« melange ») et `charge`.
   - Avec du mélange, ou une charge incomplète, l'empreinte prend un autre chemin :
     1. la moyenne pondérée des pixels courants sous l'empreinte ;

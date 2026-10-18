@@ -9,7 +9,7 @@ use crate::app::App;
 use crate::document::CelId;
 use crate::history::Edit;
 use crate::persp;
-use crate::raster::{Raster, Tile};
+use crate::raster::Raster;
 use crate::vector::VectorDrawing;
 
 /// Rayon de prise des coins, en pixels d'écran.
@@ -19,6 +19,17 @@ const ACCENT: Color32 = Color32::from_rgb(70, 165, 255);
 enum Original {
     Bitmap(Raster),
     Vector { drawing: VectorDrawing, items: Option<Vec<usize>> },
+}
+
+impl Original {
+    /// Les deux feuilles de l'aperçu : ce qui reste, et ce qui se déforme (pour un dessin
+    /// vectoriel, posées depuis les pixels en cache des traits : sans rejeu).
+    fn split(&self, src: Rect, w: usize, h: usize) -> (Raster, Raster) {
+        match self {
+            Original::Bitmap(orig) => crate::envelope::split_rect(orig, src),
+            Original::Vector { drawing, items } => drawing.render_split(items.as_deref(), w, h),
+        }
+    }
 }
 
 /// Ce que l'on tire : un coin, ou tout le cadre.
@@ -34,6 +45,30 @@ pub(crate) struct PerspEdit {
     quad: [Pos2; 4],
     original: Original,
     drag: Option<(Grip, Pos2, [Pos2; 4])>,
+    /// L'aperçu pendant le geste : ce qui reste, ce qui se déforme (`Original::split`).
+    base: Raster,
+    sheet: Raster,
+    /// La zone de la feuille que l'aperçu a couverte (à rafraîchir avec la suivante).
+    shown: Rect,
+    /// L'image exacte posée par le dernier lâcher de la séance (bitmap) : l'état d'avant le geste
+    /// suivant, pour son annulation.
+    committed: crate::envelope::Committed,
+}
+
+impl PerspEdit {
+    /// Un coin est tiré sur le dessin `cel` : son image est l'aperçu.
+    pub(crate) fn busy_on(&self, cel: CelId) -> bool {
+        self.cel == cel && self.drag.is_some()
+    }
+
+    /// L'image de l'aperçu : la feuille mise en perspective (au plus proche voisin, par blocs),
+    /// posée sur le reste ; aucune si le quadrilatère est dégénéré.
+    fn preview(&self) -> Option<Raster> {
+        let h = persp::rect_to_quad(self.src, self.quad)?;
+        let mut img = self.base.clone();
+        img.composite_over(&crate::envelope::warp_raster_fast(&self.sheet, self.src, |p| persp::apply(&h, p)));
+        Some(img)
+    }
 }
 
 impl App {
@@ -85,12 +120,17 @@ impl App {
             self.status = "Perspective : rien à déformer sur cette image.".into();
             return;
         }
+        let (base, sheet) = original.split(src, c.raster.width, c.raster.height);
         self.persp = Some(PerspEdit {
             cel,
             src,
             quad: [src.left_top(), src.right_top(), src.right_bottom(), src.left_bottom()],
             original,
             drag: None,
+            base,
+            sheet,
+            shown: src,
+            committed: Default::default(),
         });
         self.status = "Perspective : tire un coin (ou l'intérieur pour tout déplacer). Entrée ou clic ailleurs : \
                        terminer ; Ctrl+Z : annuler."
@@ -107,13 +147,30 @@ impl App {
             Grip::All => q = quad0.map(|c| c + (p - start)),
         }
         // Un quadrilatère qui se croise ne se déforme pas : on garde le dernier correct.
-        if persp::is_convex(&q) {
+        if persp::is_convex(&q) && q != e.quad {
             e.quad = q;
+            self.persp_preview();
         }
         true
     }
 
-    /// Lâcher : la déformation est appliquée (une étape d'annulation).
+    /// Montre le dessin mis en perspective (depuis l'original, ses pixels déformés : sans rejeu).
+    fn persp_preview(&mut self) {
+        let Some(e) = &mut self.persp else { return };
+        let Some(img) = e.preview() else { return };
+        let quad_box = Rect::from_points(&e.quad);
+        let region = e.shown.union(quad_box).union(e.src).expand(2.0);
+        e.shown = quad_box.union(e.src);
+        let cel = e.cel;
+        let Some(c) = self.doc.cels.get_mut(&cel) else { return };
+        let tiles = crate::vector::tiles_in(&c.raster, region);
+        c.raster = img;
+        c.version += 1;
+        self.renderer.invalidate_tiles(&tiles);
+    }
+
+    /// Lâcher : la déformation est appliquée (une étape d'annulation). En vectoriel, l'aperçu
+    /// reste affiché et le rendu exact des traits déformés arrive en arrière-plan (`rejeu.rs`).
     pub(crate) fn persp_release(&mut self) {
         let Some(e) = &mut self.persp else { return };
         let Some((_, _, quad0)) = e.drag.take() else { return };
@@ -125,17 +182,11 @@ impl App {
             Original::Bitmap(orig) => {
                 let Some(new) = persp::warp_raster(orig, src, quad) else { return };
                 let Some(c) = self.doc.cels.get_mut(&cel) else { return };
-                let mut before: Vec<(usize, Option<Tile>)> = Vec::new();
-                let mut changed = Vec::new();
-                for idx in 0..new.tiles.len() {
-                    if c.raster.tiles.get(idx) != new.tiles.get(idx) {
-                        before.push((idx, c.raster.tiles[idx].clone()));
-                        changed.push(idx);
-                    }
-                }
-                if changed.is_empty() {
-                    return;
-                }
+                // L'étape d'annulation : les tuiles de l'original que la déformation a changées
+                // (l'image affichée est l'aperçu rapide : remplacée par le résultat exact).
+                // (« Avant » : l'image d'avant CE geste, résultat exact du précédent s'il y en a eu un
+                // dans la séance, sinon l'original ; sinon Ctrl+Z sauterait le geste d'avant.)
+                let Some((before, changed)) = e.committed.step(orig, &c.raster, &new) else { return };
                 c.raster = new;
                 c.version += 1;
                 self.renderer.invalidate_tiles(&changed);
@@ -146,7 +197,7 @@ impl App {
                 let Some(new) = persp::warp_drawing(drawing, items.as_deref(), src, quad) else { return };
                 let Some(d) = self.drawing_mut(cel) else { return };
                 let before = std::mem::replace(d, new);
-                self.refresh_cel(cel);
+                self.rejeu_cel(cel);
                 self.push_vector(cel, before, None);
             }
         }

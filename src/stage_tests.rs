@@ -29,6 +29,7 @@ fn small_doc() -> (Document, u64, u64) {
         opacity: 1.0,
         hardness: 1.0,
         brush: None,
+        trace: Default::default(),
     });
     c.rerender();
     doc.panels[0].layers[0].frames = vec![Some(b)];

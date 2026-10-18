@@ -16,7 +16,7 @@ use crate::app::App;
 use crate::document::CelId;
 use crate::envelope::{self, Envelope};
 use crate::history::Edit;
-use crate::raster::{Raster, Tile};
+use crate::raster::Raster;
 use crate::vector::VectorDrawing;
 
 /// Rayon de prise des coins et des poignées, en pixels d'écran.
@@ -29,6 +29,27 @@ enum Original {
     Vector(VectorDrawing, Option<Vec<usize>>),
     /// Le dessin bitmap et la zone choisie, seule déformée.
     Masked(Raster, crate::pixsel::PixelMask),
+}
+
+impl Original {
+    /// Les deux feuilles de l'aperçu : ce qui reste, et ce qui se déforme (pour un dessin
+    /// vectoriel, posées depuis les pixels en cache des traits : sans rejeu).
+    fn split(&self, src: Rect, w: usize, h: usize) -> (Raster, Raster) {
+        match self {
+            Original::Bitmap(orig) => envelope::split_rect(orig, src),
+            Original::Masked(orig, mask) => envelope::split_masked(orig, mask),
+            Original::Vector(d, items) => d.render_split(items.as_deref(), w, h),
+        }
+    }
+
+    /// Le résultat exact d'un dessin bitmap déformé par `env`.
+    fn exact(&self, src: Rect, env: &Envelope) -> Option<Raster> {
+        match self {
+            Original::Bitmap(orig) => Some(envelope::warp_raster(orig, src, env)),
+            Original::Masked(orig, mask) => Some(envelope::warp_raster_masked(orig, mask, env)),
+            Original::Vector(..) => None,
+        }
+    }
 }
 
 /// Ce que l'on tire : un coin, une poignée, ou toute l'enveloppe.
@@ -45,6 +66,41 @@ pub(crate) struct EnvelopeEdit {
     env: Envelope,
     original: Original,
     drag: Option<(Grip, Pos2, Envelope)>,
+    /// L'aperçu pendant le geste : ce qui reste, ce qui se déforme (`Original::split`).
+    base: Raster,
+    sheet: Raster,
+    /// La zone de la feuille que l'aperçu a couverte (à rafraîchir avec la suivante).
+    shown: Rect,
+    /// L'image exacte posée par le dernier lâcher de la séance (bitmap) : l'état d'avant le geste
+    /// suivant, pour son annulation.
+    committed: crate::envelope::Committed,
+}
+
+impl EnvelopeEdit {
+    /// Un coin, une poignée ou l'enveloppe est tiré sur le dessin `cel` : son image est l'aperçu.
+    pub(crate) fn busy_on(&self, cel: CelId) -> bool {
+        self.cel == cel && self.drag.is_some()
+    }
+
+    fn new(cel: CelId, src: Rect, original: Original, grip: Grip, p: Pos2, w: usize, h: usize) -> EnvelopeEdit {
+        let env = Envelope::identity(src);
+        let (base, sheet) = original.split(src, w, h);
+        EnvelopeEdit { cel, src, env, original, drag: Some((grip, p, env)), base, sheet, shown: src, committed: Default::default() }
+    }
+
+    /// L'image de l'aperçu : la feuille déformée par le maillage de l'enveloppe, posée sur le reste.
+    fn preview(&self) -> Raster {
+        let mut img = self.base.clone();
+        img.composite_over(&envelope::warp_raster_fast(&self.sheet, self.src, |p| self.env.map(self.src, p)));
+        img
+    }
+}
+
+/// Boîte de l'enveloppe (ses courbes restent dans l'enveloppe convexe de leurs points de contrôle).
+fn env_box(env: &Envelope) -> Rect {
+    let mut pts: Vec<Pos2> = env.corners.to_vec();
+    pts.extend_from_slice(&env.handles);
+    Rect::from_points(&pts)
 }
 
 impl App {
@@ -122,8 +178,7 @@ impl App {
             Some(d) => Original::Vector(d.clone(), items),
             None => Original::Bitmap(c.raster.clone()),
         };
-        let env = Envelope::identity(src);
-        self.envelope = Some(EnvelopeEdit { cel, src, env, original, drag: Some((Grip::Corner(k), p, env)) });
+        self.envelope = Some(EnvelopeEdit::new(cel, src, original, Grip::Corner(k), p, c.raster.width, c.raster.height));
         let what = match n {
             Some(n) => format!("Enveloppe sur la sélection ({n} élément{})", if n > 1 { "s" } else { "" }),
             None => "Enveloppe".to_string(),
@@ -153,15 +208,16 @@ impl App {
         self.bdrag = None;
         let (Some(mask), Some(c)) = (mask, self.doc.cels.get(&cel)) else { return true };
         let src = mask.bounds();
-        let env = Envelope::identity(src);
-        self.envelope = Some(EnvelopeEdit { cel, src, env, original: Original::Masked(c.raster.clone(), mask), drag: Some((Grip::Corner(k), p, env)) });
+        self.envelope = Some(EnvelopeEdit::new(cel, src, Original::Masked(c.raster.clone(), mask), Grip::Corner(k), p, c.raster.width, c.raster.height));
         self.status = "Enveloppe sur la zone choisie : tire les coins, et leurs poignées rondes pour courber les côtés ; \
                        l'intérieur pour tout déplacer. Entrée, Échap ou clic ailleurs : terminer ; Ctrl+Z annule chaque geste."
             .into();
         true
     }
 
-    /// Mouvement du pointeur ; vrai si un coin, une poignée ou l'enveloppe est tiré.
+    /// Mouvement du pointeur ; vrai si un coin, une poignée ou l'enveloppe est tiré. Le dessin
+    /// suit : ses pixels (ceux de l'original, ou des caches des traits choisis) sont déformés par le
+    /// maillage de l'enveloppe à chaque image, jamais rejoués.
     pub(crate) fn envelope_drag(&mut self, p: Pos2) -> bool {
         let Some(e) = &mut self.envelope else { return false };
         let Some((grip, start, env0)) = e.drag else { return false };
@@ -172,11 +228,31 @@ impl App {
             Grip::Handle(i) => env.handles[i] = env0.handles[i] + d,
             Grip::All => env.translate(d),
         }
+        if env == e.env {
+            return true;
+        }
         e.env = env;
+        self.envelope_preview();
         true
     }
 
+    /// Montre le dessin déformé par l'enveloppe du moment (depuis l'original, sans rejeu).
+    fn envelope_preview(&mut self) {
+        let Some(e) = &mut self.envelope else { return };
+        let img = e.preview();
+        let region = e.shown.union(env_box(&e.env)).union(e.src).expand(2.0);
+        e.shown = env_box(&e.env).union(e.src);
+        let cel = e.cel;
+        let Some(c) = self.doc.cels.get_mut(&cel) else { return };
+        let tiles = crate::vector::tiles_in(&c.raster, region);
+        c.raster = img;
+        c.version += 1;
+        self.renderer.invalidate_tiles(&tiles);
+    }
+
     /// Lâcher : la déformation est appliquée depuis le dessin d'origine (une étape d'annulation).
+    /// En vectoriel, l'aperçu reste affiché et le rendu exact des traits déformés arrive en
+    /// arrière-plan (`rejeu.rs`).
     pub(crate) fn envelope_release(&mut self) {
         let Some(e) = &mut self.envelope else { return };
         let Some((_, _, env0)) = e.drag.take() else { return };
@@ -184,39 +260,28 @@ impl App {
             return;
         }
         let (cel, src, env) = (e.cel, e.src, e.env);
-        let bitmap = match &e.original {
-            Original::Bitmap(orig) => Some(envelope::warp_raster(orig, src, &env)),
-            Original::Masked(orig, mask) => Some(envelope::warp_raster_masked(orig, mask, &env)),
-            Original::Vector(..) => None,
-        };
-        match (&e.original, bitmap) {
-            (_, Some(new)) => {
+        match &e.original {
+            Original::Bitmap(orig) | Original::Masked(orig, _) => {
+                let Some(new) = e.original.exact(src, &env) else { return };
                 let Some(c) = self.doc.cels.get_mut(&cel) else { return };
-                let mut before: Vec<(usize, Option<Tile>)> = Vec::new();
-                let mut changed = Vec::new();
-                for idx in 0..new.tiles.len() {
-                    if c.raster.tiles.get(idx) != new.tiles.get(idx) {
-                        before.push((idx, c.raster.tiles[idx].clone()));
-                        changed.push(idx);
-                    }
-                }
-                if changed.is_empty() {
-                    return;
-                }
+                // L'étape d'annulation : les tuiles de l'original que la déformation a changées
+                // (l'image affichée est l'aperçu rapide : remplacée par le résultat exact).
+                // (« Avant » : l'image d'avant CE geste, résultat exact du précédent s'il y en a eu un
+                // dans la séance, sinon l'original ; sinon Ctrl+Z sauterait le geste d'avant.)
+                let Some((before, changed)) = e.committed.step(orig, &c.raster, &new) else { return };
                 c.raster = new;
                 c.version += 1;
                 self.renderer.invalidate_tiles(&changed);
                 self.history.push(Edit::Tiles { cel, tiles: before });
                 self.modified = true;
             }
-            (Original::Vector(drawing, items), None) => {
+            Original::Vector(drawing, items) => {
                 let new = envelope::warp_drawing(drawing, items.as_deref(), src, &env);
                 let Some(d) = self.drawing_mut(cel) else { return };
                 let before = std::mem::replace(d, new);
-                self.refresh_cel(cel);
+                self.rejeu_cel(cel);
                 self.push_vector(cel, before, None);
             }
-            _ => {}
         }
     }
 

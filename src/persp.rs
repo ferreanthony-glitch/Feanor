@@ -188,7 +188,7 @@ pub fn warp_element_with(e: &Element, f: &impl Fn(Pos2) -> Pos2, k: f32) -> Elem
         [q.x, q.y]
     };
     match e {
-        Element::Stroke { points, color, opacity, hardness, brush } => Element::Stroke {
+        Element::Stroke { points, color, opacity, hardness, brush, trace } => Element::Stroke {
             points: points
                 .iter()
                 .map(|p| {
@@ -200,6 +200,7 @@ pub fn warp_element_with(e: &Element, f: &impl Fn(Pos2) -> Pos2, k: f32) -> Elem
             opacity: *opacity,
             hardness: *hardness,
             brush: brush.as_ref().map(|b| Box::new(crate::brush::BrushSettings { size: b.size * k, ..**b })),
+            trace: trace.without_cache(),
         },
         Element::Fill { contours, color, opacity } => Element::Fill {
             contours: contours.iter().map(|c| c.iter().map(|p| map(p[0], p[1])).collect()).collect(),

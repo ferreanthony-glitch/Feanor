@@ -14,6 +14,7 @@ fn stroke(color: [u8; 3], y: f32) -> Element {
         opacity: 1.0,
         hardness: 1.0,
         brush: None,
+        trace: Default::default(),
     }
 }
 

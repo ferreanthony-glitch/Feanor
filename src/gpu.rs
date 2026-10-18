@@ -497,7 +497,8 @@ impl GpuCanvas {
             // Un dessin passé par des effets (13i) : son dessin dérivé, sous son propre numéro.
             let Some(cel) = crate::fx::shown(doc, item) else { continue };
             let id = crate::fx::shown_id(item);
-            let entry = ensure_texture(rs, res, id, cel.raster.tiles.len(), size);
+            // (À la taille de son image : la feuille flottante d'une sélection peut dépasser la feuille.)
+            let entry = ensure_texture(rs, res, id, cel.raster.tiles.len(), (cel.raster.width as u32, cel.raster.height as u32));
             if all || entry.version != cel.version {
                 // Un envoi d'avance commencé pour cette version reprend où il en était.
                 let start = match entry.partial {
@@ -522,7 +523,7 @@ impl GpuCanvas {
                 break;
             }
             let Some(cel) = doc.cels.get(&id) else { continue };
-            let entry = ensure_texture(rs, res, id, cel.raster.tiles.len(), size);
+            let entry = ensure_texture(rs, res, id, cel.raster.tiles.len(), (cel.raster.width as u32, cel.raster.height as u32));
             entry.last_used = tick;
             if entry.version == cel.version {
                 continue;
@@ -606,11 +607,12 @@ impl GpuCanvas {
         let (w, h) = (stage[0] as f32, stage[1] as f32);
         let pivot = egui::pos2(w / 2.0, h / 2.0);
         // Calque transformé : les coins de la feuille, déplacés, en coordonnées normalisées.
-        let placed = |t: &crate::document::LayerTransform| -> [[f32; 4]; 4] {
-            let aff = t.affine(pivot);
+        // (`dims` : l'image du dessin si elle n'est pas à la taille de la feuille.)
+        let placed = |aff: crate::vector::Affine, dims: Option<[usize; 2]>| -> [[f32; 4]; 4] {
             let uv = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
+            let (dw, dh) = dims.map_or((w, h), |d| (d[0] as f32, d[1] as f32));
             std::array::from_fn(|i| {
-                let p = aff.apply(egui::pos2(uv[i][0] * w, uv[i][1] * h));
+                let p = aff.apply(egui::pos2(uv[i][0] * dw, uv[i][1] * dh));
                 [p.x / w * 2.0 - 1.0, 1.0 - p.y / h * 2.0, uv[i][0], uv[i][1]]
             })
         };
@@ -633,7 +635,7 @@ impl GpuCanvas {
             let blend = if item.tint.is_some() { 0 } else { item.blend.index() };
             items.push(GpuItem {
                 cel: Some(crate::fx::shown_id(item)),
-                corners: item.transform.as_ref().map_or(full, placed),
+                corners: item.affine(pivot).map_or(full, |aff| placed(aff, item.pre.and_then(|p| p.dims))),
                 color: [color[0], color[1], color[2], tinted],
                 params: [item.opacity as f32 / 255.0, 1.0, blend as f32, 0.0],
                 blend,

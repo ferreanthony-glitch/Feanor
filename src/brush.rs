@@ -753,7 +753,7 @@ impl BrushSettings {
     // grain collé à la feuille. Tailles pour un projet 1920×1080 vu à 50 %.
 
     /// Crayon graphite : le réglage de départ de l'outil Crayon. Amas de grains tourné au hasard,
-    /// papier à dessin, débit qui s'accumule jusqu'à 90 % d'opacité (jamais tout à fait noir),
+    /// papier à dessin fin (le sien, `PAPER_GRAPHITE`), débit qui s'accumule jusqu'à 90 % d'opacité (jamais tout à fait noir),
     /// grain propre du crayon « Doux ». (Le débit vaut pour une empreinte pleine ; une pointe en
     /// amas de grains n'en dépose qu'une part, d'où un débit réglé haut : un passage appuyé fait un
     /// gris foncé, repasser fonce.)
@@ -776,15 +776,16 @@ impl BrushSettings {
             flip_y: true,
             size_jitter: 0.1,
             scatter: 0.03,
-            paper: Some(crate::brushtex::PAPER_DRAWING),
+            paper: Some(crate::brushtex::PAPER_GRAPHITE),
             grain: 0.85,
-            paper_scale: 2.5,
+            paper_scale: 2.0,
             paper_softness: crate::brushtex::GRAIN_SOFTNESS_SOFT,
             pencil_grain: PencilGrain::Soft,
             ..Self::brush()
         };
-        // L'appui fait le débit, en douceur : on effleure gris, on appuie noir.
-        s.dynamics.opacity = Connection { source: Source::Pressure, curve: Curve::from_points(&[[0.0, 0.15], [0.5, 0.6], [1.0, 1.0]]), ..Default::default() };
+        // L'appui fait le débit : le crayon mord dès qu'on effleure (Anthony, 2026-10-18 : les
+        // hachures légères étaient trop pâles à 50 %), et appuyé il est presque noir.
+        s.dynamics.opacity = Connection { source: Source::Pressure, curve: Curve::from_points(&[[0.0, 0.35], [0.4, 0.8], [1.0, 1.0]]), ..Default::default() };
         s
     }
 
@@ -793,9 +794,9 @@ impl BrushSettings {
         Self {
             size: 7.0,
             opacity: 0.8,
-            power: 0.7,
+            power: 0.75,
             grain: 0.9,
-            paper_scale: 2.5,
+            paper_scale: 2.0,
             pencil_grain: PencilGrain::Medium,
             ..Self::graphite()
         }
@@ -980,6 +981,12 @@ pub struct StrokeState {
     pub pen: bool,
     /// Ligne médiane lissée et rayon en chaque point : ce que garde un trait vectoriel.
     pub path: Vec<VPoint>,
+    /// Appui (après la courbe de pression) et instant (−1 : inconnu) de chaque point de `path` :
+    /// la trace qui permet au trait vectoriel de rejouer ses empreintes exactement (étape 5).
+    pub path_pressure: Vec<f32>,
+    pub path_time: Vec<f64>,
+    /// Instant du point en cours (−1 : inconnu).
+    cur_time: f64,
     mode: StrokeMode,
     settings: BrushSettings,
     before: HashMap<usize, Option<Tile>>,
@@ -1040,6 +1047,10 @@ pub struct StrokeState {
     replaying: bool,
     /// Première empreinte du trait : l'origine du papier quand il suit le trait.
     origin: Option<Pos2>,
+    /// Le trait est peint sur une image décalée de (x, y) pixels par rapport à la feuille (une
+    /// marge à gauche et en haut, pour garder ce qui dépasse de la feuille) : le papier se lit
+    /// comme sur la feuille, pas sur l'image décalée.
+    grain_off: (i64, i64),
 }
 
 /// Graine du hasard d'un trait (la même à chaque fois : un trait rejoué est le même).
@@ -1071,6 +1082,9 @@ impl StrokeState {
             cel,
             pen,
             path: Vec::new(),
+            path_pressure: Vec::new(),
+            path_time: Vec::new(),
+            cur_time: -1.0,
             mode,
             settings,
             before: HashMap::new(),
@@ -1106,7 +1120,16 @@ impl StrokeState {
             dt: None,
             replaying: false,
             origin: None,
+            grain_off: (0, 0),
         }
+    }
+
+    /// Le trait est peint sur une image décalée de `off` pixels (marge à gauche et en haut) :
+    /// le grain du papier reste celui de la feuille. Les positions du chemin sont celles de l'image
+    /// décalée (l'appelant les a décalées aussi).
+    pub fn with_grain_offset(mut self, off: (usize, usize)) -> Self {
+        self.grain_off = (off.0 as i64, off.1 as i64);
+        self
     }
 
     /// Le zoom de la vue (pixels d'écran par pixel du dessin), pour la corde et la distance du
@@ -1303,7 +1326,8 @@ impl StrokeState {
     }
 
     pub fn add_point(&mut self, raster: &mut Raster, pos: Pos2, pressure: f32, dirty: &mut Vec<usize>) {
-        self.raw_log.push([pos.x as f64, pos.y as f64, pressure as f64, std::mem::replace(&mut self.next_time, -1.0)]);
+        self.cur_time = std::mem::replace(&mut self.next_time, -1.0);
+        self.raw_log.push([pos.x as f64, pos.y as f64, pressure as f64, self.cur_time]);
         // Toucher du stylet : au-dessous du seuil, le stylet ne touche pas (rien n'est posé ; le
         // trait reprendra, ou finira, au dernier point qui touchait). L'appui passe ensuite par la
         // courbe de pression globale. La souris appuie toujours à fond.
@@ -1324,6 +1348,9 @@ impl StrokeState {
     fn record(&mut self, p: Pos2, pressure: f32) {
         let r = self.settings.size * 0.5 * self.size_factor(&self.inputs(pressure, 0.0));
         self.path.push(VPoint { x: p.x, y: p.y, r });
+        // La trace du trait vectoriel (étape 5) : de quoi rejouer les empreintes exactement.
+        self.path_pressure.push(pressure);
+        self.path_time.push(self.cur_time);
     }
 
     /// Le lissage a-t-il un effet, avec ces réglages ?
@@ -1366,6 +1393,9 @@ impl StrokeState {
     /// Remet le geste à son départ, tout sauf les tuiles d'avant et le journal : pour le rejouer.
     fn reset_gesture(&mut self) {
         self.path.clear();
+        self.path_pressure.clear();
+        self.path_time.clear();
+        self.cur_time = -1.0;
         self.mask.clear();
         self.last = None;
         self.smoothed = None;
@@ -1645,7 +1675,9 @@ impl StrokeState {
         if self.origin.is_none() {
             self.origin = Some(c);
         }
-        let origin = if s.paper_follow { self.origin.unwrap_or(c) } else { Pos2::ZERO };
+        // (Image décalée : le papier fixe sur la feuille se lit à l'origine de la feuille.)
+        let (gox, goy) = self.grain_off;
+        let origin = if s.paper_follow { self.origin.unwrap_or(c) } else { Pos2::new(gox as f32, goy as f32) };
         // Papier tel quel (comme avant), ou mis à l'échelle et tourné.
         let paper_plain = (s.paper_scale - 1.0).abs() < 1e-4 && s.paper_angle == 0.0 && !s.paper_follow;
         let pscale = s.paper_scale.clamp(0.05, 20.0);
@@ -1654,16 +1686,17 @@ impl StrokeState {
         // fois le grain du crayon.
         let grain_at = |px: usize, py: usize| -> f32 {
             let (x, y) = (px as f32 + 0.5 - origin.x, py as f32 + 0.5 - origin.y);
+            let (sx, sy) = (px as i64 - gox, py as i64 - goy);
             let mut f = paper.as_ref().map_or(1.0, |p| {
                 let h = if paper_plain {
-                    p.tiled(px, py)
+                    p.tiled_at(sx, sy)
                 } else {
                     p.sample_wrapped((x * pcos + y * psin) / pscale, (-x * psin + y * pcos) / pscale)
                 };
                 grain_factor(if s.paper_invert { 1.0 - h } else { h }, pressure, s.grain, s.paper_softness)
             });
             if let Some(g) = &pencil {
-                let h = if s.paper_follow { g.sample_wrapped(x, y) } else { g.tiled(px, py) };
+                let h = if s.paper_follow { g.sample_wrapped(x, y) } else { g.tiled_at(sx, sy) };
                 f *= grain_factor(h, pressure, s.pencil_grain.strength(), s.pencil_grain.softness());
             }
             f

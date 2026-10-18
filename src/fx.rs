@@ -754,23 +754,151 @@ fn fond_shown<'a>(doc: &'a Document, item: &crate::render::PlanItem, r: &crate::
         h.finish()
     };
     let tick = TICK.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(e) = cache.get_mut(&id).filter(|e| e.version == version) {
-        e.used = tick;
-        return Some(Shown::Fx(e.cel.clone()));
+    let differe = DIFFERE.with(std::cell::Cell::get);
+    let ancien = {
+        let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        match cache.get_mut(&id) {
+            Some(e) if e.version == version => {
+                e.used = tick;
+                let cel = e.cel.clone();
+                drop(cache);
+                // Revenu à une version déjà prête (annulation) : le fond attendu ne vaut plus.
+                if let Some(fil) = FIL.get() {
+                    let mut fil = fil.lock().unwrap_or_else(|e| e.into_inner());
+                    if fil.pending_version(id).is_some_and(|p| p != version) {
+                        fil.cancel(id);
+                    }
+                }
+                return Some(Shown::Fx(cel));
+            }
+            // À l'écran : le fond d'avant en attendant le nouveau (calculé en arrière-plan).
+            Some(e) if differe => {
+                e.used = tick;
+                Some(e.cel.clone())
+            }
+            _ => None,
+        }
+    };
+    if let Some(ancien) = ancien {
+        demander_fond(id, version, src, r);
+        return Some(Shown::Fx(ancien));
+    }
+    // Calcul direct (export, enregistrement, premier affichage) : ce qu'on attendait ne vaut plus.
+    if let Some(fil) = FIL.get() {
+        fil.lock().unwrap_or_else(|e| e.into_inner()).cancel(id);
     }
     let (w, h) = (src.raster.width, src.raster.height);
     let cover = cover_of(id, src, r, tick);
     let strate = src.fond.as_deref();
     let raster = crate::fond::compose(&cover, w, h, r.couleur, strate.map(|s| &s.peinture.raster), strate.map(|s| &s.coupe));
     let derived = Arc::new(Cel { raster, vector: None, version, fond: None });
-    cache.insert(id, Entry { version, cel: derived.clone(), used: tick });
+    garder_fond(id, Entry { version, cel: derived.clone(), used: tick });
+    Some(Shown::Fx(derived))
+}
+
+/// Range un fond dans le cache des dessins dérivés.
+fn garder_fond(id: CelId, entry: Entry) {
+    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    cache.insert(id, entry);
     if cache.len() > CACHE_MAX {
         if let Some(old) = cache.iter().min_by_key(|(_, e)| e.used).map(|(k, _)| *k) {
             cache.remove(&old);
         }
     }
-    Some(Shown::Fx(derived))
+}
+
+// ---------------------------------------------------------------------- fond en arrière-plan
+
+thread_local! {
+    static DIFFERE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+static FIL: std::sync::OnceLock<Mutex<crate::fondfil::FondFil>> = std::sync::OnceLock::new();
+/// Compte les fonds adoptés (pour rafraîchir ce qui en dépend : vignettes, image composée).
+static FOND_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Exécute `f` en laissant les fonds se calculer en arrière-plan (fil de l'interface) : un fond
+/// qui n'est plus à jour montre sa version d'avant, et la nouvelle le remplace à son arrivée
+/// (`fond_poll`). Hors de là, partout (export, enregistrement, essais), le fond est exact et
+/// calculé tout de suite.
+pub fn differe<R>(f: impl FnOnce() -> R) -> R {
+    struct Garde(bool);
+    impl Drop for Garde {
+        fn drop(&mut self) {
+            DIFFERE.with(|d| d.set(self.0));
+        }
+    }
+    let _garde = Garde(DIFFERE.with(|d| d.replace(true)));
+    f()
+}
+
+/// Demande en arrière-plan le fond `id` de la version `version` du dessin `src` (sauf si c'est
+/// déjà demandé).
+fn demander_fond(id: CelId, version: u64, src: &Cel, r: &crate::fond::FondReglages) {
+    let forme = COVERS.lock().unwrap_or_else(|e| e.into_inner()).get(&id).filter(|e| e.0 == src.version).map(|e| e.1.clone());
+    let mut fil = FIL.get_or_init(|| Mutex::new(crate::fondfil::FondFil::new())).lock().unwrap_or_else(|e| e.into_inner());
+    if fil.pending_version(id) == Some(version) {
+        return;
+    }
+    let strate = src.fond.as_deref();
+    fil.submit(crate::fondfil::Demande {
+        id,
+        version,
+        src_version: src.version,
+        reglages: *r,
+        width: src.raster.width,
+        height: src.raster.height,
+        trait_: forme.is_none().then(|| src.raster.clone()),
+        forme,
+        peinture: strate.map(|s| s.peinture.raster.clone()),
+        coupe: strate.map(|s| s.coupe.clone()),
+    });
+}
+
+/// Adopte les fonds arrivés et encore valables ; vrai si l'un d'eux remplace un fond affiché
+/// (il faut alors redessiner).
+pub fn fond_poll() -> bool {
+    let Some(fil) = FIL.get() else { return false };
+    let done = fil.lock().unwrap_or_else(|e| e.into_inner()).poll();
+    if done.is_empty() {
+        return false;
+    }
+    for d in done {
+        let tick = TICK.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        {
+            let mut covers = COVERS.lock().unwrap_or_else(|e| e.into_inner());
+            covers.insert(d.id, (d.src_version, d.forme, tick));
+            if covers.len() > COVERS_MAX {
+                if let Some(old) = covers.iter().min_by_key(|(_, e)| e.2).map(|(k, _)| *k) {
+                    covers.remove(&old);
+                }
+            }
+        }
+        let cel = Arc::new(Cel { raster: d.raster, vector: None, version: d.version, fond: None });
+        garder_fond(d.id, Entry { version: d.version, cel, used: tick });
+    }
+    FOND_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    true
+}
+
+/// Un fond est-il en cours de calcul ?
+pub fn fond_pending() -> bool {
+    FIL.get().is_some_and(|f| f.lock().unwrap_or_else(|e| e.into_inner()).has_pending())
+}
+
+/// Autre projet : plus rien à attendre, et les dessins dérivés gardés (dont les fonds, qu'on
+/// montre en attendant le nouveau) ne sont plus ceux de ce projet.
+pub fn fond_cancel_all() {
+    if let Some(f) = FIL.get() {
+        f.lock().unwrap_or_else(|e| e.into_inner()).cancel_all();
+    }
+    CACHE.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    COVERS.lock().unwrap_or_else(|e| e.into_inner()).clear();
+}
+
+/// Nombre de fonds adoptés depuis le début.
+pub fn fond_epoch() -> u64 {
+    FOND_EPOCH.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Pendant qu'on peint ou qu'on gomme dans la strate Fond du dessin `cel` (fond aux réglages
@@ -787,6 +915,7 @@ pub fn fond_patch(doc: &Document, cel: CelId, r: &crate::fond::FondReglages, til
         fx: Vec::new(),
         ctg: None,
         fond: Some(crate::render::FondPart::Forme(*r)),
+        pre: None,
     };
     let id = shown_id(&item);
     let Some(cover) = COVERS.lock().unwrap_or_else(|e| e.into_inner()).get(&id).filter(|e| e.0 == src.version).map(|e| e.1.clone()) else { return };
@@ -818,6 +947,7 @@ pub fn shown_with<'a>(doc: &'a Document, cel: CelId, steps: &[FxStep], ctg: Opti
         fx: steps.to_vec(),
         ctg: ctg.cloned(),
         fond: None,
+        pre: None,
     };
     let id = shown_id(&item);
     // Version : celle du dessin, et celles des sources du remplissage.

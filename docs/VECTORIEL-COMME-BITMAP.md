@@ -259,9 +259,179 @@ calque par défaut.
 | 5 | Option « grain lié au trait » pour le tween, et « Moderniser les traits » des vieux dessins | 0,5 j | au choix | tween d'un trait à papier : bouillonne ou non |
 | 6 | Plus tard : empreintes sur GPU (P3) si la taille des projets l'exige | — | — | — |
 
-Format : `VERSION` 24, `#[serde(default)]` partout, vieux dessins inchangés à l'écran. Rien de ce
-plan n'est commencé sur la branche (étude seulement) ; l'essai d'audit fournit la mesure d'écart
-qui servira de test de non-régression (« écart 0 »).
+Format : `VERSION` 24, `#[serde(default)]` partout, vieux dessins inchangés à l'écran.
+
+## 3 bis. Fait (branche `vecto`, 2026-10-18)
+
+Anthony : « ensuite, l'étape 5 », avec en priorité le déplacement d'une sélection vectorielle, qui
+« ralentit énormément » (mesuré à 107–109 ms par image pour 12 traits de graphite).
+
+### Ce qui est fait
+
+- **La trace** (`vector::Trace`, dans `Element::Stroke { trace }`, `#[serde(default)]`) : l'appui
+  (après la courbe de pression) et l'instant de chaque point du chemin, le toucher du moment et la
+  couleur B. Le moteur les enregistre pendant le geste (`StrokeState::path_pressure`,
+  `path_time`) ; `commit_vector_stroke` les garde avec le réglage complet (`for_vector` rend
+  maintenant toujours le réglage, texturé ou non) et **ne simplifie plus le chemin** (la
+  simplification déplaçait les empreintes). Pas de graine à garder : elle est fixe (`RNG_SEED`).
+- **Le rendu par rejeu** (`render_stroke_alone`) : un `StrokeState` sans lissage reçoit les points
+  du chemin — qui sont déjà les cibles lissées que le moteur a reçues pendant le geste — avec leur
+  appui et leur instant, le toucher (sa courbe et son seuil ont déjà joué), la couleur B. Mêmes
+  empreintes, même ordre, même hasard : **trait pour trait**. `mesures.txt` : écart bitmap /
+  vectoriel **0,0** sur toutes les brosses livrées, sur le « Trait » TVPaint d'Anthony et sur les
+  panneaux TVPaint importés (planches `01` à `11`, `30`, `40` à `57`). Un trait sans appuis (vieux
+  fichier, trait coupé, interpolé) retrouve l'appui d'après ses rayons (`pressure_for_radius`) ;
+  un trait sans réglage (vieux fichier, formes) garde le trait lisse d'avant.
+- **Le cache de pixels** (`StrokeCache`, `CachedPixels`) : au premier rendu, le trait rendu seul
+  est gardé en **tuiles creuses de 64 × 64** (celles qu'il touche : un trait fin en diagonale de la
+  feuille coûte ses tuiles, pas sa boîte), avec une signature de ce qui fait ses pixels (couleur,
+  opacité, dureté, réglage, trace) ; les rendus suivants posent ces pixels (`blit_cache`). Le cache
+  est partagé entre les copies du trait (annulation, aperçu en cours) ; un trait dont la signature
+  a changé est rerendu ; `set_color`, `scale_width`, `invalidate_cache` et **toute transformation**
+  (`Element::transformed`) le vident. Plafond : 1024 tuiles (16 Mo) par trait, au-delà le trait est
+  rejoué à chaque rendu ; **budget global** 512 Mo (`CACHE_BUDGET_BYTES`), au-delà les pixels les
+  moins récemment posés sont rendus (registre des caches vivants, `Registry`). Pas dans le fichier.
+- **L'aperçu d'un geste** : `Element::transformed_preview` garde le cache et compose la
+  transformation (`xf`) ; une translation est **arrondie au pixel** (copie nette, 8 fois moins
+  chère que le rééchantillonnage), échelle et rotation sont rééchantillonnées depuis le cache (un peu
+  floues pendant le geste). Au lâcher, l'aperçu reste affiché et le **rendu exact arrive d'un fil de
+  travail** (`rejeu.rs`), voir §3 ter.
+- **Format** : `project::VERSION` 24 ; un fichier d'avant se relit (trace vide) ; une version
+  d'avant refuse un fichier d'après (comme pour tout nouveau format). Dans le fichier, `appui` est
+  en entiers sur 16 bits et `instants` en dixièmes de milliseconde depuis le premier ; un trait
+  sans trace n'écrit pas le champ.
+- Gomme vectorielle, cutter, enveloppe, interpolation : les morceaux et les traits refaits
+  **gardent leurs appuis et leurs instants, interpolés** aux coupes et aux points ajoutés
+  (`Trace::sample`, `densify_traced`, `piece_traced`) ; les traits non touchés ne bougent pas d'un
+  point. Perspective, export Storyboard Pro : la trace suit (`without_cache`). Copier-coller et
+  enregistrement : la trace suit.
+
+### Mesures (`vecto_tests::vector_selection_drag_is_fast_with_the_pixel_cache`, essai ignoré)
+
+50 traits de Crayon graphite sur 1920×1080, tous sélectionnés et déplacés image après image :
+- avant (chaque image rejoue le moteur, comme `select_drag` le faisait) : **103,9 ms par image** ;
+- après (pixels en cache copiés) : **3,9 ms par image** (1,9 ms avec le cache en tuiles, §3 ter) ;
+- premier rendu des 50 traits (rejeu, une fois) : 101 ms ;
+- mémoire du cache : **101 Ko par trait**, 5,0 Mo pour les 50 (131 Ko par trait en tuiles).
+
+Tests : `vecto_tests.rs` — rendu vectoriel identique au bitmap pour graphite, encre, gouache,
+feutre, fusain, pinceau rond, brosse à deux couleurs (et depuis le cache) ; un trait déplacé est
+son image décalée pendant le geste, rejoué exact au lâcher ; les anciens traits, les morceaux
+coupés, le relire après enregistrement ; un trait recoloré oublie son cache. 586 tests passent.
+
+### Ce qui reste
+
+- **Peinture humide entre traits** : chaque trait est rejoué seul, la gouache ne se mêle plus à ce
+  que les traits d'avant ont posé sur le calque (écart 4 d'alpha sur 11 % des pixels aux
+  croisements des hachures, planche `10_pelure_gouache.png`). Pour l'avoir, il faudrait rejouer
+  sur le composite des traits d'avant — incompatible avec un cache par trait ; à décider si la
+  gouache compte sur un calque vectoriel.
+- **Connexion à la vitesse** : rejouée depuis les positions lissées, pas brutes (vitesse un peu
+  différente) ; aucune brosse livrée ne s'en sert.
+- **Rotation et échelle pendant le geste** : rééchantillonnées (floues) jusqu'au lâcher ; le
+  rendu exact revient quelques instants après le lâcher (fil de travail).
+- **Morceaux** (gomme, cutter) : gardent leurs appuis, mais repartent d'un état neuf (phase des
+  empreintes, charge) — P5 du plan, pas fait. Pendant le geste de la gomme, les morceaux coupés
+  sont rejoués sur le fil de l'interface (quelques traits, ≈ 2 ms chacun) : à passer en aperçu
+  (cache du trait parent moins le disque) si ça se sent.
+- **Relecture** : les appuis au 1/65535 et les instants au dixième de milliseconde font, à la
+  relecture, un écart d'un niveau sur quelques pixels isolés (invisible).
+
+## 3 ter. Revue, et règle « sans latence » (branche `vecto`, 2026-10-18)
+
+Une revue de la branche a confirmé 23 constats (cache jamais invalidé hors du glissé, gomme qui
+simplifiait les traits voisins et faisait sauter l'opacité des morceaux, mémoire sans limite,
+chargement ralenti, glissé non entier huit fois plus lent, empreintes hors de la boîte, traits de
+plus de 2 M px sans cache, fichier gonflé, papier partagé changé, doc du format fausse). Puis
+Anthony, après essai : « on a un vrai souci de ralentissement avec les brosses vecto quand elles
+sont enveloppées et qu'on veut les déplacer. Ma priorité est d'avoir un logiciel qui réponde
+toujours très rapidement, sans latence ».
+
+**Règle de conception (appliquée partout)** : pendant un geste (glisser, enveloppe, perspective,
+échelle, rotation, flèches), **jamais de rejeu du moteur sur le fil de l'interface**. On montre les
+pixels en cache déformés à la volée ; le rendu exact (le rejeu) se fait dans un fil de travail
+(`rejeu.rs`) et remplace l'aperçu quand il est prêt — au lâcher non plus, rien ne bloque.
+
+Ce qui a été fait :
+- **Gomme, cutter, enveloppe, intervalles** : les morceaux gardent leurs appuis et instants
+  (interpolés) ; plus de `simplify_strokes_in` sur les traits voisins ; une brosse dont l'opacité
+  seule suit l'appui garde son toucher léger sur ses morceaux.
+- **Invalidation** : `Element::transformed` vide le cache (agrandir la feuille, retourner un dessin,
+  changer la résolution, vieux projets) ; seul `transformed_preview` le garde (glissé, flèches).
+- **Mémoire** : cache en tuiles creuses, plafond 1024 tuiles par trait, budget global 512 Mo
+  (éviction du moins récent) ; les copies de l'historique partagent les caches (`Arc`).
+- **Glissé** : translation arrondie au pixel ; échelle et rotation posées depuis le cache (la
+  signature n'est pas vérifiée sur un aperçu, qui est par construction le trait rendu transformé).
+- **Boîte** : `bounds()` compte √2 − 1 de rayon en plus pour une pointe en image (tournée) ; le
+  rendu d'un trait est borné à `bounds() + 1,5` : refaire une zone = rendu complet.
+- **Enveloppe et perspective** : pendant le geste, la feuille des éléments choisis (posée depuis
+  les caches, `render_split`) est déformée par le maillage (`envelope::warp_raster_fast` :
+  projection au plus proche voisin par blocs, grille de 8 px, coût selon les pixels dessinés) et
+  posée sur le reste ; au lâcher, la géométrie seule et la demande de rejeu. Bitmap : même aperçu,
+  résultat exact (bilinéaire) au lâcher.
+- **Lâcher d'un glissé, flèches** : l'aperçu reste, le rejeu exact arrive en arrière-plan
+  (`App::rejeu_cel`, `App::poll_rejeu` : adopté seulement si le dessin n'a pas changé entre-temps ;
+  un rendu direct ou une annulation rend la demande caduque).
+- **Chargement** : `project::load_quick` affiche tout de suite les dessins vectoriels texturés en
+  rendu rapide (traits lisses) et les liste pour le rejeu en arrière-plan ; `project::load` reste
+  exact (essais, outils).
+- **Fichier** : `appui` en u16, `instants` en entiers relatifs ; champ `trace` omis s'il est vide.
+- **Papier** : les crayons ont leur « Papier à dessin fin » (`PAPER_GRAPHITE` = 6) ; le « Papier à
+  dessin » (3) a retrouvé son relief des étapes 1 à 3 (fusain, gomme à grain, réglages enregistrés).
+
+### Mesures (`revue_tests.rs`, essais ignorés, 1920 × 1080, 51 traits de graphite)
+
+Scénario d'Anthony (`envelope_then_drag_is_fast_on_the_ui_thread`), avant (d01fffe) → après :
+
+| Étape | Avant | Après (fil de l'interface) | Arrière-plan |
+|---|---|---|---|
+| Enveloppe en cours (1575 × 867 px) | rien d'affiché | **8,6 ms / image** (exact bilinéaire : 65 ms) | — |
+| Lâcher de l'enveloppe | **113 ms** (rejeu) | **0,5 ms** | 95–102 ms |
+| Glissé de la sélection enveloppée (pas de 3,4 × 2,6 px) | **44,9 ms / image** (bilinéaire) | **1,6 ms / image** | — |
+| Lâcher du glissé | **118 ms** (rejeu) | **0,1 ms** | 92 ms |
+| Une flèche (1 px) | 3,8 ms | **1,9 ms** | 92 ms |
+
+Glissé de 50 traits (`vecto_tests::vector_selection_drag_is_fast_with_the_pixel_cache`) : 1,9 ms
+par image (105,7 sans cache) ; cache 131 Ko par trait (tuiles). Chargement
+(`loading_a_big_project_is_measured`, 24 dessins × 30 traits, 8,7 Mo de JSON) : exact **1,60 s** ;
+rapide **0,28 s** affiché, puis 1,50 s de rejeu en arrière-plan. Fichier
+(`saved_traces_are_quantized_and_much_smaller`) : par trait de 200 points, points 8,7 Ko, trace
+2,35 Ko (3,25 Ko avant ; les instants de ce geste de synthèse sont courts, l'écart réel est plus
+grand), réglage 1,27 Ko — les points et le réglage restent les gros postes (à quantifier / dédoubler
+plus tard si la taille compte). 597 tests passent.
+
+### Essai d'Anthony sur la feuille flottante (2026-10-18, soir) : deux constats corrigés
+
+**Déplacement : des morceaux du dessin manquaient, coupés en ligne droite** (`affichage_tests.rs`).
+Le cache de pixels d'un trait, comme la feuille flottante, était à la taille de la feuille : ce qui
+dépassait de la feuille n'existait pas. Un trait qui en sortait par le haut ou la gauche, déplacé
+vers l'intérieur, montrait donc un bord droit là où la feuille s'arrêtait (21 % des pixels peints
+manquaient dans l'essai). Les fines lignes vues par-dessus sont les contours de sélection
+(`canvas.rs`, le trait médian de chaque trait choisi, 1 px) : ils continuaient là où les pixels
+manquaient. Maintenant un trait qui dépasse est rendu sur une image plus grande (marge de 1024 px au
+plus par côté, 8192 px de côté au plus : limite des textures), le grain du papier lu comme sur la
+feuille (`StrokeState::with_grain_offset`) : sur la feuille, mêmes pixels qu'avant (un niveau d'écart
+sur quelques pixels du bord, l'arrondi des positions décalées). La feuille flottante est élargie de
+ce qui dépasse (`render_split_extended`, `PlanItem::pre` devient `Pre { aff, dims }`, textures de la
+carte graphique à la taille de l'image du dessin). Coût mesuré (40 gros traits de gouache, feutre et
+fusain, 1920 × 1080, 11 dépassent) : saisie 11,0 ms contre 10,2 ms, une fois au début du geste ;
+feuille 2039 × 1455 (6,0 Mo de tuiles) ; 0,001 ms par image. Aussi corrigé : terminer un geste
+lâché avant l'arrivée du rendu exact (`apply_preview`) ne refaisait que la nouvelle place de la
+sélection et la laissait en double à l'ancienne. Limites : l'enveloppe et la perspective
+(`render_split`) n'ont pas encore cette marge ; la saisie d'une sélection dont des traits n'ont pas
+de pixels en cache (budget dépassé, projet qui vient de s'ouvrir) les rejoue sur le fil de
+l'interface, 20 ms par trait large (0,8 s pour 40) — d'où `App::warm_current_cel`, qui demande au
+fil de travail les traits manquants du dessin regardé, une fois par version.
+
+**Dessin : de la latence avec une brosse vectorielle texturée.** Le moteur ne ralentit pas avec la
+longueur du trait (`live_textured_stroke_cost_per_frame`, 4 points par image d'écran, de 400 à 2400
+points : 0,15 à 1,4 ms par image selon la brosse et la taille, sans croissance). Ce qui croît avec
+la longueur était la pose au lever du stylet : le trait était rejoué en entier sur le fil de
+l'interface (`vector_stroke_begin_and_commit_cost`, gouache de 40 px : 44 ms pour 600 points, 174 ms
+pour 2400). Maintenant l'aperçu du geste reste, le dessin est copié (0,07 ms) et le rendu exact
+vient d'un fil de travail (181 ms pour 2400 points, sans rien bloquer). Le fil ne rejoue plus tout
+le dessin à chaque demande : les traits aux pixels exacts en cache (signature juste) les gardent,
+seuls les aperçus déformés sont oubliés (`Rejeu::submit_with`) — un trait de plus coûte un trait.
 
 ## 4. Questions pour Anthony
 

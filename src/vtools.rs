@@ -19,8 +19,11 @@ pub(crate) struct VectorStroke {
     pub color: [u8; 3],
     pub opacity: f32,
     pub hardness: f32,
-    /// Pinceau texturé (7b), textures désignées par leur clé de contenu.
+    /// Le réglage complet, textures désignées par leur clé de contenu (7b, étape 5).
     pub brush: Option<Box<crate::brush::BrushSettings>>,
+    /// Le toucher et la couleur B du moment : la trace du trait (étape 5).
+    pub feel: crate::brush::Toucher,
+    pub secondary: [u8; 3],
 }
 
 pub(crate) struct VectorErase {
@@ -148,6 +151,10 @@ impl App {
             return self.bitmap_selection_bounds();
         }
         let sel = self.vsel.as_ref()?;
+        // Geste en cours : les éléments n'ont pas encore bougé, la boîte suit la feuille flottante.
+        if let (Some(f), Some(VDrag::Transform { bbox, .. })) = (&self.flottante, &self.vdrag) {
+            return Some(f.aff.apply_rect(*bbox));
+        }
         let d = self.drawing(sel.cel)?;
         let r = sel
             .items
@@ -195,9 +202,9 @@ impl App {
         }
         let (cel, prefix) = self.ensure_cel();
         let before = self.drawing(cel).cloned().unwrap_or_default();
-        // Pinceau texturé : l'aperçu prend ses textures, le trait gardera le réglage (7b).
+        // L'aperçu prend les textures du réglage, le trait gardera le réglage complet (7b, étape 5).
         let brush = self.brushes.for_vector(&settings).map(Box::new);
-        let textures = if brush.is_some() { self.brushes.textures(&settings) } else { Default::default() };
+        let textures = self.brushes.textures(&settings);
         // Peint derrière : l'aperçu passe déjà sous les autres traits ; le remplissage, lui, est un
         // élément vectoriel posé au lâcher (`commit_vector_stroke`).
         let mut stroke = StrokeState::new(cel, StrokeMode::Paint(self.color), settings, None, pen)
@@ -221,20 +228,27 @@ impl App {
             opacity: settings.opacity,
             hardness: settings.hardness,
             brush,
+            feel: self.toucher,
+            secondary: self.couleurs.prefs.back,
         });
         self.vsel = None;
         self.modified = true;
     }
 
     /// Pose le trait vectoriel tracé. `preview` : l'état des tuiles avant l'aperçu dessiné pendant
-    /// le geste.
+    /// le geste. `pressure` et `time` : l'appui et l'instant de chaque point de `path` (la trace,
+    /// étape 5) ; avec un réglage, le chemin est gardé tel quel (le simplifier déplacerait les
+    /// empreintes rejouées).
     pub(crate) fn commit_vector_stroke(
         &mut self,
         vs: VectorStroke,
         path: Vec<VPoint>,
+        pressure: Vec<f32>,
+        time: Vec<f64>,
         preview: Option<Vec<(usize, Option<crate::raster::Tile>)>>,
     ) {
-        let points = vector::simplify(&path, 0.25);
+        let replayed = vs.brush.is_some() && pressure.len() == path.len();
+        let points = if replayed { path.clone() } else { vector::simplify(&path, 0.25) };
         if points.is_empty() {
             // Rien à garder : on efface l'aperçu.
             if let (Some(tiles), Some(c)) = (preview, self.doc.cels.get_mut(&vs.cel)) {
@@ -246,12 +260,18 @@ impl App {
             }
             return;
         }
+        let trace = if replayed {
+            vector::Trace { pressure, time, feel: Some(vs.feel), secondary: Some(vs.secondary), cache: Default::default() }
+        } else {
+            vector::Trace::default()
+        };
         let element = Element::Stroke {
             points,
             color: vs.color,
             opacity: vs.opacity,
             hardness: vs.hardness,
             brush: vs.brush,
+            trace,
         };
         // Remplir la forme (`brushfill`) : une zone remplie de la couleur du trait, juste sous lui.
         let fill = if self.fill_shapes && self.tool != Tool::Eraser {
@@ -272,6 +292,19 @@ impl App {
             if let Some(f) = &fill {
                 d.elements.insert(at, f.clone());
             }
+        }
+        // Un trait au réglage complet se rejoue par le moteur, empreinte par empreinte : cela
+        // coûte autant que de le tracer (44 ms pour 600 points de gouache, 174 ms pour 2400), donc
+        // jamais sur le fil de l'interface (règle « sans latence »). L'aperçu du geste, déjà posé
+        // dans l'image du dessin, reste affiché ; le rendu exact arrive d'un fil de travail
+        // (`rejeu.rs`) qui pose le trait en cache et remplace l'image.
+        if replayed {
+            if let Some(c) = self.doc.cels.get_mut(&vs.cel) {
+                c.version += 1;
+            }
+            self.push_vector(vs.cel, vs.before, vs.prefix);
+            self.rejeu_cel(vs.cel);
+            return;
         }
         // Sous les autres, ou avec sa zone : on refait la zone du trait (le raccourci ci-dessous
         // suppose le trait seul, dessus tout le reste).
@@ -353,10 +386,8 @@ impl App {
         if !ve.changed {
             return;
         }
-        // Les morceaux coupés sont simplifiés ; le reste du dessin n'a pas bougé.
-        if let Some(d) = self.drawing_mut(ve.cel) {
-            d.simplify_strokes_in(0.25, ve.region);
-        }
+        // Les morceaux coupés ont été refaits par `erase_circle` (un trait lisse simplifié, un trait
+        // rejoué avec ses appuis) ; le reste du dessin n'a pas bougé d'un pixel.
         self.refresh_cel_region(ve.cel, ve.region);
         self.push_vector(ve.cel, ve.before, None);
     }
@@ -491,30 +522,20 @@ impl App {
                     points.push(p);
                 }
             }
-            Some(VDrag::Transform {
-                handle,
-                start,
-                bbox,
-                originals,
-                changed,
-                ..
-            }) => {
+            Some(VDrag::Transform { cel, handle, start, bbox, changed, .. }) => {
                 let aff = transform_for(*handle, *start, p, *bbox, shift);
+                let (cel, first) = (*cel, !*changed);
                 *changed = true;
-                let Some(sel) = &self.vsel else { return };
-                let Some(cel) = self.doc.cels.get_mut(&sel.cel) else { return };
-                let Some(d) = cel.vector.as_mut() else { return };
-                // On ne refait que là où étaient les éléments déplacés et là où ils arrivent.
-                let mut region = Rect::NOTHING;
-                for (k, &i) in sel.items.iter().enumerate() {
-                    if let (Some(dst), Some(src)) = (d.elements.get_mut(i), originals.get(k)) {
-                        region = region.union(dst.bounds().expand(1.5));
-                        *dst = src.transformed(&aff);
-                        region = region.union(dst.bounds().expand(1.5));
-                    }
+                // Feuille flottante (`flottante.rs`) : à la première image, le dessin sans la
+                // sélection et la sélection seule, faits une fois ; ensuite seule la
+                // transformation change (rien à refaire, rien à renvoyer à la carte graphique).
+                if first {
+                    let items = self.vsel.as_ref().map(|s| s.items.clone()).unwrap_or_default();
+                    self.flottante = crate::flottante::Flottante::lift(&mut self.doc, cel, &items);
                 }
-                let tiles = cel.rerender_region(region.expand(2.0));
-                self.renderer.invalidate_tiles(&tiles);
+                if let Some(f) = self.flottante.as_mut() {
+                    f.aff = aff;
+                }
             }
             None => {}
         }
@@ -549,12 +570,56 @@ impl App {
                 }
             }
             VDrag::Transform {
-                cel, before, changed, ..
+                cel, before, originals, changed, ..
             } => {
-                if changed {
+                let aff = self.flottante.as_ref().map(|f| f.aff);
+                if let (true, Some(aff)) = (changed, aff) {
+                    // La transformation du geste passe à la géométrie des éléments choisis, sans
+                    // rien refaire : la feuille flottante reste affichée, et le rendu exact (le
+                    // moteur rejoué sur leur nouvelle place) arrive d'un fil de travail quelques
+                    // instants après (`poll_rejeu`), sans rien bloquer.
+                    let items = self.vsel.as_ref().map(|s| s.items.clone()).unwrap_or_default();
+                    crate::flottante::Flottante::apply_geometry(&mut self.doc, cel, &items, &originals, &aff);
+                    if let Some(f) = self.flottante.as_mut() {
+                        f.pending = Some(crate::flottante::Pending { items, originals });
+                    }
+                    self.rejeu_cel(cel);
                     self.push_vector(cel, before, None);
+                } else {
+                    self.flottante = None;
+                    crate::flottante::Flottante::release(&mut self.doc);
                 }
             }
+        }
+    }
+
+    /// Un geste lâché dont la feuille flottante attend encore le rendu exact : l'utilisateur agit
+    /// (clic, touche) avant qu'il arrive, on met d'abord l'image du dessin à jour, à l'ancienne,
+    /// pour que tout ce qui suit parte d'une image juste.
+    pub(crate) fn flush_flottante_on_input(&mut self, ctx: &eframe::egui::Context) {
+        if !self.flottante.as_ref().is_some_and(|f| f.pending.is_some()) {
+            return;
+        }
+        use eframe::egui::Event;
+        let acts = ctx.input(|i| {
+            i.pointer.any_pressed() || i.events.iter().any(|e| matches!(e, Event::Key { pressed: true, .. } | Event::Text(_) | Event::Paste(_) | Event::Cut | Event::Copy))
+        });
+        if acts {
+            self.flush_flottante();
+        }
+    }
+
+    /// Termine tout de suite le travail d'un geste lâché : les éléments reprennent leurs pixels en
+    /// cache suivis, l'image du dessin est refaite là où quelque chose a changé, la feuille s'en va.
+    pub(crate) fn flush_flottante(&mut self) {
+        if !self.flottante.as_ref().is_some_and(|f| f.pending.is_some()) {
+            return;
+        }
+        let Some(f) = self.flottante.take() else { return };
+        crate::flottante::Flottante::release(&mut self.doc);
+        if let Some(p) = f.pending {
+            let tiles = crate::flottante::Flottante::apply_preview(&mut self.doc, f.src, &p.items, &p.originals, &f.aff);
+            self.renderer.invalidate_tiles(&tiles);
         }
     }
 

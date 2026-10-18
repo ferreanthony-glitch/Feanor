@@ -23,15 +23,16 @@ fn content_keys() {
 fn library_settings_for_vector() {
     let lib = BrushLibrary::builtin();
     lib.share();
-    assert!(lib.for_vector(&BrushSettings::brush()).is_none(), "sans texture : trait lisse");
+    // Depuis l'étape 5 du rendu, le réglage est toujours gardé (le trait est rejoué par le moteur
+    // bitmap) ; sans texture, il n'a pas de clé de texture.
+    let plain = lib.for_vector(&BrushSettings::brush()).expect("réglage gardé");
+    assert!(plain.tip.is_none() && plain.paper.is_none());
     let chalk = BrushSettings { paper: Some(PAPER_COARSE), grain: 1.0, ..BrushSettings::brush() };
     let v = lib.for_vector(&chalk).expect("texturé");
     let key = v.paper.expect("papier");
     assert_ne!(key & 0x8000_0000, 0);
     assert!(brushtex::shared_textures(&v).paper.is_some());
     assert!(brushtex::shared_image(TextureKind::Paper, key).is_some());
-    // Un grain nul ne compte pas.
-    assert!(lib.for_vector(&BrushSettings { grain: 0.0, ..chalk }).is_none());
 }
 
 fn chalk_stroke(lib: &BrushLibrary) -> Element {
@@ -42,6 +43,7 @@ fn chalk_stroke(lib: &BrushLibrary) -> Element {
         opacity: 1.0,
         hardness: 0.8,
         brush: lib.for_vector(&s).map(Box::new),
+        trace: Default::default(),
     }
 }
 
