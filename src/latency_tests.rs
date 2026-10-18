@@ -68,6 +68,29 @@ fn region_rerender_matches_full_rerender() {
     assert_eq!(same(&c, &base), 0);
 }
 
+/// Précision de `thread::sleep` sous Windows (sensation des brosses, §2.6) : le rythme des images
+/// de Pelure dort « 2 ms − écoulé » entre deux images (`App::update`). Si la minuterie ne valait que
+/// 15,6 ms, chaque image attendrait trop et le trait prendrait du retard. Lancé à la main
+/// (`--ignored`) : affiche le dépassement moyen et le pire sur 200 sommeils de 2 ms, et échoue
+/// au-delà de 1 ms de dépassement moyen (il faudrait alors remplacer le sommeil).
+#[test]
+#[ignore]
+fn frame_pacing_sleep_is_precise() {
+    use std::time::{Duration, Instant};
+    let want = Duration::from_micros(2_000);
+    let over: Vec<f64> = (0..200)
+        .map(|_| {
+            let t = Instant::now();
+            std::thread::sleep(want);
+            t.elapsed().saturating_sub(want).as_secs_f64() * 1000.0
+        })
+        .collect();
+    let mean = over.iter().sum::<f64>() / over.len() as f64;
+    let worst = over.iter().cloned().fold(0.0, f64::max);
+    println!("sommeil de 2 ms : dépassement moyen {mean:.3} ms, pire {worst:.3} ms");
+    assert!(mean < 1.0, "dépassement moyen {mean:.3} ms : minuterie grossière, remplacer le sommeil");
+}
+
 #[test]
 fn new_stroke_on_top_matches_full_rerender() {
     let mut c = busy_cel();
