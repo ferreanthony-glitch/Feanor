@@ -610,6 +610,19 @@ Les messages de la barre d'état ne se perdent plus : survole-le pour le lire en
 pour voir les précédents. Les avis importants (enregistrement, ouverture, erreurs, fin de
 propagation, export) restent aussi quelques secondes en bas à droite ; un clic les ferme.
 
+## Menus courts
+
+Les menus montrent l'essentiel ; le reste est rangé dans un sous-menu (« Plans », « Importer »,
+« Ordre », « Plus »…) ou une fenêtre :
+- Fichier > Exporter… : film, images, image courante, PDF, page HTML, son, Storyboard Pro, et la
+  case « PNG sans le papier » ;
+- Fichier > Préférences… : copie de secours, dernier projet rouvert, croix du système, panneaux
+  ajustés, raccourcis clavier.
+
+Ce qui a déjà un bouton sous le dessin (zoom, rotation, miroir, pelure, table lumineuse, caméra)
+n'est plus répété dans Affichage ni dans le clic droit du dessin. La couleur du papier se règle
+dans l'onglet du bas Arrière-plan. Toute commande reste trouvable avec Ctrl+K.
+
 ## Panneaux qui s'ajustent
 
 Quand deux panneaux sont l'un sur l'autre, celui des réglages (réglages de l'outil, guides, fiche,

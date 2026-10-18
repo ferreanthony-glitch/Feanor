@@ -1259,6 +1259,16 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         `run_action` et `pane_ui` : aucun des endroits qui enregistrent n'a changé), sinon la
         sorte de modification ; clic sur une étape : annuler ou rétablir jusque-là ; les étapes
         annulées restent en gris dessous. `historyui.rs` ;
+      - **menus courts** (Anthony : « certains menus contiennent trop de choses et noient les
+        informations principales » ; « suis tes recommandations ») : barre de menus de 135 lignes
+        de premier niveau à environ 75 (Fichier 25 → 12, Édition 13 → 10, Storyboard 22 → 9,
+        Calques 28 → 12, Affichage 25 → 9) ; Fichier > Exporter… et Préférences… (`prefsui.rs`,
+        actions `fichier.exporter` et `fichier.preferences`, sans touche) ; sous-menus Importer,
+        Plans, Aller à, Caméra, Plateau, Guides, Ordre, Presse-papiers, Plus ; le sous-menu
+        Couleur de l'Édition retiré (tout est dans le panneau Couleur). Clic droit : dessin 16 → 8,
+        calque au montage 28 → 13 (Options du calque, Animation, Effets en sous-menus), calque du
+        panneau 22 → 8, en-tête de timeline 14 → 10, case de timeline 21 → 12 (Insérer ou retirer,
+        Plus). Rien n'est perdu : sous-menus, boutons, Ctrl+K ;
       - **enveloppe de Bézier** (Anthony : « maintenir Ctrl permet de saisir une poignée de Bézier
         des coins pour transformer la forme » ; son choix : « B, comme l'outil Perspective ») : dans
         l'outil Transformer, Ctrl + glisser un coin du cadre ouvre une enveloppe sur le dessin
