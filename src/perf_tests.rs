@@ -738,6 +738,12 @@ fn perf_scale() {
         b.app.goto_global((k * 977) % total);
         bouge(k, zone)
     });
+    // Une étape d'annulation de structure copie toute la structure (pas les dessins).
+    let t = Instant::now();
+    for _ in 0..20 {
+        std::hint::black_box(b.app.doc.structure());
+    }
+    println!("PERF étape d'annulation de structure, 600 plans x 3 calques : {:.2} ms", t.elapsed().as_secs_f64() * 1e3 / 20.0);
 }
 
 /// Dessiner à la souris sur un calque vectoriel qui porte déjà trente traits larges et texturés

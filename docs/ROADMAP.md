@@ -1828,6 +1828,23 @@ moyens, rien de copié).
 - Aide > À propos de SHOT… (`aide.a_propos`, `aproposui.rs`) : fenêtre modale avec le logo, la
   version de Cargo.toml et « Anciennement Pelure » ; Échap, un clic à côté ou Fermer la ferment.
 
+## Passe de performance (2026-10-19, branche `perf`) ✅
+
+Demande d'Anthony : « avancer sur l'optimisation du soft et le rendre le plus performant possible
+rapidement. C'est prioritaire. » Détail, mesures avant / après et leviers restants :
+`docs/PERFORMANCE.md`.
+- Mesurer tout le logiciel : superposition « Performance » (`vue.performance`, Ctrl+K ou menu
+  Affichage : images par seconde, temps par panneau, réveils, arrière-plan) et banc sans fenêtre
+  (`perf_tests.rs`, application complète et carte graphique, essais `--ignored`).
+- Ouvrir un projet de 100 plans : 85 s → 7 s, sur un autre fil avec avancement ; enregistrer 81 → 9 s ;
+  timeline zoomée 76 → 4 ms par image ; timeline de 2 000 images 20 → 5 ms ; montage de 600 plans
+  32 → 4 ms ; vignettes ÷5 à ÷12 ; démarrage avec des centaines de pinceaux importés 5,2 → 0,4 s.
+- Compilation : `target-cpu=x86-64-v3` (interface -20 %, PNG -26 %) ; LTO et une seule unité de
+  génération écartés (aucun gain, compilation ×2 à ×3,5) ; `panic = "abort"` écarté (SHOT compte sur
+  les panics rattrapés).
+- Reste (classé dans le document) : enregistrer en arrière-plan, textures de dessin à la taille du
+  contenu, image composée gardée, vignettes hors du fil de l'interface.
+
 ## Raccourcis proposés, à valider
 
 Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans `keymap.toml`) :
