@@ -38,9 +38,29 @@ pub struct Cel {
     pub vector: Option<VectorDrawing>,
     /// Augmente à chaque modification (sert à savoir quand refaire les vignettes).
     pub version: u64,
-    /// Strate Fond (`fond.rs`) : ce qu'on a peint dans le fond de ce dessin, sous le trait (un
-    /// dessin bitmap, avec sa propre version) ; rien tant qu'on n'y a pas peint.
-    pub fond: Option<Box<Cel>>,
+    /// Strate Fond (`fond.rs`) : ce qu'on a peint dans le fond de ce dessin, sous le trait, et où
+    /// on l'a coupé ; rien tant qu'on n'y a pas touché.
+    pub fond: Option<Box<Strate>>,
+}
+
+/// La strate Fond d'un dessin (`fond.rs`).
+#[derive(Clone)]
+pub struct Strate {
+    /// Ce qu'on a peint dans le fond (un dessin bitmap ; sa version augmente aussi quand la coupe
+    /// change).
+    pub peinture: Cel,
+    /// Où le fond est coupé, à la gomme dans la strate Fond (l'opacité dit combien).
+    pub coupe: Raster,
+}
+
+impl Strate {
+    pub fn new(width: usize, height: usize) -> Self {
+        Strate { peinture: Cel::bitmap(Raster::new(width, height)), coupe: Raster::new(width, height) }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.peinture.is_empty() && self.coupe.tiles.iter().all(Option::is_none)
+    }
 }
 
 impl Cel {

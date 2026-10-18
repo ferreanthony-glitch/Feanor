@@ -639,9 +639,14 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     fs::rename(&tmp, path).map_err(|e| format!("{} : {e}", path.display()))
 }
 
-/// La strate Fond du dessin `id` (format 23), à côté de lui.
+/// La peinture de la strate Fond du dessin `id` (format 23), à côté de lui.
 fn fond_path(dir: &Path, id: CelId) -> PathBuf {
     dir.join(DRAWINGS).join(format!("{id}_fond.png"))
+}
+
+/// La coupe de la strate Fond du dessin `id` (où le fond est retiré à la gomme).
+fn coupe_path(dir: &Path, id: CelId) -> PathBuf {
+    dir.join(DRAWINGS).join(format!("{id}_coupe.png"))
 }
 
 fn drawing_path(dir: &Path, id: CelId, vector: bool) -> PathBuf {
@@ -799,12 +804,16 @@ pub fn prepare_save(
             (None, None) => DrawingData::Raster(cel.raster.clone()),
         };
         drawings.push((path, data));
-        if let (true, Some(f)) = (fonds.contains(&id), cel.fond.as_ref()) {
-            let data = match same_elsewhere.map(|d| fond_path(d, id)).filter(|p| p.exists()) {
-                Some(from) => DrawingData::CopyFrom(from),
-                None => DrawingData::Raster(f.raster.clone()),
-            };
-            drawings.push((fond_path(dir, id), data));
+        // La strate Fond : sa peinture et sa coupe, à côté du dessin.
+        if let (true, Some(s)) = (fonds.contains(&id), cel.fond.as_ref()) {
+            let parts: [(fn(&Path, CelId) -> PathBuf, &Raster); 2] = [(fond_path, &s.peinture.raster), (coupe_path, &s.coupe)];
+            for (path_of, raster) in parts {
+                let data = match same_elsewhere.map(|d| path_of(d, id)).filter(|p| p.exists()) {
+                    Some(from) => DrawingData::CopyFrom(from),
+                    None => DrawingData::Raster(raster.clone()),
+                };
+                drawings.push((path_of(dir, id), data));
+            }
         }
         written.insert(id, cel.version);
     }
@@ -946,7 +955,7 @@ fn remove_unused_sounds(dir: &Path, used: &BTreeSet<u64>) -> usize {
 }
 
 /// Efface les dessins du dossier qui ne servent plus (seulement les fichiers « <nombre>.png/json »),
-/// et les strates Fond « <nombre>_fond.png » des dessins qui n'en ont plus.
+/// et les strates Fond « <nombre>_fond.png » et « <nombre>_coupe.png » des dessins qui n'en ont plus.
 fn remove_unused(dir: &Path, used: &BTreeSet<CelId>, fonds: &BTreeSet<CelId>) -> usize {
     let Ok(entries) = fs::read_dir(dir.join(DRAWINGS)) else { return 0 };
     let mut removed = 0;
@@ -954,7 +963,7 @@ fn remove_unused(dir: &Path, used: &BTreeSet<CelId>, fonds: &BTreeSet<CelId>) ->
         let path = entry.path();
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
         let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-        if let (Some(id), "png") = (stem.strip_suffix("_fond").and_then(|s| s.parse::<CelId>().ok()), ext) {
+        if let (Some(id), "png") = (stem.strip_suffix("_fond").or_else(|| stem.strip_suffix("_coupe")).and_then(|s| s.parse::<CelId>().ok()), ext) {
             if !fonds.contains(&id) && fs::remove_file(&path).is_ok() {
                 removed += 1;
             }
@@ -1643,13 +1652,20 @@ fn load_sound(dir: &Path, entry: &SoundEntry) -> Result<Sound, String> {
 /// ignorée, le dessin reste).
 fn load_drawing(dir: &Path, id: CelId, w: usize, h: usize) -> Result<Cel, String> {
     let mut cel = load_line(dir, id, w, h)?;
-    let path = fond_path(dir, id);
-    if path.exists() {
-        if let Ok(img) = image::open(&path).map(|i| i.to_rgba8()) {
-            if img.width() as usize == w && img.height() as usize == h {
-                cel.fond = Some(Box::new(Cel::bitmap(Raster::from_rgba(w, h, img.as_raw()))));
-            }
+    let read = |path: PathBuf| -> Option<Raster> {
+        let img = image::open(&path).ok()?.to_rgba8();
+        (img.width() as usize == w && img.height() as usize == h).then(|| Raster::from_rgba(w, h, img.as_raw()))
+    };
+    let (paint, cut) = (read(fond_path(dir, id)), read(coupe_path(dir, id)));
+    if paint.is_some() || cut.is_some() {
+        let mut s = crate::document::Strate::new(w, h);
+        if let Some(r) = paint {
+            s.peinture.raster = r;
         }
+        if let Some(r) = cut {
+            s.coupe = r;
+        }
+        cel.fond = Some(Box::new(s));
     }
     Ok(cel)
 }

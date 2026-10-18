@@ -24,10 +24,12 @@ pub enum Edit {
     },
     /// Dessin vectoriel complet avant modification.
     Vector { cel: CelId, drawing: VectorDrawing },
-    /// Tuiles de la strate Fond d'un dessin avant modification (`fond.rs`).
+    /// Tuiles de la strate Fond d'un dessin avant modification (`fond.rs`) : sa peinture, ou sa
+    /// coupe (`coupe`).
     FondTiles {
         cel: CelId,
         tiles: Vec<(usize, Option<Tile>)>,
+        coupe: bool,
     },
     /// Tout le document hors dessins : séquences, scènes, panneaux et leurs textes, calques
     /// (images, expositions, réglages), pistes son, guides, papier, cadence.
@@ -49,16 +51,17 @@ impl Edit {
                 c.version += 1;
                 Edit::Tiles { cel, tiles }
             }
-            Edit::FondTiles { cel, tiles } => {
+            Edit::FondTiles { cel, tiles, coupe } => {
                 let Some(c) = doc.cels.get_mut(&cel) else {
                     return Edit::Group(Vec::new());
                 };
                 let (w, h) = (c.raster.width, c.raster.height);
-                let f = c.fond.get_or_insert_with(|| Box::new(crate::document::Cel::bitmap(crate::raster::Raster::new(w, h))));
-                let tiles = tiles.into_iter().map(|(i, t)| (i, std::mem::replace(&mut f.raster.tiles[i], t))).collect();
-                f.version += 1;
+                let s = c.fond.get_or_insert_with(|| Box::new(crate::document::Strate::new(w, h)));
+                let target = if coupe { &mut s.coupe } else { &mut s.peinture.raster };
+                let tiles = tiles.into_iter().map(|(i, t)| (i, std::mem::replace(&mut target.tiles[i], t))).collect();
+                s.peinture.version += 1;
                 c.version += 1;
-                Edit::FondTiles { cel, tiles }
+                Edit::FondTiles { cel, tiles, coupe }
             }
             Edit::Vector { cel, drawing } => {
                 let Some(c) = doc.cels.get_mut(&cel) else {

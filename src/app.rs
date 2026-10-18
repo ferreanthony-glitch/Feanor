@@ -586,6 +586,8 @@ pub struct App {
     /// trait), et le dessin dont on peint le fond en ce moment (affiché en direct).
     pub(crate) paint_fond: bool,
     pub(crate) fond_stroke: Option<CelId>,
+    /// Le trait qui suit le même geste sur la coupe du fond (la gomme coupe, le pinceau recoud).
+    pub(crate) fond_cut: Option<StrokeState>,
     /// Panneaux qui s'ajustent (`ajuste.rs`) : hauteur du contenu de chaque panneau à sa dernière
     /// image affichée, part posée par paire de panneaux, un bord a glissé à cette image.
     pub(crate) pane_heights: std::collections::HashMap<crate::dock::Pane, f32>,
@@ -875,6 +877,7 @@ impl App {
             prefs_window: false,
             paint_fond: false,
             fond_stroke: None,
+            fond_cut: None,
             pane_heights: Default::default(),
             fit_set: Default::default(),
             fit_busy: false,
@@ -1136,16 +1139,8 @@ impl App {
                     ctg: crate::ctg::input(self.layers(), li, frame),
                     fond: None,
                 };
-                // Fond sous le trait (`fond.rs`) : sa forme, puis, pendant qu'on peint dans ce
-                // fond, la peinture en direct ; le trait par-dessus.
-                if let Some(fond) = crate::render::fond_item(layer, &line) {
-                    let live = self.fond_stroke == Some(cel);
-                    let paint = PlanItem { fond: Some(crate::render::FondPart::Peinture), ..fond.clone() };
-                    items.push(fond);
-                    if live {
-                        items.push(paint);
-                    }
-                }
+                // Fond sous le trait (`fond.rs`), le trait par-dessus.
+                items.extend(crate::render::fond_item(layer, &line));
                 items.push(line);
                 // Calque CTG courant, à l'écran seulement : ses graffitis, pâles, par-dessus.
                 if onion && layer.ctg.is_some() && li == self.cur_layer && !self.playing {
@@ -1492,23 +1487,35 @@ impl App {
         }
         let mut stencil = self.stencil_for(cel);
         stencil.get_or_insert_with(|| crate::stencil::Stencil::new(w, h)).add(&crate::fond::mask(&cover, w, h), false, None);
-        let mode = if self.tool == Tool::Eraser { StrokeMode::Erase } else { StrokeMode::Paint(self.color) };
-        let textures = self.brushes.textures(&settings);
+        let erase = self.tool == Tool::Eraser;
+        let mode = if erase { StrokeMode::Erase } else { StrokeMode::Paint(self.color) };
         let mut stroke = StrokeState::new(cel, mode, settings, prefix, pen)
-            .with_textures(textures)
+            .with_textures(self.brushes.textures(&settings))
             .with_feel(self.toucher)
             .with_zoom(self.layer_zoom())
             .with_secondary(self.couleurs.prefs.back)
             .on_layer(false, stencil)
             .with_options(false, false, self.close_tolerance());
+        // La coupe suit le même geste : la gomme coupe le fond (elle peint la coupe), le pinceau
+        // le recoud (il efface la coupe).
+        let cut_mode = if erase { StrokeMode::Paint([255, 255, 255]) } else { StrokeMode::Erase };
+        let mut cut = StrokeState::new(cel, cut_mode, settings, None, pen)
+            .with_textures(self.brushes.textures(&settings))
+            .with_feel(self.toucher)
+            .with_zoom(self.layer_zoom())
+            .on_layer(false, None)
+            .with_options(false, false, self.close_tolerance());
         let mut dirty = Vec::new();
         let time = self.input_time;
         if let Some(c) = self.doc.cels.get_mut(&cel) {
-            let f = c.fond.get_or_insert_with(|| Box::new(crate::document::Cel::bitmap(crate::raster::Raster::new(w, h))));
-            stroke.add_point_at(&mut f.raster, p, pressure, time, &mut dirty);
+            let s = c.fond.get_or_insert_with(|| Box::new(crate::document::Strate::new(w, h)));
+            stroke.add_point_at(&mut s.peinture.raster, p, pressure, time, &mut dirty);
+            cut.add_point_at(&mut s.coupe, p, pressure, time, &mut dirty);
         }
+        crate::fx::fond_patch(&self.doc, cel, &r, &dirty);
         self.renderer.invalidate_tiles(&dirty);
         self.fond_stroke = Some(cel);
+        self.fond_cut = Some(cut);
         self.stroke = Some(stroke);
         self.modified = true;
     }
@@ -1549,14 +1556,23 @@ impl App {
     pub(crate) fn stroke_to(&mut self, p: Pos2, pressure: f32) {
         let time = self.input_time;
         let Some(stroke) = self.stroke.as_mut() else { return };
-        let Some(c) = self.doc.cels.get_mut(&stroke.cel) else { return };
+        let cel = stroke.cel;
+        let Some(c) = self.doc.cels.get_mut(&cel) else { return };
         let mut dirty = Vec::new();
-        // (Un trait dans la strate Fond peint son dessin à elle.)
-        let target = match (self.fond_stroke == Some(stroke.cel), c.fond.as_mut()) {
-            (true, Some(f)) => &mut f.raster,
-            _ => &mut c.raster,
-        };
-        stroke.add_point_at(target, p, pressure, time, &mut dirty);
+        // Un trait dans la strate Fond peint sa peinture et sa coupe, et le fond affiché suit.
+        if self.fond_stroke == Some(cel) {
+            if let Some(s) = c.fond.as_mut() {
+                stroke.add_point_at(&mut s.peinture.raster, p, pressure, time, &mut dirty);
+                if let Some(cut) = self.fond_cut.as_mut() {
+                    cut.add_point_at(&mut s.coupe, p, pressure, time, &mut dirty);
+                }
+            }
+            if let Some(r) = self.layer().fond {
+                crate::fx::fond_patch(&self.doc, cel, &r, &dirty);
+            }
+        } else {
+            stroke.add_point_at(&mut c.raster, p, pressure, time, &mut dirty);
+        }
         self.renderer.invalidate_tiles(&dirty);
     }
 
@@ -1581,20 +1597,24 @@ impl App {
             let mut dirty = Vec::new();
             // Un trait dans la strate Fond : fini dans son dessin, annulé par `FondTiles`.
             if self.fond_stroke.take() == Some(cel) {
-                let edit = match self.doc.cels.get_mut(&cel) {
-                    Some(c) => {
-                        let edit = c.fond.as_mut().and_then(|f| stroke.finish(&mut f.raster, &mut dirty));
-                        if let Some(f) = c.fond.as_mut() {
-                            f.version += 1;
+                let mut cut = self.fond_cut.take();
+                let mut edits = Vec::new();
+                if let Some(c) = self.doc.cels.get_mut(&cel) {
+                    if let Some(s) = c.fond.as_mut() {
+                        edits.extend(stroke.finish(&mut s.peinture.raster, &mut dirty).map(|e| crate::fond::to_fond_edit(e, false)));
+                        if let Some(cut) = cut.as_mut() {
+                            edits.extend(cut.finish(&mut s.coupe, &mut dirty).map(|e| crate::fond::to_fond_edit(e, true)));
                         }
-                        c.version += 1;
-                        edit
+                        s.peinture.version += 1;
                     }
-                    None => None,
-                };
+                    c.version += 1;
+                }
                 self.renderer.invalidate_tiles(&dirty);
-                if let Some(edit) = edit {
-                    self.history.push(crate::fond::to_fond_edit(edit));
+                // Peinture et coupe : une seule étape d'annulation.
+                match edits.len() {
+                    0 => {}
+                    1 => self.history.push(edits.pop().unwrap_or(Edit::Group(Vec::new()))),
+                    _ => self.history.push(Edit::Group(edits)),
                 }
             } else {
                 let edit = match self.doc.cels.get_mut(&cel) {
@@ -2362,6 +2382,7 @@ impl App {
         self.cur_frame = 0;
         self.stroke = None;
         self.fond_stroke = None;
+        self.fond_cut = None;
         self.vstroke = None;
         self.verase = None;
         self.vsel = None;
@@ -2394,6 +2415,7 @@ impl App {
     pub(crate) fn after_stage_change(&mut self) {
         self.stroke = None;
         self.fond_stroke = None;
+        self.fond_cut = None;
         self.vstroke = None;
         self.verase = None;
         self.vsel = None;

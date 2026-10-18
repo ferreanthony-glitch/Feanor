@@ -28,11 +28,10 @@ pub struct PlanItem {
 /// Ce que montre un élément de fond.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum FondPart {
-    /// La forme déduite du trait, de ces réglages, avec ce qu'on a peint dans le fond, dans la
-    /// forme (recalculée quand le dessin change).
+    /// La forme déduite du trait, de ces réglages, moins ce qu'on en a coupé, avec ce qu'on a
+    /// peint dans le fond, dans la forme (recalculée quand le dessin change ; refaite tuile par
+    /// tuile pendant qu'on peint dedans, `fx::fond_patch`).
     Forme(crate::fond::FondReglages),
-    /// Ce qu'on a peint dans le fond, tel quel : pendant qu'on y peint, suivi en direct.
-    Peinture,
 }
 
 /// L'élément du fond sous le trait du calque `layer` (s'il en a un), à placer juste sous `line`,

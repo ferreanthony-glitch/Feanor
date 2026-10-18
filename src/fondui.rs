@@ -42,7 +42,7 @@ impl App {
                 true,
                 ph::USER_SQUARE,
                 "Le fond",
-                "Le pinceau, le crayon et la gomme peignent dans le fond, sous le trait : la peinture reste dans sa forme.",
+                "Le pinceau et le crayon peignent dans le fond, sous le trait (la peinture reste dans sa forme, et recoud le fond là où il était coupé) ; la gomme coupe le fond.",
                 &key,
                 "pinceau.strate_fond",
             );
@@ -84,7 +84,7 @@ impl App {
             self.renderer.invalidate_all();
         }
         if self.paint_fond {
-            ui.label(RichText::new("Strate Fond : la peinture reste dans la forme du fond, sous le trait.").small().weak());
+            ui.label(RichText::new("Strate Fond : la peinture reste dans la forme, sous le trait ; la gomme coupe le fond, le pinceau le recoud.").small().weak());
         }
     }
 

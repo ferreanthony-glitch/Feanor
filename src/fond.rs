@@ -218,16 +218,17 @@ pub fn silhouette(line: &Raster, r: &FondReglages) -> Vec<u8> {
     out
 }
 
-/// L'étape d'annulation d'un trait peint dans la strate Fond : ses tuiles sont celles du fond
-/// (la création éventuelle du dessin, avant, reste telle quelle).
-pub fn to_fond_edit(edit: crate::history::Edit) -> crate::history::Edit {
+/// L'étape d'annulation d'un trait peint dans la strate Fond : ses tuiles sont celles de la
+/// peinture du fond, ou de sa coupe (`coupe`) ; la création éventuelle du dessin, avant, reste
+/// telle quelle.
+pub fn to_fond_edit(edit: crate::history::Edit, coupe: bool) -> crate::history::Edit {
     use crate::history::Edit;
     match edit {
-        Edit::Tiles { cel, tiles } => Edit::FondTiles { cel, tiles },
+        Edit::Tiles { cel, tiles } => Edit::FondTiles { cel, tiles, coupe },
         // (Le trait est la dernière étape du groupe.)
         Edit::Group(mut edits) => {
             if let Some(last) = edits.pop() {
-                edits.push(to_fond_edit(last));
+                edits.push(to_fond_edit(last, coupe));
             }
             Edit::Group(edits)
         }
@@ -249,28 +250,59 @@ pub fn mask(cover: &[u8], width: usize, height: usize) -> Raster {
     out
 }
 
-/// Le fond à afficher sous le trait : la forme `cover` de la couleur `couleur`, et par-dessus,
-/// dans la forme seulement, ce qu'on a peint dans le fond (`paint`).
-pub fn compose(cover: &[u8], width: usize, height: usize, couleur: [u8; 3], paint: Option<&Raster>) -> Raster {
+/// Un pixel du fond : couverture `c` de la forme, coupée de `cut` (gomme dans la strate Fond),
+/// de la couleur `couleur`, avec par-dessus, dans la forme seulement, la peinture `paint`.
+fn compose_px(c: u8, cut: u8, couleur: [u8; 3], paint: Color32) -> Color32 {
+    let c = ((c as u32 * (255 - cut as u32) + 127) / 255) as u8;
+    if c == 0 {
+        return Color32::TRANSPARENT;
+    }
+    let fill = premultiply(couleur[0], couleur[1], couleur[2], c);
+    if paint.a() == 0 {
+        return fill;
+    }
+    // Peinture « par-dessus, dans la forme » : couleur = peinture × couverture + fond ×
+    // (1 − opacité de la peinture), opacité = celle du fond.
+    let (fa, sa) = (c as f32 / 255.0, paint.a() as f32 / 255.0);
+    let mix = |sc: u8, fc: u8| (sc as f32 * fa + fc as f32 * (1.0 - sa)).round().clamp(0.0, 255.0) as u8;
+    Color32::from_rgba_premultiplied(mix(paint.r(), fill.r()), mix(paint.g(), fill.g()), mix(paint.b(), fill.b()), c)
+}
+
+/// Le fond à afficher sous le trait : la forme `cover` de la couleur `couleur`, moins ce qu'on en
+/// a coupé (`cut`), et par-dessus, dans la forme seulement, ce qu'on a peint dans le fond (`paint`).
+pub fn compose(cover: &[u8], width: usize, height: usize, couleur: [u8; 3], paint: Option<&Raster>, cut: Option<&Raster>) -> Raster {
     let mut out = Raster::new(width, height);
-    for (p, &c) in cover.iter().enumerate() {
-        if c == 0 {
-            continue;
-        }
-        let (x, y) = (p % width, p / width);
-        let fill = premultiply(couleur[0], couleur[1], couleur[2], c);
-        let px = match paint.map(|r| r.get(x, y)) {
-            // Peinture « par-dessus, dans la forme » : couleur = peinture × couverture + fond ×
-            // (1 − opacité de la peinture), opacité = celle du fond.
-            Some(s) if s.a() > 0 => {
-                let (fa, sa) = (c as f32 / 255.0, s.a() as f32 / 255.0);
-                let mix = |sc: u8, fc: u8| (sc as f32 * fa + fc as f32 * (1.0 - sa)).round().clamp(0.0, 255.0) as u8;
-                Color32::from_rgba_premultiplied(mix(s.r(), fill.r()), mix(s.g(), fill.g()), mix(s.b(), fill.b()), c)
-            }
-            _ => fill,
-        };
-        let idx = out.tile_index_of(x, y);
-        out.tile_mut(idx)[(y % TILE) * TILE + x % TILE] = px;
+    for idx in 0..out.tiles.len() {
+        compose_tile(&mut out, idx, cover, couleur, paint, cut);
     }
     out
+}
+
+/// `compose` sur la seule tuile `idx` de `out` (suivi en direct pendant qu'on peint dans le fond).
+pub fn compose_tile(out: &mut Raster, idx: usize, cover: &[u8], couleur: [u8; 3], paint: Option<&Raster>, cut: Option<&Raster>) {
+    let width = out.width;
+    let (ox, oy, tw, th) = out.tile_bounds(idx);
+    let mut any = false;
+    let mut tile = [Color32::TRANSPARENT; TILE * TILE];
+    for y in 0..th {
+        for x in 0..tw {
+            let (gx, gy) = (ox + x, oy + y);
+            let c = cover[gy * width + gx];
+            if c == 0 {
+                continue;
+            }
+            let k = cut.map_or(0, |r| r.get(gx, gy).a());
+            let s = paint.map_or(Color32::TRANSPARENT, |r| r.get(gx, gy));
+            let px = compose_px(c, k, couleur, s);
+            if px.a() != 0 {
+                tile[y * TILE + x] = px;
+                any = true;
+            }
+        }
+    }
+    if any {
+        out.tiles[idx] = Some(Box::new(tile));
+    } else {
+        out.tiles[idx] = None;
+    }
 }

@@ -166,12 +166,13 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   `pane_ui` (outil sur le dessin, sinon nom du panneau) posent le temps de leur travail, puis
   rendent. Les ~60 endroits qui appellent `push` n'en savent rien.
 - Fond sous le trait (`fond.rs`, `fondui.rs`) : réglages par calque (`Layer::fond`), strate Fond
-  par dessin (`Cel::fond`, un `Cel` bitmap avec sa version). Le rendu ne suit pas en direct un
+  par dessin (`Cel::fond` : `Strate { peinture, coupe }`). Le rendu ne suit pas en direct un
   dessin dérivé (effets, CTG) pendant un trait : le fond est donc un élément à part, juste sous
   le trait (`render::fond_item`, `FondPart::Forme`, dérivé et gardé dans le cache de `fx`,
-  recalculé au lâcher) ; pendant qu'on peint dans le fond, `FondPart::Peinture` montre la strate
-  en direct (tuile par tuile dans `gpu::sync`). La peinture est gardée dans la forme par un
-  pochoir au moment de peindre, et de nouveau à la composition.
+  recalculé au lâcher). Pendant qu'on peint ou gomme dans le fond, `fx::fond_patch` refait ses
+  seules tuiles touchées (forme gardée dans `COVERS`, même version), que `gpu::sync` envoie
+  tuile par tuile. La peinture est gardée dans la forme par un pochoir au moment de peindre, et
+  de nouveau à la composition ; la coupe suit le geste dans un second `StrokeState`.
 - `workspace::Layout` garde ses anciens champs (panneaux affichés, tailles en pixels) : ils
   décrivent les dispositions de Pelure et sont convertis (`DockLayout::from_legacy`) quand
   `panneaux` manque (espaces enregistrés avant 5b).

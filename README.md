@@ -622,8 +622,10 @@ en une seule forme qui se recalcule à chaque trait (en animation aussi). Régla
 - le bord de l'image ferme la forme (un personnage coupé par le cadre a son fond jusqu'au bord).
 
 « Peindre dans : Trait | Fond » (dans les réglages, et sur la ligne du calque) : en « Fond », le
-pinceau, le crayon et la gomme peignent dans le fond, sous le trait, sans jamais le toucher, et
-la peinture reste dans la forme. Ctrl+Z annule chaque coup. Éteindre l'option retire le fond.
+pinceau et le crayon peignent dans le fond, sous le trait, sans jamais le toucher, et la peinture
+reste dans la forme ; la gomme **coupe le fond** (une zone fermée qu'on veut laisser voir à travers),
+et repeindre au même endroit le recoud. Tout se voit pendant le geste ; Ctrl+Z annule chaque coup.
+Éteindre l'option retire le fond.
 
 ## Menus courts
 

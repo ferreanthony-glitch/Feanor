@@ -689,14 +689,11 @@ impl std::ops::Deref for Shown<'_> {
 /// CTG, sinon un numéro propre à ce dessin, ces effets et ces sources.
 pub fn shown_id(item: &crate::render::PlanItem) -> CelId {
     // Fond sous le trait (`fond.rs`) : un numéro propre au fond de ce dessin.
-    if let Some(part) = &item.fond {
+    if let Some(crate::render::FondPart::Forme(r)) = &item.fond {
         let mut h = std::collections::hash_map::DefaultHasher::new();
         item.cel.hash(&mut h);
         "fond".hash(&mut h);
-        match part {
-            crate::render::FondPart::Forme(r) => r.hash(&mut h),
-            crate::render::FondPart::Peinture => "peinture".hash(&mut h),
-        }
+        r.hash(&mut h);
         return h.finish() | (1 << 63);
     }
     match &item.ctg {
@@ -717,21 +714,43 @@ pub fn shown_id(item: &crate::render::PlanItem) -> CelId {
 pub fn shown<'a>(doc: &'a Document, item: &crate::render::PlanItem) -> Option<Shown<'a>> {
     match item.fond {
         None => shown_with(doc, item.cel, &item.fx, item.ctg.as_ref()),
-        // Ce qu'on peint dans le fond, en direct (la strate elle-même).
-        Some(crate::render::FondPart::Peinture) => doc.cels.get(&item.cel)?.fond.as_deref().map(Shown::Plain),
         Some(crate::render::FondPart::Forme(r)) => fond_shown(doc, item, &r),
     }
 }
 
-/// Le fond sous le trait du dessin de `item` : sa forme et ce qu'on y a peint (calculé une fois,
-/// puis gardé tant que le dessin, sa strate Fond et les réglages ne changent pas).
+/// Formes de fond gardées (`fond::silhouette`, pour refaire le fond tuile par tuile pendant qu'on
+/// peint dedans) : numéro du fond → version du dessin, forme, dernier usage.
+type Cover = (u64, Arc<Vec<u8>>, u64);
+static COVERS: Mutex<BTreeMap<CelId, Cover>> = Mutex::new(BTreeMap::new());
+const COVERS_MAX: usize = 16;
+
+/// La forme du fond `id` du dessin `src` (calculée une fois par version du dessin).
+fn cover_of(id: CelId, src: &Cel, r: &crate::fond::FondReglages, tick: u64) -> Arc<Vec<u8>> {
+    let mut covers = COVERS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(e) = covers.get_mut(&id).filter(|e| e.0 == src.version) {
+        e.2 = tick;
+        return e.1.clone();
+    }
+    let cover = Arc::new(crate::fond::silhouette(&src.raster, r));
+    covers.insert(id, (src.version, cover.clone(), tick));
+    if covers.len() > COVERS_MAX {
+        if let Some(old) = covers.iter().min_by_key(|(_, e)| e.2).map(|(k, _)| *k) {
+            covers.remove(&old);
+        }
+    }
+    cover
+}
+
+/// Le fond sous le trait du dessin de `item` : sa forme, moins ce qu'on en a coupé, et ce qu'on y
+/// a peint (calculé une fois, puis gardé tant que le dessin, sa strate Fond et les réglages ne
+/// changent pas).
 fn fond_shown<'a>(doc: &'a Document, item: &crate::render::PlanItem, r: &crate::fond::FondReglages) -> Option<Shown<'a>> {
     let src = doc.cels.get(&item.cel)?;
     let id = shown_id(item);
     let version = {
         let mut h = std::collections::hash_map::DefaultHasher::new();
         src.version.hash(&mut h);
-        src.fond.as_ref().map_or(0, |f| f.version + 1).hash(&mut h);
+        src.fond.as_ref().map_or(0, |s| s.peinture.version + 1).hash(&mut h);
         h.finish()
     };
     let tick = TICK.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -741,8 +760,9 @@ fn fond_shown<'a>(doc: &'a Document, item: &crate::render::PlanItem, r: &crate::
         return Some(Shown::Fx(e.cel.clone()));
     }
     let (w, h) = (src.raster.width, src.raster.height);
-    let cover = crate::fond::silhouette(&src.raster, r);
-    let raster = crate::fond::compose(&cover, w, h, r.couleur, src.fond.as_ref().map(|f| &f.raster));
+    let cover = cover_of(id, src, r, tick);
+    let strate = src.fond.as_deref();
+    let raster = crate::fond::compose(&cover, w, h, r.couleur, strate.map(|s| &s.peinture.raster), strate.map(|s| &s.coupe));
     let derived = Arc::new(Cel { raster, vector: None, version, fond: None });
     cache.insert(id, Entry { version, cel: derived.clone(), used: tick });
     if cache.len() > CACHE_MAX {
@@ -751,6 +771,34 @@ fn fond_shown<'a>(doc: &'a Document, item: &crate::render::PlanItem, r: &crate::
         }
     }
     Some(Shown::Fx(derived))
+}
+
+/// Pendant qu'on peint ou qu'on gomme dans la strate Fond du dessin `cel` (fond aux réglages
+/// `r`) : le fond affiché refait sur les tuiles `tiles` seulement, sans changer de version, pour
+/// le voir en direct (la version change au lâcher, et tout est refait).
+pub fn fond_patch(doc: &Document, cel: CelId, r: &crate::fond::FondReglages, tiles: &[usize]) {
+    let Some(src) = doc.cels.get(&cel) else { return };
+    let item = crate::render::PlanItem {
+        cel,
+        opacity: 255,
+        tint: None,
+        transform: None,
+        blend: Default::default(),
+        fx: Vec::new(),
+        ctg: None,
+        fond: Some(crate::render::FondPart::Forme(*r)),
+    };
+    let id = shown_id(&item);
+    let Some(cover) = COVERS.lock().unwrap_or_else(|e| e.into_inner()).get(&id).filter(|e| e.0 == src.version).map(|e| e.1.clone()) else { return };
+    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    let Some(e) = cache.get_mut(&id) else { return };
+    let mut raster = e.cel.raster.clone();
+    let strate = src.fond.as_deref();
+    let n = raster.tiles.len();
+    for &idx in tiles.iter().filter(|&&i| i < n) {
+        crate::fond::compose_tile(&mut raster, idx, &cover, r.couleur, strate.map(|s| &s.peinture.raster), strate.map(|s| &s.coupe));
+    }
+    e.cel = Arc::new(Cel { raster, vector: None, version: e.version, fond: None });
 }
 
 /// Le dessin `cel`, rempli d'après `ctg` (dessins des sources, trous) s'il est d'un calque CTG, puis passé par

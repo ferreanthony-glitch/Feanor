@@ -87,7 +87,7 @@ fn paint_stays_inside_the_shape_under_its_color() {
     let mut paint = Raster::new(w, h);
     put(&mut paint, 0, 0, Color32::from_rgb(255, 0, 0));
     put(&mut paint, 2, 0, Color32::from_rgb(0, 0, 255));
-    let out = compose(&cover, w, h, [255, 255, 255], Some(&paint));
+    let out = compose(&cover, w, h, [255, 255, 255], Some(&paint), None);
     assert_eq!(out.get(0, 0), Color32::from_rgb(255, 0, 0), "la peinture dans la forme");
     assert_eq!(out.get(1, 0).a(), 128, "le bord adouci");
     assert_eq!(out.get(2, 0).a(), 0, "hors de la forme : rien, même peint");
@@ -96,7 +96,7 @@ fn paint_stays_inside_the_shape_under_its_color() {
 
 #[test]
 fn the_fond_shows_under_the_line_in_the_picture() {
-    use crate::document::{Cel, Document};
+    use crate::document::{Cel, Document, Strate};
     use crate::render;
     let mut doc = Document::new(200, 200, 24);
     let a = doc.add_cel(Cel::bitmap(ring(0.0)));
@@ -114,15 +114,63 @@ fn the_fond_shows_under_the_line_in_the_picture() {
     put(&mut paint, 100, 100, Color32::from_rgb(0, 0, 255));
     put(&mut paint, 5, 5, Color32::from_rgb(0, 0, 255));
     let c = doc.cels.get_mut(&a).unwrap();
-    c.fond = Some(Box::new(Cel::bitmap(paint)));
+    let mut s = Strate::new(200, 200);
+    s.peinture.raster = paint;
+    c.fond = Some(Box::new(s));
     c.version += 1;
     assert_eq!(render::composite_pixel(&doc, &plan, 100, 100), Color32::from_rgb(0, 0, 255));
     assert_eq!(render::composite_pixel(&doc, &plan, 5, 5).a(), 0, "hors de la forme : rien, même peint");
+    // La gomme coupe le fond : là, on voit à travers (peinture comprise), le trait reste.
+    let c = doc.cels.get_mut(&a).unwrap();
+    let s = c.fond.as_mut().unwrap();
+    put(&mut s.coupe, 100, 100, Color32::WHITE);
+    put(&mut s.coupe, 150, 100, Color32::WHITE);
+    s.peinture.version += 1;
+    c.version += 1;
+    assert_eq!(render::composite_pixel(&doc, &plan, 100, 100).a(), 0, "le fond coupé");
+    assert_eq!(render::composite_pixel(&doc, &plan, 150, 100), Color32::BLACK, "le trait n'est pas touché");
+    assert_eq!(render::composite_pixel(&doc, &plan, 101, 100), Color32::from_rgb(250, 240, 200), "à côté, le fond reste");
+}
+
+#[test]
+fn a_cut_removes_the_fond_and_its_paint() {
+    let (w, h) = (3, 1);
+    let cover = vec![255, 255, 255];
+    let mut paint = Raster::new(w, h);
+    put(&mut paint, 0, 0, Color32::from_rgb(255, 0, 0));
+    let mut cut = Raster::new(w, h);
+    put(&mut cut, 0, 0, Color32::WHITE);
+    put(&mut cut, 1, 0, Color32::from_rgba_premultiplied(128, 128, 128, 128));
+    let out = compose(&cover, w, h, [255, 255, 255], Some(&paint), Some(&cut));
+    assert_eq!(out.get(0, 0).a(), 0, "coupé : ni fond ni peinture");
+    assert_eq!(out.get(1, 0).a(), 127, "à moitié coupé : à moitié là");
+    assert_eq!(out.get(2, 0), Color32::WHITE);
+}
+
+#[test]
+fn one_tile_recomposed_matches_the_whole() {
+    use crate::fond::compose_tile;
+    let line = ring(0.0);
+    let r = FondReglages::default();
+    let cover = silhouette(&line, &r);
+    let mut paint = Raster::new(200, 200);
+    put(&mut paint, 100, 100, Color32::from_rgb(0, 200, 0));
+    let mut cut = Raster::new(200, 200);
+    put(&mut cut, 90, 90, Color32::WHITE);
+    let whole = compose(&cover, 200, 200, r.couleur, Some(&paint), Some(&cut));
+    // Le fond d'avant (sans peinture ni coupe), refait tuile par tuile.
+    let mut live = compose(&cover, 200, 200, r.couleur, None, None);
+    for idx in 0..live.tiles.len() {
+        compose_tile(&mut live, idx, &cover, r.couleur, Some(&paint), Some(&cut));
+    }
+    for (y, x) in [(100, 100), (90, 90), (50, 100), (5, 5)] {
+        assert_eq!(live.get(x, y), whole.get(x, y), "({x}, {y})");
+    }
 }
 
 #[test]
 fn the_fond_survives_save_and_reload() {
-    use crate::document::{Cel, Document, LayerKind};
+    use crate::document::{Document, LayerKind, Strate};
     use crate::project;
     let dir = std::env::temp_dir().join(format!("pelure-test-fond-{}", std::process::id()));
     std::fs::remove_dir_all(&dir).ok();
@@ -136,22 +184,30 @@ fn the_fond_survives_save_and_reload() {
     doc.panels[0].layers[0].fond = Some(reglages);
     let mut paint = Raster::new(64, 48);
     put(&mut paint, 10, 10, Color32::RED);
-    doc.cels.get_mut(&a).unwrap().fond = Some(Box::new(Cel::bitmap(paint)));
+    let mut s = Strate::new(64, 48);
+    s.peinture.raster = paint;
+    let mut cut = Raster::new(64, 48);
+    put(&mut cut, 20, 20, Color32::WHITE);
+    s.coupe = cut;
+    doc.cels.get_mut(&a).unwrap().fond = Some(Box::new(s));
     project::save(&doc, &manifest, &mut Default::default()).unwrap();
     assert!(drawings.join(format!("{a}_fond.png")).exists(), "la strate Fond à côté du dessin");
+    assert!(drawings.join(format!("{a}_coupe.png")).exists(), "et sa coupe");
     assert!(!drawings.join(format!("{b}_fond.png")).exists(), "rien de peint : pas de fichier");
 
     let mut back = project::load(&manifest).unwrap().doc;
     let layer = &back.panels[0].layers[0];
     assert_eq!(layer.fond, Some(reglages), "les réglages du fond, avec le calque");
     let ca = layer.frames[0].unwrap();
-    assert_eq!(back.cels[&ca].fond.as_ref().unwrap().raster.get(10, 10), Color32::RED, "la peinture du fond");
+    assert_eq!(back.cels[&ca].fond.as_ref().unwrap().peinture.raster.get(10, 10), Color32::RED, "la peinture du fond");
+    assert_eq!(back.cels[&ca].fond.as_ref().unwrap().coupe.get(20, 20).a(), 255, "la coupe du fond");
     // Fond effacé : son fichier part à l'enregistrement suivant.
     let c = back.cels.get_mut(&ca).unwrap();
     c.fond = None;
     c.version += 1;
     project::save(&back, &manifest, &mut Default::default()).unwrap();
     assert!(!drawings.join(format!("{ca}_fond.png")).exists());
+    assert!(!drawings.join(format!("{ca}_coupe.png")).exists());
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -167,7 +223,7 @@ fn silhouette_speed_full_hd() {
     let cover = silhouette(&big, &FondReglages::default());
     let ms = t.elapsed().as_secs_f64() * 1000.0;
     let t = std::time::Instant::now();
-    let _ = compose(&cover, 1920, 1080, [255, 255, 255], None);
+    let _ = compose(&cover, 1920, 1080, [255, 255, 255], None, None);
     eprintln!("silhouette {ms:.1} ms, composition {:.1} ms", t.elapsed().as_secs_f64() * 1000.0);
     assert_eq!(cover[540 * 1920 + 960], 255);
 }
