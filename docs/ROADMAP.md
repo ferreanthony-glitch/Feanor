@@ -1593,7 +1593,7 @@ Choix d'Anthony :
   flottante** (lottante.rs) : déplacer, tourner ou agrandir une sélection vectorielle ne refait
   plus rien par image — à la première image, le dessin sans la sélection et la sélection seule
   (deux images, depuis les caches), puis le GPU n'a que la transformation du geste à changer
-  (PlanItem::pre) ; au lâcher la géométrie, le rejeu exact en arrière-plan. 40 traits de Crayon
+  (PlanItem::pre) ; au lâcher la géométrie seule (0,1 ms ; la feuille reste affichée jusqu'à l'arrivée du rejeu exact, ou jusqu'à la prochaine action, qui termine à l'ancienne). 40 traits de Crayon
   net sur toute la feuille 1920×1080 : translation 1,0 ms et 6,1 Mo de tuiles par image → 0,001 ms
   et 0 octet, rotation 28,4 ms et 8,3 Mo → 0 (`floating_selection_gesture_is_cheap_per_frame`).
   **Fond sous le trait en arrière-plan** (ondfil.rs, x::differe) : la silhouette et la

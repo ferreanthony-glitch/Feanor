@@ -559,32 +559,54 @@ impl App {
             VDrag::Transform {
                 cel, before, originals, changed, ..
             } => {
-                let aff = self.flottante.take().map(|f| f.aff);
-                crate::flottante::Flottante::release(&mut self.doc);
+                let aff = self.flottante.as_ref().map(|f| f.aff);
                 if let (true, Some(aff)) = (changed, aff) {
-                    // La transformation du geste passe aux éléments choisis, posés depuis leurs
-                    // pixels en cache (copiés, ou rééchantillonnés s'ils ont tourné ou changé
-                    // d'échelle) ; le rendu exact (le moteur rejoué sur leur nouvelle place) arrive
-                    // d'un fil de travail quelques instants après, sans rien bloquer.
+                    // La transformation du geste passe à la géométrie des éléments choisis, sans
+                    // rien refaire : la feuille flottante reste affichée, et le rendu exact (le
+                    // moteur rejoué sur leur nouvelle place) arrive d'un fil de travail quelques
+                    // instants après (`poll_rejeu`), sans rien bloquer.
                     let items = self.vsel.as_ref().map(|s| s.items.clone()).unwrap_or_default();
-                    if let Some(c) = self.doc.cels.get_mut(&cel) {
-                        if let Some(d) = c.vector.as_mut() {
-                            let mut region = Rect::NOTHING;
-                            for (k, &i) in items.iter().enumerate() {
-                                if let (Some(dst), Some(src)) = (d.elements.get_mut(i), originals.get(k)) {
-                                    region = region.union(dst.bounds().expand(1.5));
-                                    *dst = src.transformed_preview(&aff);
-                                    region = region.union(dst.bounds().expand(1.5));
-                                }
-                            }
-                            let tiles = c.rerender_region(region.expand(2.0));
-                            self.renderer.invalidate_tiles(&tiles);
-                        }
+                    crate::flottante::Flottante::apply_geometry(&mut self.doc, cel, &items, &originals, &aff);
+                    if let Some(f) = self.flottante.as_mut() {
+                        f.pending = Some(crate::flottante::Pending { items, originals });
                     }
                     self.rejeu_cel(cel);
                     self.push_vector(cel, before, None);
+                } else {
+                    self.flottante = None;
+                    crate::flottante::Flottante::release(&mut self.doc);
                 }
             }
+        }
+    }
+
+    /// Un geste lâché dont la feuille flottante attend encore le rendu exact : l'utilisateur agit
+    /// (clic, touche) avant qu'il arrive, on met d'abord l'image du dessin à jour, à l'ancienne,
+    /// pour que tout ce qui suit parte d'une image juste.
+    pub(crate) fn flush_flottante_on_input(&mut self, ctx: &eframe::egui::Context) {
+        if !self.flottante.as_ref().is_some_and(|f| f.pending.is_some()) {
+            return;
+        }
+        use eframe::egui::Event;
+        let acts = ctx.input(|i| {
+            i.pointer.any_pressed() || i.events.iter().any(|e| matches!(e, Event::Key { pressed: true, .. } | Event::Text(_) | Event::Paste(_) | Event::Cut | Event::Copy))
+        });
+        if acts {
+            self.flush_flottante();
+        }
+    }
+
+    /// Termine tout de suite le travail d'un geste lâché : les éléments reprennent leurs pixels en
+    /// cache suivis, l'image du dessin est refaite là où quelque chose a changé, la feuille s'en va.
+    pub(crate) fn flush_flottante(&mut self) {
+        if !self.flottante.as_ref().is_some_and(|f| f.pending.is_some()) {
+            return;
+        }
+        let Some(f) = self.flottante.take() else { return };
+        crate::flottante::Flottante::release(&mut self.doc);
+        if let Some(p) = f.pending {
+            let tiles = crate::flottante::Flottante::apply_preview(&mut self.doc, f.src, &p.items, &p.originals, &f.aff);
+            self.renderer.invalidate_tiles(&tiles);
         }
     }
 

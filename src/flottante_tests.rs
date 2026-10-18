@@ -82,6 +82,31 @@ fn a_floating_translation_matches_the_moved_strokes() {
 }
 
 #[test]
+fn the_cheap_release_gives_the_geometry_the_background_replay_will_confirm() {
+    // Au lâcher la géométrie seule est posée ; le rejeu exact copie ce dessin, et ne sera adopté
+    // que si la géométrie est celle de l'ancienne voie (`same_as`).
+    let (mut doc, id) = doc_with(crayon_net(5));
+    let originals = doc.cels[&id].vector.as_ref().unwrap().elements.clone();
+    let items: Vec<usize> = vec![1, 3];
+    let picked: Vec<Element> = items.iter().map(|&i| originals[i].clone()).collect();
+    let aff = Affine::rotate_about(eframe::egui::pos2(900.0, 500.0), 0.4);
+    Flottante::apply_geometry(&mut doc, id, &items, &picked, &aff);
+    let cheap = doc.cels[&id].vector.as_ref().unwrap().elements.clone();
+    // Les autres traits n'ont pas bougé.
+    for i in [0, 2, 4] {
+        assert!(cheap[i].same_as(&originals[i]));
+    }
+    // Retour à l'état d'avant, puis l'ancienne voie.
+    doc.cels.get_mut(&id).unwrap().vector.as_mut().unwrap().elements = originals.clone();
+    let tiles = Flottante::apply_preview(&mut doc, id, &items, &picked, &aff);
+    assert!(!tiles.is_empty());
+    let old = doc.cels[&id].vector.as_ref().unwrap().elements.clone();
+    for i in 0..5 {
+        assert!(cheap[i].same_as(&old[i]), "trait {i}");
+    }
+}
+
+#[test]
 fn only_the_chosen_strokes_float_the_others_stay_in_the_base() {
     let (mut doc, id) = doc_with(crayon_net(6));
     let f = Flottante::lift(&mut doc, id, &[0, 1]).unwrap();
@@ -123,7 +148,25 @@ fn the_gesture_transform_comes_before_the_layer_transform() {
 #[test]
 #[ignore]
 fn floating_selection_gesture_is_cheap_per_frame() {
-    let elements = crayon_net(40);
+    mesure("Crayon net 2,5 px", crayon_net(40));
+}
+
+/// Les brosses texturées : 50 traits de Crayon graphite, Fusain, Craie et Gouache.
+/// `cargo test --release --offline --target-dir target\audit floating_selection_textured -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn floating_selection_textured_brushes_are_cheap_per_frame() {
+    let lib = BrushLibrary::builtin();
+    lib.share();
+    for name in ["Crayon graphite", "Fusain", "Craie", "Gouache"] {
+        let s = lib.presets.iter().find(|p| p.name == name).expect("brosse").settings;
+        let elements = (0..50).map(|k| trait_de(&s, &lib, &geste(160, 20.0 + (k % 8) as f32 * 225.0, 60.0 + (k / 8) as f32 * 150.0))).collect();
+        mesure(name, elements);
+    }
+}
+
+fn mesure(label: &str, elements: Vec<Element>) {
+    println!("--- {label}");
     let n = elements.len();
     let items: Vec<usize> = (0..n).collect();
     let (mut doc, id) = doc_with(elements);
@@ -193,22 +236,20 @@ fn floating_selection_gesture_is_cheap_per_frame() {
         }
         let after_ms = total / frames as f64;
         // Le lâcher : la géométrie et l'image du dessin refaites une fois.
+        // (La feuille reste affichée jusqu'à l'arrivée du rendu exact.)
         let t = Instant::now();
         let aff = fl.aff;
-        Flottante::release(&mut doc);
-        let cel = doc.cels.get_mut(&id).unwrap();
-        let d = cel.vector.as_mut().unwrap();
-        let mut region = Rect::NOTHING;
-        for (i, src) in originals.iter().enumerate() {
-            region = region.union(d.elements[i].bounds().expand(1.5));
-            d.elements[i] = src.transformed_preview(&aff);
-            region = region.union(d.elements[i].bounds().expand(1.5));
-        }
-        let rel_tiles = cel.rerender_region(region.expand(2.0)).len();
+        Flottante::apply_geometry(&mut doc, id, &items, &originals, &aff);
         let release_ms = ms(t);
+        // Si l'utilisateur agit avant l'arrivée du rendu : l'ancienne voie, une fois.
+        let t = Instant::now();
+        let rel_tiles = Flottante::apply_preview(&mut doc, id, &items, &originals, &aff).len();
+        let flush_ms = ms(t);
+        Flottante::release(&mut doc);
         println!(
-            "  {name:<12} | {before_ms:>8.1} ms, {before_tiles:>4} tuiles, {before_mb:>5.1} Mo | {after_ms:>8.3} ms, {changed_textures} tuiles, 0 octet | {cpu:>6.1}   (saisie {lift_ms:.1} ms, lâcher {release_ms:.1} ms, {rel_tiles} tuiles)"
+            "  {name:<12} | {before_ms:>8.1} ms, {before_tiles:>4} tuiles, {before_mb:>5.1} Mo | {after_ms:>8.3} ms, {changed_textures} tuiles, 0 octet | {cpu:>6.1}   (saisie {lift_ms:.1} ms, lâcher {release_ms:.2} ms ; si action avant le rendu exact : {flush_ms:.1} ms, {rel_tiles} tuiles)"
         );
+        assert!(release_ms < 8.0 && lift_ms < 16.0, "{name} : saisie {lift_ms:.1} ms, lâcher {release_ms:.1} ms");
         assert!(after_ms < 8.0, "{name} : {after_ms:.2} ms par image");
         assert_eq!(changed_textures, 0, "aucune tuile renvoyée pendant le geste");
         let cel = doc.cels.get_mut(&id).unwrap();

@@ -1790,11 +1790,23 @@ impl App {
     /// traits, d'un coup — si le dessin n'a pas changé entre-temps.
     pub(crate) fn poll_rejeu(&mut self, ctx: &egui::Context) {
         for done in self.rejeu.poll() {
+            // La feuille flottante d'un geste lâché sur ce dessin laisse la place au rendu exact.
+            let waiting = self.flottante.as_ref().is_some_and(|f| f.pending.is_some() && f.src == done.cel);
             let Some(c) = self.doc.cels.get_mut(&done.cel) else { continue };
             let Some(d) = c.vector.as_mut() else { continue };
             if d.elements.len() != done.drawing.elements.len() || d.elements.iter().zip(&done.drawing.elements).any(|(a, b)| !a.same_as(b)) {
+                // Le dessin a changé depuis : on termine à l'ancienne ce que la feuille montrait.
+                if waiting {
+                    self.flush_flottante();
+                }
                 continue;
             }
+            if waiting {
+                self.flottante = None;
+                crate::flottante::Flottante::release(&mut self.doc);
+            }
+            let Some(c) = self.doc.cels.get_mut(&done.cel) else { continue };
+            let Some(d) = c.vector.as_mut() else { continue };
             for (e, exact) in d.elements.iter_mut().zip(&done.drawing.elements) {
                 e.adopt_cache(exact);
             }
@@ -3539,6 +3551,7 @@ impl eframe::App for App {
         self.frame_start = Some(std::time::Instant::now());
         self.ppp = ctx.pixels_per_point();
         self.clamp_nav();
+        self.flush_flottante_on_input(ctx);
         self.end_length_gesture_if_idle();
         self.end_gesture_if_idle();
         self.handle_close_request(ctx);

@@ -451,7 +451,7 @@ impl App {
         if let Some(sel) = &self.vsel {
             if let Some(d) = self.drawing(sel.cel) {
                 // Geste en cours : les éléments n'ont pas bougé, leurs contours suivent la feuille.
-                let moved = self.flottante.as_ref().map(|f| f.aff).unwrap_or_default();
+                let moved = self.flottante.as_ref().filter(|f| f.pending.is_none()).map(|f| f.aff).unwrap_or_default();
                 for e in sel.items.iter().filter_map(|&i| d.elements.get(i)) {
                     for line in e.outline() {
                         if line.len() >= 2 {

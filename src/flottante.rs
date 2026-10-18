@@ -11,8 +11,10 @@
 //! par image, aucun pixel n'est refait ni envoyé.
 //!
 //! Au lâcher (`App::finish_vdrag`), la géométrie des éléments reçoit la transformation et le rejeu
-//! exact part en arrière-plan (`rejeu.rs`), comme avant. (Pendant le geste, les éléments restent
-//! où ils étaient : seule la feuille bouge.)
+//! exact part en arrière-plan (`rejeu.rs`) ; la feuille reste affichée jusqu'à son arrivée, donc
+//! le lâcher ne coûte rien non plus. Si l'utilisateur agit avant (clic, touche), l'image du
+//! dessin est d'abord mise à jour à l'ancienne (`App::flush_flottante`). Pendant le geste, les
+//! éléments restent où ils étaient : seule la feuille bouge.
 //!
 //! Les deux dessins temporaires vivent dans `Document::cels` le temps du geste ; aucun calque ne
 //! les référence, donc ils ne sont jamais enregistrés.
@@ -21,7 +23,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::document::{Cel, CelId, Document};
 use crate::render::PlanItem;
-use crate::vector::Affine;
+use crate::vector::{Affine, Element};
 
 /// Le dessin sans les éléments choisis.
 pub const BASE_CEL: CelId = 1 << 62;
@@ -36,6 +38,18 @@ pub struct Flottante {
     pub src: CelId,
     /// La transformation du geste, en coordonnées du dessin.
     pub aff: Affine,
+    /// Geste lâché : les éléments ont leur nouvelle géométrie, mais l'image du dessin (`raster`)
+    /// est encore celle d'avant. La feuille reste affichée jusqu'à l'arrivée du rendu exact
+    /// (`App::poll_rejeu`), ou jusqu'à la prochaine action de l'utilisateur
+    /// (`App::flush_flottante`).
+    pub pending: Option<Pending>,
+}
+
+/// Ce qu'il faut pour terminer le travail d'un geste lâché sans attendre le rejeu.
+pub struct Pending {
+    /// Les éléments transformés, et leurs états d'avant le geste.
+    pub items: Vec<usize>,
+    pub originals: Vec<Element>,
 }
 
 impl Flottante {
@@ -52,7 +66,35 @@ impl Flottante {
             c.version = version;
             doc.cels.insert(id, c);
         }
-        Some(Flottante { src, aff: Affine::IDENTITY })
+        Some(Flottante { src, aff: Affine::IDENTITY, pending: None })
+    }
+
+    /// Lâcher, sans rien refaire : la nouvelle géométrie des éléments choisis (`items`, d'états
+    /// d'avant `originals`), sans pixels en cache. Rapide.
+    pub fn apply_geometry(doc: &mut Document, src: CelId, items: &[usize], originals: &[Element], aff: &Affine) {
+        let Some(d) = doc.cels.get_mut(&src).and_then(|c| c.vector.as_mut()) else { return };
+        for (k, &i) in items.iter().enumerate() {
+            if let (Some(dst), Some(from)) = (d.elements.get_mut(i), originals.get(k)) {
+                *dst = from.transformed(aff);
+            }
+        }
+    }
+
+    /// L'ancienne voie, pour terminer le travail tout de suite : les éléments reçoivent la
+    /// transformation avec leurs pixels en cache suivis, et l'image du dessin est refaite là où
+    /// quelque chose a changé. Rend les tuiles touchées. Coûteux (rotation, échelle : 30 à 70 ms).
+    pub fn apply_preview(doc: &mut Document, src: CelId, items: &[usize], originals: &[Element], aff: &Affine) -> Vec<usize> {
+        let Some(c) = doc.cels.get_mut(&src) else { return Vec::new() };
+        let Some(d) = c.vector.as_mut() else { return Vec::new() };
+        let mut region = eframe::egui::Rect::NOTHING;
+        for (k, &i) in items.iter().enumerate() {
+            if let (Some(dst), Some(from)) = (d.elements.get_mut(i), originals.get(k)) {
+                region = region.union(dst.bounds().expand(1.5));
+                *dst = from.transformed_preview(aff);
+                region = region.union(dst.bounds().expand(1.5));
+            }
+        }
+        c.rerender_region(region.expand(2.0))
     }
 
     /// Lâcher : les deux dessins temporaires s'en vont.
