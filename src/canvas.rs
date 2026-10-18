@@ -316,7 +316,15 @@ impl App {
                         Tool::Transform => {
                             // Ctrl + coin : l'enveloppe de Bézier du dessin (`envelopetools.rs`).
                             if !self.envelope_press(p, *pos, modifiers.command || modifiers.ctrl) {
-                                self.transform_press(stage, *pos);
+                                // Une zone bitmap choisie : ses poignées, ou glisser dedans, la
+                                // transforment ; ailleurs, c'est le calque.
+                                let on_zone = self.bsel.is_some()
+                                    && (self.handle_at(*pos).is_some() || self.bitmap_selection_bounds().is_some_and(|b| b.contains(p)));
+                                if on_zone {
+                                    self.bitmap_select_press(p, *pos, false);
+                                } else {
+                                    self.transform_press(stage, *pos);
+                                }
                             }
                         }
                         Tool::Ref3d => self.ref3d_press(*pos, *modifiers),

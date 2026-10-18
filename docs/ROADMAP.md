@@ -1241,7 +1241,9 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         message, texte entier au survol, notifications pour les avis importants : `messages.rs`) ;
         4, ce que font les touches avec l'outil courant, au bout de la barre sous le dessin
         (`viewbar::tool_hint`) ; 5, le panneau qui a la main encadré en bleu d'accent (montage,
-        timeline ; le dessin, plus discret) au lieu d'un fin trait blanc en haut ;
+        timeline ; le dessin, plus discret) au lieu d'un fin trait blanc en haut ; 6, une zone bitmap
+        choisie survit au passage sur Transformer, qui la déplace (glisser dedans), l'agrandit ou
+        la tourne (ses poignées), l'enveloppe (Ctrl + coin) ; les flèches la poussent (`Tool::keeps_zone`) ;
       - **enveloppe de Bézier** (Anthony : « maintenir Ctrl permet de saisir une poignée de Bézier
         des coins pour transformer la forme » ; son choix : « B, comme l'outil Perspective ») : dans
         l'outil Transformer, Ctrl + glisser un coin du cadre ouvre une enveloppe sur le dessin

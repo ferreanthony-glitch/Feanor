@@ -230,6 +230,12 @@ impl Tool {
     pub fn is_select(self) -> bool {
         matches!(self, Tool::Select | Tool::SelectColor)
     }
+
+    /// Une zone bitmap choisie reste avec cet outil (Anthony, 2026-10-18, axe d'ergonomie 6 : elle
+    /// survit au passage sur Transformer, qui la déplace, l'agrandit, la tourne ou l'enveloppe).
+    pub fn keeps_zone(self) -> bool {
+        self.is_select() || self == Tool::Transform
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

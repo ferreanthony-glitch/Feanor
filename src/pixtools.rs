@@ -69,7 +69,7 @@ impl App {
         let Some(sel) = &self.bsel else { return };
         let valid = Some(sel.cel) == self.cel_here()
             && self.layer().kind == LayerKind::Bitmap
-            && self.tool.is_select();
+            && self.tool.keeps_zone();
         if !valid && self.bdrag.is_none() {
             self.drop_bitmap_selection();
         }

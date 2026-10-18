@@ -447,7 +447,8 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   côtés ; l'intérieur pour la déplacer ; Entrée, Échap ou un clic ailleurs pour terminer ; Ctrl+Z
   annule chaque geste. Avec des éléments choisis (vectoriel) ou une zone choisie (bitmap), Ctrl + un
   coin du cadre de la sélection ne déforme qu'eux, avec l'outil Transformer comme avec l'outil
-  Sélection (en bitmap, seulement avec la Sélection : la zone n'existe qu'avec elle). Avec l'outil Transformer, Ctrl ne prend pas le lasso.
+  Sélection. Une zone bitmap choisie reste quand on passe sur Transformer : glisser dedans la
+  déplace, ses poignées l'agrandissent ou la tournent ; ailleurs, Transformer agit sur le calque. Avec l'outil Transformer, Ctrl ne prend pas le lasso.
 - **Cutter** (Alt+T, calque vectoriel) : glisser en travers des bouts de traits à enlever (ou
   cliquer sur l'un d'eux) ; chaque trait touché est coupé là où il croise les autres, seuls les
   morceaux touchés partent (un dépassement est coupé net au croisement). Un trait qui ne croise
