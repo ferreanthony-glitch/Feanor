@@ -93,9 +93,20 @@ mod lissage_tests;
 mod bulles;
 #[cfg(test)]
 mod bulles_tests;
+mod cadrage;
+#[cfg(test)]
+mod cadrage_tests;
+mod cadrageui;
 mod camera;
 #[cfg(test)]
 mod camera_tests;
+mod camfx;
+#[cfg(test)]
+mod camfx_tests;
+mod camfxui;
+mod camkeys;
+#[cfg(test)]
+mod camkeys_tests;
 mod camtools;
 mod canvas;
 #[cfg(test)]

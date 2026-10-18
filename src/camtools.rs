@@ -22,16 +22,6 @@ pub(crate) enum CamHandle {
     Rotate,
 }
 
-/// Clé de caméra que l'on fait glisser dans la timeline ou le montage (12e) : son panneau (id),
-/// son rang, l'image d'où elle part, et le document d'avant (une étape d'annulation pour tout le
-/// geste).
-pub(crate) struct CamKeyDrag {
-    panel: u64,
-    key: usize,
-    from: usize,
-    snap: Edit,
-}
-
 /// Rang de la clé sous l'abscisse `x` dans une rangée de clés : la plus proche, à `tol` près.
 /// `x_of(f)` : abscisse du milieu de l'image `f`.
 pub(crate) fn camera_key_at(keys: &[camera::CameraKey], x: f32, x_of: impl Fn(usize) -> f32, tol: f32) -> Option<usize> {
@@ -154,63 +144,7 @@ impl App {
         self.doc.panels[self.cur_panel].camera.iter().find(|k| k.frame == self.cur_frame)
     }
 
-    // ------------------------------------------------------------------ glisser une clé (12e)
-
-    /// Prend la clé `key` du panneau `panel` pour la faire glisser.
-    pub(crate) fn begin_camera_key_drag(&mut self, panel: usize, key: usize) {
-        let Some((id, from)) = self.doc.panels.get(panel).and_then(|p| Some((p.id, p.camera.get(key)?.frame))) else { return };
-        self.end_stroke();
-        self.playing = false;
-        self.cam_key_drag = Some(CamKeyDrag { panel: id, key, from, snap: self.snapshot() });
-    }
-
-    /// Amène la clé tenue à l'image `frame` de son panneau (entre ses voisines, voir
-    /// `camera::move_key`).
-    pub(crate) fn drag_camera_key(&mut self, frame: usize) {
-        let Some(d) = &self.cam_key_drag else { return };
-        let key = d.key;
-        let Some(i) = self.doc.panels.iter().position(|p| p.id == d.panel) else {
-            self.cam_key_drag = None;
-            return;
-        };
-        let len = self.doc.panels[i].frame_count();
-        let to = camera::move_key(&mut self.doc.panels[i].camera, key, frame, len);
-        self.status = format!("Clé de caméra : image {}.", to + 1);
-    }
-
-    /// Lâche la clé : une étape d'annulation si elle a bougé.
-    pub(crate) fn end_camera_key_drag(&mut self) {
-        let Some(d) = self.cam_key_drag.take() else { return };
-        let moved = self
-            .doc
-            .panels
-            .iter()
-            .find(|p| p.id == d.panel)
-            .and_then(|p| p.camera.get(d.key))
-            .is_some_and(|k| k.frame != d.from);
-        if moved {
-            self.history.push(d.snap);
-            self.modified = true;
-        }
-    }
-
-    /// Abandonne le glisser : la clé revient où elle était.
-    pub(crate) fn cancel_camera_key_drag(&mut self) {
-        let Some(d) = self.cam_key_drag.take() else { return };
-        if let Some(k) = self.doc.panels.iter_mut().find(|p| p.id == d.panel).and_then(|p| p.camera.get_mut(d.key)) {
-            k.frame = d.from;
-        }
-    }
-
-    /// Vrai si la clé tenue est une clé du panneau d'identifiant `id`.
-    pub(crate) fn is_dragged_camera_key_panel(&self, id: u64) -> bool {
-        self.cam_key_drag.as_ref().is_some_and(|d| d.panel == id)
-    }
-
-    /// La clé tenue, si c'est la clé `key` du panneau `panel` (pour la dessiner en évidence).
-    pub(crate) fn is_dragged_camera_key(&self, panel: usize, key: usize) -> bool {
-        self.cam_key_drag.as_ref().is_some_and(|d| d.key == key && self.doc.panels.get(panel).is_some_and(|p| p.id == d.panel))
-    }
+    // (Les clés de caméra se choisissent, se glissent, se copient… dans `camkeys.rs`.)
 
     /// Adoucit (ou non) le mouvement à la clé de l'image courante.
     pub(crate) fn toggle_camera_key_smooth(&mut self) {
@@ -594,8 +528,16 @@ impl App {
                     if self.edited(&r) {
                         next = Some(Camera { zoom: (focal / camera::REF_FOCAL).clamp(0.05, 50.0), ..cam });
                     }
-                    ui.label(RichText::new(format!("grossissement {:.0} %", cam.magnification(frame) * 100.0)).small().weak());
+                    self.focal_presets_ui(ui, focal);
                 });
+                ui.end_row();
+                ui.label("");
+                ui.label(
+                    RichText::new(format!("champ {:.0}° · grossissement {:.0} %", camera::angle_of_view(focal), cam.magnification(frame) * 100.0))
+                        .small()
+                        .weak(),
+                )
+                .on_hover_text("Angle de champ horizontal d'un capteur de 36 mm de large, et grossissement du plan de référence (focale et avancée).");
                 ui.end_row();
                 ui.label("Rotation");
                 ui.horizontal(|ui| {
@@ -642,6 +584,9 @@ impl App {
             self.set_current_camera(c);
         }
 
+        // Effets de caméra : des préréglages qui posent des clés (`camfxui.rs`).
+        section(ui, "Effets de caméra", &mut |ui| self.camera_effects_ui(ui));
+
         // Vue et durées.
         section(ui, "Vue", &mut |ui| {
             ui.horizontal(|ui| {
@@ -651,11 +596,11 @@ impl App {
                 }
                 let key = self.raccourci("camera.masque");
                 crate::bulles::interrupteur_a(ui, &mut self.camera_mask, ph::SELECTION_INVERSE, "Estomper le hors-champ", "Voiler ce qui est hors du cadre de la caméra.", &key, "camera.masque");
-                let key = self.raccourci("vue.cadres_securite");
-                crate::bulles::interrupteur_a(ui, &mut self.layout.safe_frames, ph::SELECTION, "Zones de sécurité", "Action 93 %, titres 90 %, tracées dans le cadre.", &key, "vue.cadres_securite");
-                self.frame_format_ui(ui);
             });
         });
+        // Aides au cadrage : tiers, grille d'or, spirale, diagonales, croix, zones de sécurité,
+        // cadre de format (`cadrage.rs`).
+        section(ui, "Aides au cadrage", &mut |ui| self.framing_aids_ui(ui));
         let (s, e) = self.doc.sequence_run(self.cur_panel);
         let sequence_len: usize = self.doc.panels[s..e].iter().map(|p| p.frame_count()).sum();
         section(ui, "Durées", &mut |ui| {
@@ -665,7 +610,9 @@ impl App {
         ui.label(
             RichText::new(
                 "Glisser dans le cadre : déplacer (Maj : à l'horizontale ou à la verticale). Coin : zoomer. \
-                 Poignée ronde : tourner (Maj : par 15°). Un plan sans clé : caméra au centre, cadre entier.",
+                 Poignée ronde : tourner (Maj : par 15°). Un plan sans clé : caméra au centre, cadre entier. \
+                 Losanges jaunes de la piste Caméra : clic pour choisir (Ctrl : ajouter, Maj : la suite), glisser pour \
+                 déplacer, Ctrl+C / Ctrl+V à l'image courante, Suppr.",
             )
             .small()
             .weak(),

@@ -712,6 +712,10 @@ impl App {
                 ui.separator();
                 self.action_item(ui, "Vue à travers la caméra", "camera.vue");
                 self.action_item(ui, "Réinitialiser la caméra", "camera.reinitialiser");
+                ui.separator();
+                // Les clés choisies (clic sur un losange jaune), puis les effets en préréglage.
+                self.cam_key_menu_items(ui);
+                self.action_item(ui, "Effets de caméra (réglages de l'outil Caméra)", "outil.camera");
             }
             GridMenu::FxKey => self.fx_key_menu(ui),
             GridMenu::Sound { track, clip, frame } => self.lane_menu(ui, track, clip, frame),
@@ -744,7 +748,7 @@ impl App {
     /// images choisies, choix au rectangle, ligne de calque.
     pub(crate) fn dragging(&self) -> bool {
         self.handle_drag.is_some()
-            || self.cam_key_drag.is_some()
+            || self.cam_keys_drag.is_some()
             || self.montage_drag.is_some()
             || self.image_drag.is_some()
             || self.grid_select.is_some()
@@ -764,6 +768,7 @@ impl App {
         self.cancel_montage_drag();
         self.cancel_keys_drag();
         self.cancel_fx_keys_drag();
+        self.cancel_cam_keys_drag();
         self.cancel_comment_drag();
         if let Some(r) = self.key_rect.take() {
             self.key_sel = r.before;
@@ -799,6 +804,9 @@ impl App {
         }
         if self.fx_keys_drag.is_some() {
             self.end_fx_keys_drag();
+        }
+        if self.cam_keys_drag.is_some() {
+            self.end_cam_keys_drag();
         }
         if self.comment_ui.drag.is_some() {
             self.end_comment_drag();

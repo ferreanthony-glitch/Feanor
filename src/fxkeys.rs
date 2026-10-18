@@ -375,6 +375,7 @@ impl App {
 
     /// Donne la main aux clés d'effets choisies : elles remplacent le choix des dessins et des images.
     fn give_fx_keys_focus(&mut self) {
+        self.clear_cam_keys();
         self.key_sel.clear();
         self.key_anchor = None;
         self.frame_sel = None;
@@ -538,6 +539,7 @@ impl App {
         let (n, kind) = (clip.keys.len(), clip.kind.label());
         self.fx_key_clipboard = Some(clip);
         self.fx_clip_recent = true;
+        self.cam_clip_recent = false;
         // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau SHOT (`pasteimage`).
         self.ctx.copy_text(format!("{}clés d'effets copiées", crate::pasteimage::MARK));
         self.status = format!("{n} clé{} d'effet copiée{} : Ctrl+V pour les coller à l'image courante, sur l'effet choisi ({kind}).", s(n), s(n));

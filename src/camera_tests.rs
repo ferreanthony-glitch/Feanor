@@ -35,30 +35,50 @@ fn keys_and_interpolation() {
 }
 
 #[test]
-fn a_key_moves_between_its_neighbours() {
-    // Panneau de 24 images, clés à 0, 10 et 20.
-    let mut keys = vec![
-        CameraKey::new(0, cam(0.0, 1.0, 0.0)),
-        CameraKey::new(10, cam(50.0, 1.0, 0.0)),
-        CameraKey::new(20, cam(100.0, 1.0, 0.0)),
-    ];
-    assert_eq!(camera::key_range(&keys, 0, 24), (0, 9));
-    assert_eq!(camera::key_range(&keys, 1, 24), (1, 19));
-    assert_eq!(camera::key_range(&keys, 2, 24), (11, 23), "la dernière va jusqu'à la fin du panneau");
-    assert_eq!(camera::move_key(&mut keys, 1, 14, 24), 14);
-    assert_eq!(camera::move_key(&mut keys, 1, 25, 24), 19, "elle s'arrête avant la clé suivante");
-    assert_eq!(camera::move_key(&mut keys, 1, 0, 24), 1, "et après la précédente");
-    assert_eq!(camera::move_key(&mut keys, 2, 40, 24), 23, "pas au-delà du panneau");
-    assert_eq!(keys.iter().map(|k| k.frame).collect::<Vec<_>>(), vec![0, 1, 23], "toujours triées");
-    assert_eq!(keys[1].cam.x, 50.0, "la clé garde sa caméra");
-    // La caméra suit : à mi-chemin entre 1 et 23, elle est à mi-chemin entre 50 et 100.
-    let default = Camera::centered(200, 100);
-    assert!((camera_at(&keys, 12, default).x - 75.0).abs() < 1e-3);
-    // Une seule clé : tout le panneau.
-    let mut one = vec![CameraKey::new(3, cam(0.0, 1.0, 0.0))];
-    assert_eq!(camera::move_key(&mut one, 0, 30, 24), 23);
-    assert_eq!(camera::move_key(&mut one, 7, 5, 24), 5, "clé absente : rien ne bouge");
-    assert_eq!(one[0].frame, 23);
+fn focal_presets_and_angle_of_view() {
+    // Les focales proposées, dans l'ordre, et leur zoom (35 mm = 100 %).
+    let mm: Vec<f32> = camera::FOCAL_PRESETS.iter().map(|p| p.mm).collect();
+    assert_eq!(mm, vec![14.0, 24.0, 35.0, 50.0, 85.0, 135.0, 200.0, 40.0]);
+    assert!(camera::FOCAL_PRESETS.iter().map(|p| p.name).eq([
+        "Très grand angle", "Grand angle (courte)", "Normale", "Standard", "Portrait", "Téléobjectif (longue)", "Long téléobjectif", "Anamorphique"
+    ]));
+    assert_eq!(camera::FOCAL_PRESETS.iter().filter(|p| p.anamorphic).count(), 1, "un seul objectif anamorphique");
+    assert!(camera::FOCAL_PRESETS[7].anamorphic && camera::ANAMORPHIC_FORMAT == [2.39, 1.0]);
+    assert!((camera::zoom_for_focal(35.0) - 1.0).abs() < 1e-6, "35 mm = zoom 100 %");
+    assert!((camera::zoom_for_focal(70.0) - 2.0).abs() < 1e-6);
+    // La focale d'une caméra réglée par un objectif se relit telle quelle.
+    for p in camera::FOCAL_PRESETS {
+        let c = Camera { zoom: camera::zoom_for_focal(p.mm), ..Camera::centered(100, 100) };
+        assert!((c.focal() - p.mm).abs() < 1e-3, "{} mm", p.mm);
+    }
+    // Angle de champ horizontal, capteur de 36 mm : valeurs de référence connues.
+    let aov = |mm: f32| camera::angle_of_view(mm);
+    assert!((aov(14.0) - 104.25).abs() < 0.05, "{}", aov(14.0));
+    assert!((aov(24.0) - 73.74).abs() < 0.05);
+    assert!((aov(35.0) - 54.43).abs() < 0.05);
+    assert!((aov(50.0) - 39.60).abs() < 0.05);
+    assert!((aov(85.0) - 23.91).abs() < 0.05);
+    assert!((aov(135.0) - 15.19).abs() < 0.05);
+    assert!((aov(200.0) - 10.29).abs() < 0.05);
+    assert!((aov(40.0) - 48.46).abs() < 0.05, "{}", aov(40.0));
+    assert!(mm.windows(2).take(6).all(|w| aov(w[0]) > aov(w[1])), "plus la focale est longue, plus le champ est étroit");
+    // L'angle de champ de la focale de référence est celui du cadre vu depuis la distance de référence.
+    let frame = [360, 200];
+    let seen = 2.0 * (frame[0] as f32 / 2.0 / camera::ref_distance(frame)).atan().to_degrees();
+    assert!((seen - aov(camera::REF_FOCAL)).abs() < 1e-3);
+    assert_eq!(camera::focal_label(&camera::FOCAL_PRESETS[4]), "Portrait · 85 mm · 24°");
+}
+
+#[test]
+fn put_key_replaces_a_whole_key_and_keeps_the_order() {
+    let mut keys = vec![CameraKey::new(0, cam(0.0, 1.0, 0.0)), CameraKey::new(10, cam(50.0, 1.0, 0.0))];
+    let mut k = CameraKey::new(10, cam(99.0, 2.0, 0.0));
+    k.ease_in = 3.0;
+    camera::put_key(&mut keys, k);
+    camera::put_key(&mut keys, CameraKey::new(4, cam(7.0, 1.0, 0.0)));
+    camera::put_key(&mut keys, CameraKey::new(30, cam(8.0, 1.0, 0.0)));
+    assert_eq!(keys.iter().map(|k| k.frame).collect::<Vec<_>>(), vec![0, 4, 10, 30]);
+    assert_eq!((keys[2].cam.x, keys[2].ease_in), (99.0, 3.0), "la clé remplace l'autre en entier, adoucis compris");
 }
 
 #[test]

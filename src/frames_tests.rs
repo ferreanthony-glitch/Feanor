@@ -40,7 +40,9 @@ fn safe_zones_shrink_around_the_centre() {
 fn formats_are_named_and_checked() {
     assert_eq!(frames::label([16.0, 9.0]), "16:9");
     assert_eq!(frames::label([2.39, 1.0]), "2.39:1");
-    assert!(frames::is_preset([9.0, 16.0]) && !frames::is_preset([2.39, 1.0]));
+    assert!(frames::is_preset([9.0, 16.0]) && !frames::is_preset([1.9, 1.0]));
+    assert!(frames::is_preset([1.85, 1.0]) && frames::is_preset([4.0, 3.0]));
+    assert!(frames::is_preset([2.39, 1.0]), "le 2,39:1 de l'objectif anamorphique est proposé dans la liste des formats");
     assert_eq!(frames::sanitized([0.0, 1.0]), None);
     assert_eq!(frames::sanitized([f32::NAN, 1.0]), None);
     assert_eq!(frames::sanitized([4.0, 5.0]), Some([4.0, 5.0]));

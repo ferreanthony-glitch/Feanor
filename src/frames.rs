@@ -4,7 +4,8 @@
 use eframe::egui::{pos2, Rect};
 
 /// Formats proposés pour le cadre réglable, largeur:hauteur (« Personnalisé » : n'importe lequel).
-pub const PRESETS: [[f32; 2]; 4] = [[16.0, 9.0], [9.0, 16.0], [4.0, 5.0], [1.0, 1.0]];
+/// Le 2,39:1 est celui que pose l'objectif anamorphique de la caméra (`camera::ANAMORPHIC_FORMAT`).
+pub const PRESETS: [[f32; 2]; 7] = [[16.0, 9.0], [9.0, 16.0], [4.0, 5.0], [1.0, 1.0], [4.0, 3.0], [1.85, 1.0], crate::camera::ANAMORPHIC_FORMAT];
 
 /// Zones de sécurité, en part de la largeur et de la hauteur du cadre : action dans 93 %,
 /// titres et textes dans 90 % (valeurs de la recommandation EBU R 95).

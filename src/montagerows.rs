@@ -309,16 +309,13 @@ impl App {
                     painter.rect_filled(bar, 1.0, cam_color().gamma_multiply(0.5));
                 }
             }
-            for (k, key) in keys.iter().enumerate() {
+            for key in keys.iter() {
                 let c = pos2(x0 + key.frame as f32 * ppf + ppf * 0.5, y);
-                let d = 4.0;
-                // La clé que l'on fait glisser : cerclée de blanc.
-                let outline = if self.is_dragged_camera_key(i, k) { Stroke::new(1.5_f32, theme::contour()) } else { Stroke::NONE };
-                painter.add(egui::Shape::convex_polygon(
-                    vec![c + vec2(0.0, -d), c + vec2(d, 0.0), c + vec2(0.0, d), c + vec2(-d, 0.0)],
-                    cam_color(),
-                    outline,
-                ));
+                if c.x < painter.clip_rect().left() - 8.0 || c.x > painter.clip_rect().right() + 8.0 {
+                    continue;
+                }
+                // Une clé choisie (ou que l'on fait glisser) : plus grande, cerclée du contour du thème.
+                self.paint_cam_diamond(painter, c, self.cam_key_chosen(i, key.frame), cam_color(), 4.0, Stroke::NONE);
             }
         }
 
