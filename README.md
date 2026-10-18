@@ -379,23 +379,38 @@ on les coche et décoche, le dessin reste tel quel).
   montage ; aucun effet choisi, aucun losange (la case « Clés d'effets dans la timeline et le
   montage » est l'interrupteur général). Un clic en choisit une (Ctrl : en ajoute
   ou en retire ; Maj : toutes celles d'entre), la tête de lecture va dessus ; glisse-en une, elle
-  emmène toutes les choisies (Échap abandonne le geste) ; Ctrl+C copie, Ctrl+V colle à l'image
-  courante, sur l'effet choisi (de la même sorte que celui copié), Suppr supprime
+  **et toutes les clés d'après** du même effet glissent avec elle (Maj tenue : la clé choisie
+  seule ; Échap abandonne le geste) ; Ctrl+C copie, Ctrl+V **insère** après la clé de la tête de
+  lecture (sinon la dernière d'avant) et repousse les clés d'après, Maj+Ctrl+V colle exactement
+  sur la tête de lecture sans rien repousser, sur l'effet choisi (de la même sorte que celui
+  copié), Suppr supprime
   (rien si aucune n'est choisie) ; le clic droit propose les mêmes commandes. Changer d'effet
   choisi lâche le choix des clés. Une clé créée par
   « Créer une clé » est aussitôt choisie. Chaque geste est une étape d'annulation nommée
-  (« Déplacer / Coller / Supprimer des clés d'effet »).
+  (« Décaler / Déplacer / Insérer / Coller à la tête de lecture / Supprimer des clés d'effet »).
 - **Caméra : clés, effets, focales, aides au cadrage** (2026-10-19). Les losanges jaunes de la
   piste Caméra (montage, et timeline) se choisissent comme les clés d'effets : clic (Ctrl : ajoute
   ou retire ; Maj : toutes celles d'entre, d'un plan à l'autre), la tête de lecture va dessus ;
-  glisser en emmène toutes les choisies (Échap abandonne) ; **au rectangle** : un glisser qui part
+  **glisser une clé emmène aussi toutes les clés d'après** de son plan (Maj tenue : seules les clés
+  choisies bougent, sans passer par-dessus une clé non choisie ; Échap abandonne) ; **au
+  rectangle** : un glisser qui part
   d'un espace vide de la piste Caméra (montage ou timeline) trace un rectangle et choisit les clés
   qu'il touche (Maj : les ajoute au choix ; Ctrl : bascule celles qu'il touche ; Échap rend le choix
-  d'avant ; un clic dans le vide lâche le choix) ; Ctrl+C / Ctrl+V à l'image courante en
-  gardant l'écart entre les clés (dans le montage elles passent d'un plan à l'autre, en animation
-  elles restent dans le plan courant, les clés qui tombent hors sont dites et laissées de côté) ;
+  d'avant ; un clic dans le vide lâche le choix) ; Ctrl+C copie ; **Ctrl+V insère** les clés
+  après la clé sur laquelle est la tête de lecture (sinon la dernière d'avant elle ; sans clé
+  avant, sur la tête) en gardant l'écart entre elles : la première collée est à l'image d'après
+  cette clé, et les clés d'après sont repoussées de la longueur du bloc (écart de la dernière clé
+  collée + 1), donc rien n'est écrasé ; **Maj+Ctrl+V** (« Coller à la tête de lecture ») pose la
+  première clé exactement sur la tête, sans rien repousser (les clés rencontrées sont remplacées).
+  Dans le montage elles passent d'un plan à l'autre, en animation elles restent dans le plan
+  courant, les clés qui tombent hors sont dites et laissées de côté ; si l'insertion repoussait une
+  clé hors de son plan, rien n'est collé (le plan ne s'allonge pas, la barre d'état le dit) ;
   Suppr supprime (rien sans clé choisie) ; clic droit sur la piste Caméra. Une étape d'annulation
-  nommée par geste. Dans les réglages de l'outil Caméra, la section **Effets de caméra** pose des
+  nommée par geste (« Décaler / Déplacer / Insérer / Coller à la tête de lecture / Supprimer des
+  clés de caméra »). Ces règles valent aussi pour les clés d'effets et les clés de dessins.
+  Maj+Ctrl+V est la touche de l'ancien « Coller sur place » (un simple alias de Ctrl+V, resté sans
+  touche) ; hors clés, il colle comme Ctrl+V. Maj+clic sans mouvement reste le choix d'une plage ;
+  c'est le seuil de glissement d'egui (environ 6 points) qui sépare ce clic d'un Maj+glisser. Dans les réglages de l'outil Caméra, la section **Effets de caméra** pose des
   clés ordinaires à partir de la caméra actuelle (rien n'est remis à zéro) : caméra à l'épaule
   (found footage), tremblement léger, explosion / impact (avec coup de zoom), secousse rapide,
   zoom avant, zoom arrière, zoom choc, vertigo (dolly zoom) ; intensité, durée, fréquence, graine ;
@@ -508,14 +523,25 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   principal : sous chaque plan, ses calques dans son propre ordre (du haut de sa pile vers le
   bas), et l'essentiel s'y fait sans entrer dans le plan :
   nouveau calque (bouton de la barre), nouveau dessin à une image (double-clic sur la piste du
-  calque, ou clic droit), placer un dessin avant ou après un autre (le prendre par son milieu ;
-  chacun garde sa durée), étirer une clé (la limite entre deux dessins : l'un s'allonge, l'autre
-  raccourcit), décaler un calque (sa barre), le rogner ou l'allonger (ses bouts). Après un clic
-  sur la piste d'un calque, Ctrl+C / Ctrl+V copient et collent la clé (le dessin et sa durée),
-  Suppr la supprime (sa voisine la remplace), Ctrl+D la duplique sur place ; le clic droit
-  propose aussi de la supprimer en laissant un vide. Ctrl ou Maj + clic choisissent plusieurs
+  calque, ou clic droit), **décaler une clé** (la prendre par son milieu ou par la limite entre
+  deux dessins : elle **et toutes les clés d'après** sur ce calque glissent, chacune gardant sa
+  durée, l'exposition d'avant s'allonge ou raccourcit ; **Maj tenue : la clé seule** bouge, la
+  suite reste en place ; **Alt tenue : l'ancien geste**, la clé prend sa place avant ou après les
+  autres dessins, chacun gardant sa durée), décaler un calque (sa barre), le rogner ou l'allonger
+  (ses bouts). La durée du plan ne change jamais pendant ces gestes : un calque tenu jusqu'à la
+  fin du plan le reste (sa dernière exposition absorbe le décalage, en gardant au moins une
+  image), sinon le contenu s'arrête à la fin du plan (le bord droit d'un dessin dans la timeline
+  suit la même règle : Maj tenue, seule cette limite bouge). Après un clic
+  sur la piste d'un calque, Ctrl+C copie la clé (le dessin et sa durée), **Ctrl+V l'insère** après
+  la clé sur laquelle est la tête de lecture, sur le calque courant, et repousse la suite de la
+  piste de la longueur du bloc (sans allonger le plan : la queue de la dernière exposition est
+  coupée ; rien n'est collé si une clé entière sortirait du plan) ; **Maj+Ctrl+V** (« Coller à
+  la tête de lecture ») la pose exactement sur la tête, par-dessus ce qui y était, sans rien
+  repousser. Suppr la supprime (sa voisine la remplace), Ctrl+D la duplique sur place ; le clic
+  droit propose aussi de la supprimer en laissant un vide. Le storyboard verrouillé refuse tous
+  ces gestes. Ctrl ou Maj + clic choisissent plusieurs
   clés à la fois (Ctrl+A : toutes celles du calque) : ces commandes les visent toutes, et une
-  clé choisie prise par son milieu les emmène toutes (chacune garde sa durée) ; un repère montre
+  clé choisie prise par son milieu les emmène toutes ; des fantômes et un repère montrent
   où elles se poseront. Un glisser dans le vide des pistes choisit les clés au rectangle. Zoom
   de la bande : la petite barre en bas, Ctrl + molette, ou Alt+1 / Alt+2 / Alt+3 (tout voir). F5
   (ou double-clic sur la piste) pose une clé à l'image courante, copie du dessin montré (sinon du

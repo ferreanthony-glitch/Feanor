@@ -326,6 +326,202 @@ fn several_keys_slide_together() {
     assert_eq!(drop_marks(&base(), &[2, 4], 4), vec![8], "le bloc B-C après D : la fin de D");
     assert_eq!(drop_marks(&base(), &[0, 4], 3), vec![4, 8], "A après B, C après D");
 }
+// ---------------------------------------------------------------------- décaler, déplacer, insérer (2026-10-19)
+
+/// A (dessin 1) sur 0..3, B (2) sur 3..5, C (3) sur 5..9 ; un rôle au début de B et un sur C, une
+/// clé d'effet à l'image 6.
+fn abc() -> Layer {
+    let mut l = Layer::new("L", LayerKind::Bitmap);
+    l.frames = vec![Some(1), Some(1), Some(1), Some(2), Some(2), Some(3), Some(3), Some(3), Some(3)];
+    l.roles.insert(3, crate::roles::Role::Key);
+    l.roles.insert(6, crate::roles::Role::Key);
+    let mut e = Effect::new(EffectKind::GaussianBlur);
+    e.keys.push(FxKey { frame: 6, values: vec![1.0] });
+    l.fx.push(e);
+    l
+}
+
+fn roles(l: &Layer) -> Vec<usize> {
+    l.roles.keys().copied().collect()
+}
+
+#[test]
+fn dragging_a_drawing_key_carries_every_later_key() {
+    use crate::handles::{clamp_ripple_delta, ripple_at, ripple_bounds};
+    let plan = 12;
+    assert_eq!(ripple_bounds(&abc(), 3, plan), (-2, 3), "A garde une image ; le calque finit au plus à la fin du plan");
+    assert_eq!(clamp_ripple_delta(&abc(), 3, -9, plan), -2);
+    assert_eq!(clamp_ripple_delta(&abc(), 3, 9, plan), 3);
+    // B tirée de 2 images vers la droite : A s'allonge, B et C glissent avec leur durée, leurs rôles
+    // et la clé d'effet de C.
+    let mut l = abc();
+    ripple_at(&mut l, 3, 2, plan);
+    assert_eq!(frames(&l), [vec![Some(1); 5], vec![Some(2); 2], vec![Some(3); 4]].concat());
+    assert_eq!(roles(&l), vec![5, 8]);
+    assert_eq!(l.fx[0].keys[0].frame, 8);
+    // Vers la gauche : A raccourcit, la suite recule.
+    let mut l = abc();
+    ripple_at(&mut l, 3, -2, plan);
+    assert_eq!(frames(&l), [vec![Some(1)], vec![Some(2); 2], vec![Some(3); 4]].concat());
+    assert_eq!(roles(&l), vec![1, 4]);
+    assert_eq!(l.fx[0].keys[0].frame, 4);
+    // Les clés d'avant ne bougent pas : C tirée de 1 image, A et B restent telles quelles.
+    let mut l = abc();
+    ripple_at(&mut l, 5, 1, plan);
+    assert_eq!(frames(&l), [vec![Some(1); 3], vec![Some(2); 3], vec![Some(3); 4]].concat());
+    assert_eq!(roles(&l), vec![3, 7], "le rôle de B reste, celui de C suit");
+}
+
+#[test]
+fn the_plan_never_grows_and_the_last_exposure_absorbs_when_it_was_held_to_the_end() {
+    use crate::handles::{ripple_at, ripple_bounds};
+    // Le calque tient jusqu'à la fin du plan (9 images) : C, tenue jusque-là, absorbe le décalage.
+    assert_eq!(ripple_bounds(&abc(), 3, 9), (-2, 3), "C garde au moins une image");
+    let mut l = abc();
+    ripple_at(&mut l, 3, 3, 9);
+    assert_eq!(frames(&l), [vec![Some(1); 6], vec![Some(2); 2], vec![Some(3)]].concat(), "la queue de C est coupée, le plan reste à 9 images");
+    // Vers la gauche, C reste tenue jusqu'à la fin du plan.
+    let mut l = abc();
+    ripple_at(&mut l, 3, -2, 9);
+    assert_eq!(frames(&l), [vec![Some(1)], vec![Some(2); 2], vec![Some(3); 6]].concat());
+    // Un calque qui finit avant la fin du plan garde sa fin décalée, sans la dépasser.
+    assert_eq!(ripple_bounds(&abc(), 3, 11), (-2, 2));
+    // La fin de la dernière exposition n'a rien après elle : elle ne peut que raccourcir (C garde une image).
+    assert_eq!(ripple_bounds(&abc(), 9, 9), (-3, 0));
+}
+
+#[test]
+fn shift_held_moves_only_the_boundary_of_the_chosen_keys() {
+    use crate::handles::{clamp_key_delta, move_keys_only, single_bounds, KeyMove};
+    assert_eq!(single_bounds(&abc(), &[3]), (-2, 1), "A garde une image, B aussi");
+    // B avance d'une image : A s'allonge, B raccourcit, C ne bouge pas ; le rôle suit B.
+    let mut l = abc();
+    assert_eq!(move_keys_only(&mut l, &[3], 1), vec![4]);
+    assert_eq!(frames(&l), [vec![Some(1); 4], vec![Some(2)], vec![Some(3); 4]].concat());
+    assert_eq!(roles(&l), vec![4, 6]);
+    // B recule de 2 : A raccourcit, B s'allonge.
+    let mut l = abc();
+    move_keys_only(&mut l, &[3], -2);
+    assert_eq!(frames(&l), [vec![Some(1)], vec![Some(2); 4], vec![Some(3); 4]].concat());
+    // Elle ne passe pas par-dessus ses voisines.
+    assert_eq!(clamp_key_delta(&abc(), &[3], 5, KeyMove::Single, 12), 1);
+    assert_eq!(clamp_key_delta(&abc(), &[3], -5, KeyMove::Single, 12), -2);
+    // B et C ensemble : elles glissent du même nombre d'images, la suite (la fin du calque) reste.
+    let mut l = abc();
+    assert_eq!(move_keys_only(&mut l, &[3, 5], 1), vec![4, 6]);
+    assert_eq!(frames(&l), [vec![Some(1); 4], vec![Some(2); 2], vec![Some(3); 3]].concat());
+    assert_eq!(clamp_key_delta(&abc(), &[3, 5], 10, KeyMove::Single, 12), 3, "C garde une image");
+    assert_eq!(clamp_key_delta(&abc(), &[3, 5], -10, KeyMove::Single, 12), -2, "A garde une image");
+    // Une clé à l'image 0 qui avance laisse des images vides devant elle.
+    let mut d = Layer::new("D", LayerKind::Bitmap);
+    d.frames = vec![Some(1), Some(1), Some(1), Some(2), Some(2)];
+    assert_eq!(move_keys_only(&mut d, &[0], 2), vec![2]);
+    assert_eq!(frames(&d), vec![None, None, Some(1), Some(2), Some(2)]);
+    assert_eq!(clamp_key_delta(&d, &[0], -4, KeyMove::Single, 8), 0, "pas avant l'image 0");
+}
+
+#[test]
+fn the_drag_modes_and_their_preview() {
+    use crate::handles::{apply_key_move, clamp_key_delta, key_preview, KeyMove};
+    // Par défaut, les clés d'après suivent ; le décalage tient compte de la fin du plan.
+    assert_eq!(clamp_key_delta(&abc(), &[3, 5], 4, KeyMove::Ripple, 12), 3);
+    assert_eq!(clamp_key_delta(&abc(), &[5], -4, KeyMove::Ripple, 12), -1, "B garde une image");
+    assert_eq!(clamp_key_delta(&abc(), &[3], 7, KeyMove::Reorder, 12), 7, "réordonner : l'ancien geste, sans borne");
+    let mut l = abc();
+    assert_eq!(apply_key_move(&mut l, &[3], 2, KeyMove::Ripple, 12), vec![5]);
+    assert_eq!(frames(&l).len(), 11);
+    let mut l = abc();
+    assert_eq!(apply_key_move(&mut l, &[3], 4, KeyMove::Reorder, 12), vec![7], "réordonner : B passe après C");
+    // L'aperçu (rien ne bouge avant le lâcher) : les expositions déplacées et où se pose la clé.
+    let (ghosts, marks) = key_preview(&abc(), &[3], 2, KeyMove::Ripple, 12);
+    assert_eq!((ghosts, marks), (vec![(5, 7), (7, 11)], vec![5]), "B et C, glissées de 2");
+    let (ghosts, marks) = key_preview(&abc(), &[3], 1, KeyMove::Single, 12);
+    assert_eq!((ghosts, marks), (vec![(4, 5)], vec![4]), "B seule : sa nouvelle exposition");
+    assert_eq!(key_preview(&abc(), &[3], 0, KeyMove::Ripple, 12), (vec![], vec![]), "sans bouger : rien");
+}
+
+#[test]
+fn pasted_drawing_keys_are_inserted_after_the_key_under_the_playhead() {
+    use crate::handles::runs;
+    use crate::montagekeys::{gap_short, insert_point, open_gap};
+    // Après la clé sous la tête de lecture.
+    assert_eq!(insert_point(&abc(), 3), 5, "la tête sur B : la fin de B");
+    assert_eq!(insert_point(&abc(), 4), 5);
+    assert_eq!(insert_point(&abc(), 0), 3);
+    assert_eq!(insert_point(&abc(), 8), 9);
+    let mut v = Layer::new("V", LayerKind::Bitmap);
+    v.frames = vec![Some(1), Some(1), None, None, Some(2)];
+    assert_eq!(insert_point(&v, 3), 2, "sur un vide : la fin du dernier dessin d'avant");
+    assert_eq!(insert_point(&v, 20), 5, "après la fin du calque");
+    let mut w = Layer::new("W", LayerKind::Bitmap);
+    w.frames = vec![None, None, Some(1)];
+    assert_eq!(insert_point(&w, 1), 1, "aucun dessin avant : la tête elle-même");
+    // La place : le plan ne s'allonge pas, la queue de la dernière exposition peut être coupée.
+    assert_eq!(gap_short(&abc(), 5, 3, 12), 0);
+    assert_eq!(gap_short(&abc(), 5, 7, 12), 1, "le début de C sortirait du plan de 12 images");
+    assert_eq!(gap_short(&abc(), 5, 3, 10), 0, "C perd sa queue, pas son début");
+    assert_eq!(gap_short(&abc(), 5, 5, 10), 1);
+    assert_eq!(gap_short(&abc(), 9, 50, 12), 0, "rien après : rien à repousser");
+    // Insérer une clé de 2 images après B : C est repoussée de 2, ses rôles et sa clé d'effet aussi.
+    let mut l = abc();
+    open_gap(&mut l, 5, 2, 12);
+    overwrite_run(&mut l, 5, 2, 9);
+    assert_eq!(frames(&l), [vec![Some(1); 3], vec![Some(2); 2], vec![Some(9); 2], vec![Some(3); 4]].concat());
+    assert_eq!(roles(&l), vec![3, 8]);
+    assert_eq!(l.fx[0].keys[0].frame, 8);
+    assert_eq!(runs(&l).len(), 4);
+    // Plan de 10 images : la queue de C est coupée, le plan reste à 10.
+    let mut l = abc();
+    open_gap(&mut l, 5, 3, 10);
+    assert_eq!(l.frames.len(), 10);
+    assert_eq!(&l.frames[5..], &[None, None, None, Some(3), Some(3)]);
+    // Maj+Ctrl+V : sur la tête de lecture, par-dessus ce qui y était, sans rien repousser.
+    let mut l = abc();
+    overwrite_run(&mut l, 3, 2, 9);
+    assert_eq!(frames(&l), [vec![Some(1); 3], vec![Some(9); 2], vec![Some(3); 4]].concat());
+}
+
+#[test]
+fn drawing_key_edits_are_named_undo_steps() {
+    use crate::handles::{ripple_at, move_keys_only};
+    use crate::history::{Edit, History, Nav};
+    use crate::montagekeys::{key_move_name, open_gap};
+    let mut doc = crate::document::Document::new(64, 64, 24);
+    doc.panels[0].set_length(12);
+    doc.panels[0].layers[0].frames = abc().frames;
+    let original = doc.panels[0].layers[0].frames.clone();
+    let mut nav = Nav { panel: 0, layer: 0 };
+    let mut history = History::default();
+    let mut step = |doc: &mut crate::document::Document, name: &str, edit: &dyn Fn(&mut Layer)| {
+        let snap = Edit::Structure { structure: doc.structure(), nav };
+        edit(&mut doc.panels[0].layers[0]);
+        let before = history.context.replace(name.to_string());
+        history.push(snap);
+        history.context = before;
+    };
+    use crate::handles::KeyMove;
+    step(&mut doc, key_move_name(KeyMove::Ripple, false), &|l| ripple_at(l, 3, 2, 12));
+    step(&mut doc, key_move_name(KeyMove::Single, false), &|l| {
+        move_keys_only(l, &[5], 1);
+    });
+    step(&mut doc, "Insérer des clés", &|l| {
+        open_gap(l, 8, 1, 12);
+        overwrite_run(l, 8, 1, 7);
+    });
+    assert_eq!(history.names().0, vec!["Décaler les clés", "Déplacer une clé", "Insérer des clés"]);
+    assert_eq!(doc.panels[0].layers[0].frames.len(), 12);
+    for _ in 0..3 {
+        assert!(history.undo(&mut doc, &mut nav));
+    }
+    assert_eq!(doc.panels[0].layers[0].frames, original);
+    for _ in 0..3 {
+        assert!(history.redo(&mut doc, &mut nav));
+    }
+    assert_eq!(doc.panels[0].layers[0].frames.len(), 12);
+    assert_eq!(key_move_name(KeyMove::Single, true), "Déplacer des clés");
+    assert_eq!(key_move_name(KeyMove::Reorder, false), "Réordonner les clés");
+}
+
 #[test]
 fn a_new_key_starts_from_a_copy_of_the_drawing() {
     use crate::handles::key_source;

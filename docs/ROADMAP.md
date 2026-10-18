@@ -1401,6 +1401,46 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         (`[aides_cadrage]`, valeurs par défaut serde, sans changer la version du projet) ; le cadre
         de format et les zones de sécurité restent dans la disposition. Rien ne passe dans les
         exports ;
+      - **clés : décaler, déplacer, insérer, coller sur la tête** (Anthony, 2026-10-19 : « quand je
+        tire une image clé, les autres clés suivent ; avec Maj, seule l'image clé se déplace ;
+        Ctrl+V colle après la clé de la tête de lecture ; Maj+Ctrl+V sur la tête »). Branche
+        `cles-regles` (sur `retouches`). Mêmes règles pour les clés de caméra (`camkeys.rs`), les
+        clés d'effets (`fxkeys.rs`) et les clés de dessins (`handles.rs`, `montagekeys.rs`).
+        (1) Glisser : par défaut la clé prise (la première des choisies) et toutes les clés
+        d'après, dans le même plan (caméra), le même effet (effets) ou la même piste (dessins),
+        glissent du même nombre d'images (« Décaler les clés… ») ; celles d'avant ne bougent pas, la
+        première s'arrête avant la clé d'avant (`clamp_ripple`, `ripple_frames`, `ripple_keys`,
+        `ripple_at`). Maj tenue, même en cours de geste : seules les clés choisies bougent
+        (« Déplacer une clé… »), sans passer par-dessus une clé non choisie pour la caméra
+        (`clamp_delta`) et les dessins ; pour les effets, comme avant, une clé qui tombe sur une
+        autre la remplace. Maj + clic sans mouvement reste le choix d'une plage (le seuil de
+        glissement d'egui, environ 6 points, sépare le clic du glisser). (2) Ctrl+V insère
+        (`paste_insert`, `paste_insert_keys`, `insert_point` + `open_gap`) : la première clé collée
+        va à l'image qui suit la clé sur laquelle est la tête (sinon la dernière clé d'avant la
+        tête ; sans clé avant, sur la tête) ; les écarts du bloc sont gardés et tout ce qui suit est
+        repoussé de la longueur du bloc (écart de la dernière clé collée + 1 ; pour les dessins,
+        écart + durée), donc rien n'est écrasé. Caméra : chaque plan touché fait la place de ce qu'il
+        reçoit (le collage passe d'un plan à l'autre dans le montage). Dessins : l'ancre est le
+        calque courant, même point d'insertion pour tous les calques collés. (3) Maj+Ctrl+V,
+        action `edition.coller_a_la_tete` : la première clé exactement sur la tête, sans rien
+        repousser, remplace ce qu'elle rencontre (c'est l'ancien Ctrl+V) ; hors clés, il fait ce
+        que faisait Ctrl+Maj+V avant. Conflit : Ctrl+Maj+V était `edition.coller_sur_place`
+        (PASTE_IN_PLACE_KEY de Storyboard Pro, alias de Ctrl+V dans SHOT) : la touche passe à
+        `edition.coller_a_la_tete`, « Coller sur place » reste une commande sans touche par défaut
+        (la ligne du `keymap.toml` garde sa source). (4) Plan : jamais allongé. Glisser des dessins :
+        un calque tenu jusqu'à la fin du plan le reste (sa dernière exposition absorbe, avec une image
+        au moins), sinon le contenu s'arrête à la fin du plan ; insérer : la queue de la dernière
+        exposition est coupée, et rien n'est collé (message) si le début d'une clé repoussée sortirait
+        du plan. Caméra et effets : même refus. La limite entre deux dessins (montage) et le bord
+        droit d'un dessin (timeline) suivent la règle (par défaut les clés d'après suivent, Maj : cette
+        limite seule) ; Alt tenue sur un dessin du montage rend l'ancien geste (la clé prend sa place
+        parmi les autres, `shift_runs`, « Réordonner les clés »). Verrou du storyboard : refus comme
+        avant (`content_refuses`). Étapes d'annulation nommées « Décaler les clés », « Déplacer une
+        clé », « Insérer des clés », « Coller les clés à la tête de lecture » (« … de caméra », « …
+        d'effet »). Les règles (cascade par défaut, Maj = seule, insertion après la clé de la tête)
+        sont des choix d'Anthony ; leurs équivalents dans Storyboard Pro et TVPaint sont à vérifier.
+        Fonctions pures testées (`camkeys_tests.rs`, `fxkeys_tests.rs`, `handles_tests.rs`,
+        `keymap_tests.rs`) ;
       - **clés d'effets : seulement celles de l'effet choisi** (Anthony : « elles n'apparaissent
         que lorsque l'effet est sélectionné »). L'effet choisi (`App::fx_choice` : plan, calque,
         rang) est celui du panneau Effets : un clic sur son nom le choisit (cadre de la couleur de

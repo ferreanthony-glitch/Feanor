@@ -413,6 +413,8 @@ pub struct App {
     /// Une clé seule prise dans le montage (`Handle::Key`) : de combien d'images elle est glissée.
     /// Elle ne se pose qu'au lâcher ; d'ici là, un repère montre où (`montagekeys::drop_view`).
     pub(crate) key_drag_delta: isize,
+    /// Le geste de cette clé seule (Maj, Alt ou rien tenu à la dernière image d'écran).
+    pub(crate) key_drag_mode: crate::handles::KeyMove,
     /// Le dernier clic dans le montage était sur la piste d'un calque : copier, coller et
     /// supprimer visent la clé à l'image courante du calque courant.
     pub(crate) key_focus: bool,
@@ -833,6 +835,7 @@ impl App {
             key_anchor: None,
             keys_drag: None,
             key_drag_delta: 0,
+            key_drag_mode: crate::handles::KeyMove::Ripple,
             key_rect: None,
             tool_spring: None,
             ctrl_lasso: None,
@@ -3029,7 +3032,7 @@ impl App {
         self.finish_text_edit();
         // Une image copiée ailleurs (navigateur…) passe avant le presse-papiers de SHOT, dont
         // les copies écrivent « SHOT : … » dans celui de Windows (`pasteimage.rs`).
-        if action == "edition.coller" {
+        if action == "edition.coller" || action == "edition.coller_a_la_tete" {
             if let Some(image) = crate::pasteimage::clipboard_image() {
                 self.paste_clipboard_image(image);
                 return;
@@ -3110,6 +3113,11 @@ impl App {
                 self.delete_cam_keys();
             }
             "edition.coller" if self.cam_clip_recent && self.cam_key_clipboard.is_some() && (self.key_focus || self.images_focus) => self.paste_cam_keys(),
+            // Maj+Ctrl+V : les clés (caméra, effets, dessins) se collent sur la tête de lecture ;
+            // le reste se colle comme Ctrl+V (voir plus bas).
+            "edition.coller_a_la_tete" if self.cam_clip_recent && self.cam_key_clipboard.is_some() && (self.key_focus || self.images_focus) => {
+                self.paste_cam_keys_at_head()
+            }
             "edition.supprimer" if self.cam_keys_have_focus() => self.delete_cam_keys(),
             "camera.cles_copier" => self.copy_cam_keys(),
             "camera.cles_coller" => self.paste_cam_keys(),
@@ -3140,6 +3148,9 @@ impl App {
                 self.delete_fx_keys();
             }
             "edition.coller" if self.fx_clip_recent && self.fx_key_clipboard.is_some() && (self.key_focus || self.images_focus) => self.paste_fx_keys(),
+            "edition.coller_a_la_tete" if self.fx_clip_recent && self.fx_key_clipboard.is_some() && (self.key_focus || self.images_focus) => {
+                self.paste_fx_keys_at_head()
+            }
             "edition.supprimer" if self.fx_keys_have_focus() => self.delete_fx_keys(),
             "fx.cles_copier" => self.copy_fx_keys(),
             "fx.cles_coller" => self.paste_fx_keys(),
@@ -3152,6 +3163,10 @@ impl App {
                 self.delete_keys(false);
             }
             "edition.coller" if self.key_focus && self.key_clipboard.is_some() => self.paste_keys(),
+            "edition.coller_a_la_tete" if self.key_focus && self.key_clipboard.is_some() => self.paste_keys_at_head(),
+            // Ni clés de caméra, ni clés d'effets, ni clés de dessins à coller : Maj+Ctrl+V fait
+            // ce qu'il faisait avant (« Coller sur place », un alias de Ctrl+V).
+            "edition.coller_a_la_tete" => self.run_action("edition.coller"),
             "edition.supprimer" if self.key_focus => self.delete_keys(false),
             "dessin.dupliquer" if self.key_focus => self.duplicate_keys(),
             // Une clé à l'image courante du calque courant (montage, timeline, dessin en animation) :

@@ -59,6 +59,23 @@ fn default_file_is_clean() {
 }
 
 #[test]
+fn ctrl_shift_v_pastes_at_the_playhead_and_ctrl_v_keeps_its_meaning() {
+    // Anthony, 2026-10-19 : Ctrl+V insère après la clé de la tête de lecture, Maj+Ctrl+V colle sur la tête.
+    // Ctrl+Maj+V était « Coller sur place » (un alias de Ctrl+V) : la touche passe à la nouvelle action.
+    let map = default_map();
+    let ctrl = Modifiers { command: true, ctrl: true, ..Modifiers::NONE };
+    let ctrl_shift = Modifiers { shift: true, ..ctrl };
+    for mode in [Mode::Storyboard, Mode::Animation] {
+        assert_eq!(press(&map, Key::V, Key::V, ctrl, mode).as_deref(), Some("edition.coller"));
+        assert_eq!(press(&map, Key::V, Key::V, ctrl_shift, mode).as_deref(), Some("edition.coller_a_la_tete"));
+    }
+    assert_eq!(map.label("edition.coller_a_la_tete"), "Ctrl+Maj+V");
+    assert!(map.keys_of("edition.coller_sur_place").is_empty(), "Coller sur place reste une commande, sans touche par défaut");
+    assert!(map.warnings.is_empty(), "aucun conflit : {:#?}", map.warnings);
+    assert!(ACTIONS.iter().any(|a| a.id == "edition.coller_a_la_tete" && a.implemented));
+}
+
+#[test]
 fn storyboard_pro_sources_are_exact() {
     // Chaque raccourci qui se dit « Storyboard Pro 27 » cite un identifiant du fichier d'origine,
     // et les 65 y sont tous.

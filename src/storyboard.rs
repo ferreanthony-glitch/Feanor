@@ -1111,7 +1111,7 @@ impl App {
             if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
                 self.key_rect = None;
                 let n = self.key_sel.len();
-                self.status = format!("{n} clé{} choisie{} : Ctrl+C, Ctrl+V, Suppr, Ctrl+D ; une clé choisie prise par son milieu les emmène toutes.", if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" });
+                self.status = format!("{n} clé{} choisie{} : Ctrl+C, Ctrl+V (insérer), Maj+Ctrl+V (sur la tête), Suppr, Ctrl+D ; une clé choisie prise par son milieu décale la suite avec elle (Maj : seules les clés choisies).", if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" });
             }
         }
         // Plusieurs clés choisies prises à la fois (`montagekeys`).
@@ -1374,9 +1374,21 @@ impl App {
                         self.copy_keys();
                     }
                     let can_paste = self.key_clipboard.is_some();
-                    if ui.add_enabled(can_paste, egui::Button::new("Coller ici").shortcut_text(key(self, "edition.coller"))).clicked() {
+                    if ui
+                        .add_enabled(can_paste, egui::Button::new("Coller les clés").shortcut_text(key(self, "edition.coller")))
+                        .on_hover_text("Insère les clés après la clé de la tête de lecture ; le reste de la piste est repoussé.")
+                        .clicked()
+                    {
                         ui.close_menu();
                         self.paste_keys();
+                    }
+                    if ui
+                        .add_enabled(can_paste, egui::Button::new("Coller à la tête de lecture").shortcut_text(key(self, "edition.coller_a_la_tete")))
+                        .on_hover_text("La première clé commence sur la tête de lecture, par-dessus ce qui y était ; rien n'est repoussé.")
+                        .clicked()
+                    {
+                        ui.close_menu();
+                        self.paste_keys_at_head();
                     }
                     if ui
                         .add(egui::Button::new(what("Dupliquer la clé sur place", "Dupliquer les clés sur place")).shortcut_text(key(self, "dessin.dupliquer")))

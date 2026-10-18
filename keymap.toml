@@ -120,10 +120,19 @@ action = "edition.coller"
 touches = ["Ctrl+V"]
 source = "Storyboard Pro 27 : PASTE_KEY"
 
+# Ctrl+Maj+V était « Coller sur place » (PASTE_IN_PLACE_KEY de Storyboard Pro 27), un simple alias de
+# Ctrl+V dans SHOT (le collage pose déjà tout à sa place d'origine). Depuis le 2026-10-19 (demande
+# d'Anthony), Ctrl+Maj+V colle les clés « à la tête de lecture » ; hors clés, il garde son ancien
+# rôle (il colle comme Ctrl+V). « Coller sur place » reste une commande, sans touche par défaut.
 [[raccourci]]
 action = "edition.coller_sur_place"
+touches = []
+source = "Storyboard Pro 27 : PASTE_IN_PLACE_KEY (sa touche Ctrl+Maj+V va à edition.coller_a_la_tete)"
+
+[[raccourci]]
+action = "edition.coller_a_la_tete"
 touches = ["Ctrl+Maj+V"]
-source = "Storyboard Pro 27 : PASTE_IN_PLACE_KEY"
+source = "choix d'Anthony, 2026-10-19 (clés : Ctrl+V insère après la clé de la tête, Ctrl+Maj+V colle sur la tête)"
 
 [[raccourci]]
 action = "edition.supprimer"

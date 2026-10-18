@@ -13,11 +13,19 @@
 //!   interrupteur général ;
 //! - un clic le choisit (Ctrl : l'ajoute ou le retire ; Maj : tous ceux d'entre l'ancre et lui, sur
 //!   ce calque) et place la tête de lecture dessus ; le choix efface celui des dessins et des images ;
-//! - glisser un losange emmène tous les choisis du même nombre d'images (une étape d'annulation
-//!   par geste, Échap l'abandonne) ; une clé qui tombe sur une autre du même effet la remplace ;
-//! - Ctrl+C copie les clés choisies, Ctrl+V les colle à l'image courante, sur l'effet choisi (de
-//!   la même sorte que celui copié), Suppr les supprime ; le clic droit a les mêmes commandes.
-//!   Suppr sans clé choisie ne fait rien ;
+//! - glisser un losange (Anthony, 2026-10-19, mêmes règles que les clés de caméra) : par défaut la
+//!   clé prise (ou la première des choisies) et TOUTES les clés d'après du même effet glissent du
+//!   même nombre d'images (« Décaler les clés d'effet ») ; les clés d'avant ne bougent pas, la
+//!   première ne passe pas par-dessus la clé d'avant (`clamp_ripple`). Maj tenue : seules les clés
+//!   choisies bougent (« Déplacer une clé d'effet ») ; une clé qui tombe alors sur une autre du
+//!   même effet la remplace, comme avant. Une étape d'annulation par geste, Échap l'abandonne ;
+//! - Ctrl+C copie les clés choisies. Ctrl+V les insère après la clé de l'effet sur laquelle est la
+//!   tête de lecture (sinon la dernière d'avant elle, sinon sur la tête), en gardant leurs écarts,
+//!   et repousse les clés d'après de la longueur du bloc (`paste_insert_keys`, « Insérer des clés
+//!   d'effet ») ; Maj+Ctrl+V (`edition.coller_a_la_tete`) les colle exactement sur la tête de lecture,
+//!   sans rien repousser (`paste_keys`, « Coller les clés d'effet à la tête de lecture »). Elles
+//!   vont sur l'effet choisi (de la même sorte que celui copié). Suppr les supprime ; le clic droit
+//!   a les mêmes commandes. Suppr sans clé choisie ne fait rien ;
 //! - une clé créée (panneau Effets) devient le choix ; changer d'effet choisi lâche le choix des clés.
 //!
 //! La logique est ici en fonctions pures (`move_keys`, `paste_keys`…), testées dans
@@ -181,6 +189,35 @@ pub(crate) fn clamp_delta(groups: &[(Vec<usize>, usize)], want: isize) -> isize 
     want.clamp(lo, hi.max(lo))
 }
 
+/// Les clés qui suivent le geste « décaler » : pour chaque effet touché, sa première clé choisie
+/// et toutes ses clés d'après (choisies ou non). (effet, image), dans l'ordre.
+pub(crate) fn ripple_keys(fx: &[Effect], keys: &[(usize, usize)]) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    for (ei, e) in fx.iter().enumerate() {
+        let Some(first) = keys.iter().filter(|k| k.0 == ei).map(|k| k.1).min() else { continue };
+        out.extend(marker_frames(e).into_iter().filter(|f| *f >= first).map(|f| (ei, f)));
+    }
+    out
+}
+
+/// Le décalage `want` ramené dans ce que permet le geste « décaler » : `groups` donne, pour chaque
+/// effet touché, (toutes les images de ses clés, la première image choisie, la durée du plan). La
+/// première clé choisie ne passe pas par-dessus la clé d'avant (qui ne bouge pas) ni l'image 0, la
+/// dernière clé de l'effet reste dans son plan.
+pub(crate) fn clamp_ripple(groups: &[(Vec<usize>, usize, usize)], want: isize) -> isize {
+    if groups.is_empty() {
+        return 0;
+    }
+    let (mut lo, mut hi) = (isize::MIN, isize::MAX);
+    for (all, first, len) in groups {
+        let floor = all.iter().copied().filter(|f| f < first).max().map_or(0, |p| p as isize + 1);
+        lo = lo.max(floor - *first as isize);
+        let last = all.iter().copied().max().unwrap_or(*first);
+        hi = hi.min((len.saturating_sub(1) as isize - last as isize).max(0));
+    }
+    want.clamp(lo, hi.max(lo))
+}
+
 /// Les clés `keys` (effet, image) de la pile `fx` déplacées de `delta` images : chacune garde ses
 /// paramètres, une clé qui en rencontre une autre du même effet (non choisie) la remplace, les
 /// clés restent dans l'ordre des images. Renvoie où elles sont maintenant : (effet, image). Le
@@ -240,6 +277,53 @@ pub(crate) fn paste_keys(e: &mut Effect, clip: &FxClip, at: usize, len: usize) -
     Pasted { placed, skipped }
 }
 
+/// Ce que donne un collage par insertion.
+#[derive(Debug, PartialEq)]
+pub(crate) struct Inserted {
+    pub pasted: Pasted,
+    /// Clés d'après repoussées.
+    pub pushed: usize,
+}
+
+/// L'image de la clé de l'effet `e` sur laquelle est la tête de lecture (`playhead`), sinon de la
+/// dernière clé d'avant elle ; rien s'il n'y en a pas.
+pub(crate) fn anchor_frame(e: &Effect, playhead: usize) -> Option<usize> {
+    e.keys.iter().map(|k| k.frame).filter(|f| *f <= playhead).max()
+}
+
+/// Insère `clip` sur l'effet `e` après sa clé de la tête de lecture : la première clé collée va à
+/// l'image d'après cette clé (la dernière clé d'avant la tête si aucune n'est dessus, la tête
+/// elle-même s'il n'y en a pas avant), les autres gardent leurs écarts ; les clés de `e` à partir de
+/// là sont repoussées de la longueur du bloc (de la première à la dernière clé collée, comprises) :
+/// rien n'est écrasé. Les clés d'une autre sorte d'effet, ou après la fin du plan (`len`), sont
+/// laissées de côté. Si une clé repoussée sortait du plan, rien n'est fait.
+pub(crate) fn paste_insert_keys(e: &mut Effect, clip: &FxClip, playhead: usize, len: usize) -> Result<Inserted, crate::camkeys::NoRoom> {
+    let nothing = || Ok(Inserted { pasted: Pasted { placed: Vec::new(), skipped: clip.keys.len() }, pushed: 0 });
+    if e.kind != clip.kind {
+        return nothing();
+    }
+    let at = anchor_frame(e, playhead).map_or(playhead, |a| a + 1);
+    let fits: Vec<&FxClipKey> = clip.keys.iter().filter(|k| at + k.offset < len).collect();
+    let Some(last) = fits.iter().map(|k| k.offset).max() else { return nothing() };
+    let room = last + 1;
+    if let Some(max) = e.keys.iter().map(|k| k.frame).filter(|f| *f >= at).max() {
+        if max + room > len.saturating_sub(1) {
+            return Err(crate::camkeys::NoRoom { short: max + room - len.saturating_sub(1) });
+        }
+    }
+    let mut pushed = 0;
+    for k in e.keys.iter_mut().filter(|k| k.frame >= at) {
+        k.frame += room;
+        pushed += 1;
+    }
+    let mut placed = Vec::new();
+    for k in &fits {
+        e.set_key(at + k.offset, k.values.clone());
+        placed.push(at + k.offset);
+    }
+    Ok(Inserted { pasted: Pasted { placed, skipped: clip.keys.len() - fits.len() }, pushed })
+}
+
 /// Supprime les clés `keys` (effet, image) de la pile `fx`. Renvoie combien étaient là.
 pub(crate) fn delete_keys(fx: &mut [Effect], keys: &[(usize, usize)]) -> usize {
     keys.iter().filter(|&&(ei, frame)| fx.get_mut(ei).is_some_and(|e| e.remove_key(frame))).count()
@@ -275,6 +359,8 @@ pub(crate) struct FxKeysDrag {
     layers: Vec<DragLayer>,
     grab: usize,
     delta: isize,
+    /// Les clés d'après suivent (par défaut) ; faux : Maj tenue, seules les clés choisies bougent.
+    ripple: bool,
     snap: Edit,
 }
 
@@ -421,7 +507,7 @@ impl App {
         self.status = if n == 0 {
             "Plus aucune clé d'effet choisie.".into()
         } else {
-            format!("{n} clé{} d'effet choisie{} (image {} : {name}) : glisser pour déplacer, Ctrl+C, Ctrl+V à l'image courante, Suppr ; clic droit pour le reste.", s(n), s(n), self.frame_label(frame))
+            format!("{n} clé{} d'effet choisie{} (image {} : {name}) : glisser pour décaler (Maj : cette clé seule), Ctrl+C, Ctrl+V insère après la clé (Maj+Ctrl+V : sur la tête), Suppr ; clic droit pour le reste.", s(n), s(n), self.frame_label(frame))
         };
     }
 
@@ -462,32 +548,56 @@ impl App {
         self.end_stroke();
         self.playing = false;
         let snap = self.snapshot();
-        self.fx_keys_drag = Some(FxKeysDrag { layers, grab, delta: 0, snap });
+        self.fx_keys_drag = Some(FxKeysDrag { layers, grab, delta: 0, ripple: true, snap });
         true
     }
 
     /// Les clés prises suivent la souris, à l'image `at` : chaque calque repart de sa pile d'avant
-    /// le geste.
+    /// le geste. Maj tenue (même en cours de geste) : seules les clés choisies bougent ; sinon les
+    /// clés d'après du même effet les suivent.
     pub(crate) fn drag_fx_keys(&mut self, at: usize) {
+        let ripple = !self.ctx.input(|i| i.modifiers.shift);
+        self.drag_fx_keys_mode(at, ripple);
+    }
+
+    pub(crate) fn drag_fx_keys_mode(&mut self, at: usize, ripple: bool) {
         let Some(mut d) = self.fx_keys_drag.take() else { return };
-        let groups: Vec<(Vec<usize>, usize)> = d.layers.iter().map(|l| (l.keys.iter().map(|k| k.1).collect(), l.plan_len)).collect();
-        let delta = clamp_delta(&groups, at as isize - d.grab as isize);
-        if delta != d.delta {
+        let want = at as isize - d.grab as isize;
+        let delta = if ripple {
+            // Par effet touché : toutes ses clés, sa première clé choisie, la durée du plan.
+            let mut groups: Vec<(Vec<usize>, usize, usize)> = Vec::new();
+            for dl in &d.layers {
+                for (ei, e) in dl.before.iter().enumerate() {
+                    if let Some(first) = dl.keys.iter().filter(|k| k.0 == ei).map(|k| k.1).min() {
+                        groups.push((marker_frames(e), first, dl.plan_len));
+                    }
+                }
+            }
+            clamp_ripple(&groups, want)
+        } else {
+            let groups: Vec<(Vec<usize>, usize)> = d.layers.iter().map(|l| (l.keys.iter().map(|k| k.1).collect(), l.plan_len)).collect();
+            clamp_delta(&groups, want)
+        };
+        if delta != d.delta || ripple != d.ripple {
             d.delta = delta;
+            d.ripple = ripple;
             for dl in &d.layers {
                 let Some((pi, li)) = self.fx_layer_at(dl.panel, dl.layer) else { continue };
                 let mut fx = dl.before.clone();
-                move_keys(&mut fx, &dl.keys, delta);
+                let moving = if ripple { ripple_keys(&dl.before, &dl.keys) } else { dl.keys.clone() };
+                move_keys(&mut fx, &moving, delta);
                 self.doc.panels[pi].layers[li].fx = fx;
             }
             self.renderer.invalidate_all();
             let n: usize = d.layers.iter().map(|l| l.keys.len()).sum();
-            self.status = format!("{n} clé{} d'effet : {delta:+} image{}.", s(n), if delta.abs() > 1 { "s" } else { "" });
+            let who = if ripple { "et les clés d'après" } else { "seule, Maj tenue" };
+            self.status = format!("{n} clé{} d'effet {who} : {delta:+} image{}.", s(n), if delta.abs() > 1 { "s" } else { "" });
         }
         self.fx_keys_drag = Some(d);
     }
 
-    /// Lâche les clés : une étape d'annulation, « Déplacer des clés d'effet », si quelque chose a bougé.
+    /// Lâche les clés : une étape d'annulation, « Décaler les clés d'effet » (les clés d'après ont
+    /// suivi) ou « Déplacer une clé d'effet » (Maj tenue), si quelque chose a bougé.
     pub(crate) fn end_fx_keys_drag(&mut self) {
         let Some(d) = self.fx_keys_drag.take() else { return };
         if d.delta == 0 {
@@ -502,9 +612,17 @@ impl App {
                 frame: (frame as isize + d.delta).max(0) as usize,
             }));
         }
+        let several = sel.len() > 1;
         self.fx_key_anchor = sel.first().copied();
         self.fx_key_sel = sel;
-        self.commit_named(d.snap, "Déplacer des clés d'effet");
+        let name = if d.ripple {
+            "Décaler les clés d'effet"
+        } else if several {
+            "Déplacer des clés d'effet"
+        } else {
+            "Déplacer une clé d'effet"
+        };
+        self.commit_named(d.snap, name);
     }
 
     /// Échap pendant le geste : les piles reviennent comme avant, le choix reste.
@@ -542,12 +660,24 @@ impl App {
         self.cam_clip_recent = false;
         // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau SHOT (`pasteimage`).
         self.ctx.copy_text(format!("{}clés d'effets copiées", crate::pasteimage::MARK));
-        self.status = format!("{n} clé{} d'effet copiée{} : Ctrl+V pour les coller à l'image courante, sur l'effet choisi ({kind}).", s(n), s(n));
+        self.status = format!("{n} clé{} d'effet copiée{} : Ctrl+V pour les insérer après la clé de la tête de lecture, Maj+Ctrl+V pour les coller sur la tête, sur l'effet choisi ({kind}).", s(n), s(n));
     }
 
-    /// Colle les clés d'effets copiées à l'image courante, sur l'effet choisi (de la même sorte
-    /// que celui copié) ; elles deviennent le choix.
+    /// Ctrl+V : insère les clés d'effets copiées sur l'effet choisi (de la même sorte que celui
+    /// copié), après sa clé de la tête de lecture ; les clés d'après sont repoussées.
     pub(crate) fn paste_fx_keys(&mut self) {
+        self.paste_fx_keys_with(true);
+    }
+
+    /// Maj+Ctrl+V : colle les clés d'effets copiées exactement sur la tête de lecture, sans rien
+    /// repousser (ce qu'elles rencontrent est remplacé).
+    pub(crate) fn paste_fx_keys_at_head(&mut self) {
+        self.paste_fx_keys_with(false);
+    }
+
+    /// Colle les clés d'effets copiées, sur l'effet choisi ; elles deviennent le choix.
+    /// `insert` : après la clé de la tête de lecture, en repoussant la suite ; sinon sur la tête.
+    fn paste_fx_keys_with(&mut self, insert: bool) {
         let Some(clip) = self.fx_key_clipboard.clone() else {
             self.status = "Aucune clé d'effet copiée.".into();
             return;
@@ -572,7 +702,21 @@ impl App {
         let (at, len) = (self.cur_frame, self.frame_count());
         self.end_stroke();
         let snap = self.snapshot();
-        let result = paste_keys(&mut self.doc.panels[pi].layers[li].fx[sel.effect], &clip, at, len);
+        let effect = &mut self.doc.panels[pi].layers[li].fx[sel.effect];
+        let (result, pushed) = if insert {
+            match paste_insert_keys(effect, &clip, at, len) {
+                Ok(r) => (r.pasted, r.pushed),
+                Err(crate::camkeys::NoRoom { short }) => {
+                    self.status = format!(
+                        "Rien collé : les clés d'après sortiraient du plan ({short} image{} de trop). Maj+Ctrl+V colle sur la tête de lecture sans rien repousser.",
+                        if short > 1 { "s" } else { "" }
+                    );
+                    return;
+                }
+            }
+        } else {
+            (paste_keys(effect, &clip, at, len), 0)
+        };
         if result.placed.is_empty() {
             self.status = "Rien collé : l'image courante est trop près de la fin du plan.".into();
             return;
@@ -582,9 +726,12 @@ impl App {
         self.fx_key_sel = sel_keys;
         self.give_fx_keys_focus();
         let n = result.placed.len();
-        self.status = format!("{n} clé{} d'effet collée{}{}.", s(n), s(n), if result.skipped > 0 { format!(" ; {} laissée{} de côté (après la fin du plan)", result.skipped, s(result.skipped)) } else { String::new() });
+        let verb = if insert { "insérée" } else { "collée" };
+        let push = if pushed > 0 { format!(", {pushed} clé{} d'après repoussée{}", s(pushed), s(pushed)) } else { String::new() };
+        let skipped = if result.skipped > 0 { format!(" ; {} laissée{} de côté (après la fin du plan)", result.skipped, s(result.skipped)) } else { String::new() };
+        self.status = format!("{n} clé{} d'effet {verb}{}{push}{skipped}.", s(n), s(n));
         self.renderer.invalidate_all();
-        self.commit_named(snap, "Coller des clés d'effet");
+        self.commit_named(snap, if insert { "Insérer des clés d'effet" } else { "Coller les clés d'effet à la tête de lecture" });
     }
 
     /// Supprime les clés d'effets choisies (rien sans clé choisie).
@@ -620,12 +767,20 @@ impl App {
         }
         let can_paste = self.fx_key_clipboard.is_some();
         if ui
-            .add_enabled(can_paste, egui::Button::new("Coller à l'image courante").shortcut_text(key(self, "edition.coller")))
-            .on_hover_text("Les clés vont à l'effet choisi dans le panneau Effets (de la même sorte que celui copié).")
+            .add_enabled(can_paste, egui::Button::new("Coller les clés d'effet").shortcut_text(key(self, "edition.coller")))
+            .on_hover_text("Insère les clés après la clé de la tête de lecture, sur l'effet choisi dans le panneau Effets (de la même sorte que celui copié) ; les clés d'après sont repoussées.")
             .clicked()
         {
             ui.close_menu();
             self.paste_fx_keys();
+        }
+        if ui
+            .add_enabled(can_paste, egui::Button::new("Coller à la tête de lecture").shortcut_text(key(self, "edition.coller_a_la_tete")))
+            .on_hover_text("La première clé tombe sur la tête de lecture ; rien n'est repoussé, les clés rencontrées sont remplacées.")
+            .clicked()
+        {
+            ui.close_menu();
+            self.paste_fx_keys_at_head();
         }
         if ui.add(egui::Button::new(what("Supprimer la clé d'effet", "Supprimer les clés d'effet")).shortcut_text(key(self, "edition.supprimer"))).clicked() {
             ui.close_menu();
