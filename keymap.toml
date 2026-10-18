@@ -255,6 +255,11 @@ touches = ["Tab"]
 source = "proposition"
 
 [[raccourci]]
+action = "aide.palette"
+touches = ["Ctrl+K"]
+source = "proposition (palette de commandes)"
+
+[[raccourci]]
 action = "aide.raccourcis"
 touches = ["F1"]
 source = "proposition"

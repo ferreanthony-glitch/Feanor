@@ -563,6 +563,8 @@ pub struct App {
     pub(crate) tool_flyout: Option<(usize, usize, Rect)>,
     /// Un Ctrl+V a donné un événement de collage (texte) depuis l'appui sur V (`pasteimage`).
     pub(crate) paste_event: bool,
+    /// Palette de commandes ouverte (Ctrl+K, `palette.rs`).
+    pub(crate) palette: Option<crate::palette::Palette>,
     /// Projet récent à ouvrir une fois « Enregistrer ? » réglé (`recents.rs`).
     pub(crate) recent_to_open: Option<PathBuf>,
     /// Fenêtre « Aller à un plan » ouverte, et ce qui y est tapé (`aller.rs`).
@@ -835,6 +837,7 @@ impl App {
             maximized_once: 0,
             goto_plan: None,
             recent_to_open: None,
+            palette: None,
             envelope: None,
             persp: None,
             clipboard: Vec::new(),
@@ -2601,6 +2604,7 @@ impl App {
             }
             "fichier.quitter" => self.request(Pending::Quit),
             "fichier.fermer" => self.request(Pending::Close),
+            "aide.palette" => self.palette = Some(Default::default()),
             // Le collage pose déjà les éléments et les zones à leur place d'origine.
             "edition.coller_sur_place" => self.run_action("edition.coller"),
             // Les propriétés du plan : la fiche (action, dialogue, notes, durée…).

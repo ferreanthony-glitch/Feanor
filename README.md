@@ -590,6 +590,12 @@ raccourcis à la main », puis « Recharger »). Détails et choix pour le clavi
 
 Documentation technique : `docs/ARCHITECTURE.md` ; avancement : `docs/ROADMAP.md`.
 
+## Palette de commandes
+
+Ctrl+K (ou Aide > Palette de commandes) : tape quelques lettres du nom d'une commande (« persp »,
+« retourner », « flou »), la palette propose les commandes avec leur raccourci. Flèches pour
+choisir, Entrée pour lancer, Échap pour fermer.
+
 ## Projets récents
 
 Fichier > Projets récents : les dix derniers projets ouverts ou enregistrés. Au lancement, Pelure

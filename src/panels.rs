@@ -301,6 +301,7 @@ impl App {
                 });
             });
             ui.menu_button("Aide", |ui| {
+                self.action_item(ui, "Palette de commandes…", "aide.palette");
                 self.action_item(ui, "Raccourcis clavier…", "aide.raccourcis");
                 let rec = if self.record_strokes.is_some() { "Arrêter d'enregistrer mes traits" } else { "Enregistrer mes traits (banc d'essai du moteur)" };
                 self.action_item(ui, rec, "pinceau.enregistrer_traits");
@@ -715,6 +716,7 @@ impl App {
         self.sb_export_ui(ctx);
         self.smart_rename_window(ctx);
         self.goto_window(ctx);
+        self.palette_window(ctx);
         if let Some(mut d) = self.new_dialog.take() {
             let mut keep = true;
             let mut create = false;
