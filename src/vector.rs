@@ -203,6 +203,39 @@ pub struct CachedPixels {
 /// rendu.
 pub const MAX_CACHE_TILES: usize = 1024;
 
+/// Ce qu'un trait garde en pixels au-delà de la feuille, de chaque côté (en cache, et sur la feuille
+/// flottante d'une sélection) : déplacé vers l'intérieur, il se montre en entier.
+pub const MAX_OVERHANG: usize = 1024;
+
+/// Plus grand côté d'une image de dessin (limite des textures de la carte graphique).
+pub const MAX_SIDE: usize = 8192;
+
+/// Ce que le rectangle `b` déborde d'une feuille `w` × `h` : (gauche, haut, droite, bas), en pixels
+/// entiers, bornés par `MAX_OVERHANG` et par `MAX_SIDE`.
+pub fn overhang(b: Rect, w: usize, h: usize) -> (usize, usize, usize, usize) {
+    if !b.is_finite() || b.max.x < b.min.x || b.max.y < b.min.y {
+        return (0, 0, 0, 0);
+    }
+    let amount = |v: f32| (v.max(0.0).ceil() as usize).min(MAX_OVERHANG);
+    let fit = |a: usize, b: usize, side: usize| {
+        let room = MAX_SIDE.saturating_sub(side);
+        let a = a.min(room);
+        (a, b.min(room - a))
+    };
+    let (l, r) = fit(amount(-b.min.x), amount(b.max.x - w as f32), w);
+    let (t, d) = fit(amount(-b.min.y), amount(b.max.y - h as f32), h);
+    (l, t, r, d)
+}
+
+/// Où poser un élément sur une image : le pixel (x, y) de la feuille (de taille `sheet`) va en
+/// (x + shift.0, y + shift.1) de l'image. Une feuille flottante élargie garde ce qui dépasse de la
+/// feuille : elle est décalée de sa marge.
+#[derive(Clone, Copy)]
+pub struct Place {
+    pub shift: (i64, i64),
+    pub sheet: (usize, usize),
+}
+
 impl CachedPixels {
     /// Les tuiles dessinées de `sheet` ; `None` s'il y en a plus de `MAX_CACHE_TILES`.
     fn from_sheet(sheet: &Raster, base: Affine) -> Option<CachedPixels> {
@@ -430,6 +463,12 @@ impl StrokeCache {
         self.xf != Affine::IDENTITY
     }
 
+    /// Le trait a été rendu (même si ses pixels étaient trop grands pour être gardés) : un nouveau
+    /// rendu ne le rejouerait pas pour rien.
+    pub fn is_rendered(&self) -> bool {
+        self.cell.read().is_ok_and(|r| r.is_some())
+    }
+
     /// Les pixels gardés, en octets.
     pub fn bytes(&self) -> usize {
         self.cell.read().ok().and_then(|r| r.as_ref().and_then(|r| r.pixels.as_ref().map(CachedPixels::bytes))).unwrap_or(0)
@@ -619,6 +658,17 @@ impl Element {
         }
     }
 
+    /// Un trait au réglage complet qui n'a pas (ou plus) de rendu en cache : le montrer le rejoue.
+    pub fn cache_missing(&self) -> bool {
+        matches!(self, Element::Stroke { brush: Some(_), trace, .. } if !trace.cache.is_rendered())
+    }
+
+    /// Les pixels en cache du trait suivent une transformation d'aperçu (glissé, flèches) : ils sont
+    /// déformés, pas exacts.
+    pub fn cache_is_preview(&self) -> bool {
+        matches!(self, Element::Stroke { trace, .. } if trace.cache.is_preview())
+    }
+
     /// Même géométrie et même aspect que `other` (seul le cache peut différer).
     pub fn same_as(&self, other: &Element) -> bool {
         self == other
@@ -798,6 +848,27 @@ impl VectorDrawing {
         (base, sheet)
     }
 
+    /// Comme `render_split`, mais la feuille des éléments `items` garde ce qui dépasse de la feuille
+    /// (jusqu'à `MAX_OVERHANG` de chaque côté) : un trait déplacé vers l'intérieur se montre en
+    /// entier, au lieu d'être coupé en ligne droite là où la feuille s'arrêtait. Rend le reste
+    /// (à la taille de la feuille), les éléments choisis (plus grande) et la marge de cette
+    /// seconde à gauche et en haut : son pixel (x, y) est le point (x − marge.0, y − marge.1) de la
+    /// feuille. Posés depuis les pixels en cache (qui gardent aussi ce qui dépasse).
+    pub fn render_split_extended(&self, items: &[usize], width: usize, height: usize) -> (Raster, Raster, (usize, usize)) {
+        let reach = items.iter().filter_map(|&i| self.elements.get(i)).fold(Rect::NOTHING, |r, e| r.union(e.bounds().expand(1.5)));
+        let (l, t, r, d) = overhang(reach, width, height);
+        let (mut base, mut sheet) = (Raster::new(width, height), Raster::new(width + l + r, height + t + d));
+        let place = Place { shift: (l as i64, t as i64), sheet: (width, height) };
+        for (i, e) in self.elements.iter().enumerate() {
+            if items.contains(&i) {
+                render_element_in(&mut sheet, e, Rect::EVERYTHING, place);
+            } else {
+                render_element(&mut base, e);
+            }
+        }
+        (base, sheet, (l, t))
+    }
+
     /// L'image approchée du dessin, tout de suite : les traits qui ont déjà leurs pixels en cache
     /// les posent ; les autres sont tracés lisses (sans leur réglage, sans rejeu du moteur). Pour
     /// afficher un projet qui s'ouvre, le temps que le rejeu exact arrive en arrière-plan.
@@ -806,13 +877,19 @@ impl VectorDrawing {
         for e in &self.elements {
             match e {
                 Element::Stroke { points, color, opacity, hardness, brush: Some(_), trace } if e.cache_bytes() == 0 => {
-                    let sheet = render_stroke_alone(width, height, points, *color, *opacity, *hardness, None, trace);
-                    blit_sheet(&mut raster, &sheet, Rect::EVERYTHING);
+                    let (sheet, _) = render_stroke_alone(width, height, points, *color, *opacity, *hardness, None, trace, Rect::NOTHING);
+                    blit_sheet(&mut raster, &sheet, Rect::EVERYTHING, (0, 0));
                 }
                 _ => render_element(&mut raster, e),
             }
         }
         raster
+    }
+
+    /// Combien de traits de ce dessin seraient rejoués par le moteur si on les montrait (aucun
+    /// rendu en cache : jamais rendus, ou évincés du budget).
+    pub fn missing_caches(&self) -> usize {
+        self.elements.iter().filter(|e| e.cache_missing()).count()
     }
 
     /// Élément le plus haut sous le point.
@@ -1044,10 +1121,18 @@ pub fn render_element(raster: &mut Raster, e: &Element) {
 /// été depuis (déplacement : copie ; échelle, rotation : rééchantillonnage, exact au lâcher quand
 /// le cache est refait).
 pub fn render_element_clipped(raster: &mut Raster, e: &Element, clip: Rect) {
+    render_element_in(raster, e, clip, Place { shift: (0, 0), sheet: (raster.width, raster.height) });
+}
+
+/// Comme `render_element_clipped`, sur une image qui n'est pas la feuille elle-même (`place`) :
+/// la feuille flottante élargie d'une sélection. `clip` est un rectangle de l'image.
+pub fn render_element_in(raster: &mut Raster, e: &Element, clip: Rect, place: Place) {
+    let shift = vec2(place.shift.0 as f32, place.shift.1 as f32);
     if let Element::Stroke { points, color, opacity, hardness, brush, trace } = e {
         // Jamais hors de la boîte de l'élément (+ 1,5) : refaire une zone donne la même image
         // qu'un rendu complet.
-        let clip = clip.intersect(e.bounds().expand(1.5));
+        let reach = e.bounds().expand(1.5);
+        let clip = clip.intersect(reach.translate(shift));
         if clip.width() <= 0.0 || clip.height() <= 0.0 {
             return;
         }
@@ -1062,13 +1147,13 @@ pub fn render_element_clipped(raster: &mut Raster, e: &Element, clip: Rect) {
                 }
                 match &r.pixels {
                     Some(px) => {
-                        let delta = px.base.inverse().unwrap_or(Affine::IDENTITY).then(&trace.cache.xf);
+                        let delta = px.base.inverse().unwrap_or(Affine::IDENTITY).then(&trace.cache.xf).then(&Affine::translate(shift));
                         blit_cache(raster, px, &delta, clip);
                     }
                     None => {
                         // Trop grand pour le cache : rejoué à chaque fois, posé dans la zone.
-                        let sheet = render_stroke_alone(raster.width, raster.height, points, *color, *opacity, *hardness, brush.as_deref(), trace);
-                        blit_sheet(raster, &sheet, clip);
+                        let (sheet, off) = render_stroke_alone(place.sheet.0, place.sheet.1, points, *color, *opacity, *hardness, brush.as_deref(), trace, reach);
+                        blit_sheet(raster, &sheet, clip, (place.shift.0 - off.0 as i64, place.shift.1 - off.1 as i64));
                     }
                 }
                 return;
@@ -1076,10 +1161,12 @@ pub fn render_element_clipped(raster: &mut Raster, e: &Element, clip: Rect) {
         }
         // Premier rendu, ou le trait a changé depuis : rendu seul, posé, et gardé. Depuis un aperçu
         // (cache perdu en plein geste) : gardé aussi, avec la transformation du moment pour base,
-        // sans signature (seul un autre aperçu du même trait le reprendra).
-        let sheet = render_stroke_alone(raster.width, raster.height, points, *color, *opacity, *hardness, brush.as_deref(), trace);
-        blit_sheet(raster, &sheet, clip);
-        let kept = CachedPixels::from_sheet(&sheet, trace.cache.xf);
+        // sans signature (seul un autre aperçu du même trait le reprendra). Les pixels gardés sont
+        // ceux de l'image du trait, marge comprise (ce qui dépasse de la feuille) : `base` en tient
+        // compte.
+        let (sheet, off) = render_stroke_alone(place.sheet.0, place.sheet.1, points, *color, *opacity, *hardness, brush.as_deref(), trace, reach);
+        blit_sheet(raster, &sheet, clip, (place.shift.0 - off.0 as i64, place.shift.1 - off.1 as i64));
+        let kept = CachedPixels::from_sheet(&sheet, trace.cache.xf.then(&Affine::translate(vec2(off.0 as f32, off.1 as f32))));
         let bytes = kept.as_ref().map_or(0, CachedPixels::bytes);
         let Ok(mut reg) = REGISTRY.lock() else { return };
         let id = reg.insert(&trace.cache.cell, bytes);
@@ -1099,6 +1186,11 @@ pub fn render_element_clipped(raster: &mut Raster, e: &Element, clip: Rect) {
         };
         drop(old);
         drop(dropped);
+        return;
+    }
+    // Une zone ou un texte sur une image décalée : sa géométrie décalée, posée comme à l'ordinaire.
+    if place.shift != (0, 0) {
+        render_element_in(raster, &e.transformed(&Affine::translate(shift)), clip, Place { shift: (0, 0), ..place });
         return;
     }
     let Some(mut mask) = Mask::new(e.bounds().expand(1.5).intersect(clip), raster.width, raster.height) else {
@@ -1159,21 +1251,37 @@ pub fn pressure_for_radius(s: &BrushSettings, r: f32) -> f32 {
 /// suite des points lissés que le moteur a reçus pendant le geste : rejoué sans lissage, il donne
 /// les mêmes empreintes, dans le même ordre, avec le même hasard — la même image que l'aperçu.
 /// Sans réglage (traits d'avant 7b, formes) : le trait lisse d'avant.
-fn render_stroke_alone(w: usize, h: usize, points: &[VPoint], color: [u8; 3], opacity: f32, hardness: f32, brush: Option<&BrushSettings>, trace: &Trace) -> Raster {
+///
+/// `reach` : la boîte du trait. Ce qui en dépasse de la feuille est gardé (jusqu'à `MAX_OVERHANG`
+/// de chaque côté) : le trait est rendu sur une image plus grande, décalée de la marge rendue
+/// (gauche, haut), le grain du papier lu comme sur la feuille. Les pixels de la feuille sont
+/// ceux qu'on aurait sans marge ; ceux de la marge servent quand le trait est déplacé vers
+/// l'intérieur. Aucune marge (trait dans la feuille) : une image à la taille de la feuille.
+#[allow(clippy::too_many_arguments)]
+fn render_stroke_alone(w: usize, h: usize, points: &[VPoint], color: [u8; 3], opacity: f32, hardness: f32, brush: Option<&BrushSettings>, trace: &Trace, reach: Rect) -> (Raster, (usize, usize)) {
     REPLAYS.with(|r| r.set(r.get() + 1));
-    let mut sheet = Raster::new(w, h);
+    let (l, t, r, d) = overhang(reach, w, h);
+    let (sw, sh) = (w + l + r, h + t + d);
+    let shifted: Vec<VPoint>;
+    let points = if (l, t) == (0, 0) {
+        points
+    } else {
+        shifted = points.iter().map(|p| VPoint { x: p.x + l as f32, y: p.y + t as f32, r: p.r }).collect();
+        &shifted
+    };
+    let mut sheet = Raster::new(sw, sh);
     let Some(b) = brush else {
-        if let Some(mut mask) = Mask::new(path_bounds(points), w, h) {
+        if let Some(mut mask) = Mask::new(path_bounds(points), sw, sh) {
             stamp_path(&mut mask, points, hardness);
             mask.composite(&mut sheet, color, opacity);
         }
-        return sheet;
+        return (sheet, (l, t));
     };
     let settings = BrushSettings { opacity, smoothing: 0.0, smooth_kind: crate::brush::SmoothKind::Follow, smooth_deferred: false, aliased: false, ..*b };
     let textures = crate::brushtex::shared_textures(&settings);
     let feel = trace.feel.unwrap_or_default();
     let feel = Toucher { pressure_curve: Curve::linear(), threshold: 0.0, ..feel };
-    let mut stroke = StrokeState::new(0, StrokeMode::Paint(color), settings, None, true).with_textures(textures).with_feel(feel);
+    let mut stroke = StrokeState::new(0, StrokeMode::Paint(color), settings, None, true).with_textures(textures).with_feel(feel).with_grain_offset((l, t));
     if let Some(b) = trace.secondary {
         stroke = stroke.with_secondary(b);
     }
@@ -1191,7 +1299,7 @@ fn render_stroke_alone(w: usize, h: usize, points: &[VPoint], color: [u8; 3], op
         }
     }
     stroke.finish(&mut sheet, &mut dirty);
-    sheet
+    (sheet, (l, t))
 }
 
 /// Bornes entières de `clip` dans une image `w`×`h` : (x0, y0, x1, y1), vides si rien.
@@ -1203,21 +1311,27 @@ fn clip_bounds(clip: Rect, w: usize, h: usize) -> (usize, usize, usize, usize) {
     (x0, y0, x1, y1)
 }
 
-/// Pose la feuille `sheet` (le trait seul) sur `raster`, dans `clip`.
-fn blit_sheet(raster: &mut Raster, sheet: &Raster, clip: Rect) {
+/// Pose la feuille `sheet` (le trait seul) sur `raster`, dans `clip` (un rectangle de `raster`) :
+/// le pixel (x, y) de `sheet` va en (x + d.0, y + d.1).
+fn blit_sheet(raster: &mut Raster, sheet: &Raster, clip: Rect, d: (i64, i64)) {
     let (x0, y0, x1, y1) = clip_bounds(clip, raster.width, raster.height);
     for idx in 0..sheet.tiles.len() {
         let Some(tile) = &sheet.tiles[idx] else { continue };
         let (tx, ty, tw, th) = sheet.tile_bounds(idx);
-        for y in ty.max(y0)..(ty + th).min(y1) {
-            for x in tx.max(x0)..(tx + tw).min(x1) {
-                let i = (y % TILE) * TILE + x % TILE;
-                let s = tile[i];
+        let (from_x, to_x) = ((tx as i64 + d.0).max(x0 as i64), ((tx + tw) as i64 + d.0).min(x1 as i64));
+        let (from_y, to_y) = ((ty as i64 + d.1).max(y0 as i64), ((ty + th) as i64 + d.1).min(y1 as i64));
+        for y in from_y..to_y {
+            let sy = (y - d.1) as usize;
+            for x in from_x..to_x {
+                let sx = (x - d.0) as usize;
+                let s = tile[(sy % TILE) * TILE + sx % TILE];
                 if s.a() == 0 {
                     continue;
                 }
+                let (x, y) = (x as usize, y as usize);
                 let di = raster.tile_index_of(x, y);
                 let dst = raster.tile_mut(di);
+                let i = (y % TILE) * TILE + x % TILE;
                 dst[i] = crate::render::over(dst[i], s, 255, None);
             }
         }

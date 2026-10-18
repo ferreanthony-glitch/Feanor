@@ -26,7 +26,18 @@ pub struct PlanItem {
     /// Feuille flottante (`flottante.rs`) : transformation du geste en cours (déplacer, tourner,
     /// agrandir une sélection vectorielle), appliquée au dessin avant celle du calque. Le GPU
     /// n'a que ce paramètre à changer à chaque image ; aucun pixel n'est refait ni envoyé.
-    pub pre: Option<Affine>,
+    pub pre: Option<Pre>,
+}
+
+/// La transformation d'un geste sur une feuille flottante (`PlanItem::pre`).
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Pre {
+    /// Du dessin (ses pixels) vers la feuille, avant la transformation du calque.
+    pub aff: Affine,
+    /// Taille de l'image du dessin quand ce n'est pas celle de la feuille : la feuille flottante
+    /// d'une sélection garde ce qui dépasse de la feuille (`flottante.rs`), elle est plus grande
+    /// (`aff` compte alors sa marge). Rien : la taille de la feuille.
+    pub dims: Option<[usize; 2]>,
 }
 
 impl PlanItem {
@@ -35,9 +46,9 @@ impl PlanItem {
     pub fn affine(&self, pivot: egui::Pos2) -> Option<Affine> {
         match (self.pre, &self.transform) {
             (None, None) => None,
-            (Some(p), None) => Some(p),
+            (Some(p), None) => Some(p.aff),
             (None, Some(t)) => Some(t.affine(pivot)),
-            (Some(p), Some(t)) => Some(p.then(&t.affine(pivot))),
+            (Some(p), Some(t)) => Some(p.aff.then(&t.affine(pivot))),
         }
     }
 }

@@ -400,6 +400,39 @@ rapide **0,28 s** affiché, puis 1,50 s de rejeu en arrière-plan. Fichier
 grand), réglage 1,27 Ko — les points et le réglage restent les gros postes (à quantifier / dédoubler
 plus tard si la taille compte). 597 tests passent.
 
+### Essai d'Anthony sur la feuille flottante (2026-10-18, soir) : deux constats corrigés
+
+**Déplacement : des morceaux du dessin manquaient, coupés en ligne droite** (`affichage_tests.rs`).
+Le cache de pixels d'un trait, comme la feuille flottante, était à la taille de la feuille : ce qui
+dépassait de la feuille n'existait pas. Un trait qui en sortait par le haut ou la gauche, déplacé
+vers l'intérieur, montrait donc un bord droit là où la feuille s'arrêtait (21 % des pixels peints
+manquaient dans l'essai). Les fines lignes vues par-dessus sont les contours de sélection
+(`canvas.rs`, le trait médian de chaque trait choisi, 1 px) : ils continuaient là où les pixels
+manquaient. Maintenant un trait qui dépasse est rendu sur une image plus grande (marge de 1024 px au
+plus par côté, 8192 px de côté au plus : limite des textures), le grain du papier lu comme sur la
+feuille (`StrokeState::with_grain_offset`) : sur la feuille, mêmes pixels qu'avant (un niveau d'écart
+sur quelques pixels du bord, l'arrondi des positions décalées). La feuille flottante est élargie de
+ce qui dépasse (`render_split_extended`, `PlanItem::pre` devient `Pre { aff, dims }`, textures de la
+carte graphique à la taille de l'image du dessin). Coût mesuré (40 gros traits de gouache, feutre et
+fusain, 1920 × 1080, 11 dépassent) : saisie 11,0 ms contre 10,2 ms, une fois au début du geste ;
+feuille 2039 × 1455 (6,0 Mo de tuiles) ; 0,001 ms par image. Aussi corrigé : terminer un geste
+lâché avant l'arrivée du rendu exact (`apply_preview`) ne refaisait que la nouvelle place de la
+sélection et la laissait en double à l'ancienne. Limites : l'enveloppe et la perspective
+(`render_split`) n'ont pas encore cette marge ; la saisie d'une sélection dont des traits n'ont pas
+de pixels en cache (budget dépassé, projet qui vient de s'ouvrir) les rejoue sur le fil de
+l'interface, 20 ms par trait large (0,8 s pour 40) — d'où `App::warm_current_cel`, qui demande au
+fil de travail les traits manquants du dessin regardé, une fois par version.
+
+**Dessin : de la latence avec une brosse vectorielle texturée.** Le moteur ne ralentit pas avec la
+longueur du trait (`live_textured_stroke_cost_per_frame`, 4 points par image d'écran, de 400 à 2400
+points : 0,15 à 1,4 ms par image selon la brosse et la taille, sans croissance). Ce qui croît avec
+la longueur était la pose au lever du stylet : le trait était rejoué en entier sur le fil de
+l'interface (`vector_stroke_begin_and_commit_cost`, gouache de 40 px : 44 ms pour 600 points, 174 ms
+pour 2400). Maintenant l'aperçu du geste reste, le dessin est copié (0,07 ms) et le rendu exact
+vient d'un fil de travail (181 ms pour 2400 points, sans rien bloquer). Le fil ne rejoue plus tout
+le dessin à chaque demande : les traits aux pixels exacts en cache (signature juste) les gardent,
+seuls les aperçus déformés sont oubliés (`Rejeu::submit_with`) — un trait de plus coûte un trait.
+
 ## 4. Questions pour Anthony
 
 1. Édites-tu vraiment les traits vectoriels après coup (lasso, échelle, rotation, cutter), ou

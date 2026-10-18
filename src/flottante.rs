@@ -18,11 +18,18 @@
 //!
 //! Les deux dessins temporaires vivent dans `Document::cels` le temps du geste ; aucun calque ne
 //! les référence, donc ils ne sont jamais enregistrés.
+//!
+//! La feuille des éléments choisis est élargie de ce qui dépasse de la feuille du dessin (les
+//! pixels en cache des traits le gardent, `vector::overhang`) : un trait qui en sort, déplacé vers
+//! l'intérieur, se montre en entier au lieu d'être coupé en ligne droite à l'ancien bord. Sa
+//! marge et sa taille sont comptées dans la transformation du plan (`Pre`).
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use eframe::egui::vec2;
+
 use crate::document::{Cel, CelId, Document};
-use crate::render::PlanItem;
+use crate::render::{PlanItem, Pre};
 use crate::vector::{Affine, Element};
 
 /// Le dessin sans les éléments choisis.
@@ -43,6 +50,13 @@ pub struct Flottante {
     /// (`App::poll_rejeu`), ou jusqu'à la prochaine action de l'utilisateur
     /// (`App::flush_flottante`).
     pub pending: Option<Pending>,
+    /// La feuille des éléments choisis garde ce qui dépasse de la feuille du dessin (un trait qui
+    /// en sort, déplacé vers l'intérieur, se montre en entier) : son image est plus grande que la
+    /// feuille, et son pixel (x, y) est le point (x − marge.0, y − marge.1) du dessin. Aucune
+    /// marge : la feuille a la taille du dessin.
+    pub margin: (usize, usize),
+    /// Taille de l'image de la feuille si ce n'est pas celle du dessin.
+    pub dims: Option<[usize; 2]>,
 }
 
 /// Ce qu'il faut pour terminer le travail d'un geste lâché sans attendre le rejeu.
@@ -59,14 +73,15 @@ impl Flottante {
         let cel = doc.cels.get(&src)?;
         let d = cel.vector.as_ref()?;
         let (w, h) = (cel.raster.width, cel.raster.height);
-        let (base, sheet) = d.render_split(Some(items), w, h);
+        let (base, sheet, margin) = d.render_split_extended(items, w, h);
+        let dims = ((sheet.width, sheet.height) != (w, h)).then_some([sheet.width, sheet.height]);
         let version = VERSION.fetch_add(2, Ordering::Relaxed);
         for (id, raster, version) in [(BASE_CEL, base, version), (SHEET_CEL, sheet, version + 1)] {
             let mut c = Cel::bitmap(raster);
             c.version = version;
             doc.cels.insert(id, c);
         }
-        Some(Flottante { src, aff: Affine::IDENTITY, pending: None })
+        Some(Flottante { src, aff: Affine::IDENTITY, pending: None, margin, dims })
     }
 
     /// Lâcher, sans rien refaire : la nouvelle géométrie des éléments choisis (`items`, d'états
@@ -89,6 +104,10 @@ impl Flottante {
         let mut region = eframe::egui::Rect::NOTHING;
         for (k, &i) in items.iter().enumerate() {
             if let (Some(dst), Some(from)) = (d.elements.get_mut(i), originals.get(k)) {
+                // (L'image du dessin montre encore l'élément tel qu'il était avant le geste, quand
+                // le lâcher n'a posé que la géométrie : c'est sa place d'avant qu'il faut aussi
+                // refaire, sinon il y reste en double.)
+                region = region.union(from.bounds().expand(1.5));
                 region = region.union(dst.bounds().expand(1.5));
                 *dst = from.transformed_preview(aff);
                 region = region.union(dst.bounds().expand(1.5));
@@ -107,7 +126,12 @@ impl Flottante {
     /// sélection, et sa feuille transformée par-dessus (mêmes opacité, mode et effets).
     pub fn items(&self, line: &PlanItem) -> [PlanItem; 2] {
         let base = PlanItem { cel: BASE_CEL, ..line.clone() };
-        let sheet = PlanItem { cel: SHEET_CEL, ctg: None, pre: Some(self.aff), ..line.clone() };
+        // (Du pixel de la feuille élargie au point du dessin, puis le geste.)
+        let aff = match self.margin {
+            (0, 0) => self.aff,
+            (l, t) => Affine::translate(vec2(-(l as f32), -(t as f32))).then(&self.aff),
+        };
+        let sheet = PlanItem { cel: SHEET_CEL, ctg: None, pre: Some(Pre { aff, dims: self.dims }), ..line.clone() };
         [base, sheet]
     }
 }

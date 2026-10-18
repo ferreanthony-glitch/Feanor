@@ -1047,6 +1047,10 @@ pub struct StrokeState {
     replaying: bool,
     /// Première empreinte du trait : l'origine du papier quand il suit le trait.
     origin: Option<Pos2>,
+    /// Le trait est peint sur une image décalée de (x, y) pixels par rapport à la feuille (une
+    /// marge à gauche et en haut, pour garder ce qui dépasse de la feuille) : le papier se lit
+    /// comme sur la feuille, pas sur l'image décalée.
+    grain_off: (i64, i64),
 }
 
 /// Graine du hasard d'un trait (la même à chaque fois : un trait rejoué est le même).
@@ -1116,7 +1120,16 @@ impl StrokeState {
             dt: None,
             replaying: false,
             origin: None,
+            grain_off: (0, 0),
         }
+    }
+
+    /// Le trait est peint sur une image décalée de `off` pixels (marge à gauche et en haut) :
+    /// le grain du papier reste celui de la feuille. Les positions du chemin sont celles de l'image
+    /// décalée (l'appelant les a décalées aussi).
+    pub fn with_grain_offset(mut self, off: (usize, usize)) -> Self {
+        self.grain_off = (off.0 as i64, off.1 as i64);
+        self
     }
 
     /// Le zoom de la vue (pixels d'écran par pixel du dessin), pour la corde et la distance du
@@ -1662,7 +1675,9 @@ impl StrokeState {
         if self.origin.is_none() {
             self.origin = Some(c);
         }
-        let origin = if s.paper_follow { self.origin.unwrap_or(c) } else { Pos2::ZERO };
+        // (Image décalée : le papier fixe sur la feuille se lit à l'origine de la feuille.)
+        let (gox, goy) = self.grain_off;
+        let origin = if s.paper_follow { self.origin.unwrap_or(c) } else { Pos2::new(gox as f32, goy as f32) };
         // Papier tel quel (comme avant), ou mis à l'échelle et tourné.
         let paper_plain = (s.paper_scale - 1.0).abs() < 1e-4 && s.paper_angle == 0.0 && !s.paper_follow;
         let pscale = s.paper_scale.clamp(0.05, 20.0);
@@ -1671,16 +1686,17 @@ impl StrokeState {
         // fois le grain du crayon.
         let grain_at = |px: usize, py: usize| -> f32 {
             let (x, y) = (px as f32 + 0.5 - origin.x, py as f32 + 0.5 - origin.y);
+            let (sx, sy) = (px as i64 - gox, py as i64 - goy);
             let mut f = paper.as_ref().map_or(1.0, |p| {
                 let h = if paper_plain {
-                    p.tiled(px, py)
+                    p.tiled_at(sx, sy)
                 } else {
                     p.sample_wrapped((x * pcos + y * psin) / pscale, (-x * psin + y * pcos) / pscale)
                 };
                 grain_factor(if s.paper_invert { 1.0 - h } else { h }, pressure, s.grain, s.paper_softness)
             });
             if let Some(g) = &pencil {
-                let h = if s.paper_follow { g.sample_wrapped(x, y) } else { g.tiled(px, py) };
+                let h = if s.paper_follow { g.sample_wrapped(x, y) } else { g.tiled_at(sx, sy) };
                 f *= grain_factor(h, pressure, s.pencil_grain.strength(), s.pencil_grain.softness());
             }
             f

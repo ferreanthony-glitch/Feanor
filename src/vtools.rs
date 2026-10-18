@@ -293,6 +293,19 @@ impl App {
                 d.elements.insert(at, f.clone());
             }
         }
+        // Un trait au réglage complet se rejoue par le moteur, empreinte par empreinte : cela
+        // coûte autant que de le tracer (44 ms pour 600 points de gouache, 174 ms pour 2400), donc
+        // jamais sur le fil de l'interface (règle « sans latence »). L'aperçu du geste, déjà posé
+        // dans l'image du dessin, reste affiché ; le rendu exact arrive d'un fil de travail
+        // (`rejeu.rs`) qui pose le trait en cache et remplace l'image.
+        if replayed {
+            if let Some(c) = self.doc.cels.get_mut(&vs.cel) {
+                c.version += 1;
+            }
+            self.push_vector(vs.cel, vs.before, vs.prefix);
+            self.rejeu_cel(vs.cel);
+            return;
+        }
         // Sous les autres, ou avec sa zone : on refait la zone du trait (le raccourci ci-dessous
         // suppose le trait seul, dessus tout le reste).
         if behind || fill.is_some() {

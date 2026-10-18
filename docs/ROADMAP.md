@@ -1589,6 +1589,16 @@ Choix d'Anthony :
   enveloppe 8,6 ms / image (rien n'était affiché avant), lâcher 113 → 0,5 ms, glissé après enveloppe
   44,9 → 1,6 ms / image, lâcher 118 → 0,1 ms ; chargement 24 dessins affiché en 0,28 s au lieu de
   1,6 s.
+- ✅ Essai d'Anthony sur la feuille flottante (2026-10-18, soir, `docs/VECTORIEL-COMME-BITMAP.md`
+  §3 ter, `affichage_tests.rs`) : (1) des morceaux du dessin manquaient, coupés en ligne droite,
+  quand on déplaçait vers l'intérieur des traits qui dépassaient de la feuille (cache et feuille
+  flottante à la taille de la feuille) — les traits gardent maintenant ce qui dépasse (marge de
+  1024 px, grain lu comme sur la feuille), la feuille flottante est élargie (saisie 11,0 ms contre
+  10,2 ms) ; terminer un geste lâché trop tôt ne laisse plus la sélection en double. (2) La latence
+  au dessin d'un trait texturé était la pose au lever du stylet, un rejeu complet sur le fil de
+  l'interface (44 ms à 600 points, 174 ms à 2400) : 0,07 ms maintenant, le rendu exact vient du fil
+  de travail, qui ne rejoue plus que les traits sans pixels exacts. Les traits manquants du dessin
+  regardé sont réchauffés en arrière-plan (saisie sans cache : 0,8 s pour 40 traits larges).
 - ✅ Latences sur la branche ecto (Anthony, 2026-10-18 : « sans latence »). **Feuille
   flottante** (lottante.rs) : déplacer, tourner ou agrandir une sélection vectorielle ne refait
   plus rien par image — à la première image, le dessin sans la sélection et la sélection seule

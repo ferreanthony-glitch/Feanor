@@ -145,8 +145,10 @@ toujours très rapidement, sans latence ») : déplacer, tourner, agrandir une s
 la pousser aux flèches, la déformer à l'enveloppe ou en perspective pose ces pixels déformés à la
 volée (une cinquantaine de traits texturés : 2 ms par image au glissé, 9 ms à l'enveloppe), et le
 rendu exact arrive quelques instants après le lâcher, d'un fil de travail (`rejeu.rs`), sans rien
-bloquer. À l'ouverture d'un projet, les dessins texturés paraissent tout de suite en rendu rapide,
-puis exacts. Seule différence restante : la peinture humide (gouache) ne se mêle pas à ce que les
+bloquer ; au lever du stylet non plus, le trait n'est plus rejoué sur le fil de l'interface (174 ms
+pour 2400 points de gouache avant). Un trait qui dépasse de la feuille garde ce qui dépasse :
+déplacé vers l'intérieur, il se montre en entier. À l'ouverture d'un projet, les dessins texturés
+paraissent tout de suite en rendu rapide, puis exacts. Seule différence restante : la peinture humide (gouache) ne se mêle pas à ce que les
 traits précédents ont posé, chaque trait étant rejoué seul. Les anciens dessins (sans trace)
 rendent comme avant.
 

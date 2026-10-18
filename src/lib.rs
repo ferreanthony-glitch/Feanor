@@ -19,6 +19,8 @@ mod perte_tests;
 mod rejeu_tests;
 pub mod flottante;
 #[cfg(test)]
+mod affichage_tests;
+#[cfg(test)]
 mod flottante_tests;
 mod fondfil;
 #[cfg(test)]

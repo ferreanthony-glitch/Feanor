@@ -14,6 +14,9 @@
 //! direct du dessin (`App::refresh_cel`, annulation), rend les précédentes caduques — elles sont
 //! retirées de la file, et leurs résultats jetés. Un résultat adopté (`App::poll_rejeu`) remplace
 //! l'image du dessin et donne aux traits leurs pixels exacts en cache (ceux du rendu), d'un coup.
+//! Le fil ne rejoue que les traits sans pixels exacts (jamais rendus, évincés du budget, ou
+//! déformés par un aperçu) : un trait de plus coûte un trait, pas le dessin entier — c'est ce qui
+//! permet de lui confier la pose d'un trait tracé au lever du stylet (`commit_vector_stroke`).
 //!
 //! Deux priorités : les demandes interactives (un geste vient de finir) passent avant la file du
 //! chargement d'un projet. Un panic du rendu n'arrête pas le fil : la demande est signalée perdue
@@ -156,8 +159,8 @@ impl Rejeu {
     }
 
     /// Demande le rendu exact de `drawing` (l'image `w` × `h` du dessin `cel`), interactive : une
-    /// copie, dont les pixels en cache sont oubliés pour que le fil les refasse exactement.
-    /// Remplace toute demande en attente pour ce dessin.
+    /// copie, dont les pixels en cache déformés (aperçus) sont oubliés pour que le fil les refasse
+    /// exactement. Remplace toute demande en attente pour ce dessin.
     #[allow(dead_code)]
     pub fn submit(&mut self, cel: CelId, drawing: &VectorDrawing, w: usize, h: usize) -> u64 {
         self.submit_with(cel, drawing, w, h, 0, true)
@@ -172,9 +175,16 @@ impl Rejeu {
         }
         let gen = self.next_gen;
         self.next_gen += 1;
+        // Les traits dont les pixels en cache sont exacts (rendus à leur place, signature juste)
+        // les gardent : le fil les pose tels quels, et ne rejoue que les autres — un trait de plus
+        // à chaque lâcher ne coûte pas le dessin entier. Les aperçus (pixels déformés) repartent de
+        // zéro, dans un cache à part. Un cache vide ou périmé est refait par le fil, dans le cache
+        // partagé avec le dessin de l'interface : le trait y trouve ses pixels exacts.
         let mut copy = drawing.clone();
         for e in &mut copy.elements {
-            e.invalidate_cache();
+            if e.cache_is_preview() {
+                e.invalidate_cache();
+            }
         }
         self.pending.insert(cel, (gen, version));
         let (m, cv) = &*self.boite;

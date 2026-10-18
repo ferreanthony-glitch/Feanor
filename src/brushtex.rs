@@ -55,6 +55,11 @@ impl GrayImage {
         self.values[(y % self.height) * self.width + x % self.width]
     }
 
+    /// Comme `tiled`, pour des coordonnées qui peuvent être négatives (hors de la feuille).
+    pub fn tiled_at(&self, x: i64, y: i64) -> f32 {
+        self.values[y.rem_euclid(self.height as i64) as usize * self.width + x.rem_euclid(self.width as i64) as usize]
+    }
+
     /// Valeur interpolée au point (`x`, `y`) de l'image répétée sans fin (papier mis à
     /// l'échelle ou tourné).
     pub fn sample_wrapped(&self, x: f32, y: f32) -> f32 {

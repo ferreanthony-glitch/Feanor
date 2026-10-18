@@ -540,6 +540,9 @@ pub struct App {
     pub(crate) flottante: Option<crate::flottante::Flottante>,
     /// Dessins dont le rendu exact est à redemander dès qu'aucun geste n'y travaille (`rejeu.rs`).
     pub(crate) rejeu_again: std::collections::BTreeSet<CelId>,
+    /// Pour chaque dessin vectoriel regardé, la version dont on a vérifié que tous les traits
+    /// étaient en cache (`App::warm_current_cel`).
+    pub(crate) rejeu_warm: std::collections::HashMap<CelId, u64>,
     /// Rendus exacts arrivés pendant un geste sur leur dessin, adoptés à la fin du geste.
     pub(crate) rejeu_deferred: Vec<crate::rejeu::Done>,
     /// Sélection dans un dessin bitmap, et geste en cours avec l'outil Sélection.
@@ -862,6 +865,7 @@ impl App {
             vdrag: None,
             flottante: None,
             rejeu_again: Default::default(),
+            rejeu_warm: Default::default(),
             rejeu_deferred: Vec::new(),
             bsel: None,
             bdrag: None,
@@ -1803,6 +1807,26 @@ impl App {
         }
     }
 
+    /// Le dessin vectoriel qu'on regarde a tous ses traits en cache : sinon saisir une sélection
+    /// les rejouerait sur le fil de l'interface (20 ms par trait large, 0,8 s pour 40). Ce qui
+    /// manque (budget dépassé, ouverture d'un projet, autre panneau) est demandé une fois au fil de
+    /// travail par version du dessin, qui ne rejoue que ces traits-là (`Rejeu::submit_with`).
+    pub(crate) fn warm_current_cel(&mut self) {
+        if self.playing {
+            return;
+        }
+        let Some(cel) = self.cel_here() else { return };
+        let Some(c) = self.doc.cels.get(&cel) else { return };
+        let Some(d) = &c.vector else { return };
+        if self.rejeu_warm.get(&cel) == Some(&c.version) || self.cel_busy(cel) || self.rejeu.is_pending(cel) || self.flottante.is_some() {
+            return;
+        }
+        self.rejeu_warm.insert(cel, c.version);
+        if d.missing_caches() > 0 {
+            self.rejeu_cel(cel);
+        }
+    }
+
     /// Un geste, un trait ou une gomme est en cours sur ce dessin : son image est celle du geste.
     pub(crate) fn cel_busy(&self, cel: CelId) -> bool {
         self.stroke.as_ref().is_some_and(|s| s.cel == cel)
@@ -1878,6 +1902,8 @@ impl App {
             let before = c.version;
             c.raster = done.raster;
             c.version += 1;
+            // (Ses traits sont tous en cache : rien à réchauffer pour cette version.)
+            self.rejeu_warm.insert(done.cel, c.version);
             crate::rejeu::keep_saved(&mut self.written, done.cel, before, c.version);
             self.renderer.invalidate_tiles(&changed);
         }
@@ -2539,6 +2565,7 @@ impl App {
     pub(crate) fn load_doc(&mut self, doc: Document) {
         self.rejeu.cancel_all();
         self.rejeu_again.clear();
+        self.rejeu_warm.clear();
         self.rejeu_deferred.clear();
         crate::fx::fond_cancel_all();
         self.doc = doc;
@@ -3645,6 +3672,7 @@ impl eframe::App for App {
         self.validate_selection();
         self.validate_bitmap_selection();
         self.poll_rejeu(ctx);
+        self.warm_current_cel();
         self.update_title(ctx);
         self.thumbs.prune(&self.doc);
         self.thumbs.pending = false;
