@@ -589,6 +589,42 @@ fn playing_a_boiling_vector_plan_never_replays_the_engine_on_the_interface_threa
     crate::fxcache::settle();
 }
 
+#[test]
+fn the_boil_is_offered_in_every_menu_on_vector_layers_and_shown_disabled_on_bitmap_ones() {
+    use crate::fxui::{offer, Offer, BOIL_VECTOR_ONLY};
+    // Calque vectoriel : l'entrée est utilisable ; calque bitmap : grisée, avec la raison ; dossier : absente.
+    assert_eq!(offer(EffectKind::Boil, LayerKind::Vector, false), Offer::Enabled);
+    assert_eq!(offer(EffectKind::Boil, LayerKind::Bitmap, false), Offer::Disabled(BOIL_VECTOR_ONLY));
+    assert_eq!(offer(EffectKind::Boil, LayerKind::Vector, true), Offer::Absent);
+    assert_eq!(offer(EffectKind::Boil, LayerKind::Bitmap, true), Offer::Absent);
+    // La raison dit que c'est pour les calques vectoriels.
+    assert!(BOIL_VECTOR_ONLY.contains("calque vectoriel"));
+    // Les autres effets vont sur les deux sortes de calques, et sont absents d'un dossier.
+    for kind in EffectKind::ALL.into_iter().filter(|k| !k.vector_only()) {
+        assert_eq!(offer(kind, LayerKind::Bitmap, false), Offer::Enabled, "{kind:?}");
+        assert_eq!(offer(kind, LayerKind::Vector, false), Offer::Enabled, "{kind:?}");
+        assert_eq!(offer(kind, LayerKind::Vector, true), Offer::Absent, "{kind:?}");
+    }
+    // Le tremblement est le seul effet réservé au vectoriel : l'entrée qui le montre en tête de
+    // « Ajouter un effet » suffit.
+    assert_eq!(EffectKind::ALL.into_iter().filter(|k| k.vector_only()).collect::<Vec<_>>(), vec![EffectKind::Boil]);
+}
+
+#[test]
+fn the_command_palette_finds_the_boil_by_its_name() {
+    use crate::keymap::ACTIONS;
+    use crate::palette::rank;
+    let commands: Vec<(&str, &str)> = ACTIONS.iter().filter(|a| a.implemented).map(|a| (a.id, a.label)).collect();
+    for word in ["tremblement", "tremblement du trait", "trembl", "boil"] {
+        let hits = rank(&commands, word);
+        let ids: Vec<&str> = hits.iter().map(|&i| commands[i].0).collect();
+        assert!(ids.contains(&"fx.tremblement"), "« {word} » ne trouve pas le tremblement du trait : {ids:?}");
+    }
+    // Les commandes du tremblement du trait passent devant les tremblements de caméra.
+    let hits = rank(&commands, "tremblement");
+    assert_eq!(commands[hits[0]].0, "fx.tremblement");
+}
+
 /// Mesure : la lecture à 24 ips d'un plan de 60 traits texturés qui tremblent (1920 × 1080, trois
 /// variantes, une toutes les deux images) ; temps de l'interface par image, images servies sans
 /// attendre, coût d'une variante en arrière-plan (pleine résolution et aperçu), mémoire.

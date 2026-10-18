@@ -631,6 +631,9 @@ impl App {
         if self.layers().get(li).is_some_and(|l| l.video.is_some()) {
             ui.menu_button("Calque vidéo", |ui| self.video_menu(ui, li));
         }
+        // Les effets, dont le tremblement du trait (calques vectoriels, grisé sur un bitmap), comme
+        // dans le panneau Calques et le montage.
+        self.layer_fx_items(ui, li);
         // Propager la peinture sur la vidéo (façon EbSynth, `propagerui.rs`), grisé s'il ne se peut pas.
         self.propagation_item(ui, li);
         // Avant / après ses images, automatismes : dans un sous-menu, comme au montage (menus

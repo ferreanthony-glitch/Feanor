@@ -298,6 +298,7 @@ impl App {
                 if vector {
                     note(ui, "Le trait reste modifiable avec l'outil Sélection (V), même texturé (pointe en \
                               image, grain du papier).");
+                    self.boil_tool_toggle(ui);
                 }
             }
             Tool::Pencil => {
@@ -306,6 +307,7 @@ impl App {
                 self.brush_extras_ui(ui);
                 if vector {
                     note(ui, "Le trait reste modifiable avec l'outil Sélection (V).");
+                    self.boil_tool_toggle(ui);
                 }
             }
             Tool::Eraser => {
