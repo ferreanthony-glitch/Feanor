@@ -56,6 +56,24 @@ pub struct BrushSettings {
     /// Nombre de points de la moyenne sur des points.
     #[serde(rename = "lissage_points")]
     pub smooth_points: u32,
+    /// Lissage selon le temps (sensation des brosses, §2.3) : le « Suivi » rattrape la pointe d'une
+    /// part qui dépend du temps écoulé depuis le point d'avant (constante de temps, comme le
+    /// `slow_tracking` de libmypaint), non du nombre d'échantillons : la même douceur à 60 ou 250
+    /// échantillons par seconde. Sans instants (rejeu, Studio) : le calcul d'avant.
+    #[serde(rename = "suivi_temps")]
+    pub smooth_time: bool,
+    /// Corde et distance mesurées en pixels de l'écran (le « Scalable Distance » de Krita) : la
+    /// même corde sous le stylet quel que soit le zoom. Faux : en pixels du dessin, comme avant.
+    #[serde(rename = "lissage_ecran")]
+    pub smooth_screen: bool,
+    /// Lissage après le trait (TVPaint : Line Smoothing avec Real Time décoché, le réglage
+    /// d'Anthony) : pendant le geste, le trait brut suit la pointe sans retard ; au levé, il est
+    /// rejoué lissé depuis les points reçus.
+    #[serde(rename = "lissage_differe")]
+    pub smooth_deferred: bool,
+    /// Comment le trait rattrape la pointe au levé (le lissage le laisse en retard).
+    #[serde(rename = "rattrapage")]
+    pub catch_up: CatchUp,
     #[serde(rename = "pression_taille")]
     pub pressure_size: bool,
     #[serde(rename = "pression_opacite")]
@@ -161,6 +179,60 @@ impl SmoothKind {
             SmoothKind::AveragePoints => "Le trait passe par la moyenne des dernières positions de la pointe.",
             SmoothKind::AverageDistance => "Le trait passe par la moyenne des positions sur les derniers pixels parcourus.",
         }
+    }
+}
+
+/// Au levé, comment le trait lissé (en retard sur la pointe) la rattrape : pas du tout, tout droit
+/// (comme avant : un petit crochet quand le geste tournait), ou en prolongeant sa courbe (une
+/// Bézier qui part dans la dernière direction du trait et finit à la pointe). Avec le Suivi et la
+/// corde tirée, dont chaque pas vise déjà la pointe, la courbe se confond avec le segment droit ;
+/// la différence se voit avec les moyennes.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum CatchUp {
+    #[serde(rename = "aucun")]
+    None,
+    #[serde(rename = "droit")]
+    Straight,
+    #[default]
+    #[serde(rename = "courbe")]
+    Curve,
+}
+
+impl CatchUp {
+    pub const ALL: [CatchUp; 3] = [CatchUp::None, CatchUp::Straight, CatchUp::Curve];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            CatchUp::None => "Sans rattrapage",
+            CatchUp::Straight => "Rattrapage droit",
+            CatchUp::Curve => "Rattrapage en courbe",
+        }
+    }
+
+    pub fn help(self) -> &'static str {
+        match self {
+            CatchUp::None => "Au levé, le trait s'arrête où le lissage l'a mené, en retrait de la pointe.",
+            CatchUp::Straight => "Au levé, un segment droit jusqu'à la pointe (comme avant).",
+            CatchUp::Curve => "Au levé, le trait prolonge sa courbe jusqu'à la pointe.",
+        }
+    }
+}
+
+/// Cadence de référence du « Suivi » selon le temps : à 200 échantillons par seconde (un stylet
+/// Windows Ink courant), la part rattrapée par échantillon est celle d'avant ; à cadence plus
+/// basse (grosse brosse, image lente) on rattrape plus, à cadence plus haute moins. À vérifier à la
+/// tablette (la cadence réelle d'Anthony se lit dans le banc de traits).
+pub const FOLLOW_REF_HZ: f32 = 200.0;
+
+/// Part de l'écart à la pointe rattrapée par le « Suivi » pour un lissage `smoothing` (0 à 0,95) :
+/// `1 − lissage` par échantillon, ou, avec le temps `dt` écoulé depuis le point d'avant,
+/// `1 − lissage^(dt × cadence de référence)` (constante de temps). Sans `dt`, ou nul : par
+/// échantillon. Après une pause, on rattrape tout.
+pub fn follow_alpha(smoothing: f32, dt: Option<f32>) -> f32 {
+    let s = smoothing.clamp(0.0, 0.95);
+    match dt {
+        Some(dt) if dt > 0.0 && s > 0.0 => 1.0 - s.powf(dt * FOLLOW_REF_HZ),
+        _ => 1.0 - s,
     }
 }
 
@@ -499,6 +571,10 @@ impl BrushSettings {
             smooth_kind: SmoothKind::Follow,
             smooth_px: 8.0,
             smooth_points: 6,
+            smooth_time: true,
+            smooth_screen: true,
+            smooth_deferred: false,
+            catch_up: CatchUp::Curve,
             pressure_size: true,
             pressure_opacity: false,
             aliased: false,
@@ -621,6 +697,7 @@ pub fn stroke_preview(settings: &BrushSettings, textures: BrushTextures, w: usiz
     s.size = s.size.clamp(1.0, h as f32 * 0.5);
     s.smoothing = 0.0;
     s.smooth_kind = SmoothKind::Follow;
+    s.smooth_deferred = false;
     let mut raster = Raster::new(w, h);
     let mut stroke = StrokeState::new(0, StrokeMode::Paint([0, 0, 0]), s, None, true).with_textures(textures);
     let mut dirty = Vec::new();
@@ -713,6 +790,31 @@ pub struct StrokeState {
     /// Dernier point où le stylet touchait (appui au-dessus du seuil), déjà passé par la courbe :
     /// c'est lui que le trait rattrape au levé, pas un échantillon où la pression s'effondre.
     contact: Option<(Pos2, f32)>,
+    /// Pixels d'écran par pixel du dessin (corde et distance en pixels d'écran).
+    zoom: f32,
+    /// Instant du point d'avant, et temps écoulé depuis lui pour le point en cours (lissage selon
+    /// le temps) ; aucun : point sans instant.
+    last_time: Option<f64>,
+    dt: Option<f32>,
+    /// Lissage après le trait : on rejoue les points reçus, lissage allumé.
+    replaying: bool,
+}
+
+/// Graine du hasard d'un trait (la même à chaque fois : un trait rejoué est le même).
+const RNG_SEED: u32 = 0x9E37_79B9;
+
+/// La couleur dans la brosse au départ d'un trait (peinture humide).
+fn wet_start(mode: StrokeMode) -> [f32; 3] {
+    match mode {
+        StrokeMode::Paint(rgb) => [rgb[0] as f32, rgb[1] as f32, rgb[2] as f32],
+        StrokeMode::Erase => [0.0; 3],
+    }
+}
+
+/// Point d'une Bézier quadratique de `a` à `b`, de contrôle `c`, en `t` (0 à 1).
+fn bezier2(a: Pos2, c: Pos2, b: Pos2, t: f32) -> Pos2 {
+    let u = 1.0 - t;
+    Pos2::new(u * u * a.x + 2.0 * u * t * c.x + t * t * b.x, u * u * a.y + 2.0 * u * t * c.y + t * t * b.y)
 }
 
 impl StrokeState {
@@ -737,7 +839,7 @@ impl StrokeState {
             raw: None,
             since_dab: 0.0,
             textures: BrushTextures::default(),
-            rng: 0x9E37_79B9,
+            rng: RNG_SEED,
             keep_alpha: false,
             stencil: None,
             clock: None,
@@ -747,10 +849,7 @@ impl StrokeState {
             direction: 0.0,
             history: std::collections::VecDeque::new(),
             dabs: 0,
-            wet_rgb: match mode {
-                StrokeMode::Paint(rgb) => [rgb[0] as f32, rgb[1] as f32, rgb[2] as f32],
-                StrokeMode::Erase => [0.0; 3],
-            },
+            wet_rgb: wet_start(mode),
             wet_load: 1.0,
             raw_log: Vec::new(),
             next_time: -1.0,
@@ -760,7 +859,18 @@ impl StrokeState {
             close_tol: 0.0,
             feel: Toucher::default(),
             contact: None,
+            zoom: 1.0,
+            last_time: None,
+            dt: None,
+            replaying: false,
         }
+    }
+
+    /// Le zoom de la vue (pixels d'écran par pixel du dessin), pour la corde et la distance du
+    /// lissage mesurées à l'écran ; sans lui, 1.
+    pub fn with_zoom(mut self, zoom: f32) -> Self {
+        self.zoom = if zoom.is_finite() && zoom > 0.0 { zoom } else { 1.0 };
+        self
     }
 
     /// Le toucher du stylet (réglage commun à tous les pinceaux ; sans lui, celui par défaut).
@@ -814,17 +924,25 @@ impl StrokeState {
         self.mode
     }
 
-    /// Le point posé pour une nouvelle position `pos` de la pointe, selon le type de lissage.
-    fn smooth(&mut self, pos: Pos2) -> Pos2 {
+    /// Le point posé pour une nouvelle position `pos` de la pointe, selon le type de lissage ;
+    /// `dt` : le temps écoulé depuis le point d'avant, s'il est connu.
+    fn smooth(&mut self, pos: Pos2, dt: Option<f32>) -> Pos2 {
         let s = self.settings;
         let Some(prev) = self.smoothed else {
             self.history.push_back(pos);
             return pos;
         };
+        // Lissage après le trait : brut pendant le geste, lissé au rejeu du levé.
+        if s.smooth_deferred && !self.replaying {
+            self.history.push_back(pos);
+            return pos;
+        }
+        // Corde et distance : en pixels de l'écran si demandé.
+        let px = if s.smooth_screen { s.smooth_px / self.zoom } else { s.smooth_px }.max(0.0);
         match s.smooth_kind {
-            SmoothKind::Follow => prev + (pos - prev) * (1.0 - s.smoothing.clamp(0.0, 0.95)),
+            SmoothKind::Follow => prev + (pos - prev) * follow_alpha(s.smoothing, if s.smooth_time { dt } else { None }),
             SmoothKind::PulledString => {
-                let len = s.smooth_px.max(0.0);
+                let len = px;
                 let d = pos - prev;
                 let dist = d.length();
                 if dist > len {
@@ -843,8 +961,8 @@ impl StrokeState {
             }
             SmoothKind::AverageDistance => {
                 self.history.push_back(pos);
-                // On garde les positions des derniers `smooth_px` pixels parcourus.
-                let span = s.smooth_px.max(0.0);
+                // On garde les positions des derniers `px` pixels parcourus.
+                let span = px;
                 let mut keep = 1;
                 let mut run = 0.0;
                 let pts: Vec<Pos2> = self.history.iter().rev().copied().collect();
@@ -934,6 +1052,9 @@ impl StrokeState {
             Some(_) => {}
             None => self.clock = Some(time),
         }
+        // Temps écoulé depuis le point d'avant (lissage selon le temps) ; nul ou négatif : inconnu.
+        self.dt = self.last_time.map(|t0| (time - t0) as f32).filter(|d| *d > 0.0);
+        self.last_time = Some(time);
         self.next_time = time;
         self.add_point(raster, pos, pressure, dirty);
     }
@@ -946,11 +1067,12 @@ impl StrokeState {
         let touching = !self.pen || self.feel.threshold <= 0.0 || pressure >= self.feel.threshold;
         let pressure = if self.pen { self.feel.pressure_curve.eval(pressure) } else { pressure };
         self.raw = Some((pos, pressure));
+        let dt = self.dt.take();
         if !touching {
             return;
         }
         self.contact = Some((pos, pressure));
-        let target = self.smooth(pos);
+        let target = self.smooth(pos, dt);
         self.smoothed = Some(target);
         self.record(target, pressure);
         self.move_to(raster, target, pressure, dirty);
@@ -961,14 +1083,110 @@ impl StrokeState {
         self.path.push(VPoint { x: p.x, y: p.y, r });
     }
 
-    /// Termine le trait (en rattrapant le retard du lissage) et renvoie de quoi l'annuler.
-    pub fn finish(&mut self, raster: &mut Raster, dirty: &mut Vec<usize>) -> Option<Edit> {
-        if let (Some((p, pr)), Some(s)) = (self.contact, self.smoothed) {
-            if p != s {
+    /// Le lissage a-t-il un effet, avec ces réglages ?
+    fn smoothing_active(&self) -> bool {
+        let s = self.settings;
+        match s.smooth_kind {
+            SmoothKind::Follow => s.smoothing > 0.0,
+            SmoothKind::PulledString | SmoothKind::AverageDistance => s.smooth_px > 0.0,
+            SmoothKind::AveragePoints => s.smooth_points > 1,
+        }
+    }
+
+    /// Lissage après le trait : le trait brut est effacé (les tuiles d'avant reprennent leur place)
+    /// et les points reçus sont rejoués avec le lissage, comme s'ils arrivaient. Borne : un trait
+    /// qui a touché plus de 2000 tuiles (8 millions de pixels) reste brut, le rejeu coûterait une
+    /// image entière.
+    fn replay_smoothed(&mut self, raster: &mut Raster, dirty: &mut Vec<usize>) {
+        if self.before.len() > 2000 {
+            return;
+        }
+        for (&idx, tile) in &self.before {
+            if idx < raster.tiles.len() {
+                raster.tiles[idx] = tile.clone();
+                dirty.push(idx);
+            }
+        }
+        let log = std::mem::take(&mut self.raw_log);
+        self.reset_gesture();
+        self.replaying = true;
+        for p in &log {
+            let pos = Pos2::new(p[0] as f32, p[1] as f32);
+            if p[3] >= 0.0 {
+                self.add_point_at(raster, pos, p[2] as f32, p[3], dirty);
+            } else {
+                self.add_point(raster, pos, p[2] as f32, dirty);
+            }
+        }
+    }
+
+    /// Remet le geste à son départ, tout sauf les tuiles d'avant et le journal : pour le rejouer.
+    fn reset_gesture(&mut self) {
+        self.path.clear();
+        self.mask.clear();
+        self.last = None;
+        self.smoothed = None;
+        self.raw = None;
+        self.contact = None;
+        self.since_dab = 0.0;
+        self.rng = RNG_SEED;
+        self.clock = None;
+        self.since_clock = 0.0;
+        self.speed = 0.0;
+        self.travel = 0.0;
+        self.direction = 0.0;
+        self.history.clear();
+        self.dabs = 0;
+        self.wet_rgb = wet_start(self.mode);
+        self.wet_load = 1.0;
+        self.next_time = -1.0;
+        self.last_time = None;
+        self.dt = None;
+    }
+
+    /// Au levé, le trait rattrape la pointe (le lissage le laisse en retard), selon le réglage :
+    /// pas du tout, tout droit, ou en prolongeant sa courbe — une Bézier qui part dans la dernière
+    /// direction du trait lissé et finit à la pointe, en autant de points qu'il faut (un tous les
+    /// deux pixels), l'appui glissant vers celui de la pointe.
+    fn catch_up(&mut self, raster: &mut Raster, dirty: &mut Vec<usize>) {
+        let (Some((p, pr)), Some(s)) = (self.contact, self.smoothed) else { return };
+        if p == s {
+            return;
+        }
+        let n = self.path.len();
+        let dir = (n >= 2)
+            .then(|| self.path[n - 1].pos() - self.path[n - 2].pos())
+            .filter(|d| d.length() > 1e-3)
+            .map(|d| d / d.length());
+        match (self.settings.catch_up, dir) {
+            (CatchUp::None, _) => {}
+            (CatchUp::Straight, _) | (CatchUp::Curve, None) => {
                 self.move_to(raster, p, pr, dirty);
                 self.record(p, pr);
             }
+            (CatchUp::Curve, Some(dir)) => {
+                let dist = s.distance(p);
+                let ctrl = s + dir * (dist * 0.5);
+                let p0 = self.last.map_or(pr, |l| l.1);
+                let steps = ((dist / 2.0).ceil() as usize).clamp(2, 64);
+                for k in 1..=steps {
+                    let t = k as f32 / steps as f32;
+                    let q = if k == steps { p } else { bezier2(s, ctrl, p, t) };
+                    let pk = p0 + (pr - p0) * t;
+                    self.move_to(raster, q, pk, dirty);
+                    self.record(q, pk);
+                }
+            }
         }
+    }
+
+    /// Termine le trait (lissage après le trait s'il est demandé, puis rattrapage de la pointe) et
+    /// renvoie de quoi l'annuler.
+    pub fn finish(&mut self, raster: &mut Raster, dirty: &mut Vec<usize>) -> Option<Edit> {
+        if self.settings.smooth_deferred && !self.replaying && self.smoothing_active() {
+            self.replay_smoothed(raster, dirty);
+        }
+        self.catch_up(raster, dirty);
         self.fill_shape(raster, dirty);
         let tiles: Vec<_> = std::mem::take(&mut self.before).into_iter().collect();
         let pixels = (!tiles.is_empty()).then_some(Edit::Tiles {

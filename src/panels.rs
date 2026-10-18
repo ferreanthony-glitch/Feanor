@@ -125,6 +125,31 @@ fn brush_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
     })
     .response
     .on_hover_text(s.smooth_kind.help());
+    // Options du lissage (sensation des brosses, §2.3), quand il a un effet.
+    let smoothing_on = match s.smooth_kind {
+        crate::brush::SmoothKind::Follow => s.smoothing > 0.0,
+        crate::brush::SmoothKind::PulledString | crate::brush::SmoothKind::AverageDistance => s.smooth_px > 0.0,
+        crate::brush::SmoothKind::AveragePoints => s.smooth_points > 1,
+    };
+    if smoothing_on {
+        ui.horizontal_wrapped(|ui| {
+            ui.checkbox(&mut s.smooth_deferred, "Après le trait")
+                .on_hover_text("Pendant le geste, le trait brut suit la pointe sans retard ; au levé, il est rejoué lissé (TVPaint : Line Smoothing sans Real Time, ton réglage).");
+            if s.smooth_kind == crate::brush::SmoothKind::Follow {
+                ui.checkbox(&mut s.smooth_time, "Selon le temps")
+                    .on_hover_text("Le Suivi rattrape la pointe selon le temps écoulé, non le nombre d'échantillons : la même douceur quelle que soit la cadence du stylet et de l'image (décoché : comme avant).");
+            }
+            if matches!(s.smooth_kind, crate::brush::SmoothKind::PulledString | crate::brush::SmoothKind::AverageDistance) {
+                ui.checkbox(&mut s.smooth_screen, "Pixels d'écran")
+                    .on_hover_text("La corde ou la distance se mesurent à l'écran : la même sous le stylet à tout zoom (décoché : en pixels du dessin, comme avant).");
+            }
+            egui::ComboBox::from_id_salt("rattrapage").selected_text(s.catch_up.label()).width(crate::dockui::fit_w(ui, 150.0)).show_ui(ui, |ui| {
+                for c in crate::brush::CatchUp::ALL {
+                    ui.selectable_value(&mut s.catch_up, c, c.label()).on_hover_text(c.help());
+                }
+            });
+        });
+    }
     crate::dynui::shape_ui(ui, s);
     crate::dynui::wet_ui(ui, s, vector);
     crate::dynui::dynamics_ui(ui, s, vector);

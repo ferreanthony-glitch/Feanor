@@ -1415,6 +1415,7 @@ impl App {
         let mut stroke = StrokeState::new(cel, mode, settings, prefix, pen)
             .with_textures(textures)
             .with_feel(self.toucher)
+            .with_zoom(self.layer_zoom())
             .with_secondary(self.couleurs.prefs.back)
             .on_layer(self.layer().keep_alpha, stencil)
             .with_options(behind, fill, tol);

@@ -43,6 +43,8 @@ mod dip_tests;
 mod dynamics_tests;
 #[cfg(test)]
 mod toucher_tests;
+#[cfg(test)]
+mod lissage_tests;
 mod bulles;
 #[cfg(test)]
 mod bulles_tests;
