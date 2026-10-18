@@ -15,7 +15,8 @@ use serde::{Deserialize, Serialize};
 use crate::brush::{BrushSettings, Connection, Source};
 use crate::brushtex::{Preset, Target, MINE, PAPER_DRAWING};
 
-/// Source des réglages fournis par Pelure.
+/// Source des réglages fournis par SHOT. Étiquette interne, jamais montrée et gardée telle quelle
+/// (ancien nom du logiciel : Pelure) pour ne pas toucher aux réglages déjà enregistrés.
 pub const PELURE: &str = "Pelure";
 
 pub const CRAYONS: &str = "Crayons";

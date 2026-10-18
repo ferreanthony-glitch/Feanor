@@ -2,7 +2,7 @@
 //! de coller une image copiée dans le presse-papiers de Windows, issue d'internet ou autre »).
 //!
 //! Ctrl+V (ou Édition > Coller) : si le presse-papiers de Windows tient une image qui ne vient pas
-//! de Pelure (ses copies y écrivent « Pelure : … »), c'est elle qui est collée. Sur un calque
+//! de SHOT (ses copies y écrivent « SHOT : … »), c'est elle qui est collée. Sur un calque
 //! bitmap modifiable : dans son dessin ; sinon sur un nouveau calque bitmap « Image collée »,
 //! au-dessus du calque courant. Centrée dans le cadre, réduite s'il le faut pour y tenir, et
 //! sélectionnée (poignées, flèches) : Échap ou un autre outil la pose.
@@ -15,8 +15,17 @@ use crate::document::LayerKind;
 use crate::pixsel::Floating;
 use crate::raster::premultiply;
 
-/// Début du texte qu'écrivent les copies de Pelure dans le presse-papiers de Windows.
-pub const MARK: &str = "Pelure : ";
+/// Début du texte qu'écrivent les copies de SHOT dans le presse-papiers de Windows.
+pub const MARK: &str = "SHOT : ";
+
+/// Le même début chez l'ancien nom du logiciel (Pelure) : un presse-papiers rempli par l'ancienne
+/// version est encore reconnu.
+pub const ANCIEN_MARK: &str = "Pelure : ";
+
+/// Ce texte du presse-papiers est-il une copie interne de SHOT (ou de Pelure) ?
+pub fn est_copie_interne(texte: &str) -> bool {
+    texte.starts_with(MARK) || texte.starts_with(ANCIEN_MARK)
+}
 
 /// Taille qui tient dans `max_w` × `max_h` sans déformer ; jamais agrandie.
 pub fn fit_size(w: usize, h: usize, max_w: usize, max_h: usize) -> (usize, usize) {
@@ -39,10 +48,10 @@ pub fn to_floating(rgba: &[u8], w: usize, h: usize, x0: usize, y0: usize) -> Flo
     Floating { x0, y0, w, h, pixels }
 }
 
-/// L'image du presse-papiers de Windows (largeur, hauteur, RVBA), si elle ne vient pas de Pelure.
+/// L'image du presse-papiers de Windows (largeur, hauteur, RVBA), si elle ne vient pas de SHOT.
 pub fn clipboard_image() -> Option<(usize, usize, Vec<u8>)> {
     let mut clipboard = arboard::Clipboard::new().ok()?;
-    if clipboard.get_text().is_ok_and(|t| t.starts_with(MARK)) {
+    if clipboard.get_text().is_ok_and(|t| est_copie_interne(&t)) {
         return None;
     }
     let image = clipboard.get_image().ok()?;

@@ -7,11 +7,14 @@
 //! - Préférences… : les réglages de l'application (pas du projet) qui étaient éparpillés dans les
 //!   menus : copie de secours, dernier projet rouvert, croix du système, panneaux ajustés,
 //!   raccourcis clavier.
+//!
+//! Apparence (en tête de Préférences…) : le thème et ses neuf couleurs (`theme.rs`).
 
 use eframe::egui::{self, RichText};
 use egui_phosphor::regular as ph;
 
 use crate::app::App;
+use crate::theme::ChoixTheme;
 
 /// Les exports proposés : icône, nom, explication, action (ou `None` : la page HTML, sans action).
 const EXPORTS: [(&str, &str, &str, Option<&str>); 7] = [
@@ -62,6 +65,45 @@ impl App {
         }
     }
 
+    /// Apparence : le thème (Gris sombre, Gris clair, Sombre, Personnalisé) et les neuf couleurs de
+    /// l'interface. Tout change aussitôt ; modifier une couleur passe en « Personnalisé », en
+    /// partant du thème courant. Le réglage est enregistré par `App::update` une fois le curseur
+    /// du sélecteur de couleur relâché.
+    fn theme_prefs_ui(&mut self, ui: &mut egui::Ui) {
+        ui.label(RichText::new("Apparence").strong());
+        ui.horizontal(|ui| {
+            ui.label("Thème");
+            let actuel = self.settings.theme.choix;
+            egui::ComboBox::from_id_salt("theme_choix").selected_text(actuel.nom()).show_ui(ui, |ui| {
+                for choix in ChoixTheme::TOUS {
+                    if ui.selectable_label(actuel == choix, choix.nom()).clicked() {
+                        self.settings.theme.choisir(choix);
+                    }
+                }
+            });
+            if ui
+                .button("Rétablir")
+                .on_hover_text("Revenir au thème par défaut, Gris sombre (les couleurs personnalisées sont aussi remises à zéro).")
+                .clicked()
+            {
+                self.settings.theme.retablir();
+            }
+        });
+        let avant = self.settings.theme.couleurs();
+        let mut couleurs = avant;
+        egui::Grid::new("theme_couleurs").num_columns(2).spacing([12.0, 4.0]).show(ui, |ui| {
+            for (nom, aide, rvb) in couleurs.champs() {
+                ui.label(nom).on_hover_text(aide);
+                ui.color_edit_button_srgb(rvb).on_hover_text(aide);
+                ui.end_row();
+            }
+        });
+        if couleurs != avant {
+            self.settings.theme.modifier(couleurs);
+        }
+        ui.label(RichText::new("Changer une couleur passe en « Personnalisé » ; le survol, le texte secondaire et les couleurs de la timeline s'en déduisent.").small().weak());
+    }
+
     /// La fenêtre Préférences… (menu Fichier).
     pub(crate) fn preferences_window(&mut self, ctx: &egui::Context) {
         if !self.prefs_window {
@@ -76,6 +118,8 @@ impl App {
             .anchor(egui::Align2::CENTER_TOP, [0.0, 80.0])
             .show(ctx, |ui| {
                 ui.set_width(440.0);
+                self.theme_prefs_ui(ui);
+                ui.add_space(6.0);
                 ui.label(RichText::new("Projets").strong());
                 self.autosave_menu_ui(ui);
                 if ui.checkbox(&mut self.settings.reopen_last, "Rouvrir le dernier projet au lancement").changed() {
@@ -85,7 +129,7 @@ impl App {
                 ui.label(RichText::new("Dessin").strong());
                 let resp = ui.checkbox(&mut self.settings.system_cursor, "Croix du système sur le pinceau").on_hover_text(
                     "Affiche la croix de Windows à la pointe, en plus du cercle du pinceau : elle suit le \
-                     stylet sans retard (le cercle, dessiné par Pelure, arrive une image plus tard).",
+                     stylet sans retard (le cercle, dessiné par SHOT, arrive une image plus tard).",
                 );
                 if resp.changed() {
                     let _ = self.settings.save();

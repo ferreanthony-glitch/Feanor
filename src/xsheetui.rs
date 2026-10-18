@@ -150,7 +150,7 @@ impl App {
     }
 
     fn paint_xsheet_header(&self, painter: &egui::Painter, header: Rect, cols: &[Col]) {
-        painter.rect_filled(header, 0.0, theme::ENTETE);
+        painter.rect_filled(header, 0.0, theme::entete());
         let font = FontId::proportional(11.0);
         let mut x = header.left();
         for c in cols {
@@ -169,18 +169,18 @@ impl App {
                         painter.rect_filled(Rect::from_min_size(r.min, vec2(r.width(), 3.0)), 0.0, Color32::from_rgb(r0, g0, b0));
                     }
                     if li == self.cur_layer {
-                        painter.rect_filled(r.shrink2(vec2(1.0, 3.0)).translate(vec2(0.0, 1.0)), 2.0, theme::ACCENT);
+                        painter.rect_filled(r.shrink2(vec2(1.0, 3.0)).translate(vec2(0.0, 1.0)), 2.0, theme::accent());
                     }
                     (l.name.clone(), li == self.cur_layer)
                 }
             };
-            let color = if strong { theme::TEXTE_FORT } else if matches!(c, Col::Layer(li) if !self.layers()[*li].visible) { theme::TEXTE_DOUX } else { theme::TEXTE };
+            let color = if strong { theme::texte_fort() } else if matches!(c, Col::Layer(li) if !self.layers()[*li].visible) { theme::texte_doux() } else { theme::texte() };
             let galley = painter.layout(title, font.clone(), color, r.width() - 6.0);
             painter.with_clip_rect(r.shrink(2.0)).galley(pos2(r.left() + 3.0, r.center().y - galley.size().y / 2.0), galley, color);
-            painter.line_segment([pos2(r.right(), r.top()), pos2(r.right(), r.bottom())], Stroke::new(1.0_f32, theme::BORD));
+            painter.line_segment([pos2(r.right(), r.top()), pos2(r.right(), r.bottom())], Stroke::new(1.0_f32, theme::bord()));
             x += c.width();
         }
-        painter.line_segment([header.left_bottom(), header.right_bottom()], Stroke::new(1.0_f32, theme::GRADUATION_SECONDE));
+        painter.line_segment([header.left_bottom(), header.right_bottom()], Stroke::new(1.0_f32, theme::graduation_seconde()));
     }
 
     fn paint_xsheet_rows(&self, painter: &egui::Painter, origin: egui::Pos2, cols: &[Col], first: usize, last: usize) {
@@ -197,10 +197,10 @@ impl App {
         for f in first..last {
             let r = row_rect(f, origin.x, width);
             let outside = s.cues && (cues.in_point.is_some_and(|a| f < a) || cues.out_point.is_some_and(|b| f > b));
-            let fill = if outside { theme::FOND } else if (f / every) % 2 == 0 { theme::RANGEE } else { theme::RANGEE_SOMBRE };
+            let fill = if outside { theme::fond() } else if (f / every) % 2 == 0 { theme::rangee() } else { theme::rangee_sombre() };
             painter.rect_filled(r, 0.0, fill);
             if s.playhead && f == self.cur_frame {
-                painter.rect_filled(r, 0.0, theme::IMAGE_COURANTE.gamma_multiply(0.35));
+                painter.rect_filled(r, 0.0, theme::image_courante().gamma_multiply(0.35));
             }
         }
         // Données par colonne.
@@ -222,15 +222,15 @@ impl App {
                     for f in first..last {
                         let r = row_rect(f, x, w);
                         let strong = f % every == 0;
-                        let color = if f == self.cur_frame { theme::TEXTE_FORT } else if strong { theme::TEXTE } else { theme::TEXTE_DOUX };
+                        let color = if f == self.cur_frame { theme::texte_fort() } else if strong { theme::texte() } else { theme::texte_doux() };
                         painter.text(pos2(r.right() - 4.0, r.center().y), Align2::RIGHT_CENTER, self.frame_label(f), mono.clone(), color);
                         if s.cues {
                             if cues.bookmarks.contains(&f) {
-                                painter.text(pos2(r.left() + 2.0, r.center().y), Align2::LEFT_CENTER, ph::BOOKMARK_SIMPLE, small.clone(), theme::CAMERA);
+                                painter.text(pos2(r.left() + 2.0, r.center().y), Align2::LEFT_CENTER, ph::BOOKMARK_SIMPLE, small.clone(), theme::camera());
                             }
                             for (at, mark) in [(cues.in_point, "["), (cues.out_point, "]")] {
                                 if at == Some(f) {
-                                    painter.text(pos2(r.left() + 12.0, r.center().y), Align2::LEFT_CENTER, mark, mono.clone(), theme::ACCENT_TEXTE);
+                                    painter.text(pos2(r.left() + 12.0, r.center().y), Align2::LEFT_CENTER, mark, mono.clone(), theme::accent_texte());
                                 }
                             }
                         }
@@ -249,10 +249,10 @@ impl App {
                             [row.dialogue.as_str(), row.notes.as_str()].iter().filter(|t| !t.trim().is_empty()).copied().collect::<Vec<_>>().join("\n")
                         };
                         let r = Rect::from_min_max(row_rect(row.frame, x, w).min, row_rect(end - 1, x, w).max).shrink(3.0);
-                        painter.line_segment([pos2(x, r.top() - 3.0), pos2(x + w, r.top() - 3.0)], Stroke::new(1.0_f32, theme::MARQUE));
+                        painter.line_segment([pos2(x, r.top() - 3.0), pos2(x + w, r.top() - 3.0)], Stroke::new(1.0_f32, theme::marque()));
                         if !text.trim().is_empty() {
-                            let galley = painter.layout(text, small.clone(), theme::TEXTE, r.width());
-                            painter.with_clip_rect(r).galley(r.min, galley, theme::TEXTE);
+                            let galley = painter.layout(text, small.clone(), theme::texte(), r.width());
+                            painter.with_clip_rect(r).galley(r.min, galley, theme::texte());
                         }
                     }
                 }
@@ -262,7 +262,7 @@ impl App {
                         let a = levels.get(f).copied().unwrap_or(0.0);
                         if a > 0.004 {
                             let half = (r.width() / 2.0 - 3.0) * a;
-                            painter.rect_filled(Rect::from_center_size(r.center(), vec2((half * 2.0).max(1.0), r.height() - 4.0)), 1.0, theme::SON_ONDE);
+                            painter.rect_filled(Rect::from_center_size(r.center(), vec2((half * 2.0).max(1.0), r.height() - 4.0)), 1.0, theme::son_onde());
                         }
                     }
                 }
@@ -271,10 +271,10 @@ impl App {
                         let r = row_rect(f, x, w);
                         match cam.get(f) {
                             Some(CamCell::Key) => {
-                                painter.text(r.center(), Align2::CENTER_CENTER, "◆", small.clone(), theme::CAMERA);
+                                painter.text(r.center(), Align2::CENTER_CENTER, "◆", small.clone(), theme::camera());
                             }
                             Some(CamCell::Between) => {
-                                painter.line_segment([pos2(r.center().x, r.top()), pos2(r.center().x, r.bottom())], Stroke::new(1.5_f32, theme::CAMERA));
+                                painter.line_segment([pos2(r.center().x, r.top()), pos2(r.center().x, r.bottom())], Stroke::new(1.5_f32, theme::camera()));
                             }
                             _ => {}
                         }
@@ -283,8 +283,8 @@ impl App {
                 Col::Layer(li) => {
                     let Some((_, list)) = cells.iter().find(|(cc, _)| *cc == *c) else { continue };
                     let kind_color = match self.layers()[li].kind {
-                        crate::document::LayerKind::Vector => theme::DESSIN_VECTORIEL,
-                        crate::document::LayerKind::Bitmap => theme::DESSIN_BITMAP,
+                        crate::document::LayerKind::Vector => theme::dessin_vectoriel(),
+                        crate::document::LayerKind::Bitmap => theme::dessin_bitmap(),
                     };
                     for f in first..last {
                         let r = row_rect(f, x, w);
@@ -293,7 +293,7 @@ impl App {
                                 if let Some(k) = mark {
                                     painter.rect_filled(Rect::from_min_size(pos2(r.left() + 2.0, r.top() + 3.0), vec2(4.0, r.height() - 6.0)), 1.0, crate::marks::color(*k));
                                 }
-                                let color = if li == self.cur_layer { theme::TEXTE_FORT } else { theme::TEXTE };
+                                let color = if li == self.cur_layer { theme::texte_fort() } else { theme::texte() };
                                 let galley = painter.layout_no_wrap(label.clone(), mono.clone(), color);
                                 painter.with_clip_rect(r.shrink(1.0)).galley(pos2(r.center().x - galley.size().x / 2.0, r.center().y - galley.size().y / 2.0), galley, color);
                             }
@@ -301,10 +301,10 @@ impl App {
                                 painter.line_segment([pos2(r.center().x, r.top()), pos2(r.center().x, r.bottom())], Stroke::new(2.0_f32, kind_color));
                             }
                             Cell::EmptyStart => {
-                                painter.text(r.center(), Align2::CENTER_CENTER, "×", mono.clone(), theme::DESSIN_VIDE);
+                                painter.text(r.center(), Align2::CENTER_CENTER, "×", mono.clone(), theme::dessin_vide());
                             }
                             Cell::Behaviour { label } => {
-                                painter.text(r.center(), Align2::CENTER_CENTER, format!("({label})"), mono.clone(), theme::TEXTE_DOUX);
+                                painter.text(r.center(), Align2::CENTER_CENTER, format!("({label})"), mono.clone(), theme::texte_doux());
                             }
                             Cell::Blank => {}
                         }
@@ -318,13 +318,13 @@ impl App {
             // Trait de colonne.
             let top = origin.y + HEADER_H + first as f32 * ROW_H;
             let bottom = origin.y + HEADER_H + last as f32 * ROW_H;
-            painter.line_segment([pos2(x + w, top), pos2(x + w, bottom)], Stroke::new(1.0_f32, theme::BORD));
+            painter.line_segment([pos2(x + w, top), pos2(x + w, bottom)], Stroke::new(1.0_f32, theme::bord()));
             x += w;
         }
         // Traits entre les images ; épais toutes les `every` images.
         for f in first..=last {
             let y = origin.y + HEADER_H + f as f32 * ROW_H;
-            let (stroke_w, color) = if f % every == 0 { (1.5_f32, theme::GRADUATION_SECONDE) } else { (1.0_f32, theme::GRADUATION) };
+            let (stroke_w, color) = if f % every == 0 { (1.5_f32, theme::graduation_seconde()) } else { (1.0_f32, theme::graduation()) };
             painter.line_segment([pos2(origin.x, y), pos2(origin.x + width, y)], Stroke::new(stroke_w, color));
         }
     }

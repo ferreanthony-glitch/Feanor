@@ -18,7 +18,10 @@ const NAMES_W: f32 = HEAD_W;
 const SOUND_H: f32 = 30.0;
 /// Ligne des images clés de la caméra, sous les calques.
 const CAM_H: f32 = 18.0;
-const CAM_KEY: Color32 = theme::CAMERA;
+/// Couleur des clés de caméra (celle du thème).
+fn cam_key() -> Color32 {
+    theme::camera()
+}
 /// Barre d'un calque, sous ses dessins (chantier 1) : on la prend pour décaler le calque, par
 /// ses bouts pour le rogner ou l'allonger.
 const BAR_H: f32 = 4.0;
@@ -30,7 +33,10 @@ fn body_bottom(y: f32, h: f32) -> f32 {
     y + h - BAR_H - 3.0
 }
 
-pub(crate) const CUR_FRAME: Color32 = theme::IMAGE_COURANTE;
+/// Couleur de l'image courante (celle du thème).
+pub(crate) fn cur_frame() -> Color32 {
+    theme::image_courante()
+}
 
 impl App {
     /// Hauteur de la ligne du son (rien s'il n'y a aucun son dans le projet).
@@ -258,14 +264,14 @@ impl App {
         };
         if notes_h > 0.0 {
             let row = Rect::from_min_size(pos2(r.left(), r.top() + HEADER_H + rows_h + CAM_H), vec2(NAMES_W, notes_h)).shrink2(vec2(0.0, 1.0));
-            painter.rect_filled(row, 2.0, theme::RANGEE_SOMBRE);
+            painter.rect_filled(row, 2.0, theme::rangee_sombre());
             painter.text(pos2(r.left() + 8.0, row.center().y), Align2::LEFT_CENTER, "Notes (jamais exportées)", FontId::proportional(11.0), visuals.weak_text_color());
             menu_on(self, ui, row, "notes", GridMenu::NotesHeader);
         }
         {
             let y = r.top() + HEADER_H + rows_h;
             let row = Rect::from_min_size(pos2(r.left(), y), vec2(NAMES_W, CAM_H)).shrink2(vec2(0.0, 1.0));
-            painter.rect_filled(row, 2.0, theme::RANGEE_SOMBRE);
+            painter.rect_filled(row, 2.0, theme::rangee_sombre());
             let n = self.panel().camera.len();
             let label = match n {
                 0 => "Caméra".to_string(),
@@ -283,7 +289,7 @@ impl App {
         }
         if sound_h > 0.0 {
             let row = Rect::from_min_max(pos2(r.left(), r.bottom() - sound_h), r.max).shrink2(vec2(0.0, 1.0));
-            painter.rect_filled(row, 2.0, theme::RANGEE_SOMBRE);
+            painter.rect_filled(row, 2.0, theme::rangee_sombre());
             painter.text(
                 pos2(r.left() + 8.0, row.center().y),
                 Align2::LEFT_CENTER,
@@ -335,37 +341,37 @@ impl App {
             .map(|d| d.handle)
             .or_else(|| resp.hover_pos().and_then(|p| self.timeline_handle_at(p, r, cell, &rows, grid_top)));
         // Règle des images.
-        painter.rect_filled(Rect::from_min_size(r.min, vec2(size.x, HEADER_H)), 0.0, theme::REGLE);
+        painter.rect_filled(Rect::from_min_size(r.min, vec2(size.x, HEADER_H)), 0.0, theme::regle());
 
         // Images clés de la caméra : losanges (ronds si le mouvement y est adouci), reliés par un
         // trait là où la caméra bouge.
         {
             let y = grid_top + rows_h;
             let row = Rect::from_min_size(pos2(r.left(), y), vec2(size.x, CAM_H)).shrink2(vec2(0.0, 1.0));
-            painter.rect_filled(row, 0.0, theme::RANGEE_SOMBRE);
+            painter.rect_filled(row, 0.0, theme::rangee_sombre());
             let keys = &self.panel().camera;
             let cx = |f: usize| r.left() + (f as f32 + 0.5) * cell;
             if keys.len() >= 2 {
                 painter.line_segment(
                     [pos2(cx(keys[0].frame), row.center().y), pos2(cx(keys[keys.len() - 1].frame), row.center().y)],
-                    Stroke::new(2.0_f32, CAM_KEY.gamma_multiply(0.45)),
+                    Stroke::new(2.0_f32, cam_key().gamma_multiply(0.45)),
                 );
             }
             for (i, k) in keys.iter().enumerate() {
                 let c = pos2(cx(k.frame), row.center().y);
                 // La clé que l'on fait glisser : cerclée de blanc.
                 let outline = if self.is_dragged_camera_key(self.cur_panel, i) {
-                    Stroke::new(1.5_f32, Color32::WHITE)
+                    Stroke::new(1.5_f32, theme::contour())
                 } else {
                     Stroke::new(1.0_f32, Color32::from_black_alpha(140))
                 };
                 if k.smooth {
-                    painter.circle(c, 4.5, CAM_KEY, outline);
+                    painter.circle(c, 4.5, cam_key(), outline);
                 } else {
                     let d = 5.0;
                     painter.add(egui::Shape::convex_polygon(
                         vec![c + vec2(0.0, -d), c + vec2(d, 0.0), c + vec2(0.0, d), c + vec2(-d, 0.0)],
-                        CAM_KEY,
+                        cam_key(),
                         outline,
                     ));
                 }
@@ -375,15 +381,15 @@ impl App {
         // Le son du montage pendant ce panneau (toutes pistes superposées), en lecture seule.
         if sound_h > 0.0 {
             let row = Rect::from_min_max(pos2(r.left(), r.bottom() - sound_h), r.max).shrink2(vec2(0.0, 1.0));
-            painter.rect_filled(row, 0.0, theme::RANGEE_SOMBRE);
+            painter.rect_filled(row, 0.0, theme::rangee_sombre());
             let start = self.doc.panel_start(self.cur_panel);
             let left = r.left() - start as f32 * cell;
             let fps = self.doc.fps;
             for track in &self.doc.audio_tracks {
                 let color = if track.muted {
-                    theme::TEXTE_DOUX
+                    theme::texte_doux()
                 } else {
-                    theme::SON_ONDE
+                    theme::son_onde()
                 };
                 for clip in &track.clips {
                     let cr = Rect::from_min_max(
@@ -420,9 +426,9 @@ impl App {
                 visuals.selection.bg_fill.gamma_multiply(0.18)
             } else if self.layers()[li].folder {
                 // Dossier (13b-5) : pas de dessin, une rangée plus sombre.
-                theme::RANGEE_SOMBRE
+                theme::rangee_sombre()
             } else {
-                theme::RANGEE
+                theme::rangee()
             };
             painter.rect_filled(rect, 0.0, bg);
         }
@@ -432,9 +438,9 @@ impl App {
         for c in 0..=cols {
             let x = r.left() + c as f32 * cell;
             let color = if c % fps == 0 {
-                theme::GRADUATION_SECONDE
+                theme::graduation_seconde()
             } else {
-                theme::GRADUATION
+                theme::graduation()
             };
             painter.line_segment([pos2(x, grid_top), pos2(x, r.bottom())], Stroke::new(1.0_f32, color));
             // Numéros (13d) : assez espacés pour se lire (toutes les 5 images au zoom normal), ou
@@ -461,7 +467,7 @@ impl App {
             let shade = Color32::from_black_alpha(80);
             painter.rect_filled(Rect::from_min_max(pos2(r.left(), grid_top), pos2(r.left() + a as f32 * cell, r.bottom())), 0.0, shade);
             painter.rect_filled(Rect::from_min_max(pos2(r.left() + b as f32 * cell, grid_top), r.max), 0.0, shade);
-            let bracket = Stroke::new(2.0_f32, theme::IMAGE_COURANTE);
+            let bracket = Stroke::new(2.0_f32, theme::image_courante());
             if let Some(f) = cues.in_point {
                 let x = r.left() + f as f32 * cell + 1.0;
                 painter.line_segment([pos2(x, r.top() + 2.0), pos2(x, r.top() + HEADER_H - 2.0)], bracket);
@@ -476,7 +482,7 @@ impl App {
             }
         }
         // Signets (13d) : un petit fanion bleu en bas de la règle.
-        let bookmark = Color32::from_rgb(95, 170, 255);
+        let bookmark = theme::accent_texte();
         for &f in &cues.bookmarks {
             let x = r.left() + (f as f32 + 0.5) * cell;
             painter.add(egui::Shape::convex_polygon(
@@ -490,10 +496,10 @@ impl App {
         // Marques d'image (13a) : un triangle dans la règle et un trait au début de l'image.
         for m in &self.panel().marks {
             let x = r.left() + m.frame as f32 * cell;
-            painter.line_segment([pos2(x, grid_top), pos2(x, r.bottom())], Stroke::new(1.5_f32, theme::MARQUE));
+            painter.line_segment([pos2(x, grid_top), pos2(x, r.bottom())], Stroke::new(1.5_f32, theme::marque()));
             painter.add(egui::Shape::convex_polygon(
                 vec![pos2(x, r.top() + 2.0), pos2(x + 7.0, r.top() + 2.0), pos2(x, r.top() + HEADER_H - 2.0)],
-                theme::MARQUE,
+                theme::marque(),
                 Stroke::NONE,
             ));
         }
@@ -509,13 +515,13 @@ impl App {
                 let (a, b) = (v.start, v.end(self.doc.fps).min(cols));
                 if a < b {
                     let block = Rect::from_min_max(pos2(r.left() + a as f32 * cell + 1.0, y + 4.0), pos2(r.left() + b as f32 * cell - 1.0, y + row.h - 4.0));
-                    let fill = if layer.visible { theme::SON_EXTRAIT } else { theme::SON_EXTRAIT.gamma_multiply(0.5) };
+                    let fill = if layer.visible { theme::son_extrait() } else { theme::son_extrait().gamma_multiply(0.5) };
                     painter.rect_filled(block, 3.0, fill);
                     // Perforations, comme une pellicule.
                     let mut x = block.left() + 4.0;
                     while x < block.right() - 4.0 {
                         for yy in [block.top() + 2.0, block.bottom() - 4.0] {
-                            painter.rect_filled(Rect::from_min_size(pos2(x, yy), vec2(3.0, 2.0)), 0.5, theme::FOND.gamma_multiply(0.6));
+                            painter.rect_filled(Rect::from_min_size(pos2(x, yy), vec2(3.0, 2.0)), 0.5, theme::sur_calque().gamma_multiply(0.6));
                         }
                         x += 8.0;
                     }
@@ -524,7 +530,7 @@ impl App {
                         Align2::LEFT_CENTER,
                         format!("{}  {}", egui_phosphor::regular::FILM_STRIP, v.name),
                         FontId::proportional(10.0),
-                        theme::TEXTE_FORT,
+                        theme::sur_calque(),
                     );
                 }
                 continue;
@@ -566,7 +572,7 @@ impl App {
                         pos2(r.left() + start as f32 * cell + 2.0, y + 5.0),
                         pos2(r.left() + end as f32 * cell - 2.0, body_bottom(y, row.h) - 2.0),
                     );
-                    let stroke = Stroke::new(1.0_f32, theme::TEXTE_DOUX.gamma_multiply(0.6));
+                    let stroke = Stroke::new(1.0_f32, theme::texte_doux().gamma_multiply(0.6));
                     painter.rect_stroke(cross, 2.0, stroke, StrokeKind::Inside);
                     painter.line_segment([cross.left_top(), cross.right_bottom()], stroke);
                     painter.line_segment([cross.left_bottom(), cross.right_top()], stroke);
@@ -577,7 +583,7 @@ impl App {
                         pos2(r.left() + end as f32 * cell - 1.0, body_bottom(y, row.h)),
                     );
                     let empty = self.doc.cels.get(&id).is_none_or(|c| c.is_empty());
-                    let mut fill = if empty { theme::DESSIN_VIDE } else { theme::couleur_calque(layer.kind, layer.ctg.is_some()) };
+                    let mut fill = if empty { theme::dessin_vide() } else { theme::couleur_calque(layer.kind, layer.ctg.is_some()) };
                     if !layer.visible {
                         fill = fill.gamma_multiply(0.5);
                     }
@@ -585,7 +591,7 @@ impl App {
                     painter.circle_filled(
                         pos2(block.left() + cell * 0.5 - 1.0, block.center().y),
                         2.5,
-                        theme::FOND,
+                        theme::encre(),
                     );
                     // Marque de couleur (13d) : un trait de sa couleur en haut du bloc.
                     if let Some(&k) = layer.color_marks.get(&id) {
@@ -609,13 +615,13 @@ impl App {
                                 Align2::LEFT_CENTER,
                                 name,
                                 FontId::proportional(10.0),
-                                theme::FOND,
+                                theme::encre(),
                             );
                         }
                         None if end - start > 1 && text_x < block.right() - 6.0 => {
                             painter.line_segment(
                                 [pos2(text_x, block.center().y), pos2(block.right() - 4.0, block.center().y)],
-                                Stroke::new(1.0_f32, theme::ENTETE),
+                                Stroke::new(1.0_f32, theme::encre()),
                             );
                         }
                         _ => {}
@@ -650,13 +656,13 @@ impl App {
             painter.rect_filled(bar, 1.5, fill);
             let cap = (bar.width() * 0.5).min(4.0);
             for (x0, x1, hot) in [(bar.left(), bar.left() + cap, start_lit), (bar.right() - cap, bar.right(), end_lit)] {
-                let c = if hot { Color32::WHITE } else { theme::TEXTE_FORT.gamma_multiply(0.7) };
+                let c = if hot { theme::contour() } else { theme::texte_fort().gamma_multiply(0.7) };
                 painter.rect_filled(Rect::from_min_max(pos2(x0, bar.top()), pos2(x1, bar.bottom())), 1.0, c);
             }
             // Un bout pris : un trait sur toute la hauteur de la ligne, là où il est.
             for (hot, x) in [(start_lit, bar.left() - 1.0), (end_lit, bar.right() + 1.0)] {
                 if hot {
-                    painter.line_segment([pos2(x, y + 1.0), pos2(x, y + row.h - 1.0)], Stroke::new(1.5_f32, Color32::WHITE));
+                    painter.line_segment([pos2(x, y + 1.0), pos2(x, y + row.h - 1.0)], Stroke::new(1.5_f32, theme::contour()));
                 }
             }
         }
@@ -678,7 +684,7 @@ impl App {
                 }
                 for (&f, &role) in self.layers()[row.li].roles.range(0..cols) {
                     let c = pos2(r.left() + (f as f32 + 0.5) * cell, grid_top + row.top + row.h - s * 0.5 - 3.0);
-                    painter.circle_filled(c, s * 0.5 + 1.5, theme::FOND.gamma_multiply(view.opacity));
+                    painter.circle_filled(c, s * 0.5 + 1.5, theme::encre().gamma_multiply(view.opacity));
                     crate::roles::paint_symbol(&painter, c, s, role, view.opacity);
                 }
             }
@@ -795,28 +801,28 @@ impl App {
         let end_lit = lit == Some(Handle::PlanEnd);
         painter.line_segment(
             [pos2(end_x, r.top()), pos2(end_x, r.bottom())],
-            Stroke::new(if end_lit { 2.0_f32 } else { 1.5_f32 }, if end_lit { Color32::WHITE } else { theme::TEXTE_DOUX }),
+            Stroke::new(if end_lit { 2.0_f32 } else { 1.5_f32 }, if end_lit { theme::contour() } else { theme::texte_doux() }),
         );
         // La prise de la fin du plan, au bout de la règle (chantier 4) : on la tire pour changer
         // la durée du plan.
         let tab = Rect::from_min_size(pos2(end_x, r.top() + 2.0), vec2(PLAN_END_W - 2.0, HEADER_H - 4.0));
-        painter.rect_filled(tab, 2.0, if end_lit { Color32::WHITE } else { theme::TEXTE_DOUX });
+        painter.rect_filled(tab, 2.0, if end_lit { theme::contour() } else { theme::texte_doux() });
         for dy in [-3.0, 0.0, 3.0] {
             painter.line_segment(
                 [pos2(tab.left() + 2.0, tab.center().y + dy), pos2(tab.right() - 2.0, tab.center().y + dy)],
-                Stroke::new(1.0_f32, theme::REGLE),
+                Stroke::new(1.0_f32, theme::regle()),
             );
         }
 
         // Image courante.
         let cx = r.left() + self.cur_frame as f32 * cell;
         let column = Rect::from_min_size(pos2(cx, r.top()), vec2(cell, size.y));
-        painter.rect_filled(column, 0.0, CUR_FRAME.gamma_multiply(0.18));
-        painter.rect_stroke(column, 0.0, Stroke::new(1.0_f32, CUR_FRAME), StrokeKind::Inside);
+        painter.rect_filled(column, 0.0, cur_frame().gamma_multiply(0.18));
+        painter.rect_stroke(column, 0.0, Stroke::new(1.0_f32, cur_frame()), StrokeKind::Inside);
         painter.rect_filled(
             Rect::from_min_size(pos2(cx, r.top()), vec2(cell, HEADER_H)),
             0.0,
-            CUR_FRAME,
+            cur_frame(),
         );
         painter.text(
             pos2(cx + cell * 0.5, r.top() + HEADER_H * 0.5),
@@ -829,7 +835,7 @@ impl App {
                 _ => self.frame_label(self.cur_frame),
             },
             FontId::monospace(9.0),
-            Color32::BLACK,
+            theme::encre(),
         );
 
         // Notes dessinées (13e) : leur rangée sous la caméra ; un geste qui y commence ne bouge
@@ -1080,12 +1086,12 @@ impl App {
                     pos2(r.left() + a as f32 * cell, grid_top + row.top + 1.0),
                     pos2(r.left() + b as f32 * cell, grid_top + row.top + row.h - 1.0),
                 );
-                painter.rect(sel, 2.0, Color32::from_white_alpha(28), Stroke::new(1.5_f32, Color32::WHITE), StrokeKind::Inside);
+                painter.rect(sel, 2.0, theme::contour().gamma_multiply(0.11), Stroke::new(1.5_f32, theme::contour()), StrokeKind::Inside);
                 // Pendant un glisser : là où elles vont se poser.
                 if let Some((c0, c1)) = self.image_drag.filter(|(c0, c1)| c0 != c1) {
                     let dx = (c1 as f32 - c0 as f32) * cell;
                     let ghost = sel.translate(vec2(dx, 0.0));
-                    painter.rect(ghost, 2.0, theme::MARQUE.gamma_multiply(0.25), Stroke::new(1.5_f32, theme::MARQUE), StrokeKind::Inside);
+                    painter.rect(ghost, 2.0, theme::marque().gamma_multiply(0.25), Stroke::new(1.5_f32, theme::marque()), StrokeKind::Inside);
                 }
             }
         }

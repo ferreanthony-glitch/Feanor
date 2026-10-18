@@ -3,7 +3,7 @@
 //! réponse, que l'on modifie à la souris (glisser un point ; double-clic : ajouter ; clic droit :
 //! retirer).
 
-use eframe::egui::{self, pos2, vec2, Color32, Rect, Sense, Shape, Stroke};
+use eframe::egui::{self, pos2, vec2, Rect, Sense, Shape, Stroke};
 
 use crate::brush::{BrushSettings, Connection, Curve, Source};
 use crate::bulles::bulle;
@@ -54,7 +54,7 @@ pub(crate) fn wet_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
         egui::RichText::new(if vector {
             "Calque vectoriel : la peinture humide ne vaut que pendant le tracé ; elle est faite pour un calque bitmap."
         } else {
-            "Modèle de Pelure (la formule de TVPaint n'est pas publiée) : à comparer avec tes outils de peinture."
+            "Modèle de SHOT (la formule de TVPaint n'est pas publiée) : à comparer avec tes outils de peinture."
         })
         .small()
         .weak(),
@@ -203,19 +203,19 @@ pub(crate) fn curve_editor(ui: &mut egui::Ui, curve: &mut Curve, id: &str) -> eg
 
     // Dessin : fond, quadrillage, la courbe, ses points.
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 3.0, theme::RANGEE_SOMBRE);
-    let grid = Stroke::new(1.0_f32, theme::GRADUATION);
+    painter.rect_filled(rect, 3.0, theme::rangee_sombre());
+    let grid = Stroke::new(1.0_f32, theme::graduation());
     for k in 1..4 {
         let t = k as f32 / 4.0;
         painter.line_segment([pos2(inner.left() + t * inner.width(), inner.top()), pos2(inner.left() + t * inner.width(), inner.bottom())], grid);
         painter.line_segment([pos2(inner.left(), inner.bottom() - t * inner.height()), pos2(inner.right(), inner.bottom() - t * inner.height())], grid);
     }
     let line: Vec<egui::Pos2> = curve.points().iter().map(|p| to_screen(*p)).collect();
-    painter.add(Shape::line(line, Stroke::new(1.5_f32, theme::IMAGE_COURANTE)));
+    painter.add(Shape::line(line, Stroke::new(1.5_f32, theme::image_courante())));
     let hover = resp.hover_pos().and_then(|q| near(curve.points(), q));
     for (i, p) in curve.points().iter().enumerate() {
         let lit = Some(i) == held || Some(i) == hover;
-        painter.circle(to_screen(*p), if lit { 4.5 } else { 3.5 }, if lit { Color32::WHITE } else { theme::IMAGE_COURANTE }, Stroke::new(1.0_f32, theme::FOND));
+        painter.circle(to_screen(*p), if lit { 4.5 } else { 3.5 }, if lit { theme::contour() } else { theme::image_courante() }, Stroke::new(1.0_f32, theme::encre()));
     }
     if hover.is_some() || held.is_some() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);

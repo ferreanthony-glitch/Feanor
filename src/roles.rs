@@ -60,10 +60,11 @@ impl Role {
 
     fn color(self) -> Color32 {
         match self {
-            Role::Key => Color32::from_rgb(252, 67, 46),
-            Role::Breakdown => Color32::from_rgb(244, 129, 12),
-            Role::Inbetween | Role::InbetweenDone => Color32::from_rgb(86, 129, 255),
-            Role::Special | Role::SpecialDone => Color32::from_rgb(182, 103, 230),
+            // Les couleurs du thème : rouge, orange, bleu et violet restent lisibles sur les rangées.
+            Role::Key => crate::theme::image_courante(),
+            Role::Breakdown => crate::theme::marque(),
+            Role::Inbetween | Role::InbetweenDone => crate::theme::dessin_vectoriel(),
+            Role::Special | Role::SpecialDone => crate::theme::effet(),
         }
     }
 }

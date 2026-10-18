@@ -131,7 +131,7 @@ pub struct Preset {
 
 /// Les préréglages d'origine, dans l'ordre de la liste.
 ///
-/// « SD PAL 720×576 » n'y est pas : ses pixels ne sont pas carrés (4:3 sur 5:4), et Pelure ne
+/// « SD PAL 720×576 » n'y est pas : ses pixels ne sont pas carrés (4:3 sur 5:4), et SHOT ne
 /// travaille qu'en pixels carrés ; 768×576 en est la version carrée.
 pub const PRESETS: [Preset; 13] = [
     Preset { category: Category::Video, name: "HD 1080", size: Size::Px(1920, 1080), fps: 24 },

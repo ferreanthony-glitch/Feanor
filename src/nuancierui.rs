@@ -342,7 +342,7 @@ impl App {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
             let r = rects.get(slot).copied().unwrap_or_else(|| rects[rects.len() - 1].translate(vec2(SIDE + 2.0, 0.0)));
             let x = r.left() - 1.5;
-            ui.painter().line_segment([egui::pos2(x, r.top() - 2.0), egui::pos2(x, r.bottom() + 2.0)], Stroke::new(2.0_f32, crate::theme::ACCENT));
+            ui.painter().line_segment([egui::pos2(x, r.top() - 2.0), egui::pos2(x, r.bottom() + 2.0)], Stroke::new(2.0_f32, crate::theme::accent_texte()));
         }
     }
 }

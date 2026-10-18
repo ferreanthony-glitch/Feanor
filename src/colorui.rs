@@ -123,11 +123,12 @@ fn channel_rows(ui: &mut egui::Ui, channels: &[Channel]) -> (Option<(usize, f32)
     (out, parts)
 }
 
-/// Une pastille de `side` points : sa couleur, bordée de blanc si `chosen`.
+/// Une pastille de `side` points : sa couleur, bordée du contour du thème (blanc ou presque noir)
+/// si `chosen`.
 pub(crate) fn swatch_cell(ui: &mut egui::Ui, c: [u8; 3], side: f32, chosen: bool, sense: Sense) -> Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(side, side), sense);
     ui.painter().rect_filled(rect, 2.0, to_color(c));
-    let border = if chosen { Stroke::new(2.0_f32, Color32::WHITE) } else { Stroke::new(1.0_f32, Color32::from_gray(70)) };
+    let border = if chosen { Stroke::new(2.0_f32, crate::theme::contour()) } else { Stroke::new(1.0_f32, crate::theme::bord()) };
     ui.painter().rect_stroke(rect, 2.0, border, StrokeKind::Inside);
     resp
 }
@@ -155,7 +156,7 @@ fn gradient_bar(ui: &mut egui::Ui, value: f32, colors: &[Color32]) -> (Response,
         }
     }
     painter.add(Shape::mesh(mesh));
-    painter.rect_stroke(rect, 0.0, Stroke::new(1.0_f32, Color32::from_gray(80)), StrokeKind::Outside);
+    painter.rect_stroke(rect, 0.0, Stroke::new(1.0_f32, crate::theme::bord()), StrokeKind::Outside);
     let x = rect.left() + rect.width() * value.clamp(0.0, 1.0);
     let mark = Rect::from_center_size(pos2(x, rect.center().y), vec2(5.0, rect.height() + 6.0));
     painter.rect(mark, 1.0, Color32::from_black_alpha(80), Stroke::new(1.5_f32, Color32::WHITE), StrokeKind::Middle);

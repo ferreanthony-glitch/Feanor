@@ -1,6 +1,6 @@
-//! Moteur de dessin de Pelure pour d'autres interfaces (11a) : la bibliothèque de pinceaux (ceux
-//! de Pelure et ceux importés, gardés dans %APPDATA%\Pelure\pinceaux), des dessins en tuiles, et
-//! des traits peints par le même moteur que Pelure (`brush::StrokeState` : lissage, pression,
+//! Moteur de dessin de SHOT pour d'autres interfaces (11a) : la bibliothèque de pinceaux (ceux
+//! de SHOT et ceux importés, gardés dans %APPDATA%\SHOT\pinceaux), des dessins en tuiles, et
+//! des traits peints par le même moteur que SHOT (`brush::StrokeState` : lissage, pression,
 //! pointes et papiers en image). Données simples, sans egui ; utilisé par Pelure Studio.
 
 use eframe::egui::{pos2, Color32};

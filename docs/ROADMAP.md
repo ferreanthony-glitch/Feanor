@@ -1717,6 +1717,54 @@ mise en avant ».
     dossier ; pas de menu sur l'en-tête d'un dossier ;
   - la case d'une catégorie ne se rappelle ses valeurs que pendant la séance ;
   - « Supprimer la brosse » ne demande pas de confirmation (comme le menu du clic droit).
+
+## Pelure devient SHOT (2026-10-18) ✅
+
+Le logiciel s'appelle SHOT, « Frame the story » ; son logo (`assets/shot-logo.svg`) est celui
+d'Anthony.
+- Nom visible : titre de fenêtre (« Sans titre — SHOT »), accueil, boîtes de dialogue, messages,
+  bulles, rapports d'erreur, textes écrits dans les scripts Storyboard Pro. La « pelure d'oignon »
+  garde son nom (terme de dessin).
+- Accueil : le logo remplace le titre en texte (`logo.rs` le trace en vecteur avec tiny-skia, une
+  fois, à la taille de l'écran ; la devise est dans le dessin). Icône de fenêtre : le « S » entre
+  les deux angles du logo (`logo::icone`). Icône et version dans l'exécutable : `build.rs`
+  compile un fichier de ressources avec `rc.exe` du Windows SDK (sans lui, l'exécutable se
+  construit quand même, sans icône dans l'Explorateur).
+- Exécutable : `target\release\shot.exe`. La bibliothèque garde le nom `pelure`.
+- Données : `%APPDATA%\SHOT` et `%LOCALAPPDATA%\SHOT` (`donnees.rs`). Au premier lancement, le
+  contenu de l'ancien dossier `Pelure` y est copié s'il n'y a pas encore de dossier SHOT ; l'ancien
+  n'est ni modifié ni supprimé.
+- Projets : rien ne change (dossier du projet, fichier `.pelure`, format `pelure-projet`,
+  version du format, modèles 3D `.pelure3d`) ; les anciens s'ouvrent comme avant.
+- Gardés sous l'ancien nom, sans effet pour l'utilisateur : les variables `PELURE_*`, l'étiquette
+  interne des brosses livrées, les noms de fichiers échangés avec Storyboard Pro (`pelure.txt`,
+  `construit_pelure.js`…), les dossiers temporaires `pelure-*`.
+
+## Thème gris et couleurs réglables (2026-10-18) ✅
+
+Demande d'Anthony : « changer l'interface vers un gris sombre/clair plus proche de Storyboard Pro
+ou Clip Studio Paint », couleurs « paramétrables dans les préférences » (seulement l'idée de gris
+moyens, rien de copié).
+- `theme.rs` : une palette centrale (`Palette`), déduite de neuf couleurs (`Couleurs`), lue à chaque
+  image par de petites fonctions (`theme::fond()`, `theme::texte()`…) ; les `Visuals` d'egui ne sont
+  posés qu'au changement de thème. Trois thèmes livrés : Gris sombre (défaut), Gris clair, Sombre
+  (l'ancien) ; Personnalisé part du thème courant dès qu'une couleur est changée.
+- Fichier > Préférences… (`prefsui.rs`) : liste des thèmes, neuf sélecteurs de couleur, Rétablir ;
+  tout est appliqué en direct, enregistré dans `reglages.toml` (`[theme]`, vieux fichier = Gris
+  sombre) une fois le sélecteur relâché.
+- Les couleurs écrites en dur dans l'interface (timeline, montage, feuille d'exposition, calques,
+  son, rôles, clés d'effets, messages, avertissements, fond du plan de planches, séparations de
+  barres…) lisent le thème. Un thème clair prend des repères plus foncés et des blocs pâles à texte
+  sombre ; le contour des éléments choisis passe du blanc au presque noir.
+- Logo : variante claire sur un fond de panneau clair (accueil et « À propos de SHOT »).
+- Tests (`theme_tests.rs`) : contraste du texte (≥ 7:1 sur les panneaux, ≥ 4,5:1 ailleurs), de
+  l'accent (≥ 4,5:1 sur le panneau pour les traits, texte lisible sur l'accent), des repères de la
+  timeline (≥ 3:1), réglages relus, Personnalisé.
+- Pas fait : les vues 3D (plateau, vue de dessus) gardent leur fond sombre propre ; les poignées des
+  outils dessinées sur le dessin (bleu vif, jaune de la caméra) gardent leurs couleurs.
+- Aide > À propos de SHOT… (`aide.a_propos`, `aproposui.rs`) : fenêtre modale avec le logo, la
+  version de Cargo.toml et « Anciennement Pelure » ; Échap, un clic à côté ou Fermer la ferment.
+
 ## Raccourcis proposés, à valider
 
 Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans `keymap.toml`) :

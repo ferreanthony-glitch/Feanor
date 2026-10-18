@@ -11,6 +11,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::couleur::{hsv_to_rgb, lab_to_rgb};
 
+/// Nom du nuancier d'un premier lancement.
+pub const NOM_DEFAUT: &str = "SHOT";
+/// Son nom avant que le logiciel ne s'appelle SHOT : un nuancier gardé sous ce nom dans les
+/// réglages est renommé à la lecture (`ColorSettings::sanitized`).
+pub const NOM_ANCIEN: &str = "Pelure";
+
 /// Une pastille : une couleur, et un nom facultatif (montré dans sa bulle).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Swatch {
@@ -40,7 +46,8 @@ impl Palette {
         Palette { name: name.to_string(), swatches: Vec::new() }
     }
 
-    /// Le nuancier d'un premier lancement : les couleurs de l'ancien nuancier de Pelure (6b).
+    /// Le nuancier d'un premier lancement : les couleurs de l'ancien nuancier de SHOT (6b). Il
+    /// s'appelait « Pelure » avant le changement de nom du logiciel (voir `NOM_ANCIEN`).
     pub fn pelure() -> Palette {
         let colors: [([u8; 3], &str); 10] = [
             ([24, 24, 28], "Encre"),
@@ -54,7 +61,7 @@ impl Palette {
             ([130, 70, 170], "Violet"),
             ([235, 190, 160], "Peau"),
         ];
-        Palette { name: "Pelure".into(), swatches: colors.iter().map(|(c, n)| Swatch::new(*c, n)).collect() }
+        Palette { name: NOM_DEFAUT.into(), swatches: colors.iter().map(|(c, n)| Swatch::new(*c, n)).collect() }
     }
 
     /// Rang de la première pastille de cette couleur.

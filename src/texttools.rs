@@ -285,14 +285,14 @@ impl App {
             ui.label(
                 egui::RichText::new(format!("« {} » n'est pas sur ce poste : texte dessiné en {used}.", self.text_font))
                     .small()
-                    .color(Color32::from_rgb(230, 170, 60)),
+                    .color(crate::theme::avertissement()),
             );
         }
         ui.label(
             egui::RichText::new(
                 "Clic : nouveau texte (sur un texte d'un calque vectoriel : le modifier). Ctrl+Entrée : \
                  poser ; Échap : annuler. Sur un calque vectoriel, le texte reste modifiable (Sélection : \
-                 déplacer, agrandir, tourner). Une police absente du poste est remplacée par celle de Pelure.",
+                 déplacer, agrandir, tourner). Une police absente du poste est remplacée par celle de SHOT.",
             )
             .small()
             .weak(),

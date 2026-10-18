@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="720" viewBox="0 0 960 720">
+<title>SHOT — logo B16, S de la typo, crochet haut gauche rapproché, un objet par élément</title>
+<rect id="fond" x="0" y="0" width="960" height="720" fill="#121214"/>
+<g id="logo-shot" fill="#ECE8DC">
+<g id="corner-tl">
+<rect id="corner-tl-bar" x="242.6" y="204" width="97" height="23"/>
+<rect id="corner-tl-stem" x="242.6" y="204" width="20" height="66"/>
+</g>
+<g id="letter-s">
+<path id="s-glyph" d="M322 420Q299.3 420 289.3 410.7Q279.2 401.5 278.3 379.9Q278.2 375.6 278.2 371Q278.2 366.4 278.4 361.8Q278.7 357.2 279.1 352.7H305.7Q305.3 361.2 305.2 369.4Q305.2 377.6 305.7 384.9Q306.3 390.9 310.2 393.9Q314.2 396.8 321.9 396.8Q329.3 396.8 333.1 393.9Q336.9 390.9 337.5 384.9Q337.9 380.8 338.1 376.6Q338.2 372.4 338 368.1Q337.8 363.9 337.5 359.8Q337.1 354 333.7 350Q330.4 345.9 324.4 344.5L306.7 340.4Q295.9 337.9 289.7 332.8Q283.5 327.6 280.8 319.5Q278 311.5 277.7 300.5Q277.6 295 277.6 290Q277.6 285 277.7 279.8Q278.2 265.5 282.9 256.8Q287.6 248.1 297.1 244Q306.6 240 321.9 240Q344.2 240 354.2 249.2Q364.2 258.4 365 279.8Q365.2 285.2 365.1 292.5Q365 299.8 364.7 306.5H337.5Q337.8 298.2 338 290.4Q338.1 282.6 337.7 274.9Q337.5 268.9 333.6 266.1Q329.6 263.2 321.9 263.2Q314.4 263.2 310.5 266.1Q306.6 268.9 305.9 274.9Q305.4 281.4 305.4 287.7Q305.4 294 305.9 300.5Q306.4 306.5 308.9 310.4Q311.4 314.4 317.2 315.6L333 319Q344.7 321.6 351.8 327Q358.9 332.3 362.1 340.5Q365.4 348.7 365.9 359.8Q366 363 366 366.5Q366 369.9 365.9 373.3Q365.9 376.8 365.7 379.9Q364.8 401.5 354.7 410.7Q344.6 420 322 420Z"/>
+</g>
+<g id="letter-h">
+<rect id="h-stem-left" x="393" y="242" width="28" height="176"/>
+<rect id="h-stem-right" x="446" y="242" width="28" height="176"/>
+<rect id="h-bar" x="393" y="316" width="81" height="25"/>
+</g>
+<g id="letter-o">
+<path id="o-ring" fill-rule="evenodd" d="M541 241H554A36 30 0 0 1 590 271V388A36 30 0 0 1 554 418H541A36 30 0 0 1 505 388V271A36 30 0 0 1 541 241Z M547 263A14 9 0 0 1 561 272V387A14 9 0 0 1 547 396A14 9 0 0 1 533 387V272A14 9 0 0 1 547 263Z"/>
+</g>
+<g id="letter-t">
+<rect id="t-bar" x="610" y="242" width="82" height="25"/>
+<rect id="t-stem" x="637" y="242" width="28" height="176"/>
+</g>
+<g id="corner-br">
+<rect id="corner-br-stem" x="680" y="388" width="20" height="66"/>
+<rect id="corner-br-box" x="603" y="431" width="97" height="23"/>
+</g>
+</g>
+<g id="tagline" fill="none" stroke-width="2" stroke-linejoin="bevel">
+<g id="tagline-frame" stroke="#C1C0BC">
+<path id="tag-f" transform="translate(411 437)" d="M1 0V12M1 1H8M1 6H7"/>
+<path id="tag-r1" transform="translate(430 437)" d="M1 0V12M1 1H5.8Q8 1 8 3.5Q8 6 5.8 6H1M4.6 6.4L8.2 12"/>
+<path id="tag-a" transform="translate(448 437)" d="M0.9 12L5 1L9.1 12M2.5 9H7.5"/>
+<path id="tag-m" transform="translate(467 437)" d="M1 12V1L5 7L9 1V12"/>
+<path id="tag-e1" transform="translate(487 437)" d="M1 0V12M1 1H8M1 6H7.2M1 11H8"/>
+</g>
+<g id="tagline-the" stroke="#C1C0BC">
+<path id="tag-t1" transform="translate(529 437)" d="M0 1H8M4 0V12"/>
+<path id="tag-h" transform="translate(547 437)" d="M1 0V12M9 0V12M1 6H9"/>
+<path id="tag-e2" transform="translate(567 437)" d="M1 0V12M1 1H8M1 6H7.2M1 11H8"/>
+</g>
+<g id="tagline-story" stroke="#121214">
+<path id="tag-s" transform="translate(609 437)" d="M8 3.2Q8 1 4.5 1Q1 1 1 3.3Q1 5.4 4.5 6Q8 6.6 8 8.8Q8 11 4.5 11Q1 11 1 8.8"/>
+<path id="tag-t2" transform="translate(628 437)" d="M0 1H10M5 0V12"/>
+<rect id="tag-o" transform="translate(646 437)" x="1" y="1" width="10" height="10" rx="4.5"/>
+<path id="tag-r2" transform="translate(665 437)" d="M1 0V12M1 1H6.4Q8.6 1 8.6 3.5Q8.6 6 6.4 6H1M5 6.4L8.8 12"/>
+<path id="tag-y" transform="translate(684 437)" d="M0.6 0L5.5 6.5L10.4 0M5.5 6V12"/>
+</g>
+</g>
+</svg>

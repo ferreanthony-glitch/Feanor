@@ -51,7 +51,7 @@ fn sample() -> Document {
 fn titles_become_folder_names() {
     assert_eq!(safe_name("  Épisode 3 : la fuite?. "), "Épisode 3 _ la fuite_");
     assert_eq!(safe_name("a/b\\c*"), "a_b_c_");
-    assert_eq!(safe_name(" .. "), "Projet Pelure");
+    assert_eq!(safe_name(" .. "), "Projet SHOT");
 }
 
 #[test]

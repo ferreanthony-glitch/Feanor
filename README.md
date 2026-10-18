@@ -1,8 +1,16 @@
-# Pelure
+# SHOT — Frame the story
+
+*Anciennement Pelure.* Le logiciel s'appelle SHOT depuis le 2026-10-18 ; son logo est dans
+`assets/shot-logo.svg`.
 
 Logiciel d'animation 2D écrit en Rust avec egui : storyboard en séquences et plans (chaque plan,
 une timeline de calques façon TVPaint, ses images de storyboard marquées), animation image par
 image, et dessin vectoriel modifiable.
+
+Ce qui garde l'ancien nom, pour que rien d'existant ne casse : les projets (dossier du projet,
+fichier `.pelure`, format `pelure-projet`), la bibliothèque Rust (`pelure::`, la caisse reste
+`pelure`) et les variables d'environnement `PELURE_*`. La « pelure d'oignon » est un terme de
+dessin, pas l'ancien nom du logiciel.
 
 ## Lancer
 
@@ -10,9 +18,13 @@ image, et dessin vectoriel modifiable.
 cargo run --release
 ```
 
-L'exécutable est ensuite dans `target\release\pelure.exe`. On peut lui passer un projet :
-`pelure.exe "C:\Films\Bus\Bus.pelure"` (et donc associer les fichiers `.pelure` à Pelure pour les
+L'exécutable est ensuite dans `target\release\shot.exe`. On peut lui passer un projet :
+`shot.exe "C:\Films\Bus\Bus.pelure"` (et donc associer les fichiers `.pelure` à SHOT pour les
 ouvrir d'un double-clic).
+
+Les réglages, raccourcis, brosses importées, rapports d'erreur et copies de secours sont dans
+`%APPDATA%\SHOT` et `%LOCALAPPDATA%\SHOT`. Au premier lancement, ce que l'ancien nom avait rangé
+dans `...\Pelure` y est copié (jamais déplacé ni supprimé) s'il n'y a pas encore de dossier SHOT.
 
 ## Deux niveaux : storyboard et animation
 
@@ -401,7 +413,7 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
     un raccourci qu'on leur assigne agit sur la pastille survolée.
 
   Les couleurs, la roue, les curseurs, les récentes et les nuanciers sont retenus pour la
-  prochaine fois (`%APPDATA%\Pelure\reglages.toml`), pas dans le projet. Ctrl+Z ne défait pas
+  prochaine fois (`%APPDATA%\SHOT\reglages.toml`), pas dans le projet. Ctrl+Z ne défait pas
   les changements de nuancier.
 - **Panneaux** : chaque panneau (Outils, Couleur, Pinceaux, Réglages, Guides, Fiche, Effets,
   Calques, Montage ou Timeline) est un onglet. La bande du bas montre le montage en storyboard,
@@ -448,7 +460,7 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   gomme), Mes brosses, puis un dossier par fichier importé (les importés démarrent repliés). Clic :
   choisir ; clic droit : renommer, dupliquer, remplacer, supprimer. En bas, trois icônes :
   importer des pinceaux, nouvelle brosse (garde le réglage courant dans Mes brosses), supprimer la
-  brosse choisie (celles de Pelure restent). Les **réglages du pinceau** sont dans le panneau
+  brosse choisie (celles de SHOT restent). Les **réglages du pinceau** sont dans le panneau
   **Réglages** de l'outil (pinceau, crayon, gomme), sous le nom, la taille et l'opacité : l'aperçu
   du trait courant, puis à gauche les catégories (Forme de la pointe, Taille et appui, Dispersion,
   Grain et papier, Couleur et mélange, Lissage, Toucher du stylet), dont quatre ont une case qui
@@ -456,8 +468,8 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   Panneau étroit : les catégories passent au-dessus, en liste déroulante.
   Liste ou vignettes, la catégorie et les dossiers ouverts sont retenus (`reglages.toml`,
   clé `panneau_pinceaux`). Les aperçus montrent le trait dans la couleur courante, sur le papier.
-  L'interface est sombre et dense (gris et bleu d'accent repris de Pelure Studio, police Segoe
-  UI). Les pinceaux texturés
+  L'interface est dense (police Segoe UI), en gris neutres, avec trois thèmes et un quatrième à
+  régler soi-même : voir « Apparence » plus bas. Les pinceaux texturés
   (pointe en image, grain du papier, pinceaux importés) marchent aussi sur un calque vectoriel :
   le trait reste modifiable, et ses textures sont enregistrées avec le projet.
 - **Formes** : Ligne (droite, courbe : tracer puis glisser pour courber ; courbe en S : deux
@@ -642,7 +654,7 @@ rangés dans `keymap.toml`. Pour en changer un :
 Fichier > Raccourcis clavier… (ou F1) liste toutes les commandes. On y trouve une recherche, les
 mêmes boutons, et l'origine de chaque raccourci en bulle.
 
-Les choix vont dans un fichier personnel (`%APPDATA%\Pelure\keymap.toml`), qui remplace, action par
+Les choix vont dans un fichier personnel (`%APPDATA%\SHOT\keymap.toml`), qui remplace, action par
 action, le fichier par défaut. On peut aussi l'écrire à la main (« Aide > Modifier le fichier de
 raccourcis à la main », puis « Recharger »). Détails et choix pour le clavier AZERTY :
 `docs/reference/sbpro_presets/README.md`.
@@ -697,8 +709,24 @@ Les menus montrent l'essentiel ; le reste est rangé dans un sous-menu (« Plans
 « Ordre », « Plus »…) ou une fenêtre :
 - Fichier > Exporter… : film, images, image courante, PDF, page HTML, son, Storyboard Pro, et la
   case « PNG sans le papier » ;
-- Fichier > Préférences… : copie de secours, dernier projet rouvert, croix du système, panneaux
-  ajustés, raccourcis clavier.
+- Fichier > Préférences… : l'apparence (voir ci-dessous), copie de secours, dernier projet rouvert,
+  croix du système, panneaux ajustés, raccourcis clavier ;
+- Aide > À propos de SHOT… : le logo, la version et le nom d'avant (Échap ferme la fenêtre).
+
+### Apparence
+
+Fichier > Préférences…, en tête : le **thème** de l'interface, qui change tout de suite.
+- **Gris sombre** (par défaut) : gris neutres moyens, plus proches de Storyboard Pro ou de Clip
+  Studio Paint que du noir ; **Gris clair** (texte sombre, logo clair) ; **Sombre**, l'ancien thème
+  presque noir ; **Personnalisé**.
+- Neuf couleurs se règlent : fond des panneaux, barres, fenêtres et menus, boutons et curseurs,
+  texte, accent et sélection, fond autour du dessin, timeline et montage, bordures. Changer l'une
+  d'elles passe en « Personnalisé », en partant du thème qu'on avait. Le survol des boutons, le
+  texte secondaire, les couleurs des dessins, des clés, des marques et du son sont déduits de ces
+  neuf-là, assez contrastés pour rester lisibles (un thème clair prend des repères plus foncés).
+- « Rétablir » revient à Gris sombre. Le choix est retenu dans `reglages.toml` (section `[theme]`) ;
+  un ancien fichier sans cette section donne Gris sombre.
+- Les couleurs du dessin (papier, traits, couleurs du projet) ne changent jamais avec le thème.
 
 Ce qui a déjà un bouton sous le dessin (zoom, rotation, miroir, pelure, table lumineuse, caméra)
 n'est plus répété dans Affichage ni dans le clic droit du dessin. La couleur du papier se règle
@@ -772,7 +800,7 @@ Il s'en va dès qu'un projet s'ouvre ou se crée, au premier trait, ou par « Co
   aperçu du cadre.
 
 Entrée valide, Échap annule. La fenêtre repart des dernières valeurs, du dernier dossier et de tes
-préréglages, retenus dans `%APPDATA%\Pelure\reglages.toml`.
+préréglages, retenus dans `%APPDATA%\SHOT\reglages.toml`.
 
 ## Plantage
 

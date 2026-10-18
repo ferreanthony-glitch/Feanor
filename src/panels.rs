@@ -1,4 +1,4 @@
-use eframe::egui::{self, vec2, Align, Align2, Color32, Layout, RichText};
+use eframe::egui::{self, vec2, Align, Align2, Layout, RichText};
 
 use crate::app::{App, Mode, Tool};
 use crate::document::LayerKind;
@@ -198,6 +198,8 @@ impl App {
             ui.menu_button("Aide", |ui| {
                 self.action_item(ui, "Palette de commandes…", "aide.palette");
                 self.action_item(ui, "Raccourcis clavier…", "aide.raccourcis");
+                ui.separator();
+                self.action_item(ui, "À propos de SHOT…", "aide.a_propos");
                 ui.separator();
                 let rec = if self.record_strokes.is_some() { "Arrêter d'enregistrer mes traits" } else { "Enregistrer mes traits (banc d'essai du moteur)" };
                 self.action_item(ui, rec, "pinceau.enregistrer_traits");
@@ -583,7 +585,7 @@ impl App {
                     text += &format!(" · {skipped} image{s} sautée{s}");
                 }
                 let slow = skipped > 0 || rate < self.doc.fps as f32 * 0.95;
-                let color = if slow { Color32::from_rgb(240, 170, 60) } else { ui.visuals().text_color() };
+                let color = if slow { crate::theme::avertissement() } else { ui.visuals().text_color() };
                 ui.label(RichText::new(text).color(color)).on_hover_text(
                     "Images réellement affichées pendant la dernière seconde de lecture. Si la machine \
                      ne suit pas, des images sont sautées pour rester calé sur le son.",
@@ -601,6 +603,8 @@ impl App {
         // Exporter… et Préférences… (`prefsui.rs`).
         self.export_hub_window(ctx);
         self.preferences_window(ctx);
+        // À propos de SHOT (`aproposui.rs`).
+        self.about_window_ui(ctx);
         // Écran d'accueil, sans projet ouvert (`accueil.rs`).
         self.welcome_ui(ctx);
         self.new_layer_window(ctx);

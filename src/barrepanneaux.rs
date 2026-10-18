@@ -1,7 +1,7 @@
 //! Barre des panneaux (2026-10-18) : une fine bande d'icônes sur le bord droit de la fenêtre, une
 //! icône par panneau de côté ; un clic l'ouvre, le met devant ou le ferme. L'idée vient des
 //! logiciels de retouche (une colonne d'icônes qui allument et éteignent les panneaux) ; les
-//! icônes sont celles de Pelure (`Pane::icon`). Elle n'est pas un panneau de l'espace de travail :
+//! icônes sont celles de SHOT (`Pane::icon`). Elle n'est pas un panneau de l'espace de travail :
 //! elle est posée avant la zone des panneaux, comme la barre d'outils de gauche.
 //!
 //! Chaque icône est liée à une action (`vue.calques`…), donc une bulle d'aide avec son raccourci,
@@ -9,7 +9,7 @@
 //! suivent la même règle de clic que l'icône. Le dessin ne coûte que dix icônes : la place des
 //! panneaux n'est lue qu'au clic.
 
-use eframe::egui::{self, vec2, Color32, RichText};
+use eframe::egui::{self, vec2, RichText};
 use egui_dock::{DockState, Node};
 
 use crate::app::{App, Mode};
@@ -122,7 +122,7 @@ impl App {
                 if g > 0 {
                     ui.add_space(3.0);
                     let (rect, _) = ui.allocate_exact_size(vec2(18.0, 1.0), egui::Sense::hover());
-                    ui.painter().rect_filled(rect, 0.0, Color32::from_gray(70));
+                    ui.painter().rect_filled(rect, 0.0, crate::theme::bord());
                     ui.add_space(3.0);
                 }
                 let animation = self.mode == Mode::Animation;

@@ -1,11 +1,11 @@
-# Raccourcis clavier de Pelure
+# Raccourcis clavier de SHOT
 #
 # Chaque bloc [[raccourci]] associe une ou plusieurs touches à une action (identifiant stable).
 #
 # Pour personnaliser : « Aide > Modifier les raccourcis » crée une copie de ce fichier dans
-# %APPDATA%\Pelure\keymap.toml et l'ouvre. Ne gardez-y que les actions que vous changez si vous
+# %APPDATA%\SHOT\keymap.toml et l'ouvre. Ne gardez-y que les actions que vous changez si vous
 # voulez : chaque action redéfinie remplace celle d'ici, les autres restent par défaut.
-# Puis « Aide > Recharger les raccourcis » (ou relancez Pelure). touches = [] retire un raccourci.
+# Puis « Aide > Recharger les raccourcis » (ou relancez SHOT). touches = [] retire un raccourci.
 #
 # Écriture des touches : modificateurs Ctrl, Maj (ou Shift), Alt, puis la touche, séparés par « + ».
 #   Exemples : "Ctrl+Z", "Ctrl+Maj+Z", "Alt+B", "F5", "Entrée", "Suppr", "Échap", "Espace", "+".
@@ -16,11 +16,11 @@
 #   Pour forcer : "car:," (le caractère virgule) ou "pos:A" (la position du A d'un QWERTY).
 #
 # contexte = "storyboard" ou "animation" : le raccourci ne vaut que dans ce mode.
-# etat = "non implémenté" : gardé en réserve, la fonction n'existe pas encore dans Pelure.
+# etat = "non implémenté" : gardé en réserve, la fonction n'existe pas encore dans SHOT.
 # etat = "désactivé" : le raccourci est ignoré.
 # source : d'où vient le raccourci.
 #   « Storyboard Pro 27 » = raccourci par défaut lu dans sb_shortcuts.xml de Storyboard Pro 27 ;
-#   « perso » = vos réglages (STB_Shortcuts.xml) ; « proposition » = proposé par Pelure, à valider ;
+#   « perso » = vos réglages (STB_Shortcuts.xml) ; « proposition » = proposé par SHOT, à valider ;
 #   « TVPaint 12 (perso) » = vos raccourcis TVPaint 12 (config.ini, section [keyboard]).
 
 version = 1
@@ -50,7 +50,7 @@ source = "proposition (SAVE_AS_KEY n'a pas de touche par défaut)"
 [[raccourci]]
 action = "fichier.afficher_explorateur"
 touches = []
-source = "Pelure (sans touche)"
+source = "SHOT (sans touche)"
 
 [[raccourci]]
 action = "fichier.fermer"
@@ -400,74 +400,74 @@ source = "proposition : aucune touche (X, celle de Photoshop, colle le calque : 
 [[raccourci]]
 action = "couleur.defaut"
 touches = ["D"]
-source = "proposition (D, la touche de Photoshop, libre dans Pelure)"
+source = "proposition (D, la touche de Photoshop, libre dans SHOT)"
 
 [[raccourci]]
 action = "couleur.copier_code"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 [[raccourci]]
 action = "couleur.roue"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 [[raccourci]]
 action = "couleur.roue_carre"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 [[raccourci]]
 action = "couleur.roue_triangle"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 [[raccourci]]
 action = "couleur.curseurs_tsv"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 [[raccourci]]
 action = "couleur.curseurs_rvb"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 [[raccourci]]
 action = "couleur.curseurs_tsl"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 [[raccourci]]
 action = "couleur.recentes_effacer"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 # Les commandes « pastille » visent la pastille dont le menu est ouvert, sinon celle sous la
 # souris (nuancier ou couleurs récentes).
 [[raccourci]]
 action = "pastille.avant_plan"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 [[raccourci]]
 action = "pastille.arriere_plan"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 [[raccourci]]
 action = "pastille.renommer"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 [[raccourci]]
 action = "pastille.remplacer"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 [[raccourci]]
 action = "pastille.retirer"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 # Nuanciers personnels.
 [[raccourci]]
@@ -478,44 +478,44 @@ source = "Storyboard Pro 27 sans touche par défaut : COLOR_ADD (« New Colour S
 [[raccourci]]
 action = "nuancier.nouveau"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 [[raccourci]]
 action = "nuancier.renommer"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 [[raccourci]]
 action = "nuancier.dupliquer"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 [[raccourci]]
 action = "nuancier.supprimer"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 [[raccourci]]
 action = "nuancier.importer"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 [[raccourci]]
 action = "nuancier.exporter"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 # ------------------------------------------------------------------------------------ Dessin
 
 [[raccourci]]
 action = "calque.miroir_h"
 touches = []
-source = "Pelure (sans touche)"
+source = "SHOT (sans touche)"
 
 [[raccourci]]
 action = "calque.miroir_v"
 touches = []
-source = "Pelure (sans touche)"
+source = "SHOT (sans touche)"
 
 [[raccourci]]
 action = "plan.retourner"
@@ -684,12 +684,12 @@ source = "proposition (NEW_SCENE_KEY n'a pas de touche par défaut)"
 [[raccourci]]
 action = "scene.dupliquer"
 touches = []
-source = "Pelure (pas d'équivalent direct repéré dans Storyboard Pro 27)"
+source = "SHOT (pas d'équivalent direct repéré dans Storyboard Pro 27)"
 
 [[raccourci]]
 action = "scene.supprimer"
 touches = []
-source = "Pelure (pas d'équivalent direct repéré dans Storyboard Pro 27)"
+source = "SHOT (pas d'équivalent direct repéré dans Storyboard Pro 27)"
 
 [[raccourci]]
 action = "sequence.nouvelle"
@@ -714,9 +714,9 @@ source = "Storyboard Pro 27 : SB_PROPERTIES_KEY"
 [[raccourci]]
 action = "panneau.couper"
 touches = ["F6"]
-# F5 dans son Storyboard Pro ; F6 dans Pelure depuis le 2026-10-17 (Anthony : « F5 pose une clé
+# F5 dans son Storyboard Pro ; F6 dans SHOT depuis le 2026-10-17 (Anthony : « F5 pose une clé
 # partout. F6 coupe le plan »).
-source = "perso : SPLIT_PANEL_KEY (F6 dans Pelure)"
+source = "perso : SPLIT_PANEL_KEY (F6 dans SHOT)"
 
 [[raccourci]]
 action = "dessin.nouvelle_cle"
@@ -732,7 +732,7 @@ source = "perso (Anthony, 2026-10-17 : « avec un autre raccourci comme F4 »)"
 [[raccourci]]
 action = "panneau.fusionner_suivant"
 touches = []
-source = "Pelure (inverse de « couper le panneau » ; pas de commande équivalente repérée dans Storyboard Pro 27)"
+source = "SHOT (inverse de « couper le panneau » ; pas de commande équivalente repérée dans Storyboard Pro 27)"
 
 [[raccourci]]
 action = "scene.couper"
@@ -742,7 +742,7 @@ source = "Storyboard Pro 27 sans touche par défaut : SPLIT_SHOT_KEY"
 [[raccourci]]
 action = "scene.joindre_precedente"
 touches = []
-source = "Pelure (Storyboard Pro 27 crée une scène à partir des panneaux sélectionnés : JOIN_PANEL_KEY, sans touche)"
+source = "SHOT (Storyboard Pro 27 crée une scène à partir des panneaux sélectionnés : JOIN_PANEL_KEY, sans touche)"
 
 [[raccourci]]
 action = "panneau.supprimer"
@@ -755,12 +755,12 @@ source = "proposition"
 [[raccourci]]
 action = "panneau.copier"
 touches = []
-source = "Pelure (Ctrl+C après un clic dans le montage)"
+source = "SHOT (Ctrl+C après un clic dans le montage)"
 
 [[raccourci]]
 action = "panneau.coller"
 touches = []
-source = "Pelure (Ctrl+V après un clic dans le montage)"
+source = "SHOT (Ctrl+V après un clic dans le montage)"
 
 # ------------------------------------------------------------------------------------ Animation
 
@@ -849,7 +849,7 @@ touches = ["Flèche bas"]
 source = "TVPaint 12 (perso) : LayerDown"
 
 # Calques choisis et opérations sur plusieurs calques (13b). Les touches TVPaint qui prendraient
-# celle d'une autre fonction de Pelure sont proposées dans docs/ROADMAP.md, pas posées ici.
+# celle d'une autre fonction de SHOT sont proposées dans docs/ROADMAP.md, pas posées ici.
 
 [[raccourci]]
 action = "calque.choisir_dessus"
@@ -1706,81 +1706,81 @@ source = "Storyboard Pro 27 sans touche par défaut : REMOVE_CAMERA_KEY_AT_CURRE
 [[raccourci]]
 action = "camera.cle_adoucir"
 touches = []
-source = "Pelure (adoucissement par clé ; Storyboard Pro règle les courbes autrement, non vérifié)"
+source = "SHOT (adoucissement par clé ; Storyboard Pro règle les courbes autrement, non vérifié)"
 
 [[raccourci]]
 action = "vue.dessus"
 touches = []
-source = "Pelure (fenêtre Vue de dessus ; aucune commande équivalente dans sb_shortcuts.xml de Storyboard Pro 27)"
+source = "SHOT (fenêtre Vue de dessus ; aucune commande équivalente dans sb_shortcuts.xml de Storyboard Pro 27)"
 
 [[raccourci]]
 action = "vue.cadres_securite"
 touches = []
-source = "Pelure (zones de sécurité EBU R 95 ; aucune touche choisie)"
+source = "SHOT (zones de sécurité EBU R 95 ; aucune touche choisie)"
 
 [[raccourci]]
 action = "vue.3d"
 touches = []
-source = "Pelure (plateau en 3D ; aucune touche choisie)"
+source = "SHOT (plateau en 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "vue3d.recadrer"
 touches = []
-source = "Pelure (plateau en 3D ; aucune touche choisie)"
+source = "SHOT (plateau en 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "outil3d.orbite"
 touches = []
-source = "Pelure (plateau en 3D ; aucune touche choisie)"
+source = "SHOT (plateau en 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "outil3d.glisser"
 touches = []
-source = "Pelure (plateau en 3D ; aucune touche choisie)"
+source = "SHOT (plateau en 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "outil3d.avancer"
 touches = []
-source = "Pelure (plateau en 3D ; aucune touche choisie)"
+source = "SHOT (plateau en 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "outil3d.deplacer"
 touches = []
-source = "Pelure (plateau en 3D ; aucune touche choisie)"
+source = "SHOT (plateau en 3D ; aucune touche choisie)"
 
 # ------------------------------------------------------------------------------------ Repère 3D
 
 [[raccourci]]
 action = "outil.repere3d"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : CANVAS_THIRD_PERSON_NAVIGATION_3D_TOOL_KEY (navigation 3D ; le repère en fil de fer est propre à Pelure)"
+source = "Storyboard Pro 27 sans touche par défaut : CANVAS_THIRD_PERSON_NAVIGATION_3D_TOOL_KEY (navigation 3D ; le repère en fil de fer est propre à SHOT)"
 
 [[raccourci]]
 action = "fichier.importer_modele3d"
 touches = []
-source = "Pelure (import glTF ; aucune commande équivalente vérifiée dans sb_shortcuts.xml de Storyboard Pro 27)"
+source = "SHOT (import glTF ; aucune commande équivalente vérifiée dans sb_shortcuts.xml de Storyboard Pro 27)"
 
 # ------------------------------------------------------------------------------------ Calques de toute la scène (6f)
 
 [[raccourci]]
 action = "calque.nouveau_fond"
 touches = []
-source = "Pelure (calque de fond commun aux panneaux d'une scène ; aucune commande équivalente vérifiée)"
+source = "SHOT (calque de fond commun aux panneaux d'une scène ; aucune commande équivalente vérifiée)"
 
 # Marque d'image (13a) : une image de storyboard de plus dans le plan ; pas de touche à elle.
 [[raccourci]]
 action = "marque.basculer"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 # ------------------------------------------------------------------------------------ Espaces de travail
-# Les dispositions de Pelure reprennent par le nom les commandes de Storyboard Pro 27 (sans
-# touche) ; leur contenu est propre à Pelure.
+# Les dispositions de SHOT reprennent par le nom les commandes de Storyboard Pro 27 (sans
+# touche) ; leur contenu est propre à SHOT.
 
 [[raccourci]]
 action = "espace.standard"
 touches = []
-source = "Pelure (disposition par défaut)"
+source = "SHOT (disposition par défaut)"
 
 [[raccourci]]
 action = "espace.dessin"
@@ -1800,22 +1800,22 @@ source = "Storyboard Pro 27 sans touche par défaut : VIEW_LAYOUT_OVERVIEW_KEY"
 [[raccourci]]
 action = "espace.enregistrer"
 touches = []
-source = "Pelure (Storyboard Pro 27 passe par WORKSPACE_MANAGER, sans touche)"
+source = "SHOT (Storyboard Pro 27 passe par WORKSPACE_MANAGER, sans touche)"
 
 [[raccourci]]
 action = "vue.panneau_outils"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 [[raccourci]]
 action = "vue.panneau_fiche"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 [[raccourci]]
 action = "vue.panneau_bande"
 touches = []
-source = "Pelure"
+source = "SHOT"
 
 # ------------------------------------------------------------------------------------ Table lumineuse et guides
 # Les touches des guides viennent du module « Guides » de Storyboard Pro 27

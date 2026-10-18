@@ -245,7 +245,7 @@ impl PdfFile {
             self.objects[2 + i] =
                 format!("<< /Type /Font /Subtype /Type1 /BaseFont /{font} /Encoding /WinAnsiEncoding >>").into_bytes();
         }
-        let info = self.add(format!("<< /Title {} /Producer (Pelure) >>", pdf_text_utf16(title)).into_bytes());
+        let info = self.add(format!("<< /Title {} /Producer (SHOT) >>", pdf_text_utf16(title)).into_bytes());
         let mut out = b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n".to_vec();
         let mut offsets = Vec::with_capacity(self.objects.len());
         for (i, body) in self.objects.iter().enumerate() {

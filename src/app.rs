@@ -298,7 +298,7 @@ pub struct App {
     pub(crate) brush: BrushSettings,
     pub(crate) pencil: BrushSettings,
     pub(crate) eraser: BrushSettings,
-    /// Pointes, papiers et réglages de pinceau (ceux de Pelure et les importés).
+    /// Pointes, papiers et réglages de pinceau (ceux de SHOT et les importés).
     pub(crate) brushes: crate::brushtex::BrushLibrary,
     pub(crate) fill: FillSettings,
     pub(crate) shape: ShapeSettings,
@@ -498,7 +498,7 @@ pub struct App {
     pub(crate) export_job: Option<crate::export::ExportJob>,
     /// ffmpeg trouvé (ou choisi) et ce qu'il sait encoder ; cherché à la première ouverture.
     pub(crate) ffmpeg: Option<Option<(PathBuf, Result<crate::export::Encoders, String>)>>,
-    /// Réglages de l'application (%APPDATA%\Pelure\reglages.toml).
+    /// Réglages de l'application (%APPDATA%\SHOT\reglages.toml).
     pub(crate) settings: crate::settings::Settings,
     /// Dernière disposition appliquée (espace de travail) ; les panneaux eux-mêmes, que l'on
     /// glisse et aimante, sont dans `dock` (affiché par egui_dock).
@@ -592,6 +592,12 @@ pub struct App {
     /// Fenêtres Exporter… et Préférences… ouvertes (`prefsui.rs`).
     pub(crate) export_hub: bool,
     pub(crate) prefs_window: bool,
+    /// Fenêtre « À propos de SHOT » (`aproposui.rs`).
+    pub(crate) about_window: bool,
+    /// Le thème dont les couleurs sont posées dans egui : quand le réglage change, tout est
+    /// reposé une fois (`theme.rs`).
+    pub(crate) theme_applied: crate::theme::ReglageTheme,
+    pub(crate) theme_unsaved: bool,
     /// Écran d'accueil à montrer tant qu'aucun projet n'est ouvert (`accueil.rs`).
     pub(crate) welcome: bool,
     /// Fond sous le trait (`fond.rs`) : le pinceau peint dans la strate Fond (sinon dans le
@@ -678,8 +684,6 @@ pub struct App {
 
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // Thème sombre et dense, repris de Pelure Studio (12a).
-        crate::theme::appliquer(&cc.egui_ctx);
         // Police de l'interface (Segoe UI si Windows l'a) et icônes (Phosphor), utilisables dans
         // tout texte.
         let mut fonts = egui::FontDefinitions::default();
@@ -692,11 +696,15 @@ impl App {
             let info = rs.adapter.get_info();
             eprintln!("affichage : wgpu, {} ({:?}, {:?})", info.name, info.backend, info.device_type);
             // Une erreur de la carte graphique : wgpu en fait par défaut un plantage de tout
-            // Pelure ; elle est notée dans un rapport (`plantage.rs`) et l'on continue.
+            // SHOT ; elle est notée dans un rapport (`plantage.rs`) et l'on continue.
             rs.device.on_uncaptured_error(Box::new(|e| crate::plantage::note_gpu_error(&format!("erreur de la carte graphique : {e}"))));
             rs.device.set_device_lost_callback(|reason, message| crate::plantage::note_gpu_error(&format!("carte graphique perdue ({reason:?}) : {message}")));
         }
         let settings = crate::settings::Settings::load();
+        // Thème de l'interface, dense (12a, `theme.rs`) : celui des réglages.
+        let theme_applied = settings.theme;
+        crate::theme::installer(&theme_applied);
+        crate::theme::appliquer(&cc.egui_ctx);
         let montage_head_w = crate::montagehead::clamp_head_w(settings.montage_head_w);
         let (paint_behind, fill_shapes) = (settings.paint_behind, settings.fill_shapes);
         let mut app = Self {
@@ -896,6 +904,9 @@ impl App {
             palette: None,
             export_hub: false,
             prefs_window: false,
+            about_window: false,
+            theme_applied,
+            theme_unsaved: false,
             welcome: true,
             paint_fond: false,
             fond_stroke: None,
@@ -1062,6 +1073,7 @@ impl App {
 
     pub(crate) fn modal_open(&self) -> bool {
         self.new_dialog.is_some()
+            || self.about_window
             || self.pending.is_some()
             || self.export_dialog.is_some()
             || self.export_job.is_some()
@@ -2290,7 +2302,7 @@ impl App {
         }
     }
 
-    /// « Enregistrer sous » : on choisit un nom, Pelure crée le dossier du projet à ce nom.
+    /// « Enregistrer sous » : on choisit un nom, SHOT crée le dossier du projet à ce nom.
     pub(crate) fn save_as(&mut self) -> bool {
         self.end_stroke();
         // Sans nom de fichier : le titre du projet (un projet importé, 14a), sinon « Mon film ».
@@ -2298,7 +2310,7 @@ impl App {
         let name = format!("{}.pelure", self.base_name_or(if title.is_empty() { "Mon film" } else { &title }));
         let mut dialog = rfd::FileDialog::new()
             .set_title("Enregistrer le projet (un dossier à ce nom sera créé)")
-            .add_filter("Projet Pelure", &["pelure"])
+            .add_filter("Projet SHOT", &["pelure"])
             .set_file_name(name);
         if let Some(dir) = self.import_source.as_ref().and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);
@@ -2352,8 +2364,8 @@ impl App {
 
     fn open_dialog(&mut self) {
         let Some(path) = rfd::FileDialog::new()
-            .add_filter("Projet Pelure ou Storyboard Pro", &["pelure", "sboard"])
-            .add_filter("Projet Pelure", &["pelure"])
+            .add_filter("Projet SHOT ou Storyboard Pro", &["pelure", "sboard"])
+            .add_filter("Projet SHOT", &["pelure"])
             .add_filter("Projet Storyboard Pro", &["sboard"])
             .pick_file()
         else {
@@ -2771,8 +2783,8 @@ impl App {
     fn run_action_now(&mut self, action: &str) {
         // Un texte en cours de saisie est posé avant toute commande (annuler, changer d'image…).
         self.finish_text_edit();
-        // Une image copiée ailleurs (navigateur…) passe avant le presse-papiers de Pelure, dont
-        // les copies écrivent « Pelure : … » dans celui de Windows (`pasteimage.rs`).
+        // Une image copiée ailleurs (navigateur…) passe avant le presse-papiers de SHOT, dont
+        // les copies écrivent « SHOT : … » dans celui de Windows (`pasteimage.rs`).
         if action == "edition.coller" {
             if let Some(image) = crate::pasteimage::clipboard_image() {
                 self.paste_clipboard_image(image);
@@ -2817,6 +2829,7 @@ impl App {
             "aide.palette" => self.palette = Some(Default::default()),
             "fichier.exporter" => self.export_hub = true,
             "fichier.preferences" => self.prefs_window = true,
+            "aide.a_propos" => self.about_window = true,
             // Le collage pose déjà les éléments et les zones à leur place d'origine.
             "edition.coller_sur_place" => self.run_action("edition.coller"),
             // Les propriétés du plan : la fiche (action, dialogue, notes, durée…).
@@ -3454,7 +3467,7 @@ impl App {
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| "Sans titre".into());
-        let title = format!("{name}{} — Pelure", if self.modified { " •" } else { "" });
+        let title = format!("{name}{} — SHOT", if self.modified { " •" } else { "" });
         if title != self.title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.title = title;
@@ -3512,6 +3525,19 @@ impl eframe::App for App {
         }
         self.frame_start = Some(std::time::Instant::now());
         self.ppp = ctx.pixels_per_point();
+        // Thème changé dans les préférences : les couleurs sont reposées une fois, et tout
+        // l'écran suit dès cette image.
+        if self.settings.theme != self.theme_applied {
+            self.theme_applied = self.settings.theme;
+            crate::theme::installer(&self.theme_applied);
+            crate::theme::appliquer(ctx);
+            self.theme_unsaved = true;
+        }
+        // Enregistré une fois le sélecteur de couleur relâché, pas à chaque image du glissement.
+        if self.theme_unsaved && !ctx.input(|i| i.pointer.any_down()) {
+            self.theme_unsaved = false;
+            let _ = self.settings.save();
+        }
         self.clamp_nav();
         self.end_length_gesture_if_idle();
         self.end_gesture_if_idle();

@@ -25,11 +25,11 @@ pub(crate) fn contenu(ui: &mut Ui, nom: &str, description: &str, raccourci: &str
         ui.label(RichText::new(nom).strong());
         if !raccourci.is_empty() {
             ui.add_space(10.0);
-            ui.label(RichText::new(raccourci).monospace().color(theme::TEXTE_DOUX));
+            ui.label(RichText::new(raccourci).monospace().color(theme::texte_doux()));
         }
     });
     if !description.is_empty() {
-        ui.label(RichText::new(description).color(theme::TEXTE_DOUX));
+        ui.label(RichText::new(description).color(theme::texte_doux()));
     }
 }
 
@@ -45,7 +45,7 @@ fn texte(symbole: &str) -> RichText {
 
 /// Icône à la place du nom d'un réglage (devant un curseur ou une valeur), avec sa bulle.
 pub(crate) fn etiquette(ui: &mut Ui, symbole: &str, nom: &str, description: &str) -> Response {
-    let resp = ui.label(texte(symbole).color(theme::TEXTE_DOUX));
+    let resp = ui.label(texte(symbole).color(theme::texte_doux()));
     bulle(resp, nom, description, "")
 }
 

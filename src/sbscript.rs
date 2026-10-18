@@ -147,7 +147,7 @@ pub fn parse_manifest(text: &str, dir: &Path) -> Result<Drawings, String> {
         }
     }
     if !seen_header {
-        return Err("ce fichier n'est pas une liste écrite par le script de Pelure".into());
+        return Err("ce fichier n'est pas une liste écrite par le script de SHOT".into());
     }
     Ok(d)
 }
@@ -171,8 +171,8 @@ fn found_image(dir: &Path, rel: &str) -> Option<PathBuf> {
 /// Le script (ECMAScript 3 : l'interface de script de Storyboard Pro est en Qt Script). L'objet
 /// `JSON` existe dans Storyboard Pro 27 (essai d'Anthony) : on s'en sert, `pelureJson` reste en
 /// secours.
-const SCRIPT_TEXT: &str = r#"// Pelure : export des dessins de ce projet Storyboard Pro, calque par calque.
-// Lance par Pelure a l'ouverture du projet (mode batch, sur une copie du projet), ou a
+const SCRIPT_TEXT: &str = r#"// SHOT : export des dessins de ce projet Storyboard Pro, calque par calque.
+// Lance par SHOT a l'ouverture du projet (mode batch, sur une copie du projet), ou a
 // la main : vue Script Editor, Sandbox, coller ce texte, puis Run. Le projet n'est pas
 // modifie : la visibilite des calques est remise comme avant, et toutes les etapes
 // sont annulees a la fin. Images, traits vectoriels et liste "pelure.txt" vont dans :
@@ -295,7 +295,7 @@ function pelureExporte()
     + "\t" + project.defaultResolutionX() + "\t" + project.defaultResolutionY());
 
   var n = sb.numberOfPanelsInProject();
-  project.beginUndoRedoAccum("Pelure");
+  project.beginUndoRedoAccum("SHOT");
   try
   {
     for (var k = 0; k < n; ++k)
@@ -306,7 +306,7 @@ function pelureExporte()
       lignes.push("panneau\t" + k + "\t" + panelId + "\t" + pelureNettoie(sb.nameOfSequence(seqId))
         + "\t" + pelureNettoie(sb.nameOfScene(sceneId)) + "\t" + pelureNettoie(sb.nameOfPanel(panelId))
         + "\t" + sb.getPanelDuration(panelId));
-      MessageLog.trace("Pelure : panneau " + (k + 1) + " / " + n);
+      MessageLog.trace("SHOT : panneau " + (k + 1) + " / " + n);
 
       var count = lm.numberOfLayers(panelId);
       var visible = new Array(count);
@@ -362,7 +362,7 @@ function pelureExporte()
               }
             }
             catch (e) { note = "erreur : " + e; }
-            MessageLog.trace("Pelure : traits du calque " + j + " : " + note);
+            MessageLog.trace("SHOT : traits du calque " + j + " : " + note);
           }
         }
         lignes.push("calque\t" + k + "\t" + j + "\t" + pelureNettoie(lm.layerName(panelId, j))
@@ -375,7 +375,7 @@ function pelureExporte()
   }
   catch (e)
   {
-    MessageLog.trace("Pelure : erreur " + e);
+    MessageLog.trace("SHOT : erreur " + e);
   }
   finally
   {
@@ -391,7 +391,7 @@ function pelureExporte()
   f.open(FileAccess.WriteOnly);
   for (var i = 0; i < lignes.length; ++i) f.writeLine(lignes[i]);
   f.close();
-  MessageLog.trace("Pelure : " + n + " panneaux exportes dans " + PELURE_DOSSIER);
+  MessageLog.trace("SHOT : " + n + " panneaux exportes dans " + PELURE_DOSSIER);
 }
 
 pelureExporte();

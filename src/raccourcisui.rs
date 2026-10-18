@@ -4,7 +4,7 @@
 //! remplace, action par action, le fichier par défaut). La fenêtre « Raccourcis clavier » liste
 //! toutes les commandes, avec une recherche, et les mêmes boutons.
 
-use eframe::egui::{self, vec2, Align2, Color32, Event, Id, Response, RichText};
+use eframe::egui::{self, vec2, Align2, Event, Id, Response, RichText};
 use egui_phosphor::regular as ph;
 
 use crate::app::{App, Mode};
@@ -119,7 +119,7 @@ impl App {
         let (action, captured) = (a.action.clone(), a.captured.clone());
         let label = label_of(&action);
         let current = self.keymap.labels_of(&action);
-        let warn = Color32::from_rgb(240, 170, 60);
+        let warn = crate::theme::avertissement();
         let mut open = true;
         let mut choice: Option<&str> = None;
         egui::Window::new("Assigner un raccourci")
@@ -235,7 +235,7 @@ impl App {
                         .weak(),
                 );
                 for w in &self.keymap.warnings {
-                    ui.colored_label(Color32::from_rgb(240, 170, 60), format!("⚠ {w}"));
+                    ui.colored_label(crate::theme::avertissement(), format!("⚠ {w}"));
                 }
                 ui.horizontal(|ui| {
                     ui.label(ph::MAGNIFYING_GLASS);

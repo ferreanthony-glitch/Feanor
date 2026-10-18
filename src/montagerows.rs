@@ -15,7 +15,7 @@
 //! limite entre deux dessins allonge l'un et raccourcit l'autre, un double-clic pose un nouveau
 //! dessin (une clé d'animation) à l'image visée.
 
-use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rect, Sense, Stroke, StrokeKind, Visuals};
+use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rect, Sense, Stroke, StrokeKind};
 
 use crate::app::App;
 use crate::document::{Behaviour, Layer};
@@ -33,7 +33,10 @@ pub(crate) const LAYER_H: f32 = 40.0;
 /// Barre d'un calque sous ses dessins (chantier 5, comme dans la timeline) : on la prend pour
 /// décaler le calque.
 const BAR_H: f32 = 5.0;
-const CAM_COLOR: Color32 = theme::CAMERA;
+/// La couleur des clés de caméra (celle du thème).
+fn cam_color() -> Color32 {
+    theme::camera()
+}
 
 /// Une piste de calque du montage (chantier 5) : un nom de calque et, quand un plan a plusieurs
 /// calques de ce nom, le rang de celui-ci parmi eux (0 : le plus haut).
@@ -112,7 +115,7 @@ impl App {
         let visuals = ui.visuals().clone();
         let lane = |y: f32, h: f32| Rect::from_min_size(pos2(rect.left() + 2.0, rect.top() + y + 1.0), vec2(rect.width() - 8.0, h - 2.0));
         let label = |lane: Rect, text: &str, color: Color32| {
-            painter.rect_filled(lane, 3.0, theme::ETIQUETTE);
+            painter.rect_filled(lane, 3.0, theme::etiquette());
             painter.with_clip_rect(lane.shrink(1.0)).text(
                 pos2(lane.left() + 6.0, lane.center().y),
                 Align2::LEFT_CENTER,
@@ -126,7 +129,7 @@ impl App {
         // Clic droit sur « Caméra » : le menu de la caméra (passe interface).
         ui.interact(cam, ui.id().with("nom_piste_camera"), Sense::click()).context_menu(|ui| self.grid_menu_ui(ui, crate::handles::GridMenu::Camera));
         let header = lane(rows.blocks_top(), rows.block_h);
-        painter.rect_filled(header, 3.0, theme::ETIQUETTE);
+        painter.rect_filled(header, 3.0, theme::etiquette());
         self.project_header(ui, header);
         // Les calques du plan courant, dans son ordre : clic, il devient courant ; glisser, il monte
         // ou descend (dans ce plan seulement) ; clic droit, son menu (passe interface).
@@ -160,7 +163,7 @@ impl App {
             };
             // Le fond de la rangée (choisir, glisser, menu), puis le nom et les réglages qui tiennent
             // dans la largeur de la colonne, au-dessus (`montagehead.rs`).
-            painter.rect_filled(r, 3.0, theme::ETIQUETTE);
+            painter.rect_filled(r, 3.0, theme::etiquette());
             // La bande de sa sorte (bitmap vert, vectoriel bleu, CTG rose), au bord gauche.
             let l = &self.doc.panels[self.cur_panel].layers[k];
             if !l.folder {
@@ -168,7 +171,7 @@ impl App {
                 painter.rect_filled(band, 1.0, theme::couleur_calque(l.kind, l.ctg.is_some()));
             }
             if current {
-                painter.rect_stroke(r, 3.0, Stroke::new(1.5_f32, visuals.selection.stroke.color), StrokeKind::Inside);
+                painter.rect_stroke(r, 3.0, Stroke::new(1.5_f32, theme::contour()), StrokeKind::Inside);
             }
             // Choisi avec d'autres (Ctrl ou Maj + clic) : surligné plus légèrement.
             if !current && self.is_chosen_layer(k) {
@@ -198,7 +201,7 @@ impl App {
             if let Some(p) = pointer {
                 let slot = grid.iter().filter(|g| g.top + g.h * 0.5 < p.y - base).count();
                 let y = base + grid.get(slot).map_or(grid.len() as f32 * LAYER_H, |g| g.top);
-                painter.line_segment([pos2(rect.left() + 2.0, y), pos2(rect.right() - 6.0, y)], Stroke::new(2.0_f32, Color32::WHITE));
+                painter.line_segment([pos2(rect.left() + 2.0, y), pos2(rect.right() - 6.0, y)], Stroke::new(2.0_f32, theme::contour()));
             }
             if ui.input(|i| !i.pointer.any_down()) {
                 self.montage_layer_drag = None;
@@ -284,7 +287,6 @@ impl App {
         blocks: &[Rect],
         ppf: f32,
         rows: &Rows,
-        visuals: &Visuals,
         lit: Option<(usize, Handle, bool)>,
         drops: &[crate::montagekeys::DropCell],
     ) {
@@ -293,7 +295,7 @@ impl App {
 
         // Caméra : une clé = un losange ; un mouvement = une barre de la première à la dernière.
         let cam = lane(rows.camera_top(), CAM_H);
-        painter.rect_filled(cam, 0.0, theme::RANGEE_SOMBRE);
+        painter.rect_filled(cam, 0.0, theme::rangee_sombre());
         for (i, b) in blocks.iter().enumerate() {
             let keys = &self.doc.panels[i].camera;
             let x0 = b.left() - 1.0;
@@ -304,17 +306,17 @@ impl App {
                         pos2(x0 + first.frame as f32 * ppf + ppf * 0.5, y - 1.5),
                         pos2(x0 + last.frame as f32 * ppf + ppf * 0.5, y + 1.5),
                     );
-                    painter.rect_filled(bar, 1.0, CAM_COLOR.gamma_multiply(0.5));
+                    painter.rect_filled(bar, 1.0, cam_color().gamma_multiply(0.5));
                 }
             }
             for (k, key) in keys.iter().enumerate() {
                 let c = pos2(x0 + key.frame as f32 * ppf + ppf * 0.5, y);
                 let d = 4.0;
                 // La clé que l'on fait glisser : cerclée de blanc.
-                let outline = if self.is_dragged_camera_key(i, k) { Stroke::new(1.5_f32, Color32::WHITE) } else { Stroke::NONE };
+                let outline = if self.is_dragged_camera_key(i, k) { Stroke::new(1.5_f32, theme::contour()) } else { Stroke::NONE };
                 painter.add(egui::Shape::convex_polygon(
                     vec![c + vec2(0.0, -d), c + vec2(d, 0.0), c + vec2(0.0, d), c + vec2(-d, 0.0)],
-                    CAM_COLOR,
+                    cam_color(),
                     outline,
                 ));
             }
@@ -323,7 +325,7 @@ impl App {
         // Les calques de chaque plan, dans son ordre.
         for row in 0..rows.count {
             let lr = lane(rows.layers_top() + row as f32 * LAYER_H, LAYER_H);
-            painter.rect_filled(lr, 0.0, theme::RANGEE_SOMBRE);
+            painter.rect_filled(lr, 0.0, theme::rangee_sombre());
             for (i, b) in blocks.iter().enumerate() {
                 let cell = Rect::from_min_max(pos2(b.left(), lr.top()), pos2(b.right(), lr.bottom()));
                 if !painter.clip_rect().intersects(cell) {
@@ -334,14 +336,14 @@ impl App {
                 let current = i == self.cur_panel && k == self.cur_layer;
                 let hot = lit.filter(|(pi, h, _)| *pi == i && h.layer() == Some(k)).map(|(_, h, held)| (h, held));
                 let chosen: Vec<usize> = self.key_sel.iter().filter(|c| c.panel == p.id && c.layer == p.layers[k].id).map(|c| c.start).collect();
-                paint_layer_cell(painter, cell, &p.layers[k], ppf, current, hot, &chosen, visuals);
+                paint_layer_cell(painter, cell, &p.layers[k], ppf, current, hot, &chosen);
                 // Clés d'effets (13i) : un losange violet en haut de la piste, par image clée.
                 let x0 = cell.left() - 1.0;
                 self.paint_fx_markers(painter, p.id, &p.layers[k], |f| x0 + f as f32 * ppf + ppf * 0.5, cell.top() + 8.0, p.frame_count(), (painter.clip_rect().left(), painter.clip_rect().right()));
                 // Clés qu'on glisse : leur fantôme suit la souris, un repère montre où elles se
                 // poseront (comme le repère de Storyboard Pro entre deux panneaux).
                 if let Some(d) = drops.iter().find(|d| d.panel == p.id && d.layer == p.layers[k].id) {
-                    paint_drop(painter, cell, ppf, d, visuals);
+                    paint_drop(painter, cell, ppf, d);
                 }
             }
         }
@@ -433,9 +435,9 @@ impl App {
 
 /// Les fantômes des clés qu'on glisse (cadres translucides, coupés au plan) et les repères où
 /// elles se poseront (un trait épais sur la hauteur de la piste, avec deux pointes).
-fn paint_drop(painter: &Painter, cell: Rect, ppf: f32, d: &crate::montagekeys::DropCell, visuals: &Visuals) {
+fn paint_drop(painter: &Painter, cell: Rect, ppf: f32, d: &crate::montagekeys::DropCell) {
     let x0 = cell.left() - 1.0;
-    let accent = visuals.selection.stroke.color;
+    let accent = theme::contour();
     let clip = painter.with_clip_rect(cell.expand(1.0).intersect(painter.clip_rect()));
     for &(s, e) in &d.ghosts {
         let ghost = Rect::from_min_max(pos2(x0 + s as f32 * ppf, cell.top() + 2.0), pos2(x0 + e as f32 * ppf - 1.0, cell.bottom() - 2.0));
@@ -443,10 +445,10 @@ fn paint_drop(painter: &Painter, cell: Rect, ppf: f32, d: &crate::montagekeys::D
     }
     for &m in &d.marks {
         let x = x0 + m as f32 * ppf;
-        clip.line_segment([pos2(x, cell.top()), pos2(x, cell.bottom())], Stroke::new(3.0_f32, Color32::WHITE));
+        clip.line_segment([pos2(x, cell.top()), pos2(x, cell.bottom())], Stroke::new(3.0_f32, theme::contour()));
         let t = 5.0;
-        clip.add(egui::Shape::convex_polygon(vec![pos2(x - t, cell.top()), pos2(x + t, cell.top()), pos2(x, cell.top() + t)], Color32::WHITE, Stroke::NONE));
-        clip.add(egui::Shape::convex_polygon(vec![pos2(x - t, cell.bottom()), pos2(x, cell.bottom() - t), pos2(x + t, cell.bottom())], Color32::WHITE, Stroke::NONE));
+        clip.add(egui::Shape::convex_polygon(vec![pos2(x - t, cell.top()), pos2(x + t, cell.top()), pos2(x, cell.top() + t)], theme::contour(), Stroke::NONE));
+        clip.add(egui::Shape::convex_polygon(vec![pos2(x - t, cell.bottom()), pos2(x, cell.bottom() - t), pos2(x + t, cell.bottom())], theme::contour(), Stroke::NONE));
     }
 }
 
@@ -488,9 +490,9 @@ pub(crate) fn cell_handle(layer: &Layer, k: usize, p: Pos2, x0: f32, lane_top: f
 /// dessous (chantier 5), son nom. `hot` : sa poignée survolée ou tenue (vrai : tenue) ;
 /// `chosen` : début des clés choisies.
 #[allow(clippy::too_many_arguments)]
-fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, current: bool, hot: Option<(Handle, bool)>, chosen: &[usize], visuals: &Visuals) {
+fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, current: bool, hot: Option<(Handle, bool)>, chosen: &[usize]) {
     let (hot, held) = (hot.map(|h| h.0), hot.is_some_and(|h| h.1));
-    painter.rect_filled(cell, 2.0, theme::ETIQUETTE);
+    painter.rect_filled(cell, 2.0, theme::etiquette());
     // Un calque de toute la scène : ses dessins teintés « fond ».
     let fill = match (layer.scene_wide.is_some(), layer.kind) {
         (true, _) => SCENE_WIDE,
@@ -511,10 +513,10 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, curr
                 // Une clé choisie : cerclée de la couleur du choix ; survolée (on la prend par son
                 // milieu pour la déplacer) : de blanc.
                 if chosen.contains(&s) {
-                    painter.rect_stroke(seg, 1.0, Stroke::new(2.0_f32, visuals.selection.stroke.color), StrokeKind::Inside);
+                    painter.rect_stroke(seg, 1.0, Stroke::new(2.0_f32, theme::contour()), StrokeKind::Inside);
                 }
                 if matches!(hot, Some(Handle::Key { start, .. }) if start == s) {
-                    painter.rect_stroke(seg, 1.0, Stroke::new(1.5_f32, Color32::WHITE), StrokeKind::Inside);
+                    painter.rect_stroke(seg, 1.0, Stroke::new(1.5_f32, theme::contour()), StrokeKind::Inside);
                 }
             }
         }
@@ -532,7 +534,7 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, curr
             painter.rect_filled(band, 1.0, fill.gamma_multiply(0.3));
             if band.width() > 14.0 {
                 let icon = crate::montagehead::behaviour_icon(how);
-                painter.with_clip_rect(band).text(pos2(band.right() - 3.0, band.top() + 1.0), Align2::RIGHT_TOP, icon, FontId::proportional(11.0), theme::TEXTE_FORT.gamma_multiply(0.8));
+                painter.with_clip_rect(band).text(pos2(band.right() - 3.0, band.top() + 1.0), Align2::RIGHT_TOP, icon, FontId::proportional(11.0), theme::sur_calque().gamma_multiply(0.8));
             }
         }
     }
@@ -550,7 +552,7 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, curr
             let cap = (bar.width() * 0.5).min(3.0);
             let (start_lit, end_lit) = (matches!(hot, Some(Handle::LayerStart { .. })), matches!(hot, Some(Handle::LayerEnd { .. })));
             for (l, r, on) in [(bar.left(), bar.left() + cap, start_lit), (bar.right() - cap, bar.right(), end_lit)] {
-                let c = if on { Color32::WHITE } else { theme::TEXTE_FORT.gamma_multiply(0.7) };
+                let c = if on { theme::contour() } else { theme::texte_fort().gamma_multiply(0.7) };
                 painter.rect_filled(Rect::from_min_max(pos2(l, bar.top()), pos2(r, bar.bottom())), 1.0, c);
             }
         }
@@ -566,11 +568,11 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, curr
     if let Some(f) = edge {
         let x = x0 + f as f32 * ppf;
         if x >= cell.left() - 1.0 && x <= cell.right() + 1.0 {
-            painter.line_segment([pos2(x, cell.top()), pos2(x, cell.bottom())], Stroke::new(1.5_f32, Color32::WHITE));
+            painter.line_segment([pos2(x, cell.top()), pos2(x, cell.bottom())], Stroke::new(1.5_f32, theme::contour()));
         }
     }
     if cell.width() > 28.0 {
-        let text = if layer.visible { theme::TEXTE_FORT } else { theme::TEXTE_DOUX };
+        let text = if layer.visible { theme::sur_calque() } else { theme::texte_doux() };
         painter.with_clip_rect(cell.shrink(1.0)).text(
             pos2(cell.left() + 4.0, cell.center().y),
             Align2::LEFT_CENTER,
@@ -583,9 +585,9 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, curr
         // Le calque courant : un cadre autour de sa case. Quand des clés y sont choisies, ce sont
         // elles qui portent le blanc (la nouvelle clé seule, par exemple) : le cadre du calque s'efface.
         let stroke = if chosen.is_empty() {
-            Stroke::new(1.5_f32, visuals.selection.stroke.color)
+            Stroke::new(1.5_f32, theme::contour())
         } else {
-            Stroke::new(1.0_f32, visuals.selection.stroke.color.gamma_multiply(0.3))
+            Stroke::new(1.0_f32, theme::contour().gamma_multiply(0.3))
         };
         painter.rect_stroke(cell, 2.0, stroke, StrokeKind::Inside);
     }

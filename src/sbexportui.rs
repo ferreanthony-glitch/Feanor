@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
-use eframe::egui::{self, vec2, Align2, Color32, RichText};
+use eframe::egui::{self, vec2, Align2, RichText};
 
 use crate::app::App;
 use crate::sbexport::{self, Built, SbExportJob, SbOut, Stage};
@@ -55,12 +55,12 @@ fn template_info(path: &Path, doc_frame: [usize; 2], doc_fps: u32) -> Result<(St
     let [w, h] = doc_frame;
     let [tw, th] = sb.size;
     if tw * h != th * w {
-        warnings.push(format!("Le projet Pelure est en {w}×{h} : les images ne seront pas aux proportions du modèle ({tw}×{th})."));
+        warnings.push(format!("Le projet SHOT est en {w}×{h} : les images ne seront pas aux proportions du modèle ({tw}×{th})."));
     } else if [tw, th] != doc_frame {
-        warnings.push(format!("Le projet Pelure est en {w}×{h}, le modèle en {tw}×{th} : Storyboard Pro mettra les images à sa taille."));
+        warnings.push(format!("Le projet SHOT est en {w}×{h}, le modèle en {tw}×{th} : Storyboard Pro mettra les images à sa taille."));
     }
     if sb.fps != doc_fps {
-        warnings.push(format!("Le projet Pelure est à {doc_fps} i/s, le modèle à {} i/s : les durées en images sont gardées, pas en secondes.", sb.fps));
+        warnings.push(format!("Le projet SHOT est à {doc_fps} i/s, le modèle à {} i/s : les durées en images sont gardées, pas en secondes.", sb.fps));
     }
     if panels > 0 {
         warnings.push(format!("Le modèle a {} plan(s), {panels} panneau(x) : ils ne seront pas gardés (seuls ses réglages servent).", sb.shots.len()));
@@ -76,7 +76,7 @@ impl App {
             return;
         }
         let title = match self.doc.properties.title.trim() {
-            "" => self.base_name_or("Projet Pelure"),
+            "" => self.base_name_or("Projet SHOT"),
             t => t.to_string(),
         };
         let preview = sbexport::prepare(&self.doc, &title);
@@ -172,7 +172,7 @@ impl App {
 
     /// Le contenu de la fenêtre ; vrai si l'on demande l'export.
     fn sb_export_body(&mut self, ui: &mut egui::Ui, w: &mut SbExportWindow) -> bool {
-        let warn = Color32::from_rgb(240, 170, 60);
+        let warn = crate::theme::avertissement();
         let busy = w.busy();
         let exe = crate::sbbatch::find_storyboard_pro();
         let (plans, panels, drawn, clips) = sbexport::counts(&w.preview);
@@ -272,7 +272,7 @@ impl App {
         match &w.job {
             Some(job) => {
                 let (label, done, total) = match &job.stage {
-                    Stage::Images => ("Pelure calcule les images des calques…".to_string(), job.next, job.total_images()),
+                    Stage::Images => ("SHOT calcule les images des calques…".to_string(), job.next, job.total_images()),
                     Stage::Storyboard(b) => (b.stage.lock().unwrap_or_else(|e| e.into_inner()).clone(), b.done.load(Ordering::Relaxed), b.total),
                     Stage::Done(_) => (String::new(), 0, 0),
                 };

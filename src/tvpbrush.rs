@@ -228,7 +228,7 @@ pub fn custom_brush(ini: &HashMap<String, HashMap<String, String>>, tip_size: Op
     if matches!(num("stamp", 1.0) as i32, 6..=8) {
         let smear = num("smear", 50.0);
         s.mix = (smear / 100.0).clamp(0.05, 1.0);
-        notes.push(format!("estompe ({smear:.0}) prise comme le mélange de Pelure, à comparer"));
+        notes.push(format!("estompe ({smear:.0}) prise comme le mélange de SHOT, à comparer"));
     }
     if num("shift", 0.0) > 0.0 {
         notes.push("décalage de couleur (shift) non repris".into());
@@ -302,7 +302,7 @@ pub fn base_tool(cmd: &str, notes: &mut Vec<String>) -> Option<BrushSettings> {
                 2 => PencilGrain::Medium,
                 _ => PencilGrain::Hard,
             };
-            notes.push(format!("grain du crayon {g:.0} pris comme « {} » de Pelure (ordre Silk, Soft, Medium, Hard deviné, à vérifier)", s.pencil_grain.label()));
+            notes.push(format!("grain du crayon {g:.0} pris comme « {} » de SHOT (ordre Silk, Soft, Medium, Hard deviné, à vérifier)", s.pencil_grain.label()));
         }
     }
     if let Some(aspect) = a.get("aspect").and_then(|v| v.parse::<f32>().ok()) {

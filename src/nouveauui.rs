@@ -293,7 +293,7 @@ impl App {
                     cancel = true;
                 }
                 if let Some(p) = &problem {
-                    ui.colored_label(Color32::from_rgb(240, 120, 90), p.as_str());
+                    ui.colored_label(crate::theme::erreur(), p.as_str());
                 }
             });
         });

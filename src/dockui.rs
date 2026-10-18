@@ -110,7 +110,7 @@ impl App {
         }
         match pane {
             Pane::Canvas => {
-                ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::FOND);
+                ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::fond());
                 if self.mode == Mode::Storyboard && self.board_view == BoardView::Panels {
                     self.board_view(ui);
                 } else {
@@ -153,7 +153,7 @@ impl App {
     fn focus_mark(&self, ui: &egui::Ui, on: bool, strong: bool) {
         if on {
             let r = ui.max_rect();
-            let (width, color) = if strong { (2.0, crate::theme::ACCENT) } else { (1.0, crate::theme::ACCENT.gamma_multiply(0.55)) };
+            let (width, color) = if strong { (2.0, crate::theme::accent_texte()) } else { (1.0, crate::theme::accent_texte().gamma_multiply(0.55)) };
             ui.painter().with_clip_rect(r).rect_stroke(r.shrink(width * 0.5), 0.0, egui::Stroke::new(width, color), egui::StrokeKind::Inside);
         }
     }
@@ -194,7 +194,7 @@ impl App {
         let mut back = Vec::new();
         for i in 0..self.detached.len() {
             let d = self.detached[i].clone();
-            let title = format!("Pelure — {}", d.panneau.name());
+            let title = format!("SHOT — {}", d.panneau.name());
             let mut builder = egui::ViewportBuilder::default().with_title(title).with_min_inner_size([180.0, 120.0]);
             if d.largeur > 0.0 && d.hauteur > 0.0 {
                 builder = builder.with_inner_size([d.largeur, d.hauteur]).with_position([d.x, d.y]);

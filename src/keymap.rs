@@ -2,7 +2,7 @@
 //!
 //! Chaque action du logiciel a un identifiant stable (`ACTIONS`). Le fichier associe des touches
 //! à ces identifiants. Le fichier par défaut est intégré au programme ; un fichier utilisateur
-//! (à côté de l'exécutable, ou dans %APPDATA%\Pelure) remplace action par action ce qu'il redéfinit.
+//! (à côté de l'exécutable, ou dans %APPDATA%\SHOT) remplace action par action ce qu'il redéfinit.
 
 use std::path::PathBuf;
 
@@ -47,7 +47,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("fichier.exporter_pdf", "Exporter le storyboard (PDF)", true, false),
     act("fichier.exporter_image_courante", "Exporter l'image courante (PNG)", true, false),
     act("fichier.exporter", "Exporter (choisir le format : film, images, PDF, son…)", true, false),
-    act("fichier.preferences", "Préférences de Pelure (copie de secours, curseur, panneaux, raccourcis)", true, false),
+    act("fichier.preferences", "Préférences de SHOT (copie de secours, curseur, panneaux, raccourcis)", true, false),
     act("edition.annuler", "Annuler", true, true),
     act("edition.retablir", "Rétablir", true, true),
     act("edition.couper", "Couper", true, false),
@@ -79,7 +79,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("vue.planches", "Storyboard : vue dessin / vue vignettes", true, false),
     act("mode.basculer", "Passer du storyboard à l'animation, et retour", true, false),
     act("aide.raccourcis", "Liste des raccourcis", true, false),
-    act("aide.palette", "Palette de commandes : chercher une commande par son nom", true, false),
+    act("aide.a_propos", "À propos de SHOT (version, logo)", true, false),
+    act("aide.palette","Palette de commandes : chercher une commande par son nom", true, false),
     act("outil.pinceau", "Outil pinceau", true, false),
     act("outil.crayon", "Outil crayon", true, false),
     act("outil.gomme", "Outil gomme", true, false),
@@ -857,7 +858,7 @@ impl Keymap {
         map
     }
 
-    /// Charge le fichier à côté de l'exécutable, sinon celui de %APPDATA%\Pelure, sinon le défaut.
+    /// Charge le fichier à côté de l'exécutable, sinon celui de %APPDATA%\SHOT, sinon le défaut.
     pub fn load() -> Keymap {
         let path = Self::candidate_paths().into_iter().find(|p| p.is_file());
         let user = path.as_ref().and_then(|p| std::fs::read_to_string(p).ok());
@@ -878,7 +879,7 @@ impl Keymap {
     }
 
     pub fn appdata_path() -> Option<PathBuf> {
-        std::env::var_os("APPDATA").map(|d| PathBuf::from(d).join("Pelure").join("keymap.toml"))
+        crate::donnees::roaming().map(|d| d.join("keymap.toml"))
     }
 
     fn check_conflicts(&mut self) {
@@ -989,7 +990,7 @@ impl Keymap {
                 entries.push(Entry {
                     action: action.clone(),
                     touches: keys.clone(),
-                    source: "choisi dans Pelure".into(),
+                    source: "choisi dans SHOT".into(),
                     contexte,
                     etat: None,
                 });
@@ -1002,8 +1003,8 @@ impl Keymap {
         }
         let body = toml::to_string(&Out { version: 1, raccourci: &entries }).map_err(|e| e.to_string())?;
         Ok(format!(
-            "# Raccourcis personnels de Pelure : chacun remplace, action par action, celui du fichier\n\
-             # par défaut. Écrit par Pelure (clic droit sur une commande > « Assigner un raccourci »,\n\
+            "# Raccourcis personnels de SHOT : chacun remplace, action par action, celui du fichier\n\
+             # par défaut. Écrit par SHOT (clic droit sur une commande > « Assigner un raccourci »,\n\
              # ou Fichier > Raccourcis clavier) ; on peut aussi le modifier à la main.\n\n{body}"
         ))
     }

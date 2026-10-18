@@ -1,161 +1,575 @@
-//! Thème de l'interface (12a, repris de Pelure Studio) : les gris sombres et le bleu d'accent du
-//! système Spectrum (thème sombre ; valeurs de @spectrum-css/tokens 16), une interface dense, et
-//! la police Segoe UI si Windows l'a (sinon celle d'egui). Seulement des couleurs et des tailles :
-//! aucun élément ni ressource graphique repris.
+//! Thème de l'interface : une palette centrale, lue à chaque image par les panneaux, et les
+//! `Visuals` d'egui posés une seule fois quand le thème change. Seulement des couleurs et des
+//! tailles : aucun élément ni ressource graphique repris.
+//!
+//! Trois thèmes livrés, des gris neutres (Anthony, 2026-10-18 : « un gris sombre/clair plus proche de
+//! Storyboard Pro ou Clip Studio Paint ») : **Gris sombre** (par défaut), **Gris clair** et
+//! **Sombre** (l'ancien presque noir). Un quatrième, **Personnalisé**, part du thème courant et se
+//! règle dans Fichier > Préférences… avec neuf couleurs ; tout le reste de la palette (survol,
+//! onglet actif, texte secondaire, couleur des dessins sur la timeline…) en est déduit, et choisi
+//! pour rester lisible sur le thème (contraste WCAG, `contraste`).
+//!
+//! La palette courante vit dans le fil de l'interface (`installer`) ; chaque couleur se lit par une
+//! petite fonction (`theme::fond()`, `theme::texte()`…) qui copie quatre octets.
+//!
+//! La police est Segoe UI si Windows l'a (sinon celle d'egui). Les couleurs du dessin (papier,
+//! traits, couleurs de projet) sont des données du document, pas de l'interface : elles ne passent
+//! pas par ici.
+
+use std::cell::RefCell;
 
 use eframe::egui::{self, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Margin, Shadow, Stroke, TextStyle, Vec2};
+use serde::{Deserialize, Serialize};
 
 use crate::document::LayerKind;
+
+/// Une couleur d'interface : rouge, vert, bleu.
+pub type Rvb = [u8; 3];
 
 const fn gris(v: u8) -> Color32 {
     Color32::from_rgb(v, v, v)
 }
 
-/// Autour de la feuille et entre les panneaux (gray-25).
-pub const FOND: Color32 = gris(17);
-/// Barres d'onglets et barres d'outils (gray-50).
-pub const ENTETE: Color32 = gris(27);
-/// Fond des panneaux (gray-75).
-pub const PANNEAU: Color32 = gris(34);
-/// Onglet actif, ligne choisie, survol léger (gray-100).
-pub const ELEVE: Color32 = gris(44);
-/// Traits de séparation (gray-200).
-pub const BORD: Color32 = gris(50);
-/// Boutons au repos, survolés, enfoncés (gray-300, 400, 500).
-pub const CONTROLE: Color32 = gris(57);
-pub const CONTROLE_SURVOL: Color32 = gris(68);
-pub const CONTROLE_ACTIF: Color32 = gris(109);
-/// Champs de saisie (plus sombres que le panneau).
-pub const CHAMP: Color32 = gris(22);
-/// Texte, texte secondaire (gray-800, 600), texte fort (gray-900).
-pub const TEXTE: Color32 = gris(219);
-pub const TEXTE_DOUX: Color32 = gris(138);
-pub const TEXTE_FORT: Color32 = gris(242);
-/// Bleu d'accent : fonds (blue-800) et textes (blue-900).
-pub const ACCENT: Color32 = Color32::from_rgb(64, 105, 253);
-pub const ACCENT_TEXTE: Color32 = Color32::from_rgb(86, 129, 255);
+fn couleur(c: Rvb) -> Color32 {
+    Color32::from_rgb(c[0], c[1], c[2])
+}
 
-// ------------------------------------------------------------ timeline et montage (12c)
+// ------------------------------------------------------------------- choix et réglages
 
-/// Règle des images (au-dessus des rangées).
-pub const REGLE: Color32 = ENTETE;
-/// Rangée d'un calque ; rangées de la caméra, du son et des pistes, plus sombres.
-pub const RANGEE: Color32 = gris(40);
-pub const RANGEE_SOMBRE: Color32 = gris(30);
-/// Étiquette d'une rangée dans la colonne des noms, case d'un calque sous un panneau.
-pub const ETIQUETTE: Color32 = ELEVE;
-/// Graduations : une image, une seconde.
-pub const GRADUATION: Color32 = BORD;
-pub const GRADUATION_SECONDE: Color32 = gris(82);
-/// Bloc d'un panneau dans le montage, et sa poignée de durée.
-pub const BLOC: Color32 = CONTROLE;
-pub const POIGNEE: Color32 = TEXTE_DOUX;
-/// Dessins exposés (timeline) : vectoriel (blue-900), bitmap (seafoam-900), dessin vide.
-pub const DESSIN_VECTORIEL: Color32 = Color32::from_rgb(86, 129, 255);
-pub const DESSIN_BITMAP: Color32 = Color32::from_rgb(10, 154, 128);
-pub const DESSIN_VIDE: Color32 = gris(115);
-/// Les mêmes, plus sourds, sous les panneaux du montage (blue-700, seafoam-700).
-pub const CALQUE_VECTORIEL: Color32 = Color32::from_rgb(52, 91, 248);
-pub const CALQUE_BITMAP: Color32 = Color32::from_rgb(6, 122, 103);
-/// Calque CTG (13j) : rose, vif et sourd (Anthony, 2026-10-17 : « code couleur selon type de
-/// calque : bitmap, vecto, CTG »).
-pub const DESSIN_CTG: Color32 = Color32::from_rgb(229, 91, 182);
-pub const CALQUE_CTG: Color32 = Color32::from_rgb(176, 52, 136);
+/// Le thème choisi dans les préférences.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChoixTheme {
+    #[default]
+    GrisSombre,
+    GrisClair,
+    Sombre,
+    Personnalise,
+}
+
+impl ChoixTheme {
+    pub const TOUS: [ChoixTheme; 4] = [ChoixTheme::GrisSombre, ChoixTheme::GrisClair, ChoixTheme::Sombre, ChoixTheme::Personnalise];
+
+    pub fn nom(self) -> &'static str {
+        match self {
+            ChoixTheme::GrisSombre => "Gris sombre",
+            ChoixTheme::GrisClair => "Gris clair",
+            ChoixTheme::Sombre => "Sombre",
+            ChoixTheme::Personnalise => "Personnalisé",
+        }
+    }
+}
+
+/// Les neuf couleurs qu'on règle dans les préférences. Tout le reste en est déduit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Couleurs {
+    /// Fond des panneaux.
+    pub panneau: Rvb,
+    /// Barres d'onglets et d'outils, règle de la timeline.
+    pub entete: Rvb,
+    /// Fond des fenêtres et des menus.
+    pub fenetre: Rvb,
+    /// Boutons, cases, curseurs au repos.
+    pub widgets: Rvb,
+    /// Texte.
+    pub texte: Rvb,
+    /// Accent : sélection, cadre du panneau actif.
+    pub accent: Rvb,
+    /// Fond autour du dessin et entre les panneaux.
+    pub fond: Rvb,
+    /// Fond des rangées de la timeline et du montage.
+    pub timeline: Rvb,
+    /// Traits de séparation, bordures.
+    pub bordure: Rvb,
+}
+
+impl Default for Couleurs {
+    fn default() -> Self {
+        Couleurs::gris_sombre()
+    }
+}
+
+impl Couleurs {
+    pub const fn gris_sombre() -> Couleurs {
+        Couleurs {
+            panneau: [64, 64, 64],
+            entete: [54, 54, 54],
+            fenetre: [56, 56, 56],
+            widgets: [90, 90, 90],
+            texte: [230, 230, 230],
+            // Gris clair (Anthony, 2026-10-18 : l'accent et la sélection en gris clair plutôt
+            // qu'en bleu) ; ce qui s'écrit dessus passe en presque noir (`sur_accent`).
+            accent: [200, 200, 200],
+            fond: [46, 46, 46],
+            timeline: [72, 72, 72],
+            bordure: [80, 80, 80],
+        }
+    }
+
+    pub const fn gris_clair() -> Couleurs {
+        Couleurs {
+            panneau: [192, 192, 192],
+            entete: [176, 176, 176],
+            fenetre: [210, 210, 210],
+            widgets: [224, 224, 224],
+            texte: [28, 28, 28],
+            // Bleu clair : un texte presque noir s'y lit (comme la sélection de Windows).
+            accent: [120, 165, 230],
+            fond: [158, 158, 158],
+            timeline: [205, 205, 205],
+            bordure: [150, 150, 150],
+        }
+    }
+
+    /// L'ancien thème, presque noir (gris du système Spectrum, bleu d'accent saturé).
+    pub const fn sombre() -> Couleurs {
+        Couleurs {
+            panneau: [34, 34, 34],
+            entete: [27, 27, 27],
+            fenetre: [34, 34, 34],
+            widgets: [57, 57, 57],
+            texte: [219, 219, 219],
+            accent: [64, 105, 253],
+            fond: [17, 17, 17],
+            timeline: [40, 40, 40],
+            bordure: [50, 50, 50],
+        }
+    }
+
+    /// Les noms et les accès des neuf couleurs, dans l'ordre de la fenêtre Préférences.
+    pub fn champs(&mut self) -> [(&'static str, &'static str, &mut Rvb); 9] {
+        [
+            ("Fond des panneaux", "Le fond de tous les panneaux.", &mut self.panneau),
+            ("Barres", "Barres d'onglets, barres d'outils et règle de la timeline.", &mut self.entete),
+            ("Fenêtres et menus", "Le fond des fenêtres, des menus et des listes déroulantes.", &mut self.fenetre),
+            ("Boutons et curseurs", "Les boutons, cases et curseurs au repos ; le survol et l'appui en sont déduits.", &mut self.widgets),
+            ("Texte", "La couleur du texte ; le texte secondaire et le texte fort en sont déduits.", &mut self.texte),
+            ("Accent et sélection", "La sélection, le cadre du panneau actif, les poignées au survol.", &mut self.accent),
+            ("Autour du dessin", "Le fond autour de la feuille et de la caméra, et entre les panneaux.", &mut self.fond),
+            ("Timeline et montage", "Le fond des rangées de la timeline, du montage et de la feuille d'exposition.", &mut self.timeline),
+            ("Bordures", "Les traits de séparation et le quadrillage.", &mut self.bordure),
+        ]
+    }
+}
+
+/// Le réglage de l'application (`reglages.toml`, `[theme]`) : le thème choisi et, gardées à part,
+/// les couleurs du thème personnalisé. Un fichier sans cette section donne Gris sombre.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReglageTheme {
+    pub choix: ChoixTheme,
+    pub perso: Couleurs,
+}
+
+impl ReglageTheme {
+    /// Les neuf couleurs du thème courant.
+    pub fn couleurs(&self) -> Couleurs {
+        match self.choix {
+            ChoixTheme::GrisSombre => Couleurs::gris_sombre(),
+            ChoixTheme::GrisClair => Couleurs::gris_clair(),
+            ChoixTheme::Sombre => Couleurs::sombre(),
+            ChoixTheme::Personnalise => self.perso,
+        }
+    }
+
+    /// Choisit un thème. Passer à « Personnalisé » part du thème qu'on quitte.
+    pub fn choisir(&mut self, choix: ChoixTheme) {
+        if choix == ChoixTheme::Personnalise && self.choix != ChoixTheme::Personnalise {
+            self.perso = self.couleurs();
+        }
+        self.choix = choix;
+    }
+
+    /// Une couleur a été changée à la main : les nouvelles couleurs deviennent le thème
+    /// « Personnalisé » (si elles diffèrent vraiment du thème courant).
+    pub fn modifier(&mut self, nouvelles: Couleurs) {
+        if nouvelles != self.couleurs() {
+            self.perso = nouvelles;
+            self.choix = ChoixTheme::Personnalise;
+        }
+    }
+
+    /// « Rétablir » : le thème par défaut, Gris sombre (les couleurs personnalisées sont aussi
+    /// remises à celles de ce thème).
+    pub fn retablir(&mut self) {
+        *self = ReglageTheme::default();
+    }
+}
+
+// ------------------------------------------------------------------- contraste
+
+/// Luminance relative (WCAG) d'une couleur opaque.
+pub fn luminance(c: Color32) -> f32 {
+    let lin = |v: u8| {
+        let s = v as f32 / 255.0;
+        if s <= 0.04045 { s / 12.92 } else { ((s + 0.055) / 1.055).powf(2.4) }
+    };
+    0.2126 * lin(c.r()) + 0.7152 * lin(c.g()) + 0.0722 * lin(c.b())
+}
+
+/// Rapport de contraste (WCAG) entre deux couleurs opaques : de 1 (pareil) à 21 (noir et blanc).
+pub fn contraste(a: Color32, b: Color32) -> f32 {
+    let (x, y) = (luminance(a), luminance(b));
+    (x.max(y) + 0.05) / (x.min(y) + 0.05)
+}
+
+/// `a` vers `b` de la fraction `t` (0 : `a`, 1 : `b`).
+fn melange(a: Color32, b: Color32, t: f32) -> Color32 {
+    let m = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round().clamp(0.0, 255.0) as u8;
+    Color32::from_rgb(m(a.r(), b.r()), m(a.g(), b.g()), m(a.b(), b.b()))
+}
+
+/// `c` poussée vers `pole` par pas de 5 %, juste assez pour atteindre `min` sur chacun des `fonds`.
+fn assurer(c: Color32, fonds: &[Color32], min: f32, pole: Color32) -> Color32 {
+    (0..=20)
+        .map(|k| melange(c, pole, k as f32 * 0.05))
+        .find(|x| fonds.iter().all(|f| contraste(*x, *f) >= min))
+        .unwrap_or(pole)
+}
+
+// ------------------------------------------------------------------- palette
+
+/// Toutes les couleurs de l'interface, déduites des neuf réglées dans les préférences.
+#[derive(Clone, Copy, Debug)]
+pub struct Palette {
+    /// Thème clair (texte plus sombre que le fond) : `Visuals::light`, logo clair.
+    pub claire: bool,
+    // Fonds.
+    pub fond: Color32,
+    pub entete: Color32,
+    pub panneau: Color32,
+    pub fenetre: Color32,
+    pub eleve: Color32,
+    pub bord: Color32,
+    pub champ: Color32,
+    // Boutons.
+    pub controle: Color32,
+    pub controle_survol: Color32,
+    pub controle_actif: Color32,
+    // Textes.
+    pub texte: Color32,
+    pub texte_doux: Color32,
+    pub texte_fort: Color32,
+    // Accent : le fond de la sélection, ce qui s'écrit dessus, et sa version pour les traits et
+    // les textes sur un panneau.
+    pub accent: Color32,
+    pub sur_accent: Color32,
+    pub accent_texte: Color32,
+    // Timeline et montage.
+    pub regle: Color32,
+    pub rangee: Color32,
+    pub rangee_sombre: Color32,
+    pub etiquette: Color32,
+    pub graduation: Color32,
+    pub graduation_seconde: Color32,
+    pub bloc: Color32,
+    pub poignee: Color32,
+    /// Contour des éléments choisis (clés, séquences), blanc ou presque noir.
+    pub contour: Color32,
+    /// Encre sur les dessins vifs de la timeline, et fond des pastilles posées sur une rangée.
+    pub encre: Color32,
+    /// Texte écrit sur les blocs sourds du montage et les extraits son : clair sur les blocs
+    /// foncés des thèmes sombres, foncé sur les blocs pâles des thèmes clairs.
+    pub sur_calque: Color32,
+    // Sortes de calques et repères.
+    pub dessin_vectoriel: Color32,
+    pub dessin_bitmap: Color32,
+    pub dessin_vide: Color32,
+    pub calque_vectoriel: Color32,
+    pub calque_bitmap: Color32,
+    pub dessin_ctg: Color32,
+    pub calque_ctg: Color32,
+    pub image_courante: Color32,
+    pub camera: Color32,
+    pub marque: Color32,
+    /// Clés d'effets (violet).
+    pub effet: Color32,
+    pub son_extrait: Color32,
+    pub son_choisi: Color32,
+    pub son_onde: Color32,
+    pub son_muet: Color32,
+    /// Barres des séquences et des scènes : séquence paire, impaire, scène paire, impaire.
+    pub barres: [Color32; 4],
+    // Messages.
+    pub avertissement: Color32,
+    pub erreur: Color32,
+    pub succes: Color32,
+}
+
+impl Palette {
+    /// La palette qui découle de neuf couleurs.
+    pub fn depuis(c: &Couleurs) -> Palette {
+        let (panneau, entete, fenetre, controle) = (couleur(c.panneau), couleur(c.entete), couleur(c.fenetre), couleur(c.widgets));
+        let (texte, accent, fond, rangee, bord) = (couleur(c.texte), couleur(c.accent), couleur(c.fond), couleur(c.timeline), couleur(c.bordure));
+        let claire = luminance(texte) < luminance(panneau);
+        // Le texte fort tend vers le blanc (thème sombre) ou le presque noir (thème clair).
+        let pole = if claire { gris(15) } else { Color32::WHITE };
+
+        let eleve = melange(panneau, texte, 0.06);
+        let champ = if claire { melange(panneau, Color32::WHITE, 0.55) } else { melange(panneau, Color32::BLACK, 0.35) };
+        let rangee_sombre = melange(rangee, Color32::BLACK, if claire { 0.12 } else { 0.25 });
+        let texte_fort = melange(texte, pole, 0.55);
+        // Le texte secondaire est le plus doux qui reste lisible (4,5:1) sur les fonds d'interface.
+        let lisibles = [panneau, entete, fenetre, rangee, rangee_sombre];
+        let texte_doux = (0..=9).map(|k| melange(texte, panneau, 0.45 - 0.05 * k as f32)).find(|x| lisibles.iter().all(|f| contraste(*x, *f) >= 4.5)).unwrap_or(texte);
+        let accent_texte = (0..=20).map(|k| melange(accent, texte_fort, k as f32 * 0.05)).find(|x| contraste(*x, panneau) >= 4.5).unwrap_or(texte_fort);
+        let sur_accent = if contraste(Color32::WHITE, accent) >= 4.5 || contraste(Color32::WHITE, accent) >= contraste(gris(15), accent) { Color32::WHITE } else { gris(15) };
+
+        // Couleurs des repères : un jeu vif pour les fonds sombres, un jeu plus profond pour les
+        // clairs ; chacune est poussée si besoin jusqu'à 3,2:1 sur les rangées.
+        let jeu = |sombre: [u8; 3], clair: [u8; 3]| assurer(couleur(if claire { clair } else { sombre }), &[rangee, rangee_sombre], 3.2, anti_de(claire));
+        let dessin_vide = (6..=20).map(|k| melange(rangee, texte, k as f32 * 0.05)).find(|x| contraste(*x, rangee) >= 3.2 && contraste(*x, rangee_sombre) >= 3.2).unwrap_or(texte);
+        // Survolé, enfoncé : le bouton s'éloigne de son repos vers la couleur du texte, tant que le
+        // texte fort y reste lisible (4,5:1).
+        let vers_texte = |t: f32| (0..=16).map(|k| melange(controle, texte, t - 0.02 * k as f32)).find(|x| contraste(texte_fort, *x) >= 4.5).unwrap_or(controle);
+        let controle_survol = vers_texte(0.07);
+        let controle_actif = vers_texte(0.32);
+        let palier = |t: f32| melange(rangee, texte, t);
+        Palette {
+            claire,
+            fond,
+            entete,
+            panneau,
+            fenetre,
+            eleve,
+            bord,
+            champ,
+            controle,
+            controle_survol,
+            controle_actif,
+            texte,
+            texte_doux,
+            texte_fort,
+            accent,
+            sur_accent,
+            accent_texte,
+            regle: entete,
+            rangee,
+            rangee_sombre,
+            etiquette: eleve,
+            graduation: bord,
+            graduation_seconde: palier(0.23),
+            bloc: controle,
+            poignee: texte_doux,
+            contour: if claire { gris(15) } else { Color32::WHITE },
+            encre: if claire { Color32::WHITE } else { melange(rangee, Color32::BLACK, 0.6) },
+            sur_calque: if claire { gris(20) } else { gris(242) },
+            dessin_vectoriel: jeu([86, 129, 255], [40, 90, 210]),
+            dessin_bitmap: jeu([10, 154, 128], [0, 120, 96]),
+            dessin_vide,
+            calque_vectoriel: if claire { Color32::from_rgb(110, 150, 230) } else { Color32::from_rgb(52, 91, 248) },
+            calque_bitmap: if claire { Color32::from_rgb(90, 175, 150) } else { Color32::from_rgb(6, 122, 103) },
+            dessin_ctg: jeu([229, 91, 182], [180, 30, 130]),
+            calque_ctg: if claire { Color32::from_rgb(210, 120, 185) } else { Color32::from_rgb(176, 52, 136) },
+            image_courante: jeu([252, 67, 46], [205, 30, 20]),
+            camera: jeu([255, 196, 60], [150, 92, 0]),
+            marque: jeu([244, 129, 12], [170, 70, 0]),
+            effet: jeu([182, 103, 230], [120, 50, 190]),
+            son_extrait: if claire { Color32::from_rgb(110, 185, 215) } else { Color32::from_rgb(3, 99, 140) },
+            son_choisi: if claire { Color32::from_rgb(80, 160, 205) } else { Color32::from_rgb(8, 115, 168) },
+            son_onde: if claire { Color32::from_rgb(10, 80, 130) } else { Color32::from_rgb(140, 205, 240) },
+            son_muet: if claire { Color32::from_rgb(200, 40, 30) } else { Color32::from_rgb(223, 52, 34) },
+            barres: [rangee, palier(0.07), palier(0.07), palier(0.13)],
+            succes: if claire { Color32::from_rgb(20, 120, 50) } else { Color32::from_rgb(120, 210, 130) },
+            avertissement: if claire { Color32::from_rgb(176, 100, 0) } else { Color32::from_rgb(232, 153, 34) },
+            erreur: if claire { Color32::from_rgb(190, 30, 20) } else { Color32::from_rgb(247, 92, 70) },
+        }
+    }
+
+    /// Les `Visuals` d'egui de cette palette.
+    pub fn visuels(&self) -> egui::Visuals {
+        let mut v = if self.claire { egui::Visuals::light() } else { egui::Visuals::dark() };
+        let arrondi = CornerRadius::same(4);
+        v.panel_fill = self.panneau;
+        v.window_fill = self.fenetre;
+        v.window_stroke = Stroke::new(1.0_f32, self.bord);
+        v.window_corner_radius = CornerRadius::same(6);
+        v.menu_corner_radius = CornerRadius::same(5);
+        let (ombre_fenetre, ombre_menu) = if self.claire { (60, 50) } else { (120, 110) };
+        v.window_shadow = Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(ombre_fenetre) };
+        v.popup_shadow = Shadow { offset: [0, 4], blur: 12, spread: 0, color: Color32::from_black_alpha(ombre_menu) };
+        v.extreme_bg_color = self.champ;
+        v.faint_bg_color = self.eleve;
+        v.code_bg_color = self.entete;
+        v.hyperlink_color = self.accent_texte;
+        v.warn_fg_color = self.avertissement;
+        v.error_fg_color = self.erreur;
+        v.selection.bg_fill = self.accent;
+        v.selection.stroke = Stroke::new(1.0_f32, self.sur_accent);
+        let w = &mut v.widgets;
+        // Textes et cadres qui ne réagissent pas.
+        w.noninteractive.bg_fill = self.panneau;
+        w.noninteractive.weak_bg_fill = self.panneau;
+        w.noninteractive.bg_stroke = Stroke::new(1.0_f32, self.bord);
+        w.noninteractive.fg_stroke = Stroke::new(1.0_f32, self.texte);
+        w.noninteractive.corner_radius = arrondi;
+        // Boutons, cases, curseurs : au repos, survolés, enfoncés, ouverts.
+        for (etat, fond, texte) in [
+            (&mut w.inactive, self.controle, self.texte),
+            (&mut w.hovered, self.controle_survol, self.texte_fort),
+            (&mut w.active, self.controle_actif, self.texte_fort),
+            (&mut w.open, self.controle_survol, self.texte_fort),
+        ] {
+            etat.bg_fill = fond;
+            etat.weak_bg_fill = fond;
+            etat.bg_stroke = Stroke::NONE;
+            etat.fg_stroke = Stroke::new(1.0_f32, texte);
+            etat.corner_radius = arrondi;
+            etat.expansion = 0.0;
+        }
+        // Sur un fond clair, un bouton au repos a besoin d'un trait pour se détacher du panneau.
+        if self.claire {
+            w.inactive.bg_stroke = Stroke::new(1.0_f32, self.bord);
+        }
+        w.hovered.bg_stroke = Stroke::new(1.0_f32, self.controle_actif);
+        v
+    }
+}
+
+/// Vers quoi pousser une couleur de repère pour la rendre plus visible : le blanc sur un thème
+/// sombre, le noir sur un thème clair.
+fn anti_de(claire: bool) -> Color32 {
+    if claire { Color32::BLACK } else { Color32::WHITE }
+}
+
+thread_local! {
+    static COURANTE: RefCell<Palette> = RefCell::new(Palette::depuis(&Couleurs::gris_sombre()));
+}
+
+/// Installe le thème : les couleurs que lisent les panneaux changent aussitôt. Les `Visuals`
+/// d'egui suivent avec `appliquer`.
+pub fn installer(reglage: &ReglageTheme) {
+    let palette = Palette::depuis(&reglage.couleurs());
+    COURANTE.with(|p| *p.borrow_mut() = palette);
+}
+
+/// La palette courante, en entier (à lire une fois pour plusieurs couleurs).
+pub fn palette() -> Palette {
+    COURANTE.with(|p| *p.borrow())
+}
+
+macro_rules! couleurs_courantes {
+    ($($(#[$doc:meta])* $nom:ident),* $(,)?) => {
+        $(
+            $(#[$doc])*
+            // Toute la palette se lit par là, même les couleurs que rien n'utilise encore.
+            #[allow(dead_code)]
+            pub fn $nom() -> Color32 {
+                COURANTE.with(|p| p.borrow().$nom)
+            }
+        )*
+    };
+}
+
+couleurs_courantes! {
+    /// Autour de la feuille et entre les panneaux.
+    fond,
+    /// Barres d'onglets et barres d'outils.
+    entete,
+    /// Fond des panneaux.
+    panneau,
+    /// Fond des fenêtres et des menus.
+    fenetre,
+    /// Onglet actif, ligne choisie, survol léger.
+    eleve,
+    /// Traits de séparation.
+    bord,
+    /// Champs de saisie.
+    champ,
+    /// Boutons au repos, survolés, enfoncés.
+    controle,
+    controle_survol,
+    controle_actif,
+    /// Texte, texte secondaire, texte fort.
+    texte,
+    texte_doux,
+    texte_fort,
+    /// Accent (fonds), ce qui s'écrit dessus, accent des traits et des textes.
+    accent,
+    sur_accent,
+    accent_texte,
+    /// Règle des images (au-dessus des rangées).
+    regle,
+    /// Rangée d'un calque ; rangées de la caméra, du son et des pistes, plus sombres.
+    rangee,
+    rangee_sombre,
+    /// Étiquette d'une rangée dans la colonne des noms.
+    etiquette,
+    /// Graduations : une image, une seconde.
+    graduation,
+    graduation_seconde,
+    /// Bloc d'un panneau dans le montage, et sa poignée de durée.
+    bloc,
+    poignee,
+    /// Contour des éléments choisis.
+    contour,
+    /// Encre sur les dessins vifs, fond des pastilles posées sur une rangée.
+    encre,
+    /// Texte écrit sur les blocs sourds et les extraits son.
+    sur_calque,
+    /// Dessins exposés (timeline) : vectoriel, bitmap, vide.
+    dessin_vectoriel,
+    dessin_bitmap,
+    dessin_vide,
+    /// Les mêmes, plus sourds, sous les panneaux du montage.
+    calque_vectoriel,
+    calque_bitmap,
+    /// Calque CTG (13j) : rose, vif et sourd.
+    dessin_ctg,
+    calque_ctg,
+    /// Image courante, clés de caméra, marques d'image, clés d'effets.
+    image_courante,
+    camera,
+    marque,
+    effet,
+    /// Son : extrait, extrait choisi, forme d'onde, piste muette.
+    son_extrait,
+    son_choisi,
+    son_onde,
+    son_muet,
+    /// Messages d'avertissement et d'erreur.
+    avertissement,
+    erreur,
+    succes,
+}
 
 /// Couleur vive d'une sorte de calque (repères, barres, étiquettes) : bitmap vert, vectoriel
 /// bleu, CTG rose (`ctg` : le calque est un calque CTG).
 pub fn couleur_calque(kind: LayerKind, ctg: bool) -> Color32 {
+    let p = palette();
     match (ctg, kind) {
-        (true, _) => DESSIN_CTG,
-        (false, LayerKind::Vector) => DESSIN_VECTORIEL,
-        (false, LayerKind::Bitmap) => DESSIN_BITMAP,
+        (true, _) => p.dessin_ctg,
+        (false, LayerKind::Vector) => p.dessin_vectoriel,
+        (false, LayerKind::Bitmap) => p.dessin_bitmap,
     }
 }
 
 /// La même, sourde : fond des dessins sous les panneaux du montage, où un nom s'écrit dessus.
 pub fn fond_calque(kind: LayerKind, ctg: bool) -> Color32 {
+    let p = palette();
     match (ctg, kind) {
-        (true, _) => CALQUE_CTG,
-        (false, LayerKind::Vector) => CALQUE_VECTORIEL,
-        (false, LayerKind::Bitmap) => CALQUE_BITMAP,
+        (true, _) => p.calque_ctg,
+        (false, LayerKind::Vector) => p.calque_vectoriel,
+        (false, LayerKind::Bitmap) => p.calque_bitmap,
     }
-}/// Image courante (red-900), clés de caméra (le jaune du cadre de la caméra).
-pub const IMAGE_COURANTE: Color32 = Color32::from_rgb(252, 67, 46);
-pub const CAMERA: Color32 = Color32::from_rgb(255, 196, 60);
-/// Marques d'image (13a) : orange (orange-900), distinct du jaune des clés de caméra.
-pub const MARQUE: Color32 = Color32::from_rgb(244, 129, 12);
-/// Son : extrait (cyan-600, cyan-700 choisi), forme d'onde, piste muette (red-800).
-pub const SON_EXTRAIT: Color32 = Color32::from_rgb(3, 99, 140);
-pub const SON_CHOISI: Color32 = Color32::from_rgb(8, 115, 168);
-pub const SON_ONDE: Color32 = Color32::from_rgb(140, 205, 240);
-pub const SON_MUET: Color32 = Color32::from_rgb(223, 52, 34);
+}
+
 /// Barres des séquences et des scènes, alternées pour qu'on voie les limites.
-pub const fn barre(sequence: bool, impaire: bool) -> Color32 {
-    match (sequence, impaire) {
-        (true, false) => gris(40),
-        (true, true) => gris(52),
-        (false, false) => gris(52),
-        (false, true) => gris(64),
-    }
+pub fn barre(sequence: bool, impaire: bool) -> Color32 {
+    palette().barres[match (sequence, impaire) {
+        (true, false) => 0,
+        (true, true) => 1,
+        (false, false) => 2,
+        (false, true) => 3,
+    }]
 }
 
-/// Rapport de contraste (WCAG) entre deux couleurs opaques : de 1 (pareil) à 21 (noir et blanc).
-#[cfg(test)]
-pub fn contraste(a: Color32, b: Color32) -> f32 {
-    let lum = |c: Color32| {
-        let lin = |v: u8| {
-            let s = v as f32 / 255.0;
-            if s <= 0.04045 { s / 12.92 } else { ((s + 0.055) / 1.055).powf(2.4) }
-        };
-        0.2126 * lin(c.r()) + 0.7152 * lin(c.g()) + 0.0722 * lin(c.b())
-    };
-    let (x, y) = (lum(a), lum(b));
-    (x.max(y) + 0.05) / (x.min(y) + 0.05)
-}
+// ------------------------------------------------------------------- egui
 
-/// Couleurs des fenêtres, panneaux et contrôles.
+/// Couleurs des fenêtres, panneaux et contrôles du thème courant.
 pub fn visuels() -> egui::Visuals {
-    let mut v = egui::Visuals::dark();
-    let arrondi = CornerRadius::same(4);
-    v.panel_fill = PANNEAU;
-    v.window_fill = PANNEAU;
-    v.window_stroke = Stroke::new(1.0_f32, BORD);
-    v.window_corner_radius = CornerRadius::same(6);
-    v.menu_corner_radius = CornerRadius::same(5);
-    v.window_shadow = Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(120) };
-    v.popup_shadow = Shadow { offset: [0, 4], blur: 12, spread: 0, color: Color32::from_black_alpha(110) };
-    v.extreme_bg_color = CHAMP;
-    v.faint_bg_color = ELEVE;
-    v.code_bg_color = ENTETE;
-    v.hyperlink_color = ACCENT_TEXTE;
-    v.warn_fg_color = Color32::from_rgb(232, 153, 34);
-    v.error_fg_color = Color32::from_rgb(247, 92, 70);
-    v.selection.bg_fill = ACCENT;
-    // Blanc pur sur l'accent : 4,5:1 (le gris-blanc n'y fait que 4:1).
-    v.selection.stroke = Stroke::new(1.0_f32, Color32::WHITE);
-    let w = &mut v.widgets;
-    // Textes et cadres qui ne réagissent pas.
-    w.noninteractive.bg_fill = PANNEAU;
-    w.noninteractive.weak_bg_fill = PANNEAU;
-    w.noninteractive.bg_stroke = Stroke::new(1.0_f32, BORD);
-    w.noninteractive.fg_stroke = Stroke::new(1.0_f32, TEXTE);
-    w.noninteractive.corner_radius = arrondi;
-    // Boutons, cases, curseurs : au repos, survolés, enfoncés, ouverts.
-    for (etat, fond, texte) in [
-        (&mut w.inactive, CONTROLE, TEXTE),
-        (&mut w.hovered, CONTROLE_SURVOL, TEXTE_FORT),
-        (&mut w.active, CONTROLE_ACTIF, TEXTE_FORT),
-        (&mut w.open, CONTROLE_SURVOL, TEXTE_FORT),
-    ] {
-        etat.bg_fill = fond;
-        etat.weak_bg_fill = fond;
-        etat.bg_stroke = Stroke::NONE;
-        etat.fg_stroke = Stroke::new(1.0_f32, texte);
-        etat.corner_radius = arrondi;
-        etat.expansion = 0.0;
-    }
-    w.hovered.bg_stroke = Stroke::new(1.0_f32, CONTROLE_ACTIF);
-    v
+    palette().visuels()
 }
 
 /// Interface dense : espacements serrés, textes un peu plus petits qu'egui par défaut.
@@ -192,16 +606,17 @@ pub fn polices(fonts: &mut FontDefinitions) -> bool {
     true
 }
 
-/// Onglets et séparations des panneaux (egui_dock) : barres d'onglets sombres, onglet actif de la
-/// couleur du panneau avec un filet bleu, séparations du fond qui bleuissent au survol.
+/// Onglets et séparations des panneaux (egui_dock) : barres d'onglets, onglet actif de la couleur
+/// du panneau, séparations du fond qui prennent l'accent au survol.
 pub fn dock(mut s: egui_dock::Style) -> egui_dock::Style {
+    let p = palette();
     s.main_surface_border_stroke = Stroke::NONE;
     s.separator.width = 4.0;
-    s.separator.color_idle = FOND;
-    s.separator.color_hovered = ACCENT;
-    s.separator.color_dragged = ACCENT;
-    s.tab_bar.bg_fill = ENTETE;
-    s.tab_bar.hline_color = ENTETE;
+    s.separator.color_idle = p.fond;
+    s.separator.color_hovered = p.accent_texte;
+    s.separator.color_dragged = p.accent_texte;
+    s.tab_bar.bg_fill = p.entete;
+    s.tab_bar.hline_color = p.entete;
     s.tab_bar.height = 26.0;
     // Des onglets qui ne tiennent plus dans un panneau rétréci : une petite barre pour les
     // atteindre (Anthony, 2026-10-17 : « toujours utilisables même lorsqu'ils sont réduits »).
@@ -213,25 +628,26 @@ pub fn dock(mut s: egui_dock::Style) -> egui_dock::Style {
         bg_fill: fond,
         text_color: texte,
     };
-    s.tab.inactive = onglet(ENTETE, TEXTE_DOUX);
-    s.tab.hovered = onglet(ENTETE, TEXTE);
-    s.tab.active = onglet(PANNEAU, TEXTE);
-    s.tab.focused = onglet(PANNEAU, TEXTE_FORT);
+    s.tab.inactive = onglet(p.entete, p.texte_doux);
+    s.tab.hovered = onglet(p.entete, p.texte);
+    s.tab.active = onglet(p.panneau, p.texte);
+    s.tab.focused = onglet(p.panneau, p.texte_fort);
     s.tab.inactive_with_kb_focus = s.tab.inactive.clone();
     s.tab.active_with_kb_focus = s.tab.active.clone();
     s.tab.focused_with_kb_focus = s.tab.focused.clone();
     s.tab.hline_below_active_tab_name = false;
-    s.tab.tab_body.bg_fill = PANNEAU;
+    s.tab.tab_body.bg_fill = p.panneau;
     s.tab.tab_body.stroke = Stroke::NONE;
     s.tab.tab_body.corner_radius = CornerRadius::ZERO;
-    s.buttons.close_tab_color = TEXTE_DOUX;
-    s.buttons.close_tab_active_color = TEXTE_FORT;
-    s.buttons.close_tab_bg_fill = CONTROLE_SURVOL;
-    s.overlay.selection_color = ACCENT.gamma_multiply(0.5);
+    s.buttons.close_tab_color = p.texte_doux;
+    s.buttons.close_tab_active_color = p.texte_fort;
+    s.buttons.close_tab_bg_fill = p.controle_survol;
+    s.overlay.selection_color = p.accent.gamma_multiply(0.5);
     s
 }
 
-/// Applique le thème : couleurs, densité.
+/// Applique le thème courant à egui : couleurs, densité. À refaire quand le thème change
+/// (`installer` d'abord).
 pub fn appliquer(ctx: &egui::Context) {
     ctx.set_visuals(visuels());
     ctx.style_mut(densifier);

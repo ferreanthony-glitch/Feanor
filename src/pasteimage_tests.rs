@@ -2,7 +2,7 @@
 
 use eframe::egui::Color32;
 
-use crate::pasteimage::{fit_size, to_floating, MARK};
+use crate::pasteimage::{est_copie_interne, fit_size, to_floating, MARK};
 
 #[test]
 fn a_big_image_shrinks_to_the_frame_without_distortion() {
@@ -31,9 +31,13 @@ fn an_image_without_any_alpha_is_opaque() {
 }
 
 #[test]
-fn pelure_marks_its_own_copies() {
-    // Les copies de Pelure (zone bitmap, éléments vectoriels) commencent par la marque : leur
+fn shot_marks_its_own_copies() {
+    // Les copies de SHOT (zone bitmap, éléments vectoriels) commencent par la marque : leur
     // collage n'est pas pris pour une image venue d'ailleurs.
-    assert!("Pelure : zone bitmap 10×10".starts_with(MARK));
-    assert!("Pelure : 3 élément(s) vectoriel(s)".starts_with(MARK));
+    assert!("SHOT : zone bitmap 10×10".starts_with(MARK));
+    assert!("SHOT : 3 élément(s) vectoriel(s)".starts_with(MARK));
+    // Une copie faite par l'ancienne version (Pelure) est reconnue aussi.
+    assert!(est_copie_interne("Pelure : zone bitmap 10×10"));
+    assert!(est_copie_interne("SHOT : images copiées"));
+    assert!(!est_copie_interne("un texte copié ailleurs"));
 }

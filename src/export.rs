@@ -104,7 +104,7 @@ pub fn video_size(frame: [usize; 2], half: bool) -> [usize; 2] {
 
 // ------------------------------------------------------------------------------------- ffmpeg
 
-/// ffmpeg à utiliser : `PELURE_FFMPEG`, celui choisi dans Pelure, celui du PATH, puis ceux
+/// ffmpeg à utiliser : `PELURE_FFMPEG`, celui choisi dans SHOT, celui du PATH, puis ceux
 /// installés avec d'autres logiciels (Krita) ou par winget.
 pub fn find_ffmpeg(saved: Option<&Path>) -> Option<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();

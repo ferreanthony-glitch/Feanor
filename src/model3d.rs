@@ -91,7 +91,7 @@ pub fn parse_gltf(bytes: &[u8], dir: Option<&Path>) -> Result<Mesh3d, String> {
     }
     for ext in json["extensionsRequired"].as_array().into_iter().flatten() {
         let name = ext.as_str().unwrap_or("?");
-        return Err(format!("le fichier exige l'extension glTF « {name} » (compression ?), non lue par Pelure : réexporte sans compression"));
+        return Err(format!("le fichier exige l'extension glTF « {name} » (compression ?), non lue par SHOT : réexporte sans compression"));
     }
     let buffers = load_buffers(&json, bin, dir)?;
     let mut mesh = Mesh3d::default();
@@ -478,7 +478,7 @@ pub fn from_bytes(bytes: &[u8]) -> Result<Mesh3d, String> {
     }
     let u = |i: usize| u32::from_le_bytes(bytes[i..i + 4].try_into().expect("4 octets"));
     if u(8) != 1 {
-        return Err("modèle 3D d'une version plus récente de Pelure".into());
+        return Err("modèle 3D d'une version plus récente de SHOT".into());
     }
     let (nv, nt) = (u(12) as usize, u(16) as usize);
     if bytes.len() != 20 + nv * 12 + nt * 12 {
