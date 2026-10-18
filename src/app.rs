@@ -2608,6 +2608,9 @@ impl App {
         self.rejeu_deferred.clear();
         crate::fx::fond_cancel_all();
         self.doc = doc;
+        // (Ses dessins portent les numéros et les versions de ceux de l'ancien : les dessins
+        // dérivés des effets de l'ancien ne lui servent pas.)
+        crate::fx::forget_all();
         // (Un autre projet : l'effet choisi et les clés choisies étaient ceux de l'ancien.)
         self.fx_choice = None;
         self.fx_key_sel.clear();
@@ -3725,6 +3728,8 @@ impl eframe::App for App {
             self.theme_unsaved = false;
             let _ = self.settings.save();
         }
+        // Effets de calque : l'horloge de leurs demandes avance (calculs de fond, `fxcache.rs`).
+        crate::fx::begin_frame(ctx);
         self.clamp_nav();
         self.flush_flottante_on_input(ctx);
         self.end_length_gesture_if_idle();

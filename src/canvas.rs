@@ -80,22 +80,32 @@ impl App {
         }
         // Arrière-plan (13e) : aucun → noir ; damier → cases des couleurs A et B sous les calques.
         self.paint_background(ui.ctx(), &painter, corners, size);
-        // Dessins des images qui viennent, à envoyer d'avance à la carte graphique.
-        let ahead = match &self.gpu {
-            Some(gpu) => crate::playback::upcoming_cels(
-                &self.doc,
-                self.play_position(),
-                &plan,
-                gpu.ahead_capacity(&self.doc, plan.items.len()),
-            ),
+        // Effets (13i) : jamais calculés ici. En lecture, au défilement et pendant un geste sur un
+        // effet, l'aperçu à la taille de l'écran ; au repos, la pleine résolution, calculée par le
+        // fil de fond (`fxcache.rs`) ; l'écran montre le dernier résultat en attendant.
+        let level = match &self.gpu {
+            Some(_) => crate::fx::draft_level(ui.ctx(), self.cur_panel, self.cur_frame, self.playing, self.view.zoom * ui.ctx().pixels_per_point()),
+            None => 0,
+        };
+        // Dessins des images qui viennent, à envoyer d'avance à la carte graphique (leurs effets
+        // sont demandés au fil de fond en même temps).
+        let ahead: Vec<crate::gpu::Ahead> = match &self.gpu {
+            Some(gpu) => {
+                let (at, cap) = (self.play_position(), gpu.ahead_capacity(&self.doc, plan.items.len()));
+                let mut ahead = crate::playback::upcoming_derived(&self.doc, at, level, cap);
+                ahead.extend(
+                    crate::playback::upcoming_cels(&self.doc, at, &plan, cap).into_iter().map(|id| crate::gpu::Ahead { id, cel: None }),
+                );
+                ahead
+            }
             None => Vec::new(),
         };
         if let Some(gpu) = &mut self.gpu {
             // Les calques sont superposés par la carte graphique, directement à leur place.
             let (all, tiles) = self.renderer.take_gpu_dirty();
             // (Le fond sous le trait se calcule en arrière-plan : `fx::differe`.)
-            crate::fx::differe(|| gpu.sync(&self.doc, &plan, all, &tiles, &ahead));
-            painter.add(gpu.paint(&plan, corners, ws, rect, [self.doc.width, self.doc.height]));
+            let resolved = crate::fx::differe(|| gpu.sync(&self.doc, &plan, all, &tiles, &ahead, level));
+            painter.add(gpu.paint(&plan, &resolved, corners, ws, rect, [self.doc.width, self.doc.height]));
         } else {
             let texture = crate::fx::differe(|| self.renderer.update(ui.ctx(), &self.doc, plan));
             let mut mesh = egui::Mesh::with_texture(texture);

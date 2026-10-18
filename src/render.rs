@@ -231,15 +231,30 @@ pub fn composite_full(doc: &Document, plan: &Plan) -> Vec<Color32> {
 /// Traite `buf` par morceaux de `chunk` éléments, répartis sur les cœurs du processeur
 /// (`f` reçoit le numéro du morceau et le morceau).
 pub(crate) fn par_chunks<T: Send>(buf: &mut [T], chunk: usize, f: impl Fn(usize, &mut [T]) + Sync) {
-    let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(1, 16);
+    let mut threads = std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(1, 16);
+    // Un travail de fond (effets calculés en arrière-plan) laisse des cœurs libres à l'interface.
+    let cap = THREAD_CAP.with(|c| c.get());
+    if cap > 0 {
+        threads = threads.min(cap);
+    }
     let mut groups: Vec<Vec<(usize, &mut [T])>> = (0..threads).map(|_| Vec::new()).collect();
     // En alternance : les zones chargées (souvent groupées) se répartissent entre les fils.
     for (i, c) in buf.chunks_mut(chunk.max(1)).enumerate() {
         groups[i % threads].push((i, c));
     }
+    groups.retain(|g| !g.is_empty());
     let f = &f;
+    // Un seul groupe : pas la peine de lancer un fil.
+    if groups.len() <= 1 {
+        for group in groups {
+            for (i, c) in group {
+                f(i, c);
+            }
+        }
+        return;
+    }
     std::thread::scope(|s| {
-        for group in groups.into_iter().filter(|g| !g.is_empty()) {
+        for group in groups {
             s.spawn(move || {
                 for (i, c) in group {
                     f(i, c);
@@ -247,6 +262,17 @@ pub(crate) fn par_chunks<T: Send>(buf: &mut [T], chunk: usize, f: impl Fn(usize,
             });
         }
     });
+}
+
+thread_local! {
+    /// Nombre de fils que `par_chunks` peut lancer depuis ce fil (0 : autant que de cœurs).
+    static THREAD_CAP: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Limite à `cap` le nombre de fils que `par_chunks` lance depuis le fil appelant (le fil de fond
+/// des effets s'en sert pour ne pas affamer l'interface).
+pub(crate) fn set_thread_cap(cap: usize) {
+    THREAD_CAP.with(|c| c.set(cap));
 }
 
 /// Ce que voit la caméra `cam` : l'image finale (`doc.frame`). Chaque pixel prend la couleur de
@@ -321,9 +347,20 @@ pub fn camera_image(doc: &Document, plan: &Plan, cam: &Camera) -> Vec<Color32> {
 }
 
 pub fn composite_pixel(doc: &Document, plan: &Plan, x: usize, y: usize) -> Color32 {
+    composite_pixel_in(doc, plan, &shown_items(doc, plan), x, y)
+}
+
+/// Les dessins tels qu'ils s'affichent (effets compris) pour chaque élément du plan, cherchés une
+/// seule fois (une vignette lit des dizaines de milliers de pixels).
+fn shown_items<'a>(doc: &'a Document, plan: &Plan) -> Vec<Option<crate::fx::Shown<'a>>> {
+    plan.items.iter().map(|item| crate::fx::shown(doc, item)).collect()
+}
+
+/// `composite_pixel` avec les dessins déjà cherchés (`shown_items`).
+fn composite_pixel_in(doc: &Document, plan: &Plan, shown: &[Option<crate::fx::Shown>], x: usize, y: usize) -> Color32 {
     let mut c = paper_color(plan);
-    for item in &plan.items {
-        if let Some(cel) = crate::fx::shown(doc, item) {
+    for (item, cel) in plan.items.iter().zip(shown) {
+        if let Some(cel) = cel {
             let s = match inverse_of(doc, item) {
                 Some(inv) => {
                     let p = inv.apply(egui::pos2(x as f32 + 0.5, y as f32 + 0.5));
@@ -408,6 +445,7 @@ pub fn thumbnail(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize
     let [fw, fh] = doc.frame;
     let (sx, sy) = (fw as f32 / tw as f32, fh as f32 / th as f32);
     let map = cam.frame_map(doc.frame);
+    let shown = shown_items(doc, plan);
     let mut pixels = Vec::with_capacity(tw * th);
     for y in 0..th {
         for x in 0..tw {
@@ -415,7 +453,7 @@ pub fn thumbnail(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize
             for (ox, oy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
                 let c = match map.at((x as f32 + ox) * sx, (y as f32 + oy) * sy) {
                     Some(p) if p.x >= 0.0 && p.y >= 0.0 && p.x < doc.width as f32 && p.y < doc.height as f32 => {
-                        composite_pixel(doc, plan, p.x as usize, p.y as usize)
+                        composite_pixel_in(doc, plan, &shown, p.x as usize, p.y as usize)
                     }
                     _ => Color32::TRANSPARENT,
                 };

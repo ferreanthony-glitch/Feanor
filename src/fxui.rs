@@ -224,6 +224,11 @@ impl App {
                         ui.label(p.name);
                         let mut v = values[k];
                         let resp = ui.add(egui::Slider::new(&mut v, p.min..=p.max).suffix(p.unit));
+                        // Pendant le geste, l'image passe en aperçu (`fx::draft_level`) ; la pleine
+                        // résolution revient au lâcher.
+                        if resp.dragged() || resp.changed() {
+                            crate::fx::note_interaction(ui.ctx());
+                        }
                         if self.edited(&resp) {
                             let mut new = values.clone();
                             new[k] = v;

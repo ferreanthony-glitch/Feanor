@@ -48,10 +48,10 @@ fn headless() -> Option<RenderState> {
 fn render_on_gpu(rs: &RenderState, doc: &Document, plan: &Plan) -> Vec<Color32> {
     let (w, h) = (doc.width as u32, doc.height as u32);
     let mut gpu = GpuCanvas::new(rs);
-    gpu.sync(doc, plan, true, &[], &[]);
+    let resolved = gpu.sync(doc, plan, true, &[], &[], 0);
     let rect = Rect::from_min_size(pos2(0.0, 0.0), vec2(w as f32, h as f32));
     let corners = [rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom()];
-    let callback = gpu.paint(plan, corners, None, rect, [doc.width, doc.height]);
+    let callback = gpu.paint(plan, &resolved, corners, None, rect, [doc.width, doc.height]);
     let jobs = [ClippedPrimitive { clip_rect: rect, primitive: Primitive::Callback(callback) }];
     let screen = ScreenDescriptor { size_in_pixels: [w, h], pixels_per_point: 1.0 };
     let target = rs.device.create_texture(&wgpu::TextureDescriptor {

@@ -125,27 +125,29 @@ pub fn pinch(raster: &Raster, amount: f32, radius: f32, cx: f32, cy: f32) -> Ras
 }
 
 /// La couleur de chaque pixel dessiné multipliée par `factor(x, y)` (la couverture reste).
-fn shade(raster: &Raster, factor: impl Fn(f32, f32) -> f32) -> Raster {
+fn shade(raster: &Raster, factor: impl Fn(f32, f32) -> f32 + Sync) -> Raster {
     let mut out = raster.clone();
-    for idx in 0..out.tiles.len() {
-        if out.tiles[idx].is_none() {
-            continue;
-        }
-        let (ox, oy, tw, th) = out.tile_bounds(idx);
-        let tile = out.tile_mut(idx);
-        for y in 0..th {
-            for x in 0..tw {
-                let i = y * TILE + x;
-                let p = tile[i];
-                if p.a() == 0 {
-                    continue;
+    let (width, height) = (out.width, out.height);
+    let tiles_x = out.tiles_x.max(1);
+    // Une rangée de tuiles par morceau, répartie sur les cœurs (chaque pixel est indépendant).
+    crate::render::par_chunks(&mut out.tiles, tiles_x, |k, row| {
+        for (tx, tile) in row.iter_mut().enumerate() {
+            let Some(tile) = tile.as_mut() else { continue };
+            let (ox, oy, tw, th) = crate::raster::tile_bounds(width, height, k * tiles_x + tx);
+            for y in 0..th {
+                for x in 0..tw {
+                    let i = y * TILE + x;
+                    let p = tile[i];
+                    if p.a() == 0 {
+                        continue;
+                    }
+                    let k = factor((ox + x) as f32 + 0.5, (oy + y) as f32 + 0.5).max(0.0);
+                    let ch = |v: u8| (v as f32 * k).round().clamp(0.0, p.a() as f32) as u8;
+                    tile[i] = Color32::from_rgba_premultiplied(ch(p.r()), ch(p.g()), ch(p.b()), p.a());
                 }
-                let k = factor((ox + x) as f32 + 0.5, (oy + y) as f32 + 0.5).max(0.0);
-                let ch = |v: u8| (v as f32 * k).round().clamp(0.0, p.a() as f32) as u8;
-                tile[i] = Color32::from_rgba_premultiplied(ch(p.r()), ch(p.g()), ch(p.b()), p.a());
             }
         }
-    }
+    });
     out
 }
 

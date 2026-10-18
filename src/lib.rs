@@ -164,8 +164,14 @@ mod exportui;
 mod fill;
 mod folders;
 pub mod fx;
+mod fxcache;
+mod fxproxy;
 #[cfg(test)]
 mod fx_tests;
+#[cfg(test)]
+mod fxexact_tests;
+#[cfg(test)]
+mod fxperf_tests;
 mod fxfilters;
 #[cfg(test)]
 mod fxfilters_tests;

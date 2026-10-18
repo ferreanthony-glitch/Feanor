@@ -1828,6 +1828,115 @@ moyens, rien de copié).
 - Aide > À propos de SHOT… (`aide.a_propos`, `aproposui.rs`) : fenêtre modale avec le logo, la
   version de Cargo.toml et « Anciennement Pelure » ; Échap, un clic à côté ou Fermer la ferment.
 
+## Effets de calque : vitesse (demandé par Anthony le 2026-10-18) ✅
+
+Anthony : « trois clés d'animation sur un calque vecto, un effet animé de flou ; par-dessus, un
+calque bitmap avec un effet bruit animé et une option de fusion […] ça rame à mort. After Effects
+n'aurait pas ce problème pour si peu. » Règle de la maison : jamais de calcul lourd sur le fil de
+l'interface pendant qu'on s'en sert.
+
+Scène mesurée : son projet copié (`TEST PELURE_effets`, dessins réels) : feuille 3840 × 2160, cadre
+1920 × 1080, 24 images/s. « Dessin » (vecto, 67 et 108 tuiles) : flou gaussien 8 → 50 → 130 → 70 →
+120 aux images 1, 7, 22, 31, 36, puis luminosité / contraste. « Calque 2 » (bitmap de 859 tuiles,
+opacité 0,6, fusion Densité linéaire +) : bruit 0 → 45 %, puis teinte / saturation. Machine : Core
+i7-10700K (8 cœurs, 16 fils), partagée avec d'autres programmes (± 15 % d'une série à l'autre).
+Mesures : `cargo test --release --offline --lib fxperf -- --ignored --nocapture --test-threads=1`
+(`fxperf_tests.rs`, le projet de l'utilisateur est lu en lecture seule ; absent, des dessins
+fabriqués de même ampleur le remplacent).
+
+**Où allait le temps** (160 ms par image sur le fil de l'interface, à chaque image de la lecture,
+du défilement, à chaque cran d'un curseur, pour chaque vignette) :
+- les effets par pixel (bruit, teinte / saturation, luminosité, niveaux, netteté, ombre, lueur,
+  nuages…) tournaient sur un seul cœur : la teinte / saturation seule, 130 ms ; le bruit 36 ms
+  (`fxfilters.rs`, `fxwarp.rs::shade`) ;
+- le flou transposait l'image en écrivant en travers du cache, deux fois (`fx.rs`, `transpose`),
+  et lisait la zone pixel par pixel (`region_of`) ;
+- le calcul se faisait sur le fil de l'interface (`gpu.rs`, `sync` → `fx::shown`), et tout le
+  dessin dérivé repartait ensuite à la carte graphique ;
+- le cache ne gardait que 48 dessins dérivés (`CACHE_MAX`) : 47 images × 2 calques le vidaient à
+  chaque tour de lecture (le deuxième tour coûtait autant que le premier) ;
+- une vignette de la bande cherchait le dessin dérivé (hachage, verrou, copie des effets) pour
+  chacun de ses 83 000 pixels lus (`render::thumbnail` → `composite_pixel`).
+Ce n'était pas : le mode de fusion (fait sur la carte graphique à l'écran ; 28 ms sur processeur à
+l'export) ni le bruit regénéré (le hasard est une fonction du pixel, sans état), ni le flou (déjà
+en trois boîtes, coût constant par pixel, quel que soit le rayon).
+
+**Ce qui a changé** (code d'avant : commit 14233e9) :
+1. Calculs sur tous les cœurs (`render::par_chunks`), flou à transposition par bandes de 16
+   colonnes, division par multiplication : **le même résultat à l'octet près** (empreinte de
+   chacun des 21 effets comparée avec l'ancien code : `fxexact_tests.rs`).
+2. Cache en octets (768 Mo) au lieu de 48 entrées, calcul unique même si plusieurs fils le
+   demandent (`fxcache.rs`).
+3. Calcul de fond : `fx::display` ne calcule rien ; il demande au fil de fond (deux cœurs laissés
+   à l'interface), montre le dernier résultat du même dessin (ou le dessin sans effet) et l'écran se
+   redessine à l'arrivée. En lecture, les 24 images qui viennent sont demandées d'avance (la plus
+   proche d'abord), puis envoyées d'avance à la carte graphique ; les vignettes passent après,
+   et attendent la fin d'un geste ou de la lecture.
+4. Aperçu réduit (`fxproxy.rs`) en lecture, au défilement et pendant un curseur d'effet : à
+   la taille de l'écran (moitié sous un zoom de 80 %, quart sous 35 %), une pleine résolution
+   revient 250 ms après le dernier mouvement.
+5. Vignettes : les dessins sont cherchés une fois par vignette, pas une fois par pixel.
+6. Ouvrir un autre projet oublie les dessins dérivés de l'ancien (mêmes numéros, mêmes versions :
+   un flou à réglages par défaut aurait pu réafficher l'ancien dessin — défaut d'avant).
+
+**Avant / après** (médianes ; fil de l'interface = ce que l'écran attend) :
+
+| Mesure | Avant | Après |
+|---|---|---|
+| Une image à froid, composée comme à l'export (caméra 1920 × 1080) | 225 ms | 92 ms |
+| Même image, effets déjà calculés | 28 ms | 29–35 ms (la composition seule) |
+| Lecture : fil de l'interface, par image d'écran | 161 ms (au mieux 6 images/s, interface figée) ; 2ᵉ tour 159 ms (cache vidé) | 0,08 ms (4,8 ms au pire : copie du dessin d'origine, une fois) ; 24 images/s tenues, 223 images d'écran sur 227 avec leurs effets prêts dès le 1ᵉʳ tour, toutes au 2ᵉ |
+| Défilement (sauts dans le désordre) : fil de l'interface | 164 ms | 0,1 ms ; l'image se complète après ~40 ms (pleine) ou ~15 ms (aperçu) |
+| Curseur du flou (rayon change, image fixe) | 25 ms | 0,1 ms ; résultat après 12 ms (pleine) ou 6,5 ms (aperçu) |
+| Curseur du bruit | 153 ms | 0,0 ms ; résultat après 31 ms (pleine) ou 9 ms (aperçu) |
+| Vignette 192 × 108, effets calculés | 46 ms | 7,7 ms |
+
+Un effet à la fois sur le grand bitmap (3840 × 2160, 859 tuiles ; ms, avant → après) :
+flou gaussien 40 px 81 → 35 ; luminosité / contraste 34 → 12 ; niveaux 154 → 29 ; teinte /
+saturation 129 → 24 ; noir et blanc 34 → 13 ; négatif 33 → 12 ; postérisation 43 → 14 ; seuil
+24 → 9 ; netteté 107 → 36 ; bruit 35 → 10 ; mosaïque 26 → 10 ; ombre portée 134 → 54 ; lueur
+120 → 45 ; nuages 191 → 30 ; éclairage 88 → 15 ; dégradé 75 → 13 ; onde 88 → 79 ; ondulation
+91 → 85 ; tourbillon 77 → 71 ; pincement 76 → 70 ; flou de mouvement 165 → 178 (inchangé).
+
+**Ce que ça change à l'œil** (rien à l'export ni dans le dessin dérivé en pleine résolution) :
+- à l'ouverture ou au changement d'un réglage, le calque s'affiche un instant (de l'ordre de 30 à
+  100 ms) avec son dernier résultat, ou sans effet la toute première fois, puis l'effet arrive ;
+- en lecture, au défilement et pendant un curseur, l'image est un aperçu à la taille de l'écran :
+  écart mesuré avec la pleine résolution vue à moitié 0,2/255 en moyenne sur un dégradé net (flou,
+  luminosité, teinte, lueur) ; un trait très fin peut y paraître un peu plus doux. Le grain du
+  bruit est celui que la pleine résolution donne vue à moitié (moyenne du hasard de 2 × 2
+  pixels), pas un bruit à gros grains ;
+- quand le mouvement s'arrête, la pleine résolution remplace l'aperçu d'un coup (netteté qui
+  revient) ;
+- un calque déplacé ou tourné par la caméra (multiplan), la mosaïque, les déformations et le rendu
+  restent en pleine résolution, et attendent leur calcul de fond (dernier résultat montré).
+
+**Reste pour une passe sur la carte graphique** (pas fait : le calcul de fond et l'aperçu tiennent
+la scène d'Anthony en temps réel sur processeur ; la carte graphique le ferait sans copier le
+dessin d'origine ni envoyer le résultat) :
+- fragment unique pour les réglages de couleur et le bruit (luminosité, niveaux, teinte, noir et
+  blanc, négatif, postérisation, seuil, bruit : même hachage en WGSL), appliqué dans `fs_compose`
+  avant l'opacité — 1 à 2 jours, sans cache ni texture en plus ;
+- flou en boîte (trois passes en lignes puis en colonnes) par calcul à somme glissante, une
+  rangée ou colonne par groupe, textures de travail à la taille de la zone dessinée — 2 à 3 jours ;
+  netteté, lueur et ombre en découlent (1 jour) ;
+- flou de mouvement, déformations (lecture inverse bilinéaire), nuages, éclairage, dégradé en
+  fragment — 2 jours ; ce sont les plus lents aujourd'hui (flou de mouvement 178 ms, déformations
+  70–85 ms pour une feuille 4K) ;
+- tests : un banc d'essai sans écran (adaptateur wgpu) qui compare la carte graphique au calcul
+  sur processeur à ±2/255, et le repli sur processeur (`PELURE_COMPOSITION=processeur`, export)
+  inchangé — 2 jours.
+Total estimé : 8 à 10 jours. À ce prix, plus de copie du dessin d'origine ni de cache de pixels sur
+processeur pour l'écran (l'export garde le calcul exact d'aujourd'hui).
+
+Autres restes : le flou de mouvement (64 échantillons bilinéaires par pixel) et les déformations
+travaillent sur toute la feuille au lieu de la zone dessinée plus le déplacement maximal ; la copie
+du dessin d'origine pour le fil de fond (3 à 8 ms, une fois par version, à la fin d'un trait sur un
+calque à effets) se fait sur le fil de l'interface — il faudrait des tuiles partagées (`Arc`).
+Pas vu à l'écran (pas de lancement de l'application dans cette séance) : la composition par la
+carte graphique, le va-et-vient aperçu / pleine résolution et les vignettes en attente sont à
+essayer par Anthony.
+
 ## Raccourcis proposés, à valider
 
 Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans `keymap.toml`) :

@@ -70,12 +70,38 @@ pub fn upcoming_cels(doc: &Document, at: Position, shown: &Plan, cap: usize) -> 
         let layers = &doc.panels[p].layers;
         for layer in (0..layers.len()).filter(|&li| crate::folders::effect(layers, li).is_some()).map(|li| &layers[li]) {
             let Some(id) = layer.shown_at(f) else { continue };
+            // Un calque à effets montre son dessin dérivé (`upcoming_derived`), pas le dessin même.
+            if !crate::fx::steps_at(&layer.fx, f).is_empty() {
+                continue;
+            }
             if out.contains(&id) || shown.items.iter().any(|i| i.cel == id) {
                 continue;
             }
             out.push(id);
             if out.len() >= cap {
                 return out;
+            }
+        }
+    }
+    out
+}
+
+/// Les effets des images qui viennent (13i) : leurs dessins dérivés sont demandés au fil de fond,
+/// la plus proche d'abord (`fx::prefetch`), et ceux qui sont déjà calculés sont rendus pour être
+/// envoyés d'avance à la carte graphique, au plus `cap`. `level` : aperçu des effets (`fx::draft_level`).
+pub fn upcoming_derived(doc: &Document, at: Position, level: u8, cap: usize) -> Vec<crate::gpu::Ahead> {
+    let mut out: Vec<crate::gpu::Ahead> = Vec::new();
+    for (k, (p, f)) in upcoming_frames(doc, at).into_iter().enumerate() {
+        let plan = crate::render::panel_plan_at(doc, p, f, None);
+        crate::fx::prefetch(doc, &plan.items, k as u32 + 1, level);
+        for item in &plan.items {
+            if out.len() >= cap {
+                break;
+            }
+            if let Some((id, cel)) = crate::fx::ready(doc, item, level) {
+                if !out.iter().any(|a| a.id == id) {
+                    out.push(crate::gpu::Ahead { id, cel: Some(cel) });
+                }
             }
         }
     }
