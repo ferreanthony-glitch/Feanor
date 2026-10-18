@@ -73,6 +73,25 @@ fn a_live_session_is_not_an_orphan_and_a_crashed_one_is() {
 }
 
 #[test]
+fn the_recovery_copy_keeps_the_timeline_comments() {
+    let root = temp("secours-commentaires");
+    let mut doc = doc();
+    let plan = doc.panels[0].id;
+    let id = doc.add_comment(plan, 0, "Anthony", 1_760_000_000);
+    doc.comment_mut(id).unwrap().text = "À reprendre.".into();
+    let none = HashMap::new();
+    let mut rec = Recovery::start(&root).unwrap();
+    copy_now(&mut rec, &doc, 1, &none, None);
+    drop(rec);
+    let found = recovery::orphans(&root, None);
+    assert_eq!(found.len(), 1);
+    assert!(found[0].manifest.parent().unwrap().join(crate::commentaires::FILE).exists(), "commentaires.json suit la copie");
+    let back = project::load(&found[0].manifest).unwrap().doc;
+    assert_eq!(back.comments, doc.comments);
+    std::fs::remove_dir_all(&root).ok();
+}
+
+#[test]
 fn sessions_without_a_copy_are_cleaned_and_closing_removes_the_folder() {
     let root = temp("secours-vide");
     let rec = Recovery::start(&root).unwrap();

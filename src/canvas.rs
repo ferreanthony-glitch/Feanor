@@ -125,9 +125,13 @@ impl App {
             // Les calques sont superposés par la carte graphique, directement à leur place.
             let (all, tiles) = self.renderer.take_gpu_dirty();
             // (Le fond sous le trait se calcule en arrière-plan : `fx::differe`.)
-            let resolved = crate::fx::differe(|| gpu.sync(&self.doc, &plan, all, &tiles, &ahead, level));
+            let resolved = {
+                let _t = crate::perf::section("composition : envoi à la carte graphique");
+                crate::fx::differe(|| gpu.sync(&self.doc, &plan, all, &tiles, &ahead, level))
+            };
             painter.add(gpu.paint(&plan, &resolved, corners, ws, rect, [self.doc.width, self.doc.height]));
         } else {
+            let _t = crate::perf::section("composition : processeur");
             let texture = crate::fx::differe(|| self.renderer.update(ui.ctx(), &self.doc, plan));
             let mut mesh = egui::Mesh::with_texture(texture);
             // En perspective, egui plaque la texture par triangle (sans perspective) : on

@@ -739,7 +739,8 @@ action, le fichier par défaut. On peut aussi l'écrire à la main (« Aide > Mo
 raccourcis à la main », puis « Recharger »). Détails et choix pour le clavier AZERTY :
 `docs/reference/sbpro_presets/README.md`.
 
-Documentation technique : `docs/ARCHITECTURE.md` ; avancement : `docs/ROADMAP.md`.
+Documentation technique : `docs/ARCHITECTURE.md` ; avancement : `docs/ROADMAP.md` ; mesures et
+leviers de performance (superposition « Performance », banc `perf_tests.rs`) : `docs/PERFORMANCE.md`.
 
 ## Messages
 
@@ -1092,6 +1093,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `topview.rs` | Vue de dessus (profondeur des calques) |
 | `model3d.rs`, `view3d.rs`, `ref3dtool.rs` | Repère 3D : lecture glTF, arêtes utiles ; caméra en orbite, fil de fer, arêtes cachées ; outil et affichage |
 | `thumbs.rs` | Cache des vignettes de panneaux |
+| `perf.rs`, `perf_tests.rs` | Profileur intégré et superposition « Performance » (`vue.performance`) ; banc sans fenêtre (voir `docs/PERFORMANCE.md`) |
+| `parallele.rs`, `ouverture.rs` | Travail réparti sur les cœurs (`par_map`) ; ouverture d'un projet sur un autre fil |
 | `history.rs` | Annuler / rétablir |
 | `project.rs` | Projet en dossier (format 11), enregistrement préparé puis écrit |
 | `blend.rs` | Modes de fusion des calques (formules, composition d'un pixel) |

@@ -202,6 +202,7 @@ impl App {
                 ui.separator();
                 self.workspace_menu(ui);
                 self.action_item(ui, "Plein écran", "vue.plein_ecran");
+                self.action_item(ui, "Performance (temps de l'interface)", "vue.performance");
             });
             ui.menu_button("Aide", |ui| {
                 self.action_item(ui, "Palette de commandes…", "aide.palette");

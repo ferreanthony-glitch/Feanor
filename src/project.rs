@@ -88,6 +88,9 @@ pub const FORMAT: &str = "pelure-projet";
 /// son tremblement (elle ne connaît pas la sorte d'effet) : le film changerait sans prévenir.
 pub const VERSION: u32 = 26;
 const DRAWINGS: &str = "dessins";
+/// Fils qui lisent ou écrivent les dessins d'un projet en parallèle : au-delà de huit, le disque et
+/// la mémoire (une feuille décodée pèse 33 Mo) limitent plus que le processeur.
+const LOAD_THREADS: usize = 8;
 const SOUNDS: &str = "sons";
 /// Images des calques vidéo (13k) : `videos/<id>/000001.jpg`…
 const VIDEOS: &str = "videos";
@@ -815,11 +818,17 @@ pub fn prepare_save(
     let mut drawings = Vec::new();
     // Les dessins qui ont une strate Fond peinte (format 23) : les autres `<id>_fond.png` partent.
     let fonds: BTreeSet<CelId> = used.iter().copied().filter(|id| doc.cels.get(id).and_then(|c| c.fond.as_ref()).is_some_and(|f| !f.is_empty())).collect();
+    // Les fichiers déjà là, d'une seule lecture du dossier : un `exists` par dessin coûtait 0,15 ms
+    // chacun sur le fil de l'interface (450 ms pour un enregistrement de 3 000 dessins où rien
+    // n'avait changé).
+    let present: std::collections::HashSet<std::ffi::OsString> =
+        fs::read_dir(dir.join(DRAWINGS)).map(|entries| entries.flatten().map(|e| e.file_name()).collect()).unwrap_or_default();
+    let there = |p: &Path| p.file_name().is_some_and(|n| present.contains(n));
     for &id in &used {
         let Some(cel) = doc.cels.get(&id) else { continue };
         let vector = cel.vector.is_some();
         let path = drawing_path(dir, id, vector);
-        if written.get(&id) == Some(&cel.version) && path.exists() && (!fonds.contains(&id) || fond_path(dir, id).exists()) {
+        if written.get(&id) == Some(&cel.version) && there(&path) && (!fonds.contains(&id) || there(&fond_path(dir, id))) {
             continue;
         }
         let same_elsewhere = reuse_dir.zip(reuse.as_ref()).filter(|(_, r)| r.written.get(&id) == Some(&cel.version)).map(|(d, _)| d);
@@ -920,13 +929,18 @@ impl SaveJob {
         let dir = self.manifest_path.parent().ok_or("chemin de projet invalide")?;
         fs::create_dir_all(dir.join(DRAWINGS)).map_err(|e| format!("{} : {e}", dir.display()))?;
         let mut count = 0;
-        for (path, data) in &self.drawings {
-            let bytes = match data {
-                DrawingData::Bytes(b) => b.clone(),
-                DrawingData::Raster(r) => encode_png(&r.to_rgba(), r.width, r.height)?,
-                DrawingData::CopyFrom(from) => fs::read(from).map_err(|e| format!("{} : {e}", from.display()))?,
+        // Les dessins s'encodent et s'écrivent en parallèle (11 ms de PNG chacun) ; la première
+        // erreur, dans l'ordre des dessins, est celle qui est rendue.
+        let written = crate::parallele::par_map(&self.drawings, LOAD_THREADS, |_, (path, data)| -> Result<(), String> {
+            let bytes: std::borrow::Cow<[u8]> = match data {
+                DrawingData::Bytes(b) => std::borrow::Cow::Borrowed(b),
+                DrawingData::Raster(r) => std::borrow::Cow::Owned(encode_png(&r.to_rgba(), r.width, r.height)?),
+                DrawingData::CopyFrom(from) => std::borrow::Cow::Owned(fs::read(from).map_err(|e| format!("{} : {e}", from.display()))?),
             };
-            write_atomic(path, &bytes)?;
+            write_atomic(path, &bytes)
+        });
+        for result in written {
+            result?;
             count += 1;
         }
         if !self.sounds.is_empty() {
@@ -1337,17 +1351,32 @@ fn unique_ids(manifest: &mut Manifest, floor: u64) -> usize {
 /// Ouvre le projet, dessins vectoriels rendus exactement (le moteur rejoué sur chaque trait : ce
 /// que l'application affiche une fois le rejeu terminé).
 pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
-    load_with(manifest_path, false)
+    load_with(manifest_path, false, None)
+}
+
+/// Comme `load_quick_progress`, sans suivre l'avancement (essais).
+#[cfg(test)]
+pub fn load_quick(manifest_path: &Path) -> Result<Loaded, String> {
+    load_with(manifest_path, true, None)
 }
 
 /// Ouvre le projet tout de suite : les dessins vectoriels texturés sont affichés en rendu rapide
 /// (traits lisses, sans rejeu du moteur) et listés dans `approx`, pour un rendu exact en
-/// arrière-plan. Règle d'Anthony : rien ne bloque l'interface.
-pub fn load_quick(manifest_path: &Path) -> Result<Loaded, String> {
-    load_with(manifest_path, true)
+/// arrière-plan. Règle d'Anthony : rien ne bloque l'interface. `progress` tient le compte des
+/// dessins lus / à lire : l'interface l'affiche pendant qu'un autre fil ouvre le projet
+/// (`ouverture.rs`).
+pub fn load_quick_progress(manifest_path: &Path, progress: &Progress) -> Result<Loaded, String> {
+    load_with(manifest_path, true, Some(progress))
 }
 
-fn load_with(manifest_path: &Path, quick: bool) -> Result<Loaded, String> {
+/// Avancement d'une ouverture, lu par l'interface pendant qu'un autre fil travaille.
+#[derive(Default)]
+pub struct Progress {
+    pub done: std::sync::atomic::AtomicUsize,
+    pub total: std::sync::atomic::AtomicUsize,
+}
+
+fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> Result<Loaded, String> {
     let text = fs::read_to_string(manifest_path).map_err(|e| e.to_string())?;
     let mut manifest: Manifest =
         serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("manifeste illisible : {e}"))?;
@@ -1379,8 +1408,21 @@ fn load_with(manifest_path: &Path, quick: bool) -> Result<Loaded, String> {
         .flat_map(|l| l.expositions.iter().filter_map(|r| r.dessin))
         .collect();
     let mut approx = Vec::new();
-    for id in referenced {
-        match load_drawing(dir, id, w, h, quick) {
+    // Les dessins se lisent en parallèle (décodage PNG ou rendu des traits : 25 ms chacun, un par
+    // cœur) ; les résultats reviennent dans l'ordre des identifiants, comme en une seule boucle.
+    let referenced: Vec<CelId> = referenced.into_iter().collect();
+    if let Some(p) = progress {
+        p.total.store(referenced.len(), std::sync::atomic::Ordering::Relaxed);
+    }
+    let loaded = crate::parallele::par_map(&referenced, LOAD_THREADS, |_, &id| {
+        let r = load_drawing(dir, id, w, h, quick);
+        if let Some(p) = progress {
+            p.done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        r
+    });
+    for (id, result) in referenced.into_iter().zip(loaded) {
+        match result {
             Ok((cel, approximate)) => {
                 if approximate {
                     approx.push(id);
@@ -1806,8 +1848,8 @@ fn load_sound(dir: &Path, entry: &SoundEntry) -> Result<Sound, String> {
 fn load_drawing(dir: &Path, id: CelId, w: usize, h: usize, quick: bool) -> Result<(Cel, bool), String> {
     let (mut cel, approximate) = load_line(dir, id, w, h, quick)?;
     let read = |path: PathBuf| -> Option<Raster> {
-        let img = image::open(&path).ok()?.to_rgba8();
-        (img.width() as usize == w && img.height() as usize == h).then(|| Raster::from_rgba(w, h, img.as_raw()))
+        // (Pas même un `exists` d'avance : presque aucun dessin n'a de strate Fond.)
+        read_rgba(&path, |pw, ph, data| (pw == w && ph == h).then(|| Raster::from_rgba(w, h, data))).ok().flatten()
     };
     let (paint, cut) = (read(fond_path(dir, id)), read(coupe_path(dir, id)));
     if paint.is_some() || cut.is_some() {
@@ -1844,13 +1886,46 @@ fn load_line(dir: &Path, id: CelId, w: usize, h: usize, quick: bool) -> Result<(
     }
     let png_path = drawing_path(dir, id, false);
     if png_path.exists() {
-        let img = image::open(&png_path)
-            .map_err(|e| format!("dessin {id} illisible : {e}"))?
-            .to_rgba8();
-        if img.width() as usize != w || img.height() as usize != h {
-            return Err(format!("dessin {id} : taille différente de celle du projet, ignoré"));
-        }
-        return Ok((Cel::bitmap(Raster::from_rgba(w, h, img.as_raw())), false));
+        let raster = read_rgba(&png_path, |pw, ph, data| (pw == w && ph == h).then(|| Raster::from_rgba(w, h, data)))
+            .map_err(|e| format!("dessin {id} illisible : {e}"))?;
+        return match raster {
+            Some(r) => Ok((Cel::bitmap(r), false)),
+            None => Err(format!("dessin {id} : taille différente de celle du projet, ignoré")),
+        };
     }
     Err(format!("dessin {id} introuvable dans « {DRAWINGS} »"))
+}
+
+thread_local! {
+    /// Tampon de décodage, gardé par fil : une feuille décodée pèse 33 Mo, et en allouer (et
+    /// remplir de zéros) une à chaque dessin coûtait autant que le décodage lui-même quand
+    /// plusieurs fils lisent à la fois.
+    static DECODE_BUF: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Lit une image PNG et la donne à `use_it` en octets RGBA (largeur, hauteur, octets). Un PNG RGBA 8
+/// bits, comme ceux de SHOT, est décodé dans le tampon du fil ; tout autre PNG passe par
+/// `image::open` comme avant.
+fn read_rgba<R>(path: &Path, use_it: impl FnOnce(usize, usize, &[u8]) -> R) -> Result<R, String> {
+    use image::ImageDecoder;
+    let bytes = fs::read(path).map_err(|e| e.to_string())?;
+    if let Ok(decoder) = image::codecs::png::PngDecoder::new(std::io::Cursor::new(&bytes)) {
+        if decoder.color_type() == image::ColorType::Rgba8 {
+            let (w, h) = decoder.dimensions();
+            let len = decoder.total_bytes() as usize;
+            return DECODE_BUF.with(|buf| {
+                let mut buf = buf.borrow_mut();
+                buf.resize(len, 0);
+                decoder.read_image(&mut buf[..len]).map_err(|e| e.to_string())?;
+                let result = use_it(w as usize, h as usize, &buf[..len]);
+                // Une feuille démesurée (image importée) ne reste pas en mémoire.
+                if buf.capacity() > 64 << 20 {
+                    *buf = Vec::new();
+                }
+                Ok(result)
+            });
+        }
+    }
+    let img = image::load_from_memory(&bytes).map_err(|e| e.to_string())?.into_rgba8();
+    Ok(use_it(img.width() as usize, img.height() as usize, img.as_raw()))
 }

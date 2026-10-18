@@ -1247,9 +1247,12 @@ impl Document {
 
     /// Scènes dans l'ordre du film.
     pub fn scene_order(&self) -> Vec<u64> {
+        // (Dans l'ordre de première apparition. `contains` dans la boucle coûtait le carré du
+        // nombre de plans : 11 ms par image d'écran à 600 plans, pour chaque titre de plan.)
+        let mut seen = std::collections::HashSet::new();
         let mut order: Vec<u64> = Vec::new();
         for p in &self.panels {
-            if order.last() != Some(&p.scene) && !order.contains(&p.scene) {
+            if seen.insert(p.scene) {
                 order.push(p.scene);
             }
         }
@@ -1258,14 +1261,21 @@ impl Document {
 
     /// Séquences dans l'ordre du film.
     pub fn sequence_order(&self) -> Vec<u64> {
+        let mut seen = std::collections::HashSet::new();
         let mut order: Vec<u64> = Vec::new();
-        for i in 0..self.panels.len() {
-            let s = self.sequence_of(i);
-            if !order.contains(&s) {
+        for s in self.sequence_ids() {
+            if seen.insert(s) {
                 order.push(s);
             }
         }
         order
+    }
+
+    /// La séquence de chaque panneau, dans l'ordre du film (une passe : `sequence_of` cherche la
+    /// scène dans la liste à chaque appel).
+    pub fn sequence_ids(&self) -> Vec<u64> {
+        let of_scene: std::collections::HashMap<u64, u64> = self.scenes.iter().map(|s| (s.id, s.sequence)).collect();
+        self.panels.iter().map(|p| of_scene.get(&p.scene).copied().unwrap_or(0)).collect()
     }
 
     /// Numéro automatique de la scène (1, 2, 3… dans l'ordre du film, toutes séquences confondues).

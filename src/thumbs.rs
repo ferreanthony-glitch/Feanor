@@ -120,7 +120,13 @@ impl Thumbs {
     }
 
     pub fn prune(&mut self, doc: &Document) {
-        self.entries.retain(|(id, _), _| doc.panels.iter().any(|s| s.id == *id || s.marks.iter().any(|m| m.id == *id)));
+        if self.entries.is_empty() {
+            return;
+        }
+        // (Les identifiants des plans et de leurs marques d'abord : chercher chaque vignette parmi
+        // tous les plans, à chaque image d'écran, coûtait le carré du nombre de plans.)
+        let ids: std::collections::HashSet<u64> = doc.panels.iter().flat_map(|p| std::iter::once(p.id).chain(p.marks.iter().map(|m| m.id))).collect();
+        self.entries.retain(|(id, _), _| ids.contains(id));
     }
 
     pub fn clear(&mut self) {

@@ -29,7 +29,24 @@ pub fn local() -> Option<PathBuf> {
 }
 
 fn dossier(variable: &str) -> Option<PathBuf> {
+    #[cfg(test)]
+    if let Some(bac) = BAC.with(|b| b.borrow().clone()) {
+        return Some(sous(&bac));
+    }
     Some(sous(Path::new(&std::env::var_os(variable)?)))
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Essais : dossier qui tient lieu de `%APPDATA%` et de `%LOCALAPPDATA%` pour ce fil.
+    static BAC: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Essais : les réglages, raccourcis et copies de ce fil s'écrivent dans `dossier` au lieu des
+/// vrais dossiers de l'utilisateur (un essai qui fait tourner l'application ne touche pas aux siens).
+#[cfg(test)]
+pub fn bac_a_sable(dossier: &Path) {
+    BAC.with(|b| *b.borrow_mut() = Some(dossier.to_path_buf()));
 }
 
 /// Le dossier SHOT dans `base` ; la première fois (par séance et par `base`), reprend l'ancien.

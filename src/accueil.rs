@@ -87,8 +87,9 @@ impl App {
                 let recents: Vec<std::path::PathBuf> = self.settings.recent_projects.iter().take(RECENTS).cloned().collect();
                 if !recents.is_empty() {
                     ui.label(RichText::new("Projets récents").strong());
+                    self.recent_presence.refresh(ctx, &recents);
                     for path in recents {
-                        let exists = path.exists();
+                        let exists = self.recent_presence.exists(&path);
                         let resp = ui.add_enabled(exists, egui::Button::new(crate::recents::label(&path)).frame(false));
                         let resp = resp.on_hover_text(path.display().to_string()).on_disabled_hover_text(format!("Introuvable : {}", path.display()));
                         if resp.clicked() {

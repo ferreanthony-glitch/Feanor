@@ -33,6 +33,15 @@ fn body_bottom(y: f32, h: f32) -> f32 {
     y + h - BAR_H - 3.0
 }
 
+/// Colonnes [début, fin] de la grille qu'il faut peindre : celles que montre la zone `clip_left` à
+/// `clip_right` (la grille commence en `origin`, `cell` de large par colonne), une de marge de
+/// chaque côté, sans dépasser les `cols` colonnes de la grille.
+pub(crate) fn visible_columns(clip_left: f32, clip_right: f32, origin: f32, cell: f32, cols: usize) -> (usize, usize) {
+    let first = (((clip_left - origin) / cell).floor().max(0.0) as usize).saturating_sub(1);
+    let last = (((clip_right - origin) / cell).ceil().max(0.0) as usize + 1).min(cols);
+    (first.min(last), last)
+}
+
 /// Couleur de l'image courante (celle du thème).
 pub(crate) fn cur_frame() -> Color32 {
     theme::image_courante()
@@ -341,6 +350,10 @@ impl App {
         }
         let visuals = ui.visuals().clone();
         let grid_top = r.top() + HEADER_H;
+        // Colonnes visibles [c0, c1] : le reste du plan n'est ni parcouru ni peint (à 2 000 images et
+        // 15 calques, la grille entière coûtait 16 ms par image d'écran).
+        let clip = painter.clip_rect();
+        let (c0, c1) = visible_columns(clip.left(), clip.right(), r.left(), cell, cols);
         // Poignée sous la souris ou tenue : sa barre ou sa prise s'éclaire.
         let lit = self
             .handle_drag
@@ -438,7 +451,7 @@ impl App {
 
         // Graduations : une seconde = trait plus marqué.
         let fps = self.doc.fps.max(1) as usize;
-        for c in 0..=cols {
+        for c in c0..=c1 {
             let x = r.left() + c as f32 * cell;
             let color = if c % fps == 0 {
                 theme::graduation_seconde()
@@ -545,7 +558,8 @@ impl App {
             let last = layer.frames.iter().rposition(Option::is_some);
             if let (Some(first), Some(last)) = (first, last) {
                 let base = theme::couleur_calque(layer.kind, layer.ctg.is_some());
-                let ranges = [(0, first), (last + 1, cols)];
+                // (Les parties visibles seulement.)
+                let ranges = [(c0, first.min(c1 + 1)), ((last + 1).max(c0), cols.min(c1 + 1))];
                 for (a, b) in ranges {
                     let mut f = a;
                     while f < b {
@@ -565,8 +579,9 @@ impl App {
                     }
                 }
             }
-            let mut f = 0;
-            while f < layer.frames.len() {
+            // Depuis l'exposition qui couvre la première colonne visible, jusqu'à la dernière.
+            let mut f = if c0 < layer.frames.len() { layer.run_bounds(c0).0 } else { layer.frames.len() };
+            while f < layer.frames.len().min(c1 + 1) {
                 let (start, end) = layer.run_bounds(f);
                 // Instance vide entre deux dessins (13d) : une croix, si on le veut.
                 let inside = content.is_some_and(|(a, b)| start > a && end <= b);
@@ -603,7 +618,9 @@ impl App {
                     }
                     // Miniature (13d) : dans une ligne complète, si le bloc est assez large.
                     let mut text_x = block.left() + cell - 1.0;
-                    if self.timeline_thumbs && row.h >= 40.0 && block.width() >= cell + 26.0 {
+                    // (Seulement les blocs que l'on voit : une miniature par bloc du plan entier, c'était
+                    // des centaines de dessins échantillonnés à chaque image d'écran.)
+                    if self.timeline_thumbs && row.h >= 40.0 && block.width() >= cell + 26.0 && block.intersects(painter.clip_rect()) {
                         let h = block.height() - 6.0;
                         let w = (h * 16.0 / 9.0).min(block.width() - cell - 4.0);
                         let at = Rect::from_min_size(pos2(block.left() + cell, block.top() + 3.0), vec2(w, h));

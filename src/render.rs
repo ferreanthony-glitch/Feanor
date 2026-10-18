@@ -347,39 +347,56 @@ pub fn camera_image(doc: &Document, plan: &Plan, cam: &Camera) -> Vec<Color32> {
 }
 
 pub fn composite_pixel(doc: &Document, plan: &Plan, x: usize, y: usize) -> Color32 {
-    composite_pixel_in(doc, plan, &shown_items(doc, plan), x, y)
+    pixel_of(&resolve(doc, plan), paper_color(plan), x, y)
 }
 
-/// Les dessins tels qu'ils s'affichent (effets compris) pour chaque élément du plan, cherchés une
-/// seule fois (une vignette lit des dizaines de milliers de pixels).
-fn shown_items<'a>(doc: &'a Document, plan: &Plan) -> Vec<Option<crate::fx::Shown<'a>>> {
-    plan.items.iter().map(|item| crate::fx::shown(doc, item)).collect()
+/// Un élément du plan dont le dessin affiché (effets compris) et la transformation inverse sont
+/// déjà trouvés : de quoi composer des milliers de pixels sans refaire ce travail pour chacun.
+/// Le dessin peut être plus petit que la feuille : pendant qu'une vignette attend son effet,
+/// `fx::shown` rend le dernier résultat gardé, qui peut être un aperçu réduit (`fxproxy.rs`) ; on
+/// le lit à l'échelle (`kx`, `ky` : dessin sur feuille ; le lire comme une feuille entière sortait
+/// du dessin et fermait SHOT au lancement, 2026-10-18).
+struct Resolved<'a> {
+    item: &'a PlanItem,
+    cel: crate::fx::Shown<'a>,
+    inv: Option<Affine>,
+    kx: f32,
+    ky: f32,
+    /// Le dessin a la taille de la feuille.
+    same: bool,
 }
 
-/// `composite_pixel` avec les dessins déjà cherchés (`shown_items`). Un dessin peut être plus
-/// petit que la feuille : pendant qu'une vignette attend son effet, `fx::shown` rend le dernier
-/// résultat gardé, qui peut être un aperçu réduit (`fxproxy.rs`) ; on le lit à l'échelle (le
-/// lire comme une feuille entière sortait du dessin et fermait SHOT au lancement, 2026-10-18).
-fn composite_pixel_in(doc: &Document, plan: &Plan, shown: &[Option<crate::fx::Shown>], x: usize, y: usize) -> Color32 {
-    let mut c = paper_color(plan);
-    for (item, cel) in plan.items.iter().zip(shown) {
-        if let Some(cel) = cel {
-            let r = &cel.raster;
-            let (kx, ky) = (r.width as f32 / doc.width.max(1) as f32, r.height as f32 / doc.height.max(1) as f32);
-            let s = match inverse_of(doc, item) {
-                Some(inv) => {
-                    let p = inv.apply(egui::pos2(x as f32 + 0.5, y as f32 + 0.5));
-                    sample(r, p.x * kx, p.y * ky)
-                }
-                None if r.width == doc.width && r.height == doc.height => r.get(x, y),
-                None => {
-                    let (rx, ry) = (((x as f32 + 0.5) * kx) as usize, ((y as f32 + 0.5) * ky) as usize);
-                    if rx < r.width && ry < r.height { r.get(rx, ry) } else { Color32::TRANSPARENT }
-                }
-            };
-            if s.a() != 0 {
-                c = blend_over(c, s, item.opacity, item.tint, item.blend, (x, y));
+fn resolve<'a>(doc: &'a Document, plan: &'a Plan) -> Vec<Resolved<'a>> {
+    plan.items
+        .iter()
+        .filter_map(|item| {
+            let cel = crate::fx::shown(doc, item)?;
+            let (w, h) = (cel.raster.width, cel.raster.height);
+            let kx = w as f32 / doc.width.max(1) as f32;
+            let ky = h as f32 / doc.height.max(1) as f32;
+            Some(Resolved { item, cel, inv: inverse_of(doc, item), kx, ky, same: w == doc.width && h == doc.height })
+        })
+        .collect()
+}
+
+/// Le pixel (`x`, `y`) de la feuille : le papier `base`, puis chaque élément.
+fn pixel_of(layers: &[Resolved], base: Color32, x: usize, y: usize) -> Color32 {
+    let mut c = base;
+    for l in layers {
+        let r = &l.cel.raster;
+        let s = match &l.inv {
+            Some(inv) => {
+                let p = inv.apply(egui::pos2(x as f32 + 0.5, y as f32 + 0.5));
+                sample(r, p.x * l.kx, p.y * l.ky)
             }
+            None if l.same => r.get(x, y),
+            None => {
+                let (rx, ry) = (((x as f32 + 0.5) * l.kx) as usize, ((y as f32 + 0.5) * l.ky) as usize);
+                if rx < r.width && ry < r.height { r.get(rx, ry) } else { Color32::TRANSPARENT }
+            }
+        };
+        if s.a() != 0 {
+            c = blend_over(c, s, l.item.opacity, l.item.tint, l.item.blend, (x, y));
         }
     }
     c
@@ -454,15 +471,17 @@ pub fn thumbnail(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize
     let [fw, fh] = doc.frame;
     let (sx, sy) = (fw as f32 / tw as f32, fh as f32 / th as f32);
     let map = cam.frame_map(doc.frame);
-    let shown = shown_items(doc, plan);
     let mut pixels = Vec::with_capacity(tw * th);
+    // (Les dessins affichés se cherchent une fois, pas à chaque échantillon : 80 000 par vignette.)
+    let layers = resolve(doc, plan);
+    let base = paper_color(plan);
     for y in 0..th {
         for x in 0..tw {
             let mut acc = [0u32; 4];
             for (ox, oy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
                 let c = match map.at((x as f32 + ox) * sx, (y as f32 + oy) * sy) {
                     Some(p) if p.x >= 0.0 && p.y >= 0.0 && p.x < doc.width as f32 && p.y < doc.height as f32 => {
-                        composite_pixel_in(doc, plan, &shown, p.x as usize, p.y as usize)
+                        pixel_of(&layers, base, p.x as usize, p.y as usize)
                     }
                     _ => Color32::TRANSPARENT,
                 };
