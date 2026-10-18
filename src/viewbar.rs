@@ -9,6 +9,29 @@ use crate::frames;
 
 /// Hauteur de la barre.
 pub(crate) const VIEW_BAR_H: f32 = 26.0;
+
+/// Ce que font les touches avec l'outil `tool`, en une ligne sous le dessin (Anthony,
+/// 2026-10-18 : les gestes à touche, comme l'enveloppe ou le lasso de Ctrl, ne se devinent pas).
+pub(crate) fn tool_hint(tool: crate::app::Tool) -> &'static str {
+    use crate::app::Tool;
+    match tool {
+        Tool::Brush | Tool::Pencil | Tool::Eraser => "Alt + clic : pipette · Ctrl tenu : lasso · Espace : déplacer la vue · ^ $ : taille",
+        Tool::Fill => "Clic : remplir · Alt + clic : pipette",
+        Tool::Cutter => "Glisser en travers des bouts à enlever · clic : un bout",
+        Tool::Select => "Glisser : lasso (Maj : ajouter) · flèches : déplacer (Maj : 10 px) · Ctrl + coin du cadre : enveloppe",
+        Tool::SelectColor => "Clic : une couleur (Maj : ajouter) · Ctrl + coin du cadre : enveloppe",
+        Tool::Line => "Glisser : tracer · Maj : par 15°",
+        Tool::Rect | Tool::Ellipse => "Glisser : tracer · Maj : carré ou cercle",
+        Tool::Polyline => "Un clic par point (Maj : par 15°) · double-clic ou Entrée : terminer",
+        Tool::Text => "Clic : poser un texte · Ctrl + Entrée : valider · Échap : annuler",
+        Tool::Transform => "Coin : agrandir (Maj : proportions) · côté : étirer · Ctrl + coin : enveloppe · Ctrl+R : annuler",
+        Tool::Perspective => "Tirer un coin · l'intérieur : déplacer · Entrée : terminer",
+        Tool::Picker => "Clic : prendre la couleur",
+        Tool::Pan => "Glisser : déplacer la vue",
+        Tool::Camera => "Glisser : déplacer (Maj : à l'horizontale ou à la verticale) · coin : zoomer · rond : tourner (Maj : 15°)",
+        Tool::Ref3d => "Glisser : tourner · Maj : déplacer · Ctrl : avancer ou reculer",
+    }
+}
 /// Hauteur de la barre des commandes de la vue, sous le dessin.
 pub(crate) const TOOLS_BAR_H: f32 = 30.0;
 /// Couleurs des zones de sécurité et du cadre de format.
@@ -157,6 +180,12 @@ impl App {
                 let resp = ui.add(egui::Slider::new(&mut self.light_table_strength, 0.05..=0.8).custom_formatter(|v, _| format!("{:.0} %", v * 100.0)));
                 crate::bulles::bulle(resp, "Autres calques", "Combien ils restent visibles.", "");
             }
+            // Ce que font les touches avec l'outil courant (Anthony, 2026-10-18, axe d'ergonomie 4).
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.add_space(6.0);
+                let hint = tool_hint(self.tool);
+                ui.add(egui::Label::new(egui::RichText::new(hint).small().weak()).truncate()).on_hover_text(hint);
+            });
         });
     }
 

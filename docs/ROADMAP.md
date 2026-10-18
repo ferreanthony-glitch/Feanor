@@ -1239,6 +1239,8 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         (Ctrl+K, « proposition » : `palette.rs`, accents et casse ignorés, la commande elle-même
         puis un mot placé tôt dans le nom) ; 3, messages qui restent (historique au clic sur le
         message, texte entier au survol, notifications pour les avis importants : `messages.rs`) ;
+        4, ce que font les touches avec l'outil courant, au bout de la barre sous le dessin
+        (`viewbar::tool_hint`) ;
       - **enveloppe de Bézier** (Anthony : « maintenir Ctrl permet de saisir une poignée de Bézier
         des coins pour transformer la forme » ; son choix : « B, comme l'outil Perspective ») : dans
         l'outil Transformer, Ctrl + glisser un coin du cadre ouvre une enveloppe sur le dessin
