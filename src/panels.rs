@@ -185,6 +185,7 @@ impl App {
             ui.menu_button("Édition", |ui| {
                 self.action_item(ui, "Annuler", "edition.annuler");
                 self.action_item(ui, "Rétablir", "edition.retablir");
+                self.action_item(ui, "Historique…", "vue.historique");
                 ui.separator();
                 self.action_item(ui, "Copier la sélection", "edition.copier");
                 self.action_item(ui, "Couper la sélection", "edition.couper");

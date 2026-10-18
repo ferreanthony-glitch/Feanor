@@ -161,6 +161,10 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   panneau du haut, premier du bas) dont la part n'est plus celle qu'on a posée a été tirée à la
   main : elle rejoint `panneaux_tires_a_la_main`. `remember_layout` attend que le bord soit
   arrêté (`fit_busy`) ; `set_dock_layout` oublie les parts posées.
+- Historique nommé (`history.rs`, `historyui.rs`) : `History` garde un nom par étape à côté de
+  `undo` / `redo` ; le nom vient de `History::context`, que `run_action` (nom de la commande) et
+  `pane_ui` (outil sur le dessin, sinon nom du panneau) posent le temps de leur travail, puis
+  rendent. Les ~60 endroits qui appellent `push` n'en savent rien.
 - `workspace::Layout` garde ses anciens champs (panneaux affichés, tailles en pixels) : ils
   décrivent les dispositions de Pelure et sont convertis (`DockLayout::from_legacy`) quand
   `panneaux` manque (espaces enregistrés avant 5b).

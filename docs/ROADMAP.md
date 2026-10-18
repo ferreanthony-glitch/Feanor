@@ -1252,7 +1252,13 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         Le bord glisse en quelques images. Un bord tiré à la main est retenu dans `reglages.toml`
         (`panneaux_tires_a_la_main`) et n'est plus touché, jusqu'à Affichage > Panneaux >
         Réajuster les panneaux (`vue.reajuster_panneaux`, sans touche) ; case « Ajuster les
-        panneaux à leur contenu » (`panneaux_ajustes`). `ajuste.rs` ;
+        panneaux à leur contenu » (`panneaux_ajustes`). `ajuste.rs` ; 7, panneau Historique
+        (Édition > Historique…, `vue.historique`, sans touche ; fermé par défaut, en onglet avec
+        les calques) : chaque étape d'annulation a un nom, celui de la commande lancée, sinon de
+        l'outil (dessin) ou du panneau où elle a été faite (`History::context`, posé par
+        `run_action` et `pane_ui` : aucun des endroits qui enregistrent n'a changé), sinon la
+        sorte de modification ; clic sur une étape : annuler ou rétablir jusque-là ; les étapes
+        annulées restent en gris dessous. `historyui.rs` ;
       - **enveloppe de Bézier** (Anthony : « maintenir Ctrl permet de saisir une poignée de Bézier
         des coins pour transformer la forme » ; son choix : « B, comme l'outil Perspective ») : dans
         l'outil Transformer, Ctrl + glisser un coin du cadre ouvre une enveloppe sur le dessin

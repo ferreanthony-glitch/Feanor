@@ -74,6 +74,9 @@ pub mod ctg;
 #[cfg(test)]
 mod ctg_tests;
 mod ctgui;
+mod historyui;
+#[cfg(test)]
+mod historyui_tests;
 mod messages;
 #[cfg(test)]
 mod messages_tests;

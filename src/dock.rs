@@ -59,6 +59,10 @@ pub enum Pane {
     /// travail »), sous les calques depuis la disposition 8 (son choix).
     #[serde(rename = "effets")]
     Effects,
+    /// Les étapes d'annulation, par leur nom (axe d'ergonomie 7, `historyui.rs`). Fermé dans la
+    /// disposition par défaut ; il s'ouvre en onglet avec les calques.
+    #[serde(rename = "historique")]
+    History,
 }
 
 /// Où un panneau se range quand on le rouvre.
@@ -74,7 +78,7 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 11] = [
+    pub const ALL: [Pane; 12] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
@@ -86,7 +90,13 @@ impl Pane {
         Pane::Montage,
         Pane::XSheet,
         Pane::Effects,
+        Pane::History,
     ];
+
+    /// Les panneaux fermés dans la disposition par défaut, qui ne s'ouvrent qu'à la demande.
+    pub fn on_demand(self) -> bool {
+        matches!(self, Pane::XSheet | Pane::History)
+    }
 
     pub fn name(self) -> &'static str {
         match self {
@@ -103,6 +113,7 @@ impl Pane {
             Pane::Timeline => "Timeline",
             Pane::XSheet => "Feuille d'exposition",
             Pane::Effects => "Effets",
+            Pane::History => "Historique",
         }
     }
 
@@ -132,6 +143,7 @@ impl Pane {
             Pane::Timeline => ph::ROWS,
             Pane::XSheet => ph::TABLE,
             Pane::Effects => ph::MAGIC_WAND,
+            Pane::History => ph::CLOCK_COUNTER_CLOCKWISE,
         }
     }
 
@@ -139,7 +151,7 @@ impl Pane {
         match self {
             Pane::Canvas => Group::Center,
             Pane::Tools | Pane::Color | Pane::Brushes | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet => Group::Left,
-            Pane::Layers | Pane::XSheet | Pane::Effects => Group::Right,
+            Pane::Layers | Pane::XSheet | Pane::Effects | Pane::History => Group::Right,
             Pane::Montage | Pane::Timeline => Group::Bottom,
         }
     }
@@ -657,8 +669,8 @@ impl DockLayout {
                 self.close(p);
             }
         } else {
-            // La feuille d'exposition ne s'ouvre qu'à la demande (13g).
-            let panes: Vec<Pane> = panes.into_iter().filter(|p| *p != Pane::XSheet).collect();
+            // La feuille d'exposition (13g) et l'historique ne s'ouvrent qu'à la demande.
+            let panes: Vec<Pane> = panes.into_iter().filter(|p| !p.on_demand()).collect();
             self.insert_group(group, &panes);
         }
     }

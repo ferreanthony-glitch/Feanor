@@ -66,8 +66,8 @@ impl egui_dock::TabViewer for Panes<'_> {
     fn scroll_bars(&self, tab: &Pane) -> [bool; 2] {
         match tab {
             // Calques : l'en-tête (mode, opacité, commandes) reste en haut, seule la liste défile
-            // (`layers_panel`).
-            Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::XSheet | Pane::Layers => [false, false],
+            // (`layers_panel`). L'historique défile seul, pour rester sur la dernière étape.
+            Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::XSheet | Pane::Layers | Pane::History => [false, false],
             _ => [false, true],
         }
     }
@@ -92,6 +92,18 @@ impl App {
 
     /// Le contenu d'un panneau (dans un onglet ou dans sa propre fenêtre).
     pub(crate) fn pane_ui(&mut self, ui: &mut egui::Ui, pane: Pane) {
+        // Les étapes d'annulation enregistrées ici portent le nom de l'outil (dessin) ou du
+        // panneau (panneau Historique) ; une commande lancée d'ici donne le sien.
+        let name = match pane {
+            Pane::Canvas => self.tool.label().to_string(),
+            p => self.pane_title(p).to_string(),
+        };
+        let before = self.history.context.replace(name);
+        self.pane_content(ui, pane);
+        self.history.context = before;
+    }
+
+    fn pane_content(&mut self, ui: &mut egui::Ui, pane: Pane) {
         if !matches!(pane, Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::XSheet) {
             fit_to_pane(ui);
         }
@@ -130,6 +142,7 @@ impl App {
             },
             Pane::XSheet => self.xsheet_panel(ui),
             Pane::Effects => self.fx_panel(ui),
+            Pane::History => self.history_panel(ui),
         }
     }
 
@@ -191,7 +204,7 @@ impl App {
             let pane = d.panneau;
             let (closed, rect) = ctx.show_viewport_immediate(id, builder, |ctx, _class| {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    if matches!(pane, Pane::Montage | Pane::Timeline | Pane::XSheet) {
+                    if matches!(pane, Pane::Montage | Pane::Timeline | Pane::XSheet | Pane::History) {
                         self.pane_ui(ui, pane);
                     } else {
                         egui::ScrollArea::vertical().show(ui, |ui| self.pane_ui(ui, pane));

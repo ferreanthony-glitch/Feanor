@@ -121,15 +121,35 @@ pub struct History {
     /// Augmente à chaque changement de l'historique : un geste en cours (saisie dans un champ…)
     /// sait ainsi si une autre étape s'est glissée depuis la sienne.
     serial: u64,
+    /// Le nom de chaque étape, à côté de `undo` et `redo` (panneau Historique, `historyui.rs`).
+    undo_names: Vec<String>,
+    redo_names: Vec<String>,
+    /// Le nom des étapes enregistrées maintenant : la commande lancée, sinon le panneau ou l'outil
+    /// en cours (posé par l'application) ; à défaut, la sorte de modification.
+    pub context: Option<String>,
+}
+
+/// Le nom d'une étape sans contexte : ce qu'elle a changé.
+fn kind_name(edit: &Edit) -> &'static str {
+    match edit {
+        Edit::Tiles { .. } => "Dessin",
+        Edit::Vector { .. } => "Dessin vectoriel",
+        Edit::Structure { .. } => "Modification",
+        Edit::Group(edits) => edits.iter().map(kind_name).find(|n| *n != "Modification").unwrap_or("Modification"),
+    }
 }
 
 impl History {
     pub fn push(&mut self, edit: Edit) {
+        let name = self.context.clone().unwrap_or_else(|| kind_name(&edit).to_string());
         self.undo.push(edit);
+        self.undo_names.push(name);
         self.redo.clear();
+        self.redo_names.clear();
         self.serial += 1;
         if self.undo.len() > LIMIT {
             self.undo.remove(0);
+            self.undo_names.remove(0);
         }
     }
 
@@ -138,6 +158,7 @@ impl History {
             return false;
         };
         self.redo.push(edit.apply(doc, nav));
+        self.redo_names.push(self.undo_names.pop().unwrap_or_default());
         self.serial += 1;
         true
     }
@@ -147,6 +168,7 @@ impl History {
             return false;
         };
         self.undo.push(edit.apply(doc, nav));
+        self.undo_names.push(self.redo_names.pop().unwrap_or_default());
         self.serial += 1;
         true
     }
@@ -154,7 +176,15 @@ impl History {
     pub fn clear(&mut self) {
         self.undo.clear();
         self.redo.clear();
+        self.undo_names.clear();
+        self.redo_names.clear();
         self.serial += 1;
+    }
+
+    /// Les étapes à annuler (la plus ancienne d'abord, la dernière faite à la fin) et celles à
+    /// rétablir (la prochaine d'abord).
+    pub fn names(&self) -> (Vec<&str>, Vec<&str>) {
+        (self.undo_names.iter().map(String::as_str).collect(), self.redo_names.iter().rev().map(String::as_str).collect())
     }
 
     pub fn serial(&self) -> u64 {

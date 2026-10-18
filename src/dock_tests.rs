@@ -13,10 +13,25 @@ fn count(layout: &DockLayout, pane: Pane) -> usize {
     layout.panes().iter().filter(|p| **p == pane).count()
 }
 
-/// Panneaux d'une disposition par défaut : tous, sauf les icônes des outils (barre verticale) et
-/// la feuille d'exposition (ouverte à la demande, 13g).
+/// Panneaux d'une disposition par défaut : tous, sauf les icônes des outils (barre verticale), la
+/// feuille d'exposition (13g) et l'historique (ouverts à la demande).
 fn default_panes() -> impl Iterator<Item = Pane> {
-    Pane::ALL.into_iter().filter(|p| !matches!(p, Pane::Tools | Pane::XSheet))
+    Pane::ALL.into_iter().filter(|p| !matches!(p, Pane::Tools | Pane::XSheet | Pane::History))
+}
+
+#[test]
+fn the_history_opens_as_a_tab_with_the_layers() {
+    let mut l = DockLayout::from_legacy(&Layout::default());
+    assert_eq!(count(&l, Pane::History), 0, "fermé par défaut");
+    l.open(Pane::History);
+    assert_eq!(count(&l, Pane::History), 1);
+    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Layers, History]"), "{:?}", l.principal);
+    // Rouvrir le groupe des calques ne l'ouvre pas.
+    l.close(Pane::History);
+    l.close(Pane::Layers);
+    l.close(Pane::Effects);
+    l.toggle_group(Group::Right);
+    assert_eq!((count(&l, Pane::Layers), count(&l, Pane::History)), (1, 0));
 }
 
 #[test]

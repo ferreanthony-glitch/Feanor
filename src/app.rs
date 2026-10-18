@@ -2584,8 +2584,19 @@ impl App {
         }
     }
 
-    /// Exécute une action désignée par son identifiant stable (voir `keymap::ACTIONS`).
+    /// Exécute une action désignée par son identifiant stable (voir `keymap::ACTIONS`). Les étapes
+    /// d'annulation qu'elle enregistre portent son nom (panneau Historique).
     pub(crate) fn run_action(&mut self, action: &str) {
+        let name = crate::keymap::ACTIONS.iter().find(|a| a.id == action).map(|a| crate::historyui::step_name(a.label));
+        let before = self.history.context.clone();
+        if name.is_some() {
+            self.history.context = name;
+        }
+        self.run_action_now(action);
+        self.history.context = before;
+    }
+
+    fn run_action_now(&mut self, action: &str) {
         // Un texte en cours de saisie est posé avant toute commande (annuler, changer d'image…).
         self.finish_text_edit();
         // Une image copiée ailleurs (navigateur…) passe avant le presse-papiers de Pelure, dont
@@ -2973,6 +2984,7 @@ impl App {
             "pelure.remettre" => self.reset_onion_offset(),
             // Feuille d'exposition (13g, `xsheetui.rs`).
             "vue.feuille_exposition" => self.toggle_pane(crate::dock::Pane::XSheet),
+            "vue.historique" => self.toggle_pane(crate::dock::Pane::History),
             // Rôles des images (13g-2, `rolesui.rs`).
             "role.cle" => self.set_role(Some(crate::roles::Role::Key)),
             "role.breakdown" => self.set_role(Some(crate::roles::Role::Breakdown)),

@@ -303,6 +303,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("pelure.decaler", "Décaler les images de la pelure (glisser sur le dessin)", true, false),
     act("pelure.remettre", "Remettre les images de la pelure en place", true, false),
     act("vue.feuille_exposition", "Panneau Feuille d'exposition (ouvrir / fermer)", true, false),
+    act("vue.historique", "Panneau Historique des annulations (ouvrir / fermer)", true, false),
     act("role.cle", "Rôle des images visées : clé", true, false),
     act("role.breakdown", "Rôle des images visées : breakdown", true, false),
     act("role.intervalle", "Rôle des images visées : intervalle à faire", true, false),

@@ -606,6 +606,13 @@ effets sous les calques font de même. Tire un bord à la main : il reste où tu
 après relance. Affichage > Panneaux > Réajuster les panneaux oublie ces bords ; la case « Ajuster
 les panneaux à leur contenu » coupe le tout.
 
+## Historique
+
+Édition > Historique… ouvre la liste des étapes d'annulation, à côté des calques : chacune porte
+le nom de ce qui l'a faite (« Pinceau », « Retourner le calque de gauche à droite », « Calques »…).
+Clique une étape pour revenir juste après elle ; les étapes annulées restent en gris dessous
+(clic : les rétablir), jusqu'à la prochaine modification.
+
 ## Palette de commandes
 
 Ctrl+K (ou Aide > Palette de commandes) : tape quelques lettres du nom d'une commande (« persp »,
