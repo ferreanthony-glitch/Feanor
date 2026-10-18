@@ -760,6 +760,8 @@ impl App {
         // Exporter… et Préférences… (`prefsui.rs`).
         self.export_hub_window(ctx);
         self.preferences_window(ctx);
+        // Écran d'accueil, sans projet ouvert (`accueil.rs`).
+        self.welcome_ui(ctx);
         self.new_layer_window(ctx);
         self.groups_window_ui(ctx);
         self.properties_window_ui(ctx);

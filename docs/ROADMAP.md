@@ -1280,6 +1280,10 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         trait, sans touche) ; couleur des fonds neufs par projet (`Properties::fond`, manifeste
         `proprietes.fond`, Réglages du projet). Reste : le pot de peinture dans le fond, l'export
         vers Storyboard Pro du fond (à vérifier) ;
+      - **écran d'accueil** (sa suggestion 1 retenue) : sans projet ouvert (lancement, « Fermer le
+        projet »), une carte au milieu : nouveau projet, ouvrir (Pelure, Storyboard Pro), projets
+        récents (huit), rouvrir le dernier au lancement, « Commencer sans projet ». Elle part dès
+        qu'un projet s'ouvre ou se crée, ou au premier trait (`accueil.rs`, `App::welcome`) ;
       - **menus courts** (Anthony : « certains menus contiennent trop de choses et noient les
         informations principales » ; « suis tes recommandations ») : barre de menus de 135 lignes
         de premier niveau à environ 75 (Fichier 25 → 12, Édition 13 → 10, Storyboard 22 → 9,

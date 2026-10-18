@@ -2,6 +2,7 @@
 //! (`noyau`) que d'autres interfaces peuvent utiliser — l'appli compagnon Tauri (`src-tauri/`).
 //! L'exécutable `pelure` (`main.rs`) ne fait qu'appeler `lancer`.
 
+mod accueil;
 mod ajuste;
 #[cfg(test)]
 mod ajuste_tests;

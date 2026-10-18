@@ -674,6 +674,13 @@ Fichier > Projets récents : les dix derniers projets ouverts ou enregistrés. A
 rouvre le dernier (sauf si tu en ouvres un autre, ou si une séance interrompue attend d'être
 récupérée) ; une case du même menu le désactive.
 
+Sans projet ouvert (au lancement, ou après « Fermer le projet »), un écran d'accueil propose :
+- un nouveau projet ;
+- d'ouvrir un projet Pelure ou Storyboard Pro ;
+- les projets récents.
+
+Il s'en va dès qu'un projet s'ouvre ou se crée, au premier trait, ou par « Commencer sans projet ».
+
 ## Plantage
 
 Si Pelure se ferme sur une erreur, un rapport est écrit dans `%LOCALAPPDATA%\Pelure\plantages\`, et la

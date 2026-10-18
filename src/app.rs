@@ -582,6 +582,8 @@ pub struct App {
     /// Fenêtres Exporter… et Préférences… ouvertes (`prefsui.rs`).
     pub(crate) export_hub: bool,
     pub(crate) prefs_window: bool,
+    /// Écran d'accueil à montrer tant qu'aucun projet n'est ouvert (`accueil.rs`).
+    pub(crate) welcome: bool,
     /// Fond sous le trait (`fond.rs`) : le pinceau peint dans la strate Fond (sinon dans le
     /// trait), et le dessin dont on peint le fond en ce moment (affiché en direct).
     pub(crate) paint_fond: bool,
@@ -875,6 +877,7 @@ impl App {
             palette: None,
             export_hub: false,
             prefs_window: false,
+            welcome: true,
             paint_fond: false,
             fond_stroke: None,
             fond_cut: None,
@@ -2218,6 +2221,7 @@ impl App {
     pub(crate) fn perform(&mut self, action: Pending) {
         match action {
             Pending::New => {
+                self.welcome = false;
                 self.new_dialog = Some(NewDocDialog {
                     width: self.doc.frame[0],
                     height: self.doc.frame[1],
@@ -2225,8 +2229,14 @@ impl App {
                 })
             }
             Pending::Open => self.open_dialog(),
-            Pending::FromChosen => self.new_project_from_chosen(),
-            Pending::SbImport => self.start_sb_import(),
+            Pending::FromChosen => {
+                self.welcome = false;
+                self.new_project_from_chosen();
+            }
+            Pending::SbImport => {
+                self.welcome = false;
+                self.start_sb_import();
+            }
             Pending::OpenRecent => {
                 if let Some(path) = self.recent_to_open.take() {
                     self.open_path(path);
@@ -2236,6 +2246,8 @@ impl App {
                 let (w, h, fps) = (self.doc.frame[0], self.doc.frame[1], self.doc.fps);
                 self.load_doc(Document::with_frame(w, h, fps).created_now());
                 self.path = None;
+                // L'accueil revient (`accueil.rs`).
+                self.welcome = true;
                 self.status = "Projet fermé : un projet vide du même format le remplace.".into();
             }
             Pending::Quit => {
