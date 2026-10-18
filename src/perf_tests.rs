@@ -371,6 +371,64 @@ fn an_idle_application_does_not_repaint() {
     assert!(pire >= Duration::from_secs(1), "au repos, SHOT demande à être repeint dans {pire:?}");
 }
 
+/// L'ordre des scènes et des séquences, trouvé en une passe (`HashSet`), est celui de l'ancienne
+/// boucle (`contains` dans la boucle : le carré du nombre de plans).
+#[test]
+fn the_scene_and_sequence_order_match_the_naive_versions() {
+    let mut doc = projet_long(45, 1, 6, 1);
+    // Des séquences qui se recoupent et une scène sans séquence, pour les cas tordus.
+    let seqs: Vec<u64> = doc.sequences.iter().map(|s| s.id).collect();
+    for (k, s) in doc.scenes.iter_mut().enumerate() {
+        if k % 7 == 3 {
+            s.sequence = seqs[(k * 5) % seqs.len()];
+        }
+        if k == 11 {
+            s.sequence = 987_654;
+        }
+    }
+    let naive_scenes = {
+        let mut order: Vec<u64> = Vec::new();
+        for p in &doc.panels {
+            if order.last() != Some(&p.scene) && !order.contains(&p.scene) {
+                order.push(p.scene);
+            }
+        }
+        order
+    };
+    let naive_sequences = {
+        let mut order: Vec<u64> = Vec::new();
+        for i in 0..doc.panels.len() {
+            let s = doc.sequence_of(i);
+            if !order.contains(&s) {
+                order.push(s);
+            }
+        }
+        order
+    };
+    assert_eq!(doc.scene_order(), naive_scenes);
+    assert_eq!(doc.sequence_order(), naive_sequences);
+    assert_eq!(doc.sequence_ids(), (0..doc.panels.len()).map(|i| doc.sequence_of(i)).collect::<Vec<_>>());
+    assert!(doc.sequence_order().len() > 3 && doc.scene_order().len() == doc.panels.len());
+}
+
+/// Les colonnes de la timeline qu'on peint : celles de la zone visible, avec une de marge.
+#[test]
+fn the_timeline_columns_to_paint_cover_the_visible_area() {
+    use crate::timeline::visible_columns;
+    // Grille qui commence à x = 100, 16 par colonne, 2 000 colonnes.
+    assert_eq!(visible_columns(100.0, 420.0, 100.0, 16.0, 2000), (0, 21));
+    // Défilée : la zone visible va de x = 1 700 à 2 100, soit les colonnes 100 à 125 ; une de marge.
+    let (a, b) = visible_columns(1700.0, 2100.0, 100.0, 16.0, 2000);
+    assert!(a <= 100 && a >= 98 && b >= 125 && b <= 127, "{a}..{b}");
+    // Tout au bout, la grille s'arrête à sa dernière colonne.
+    assert_eq!(visible_columns(100.0 + 1990.0 * 16.0, 100.0 + 2200.0 * 16.0, 100.0, 16.0, 2000).1, 2000);
+    // Zone entièrement après la grille : rien d'autre que la dernière colonne.
+    let (a, b) = visible_columns(100_000.0, 101_000.0, 100.0, 16.0, 2000);
+    assert!(a <= b && b == 2000);
+    // Zone à gauche de la grille (rien n'a défilé de ce côté) : depuis la colonne 0.
+    assert_eq!(visible_columns(-50.0, 40.0, 100.0, 16.0, 2000).0, 0);
+}
+
 /// La vignette (dessins cherchés une fois, puis chaque échantillon composé) donne les pixels de la
 /// composition entière échantillonnée aux mêmes points : opacité, teinte, mode de fusion,
 /// transformation du calque comprises.
