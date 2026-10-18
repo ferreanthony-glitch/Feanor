@@ -1241,9 +1241,52 @@ pub struct Loaded {
     pub converted: bool,
 }
 
+/// Un projet enregistré avec des identifiants en double (deux plans collés qui gardaient le même,
+/// une scène reprise deux fois…) se relit avec tous ses plans : chaque entrée du manifeste est un
+/// plan, une scène, une séquence à part entière. Le premier garde son numéro, les suivants en
+/// reçoivent un neuf (au-dessus de `floor` et de tout ce que le manifeste contient). Renvoie le
+/// nombre d'identifiants changés.
+fn unique_ids(manifest: &mut Manifest, floor: u64) -> usize {
+    let mut top = floor;
+    for q in &manifest.sequences {
+        top = top.max(q.id);
+        for s in &q.scenes {
+            top = top.max(s.id);
+            for p in &s.panneaux {
+                top = top.max(p.id).max(p.marques.iter().map(|m| m.id).max().unwrap_or(0));
+            }
+        }
+    }
+    top = top.max(manifest.pistes_son.iter().flat_map(|t| std::iter::once(t.id).chain(t.extraits.iter().map(|c| c.id))).max().unwrap_or(0));
+    top = top.max(manifest.sons.iter().map(|s| s.id).max().unwrap_or(0));
+    let mut changed = 0;
+    let mut take = |seen: &mut BTreeSet<u64>, id: &mut u64| {
+        if !seen.insert(*id) {
+            top += 1;
+            *id = top;
+            seen.insert(top);
+            changed += 1;
+        }
+    };
+    let (mut seqs, mut scenes, mut cards) = (BTreeSet::new(), BTreeSet::new(), BTreeSet::new());
+    for q in &mut manifest.sequences {
+        take(&mut seqs, &mut q.id);
+        for s in &mut q.scenes {
+            take(&mut scenes, &mut s.id);
+            for p in &mut s.panneaux {
+                take(&mut cards, &mut p.id);
+                for m in &mut p.marques {
+                    take(&mut cards, &mut m.id);
+                }
+            }
+        }
+    }
+    changed
+}
+
 pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
     let text = fs::read_to_string(manifest_path).map_err(|e| e.to_string())?;
-    let manifest: Manifest =
+    let mut manifest: Manifest =
         serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("manifeste illisible : {e}"))?;
     if manifest.format != FORMAT {
         return Err("ce fichier n'est pas un projet Pelure".into());
@@ -1329,6 +1372,10 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
         })
         .collect();
 
+    let renumbered = unique_ids(&mut manifest, cels.keys().chain(sounds.keys()).copied().max().unwrap_or(0));
+    if renumbered > 0 {
+        warnings.push(format!("{renumbered} identifiant(s) de plan, de scène ou de séquence en double ont été renumérotés : aucun plan n'est perdu."));
+    }
     let mut structure = Structure {
         sequences: Vec::new(),
         scenes: Vec::new(),
