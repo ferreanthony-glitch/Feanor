@@ -13,6 +13,32 @@ use crate::theme;
 
 /// Hauteur d'une ligne de la liste du panneau.
 const ROW_H: f32 = 40.0;
+/// Espace entre la liste et l'éditeur.
+const GAP: f32 = 10.0;
+/// Épaisseur du cadre de la liste (marge et trait, de chaque côté).
+const LIST_PAD: f32 = 6.0;
+/// Nombre de lignes que la liste garde au moins, même dans un panneau court.
+const MIN_ROWS: usize = 3;
+
+/// Hauteur de la liste de `rows` lignes (`pitch` : une ligne et son espacement) dans un panneau de
+/// `avail` de haut, dont l'éditeur prend `editor_h` : tout ce qui reste au-dessus de l'éditeur,
+/// jamais plus que la liste entière, jamais moins de trois lignes (ou de toutes si elle en a moins).
+/// Plus court que ça, le panneau défile : la liste et l'éditeur ne se superposent pas.
+pub(crate) fn list_height(avail: f32, editor_h: f32, rows: usize, pitch: f32) -> f32 {
+    let natural = rows as f32 * pitch;
+    let least = MIN_ROWS.min(rows) as f32 * pitch;
+    let room = avail - editor_h - GAP - LIST_PAD;
+    natural.min(room.max(least))
+}
+
+/// `text` sur une seule ligne, d'au plus `max_w` de large : coupé et fini par « … » s'il est plus long.
+pub(crate) fn one_line(painter: &Painter, text: &str, font: FontId, color: Color32, max_w: f32) -> std::sync::Arc<egui::Galley> {
+    let mut job = egui::text::LayoutJob::simple_singleline(text.to_string(), font, color);
+    job.wrap.max_width = max_w.max(0.0);
+    job.wrap.max_rows = 1;
+    job.wrap.break_anywhere = true;
+    painter.layout_job(job)
+}
 
 /// Les couleurs proposées : celles des marques de couleur, et un jaune de plus.
 pub(crate) fn palette() -> Vec<(&'static str, [u8; 3])> {
@@ -469,36 +495,48 @@ impl App {
             ui.label(RichText::new(format!("{shown} / {all}")).small().weak());
         });
         ui.separator();
-        egui::TopBottomPanel::bottom("editeur_commentaire")
-            .resizable(false)
-            .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(0, 4)))
-            .show_inside(ui, |ui| {
-                ui.separator();
-                self.comment_editor(ui);
-            });
-        self.comment_list(ui);
+        // La liste (son cadre et son défilement) puis l'éditeur dessous, l'un après l'autre : la
+        // liste prend la place qui reste au-dessus de l'éditeur, jamais moins de trois lignes ; si
+        // le panneau est plus court que les deux ensemble, c'est le panneau qui défile (rien ne se
+        // superpose, à aucune taille). Avant, l'éditeur était collé au bas du panneau et la liste
+        // gardait au moins 64 points : dans un panneau court, elle passait sous l'éditeur.
+        let avail = ui.available_height();
+        egui::ScrollArea::vertical().id_salt("panneau_commentaires").auto_shrink([false, false]).show(ui, |ui| {
+            self.comment_list(ui, avail);
+            ui.add_space(GAP * 0.5);
+            ui.separator();
+            let editor = ui.scope(|ui| self.comment_editor(ui)).response.rect.height();
+            if (editor - self.comment_ui.editor_h).abs() > 0.5 {
+                self.comment_ui.editor_h = editor;
+                ui.ctx().request_repaint();
+            }
+        });
         // Un clic dans le panneau lui donne la main : Suppr supprime le commentaire choisi.
         if self.comment_ui.sel.is_some() && ui.input(|i| i.pointer.any_pressed()) && ui.rect_contains_pointer(ui.max_rect()) {
             self.comment_ui.focus = true;
         }
     }
 
-    /// La liste, dans l'ordre du film ; seules les lignes visibles sont dessinées.
-    fn comment_list(&mut self, ui: &mut egui::Ui) {
+    /// La liste, dans l'ordre du film, dans un cadre qui a son propre défilement ; `avail` : la
+    /// hauteur du panneau sous son en-tête. Seules les lignes visibles sont dessinées.
+    fn comment_list(&mut self, ui: &mut egui::Ui, avail: f32) {
         let list = self.doc.comments_in_order(self.comment_ui.show_done);
         if list.is_empty() {
             ui.add_space(6.0);
             ui.label(RichText::new("Aucun commentaire. Double-clic dans la règle du montage ou de la timeline, ou « Nouveau commentaire ».").small().weak());
             return;
         }
-        let mut area = egui::ScrollArea::vertical().id_salt("liste_commentaires").auto_shrink([false, false]);
+        let pitch = ROW_H + ui.spacing().item_spacing.y;
+        let height = list_height(avail, self.comment_ui.editor_h, list.len(), pitch);
+        let mut area = egui::ScrollArea::vertical().id_salt("liste_commentaires").auto_shrink([false, false]).min_scrolled_height(height).max_height(height);
         if let Some(i) = self.comment_ui.scroll_to.take().and_then(|id| list.iter().position(|(_, x)| *x == id)) {
-            area = area.vertical_scroll_offset((i as f32 - 1.0).max(0.0) * (ROW_H + ui.spacing().item_spacing.y));
+            area = area.vertical_scroll_offset((i as f32 - 1.0).max(0.0) * pitch);
         }
         let mut clicked: Option<u64> = None;
         let mut toggled: Option<(u64, bool)> = None;
         let fps = self.doc.fps;
-        area.show_rows(ui, ROW_H, list.len(), |ui, range| {
+        let frame = egui::Frame::new().stroke(ui.visuals().widgets.noninteractive.bg_stroke).corner_radius(4).inner_margin(egui::Margin::same(2));
+        frame.show(ui, |ui| area.show_rows(ui, ROW_H, list.len(), |ui, range| {
             for i in range {
                 let (global, id) = list[i];
                 let Some(c) = self.doc.comment(id).cloned() else { continue };
@@ -514,18 +552,20 @@ impl App {
                 let dim = if c.done { 0.45 } else { 1.0 };
                 painter.circle_filled(pos2(rect.left() + 11.0, rect.top() + 13.0), 5.0, rgb(c.color).gamma_multiply(dim));
                 let check = Rect::from_center_size(pos2(rect.right() - 14.0, rect.top() + 13.0), vec2(20.0, 20.0));
-                let text_clip = Rect::from_min_max(rect.min, pos2(check.left() - 2.0, rect.max.y));
-                let clip = painter.with_clip_rect(text_clip);
+                // Chaque ligne de texte tient sur une seule ligne, coupée par « … » avant la case
+                // « résolu » : la hauteur d'une ligne de la liste ne dépend jamais du texte.
                 let strong = theme::texte().gamma_multiply(dim);
-                clip.text(pos2(rect.left() + 22.0, rect.top() + 5.0), Align2::LEFT_TOP, crate::storyboard::timecode(global, fps), FontId::monospace(11.0), strong);
+                let text_right = check.left() - 4.0;
+                let time = one_line(&painter, &crate::storyboard::timecode(global, fps), FontId::monospace(11.0), strong, text_right - (rect.left() + 22.0));
+                let who_x = rect.left() + 22.0 + time.size().x + 8.0;
                 let who = if c.author.is_empty() { plan.clone() } else { format!("{plan} · {}", c.author) };
-                clip.text(pos2(rect.left() + 86.0, rect.top() + 6.0), Align2::LEFT_TOP, who, FontId::proportional(10.5), theme::texte_doux());
+                let who = one_line(&painter, &who, FontId::proportional(10.5), theme::texte_doux(), text_right - who_x);
+                painter.galley(pos2(rect.left() + 22.0, rect.top() + 5.0), time, strong);
+                painter.galley(pos2(who_x, rect.top() + 6.0), who, theme::texte_doux());
                 let first = commentaires::first_line(&c.text, 90);
-                if first.is_empty() {
-                    clip.text(pos2(rect.left() + 22.0, rect.top() + 21.0), Align2::LEFT_TOP, "(pas encore de texte)", FontId::proportional(11.5), theme::texte_doux());
-                } else {
-                    clip.text(pos2(rect.left() + 22.0, rect.top() + 21.0), Align2::LEFT_TOP, first, FontId::proportional(11.5), strong);
-                }
+                let (first, color) = if first.is_empty() { ("(pas encore de texte)".to_string(), theme::texte_doux()) } else { (first, strong) };
+                let first = one_line(&painter, &first, FontId::proportional(11.5), color, text_right - (rect.left() + 22.0));
+                painter.galley(pos2(rect.left() + 22.0, rect.top() + 21.0), first, color);
                 // La case « résolu ».
                 let box_resp = ui.interact(check, resp.id.with("resolu"), Sense::click());
                 let frame = Rect::from_center_size(check.center(), vec2(14.0, 14.0));
@@ -541,7 +581,7 @@ impl App {
                 }
                 resp.context_menu(|ui| self.comment_menu(ui, id));
             }
-        });
+        }));
         if let Some(id) = clicked {
             self.select_comment(id, true);
             // La ligne cliquée est déjà sous les yeux : la liste ne saute pas.

@@ -365,11 +365,13 @@ pub(crate) struct CommentUi {
     pub focus_text: bool,
     /// Faire défiler la liste jusqu'à ce commentaire.
     pub scroll_to: Option<u64>,
+    /// Hauteur de l'éditeur à la dernière image : la liste prend la place qui reste au-dessus.
+    pub editor_h: f32,
 }
 
 impl Default for CommentUi {
     fn default() -> Self {
-        CommentUi { sel: None, focus: false, drag: None, show_done: true, focus_text: false, scroll_to: None }
+        CommentUi { sel: None, focus: false, drag: None, show_done: true, focus_text: false, scroll_to: None, editor_h: 0.0 }
     }
 }
 

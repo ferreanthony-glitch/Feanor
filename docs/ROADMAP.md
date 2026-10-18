@@ -2207,3 +2207,38 @@ par Anthony.
   rendu exact d'un trait sous le tremblement n'est pas un défaut de la plume mais de la relecture —
   pour un rendu net, éteindre le tremblement à l'export final ou demander un rejeu par variante (piste
   écartée plus haut).
+
+## Retouches du 2026-10-19 (aides au cadrage, choix au rectangle, tremblement, commentaires) ✅
+
+Quatre retours d'Anthony, branche `retouches` (pas vus à l'écran dans cette séance : à regarder).
+
+- ✅ **Aides au cadrage plus discrètes et au bon endroit** : « un peu trop épaisses, elles doivent
+  apparaître au-dessus de la zone de dessin, pas dans les réglages de caméra ». Défaut 1 px et 70 %
+  (avant 1,3 px et 85 %), le liseré sombre dessous plus fin. La section « Aides au cadrage » quitte les
+  réglages de la caméra : tout est dans le menu **Cadrage** (icône de règle et son nom) de la barre au-dessus
+  du dessin, à côté du menu de format, allumé dès qu'une aide, les zones de sécurité ou un format sont
+  tracés. Le menu : tiers, grille d'or, spirale + orientation, diagonales, croix, zones de sécurité (et
+  leur choix), format (sous-menu), couleur (six pastilles + sélecteur en sous-menu), opacité, épaisseur,
+  tout éteindre. Sous-menus et choix en ligne plutôt que listes déroulantes : un clic hors du menu le
+  ferme, et une liste déroulante s'ouvre hors de lui. Migration : `[aides_cadrage]` porte `version_aspect`
+  (absent = 0) ; à 0, une épaisseur de 1,3 ou une opacité de 0,85 (l'ancien défaut) passe au nouveau, une
+  valeur choisie reste (`FramingAids::sanitized`). Le format du projet ne change pas.
+- ✅ **Clés de caméra au rectangle** (`camkeys.rs`, `CamRect`) : un glisser qui part d'un espace vide de la
+  piste Caméra du montage ou de la rangée Caméra de la timeline trace un rectangle (dessiné) et choisit
+  les clés qu'il touche ; Maj ajoute au choix, Ctrl bascule celles qu'il touche, Échap rend le choix
+  d'avant, un clic dans le vide lâche le choix. Seule la largeur compte (la piste est basse). Il ne
+  gêne pas : un losange pris emmène toujours le choix, la règle et la fin du plan gardent leur geste, et
+  le geste ne fait plus déplacer la tête de lecture depuis la piste Caméra. Les clés d'effets n'ont pas
+  le rectangle : leurs losanges sont dans les pistes de calques, où le rectangle des clés de dessin existe
+  déjà, ce serait deux rectangles pour le même geste.
+- ✅ **Tremblement du trait plus facile à trouver** : l'entrée était cachée sur un calque bitmap et absente
+  du menu de la timeline. Maintenant : en tête de « Ajouter un effet » (déjà là, il est choisi dans la
+  pile), dans le clic droit d'un calque du panneau Calques, du montage **et** de l'en-tête de la timeline
+  (« Effets » + la case « Tremblement du trait » à découvert), dans les réglages du pinceau et du crayon sur
+  un calque vectoriel (icône en vague), Ctrl+K « tremblement » (ou « boil »). Sur un calque bitmap :
+  grisé avec la raison dans la bulle (`fxui::offer`).
+- ✅ **Panneau Commentaires sans superposition** : la liste gardait au moins 64 points et l'éditeur était
+  collé au bas du panneau ; dans un panneau court la liste passait sous l'éditeur. Maintenant la liste
+  (cadre, défilement propre, au moins trois lignes) puis l'éditeur dessous, dans un panneau qui défile s'il
+  est plus court que les deux (`list_height`) ; chaque ligne tient sur une ligne, coupée par « … »
+  (`one_line`), l'heure et le plan ne se chevauchent plus.

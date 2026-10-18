@@ -351,8 +351,12 @@ on les coche et décoche, le dessin reste tel quel).
   lueur).
 - **Tremblement du trait** (famille Déformation, **calques vectoriels seulement**, comme dans
   WigglyPaint) : le dessin « bout », montré en quelques variantes légèrement déplacées qui se
-  suivent à basse cadence, même sur une image fixe. Au clic droit sur un calque vectoriel, la case
-  « Tremblement du trait » (et « Animer à l'arrêt ») ; les réglages dans le panneau Effets :
+  suivent à basse cadence, même sur une image fixe. Où le trouver : en tête de « Ajouter un effet »
+  (panneau Effets), au clic droit sur un calque dans le panneau Calques, dans le montage et dans
+  l'en-tête de la timeline (la case « Tremblement du trait » et « Animer à l'arrêt »), dans les
+  réglages du pinceau et du crayon sur un calque vectoriel (l'icône en vague), et par Ctrl+K en
+  tapant « tremblement ». Sur un calque bitmap, l'entrée est grisée et dit pourquoi (il ne va que
+  sur un calque vectoriel). Les réglages sont dans le panneau Effets :
   **Intensité** (0 à 20 px, le déplacement maximal), **Fréquence** (0 à 100 % : de très doux le long
   du trait à nerveux), **Variantes** (2 à 6 dessins qui tournent), **Vitesse** (1 à 12 images du
   projet par variante : 2 images à 24 ips, 12 changements par seconde), **Épaisseur** (0 à 100 % :
@@ -384,7 +388,10 @@ on les coche et décoche, le dessin reste tel quel).
 - **Caméra : clés, effets, focales, aides au cadrage** (2026-10-19). Les losanges jaunes de la
   piste Caméra (montage, et timeline) se choisissent comme les clés d'effets : clic (Ctrl : ajoute
   ou retire ; Maj : toutes celles d'entre, d'un plan à l'autre), la tête de lecture va dessus ;
-  glisser en emmène toutes les choisies (Échap abandonne) ; Ctrl+C / Ctrl+V à l'image courante en
+  glisser en emmène toutes les choisies (Échap abandonne) ; **au rectangle** : un glisser qui part
+  d'un espace vide de la piste Caméra (montage ou timeline) trace un rectangle et choisit les clés
+  qu'il touche (Maj : les ajoute au choix ; Ctrl : bascule celles qu'il touche ; Échap rend le choix
+  d'avant ; un clic dans le vide lâche le choix) ; Ctrl+C / Ctrl+V à l'image courante en
   gardant l'écart entre les clés (dans le montage elles passent d'un plan à l'autre, en animation
   elles restent dans le plan courant, les clés qui tombent hors sont dites et laissées de côté) ;
   Suppr supprime (rien sans clé choisie) ; clic droit sur la piste Caméra. Une étape d'annulation
@@ -395,10 +402,13 @@ on les coche et décoche, le dessin reste tel quel).
   « Appliquer » (à l'image courante, ou sur les images choisies dans la timeline) est une seule
   étape d'annulation. À côté de la focale, la liste **Objectifs** (14, 24, 35, 50, 85, 135, 200 mm
   et l'anamorphique 40 mm, qui pose aussi le cadre 2,39:1) et l'angle de champ horizontal (capteur
-  de 36 mm). Les **aides au cadrage** (menu en forme de règle dans la barre de vue, et section des
-  réglages de la caméra) : tiers, grille d'or, spirale d'or (huit orientations), diagonales et
+  de 36 mm). Les **aides au cadrage** (menu « Cadrage », icône de règle, dans la barre au-dessus du
+  dessin, à côté du menu de format ; il s'allume dès qu'une aide est tracée ; plus dans les réglages
+  de la caméra) : tiers, grille d'or, spirale d'or (huit orientations), diagonales et
   réciproques, croix centrale, zones de sécurité, cadre de format (16:9, 9:16, 4:5, 1:1, 4:3,
-  1,85:1, 2,39:1) ; couleur, opacité, épaisseur ; repères d'écran, jamais exportés.
+  1,85:1, 2,39:1) ; couleur, opacité, épaisseur (par défaut 1 px et 70 % : discrets ; un ancien
+  `reglages.toml` resté à l'ancien défaut 1,3 px / 85 % passe au nouveau, un réglage choisi est
+  gardé) ; repères d'écran, jamais exportés.
 - Vitesse (2026-10-18, scène de 3840 × 2160 : un calque vecto avec un flou animé, par-dessus un
   bitmap avec un bruit animé et une fusion). L'écran ne calcule jamais un effet : un fil de fond
   s'en charge sur tous les cœurs sauf deux (`fxcache.rs`), et l'écran montre en attendant le
@@ -859,7 +869,9 @@ ou le réunit à un autre.
   Marquer résolu, Supprimer. Suppr supprime le commentaire choisi quand le dernier clic l'a visé.
 - Panneau Commentaires (barre des panneaux, ou Storyboard > Commentaires…) : la liste dans l'ordre du
   film (pastille, time code, plan, auteur, première ligne, case « résolu »), « Montrer les résolus »,
-  et l'éditeur du commentaire choisi : texte sur plusieurs lignes, auteur, couleur, résolu.
+  et l'éditeur du commentaire choisi : texte sur plusieurs lignes, auteur, couleur, résolu. La liste
+  est dans un cadre qui défile seul (chaque ligne tient sur une ligne, coupée par « … »), l'éditeur
+  dessous : ils ne se superposent à aucune taille (panneau trop court : le panneau défile).
 - Un commentaire résolu est estompé. L'auteur par défaut est l'utilisateur Windows, ou le nom donné
   dans Fichier > Préférences… > Commentaires.
 - Enregistrés dans `commentaires.json`, à côté du manifeste du projet (le format du projet ne
