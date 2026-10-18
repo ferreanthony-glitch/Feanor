@@ -703,6 +703,30 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   - `GrayImage::equalized` (rang, valeurs égales au rang moyen) remplace `normalized` pour les
     papiers importés (`add_paper`, `load`) : le seuil de `grain_factor` suppose un relief réparti
     uniformément, comme celui de `procedural_paper`.
+- Rendu des brosses, étapes 1 à 3 (2026-10-18, `docs/AUDIT-RENDU-BROSSES.md` §6 bis).
+  - Textures fabriquées (`brushtex.rs`) : `multiscale_paper` (somme de bruits adoucis sur 1, 2,
+    4, 8 texels, chacun ramené à l'écart-type 1, puis `equalized`), `canvas_paper`, `laid_paper`,
+    `tip_grains`, `tip_stick` (fusain / craie : bord déchiqueté par trois sinus, trous par un bruit
+    adouci), `tip_bristles_flat` (poils posés par `stamp_hair`), `tip_bristles_round` ; tirages
+    déterministes (`Rng` xorshift, `hash01`), donc la même clé de contenu partout. Numéros fixes
+    des textures de Pelure : papiers 1–5, pointes 10–14 (`builtin_tip_cells`), importés ≥ 100.
+  - `BrushSettings` : `paper_softness` (largeur de transition de `grain_factor`, défaut 0,12 =
+    l'ancien seuil, `GRAIN_SOFTNESS_OLD`), `paper_follow` (relief lu depuis la première empreinte
+    du trait, `StrokeState::origin`), `pencil_grain : PencilGrain` (force et douceur par niveau,
+    papier fin partagé `pencil_grain_paper`, appliqué dans `dab` en plus du papier) ; tous en
+    `#[serde(default)]`, un vieux réglage rend la même image.
+  - Débit accumulé : `dab` divise le nombre d'empreintes par `Tip::mean_coverage` (dépôt moyen de
+    la pointe sur son carré) pour qu'une pointe clairsemée atteigne le débit réglé.
+  - Réglages : `BrushSettings::graphite` (le départ de l'outil Crayon, `App::new`),
+    `colour_pencil`, `ink`, `felt`, `charcoal`, `chalk`, `gouache` ; `pencil` = « Crayon net ».
+    Le Pinceau rond reste le premier de `builtin()` et le départ de l'outil Pinceau.
+  - `brushui::grain_ui` : listes « Pointe » et « Papier », « Douceur du grain », « Grain du
+    crayon », « Le grain suit le trait ».
+  - Imports : `kritabrush` met `opaque` (MyPaint) et Flow (Krita) en débit accumulé ;
+    `tvpbrush::base_tool` met le `grain` du `tv_pencil` en `PencilGrain` (ordre deviné).
+  - `vector::pressure_for_radius` : l'appui d'un point vectoriel retrouvé pour toute connexion de
+    taille (dichotomie sur la réponse), utilisé par `paint_textured`.
+  - Tests : `matiere_tests.rs`.
 - Peinture humide (moteur de dessin, étape 11) : `BrushSettings::mix` (« melange ») et `charge`.
   - Avec du mélange, ou une charge incomplète, l'empreinte prend un autre chemin :
     1. la moyenne pondérée des pixels courants sous l'empreinte ;

@@ -237,6 +237,14 @@ qui doit tomber à 0 ; 0,0 pour la même image).
 
 ## 3. Recommandation et plan
 
+Réponse d'Anthony (2026-10-18) : **il ne modifie pas ses traits vectoriels après coup**. Cela
+simplifie tout : l'étape 1 ci-dessous (garder les pixels de l'aperçu au lâcher) donne déjà le
+trait pour trait sur son calque par défaut, sans rejeu ; le rejeu (étape 2) ne sert plus qu'aux
+rares éditions, à l'interpolation et à la mise à l'échelle, et peut attendre. Fait en passant avec
+les étapes 1 à 3 du rendu : `vector::pressure_for_radius` retrouve l'appui d'un point pour toute
+connexion de taille (dichotomie), si bien que les brosses à connexion (son « Trait » importé)
+rendent déjà pareil en bitmap et en vectoriel quand elles sont texturées (planche `30`).
+
 **Faire P1 + P2 (dans cet ordre : P2-aperçu d'abord, c'est gratuit), puis P5 et P6.** Le vectoriel
 de Pelure devient « un trait bitmap dont on garde la recette » : le moteur est le même, les pixels
 sont les mêmes, et le chemin reste modifiable. C'est aussi ce qui rend l'audit du rendu utile sur le

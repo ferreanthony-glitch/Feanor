@@ -1545,6 +1545,23 @@ Choix d'Anthony :
   crayon, mode Multiplier, puis peinture. Corrigé en passant : import TVPaint (`[ToolBox]` des
   exports, `step` des outils de base en % — à vérifier —, grain du crayon noté), papiers importés
   répartis par rang (`GrayImage::equalized`).
+- ✅ Rendu des brosses, étapes 1 à 3 (Fable, 2026-10-18, branche `rendu` ; Anthony : « Fusionne et
+  commence les étapes 1 à 3 » ; `docs/AUDIT-RENDU-BROSSES.md` §6 bis) :
+  - **pointes et papiers fabriqués par Pelure** au démarrage (Graphite, Fusain, Craie, Poils
+    plats, Poils ronds ; Papier à dessin, Toile, Vergé), rien de copié d'un autre logiciel ;
+  - **brosses traditionnelles** après le Pinceau rond (inchangé, toujours le départ de l'outil
+    Pinceau) : Crayon graphite (le départ de l'outil Crayon), Crayon de couleur, Encre, Feutre,
+    Fusain, Craie, Gouache ; l'ancien crayon reste « Crayon net » ; « Mes brosses » intact ;
+  - **douceur du grain** (0,12 pour les anciens réglages, 0,3 pour les nouvelles brosses), débit
+    qui s'accumule sous un plafond sur les outils secs (le débit tient compte du dépôt moyen de la
+    pointe), appui → débit ; imports MyPaint / Krita en dépôt accumulé ;
+  - **grain du crayon** (Soie, Doux, Moyen, Dur), collé à la feuille même sans papier ; le
+    `grain` du `tv_pencil` importé y passe (ordre deviné, à vérifier) ; option « le grain suit le
+    trait » ;
+  - en vectoriel, l'appui d'un point est retrouvé pour toute connexion de taille
+    (`vector::pressure_for_radius`).
+  - Choix par défaut à confirmer à la tablette : grain collé à la feuille, crayon plafonné à 90 %,
+    tailles pour 1920×1080 vu à 50 %. Planches avant / après : `audit-rendu/70_…` à `75_…`.
 - ✅ Étude « vectoriel comme bitmap » (Fable, 2026-10-18, `docs/VECTORIEL-COMME-BITMAP.md`) :
   l'existant en images (le trait vectoriel perd au lâcher opacité ↔ appui, connexions, humide,
   accumulation, et garde l'ancien bord), toutes les pistes (rejeu du moteur depuis le chemin avec
