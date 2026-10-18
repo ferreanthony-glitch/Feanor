@@ -100,7 +100,10 @@ impl App {
             p => self.pane_title(p).to_string(),
         };
         let before = self.history.context.replace(name);
-        self.pane_content(ui, pane);
+        {
+            let _t = crate::perf::section(self.pane_title(pane));
+            self.pane_content(ui, pane);
+        }
         self.history.context = before;
     }
 

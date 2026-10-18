@@ -407,6 +407,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("vue.panneau_fiche", "Afficher / masquer la fiche et les calques", true, false),
     act("vue.panneau_bande", "Afficher / masquer le montage ou la timeline", true, false),
     act("vue.reajuster_panneaux", "Réajuster les panneaux à leur contenu", true, false),
+    act("vue.performance", "Performance : superposition des temps (images, panneaux, arrière-plan)", true, false),
     act("guide.activer", "Guide de perspective : afficher et utiliser", true, false),
     act("guide.aligner", "Guide : aligner les traits", true, false),
     act("guide.verrouiller", "Guide : verrouiller", true, false),

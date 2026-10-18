@@ -1,0 +1,527 @@
+//! Mesures de la performance de tout le logiciel, pas seulement du dessin (Anthony, 2026-10-18 :
+//! « J'ai vraiment besoin qu'on avance sur l'optimisation du soft »). L'application tourne sans
+//! fenêtre (`App::sans_fenetre`) : `App::frame` construit toute l'interface comme à l'écran, egui
+//! la découpe en triangles, et, avec un périphérique wgpu sans fenêtre, la carte graphique reçoit
+//! les textures et peint l'image (le dessin est composé par `gpu.rs`, comme à l'écran).
+//!
+//! Les essais `#[ignore]` s'affichent avec :
+//! `cargo test --release --offline --target-dir target\msvc perf_ -- --ignored --nocapture --test-threads=1`.
+//! Les chiffres de `docs/PERFORMANCE.md` viennent de là. L'essai d'inactivité, lui, tourne
+//! toujours : un défaut de repeinture au repos est un défaut.
+
+use std::future::Future;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use eframe::egui::epaint::ClippedPrimitive;
+use eframe::egui::mutex::RwLock;
+use eframe::egui::{self, pos2, vec2, Color32, Event, Modifiers, PointerButton, RawInput, Rect, ViewportId};
+use eframe::egui_wgpu::{wgpu, RenderState, Renderer, ScreenDescriptor};
+
+use crate::app::{App, Mode};
+use crate::document::{Cel, CelId, Document, Layer, LayerKind};
+use crate::dock::Pane;
+use crate::raster::{empty_tile, Tile, TILE};
+
+fn block_on<F: Future>(f: F) -> F::Output {
+    let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
+    let mut f = std::pin::pin!(f);
+    loop {
+        if let std::task::Poll::Ready(v) = f.as_mut().poll(&mut cx) {
+            return v;
+        }
+        std::thread::yield_now();
+    }
+}
+
+/// Un périphérique wgpu sans fenêtre, ou `None` (aucune carte graphique).
+fn headless() -> Option<RenderState> {
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
+    let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))?;
+    let (device, queue) = block_on(adapter.request_device(
+        &wgpu::DeviceDescriptor { label: Some("essai"), required_features: wgpu::Features::empty(), required_limits: adapter.limits(), memory_hints: wgpu::MemoryHints::Performance },
+        None,
+    ))
+    .ok()?;
+    let format = wgpu::TextureFormat::Rgba8Unorm;
+    let renderer = Renderer::new(&device, format, None, 1, false);
+    Some(RenderState { adapter, available_adapters: Vec::new(), device, queue, target_format: format, renderer: Arc::new(RwLock::new(renderer)) })
+}
+
+// ------------------------------------------------------------------ documents d'essai
+
+/// Une tuile peinte d'un motif (un peu de transparence, pour que la composition travaille).
+fn tuile(seed: u32) -> Tile {
+    let mut t = empty_tile();
+    for (i, p) in t.iter_mut().enumerate() {
+        let (x, y) = ((i % TILE) as u32, (i / TILE) as u32);
+        if (x + y + seed) % 5 < 2 {
+            *p = Color32::from_rgba_premultiplied(30, 20 + (seed % 90) as u8, 40, 200);
+        }
+    }
+    t
+}
+
+/// Un dessin bitmap de la taille de la feuille avec `tiles` tuiles peintes, réparties selon `seed`.
+fn dessin(doc: &mut Document, tiles: usize, seed: usize) -> CelId {
+    let mut cel = Cel::new(doc.width, doc.height, LayerKind::Bitmap);
+    let n = cel.raster.tiles.len();
+    for k in 0..tiles {
+        let idx = (seed * 31 + k * 17) % n;
+        cel.raster.tiles[idx] = Some(tuile((seed + k) as u32));
+    }
+    doc.add_cel(cel)
+}
+
+/// Un calque bitmap de `frames` images : un nouveau dessin toutes les `every` images.
+fn calque(doc: &mut Document, name: &str, frames: usize, every: usize, tiles: usize, seed: usize) -> Layer {
+    let mut layer = Layer::new(name, LayerKind::Bitmap);
+    let mut last = None;
+    for f in 0..frames {
+        if f % every == 0 {
+            last = Some(dessin(doc, tiles, seed * 1000 + f));
+        }
+        layer.frames.push(last);
+    }
+    layer
+}
+
+/// Un long projet : `plans` plans en séquences de dix, `layers` calques de `frames` images
+/// (animé à l'image 2 sur le premier, plus lent sur les suivants, un fond tenu sur le dernier).
+fn projet_long(plans: usize, layers: usize, frames: usize, tiles: usize) -> Document {
+    let mut doc = Document::with_frame(1920, 1080, 24);
+    let mut at = 0;
+    for i in 1..plans {
+        at = if i % 10 == 0 { doc.add_sequence_after(at) } else { doc.add_scene_after(at) };
+    }
+    for p in 0..doc.panels.len() {
+        let mut ls = Vec::new();
+        for l in 0..layers {
+            let every = if l + 1 == layers { frames } else { 2 + 6 * l };
+            ls.push(calque(&mut doc, &format!("Calque {}", l + 1), frames, every, tiles, p * 10 + l));
+        }
+        doc.panels[p].layers = ls;
+        doc.panels[p].length = frames;
+    }
+    doc
+}
+
+/// Un seul plan, très chargé : `layers` calques de `frames` images.
+fn plan_charge(layers: usize, frames: usize, tiles: usize) -> Document {
+    let mut doc = Document::with_frame(1920, 1080, 24);
+    let mut ls = Vec::new();
+    for l in 0..layers {
+        ls.push(calque(&mut doc, &format!("Calque {}", l + 1), frames, 2, tiles, l));
+    }
+    doc.panels[0].layers = ls;
+    doc.panels[0].length = frames;
+    doc
+}
+
+// ------------------------------------------------------------------ le banc
+
+/// Ce qu'une image d'écran a coûté, en millisecondes.
+#[derive(Clone, Copy, Default, Debug)]
+pub(crate) struct Mesure {
+    /// `App::frame` : construction de toute l'interface.
+    pub construction: f64,
+    /// Découpage en triangles.
+    pub decoupage: f64,
+    /// Textures envoyées + peinture par la carte graphique, attendue jusqu'au bout.
+    pub carte: f64,
+    pub textures: usize,
+    pub octets: usize,
+    pub sommets: usize,
+    /// Dans combien de temps l'application demande à être repeinte.
+    pub reveil: Duration,
+}
+
+impl Mesure {
+    pub fn total(&self) -> f64 {
+        self.construction + self.decoupage + self.carte
+    }
+}
+
+pub(crate) struct Banc {
+    pub ctx: egui::Context,
+    pub app: App,
+    rs: Option<RenderState>,
+    taille: egui::Vec2,
+    t: f64,
+    cible: Option<wgpu::Texture>,
+}
+
+pub(crate) fn banc(doc: Document, avec_gpu: bool) -> Banc {
+    let bac = std::env::temp_dir().join(format!("shot-perf-bac-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&bac);
+    crate::donnees::bac_a_sable(&bac);
+    let rs = if avec_gpu { headless() } else { None };
+    let ctx = egui::Context::default();
+    let mut app = App::sans_fenetre(&ctx, rs.as_ref());
+    app.doc = doc;
+    app.welcome = false;
+    app.maximized_once = 4;
+    let taille = vec2(1920.0, 1080.0);
+    let cible = rs.as_ref().map(|rs| {
+        rs.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("écran"),
+            size: wgpu::Extent3d { width: 1920, height: 1080, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: rs.target_format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        })
+    });
+    let mut b = Banc { ctx, app, rs, taille, t: 0.0, cible };
+    b.chauffer(8);
+    b
+}
+
+impl Banc {
+    /// Quelques images pour que la mise en page se stabilise (egui mesure en deux passes).
+    pub fn chauffer(&mut self, n: usize) {
+        for _ in 0..n {
+            self.image(Vec::new(), 1.0 / 60.0);
+        }
+    }
+
+    /// Une image d'écran, `dt` secondes après la précédente, avec ces événements.
+    pub fn image(&mut self, events: Vec<Event>, dt: f64) -> Mesure {
+        self.t += dt;
+        let mut input = RawInput { screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), self.taille)), time: Some(self.t), events, ..RawInput::default() };
+        input.viewports.entry(ViewportId::ROOT).or_default().native_pixels_per_point = Some(1.0);
+        let t0 = Instant::now();
+        let app = &mut self.app;
+        let out = self.ctx.run(input, |ctx| app.frame(ctx));
+        let construction = t0.elapsed().as_secs_f64() * 1e3;
+        let t1 = Instant::now();
+        let ppp = out.pixels_per_point;
+        let reveil = out.viewport_output.get(&ViewportId::ROOT).map_or(Duration::MAX, |v| v.repaint_delay);
+        let (textures, octets) = (out.textures_delta.set.len(), out.textures_delta.set.iter().map(|(_, d)| d.image.width() * d.image.height() * 4).sum());
+        let prims = self.ctx.tessellate(out.shapes, ppp);
+        let sommets = prims.iter().map(|p| if let egui::epaint::Primitive::Mesh(m) = &p.primitive { m.vertices.len() } else { 0 }).sum();
+        let decoupage = t1.elapsed().as_secs_f64() * 1e3;
+        let t2 = Instant::now();
+        if let (Some(rs), Some(cible)) = (&self.rs, &self.cible) {
+            peindre(rs, cible, &out.textures_delta, &prims);
+        }
+        let carte = t2.elapsed().as_secs_f64() * 1e3;
+        Mesure { construction, decoupage, carte, textures, octets, sommets, reveil }
+    }
+
+    pub fn souris(&mut self, x: f32, y: f32) -> Vec<Event> {
+        vec![Event::PointerMoved(pos2(x, y))]
+    }
+
+    /// Molette sur la zone où se trouve la souris.
+    pub fn molette(&mut self, delta: egui::Vec2, modifiers: Modifiers) -> Vec<Event> {
+        vec![Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta, modifiers }]
+    }
+}
+
+/// Envoie les textures et peint l'image sur la cible, en attendant la fin du travail de la carte.
+fn peindre(rs: &RenderState, cible: &wgpu::Texture, delta: &egui::TexturesDelta, prims: &[ClippedPrimitive]) {
+    for (id, d) in &delta.set {
+        rs.renderer.write().update_texture(&rs.device, &rs.queue, *id, d);
+    }
+    let screen = ScreenDescriptor { size_in_pixels: [1920, 1080], pixels_per_point: 1.0 };
+    let view = cible.create_view(&Default::default());
+    let mut encoder = rs.device.create_command_encoder(&Default::default());
+    let extra = rs.renderer.write().update_buffers(&rs.device, &rs.queue, &mut encoder, prims, &screen);
+    {
+        let mut pass = encoder
+            .begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("écran"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &view, resolve_target: None, ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::BLACK), store: wgpu::StoreOp::Store } })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            })
+            .forget_lifetime();
+        rs.renderer.read().render(&mut pass, prims, &screen);
+    }
+    rs.queue.submit(extra.into_iter().chain([encoder.finish()]));
+    rs.device.poll(wgpu::Maintain::Wait);
+    for id in &delta.free {
+        rs.renderer.write().free_texture(id);
+    }
+}
+
+// ------------------------------------------------------------------ chiffres
+
+fn tri(mut v: Vec<f64>) -> (f64, f64, f64) {
+    if v.is_empty() {
+        return (0.0, 0.0, 0.0);
+    }
+    v.sort_by(f64::total_cmp);
+    let moy = v.iter().sum::<f64>() / v.len() as f64;
+    (moy, v[v.len() / 2], v[(v.len() * 95 / 100).min(v.len() - 1)])
+}
+
+/// Affiche une ligne de mesures : moyenne, médiane, 95e centile du total, puis par étage.
+fn rapporter(titre: &str, mesures: &[Mesure]) {
+    let (moy, med, p95) = tri(mesures.iter().map(Mesure::total).collect());
+    let (c, _, cmax) = tri(mesures.iter().map(|m| m.construction).collect());
+    let d = tri(mesures.iter().map(|m| m.decoupage).collect()).0;
+    let g = tri(mesures.iter().map(|m| m.carte).collect()).0;
+    let pire = mesures.iter().map(Mesure::total).fold(0.0, f64::max);
+    let n = mesures.len().max(1) as f64;
+    let octets = mesures.iter().map(|m| m.octets).sum::<usize>() as f64 / n / 1e6;
+    let textures = mesures.iter().map(|m| m.textures).sum::<usize>() as f64 / n;
+    let sommets = mesures.iter().map(|m| m.sommets).sum::<usize>() as f64 / n;
+    println!(
+        "PERF {titre:<46} total moy {moy:>7.2} méd {med:>7.2} p95 {p95:>7.2} max {pire:>7.2} ms | interface {c:>6.2} (max {cmax:>6.2}) découpage {d:>5.2} carte {g:>6.2} | envoi {octets:>5.2} Mo et {textures:.1} textures/img, {sommets:.0} sommets ({} images)",
+        mesures.len()
+    );
+}
+
+/// `n` images, `dt` secondes l'une après l'autre ; les événements de chacune sont donnés par
+/// `avant(numéro)` (qui peut aussi agir sur l'application). Les sections du profileur sont
+/// affichées (les plus coûteuses).
+fn scenario(titre: &str, b: &mut Banc, n: usize, dt: f64, mut avant: impl FnMut(&mut Banc, usize) -> Vec<Event>) -> Vec<Mesure> {
+    crate::perf::activer(true);
+    let mesures: Vec<Mesure> = (0..n)
+        .map(|k| {
+            let ev = avant(b, k);
+            b.image(ev, dt)
+        })
+        .collect();
+    rapporter(titre, &mesures);
+    let r = crate::perf::resume();
+    let tete: Vec<String> = r.sections.iter().take(6).map(|(nom, moy, max)| format!("{nom} {moy:.2}/{max:.2}")).collect();
+    println!("     sections (ms moy/max) : {}", tete.join(" | "));
+    crate::perf::activer(false);
+    mesures
+}
+
+/// Images jusqu'à ce que plus rien ne demande de repeindre (vignettes, rejeux…), ou `max` images.
+/// Renvoie le nombre d'images et le temps total (ms).
+fn jusqu_au_repos(b: &mut Banc, max: usize) -> (usize, f64) {
+    let t = Instant::now();
+    for k in 0..max {
+        let m = b.image(Vec::new(), 1.0 / 60.0);
+        // (Le rafraîchissement de la superposition, 500 ms, ne compte pas.)
+        if m.reveil >= Duration::from_millis(400) {
+            return (k + 1, t.elapsed().as_secs_f64() * 1e3);
+        }
+    }
+    (max, t.elapsed().as_secs_f64() * 1e3)
+}
+
+/// Quatre déplacements de souris par image dans la zone `r` (de quoi garder l'interface éveillée,
+/// comme une main sur la souris).
+fn bouge(k: usize, r: Rect) -> Vec<Event> {
+    (0..4)
+        .map(|j| {
+            let u = ((k * 4 + j) % 97) as f32 / 97.0;
+            Event::PointerMoved(pos2(r.left() + r.width() * (0.2 + 0.6 * u), r.center().y))
+        })
+        .collect()
+}
+
+/// Un trait de pinceau à la souris : appui, déplacements (`par_image` par image), puis lâcher.
+fn trait_souris(k: usize, n: usize, par_image: usize, r: Rect) -> Vec<Event> {
+    let mut ev = Vec::new();
+    let point = |i: usize| {
+        let t = i as f32 / (n * par_image) as f32;
+        pos2(r.left() + r.width() * (0.15 + 0.7 * t), r.center().y + (t * 25.0).sin() * r.height() * 0.2)
+    };
+    if k == 0 {
+        ev.push(Event::PointerMoved(point(0)));
+        ev.push(Event::PointerButton { pos: point(0), button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE });
+    }
+    for j in 0..par_image {
+        ev.push(Event::PointerMoved(point(k * par_image + j + 1)));
+    }
+    if k + 1 == n {
+        ev.push(Event::PointerButton { pos: point(n * par_image), button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE });
+    }
+    ev
+}
+
+// ------------------------------------------------------------------ essais
+
+/// Au repos, SHOT ne demande aucune image de plus : processeur à zéro (règle « sans latence »,
+/// et pas de chauffage inutile). Tourne toujours.
+#[test]
+fn an_idle_application_does_not_repaint() {
+    let doc = projet_long(12, 3, 24, 4);
+    let mut b = banc(doc, false);
+    b.chauffer(30);
+    let mesures: Vec<Mesure> = (0..10).map(|_| b.image(Vec::new(), 0.5)).collect();
+    let pire = mesures.iter().map(|m| m.reveil).min().unwrap_or(Duration::MAX);
+    assert!(pire >= Duration::from_secs(1), "au repos, SHOT demande à être repeint dans {pire:?}");
+}
+
+/// Le long projet : 100 plans x 3 calques x 48 images, en storyboard (le montage est sous les yeux).
+#[test]
+#[ignore]
+fn perf_long_project() {
+    let t = Instant::now();
+    let doc = projet_long(100, 3, 48, 6);
+    println!("PERF construction du projet d'essai : {:.0} ms", t.elapsed().as_secs_f64() * 1e3);
+    let mut b = banc(doc, true);
+    // Première ouverture : combien d'images (et de temps) avant que les vignettes soient toutes là.
+    crate::perf::activer(true);
+    let (images, ms) = jusqu_au_repos(&mut b, 2000);
+    println!("PERF ouverture : {images} images et {ms:.0} ms avant le repos (vignettes du montage)");
+    println!("     sections : {}", crate::perf::resume().sections.iter().take(5).map(|(n, m, x)| format!("{n} {m:.2}/{x:.2}")).collect::<Vec<_>>().join(" | "));
+    crate::perf::activer(false);
+    let repos = b.image(Vec::new(), 0.5);
+    println!("PERF au repos : prochaine image demandée dans {:?}", repos.reveil);
+    let zone = Rect::from_min_size(pos2(500.0, 880.0), vec2(900.0, 120.0));
+    scenario("souris qui bouge (images à 60/s)", &mut b, 120, 1.0 / 60.0, |_, k| bouge(k, zone));
+    let total = b.app.doc.total_frames();
+    scenario("défilement : tête de lecture qui saute", &mut b, 120, 1.0 / 60.0, |b, k| {
+        b.app.goto_global((k * 977) % total);
+        bouge(k, zone)
+    });
+    scenario("zoom du montage (cran par image)", &mut b, 90, 1.0 / 60.0, |b, k| {
+        b.app.montage_zoom = 1.0 + (k % 45) as f32 * 0.2;
+        b.app.follow_frame = true;
+        Vec::new()
+    });
+    b.app.montage_zoom = 4.0;
+    scenario("molette horizontale sur le montage", &mut b, 90, 1.0 / 60.0, |b, k| {
+        let mut ev = b.souris(900.0, 940.0);
+        ev.extend(b.molette(vec2(-60.0 - (k % 5) as f32 * 10.0, 0.0), Modifiers::NONE));
+        ev
+    });
+    b.app.goto_global(0);
+    b.app.toggle_play_scope(true);
+    scenario("lecture du montage (24 images/s)", &mut b, 96, 1.0 / 24.0, |_, _| Vec::new());
+    b.app.playing = false;
+}
+
+/// Un plan très chargé : 15 calques x 200 images, en animation (la timeline est sous les yeux).
+#[test]
+#[ignore]
+fn perf_heavy_plan() {
+    let mut b = banc(plan_charge(15, 200, 8), true);
+    b.app.set_mode(Mode::Animation);
+    b.chauffer(10);
+    let (images, ms) = jusqu_au_repos(&mut b, 600);
+    println!("PERF ouverture du plan chargé : {images} images, {ms:.0} ms avant le repos");
+    let repos = b.image(Vec::new(), 0.5);
+    println!("PERF au repos : prochaine image demandée dans {:?}", repos.reveil);
+    let zone = Rect::from_min_size(pos2(500.0, 880.0), vec2(900.0, 120.0));
+    scenario("souris qui bouge (timeline)", &mut b, 120, 1.0 / 60.0, |_, k| bouge(k, zone));
+    scenario("défilement : tête de lecture à chaque image", &mut b, 120, 1.0 / 60.0, |b, k| {
+        b.app.cur_frame = (k * 3) % 200;
+        bouge(k, zone)
+    });
+    b.app.cur_frame = 0;
+    b.app.toggle_play_scope(false);
+    let m = scenario("lecture du plan (24 images/s, 15 calques)", &mut b, 144, 1.0 / 24.0, |_, _| Vec::new());
+    let pires = m.iter().filter(|x| x.total() > 41.7).count();
+    println!("PERF lecture : {pires} images sur {} dépassent le budget de 41,7 ms (24 images/s)", m.len());
+    b.app.playing = false;
+    // Dessiner sur un calque du milieu : les calques dessus et dessous restent à la carte graphique.
+    b.app.cur_layer = 7;
+    b.app.cur_frame = 10;
+    b.chauffer(3);
+    let r = b.app.canvas_rect;
+    let zone = r.shrink2(vec2(r.width() * 0.2, r.height() * 0.3));
+    scenario("dessin au pinceau sur le calque 8 (8 points/image)", &mut b, 60, 1.0 / 60.0, |_, k| trait_souris(k, 60, 8, zone));
+}
+
+/// Les panneaux : Calques (60 calques), Pinceaux (400 pinceaux), Couleur, Réglages.
+#[test]
+#[ignore]
+fn perf_panels() {
+    let mut doc = plan_charge(60, 24, 2);
+    doc.panels[0].length = 24;
+    let mut b = banc(doc, true);
+    b.app.set_mode(Mode::Animation);
+    // Beaucoup de pinceaux importés.
+    let modele = b.app.brushes.presets.clone();
+    for k in 0..400 {
+        let mut p = modele[k % modele.len()].clone();
+        p.name = format!("Importé {k:03} — {}", p.name);
+        b.app.brushes.presets.push(p);
+    }
+    println!("PERF pinceaux : {} réglages dans la bibliothèque", b.app.brushes.presets.len());
+    let zone = Rect::from_min_size(pos2(1500.0, 300.0), vec2(300.0, 400.0));
+    for (pane, nom) in [(Pane::Layers, "panneau Calques (60 calques)"), (Pane::Brushes, "panneau Pinceaux (480 réglages)"), (Pane::Color, "panneau Couleur"), (Pane::ToolOptions, "panneau Réglages"), (Pane::Effects, "panneau Effets"), (Pane::History, "panneau Historique")] {
+        b.app.show_pane(pane);
+        let (images, ms) = jusqu_au_repos(&mut b, 200);
+        println!("PERF {nom} : {images} images, {ms:.0} ms avant le repos");
+        scenario(nom, &mut b, 90, 1.0 / 60.0, |_, k| bouge(k, zone));
+    }
+}
+
+/// Chaque étape de l'écriture et de la lecture d'un dessin bitmap (3840 x 2160, 40 tuiles peintes).
+#[test]
+#[ignore]
+fn perf_cel_io_steps() {
+    let mut doc = Document::with_frame(1920, 1080, 24);
+    let id = dessin(&mut doc, 40, 3);
+    let r = &doc.cels[&id].raster;
+    let temps = |nom: &str, f: &mut dyn FnMut()| {
+        let t = Instant::now();
+        let n = 5;
+        for _ in 0..n {
+            f();
+        }
+        println!("PERF dessin {nom:<34} {:>8.2} ms", t.elapsed().as_secs_f64() * 1e3 / n as f64);
+    };
+    let mut rgba = Vec::new();
+    temps("to_rgba", &mut || rgba = r.to_rgba());
+    let mut png = Vec::new();
+    temps("encode_png (Fast, Adaptive)", &mut || png = crate::io::encode_png(&rgba, r.width, r.height).unwrap());
+    println!("PERF dessin PNG : {} octets", png.len());
+    let mut img = None;
+    temps("décodage PNG (image::load_from_memory)", &mut || img = Some(image::load_from_memory(&png).unwrap().to_rgba8()));
+    let img = img.unwrap();
+    temps("Raster::from_rgba", &mut || {
+        let _ = crate::raster::Raster::from_rgba(r.width, r.height, img.as_raw());
+    });
+    let dir = std::env::temp_dir().join(format!("shot-perf-io-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let p = dir.join("x.png");
+    temps("écriture (tmp + rename)", &mut || {
+        let mut tmp = p.as_os_str().to_owned();
+        tmp.push(".tmp");
+        std::fs::write(&tmp, &png).unwrap();
+        std::fs::rename(&tmp, &p).unwrap();
+    });
+    temps("existence du fichier (stat)", &mut || {
+        let _ = p.exists();
+    });
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Enregistrer et rouvrir un grand projet (sur le disque temporaire).
+#[test]
+#[ignore]
+fn perf_project_open_save() {
+    let doc = projet_long(100, 3, 48, 6);
+    let dir = std::env::temp_dir().join(format!("shot-perf-projet-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("dossier");
+    let manifeste = dir.join("Essai.pelure");
+    let mut written = std::collections::HashMap::new();
+    let t = Instant::now();
+    let job = crate::project::prepare_save(&doc, &manifeste, &mut written, None).expect("préparation");
+    let prepare = t.elapsed().as_secs_f64() * 1e3;
+    let t = Instant::now();
+    let rapport = job.run().expect("écriture");
+    println!("PERF enregistrement : préparation (fil de l'interface) {prepare:.0} ms, écriture {:.0} ms, {} dessins", t.elapsed().as_secs_f64() * 1e3, rapport.written);
+    // Deuxième enregistrement, rien n'a changé.
+    let t = Instant::now();
+    let job = crate::project::prepare_save(&doc, &manifeste, &mut written, None).expect("préparation");
+    let prepare = t.elapsed().as_secs_f64() * 1e3;
+    let t = Instant::now();
+    let rapport = job.run().expect("écriture");
+    println!("PERF enregistrement, rien de modifié : préparation {prepare:.0} ms, écriture {:.0} ms, {} dessins", t.elapsed().as_secs_f64() * 1e3, rapport.written);
+    let t = Instant::now();
+    let l = crate::project::load(&manifeste).expect("lecture");
+    println!("PERF ouverture : {:.0} ms ({} plans, {} dessins)", t.elapsed().as_secs_f64() * 1e3, l.doc.panels.len(), l.doc.cels.len());
+    let t = Instant::now();
+    let l = crate::project::load_quick(&manifeste).expect("lecture");
+    println!("PERF ouverture rapide : {:.0} ms", t.elapsed().as_secs_f64() * 1e3);
+    drop(l);
+    let _ = std::fs::remove_dir_all(&dir);
+}
