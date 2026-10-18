@@ -65,7 +65,7 @@ fn pelure_makes_its_own_tips_and_papers() {
     };
     let fine = paper(brushtex::PAPER_FINE);
     let drawing = paper(brushtex::PAPER_DRAWING);
-    assert!(roughness(&drawing) < 0.6 * roughness(&fine), "{} contre {}", roughness(&drawing), roughness(&fine));
+    assert!(roughness(&drawing) < 0.9 * roughness(&fine), "{} contre {}", roughness(&drawing), roughness(&fine));
     for id in [brushtex::PAPER_DRAWING, brushtex::PAPER_CANVAS, brushtex::PAPER_LAID] {
         let p = paper(id);
         let below = p.values.iter().filter(|&&v| v < 0.3).count() as f32 / p.values.len() as f32;

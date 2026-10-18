@@ -467,11 +467,37 @@ fn cell_noise(size: usize, blur: usize, seed: u32) -> Vec<f32> {
     n
 }
 
+/// Les tirages d'une pointe « amas de grains » : le corps (taches faibles), les grains francs et
+/// le sable fin — nombre, rayon (en part du rayon de la case), netteté du bord (`soft`, 0 = tout
+/// doux, 1 = franc) et force de chacun.
+#[derive(Clone, Copy, Debug)]
+pub struct Grains {
+    pub body: (usize, f32),
+    pub grains: usize,
+    pub grain_r: (f32, f32),
+    pub grain_soft: f32,
+    pub sand: usize,
+    pub sand_r: (f32, f32),
+    pub sand_soft: f32,
+}
+
+/// Les grains de la première version (étapes 1 à 3) : nuageux (gardés pour les planches
+/// avant / après de l'essai d'audit).
+#[allow(dead_code)]
+pub const GRAINS_V1: Grains = Grains { body: (3, 0.18), grains: 16, grain_r: (0.08, 0.18), grain_soft: 0.7, sand: 24, sand_r: (0.03, 0.07), sand_soft: 0.5 };
+/// Les grains « sable » (Anthony, 2026-10-18 : « plus franc, comme le 2B de TVPaint, moins
+/// nuageux ») : presque pas de corps, des grains nets et serrés.
+pub const GRAINS_SAND: Grains = Grains { body: (2, 0.08), grains: 26, grain_r: (0.06, 0.13), grain_soft: 0.92, sand: 30, sand_r: (0.03, 0.06), sand_soft: 0.85 };
+
 /// Pointe « amas de grains » (graphite, crayon de couleur) : `cells` dessins côte à côte de
-/// `size` texels, chacun un corps faible, une quinzaine de grains francs (le dépôt de la mine sur
-/// les sommets du papier) et du sable plus fin, plus denses au centre. Les grains sont gros par
-/// rapport à la case : à 6 px de diamètre ils font encore un demi-pixel et se voient.
+/// `size` texels, chacun un corps faible, des grains francs (le dépôt de la mine sur les sommets
+/// du papier) et du sable plus fin, plus denses au centre. Les grains sont gros par rapport à la
+/// case : à 6 px de diamètre ils font encore un demi-pixel et se voient.
 pub fn tip_grains(size: usize, cells: usize, seed: u32) -> GrayImage {
+    tip_grains_with(size, cells, seed, &GRAINS_SAND)
+}
+
+pub fn tip_grains_with(size: usize, cells: usize, seed: u32, g: &Grains) -> GrayImage {
     let (size, cells) = (size.max(8), cells.max(1));
     let (w, h) = (size * cells, size);
     let mut v = vec![0.0f32; w * h];
@@ -479,23 +505,23 @@ pub fn tip_grains(size: usize, cells: usize, seed: u32) -> GrayImage {
     let rad = size as f32 * 0.5;
     for c in 0..cells {
         let (cx, cy) = (c as f32 * size as f32 + rad, rad);
-        for _ in 0..3 {
+        for _ in 0..g.body.0 {
             let a = rng.next() * std::f32::consts::TAU;
             let d = rng.next() * rad * 0.3;
-            stamp_disc(&mut v, w, h, cx + d * a.cos(), cy + d * a.sin(), rad * rng.range(0.3, 0.5), 0.0, 0.18);
+            stamp_disc(&mut v, w, h, cx + d * a.cos(), cy + d * a.sin(), rad * rng.range(0.3, 0.5), 0.0, g.body.1);
         }
-        for _ in 0..16 {
+        for _ in 0..g.grains {
             let a = rng.next() * std::f32::consts::TAU;
             let d = rad * 0.8 * rng.next().powf(0.7);
-            let r = rad * rng.range(0.08, 0.18);
+            let r = rad * rng.range(g.grain_r.0, g.grain_r.1);
             let amount = rng.range(0.6, 1.0) * (1.0 - 0.35 * d / rad);
-            stamp_disc(&mut v, w, h, cx + d * a.cos(), cy + d * a.sin(), r, 0.7, amount);
+            stamp_disc(&mut v, w, h, cx + d * a.cos(), cy + d * a.sin(), r, g.grain_soft, amount);
         }
-        for _ in 0..24 {
+        for _ in 0..g.sand {
             let a = rng.next() * std::f32::consts::TAU;
             let d = rad * 0.9 * rng.next().powf(0.6);
-            let r = rad * rng.range(0.03, 0.07);
-            stamp_disc(&mut v, w, h, cx + d * a.cos(), cy + d * a.sin(), r, 0.5, rng.range(0.4, 0.9));
+            let r = rad * rng.range(g.sand_r.0, g.sand_r.1);
+            stamp_disc(&mut v, w, h, cx + d * a.cos(), cy + d * a.sin(), r, g.sand_soft, rng.range(0.4, 0.9));
         }
     }
     GrayImage::new(w, h, clamped(v))
@@ -801,7 +827,9 @@ impl BrushLibrary {
         lib.papers.insert(PAPER_FINE, ("Grain fin".into(), Arc::new(procedural_paper(256, 0, 11))));
         lib.papers.insert(PAPER_COARSE, ("Grain gros".into(), Arc::new(procedural_paper(256, 1, 29))));
         // Papiers et pointes fabriqués (rendu, étape 1) : pour un projet 1920×1080 vu à 50 %.
-        lib.papers.insert(PAPER_DRAWING, ("Papier à dessin".into(), Arc::new(multiscale_paper(256, 0x0A11, &[(0, 0.25), (1, 0.45), (2, 0.55), (4, 0.35)]))));
+        // Papier à dessin : plus de relief fin (1 et 2 texels) depuis le retour d'Anthony (grain
+        // « sable », pas nuageux), un peu de large pour la respiration.
+        lib.papers.insert(PAPER_DRAWING, ("Papier à dessin".into(), Arc::new(multiscale_paper(256, 0x0A11, &[(0, 0.5), (1, 0.55), (2, 0.4), (4, 0.25)]))));
         lib.papers.insert(PAPER_CANVAS, ("Toile".into(), Arc::new(canvas_paper(256, 8, 0x70A1))));
         lib.papers.insert(PAPER_LAID, ("Vergé".into(), Arc::new(laid_paper(256, 0x7E86))));
         let tip = |img: GrayImage| Arc::new(Tip::new(img));

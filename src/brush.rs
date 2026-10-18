@@ -778,13 +778,14 @@ impl BrushSettings {
             scatter: 0.03,
             paper: Some(crate::brushtex::PAPER_DRAWING),
             grain: 0.85,
-            paper_scale: 2.5,
+            paper_scale: 2.0,
             paper_softness: crate::brushtex::GRAIN_SOFTNESS_SOFT,
             pencil_grain: PencilGrain::Soft,
             ..Self::brush()
         };
-        // L'appui fait le débit, en douceur : on effleure gris, on appuie noir.
-        s.dynamics.opacity = Connection { source: Source::Pressure, curve: Curve::from_points(&[[0.0, 0.15], [0.5, 0.6], [1.0, 1.0]]), ..Default::default() };
+        // L'appui fait le débit : le crayon mord dès qu'on effleure (Anthony, 2026-10-18 : les
+        // hachures légères étaient trop pâles à 50 %), et appuyé il est presque noir.
+        s.dynamics.opacity = Connection { source: Source::Pressure, curve: Curve::from_points(&[[0.0, 0.35], [0.4, 0.8], [1.0, 1.0]]), ..Default::default() };
         s
     }
 
@@ -793,9 +794,9 @@ impl BrushSettings {
         Self {
             size: 7.0,
             opacity: 0.8,
-            power: 0.7,
+            power: 0.75,
             grain: 0.9,
-            paper_scale: 2.5,
+            paper_scale: 2.0,
             pencil_grain: PencilGrain::Medium,
             ..Self::graphite()
         }
@@ -980,6 +981,12 @@ pub struct StrokeState {
     pub pen: bool,
     /// Ligne médiane lissée et rayon en chaque point : ce que garde un trait vectoriel.
     pub path: Vec<VPoint>,
+    /// Appui (après la courbe de pression) et instant (−1 : inconnu) de chaque point de `path` :
+    /// la trace qui permet au trait vectoriel de rejouer ses empreintes exactement (étape 5).
+    pub path_pressure: Vec<f32>,
+    pub path_time: Vec<f64>,
+    /// Instant du point en cours (−1 : inconnu).
+    cur_time: f64,
     mode: StrokeMode,
     settings: BrushSettings,
     before: HashMap<usize, Option<Tile>>,
@@ -1071,6 +1078,9 @@ impl StrokeState {
             cel,
             pen,
             path: Vec::new(),
+            path_pressure: Vec::new(),
+            path_time: Vec::new(),
+            cur_time: -1.0,
             mode,
             settings,
             before: HashMap::new(),
@@ -1303,7 +1313,8 @@ impl StrokeState {
     }
 
     pub fn add_point(&mut self, raster: &mut Raster, pos: Pos2, pressure: f32, dirty: &mut Vec<usize>) {
-        self.raw_log.push([pos.x as f64, pos.y as f64, pressure as f64, std::mem::replace(&mut self.next_time, -1.0)]);
+        self.cur_time = std::mem::replace(&mut self.next_time, -1.0);
+        self.raw_log.push([pos.x as f64, pos.y as f64, pressure as f64, self.cur_time]);
         // Toucher du stylet : au-dessous du seuil, le stylet ne touche pas (rien n'est posé ; le
         // trait reprendra, ou finira, au dernier point qui touchait). L'appui passe ensuite par la
         // courbe de pression globale. La souris appuie toujours à fond.
@@ -1324,6 +1335,9 @@ impl StrokeState {
     fn record(&mut self, p: Pos2, pressure: f32) {
         let r = self.settings.size * 0.5 * self.size_factor(&self.inputs(pressure, 0.0));
         self.path.push(VPoint { x: p.x, y: p.y, r });
+        // La trace du trait vectoriel (étape 5) : de quoi rejouer les empreintes exactement.
+        self.path_pressure.push(pressure);
+        self.path_time.push(self.cur_time);
     }
 
     /// Le lissage a-t-il un effet, avec ces réglages ?
@@ -1366,6 +1380,9 @@ impl StrokeState {
     /// Remet le geste à son départ, tout sauf les tuiles d'avant et le journal : pour le rejouer.
     fn reset_gesture(&mut self) {
         self.path.clear();
+        self.path_pressure.clear();
+        self.path_time.clear();
+        self.cur_time = -1.0;
         self.mask.clear();
         self.last = None;
         self.smoothed = None;
