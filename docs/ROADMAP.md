@@ -1320,6 +1320,51 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         « Barre des panneaux » (`vue.barre_panneaux`, `reglages.toml` : `barre_panneaux`, montrée
         d'office). Rien par image au-delà du dessin des icônes ; la place d'un panneau n'est lue
         qu'au clic. Le menu Panneaux et les panneaux qui s'ajustent n'ont pas changé. `barrepanneaux.rs` ;
+      - **feuille d'exposition en animation seulement** (Anthony : « Exposition n'est disponible que
+        dans la partie animation ») : `Pane::animation_only`. En storyboard : son icône de la barre
+        et son entrée d'Affichage > Panneaux sont masquées, `vue.feuille_exposition` répond d'un mot
+        dans la barre d'état (`refuse_hors_animation`), et une disposition qui l'ouvre (démarrage,
+        espace de travail) la garde de côté (`App::exposition_masquee`, `set_dock_layout`). Le
+        retour en animation (`masquer_exposition`, appelée par `set_mode`) rend la disposition
+        d'avant à l'identique si rien n'a bougé entre-temps, sinon rouvre la feuille à sa place
+        d'ordinaire (`DockLayout::retour_animation`, pure). La disposition retenue à la fermeture la
+        garde (`current_layout`). Une seule disposition pour les deux modes, pas de version de
+        disposition de plus ;
+      - **nouvelle clé = choix** (Anthony : la nouvelle clé doit être sélectionnée ; avant, le cadre
+        blanc restait autour du bloc entier) : toute commande qui ajoute une clé ou une image
+        (F4 / F5, double-clic et menu de la piste, Nouveau dessin, Dupliquer le dessin, Insérer une
+        image) donne le choix à la nouvelle seule (`choice_for_new_key`, `select_new_key`) : dans le
+        montage, la clé est cerclée de blanc et le cadre du calque courant s'efface (il garde un
+        filet pâle) ; dans la timeline, ses images sont cadrées de blanc. Suppr et Ctrl+C la
+        visent. `montagekeys.rs` ;
+      - **clés d'effets dans le montage et la timeline** (Anthony : les voir, les déplacer, les
+        copier-coller et les supprimer). Cause : elles ne se dessinaient que dans la timeline de
+        l'animation, en petits losanges (7 points) collés au bord des dessins, une seule se prenait
+        à la fois, et le montage, où il travaille, n'en montrait aucune ; la case du panneau Effets
+        était cochée d'office, ce n'était pas elle. Maintenant (`fxkeys.rs`) : un losange violet
+        par image clée en haut de la piste, dans le montage comme dans la timeline (point sombre
+        s'il porte les clés de plusieurs effets) ; clic = choix (Ctrl ajoute ou retire, Maj prend
+        les images d'entre), glisser = tout le choix glisse du même nombre d'images (une clé qui
+        tombe sur une autre du même effet la remplace, rien avant l'image 0 ni après la fin du
+        plan), Échap abandonne ; Ctrl+C / Ctrl+V (collées à l'image courante du calque courant, sur
+        l'effet de même sorte et de même rang, les clés sans effet correspondant sont laissées de
+        côté et dites) / Suppr (rien sans choix), clic droit ; actions `fx.cles_copier`,
+        `fx.cles_coller`, `fx.cles_supprimer`. « Créer une clé » choisit la clé créée. Le choix
+        est lâché par un clic ailleurs, une annulation, un changement d'ordre de la pile. Étapes
+        d'annulation nommées « Déplacer / Coller / Supprimer des clés d'effet ». Logique en
+        fonctions pures testées (`move_keys`, `paste_keys`, `clamp_delta`…) ;
+      - **clés d'effets : seulement celles de l'effet choisi** (Anthony : « elles n'apparaissent
+        que lorsque l'effet est sélectionné »). L'effet choisi (`App::fx_choice` : plan, calque,
+        rang) est celui du panneau Effets : un clic sur son nom le choisit (cadre de la couleur de
+        sélection, nom sur toute la largeur), un second le lâche ; « Créer une clé », un curseur,
+        « Ajouter un effet » ou cocher un effet du calque le choisissent aussi ; action
+        `fx.choisir_aucun`. Seules ses clés se dessinent et se prennent, sur son calque, dans le
+        montage et la timeline ; aucun effet choisi, aucun losange ; la case du panneau reste
+        l'interrupteur général. Plus de point sombre (un losange = une clé). Copier, coller (sur
+        l'effet choisi, de la même sorte que le copié, sinon dit et rien collé), supprimer
+        agissent sur ces clés ; changer d'effet choisi, ouvrir un projet ou vider la pile lâche
+        le choix des clés ; le rang suit un échange ou un retrait de la pile (`rank_after_swap`,
+        `rank_after_remove`, `shown`, testées) ;
       - **enveloppe de Bézier** (Anthony : « maintenir Ctrl permet de saisir une poignée de Bézier
         des coins pour transformer la forme » ; son choix : « B, comme l'outil Perspective ») : dans
         l'outil Transformer, Ctrl + glisser un coin du cadre ouvre une enveloppe sur le dessin

@@ -54,6 +54,57 @@ fn the_exposure_sheet_opens_next_to_the_layers() {
 }
 
 #[test]
+fn only_the_exposure_sheet_is_animation_only() {
+    for p in Pane::ALL {
+        assert_eq!(p.animation_only(), p == Pane::XSheet, "{p:?}");
+    }
+}
+
+#[test]
+fn the_storyboard_layout_leaves_out_the_exposure_sheet() {
+    let mut l = DockLayout::from_legacy(&Layout::default());
+    // Fermée : rien à retirer.
+    assert!(l.sans_animation_seule().is_none());
+    l.open(Pane::XSheet);
+    let sans = l.sans_animation_seule().expect("la feuille était ouverte");
+    assert_eq!(count(&sans, Pane::XSheet), 0);
+    // Le reste de la disposition n'a pas bougé.
+    for p in default_panes() {
+        assert_eq!(count(&sans, p), 1, "{p:?}");
+    }
+    // Détachée dans sa fenêtre : retirée aussi.
+    let mut l = DockLayout::from_legacy(&Layout::default());
+    l.open(Pane::XSheet);
+    l.detach(Pane::XSheet);
+    assert_eq!(count(&l, Pane::XSheet), 1);
+    assert_eq!(count(&l.sans_animation_seule().unwrap(), Pane::XSheet), 0);
+}
+
+#[test]
+fn back_in_animation_the_exposure_sheet_returns_where_it_was() {
+    let mut l = DockLayout::from_legacy(&Layout::default());
+    l.open(Pane::XSheet);
+    // On l'a rangée ailleurs : détachée dans sa fenêtre.
+    let mut saved = l.clone();
+    saved.detach(Pane::XSheet);
+    let storyboard = saved.sans_animation_seule().unwrap();
+    // Rien n'a bougé en storyboard : on retrouve la disposition d'avant, à l'identique.
+    assert_eq!(storyboard.retour_animation(&saved), saved);
+    // Un panneau fermé entre-temps : la feuille se rouvre à sa place d'ordinaire, le reste est gardé.
+    let mut changed = storyboard.clone();
+    changed.close(Pane::Guides);
+    let back = changed.retour_animation(&saved);
+    assert_eq!(count(&back, Pane::XSheet), 1);
+    assert_eq!(count(&back, Pane::Guides), 0, "ce qu'on a fermé reste fermé");
+    assert!(format!("{:?}", back.principal).contains("Tabs { panneaux: [Layers, XSheet]"), "{:?}", back.principal);
+    // Une feuille qui n'était pas ouverte ne s'ouvre pas.
+    let closed = DockLayout::from_legacy(&Layout::default());
+    assert_eq!(closed.retour_animation(&closed), closed);
+    // Déjà ouverte (l'utilisatrice l'a rouverte) : rien à faire.
+    assert_eq!(l.retour_animation(&l), l);
+}
+
+#[test]
 fn default_layout_has_every_panel_once() {
     let l = DockLayout::from_legacy(&Layout::default());
     for pane in default_panes() {

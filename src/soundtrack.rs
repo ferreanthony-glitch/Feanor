@@ -49,6 +49,8 @@ pub(crate) enum MenuTarget {
     /// Passe interface : une piste de calque (le calque du plan courant), la piste Caméra, la
     /// barre d'une séquence, la règle.
     Layer(usize),
+    /// Un losange de clé d'effet de la piste d'un calque (`fxkeys.rs`).
+    FxKey,
     Camera,
     Sequence,
     Ruler,

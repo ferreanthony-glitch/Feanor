@@ -311,7 +311,18 @@ on les coche et décoche, le dessin reste tel quel).
   en cases à cocher ; on règle les paramètres dans le panneau Effets.
 - On les active, les ordonne ou les retire à tout moment.
 - On peut les animer par clés : « Créer une clé » à une image, puis à une autre, et les
-  paramètres vont de l'une à l'autre. Les clés sont des losanges violets dans la timeline.
+  paramètres vont de l'une à l'autre. Les clés de l'effet choisi dans le panneau Effets (clic sur
+  son nom, il prend un cadre de la couleur de sélection ; un second clic le lâche) sont des
+  losanges violets, en haut de la piste de son calque, dans la timeline comme dans la bande de
+  montage ; aucun effet choisi, aucun losange (la case « Clés d'effets dans la timeline et le
+  montage » est l'interrupteur général). Un clic en choisit une (Ctrl : en ajoute
+  ou en retire ; Maj : toutes celles d'entre), la tête de lecture va dessus ; glisse-en une, elle
+  emmène toutes les choisies (Échap abandonne le geste) ; Ctrl+C copie, Ctrl+V colle à l'image
+  courante, sur l'effet choisi (de la même sorte que celui copié), Suppr supprime
+  (rien si aucune n'est choisie) ; le clic droit propose les mêmes commandes. Changer d'effet
+  choisi lâche le choix des clés. Une clé créée par
+  « Créer une clé » est aussitôt choisie. Chaque geste est une étape d'annulation nommée
+  (« Déplacer / Coller / Supprimer des clés d'effet »).
 
 **Calque CTG** (Calques > Calque CTG > Nouveau calque CTG) : un calque de couleur sous les
 traits.
@@ -409,7 +420,10 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   où elles se poseront. Un glisser dans le vide des pistes choisit les clés au rectangle. Zoom
   de la bande : la petite barre en bas, Ctrl + molette, ou Alt+1 / Alt+2 / Alt+3 (tout voir). F5
   (ou double-clic sur la piste) pose une clé à l'image courante, copie du dessin montré (sinon du
-  dernier d'avant) ; F4 pose une clé vide ; F6 coupe le plan. Outils : la touche d'un
+  dernier d'avant) ; F4 pose une clé vide ; la clé posée est aussitôt la seule choisie (cerclée de
+  blanc, le cadre du calque s'efface) : Suppr la supprime, Ctrl+C la copie. Il en va de même d'un
+  nouveau dessin, d'un dessin dupliqué ou d'images insérées dans la timeline (cadrées de blanc).
+  F6 coupe le plan. Outils : la touche d'un
   outil tenue le prend le temps de la
   tenir ; Ctrl tenu sur le dessin donne le lasso. Les
   calques de toute la scène (fond) ont leur piste, teintée, avec les mêmes gestes. La timeline sert à entrer dans le détail. Copier, Coller, Suppr et les raccourcis
@@ -711,6 +725,11 @@ icône donne son nom et son raccourci ; clic droit > « Assigner un raccourci…
 aussi une commande de Ctrl+K, et son raccourci suit la même règle). Affichage > Panneaux >
 « Barre des panneaux » la montre ou la cache.
 
+La feuille d'exposition n'existe qu'en animation (Anthony : « Exposition n'est disponible que dans
+la partie animation ») : en storyboard, son icône, son entrée du menu Affichage > Panneaux et son
+action disparaissent ou répondent d'un mot dans la barre d'état, et si elle était ouverte elle est
+mise de côté ; au retour en animation (Tab, double-clic sur un plan) elle revient où elle était.
+
 ## Historique
 
 Édition > Historique… ouvre la liste des étapes d'annulation, à côté des calques : chacune porte
@@ -936,7 +955,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `keymap.rs` | Raccourcis : actions, lecture de `keymap.toml`, touche tapée, fichier personnel |
 | `raccourcisui.rs` | Clic droit « Assigner un raccourci… », fenêtre d'assignation, liste des raccourcis |
 | `propager.rs`, `propagerui.rs` | Propagation de la peinture sur une vidéo, façon EbSynth (voir `docs/PROPAGATION.md`) |
-| `handles.rs` | Poignées de la timeline (marques, signets, entrée / sortie, clés d'effets, expositions) et menus de la grille |
+| `handles.rs` | Poignées de la timeline (marques, signets, entrée / sortie, expositions) et menus de la grille |
+| `fxkeys.rs` | Clés d'effets dans le montage et la timeline : losanges, choix, déplacement, copier-coller, suppression |
 | `app.rs` | État de l'application, actions, raccourcis |
 | `vtools.rs` | Outils des calques vectoriels |
 | `storyboard.rs` | Bande de montage, vue vignettes, fiche du panneau |

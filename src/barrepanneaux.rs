@@ -12,7 +12,7 @@
 use eframe::egui::{self, vec2, Color32, RichText};
 use egui_dock::{DockState, Node};
 
-use crate::app::App;
+use crate::app::{App, Mode};
 use crate::dock::Pane;
 
 /// Largeur de la barre, marges comprises, en points.
@@ -25,6 +25,19 @@ pub(crate) struct Entree {
     pub action: &'static str,
     pub nom: &'static str,
     pub description: &'static str,
+}
+
+impl Entree {
+    /// L'icône se voit-elle dans ce mode ? La feuille d'exposition n'existe qu'en animation.
+    pub(crate) fn visible(&self, animation: bool) -> bool {
+        animation || !self.pane.animation_only()
+    }
+}
+
+/// Les icônes de la barre dans un mode, en groupes (un groupe vide n'est pas rendu).
+#[cfg(test)]
+pub(crate) fn icones(animation: bool) -> Vec<Vec<&'static Entree>> {
+    GROUPES.iter().map(|g| g.iter().filter(|e| e.visible(animation)).collect::<Vec<_>>()).filter(|g| !g.is_empty()).collect()
 }
 
 const fn entree(pane: Pane, action: &'static str, nom: &'static str, description: &'static str) -> Entree {
@@ -112,7 +125,8 @@ impl App {
                     ui.painter().rect_filled(rect, 0.0, Color32::from_gray(70));
                     ui.add_space(3.0);
                 }
-                for e in *groupe {
+                let animation = self.mode == Mode::Animation;
+                for e in groupe.iter().filter(|e| e.visible(animation)) {
                     let on = self.pane_shown(e.pane);
                     let resp = ui.add_sized([24.0, 26.0], egui::SelectableLabel::new(on, RichText::new(e.pane.icon()).size(17.0)));
                     if self.aide(resp, e.nom, e.description, e.action).clicked() {
