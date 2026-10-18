@@ -346,6 +346,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("fx.cle_supprimer", "Supprimer la clé de l'effet choisi à l'image courante", true, false),
     act("fx.cle_auto", "Création automatique des clés d'effets (oui / non)", true, false),
     act("fx.cles_timeline", "Clés d'effets dans la timeline et le montage (montrer / cacher)", true, false),
+    act("fx.choisir_aucun", "Ne choisir aucun effet (les clés d'effets se cachent dans la timeline et le montage)", true, false),
     act("fx.cles_copier", "Copier les clés d'effets choisies", true, false),
     act("fx.cles_coller", "Coller les clés d'effets à l'image courante du calque courant", true, false),
     act("fx.cles_supprimer", "Supprimer les clés d'effets choisies (rien sans clé choisie)", true, false),

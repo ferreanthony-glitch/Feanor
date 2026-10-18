@@ -6,17 +6,19 @@
 //! Avant, les clés (13i) n'étaient dessinées que dans la timeline de l'animation, en petits
 //! losanges collés au bord haut des dessins ; le montage, où Anthony travaille, ne les montrait
 //! pas du tout, et une seule clé se prenait à la fois. Maintenant :
-//! - un losange violet par image où le calque a des clés d'effets, en haut de sa piste dans le
-//!   montage comme dans la timeline (case « Clés d'effets… » du panneau Effets) ; un losange à
-//!   point sombre porte les clés de plusieurs effets, la bulle les nomme ;
+//! - un losange violet par clé de l'effet choisi dans le panneau Effets (Anthony, même jour :
+//!   « les clés d'effets n'apparaissent que lorsque l'effet est sélectionné ») : seulement sur le
+//!   calque de cet effet, en haut de sa piste, dans le montage comme dans la timeline ; aucun
+//!   effet choisi, aucun losange. La case « Clés d'effets… » du panneau Effets est un
+//!   interrupteur général ;
 //! - un clic le choisit (Ctrl : l'ajoute ou le retire ; Maj : tous ceux d'entre l'ancre et lui, sur
 //!   ce calque) et place la tête de lecture dessus ; le choix efface celui des dessins et des images ;
 //! - glisser un losange emmène tous les choisis du même nombre d'images (une étape d'annulation
 //!   par geste, Échap l'abandonne) ; une clé qui tombe sur une autre du même effet la remplace ;
-//! - Ctrl+C copie les clés choisies, Ctrl+V les colle à l'image courante du calque courant (chaque
-//!   clé sur l'effet de même sorte, au même rang parmi ceux de sa sorte), Suppr les supprime ;
-//!   le clic droit a les mêmes commandes. Suppr sans clé choisie ne fait rien ;
-//! - une clé créée (panneau Effets) devient le choix.
+//! - Ctrl+C copie les clés choisies, Ctrl+V les colle à l'image courante, sur l'effet choisi (de
+//!   la même sorte que celui copié), Suppr les supprime ; le clic droit a les mêmes commandes.
+//!   Suppr sans clé choisie ne fait rien ;
+//! - une clé créée (panneau Effets) devient le choix ; changer d'effet choisi lâche le choix des clés.
 //!
 //! La logique est ici en fonctions pures (`move_keys`, `paste_keys`…), testées dans
 //! `fxkeys_tests.rs` ; `impl App` en dessous ne fait que la brancher sur la souris, le clavier et
@@ -43,49 +45,75 @@ pub(crate) struct FxKeyRef {
     pub frame: usize,
 }
 
-/// Une clé copiée : son écart à la première clé copiée, la sorte de son effet et son rang parmi
-/// les effets de cette sorte (le deuxième flou de la pile…), ses paramètres.
+/// Une clé copiée : son écart à la première clé copiée et ses paramètres.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct FxClipKey {
     pub offset: usize,
-    pub kind: EffectKind,
-    pub nth: usize,
     pub values: Vec<f32>,
 }
 
-/// Les clés d'effets copiées.
+/// Les clés d'effet copiées : celles d'un seul effet, dont on garde la sorte (les paramètres ne
+/// vont qu'à un effet de la même sorte).
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct FxClip {
+    pub kind: EffectKind,
     pub keys: Vec<FxClipKey>,
 }
 
 /// Ce que donne un collage.
 #[derive(Debug, PartialEq)]
 pub(crate) struct Pasted {
-    /// Où les clés sont posées : (effet, image).
-    pub placed: Vec<(usize, usize)>,
-    /// Clés laissées de côté : sans effet de leur sorte sur le calque, ou après la fin du plan.
+    /// Les images où des clés sont posées.
+    pub placed: Vec<usize>,
+    /// Clés laissées de côté : d'une autre sorte d'effet, ou après la fin du plan.
     pub skipped: usize,
+}
+
+/// L'effet dont les clés se montrent : le plan (id), le calque (id) et son rang dans la pile.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct FxSel {
+    pub panel: u64,
+    pub layer: u64,
+    pub effect: usize,
 }
 
 // ---------------------------------------------------------------------- lecture
 
-/// Les images où le calque a des clés d'effets, dans l'ordre, sans doublon (une par losange).
-pub(crate) fn marker_frames(fx: &[Effect]) -> Vec<usize> {
-    let mut out: Vec<usize> = fx.iter().flat_map(|e| e.keys.iter().map(|k| k.frame)).collect();
+/// L'effet dont les clés se montrent sur le calque `layer` du plan `panel` (id) : `choice`, si
+/// c'est un effet de ce calque, si l'interrupteur général `on` est mis, et si le calque peut avoir
+/// des effets (ni dossier, ni vidéo).
+pub(crate) fn shown(choice: Option<FxSel>, on: bool, panel: u64, layer: &crate::document::Layer) -> Option<FxSel> {
+    let c = choice.filter(|c| on && c.panel == panel && c.layer == layer.id)?;
+    (c.effect < layer.fx.len() && !layer.folder && layer.video.is_none()).then_some(c)
+}
+
+/// Le rang de l'effet choisi `c` après l'échange des rangs `a` et `b`.
+pub(crate) fn rank_after_swap(c: usize, a: usize, b: usize) -> usize {
+    if c == a {
+        b
+    } else if c == b {
+        a
+    } else {
+        c
+    }
+}
+
+/// Le rang de l'effet choisi `c` après le retrait du rang `removed` : plus de choix s'il était
+/// lui-même retiré, un rang de moins s'il venait après.
+pub(crate) fn rank_after_remove(c: usize, removed: usize) -> Option<usize> {
+    match c.cmp(&removed) {
+        std::cmp::Ordering::Equal => None,
+        std::cmp::Ordering::Greater => Some(c - 1),
+        std::cmp::Ordering::Less => Some(c),
+    }
+}
+
+/// Les images où l'effet a une clé, dans l'ordre (une par losange).
+pub(crate) fn marker_frames(e: &Effect) -> Vec<usize> {
+    let mut out: Vec<usize> = e.keys.iter().map(|k| k.frame).collect();
     out.sort_unstable();
     out.dedup();
     out
-}
-
-/// Les clés de la pile `fx` posées à l'image `frame` : (effet, image).
-pub(crate) fn keys_on(fx: &[Effect], frame: usize) -> Vec<(usize, usize)> {
-    fx.iter().enumerate().filter(|(_, e)| e.key_at(frame).is_some()).map(|(i, _)| (i, frame)).collect()
-}
-
-/// Les noms des effets qui ont une clé à l'image `frame` (la bulle du losange).
-pub(crate) fn names_on(fx: &[Effect], frame: usize) -> Vec<&'static str> {
-    keys_on(fx, frame).into_iter().map(|(i, _)| fx[i].kind.label()).collect()
 }
 
 /// Le losange le plus proche de l'abscisse `px` parmi ceux des images `frames` (`x_of` : le
@@ -99,19 +127,19 @@ pub(crate) fn marker_near(frames: &[usize], px: f32, x_of: impl Fn(usize) -> f32
         .map(|(f, _)| f)
 }
 
-/// Les clés de `fx` à l'image `frame`, en références (plan et calque donnés).
-pub(crate) fn refs_on(panel: u64, layer: u64, fx: &[Effect], frame: usize) -> Vec<FxKeyRef> {
-    keys_on(fx, frame).into_iter().map(|(effect, frame)| FxKeyRef { panel, layer, effect, frame }).collect()
+/// La clé de l'effet `e` (celui de `sel`) à l'image `frame`, en référence : vide s'il n'y en a pas.
+pub(crate) fn refs_on(sel: FxSel, e: &Effect, frame: usize) -> Vec<FxKeyRef> {
+    if e.key_at(frame).is_some() {
+        vec![FxKeyRef { panel: sel.panel, layer: sel.layer, effect: sel.effect, frame }]
+    } else {
+        Vec::new()
+    }
 }
 
-/// Toutes les clés de `fx` des images `a` à `b` (comprises).
-pub(crate) fn keys_between(panel: u64, layer: u64, fx: &[Effect], a: usize, b: usize) -> Vec<FxKeyRef> {
+/// Toutes les clés de l'effet `e` (celui de `sel`) des images `a` à `b` (comprises).
+pub(crate) fn keys_between(sel: FxSel, e: &Effect, a: usize, b: usize) -> Vec<FxKeyRef> {
     let (a, b) = (a.min(b), a.max(b));
-    let mut out = Vec::new();
-    for (effect, e) in fx.iter().enumerate() {
-        out.extend(e.keys.iter().filter(|k| (a..=b).contains(&k.frame)).map(|k| FxKeyRef { panel, layer, effect, frame: k.frame }));
-    }
-    out
+    e.keys.iter().filter(|k| (a..=b).contains(&k.frame)).map(|k| FxKeyRef { panel: sel.panel, layer: sel.layer, effect: sel.effect, frame: k.frame }).collect()
 }
 
 // ---------------------------------------------------------------------- choix
@@ -180,39 +208,31 @@ pub(crate) fn move_keys(fx: &mut [Effect], keys: &[(usize, usize)], delta: isize
 
 // ---------------------------------------------------------------------- copier, coller, supprimer
 
-/// Copie les clés choisies. `groups` : pour chaque calque, sa pile et les clés (effet, image)
-/// choisies. Les écarts se comptent depuis la première image copiée.
-pub(crate) fn copy_keys(groups: &[(&[Effect], &[(usize, usize)])]) -> FxClip {
-    let first = groups.iter().flat_map(|g| g.1.iter().map(|k| k.1)).min().unwrap_or(0);
-    let mut keys = Vec::new();
-    for (fx, chosen) in groups {
-        for &(ei, frame) in *chosen {
-            let Some(e) = fx.get(ei) else { continue };
-            let Some(k) = e.keys.iter().find(|k| k.frame == frame) else { continue };
-            let nth = fx[..ei].iter().filter(|x| x.kind == e.kind).count();
-            keys.push(FxClipKey { offset: frame - first, kind: e.kind, nth, values: k.values.clone() });
-        }
-    }
-    keys.sort_by_key(|k| (k.offset, k.kind as u8, k.nth));
-    FxClip { keys }
+/// Copie les clés de l'effet `e` aux images `frames`. Les écarts se comptent depuis la première
+/// image copiée.
+pub(crate) fn copy_keys(e: &Effect, frames: &[usize]) -> FxClip {
+    let first = frames.iter().copied().min().unwrap_or(0);
+    let mut keys: Vec<FxClipKey> = frames
+        .iter()
+        .filter_map(|&frame| e.keys.iter().find(|k| k.frame == frame).map(|k| FxClipKey { offset: frame - first, values: k.values.clone() }))
+        .collect();
+    keys.sort_by_key(|k| k.offset);
+    FxClip { kind: e.kind, keys }
 }
 
-/// Colle `clip` dans la pile `fx` d'un calque, à partir de l'image `at` d'un plan de `len`
-/// images : chaque clé va à l'effet de même sorte et de même rang parmi ceux de sa sorte, à son
-/// écart ; elle remplace celle qui y était. Les clés sans effet de leur sorte ici, ou qui
-/// tomberaient après la fin du plan, sont laissées de côté.
-pub(crate) fn paste_keys(fx: &mut [Effect], clip: &FxClip, at: usize, len: usize) -> Pasted {
+/// Colle `clip` sur l'effet `e`, à partir de l'image `at` d'un plan de `len` images : chaque clé
+/// va à son écart ; elle remplace celle qui y était. Les clés d'une autre sorte d'effet que `e`,
+/// ou qui tomberaient après la fin du plan, sont laissées de côté.
+pub(crate) fn paste_keys(e: &mut Effect, clip: &FxClip, at: usize, len: usize) -> Pasted {
     let mut placed = Vec::new();
     let mut skipped = 0;
     for k in &clip.keys {
         let frame = at + k.offset;
-        let target = fx.iter().enumerate().filter(|(_, e)| e.kind == k.kind).nth(k.nth).map(|(i, _)| i);
-        match target {
-            Some(ei) if frame < len => {
-                fx[ei].set_key(frame, k.values.clone());
-                placed.push((ei, frame));
-            }
-            _ => skipped += 1,
+        if e.kind == clip.kind && frame < len {
+            e.set_key(frame, k.values.clone());
+            placed.push(frame);
+        } else {
+            skipped += 1;
         }
     }
     Pasted { placed, skipped }
@@ -225,29 +245,24 @@ pub(crate) fn delete_keys(fx: &mut [Effect], keys: &[(usize, usize)]) -> usize {
 
 // ---------------------------------------------------------------------- dessin
 
-/// Les losanges d'une piste : `fx` la pile du calque, `x_of` le centre d'une image, `y` leur
+/// Les losanges d'une piste : `e` l'effet choisi du calque, `x_of` le centre d'une image, `y` leur
 /// hauteur, `max` les images du plan, `visible` les abscisses à dessiner, `chosen` les images dont
 /// les clés sont choisies (cerclées de blanc).
-pub(crate) fn paint_markers(painter: &Painter, fx: &[Effect], x_of: impl Fn(usize) -> f32, y: f32, max: usize, visible: (f32, f32), chosen: &[usize]) {
-    for f in marker_frames(fx) {
+pub(crate) fn paint_markers(painter: &Painter, e: &Effect, x_of: impl Fn(usize) -> f32, y: f32, max: usize, visible: (f32, f32), chosen: &[usize]) {
+    for f in marker_frames(e) {
         let x = x_of(f);
         if f >= max || x < visible.0 - 8.0 || x > visible.1 + 8.0 {
             continue;
         }
-        let several = keys_on(fx, f).len() > 1;
-        paint_marker(painter, Pos2::new(x, y), chosen.contains(&f), several);
+        paint_marker(painter, Pos2::new(x, y), chosen.contains(&f));
     }
 }
 
-/// Un losange : violet, cerclé de noir ; choisi : plus grand et cerclé de blanc ; avec un point
-/// sombre quand il porte les clés de plusieurs effets.
-fn paint_marker(painter: &Painter, c: Pos2, chosen: bool, several: bool) {
+/// Un losange : violet, cerclé de noir ; choisi : plus grand et cerclé de blanc.
+fn paint_marker(painter: &Painter, c: Pos2, chosen: bool) {
     let d = if chosen { 6.0 } else { 4.5 };
     let outline = if chosen { Stroke::new(2.0_f32, Color32::WHITE) } else { Stroke::new(1.0_f32, Color32::from_black_alpha(200)) };
     painter.add(Shape::convex_polygon(vec![c + vec2(0.0, -d), c + vec2(d, 0.0), c + vec2(0.0, d), c + vec2(-d, 0.0)], COLOR, outline));
-    if several {
-        painter.circle_filled(c, 1.6, Color32::from_black_alpha(220));
-    }
 }
 
 // ---------------------------------------------------------------------- geste en cours
@@ -291,12 +306,60 @@ impl App {
         Some((pi, li))
     }
 
-    /// Les clés choisies qui sont encore là, par calque : (plan, calque, [(effet, image)]).
+    // ------------------------------------------------------------------ l'effet choisi
+
+    /// Choisit l'effet de rang `effect` dans la pile du calque courant : ses clés, et elles seules,
+    /// se montrent dans le montage et la timeline. Changer d'effet lâche le choix des clés.
+    pub(crate) fn select_fx(&mut self, effect: usize) {
+        let new = self.doc.panels.get(self.cur_panel).and_then(|p| {
+            let l = p.layers.get(self.cur_layer)?;
+            (effect < l.fx.len()).then_some(FxSel { panel: p.id, layer: l.id, effect })
+        });
+        self.set_fx_choice(new);
+    }
+
+    /// Plus aucun effet choisi : plus de losange.
+    pub(crate) fn deselect_fx(&mut self) {
+        self.set_fx_choice(None);
+    }
+
+    fn set_fx_choice(&mut self, new: Option<FxSel>) {
+        if self.fx_choice != new {
+            self.fx_choice = new;
+            self.fx_key_sel.clear();
+            self.fx_key_anchor = None;
+        }
+    }
+
+    /// Le rang de l'effet choisi dans la pile du calque courant (il est choisi, sur ce calque).
+    pub(crate) fn fx_index(&self) -> Option<usize> {
+        let c = self.fx_choice?;
+        let p = self.doc.panels.get(self.cur_panel)?;
+        let l = p.layers.get(self.cur_layer)?;
+        (c.panel == p.id && c.layer == l.id && c.effect < l.fx.len()).then_some(c.effect)
+    }
+
+    /// L'effet dont les clés se montrent sur le calque `layer` du plan `panel` (id) : celui qui est
+    /// choisi, si c'est sur ce calque, si la case du panneau Effets est cochée, et si le calque
+    /// peut avoir des effets.
+    pub(crate) fn fx_shown(&self, panel: u64, layer: &crate::document::Layer) -> Option<FxSel> {
+        shown(self.fx_choice, self.fx_keys_shown, panel, layer)
+    }
+
+    /// Les clés de l'effet montré à l'image `frame` du calque `li` du plan `pi` (le losange).
+    pub(crate) fn fx_marker_refs(&self, pi: usize, li: usize, frame: usize) -> Vec<FxKeyRef> {
+        let Some(p) = self.doc.panels.get(pi) else { return Vec::new() };
+        let Some(l) = p.layers.get(li) else { return Vec::new() };
+        self.fx_shown(p.id, l).map_or_else(Vec::new, |sel| refs_on(sel, &l.fx[sel.effect], frame))
+    }
+
+    /// Les clés choisies qui sont encore là et visibles, par calque : (plan, calque, [(effet, image)]).
     pub(crate) fn fx_targets(&self) -> Vec<(usize, usize, Vec<(usize, usize)>)> {
         let mut out: Vec<(usize, usize, Vec<(usize, usize)>)> = Vec::new();
         for k in &self.fx_key_sel {
             let Some((pi, li)) = self.fx_layer_at(k.panel, k.layer) else { continue };
-            if self.doc.panels[pi].layers[li].fx.get(k.effect).is_none_or(|e| e.key_at(k.frame).is_none()) {
+            let layer = &self.doc.panels[pi].layers[li];
+            if self.fx_shown(k.panel, layer).is_none_or(|s| s.effect != k.effect) || layer.fx.get(k.effect).is_none_or(|e| e.key_at(k.frame).is_none()) {
                 continue;
             }
             match out.iter_mut().find(|t| t.0 == pi && t.1 == li) {
@@ -324,21 +387,22 @@ impl App {
     /// Clic sur le losange de l'image `frame` du calque `li` du plan `pi` : voir `choose`. La tête
     /// de lecture va sur le losange et le calque devient courant.
     pub(crate) fn click_fx_marker(&mut self, pi: usize, li: usize, frame: usize, toggle: bool, range: bool) {
-        let Some((marker, between, names)) = self.doc.panels.get(pi).and_then(|p| {
+        let Some((marker, between, name)) = self.doc.panels.get(pi).and_then(|p| {
             let l = p.layers.get(li)?;
-            let marker = refs_on(p.id, l.id, &l.fx, frame);
+            let shown = self.fx_shown(p.id, l)?;
+            let e = &l.fx[shown.effect];
+            let marker = refs_on(shown, e, frame);
             let between = match (range, self.fx_key_anchor) {
-                (true, Some(a)) if a.panel == p.id && a.layer == l.id => Some(keys_between(p.id, l.id, &l.fx, a.frame, frame)),
+                (true, Some(a)) if a.panel == p.id && a.layer == l.id => Some(keys_between(shown, e, a.frame, frame)),
                 _ => None,
             };
-            Some((marker, between, names_on(&l.fx, frame).join(", ")))
+            Some((marker, between, e.kind.label()))
         }) else {
             return;
         };
         if marker.is_empty() {
             return;
         }
-        let effect = marker[0].effect;
         let (sel, anchor) = choose(&self.fx_key_sel, self.fx_key_anchor, &marker, toggle, between);
         self.fx_key_sel = sel;
         self.fx_key_anchor = anchor;
@@ -350,12 +414,11 @@ impl App {
             self.set_frame_free(frame);
         }
         self.select_layer(li);
-        self.fx_selected = effect;
         let n = self.fx_key_sel.len();
         self.status = if n == 0 {
             "Plus aucune clé d'effet choisie.".into()
         } else {
-            format!("{n} clé{} d'effet choisie{} (image {} : {names}) : glisser pour déplacer, Ctrl+C, Ctrl+V à l'image courante, Suppr ; clic droit pour le reste.", s(n), s(n), self.frame_label(frame))
+            format!("{n} clé{} d'effet choisie{} (image {} : {name}) : glisser pour déplacer, Ctrl+C, Ctrl+V à l'image courante, Suppr ; clic droit pour le reste.", s(n), s(n), self.frame_label(frame))
         };
     }
 
@@ -377,7 +440,8 @@ impl App {
         if self.content_refuses() {
             return false;
         }
-        let in_choice = self.doc.panels.get(pi).and_then(|p| p.layers.get(li).map(|l| refs_on(p.id, l.id, &l.fx, frame))).is_some_and(|m| !m.is_empty() && m.iter().all(|k| self.fx_key_sel.contains(k)));
+        let marker = self.fx_marker_refs(pi, li, frame);
+        let in_choice = !marker.is_empty() && marker.iter().all(|k| self.fx_key_sel.contains(k));
         if !in_choice {
             self.click_fx_marker(pi, li, frame, false, false);
         }
@@ -463,21 +527,22 @@ impl App {
     /// Copie les clés d'effets choisies.
     pub(crate) fn copy_fx_keys(&mut self) {
         let targets = self.fx_targets();
-        if targets.is_empty() {
-            self.status = "Pas de clé d'effet choisie : cliquer sur un losange violet de la piste d'un calque.".into();
+        let Some((pi, li, keys)) = targets.first() else {
+            self.status = "Pas de clé d'effet choisie : choisir un effet dans le panneau Effets, puis cliquer sur un losange violet de la piste de son calque.".into();
             return;
-        }
-        let groups: Vec<(&[Effect], &[(usize, usize)])> = targets.iter().map(|(pi, li, keys)| (self.doc.panels[*pi].layers[*li].fx.as_slice(), keys.as_slice())).collect();
-        let clip = copy_keys(&groups);
-        let n = clip.keys.len();
+        };
+        let Some(e) = keys.first().and_then(|k| self.doc.panels[*pi].layers[*li].fx.get(k.0)) else { return };
+        let clip = copy_keys(e, &keys.iter().map(|k| k.1).collect::<Vec<_>>());
+        let (n, kind) = (clip.keys.len(), clip.kind.label());
         self.fx_key_clipboard = Some(clip);
         self.fx_clip_recent = true;
         // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau Pelure (`pasteimage`).
         self.ctx.copy_text(format!("{}clés d'effets copiées", crate::pasteimage::MARK));
-        self.status = format!("{n} clé{} d'effet copiée{} : Ctrl+V pour les coller à l'image courante du calque courant.", s(n), s(n));
+        self.status = format!("{n} clé{} d'effet copiée{} : Ctrl+V pour les coller à l'image courante, sur l'effet choisi ({kind}).", s(n), s(n));
     }
 
-    /// Colle les clés d'effets copiées à l'image courante du calque courant ; elles deviennent le choix.
+    /// Colle les clés d'effets copiées à l'image courante, sur l'effet choisi (de la même sorte
+    /// que celui copié) ; elles deviennent le choix.
     pub(crate) fn paste_fx_keys(&mut self) {
         let Some(clip) = self.fx_key_clipboard.clone() else {
             self.status = "Aucune clé d'effet copiée.".into();
@@ -486,22 +551,35 @@ impl App {
         if self.refuse_on_folder() {
             return;
         }
-        let (pi, li, at, len) = (self.cur_panel, self.cur_layer, self.cur_frame, self.frame_count());
-        self.end_stroke();
-        let snap = self.snapshot();
-        let result = paste_keys(&mut self.doc.panels[pi].layers[li].fx, &clip, at, len);
-        if result.placed.is_empty() {
-            let names: Vec<&str> = clip.keys.iter().map(|k| k.kind.label()).collect();
-            self.status = format!("Rien collé : ce calque n'a pas l'effet {} (l'ajouter d'abord dans le panneau Effets), ou l'image courante est trop près de la fin du plan.", names.first().copied().unwrap_or("copié"));
+        let Some(sel) = self.fx_choice.filter(|c| self.fx_keys_shown && self.fx_layer_at(c.panel, c.layer).is_some()) else {
+            self.status = "Pas d'effet choisi : en choisir un dans le panneau Effets (et garder cochée la case des clés d'effets) pour y coller les clés.".into();
+            return;
+        };
+        let Some((pi, li)) = self.fx_layer_at(sel.panel, sel.layer) else { return };
+        let Some(kind) = self.doc.panels[pi].layers[li].fx.get(sel.effect).map(|e| e.kind) else { return };
+        if pi != self.cur_panel {
+            self.status = "L'effet choisi est dans un autre plan : se placer dans ce plan pour y coller les clés.".into();
             return;
         }
-        let (panel, layer) = (self.doc.panels[pi].id, self.doc.panels[pi].layers[li].id);
-        let sel: Vec<FxKeyRef> = result.placed.iter().map(|&(effect, frame)| FxKeyRef { panel, layer, effect, frame }).collect();
-        self.fx_key_anchor = sel.first().copied();
-        self.fx_key_sel = sel;
+        if kind != clip.kind {
+            self.status = format!("Rien collé : les clés copiées sont celles d'un effet « {} », l'effet choisi est « {} ».", clip.kind.label(), kind.label());
+            return;
+        }
+        let (at, len) = (self.cur_frame, self.frame_count());
+        self.end_stroke();
+        let snap = self.snapshot();
+        let result = paste_keys(&mut self.doc.panels[pi].layers[li].fx[sel.effect], &clip, at, len);
+        if result.placed.is_empty() {
+            self.status = "Rien collé : l'image courante est trop près de la fin du plan.".into();
+            return;
+        }
+        let sel_keys: Vec<FxKeyRef> = result.placed.iter().map(|&frame| FxKeyRef { panel: sel.panel, layer: sel.layer, effect: sel.effect, frame }).collect();
+        self.fx_key_anchor = sel_keys.first().copied();
+        self.fx_key_sel = sel_keys;
         self.give_fx_keys_focus();
         let n = result.placed.len();
-        self.status = format!("{n} clé{} d'effet collée{}{}.", s(n), s(n), if result.skipped > 0 { format!(" ; {} laissée{} de côté (effet absent de ce calque, ou après la fin du plan)", result.skipped, s(result.skipped)) } else { String::new() });
+        self.status = format!("{n} clé{} d'effet collée{}{}.", s(n), s(n), if result.skipped > 0 { format!(" ; {} laissée{} de côté (après la fin du plan)", result.skipped, s(result.skipped)) } else { String::new() });
+        self.renderer.invalidate_all();
         self.commit_named(snap, "Coller des clés d'effet");
     }
 
@@ -539,7 +617,7 @@ impl App {
         let can_paste = self.fx_key_clipboard.is_some();
         if ui
             .add_enabled(can_paste, egui::Button::new("Coller à l'image courante").shortcut_text(key(self, "edition.coller")))
-            .on_hover_text("Chaque clé va à l'effet de même sorte du calque courant.")
+            .on_hover_text("Les clés vont à l'effet choisi dans le panneau Effets (de la même sorte que celui copié).")
             .clicked()
         {
             ui.close_menu();
@@ -559,30 +637,24 @@ impl App {
         self.fx_key_sel.iter().filter(|k| k.panel == panel && k.layer == layer).map(|k| k.frame).collect()
     }
 
-    /// Les losanges de la piste d'un calque, s'il en a (et que la case du panneau Effets les montre).
+    /// Les losanges de la piste d'un calque : ceux de l'effet choisi, si c'est un effet de ce
+    /// calque et que la case du panneau Effets les montre.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn paint_fx_markers(&self, painter: &Painter, panel: u64, layer: &crate::document::Layer, x_of: impl Fn(usize) -> f32, y: f32, max: usize, visible: (f32, f32)) {
-        if !self.fx_keys_shown || layer.fx.is_empty() || layer.folder || layer.video.is_some() {
-            return;
-        }
-        paint_markers(painter, &layer.fx, x_of, y, max, visible, &self.fx_chosen_frames(panel, layer.id));
+        let Some(sel) = self.fx_shown(panel, layer) else { return };
+        paint_markers(painter, &layer.fx[sel.effect], x_of, y, max, visible, &self.fx_chosen_frames(panel, layer.id));
     }
 
     /// Le losange sous le point `p` dans la timeline de l'animation : (calque, image).
     pub(crate) fn fx_marker_in_timeline(&self, p: Pos2, r: Rect, cell: f32, rows: &[crate::layerheads::Row], grid_top: f32) -> Option<(usize, usize)> {
-        if !self.fx_keys_shown {
-            return None;
-        }
         let row = crate::layerheads::row_at(rows, p.y - grid_top)?;
         if p.y - grid_top - row.top > STRIP {
             return None;
         }
         let layer = self.layers().get(row.li)?;
-        if layer.folder || layer.video.is_some() || layer.fx.is_empty() {
-            return None;
-        }
+        let sel = self.fx_shown(self.panel().id, layer)?;
         let tol = (cell * 0.5).max(5.0);
-        let f = marker_near(&marker_frames(&layer.fx), p.x, |f| r.left() + (f as f32 + 0.5) * cell, tol)?;
+        let f = marker_near(&marker_frames(&layer.fx[sel.effect]), p.x, |f| r.left() + (f as f32 + 0.5) * cell, tol)?;
         Some((row.li, f))
     }
 }

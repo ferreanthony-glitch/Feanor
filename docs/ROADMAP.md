@@ -1353,6 +1353,18 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         est lâché par un clic ailleurs, une annulation, un changement d'ordre de la pile. Étapes
         d'annulation nommées « Déplacer / Coller / Supprimer des clés d'effet ». Logique en
         fonctions pures testées (`move_keys`, `paste_keys`, `clamp_delta`…) ;
+      - **clés d'effets : seulement celles de l'effet choisi** (Anthony : « elles n'apparaissent
+        que lorsque l'effet est sélectionné »). L'effet choisi (`App::fx_choice` : plan, calque,
+        rang) est celui du panneau Effets : un clic sur son nom le choisit (cadre de la couleur de
+        sélection, nom sur toute la largeur), un second le lâche ; « Créer une clé », un curseur,
+        « Ajouter un effet » ou cocher un effet du calque le choisissent aussi ; action
+        `fx.choisir_aucun`. Seules ses clés se dessinent et se prennent, sur son calque, dans le
+        montage et la timeline ; aucun effet choisi, aucun losange ; la case du panneau reste
+        l'interrupteur général. Plus de point sombre (un losange = une clé). Copier, coller (sur
+        l'effet choisi, de la même sorte que le copié, sinon dit et rien collé), supprimer
+        agissent sur ces clés ; changer d'effet choisi, ouvrir un projet ou vider la pile lâche
+        le choix des clés ; le rang suit un échange ou un retrait de la pile (`rank_after_swap`,
+        `rank_after_remove`, `shown`, testées) ;
       - **enveloppe de Bézier** (Anthony : « maintenir Ctrl permet de saisir une poignée de Bézier
         des coins pour transformer la forme » ; son choix : « B, comme l'outil Perspective ») : dans
         l'outil Transformer, Ctrl + glisser un coin du cadre ouvre une enveloppe sur le dessin

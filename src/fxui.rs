@@ -3,8 +3,8 @@
 //! la création automatique des clés. Avec des clés, changer un paramètre pose (ou met à jour) la
 //! clé de l'image courante ; sans clé, il change l'effet sur tout le calque.
 //!
-//! Les clés d'effets se voient aussi dans la timeline : de petits losanges en haut de la ligne
-//! du calque.
+//! Les clés de l'effet choisi (clic sur son nom, cadre de la couleur de sélection) se voient aussi
+//! dans la timeline et le montage : des losanges en haut de la piste de son calque (`fxkeys.rs`).
 
 use eframe::egui::{self, RichText};
 use egui_phosphor::regular as ph;
@@ -34,7 +34,9 @@ impl App {
             None => fx.push(Effect::new(kind)),
         }
         if let Some(i) = self.layers()[li].fx.iter().position(|e| e.kind == kind) {
-            self.fx_selected = i;
+            if li == self.cur_layer {
+                self.select_fx(i);
+            }
         }
         self.renderer.invalidate_all();
         self.status = format!("{} : {}.", kind.label(), if on { "décoché (le dessin n'a pas changé)" } else { "coché" });
@@ -60,7 +62,11 @@ impl App {
     /// Pose ou met à jour la clé de l'effet `i` du calque courant à l'image courante, avec ses
     /// paramètres à cette image (une étape d'annulation).
     pub(crate) fn fx_create_key(&mut self) {
-        let (li, f, i) = (self.cur_layer, self.cur_frame, self.fx_selected);
+        let (li, f) = (self.cur_layer, self.cur_frame);
+        let Some(i) = self.fx_index() else {
+            self.status = "Choisis d'abord un effet dans la pile du calque (clic sur son nom, dans le panneau Effets).".into();
+            return;
+        };
         let Some((values, name)) = self.layers().get(li).and_then(|l| l.fx.get(i)).map(|e| (e.values_at(f), e.kind.label())) else {
             self.status = "Choisis d'abord un effet dans la pile du calque.".into();
             return;
@@ -78,8 +84,12 @@ impl App {
 
     /// Retire la clé de l'effet choisi à l'image courante.
     pub(crate) fn fx_delete_key(&mut self) {
-        let (li, f, i) = (self.cur_layer, self.cur_frame, self.fx_selected);
-        let has = self.layers().get(li).and_then(|l| l.fx.get(i)).is_some_and(|e| e.key_at(f).is_some());
+        let (li, f) = (self.cur_layer, self.cur_frame);
+        let Some(i) = self.fx_index() else {
+            self.status = "Choisis d'abord un effet dans la pile du calque (clic sur son nom, dans le panneau Effets).".into();
+            return;
+        };
+        let has =self.layers().get(li).and_then(|l| l.fx.get(i)).is_some_and(|e| e.key_at(f).is_some());
         if !has {
             self.status = "Pas de clé de cet effet à l'image courante.".into();
             return;
@@ -94,7 +104,7 @@ impl App {
 
     /// Va à la clé précédente (`dir` < 0) ou suivante de l'effet choisi.
     fn fx_goto_key(&mut self, dir: i32) {
-        let Some(e) = self.layer().fx.get(self.fx_selected) else { return };
+        let Some(e) = self.fx_index().and_then(|i| self.layer().fx.get(i)) else { return };
         let f = self.cur_frame;
         let to = if dir > 0 { e.keys.iter().map(|k| k.frame).find(|&k| k > f) } else { e.keys.iter().rev().map(|k| k.frame).find(|&k| k < f) };
         match to {
@@ -131,7 +141,7 @@ impl App {
                             if ui.button(k.label()).clicked() {
                                 self.record_step();
                                 self.layers_mut()[li].fx.push(Effect::new(k));
-                                self.fx_selected = self.layers()[li].fx.len() - 1;
+                                self.select_fx(self.layers()[li].fx.len() - 1);
                                 ui.close_menu();
                             }
                         }
@@ -147,6 +157,7 @@ impl App {
             }
             if ui.add_enabled(any, egui::Button::new("Tout supprimer")).clicked() {
                 self.record_step();
+                self.deselect_fx();
                 self.fx_key_sel.clear();
                 self.layers_mut()[li].fx.clear();
             }
@@ -155,26 +166,47 @@ impl App {
         let resp = ui.checkbox(&mut self.fx_auto_key, "Création automatique des clés");
         crate::bulles::bulle(resp, "Création automatique des clés", "Une clé est posée à l'image courante à chaque changement d'un paramètre.", &key);
         ui.checkbox(&mut self.fx_keys_shown, "Clés d'effets dans la timeline et le montage")
-            .on_hover_text("Un losange violet par image clée, en haut de la piste du calque : clic pour le choisir, glisser pour le déplacer, Ctrl+C / Ctrl+V / Suppr.");
+            .on_hover_text("Interrupteur général. Les clés de l'effet choisi ci-dessous se montrent, en losanges violets en haut de la piste de son calque : clic pour les choisir, glisser pour les déplacer, Ctrl+C / Ctrl+V / Suppr. Aucun effet choisi, aucun losange.");
         ui.separator();
         let n = self.layers()[li].fx.len();
         if n == 0 {
             ui.label(RichText::new("Aucun effet sur ce calque.").weak());
             return;
         }
+        if self.fx_index().is_none() {
+            ui.label(RichText::new("Clique sur le nom d'un effet pour voir ses clés dans la timeline et le montage.").weak());
+        }
         let mut remove = None;
         let mut swap = None;
         for i in 0..n {
             let e = self.layers()[li].fx[i].clone();
-            egui::Frame::group(ui.style()).show(ui, |ui| {
+            let chosen = self.fx_index() == Some(i);
+            // L'effet choisi se voit : cadre et fond de la couleur de sélection.
+            let sel = ui.visuals().selection;
+            let mut frame = egui::Frame::group(ui.style());
+            if chosen {
+                frame = frame.stroke(egui::Stroke::new(1.5_f32,sel.stroke.color)).fill(sel.bg_fill.gamma_multiply(0.35));
+            }
+            frame.show(ui, |ui| {
                 ui.horizontal(|ui| {
                     let mut on = e.enabled;
                     if ui.checkbox(&mut on, "").on_hover_text("Effet actif").changed() {
                         self.record_step();
                         self.layers_mut()[li].fx[i].enabled = on;
                     }
-                    if ui.selectable_label(self.fx_selected == i, RichText::new(e.kind.label()).strong()).on_hover_text("Effet choisi : les boutons de clé et les actions du clavier le visent.").clicked() {
-                        self.fx_selected = i;
+                    // Le nom prend toute la place libre : une grande cible à cliquer.
+                    let w = (ui.available_width() - 3.0 * 26.0).max(60.0);
+                    let hint = if chosen {
+                        "Effet choisi : ses clés se voient dans la timeline et le montage, et les boutons de clé le visent. Cliquer de nouveau pour ne plus en choisir."
+                    } else {
+                        "Choisir cet effet : ses clés se voient alors dans la timeline et le montage (les boutons de clé le visent)."
+                    };
+                    if ui.add_sized(egui::vec2(w, ui.spacing().interact_size.y), egui::SelectableLabel::new(chosen, RichText::new(e.kind.label()).strong())).on_hover_text(hint).clicked() {
+                        if chosen {
+                            self.deselect_fx();
+                        } else {
+                            self.select_fx(i);
+                        }
                     }
                     if ui.add_enabled(i > 0, egui::Button::new(ph::ARROW_UP).frame(false)).on_hover_text("Plus tôt dans la pile").clicked() {
                         swap = Some((i, i - 1));
@@ -202,7 +234,7 @@ impl App {
                             } else {
                                 effect.values = new;
                             }
-                            self.fx_selected = i;
+                            self.select_fx(i);
                         }
                         ui.end_row();
                     }
@@ -212,22 +244,22 @@ impl App {
                     let key = self.raccourci("fx.cle_creer");
                     let resp = ui.button(format!("{}  Créer une clé", ph::DIAMOND));
                     if crate::bulles::bulle(resp, "Créer une clé", "À l'image courante, avec les paramètres de l'effet.", &key).clicked() {
-                        self.fx_selected = i;
+                        self.select_fx(i);
                         self.fx_create_key();
                     }
                     let key = self.raccourci("fx.cle_supprimer");
                     let resp = ui.add_enabled(here, egui::Button::new("Supprimer la clé"));
                     if crate::bulles::bulle(resp, "Supprimer la clé", "La clé de cet effet à l'image courante.", &key).clicked() {
-                        self.fx_selected = i;
+                        self.select_fx(i);
                         self.fx_delete_key();
                     }
                     if !e.keys.is_empty() {
                         if ui.button(ph::CARET_LEFT).on_hover_text("Clé précédente").clicked() {
-                            self.fx_selected = i;
+                            self.select_fx(i);
                             self.fx_goto_key(-1);
                         }
                         if ui.button(ph::CARET_RIGHT).on_hover_text("Clé suivante").clicked() {
-                            self.fx_selected = i;
+                            self.select_fx(i);
                             self.fx_goto_key(1);
                         }
                         let s = if e.keys.len() > 1 { "s" } else { "" };
@@ -240,16 +272,26 @@ impl App {
             self.record_step();
             // (Les clés choisies se repèrent par le rang de leur effet : le choix est lâché.)
             self.fx_key_sel.clear();
+            self.fx_key_anchor = None;
+            let chosen = self.fx_index();
             self.layers_mut()[li].fx.swap(a, b);
-            if self.fx_selected == a {
-                self.fx_selected = b;
+            // L'effet choisi reste choisi, à son nouveau rang.
+            if let Some(c) = chosen {
+                self.select_fx(crate::fxkeys::rank_after_swap(c, a, b));
             }
         }
         if let Some(i) = remove {
             self.record_step();
             self.fx_key_sel.clear();
+            self.fx_key_anchor = None;
+            let chosen = self.fx_index();
             self.layers_mut()[li].fx.remove(i);
-            self.fx_selected = self.fx_selected.min(self.layers()[li].fx.len().saturating_sub(1));
+            // Retiré, l'effet choisi ne l'est plus ; plus loin dans la pile, il monte d'un rang.
+            match chosen.map(|c| crate::fxkeys::rank_after_remove(c, i)) {
+                Some(Some(c)) => self.select_fx(c),
+                Some(None) => self.deselect_fx(),
+                None => {}
+            }
         }
     }
 }

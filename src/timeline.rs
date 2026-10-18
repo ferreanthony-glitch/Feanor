@@ -685,7 +685,8 @@ impl App {
         }
 
         // Clés d'effets (13i) : un losange violet en haut de la ligne du calque, cerclé de blanc
-        // quand il est choisi (`fxkeys.rs`).
+        // quand il est choisi ; seulement les clés de l'effet choisi dans le panneau Effets, sur
+        // son calque (`fxkeys.rs`).
         if self.fx_keys_shown {
             let panel = self.panel().id;
             let visible = (ui.clip_rect().left(), ui.clip_rect().right());
@@ -710,8 +711,7 @@ impl App {
                 } else if y < rows_h {
                     if let Some((layer, f)) = self.fx_marker_in_timeline(p, r, cell, &rows, grid_top) {
                         // Un losange qui n'était pas choisi l'est seul ; le menu vise le choix.
-                        let (panel, id) = (self.panel().id, self.layers()[layer].id);
-                        if !crate::fxkeys::refs_on(panel, id, &self.layers()[layer].fx, f).iter().all(|k| self.fx_key_sel.contains(k)) {
+                        if !self.fx_marker_refs(self.cur_panel, layer, f).iter().all(|k| self.fx_key_sel.contains(k)) {
                             self.click_fx_marker(self.cur_panel, layer, f, false, false);
                         }
                         self.grid_menu = Some(GridMenu::FxKey);

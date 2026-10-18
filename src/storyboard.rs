@@ -1238,8 +1238,7 @@ impl App {
                     // Un losange de clé d'effet : le menu des clés d'effets choisies (celui-ci seul s'il
                     // n'était pas choisi).
                     self.sel_clip = None;
-                    let panels = &self.doc.panels;
-                    let all_chosen = panels.get(i).and_then(|pn| pn.layers.get(k).map(|l| crate::fxkeys::refs_on(pn.id, l.id, &l.fx, f))).is_some_and(|m| m.iter().all(|c| self.fx_key_sel.contains(c)));
+                    let all_chosen = self.fx_marker_refs(i, k, f).iter().all(|c| self.fx_key_sel.contains(c));
                     if !all_chosen {
                         self.click_fx_marker(i, k, f, false, false);
                     }
