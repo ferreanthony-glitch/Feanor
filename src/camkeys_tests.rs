@@ -266,3 +266,68 @@ fn every_edit_is_one_named_undo_step_that_restores_the_keys() {
     }
     assert_eq!(frames(&doc, 1), vec![0, 6]);
 }
+
+// ---------------------------------------------------------------------- choix au rectangle
+
+/// Les losanges à l'écran : un par clé, à 10 points par image, sur la ligne y = 8, et 300 points
+/// plus loin par plan.
+fn diamonds(doc: &Document) -> Vec<(CamKeyRef, eframe::egui::Pos2)> {
+    let mut out = Vec::new();
+    for (pi, p) in doc.panels.iter().enumerate() {
+        for k in &p.camera {
+            out.push((CamKeyRef { panel: p.id, frame: k.frame }, eframe::egui::pos2(pi as f32 * 300.0 + k.frame as f32 * 10.0, 8.0)));
+        }
+    }
+    out
+}
+
+fn rect(x0: f32, y0: f32, x1: f32, y1: f32) -> eframe::egui::Rect {
+    eframe::egui::Rect::from_two_pos(eframe::egui::pos2(x0, y0), eframe::egui::pos2(x1, y1))
+}
+
+#[test]
+fn a_rectangle_picks_the_keys_it_touches_in_any_direction() {
+    use crate::camkeys::{pick_in_rect, DIAMOND_HALF};
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[2, 6, 12]);
+    keys(&mut doc, 1, &[1, 5]);
+    let d = diamonds(&doc);
+    // Les clés 6 et 12 du plan 0 (x = 60 et 120), pas la 2 (x = 20) : de gauche à droite…
+    let picked = pick_in_rect(&d, rect(50.0, 0.0, 130.0, 16.0), DIAMOND_HALF);
+    assert_eq!(picked, vec![at(&doc, 0, 6), at(&doc, 0, 12)]);
+    // … et de droite à gauche, en montant : le même rectangle.
+    assert_eq!(pick_in_rect(&d, rect(130.0, 16.0, 50.0, 0.0), DIAMOND_HALF), picked);
+    // D'un plan à l'autre (x = 310 et 350 pour le plan 1).
+    let across = pick_in_rect(&d, rect(100.0, 0.0, 320.0, 16.0), DIAMOND_HALF);
+    assert_eq!(across, vec![at(&doc, 0, 12), at(&doc, 1, 1)]);
+    // Le losange est touché dès que son bord entre dans le rectangle (demi-diagonale 4).
+    assert_eq!(pick_in_rect(&d, rect(63.0, 0.0, 70.0, 16.0), DIAMOND_HALF), vec![at(&doc, 0, 6)]);
+    assert!(pick_in_rect(&d, rect(65.0, 0.0, 70.0, 16.0), DIAMOND_HALF).is_empty());
+    // Hors de la hauteur de la piste : rien.
+    assert!(pick_in_rect(&d, rect(0.0, 40.0, 500.0, 60.0), DIAMOND_HALF).is_empty());
+    // Un rectangle entre deux clés ne choisit rien.
+    assert!(pick_in_rect(&d, rect(25.0, 0.0, 45.0, 16.0), DIAMOND_HALF).is_empty());
+}
+
+#[test]
+fn shift_adds_ctrl_toggles_and_no_key_starts_over() {
+    use crate::camkeys::rect_choice;
+    let mut doc = doc3();
+    keys(&mut doc, 0, &[2, 6, 12, 18]);
+    let (a, b, c, d) = (at(&doc, 0, 2), at(&doc, 0, 6), at(&doc, 0, 12), at(&doc, 0, 18));
+    // Sans touche : le rectangle remplace le choix d'avant.
+    assert_eq!(rect_choice(&[a], &[b, c], false, false), vec![b, c]);
+    // Un rectangle dans le vide, sans touche : plus rien de choisi.
+    assert!(rect_choice(&[a], &[], false, false).is_empty());
+    // Maj : s'ajoute au choix d'avant, sans doublon.
+    assert_eq!(rect_choice(&[a, b], &[b, c], true, false), vec![a, b, c]);
+    // Maj dans le vide : le choix d'avant reste.
+    assert_eq!(rect_choice(&[a, b], &[], true, false), vec![a, b]);
+    // Ctrl : les clés touchées déjà choisies sont retirées, les autres ajoutées.
+    assert_eq!(rect_choice(&[a, b], &[b, c], false, true), vec![a, c]);
+    assert!(rect_choice(&[a, b], &[a, b], false, true).is_empty());
+    // Les clés choisies ainsi sont celles qui existent (le copier-coller les vise).
+    let kept = rect_choice(&[a], &[c, d], true, false);
+    assert_eq!(live(&doc, &kept), vec![a, c, d]);
+}
+

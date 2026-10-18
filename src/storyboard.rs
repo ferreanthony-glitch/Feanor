@@ -971,7 +971,9 @@ impl App {
             }
             // Un geste qui ne part pas d'un losange jaune lâche le choix des clés de caméra.
             let cam_hit = self.montage_camera_key_at(origin, r.top(), &blocks, ppf, rows).and_then(|(i, k)| Some((i, self.doc.panels[i].camera.get(k)?.frame)));
-            if cam_hit.is_none() {
+            // (Un geste qui part de la piste Caméra, hors d'un losange, trace un rectangle de choix.)
+            let cam_row = (r.top() + rows.camera_top()..=r.top() + rows.camera_top() + crate::montagerows::CAM_H).contains(&origin.y);
+            if cam_hit.is_none() && !cam_row {
                 self.clear_cam_keys();
             }
             if let Some((i, f)) = cam_hit {
@@ -979,6 +981,12 @@ impl App {
                 self.sel_clip = None;
                 let grab = free_frame_at(origin.x);
                 self.begin_cam_keys_drag(i, f, grab);
+            } else if cam_row {
+                // Un rectangle de choix des clés de caméra (`camkeys::CamRect`) : Maj ajoute au choix,
+                // Ctrl bascule les clés touchées.
+                self.sel_clip = None;
+                let mods = ui.input(|i| i.modifiers);
+                self.begin_cam_rect(origin, mods.shift, mods.command && !mods.shift);
             } else if let Some((_, Some((id, edge)))) = self.lane_hit(origin, left, ppf, lanes_top) {
                 self.begin_clip_drag(id, edge, origin);
             } else if let Some((i, m)) = mark_at(self, origin) {
@@ -1058,6 +1066,22 @@ impl App {
             }
         } else if resp.hover_pos().is_some_and(|p| self.montage_camera_key_at(p, r.top(), &blocks, ppf, rows).is_some()) {
             ui.ctx().set_cursor_icon(CursorIcon::Grab);
+        }
+        // Choix au rectangle des clés de caméra : seule la largeur du rectangle compte (la piste
+        // est basse), il se dessine pendant le geste.
+        if let Some(o) = self.cam_rect.as_ref().map(|c| c.origin) {
+            ui.ctx().set_cursor_icon(CursorIcon::Crosshair);
+            if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
+                let rect = Rect::from_two_pos(o, p);
+                let y = r.top() + rows.camera_top() + crate::montagerows::CAM_H * 0.5;
+                let band = rect.union(Rect::from_center_size(pos2(rect.center().x, y), vec2(0.0, crate::montagerows::CAM_H)));
+                let picked = crate::camkeys::pick_in_rect(&self.montage_cam_diamonds(&blocks, ppf, y), band, crate::camkeys::DIAMOND_HALF);
+                self.drag_cam_rect(&picked);
+                crate::camkeys::paint_marquee(&painter, rect);
+            }
+            if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
+                self.end_cam_rect();
+            }
         }
         if let Some(h) = self.handle_drag.as_ref().map(|d| d.handle) {
             let resize = matches!(h, Handle::LayerStart { .. } | Handle::LayerEnd { .. } | Handle::Exposure { .. } | Handle::Boundary { .. });

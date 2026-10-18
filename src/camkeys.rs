@@ -6,6 +6,11 @@
 //! - un clic choisit le losange jaune (Ctrl : l'ajoute ou le retire ; Maj : toutes les clés
 //!   d'entre le dernier cliqué et lui, d'un plan à l'autre dans le montage) et place la tête de
 //!   lecture dessus ; les clés choisies sont cerclées du contour du thème ;
+//! - au rectangle (Anthony, 2026-10-19 : « sélectionner les clés de caméra par une sélection par
+//!   zone ») : un glisser qui part d'un espace vide de la piste Caméra trace un rectangle et
+//!   choisit les clés qu'il touche ; Maj les ajoute au choix, Ctrl bascule celles qu'il touche,
+//!   Échap rend le choix d'avant ; un clic dans le vide lâche le choix (`CamRect`, `pick_in_rect`,
+//!   `rect_choice`) ;
 //! - glisser un losange emmène toutes les clés choisies du même nombre d'images (une étape
 //!   d'annulation par geste, Échap l'abandonne). Comme avant, une clé ne passe pas par-dessus une
 //!   clé qui n'est pas choisie (ni avant l'image 0, ni après la fin de son plan) ;
@@ -21,7 +26,7 @@
 //! `delete`), testées dans `camkeys_tests.rs` ; `impl App` ne fait que la brancher sur la souris,
 //! le clavier et l'historique.
 
-use eframe::egui::{self, Color32, Pos2, Stroke};
+use eframe::egui::{self, Color32, Pos2, Rect, Stroke};
 
 use crate::app::{App, Mode};
 use crate::camera::{self, CameraKey};
@@ -125,6 +130,50 @@ pub(crate) fn choose(chosen: &[CamKeyRef], anchor: Option<CamKeyRef>, clicked: C
         return (out, Some(clicked));
     }
     (vec![clicked], Some(clicked))
+}
+
+// ---------------------------------------------------------------------- choix au rectangle
+
+/// Un choix au rectangle en cours : son coin de départ (à l'écran), le choix d'avant (que Échap
+/// rend), et la touche tenue au départ : Maj ajoute au choix, Ctrl bascule les clés touchées.
+pub(crate) struct CamRect {
+    pub origin: Pos2,
+    pub before: Vec<CamKeyRef>,
+    pub before_anchor: Option<CamKeyRef>,
+    pub add: bool,
+    pub toggle: bool,
+}
+
+/// Les clés dont le losange (centre donné, `half` de demi-diagonale) touche `rect`.
+pub(crate) fn pick_in_rect(diamonds: &[(CamKeyRef, Pos2)], rect: Rect, half: f32) -> Vec<CamKeyRef> {
+    diamonds.iter().filter(|(_, c)| Rect::from_center_size(*c, egui::vec2(2.0 * half, 2.0 * half)).intersects(rect)).map(|(k, _)| *k).collect()
+}
+
+/// Le choix une fois le rectangle tendu sur `picked` : sans touche, ces clés seules ; `add` (Maj) :
+/// elles s'ajoutent au choix d'avant ; `toggle` (Ctrl) : celles du choix d'avant qu'il touche sont
+/// retirées, les autres ajoutées.
+pub(crate) fn rect_choice(before: &[CamKeyRef], picked: &[CamKeyRef], add: bool, toggle: bool) -> Vec<CamKeyRef> {
+    if toggle {
+        let mut out: Vec<CamKeyRef> = before.iter().copied().filter(|k| !picked.contains(k)).collect();
+        out.extend(picked.iter().copied().filter(|k| !before.contains(k)));
+        return out;
+    }
+    let mut out = if add { before.to_vec() } else { Vec::new() };
+    for k in picked {
+        if !out.contains(k) {
+            out.push(*k);
+        }
+    }
+    out
+}
+
+/// Demi-diagonale d'un losange de clé de caméra à l'écran, en points.
+pub(crate) const DIAMOND_HALF: f32 = 4.0;
+
+/// Le rectangle de choix tel qu'on le voit : un voile du contour du thème, cerclé.
+pub(crate) fn paint_marquee(painter: &egui::Painter, rect: Rect) {
+    let accent = crate::theme::contour();
+    painter.rect(rect, 2.0, accent.gamma_multiply(0.15), Stroke::new(1.5_f32, accent), egui::StrokeKind::Inside);
 }
 
 // ---------------------------------------------------------------------- déplacer
@@ -379,6 +428,62 @@ impl App {
         self.cam_key_anchor = keys.first().copied();
         self.cam_key_sel = keys;
         self.give_cam_keys_focus();
+    }
+
+    // ------------------------------------------------------------------ choix au rectangle
+
+    /// Les losanges de clés de caméra du montage à l'écran : `blocks` les plans, `ppf` la largeur
+    /// d'une image, `y` le milieu de la piste Caméra.
+    pub(crate) fn montage_cam_diamonds(&self, blocks: &[Rect], ppf: f32, y: f32) -> Vec<(CamKeyRef, Pos2)> {
+        let mut out = Vec::new();
+        for (p, b) in self.doc.panels.iter().zip(blocks) {
+            let x0 = b.left() - 1.0;
+            out.extend(p.camera.iter().map(|k| (CamKeyRef { panel: p.id, frame: k.frame }, egui::pos2(x0 + k.frame as f32 * ppf + ppf * 0.5, y))));
+        }
+        out
+    }
+
+    /// Commence un choix au rectangle depuis `origin`, un espace vide de la piste Caméra. Maj
+    /// ajoute au choix d'avant, Ctrl bascule les clés touchées ; sans touche, le choix repart de zéro.
+    pub(crate) fn begin_cam_rect(&mut self, origin: Pos2, add: bool, toggle: bool) {
+        self.end_stroke();
+        self.playing = false;
+        self.cam_rect = Some(CamRect { origin, before: self.cam_key_sel.clone(), before_anchor: self.cam_key_anchor, add, toggle });
+    }
+
+    /// Le rectangle suit la souris : le choix devient ce qu'il touche (`picked`) avec le choix d'avant.
+    pub(crate) fn drag_cam_rect(&mut self, picked: &[CamKeyRef]) {
+        let Some((before, add, toggle)) = self.cam_rect.as_ref().map(|r| (r.before.clone(), r.add, r.toggle)) else { return };
+        let sel = rect_choice(&before, picked, add, toggle);
+        self.cam_key_anchor = sel.last().copied();
+        self.cam_key_sel = sel;
+        if !self.cam_key_sel.is_empty() {
+            self.give_cam_keys_focus();
+        }
+    }
+
+    /// Lâche le rectangle : le choix reste, et la barre d'état le dit.
+    pub(crate) fn end_cam_rect(&mut self) {
+        if self.cam_rect.take().is_none() {
+            return;
+        }
+        let n = self.cam_targets().len();
+        if n > 0 {
+            self.give_cam_keys_focus();
+        }
+        self.status = if n == 0 {
+            "Plus aucune clé de caméra choisie.".into()
+        } else {
+            format!("{n} clé{} de caméra choisie{} : glisser pour déplacer, Ctrl+C, Ctrl+V à l'image courante, Suppr.", s(n), s(n))
+        };
+    }
+
+    /// Échap pendant le rectangle : le choix d'avant revient.
+    pub(crate) fn cancel_cam_rect(&mut self) {
+        if let Some(r) = self.cam_rect.take() {
+            self.cam_key_sel = r.before;
+            self.cam_key_anchor = r.before_anchor;
+        }
     }
 
     // ------------------------------------------------------------------ déplacer

@@ -593,6 +593,8 @@ pub struct App {
     pub(crate) cam_key_clipboard: Option<crate::camkeys::CamClip>,
     pub(crate) cam_clip_recent: bool,
     pub(crate) cam_keys_drag: Option<crate::camkeys::CamKeysDrag>,
+    /// Choix au rectangle des clés de caméra en cours (glisser depuis un espace vide de la piste).
+    pub(crate) cam_rect: Option<crate::camkeys::CamRect>,
     pub(crate) cam_fx: crate::camfx::Params,
     /// Aides au cadrage de la caméra (tiers, grille d'or, spirale…, `cadrage.rs`) : les choix,
     /// retenus dans `reglages.toml`, et leur géométrie du dernier cadre.
@@ -938,6 +940,7 @@ impl App {
             cam_key_clipboard: None,
             cam_clip_recent: false,
             cam_keys_drag: None,
+            cam_rect: None,
             cam_fx: crate::camfx::Params::new(crate::camfx::Preset::Shoulder, 24),
             cadrage_cache: Default::default(),
             handle_drag: None,

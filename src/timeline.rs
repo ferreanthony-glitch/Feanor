@@ -919,12 +919,37 @@ impl App {
         if resp.drag_started() {
             let origin = ui.input(|i| i.pointer.press_origin());
             let hit = origin.and_then(|p| cam_frame_under(self, p));
-            if hit.is_none() {
+            // Un geste qui part d'un espace vide de la rangée Caméra (hors poignée : la fin du
+            // plan) trace un rectangle de choix ; ailleurs, il lâche le choix des clés.
+            let rect_from = origin
+                .filter(|p| hit.is_none() && cam_row.contains(*p) && !in_notes && !comment_busy)
+                .filter(|p| self.timeline_handle_at(*p, r, cell, &rows, grid_top).is_none());
+            if hit.is_none() && rect_from.is_none() {
                 self.clear_cam_keys();
             }
             if let (Some(f), Some(p)) = (hit, origin) {
                 let grab = self.doc.panel_start(self.cur_panel) + ((p.x - r.left()) / cell).floor().max(0.0) as usize;
                 self.begin_cam_keys_drag(self.cur_panel, f, grab);
+            } else if let Some(p) = rect_from {
+                let mods = ui.input(|i| i.modifiers);
+                self.begin_cam_rect(p, mods.shift, mods.command && !mods.shift);
+            }
+        }
+        // Le rectangle de choix des clés de caméra : seule sa largeur compte (la rangée est basse).
+        let marquee = self.cam_rect.is_some();
+        if let Some(o) = self.cam_rect.as_ref().map(|c| c.origin) {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+            if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
+                let rect = Rect::from_two_pos(o, p);
+                let band = rect.union(Rect::from_center_size(pos2(rect.center().x, cam_row.center().y), vec2(0.0, CAM_H)));
+                let panel = self.panel();
+                let diamonds: Vec<_> = panel.camera.iter().map(|k| (crate::camkeys::CamKeyRef { panel: panel.id, frame: k.frame }, pos2(key_x(k.frame), cam_row.center().y))).collect();
+                let picked = crate::camkeys::pick_in_rect(&diamonds, band, crate::camkeys::DIAMOND_HALF);
+                self.drag_cam_rect(&picked);
+                crate::camkeys::paint_marquee(&painter, rect);
+            }
+            if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
+                self.end_cam_rect();
             }
         }
         // Tant qu'on tient une clé, la tête de lecture ne bouge pas.
@@ -1004,7 +1029,7 @@ impl App {
                 ui.ctx().set_cursor_icon(cursor_for(h, false));
             }
         }
-        let holding_key = holding_key || self.handle_drag.is_some() || self.fx_keys_drag.is_some() || comment_busy;
+        let holding_key = holding_key || marquee || self.handle_drag.is_some() || self.fx_keys_drag.is_some() || comment_busy;
 
         // Clic et glisser : choisir l'image (et le calque au clic). Avec Maj : choisir les images
         // entre l'image courante et celle sous la souris, sur les calques choisis (13c-2).

@@ -749,6 +749,7 @@ impl App {
     pub(crate) fn dragging(&self) -> bool {
         self.handle_drag.is_some()
             || self.cam_keys_drag.is_some()
+            || self.cam_rect.is_some()
             || self.montage_drag.is_some()
             || self.image_drag.is_some()
             || self.grid_select.is_some()
@@ -769,6 +770,7 @@ impl App {
         self.cancel_keys_drag();
         self.cancel_fx_keys_drag();
         self.cancel_cam_keys_drag();
+        self.cancel_cam_rect();
         self.cancel_comment_drag();
         if let Some(r) = self.key_rect.take() {
             self.key_sel = r.before;
@@ -807,6 +809,9 @@ impl App {
         }
         if self.cam_keys_drag.is_some() {
             self.end_cam_keys_drag();
+        }
+        if self.cam_rect.is_some() {
+            self.end_cam_rect();
         }
         if self.comment_ui.drag.is_some() {
             self.end_comment_drag();
