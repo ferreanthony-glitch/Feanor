@@ -264,6 +264,8 @@ pub enum Pending {
     SbImport,
     /// Fermer le projet (Ctrl+W) : un projet vide du même format le remplace.
     Close,
+    /// Ouvrir un projet récent (`App::recent_to_open`).
+    OpenRecent,
 }
 
 /// Calque copié (W) : sa timeline, ses dessins, et la durée du panneau d'où il vient.
@@ -561,6 +563,8 @@ pub struct App {
     pub(crate) tool_flyout: Option<(usize, usize, Rect)>,
     /// Un Ctrl+V a donné un événement de collage (texte) depuis l'appui sur V (`pasteimage`).
     pub(crate) paste_event: bool,
+    /// Projet récent à ouvrir une fois « Enregistrer ? » réglé (`recents.rs`).
+    pub(crate) recent_to_open: Option<PathBuf>,
     /// Fenêtre « Aller à un plan » ouverte, et ce qui y est tapé (`aller.rs`).
     pub(crate) goto_plan: Option<String>,
     /// La fenêtre a reçu sa maximisation d'ouverture.
@@ -830,6 +834,7 @@ impl App {
             paste_event: false,
             maximized_once: 0,
             goto_plan: None,
+            recent_to_open: None,
             envelope: None,
             persp: None,
             clipboard: Vec::new(),
@@ -2069,6 +2074,11 @@ impl App {
             Pending::Open => self.open_dialog(),
             Pending::FromChosen => self.new_project_from_chosen(),
             Pending::SbImport => self.start_sb_import(),
+            Pending::OpenRecent => {
+                if let Some(path) = self.recent_to_open.take() {
+                    self.open_path(path);
+                }
+            }
             Pending::Close => {
                 let (w, h, fps) = (self.doc.frame[0], self.doc.frame[1], self.doc.fps);
                 self.load_doc(Document::with_frame(w, h, fps).created_now());
@@ -2137,6 +2147,7 @@ impl App {
                         String::new()
                     }
                 );
+                self.remember_project(&manifest);
                 self.path = Some(manifest);
                 self.import_source = None;
                 self.modified = false;
@@ -2203,6 +2214,7 @@ impl App {
                          « Enregistrer » le passe au nouveau format.",
                     );
                 }
+                self.remember_project(&path);
                 self.path = Some(path);
             }
             Err(e) => self.status = format!("Impossible d'ouvrir le projet : {e}"),

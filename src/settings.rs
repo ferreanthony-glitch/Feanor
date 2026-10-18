@@ -56,6 +56,11 @@ pub struct Settings {
     pub paint_behind: bool,
     #[serde(default, rename = "remplir_la_forme")]
     pub fill_shapes: bool,
+    /// Projets récents, le plus récent d'abord (`recents.rs`), et rouvrir le dernier au lancement.
+    #[serde(default, rename = "projets_recents", skip_serializing_if = "Vec::is_empty")]
+    pub recent_projects: Vec<PathBuf>,
+    #[serde(default = "yes", rename = "rouvrir_dernier_projet")]
+    pub reopen_last: bool,
 }
 
 fn default_autosave() -> u32 {
@@ -87,6 +92,8 @@ impl Default for Settings {
             montage_head_w: default_head_w(),
             paint_behind: false,
             fill_shapes: false,
+            recent_projects: Vec::new(),
+            reopen_last: true,
         }
     }
 }

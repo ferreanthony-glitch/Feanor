@@ -590,6 +590,12 @@ raccourcis à la main », puis « Recharger »). Détails et choix pour le clavi
 
 Documentation technique : `docs/ARCHITECTURE.md` ; avancement : `docs/ROADMAP.md`.
 
+## Projets récents
+
+Fichier > Projets récents : les dix derniers projets ouverts ou enregistrés. Au lancement, Pelure
+rouvre le dernier (sauf si tu en ouvres un autre, ou si une séance interrompue attend d'être
+récupérée) ; une case du même menu le désactive.
+
 ## Plantage
 
 Si Pelure se ferme sur une erreur, un rapport est écrit dans `%LOCALAPPDATA%\Pelure\plantages\`, et la

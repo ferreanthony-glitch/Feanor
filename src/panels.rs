@@ -150,6 +150,7 @@ impl App {
             ui.menu_button("Fichier", |ui| {
                 self.action_item(ui, "Nouveau…", "fichier.nouveau");
                 self.action_item(ui, "Ouvrir…", "fichier.ouvrir");
+                ui.menu_button("Projets récents", |ui| self.recent_menu(ui));
                 self.action_item(ui, "Ouvrir un projet Storyboard Pro (.sboard)…", "fichier.importer_sboard");
                 self.action_item(ui, "Enregistrer", "fichier.enregistrer");
                 self.action_item(ui, "Enregistrer sous…", "fichier.enregistrer_sous");

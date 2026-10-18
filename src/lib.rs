@@ -71,6 +71,9 @@ pub mod ctg;
 #[cfg(test)]
 mod ctg_tests;
 mod ctgui;
+mod recents;
+#[cfg(test)]
+mod recents_tests;
 mod aller;
 #[cfg(test)]
 mod aller_tests;
@@ -345,8 +348,10 @@ fn run(renderer: eframe::Renderer, initial: Option<std::path::PathBuf>) -> efram
         options,
         Box::new(move |cc| {
             let mut app = app::App::new(cc);
-            if let Some(path) = initial {
-                app.open_path(path);
+            match initial {
+                Some(path) => app.open_path(path),
+                // Sans projet demandé : le dernier ouvert (`recents.rs`).
+                None => app.reopen_last_project(),
             }
             // La séance d'avant s'est fermée sur une erreur : on le dit, avec où lire le rapport.
             if let Some(report) = plantage::dir().and_then(|d| plantage::take_new(&d)) {
