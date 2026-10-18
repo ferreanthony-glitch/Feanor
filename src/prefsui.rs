@@ -85,7 +85,7 @@ impl App {
                 ui.label(RichText::new("Dessin").strong());
                 let resp = ui.checkbox(&mut self.settings.system_cursor, "Croix du système sur le pinceau").on_hover_text(
                     "Affiche la croix de Windows à la pointe, en plus du cercle du pinceau : elle suit le \
-                     stylet sans retard (le cercle, dessiné par Pelure, arrive une image plus tard).",
+                     stylet sans retard (le cercle, dessiné par SHOT, arrive une image plus tard).",
                 );
                 if resp.changed() {
                     let _ = self.settings.save();

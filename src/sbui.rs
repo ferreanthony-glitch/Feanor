@@ -178,7 +178,7 @@ impl App {
             self.load_doc(doc);
             self.modified = true;
             self.status = format!(
-                "« {name} » ouvert : {plans} plan(s), {} image(s) de storyboard, {sounds} extrait(s) de son{}. « Enregistrer sous » pour le garder en projet Pelure.",
+                "« {name} » ouvert : {plans} plan(s), {} image(s) de storyboard, {sounds} extrait(s) de son{}. « Enregistrer sous » pour le garder en projet SHOT.",
                 plans + marks,
                 if warnings.is_empty() { String::new() } else { format!(", {} remarque(s)", warnings.len()) }
             );

@@ -68,8 +68,8 @@ impl App {
         })
         .response
         .on_hover_text(
-            "Pelure copie le projet à part (dans %LOCALAPPDATA%\\Pelure\\secours), sans toucher au projet \
-             lui-même : seul « Enregistrer » l'écrit. Après un plantage, Pelure propose d'ouvrir la copie. \
+            "SHOT copie le projet à part (dans %LOCALAPPDATA%\\SHOT\\secours), sans toucher au projet \
+             lui-même : seul « Enregistrer » l'écrit. Après un plantage, SHOT propose d'ouvrir la copie. \
              0 = jamais.",
         );
     }
@@ -82,7 +82,7 @@ impl App {
             .on_hover_text("Copie de secours du projet. Le projet lui-même n'est écrit que par « Enregistrer ».");
     }
 
-    /// Fenêtre « Pelure s'est fermé sans enregistrer », au démarrage.
+    /// Fenêtre « SHOT s'est fermé sans enregistrer », au démarrage.
     pub(crate) fn recovery_window(&mut self, ctx: &egui::Context) {
         if self.orphans.is_empty() {
             return;
@@ -92,7 +92,7 @@ impl App {
         let mut later = false;
         egui::Modal::new(egui::Id::new("recuperation")).show(ctx, |ui| {
             ui.set_width(480.0);
-            ui.heading("Pelure s'est fermé sans enregistrer");
+            ui.heading("SHOT s'est fermé sans enregistrer");
             ui.label("Une copie de secours a été trouvée :");
             ui.add_space(6.0);
             for (i, o) in self.orphans.iter().enumerate() {
@@ -122,7 +122,7 @@ impl App {
             ui.add_space(6.0);
             later = ui
                 .button("Plus tard")
-                .on_hover_text("Les copies restent ; Pelure les proposera au prochain démarrage.")
+                .on_hover_text("Les copies restent ; SHOT les proposera au prochain démarrage.")
                 .clicked();
         });
         if let Some(i) = open {

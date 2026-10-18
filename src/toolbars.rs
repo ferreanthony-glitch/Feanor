@@ -56,7 +56,7 @@ impl App {
                 ui.add_space(4.0);
             };
             self.command_button(ui, ph::FILE_PLUS, "fichier.nouveau", "Nouveau projet", "Commencer un projet vide.", None);
-            self.command_button(ui, ph::FOLDER_OPEN, "fichier.ouvrir", "Ouvrir", "Ouvrir un projet Pelure.", None);
+            self.command_button(ui, ph::FOLDER_OPEN, "fichier.ouvrir", "Ouvrir", "Ouvrir un projet SHOT.", None);
             self.command_button(ui, ph::FLOPPY_DISK, "fichier.enregistrer", "Enregistrer", "Enregistrer le projet.", None);
             self.command_button(ui, ph::EXPORT, "fichier.exporter_film", "Exporter le film", "Exporter le montage.", None);
             sep(ui);

@@ -13,14 +13,15 @@ fn palette(name: &str, colors: &[([u8; 3], &str)]) -> Palette {
 #[test]
 fn palettes_are_created_renamed_duplicated_and_deleted() {
     let mut list = vec![Palette::pelure()];
-    assert_eq!(list[0].swatches.len(), 10, "l'ancien nuancier de Pelure");
+    assert_eq!(list[0].swatches.len(), 10, "l'ancien nuancier de SHOT");
+    assert_eq!(list[0].name, "SHOT");
     let i = nuancier::create(&mut list, 0);
     assert_eq!((i, list[1].name.as_str()), (1, "Nouveau nuancier"));
     let j = nuancier::create(&mut list, 0);
     assert_eq!((j, list[1].name.as_str()), (1, "Nouveau nuancier 2"), "juste après, sous un nom libre");
     assert!(nuancier::rename(&mut list, 1, "  Décors  ").is_ok());
     assert_eq!(list[1].name, "Décors", "sans les espaces autour");
-    assert!(nuancier::rename(&mut list, 1, "Pelure").is_err(), "nom déjà pris");
+    assert!(nuancier::rename(&mut list, 1, "SHOT").is_err(), "nom déjà pris");
     assert!(nuancier::rename(&mut list, 1, "   ").is_err(), "nom vide");
     assert!(nuancier::rename(&mut list, 1, "Décors").is_ok(), "son propre nom");
     list[1].add([1, 2, 3], "Ciel").unwrap();
@@ -90,6 +91,21 @@ fn palettes_are_kept_in_the_settings_file() {
     assert_eq!(broken.palettes, vec![Palette::pelure()]);
     assert_eq!(broken.shown, 0);
     assert_eq!(broken.recent.len(), crate::couleur::RECENT_MAX);
+}
+
+#[test]
+fn the_palette_kept_under_the_old_name_is_renamed_on_read() {
+    // Réglages écrits avant que le logiciel ne s'appelle SHOT : le nuancier de départ s'appelait « Pelure ».
+    let mut old = Palette::pelure();
+    old.name = "Pelure".into();
+    let s = ColorSettings { palettes: vec![old, palette("Décors", &[([1, 2, 3], "Ciel")])], ..Default::default() }.sanitized();
+    assert_eq!(s.palettes[0].name, "SHOT");
+    assert_eq!(s.palettes[1].name, "Décors");
+    // Un nuancier « SHOT » déjà là : l'ancien garde son nom, pas de doublon.
+    let mut old = Palette::pelure();
+    old.name = "Pelure".into();
+    let s = ColorSettings { palettes: vec![old, Palette::pelure()], ..Default::default() }.sanitized();
+    assert_eq!(s.palettes.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["Pelure", "SHOT"]);
 }
 
 // ------------------------------------------------------------ GIMP

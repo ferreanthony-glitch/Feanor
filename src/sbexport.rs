@@ -117,12 +117,12 @@ pub struct OutClip {
 }
 
 /// Le titre en nom de dossier : sans les caractères interdits par Windows, ni point ou espace au
-/// bout ; « Projet Pelure » s'il ne reste rien.
+/// bout ; « Projet SHOT » s'il ne reste rien.
 pub fn safe_name(title: &str) -> String {
     let s: String = title.chars().map(|c| if c.is_control() || "<>:\"/\\|?*".contains(c) { '_' } else { c }).collect();
     let s = s.trim().trim_end_matches(['.', ' ']).to_string();
     if s.is_empty() {
-        "Projet Pelure".into()
+        "Projet SHOT".into()
     } else {
         s
     }
@@ -213,7 +213,7 @@ pub fn prepare(doc: &Document, title: &str) -> SbOut {
         out.notes.push("Dossiers de calques : mis à plat (leur visibilité et leur opacité passent à leurs calques).".into());
     }
     if muted > 0 {
-        out.notes.push(format!("Son : {muted} piste(s) coupée(s) dans Pelure, exportées quand même (et pas coupées dans Storyboard Pro)."));
+        out.notes.push(format!("Son : {muted} piste(s) coupée(s) dans SHOT, exportées quand même (et pas coupées dans Storyboard Pro)."));
     }
     out
 }
@@ -617,8 +617,8 @@ impl SbExportJob {
 /// les données sont écrites en littéral). Les fonctions sont celles de la documentation de
 /// l'interface de script de Storyboard Pro : StoryboardManager, LayerManager, CaptionManager,
 /// SoundTrackManager, project.
-const SCRIPT_TEXT: &str = r#"// Pelure : construction d'un projet Storyboard Pro a partir d'un projet Pelure.
-// Lance par Pelure en mode batch, sur une copie du projet modele. Les images, les sons,
+const SCRIPT_TEXT: &str = r#"// SHOT : construction d'un projet Storyboard Pro a partir d'un projet SHOT.
+// Lance par SHOT en mode batch, sur une copie du projet modele. Les images, les sons,
 // l'avancement et le resultat sont dans PELURE_DONNEES ; le projet est enregistre dans
 // PELURE_DESTINATION.
 var PELURE_DONNEES = @DONNEES@;
@@ -765,7 +765,7 @@ function pelureConstruit()
       // Un nom refuse (deja pris par un plan du modele) : un nom provisoire, corrige plus bas.
       var avant = sb.numberOfScenesInProject();
       sb.appendScene(plan.nom);
-      if (sb.numberOfScenesInProject() == avant) sb.appendScene("pelure" + (s + 1));
+      if (sb.numberOfScenesInProject() == avant) sb.appendScene("shot" + (s + 1));
       if (sb.numberOfScenesInProject() == avant)
       {
         remarques.push("plan " + plan.nom + " non cree");
@@ -788,7 +788,7 @@ function pelureConstruit()
         pelureLegende(cm, legendes.notes, panelId, p.notes);
       }
       pelureEcrit("avancement.txt", ["" + (s + 1)]);
-      MessageLog.trace("Pelure : plan " + (s + 1) + " / " + PELURE.plans.length);
+      MessageLog.trace("SHOT : plan " + (s + 1) + " / " + PELURE.plans.length);
     }
 
     // Les plans du modele s'en vont ; les plans de Pelure prennent leurs noms, maintenant
@@ -848,7 +848,7 @@ function pelureConstruit()
   lignes.push("projet\t" + project.getFrameRate() + "\t" + project.defaultResolutionX() + "\t" + project.defaultResolutionY());
   for (var i = 0; i < remarques.length; ++i) lignes.push("remarque\t" + pelureNettoie(remarques[i]));
   pelureEcrit("resultat.txt", lignes);
-  MessageLog.trace("Pelure : " + n + " plans construits");
+  MessageLog.trace("SHOT : " + n + " plans construits");
 }
 
 pelureConstruit();

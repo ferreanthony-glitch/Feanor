@@ -676,7 +676,7 @@ impl App {
         self.status = format!("{} élément(s) copié(s).", items.len());
         // Un texte dans le presse-papiers du système : sans lui, Ctrl+V n'arrive pas jusqu'à nous.
         self.ctx
-            .copy_text(format!("Pelure : {} élément(s) vectoriel(s)", items.len()));
+            .copy_text(format!("SHOT : {} élément(s) vectoriel(s)", items.len()));
         self.clipboard = items;
         true
     }

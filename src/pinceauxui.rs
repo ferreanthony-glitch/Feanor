@@ -227,7 +227,7 @@ impl App {
         ui.horizontal(|ui| {
             import = icone(ui, ph::FILE_ARROW_DOWN, "Importer des pinceaux", IMPORT_HINT, "").clicked();
             nouvelle = icone(ui, ph::PLUS, "Nouvelle brosse", "Garder le réglage courant sous un nom, dans « Mes brosses » (clic droit sur un pinceau : renommer, dupliquer, remplacer, supprimer).", "").clicked();
-            supprimer = icone_si(ui, can_delete, ph::TRASH, "Supprimer la brosse", "Supprimer la brosse choisie (celles de Pelure restent).", "").clicked();
+            supprimer = icone_si(ui, can_delete, ph::TRASH, "Supprimer la brosse", "Supprimer la brosse choisie (celles de SHOT restent).", "").clicked();
         });
 
         if let Some(i) = pick {
@@ -576,7 +576,7 @@ impl App {
             });
             // Rendu des brosses, étape 2 : un grain qui répond en douceur.
             let resp = ui.add(egui::Slider::new(&mut b.paper_softness, 0.05..=0.5).text("Douceur du grain"));
-            bulle(resp, "Douceur du grain", "Largeur de la transition entre un creux vide et un sommet plein : petit = grain net et dur (0,12 : les anciens réglages), grand = grain qui répond en douceur (0,3 : les brosses de Pelure).", "");
+            bulle(resp, "Douceur du grain", "Largeur de la transition entre un creux vide et un sommet plein : petit = grain net et dur (0,12 : les anciens réglages), grand = grain qui répond en douceur (0,3 : les brosses de SHOT).", "");
         }
         // Rendu des brosses, étape 3 : le grain propre du crayon, même sans papier.
         ui.horizontal(|ui| {
@@ -586,7 +586,7 @@ impl App {
                     ui.selectable_value(&mut b.pencil_grain, g, g.label());
                 }
             });
-            bulle(resp.response, "Grain du crayon", "Un grain fin collé à la feuille, même sans papier : le « Grain » Soie / Doux / Moyen / Dur du crayon de TVPaint, refait par Pelure.", "");
+            bulle(resp.response, "Grain du crayon", "Un grain fin collé à la feuille, même sans papier : le « Grain » Soie / Doux / Moyen / Dur du crayon de TVPaint, refait par SHOT.", "");
         });
         if b.paper.is_some() || b.pencil_grain != crate::brush::PencilGrain::None {
             ui.checkbox(&mut b.paper_follow, "Le grain suit le trait").on_hover_text("Le relief est lu depuis le début du trait au lieu de rester collé à la feuille (collé, comme TVPaint : repasser retrouve les mêmes creux).");

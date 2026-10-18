@@ -54,7 +54,7 @@ pub(crate) fn wet_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
         egui::RichText::new(if vector {
             "Calque vectoriel : la peinture humide ne vaut que pendant le tracé ; elle est faite pour un calque bitmap."
         } else {
-            "Modèle de Pelure (la formule de TVPaint n'est pas publiée) : à comparer avec tes outils de peinture."
+            "Modèle de SHOT (la formule de TVPaint n'est pas publiée) : à comparer avec tes outils de peinture."
         })
         .small()
         .weak(),

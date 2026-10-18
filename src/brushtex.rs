@@ -729,8 +729,8 @@ pub fn share_texture(kind: TextureKind, key: u32, img: GrayImage) {
     }
 }
 
-/// Pointes, papiers et réglages nommés. Ceux de Pelure sont fabriqués au démarrage ; ceux
-/// importés sont gardés dans %APPDATA%\Pelure\pinceaux.
+/// Pointes, papiers et réglages nommés. Ceux de SHOT sont fabriqués au démarrage ; ceux
+/// importés sont gardés dans %APPDATA%\SHOT\pinceaux.
 pub struct BrushLibrary {
     tips: HashMap<u32, (String, Arc<Tip>)>,
     papers: HashMap<u32, (String, Arc<GrayImage>)>,
@@ -739,7 +739,7 @@ pub struct BrushLibrary {
 }
 
 /// Provenance des réglages enregistrés par Anthony (moteur de dessin, étape 9) : gardés comme
-/// les importés dans %APPDATA%\Pelure\pinceaux.
+/// les importés dans %APPDATA%\SHOT\pinceaux.
 pub const MINE: &str = "Mes brosses";
 
 /// Papiers de Pelure. Les deux premiers, des bruits par texel (d'avant l'audit du rendu), restent
@@ -935,7 +935,7 @@ impl BrushLibrary {
 
     /// Dossier des pinceaux importés.
     pub fn user_dir() -> Option<PathBuf> {
-        std::env::var_os("APPDATA").map(|d| PathBuf::from(d).join("Pelure").join("pinceaux"))
+        crate::donnees::roaming().map(|d| d.join("pinceaux"))
     }
 
     /// Les pinceaux de Pelure, plus ceux importés et gardés dans `dir`.

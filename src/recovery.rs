@@ -1,8 +1,8 @@
 //! Sauvegarde de secours et récupération après plantage (4a).
 //!
-//! Chaque séance de Pelure a son dossier dans `%LOCALAPPDATA%\Pelure\secours\<séance>` :
-//! - `verrou` : tenu ouvert (sans partage) tant que Pelure tourne ; tant qu'on ne peut pas
-//!   l'effacer, la séance est vivante (un autre Pelure ouvert à côté, par exemple) ;
+//! Chaque séance de SHOT a son dossier dans `%LOCALAPPDATA%\SHOT\secours\<séance>` :
+//! - `verrou` : tenu ouvert (sans partage) tant que SHOT tourne ; tant qu'on ne peut pas
+//!   l'effacer, la séance est vivante (un autre SHOT ouvert à côté, par exemple) ;
 //! - `seance.json` : le projet d'origine, son titre, l'heure de la dernière copie ;
 //! - `projet\secours.pelure` : une copie du projet, écrite toutes les N minutes s'il a changé,
 //!   sur un autre fil (on continue à dessiner pendant ce temps).
@@ -71,10 +71,10 @@ pub fn now_secs() -> u64 {
 
 /// Dossier de toutes les séances.
 pub fn root() -> Option<PathBuf> {
-    std::env::var_os("LOCALAPPDATA").map(|d| PathBuf::from(d).join("Pelure").join("secours"))
+    crate::donnees::local().map(|d| d.join("secours"))
 }
 
-/// Fichier ouvert sans partage : ni un autre programme ni Pelure ne peut l'effacer tant qu'il
+/// Fichier ouvert sans partage : ni un autre programme ni SHOT ne peut l'effacer tant qu'il
 /// est ouvert.
 fn open_lock(path: &Path) -> std::io::Result<File> {
     let mut o = fs::OpenOptions::new();

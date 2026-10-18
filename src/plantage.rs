@@ -1,8 +1,8 @@
 //! Journal de plantage (Anthony, 2026-10-17 : « le logiciel crashe très vite lors de
 //! l'utilisation de l'outil de propagation de la couleur ») : une erreur de programme (panic)
-//! fermait Pelure sans laisser de trace (pas de console, rien dans le journal de Windows). Le
-//! crochet écrit le message, l'endroit du code, le fil et la pile dans
-//! `%LOCALAPPDATA%\Pelure\plantages\plantage-<secondes>.txt`, et la séance suivante le signale
+//! fermait SHOT (alors Pelure) sans laisser de trace (pas de console, rien dans le journal de
+//! Windows). Le crochet écrit le message, l'endroit du code, le fil et la pile dans
+//! `%LOCALAPPDATA%\SHOT\plantages\plantage-<secondes>.txt`, et la séance suivante le signale
 //! dans la barre d'état. Le projet, lui, est rattrapé par la copie de secours (`recovery.rs`).
 
 use std::path::{Path, PathBuf};
@@ -12,13 +12,13 @@ const NEW: &str = "nouveau.txt";
 
 /// Dossier des rapports.
 pub fn dir() -> Option<PathBuf> {
-    std::env::var_os("LOCALAPPDATA").map(|d| PathBuf::from(d).join("Pelure").join("plantages"))
+    crate::donnees::local().map(|d| d.join("plantages"))
 }
 
 /// Texte du rapport.
 pub fn report_text(message: &str, location: &str, thread: &str, backtrace: &str) -> String {
     format!(
-        "Pelure {} : une erreur de programme (une erreur rattrapée, par exemple dans la propagation, ne ferme pas Pelure).\n\nErreur : {message}\nEndroit : {location}\nFil : {thread}\nQuand : {} s (horloge Unix)\n\nPile :\n{backtrace}\n",
+        "SHOT {} : une erreur de programme (une erreur rattrapée, par exemple dans la propagation, ne ferme pas SHOT).\n\nErreur : {message}\nEndroit : {location}\nFil : {thread}\nQuand : {} s (horloge Unix)\n\nPile :\n{backtrace}\n",
         env!("CARGO_PKG_VERSION"),
         crate::recovery::now_secs(),
     )

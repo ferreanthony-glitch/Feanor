@@ -1,6 +1,6 @@
 //! Banc de traits (moteur de dessin, étape 1) : Aide > « Enregistrer mes traits » garde chaque
 //! trait tel que le stylet l'a donné (positions, appui, instants) avec son réglage, une ligne JSON
-//! par trait dans `%APPDATA%\Pelure\traits\traits.jsonl`. On les rejoue ensuite dans le moteur
+//! par trait dans `%APPDATA%\SHOT\traits\traits.jsonl`. On les rejoue ensuite dans le moteur
 //! (essai ignoré `PELURE_TRAITS`) pour régler la sensation sur les vrais gestes d'Anthony et
 //! comparer avec TVPaint, sans deviner.
 
@@ -43,7 +43,7 @@ impl Recorded {
 
 /// Le dossier des traits enregistrés.
 pub fn dir() -> Option<PathBuf> {
-    std::env::var_os("APPDATA").map(|d| PathBuf::from(d).join("Pelure").join("traits"))
+    crate::donnees::roaming().map(|d| d.join("traits"))
 }
 
 /// Ajoute un trait au fichier `traits.jsonl` du dossier `dir` ; renvoie le fichier.

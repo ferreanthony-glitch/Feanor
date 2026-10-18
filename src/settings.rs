@@ -1,4 +1,4 @@
-//! Réglages de l'application (pas du projet), dans %APPDATA%\Pelure\reglages.toml.
+//! Réglages de l'application (pas du projet), dans %APPDATA%\SHOT\reglages.toml.
 
 use std::path::PathBuf;
 
@@ -122,7 +122,7 @@ impl Default for Settings {
 
 impl Settings {
     fn path() -> Option<PathBuf> {
-        std::env::var_os("APPDATA").map(|d| PathBuf::from(d).join("Pelure").join("reglages.toml"))
+        crate::donnees::roaming().map(|d| d.join("reglages.toml"))
     }
 
     /// Réglages enregistrés ; défauts si le fichier manque ou se lit mal.

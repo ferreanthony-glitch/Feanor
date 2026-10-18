@@ -1289,11 +1289,11 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
     let mut manifest: Manifest =
         serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("manifeste illisible : {e}"))?;
     if manifest.format != FORMAT {
-        return Err("ce fichier n'est pas un projet Pelure".into());
+        return Err("ce fichier n'est pas un projet SHOT".into());
     }
     if manifest.version > VERSION {
         return Err(format!(
-            "projet créé par une version plus récente de Pelure (format {})",
+            "projet créé par une version plus récente de SHOT (format {})",
             manifest.version
         ));
     }

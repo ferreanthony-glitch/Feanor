@@ -1,8 +1,15 @@
-//! Pelure en bibliothèque (10a) : tous les modules, l'application egui (`lancer`), et le noyau
-//! (`noyau`) que d'autres interfaces peuvent utiliser — l'appli compagnon Tauri (`src-tauri/`).
-//! L'exécutable `pelure` (`main.rs`) ne fait qu'appeler `lancer`.
+//! SHOT (Frame the story ; anciennement Pelure) en bibliothèque (10a) : tous les modules,
+//! l'application egui (`lancer`), et le noyau (`noyau`) que d'autres interfaces peuvent utiliser
+//! — l'appli compagnon Tauri (`src-tauri/`). L'exécutable `shot` (`main.rs`) ne fait qu'appeler
+//! `lancer`. La bibliothèque garde le nom `pelure` (les chemins `pelure::` ne changent pas).
 
 mod accueil;
+mod donnees;
+#[cfg(test)]
+mod donnees_tests;
+pub mod logo;
+#[cfg(test)]
+mod logo_tests;
 mod ajuste;
 #[cfg(test)]
 mod ajuste_tests;
@@ -340,7 +347,7 @@ mod xsheet;
 mod xsheet_tests;
 mod xsheetui;
 
-/// Lance Pelure (l'application egui). Un projet passé en argument (ou par double-clic sur un
+/// Lance SHOT (l'application egui). Un projet passé en argument (ou par double-clic sur un
 /// .pelure) est ouvert au démarrage.
 pub fn lancer() -> eframe::Result<()> {
     // Une erreur de programme laisse un rapport (`plantage.rs`).
@@ -361,7 +368,9 @@ pub fn lancer() -> eframe::Result<()> {
 fn run(renderer: eframe::Renderer, initial: Option<std::path::PathBuf>) -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
-            .with_title("Pelure")
+            .with_title("SHOT")
+            // Icône de la fenêtre : le « S » du logo entre deux angles (`logo::icone`).
+            .with_icon(std::sync::Arc::new(eframe::egui::IconData { rgba: logo::icone(64), width: 64, height: 64 }))
             .with_inner_size([1500.0, 920.0])
             .with_min_inner_size([960.0, 600.0])
             // Ouverture en plein écran (Anthony, 2026-10-18), fenêtre maximisée comme Storyboard Pro.
@@ -380,7 +389,7 @@ fn run(renderer: eframe::Renderer, initial: Option<std::path::PathBuf>) -> efram
         ..Default::default()
     };
     eframe::run_native(
-        "Pelure",
+        "SHOT",
         options,
         Box::new(move |cc| {
             let mut app = app::App::new(cc);

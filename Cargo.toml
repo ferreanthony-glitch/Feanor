@@ -2,7 +2,7 @@
 name = "pelure"
 version = "0.1.0"
 edition = "2021"
-description = "Logiciel d'animation 2D bitmap image par image, inspiré de TVPaint"
+description = "SHOT — Frame the story. Storyboard et animation 2D image par image (anciennement Pelure)"
 
 # 10a : Pelure est aussi une bibliothèque, utilisée par l'appli compagnon Tauri (src-tauri/) ;
 # l'exécutable (src/main.rs) ne fait que la lancer. src-tauri/ est un projet Cargo à part (son
@@ -10,6 +10,12 @@ description = "Logiciel d'animation 2D bitmap image par image, inspiré de TVPai
 [lib]
 name = "pelure"
 path = "src/lib.rs"
+
+# Le logiciel s'appelle SHOT (ancien nom : Pelure, gardé pour la bibliothèque `pelure::`) :
+# l'exécutable est `shot.exe`.
+[[bin]]
+name = "shot"
+path = "src/main.rs"
 
 [dependencies]
 # « wgpu » : affichage par la carte graphique (Direct3D 12 / Vulkan) ; « glow » (OpenGL) reste en
@@ -44,6 +50,13 @@ arboard = { version = "3.6", default-features = false, features = ["image-data"]
 # Propagation façon EbSynth : la caisse synthese/ (projet Cargo à part), synthèse sur la carte
 # graphique avec wgpu 24, celui d'eframe : elle tourne sur le périphérique de l'affichage.
 synthese = { path = "synthese", features = ["gpu"] }
+# Logo et icône de SHOT (`logo.rs`) : le dessin du logo, tracé en vecteur, est rasterisé une fois.
+# Sans le format PNG (inutile ici) : seules des caisses déjà en cache sont tirées.
+tiny-skia = { version = "0.11", default-features = false, features = ["std"] }
+
+# `build.rs` dessine l'icône de shot.exe avec le même code que l'application (src/logo.rs).
+[build-dependencies]
+tiny-skia = { version = "0.11", default-features = false, features = ["std"] }
 
 # Le dessin et la composition sont du calcul pixel : même en debug on optimise,
 # sinon le pinceau rame.

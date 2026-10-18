@@ -1,6 +1,6 @@
 //! Couleurs (passe couleur, demandée par Anthony le 2026-10-16), sans interface : conversions
 //! entre RVB, TSV et TSL, code hexadécimal, et les réglages du panneau Couleur gardés dans
-//! `%APPDATA%\Pelure\reglages.toml` (table `[couleurs]`). Les couleurs ne vont pas dans le
+//! `%APPDATA%\SHOT\reglages.toml` (table `[couleurs]`). Les couleurs ne vont pas dans le
 //! projet : son format ne change pas.
 
 use serde::{Deserialize, Serialize};
@@ -206,6 +206,13 @@ impl ColorSettings {
     pub fn sanitized(mut self) -> ColorSettings {
         if self.palettes.is_empty() {
             self.palettes.push(Palette::pelure());
+        }
+        // Le nuancier d'avant le changement de nom du logiciel : « Pelure » devient « SHOT »,
+        // sauf si le nom est déjà pris.
+        if !self.palettes.iter().any(|p| p.name == crate::nuancier::NOM_DEFAUT) {
+            if let Some(p) = self.palettes.iter_mut().find(|p| p.name == crate::nuancier::NOM_ANCIEN) {
+                p.name = crate::nuancier::NOM_DEFAUT.to_string();
+            }
         }
         self.shown = self.shown.min(self.palettes.len() - 1);
         self.recent.truncate(RECENT_MAX);
