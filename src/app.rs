@@ -1156,6 +1156,10 @@ impl App {
         let washed = onion && self.light_table && !self.playing;
         // Multiplan : les calques en profondeur défilent selon la position de la caméra.
         let camera = self.doc.camera_seen(self.cur_panel, frame);
+        // Tremblement du trait (`tremblement.rs`) : à l'écran et à l'arrêt, les calques qui animent
+        // à l'arrêt suivent l'horloge ; l'export, les vignettes et la lecture, l'image.
+        let rest = (onion && !self.playing).then(|| crate::tremblement::rest_frame(crate::fx::now_ms(), self.doc.fps));
+        let editing = self.boil_editing();
         for (li, layer) in self.layers().iter().enumerate() {
             // Caché (lui ou son dossier) : rien ; sinon son opacité, avec celle de son dossier.
             let Some(mut opacity) = crate::folders::effect(self.layers(), li) else { continue };
@@ -1207,7 +1211,11 @@ impl App {
                     tint: None,
                     blend: layer.blend,
                     // Pile d'effets du calque (13i).
-                    fx: crate::fx::steps_at(&layer.fx, frame),
+                    // (Le calque qu'on édite se montre sans tremblement : `boil_editing`.)
+                    fx: match crate::fx::layer_steps(layer, frame, rest) {
+                        steps if editing && li == self.cur_layer => crate::fx::without_boil(steps),
+                        steps => steps,
+                    },
                     // Calque CTG (13j) : rempli d'après les traits de ses sources.
                     ctg: crate::ctg::input(self.layers(), li, frame),
                     fond: None,
@@ -3456,6 +3464,9 @@ impl App {
                 self.status = format!("Création automatique des clés d'effets : {}.", if self.fx_auto_key { "oui" } else { "non" });
             }
             "fx.cles_timeline" => self.fx_keys_shown = !self.fx_keys_shown,
+            // Tremblement du trait (`tremblement.rs`) du calque courant.
+            "fx.tremblement" => self.toggle_fx(self.cur_layer, crate::fx::EffectKind::Boil),
+            "fx.tremblement_repos" => self.set_boil_rest(self.cur_layer, !self.boil_rest_on(self.cur_layer)),
             "fx.choisir_aucun" => {
                 self.deselect_fx();
                 self.status = "Aucun effet choisi : plus de clé d'effet dans la timeline ni le montage.".into();

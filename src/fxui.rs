@@ -18,11 +18,65 @@ impl App {
         self.layers().get(li).is_some_and(|l| l.fx.iter().any(|e| e.kind == kind && e.enabled))
     }
 
+    /// L'effet `kind` peut-il aller sur le calque `li` ? (Le tremblement du trait : calques
+    /// vectoriels seulement.)
+    pub(crate) fn fx_allowed(&self, li: usize, kind: EffectKind) -> bool {
+        self.layers().get(li).is_some_and(|l| !l.folder && (!kind.vector_only() || l.kind == crate::document::LayerKind::Vector))
+    }
+
+    /// Un geste d'édition est en cours sur le calque courant : dessin, gomme, sélection,
+    /// transformation, forme, texte. Son tremblement se tait le temps du geste (`build_plan`) : on
+    /// dessine, on prend et on déplace ce qu'on voit, à la vraie place des traits.
+    pub(crate) fn boil_editing(&self) -> bool {
+        self.stroke.is_some()
+            || self.vstroke.is_some()
+            || self.verase.is_some()
+            || self.vsel.as_ref().is_some_and(|s| !s.items.is_empty())
+            || self.vdrag.is_some()
+            || self.flottante.is_some()
+            || self.cut_gesture.is_some()
+            || self.envelope.is_some()
+            || self.persp.is_some()
+            || self.shape_drag.is_some()
+            || self.shape_edit.is_some()
+            || self.text_edit.is_some()
+    }
+
+    /// Règle « Animer à l'arrêt » du tremblement du calque `li` (il s'ajoute, réglages par défaut,
+    /// s'il n'y est pas encore) : une étape d'annulation. Le réglage vaut aussi pour les clés.
+    pub(crate) fn set_boil_rest(&mut self, li: usize, on: bool) {
+        if !self.fx_allowed(li, EffectKind::Boil) || self.content_refuses() {
+            return;
+        }
+        self.record_step();
+        let fx = &mut self.layers_mut()[li].fx;
+        let i = match fx.iter().position(|e| e.kind == EffectKind::Boil) {
+            Some(i) => i,
+            None => {
+                fx.push(Effect::new(EffectKind::Boil));
+                fx.len() - 1
+            }
+        };
+        fx[i].enabled = true;
+        fx[i].set_param(crate::tremblement::REST, if on { 1.0 } else { 0.0 });
+        self.renderer.invalidate_all();
+        self.status = format!("Tremblement du trait : {}.", if on { "le dessin bout aussi à l'arrêt" } else { "image fixe à l'arrêt" });
+    }
+
+    /// « Animer à l'arrêt » est-il réglé sur le tremblement du calque `li` ?
+    pub(crate) fn boil_rest_on(&self, li: usize) -> bool {
+        self.layers().get(li).is_some_and(|l| l.fx.iter().any(|e| e.kind == EffectKind::Boil && e.enabled && e.values_at(self.cur_frame).get(crate::tremblement::REST).is_some_and(|v| *v >= 0.5)))
+    }
+
     /// Coche ou décoche l'effet `kind` du calque `li` (une étape d'annulation, le dessin ne
     /// change pas) : absent, il s'ajoute avec ses réglages par défaut ; présent, il s'active ou
     /// se désactive, ses réglages restent.
     pub(crate) fn toggle_fx(&mut self, li: usize, kind: EffectKind) {
         if li >= self.layers().len() || self.content_refuses() {
+            return;
+        }
+        if !self.fx_allowed(li, kind) {
+            self.status = format!("« {} » ne va que sur un calque vectoriel.", kind.label());
             return;
         }
         let on = self.fx_on(li, kind);
@@ -48,7 +102,8 @@ impl App {
     pub(crate) fn fx_menu_items(&mut self, ui: &mut egui::Ui, li: usize) {
         for family in FAMILIES {
             ui.menu_button(family, |ui| {
-                for kind in EffectKind::ALL.into_iter().filter(|k| k.family() == family) {
+                let kinds: Vec<EffectKind> = EffectKind::ALL.into_iter().filter(|k| k.family() == family && self.fx_allowed(li, *k)).collect();
+                for kind in kinds {
                     let on = self.fx_on(li, kind);
                     if ui.checkbox(&mut on.clone(), kind.label()).clicked() {
                         self.toggle_fx(li, kind);
@@ -137,7 +192,8 @@ impl App {
                 // Par familles, comme le menu Filtre de Photoshop.
                 for family in FAMILIES {
                     ui.menu_button(family, |ui| {
-                        for k in EffectKind::ALL.into_iter().filter(|k| k.family() == family) {
+                        let kinds: Vec<EffectKind> = EffectKind::ALL.into_iter().filter(|k| k.family() == family && self.fx_allowed(li, *k)).collect();
+                        for k in kinds {
                             if ui.button(k.label()).clicked() {
                                 self.record_step();
                                 self.layers_mut()[li].fx.push(Effect::new(k));
@@ -223,7 +279,16 @@ impl App {
                     for (k, p) in e.kind.params().iter().enumerate() {
                         ui.label(p.name);
                         let mut v = values[k];
-                        let resp = ui.add(egui::Slider::new(&mut v, p.min..=p.max).suffix(p.unit));
+                        let resp = match e.kind.param_style(k) {
+                            crate::fx::ParamStyle::Slider => ui.add(egui::Slider::new(&mut v, p.min..=p.max).suffix(p.unit)),
+                            crate::fx::ParamStyle::Integer => ui.add(egui::Slider::new(&mut v, p.min..=p.max).suffix(p.unit).step_by(1.0).fixed_decimals(0)),
+                            crate::fx::ParamStyle::Switch => {
+                                let mut on = v >= 0.5;
+                                let resp = ui.checkbox(&mut on, "").on_hover_text("Au repos, le dessin continue de trembler (l'écran se redessine à la cadence du tremblement). Éteint, l'image fixe montre la variante de l'image courante.");
+                                v = if on { 1.0 } else { 0.0 };
+                                resp
+                            }
+                        };
                         // Pendant le geste, l'image passe en aperçu (`fx::draft_level`) ; la pleine
                         // résolution revient au lâcher.
                         if resp.dragged() || resp.changed() {
@@ -234,7 +299,10 @@ impl App {
                             new[k] = v;
                             let auto = self.fx_auto_key;
                             let effect = &mut self.layers_mut()[li].fx[i];
-                            if auto || !effect.keys.is_empty() {
+                            if e.kind.param_style(k) == crate::fx::ParamStyle::Switch {
+                                // (Un interrupteur ne s'anime pas : il vaut pour toutes les clés.)
+                                effect.set_param(k, v);
+                            } else if auto || !effect.keys.is_empty() {
                                 effect.set_key(f, new);
                             } else {
                                 effect.values = new;

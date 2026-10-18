@@ -71,7 +71,7 @@ pub fn upcoming_cels(doc: &Document, at: Position, shown: &Plan, cap: usize) -> 
         for layer in (0..layers.len()).filter(|&li| crate::folders::effect(layers, li).is_some()).map(|li| &layers[li]) {
             let Some(id) = layer.shown_at(f) else { continue };
             // Un calque à effets montre son dessin dérivé (`upcoming_derived`), pas le dessin même.
-            if !crate::fx::steps_at(&layer.fx, f).is_empty() {
+            if !crate::fx::layer_steps(layer, f, None).is_empty() {
                 continue;
             }
             if out.contains(&id) || shown.items.iter().any(|i| i.cel == id) {

@@ -66,6 +66,13 @@ impl App {
         self.check_envelope();
 
         let plan = self.build_plan(self.cur_frame, true, true);
+        // Tremblement du trait animé à l'arrêt (`tremblement.rs`) : seul le prochain changement de
+        // variante réveille l'écran (12 fois par seconde par défaut), jamais à la cadence de l'écran.
+        if !self.playing {
+            if let Some(wait) = crate::tremblement::rest_wake(&plan.items, self.doc.fps, crate::fx::now_ms()) {
+                ui.ctx().request_repaint_after(wait);
+            }
+        }
         let painter = ui.painter_at(rect);
         let stage_corners = [pos2(0.0, 0.0), pos2(size.x, 0.0), pos2(size.x, size.y), pos2(0.0, size.y)];
         let corners_h = stage_corners.map(|p| self.view.to_screen_h(rect, size, p));
@@ -97,6 +104,19 @@ impl App {
                 ahead.extend(
                     crate::playback::upcoming_cels(&self.doc, at, &plan, cap).into_iter().map(|id| crate::gpu::Ahead { id, cel: None }),
                 );
+                // Les autres variantes d'un tremblement animé à l'arrêt : demandées au fil de fond
+                // et envoyées d'avance, pour que l'écran passe de l'une à l'autre sans attendre.
+                if !self.playing {
+                    let others = crate::tremblement::other_variants(&plan.items);
+                    crate::fx::prefetch(&self.doc, &others, 1, level);
+                    for item in &others {
+                        if let Some((id, cel)) = crate::fx::ready(&self.doc, item, level) {
+                            if !ahead.iter().any(|a| a.id == id) {
+                                ahead.push(crate::gpu::Ahead { id, cel: Some(cel) });
+                            }
+                        }
+                    }
+                }
                 ahead
             }
             None => Vec::new(),

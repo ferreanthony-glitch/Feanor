@@ -349,6 +349,22 @@ on les coche et décoche, le dessin reste tel quel).
   postérisation, seuil), **Bruit**, **Pixéliser** (mosaïque), **Rendu** (nuages, éclairage,
   dégradé : ils texturent ou éclairent le dessin), **Netteté**, **Styliser** (ombre portée,
   lueur).
+- **Tremblement du trait** (famille Déformation, **calques vectoriels seulement**, comme dans
+  WigglyPaint) : le dessin « bout », montré en quelques variantes légèrement déplacées qui se
+  suivent à basse cadence, même sur une image fixe. Au clic droit sur un calque vectoriel, la case
+  « Tremblement du trait » (et « Animer à l'arrêt ») ; les réglages dans le panneau Effets :
+  **Intensité** (0 à 20 px, le déplacement maximal), **Fréquence** (0 à 100 % : de très doux le long
+  du trait à nerveux), **Variantes** (2 à 6 dessins qui tournent), **Vitesse** (1 à 12 images du
+  projet par variante : 2 images à 24 ips, 12 changements par seconde), **Épaisseur** (0 à 100 % :
+  le trait s'épaissit et s'amincit un peu), **Graine** (pour que deux calques ne tremblent pas
+  pareil), **Animer à l'arrêt** (éteint par défaut : l'image fixe montre la variante de l'image
+  courante et ne coûte rien ; allumé, le dessin continue de trembler quand on ne lit pas, et seul
+  cela redessine l'écran, à la cadence du tremblement, 12 fois par seconde et non 60). Tout se règle
+  par clés comme les autres effets (sauf « Animer à l'arrêt »). Le même dessin donne toujours les
+  mêmes pixels (lecture, export, défilement). Les dessins ne changent pas : tant que tu dessines, gommes,
+  sélectionnes ou transformes sur le calque, il se montre sans tremblement, à la vraie place de ses
+  traits. Actions : `fx.tremblement`, `fx.tremblement_repos`. Détails dans `src/tremblement.rs` et
+  `docs/ROADMAP.md`.
 - Au clic droit sur un calque, la partie « Effets » : opacité, mode de fusion, chaque famille
   en cases à cocher ; on règle les paramètres dans le panneau Effets.
 - On les active, les ordonne ou les retire à tout moment.
@@ -1027,6 +1043,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `flips.rs`, `flipsui.rs` | Flips : limites, checkpoints, pas, panneau et flip en cours (13h) |
 | `fx.rs`, `fxui.rs` | Pile d'effets : clés, flous, dessins dérivés, panneau (13i) |
 | `fxcache.rs`, `fxproxy.rs` | Effets : cache en octets, calcul de fond, dernier résultat en attendant ; aperçu réduit pendant la lecture et les gestes |
+| `tremblement.rs` | Tremblement du trait des calques vectoriels : champ de déplacement lisse, variantes, repos (effet de la pile) |
 | `ctg.rs`, `ctgui.rs` | Calque CTG : remplissage par graffitis, sources, structure (13j) |
 | `video.rs`, `videoui.rs` | Calque vidéo : import par ffmpeg, images lues à la demande (13k) |
 | `tween.rs`, `tweenui.rs` | Interpolation : intervalles vectoriels, fondus, étirement, cadence (13l) |

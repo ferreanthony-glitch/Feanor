@@ -2108,3 +2108,69 @@ n'est tiré de son code, de ses images ni de ses textes).
   à essayer par Anthony.
 - Pas faits : le pivot n'est pas enregistré avec le projet ni annulable ; pas d'inclinaison de la
   perspective ; Échap n'abandonne pas un geste en cours (comme avant).
+
+## Tremblement du trait, façon WigglyPaint (demandé par Anthony le 2026-10-19) ✅
+
+La demande : « une option uniquement pour le vectoriel de tremblement du trait, avec des paramètres
+possibles pour modifier l'intensité du tremblement, comme dans WigglyPaint ». Branche `tremblement`
+(`src/tremblement.rs`, essais `tremblement_tests.rs`). Pas vu à l'écran dans cette séance : à essayer
+par Anthony.
+
+- ✅ **Où** : un effet de la pile du calque (`EffectKind::Boil`, famille Déformation), réservé aux
+  calques vectoriels (`fx::layer_steps`, `EffectKind::vector_only` ; absent des menus d'un calque
+  bitmap). Interrupteur dans le menu du calque (« Tremblement du trait », « Animer à l'arrêt »),
+  réglages dans le panneau Effets, actions `fx.tremblement` et `fx.tremblement_repos`. Il hérite des
+  effets : enregistrement dans le projet, clés (intensité, fréquence… animables), calcul de fond avec
+  la règle « sans latence », cache des dessins dérivés par jeu de réglages, aperçu réduit pendant la
+  lecture, envoi d'avance à la carte graphique, export et vignettes.
+- ✅ **Réglages** : Intensité 0–20 px (3), Fréquence 0–100 % (55 ; longueur d'onde de 160 px à 4 px,
+  en échelle exponentielle), Variantes 2–6 (3), Vitesse 1–12 images par variante (2 : 12 changements
+  par seconde à 24 ips), Épaisseur 0–100 % (0), Graine 1–999, Animer à l'arrêt (non).
+- ✅ **Déplacement déterministe** : un champ de bruit de valeurs en 2D, maille = demi-longueur d'onde,
+  nœuds tirés d'un hachage entier de (graine, variante, nœud) ; chaque nœud porte un vecteur de norme au
+  plus 1 et l'interpolation lissée (3t² − 2t³) est une combinaison convexe : continu, de classe C¹,
+  jamais plus que l'intensité, et la même image donne toujours les mêmes pixels. Variante d'une image =
+  `(image / vitesse) % variantes`.
+- ✅ **Choix de rendu (et pourquoi pas un rejeu par variante)** : chaque variante est le dessin déjà
+  rendu (les pixels exacts des traits en cache) relu à travers le champ — une relecture bilinéaire, pas
+  un rejeu du moteur de brosses. Rejouer le moteur pour chaque variante aurait coûté N fois les 2 à 20 ms
+  de chaque trait texturé, N fois la mémoire de chaque trait, et un déplacement par trait (pas par
+  champ). Le champ donne le même caractère pour toutes les brosses, texturées ou non, sans toucher au
+  moteur, et les variantes se calculent en arrière-plan comme n'importe quel effet. Le prix : une
+  relecture bilinéaire adoucit très légèrement le trait (au plus un demi-pixel), et deux traits proches
+  tremblent ensemble (le champ est continu) — c'est aussi le caractère de WigglyPaint. Le maillage
+  `warp.rs` sur la carte graphique a été écarté : il aurait demandé un maillage de plusieurs dizaines de
+  milliers de cases (longueur d'onde de 4 px sur 1920 px), renvoyé à chaque image, et un calcul de
+  secours sur processeur pour l'export, plus lent qu'une variante gardée.
+- ✅ **Épaisseur variable** : la couverture des pixels de bord grimpe ou descend selon une valeur lisse du
+  même champ (puissance de la couverture, 2^(±1,5 × réglage)) : le cœur du trait ne bouge pas, les bords
+  s'épaississent et s'amincissent d'une fraction de pixel.
+- ✅ **Sans latence** : l'écran ne calcule jamais une variante (`fxcache.rs`, fil de fond). En lecture, les
+  variantes des 24 images qui viennent sont demandées d'avance, la plus proche d'abord, et envoyées à la
+  carte graphique ; en attendant une variante, l'écran montre la variante d'avant du même dessin (ou le
+  dessin tel quel si le dessin a changé depuis : jamais un tremblement d'avant le dernier trait posé,
+  `fx::display_with`). Aucun rejeu du moteur, nulle part, y compris sur le fil de l'interface.
+- ✅ **À l'arrêt** : « Animer à l'arrêt » éteint par défaut (une passe de performance est en cours et
+  une image fixe doit coûter 0 % de processeur) ; l'image fixe montre la variante de l'image courante.
+  Allumé, le calque suit l'horloge (`tremblement::rest_frame`) et seul le prochain changement de variante
+  réveille l'écran (`rest_wake` → `request_repaint_after`, 83 ms à 24 ips avec une vitesse de 2 : 12 Hz,
+  pas 60) ; les autres variantes sont demandées et envoyées d'avance (`other_variants`).
+- ✅ **Édition** : sur le calque courant, un geste de dessin, de gomme, de sélection (tant qu'un choix
+  existe) ou de transformation éteint son tremblement (`App::boil_editing`) : on voit et on prend les
+  traits à leur vraie place. Les dessins ne changent jamais : la prise, la sélection, le cutter et
+  l'export SBP lisent la vraie géométrie. L'export d'images, de film, de PDF et les vignettes montrent
+  la variante de chaque image.
+- ✅ **Format** : `project::VERSION` 25 → 26 (la sorte d'effet `tremblement` est inconnue des versions
+  d'avant, qui refusent le projet au lieu de le montrer sans son tremblement).
+- ✅ **Mesures** (`tremblement_tests::boiling_playback_cost`, `#[ignore]`, 1920 × 1080, 60 traits texturés,
+  3 variantes, une toutes les deux images, 24 ips en temps réel) : lecture de 96 images, **0 rejeu du
+  moteur sur le fil de l'interface**, interface **0,04 ms par image en moyenne** (1,2 ms pour la première
+  image, qui demande les variantes), 95 images servies avec la variante prête, une seule en attente ;
+  une variante en arrière-plan : **8 à 10 ms** pleine résolution (3,4 Mo), **4,7 ms** en aperçu réduit de
+  moitié (1,1 Mo), 20 ms au pire (feuille couverte de bout en bout, 334 tuiles), 10 ms avec l'épaisseur
+  variable.
+- Pas faits : le tremblement ne se règle pas par trait mais par calque ; il adoucit un peu le trait
+  (lecture bilinéaire) ; l'écran n'a pas été regardé (pas de capture dans cette séance) ; la perte du
+  rendu exact d'un trait sous le tremblement n'est pas un défaut de la plume mais de la relecture —
+  pour un rendu net, éteindre le tremblement à l'export final ou demander un rejeu par variante (piste
+  écartée plus haut).
