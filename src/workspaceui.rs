@@ -63,7 +63,12 @@ impl App {
             "vue.panneau_fiche" => self.toggle_pane_group(Group::Right),
             "vue.panneau_bande" => self.toggle_pane_group(Group::Bottom),
             "vue.reajuster_panneaux" => self.refit_panes(),
-            _ => return false,
+            "vue.barre_panneaux" => self.toggle_panel_bar(),
+            // Les panneaux de la barre des panneaux : même règle que son clic.
+            a => match crate::barrepanneaux::pane_de_action(a) {
+                Some(pane) => self.clic_panneau(pane),
+                None => return false,
+            },
         }
         true
     }
@@ -106,6 +111,13 @@ impl App {
         ui.menu_button("Panneaux", |ui| {
             ui.checkbox(&mut self.layout.command_bar, "Barre de commandes (en haut)");
             ui.checkbox(&mut self.layout.tool_bar, "Barre d'outils (à gauche)");
+            // La barre des panneaux est un réglage de l'application, pas de l'espace de travail.
+            let key = self.keymap.label("vue.barre_panneaux");
+            let text = if key.is_empty() { "Barre des panneaux (à droite)".to_string() } else { format!("Barre des panneaux (à droite) ({key})") };
+            let resp = ui.checkbox(&mut self.settings.panel_bar, text).on_hover_text("Une icône par panneau de côté, sur le bord droit : un clic l'ouvre, le met devant ou le ferme.");
+            if resp.changed() {
+                let _ = self.settings.save();
+            }
             ui.separator();
             let panes = self.dock_layout();
             let detached = self.detached_panes();

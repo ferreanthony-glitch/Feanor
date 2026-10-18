@@ -1306,6 +1306,20 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         calque au montage 28 → 13 (Options du calque, Animation, Effets en sous-menus), calque du
         panneau 22 → 8, en-tête de timeline 14 → 10, case de timeline 21 → 12 (Insérer ou retirer,
         Plus). Rien n'est perdu : sous-menus, boutons, Ctrl+K ;
+      - **barre des panneaux** (Anthony, d'après Photoshop : une fine bande d'icônes sur le côté, une
+        par panneau de côté ; on ne prend que l'organisation) : un `SidePanel::right` de 30 points,
+        posé avant la zone des panneaux (elle n'est pas un panneau de l'espace de travail), neuf
+        icônes de `Pane::icon` en trois groupes (réglages, pinceaux, couleur, guides ; calques,
+        effets, fiche, feuille d'exposition ; historique). Règle du clic (`regle_clic`, pure) :
+        fermé, il s'ouvre devant ses onglets ; ouvert derrière un autre onglet, il passe devant ;
+        ouvert et visible, il se ferme. Icône enfoncée quand le panneau est dans l'espace de
+        travail. Chaque icône est une action (`vue.reglages`, `vue.pinceaux`, `vue.couleur`,
+        `vue.guides`, `vue.calques`, `vue.fiche`, plus `fx.panneau`, `vue.feuille_exposition` et
+        `vue.historique` qui existaient : leurs touches suivent maintenant la même règle), donc
+        bulle de 1 s, clic droit « Assigner un raccourci… » et palette. Affichage > Panneaux >
+        « Barre des panneaux » (`vue.barre_panneaux`, `reglages.toml` : `barre_panneaux`, montrée
+        d'office). Rien par image au-delà du dessin des icônes ; la place d'un panneau n'est lue
+        qu'au clic. Le menu Panneaux et les panneaux qui s'ajustent n'ont pas changé. `barrepanneaux.rs` ;
       - **enveloppe de Bézier** (Anthony : « maintenir Ctrl permet de saisir une poignée de Bézier
         des coins pour transformer la forme » ; son choix : « B, comme l'outil Perspective ») : dans
         l'outil Transformer, Ctrl + glisser un coin du cadre ouvre une enveloppe sur le dessin

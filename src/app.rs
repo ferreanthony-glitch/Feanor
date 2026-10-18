@@ -3148,8 +3148,7 @@ impl App {
             "pelure.decaler" => self.onion_shift = !self.onion_shift,
             "pelure.remettre" => self.reset_onion_offset(),
             // Feuille d'exposition (13g, `xsheetui.rs`).
-            "vue.feuille_exposition" => self.toggle_pane(crate::dock::Pane::XSheet),
-            "vue.historique" => self.toggle_pane(crate::dock::Pane::History),
+            // (`vue.feuille_exposition` et `vue.historique` : barre des panneaux, `workspace_action`.)
             // Rôles des images (13g-2, `rolesui.rs`).
             "role.cle" => self.set_role(Some(crate::roles::Role::Key)),
             "role.breakdown" => self.set_role(Some(crate::roles::Role::Breakdown)),
@@ -3169,7 +3168,6 @@ impl App {
             "flip.changer" => self.next_flip(),
             a if a.starts_with("flip.") && self.role_flip_action(a) => {}
             // Pile d'effets (13i, `fxui.rs`).
-            "fx.panneau" => self.toggle_pane(crate::dock::Pane::Effects),
             "fx.cle_creer" => self.fx_create_key(),
             "fx.cle_supprimer" => self.fx_delete_key(),
             "fx.cle_auto" => {
@@ -3515,6 +3513,15 @@ impl eframe::App for App {
                 .exact_width(44.0)
                 .resizable(false)
                 .show(ctx, |ui| self.vertical_tool_bar(ui));
+        }
+        // La barre des panneaux, sur le bord droit : avant les panneaux, qui prennent le reste.
+        if self.settings.panel_bar {
+            let frame = egui::Frame::side_top_panel(&ctx.style()).inner_margin(egui::Margin::symmetric(2, 4));
+            egui::SidePanel::right("barre_panneaux")
+                .exact_width(crate::barrepanneaux::LARGEUR)
+                .resizable(false)
+                .frame(frame)
+                .show(ctx, |ui| self.panel_bar(ui));
         }
         // Les panneaux : onglets que l'on glisse, aimante ou fait flotter (5b).
         self.show_dock(ctx);

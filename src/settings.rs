@@ -65,6 +65,9 @@ pub struct Settings {
     /// paires (premier panneau du haut, premier du bas) dont on a tiré le bord à la main.
     #[serde(default = "yes", rename = "panneaux_ajustes")]
     pub panes_fit: bool,
+    /// La barre des panneaux, sur le bord droit de la fenêtre (`barrepanneaux.rs`).
+    #[serde(default = "yes", rename = "barre_panneaux")]
+    pub panel_bar: bool,
     #[serde(default, rename = "panneaux_tires_a_la_main", skip_serializing_if = "Vec::is_empty")]
     pub panes_fixed: Vec<(crate::dock::Pane, crate::dock::Pane)>,
     /// Toucher du stylet (sensation des brosses, 2026-10-18) : courbe de pression globale,
@@ -109,6 +112,7 @@ impl Default for Settings {
             recent_projects: Vec::new(),
             reopen_last: true,
             panes_fit: true,
+            panel_bar: true,
             panes_fixed: Vec::new(),
             toucher: Default::default(),
             brushes_panel: Default::default(),
