@@ -494,6 +494,19 @@ impl App {
         {
             self.import_sound(None, None);
         }
+        // Vidéo, à côté du son (Anthony, 2026-10-19) : un calque vidéo dans le plan courant.
+        if self
+            .bouton(
+                ui,
+                ph::FILE_VIDEO,
+                "Importer une vidéo",
+                "Une vidéo devient un calque vidéo du plan courant, image par image (à dessiner par-dessus, ou à transformer en calque d'animation).",
+                "fichier.importer_video",
+            )
+            .clicked()
+        {
+            self.import_video();
+        }
         let resp = ui.menu_button(RichText::new(ph::SPEAKER_HIGH).size(TAILLE), |ui| self.sound_menu(ui)).response;
         bulle(resp, "Son", "Pistes son, son au défilement et pendant la lecture.", "");
         sep(ui);
