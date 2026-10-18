@@ -262,6 +262,8 @@ pub enum Pending {
     FromChosen,
     /// Import d'un projet Storyboard Pro (14a), qui remplace le projet ouvert.
     SbImport,
+    /// Fermer le projet (Ctrl+W) : un projet vide du même format le remplace.
+    Close,
 }
 
 /// Calque copié (W) : sa timeline, ses dessins, et la durée du panneau d'où il vient.
@@ -559,6 +561,8 @@ pub struct App {
     pub(crate) tool_flyout: Option<(usize, usize, Rect)>,
     /// Un Ctrl+V a donné un événement de collage (texte) depuis l'appui sur V (`pasteimage`).
     pub(crate) paste_event: bool,
+    /// Fenêtre « Aller à un plan » ouverte, et ce qui y est tapé (`aller.rs`).
+    pub(crate) goto_plan: Option<String>,
     /// La fenêtre a reçu sa maximisation d'ouverture.
     pub(crate) maximized_once: u8,
     /// Geste du cutter en cours (points du dessin).
@@ -825,6 +829,7 @@ impl App {
             cut_gesture: None,
             paste_event: false,
             maximized_once: 0,
+            goto_plan: None,
             envelope: None,
             persp: None,
             clipboard: Vec::new(),
@@ -2064,6 +2069,12 @@ impl App {
             Pending::Open => self.open_dialog(),
             Pending::FromChosen => self.new_project_from_chosen(),
             Pending::SbImport => self.start_sb_import(),
+            Pending::Close => {
+                let (w, h, fps) = (self.doc.frame[0], self.doc.frame[1], self.doc.fps);
+                self.load_doc(Document::with_frame(w, h, fps).created_now());
+                self.path = None;
+                self.status = "Projet fermé : un projet vide du même format le remplace.".into();
+            }
             Pending::Quit => {
                 self.allow_close = true;
                 self.ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -2577,6 +2588,13 @@ impl App {
                 self.save_as();
             }
             "fichier.quitter" => self.request(Pending::Quit),
+            "fichier.fermer" => self.request(Pending::Close),
+            // Le collage pose déjà les éléments et les zones à leur place d'origine.
+            "edition.coller_sur_place" => self.run_action("edition.coller"),
+            // Les propriétés du plan : la fiche (action, dialogue, notes, durée…).
+            "panneau.proprietes" => self.show_pane(crate::dock::Pane::Sheet),
+            "scene.aller_a" => self.goto_plan = Some(String::new()),
+            "calque.flou" => self.toggle_fx(self.cur_layer, crate::fx::EffectKind::GaussianBlur),
             "fichier.exporter_film" => self.open_export(crate::export::Format::Mp4),
             "fichier.exporter_images" => self.open_export(crate::export::Format::Png),
             "fichier.exporter_son" => self.open_export(crate::export::Format::Wav),

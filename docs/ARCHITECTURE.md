@@ -811,6 +811,9 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     `select_press`) : `Original::Vector` avec les éléments choisis, `Original::Masked` (zone bitmap,
     `envelope::warp_raster_masked`, `rasterize` partagé). `springtools` : pas de lasso de Ctrl avec
     Transformer.
+  - Aller à un plan (`aller.rs`) : `find_plan` (pur, testé : nom du plan, de préférence dans la
+    séquence courante, puis « séquence/plan », puis le rang), fenêtre `goto_window` (`App::goto_plan`).
+    `Pending::Close` (Ctrl+W) ; `dockui::show_pane` (ouvert, onglet devant).
   - Retourner (`flip.rs`) : `mirror_transform_x` (miroir de la feuille : angle opposé, largeur
     négative, translation recalée sur le centre de la feuille), `flipped_in_place`, `mirror_camera_x`,
     purs et testés ; `LayerTransform::clamp_stretch` garde le signe.

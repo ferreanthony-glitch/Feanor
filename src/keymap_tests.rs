@@ -26,8 +26,9 @@ const SBP27_IDS: [&str; 65] = [
     "ADD_FRAME_KEY", "REMOVE_FRAME_KEY", "SB_PROPERTIES_KEY",
 ];
 
-/// Tes 8 réglages personnels (STB_Shortcuts.xml).
-const PERSO: [(&str, &str, &[&str]); 8] = [
+/// Tes réglages personnels (STB_Shortcuts.xml) ; le huitième, le pinceau pochoir
+/// (DRAWING_STENCIL_BRUSH_TOOL_KEY, retiré chez toi), n'a plus d'action depuis le 2026-10-18.
+const PERSO: [(&str, &str, &[&str]); 7] = [
     ("TOGGLE_PLAYBACK_ALL_KEY", "lecture.basculer", &["Entrée"]),
     // F5 dans son Storyboard Pro ; F6 dans Pelure depuis le 2026-10-17 (F5 pose une clé).
     ("SPLIT_PANEL_KEY", "panneau.couper", &["F6"]),
@@ -36,7 +37,6 @@ const PERSO: [(&str, &str, &[&str]); 8] = [
     ("PASTE_LAYERS_KEY", "calque.coller", &["X"]),
     ("DELETE_LAYER_KEY", "calque.supprimer", &["Q"]),
     ("BLUR_BITMAP_LAYER_KEY", "calque.flou", &["Maj+D"]),
-    ("DRAWING_STENCIL_BRUSH_TOOL_KEY", "outil.pochoir", &[]),
 ];
 
 fn default_map() -> Keymap {
@@ -74,8 +74,10 @@ fn storyboard_pro_sources_are_exact() {
             }
         }
     }
-    // Le pinceau pochoir est cité via ton réglage perso (raccourci retiré).
+    // Le pinceau pochoir (retiré dans tes réglages perso) et « lier les clips au panneau » (sans
+    // objet depuis les plans) n'ont plus d'action (2026-10-18) : cités en commentaire du fichier.
     cited.insert("DRAWING_STENCIL_BRUSH_TOOL_KEY");
+    cited.insert("LINK_CLIP_AND_PANEL");
     // A / F (plan précédent / suivant dans Storyboard Pro) vont à la clé précédente / suivante,
     // tous les calques (choix d'Anthony, 2026-10-17) ; les plans passent sur PgPréc / PgSuiv.
     cited.insert("PREV_PANEL_KEY");
@@ -168,9 +170,11 @@ fn modifiers_and_contexts() {
     assert_eq!(press(&map, Key::Delete, Key::Delete, ctrl, Mode::Animation).as_deref(), Some("dessin.supprimer"));
     assert_eq!(press(&map, Key::Tab, Key::Tab, NONE, Mode::Animation).as_deref(), Some("mode.basculer"));
     assert_eq!(press(&map, Key::Tab, Key::Tab, Modifiers::SHIFT, Mode::Storyboard).as_deref(), Some("vue.planches"));
-    // Raccourcis en réserve : ils ne déclenchent rien.
-    assert_eq!(press(&map, Key::Enter, Key::Enter, Modifiers::ALT, Mode::Storyboard), None);
-    // Ctrl+L, en réserve pour « lier les clips au panneau », va à la pelure du calque (13b).
+    // Raccourcis en réserve : ils ne déclenchent rien (Ctrl+G, la grille).
+    assert_eq!(press(&map, Key::G, Key::G, ctrl, Mode::Storyboard), None);
+    // Alt+Entrée : les propriétés du plan (la fiche), faites le 2026-10-18.
+    assert_eq!(press(&map, Key::Enter, Key::Enter, Modifiers::ALT, Mode::Storyboard).as_deref(), Some("panneau.proprietes"));
+    // Ctrl+L (« lier les clips au panneau » de Storyboard Pro, sans objet) va à la pelure du calque (13b).
     assert_eq!(press(&map, Key::L, Key::L, ctrl, Mode::Storyboard).as_deref(), Some("calque.pelure"));
     // Réglages perso devenus actifs en 1e.
     assert_eq!(press(&map, Key::F6, Key::F6, NONE, Mode::Storyboard).as_deref(), Some("panneau.couper"));
@@ -186,7 +190,7 @@ fn menu_labels() {
     assert_eq!(map.label("image.precedente"), "; (QWERTY ,)");
     assert_eq!(map.label("outil.taille_plus"), "$ (QWERTY ])");
     assert_eq!(map.label("panneau.ajouter_image"), "+");
-    assert_eq!(map.label("panneau.proprietes"), "", "pas d'étiquette pour un raccourci en réserve");
+    assert_eq!(map.label("vue.grille"), "", "pas d'étiquette pour un raccourci en réserve");
     assert_eq!(map.label("calque.verrouiller"), "Alt+L");
 }
 

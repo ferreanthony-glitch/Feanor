@@ -153,6 +153,7 @@ impl App {
                 self.action_item(ui, "Ouvrir un projet Storyboard Pro (.sboard)…", "fichier.importer_sboard");
                 self.action_item(ui, "Enregistrer", "fichier.enregistrer");
                 self.action_item(ui, "Enregistrer sous…", "fichier.enregistrer_sous");
+                self.action_item(ui, "Fermer le projet", "fichier.fermer");
                 self.action_item(ui, "Afficher le projet dans l'Explorateur", "fichier.afficher_explorateur");
                 self.action_item(ui, "Nouveau projet à partir des plans choisis", "projet.nouveau_depuis_plans");
                 self.action_item(ui, "Réglages du projet (propriétés, résolution, cadence)…", "projet.proprietes");
@@ -187,6 +188,7 @@ impl App {
                 self.action_item(ui, "Copier la sélection", "edition.copier");
                 self.action_item(ui, "Couper la sélection", "edition.couper");
                 self.action_item(ui, "Coller", "edition.coller");
+                self.action_item(ui, "Coller sur place", "edition.coller_sur_place");
                 self.action_item(ui, "Tout sélectionner", "edition.tout_selectionner");
                 self.action_item(ui, "Tout désélectionner", "edition.tout_deselectionner");
                 self.action_item(ui, "Retourner la sélection de gauche à droite", "selection.miroir_h");
@@ -201,6 +203,9 @@ impl App {
                 self.action_item(ui, "Nouveau plan", "panneau.nouveau");
                 self.action_item(ui, "Nouveau plan avant le plan courant", "plan.nouveau_avant");
                 self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
+                ui.separator();
+                self.action_item(ui, "Aller à un plan…", "scene.aller_a");
+                self.action_item(ui, "Propriétés du plan", "panneau.proprietes");
                 ui.separator();
                 let lock = if self.doc.storyboard_locked { "Déverrouiller le storyboard" } else { "Verrouiller le storyboard" };
                 self.action_item(ui, lock, "storyboard.verrouiller");
@@ -708,6 +713,7 @@ impl App {
         self.brush_import_window(ctx);
         self.sb_export_ui(ctx);
         self.smart_rename_window(ctx);
+        self.goto_window(ctx);
         if let Some(mut d) = self.new_dialog.take() {
             let mut keep = true;
             let mut create = false;

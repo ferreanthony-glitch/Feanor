@@ -56,7 +56,6 @@ source = "Pelure (sans touche)"
 action = "fichier.fermer"
 touches = ["Ctrl+W"]
 source = "Storyboard Pro 27 : CLOSE_KEY"
-etat = "non implémenté"
 
 [[raccourci]]
 action = "fichier.quitter"
@@ -125,7 +124,6 @@ source = "Storyboard Pro 27 : PASTE_KEY"
 action = "edition.coller_sur_place"
 touches = ["Ctrl+Maj+V"]
 source = "Storyboard Pro 27 : PASTE_IN_PLACE_KEY"
-etat = "non implémenté"
 
 [[raccourci]]
 action = "edition.supprimer"
@@ -309,11 +307,8 @@ action = "outil.cutter"
 touches = ["Alt+T"]
 source = "Storyboard Pro 27 : DRAWING_CUTTER_TOOL_KEY"
 
-[[raccourci]]
-action = "outil.pochoir"
-touches = []
-source = "perso : DRAWING_STENCIL_BRUSH_TOOL_KEY retiré (Alt+X par défaut dans Storyboard Pro 27)"
-etat = "non implémenté"
+# Pinceau pochoir (DRAWING_STENCIL_BRUSH_TOOL_KEY, Alt+X dans Storyboard Pro 27, retiré dans tes
+# réglages perso) : action retirée le 2026-10-18 (le pochoir de calque existe).
 
 [[raccourci]]
 action = "outil.formes"
@@ -657,7 +652,6 @@ source = "proposition validée (NEXT_SHOT_KEY n'a pas de touche par défaut)"
 action = "scene.aller_a"
 touches = ["Ctrl+F"]
 source = "Storyboard Pro 27 : GOTO_SHOT_KEY"
-etat = "non implémenté"
 
 # ------------------------------------------------------------------------------------ Panneaux
 
@@ -711,7 +705,6 @@ source = "Storyboard Pro 27 : REMOVE_FRAME_KEY"
 action = "panneau.proprietes"
 touches = ["Alt+Entrée"]
 source = "Storyboard Pro 27 : SB_PROPERTIES_KEY"
-etat = "non implémenté"
 
 [[raccourci]]
 action = "panneau.couper"
@@ -824,7 +817,6 @@ source = "perso : DELETE_LAYER_KEY"
 action = "calque.flou"
 touches = ["Maj+D"]
 source = "perso : BLUR_BITMAP_LAYER_KEY"
-etat = "non implémenté"
 
 [[raccourci]]
 action = "calque.verrouiller"
@@ -1770,12 +1762,6 @@ action = "calque.nouveau_fond"
 touches = []
 source = "Pelure (calque de fond commun aux panneaux d'une scène ; aucune commande équivalente vérifiée)"
 
-[[raccourci]]
-action = "calque.toute_la_scene"
-touches = []
-etat = "non implémenté"
-source = "Pelure (plus utilisé depuis les plans, phase 13a)"
-
 # Marque d'image (13a) : une image de storyboard de plus dans le plan ; pas de touche à elle.
 [[raccourci]]
 action = "marque.basculer"
@@ -1895,13 +1881,8 @@ source = "Storyboard Pro 27 sans touche par défaut : TOGGLE_SOUND_KEY"
 
 # ------------------------------------------------------------------------------------ Autres (en réserve)
 
-[[raccourci]]
-action = "clips.lier_au_panneau"
-# Ctrl+L de Storyboard Pro, laissé à la pelure d'oignon du calque (13b, validé) : sans objet
-# depuis qu'il n'y a plus de panneaux.
-touches = []
-source = "Storyboard Pro 27 : LINK_CLIP_AND_PANEL"
-etat = "non implémenté"
+# Lier les clips au panneau (LINK_CLIP_AND_PANEL, Ctrl+L dans Storyboard Pro 27) : sans objet depuis
+# les plans ; action retirée le 2026-10-18. Ctrl+L reste à la pelure d'oignon du calque (13b).
 
 [[raccourci]]
 action = "reference.decharger"

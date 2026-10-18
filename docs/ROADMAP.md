@@ -1220,6 +1220,18 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         caméra (`plan.retourner`, « Flip Selected Shots » de Storyboard Pro 27, sans touche ;
         menus Storyboard et « … »). Mes choix : le calque autour du milieu de son contenu ; les
         calques de toute la scène pas retournés (partagés avec les autres plans) ;
+      - **passe sur les raccourcis** (Anthony : « regarde s'il existe des raccourcis prévus pour des
+        fonctions qui n'existent pas dans Pelure ») : 22 actions sans fonction, dont 19 avec une
+        touche (presque toutes de Storyboard Pro 27, gardées en réserve). Puis (« retire ce qui
+        est devenu inutile et fais les 5 rapides ») : retirées, pinceau pochoir, calque de toute la
+        scène, lier les clips au panneau ; faites, Ctrl+W fermer le projet (un projet vide du même
+        format, après « Enregistrer ? »), Ctrl+Maj+V coller sur place (le collage pose déjà à la
+        place d'origine), Alt+Entrée propriétés du plan (la fiche devant), Ctrl+F aller à un plan
+        (nom, séquence/plan ou rang, `aller.rs`), Maj+D flou du calque (l'effet Flou gaussien coché
+        ou décoché). Restent en réserve : grille, outil zoom, zoom et rotation temporaires, peindre
+        les zones non peintes, remplissage automatique, chercher dans les légendes, supprimer et
+        resserrer, choisir tous les dessins du plan, épaisseur du crayon, aimanter au contour,
+        aplatir, décharger la référence ;
       - **enveloppe de Bézier** (Anthony : « maintenir Ctrl permet de saisir une poignée de Bézier
         des coins pour transformer la forme » ; son choix : « B, comme l'outil Perspective ») : dans
         l'outil Transformer, Ctrl + glisser un coin du cadre ouvre une enveloppe sur le dessin

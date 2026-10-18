@@ -250,6 +250,17 @@ impl App {
         }
     }
 
+    /// Montre `pane` : ouvert s'il ne l'était pas, son onglet devant.
+    pub(crate) fn show_pane(&mut self, pane: Pane) {
+        if !self.pane_shown(pane) {
+            self.toggle_pane(pane);
+        } else if let Some(state) = self.dock.as_mut() {
+            if let Some(at) = state.find_tab(&pane) {
+                state.set_active_tab(at);
+            }
+        }
+    }
+
     /// `pane` est-il dans l'espace de travail (affiché ou en onglet) ?
     pub(crate) fn pane_shown(&self, pane: Pane) -> bool {
         self.dock.as_ref().map_or_else(|| self.layout.dock_layout().contains(pane), |s| s.find_tab(&pane).is_some()) || self.detached.iter().any(|d| d.panneau == pane)

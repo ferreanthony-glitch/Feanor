@@ -71,6 +71,9 @@ pub mod ctg;
 #[cfg(test)]
 mod ctg_tests;
 mod ctgui;
+mod aller;
+#[cfg(test)]
+mod aller_tests;
 mod envelope;
 #[cfg(test)]
 mod envelope_tests;
