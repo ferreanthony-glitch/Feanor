@@ -10,6 +10,9 @@ mod app;
 mod audio;
 #[cfg(test)]
 mod audio_tests;
+mod barrepanneaux;
+#[cfg(test)]
+mod barrepanneaux_tests;
 pub mod fond;
 #[cfg(test)]
 mod fond_tests;

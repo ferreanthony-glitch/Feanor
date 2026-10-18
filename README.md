@@ -699,6 +699,17 @@ effets sous les calques font de même. Tire un bord à la main : il reste où tu
 après relance. Affichage > Panneaux > Réajuster les panneaux oublie ces bords ; la case « Ajuster
 les panneaux à leur contenu » coupe le tout.
 
+## Barre des panneaux
+
+Une fine bande d'icônes sur le bord droit de la fenêtre, une par panneau de côté : réglages de
+l'outil, pinceaux, couleur, guides ; calques, effets, fiche du plan, feuille d'exposition ;
+historique. Un clic sur une icône ouvre le panneau, devant les onglets de son groupe. S'il est
+ouvert mais caché derrière un autre onglet, le clic le met devant ; s'il est visible, le clic le
+ferme. L'icône est enfoncée tant que le panneau est dans l'espace de travail. La bulle d'une
+icône donne son nom et son raccourci ; clic droit > « Assigner un raccourci… » (chaque icône est
+aussi une commande de Ctrl+K, et son raccourci suit la même règle). Affichage > Panneaux >
+« Barre des panneaux » la montre ou la cache.
+
 ## Historique
 
 Édition > Historique… ouvre la liste des étapes d'annulation, à côté des calques : chacune porte
