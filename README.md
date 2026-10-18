@@ -627,6 +627,11 @@ reste dans la forme ; la gomme **coupe le fond** (une zone fermée qu'on veut la
 et repeindre au même endroit le recoud. Tout se voit pendant le geste ; Ctrl+Z annule chaque coup.
 Éteindre l'option retire le fond.
 
+Toujours en « Fond », le pot de peinture et le cutter travaillent par zones fermées par le trait :
+un clic du pot de peinture remplit la zone de la couleur courante, sous le trait (un t-shirt rouge,
+un visage qui reste blanc) ; un clic du cutter retire la zone du fond (le trou entre le bras et le
+corps). Les trous du trait sont fermés comme pour le fond.
+
 Plusieurs calques d'un coup : Calques > Fond sous le trait (sur les calques choisis, sur tout le
 plan, retirer), ou « Ce fond aussi sur » dans les réglages. « Tout le plan » laisse les calques de
 fond du décor. La couleur d'un fond neuf se règle par projet (Fichier > Réglages du projet,

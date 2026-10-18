@@ -244,3 +244,48 @@ fn distances_match_brute_force() {
         assert!((d[p] - best).abs() < 1e-6, "pixel {p} : {} au lieu de {best}", d[p]);
     }
 }
+
+#[test]
+fn a_click_finds_the_zone_closed_by_the_line() {
+    use crate::fond::zone;
+    let ring = ring(0.0);
+    let z = zone(&ring, 100, 100, 6).expect("le dedans de l'anneau");
+    let at = |x: usize, y: usize| z[y * 200 + x];
+    assert!(at(100, 100) && at(100, 60) && at(60, 100), "tout le dedans");
+    assert!(at(147, 100), "jusqu'au trait (la bande de fermeture regagnée)");
+    assert!(at(149, 100), "et un peu sous lui : pas de liseré");
+    assert!(!at(151, 100) && !at(160, 100) && !at(5, 5), "pas le dehors");
+    assert!(zone(&ring, 150, 100, 6).is_none(), "un clic sur le trait ne vise rien");
+    // Le dehors : un clic loin du trait.
+    let out = zone(&ring, 5, 5, 6).unwrap();
+    assert!(out[5 * 200 + 5] && out[100 * 200 + 160] && !out[100 * 200 + 100], "le dehors, pas le dedans");
+}
+
+#[test]
+fn a_line_across_splits_the_zone_and_gaps_follow_the_setting() {
+    use crate::fond::zone;
+    // L'anneau coupé en deux par un diamètre vertical.
+    let split = line(200, 200, |x, y| {
+        let d = ((x - 100.0).powi(2) + (y - 100.0).powi(2)).sqrt();
+        (48.5..=51.5).contains(&d) || ((x - 100.0).abs() < 1.5 && d < 50.0)
+    });
+    let z = zone(&split, 70, 100, 6).unwrap();
+    assert!(z[100 * 200 + 70] && !z[100 * 200 + 130], "la moitié gauche seulement");
+    // Un trou de 8 px est fermé ; un trou de 40 px laisse la zone rejoindre le dehors.
+    assert!(!zone(&ring(8.0), 100, 100, 6).unwrap()[5 * 200 + 5]);
+    assert!(zone(&ring(40.0), 100, 100, 6).unwrap()[5 * 200 + 5]);
+}
+
+#[test]
+fn painting_a_mask_keeps_the_old_tiles() {
+    use crate::fond::paint_mask;
+    let mut r = Raster::new(100, 70);
+    let mask: Vec<bool> = (0..100 * 70).map(|p| p % 100 < 10).collect();
+    let old = paint_mask(&mut r, &mask, Some(Color32::RED));
+    assert_eq!(old.len(), 2, "les deux tuiles touchées (à gauche, en haut et en bas)");
+    assert!(old.iter().all(|(_, t)| t.is_none()), "elles étaient vides");
+    assert_eq!((r.get(5, 50), r.get(50, 50).a()), (Color32::RED, 0));
+    let old = paint_mask(&mut r, &mask, None);
+    assert_eq!(old.len(), 2);
+    assert_eq!(r.get(5, 50).a(), 0, "effacé");
+}

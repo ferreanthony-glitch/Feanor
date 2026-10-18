@@ -185,6 +185,12 @@ impl App {
         if !self.layer_editable() {
             return;
         }
+        // Strate Fond (`fondui.rs`) : un clic retire du fond la zone fermée par le trait, sur un
+        // calque bitmap comme vectoriel.
+        if self.paint_fond && self.layer().fond.is_some() {
+            self.fond_zone_at(p, true);
+            return;
+        }
         if self.layer().kind != LayerKind::Vector {
             self.status = "Le cutter coupe les traits d'un calque vectoriel.".into();
             return;

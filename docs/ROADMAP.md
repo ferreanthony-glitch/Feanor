@@ -1278,8 +1278,13 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         et 3 retenues) : `fond.calques_choisis`, `fond.tout_le_plan` (sauf les calques de toute la
         scène, le décor), `fond.retirer_choisis`, `fond.couleur_partout` (menu Calques > Fond sous le
         trait, sans touche) ; couleur des fonds neufs par projet (`Properties::fond`, manifeste
-        `proprietes.fond`, Réglages du projet). Reste : le pot de peinture dans le fond, l'export
-        vers Storyboard Pro du fond (à vérifier) ;
+        `proprietes.fond`, Réglages du projet). Puis (« le pot de peinture dans le fond, pareil
+        pour le cutter dans le fond qui coupe des zones fermées ») : en strate Fond, un clic du pot
+        remplit la zone fermée par le trait (`fond::zone` : trous fermés comme le fond, bande
+        regagnée, `UNDER` pixels sous le trait, une zone qui fuit rejoint le dehors) de la couleur
+        courante et y recoud le fond ; un clic du cutter retire la zone du fond (sur un calque
+        bitmap aussi) ; une étape d'annulation ; aide des touches adaptée. Reste : l'export vers
+        Storyboard Pro du fond (à vérifier) ;
       - **écran d'accueil** (sa suggestion 1 retenue) : sans projet ouvert (lancement, « Fermer le
         projet »), une carte au milieu : nouveau projet, ouvrir (Pelure, Storyboard Pro), projets
         récents (huit), rouvrir le dernier au lancement, « Commencer sans projet ». Elle part dès

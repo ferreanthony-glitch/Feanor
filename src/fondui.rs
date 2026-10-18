@@ -93,7 +93,12 @@ impl App {
             }
         });
         if self.paint_fond {
-            ui.label(RichText::new("Strate Fond : la peinture reste dans la forme, sous le trait ; la gomme coupe le fond, le pinceau le recoud.").small().weak());
+            let hint = match self.tool {
+                crate::app::Tool::Fill => "Strate Fond : un clic remplit de la couleur courante la zone fermée par le trait, sous le trait (et y recoud le fond s'il était coupé).",
+                crate::app::Tool::Cutter => "Strate Fond : un clic retire du fond la zone fermée par le trait (le pot de peinture ou le pinceau la remet).",
+                _ => "Strate Fond : la peinture reste dans la forme, sous le trait ; la gomme coupe le fond, le pinceau le recoud.",
+            };
+            ui.label(RichText::new(hint).small().weak());
         }
     }
 
@@ -196,6 +201,59 @@ impl App {
             _ => return false,
         }
         true
+    }
+
+    /// Pot de peinture (`cut` faux) ou cutter (`cut`) dans la strate Fond, au point `p` du dessin
+    /// (Anthony, 2026-10-18 : « le pot de peinture dans le fond, pareil pour le cutter dans le fond
+    /// qui coupe des zones fermées ») : la zone fermée par le trait où l'on clique est remplie de la
+    /// couleur courante (et le fond y est recousu s'il était coupé), ou retirée du fond.
+    pub(crate) fn fond_zone_at(&mut self, p: egui::Pos2, cut: bool) {
+        self.end_stroke();
+        self.playing = false;
+        if !self.layer_editable() {
+            return;
+        }
+        let Some(r) = self.layer().fond else { return };
+        let Some(cel) = self.cel_here() else {
+            self.status = "Strate Fond : pas de dessin à cette image.".into();
+            return;
+        };
+        if p.x < 0.0 || p.y < 0.0 {
+            return;
+        }
+        let Some(mask) = self.doc.cels.get(&cel).and_then(|c| crate::fond::zone(&c.raster, p.x as usize, p.y as usize, r.trous)) else {
+            self.status = "Strate Fond : clique dans une zone fermée par le trait (pas sur le trait).".into();
+            return;
+        };
+        let color = egui::Color32::from_rgb(self.color[0], self.color[1], self.color[2]);
+        let (w, h) = (self.doc.width, self.doc.height);
+        let Some(c) = self.doc.cels.get_mut(&cel) else { return };
+        let s = c.fond.get_or_insert_with(|| Box::new(crate::document::Strate::new(w, h)));
+        let mut edits = Vec::new();
+        if cut {
+            let old = crate::fond::paint_mask(&mut s.coupe, &mask, Some(egui::Color32::WHITE));
+            edits.push(crate::history::Edit::FondTiles { cel, tiles: old, coupe: true });
+        } else {
+            let old = crate::fond::paint_mask(&mut s.peinture.raster, &mask, Some(color));
+            edits.push(crate::history::Edit::FondTiles { cel, tiles: old, coupe: false });
+            let old = crate::fond::paint_mask(&mut s.coupe, &mask, None);
+            if !old.is_empty() {
+                edits.push(crate::history::Edit::FondTiles { cel, tiles: old, coupe: true });
+            }
+        }
+        s.peinture.version += 1;
+        c.version += 1;
+        self.history.push(crate::history::Edit::Group(edits));
+        self.modified = true;
+        self.renderer.invalidate_all();
+        if !cut {
+            self.color_used(self.color);
+        }
+        self.status = if cut {
+            "Strate Fond : zone retirée du fond (le pot de peinture ou le pinceau la remet).".into()
+        } else {
+            "Strate Fond : zone remplie, sous le trait.".into()
+        };
     }
 
     /// Un fond neuf : la couleur du projet (Réglages du projet), blanc d'office.

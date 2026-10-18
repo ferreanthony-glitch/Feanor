@@ -425,7 +425,7 @@ impl App {
                 self.fond_toggle_ui(ui);
             });
         }
-        if matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser) {
+        if matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser | Tool::Fill | Tool::Cutter) {
             self.fond_options_ui(ui);
         }
         // Réglages nommés, papier et grain : pinceau et crayon sur les deux sortes de calques (le

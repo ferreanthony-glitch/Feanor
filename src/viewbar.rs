@@ -183,7 +183,15 @@ impl App {
             // Ce que font les touches avec l'outil courant (Anthony, 2026-10-18, axe d'ergonomie 4).
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(6.0);
-                let hint = tool_hint(self.tool);
+                // En strate Fond (`fondui.rs`), ce que font les outils dans le fond.
+                let fond = self.paint_fond && self.layer().fond.is_some();
+                let hint = match self.tool {
+                    crate::app::Tool::Fill if fond => "Strate Fond · clic : remplir la zone fermée, sous le trait",
+                    crate::app::Tool::Cutter if fond => "Strate Fond · clic : retirer la zone fermée du fond",
+                    crate::app::Tool::Eraser if fond => "Strate Fond · la gomme coupe le fond",
+                    crate::app::Tool::Brush | crate::app::Tool::Pencil if fond => "Strate Fond · peindre sous le trait, dans la forme (recoud le fond coupé)",
+                    t => tool_hint(t),
+                };
                 ui.add(egui::Label::new(egui::RichText::new(hint).small().weak()).truncate()).on_hover_text(hint);
             });
         });

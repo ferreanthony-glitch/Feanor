@@ -218,6 +218,158 @@ pub fn silhouette(line: &Raster, r: &FondReglages) -> Vec<u8> {
     out
 }
 
+/// Pixels du trait que gagne une zone remplie ou coupée dans le fond (pas de liseré au bord du
+/// trait).
+pub const UNDER: usize = 2;
+
+/// La zone fermée par le trait `line` où l'on a cliqué (`x`, `y`) : les pixels qu'on atteint sans
+/// traverser le trait (ses trous jusqu'à `2 × trous` pixels fermés), jusqu'au trait, plus
+/// `UNDER` pixels sous lui. Un clic hors du rectangle du trait vise le dehors. Rien s'il n'y a
+/// pas de trait, ou si le clic tombe sur le trait lui-même. Le masque a la taille du dessin.
+pub fn zone(line: &Raster, x: usize, y: usize, trous: u8) -> Option<Vec<bool>> {
+    let (w, h) = (line.width, line.height);
+    if x >= w || y >= h {
+        return None;
+    }
+    let solid_at = |gx: usize, gy: usize| line.get(gx, gy).a() >= LINE_ALPHA;
+    if solid_at(x, y) {
+        return None;
+    }
+    // Le rectangle du trait, agrandi : on ne calcule que dedans (le dehors continue au-delà).
+    let (mut x0, mut y0, mut x1, mut y1) = (usize::MAX, usize::MAX, 0usize, 0usize);
+    for (idx, t) in line.tiles.iter().enumerate() {
+        let Some(t) = t else { continue };
+        let (ox, oy, tw, th) = line.tile_bounds(idx);
+        for ty in 0..th {
+            for tx in 0..tw {
+                if t[ty * TILE + tx].a() >= LINE_ALPHA {
+                    x0 = x0.min(ox + tx);
+                    y0 = y0.min(oy + ty);
+                    x1 = x1.max(ox + tx);
+                    y1 = y1.max(oy + ty);
+                }
+            }
+        }
+    }
+    if x0 == usize::MAX {
+        return None;
+    }
+    let pad = trous as usize + UNDER + 3;
+    let (bx0, by0) = (x0.saturating_sub(pad), y0.saturating_sub(pad));
+    let (bx1, by1) = ((x1 + pad).min(w - 1), (y1 + pad).min(h - 1));
+    let (bw, bh) = (bx1 - bx0 + 1, by1 - by0 + 1);
+    let mut solid = vec![false; bw * bh];
+    for by in 0..bh {
+        for bx in 0..bw {
+            solid[by * bw + bx] = solid_at(bx0 + bx, by0 + by);
+        }
+    }
+    let d_line = edt(&solid, bw, bh);
+    let t2 = (trous as f64) * (trous as f64);
+    let wall: Vec<bool> = d_line.iter().map(|&d| d <= t2).collect();
+    let inside_box = (bx0..=bx1).contains(&x) && (by0..=by1).contains(&y);
+    let mut region = vec![false; bw * bh];
+    let mut stack: Vec<usize> = Vec::new();
+    if inside_box {
+        // Un clic tout près du trait (dans la fermeture des trous) : le pixel libre le plus proche.
+        let (cx, cy) = (x - bx0, y - by0);
+        let r = trous as usize + 1;
+        let start = (cy.saturating_sub(r)..=(cy + r).min(bh - 1))
+            .flat_map(|py| (cx.saturating_sub(r)..=(cx + r).min(bw - 1)).map(move |px| (px, py)))
+            .filter(|&(px, py)| !wall[py * bw + px])
+            .min_by_key(|&(px, py)| px.abs_diff(cx).pow(2) + py.abs_diff(cy).pow(2))?;
+        stack.push(start.1 * bw + start.0);
+    } else {
+        // Le dehors : depuis le bord du rectangle.
+        for bx in 0..bw {
+            stack.extend([bx, (bh - 1) * bw + bx]);
+        }
+        for by in 0..bh {
+            stack.extend([by * bw, by * bw + bw - 1]);
+        }
+        stack.retain(|&p| !wall[p]);
+    }
+    for &p in &stack {
+        region[p] = true;
+    }
+    while let Some(p) = stack.pop() {
+        let (px, py) = (p % bw, p / bw);
+        let near = [(px > 0).then(|| p - 1), (px + 1 < bw).then(|| p + 1), (py > 0).then(|| p - bw), (py + 1 < bh).then(|| p + bw)];
+        for q in near.into_iter().flatten() {
+            if !wall[q] && !region[q] {
+                region[q] = true;
+                stack.push(q);
+            }
+        }
+    }
+    // La zone regagne la bande de fermeture jusqu'au trait, puis passe un peu sous lui.
+    let grow = |region: &mut Vec<bool>, times: usize, can: &dyn Fn(usize) -> bool| {
+        for _ in 0..times {
+            let before = region.clone();
+            for p in 0..bw * bh {
+                if before[p] || !can(p) {
+                    continue;
+                }
+                let (px, py) = (p % bw, p / bw);
+                let near = [(px > 0).then(|| p - 1), (px + 1 < bw).then(|| p + 1), (py > 0).then(|| p - bw), (py + 1 < bh).then(|| p + bw)];
+                if near.into_iter().flatten().any(|q| before[q]) {
+                    region[p] = true;
+                }
+            }
+        }
+    };
+    grow(&mut region, trous as usize, &|p| !solid[p]);
+    grow(&mut region, UNDER, &|p| solid[p]);
+    let mut out = vec![false; w * h];
+    for by in 0..bh {
+        for bx in 0..bw {
+            out[(by0 + by) * w + bx0 + bx] = region[by * bw + bx];
+        }
+    }
+    // Le dehors continue hors du rectangle (sans effet sur le fond, qui n'y est pas) : la zone
+    // est le dehors si l'on a cliqué hors du rectangle, ou si elle en atteint le bord (elle fuit
+    // par un trou trop grand).
+    let on_border = |p: usize| {
+        let (px, py) = (p % bw, p / bw);
+        px == 0 || py == 0 || px + 1 == bw || py + 1 == bh
+    };
+    let outside = !inside_box || (0..bw * bh).any(|p| region[p] && on_border(p));
+    if outside {
+        for gy in 0..h {
+            for gx in 0..w {
+                if !(bx0..=bx1).contains(&gx) || !(by0..=by1).contains(&gy) {
+                    out[gy * w + gx] = true;
+                }
+            }
+        }
+    }
+    Some(out)
+}
+
+/// Pose `color` (ou efface, si rien) sur les pixels de `mask` dans `r` ; renvoie les tuiles
+/// d'avant (annulation).
+pub fn paint_mask(r: &mut Raster, mask: &[bool], color: Option<Color32>) -> Vec<(usize, Option<crate::raster::Tile>)> {
+    let w = r.width;
+    let mut old = Vec::new();
+    for idx in 0..r.tiles.len() {
+        let (ox, oy, tw, th) = r.tile_bounds(idx);
+        let touched = (0..th).any(|ty| (0..tw).any(|tx| mask[(oy + ty) * w + ox + tx]));
+        if !touched || (color.is_none() && r.tiles[idx].is_none()) {
+            continue;
+        }
+        old.push((idx, r.tiles[idx].clone()));
+        let tile = r.tile_mut(idx);
+        for ty in 0..th {
+            for tx in 0..tw {
+                if mask[(oy + ty) * w + ox + tx] {
+                    tile[ty * TILE + tx] = color.unwrap_or(Color32::TRANSPARENT);
+                }
+            }
+        }
+    }
+    old
+}
+
 /// L'étape d'annulation d'un trait peint dans la strate Fond : ses tuiles sont celles de la
 /// peinture du fond, ou de sa coupe (`coupe`) ; la création éventuelle du dessin, avant, reste
 /// telle quelle.

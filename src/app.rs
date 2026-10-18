@@ -1674,6 +1674,11 @@ impl App {
         if p.x < 0.0 || p.y < 0.0 || p.x >= self.doc.width as f32 || p.y >= self.doc.height as f32 {
             return;
         }
+        // Strate Fond (`fondui.rs`) : la zone fermée par le trait se remplit dans le fond.
+        if self.paint_fond && self.layer().fond.is_some() {
+            self.fond_zone_at(p, false);
+            return;
+        }
         self.end_stroke();
         self.playing = false;
         if !self.layer_editable() {
