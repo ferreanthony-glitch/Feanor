@@ -541,9 +541,31 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   les effets à appliquer à cette image (`steps_at`). Les moteurs lisent les dessins par
   `fx::shown`, qui rend :
   - le dessin lui-même s'il n'y a pas d'effet ;
-  - sinon un dessin dérivé, calculé une fois et gardé dans un cache (48 au plus, les plus
-    anciens partent). Le cache est indexé par `fx_id` (dessin + paramètres, bit de poids fort
-    mis) et refait quand la version du dessin change.
+  - sinon un dessin dérivé, calculé une fois et gardé dans un cache (`fxcache.rs` : 768 Mo de
+    pixels, les plus anciens partent ; 48 entrées au plus avant 2026-10-18, ce qui vidait le
+    cache à chaque tour d'une animation d'effet). Le cache est indexé par `fx_id` (dessin +
+    paramètres, bit de poids fort mis) et refait quand la version du dessin change ; ouvrir un
+    autre projet l'oublie (`fx::forget_all`, dans `App::load_doc`).
+  - `fx::shown` calcule en bloquant (export, vignettes enregistrées, tests) : un seul calcul
+    même si plusieurs fils le demandent (`fxcache::get_or_compute`). L'écran, lui, passe par
+    `fx::display` (GPU, vignettes en mode doux `fxcache::soft_scope`) : jamais de calcul sur le
+    fil de l'interface. Un dessin non prêt est demandé au fil de fond (`fxcache::request`, file
+    par priorité : l'image affichée, puis les 24 qui viennent par `fx::prefetch`, puis les
+    vignettes ; une demande non renouvelée en 6 images d'écran est abandonnée ; le fil laisse
+    deux cœurs libres, `render::set_thread_cap`) et on montre son dernier résultat
+    (`fxcache::fallback`, par dessin d'origine) ou le dessin sans effet ; `gpu::sync` rend le
+    numéro de texture réellement composé pour chaque élément (celui du dernier résultat, donc
+    sans nouvel envoi). Le fil de fond redessine l'écran à chaque résultat.
+  - Aperçu (`fxproxy.rs`, `fx::draft_level`) : lecture, défilement et gestes sur un curseur
+    (`fx::note_interaction`) calculent sur un dessin réduit `1 << niveau` fois (niveau selon le
+    zoom : moitié sous 0,8, quart sous 0,35), numéro de dessin dérivé à part, texture plus
+    petite à la carte graphique (la composition agrandit). Admis seulement sans transformation
+    du calque et pour les effets qui suivent l'échelle (`proxyable`) ; rayons et décalages
+    réduits (`scaled_values`), bruit = moyenne du hasard pleine taille (`noise_scaled`).
+    Quand rien ne bouge depuis 250 ms, la pleine résolution est demandée et remplace l'aperçu.
+  - Calcul des effets : tous exacts à l'octet près avec l'ancien code (empreintes dans
+    `fxexact_tests.rs`), répartis sur les cœurs par `render::par_chunks` (rangées de tuiles ;
+    flou : lignes, transposition par bandes de 16 colonnes, lignes, transposition).
   - Au-delà des flous (2026-10-17) : `fxfilters.rs` (purs, testés) — réglages de couleur sur
     les pixels dessinés (`map_colors`, couverture inchangée), netteté (différence avec
     `fx::gaussian`), bruit (hasard fixe par pixel), mosaïque, ombre portée, lueur (débordent :
@@ -559,12 +581,12 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   La carte graphique garde la texture du dérivé sous ce même numéro. Les flous ne travaillent
   que sur la zone dessinée, marge comprise :
   - flou gaussien : trois flous en boîte par sommes glissantes, en lignes puis en colonnes
-    (transposition) ;
+    (transposition par bandes, en parallèle) ;
   - flou de mouvement : jusqu'à 64 échantillons bilinéaires le long du segment, répartis sur
     les cœurs.
 
-  Décision : coût — le calcul se fait à chaque nouveau jeu de paramètres, et pendant un trait
-  le flou n'est refait qu'à la fin. Risque faible : les dessins ne changent jamais.
+  Décision : coût — le calcul se fait à chaque nouveau jeu de paramètres (en fond), et pendant
+  un trait le flou n'est refait qu'à la fin. Risque faible : les dessins ne changent jamais.
   Réversible : retirer l'effet suffit. Les clés suivent les images insérées / supprimées
   (`Layer::shift_frames`, avec les rôles).
 - Calque CTG (`ctg.rs`, `ctgui.rs`, 13j) : `Layer::ctg` (sources : id de calques). Le plan

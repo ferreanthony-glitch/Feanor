@@ -323,6 +323,19 @@ on les coche et décoche, le dessin reste tel quel).
   choisi lâche le choix des clés. Une clé créée par
   « Créer une clé » est aussitôt choisie. Chaque geste est une étape d'annulation nommée
   (« Déplacer / Coller / Supprimer des clés d'effet »).
+- Vitesse (2026-10-18, scène de 3840 × 2160 : un calque vecto avec un flou animé, par-dessus un
+  bitmap avec un bruit animé et une fusion). L'écran ne calcule jamais un effet : un fil de fond
+  s'en charge sur tous les cœurs sauf deux (`fxcache.rs`), et l'écran montre en attendant le
+  dernier résultat du même dessin (ou le dessin sans effet), puis se redessine à l'arrivée du
+  nouveau. En lecture, les 24 images qui viennent sont calculées d'avance, la plus proche d'abord.
+  Pendant la lecture, le défilement et les gestes sur un curseur d'effet, et si le zoom est sous
+  80 % (sous 35 % : au quart), les effets sont calculés sur un dessin réduit de moitié, à la
+  taille de l'écran, quatre fois plus vite (`fxproxy.rs`) ; un quart de seconde sans mouvement, la
+  pleine résolution prend la place (la netteté revient d'un coup). Pas d'aperçu pour un calque
+  déplacé ou tourné, la mosaïque, les déformations et le rendu. L'export, les vignettes
+  enregistrées et le calcul sans écran donnent exactement les mêmes pixels qu'avant : seule la
+  vitesse a changé. Mesures dans `docs/ROADMAP.md` (« Effets de calque : vitesse »), à relancer
+  par `cargo test --release --lib fxperf -- --ignored --nocapture --test-threads=1`.
 
 **Calque CTG** (Calques > Calque CTG > Nouveau calque CTG) : un calque de couleur sous les
 traits.
@@ -910,7 +923,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `xsheet.rs`, `xsheetui.rs` | Feuille d'exposition : ce que montre chaque case, le panneau (13g) |
 | `roles.rs`, `rolesui.rs` | Rôles des images : modèle, suivi des images, symboles, menu (13g-2) |
 | `flips.rs`, `flipsui.rs` | Flips : limites, checkpoints, pas, panneau et flip en cours (13h) |
-| `fx.rs`, `fxui.rs` | Pile d'effets : clés, flous, dessins dérivés en cache, panneau (13i) |
+| `fx.rs`, `fxui.rs` | Pile d'effets : clés, flous, dessins dérivés, panneau (13i) |
+| `fxcache.rs`, `fxproxy.rs` | Effets : cache en octets, calcul de fond, dernier résultat en attendant ; aperçu réduit pendant la lecture et les gestes |
 | `ctg.rs`, `ctgui.rs` | Calque CTG : remplissage par graffitis, sources, structure (13j) |
 | `video.rs`, `videoui.rs` | Calque vidéo : import par ffmpeg, images lues à la demande (13k) |
 | `tween.rs`, `tweenui.rs` | Interpolation : intervalles vectoriels, fondus, étirement, cadence (13l) |
