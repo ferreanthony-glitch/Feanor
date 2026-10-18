@@ -1589,7 +1589,19 @@ Choix d'Anthony :
   enveloppe 8,6 ms / image (rien n'était affiché avant), lâcher 113 → 0,5 ms, glissé après enveloppe
   44,9 → 1,6 ms / image, lâcher 118 → 0,1 ms ; chargement 24 dessins affiché en 0,28 s au lieu de
   1,6 s.
-- ✅ Étude « vectoriel comme bitmap » (Fable, 2026-10-18, `docs/VECTORIEL-COMME-BITMAP.md`) :
+- ✅ Latences sur la branche ecto (Anthony, 2026-10-18 : « sans latence »). **Feuille
+  flottante** (lottante.rs) : déplacer, tourner ou agrandir une sélection vectorielle ne refait
+  plus rien par image — à la première image, le dessin sans la sélection et la sélection seule
+  (deux images, depuis les caches), puis le GPU n'a que la transformation du geste à changer
+  (PlanItem::pre) ; au lâcher la géométrie, le rejeu exact en arrière-plan. 40 traits de Crayon
+  net sur toute la feuille 1920×1080 : translation 1,0 ms et 6,1 Mo de tuiles par image → 0,001 ms
+  et 0 octet, rotation 28,4 ms et 8,3 Mo → 0 (`floating_selection_gesture_is_cheap_per_frame`).
+  **Fond sous le trait en arrière-plan** (ondfil.rs, x::differe) : la silhouette et la
+  composition se calculent d'un fil de travail ; à l'écran, le fond d'avant reste jusqu'à
+  l'arrivée du nouveau (demande caduque jetée) ; export et enregistrement restent exacts. Rendu du
+  plan après le 60e trait : 91 → 6 ms, glissé de 50 traits 71 → 1,6 ms par image
+  (`fond_background_keeps_the_ui_thread_free`). **Perte de données** corrigée : les traces en
+  flottants de d01fffe se relisent, un dessin illisible n'est plus effacé à l'enregistrement.- ✅ Étude « vectoriel comme bitmap » (Fable, 2026-10-18, `docs/VECTORIEL-COMME-BITMAP.md`) :
   l'existant en images (le trait vectoriel perd au lâcher opacité ↔ appui, connexions, humide,
   accumulation, et garde l'ancien bord), toutes les pistes (rejeu du moteur depuis le chemin avec
   appui, instant, réglage complet et graine ; cache par trait ; GPU ; état de départ des morceaux ;

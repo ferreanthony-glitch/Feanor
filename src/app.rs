@@ -535,6 +535,9 @@ pub struct App {
     pub(crate) verase: Option<VectorErase>,
     pub(crate) vsel: Option<VSelection>,
     pub(crate) vdrag: Option<VDrag>,
+    /// Feuille flottante de la sélection vectorielle qu'on déplace, tourne ou agrandit
+    /// (`flottante.rs`).
+    pub(crate) flottante: Option<crate::flottante::Flottante>,
     /// Sélection dans un dessin bitmap, et geste en cours avec l'outil Sélection.
     pub(crate) bsel: Option<BSelection>,
     pub(crate) bdrag: Option<BDrag>,
@@ -853,6 +856,7 @@ impl App {
             verase: None,
             vsel: None,
             vdrag: None,
+            flottante: None,
             bsel: None,
             bdrag: None,
             select_rect: false,
@@ -1124,6 +1128,7 @@ impl App {
                             fx: Vec::new(),
                             ctg: None,
                             fond: None,
+                            pre: None,
                         });
                     }
                 }
@@ -1146,13 +1151,19 @@ impl App {
                     // Calque CTG (13j) : rempli d'après les traits de ses sources.
                     ctg: crate::ctg::input(self.layers(), li, frame),
                     fond: None,
+                    pre: None,
                 };
                 // Fond sous le trait (`fond.rs`), le trait par-dessus.
                 items.extend(crate::render::fond_item(layer, &line));
-                items.push(line);
+                match self.flottante.as_ref().filter(|f| f.src == cel) {
+                    // Sélection vectorielle en cours de transformation : le dessin sans elle, et sa
+                    // feuille flottante par-dessus (`flottante.rs`).
+                    Some(f) => items.extend(f.items(&line)),
+                    None => items.push(line),
+                }
                 // Calque CTG courant, à l'écran seulement : ses graffitis, pâles, par-dessus.
                 if onion && layer.ctg.is_some() && li == self.cur_layer && !self.playing {
-                    items.push(PlanItem { cel, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None });
+                    items.push(PlanItem { cel, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: None });
                 }
             }
             items.append(&mut onion_items);
@@ -1793,6 +1804,14 @@ impl App {
             self.renderer.invalidate_tiles(&changed);
         }
         if self.rejeu.has_pending() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(16));
+        }
+        // Fonds sous le trait calculés en arrière-plan (`fondfil.rs`).
+        if crate::fx::fond_poll() {
+            self.renderer.invalidate_composed();
+            ctx.request_repaint();
+        }
+        if crate::fx::fond_pending() {
             ctx.request_repaint_after(std::time::Duration::from_millis(16));
         }
     }
@@ -2439,6 +2458,7 @@ impl App {
 
     pub(crate) fn load_doc(&mut self, doc: Document) {
         self.rejeu.cancel_all();
+        crate::fx::fond_cancel_all();
         self.doc = doc;
         self.mode = Mode::Storyboard;
         self.cur_panel = 0;
@@ -2451,6 +2471,8 @@ impl App {
         self.verase = None;
         self.vsel = None;
         self.vdrag = None;
+        self.flottante = None;
+        crate::flottante::Flottante::release(&mut self.doc);
         self.bsel = None;
         self.bdrag = None;
         self.playing = false;
@@ -2484,6 +2506,8 @@ impl App {
         self.verase = None;
         self.vsel = None;
         self.vdrag = None;
+        self.flottante = None;
+        crate::flottante::Flottante::release(&mut self.doc);
         self.bsel = None;
         self.bdrag = None;
         self.history.clear();

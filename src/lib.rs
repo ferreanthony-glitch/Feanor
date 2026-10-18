@@ -15,6 +15,12 @@ pub mod fond;
 mod fond_tests;
 #[cfg(test)]
 mod perte_tests;
+pub mod flottante;
+#[cfg(test)]
+mod flottante_tests;
+mod fondfil;
+#[cfg(test)]
+mod fondfil_tests;
 mod fondui;
 mod blend;
 #[cfg(test)]

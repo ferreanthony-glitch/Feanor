@@ -93,10 +93,11 @@ impl App {
         if let Some(gpu) = &mut self.gpu {
             // Les calques sont superposés par la carte graphique, directement à leur place.
             let (all, tiles) = self.renderer.take_gpu_dirty();
-            gpu.sync(&self.doc, &plan, all, &tiles, &ahead);
+            // (Le fond sous le trait se calcule en arrière-plan : `fx::differe`.)
+            crate::fx::differe(|| gpu.sync(&self.doc, &plan, all, &tiles, &ahead));
             painter.add(gpu.paint(&plan, corners, ws, rect, [self.doc.width, self.doc.height]));
         } else {
-            let texture = self.renderer.update(ui.ctx(), &self.doc, plan);
+            let texture = crate::fx::differe(|| self.renderer.update(ui.ctx(), &self.doc, plan));
             let mut mesh = egui::Mesh::with_texture(texture);
             // En perspective, egui plaque la texture par triangle (sans perspective) : on
             // subdivise, et on laisse ce qui passe derrière la caméra.
@@ -449,11 +450,13 @@ impl App {
         };
         if let Some(sel) = &self.vsel {
             if let Some(d) = self.drawing(sel.cel) {
+                // Geste en cours : les éléments n'ont pas bougé, leurs contours suivent la feuille.
+                let moved = self.flottante.as_ref().map(|f| f.aff).unwrap_or_default();
                 for e in sel.items.iter().filter_map(|&i| d.elements.get(i)) {
                     for line in e.outline() {
                         if line.len() >= 2 {
                             painter.add(Shape::line(
-                                line.into_iter().map(to_s).collect(),
+                                line.into_iter().map(|q| to_s(moved.apply(q))).collect(),
                                 Stroke::new(1.0_f32, ACCENT.gamma_multiply(0.85)),
                             ));
                         }

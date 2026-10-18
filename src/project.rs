@@ -1616,10 +1616,8 @@ fn load_with(manifest_path: &Path, quick: bool) -> Result<Loaded, String> {
     // Les dessins illisibles ne sont plus dans le projet, mais leurs fichiers restent : un
     // enregistrement ne les efface jamais (on pourra les récupérer ou les rouvrir avec une
     // version qui les lit).
+    // (Chacun a déjà son avertissement, plus haut.)
     keep_unreadable(dir, &missing);
-    if !missing.is_empty() {
-        warnings.push(format!("{} dessin(s) illisible(s) : leurs fichiers sont gardés dans le dossier du projet", missing.len()));
-    }
     Ok(Loaded {
         doc,
         written,

@@ -151,6 +151,10 @@ impl App {
             return self.bitmap_selection_bounds();
         }
         let sel = self.vsel.as_ref()?;
+        // Geste en cours : les éléments n'ont pas encore bougé, la boîte suit la feuille flottante.
+        if let (Some(f), Some(VDrag::Transform { bbox, .. })) = (&self.flottante, &self.vdrag) {
+            return Some(f.aff.apply_rect(*bbox));
+        }
         let d = self.drawing(sel.cel)?;
         let r = sel
             .items
@@ -505,32 +509,20 @@ impl App {
                     points.push(p);
                 }
             }
-            Some(VDrag::Transform {
-                handle,
-                start,
-                bbox,
-                originals,
-                changed,
-                ..
-            }) => {
+            Some(VDrag::Transform { cel, handle, start, bbox, changed, .. }) => {
                 let aff = transform_for(*handle, *start, p, *bbox, shift);
+                let (cel, first) = (*cel, !*changed);
                 *changed = true;
-                let Some(sel) = &self.vsel else { return };
-                let Some(cel) = self.doc.cels.get_mut(&sel.cel) else { return };
-                let Some(d) = cel.vector.as_mut() else { return };
-                // On ne refait que là où étaient les éléments déplacés et là où ils arrivent.
-                let mut region = Rect::NOTHING;
-                for (k, &i) in sel.items.iter().enumerate() {
-                    if let (Some(dst), Some(src)) = (d.elements.get_mut(i), originals.get(k)) {
-                        region = region.union(dst.bounds().expand(1.5));
-                        // Aperçu : les pixels en cache suivent (une translation arrondie au
-                        // pixel) ; le lâcher (`finish_vdrag`) rejoue les traits exactement.
-                        *dst = src.transformed_preview(&aff);
-                        region = region.union(dst.bounds().expand(1.5));
-                    }
+                // Feuille flottante (`flottante.rs`) : à la première image, le dessin sans la
+                // sélection et la sélection seule, faits une fois ; ensuite seule la
+                // transformation change (rien à refaire, rien à renvoyer à la carte graphique).
+                if first {
+                    let items = self.vsel.as_ref().map(|s| s.items.clone()).unwrap_or_default();
+                    self.flottante = crate::flottante::Flottante::lift(&mut self.doc, cel, &items);
                 }
-                let tiles = cel.rerender_region(region.expand(2.0));
-                self.renderer.invalidate_tiles(&tiles);
+                if let Some(f) = self.flottante.as_mut() {
+                    f.aff = aff;
+                }
             }
             None => {}
         }
@@ -565,13 +557,30 @@ impl App {
                 }
             }
             VDrag::Transform {
-                cel, before, changed, ..
+                cel, before, originals, changed, ..
             } => {
-                if changed {
-                    // Pendant le glissé, les traits déplacés étaient posés depuis leurs pixels en
-                    // cache (copiés, ou rééchantillonnés s'ils ont tourné ou changé d'échelle) ; ils
-                    // le restent au lâcher, et le rendu exact (le moteur rejoué sur leur nouvelle
-                    // place) arrive d'un fil de travail quelques instants après, sans rien bloquer.
+                let aff = self.flottante.take().map(|f| f.aff);
+                crate::flottante::Flottante::release(&mut self.doc);
+                if let (true, Some(aff)) = (changed, aff) {
+                    // La transformation du geste passe aux éléments choisis, posés depuis leurs
+                    // pixels en cache (copiés, ou rééchantillonnés s'ils ont tourné ou changé
+                    // d'échelle) ; le rendu exact (le moteur rejoué sur leur nouvelle place) arrive
+                    // d'un fil de travail quelques instants après, sans rien bloquer.
+                    let items = self.vsel.as_ref().map(|s| s.items.clone()).unwrap_or_default();
+                    if let Some(c) = self.doc.cels.get_mut(&cel) {
+                        if let Some(d) = c.vector.as_mut() {
+                            let mut region = Rect::NOTHING;
+                            for (k, &i) in items.iter().enumerate() {
+                                if let (Some(dst), Some(src)) = (d.elements.get_mut(i), originals.get(k)) {
+                                    region = region.union(dst.bounds().expand(1.5));
+                                    *dst = src.transformed_preview(&aff);
+                                    region = region.union(dst.bounds().expand(1.5));
+                                }
+                            }
+                            let tiles = c.rerender_region(region.expand(2.0));
+                            self.renderer.invalidate_tiles(&tiles);
+                        }
+                    }
                     self.rejeu_cel(cel);
                     self.push_vector(cel, before, None);
                 }

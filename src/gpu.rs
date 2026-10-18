@@ -606,8 +606,7 @@ impl GpuCanvas {
         let (w, h) = (stage[0] as f32, stage[1] as f32);
         let pivot = egui::pos2(w / 2.0, h / 2.0);
         // Calque transformé : les coins de la feuille, déplacés, en coordonnées normalisées.
-        let placed = |t: &crate::document::LayerTransform| -> [[f32; 4]; 4] {
-            let aff = t.affine(pivot);
+        let placed = |aff: crate::vector::Affine| -> [[f32; 4]; 4] {
             let uv = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
             std::array::from_fn(|i| {
                 let p = aff.apply(egui::pos2(uv[i][0] * w, uv[i][1] * h));
@@ -633,7 +632,7 @@ impl GpuCanvas {
             let blend = if item.tint.is_some() { 0 } else { item.blend.index() };
             items.push(GpuItem {
                 cel: Some(crate::fx::shown_id(item)),
-                corners: item.transform.as_ref().map_or(full, placed),
+                corners: item.affine(pivot).map_or(full, placed),
                 color: [color[0], color[1], color[2], tinted],
                 params: [item.opacity as f32 / 255.0, 1.0, blend as f32, 0.0],
                 blend,
