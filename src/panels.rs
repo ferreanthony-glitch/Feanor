@@ -281,12 +281,14 @@ impl App {
                     note(ui, "Le trait reste modifiable avec l'outil Sélection (V), même texturé (pointe en \
                               image, grain du papier).");
                 }
+                self.brush_settings_ui(ui);
             }
             Tool::Pencil => {
                 self.brush_summary_ui(ui);
                 if vector {
                     note(ui, "Le trait reste modifiable avec l'outil Sélection (V).");
                 }
+                self.brush_settings_ui(ui);
             }
             Tool::Eraser => {
                 self.brush_summary_ui(ui);
@@ -305,6 +307,7 @@ impl App {
                          s'effacent en mode « traits entiers » ou par la sélection.",
                     );
                 }
+                self.brush_settings_ui(ui);
             }
             Tool::Fill => {
                 ui.add(egui::Slider::new(&mut self.fill.tolerance, 0.0..=1.0).text("Tolérance"));
