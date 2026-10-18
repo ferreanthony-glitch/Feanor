@@ -96,6 +96,19 @@ pub struct BrushSettings {
     pub paper_angle: f32,
     #[serde(rename = "papier_inverser")]
     pub paper_invert: bool,
+    /// Douceur du grain (rendu des brosses, étape 2) : largeur de la transition entre un creux
+    /// vide et un sommet plein, en part du relief. 0,12 : le seuil presque net d'avant l'audit (la
+    /// valeur des anciens réglages) ; 0,3 : un grain qui répond en douceur, comme un vrai papier.
+    #[serde(rename = "papier_douceur")]
+    pub paper_softness: f32,
+    /// Le papier et le grain du crayon suivent le trait (lus depuis son premier point) au lieu de
+    /// rester collés à la feuille (TVPaint, le défaut : repasser retrouve les mêmes creux).
+    #[serde(rename = "papier_suit_trait")]
+    pub paper_follow: bool,
+    /// Grain propre du crayon (rendu, étape 3 ; le « Grain » Silk / Soft / Medium / Hard du crayon
+    /// de TVPaint) : un bruit fin collé à la feuille, même sans papier.
+    #[serde(rename = "grain_crayon")]
+    pub pencil_grain: PencilGrain,
     /// Papier et pointe en image (numéros dans `BrushLibrary`) ; pas de pointe : pointe ronde.
     #[serde(rename = "papier")]
     pub paper: Option<u32>,
@@ -272,6 +285,60 @@ impl TipOrder {
             TipOrder::Random => pick(random),
             TipOrder::Pressure => pick(inp.pressure),
             TipOrder::Direction => pick(inp.direction),
+        }
+    }
+}
+
+/// Grain propre du crayon (rendu des brosses, étape 3) : les quatre forces du menu « Grain » du
+/// crayon de TVPaint (Silk, Soft, Medium, Hard — leur calcul n'est pas publié, celui-ci est de
+/// Pelure : un papier fin collé à la feuille, `brushtex::pencil_grain_paper`, à une force et une
+/// douceur par niveau).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum PencilGrain {
+    #[default]
+    #[serde(rename = "aucun")]
+    None,
+    #[serde(rename = "soie")]
+    Silk,
+    #[serde(rename = "doux")]
+    Soft,
+    #[serde(rename = "moyen")]
+    Medium,
+    #[serde(rename = "dur")]
+    Hard,
+}
+
+impl PencilGrain {
+    pub const ALL: [PencilGrain; 5] = [PencilGrain::None, PencilGrain::Silk, PencilGrain::Soft, PencilGrain::Medium, PencilGrain::Hard];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            PencilGrain::None => "Aucun",
+            PencilGrain::Silk => "Soie",
+            PencilGrain::Soft => "Doux",
+            PencilGrain::Medium => "Moyen",
+            PencilGrain::Hard => "Dur",
+        }
+    }
+
+    /// Force du grain (la part de couleur retenue dans les creux).
+    pub fn strength(self) -> f32 {
+        match self {
+            PencilGrain::None => 0.0,
+            PencilGrain::Silk => 0.35,
+            PencilGrain::Soft => 0.55,
+            PencilGrain::Medium => 0.75,
+            PencilGrain::Hard => 0.92,
+        }
+    }
+
+    /// Douceur de la transition (voir `grain_factor`).
+    pub fn softness(self) -> f32 {
+        match self {
+            PencilGrain::None | PencilGrain::Silk => 0.45,
+            PencilGrain::Soft => 0.35,
+            PencilGrain::Medium => 0.28,
+            PencilGrain::Hard => 0.2,
         }
     }
 }
@@ -586,6 +653,9 @@ impl BrushSettings {
             paper_scale: 1.0,
             paper_angle: 0.0,
             paper_invert: false,
+            paper_softness: crate::brushtex::GRAIN_SOFTNESS_OLD,
+            paper_follow: false,
+            pencil_grain: PencilGrain::None,
             paper: None,
             tip: None,
             tip_cells: 1,
@@ -660,10 +730,10 @@ impl BrushSettings {
         self.roundness * if c.active() { c.at(inp) } else { 1.0 }
     }
 
-    /// Le crayon de la barre d'outils. Anticrénelé depuis l'étude du toucher (2026-10-18 : les
-    /// outils TVPaint d'Anthony ont `aliasing=0`, le profil « Crayon » n'y est qu'une forme de
-    /// pointe), un peu plus gros, qui mord plus ou moins selon l'appui, lissé un rien. L'ancien
-    /// crayon crénelé reste à un clic : « Pixels nets », à côté de la dureté.
+    /// Le « Crayon net » : le crayon de la barre d'outils d'avant l'audit du rendu (anticrénelé
+    /// depuis l'étude du toucher du 2026-10-18, qui mord plus ou moins selon l'appui, lissé un
+    /// rien, sans matière). L'outil Crayon part maintenant du crayon graphite (`graphite`) ; celui-ci
+    /// reste dans la liste des réglages.
     pub fn pencil() -> Self {
         Self {
             size: 2.5,
@@ -675,6 +745,176 @@ impl BrushSettings {
             min_opacity: 0.3,
             ..Self::brush()
         }
+    }
+
+    // Brosses traditionnelles (rendu des brosses, étapes 1 à 3, `docs/AUDIT-RENDU-BROSSES.md`
+    // §3) : pointes et papiers fabriqués par Pelure (`brushtex`), un débit qui s'accumule sous un
+    // plafond d'opacité (on fonce en repassant), l'appui qui joue sur la taille et le débit, un
+    // grain collé à la feuille. Tailles pour un projet 1920×1080 vu à 50 %.
+
+    /// Crayon graphite : le réglage de départ de l'outil Crayon. Amas de grains tourné au hasard,
+    /// papier à dessin, débit qui s'accumule jusqu'à 90 % d'opacité (jamais tout à fait noir),
+    /// grain propre du crayon « Doux ». (Le débit vaut pour une empreinte pleine ; une pointe en
+    /// amas de grains n'en dépose qu'une part, d'où un débit réglé haut : un passage appuyé fait un
+    /// gris foncé, repasser fonce.)
+    pub fn graphite() -> Self {
+        let mut s = Self {
+            size: 6.0,
+            hardness: 0.8,
+            spacing: 0.12,
+            smoothing: 0.15,
+            opacity: 0.9,
+            power: 0.85,
+            build_up: true,
+            pressure_size: true,
+            min_size: 0.25,
+            tip: Some(crate::brushtex::TIP_GRAPHITE),
+            tip_cells: 8,
+            tip_order: TipOrder::Random,
+            angle_jitter: 360.0,
+            flip_x: true,
+            flip_y: true,
+            size_jitter: 0.1,
+            scatter: 0.03,
+            paper: Some(crate::brushtex::PAPER_DRAWING),
+            grain: 0.85,
+            paper_scale: 2.5,
+            paper_softness: crate::brushtex::GRAIN_SOFTNESS_SOFT,
+            pencil_grain: PencilGrain::Soft,
+            ..Self::brush()
+        };
+        // L'appui fait le débit, en douceur : on effleure gris, on appuie noir.
+        s.dynamics.opacity = Connection { source: Source::Pressure, curve: Curve::from_points(&[[0.0, 0.15], [0.5, 0.6], [1.0, 1.0]]), ..Default::default() };
+        s
+    }
+
+    /// Crayon de couleur : comme le graphite, plus gros et plus clair, qui garde la trace du grain.
+    pub fn colour_pencil() -> Self {
+        Self {
+            size: 7.0,
+            opacity: 0.8,
+            power: 0.7,
+            grain: 0.9,
+            paper_scale: 2.5,
+            pencil_grain: PencilGrain::Medium,
+            ..Self::graphite()
+        }
+    }
+
+    /// Encre au pinceau : le ruban plein, mais des bouts effilés (courbe de taille ferme) et un
+    /// bord à peine vivant.
+    pub fn ink() -> Self {
+        let mut s = Self {
+            size: 7.0,
+            hardness: 1.0,
+            spacing: 0.05,
+            smoothing: 0.4,
+            pressure_size: true,
+            min_size: 0.04,
+            size_jitter: 0.03,
+            ..Self::brush()
+        };
+        s.dynamics.size = Connection { source: Source::Pressure, curve: Curve::from_points(&[[0.0, 0.0], [0.4, 0.15], [0.8, 0.7], [1.0, 1.0]]), min: 0.04, ..Default::default() };
+        s
+    }
+
+    /// Feutre : un aplat à 70 %, un biseau (pointe aplatie à angle fixe), largeur constante ; deux
+    /// traits croisés foncent par superposition.
+    pub fn felt() -> Self {
+        Self {
+            size: 10.0,
+            hardness: 0.9,
+            spacing: 0.05,
+            smoothing: 0.25,
+            opacity: 0.7,
+            pressure_size: false,
+            roundness: 0.55,
+            angle: 40.0,
+            ..Self::brush()
+        }
+    }
+
+    /// Fusain : un bâton cotonneux qui s'écrase avec l'appui, débit 60 % qui s'accumule, grain du
+    /// papier, un peu de dispersion.
+    pub fn charcoal() -> Self {
+        let mut s = Self {
+            size: 14.0,
+            spacing: 0.1,
+            smoothing: 0.2,
+            opacity: 0.95,
+            power: 0.8,
+            build_up: true,
+            pressure_size: true,
+            min_size: 0.5,
+            tip: Some(crate::brushtex::TIP_CHARCOAL),
+            tip_cells: 6,
+            tip_order: TipOrder::Random,
+            angle_jitter: 40.0,
+            flip_x: true,
+            flip_y: true,
+            scatter: 0.05,
+            size_jitter: 0.1,
+            paper: Some(crate::brushtex::PAPER_DRAWING),
+            grain: 0.6,
+            paper_scale: 2.5,
+            paper_softness: crate::brushtex::GRAIN_SOFTNESS_SOFT,
+            ..Self::brush()
+        };
+        s.dynamics.opacity = Connection { source: Source::Pressure, curve: Curve::from_points(&[[0.0, 0.2], [1.0, 1.0]]), ..Default::default() };
+        s.dynamics.angle = Connection { source: Source::Direction, ..Default::default() };
+        s
+    }
+
+    /// Craie : un bâton net et plat, débit 70 % qui s'accumule, sur une toile.
+    pub fn chalk() -> Self {
+        let mut s = Self {
+            size: 16.0,
+            spacing: 0.08,
+            smoothing: 0.2,
+            opacity: 1.0,
+            power: 0.85,
+            build_up: true,
+            pressure_size: true,
+            min_size: 0.5,
+            tip: Some(crate::brushtex::TIP_CHALK),
+            tip_cells: 6,
+            tip_order: TipOrder::Random,
+            angle_jitter: 30.0,
+            flip_x: true,
+            flip_y: true,
+            paper: Some(crate::brushtex::PAPER_CANVAS),
+            grain: 0.8,
+            paper_scale: 1.5,
+            paper_softness: 0.25,
+            ..Self::brush()
+        };
+        s.dynamics.opacity = Connection { source: Source::Pressure, curve: Curve::from_points(&[[0.0, 0.3], [1.0, 1.0]]), ..Default::default() };
+        s.dynamics.angle = Connection { source: Source::Direction, ..Default::default() };
+        s
+    }
+
+    /// Gouache : des poils plats qui suivent le trait, une peinture opaque qui se mêle un peu à ce
+    /// qui est dessous et dont la brosse se vide doucement.
+    pub fn gouache() -> Self {
+        let mut s = Self {
+            size: 18.0,
+            hardness: 0.6,
+            spacing: 0.06,
+            smoothing: 0.3,
+            opacity: 1.0,
+            power: 0.9,
+            mix: 0.25,
+            charge: 0.95,
+            pressure_size: true,
+            min_size: 0.6,
+            tip: Some(crate::brushtex::TIP_BRISTLES_FLAT),
+            tip_cells: 4,
+            tip_order: TipOrder::Loop,
+            angle_jitter: 8.0,
+            ..Self::brush()
+        };
+        s.dynamics.angle = Connection { source: Source::Direction, ..Default::default() };
+        s
     }
 
     pub fn eraser() -> Self {
@@ -798,6 +1038,8 @@ pub struct StrokeState {
     dt: Option<f32>,
     /// Lissage après le trait : on rejoue les points reçus, lissage allumé.
     replaying: bool,
+    /// Première empreinte du trait : l'origine du papier quand il suit le trait.
+    origin: Option<Pos2>,
 }
 
 /// Graine du hasard d'un trait (la même à chaque fois : un trait rejoué est le même).
@@ -863,6 +1105,7 @@ impl StrokeState {
             last_time: None,
             dt: None,
             replaying: false,
+            origin: None,
         }
     }
 
@@ -1142,6 +1385,7 @@ impl StrokeState {
         self.next_time = -1.0;
         self.last_time = None;
         self.dt = None;
+        self.origin = None;
     }
 
     /// Au levé, le trait rattrape la pointe (le lissage le laisse en retard), selon le réglage :
@@ -1359,7 +1603,11 @@ impl StrokeState {
         // publiée.)
         let deposit = if s.build_up {
             let diameter = radius * 2.0;
-            let n = (diameter / (diameter * s.spacing).max(0.3)).max(1.0);
+            let dabs = (diameter / (diameter * s.spacing).max(0.3)).max(1.0);
+            // Une pointe en image clairsemée (amas de grains, poils) ne dépose qu'une part de son
+            // carré à chaque empreinte : le débit vaut pour ce que le trait atteint, pas pour une
+            // empreinte pleine (rendu des brosses, étape 2).
+            let n = dabs * self.textures.tip.as_ref().map_or(1.0, |t| t.mean_coverage().clamp(0.05, 1.0));
             1.0 - (1.0 - s.power.clamp(0.0, 1.0)).powf(1.0 / n)
         } else {
             s.power.clamp(0.0, 1.0)
@@ -1389,22 +1637,36 @@ impl StrokeState {
         let flip_u = tip.is_some() && s.flip_x && self.jitter() < 0.0;
         let flip_v = tip.is_some() && s.flip_y && self.jitter() < 0.0;
         let paper = self.textures.paper.clone().filter(|_| s.grain > 0.0);
+        // Le grain propre du crayon (rendu, étape 3), même sans papier.
+        let pencil = (s.pencil_grain != PencilGrain::None).then(crate::brushtex::pencil_grain_paper);
         let profile = s.profile.map(|c| profile_lut(&c));
+        // Le papier suit le trait : le relief est lu depuis le premier point du trait ; sinon il
+        // est collé à la feuille (origine en haut à gauche, comme avant).
+        if self.origin.is_none() {
+            self.origin = Some(c);
+        }
+        let origin = if s.paper_follow { self.origin.unwrap_or(c) } else { Pos2::ZERO };
         // Papier tel quel (comme avant), ou mis à l'échelle et tourné.
-        let paper_plain = (s.paper_scale - 1.0).abs() < 1e-4 && s.paper_angle == 0.0;
+        let paper_plain = (s.paper_scale - 1.0).abs() < 1e-4 && s.paper_angle == 0.0 && !s.paper_follow;
         let pscale = s.paper_scale.clamp(0.05, 20.0);
         let (psin, pcos) = s.paper_angle.to_radians().sin_cos();
-        // Grain du papier en un pixel, fixe sur le dessin (à sa taille, son angle, inversé ou non).
+        // Grain du papier en un pixel, fixe sur le dessin (à sa taille, son angle, inversé ou non),
+        // fois le grain du crayon.
         let grain_at = |px: usize, py: usize| -> f32 {
-            paper.as_ref().map_or(1.0, |p| {
+            let (x, y) = (px as f32 + 0.5 - origin.x, py as f32 + 0.5 - origin.y);
+            let mut f = paper.as_ref().map_or(1.0, |p| {
                 let h = if paper_plain {
                     p.tiled(px, py)
                 } else {
-                    let (x, y) = (px as f32 + 0.5, py as f32 + 0.5);
                     p.sample_wrapped((x * pcos + y * psin) / pscale, (-x * psin + y * pcos) / pscale)
                 };
-                grain_factor(if s.paper_invert { 1.0 - h } else { h }, pressure, s.grain)
-            })
+                grain_factor(if s.paper_invert { 1.0 - h } else { h }, pressure, s.grain, s.paper_softness)
+            });
+            if let Some(g) = &pencil {
+                let h = if s.paper_follow { g.sample_wrapped(x, y) } else { g.tiled(px, py) };
+                f *= grain_factor(h, pressure, s.pencil_grain.strength(), s.pencil_grain.softness());
+            }
+            f
         };
         // Une pointe en image tournée déborde du cercle : on couvre le carré qui la contient.
         let reach = if tip.is_some() { radius * std::f32::consts::SQRT_2 } else { radius };

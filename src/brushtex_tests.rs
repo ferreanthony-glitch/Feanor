@@ -142,11 +142,17 @@ fn toon_boom_pens_become_pelure_presets() {
 
 #[test]
 fn grain_depends_on_paper_and_pressure() {
-    assert_eq!(brushtex::grain_factor(0.0, 1.0, 0.0), 1.0, "papier lisse");
+    let old = brushtex::GRAIN_SOFTNESS_OLD;
+    assert_eq!(brushtex::grain_factor(0.0, 1.0, 0.0, old), 1.0, "papier lisse");
     // Sommets avant creux ; appuyer remplit.
-    assert!(brushtex::grain_factor(0.9, 0.5, 1.0) > brushtex::grain_factor(0.2, 0.5, 1.0));
-    assert!(brushtex::grain_factor(0.3, 1.0, 1.0) > brushtex::grain_factor(0.3, 0.2, 1.0));
-    assert!(brushtex::grain_factor(0.0, 1.0, 1.0) < 0.2, "les creux profonds restent vides");
+    assert!(brushtex::grain_factor(0.9, 0.5, 1.0, old) > brushtex::grain_factor(0.2, 0.5, 1.0, old));
+    assert!(brushtex::grain_factor(0.3, 1.0, 1.0, old) > brushtex::grain_factor(0.3, 0.2, 1.0, old));
+    assert!(brushtex::grain_factor(0.0, 1.0, 1.0, old) < 0.2, "les creux profonds restent vides");
+    // Douceur (rendu, étape 2) : à mi-appui, le seuil est à 0,45 ; net, un relief de 0,35 est
+    // vide et 0,55 plein ; doux, les deux sont à mi-chemin.
+    let (soft, hard) = (brushtex::GRAIN_SOFTNESS_SOFT, 0.05);
+    assert!(brushtex::grain_factor(0.35, 0.5, 1.0, hard) < 0.05 && brushtex::grain_factor(0.55, 0.5, 1.0, hard) > 0.95);
+    assert!(brushtex::grain_factor(0.35, 0.5, 1.0, soft) > 0.2 && brushtex::grain_factor(0.55, 0.5, 1.0, soft) < 0.8);
     let p = brushtex::procedural_paper(64, 8, 3);
     let (lo, hi) = p.values.iter().fold((1.0f32, 0.0f32), |(a, b), &v| (a.min(v), b.max(v)));
     assert!(lo == 0.0 && hi == 1.0);

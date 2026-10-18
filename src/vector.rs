@@ -553,24 +553,43 @@ pub fn render_element_clipped(raster: &mut Raster, e: &Element, clip: Rect) {
     }
 }
 
+/// L'appui qui a donné le rayon `r` à un trait de réglage `s` : l'inverse de la connexion de la
+/// taille (la pression simple d'avant, ou une connexion à courbe, cherchée par dichotomie — la
+/// réponse est croissante ou décroissante selon la courbe). Sans connexion : appui plein. (Rendu
+/// des brosses, étape 3 : avant, seule la pression simple était retrouvée, une brosse importée à
+/// connexion gardait un appui plein au lâcher sur un calque vectoriel.)
+pub fn pressure_for_radius(s: &BrushSettings, r: f32) -> f32 {
+    let Some(c) = s.size_connection() else { return 1.0 };
+    let target = r / (s.size * 0.5).max(1e-3);
+    let (at0, at1) = (c.response(0.0), c.response(1.0));
+    if (at1 - at0).abs() < 1e-6 {
+        return 1.0;
+    }
+    let rising = at1 > at0;
+    let (mut lo, mut hi) = (0.0f32, 1.0f32);
+    for _ in 0..24 {
+        let mid = 0.5 * (lo + hi);
+        if (c.response(mid) < target) == rising {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    (0.5 * (lo + hi)).clamp(0.0, 1.0)
+}
+
 /// Trait vectoriel texturé (7b) : tracé par le moteur des pinceaux bitmap (empreintes de la
 /// pointe, grain du papier) sur une feuille à part, puis posé sur `raster` dans `region`
-/// seulement. La pression de chaque point se retrouve d'après son rayon (rayon = taille / 2 ×
-/// facteur de pression) ; une pointe ou un papier introuvable donne une pointe ronde, un papier lisse.
+/// seulement. La pression de chaque point se retrouve d'après son rayon (`pressure_for_radius`) ;
+/// une pointe ou un papier introuvable donne une pointe ronde, un papier lisse.
 fn paint_textured(raster: &mut Raster, points: &[VPoint], color: [u8; 3], opacity: f32, b: &BrushSettings, region: Rect) {
     let settings = BrushSettings { opacity, smoothing: 0.0, smooth_kind: crate::brush::SmoothKind::Follow, aliased: false, ..*b };
     let textures = crate::brushtex::shared_textures(&settings);
     let mut sheet = Raster::new(raster.width, raster.height);
     let mut stroke = StrokeState::new(0, StrokeMode::Paint(color), settings, None, true).with_textures(textures);
     let mut dirty = Vec::new();
-    let half = (settings.size * 0.5).max(1e-3);
     for p in points {
-        let pressure = if settings.pressure_size && settings.min_size < 1.0 {
-            ((p.r / half - settings.min_size) / (1.0 - settings.min_size)).clamp(0.0, 1.0)
-        } else {
-            1.0
-        };
-        stroke.add_point(&mut sheet, p.pos(), pressure, &mut dirty);
+        stroke.add_point(&mut sheet, p.pos(), pressure_for_radius(&settings, p.r), &mut dirty);
     }
     stroke.finish(&mut sheet, &mut dirty);
     let (x0, y0) = (region.min.x.max(0.0) as usize, region.min.y.max(0.0) as usize);
