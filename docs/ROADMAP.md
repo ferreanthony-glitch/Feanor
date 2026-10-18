@@ -1367,6 +1367,39 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         est lâché par un clic ailleurs, une annulation, un changement d'ordre de la pile. Étapes
         d'annulation nommées « Déplacer / Coller / Supprimer des clés d'effet ». Logique en
         fonctions pures testées (`move_keys`, `paste_keys`, `clamp_delta`…) ;
+      - **caméra : clés choisies, effets, focales, aides au cadrage** (Anthony, 2026-10-19). Branche
+        `camera-presets`. (1) Clés de caméra (`camkeys.rs`, comme `fxkeys.rs`) : clic = choix (Ctrl,
+        Maj, d'un plan à l'autre), glisser = tout le choix (une clé ne passe pas par-dessus une clé
+        non choisie : c'était la règle de la clé seule, `camera::move_key` est remplacée par
+        `clamp_delta`), Ctrl+C / Ctrl+V à la tête de lecture avec l'écart entre les clés (collage
+        d'un plan à l'autre dans le montage, dans le plan courant en animation ; un plan sans clé
+        qui en reçoit après son début garde sa caméra de continuité par une clé au début, comme
+        « Clé ici »), Suppr (rien sans choix), clic droit ; étapes nommées « Déplacer / Coller /
+        Supprimer des clés de caméra » ; actions `camera.cles_copier`, `camera.cles_coller`,
+        `camera.cles_supprimer`, `camera.cles_tout_choisir`. (2) Effets (`camfx.rs`, `camfxui.rs`) :
+        clés ordinaires ajoutées à la caméra de chaque image (décalages en part de la largeur du
+        cadre filmé, bruit de sinus à phases tirées de la graine, secousses amorties) ; caméra à
+        l'épaule : dérive 0,9 Hz de ±1,2 % × ±0,9 % et ±0,7°, secousses de ±2,5 % et ±1,2° toutes les
+        0,9 à 2,4 s, une clé sur deux ; tremblement léger : ±0,4 % et ±0,15° à 7 Hz, une clé par
+        image ; explosion : ±4,5 % et ±2,5° à 12 Hz, décroissance exponentielle (τ = durée / 4),
+        coup de zoom +6 %, une clé par image ; secousse : ±3 % et ±1,5° à 10 Hz (τ = durée / 3) ;
+        zoom avant / arrière : deux clés, adoucies, facteur 1,5 par défaut ; zoom choc : deux clés,
+        départ brutal, facteur 3 ; vertigo : la distance suit la focale, 25 clés pour que la taille
+        du sujet au plan de référence reste à 0,1 % près (la distance se mêle en ligne droite, le
+        zoom en proportion). Plafond de 1000 clés par effet (au-delà, les clés s'espacent). Action
+        `camera.effet_appliquer`. Les valeurs sont des choix de SHOT, à régler à l'œil ; rien de
+        Storyboard Pro ni de TVPaint n'est copié (équivalents non vérifiés). (3) Focales
+        (`camera::FOCAL_PRESETS`) : 14, 24, 35, 50, 85, 135, 200 mm et anamorphique (40 mm + cadre
+        2,39:1 d'affichage, sans déformer le dessin) ; angle de champ horizontal, capteur de 36 mm.
+        (4) Aides au cadrage (`cadrage.rs`, `cadrageui.rs`) : tiers, grille d'or (lignes à
+        1/2,618 et 1,618/2,618, points aux intersections), spirale d'or étirée aux proportions du
+        cadre (8 orientations), diagonales et réciproques, croix, zones de sécurité (action 93 % /
+        titres 90 %, ou 90 % / 80 % à vérifier), cadre de format ; actions `cadrage.tiers`,
+        `cadrage.grille_or`, `cadrage.spirale`, `cadrage.spirale_orientation`, `cadrage.diagonales`,
+        `cadrage.croix`, `cadrage.aucune`, `cadrage.format_suivant`. Réglages dans `reglages.toml`
+        (`[aides_cadrage]`, valeurs par défaut serde, sans changer la version du projet) ; le cadre
+        de format et les zones de sécurité restent dans la disposition. Rien ne passe dans les
+        exports ;
       - **clés d'effets : seulement celles de l'effet choisi** (Anthony : « elles n'apparaissent
         que lorsque l'effet est sélectionné »). L'effet choisi (`App::fx_choice` : plan, calque,
         rang) est celui du panneau Effets : un clic sur son nom le choisit (cadre de la couleur de

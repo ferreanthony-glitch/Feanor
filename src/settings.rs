@@ -90,6 +90,10 @@ pub struct Settings {
     /// Windows.
     #[serde(default, rename = "auteur_commentaires", skip_serializing_if = "String::is_empty")]
     pub comment_author: String,
+    /// Aides au cadrage de la caméra (tiers, grille d'or, spirale, diagonales, croix) et leur
+    /// aspect (`cadrage.rs`).
+    #[serde(default, rename = "aides_cadrage")]
+    pub framing: crate::cadrage::FramingAids,
 }
 
 fn default_autosave() -> u32 {
@@ -131,6 +135,7 @@ impl Default for Settings {
             new_project: Default::default(),
             theme: Default::default(),
             comment_author: String::new(),
+            framing: Default::default(),
         }
     }
 }
@@ -147,6 +152,7 @@ impl Settings {
             .and_then(|t| toml::from_str(&t).ok())
             .unwrap_or_default();
         s.onion.migrate();
+        s.framing = s.framing.sanitized();
         s
     }
 

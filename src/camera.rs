@@ -24,6 +24,58 @@ use crate::persp::{self, Homography};
 /// Focale du zoom 100 %, en mm (capteur de 36 mm de large).
 pub const REF_FOCAL: f32 = 35.0;
 
+/// Largeur du capteur (film 35 mm plein cadre), en mm : celle qui lie la focale à l'angle de
+/// champ, et le zoom 100 % (35 mm) à la distance de référence.
+pub const SENSOR_WIDTH: f32 = 36.0;
+
+/// Angle de champ horizontal, en degrés, d'un objectif de `focal` mm sur un capteur de
+/// `SENSOR_WIDTH` mm de large.
+pub fn angle_of_view(focal: f32) -> f32 {
+    2.0 * (SENSOR_WIDTH / (2.0 * focal.max(0.1))).atan().to_degrees()
+}
+
+/// Zoom (1 = `REF_FOCAL`) d'une focale en mm, dans les bornes du modèle.
+pub fn zoom_for_focal(focal: f32) -> f32 {
+    (focal / REF_FOCAL).clamp(0.05, 50.0)
+}
+
+/// Un objectif proposé dans la liste des focales (réglages de la caméra).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FocalPreset {
+    pub name: &'static str,
+    pub mm: f32,
+    /// Ce que l'objectif donne, en une phrase.
+    pub note: &'static str,
+    /// Objectif anamorphique : il pose aussi le cadre 2,39:1 (un repère d'affichage seulement).
+    pub anamorphic: bool,
+}
+
+/// Rapport du cadre posé avec l'objectif anamorphique (le « cinémascope »), largeur:hauteur.
+pub const ANAMORPHIC_FORMAT: [f32; 2] = [2.39, 1.0];
+
+/// Focales proposées, de la plus courte à la plus longue (l'anamorphique, à part, en dernier).
+pub const FOCAL_PRESETS: [FocalPreset; 8] = [
+    FocalPreset { name: "Très grand angle", mm: 14.0, note: "Champ très large, perspective exagérée.", anamorphic: false },
+    FocalPreset { name: "Grand angle (courte)", mm: 24.0, note: "Large, profondeur marquée : décors, espaces.", anamorphic: false },
+    FocalPreset { name: "Normale", mm: 35.0, note: "Le zoom 100 % de SHOT : le cadre vu tel quel.", anamorphic: false },
+    FocalPreset { name: "Standard", mm: 50.0, note: "Proche du regard : champ sans exagération.", anamorphic: false },
+    FocalPreset { name: "Portrait", mm: 85.0, note: "Resserré, fonds aplatis : visages.", anamorphic: false },
+    FocalPreset { name: "Téléobjectif (longue)", mm: 135.0, note: "Étroit, plans écrasés les uns sur les autres.", anamorphic: false },
+    FocalPreset { name: "Long téléobjectif", mm: 200.0, note: "Très étroit : sujets lointains, perspective aplatie.", anamorphic: false },
+    FocalPreset {
+        name: "Anamorphique",
+        mm: 40.0,
+        note: "40 mm et cadre 2,39:1 posé en repère. Un vrai objectif anamorphique comprime l'image en largeur (×2 en général) \
+               et on la redresse ensuite : SHOT ne déforme pas le dessin, il montre seulement le cadre.",
+        anamorphic: true,
+    },
+];
+
+/// Texte d'un objectif : « Portrait · 85 mm · 24° ».
+pub fn focal_label(p: &FocalPreset) -> String {
+    format!("{} · {} mm · {:.0}°", p.name, p.mm, angle_of_view(p.mm))
+}
+
 /// Distance de la caméra au plan de référence (profondeur 0), en pixels de la feuille : celle
 /// d'où un objectif de `REF_FOCAL` voit exactement le cadre.
 pub fn ref_distance(frame: [usize; 2]) -> f32 {
@@ -338,24 +390,14 @@ pub fn set_key(keys: &mut Vec<CameraKey>, frame: usize, cam: Camera) {
     }
 }
 
-/// Images où la clé `index` peut aller (12e) : entre ses voisines (elle ne passe pas par-dessus
-/// une autre clé), dans un panneau de `len` images.
-pub fn key_range(keys: &[CameraKey], index: usize, len: usize) -> (usize, usize) {
-    let lo = index.checked_sub(1).and_then(|i| keys.get(i)).map_or(0, |k| k.frame + 1);
-    let hi = keys.get(index + 1).map_or(len.saturating_sub(1), |k| k.frame.saturating_sub(1));
-    (lo, hi.max(lo))
-}
-
-/// Déplace la clé `index` vers l'image `frame`, bornée par `key_range` ; les clés restent
-/// triées. Renvoie l'image où elle est.
-pub fn move_key(keys: &mut [CameraKey], index: usize, frame: usize, len: usize) -> usize {
-    if index >= keys.len() {
-        return frame;
+/// Pose la clé `key` en entier (caméra et adoucis) à son image, en gardant les clés triées ; elle
+/// remplace celle qui y était.
+pub fn put_key(keys: &mut Vec<CameraKey>, key: CameraKey) {
+    match keys.iter().position(|k| k.frame >= key.frame) {
+        Some(i) if keys[i].frame == key.frame => keys[i] = key,
+        Some(i) => keys.insert(i, key),
+        None => keys.push(key),
     }
-    let (lo, hi) = key_range(keys, index, len);
-    let to = frame.clamp(lo, hi);
-    keys[index].frame = to;
-    to
 }
 
 /// Coupe les clés d'un panneau à l'image `at` : celles d'avant, et celles d'après ramenées à 0.

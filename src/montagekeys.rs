@@ -228,6 +228,7 @@ impl App {
         self.key_sel = c.keys;
         self.fx_key_sel.clear();
         self.fx_key_anchor = None;
+        self.clear_cam_keys();
         self.layer_sel.clear();
         self.frame_sel = c.frames;
         self.key_focus = c.key_focus;
@@ -473,6 +474,7 @@ impl App {
         let n = keys.len();
         self.key_clipboard = Some(KeyClip { keys });
         self.fx_clip_recent = false;
+        self.cam_clip_recent = false;
         // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau Pelure (`pasteimage`).
         self.ctx.copy_text(format!("{}clés copiées", crate::pasteimage::MARK));
         self.status = format!("{n} clé{} copiée{} : Ctrl+V pour coller à l'image courante d'un calque.", s(n), s(n));

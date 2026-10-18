@@ -265,6 +265,8 @@ impl App {
             }
             ui.add_space(4.0);
             self.frame_format_ui(ui);
+            ui.add_space(4.0);
+            self.framing_aids_button(ui);
         });
     }
 
@@ -317,7 +319,7 @@ impl App {
     /// suivent la caméra : position, zoom, rotation.
     pub(crate) fn paint_frame_overlays(&self, painter: &egui::Painter, rect: Rect) {
         let format = self.layout.frame_format.and_then(frames::sanitized);
-        if format.is_none() && !self.layout.safe_frames {
+        if format.is_none() && !self.layout.safe_frames && !self.cadrage.any_on() {
             return;
         }
         let (cam, frame, size) = (self.current_camera(), self.doc.frame, self.canvas_size());
@@ -336,8 +338,12 @@ impl App {
             painter.text(q[0] + vec2(4.0, 3.0), Align2::LEFT_TOP, frames::label(ratio), FontId::proportional(11.0), FORMAT);
             inside = r;
         }
+        // Aides au cadrage (`cadrage.rs`) : tiers, grille d'or, spirale, diagonales, croix, dans le
+        // cadre du format s'il y en a un.
+        self.paint_framing_aids(painter, inside, &|p| self.view.to_screen(rect, size, cam.to_stage(frame, p.x, p.y)));
         if self.layout.safe_frames {
-            for (part, name, corner) in [(frames::ACTION_SAFE, "action", 0), (frames::TITLE_SAFE, "titres", 3)] {
+            let (action, title) = self.cadrage.safe.parts();
+            for (part, name, corner) in [(action, "action", 0), (title, "titres", 3)] {
                 let q = quad(frames::safe_rect(inside, part));
                 let pts = vec![q[0], q[1], q[2], q[3], q[0]];
                 painter.add(Shape::line(pts.clone(), Stroke::new(2.5_f32, veil(40))));

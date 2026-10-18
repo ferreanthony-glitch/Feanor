@@ -575,8 +575,20 @@ pub struct App {
     /// Le montage (ou la planche des vignettes) a la main : on y a cliqué en dernier, pas dans le
     /// dessin. Copier, coller et supprimer y visent alors les panneaux choisis (12e).
     pub(crate) panel_focus: bool,
-    /// Clé de caméra que l'on fait glisser dans la timeline ou le montage (12e).
-    pub(crate) cam_key_drag: Option<crate::camtools::CamKeyDrag>,
+    /// Clés de caméra choisies dans le montage ou la timeline (`camkeys.rs`) et la dernière
+    /// cliquée (départ des Maj + clic), clés copiées (`cam_clip_recent` : la dernière copie est la
+    /// leur, Ctrl+V les vise), clés prises à la souris (12e), et les réglages de l'effet de caméra
+    /// choisi dans les réglages de la caméra (`camfxui.rs`).
+    pub(crate) cam_key_sel: Vec<crate::camkeys::CamKeyRef>,
+    pub(crate) cam_key_anchor: Option<crate::camkeys::CamKeyRef>,
+    pub(crate) cam_key_clipboard: Option<crate::camkeys::CamClip>,
+    pub(crate) cam_clip_recent: bool,
+    pub(crate) cam_keys_drag: Option<crate::camkeys::CamKeysDrag>,
+    pub(crate) cam_fx: crate::camfx::Params,
+    /// Aides au cadrage de la caméra (tiers, grille d'or, spirale…, `cadrage.rs`) : les choix,
+    /// retenus dans `reglages.toml`, et leur géométrie du dernier cadre.
+    pub(crate) cadrage: crate::cadrage::FramingAids,
+    pub(crate) cadrage_cache: std::cell::RefCell<crate::cadrage::Cache>,
     /// Poignée tenue dans la timeline du plan (passe interface, `handles.rs`).
     pub(crate) handle_drag: Option<crate::handles::HandleDrag>,
     /// Menu du dernier clic droit dans la timeline hors des cases (`handles::GridMenu`).
@@ -762,6 +774,7 @@ impl App {
             canvas_rect: Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0)),
             ppp: 1.0,
             onion: settings.onion.clone(),
+            cadrage: settings.framing.clone(),
             onion_window: false,
             onion_offset: Vec2::ZERO,
             onion_shift: false,
@@ -907,7 +920,13 @@ impl App {
             layer_clipboard: None,
             panel_clipboard: None,
             panel_focus: false,
-            cam_key_drag: None,
+            cam_key_sel: Vec::new(),
+            cam_key_anchor: None,
+            cam_key_clipboard: None,
+            cam_clip_recent: false,
+            cam_keys_drag: None,
+            cam_fx: crate::camfx::Params::new(crate::camfx::Preset::Shoulder, 24),
+            cadrage_cache: Default::default(),
             handle_drag: None,
             grid_menu: None,
             shape_drag: None,
@@ -2417,9 +2436,10 @@ impl App {
         self.clamp_nav();
         self.guides.current = self.guides.current.min(self.doc.guides.len().saturating_sub(1));
         self.vsel = None;
-        // (Les clés d'effets choisies étaient celles d'avant l'annulation.)
+        // (Les clés d'effets et de caméra choisies étaient celles d'avant l'annulation.)
         self.fx_key_sel.clear();
         self.fx_key_anchor = None;
+        self.clear_cam_keys();
         self.length_origin = None;
         self.renderer.invalidate_all();
         self.modified = true;
@@ -2619,6 +2639,9 @@ impl App {
         self.fx_choice = None;
         self.fx_key_sel.clear();
         self.fx_key_anchor = None;
+        self.clear_cam_keys();
+        self.cam_key_clipboard = None;
+        self.cam_clip_recent = false;
         self.comment_ui = Default::default();
         self.mode = Mode::Storyboard;
         self.cur_panel = 0;
@@ -3049,6 +3072,36 @@ impl App {
             "fichier.importer_modele3d" => self.import_model3d(),
             "edition.annuler" => self.undo(),
             "edition.retablir" => self.redo(),
+            // Des clés de caméra choisies (un losange jaune de la piste Caméra) : copier, couper,
+            // supprimer les visent, coller aussi tant que c'est la dernière chose copiée
+            // (`camkeys.rs`).
+            "edition.copier" if self.cam_keys_have_focus() => self.copy_cam_keys(),
+            "edition.couper" if self.cam_keys_have_focus() => {
+                self.copy_cam_keys();
+                self.delete_cam_keys();
+            }
+            "edition.coller" if self.cam_clip_recent && self.cam_key_clipboard.is_some() && (self.key_focus || self.images_focus) => self.paste_cam_keys(),
+            "edition.supprimer" if self.cam_keys_have_focus() => self.delete_cam_keys(),
+            "camera.cles_copier" => self.copy_cam_keys(),
+            "camera.cles_coller" => self.paste_cam_keys(),
+            "camera.cles_supprimer" => self.delete_cam_keys(),
+            "camera.cles_tout_choisir" => self.choose_all_cam_keys(),
+            "camera.effet_appliquer" => self.apply_camera_effect(),
+            "cadrage.tiers" => self.cadrage.thirds = !self.cadrage.thirds,
+            "cadrage.grille_or" => self.cadrage.phi_grid = !self.cadrage.phi_grid,
+            "cadrage.spirale" => self.cadrage.spiral = !self.cadrage.spiral,
+            "cadrage.spirale_orientation" => {
+                // (Elle s'allume si besoin : on veut voir l'orientation qu'on choisit.)
+                if self.cadrage.spiral {
+                    self.cadrage.next_variant();
+                }
+                self.cadrage.spiral = true;
+                self.status = format!("Spirale d'or : orientation {}.", crate::cadrage::variant_label(self.cadrage.spiral_variant));
+            }
+            "cadrage.diagonales" => self.cadrage.diagonals = !self.cadrage.diagonals,
+            "cadrage.croix" => self.cadrage.cross = !self.cadrage.cross,
+            "cadrage.aucune" => self.cadrage.clear(),
+            "cadrage.format_suivant" => self.next_frame_format(),
             // Des clés d'effets choisies (un losange violet du montage ou de la timeline) passent
             // avant les clés de dessins : copier, couper et supprimer les visent, coller aussi
             // tant que c'est la dernière chose copiée (`fxkeys.rs`).
@@ -3825,8 +3878,9 @@ impl eframe::App for App {
         // (peint derrière, remplir la forme) : enregistrés quand ils
         // changent (pas pendant un glissé).
         let options = (self.paint_behind, self.fill_shapes) != (self.settings.paint_behind, self.settings.fill_shapes);
-        let changed = self.onion != self.settings.onion || self.xsheet != self.settings.xsheet || self.flips != self.settings.flips || options || self.toucher != self.settings.toucher || self.pinceaux != self.settings.brushes_panel;
+        let changed = self.onion != self.settings.onion || self.xsheet != self.settings.xsheet || self.flips != self.settings.flips || options || self.toucher != self.settings.toucher || self.pinceaux != self.settings.brushes_panel || self.cadrage != self.settings.framing;
         if changed && !ctx.input(|i| i.pointer.any_down()) {
+            self.settings.framing = self.cadrage.clone();
             self.settings.onion = self.onion.clone();
             self.settings.xsheet = self.xsheet.clone();
             self.settings.flips = self.flips.clone();

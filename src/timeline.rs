@@ -364,23 +364,19 @@ impl App {
                     Stroke::new(2.0_f32, cam_key().gamma_multiply(0.45)),
                 );
             }
-            for (i, k) in keys.iter().enumerate() {
+            for k in keys.iter() {
                 let c = pos2(cx(k.frame), row.center().y);
-                // La clé que l'on fait glisser : cerclée de blanc.
-                let outline = if self.is_dragged_camera_key(self.cur_panel, i) {
-                    Stroke::new(1.5_f32, theme::contour())
-                } else {
-                    Stroke::new(1.0_f32, Color32::from_black_alpha(140))
-                };
+                if c.x < painter.clip_rect().left() - 8.0 || c.x > painter.clip_rect().right() + 8.0 {
+                    continue;
+                }
+                // Une clé choisie (ou que l'on fait glisser) : plus grande, cerclée du contour du thème.
+                let chosen = self.cam_key_chosen(self.cur_panel, k.frame);
+                let plain = Stroke::new(1.0_f32, Color32::from_black_alpha(140));
                 if k.smooth {
-                    painter.circle(c, 4.5, cam_key(), outline);
+                    let outline = if chosen { Stroke::new(2.0_f32, theme::contour()) } else { plain };
+                    painter.circle(c, if chosen { 6.0 } else { 4.5 }, cam_key(), outline);
                 } else {
-                    let d = 5.0;
-                    painter.add(egui::Shape::convex_polygon(
-                        vec![c + vec2(0.0, -d), c + vec2(d, 0.0), c + vec2(0.0, d), c + vec2(-d, 0.0)],
-                        cam_key(),
-                        outline,
-                    ));
+                    self.paint_cam_diamond(&painter, c, chosen, cam_key(), 5.0, plain);
                 }
             }
         }
@@ -724,6 +720,14 @@ impl App {
         );
         let comment_busy = comment_ptr.busy;
 
+        // La clé de caméra sous le point `p` de la rangée Caméra : son image dans le plan.
+        let cam_row = Rect::from_min_size(pos2(r.left(), grid_top + rows_h), vec2(size.x, CAM_H));
+        let key_x = |f: usize| r.left() + (f as f32 + 0.5) * cell;
+        let key_under = |app: &App, p: Pos2| {
+            cam_row.contains(p).then(|| crate::camtools::camera_key_at(&app.panel().camera, p.x, key_x, cell * 0.5 + 2.0)).flatten()
+        };
+        let cam_frame_under = |app: &App, p: Pos2| key_under(app, p).and_then(|k| app.panel().camera.get(k).map(|k| k.frame));
+
         // Clic droit sur une case de calque : elle est visée (sauf dans le choix), puis le menu
         // des rôles et des images. Ailleurs (passe interface) : la règle, une clé d'effet, la
         // caméra, le son ont leur menu (`handles::GridMenu`). Un fanion de commentaire a le sien.
@@ -751,7 +755,15 @@ impl App {
                         self.role_menu = true;
                     }
                 } else if y < rows_h + CAM_H {
-                    self.set_frame_free(col);
+                    // Un losange de clé de caméra qui n'était pas choisi l'est seul ; le menu vise le choix.
+                    match cam_frame_under(self, p) {
+                        Some(f) => {
+                            if !self.cam_key_chosen(self.cur_panel, f) {
+                                self.click_cam_key(self.cur_panel, f, false, false);
+                            }
+                        }
+                        None => self.set_frame_free(col),
+                    }
                     self.grid_menu = Some(GridMenu::Camera);
                 } else if sound_h > 0.0 && p.y >= r.bottom() - sound_h {
                     let g = self.doc.panel_start(self.cur_panel) + col;
@@ -902,27 +914,29 @@ impl App {
         }
         let in_notes = in_notes || self.timeline_sound_track.is_some();
 
-        // Clés de caméra : on les prend et les fait glisser le long de leur rangée (12e).
-        let cam_row = Rect::from_min_size(pos2(r.left(), grid_top + rows_h), vec2(size.x, CAM_H));
-        let key_x = |f: usize| r.left() + (f as f32 + 0.5) * cell;
-        let key_under = |app: &App, p: Pos2| {
-            cam_row.contains(p).then(|| crate::camtools::camera_key_at(&app.panel().camera, p.x, key_x, cell * 0.5 + 2.0)).flatten()
-        };
+        // Clés de caméra : on les choisit, les prend et les fait glisser le long de leur rangée
+        // (12e, `camkeys.rs`).
         if resp.drag_started() {
             let origin = ui.input(|i| i.pointer.press_origin());
-            if let Some(k) = origin.and_then(|p| key_under(self, p)) {
-                self.begin_camera_key_drag(self.cur_panel, k);
+            let hit = origin.and_then(|p| cam_frame_under(self, p));
+            if hit.is_none() {
+                self.clear_cam_keys();
+            }
+            if let (Some(f), Some(p)) = (hit, origin) {
+                let grab = self.doc.panel_start(self.cur_panel) + ((p.x - r.left()) / cell).floor().max(0.0) as usize;
+                self.begin_cam_keys_drag(self.cur_panel, f, grab);
             }
         }
         // Tant qu'on tient une clé, la tête de lecture ne bouge pas.
-        let holding_key = self.cam_key_drag.is_some();
+        let holding_key = self.cam_keys_drag.is_some();
         if holding_key {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
             if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
-                self.drag_camera_key(((p.x - r.left()) / cell).floor().max(0.0) as usize);
+                let at = self.doc.panel_start(self.cur_panel) + ((p.x - r.left()) / cell).floor().max(0.0) as usize;
+                self.drag_cam_keys(at);
             }
-            if resp.drag_stopped() {
-                self.end_camera_key_drag();
+            if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
+                self.end_cam_keys_drag();
             }
         } else if resp.hover_pos().is_some_and(|p| key_under(self, p).is_some()) {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
@@ -1084,7 +1098,23 @@ impl App {
                 fx_clicked = true;
             }
         }
-        if (resp.clicked() || resp.dragged()) && !fx_clicked && !holding_key && self.image_drag.is_none() && self.grid_select.is_none() && !resp.drag_stopped() && !in_notes {
+        // Clic sur un losange jaune de la rangée Caméra : la clé est choisie (Ctrl : ajoutée ou
+        // retirée ; Maj : toutes celles d'entre), la tête de lecture va dessus (`camkeys.rs`).
+        // Un clic ailleurs lâche le choix.
+        let mut cam_clicked = false;
+        if resp.clicked() && !holding_key && !in_notes {
+            if let Some(p) = resp.interact_pointer_pos() {
+                match cam_frame_under(self, p) {
+                    Some(f) => {
+                        let m = ui.input(|i| i.modifiers);
+                        self.click_cam_key(self.cur_panel, f, m.command, m.shift);
+                        cam_clicked = true;
+                    }
+                    None => self.clear_cam_keys(),
+                }
+            }
+        }
+        if (resp.clicked() || resp.dragged()) && !fx_clicked && !cam_clicked && !holding_key && self.image_drag.is_none() && self.grid_select.is_none() && !resp.drag_stopped() && !in_notes {
             if let Some(p) = resp.interact_pointer_pos() {
                 let col = ((p.x - r.left()) / cell).floor().max(0.0) as usize;
                 if shift {

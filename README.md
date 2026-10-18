@@ -357,6 +357,24 @@ on les coche et décoche, le dessin reste tel quel).
   choisi lâche le choix des clés. Une clé créée par
   « Créer une clé » est aussitôt choisie. Chaque geste est une étape d'annulation nommée
   (« Déplacer / Coller / Supprimer des clés d'effet »).
+- **Caméra : clés, effets, focales, aides au cadrage** (2026-10-19). Les losanges jaunes de la
+  piste Caméra (montage, et timeline) se choisissent comme les clés d'effets : clic (Ctrl : ajoute
+  ou retire ; Maj : toutes celles d'entre, d'un plan à l'autre), la tête de lecture va dessus ;
+  glisser en emmène toutes les choisies (Échap abandonne) ; Ctrl+C / Ctrl+V à l'image courante en
+  gardant l'écart entre les clés (dans le montage elles passent d'un plan à l'autre, en animation
+  elles restent dans le plan courant, les clés qui tombent hors sont dites et laissées de côté) ;
+  Suppr supprime (rien sans clé choisie) ; clic droit sur la piste Caméra. Une étape d'annulation
+  nommée par geste. Dans les réglages de l'outil Caméra, la section **Effets de caméra** pose des
+  clés ordinaires à partir de la caméra actuelle (rien n'est remis à zéro) : caméra à l'épaule
+  (found footage), tremblement léger, explosion / impact (avec coup de zoom), secousse rapide,
+  zoom avant, zoom arrière, zoom choc, vertigo (dolly zoom) ; intensité, durée, fréquence, graine ;
+  « Appliquer » (à l'image courante, ou sur les images choisies dans la timeline) est une seule
+  étape d'annulation. À côté de la focale, la liste **Objectifs** (14, 24, 35, 50, 85, 135, 200 mm
+  et l'anamorphique 40 mm, qui pose aussi le cadre 2,39:1) et l'angle de champ horizontal (capteur
+  de 36 mm). Les **aides au cadrage** (menu en forme de règle dans la barre de vue, et section des
+  réglages de la caméra) : tiers, grille d'or, spirale d'or (huit orientations), diagonales et
+  réciproques, croix centrale, zones de sécurité, cadre de format (16:9, 9:16, 4:5, 1:1, 4:3,
+  1,85:1, 2,39:1) ; couleur, opacité, épaisseur ; repères d'écran, jamais exportés.
 - Vitesse (2026-10-18, scène de 3840 × 2160 : un calque vecto avec un flou animé, par-dessus un
   bitmap avec un bruit animé et une fusion). L'écran ne calcule jamais un effet : un fil de fond
   s'en charge sur tous les cœurs sauf deux (`fxcache.rs`), et l'écran montre en attendant le
@@ -1064,6 +1082,9 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `propager.rs`, `propagerui.rs` | Propagation de la peinture sur une vidéo, façon EbSynth (voir `docs/PROPAGATION.md`) |
 | `handles.rs` | Poignées de la timeline (marques, signets, entrée / sortie, expositions) et menus de la grille |
 | `fxkeys.rs` | Clés d'effets dans le montage et la timeline : losanges, choix, déplacement, copier-coller, suppression |
+| `camkeys.rs` | Clés de caméra dans le montage et la timeline : choix, déplacement, copier-coller entre plans, suppression |
+| `camfx.rs`, `camfxui.rs` | Effets de caméra en préréglages (tremblements, explosion, zooms, vertigo) et liste des focales |
+| `cadrage.rs`, `cadrageui.rs` | Aides au cadrage (tiers, grille d'or, spirale, diagonales, croix) : géométrie, réglages, tracé |
 | `commentaires.rs`, `commentairesui.rs` | Commentaires sur la timeline : modèle, fichier `commentaires.json`, positions ; fanions, bulle, menu, panneau |
 | `app.rs` | État de l'application, actions, raccourcis |
 | `vtools.rs` | Outils des calques vectoriels |
