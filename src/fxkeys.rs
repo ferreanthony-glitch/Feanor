@@ -536,7 +536,7 @@ impl App {
         let (n, kind) = (clip.keys.len(), clip.kind.label());
         self.fx_key_clipboard = Some(clip);
         self.fx_clip_recent = true;
-        // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau Pelure (`pasteimage`).
+        // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau SHOT (`pasteimage`).
         self.ctx.copy_text(format!("{}clés d'effets copiées", crate::pasteimage::MARK));
         self.status = format!("{n} clé{} d'effet copiée{} : Ctrl+V pour les coller à l'image courante, sur l'effet choisi ({kind}).", s(n), s(n));
     }

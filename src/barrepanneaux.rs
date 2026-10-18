@@ -1,7 +1,7 @@
 //! Barre des panneaux (2026-10-18) : une fine bande d'icônes sur le bord droit de la fenêtre, une
 //! icône par panneau de côté ; un clic l'ouvre, le met devant ou le ferme. L'idée vient des
 //! logiciels de retouche (une colonne d'icônes qui allument et éteignent les panneaux) ; les
-//! icônes sont celles de Pelure (`Pane::icon`). Elle n'est pas un panneau de l'espace de travail :
+//! icônes sont celles de SHOT (`Pane::icon`). Elle n'est pas un panneau de l'espace de travail :
 //! elle est posée avant la zone des panneaux, comme la barre d'outils de gauche.
 //!
 //! Chaque icône est liée à une action (`vue.calques`…), donc une bulle d'aide avec son raccourci,

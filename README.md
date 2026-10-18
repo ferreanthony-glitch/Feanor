@@ -460,7 +460,7 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   gomme), Mes brosses, puis un dossier par fichier importé (les importés démarrent repliés). Clic :
   choisir ; clic droit : renommer, dupliquer, remplacer, supprimer. En bas, trois icônes :
   importer des pinceaux, nouvelle brosse (garde le réglage courant dans Mes brosses), supprimer la
-  brosse choisie (celles de Pelure restent). Les **réglages du pinceau** sont dans le panneau
+  brosse choisie (celles de SHOT restent). Les **réglages du pinceau** sont dans le panneau
   **Réglages** de l'outil (pinceau, crayon, gomme), sous le nom, la taille et l'opacité : l'aperçu
   du trait courant, puis à gauche les catégories (Forme de la pointe, Taille et appui, Dispersion,
   Grain et papier, Couleur et mélange, Lissage, Toucher du stylet), dont quatre ont une case qui
@@ -784,7 +784,7 @@ Il s'en va dès qu'un projet s'ouvre ou se crée, au premier trait, ou par « Co
   aperçu du cadre.
 
 Entrée valide, Échap annule. La fenêtre repart des dernières valeurs, du dernier dossier et de tes
-préréglages, retenus dans `%APPDATA%\Pelure\reglages.toml`.
+préréglages, retenus dans `%APPDATA%\SHOT\reglages.toml`.
 
 ## Plantage
 
