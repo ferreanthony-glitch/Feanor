@@ -1706,6 +1706,10 @@ mise en avant ».
   panneau Réglages, autant tout mettre dans le panneau Réglages ») : aperçu et catégories sous le
   résumé du panneau Réglages de l'outil (`brush_settings_ui`) ; le panneau Pinceaux garde la
   taille et la bibliothèque. `Onglet` reste dans `pinceaux.rs` pour relire les réglages écrits.
+- ✅ Puis (Anthony : « la taille apparaît dans deux panneaux ; garder dans Réglages, en premier, en
+  haut ») : la taille n'est plus que dans le panneau Réglages, en tête, en grand ; peint derrière,
+  remplir la forme et le fond sous le trait passent en bas des réglages de la brosse
+  (`brush_extras_ui`). Pour le pot et le cutter, les options du fond restent en haut.
 - ✅ Retenus dans `reglages.toml` (`panneau_pinceaux`, `#[serde(default)]`) : onglet, liste ou
   vignettes, catégorie, dossiers ouverts ou repliés.
 - ✅ Logique sans écran dans `pinceaux.rs` (rangement, recherche, état, catégories), testée dans
