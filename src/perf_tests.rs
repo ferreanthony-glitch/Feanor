@@ -151,6 +151,9 @@ pub(crate) struct Banc {
     taille: egui::Vec2,
     t: f64,
     cible: Option<wgpu::Texture>,
+    /// Les textes peints par la dernière image (si `garder_textes`).
+    pub textes: Vec<String>,
+    pub garder_textes: bool,
 }
 
 pub(crate) fn banc(doc: Document, avec_gpu: bool) -> Banc {
@@ -176,7 +179,7 @@ pub(crate) fn banc(doc: Document, avec_gpu: bool) -> Banc {
             view_formats: &[],
         })
     });
-    let mut b = Banc { ctx, app, rs, taille, t: 0.0, cible };
+    let mut b = Banc { ctx, app, rs, taille, t: 0.0, cible, textes: Vec::new(), garder_textes: false };
     b.chauffer(8);
     b
 }
@@ -202,6 +205,13 @@ impl Banc {
         let ppp = out.pixels_per_point;
         let reveil = out.viewport_output.get(&ViewportId::ROOT).map_or(Duration::MAX, |v| v.repaint_delay);
         let (textures, octets) = (out.textures_delta.set.len(), out.textures_delta.set.iter().map(|(_, d)| d.image.width() * d.image.height() * 4).sum());
+        if self.garder_textes {
+            self.textes = out
+                .shapes
+                .iter()
+                .filter_map(|s| if let egui::epaint::Shape::Text(t) = &s.shape { Some(t.galley.job.text.clone()) } else { None })
+                .collect();
+        }
         let prims = self.ctx.tessellate(out.shapes, ppp);
         let sommets = prims.iter().map(|p| if let egui::epaint::Primitive::Mesh(m) = &p.primitive { m.vertices.len() } else { 0 }).sum();
         let decoupage = t1.elapsed().as_secs_f64() * 1e3;
@@ -369,6 +379,66 @@ fn an_idle_application_does_not_repaint() {
     let mesures: Vec<Mesure> = (0..10).map(|_| b.image(Vec::new(), 0.5)).collect();
     let pire = mesures.iter().map(|m| m.reveil).min().unwrap_or(Duration::MAX);
     assert!(pire >= Duration::from_secs(1), "au repos, SHOT demande à être repeint dans {pire:?}");
+    // Pendant la lecture, une image après l'autre ; une fois arrêtée, plus rien.
+    b.app.set_mode(Mode::Animation);
+    b.chauffer(10);
+    b.app.toggle_play_scope(false);
+    let lecture: Vec<Mesure> = (0..6).map(|_| b.image(Vec::new(), 1.0 / 24.0)).collect();
+    assert!(lecture.iter().all(|m| m.reveil < Duration::from_millis(100)), "la lecture doit demander l'image suivante");
+    b.app.toggle_play_scope(false);
+    assert!(!b.app.playing);
+    b.chauffer(10);
+    let repos: Vec<Mesure> = (0..6).map(|_| b.image(Vec::new(), 0.5)).collect();
+    let pire = repos.iter().map(|m| m.reveil).min().unwrap_or(Duration::MAX);
+    assert!(pire >= Duration::from_secs(1), "lecture arrêtée, SHOT demande à être repeint dans {pire:?}");
+    // Un trait de pinceau, puis plus rien (le rejeu et les fonds se terminent).
+    let r = b.app.canvas_rect;
+    let zone = r.shrink2(vec2(r.width() * 0.2, r.height() * 0.3));
+    for k in 0..20 {
+        b.image(trait_souris(k, 20, 6, zone), 1.0 / 60.0);
+    }
+    b.chauffer(20);
+    let repos: Vec<Mesure> = (0..6).map(|_| b.image(Vec::new(), 0.5)).collect();
+    let pire = repos.iter().map(|m| m.reveil).min().unwrap_or(Duration::MAX);
+    assert!(pire >= Duration::from_secs(1), "après un trait, SHOT demande à être repeint dans {pire:?}");
+}
+
+/// L'action « vue.performance » allume la mesure et la superposition (qui montre les panneaux et
+/// leur coût), et la rééteint ; éteinte, la mesure ne garde rien.
+#[test]
+fn the_performance_overlay_toggles_and_reports_the_panes() {
+    let mut b = banc(projet_long(8, 3, 12, 2), false);
+    b.garder_textes = true;
+    assert!(crate::keymap::action_info("vue.performance").is_some_and(|a| a.implemented), "l'action doit être dans la palette");
+    // Éteinte : rien n'est gardé, rien n'est montré.
+    b.chauffer(3);
+    assert!(!crate::perf::actif());
+    assert_eq!(crate::perf::resume().images, 0);
+    assert!(!b.textes.iter().any(|t| t.contains("Performance (vue.performance")));
+    // Allumée par l'action.
+    b.app.run_action("vue.performance");
+    assert!(crate::perf::actif());
+    for _ in 0..4 {
+        b.image(Vec::new(), 1.0 / 60.0);
+    }
+    let r = crate::perf::resume();
+    assert!(r.images >= 3 && r.construction_moy > 0.0, "{r:?}");
+    let noms: Vec<&str> = r.sections.iter().map(|s| s.0).collect();
+    for want in ["Dessin", "Montage", "barre de menus", "panneaux (dock, total)"] {
+        assert!(noms.contains(&want), "la section « {want} » manque : {noms:?}");
+    }
+    assert!(b.textes.iter().any(|t| t.contains("Performance (vue.performance")), "la superposition doit se peindre");
+    let joint = b.textes.join("\n");
+    assert!(joint.contains("Images :") && joint.contains("Construction de l'interface") && joint.contains("Montage"), "{joint}");
+    // Le rapport nomme les réveils : le rafraîchissement de la superposition, et l'entrée.
+    let rapport = crate::perf::rapport(&r);
+    assert!(rapport.contains("Réveils"), "{rapport}");
+    // Éteinte de nouveau : l'historique est vidé et la superposition disparaît.
+    b.app.run_action("vue.performance");
+    b.image(Vec::new(), 1.0 / 60.0);
+    assert!(!crate::perf::actif());
+    assert_eq!(crate::perf::resume().images, 0);
+    assert!(!b.textes.iter().any(|t| t.contains("Performance (vue.performance")));
 }
 
 /// L'ordre des scènes et des séquences, trouvé en une passe (`HashSet`), est celui de l'ancienne
@@ -605,6 +675,45 @@ fn perf_heavy_plan() {
     scenario("dessin au pinceau sur le calque 8 (8 points/image)", &mut b, 60, 1.0 / 60.0, |_, k| trait_souris(k, 60, 8, zone));
     let apres = cel.map(|c| b.app.doc.cels[&c].version);
     println!("PERF le trait a bien été posé : version du dessin {avant:?} -> {apres:?}, projet modifié : {}", b.app.modified);
+}
+
+/// Le démarrage avec beaucoup de pinceaux importés : 300 pointes de 512 x 512 et 100 papiers de
+/// 1024 x 1024, 400 réglages, lus dans le dossier de pinceaux de l'utilisateur (ici un dossier d'essai).
+#[test]
+#[ignore]
+fn perf_brush_library_startup() {
+    use crate::brushtex::{BrushLibrary, GrayImage, Preset, Target};
+    let mut lib = BrushLibrary::builtin();
+    let mut rng = 12345u64;
+    let mut noise = |n: usize| -> Vec<f32> {
+        (0..n)
+            .map(|_| {
+                rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                ((rng >> 40) as f32) / (1u64 << 24) as f32
+            })
+            .collect()
+    };
+    for k in 0..300 {
+        lib.add_tip(&format!("Pointe {k}"), GrayImage::new(512, 512, noise(512 * 512)));
+    }
+    for k in 0..100 {
+        lib.add_paper(&format!("Papier {k}"), GrayImage::new(1024, 1024, noise(1024 * 1024)));
+    }
+    for k in 0..400 {
+        lib.presets.push(Preset { name: format!("Importé {k}"), target: Target::Brush, settings: crate::brush::BrushSettings::brush(), source: "Essai.abr".into() });
+    }
+    let dir = std::env::temp_dir().join(format!("shot-perf-pinceaux-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    lib.save(&dir).expect("enregistrement");
+    let t = Instant::now();
+    let loaded = BrushLibrary::load(Some(&dir));
+    println!("PERF démarrage : lecture de la bibliothèque de pinceaux (300 pointes, 100 papiers) : {:.0} ms, {} réglages", t.elapsed().as_secs_f64() * 1e3, loaded.presets.len());
+    let _ = std::fs::remove_dir_all(&dir);
+    // Le reste de la construction de l'application (polices, thème, raccourcis).
+    let t = Instant::now();
+    let ctx = egui::Context::default();
+    let _app = App::sans_fenetre(&ctx, None);
+    println!("PERF démarrage : construction de l'application : {:.0} ms", t.elapsed().as_secs_f64() * 1e3);
 }
 
 /// Ce qui grandit avec le projet : une timeline de 2 000 images sur 15 calques, un montage de 600 plans.
