@@ -13,6 +13,7 @@ fn stroke(points: &[(f32, f32)]) -> Element {
         opacity: 1.0,
         hardness: 1.0,
         brush: None,
+        trace: Default::default(),
     }
 }
 

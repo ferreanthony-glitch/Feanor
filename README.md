@@ -145,6 +145,28 @@ Chaque plan a ses calques, de deux sortes :
 Les traits vectoriels sont rendus à la résolution du projet : en zoomant très fort, on voit les pixels
 (comme à l'export), mais le trait reste modifiable.
 
+**Un trait vectoriel rend exactement comme le trait bitmap** (2026-10-18, étape 5 du rendu des
+brosses, `docs/VECTORIEL-COMME-BITMAP.md`) : au lâcher, le trait garde son réglage complet et sa
+trace (l'appui et l'instant de chaque point, le toucher, la couleur B) et rejoue le moteur des
+pinceaux bitmap, empreinte par empreinte — crayon graphite, fusain, gouache, brosses TVPaint
+importées, tout rend pareil sur les deux sortes de calques, et le trait ne change plus quand on lève
+le stylet. Ses pixels sont gardés en mémoire en tuiles (environ 130 Ko par trait de crayon ; 16 Mo
+au plus par trait, 512 Mo en tout, au-delà les moins récents sont oubliés et rejoués au besoin).
+**Aucun geste n'attend le moteur** (règle d'Anthony, 2026-10-18 : « un logiciel qui réponde
+toujours très rapidement, sans latence ») : déplacer, tourner, agrandir une sélection vectorielle,
+la pousser aux flèches, la déformer à l'enveloppe ou en perspective pose ces pixels déformés à la
+volée (une cinquantaine de traits texturés : 2 ms par image au glissé ; à l'enveloppe et en
+perspective la carte graphique déforme la feuille par un maillage, 0,14 ms par image que ce
+soit 10, 40 ou 300 traits, au lieu de 10 à 37 ms), et le rendu exact arrive quelques instants après le lâcher, d'un fil de travail (`rejeu.rs`), sans rien
+bloquer ; au lever du stylet non plus, le trait n'est plus rejoué sur le fil de l'interface (174 ms
+pour 2400 points de gouache avant). Un trait qui dépasse de la feuille garde ce qui dépasse :
+déplacé vers l'intérieur, il se montre en entier. Les contours bleus d'une grosse sélection (des
+centaines de traits) sont faits une fois, à la résolution de l'écran : 0,6 ms par image au lieu de
+13,5 ms pour 300 traits de 500 points. À l'ouverture d'un projet, les dessins texturés
+paraissent tout de suite en rendu rapide, puis exacts. Seule différence restante : la peinture humide (gouache) ne se mêle pas à ce que les
+traits précédents ont posé, chaque trait étant rejoué seul. Les anciens dessins (sans trace)
+rendent comme avant.
+
 L'outil **Transformer** déplace, agrandit ou tourne un calque entier (tous ses dessins) : glisser
 dans la boîte, tirer un coin, tirer la poignée ronde (Maj : contraintes). Les dessins ne sont pas
 modifiés, Ctrl+R annule la transformation, et on peut continuer à dessiner sur le calque.
@@ -517,7 +539,9 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   se choisissent dans les listes « Pointe » et « Papier » de n'importe quel réglage. Pour les
   essayer : outil Crayon sur un calque bitmap ou vectoriel, hachures légères (le grain), trois
   passages au même endroit (ça fonce), puis comparer à « Crayon net ». Tailles pensées pour un
-  projet 1920×1080 vu à 50 %.
+  projet 1920×1080 vu à 50 %. Depuis le retour d'Anthony : le graphite et le crayon de couleur
+  mordent dès l'effleurement (courbe appui → débit relevée) et leur pointe est un « sable » de
+  grains francs plutôt qu'un nuage.
   - **Douceur du grain** (sous le papier) : petit = grain net et dur (les anciens réglages),
     grand = grain qui répond en douceur. **Grain du crayon** (Soie, Doux, Moyen, Dur) : un grain
     fin collé à la feuille, même sans papier — le « Grain » du crayon de TVPaint, refait par
@@ -943,7 +967,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `noyau.rs` | Noyau pour l'appli compagnon : projet, résumé, vignettes PNG, panneaux, textes, PDF |
 | `document.rs` | Séquences, scènes, panneaux, calques, expositions, dessins ; opérations de montage |
 | `raster.rs` | Images en tuiles de 64×64 allouées à la demande |
-| `vector.rs` | Éléments vectoriels : rendu, sélection, transformations, gomme, contours de remplissage |
+| `vector.rs` | Éléments vectoriels : rendu (rejeu du moteur, cache de pixels en tuiles), sélection, transformations, gomme, contours de remplissage |
+| `rejeu.rs` | Rendu exact des dessins vectoriels en arrière-plan (fil de travail, demandes numérotées) |
 | `pixsel.rs`, `pixtools.rs` | Sélection bitmap : zones, pixels soulevés, transformations ; outil |
 | `guides.rs` | Guides de perspective : géométrie, affichage, traits alignés |
 | `brush.rs` | Moteur de pinceau : empreintes, pression, lissage, pointe en image, grain |

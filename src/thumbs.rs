@@ -72,10 +72,13 @@ impl Thumbs {
     ) -> Option<TextureId> {
         let slot = (id, width);
         let plan = render::panel_plan_at(doc, panel, frame, Some(doc.paper));
+        // (Plus le nombre de fonds sous le trait arrivés de l'arrière-plan : la vignette montre le
+        // fond d'avant jusqu'à l'arrivée du nouveau.)
         let versions = plan
             .items
             .iter()
             .map(|i| doc.cels.get(&i.cel).map_or(0, |c| c.version))
+            .chain([crate::fx::fond_epoch()])
             .collect();
         let cam = doc.panel_camera(panel, frame);
         let key = (plan, versions, [cam.x, cam.y, cam.zoom, cam.angle, cam.dolly, cam.tilt, cam.pan].map(f32::to_bits));
@@ -92,7 +95,7 @@ impl Thumbs {
                 .map(|e| e.texture.id());
         }
         let (tw, th) = thumb_size(doc, width);
-        let image = render::thumbnail(doc, &key.0, &cam, tw, th);
+        let image = crate::fx::differe(|| render::thumbnail(doc, &key.0, &cam, tw, th));
         match self.entries.get_mut(&slot) {
             Some(e) => {
                 e.texture.set(image, TextureOptions::LINEAR);

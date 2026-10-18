@@ -48,6 +48,7 @@ fn a_vector_stroke_bends_with_the_envelope() {
         opacity: 1.0,
         hardness: 1.0,
         brush: None,
+        trace: Default::default(),
     };
     let d = VectorDrawing { elements: vec![stroke] };
     // Neutre : les mêmes points (plus serrés).
@@ -95,6 +96,7 @@ fn only_the_chosen_elements_follow_the_envelope() {
         opacity: 1.0,
         hardness: 1.0,
         brush: None,
+        trace: Default::default(),
     };
     let d = VectorDrawing { elements: vec![line(100.0), line(150.0)] };
     let mut e = Envelope::identity(src());

@@ -10,7 +10,7 @@ use eframe::egui::{pos2, Color32, Pos2, Rect, Vec2};
 use crate::persp;
 use crate::pixsel::PixelMask;
 use crate::raster::{Raster, TILE};
-use crate::vector::{Element, VPoint, VectorDrawing};
+use crate::vector::{self, Element, VectorDrawing};
 
 /// Coins (haut-gauche, haut-droite, bas-droite, bas-gauche) et poignées : sur le côté `k` (du coin
 /// `k` au coin `k + 1`), `handles[2k]` près du coin `k`, `handles[2k + 1]` près du coin `k + 1`.
@@ -204,6 +204,114 @@ pub fn warp_raster_masked(original: &Raster, mask: &PixelMask, env: &Envelope) -
     out
 }
 
+/// Les deux feuilles d'un dessin bitmap dont le rectangle `src` se déforme : ce qui reste (le
+/// dessin sans le rectangle) et ce qui bouge (le rectangle seul).
+pub fn split_rect(original: &Raster, src: Rect) -> (Raster, Raster) {
+    let mut base = original.clone();
+    let mut sheet = Raster::new(original.width, original.height);
+    let (x0, y0) = (src.min.x.floor().max(0.0) as usize, src.min.y.floor().max(0.0) as usize);
+    let (x1, y1) = ((src.max.x.ceil().max(0.0) as usize).min(original.width), (src.max.y.ceil().max(0.0) as usize).min(original.height));
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let idx = original.tile_index_of(x, y);
+            if original.tiles[idx].is_some() {
+                let c = original.get(x, y);
+                base.tile_mut(idx)[(y % TILE) * TILE + x % TILE] = Color32::TRANSPARENT;
+                if c.a() > 0 {
+                    put_pixel(&mut sheet, x, y, c);
+                }
+            }
+        }
+    }
+    (base, sheet)
+}
+
+/// Les deux feuilles d'un dessin bitmap dont la zone choisie `mask` se déforme : ce qui reste (en
+/// proportion inverse de la couverture) et ce qui bouge (en proportion de la couverture).
+pub fn split_masked(original: &Raster, mask: &PixelMask) -> (Raster, Raster) {
+    let mut base = original.clone();
+    let mut sheet = Raster::new(original.width, original.height);
+    for y in mask.y0..(mask.y0 + mask.h).min(original.height) {
+        for x in mask.x0..(mask.x0 + mask.w).min(original.width) {
+            let m = mask.at(x, y);
+            let idx = original.tile_index_of(x, y);
+            if m > 0.0 && original.tiles[idx].is_some() {
+                let c = original.get(x, y);
+                put_pixel(&mut base, x, y, scaled(c, 1.0 - m));
+                let moved = scaled(c, m);
+                if moved.a() > 0 {
+                    put_pixel(&mut sheet, x, y, moved);
+                }
+            }
+        }
+    }
+    (base, sheet)
+}
+
+/// Aperçu rapide d'une déformation pendant un geste (règle d'Anthony : jamais d'attente pendant un
+/// geste) : les pixels dessinés de `sheet` dans `src` sont projetés là où `map` les envoie, au plus
+/// proche voisin, par blocs qui couvrent l'agrandissement local (pas de trous) ; `map` est
+/// interpolée sur une grille de 8 px. Le coût suit le nombre de pixels dessinés, pas la surface. Le
+/// résultat exact (`warp_raster`, bilinéaire ; ou le rejeu des traits) vient au lâcher.
+pub fn warp_raster_fast(sheet: &Raster, src: Rect, map: impl Fn(Pos2) -> Pos2) -> Raster {
+    let mut out = Raster::new(sheet.width, sheet.height);
+    if !src.is_positive() || !src.is_finite() {
+        return out;
+    }
+    const CELL: f32 = 8.0;
+    let nx = (src.width() / CELL).ceil().max(1.0) as usize;
+    let ny = (src.height() / CELL).ceil().max(1.0) as usize;
+    let grid: Vec<Pos2> = (0..=ny).flat_map(|j| (0..=nx).map(move |i| (i, j))).map(|(i, j)| map(pos2(src.min.x + i as f32 * CELL, src.min.y + j as f32 * CELL))).collect();
+    let at = |i: usize, j: usize| grid[j * (nx + 1) + i];
+    // Par case : le côté du bloc, l'agrandissement local arrondi au-dessus.
+    let block: Vec<i64> = (0..ny)
+        .flat_map(|j| (0..nx).map(move |i| (i, j)))
+        .map(|(i, j)| {
+            let (a, b, c, d) = (at(i, j), at(i + 1, j), at(i, j + 1), at(i + 1, j + 1));
+            let sx = a.distance(b).max(c.distance(d)) / CELL;
+            let sy = a.distance(c).max(b.distance(d)) / CELL;
+            (sx.max(sy).ceil() as i64).clamp(1, 16)
+        })
+        .collect();
+    let (w, h) = (sheet.width as i64, sheet.height as i64);
+    let (x0, y0) = (src.min.x.floor().max(0.0) as usize, src.min.y.floor().max(0.0) as usize);
+    let (x1, y1) = ((src.max.x.ceil().max(0.0) as usize).min(sheet.width), (src.max.y.ceil().max(0.0) as usize).min(sheet.height));
+    if x0 >= x1 || y0 >= y1 {
+        return out;
+    }
+    for ty in (y0 / TILE)..=((y1 - 1) / TILE) {
+        for tx in (x0 / TILE)..=((x1 - 1) / TILE) {
+            let idx = ty * sheet.tiles_x + tx;
+            let Some(tile) = &sheet.tiles[idx] else { continue };
+            let (ox, oy) = (tx * TILE, ty * TILE);
+            for y in oy.max(y0)..(oy + TILE).min(y1) {
+                for x in ox.max(x0)..(ox + TILE).min(x1) {
+                    let c = tile[(y - oy) * TILE + (x - ox)];
+                    if c.a() == 0 {
+                        continue;
+                    }
+                    let u = (x as f32 + 0.5 - src.min.x) / CELL;
+                    let v = (y as f32 + 0.5 - src.min.y) / CELL;
+                    let (i, j) = ((u.floor().max(0.0) as usize).min(nx - 1), (v.floor().max(0.0) as usize).min(ny - 1));
+                    let (fu, fv) = ((u - i as f32).clamp(0.0, 1.0), (v - j as f32).clamp(0.0, 1.0));
+                    let (a, b, cc, d) = (at(i, j), at(i + 1, j), at(i, j + 1), at(i + 1, j + 1));
+                    let top = a.to_vec2() * (1.0 - fu) + b.to_vec2() * fu;
+                    let bottom = cc.to_vec2() * (1.0 - fu) + d.to_vec2() * fu;
+                    let p = top * (1.0 - fv) + bottom * fv;
+                    let bsz = block[j * nx + i];
+                    let (px, py) = ((p.x - 0.5).round() as i64 - bsz / 2, (p.y - 0.5).round() as i64 - bsz / 2);
+                    for by in py.max(0)..(py + bsz).min(h) {
+                        for bx in px.max(0)..(px + bsz).min(w) {
+                            put_pixel(&mut out, bx as usize, by as usize, c);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Une suite de points rendue plus dense (au plus `step` entre deux), pour qu'elle puisse se courber.
 fn densify_points(points: &[[f32; 2]], step: f32, closed: bool) -> Vec<[f32; 2]> {
     let n = points.len();
@@ -239,20 +347,11 @@ pub fn warp_drawing(original: &VectorDrawing, items: Option<&[usize]>, src: Rect
             continue;
         }
         let dense = match e {
-            Element::Stroke { points, color, opacity, hardness, brush } => {
-                let mut pts: Vec<VPoint> = Vec::with_capacity(points.len() * 2);
-                for (j, p) in points.iter().enumerate() {
-                    if j > 0 {
-                        let a = points[j - 1];
-                        let d = (a.pos().distance(p.pos()) / step).ceil() as usize;
-                        for s in 1..d {
-                            let t = s as f32 / d as f32;
-                            pts.push(VPoint { x: a.x + (p.x - a.x) * t, y: a.y + (p.y - a.y) * t, r: a.r + (p.r - a.r) * t });
-                        }
-                    }
-                    pts.push(*p);
-                }
-                Element::Stroke { points: pts, color: *color, opacity: *opacity, hardness: *hardness, brush: brush.clone() }
+            Element::Stroke { points, color, opacity, hardness, brush, trace } => {
+                // Les appuis et les instants suivent les points ajoutés (interpolés).
+                let (pts, samples) = vector::densify_traced(points, trace, step);
+                let trace = if samples.len() == pts.len() { trace.with_samples(&samples) } else { trace.without_samples() };
+                Element::Stroke { points: pts, color: *color, opacity: *opacity, hardness: *hardness, brush: brush.clone(), trace }
             }
             Element::Fill { contours, color, opacity } => Element::Fill {
                 contours: contours.iter().map(|c| densify_points(c, step, true)).collect(),
@@ -264,4 +363,33 @@ pub fn warp_drawing(original: &VectorDrawing, items: Option<&[usize]>, src: Rect
         *e = persp::warp_element_with(&dense, &map, k);
     }
     out
+}
+
+/// L'état d'avant chaque geste d'une séance de déformation bitmap (enveloppe, perspective), pour
+/// l'annulation : l'original pour le premier geste, ensuite le résultat exact du précédent (la
+/// déformation se refait toujours depuis l'original, mais Ctrl+Z du second geste doit revenir au
+/// premier, pas sauter jusqu'à l'original).
+#[derive(Default)]
+pub struct Committed(Option<Raster>);
+
+impl Committed {
+    /// Un geste se termine : `shown` est l'image affichée (l'aperçu), `new` le résultat exact,
+    /// `original` l'image du début de la séance. Rend les tuiles d'avant le geste (celles que
+    /// l'annulation remet) et les tuiles changées ; `None` : rien n'a changé.
+    pub fn step(&mut self, original: &Raster, shown: &Raster, new: &Raster) -> Option<(Vec<(usize, Option<crate::raster::Tile>)>, Vec<usize>)> {
+        let prior = self.0.as_ref().unwrap_or(original);
+        let mut before = Vec::new();
+        let mut changed = Vec::new();
+        for idx in 0..new.tiles.len() {
+            if prior.tiles.get(idx) != new.tiles.get(idx) || shown.tiles.get(idx) != new.tiles.get(idx) {
+                before.push((idx, prior.tiles[idx].clone()));
+                changed.push(idx);
+            }
+        }
+        if changed.is_empty() {
+            return None;
+        }
+        self.0 = Some(new.clone());
+        Some((before, changed))
+    }
 }

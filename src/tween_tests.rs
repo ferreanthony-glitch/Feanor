@@ -7,7 +7,7 @@ use crate::tween::{self, Slot};
 use crate::vector::{Element, VPoint, VectorDrawing};
 
 fn stroke(pts: &[(f32, f32)], r: f32) -> Element {
-    Element::Stroke { points: pts.iter().map(|&(x, y)| VPoint { x, y, r }).collect(), color: [0, 0, 0], opacity: 1.0, hardness: 1.0, brush: None }
+    Element::Stroke { points: pts.iter().map(|&(x, y)| VPoint { x, y, r }).collect(), color: [0, 0, 0], opacity: 1.0, hardness: 1.0, brush: None, trace: Default::default() }
 }
 
 fn points(e: &Element) -> Vec<(f32, f32, f32)> {

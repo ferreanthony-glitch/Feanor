@@ -155,7 +155,7 @@ const FENETRES: [(usize, usize); 4] = [(24, 64), (100, 60), (100, 64), (90, 60)]
 
 /// Trace les traits en bitmap, comme sur un calque bitmap de Pelure ; rend les chemins (ligne
 /// médiane et rayons) que garderait un calque vectoriel.
-fn trace_bitmap(raster: &mut Raster, s: &BrushSettings, tex: &BrushTextures, traits: &[Trait], feel: Toucher) -> Vec<Vec<VPoint>> {
+fn trace_bitmap(raster: &mut Raster, s: &BrushSettings, tex: &BrushTextures, traits: &[Trait], feel: Toucher) -> Vec<Chemin> {
     let mut paths = Vec::new();
     for t in traits {
         let mut st = StrokeState::new(0, StrokeMode::Paint(t.color), *s, None, true).with_textures(tex.clone()).with_feel(feel);
@@ -164,24 +164,28 @@ fn trace_bitmap(raster: &mut Raster, s: &BrushSettings, tex: &BrushTextures, tra
             st.add_point_at(raster, p, pr, time, &mut dirty);
         }
         st.finish(raster, &mut dirty);
-        paths.push(std::mem::take(&mut st.path));
+        paths.push((std::mem::take(&mut st.path), std::mem::take(&mut st.path_pressure), std::mem::take(&mut st.path_time)));
     }
     paths
 }
 
-/// Pose les traits comme un calque vectoriel au lâcher (`commit_vector_stroke`) : chemin simplifié
-/// à 0,25 px, élément `Stroke` rendu par `vector::render_element`.
-fn trace_vector(raster: &mut Raster, s: &BrushSettings, lib: &BrushLibrary, paths: &[Vec<VPoint>], traits: &[Trait], hardness: f32) {
+/// Pose les traits comme un calque vectoriel au lâcher (`commit_vector_stroke`, étape 5) : le
+/// chemin tel quel avec sa trace (appuis, instants, toucher), élément `Stroke` rendu par
+/// `vector::render_element` (rejoué par le moteur bitmap, puis gardé en cache).
+fn trace_vector(raster: &mut Raster, s: &BrushSettings, lib: &BrushLibrary, paths: &[Chemin], traits: &[Trait], hardness: f32) {
     let brush = lib.for_vector(s).map(Box::new);
     for (path, t) in paths.iter().zip(traits) {
-        let points = vector::simplify(path, 0.25);
-        if points.is_empty() {
+        if path.0.is_empty() {
             continue;
         }
-        let e = Element::Stroke { points, color: t.color, opacity: s.opacity, hardness, brush: brush.clone() };
+        let trace = vector::Trace { pressure: path.1.clone(), time: path.2.clone(), feel: Some(Toucher::default()), secondary: None, cache: Default::default() };
+        let e = Element::Stroke { points: path.0.clone(), color: t.color, opacity: s.opacity, hardness, brush: brush.clone(), trace };
         vector::render_element(raster, &e);
     }
 }
+
+/// Un chemin enregistré par le moteur : points, appuis, instants.
+type Chemin = (Vec<VPoint>, Vec<f32>, Vec<f64>);
 
 /// Une rangée de la planche : son nom et ses quatre cases.
 struct Rangee {
@@ -189,7 +193,7 @@ struct Rangee {
     cases: [Raster; 4],
 }
 
-fn rangee_bitmap(nom: &str, s: &BrushSettings, tex: &BrushTextures, feel: Toucher) -> (Rangee, [Vec<Vec<VPoint>>; 4]) {
+fn rangee_bitmap(nom: &str, s: &BrushSettings, tex: &BrushTextures, feel: Toucher) -> (Rangee, [Vec<Chemin>; 4]) {
     let ex = exercices();
     let mut cases = Vec::new();
     let mut paths = Vec::new();
@@ -199,11 +203,11 @@ fn rangee_bitmap(nom: &str, s: &BrushSettings, tex: &BrushTextures, feel: Touche
         cases.push(r);
     }
     let cases: [Raster; 4] = cases.try_into().ok().expect("quatre cases");
-    let paths: [Vec<Vec<VPoint>>; 4] = paths.try_into().ok().expect("quatre chemins");
+    let paths: [Vec<Chemin>; 4] = paths.try_into().ok().expect("quatre chemins");
     (Rangee { nom: nom.into(), cases }, paths)
 }
 
-fn rangee_vector(nom: &str, s: &BrushSettings, lib: &BrushLibrary, paths: &[Vec<Vec<VPoint>>; 4], hardness: f32) -> Rangee {
+fn rangee_vector(nom: &str, s: &BrushSettings, lib: &BrushLibrary, paths: &[Vec<Chemin>; 4], hardness: f32) -> Rangee {
     let ex = exercices();
     let mut cases = Vec::new();
     for (traits, p) in ex.iter().zip(paths) {
@@ -621,6 +625,24 @@ fn planches_avant_apres(lib: &BrushLibrary) {
         .map(|p| rangee_bitmap(&p.name, &p.settings, &lib.textures(&p.settings), Toucher::default()).0)
         .collect();
     save(&planche_demi("Les brosses livrées avec Pelure, vues à 50 %", "bitmap, mêmes gestes", &rows), "75_brosses_pelure_50pc.png");
+
+    // Le graphite des étapes 1 à 3 (grains nuageux, courbe d'appui douce) contre celui d'après le
+    // retour d'Anthony (grains « sable », mord plus à faible appui).
+    let v1_tip = std::sync::Arc::new(crate::brushtex::Tip::new(crate::brushtex::tip_grains_with(48, 8, 0x6A1, &crate::brushtex::GRAINS_V1)));
+    let v1_paper = std::sync::Arc::new(crate::brushtex::multiscale_paper(256, 0x0A11, &[(0, 0.25), (1, 0.45), (2, 0.55), (4, 0.35)]));
+    let v1_tex = BrushTextures { tip: Some(v1_tip), paper: Some(v1_paper) };
+    let mut g1 = BrushSettings { paper_scale: 2.5, ..BrushSettings::graphite() };
+    g1.dynamics.opacity = Connection { source: Source::Pressure, curve: Curve::from_points(&[[0.0, 0.15], [0.5, 0.6], [1.0, 1.0]]), ..Default::default() };
+    let c1 = BrushSettings { opacity: 0.8, power: 0.7, grain: 0.9, pencil_grain: PencilGrain::Medium, ..g1 };
+    let (g2, c2) = (BrushSettings::graphite(), BrushSettings::colour_pencil());
+    let rows = vec![
+        rangee_bitmap("avant : graphite (étapes 1–3)", &g1, &v1_tex, Toucher::default()).0,
+        rangee_bitmap("après : graphite (sable, mord plus)", &g2, &lib.textures(&g2), Toucher::default()).0,
+        rangee_bitmap("avant : crayon de couleur", &c1, &v1_tex, Toucher::default()).0,
+        rangee_bitmap("après : crayon de couleur", &c2, &lib.textures(&c2), Toucher::default()).0,
+    ];
+    save(&planche("Graphite et crayon de couleur : grains nuageux (avant) / grains sable qui mordent dès l'effleurement (après)", "bitmap, mêmes gestes ; rangées du haut à 100 %, du bas en gros plan ×4", &rows), "76_graphite_sable.png");
+    save(&planche_demi("Graphite et crayon de couleur : avant / après (sable)", "vu à 50 %, le zoom de travail", &rows), "76_graphite_sable_50pc.png");
 }
 
 /// Essais : ce que les briques déjà là donnent avec d'autres valeurs (pas de nouveau code).

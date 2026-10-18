@@ -155,7 +155,7 @@ fn pencil(s: &Value, color: Option<&str>, path: &[[f32; 2]], thickness_paths: &[
             VPoint { x: p[0], y: p[1], r: radius_at(keys, t).unwrap_or((min + max) * 0.25).max(0.1) }
         })
         .collect();
-    Element::Stroke { points, color, opacity, hardness: 1.0, brush: None }
+    Element::Stroke { points, color, opacity, hardness: 1.0, brush: None, trace: Default::default() }
 }
 
 /// Un trait du modèle : ses jointures de départ et d'arrivée, sa ligne échantillonnée.
@@ -387,7 +387,7 @@ pub fn fit_to_image(raw: &[Element], target: &Raster) -> Option<Fit> {
         let placed: Vec<Element> = raw
             .iter()
             .map(|e| match e {
-                Element::Stroke { points, color, opacity, hardness, brush } => Element::Stroke {
+                Element::Stroke { points, color, opacity, hardness, brush, trace } => Element::Stroke {
                     points: points
                         .iter()
                         .map(|p| {
@@ -399,6 +399,7 @@ pub fn fit_to_image(raw: &[Element], target: &Raster) -> Option<Fit> {
                     opacity: *opacity,
                     hardness: *hardness,
                     brush: brush.clone(),
+                    trace: trace.without_cache(),
                 },
                 Element::Fill { contours, color, opacity } => Element::Fill {
                     contours: contours.iter().map(|c| c.iter().map(|p| place(*p)).collect()).collect(),

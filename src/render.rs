@@ -23,6 +23,44 @@ pub struct PlanItem {
     pub ctg: Option<crate::ctg::CtgInput>,
     /// Fond sous le trait (`fond.rs`) : cet élément montre le fond du dessin `cel`, pas son trait.
     pub fond: Option<FondPart>,
+    /// Feuille flottante (`flottante.rs`) : transformation du geste en cours (déplacer, tourner,
+    /// agrandir une sélection vectorielle), appliquée au dessin avant celle du calque. Le GPU
+    /// n'a que ce paramètre à changer à chaque image ; aucun pixel n'est refait ni envoyé.
+    pub pre: Option<Pre>,
+}
+
+/// La transformation d'un geste sur une feuille flottante (`PlanItem::pre`).
+#[derive(Clone, PartialEq, Debug)]
+pub struct Pre {
+    /// Du dessin (ses pixels) vers la feuille, avant la transformation du calque.
+    pub aff: Affine,
+    /// Taille de l'image du dessin quand ce n'est pas celle de la feuille : la feuille flottante
+    /// d'une sélection garde ce qui dépasse de la feuille (`flottante.rs`), elle est plus grande
+    /// (`aff` compte alors sa marge). Rien : la taille de la feuille.
+    pub dims: Option<[usize; 2]>,
+    /// Enveloppe ou perspective (`warp.rs`) : la feuille est posée par ce maillage, pas par `aff`
+    /// (le maillage compte la marge de la feuille).
+    pub warp: Option<std::sync::Arc<crate::warp::Warp>>,
+}
+
+impl PlanItem {
+    /// La transformation du dessin vers la feuille (celle du geste, puis celle du calque), `pivot`
+    /// étant le centre de la feuille ; `None` : le dessin tel quel.
+    pub fn affine(&self, pivot: egui::Pos2) -> Option<Affine> {
+        match (&self.pre, &self.transform) {
+            (None, None) => None,
+            (Some(p), None) => Some(p.aff),
+            (None, Some(t)) => Some(t.affine(pivot)),
+            (Some(p), Some(t)) => Some(p.aff.then(&t.affine(pivot))),
+        }
+    }
+
+    /// Le maillage qui pose la feuille (enveloppe, perspective) et la transformation du calque à
+    /// lui appliquer ensuite.
+    pub fn warp(&self, pivot: egui::Pos2) -> Option<(&crate::warp::Warp, Option<Affine>)> {
+        let w = self.pre.as_ref()?.warp.as_deref()?;
+        Some((w, self.transform.as_ref().map(|t| t.affine(pivot))))
+    }
 }
 
 /// Ce que montre un élément de fond.
@@ -65,8 +103,8 @@ pub fn sample(raster: &Raster, x: f32, y: f32) -> Color32 {
 }
 
 /// Transformation inverse (feuille → dessin) d'un dessin transformé.
-fn inverse_of(doc: &Document, t: &Option<LayerTransform>) -> Option<Affine> {
-    t.as_ref().and_then(|t| t.affine(doc.stage_center()).inverse())
+fn inverse_of(doc: &Document, item: &PlanItem) -> Option<Affine> {
+    item.affine(doc.stage_center()).and_then(|a| a.inverse())
 }
 
 /// Ce qu'il faut composer pour afficher une image, du fond vers le dessus.
@@ -129,8 +167,25 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
         buf[s..s + tw].fill(base);
     }
     for item in &plan.items {
+        // Feuille déformée par un maillage (enveloppe, perspective) : calcul de secours, la carte
+        // graphique dessine les mêmes triangles.
+        if let Some((warp, layer)) = item.warp(doc.stage_center()) {
+            let Some(cel) = crate::fx::shown(doc, item) else { continue };
+            // (D'abord dans une zone à part : deux triangles voisins peuvent poser le même pixel.)
+            let mut laid = vec![Color32::TRANSPARENT; tw * th];
+            warp.fill(&cel.raster, layer.as_ref(), (ox, oy, tw, th), |x, y, src| laid[(y - oy) * tw + (x - ox)] = src);
+            for y in 0..th {
+                let s = at(ox, oy + y);
+                for (x, (d, &src)) in buf[s..s + tw].iter_mut().zip(&laid[y * tw..(y + 1) * tw]).enumerate() {
+                    if src.a() != 0 {
+                        *d = blend_over(*d, src, item.opacity, item.tint, item.blend, (ox + x, oy + y));
+                    }
+                }
+            }
+            continue;
+        }
         // Calque transformé : chaque pixel va chercher le point correspondant du dessin.
-        if let Some(inv) = inverse_of(doc, &item.transform) {
+        if let Some(inv) = inverse_of(doc, item) {
             let Some(cel) = crate::fx::shown(doc, item) else { continue };
             for y in 0..th {
                 let s = at(ox, oy + y);
@@ -269,7 +324,7 @@ pub fn composite_pixel(doc: &Document, plan: &Plan, x: usize, y: usize) -> Color
     let mut c = paper_color(plan);
     for item in &plan.items {
         if let Some(cel) = crate::fx::shown(doc, item) {
-            let s = match inverse_of(doc, &item.transform) {
+            let s = match inverse_of(doc, item) {
                 Some(inv) => {
                     let p = inv.apply(egui::pos2(x as f32 + 0.5, y as f32 + 0.5));
                     sample(&cel.raster, p.x, p.y)
@@ -311,6 +366,7 @@ pub fn layer_plan_at(doc: &Document, index: usize, li: usize, frame: usize) -> O
         fx: crate::fx::steps_at(&l.fx, frame),
         ctg: crate::ctg::input(&panel.layers, li, frame),
         fond: None,
+        pre: None,
     };
     // Le fond sous le trait fait partie de l'image du calque.
     Some(Plan { paper: None, items: fond_item(l, &line).into_iter().chain([line]).collect() })
@@ -337,6 +393,7 @@ fn plan_with_camera(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera:
                     fx: crate::fx::steps_at(&l.fx, frame),
                     ctg: crate::ctg::input(&panel.layers, li, frame),
                     fond: None,
+                    pre: None,
                 })
                 .map(|line| (li, line))
             })
@@ -453,6 +510,13 @@ impl Renderer {
     pub fn invalidate_all(&mut self) {
         self.dirty_all = true;
         self.gpu_all = true;
+    }
+
+    /// Un fond arrivé de l'arrière-plan (`fx::fond_poll`) remplace celui d'avant : le plan est le
+    /// même, l'image composée par le processeur est à refaire (la carte graphique suit les versions
+    /// des dessins dérivés toute seule).
+    pub fn invalidate_composed(&mut self) {
+        self.dirty_all = true;
     }
 
     pub fn invalidate_tiles(&mut self, tiles: &[usize]) {

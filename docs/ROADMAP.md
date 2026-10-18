@@ -1642,7 +1642,66 @@ Choix d'Anthony :
     (`vector::pressure_for_radius`).
   - Choix par défaut à confirmer à la tablette : grain collé à la feuille, crayon plafonné à 90 %,
     tailles pour 1920×1080 vu à 50 %. Planches avant / après : `audit-rendu/70_…` à `75_…`.
-- ✅ Étude « vectoriel comme bitmap » (Fable, 2026-10-18, `docs/VECTORIEL-COMME-BITMAP.md`) :
+- ✅ Retour d'Anthony sur les brosses et étape 5 du rendu (Fable, 2026-10-18, branche `vecto` ;
+  `docs/AUDIT-RENDU-BROSSES.md` §6 ter, `docs/VECTORIEL-COMME-BITMAP.md` §3 bis) :
+  - le graphite et le crayon de couleur **mordent dès l'effleurement** (courbe appui → débit) et
+    ont un grain **« sable »**, franc (`GRAINS_SAND`), papier à dessin plus fin ; planches `76_…` ;
+  - **le trait vectoriel rend trait pour trait comme le bitmap** : il garde sa trace (appui et
+    instant par point, toucher, couleur B, `vector::Trace`) et son réglage complet, et rejoue le
+    moteur bitmap ; écart 0,0 sur toutes les brosses et le Trait TVPaint importé ; format 24 ;
+  - **cache de pixels par trait** (`StrokeCache`, ≈ 100 Ko par trait de crayon, plafond 8 Mo par
+    trait) : déplacer une sélection vectorielle pose les pixels sans rejeu — 50 traits de
+    graphite : 103,9 → 3,9 ms par image ; rendu exact refait une fois au lâcher.
+  - Reste : la peinture humide ne se mêle pas d'un trait vectoriel à l'autre ; rotation / échelle
+    rééchantillonnées pendant le geste ; morceaux coupés repartent d'un état neuf.
+- ✅ Revue de l'étape 5 et règle « sans latence » (Fable, 2026-10-18, branche `vecto` ;
+  `docs/VECTORIEL-COMME-BITMAP.md` §3 ter, `revue_tests.rs`) : les 23 constats de la revue
+  corrigés — gomme / cutter / enveloppe / intervalles gardent les appuis des morceaux et ne touchent
+  plus aux traits voisins ; toute transformation hors aperçu vide le cache ; cache en tuiles creuses
+  (plafond 1024 tuiles, budget global 512 Mo, partagé par l'historique) ; glissé arrondi au pixel ;
+  boîte des pointes tournées ; fichier quantifié ; papier des crayons à part (`PAPER_GRAPHITE`) ;
+  doc du format 24 corrigée. Puis, Anthony (« un vrai souci de ralentissement avec les brosses
+  vecto quand elles sont enveloppées et qu'on veut les déplacer ; ma priorité : sans latence ») :
+  **jamais de rejeu du moteur sur le fil de l'interface pendant un geste** — enveloppe et
+  perspective déforment les pixels en cache par maillage (`envelope::warp_raster_fast`), le rendu
+  exact arrive d'un fil de travail (`rejeu.rs`, `App::rejeu_cel` / `poll_rejeu`), ouverture d'un
+  projet en rendu rapide puis exact (`project::load_quick`). Mesures (51 traits, 1920×1080) :
+  enveloppe 8,6 ms / image (rien n'était affiché avant), lâcher 113 → 0,5 ms, glissé après enveloppe
+  44,9 → 1,6 ms / image, lâcher 118 → 0,1 ms ; chargement 24 dessins affiché en 0,28 s au lieu de
+  1,6 s.
+- ✅ Essai d'Anthony, enveloppe et grosse sélection (2026-10-18, nuit, `docs/VECTORIEL-COMME-BITMAP.md`
+  §3 ter, `warp.rs`, `contours.rs`) : (1) enveloppe et perspective vectorielles passent par la
+  feuille flottante : seul un maillage change par image, dessiné par la carte graphique (`gpu.rs`
+  `vs_mesh`, secours processeur dans `render.rs`), feuille avec marge ; 10 traits 9,9 → 0,14 ms par
+  image, 40 traits 37 → 0,14 ms (8 Mo de tuiles → 221 Ko de sommets) ; la feuille déformée reste
+  jusqu'au rendu exact. (2) Les contours bleus d'une grosse sélection sont gardés d'une image à
+  l'autre, simplifiés à l'écran (300 traits de 500 points : 13,5 → 0,6 ms au repos, 1,2 en geste ;
+  300 de 2000 points : 54 → 0,6 ms) ; saisie de 300 traits par bandes sur tous les cœurs
+  (112 → 25 ms). Essais `warp_tests.rs`, `contours_tests.rs`, `gpu_tests.rs` (carte graphique
+  réelle contre le calcul de secours).
+- ✅ Essai d'Anthony sur la feuille flottante (2026-10-18, soir, `docs/VECTORIEL-COMME-BITMAP.md`
+  §3 ter, `affichage_tests.rs`) : (1) des morceaux du dessin manquaient, coupés en ligne droite,
+  quand on déplaçait vers l'intérieur des traits qui dépassaient de la feuille (cache et feuille
+  flottante à la taille de la feuille) — les traits gardent maintenant ce qui dépasse (marge de
+  1024 px, grain lu comme sur la feuille), la feuille flottante est élargie (saisie 11,0 ms contre
+  10,2 ms) ; terminer un geste lâché trop tôt ne laisse plus la sélection en double. (2) La latence
+  au dessin d'un trait texturé était la pose au lever du stylet, un rejeu complet sur le fil de
+  l'interface (44 ms à 600 points, 174 ms à 2400) : 0,07 ms maintenant, le rendu exact vient du fil
+  de travail, qui ne rejoue plus que les traits sans pixels exacts. Les traits manquants du dessin
+  regardé sont réchauffés en arrière-plan (saisie sans cache : 0,8 s pour 40 traits larges).
+- ✅ Latences sur la branche ecto (Anthony, 2026-10-18 : « sans latence »). **Feuille
+  flottante** (lottante.rs) : déplacer, tourner ou agrandir une sélection vectorielle ne refait
+  plus rien par image — à la première image, le dessin sans la sélection et la sélection seule
+  (deux images, depuis les caches), puis le GPU n'a que la transformation du geste à changer
+  (PlanItem::pre) ; au lâcher la géométrie seule (0,1 ms ; la feuille reste affichée jusqu'à l'arrivée du rejeu exact, ou jusqu'à la prochaine action, qui termine à l'ancienne). 40 traits de Crayon
+  net sur toute la feuille 1920×1080 : translation 1,0 ms et 6,1 Mo de tuiles par image → 0,001 ms
+  et 0 octet, rotation 28,4 ms et 8,3 Mo → 0 (`floating_selection_gesture_is_cheap_per_frame`).
+  **Fond sous le trait en arrière-plan** (ondfil.rs, x::differe) : la silhouette et la
+  composition se calculent d'un fil de travail ; à l'écran, le fond d'avant reste jusqu'à
+  l'arrivée du nouveau (demande caduque jetée) ; export et enregistrement restent exacts. Rendu du
+  plan après le 60e trait : 91 → 6 ms, glissé de 50 traits 71 → 1,6 ms par image
+  (`fond_background_keeps_the_ui_thread_free`). **Perte de données** corrigée : les traces en
+  flottants de d01fffe se relisent, un dessin illisible n'est plus effacé à l'enregistrement. **Rejeu** (contre-vérification de 55b35a3, ejeu_tests.rs) : Ctrl+Z n'annule plus que les dessins qu'il a refaits (N1), un rendu dépassé est redemandé et les demandes interactives passent devant la file du chargement (N2), pas d'adoption pendant un geste sur le dessin ni si sa version a changé (N3), Ctrl+Z du second geste d'une enveloppe ou d'une perspective bitmap revient au premier (N4), l'adoption ne fait plus réécrire tous les dessins au premier enregistrement (N7), un panic du rendu est signalé sans tuer le fil (N9).- ✅ Étude « vectoriel comme bitmap » (Fable, 2026-10-18, `docs/VECTORIEL-COMME-BITMAP.md`) :
   l'existant en images (le trait vectoriel perd au lâcher opacité ↔ appui, connexions, humide,
   accumulation, et garde l'ancien bord), toutes les pistes (rejeu du moteur depuis le chemin avec
   appui, instant, réglage complet et graine ; cache par trait ; GPU ; état de départ des morceaux ;

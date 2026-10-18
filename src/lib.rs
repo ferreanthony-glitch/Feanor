@@ -26,6 +26,26 @@ mod barrepanneaux_tests;
 pub mod fond;
 #[cfg(test)]
 mod fond_tests;
+#[cfg(test)]
+mod perte_tests;
+#[cfg(test)]
+mod rejeu_tests;
+pub mod flottante;
+pub mod warp;
+#[cfg(test)]
+mod warp_tests;
+pub mod contours;
+#[cfg(test)]
+mod contours_tests;
+#[cfg(test)]
+mod gpu_tests;
+#[cfg(test)]
+mod affichage_tests;
+#[cfg(test)]
+mod flottante_tests;
+mod fondfil;
+#[cfg(test)]
+mod fondfil_tests;
 mod fondui;
 mod blend;
 #[cfg(test)]
@@ -190,6 +210,10 @@ mod marks;
 #[cfg(test)]
 mod matiere_tests;
 #[cfg(test)]
+mod vecto_tests;
+#[cfg(test)]
+mod revue_tests;
+#[cfg(test)]
 mod keymap_tests;
 #[cfg(test)]
 mod ops_tests;
@@ -259,6 +283,7 @@ mod propager_cadence_tests;
 mod propagerui;
 mod raccourcisui;
 mod raster;
+mod rejeu;
 mod recovery;
 #[cfg(test)]
 mod recovery_tests;

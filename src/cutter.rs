@@ -11,7 +11,7 @@ use eframe::egui::{Pos2, Rect};
 
 use crate::app::App;
 use crate::document::LayerKind;
-use crate::vector::{Element, VPoint, VectorDrawing};
+use crate::vector::{self, Element, VPoint, VectorDrawing};
 
 /// Les morceaux plus courts (pixels du dessin) sont laissés de côté.
 const MIN_PIECE: f32 = 0.5;
@@ -78,20 +78,6 @@ fn nearest(points: &[VPoint], c: Pos2) -> Option<(f32, f32)> {
     best
 }
 
-/// Le morceau de la ligne entre `from` et `to`.
-fn piece(points: &[VPoint], from: f32, to: f32) -> Vec<VPoint> {
-    let mut out = vec![point_at(points, from)];
-    let first = from.floor() as usize + 1;
-    for k in first..points.len() {
-        if k as f32 >= to {
-            break;
-        }
-        out.push(points[k]);
-    }
-    out.push(point_at(points, to));
-    out
-}
-
 fn length(points: &[VPoint]) -> f32 {
     points.windows(2).map(|w| w[0].pos().distance(w[1].pos())).sum()
 }
@@ -130,7 +116,7 @@ pub fn cut_strokes(d: &mut VectorDrawing, gesture: &[Pos2], tol: f32) -> Option<
     let mut region = Rect::NOTHING;
     let mut out = Vec::with_capacity(d.elements.len());
     for (i, e) in d.elements.iter().enumerate() {
-        let (Some(line), Element::Stroke { points, color, opacity, hardness, brush }) = (&lines[i], e) else {
+        let (Some(line), Element::Stroke { points, color, opacity, hardness, brush, trace }) = (&lines[i], e) else {
             out.push(e.clone());
             continue;
         };
@@ -165,9 +151,10 @@ pub fn cut_strokes(d: &mut VectorDrawing, gesture: &[Pos2], tol: f32) -> Option<
             if hits.iter().any(|&h| h >= from && h <= to) {
                 continue;
             }
-            let kept = piece(points, from, to);
+            // Le morceau garde les appuis et les instants du trait (interpolés aux coupes).
+            let (kept, samples) = vector::piece_traced(points, trace, from, to);
             if kept.len() >= 2 && length(&kept) >= MIN_PIECE {
-                out.push(Element::Stroke { points: kept, color: *color, opacity: *opacity, hardness: *hardness, brush: brush.clone() });
+                out.push(vector::piece_stroke(kept, samples, *color, *opacity, *hardness, brush, trace));
             }
         }
         region = region.union(bounds);

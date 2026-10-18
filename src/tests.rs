@@ -29,6 +29,7 @@ fn line(x0: f32, y0: f32, x1: f32, y1: f32, r: f32) -> Element {
         opacity: 1.0,
         hardness: 1.0,
         brush: None,
+        trace: Default::default(),
     }
 }
 
@@ -127,6 +128,7 @@ fn onion_tint_and_opacity() {
             fx: Vec::new(),
             ctg: None,
             fond: None,
+            pre: None,
         }],
     };
     let c = render::composite_pixel(&doc, &plan, 0, 0);
@@ -499,6 +501,7 @@ fn demo_project() {
         color: [24, 24, 28],
         opacity: 1.0,
         hardness: 0.9,
+        trace: Default::default(),
         brush: None,
     };
     // Séquence 1 : « Arrivée » (2 panneaux), « Gros plan » ; séquence 2 : « Large ».
