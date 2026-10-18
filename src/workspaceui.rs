@@ -2,14 +2,19 @@
 
 use eframe::egui;
 
-use crate::app::{App, BoardView};
+use crate::app::{App, BoardView, Mode};
 use crate::dock::{Group, Pane};
 use crate::workspace::{self, Layout};
 
 impl App {
     /// La disposition telle qu'elle est à l'écran.
     pub(crate) fn current_layout(&self) -> Layout {
-        let panes = self.dock_layout();
+        let mut panes = self.dock_layout();
+        // En storyboard, la feuille d'exposition est mise de côté : la disposition retenue la garde
+        // (elle revient au prochain passage en animation).
+        if let (Mode::Storyboard, Some(saved)) = (self.mode, &self.exposition_masquee) {
+            panes = panes.retour_animation(saved);
+        }
         Layout {
             tools: panes.contains(Pane::Tools),
             sheet: panes.contains(Pane::Sheet) || panes.contains(Pane::Layers),
@@ -32,6 +37,7 @@ impl App {
         .sanitized();
         self.top_view = layout.top_view;
         self.board_view = if layout.vignettes { BoardView::Panels } else { BoardView::Scene };
+        self.exposition_masquee = None;
         self.set_dock_layout(layout.dock_layout());
         self.layout = layout;
     }
@@ -122,7 +128,8 @@ impl App {
             let panes = self.dock_layout();
             let detached = self.detached_panes();
             // Un par un…
-            for pane in Pane::ALL.into_iter().filter(|p| *p != Pane::Canvas) {
+            let animation = self.mode == Mode::Animation;
+            for pane in Pane::ALL.into_iter().filter(|p| *p != Pane::Canvas && (animation || !p.animation_only())) {
                 let mut on = panes.contains(pane);
                 let apart = if detached.iter().any(|d| d.panneau == pane) { " (fenêtre à part)" } else { "" };
                 if ui.checkbox(&mut on, format!("{}  {}{apart}", pane.icon(), pane.name())).changed() {

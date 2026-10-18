@@ -135,6 +135,30 @@ pub(crate) fn ensure_tracks(layers: &mut Vec<Layer>, wanted: &[(TrackKey, LayerK
     missing.len()
 }
 
+/// Ce qui est choisi (donc éclairé) juste après qu'une clé ou une image a été ajoutée (Anthony,
+/// 2026-10-18 : « la nouvelle clé doit être sélectionnée ») : elle seule, ni l'ancien choix ni
+/// la clé qu'elle vient de couper. Dans le montage (storyboard) c'est la clé choisie de ses pistes ;
+/// dans la timeline (animation) ce sont ses images, cadrées de blanc sur son calque.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct NewKeyChoice {
+    pub keys: Vec<KeyRef>,
+    pub frames: Option<(usize, usize)>,
+    /// Qui a la main pour copier, coller et supprimer : les clés (montage) ou les images (timeline).
+    pub key_focus: bool,
+    pub images_focus: bool,
+}
+
+/// Le choix après l'ajout d'une clé (ou d'images) du plan `panel`, calque `layer`, images
+/// `start` à `end` (exclue) ; `animation` : la timeline est montrée.
+pub(crate) fn choice_for_new_key(animation: bool, panel: u64, layer: u64, start: usize, end: usize) -> NewKeyChoice {
+    NewKeyChoice {
+        keys: vec![KeyRef { panel, layer, start }],
+        frames: animation.then_some((start, end.max(start + 1))),
+        key_focus: !animation,
+        images_focus: animation,
+    }
+}
+
 /// Les clés d'un plan avant son image `limit` : les images où commence un dessin, sur n'importe
 /// lequel de ses calques (sauf dossiers et calques vidéo), dans l'ordre, sans doublon.
 pub(crate) fn key_starts(layers: &[Layer], limit: usize) -> Vec<usize> {
@@ -191,6 +215,24 @@ impl App {
         if !found {
             self.status = if forward { "Pas de clé après la tête de lecture." } else { "Pas de clé avant la tête de lecture." }.into();
         }
+    }
+
+    /// La clé (ou les images) qu'on vient d'ajouter sur le calque `li` du plan `pi`, images `start`
+    /// à `end` (exclue), devient le choix et reçoit la main (`choice_for_new_key`). Toutes les
+    /// commandes qui ajoutent une clé ou une image y passent : nouvelle clé (F4 / F5, double-clic,
+    /// menu), nouveau dessin, dupliquer, insérer une image.
+    pub(crate) fn select_new_key(&mut self, pi: usize, li: usize, start: usize, end: usize) {
+        let Some((panel, layer)) = self.doc.panels.get(pi).and_then(|p| p.layers.get(li).map(|l| (p.id, l.id))) else { return };
+        let c = choice_for_new_key(self.mode == crate::app::Mode::Animation, panel, layer, start, end);
+        self.key_anchor = c.keys.first().copied();
+        self.key_sel = c.keys;
+        self.fx_key_sel.clear();
+        self.fx_key_anchor = None;
+        self.layer_sel.clear();
+        self.frame_sel = c.frames;
+        self.key_focus = c.key_focus;
+        self.images_focus = c.images_focus;
+        self.panel_focus = false;
     }
 
     /// La clé du plan `pi`, calque `li`, qui contient l'image `f` du plan.
@@ -430,6 +472,7 @@ impl App {
         keys.sort_by_key(|k| k.offset);
         let n = keys.len();
         self.key_clipboard = Some(KeyClip { keys });
+        self.fx_clip_recent = false;
         // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau Pelure (`pasteimage`).
         self.ctx.copy_text(format!("{}clés copiées", crate::pasteimage::MARK));
         self.status = format!("{n} clé{} copiée{} : Ctrl+V pour coller à l'image courante d'un calque.", s(n), s(n));

@@ -30,6 +30,22 @@ fn the_bar_has_the_nine_side_panels_in_order() {
 }
 
 #[test]
+fn the_exposure_sheet_icon_is_only_there_in_animation() {
+    use crate::barrepanneaux::icones;
+    let panes = |animation: bool| icones(animation).into_iter().flatten().map(|e| e.pane).collect::<Vec<_>>();
+    assert_eq!(panes(true), self::panes(), "en animation : les neuf icônes");
+    let storyboard = panes(false);
+    assert_eq!(storyboard.len(), 8);
+    assert!(!storyboard.contains(&Pane::XSheet), "pas de feuille d'exposition en storyboard");
+    assert!(storyboard.contains(&Pane::Sheet) && storyboard.contains(&Pane::History));
+    // Les trois groupes restent là (aucun ne s'est vidé).
+    assert_eq!(icones(false).len(), 3);
+    assert_eq!(icones(false)[1].len(), 3);
+    // L'action reste enregistrée (palette, raccourci) : elle répond d'un mot en storyboard.
+    assert!(crate::keymap::action_info("vue.feuille_exposition").is_some_and(|a| a.implemented));
+}
+
+#[test]
 fn the_bar_leaves_out_the_canvas_the_strip_the_tools_and_the_old_panes() {
     for p in [Pane::Canvas, Pane::Montage, Pane::Tools, Pane::View, Pane::Timeline] {
         assert!(!panes().contains(&p), "{p:?} n'a pas d'icône dans la barre");

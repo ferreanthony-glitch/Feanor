@@ -139,6 +139,9 @@ mod fxwarp;
 #[cfg(test)]
 mod fxwarp_tests;
 mod fxui;
+mod fxkeys;
+#[cfg(test)]
+mod fxkeys_tests;
 #[cfg(test)]
 mod folders_tests;
 mod frames;

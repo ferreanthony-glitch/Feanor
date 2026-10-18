@@ -335,6 +335,9 @@ impl App {
                 let hot = lit.filter(|(pi, h, _)| *pi == i && h.layer() == Some(k)).map(|(_, h, held)| (h, held));
                 let chosen: Vec<usize> = self.key_sel.iter().filter(|c| c.panel == p.id && c.layer == p.layers[k].id).map(|c| c.start).collect();
                 paint_layer_cell(painter, cell, &p.layers[k], ppf, current, hot, &chosen, visuals);
+                // Clés d'effets (13i) : un losange violet en haut de la piste, par image clée.
+                let x0 = cell.left() - 1.0;
+                self.paint_fx_markers(painter, p.id, &p.layers[k], |f| x0 + f as f32 * ppf + ppf * 0.5, cell.top() + 8.0, p.frame_count(), (painter.clip_rect().left(), painter.clip_rect().right()));
                 // Clés qu'on glisse : leur fantôme suit la souris, un repère montre où elles se
                 // poseront (comme le repère de Storyboard Pro entre deux panneaux).
                 if let Some(d) = drops.iter().find(|d| d.panel == p.id && d.layer == p.layers[k].id) {
@@ -360,6 +363,35 @@ impl App {
                 let x0 = b.left() - 1.0;
                 crate::camtools::camera_key_at(&self.doc.panels[i].camera, p.x, |f| x0 + f as f32 * ppf + ppf * 0.5, tol).map(|k| (i, k))
             })
+    }
+
+    /// Losange de clé d'effet sous le point `p`, en haut d'une piste de calque : (plan, calque,
+    /// image du plan). `top` : haut de la bande ; `blocks` : les panneaux à l'écran. Il passe avant
+    /// les poignées du dessin dessous (`fxkeys.rs`).
+    pub(crate) fn montage_fx_key_at(&self, p: Pos2, top: f32, blocks: &[Rect], ppf: f32, rows: &Rows) -> Option<(usize, usize, usize)> {
+        if !self.fx_keys_shown {
+            return None;
+        }
+        let y = p.y - top;
+        if y < rows.layers_top() || y >= rows.background_top() {
+            return None;
+        }
+        let row = ((y - rows.layers_top()) / LAYER_H) as usize;
+        if row >= rows.count || (y - rows.layers_top()) - row as f32 * LAYER_H > crate::fxkeys::STRIP {
+            return None;
+        }
+        let tol = (ppf * 0.5).max(5.0);
+        blocks.iter().enumerate().filter(|(_, b)| p.x >= b.left() - 1.0 - tol && p.x <= b.right() + 1.0 + tol).find_map(|(i, b)| {
+            let panel = &self.doc.panels[i];
+            let k = layer_in_row(&panel.layers, row)?;
+            let l = &panel.layers[k];
+            if l.fx.is_empty() || l.folder || l.video.is_some() {
+                return None;
+            }
+            let x0 = b.left() - 1.0;
+            let f = crate::fxkeys::marker_near(&crate::fxkeys::marker_frames(&l.fx), p.x, |f| x0 + f as f32 * ppf + ppf * 0.5, tol)?;
+            (f < panel.frame_count()).then_some((i, k, f))
+        })
     }
 
     /// Calque visé dans les pistes de calques : (panneau, calque). `top` : haut de la bande.
@@ -552,6 +584,13 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, curr
         );
     }
     if current {
-        painter.rect_stroke(cell, 2.0, Stroke::new(1.5_f32, visuals.selection.stroke.color), StrokeKind::Inside);
+        // Le calque courant : un cadre autour de sa case. Quand des clés y sont choisies, ce sont
+        // elles qui portent le blanc (la nouvelle clé seule, par exemple) : le cadre du calque s'efface.
+        let stroke = if chosen.is_empty() {
+            Stroke::new(1.5_f32, visuals.selection.stroke.color)
+        } else {
+            Stroke::new(1.0_f32, visuals.selection.stroke.color.gamma_multiply(0.3))
+        };
+        painter.rect_stroke(cell, 2.0, stroke, StrokeKind::Inside);
     }
 }

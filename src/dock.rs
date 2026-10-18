@@ -98,6 +98,13 @@ impl Pane {
         matches!(self, Pane::XSheet | Pane::History)
     }
 
+    /// Les panneaux qui n'existent qu'en animation (Anthony, 2026-10-18 : « Exposition n'est
+    /// disponible que dans la partie animation ») : en storyboard, leur icône, leur entrée de menu et
+    /// leur action sont masquées, et le panneau n'est pas montré (`App::masquer_exposition`).
+    pub fn animation_only(self) -> bool {
+        matches!(self, Pane::XSheet)
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             Pane::Canvas => "Dessin",
@@ -536,6 +543,37 @@ impl DockLayout {
 
     pub fn contains(&self, pane: Pane) -> bool {
         self.panes().contains(&pane)
+    }
+
+    /// La disposition du storyboard : sans les panneaux d'animation seule (la feuille d'exposition).
+    /// `None` s'il n'y en avait aucun d'ouvert.
+    pub fn sans_animation_seule(&self) -> Option<DockLayout> {
+        let mut out = self.clone();
+        let mut any = false;
+        for p in self.panes().into_iter().filter(|p| p.animation_only()) {
+            out.close(p);
+            any = true;
+        }
+        any.then_some(out)
+    }
+
+    /// Le retour en animation : `saved` est la disposition d'avant le storyboard, `self` celle
+    /// d'aujourd'hui. Si rien n'a bougé entre-temps (aux parts près), on retrouve `saved` à
+    /// l'identique ; sinon la feuille d'exposition se rouvre à sa place d'ordinaire, dans la
+    /// disposition d'aujourd'hui.
+    pub fn retour_animation(&self, saved: &DockLayout) -> DockLayout {
+        let wanted: Vec<Pane> = saved.panes().into_iter().filter(|p| p.animation_only() && !self.contains(*p)).collect();
+        if wanted.is_empty() {
+            return self.clone();
+        }
+        if saved.sans_animation_seule().is_some_and(|s| s.close_to(self)) {
+            return saved.clone();
+        }
+        let mut out = self.clone();
+        for p in wanted {
+            out.open(p);
+        }
+        out
     }
 
     /// `pane` est dans la fenêtre principale (pas flottant ni détaché).

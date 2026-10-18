@@ -622,6 +622,8 @@ impl App {
         self.cur_frame = f;
         self.vsel = None;
         self.commit_structure(snap);
+        // La nouvelle clé, seule, devient le choix (elle est éclairée, Suppr la vise).
+        self.select_new_key(pi, li, f, end);
         let name = self.doc.panels[pi].layers[li].name.clone();
         let what = if source.is_some() { "une copie du dessin, à modifier" } else { "un dessin vide" };
         self.status = format!("Nouvelle clé sur « {name} » : images {} à {}, {what}.", self.frame_label(f), self.frame_label(end - 1));
@@ -707,11 +709,7 @@ impl App {
                 self.action_item(ui, "Vue à travers la caméra", "camera.vue");
                 self.action_item(ui, "Réinitialiser la caméra", "camera.reinitialiser");
             }
-            GridMenu::FxKey => {
-                self.action_item(ui, "Supprimer cette clé d'effet", "fx.cle_supprimer");
-                self.action_item(ui, "Pile d'effets du calque…", "fx.panneau");
-                self.action_item(ui, "Clés d'effets dans la timeline (montrer / cacher)", "fx.cles_timeline");
-            }
+            GridMenu::FxKey => self.fx_key_menu(ui),
             GridMenu::Sound { track, clip, frame } => self.lane_menu(ui, track, clip, frame),
             GridMenu::SoundHeader => {
                 self.action_item(ui, "Importer un son…", "son.importer");
@@ -751,6 +749,7 @@ impl App {
             || self.panel_layer_drag.is_some()
             || self.montage_layer_drag.is_some()
             || self.keys_drag.is_some()
+            || self.fx_keys_drag.is_some()
             || self.key_rect.is_some()
     }
 
@@ -759,6 +758,7 @@ impl App {
     pub(crate) fn cancel_drags(&mut self) {
         self.cancel_montage_drag();
         self.cancel_keys_drag();
+        self.cancel_fx_keys_drag();
         if let Some(r) = self.key_rect.take() {
             self.key_sel = r.before;
         }
@@ -790,6 +790,9 @@ impl App {
         }
         if self.keys_drag.is_some() {
             self.end_keys_drag();
+        }
+        if self.fx_keys_drag.is_some() {
+            self.end_fx_keys_drag();
         }
         self.key_rect = None;
     }

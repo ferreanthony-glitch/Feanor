@@ -684,20 +684,14 @@ impl App {
             }
         }
 
-        // Clés d'effets (13i) : un petit losange violet en haut de la ligne du calque.
+        // Clés d'effets (13i) : un losange violet en haut de la ligne du calque, cerclé de blanc
+        // quand il est choisi (`fxkeys.rs`).
         if self.fx_keys_shown {
-            let fx_color = Color32::from_rgb(182, 103, 230);
+            let panel = self.panel().id;
+            let visible = (ui.clip_rect().left(), ui.clip_rect().right());
             for row in &rows {
                 let layer = &self.layers()[row.li];
-                for f in layer.fx.iter().flat_map(|e| e.keys.iter().map(|k| k.frame)).filter(|&f| f < cols) {
-                    let c = pos2(r.left() + (f as f32 + 0.5) * cell, grid_top + row.top + 4.0);
-                    let d = 3.5;
-                    painter.add(egui::Shape::convex_polygon(
-                        vec![c + vec2(0.0, -d), c + vec2(d, 0.0), c + vec2(0.0, d), c + vec2(-d, 0.0)],
-                        fx_color,
-                        Stroke::new(1.0_f32, theme::FOND),
-                    ));
-                }
+                self.paint_fx_markers(&painter, panel, layer, |f| r.left() + (f as f32 + 0.5) * cell, grid_top + row.top + 8.0, cols, visible);
             }
         }
 
@@ -714,11 +708,12 @@ impl App {
                     self.set_frame_free(col);
                     self.grid_menu = Some(GridMenu::Ruler);
                 } else if y < rows_h {
-                    if let Some(Handle::FxKey { layer, effect, key }) = self.timeline_handle_at(p, r, cell, &rows, grid_top) {
-                        let f = self.layers()[layer].fx[effect].keys[key].frame;
-                        self.select_layer(layer);
-                        self.fx_selected = effect;
-                        self.set_frame_free(f);
+                    if let Some((layer, f)) = self.fx_marker_in_timeline(p, r, cell, &rows, grid_top) {
+                        // Un losange qui n'était pas choisi l'est seul ; le menu vise le choix.
+                        let (panel, id) = (self.panel().id, self.layers()[layer].id);
+                        if !crate::fxkeys::refs_on(panel, id, &self.layers()[layer].fx, f).iter().all(|k| self.fx_key_sel.contains(k)) {
+                            self.click_fx_marker(self.cur_panel, layer, f, false, false);
+                        }
                         self.grid_menu = Some(GridMenu::FxKey);
                     } else if let Some(row) = row_at(&rows, y).filter(|row| !self.layers()[row.li].folder) {
                         self.aim_cell(row.li, col);
@@ -905,13 +900,40 @@ impl App {
         // la tête de lecture, dans la règle, prend la tête (Anthony, 2026-10-17 : posée sur
         // l'entrée ou la sortie, elle ne se laissait plus glisser : la prise passait avant).
         let on_playhead = |p: Pos2| p.y >= r.top() && p.y < grid_top && p.x >= cx - 1.0 && p.x < cx + cell + 1.0;
+        // Un clic ou un geste qui ne part pas d'un losange violet lâche le choix des clés d'effets.
+        if (resp.clicked() || resp.drag_started()) && !self.fx_key_sel.is_empty() {
+            let at = if resp.clicked() { resp.interact_pointer_pos() } else { ui.input(|i| i.pointer.press_origin()) };
+            if at.is_none_or(|p| self.fx_marker_in_timeline(p, r, cell, &rows, grid_top).is_none()) {
+                self.fx_key_sel.clear();
+            }
+        }
         if resp.drag_started() && !holding_key && !in_notes {
-            if let Some(h) = ui
+            if let Some((p, h)) = ui
                 .input(|i| i.pointer.press_origin())
                 .filter(|p| !on_playhead(*p))
-                .and_then(|p| self.timeline_handle_at(p, r, cell, &rows, grid_top))
+                .and_then(|p| self.timeline_handle_at(p, r, cell, &rows, grid_top).map(|h| (p, h)))
             {
-                self.begin_handle_drag(h);
+                match h {
+                    // Une clé d'effet emmène tout le choix (`fxkeys.rs`), une étape d'annulation.
+                    Handle::FxKey { layer, effect, key } => {
+                        if let Some(f) = self.layers().get(layer).and_then(|l| l.fx.get(effect)).and_then(|e| e.keys.get(key)).map(|k| k.frame) {
+                            let grab = ((p.x - r.left()) / cell).floor().max(0.0) as usize;
+                            self.begin_fx_keys_drag(self.cur_panel, layer, f, grab);
+                        }
+                    }
+                    h => {
+                        self.begin_handle_drag(h);
+                    }
+                }
+            }
+        }
+        if self.fx_keys_drag.is_some() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+            if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
+                self.drag_fx_keys(((p.x - r.left()) / cell).floor().max(0.0) as usize);
+            }
+            if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
+                self.end_fx_keys_drag();
             }
         }
         let cursor_for = |h: Handle, held: bool| match h {
@@ -930,12 +952,12 @@ impl App {
             if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
                 self.end_handle_drag();
             }
-        } else if !holding_key && self.image_drag.is_none() {
+        } else if !holding_key && self.image_drag.is_none() && self.fx_keys_drag.is_none() {
             if let Some(h) = resp.hover_pos().filter(|p| !on_playhead(*p)).and_then(|p| self.timeline_handle_at(p, r, cell, &rows, grid_top)) {
                 ui.ctx().set_cursor_icon(cursor_for(h, false));
             }
         }
-        let holding_key = holding_key || self.handle_drag.is_some();
+        let holding_key = holding_key || self.handle_drag.is_some() || self.fx_keys_drag.is_some();
 
         // Clic et glisser : choisir l'image (et le calque au clic). Avec Maj : choisir les images
         // entre l'image courante et celle sous la souris, sur les calques choisis (13c-2).
@@ -1019,7 +1041,17 @@ impl App {
                 );
             }
         }
-        if (resp.clicked() || resp.dragged()) && !holding_key && self.image_drag.is_none() && self.grid_select.is_none() && !resp.drag_stopped() && !in_notes {
+        // Clic sur un losange violet : il est choisi (Ctrl : ajouté ou retiré ; Maj : tous ceux
+        // d'entre le dernier cliqué et lui), la tête de lecture va dessus.
+        let mut fx_clicked = false;
+        if resp.clicked() && !holding_key && !in_notes {
+            if let Some((layer, f)) = resp.interact_pointer_pos().and_then(|p| self.fx_marker_in_timeline(p, r, cell, &rows, grid_top)) {
+                let m = ui.input(|i| i.modifiers);
+                self.click_fx_marker(self.cur_panel, layer, f, m.command, m.shift);
+                fx_clicked = true;
+            }
+        }
+        if (resp.clicked() || resp.dragged()) && !fx_clicked && !holding_key && self.image_drag.is_none() && self.grid_select.is_none() && !resp.drag_stopped() && !in_notes {
             if let Some(p) = resp.interact_pointer_pos() {
                 let col = ((p.x - r.left()) / cell).floor().max(0.0) as usize;
                 if shift {
@@ -1100,11 +1132,9 @@ impl App {
         if layer.folder || layer.video.is_some() {
             return None;
         }
-        if self.fx_keys_shown && p.y - grid_top - row.top <= 9.0 {
-            for (e, effect) in layer.fx.iter().enumerate() {
-                if let Some(k) = effect.keys.iter().position(|k| near(x(k.frame) + cell * 0.5, (cell * 0.5).max(4.0))) {
-                    return Some(Handle::FxKey { layer: row.li, effect: e, key: k });
-                }
+        if let Some((li, f)) = self.fx_marker_in_timeline(p, r, cell, rows, grid_top) {
+            if let Some((effect, key)) = layer.fx.iter().enumerate().find_map(|(e, fx)| fx.key_at(f).map(|k| (e, k))) {
+                return Some(Handle::FxKey { layer: li, effect, key });
             }
         }
         let tol = (cell * 0.3).clamp(2.0, 5.0);
