@@ -15,7 +15,8 @@ use crate::app::{App, Tool};
 pub(crate) const TOOL_GROUPS: &[&[&[Tool]]] = &[
     &[&[Tool::Select, Tool::SelectColor], &[Tool::Brush], &[Tool::Pencil], &[Tool::Eraser], &[Tool::Cutter], &[Tool::Fill]],
     &[&[Tool::Rect, Tool::Line, Tool::Ellipse, Tool::Polyline], &[Tool::Text]],
-    &[&[Tool::Transform], &[Tool::Perspective], &[Tool::Picker]],
+    // Transformer et Perspective dans une seule case (Anthony, 2026-10-18).
+    &[&[Tool::Transform, Tool::Perspective], &[Tool::Picker]],
     &[&[Tool::Pan], &[Tool::Camera], &[Tool::Ref3d]],
 ];
 
