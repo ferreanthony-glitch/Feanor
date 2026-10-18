@@ -417,6 +417,13 @@ sélection vectorielle, très lent.
   en cache, et une sélection déplacée pose ces pixels sans rejeu : **103,9 → 3,9 ms par image**
   pour 50 traits de graphite (101 Ko de cache par trait). Reste : la peinture humide ne se mêle
   pas d'un trait vectoriel à l'autre (planche `10_pelure_gouache.png`, croisements).
+- **Revue et règle « sans latence »** (même jour, §3 ter de l'étude) : les 23 constats de la revue
+  corrigés (gomme, invalidation, mémoire, glissé, boîte, tuiles, fichier, papier) ; et, à la
+  demande d'Anthony (« sans latence »), plus aucun rejeu du moteur sur le fil de l'interface pendant
+  un geste : enveloppe et perspective déforment les pixels en cache par maillage (8,6 ms par image
+  au lieu de rien d'affiché puis 113 ms au lâcher), le rejeu exact arrive d'un fil de travail
+  (`rejeu.rs`). Le papier des crayons est maintenant le sien, « Papier à dessin fin » (6) ; le
+  « Papier à dessin » (3) a repris son relief d'étape 1 pour le fusain et la gomme à grain.
 
 ## 7. Questions pour Anthony
 

@@ -1574,6 +1574,21 @@ Choix d'Anthony :
     graphite : 103,9 → 3,9 ms par image ; rendu exact refait une fois au lâcher.
   - Reste : la peinture humide ne se mêle pas d'un trait vectoriel à l'autre ; rotation / échelle
     rééchantillonnées pendant le geste ; morceaux coupés repartent d'un état neuf.
+- ✅ Revue de l'étape 5 et règle « sans latence » (Fable, 2026-10-18, branche `vecto` ;
+  `docs/VECTORIEL-COMME-BITMAP.md` §3 ter, `revue_tests.rs`) : les 23 constats de la revue
+  corrigés — gomme / cutter / enveloppe / intervalles gardent les appuis des morceaux et ne touchent
+  plus aux traits voisins ; toute transformation hors aperçu vide le cache ; cache en tuiles creuses
+  (plafond 1024 tuiles, budget global 512 Mo, partagé par l'historique) ; glissé arrondi au pixel ;
+  boîte des pointes tournées ; fichier quantifié ; papier des crayons à part (`PAPER_GRAPHITE`) ;
+  doc du format 24 corrigée. Puis, Anthony (« un vrai souci de ralentissement avec les brosses
+  vecto quand elles sont enveloppées et qu'on veut les déplacer ; ma priorité : sans latence ») :
+  **jamais de rejeu du moteur sur le fil de l'interface pendant un geste** — enveloppe et
+  perspective déforment les pixels en cache par maillage (`envelope::warp_raster_fast`), le rendu
+  exact arrive d'un fil de travail (`rejeu.rs`, `App::rejeu_cel` / `poll_rejeu`), ouverture d'un
+  projet en rendu rapide puis exact (`project::load_quick`). Mesures (51 traits, 1920×1080) :
+  enveloppe 8,6 ms / image (rien n'était affiché avant), lâcher 113 → 0,5 ms, glissé après enveloppe
+  44,9 → 1,6 ms / image, lâcher 118 → 0,1 ms ; chargement 24 dessins affiché en 0,28 s au lieu de
+  1,6 s.
 - ✅ Étude « vectoriel comme bitmap » (Fable, 2026-10-18, `docs/VECTORIEL-COMME-BITMAP.md`) :
   l'existant en images (le trait vectoriel perd au lâcher opacité ↔ appui, connexions, humide,
   accumulation, et garde l'ancien bord), toutes les pistes (rejeu du moteur depuis le chemin avec

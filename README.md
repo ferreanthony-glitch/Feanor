@@ -138,12 +138,17 @@ brosses, `docs/VECTORIEL-COMME-BITMAP.md`) : au lâcher, le trait garde son rég
 trace (l'appui et l'instant de chaque point, le toucher, la couleur B) et rejoue le moteur des
 pinceaux bitmap, empreinte par empreinte — crayon graphite, fusain, gouache, brosses TVPaint
 importées, tout rend pareil sur les deux sortes de calques, et le trait ne change plus quand on lève
-le stylet. Ses pixels sont gardés en mémoire (environ 100 Ko par trait de crayon ; au-delà de 8 Mo,
-un trait n'est pas gardé) : déplacer, tourner ou agrandir une sélection vectorielle pose ces pixels
-sans rien rejouer (une cinquantaine de traits texturés : 4 ms par image au lieu de 100), et le rendu
-exact est refait une fois au lâcher. Seule différence restante : la peinture humide (gouache) ne se
-mêle pas à ce que les traits précédents ont posé, chaque trait étant rejoué seul. Les anciens
-dessins (sans trace) rendent comme avant.
+le stylet. Ses pixels sont gardés en mémoire en tuiles (environ 130 Ko par trait de crayon ; 16 Mo
+au plus par trait, 512 Mo en tout, au-delà les moins récents sont oubliés et rejoués au besoin).
+**Aucun geste n'attend le moteur** (règle d'Anthony, 2026-10-18 : « un logiciel qui réponde
+toujours très rapidement, sans latence ») : déplacer, tourner, agrandir une sélection vectorielle,
+la pousser aux flèches, la déformer à l'enveloppe ou en perspective pose ces pixels déformés à la
+volée (une cinquantaine de traits texturés : 2 ms par image au glissé, 9 ms à l'enveloppe), et le
+rendu exact arrive quelques instants après le lâcher, d'un fil de travail (`rejeu.rs`), sans rien
+bloquer. À l'ouverture d'un projet, les dessins texturés paraissent tout de suite en rendu rapide,
+puis exacts. Seule différence restante : la peinture humide (gouache) ne se mêle pas à ce que les
+traits précédents ont posé, chaque trait étant rejoué seul. Les anciens dessins (sans trace)
+rendent comme avant.
 
 L'outil **Transformer** déplace, agrandit ou tourne un calque entier (tous ses dessins) : glisser
 dans la boîte, tirer un coin, tirer la poignée ronde (Maj : contraintes). Les dessins ne sont pas
@@ -860,7 +865,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `noyau.rs` | Noyau pour l'appli compagnon : projet, résumé, vignettes PNG, panneaux, textes, PDF |
 | `document.rs` | Séquences, scènes, panneaux, calques, expositions, dessins ; opérations de montage |
 | `raster.rs` | Images en tuiles de 64×64 allouées à la demande |
-| `vector.rs` | Éléments vectoriels : rendu, sélection, transformations, gomme, contours de remplissage |
+| `vector.rs` | Éléments vectoriels : rendu (rejeu du moteur, cache de pixels en tuiles), sélection, transformations, gomme, contours de remplissage |
+| `rejeu.rs` | Rendu exact des dessins vectoriels en arrière-plan (fil de travail, demandes numérotées) |
 | `pixsel.rs`, `pixtools.rs` | Sélection bitmap : zones, pixels soulevés, transformations ; outil |
 | `guides.rs` | Guides de perspective : géométrie, affichage, traits alignés |
 | `brush.rs` | Moteur de pinceau : empreintes, pression, lissage, pointe en image, grain |
