@@ -256,14 +256,16 @@ pub fn overlay(ctx: &egui::Context) {
         return;
     }
     let text = rapport(&resume());
+    // (Les couleurs du thème : un fond de fenêtre un peu transparent, le titre en avertissement.)
+    let palette = crate::theme::palette();
     egui::Area::new(egui::Id::new("superposition_performance"))
         .order(egui::Order::Foreground)
         .interactable(false)
         .fixed_pos(egui::pos2(56.0, 60.0))
         .show(ctx, |ui| {
-            egui::Frame::new().fill(egui::Color32::from_black_alpha(215)).corner_radius(4.0).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
-                ui.label(egui::RichText::new("Performance (vue.performance pour fermer)").strong().size(11.0).color(egui::Color32::from_rgb(255, 210, 90)));
-                ui.label(egui::RichText::new(text).monospace().size(11.0).color(egui::Color32::from_gray(225)));
+            egui::Frame::new().fill(palette.fenetre.gamma_multiply(0.92)).corner_radius(4.0).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
+                ui.label(egui::RichText::new("Performance (vue.performance pour fermer)").strong().size(11.0).color(palette.avertissement));
+                ui.label(egui::RichText::new(text).monospace().size(11.0).color(palette.texte));
             });
         });
 }
