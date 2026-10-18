@@ -46,9 +46,15 @@ fn headless() -> Option<RenderState> {
 
 /// Ce que la carte graphique affiche du plan, 1 pixel d'écran pour 1 pixel du dessin.
 fn render_on_gpu(rs: &RenderState, doc: &Document, plan: &Plan) -> Vec<Color32> {
-    let (w, h) = (doc.width as u32, doc.height as u32);
     let mut gpu = GpuCanvas::new(rs);
-    gpu.sync(doc, plan, true, &[], &[]);
+    render_with(&mut gpu, rs, doc, plan, true)
+}
+
+/// Comme `render_on_gpu`, avec une carte déjà en route (ses textures gardées d'une image à l'autre) ;
+/// `all` : tout a pu changer.
+fn render_with(gpu: &mut GpuCanvas, rs: &RenderState, doc: &Document, plan: &Plan, all: bool) -> Vec<Color32> {
+    let (w, h) = (doc.width as u32, doc.height as u32);
+    gpu.sync(doc, plan, all, &[], &[]);
     let rect = Rect::from_min_size(pos2(0.0, 0.0), vec2(w as f32, h as f32));
     let corners = [rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom()];
     let callback = gpu.paint(plan, corners, None, rect, [doc.width, doc.height]);
@@ -181,4 +187,53 @@ fn the_gpu_draws_a_meshed_sheet_like_the_fallback_does() {
     let (far, cover, painted) = ecarts(&render_on_gpu(&rs, &doc, &plan), &render::composite_full(&doc, &plan), 4);
     println!("enveloppe sous une transformation de calque : {far} pixels diffèrent de plus de 4 niveaux, {cover} de couverture, sur {painted} peints");
     assert!(far * 100 < painted.max(1) && cover * 200 < painted.max(1));
+}
+
+/// Un cache de textures plein recycle la plus ancienne texture pour le dessin suivant (au lieu d'en
+/// créer une neuve) : ce que la carte montre reste exactement le dessin, sans reste du précédent
+/// (tuiles que le nouveau dessin n'a pas, effacées), dans un sens comme dans l'autre.
+#[test]
+fn recycled_cel_textures_show_exactly_their_own_drawing() {
+    let Some(rs) = headless() else {
+        println!("pas de carte graphique : essai passé");
+        return;
+    };
+    let (w, h) = (256, 192);
+    let mut doc = Document::new(w, h, 24);
+    // Quinze dessins qui n'ont pas les mêmes tuiles : une tuile dessinée dans l'un est vide dans
+    // l'autre, et leurs motifs diffèrent.
+    let cels: Vec<_> = (0..15usize)
+        .map(|k| {
+            let mut cel = crate::document::Cel::new(w, h, crate::document::LayerKind::Bitmap);
+            for t in 0..cel.raster.tiles.len() {
+                if (t + k) % 3 != 0 {
+                    continue;
+                }
+                let tile = cel.raster.tile_mut(t);
+                for (i, p) in tile.iter_mut().enumerate() {
+                    if (i + k * 7) % 4 < 2 {
+                        *p = Color32::from_rgba_premultiplied(20 + k as u8 * 10, 60, 200 - k as u8 * 8, 220);
+                    }
+                }
+            }
+            doc.add_cel(cel)
+        })
+        .collect();
+    let mut gpu = GpuCanvas::new(&rs);
+    // Neuf dessins au plus tiennent (huit de marge, un affiché) : le dixième recycle une texture.
+    gpu.set_cache_bytes(1);
+    let mut checked = 0;
+    for round in 0..3 {
+        for step in 0..cels.len() {
+            // Dans un ordre qui revient sur des dessins déjà vus, chassés puis recréés.
+            let k = if round == 1 { cels.len() - 1 - step } else { (step * 4) % cels.len() };
+            let plan = Plan { paper: Some([255, 255, 255]), items: vec![line_item(cels[k])] };
+            let on_gpu = render_with(&mut gpu, &rs, &doc, &plan, false);
+            let cpu = render::composite_full(&doc, &plan);
+            let far = on_gpu.iter().zip(&cpu).filter(|(a, b)| a.to_array().iter().zip(b.to_array()).any(|(x, y)| (*x as i32 - y as i32).abs() > 1)).count();
+            assert_eq!(far, 0, "round {round}, dessin {k} : {far} pixels diffèrent de la composition sur processeur");
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 45);
 }

@@ -19,7 +19,19 @@ pub(crate) const SCENE_WIDE: Color32 = Color32::from_rgb(214, 170, 92);
 /// Vignettes des dessins (par dessin et version), refaites quand le dessin change.
 #[derive(Default)]
 pub(crate) struct LayerThumbs {
-    cache: HashMap<CelId, (u64, TextureHandle)>,
+    /// Dessin → (version du dessin, vignette, dernière image d'écran où elle a servi).
+    cache: HashMap<CelId, (u64, TextureHandle, u64)>,
+}
+
+impl LayerThumbs {
+    /// Nombre de vignettes gardées (une texture chacune) avant de lâcher celles qui ne servent plus.
+    const LIMIT: usize = 1500;
+
+    /// Vignettes gardées (essais).
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
+        self.cache.len()
+    }
 }
 
 /// Renommage d'un calque en cours : le calque, le nom tapé, le champ a déjà pris le clavier, et
@@ -43,8 +55,10 @@ impl App {
     /// Vignette du dessin `cel` : la partie filmée (le cadre), sur fond blanc.
     pub(crate) fn layer_thumb(&mut self, ctx: &egui::Context, cel: CelId) -> Option<TextureHandle> {
         let c = self.doc.cels.get(&cel)?;
-        if let Some((v, t)) = self.layer_thumbs.cache.get(&cel) {
+        let pass = ctx.cumulative_pass_nr();
+        if let Some((v, t, used)) = self.layer_thumbs.cache.get_mut(&cel) {
             if *v == c.version {
+                *used = pass;
                 return Some(t.clone());
             }
         }
@@ -71,10 +85,15 @@ impl App {
         }
         let image = egui::ColorImage { size: [w, h], pixels };
         let tex = ctx.load_texture(format!("calque {cel}"), image, egui::TextureOptions::LINEAR);
-        if self.layer_thumbs.cache.len() > 512 {
-            self.layer_thumbs.cache.clear();
+        // Trop de vignettes : on garde celles des deux dernières images d'écran (ce qu'on voit) ;
+        // tout vider refaisait, à chaque image, toutes celles qui restaient à l'écran.
+        if self.layer_thumbs.cache.len() >= LayerThumbs::LIMIT {
+            self.layer_thumbs.cache.retain(|_, e| pass.saturating_sub(e.2) <= 2);
+            if self.layer_thumbs.cache.len() >= LayerThumbs::LIMIT {
+                self.layer_thumbs.cache.clear();
+            }
         }
-        self.layer_thumbs.cache.insert(cel, (c.version, tex.clone()));
+        self.layer_thumbs.cache.insert(cel, (c.version, tex.clone(), pass));
         Some(tex)
     }
 

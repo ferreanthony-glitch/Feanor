@@ -134,6 +134,8 @@ pub(crate) struct Mesure {
     pub sommets: usize,
     /// Dans combien de temps l'application demande à être repeinte.
     pub reveil: Duration,
+    /// La carte graphique en détail : textures d'egui, préparation, passe, attente.
+    pub detail: [f64; 4],
 }
 
 impl Mesure {
@@ -204,11 +206,12 @@ impl Banc {
         let sommets = prims.iter().map(|p| if let egui::epaint::Primitive::Mesh(m) = &p.primitive { m.vertices.len() } else { 0 }).sum();
         let decoupage = t1.elapsed().as_secs_f64() * 1e3;
         let t2 = Instant::now();
+        let mut detail = [0.0; 4];
         if let (Some(rs), Some(cible)) = (&self.rs, &self.cible) {
-            peindre(rs, cible, &out.textures_delta, &prims);
+            detail = peindre(rs, cible, &out.textures_delta, &prims);
         }
         let carte = t2.elapsed().as_secs_f64() * 1e3;
-        Mesure { construction, decoupage, carte, textures, octets, sommets, reveil }
+        Mesure { construction, decoupage, carte, textures, octets, sommets, reveil, detail }
     }
 
     pub fn souris(&mut self, x: f32, y: f32) -> Vec<Event> {
@@ -222,14 +225,21 @@ impl Banc {
 }
 
 /// Envoie les textures et peint l'image sur la cible, en attendant la fin du travail de la carte.
-fn peindre(rs: &RenderState, cible: &wgpu::Texture, delta: &egui::TexturesDelta, prims: &[ClippedPrimitive]) {
+/// Renvoie les temps (ms) : textures d'egui, préparation (`prepare` du dessin : composition des
+/// calques enregistrée), enregistrement de la passe, attente de la carte.
+fn peindre(rs: &RenderState, cible: &wgpu::Texture, delta: &egui::TexturesDelta, prims: &[ClippedPrimitive]) -> [f64; 4] {
+    let t = Instant::now();
     for (id, d) in &delta.set {
         rs.renderer.write().update_texture(&rs.device, &rs.queue, *id, d);
     }
+    let t_tex = t.elapsed().as_secs_f64() * 1e3;
+    let t = Instant::now();
     let screen = ScreenDescriptor { size_in_pixels: [1920, 1080], pixels_per_point: 1.0 };
     let view = cible.create_view(&Default::default());
     let mut encoder = rs.device.create_command_encoder(&Default::default());
     let extra = rs.renderer.write().update_buffers(&rs.device, &rs.queue, &mut encoder, prims, &screen);
+    let t_prep = t.elapsed().as_secs_f64() * 1e3;
+    let t = Instant::now();
     {
         let mut pass = encoder
             .begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -243,10 +253,14 @@ fn peindre(rs: &RenderState, cible: &wgpu::Texture, delta: &egui::TexturesDelta,
         rs.renderer.read().render(&mut pass, prims, &screen);
     }
     rs.queue.submit(extra.into_iter().chain([encoder.finish()]));
+    let t_pass = t.elapsed().as_secs_f64() * 1e3;
+    let t = Instant::now();
     rs.device.poll(wgpu::Maintain::Wait);
+    let t_wait = t.elapsed().as_secs_f64() * 1e3;
     for id in &delta.free {
         rs.renderer.write().free_texture(id);
     }
+    [t_tex, t_prep, t_pass, t_wait]
 }
 
 // ------------------------------------------------------------------ chiffres
@@ -268,6 +282,8 @@ fn rapporter(titre: &str, mesures: &[Mesure]) {
     let g = tri(mesures.iter().map(|m| m.carte).collect()).0;
     let pire = mesures.iter().map(Mesure::total).fold(0.0, f64::max);
     let n = mesures.len().max(1) as f64;
+    let det: Vec<String> = (0..4).map(|k| format!("{:.2}", mesures.iter().map(|m| m.detail[k]).sum::<f64>() / n)).collect();
+    println!("     carte en détail (ms) : textures egui {} | préparation {} | passe {} | attente {}", det[0], det[1], det[2], det[3]);
     let octets = mesures.iter().map(|m| m.octets).sum::<usize>() as f64 / n / 1e6;
     let textures = mesures.iter().map(|m| m.textures).sum::<usize>() as f64 / n;
     let sommets = mesures.iter().map(|m| m.sommets).sum::<usize>() as f64 / n;
@@ -290,7 +306,7 @@ fn scenario(titre: &str, b: &mut Banc, n: usize, dt: f64, mut avant: impl FnMut(
         .collect();
     rapporter(titre, &mesures);
     let r = crate::perf::resume();
-    let tete: Vec<String> = r.sections.iter().take(6).map(|(nom, moy, max)| format!("{nom} {moy:.2}/{max:.2}")).collect();
+    let tete: Vec<String> = r.sections.iter().take(9).map(|(nom, moy, max)| format!("{nom} {moy:.2}/{max:.2}")).collect();
     println!("     sections (ms moy/max) : {}", tete.join(" | "));
     crate::perf::activer(false);
     mesures
@@ -355,6 +371,65 @@ fn an_idle_application_does_not_repaint() {
     assert!(pire >= Duration::from_secs(1), "au repos, SHOT demande à être repeint dans {pire:?}");
 }
 
+/// La vignette (dessins cherchés une fois, puis chaque échantillon composé) donne les pixels de la
+/// composition entière échantillonnée aux mêmes points : opacité, teinte, mode de fusion,
+/// transformation du calque comprises.
+#[test]
+fn the_thumbnail_samples_the_full_composition() {
+    let mut doc = projet_long(1, 4, 6, 30);
+    doc.panels[0].layers[1].blend = crate::blend::BlendMode::Multiply;
+    doc.panels[0].layers[1].opacity = 0.6;
+    doc.panels[0].layers[2].transform = crate::document::LayerTransform { x: 40.0, y: -25.0, scale: 0.8, ..Default::default() };
+    let cam = doc.panel_camera(0, 0);
+    let mut plan = crate::render::panel_plan_at(&doc, 0, 2, Some(doc.paper));
+    plan.items[3].tint = Some([200, 40, 40]);
+    let (tw, th) = (96, 54);
+    let thumb = crate::render::thumbnail(&doc, &plan, &cam, tw, th);
+    let full = crate::render::composite_full(&doc, &plan);
+    let [fw, fh] = doc.frame;
+    let (sx, sy) = (fw as f32 / tw as f32, fh as f32 / th as f32);
+    let map = cam.frame_map(doc.frame);
+    let mut painted = 0;
+    for y in 0..th {
+        for x in 0..tw {
+            let mut acc = [0u32; 4];
+            for (ox, oy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
+                let c = match map.at((x as f32 + ox) * sx, (y as f32 + oy) * sy) {
+                    Some(p) if p.x >= 0.0 && p.y >= 0.0 && p.x < doc.width as f32 && p.y < doc.height as f32 => full[p.y as usize * doc.width + p.x as usize],
+                    _ => Color32::TRANSPARENT,
+                };
+                for (a, v) in acc.iter_mut().zip(c.to_array()) {
+                    *a += v as u32;
+                }
+            }
+            let want = Color32::from_rgba_premultiplied((acc[0] / 4) as u8, (acc[1] / 4) as u8, (acc[2] / 4) as u8, (acc[3] / 4) as u8);
+            let got = thumb.pixels[y * tw + x];
+            painted += usize::from(want != Color32::from_rgb(255, 255, 255));
+            assert_eq!(got, want, "pixel ({x}, {y})");
+        }
+    }
+    assert!(painted > 200, "la vignette doit montrer des dessins ({painted} pixels autres que le papier)");
+}
+
+/// La timeline zoomée montre une miniature par bloc visible, une seule fois : avant, une miniature
+/// par bloc du plan entier (des centaines), et un cache de 512 vidé d'un coup refaisait tout à chaque
+/// image (130 ms par image, 1 500 textures envoyées).
+#[test]
+fn a_zoomed_timeline_keeps_its_thumbnails_instead_of_remaking_them() {
+    let mut b = banc(plan_charge(10, 160, 2), false);
+    b.app.set_mode(Mode::Animation);
+    b.app.timeline_cell = 48.0;
+    b.chauffer(10);
+    let made = b.app.layer_thumbs.len();
+    let cels = b.app.doc.cels.len();
+    assert!(made > 20, "la timeline zoomée doit montrer des miniatures ({made})");
+    assert!(made < cels / 2, "{made} miniatures pour {cels} dessins : seulement les blocs visibles");
+    let zone = Rect::from_min_size(pos2(500.0, 880.0), vec2(900.0, 120.0));
+    let steady: Vec<Mesure> = (0..12).map(|k| b.image(bouge(k, zone), 1.0 / 60.0)).collect();
+    assert!(steady.iter().all(|m| m.textures == 0), "des textures renvoyées à chaque image : {:?}", steady.iter().map(|m| m.textures).collect::<Vec<_>>());
+    assert_eq!(b.app.layer_thumbs.len(), made, "les miniatures gardées ne changent pas");
+}
+
 /// Le long projet : 100 plans x 3 calques x 48 images, en storyboard (le montage est sous les yeux).
 #[test]
 #[ignore]
@@ -393,13 +468,24 @@ fn perf_long_project() {
     b.app.toggle_play_scope(true);
     scenario("lecture du montage (24 images/s)", &mut b, 96, 1.0 / 24.0, |_, _| Vec::new());
     b.app.playing = false;
+    // Dessiner sur le plan courant pendant que le montage est sous les yeux : sa vignette change.
+    b.app.goto_global(0);
+    b.chauffer(3);
+    let r = b.app.canvas_rect;
+    let zone = r.shrink2(vec2(r.width() * 0.2, r.height() * 0.3));
+    let cel = b.app.cel_here();
+    let avant = cel.map(|c| b.app.doc.cels[&c].version);
+    scenario("dessin au pinceau, montage visible (8 pts/image)", &mut b, 60, 1.0 / 60.0, |_, k| trait_souris(k, 60, 8, zone));
+    let apres = cel.map(|c| b.app.doc.cels[&c].version);
+    println!("PERF le trait a bien été posé : version du dessin {avant:?} -> {apres:?}, projet modifié : {}", b.app.modified);
 }
 
 /// Un plan très chargé : 15 calques x 200 images, en animation (la timeline est sous les yeux).
 #[test]
 #[ignore]
 fn perf_heavy_plan() {
-    let mut b = banc(plan_charge(15, 200, 8), true);
+    // (40 tuiles par dessin : un dessin au trait qui occupe le quart de la feuille.)
+    let mut b = banc(plan_charge(15, 200, 40), true);
     b.app.set_mode(Mode::Animation);
     b.chauffer(10);
     let (images, ms) = jusqu_au_repos(&mut b, 600);
@@ -412,6 +498,24 @@ fn perf_heavy_plan() {
         b.app.cur_frame = (k * 3) % 200;
         bouge(k, zone)
     });
+    // Timeline zoomée : les blocs sont assez larges pour porter une miniature du dessin.
+    b.app.timeline_cell = 48.0;
+    b.app.cur_frame = 0;
+    let (images, ms) = {
+        crate::perf::activer(true);
+        let r = jusqu_au_repos(&mut b, 600);
+        let s = crate::perf::resume();
+        println!("     sections à l'ouverture : {}", s.sections.iter().take(4).map(|(n, m, x)| format!("{n} {m:.1}/{x:.1}")).collect::<Vec<_>>().join(" | "));
+        crate::perf::activer(false);
+        r
+    };
+    println!("PERF timeline zoomée (miniatures) : {images} images, {ms:.0} ms avant le repos");
+    scenario("timeline zoomée, souris qui bouge", &mut b, 90, 1.0 / 60.0, |_, k| bouge(k, zone));
+    scenario("timeline zoomée, tête de lecture à chaque image", &mut b, 90, 1.0 / 60.0, |b, k| {
+        b.app.cur_frame = (k * 3) % 200;
+        bouge(k, zone)
+    });
+    b.app.timeline_cell = crate::timeline::CELL_W;
     b.app.cur_frame = 0;
     b.app.toggle_play_scope(false);
     let m = scenario("lecture du plan (24 images/s, 15 calques)", &mut b, 144, 1.0 / 24.0, |_, _| Vec::new());
@@ -424,7 +528,11 @@ fn perf_heavy_plan() {
     b.chauffer(3);
     let r = b.app.canvas_rect;
     let zone = r.shrink2(vec2(r.width() * 0.2, r.height() * 0.3));
+    let cel = b.app.cel_here();
+    let avant = cel.map(|c| b.app.doc.cels[&c].version);
     scenario("dessin au pinceau sur le calque 8 (8 points/image)", &mut b, 60, 1.0 / 60.0, |_, k| trait_souris(k, 60, 8, zone));
+    let apres = cel.map(|c| b.app.doc.cels[&c].version);
+    println!("PERF le trait a bien été posé : version du dessin {avant:?} -> {apres:?}, projet modifié : {}", b.app.modified);
 }
 
 /// Les panneaux : Calques (60 calques), Pinceaux (400 pinceaux), Couleur, Réglages.
@@ -449,6 +557,24 @@ fn perf_panels() {
         let (images, ms) = jusqu_au_repos(&mut b, 200);
         println!("PERF {nom} : {images} images, {ms:.0} ms avant le repos");
         scenario(nom, &mut b, 90, 1.0 / 60.0, |_, k| bouge(k, zone));
+    }
+}
+
+/// Une vignette du montage (192 x 108) : plan de 3 calques, puis de 15.
+#[test]
+#[ignore]
+fn perf_thumbnail_cost() {
+    for (layers, tiles) in [(3usize, 40usize), (15, 40)] {
+        let doc = projet_long(1, layers, 12, tiles);
+        let cam = doc.panel_camera(0, 0);
+        let plan = crate::render::panel_plan_at(&doc, 0, 0, Some(doc.paper));
+        let (tw, th) = crate::thumbs::thumb_size(&doc, crate::thumbs::STRIP_WIDTH);
+        let t = Instant::now();
+        let n = 10;
+        for _ in 0..n {
+            std::hint::black_box(crate::render::thumbnail(&doc, &plan, &cam, tw, th));
+        }
+        println!("PERF vignette {tw}x{th}, {layers} calques : {:.2} ms", t.elapsed().as_secs_f64() * 1e3 / n as f64);
     }
 }
 

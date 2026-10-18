@@ -600,7 +600,9 @@ impl App {
                     }
                     // Miniature (13d) : dans une ligne complète, si le bloc est assez large.
                     let mut text_x = block.left() + cell - 1.0;
-                    if self.timeline_thumbs && row.h >= 40.0 && block.width() >= cell + 26.0 {
+                    // (Seulement les blocs que l'on voit : une miniature par bloc du plan entier, c'était
+                    // des centaines de dessins échantillonnés à chaque image d'écran.)
+                    if self.timeline_thumbs && row.h >= 40.0 && block.width() >= cell + 26.0 && block.intersects(painter.clip_rect()) {
                         let h = block.height() - 6.0;
                         let w = (h * 16.0 / 9.0).min(block.width() - cell - 4.0);
                         let at = Rect::from_min_size(pos2(block.left() + cell, block.top() + 3.0), vec2(w, h));
