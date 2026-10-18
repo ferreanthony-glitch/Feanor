@@ -38,6 +38,12 @@ fn menu_item(ui: &mut egui::Ui, label: &str, shortcut: &str) -> bool {
     clicked
 }
 
+/// Mode d'emploi de la boîte de sélection (Réglages de l'outil Sélection).
+const BOX_NOTE: &str = "Boîte : glisser dedans pour déplacer (Maj : un seul axe) ; un coin ou le milieu d'un côté pour \
+mettre à l'échelle (Maj : proportions ; Ctrl : autour du pivot) ; juste hors d'un coin pour tourner autour du pivot \
+(Maj : par 15°) ; un bord entre les poignées pour incliner ; le point rond pour déplacer le pivot. \
+Flèches : déplacer d'un pixel (Maj : dix).";
+
 fn note(ui: &mut egui::Ui, text: &str) {
     ui.label(RichText::new(text).small().weak());
 }
@@ -345,7 +351,7 @@ impl App {
             }
             Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline => self.shape_options_ui(ui),
             Tool::Text => self.text_options_ui(ui),
-            Tool::Perspective => self.persp_options_ui(ui),
+            Tool::Perspective => self.deform_options_ui(ui),
             Tool::Select => self.selection_ui(ui, true),
             Tool::SelectColor => self.color_select_ui(ui),
             Tool::Cutter => {
@@ -371,8 +377,7 @@ impl App {
                     "Glisser dans la boîte : déplacer le calque (Maj : à l'horizontale ou à la \
                      verticale). Coin : agrandir ou réduire (Maj : en gardant les proportions). Milieu \
                      d'un côté : étirer dans un seul sens. Poignée ronde : tourner (Maj : par 15°). \
-                     Ctrl + coin : enveloppe de Bézier qui déforme le dessin courant (poignées rondes : \
-                     courber les côtés ; Entrée : terminer). \
+                     Pour courber le dessin, l'outil Déformer a son mode Enveloppe. \
                      Les dessins ne sont pas modifiés : on peut annuler la transformation à tout moment.",
                 );
             }
@@ -476,12 +481,12 @@ impl App {
                 self.bitmap_paste();
             }
         });
+        if has {
+            self.box_fields_ui(ui);
+        }
         if lasso {
-            note(
-                ui,
-                "Glisser : lasso ou rectangle (Maj : ajouter). Dans la zone : déplacer. Poignées : \
-                 échelle (Maj : proportionnelle), rotation (Maj : par 15°). Échap ou autre outil : poser.",
-            );
+            note(ui, BOX_NOTE);
+            note(ui, "Glisser dans le vide : lasso ou rectangle (Maj : ajouter). Échap ou autre outil : poser la zone.");
         }
     }
 
@@ -535,12 +540,12 @@ impl App {
                 self.paste();
             }
         });
+        if has {
+            self.box_fields_ui(ui);
+        }
         if lasso {
-            note(
-                ui,
-                "Clic : un élément. Glisser dans le vide : lasso. Maj : ajouter / retirer. \
-                 Poignées : échelle (Maj : proportionnelle) et rotation (Maj : par 15°).",
-            );
+            note(ui, BOX_NOTE);
+            note(ui, "Clic : un élément. Glisser dans le vide : lasso. Maj : ajouter / retirer.");
         }
     }
     pub(crate) fn status_bar(&mut self, ui: &mut egui::Ui) {

@@ -126,17 +126,25 @@ Chaque plan a ses calques, de deux sortes :
   - Le pot de peinture crée une zone remplie qui passe sous les traits. Sur un trait ou une zone
     déjà peinte, il en change la couleur.
   - Les formes (ligne, rectangle, ellipse, pleines ou non) se tracent avec l'outil Formes (Alt+R).
-  - L'outil Sélection (Alt+S) prend au clic ou au lasso (Maj pour ajouter). Ses poignées servent à
-    déplacer, mettre à l'échelle (Maj : proportionnel) et tourner (Maj : par 15°). On peut aussi
-    appliquer la couleur courante, épaissir, affiner, faire un miroir, passer devant ou derrière,
-    supprimer. Copier, couper et coller (Ctrl+C/X/V) marchent d'un plan à l'autre.
+  - L'outil Sélection (Alt+S) prend au clic ou au lasso (Maj pour ajouter) et montre une **boîte façon
+    Storyboard Pro** : un cadre, huit petites poignées carrées (coins et milieux des côtés) et un point
+    rond de pivot au centre. Glisser dedans déplace ; un coin met à l'échelle dans les deux sens, le
+    milieu d'un côté dans un seul ; juste à l'extérieur d'un coin, on tourne autour du pivot ; sur un
+    bord, entre les poignées, on incline ; le point rond se tire ailleurs pour changer le pivot. Maj :
+    proportions (échelle), un seul axe (déplacement), pas de 15° (rotation) ; Ctrl : autour du pivot au
+    lieu du côté opposé (*touches à vérifier avec le vrai Storyboard Pro*). Le panneau Réglages donne
+    les mêmes valeurs en chiffres (position, largeur, hauteur, angle, inclinaison), « Garder les
+    proportions » et « Réinitialiser le pivot ». Chaque geste est une étape d'annulation à son nom
+    (« Déplacer », « Mettre à l'échelle », « Tourner », « Incliner »). On peut aussi appliquer la couleur
+    courante, épaissir, affiner, faire un miroir, passer devant ou derrière, supprimer. Copier, couper
+    et coller (Ctrl+C/X/V) marchent d'un plan à l'autre.
 - **Bitmap** (B, façon TVPaint) : peinture en pixels, avec le pinceau, le crayon (anticrénelé ;
   « Pixels nets » pour le pixel art), la gomme, le remplissage avec débord sous le trait et
   l'import d'images PNG/JPEG.
   - L'outil Sélection y découpe une zone au lasso ou au rectangle (Maj : ajouter). On la déplace
     en la faisant glisser (au pixel près, sans flou) ou aux flèches (1 pixel, 10 avec Maj ; aussi
-    pour des traits vectoriels choisis), ses poignées la mettent à l'échelle ou la
-    tournent, Alt+H / Alt+V la retournent. Tant que la zone reste sélectionnée, chaque
+    pour des traits vectoriels choisis), sa boîte (mêmes gestes que sur un calque vectoriel : échelle,
+    rotation, inclinaison, pivot) la transforme, Alt+H / Alt+V la retournent. Tant que la zone reste sélectionnée, chaque
     transformation repart de l'image d'origine : tourner deux fois ne floute pas deux fois.
   - Suppr efface dedans, Maj+Suppr efface autour, Ctrl+C / X / V copient, coupent, collent
     (la zone collée arrive à sa place, prête à être déplacée). Échap ou un autre outil la pose ;
@@ -522,13 +530,9 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
 - **Transformer** (calque entier, ses dessins ne changent pas) : glisser dans la boîte pour
   déplacer, un coin pour agrandir (Maj : proportions), le milieu d'un côté pour étirer en largeur ou
   en hauteur, la poignée ronde pour tourner ; largeur et hauteur aussi en chiffres. Ctrl+R annule.
-  **Ctrl + glisser un coin** : une enveloppe de Bézier sur le dessin courant (comme l'outil
-  Perspective, le dessin est vraiment déformé) : ses coins, et leurs poignées rondes pour courber les
-  côtés ; l'intérieur pour la déplacer ; Entrée, Échap ou un clic ailleurs pour terminer ; Ctrl+Z
-  annule chaque geste. Avec des éléments choisis (vectoriel) ou une zone choisie (bitmap), Ctrl + un
-  coin du cadre de la sélection ne déforme qu'eux, avec l'outil Transformer comme avec l'outil
-  Sélection. Une zone bitmap choisie reste quand on passe sur Transformer : glisser dedans la
-  déplace, ses poignées l'agrandissent ou la tournent ; ailleurs, Transformer agit sur le calque. Avec l'outil Transformer, Ctrl ne prend pas le lasso.
+  L'enveloppe de Bézier n'est plus un Ctrl + coin : c'est un mode de l'outil **Déformer** (voir plus bas).
+  Une zone bitmap choisie reste quand on passe sur Transformer : glisser dedans la
+  déplace, sa boîte l'agrandit, la tourne ou l'incline ; ailleurs, Transformer agit sur le calque. Avec l'outil Transformer, Ctrl ne prend pas le lasso.
 - **Cutter** (Alt+T, calque vectoriel) : glisser en travers des bouts de traits à enlever (ou
   cliquer sur l'un d'eux) ; chaque trait touché est coupé là où il croise les autres, seuls les
   morceaux touchés partent (un dépassement est coupé net au croisement). Un trait qui ne croise
@@ -539,7 +543,12 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   couper, effacer, flèches et poignées comme avec la Sélection.
 - **Texte** : clic pour poser un texte, Ctrl+Entrée pour le valider ; police et taille dans
   Réglages. Sur un calque vectoriel il reste modifiable (clic dessus avec l'outil Texte).
-- **Perspective** : clic sur le dessin, puis tirer ses coins (Ctrl+Z annule chaque geste).
+- **Déformer** (même case de la barre d'outils que Transformer ; ex-outil Perspective) : deux modes,
+  choisis dans Réglages (ou par les actions « Outil déformer : enveloppe de Bézier » et « … :
+  perspective »). *Perspective* : clic sur le dessin, puis tirer ses coins. *Enveloppe* : clic sur le
+  dessin, ses coins et leurs poignées rondes courbent les côtés, l'intérieur la déplace ; Entrée, Échap
+  ou un clic ailleurs terminent. Ctrl+Z annule chaque geste. Avec des éléments choisis (vectoriel) ou
+  une zone choisie (bitmap, enveloppe seulement), seuls ceux-là sont déformés ; sinon tout le dessin.
 - **Brosses traditionnelles** (2026-10-18, `docs/AUDIT-RENDU-BROSSES.md`) : dans la liste des
   réglages (grille des Réglages, panneau Pinceaux), après le Pinceau rond — **Crayon graphite**
   (le réglage de départ de l'outil Crayon : un amas de grains sur un papier à dessin, un dépôt qui
@@ -1043,6 +1052,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `viewbar.rs`, `frames.rs` | Barre au-dessus du dessin (plateau / caméra / 3D) ; zones de sécurité, cadre de format |
 | `stage3d.rs`, `stage3dui.rs` | Plateau en 3D : géométrie (plans, caméra, rayons) ; affichage, navigation, outil Déplacer |
 | `layertools.rs` | Outil Transformer (calque entier) |
+| `selbox.rs`, `seltools.rs` | Boîte de sélection façon Storyboard Pro : parties sous le pointeur, gestes (échelle, rotation, inclinaison, pivot), valeurs chiffrées ; sa place dans l'application |
+| `envelopetools.rs` | Outil Déformer : mode Enveloppe de Bézier (la perspective : `perstools.rs`) |
 | `topview.rs` | Vue de dessus (profondeur des calques) |
 | `model3d.rs`, `view3d.rs`, `ref3dtool.rs` | Repère 3D : lecture glTF, arêtes utiles ; caméra en orbite, fil de fer, arêtes cachées ; outil et affichage |
 | `thumbs.rs` | Cache des vignettes de panneaux |

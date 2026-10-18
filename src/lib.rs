@@ -329,6 +329,10 @@ mod roue;
 mod roue_tests;
 #[cfg(test)]
 mod scenelayer_tests;
+mod selbox;
+#[cfg(test)]
+mod selbox_tests;
+mod seltools;
 mod settings;
 mod shapes;
 #[cfg(test)]

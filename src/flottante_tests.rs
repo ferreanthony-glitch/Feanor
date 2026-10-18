@@ -106,6 +106,31 @@ fn the_cheap_release_gives_the_geometry_the_background_replay_will_confirm() {
     }
 }
 
+/// L'inclinaison de la boîte de sélection (`selbox.rs`) est une transformation affine avec
+/// cisaillement : la feuille flottante la pose comme une translation (la carte graphique dessine
+/// un parallélogramme, le processeur inverse la matrice entière).
+#[test]
+fn a_floating_sheet_takes_a_shear_and_slants_the_drawing() {
+    let bar = Element::Fill { contours: vec![vec![[50.0, 100.0], [150.0, 100.0], [150.0, 110.0], [50.0, 110.0]]], color: [200, 30, 30], opacity: 1.0 };
+    let (mut doc, id) = doc_with(vec![bar]);
+    let mut f = Flottante::lift(&mut doc, id, &[0]).unwrap();
+    // x' = x + 0,5 · (y − 100) : le bord du haut (y = 100) ne bouge pas, le bas glisse de 5 px.
+    f.aff = Affine { a: 1.0, b: 0.5, c: 0.0, d: 1.0, tx: -50.0, ty: 0.0 };
+    let plan = Plan { paper: None, items: f.items(&line_item(id)).to_vec() };
+    let img = flat(&doc, &plan);
+    let at = |x: usize, y: usize| img[y * 1920 + x];
+    // Rangée y = 108 (centre 108,5) : les x vont de 54,25 à 154,25.
+    assert_eq!(at(52, 108).a(), 0, "à gauche du parallélogramme : vide (droit, la barre y serait)");
+    assert!(at(58, 108).a() > 250 && at(150, 108).a() > 250, "dedans");
+    assert_eq!(at(158, 108).a(), 0, "à droite : vide");
+    // Rangée y = 100 : à peine décalée.
+    assert!(at(55, 100).a() > 250 && at(148, 100).a() > 250);
+    // L'inverse de la matrice entière ramène le point : pas de rotation cachée.
+    let back = f.aff.inverse().expect("inversible").apply(f.aff.apply(vec2(80.0, 107.0).to_pos2()));
+    assert!((back - vec2(80.0, 107.0).to_pos2()).length() < 1e-3);
+    Flottante::release(&mut doc);
+}
+
 #[test]
 fn only_the_chosen_strokes_float_the_others_stay_in_the_base() {
     let (mut doc, id) = doc_with(crayon_net(6));
@@ -173,10 +198,13 @@ fn mesure(label: &str, elements: Vec<Element>) {
     let originals = doc.cels[&id].vector.as_ref().unwrap().elements.clone();
     let bbox = originals.iter().fold(Rect::NOTHING, |r, e| r.union(e.bounds()));
     println!("dessin : {n} traits, boîte {:.0}×{:.0} px", bbox.width(), bbox.height());
-    let gestures: [(&str, Box<dyn Fn(f32) -> Affine>); 3] = [
+    let gestures: [(&str, Box<dyn Fn(f32) -> Affine>); 4] = [
         ("translation", Box::new(|t| Affine::translate(vec2(400.0 * t, 250.0 * t)))),
         ("rotation", Box::new(move |t| Affine::rotate_about(bbox.center(), 0.9 * t))),
         ("échelle", Box::new(move |t| Affine::scale_about(bbox.left_top(), 1.0 + 0.5 * t, 1.0 + 0.5 * t))),
+        // L'inclinaison de la boîte de sélection (`selbox.rs`) : un cisaillement le long du bord du
+        // haut, le bord du bas en place. Même chemin que les autres, sans aucun rejeu.
+        ("inclinaison", Box::new(move |t| Affine { a: 1.0, b: 0.6 * t, c: 0.0, d: 1.0, tx: -0.6 * t * bbox.max.y, ty: 0.0 })),
     ];
     println!("  geste        | avant : ms/image, tuiles, Mo envoyés | après : ms/image, tuiles, octets | CPU seul (sans GPU) ms/image");
     let frames = 20;
@@ -212,6 +240,7 @@ fn mesure(label: &str, elements: Vec<Element>) {
         let lift_ms = ms(t);
         let versions = |doc: &Document| (doc.cels[&BASE_CEL].version, doc.cels[&SHEET_CEL].version);
         let v0 = versions(&doc);
+        let replays = crate::vector::replay_count();
         let (mut total, mut cpu) = (0.0, 0.0);
         let mut changed_textures = 0;
         let item = line_item(id);
@@ -235,6 +264,8 @@ fn mesure(label: &str, elements: Vec<Element>) {
             }
         }
         let after_ms = total / frames as f64;
+        // Aucun rejeu du moteur pendant le geste, inclinaison comprise (règle « sans latence »).
+        assert_eq!(crate::vector::replay_count(), replays, "{name} : aucun rejeu du moteur pendant le geste");
         // Le lâcher : la géométrie et l'image du dessin refaites une fois.
         // (La feuille reste affichée jusqu'à l'arrivée du rendu exact.)
         let t = Instant::now();

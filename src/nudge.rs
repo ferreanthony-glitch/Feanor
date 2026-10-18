@@ -61,6 +61,7 @@ impl App {
                 return;
             }
             let aff0 = self.bsel.as_ref().and_then(|s| s.lifted.as_ref()).map_or(Affine::IDENTITY, |l| l.aff);
+            self.note_bitmap_name("Déplacer");
             self.place_floating(aff0.then(&Affine::translate(d)));
         } else {
             let Some((cel, items)) = self.vsel.as_ref().map(|s| (s.cel, s.items.clone())) else { return };
@@ -81,8 +82,10 @@ impl App {
             if region != Rect::NOTHING {
                 self.refresh_cel_region(cel, region);
             }
+            // La boîte, tournée ou non, suit la sélection.
+            self.move_sel_box(&aff);
             self.rejeu_cel(cel);
-            self.gesture_change(GESTURE, |app| app.push_vector(cel, before, None));
+            self.gesture_change(GESTURE, |app| app.named_step("Déplacer", |app| app.push_vector(cel, before, None)));
         }
         self.status = format!("Sélection déplacée de {} px (flèches ; Maj + flèche : {} px).", d.length().round(), BIG_STEP);
     }

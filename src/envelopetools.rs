@@ -1,14 +1,18 @@
-//! Enveloppe de Bézier dans l'outil Transformer (Anthony, 2026-10-18 : « maintenir Ctrl permet de
-//! saisir une poignée de Bézier des coins pour transformer la forme » ; choix B, « comme l'outil
-//! Perspective »). Ctrl + glisser un coin du cadre ouvre l'enveloppe du dessin courant : ses coins,
-//! et deux poignées par coin (rondes) qui courbent les côtés ; l'intérieur la déplace. Chaque lâcher
-//! refait la déformation depuis le dessin d'origine (pas de perte d'un geste à l'autre) et compte
-//! pour une étape d'annulation. Entrée, Échap, un clic ailleurs, un autre outil ou une autre image
-//! terminent. Sur un calque vectoriel avec des éléments choisis, Ctrl + un coin du cadre de la
-//! sélection ne déforme qu'eux (Anthony, 2026-10-18 : « l'enveloppe doit aussi pouvoir ne déformer
-//! que la sélection, comme l'outil Perspective le fait en vectoriel ») ; un coin du cadre du calque,
-//! tout le dessin. Avec l'outil Sélection aussi, Ctrl + un coin du cadre de la sélection (traits
-//! choisis ou zone bitmap : seuls ses pixels, bords adoucis compris, sont déformés). Comportement exact de Storyboard Pro à vérifier. Géométrie dans `envelope.rs`.
+//! Enveloppe de Bézier (Anthony, 2026-10-18 : « maintenir Ctrl permet de saisir une poignée de
+//! Bézier des coins pour transformer la forme » ; choix B, « comme l'outil Perspective »).
+//!
+//! Depuis la refonte de la boîte de sélection (2026-10-18, « singer le système de Storyboard Pro »,
+//! `selbox.rs`), l'enveloppe n'est plus ce que fait Ctrl + un coin après une sélection : c'est un
+//! mode de l'outil **Déformer** (Enveloppe | Perspective, choisi dans Réglages ou par les actions
+//! `deformer.enveloppe` et `deformer.perspective`). Un clic sur le dessin ouvre l'enveloppe : ses
+//! coins, et deux poignées par coin (rondes) qui courbent les côtés ; l'intérieur la déplace.
+//! Chaque lâcher refait la déformation depuis le dessin d'origine (pas de perte d'un geste à
+//! l'autre) et compte pour une étape d'annulation. Entrée, Échap, un clic ailleurs, un autre outil
+//! ou une autre image terminent. Sur un calque vectoriel avec des éléments choisis, l'enveloppe ne
+//! déforme qu'eux (Anthony, 2026-10-18 : « l'enveloppe doit aussi pouvoir ne déformer que la
+//! sélection, comme l'outil Perspective le fait en vectoriel ») ; sur une zone bitmap choisie, que
+//! ses pixels, bords adoucis compris ; sans sélection, tout le dessin. Comportement exact de
+//! Storyboard Pro à vérifier. Géométrie dans `envelope.rs`.
 
 use eframe::egui::{self, vec2, Color32, Key, Pos2, Rect, Shape, Stroke, StrokeKind};
 
@@ -22,6 +26,16 @@ use crate::vector::VectorDrawing;
 /// Rayon de prise des coins et des poignées, en pixels d'écran.
 const GRAB: f32 = 9.0;
 const ACCENT: Color32 = Color32::from_rgb(255, 150, 60);
+
+/// Mode de l'outil Déformer.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum DeformMode {
+    /// Enveloppe de Bézier : coins et poignées qui courbent les côtés.
+    Envelope,
+    /// Perspective : les quatre coins.
+    #[default]
+    Perspective,
+}
 
 enum Original {
     Bitmap(Raster),
@@ -83,10 +97,10 @@ impl EnvelopeEdit {
         self.cel == cel && self.drag.is_some()
     }
 
-    fn new(cel: CelId, src: Rect, original: Original, grip: Grip, p: Pos2) -> EnvelopeEdit {
+    fn new(cel: CelId, src: Rect, original: Original) -> EnvelopeEdit {
         let env = Envelope::identity(src);
         let (base, sheet) = original.split(src);
-        EnvelopeEdit { cel, src, env, original, drag: Some((grip, p, env)), base, sheet, shown: src, committed: Default::default() }
+        EnvelopeEdit { cel, src, env, original, drag: None, base, sheet, shown: src, committed: Default::default() }
     }
 
     /// L'image de l'aperçu : la feuille déformée par le maillage de l'enveloppe, posée sur le reste.
@@ -121,65 +135,48 @@ impl App {
         crate::vector::point_in_polygon(screen, &self.envelope_outline(&e.env)).then_some(Grip::All)
     }
 
-    /// Appui avec l'outil Transformer ; vrai s'il était pour l'enveloppe (sinon l'outil fait le
-    /// reste). Ctrl sur un coin du cadre ouvre l'enveloppe ; ensuite ses coins et poignées se
-    /// prennent sans Ctrl.
-    pub(crate) fn envelope_press(&mut self, p: Pos2, screen: Pos2, ctrl: bool) -> bool {
+    /// Appui avec l'outil Déformer en mode Enveloppe : sur un coin, une poignée ou l'intérieur de
+    /// l'enveloppe ouverte, on la tire ; ailleurs elle se termine et une nouvelle s'ouvre sur ce
+    /// qui est à déformer (comme la perspective) : les éléments choisis, la zone bitmap choisie,
+    /// sinon tout le dessin du calque.
+    pub(crate) fn envelope_press(&mut self, p: Pos2, screen: Pos2) {
+        self.playing = false;
         if let Some(grip) = self.envelope_grip(screen) {
             if let Some(e) = &mut self.envelope {
                 e.drag = Some((grip, p, e.env));
             }
-            return true;
+            return;
         }
-        if self.envelope.take().is_some() {
-            self.status = "Enveloppe terminée.".into();
-            return true;
-        }
-        if !ctrl {
-            return false;
-        }
-        // Un coin du cadre de la sélection (traits choisis ou zone bitmap) : elle seule ; avec l'outil
-        // Transformer, un coin du cadre du calque : tout le dessin.
-        let here = self.cel_here();
-        let chosen = self.vsel.as_ref().filter(|s| Some(s.cel) == here && !s.items.is_empty() && self.bsel.is_none()).map(|s| s.items.clone());
-        let zone = self.bsel.as_ref().is_some_and(|s| Some(s.cel) == here);
-        let corner = match self.handle_at(screen) {
-            Some(crate::vtools::Handle::Corner(k)) if chosen.is_some() || zone => Some(k),
-            _ => None,
-        };
-        if zone && corner.is_some() {
-            return self.envelope_on_zone(corner.unwrap_or(0), p);
-        }
-        let (k, items) = match (chosen, corner) {
-            (Some(items), Some(k)) => (k, Some(items)),
-            _ => match self.transform_handle_at(screen).filter(|_| self.tool == crate::app::Tool::Transform) {
-                Some(crate::layertools::BoxHandle::Corner(k)) => (k, None),
-                _ => return false,
-            },
-        };
+        self.envelope = None;
         self.end_stroke();
-        self.playing = false;
         if !self.layer_editable() {
-            return true;
+            return;
         }
-        let Some(cel) = self.cel_here() else {
+        let here = self.cel_here();
+        // La zone bitmap choisie, ou les traits choisis : elle seule ; sinon tout le dessin.
+        if self.bsel.as_ref().is_some_and(|s| Some(s.cel) == here) {
+            self.envelope_on_zone();
+            return;
+        }
+        let chosen = self.vsel.as_ref().filter(|s| Some(s.cel) == here && !s.items.is_empty()).map(|s| s.items.clone());
+        let Some(cel) = here else {
             self.status = "Enveloppe : rien à déformer sur cette image.".into();
-            return true;
+            return;
         };
-        let Some(c) = self.doc.cels.get(&cel) else { return true };
-        let src = match &items {
+        let Some(c) = self.doc.cels.get(&cel) else { return };
+        let src = match &chosen {
             Some(_) => match self.selection_bounds() {
                 Some(b) => b,
-                None => return true,
+                None => return,
             },
             None => self.content_box(),
         };
-        let n = items.as_ref().map(|i| i.len());
+        let n = chosen.as_ref().map(|i| i.len());
         let original = match &c.vector {
-            Some(d) => Original::Vector(d.clone(), items),
+            Some(d) => Original::Vector(d.clone(), chosen),
             None => Original::Bitmap(c.raster.clone()),
         };
-        self.envelope = Some(EnvelopeEdit::new(cel, src, original, Grip::Corner(k), p));
+        self.envelope = Some(EnvelopeEdit::new(cel, src, original));
         let what = match n {
             Some(n) => format!("Enveloppe sur la sélection ({n} élément{})", if n > 1 { "s" } else { "" }),
             None => "Enveloppe".to_string(),
@@ -188,16 +185,12 @@ impl App {
             "{what} : tire les coins, et leurs poignées rondes pour courber les côtés ; l'intérieur pour tout déplacer. \
              Entrée, Échap ou clic ailleurs : terminer ; Ctrl+Z annule chaque geste."
         );
-        true
     }
 
-    /// L'enveloppe sur la zone bitmap choisie, le coin `k` tiré depuis `p`. Une zone déjà déplacée
-    /// est d'abord posée là où on la voit.
-    fn envelope_on_zone(&mut self, k: usize, p: Pos2) -> bool {
-        let Some((cel, lifted, mask0)) = self.bsel.as_ref().map(|s| (s.cel, s.lifted.is_some(), s.mask.clone())) else { return true };
-        if !self.layer_editable() {
-            return true;
-        }
+    /// L'enveloppe sur la zone bitmap choisie. Une zone déjà déplacée est d'abord posée là où on la
+    /// voit.
+    fn envelope_on_zone(&mut self) {
+        let Some((cel, lifted, mask0)) = self.bsel.as_ref().map(|s| (s.cel, s.lifted.is_some(), s.mask.clone())) else { return };
         let mask = if lifted {
             let outline = self.bitmap_selection_outline();
             self.drop_bitmap_selection();
@@ -207,13 +200,92 @@ impl App {
         };
         self.bsel = None;
         self.bdrag = None;
-        let (Some(mask), Some(c)) = (mask, self.doc.cels.get(&cel)) else { return true };
+        let (Some(mask), Some(c)) = (mask, self.doc.cels.get(&cel)) else { return };
         let src = mask.bounds();
-        self.envelope = Some(EnvelopeEdit::new(cel, src, Original::Masked(c.raster.clone(), mask), Grip::Corner(k), p));
+        self.envelope = Some(EnvelopeEdit::new(cel, src, Original::Masked(c.raster.clone(), mask)));
         self.status = "Enveloppe sur la zone choisie : tire les coins, et leurs poignées rondes pour courber les côtés ; \
                        l'intérieur pour tout déplacer. Entrée, Échap ou clic ailleurs : terminer ; Ctrl+Z annule chaque geste."
             .into();
-        true
+    }
+
+    /// Appui avec l'outil Déformer : l'enveloppe ou la perspective, selon le mode.
+    pub(crate) fn deform_press(&mut self, p: Pos2, screen: Pos2) {
+        match self.deform_mode {
+            DeformMode::Envelope => {
+                self.persp = None;
+                self.envelope_press(p, screen);
+            }
+            DeformMode::Perspective => {
+                self.envelope = None;
+                // La perspective ne déforme pas une zone bitmap : l'enveloppe, oui.
+                if self.bsel.is_some() {
+                    self.status = "Perspective : une zone choisie se déforme avec l'enveloppe (mode Enveloppe, dans Réglages).".into();
+                    return;
+                }
+                self.persp_press(p, screen);
+            }
+        }
+    }
+
+    /// Change le mode de l'outil Déformer : la déformation ouverte se termine.
+    pub(crate) fn set_deform_mode(&mut self, mode: DeformMode) {
+        if self.deform_mode != mode {
+            self.deform_mode = mode;
+            self.envelope = None;
+            self.persp = None;
+        }
+    }
+
+    /// Curseur de l'outil Déformer.
+    pub(crate) fn deform_cursor(&self, screen: Pos2) -> egui::CursorIcon {
+        match self.deform_mode {
+            DeformMode::Perspective => self.persp_cursor(screen),
+            DeformMode::Envelope => self.envelope_cursor(screen).unwrap_or(egui::CursorIcon::Crosshair),
+        }
+    }
+
+    /// « Remettre droit » : l'enveloppe revient à son rectangle (une étape d'annulation).
+    fn envelope_reset(&mut self) {
+        let Some(e) = &mut self.envelope else { return };
+        e.drag = Some((Grip::All, Pos2::ZERO, e.env));
+        e.env = Envelope::identity(e.src);
+        self.envelope_release();
+    }
+
+    /// Réglages de l'outil Déformer (panneau Réglages) : le mode, puis ses commandes.
+    pub(crate) fn deform_options_ui(&mut self, ui: &mut egui::Ui) {
+        use crate::bulles::choix_a;
+        use egui_phosphor::regular as ph;
+        let mut mode = self.deform_mode;
+        ui.horizontal(|ui| {
+            let (ke, kp) = (self.raccourci("deformer.enveloppe"), self.raccourci("deformer.perspective"));
+            choix_a(ui, &mut mode, DeformMode::Envelope, ph::BEZIER_CURVE, "Enveloppe", "Courber le dessin : coins et poignées rondes qui courbent les côtés.", &ke, "deformer.enveloppe");
+            choix_a(ui, &mut mode, DeformMode::Perspective, ph::PERSPECTIVE, "Perspective", "Mettre en perspective : tirer les quatre coins.", &kp, "deformer.perspective");
+        });
+        self.set_deform_mode(mode);
+        match self.deform_mode {
+            DeformMode::Perspective => self.persp_options_ui(ui),
+            DeformMode::Envelope => {
+                let editing = self.envelope.is_some();
+                ui.horizontal(|ui| {
+                    if crate::bulles::icone_si(ui, editing, ph::ARROW_COUNTER_CLOCKWISE, "Remettre droit", "Les coins et les poignées reviennent à leur place.", "").clicked() {
+                        self.envelope_reset();
+                    }
+                    if crate::bulles::icone_si(ui, editing, ph::CHECK, "Terminer", "Garder la déformation et quitter (Entrée).", "").clicked() {
+                        self.envelope = None;
+                    }
+                });
+                ui.label(
+                    egui::RichText::new(
+                        "Clic sur le dessin : son enveloppe apparaît (sur un calque vectoriel, la sélection s'il y \
+                         en a une ; sur un calque bitmap, la zone choisie). Tire un coin ou une poignée ronde pour \
+                         courber les côtés, l'intérieur pour déplacer. Ctrl+Z annule chaque geste.",
+                    )
+                    .small()
+                    .weak(),
+                );
+            }
+        }
     }
 
     /// Mouvement du pointeur ; vrai si un coin, une poignée ou l'enveloppe est tiré. Le dessin
@@ -316,7 +388,7 @@ impl App {
 
     /// L'enveloppe suit le dessin : changer d'image, de calque ou d'outil la termine.
     pub(crate) fn check_envelope(&mut self) {
-        let tool_ok = self.tool == crate::app::Tool::Transform || self.tool.is_select();
+        let tool_ok = self.tool == crate::app::Tool::Perspective && self.deform_mode == DeformMode::Envelope;
         if self.envelope.as_ref().is_some_and(|e| Some(e.cel) != self.cel_here() || !tool_ok) {
             self.envelope = None;
         }

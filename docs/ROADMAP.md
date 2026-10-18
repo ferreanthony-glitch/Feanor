@@ -1243,7 +1243,8 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         (`viewbar::tool_hint`) ; 5, le panneau qui a la main encadré en bleu d'accent (montage,
         timeline ; le dessin, plus discret) au lieu d'un fin trait blanc en haut ; 6, une zone bitmap
         choisie survit au passage sur Transformer, qui la déplace (glisser dedans), l'agrandit ou
-        la tourne (ses poignées), l'enveloppe (Ctrl + coin) ; les flèches la poussent (`Tool::keeps_zone`) ;
+        la tourne (ses poignées), l'enveloppe (Ctrl + coin, **remplacé le 2026-10-18 par l'outil
+        Déformer** : voir « Boîte de sélection façon Storyboard Pro ») ; les flèches la poussent (`Tool::keeps_zone`) ;
         8, panneaux qui s'ajustent (Anthony : « que les panneaux s'adaptent d'eux-mêmes en fonction
         de ce qu'ils affichent ») : quand deux panneaux sont l'un sur l'autre, les réglages de
         l'outil, les guides, la fiche, les effets et les icônes des outils prennent la hauteur de
@@ -1379,7 +1380,9 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         agissent sur ces clés ; changer d'effet choisi, ouvrir un projet ou vider la pile lâche
         le choix des clés ; le rang suit un échange ou un retrait de la pile (`rank_after_swap`,
         `rank_after_remove`, `shown`, testées) ;
-      - **enveloppe de Bézier** (Anthony : « maintenir Ctrl permet de saisir une poignée de Bézier
+      - **enveloppe de Bézier** (**depuis le 2026-10-18, c'est un mode de l'outil Déformer, plus un
+        Ctrl + coin** : voir « Boîte de sélection façon Storyboard Pro ») (Anthony : « maintenir Ctrl
+        permet de saisir une poignée de Bézier
         des coins pour transformer la forme » ; son choix : « B, comme l'outil Perspective ») : dans
         l'outil Transformer, Ctrl + glisser un coin du cadre ouvre une enveloppe sur le dessin
         courant (4 coins, 2 poignées par coin ; surface de Coons), appliquée à chaque lâcher depuis
@@ -2038,3 +2041,70 @@ curseur, etc. Le curseur sur la timeline est déplaçable. » Menée sur la bran
   à essayer par Anthony.
 - Pas faits : longueur d'un commentaire (une plage dans la règle) ; réponses à un commentaire ; les
   commentaires ne sont ni exportés (PDF, Storyboard Pro) ni copiés avec des plans copiés ou dupliqués.
+
+## Boîte de sélection façon Storyboard Pro (demandée par Anthony le 2026-10-18) ✅
+
+La demande : « revoir le système de transformation après sélection pour singer le système de
+Storyboard Pro. On peut enlever dans SHOT notre système de transformation avec poignées de Bézier
+(ou en faire un outil spécifique) pour rester plus proche de la version SBP. » Menée sur la branche
+`transfo-sbp`. Il s'appuyait sur une capture de l'outil Sélection de Storyboard Pro : un cadre aux
+petites poignées carrées (coins et milieux des côtés), un point rond de pivot au centre, et des
+flèches rouges qui montrent les gestes. **Ce qui est repris, c'est ce que montre cette capture ;
+tout le reste (touches, détails) est un choix de SHOT, à vérifier avec le vrai logiciel** (rien
+n'est tiré de son code, de ses images ni de ses textes).
+
+- ✅ **La boîte** (`selbox.rs`, géométrie pure ; `seltools.rs`, dans l'application) : après un choix
+  (traits vectoriels, zone bitmap), l'outil Sélection montre le cadre, huit poignées carrées et le
+  pivot rond. Les gestes, avec leur curseur :
+  - glisser dedans : **déplacer** ;
+  - un coin : **mettre à l'échelle** dans les deux sens ; le milieu d'un côté : dans un seul sens ;
+  - juste à l'extérieur d'un coin : **tourner** autour du pivot ;
+  - un bord, entre les poignées : **incliner** (cisaillement le long de ce bord, le bord opposé reste) ;
+  - le point rond : **déplacer le pivot** (il se remet au centre quand on le lâche près de lui).
+  Tailles de prise en pixels d'écran (donc les mêmes à tout zoom) : poignées 9, pivot 8, bande d'un
+  bord 5 de chaque côté, couronne de rotation jusqu'à 26 du coin ; elles rétrécissent (jusqu'à
+  45 %) sur une boîte de moins de 40 px, pour que chaque partie reste atteignable.
+- ✅ **La boîte reste tournée** : après une rotation ou une inclinaison, ses poignées restent sur les
+  côtés du dessin tourné (échelle et inclinaison suivent les axes de la boîte, pas ceux de l'écran).
+  Elle repart droite quand la sélection ou les éléments changent par ailleurs (annuler, miroir,
+  autre choix) ; les flèches la déplacent sans la défaire. Une zone bitmap suit la transformation de
+  ses pixels soulevés.
+- ✅ **Touches** (choix de SHOT, à vérifier) : Maj sur un coin ou un côté, proportions gardées ; Maj en
+  déplaçant, un seul axe ; Maj en tournant, par pas de 15° ; **Ctrl** en tirant une poignée ou un
+  bord, autour du pivot au lieu du côté opposé (Alt est pris par la pipette). Maj + clic dedans
+  ajoute au choix au lieu de déplacer. Le réglage « Garder les proportions » inverse l'effet de Maj
+  sur les poignées. Sans pivot déplacé, le pivot est le centre de la boîte ; l'échelle d'une poignée
+  se fait depuis le côté opposé (à vérifier : la capture dit « centre de rotation et d'échelle »,
+  Ctrl donne l'échelle autour du pivot).
+- ✅ **Sans latence** : les gestes passent tous par une `Affine` (échelle, rotation, cisaillement,
+  déplacement) que la feuille flottante (`flottante.rs`) pose comme un déplacement : la carte
+  graphique dessine un parallélogramme (quatre coins), le processeur inverse la matrice entière ;
+  le contour bleu (`contours.rs`) suit déjà toute transformation affine. Aucun rejeu du moteur sur le
+  fil de l'interface pendant l'inclinaison (essai `#[ignore]` `floating_selection_*` étendu :
+  « inclinaison », 0 rejeu, 0 tuile renvoyée, 1,5 ms de saisie, 0,14 ms au lâcher).
+- ✅ **Annulation** : un geste, une étape, à son nom (panneau Historique) : « Déplacer », « Mettre à
+  l'échelle », « Tourner », « Incliner » ; les flèches « Déplacer ». Une zone bitmap se repose en une
+  étape au nom du geste (« Transformer la sélection » s'il y en a eu plusieurs).
+- ✅ **Réglages** (outil Sélection, calque vectoriel ou bitmap) : champs chiffrés de la boîte — position
+  x / y du pivot, largeur et hauteur (le long des axes de la boîte), angle, inclinaison —,
+  interrupteur « Garder les proportions » (largeur et hauteur ensemble ; inverse Maj sur les
+  poignées), « Réinitialiser le pivot ». Un champ qu'on tire ou qu'on tape passe par le même chemin
+  qu'un glissé (la feuille flottante suit, une seule étape d'annulation à la fin de la saisie).
+  Actions : `selection.reinit_pivot`, `selection.proportions` (aucune touche par défaut).
+- ✅ **Enveloppe et perspective deviennent l'outil Déformer** (même case de la barre d'outils que
+  Transformer, même action `outil.perspective`, nouveau nom « Déformer ») avec deux modes dans Réglages :
+  Enveloppe | Perspective (actions `deformer.enveloppe`, `deformer.perspective`). Plus de Ctrl + coin après
+  une sélection, ni avec Transformer. L'enveloppe ne déforme que les éléments choisis (vectoriel), la
+  zone choisie (bitmap), sinon tout le dessin ; elle ne perd rien (même moteur : `envelopetools.rs`).
+  La perspective ne prend pas une zone bitmap (comme avant) ; il faut l'enveloppe pour cela. Une zone
+  choisie survit au passage sur Déformer (`Tool::keeps_zone`).
+- ✅ **Bitmap** : même boîte (déplacer, échelle, rotation, **inclinaison**, pivot) par les pixels
+  soulevés (`pixsel::stamp`, qui prenait déjà une affine quelconque) ; Transformer sur une zone choisie
+  garde la boîte.
+- ✅ Tests : `selbox_tests.rs` (prise des parties à cinq zooms et sur une boîte tournée, petites
+  boîtes, échelle autour d'un coin et du pivot, un seul sens, proportions, rotation et Maj,
+  inclinaison, pivot, champs chiffrés aller-retour, miroir, annulation et rétablissement de chaque
+  geste) et un test de cisaillement dans `flottante_tests.rs`. Pas vu à l'écran dans cette séance :
+  à essayer par Anthony.
+- Pas faits : le pivot n'est pas enregistré avec le projet ni annulable ; pas d'inclinaison de la
+  perspective ; Échap n'abandonne pas un geste en cours (comme avant).

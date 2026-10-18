@@ -134,7 +134,7 @@ impl Tool {
             Tool::Transform => "Transformer",
             Tool::Ref3d => "Repère 3D",
             Tool::Text => "Texte",
-            Tool::Perspective => "Perspective",
+            Tool::Perspective => "Déformer",
         }
     }
 
@@ -150,7 +150,7 @@ impl Tool {
             Tool::Rect => "Tracer un rectangle, vide ou plein.",
             Tool::Ellipse => "Tracer une ellipse, vide ou pleine.",
             Tool::Polyline => "Tracer une suite de segments, clic après clic.",
-            Tool::Select => "Choisir une zone (lasso ou rectangle) pour la déplacer, la copier ou l'effacer.",
+            Tool::Select => "Choisir au lasso, au rectangle ou au clic, puis transformer avec la boîte : glisser dedans pour déplacer, un coin ou un côté pour mettre à l'échelle, juste hors d'un coin pour tourner, un bord pour incliner, le point rond pour changer le pivot.",
             Tool::SelectColor => "Clic sur une couleur : la zone de cette couleur (bitmap), ou tous les traits et zones de cette couleur (vectoriel). Maj : ajouter.",
             Tool::Picker => "Prendre une couleur sur le dessin.",
             Tool::Pan => "Déplacer la vue.",
@@ -158,7 +158,7 @@ impl Tool {
             Tool::Transform => "Déplacer, agrandir ou tourner le calque entier (tous ses dessins).",
             Tool::Ref3d => "Un modèle 3D en fil de fer comme guide, vu depuis le cadre du plan.",
             Tool::Text => "Clic : poser un texte ; Ctrl + Entrée pour le valider.",
-            Tool::Perspective => "Tirer les quatre coins du dessin pour le mettre en perspective.",
+            Tool::Perspective => "Déformer le dessin, la sélection ou la zone choisie : en enveloppe de Bézier (coins et poignées pour courber les côtés) ou en perspective (les quatre coins). Le mode se choisit dans Réglages.",
         }
     }
 
@@ -232,9 +232,10 @@ impl Tool {
     }
 
     /// Une zone bitmap choisie reste avec cet outil (Anthony, 2026-10-18, axe d'ergonomie 6 : elle
-    /// survit au passage sur Transformer, qui la déplace, l'agrandit, la tourne ou l'enveloppe).
+    /// survit au passage sur Transformer, qui la déplace, l'agrandit, la tourne, et sur Déformer,
+    /// dont l'enveloppe ne déforme alors qu'elle).
     pub fn keeps_zone(self) -> bool {
-        self.is_select() || self == Tool::Transform
+        self.is_select() || matches!(self, Tool::Transform | Tool::Perspective)
     }
 }
 
@@ -564,6 +565,14 @@ pub struct App {
     /// Sélection dans un dessin bitmap, et geste en cours avec l'outil Sélection.
     pub(crate) bsel: Option<BSelection>,
     pub(crate) bdrag: Option<BDrag>,
+    /// La boîte de la sélection, gardée d'une image à l'autre (rotation, pivot : `seltools.rs`).
+    pub(crate) sel_box: Option<crate::seltools::SelBox>,
+    /// « Garder les proportions » : la mise à l'échelle de la boîte garde la forme.
+    pub(crate) keep_proportions: bool,
+    /// Un champ chiffré de la boîte (Réglages) a la main : son geste continue (`seltools.rs`).
+    pub(crate) field_edit_alive: bool,
+    /// Mode de l'outil Déformer : enveloppe de Bézier ou perspective.
+    pub(crate) deform_mode: crate::envelopetools::DeformMode,
     /// Sélection bitmap au rectangle (sinon au lasso).
     pub(crate) select_rect: bool,
     /// Zone bitmap copiée.
@@ -635,7 +644,7 @@ pub struct App {
     pub(crate) maximized_once: u8,
     /// Geste du cutter en cours (points du dessin).
     pub(crate) cut_gesture: Option<Vec<Pos2>>,
-    /// Enveloppe de Bézier en cours (outil Transformer, Ctrl + coin).
+    /// Enveloppe de Bézier en cours (outil Déformer, mode Enveloppe).
     pub(crate) envelope: Option<crate::envelopetools::EnvelopeEdit>,
     /// Déformation en perspective en cours (5f).
     pub(crate) persp: Option<crate::perstools::PerspEdit>,
@@ -902,6 +911,10 @@ impl App {
             rejeu_deferred: Vec::new(),
             bsel: None,
             bdrag: None,
+            sel_box: None,
+            keep_proportions: false,
+            field_edit_alive: false,
+            deform_mode: Default::default(),
             select_rect: false,
             pixel_clipboard: None,
             layer_clipboard: None,
@@ -1712,10 +1725,12 @@ impl App {
         }
         self.finish_vector_erase();
         self.finish_cut();
-        if self.vdrag.is_some() {
+        // (Le geste d'un champ chiffré de la boîte de sélection dure tant que le champ a la main :
+        // `finish_field_edit_if_idle`.)
+        if self.vdrag.is_some() && !matches!(&self.vdrag, Some(VDrag::Transform { field: true, .. })) {
             self.finish_vdrag(false);
         }
-        if self.bdrag.is_some() {
+        if self.bdrag.is_some() && !matches!(&self.bdrag, Some(BDrag::Transform { field: true, .. })) {
             self.finish_bdrag();
         }
         self.finish_camera_drag();
@@ -2986,6 +3001,9 @@ impl App {
                 return;
             }
         }
+        // Un champ de la boîte de sélection (Réglages) en cours de saisie : son geste se termine
+        // avant toute commande (annuler, changer d'image…).
+        self.finish_field_edit();
         // Annuler ou rétablir pendant une déformation : elle repartirait d'un dessin périmé.
         if matches!(action, "edition.annuler" | "edition.retablir") {
             self.persp = None;
@@ -3199,6 +3217,19 @@ impl App {
             }
             "outil.texte" => self.set_tool(Tool::Text),
             "outil.perspective" => self.set_tool(Tool::Perspective),
+            "deformer.enveloppe" => {
+                self.set_deform_mode(crate::envelopetools::DeformMode::Envelope);
+                self.set_tool(Tool::Perspective);
+            }
+            "deformer.perspective" => {
+                self.set_deform_mode(crate::envelopetools::DeformMode::Perspective);
+                self.set_tool(Tool::Perspective);
+            }
+            "selection.reinit_pivot" => self.reset_pivot(),
+            "selection.proportions" => {
+                self.keep_proportions = !self.keep_proportions;
+                self.status = format!("Sélection : proportions gardées : {}.", if self.keep_proportions { "oui" } else { "non" });
+            }
             "outil.rectangle" => self.set_tool(Tool::Rect),
             "outil.ellipse" => self.set_tool(Tool::Ellipse),
             "outil.polyligne" => self.set_tool(Tool::Polyline),
@@ -3555,6 +3586,7 @@ impl App {
     /// Change d'outil : la forme en cours (courbe, polyligne) est posée avant.
     pub(crate) fn set_tool(&mut self, tool: Tool) {
         if self.tool != tool {
+            self.finish_field_edit();
             self.finish_shape_edit();
             self.finish_text_edit();
             self.persp = None;
@@ -3747,6 +3779,8 @@ impl eframe::App for App {
         crate::fx::begin_frame(ctx);
         self.clamp_nav();
         self.flush_flottante_on_input(ctx);
+        // Un champ de la boîte de sélection qui n'a plus la main termine son geste.
+        self.finish_field_edit_if_idle();
         self.end_length_gesture_if_idle();
         self.end_gesture_if_idle();
         self.handle_close_request(ctx);
