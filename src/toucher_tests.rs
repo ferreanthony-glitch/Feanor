@@ -140,6 +140,28 @@ fn the_soft_edge_has_the_optical_radius_and_no_notch() {
 }
 
 #[test]
+fn the_pencil_is_antialiased_and_bites_with_the_pressure() {
+    let p = BrushSettings::pencil();
+    assert!(!p.aliased && p.hardness == 1.0 && p.pressure_opacity && (p.min_opacity - 0.3).abs() < 1e-6, "{p:?}");
+    assert!(p.size >= 2.0 && p.smoothing > 0.0 && p.smoothing < 0.3);
+    // Une diagonale : des demi-teintes sur les bords (anticrénelage) ; en pixels nets, rien que
+    // du plein ou du vide, en escalier.
+    let diagonal: Vec<(f32, f32, f32)> = (0..=24).map(|k| (40.0 + 10.0 * k as f32, 40.0 + 7.0 * k as f32, 1.0)).collect();
+    let shades = |r: &Raster| (0..320).flat_map(|y| (0..320).map(move |x| (x, y))).filter(|&(x, y)| matches!(r.get(x, y).a(), 1..=254)).count();
+    let smooth = draw(BrushSettings { smoothing: 0.0, ..p }, Toucher::default(), false, &diagonal);
+    let crisp = draw(BrushSettings { smoothing: 0.0, aliased: true, ..p }, Toucher::default(), false, &diagonal);
+    assert!(shades(&smooth) > 100, "demi-teintes : {}", shades(&smooth));
+    assert_eq!(shades(&crisp), 0, "pixels nets : aucune demi-teinte");
+    // Effleuré au stylet, le crayon mord moins (30 % au moins) ; appuyé, il est noir. (Ligne sur
+    // les centres des pixels : un trait effleuré fait moins d'un pixel.)
+    let centered = |pressure: f32| -> Vec<(f32, f32, f32)> { (0..=24).map(|k| (40.0 + 10.0 * k as f32, 160.5, pressure)).collect() };
+    let light = draw(BrushSettings { smoothing: 0.0, ..p }, Toucher::default(), true, &centered(0.05));
+    let heavy = draw(BrushSettings { smoothing: 0.0, ..p }, Toucher::default(), true, &centered(1.0));
+    let (l, h) = (light.get(160, 160).a(), heavy.get(160, 160).a());
+    assert!(h >= 250 && l < h && l >= 60, "effleuré {l}, appuyé {h}");
+}
+
+#[test]
 fn the_old_feel_is_within_reach_and_strokes_keep_their_feel() {
     let old = Toucher::ancien();
     assert_eq!((old.size_floor, old.thin_full, old.soft_edge, old.threshold), (0.03, false, false, 0.0));

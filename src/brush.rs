@@ -584,13 +584,19 @@ impl BrushSettings {
         self.roundness * if c.active() { c.at(inp) } else { 1.0 }
     }
 
+    /// Le crayon de la barre d'outils. Anticrénelé depuis l'étude du toucher (2026-10-18 : les
+    /// outils TVPaint d'Anthony ont `aliasing=0`, le profil « Crayon » n'y est qu'une forme de
+    /// pointe), un peu plus gros, qui mord plus ou moins selon l'appui, lissé un rien. L'ancien
+    /// crayon crénelé reste à un clic : « Pixels nets », à côté de la dureté.
     pub fn pencil() -> Self {
         Self {
-            size: 2.0,
+            size: 2.5,
             hardness: 1.0,
             spacing: 0.1,
-            smoothing: 0.0,
-            aliased: true,
+            smoothing: 0.15,
+            aliased: false,
+            pressure_opacity: true,
+            min_opacity: 0.3,
             ..Self::brush()
         }
     }
