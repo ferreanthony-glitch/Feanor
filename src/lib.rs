@@ -41,6 +41,8 @@ mod tvpbrush_tests;
 mod dip_tests;
 #[cfg(test)]
 mod dynamics_tests;
+#[cfg(test)]
+mod toucher_tests;
 mod bulles;
 #[cfg(test)]
 mod bulles_tests;

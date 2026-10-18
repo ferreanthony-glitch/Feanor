@@ -434,6 +434,49 @@ impl Inputs {
     }
 }
 
+/// Toucher du stylet (sensation des brosses, étude du 2026-10-18) : la réponse à la pression
+/// commune à tous les pinceaux, réglée une fois pour toutes (préférence, comme le « Pen Pressure
+/// Feel » de Storyboard Pro) et appliquée par le moteur avant les connexions de chaque brosse.
+/// `Toucher::ancien()` est le comportement d'avant, à portée de main pour comparer à la tablette.
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Toucher {
+    /// Courbe de pression globale : l'appui lu sur la tablette passe par elle avant tout le reste
+    /// (droite : tel quel). La souris, qui appuie toujours à fond, n'y passe pas.
+    #[serde(rename = "courbe_pression")]
+    pub pressure_curve: Curve,
+    /// Plancher de la part de taille quand on effleure, si la taille suit l'appui (ancien : 0,03,
+    /// soit un fil de 0,18 px pour un pinceau de 6).
+    #[serde(rename = "plancher_taille")]
+    pub size_floor: f32,
+    /// Plus fin qu'un pixel : garder un demi-pixel de rayon et un pixel plein (vrai), ou éclaircir
+    /// le débit en gardant 0,75 px de rayon (ancien : des traits fins gris et mous).
+    #[serde(rename = "fin_plein")]
+    pub thin_full: bool,
+    /// Bord des empreintes rondes en une seule chute douce, large d'au moins un pixel (vrai ; le
+    /// fondu minimal du « pixel feather » de libmypaint) ; ancien : rampe linéaire d'un pixel
+    /// coupée par la chute de la dureté (un léger cran, des petites tailles grises).
+    #[serde(rename = "bord_doux")]
+    pub soft_edge: bool,
+    /// Appui au-dessous duquel le stylet ne pose rien, au posé comme au levé (0 : dès le premier
+    /// échantillon). La souris n'est pas concernée.
+    #[serde(rename = "seuil_appui")]
+    pub threshold: f32,
+}
+
+impl Default for Toucher {
+    fn default() -> Self {
+        Toucher { pressure_curve: Curve::linear(), size_floor: 0.1, thin_full: true, soft_edge: true, threshold: 0.03 }
+    }
+}
+
+impl Toucher {
+    /// Le toucher d'avant l'étude (pour comparer à la tablette).
+    pub fn ancien() -> Self {
+        Toucher { pressure_curve: Curve::linear(), size_floor: 0.03, thin_full: false, soft_edge: false, threshold: 0.0 }
+    }
+}
+
 impl Default for BrushSettings {
     fn default() -> Self {
         Self::brush()
@@ -459,7 +502,9 @@ impl BrushSettings {
             pressure_size: true,
             pressure_opacity: false,
             aliased: false,
-            min_size: 0.0,
+            // 0,18 (étude du toucher, 2026-10-18) : un trait qui garde du corps quand on effleure,
+            // comme le minimum de 10 % des outils TVPaint d'Anthony ; avant : 0, des bouts en fil.
+            min_size: 0.18,
             min_opacity: 0.0,
             grain: 0.0,
             paper_scale: 1.0,
@@ -501,9 +546,10 @@ impl BrushSettings {
         }
     }
 
-    /// Part de la taille à une empreinte (jamais moins de 3 %).
-    pub fn size_factor(&self, inp: &Inputs) -> f32 {
-        self.size_connection().map_or(1.0, |c| c.at(inp).max(0.03))
+    /// Part de la taille à une empreinte, jamais moins de `floor` (le plancher du toucher ;
+    /// `Toucher::ancien()` : 3 %).
+    pub fn size_factor(&self, inp: &Inputs, floor: f32) -> f32 {
+        self.size_connection().map_or(1.0, |c| c.at(inp).max(floor.clamp(0.0, 1.0)))
     }
 
     /// Part de l'opacité à une empreinte.
@@ -656,6 +702,11 @@ pub struct StrokeState {
     /// son intérieur de sa couleur.
     fill_closed: bool,
     close_tol: f32,
+    /// Toucher du stylet (courbe de pression globale, plancher, traits fins, bord, seuil).
+    feel: Toucher,
+    /// Dernier point où le stylet touchait (appui au-dessus du seuil), déjà passé par la courbe :
+    /// c'est lui que le trait rattrape au levé, pas un échantillon où la pression s'effondre.
+    contact: Option<(Pos2, f32)>,
 }
 
 impl StrokeState {
@@ -701,7 +752,24 @@ impl StrokeState {
             behind: false,
             fill_closed: false,
             close_tol: 0.0,
+            feel: Toucher::default(),
+            contact: None,
         }
+    }
+
+    /// Le toucher du stylet (réglage commun à tous les pinceaux ; sans lui, celui par défaut).
+    pub fn with_feel(mut self, feel: Toucher) -> Self {
+        self.feel = feel;
+        self
+    }
+
+    pub fn feel(&self) -> Toucher {
+        self.feel
+    }
+
+    /// Part de la taille à une empreinte, avec le plancher du toucher.
+    fn size_factor(&self, inp: &Inputs) -> f32 {
+        self.settings.size_factor(inp, self.feel.size_floor)
     }
 
     /// Options du pinceau (`brushfill`) : peint derrière ; remplir la forme, un trait étant
@@ -815,7 +883,7 @@ impl StrokeState {
     pub fn tip(&self) -> Option<(Pos2, Pos2, f32)> {
         let (last, _) = self.last?;
         let (raw, pressure) = self.raw?;
-        Some((last, raw, self.settings.size * 0.5 * self.settings.size_factor(&self.inputs(pressure, 0.0))))
+        Some((last, raw, self.settings.size * 0.5 * self.size_factor(&self.inputs(pressure, 0.0))))
     }
 
     /// Couleur et opacité du trait à la pointe (aucune pour la gomme).
@@ -866,7 +934,16 @@ impl StrokeState {
 
     pub fn add_point(&mut self, raster: &mut Raster, pos: Pos2, pressure: f32, dirty: &mut Vec<usize>) {
         self.raw_log.push([pos.x as f64, pos.y as f64, pressure as f64, std::mem::replace(&mut self.next_time, -1.0)]);
+        // Toucher du stylet : au-dessous du seuil, le stylet ne touche pas (rien n'est posé ; le
+        // trait reprendra, ou finira, au dernier point qui touchait). L'appui passe ensuite par la
+        // courbe de pression globale. La souris appuie toujours à fond.
+        let touching = !self.pen || self.feel.threshold <= 0.0 || pressure >= self.feel.threshold;
+        let pressure = if self.pen { self.feel.pressure_curve.eval(pressure) } else { pressure };
         self.raw = Some((pos, pressure));
+        if !touching {
+            return;
+        }
+        self.contact = Some((pos, pressure));
         let target = self.smooth(pos);
         self.smoothed = Some(target);
         self.record(target, pressure);
@@ -874,13 +951,13 @@ impl StrokeState {
     }
 
     fn record(&mut self, p: Pos2, pressure: f32) {
-        let r = self.settings.size * 0.5 * self.settings.size_factor(&self.inputs(pressure, 0.0));
+        let r = self.settings.size * 0.5 * self.size_factor(&self.inputs(pressure, 0.0));
         self.path.push(VPoint { x: p.x, y: p.y, r });
     }
 
     /// Termine le trait (en rattrapant le retard du lissage) et renvoie de quoi l'annuler.
     pub fn finish(&mut self, raster: &mut Raster, dirty: &mut Vec<usize>) -> Option<Edit> {
-        if let (Some((p, pr)), Some(s)) = (self.raw, self.smoothed) {
+        if let (Some((p, pr)), Some(s)) = (self.contact, self.smoothed) {
             if p != s {
                 self.move_to(raster, p, pr, dirty);
                 self.record(p, pr);
@@ -962,7 +1039,7 @@ impl StrokeState {
     }
 
     fn step(&self, inp: &Inputs) -> f32 {
-        let diameter = self.settings.size * self.settings.size_factor(inp);
+        let diameter = self.settings.size * self.size_factor(inp);
         (diameter * self.settings.spacing).max(0.3)
     }
 
@@ -1010,7 +1087,7 @@ impl StrokeState {
             self.dab(raster, c, inp, dirty);
             return;
         }
-        let diameter = s.size * s.size_factor(&inp);
+        let diameter = s.size * self.size_factor(&inp);
         let across = egui::vec2(-dir.y, dir.x);
         for _ in 0..n {
             let mut p = c;
@@ -1031,7 +1108,7 @@ impl StrokeState {
             inp.random = self.jitter() + 0.5;
         }
         let pressure = inp.pressure;
-        let mut radius = s.size * 0.5 * s.size_factor(&inp);
+        let mut radius = s.size * 0.5 * self.size_factor(&inp);
         if s.size_jitter > 0.0 {
             radius *= (1.0 + s.size_jitter * 2.0 * self.jitter()).max(0.05);
         }
@@ -1039,9 +1116,15 @@ impl StrokeState {
         if s.aliased {
             radius = radius.max(0.71);
         } else if radius < 0.75 {
-            // Plus fin qu'un pixel : on éclaircit au lieu d'amincir.
-            flow *= radius / 0.75;
-            radius = 0.75;
+            if self.feel.thin_full {
+                // Plus fin qu'un pixel : un trait d'un pixel plein (un demi-pixel de rayon, le bord
+                // doux remplit le pixel du centre), au lieu d'un fil gris.
+                radius = radius.max(0.5);
+            } else {
+                // (Ancien toucher.) Plus fin qu'un pixel : on éclaircit au lieu d'amincir.
+                flow *= radius / 0.75;
+                radius = 0.75;
+            }
         }
         if flow <= 0.0 {
             return;
@@ -1058,6 +1141,9 @@ impl StrokeState {
             s.power.clamp(0.0, 1.0)
         };
         let inner = (radius * s.hardness.clamp(0.0, 1.0)).min(radius - 0.5).max(0.0);
+        // Bord doux (toucher) : une seule chute, de rayon × dureté au bord, large d'un pixel au moins.
+        let soft = self.feel.soft_edge && !s.aliased;
+        let inner_soft = radius * s.hardness.clamp(0.0, 1.0);
         // Pointe aplatie ou tournée : on mesure chaque pixel dans le repère de la pointe.
         let angle = (s.angle_at(&inp) + s.angle_jitter * self.jitter()).to_radians();
         let (sin, cos) = angle.sin_cos();
@@ -1126,6 +1212,7 @@ impl StrokeState {
                 }
                 None => match &profile {
                     Some(lut) => profile_coverage((lx * lx + ly * ly).sqrt(), radius, lut, s.aliased),
+                    None if soft => coverage_soft((lx * lx + ly * ly).sqrt(), radius, inner_soft),
                     None => coverage((lx * lx + ly * ly).sqrt(), radius, inner, s.aliased),
                 },
             }
@@ -1339,6 +1426,24 @@ pub(crate) fn profile_coverage(d: f32, radius: f32, lut: &[f32; PROFILE_STEPS + 
     v.min((radius - d + 0.5).clamp(0.0, 1.0))
 }
 
+/// Couverture d'un pixel à la distance `d` du centre d'une empreinte ronde de rayon `radius`,
+/// pleine jusqu'à `inner` (rayon × dureté), par le bord doux du toucher : une seule chute
+/// (smoothstep) de `inner` au bord extérieur `radius + 0,5`, large d'au moins un pixel — le fondu
+/// minimal du « pixel feather » de libmypaint. Le rayon optique est `radius` (une pointe dure passe
+/// à moitié à `d = radius`), les bords demi-durs n'ont plus de cran, et une empreinte d'un demi-pixel
+/// de rayon remplit le pixel de son centre.
+pub(crate) fn coverage_soft(d: f32, radius: f32, inner: f32) -> f32 {
+    let outer = radius + 0.5;
+    if d >= outer {
+        return 0.0;
+    }
+    let width = (outer - inner.clamp(0.0, radius)).max(1.0);
+    let t = ((d - (outer - width)) / width).clamp(0.0, 1.0);
+    1.0 - t * t * (3.0 - 2.0 * t)
+}
+
+/// Couverture d'avant le toucher (`Toucher::ancien()`, et les traits vectoriels) : une rampe
+/// linéaire d'un pixel au bord, coupée par la chute de la dureté entre `inner` et `radius`.
 pub(crate) fn coverage(d: f32, radius: f32, inner: f32, aliased: bool) -> f32 {
     if aliased {
         return if d <= radius { 1.0 } else { 0.0 };
