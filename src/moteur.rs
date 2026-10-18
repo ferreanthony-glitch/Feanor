@@ -186,6 +186,12 @@ impl Trait {
         self.etat.add_point(&mut dessin.raster, pos2(x, y), pression.clamp(0.0, 1.0), changees);
     }
 
+    /// Comme `point`, avec l'instant (secondes) où le stylet y était : la vitesse des connexions
+    /// et le lissage selon le temps en viennent (sans instant : par échantillon, comme avant).
+    pub fn point_instant(&mut self, dessin: &mut Dessin, x: f32, y: f32, pression: f32, instant: f64, changees: &mut Vec<usize>) {
+        self.etat.add_point_at(&mut dessin.raster, pos2(x, y), pression.clamp(0.0, 1.0), instant, changees);
+    }
+
     pub fn pointe(&self) -> Option<Pointe> {
         let (depuis, jusqua, rayon) = self.etat.tip()?;
         let (couleur, opacite) = self.etat.tip_paint().unwrap_or(([0, 0, 0], 0.0));

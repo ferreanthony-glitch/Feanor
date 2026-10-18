@@ -10,7 +10,7 @@ fn a_recorded_stroke_is_kept_and_replayed() {
     let s = BrushSettings { size: 10.0, smoothing: 0.0, ..BrushSettings::brush() };
     // (Des valeurs exactes en binaire : le texte JSON les relit sans arrondi.)
     let points: Vec<[f64; 4]> = (0..=20).map(|k| [100.0 + 5.0 * k as f64, 50.0, 0.25 + k as f64 / 32.0, k as f64 / 64.0]).collect();
-    let r = Recorded { settings: s, color: [10, 20, 30], eraser: false, points };
+    let r = Recorded { settings: s, color: [10, 20, 30], eraser: false, points, feel: Default::default() };
     let path = append(&dir, &r).unwrap();
     append(&dir, &Recorded { points: vec![[0.0, 0.0, 1.0, -1.0], [3.0, 4.0, 1.0, -1.0]], ..r.clone() }).unwrap();
     let back = read(&path).unwrap();

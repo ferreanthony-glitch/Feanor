@@ -310,6 +310,9 @@ pub struct App {
     /// Options du pinceau et du crayon (`brushfill`) : peint derrière, remplir la forme.
     pub(crate) paint_behind: bool,
     pub(crate) fill_shapes: bool,
+    /// Toucher du stylet (sensation des brosses) : la copie de travail du réglage, enregistrée
+    /// dans `update` quand elle change (hors glissé), comme les options du pinceau.
+    pub(crate) toucher: crate::brush::Toucher,
     pub(crate) color: [u8; 3],
     /// La couleur en teinte, saturation, valeur (panneau Couleur, 6b).
     pub(crate) hsv: [f32; 3],
@@ -610,6 +613,12 @@ pub struct App {
     pub(crate) length_field_active: bool,
     pub(crate) pen_pressure: f32,
     pub(crate) pen_touch: bool,
+    /// Horodatage par événement (sensation des brosses, §2.5) : egui donne la même heure à tous
+    /// les événements d'une image d'écran ; `canvas_input` étale ceux du pointeur entre l'image
+    /// d'avant (`last_frame_time`) et celle-ci, et `input_time` est l'instant de l'événement en
+    /// cours, celui que reçoivent les traits (vitesse, lissage selon le temps).
+    pub(crate) input_time: f64,
+    pub(crate) last_frame_time: f64,
     pub(crate) picking: bool,
     /// Manifeste du projet en dossier (`MonFilm/MonFilm.pelure`).
     pub(crate) path: Option<PathBuf>,
@@ -693,6 +702,7 @@ impl App {
             vector_erase_whole: false,
             paint_behind,
             fill_shapes,
+            toucher: settings.toucher,
             // Les couleurs de la dernière fois (passe couleur).
             color: settings.colors.front,
             hsv: crate::colorui::rgb_to_hsv(settings.colors.front),
@@ -873,6 +883,8 @@ impl App {
             length_origin: None,
             length_field_active: false,
             pen_pressure: 1.0,
+            input_time: 0.0,
+            last_frame_time: 0.0,
             pen_touch: false,
             picking: false,
             path: None,
@@ -1416,12 +1428,15 @@ impl App {
         let (behind, fill, tol) = (painting && self.paint_behind, painting && self.fill_shapes, self.close_tolerance());
         let mut stroke = StrokeState::new(cel, mode, settings, prefix, pen)
             .with_textures(textures)
+            .with_feel(self.toucher)
+            .with_zoom(self.layer_zoom())
             .with_secondary(self.couleurs.prefs.back)
             .on_layer(self.layer().keep_alpha, stencil)
             .with_options(behind, fill, tol);
         let mut dirty = Vec::new();
-        // L'instant de l'image d'écran : la vitesse du trait en vient (connexions).
-        let time = self.ctx.input(|i| i.time);
+        // L'instant de l'événement (étalé dans l'image d'écran, `canvas_input`) : la vitesse du
+        // trait et le lissage selon le temps en viennent.
+        let time = self.input_time;
         if let Some(c) = self.doc.cels.get_mut(&cel) {
             stroke.add_point_at(&mut c.raster, p, pressure, time, &mut dirty);
         }
@@ -1464,7 +1479,7 @@ impl App {
     }
 
     pub(crate) fn stroke_to(&mut self, p: Pos2, pressure: f32) {
-        let time = self.ctx.input(|i| i.time);
+        let time = self.input_time;
         let Some(stroke) = self.stroke.as_mut() else { return };
         let Some(c) = self.doc.cels.get_mut(&stroke.cel) else { return };
         let mut dirty = Vec::new();
@@ -3376,12 +3391,13 @@ impl eframe::App for App {
         // (peint derrière, remplir la forme) : enregistrés quand ils
         // changent (pas pendant un glissé).
         let options = (self.paint_behind, self.fill_shapes) != (self.settings.paint_behind, self.settings.fill_shapes);
-        let changed = self.onion != self.settings.onion || self.xsheet != self.settings.xsheet || self.flips != self.settings.flips || options;
+        let changed = self.onion != self.settings.onion || self.xsheet != self.settings.xsheet || self.flips != self.settings.flips || options || self.toucher != self.settings.toucher;
         if changed && !ctx.input(|i| i.pointer.any_down()) {
             self.settings.onion = self.onion.clone();
             self.settings.xsheet = self.xsheet.clone();
             self.settings.flips = self.flips.clone();
             (self.settings.paint_behind, self.settings.fill_shapes) = (self.paint_behind, self.fill_shapes);
+            self.settings.toucher = self.toucher;
             if let Err(e) = self.settings.save() {
                 self.status = format!("Réglages non enregistrés : {e}");
             }

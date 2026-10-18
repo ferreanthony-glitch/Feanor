@@ -67,6 +67,10 @@ pub struct Settings {
     pub panes_fit: bool,
     #[serde(default, rename = "panneaux_tires_a_la_main", skip_serializing_if = "Vec::is_empty")]
     pub panes_fixed: Vec<(crate::dock::Pane, crate::dock::Pane)>,
+    /// Toucher du stylet (sensation des brosses, 2026-10-18) : courbe de pression globale,
+    /// plancher de taille, traits fins, bord, seuil d'appui ; commun à tous les pinceaux.
+    #[serde(default, rename = "toucher")]
+    pub toucher: crate::brush::Toucher,
 }
 
 fn default_autosave() -> u32 {
@@ -102,6 +106,7 @@ impl Default for Settings {
             reopen_last: true,
             panes_fit: true,
             panes_fixed: Vec::new(),
+            toucher: Default::default(),
         }
     }
 }

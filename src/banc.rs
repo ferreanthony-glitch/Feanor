@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use eframe::egui::pos2;
 use serde::{Deserialize, Serialize};
 
-use crate::brush::{BrushSettings, StrokeMode, StrokeState};
+use crate::brush::{BrushSettings, StrokeMode, StrokeState, Toucher};
 use crate::brushtex::BrushTextures;
 use crate::raster::Raster;
 
@@ -23,8 +23,12 @@ pub struct Recorded {
     pub color: [u8; 3],
     #[serde(rename = "gomme")]
     pub eraser: bool,
-    /// x, y (pixels du dessin), appui (0 à 1), instant (secondes ; −1 : inconnu).
+    /// x, y (pixels du dessin), appui tel que lu sur la tablette (0 à 1), instant (secondes ;
+    /// −1 : inconnu).
     pub points: Vec<[f64; 4]>,
+    /// Le toucher du stylet au moment du trait (les traits d'avant l'étude : celui par défaut).
+    #[serde(default, rename = "toucher")]
+    pub feel: Toucher,
 }
 
 impl Recorded {
@@ -33,7 +37,7 @@ impl Recorded {
             StrokeMode::Paint(rgb) => (rgb, false),
             StrokeMode::Erase => ([0, 0, 0], true),
         };
-        Recorded { settings: stroke.settings(), color, eraser, points: stroke.raw_log.clone() }
+        Recorded { settings: stroke.settings(), color, eraser, points: stroke.raw_log.clone(), feel: stroke.feel() }
     }
 }
 
@@ -76,7 +80,7 @@ pub fn replay(r: &Recorded, textures: BrushTextures) -> (Raster, [f32; 2]) {
     let off = [(margin - x0) as f32, (margin - y0) as f32];
     let mut raster = Raster::new(w.min(8192), h.min(8192));
     let mode = if r.eraser { StrokeMode::Paint([0, 0, 0]) } else { StrokeMode::Paint(r.color) };
-    let mut st = StrokeState::new(0, mode, r.settings, None, true).with_textures(textures);
+    let mut st = StrokeState::new(0, mode, r.settings, None, true).with_textures(textures).with_feel(r.feel);
     let mut dirty = Vec::new();
     for p in &r.points {
         let pos = pos2(p[0] as f32 + off[0], p[1] as f32 + off[1]);

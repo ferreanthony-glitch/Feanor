@@ -202,10 +202,12 @@ impl App {
         // élément vectoriel posé au lâcher (`commit_vector_stroke`).
         let mut stroke = StrokeState::new(cel, StrokeMode::Paint(self.color), settings, None, pen)
             .with_textures(textures)
+            .with_feel(self.toucher)
+            .with_zoom(self.layer_zoom())
             .with_secondary(self.couleurs.prefs.back)
             .with_options(self.paint_behind, false, 0.0);
         let mut dirty = Vec::new();
-        let time = self.ctx.input(|i| i.time);
+        let time = self.input_time;
         if let Some(c) = self.doc.cels.get_mut(&cel) {
             stroke.add_point_at(&mut c.raster, p, pressure, time, &mut dirty);
         }
