@@ -193,6 +193,9 @@ mod fxfilters_tests;
 mod fxwarp;
 #[cfg(test)]
 mod fxwarp_tests;
+mod tremblement;
+#[cfg(test)]
+mod tremblement_tests;
 mod fxui;
 mod fxkeys;
 #[cfg(test)]

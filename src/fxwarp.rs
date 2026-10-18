@@ -15,7 +15,7 @@ use crate::raster::{Raster, TILE};
 
 /// La couleur prémultipliée du dessin au point (x, y) en pixels de la feuille, lue entre ses
 /// quatre pixels voisins ; vide hors de la feuille.
-fn sample(r: &Raster, x: f32, y: f32) -> [f32; 4] {
+pub(crate) fn sample(r: &Raster, x: f32, y: f32) -> [f32; 4] {
     let (fx, fy) = (x - 0.5, y - 0.5);
     let (ix, iy) = (fx.floor(), fy.floor());
     let (tx, ty) = (fx - ix, fy - iy);

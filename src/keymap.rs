@@ -362,6 +362,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("fx.cles_copier", "Copier les clés d'effets choisies", true, false),
     act("fx.cles_coller", "Coller les clés d'effets à l'image courante du calque courant", true, false),
     act("fx.cles_supprimer", "Supprimer les clés d'effets choisies (rien sans clé choisie)", true, false),
+    act("fx.tremblement", "Tremblement du trait du calque courant (calque vectoriel : oui / non)", true, false),
+    act("fx.tremblement_repos", "Tremblement du trait : animer aussi à l'arrêt (oui / non)", true, false),
     act("calque.nouveau_ctg", "Nouveau calque CTG", true, false),
     act("calque.transformer_ctg", "Transformer en calque CTG", true, false),
     act("calque.desactiver_ctg", "Désactiver le calque CTG", true, false),

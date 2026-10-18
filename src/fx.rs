@@ -76,6 +76,9 @@ pub enum EffectKind {
     Lighting,
     #[serde(rename = "degrade")]
     Gradient,
+    // Tremblement du trait (`tremblement.rs`, Anthony, 2026-10-19), calques vectoriels seulement.
+    #[serde(rename = "tremblement")]
+    Boil,
 }
 
 const GAUSSIAN: [Param; 1] = [Param { name: "Rayon", min: 0.0, max: 200.0, default: 8.0, unit: " px" }];
@@ -156,12 +159,35 @@ const GRADIENT: [Param; 2] = [
     Param { name: "Force", min: 0.0, max: 100.0, default: 50.0, unit: " %" },
 ];
 
+/// Tremblement du trait (`tremblement.rs`) : les rangs sont ceux de `tremblement::INTENSITY`…
+/// `REST`.
+const BOIL: [Param; 7] = [
+    Param { name: "Intensité", min: 0.0, max: 20.0, default: 3.0, unit: " px" },
+    Param { name: "Fréquence", min: 0.0, max: 100.0, default: 55.0, unit: " %" },
+    Param { name: "Variantes", min: 2.0, max: 6.0, default: 3.0, unit: "" },
+    Param { name: "Vitesse", min: 1.0, max: 12.0, default: 2.0, unit: " img/var." },
+    Param { name: "Épaisseur", min: 0.0, max: 100.0, default: 0.0, unit: " %" },
+    Param { name: "Graine", min: 1.0, max: 999.0, default: 1.0, unit: "" },
+    Param { name: "Animer à l'arrêt", min: 0.0, max: 1.0, default: 0.0, unit: "" },
+];
+
+/// Comment se règle un paramètre dans le panneau Effets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ParamStyle {
+    /// Un curseur.
+    Slider,
+    /// Un curseur à valeurs entières.
+    Integer,
+    /// Une case à cocher (0 ou 1).
+    Switch,
+}
+
 /// Familles d'effets, dans l'ordre des menus (inspirées du menu Filtre et des réglages de
 /// Photoshop).
 pub const FAMILIES: [&str; 8] = ["Flou", "Déformation", "Réglages", "Bruit", "Pixéliser", "Rendu", "Netteté", "Styliser"];
 
 impl EffectKind {
-    pub const ALL: [EffectKind; 21] = [
+    pub const ALL: [EffectKind; 22] = [
         EffectKind::GaussianBlur,
         EffectKind::MotionBlur,
         EffectKind::BrightnessContrast,
@@ -183,7 +209,22 @@ impl EffectKind {
         EffectKind::Clouds,
         EffectKind::Lighting,
         EffectKind::Gradient,
+        EffectKind::Boil,
     ];
+
+    /// L'effet n'a de sens que sur un calque vectoriel (le tremblement du trait).
+    pub fn vector_only(self) -> bool {
+        self == EffectKind::Boil
+    }
+
+    /// Le réglage `k` de l'effet se règle-t-il par un curseur, un curseur entier ou une case ?
+    pub fn param_style(self, k: usize) -> ParamStyle {
+        match (self, k) {
+            (EffectKind::Boil, crate::tremblement::VARIANTS | crate::tremblement::SPEED | crate::tremblement::SEED) => ParamStyle::Integer,
+            (EffectKind::Boil, crate::tremblement::REST) => ParamStyle::Switch,
+            _ => ParamStyle::Slider,
+        }
+    }
 
     pub fn label(self) -> &'static str {
         match self {
@@ -208,6 +249,7 @@ impl EffectKind {
             EffectKind::Clouds => "Nuages",
             EffectKind::Lighting => "Éclairage",
             EffectKind::Gradient => "Dégradé",
+            EffectKind::Boil => "Tremblement du trait",
         }
     }
 
@@ -226,7 +268,7 @@ impl EffectKind {
             EffectKind::Noise => "Bruit",
             EffectKind::Mosaic => "Pixéliser",
             EffectKind::DropShadow | EffectKind::Glow => "Styliser",
-            EffectKind::Wave | EffectKind::Ripple | EffectKind::Twirl | EffectKind::Pinch => "Déformation",
+            EffectKind::Wave | EffectKind::Ripple | EffectKind::Twirl | EffectKind::Pinch | EffectKind::Boil => "Déformation",
             EffectKind::Clouds | EffectKind::Lighting | EffectKind::Gradient => "Rendu",
         }
     }
@@ -253,6 +295,7 @@ impl EffectKind {
             EffectKind::Clouds => &CLOUDS,
             EffectKind::Lighting => &LIGHTING,
             EffectKind::Gradient => &GRADIENT,
+            EffectKind::Boil => &BOIL,
         }
     }
 
@@ -276,6 +319,7 @@ impl EffectKind {
             EffectKind::Clouds => at(1) > 0.0,
             EffectKind::Lighting => at(3) > 0.0,
             EffectKind::Gradient => at(1) > 0.0,
+            EffectKind::Boil => crate::tremblement::Settings::of(v).changes(),
         }
     }
 
@@ -344,6 +388,20 @@ impl Effect {
         va.iter().zip(&vb).map(|(x, y)| x + (y - x) * t).collect()
     }
 
+    /// Change le paramètre `k` partout : dans les valeurs de l'effet et dans chacune de ses clés
+    /// (un réglage qui ne s'anime pas, comme « Animer à l'arrêt »).
+    pub fn set_param(&mut self, k: usize, v: f32) {
+        let v = self.kind.params().get(k).map_or(v, |p| v.clamp(p.min, p.max));
+        if let Some(x) = self.values.get_mut(k) {
+            *x = v;
+        }
+        for key in &mut self.keys {
+            if let Some(x) = key.values.get_mut(k) {
+                *x = v;
+            }
+        }
+    }
+
     /// La clé de l'image `frame`, s'il y en a une.
     pub fn key_at(&self, frame: usize) -> Option<usize> {
         self.keys.iter().position(|k| k.frame == frame)
@@ -407,11 +465,38 @@ pub struct FxStep {
 
 /// Les effets actifs de la pile qui changent quelque chose à l'image `frame`, dans l'ordre.
 pub fn steps_at(fx: &[Effect], frame: usize) -> Vec<FxStep> {
+    steps_at_with(fx, frame, None, true)
+}
+
+/// Comme `steps_at`. `rest` : l'image virtuelle du repos (`tremblement::rest_frame`), que prennent
+/// à la place de `frame` les tremblements qui animent à l'arrêt ; `vector` : le calque est
+/// vectoriel (sinon les effets réservés au vectoriel sont laissés). Le tremblement porte à la fin
+/// de ses valeurs la variante de l'image (`tremblement::VARIANT`) : c'est ce qui fait de chaque
+/// variante un dessin dérivé à part, gardé sous son propre numéro (`fx_id`).
+pub fn steps_at_with(fx: &[Effect], frame: usize, rest: Option<usize>, vector: bool) -> Vec<FxStep> {
     fx.iter()
-        .filter(|e| e.enabled)
-        .map(|e| FxStep { kind: e.kind, values: e.values_at(frame) })
+        .filter(|e| e.enabled && (vector || !e.kind.vector_only()))
+        .map(|e| {
+            let mut values = e.values_at(frame);
+            if e.kind == EffectKind::Boil {
+                let variant = crate::tremblement::variant_for(&values, frame, rest);
+                values.push(variant as f32);
+            }
+            FxStep { kind: e.kind, values }
+        })
         .filter(|s| s.kind.changes(&s.values))
         .collect()
+}
+
+/// Les effets du calque `layer` à l'image `frame` (voir `steps_at_with`) : le tremblement n'agit que
+/// sur un calque vectoriel.
+pub fn layer_steps(layer: &crate::document::Layer, frame: usize, rest: Option<usize>) -> Vec<FxStep> {
+    steps_at_with(&layer.fx, frame, rest, layer.kind == crate::document::LayerKind::Vector)
+}
+
+/// Les mêmes effets sans le tremblement (le calque qu'on édite se montre tel qu'il est).
+pub fn without_boil(steps: Vec<FxStep>) -> Vec<FxStep> {
+    steps.into_iter().filter(|s| s.kind != EffectKind::Boil).collect()
 }
 
 /// Numéro du dessin dérivé : le dessin `cel` passé par `steps` (bit de poids fort mis : il ne
@@ -703,6 +788,7 @@ pub fn apply_scaled(raster: &Raster, steps: &[FxStep], level: u8) -> Raster {
             EffectKind::Clouds => crate::fxwarp::clouds(src, v[0], v[1], v[2]),
             EffectKind::Lighting => crate::fxwarp::lighting(src, v[0], v[1], v[2], v[3]),
             EffectKind::Gradient => crate::fxwarp::gradient(src, v[0], v[1]),
+            EffectKind::Boil => crate::tremblement::boil(src, v, level),
         };
         cur = Some(next);
     }
@@ -843,9 +929,13 @@ fn display_with<'a>(doc: &'a Document, item: &crate::render::PlanItem, level: u8
     if prio < THUMB_PRIO || !draft_active() {
         crate::fxcache::request(job_for(item, src, display_id(item, level), level, prio));
     }
+    // (Un tremblement n'a rien à gagner d'un résultat d'avant la dernière retouche du dessin : il
+    // ferait disparaître le trait qu'on vient de poser ; il montre alors le dessin tel quel.
+    // L'autre variante du même dessin, elle, est un bon remplaçant.)
+    let boil = item.fx.iter().any(|s| s.kind == EffectKind::Boil);
     Some(match crate::fxcache::fallback(item.cel) {
-        Some((last, cel)) => Display { cel: Shown::Fx(cel), id: last, ready: false },
-        None => Display { cel: Shown::Plain(src), id: item.cel, ready: false },
+        Some((last, cel)) if !boil || cel.version == src.version => Display { cel: Shown::Fx(cel), id: last, ready: false },
+        _ => Display { cel: Shown::Plain(src), id: item.cel, ready: false },
     })
 }
 
@@ -918,7 +1008,7 @@ static DRAFT_UNTIL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64:
 static LAST_SHOWN: Mutex<Option<(usize, usize)>> = Mutex::new(None);
 const DRAFT_MS: u64 = 250;
 
-fn now_ms() -> u64 {
+pub(crate) fn now_ms() -> u64 {
     static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
     START.get_or_init(std::time::Instant::now).elapsed().as_millis() as u64
 }

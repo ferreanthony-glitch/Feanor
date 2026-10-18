@@ -82,7 +82,11 @@ pub const FORMAT: &str = "pelure-projet";
 /// par le moteur bitmap. Comme pour tout nouveau format, une version précédente de Pelure **refuse**
 /// d'ouvrir le projet (`load` : « créé par une version plus récente ») ; elle ne le lit pas en
 /// rendu approché.
-pub const VERSION: u32 = 25;
+/// 26 (2026-10-19) : tremblement du trait des calques vectoriels (effet `tremblement` de la pile
+/// `effets` : intensité, fréquence, variantes, vitesse, épaisseur, graine, animer à l'arrêt ; voir
+/// `tremblement.rs`). Une version précédente refuse le projet au lieu de montrer le dessin sans
+/// son tremblement (elle ne connaît pas la sorte d'effet) : le film changerait sans prévenir.
+pub const VERSION: u32 = 26;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Images des calques vidéo (13k) : `videos/<id>/000001.jpg`…

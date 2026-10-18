@@ -331,6 +331,30 @@ impl App {
                 });
             }
             ui.menu_button("Effets", |ui| self.fx_menu_items(ui, li));
+            // Tremblement du trait (`tremblement.rs`), calques vectoriels : l'interrupteur est ici,
+            // les réglages dans le panneau Effets.
+            if self.fx_allowed(li, crate::fx::EffectKind::Boil) {
+                let boil = self.fx_on(li, crate::fx::EffectKind::Boil);
+                if ui
+                    .checkbox(&mut boil.clone(), "Tremblement du trait")
+                    .on_hover_text("Le trait « bout » comme dans WigglyPaint : le dessin est montré en quelques variantes légèrement déplacées, qui se suivent. Les dessins ne changent pas ; intensité, fréquence, variantes et vitesse se règlent dans le panneau Effets.")
+                    .clicked()
+                {
+                    ui.close_menu();
+                    self.toggle_fx(li, crate::fx::EffectKind::Boil);
+                }
+                if boil {
+                    let rest = self.boil_rest_on(li);
+                    if ui
+                        .checkbox(&mut rest.clone(), "Animer à l'arrêt")
+                        .on_hover_text("Le dessin continue de trembler quand on ne lit pas (l'écran se redessine alors à la cadence du tremblement). Éteint : l'image fixe montre la variante de l'image courante.")
+                        .clicked()
+                    {
+                        ui.close_menu();
+                        self.set_boil_rest(li, !rest);
+                    }
+                }
+            }
         }
         self.propagation_item(ui, li);
         // Fonctions d'état, puis d'animation (Anthony, 2026-10-17 : « en premier les fonctions
