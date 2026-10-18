@@ -9,6 +9,9 @@ mod app;
 mod audio;
 #[cfg(test)]
 mod audio_tests;
+pub mod fond;
+#[cfg(test)]
+mod fond_tests;
 mod blend;
 #[cfg(test)]
 mod blend_tests;
