@@ -118,8 +118,9 @@ Chaque plan a ses calques, de deux sortes :
     déplacer, mettre à l'échelle (Maj : proportionnel) et tourner (Maj : par 15°). On peut aussi
     appliquer la couleur courante, épaissir, affiner, faire un miroir, passer devant ou derrière,
     supprimer. Copier, couper et coller (Ctrl+C/X/V) marchent d'un plan à l'autre.
-- **Bitmap** (B, façon TVPaint) : peinture en pixels, avec le pinceau, le crayon à pixels nets,
-  la gomme, le remplissage avec débord sous le trait et l'import d'images PNG/JPEG.
+- **Bitmap** (B, façon TVPaint) : peinture en pixels, avec le pinceau, le crayon (anticrénelé ;
+  « Pixels nets » pour le pixel art), la gomme, le remplissage avec débord sous le trait et
+  l'import d'images PNG/JPEG.
   - L'outil Sélection y découpe une zone au lasso ou au rectangle (Maj : ajouter). On la déplace
     en la faisant glisser (au pixel près, sans flou) ou aux flèches (1 pixel, 10 avec Maj ; aussi
     pour des traits vectoriels choisis), ses poignées la mettent à l'échelle ou la
@@ -353,6 +354,12 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   Wacom, l'option « Utiliser Windows Ink » doit être cochée dans les propriétés de la tablette.
   Sur le dessin, la croix de Windows marque la pointe sans retard, le cercle autour montre la
   taille du pinceau (Affichage > « Croix du système sur le pinceau » pour n'avoir que le cercle).
+  - **Toucher du stylet** (section repliée au bas des réglages du pinceau, du crayon et de la
+    gomme ; vaut pour tous les pinceaux) : la courbe de pression (Droite, Douce, Ferme, ou à la
+    main), le plancher de taille quand on effleure, le seuil d'appui sous lequel rien n'est posé
+    (ni début fantôme ni pointe au levé), « Traits fins pleins » (un trait plus fin qu'un pixel
+    reste un pixel plein, pas un fil gris) et « Bord doux » (bord des empreintes en une seule
+    chute douce). « Ancien toucher » remet le comportement d'avant, pour comparer.
 - **Couleur** (panneau Couleur ; au pied de la barre d'outils, un clic sur le carré de devant
   ouvre à côté la roue, les curseurs, les couleurs récentes et le nuancier ; menu Édition >
   Couleur) :
@@ -495,7 +502,13 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   pas, retournements au hasard d'une pointe en image (craies, matières).
 - **Lissage** (réglages du pinceau) : Suivi (comme avant), Corde tirée (le trait suit la pointe
   au bout d'une corde : les petits tremblements ne le bougent pas, pour l'encrage), Moyenne sur
-  des points ou sur une distance.
+  des points ou sur une distance. Options, sous le type : « Après le trait » (le trait brut suit
+  la pointe sans retard, puis est rejoué lissé au levé, comme TVPaint avec Real Time décoché),
+  « Selon le temps » (le Suivi lisse pareil quelle que soit la cadence du stylet et de l'image),
+  « Pixels d'écran » (la corde ou la distance se mesurent à l'écran : la même à tout zoom), et la
+  fin du trait : rattrapage de la pointe en courbe, droit ou aucun.
+- **Crayon** : anticrénelé, 2,5 px, qui mord plus ou moins selon l'appui ; « Pixels nets » (à
+  côté de la dureté) rend le crayon à pixels francs du pixel art.
 - **Profil de la pointe** (bouton courbe à côté de la Dureté) : la couverture de la pointe du
   centre au bord, en courbe, à la place de la dureté. Il part de la dureté réglée ; préréglages
   Dur, Doux, Diffus.

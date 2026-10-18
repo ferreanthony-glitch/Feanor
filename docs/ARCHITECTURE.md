@@ -641,6 +641,36 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     commande `pinceau.enregistrer_traits`).
   - `replay` rejoue un trait sur une feuille à sa mesure, avec ses instants : la vitesse est la
     même.
+- Sensation des brosses (étude du 2026-10-18, `docs/SENSATION-BROSSES.md`) : `brush.rs`.
+  - `Toucher` (réglage commun à tous les pinceaux : `Settings::toucher`, copie de travail
+    `App::toucher` enregistrée dans `update` hors glissé, `StrokeState::with_feel`) :
+    - `pressure_curve`, appliquée dans `add_point` au stylet seulement, après le journal du banc
+      (qui garde l'appui brut ; `Recorded::feel` garde le toucher, `replay` le rend) ;
+    - `threshold` : au-dessous, le point met à jour `raw` (la pointe affichée) mais ni `contact`,
+      ni le lissage, ni les empreintes ; `finish` rattrape `contact`, pas `raw` ;
+    - `size_floor`, par `StrokeState::size_factor` ;
+    - `thin_full` et `soft_edge`, dans `dab` : `coverage_soft` est une seule smoothstep de
+      rayon × dureté au bord `rayon + 0,5`, large d'un pixel au moins ; l'ancienne `coverage`
+      reste pour `Toucher::ancien()` et pour les traits vectoriels (`vector::Mask::stamp`).
+  - Horodatage : `spread_time` (pure) étale les événements du pointeur d'une image d'écran entre
+    `App::last_frame_time` et l'heure de l'image ; `App::input_time` est lu par `begin_stroke`,
+    `stroke_to` et `begin_vector_stroke`.
+  - Lissage : `follow_alpha(smoothing, dt)` (constante de temps, `FOLLOW_REF_HZ` = 200) ; `dt`
+    vient de `add_point_at` (`last_time`), aucun dans `add_point` ; `with_zoom` pour la corde et
+    la distance en pixels d'écran (`smooth_screen`) ; `catch_up` selon `CatchUp` (aucun, droit,
+    courbe : Bézier quadratique partant de la dernière direction du chemin lissé) ; lissage
+    différé (`smooth_deferred`) : `smooth` rend le point brut pendant le geste, et `finish`
+    appelle `replay_smoothed` — les tuiles d'avant reprennent leur place, `reset_gesture` remet
+    l'état (graine du hasard comprise), puis les points du journal sont rejoués avec `replaying`
+    ; au-delà de 2000 tuiles touchées, le trait reste brut.
+  - Tests : `toucher_tests.rs`, `lissage_tests.rs` ; `latency_tests::frame_pacing_sleep_is_precise`
+    (ignoré) mesure le sommeil du rythme des images.
+
+    Décision : coût — les réglages de toucher sont globaux (`Toucher`) plutôt que par brosse (un
+    seul endroit, les réglages de brosses enregistrés ne changent pas), les options de lissage
+    par brosse avec `#[serde(default)]` (les anciens fichiers se relisent). Risque : la cadence de
+    référence du Suivi et les défauts sont des choix à confirmer à la tablette. Réversible :
+    « Ancien toucher » et les cases rendent le comportement d'avant.
 - Peinture humide (moteur de dessin, étape 11) : `BrushSettings::mix` (« melange ») et `charge`.
   - Avec du mélange, ou une charge incomplète, l'empreinte prend un autre chemin :
     1. la moyenne pondérée des pixels courants sous l'empreinte ;

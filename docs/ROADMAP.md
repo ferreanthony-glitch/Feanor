@@ -1442,6 +1442,37 @@ Choix d'Anthony :
   Le dépôt de chaque empreinte est réglé d'après leur nombre au même point (diamètre ÷ pas) : un
   choix de Pelure, à comparer avec TVPaint, dont la formule n'est pas publiée. Autre point à
   comparer : d'après sa documentation, un Power à 0 ne rend pas la brosse transparente.
+- ✅ Sensation des brosses (étude de Fable du 2026-10-18, `docs/SENSATION-BROSSES.md` ; Anthony :
+  « règle le point 10 en suivant ses recommandations ») :
+  - **Toucher du stylet**, commun à tous les pinceaux (section repliée au bas des réglages du
+    pinceau, du crayon et de la gomme ; gardé dans `reglages.toml`) : courbe de pression globale
+    (le « Pen Pressure Feel » de Storyboard Pro : Droite, Douce, Ferme ou à la main), plancher de
+    taille 10 % (avant 3 %), seuil d'appui 3 % sous lequel le stylet ne pose rien (ni début
+    fantôme ni pointe au levé), traits plus fins qu'un pixel gardés pleins (avant : éclaircis,
+    gris), bord des empreintes en une seule chute douce d'au moins un pixel (le « pixel feather »
+    de libmypaint ; une pointe dure fait maintenant sa taille vraie, un demi-pixel de plus
+    qu'avant). « Ancien toucher » remet tout comme avant, pour comparer.
+  - **Pinceau rond** : taille mini 18 % (tes outils TVPaint ont 10 %), au lieu de 0.
+  - **Crayon** anticrénelé (tes outils TVPaint ont `aliasing=0`), 2,5 px, opacité selon l'appui
+    (mini 30 %), lissage léger ; « Pixels nets » rend l'ancien crayon.
+  - **Horodatage par événement** : les échantillons du stylet d'une image d'écran sont étalés
+    entre l'image d'avant et celle-ci (egui les datait tous de la même heure) : la vitesse des
+    connexions n'est plus en escalier.
+  - **Lissage** (options par pinceau, sous le type) : Suivi selon le temps (constante de temps,
+    cadence de référence 200 Hz — à vérifier à la tablette), corde et distance en pixels d'écran
+    (le « Scalable Distance » de Krita), rattrapage de la pointe au levé en courbe, droit (comme
+    avant) ou aucun, et **lissage après le trait** comme TVPaint avec Real Time décoché (ton
+    réglage) : brut pendant le geste, rejoué lissé au levé. Ce dernier reste décoché par défaut.
+  - **Latence** : `thread::sleep` mesuré sur ce poste (test ignoré `frame_pacing_sleep_is_precise`) :
+    0,25 ms de dépassement moyen sur 2 ms, 0,8 au pire ; le rythme des images est bon, rien à
+    changer.
+  - Pas fait : la couverture par aire sous 2 px (le bord doux suffit pour l'instant),
+    l'inclinaison et l'heure vraie des échantillons (lecture directe de WM_POINTER, avec Anthony),
+    les traits vectoriels rejoués avec l'opacité selon l'appui (calque par défaut : bitmap) ; le
+    trait vectoriel garde l'ancien bord et peut paraître, au lâcher, un demi-pixel plus fin que
+    l'aperçu bitmap.
+  - Tout est à essayer à la tablette : la liste des A/B est à la fin de
+    `docs/SENSATION-BROSSES.md`. Le banc de traits (étape 0) n'a encore aucun trait d'Anthony.
 ## Couleur (demandée par Anthony le 2026-10-16) ✅
 
 La demande : « Le nuancier seul ne suffit pas, il me faut également la possibilité de passer
