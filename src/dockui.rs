@@ -259,15 +259,49 @@ impl App {
     }
 
     pub(crate) fn set_dock_layout(&mut self, layout: DockLayout) {
-        let layout = layout.sanitized();
+        let mut layout = layout.sanitized();
+        // La feuille d'exposition n'existe qu'en animation : en storyboard, une disposition qui
+        // l'ouvre (espace de travail, démarrage) la garde de côté pour le retour.
+        if self.mode == Mode::Storyboard {
+            if let Some(sans) = layout.sans_animation_seule() {
+                self.exposition_masquee = Some(std::mem::replace(&mut layout, sans));
+            }
+        }
         self.detached = layout.detachees.clone();
         self.dock = Some(dock::to_state(&layout));
         // Nouvelle disposition : ses parts ne sont pas des bords tirés à la main.
         self.fit_set.clear();
     }
 
+    /// Au changement de mode : la feuille d'exposition (animation seule) quitte l'espace de travail
+    /// en storyboard et y revient, où elle était, en animation.
+    pub(crate) fn masquer_exposition(&mut self) {
+        let layout = self.dock_layout();
+        if self.mode == Mode::Animation {
+            if let Some(saved) = self.exposition_masquee.take() {
+                let back = layout.retour_animation(&saved);
+                self.set_dock_layout(back);
+            }
+        } else if layout.sans_animation_seule().is_some() {
+            self.set_dock_layout(layout);
+        }
+    }
+
+    /// Un panneau d'animation seule se refuse en storyboard (action, menu) : vrai, avec un mot dans
+    /// la barre d'état, s'il faut s'arrêter là.
+    pub(crate) fn refuse_hors_animation(&mut self, pane: Pane) -> bool {
+        if pane.animation_only() && self.mode == Mode::Storyboard {
+            self.status = format!("{} : seulement en animation (double-clic sur un plan, ou Tab).", pane.name());
+            return true;
+        }
+        false
+    }
+
     /// Affiche ou masque un panneau (menu Affichage > Panneaux).
     pub(crate) fn toggle_pane(&mut self, pane: Pane) {
+        if self.refuse_hors_animation(pane) {
+            return;
+        }
         let mut layout = self.dock_layout();
         let opening = !layout.contains(pane);
         if opening {
@@ -286,6 +320,9 @@ impl App {
 
     /// Montre `pane` : ouvert s'il ne l'était pas, son onglet devant.
     pub(crate) fn show_pane(&mut self, pane: Pane) {
+        if self.refuse_hors_animation(pane) {
+            return;
+        }
         if !self.pane_shown(pane) {
             self.toggle_pane(pane);
         } else if let Some(state) = self.dock.as_mut() {

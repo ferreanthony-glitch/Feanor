@@ -130,6 +130,7 @@ impl App {
         // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau Pelure (`pasteimage`).
         self.ctx.copy_text(format!("{}plans copiés", crate::pasteimage::MARK));
         self.panel_clipboard = Some(clip);
+        self.fx_clip_recent = false;
     }
 
     /// Copie les plans choisis, puis les retire.
@@ -882,8 +883,9 @@ impl App {
         // calque tenue (sur le plan courant) ou survolée s'éclaire (chantier 5).
         let lit = match &self.handle_drag {
             Some(d) => Some((self.cur_panel, d.handle, true)),
-            None if self.montage_drag.is_none() && self.cam_key_drag.is_none() && self.keys_drag.is_none() => resp
+            None if self.montage_drag.is_none() && self.cam_key_drag.is_none() && self.keys_drag.is_none() && self.fx_keys_drag.is_none() => resp
                 .hover_pos()
+                .filter(|p| self.montage_fx_key_at(*p, r.top(), &blocks, ppf, rows).is_none())
                 .and_then(|p| self.montage_layer_handle_at(p, r.top(), &blocks, ppf, rows))
                 .map(|(i, _, h)| (i, h, false)),
             None => None,
@@ -922,6 +924,10 @@ impl App {
             if edge_at(p).is_some() || clip_edge || resizing {
                 ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
             }
+            // Un losange de clé d'effet se prend (`fxkeys.rs`).
+            if self.montage_fx_key_at(p, r.top(), &blocks, ppf, rows).is_some() {
+                ui.ctx().set_cursor_icon(CursorIcon::Grab);
+            }
             // Poignées des pistes de calques (chantier 5) : les bords s'étirent, la barre se prend.
             match lit.filter(|_| self.handle_drag.is_none()).map(|(_, h, _)| h) {
                 Some(Handle::LayerStart { .. } | Handle::LayerEnd { .. } | Handle::Exposure { .. } | Handle::Boundary { .. }) => {
@@ -936,6 +942,11 @@ impl App {
             let origin = ui.input(|i| i.pointer.press_origin()).unwrap_or(r.center());
             // Sans recentrer la bande : le bord tiré doit rester sous le pointeur.
             self.playing = false;
+            // Un geste qui ne part pas d'un losange violet lâche le choix des clés d'effets.
+            let fx_hit = self.montage_fx_key_at(origin, r.top(), &blocks, ppf, rows);
+            if fx_hit.is_none() {
+                self.fx_key_sel.clear();
+            }
             if let Some((i, k)) = self.montage_camera_key_at(origin, r.top(), &blocks, ppf, rows) {
                 self.begin_camera_key_drag(i, k);
             } else if let Some((_, Some((id, edge)))) = self.lane_hit(origin, left, ppf, lanes_top) {
@@ -944,6 +955,12 @@ impl App {
                 // Une marque d'image se prend aussi dans le montage (passe interface).
                 self.set_panel(i);
                 self.begin_handle_drag(crate::handles::Handle::Mark(m));
+            } else if let Some((i, k, f)) = fx_hit {
+                // Une clé d'effet : elle emmène toutes les clés d'effets choisies (`fxkeys.rs`).
+                self.sel_clip = None;
+                self.key_focus = true;
+                let grab = free_frame_at(origin.x);
+                self.begin_fx_keys_drag(i, k, f, grab);
             } else if let Some(rect) = {
                 // Un choix au rectangle : depuis un espace vide des pistes de calques, ou avec Ctrl
                 // ou Maj depuis n'importe où dans les pistes (`montagekeys::KeyRect`).
@@ -1056,7 +1073,17 @@ impl App {
                 self.end_keys_drag();
             }
         }
-        if resp.dragged() && self.cam_key_drag.is_none() && self.handle_drag.is_none() && self.keys_drag.is_none() && self.key_rect.is_none() {
+        // Des clés d'effets prises à la souris (`fxkeys.rs`).
+        if self.fx_keys_drag.is_some() {
+            ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
+            if let (true, Some(p)) = (resp.dragged(), resp.interact_pointer_pos()) {
+                self.drag_fx_keys(free_frame_at(p.x));
+            }
+            if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
+                self.end_fx_keys_drag();
+            }
+        }
+        if resp.dragged() && self.cam_key_drag.is_none() && self.handle_drag.is_none() && self.keys_drag.is_none() && self.fx_keys_drag.is_none() && self.key_rect.is_none() {
             if let Some(p) = resp.interact_pointer_pos() {
                 match &mut self.montage_drag {
                     Some(MontageDrag::Scrub) => {
@@ -1108,7 +1135,17 @@ impl App {
 
         if resp.clicked() {
             if let Some(p) = resp.interact_pointer_pos() {
-                if let Some((i, k)) = self.layer_row_hit(p, r.top(), &blocks, rows) {
+                let fx_hit = self.montage_fx_key_at(p, r.top(), &blocks, ppf, rows);
+                if fx_hit.is_none() {
+                    self.fx_key_sel.clear();
+                }
+                if let Some((i, k, f)) = fx_hit {
+                    // Un losange de clé d'effet : choisi (Ctrl : ajouté ou retiré ; Maj : ceux d'entre),
+                    // la tête de lecture va dessus (`fxkeys.rs`).
+                    self.sel_clip = None;
+                    let mods = ui.input(|i| i.modifiers);
+                    self.click_fx_marker(i, k, f, mods.command, mods.shift);
+                } else if let Some((i, k)) = self.layer_row_hit(p, r.top(), &blocks, rows) {
                     // Clic dans une piste de calque : ce panneau, cette image, ce calque ; la clé
                     // cliquée est choisie (Ctrl : ajoutée ou retirée ; Maj : celles d'entre).
                     self.sel_clip = None;
@@ -1165,6 +1202,8 @@ impl App {
             if let Some(p) = resp.interact_pointer_pos() {
                 if let Some(i) = in_blocks(p).then(|| panel_at(p.x)).flatten() {
                     self.enter_animation(i);
+                } else if self.montage_fx_key_at(p, r.top(), &blocks, ppf, rows).is_some() {
+                    // Sur un losange de clé d'effet : le double-clic ne pose pas de clé de dessin.
                 } else if let Some((i, k)) = self.layer_row_hit(p, r.top(), &blocks, rows).filter(|_| p.y < r.top() + rows.background_top()) {
                     // Double-clic sur la piste d'un calque : une nouvelle clé à cette image, copie du
                     // dessin comme F5.
@@ -1195,6 +1234,16 @@ impl App {
                         self.select_panel(i);
                         MenuTarget::Panel(i)
                     })
+                } else if let Some((i, k, f)) = self.montage_fx_key_at(p, r.top(), &blocks, ppf, rows) {
+                    // Un losange de clé d'effet : le menu des clés d'effets choisies (celui-ci seul s'il
+                    // n'était pas choisi).
+                    self.sel_clip = None;
+                    let panels = &self.doc.panels;
+                    let all_chosen = panels.get(i).and_then(|pn| pn.layers.get(k).map(|l| crate::fxkeys::refs_on(pn.id, l.id, &l.fx, f))).is_some_and(|m| m.iter().all(|c| self.fx_key_sel.contains(c)));
+                    if !all_chosen {
+                        self.click_fx_marker(i, k, f, false, false);
+                    }
+                    Some(MenuTarget::FxKey)
                 } else if let Some((i, k)) = self.layer_row_hit(p, r.top(), &blocks, rows) {
                     // Une piste de calque : ce plan, cette image, ce calque, et son menu. Une clé
                     // qui n'était pas choisie l'est seule.
@@ -1283,6 +1332,7 @@ impl App {
                     ui.menu_button(format!("Calque « {name} »"), |ui| self.montage_layer_menu(ui, k));
                 }
                 MenuTarget::Camera => self.grid_menu_ui(ui, crate::handles::GridMenu::Camera),
+                MenuTarget::FxKey => self.fx_key_menu(ui),
                 MenuTarget::Sequence => {
                     self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
                     self.action_item(ui, "Nouveau plan", "panneau.nouveau");

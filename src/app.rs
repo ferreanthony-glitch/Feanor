@@ -353,6 +353,14 @@ pub struct App {
     pub(crate) fx_auto_key: bool,
     pub(crate) fx_keys_shown: bool,
     pub(crate) fx_selected: usize,
+    /// Clés d'effets choisies dans le montage ou la timeline (`fxkeys.rs`) et la dernière cliquée
+    /// (départ des Maj + clic), clés copiées (`fx_clip_recent` : la dernière copie est la leur,
+    /// Ctrl+V les vise), clés prises à la souris.
+    pub(crate) fx_key_sel: Vec<crate::fxkeys::FxKeyRef>,
+    pub(crate) fx_key_anchor: Option<crate::fxkeys::FxKeyRef>,
+    pub(crate) fx_key_clipboard: Option<crate::fxkeys::FxClip>,
+    pub(crate) fx_clip_recent: bool,
+    pub(crate) fx_keys_drag: Option<crate::fxkeys::FxKeysDrag>,
     /// Import vidéo en cours (13k, `videoui.rs`).
     pub(crate) video_import: Option<crate::videoui::VideoImport>,
     /// Propagation d'une peinture sur la vidéo, façon EbSynth (`propagerui.rs`).
@@ -503,6 +511,9 @@ pub struct App {
     /// son onglet).
     pub(crate) detached: Vec<crate::dock::DetachedPanel>,
     pub(crate) detach_request: Option<crate::dock::Pane>,
+    /// La disposition d'animation dont la feuille d'exposition a été retirée en passant au
+    /// storyboard (elle n'existe qu'en animation) ; elle revient à sa place au retour.
+    pub(crate) exposition_masquee: Option<crate::dock::DockLayout>,
     /// Nom en cours de saisie pour enregistrer l'espace de travail.
     pub(crate) workspace_name: Option<String>,
     /// Copie de secours de cette séance, et séances interrompues à proposer au démarrage.
@@ -745,6 +756,11 @@ impl App {
             fx_auto_key: false,
             fx_keys_shown: true,
             fx_selected: 0,
+            fx_key_sel: Vec::new(),
+            fx_key_anchor: None,
+            fx_key_clipboard: None,
+            fx_clip_recent: false,
+            fx_keys_drag: None,
             video_import: None,
             propagation: crate::propagerui::Propagation::new(cc.wgpu_render_state.as_ref()),
             sb_window: None,
@@ -828,6 +844,7 @@ impl App {
             dock: None,
             detached: Vec::new(),
             detach_request: None,
+            exposition_masquee: None,
             workspace_name: None,
             settings,
             // Les séances interrompues d'abord (avant d'ouvrir la nôtre).
@@ -1241,6 +1258,8 @@ impl App {
             Mode::Storyboard => "Storyboard : montage des plans.".into(),
             Mode::Animation => format!("Animation de {} (Tab : retour au storyboard).", crate::storyboard::panel_long_title(&self.doc, self.cur_panel)),
         };
+        // La feuille d'exposition n'existe qu'en animation.
+        self.masquer_exposition();
     }
 
     pub(crate) fn select_layer(&mut self, layer: usize) {
@@ -1880,6 +1899,8 @@ impl App {
         self.follow_frame = true;
         self.vsel = None;
         self.commit_structure(snap);
+        // Le nouveau dessin, seul, devient le choix.
+        self.select_new_key(self.cur_panel, li, at, at + n);
     }
 
     pub(crate) fn exposure_plus(&mut self) {
@@ -2211,6 +2232,9 @@ impl App {
         self.clamp_nav();
         self.guides.current = self.guides.current.min(self.doc.guides.len().saturating_sub(1));
         self.vsel = None;
+        // (Les clés d'effets choisies étaient celles d'avant l'annulation.)
+        self.fx_key_sel.clear();
+        self.fx_key_anchor = None;
         self.length_origin = None;
         self.renderer.invalidate_all();
         self.modified = true;
@@ -2812,6 +2836,19 @@ impl App {
             "fichier.importer_modele3d" => self.import_model3d(),
             "edition.annuler" => self.undo(),
             "edition.retablir" => self.redo(),
+            // Des clés d'effets choisies (un losange violet du montage ou de la timeline) passent
+            // avant les clés de dessins : copier, couper et supprimer les visent, coller aussi
+            // tant que c'est la dernière chose copiée (`fxkeys.rs`).
+            "edition.copier" if self.fx_keys_have_focus() => self.copy_fx_keys(),
+            "edition.couper" if self.fx_keys_have_focus() => {
+                self.copy_fx_keys();
+                self.delete_fx_keys();
+            }
+            "edition.coller" if self.fx_clip_recent && self.fx_key_clipboard.is_some() && (self.key_focus || self.images_focus) => self.paste_fx_keys(),
+            "edition.supprimer" if self.fx_keys_have_focus() => self.delete_fx_keys(),
+            "fx.cles_copier" => self.copy_fx_keys(),
+            "fx.cles_coller" => self.paste_fx_keys(),
+            "fx.cles_supprimer" => self.delete_fx_keys(),
             // Après un clic sur la piste d'un calque dans le montage : les clés choisies, sinon
             // celle de l'image courante du calque courant (`montagekeys`).
             "edition.copier" if self.key_focus => self.copy_keys(),

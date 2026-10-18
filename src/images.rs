@@ -544,6 +544,16 @@ impl App {
         self.follow_frame = true;
         self.frame_sel = None;
         self.done(snap, format!("{n} image{} insérée{}.", s(n), s(n)));
+        // Les images insérées, seules, deviennent le choix (cadrées dans la timeline sur les calques
+        // visés), comme une clé ajoutée.
+        if self.mode == crate::app::Mode::Animation {
+            self.frame_sel = Some((at, at + n));
+            self.key_sel.clear();
+            self.fx_key_sel.clear();
+            self.images_focus = true;
+            self.panel_focus = false;
+            self.key_focus = false;
+        }
     }
 
     /// Copie les images visées des calques choisis.
@@ -560,6 +570,7 @@ impl App {
             .collect();
         let (n, k) = (b - a, rows.len());
         self.image_clipboard = Some(ImageClip { rows, cels, roles: role_rows });
+        self.fx_clip_recent = false;
         // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau Pelure (`pasteimage`).
         self.ctx.copy_text(format!("{}images copiées", crate::pasteimage::MARK));
         self.status = format!("{n} image{} de {k} calque{} copiée{}.", s(n), s(k), s(n));

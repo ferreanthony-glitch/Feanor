@@ -70,6 +70,9 @@ impl App {
         }
         self.record_step();
         self.layers_mut()[li].fx[i].set_key(f, values);
+        // La clé qu'on vient de créer, seule, devient le choix (elle se voit, se déplace, se copie
+        // et se supprime dans le montage et la timeline).
+        self.select_new_fx_key(li, i, f);
         self.status = format!("Clé de « {name} » à l'image {}.", self.frame_label(f));
     }
 
@@ -144,13 +147,15 @@ impl App {
             }
             if ui.add_enabled(any, egui::Button::new("Tout supprimer")).clicked() {
                 self.record_step();
+                self.fx_key_sel.clear();
                 self.layers_mut()[li].fx.clear();
             }
         });
         let key = self.raccourci("fx.cle_auto");
         let resp = ui.checkbox(&mut self.fx_auto_key, "Création automatique des clés");
         crate::bulles::bulle(resp, "Création automatique des clés", "Une clé est posée à l'image courante à chaque changement d'un paramètre.", &key);
-        ui.checkbox(&mut self.fx_keys_shown, "Clés d'effets dans la timeline");
+        ui.checkbox(&mut self.fx_keys_shown, "Clés d'effets dans la timeline et le montage")
+            .on_hover_text("Un losange violet par image clée, en haut de la piste du calque : clic pour le choisir, glisser pour le déplacer, Ctrl+C / Ctrl+V / Suppr.");
         ui.separator();
         let n = self.layers()[li].fx.len();
         if n == 0 {
@@ -233,6 +238,8 @@ impl App {
         }
         if let Some((a, b)) = swap {
             self.record_step();
+            // (Les clés choisies se repèrent par le rang de leur effet : le choix est lâché.)
+            self.fx_key_sel.clear();
             self.layers_mut()[li].fx.swap(a, b);
             if self.fx_selected == a {
                 self.fx_selected = b;
@@ -240,6 +247,7 @@ impl App {
         }
         if let Some(i) = remove {
             self.record_step();
+            self.fx_key_sel.clear();
             self.layers_mut()[li].fx.remove(i);
             self.fx_selected = self.fx_selected.min(self.layers()[li].fx.len().saturating_sub(1));
         }

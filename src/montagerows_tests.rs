@@ -115,6 +115,38 @@ fn keys_are_chosen_one_or_several_at_a_time() {
 }
 
 #[test]
+fn a_new_key_becomes_the_only_choice() {
+    use crate::handles::{key_at, key_start_taken};
+    use crate::montagekeys::{choice_for_new_key, KeyRef};
+    use crate::handles::runs;
+    // Anthony : le bloc « Dessin » d'un plan de 10 images ; F5 à l'image 4 coupe l'exposition.
+    let mut l = Layer::new("Dessin", LayerKind::Vector);
+    l.frames = vec![Some(1); 10];
+    assert!(!key_start_taken(&l, 4));
+    let end = key_at(&mut l, 4, 2, 10).expect("la clé est posée");
+    // La nouvelle clé commence à l'image 4 et finit avec l'ancienne exposition.
+    assert_eq!(runs(&l), vec![(0, 4, Some(1)), (4, 10, Some(2))]);
+    assert_eq!(end, 10);
+    // Dans le montage (storyboard) : elle seule est choisie, dans les pistes, et elle a la main.
+    let c = choice_for_new_key(false, 7, 3, 4, end);
+    assert_eq!(c.keys, vec![KeyRef { panel: 7, layer: 3, start: 4 }], "ni l'ancienne clé (début 0) ni le bloc entier");
+    assert!(c.key_focus && !c.images_focus);
+    assert_eq!(c.frames, None, "pas d'images cadrées dans le montage");
+    // Dans la timeline (animation) : ses images sont cadrées, la timeline a la main.
+    let c = choice_for_new_key(true, 7, 3, 4, end);
+    assert_eq!(c.frames, Some((4, 10)));
+    assert!(c.images_focus && !c.key_focus);
+    assert_eq!(c.keys, vec![KeyRef { panel: 7, layer: 3, start: 4 }]);
+    // Un nouveau dessin d'une image (Nouveau dessin, N) : une seule image cadrée.
+    assert_eq!(choice_for_new_key(true, 1, 1, 12, 12).frames, Some((12, 13)), "au moins une image");
+    // Un dessin posé sur une image vide, tenu jusqu'au suivant.
+    let mut gap = Layer::new("Dessin", LayerKind::Vector);
+    gap.frames = vec![Some(1), None, None, None, Some(5)];
+    let end = key_at(&mut gap, 2, 9, 5).unwrap();
+    assert_eq!((end, choice_for_new_key(true, 1, 1, 2, end).frames), (4, Some((2, 4))));
+}
+
+#[test]
 fn keys_pasted_from_several_layers_find_or_create_their_layers() {
     use crate::montagekeys::ensure_tracks;
     use crate::montagerows::track_of;
