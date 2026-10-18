@@ -425,11 +425,23 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   pour les masquer). Une case à petit coin regroupe plusieurs outils : clic maintenu pour les
   voir et en prendre un, la case montre ensuite le dernier pris (Sélection et Sélection par
   couleur en haut ; Rectangle, Ligne, Ellipse et Polyligne dans une seule case). Couleur : avant-plan et arrière-plan, roue, curseurs, couleurs récentes et
-  nuanciers (voir **Couleur** plus haut). Réglages du pinceau : une
-  grille de réglages, chacun avec l'aperçu de son trait et sa taille. Panneau **Pinceaux** (onglet
-  à côté de Couleur) : les mêmes réglages en liste, avec un grand aperçu du trait, la taille, et
-  « texture » / « importé » ; ceux de la gomme quand la gomme est choisie ; l'icône d'import pour
-  les pinceaux Toon Boom. Les aperçus montrent le trait dans la couleur courante, sur le papier.
+  nuanciers (voir **Couleur** plus haut). Panneau **Pinceaux** (onglet à côté de Couleur) :
+  en haut, toujours visible, la **taille** de l'outil courant (pinceau, crayon ou gomme) en grand
+  curseur et en champ px, la même valeur que les touches ^ et $ ; dessous deux onglets.
+  **Pinceaux** : une recherche par nom, une bascule liste / vignettes (liste : pastille de la
+  pointe avec sa taille, aperçu du trait, nom), et les réglages rangés en **dossiers repliables
+  avec leur nombre** : Crayons, Encres et feutres, Peinture, Craie et fusain, Gommes (avec la
+  gomme), Mes brosses, puis un dossier par fichier importé (les importés démarrent repliés). Clic :
+  choisir ; clic droit : renommer, dupliquer, remplacer, supprimer. En bas, trois icônes :
+  importer des pinceaux, nouvelle brosse (garde le réglage courant dans Mes brosses), supprimer la
+  brosse choisie (celles de Pelure restent). **Réglages du pinceau** : à gauche les catégories
+  (Forme de la pointe, Taille et appui, Dispersion, Grain et papier, Couleur et mélange, Lissage,
+  Toucher du stylet), dont quatre ont une case qui les allume ou les éteint sans perdre leurs
+  valeurs ; à droite les réglages de la catégorie ; en bas l'aperçu du trait courant. Panneau
+  étroit : les catégories passent au-dessus, en liste déroulante. Le panneau Réglages de l'outil
+  n'en garde qu'un résumé (nom, taille, opacité, deux boutons qui ouvrent le panneau Pinceaux).
+  L'onglet, liste ou vignettes, la catégorie et les dossiers ouverts sont retenus (`reglages.toml`,
+  clé `panneau_pinceaux`). Les aperçus montrent le trait dans la couleur courante, sur le papier.
   L'interface est sombre et dense (gris et bleu d'accent repris de Pelure Studio, police Segoe
   UI). Les pinceaux texturés
   (pointe en image, grain du papier, pinceaux importés) marchent aussi sur un calque vectoriel :
@@ -910,7 +922,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `storyboard.rs` | Bande de montage, vue vignettes, fiche du panneau |
 | `montagerows.rs` | Pistes du montage : caméra, calques, fond de scène, noms des pistes |
 | `montagehead.rs` | Colonne de gauche du montage : largeur étirable, réglages des calques par rangée, menu de tout ce qui touche au calque |
-| `toolbars.rs`, `colorui.rs`, `layersui.rs`, `brushui.rs` | Barres de commandes et d'outils, panneau Couleur, panneau Calques, grille des pinceaux |
+| `toolbars.rs`, `colorui.rs`, `layersui.rs`, `brushui.rs` | Barres de commandes et d'outils, panneau Couleur, panneau Calques, case et menu d'un pinceau, import |
+| `pinceaux.rs`, `pinceauxui.rs` | Panneau Pinceaux : dossiers, recherche, état retenu, catégories des réglages (logique) ; taille, onglets, liste et réglages (affichage) |
 | `couleur.rs` | Couleurs : conversions RVB, TSV, TSL, Lab, code hexadécimal, couleurs récentes, réglages retenus |
 | `roue.rs` | Roue chromatique : géométrie (anneau, carré, triangle) et maillages colorés |
 | `nuancier.rs`, `nuancierui.rs` | Nuanciers personnels : modèle, formats GIMP (.gpl) et Photoshop (.aco) ; leur place dans le panneau Couleur |

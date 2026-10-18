@@ -1,4 +1,4 @@
-//! Panneau des connexions d'une brosse (moteur de dessin, étape 2) : pour la taille, l'opacité,
+//! Réglages d'une brosse en sections (panneau Pinceaux, onglet Réglages du pinceau) : forme de la pointe, dispersion, peinture humide, et le panneau des connexions d'une brosse (moteur de dessin, étape 2) : pour la taille, l'opacité,
 //! l'angle et la rondeur, la source suivie, « Inverser », la réponse minimale et la courbe de
 //! réponse, que l'on modifie à la souris (glisser un point ; double-clic : ajouter ; clic droit :
 //! retirer).
@@ -13,93 +13,96 @@ use crate::theme;
 const CURVE_W: f32 = 132.0;
 const CURVE_H: f32 = 84.0;
 
-/// La section « Forme et dispersion » (moteur de dessin, étape 6) : rondeur et angle de la
-/// pointe, hasards de taille et d'angle, dispersion des empreintes, nombre par pas, retournements
-/// d'une pointe en image.
+/// Forme de la pointe (moteur de dessin, étape 6) : rondeur et angle de la pointe, retournements
+/// d'une pointe en image. Le contenu de la catégorie « Forme de la pointe » du panneau Pinceaux.
 pub(crate) fn shape_ui(ui: &mut egui::Ui, s: &mut BrushSettings) {
-    let used = s.roundness < 1.0 || s.angle != 0.0 || s.angle_jitter > 0.0 || s.size_jitter > 0.0 || s.scatter > 0.0 || s.scatter_along > 0.0 || s.count > 1 || s.flip_x || s.flip_y;
-    egui::CollapsingHeader::new("Forme et dispersion").id_salt("forme_brosse").default_open(used).show(ui, |ui| {
-        let resp = ui.add(egui::Slider::new(&mut s.roundness, 0.05..=1.0).text("Rondeur"));
-        bulle(resp, "Rondeur", "Pointe aplatie (petit) ou ronde (1).", "");
-        let resp = ui.add(egui::Slider::new(&mut s.angle, -180.0..=180.0).suffix("°").text("Angle"));
-        bulle(resp, "Angle", "Angle de la pointe aplatie ou en image.", "");
-        let resp = ui.add(egui::Slider::new(&mut s.angle_jitter, 0.0..=360.0).suffix("°").text("Angle au hasard"));
-        bulle(resp, "Angle au hasard", "Chaque empreinte tourne au hasard dans cet écart.", "");
-        let resp = ui.add(egui::Slider::new(&mut s.size_jitter, 0.0..=1.0).text("Taille au hasard"));
-        bulle(resp, "Taille au hasard", "Chaque empreinte grandit ou rapetisse au hasard, jusqu'à cette part de la taille.", "");
-        let resp = ui.add(egui::Slider::new(&mut s.scatter, 0.0..=4.0).text("Dispersion"));
-        bulle(resp, "Dispersion", "Chaque empreinte s'écarte au hasard en travers du trait, jusqu'à ce nombre de diamètres.", "");
-        let resp = ui.add(egui::Slider::new(&mut s.scatter_along, 0.0..=4.0).text("Dispersion le long"));
-        bulle(resp, "Dispersion le long", "Chaque empreinte s'écarte au hasard le long du trait.", "");
-        let resp = ui.add(egui::Slider::new(&mut s.count, 1..=16).text("Nombre"));
-        bulle(resp, "Nombre", "Empreintes posées à chaque pas, chacune dispersée à part.", "");
-        if s.tip.is_some() {
-            ui.horizontal(|ui| {
-                ui.checkbox(&mut s.flip_x, "Retourner au hasard ↔").on_hover_text("La pointe en image est retournée horizontalement une empreinte sur deux, au hasard.");
-                ui.checkbox(&mut s.flip_y, "↕").on_hover_text("La pointe en image est retournée verticalement, au hasard.");
-            });
-        }
-    });
+    let resp = ui.add(egui::Slider::new(&mut s.roundness, 0.05..=1.0).text("Rondeur"));
+    bulle(resp, "Rondeur", "Pointe aplatie (petit) ou ronde (1).", "");
+    let resp = ui.add(egui::Slider::new(&mut s.angle, -180.0..=180.0).suffix("°").text("Angle"));
+    bulle(resp, "Angle", "Angle de la pointe aplatie ou en image.", "");
+    if s.tip.is_some() {
+        ui.horizontal_wrapped(|ui| {
+            ui.checkbox(&mut s.flip_x, "Retourner au hasard ↔").on_hover_text("La pointe en image est retournée horizontalement une empreinte sur deux, au hasard.");
+            ui.checkbox(&mut s.flip_y, "↕").on_hover_text("La pointe en image est retournée verticalement, au hasard.");
+        });
+    }
 }
 
-/// La section « Peinture humide » (moteur de dessin, étape 11) : mélange avec la couleur déjà
-/// posée, et charge de la brosse.
+/// Dispersion (moteur de dessin, étape 6) : hasards de taille et d'angle, dispersion des
+/// empreintes, nombre par pas. Le contenu de la catégorie « Dispersion ».
+pub(crate) fn scatter_ui(ui: &mut egui::Ui, s: &mut BrushSettings) {
+    let resp = ui.add(egui::Slider::new(&mut s.angle_jitter, 0.0..=360.0).suffix("°").text("Angle au hasard"));
+    bulle(resp, "Angle au hasard", "Chaque empreinte tourne au hasard dans cet écart.", "");
+    let resp = ui.add(egui::Slider::new(&mut s.size_jitter, 0.0..=1.0).text("Taille au hasard"));
+    bulle(resp, "Taille au hasard", "Chaque empreinte grandit ou rapetisse au hasard, jusqu'à cette part de la taille.", "");
+    let resp = ui.add(egui::Slider::new(&mut s.scatter, 0.0..=4.0).text("Dispersion"));
+    bulle(resp, "Dispersion", "Chaque empreinte s'écarte au hasard en travers du trait, jusqu'à ce nombre de diamètres.", "");
+    let resp = ui.add(egui::Slider::new(&mut s.scatter_along, 0.0..=4.0).text("Dispersion le long"));
+    bulle(resp, "Dispersion le long", "Chaque empreinte s'écarte au hasard le long du trait.", "");
+    let resp = ui.add(egui::Slider::new(&mut s.count, 1..=16).text("Nombre"));
+    bulle(resp, "Nombre", "Empreintes posées à chaque pas, chacune dispersée à part.", "");
+}
+
+/// Peinture humide (moteur de dessin, étape 11) : mélange avec la couleur déjà posée, et charge
+/// de la brosse. Une partie de la catégorie « Couleur et mélange ».
 pub(crate) fn wet_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
-    let used = s.mix > 0.0 || s.charge < 1.0;
-    egui::CollapsingHeader::new("Peinture humide").id_salt("humide_brosse").default_open(used).show(ui, |ui| {
-        let resp = ui.add(egui::Slider::new(&mut s.mix, 0.0..=1.0).text("Mélange"));
-        bulle(resp, "Mélange", "La brosse prend la couleur déjà posée sous elle, la mêle à la sienne et l'entraîne (0 : peinture qui couvre, comme avant).", "");
-        let resp = ui.add(egui::Slider::new(&mut s.charge, 0.0..=1.0).text("Charge"));
-        bulle(resp, "Charge", "La peinture dans la brosse : 1, elle ne s'épuise pas ; moins, elle s'épuise le long du trait, puis la brosse ne fait plus qu'étaler.", "");
-        ui.label(
-            egui::RichText::new(if vector {
-                "Calque vectoriel : la peinture humide ne vaut que pendant le tracé ; elle est faite pour un calque bitmap."
-            } else {
-                "Modèle de Pelure (la formule de TVPaint n'est pas publiée) : à comparer avec tes outils de peinture."
-            })
+    let resp = ui.add(egui::Slider::new(&mut s.mix, 0.0..=1.0).text("Mélange"));
+    bulle(resp, "Mélange", "La brosse prend la couleur déjà posée sous elle, la mêle à la sienne et l'entraîne (0 : peinture qui couvre, comme avant).", "");
+    let resp = ui.add(egui::Slider::new(&mut s.charge, 0.0..=1.0).text("Charge"));
+    bulle(resp, "Charge", "La peinture dans la brosse : 1, elle ne s'épuise pas ; moins, elle s'épuise le long du trait, puis la brosse ne fait plus qu'étaler.", "");
+    ui.label(
+        egui::RichText::new(if vector {
+            "Calque vectoriel : la peinture humide ne vaut que pendant le tracé ; elle est faite pour un calque bitmap."
+        } else {
+            "Modèle de Pelure (la formule de TVPaint n'est pas publiée) : à comparer avec tes outils de peinture."
+        })
+        .small()
+        .weak(),
+    );
+}
+
+/// Les connexions d'une brosse. `color` faux : la taille, l'opacité, l'angle et la rondeur (catégorie
+/// « Taille et appui ») ; vrai : la couleur A→B (catégorie « Couleur et mélange »). `vector` :
+/// calque vectoriel, où le trait gardé ne retient que la taille.
+pub(crate) fn dynamics_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool, color: bool) {
+    ui.label(
+        egui::RichText::new("Chaque réglage peut suivre l'appui, la vitesse, la direction du trait, un fondu ou le hasard, par une courbe (comme les connexions de TVPaint).")
             .small()
             .weak(),
-        );
-    });
-}
-
-/// La section « Connexions » des réglages d'une brosse. `vector` : calque vectoriel, où le trait
-/// gardé ne retient que la taille.
-pub(crate) fn dynamics_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
-    let n = [s.dynamics.size, s.dynamics.opacity, s.dynamics.angle, s.dynamics.roundness, s.dynamics.color].iter().filter(|c| c.active()).count();
-    let title = if n > 0 { format!("Connexions ({n})") } else { "Connexions".to_string() };
-    egui::CollapsingHeader::new(title).id_salt("connexions_brosse").default_open(n > 0).show(ui, |ui| {
+    );
+    let (legacy_size, legacy_opacity, min_size, min_opacity) = (s.pressure_size, s.pressure_opacity, s.min_size, s.min_opacity);
+    let d = &mut s.dynamics;
+    let (uses_speed, uses_fade);
+    if color {
+        connection_row(ui, "Couleur A→B", "couleur", &mut d.color, None);
+        if d.color.active() {
+            note(ui, "Couleur A→B : la couleur d'arrière-plan (B) se mêle à celle d'avant-plan (A) selon la source.");
+        }
+        (uses_speed, uses_fade) = (d.color.source == Source::Speed, d.color.source == Source::Fade);
+    } else {
+        connection_row(ui, "Taille", "taille", &mut d.size, legacy_size.then_some(min_size));
+        connection_row(ui, "Opacité", "opacite", &mut d.opacity, legacy_opacity.then_some(min_opacity));
+        connection_row(ui, "Angle", "angle", &mut d.angle, None);
+        connection_row(ui, "Rondeur", "rondeur", &mut d.roundness, None);
+        let four = [d.size, d.opacity, d.angle, d.roundness];
+        (uses_speed, uses_fade) = (four.iter().any(|c| c.source == Source::Speed), four.iter().any(|c| c.source == Source::Fade));
+    }
+    if uses_speed {
+        let resp = ui.add(egui::Slider::new(&mut d.speed_max, 100.0..=8000.0).logarithmic(true).suffix(" px/s").text("Vitesse max"));
+        bulle(resp, "Vitesse max", "Vitesse du trait à laquelle la source « Vitesse » est au plus haut.", "");
+    }
+    if uses_fade {
+        let resp = ui.add(egui::Slider::new(&mut d.fade_length, 10.0..=3000.0).logarithmic(true).suffix(" px").text("Longueur du fondu"));
+        bulle(resp, "Longueur du fondu", "Longueur tracée au bout de laquelle le fondu est complet.", "");
+    }
+    let n = [d.size, d.opacity, d.angle, d.roundness, d.color].iter().filter(|c| c.active()).count();
+    if vector && n > 0 {
         ui.label(
-            egui::RichText::new("Chaque réglage peut suivre l'appui, la vitesse, la direction du trait, un fondu ou le hasard, par une courbe (comme les connexions de TVPaint).")
+            egui::RichText::new("Calque vectoriel : le trait gardé retient la taille ; l'opacité, l'angle et la rondeur connectés ne valent que pour un calque bitmap.")
                 .small()
                 .weak(),
         );
-        let legacy_size = s.pressure_size;
-        let legacy_opacity = s.pressure_opacity;
-        connection_row(ui, "Taille", "taille", &mut s.dynamics.size, legacy_size.then_some(s.min_size));
-        connection_row(ui, "Opacité", "opacite", &mut s.dynamics.opacity, legacy_opacity.then_some(s.min_opacity));
-        connection_row(ui, "Angle", "angle", &mut s.dynamics.angle, None);
-        connection_row(ui, "Rondeur", "rondeur", &mut s.dynamics.roundness, None);
-        connection_row(ui, "Couleur A→B", "couleur", &mut s.dynamics.color, None);
-        if s.dynamics.color.active() {
-            note(ui, "Couleur A→B : la couleur d'arrière-plan (B) se mêle à celle d'avant-plan (A) selon la source.");
-        }
-        if s.dynamics.uses(Source::Speed) {
-            let resp = ui.add(egui::Slider::new(&mut s.dynamics.speed_max, 100.0..=8000.0).logarithmic(true).suffix(" px/s").text("Vitesse max"));
-            bulle(resp, "Vitesse max", "Vitesse du trait à laquelle la source « Vitesse » est au plus haut.", "");
-        }
-        if s.dynamics.uses(Source::Fade) {
-            let resp = ui.add(egui::Slider::new(&mut s.dynamics.fade_length, 10.0..=3000.0).logarithmic(true).suffix(" px").text("Longueur du fondu"));
-            bulle(resp, "Longueur du fondu", "Longueur tracée au bout de laquelle le fondu est complet.", "");
-        }
-        if vector && n > 0 {
-            ui.label(
-                egui::RichText::new("Calque vectoriel : le trait gardé retient la taille ; l'opacité, l'angle et la rondeur connectés ne valent que pour un calque bitmap.")
-                    .small()
-                    .weak(),
-            );
-        }
-    });
+    }
 }
 
 /// Une ligne : le réglage, sa source ; puis, si elle est choisie, « Inverser », la réponse

@@ -66,8 +66,9 @@ impl egui_dock::TabViewer for Panes<'_> {
     fn scroll_bars(&self, tab: &Pane) -> [bool; 2] {
         match tab {
             // Calques : l'en-tête (mode, opacité, commandes) reste en haut, seule la liste défile
-            // (`layers_panel`). L'historique défile seul, pour rester sur la dernière étape.
-            Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::XSheet | Pane::Layers | Pane::History => [false, false],
+            // (`layers_panel`). L'historique défile seul, pour rester sur la dernière étape. Pinceaux : la
+            // taille et les onglets restent en haut, les boutons en bas, la liste défile entre les deux.
+            Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::XSheet | Pane::Layers | Pane::History | Pane::Brushes => [false, false],
             _ => [false, true],
         }
     }
