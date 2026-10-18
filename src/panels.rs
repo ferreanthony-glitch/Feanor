@@ -1,7 +1,6 @@
 use eframe::egui::{self, vec2, Align, Align2, Color32, Layout, RichText};
 
 use crate::app::{App, Mode, Tool};
-use crate::brush::BrushSettings;
 use crate::document::{Document, LayerKind};
 
 /// Gestes à la souris et au stylet (hors fichier de raccourcis).
@@ -43,118 +42,6 @@ fn note(ui: &mut egui::Ui, text: &str) {
     ui.label(RichText::new(text).small().weak());
 }
 
-/// Réglages d'un pinceau : chaque curseur avec, au bout, l'interrupteur qui le concerne (12d) —
-/// la pression du stylet à côté de la taille et de l'opacité, les pixels nets à côté de la dureté.
-fn brush_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
-    use crate::bulles::{bulle, interrupteur};
-    use egui_phosphor::regular as ph;
-    ui.horizontal(|ui| {
-        ui.add(egui::Slider::new(&mut s.size, 0.5..=400.0).logarithmic(true).text("Taille"));
-        interrupteur(ui, &mut s.pressure_size, ph::PEN_NIB, "Taille selon la pression", "Plus on appuie avec le stylet, plus le trait est gros.", "");
-    });
-    if s.pressure_size {
-        let resp = ui.add(egui::Slider::new(&mut s.min_size, 0.0..=1.0).text("Taille mini"));
-        bulle(resp, "Taille mini", "Taille quand on effleure, en part de la taille.", "");
-    }
-    ui.horizontal(|ui| {
-        ui.add(egui::Slider::new(&mut s.opacity, 0.0..=1.0).text("Opacité"));
-        interrupteur(ui, &mut s.pressure_opacity, ph::PEN_NIB, "Opacité selon la pression", "Plus on appuie avec le stylet, plus le trait couvre.", "");
-    });
-    if s.pressure_opacity {
-        let resp = ui.add(egui::Slider::new(&mut s.min_opacity, 0.0..=1.0).text("Opacité mini"));
-        bulle(resp, "Opacité mini", "Opacité quand on effleure, en part de l'opacité.", "");
-    }
-    ui.horizontal(|ui| {
-        let resp = ui.add(egui::Slider::new(&mut s.power, 0.01..=1.0).text("Débit"));
-        bulle(resp, "Débit", "Peinture déposée à chaque empreinte (le « Power » de TVPaint) ; l'opacité en reste le plafond.", "");
-        interrupteur(ui, &mut s.build_up, ph::STACK, "Accumuler", "Repasser dans le même trait fonce, jusqu'à l'opacité. Éteint : le trait reste uniforme.", "");
-    });
-    ui.horizontal(|ui| {
-        if (!s.aliased || vector) && s.profile.is_none() {
-            ui.add(egui::Slider::new(&mut s.hardness, 0.0..=1.0).text("Dureté"));
-        }
-        if !vector {
-            interrupteur(ui, &mut s.aliased, ph::CHECKERBOARD, "Pixels nets", "Sans anticrénelage : un bord net, pixel par pixel (sans dureté).", "");
-        }
-        // Profil de la pointe (moteur de dessin, étape 3) : il part de la dureté réglée.
-        let mut on = s.profile.is_some();
-        if interrupteur(ui, &mut on, ph::CHART_LINE, "Profil de la pointe", "Régler en courbe la couverture de la pointe, du centre au bord (remplace la dureté).", "").clicked() {
-            s.profile = on.then(|| BrushSettings::profile_from_hardness(s.hardness));
-        }
-    });
-    if let Some(profile) = &mut s.profile {
-        ui.horizontal(|ui| {
-            let resp = crate::dynui::curve_editor(ui, profile, "profil");
-            bulle(resp, "Profil de la pointe", "Couverture du centre (à gauche) au bord (à droite). Glisser un point ; double-clic : ajouter ; clic droit : retirer.", "");
-            ui.vertical(|ui| {
-                let presets: [(&str, &str, &[[f32; 2]]); 3] = [
-                    ("Dur", "Plein jusqu'au bord.", &[[0.0, 1.0], [0.9, 1.0], [1.0, 0.0]]),
-                    ("Doux", "Plein au centre, chute douce jusqu'au bord.", &[[0.0, 1.0], [0.2, 0.95], [0.5, 0.5], [0.8, 0.05], [1.0, 0.0]]),
-                    ("Diffus", "Peu de cœur, un large halo.", &[[0.0, 1.0], [0.15, 0.6], [0.4, 0.25], [0.7, 0.07], [1.0, 0.0]]),
-                ];
-                for (name, help, pts) in presets {
-                    if ui.small_button(name).on_hover_text(help).clicked() {
-                        *profile = crate::brush::Curve::from_points(pts);
-                    }
-                }
-            });
-        });
-    }
-    ui.add(egui::Slider::new(&mut s.spacing, 0.02..=1.0).text("Espacement"));
-    // Lissage (moteur de dessin, étape 5) : son type, et le réglage qui va avec.
-    ui.horizontal(|ui| {
-        egui::ComboBox::from_id_salt("lissage_type").selected_text(s.smooth_kind.label()).width(crate::dockui::fit_w(ui, 120.0)).show_ui(ui, |ui| {
-            for k in crate::brush::SmoothKind::ALL {
-                ui.selectable_value(&mut s.smooth_kind, k, k.label()).on_hover_text(k.help());
-            }
-        });
-        match s.smooth_kind {
-            crate::brush::SmoothKind::Follow => {
-                ui.add(egui::Slider::new(&mut s.smoothing, 0.0..=0.95).text("Lissage"));
-            }
-            crate::brush::SmoothKind::PulledString => {
-                ui.add(egui::Slider::new(&mut s.smooth_px, 0.0..=80.0).suffix(" px").text("Corde"));
-            }
-            crate::brush::SmoothKind::AveragePoints => {
-                ui.add(egui::Slider::new(&mut s.smooth_points, 1..=40).text("Points"));
-            }
-            crate::brush::SmoothKind::AverageDistance => {
-                ui.add(egui::Slider::new(&mut s.smooth_px, 0.0..=80.0).suffix(" px").text("Distance"));
-            }
-        }
-    })
-    .response
-    .on_hover_text(s.smooth_kind.help());
-    // Options du lissage (sensation des brosses, §2.3), quand il a un effet.
-    let smoothing_on = match s.smooth_kind {
-        crate::brush::SmoothKind::Follow => s.smoothing > 0.0,
-        crate::brush::SmoothKind::PulledString | crate::brush::SmoothKind::AverageDistance => s.smooth_px > 0.0,
-        crate::brush::SmoothKind::AveragePoints => s.smooth_points > 1,
-    };
-    if smoothing_on {
-        ui.horizontal_wrapped(|ui| {
-            ui.checkbox(&mut s.smooth_deferred, "Après le trait")
-                .on_hover_text("Pendant le geste, le trait brut suit la pointe sans retard ; au levé, il est rejoué lissé (TVPaint : Line Smoothing sans Real Time, ton réglage).");
-            if s.smooth_kind == crate::brush::SmoothKind::Follow {
-                ui.checkbox(&mut s.smooth_time, "Selon le temps")
-                    .on_hover_text("Le Suivi rattrape la pointe selon le temps écoulé, non le nombre d'échantillons : la même douceur quelle que soit la cadence du stylet et de l'image (décoché : comme avant).");
-            }
-            if matches!(s.smooth_kind, crate::brush::SmoothKind::PulledString | crate::brush::SmoothKind::AverageDistance) {
-                ui.checkbox(&mut s.smooth_screen, "Pixels d'écran")
-                    .on_hover_text("La corde ou la distance se mesurent à l'écran : la même sous le stylet à tout zoom (décoché : en pixels du dessin, comme avant).");
-            }
-            egui::ComboBox::from_id_salt("rattrapage").selected_text(s.catch_up.label()).width(crate::dockui::fit_w(ui, 150.0)).show_ui(ui, |ui| {
-                for c in crate::brush::CatchUp::ALL {
-                    ui.selectable_value(&mut s.catch_up, c, c.label()).on_hover_text(c.help());
-                }
-            });
-        });
-    }
-    crate::dynui::shape_ui(ui, s);
-    crate::dynui::wet_ui(ui, s, vector);
-    crate::dynui::dynamics_ui(ui, s, vector);
-}
-
 impl App {
     /// Entrée de menu reliée à une action ; le raccourci affiché vient du fichier de raccourcis.
     /// Clic droit : lui assigner un raccourci.
@@ -168,48 +55,6 @@ impl App {
             ui.close_menu();
             self.start_assign(action);
         }
-    }
-
-    /// Toucher du stylet (sensation des brosses, 2026-10-18) : la réponse à la pression commune à
-    /// tous les pinceaux, gardée dans les réglages de l'application (enregistrés dans `update`,
-    /// comme la pelure) ; l'ancien toucher à portée de main pour comparer à la tablette.
-    fn feel_ui(&mut self, ui: &mut egui::Ui) {
-        use crate::brush::{Curve, Toucher};
-        use crate::bulles::bulle;
-        let t = &mut self.toucher;
-        let title = if *t == Toucher::default() { "Toucher du stylet (tous les pinceaux)" } else { "Toucher du stylet (tous les pinceaux, réglé)" };
-        egui::CollapsingHeader::new(title).id_salt("toucher_stylet").default_open(false).show(ui, |ui| {
-            note(ui, "Réponse à la pression commune à tous les pinceaux, appliquée avant leurs réglages. « Ancien » : le toucher d'avant l'étude, pour comparer.");
-            ui.horizontal(|ui| {
-                let resp = crate::dynui::curve_editor(ui, &mut t.pressure_curve, "toucher");
-                bulle(resp, "Courbe de pression", "L'appui du stylet passe par cette courbe avant tout le reste (le « Pen Pressure Feel » de Storyboard Pro). Glisser un point ; double-clic : ajouter ; clic droit : retirer.", "");
-                ui.vertical(|ui| {
-                    if ui.small_button("Droite").on_hover_text("L'appui tel quel.").clicked() {
-                        t.pressure_curve = Curve::linear();
-                    }
-                    if ui.small_button("Douce").on_hover_text("Plus de finesse dans les appuis légers : il faut appuyer pour grossir.").clicked() {
-                        t.pressure_curve = Curve::from_points(&[[0.0, 0.0], [0.5, 0.35], [1.0, 1.0]]);
-                    }
-                    if ui.small_button("Ferme").on_hover_text("Le trait prend du corps dès qu'on effleure.").clicked() {
-                        t.pressure_curve = Curve::from_points(&[[0.0, 0.0], [0.5, 0.65], [1.0, 1.0]]);
-                    }
-                });
-            });
-            let resp = ui.add(egui::Slider::new(&mut t.size_floor, 0.0..=0.5).text("Plancher de taille"));
-            bulle(resp, "Plancher de taille", "Part de la taille au-dessous de laquelle le trait ne descend jamais quand la taille suit l'appui (ancien : 3 %).", "");
-            let resp = ui.add(egui::Slider::new(&mut t.threshold, 0.0..=0.2).text("Seuil d'appui"));
-            bulle(resp, "Seuil d'appui", "Au-dessous, le stylet ne pose rien : ni début fantôme ni pointe au levé (0 : dès le premier échantillon). La souris n'est pas concernée.", "");
-            ui.checkbox(&mut t.thin_full, "Traits fins pleins").on_hover_text("Plus fin qu'un pixel : un pixel plein plutôt qu'un fil gris (ancien : éclairci).");
-            ui.checkbox(&mut t.soft_edge, "Bord doux").on_hover_text("Bord des empreintes rondes en une seule chute douce d'au moins un pixel (ancien : rampe d'un pixel coupée par la dureté, un léger cran, des petites tailles grises).");
-            ui.horizontal(|ui| {
-                if ui.small_button("Nouveau toucher").on_hover_text("Les réglages de l'étude.").clicked() {
-                    *t = Toucher::default();
-                }
-                if ui.small_button("Ancien toucher").on_hover_text("Le comportement d'avant, pour comparer.").clicked() {
-                    *t = Toucher::ancien();
-                }
-            });
-        });
     }
 
     /// Storyboard > Plans : ce qui se fait sur les plans choisis.
@@ -429,27 +274,22 @@ impl App {
         if matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser | Tool::Fill | Tool::Cutter) {
             self.fond_options_ui(ui);
         }
-        // Réglages nommés, papier et grain : pinceau et crayon sur les deux sortes de calques (le
-        // trait vectoriel texturé reste modifiable, 7b) ; la gomme sur un calque bitmap.
-        if matches!(self.tool, Tool::Brush | Tool::Pencil) || (self.tool == Tool::Eraser && !vector) {
-            self.brush_library_ui(ui);
-        }
         match self.tool {
             Tool::Brush => {
-                brush_ui(ui, &mut self.brush, vector);
+                self.brush_summary_ui(ui);
                 if vector {
                     note(ui, "Le trait reste modifiable avec l'outil Sélection (V), même texturé (pointe en \
                               image, grain du papier).");
                 }
             }
             Tool::Pencil => {
-                brush_ui(ui, &mut self.pencil, vector);
+                self.brush_summary_ui(ui);
                 if vector {
                     note(ui, "Le trait reste modifiable avec l'outil Sélection (V).");
                 }
             }
             Tool::Eraser => {
-                brush_ui(ui, &mut self.eraser, vector);
+                self.brush_summary_ui(ui);
                 if vector {
                     crate::bulles::interrupteur(
                         ui,
@@ -521,9 +361,6 @@ impl App {
             }
             Tool::Ref3d => self.ref3d_panel(ui),
             Tool::Camera => self.camera_panel(ui),
-        }
-        if matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser) {
-            self.feel_ui(ui);
         }
         if self.current_brush().is_some_and(|b| b.pressure_size || b.pressure_opacity) {
             note(ui, "La pression vient du stylet (Windows Ink). À la souris, elle vaut 100 %.");

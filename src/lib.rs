@@ -27,6 +27,10 @@ mod brushtex;
 #[cfg(test)]
 mod brushtex_tests;
 mod brushui;
+mod pinceaux;
+#[cfg(test)]
+mod pinceaux_tests;
+mod pinceauxui;
 mod dynui;
 pub mod banc;
 #[cfg(test)]

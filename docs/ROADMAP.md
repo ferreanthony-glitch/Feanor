@@ -1602,6 +1602,36 @@ Menée dans une session parallèle, branche `couleur` (à fusionner par la sessi
   - Ctrl+Z ne défait pas les changements de nuancier (la suppression est confirmée) ;
   - pas d'import Adobe Swatch Exchange (`.ase`) ; `.aco` en CMJN ou Lab : sans profil de couleur.
 
+## Panneau Pinceaux refait (demandé par Anthony le 2026-10-18) ✅
+
+Référence d'organisation : un panneau de brosses de logiciel de retouche (rangement seulement, ni
+apparence ni textes). Demande : « une organisation des brosses plus simple, et la taille du pinceau
+mise en avant ».
+
+- ✅ Taille de l'outil courant en haut du panneau (grand curseur logarithmique + champ px), même
+  valeur que les touches ^ et $ (largeur pour les formes).
+- ✅ Onglet « Pinceaux » : recherche par nom (sans accents ni majuscules), liste (pastille +
+  taille, aperçu du trait, nom) ou vignettes, dossiers repliables avec leur nombre (Crayons, Encres
+  et feutres, Peinture, Craie et fusain, Gommes, Mes brosses, un dossier par fichier importé ; les
+  réglages de Pelure rangés d'après leur nom), trois icônes en bas (importer, nouvelle brosse,
+  supprimer). Menu du clic droit et enregistrement inchangés. Les lignes hors écran ne font ni
+  aperçu ni texte (centaines de brosses importées).
+- ✅ Onglet « Réglages du pinceau » : sept catégories (la case allume ou éteint la dispersion, le
+  grain et papier, la couleur et mélange, le lissage ; les valeurs sont gardées pour la rallumer),
+  aperçu du trait en bas, liste déroulante si le panneau est étroit. Les réglages sont ceux de
+  l'ancien panneau Réglages de l'outil (`dynui.rs` découpé par catégorie, `brush_ui` déplacé), qui
+  n'en garde qu'un résumé.
+- ✅ Retenus dans `reglages.toml` (`panneau_pinceaux`, `#[serde(default)]`) : onglet, liste ou
+  vignettes, catégorie, dossiers ouverts ou repliés.
+- ✅ Logique sans écran dans `pinceaux.rs` (rangement, recherche, état, catégories), testée dans
+  `pinceaux_tests.rs` ; affichage dans `pinceauxui.rs`.
+- Pas vu à l'écran (pas de capture de l'application dans cette séance) : à essayer par Anthony.
+- Pas faits :
+  - le crayon n'a pas de réglages nommés propres : choisir un réglage prend le pinceau, comme avant ;
+  - pas de dossiers que l'utilisateur crée lui-même, ni de glisser-déposer d'une brosse vers un
+    dossier ; pas de menu sur l'en-tête d'un dossier ;
+  - la case d'une catégorie ne se rappelle ses valeurs que pendant la séance ;
+  - « Supprimer la brosse » ne demande pas de confirmation (comme le menu du clic droit).
 ## Raccourcis proposés, à valider
 
 Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans `keymap.toml`) :

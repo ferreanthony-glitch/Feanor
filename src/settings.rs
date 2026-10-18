@@ -71,6 +71,10 @@ pub struct Settings {
     /// plancher de taille, traits fins, bord, seuil d'appui ; commun à tous les pinceaux.
     #[serde(default, rename = "toucher")]
     pub toucher: crate::brush::Toucher,
+    /// Panneau Pinceaux (2026-10-18) : l'onglet, liste ou vignettes, la catégorie des réglages et les
+    /// dossiers ouverts ou repliés.
+    #[serde(default, rename = "panneau_pinceaux")]
+    pub brushes_panel: crate::pinceaux::Panneau,
 }
 
 fn default_autosave() -> u32 {
@@ -107,6 +111,7 @@ impl Default for Settings {
             panes_fit: true,
             panes_fixed: Vec::new(),
             toucher: Default::default(),
+            brushes_panel: Default::default(),
         }
     }
 }

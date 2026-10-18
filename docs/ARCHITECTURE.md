@@ -720,7 +720,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   - Réglages : `BrushSettings::graphite` (le départ de l'outil Crayon, `App::new`),
     `colour_pencil`, `ink`, `felt`, `charcoal`, `chalk`, `gouache` ; `pencil` = « Crayon net ».
     Le Pinceau rond reste le premier de `builtin()` et le départ de l'outil Pinceau.
-  - `brushui::grain_ui` : listes « Pointe » et « Papier », « Douceur du grain », « Grain du
+  - `pinceauxui::paper_ui` et `tip_ui` (panneau Pinceaux, catégories Grain et papier, Forme de la pointe) : listes « Pointe » et « Papier », « Douceur du grain », « Grain du
     crayon », « Le grain suit le trait ».
   - Imports : `kritabrush` met `opaque` (MyPaint) et Flow (Krita) en débit accumulé ;
     `tvpbrush::base_tool` met le `grain` du `tv_pencil` en `PencilGrain` (ordre deviné).

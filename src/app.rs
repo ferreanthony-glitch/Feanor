@@ -313,6 +313,8 @@ pub struct App {
     /// Toucher du stylet (sensation des brosses) : la copie de travail du réglage, enregistrée
     /// dans `update` quand elle change (hors glissé), comme les options du pinceau.
     pub(crate) toucher: crate::brush::Toucher,
+    /// État du panneau Pinceaux retenu d'une séance à l'autre (onglet, liste ou vignettes, dossiers).
+    pub(crate) pinceaux: crate::pinceaux::Panneau,
     pub(crate) color: [u8; 3],
     /// La couleur en teinte, saturation, valeur (panneau Couleur, 6b).
     pub(crate) hsv: [f32; 3],
@@ -716,6 +718,7 @@ impl App {
             paint_behind,
             fill_shapes,
             toucher: settings.toucher,
+            pinceaux: settings.brushes_panel.clone(),
             // Les couleurs de la dernière fois (passe couleur).
             color: settings.colors.front,
             hsv: crate::colorui::rgb_to_hsv(settings.colors.front),
@@ -3538,13 +3541,14 @@ impl eframe::App for App {
         // (peint derrière, remplir la forme) : enregistrés quand ils
         // changent (pas pendant un glissé).
         let options = (self.paint_behind, self.fill_shapes) != (self.settings.paint_behind, self.settings.fill_shapes);
-        let changed = self.onion != self.settings.onion || self.xsheet != self.settings.xsheet || self.flips != self.settings.flips || options || self.toucher != self.settings.toucher;
+        let changed = self.onion != self.settings.onion || self.xsheet != self.settings.xsheet || self.flips != self.settings.flips || options || self.toucher != self.settings.toucher || self.pinceaux != self.settings.brushes_panel;
         if changed && !ctx.input(|i| i.pointer.any_down()) {
             self.settings.onion = self.onion.clone();
             self.settings.xsheet = self.xsheet.clone();
             self.settings.flips = self.flips.clone();
             (self.settings.paint_behind, self.settings.fill_shapes) = (self.paint_behind, self.fill_shapes);
             self.settings.toucher = self.toucher;
+            self.settings.brushes_panel = self.pinceaux.clone();
             if let Err(e) = self.settings.save() {
                 self.status = format!("Réglages non enregistrés : {e}");
             }
