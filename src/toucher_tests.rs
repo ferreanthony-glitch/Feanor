@@ -162,6 +162,23 @@ fn the_pencil_is_antialiased_and_bites_with_the_pressure() {
 }
 
 #[test]
+fn pointer_events_of_a_frame_are_spread_over_the_frame() {
+    use crate::brush::spread_time;
+    // Quatre événements entre l'image à 1,00 s et celle à 1,02 s : tous les 5 ms, le dernier à
+    // l'heure de l'image.
+    let times: Vec<f64> = (1..=4).map(|k| spread_time(1.0, 1.02, k, 4)).collect();
+    assert!(times.windows(2).all(|w| w[1] > w[0]), "{times:?}");
+    assert!((times[0] - 1.005).abs() < 1e-9 && (times[3] - 1.02).abs() < 1e-12, "{times:?}");
+    assert!(times[0] > 1.0, "après l'image d'avant");
+    // Un seul événement : l'heure de l'image ; sans image d'avant (ou heure qui recule) : pareil.
+    assert_eq!(spread_time(1.0, 1.02, 1, 1), 1.02);
+    assert_eq!(spread_time(0.0, 0.0, 1, 3), 0.0);
+    assert_eq!(spread_time(2.0, 1.0, 1, 3), 1.0);
+    assert_eq!(spread_time(1.0, 1.02, 0, 3), 1.02);
+    assert_eq!(spread_time(1.0, 1.02, 7, 3), 1.02);
+}
+
+#[test]
 fn the_old_feel_is_within_reach_and_strokes_keep_their_feel() {
     let old = Toucher::ancien();
     assert_eq!((old.size_floor, old.thin_full, old.soft_edge, old.threshold), (0.03, false, false, 0.0));

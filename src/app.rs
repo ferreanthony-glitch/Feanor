@@ -602,6 +602,12 @@ pub struct App {
     pub(crate) length_field_active: bool,
     pub(crate) pen_pressure: f32,
     pub(crate) pen_touch: bool,
+    /// Horodatage par événement (sensation des brosses, §2.5) : egui donne la même heure à tous
+    /// les événements d'une image d'écran ; `canvas_input` étale ceux du pointeur entre l'image
+    /// d'avant (`last_frame_time`) et celle-ci, et `input_time` est l'instant de l'événement en
+    /// cours, celui que reçoivent les traits (vitesse, lissage selon le temps).
+    pub(crate) input_time: f64,
+    pub(crate) last_frame_time: f64,
     pub(crate) picking: bool,
     /// Manifeste du projet en dossier (`MonFilm/MonFilm.pelure`).
     pub(crate) path: Option<PathBuf>,
@@ -863,6 +869,8 @@ impl App {
             length_origin: None,
             length_field_active: false,
             pen_pressure: 1.0,
+            input_time: 0.0,
+            last_frame_time: 0.0,
             pen_touch: false,
             picking: false,
             path: None,
@@ -1411,8 +1419,9 @@ impl App {
             .on_layer(self.layer().keep_alpha, stencil)
             .with_options(behind, fill, tol);
         let mut dirty = Vec::new();
-        // L'instant de l'image d'écran : la vitesse du trait en vient (connexions).
-        let time = self.ctx.input(|i| i.time);
+        // L'instant de l'événement (étalé dans l'image d'écran, `canvas_input`) : la vitesse du
+        // trait et le lissage selon le temps en viennent.
+        let time = self.input_time;
         if let Some(c) = self.doc.cels.get_mut(&cel) {
             stroke.add_point_at(&mut c.raster, p, pressure, time, &mut dirty);
         }
@@ -1455,7 +1464,7 @@ impl App {
     }
 
     pub(crate) fn stroke_to(&mut self, p: Pos2, pressure: f32) {
-        let time = self.ctx.input(|i| i.time);
+        let time = self.input_time;
         let Some(stroke) = self.stroke.as_mut() else { return };
         let Some(c) = self.doc.cels.get_mut(&stroke.cel) else { return };
         let mut dirty = Vec::new();

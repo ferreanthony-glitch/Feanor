@@ -206,7 +206,7 @@ impl App {
             .with_secondary(self.couleurs.prefs.back)
             .with_options(self.paint_behind, false, 0.0);
         let mut dirty = Vec::new();
-        let time = self.ctx.input(|i| i.time);
+        let time = self.input_time;
         if let Some(c) = self.doc.cels.get_mut(&cel) {
             stroke.add_point_at(&mut c.raster, p, pressure, time, &mut dirty);
         }

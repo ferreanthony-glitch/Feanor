@@ -1394,6 +1394,19 @@ pub(crate) fn wet_blend(cur: Color32, rgb: [f32; 3], a: f32, amt: f32, keep_alph
     Color32::from_rgba_premultiplied((r + 0.5) as u8, (g + 0.5) as u8, (b + 0.5) as u8, (alpha + 0.5).min(255.0) as u8)
 }
 
+/// Instant du `k`-ième (de 1 à `n`) événement du pointeur d'une image d'écran dont egui ne
+/// connaît que l'heure `now` (sensation des brosses, §2.5) : les échantillons du stylet sont
+/// étalés régulièrement sur l'intervalle depuis l'image d'avant (`prev`), le dernier à `now`.
+/// Sans image d'avant, ou hors bornes : `now`. (Approximation : winit lit tout l'historique
+/// WM_POINTER d'un coup ; l'heure vraie de chaque échantillon, `PerformanceCount`, viendra avec
+/// la lecture directe de WM_POINTER, à faire avec Anthony à la tablette.)
+pub fn spread_time(prev: f64, now: f64, k: usize, n: usize) -> f64 {
+    if n == 0 || k == 0 || k >= n || !(prev < now) {
+        return now;
+    }
+    prev + (now - prev) * (k as f64 / n as f64)
+}
+
 /// Moyenne de positions (au moins une).
 fn mean<'a>(pts: impl Iterator<Item = &'a Pos2>) -> Pos2 {
     let (mut x, mut y, mut n) = (0.0, 0.0, 0.0);

@@ -250,7 +250,18 @@ impl App {
             rect.contains(pos) && response.interact_rect.contains(pos) && ctx.layer_id_at(pos) == Some(response.layer_id)
         };
 
+        // Horodatage par événement (sensation des brosses, §2.5) : egui date tous les événements
+        // d'une image d'écran de la même heure, alors que les échantillons du stylet (l'historique
+        // WM_POINTER lu par winit) sont réguliers. On étale ceux du pointeur entre l'image d'avant
+        // et celle-ci : la vitesse et le lissage selon le temps y gagnent.
+        let now = ctx.input(|i| i.time);
+        let pointer_events = events.iter().filter(|e| matches!(e, Event::PointerMoved(_) | Event::PointerButton { .. })).count();
+        let mut k = 0;
         for event in &events {
+            if matches!(event, Event::PointerMoved(_) | Event::PointerButton { .. }) {
+                k += 1;
+                self.input_time = crate::brush::spread_time(self.last_frame_time, now, k, pointer_events);
+            }
             match event {
                 // Le stylet arrive sous forme d'événements « tactiles » qui portent la pression ;
                 // egui les double d'événements souris, que l'on suit pour la position.
@@ -382,6 +393,8 @@ impl App {
                 _ => {}
             }
         }
+        self.input_time = now;
+        self.last_frame_time = now;
         // Relâchement manqué (perte de focus…) : on clôt le geste quand même.
         if !primary_down {
             self.end_stroke();
