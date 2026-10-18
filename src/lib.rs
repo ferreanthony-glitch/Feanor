@@ -10,6 +10,15 @@ mod aproposui_tests;
 mod donnees;
 #[cfg(test)]
 mod donnees_tests;
+#[cfg(test)]
+mod demarrage_tests;
+mod ouverture;
+mod parallele;
+#[cfg(test)]
+mod parallele_tests;
+mod perf;
+#[cfg(test)]
+mod perf_tests;
 pub mod logo;
 #[cfg(test)]
 mod logo_tests;

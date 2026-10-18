@@ -137,6 +137,27 @@ impl GrayImage {
         if n < 2 {
             return self;
         }
+        // Image en 256 niveaux (tout fichier lu, tout papier importé) : le rang de chaque niveau se
+        // compte sur un histogramme, sans trier un million de valeurs (100 ms par papier de
+        // 1024 x 1024, relu à chaque démarrage pour chaque papier importé) ; mêmes valeurs.
+        if let Some(levels) = byte_levels(&self.values) {
+            let d = (n - 1) as f32;
+            let mut count = [0usize; 256];
+            for &k in &levels {
+                count[k as usize] += 1;
+            }
+            let mut rank = [0.0f32; 256];
+            let mut i = 0;
+            for (k, &c) in count.iter().enumerate() {
+                if c > 0 {
+                    let j = i + c - 1;
+                    rank[k] = (i + j) as f32 / 2.0 / d;
+                    i = j + 1;
+                }
+            }
+            self.values = levels.iter().map(|&k| rank[k as usize]).collect();
+            return self;
+        }
         let mut order: Vec<usize> = (0..n).collect();
         order.sort_by(|&a, &b| self.values[a].total_cmp(&self.values[b]));
         let d = (n - 1) as f32;
@@ -156,6 +177,26 @@ impl GrayImage {
         self.values = ranked;
         self
     }
+}
+
+/// Une texture lue dans le dossier des pinceaux, prête à entrer dans la bibliothèque.
+enum Prepared {
+    Tip(Arc<Tip>),
+    Paper(Arc<GrayImage>),
+}
+
+/// Les niveaux (0 à 255) d'une image dont chaque valeur est exactement `k / 255` (ce que donne la
+/// lecture d'un fichier en 8 bits) ; `None` si une valeur ne l'est pas.
+fn byte_levels(values: &[f32]) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(values.len());
+    for &v in values {
+        let k = (v * 255.0).round();
+        if !(0.0..=255.0).contains(&k) || k as u8 as f32 / 255.0 != v {
+            return None;
+        }
+        out.push(k as u8);
+    }
+    Some(out)
 }
 
 /// Pointe en image, avec ses réductions successives : une pointe de quelques pixels prend une
@@ -928,14 +969,19 @@ impl BrushLibrary {
     /// Met les textures de la bibliothèque à la disposition des traits vectoriels (au démarrage
     /// et après un import).
     pub fn share(&self) {
+        // Les clés de contenu (un million d'octets lus par papier) se calculent d'abord, sur plusieurs
+        // cœurs et hors du verrou.
+        let tips: Vec<(u32, &Arc<Tip>)> = self.tips.iter().map(|(&id, (_, t))| (id, t)).collect();
+        let papers: Vec<(u32, &Arc<GrayImage>)> = self.papers.iter().map(|(&id, (_, p))| (id, p)).collect();
+        let threads = if tips.len() + papers.len() > 16 { 8 } else { 1 };
+        let tip_keys = crate::parallele::par_map(&tips, threads, |_, (_, t)| content_key(TextureKind::Tip, t.full()));
+        let paper_keys = crate::parallele::par_map(&papers, threads, |_, (_, p)| content_key(TextureKind::Paper, p));
         let Ok(mut shared) = SHARED.write() else { return };
-        for (&id, (_, tip)) in &self.tips {
-            let key = content_key(TextureKind::Tip, tip.full());
+        for ((id, tip), key) in tips.into_iter().zip(tip_keys) {
             shared.tips.entry(key).or_insert_with(|| tip.clone());
             shared.from_library.insert((TextureKind::Tip, id), key);
         }
-        for (&id, (_, paper)) in &self.papers {
-            let key = content_key(TextureKind::Paper, paper);
+        for ((id, paper), key) in papers.into_iter().zip(paper_keys) {
             shared.papers.entry(key).or_insert_with(|| paper.clone());
             shared.from_library.insert((TextureKind::Paper, id), key);
         }
@@ -986,17 +1032,28 @@ impl BrushLibrary {
         let Some(dir) = dir else { return lib };
         let Ok(text) = std::fs::read_to_string(dir.join("pinceaux.json")) else { return lib };
         let Ok(saved) = serde_json::from_str::<SavedLibrary>(&text) else { return lib };
-        for t in saved.textures {
-            let Ok(img) = image::open(dir.join(&t.file)) else { continue };
+        // Les textures se lisent et se préparent en parallèle (décodage, réductions de la pointe,
+        // répartition du papier : 12 ms chacune, des centaines de pinceaux importés au démarrage) ;
+        // elles entrent dans la bibliothèque dans l'ordre du fichier.
+        let threads = if saved.textures.len() > 8 { 8 } else { 1 };
+        let prepared = crate::parallele::par_map(&saved.textures, threads, |_, t| {
+            let img = image::open(dir.join(&t.file)).ok()?;
             let gray = img.to_luma8();
             let values = gray.as_raw().iter().map(|&v| v as f32 / 255.0).collect();
             let image = GrayImage::new(gray.width() as usize, gray.height() as usize, values);
-            match t.kind {
-                TextureKind::Tip => {
-                    lib.tips.insert(t.id, (t.name, Arc::new(Tip::new(image))));
+            Some(match t.kind {
+                TextureKind::Tip => Prepared::Tip(Arc::new(Tip::new(image))),
+                TextureKind::Paper => Prepared::Paper(Arc::new(image.equalized())),
+            })
+        });
+        for (t, prepared) in saved.textures.into_iter().zip(prepared) {
+            let Some(prepared) = prepared else { continue };
+            match prepared {
+                Prepared::Tip(tip) => {
+                    lib.tips.insert(t.id, (t.name, tip));
                 }
-                TextureKind::Paper => {
-                    lib.papers.insert(t.id, (t.name, Arc::new(image.equalized())));
+                Prepared::Paper(paper) => {
+                    lib.papers.insert(t.id, (t.name, paper));
                 }
             }
             lib.next_id = lib.next_id.max(t.id + 1);

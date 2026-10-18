@@ -770,6 +770,12 @@ impl App {
             );
             blocks.push(rect);
             start += len;
+            // Hors de la partie visible de la bande : ni dessin ni vignette (le bloc reste dans
+            // `blocks`, les gestes s'en servent). Sans cela, six cents plans coûtaient six cents
+            // vignettes cherchées et six cents titres mis en page à chaque image d'écran.
+            if !rect.expand(8.0).intersects(painter.clip_rect()) {
+                continue;
+            }
             let selected = i == self.cur_panel;
             // Choisi avec lui (Ctrl ou Maj + clic) : un ton d'accent plus léger.
             let chosen = !selected && self.board_sel.contains(&self.doc.panels[i].id);
@@ -844,11 +850,19 @@ impl App {
 
         // Barre des séquences au-dessus des plans (13a : un plan = un bloc, plus de barre de scène).
         let mut runs: Vec<(Rect, usize)> = Vec::new();
+        // (La séquence de chaque plan et leur ordre, trouvés une fois : les chercher plan par plan
+        // coûtait le carré du nombre de plans.)
+        let seqs = self.doc.sequence_ids();
+        let seq_order = self.doc.sequence_order();
         for (band, y0, h) in [(0, bands_top, SEQ_H)] {
             let mut i = 0;
             while i < self.doc.panels.len() {
                 let (start, end) = if band == 0 {
-                    self.doc.sequence_run(i)
+                    let mut e = i + 1;
+                    while e < seqs.len() && seqs[e] == seqs[i] {
+                        e += 1;
+                    }
+                    (i, e)
                 } else {
                     self.doc.scene_run(i)
                 };
@@ -857,8 +871,13 @@ impl App {
                     pos2(blocks[end - 1].right(), y0 + h - 1.0),
                 );
                 let (label, number) = if band == 0 {
-                    let seq = self.doc.sequence_of(start);
-                    (format!("Séquence {}", self.doc.sequence_label(seq)), self.doc.sequence_number(seq))
+                    let seq = seqs[start];
+                    let number = seq_order.iter().position(|&s| s == seq).map_or(0, |k| k + 1);
+                    let label = match self.doc.sequences.iter().find(|s| s.id == seq) {
+                        Some(s) if !s.name.trim().is_empty() => s.name.trim().to_string(),
+                        _ => number.to_string(),
+                    };
+                    (format!("Séquence {label}"), number)
                 } else {
                     let scene = self.doc.panels[start].scene;
                     (format!("Scène {}", self.doc.scene_label(scene)), self.doc.scene_number(scene))

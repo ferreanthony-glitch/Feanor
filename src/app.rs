@@ -650,6 +650,10 @@ pub struct App {
     pub(crate) fit_busy: bool,
     /// Projet récent à ouvrir une fois « Enregistrer ? » réglé (`recents.rs`).
     pub(crate) recent_to_open: Option<PathBuf>,
+    /// Les projets récents sont-ils encore là ? (Vérifié sur un autre fil : `recents.rs`.)
+    pub(crate) recent_presence: crate::recents::Presence,
+    /// Projet en cours d'ouverture sur un autre fil (`ouverture.rs`).
+    pub(crate) open_job: Option<crate::ouverture::OpenJob>,
     /// Fenêtre « Aller à un plan » ouverte, et ce qui y est tapé (`aller.rs`).
     pub(crate) goto_plan: Option<String>,
     /// La fenêtre a reçu sa maximisation d'ouverture.
@@ -723,12 +727,6 @@ pub struct App {
 
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // Police de l'interface (Segoe UI si Windows l'a) et icônes (Phosphor), utilisables dans
-        // tout texte.
-        let mut fonts = egui::FontDefinitions::default();
-        crate::theme::polices(&mut fonts);
-        egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
-        cc.egui_ctx.set_fonts(fonts);
         // Polices du poste (outil Texte) : lues sur un autre fil dès le démarrage.
         crate::text::scan_in_background();
         if let Some(rs) = &cc.wgpu_render_state {
@@ -739,15 +737,35 @@ impl App {
             rs.device.on_uncaptured_error(Box::new(|e| crate::plantage::note_gpu_error(&format!("erreur de la carte graphique : {e}"))));
             rs.device.set_device_lost_callback(|reason, message| crate::plantage::note_gpu_error(&format!("carte graphique perdue ({reason:?}) : {message}")));
         }
+        Self::construire(&cc.egui_ctx, cc.wgpu_render_state.as_ref(), true)
+    }
+
+    /// Le logiciel sans fenêtre (mesures et essais de `perf_tests.rs`) : même état et mêmes
+    /// panneaux que `new`, mais sans copie de secours ni séances interrompues, et les réglages
+    /// s'écrivent là où `donnees::bac_a_sable` les a envoyés.
+    #[cfg(test)]
+    pub(crate) fn sans_fenetre(ctx: &egui::Context, rs: Option<&eframe::egui_wgpu::RenderState>) -> Self {
+        Self::construire(ctx, rs, false)
+    }
+
+    /// L'état de départ. `reel` : lancé par l'utilisateur (copie de secours de la séance, séances
+    /// interrompues à proposer) ; faux pour les essais.
+    fn construire(egui_ctx: &egui::Context, wgpu_render_state: Option<&eframe::egui_wgpu::RenderState>, reel: bool) -> Self {
+        // Police de l'interface (Segoe UI si Windows l'a) et icônes (Phosphor), utilisables dans
+        // tout texte.
+        let mut fonts = egui::FontDefinitions::default();
+        crate::theme::polices(&mut fonts);
+        egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+        egui_ctx.set_fonts(fonts);
         let settings = crate::settings::Settings::load();
         // Thème de l'interface, dense (12a, `theme.rs`) : celui des réglages.
         let theme_applied = settings.theme;
         crate::theme::installer(&theme_applied);
-        crate::theme::appliquer(&cc.egui_ctx);
+        crate::theme::appliquer(egui_ctx);
         let montage_head_w = crate::montagehead::clamp_head_w(settings.montage_head_w);
         let (paint_behind, fill_shapes) = (settings.paint_behind, settings.fill_shapes);
         let mut app = Self {
-            ctx: cc.egui_ctx.clone(),
+            ctx: egui_ctx.clone(),
             doc: Document::with_frame(1920, 1080, 24).created_now(),
             mode: Mode::Storyboard,
             board_view: BoardView::Scene,
@@ -807,7 +825,7 @@ impl App {
             fx_clip_recent: false,
             fx_keys_drag: None,
             video_import: None,
-            propagation: crate::propagerui::Propagation::new(cc.wgpu_render_state.as_ref()),
+            propagation: crate::propagerui::Propagation::new(wgpu_render_state),
             sb_window: None,
             sb_export: None,
             tween_dialog: None,
@@ -894,8 +912,8 @@ impl App {
             workspace_name: None,
             settings,
             // Les séances interrompues d'abord (avant d'ouvrir la nôtre).
-            orphans: crate::recovery::root().map(|r| crate::recovery::orphans(&r, None)).unwrap_or_default(),
-            recovery: crate::recovery::root().and_then(|r| crate::recovery::Recovery::start(&r).ok()),
+            orphans: crate::recovery::root().filter(|_| reel).map(|r| crate::recovery::orphans(&r, None)).unwrap_or_default(),
+            recovery: crate::recovery::root().filter(|_| reel).and_then(|r| crate::recovery::Recovery::start(&r).ok()),
             default_exposure: 1,
             playing: false,
             play_montage: false,
@@ -957,6 +975,8 @@ impl App {
             maximized_once: 0,
             goto_plan: None,
             recent_to_open: None,
+            recent_presence: Default::default(),
+            open_job: None,
             palette: None,
             export_hub: false,
             prefs_window: false,
@@ -1011,7 +1031,7 @@ impl App {
             keys_filter: String::new(),
             keymap: Keymap::load(),
             title: String::new(),
-            display_info: match &cc.wgpu_render_state {
+            display_info: match wgpu_render_state {
                 Some(rs) => {
                     let info = rs.adapter.get_info();
                     format!("wgpu, {} ({:?})", info.name, info.backend)
@@ -1023,7 +1043,7 @@ impl App {
         // Calques superposés par la carte graphique, sauf PELURE_COMPOSITION=processeur.
         let cpu = std::env::var("PELURE_COMPOSITION").is_ok_and(|v| v.eq_ignore_ascii_case("processeur"));
         if !cpu {
-            app.gpu = cc.wgpu_render_state.as_ref().map(GpuCanvas::new);
+            app.gpu = wgpu_render_state.map(GpuCanvas::new);
         }
         app.renderer.set_gpu(app.gpu.is_some());
         app.display_info.push_str(if app.gpu.is_some() {
@@ -1136,6 +1156,7 @@ impl App {
             || self.export_job.is_some()
             || !self.orphans.is_empty()
             || self.workspace_name.is_some()
+            || self.open_job.is_some()
             || self.assign.is_some()
             || self.propagation.running()
             || self.sb_export.as_ref().is_some_and(crate::sbexportui::SbExportWindow::rendering)
@@ -1881,7 +1902,7 @@ impl App {
         self.rejeu_with(cel, true);
     }
 
-    fn rejeu_with(&mut self, cel: CelId, priority: bool) {
+    pub(crate) fn rejeu_with(&mut self, cel: CelId, priority: bool) {
         let (w, h) = (self.doc.width, self.doc.height);
         if let Some((d, version)) = self.doc.cels.get(&cel).and_then(|c| c.vector.as_ref().map(|d| (d, c.version))) {
             self.rejeu.submit_with(cel, d, w, h, version, priority);
@@ -2620,32 +2641,8 @@ impl App {
         }
         // Ouverture immédiate : les dessins vectoriels texturés paraissent en rendu rapide, leur
         // rendu exact arrive en arrière-plan (`rejeu.rs`).
-        match project::load_quick(&path) {
-            Ok(loaded) => {
-                self.load_doc(loaded.doc);
-                for id in loaded.approx {
-                    // (Derrière tout geste de l'utilisateur : le chargement attend son tour.)
-                    self.rejeu_with(id, false);
-                }
-                self.written = loaded.written;
-                self.status = if loaded.warnings.is_empty() {
-                    format!("Ouvert : {}", path.display())
-                } else {
-                    format!("Ouvert avec {} problème(s) : {}", loaded.warnings.len(), loaded.warnings.join(" ; "))
-                };
-                if loaded.converted {
-                    // Rien n'est réécrit sur le disque avant « Enregistrer ».
-                    self.modified = true;
-                    self.status.push_str(
-                        " — Ancien format : la feuille de dessin a été agrandie autour du cadre (même cadrage). \
-                         « Enregistrer » le passe au nouveau format.",
-                    );
-                }
-                self.remember_project(&path);
-                self.path = Some(path);
-            }
-            Err(e) => self.status = format!("Impossible d'ouvrir le projet : {e}"),
-        }
+        // La lecture se fait sur un autre fil (`ouverture.rs`) : l'interface reste vivante.
+        self.start_open(path);
     }
 
     pub(crate) fn load_doc(&mut self, doc: Document) {
@@ -3601,6 +3598,10 @@ impl App {
             "camera.cle_supprimer" => self.remove_camera_key_here(),
             "camera.cle_adoucir" => self.toggle_camera_key_smooth(),
             "vue.dessus" => self.top_view = !self.top_view,
+            "vue.performance" => {
+                crate::perf::activer(!crate::perf::actif());
+                self.ctx.request_repaint();
+            }
             "vue.table_lumineuse" => {
                 self.light_table = !self.light_table;
                 self.status = format!("Table lumineuse : {}.", if self.light_table { "oui" } else { "non" });
@@ -3800,19 +3801,12 @@ impl eframe::App for App {
         });
     }
 
+    /// Fermeture normale (même sans enregistrer) : voir `App::fermeture`.
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        self.fermeture();
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Plein écran à l'ouverture (Anthony, 2026-10-18) : la fenêtre, créée cachée, perd la
-        // consigne de `with_maximized` sous Windows : elle est marquée maximisée mais garde sa taille.
-        // Une fois affichée, on la remet à sa taille, puis on la maximise vraiment.
-        if self.maximized_once < 4 {
-            self.maximized_once += 1;
-            match self.maximized_once {
-                3 => ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(false)),
-                4 => ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true)),
-                _ => {}
-            }
-            ctx.request_repaint();
-        }
         // Rythme des images : l'affichage n'attend plus la synchro de l'écran. Une image suit
         // chaque mouvement du stylet (500 par seconde au plus) ; sans entrée (lecture, export,
         // animations), 125 par seconde suffisent : la carte ne tourne pas pour rien.
@@ -3825,6 +3819,27 @@ impl eframe::App for App {
             }
         }
         self.frame_start = Some(std::time::Instant::now());
+        self.frame(ctx);
+    }
+}
+
+impl App {
+    /// Une image d'écran : tout ce que `update` fait une fois le rythme réglé. Les mesures de
+    /// `perf_tests.rs` l'appellent directement (sans fenêtre, sans sommeil).
+    pub(crate) fn frame(&mut self, ctx: &egui::Context) {
+        crate::perf::begin_frame(ctx);
+        // Plein écran à l'ouverture (Anthony, 2026-10-18) : la fenêtre, créée cachée, perd la
+        // consigne de `with_maximized` sous Windows : elle est marquée maximisée mais garde sa taille.
+        // Une fois affichée, on la remet à sa taille, puis on la maximise vraiment.
+        if self.maximized_once < 4 {
+            self.maximized_once += 1;
+            match self.maximized_once {
+                3 => ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(false)),
+                4 => ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true)),
+                _ => {}
+            }
+            ctx.request_repaint();
+        }
         self.ppp = ctx.pixels_per_point();
         // Thème changé dans les préférences : les couleurs sont reposées une fois, et tout
         // l'écran suit dès cette image.
@@ -3841,6 +3856,7 @@ impl eframe::App for App {
         }
         // Effets de calque : l'horloge de leurs demandes avance (calculs de fond, `fxcache.rs`).
         crate::fx::begin_frame(ctx);
+        let prep = crate::perf::section("préparation (raccourcis, lecture)");
         self.clamp_nav();
         self.flush_flottante_on_input(ctx);
         // Un champ de la boîte de sélection qui n'a plus la main termine son geste.
@@ -3872,18 +3888,33 @@ impl eframe::App for App {
         }
         self.validate_selection();
         self.validate_bitmap_selection();
-        self.poll_rejeu(ctx);
-        self.warm_current_cel();
+        drop(prep);
+        {
+            let _t = crate::perf::section("arrière-plan (rejeu, fonds)");
+            self.poll_rejeu(ctx);
+            self.warm_current_cel();
+        }
         self.update_title(ctx);
-        self.thumbs.prune(&self.doc);
+        {
+            let _t = crate::perf::section("vignettes (nettoyage)");
+            self.thumbs.prune(&self.doc);
+        }
         self.thumbs.pending = false;
 
-        egui::TopBottomPanel::top("menu").show(ctx, |ui| self.menu_bar(ui));
+        {
+            let _t = crate::perf::section("barre de menus");
+            egui::TopBottomPanel::top("menu").show(ctx, |ui| self.menu_bar(ui));
+        }
         if self.layout.command_bar {
+            let _t = crate::perf::section("barre de commandes");
             egui::TopBottomPanel::top("commandes").show(ctx, |ui| self.command_bar(ui));
         }
-        egui::TopBottomPanel::bottom("statut").show(ctx, |ui| self.status_bar(ui));
+        {
+            let _t = crate::perf::section("barre d'état");
+            egui::TopBottomPanel::bottom("statut").show(ctx, |ui| self.status_bar(ui));
+        }
         if self.layout.tool_bar {
+            let _t = crate::perf::section("barre d'outils");
             egui::SidePanel::left("barre_outils")
                 .exact_width(44.0)
                 .resizable(false)
@@ -3891,6 +3922,7 @@ impl eframe::App for App {
         }
         // La barre des panneaux, sur le bord droit : avant les panneaux, qui prennent le reste.
         if self.settings.panel_bar {
+            let _t = crate::perf::section("barre des panneaux");
             let frame = egui::Frame::side_top_panel(&ctx.style()).inner_margin(egui::Margin::symmetric(2, 4));
             egui::SidePanel::right("barre_panneaux")
                 .exact_width(crate::barrepanneaux::LARGEUR)
@@ -3899,10 +3931,17 @@ impl eframe::App for App {
                 .show(ctx, |ui| self.panel_bar(ui));
         }
         // Les panneaux : onglets que l'on glisse, aimante ou fait flotter (5b).
-        self.show_dock(ctx);
+        {
+            let _t = crate::perf::section("panneaux (dock, total)");
+            self.show_dock(ctx);
+        }
 
-        self.dialogs(ctx);
-        self.top_view_window(ctx);
+        {
+            let _t = crate::perf::section("fenêtres et dialogues");
+            self.dialogs(ctx);
+            self.top_view_window(ctx);
+            self.tick_open(ctx);
+        }
         // Export en cours : quelques images par image d'écran, la fenêtre reste vivante.
         if let Some(job) = &mut self.export_job {
             job.step(&self.doc, std::time::Duration::from_millis(40));
@@ -3939,12 +3978,24 @@ impl eframe::App for App {
         // Couleurs et nuanciers : enregistrés quand ils changent (passe couleur).
         self.color_tick(ctx);
         self.tick_recovery(ctx);
-        self.remember_layout(ctx);
+        {
+            let _t = crate::perf::section("disposition (mémoire)");
+            self.remember_layout(ctx);
+        }
+        if crate::perf::actif() {
+            crate::perf::file_attente("rejeu", usize::from(self.rejeu.has_pending()) + self.rejeu_deferred.len() + self.rejeu_again.len());
+            crate::perf::file_attente("fonds", usize::from(crate::fx::fond_pending()));
+            crate::perf::file_attente("vignettes", usize::from(self.thumbs.pending));
+            crate::perf::overlay(ctx);
+        }
+        crate::perf::end_frame(ctx);
     }
+}
 
+impl App {
     /// Fermeture normale (même sans enregistrer) : la copie de secours de la séance est effacée,
     /// la disposition de la fenêtre retenue.
-    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+    pub(crate) fn fermeture(&mut self) {
         if let Some(r) = self.recovery.take() {
             r.close();
         }

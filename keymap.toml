@@ -1817,6 +1817,11 @@ action = "vue.panneau_bande"
 touches = []
 source = "SHOT"
 
+[[raccourci]]
+action = "vue.performance"
+touches = []
+source = "SHOT (mesure de la performance, sans touche : la palette Ctrl+K ou le menu Affichage)"
+
 # ------------------------------------------------------------------------------------ Table lumineuse et guides
 # Les touches des guides viennent du module « Guides » de Storyboard Pro 27
 # (Plugins\GuideTool\resources\sb_shortcuts.xml, valeurs « Toon Boom Storyboard »).

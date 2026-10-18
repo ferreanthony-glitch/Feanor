@@ -340,6 +340,8 @@ struct CanvasResources {
     /// Texture d'un pixel blanc, pour le papier.
     white: wgpu::BindGroup,
     textures: HashMap<CelId, CelTexture>,
+    /// Mémoire visée pour les textures des dessins (`CACHE_BYTES`, plus petite dans les essais).
+    cache_bytes: u64,
     frame: Option<Frame>,
     tick: u64,
 }
@@ -523,11 +525,20 @@ impl GpuCanvas {
             stride,
             white,
             textures: HashMap::new(),
+            cache_bytes: CACHE_BYTES,
             frame: None,
             tick: 0,
         });
         Self {
             render_state: rs.clone(),
+        }
+    }
+
+    /// Essais : la mémoire visée pour les textures des dessins (un Go d'ordinaire).
+    #[cfg(test)]
+    pub fn set_cache_bytes(&self, bytes: u64) {
+        if let Some(res) = self.render_state.renderer.write().callback_resources.get_mut::<CanvasResources>() {
+            res.cache_bytes = bytes;
         }
     }
 
@@ -551,20 +562,31 @@ impl GpuCanvas {
         res.tick += 1;
         let tick = res.tick;
         let size = (doc.width as u32, doc.height as u32);
+        let per = size.0 as u64 * size.1 as u64 * 4;
+        let max = (res.cache_bytes / per.max(1)).max(plan.items.len() as u64 + 8) as usize;
         let mut up = Uploads::default();
+        // Un dessin passé par des effets (13i) : son dessin dérivé, sous son propre numéro ; en
+        // aperçu ou en attente du fil de fond, une texture plus petite ou plus ancienne. Cherché
+        // une fois par élément.
+        let displays: Vec<Option<crate::fx::Display>> = plan.items.iter().map(|item| crate::fx::display(doc, item, level)).collect();
+        // Les dessins de cette image sont les plus récents avant tout : en créer un ne chasse pas
+        // un autre dessin de la même image.
         let mut resolved = Vec::with_capacity(plan.items.len());
-        for item in &plan.items {
-            // Un dessin passé par des effets (13i) : son dessin dérivé, sous son propre numéro ; en
-            // aperçu ou en attente du fil de fond, une texture plus petite ou plus ancienne.
-            let Some(shown) = crate::fx::display(doc, item, level) else {
+        for shown in displays.iter().flatten() {
+            if let Some(t) = res.textures.get_mut(&shown.id) {
+                t.last_used = tick;
+            }
+        }
+        for (item, shown) in plan.items.iter().zip(&displays) {
+            let Some(shown) = shown else {
                 resolved.push(None);
                 continue;
             };
-            let (cel, id) = (shown.cel, shown.id);
+            let (cel, id) = (&shown.cel, shown.id);
             resolved.push(Some(id));
             // (À la taille de son image : la feuille flottante d'une sélection peut dépasser la feuille.)
             let own = (cel.raster.width as u32, cel.raster.height as u32);
-            let entry = ensure_texture(rs, res, id, cel.raster.tiles.len(), own);
+            let entry = ensure_texture(rs, res, id, cel.raster.tiles.len(), own, max);
             if all || entry.version != cel.version {
                 // Un envoi d'avance commencé pour cette version reprend où il en était.
                 let start = match entry.partial {
@@ -572,6 +594,7 @@ impl GpuCanvas {
                     _ => 0,
                 };
                 let rest: Vec<usize> = (start..cel.raster.tiles.len()).collect();
+                let _t = crate::perf::section("  gpu : tuiles copiées");
                 up.add(id, entry, &cel.raster, &rest);
                 entry.version = cel.version;
                 entry.partial = None;
@@ -592,7 +615,7 @@ impl GpuCanvas {
             // Un dessin dérivé déjà calculé par le fil de fond, ou un dessin du projet.
             let Some(cel) = a.cel.as_deref().or_else(|| doc.cels.get(&id)) else { continue };
             let own = (cel.raster.width as u32, cel.raster.height as u32);
-            let entry = ensure_texture(rs, res, id, cel.raster.tiles.len(), own);
+            let entry = ensure_texture(rs, res, id, cel.raster.tiles.len(), own, max);
             entry.last_used = tick;
             if entry.version == cel.version {
                 continue;
@@ -615,14 +638,16 @@ impl GpuCanvas {
         up.submit(rs, &res.textures);
         // Mémoire de la carte graphique : on libère les textures les plus anciennes au-delà d'un Go
         // (en octets : un aperçu réduit pèse le quart ou moins d'une texture de la taille du
-        // projet) ; celles de cette image restent.
+        // projet) ; celles de cette image restent. Un cache plein recycle déjà ses textures
+        // (`ensure_texture`) ; ceci rattrape le reste, les dessins d'une autre taille.
         let bytes_of = |t: &CelTexture| t.size.0 as u64 * t.size.1 as u64 * 4;
+        let budget = res.cache_bytes;
         let mut total: u64 = res.textures.values().map(bytes_of).sum();
-        if total > CACHE_BYTES {
+        if total > budget {
             let mut ages: Vec<(u64, CelId)> = res.textures.iter().map(|(&id, t)| (t.last_used, id)).collect();
             ages.sort_unstable();
             for (used, id) in ages {
-                if total <= CACHE_BYTES || used == tick {
+                if total <= budget || used == tick {
                     break;
                 }
                 if let Some(t) = res.textures.remove(&id) {
@@ -966,23 +991,33 @@ fn ensure_texture<'a>(
     id: CelId,
     tiles: usize,
     size: (u32, u32),
+    max: usize,
 ) -> &'a mut CelTexture {
     if !res.textures.get(&id).is_some_and(|e| e.size == size) {
-        let texture = cel_texture(&rs.device, size.0, size.1);
-        let view = texture.create_view(&Default::default());
-        let bind_group = texture_group(&rs.device, &res.texture_layout, &view, &res.nearest);
-        res.textures.insert(
-            id,
-            CelTexture {
-                bind_group,
-                texture,
-                size,
-                version: u64::MAX,
-                last_used: 0,
-                filled: vec![false; tiles],
-                partial: None,
-            },
-        );
+        let _t = crate::perf::section("  gpu : textures créées");
+        // Cache plein : le dessin le moins récent prend sa place, avec sa texture, déjà payée (en
+        // créer une de 33 Mo oblige la carte à la remplir de zéros) ; ses tuiles dessinées sont
+        // encore dedans (`filled`), le premier envoi les efface ou les remplace. Un dessin de cette
+        // image d'écran (`last_used == tick`) n'est jamais pris.
+        let tick = res.tick;
+        let oldest = (res.textures.len() >= max)
+            .then(|| res.textures.iter().filter(|(_, t)| t.size == size && t.filled.len() == tiles && t.last_used < tick).min_by_key(|(_, t)| t.last_used).map(|(&k, _)| k))
+            .flatten();
+        let entry = match oldest.and_then(|k| res.textures.remove(&k)) {
+            Some(mut t) => {
+                t.version = u64::MAX;
+                t.last_used = tick;
+                t.partial = None;
+                t
+            }
+            None => {
+                let texture = cel_texture(&rs.device, size.0, size.1);
+                let view = texture.create_view(&Default::default());
+                let bind_group = texture_group(&rs.device, &res.texture_layout, &view, &res.nearest);
+                CelTexture { bind_group, texture, size, version: u64::MAX, last_used: tick, filled: vec![false; tiles], partial: None }
+            }
+        };
+        res.textures.insert(id, entry);
     }
     res.textures.get_mut(&id).expect("texture présente")
 }
@@ -1081,6 +1116,7 @@ impl Uploads {
         if self.copies.is_empty() {
             return;
         }
+        let _t = crate::perf::section("  gpu : tuiles envoyées");
         use wgpu::util::DeviceExt;
         let buffer = rs.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("tuiles à envoyer"),
