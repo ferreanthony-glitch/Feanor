@@ -174,6 +174,20 @@ impl App {
             self.command_button(ui, ph::FLIP_HORIZONTAL, "vue.miroir", "Miroir de la vue", "Voir le dessin retourné, pour vérifier ses proportions ; le dessin ne change pas.", Some(self.view.flip));
             sep(ui);
             self.command_button(ui, ph::CIRCLES_THREE, "vue.pelure", "Pelure d'oignon", "Par défaut, les dessins d'avant en rouge, ceux d'après en vert.", Some(self.onion.enabled));
+            // Réglages de la pelure à côté de son icône (Anthony, 2026-10-18) : combien avant et
+            // après, et le panneau complet (comme dans la barre de la timeline).
+            if self.onion.enabled && !narrow {
+                let max = crate::onion::MAX_NEIGHBOURS;
+                let resp = ui.add(egui::DragValue::new(&mut self.onion.before).range(0..=max).prefix("‹ "));
+                crate::bulles::bulle(resp, "Avant", "Nombre de dessins (ou d'images) montrés avant.", "");
+                let resp = ui.add(egui::DragValue::new(&mut self.onion.after).range(0..=max).suffix(" ›"));
+                crate::bulles::bulle(resp, "Après", "Nombre de dessins (ou d'images) montrés après.", "");
+            }
+            let key = self.raccourci("pelure.panneau");
+            let resp = ui.add(egui::Button::new(egui::RichText::new(ph::GEAR).size(crate::bulles::TAILLE)).selected(self.onion_window).frame(false));
+            if crate::bulles::bulle(resp, "Réglages de la pelure", "Avant et après, mode, devant, couleurs, opacité de chaque image, réglages rangés, décalage.", &key).clicked() {
+                self.onion_window = !self.onion_window;
+            }
             self.command_button(ui, ph::LIGHTBULB, "vue.table_lumineuse", "Table lumineuse", "Les autres calques du plan estompés ; le calque courant reste net.", Some(self.light_table));
             if self.light_table && !narrow {
                 ui.spacing_mut().slider_width = 70.0;
