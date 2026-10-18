@@ -421,7 +421,12 @@ impl App {
                     &fill_key,
                     "pinceau.remplir",
                 );
+                // Fond sous le trait (`fondui.rs`).
+                self.fond_toggle_ui(ui);
             });
+        }
+        if matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser) {
+            self.fond_options_ui(ui);
         }
         // Réglages nommés, papier et grain : pinceau et crayon sur les deux sortes de calques (le
         // trait vectoriel texturé reste modifiable, 7b) ; la gomme sur un calque bitmap.

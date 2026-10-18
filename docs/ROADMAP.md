@@ -1259,6 +1259,19 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         `run_action` et `pane_ui` : aucun des endroits qui enregistrent n'a changé), sinon la
         sorte de modification ; clic sur une étape : annuler ou rétablir jusque-là ; les étapes
         annulées restent en gris dessous. `historyui.rs` ;
+      - **fond sous le trait** (Anthony : « une tâche fastidieuse du storyboard consiste à remplir
+        les personnages d'un fond blanc » ; ses choix : « Dans le même calque », « Option du
+        pinceau ») : option du pinceau et du crayon `pinceau.fond` (le calque courant prend un
+        fond) ; la forme se déduit du trait de chaque dessin à chaque changement (zones fermées,
+        trous fermés jusqu'à 2 × `trous`, débord, bord adouci, bord de l'image qui ferme la
+        forme ; `fond::silhouette`, distances exactes, limitée au rectangle du trait : 36 ms pour
+        un grand personnage en 1920 × 1080) ; strate Fond par dessin (`Cel::fond`, bitmap) où
+        peignent pinceau, crayon et gomme quand « Peindre dans : Fond » (`pinceau.strate_fond`,
+        aussi sur la ligne du calque), gardée dans la forme par un pochoir ; affichée sous le trait
+        à l'écran, à l'export, dans les vignettes (`render::fond_item`, `FondPart`) ; annulation
+        `Edit::FondTiles` ; format 23 (`fond` du calque, `dessins/<id>_fond.png`). Sans touche.
+        Reste : couper le fond (une zone qu'on voudrait transparente), le pot de peinture dans le
+        fond, l'export vers Storyboard Pro du fond (à vérifier) ;
       - **menus courts** (Anthony : « certains menus contiennent trop de choses et noient les
         informations principales » ; « suis tes recommandations ») : barre de menus de 135 lignes
         de premier niveau à environ 75 (Fichier 25 → 12, Édition 13 → 10, Storyboard 22 → 9,

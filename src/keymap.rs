@@ -88,6 +88,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("outil.selection", "Outil sélection", true, false),
     act("outil.selection_couleur", "Outil sélection par couleur", true, false),
     act("pinceau.derriere", "Pinceau et crayon : peint derrière (oui / non)", true, false),
+    act("pinceau.fond", "Fond sous le trait du calque courant (oui / non)", true, false),
+    act("pinceau.strate_fond", "Peindre dans le fond ou dans le trait (bascule)", true, false),
     act("pinceau.remplir", "Pinceau et crayon : remplir la forme (oui / non)", true, false),
     act("outil.cutter", "Outil cutter", true, false),
     act("outil.formes", "Outil formes (dernière forme utilisée)", true, false),

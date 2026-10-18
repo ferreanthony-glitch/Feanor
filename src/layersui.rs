@@ -235,6 +235,8 @@ impl App {
         let mut toggle = None;
         let mut lock = None;
         let mut rename_done: Option<bool> = None;
+        // Bascule Trait / Fond cliquée sur la ligne du calque courant.
+        let mut strate = false;
         let lock_key = self.raccourci("calque.verrouiller");
         let frame = self.cur_frame;
         let accent = ui.visuals().selection.bg_fill;
@@ -246,9 +248,9 @@ impl App {
         let list_top = ui.cursor().top();
         let mut drag_rows: Vec<crate::layerheads::Row> = Vec::new();
         for li in (0..self.layers().len()).rev() {
-            let (id, visible, locked, kind, name, cel, folder, ctg) = {
+            let (id, visible, locked, kind, name, cel, folder, ctg, has_fond) = {
                 let l = &self.layers()[li];
-                (l.id, l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame), l.folder, l.ctg.is_some())
+                (l.id, l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame), l.folder, l.ctg.is_some(), l.fond.is_some())
             };
             // Code couleur de sa sorte (bitmap vert, vectoriel bleu, CTG rose ; Anthony, 2026-10-17).
             let hue = if folder { accent } else { crate::theme::couleur_calque(kind, ctg) };
@@ -331,6 +333,22 @@ impl App {
                             };
                             let label = RichText::new(kind).small();
                             ui.label(if folder || current { label.weak() } else { label.color(hue) });
+                            // Fond sous le trait (`fondui.rs`) : sur le calque courant, où peint le
+                            // pinceau (le trait ou le fond) ; sur les autres, qu'il en a un.
+                            if has_fond && current {
+                                ui.horizontal(|ui| {
+                                    ui.spacing_mut().item_spacing.x = 2.0;
+                                    let on = self.paint_fond;
+                                    let t = ui.add(egui::SelectableLabel::new(!on, RichText::new("Trait").small()));
+                                    let f = ui.add(egui::SelectableLabel::new(on, RichText::new("Fond").small()));
+                                    let f = f.on_hover_text("Le pinceau, le crayon et la gomme peignent dans le fond, sous le trait.");
+                                    if (t.clicked() && on) || (f.clicked() && !on) {
+                                        strate = true;
+                                    }
+                                });
+                            } else if has_fond {
+                                ui.label(RichText::new("+ fond").small().weak()).on_hover_text("Ce calque a un fond sous son trait.");
+                            }
                         });
                     });
                 });
@@ -386,6 +404,9 @@ impl App {
             }
         }
         self.finish_layer_rename(rename_done);
+        if strate {
+            self.run_action("pinceau.strate_fond");
+        }
 
         // Clic droit dans le vide sous la liste : de nouveaux calques.
         let rest = ui.available_rect_before_wrap();

@@ -610,6 +610,21 @@ Les messages de la barre d'état ne se perdent plus : survole-le pour le lire en
 pour voir les précédents. Les avis importants (enregistrement, ouverture, erreurs, fin de
 propagation, export) restent aussi quelques secondes en bas à droite ; un clic les ferme.
 
+## Fond sous le trait
+
+Pour détacher un personnage du décor sans le remplir à la main : dans les réglages du pinceau ou
+du crayon, allume « Fond sous le trait » (à côté de « Peint derrière »). Chaque dessin du calque
+prend alors un fond sous son trait : tout ce que le trait enferme, plus un léger débord autour,
+en une seule forme qui se recalcule à chaque trait (en animation aussi). Réglages, juste dessous :
+- couleur du fond (blanc d'office) ;
+- débord (3 px) ;
+- fermer les trous (6 px : un trou du trait jusqu'à 12 px ne laisse pas fuir le fond) ;
+- le bord de l'image ferme la forme (un personnage coupé par le cadre a son fond jusqu'au bord).
+
+« Peindre dans : Trait | Fond » (dans les réglages, et sur la ligne du calque) : en « Fond », le
+pinceau, le crayon et la gomme peignent dans le fond, sous le trait, sans jamais le toucher, et
+la peinture reste dans la forme. Ctrl+Z annule chaque coup. Éteindre l'option retire le fond.
+
 ## Menus courts
 
 Les menus montrent l'essentiel ; le reste est rangé dans un sous-menu (« Plans », « Importer »,

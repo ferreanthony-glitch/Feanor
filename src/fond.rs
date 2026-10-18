@@ -218,6 +218,37 @@ pub fn silhouette(line: &Raster, r: &FondReglages) -> Vec<u8> {
     out
 }
 
+/// L'étape d'annulation d'un trait peint dans la strate Fond : ses tuiles sont celles du fond
+/// (la création éventuelle du dessin, avant, reste telle quelle).
+pub fn to_fond_edit(edit: crate::history::Edit) -> crate::history::Edit {
+    use crate::history::Edit;
+    match edit {
+        Edit::Tiles { cel, tiles } => Edit::FondTiles { cel, tiles },
+        // (Le trait est la dernière étape du groupe.)
+        Edit::Group(mut edits) => {
+            if let Some(last) = edits.pop() {
+                edits.push(to_fond_edit(last));
+            }
+            Edit::Group(edits)
+        }
+        other => other,
+    }
+}
+
+/// La forme `cover` en dessin (blanc, d'opacité la couverture) : le pochoir qui garde dans la
+/// forme ce qu'on peint dans le fond.
+pub fn mask(cover: &[u8], width: usize, height: usize) -> Raster {
+    let mut out = Raster::new(width, height);
+    for (p, &c) in cover.iter().enumerate() {
+        if c != 0 {
+            let (x, y) = (p % width, p / width);
+            let idx = out.tile_index_of(x, y);
+            out.tile_mut(idx)[(y % TILE) * TILE + x % TILE] = Color32::from_rgba_premultiplied(c, c, c, c);
+        }
+    }
+    out
+}
+
 /// Le fond à afficher sous le trait : la forme `cover` de la couleur `couleur`, et par-dessus,
 /// dans la forme seulement, ce qu'on a peint dans le fond (`paint`).
 pub fn compose(cover: &[u8], width: usize, height: usize, couleur: [u8; 3], paint: Option<&Raster>) -> Raster {

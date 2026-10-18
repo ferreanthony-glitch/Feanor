@@ -1429,6 +1429,11 @@ impl App {
             self.guides.stroke = None;
             return;
         }
+        // Strate Fond (`fond.rs`) : pinceau et gomme peignent dans le fond, en bitmap.
+        if self.paint_fond && self.layer().fond.is_some() {
+            self.begin_fond_stroke(p, pressure, pen);
+            return;
+        }
         match (self.layer().kind, erase) {
             (LayerKind::Vector, true) => self.begin_vector_erase(p, pen),
             (LayerKind::Vector, false) => self.begin_vector_stroke(p, pressure, pen),
@@ -1465,6 +1470,45 @@ impl App {
             stroke.add_point_at(&mut c.raster, p, pressure, time, &mut dirty);
         }
         self.renderer.invalidate_tiles(&dirty);
+        self.stroke = Some(stroke);
+        self.modified = true;
+    }
+
+    /// Un trait dans la strate Fond du dessin courant : la peinture reste dans la forme du fond
+    /// (déduite du trait, gardée comme un pochoir), sous le trait.
+    fn begin_fond_stroke(&mut self, p: Pos2, pressure: f32, pen: bool) {
+        let (Some(settings), Some(r)) = (self.current_brush().copied(), self.layer().fond) else {
+            return;
+        };
+        let (cel, prefix) = self.ensure_cel();
+        let (w, h) = (self.doc.width, self.doc.height);
+        let Some(cover) = self.doc.cels.get(&cel).map(|c| crate::fond::silhouette(&c.raster, &r)) else { return };
+        if cover.iter().all(|&c| c == 0) {
+            self.status = "Strate Fond : dessine d'abord le trait, le fond se déduit de lui (bascule sur Trait).".into();
+            if let Some(p) = prefix {
+                self.history.push(p);
+            }
+            return;
+        }
+        let mut stencil = self.stencil_for(cel);
+        stencil.get_or_insert_with(|| crate::stencil::Stencil::new(w, h)).add(&crate::fond::mask(&cover, w, h), false, None);
+        let mode = if self.tool == Tool::Eraser { StrokeMode::Erase } else { StrokeMode::Paint(self.color) };
+        let textures = self.brushes.textures(&settings);
+        let mut stroke = StrokeState::new(cel, mode, settings, prefix, pen)
+            .with_textures(textures)
+            .with_feel(self.toucher)
+            .with_zoom(self.layer_zoom())
+            .with_secondary(self.couleurs.prefs.back)
+            .on_layer(false, stencil)
+            .with_options(false, false, self.close_tolerance());
+        let mut dirty = Vec::new();
+        let time = self.input_time;
+        if let Some(c) = self.doc.cels.get_mut(&cel) {
+            let f = c.fond.get_or_insert_with(|| Box::new(crate::document::Cel::bitmap(crate::raster::Raster::new(w, h))));
+            stroke.add_point_at(&mut f.raster, p, pressure, time, &mut dirty);
+        }
+        self.renderer.invalidate_tiles(&dirty);
+        self.fond_stroke = Some(cel);
         self.stroke = Some(stroke);
         self.modified = true;
     }
@@ -1507,7 +1551,12 @@ impl App {
         let Some(stroke) = self.stroke.as_mut() else { return };
         let Some(c) = self.doc.cels.get_mut(&stroke.cel) else { return };
         let mut dirty = Vec::new();
-        stroke.add_point_at(&mut c.raster, p, pressure, time, &mut dirty);
+        // (Un trait dans la strate Fond peint son dessin à elle.)
+        let target = match (self.fond_stroke == Some(stroke.cel), c.fond.as_mut()) {
+            (true, Some(f)) => &mut f.raster,
+            _ => &mut c.raster,
+        };
+        stroke.add_point_at(target, p, pressure, time, &mut dirty);
         self.renderer.invalidate_tiles(&dirty);
     }
 
@@ -1530,26 +1579,45 @@ impl App {
             }
             let cel = stroke.cel;
             let mut dirty = Vec::new();
-            let edit = match self.doc.cels.get_mut(&cel) {
-                Some(c) => stroke.finish(&mut c.raster, &mut dirty),
-                None => None,
-            };
-            self.renderer.invalidate_tiles(&dirty);
-            match self.vstroke.take() {
-                Some(vs) => {
-                    // Les pixels d'avant l'aperçu servent à poser le trait définitif sans tout redessiner.
-                    let preview = match edit {
-                        Some(Edit::Tiles { tiles, .. }) => Some(tiles),
-                        _ => None,
-                    };
-                    self.commit_vector_stroke(vs, std::mem::take(&mut stroke.path), preview)
-                }
-                None => {
-                    if let Some(c) = self.doc.cels.get_mut(&cel) {
+            // Un trait dans la strate Fond : fini dans son dessin, annulé par `FondTiles`.
+            if self.fond_stroke.take() == Some(cel) {
+                let edit = match self.doc.cels.get_mut(&cel) {
+                    Some(c) => {
+                        let edit = c.fond.as_mut().and_then(|f| stroke.finish(&mut f.raster, &mut dirty));
+                        if let Some(f) = c.fond.as_mut() {
+                            f.version += 1;
+                        }
                         c.version += 1;
+                        edit
                     }
-                    if let Some(edit) = edit {
-                        self.history.push(edit);
+                    None => None,
+                };
+                self.renderer.invalidate_tiles(&dirty);
+                if let Some(edit) = edit {
+                    self.history.push(crate::fond::to_fond_edit(edit));
+                }
+            } else {
+                let edit = match self.doc.cels.get_mut(&cel) {
+                    Some(c) => stroke.finish(&mut c.raster, &mut dirty),
+                    None => None,
+                };
+                self.renderer.invalidate_tiles(&dirty);
+                match self.vstroke.take() {
+                    Some(vs) => {
+                        // Les pixels d'avant l'aperçu servent à poser le trait définitif sans tout redessiner.
+                        let preview = match edit {
+                            Some(Edit::Tiles { tiles, .. }) => Some(tiles),
+                            _ => None,
+                        };
+                        self.commit_vector_stroke(vs, std::mem::take(&mut stroke.path), preview)
+                    }
+                    None => {
+                        if let Some(c) = self.doc.cels.get_mut(&cel) {
+                            c.version += 1;
+                        }
+                        if let Some(edit) = edit {
+                            self.history.push(edit);
+                        }
                     }
                 }
             }
@@ -2293,6 +2361,7 @@ impl App {
         self.cur_layer = self.layers().len() - 1;
         self.cur_frame = 0;
         self.stroke = None;
+        self.fond_stroke = None;
         self.vstroke = None;
         self.verase = None;
         self.vsel = None;
@@ -2324,6 +2393,7 @@ impl App {
     /// à l'ancienne taille), la vue recadrée.
     pub(crate) fn after_stage_change(&mut self) {
         self.stroke = None;
+        self.fond_stroke = None;
         self.vstroke = None;
         self.verase = None;
         self.vsel = None;
@@ -2652,6 +2722,10 @@ impl App {
             self.envelope = None;
         }
         if self.workspace_action(action) {
+            return;
+        }
+        // Fond sous le trait (ondui.rs).
+        if self.fond_action(action) {
             return;
         }
         // Couleurs et nuanciers (passe couleur, `colorui.rs`).
