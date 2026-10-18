@@ -11,6 +11,9 @@
 //!   commentaires.json     commentaires sur la timeline (`commentaires.rs`), sans changer `VERSION` :
 //!                         absent, il n'y a pas de commentaires ; une version qui ne le connaît pas
 //!                         le laisse en place (elle n'efface que le contenu de dessins/, sons/…)
+//!   rognages.json         contenu rogné au début et à la fin des plans (`rognage.rs`), de même sans
+//!                         changer `VERSION` ; ses dessins restent dans dessins/ (une version qui ne
+//!                         le connaît pas les efface à l'enregistrement : le plan reste tel qu'il est)
 //! ```
 //!
 //! Un enregistrement n'écrit que les dessins modifiés depuis le précédent, puis le manifeste.
@@ -544,8 +547,9 @@ struct VideoEntry {
     nom: String,
     images: usize,
     ips: f64,
+    /// Image du plan où commence la vidéo (négative : le début du plan a été rogné).
     #[serde(default)]
-    debut: usize,
+    debut: i64,
     ext: String,
 }
 
@@ -798,6 +802,8 @@ pub struct SaveJob {
     used_textures: BTreeSet<(TextureKind, u32)>,
     /// Le fichier des commentaires (`commentaires.json`) ; rien : il n'y en a plus, le fichier part.
     comments: Option<Vec<u8>>,
+    /// Le fichier du contenu rogné (`rognages.json`) ; rien : il n'y en a plus, le fichier part.
+    reserves: Option<Vec<u8>>,
 }
 
 /// Prépare l'enregistrement de `doc` dans `manifest_path`. `written` est mis à jour comme si
@@ -893,7 +899,28 @@ pub fn prepare_save(
         used_models,
         used_textures,
         comments: crate::commentaires::to_bytes(doc)?,
+        reserves: crate::rognage::to_bytes(doc)?,
     })
+}
+
+/// Le contenu rogné des plans, lu dans `rognages.json` (absent : rien n'est rogné). Un fichier
+/// illisible n'empêche pas d'ouvrir le projet : on le dit, sans contenu rogné.
+fn load_reserves(dir: &Path, warnings: &mut Vec<String>) -> Option<crate::rognage::Loaded> {
+    let path = dir.join(crate::rognage::FILE);
+    match fs::read_to_string(&path) {
+        Ok(text) => match crate::rognage::parse(&text) {
+            Ok(r) => Some(r),
+            Err(e) => {
+                warnings.push(format!("{} : {e} ; le contenu rogné des plans n'est pas chargé.", crate::rognage::FILE));
+                None
+            }
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => {
+            warnings.push(format!("{} : {e} ; le contenu rogné des plans n'est pas chargé.", path.display()));
+            None
+        }
+    }
 }
 
 /// Les commentaires du projet, lus dans `commentaires.json` (absent : aucun commentaire). Un
@@ -963,6 +990,14 @@ impl SaveJob {
             Some(bytes) => write_atomic(&sidecar, bytes)?,
             None => {
                 let _ = fs::remove_file(&sidecar);
+            }
+        }
+        // Le contenu rogné des plans : son fichier à côté du manifeste (rien de rogné, il part).
+        let rognages = dir.join(crate::rognage::FILE);
+        match &self.reserves {
+            Some(bytes) => write_atomic(&rognages, bytes)?,
+            None => {
+                let _ = fs::remove_file(&rognages);
             }
         }
         write_atomic(&self.manifest_path, &self.manifest)?;
@@ -1370,7 +1405,9 @@ fn load_with(manifest_path: &Path, quick: bool) -> Result<Loaded, String> {
     load_textures(dir, &mut warnings);
     let mut cels: HashMap<CelId, Cel> = HashMap::new();
     let mut missing: BTreeSet<CelId> = BTreeSet::new();
-    let referenced: BTreeSet<CelId> = manifest
+    // Le contenu rogné des plans (`rognages.json`) : ses dessins se chargent avec les autres.
+    let reserves = load_reserves(dir, &mut warnings);
+    let mut referenced: BTreeSet<CelId> = manifest
         .sequences
         .iter()
         .flat_map(|s| &s.scenes)
@@ -1378,6 +1415,9 @@ fn load_with(manifest_path: &Path, quick: bool) -> Result<Loaded, String> {
         .flat_map(|p| &p.calques)
         .flat_map(|l| l.expositions.iter().filter_map(|r| r.dessin))
         .collect();
+    if let Some(r) = &reserves {
+        referenced.extend(r.cels());
+    }
     let mut approx = Vec::new();
     for id in referenced {
         match load_drawing(dir, id, w, h, quick) {
@@ -1511,6 +1551,8 @@ fn load_with(manifest_path: &Path, quick: bool) -> Result<Loaded, String> {
         },
         // Les commentaires viennent de leur fichier, après les plans (`load_comments`).
         comments: Vec::new(),
+        // La réserve du rognage aussi (`rognages.json`, `load_reserves`).
+        reserves: Default::default(),
     };
     for seq in manifest.sequences {
         structure.sequences.push(Sequence {
@@ -1681,6 +1723,9 @@ fn load_with(manifest_path: &Path, quick: bool) -> Result<Loaded, String> {
     let mut doc = Document::from_parts(w, h, structure, cels, sounds);
     for model in models.into_values() {
         doc.insert_model(model);
+    }
+    if let Some(r) = reserves {
+        r.install(&mut doc, &missing);
     }
     // Projet d'avant les plans (13a) : chaque scène devient un plan, ses panneaux bout à bout.
     if !doc.is_plans() {

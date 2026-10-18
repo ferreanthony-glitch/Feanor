@@ -32,8 +32,9 @@ pub struct VideoClip {
     pub frames: usize,
     /// Cadence de la vidéo (images par seconde).
     pub fps: f64,
-    /// Image du plan où commence la vidéo.
-    pub start: usize,
+    /// Image du plan où commence la vidéo (négative : la vidéo a commencé avant le plan, dont le
+    /// début a été rogné, `rognage.rs`).
+    pub start: i64,
     /// Extension des images (`jpg` pour une vidéo, `png` pour une séquence).
     pub ext: String,
 }
@@ -42,7 +43,7 @@ impl VideoClip {
     /// Image de la vidéo montrée à l'image `frame` du plan (cadence du projet `fps`), s'il y en
     /// a une.
     pub fn index_at(&self, frame: usize, fps: u32) -> Option<usize> {
-        let t = frame.checked_sub(self.start)?;
+        let t = usize::try_from(frame as i64 - self.start).ok()?;
         let k = (t as f64 * self.fps / fps.max(1) as f64 + 1e-6).floor() as usize;
         (k < self.frames).then_some(k)
     }
@@ -54,7 +55,12 @@ impl VideoClip {
 
     /// Image du plan juste après la fin de la vidéo.
     pub fn end(&self, fps: u32) -> usize {
-        self.start + self.plan_frames(fps)
+        (self.start + self.plan_frames(fps) as i64).max(0) as usize
+    }
+
+    /// Image du plan où commence la vidéo, ramenée à 0 si elle commence avant le plan.
+    pub fn first_frame(&self) -> usize {
+        self.start.max(0) as usize
     }
 }
 

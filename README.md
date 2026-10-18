@@ -865,6 +865,50 @@ ou le réunit à un autre.
 - Enregistrés dans `commentaires.json`, à côté du manifeste du projet (le format du projet ne
   change pas) ; chaque changement s'annule et se rétablit.
 
+## Rogner les plans dans le montage
+
+Un plan se raccourcit ou s'allonge par ses deux bords dans la bande de montage, sans rien détruire :
+ce qui sort du plan est gardé en réserve et revient en le rallongeant (un petit triangle au bord dit
+qu'il reste du contenu caché de ce côté).
+
+| Geste | Effet |
+|---|---|
+| Glisser le **bord gauche** d'un plan | rogne ou rallonge son **début** (vers la droite : le plan perd ses premières images ; vers la gauche : elles reviennent de la réserve, puis le premier dessin est tenu) |
+| Glisser le **bord droit** | rogne ou rallonge sa **fin** (c'était déjà là, mais détruisait ce qu'on coupait) |
+| **Alt** + glisser un bord, entre deux plans | **roll** : la coupe se déplace, l'un raccourcit, l'autre s'allonge, le total ne change pas |
+| **Alt** (ou Ctrl+Alt) + glisser dans un plan | **glisser le contenu** : le plan garde sa durée et sa place, c'est ce qu'il montre qui avance ou recule dans sa réserve (rogne d'abord le début ou la fin) |
+| Clic sur un bord (Alt : la coupe), puis ← / → | déplace ce bord d'une image |
+| Clic droit sur un plan > « Durée… » | tape la durée exacte (`36`, `1:12` ou `1s12`, `+12`, `-4`) |
+| Clic droit > « Raccourcir le début / la fin jusqu'à la tête de lecture » | coupe au trait de la tête de lecture (le bord gauche de l'image courante) |
+| Clic droit > « Rétablir le contenu rogné » / « Oublier le contenu rogné » | reprend toute la réserve du plan, ou la vide (le rognage devient définitif) |
+
+- **Ripple** par défaut : les plans suivants se serrent ou s'écartent d'autant, sans trou. Le son ne
+  bouge pas (la barre d'état prévient quand les plans se décalent par rapport à lui).
+- **Aimant** (bouton de la barre du montage) : un bord se colle, à six points d'écran près, à la tête
+  de lecture, aux autres coupes et aux clés de caméra et d'effets. Éteint, il suit la souris à
+  l'image près. Pendant le geste, un repère montre où la coupe tombe dans le film d'avant et une
+  étiquette donne la nouvelle durée et ce qui est caché. Échap rend tout comme avant.
+- Dans la timeline du plan, la poignée de fin de la règle et les menus de la règle font la même chose.
+- Ce qui tient aux images suit le contenu : calques (dessins, rôles, clés d'effets), clés de caméra,
+  marques d'image, signets, entrée / sortie, commentaires et calques vidéo. Rogner pose une clé
+  au bord du plan (caméra, effets) pour que le mouvement continue tel qu'il était ; elle repart quand
+  le contenu revient. Ce qui est caché disparaît des vignettes, de l'export et du PDF ; les
+  commentaires cachés reviennent avec leurs images.
+- Chaque geste est une étape d'annulation nommée : « Raccourcir le début », « Allonger le début »,
+  « Raccourcir la fin », « Allonger la fin », « Déplacer la coupe », « Glisser le contenu ». Le
+  storyboard verrouillé les refuse. Les commandes sont des actions (`montage.duree`,
+  `montage.debut_a_tete`, `montage.fin_a_tete`, `montage.rognage_retablir`,
+  `montage.rognage_oublier`, `montage.aimanter`), sans touche par défaut : clic droit sur l'entrée d'un
+  menu pour leur en donner une, ou Ctrl+K.
+- À vérifier face à Storyboard Pro et aux logiciels de montage : la touche Alt pour le roll et le
+  glisser, la coupe « au trait de la tête de lecture » (l'image sous la tête sort de la fin), et le
+  premier dessin tenu quand on rallonge au-delà de la réserve. Ce sont des choix de SHOT.
+- Enregistré dans `rognages.json`, à côté du manifeste (le format du projet ne change pas ; une
+  version qui ne le connaît pas ne voit que les plans, et peut effacer les dessins cachés). Les
+  noms d'instance et marques de couleur d'un dessin caché ne sont pas gardés à l'enregistrement.
+  Dupliquer ou copier un plan ne copie pas sa réserve ; couper un plan garde le début caché au premier
+  plan, réunir deux plans ne garde que le début caché du premier.
+
 ## Palette de commandes
 
 Ctrl+K (ou Aide > Palette de commandes) : tape quelques lettres du nom d'une commande (« persp »,
@@ -921,6 +965,7 @@ Bus/
   sons/14.mp3       les sons importés, copiés tels quels
   modeles/15.pelure3d  les modèles 3D de repère
   commentaires.json    les commentaires de la timeline (absent : aucun commentaire)
+  rognages.json        le contenu rogné des plans (absent : rien de rogné)
 ```
 
 Si tu enregistres « Bus.pelure » dans `Films`, le fichier est donc dans `Films\Bus\Bus.pelure`, pas
@@ -1114,6 +1159,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `camfx.rs`, `camfxui.rs` | Effets de caméra en préréglages (tremblements, explosion, zooms, vertigo) et liste des focales |
 | `cadrage.rs`, `cadrageui.rs` | Aides au cadrage (tiers, grille d'or, spirale, diagonales, croix) : géométrie, réglages, tracé |
 | `commentaires.rs`, `commentairesui.rs` | Commentaires sur la timeline : modèle, fichier `commentaires.json`, positions ; fanions, bulle, menu, panneau |
+| `rognage.rs`, `rognageui.rs` | Rogner les plans sans rien détruire : réserve du début et de la fin, ripple, roll, glisser, aimantation, durée tapée, fichier `rognages.json` ; bords à la souris, flèches, commandes, fenêtre « Durée… » |
 | `app.rs` | État de l'application, actions, raccourcis |
 | `vtools.rs` | Outils des calques vectoriels |
 | `storyboard.rs` | Bande de montage, vue vignettes, fiche du panneau |

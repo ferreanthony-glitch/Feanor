@@ -219,6 +219,9 @@ impl App {
         self.playing = false;
         let snap = self.snapshot();
         let r = |f: usize| tween::rescale_frame(f, from, fps);
+        // Le contenu rogné des plans (`rognage.rs`) est compté dans l'ancienne cadence : oublié.
+        let forgotten: usize = self.doc.reserves.values().map(|r| r.head.len + r.tail.len).sum();
+        self.doc.reserves.clear();
         for pi in 0..self.doc.panels.len() {
             let layers = self.doc.panels[pi].layers.clone();
             let mut new_layers = Vec::with_capacity(layers.len());
@@ -234,7 +237,7 @@ impl App {
                     }
                 }
                 if let Some(v) = &mut l.video {
-                    v.start = r(v.start);
+                    v.start = if v.start >= 0 { r(v.start as usize) as i64 } else { -(r(v.start.unsigned_abs() as usize) as i64) };
                 }
                 new_layers.push(l);
             }
@@ -271,6 +274,9 @@ impl App {
         self.commit_structure(snap);
         let how = if interpolate { "images ajoutées interpolées" } else { "dessins tenus" };
         self.status = format!("Projet passé de {from} à {fps} images par seconde, durées gardées ({how}).");
+        if forgotten > 0 {
+            self.status.push_str(&format!(" Le contenu rogné des plans ({forgotten} i) est oublié."));
+        }
     }
 
     /// Ouvre la fenêtre d'interpolation pour `kind`.

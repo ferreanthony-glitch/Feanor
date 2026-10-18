@@ -515,7 +515,7 @@ impl App {
             let y = grid_top + row.top;
             // Calque vidéo (13k) : une bande de film de sa durée, avec son nom.
             if let Some(v) = &layer.video {
-                let (a, b) = (v.start, v.end(self.doc.fps).min(cols));
+                let (a, b) = (v.first_frame(), v.end(self.doc.fps).min(cols));
                 if a < b {
                     let block = Rect::from_min_max(pos2(r.left() + a as f32 * cell + 1.0, y + 4.0), pos2(r.left() + b as f32 * cell - 1.0, y + row.h - 4.0));
                     let fill = if layer.visible { theme::son_extrait() } else { theme::son_extrait().gamma_multiply(0.5) };

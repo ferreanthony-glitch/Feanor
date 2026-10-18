@@ -197,7 +197,7 @@ impl Projet {
     /// Durée voulue du panneau `index`, en images (il reste au moins aussi long que son animation).
     pub fn regler_duree(&mut self, index: usize, images: usize) -> Result<usize, String> {
         let index = self.panneau(index)?;
-        self.doc.panels[index].set_length(images.clamp(1, 100_000));
+        self.doc.set_duration(index, images);
         self.modifie = true;
         Ok(self.doc.panels[index].frame_count())
     }
