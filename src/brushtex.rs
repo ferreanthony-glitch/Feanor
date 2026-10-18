@@ -778,6 +778,11 @@ pub const PAPER_DRAWING: u32 = 3;
 pub const PAPER_CANVAS: u32 = 4;
 /// « Vergé » : vergeures et pontuseaux.
 pub const PAPER_LAID: u32 = 5;
+/// « Papier à dessin fin » : le papier des crayons graphite et de couleur depuis le retour
+/// d'Anthony (grain « sable », relief fin à 1 et 2 texels). Un papier à part : le « Papier à
+/// dessin » (3) garde le relief des étapes 1 à 3 pour le fusain, la gomme à grain et les réglages
+/// enregistrés qui s'en servent.
+pub const PAPER_GRAPHITE: u32 = 6;
 /// Pointes de Pelure (fabriquées au démarrage).
 pub const TIP_GRAPHITE: u32 = 10;
 pub const TIP_CHARCOAL: u32 = 11;
@@ -786,6 +791,12 @@ pub const TIP_BRISTLES_FLAT: u32 = 13;
 pub const TIP_BRISTLES_ROUND: u32 = 14;
 /// Numéros des textures importées : à partir d'ici.
 const FIRST_IMPORTED: u32 = 100;
+
+/// Relief du « Papier à dessin » (étapes 1 à 3 : surtout 2 à 8 texels) : ne change plus, les
+/// réglages qui s'en servent gardent leur rendu.
+pub const PAPER_DRAWING_OCTAVES: &[(usize, f32)] = &[(0, 0.25), (1, 0.45), (2, 0.55), (4, 0.35)];
+/// Relief du « Papier à dessin fin » des crayons (retour d'Anthony : grain « sable »).
+pub const PAPER_GRAPHITE_OCTAVES: &[(usize, f32)] = &[(0, 0.5), (1, 0.55), (2, 0.4), (4, 0.25)];
 
 /// Nombre de cases d'une pointe de Pelure (aucun : pointe importée).
 pub fn builtin_tip_cells(id: u32) -> Option<u32> {
@@ -827,11 +838,12 @@ impl BrushLibrary {
         lib.papers.insert(PAPER_FINE, ("Grain fin".into(), Arc::new(procedural_paper(256, 0, 11))));
         lib.papers.insert(PAPER_COARSE, ("Grain gros".into(), Arc::new(procedural_paper(256, 1, 29))));
         // Papiers et pointes fabriqués (rendu, étape 1) : pour un projet 1920×1080 vu à 50 %.
-        // Papier à dessin : plus de relief fin (1 et 2 texels) depuis le retour d'Anthony (grain
-        // « sable », pas nuageux), un peu de large pour la respiration.
-        lib.papers.insert(PAPER_DRAWING, ("Papier à dessin".into(), Arc::new(multiscale_paper(256, 0x0A11, &[(0, 0.5), (1, 0.55), (2, 0.4), (4, 0.25)]))));
+        lib.papers.insert(PAPER_DRAWING, ("Papier à dessin".into(), Arc::new(multiscale_paper(256, 0x0A11, PAPER_DRAWING_OCTAVES))));
         lib.papers.insert(PAPER_CANVAS, ("Toile".into(), Arc::new(canvas_paper(256, 8, 0x70A1))));
         lib.papers.insert(PAPER_LAID, ("Vergé".into(), Arc::new(laid_paper(256, 0x7E86))));
+        // Papier des crayons : plus de relief fin (1 et 2 texels) depuis le retour d'Anthony (grain
+        // « sable », pas nuageux), un peu de large pour la respiration.
+        lib.papers.insert(PAPER_GRAPHITE, ("Papier à dessin fin".into(), Arc::new(multiscale_paper(256, 0x0A11, PAPER_GRAPHITE_OCTAVES))));
         let tip = |img: GrayImage| Arc::new(Tip::new(img));
         lib.tips.insert(TIP_GRAPHITE, ("Graphite".into(), tip(tip_grains(48, 8, 0x6A1))));
         lib.tips.insert(TIP_CHARCOAL, ("Fusain".into(), tip(tip_stick(96, 6, 0xF05A, 0.9, 0.8, 0.4))));

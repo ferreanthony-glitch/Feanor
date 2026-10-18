@@ -607,6 +607,8 @@ pub struct App {
     pub(crate) envelope: Option<crate::envelopetools::EnvelopeEdit>,
     /// Déformation en perspective en cours (5f).
     pub(crate) persp: Option<crate::perstools::PerspEdit>,
+    /// Rejeux exacts des dessins vectoriels en arrière-plan (`rejeu.rs`).
+    pub(crate) rejeu: crate::rejeu::Rejeu,
     pub(crate) clipboard: Vec<Element>,
     pub(crate) renderer: Renderer,
     pub(crate) thumbs: Thumbs,
@@ -892,6 +894,7 @@ impl App {
             messages_window: false,
             envelope: None,
             persp: None,
+            rejeu: crate::rejeu::Rejeu::new(),
             clipboard: Vec::new(),
             renderer: Renderer::new(),
             thumbs: Thumbs::default(),
@@ -1743,8 +1746,10 @@ impl App {
         self.modified = true;
     }
 
-    /// Refait l'image d'un dessin vectoriel et rafraîchit l'affichage.
+    /// Refait l'image d'un dessin vectoriel et rafraîchit l'affichage (sur le fil de l'interface :
+    /// pour ce qui n'est pas un geste ; voir `rejeu_cel`).
     pub(crate) fn refresh_cel(&mut self, cel: CelId) {
+        self.rejeu.cancel(cel);
         if let Some(c) = self.doc.cels.get_mut(&cel) {
             let tiles = c.rerender();
             self.renderer.invalidate_tiles(&tiles);
@@ -1754,9 +1759,41 @@ impl App {
     /// Comme `refresh_cel`, dans `region` seulement (là où quelque chose a changé) : le coût ne
     /// grandit plus avec le nombre de traits du dessin.
     pub(crate) fn refresh_cel_region(&mut self, cel: CelId, region: Rect) {
+        self.rejeu.cancel(cel);
         if let Some(c) = self.doc.cels.get_mut(&cel) {
             let tiles = c.rerender_region(region.expand(2.0));
             self.renderer.invalidate_tiles(&tiles);
+        }
+    }
+
+    /// Demande le rendu exact du dessin vectoriel `cel` en arrière-plan (`rejeu.rs`) : son image
+    /// actuelle (l'aperçu du geste, posé depuis les caches) reste affichée jusqu'à ce qu'il arrive.
+    pub(crate) fn rejeu_cel(&mut self, cel: CelId) {
+        let (w, h) = (self.doc.width, self.doc.height);
+        if let Some(d) = self.doc.cels.get(&cel).and_then(|c| c.vector.as_ref()) {
+            self.rejeu.submit(cel, d, w, h);
+        }
+    }
+
+    /// Adopte les rejeux exacts arrivés : l'image du dessin, et les pixels exacts en cache de ses
+    /// traits, d'un coup — si le dessin n'a pas changé entre-temps.
+    pub(crate) fn poll_rejeu(&mut self, ctx: &egui::Context) {
+        for done in self.rejeu.poll() {
+            let Some(c) = self.doc.cels.get_mut(&done.cel) else { continue };
+            let Some(d) = c.vector.as_mut() else { continue };
+            if d.elements.len() != done.drawing.elements.len() || d.elements.iter().zip(&done.drawing.elements).any(|(a, b)| !a.same_as(b)) {
+                continue;
+            }
+            for (e, exact) in d.elements.iter_mut().zip(&done.drawing.elements) {
+                e.adopt_cache(exact);
+            }
+            let changed: Vec<usize> = (0..done.raster.tiles.len()).filter(|&i| c.raster.tiles.get(i).is_some_and(Option::is_some) || done.raster.tiles[i].is_some()).collect();
+            c.raster = done.raster;
+            c.version += 1;
+            self.renderer.invalidate_tiles(&changed);
+        }
+        if self.rejeu.has_pending() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(16));
         }
     }
 
@@ -2203,6 +2240,8 @@ impl App {
     }
 
     fn after_history(&mut self, nav: Nav) {
+        // Les dessins rétablis ont été rendus directement : plus rien à attendre du rejeu.
+        self.rejeu.cancel_all();
         self.cur_panel = nav.panel;
         self.cur_layer = nav.layer;
         self.clamp_nav();
@@ -2369,9 +2408,14 @@ impl App {
             }
             return;
         }
-        match project::load(&path) {
+        // Ouverture immédiate : les dessins vectoriels texturés paraissent en rendu rapide, leur
+        // rendu exact arrive en arrière-plan (`rejeu.rs`).
+        match project::load_quick(&path) {
             Ok(loaded) => {
                 self.load_doc(loaded.doc);
+                for id in loaded.approx {
+                    self.rejeu_cel(id);
+                }
                 self.written = loaded.written;
                 self.status = if loaded.warnings.is_empty() {
                     format!("Ouvert : {}", path.display())
@@ -2394,6 +2438,7 @@ impl App {
     }
 
     pub(crate) fn load_doc(&mut self, doc: Document) {
+        self.rejeu.cancel_all();
         self.doc = doc;
         self.mode = Mode::Storyboard;
         self.cur_panel = 0;
@@ -3492,6 +3537,7 @@ impl eframe::App for App {
         }
         self.validate_selection();
         self.validate_bitmap_selection();
+        self.poll_rejeu(ctx);
         self.update_title(ctx);
         self.thumbs.prune(&self.doc);
         self.thumbs.pending = false;

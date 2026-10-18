@@ -64,6 +64,22 @@ impl Raster {
         self.tiles[idx].get_or_insert_with(empty_tile)
     }
 
+    /// Pose `src` (même taille, prémultipliée) par-dessus cette image.
+    pub fn composite_over(&mut self, src: &Raster) {
+        for (idx, tile) in src.tiles.iter().enumerate() {
+            let Some(tile) = tile else { continue };
+            if idx >= self.tiles.len() {
+                break;
+            }
+            let dst = self.tile_mut(idx);
+            for (d, &s) in dst.iter_mut().zip(tile.iter()) {
+                if s.a() != 0 {
+                    *d = crate::render::over(*d, s, 255, None);
+                }
+            }
+        }
+    }
+
     /// Même image dans une feuille `width`×`height`, décalée de (`dx`, `dy`) pixels.
     pub fn placed_in(&self, width: usize, height: usize, dx: usize, dy: usize) -> Raster {
         let mut out = Raster::new(width, height);

@@ -99,7 +99,7 @@ fn a_moved_stroke_is_its_shifted_pixels_until_released() {
     vector::render_element(&mut first, &e);
     // Déplacé d'un nombre entier de pixels : les pixels copiés, sans rejeu (le grain du papier
     // suit le trait pendant le geste).
-    let moved = e.transformed(&Affine::translate(eframe::egui::vec2(7.0, -3.0)));
+    let moved = e.transformed_preview(&Affine::translate(eframe::egui::vec2(7.0, -3.0)));
     let mut shifted = Raster::new(400, 200);
     vector::render_element(&mut shifted, &moved);
     for y in 10..190 {
@@ -108,7 +108,7 @@ fn a_moved_stroke_is_its_shifted_pixels_until_released() {
         }
     }
     // Tourné : rééchantillonné depuis le cache, à peu près la même quantité d'encre.
-    let turned = e.transformed(&Affine::rotate_about(pos2(180.0, 90.0), 0.3));
+    let turned = e.transformed_preview(&Affine::rotate_about(pos2(180.0, 90.0), 0.3));
     let mut rot = Raster::new(400, 200);
     vector::render_element(&mut rot, &turned);
     let ink = |r: &Raster| (0..200).flat_map(|y| (0..400).map(move |x| (x, y))).map(|(x, y)| r.get(x, y).a() as f64).sum::<f64>();
@@ -166,15 +166,15 @@ fn old_strokes_and_edited_strokes_still_render() {
     let mut r2 = Raster::new(200, 80);
     vector::render_element(&mut r2, &textured_old);
     assert!((24..176).filter(|&x| r2.get(x, 40).a() > 0).count() > 100);
-    // Coupé par la gomme : des morceaux qui se rendent, sans appuis (retrouvés d'après les rayons).
+    // Coupé par la gomme : des morceaux qui se rendent, avec leurs appuis (interpolés aux coupes).
     let (_, e) = bitmap_and_element(&s, &lib, 400, 200, &geste(120, 0.0, 0.0));
     let mut d = VectorDrawing { elements: vec![e.clone()] };
     assert!(vector::erase_circle(&mut d, pos2(180.0, 90.0), 12.0, false));
     assert!(d.elements.len() >= 2);
     let mut r3 = Raster::new(400, 200);
     for p in &d.elements {
-        if let Element::Stroke { trace, .. } = p {
-            assert!(trace.pressure.is_empty() && trace.feel.is_some());
+        if let Element::Stroke { points, trace, .. } = p {
+            assert!(trace.pressure.len() == points.len() && trace.time.len() == points.len() && trace.feel.is_some());
         }
         vector::render_element(&mut r3, p);
     }
@@ -185,12 +185,18 @@ fn old_strokes_and_edited_strokes_still_render() {
     let json = serde_json::to_string(&e).unwrap();
     assert!(json.contains("\"appui\"") && json.contains("\"instants\"") && !json.contains("cache"));
     let back: Element = serde_json::from_str(&json).unwrap();
-    assert_eq!(back, e);
+    // Les appuis sont enregistrés au 1/65535, les instants au dixième de milliseconde depuis le
+    // premier : le trait relu est le même à ces arrondis près.
+    let (Element::Stroke { points: pe, trace: te, .. }, Element::Stroke { points: pb, trace: tb, .. }) = (&e, &back) else { panic!() };
+    assert_eq!(pe, pb);
+    assert_eq!((te.feel, te.secondary), (tb.feel, tb.secondary));
+    assert!(te.pressure.iter().zip(&tb.pressure).all(|(a, b)| (a - b).abs() <= 1.0 / 65535.0));
+    assert!(te.time.iter().zip(&tb.time).all(|(a, b)| ((a - te.time[0]) - b).abs() <= 1e-4));
     assert_eq!(back.cache_bytes(), 0);
     let (mut a, mut b) = (Raster::new(400, 200), Raster::new(400, 200));
     vector::render_element(&mut a, &e);
     vector::render_element(&mut b, &back);
-    same_pixels(&a, &b).unwrap();
+    near_pixels(&a, &b, 1).unwrap();
     // Un vieux fichier sans « trace » se relit.
     let legacy: Element = serde_json::from_str(r#"{"type":"Stroke","points":[{"x":1.0,"y":2.0,"r":3.0}],"color":[0,0,0],"opacity":1.0,"hardness":1.0}"#).unwrap();
     assert!(matches!(legacy, Element::Stroke { ref trace, .. } if trace.pressure.is_empty() && trace.feel.is_none()));
@@ -229,7 +235,7 @@ fn vector_selection_drag_is_fast_with_the_pixel_cache() {
             let mut region = Rect::NOTHING;
             for (i, src) in originals.iter().enumerate() {
                 region = region.union(d.elements[i].bounds().expand(1.5));
-                d.elements[i] = src.transformed(&aff);
+                d.elements[i] = src.transformed_preview(&aff);
                 if !with_cache {
                     d.elements[i].invalidate_cache();
                 }

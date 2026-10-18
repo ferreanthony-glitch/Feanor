@@ -168,6 +168,8 @@ mod matiere_tests;
 #[cfg(test)]
 mod vecto_tests;
 #[cfg(test)]
+mod revue_tests;
+#[cfg(test)]
 mod keymap_tests;
 #[cfg(test)]
 mod ops_tests;
@@ -237,6 +239,7 @@ mod propager_cadence_tests;
 mod propagerui;
 mod raccourcisui;
 mod raster;
+mod rejeu;
 mod recovery;
 #[cfg(test)]
 mod recovery_tests;

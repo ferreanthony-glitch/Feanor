@@ -73,9 +73,11 @@ pub const FORMAT: &str = "pelure-projet";
 /// 23 (2026-10-18) : fond sous le trait (`fond` d'un calque ; la strate Fond d'un dessin dans
 /// `dessins/<id>_fond.png`).
 /// 24 (2026-10-18, rendu des brosses, étape 5) : les traits vectoriels gardent leur `trace`
-/// (appui et instant par point, toucher, couleur B) et leur réglage complet, et sont rejoués par
-/// le moteur bitmap ; une version précédente les lirait sans la trace (rendu approché, l'appui
-/// retrouvé d'après les rayons).
+/// (appui et instant par point en entiers — `appui` au 1/65535, `instants` en dixièmes de
+/// milliseconde depuis le premier —, toucher, couleur B) et leur réglage complet, et sont rejoués
+/// par le moteur bitmap. Comme pour tout nouveau format, une version précédente de Pelure **refuse**
+/// d'ouvrir le projet (`load` : « créé par une version plus récente ») ; elle ne le lit pas en
+/// rendu approché.
 pub const VERSION: u32 = 24;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
@@ -1238,9 +1240,25 @@ pub struct Loaded {
     pub warnings: Vec<String>,
     /// Ancien format (3) converti à l'ouverture : feuille doublée autour du cadre.
     pub converted: bool,
+    /// Dessins vectoriels affichés en rendu rapide (`load_quick`) : leur rendu exact est à
+    /// demander au rejeu en arrière-plan (`rejeu.rs`).
+    pub approx: Vec<CelId>,
 }
 
+/// Ouvre le projet, dessins vectoriels rendus exactement (le moteur rejoué sur chaque trait : ce
+/// que l'application affiche une fois le rejeu terminé).
 pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
+    load_with(manifest_path, false)
+}
+
+/// Ouvre le projet tout de suite : les dessins vectoriels texturés sont affichés en rendu rapide
+/// (traits lisses, sans rejeu du moteur) et listés dans `approx`, pour un rendu exact en
+/// arrière-plan. Règle d'Anthony : rien ne bloque l'interface.
+pub fn load_quick(manifest_path: &Path) -> Result<Loaded, String> {
+    load_with(manifest_path, true)
+}
+
+fn load_with(manifest_path: &Path, quick: bool) -> Result<Loaded, String> {
     let text = fs::read_to_string(manifest_path).map_err(|e| e.to_string())?;
     let manifest: Manifest =
         serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("manifeste illisible : {e}"))?;
@@ -1271,9 +1289,13 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
         .flat_map(|p| &p.calques)
         .flat_map(|l| l.expositions.iter().filter_map(|r| r.dessin))
         .collect();
+    let mut approx = Vec::new();
     for id in referenced {
-        match load_drawing(dir, id, w, h) {
-            Ok(cel) => {
+        match load_drawing(dir, id, w, h, quick) {
+            Ok((cel, approximate)) => {
+                if approximate {
+                    approx.push(id);
+                }
                 cels.insert(id, cel);
             }
             Err(e) => {
@@ -1590,6 +1612,7 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
         written,
         warnings,
         converted,
+        approx,
     })
 }
 
@@ -1658,9 +1681,10 @@ fn load_sound(dir: &Path, entry: &SoundEntry) -> Result<Sound, String> {
 }
 
 /// Le dessin `id`, avec sa strate Fond s'il en a une (format 23 ; illisible ou d'une autre taille :
-/// ignorée, le dessin reste).
-fn load_drawing(dir: &Path, id: CelId, w: usize, h: usize) -> Result<Cel, String> {
-    let mut cel = load_line(dir, id, w, h)?;
+/// ignorée, le dessin reste) ; et s'il est affiché en rendu rapide (`quick`, dessin vectoriel
+/// texturé).
+fn load_drawing(dir: &Path, id: CelId, w: usize, h: usize, quick: bool) -> Result<(Cel, bool), String> {
+    let (mut cel, approximate) = load_line(dir, id, w, h, quick)?;
     let read = |path: PathBuf| -> Option<Raster> {
         let img = image::open(&path).ok()?.to_rgba8();
         (img.width() as usize == w && img.height() as usize == h).then(|| Raster::from_rgba(w, h, img.as_raw()))
@@ -1676,21 +1700,27 @@ fn load_drawing(dir: &Path, id: CelId, w: usize, h: usize) -> Result<Cel, String
         }
         cel.fond = Some(Box::new(s));
     }
-    Ok(cel)
+    Ok((cel, approximate))
 }
 
-fn load_line(dir: &Path, id: CelId, w: usize, h: usize) -> Result<Cel, String> {
+fn load_line(dir: &Path, id: CelId, w: usize, h: usize, quick: bool) -> Result<(Cel, bool), String> {
     let vector_path = drawing_path(dir, id, true);
     if vector_path.exists() {
         let text = fs::read_to_string(&vector_path).map_err(|e| format!("dessin {id} illisible : {e}"))?;
         let drawing: VectorDrawing =
             serde_json::from_str(&text).map_err(|e| format!("dessin {id} illisible : {e}"))?;
-        return Ok(Cel {
-            raster: drawing.render(w, h),
-            vector: Some(drawing),
-            version: 0,
-            fond: None,
-        });
+        let textured = drawing.elements.iter().any(|e| matches!(e, crate::vector::Element::Stroke { brush: Some(_), .. }));
+        let approximate = quick && textured;
+        let raster = if approximate { drawing.render_quick(w, h) } else { drawing.render(w, h) };
+        return Ok((
+            Cel {
+                raster,
+                vector: Some(drawing),
+                version: 0,
+                fond: None,
+            },
+            approximate,
+        ));
     }
     let png_path = drawing_path(dir, id, false);
     if png_path.exists() {
@@ -1700,7 +1730,7 @@ fn load_line(dir: &Path, id: CelId, w: usize, h: usize) -> Result<Cel, String> {
         if img.width() as usize != w || img.height() as usize != h {
             return Err(format!("dessin {id} : taille différente de celle du projet, ignoré"));
         }
-        return Ok(Cel::bitmap(Raster::from_rgba(w, h, img.as_raw())));
+        return Ok((Cel::bitmap(Raster::from_rgba(w, h, img.as_raw())), false));
     }
     Err(format!("dessin {id} introuvable dans « {DRAWINGS} »"))
 }

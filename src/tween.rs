@@ -14,7 +14,7 @@ use eframe::egui::{pos2, Color32};
 
 use crate::document::CelId;
 use crate::raster::{Raster, TILE};
-use crate::vector::{Element, VPoint, VectorDrawing};
+use crate::vector::{Element, Trace, VPoint, VectorDrawing};
 
 fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
@@ -24,10 +24,11 @@ fn lerp_rgb(a: [u8; 3], b: [u8; 3], t: f32) -> [u8; 3] {
     std::array::from_fn(|i| lerp(a[i] as f32, b[i] as f32, t).round().clamp(0.0, 255.0) as u8)
 }
 
-/// `n` points régulièrement espacés le long de `points` (par la longueur du trait).
-fn resample_points(points: &[VPoint], n: usize) -> Vec<VPoint> {
+/// `n` points régulièrement espacés le long de `points` (par la longueur du trait), avec, pour
+/// chacun, l'appui et l'instant interpolés de `trace` si elle suit le chemin.
+fn resample_traced(points: &[VPoint], trace: &Trace, n: usize) -> (Vec<VPoint>, Option<Vec<(f32, f64)>>) {
     if points.len() < 2 || n < 2 {
-        return vec![points.first().copied().unwrap_or(VPoint { x: 0.0, y: 0.0, r: 1.0 }); n.max(1)];
+        return (vec![points.first().copied().unwrap_or(VPoint { x: 0.0, y: 0.0, r: 1.0 }); n.max(1)], None);
     }
     let mut acc = vec![0.0f32];
     for w in points.windows(2) {
@@ -35,16 +36,26 @@ fn resample_points(points: &[VPoint], n: usize) -> Vec<VPoint> {
         acc.push(acc.last().unwrap() + d);
     }
     let total = *acc.last().unwrap();
-    (0..n)
+    let aligned = trace.aligned(points.len());
+    let mut samples = Vec::with_capacity(if aligned { n } else { 0 });
+    let pts = (0..n)
         .map(|k| {
             let s = total * k as f32 / (n - 1) as f32;
             let i = acc.partition_point(|&a| a <= s).clamp(1, points.len() - 1);
             let (a, b) = (points[i - 1], points[i]);
             let seg = (acc[i] - acc[i - 1]).max(1e-6);
             let t = ((s - acc[i - 1]) / seg).clamp(0.0, 1.0);
+            if aligned {
+                samples.extend(trace.sample(points.len(), i - 1, t));
+            }
             VPoint { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t), r: lerp(a.r, b.r, t) }
         })
-        .collect()
+        .collect();
+    (pts, (aligned && samples.len() == n).then_some(samples))
+}
+
+fn resample_points(points: &[VPoint], n: usize) -> Vec<VPoint> {
+    resample_traced(points, &Trace::default(), n).0
 }
 
 /// Même chose pour un contour fermé ([x, y]).
@@ -72,18 +83,35 @@ fn morph(a: &Element, b: &Element, t: f32) -> Option<Element> {
     match (a, b) {
         (
             Element::Stroke { points: pa, color: ca, opacity: oa, hardness: ha, brush, trace },
-            Element::Stroke { points: pb, color: cb, opacity: ob, hardness: hb, .. },
+            Element::Stroke { points: pb, color: cb, opacity: ob, hardness: hb, trace: tb, .. },
         ) => {
             let n = pa.len().max(pb.len()).clamp(2, 512);
-            let ra = resample_points(pa, n);
-            let mut rb = resample_points(pb, n);
+            let (ra, sa) = resample_traced(pa, trace, n);
+            let (mut rb, mut sb) = resample_traced(pb, tb, n);
             // Trait dessiné dans l'autre sens : on le retourne.
             let (a0, a1, b0, b1) = (ra[0].pos(), ra[n - 1].pos(), rb[0].pos(), rb[n - 1].pos());
             if a0.distance(b1) + a1.distance(b0) < a0.distance(b0) + a1.distance(b1) {
                 rb.reverse();
+                if let Some(s) = &mut sb {
+                    s.reverse();
+                }
             }
             let points = ra.iter().zip(&rb).map(|(p, q)| VPoint { x: lerp(p.x, q.x, t), y: lerp(p.y, q.y, t), r: lerp(p.r, q.r, t) }).collect();
-            Some(Element::Stroke { points, color: lerp_rgb(*ca, *cb, t), opacity: lerp(*oa, *ob, t), hardness: lerp(*ha, *hb, t), brush: brush.clone(), trace: trace.without_samples() })
+            // Les appuis suivent aussi, entre ceux des deux traits (les instants, s'ils sont connus
+            // des deux côtés).
+            let trace = match (sa, sb) {
+                (Some(sa), Some(sb)) => {
+                    let samples: Vec<(f32, f64)> = sa
+                        .iter()
+                        .zip(&sb)
+                        .map(|(x, y)| (lerp(x.0, y.0, t), if x.1 >= 0.0 && y.1 >= 0.0 { x.1 + (y.1 - x.1) * t as f64 } else { -1.0 }))
+                        .collect();
+                    trace.with_samples(&samples)
+                }
+                (Some(sa), None) if t < 0.5 => trace.with_samples(&sa),
+                _ => trace.without_samples(),
+            };
+            Some(Element::Stroke { points, color: lerp_rgb(*ca, *cb, t), opacity: lerp(*oa, *ob, t), hardness: lerp(*ha, *hb, t), brush: brush.clone(), trace })
         }
         (Element::Fill { contours: ka, color: ca, opacity: oa }, Element::Fill { contours: kb, color: cb, opacity: ob }) if ka.len() == kb.len() => {
             let contours = ka

@@ -9,7 +9,7 @@
 //! - Annulation : en vectoriel, une étape par flèche tenue (`App::gesture_change`) ; en bitmap,
 //!   les pixels restent soulevés et se reposent en une étape, comme après un glisser.
 
-use eframe::egui::{vec2, Key, Modifiers, Vec2};
+use eframe::egui::{vec2, Key, Modifiers, Rect, Vec2};
 
 use crate::app::App;
 use crate::vector::Affine;
@@ -66,14 +66,22 @@ impl App {
             let Some((cel, items)) = self.vsel.as_ref().map(|s| (s.cel, s.items.clone())) else { return };
             let Some(before) = self.drawing(cel).cloned() else { return };
             let aff = Affine::translate(d);
+            // Les pixels en cache sont copiés à la nouvelle place (un aperçu, comme un glissé) ; le
+            // rendu exact arrive en arrière-plan, et la zone touchée seule est refaite.
+            let mut region = Rect::NOTHING;
             if let Some(drawing) = self.drawing_mut(cel) {
                 for i in items {
                     if let Some(e) = drawing.elements.get_mut(i) {
-                        *e = e.transformed(&aff);
+                        region = region.union(e.bounds().expand(1.5));
+                        *e = e.transformed_preview(&aff);
+                        region = region.union(e.bounds().expand(1.5));
                     }
                 }
             }
-            self.refresh_cel(cel);
+            if region != Rect::NOTHING {
+                self.refresh_cel_region(cel, region);
+            }
+            self.rejeu_cel(cel);
             self.gesture_change(GESTURE, |app| app.push_vector(cel, before, None));
         }
         self.status = format!("Sélection déplacée de {} px (flèches ; Maj + flèche : {} px).", d.length().round(), BIG_STEP);

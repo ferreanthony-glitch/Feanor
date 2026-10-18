@@ -753,7 +753,7 @@ impl BrushSettings {
     // grain collé à la feuille. Tailles pour un projet 1920×1080 vu à 50 %.
 
     /// Crayon graphite : le réglage de départ de l'outil Crayon. Amas de grains tourné au hasard,
-    /// papier à dessin, débit qui s'accumule jusqu'à 90 % d'opacité (jamais tout à fait noir),
+    /// papier à dessin fin (le sien, `PAPER_GRAPHITE`), débit qui s'accumule jusqu'à 90 % d'opacité (jamais tout à fait noir),
     /// grain propre du crayon « Doux ». (Le débit vaut pour une empreinte pleine ; une pointe en
     /// amas de grains n'en dépose qu'une part, d'où un débit réglé haut : un passage appuyé fait un
     /// gris foncé, repasser fonce.)
@@ -776,7 +776,7 @@ impl BrushSettings {
             flip_y: true,
             size_jitter: 0.1,
             scatter: 0.03,
-            paper: Some(crate::brushtex::PAPER_DRAWING),
+            paper: Some(crate::brushtex::PAPER_GRAPHITE),
             grain: 0.85,
             paper_scale: 2.0,
             paper_softness: crate::brushtex::GRAIN_SOFTNESS_SOFT,

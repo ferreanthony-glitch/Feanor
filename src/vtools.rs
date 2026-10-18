@@ -369,10 +369,8 @@ impl App {
         if !ve.changed {
             return;
         }
-        // Les morceaux coupés sont simplifiés ; le reste du dessin n'a pas bougé.
-        if let Some(d) = self.drawing_mut(ve.cel) {
-            d.simplify_strokes_in(0.25, ve.region);
-        }
+        // Les morceaux coupés ont été refaits par `erase_circle` (un trait lisse simplifié, un trait
+        // rejoué avec ses appuis) ; le reste du dessin n'a pas bougé d'un pixel.
         self.refresh_cel_region(ve.cel, ve.region);
         self.push_vector(ve.cel, ve.before, None);
     }
@@ -525,7 +523,9 @@ impl App {
                 for (k, &i) in sel.items.iter().enumerate() {
                     if let (Some(dst), Some(src)) = (d.elements.get_mut(i), originals.get(k)) {
                         region = region.union(dst.bounds().expand(1.5));
-                        *dst = src.transformed(&aff);
+                        // Aperçu : les pixels en cache suivent (une translation arrondie au
+                        // pixel) ; le lâcher (`finish_vdrag`) rejoue les traits exactement.
+                        *dst = src.transformed_preview(&aff);
                         region = region.union(dst.bounds().expand(1.5));
                     }
                 }
@@ -569,20 +569,10 @@ impl App {
             } => {
                 if changed {
                     // Pendant le glissé, les traits déplacés étaient posés depuis leurs pixels en
-                    // cache (copiés, ou rééchantillonnés s'ils ont tourné ou changé d'échelle) ; au
-                    // lâcher, un rendu exact : le moteur est rejoué une fois sur leur nouvelle place.
-                    let mut region = Rect::NOTHING;
-                    if let (Some(sel), Some(d)) = (self.vsel.as_ref(), self.doc.cels.get_mut(&cel).and_then(|c| c.vector.as_mut())) {
-                        for &i in &sel.items {
-                            if let Some(e) = d.elements.get_mut(i) {
-                                e.invalidate_cache();
-                                region = region.union(e.bounds().expand(1.5));
-                            }
-                        }
-                    }
-                    if region != Rect::NOTHING {
-                        self.refresh_cel_region(cel, region);
-                    }
+                    // cache (copiés, ou rééchantillonnés s'ils ont tourné ou changé d'échelle) ; ils
+                    // le restent au lâcher, et le rendu exact (le moteur rejoué sur leur nouvelle
+                    // place) arrive d'un fil de travail quelques instants après, sans rien bloquer.
+                    self.rejeu_cel(cel);
                     self.push_vector(cel, before, None);
                 }
             }
