@@ -207,6 +207,13 @@ impl App {
                     if resp.clicked() {
                         self.toggle_mark();
                     }
+                    // Commentaire : un fanion dans la règle, à l'image courante.
+                    if self
+                        .bouton(ui, ph::CHAT_CENTERED_TEXT, "Nouveau commentaire", "Laisser un commentaire à l'image courante : un fanion dans la règle (à déplacer), qui s'écrit dans le panneau Commentaires. Ou double-clic dans la règle.", "commentaire.ajouter")
+                        .clicked()
+                    {
+                        self.run_action("commentaire.ajouter");
+                    }
                     sep(ui);
 
                     // Pelure d'oignon.
@@ -696,10 +703,28 @@ impl App {
             }
         }
 
+        // Commentaires (`commentairesui.rs`) : leurs fanions dans la règle du plan, le mât au
+        // milieu de l'image. Un fanion pris garde la souris : la grille ne fait rien d'autre.
+        let ruler_rect = Rect::from_min_size(r.min, vec2(size.x, HEADER_H));
+        let plan_id = self.panel().id;
+        let comments = self.doc.comment_positions(crate::commentaires::Scope::Plan(plan_id), self.comment_ui.show_done, self.comment_ui.sel);
+        let comment_pole = |f: usize| r.left() + (f as f32 + 0.5) * cell;
+        let comment_frame = |x: f32| ((x - r.left()) / cell).floor().max(0.0) as usize;
+        let plain_ruler = resp.interact_pointer_pos().is_none_or(|p| self.timeline_handle_at(p, r, cell, &rows, grid_top).is_none());
+        let comment_ptr = self.comment_pointer(
+            ui,
+            &resp,
+            &crate::commentairesui::RulerView { ruler: ruler_rect, placed: &comments, pole_x: &comment_pole, frame_at: &comment_frame, scope: crate::commentaires::Scope::Plan(plan_id), plain: plain_ruler },
+        );
+        let comment_busy = comment_ptr.busy;
+
         // Clic droit sur une case de calque : elle est visée (sauf dans le choix), puis le menu
         // des rôles et des images. Ailleurs (passe interface) : la règle, une clé d'effet, la
-        // caméra, le son ont leur menu (`handles::GridMenu`).
-        if resp.secondary_clicked() {
+        // caméra, le son ont leur menu (`handles::GridMenu`). Un fanion de commentaire a le sien.
+        if let Some(id) = comment_ptr.menu {
+            self.role_menu = false;
+            self.grid_menu = Some(GridMenu::Comment(id));
+        } else if resp.secondary_clicked() {
             self.role_menu = false;
             self.grid_menu = None;
             if let Some(p) = resp.interact_pointer_pos() {
@@ -742,7 +767,7 @@ impl App {
         }
 
         // Double-clic sur un dessin : renommer son instance (13c) ; le champ se pose sur le bloc.
-        if resp.double_clicked() {
+        if resp.double_clicked() && !comment_busy {
             if let Some(p) = resp.interact_pointer_pos() {
                 let col = ((p.x - r.left()) / cell).floor().max(0.0) as usize;
                 if let Some(row) = row_at(&rows, p.y - grid_top) {
@@ -831,6 +856,8 @@ impl App {
             FontId::monospace(9.0),
             Color32::BLACK,
         );
+        // Les fanions des commentaires, par-dessus la case de la tête de lecture.
+        crate::commentairesui::paint_flags(&painter, ruler_rect, &comments, &comment_pole, self.comment_ui.sel, comment_ptr.hover);
 
         // Notes dessinées (13e) : leur rangée sous la caméra ; un geste qui y commence ne bouge
         // ni la tête de lecture ni les images.
@@ -907,7 +934,7 @@ impl App {
                 self.fx_key_sel.clear();
             }
         }
-        if resp.drag_started() && !holding_key && !in_notes {
+        if resp.drag_started() && !holding_key && !in_notes && !comment_busy {
             if let Some((p, h)) = ui
                 .input(|i| i.pointer.press_origin())
                 .filter(|p| !on_playhead(*p))
@@ -957,7 +984,7 @@ impl App {
                 ui.ctx().set_cursor_icon(cursor_for(h, false));
             }
         }
-        let holding_key = holding_key || self.handle_drag.is_some() || self.fx_keys_drag.is_some();
+        let holding_key = holding_key || self.handle_drag.is_some() || self.fx_keys_drag.is_some() || comment_busy;
 
         // Clic et glisser : choisir l'image (et le calque au clic). Avec Maj : choisir les images
         // entre l'image courante et celle sous la souris, sur les calques choisis (13c-2).

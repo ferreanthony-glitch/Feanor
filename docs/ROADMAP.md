@@ -1763,3 +1763,58 @@ d'Anthony du 2026-10-15 :
 | Nouveau calque d'animation | Ctrl+N | Nouveau projet | sans touche |
 
 - ✅ Perte de plan au collage ? Non reproduite : coller des plans (paste_plans) donne des ids neufs et survit à l'enregistrement (tests). L'écart « 5 à l'écriture, 4 à la relecture » venait de paste_panels (panneaux gardés dans la scène, mis bout à bout au chargement). Le chargement renumérote désormais les ids de plan, de scène et de séquence en double du manifeste, pour ne rien perdre.
+
+## Commentaires sur la timeline (demandés par Anthony le 2026-10-18) ✅
+
+La demande : « la possibilité de créer des commentaires sur la timeline. Un petit curseur apparaît là
+où un commentaire est laissé. Une boîte de dialogue apparaît quand on survole le curseur. Une
+fenêtre dans les panneaux permet au commentateur d'écrire le commentaire, de choisir la couleur du
+curseur, etc. Le curseur sur la timeline est déplaçable. » Menée sur la branche `commentaires`.
+
+- ✅ Modèle (`commentaires.rs`) : un commentaire tient à un **plan** (son id) et à une **image de ce
+  plan** (depuis 0), pas à une image du film. Le montage le montre à début du plan + image, la
+  timeline du plan à l'image du plan : il suit son plan quand on avance, recule ou réunit des plans,
+  et ses fanions restent à la même image quand un plan d'avant s'allonge. Couper un plan emmène avec
+  la suite les commentaires d'après la coupe ; réunir deux plans ramène ceux du second au bout du
+  premier ; retirer un plan emporte les siens (l'annulation les rend). Si le plan devient plus court
+  que l'image voulue, le fanion se montre sur sa dernière image et la reprend si le plan s'allonge.
+  Champs : texte, auteur, couleur (RVB : la palette des marques de couleur, un jaune, ou n'importe
+  quelle couleur du sélecteur), date de création, « résolu ». Longueur (plage) : pas faite.
+- ✅ Annulation : `Document::comments` et `Structure::comments` ; toute modification est une étape
+  d'`Edit::Structure` avec son nom (« Nouveau commentaire », « Déplacer le commentaire », « Texte du
+  commentaire », « Auteur du commentaire », « Couleur du commentaire », « Commentaire résolu »,
+  « Supprimer le commentaire ») ; le projet est marqué modifié.
+- ✅ Fichier : `commentaires.json` à côté du manifeste (champs en français, `format`
+  `shot-commentaires`, `version` 1), **sans changer `project::VERSION`** (24). Écrit avant le
+  manifeste, atomiquement ; retiré quand il n'y a plus de commentaire ; absent : aucun commentaire ;
+  illisible ou d'une version plus récente : le projet s'ouvre, sans commentaires, avec un
+  avertissement. Une version qui ne le connaît pas le laisse en place (elle n'efface que les
+  dessins, sons, modèles et textures inutilisés) : le fichier peut seulement vieillir si on
+  enregistre avec elle. Les copies de secours l'écrivent aussi.
+- ✅ Fanions (`commentairesui.rs`) dans la règle du montage (global) et de la timeline (ceux du plan
+  courant) : mât et fanion de la couleur du commentaire, estompé s'il est résolu, cerclé de blanc
+  s'il est choisi. Survol : bulle immédiate (auteur, date, plan, time code, début du texte ; jusqu'à
+  trois si plusieurs se superposent). Clic : le choisit et y met la tête de lecture (en storyboard,
+  le plan devient courant). Glisser : le déplace image par image, d'un plan à l'autre dans le
+  montage, une seule étape d'annulation ; Échap abandonne. Double-clic dessus : l'éditer ; double-clic
+  dans la règle : poser un commentaire. Clic droit : Modifier, Couleur ▸, Marquer résolu, Supprimer.
+  Bouton « Nouveau commentaire » dans les barres du montage et de la timeline, entrée « Commentaire
+  ici » du menu de la règle.
+- ✅ Panneau **Commentaires** (`Pane::Comments`, colonne de droite, fermé par défaut, icône dans la
+  barre des panneaux, `vue.commentaires`) : liste dans l'ordre du film (pastille, time code, plan,
+  auteur, première ligne, case « résolu »), seules les lignes visibles sont dessinées ; un clic va au
+  commentaire ; éditeur du commentaire choisi (texte sur plusieurs lignes, auteur, pastilles et
+  sélecteur de couleur, résolu, supprimer) ; « Nouveau commentaire » ; case « Montrer les résolus »
+  (liste et règles).
+- ✅ Actions : `vue.commentaires`, `commentaire.ajouter`, `commentaire.resoudre`,
+  `commentaire.supprimer`, `commentaire.precedent`, `commentaire.suivant` (aucune touche par
+  défaut). Suppr supprime le commentaire choisi seulement quand le dernier clic l'a visé (fanion ou
+  panneau) ; sinon elle suit sa règle : rien sans sélection.
+- ✅ Auteur : Fichier > Préférences… > Commentaires (`auteur_commentaires` dans `reglages.toml`) ;
+  vide : l'utilisateur Windows.
+- ✅ Tests dans `commentaires_tests.rs` (fichier aller-retour, absent, abîmé, fichiers étrangers
+  gardés, déplacer / modifier / supprimer avec annulation et rétablissement, plans réordonnés, coupés,
+  réunis, retirés, zone de prise d'un fanion, Suppr sans focus). Pas vu à l'écran dans cette séance :
+  à essayer par Anthony.
+- Pas faits : longueur d'un commentaire (une plage dans la règle) ; réponses à un commentaire ; les
+  commentaires ne sont ni exportés (PDF, Storyboard Pro) ni copiés avec des plans copiés ou dupliqués.

@@ -82,6 +82,10 @@ pub struct Settings {
     /// de l'utilisateur (`nouveau.rs`).
     #[serde(default, rename = "nouveau_projet")]
     pub new_project: crate::nouveau::NewProjectSettings,
+    /// Nom qui signe les commentaires de la timeline (`commentaires.rs`) ; vide : l'utilisateur de
+    /// Windows.
+    #[serde(default, rename = "auteur_commentaires", skip_serializing_if = "String::is_empty")]
+    pub comment_author: String,
 }
 
 fn default_autosave() -> u32 {
@@ -121,6 +125,7 @@ impl Default for Settings {
             toucher: Default::default(),
             brushes_panel: Default::default(),
             new_project: Default::default(),
+            comment_author: String::new(),
         }
     }
 }

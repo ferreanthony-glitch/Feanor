@@ -313,6 +313,13 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("pelure.remettre", "Remettre les images de la pelure en place", true, false),
     act("vue.feuille_exposition", "Panneau Feuille d'exposition (ouvrir / fermer)", true, false),
     act("vue.historique", "Panneau Historique des annulations (ouvrir / fermer)", true, false),
+    // Commentaires sur la timeline (`commentairesui.rs`).
+    act("vue.commentaires", "Panneau Commentaires (ouvrir / fermer)", true, false),
+    act("commentaire.ajouter", "Nouveau commentaire (à l'image courante)", true, false),
+    act("commentaire.resoudre", "Commentaire choisi : résolu / rouvert", true, false),
+    act("commentaire.supprimer", "Supprimer le commentaire choisi", true, false),
+    act("commentaire.precedent", "Aller au commentaire précédent", true, false),
+    act("commentaire.suivant", "Aller au commentaire suivant", true, false),
     // Barre des panneaux (`barrepanneaux.rs`) : ouvrir, mettre devant ou fermer un panneau de côté.
     act("vue.reglages", "Panneau Réglages de l'outil (ouvrir / fermer)", true, false),
     act("vue.pinceaux", "Panneau Pinceaux (ouvrir / fermer)", true, false),

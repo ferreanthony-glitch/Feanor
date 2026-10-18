@@ -82,6 +82,17 @@ impl App {
                     let _ = self.settings.save();
                 }
                 ui.add_space(6.0);
+                ui.label(RichText::new("Commentaires").strong());
+                ui.horizontal(|ui| {
+                    ui.label("Signer mes commentaires :");
+                    let hint = crate::commentaires::author_name("");
+                    let resp = ui.add(egui::TextEdit::singleline(&mut self.settings.comment_author).hint_text(hint).desired_width(160.0));
+                    if resp.lost_focus() {
+                        let _ = self.settings.save();
+                    }
+                });
+                ui.label(RichText::new("Vide : le nom de l'utilisateur Windows.").small().weak());
+                ui.add_space(6.0);
                 ui.label(RichText::new("Dessin").strong());
                 let resp = ui.checkbox(&mut self.settings.system_cursor, "Croix du système sur le pinceau").on_hover_text(
                     "Affiche la croix de Windows à la pointe, en plus du cercle du pinceau : elle suit le \

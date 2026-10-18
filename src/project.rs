@@ -8,6 +8,9 @@
 //!   dessins/<id>.json     dessins vectoriels
 //!   sons/<id>.<ext>       fichiers son importés, copiés tels quels
 //!   modeles/<id>.pelure3d modèles 3D de repère (format 5), maillage soudé (voir `model3d`)
+//!   commentaires.json     commentaires sur la timeline (`commentaires.rs`), sans changer `VERSION` :
+//!                         absent, il n'y a pas de commentaires ; une version qui ne le connaît pas
+//!                         le laisse en place (elle n'efface que le contenu de dessins/, sons/…)
 //! ```
 //!
 //! Un enregistrement n'écrit que les dessins modifiés depuis le précédent, puis le manifeste.
@@ -779,6 +782,8 @@ pub struct SaveJob {
     used_sounds: BTreeSet<u64>,
     used_models: BTreeSet<u64>,
     used_textures: BTreeSet<(TextureKind, u32)>,
+    /// Le fichier des commentaires (`commentaires.json`) ; rien : il n'y en a plus, le fichier part.
+    comments: Option<Vec<u8>>,
 }
 
 /// Prépare l'enregistrement de `doc` dans `manifest_path`. `written` est mis à jour comme si
@@ -871,7 +876,25 @@ pub fn prepare_save(
         used_sounds,
         used_models,
         used_textures,
+        comments: crate::commentaires::to_bytes(doc)?,
     })
+}
+
+/// Les commentaires du projet, lus dans `commentaires.json` (absent : aucun commentaire). Un
+/// fichier illisible n'empêche pas d'ouvrir le projet : on le dit, sans commentaires.
+fn load_comments(dir: &Path, warnings: &mut Vec<String>) -> Vec<crate::commentaires::Comment> {
+    let path = dir.join(crate::commentaires::FILE);
+    match fs::read_to_string(&path) {
+        Ok(text) => crate::commentaires::parse(&text).unwrap_or_else(|e| {
+            warnings.push(format!("{} : {e} ; les commentaires ne sont pas chargés.", crate::commentaires::FILE));
+            Vec::new()
+        }),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(e) => {
+            warnings.push(format!("{} : {e} ; les commentaires ne sont pas chargés.", path.display()));
+            Vec::new()
+        }
+    }
 }
 
 impl SaveJob {
@@ -917,6 +940,14 @@ impl SaveJob {
         }
         for (clip, from, to) in &self.videos {
             count += crate::video::copy_frames(clip, from, to)?;
+        }
+        // Les commentaires : leur fichier à côté du manifeste (sans commentaire, il part).
+        let sidecar = dir.join(crate::commentaires::FILE);
+        match &self.comments {
+            Some(bytes) => write_atomic(&sidecar, bytes)?,
+            None => {
+                let _ = fs::remove_file(&sidecar);
+            }
         }
         write_atomic(&self.manifest_path, &self.manifest)?;
         let removed = remove_unused(dir, &self.used, &self.fonds)
@@ -1442,6 +1473,8 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                 fond: p.fond,
             }
         },
+        // Les commentaires viennent de leur fichier, après les plans (`load_comments`).
+        comments: Vec::new(),
     };
     for seq in manifest.sequences {
         structure.sequences.push(Sequence {
@@ -1605,6 +1638,8 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
     if structure.panels.is_empty() {
         return Err("le projet ne contient aucun plan".into());
     }
+    // Les commentaires, dans leur fichier à côté du manifeste (absent : aucun commentaire).
+    structure.comments = load_comments(dir, &mut warnings);
     let frame = manifest.cadre;
     let mut written: HashMap<CelId, u64> = cels.keys().map(|&id| (id, 0)).collect();
     let mut doc = Document::from_parts(w, h, structure, cels, sounds);

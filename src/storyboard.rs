@@ -497,6 +497,15 @@ impl App {
         bulle(resp, "Son", "Pistes son, son au défilement et pendant la lecture.", "");
         sep(ui);
 
+        // Commentaire : un fanion dans la règle, à l'image courante ; il s'écrit dans le panneau.
+        if self
+            .bouton(ui, ph::CHAT_CENTERED_TEXT, "Nouveau commentaire", "Laisser un commentaire à l'image courante : un fanion dans la règle (à déplacer), qui s'écrit dans le panneau Commentaires. Ou double-clic dans la règle.", "commentaire.ajouter")
+            .clicked()
+        {
+            self.run_action("commentaire.ajouter");
+        }
+        sep(ui);
+
         // Le montage se voit aussi en animation (chantier 6) : le bouton fait alors revenir.
         let (icon, name, what) = match self.mode {
             Mode::Storyboard => (ph::FILM_SLATE, "Animer ce plan", "Entrer dans le plan courant pour l'animer (ou double-clic sur le plan)."),
@@ -912,6 +921,17 @@ impl App {
         // Sans limite à la fin des plans (on peut poser un son plus loin).
         let free_frame_at = |x: f32| ((x - left) / ppf).floor().max(0.0) as usize;
 
+        // Commentaires (`commentairesui.rs`) : leurs fanions dans la règle, le mât au milieu de
+        // l'image du film. Un fanion pris garde la souris : la bande ne fait rien d'autre.
+        let ruler_rect = Rect::from_min_max(r.min, pos2(r.right(), bands_top));
+        let comments = self.doc.comment_positions(crate::commentaires::Scope::Film, self.comment_ui.show_done, self.comment_ui.sel);
+        let comment_pole = |g: usize| x_of(g) + ppf * 0.5;
+        let comment_ptr = self.comment_pointer(
+            ui,
+            &resp,
+            &crate::commentairesui::RulerView { ruler: ruler_rect, placed: &comments, pole_x: &comment_pole, frame_at: &frame_at, scope: crate::commentaires::Scope::Film, plain: true },
+        );
+
         if let Some(p) = resp.hover_pos() {
             let clip_edge = matches!(
                 self.lane_hit(p, left, ppf, lanes_top),
@@ -938,7 +958,7 @@ impl App {
             }
         }
 
-        if resp.drag_started() {
+        if resp.drag_started() && !comment_ptr.busy {
             let origin = ui.input(|i| i.pointer.press_origin()).unwrap_or(r.center());
             // Sans recentrer la bande : le bord tiré doit rester sous le pointeur.
             self.playing = false;
@@ -1083,7 +1103,7 @@ impl App {
                 self.end_fx_keys_drag();
             }
         }
-        if resp.dragged() && self.cam_key_drag.is_none() && self.handle_drag.is_none() && self.keys_drag.is_none() && self.fx_keys_drag.is_none() && self.key_rect.is_none() {
+        if resp.dragged() && !comment_ptr.busy && self.cam_key_drag.is_none() && self.handle_drag.is_none() && self.keys_drag.is_none() && self.fx_keys_drag.is_none() && self.key_rect.is_none() {
             if let Some(p) = resp.interact_pointer_pos() {
                 match &mut self.montage_drag {
                     Some(MontageDrag::Scrub) => {
@@ -1133,7 +1153,7 @@ impl App {
             }
         }
 
-        if resp.clicked() {
+        if resp.clicked() && !comment_ptr.busy {
             if let Some(p) = resp.interact_pointer_pos() {
                 let fx_hit = self.montage_fx_key_at(p, r.top(), &blocks, ppf, rows);
                 if fx_hit.is_none() {
@@ -1198,7 +1218,7 @@ impl App {
                 }
             }
         }
-        if resp.double_clicked() {
+        if resp.double_clicked() && !comment_ptr.busy {
             if let Some(p) = resp.interact_pointer_pos() {
                 if let Some(i) = in_blocks(p).then(|| panel_at(p.x)).flatten() {
                     self.enter_animation(i);
@@ -1213,8 +1233,10 @@ impl App {
             }
         }
 
-        // Clic droit : menu du panneau ou de la piste son visés.
-        if resp.secondary_clicked() {
+        // Clic droit : menu du panneau ou de la piste son visés (d'un fanion de commentaire d'abord).
+        if let Some(id) = comment_ptr.menu {
+            self.menu_target = Some(MenuTarget::Comment(id));
+        } else if resp.secondary_clicked() {
             if let Some(p) = resp.interact_pointer_pos() {
                 self.menu_target = if let Some((track, hit)) = self.lane_hit(p, left, ppf, lanes_top) {
                     let clip = hit.map(|(id, _)| id);
@@ -1275,6 +1297,7 @@ impl App {
         if let Some(target) = self.menu_target {
             resp.context_menu(|ui| match target {
                 MenuTarget::Panel(i) => self.panel_menu(ui, i),
+                MenuTarget::Comment(id) => self.comment_menu(ui, id),
                 MenuTarget::Lane { track, clip, frame } => self.lane_menu(ui, track, clip, frame),
                 MenuTarget::Layer(k) => {
                     // La piste d'un calque : les clés à l'image du clic, puis le menu du calque.
@@ -1343,6 +1366,7 @@ impl App {
                     self.action_item(ui, "Marque d'image ici (ajouter / retirer)", "marque.basculer");
                     self.action_item(ui, "Couper le plan ici", "panneau.couper");
                     self.action_item(ui, "Signet du plan ici (poser / retirer)", "signet.basculer");
+                    self.action_item(ui, "Commentaire ici", "commentaire.ajouter");
                     ui.separator();
                     self.action_item(ui, "Importer un son ici…", "son.importer");
                 }
@@ -1367,6 +1391,8 @@ impl App {
                 Stroke::new(3.0_f32, visuals.selection.stroke.color),
             );
         }
+        // Les fanions des commentaires, par-dessus la tête de lecture.
+        crate::commentairesui::paint_flags(&painter, ruler_rect, &comments, &comment_pole, self.comment_ui.sel, comment_ptr.hover);
 
         if self.following {
             ui.scroll_to_rect(

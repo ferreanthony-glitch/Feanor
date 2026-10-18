@@ -58,7 +58,10 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
         entree(Pane::Sheet, "vue.fiche", "Fiche du plan", "Textes, durée et caméra du plan. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::XSheet, "vue.feuille_exposition", "Feuille d'exposition", "Le plan image par image, calque par calque. Un clic l'ouvre ou le met devant, un autre le ferme."),
     ],
-    &[entree(Pane::History, "vue.historique", "Historique", "Les étapes d'annulation, par leur nom. Un clic l'ouvre ou le met devant, un autre le ferme.")],
+    &[
+        entree(Pane::Comments, "vue.commentaires", "Commentaires", "Les commentaires laissés sur la timeline : la liste, et le texte, l'auteur et la couleur du fanion choisi. Un clic l'ouvre ou le met devant, un autre le ferme."),
+        entree(Pane::History, "vue.historique", "Historique", "Les étapes d'annulation, par leur nom. Un clic l'ouvre ou le met devant, un autre le ferme."),
+    ],
 ];
 
 /// Le panneau qu'une action ouvre ou ferme, si c'en est une de la barre.

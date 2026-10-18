@@ -838,6 +838,9 @@ pub struct Structure {
     /// Storyboard verrouillé (13e) et propriétés du projet.
     pub storyboard_locked: bool,
     pub properties: Properties,
+    /// Commentaires sur la timeline (`commentaires.rs`) : une étape d'annulation les rétablit avec
+    /// le reste.
+    pub comments: Vec<crate::commentaires::Comment>,
 }
 
 pub struct Document {
@@ -879,6 +882,9 @@ pub struct Document {
     pub storyboard_locked: bool,
     /// Propriétés du projet (13e).
     pub properties: Properties,
+    /// Commentaires sur la timeline, rangés par plan (`commentaires.rs`) ; enregistrés à côté du
+    /// manifeste, dans `commentaires.json`.
+    pub comments: Vec<crate::commentaires::Comment>,
     next_id: u64,
 }
 
@@ -920,6 +926,7 @@ impl Document {
             master_volume: 1.0,
             storyboard_locked: false,
             properties: Properties::default(),
+            comments: Vec::new(),
             next_id: 1,
         };
         let seq = doc.new_sequence();
@@ -945,6 +952,7 @@ impl Document {
             .chain(structure.sequences.iter().map(|s| s.id))
             .chain(structure.audio_tracks.iter().map(|t| t.id))
             .chain(structure.audio_tracks.iter().flat_map(|t| t.clips.iter().map(|c| c.id)))
+            .chain(structure.comments.iter().map(|c| c.id))
             .chain(cels.keys().copied())
             .chain(sounds.keys().copied())
             .max()
@@ -971,6 +979,7 @@ impl Document {
             master_volume: structure.master_volume,
             storyboard_locked: structure.storyboard_locked,
             properties: structure.properties,
+            comments: structure.comments,
             next_id: max_id + 1,
         };
         doc.normalize();
@@ -1142,6 +1151,7 @@ impl Document {
             master_volume: self.master_volume,
             storyboard_locked: self.storyboard_locked,
             properties: self.properties.clone(),
+            comments: self.comments.clone(),
         }
     }
 
@@ -1168,10 +1178,11 @@ impl Document {
             master_volume: std::mem::replace(&mut self.master_volume, s.master_volume),
             storyboard_locked: std::mem::replace(&mut self.storyboard_locked, s.storyboard_locked),
             properties: std::mem::replace(&mut self.properties, s.properties),
+            comments: std::mem::replace(&mut self.comments, s.comments),
         }
     }
 
-    fn alloc(&mut self) -> u64 {
+    pub(crate) fn alloc(&mut self) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
         id
@@ -1338,6 +1349,8 @@ impl Document {
         self.panels = ordered;
         self.scenes.retain(|s| scene_order.contains(&s.id));
         self.sequences.retain(|q| seq_order.contains(&q.id));
+        // Un plan retiré emporte ses commentaires (l'annulation les ramène avec lui).
+        self.prune_comments();
     }
 
     // ---------------------------------------------------------------- opérations de montage
@@ -1602,6 +1615,9 @@ impl Document {
         first.length = at;
         first.camera = keys_before;
         first.cues.bookmarks.retain(|&b| b < at);
+        // Les commentaires d'après la coupe passent au nouveau plan.
+        let (first_id, second_id) = (first.id, second.id);
+        self.split_comments(first_id, second_id, at);
         Some(self.insert_and_normalize(index + 1, vec![second]))
     }
 
@@ -1616,8 +1632,10 @@ impl Document {
         let (cam_a, cam_b) = (self.panel_camera(index, 0), self.panel_camera(index + 1, 0));
         let next = self.panels.remove(index + 1);
         let next_len = next.frame_count();
+        let a_len = self.panels[index].frame_count();
+        // Les commentaires du suivant suivent ses images.
+        self.rehome_comments(next.id, self.panels[index].id, next_len, a_len);
         let a = &mut self.panels[index];
-        let a_len = a.frame_count();
         a.camera = camera::join_keys(&a.camera, a_len, cam_a, &next.camera, next_len, cam_b);
         // Les calques de toute la scène sont déjà dans le premier : seuls les autres se suivent,
         // rang pour rang parmi les calques propres au panneau.
@@ -2026,6 +2044,8 @@ impl Document {
         let label = self.scene_label(self.panels[index].scene);
         let a_len = self.panels[index].frame_count();
         let b_len = b.frame_count();
+        // Les commentaires de `b` suivent ses images, au bout du plan.
+        self.rehome_comments(b.id, self.panels[index].id, b_len, a_len);
         let a = &mut self.panels[index];
 
         // Caméra : chaque partie tient sa caméra jusqu'à ses bords.
