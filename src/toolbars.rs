@@ -33,6 +33,16 @@ pub(crate) fn slot_tool(slot: &[Tool], current: Tool, recent: &[Tool]) -> Tool {
 }
 
 impl App {
+    /// L'icône d'un outil dans la barre : celle du mode en cours pour l'outil Déformer (courbe de
+    /// Bézier ou perspective).
+    pub(crate) fn tool_icon(&self, tool: Tool) -> &'static str {
+        if tool == Tool::Perspective && self.deform_mode == crate::envelopetools::DeformMode::Envelope {
+            egui_phosphor::regular::BEZIER_CURVE
+        } else {
+            tool.icon()
+        }
+    }
+
     /// Un bouton icône de la barre de commandes ; `on` : commande active (affichée enfoncée).
     pub(crate) fn command_button(&mut self, ui: &mut egui::Ui, icon: &str, action: &str, name: &str, description: &str, on: Option<bool>) {
         let text = RichText::new(icon).size(17.0);
@@ -120,7 +130,7 @@ impl App {
     /// au clic maintenu, la liste de ses outils.
     fn tool_slot(&mut self, ui: &mut egui::Ui, g: usize, s: usize, slot: &[Tool]) {
         let shown = slot_tool(slot, self.tool, &self.tool_recent);
-        let icon = RichText::new(shown.icon()).size(19.0);
+        let icon = RichText::new(self.tool_icon(shown)).size(19.0);
         let resp = ui.add_sized([34.0, 30.0], egui::SelectableLabel::new(slot.contains(&self.tool), icon));
         let mut description = shown.description().to_string();
         if slot.len() > 1 {
@@ -163,7 +173,7 @@ impl App {
                     ui.set_min_width(180.0);
                     for &tool in slot.iter() {
                         let key = self.raccourci(tool.action());
-                        let text = format!("{}  {}", tool.icon(), tool.label());
+                        let text = format!("{}  {}", self.tool_icon(tool), tool.label());
                         let resp = ui
                             .horizontal(|ui| {
                                 let resp = ui.add(egui::SelectableLabel::new(self.tool == tool, RichText::new(text).size(14.0)));

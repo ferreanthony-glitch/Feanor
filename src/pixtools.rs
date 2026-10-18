@@ -12,8 +12,8 @@ use crate::document::{CelId, LayerKind};
 use crate::history::Edit;
 use crate::pixsel::{self, Floating, PixelMask};
 use crate::raster::{Raster, Tile};
+use crate::selbox::{self, Handle, SelFrame};
 use crate::vector::{self, Affine};
-use crate::vtools::{transform_for, Handle};
 
 pub(crate) struct BSelection {
     pub cel: CelId,
@@ -35,12 +35,18 @@ pub(crate) struct Lifted {
     pub aff: Affine,
     /// Zone où les pixels transformés sont posés en ce moment.
     pub placed: Option<Rect>,
+    /// Les gestes faits depuis le soulèvement, pour nommer l'étape d'annulation de la pose.
+    pub steps: Vec<&'static str>,
 }
 
 pub(crate) enum BDrag {
     Lasso { points: Vec<Pos2>, add: bool },
     Rect { from: Pos2, to: Pos2, add: bool },
-    Transform { handle: Handle, start: Pos2, bbox: Rect, aff0: Affine },
+    /// Un geste de la boîte (`selbox.rs`) ; `frame` : la boîte au début du geste ; `field` : le
+    /// geste vient d'un champ chiffré du panneau Réglages.
+    Transform { handle: Handle, start: Pos2, frame: SelFrame, field: bool },
+    /// Le pivot tiré.
+    Pivot { start: Pos2, frame: SelFrame },
 }
 
 impl App {
@@ -88,18 +94,36 @@ impl App {
         if tiles.is_empty() && lifted.prefix.is_none() {
             return;
         }
-        self.push_pixels(sel.cel, lifted.prefix, tiles);
+        // L'étape porte le nom du geste (« Tourner »…), ou « Transformer » s'il y en a eu plusieurs.
+        let mut steps = lifted.steps;
+        steps.dedup();
+        let name = if let [one] = steps.as_slice() { *one } else { "Transformer la sélection" };
+        self.named_step(name, |app| app.push_pixels(sel.cel, lifted.prefix, tiles));
+    }
+
+    /// Un geste de plus sur les pixels soulevés (le nom de l'étape d'annulation de la pose).
+    pub(crate) fn note_bitmap_step(&mut self, handle: Handle) {
+        self.note_bitmap_name(handle.step_name());
+    }
+
+    pub(crate) fn note_bitmap_name(&mut self, name: &'static str) {
+        if let Some(l) = self.bsel.as_mut().and_then(|s| s.lifted.as_mut()) {
+            l.steps.push(name);
+        }
     }
 
     /// Clic avec l'outil Sélection sur un calque bitmap.
     pub(crate) fn bitmap_select_press(&mut self, p: Pos2, screen: Pos2, shift: bool) {
         self.playing = false;
-        if let Some(b) = self.bitmap_selection_bounds() {
-            let handle = self.handle_at(screen).or_else(|| (!shift && b.contains(p)).then_some(Handle::Move));
-            if let Some(handle) = handle {
-                self.begin_bitmap_transform(handle, p, b);
-                return;
+        self.finish_field_edit();
+        // La boîte de la zone : poignées, bords, extérieur d'un coin, pivot, intérieur.
+        if let Some((handle, frame)) = self.box_press(screen, shift) {
+            if handle == Handle::Pivot {
+                self.bdrag = Some(BDrag::Pivot { start: p, frame });
+            } else {
+                self.begin_bitmap_transform(handle, p, frame);
             }
+            return;
         }
         if !shift || self.bsel.as_ref().is_some_and(|s| s.lifted.is_some()) {
             self.drop_bitmap_selection();
@@ -136,21 +160,17 @@ impl App {
             prefix: None,
             aff: Affine::IDENTITY,
             placed,
+            steps: Vec::new(),
         });
         true
     }
 
-    fn begin_bitmap_transform(&mut self, handle: Handle, p: Pos2, bbox: Rect) {
+    fn begin_bitmap_transform(&mut self, handle: Handle, p: Pos2, frame: SelFrame) {
         if !self.layer_editable() || !self.lift_selection() {
             return;
         }
-        let aff0 = self.bsel.as_ref().and_then(|s| s.lifted.as_ref()).map_or(Affine::IDENTITY, |l| l.aff);
-        self.bdrag = Some(BDrag::Transform {
-            handle,
-            start: p,
-            bbox,
-            aff0,
-        });
+        self.note_bitmap_step(handle);
+        self.bdrag = Some(BDrag::Transform { handle, start: p, frame, field: false });
     }
 
     /// Pose les pixels soulevés avec la transformation `aff` (à la place de la précédente).
@@ -175,8 +195,9 @@ impl App {
         self.modified = true;
     }
 
-    pub(crate) fn bitmap_drag(&mut self, p: Pos2, shift: bool) {
+    pub(crate) fn bitmap_drag(&mut self, p: Pos2, shift: bool, ctrl: bool) {
         let zoom = self.layer_zoom();
+        let mods = self.box_mods(shift, ctrl);
         match &mut self.bdrag {
             Some(BDrag::Lasso { points, .. }) => {
                 if points.last().is_none_or(|q| q.distance(p) * zoom > 1.5) {
@@ -184,29 +205,30 @@ impl App {
                 }
             }
             Some(BDrag::Rect { to, .. }) => *to = p,
-            Some(BDrag::Transform {
-                handle,
-                start,
-                bbox,
-                aff0,
-            }) => {
-                let mut t = transform_for(*handle, *start, p, *bbox, shift);
-                if *handle == Handle::Move {
+            Some(BDrag::Transform { handle, start, frame, field: false }) => {
+                let (handle, frame) = (*handle, *frame);
+                let mut t = selbox::gesture(handle, &frame, *start, p, mods);
+                if handle == Handle::Move {
                     // Déplacement au pixel près : l'image reste nette.
                     t.tx = t.tx.round();
                     t.ty = t.ty.round();
                 }
-                let aff = aff0.then(&t);
-                self.place_floating(aff);
+                let after = frame.then(&t);
+                self.place_floating(after.m);
+                self.status = crate::seltools::gesture_text(handle, &after.params());
             }
-            None => {}
+            Some(BDrag::Pivot { start, frame }) => {
+                let (start, frame) = (*start, *frame);
+                self.drag_pivot(&frame, start, p);
+            }
+            _ => {}
         }
     }
 
     pub(crate) fn finish_bdrag(&mut self) {
         let Some(drag) = self.bdrag.take() else { return };
         let (polygon, add) = match drag {
-            BDrag::Transform { .. } => return,
+            BDrag::Transform { .. } | BDrag::Pivot { .. } => return,
             BDrag::Lasso { points, add } => {
                 let screen: Vec<Pos2> = points.iter().map(|q| self.layer_to_screen(*q)).collect();
                 let extent = Rect::from_points(&screen);
@@ -279,6 +301,7 @@ impl App {
             return;
         }
         let Some(aff) = self.bsel.as_ref().and_then(|s| s.lifted.as_ref()).map(|l| l.aff) else { return };
+        self.note_bitmap_name("Retourner");
         let flip = if horizontal {
             Affine::scale_about(b.center(), -1.0, 1.0)
         } else {
@@ -398,6 +421,7 @@ impl App {
                 prefix,
                 aff: Affine::IDENTITY,
                 placed,
+                steps: Vec::new(),
             }),
         });
         self.tool = Tool::Select;

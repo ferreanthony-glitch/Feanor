@@ -1,11 +1,11 @@
 use eframe::egui::{
     self, pos2, vec2, Color32, CursorIcon, Event, PointerButton, Pos2, Rect, Sense, Shape, Stroke,
-    StrokeKind, TouchPhase, Vec2,
+    TouchPhase,
 };
 
 use crate::app::{App, Tool};
 use crate::pixtools::BDrag;
-use crate::vtools::{Handle, VDrag};
+use crate::vtools::VDrag;
 
 const ACCENT: Color32 = Color32::from_rgb(70, 165, 255);
 
@@ -52,6 +52,8 @@ impl App {
             self.fit_pending = false;
         }
 
+        // La boîte de la sélection est à jour avant d'agir (`seltools.rs`).
+        self.sync_sel_box();
         self.canvas_input(ui.ctx(), &response, rect);
         // Clic droit sur le dessin (passe interface) : les commandes courantes. Pas dans une
         // vignette de la planche, qui a son propre menu.
@@ -314,31 +316,21 @@ impl App {
                         }
                         Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline => self.shape_press(p, modifiers.shift),
                         Tool::Text => self.text_press(p),
-                        Tool::Perspective => self.persp_press(p, *pos),
-                        // Ctrl + coin du cadre de la sélection : l'enveloppe de Bézier (`envelopetools.rs`).
-                        Tool::Select | Tool::SelectColor => {
-                            if !self.envelope_press(p, *pos, modifiers.command || modifiers.ctrl) {
-                                if self.tool == Tool::Select {
-                                    self.select_press(p, *pos, modifiers.shift);
-                                } else {
-                                    self.color_select_press(p, *pos, modifiers.shift);
-                                }
-                            }
-                        }
+                        // Déformer : l'enveloppe de Bézier ou la perspective (`envelopetools.rs`,
+                        // `perstools.rs`).
+                        Tool::Perspective => self.deform_press(p, *pos),
+                        // La boîte de la sélection : déplacer, échelle, rotation, inclinaison, pivot
+                        // (`seltools.rs`).
+                        Tool::Select => self.select_press(p, *pos, modifiers.shift),
+                        Tool::SelectColor => self.color_select_press(p, *pos, modifiers.shift),
                         Tool::Cutter => self.cutter_press(p),
                         Tool::Camera => self.camera_press(stage, *pos),
                         Tool::Transform => {
-                            // Ctrl + coin : l'enveloppe de Bézier du dessin (`envelopetools.rs`).
-                            if !self.envelope_press(p, *pos, modifiers.command || modifiers.ctrl) {
-                                // Une zone bitmap choisie : ses poignées, ou glisser dedans, la
-                                // transforment ; ailleurs, c'est le calque.
-                                let on_zone = self.bsel.is_some()
-                                    && (self.handle_at(*pos).is_some() || self.bitmap_selection_bounds().is_some_and(|b| b.contains(p)));
-                                if on_zone {
-                                    self.bitmap_select_press(p, *pos, false);
-                                } else {
-                                    self.transform_press(stage, *pos);
-                                }
+                            // Une zone bitmap choisie : sa boîte la transforme ; ailleurs, c'est le calque.
+                            if self.bsel.is_some() && self.box_hit(*pos).is_some() {
+                                self.bitmap_select_press(p, *pos, false);
+                            } else {
+                                self.transform_press(stage, *pos);
                             }
                         }
                         Tool::Ref3d => self.ref3d_press(*pos, *modifiers),
@@ -369,9 +361,9 @@ impl App {
                     } else if let Some((_, end)) = &mut self.shape_drag {
                         *end = p;
                     } else if self.vdrag.is_some() {
-                        self.select_drag(p, mods.shift);
+                        self.select_drag(p, mods.shift, mods.command || mods.ctrl);
                     } else if self.bdrag.is_some() {
-                        self.bitmap_drag(p, mods.shift);
+                        self.bitmap_drag(p, mods.shift, mods.command || mods.ctrl);
                     } else if self.cam_drag.is_some() {
                         self.camera_drag(stage, mods.shift);
                     } else if self.layer_drag.is_some() {
@@ -454,9 +446,9 @@ impl App {
             painter.extend(Shape::dashed_line(&pts, Stroke::new(1.0_f32, Color32::BLACK), 5.0, 5.0));
         }
 
-        let Some(b) = self.selection_bounds() else {
+        if self.sel_frame().is_none() {
             return;
-        };
+        }
         if let Some(sel) = &self.vsel {
             // Geste en cours : les éléments n'ont pas bougé, leurs contours suivent la feuille.
             // (Contours gardés d'une image à l'autre, simplifiés à l'écran : `contours.rs`.)
@@ -466,26 +458,8 @@ impl App {
                 painter.add(shape);
             }
         }
-        let corners = [b.left_top(), b.right_top(), b.right_bottom(), b.left_bottom()].map(to_s);
-        painter.add(Shape::closed_line(corners.to_vec(), Stroke::new(1.0_f32, ACCENT)));
-        for (handle, q) in self.handle_points(b) {
-            let s = to_s(q);
-            match handle {
-                Handle::Rotate => {
-                    painter.line_segment([to_s(pos2(b.center().x, b.min.y)), s], Stroke::new(1.0_f32, ACCENT));
-                    painter.circle(s, 5.0, Color32::WHITE, Stroke::new(1.5_f32, ACCENT));
-                }
-                _ => {
-                    painter.rect(
-                        Rect::from_center_size(s, Vec2::splat(8.0)),
-                        1.0,
-                        Color32::WHITE,
-                        Stroke::new(1.5_f32, ACCENT),
-                        StrokeKind::Middle,
-                    );
-                }
-            }
-        }
+        // Le cadre, les huit poignées et le pivot (`seltools.rs`).
+        self.paint_selection_box(painter);
     }
 
     fn paint_cursor(&self, ctx: &egui::Context, painter: &egui::Painter, response: &egui::Response) {
@@ -524,15 +498,15 @@ impl App {
             return;
         }
         if self.tool == Tool::Perspective {
-            ctx.set_cursor_icon(self.persp_cursor(p));
+            ctx.set_cursor_icon(self.deform_cursor(p));
             return;
         }
         if self.tool == Tool::Ref3d {
             ctx.set_cursor_icon(if self.ref3d.dragging() { CursorIcon::Grabbing } else { CursorIcon::Grab });
             return;
         }
-        if let Some(icon) = self.envelope_cursor(p) {
-            ctx.set_cursor_icon(icon);
+        // La zone bitmap choisie reste transformable avec l'outil Transformer.
+        if self.tool == Tool::Transform && self.bsel.is_some() && self.box_cursor(ctx, painter, p) {
             return;
         }
         if self.tool == Tool::Transform {
@@ -563,19 +537,13 @@ impl App {
         }
         if self.tool.is_select() {
             let pick = self.tool == Tool::SelectColor;
-            let icon = match self.handle_at(p) {
-                Some(Handle::Rotate) => CursorIcon::Alias,
-                Some(Handle::Corner(0 | 2)) => CursorIcon::ResizeNwSe,
-                Some(Handle::Corner(_)) => CursorIcon::ResizeNeSw,
-                Some(Handle::Edge(0 | 2)) => CursorIcon::ResizeVertical,
-                Some(Handle::Edge(_)) => CursorIcon::ResizeHorizontal,
-                _ => match (self.hover_canvas.map(|c| self.to_layer(c)), self.selection_bounds()) {
-                    (Some(c), Some(b)) if b.contains(c) && !pick => CursorIcon::Move,
-                    _ if pick => CursorIcon::Crosshair,
-                    _ => CursorIcon::Default,
-                },
-            };
-            ctx.set_cursor_icon(icon);
+            // La boîte de la sélection : un curseur par partie (`seltools.rs`) ; avec la sélection
+            // par couleur, l'intérieur reste à la pipette.
+            let handle = self.active_or_hit_handle(p);
+            if handle.is_some_and(|h| !(pick && h == crate::selbox::Handle::Move)) && self.box_cursor(ctx, painter, p) {
+                return;
+            }
+            ctx.set_cursor_icon(if pick { CursorIcon::Crosshair } else { CursorIcon::Default });
             return;
         }
         let Some(brush) = self.current_brush() else { return };

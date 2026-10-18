@@ -1,13 +1,14 @@
 //! Outils des calques vectoriels : trait, gomme qui coupe, pot de peinture, formes,
 //! sélection au lasso avec poignées (déplacer, mettre à l'échelle, tourner), presse-papiers.
 
-use eframe::egui::{pos2, Color32, Pos2, Rect};
+use eframe::egui::{Color32, Pos2, Rect};
 
 use crate::app::{App, Tool};
 use crate::brush::{StrokeMode, StrokeState};
 use crate::document::{CelId, LayerKind};
 use crate::fill;
 use crate::history::Edit;
+use crate::selbox::{Handle, SelFrame};
 use crate::vector::{self, Affine, Element, VPoint, VectorDrawing};
 
 /// Un trait vectoriel en cours : il se dessine en direct comme un trait bitmap,
@@ -41,87 +42,22 @@ pub(crate) struct VSelection {
     pub items: Vec<usize>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Handle {
-    Move,
-    /// Coins dans l'ordre : haut-gauche, haut-droite, bas-droite, bas-gauche.
-    Corner(usize),
-    /// Milieux des côtés : haut, droite, bas, gauche.
-    Edge(usize),
-    Rotate,
-}
-
 pub(crate) enum VDrag {
     Lasso(Vec<Pos2>),
+    /// Un geste de la boîte de sélection (`selbox.rs`) : `frame`, la boîte au début du geste ;
+    /// `field` : le geste vient d'un champ chiffré du panneau Réglages, pas de la souris.
     Transform {
         cel: CelId,
         handle: Handle,
         start: Pos2,
-        bbox: Rect,
+        frame: SelFrame,
         before: VectorDrawing,
         originals: Vec<Element>,
         changed: bool,
+        field: bool,
     },
-}
-
-/// Rayon de prise des poignées, en pixels d'écran.
-const HANDLE_GRAB: f32 = 9.0;
-
-pub(crate) fn transform_for(handle: Handle, s: Pos2, p: Pos2, b: Rect, shift: bool) -> Affine {
-    let ratio = |num: f32, den: f32| {
-        if den.abs() < 1e-3 {
-            return 1.0;
-        }
-        let r = num / den;
-        if r.abs() < 0.01 {
-            0.01f32.copysign(r)
-        } else {
-            r
-        }
-    };
-    match handle {
-        Handle::Move => {
-            let mut d = p - s;
-            if shift {
-                if d.x.abs() > d.y.abs() {
-                    d.y = 0.0;
-                } else {
-                    d.x = 0.0;
-                }
-            }
-            Affine::translate(d)
-        }
-        Handle::Rotate => {
-            let c = b.center();
-            let mut a = (p - c).angle() - (s - c).angle();
-            if shift {
-                let step = 15f32.to_radians();
-                a = (a / step).round() * step;
-            }
-            Affine::rotate_about(c, a)
-        }
-        Handle::Corner(k) => {
-            let corners = [b.left_top(), b.right_top(), b.right_bottom(), b.left_bottom()];
-            let (corner, anchor) = (corners[k], corners[(k + 2) % 4]);
-            let mut sx = ratio(p.x - anchor.x, corner.x - anchor.x);
-            let mut sy = ratio(p.y - anchor.y, corner.y - anchor.y);
-            if shift {
-                let m = sx.abs().max(sy.abs());
-                sx = m.copysign(sx);
-                sy = m.copysign(sy);
-            }
-            Affine::scale_about(anchor, sx, sy)
-        }
-        Handle::Edge(k) => {
-            let c = b.center();
-            match k {
-                0 => Affine::scale_about(pos2(c.x, b.max.y), 1.0, ratio(p.y - b.max.y, b.min.y - b.max.y)),
-                1 => Affine::scale_about(pos2(b.min.x, c.y), ratio(p.x - b.min.x, b.max.x - b.min.x), 1.0),
-                2 => Affine::scale_about(pos2(c.x, b.min.y), 1.0, ratio(p.y - b.min.y, b.max.y - b.min.y)),
-                _ => Affine::scale_about(pos2(b.max.x, c.y), ratio(p.x - b.max.x, b.min.x - b.max.x), 1.0),
-            }
-        }
-    }
+    /// Le pivot tiré.
+    Pivot { start: Pos2, frame: SelFrame },
 }
 
 impl App {
@@ -145,16 +81,13 @@ impl App {
         }
     }
 
-    /// Rectangle de la sélection courante (bitmap ou vectorielle), pour les poignées.
+    /// Rectangle englobant de la sélection courante (bitmap ou vectorielle) telle qu'elle est
+    /// dessinée. La boîte à poignées, elle, est `sel_frame` (`seltools.rs`).
     pub(crate) fn selection_bounds(&self) -> Option<Rect> {
         if self.bsel.is_some() {
             return self.bitmap_selection_bounds();
         }
         let sel = self.vsel.as_ref()?;
-        // Geste en cours : les éléments n'ont pas encore bougé, la boîte suit la feuille flottante.
-        if let (Some(f), Some(VDrag::Transform { bbox, .. })) = (&self.flottante, &self.vdrag) {
-            return Some(f.aff.apply_rect(*bbox));
-        }
         let d = self.drawing(sel.cel)?;
         let r = sel
             .items
@@ -162,32 +95,6 @@ impl App {
             .filter_map(|&i| d.elements.get(i))
             .fold(Rect::NOTHING, |r, e| r.union(e.bounds()));
         (r.is_finite() && r.width() >= 0.0).then_some(r)
-    }
-
-    /// Poignées de la sélection, en coordonnées du dessin.
-    pub(crate) fn handle_points(&self, b: Rect) -> Vec<(Handle, Pos2)> {
-        let c = b.center();
-        let up = 28.0 / self.layer_zoom();
-        vec![
-            (Handle::Rotate, pos2(c.x, b.min.y - up)),
-            (Handle::Corner(0), b.left_top()),
-            (Handle::Corner(1), b.right_top()),
-            (Handle::Corner(2), b.right_bottom()),
-            (Handle::Corner(3), b.left_bottom()),
-            (Handle::Edge(0), pos2(c.x, b.min.y)),
-            (Handle::Edge(1), pos2(b.max.x, c.y)),
-            (Handle::Edge(2), pos2(c.x, b.max.y)),
-            (Handle::Edge(3), pos2(b.min.x, c.y)),
-        ]
-    }
-
-    /// Poignée sous le pointeur (position écran), le cas échéant.
-    pub(crate) fn handle_at(&self, screen: Pos2) -> Option<Handle> {
-        let b = self.selection_bounds()?;
-        self.handle_points(b)
-            .into_iter()
-            .find(|(_, q)| self.layer_to_screen(*q).distance(screen) <= HANDLE_GRAB)
-            .map(|(h, _)| h)
     }
 
     // ------------------------------------------------------------------ trait et gomme
@@ -460,14 +367,12 @@ impl App {
             self.vdrag = Some(VDrag::Lasso(vec![p]));
             return;
         };
-        if let Some(b) = self.selection_bounds() {
-            let handle = self
-                .handle_at(screen)
-                .or_else(|| (!shift && b.contains(p)).then_some(Handle::Move));
-            if let Some(handle) = handle {
-                self.start_transform(cel, handle, p, b);
-                return;
-            }
+        self.finish_field_edit();
+        // La boîte de la sélection : une poignée, un bord, l'extérieur d'un coin, le pivot ou
+        // l'intérieur (`selbox.rs`).
+        if let Some((handle, frame)) = self.box_press(screen, shift) {
+            self.start_box_gesture(cel, handle, p, frame);
+            return;
         }
         let tol = 4.0 / self.layer_zoom();
         match self.drawing(cel).and_then(|d| d.hit_test(p, tol)) {
@@ -485,8 +390,10 @@ impl App {
                 if !sel.items.contains(&i) {
                     sel.items = vec![i];
                 }
-                if let Some(b) = self.selection_bounds() {
-                    self.start_transform(cel, Handle::Move, p, b);
+                // La sélection vient de changer : sa boîte est recalculée avant le geste.
+                self.sync_sel_box();
+                if let Some(frame) = self.sel_frame() {
+                    self.start_box_gesture(cel, Handle::Move, p, frame);
                 }
             }
             None => {
@@ -498,46 +405,26 @@ impl App {
         }
     }
 
-    fn start_transform(&mut self, cel: CelId, handle: Handle, p: Pos2, bbox: Rect) {
-        let Some(sel) = &self.vsel else { return };
-        let Some(d) = self.drawing(cel) else { return };
-        let originals = sel.items.iter().filter_map(|&i| d.elements.get(i).cloned()).collect();
-        let before = d.clone();
-        self.vdrag = Some(VDrag::Transform {
-            cel,
-            handle,
-            start: p,
-            bbox,
-            before,
-            originals,
-            changed: false,
-        });
-    }
-
-    pub(crate) fn select_drag(&mut self, p: Pos2, shift: bool) {
+    /// Le pointeur est en `p` (point du dessin) : le lasso grandit, ou le geste de la boîte suit
+    /// (`shift`, `ctrl` : les touches tenues maintenant, `selbox::gesture`).
+    pub(crate) fn select_drag(&mut self, p: Pos2, shift: bool, ctrl: bool) {
         let zoom = self.layer_zoom();
+        let mods = self.box_mods(shift, ctrl);
         match &mut self.vdrag {
             Some(VDrag::Lasso(points)) => {
                 if points.last().is_none_or(|q| q.distance(p) * zoom > 1.5) {
                     points.push(p);
                 }
             }
-            Some(VDrag::Transform { cel, handle, start, bbox, changed, .. }) => {
-                let aff = transform_for(*handle, *start, p, *bbox, shift);
-                let (cel, first) = (*cel, !*changed);
-                *changed = true;
-                // Feuille flottante (`flottante.rs`) : à la première image, le dessin sans la
-                // sélection et la sélection seule, faits une fois ; ensuite seule la
-                // transformation change (rien à refaire, rien à renvoyer à la carte graphique).
-                if first {
-                    let items = self.vsel.as_ref().map(|s| s.items.clone()).unwrap_or_default();
-                    self.flottante = crate::flottante::Flottante::lift(&mut self.doc, cel, &items);
-                }
-                if let Some(f) = self.flottante.as_mut() {
-                    f.aff = aff;
-                }
+            Some(VDrag::Transform { handle, start, frame, field: false, .. }) => {
+                let aff = crate::selbox::gesture(*handle, frame, *start, p, mods);
+                self.set_vector_gesture(aff);
             }
-            None => {}
+            Some(VDrag::Pivot { start, frame }) => {
+                let (start, frame) = (*start, *frame);
+                self.drag_pivot(&frame, start, p);
+            }
+            _ => {}
         }
     }
 
@@ -569,22 +456,18 @@ impl App {
                     }
                 }
             }
+            VDrag::Pivot { .. } => {}
             VDrag::Transform {
-                cel, before, originals, changed, ..
+                cel, handle, frame, before, originals, changed, ..
             } => {
                 let aff = self.flottante.as_ref().map(|f| f.aff);
                 if let (true, Some(aff)) = (changed, aff) {
                     // La transformation du geste passe à la géométrie des éléments choisis, sans
                     // rien refaire : la feuille flottante reste affichée, et le rendu exact (le
                     // moteur rejoué sur leur nouvelle place) arrive d'un fil de travail quelques
-                    // instants après (`poll_rejeu`), sans rien bloquer.
-                    let items = self.vsel.as_ref().map(|s| s.items.clone()).unwrap_or_default();
-                    crate::flottante::Flottante::apply_geometry(&mut self.doc, cel, &items, &originals, &aff);
-                    if let Some(f) = self.flottante.as_mut() {
-                        f.pending = Some(crate::flottante::Pending { items, originals });
-                    }
-                    self.rejeu_cel(cel);
-                    self.push_vector(cel, before, None);
+                    // instants après (`poll_rejeu`), sans rien bloquer. Une étape d'annulation, au
+                    // nom du geste.
+                    self.commit_vector_gesture(cel, handle, frame, before, originals, aff);
                 } else {
                     self.flottante = None;
                     crate::flottante::Flottante::release(&mut self.doc);
@@ -704,6 +587,8 @@ impl App {
         } else {
             Affine::scale_about(b.center(), 1.0, -1.0)
         };
+        // Les éléments changent de côté : la boîte repart droite autour d'eux.
+        self.sel_box = None;
         self.edit_selection(|d, items| {
             for &i in items.iter() {
                 if let Some(e) = d.elements.get_mut(i) {
