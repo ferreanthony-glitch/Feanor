@@ -89,6 +89,8 @@ pub(crate) enum GridMenu {
     SoundHeader,
     /// Le nom de la ligne des notes.
     NotesHeader,
+    /// Le repère d'un commentaire (son id) : Modifier, Couleur, Marquer résolu, Supprimer.
+    Comment(u64),
 }
 
 /// Une poignée tenue : le plan (id), le plan d'avant (pour Échap et pour savoir si quelque chose
@@ -686,9 +688,11 @@ impl App {
     /// est une commande : un clic droit dessus lui donne un raccourci.
     pub(crate) fn grid_menu_ui(&mut self, ui: &mut egui::Ui, m: GridMenu) {
         match m {
+            GridMenu::Comment(id) => self.comment_menu(ui, id),
             GridMenu::Ruler => {
                 self.action_item(ui, "Signet ici (poser / retirer)", "signet.basculer");
                 self.action_item(ui, "Marque d'image ici (poser / retirer)", "marque.basculer");
+                self.action_item(ui, "Commentaire ici", "commentaire.ajouter");
                 ui.separator();
                 self.action_item(ui, "Point d'entrée ici", "entree.poser");
                 self.action_item(ui, "Point de sortie ici", "sortie.poser");
@@ -751,6 +755,7 @@ impl App {
             || self.keys_drag.is_some()
             || self.fx_keys_drag.is_some()
             || self.key_rect.is_some()
+            || self.comment_ui.drag.is_some()
     }
 
     /// Échap (ou Ctrl+Z) pendant un glisser (chantier 2) : tout revient comme avant le geste ;
@@ -759,6 +764,7 @@ impl App {
         self.cancel_montage_drag();
         self.cancel_keys_drag();
         self.cancel_fx_keys_drag();
+        self.cancel_comment_drag();
         if let Some(r) = self.key_rect.take() {
             self.key_sel = r.before;
         }
@@ -793,6 +799,9 @@ impl App {
         }
         if self.fx_keys_drag.is_some() {
             self.end_fx_keys_drag();
+        }
+        if self.comment_ui.drag.is_some() {
+            self.end_comment_drag();
         }
         self.key_rect = None;
     }

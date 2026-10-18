@@ -63,6 +63,11 @@ pub enum Pane {
     /// disposition par défaut ; il s'ouvre en onglet avec les calques.
     #[serde(rename = "historique")]
     History,
+    /// Les commentaires de la timeline (`commentairesui.rs`) : la liste, et l'éditeur du commentaire
+    /// choisi (texte, auteur, couleur). Fermé dans la disposition par défaut ; il s'ouvre dans la
+    /// colonne de droite, en onglet avec les calques.
+    #[serde(rename = "commentaires")]
+    Comments,
 }
 
 /// Où un panneau se range quand on le rouvre.
@@ -78,7 +83,7 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 12] = [
+    pub const ALL: [Pane; 13] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
@@ -91,11 +96,12 @@ impl Pane {
         Pane::XSheet,
         Pane::Effects,
         Pane::History,
+        Pane::Comments,
     ];
 
     /// Les panneaux fermés dans la disposition par défaut, qui ne s'ouvrent qu'à la demande.
     pub fn on_demand(self) -> bool {
-        matches!(self, Pane::XSheet | Pane::History)
+        matches!(self, Pane::XSheet | Pane::History | Pane::Comments)
     }
 
     /// Les panneaux qui n'existent qu'en animation (Anthony, 2026-10-18 : « Exposition n'est
@@ -121,6 +127,7 @@ impl Pane {
             Pane::XSheet => "Feuille d'exposition",
             Pane::Effects => "Effets",
             Pane::History => "Historique",
+            Pane::Comments => "Commentaires",
         }
     }
 
@@ -151,6 +158,7 @@ impl Pane {
             Pane::XSheet => ph::TABLE,
             Pane::Effects => ph::MAGIC_WAND,
             Pane::History => ph::CLOCK_COUNTER_CLOCKWISE,
+            Pane::Comments => ph::CHAT_TEXT,
         }
     }
 
@@ -158,7 +166,7 @@ impl Pane {
         match self {
             Pane::Canvas => Group::Center,
             Pane::Tools | Pane::Color | Pane::Brushes | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet => Group::Left,
-            Pane::Layers | Pane::XSheet | Pane::Effects | Pane::History => Group::Right,
+            Pane::Layers | Pane::XSheet | Pane::Effects | Pane::History | Pane::Comments => Group::Right,
             Pane::Montage | Pane::Timeline => Group::Bottom,
         }
     }

@@ -100,6 +100,10 @@ mod camtools;
 mod canvas;
 #[cfg(test)]
 mod color_tests;
+mod commentaires;
+#[cfg(test)]
+mod commentaires_tests;
+mod commentairesui;
 mod colorsel;
 #[cfg(test)]
 mod colorsel_tests;

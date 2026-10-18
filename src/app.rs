@@ -415,6 +415,9 @@ pub struct App {
     /// Le dernier clic dans le montage était sur la piste d'un calque : copier, coller et
     /// supprimer visent la clé à l'image courante du calque courant.
     pub(crate) key_focus: bool,
+    /// Commentaires sur la timeline (`commentaires.rs`, `commentairesui.rs`) : le commentaire
+    /// choisi, le repère pris à la souris, le filtre des résolus.
+    pub(crate) comment_ui: crate::commentaires::CommentUi,
     pub(crate) hole: crate::images::Hole,
     pub(crate) images_focus: bool,
     /// Faux-fixe : nombre de fois que les images choisies sont jouées en tout (13c).
@@ -810,6 +813,7 @@ impl App {
             tool_spring: None,
             ctrl_lasso: None,
             key_focus: false,
+            comment_ui: Default::default(),
             hole: Default::default(),
             images_focus: false,
             fake_hold_times: 2,
@@ -2615,6 +2619,7 @@ impl App {
         self.fx_choice = None;
         self.fx_key_sel.clear();
         self.fx_key_anchor = None;
+        self.comment_ui = Default::default();
         self.mode = Mode::Storyboard;
         self.cur_panel = 0;
         self.cur_layer = self.layers().len() - 1;
@@ -2991,6 +2996,16 @@ impl App {
         }
         // Fond sous le trait (`fondui.rs`).
         if self.fond_action(action) {
+            return;
+        }
+        // Commentaires sur la timeline (`commentairesui.rs`).
+        if self.comment_action(action) {
+            return;
+        }
+        // Suppr vise le commentaire seulement s'il a la main (le dernier clic était sur lui) ;
+        // sinon elle suit les règles d'avant (rien sans sélection).
+        if action == "edition.supprimer" && self.comment_has_focus() {
+            self.delete_selected_comment();
             return;
         }
         // Couleurs et nuanciers (passe couleur, `colorui.rs`).
@@ -3736,6 +3751,11 @@ impl eframe::App for App {
         self.end_gesture_if_idle();
         self.handle_close_request(ctx);
         self.update_springs(ctx);
+        // Un nouvel appui lâche le commentaire (Suppr ne le vise plus) ; s'il tombe sur un repère
+        // ou dans le panneau Commentaires, l'interface le reprend pendant cette image.
+        if ctx.input(|i| i.pointer.any_pressed()) {
+            self.comment_ui.focus = false;
+        }
         self.handle_shortcuts(ctx);
         self.sync_scene_layers();
         if !self.modal_open() {

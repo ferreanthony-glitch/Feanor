@@ -54,6 +54,8 @@ pub(crate) enum MenuTarget {
     Camera,
     Sequence,
     Ruler,
+    /// Le repère d'un commentaire (son id) dans la règle (`commentairesui.rs`).
+    Comment(u64),
 }
 
 impl App {

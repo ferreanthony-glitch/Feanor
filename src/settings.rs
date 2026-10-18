@@ -86,6 +86,10 @@ pub struct Settings {
     /// Personnalisé avec ses neuf couleurs (`theme.rs`, Fichier > Préférences…).
     #[serde(default, rename = "theme")]
     pub theme: crate::theme::ReglageTheme,
+    /// Nom qui signe les commentaires de la timeline (`commentaires.rs`) ; vide : l'utilisateur de
+    /// Windows.
+    #[serde(default, rename = "auteur_commentaires", skip_serializing_if = "String::is_empty")]
+    pub comment_author: String,
 }
 
 fn default_autosave() -> u32 {
@@ -126,6 +130,7 @@ impl Default for Settings {
             brushes_panel: Default::default(),
             new_project: Default::default(),
             theme: Default::default(),
+            comment_author: String::new(),
         }
     }
 }

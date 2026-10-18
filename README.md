@@ -782,7 +782,7 @@ les panneaux à leur contenu » coupe le tout.
 
 Une fine bande d'icônes sur le bord droit de la fenêtre, une par panneau de côté : réglages de
 l'outil, pinceaux, couleur, guides ; calques, effets, fiche du plan, feuille d'exposition ;
-historique. Un clic sur une icône ouvre le panneau, devant les onglets de son groupe. S'il est
+commentaires, historique. Un clic sur une icône ouvre le panneau, devant les onglets de son groupe. S'il est
 ouvert mais caché derrière un autre onglet, le clic le met devant ; s'il est visible, le clic le
 ferme. L'icône est enfoncée tant que le panneau est dans l'espace de travail. La bulle d'une
 icône donne son nom et son raccourci ; clic droit > « Assigner un raccourci… » (chaque icône est
@@ -800,6 +800,27 @@ mise de côté ; au retour en animation (Tab, double-clic sur un plan) elle revi
 le nom de ce qui l'a faite (« Pinceau », « Retourner le calque de gauche à droite », « Calques »…).
 Clique une étape pour revenir juste après elle ; les étapes annulées restent en gris dessous
 (clic : les rétablir), jusqu'à la prochaine modification.
+
+## Commentaires sur la timeline
+
+Un commentaire est un petit fanion dans la règle du montage (tout le film) et de la timeline du
+plan (ceux du plan). Il tient à une image d'un plan : il suit son plan quand on le déplace, le coupe
+ou le réunit à un autre.
+
+- Poser : le bouton « Nouveau commentaire » des barres du montage et de la timeline, un double-clic
+  dans la règle, ou le bouton du panneau Commentaires. Le fanion se pose à l'image courante et le
+  panneau s'ouvre, le texte prêt à être tapé.
+- Survoler un fanion : une bulle donne l'auteur, la date, l'endroit et le début du texte.
+- Clic : choisit le commentaire et y va. Glisser : le déplace image par image (d'un plan à l'autre
+  dans le montage) ; Échap abandonne. Double-clic : l'éditer. Clic droit : Modifier, Couleur,
+  Marquer résolu, Supprimer. Suppr supprime le commentaire choisi quand le dernier clic l'a visé.
+- Panneau Commentaires (barre des panneaux, ou Storyboard > Commentaires…) : la liste dans l'ordre du
+  film (pastille, time code, plan, auteur, première ligne, case « résolu »), « Montrer les résolus »,
+  et l'éditeur du commentaire choisi : texte sur plusieurs lignes, auteur, couleur, résolu.
+- Un commentaire résolu est estompé. L'auteur par défaut est l'utilisateur Windows, ou le nom donné
+  dans Fichier > Préférences… > Commentaires.
+- Enregistrés dans `commentaires.json`, à côté du manifeste du projet (le format du projet ne
+  change pas) ; chaque changement s'annule et se rétablit.
 
 ## Palette de commandes
 
@@ -856,6 +877,7 @@ Bus/
   dessins/13.json   un fichier par dessin vectoriel
   sons/14.mp3       les sons importés, copiés tels quels
   modeles/15.pelure3d  les modèles 3D de repère
+  commentaires.json    les commentaires de la timeline (absent : aucun commentaire)
 ```
 
 Si tu enregistres « Bus.pelure » dans `Films`, le fichier est donc dans `Films\Bus\Bus.pelure`, pas
@@ -1042,6 +1064,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `propager.rs`, `propagerui.rs` | Propagation de la peinture sur une vidéo, façon EbSynth (voir `docs/PROPAGATION.md`) |
 | `handles.rs` | Poignées de la timeline (marques, signets, entrée / sortie, expositions) et menus de la grille |
 | `fxkeys.rs` | Clés d'effets dans le montage et la timeline : losanges, choix, déplacement, copier-coller, suppression |
+| `commentaires.rs`, `commentairesui.rs` | Commentaires sur la timeline : modèle, fichier `commentaires.json`, positions ; fanions, bulle, menu, panneau |
 | `app.rs` | État de l'application, actions, raccourcis |
 | `vtools.rs` | Outils des calques vectoriels |
 | `storyboard.rs` | Bande de montage, vue vignettes, fiche du panneau |
