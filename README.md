@@ -627,6 +627,12 @@ reste dans la forme ; la gomme **coupe le fond** (une zone fermée qu'on veut la
 et repeindre au même endroit le recoud. Tout se voit pendant le geste ; Ctrl+Z annule chaque coup.
 Éteindre l'option retire le fond.
 
+Plusieurs calques d'un coup : Calques > Fond sous le trait (sur les calques choisis, sur tout le
+plan, retirer), ou « Ce fond aussi sur » dans les réglages. « Tout le plan » laisse les calques de
+fond du décor. La couleur d'un fond neuf se règle par projet (Fichier > Réglages du projet,
+« Couleur des fonds sous le trait », par exemple un gris clair) ; « Aux fonds déjà posés » la
+donne à tous les fonds du projet.
+
 ## Menus courts
 
 Les menus montrent l'essentiel ; le reste est rangé dans un sous-menu (« Plans », « Importer »,

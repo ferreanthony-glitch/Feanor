@@ -2746,7 +2746,7 @@ impl App {
         if self.workspace_action(action) {
             return;
         }
-        // Fond sous le trait (ondui.rs).
+        // Fond sous le trait (`fondui.rs`).
         if self.fond_action(action) {
             return;
         }

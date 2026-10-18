@@ -1270,12 +1270,16 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         aussi sur la ligne du calque), gardée dans la forme par un pochoir ; affichée sous le trait
         à l'écran, à l'export, dans les vignettes (`render::fond_item`, `FondPart`) ; annulation
         `Edit::FondTiles` ; format 23 (`fond` du calque, `dessins/<id>_fond.png`). Sans touche.
-        Puis (Anthony : « gomme qui coupe le fond ») : la strate devient Strate { peinture, coupe },
+        Puis (Anthony : « gomme qui coupe le fond ») : la strate devient `Strate { peinture, coupe }`,
         la gomme en strate Fond peint la coupe (le fond disparaît là), le pinceau l'efface (il le
         recoud) ; un second trait suit le même geste sur la coupe ; le fond affiché est refait tuile
-        par tuile pendant le geste (x::fond_patch, forme gardée dans COVERS) au lieu d'un
-        élément « peinture » à part ; coupe dans dessins/<id>_coupe.png. Reste : le pot de peinture
-        dans le fond, l'export vers Storyboard Pro du fond (à vérifier) ;
+        par tuile pendant le geste (`fx::fond_patch`, forme gardée dans `COVERS`) au lieu d'un
+        élément « peinture » à part ; coupe dans `dessins/<id>_coupe.png`. Puis (ses suggestions 2
+        et 3 retenues) : `fond.calques_choisis`, `fond.tout_le_plan` (sauf les calques de toute la
+        scène, le décor), `fond.retirer_choisis`, `fond.couleur_partout` (menu Calques > Fond sous le
+        trait, sans touche) ; couleur des fonds neufs par projet (`Properties::fond`, manifeste
+        `proprietes.fond`, Réglages du projet). Reste : le pot de peinture dans le fond, l'export
+        vers Storyboard Pro du fond (à vérifier) ;
       - **menus courts** (Anthony : « certains menus contiennent trop de choses et noient les
         informations principales » ; « suis tes recommandations ») : barre de menus de 135 lignes
         de premier niveau à environ 75 (Fichier 25 → 12, Édition 13 → 10, Storyboard 22 → 9,
