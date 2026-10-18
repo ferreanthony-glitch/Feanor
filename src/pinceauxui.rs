@@ -1,13 +1,14 @@
 //! Panneau Pinceaux, l'affichage (refonte du 2026-10-18, d'après la demande d'Anthony : « une
 //! organisation des brosses plus simple, et la taille du pinceau mise en avant ») :
 //! - en haut, toujours visible, la taille de l'outil courant (curseur et champ en px) ;
-//! - deux onglets : « Pinceaux » (la bibliothèque : recherche, liste ou vignettes, dossiers
-//!   repliables, trois boutons en bas) et « Réglages du pinceau » (les catégories à gauche, les
-//!   réglages de la catégorie à droite, l'aperçu du trait en bas).
+//! - la bibliothèque : recherche, liste ou vignettes, dossiers repliables, trois boutons en bas.
 //!
-//! Le rangement, la recherche et l'état retenu sont dans `pinceaux.rs`. Les réglages euxmêmes sont
-//! ceux qui étaient dans le panneau Réglages de l'outil, déplacés ici ; ce dernier n'en garde
-//! qu'un résumé (`brush_summary_ui`).
+//! Les réglages du pinceau (l'aperçu du trait, les catégories à gauche, les réglages de la
+//! catégorie à droite) sont dans le panneau Réglages de l'outil, sous son résumé
+//! (`brush_summary_ui`, `brush_settings_ui`) : un onglet du panneau Pinceaux les a portés le
+//! 2026-10-18, retiré le même jour (Anthony : il faisait doublon avec le panneau Réglages).
+//!
+//! Le rangement, la recherche et l'état retenu sont dans `pinceaux.rs`.
 
 use eframe::egui::{self, pos2, vec2, Align, Align2, Color32, FontId, Layout, Rect, RichText, Sense, Vec2};
 use egui_phosphor::regular as ph;
@@ -19,14 +20,14 @@ use crate::brushui::{preset_menu, IMPORT_HINT};
 use crate::bulles::{bulle, choix, icone, icone_si, interrupteur};
 use crate::dockui::{fit_to_pane, fit_w};
 use crate::document::LayerKind;
-use crate::pinceaux::{choisi, dossier_de, ranger, supprimable, Categorie, Onglet};
+use crate::pinceaux::{choisi, dossier_de, ranger, supprimable, Categorie};
 
 /// Hauteur d'une ligne de la liste, et l'aperçu du trait qu'elle porte.
 const LINE_H: f32 = 26.0;
 const LINE_THUMB: Vec2 = vec2(64.0, 18.0);
 /// Largeur de la liste en dessous de laquelle la ligne n'a plus d'aperçu de trait.
 const LINE_THUMB_MIN_W: f32 = 200.0;
-/// Hauteur de l'aperçu du trait courant (onglet Réglages), et de la barre de boutons du bas.
+/// Hauteur de l'aperçu du trait courant (panneau Réglages de l'outil), et de la barre de boutons du bas.
 const CURRENT_H: f32 = 38.0;
 const BAR_H: f32 = 34.0;
 /// Largeur de la colonne des catégories ; en dessous de `NARROW` points de panneau, elle devient
@@ -77,26 +78,13 @@ impl App {
         }
     }
 
-    /// Panneau Pinceaux : les deux onglets en haut (Anthony, 2026-10-18), la taille, puis le
-    /// contenu de l'onglet choisi.
+    /// Panneau Pinceaux : la taille, puis la bibliothèque. Les réglages du pinceau sont dans le
+    /// panneau Réglages de l'outil (Anthony, 2026-10-18 : réglages du pinceau (panneau Réglages de l'outil) faisait
+    /// doublon avec lui, « autant tout mettre dans le panneau Réglages »).
     pub(crate) fn brushes_panel(&mut self, ui: &mut egui::Ui) {
-        let mut onglet = self.pinceaux.onglet;
-        ui.columns(2, |cols| {
-            for (i, (o, titre)) in [(Onglet::Pinceaux, "Pinceaux"), (Onglet::Reglages, "Réglages du pinceau")].into_iter().enumerate() {
-                let w = cols[i].available_width();
-                if cols[i].add(egui::Button::new(titre).selected(onglet == o).min_size(vec2(w, 0.0))).clicked() {
-                    onglet = o;
-                }
-            }
-        });
-        self.pinceaux.onglet = onglet;
-        ui.add_space(2.0);
         self.size_row(ui);
         ui.add_space(2.0);
-        match onglet {
-            Onglet::Pinceaux => self.library_tab(ui),
-            Onglet::Reglages => self.settings_tab(ui),
-        }
+        self.library_tab(ui);
     }
 
     /// La taille de l'outil courant (pinceau, crayon ou gomme ; la largeur d'une forme), en grand :
@@ -320,54 +308,49 @@ impl App {
         bulle(resp, name, source, "")
     }
 
-    // ------------------------------------------------------------------ onglet Réglages du pinceau
+    // ------------------------------------------------------------------ réglages du pinceau
 
-    /// L'aperçu du trait courant en haut, sous les onglets (Anthony, 2026-10-18 : on le voit
+    /// Dans le panneau Réglages de l'outil, sous le résumé : l'aperçu du trait courant (on le voit
     /// changer pendant qu'on règle), puis les catégories (à gauche, ou en liste déroulante si le
-    /// panneau est étroit) et les réglages de la catégorie choisie.
-    fn settings_tab(&mut self, ui: &mut egui::Ui) {
+    /// panneau est étroit) et les réglages de la catégorie choisie. Le panneau défile lui-même.
+    pub(crate) fn brush_settings_ui(&mut self, ui: &mut egui::Ui) {
         let vector = self.layer().kind == LayerKind::Vector;
         let cat = self.pinceaux.categorie;
         let wide = ui.available_width() >= NARROW;
+        ui.add_space(4.0);
         self.current_preview(ui);
         ui.add_space(4.0);
-        let mut height = ui.available_height();
-        if !height.is_finite() {
-            height = 400.0;
+        if wide {
+            ui.horizontal_top(|ui| {
+                let left = ui
+                    .vertical(|ui| {
+                        ui.set_width(CATEGORIES_W);
+                        for c in Categorie::ALL {
+                            self.category_row(ui, c, cat);
+                        }
+                    })
+                    .response
+                    .rect;
+                ui.add_space(6.0);
+                let right = ui
+                    .vertical(|ui| {
+                        fit_to_pane(ui);
+                        ui.label(RichText::new(cat.label()).strong());
+                        note(ui, cat.help());
+                        ui.add_space(2.0);
+                        self.category_ui(ui, cat, vector);
+                    })
+                    .response
+                    .rect;
+                let x = left.right() + 3.0;
+                let stroke = ui.visuals().widgets.noninteractive.bg_stroke;
+                ui.painter().vline(x, left.top()..=left.bottom().max(right.bottom()), stroke);
+            });
+        } else {
+            self.category_combo(ui, cat);
+            ui.add_space(2.0);
+            self.category_ui(ui, cat, vector);
         }
-        egui::ScrollArea::vertical().id_salt("pinceaux_reglages").auto_shrink([false, false]).max_height(height.max(60.0)).show(ui, |ui| {
-            if wide {
-                ui.horizontal_top(|ui| {
-                    let left = ui
-                        .vertical(|ui| {
-                            ui.set_width(CATEGORIES_W);
-                            for c in Categorie::ALL {
-                                self.category_row(ui, c, cat);
-                            }
-                        })
-                        .response
-                        .rect;
-                    ui.add_space(6.0);
-                    let right = ui
-                        .vertical(|ui| {
-                            fit_to_pane(ui);
-                            ui.label(RichText::new(cat.label()).strong());
-                            note(ui, cat.help());
-                            ui.add_space(2.0);
-                            self.category_ui(ui, cat, vector);
-                        })
-                        .response
-                        .rect;
-                    let x = left.right() + 3.0;
-                    let stroke = ui.visuals().widgets.noninteractive.bg_stroke;
-                    ui.painter().vline(x, left.top()..=left.bottom().max(right.bottom()), stroke);
-                });
-            } else {
-                self.category_combo(ui, cat);
-                ui.add_space(2.0);
-                self.category_ui(ui, cat, vector);
-            }
-        });
     }
 
     /// Allume ou éteint une catégorie du réglage courant ; ses valeurs sont gardées pour la
