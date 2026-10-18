@@ -1,0 +1,43 @@
+//! Travail réparti sur les cœurs du processeur, avec des fils de la bibliothèque standard
+//! (`std::thread::scope` ; rayon n'est pas dans les dépendances).
+//!
+//! `par_map` rend les résultats dans l'ordre des éléments, comme `map` : le résultat est le même
+//! qu'en une seule boucle, seul le temps change. Les éléments sont distribués un à un (un fil libre
+//! prend le suivant), ce qui convient à des travaux longs et inégaux : un dessin à lire ou à
+//! écrire, un trait à rejouer.
+
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+/// Nombre de fils pour `n` travaux, au plus `max` (et jamais plus que de cœurs).
+fn fils(n: usize, max: usize) -> usize {
+    std::thread::available_parallelism().map_or(4, |c| c.get()).clamp(1, max.max(1)).min(n.max(1))
+}
+
+/// `f(rang, élément)` pour chaque élément de `items`, sur au plus `max` fils ; les résultats dans
+/// l'ordre de `items`. Un travail qui panique fait paniquer l'appel (comme dans une boucle).
+pub fn par_map<T: Sync, R: Send>(items: &[T], max: usize, f: impl Fn(usize, &T) -> R + Sync) -> Vec<R> {
+    let threads = fils(items.len(), max);
+    if threads <= 1 {
+        return items.iter().enumerate().map(|(i, x)| f(i, x)).collect();
+    }
+    let next = AtomicUsize::new(0);
+    let (next, f) = (&next, &f);
+    let mut done: Vec<(usize, R)> = std::thread::scope(|s| {
+        let handles: Vec<_> = (0..threads)
+            .map(|_| {
+                s.spawn(move || {
+                    let mut mine = Vec::new();
+                    loop {
+                        let i = next.fetch_add(1, Ordering::Relaxed);
+                        let Some(x) = items.get(i) else { break };
+                        mine.push((i, f(i, x)));
+                    }
+                    mine
+                })
+            })
+            .collect();
+        handles.into_iter().flat_map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).collect()
+    });
+    done.sort_unstable_by_key(|(i, _)| *i);
+    done.into_iter().map(|(_, r)| r).collect()
+}

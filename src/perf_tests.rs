@@ -520,7 +520,7 @@ fn perf_project_open_save() {
     let l = crate::project::load(&manifeste).expect("lecture");
     println!("PERF ouverture : {:.0} ms ({} plans, {} dessins)", t.elapsed().as_secs_f64() * 1e3, l.doc.panels.len(), l.doc.cels.len());
     let t = Instant::now();
-    let l = crate::project::load_quick(&manifeste).expect("lecture");
+    let l = crate::project::load_quick_progress(&manifeste, &crate::project::Progress::default()).expect("lecture");
     println!("PERF ouverture rapide : {:.0} ms", t.elapsed().as_secs_f64() * 1e3);
     drop(l);
     let _ = std::fs::remove_dir_all(&dir);

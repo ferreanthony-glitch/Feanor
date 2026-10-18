@@ -626,6 +626,8 @@ pub struct App {
     pub(crate) fit_busy: bool,
     /// Projet récent à ouvrir une fois « Enregistrer ? » réglé (`recents.rs`).
     pub(crate) recent_to_open: Option<PathBuf>,
+    /// Projet en cours d'ouverture sur un autre fil (`ouverture.rs`).
+    pub(crate) open_job: Option<crate::ouverture::OpenJob>,
     /// Fenêtre « Aller à un plan » ouverte, et ce qui y est tapé (`aller.rs`).
     pub(crate) goto_plan: Option<String>,
     /// La fenêtre a reçu sa maximisation d'ouverture.
@@ -935,6 +937,7 @@ impl App {
             maximized_once: 0,
             goto_plan: None,
             recent_to_open: None,
+            open_job: None,
             palette: None,
             export_hub: false,
             prefs_window: false,
@@ -1114,6 +1117,7 @@ impl App {
             || self.export_job.is_some()
             || !self.orphans.is_empty()
             || self.workspace_name.is_some()
+            || self.open_job.is_some()
             || self.assign.is_some()
             || self.propagation.running()
             || self.sb_export.as_ref().is_some_and(crate::sbexportui::SbExportWindow::rendering)
@@ -1849,7 +1853,7 @@ impl App {
         self.rejeu_with(cel, true);
     }
 
-    fn rejeu_with(&mut self, cel: CelId, priority: bool) {
+    pub(crate) fn rejeu_with(&mut self, cel: CelId, priority: bool) {
         let (w, h) = (self.doc.width, self.doc.height);
         if let Some((d, version)) = self.doc.cels.get(&cel).and_then(|c| c.vector.as_ref().map(|d| (d, c.version))) {
             self.rejeu.submit_with(cel, d, w, h, version, priority);
@@ -2587,32 +2591,8 @@ impl App {
         }
         // Ouverture immédiate : les dessins vectoriels texturés paraissent en rendu rapide, leur
         // rendu exact arrive en arrière-plan (`rejeu.rs`).
-        match project::load_quick(&path) {
-            Ok(loaded) => {
-                self.load_doc(loaded.doc);
-                for id in loaded.approx {
-                    // (Derrière tout geste de l'utilisateur : le chargement attend son tour.)
-                    self.rejeu_with(id, false);
-                }
-                self.written = loaded.written;
-                self.status = if loaded.warnings.is_empty() {
-                    format!("Ouvert : {}", path.display())
-                } else {
-                    format!("Ouvert avec {} problème(s) : {}", loaded.warnings.len(), loaded.warnings.join(" ; "))
-                };
-                if loaded.converted {
-                    // Rien n'est réécrit sur le disque avant « Enregistrer ».
-                    self.modified = true;
-                    self.status.push_str(
-                        " — Ancien format : la feuille de dessin a été agrandie autour du cadre (même cadrage). \
-                         « Enregistrer » le passe au nouveau format.",
-                    );
-                }
-                self.remember_project(&path);
-                self.path = Some(path);
-            }
-            Err(e) => self.status = format!("Impossible d'ouvrir le projet : {e}"),
-        }
+        // La lecture se fait sur un autre fil (`ouverture.rs`) : l'interface reste vivante.
+        self.start_open(path);
     }
 
     pub(crate) fn load_doc(&mut self, doc: Document) {
@@ -3834,6 +3814,7 @@ impl App {
             let _t = crate::perf::section("fenêtres et dialogues");
             self.dialogs(ctx);
             self.top_view_window(ctx);
+            self.tick_open(ctx);
         }
         // Export en cours : quelques images par image d'écran, la fenêtre reste vivante.
         if let Some(job) = &mut self.export_job {
