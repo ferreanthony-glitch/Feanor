@@ -1589,6 +1589,16 @@ Choix d'Anthony :
   enveloppe 8,6 ms / image (rien n'était affiché avant), lâcher 113 → 0,5 ms, glissé après enveloppe
   44,9 → 1,6 ms / image, lâcher 118 → 0,1 ms ; chargement 24 dessins affiché en 0,28 s au lieu de
   1,6 s.
+- ✅ Essai d'Anthony, enveloppe et grosse sélection (2026-10-18, nuit, `docs/VECTORIEL-COMME-BITMAP.md`
+  §3 ter, `warp.rs`, `contours.rs`) : (1) enveloppe et perspective vectorielles passent par la
+  feuille flottante : seul un maillage change par image, dessiné par la carte graphique (`gpu.rs`
+  `vs_mesh`, secours processeur dans `render.rs`), feuille avec marge ; 10 traits 9,9 → 0,14 ms par
+  image, 40 traits 37 → 0,14 ms (8 Mo de tuiles → 221 Ko de sommets) ; la feuille déformée reste
+  jusqu'au rendu exact. (2) Les contours bleus d'une grosse sélection sont gardés d'une image à
+  l'autre, simplifiés à l'écran (300 traits de 500 points : 13,5 → 0,6 ms au repos, 1,2 en geste ;
+  300 de 2000 points : 54 → 0,6 ms) ; saisie de 300 traits par bandes sur tous les cœurs
+  (112 → 25 ms). Essais `warp_tests.rs`, `contours_tests.rs`, `gpu_tests.rs` (carte graphique
+  réelle contre le calcul de secours).
 - ✅ Essai d'Anthony sur la feuille flottante (2026-10-18, soir, `docs/VECTORIEL-COMME-BITMAP.md`
   §3 ter, `affichage_tests.rs`) : (1) des morceaux du dessin manquaient, coupés en ligne droite,
   quand on déplaçait vers l'intérieur des traits qui dépassaient de la feuille (cache et feuille

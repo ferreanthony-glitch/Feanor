@@ -418,7 +418,7 @@ fusain, 1920 × 1080, 11 dépassent) : saisie 11,0 ms contre 10,2 ms, une fois a
 feuille 2039 × 1455 (6,0 Mo de tuiles) ; 0,001 ms par image. Aussi corrigé : terminer un geste
 lâché avant l'arrivée du rendu exact (`apply_preview`) ne refaisait que la nouvelle place de la
 sélection et la laissait en double à l'ancienne. Limites : l'enveloppe et la perspective
-(`render_split`) n'ont pas encore cette marge ; la saisie d'une sélection dont des traits n'ont pas
+(`render_split`) n'avaient pas encore cette marge (elles l'ont, voir plus bas) ; la saisie d'une sélection dont des traits n'ont pas
 de pixels en cache (budget dépassé, projet qui vient de s'ouvrir) les rejoue sur le fil de
 l'interface, 20 ms par trait large (0,8 s pour 40) — d'où `App::warm_current_cel`, qui demande au
 fil de travail les traits manquants du dessin regardé, une fois par version.
@@ -432,6 +432,64 @@ pour 2400). Maintenant l'aperçu du geste reste, le dessin est copié (0,07 ms) 
 vient d'un fil de travail (181 ms pour 2400 points, sans rien bloquer). Le fil ne rejoue plus tout
 le dessin à chaque demande : les traits aux pixels exacts en cache (signature juste) les gardent,
 seuls les aperçus déformés sont oubliés (`Rejeu::submit_with`) — un trait de plus coûte un trait.
+
+### Essai d'Anthony, enveloppe et grosse sélection (2026-10-18, nuit) : deux constats corrigés
+
+Essai avec des traits rouges texturés : « l'outil Transformer en mode Enveloppe rame encore », et un
+ralentissement quand une centaine de longs griffonnages sont choisis au lasso, au repos comme en geste.
+
+**Enveloppe et perspective** (`envelopetools.rs`, `perstools.rs`). Il n'y avait déjà aucun rejeu du
+moteur pendant le geste, mais chaque image copiait le reste du dessin, projetait un à un les pixels de
+la feuille des traits choisis (`warp_raster_fast`, sur le fil de l'interface) et renvoyait 470 à 510
+tuiles (8 Mo) à la carte graphique ; la feuille n'avait pas non plus de marge (ce qui dépasse de la
+feuille était coupé). Maintenant c'est la feuille flottante des déplacements (`flottante.rs`) : saisie
+une fois depuis les pixels en cache du dessin d'origine de la séance (`Flottante::lift_from`, marge
+comprise), puis seul un **maillage** change à chaque image (`warp.rs` : au plus 48 × 48 cases, chaque
+point avec sa place dans la feuille et sa place d'arrivée). `gpu.rs` le dessine en triangles
+(`vs_mesh`, mêmes fragments, modes de fusion et opacité compris, transformation du calque appliquée
+après) ; `render.rs` fait le même dessin sur processeur (secours sans carte graphique). Au lâcher :
+la géométrie, le rejeu en arrière-plan, et la feuille déformée reste jusqu'à l'arrivée du rendu exact
+(`warp_settle`) ; reprendre un coin ou finir par Entrée / Échap ne la termine pas, tout autre geste la
+pose d'abord sur le dessin par le processeur (`Flottante::flatten_warp`). Le bitmap garde l'ancien
+aperçu (il n'a pas de feuille de traits).
+
+| 1920 × 1080, traits larges de gouache, feutre, fusain | Avant | Après |
+|---|---|---|
+| Enveloppe, 10 traits, par image | **9,9 ms** (+ 7,7 Mo de tuiles envoyées) | **0,14 ms** (221 Ko de sommets) |
+| Enveloppe, 40 traits, par image | **37,0 ms** (+ 8,4 Mo) | **0,14 ms** (221 Ko) |
+| Saisie, 10 / 40 traits (une fois, début du geste) | 2,6 / 18,0 ms | 2,8 / 12,2 ms |
+| Enveloppe de 300 traits (boîte 3618 × 2872) | — | saisie 25 ms (112 avant les bandes), 0,16 ms par image |
+
+La saisie d'une grosse sélection se fait par bandes de lignes sur tous les cœurs quand chaque trait a
+ses pixels exacts en cache (`vector::render_in_bands`, `Element::cache_ready`) : 112 → 25 ms pour 300
+traits, même image pixel pour pixel. Essais : `warp_tests.rs` (maillage contre la déformation exacte de
+la feuille : 0 pixel de différence ; débord de la feuille ; calque transformé ; fin anticipée),
+`gpu_tests.rs` (la carte graphique de la machine contre le secours : 0 pixel à plus de 3 niveaux, en
+mode Produit, sous une transformation de calque), `affichage_tests::envelope_drag_frame_cost`.
+
+**Beaucoup de traits choisis** (`contours.rs`, `canvas.rs`). Le contour bleu d'1 px de chaque trait
+choisi recopiait tous ses points, les passait à l'écran et laissait egui tracer chaque ligne (4
+sommets et 18 indices par point, renvoyés à la carte graphique) à chaque image d'écran, au repos
+comme en geste : 300 traits de 500 points = 13,5 ms et 22,8 Mo par image, 300 de 2000 points = 54 ms
+et 91 Mo. Ce qui ne coûtait presque rien : la boîte de la sélection (0,2 ms pour 150 000 points).
+Maintenant les contours sont faits une fois par sélection et par vue (simplifiés à 0,45 px près
+— plus gros jusqu'à 12 px au-delà de 40 000 points —, ruban de 3 sommets par point, un seul
+maillage gardé) ; ensuite l'image ne coûte qu'une empreinte de la sélection (0,02 ms) et, quand la
+vue ou le geste a déplacé la sélection, une transformation des sommets ; refaits seulement si la
+sélection ou le dessin change, ou en dehors d'un geste si la vue change d'échelle de plus d'un quart.
+
+| Sélection (griffonnages dans 1920 × 1080) | Avant, par image | Après, par image (au repos / en geste), egui compris | Construction (une fois) |
+|---|---|---|---|
+| 30 × 500 points | 1,2 ms, 2,3 Mo | 0,10 / 0,18 ms | 0,7 ms |
+| 100 × 500 | 4,2 ms, 7,6 Mo | 0,33 / 0,64 ms | 2,5 ms |
+| 300 × 500 (150 000 points → 31 746) | **13,5 ms, 22,8 Mo** | **0,64 / 1,2 ms** (3,4 Mo) | 8,1 ms |
+| 300 × 2000 (600 000 points → 29 216, tolérance 6,4 px) | **53,8 ms, 91 Mo** | **0,55 / 1,0 ms** (3,1 Mo) | 36,6 ms |
+
+(`affichage_tests::many_selected_strokes_frame_cost` et `many_selected_strokes_move_cost`, ignorés.)
+Le contour garde la même encre qu'une ligne d'1 px d'egui (908 contre 911, `contours_tests.rs`) ; en
+geste, une mise à l'échelle épaissit le trait avec le facteur (1 px × facteur) jusqu'au lâcher. Reste :
+la saisie de 300 traits coûte encore 25 ms au début du geste (pose des pixels en cache) ; la faire
+d'avance en arrière-plan dès que la sélection est faite l'effacerait.
 
 ## 4. Questions pour Anthony
 

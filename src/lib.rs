@@ -18,6 +18,14 @@ mod perte_tests;
 #[cfg(test)]
 mod rejeu_tests;
 pub mod flottante;
+pub mod warp;
+#[cfg(test)]
+mod warp_tests;
+pub mod contours;
+#[cfg(test)]
+mod contours_tests;
+#[cfg(test)]
+mod gpu_tests;
 #[cfg(test)]
 mod affichage_tests;
 #[cfg(test)]

@@ -32,13 +32,14 @@ enum Original {
 }
 
 impl Original {
-    /// Les deux feuilles de l'aperçu : ce qui reste, et ce qui se déforme (pour un dessin
-    /// vectoriel, posées depuis les pixels en cache des traits : sans rejeu).
-    fn split(&self, src: Rect, w: usize, h: usize) -> (Raster, Raster) {
+    /// Les deux feuilles de l'aperçu d'un dessin bitmap : ce qui reste, et ce qui se déforme. Un
+    /// dessin vectoriel n'en a pas : sa feuille flottante (`flottante.rs`), faite des pixels en
+    /// cache des traits, est posée par un maillage que dessine la carte graphique (`warp.rs`).
+    fn split(&self, src: Rect) -> (Raster, Raster) {
         match self {
             Original::Bitmap(orig) => envelope::split_rect(orig, src),
             Original::Masked(orig, mask) => envelope::split_masked(orig, mask),
-            Original::Vector(d, items) => d.render_split(items.as_deref(), w, h),
+            Original::Vector(..) => (Raster::new(1, 1), Raster::new(1, 1)),
         }
     }
 
@@ -54,7 +55,7 @@ impl Original {
 
 /// Ce que l'on tire : un coin, une poignée, ou toute l'enveloppe.
 #[derive(Clone, Copy)]
-enum Grip {
+pub(crate) enum Grip {
     Corner(usize),
     Handle(usize),
     All,
@@ -82,9 +83,9 @@ impl EnvelopeEdit {
         self.cel == cel && self.drag.is_some()
     }
 
-    fn new(cel: CelId, src: Rect, original: Original, grip: Grip, p: Pos2, w: usize, h: usize) -> EnvelopeEdit {
+    fn new(cel: CelId, src: Rect, original: Original, grip: Grip, p: Pos2) -> EnvelopeEdit {
         let env = Envelope::identity(src);
-        let (base, sheet) = original.split(src, w, h);
+        let (base, sheet) = original.split(src);
         EnvelopeEdit { cel, src, env, original, drag: Some((grip, p, env)), base, sheet, shown: src, committed: Default::default() }
     }
 
@@ -109,7 +110,7 @@ impl App {
         (0..4).flat_map(|k| (0..16).map(move |i| (k, i as f32 / 16.0))).map(|(k, t)| self.layer_to_screen(bezier_at(env, k, t))).collect()
     }
 
-    fn envelope_grip(&self, screen: Pos2) -> Option<Grip> {
+    pub(crate) fn envelope_grip(&self, screen: Pos2) -> Option<Grip> {
         let e = self.envelope.as_ref()?;
         if let Some(i) = (0..8).find(|&i| self.layer_to_screen(e.env.handles[i]).distance(screen) <= GRAB) {
             return Some(Grip::Handle(i));
@@ -178,7 +179,7 @@ impl App {
             Some(d) => Original::Vector(d.clone(), items),
             None => Original::Bitmap(c.raster.clone()),
         };
-        self.envelope = Some(EnvelopeEdit::new(cel, src, original, Grip::Corner(k), p, c.raster.width, c.raster.height));
+        self.envelope = Some(EnvelopeEdit::new(cel, src, original, Grip::Corner(k), p));
         let what = match n {
             Some(n) => format!("Enveloppe sur la sélection ({n} élément{})", if n > 1 { "s" } else { "" }),
             None => "Enveloppe".to_string(),
@@ -208,7 +209,7 @@ impl App {
         self.bdrag = None;
         let (Some(mask), Some(c)) = (mask, self.doc.cels.get(&cel)) else { return true };
         let src = mask.bounds();
-        self.envelope = Some(EnvelopeEdit::new(cel, src, Original::Masked(c.raster.clone(), mask), Grip::Corner(k), p, c.raster.width, c.raster.height));
+        self.envelope = Some(EnvelopeEdit::new(cel, src, Original::Masked(c.raster.clone(), mask), Grip::Corner(k), p));
         self.status = "Enveloppe sur la zone choisie : tire les coins, et leurs poignées rondes pour courber les côtés ; \
                        l'intérieur pour tout déplacer. Entrée, Échap ou clic ailleurs : terminer ; Ctrl+Z annule chaque geste."
             .into();
@@ -232,11 +233,26 @@ impl App {
             return true;
         }
         e.env = env;
-        self.envelope_preview();
+        if matches!(e.original, Original::Vector(..)) {
+            self.envelope_float();
+        } else {
+            self.envelope_preview();
+        }
         true
     }
 
-    /// Montre le dessin déformé par l'enveloppe du moment (depuis l'original, sans rejeu).
+    /// Dessin vectoriel : la feuille flottante des éléments déformés est posée par le maillage de
+    /// l'enveloppe du moment. Rien n'est refait, rien n'est renvoyé à la carte graphique : seul le
+    /// maillage change (`warp.rs`).
+    fn envelope_float(&mut self) {
+        let Some(e) = self.envelope.take() else { return };
+        if let Original::Vector(drawing, items) = &e.original {
+            self.warp_float(e.cel, drawing, items.as_deref(), e.src, 8, |p| e.env.map(e.src, p));
+        }
+        self.envelope = Some(e);
+    }
+
+    /// Montre le dessin bitmap déformé par l'enveloppe du moment (depuis l'original).
     fn envelope_preview(&mut self) {
         let Some(e) = &mut self.envelope else { return };
         let img = e.preview();
@@ -281,6 +297,9 @@ impl App {
                 let before = std::mem::replace(d, new);
                 self.rejeu_cel(cel);
                 self.push_vector(cel, before, None);
+                // La feuille déformée reste affichée jusqu'à l'arrivée du rendu exact.
+                self.envelope_float();
+                self.warp_settle(cel);
             }
         }
     }

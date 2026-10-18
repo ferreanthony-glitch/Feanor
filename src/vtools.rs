@@ -600,9 +600,19 @@ impl App {
         if !self.flottante.as_ref().is_some_and(|f| f.pending.is_some()) {
             return;
         }
-        use eframe::egui::Event;
+        use eframe::egui::{Event, Key};
+        // Une enveloppe ou une perspective lâchée, dont la séance continue : reprendre un coin, ou
+        // Entrée / Échap pour finir, ne touchent pas au dessin ; la feuille reste (et sert au geste
+        // suivant, `App::float_for_warp`).
+        let session = self.flottante.as_ref().is_some_and(|f| f.for_warp) && (self.envelope.is_some() || self.persp.is_some());
         let acts = ctx.input(|i| {
-            i.pointer.any_pressed() || i.events.iter().any(|e| matches!(e, Event::Key { pressed: true, .. } | Event::Text(_) | Event::Paste(_) | Event::Cut | Event::Copy))
+            let grabs = session && i.pointer.interact_pos().is_some_and(|p| self.envelope_grip(p).is_some() || self.persp_grip(p).is_some());
+            let on_keys = |e: &Event| match e {
+                Event::Key { key: Key::Enter | Key::Escape, pressed: true, .. } if session => false,
+                Event::Key { pressed: true, .. } | Event::Text(_) | Event::Paste(_) | Event::Cut | Event::Copy => true,
+                _ => false,
+            };
+            (i.pointer.any_pressed() && !grabs) || i.events.iter().any(on_keys)
         });
         if acts {
             self.flush_flottante();
@@ -611,13 +621,19 @@ impl App {
 
     /// Termine tout de suite le travail d'un geste lâché : les éléments reprennent leurs pixels en
     /// cache suivis, l'image du dessin est refaite là où quelque chose a changé, la feuille s'en va.
+    /// (Enveloppe ou perspective : le maillage est posé sur le reste par le processeur,
+    /// `Flottante::flatten_warp`.)
     pub(crate) fn flush_flottante(&mut self) {
         if !self.flottante.as_ref().is_some_and(|f| f.pending.is_some()) {
             return;
         }
         let Some(f) = self.flottante.take() else { return };
+        if let Some(warp) = &f.warp {
+            let tiles = crate::flottante::Flottante::flatten_warp(&mut self.doc, f.src, warp);
+            self.renderer.invalidate_tiles(&tiles);
+        }
         crate::flottante::Flottante::release(&mut self.doc);
-        if let Some(p) = f.pending {
+        if let Some(p) = f.pending.filter(|_| !f.for_warp) {
             let tiles = crate::flottante::Flottante::apply_preview(&mut self.doc, f.src, &p.items, &p.originals, &f.aff);
             self.renderer.invalidate_tiles(&tiles);
         }

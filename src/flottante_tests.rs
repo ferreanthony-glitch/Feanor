@@ -124,7 +124,7 @@ fn the_gesture_transform_comes_before_the_layer_transform() {
     let pivot = vec2(960.0, 540.0).to_pos2();
     let t = LayerTransform { x: 30.0, y: 10.0, scale: 1.5, angle: 20.0, ..Default::default() };
     item.transform = Some(t);
-    item.pre = Some(crate::render::Pre { aff: Affine::translate(vec2(100.0, 0.0)), dims: None });
+    item.pre = Some(crate::render::Pre { aff: Affine::translate(vec2(100.0, 0.0)), dims: None, warp: None });
     let p = vec2(400.0, 300.0).to_pos2();
     let expected = t.affine(pivot).apply(Affine::translate(vec2(100.0, 0.0)).apply(p));
     let got = item.affine(pivot).unwrap().apply(p);

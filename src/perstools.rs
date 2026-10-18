@@ -22,19 +22,20 @@ enum Original {
 }
 
 impl Original {
-    /// Les deux feuilles de l'aperçu : ce qui reste, et ce qui se déforme (pour un dessin
-    /// vectoriel, posées depuis les pixels en cache des traits : sans rejeu).
-    fn split(&self, src: Rect, w: usize, h: usize) -> (Raster, Raster) {
+    /// Les deux feuilles de l'aperçu d'un dessin bitmap : ce qui reste, et ce qui se déforme. Un
+    /// dessin vectoriel n'en a pas : sa feuille flottante (`flottante.rs`), faite des pixels en
+    /// cache des traits, est posée par un maillage que dessine la carte graphique (`warp.rs`).
+    fn split(&self, src: Rect) -> (Raster, Raster) {
         match self {
             Original::Bitmap(orig) => crate::envelope::split_rect(orig, src),
-            Original::Vector { drawing, items } => drawing.render_split(items.as_deref(), w, h),
+            Original::Vector { .. } => (Raster::new(1, 1), Raster::new(1, 1)),
         }
     }
 }
 
 /// Ce que l'on tire : un coin, ou tout le cadre.
 #[derive(Clone, Copy)]
-enum Grip {
+pub(crate) enum Grip {
     Corner(usize),
     All,
 }
@@ -72,7 +73,7 @@ impl PerspEdit {
 }
 
 impl App {
-    fn persp_grip(&self, screen: Pos2) -> Option<Grip> {
+    pub(crate) fn persp_grip(&self, screen: Pos2) -> Option<Grip> {
         let e = self.persp.as_ref()?;
         let corners = e.quad.map(|p| self.layer_to_screen(p));
         if let Some(i) = (0..4).find(|&i| corners[i].distance(screen) <= GRAB) {
@@ -120,7 +121,7 @@ impl App {
             self.status = "Perspective : rien à déformer sur cette image.".into();
             return;
         }
-        let (base, sheet) = original.split(src, c.raster.width, c.raster.height);
+        let (base, sheet) = original.split(src);
         self.persp = Some(PerspEdit {
             cel,
             src,
@@ -149,12 +150,26 @@ impl App {
         // Un quadrilatère qui se croise ne se déforme pas : on garde le dernier correct.
         if persp::is_convex(&q) && q != e.quad {
             e.quad = q;
-            self.persp_preview();
+            if matches!(e.original, Original::Vector { .. }) {
+                self.persp_float();
+            } else {
+                self.persp_preview();
+            }
         }
         true
     }
 
-    /// Montre le dessin mis en perspective (depuis l'original, ses pixels déformés : sans rejeu).
+    /// Dessin vectoriel : la feuille flottante des éléments déformés est posée par le maillage de
+    /// la perspective du moment (`warp.rs`), sans rien refaire ni renvoyer à la carte graphique.
+    fn persp_float(&mut self) {
+        let Some(e) = self.persp.take() else { return };
+        if let (Original::Vector { drawing, items }, Some(h)) = (&e.original, persp::rect_to_quad(e.src, e.quad)) {
+            self.warp_float(e.cel, drawing, items.as_deref(), e.src, 24, |p| persp::apply(&h, p));
+        }
+        self.persp = Some(e);
+    }
+
+    /// Montre le dessin bitmap mis en perspective (depuis l'original).
     fn persp_preview(&mut self) {
         let Some(e) = &mut self.persp else { return };
         let Some(img) = e.preview() else { return };
@@ -199,6 +214,9 @@ impl App {
                 let before = std::mem::replace(d, new);
                 self.rejeu_cel(cel);
                 self.push_vector(cel, before, None);
+                // La feuille déformée reste affichée jusqu'à l'arrivée du rendu exact.
+                self.persp_float();
+                self.warp_settle(cel);
             }
         }
     }

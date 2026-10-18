@@ -30,7 +30,7 @@ pub struct PlanItem {
 }
 
 /// La transformation d'un geste sur une feuille flottante (`PlanItem::pre`).
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Pre {
     /// Du dessin (ses pixels) vers la feuille, avant la transformation du calque.
     pub aff: Affine,
@@ -38,18 +38,28 @@ pub struct Pre {
     /// d'une sélection garde ce qui dépasse de la feuille (`flottante.rs`), elle est plus grande
     /// (`aff` compte alors sa marge). Rien : la taille de la feuille.
     pub dims: Option<[usize; 2]>,
+    /// Enveloppe ou perspective (`warp.rs`) : la feuille est posée par ce maillage, pas par `aff`
+    /// (le maillage compte la marge de la feuille).
+    pub warp: Option<std::sync::Arc<crate::warp::Warp>>,
 }
 
 impl PlanItem {
     /// La transformation du dessin vers la feuille (celle du geste, puis celle du calque), `pivot`
     /// étant le centre de la feuille ; `None` : le dessin tel quel.
     pub fn affine(&self, pivot: egui::Pos2) -> Option<Affine> {
-        match (self.pre, &self.transform) {
+        match (&self.pre, &self.transform) {
             (None, None) => None,
             (Some(p), None) => Some(p.aff),
             (None, Some(t)) => Some(t.affine(pivot)),
             (Some(p), Some(t)) => Some(p.aff.then(&t.affine(pivot))),
         }
+    }
+
+    /// Le maillage qui pose la feuille (enveloppe, perspective) et la transformation du calque à
+    /// lui appliquer ensuite.
+    pub fn warp(&self, pivot: egui::Pos2) -> Option<(&crate::warp::Warp, Option<Affine>)> {
+        let w = self.pre.as_ref()?.warp.as_deref()?;
+        Some((w, self.transform.as_ref().map(|t| t.affine(pivot))))
     }
 }
 
@@ -157,6 +167,23 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
         buf[s..s + tw].fill(base);
     }
     for item in &plan.items {
+        // Feuille déformée par un maillage (enveloppe, perspective) : calcul de secours, la carte
+        // graphique dessine les mêmes triangles.
+        if let Some((warp, layer)) = item.warp(doc.stage_center()) {
+            let Some(cel) = crate::fx::shown(doc, item) else { continue };
+            // (D'abord dans une zone à part : deux triangles voisins peuvent poser le même pixel.)
+            let mut laid = vec![Color32::TRANSPARENT; tw * th];
+            warp.fill(&cel.raster, layer.as_ref(), (ox, oy, tw, th), |x, y, src| laid[(y - oy) * tw + (x - ox)] = src);
+            for y in 0..th {
+                let s = at(ox, oy + y);
+                for (x, (d, &src)) in buf[s..s + tw].iter_mut().zip(&laid[y * tw..(y + 1) * tw]).enumerate() {
+                    if src.a() != 0 {
+                        *d = blend_over(*d, src, item.opacity, item.tint, item.blend, (ox + x, oy + y));
+                    }
+                }
+            }
+            continue;
+        }
         // Calque transformé : chaque pixel va chercher le point correspondant du dessin.
         if let Some(inv) = inverse_of(doc, item) {
             let Some(cel) = crate::fx::shown(doc, item) else { continue };

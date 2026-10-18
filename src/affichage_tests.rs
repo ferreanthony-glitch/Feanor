@@ -14,7 +14,7 @@ use crate::raster::Raster;
 use crate::render::{self, Plan, PlanItem};
 use crate::vector::{Affine, Element, Trace};
 
-fn ms(t: Instant) -> f64 {
+pub(crate) fn ms(t: Instant) -> f64 {
     t.elapsed().as_secs_f64() * 1e3
 }
 
@@ -30,7 +30,7 @@ fn lacet(k: usize, w: f32, h: f32) -> (eframe::egui::Pos2, f32, f64) {
     (pos2(x, y), 0.35 + 0.6 * ((k as f32 * 0.02).sin() * 0.5 + 0.5), k as f64 / 500.0)
 }
 
-fn line_item(cel: CelId) -> PlanItem {
+pub(crate) fn line_item(cel: CelId) -> PlanItem {
     PlanItem { cel, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: None }
 }
 
@@ -44,7 +44,7 @@ impl Lcg {
 }
 
 /// Un trait de `s` tracé par le moteur le long de `pts`, gardé comme l'élément qu'un lâcher poserait.
-fn trait_rouge(s: &BrushSettings, lib: &BrushLibrary, w: usize, h: usize, pts: &[(eframe::egui::Pos2, f32, f64)]) -> Element {
+pub(crate) fn trait_rouge(s: &BrushSettings, lib: &BrushLibrary, w: usize, h: usize, pts: &[(eframe::egui::Pos2, f32, f64)]) -> Element {
     let mut raster = Raster::new(w, h);
     let mut st = StrokeState::new(0, StrokeMode::Paint([200, 30, 30]), *s, None, true).with_textures(lib.textures(s)).with_feel(Toucher::default());
     let mut dirty = Vec::new();
@@ -58,7 +58,7 @@ fn trait_rouge(s: &BrushSettings, lib: &BrushLibrary, w: usize, h: usize, pts: &
 
 /// `n` traits larges, longs et qui se recouvrent, en gouache, feutre et fusain rouges, sur une
 /// feuille `w` × `h` (le cas d'Anthony : « des traits rouges texturés, larges, qui se chevauchent »).
-fn gros_traits(n: usize, w: usize, h: usize, seed: u64) -> Vec<Element> {
+pub(crate) fn gros_traits(n: usize, w: usize, h: usize, seed: u64) -> Vec<Element> {
     let lib = BrushLibrary::builtin();
     lib.share();
     let mut rng = Lcg(seed);
@@ -81,7 +81,7 @@ fn gros_traits(n: usize, w: usize, h: usize, seed: u64) -> Vec<Element> {
         .collect()
 }
 
-fn doc_with(w: usize, h: usize, elements: Vec<Element>) -> (Document, CelId) {
+pub(crate) fn doc_with(w: usize, h: usize, elements: Vec<Element>) -> (Document, CelId) {
     let mut doc = Document::new(w, h, 24);
     let id = doc.new_cel(LayerKind::Vector);
     let cel = doc.cels.get_mut(&id).unwrap();
@@ -193,7 +193,7 @@ fn the_floating_sheet_matches_the_drawing_in_every_cache_state() {
 /// Des traits larges qui dépassent de la feuille (en haut et à gauche), déplacés vers l'intérieur :
 /// ce qui était hors de la feuille doit apparaître, comme sur le dessin refait à sa nouvelle place
 /// (Anthony : « des morceaux du dessin manquent, coupés en ligne droite »).
-fn bord_haut_gauche() -> Vec<Element> {
+pub(crate) fn bord_haut_gauche() -> Vec<Element> {
     let lib = BrushLibrary::builtin();
     lib.share();
     let mut out = Vec::new();
@@ -336,7 +336,7 @@ fn a_stroke_crossing_the_sheet_edge_keeps_the_engine_pixels_on_the_sheet() {
 }
 
 /// Pixels nettement peints dans une image et nettement vides dans l'autre.
-fn couverture_differente(a: &[Color32], b: &[Color32]) -> usize {
+pub(crate) fn couverture_differente(a: &[Color32], b: &[Color32]) -> usize {
     a.iter().zip(b).filter(|(x, y)| (x.a() >= 128 && y.a() <= 8) || (y.a() >= 128 && x.a() <= 8)).count()
 }
 
@@ -454,6 +454,37 @@ fn every_builtin_brush_paints_inside_the_element_bounds() {
     assert!(bad.is_empty(), "{}", bad.join("\n"));
 }
 
+/// La saisie d'une grosse sélection pose les traits par bandes, sur tous les cœurs : la même image,
+/// pixel pour pixel, que les traits posés un à un, dépassement compris.
+#[test]
+fn lifting_a_big_selection_by_bands_gives_the_same_sheets_as_one_stroke_at_a_time() {
+    use crate::vector::{render_element, render_element_in, Place};
+    let (w, h) = (1920usize, 1080usize);
+    let mut elements = gros_traits(20, w, h, 41);
+    elements.extend(bord_haut_gauche());
+    let n = elements.len();
+    let (doc, id) = doc_with(w, h, elements);
+    let d = doc.cels[&id].vector.as_ref().unwrap();
+    let items: Vec<usize> = (0..n).filter(|i| i % 3 != 1).collect();
+    assert!(d.elements.iter().all(Element::cache_ready), "tous les traits ont leurs pixels exacts");
+    let (base, sheet, (l, t)) = d.render_split_extended(&items, w, h);
+    assert!(l > 0 && t > 0, "des traits dépassent");
+    // La référence : un à un, d'un seul fil.
+    let (mut rbase, mut rsheet) = (Raster::new(w, h), Raster::new(sheet.width, sheet.height));
+    let place = Place { shift: (l as i64, t as i64), sheet: (w, h) };
+    for (i, e) in d.elements.iter().enumerate() {
+        if items.contains(&i) {
+            render_element_in(&mut rsheet, e, eframe::egui::Rect::EVERYTHING, place);
+        } else {
+            render_element(&mut rbase, e);
+        }
+    }
+    assert_eq!((sheet.width, sheet.height), (rsheet.width, rsheet.height));
+    assert!(base.to_flat() == rbase.to_flat(), "le reste est le même");
+    assert!(sheet.to_flat() == rsheet.to_flat(), "la feuille est la même");
+    assert_eq!(sheet.tiles.iter().flatten().count(), rsheet.tiles.iter().flatten().count());
+}
+
 /// Le cas d'Anthony, en durées : 40 gros traits texturés qui dépassent de la feuille, saisis puis
 /// déplacés. Coût de la feuille flottante élargie (saisie) contre la feuille à la taille du
 /// dessin, mémoire des caches, et coût d'une image du geste.
@@ -531,6 +562,274 @@ fn floating_sheet_with_overhang_cost() {
         let _ = Flottante::lift(&mut doc, id, &items).expect("feuille");
         println!("   {label}, sans aucun cache : saisie {:.0} ms ({} rejeux sur le fil de l'interface)", ms(t0), crate::vector::replay_count() - replays);
     }
+}
+
+/// Enveloppe en cours de geste sur `n` gros traits texturés (le cas d'Anthony : « l'outil
+/// Transformer en mode Enveloppe rame encore »), ce que faisait chaque image avant la feuille
+/// flottante déformée par la carte graphique : copie du reste, projection des pixels de la feuille
+/// par le maillage, pose, tuiles à renvoyer à la carte graphique.
+/// `cargo test --release --offline --target-dir target\msvc envelope_drag_frame_cost -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn envelope_drag_frame_cost() {
+    use crate::envelope::{self, Envelope};
+    let (w, h) = (1920, 1080);
+    for n in [10usize, 40] {
+        let elements = gros_traits(n, w, h, 5);
+        let (doc, id) = doc_with(w, h, elements);
+        let d = doc.cels[&id].vector.as_ref().unwrap();
+        let src = d.elements.iter().fold(eframe::egui::Rect::NOTHING, |r, e| r.union(e.bounds()));
+        let t0 = Instant::now();
+        let (base, sheet) = d.render_split(None, w, h);
+        let split = ms(t0);
+        let painted = sheet.tiles.iter().flatten().count();
+        let mut raster = doc.cels[&id].raster.clone();
+        let frames = 20;
+        let (mut copy, mut warp, mut over, mut tiles_n) = (0.0, 0.0, 0.0, 0usize);
+        let mut env = Envelope::identity(src);
+        let mut shown = src;
+        for k in 0..frames {
+            env.move_corner(2, vec2(6.0, 4.0 + k as f32 * 0.2));
+            env.handles[1] += vec2(0.0, 3.0);
+            let t0 = Instant::now();
+            let mut img = base.clone();
+            copy += ms(t0);
+            let t0 = Instant::now();
+            let warped = envelope::warp_raster_fast(&sheet, src, |p| env.map(src, p));
+            warp += ms(t0);
+            let t0 = Instant::now();
+            img.composite_over(&warped);
+            let mut pts: Vec<_> = env.corners.to_vec();
+            pts.extend_from_slice(&env.handles);
+            let region = shown.union(eframe::egui::Rect::from_points(&pts)).union(src).expand(2.0);
+            shown = eframe::egui::Rect::from_points(&pts).union(src);
+            tiles_n += crate::vector::tiles_in(&raster, region).len();
+            raster = img;
+            over += ms(t0);
+        }
+        let f = frames as f64;
+        println!(
+            "{n} traits ({painted} tuiles de feuille) : AVANT saisie {split:.1} ms | par image : copie du reste {:.2} + projection {:.2} + pose {:.2} = {:.2} ms, {:.0} tuiles ({:.1} Mo) à renvoyer à la carte graphique",
+            copy / f,
+            warp / f,
+            over / f,
+            (copy + warp + over) / f,
+            tiles_n as f64 / f,
+            tiles_n as f64 / f * 16384.0 / 1e6
+        );
+        // APRÈS : la feuille flottante des traits choisis (une fois), puis par image le maillage et
+        // les sommets que la carte graphique reçoit (le reste se fait sur la carte graphique).
+        let mut doc = doc;
+        let items: Vec<usize> = (0..n).collect();
+        let t0 = Instant::now();
+        let mut fl = crate::flottante::Flottante::lift(&mut doc, id, &items).expect("feuille");
+        let lift = ms(t0);
+        let replays = crate::vector::replay_count();
+        let mut env = Envelope::identity(src);
+        let (mut mesh_ms, mut verts_ms, mut plan_ms, mut bytes) = (0.0, 0.0, 0.0, 0usize);
+        for k in 0..frames {
+            env.move_corner(2, vec2(6.0, 4.0 + k as f32 * 0.2));
+            env.handles[1] += vec2(0.0, 3.0);
+            let t0 = Instant::now();
+            fl.set_warp(src, 8, |p| env.map(src, p));
+            mesh_ms += ms(t0);
+            let t0 = Instant::now();
+            let plan = Plan { paper: None, items: fl.items(&line_item(id)).to_vec() };
+            plan_ms += ms(t0);
+            let t0 = Instant::now();
+            let warp = plan.items[1].pre.as_ref().and_then(|p| p.warp.clone()).expect("maillage");
+            let dims = fl.dims.map_or((w, h), |d| (d[0], d[1]));
+            let verts = warp.gpu_vertices(dims, None, |p| [p.x / w as f32 * 2.0 - 1.0, 1.0 - p.y / h as f32 * 2.0]);
+            verts_ms += ms(t0);
+            bytes += verts.len() * 16;
+        }
+        assert_eq!(crate::vector::replay_count(), replays, "aucun rejeu du moteur pendant le geste");
+        println!(
+            "   APRÈS saisie {lift:.1} ms (une fois) | par image : maillage {:.3} + plan {:.3} + sommets {:.3} = {:.3} ms, {:.0} Ko à envoyer (au lieu de {:.1} Mo), 0 rejeu",
+            mesh_ms / f,
+            plan_ms / f,
+            verts_ms / f,
+            (mesh_ms + plan_ms + verts_ms) / f,
+            bytes as f64 / f / 1e3,
+            tiles_n as f64 / f * 16384.0 / 1e6
+        );
+    }
+}
+
+/// `n` traits de griffonnage de `k` points chacun (3 à 4 px entre deux points, direction qui
+/// tourne), sur toute la feuille `w` × `h` et un peu au-delà : la sélection au lasso de centaines
+/// de longs traits d'Anthony. Brosse de gouache (texturée) ; sans pixels en cache.
+pub(crate) fn griffonnage(n: usize, k: usize, w: usize, h: usize, seed: u64) -> Vec<Element> {
+    use crate::vector::VPoint;
+    let lib = BrushLibrary::builtin();
+    lib.share();
+    let s = lib.presets.iter().find(|p| p.name == "Gouache").expect("brosse").settings;
+    let brush = lib.for_vector(&s).map(Box::new);
+    let mut rng = Lcg(seed);
+    (0..n)
+        .map(|_| {
+            let mut p = pos2(-100.0 + rng.next() * (w as f32 + 200.0), -100.0 + rng.next() * (h as f32 + 200.0));
+            let mut a = rng.next() * std::f32::consts::TAU;
+            let points: Vec<VPoint> = (0..k)
+                .map(|_| {
+                    a += (rng.next() - 0.5) * 0.9;
+                    p += vec2(a.cos(), a.sin()) * (3.0 + rng.next());
+                    VPoint { x: p.x, y: p.y, r: 6.0 + rng.next() * 6.0 }
+                })
+                .collect();
+            Element::Stroke { points, color: [200, 30, 30], opacity: 1.0, hardness: 0.8, brush: brush.clone(), trace: Trace::default() }
+        })
+        .collect()
+}
+
+/// Le coût, par image d'écran, de la sélection de centaines de longs traits (Anthony : « un
+/// ralentissement quand beaucoup d'objets sont sélectionnés »), au repos et pendant un geste.
+/// `cargo test --release --offline --target-dir target\msvc many_selected_strokes -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn many_selected_strokes_frame_cost() {
+    use eframe::egui::epaint::{Mesh, TessellationOptions, Tessellator};
+    use eframe::egui::{Shape, Stroke};
+    let (w, h) = (1920usize, 1080usize);
+    let to_s = |p: eframe::egui::Pos2| pos2(40.0 + p.x * 0.55, 30.0 + p.y * 0.55);
+    for (n, k) in [(30usize, 500usize), (100, 500), (300, 500), (300, 2000)] {
+        let elements = griffonnage(n, k, w, h, 17);
+        let points: usize = elements.iter().map(|e| e.outline().iter().map(Vec::len).sum::<usize>()).sum();
+        let t0 = Instant::now();
+        let bounds = elements.iter().fold(eframe::egui::Rect::NOTHING, |r, e| r.union(e.bounds()));
+        let bounds_ms = ms(t0);
+        // L'ancien contour : les points de chaque trait copiés, passés à l'écran, puis le tracé d'egui.
+        let t0 = Instant::now();
+        let mut shapes = Vec::new();
+        for e in &elements {
+            for line in e.outline() {
+                if line.len() >= 2 {
+                    shapes.push(Shape::line(line.into_iter().map(to_s).collect(), Stroke::new(1.0_f32, Color32::from_rgb(70, 165, 255).gamma_multiply(0.85))));
+                }
+            }
+        }
+        let build_ms = ms(t0);
+        let t0 = Instant::now();
+        let mut tess = Tessellator::new(1.0, TessellationOptions::default(), [1, 1], Vec::new());
+        let mut mesh = Mesh::default();
+        for s in shapes {
+            tess.tessellate_shape(s, &mut mesh);
+        }
+        let tess_ms = ms(t0);
+        println!(
+            "{n} traits × {k} points ({points} points, boîte {:.0}×{:.0}) : AVANT par image (au repos comme en geste), boîte {bounds_ms:.2} ms + contours copiés {build_ms:.2} ms + tracé egui {tess_ms:.2} ms = {:.2} ms ({} sommets, {} indices, {:.1} Mo envoyés à la carte graphique)",
+            bounds.width(),
+            bounds.height(),
+            bounds_ms + build_ms + tess_ms,
+            mesh.vertices.len(),
+            mesh.indices.len(),
+            (mesh.vertices.len() * 20 + mesh.indices.len() * 4) as f64 / 1e6
+        );
+        // APRÈS : les contours gardés (faits une fois), puis par image l'empreinte, la
+        // transformation, le maillage déplacé ou tel quel, et ce qu'egui en fait.
+        use crate::contours::{fingerprint, lines_of, Contours, ANCHORS};
+        let d = crate::vector::VectorDrawing { elements };
+        let items: Vec<usize> = (0..n).collect();
+        let blue = Color32::from_rgb(70, 165, 255).gamma_multiply(0.85);
+        let t0 = Instant::now();
+        let key = fingerprint(1, 1, &d, &items);
+        let print_ms = ms(t0);
+        let t0 = Instant::now();
+        let lines = lines_of(&d, &items);
+        let anchor = ANCHORS.map(to_s);
+        let c = Contours::build(key, &lines, to_s, anchor, blue);
+        let build = ms(t0);
+        let s = c.stats;
+        let frames = 30;
+        let mut tess = Tessellator::new(1.0, TessellationOptions::default(), [1, 1], Vec::new());
+        let (mut rest, mut moving, mut egui_rest, mut egui_moving) = (0.0, 0.0, 0.0, 0.0);
+        for k in 0..frames {
+            // Au repos : même empreinte, même vue.
+            let t0 = Instant::now();
+            let _ = fingerprint(1, 1, &d, &items);
+            let t = c.transform_to(&anchor).expect("affine");
+            let shape = c.shape(&t);
+            rest += ms(t0);
+            let t0 = Instant::now();
+            let mut out = Mesh::default();
+            tess.tessellate_shape(shape, &mut out);
+            egui_rest += ms(t0);
+            // Pendant un geste : la sélection déplacée de (3,2) px par image.
+            let moved = |p: eframe::egui::Pos2| to_s(p + vec2(3.0 * k as f32, 2.0 * k as f32));
+            let t0 = Instant::now();
+            let _ = fingerprint(1, 1, &d, &items);
+            let t = c.transform_to(&ANCHORS.map(moved)).expect("affine");
+            let shape = c.shape(&t);
+            moving += ms(t0);
+            let t0 = Instant::now();
+            let mut out = Mesh::default();
+            tess.tessellate_shape(shape, &mut out);
+            egui_moving += ms(t0);
+        }
+        let f = frames as f64;
+        println!(
+            "   APRÈS construction {build:.1} ms (une fois par sélection ; {} → {} points, tolérance {:.2} px, {} sommets, {} indices, {:.1} Mo) | par image : au repos {:.3} ms + egui {:.3} ms ; en geste {:.3} ms + egui {:.3} ms (empreinte {print_ms:.3} ms)",
+            s.points_in,
+            s.points_out,
+            s.tolerance,
+            c.vertex_count(),
+            c.index_count(),
+            (c.vertex_count() * 20 + c.index_count() * 4) as f64 / 1e6,
+            rest / f,
+            egui_rest / f,
+            moving / f,
+            egui_moving / f
+        );
+    }
+}
+
+/// Déplacer, tourner et enveloppe de 300 longs traits texturés (le lasso d'Anthony) : saisie de la
+/// feuille flottante, puis coût par image du geste. Long à préparer (le premier rendu des 300
+/// traits).
+/// `cargo test --release --offline --target-dir target\msvc many_selected_strokes_move -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn many_selected_strokes_move_cost() {
+    use crate::envelope::Envelope;
+    let (w, h) = (1920usize, 1080usize);
+    let n = 300;
+    let elements = griffonnage(n, 500, w, h, 17);
+    let (mut doc, id) = doc_with(w, h, elements);
+    let src = doc.cels[&id].vector.as_ref().unwrap().elements.iter().fold(eframe::egui::Rect::NOTHING, |r, e| r.union(e.bounds()));
+    let items: Vec<usize> = (0..n).collect();
+    let replays = crate::vector::replay_count();
+    let t0 = Instant::now();
+    let mut f = Flottante::lift(&mut doc, id, &items).expect("feuille");
+    let lift = ms(t0);
+    let sheet = &doc.cels[&crate::flottante::SHEET_CEL].raster;
+    println!(
+        "{n} traits sélectionnés (boîte {:.0}×{:.0}) : saisie de la feuille {lift:.1} ms ({} rejeux sur le fil de l'interface), feuille {}×{} ({:.0} Mo de tuiles)",
+        src.width(),
+        src.height(),
+        crate::vector::replay_count() - replays,
+        sheet.width,
+        sheet.height,
+        sheet.tiles.iter().flatten().count() as f64 * 16384.0 / 1e6
+    );
+    let frames = 30;
+    let t0 = Instant::now();
+    for k in 0..frames {
+        f.aff = Affine::translate(vec2(3.0 * k as f32, 2.0 * k as f32));
+        let _ = Plan { paper: None, items: f.items(&line_item(id)).to_vec() };
+    }
+    println!("   déplacer : {:.3} ms par image", ms(t0) / frames as f64);
+    f.aff = Affine::IDENTITY;
+    let mut env = Envelope::identity(src);
+    let t0 = Instant::now();
+    for k in 0..frames {
+        env.move_corner(2, vec2(6.0, 4.0 + k as f32 * 0.2));
+        f.set_warp(src, 8, |p| env.map(src, p));
+        let plan = Plan { paper: None, items: f.items(&line_item(id)).to_vec() };
+        let warp = plan.items[1].pre.as_ref().and_then(|p| p.warp.clone()).expect("maillage");
+        let dims = f.dims.map_or((w, h), |d| (d[0], d[1]));
+        let _ = warp.gpu_vertices(dims, None, |p| [p.x / w as f32 * 2.0 - 1.0, 1.0 - p.y / h as f32 * 2.0]);
+    }
+    println!("   enveloppe : {:.3} ms par image (maillage + sommets)", ms(t0) / frames as f64);
 }
 
 /// Le coût par image d'écran du trait vectoriel en direct (le moteur peint sur l'image du
