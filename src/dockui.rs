@@ -94,6 +94,9 @@ impl App {
                 } else {
                     self.canvas_panel(ui);
                 }
+                // Le dessin a la main (aucune bande) : un cadre discret.
+                let drawing = !self.panels_have_focus() && !self.images_focus && !self.key_focus;
+                self.focus_mark(ui, drawing, false);
             }
             Pane::Tools => self.tool_bar(ui),
             Pane::Color => self.color_panel(ui),
@@ -104,16 +107,16 @@ impl App {
             Pane::Sheet => self.panel_inspector(ui),
             Pane::Layers => self.layers_panel(ui),
             // Une seule bande : le montage en storyboard, la timeline en animation. Quand elle a la
-            // main (copier, coller, supprimer visent ses plans ou ses images), un trait de couleur
-            // en haut.
+            // main (copier, coller, supprimer visent ses plans, ses clés ou ses images), un cadre de
+            // la couleur d'accent.
             Pane::Montage | Pane::Timeline => match self.mode {
                 Mode::Storyboard => {
                     self.montage_panel(ui);
-                    self.focus_mark(ui, self.panels_have_focus());
+                    self.focus_mark(ui, self.panels_have_focus() || self.key_focus, true);
                 }
                 Mode::Animation => {
                     self.timeline_panel(ui);
-                    self.focus_mark(ui, self.images_focus);
+                    self.focus_mark(ui, self.images_focus || self.key_focus, true);
                 }
             },
             Pane::XSheet => self.xsheet_panel(ui),
@@ -121,12 +124,14 @@ impl App {
         }
     }
 
-    /// Le trait en haut du montage ou de la timeline quand il a la main (chantier 6).
-    fn focus_mark(&self, ui: &egui::Ui, on: bool) {
+    /// Le cadre du panneau qui a la main (chantier 6 ; plus visible depuis le 2026-10-18, axe
+    /// d'ergonomie 5) : les raccourcis, copier, coller et supprimer le visent. `strong` : celui
+    /// d'une bande (montage, timeline) ; sinon celui, discret, du dessin.
+    fn focus_mark(&self, ui: &egui::Ui, on: bool, strong: bool) {
         if on {
             let r = ui.max_rect();
-            let color = ui.visuals().selection.stroke.color;
-            ui.painter().with_clip_rect(r).line_segment([r.left_top(), r.right_top()], egui::Stroke::new(3.0_f32, color));
+            let (width, color) = if strong { (2.0, crate::theme::ACCENT) } else { (1.0, crate::theme::ACCENT.gamma_multiply(0.55)) };
+            ui.painter().with_clip_rect(r).rect_stroke(r.shrink(width * 0.5), 0.0, egui::Stroke::new(width, color), egui::StrokeKind::Inside);
         }
     }
 

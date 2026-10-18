@@ -657,7 +657,7 @@ impl App {
             };
             if let Some(hand) = hand {
                 ui.label(RichText::new(hand).color(ui.visuals().selection.stroke.color)).on_hover_text(
-                    "Ce panneau a la main (trait de couleur en haut) : les raccourcis, copier, coller et supprimer le visent. Un clic dans le dessin la rend au dessin.",
+                    "Ce panneau a la main (encadré en bleu) : les raccourcis, copier, coller et supprimer le visent. Un clic dans le dessin la rend au dessin.",
                 );
             }
             ui.separator();
