@@ -364,3 +364,32 @@ pub fn warp_drawing(original: &VectorDrawing, items: Option<&[usize]>, src: Rect
     }
     out
 }
+
+/// L'état d'avant chaque geste d'une séance de déformation bitmap (enveloppe, perspective), pour
+/// l'annulation : l'original pour le premier geste, ensuite le résultat exact du précédent (la
+/// déformation se refait toujours depuis l'original, mais Ctrl+Z du second geste doit revenir au
+/// premier, pas sauter jusqu'à l'original).
+#[derive(Default)]
+pub struct Committed(Option<Raster>);
+
+impl Committed {
+    /// Un geste se termine : `shown` est l'image affichée (l'aperçu), `new` le résultat exact,
+    /// `original` l'image du début de la séance. Rend les tuiles d'avant le geste (celles que
+    /// l'annulation remet) et les tuiles changées ; `None` : rien n'a changé.
+    pub fn step(&mut self, original: &Raster, shown: &Raster, new: &Raster) -> Option<(Vec<(usize, Option<crate::raster::Tile>)>, Vec<usize>)> {
+        let prior = self.0.as_ref().unwrap_or(original);
+        let mut before = Vec::new();
+        let mut changed = Vec::new();
+        for idx in 0..new.tiles.len() {
+            if prior.tiles.get(idx) != new.tiles.get(idx) || shown.tiles.get(idx) != new.tiles.get(idx) {
+                before.push((idx, prior.tiles[idx].clone()));
+                changed.push(idx);
+            }
+        }
+        if changed.is_empty() {
+            return None;
+        }
+        self.0 = Some(new.clone());
+        Some((before, changed))
+    }
+}

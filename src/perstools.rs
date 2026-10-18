@@ -9,7 +9,7 @@ use crate::app::App;
 use crate::document::CelId;
 use crate::history::Edit;
 use crate::persp;
-use crate::raster::{Raster, Tile};
+use crate::raster::Raster;
 use crate::vector::VectorDrawing;
 
 /// Rayon de prise des coins, en pixels d'écran.
@@ -50,9 +50,17 @@ pub(crate) struct PerspEdit {
     sheet: Raster,
     /// La zone de la feuille que l'aperçu a couverte (à rafraîchir avec la suivante).
     shown: Rect,
+    /// L'image exacte posée par le dernier lâcher de la séance (bitmap) : l'état d'avant le geste
+    /// suivant, pour son annulation.
+    committed: crate::envelope::Committed,
 }
 
 impl PerspEdit {
+    /// Un coin est tiré sur le dessin `cel` : son image est l'aperçu.
+    pub(crate) fn busy_on(&self, cel: CelId) -> bool {
+        self.cel == cel && self.drag.is_some()
+    }
+
     /// L'image de l'aperçu : la feuille mise en perspective (au plus proche voisin, par blocs),
     /// posée sur le reste ; aucune si le quadrilatère est dégénéré.
     fn preview(&self) -> Option<Raster> {
@@ -122,6 +130,7 @@ impl App {
             base,
             sheet,
             shown: src,
+            committed: Default::default(),
         });
         self.status = "Perspective : tire un coin (ou l'intérieur pour tout déplacer). Entrée ou clic ailleurs : \
                        terminer ; Ctrl+Z : annuler."
@@ -175,17 +184,9 @@ impl App {
                 let Some(c) = self.doc.cels.get_mut(&cel) else { return };
                 // L'étape d'annulation : les tuiles de l'original que la déformation a changées
                 // (l'image affichée est l'aperçu rapide : remplacée par le résultat exact).
-                let mut before: Vec<(usize, Option<Tile>)> = Vec::new();
-                let mut changed = Vec::new();
-                for idx in 0..new.tiles.len() {
-                    if orig.tiles.get(idx) != new.tiles.get(idx) || c.raster.tiles.get(idx) != new.tiles.get(idx) {
-                        before.push((idx, orig.tiles[idx].clone()));
-                        changed.push(idx);
-                    }
-                }
-                if changed.is_empty() {
-                    return;
-                }
+                // (« Avant » : l'image d'avant CE geste, résultat exact du précédent s'il y en a eu un
+                // dans la séance, sinon l'original ; sinon Ctrl+Z sauterait le geste d'avant.)
+                let Some((before, changed)) = e.committed.step(orig, &c.raster, &new) else { return };
                 c.raster = new;
                 c.version += 1;
                 self.renderer.invalidate_tiles(&changed);

@@ -1601,7 +1601,7 @@ Choix d'Anthony :
   l'arrivée du nouveau (demande caduque jetée) ; export et enregistrement restent exacts. Rendu du
   plan après le 60e trait : 91 → 6 ms, glissé de 50 traits 71 → 1,6 ms par image
   (`fond_background_keeps_the_ui_thread_free`). **Perte de données** corrigée : les traces en
-  flottants de d01fffe se relisent, un dessin illisible n'est plus effacé à l'enregistrement.- ✅ Étude « vectoriel comme bitmap » (Fable, 2026-10-18, `docs/VECTORIEL-COMME-BITMAP.md`) :
+  flottants de d01fffe se relisent, un dessin illisible n'est plus effacé à l'enregistrement. **Rejeu** (contre-vérification de 55b35a3, ejeu_tests.rs) : Ctrl+Z n'annule plus que les dessins qu'il a refaits (N1), un rendu dépassé est redemandé et les demandes interactives passent devant la file du chargement (N2), pas d'adoption pendant un geste sur le dessin ni si sa version a changé (N3), Ctrl+Z du second geste d'une enveloppe ou d'une perspective bitmap revient au premier (N4), l'adoption ne fait plus réécrire tous les dessins au premier enregistrement (N7), un panic du rendu est signalé sans tuer le fil (N9).- ✅ Étude « vectoriel comme bitmap » (Fable, 2026-10-18, `docs/VECTORIEL-COMME-BITMAP.md`) :
   l'existant en images (le trait vectoriel perd au lâcher opacité ↔ appui, connexions, humide,
   accumulation, et garde l'ancien bord), toutes les pistes (rejeu du moteur depuis le chemin avec
   appui, instant, réglage complet et graine ; cache par trait ; GPU ; état de départ des morceaux ;

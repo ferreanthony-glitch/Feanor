@@ -15,6 +15,8 @@ pub mod fond;
 mod fond_tests;
 #[cfg(test)]
 mod perte_tests;
+#[cfg(test)]
+mod rejeu_tests;
 pub mod flottante;
 #[cfg(test)]
 mod flottante_tests;

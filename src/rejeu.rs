@@ -6,18 +6,24 @@
 //! coûte quelques millisecondes par trait : trop pour le refaire à chaque image d'un glissé, et
 //! trop pour bloquer l'interface au lâcher d'un dessin de cinquante traits. Pendant un geste, on
 //! montre donc les pixels en cache, déformés à la volée (translation copiée, affine
-//! rééchantillonnée, enveloppe et perspective par maillage) ; au lâcher, le rendu exact du dessin
-//! est demandé ici, à un fil de travail, et l'aperçu reste affiché jusqu'à ce qu'il arrive.
+//! rééchantillonnée, enveloppe et perspective par maillage, feuille flottante `flottante.rs`) ;
+//! au lâcher, le rendu exact du dessin est demandé ici, à un fil de travail, et l'aperçu reste
+//! affiché jusqu'à ce qu'il arrive.
 //!
 //! Chaque demande porte un numéro (`gen`) par dessin : une demande plus récente, ou un rendu
-//! direct du dessin (`App::refresh_cel`, annulation), rend les précédentes caduques — le fil les
-//! saute, et leurs résultats sont jetés. Un résultat adopté (`App::poll_rejeu`) remplace l'image
-//! du dessin et donne aux traits leurs pixels exacts en cache (ceux du rendu), d'un coup.
+//! direct du dessin (`App::refresh_cel`, annulation), rend les précédentes caduques — elles sont
+//! retirées de la file, et leurs résultats jetés. Un résultat adopté (`App::poll_rejeu`) remplace
+//! l'image du dessin et donne aux traits leurs pixels exacts en cache (ceux du rendu), d'un coup.
+//!
+//! Deux priorités : les demandes interactives (un geste vient de finir) passent avant la file du
+//! chargement d'un projet. Un panic du rendu n'arrête pas le fil : la demande est signalée perdue
+//! (`take_failed`), et un fil mort est recréé à la demande suivante.
 
 use std::collections::HashMap;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender, TryRecvError};
-use std::sync::{Arc, Mutex};
-use std::thread;
+use std::sync::{Arc, Condvar, Mutex};
+use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use crate::document::CelId;
@@ -27,6 +33,9 @@ use crate::vector::VectorDrawing;
 struct Job {
     cel: CelId,
     gen: u64,
+    version: u64,
+    /// Demande interactive (un geste vient de finir) : passe avant le chargement.
+    priority: bool,
     drawing: VectorDrawing,
     w: usize,
     h: usize,
@@ -37,6 +46,8 @@ struct Job {
 pub struct Done {
     pub cel: CelId,
     pub gen: u64,
+    /// La version du dessin (`Cel::version`) au moment de la demande.
+    pub version: u64,
     pub drawing: VectorDrawing,
     pub raster: Raster,
     /// Durée du rendu, pour les mesures.
@@ -44,18 +55,39 @@ pub struct Done {
     pub took: Duration,
 }
 
-type Latest = Arc<Mutex<HashMap<CelId, u64>>>;
+enum Msg {
+    Done(Done),
+    /// Le rendu a paniqué.
+    Failed { cel: CelId, gen: u64 },
+}
+
+#[derive(Default)]
+struct File {
+    jobs: Vec<Job>,
+    fermee: bool,
+}
+
+type Boite = Arc<(Mutex<File>, Condvar)>;
+
+/// Le rendu exact `done` peut-il remplacer l'image de `cel` ? Oui si le dessin est celui qui a été
+/// rendu : même version, mêmes éléments.
+pub fn adoptable(cel: &crate::document::Cel, done: &Done) -> bool {
+    cel.version == done.version
+        && cel.vector.as_ref().is_some_and(|d| d.elements.len() == done.drawing.elements.len() && d.elements.iter().zip(&done.drawing.elements).all(|(a, b)| a.same_as(b)))
+}
 
 /// La file des rejeux exacts en attente, et son fil de travail.
 pub struct Rejeu {
-    tx: Sender<Job>,
-    rx: Receiver<Done>,
-    /// Le dernier numéro demandé par dessin ; un rendu direct l'augmente aussi (plus rien à
-    /// attendre).
-    latest: Latest,
+    boite: Boite,
+    done_tx: Sender<Msg>,
+    rx: Receiver<Msg>,
+    worker: JoinHandle<()>,
+    render: Renderer,
     next_gen: u64,
-    /// Les dessins dont un rejeu est attendu, avec son numéro.
-    pending: HashMap<CelId, u64>,
+    /// Les dessins dont un rejeu est attendu : numéro de la demande et version du dessin.
+    pending: HashMap<CelId, (u64, u64)>,
+    /// Les dessins dont le rendu a paniqué, pas encore signalés.
+    failed: Vec<CelId>,
 }
 
 impl Default for Rejeu {
@@ -64,68 +96,110 @@ impl Default for Rejeu {
     }
 }
 
-impl Rejeu {
-    pub fn new() -> Self {
-        let (tx, jobs) = channel::<Job>();
-        let (done_tx, rx) = channel::<Done>();
-        let latest: Latest = Default::default();
-        let seen = latest.clone();
-        thread::Builder::new()
-            .name("rejeu".into())
-            .spawn(move || {
-                for job in jobs {
-                    let current = |job: &Job| seen.lock().map(|l| l.get(&job.cel) == Some(&job.gen)).unwrap_or(false);
-                    if !current(&job) {
-                        continue;
-                    }
-                    let t = Instant::now();
-                    let raster = job.drawing.render(job.w, job.h);
-                    if !current(&job) {
-                        continue;
-                    }
-                    if done_tx.send(Done { cel: job.cel, gen: job.gen, drawing: job.drawing, raster, took: t.elapsed() }).is_err() {
+impl Drop for Rejeu {
+    fn drop(&mut self) {
+        let (m, cv) = &*self.boite;
+        if let Ok(mut f) = m.lock() {
+            f.fermee = true;
+        }
+        cv.notify_all();
+    }
+}
+
+/// Le rendu d'un dessin (VectorDrawing::render, ou un autre pour les essais).
+pub type Renderer = fn(&VectorDrawing, usize, usize) -> Raster;
+
+fn spawn_worker(boite: Boite, done_tx: Sender<Msg>, render: Renderer) -> JoinHandle<()> {
+    thread::Builder::new()
+        .name("rejeu".into())
+        .spawn(move || loop {
+            let job = {
+                let (m, cv) = &*boite;
+                let mut f = m.lock().unwrap_or_else(|e| e.into_inner());
+                loop {
+                    if f.fermee {
                         return;
                     }
+                    // Les demandes interactives d'abord (la plus récente), sinon la plus ancienne
+                    // (l'ordre du chargement).
+                    let at = f.jobs.iter().rposition(|j| j.priority).or(if f.jobs.is_empty() { None } else { Some(0) });
+                    if let Some(i) = at {
+                        break f.jobs.remove(i);
+                    }
+                    f = cv.wait(f).unwrap_or_else(|e| e.into_inner());
                 }
-            })
-            .expect("fil de rejeu");
-        Rejeu { tx, rx, latest, next_gen: 1, pending: HashMap::new() }
+            };
+            let t = Instant::now();
+            let (cel, gen, version) = (job.cel, job.gen, job.version);
+            let msg = match catch_unwind(AssertUnwindSafe(|| render(&job.drawing, job.w, job.h))) {
+                Ok(raster) => Msg::Done(Done { cel, gen, version, drawing: job.drawing, raster, took: t.elapsed() }),
+                Err(_) => Msg::Failed { cel, gen },
+            };
+            if done_tx.send(msg).is_err() {
+                return;
+            }
+        })
+        .expect("fil de rejeu")
+}
+
+impl Rejeu {
+    pub fn new() -> Self {
+        Self::with_renderer(VectorDrawing::render)
     }
 
-    /// Demande le rendu exact de `drawing` (l'image `w` × `h` du dessin `cel`) : une copie, dont
-    /// les pixels en cache sont oubliés pour que le fil les refasse exactement. Remplace toute
-    /// demande en attente pour ce dessin.
+    /// Avec un autre rendu (essais : un rendu qui panique).
+    pub fn with_renderer(render: Renderer) -> Self {
+        let boite: Boite = Default::default();
+        let (done_tx, rx) = channel::<Msg>();
+        let worker = spawn_worker(boite.clone(), done_tx.clone(), render);
+        Rejeu { boite, done_tx, rx, worker, render, next_gen: 1, pending: HashMap::new(), failed: Vec::new() }
+    }
+
+    /// Demande le rendu exact de `drawing` (l'image `w` × `h` du dessin `cel`), interactive : une
+    /// copie, dont les pixels en cache sont oubliés pour que le fil les refasse exactement.
+    /// Remplace toute demande en attente pour ce dessin.
+    #[allow(dead_code)]
     pub fn submit(&mut self, cel: CelId, drawing: &VectorDrawing, w: usize, h: usize) -> u64 {
+        self.submit_with(cel, drawing, w, h, 0, true)
+    }
+
+    /// Comme `submit`, avec la version du dessin (rendue avec le résultat) et la priorité
+    /// (`false` : chargement d'un projet, derrière tout geste).
+    pub fn submit_with(&mut self, cel: CelId, drawing: &VectorDrawing, w: usize, h: usize, version: u64, priority: bool) -> u64 {
+        // Un fil mort (panic hors du rendu) est recréé.
+        if self.worker.is_finished() {
+            self.worker = spawn_worker(self.boite.clone(), self.done_tx.clone(), self.render);
+        }
         let gen = self.next_gen;
         self.next_gen += 1;
         let mut copy = drawing.clone();
         for e in &mut copy.elements {
             e.invalidate_cache();
         }
-        if let Ok(mut l) = self.latest.lock() {
-            l.insert(cel, gen);
+        self.pending.insert(cel, (gen, version));
+        let (m, cv) = &*self.boite;
+        {
+            let mut f = m.lock().unwrap_or_else(|e| e.into_inner());
+            f.jobs.retain(|j| j.cel != cel);
+            f.jobs.push(Job { cel, gen, version, priority, drawing: copy, w, h });
         }
-        self.pending.insert(cel, gen);
-        let _ = self.tx.send(Job { cel, gen, drawing: copy, w, h });
+        cv.notify_one();
         gen
     }
 
     /// Le dessin a été rendu directement (ou remplacé) : un rejeu en attente ne vaut plus.
     pub fn cancel(&mut self, cel: CelId) {
         if self.pending.remove(&cel).is_some() {
-            if let Ok(mut l) = self.latest.lock() {
-                l.insert(cel, self.next_gen);
-                self.next_gen += 1;
-            }
+            let (m, _) = &*self.boite;
+            m.lock().unwrap_or_else(|e| e.into_inner()).jobs.retain(|j| j.cel != cel);
         }
     }
 
-    /// Plus rien à attendre (annulation, autre projet).
+    /// Plus rien à attendre (autre projet).
     pub fn cancel_all(&mut self) {
-        let cels: Vec<CelId> = self.pending.keys().copied().collect();
-        for c in cels {
-            self.cancel(c);
-        }
+        self.pending.clear();
+        let (m, _) = &*self.boite;
+        m.lock().unwrap_or_else(|e| e.into_inner()).jobs.clear();
     }
 
     #[allow(dead_code)]
@@ -137,12 +211,33 @@ impl Rejeu {
         !self.pending.is_empty()
     }
 
-    fn accept(&mut self, d: Done) -> Option<Done> {
-        if self.pending.get(&d.cel) == Some(&d.gen) {
-            self.pending.remove(&d.cel);
-            Some(d)
-        } else {
-            None
+    /// Les dessins dont un rejeu est attendu, avec la version du dessin demandée.
+    pub fn pending_versions(&self) -> Vec<(CelId, u64)> {
+        self.pending.iter().map(|(&c, &(_, v))| (c, v)).collect()
+    }
+
+    /// Les dessins dont le rendu a paniqué depuis la dernière fois (à redemander ou signaler).
+    pub fn take_failed(&mut self) -> Vec<CelId> {
+        std::mem::take(&mut self.failed)
+    }
+
+    fn accept(&mut self, m: Msg) -> Option<Done> {
+        match m {
+            Msg::Done(d) => {
+                if self.pending.get(&d.cel).map(|p| p.0) == Some(d.gen) {
+                    self.pending.remove(&d.cel);
+                    Some(d)
+                } else {
+                    None
+                }
+            }
+            Msg::Failed { cel, gen } => {
+                if self.pending.get(&cel).map(|p| p.0) == Some(gen) {
+                    self.pending.remove(&cel);
+                    self.failed.push(cel);
+                }
+                None
+            }
         }
     }
 
@@ -151,7 +246,7 @@ impl Rejeu {
         let mut out = Vec::new();
         loop {
             match self.rx.try_recv() {
-                Ok(d) => out.extend(self.accept(d)),
+                Ok(m) => out.extend(self.accept(m)),
                 Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
             }
         }
@@ -169,11 +264,27 @@ impl Rejeu {
                 break;
             }
             match self.rx.recv_timeout(deadline - now) {
-                Ok(d) => out.extend(self.accept(d)),
+                Ok(m) => out.extend(self.accept(m)),
                 Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => break,
             }
         }
         out.extend(self.poll());
         out
+    }
+}
+
+/// Les dessins dont un rejeu est attendu et dont la version n'est plus celle demandée (`version_of`
+/// donne la version actuelle d'un dessin, `None` s'il n'existe plus) : ce que l'historique ou une
+/// modification directe a dépassé. Les autres rejeux continuent.
+pub fn outdated(rejeu: &Rejeu, version_of: impl Fn(CelId) -> Option<u64>) -> Vec<CelId> {
+    rejeu.pending_versions().into_iter().filter(|&(cel, v)| version_of(cel) != Some(v)).map(|(cel, _)| cel).collect()
+}
+
+/// Le rendu exact du dessin `cel` est adopté (sa version passe de `before` à `after`) : si son
+/// fichier était à jour, il l'est encore (la géométrie n'a pas changé, les pixels en cache ne
+/// s'enregistrent pas), donc le premier enregistrement après l'ouverture ne réécrit pas tout.
+pub fn keep_saved(written: &mut HashMap<CelId, u64>, cel: CelId, before: u64, after: u64) {
+    if written.get(&cel) == Some(&before) {
+        written.insert(cel, after);
     }
 }

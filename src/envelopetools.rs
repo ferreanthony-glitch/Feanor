@@ -16,7 +16,7 @@ use crate::app::App;
 use crate::document::CelId;
 use crate::envelope::{self, Envelope};
 use crate::history::Edit;
-use crate::raster::{Raster, Tile};
+use crate::raster::Raster;
 use crate::vector::VectorDrawing;
 
 /// Rayon de prise des coins et des poignées, en pixels d'écran.
@@ -71,13 +71,21 @@ pub(crate) struct EnvelopeEdit {
     sheet: Raster,
     /// La zone de la feuille que l'aperçu a couverte (à rafraîchir avec la suivante).
     shown: Rect,
+    /// L'image exacte posée par le dernier lâcher de la séance (bitmap) : l'état d'avant le geste
+    /// suivant, pour son annulation.
+    committed: crate::envelope::Committed,
 }
 
 impl EnvelopeEdit {
+    /// Un coin, une poignée ou l'enveloppe est tiré sur le dessin `cel` : son image est l'aperçu.
+    pub(crate) fn busy_on(&self, cel: CelId) -> bool {
+        self.cel == cel && self.drag.is_some()
+    }
+
     fn new(cel: CelId, src: Rect, original: Original, grip: Grip, p: Pos2, w: usize, h: usize) -> EnvelopeEdit {
         let env = Envelope::identity(src);
         let (base, sheet) = original.split(src, w, h);
-        EnvelopeEdit { cel, src, env, original, drag: Some((grip, p, env)), base, sheet, shown: src }
+        EnvelopeEdit { cel, src, env, original, drag: Some((grip, p, env)), base, sheet, shown: src, committed: Default::default() }
     }
 
     /// L'image de l'aperçu : la feuille déformée par le maillage de l'enveloppe, posée sur le reste.
@@ -258,17 +266,9 @@ impl App {
                 let Some(c) = self.doc.cels.get_mut(&cel) else { return };
                 // L'étape d'annulation : les tuiles de l'original que la déformation a changées
                 // (l'image affichée est l'aperçu rapide : remplacée par le résultat exact).
-                let mut before: Vec<(usize, Option<Tile>)> = Vec::new();
-                let mut changed = Vec::new();
-                for idx in 0..new.tiles.len() {
-                    if orig.tiles.get(idx) != new.tiles.get(idx) || c.raster.tiles.get(idx) != new.tiles.get(idx) {
-                        before.push((idx, orig.tiles[idx].clone()));
-                        changed.push(idx);
-                    }
-                }
-                if changed.is_empty() {
-                    return;
-                }
+                // (« Avant » : l'image d'avant CE geste, résultat exact du précédent s'il y en a eu un
+                // dans la séance, sinon l'original ; sinon Ctrl+Z sauterait le geste d'avant.)
+                let Some((before, changed)) = e.committed.step(orig, &c.raster, &new) else { return };
                 c.raster = new;
                 c.version += 1;
                 self.renderer.invalidate_tiles(&changed);

@@ -538,6 +538,10 @@ pub struct App {
     /// Feuille flottante de la sélection vectorielle qu'on déplace, tourne ou agrandit
     /// (`flottante.rs`).
     pub(crate) flottante: Option<crate::flottante::Flottante>,
+    /// Dessins dont le rendu exact est à redemander dès qu'aucun geste n'y travaille (`rejeu.rs`).
+    pub(crate) rejeu_again: std::collections::BTreeSet<CelId>,
+    /// Rendus exacts arrivés pendant un geste sur leur dessin, adoptés à la fin du geste.
+    pub(crate) rejeu_deferred: Vec<crate::rejeu::Done>,
     /// Sélection dans un dessin bitmap, et geste en cours avec l'outil Sélection.
     pub(crate) bsel: Option<BSelection>,
     pub(crate) bdrag: Option<BDrag>,
@@ -857,6 +861,8 @@ impl App {
             vsel: None,
             vdrag: None,
             flottante: None,
+            rejeu_again: Default::default(),
+            rejeu_deferred: Vec::new(),
             bsel: None,
             bdrag: None,
             select_rect: false,
@@ -1761,6 +1767,7 @@ impl App {
     /// pour ce qui n'est pas un geste ; voir `rejeu_cel`).
     pub(crate) fn refresh_cel(&mut self, cel: CelId) {
         self.rejeu.cancel(cel);
+        self.rejeu_again.remove(&cel);
         if let Some(c) = self.doc.cels.get_mut(&cel) {
             let tiles = c.rerender();
             self.renderer.invalidate_tiles(&tiles);
@@ -1768,8 +1775,13 @@ impl App {
     }
 
     /// Comme `refresh_cel`, dans `region` seulement (là où quelque chose a changé) : le coût ne
-    /// grandit plus avec le nombre de traits du dessin.
+    /// grandit plus avec le nombre de traits du dessin. Les traits hors de `region` gardent leur
+    /// image : si elle était encore approchée (rendu rapide à l'ouverture, aperçu d'un geste), le
+    /// rendu exact en est redemandé dès que plus rien ne se passe sur ce dessin.
     pub(crate) fn refresh_cel_region(&mut self, cel: CelId, region: Rect) {
+        if self.rejeu.is_pending(cel) {
+            self.rejeu_again.insert(cel);
+        }
         self.rejeu.cancel(cel);
         if let Some(c) = self.doc.cels.get_mut(&cel) {
             let tiles = c.rerender_region(region.expand(2.0));
@@ -1779,25 +1791,74 @@ impl App {
 
     /// Demande le rendu exact du dessin vectoriel `cel` en arrière-plan (`rejeu.rs`) : son image
     /// actuelle (l'aperçu du geste, posé depuis les caches) reste affichée jusqu'à ce qu'il arrive.
+    /// Demande interactive : elle passe avant la file du chargement d'un projet.
     pub(crate) fn rejeu_cel(&mut self, cel: CelId) {
+        self.rejeu_with(cel, true);
+    }
+
+    fn rejeu_with(&mut self, cel: CelId, priority: bool) {
         let (w, h) = (self.doc.width, self.doc.height);
-        if let Some(d) = self.doc.cels.get(&cel).and_then(|c| c.vector.as_ref()) {
-            self.rejeu.submit(cel, d, w, h);
+        if let Some((d, version)) = self.doc.cels.get(&cel).and_then(|c| c.vector.as_ref().map(|d| (d, c.version))) {
+            self.rejeu.submit_with(cel, d, w, h, version, priority);
+        }
+    }
+
+    /// Un geste, un trait ou une gomme est en cours sur ce dessin : son image est celle du geste.
+    pub(crate) fn cel_busy(&self, cel: CelId) -> bool {
+        self.stroke.as_ref().is_some_and(|s| s.cel == cel)
+            || self.vstroke.as_ref().is_some_and(|s| s.cel == cel)
+            || self.verase.as_ref().is_some_and(|e| e.cel == cel)
+            || matches!(&self.vdrag, Some(VDrag::Transform { cel: c, .. }) if *c == cel)
+            || self.envelope.as_ref().is_some_and(|e| e.busy_on(cel))
+            || self.persp.as_ref().is_some_and(|e| e.busy_on(cel))
+    }
+
+    /// Après Ctrl+Z / Ctrl+Maj+Z : les rejeux des dessins que l'historique a refaits ne valent
+    /// plus (leur version a changé), les autres continuent. Un dessin refait est exact ; on en
+    /// redemande quand même le rendu : sans effet s'il l'est, juste s'il ne l'était pas.
+    pub(crate) fn rejeu_after_history(&mut self) {
+        for cel in crate::rejeu::outdated(&self.rejeu, |c| self.doc.cels.get(&c).map(|c| c.version)) {
+            self.rejeu.cancel(cel);
+            self.rejeu_again.insert(cel);
         }
     }
 
     /// Adopte les rejeux exacts arrivés : l'image du dessin, et les pixels exacts en cache de ses
-    /// traits, d'un coup — si le dessin n'a pas changé entre-temps.
+    /// traits, d'un coup — si le dessin n'a pas changé entre-temps, et pas pendant un geste sur
+    /// ce dessin (le trait en cours disparaîtrait) : le résultat attend la fin du geste. Un
+    /// résultat que le dessin a dépassé est jeté et redemandé : l'image approchée ne reste jamais.
     pub(crate) fn poll_rejeu(&mut self, ctx: &egui::Context) {
-        for done in self.rejeu.poll() {
+        let again: Vec<CelId> = self.rejeu_again.iter().copied().filter(|&c| self.rejeu.is_pending(c) || !self.cel_busy(c)).collect();
+        for cel in again {
+            self.rejeu_again.remove(&cel);
+            // (Une demande plus récente est déjà en route : elle suffit.)
+            if !self.rejeu.is_pending(cel) {
+                self.rejeu_cel(cel);
+            }
+        }
+        for cel in self.rejeu.take_failed() {
+            self.status = "Le rendu exact d'un dessin a échoué : il reste en rendu approché.".into();
+            self.rejeu_again.remove(&cel);
+        }
+        let mut arrived = std::mem::take(&mut self.rejeu_deferred);
+        arrived.extend(self.rejeu.poll());
+        for done in arrived {
+            if self.cel_busy(done.cel) {
+                self.rejeu_deferred.push(done);
+                continue;
+            }
             // La feuille flottante d'un geste lâché sur ce dessin laisse la place au rendu exact.
             let waiting = self.flottante.as_ref().is_some_and(|f| f.pending.is_some() && f.src == done.cel);
-            let Some(c) = self.doc.cels.get_mut(&done.cel) else { continue };
-            let Some(d) = c.vector.as_mut() else { continue };
-            if d.elements.len() != done.drawing.elements.len() || d.elements.iter().zip(&done.drawing.elements).any(|(a, b)| !a.same_as(b)) {
-                // Le dessin a changé depuis : on termine à l'ancienne ce que la feuille montrait.
+            let Some(c) = self.doc.cels.get(&done.cel) else { continue };
+            if !crate::rejeu::adoptable(c, &done) {
+                // Le dessin a changé depuis : on termine à l'ancienne ce que la feuille montrait,
+                // et le rendu exact du dessin d'aujourd'hui est redemandé.
+                let vector = c.vector.is_some();
                 if waiting {
                     self.flush_flottante();
+                }
+                if vector {
+                    self.rejeu_cel(done.cel);
                 }
                 continue;
             }
@@ -1811,11 +1872,16 @@ impl App {
                 e.adopt_cache(exact);
             }
             let changed: Vec<usize> = (0..done.raster.tiles.len()).filter(|&i| c.raster.tiles.get(i).is_some_and(Option::is_some) || done.raster.tiles[i].is_some()).collect();
+            // Le fichier du dessin dit la même chose (la géométrie n'a pas changé, les pixels en
+            // cache ne s'enregistrent pas) : le premier enregistrement après l'ouverture ne le
+            // réécrit pas.
+            let before = c.version;
             c.raster = done.raster;
             c.version += 1;
+            crate::rejeu::keep_saved(&mut self.written, done.cel, before, c.version);
             self.renderer.invalidate_tiles(&changed);
         }
-        if self.rejeu.has_pending() {
+        if self.rejeu.has_pending() || !self.rejeu_deferred.is_empty() || !self.rejeu_again.is_empty() {
             ctx.request_repaint_after(std::time::Duration::from_millis(16));
         }
         // Fonds sous le trait calculés en arrière-plan (`fondfil.rs`).
@@ -2271,8 +2337,9 @@ impl App {
     }
 
     fn after_history(&mut self, nav: Nav) {
-        // Les dessins rétablis ont été rendus directement : plus rien à attendre du rejeu.
-        self.rejeu.cancel_all();
+        // Les dessins que l'historique a refaits ont été rendus directement : plus rien à attendre
+        // du rejeu pour eux. Les autres (ouverture récente, geste lâché) continuent.
+        self.rejeu_after_history();
         self.cur_panel = nav.panel;
         self.cur_layer = nav.layer;
         self.clamp_nav();
@@ -2445,7 +2512,8 @@ impl App {
             Ok(loaded) => {
                 self.load_doc(loaded.doc);
                 for id in loaded.approx {
-                    self.rejeu_cel(id);
+                    // (Derrière tout geste de l'utilisateur : le chargement attend son tour.)
+                    self.rejeu_with(id, false);
                 }
                 self.written = loaded.written;
                 self.status = if loaded.warnings.is_empty() {
@@ -2470,6 +2538,8 @@ impl App {
 
     pub(crate) fn load_doc(&mut self, doc: Document) {
         self.rejeu.cancel_all();
+        self.rejeu_again.clear();
+        self.rejeu_deferred.clear();
         crate::fx::fond_cancel_all();
         self.doc = doc;
         self.mode = Mode::Storyboard;
