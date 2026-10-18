@@ -61,6 +61,10 @@ pub struct Settings {
     pub recent_projects: Vec<PathBuf>,
     #[serde(default = "yes", rename = "rouvrir_dernier_projet")]
     pub reopen_last: bool,
+    /// Toucher du stylet (sensation des brosses, 2026-10-18) : courbe de pression globale,
+    /// plancher de taille, traits fins, bord, seuil d'appui ; commun à tous les pinceaux.
+    #[serde(default, rename = "toucher")]
+    pub toucher: crate::brush::Toucher,
 }
 
 fn default_autosave() -> u32 {
@@ -94,6 +98,7 @@ impl Default for Settings {
             fill_shapes: false,
             recent_projects: Vec::new(),
             reopen_last: true,
+            toucher: Default::default(),
         }
     }
 }

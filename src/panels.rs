@@ -145,6 +145,48 @@ impl App {
         }
     }
 
+    /// Toucher du stylet (sensation des brosses, 2026-10-18) : la réponse à la pression commune à
+    /// tous les pinceaux, gardée dans les réglages de l'application (enregistrés dans `update`,
+    /// comme la pelure) ; l'ancien toucher à portée de main pour comparer à la tablette.
+    fn feel_ui(&mut self, ui: &mut egui::Ui) {
+        use crate::brush::{Curve, Toucher};
+        use crate::bulles::bulle;
+        let t = &mut self.toucher;
+        let title = if *t == Toucher::default() { "Toucher du stylet (tous les pinceaux)" } else { "Toucher du stylet (tous les pinceaux, réglé)" };
+        egui::CollapsingHeader::new(title).id_salt("toucher_stylet").default_open(false).show(ui, |ui| {
+            note(ui, "Réponse à la pression commune à tous les pinceaux, appliquée avant leurs réglages. « Ancien » : le toucher d'avant l'étude, pour comparer.");
+            ui.horizontal(|ui| {
+                let resp = crate::dynui::curve_editor(ui, &mut t.pressure_curve, "toucher");
+                bulle(resp, "Courbe de pression", "L'appui du stylet passe par cette courbe avant tout le reste (le « Pen Pressure Feel » de Storyboard Pro). Glisser un point ; double-clic : ajouter ; clic droit : retirer.", "");
+                ui.vertical(|ui| {
+                    if ui.small_button("Droite").on_hover_text("L'appui tel quel.").clicked() {
+                        t.pressure_curve = Curve::linear();
+                    }
+                    if ui.small_button("Douce").on_hover_text("Plus de finesse dans les appuis légers : il faut appuyer pour grossir.").clicked() {
+                        t.pressure_curve = Curve::from_points(&[[0.0, 0.0], [0.5, 0.35], [1.0, 1.0]]);
+                    }
+                    if ui.small_button("Ferme").on_hover_text("Le trait prend du corps dès qu'on effleure.").clicked() {
+                        t.pressure_curve = Curve::from_points(&[[0.0, 0.0], [0.5, 0.65], [1.0, 1.0]]);
+                    }
+                });
+            });
+            let resp = ui.add(egui::Slider::new(&mut t.size_floor, 0.0..=0.5).text("Plancher de taille"));
+            bulle(resp, "Plancher de taille", "Part de la taille au-dessous de laquelle le trait ne descend jamais quand la taille suit l'appui (ancien : 3 %).", "");
+            let resp = ui.add(egui::Slider::new(&mut t.threshold, 0.0..=0.2).text("Seuil d'appui"));
+            bulle(resp, "Seuil d'appui", "Au-dessous, le stylet ne pose rien : ni début fantôme ni pointe au levé (0 : dès le premier échantillon). La souris n'est pas concernée.", "");
+            ui.checkbox(&mut t.thin_full, "Traits fins pleins").on_hover_text("Plus fin qu'un pixel : un pixel plein plutôt qu'un fil gris (ancien : éclairci).");
+            ui.checkbox(&mut t.soft_edge, "Bord doux").on_hover_text("Bord des empreintes rondes en une seule chute douce d'au moins un pixel (ancien : rampe d'un pixel coupée par la dureté, un léger cran, des petites tailles grises).");
+            ui.horizontal(|ui| {
+                if ui.small_button("Nouveau toucher").on_hover_text("Les réglages de l'étude.").clicked() {
+                    *t = Toucher::default();
+                }
+                if ui.small_button("Ancien toucher").on_hover_text("Le comportement d'avant, pour comparer.").clicked() {
+                    *t = Toucher::ancien();
+                }
+            });
+        });
+    }
+
     pub(crate) fn menu_bar(&mut self, ui: &mut egui::Ui) {
         egui::menu::bar(ui, |ui| {
             ui.menu_button("Fichier", |ui| {
@@ -473,6 +515,9 @@ impl App {
             }
             Tool::Ref3d => self.ref3d_panel(ui),
             Tool::Camera => self.camera_panel(ui),
+        }
+        if matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser) {
+            self.feel_ui(ui);
         }
         if self.current_brush().is_some_and(|b| b.pressure_size || b.pressure_opacity) {
             note(ui, "La pression vient du stylet (Windows Ink). À la souris, elle vaut 100 %.");

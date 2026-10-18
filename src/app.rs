@@ -304,6 +304,9 @@ pub struct App {
     /// Options du pinceau et du crayon (`brushfill`) : peint derrière, remplir la forme.
     pub(crate) paint_behind: bool,
     pub(crate) fill_shapes: bool,
+    /// Toucher du stylet (sensation des brosses) : la copie de travail du réglage, enregistrée
+    /// dans `update` quand elle change (hors glissé), comme les options du pinceau.
+    pub(crate) toucher: crate::brush::Toucher,
     pub(crate) color: [u8; 3],
     /// La couleur en teinte, saturation, valeur (panneau Couleur, 6b).
     pub(crate) hsv: [f32; 3],
@@ -682,6 +685,7 @@ impl App {
             vector_erase_whole: false,
             paint_behind,
             fill_shapes,
+            toucher: settings.toucher,
             // Les couleurs de la dernière fois (passe couleur).
             color: settings.colors.front,
             hsv: crate::colorui::rgb_to_hsv(settings.colors.front),
@@ -1402,6 +1406,7 @@ impl App {
         let (behind, fill, tol) = (painting && self.paint_behind, painting && self.fill_shapes, self.close_tolerance());
         let mut stroke = StrokeState::new(cel, mode, settings, prefix, pen)
             .with_textures(textures)
+            .with_feel(self.toucher)
             .with_secondary(self.couleurs.prefs.back)
             .on_layer(self.layer().keep_alpha, stencil)
             .with_options(behind, fill, tol);
@@ -3350,12 +3355,13 @@ impl eframe::App for App {
         // (peint derrière, remplir la forme) : enregistrés quand ils
         // changent (pas pendant un glissé).
         let options = (self.paint_behind, self.fill_shapes) != (self.settings.paint_behind, self.settings.fill_shapes);
-        let changed = self.onion != self.settings.onion || self.xsheet != self.settings.xsheet || self.flips != self.settings.flips || options;
+        let changed = self.onion != self.settings.onion || self.xsheet != self.settings.xsheet || self.flips != self.settings.flips || options || self.toucher != self.settings.toucher;
         if changed && !ctx.input(|i| i.pointer.any_down()) {
             self.settings.onion = self.onion.clone();
             self.settings.xsheet = self.xsheet.clone();
             self.settings.flips = self.flips.clone();
             (self.settings.paint_behind, self.settings.fill_shapes) = (self.paint_behind, self.fill_shapes);
+            self.settings.toucher = self.toucher;
             if let Err(e) = self.settings.save() {
                 self.status = format!("Réglages non enregistrés : {e}");
             }
