@@ -72,7 +72,8 @@ pub const FORMAT: &str = "pelure-projet";
 /// ignorerait (le calque reprendrait ses proportions sans prévenir).
 /// 23 (2026-10-18) : fond sous le trait (`fond` d'un calque ; la strate Fond d'un dessin dans
 /// `dessins/<id>_fond.png`).
-pub const VERSION: u32 = 23;
+/// 24 (2026-10-18) : couleur de repère des plans (`couleur` : rang dans la palette des marques).
+pub const VERSION: u32 = 24;
 const DRAWINGS: &str = "dessins";
 const SOUNDS: &str = "sons";
 /// Images des calques vidéo (13k) : `videos/<id>/000001.jpg`…
@@ -349,6 +350,9 @@ struct PanelEntry {
     entree: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sortie: Option<usize>,
+    /// Couleur de repère du plan, rang dans `marks::COLORS` (format 24 ; absente : aucune).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    couleur: Option<u8>,
     /// Notes dessinées sur la timeline (format 17 ; absentes : aucune).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     notes_dessinees: Vec<TimeNoteEntry>,
@@ -1103,6 +1107,7 @@ fn manifest_of(doc: &Document) -> Manifest {
             signets: panel.cues.bookmarks.clone(),
             entree: panel.cues.in_point,
             sortie: panel.cues.out_point,
+            couleur: panel.color,
             notes_dessinees: panel
                 .cues
                 .notes
@@ -1545,6 +1550,7 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                             })
                             .collect(),
                     },
+                    color: p.couleur.filter(|k| (*k as usize) < crate::marks::COLORS.len()),
                 });
             }
         }

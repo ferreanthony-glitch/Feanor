@@ -2,7 +2,7 @@
 //! leurs indications (action, dialogue, notes) et la lecture de tout le montage.
 
 use eframe::egui::{
-    self, pos2, vec2, Align2, Color32, CursorIcon, FontId, Pos2, Rect, RichText, Sense, Stroke, StrokeKind,
+    self, pos2, vec2, Align2, Color32, CornerRadius, CursorIcon, FontId, Pos2, Rect, RichText, Sense, Stroke, StrokeKind,
 };
 
 use crate::app::{App, BoardView, Mode};
@@ -597,6 +597,51 @@ impl App {
         }
     }
 
+    /// Couleur de repère des plans choisis (ou du plan visé, qui est alors le seul choisi) : une
+    /// étape d'annulation, rien si rien ne change.
+    pub(crate) fn set_plan_color(&mut self, color: Option<u8>) {
+        let ids = self.board_selection();
+        let differs = self.doc.panels.iter().any(|p| ids.contains(&p.id) && p.color != color);
+        if !differs {
+            return;
+        }
+        self.record_step();
+        self.doc.set_panels_color(&ids, color);
+    }
+
+    /// « Couleur du plan ▸ » (clic droit sur un plan du montage ou sur une vignette) : une pastille
+    /// par couleur de repère, et « Aucune ».
+    pub(crate) fn plan_color_menu(&mut self, ui: &mut egui::Ui) {
+        let ids = self.board_selection();
+        // La couleur commune des plans visés, pour cocher la pastille actuelle.
+        let first = self.doc.panels.iter().find(|p| ids.contains(&p.id)).map(|p| p.color);
+        let common = first.filter(|c| self.doc.panels.iter().filter(|p| ids.contains(&p.id)).all(|p| p.color == *c));
+        ui.menu_button("Couleur du plan", |ui| {
+            if ui.selectable_label(common == Some(None), "Aucune").clicked() {
+                ui.close_menu();
+                self.set_plan_color(None);
+            }
+            ui.horizontal_wrapped(|ui| {
+                ui.set_max_width(168.0);
+                for (k, (name, _)) in crate::marks::COLORS.iter().enumerate() {
+                    let k = k as u8;
+                    let (rect, resp) = ui.allocate_exact_size(vec2(24.0, 24.0), Sense::click());
+                    let c = crate::marks::color(k);
+                    ui.painter().rect_filled(rect.shrink(2.0), 4.0, c);
+                    if common == Some(Some(k)) {
+                        ui.painter().rect_stroke(rect, 4.0, Stroke::new(2.0_f32, ui.visuals().strong_text_color()), StrokeKind::Inside);
+                    } else if resp.hovered() {
+                        ui.painter().rect_stroke(rect, 4.0, Stroke::new(1.0_f32, ui.visuals().text_color()), StrokeKind::Inside);
+                    }
+                    if resp.on_hover_text(*name).clicked() {
+                        ui.close_menu();
+                        self.set_plan_color(Some(k));
+                    }
+                }
+            });
+        });
+    }
+
     /// Menu du clic droit sur un plan de la bande de montage.
     fn panel_menu(&mut self, ui: &mut egui::Ui, index: usize) {
         if ui.button("Animer ce plan").clicked() {
@@ -611,6 +656,7 @@ impl App {
             ui.close_menu();
             self.duplicate_panel();
         }
+        self.plan_color_menu(ui);
         ui.separator();
         self.panel_clipboard_items(ui);
         ui.separator();
@@ -723,7 +769,19 @@ impl App {
             } else {
                 theme::BLOC
             };
-            painter.rect_filled(rect, 4.0, bg);
+            // Plan coloré (couleur de repère) : fond teinté, puis le ton du plan courant ou choisi
+            // par-dessus, et une bande pleine en haut ; le contour de sélection reste le même.
+            if let Some(tag) = self.doc.panels[i].color {
+                let c = crate::marks::color(tag);
+                painter.rect_filled(rect, 4.0, theme::BLOC.lerp_to_gamma(c, 0.42));
+                if selected || chosen {
+                    painter.rect_filled(rect, 4.0, visuals.selection.bg_fill.gamma_multiply(if selected { 0.4 } else { 0.2 }));
+                }
+                let band = Rect::from_min_max(rect.min, pos2(rect.right(), rect.top() + 6.0));
+                painter.rect_filled(band, CornerRadius { nw: 4, ne: 4, sw: 0, se: 0 }, c);
+            } else {
+                painter.rect_filled(rect, 4.0, bg);
+            }
             let clip = painter.with_clip_rect(rect.shrink(2.0).intersect(r));
             if let Some(tex) = self.thumbs.texture(ui.ctx(), &self.doc, i, crate::thumbs::STRIP_WIDTH, deadline) {
                 let tr = Rect::from_min_size(rect.min + vec2(3.0, 3.0), vec2(thumb_h * aspect, thumb_h));

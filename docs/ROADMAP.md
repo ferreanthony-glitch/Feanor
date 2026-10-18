@@ -1285,6 +1285,13 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         courante et y recoud le fond ; un clic du cutter retire la zone du fond (sur un calque
         bitmap aussi) ; une étape d'annulation ; aide des touches adaptée. Reste : l'export vers
         Storyboard Pro du fond (à vérifier) ;
+      - **couleur de repère des plans** (Anthony : « changer la couleur des shots dans la timeline,
+        pour les utiliser comme repère », par le clic droit seulement) : `Panel::color` (rang dans
+        `marks::COLORS`), clic droit sur un plan du montage ou une vignette > « Couleur du plan »
+        (pastilles + « Aucune »), sur tous les plans choisis, une étape d'annulation
+        (`App::set_plan_color`, `Document::set_panels_color`) ; bloc teinté + bande pleine dans le
+        montage, liseré dans la vignette ; copiée avec le plan (duplication, copier-coller, nouveau
+        projet des plans choisis, coupe) ; format 24 (`couleur`). Sans touche ni action ;
       - **écran d'accueil** (sa suggestion 1 retenue) : sans projet ouvert (lancement, « Fermer le
         projet »), une carte au milieu : nouveau projet, ouvrir (Pelure, Storyboard Pro), projets
         récents (huit), rouvrir le dernier au lancement, « Commencer sans projet ». Elle part dès
