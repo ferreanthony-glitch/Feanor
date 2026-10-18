@@ -153,6 +153,9 @@ struct PropertiesEntry {
     notes: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     copyright: String,
+    /// Couleur des fonds sous le trait qu'on allume (format 23) ; absente : blanc.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    fond: Option<[u8; 3]>,
 }
 
 impl PropertiesEntry {
@@ -1204,6 +1207,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                 modifie: p.modified,
                 notes: p.notes.clone(),
                 copyright: p.copyright.clone(),
+                fond: p.fond,
             }
         },
     }
@@ -1383,6 +1387,7 @@ pub fn load(manifest_path: &Path) -> Result<Loaded, String> {
                 modified: p.modifie,
                 notes: p.notes,
                 copyright: p.copyright,
+                fond: p.fond,
             }
         },
     };

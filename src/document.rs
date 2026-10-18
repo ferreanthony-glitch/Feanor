@@ -609,6 +609,8 @@ pub struct Properties {
     pub modified: u64,
     pub notes: String,
     pub copyright: String,
+    /// Couleur que prend un fond sous le trait qu'on allume (`fond.rs`) ; rien : blanc.
+    pub fond: Option<[u8; 3]>,
 }
 
 /// Couleur B du damier d'un projet neuf.
@@ -1388,6 +1390,7 @@ impl Document {
         s.properties = Properties {
             author: self.properties.author.clone(),
             copyright: self.properties.copyright.clone(),
+            fond: self.properties.fond,
             ..Default::default()
         };
         let cels = s

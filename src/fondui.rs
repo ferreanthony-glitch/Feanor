@@ -83,9 +83,29 @@ impl App {
             self.layers_mut()[li].fond = Some(n);
             self.renderer.invalidate_all();
         }
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Ce fond aussi sur");
+            if ui.small_button("Les calques choisis").on_hover_text("Les calques choisis (Ctrl ou Maj + clic) prennent ce fond.").clicked() {
+                self.run_action("fond.calques_choisis");
+            }
+            if ui.small_button("Tout le plan").on_hover_text("Tous les calques de dessin du plan, sauf les calques de fond du décor.").clicked() {
+                self.run_action("fond.tout_le_plan");
+            }
+        });
         if self.paint_fond {
             ui.label(RichText::new("Strate Fond : la peinture reste dans la forme, sous le trait ; la gomme coupe le fond, le pinceau le recoud.").small().weak());
         }
+    }
+
+    /// Sous-menu « Fond sous le trait » (menu Calques).
+    pub(crate) fn fond_menu(&mut self, ui: &mut egui::Ui) {
+        let label = if self.layer().fond.is_some() { "Retirer du calque courant" } else { "Sur le calque courant" };
+        self.action_item(ui, label, "pinceau.fond");
+        self.action_item(ui, "Sur les calques choisis", "fond.calques_choisis");
+        self.action_item(ui, "Sur tout le plan", "fond.tout_le_plan");
+        ui.separator();
+        self.action_item(ui, "Retirer des calques choisis", "fond.retirer_choisis");
+        self.action_item(ui, "Couleur du projet à tous les fonds", "fond.couleur_partout");
     }
 
     /// Commandes du fond ; vrai si `action` en était une.
@@ -97,8 +117,9 @@ impl App {
                 }
                 let li = self.cur_layer;
                 let on = self.layers()[li].fond.is_some();
+                let fresh = self.new_fond();
                 self.record_step();
-                self.layers_mut()[li].fond = if on { None } else { Some(FondReglages::default()) };
+                self.layers_mut()[li].fond = if on { None } else { Some(fresh) };
                 if on {
                     self.paint_fond = false;
                 }
@@ -118,8 +139,74 @@ impl App {
                 self.paint_fond = !self.paint_fond;
                 self.status = if self.paint_fond { "Peindre dans : le fond (sous le trait)." } else { "Peindre dans : le trait." }.into();
             }
+            // Plusieurs calques d'un coup (Anthony, 2026-10-18 : « appliquer le fond à tous les
+            // calques choisis ou à tout un plan en une commande »).
+            "fond.calques_choisis" | "fond.tout_le_plan" | "fond.retirer_choisis" => {
+                if self.content_refuses() {
+                    return true;
+                }
+                let whole = action == "fond.tout_le_plan";
+                let remove = action == "fond.retirer_choisis";
+                let targets: Vec<usize> = if whole {
+                    // Tout le plan : ses calques de dessin, sauf les calques de fond du décor
+                    // (ceux de toute la scène).
+                    (0..self.layers().len()).filter(|&li| self.layers()[li].scene_wide.is_none()).collect()
+                } else {
+                    self.chosen_layers()
+                };
+                let targets: Vec<usize> = targets.into_iter().filter(|&li| takes_fond(&self.layers()[li])).collect();
+                if targets.is_empty() {
+                    self.status = "Fond sous le trait : aucun calque de dessin visé (ni dossier, ni CTG, ni vidéo).".into();
+                    return true;
+                }
+                let fresh = self.layer().fond.unwrap_or_else(|| self.new_fond());
+                self.record_step();
+                for &li in &targets {
+                    self.layers_mut()[li].fond = if remove { None } else { Some(fresh) };
+                }
+                if remove && self.layer().fond.is_none() {
+                    self.paint_fond = false;
+                }
+                self.renderer.invalidate_all();
+                let n = targets.len();
+                let s = if n > 1 { "s" } else { "" };
+                self.status = match (remove, whole) {
+                    (true, _) => format!("Fond sous le trait : retiré de {n} calque{s}."),
+                    (false, true) => format!("Fond sous le trait : posé sur les {n} calque{s} de dessin du plan (pas sur les calques de fond du décor)."),
+                    (false, false) => format!("Fond sous le trait : posé sur {n} calque{s}."),
+                };
+            }
+            // Couleur du projet donnée à tous les fonds déjà posés.
+            "fond.couleur_partout" => {
+                let couleur = self.new_fond().couleur;
+                let n: usize = self.doc.panels.iter().flat_map(|p| &p.layers).filter(|l| l.fond.is_some_and(|f| f.couleur != couleur)).count();
+                if n == 0 {
+                    self.status = "Tous les fonds du projet ont déjà cette couleur.".into();
+                    return true;
+                }
+                self.record_step();
+                for l in self.doc.panels.iter_mut().flat_map(|p| p.layers.iter_mut()) {
+                    if let Some(f) = l.fond.as_mut() {
+                        f.couleur = couleur;
+                    }
+                }
+                self.renderer.invalidate_all();
+                self.status = format!("Couleur des fonds : {n} calque(s) changé(s) dans le projet.");
+            }
             _ => return false,
         }
         true
     }
+
+    /// Un fond neuf : la couleur du projet (Réglages du projet), blanc d'office.
+    pub(crate) fn new_fond(&self) -> FondReglages {
+        let d = FondReglages::default();
+        FondReglages { couleur: self.doc.properties.fond.unwrap_or(d.couleur), ..d }
+    }
+}
+
+/// Le calque peut avoir un fond sous son trait : un calque de dessin (ni dossier, ni CTG, ni
+/// vidéo).
+fn takes_fond(l: &crate::document::Layer) -> bool {
+    !l.folder && l.ctg.is_none() && l.video.is_none()
 }

@@ -182,6 +182,7 @@ fn the_fond_survives_save_and_reload() {
     let reglages = FondReglages { couleur: [250, 240, 200], debord: 5, trous: 9, bord: false };
     doc.panels[0].layers[0].frames = vec![Some(a), Some(b)];
     doc.panels[0].layers[0].fond = Some(reglages);
+    doc.properties.fond = Some([220, 220, 220]);
     let mut paint = Raster::new(64, 48);
     put(&mut paint, 10, 10, Color32::RED);
     let mut s = Strate::new(64, 48);
@@ -198,6 +199,7 @@ fn the_fond_survives_save_and_reload() {
     let mut back = project::load(&manifest).unwrap().doc;
     let layer = &back.panels[0].layers[0];
     assert_eq!(layer.fond, Some(reglages), "les réglages du fond, avec le calque");
+    assert_eq!(back.properties.fond, Some([220, 220, 220]), "la couleur des fonds du projet");
     let ca = layer.frames[0].unwrap();
     assert_eq!(back.cels[&ca].fond.as_ref().unwrap().peinture.raster.get(10, 10), Color32::RED, "la peinture du fond");
     assert_eq!(back.cels[&ca].fond.as_ref().unwrap().coupe.get(20, 20).a(), 255, "la coupe du fond");
