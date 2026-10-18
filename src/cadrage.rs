@@ -89,6 +89,24 @@ pub struct FramingAids {
     /// Épaisseur des traits, en points d'écran.
     #[serde(rename = "epaisseur")]
     pub width: f32,
+    /// Version des valeurs par défaut de l'aspect : un fichier d'avant (sans ce champ) vaut 0, et
+    /// ses traits restés à l'ancien défaut (1,3 px, 85 %) passent au nouveau, plus discret.
+    #[serde(rename = "version_aspect", default = "old_look_version")]
+    pub look_version: u8,
+}
+
+/// Épaisseur par défaut des repères (points d'écran) : fine, ils ne doivent pas gêner le dessin.
+pub const DEFAULT_WIDTH: f32 = 1.0;
+/// Opacité par défaut des repères.
+pub const DEFAULT_OPACITY: f32 = 0.7;
+/// Version courante des valeurs par défaut de l'aspect.
+const LOOK_VERSION: u8 = 1;
+/// Ancien défaut d'épaisseur et d'opacité (version 0).
+const OLD_WIDTH: f32 = 1.3;
+const OLD_OPACITY: f32 = 0.85;
+
+fn old_look_version() -> u8 {
+    0
 }
 
 impl Default for FramingAids {
@@ -102,18 +120,29 @@ impl Default for FramingAids {
             cross: false,
             safe: SafeZones::default(),
             color: [90, 220, 255],
-            opacity: 0.85,
-            width: 1.3,
+            opacity: DEFAULT_OPACITY,
+            width: DEFAULT_WIDTH,
+            look_version: LOOK_VERSION,
         }
     }
 }
 
 impl FramingAids {
-    /// Réglages ramenés dans des bornes sûres (fichier modifié à la main…).
+    /// Réglages ramenés dans des bornes sûres (fichier modifié à la main…), et l'aspect d'un
+    /// ancien fichier mis au nouveau défaut s'il n'avait pas été changé.
     pub fn sanitized(mut self) -> FramingAids {
+        if self.look_version < LOOK_VERSION {
+            if (self.width - OLD_WIDTH).abs() < 1e-3 {
+                self.width = DEFAULT_WIDTH;
+            }
+            if (self.opacity - OLD_OPACITY).abs() < 1e-3 {
+                self.opacity = DEFAULT_OPACITY;
+            }
+            self.look_version = LOOK_VERSION;
+        }
         self.spiral_variant %= 8;
-        self.opacity = if self.opacity.is_finite() { self.opacity.clamp(0.05, 1.0) } else { 0.85 };
-        self.width = if self.width.is_finite() { self.width.clamp(0.5, 6.0) } else { 1.3 };
+        self.opacity = if self.opacity.is_finite() { self.opacity.clamp(0.05, 1.0) } else { DEFAULT_OPACITY };
+        self.width = if self.width.is_finite() { self.width.clamp(0.5, 6.0) } else { DEFAULT_WIDTH };
         self
     }
 

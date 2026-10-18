@@ -598,9 +598,7 @@ impl App {
                 crate::bulles::interrupteur_a(ui, &mut self.camera_mask, ph::SELECTION_INVERSE, "Estomper le hors-champ", "Voiler ce qui est hors du cadre de la caméra.", &key, "camera.masque");
             });
         });
-        // Aides au cadrage : tiers, grille d'or, spirale, diagonales, croix, zones de sécurité,
-        // cadre de format (`cadrage.rs`).
-        section(ui, "Aides au cadrage", &mut |ui| self.framing_aids_ui(ui));
+        // (Les aides au cadrage sont dans le menu « Cadrage » de la barre au-dessus du dessin.)
         let (s, e) = self.doc.sequence_run(self.cur_panel);
         let sequence_len: usize = self.doc.panels[s..e].iter().map(|p| p.frame_count()).sum();
         section(ui, "Durées", &mut |ui| {
@@ -612,7 +610,8 @@ impl App {
                 "Glisser dans le cadre : déplacer (Maj : à l'horizontale ou à la verticale). Coin : zoomer. \
                  Poignée ronde : tourner (Maj : par 15°). Un plan sans clé : caméra au centre, cadre entier. \
                  Losanges jaunes de la piste Caméra : clic pour choisir (Ctrl : ajouter, Maj : la suite), glisser pour \
-                 déplacer, Ctrl+C / Ctrl+V à l'image courante, Suppr.",
+                 déplacer, glisser dans le vide de la piste pour en choisir plusieurs au rectangle (Maj : ajouter, Ctrl : \
+                 basculer), Ctrl+C / Ctrl+V à l'image courante, Suppr. Aides au cadrage : menu « Cadrage » au-dessus du dessin.",
             )
             .small()
             .weak(),
