@@ -58,8 +58,8 @@ pub(crate) const RESOLUTIONS: [(&str, usize, usize); 12] = [
     ("PAL 4:3", 768, 576),
 ];
 
-/// Cadences proposées.
-const FPS_PRESETS: [u32; 8] = [12, 15, 24, 25, 30, 48, 50, 60];
+/// Cadences proposées (entières : le projet ne connaît pas 23,976).
+pub(crate) const FPS_PRESETS: [u32; 8] = [12, 15, 24, 25, 30, 48, 50, 60];
 
 /// Proportions d'une image : « 16:9 » quand c'est simple, sinon « 2,39:1 ».
 pub fn ratio_label(w: usize, h: usize) -> String {
