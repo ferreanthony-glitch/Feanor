@@ -233,6 +233,36 @@ impl App {
             }
         });
     }
+    /// Sous les réglages de la brosse du pinceau et du crayon : peint derrière, remplir la forme
+    /// (`brushfill`), le fond sous le trait (`fondui.rs`) et ses options.
+    fn brush_extras_ui(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
+        ui.separator();
+        let (behind_key, fill_key) = (self.raccourci("pinceau.derriere"), self.raccourci("pinceau.remplir"));
+        ui.horizontal(|ui| {
+            crate::bulles::interrupteur_a(
+                ui,
+                &mut self.paint_behind,
+                ph::SELECTION_BACKGROUND,
+                "Peint derrière",
+                "La peinture passe sous ce qui est déjà dessiné sur le calque.",
+                &behind_key,
+                "pinceau.derriere",
+            );
+            crate::bulles::interrupteur_a(
+                ui,
+                &mut self.fill_shapes,
+                ph::PAINT_BUCKET,
+                "Remplir la forme",
+                "Au lâcher, un trait fermé (son bout revient près de son début, ou il se recoupe) remplit son intérieur de sa couleur, sous le trait. Sur un calque vectoriel, la zone reste modifiable.",
+                &fill_key,
+                "pinceau.remplir",
+            );
+            self.fond_toggle_ui(ui);
+        });
+        self.fond_options_ui(ui);
+    }
+
     /// Panneau des réglages de l'outil courant.
     pub(crate) fn tool_options_panel(&mut self, ui: &mut egui::Ui) {
         let vector = self.layer().kind == LayerKind::Vector;
@@ -244,51 +274,29 @@ impl App {
                     .weak(),
             );
         });
-        // Peint derrière, remplir la forme (`brushfill`) : en haut, pour le pinceau et le crayon.
-        if matches!(self.tool, Tool::Brush | Tool::Pencil) {
-            use egui_phosphor::regular as ph;
-            let (behind_key, fill_key) = (self.raccourci("pinceau.derriere"), self.raccourci("pinceau.remplir"));
-            ui.horizontal(|ui| {
-                crate::bulles::interrupteur_a(
-                    ui,
-                    &mut self.paint_behind,
-                    ph::SELECTION_BACKGROUND,
-                    "Peint derrière",
-                    "La peinture passe sous ce qui est déjà dessiné sur le calque.",
-                    &behind_key,
-                    "pinceau.derriere",
-                );
-                crate::bulles::interrupteur_a(
-                    ui,
-                    &mut self.fill_shapes,
-                    ph::PAINT_BUCKET,
-                    "Remplir la forme",
-                    "Au lâcher, un trait fermé (son bout revient près de son début, ou il se recoupe) remplit son intérieur de sa couleur, sous le trait. Sur un calque vectoriel, la zone reste modifiable.",
-                    &fill_key,
-                    "pinceau.remplir",
-                );
-                // Fond sous le trait (`fondui.rs`).
-                self.fond_toggle_ui(ui);
-            });
-        }
-        if matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser | Tool::Fill | Tool::Cutter) {
+        // Pinceau, crayon, gomme : la taille en premier, les réglages de la brosse, puis en bas
+        // peint derrière, remplir la forme et le fond sous le trait (Anthony, 2026-10-18). Pour
+        // le pot et le cutter, les options du fond restent en haut : ce sont leurs réglages.
+        if matches!(self.tool, Tool::Fill | Tool::Cutter) {
             self.fond_options_ui(ui);
         }
         match self.tool {
             Tool::Brush => {
                 self.brush_summary_ui(ui);
+                self.brush_settings_ui(ui);
+                self.brush_extras_ui(ui);
                 if vector {
                     note(ui, "Le trait reste modifiable avec l'outil Sélection (V), même texturé (pointe en \
                               image, grain du papier).");
                 }
-                self.brush_settings_ui(ui);
             }
             Tool::Pencil => {
                 self.brush_summary_ui(ui);
+                self.brush_settings_ui(ui);
+                self.brush_extras_ui(ui);
                 if vector {
                     note(ui, "Le trait reste modifiable avec l'outil Sélection (V).");
                 }
-                self.brush_settings_ui(ui);
             }
             Tool::Eraser => {
                 self.brush_summary_ui(ui);
@@ -308,6 +316,8 @@ impl App {
                     );
                 }
                 self.brush_settings_ui(ui);
+                ui.separator();
+                self.fond_options_ui(ui);
             }
             Tool::Fill => {
                 ui.add(egui::Slider::new(&mut self.fill.tolerance, 0.0..=1.0).text("Tolérance"));

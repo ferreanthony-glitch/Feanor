@@ -1,7 +1,8 @@
 //! Panneau Pinceaux, l'affichage (refonte du 2026-10-18, d'après la demande d'Anthony : « une
 //! organisation des brosses plus simple, et la taille du pinceau mise en avant ») :
-//! - en haut, toujours visible, la taille de l'outil courant (curseur et champ en px) ;
-//! - la bibliothèque : recherche, liste ou vignettes, dossiers repliables, trois boutons en bas.
+//! - la bibliothèque : recherche, liste ou vignettes, dossiers repliables, trois boutons en bas ;
+//! - la taille de l'outil courant (curseur et champ en px) est en tête du panneau Réglages de
+//!   l'outil (`brush_summary_ui`), plus ici (Anthony, 2026-10-18 : elle était dans les deux).
 //!
 //! Les réglages du pinceau (l'aperçu du trait, les catégories à gauche, les réglages de la
 //! catégorie à droite) sont dans le panneau Réglages de l'outil, sous son résumé
@@ -82,8 +83,6 @@ impl App {
     /// panneau Réglages de l'outil (Anthony, 2026-10-18 : réglages du pinceau (panneau Réglages de l'outil) faisait
     /// doublon avec lui, « autant tout mettre dans le panneau Réglages »).
     pub(crate) fn brushes_panel(&mut self, ui: &mut egui::Ui) {
-        self.size_row(ui);
-        ui.add_space(2.0);
         self.library_tab(ui);
     }
 
@@ -622,23 +621,25 @@ impl App {
 
     // ------------------------------------------------------------------ résumé du panneau Réglages de l'outil
 
-    /// Ce que garde le panneau Réglages de l'outil des réglages du pinceau, du crayon et de la
-    /// gomme : le nom du réglage, la taille et l'opacité. Le panneau Pinceaux s'ouvre par la barre
-    /// des panneaux (Anthony, 2026-10-18 : les deux boutons qui l'ouvraient d'ici, « inutile »).
+    /// Le haut du panneau Réglages de l'outil pour le pinceau, le crayon et la gomme : la taille en
+    /// premier, en grand (Anthony, 2026-10-18 : elle n'est plus que là, plus dans le panneau
+    /// Pinceaux), l'opacité, puis le nom du réglage. Le panneau Pinceaux s'ouvre par la barre des
+    /// panneaux.
     pub(crate) fn brush_summary_ui(&mut self, ui: &mut egui::Ui) {
+        self.size_row(ui);
         let target = self.panel_target();
         let current = self.panel_brush();
         let name = choisi(&self.brushes.presets, target, &current).map_or("(réglé à la main)".to_string(), |i| self.brushes.presets[i].name.clone());
-        ui.label(RichText::new(name).strong());
         let s = self.panel_brush_mut();
         ui.horizontal(|ui| {
-            ui.add(egui::Slider::new(&mut s.size, 0.5..=400.0).logarithmic(true).text("Taille"));
             interrupteur(ui, &mut s.pressure_size, ph::PEN_NIB, "Taille selon la pression", "Plus on appuie avec le stylet, plus le trait est gros.", "");
+            ui.label(RichText::new("Taille selon l'appui").small());
         });
         ui.horizontal(|ui| {
             ui.add(egui::Slider::new(&mut s.opacity, 0.0..=1.0).text("Opacité"));
             interrupteur(ui, &mut s.pressure_opacity, ph::PEN_NIB, "Opacité selon la pression", "Plus on appuie avec le stylet, plus le trait couvre.", "");
         });
+        ui.label(RichText::new(name).strong());
     }
 }
 

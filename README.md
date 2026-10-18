@@ -440,20 +440,20 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   voir et en prendre un, la case montre ensuite le dernier pris (Sélection et Sélection par
   couleur en haut ; Rectangle, Ligne, Ellipse et Polyligne dans une seule case). Couleur : avant-plan et arrière-plan, roue, curseurs, couleurs récentes et
   nuanciers (voir **Couleur** plus haut). Panneau **Pinceaux** (onglet à côté de Couleur) :
-  en haut, toujours visible, la **taille** de l'outil courant (pinceau, crayon ou gomme) en grand
-  curseur et en champ px, la même valeur que les touches ^ et $ ; dessous la bibliothèque :
-  une recherche par nom, une bascule liste / vignettes (liste : pastille de la
+  la bibliothèque : une recherche par nom, une bascule liste / vignettes (liste : pastille de la
   pointe avec sa taille, aperçu du trait, nom), et les réglages rangés en **dossiers repliables
   avec leur nombre** : Crayons, Encres et feutres, Peinture, Craie et fusain, Gommes (avec la
   gomme), Mes brosses, puis un dossier par fichier importé (les importés démarrent repliés). Clic :
   choisir ; clic droit : renommer, dupliquer, remplacer, supprimer. En bas, trois icônes :
   importer des pinceaux, nouvelle brosse (garde le réglage courant dans Mes brosses), supprimer la
   brosse choisie (celles de Pelure restent). Les **réglages du pinceau** sont dans le panneau
-  **Réglages** de l'outil (pinceau, crayon, gomme), sous le nom, la taille et l'opacité : l'aperçu
-  du trait courant, puis à gauche les catégories (Forme de la pointe, Taille et appui, Dispersion,
+  **Réglages** de l'outil (pinceau, crayon, gomme) : en premier la **taille** en grand curseur et
+  en champ px (la même valeur que les touches ^ et $), l'opacité, le nom du réglage, l'aperçu du
+  trait courant, puis à gauche les catégories (Forme de la pointe, Taille et appui, Dispersion,
   Grain et papier, Couleur et mélange, Lissage, Toucher du stylet), dont quatre ont une case qui
   les allume ou les éteint sans perdre leurs valeurs, et à droite les réglages de la catégorie.
-  Panneau étroit : les catégories passent au-dessus, en liste déroulante.
+  Panneau étroit : les catégories passent au-dessus, en liste déroulante. En bas : peint
+  derrière, remplir la forme, le fond sous le trait et ses options.
   Liste ou vignettes, la catégorie et les dossiers ouverts sont retenus (`reglages.toml`,
   clé `panneau_pinceaux`). Les aperçus montrent le trait dans la couleur courante, sur le papier.
   L'interface est sombre et dense (gris et bleu d'accent repris de Pelure Studio, police Segoe
