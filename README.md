@@ -779,6 +779,25 @@ Sans projet ouvert (au lancement, ou après « Fermer le projet »), un écran d
 
 Il s'en va dès qu'un projet s'ouvre ou se crée, au premier trait, ou par « Commencer sans projet ».
 
+### Nouveau projet
+
+« Nouveau projet… » (l'accueil, ou Fichier > Nouveau, Ctrl+N) ouvre une fenêtre :
+- **Nom** et **dossier** : avec un nom, le projet est créé et enregistré tout de suite dans
+  `dossier\nom\` ; sans nom, « Enregistrer » demandera où le ranger plus tard.
+- **Préréglage**, groupé : Vidéo (HD 1080, HD 720, UHD 4K, 2K DCI, Scope 2,39, SD PAL 4:3 en pixels
+  carrés), Réseaux (vertical 9:16, carré 1:1, portrait 4:5) et Papier (A4, A3, A5, US Letter,
+  en paysage, calculés avec la résolution). Chacun porte sa cadence (24 i/s, 25 pour PAL). Dès
+  qu'une valeur change à la main, la liste affiche « Personnalisé ». La disquette garde le format
+  actuel sous un nom, la corbeille retire un préréglage à toi (pas ceux d'origine).
+- **Format** : largeur et hauteur en px, mm, cm ou in (le projet garde des pixels), orientation,
+  proportions reconnues, résolution (dpi, pour le papier et les unités ; elle n'est pas gardée dans
+  le projet) et cadence.
+- **Papier** (couleur, ou transparent), couleur des fonds sous le trait, durée du premier plan, et un
+  aperçu du cadre.
+
+Entrée valide, Échap annule. La fenêtre repart des dernières valeurs, du dernier dossier et de tes
+préréglages, retenus dans `%APPDATA%\Pelure\reglages.toml`.
+
 ## Plantage
 
 Si Pelure se ferme sur une erreur, un rapport est écrit dans `%LOCALAPPDATA%\Pelure\plantages\`, et la

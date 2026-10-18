@@ -123,6 +123,10 @@ mod prefsui;
 mod recents;
 #[cfg(test)]
 mod recents_tests;
+mod nouveau;
+#[cfg(test)]
+mod nouveau_tests;
+mod nouveauui;
 mod aller;
 #[cfg(test)]
 mod aller_tests;

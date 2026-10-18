@@ -284,11 +284,7 @@ pub(crate) struct LayerClip {
     pub panel_len: usize,
 }
 
-pub struct NewDocDialog {
-    pub width: usize,
-    pub height: usize,
-    pub fps: u32,
-}
+pub(crate) use crate::nouveauui::NewDocDialog;
 
 pub struct App {
     pub(crate) ctx: egui::Context,
@@ -2427,14 +2423,8 @@ impl App {
 
     pub(crate) fn perform(&mut self, action: Pending) {
         match action {
-            Pending::New => {
-                self.welcome = false;
-                self.new_dialog = Some(NewDocDialog {
-                    width: self.doc.frame[0],
-                    height: self.doc.frame[1],
-                    fps: self.doc.fps,
-                })
-            }
+            // La fenêtre « Nouveau projet » (`nouveauui.rs`).
+            Pending::New => self.open_new_project(),
             Pending::Open => self.open_dialog(),
             Pending::FromChosen => {
                 self.welcome = false;
@@ -2500,7 +2490,7 @@ impl App {
         self.save_to(manifest)
     }
 
-    fn save_to(&mut self, manifest: PathBuf) -> bool {
+    pub(crate) fn save_to(&mut self, manifest: PathBuf) -> bool {
         // Dernière modification (13e, propriétés du projet).
         self.doc.properties.modified = crate::recovery::now_secs();
         match project::save(&self.doc, &manifest, &mut self.written) {
