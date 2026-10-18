@@ -779,6 +779,12 @@ fn perf_vector_drawing() {
 fn perf_panels() {
     let mut doc = plan_charge(60, 24, 2);
     doc.panels[0].length = 24;
+    // Trois cents commentaires sur la timeline (panneau Commentaires, fanions des règles).
+    let plan = doc.panels[0].id;
+    for k in 0..300 {
+        let id = doc.add_comment(plan, k % 24, "Anthony", 1_760_000_000 + k as u64);
+        doc.comment_mut(id).unwrap().text = format!("Remarque {k} : revoir cette image, le trait tremble trop ici.");
+    }
     let mut b = banc(doc, true);
     b.app.set_mode(Mode::Animation);
     // Beaucoup de pinceaux importés.
@@ -790,7 +796,7 @@ fn perf_panels() {
     }
     println!("PERF pinceaux : {} réglages dans la bibliothèque", b.app.brushes.presets.len());
     let zone = Rect::from_min_size(pos2(1500.0, 300.0), vec2(300.0, 400.0));
-    for (pane, nom) in [(Pane::Layers, "panneau Calques (60 calques)"), (Pane::Brushes, "panneau Pinceaux (480 réglages)"), (Pane::Color, "panneau Couleur"), (Pane::ToolOptions, "panneau Réglages"), (Pane::Effects, "panneau Effets"), (Pane::History, "panneau Historique")] {
+    for (pane, nom) in [(Pane::Layers, "panneau Calques (60 calques)"), (Pane::Brushes, "panneau Pinceaux (480 réglages)"), (Pane::Color, "panneau Couleur"), (Pane::ToolOptions, "panneau Réglages"), (Pane::Effects, "panneau Effets"), (Pane::History, "panneau Historique"), (Pane::Comments, "panneau Commentaires (300 commentaires)")] {
         b.app.show_pane(pane);
         let (images, ms) = jusqu_au_repos(&mut b, 200);
         println!("PERF {nom} : {images} images, {ms:.0} ms avant le repos");

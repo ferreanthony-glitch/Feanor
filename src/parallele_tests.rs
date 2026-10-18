@@ -234,3 +234,33 @@ fn opening_a_project_does_not_block_the_interface() {
     assert_eq!(b.app.doc.panels.len(), 3, "le projet ouvert reste en place");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// L'enregistrement en parallèle écrit le fichier des commentaires, l'ouverture sur un autre fil le
+/// relit, et les dessins dérivés des effets de l'ancien projet sont oubliés (`App::load_doc`).
+#[test]
+fn parallel_save_and_open_keep_the_comments_and_forget_the_effects() {
+    let mut doc = petit_projet();
+    let (premier, dernier) = (doc.panels[0].id, doc.panels[2].id);
+    let a = doc.add_comment(premier, 3, "Anthony", 1_760_000_000);
+    let b_id = doc.add_comment(dernier, 11, "Léa", 1_760_000_100);
+    doc.comment_mut(a).unwrap().text = "Trop long.".into();
+    doc.comment_mut(b_id).unwrap().done = true;
+    let dir = dossier("commentaires");
+    let manifeste = dir.join("Essai.pelure");
+    project::save(&doc, &manifeste, &mut HashMap::new()).expect("enregistrement");
+    assert!(dir.join(crate::commentaires::FILE).exists(), "commentaires.json est écrit à côté du manifeste");
+    let mut b = crate::perf_tests::banc(Document::with_frame(160, 90, 24), false);
+    let epoque = crate::fxcache::epoch();
+    b.app.open_path(manifeste.clone());
+    for _ in 0..600 {
+        b.image(Vec::new(), 1.0 / 60.0);
+        if b.app.open_job.is_none() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(b.app.open_job.is_none(), "le projet doit finir par être adopté");
+    assert_eq!(b.app.doc.comments, doc.comments);
+    assert!(crate::fxcache::epoch() != epoque, "les effets de l'ancien projet sont oubliés");
+    let _ = std::fs::remove_dir_all(&dir);
+}

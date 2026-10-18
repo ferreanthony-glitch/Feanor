@@ -4,6 +4,10 @@ Passe de performance du 2026-10-19 (branche `perf`, partie de `main` c693643). D
 « avancer sur l'optimisation du soft et le rendre le plus performant possible rapidement », avec la
 règle qui prime sur tout : le logiciel répond toujours instantanément, sans latence.
 
+Mise à jour du 2026-10-19 : la branche a été fusionnée avec `main` 31aef6e (effets de calque en calcul
+de fond, commentaires, boîte de sélection, caméra, tremblement du trait, thèmes) dans `perf-integre` ;
+voir « Après la fusion » plus bas. Les chiffres des tableaux ci-dessous sont ceux d'avant la fusion.
+
 Ce document dit comment mesurer, ce qui a été mesuré avant et après, ce qui a été changé, ce qui reste
 (classé), et ce qu'il faut regarder à l'écran.
 
@@ -146,6 +150,47 @@ refaite).
 | Octets → tuiles (ouverture) | 6,2 ms | 5,5 ms |
 | Construire l'interface, 100 images, 100 plans | 153 ms | 131 ms |
 | PNG : coder une feuille | 22,2 ms | 16,7 ms |
+
+### Après la fusion avec `main` (31aef6e)
+
+Mêmes essais, même machine, relancés sur `perf-integre` ; la machine était partagée avec d'autres
+programmes (une série sur trois a été perturbée, ± 15 %), les chiffres sont ceux d'une série au repos.
+Aucune régression : tout est dans le bruit de la colonne « Après » ci-dessus.
+
+| Scénario | Après (perf) | Après la fusion |
+|---|---|---|
+| Ouvrir 100 plans × 3 calques × 48 images | 7,3 s | 7,9 s |
+| Enregistrer ce projet (première fois) / rien de modifié | 9,3 s / 5 ms | 9,6 s / 5 ms |
+| Plan chargé : souris / lecture à 24 images/s / tête de lecture | 4,58 / 8,2 / 13,8 | 4,50 / 8,0 / 14,2 |
+| Timeline zoomée : souris | 4,2 | 4,2 |
+| Long projet (100 plans) : souris / tête de lecture / lecture du montage | 2,64 / 5,9 / 2,52 | 2,64 / 5,6 / 2,35 |
+| Timeline de 2 000 images : souris / tête de lecture | 4,7 / 6,3 | 4,9 / 6,7 |
+| Montage de 600 plans : souris / tête de lecture | 3,6 / 11,4 | 3,7 / 11,6 |
+| Panneaux (60 calques) Calques / Pinceaux / Couleur | 9,6 / 10,1 / 9,6 | 10,1 / 10,3 / 10,1 |
+| Panneau Commentaires (300 commentaires, nouveau) | | 9,7 (la composition des 60 calques en fait 5,8) |
+| Vignette 192 × 108, 3 / 15 calques | 1,6 / 3,1 ms | 1,5 / 2,9 ms |
+| Démarrage : bibliothèque de pinceaux / construction de l'application | 371 / 126 ms | 356 / 134 ms |
+
+Les effets de calque (`fxperf_tests.rs`) gardent leurs chiffres : lecture pleine résolution 0,06 ms
+par image d'écran sur le fil de l'interface (0,08 avant), curseur du flou et du bruit 0,1 et 0,0 ms,
+image à froid à l'export 64 ms, et la vignette à effets 5,7 ms (7,7 avant : le dessin des vignettes
+est cherché une fois par vignette des deux côtés, le code de la fusion garde la lecture à l'échelle
+d'un dessin plus petit que la feuille, `render::Resolved`). Tremblement du trait
+(`boiling_playback_cost`) : 0,040 ms par image d'écran en moyenne, 1,2 ms au pire, 60 traits
+texturés, 96 images.
+
+Ce que la fusion a décidé :
+- **Cartes graphiques** (`gpu.rs`) : `sync` cherche chaque dessin affiché une fois (`fx::display`),
+  marque leurs textures comme celles de l'image avant d'en créer une, puis réutilise la texture
+  la plus ancienne **de même taille** (perf) ; l'éviction se compte en octets, pas en nombre de
+  textures, puisqu'un aperçu d'effet pèse le quart d'un dessin entier (effets).
+- **Ouverture sur un autre fil** : `App::finish_open` passe par `App::load_doc`, donc le fichier
+  `commentaires.json`, le format 26, l'oubli des dessins dérivés des effets (`fx::forget_all`) et la
+  remise à zéro des clés choisies sont ceux d'avant. L'enregistrement parallèle écrit le fichier
+  des commentaires, la copie de secours aussi (`parallele_tests.rs`, `recovery_tests.rs`).
+- **Dessin des seuls blocs visibles** : les plans colorés, les marques, la bande des séquences, les
+  clés de caméra choisies, les clés d'effets et les fanions de commentaires sont ceux de `main` ; seuls
+  les plans et les colonnes hors de la zone visible ne sont plus peints.
 
 ## 3. Ce qui a été changé
 
