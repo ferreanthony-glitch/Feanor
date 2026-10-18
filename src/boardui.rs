@@ -22,7 +22,10 @@ use crate::storyboard::{duration_label, panel_title};
 use crate::vector::VPoint;
 
 /// Fond de la planche, pages, encre des textes.
-const BOARD_BG: Color32 = Color32::from_gray(150);
+/// Le fond de la table, autour des planches : le fond du thème (les pages restent blanches).
+fn board_bg() -> Color32 {
+    crate::theme::fond()
+}
 const PAGE_BG: Color32 = Color32::WHITE;
 const INK: Color32 = Color32::from_gray(30);
 /// Épaisseur des notes : la taille du pinceau, réduite (les notes sont à l'échelle de la planche).
@@ -201,7 +204,7 @@ impl App {
         let view = ui.available_rect_before_wrap();
         let bg = ui.allocate_rect(view, Sense::click_and_drag());
         let painter = ui.painter_at(view);
-        painter.rect_filled(view, 0.0, BOARD_BG);
+        painter.rect_filled(view, 0.0, board_bg());
         self.board_sel.retain(|id| self.doc.panels.iter().any(|p| p.id == *id));
         let (ns, nt) = (self.doc.board.strokes.len(), self.doc.board.texts.len());
         self.board_notes.retain(|n| match *n {
@@ -340,7 +343,7 @@ impl App {
             let [r, g, b] = t.color;
             painter.text(xf.to_screen(pos), Align2::LEFT_TOP, &t.text, FontId::proportional(size * xf.zoom), Color32::from_rgb(r, g, b));
         }
-        let accent = Color32::from_rgb(40, 120, 230);
+        let accent = crate::theme::accent_texte();
         for &n in &self.board_notes {
             if let Some(b) = self.note_bounds(&layout, &texts, n) {
                 let r = xf.rect(b).expand(3.0);
@@ -699,7 +702,7 @@ impl App {
 
         let head_ink = if chosen {
             painter.rect_filled(header, 0.0, if current { accent } else { accent.gamma_multiply(0.6) });
-            Color32::WHITE
+            ui.visuals().selection.stroke.color
         } else {
             INK
         };
@@ -925,7 +928,7 @@ impl App {
 
     /// Repères du geste en cours : note, lasso, place où tomberont les panneaux.
     fn paint_board_drag(&self, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, gap: f32) {
-        let accent = Color32::from_rgb(40, 120, 230);
+        let accent = crate::theme::accent_texte();
         match &self.board_drag {
             Some(BoardDrag::Note { points, .. }) => paint_note(painter, view, xf, points, self.color),
             Some(BoardDrag::Rubber { start, now, .. }) => {
@@ -942,9 +945,9 @@ impl App {
                     n => format!("{n} plans"),
                 };
                 let p = xf.to_screen(*at) + vec2(14.0, 10.0);
-                let galley = painter.layout_no_wrap(label, FontId::proportional(13.0), Color32::WHITE);
-                painter.rect_filled(Rect::from_min_size(p, galley.size()).expand(4.0), 4.0, accent);
-                painter.galley(p, galley, Color32::WHITE);
+                let galley = painter.layout_no_wrap(label, FontId::proportional(13.0), crate::theme::sur_accent());
+                painter.rect_filled(Rect::from_min_size(p, galley.size()).expand(4.0), 4.0, crate::theme::accent());
+                painter.galley(p, galley, crate::theme::sur_accent());
             }
             _ => {}
         }

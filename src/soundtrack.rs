@@ -470,7 +470,7 @@ impl App {
         for (t, track) in self.doc.audio_tracks.iter().enumerate() {
             let y = lanes_top + t as f32 * TRACK_H;
             let lane = Rect::from_min_max(pos2(r.left(), y + 1.0), pos2(r.right(), y + TRACK_H - 1.0));
-            painter.rect_filled(lane, 0.0, theme::RANGEE_SOMBRE);
+            painter.rect_filled(lane, 0.0, theme::rangee_sombre());
             for clip in &track.clips {
                 let cr = Rect::from_min_max(
                     pos2(left + clip.start as f32 * ppf + 0.5, lane.top() + 1.0),
@@ -481,16 +481,16 @@ impl App {
                 }
                 let selected = self.sel_clip == Some(clip.id);
                 let fill = match (track.muted, selected) {
-                    (true, _) => theme::CONTROLE,
-                    (false, true) => theme::SON_CHOISI,
-                    (false, false) => theme::SON_EXTRAIT,
+                    (true, _) => theme::controle(),
+                    (false, true) => theme::son_choisi(),
+                    (false, false) => theme::son_extrait(),
                 };
                 painter.rect_filled(cr, 3.0, fill);
                 if let Some(sound) = self.doc.sounds.get(&clip.sound) {
                     let wave = if track.muted {
-                        theme::TEXTE_DOUX
+                        theme::texte_doux()
                     } else {
-                        theme::SON_ONDE
+                        theme::son_onde()
                     };
                     let inner = cr.shrink2(vec2(0.0, 2.0));
                     paint_wave(&painter.with_clip_rect(inner), inner, &sound.pcm, clip, left, ppf, fps, wave);
@@ -499,7 +499,7 @@ impl App {
                         Align2::LEFT_TOP,
                         &sound.name,
                         FontId::proportional(10.0),
-                        theme::TEXTE_FORT,
+                        if track.muted { theme::texte_fort() } else { theme::sur_calque() },
                     );
                 }
                 if selected {
@@ -527,7 +527,7 @@ impl App {
                 vec2(width - 8.0, TRACK_H - 2.0),
             );
             let mute = Rect::from_min_size(pos2(lane.left() + 5.0, lane.bottom() - 18.0), vec2(20.0, 15.0));
-            painter.rect_filled(lane, 3.0, theme::ETIQUETTE);
+            painter.rect_filled(lane, 3.0, theme::etiquette());
             let text = if track.muted {
                 visuals.weak_text_color()
             } else {
@@ -544,12 +544,12 @@ impl App {
                 mute,
                 2.0,
                 if track.muted {
-                    theme::SON_MUET
+                    theme::son_muet()
                 } else {
-                    theme::CONTROLE_SURVOL
+                    theme::controle_survol()
                 },
             );
-            painter.text(mute.center(), Align2::CENTER_CENTER, "M", FontId::monospace(10.0), Color32::WHITE);
+            painter.text(mute.center(), Align2::CENTER_CENTER, "M", FontId::monospace(10.0), if track.muted { Color32::WHITE } else { theme::texte_fort() });
             if track.locked {
                 painter.text(pos2(lane.right() - 6.0, lane.top() + 3.0), Align2::RIGHT_TOP, "🔒", FontId::proportional(11.0), visuals.text_color());
             }

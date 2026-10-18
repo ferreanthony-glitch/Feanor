@@ -8,7 +8,9 @@ use eframe::egui::{self, Color32, RichText};
 use crate::app::App;
 use crate::recovery::{now_secs, Orphan, Snapshot};
 
-const WARN: Color32 = Color32::from_rgb(240, 170, 60);
+fn warn() -> Color32 {
+    crate::theme::avertissement()
+}
 
 /// « il y a 3 min », « il y a 2 h », « il y a 4 jours ».
 pub fn ago(secs: u64) -> String {
@@ -107,7 +109,7 @@ impl App {
                         .map_or("projet jamais enregistré".to_string(), |p| p.display().to_string());
                     ui.label(RichText::new(format!("{when} · {place}")).small());
                     if o.project_is_newer() {
-                        ui.colored_label(WARN, "Le projet a été enregistré après cette copie : elle n'apporte sans doute rien.");
+                        ui.colored_label(warn(),"Le projet a été enregistré après cette copie : elle n'apporte sans doute rien.");
                     }
                     ui.horizontal(|ui| {
                         if ui.button("Ouvrir la copie").clicked() {

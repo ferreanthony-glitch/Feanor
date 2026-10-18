@@ -2,7 +2,7 @@
 //! d'outils verticale à gauche. Disposition inspirée des logiciels de storyboard (une barre de
 //! commandes, les outils en colonne), avec les icônes de Pelure. Bulles d'aide : `bulles.rs`.
 
-use eframe::egui::{self, vec2, Color32, RichText, Shape, Stroke};
+use eframe::egui::{self, vec2, RichText, Shape, Stroke};
 
 use crate::app::{App, Tool};
 
@@ -101,7 +101,7 @@ impl App {
                     if g > 0 {
                         ui.add_space(3.0);
                         let (rect, _) = ui.allocate_exact_size(vec2(26.0, 1.0), egui::Sense::hover());
-                        ui.painter().rect_filled(rect, 0.0, Color32::from_gray(70));
+                        ui.painter().rect_filled(rect, 0.0, crate::theme::bord());
                         ui.add_space(3.0);
                     }
                     for (s, slot) in group.iter().enumerate() {

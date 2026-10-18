@@ -468,8 +468,8 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   Panneau étroit : les catégories passent au-dessus, en liste déroulante.
   Liste ou vignettes, la catégorie et les dossiers ouverts sont retenus (`reglages.toml`,
   clé `panneau_pinceaux`). Les aperçus montrent le trait dans la couleur courante, sur le papier.
-  L'interface est sombre et dense (gris et bleu d'accent repris de Pelure Studio, police Segoe
-  UI). Les pinceaux texturés
+  L'interface est dense (police Segoe UI), en gris neutres, avec trois thèmes et un quatrième à
+  régler soi-même : voir « Apparence » plus bas. Les pinceaux texturés
   (pointe en image, grain du papier, pinceaux importés) marchent aussi sur un calque vectoriel :
   le trait reste modifiable, et ses textures sont enregistrées avec le projet.
 - **Formes** : Ligne (droite, courbe : tracer puis glisser pour courber ; courbe en S : deux
@@ -709,8 +709,24 @@ Les menus montrent l'essentiel ; le reste est rangé dans un sous-menu (« Plans
 « Ordre », « Plus »…) ou une fenêtre :
 - Fichier > Exporter… : film, images, image courante, PDF, page HTML, son, Storyboard Pro, et la
   case « PNG sans le papier » ;
-- Fichier > Préférences… : copie de secours, dernier projet rouvert, croix du système, panneaux
-  ajustés, raccourcis clavier.
+- Fichier > Préférences… : l'apparence (voir ci-dessous), copie de secours, dernier projet rouvert,
+  croix du système, panneaux ajustés, raccourcis clavier ;
+- Aide > À propos de SHOT… : le logo, la version et le nom d'avant (Échap ferme la fenêtre).
+
+### Apparence
+
+Fichier > Préférences…, en tête : le **thème** de l'interface, qui change tout de suite.
+- **Gris sombre** (par défaut) : gris neutres moyens, plus proches de Storyboard Pro ou de Clip
+  Studio Paint que du noir ; **Gris clair** (texte sombre, logo clair) ; **Sombre**, l'ancien thème
+  presque noir ; **Personnalisé**.
+- Neuf couleurs se règlent : fond des panneaux, barres, fenêtres et menus, boutons et curseurs,
+  texte, accent et sélection, fond autour du dessin, timeline et montage, bordures. Changer l'une
+  d'elles passe en « Personnalisé », en partant du thème qu'on avait. Le survol des boutons, le
+  texte secondaire, les couleurs des dessins, des clés, des marques et du son sont déduits de ces
+  neuf-là, assez contrastés pour rester lisibles (un thème clair prend des repères plus foncés).
+- « Rétablir » revient à Gris sombre. Le choix est retenu dans `reglages.toml` (section `[theme]`) ;
+  un ancien fichier sans cette section donne Gris sombre.
+- Les couleurs du dessin (papier, traits, couleurs du projet) ne changent jamais avec le thème.
 
 Ce qui a déjà un bouton sous le dessin (zoom, rotation, miroir, pelure, table lumineuse, caméra)
 n'est plus répété dans Affichage ni dans le clic droit du dessin. La couleur du papier se règle

@@ -198,7 +198,7 @@ impl App {
         let (frame, fps) = (self.doc.frame, self.doc.fps);
         let current = ResolutionEdit { w: frame[0], h: frame[1], fps, linked: true, scale: true, keep_seconds: true, interpolate: false };
         let mut e = self.res_edit.unwrap_or(current);
-        let warn = egui::Color32::from_rgb(240, 170, 60);
+        let warn = crate::theme::avertissement();
         ui.set_width(440.0);
         ui.label(RichText::new("Préréglages").strong());
         egui::ScrollArea::vertical().max_height(160.0).id_salt("prereglages_resolution").show(ui, |ui| {

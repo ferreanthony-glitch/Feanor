@@ -10,8 +10,13 @@ use crate::audio;
 use crate::export::{self, ExportJob, ExportSettings, Format, Progress, Range};
 use crate::storyboard::duration_label;
 
-const WARN: Color32 = Color32::from_rgb(240, 170, 60);
-const GOOD: Color32 = Color32::from_rgb(120, 210, 130);
+fn warn() -> Color32 {
+    crate::theme::avertissement()
+}
+
+fn good() -> Color32 {
+    crate::theme::succes()
+}
 
 impl App {
     /// Ouvre la fenêtre d'export, sur le contenu `format`.
@@ -135,15 +140,15 @@ impl App {
                         };
                         ui.label(RichText::new(format!("ffmpeg : {}", path.display())).small());
                         if let Some(m) = missing {
-                            ui.colored_label(WARN, m);
+                            ui.colored_label(warn(), m);
                         }
                     }
                     Some((path, Err(e))) => {
-                        ui.colored_label(WARN, format!("{} : {e}", path.display()));
+                        ui.colored_label(warn(), format!("{} : {e}", path.display()));
                     }
                     None => {
                         ui.colored_label(
-                            WARN,
+                            warn(),
                             "ffmpeg introuvable. C'est lui qui fabrique la vidéo : installe-le (il vient par \
                              exemple avec Krita), ou indique où il est.",
                         );
@@ -259,11 +264,11 @@ impl App {
                     match &job.outcome {
                         Some(Ok(msg)) => {
                             let s = job.started.elapsed().as_secs();
-                            ui.colored_label(GOOD, format!("Terminé en {}:{:02}.", s / 60, s % 60));
+                            ui.colored_label(good(),format!("Terminé en {}:{:02}.", s / 60, s % 60));
                             ui.label(msg);
                         }
                         Some(Err(e)) => {
-                            ui.colored_label(WARN, e);
+                            ui.colored_label(warn(), e);
                         }
                         None => {}
                     }

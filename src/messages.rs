@@ -3,7 +3,7 @@
 //! entier) ; les avis importants (enregistrement, ouverture, erreurs, fin de propagation, export)
 //! s'affichent aussi quelques secondes en bas à droite, où un clic les ferme.
 
-use eframe::egui::{self, Align2, Color32, RichText, Vec2};
+use eframe::egui::{self, Align2, RichText, Vec2};
 
 use crate::app::App;
 
@@ -87,11 +87,11 @@ impl App {
                 .anchor(Align2::RIGHT_BOTTOM, Vec2::new(-16.0, -36.0))
                 .show(ctx, |ui| {
                     for (k, (_, msg)) in self.toasts.iter().enumerate().rev() {
-                        let frame = egui::Frame::popup(ui.style()).fill(crate::theme::ELEVE).stroke(egui::Stroke::new(1.0_f32, crate::theme::ACCENT));
+                        let frame = egui::Frame::popup(ui.style()).fill(crate::theme::eleve()).stroke(egui::Stroke::new(1.0_f32, crate::theme::accent_texte()));
                         let resp = frame
                             .show(ui, |ui| {
                                 ui.set_max_width(420.0);
-                                ui.add(egui::Label::new(RichText::new(msg).color(Color32::WHITE)).wrap());
+                                ui.add(egui::Label::new(RichText::new(msg).color(crate::theme::texte_fort())).wrap());
                             })
                             .response
                             .interact(egui::Sense::click());

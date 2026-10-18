@@ -11,7 +11,7 @@ use crate::handles::Handle;
 use crate::history::Edit;
 use crate::soundtrack::{ClipDrag, ClipEdge, MenuTarget};
 use crate::theme;
-use crate::timeline::CUR_FRAME;
+use crate::timeline::cur_frame;
 
 pub(crate) enum MontageDrag {
     /// Bord droit d'un plan tiré : on change sa durée. Les calques sont recalculés depuis
@@ -726,14 +726,14 @@ impl App {
         }
 
         // Règle : une graduation par seconde, un repère lisible tous les ~60 pixels.
-        painter.rect_filled(Rect::from_min_max(r.min, pos2(r.right(), bands_top)), 0.0, theme::REGLE);
+        painter.rect_filled(Rect::from_min_max(r.min, pos2(r.right(), bands_top)), 0.0, theme::regle());
         let label_every = ((60.0 / (fps as f32 * ppf)).ceil() as usize).max(1);
         for s in 0..=(shown / fps + 2) {
             let x = x_of(s * fps);
             let major = s % label_every == 0;
             painter.line_segment(
                 [pos2(x, r.top() + if major { 3.0 } else { 10.0 }), pos2(x, bands_top)],
-                Stroke::new(1.0_f32, theme::GRADUATION_SECONDE),
+                Stroke::new(1.0_f32, theme::graduation_seconde()),
             );
             if major {
                 painter.text(
@@ -768,13 +768,13 @@ impl App {
             } else if chosen {
                 visuals.selection.bg_fill.gamma_multiply(0.3)
             } else {
-                theme::BLOC
+                theme::bloc()
             };
             // Plan coloré (couleur de repère) : fond teinté, puis le ton du plan courant ou choisi
             // par-dessus, et une bande pleine en haut ; le contour de sélection reste le même.
             if let Some(tag) = self.doc.panels[i].color {
                 let c = crate::marks::color(tag);
-                painter.rect_filled(rect, 4.0, theme::BLOC.lerp_to_gamma(c, 0.42));
+                painter.rect_filled(rect, 4.0, theme::bloc().lerp_to_gamma(c, 0.42));
                 if selected || chosen {
                     painter.rect_filled(rect, 4.0, visuals.selection.bg_fill.gamma_multiply(if selected { 0.4 } else { 0.2 }));
                 }
@@ -809,10 +809,10 @@ impl App {
             // Marques d'image (13a) : chacune, une image de storyboard de plus dans le plan.
             for m in self.doc.panels[i].marks.iter().filter(|m| m.frame < len) {
                 let x = rect.left() - 1.0 + m.frame as f32 * ppf;
-                clip.line_segment([pos2(x, rect.top() + 2.0), pos2(x, rect.bottom() - 2.0)], Stroke::new(1.0_f32, theme::MARQUE));
+                clip.line_segment([pos2(x, rect.top() + 2.0), pos2(x, rect.bottom() - 2.0)], Stroke::new(1.0_f32, theme::marque()));
                 clip.add(egui::Shape::convex_polygon(
                     vec![pos2(x - 4.0, rect.top() + 2.0), pos2(x + 4.0, rect.top() + 2.0), pos2(x, rect.top() + 8.0)],
-                    theme::MARQUE,
+                    theme::marque(),
                     Stroke::NONE,
                 ));
             }
@@ -820,7 +820,7 @@ impl App {
                 painter.rect_stroke(
                     rect,
                     4.0,
-                    Stroke::new(if selected { 2.0_f32 } else { 1.0_f32 }, visuals.selection.stroke.color),
+                    Stroke::new(if selected { 2.0_f32 } else { 1.0_f32 }, theme::contour()),
                     StrokeKind::Inside,
                 );
             }
@@ -828,7 +828,7 @@ impl App {
             painter.rect_filled(
                 Rect::from_min_max(pos2(rect.right() - 4.0, rect.top() + 10.0), pos2(rect.right() - 1.0, rect.bottom() - 10.0)),
                 1.0,
-                theme::POIGNEE,
+                theme::poignee(),
             );
         }
 
@@ -891,8 +891,8 @@ impl App {
             None => None,
         };
         let drops = self.drop_view();
-        self.paint_track_rows(&painter, r, &blocks, ppf, rows, &visuals, lit, &drops);
-        self.paint_lanes(&painter, r, left, ppf, lanes_top, visuals.selection.stroke.color);
+        self.paint_track_rows(&painter, r, &blocks, ppf, rows, lit, &drops);
+        self.paint_lanes(&painter, r, left, ppf, lanes_top, theme::contour());
 
         let panel_at = |x: f32| blocks.iter().position(|b| x >= b.left() - 1.0 && x <= b.right() + 1.0);
         let edge_at = |p: Pos2| {
@@ -1054,7 +1054,7 @@ impl App {
                 let (a, b) = (row(o.y.min(p.y)), row(o.y.max(p.y)));
                 let (g0, g1) = (free_frame_at(o.x.min(p.x)), free_frame_at(o.x.max(p.x)));
                 self.drag_key_rect(a..=b, g0, g1);
-                let accent = visuals.selection.stroke.color;
+                let accent = theme::contour();
                 painter.rect(Rect::from_two_pos(o, p), 2.0, accent.gamma_multiply(0.15), Stroke::new(1.5_f32, accent), StrokeKind::Inside);
             }
             if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
@@ -1351,10 +1351,10 @@ impl App {
 
         // Tête de lecture et repère de déplacement.
         let gx = x_of(self.global_frame());
-        painter.line_segment([pos2(gx, r.top()), pos2(gx, r.bottom())], Stroke::new(2.0_f32, CUR_FRAME));
+        painter.line_segment([pos2(gx, r.top()), pos2(gx, r.bottom())], Stroke::new(2.0_f32, cur_frame()));
         painter.add(egui::Shape::convex_polygon(
             vec![pos2(gx - 5.0, r.top()), pos2(gx + 5.0, r.top()), pos2(gx, r.top() + 7.0)],
-            CUR_FRAME,
+            cur_frame(),
             Stroke::NONE,
         ));
         if let Some(MontageDrag::Move { target, .. }) = &self.montage_drag {
@@ -1364,7 +1364,7 @@ impl App {
             };
             painter.line_segment(
                 [pos2(x, top - 2.0), pos2(x, top + block_h + 2.0)],
-                Stroke::new(3.0_f32, visuals.selection.stroke.color),
+                Stroke::new(3.0_f32, theme::contour()),
             );
         }
 

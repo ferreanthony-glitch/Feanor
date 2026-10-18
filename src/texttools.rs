@@ -285,7 +285,7 @@ impl App {
             ui.label(
                 egui::RichText::new(format!("« {} » n'est pas sur ce poste : texte dessiné en {used}.", self.text_font))
                     .small()
-                    .color(Color32::from_rgb(230, 170, 60)),
+                    .color(crate::theme::avertissement()),
             );
         }
         ui.label(

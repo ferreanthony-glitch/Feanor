@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
-use eframe::egui::{self, vec2, Align2, Color32, RichText};
+use eframe::egui::{self, vec2, Align2, RichText};
 
 use crate::app::{App, Pending};
 use crate::document::Document;
@@ -225,7 +225,7 @@ fn read_drawings(w: &mut SbWindow) {
 
 /// Le contenu de la fenêtre ; vrai si l'on demande l'import.
 fn window_body(ui: &mut egui::Ui, w: &mut SbWindow, ctx: &egui::Context) -> bool {
-    let warn = Color32::from_rgb(240, 170, 60);
+    let warn = crate::theme::avertissement();
     match &w.project {
         Some(Ok(sb)) => {
             let panels: usize = sb.shots.iter().map(|s| s.panels.len()).sum();

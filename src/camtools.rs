@@ -376,7 +376,7 @@ impl App {
             let mut mesh = egui::Mesh::default();
             // En vue caméra, rien ne doit transparaître hors du cadre : couleur du fond, opaque.
             let color = if self.camera_view {
-                crate::theme::FOND
+                crate::theme::fond()
             } else {
                 Color32::from_black_alpha(alpha)
             };
@@ -439,7 +439,7 @@ impl App {
         use crate::bulles::{bulle, etat_si, TAILLE};
         use egui_phosphor::regular as ph;
         let here = self.camera_key_here().copied();
-        let resp = ui.label(RichText::new(ph::VIDEO_CAMERA).size(TAILLE).color(crate::theme::CAMERA));
+        let resp = ui.label(RichText::new(ph::VIDEO_CAMERA).size(TAILLE).color(crate::theme::camera()));
         bulle(resp, "Images clés de la caméra", "Position, focale et adoucis en détail : réglages de l'outil Caméra.", "");
         if let Some(a) = self.camera_key_buttons(ui, here.is_some()) {
             self.run_action(a);

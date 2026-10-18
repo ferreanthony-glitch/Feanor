@@ -301,10 +301,10 @@ impl App {
                                 );
                             }
                             None => {
-                                ui.painter().rect_filled(rect, 0.0, Color32::from_gray(60));
+                                ui.painter().rect_filled(rect, 0.0, crate::theme::controle());
                             }
                         }
-                        let border = if current { Stroke::new(2.0_f32, Color32::WHITE) } else { Stroke::new(1.0_f32, Color32::from_gray(80)) };
+                        let border = if current { Stroke::new(2.0_f32, crate::theme::contour()) } else { Stroke::new(1.0_f32, crate::theme::bord()) };
                         ui.painter().rect_stroke(rect, 0.0, border, StrokeKind::Inside);
                         if resp.clicked() || resp.secondary_clicked() {
                             select = Some((li, resp.secondary_clicked()));
@@ -377,7 +377,7 @@ impl App {
                 let slot = drag_rows.iter().filter(|r| r.top + r.h * 0.5 < p.y - list_top).count();
                 let y = list_top + drag_rows.get(slot).map_or_else(|| drag_rows.last().map_or(0.0, |r| r.top + r.h), |r| r.top);
                 let x = ui.max_rect().x_range();
-                ui.painter().line_segment([egui::pos2(x.min, y), egui::pos2(x.max, y)], Stroke::new(2.0_f32, Color32::WHITE));
+                ui.painter().line_segment([egui::pos2(x.min, y), egui::pos2(x.max, y)], Stroke::new(2.0_f32, crate::theme::contour()));
             }
             if ui.input(|i| !i.pointer.any_down()) {
                 self.panel_layer_drag = None;

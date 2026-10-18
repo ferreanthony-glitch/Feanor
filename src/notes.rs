@@ -302,6 +302,6 @@ impl App {
         for n in notes {
             paint_note(&clipped, n, &to_screen, scale);
         }
-        clipped.line_segment([pos2(band.center().x, band.top()), pos2(band.center().x, band.bottom())], Stroke::new(1.5_f32, crate::theme::IMAGE_COURANTE));
+        clipped.line_segment([pos2(band.center().x, band.top()), pos2(band.center().x, band.bottom())], Stroke::new(1.5_f32, crate::theme::image_courante()));
     }
 }

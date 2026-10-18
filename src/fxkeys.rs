@@ -30,8 +30,10 @@ use crate::app::{App, Mode};
 use crate::fx::{Effect, EffectKind, FxKey};
 use crate::history::Edit;
 
-/// La couleur d'une clé d'effet.
-pub(crate) const COLOR: Color32 = Color32::from_rgb(182, 103, 230);
+/// La couleur d'une clé d'effet : le violet du thème.
+pub(crate) fn color() -> Color32 {
+    crate::theme::effet()
+}
 
 /// Hauteur, depuis le haut d'une piste, de la zone où une clé d'effet se prend.
 pub(crate) const STRIP: f32 = 14.0;
@@ -261,8 +263,8 @@ pub(crate) fn paint_markers(painter: &Painter, e: &Effect, x_of: impl Fn(usize) 
 /// Un losange : violet, cerclé de noir ; choisi : plus grand et cerclé de blanc.
 fn paint_marker(painter: &Painter, c: Pos2, chosen: bool) {
     let d = if chosen { 6.0 } else { 4.5 };
-    let outline = if chosen { Stroke::new(2.0_f32, Color32::WHITE) } else { Stroke::new(1.0_f32, Color32::from_black_alpha(200)) };
-    painter.add(Shape::convex_polygon(vec![c + vec2(0.0, -d), c + vec2(d, 0.0), c + vec2(0.0, d), c + vec2(-d, 0.0)], COLOR, outline));
+    let outline = if chosen { Stroke::new(2.0_f32, crate::theme::contour()) } else { Stroke::new(1.0_f32, Color32::from_black_alpha(200)) };
+    painter.add(Shape::convex_polygon(vec![c + vec2(0.0, -d), c + vec2(d, 0.0), c + vec2(0.0, d), c + vec2(-d, 0.0)], color(), outline));
 }
 
 // ---------------------------------------------------------------------- geste en cours

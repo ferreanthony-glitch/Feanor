@@ -17,7 +17,7 @@ pub struct Settings {
     #[serde(default = "default_autosave", rename = "copie_secours_minutes")]
     pub autosave_minutes: u32,
     /// Croix du système sur le dessin, en plus du cercle du pinceau : Windows la déplace dès que
-    /// le stylet bouge, sans attendre l'image suivante (le cercle, dessiné par Pelure, la suit).
+    /// le stylet bouge, sans attendre l'image suivante (le cercle, dessiné par SHOT, la suit).
     #[serde(default = "yes", rename = "curseur_systeme")]
     pub system_cursor: bool,
     /// Projet modèle de Storyboard Pro (14b) : l'export vers Storyboard Pro part d'une copie de ce
@@ -82,6 +82,10 @@ pub struct Settings {
     /// de l'utilisateur (`nouveau.rs`).
     #[serde(default, rename = "nouveau_projet")]
     pub new_project: crate::nouveau::NewProjectSettings,
+    /// Thème de l'interface (2026-10-18) : Gris sombre (par défaut), Gris clair, Sombre ou
+    /// Personnalisé avec ses neuf couleurs (`theme.rs`, Fichier > Préférences…).
+    #[serde(default, rename = "theme")]
+    pub theme: crate::theme::ReglageTheme,
 }
 
 fn default_autosave() -> u32 {
@@ -121,6 +125,7 @@ impl Default for Settings {
             toucher: Default::default(),
             brushes_panel: Default::default(),
             new_project: Default::default(),
+            theme: Default::default(),
         }
     }
 }

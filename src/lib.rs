@@ -4,6 +4,9 @@
 //! `lancer`. La bibliothèque garde le nom `pelure` (les chemins `pelure::` ne changent pas).
 
 mod accueil;
+mod aproposui;
+#[cfg(test)]
+mod aproposui_tests;
 mod donnees;
 #[cfg(test)]
 mod donnees_tests;

@@ -9,7 +9,7 @@
 //! suivent la même règle de clic que l'icône. Le dessin ne coûte que dix icônes : la place des
 //! panneaux n'est lue qu'au clic.
 
-use eframe::egui::{self, vec2, Color32, RichText};
+use eframe::egui::{self, vec2, RichText};
 use egui_dock::{DockState, Node};
 
 use crate::app::{App, Mode};
@@ -122,7 +122,7 @@ impl App {
                 if g > 0 {
                     ui.add_space(3.0);
                     let (rect, _) = ui.allocate_exact_size(vec2(18.0, 1.0), egui::Sense::hover());
-                    ui.painter().rect_filled(rect, 0.0, Color32::from_gray(70));
+                    ui.painter().rect_filled(rect, 0.0, crate::theme::bord());
                     ui.add_space(3.0);
                 }
                 let animation = self.mode == Mode::Animation;

@@ -161,7 +161,7 @@ impl App {
         let size = vec2(HEAD_W, header_h + rows_height(&rows) + below);
         let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
         let painter = ui.painter_at(rect);
-        painter.rect_filled(Rect::from_min_size(rect.min, vec2(HEAD_W, header_h)), 0.0, theme::REGLE);
+        painter.rect_filled(Rect::from_min_size(rect.min, vec2(HEAD_W, header_h)), 0.0, theme::regle());
         // Le calque courant est dans un groupe caché de la timeline : on le dit, et un clic sur
         // la couleur de son groupe le remontre.
         let hidden_group = self.layers().get(self.cur_layer).map(|l| l.group as usize).filter(|&g| !self.doc.groups[g].shown);
@@ -177,7 +177,7 @@ impl App {
                     Align2::LEFT_CENTER,
                     format!("{} Calque courant dans « {name} »", ph::FOLDER),
                     FontId::proportional(11.0),
-                    theme::MARQUE,
+                    theme::marque(),
                 );
                 if bulle(resp, "Le calque courant est dans un dossier fermé", "Clic : ouvrir le dossier.", "").clicked() {
                     self.layers_mut()[fi].collapsed = false;
@@ -194,7 +194,7 @@ impl App {
                     Align2::LEFT_CENTER,
                     "Calque courant caché",
                     FontId::proportional(11.0),
-                    theme::MARQUE,
+                    theme::marque(),
                 );
                 let tip = format!("Il est dans le groupe « {} », caché de la timeline. Clic sur la couleur pour montrer ce groupe.", group.name);
                 if bulle(resp, "Le calque est caché", &tip, "").clicked() {
@@ -213,20 +213,20 @@ impl App {
         }
         // Nouveau dossier (13b-5).
         let r = Rect::from_min_size(pos2(rect.right() - 88.0, rect.top()), vec2(20.0, header_h));
-        let resp = icon_at(ui, r, ph::FOLDER_PLUS, theme::TEXTE_DOUX);
+        let resp = icon_at(ui, r, ph::FOLDER_PLUS, theme::texte_doux());
         if self.aide(resp, "Nouveau dossier", "Un dossier de calques vide ; glisser des calques dedans, ou menu ☰ > Dossiers.", "dossier.nouveau").clicked() {
             self.new_folder();
         }
         // Groupes de couleur (13b-4).
         let r = Rect::from_min_size(pos2(rect.right() - 66.0, rect.top()), vec2(20.0, header_h));
-        let resp = icon_at(ui, r, ph::SWATCHES, theme::TEXTE_DOUX);
+        let resp = icon_at(ui, r, ph::SWATCHES, theme::texte_doux());
         if self.aide(resp, "Groupes de calques", "Noms, couleurs, et quels groupes la timeline montre.", "groupes.editer").clicked() {
             self.groups_window = !self.groups_window;
         }
         // Menu des opérations sur les calques.
         let r = Rect::from_min_size(pos2(rect.right() - 44.0, rect.top()), vec2(20.0, header_h));
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt("menu_calques_timeline"));
-        let button = egui::Button::new(RichText::new(ph::LIST).size(13.0).color(theme::TEXTE_DOUX)).frame(false);
+        let button = egui::Button::new(RichText::new(ph::LIST).size(13.0).color(theme::texte_doux())).frame(false);
         let resp = egui::menu::menu_custom_button(&mut child, button, |ui| self.layer_ops_menu(ui)).response;
         bulle(
             resp,
@@ -238,7 +238,7 @@ impl App {
         let all_small = self.layers().iter().all(|l| l.collapsed);
         let r = Rect::from_min_size(pos2(rect.right() - 22.0, rect.top()), vec2(20.0, header_h));
         let icon = if all_small { ph::ARROWS_OUT_LINE_VERTICAL } else { ph::ARROWS_IN_LINE_VERTICAL };
-        let resp = icon_at(ui, r, icon, theme::TEXTE_DOUX);
+        let resp = icon_at(ui, r, icon, theme::texte_doux());
         let what = if all_small { "Agrandir toutes les lignes" } else { "Réduire toutes les lignes" };
         if bulle(resp, what, "Lignes complètes (réglages, opacité, mode) ou réduites à leur nom.", "").clicked() {
             for l in self.layers_mut() {
@@ -260,7 +260,7 @@ impl App {
                 // Le trait est entre les deux lignes où le calque va se glisser.
                 let slot = rows.iter().filter(|r| r.top + r.h * 0.5 < p.y - top).count();
                 let y = top + rows.get(slot).map_or(rows_height(&rows), |r| r.top);
-                painter.line_segment([pos2(rect.left(), y), pos2(rect.right(), y)], Stroke::new(2.0_f32, Color32::WHITE));
+                painter.line_segment([pos2(rect.left(), y), pos2(rect.right(), y)], Stroke::new(2.0_f32, theme::contour()));
             }
             if ui.input(|i| !i.pointer.any_down()) {
                 self.head_drag = None;
@@ -304,7 +304,7 @@ impl App {
         // Calque rangé dans un dossier : la ligne est décalée, un trait la relie à son dossier.
         let rect = if h.in_folder {
             let gap = Rect::from_min_size(rect.min, vec2(INDENT, rect.height()));
-            ui.painter().rect_filled(gap.shrink2(vec2(5.0, 0.0)), 0.0, theme::TEXTE_DOUX.gamma_multiply(0.6));
+            ui.painter().rect_filled(gap.shrink2(vec2(5.0, 0.0)), 0.0, theme::texte_doux().gamma_multiply(0.6));
             Rect::from_min_max(pos2(rect.left() + INDENT, rect.top()), rect.max)
         } else {
             rect
@@ -315,7 +315,7 @@ impl App {
         let bg = match (current, self.is_chosen_layer(li)) {
             (true, _) => visuals.selection.bg_fill,
             (false, true) => visuals.selection.bg_fill.gamma_multiply(0.45),
-            (false, false) => theme::ETIQUETTE,
+            (false, false) => theme::etiquette(),
         };
         painter.rect_filled(r, 2.0, bg);
         // Sur le bleu du calque courant, tout passe en blanc (le seul lisible sur l'accent).
@@ -430,10 +430,10 @@ impl App {
                 painter.image(t.id(), thumb, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), tint);
             }
             None => {
-                painter.rect_filled(thumb, 0.0, Color32::from_gray(60));
+                painter.rect_filled(thumb, 0.0, theme::controle());
             }
         }
-        painter.rect_stroke(thumb, 0.0, Stroke::new(1.0_f32, Color32::from_gray(80)), StrokeKind::Inside);
+        painter.rect_stroke(thumb, 0.0, Stroke::new(1.0_f32, theme::bord()), StrokeKind::Inside);
 
         // Réglages en icônes.
         let y2 = r.top() + 20.0;
@@ -542,12 +542,12 @@ impl App {
         description: &str,
     ) {
         let mut resp = ui.interact(bar, key, Sense::click_and_drag());
-        painter.rect_filled(bar, 2.0, Color32::from_gray(38));
+        painter.rect_filled(bar, 2.0, theme::champ());
         let fill = Rect::from_min_size(bar.min, vec2(bar.width() * opacity.clamp(0.0, 1.0), bar.height()));
-        painter.rect_filled(fill, 2.0, Color32::from_gray(if current { 235 } else { 190 }));
-        // Le texte est sombre sur la partie pleine, clair sur le reste.
+        painter.rect_filled(fill, 2.0, if current { theme::texte_fort() } else { theme::texte_doux() });
+        // Le texte a la couleur du fond de la barre sur la partie pleine, celle du texte sur le reste.
         let pct = format!("{:.0} %", opacity * 100.0);
-        for (part, ink) in [(fill, Color32::from_gray(25)), (Rect::from_min_max(pos2(fill.right(), bar.top()), bar.max), Color32::from_gray(220))] {
+        for (part, ink) in [(fill, theme::champ()), (Rect::from_min_max(pos2(fill.right(), bar.top()), bar.max), theme::texte())] {
             painter.with_clip_rect(part.intersect(clip)).text(bar.center(), Align2::CENTER_CENTER, &pct, FontId::proportional(10.0), ink);
         }
         let mut value = opacity;

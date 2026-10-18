@@ -19,12 +19,18 @@ const RECENTS: usize = 8;
 /// Largeur du logo sur la carte, en points.
 const LOGO_LARGEUR: f32 = 400.0;
 
+/// Le logo à montrer est-il celui des fonds sombres ? Non quand le fond des panneaux est clair
+/// (thème clair : `Palette::claire`, `Visuals::light`).
+pub(crate) fn logo_sombre() -> bool {
+    !crate::theme::palette().claire
+}
+
 /// La texture du logo, à la taille exacte de l'écran (points × pixels par point), dans la variante
 /// qui va avec le thème. Refaite seulement si l'un des trois change.
-fn logo_texture(ctx: &egui::Context) -> egui::TextureHandle {
-    let sombre = ctx.style().visuals.dark_mode;
-    let pixels = (LOGO_LARGEUR * ctx.pixels_per_point()).round().max(8.0) as u32;
-    let id = egui::Id::new("shot_logo_accueil");
+pub(crate) fn logo_texture(ctx: &egui::Context, largeur: f32) -> egui::TextureHandle {
+    let sombre = logo_sombre();
+    let pixels = (largeur * ctx.pixels_per_point()).round().max(8.0) as u32;
+    let id = egui::Id::new(("shot_logo", largeur as u32));
     if let Some((cle, texture)) = ctx.data(|d| d.get_temp::<((u32, bool), egui::TextureHandle)>(id)) {
         if cle == (pixels, sombre) {
             return texture;
@@ -61,7 +67,7 @@ impl App {
                 ui.set_width(460.0);
                 ui.vertical_centered(|ui| {
                     ui.add_space(6.0);
-                    let texture = logo_texture(ctx);
+                    let texture = logo_texture(ctx, LOGO_LARGEUR);
                     ui.image(egui::load::SizedTexture::new(texture.id(), egui::vec2(LOGO_LARGEUR, LOGO_LARGEUR * VUE_H / VUE_L)));
                     ui.add_space(10.0);
                 });

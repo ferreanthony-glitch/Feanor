@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
-use eframe::egui::{self, vec2, Align2, Color32, RichText};
+use eframe::egui::{self, vec2, Align2, RichText};
 
 use crate::app::App;
 use crate::sbexport::{self, Built, SbExportJob, SbOut, Stage};
@@ -172,7 +172,7 @@ impl App {
 
     /// Le contenu de la fenêtre ; vrai si l'on demande l'export.
     fn sb_export_body(&mut self, ui: &mut egui::Ui, w: &mut SbExportWindow) -> bool {
-        let warn = Color32::from_rgb(240, 170, 60);
+        let warn = crate::theme::avertissement();
         let busy = w.busy();
         let exe = crate::sbbatch::find_storyboard_pro();
         let (plans, panels, drawn, clips) = sbexport::counts(&w.preview);
