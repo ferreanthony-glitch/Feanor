@@ -688,6 +688,17 @@ impl std::ops::Deref for Shown<'_> {
 /// Numéro du dessin dérivé d'un élément du plan : le dessin lui-même sans effet ni remplissage
 /// CTG, sinon un numéro propre à ce dessin, ces effets et ces sources.
 pub fn shown_id(item: &crate::render::PlanItem) -> CelId {
+    // Fond sous le trait (`fond.rs`) : un numéro propre au fond de ce dessin.
+    if let Some(part) = &item.fond {
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        item.cel.hash(&mut h);
+        "fond".hash(&mut h);
+        match part {
+            crate::render::FondPart::Forme(r) => r.hash(&mut h),
+            crate::render::FondPart::Peinture => "peinture".hash(&mut h),
+        }
+        return h.finish() | (1 << 63);
+    }
     match &item.ctg {
         None if item.fx.is_empty() => item.cel,
         None => fx_id(item.cel, &item.fx),
@@ -704,7 +715,42 @@ pub fn shown_id(item: &crate::render::PlanItem) -> CelId {
 /// Le dessin d'un élément du plan tel qu'il s'affiche : effets (13i) et remplissage CTG (13j)
 /// compris.
 pub fn shown<'a>(doc: &'a Document, item: &crate::render::PlanItem) -> Option<Shown<'a>> {
-    shown_with(doc, item.cel, &item.fx, item.ctg.as_ref())
+    match item.fond {
+        None => shown_with(doc, item.cel, &item.fx, item.ctg.as_ref()),
+        // Ce qu'on peint dans le fond, en direct (la strate elle-même).
+        Some(crate::render::FondPart::Peinture) => doc.cels.get(&item.cel)?.fond.as_deref().map(Shown::Plain),
+        Some(crate::render::FondPart::Forme(r)) => fond_shown(doc, item, &r),
+    }
+}
+
+/// Le fond sous le trait du dessin de `item` : sa forme et ce qu'on y a peint (calculé une fois,
+/// puis gardé tant que le dessin, sa strate Fond et les réglages ne changent pas).
+fn fond_shown<'a>(doc: &'a Document, item: &crate::render::PlanItem, r: &crate::fond::FondReglages) -> Option<Shown<'a>> {
+    let src = doc.cels.get(&item.cel)?;
+    let id = shown_id(item);
+    let version = {
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        src.version.hash(&mut h);
+        src.fond.as_ref().map_or(0, |f| f.version + 1).hash(&mut h);
+        h.finish()
+    };
+    let tick = TICK.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(e) = cache.get_mut(&id).filter(|e| e.version == version) {
+        e.used = tick;
+        return Some(Shown::Fx(e.cel.clone()));
+    }
+    let (w, h) = (src.raster.width, src.raster.height);
+    let cover = crate::fond::silhouette(&src.raster, r);
+    let raster = crate::fond::compose(&cover, w, h, r.couleur, src.fond.as_ref().map(|f| &f.raster));
+    let derived = Arc::new(Cel { raster, vector: None, version, fond: None });
+    cache.insert(id, Entry { version, cel: derived.clone(), used: tick });
+    if cache.len() > CACHE_MAX {
+        if let Some(old) = cache.iter().min_by_key(|(_, e)| e.used).map(|(k, _)| *k) {
+            cache.remove(&old);
+        }
+    }
+    Some(Shown::Fx(derived))
 }
 
 /// Le dessin `cel`, rempli d'après `ctg` (dessins des sources, trous) s'il est d'un calque CTG, puis passé par
@@ -723,6 +769,7 @@ pub fn shown_with<'a>(doc: &'a Document, cel: CelId, steps: &[FxStep], ctg: Opti
         blend: Default::default(),
         fx: steps.to_vec(),
         ctg: ctg.cloned(),
+        fond: None,
     };
     let id = shown_id(&item);
     // Version : celle du dessin, et celles des sources du remplissage.

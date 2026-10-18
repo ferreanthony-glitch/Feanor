@@ -21,6 +21,25 @@ pub struct PlanItem {
     /// Calque CTG (13j) : les dessins de ses sources à cette image (le dessin est rempli d'après
     /// leurs traits) ; rien pour un calque ordinaire.
     pub ctg: Option<crate::ctg::CtgInput>,
+    /// Fond sous le trait (`fond.rs`) : cet élément montre le fond du dessin `cel`, pas son trait.
+    pub fond: Option<FondPart>,
+}
+
+/// Ce que montre un élément de fond.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum FondPart {
+    /// La forme déduite du trait, de ces réglages, avec ce qu'on a peint dans le fond, dans la
+    /// forme (recalculée quand le dessin change).
+    Forme(crate::fond::FondReglages),
+    /// Ce qu'on a peint dans le fond, tel quel : pendant qu'on y peint, suivi en direct.
+    Peinture,
+}
+
+/// L'élément du fond sous le trait du calque `layer` (s'il en a un), à placer juste sous `line`,
+/// l'élément de son dessin.
+pub fn fond_item(layer: &crate::document::Layer, line: &PlanItem) -> Option<PlanItem> {
+    let r = layer.fond.filter(|_| !layer.folder && layer.ctg.is_none() && layer.video.is_none())?;
+    Some(PlanItem { fx: Vec::new(), ctg: None, fond: Some(FondPart::Forme(r)), ..line.clone() })
 }
 
 /// Couleur du dessin au point (`x`, `y`) de ses pixels (interpolation bilinéaire, prémultipliée).
@@ -284,18 +303,18 @@ pub fn layer_plan_at(doc: &Document, index: usize, li: usize, frame: usize) -> O
     }
     let cel = crate::video::cel_at(l, frame, doc.fps)?;
     let t = l.transform;
-    Some(Plan {
-        paper: None,
-        items: vec![PlanItem {
-            cel,
-            opacity: 255,
-            tint: None,
-            transform: (!t.is_identity()).then_some(t),
-            blend: BlendMode::Normal,
-            fx: crate::fx::steps_at(&l.fx, frame),
-            ctg: crate::ctg::input(&panel.layers, li, frame),
-        }],
-    })
+    let line = PlanItem {
+        cel,
+        opacity: 255,
+        tint: None,
+        transform: (!t.is_identity()).then_some(t),
+        blend: BlendMode::Normal,
+        fx: crate::fx::steps_at(&l.fx, frame),
+        ctg: crate::ctg::input(&panel.layers, li, frame),
+        fond: None,
+    };
+    // Le fond sous le trait fait partie de l'image du calque.
+    Some(Plan { paper: None, items: fond_item(l, &line).into_iter().chain([line]).collect() })
 }
 
 fn plan_with_camera(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, fps: u32) -> Plan {
@@ -318,8 +337,12 @@ fn plan_with_camera(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera:
                     blend: l.blend,
                     fx: crate::fx::steps_at(&l.fx, frame),
                     ctg: crate::ctg::input(&panel.layers, li, frame),
+                    fond: None,
                 })
+                .map(|line| (li, line))
             })
+            // Le fond sous le trait (`fond.rs`), juste sous le dessin de son calque.
+            .flat_map(|(li, line)| fond_item(&panel.layers[li], &line).into_iter().chain([line]))
             .collect(),
     }
 }

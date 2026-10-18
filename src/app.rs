@@ -582,6 +582,10 @@ pub struct App {
     /// Fenêtres Exporter… et Préférences… ouvertes (`prefsui.rs`).
     pub(crate) export_hub: bool,
     pub(crate) prefs_window: bool,
+    /// Fond sous le trait (`fond.rs`) : le pinceau peint dans la strate Fond (sinon dans le
+    /// trait), et le dessin dont on peint le fond en ce moment (affiché en direct).
+    pub(crate) paint_fond: bool,
+    pub(crate) fond_stroke: Option<CelId>,
     /// Panneaux qui s'ajustent (`ajuste.rs`) : hauteur du contenu de chaque panneau à sa dernière
     /// image affichée, part posée par paire de panneaux, un bord a glissé à cette image.
     pub(crate) pane_heights: std::collections::HashMap<crate::dock::Pane, f32>,
@@ -869,6 +873,8 @@ impl App {
             palette: None,
             export_hub: false,
             prefs_window: false,
+            paint_fond: false,
+            fond_stroke: None,
             pane_heights: Default::default(),
             fit_set: Default::default(),
             fit_busy: false,
@@ -1106,6 +1112,7 @@ impl App {
                             blend: Default::default(),
                             fx: Vec::new(),
                             ctg: None,
+                            fond: None,
                         });
                     }
                 }
@@ -1117,7 +1124,7 @@ impl App {
             }
             // Calque vidéo (13k) : l'image de la vidéo qui tombe là.
             if let Some(cel) = crate::video::cel_at(layer, frame, self.doc.fps) {
-                items.push(PlanItem {
+                let line = PlanItem {
                     cel,
                     transform,
                     opacity: (opacity * 255.0).round() as u8,
@@ -1127,10 +1134,22 @@ impl App {
                     fx: crate::fx::steps_at(&layer.fx, frame),
                     // Calque CTG (13j) : rempli d'après les traits de ses sources.
                     ctg: crate::ctg::input(self.layers(), li, frame),
-                });
+                    fond: None,
+                };
+                // Fond sous le trait (`fond.rs`) : sa forme, puis, pendant qu'on peint dans ce
+                // fond, la peinture en direct ; le trait par-dessus.
+                if let Some(fond) = crate::render::fond_item(layer, &line) {
+                    let live = self.fond_stroke == Some(cel);
+                    let paint = PlanItem { fond: Some(crate::render::FondPart::Peinture), ..fond.clone() };
+                    items.push(fond);
+                    if live {
+                        items.push(paint);
+                    }
+                }
+                items.push(line);
                 // Calque CTG courant, à l'écran seulement : ses graffitis, pâles, par-dessus.
                 if onion && layer.ctg.is_some() && li == self.cur_layer && !self.playing {
-                    items.push(PlanItem { cel, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None });
+                    items.push(PlanItem { cel, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None });
                 }
             }
             items.append(&mut onion_items);

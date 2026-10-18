@@ -508,7 +508,8 @@ impl GpuCanvas {
                 up.add(id, entry, &cel.raster, &rest);
                 entry.version = cel.version;
                 entry.partial = None;
-            } else if !tiles.is_empty() && id == item.cel {
+            } else if !tiles.is_empty() && (id == item.cel || item.fond == Some(crate::render::FondPart::Peinture)) {
+                // (La peinture d'un fond, pendant qu'on y peint, se suit aussi tuile par tuile.)
                 up.add(id, entry, &cel.raster, tiles);
             }
             entry.last_used = tick;

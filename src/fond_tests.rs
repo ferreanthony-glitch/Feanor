@@ -95,6 +95,32 @@ fn paint_stays_inside_the_shape_under_its_color() {
 }
 
 #[test]
+fn the_fond_shows_under_the_line_in_the_picture() {
+    use crate::document::{Cel, Document};
+    use crate::render;
+    let mut doc = Document::new(200, 200, 24);
+    let a = doc.add_cel(Cel::bitmap(ring(0.0)));
+    doc.panels[0].layers[0].frames = vec![Some(a)];
+    let plain = render::panel_plan_at(&doc, 0, 0, None);
+    assert_eq!(render::composite_pixel(&doc, &plain, 100, 100).a(), 0, "sans fond : on voit à travers");
+    doc.panels[0].layers[0].fond = Some(FondReglages { couleur: [250, 240, 200], ..FondReglages::default() });
+    let plan = render::panel_plan_at(&doc, 0, 0, None);
+    assert_eq!(plan.items.len(), 2, "le fond, puis le trait");
+    assert_eq!(render::composite_pixel(&doc, &plan, 100, 100), Color32::from_rgb(250, 240, 200), "le dedans, de la couleur du fond");
+    assert_eq!(render::composite_pixel(&doc, &plan, 150, 100), Color32::BLACK, "le trait par-dessus");
+    assert_eq!(render::composite_pixel(&doc, &plan, 5, 5).a(), 0, "dehors : rien");
+    // Ce qu'on peint dans le fond y reste, sous le trait.
+    let mut paint = Raster::new(200, 200);
+    put(&mut paint, 100, 100, Color32::from_rgb(0, 0, 255));
+    put(&mut paint, 5, 5, Color32::from_rgb(0, 0, 255));
+    let c = doc.cels.get_mut(&a).unwrap();
+    c.fond = Some(Box::new(Cel::bitmap(paint)));
+    c.version += 1;
+    assert_eq!(render::composite_pixel(&doc, &plan, 100, 100), Color32::from_rgb(0, 0, 255));
+    assert_eq!(render::composite_pixel(&doc, &plan, 5, 5).a(), 0, "hors de la forme : rien, même peint");
+}
+
+#[test]
 fn the_fond_survives_save_and_reload() {
     use crate::document::{Cel, Document, LayerKind};
     use crate::project;
