@@ -664,6 +664,11 @@ impl GpuCanvas {
         }
     }
 
+    /// L'état de rendu partagé avec eframe (la scène 3D y installe ses propres ressources).
+    pub fn render_state(&self) -> &RenderState {
+        &self.render_state
+    }
+
     /// La mémoire visée pour les textures des dessins (un Go d'ordinaire ; les Préférences et le
     /// diagnostic des performances la règlent). Les plus anciennes partent à la prochaine image si
     /// elle est dépassée.

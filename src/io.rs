@@ -192,6 +192,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
         master_volume: 1.0,
         storyboard_locked: false,
         properties: Default::default(),
+        scenes3d: Default::default(),
         comments: Vec::new(),
         reserves: Default::default(),
         transitions: Vec::new(),

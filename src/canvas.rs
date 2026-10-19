@@ -14,6 +14,8 @@ impl App {
         let mut rect = ui.available_rect_before_wrap();
         // Barre de la vue (plateau / caméra, cadres de composition), sauf dans une vignette.
         if !self.in_card {
+            // Scène 3D : le calque « Fond 3D » se met à jour en arrière-plan (jamais pendant un trait).
+            self.update_scene3d(ui.ctx());
             let bar = Rect::from_min_size(rect.min, vec2(rect.width(), crate::viewbar::VIEW_BAR_H));
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(bar).id_salt("barre_vue"));
             self.view_bar(&mut child);
@@ -23,6 +25,13 @@ impl App {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(tools).id_salt("outils_vue"));
             self.view_tools_bar(&mut child);
             rect.max.y = tools.min.y;
+            // Scène 3D de blocage : à la place du dessin à plat, avec ses commandes dans les Réglages.
+            if self.scene3d.on && !self.camera_view {
+                let response = ui.allocate_rect(rect, Sense::click_and_drag());
+                self.canvas_rect = rect;
+                self.scene3d_panel(ui, rect, &response);
+                return;
+            }
             // Plateau en 3D (9e) : à la place du dessin à plat.
             if self.stage3d.on && !self.camera_view {
                 let response = ui.allocate_rect(rect, Sense::click_and_drag());

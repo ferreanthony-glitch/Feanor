@@ -1405,6 +1405,7 @@ Bus/
   references.json      les références visuelles (absent : aucune)
   references/16.png    leurs images, copiées telles quelles (une vidéo : un dossier references/17/ d'images 000001.jpg…)
   crayonnes.json       la planche de crayonnés rapides (absent : pas de planche)
+  scenes3d.json        les scènes 3D de blocage (absent : aucune scène)
 ```
 
 Si tu enregistres « Bus.pelure » dans `Films`, le fichier est donc dans `Films\Bus\Bus.pelure`, pas
@@ -1453,6 +1454,28 @@ molette = avancer, bouton du milieu = glisser, clic droit ou Alt + glisser = tou
 Déplacer : glisser un calque le déplace dans son plan, Maj + glisser change sa profondeur ; prendre
 l'œil de la caméra la déplace (Maj : avancée ; Ctrl : la tourner, panoramique et bascule). Boutons Face, Dessus, Côté, « Par la caméra », et
 recadrer. Pour dessiner, on revient au plateau à plat (bouton 3D).
+
+**Scène 3D de blocage** (bouton « Scène 3D » de la barre au-dessus du dessin, ou Affichage > Plateau) :
+une vue 3D pour poser des formes simples et des mannequins, placer la caméra, puis envoyer le résultat dans un
+calque de fond sur lequel dessiner. Les réglages sont dans le panneau Réglages.
+- **Formes** : cube, plan (sol, mur), cylindre, sphère, cône, escalier (nombre de marches), **mannequin**
+  (silhouette de capsules articulées : taille réglable, poses debout / assis / marche / bras levés, et chaque
+  articulation en chiffres) ; ou un modèle glTF importé. Choisir, Déplacer, Tourner, Échelle : flèches, cercles et
+  cubes par-dessus l'objet ; glisser un objet le pose ailleurs sur le sol (Maj : en hauteur). Aimantation à la
+  grille, par paliers de rotation, et au sol. Champs numériques, couleur ou gris par objet, grouper, dupliquer,
+  supprimer ; chaque geste s'annule (« Déplacer dans la scène 3D »…).
+- **Un décor par séquence, une scène par plan** : le décor (sol, murs, escalier) se place une fois et tous les plans
+  de la séquence le montrent ; chaque plan y met ses personnages et sa caméra. « Modifier : le décor » change le
+  décor pour tous.
+- **Caméra du plateau** : posée dans la scène avec sa pyramide de vision, déplaçable avec les mêmes poignées ; focale
+  en mm et objectifs de la caméra du plan ; « Vue par la caméra » montre l'image au format du cadre. « Caler sur la
+  caméra du plan » la place là où la caméra 2D est à l'image courante. Le plan z = 0 de la scène est la feuille : le
+  cadre par défaut y mesure 6 m. Les clés de caméra ne sont pas dans la scène : la caméra 2D continue de bouger par-dessus.
+- **Dessiner par-dessus** : « Envoyer vers un calque de fond » rend la scène par la caméra du plateau dans le calque
+  « Fond 3D » (en bas, verrouillé), en couleurs, **niveaux de gris** ou **contours**. Il se met à jour tout seul,
+  en arrière-plan, quand la scène change ; jamais pendant un trait. C'est un calque ordinaire.
+- Enregistré dans `scenes3d.json` (le format du projet ne change pas). Détails : `docs/ROADMAP.md`, « Scène 3D de
+  blocage ».
 
 **Repère 3D** : exporte ton décor en glTF depuis Blender (Fichier > Exporter > glTF 2.0, `.glb`),
 puis Fichier > « Importer un modèle 3D (glTF) comme repère… ». Il apparaît en fil de fer sur la
@@ -1591,6 +1614,9 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `zoombande.rs` | Zoom du montage et de la timeline calé sur la tête de lecture |
 | `viewbar.rs`, `frames.rs` | Barre au-dessus du dessin (plateau / caméra / 3D) ; zones de sécurité, cadre de format |
 | `stage3d.rs`, `stage3dui.rs` | Plateau en 3D : géométrie (plans, caméra, rayons) ; affichage, navigation, outil Déplacer |
+| `scene3d.rs`, `scene3dmath.rs`, `scene3dmesh.rs` | Scène 3D de blocage : objets, mannequin, caméra du plateau, rangement par plan et par séquence ; maths (matrices, rayons, vue) ; maillages des formes et du mannequin |
+| `scene3dgizmo.rs`, `scene3drender.rs`, `scene3dgpu.rs` | Manipulateurs et aimantation ; rendu par le processeur (envoi vers un calque, sur un autre fil) ; vue d'édition par la carte graphique (wgpu) |
+| `scene3dstore.rs`, `scene3dui.rs`, `scene3dview.rs` | `scenes3d.json` (avec les protections des annexes) ; commandes, Réglages, calque « Fond 3D » ; la vue (souris, poignées, tracé) |
 | `layertools.rs` | Outil Transformer (calque entier) |
 | `selbox.rs`, `seltools.rs` | Boîte de sélection façon Storyboard Pro : parties sous le pointeur, gestes (échelle, rotation, inclinaison, pivot), valeurs chiffrées ; sa place dans l'application |
 | `multisel.rs`, `multitools.rs` | Sélection sur plusieurs calques choisis : parts par calque, boîte commune sur la feuille, geste appliqué à chaque calque (`T⁻¹·A·T`), une feuille flottante par calque, une étape d'annulation ; souris, commandes, écran |

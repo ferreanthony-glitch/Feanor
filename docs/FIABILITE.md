@@ -33,6 +33,7 @@ Un projet fabriqué par le code (pas un fichier d'Anthony), qui contient :
 | Références | une image étiquetée, tournée, en gris, liée à deux plans, et une vidéo de trois images aux réglages de lecture changés (`references.json` et `references/`) |
 | Crayonnés | la planche de crayonnés (`crayonnes.json`) : 2 pages de 4 × 3 cases, deux traits lisses dans une case, une case peinte au pinceau et cochée, une légende seule |
 | Planche, guides | notes dessinées et texte de la planche (une attachée à un plan), guide de perspective |
+| Scène 3D | `scenes3d.json` : toutes les formes, un mannequin à la pose libre, un groupe, un modèle importé, un décor de séquence, la caméra du plateau (aller-retour, fumée, fichier coupé et muté ; protections de `write_sidecar`) |
 
 Manque (dit, pas caché) : les calques « toute la scène » (d'avant les plans, devenus des calques ordinaires à
 l'ouverture), le texte vectoriel comparé pixel à pixel (polices du poste). `the_fixture_really_holds_everything_the_project_can_store`

@@ -501,6 +501,8 @@ pub struct App {
     pub(crate) format_custom: bool,
     /// Plateau en 3D (9e) : affiché, outil, vue, geste en cours, textures.
     pub(crate) stage3d: crate::stage3dui::Stage3dState,
+    /// Scène 3D de blocage (`scene3dui.rs`) : affichée, objets choisis, vue, envoi vers un calque.
+    pub(crate) scene3d: crate::scene3dui::Scene3dState,
     /// Le dessin est affiché dans la vignette choisie de la vue Vignettes (6e).
     pub(crate) in_card: bool,
     /// Planche de la vue Vignettes (7) : zoom, décalage, panneaux choisis (ids), geste en cours.
@@ -998,6 +1000,7 @@ impl App {
             stage_view: None,
             format_custom: false,
             stage3d: Default::default(),
+            scene3d: Default::default(),
             in_card: false,
             // Nul : la page sera mise à la largeur de la vue au premier affichage.
             board_zoom: 0.0,
@@ -2836,6 +2839,7 @@ impl App {
         // Vue du plateau et vue 3D recadrées sur le nouveau projet (9d, 9e).
         self.stage_view = None;
         self.stage3d.cam = None;
+        self.scene3d_reset();
         self.modified = false;
         self.path = None;
         self.import_source = None;
@@ -2865,6 +2869,7 @@ impl App {
         self.fit_pending = true;
         self.stage_view = None;
         self.stage3d.cam = None;
+        self.scene3d_reset();
         self.length_origin = None;
         self.modified = true;
     }
@@ -3211,6 +3216,10 @@ impl App {
         }
         // Préréglages d'effets et calques d'effets (`prereglagesui.rs`).
         if self.effet_action(action) {
+            return;
+        }
+        // Scène 3D de blocage (`scene3dui.rs`).
+        if self.scene3d_action(action) {
             return;
         }
         // Commentaires sur la timeline (`commentairesui.rs`).

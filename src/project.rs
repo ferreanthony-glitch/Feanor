@@ -11,9 +11,12 @@
 //!   commentaires.json     commentaires sur la timeline (`commentaires.rs`), sans changer `VERSION` :
 //!                         absent, il n'y a pas de commentaires ; une version qui ne le connaît pas
 //!                         le laisse en place (elle n'efface que le contenu de dessins/, sons/…)
-//!   references.json       références visuelles (`references.rs`), de même sans changer `VERSION` ;
+//!   references.json      références visuelles (`references.rs`), de même sans changer `VERSION` ;
 //!   references/<id>.<ext> leurs fichiers (images copiées telles quelles, images extraites des vidéos
 //!                         dans references/<id>/) : une version qui ne les connaît pas les laisse là
+//!   scenes3d.json        scènes 3D de blocage, par plan, et décors par séquence (`scene3d.rs`,
+//!                         `scene3dstore.rs`), de même sans changer `VERSION` ; le calque « Fond 3D »
+//!                         où une scène est envoyée est un calque bitmap ordinaire
 //!   rognages.json         contenu rogné au début et à la fin des plans (`rognage.rs`), de même sans
 //!                         changer `VERSION` ; ses dessins restent dans dessins/ (une version qui ne
 //!                         le connaît pas les efface à l'enregistrement : le plan reste tel qu'il est)
@@ -878,6 +881,8 @@ pub struct SaveJob {
     /// d'écriture (l'encodage des peintures ne se fait pas sur le fil de l'interface) ; rien :
     /// la planche est vide, le fichier part (s'il est lisible).
     crayonnes: Option<crate::crayonnes::Planche>,
+    /// Le fichier des scènes 3D (`scenes3d.json`) ; rien : il n'y en a plus, le fichier part.
+    scenes3d: Option<Vec<u8>>,
 }
 
 /// Prépare l'enregistrement de `doc` dans `manifest_path`. `written` est mis à jour comme si
@@ -986,6 +991,7 @@ pub fn prepare_save(
         sons_proposes: crate::indications::to_bytes(doc)?,
         references: crate::references::plan_save(doc, dir)?,
         crayonnes: (!doc.crayonnes.is_blank()).then(|| doc.crayonnes.clone()),
+        scenes3d: crate::scene3dstore::to_bytes(doc)?,
     })
 }
 
@@ -1086,6 +1092,27 @@ fn load_reserves(dir: &Path, warnings: &mut Vec<String>) -> Option<crate::rognag
         Err(e) => {
             warnings.push(format!("{} : {e} ; le contenu rogné des plans n'est pas chargé.", path.display()));
             None
+        }
+    }
+}
+
+/// Les scènes 3D du projet, lues dans `scenes3d.json` (absent : aucune scène). Un fichier illisible
+/// (abîmé, ou d'une version plus récente) n'empêche pas d'ouvrir le projet : on le dit, sans scènes ;
+/// il reste en place (`write_sidecar`).
+fn load_scenes3d(dir: &Path, warnings: &mut Vec<String>) -> crate::scene3d::Scenes3d {
+    let path = dir.join(crate::scene3dstore::FILE);
+    match fs::read(&path) {
+        Ok(bytes) => String::from_utf8(bytes)
+            .map_err(|_| "le fichier n'est pas du texte (UTF-8)".to_string())
+            .and_then(|text| crate::scene3dstore::parse(&text))
+            .unwrap_or_else(|e| {
+                warnings.push(format!("{} : {e} ; les scènes 3D ne sont pas chargées.", crate::scene3dstore::FILE));
+                Default::default()
+            }),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Default::default(),
+        Err(e) => {
+            warnings.push(format!("{} : {e} ; les scènes 3D ne sont pas chargées.", path.display()));
+            Default::default()
         }
     }
 }
@@ -1227,6 +1254,8 @@ impl SaveJob {
             None => None,
         };
         write_sidecar(&dir.join(crate::crayonnes::FILE), crayonnes.as_deref(), |t| crate::crayonnes::parse(t).is_ok())?;
+        // Les scènes 3D de blocage (`scene3dstore.rs`), de même.
+        write_sidecar(&dir.join(crate::scene3dstore::FILE), self.scenes3d.as_deref(), |t| crate::scene3dstore::parse(t).is_ok())?;
         write_atomic_synced(&self.manifest_path, &self.manifest)?;
         let removed = remove_unused(dir, &self.used, &self.fonds)
             + remove_unused_sounds(dir, &self.used_sounds, &self.kept)
@@ -1537,9 +1566,11 @@ fn manifest_of(doc: &Document) -> Manifest {
 
 /// Modèles 3D cités par au moins un panneau.
 fn used_models(doc: &Document) -> BTreeSet<u64> {
+    // Les modèles du repère 3D des plans, et ceux que les scènes 3D de blocage montrent.
     doc.panels
         .iter()
         .filter_map(|p| p.ref3d.as_ref().map(|r| r.model))
+        .chain(doc.scenes3d.models_used())
         .filter(|id| doc.models.contains_key(id))
         .collect()
 }
@@ -1832,6 +1863,8 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
                 fond: p.fond,
             }
         },
+        // Les scènes 3D viennent de leur fichier (`scenes3d.json`, `load_scenes3d`).
+        scenes3d: Default::default(),
         // Les commentaires viennent de leur fichier, après les plans (`load_comments`).
         comments: Vec::new(),
         // La réserve du rognage aussi (`rognages.json`, `load_reserves`).
@@ -2005,6 +2038,8 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
     if structure.panels.is_empty() {
         return Err("le projet ne contient aucun plan".into());
     }
+    // Les scènes 3D, dans leur fichier à côté du manifeste (absent : aucune scène).
+    structure.scenes3d = load_scenes3d(dir, &mut warnings);
     // Les commentaires, dans leur fichier à côté du manifeste (absent : aucun commentaire).
     structure.comments = load_comments(dir, &mut warnings);
     // Les transitions du montage, de même (`transitions.json`).
