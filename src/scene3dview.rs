@@ -82,7 +82,8 @@ impl App {
         let xfs = self.s3_xfs(&self.scene3d.sel);
         let first = xfs.first()?;
         let origin = gz::pivot_of(&xfs);
-        let local = self.scene3d.local && xfs.len() == 1;
+        // (L'échelle se fait sur les axes de l'objet : ses cubes suivent donc toujours l'objet.)
+        let local = (self.scene3d.local || mode == GizmoMode::Scale) && xfs.len() == 1;
         Some(Gizmo { origin, axes: gz::axes_for(local, &first.1), len: Gizmo::size_for(view, origin), mode })
     }
 

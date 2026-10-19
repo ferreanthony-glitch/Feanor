@@ -229,7 +229,8 @@ impl App {
             if *id == CAMERA_ID {
                 let plan = scenes.plan_mut(panel);
                 plan.cam = gz::cam_from_xf(&plan.cam, xf);
-            } else if let Some(o) = scenes.find_mut(panel, seq, *id) {
+            } else if let Some(o) = scenes.find_mut(panel, seq, *id).filter(|o| !o.locked) {
+                // (Un objet verrouillé ne bouge pas, même avec les poignées d'un groupe.)
                 o.xf = xf.sanitized();
             }
         }
@@ -553,7 +554,12 @@ impl App {
         // La moitié des cœurs : le dessin garde le reste.
         let threads = (std::thread::available_parallelism().map_or(2, |n| n.get()) / 2).max(1);
         let handle = std::thread::spawn(move || {
-            let ss = if stage[0] * stage[1] <= 2_500_000 { 3 } else { 2 };
+            // Lissage des bords : moins d'échantillons quand la feuille est très grande (4K : 33 millions de pixels).
+            let ss = match stage[0] * stage[1] {
+                0..=2_500_000 => 3,
+                2_500_001..=12_000_000 => 2,
+                _ => 1,
+            };
             let plate = crate::scene3drender::render_plate(&scenes, panel, seq, &models, stage, frame, ss, threads);
             crate::scene3drender::plate_raster(&plate, stage)
         });
