@@ -197,6 +197,7 @@ impl App {
         if all {
             // La propagation (façon EbSynth) du calque courant, aussi dans le menu Calques.
             self.propagation_item(ui, self.cur_layer);
+            self.coloriage_item(ui, self.cur_layer);
         }
         ui.separator();
         ui.menu_button("Ordre", |ui| {

@@ -193,6 +193,8 @@ impl App {
                 self.action_item(ui, "Retirer le dessin de la timeline", "dessin.supprimer");
                 ui.separator();
                 ui.menu_button("Images", |ui| self.images_menu(ui));
+                ui.separator();
+                self.action_item(ui, "Colorier par zones…", "calque.colorier_zones");
             });
             ui.menu_button("Affichage", |ui| {
                 // Zoom, rotation, miroir, pelure, table lumineuse : boutons sous le dessin.

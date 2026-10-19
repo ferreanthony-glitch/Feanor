@@ -823,6 +823,25 @@ ECMAScript 3), elle, est documentée (aide `help/storyboard`). Choix d'Anthony (
   droit sur la ligne d'un calque peint au-dessus d'un calque vidéo (commande `calque.propager`).
   Tout est décrit dans `docs/PROPAGATION.md`.
 
+## Coloriage par zones (2026-10-19, branche `coloriage-zones`)
+
+Propager des aplats de couleur le long d'une animation en retrouvant les mêmes zones fermées ; distinct
+de la propagation EbSynth (rien de généré, de vrais aplats modifiables sous le trait intact).
+
+- ✅ `zones.rs` : découpe en zones fermées (fermeture des trous comme le fond sous le trait, petites
+  zones gardées, bord de l'image fermant, zone sous le trait), voisines, invariants de Hu, cache par
+  version du dessin.
+- ✅ `coloriage.rs` : couleur dominante des zones d'une clé, appariement (hongrois, coûts de position,
+  aire, recouvrement, forme, voisines ; coupures et réunions), propagation depuis la clé d'avant et celle
+  d'après, confiance, zones à vérifier, aplats vectoriels (formes pleines) et bitmap.
+- ✅ `coloriageui.rs` : « Colorier par zones… » (Animation, clic droit des calques, Ctrl+K), fenêtre,
+  tâche en arrière-plan avec « Arrêter », une étape d'annulation, liste des zones à vérifier.
+- ✅ Accroche du « conseiller de couleur » (`ConseillerCouleur`, sans avis aujourd'hui) pour un modèle
+  génératif, plus tard, comme simple indice.
+- ⬜ Aperçu avant de poser (l'annulation en tient lieu), mouvement estimé par flux optique pour les très
+  grands déplacements, transformation de calque différente entre trait et couleur, zones qui fuient par un
+  trou plus large que la fermeture : voir « Limites » dans `docs/COLORIAGE.md`.
+
 ## Passe interface (demandée par Anthony le 2026-10-16, avant 14b)
 
 Simplifier l'interface et combler ce qui manque :
