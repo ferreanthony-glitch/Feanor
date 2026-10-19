@@ -99,6 +99,7 @@ et les calques » (c'est la colonne des calques).
 | Retirer une propriété | **Retirer** (raccourci, marque, signet, rôle, pastille, fond) | |
 | Vider du contenu dessiné | **Effacer** / **Vider** | |
 | Les dessins d'avant et d'après | **pelure d'oignon** (jamais « Pelure » seule dans un titre) | |
+| Région fermée par le trait, coloriée d'un aplat | **zone** ; le coloriage s'appelle **Colorier par zones** (calque de **trait**, calque de **couleur**, **clés**) ; ce qu'on ne sait pas colorier : **zone à vérifier**, repérée en **magenta** | cellule, région, masque |
 | Vue sur le film | **montage** (storyboard) ; **timeline** (animation) ; **bande** seulement pour les deux ensemble | |
 | Traits d'aide du cadre | **aides au cadrage** | repères (réservé aux repères de la timeline : signets, entrée, sortie) |
 | Menu ⋮ d'un calque ou d'un groupe | **Commandes du calque** / **du groupe** | options |
@@ -121,6 +122,19 @@ et les calques » (c'est la colonne des calques).
 - Les doubles `scene.*` ne font plus qu'une ligne dans la palette.
 - Chemins de menu périmés dans les messages (« Aide > Recharger les raccourcis », « Calques > Nouveau
   calque vectoriel », « Fichier > Exporter le film », « Fichier > Ouvrir un projet Storyboard Pro »).
+
+### Ajout du 2026-10-19 : « Colorier par zones… »
+
+- Commande `calque.colorier_zones` (sans touche, comme `calque.propager`) : menu Animation, clic droit
+  d'un calque (montage, timeline, panneau Calques : la ligne cliquée est le calque de trait), palette
+  Ctrl+K, et « Assigner un raccourci… » au clic droit de l'entrée. Elle ouvre la fenêtre « Colorier par
+  zones » (`coloriageui.rs`) ; la tâche tourne sur un autre fil (fenêtre de progression, « Arrêter ») ;
+  une seule étape d'annulation, « Colorier par zones ».
+- Vocabulaire de la fenêtre : « Trait », « Clés peintes sur », « Écrire les aplats », « Images », « Fermer
+  les trous du trait jusqu'à », « Zone incertaine », « Confiance minimale ». La liste « N à vérifier » dit
+  « Image 12 · zone 3 · nouvelle zone » ; un clic va à l'image.
+- Distinct de « Propager la peinture… » (EbSynth : peinture sur une vidéo) : ici on retrouve les mêmes
+  zones fermées d'un dessin au suivant et on pose des aplats nets, sans pixels générés.
 
 ### Restes à décider (non changés)
 

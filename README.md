@@ -1175,6 +1175,21 @@ calque vectoriel (comme le calque « Dessin » d'un nouveau projet), l'entrée e
 dit pourquoi. Les autres images suivent le mouvement de la vidéo. Détails :
 `docs/PROPAGATION.md`.
 
+**Colorier par zones** (animation « cel » à aplats) : on dessine le trait sur un calque, on pose les
+aplats de couleur dans les zones fermées d'un calque de couleur **sous le trait**, sur quelques clés
+(les images où ce calque est peint) ; menu Animation > « Colorier par zones… » ou clic droit sur le
+calque de trait (montage, timeline, Calques), ou Ctrl+K. SHOT retrouve les mêmes zones d'un dessin
+au suivant (centre, aire, recouvrement, forme, voisines ; une zone peut se couper ou se réunir),
+depuis la clé d'avant et celle d'après (la plus sûre l'emporte), et écrit de **vrais aplats** : des
+formes pleines vectorielles sur un calque vectoriel, des pixels unis sur un calque bitmap, un peu sous
+le trait, qui n'est jamais touché. Dans la fenêtre : le calque de trait, celui des clés, où écrire (le
+même, un nouveau calque « Couleur » sous le trait, ou un autre), les clés (peintes, ou des images
+tapées), la plage (tout le plan ou de telle à telle image), la fermeture des trous du trait, et ce qu'on
+fait des zones incertaines (les laisser vides, ou les marquer en magenta « à vérifier »). Les zones
+incertaines (zone nouvelle, appariement ambigu, clés qui se contredisent) sont listées, un clic va à
+l'image. Un calcul en arrière-plan avec progression et « Arrêter », une seule étape d'annulation. La
+méthode, ses limites et l'accroche d'un futur conseiller de couleur : `docs/COLORIAGE.md`.
+
 **Glisser et clic droit** (passe interface) :
 - **Timeline du plan** : on prend à la souris les marques d'image (triangles de la règle), les
   signets, les crochets d'entrée et de sortie, les clés d'effets (losanges violets) et le bord droit
@@ -1304,6 +1319,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `keymap.rs` | Raccourcis : actions, lecture de `keymap.toml`, touche tapée, fichier personnel |
 | `raccourcisui.rs` | Clic droit « Assigner un raccourci… », fenêtre d'assignation, liste des raccourcis |
 | `propager.rs`, `propagerui.rs` | Propagation de la peinture sur une vidéo, façon EbSynth (voir `docs/PROPAGATION.md`) |
+| `zones.rs` | Découpe d'un dessin au trait en zones fermées (cœur, trous fermés, sous le trait, voisines, forme), cache par version du dessin |
+| `coloriage.rs`, `coloriageui.rs` | Colorier par zones : appariement des zones d'une image à l'autre, aplats vectoriels ou bitmap, fenêtre, tâche, liste à vérifier (voir `docs/COLORIAGE.md`) |
 | `handles.rs` | Poignées de la timeline (marques, signets, entrée / sortie, expositions) et menus de la grille |
 | `fxkeys.rs` | Clés d'effets dans le montage et la timeline : losanges, choix, déplacement, copier-coller, suppression |
 | `fxcopie.rs` | Copier-coller des effets (pile) d'un calque à l'autre : presse-papiers, calques choisis, clés hors du plan, tremblement sur bitmap |
