@@ -415,6 +415,11 @@ mod shapes;
 mod shapes_tests;
 mod shapetools;
 mod soundtrack;
+// Transitions du montage (fondus, volet, noir) : modèle, rendu, interface.
+mod transitions;
+#[cfg(test)]
+mod transitions_tests;
+mod transitionsui;
 mod text;
 #[cfg(test)]
 mod text_tests;

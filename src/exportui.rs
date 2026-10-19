@@ -80,6 +80,7 @@ impl App {
         let (start, len) = export::sample_span(fps, first, frames.len());
         let sound_here = export::has_sound(&audio::mix_clips(&self.doc), start, len);
         let ffmpeg = if s.format.is_video() { self.ffmpeg_info().cloned() } else { None };
+        let has_transitions = !self.doc.transitions.is_empty();
 
         let mut go = false;
         let mut close = false;
@@ -125,6 +126,13 @@ impl App {
                 if s.format == Format::Png {
                     ui.label("Fond");
                     ui.checkbox(&mut s.transparent, "Sans le papier (fond transparent)");
+                    ui.end_row();
+                }
+                // Les fondus, volets et noirs du montage (`transitions.rs`) : calculés comme le reste
+                // de l'export, image par image.
+                if (s.format.is_video() || s.format == Format::Png) && has_transitions {
+                    ui.label("Transitions");
+                    ui.checkbox(&mut s.transitions, "Avec les transitions du montage");
                     ui.end_row();
                 }
             });
@@ -193,7 +201,8 @@ impl App {
             }
             Format::Png => {
                 let Some(dir) = Self::pick_folder("Dossier où exporter les images") else { return };
-                self.export_job = Some(ExportJob::images(&dir, &base, frames, self.doc.frame, !s.transparent));
+                let job = ExportJob::images(&dir, &base, frames, self.doc.frame, !s.transparent);
+                self.export_job = Some(if s.transitions { job.with_transitions(&self.doc) } else { job });
             }
             Format::Pdf => {
                 let Some(out) = save_dialog(&base, Format::Pdf) else { return };
@@ -226,7 +235,7 @@ impl App {
                     }
                 };
                 match ExportJob::video(&ffmpeg, args, &out, frames, wav) {
-                    Ok(job) => self.export_job = Some(job),
+                    Ok(job) => self.export_job = Some(if s.transitions { job.with_transitions(&self.doc) } else { job }),
                     Err(e) => self.status = format!("Export impossible : {e}"),
                 }
             }

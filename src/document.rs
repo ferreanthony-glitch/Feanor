@@ -844,6 +844,8 @@ pub struct Structure {
     /// Ce que le rognage a mis de côté, par numéro de plan (`rognage.rs`) : l'annulation le
     /// rétablit avec le reste.
     pub reserves: std::collections::BTreeMap<u64, crate::rognage::Reserve>,
+    /// Transitions du montage (`transitions.rs`) : l'annulation les rétablit avec le reste.
+    pub transitions: Vec<crate::transitions::Transition>,
 }
 
 pub struct Document {
@@ -891,6 +893,9 @@ pub struct Document {
     /// Contenu rogné hors des plans, rangé par numéro de plan (`rognage.rs`) ; enregistré à côté du
     /// manifeste, dans `rognages.json`.
     pub reserves: std::collections::BTreeMap<u64, crate::rognage::Reserve>,
+    /// Transitions du montage, rangées par coupe (`transitions.rs`) ; enregistrées à côté du
+    /// manifeste, dans `transitions.json`.
+    pub transitions: Vec<crate::transitions::Transition>,
     next_id: u64,
 }
 
@@ -934,6 +939,7 @@ impl Document {
             properties: Properties::default(),
             comments: Vec::new(),
             reserves: Default::default(),
+            transitions: Vec::new(),
             next_id: 1,
         };
         let seq = doc.new_sequence();
@@ -960,6 +966,7 @@ impl Document {
             .chain(structure.audio_tracks.iter().map(|t| t.id))
             .chain(structure.audio_tracks.iter().flat_map(|t| t.clips.iter().map(|c| c.id)))
             .chain(structure.comments.iter().map(|c| c.id))
+            .chain(structure.transitions.iter().map(|t| t.id))
             .chain(cels.keys().copied())
             .chain(sounds.keys().copied())
             .max()
@@ -988,6 +995,7 @@ impl Document {
             properties: structure.properties,
             comments: structure.comments,
             reserves: structure.reserves,
+            transitions: structure.transitions,
             next_id: max_id + 1,
         };
         doc.normalize();
@@ -1163,6 +1171,7 @@ impl Document {
             properties: self.properties.clone(),
             comments: self.comments.clone(),
             reserves: self.reserves.clone(),
+            transitions: self.transitions.clone(),
         }
     }
 
@@ -1191,6 +1200,7 @@ impl Document {
             properties: std::mem::replace(&mut self.properties, s.properties),
             comments: std::mem::replace(&mut self.comments, s.comments),
             reserves: std::mem::replace(&mut self.reserves, s.reserves),
+            transitions: std::mem::replace(&mut self.transitions, s.transitions),
         }
     }
 
@@ -1378,6 +1388,8 @@ impl Document {
         self.sequences.retain(|q| seq_order.contains(&q.id));
         // Un plan retiré emporte ses commentaires (l'annulation les ramène avec lui).
         self.prune_comments();
+        // Une transition dont un plan a disparu part avec lui (`transitions.rs`).
+        self.prune_transitions();
     }
 
     // ---------------------------------------------------------------- opérations de montage

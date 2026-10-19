@@ -56,6 +56,9 @@ pub(crate) enum MenuTarget {
     Ruler,
     /// Le repère d'un commentaire (son id) dans la règle (`commentairesui.rs`).
     Comment(u64),
+    /// Une transition (son id) du montage, ou une coupe entre deux plans (`transitionsui.rs`).
+    Transition(u64),
+    Cut(usize),
 }
 
 impl App {

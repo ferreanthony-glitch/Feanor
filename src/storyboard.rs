@@ -331,6 +331,7 @@ impl App {
     pub(crate) fn cancel_montage_drag(&mut self) {
         self.cancel_cam_keys_drag();
         self.cancel_handle_drag();
+        self.trans_cancel_drag();
         match self.montage_drag.take() {
             Some(MontageDrag::Edge(d)) => self.cancel_edge_drag(d),
             Some(MontageDrag::Clip(d)) => self.doc.audio_tracks = d.before,
@@ -480,6 +481,8 @@ impl App {
             &key,
             "montage.aimanter",
         );
+        // Transition à la coupe la plus proche de la tête de lecture (`transitionsui.rs`).
+        self.transition_button(ui);
         sep(ui);
 
         // Son.
@@ -685,6 +688,9 @@ impl App {
             self.duplicate_panel();
         }
         self.plan_color_menu(ui);
+        // Les coupes de part et d'autre du plan (`transitionsui.rs`).
+        self.cut_menu_named(ui, index, "Transition au début du plan");
+        self.cut_menu_named(ui, index + 1, "Transition à la fin du plan");
         ui.separator();
         self.panel_clipboard_items(ui);
         ui.separator();
@@ -754,10 +760,13 @@ impl App {
         let lanes_top = r.top() + rows.lanes_top();
         let in_blocks = |p: Pos2| p.y >= top && p.y <= top + block_h;
         let visuals = ui.visuals().clone();
+        // Les transitions posées sur les coupes (`transitionsui.rs`) : leurs formes, au milieu des plans.
+        let badges = self.trans_badges(left, ppf, top + block_h * 0.5);
         // Un clic dans la bande lui donne la main : copier, coller, supprimer visent ses panneaux.
         if resp.is_pointer_button_down_on() {
             self.panel_focus = true;
             self.images_focus = false;
+            self.trans_track_focus(ui.input(|i| i.pointer.press_origin()), &badges);
         }
 
         // Règle : une graduation par seconde, un repère lisible tous les ~60 pixels.
@@ -971,6 +980,7 @@ impl App {
         let drops = self.drop_view();
         self.paint_track_rows(&painter, r, &blocks, ppf, rows, lit, &drops);
         self.paint_lanes(&painter, r, left, ppf, lanes_top, theme::contour());
+        self.paint_transitions(&painter, &badges);
 
         let panel_at = |x: f32| blocks.iter().position(|b| x >= b.left() - 1.0 && x <= b.right() + 1.0);
         // Le bord d'un plan sous le point : son début ou sa fin (`rognageui::edge_hit`).
@@ -1012,6 +1022,14 @@ impl App {
             if edge_at(p).is_some() || clip_edge || resizing {
                 ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
             }
+            // Une transition : ses bords s'étirent, sa bulle dit sa sorte et sa durée.
+            if let Some((i, hit)) = crate::transitionsui::badge_hit(&badges, p) {
+                if hit != crate::transitionsui::BadgeHit::Body {
+                    ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
+                }
+                let tip = crate::transitionsui::badge_tip(&badges[i], self.doc.transition(badges[i].id));
+                resp.clone().on_hover_text_at_pointer(tip);
+            }
             if matches!(&self.montage_drag, Some(MontageDrag::Edge(d)) if d.kind == crate::rognageui::EdgeKind::Slip) {
                 ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
             }
@@ -1029,7 +1047,20 @@ impl App {
             }
         }
 
-        if resp.drag_started() && !comment_ptr.busy {
+        // Une transition prend le geste qui part de sa forme (ses bords changent sa durée).
+        let trans_took = resp.drag_started()
+            && !comment_ptr.busy
+            && self.trans_begin_drag(ui.input(|i| i.pointer.press_origin()).unwrap_or(r.center()), &badges);
+        if self.trans.drag.is_some() {
+            ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
+            if let (true, Some(p)) = (resp.dragged(), resp.interact_pointer_pos()) {
+                self.trans_drag_to(free_frame_at(p.x));
+            }
+            if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
+                self.trans_end_drag();
+            }
+        }
+        if resp.drag_started() && !comment_ptr.busy && !trans_took {
             let origin = ui.input(|i| i.pointer.press_origin()).unwrap_or(r.center());
             // Sans recentrer la bande : le bord tiré doit rester sous le pointeur.
             self.playing = false;
@@ -1251,7 +1282,9 @@ impl App {
             }
         }
 
-        if resp.clicked() && !comment_ptr.busy {
+        let trans_clicked = resp.clicked() && !comment_ptr.busy && resp.interact_pointer_pos().is_some_and(|p| self.trans_click(p, &badges));
+        if resp.clicked() && !comment_ptr.busy && !trans_clicked {
+            self.trans.sel = None;
             // Le bord choisi pour les flèches ne l'est que par un clic sur un bord (ci-dessous).
             self.edge_sel = None;
             if let Some(p) = resp.interact_pointer_pos() {
@@ -1340,7 +1373,9 @@ impl App {
         }
         if resp.double_clicked() && !comment_ptr.busy {
             if let Some(p) = resp.interact_pointer_pos() {
-                if let Some(i) = in_blocks(p).then(|| panel_at(p.x)).flatten() {
+                if crate::transitionsui::badge_hit(&badges, p).is_some() {
+                    // Sur une transition : le double-clic n'entre pas dans le plan dessous.
+                } else if let Some(i) = in_blocks(p).then(|| panel_at(p.x)).flatten() {
                     self.enter_animation(i);
                 } else if self.montage_fx_key_at(p, r.top(), &blocks, ppf, rows).is_some() {
                     // Sur un losange de clé d'effet : le double-clic ne pose pas de clé de dessin.
@@ -1358,7 +1393,10 @@ impl App {
             self.menu_target = Some(MenuTarget::Comment(id));
         } else if resp.secondary_clicked() {
             if let Some(p) = resp.interact_pointer_pos() {
-                self.menu_target = if let Some((track, hit)) = self.lane_hit(p, left, ppf, lanes_top) {
+                self.menu_target = if let Some(target) = self.trans_menu_target(p, &badges, &blocks, top, top + block_h) {
+                    // Une transition ou une coupe entre deux plans (`transitionsui.rs`).
+                    Some(target)
+                } else if let Some((track, hit)) = self.lane_hit(p, left, ppf, lanes_top) {
                     let clip = hit.map(|(id, _)| id);
                     if clip.is_some() {
                         self.sel_clip = clip;
@@ -1430,6 +1468,8 @@ impl App {
             let menu_open = resp.context_menu(|ui| match target {
                 MenuTarget::Panel(i) => self.panel_menu(ui, i),
                 MenuTarget::Comment(id) => self.comment_menu(ui, id),
+                MenuTarget::Transition(id) => self.transition_menu(ui, id),
+                MenuTarget::Cut(cut) => self.cut_menu(ui, cut),
                 MenuTarget::Lane { track, clip, frame } => self.lane_menu(ui, track, clip, frame),
                 MenuTarget::Layer(k) => {
                     // La piste d'un calque : les clés à l'image du clic, puis le menu du calque.

@@ -551,6 +551,8 @@ pub struct App {
     pub(crate) heard_frame: Option<usize>,
     /// Extrait de son sélectionné dans la bande de montage.
     pub(crate) sel_clip: Option<u64>,
+    /// Transitions du montage : choix, geste en cours, aperçu (`transitionsui.rs`).
+    pub(crate) trans: crate::transitionsui::TransUi,
     /// Ce qu'on a cliqué du bouton droit dans la bande de montage.
     pub(crate) menu_target: Option<MenuTarget>,
     pub(crate) history: History,
@@ -1011,6 +1013,7 @@ impl App {
             sound_scrub: true,
             heard_frame: Some(0),
             sel_clip: None,
+            trans: Default::default(),
             menu_target: None,
             history: History::default(),
             gesture: Gesture::default(),
@@ -3145,6 +3148,10 @@ impl App {
         }
         // Commentaires sur la timeline (`commentairesui.rs`).
         if self.comment_action(action) {
+            return;
+        }
+        // Transitions du montage (`transitionsui.rs`) ; Suppr vise celle qui a la main.
+        if self.transition_action(action) {
             return;
         }
         // Suppr vise le commentaire seulement s'il a la main (le dernier clic était sur lui) ;

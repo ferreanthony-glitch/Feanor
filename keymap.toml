@@ -2162,6 +2162,47 @@ action = "commentaire.suivant"
 touches = []
 source = "SHOT (sans touche)"
 
+# Transitions du montage (sans touche : à choisir).
+[[raccourci]]
+action = "transition.ajouter"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "transition.supprimer"
+touches = []
+source = "SHOT (sans touche : Suppr supprime la transition choisie dans le montage)"
+
+[[raccourci]]
+action = "transition.fondu_enchaine"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "transition.fondu_noir"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "transition.fondu_blanc"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "transition.volet"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "transition.noir"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "transition.apercu"
+touches = []
+source = "SHOT (sans touche)"
+
 # Effets, propagation, caméra, aides au cadrage.
 [[raccourci]]
 action = "fx.choisir_aucun"
