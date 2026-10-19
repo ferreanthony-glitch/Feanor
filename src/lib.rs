@@ -203,6 +203,8 @@ mod fiabilite_annexes_tests;
 mod fiabilite_manifestes_tests;
 #[cfg(test)]
 mod fiabilite_dessins_tests;
+#[cfg(test)]
+mod fiabilite_fumee_tests;
 pub mod fx;
 mod fxcache;
 mod fxproxy;
