@@ -295,7 +295,8 @@ impl App {
         let Some(job) = &self.saving else { return };
         let (done, total) = job.advance();
         ui.separator();
-        ui.add(egui::Spinner::new().size(12.0));
+        // (Pas de roue qui tourne : elle repeindrait l'écran à chaque image ; le compte se rafraîchit
+        // dix fois par seconde, `tick_save`.)
         let text = if total == 0 { "Enregistrement…".to_string() } else { format!("Enregistrement… {done} / {total}") };
         ui.label(egui::RichText::new(text).small()).on_hover_text("SHOT écrit le projet pendant que tu continues : rien ne se fige. Fermer attend la fin de l'écriture.");
     }

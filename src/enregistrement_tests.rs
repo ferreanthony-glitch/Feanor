@@ -99,6 +99,21 @@ fn a_background_save_keeps_modified_when_the_project_changes_during_the_write() 
 }
 
 #[test]
+fn the_application_is_idle_again_once_the_save_is_done() {
+    let (mut b, dir, _) = banc_enregistre("repos");
+    assert!(b.app.save());
+    pomper(&mut b);
+    // (Le message d'état qui vient d'apparaître s'éteint de lui-même en quelques secondes.)
+    for _ in 0..12 {
+        b.image(Vec::new(), 0.5);
+    }
+    let repos: Vec<_> = (0..4).map(|_| b.image(Vec::new(), 0.5).reveil).collect();
+    let pire = repos.iter().min().copied().unwrap_or(Duration::MAX);
+    assert!(pire >= Duration::from_secs(1), "après l'enregistrement, SHOT demande à être repeint dans {pire:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_second_save_asked_during_the_write_follows_it() {
     let (mut b, dir, manifeste) = banc_enregistre("file");
     assert!(b.app.save());

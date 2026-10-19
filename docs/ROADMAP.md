@@ -2027,8 +2027,31 @@ rapidement. C'est prioritaire. » Détail, mesures avant / après et leviers res
 - Compilation : `target-cpu=x86-64-v3` (interface -20 %, PNG -26 %) ; LTO et une seule unité de
   génération écartés (aucun gain, compilation ×2 à ×3,5) ; `panic = "abort"` écarté (SHOT compte sur
   les panics rattrapés).
-- Reste (classé dans le document) : enregistrer en arrière-plan, textures de dessin à la taille du
-  contenu, image composée gardée, vignettes hors du fil de l'interface.
+- Reste (classé dans le document) : vignettes hors du fil de l'interface, décodage PNG en flux, effets
+  sur la carte graphique. (Enregistrer en arrière-plan, textures à la taille du contenu et image
+  composée gardée : faits, ci-dessous.)
+
+## Deuxième passe de performance (2026-10-19, branche `perf2`) ✅
+
+Suite de la passe précédente, leviers 1 à 3 de `docs/PERFORMANCE.md` (section 9).
+- **Enregistrer en arrière-plan** (`enregistrement.rs`) : Ctrl+S, Enregistrer sous et le bouton
+  Enregistrer de la boîte « Modifications non enregistrées » ne figent plus l'interface (50 dessins
+  modifiés : 270 → 1 ms ; premier enregistrement de 500 dessins : 2,8 s → 4 ms). Cliché sur le fil de
+  l'interface (tuiles partagées à la copie), écriture sur un autre fil, `modified` remis à vrai par
+  toute modification qui suit ou par un échec ; Quitter, Fermer, Nouveau, Ouvrir attendent la fin
+  (fenêtre d'avancement au-delà de 200 ms) ; échec : fenêtre qui dit pourquoi, rien de perdu ;
+  écriture atomique (fichier provisoire puis renommage, manifeste en dernier). « Enregistrement… n / N »
+  dans la barre d'état.
+- **Textures de dessin à la taille du contenu** (`gpu.rs`) : 1 Mo au lieu de 33 par dessin au trait,
+  1 093 dessins dans le cache de 1 Go au lieu de 32 ; lecture d'un plan de 15 calques 7,9 → 3,9 ms,
+  retour sur des dessins déjà vus 14 → 3 ms. Mêmes pixels qu'avant (essais contre la texture de la
+  feuille entière et contre le calcul de secours : calques transformés, modes de fusion, aperçus réduits
+  d'effets, feuilles flottantes déformées, dessin qui grandit pendant un trait, recyclage).
+- **Image composée gardée** : la pile de calques n'est recomposée que si un dessin, une place, une
+  opacité, un mode ou un maillage change (carte graphique 2,4 → 0,45 ms par image avec 15 calques).
+- À essayer par Anthony : Ctrl+S dans un vrai gros projet (barre d'état, point • du titre, Quitter
+  pendant l'écriture), un long trait qui traverse la feuille, des calques transformés, une
+  enveloppe, la lecture d'un plan chargé.
 
 ## Diagnostic des performances (2026-10-19, branche `diagnostic`) ✅
 

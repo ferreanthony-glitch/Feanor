@@ -8,6 +8,11 @@ Mise à jour du 2026-10-19 : la branche a été fusionnée avec `main` 31aef6e (
 de fond, commentaires, boîte de sélection, caméra, tremblement du trait, thèmes) dans `perf-integre` ;
 voir « Après la fusion » plus bas. Les chiffres des tableaux ci-dessous sont ceux d'avant la fusion.
 
+Mise à jour du 2026-10-19 (branche `perf2`, partie de 8b49066) : les leviers 1, 2 et 3 de la liste
+(section 6) sont faits — **enregistrer en arrière-plan**, **textures de dessin à la taille du contenu**,
+**image composée gardée** ; voir la section 9 (mesures avant / après, conception, risques). Les
+chiffres des tableaux 2 et suivants restent ceux de la première passe.
+
 Ce document dit comment mesurer, ce qui a été mesuré avant et après, ce qui a été changé, ce qui reste
 (classé), et ce qu'il faut regarder à l'écran.
 
@@ -52,7 +57,8 @@ cargo test --release --offline --target-dir target\msvc perf_ -- --ignored --noc
 
 (ou un seul : `perf_long_project`, `perf_heavy_plan`, `perf_panels`, `perf_scale`,
 `perf_vector_drawing`, `perf_project_open_save`, `perf_cel_io_steps`, `perf_thumbnail_cost`,
-`perf_brush_library_startup`, `perf_cpu_bench`). Un essai d'inactivité tourne toujours avec la suite :
+`perf_brush_library_startup`, `perf_cpu_bench`, et, depuis `perf2`, `perf_save_ui_thread` (Ctrl+S) et
+`perf_gpu_textures` (mémoire de la carte, défilement, lecture, repos). Un essai d'inactivité tourne toujours avec la suite :
 au repos, après une lecture, après un trait, SHOT ne demande aucune image de plus.
 
 Limites : projets synthétiques (dessins bitmap de 40 tuiles de 64 × 64 sur une feuille de
@@ -258,17 +264,18 @@ cinq passages, deux à trois séries) :
   `an_idle_application_does_not_repaint`. Les seuls réveils sont ceux qui ont une cause : vignettes
   qui attendent (6 ms par image), rejeux en arrière-plan (16 ms), lecture, notifications (250 ms),
   copie de secours (≤ 10 s quand le projet est modifié).
-- **Lecture** : pas de cache en mémoire d'images composées. Chaque image est composée par la carte
-  graphique à partir d'une texture par dessin ; les dessins de la seconde qui suit partent d'avance
-  (4 Mo par image d'écran). Une texture de dessin est de la taille de la **feuille** (33 Mo pour
-  3840 × 2160), le cache en garde environ 30 (1 Go) : avec 15 calques animés à 2 images, la lecture
-  renvoie à la carte les dessins neufs de chaque image. Tient : 8,2 ms en moyenne, 14,1 ms au pire
-  pour un budget de 41,7 ms. Les calques à effets (flou, ombre, CTG) se calculent sur le processeur
-  (hors de cette passe, voir l'agent des effets).
-- **Dessin dans un plan lourd** : la pile de calques est recomposée entièrement à chaque image
-  d'écran par la carte (pas de dessous / dessus gardés) : 2,2 ms pour 15 calques, 5,7 ms pour 60.
-  Sans effet sur la latence du trait (le CPU fait 2 à 3 ms, la carte travaille en parallèle), mais
-  c'est de la chaleur et du ventilateur gratuits (levier 3).
+- **Lecture** (état de la première passe ; depuis `perf2`, voir la section 9) : pas de cache en mémoire
+  d'images composées. Chaque image est composée par la carte graphique à partir d'une texture par
+  dessin ; les dessins de la seconde qui suit partent d'avance (4 Mo par image d'écran). Une texture
+  de dessin était de la taille de la **feuille** (33 Mo pour 3840 × 2160), le cache en gardait
+  environ 30 (1 Go) : avec 15 calques animés à 2 images, la lecture renvoyait à la carte les dessins
+  neufs de chaque image. Tenait : 8,2 ms en moyenne, 14,1 ms au pire pour un budget de 41,7 ms. Les
+  calques à effets (flou, ombre, CTG) se calculent sur le processeur (hors de cette passe, voir
+  l'agent des effets).
+- **Dessin dans un plan lourd** (état de la première passe ; levier 3 fait depuis) : la pile de
+  calques était recomposée entièrement à chaque image d'écran par la carte : 2,2 ms pour 15 calques,
+  5,7 ms pour 60. Sans effet sur la latence du trait (le CPU fait 2 à 3 ms, la carte travaille en
+  parallèle), mais c'était de la chaleur et du ventilateur gratuits.
 - **Trait vectoriel texturé** : déjà sans latence (rejeu en arrière-plan) ; 2 à 3 ms par image avec
   30 traits larges sur le calque.
 - **Ce que le banc ne voit pas** : le stylet (cadence réelle des événements), l'affichage (synchro,
@@ -279,9 +286,9 @@ cinq passages, deux à trois séries) :
 
 | # | Levier | Gain estimé | Effort |
 |---|---|---|---|
-| 1 | **Enregistrer en arrière-plan** (Ctrl+S) : l'écriture sort du fil de l'interface | gel de ≈ 2 ms par dessin modifié (50 dessins : ≈ 100 ms ; premier enregistrement d'un gros projet : ≈ 9 s) → 0 | M. `save_to` rend un booléen qu'attendent Quitter, Fermer, Nouveau, Ouvrir un récent : il faut une suite (`SaveThen`), et un compteur de modifications pour ne pas effacer `modified` si l'on dessine pendant l'écriture. À faire avec soin : un `modified` effacé à tort perd du travail. |
-| 2 | **Textures de dessin à la taille du contenu** (boîte des tuiles dessinées) au lieu de la feuille | mémoire de la carte ÷5 à ÷20 ; ≈ 10 fois plus de dessins en cache (30 → 300) ; défilement d'un plan lourd 13,8 → ≈ 6 ms ; lecture sans renvoi | L. `gpu.rs` : coins et UV de chaque élément, feuille flottante, maillages (enveloppe, perspective), agrandissement quand on dessine hors de la boîte, tests pixel contre le processeur. |
-| 3 | **Image composée gardée** (dessous / dessus) tant que le plan et les versions ne changent pas | carte : 2,2 → ≈ 0,5 ms par image au repos de contenu (15 calques) ; 60 calques : 5,7 → ≈ 0,5 ms ; moins de chaleur | M. Clé de composition + `sync` qui dit si un envoi a eu lieu ; invalider à chaque changement de taille, mode de fusion, maillage. |
+| 1 | ~~**Enregistrer en arrière-plan** (Ctrl+S) : l'écriture sort du fil de l'interface~~ **fait** (`perf2`, section 9.1) | Ctrl+S avec 50 dessins modifiés : 270 → 1,1 ms sur le fil de l'interface ; premier enregistrement de 500 dessins : 2 813 → 4 ms | fait |
+| 2 | ~~**Textures de dessin à la taille du contenu** (boîte des tuiles dessinées) au lieu de la feuille~~ **fait** (`perf2`, section 9.2) | 32 textures de 33 Mo → 1 093 de 1 Mo dans le même Go ; lecture 7,9 → 3,9 ms ; plan revu 14,0 → 3,1 ms | fait |
+| 3 | ~~**Image composée gardée** (dessous / dessus) tant que le plan et les versions ne changent pas~~ **fait** (`perf2`, section 9.3) | carte, 15 calques, souris qui bouge : 2,3 → 0,45 ms par image | fait |
 | 4 | **Vignettes du montage hors du fil de l'interface** | plus de pic de 6 ms en défilant un grand montage (600 plans : tête 11,4 → ≈ 3 ms) | L. Il faut des tuiles partageables (`Arc<Tile>`) pour ne pas copier les dessins vers le fil ; touche le moteur de pinceau. |
 | 5 | **Décodage PNG en flux vers les tuiles** (crate `png` en dépendance directe, déjà dans `Cargo.lock`) | ouverture 7,3 → ≈ 4 s, mémoire ÷30 par fil | S à M |
 | 6 | **Cache d'images composées en mémoire** pour la lecture des plans à effets | 24 images/s garanties avec 10 effets ou plus (les effets se calculent sur le processeur) | L. Avec la carte graphique pour les effets (7). |
@@ -387,3 +394,163 @@ de réglages, premier lancement, fenêtre et Préférences, annulation du banc).
 - **Démarrage avec les brosses importées** : la liste des pinceaux, leurs grains et pointes comme avant.
 - **Compilation `x86-64-v3`** : si `shot.exe` ne démarre pas sur une autre machine, retirer
   `.cargo/config.toml`.
+
+## 9. Deuxième passe (branche `perf2`) : enregistrer en arrière-plan, textures au contenu, image composée gardée
+
+Leviers 1, 2 et 3 de la section 6. Même machine, version release. « Avant » : 8b49066 pour
+l'enregistrement ; pour la carte graphique, le comportement d'avant reproduit par deux réglages
+d'essai (`GpuCanvas::set_whole_textures`, `set_fresh_staging`) dans le même processus, l'un après
+l'autre. Écart d'une série à l'autre : ± 10 % (la machine était partagée avec d'autres programmes).
+
+### 9.1 Enregistrer en arrière-plan (`enregistrement.rs`)
+
+Banc `perf_save_ui_thread` : 500 dessins de 8 × 5 tuiles (320 Mo), projet déjà enregistré une fois.
+
+| Scénario | Avant (sur le fil de l'interface) | Après : appel sur le fil de l'interface | Après : fin de l'écriture (autre fil) |
+|---|---|---|---|
+| Ctrl+S, 50 dessins modifiés | 269–279 ms de gel | **1,1–1,7 ms** | 177–190 ms |
+| Premier enregistrement (500 dessins) | 2 813 ms de gel | **4 ms** | 1 680 ms |
+| Rien de modifié | 7,2 ms | 0,9 ms | 8 ms |
+| Image d'écran la plus lente pendant l'écriture | (aucune : gel) | 2,3–3,1 ms | |
+
+**Conception.**
+- *Cliché* : le fil de l'interface ne fait que `project::prepare_save` (manifeste JSON, fichiers
+  annexes `commentaires.json` et `rognages.json`, liste des dessins modifiés depuis le dernier
+  enregistrement : ceux dont la version n'est pas dans `written`). La copie des pixels ne coûte
+  presque rien : `raster::Tile` est maintenant une tuile **partagée à la copie** (`Arc`, copie à la
+  première écriture, `Arc::make_mut`), cloner un `Raster` n'en recopie aucune. Les écritures par
+  `tuile[i] = c` se comportent comme avant ; trois boucles par pixel (`from_rgba`, `fxproxy`,
+  `tremblement`) prennent le tableau une fois. Les étapes d'annulation y gagnent aussi.
+- *Écriture* : un fil lance `SaveJob::run_with` (PNG des dessins sur la moitié des cœurs, 2 à 8 fils,
+  puis sons, modèles, textures, vidéos, annexes, manifeste en dernier). La barre d'état montre
+  « Enregistrement… n / N ».
+- *Compteur de modifications* : `modified` passe à faux **au cliché** ; toute modification qui suit
+  le remet à vrai. À la fin de l'écriture on n'y touche pas : s'il est vrai, c'est une modification
+  postérieure au cliché que le fichier n'a pas, le projet reste « modifié ». Un échec le remet à vrai
+  (et `written` est vidé : tout sera réécrit). `App::doc_epoch` (changé par `load_doc`) empêche
+  qu'un enregistrement fini après l'ouverture d'un autre projet lui donne son chemin ou son état.
+- *Suites* : `App::request` (Quitter, Fermer, Nouveau, Ouvrir, projet récent, import SBP) retient la
+  demande pendant l'écriture (`after_save`) et la refait à la fin : modifié depuis → boîte
+  « Modifications non enregistrées », sinon l'action. Au-delà de 200 ms d'attente, une fenêtre montre
+  l'avancement. Fermer la fenêtre pendant l'écriture est refusé de même ; `fermeture` attend le fil
+  au cas où. Le bouton « Enregistrer » de la boîte lance l'écriture avec l'action en suite. Un
+  enregistrement demandé pendant un autre se met en file. Un échec annule toutes les suites et
+  ouvre « Enregistrement impossible » (message, Réessayer, Fermer).
+- *Atomicité* : `project::write_atomic` écrit `<nom>.tmp` puis renomme (atomique sur Windows) ; en cas
+  d'échec le fichier provisoire est effacé et l'ancien fichier reste. Le manifeste est écrit en
+  dernier, après les dessins ; le manifeste et les annexes sont en plus synchronisés sur le disque
+  (`sync_all`) avant le renommage. La copie de secours (`recovery.rs`) passe par le même `SaveJob`
+  et ne démarre pas pendant un enregistrement.
+- Essais : `enregistrement_tests.rs` (12 : `modified` juste sous modifications concurrentes, file
+  d'attente, Quitter attend et redemande si le projet a changé, la fermeture attend, échec qui garde
+  `modified` et annule la suite, atomicité d'une écriture ratée et d'un enregistrement coupé avant le
+  manifeste, autre projet ouvert pendant l'écriture, repos après l'écriture).
+
+### 9.2 Textures de dessin à la taille du contenu (`gpu.rs`)
+
+Banc `perf_gpu_textures` : un plan de 15 calques × 200 images (un dessin neuf toutes les 2 images),
+feuille de 3840 × 2160, deux jeux de dessins : *éparpillés* (40 tuiles sur toute la feuille, la
+boîte du contenu est presque la feuille : le pire cas) et *d'un bloc* (8 × 5 tuiles, un vrai dessin
+au trait).
+
+Dessins d'un bloc :
+
+| | Avant | Après |
+|---|---|---|
+| Poids d'une texture | 33,2 Mo | **0,98 Mo** |
+| Dessins gardés dans le cache de 1 Go | 32 | **1 093** |
+| Défilement, 15 dessins neufs par image (ms par image d'écran) | 14,6 | 9,1 |
+| Même parcours, dessins déjà vus | 14,0 | **3,1** |
+| Lecture à 24 images/s (moyenne, ms) | 7,9 | **3,9** |
+| Souris qui bouge sur un plan de 15 calques | 5,2 | 3,0 (2,7 avec l'image gardée, 9.3) |
+
+Dessins éparpillés : 32 → 57 textures de 18,8 Mo en moyenne ; défilement 16,7 → 11,8, même parcours
+16,1 → 10,4, lecture 8,7 → 4,9 ms. Le gain de ce jeu vient surtout du tampon d'envoi gardé (ci-dessous).
+
+Le défilement à froid est le travail des pixels neufs : 15 dessins × 40 tuiles = 600 tuiles (9,8 Mo)
+copiées et envoyées par image. Le « ≈ 6 ms » espéré par la liste ne vient qu'au deuxième passage (3,1 ms) :
+ce qui reste à froid est la copie vers la carte (2,1 ms « tuiles envoyées » + la copie en tampon).
+**Tampon d'envoi gardé** d'une image à l'autre (avant : 10 Mo de mémoire neuve à chaque image, dont les
+fautes de page de Windows coûtaient 2 à 4 ms) : à lui seul 14,6 → 13,1 à froid et 14,0 → 10,7 sur
+les dessins déjà vus, avec les textures de la feuille entière.
+
+**Conception.**
+- Chaque `CelTexture` a un `rect` (x, y, largeur, hauteur en pixels du dessin) et des `dims` (taille
+  de l'image du dessin : feuille, aperçu réduit d'un effet, feuille flottante agrandie). `texture_rect`
+  prend la boîte des tuiles non vides, ajoute **un pixel transparent de marge** du côté de chaque
+  bord qui n'est pas celui de la feuille (le lissage d'un calque transformé y lit du transparent,
+  comme dans la feuille entière ; au bord de la feuille, il lit le bord, comme avant), arrondit la
+  taille à 128 pixels du côté libre, sans sortir de la feuille. Dessin vide : un pixel.
+- Les tuiles s'envoient au décalage de la boîte. `paint` place les quatre coins du rectangle comme
+  l'image entière l'aurait été : calque transformé, feuille flottante (`Pre { aff, dims }`), aperçu
+  réduit d'effet (image plus petite montrée sur toute la feuille), et ramène les coordonnées de texture
+  des maillages (enveloppe, perspective) à la texture ; la lecture hors de la texture tombe sur la marge
+  transparente. Un dessin dont la texture est la feuille entière suit le chemin d'avant, bit pour bit.
+- Un dessin qui sort de sa boîte (trait qui s'allonge, nouvelle version) refait sa texture avec de la
+  marge (le quart du contenu, au moins deux tuiles : la texture ne se refait pas à chaque tuile) et
+  renvoie le dessin entier. Les tuiles signalées pendant un trait (dont `fx::fond_patch`) sont
+  vérifiées avant d'être posées ; un pixel peint hors de la boîte ne peut pas être rogné.
+- Recyclage : quand le budget en octets est dépassé, la texture de même taille la plus ancienne qui ne
+  sert pas à l'image est reprise, et les tuiles de son ancien dessin sont effacées d'abord (rectangles
+  de tuile à zéro dans le même envoi). Le budget se compte en octets (le réglage « Cache de la carte
+  graphique » des Préférences vaut pour des dessins 30 fois plus nombreux), `ahead_capacity` compte le
+  poids moyen des textures gardées : la lecture envoie bien plus de dessins d'avance.
+- Le calcul de secours (`render.rs`), l'export, les vignettes ne changent pas.
+- Essais : `gpu_contenu_tests.rs` (8) : géométrie des boîtes (toutes positions et tailles, marge, reste
+  dans la feuille) ; **mêmes pixels** (à un niveau près, et l'essai en trouve zéro) qu'avec la texture
+  de la feuille entière pour un bloc, plusieurs, un dessin plein, des calques transformés (rotation,
+  échelle, demi-pixel), des modes de fusion et opacités, un aperçu réduit (droit et transformé), une
+  feuille flottante déplacée et en enveloppe ; un dessin qui grandit (nouvelle version, tuiles signalées
+  une à une, effacé, vidé, rempli ailleurs) comparé au calcul de secours à chaque étape ; recyclage entre
+  boîtes de même taille et d'origines différentes ; le cache garde 8 fois plus de dessins ; rien n'est
+  renvoyé quand rien ne change.
+
+### 9.3 Image composée gardée
+
+`CanvasPaint::prepare` compare une clé (`ItemKey` : dessin, génération de sa texture, coins, couleur,
+réglages, mode de fusion, empreinte du maillage de chaque élément, dans l'ordre) à celle de l'image
+composée qu'il garde (`Frame::composed`). Identique : la passe de composition est sautée, seul l'affichage
+(vue, zoom) est refait. La génération d'une texture est l'image d'écran où elle a reçu des pixels ou
+a été refaite. Mesuré, souris qui bouge sur 15 calques, part de la carte graphique par image d'écran :
+2,4 ms (avant) → 0,6–0,9 (textures au contenu) → **0,40–0,45 (image gardée)** ; dessins éparpillés,
+dont les textures restent grandes : 2,3 → 1,6 → 0,40. Total de l'image d'écran : 5,2 → 2,7 ms. Pour
+60 calques (5,7 ms de carte avant) le gain attendu est de l'ordre de 5 ms (non mesuré).
+Essai : composée une fois pour cinq images identiques, refaite pour une opacité, une transformation,
+un mode de fusion, une tuile signalée, une version, un dessin de plus, une autre taille de feuille.
+
+### 9.4 Risques
+
+- **Perte de données à l'enregistrement** : le seul risque sérieux. Garde-fous : `modified` remis à
+  vrai par tout ce qui suit le cliché (et par tout échec), suites retenues jusqu'à la fin, fermeture
+  qui attend, atomicité. Un `modified = true` oublié par un outil (une modification qui ne le pose
+  pas) était déjà un risque avant : le cliché ne l'aggrave pas. Sons, modèles et textures ne
+  s'écrivent que s'ils manquent (ils ne changent jamais sous le même nom) ; un dessin vectoriel est
+  sérialisé en JSON sur le fil de l'interface (non mesuré : un dessin avec des milliers de traits peut
+  y coûter quelques ms).
+- Premier enregistrement d'un très gros projet : 8 fils d'encodage tournent en même temps que
+  l'interface (essayé en priorité basse : sous charge, six fois plus lent, abandonné).
+- **Tuiles partagées** (`Arc`) : une écriture fait la copie de 16 Ko si la tuile est encore partagée (avec
+  un cliché en cours d'écriture, ou une étape d'annulation) ; une écriture par pixel directement par
+  la tuile coûte un test atomique de plus (trois boucles chaudes corrigées ; `perf_cpu_bench` : 30 traits
+  texturés 1 275 ms contre 1 237–1 255, dans le bruit).
+- **Textures au contenu** : le rognage d'un pixel hors de la boîte et la lecture d'un voisin au bord
+  sont les deux risques ; couverts par la marge d'un pixel et `covers`. Une texture dont le contenu a
+  fini plus petit que la boîte ne rétrécit pas avant d'être chassée. L'arrondi à 128 pixels gaspille jusqu'à
+  25 % sur un dessin de 8 × 5 tuiles (960 Ko au lieu de 750) pour des tailles qui se recyclent.
+- **Image composée gardée** : une clé incomplète montrerait une image périmée. Tout ce qui entre dans le
+  tampon des réglages et les sommets y est, avec la génération des textures. Les envois d'avance (dessins
+  qui ne sont pas à l'écran) ne changent aucune clé.
+
+### 9.5 À regarder à l'écran
+
+- **Ctrl+S dans un gros projet** : rien ne se fige ; « Enregistrement… n / N » dans la barre d'état ;
+  le point • du titre reste jusqu'à la fin ; dessiner pendant l'écriture laisse le projet « modifié »
+  après. Quitter pendant l'écriture : la fenêtre « Enregistrement » apparaît après 200 ms, puis SHOT se
+  ferme. Un disque plein ou un dossier en lecture seule : « Enregistrement impossible », rien de perdu.
+- **Dessin et défilement** : un trait qui sort loin de son contenu (de haut en bas de la feuille) est
+  entier, sans bord rogné ; un calque transformé (échelle, rotation) a les mêmes bords qu'avant ; une
+  feuille flottante déformée (Enveloppe, Perspective) aussi ; un fond sous le trait qui se peint ; des
+  pelures d'oignon teintées ; un aperçu réduit d'effet qui revient en pleine résolution ; un tremblement
+  du trait animé à l'arrêt. Aller et venir très vite dans la timeline sans reste des dessins précédents.
+- La **lecture** d'un plan chargé reste régulière (superposition « Performance » : « Dessin » et
+  « composition : envoi à la carte graphique » plus bas qu'avant).
