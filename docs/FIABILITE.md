@@ -28,6 +28,7 @@ Un projet fabriqué par le code (pas un fichier d'Anthony), qui contient :
 | Commentaires | 5 (dont 2 rangés dans la réserve), résolus et non, couleurs |
 | Son | un WAV fabriqué, deux pistes (une muette, verrouillée, volume 1,25), deux extraits |
 | Planche, guides | notes dessinées et texte de la planche (une attachée à un plan), guide de perspective |
+| Scène 3D | `scenes3d.json` : toutes les formes, un mannequin à la pose libre, un groupe, un modèle importé, un décor de séquence, la caméra du plateau (aller-retour, fumée, fichier coupé et muté ; protections de `write_sidecar`) |
 
 Manque (dit, pas caché) : les calques « toute la scène » (d'avant les plans, devenus des calques ordinaires à
 l'ouverture), le texte vectoriel comparé pixel à pixel (polices du poste). `the_fixture_really_holds_everything_the_project_can_store`

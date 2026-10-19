@@ -103,6 +103,7 @@ et les calques » (c'est la colonne des calques).
 | Traits d'aide du cadre | **aides au cadrage** | repères (réservé aux repères de la timeline : signets, entrée, sortie) |
 | Menu ⋮ d'un calque ou d'un groupe | **Commandes du calque** / **du groupe** | options |
 | Importer un projet Storyboard Pro | **Importer** (l'accueil disait « Ouvrir ») | |
+| Les objets 3D posés pour le blocage | **scène 3D** (« scène » n'est plus le mot du plan) ; **décor** (commun à la séquence) ; **caméra du plateau** (celle de la scène 3D, distincte de la **caméra** 2D du plan) ; **calque « Fond 3D »** | maquette, set, vue 3D (la « vue 3D » est le plateau en 3D) |
 | Basculer | « (montrer / cacher) » pour les barres et colonnes, « (ouvrir / fermer) » pour les panneaux, « (oui / non) » pour une option, « (allumer / éteindre) » pour la pelure et les pochoirs, « (poser / retirer) » pour les marques et signets | afficher / masquer |
 
 ### Changements faits (étiquettes seulement)
@@ -429,3 +430,30 @@ Rien de cette passe n'a été regardé : aucun lancement de SHOT (consigne). À 
 `zoombande_tests` (7), `bulles_tests` (3), `theme_tests` (2), `montagerows_tests` (2 remplacés).
 La suite passe de 1008 à 1046 essais ; `scripts\verifier.ps1 -Repetitions 2` : OK, compilation sans
 avertissement.
+
+---------------------------------------------------------------------------------------------------
+
+## 8. Scène 3D de blocage (2026-10-19, branche `scene3d`)
+
+Une vue de plus dans la barre au-dessus du dessin (icône cube, à côté de « Plateau en 3D » ; les deux s'excluent),
+avec ses réglages dans le panneau **Réglages** (qui montre la scène 3D tant qu'elle est ouverte). Tout y est
+en icônes avec bulle (nom, description, raccourci), comme le reste.
+
+- **Commandes** (`scene3d.*`, aucune touche par défaut, toutes dans Ctrl+K) : afficher / quitter, outils
+  (choisir, déplacer, tourner, échelle), ajouter (cube, plan, cylindre, sphère, cône, escalier, mannequin),
+  importer un modèle, dupliquer, supprimer (Suppr y suffit), grouper, dégrouper, vue par la caméra, cadrer,
+  envoyer vers un calque de fond, caler la caméra sur la caméra 2D, aimantation, grille, décor / plan.
+- **Souris dans la vue** : clic = choisir (Maj ou Ctrl : ajouter) ; glisser un objet = le poser sur le sol (Maj :
+  en hauteur) ; poignées du manipulateur pour déplacer, tourner, mettre à l'échelle ; clic droit ou Alt + glisser =
+  tourner la vue ; bouton du milieu = la glisser ; molette = avancer. En « Vue par la caméra », ces gestes
+  déplacent la caméra du plateau. Mêmes gestes que le plateau en 3D (clic droit, milieu, molette).
+- **Annulation** : une étape par geste, au nom français : « Ajouter : cube », « Déplacer dans la scène 3D »,
+  « Tourner dans la scène 3D », « Mettre à l'échelle dans la scène 3D », « Supprimer des objets 3D », « Dupliquer… »,
+  « Grouper… », « Envoyer la scène 3D vers un calque de fond »…
+- **Aucun repaint au repos** : la vue ne demande une image que si on la touche ou si un rendu vers le calque est en
+  cours (toutes les 40 ms, jusqu'à sa fin). Le dessin n'est jamais ralenti : le rendu part sur un autre fil (la moitié
+  des cœurs), et son résultat n'est posé ni pendant un trait, ni pendant un geste dans la vue 3D, ni en lecture.
+- **À vérifier à l'écran (par Anthony)** : lisibilité des poignées et de la boîte de sélection dans les trois
+  thèmes ; le décor estompé quand on modifie le plan ; la taille des poignées à toutes les distances ; le panneau
+  Réglages dans un panneau étroit ; les conventions empruntées aux logiciels 3D (rouge / vert / bleu pour X / Y / Z,
+  flèches / cercles / cubes, tourner au clic droit) **à vérifier** avec ce qu'il attend.

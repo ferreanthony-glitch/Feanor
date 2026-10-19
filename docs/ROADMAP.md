@@ -340,6 +340,8 @@ voir le plateau dans l'espace, naviguer et y déplacer les objets.
   caméra. Même géométrie que le multiplan (testée).
   Pas encore : modes de fusion dans la vue 3D (tout y est en Normal), repère 3D (glTF) dans la
   vue 3D, échelle et rotation d'un calque dans la vue 3D (outil Transformer en 2D).
+  Placer des objets 3D (formes, mannequins) et en faire un calque de fond : voir plus bas « Scène 3D de
+  blocage » (une vue à part, qui ne remplace pas ce plateau).
 - ✅ 9f. Bascule et panoramique de la caméra (demandés par Anthony) : la caméra tourne sur
   elle-même. Fenêtre de la caméra (Bascule, Panoramique, interpolés entre les clés), vue 3D
   (outil Déplacer, Ctrl + glisser l'œil). Vue caméra, export et vignettes en perspective ; sur le
@@ -2508,3 +2510,86 @@ feuille entière) alors que 768 essais passaient ; et sur une machine chargée, 
 - Pas fait : la première image dans la vraie fenêtre (eframe, carte graphique, pipelines : à lire dans `demarrage.log`) ;
   `BrushLibrary::builtin()` (74 ms) reste avant la première image ; un son ou un modèle illisible sort du projet et ses
   extraits avec lui à l'enregistrement.
+
+## Scène 3D de blocage (demandée par Anthony le 2026-10-19, branche `scene3d`) ✅
+
+Le choix d'Anthony : **blocage simple** — des formes (cube, plan, cylindre, sphère, escalier), les déplacer, les
+tourner, les mettre à l'échelle ; la caméra du plan dans la scène ; des silhouettes de personnages ; puis dessiner
+par-dessus. Pas d'édition de sommets. Vue **Scène 3D** (bouton de la barre au-dessus du dessin, menu Affichage >
+Plateau, action `scene3d.basculer`), réglages dans le panneau Réglages. Code : `scene3d*.rs` (huit fichiers), essais
+`scene3d_tests.rs`. Pas vu sur l'écran d'Anthony : captures faites avec le banc d'essai (voir plus bas), à regarder.
+
+- ✅ **Le modèle** (`scene3d.rs`). Chaque **plan** a sa scène : ses objets (personnages, accessoires), sa caméra du
+  plateau, sa lumière, son style de rendu. Chaque **séquence** peut avoir un **décor** : une liste d'objets que tous
+  ses plans montrent (case « Montrer le décor de la séquence » ; le plan qu'on modifie estompe le décor, et
+  « Modifier : le décor » inverse). On place un décor une fois ; chaque plan y pose ses personnages et sa caméra ;
+  changer le décor le change dans tous les plans qui l'utilisent. Un modèle importé (`.pelure3d`, glTF) est un objet
+  de plus (`Shape3d::Model`).
+- ✅ **Formes** : cube, plan (sol ou mur), cylindre, sphère, cône, escalier (nombre de marches réglable, 2 à 40),
+  **mannequin** (capsules articulées, 10 articulations : colonne, tête, épaules, coudes, hanches, genoux ; taille
+  réglable ; poses *debout, assis, marche, bras levés* ; une articulation touchée rend la pose « libre » ; les pieds
+  sont toujours au sol). Mètres, Y vers le haut, un personnage regarde vers +Z. Nom, couleur, ombrage gris par objet,
+  cacher, verrouiller, grouper (un groupe se choisit et se manie d'un bloc), dupliquer, supprimer.
+- ✅ **Vue d'édition sur la carte graphique** (`scene3dgpu.rs`, wgpu) : un appel de dessin par objet sur un maillage
+  gardé dans la carte (déplacer un objet n'envoie qu'une matrice de 176 octets), tampon de profondeur, lissage 4×,
+  coque de contour, arêtes vives, sol quadrillé, une lumière réglable (direction, force, ambiante). Tourner : clic
+  droit ou Alt + glisser ; glisser la vue : bouton du milieu ; avancer : molette ; **Cadrer**.
+- ✅ **Manipulateurs** (`scene3dgizmo.rs`) : Choisir, Déplacer (flèches et carrés de plan), Tourner (trois cercles),
+  Échelle (cubes d'axe et cube central, uniforme si plusieurs objets). Repère du monde ou de l'objet. Un objet se
+  tire directement sur le sol (Maj : en hauteur). Boîte de sélection en pointillés avec ses petits carrés d'angle,
+  comme celle du dessin. **Aimantation** : grille (pas réglable, 0,25 m), rotations par paliers (15°), tailles, et
+  pose sur le sol quand l'objet en est à moins de 15 cm. Champs numériques (position, rotation, taille, articulation)
+  dans les Réglages. **Annulation** : chaque geste est une étape au nom français (« Déplacer dans la scène 3D »,
+  « Ajouter : mannequin », « Grouper des objets 3D »…).
+- ✅ **Caméra du plateau** (`SceneCam`) : une caméra posée dans la scène, avec sa pyramide de vision tracée ; on la
+  choisit et on la déplace ou la tourne avec les mêmes poignées ; **Vue par la caméra** montre ce qu'elle filme au
+  format du cadre (et déplace alors la caméra elle-même : milieu = glisser, clic droit = tourner, molette = avancer).
+  Focale en mm sur une pellicule de 36 mm, avec la liste des objectifs de la caméra du plan (`FOCAL_PRESETS`), même
+  angle de champ que `camera::angle_of_view`. **Choix : une caméra à part, liée à la caméra 2D par une conversion
+  exacte, pas fusionnée avec elle.** Convention : le plan z = 0 de la scène est la feuille (le plan de référence) et
+  le cadre par défaut y mesure 6 m de large (`PLATE_WIDTH_M`) ; « Caler sur la caméra du plan » (`SceneCam::
+  from_plan_camera`) pose la scène-caméra là où la caméra 2D est à l'image courante (position, focale, panoramique,
+  bascule, rotation) — essai : les coins du cadre vus par l'une retombent sur ceux de l'autre, caméras droite,
+  zoomée, avancée, tournée, basculée, en panoramique. Pourquoi à part : la caméra 2D bouge pendant le plan (clés,
+  adoucis) au-dessus d'un fond qui, lui, est une image fixe ; fusionner les deux ferait appliquer le mouvement deux
+  fois. **Clés de caméra en 3D : pas faites** (la caméra du plateau est fixe pour tout le plan ; les clés de la
+  caméra 2D continuent de la faire bouger par-dessus le fond rendu). À reprendre si Anthony veut des travellings
+  filmés dans la scène : il faudrait rendre une image par image, ou la scène par la caméra 2D.
+- ✅ **Dessiner par-dessus** (`scene3drender.rs`) : « Envoyer vers un calque de fond » rend la scène par la caméra du
+  plateau dans un calque bitmap « Fond 3D », **tout en bas du plan et verrouillé**, à la taille de la feuille (le cadre
+  seul, ou toute la feuille au choix : la caméra 2D peut alors s'éloigner sans sortir du rendu). Styles : couleurs,
+  **niveaux de gris**, **contours** (aplats clairs et traits noirs sur silhouettes, cassures et profondeurs). Le
+  calque suit la scène (« Suivre ») : rendu sur un **autre fil** (la moitié des cœurs, sur-échantillonnage 2 à 3), posé
+  seulement quand on ne dessine pas (ni trait, ni geste dans la vue 3D, ni lecture), jeté s'il est périmé. Rien ne
+  tourne au repos et aucune image n'est demandée. C'est un calque ordinaire : il s'enregistre en PNG, s'exporte, se
+  copie. Le rendu vient du processeur (déterministe, indépendant de la carte graphique) avec les mêmes formules que la
+  vue d'édition (essai : mêmes silhouettes à moins de 0,5 %).
+- ✅ **Enregistrement** : `scenes3d.json` à côté du manifeste (`scene3dstore.rs`), écrit par le même `SaveJob`
+  (atomique, sur le disque), **sans changer `project::VERSION`** (resté à 26) : une version qui ne le connaît pas ouvre
+  le projet sans la scène, le calque « Fond 3D » étant un dessin ordinaire — au lieu de refuser le projet. Protections
+  de `docs/FIABILITE.md` : fichier d'une version plus récente ou abîmé = avertissement, jamais effacé, mis de côté en
+  `.illisible` si une scène neuve est à écrire ; valeurs bornées à la lecture (nombre d'objets, marches, tailles,
+  articulations, numéros doubles renumérotés). Les modèles importés qu'une scène montre sont gardés dans `modeles/`.
+  Le projet d'essai de la fiabilité contient une scène (aller-retour par les trois chemins d'enregistrement, fumée,
+  fichiers coupés et mutés).
+- ✅ **Essais** : 38 (`scene3d_tests.rs`, dont un qui passe par la carte graphique de la machine, sauté s'il n'y en a
+  pas) et la suite complète passe (1114 essais, `scripts\verifier.ps1 -Repetitions 2` : OK, compilation sans
+  avertissement) : nombre de sommets et normales des formes, mannequin (hauteur, pieds au sol,
+  poses, articulations), transformations et manipulateurs, aimantation, caméra et cadrage face à la caméra 2D,
+  taille et alignement du rendu vers un calque, aller-retour et protections du fichier, annulation, application sans
+  fenêtre (envoi, suivi, attente quand on est occupé, repos), carte graphique contre processeur. Un banc `#[ignore]`
+  (`perf_100_primitives`) et des captures (`images_of_the_scene_views`, `SHOT_SCENE3D_IMAGE=<dossier>`).
+- ✅ **Mesures** (`perf_100_primitives`, 100 formes de toutes sortes, carte graphique de la machine de développement) :
+  vue d'édition **1,9 ms** par image d'application entière (3,7 ms au plus), repos atteint en 6 images ; maillages
+  construits en 0,5 ms ; rendu vers un calque 1920 × 1080 en **102 ms** (sur-échantillonnage 2), toute la feuille
+  3840 × 2160 en **202 ms**, sur un autre fil.
+- Pas fait : pas d'édition de sommets ni de modèle à plusieurs matières ; pas de clés de caméra 3D (voir plus haut) ;
+  les scènes ne suivent pas un plan qu'on duplique, coupe ou assemble (la scène reste au plan d'origine) ; pas
+  d'ombres portées ni de textures ; pas de poses animées du mannequin ; un modèle importé de plus de 400 000 triangles
+  s'affiche en boîte dans la vue d'édition (le rendu vers un calque le trace en entier) ; pas de raccourci par défaut
+  (aucune touche choisie ; W / E / R pour déplacer / tourner / échelle sont l'usage de plusieurs logiciels 3D, **à
+  vérifier** avant de les adopter).
+- Conventions empruntées à d'autres logiciels, **à vérifier** : rouge / vert / bleu pour X / Y / Z ; flèches pour
+  déplacer, cercles pour tourner, cubes pour l'échelle ; tourner la vue au clic droit et la glisser au bouton du
+  milieu (comme le plateau en 3D) ; Alt + glisser pour tourner ; rotation en degrés dans l'ordre lacet, tangage,
+  roulis (Y, X, Z) ; focale équivalente sur pellicule de 36 mm (celle de la caméra 2D).

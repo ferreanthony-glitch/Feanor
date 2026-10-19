@@ -595,6 +595,13 @@ impl App {
 
     // ------------------------------------------------------------------------ panneau Réglages
 
+    /// Une étape d'annulation de l'état d'avant, au nom `name` (à appeler AVANT le changement).
+    fn record_named(&mut self, name: &str) {
+        let before = self.history.context.replace(name.to_string());
+        self.record_step();
+        self.history.context = before;
+    }
+
     fn edited3d(&mut self, resp: &egui::Response, name: &str) -> bool {
         let before = self.history.context.replace(name.to_string());
         let changed = self.edited(resp);
@@ -859,7 +866,7 @@ impl App {
                 }
             });
             if pose != mq.pose {
-                self.record_step();
+                self.record_named("Pose du mannequin");
                 mq.set_pose(pose);
                 changed = true;
             }
@@ -925,7 +932,7 @@ impl App {
                         if ui.selectable_label((p.mm - cam.focal).abs() < 0.01, focal_label(p)).on_hover_text(p.note).clicked() {
                             cam.focal = p.mm;
                             changed = true;
-                            self.record_step();
+                            self.record_named("Objectif de la caméra 3D");
                         }
                     }
                 });
@@ -992,7 +999,7 @@ impl App {
                 if style != render.style {
                     render.style = style;
                     changed = true;
-                    self.record_step();
+                    self.record_named("Style de rendu 3D");
                 }
             });
             ui.end_row();
@@ -1010,7 +1017,7 @@ impl App {
                     let r = crate::bulles::choix(ui, &mut render.area, area, if area == RenderArea::Frame { ph::FRAME_CORNERS } else { ph::PICTURE_IN_PICTURE }, area.label(), if area == RenderArea::Frame { "Seulement l'image finale." } else { "Toute la feuille : la caméra 2D peut s'éloigner ou se décaler sans sortir du rendu." }, "");
                     if r.clicked() {
                         changed = true;
-                        self.record_step();
+                        self.record_named("Zone de rendu 3D");
                     }
                 }
             });

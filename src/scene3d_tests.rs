@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use eframe::egui::{pos2, Rect};
+use eframe::egui::{pos2, vec2, Rect};
 
 use crate::camera::Camera;
 use crate::document::Document;
@@ -1053,6 +1053,72 @@ fn the_scene_view_runs_in_the_application_without_a_graphics_card() {
     assert!(b.app.stage3d.on && !b.app.scene3d.on);
     b.app.run_action("scene3d.basculer");
     assert!(b.app.scene3d.on && !b.app.stage3d.on);
+}
+
+#[test]
+fn the_mouse_picks_drags_and_orbits_in_the_view() {
+    use eframe::egui::{Event, Modifiers, PointerButton};
+    let mut doc = Document::with_frame(320, 180, 24);
+    let (panel, seq) = (doc.panels[0].id, doc.sequence_of(0));
+    let cube = doc.scenes3d.add(panel, seq, Target::Plan, Shape3d::Cube, [0.0; 3]).expect("cube");
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.app.run_action("scene3d.basculer");
+    b.app.scene3d.show_grid = false;
+    b.app.scene3d.mode = Mode::Select;
+    b.chauffer(5);
+    let rect = b.app.canvas_rect;
+    let at = |b: &crate::perf_tests::Banc, w: V3| {
+        let cam = b.app.scene3d.cam.expect("vue");
+        let view = crate::scene3dview::orbit_view(&cam, rect.width());
+        let p = view.project(w, [rect.width() / 2.0, rect.height() / 2.0]).expect("visible");
+        pos2(rect.left() + p[0], rect.top() + p[1])
+    };
+    let button = |pos, button, pressed| Event::PointerButton { pos, button, pressed, modifiers: Modifiers::NONE };
+    // Un clic sur le cube le choisit ; un clic dans le vide ne choisit plus rien.
+    let p = at(&b, [0.0, 0.5, 0.0]);
+    b.image(vec![Event::PointerMoved(p)], 0.02);
+    b.image(vec![button(p, PointerButton::Primary, true)], 0.02);
+    b.image(vec![button(p, PointerButton::Primary, false)], 0.02);
+    b.chauffer(2);
+    assert_eq!(b.app.scene3d.sel, vec![cube], "le clic choisit le cube");
+    assert!(b.app.history.names().0.is_empty(), "choisir n'est pas une étape d'annulation");
+    let empty = pos2(rect.left() + 40.0, rect.top() + 60.0);
+    b.image(vec![Event::PointerMoved(empty)], 0.02);
+    b.image(vec![button(empty, PointerButton::Primary, true)], 0.02);
+    b.image(vec![button(empty, PointerButton::Primary, false)], 0.02);
+    b.chauffer(2);
+    assert!(b.app.scene3d.sel.is_empty(), "un clic dans le vide lâche le choix");
+    // Glisser le cube : il suit la souris sur le sol, d'un seul geste d'annulation.
+    let to = at(&b, [2.0, 0.5, 0.0]);
+    b.image(vec![Event::PointerMoved(p)], 0.02);
+    b.image(vec![button(p, PointerButton::Primary, true)], 0.02);
+    for k in 1..=8 {
+        let t = k as f32 / 8.0;
+        b.image(vec![Event::PointerMoved(p + (to - p) * t)], 0.02);
+    }
+    b.image(vec![button(to, PointerButton::Primary, false)], 0.02);
+    b.chauffer(2);
+    let x = b.app.doc.scenes3d.find(panel, seq, cube).expect("cube").0.xf.pos;
+    assert!(x[0] > 1.5 && x[0] < 2.6 && near(x[1], 0.5, 1e-3), "le cube a suivi la souris : {x:?}");
+    assert_eq!(b.app.history.names().0, vec!["Déplacer dans la scène 3D"]);
+    b.app.undo();
+    assert!(near(b.app.doc.scenes3d.find(panel, seq, cube).expect("cube").0.xf.pos[0], 0.0, 1e-5));
+    // Clic droit glissé : la vue tourne, sans rien changer à la scène (ni étape d'annulation).
+    let az = b.app.scene3d.cam.expect("vue").azimuth;
+    b.image(vec![Event::PointerMoved(empty)], 0.02);
+    b.image(vec![button(empty, PointerButton::Secondary, true)], 0.02);
+    for k in 1..=5 {
+        b.image(vec![Event::PointerMoved(empty + vec2(20.0 * k as f32, 0.0))], 0.02);
+    }
+    b.image(vec![button(empty + vec2(100.0, 0.0), PointerButton::Secondary, false)], 0.02);
+    assert!((b.app.scene3d.cam.expect("vue").azimuth - az).abs() > 5.0, "la vue a tourné");
+    // La molette avance.
+    let distance = b.app.scene3d.cam.expect("vue").distance;
+    b.image(vec![Event::PointerMoved(p)], 0.02);
+    let wheel = b.molette(vec2(0.0, 120.0), Modifiers::NONE);
+    b.image(wheel, 0.02);
+    assert!(b.app.scene3d.cam.expect("vue").distance < distance, "la molette rapproche");
+    assert_eq!(b.app.history.names().0.len(), 0, "naviguer n'est pas une étape d'annulation");
 }
 
 #[test]
