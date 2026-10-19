@@ -28,7 +28,8 @@ pub enum PresetId {
     /// Les raccourcis de SHOT (`keymap.toml`), sans rien par-dessus.
     #[default]
     Shot,
-    /// Les raccourcis de SHOT, avec par-dessus ceux de Storyboard Pro que `keymap.toml` documente.
+    /// Les raccourcis de SHOT, avec les « à vérifier » de Storyboard Pro ; aucune touche n'est redéfinie
+    /// pour l'instant (le jeu peut recevoir par-dessus celles que `keymap.toml` documente).
     StoryboardPro,
 }
 
@@ -55,7 +56,7 @@ impl PresetId {
         match self {
             PresetId::Shot => "Les raccourcis de SHOT : A et F vont de clé en clé, PgPréc et PgSuiv de plan en plan, F5 pose une clé, F6 coupe le plan.",
             PresetId::StoryboardPro => {
-                "SHOT, avec une touche de Storyboard Pro par-dessus : Ctrl+Maj+V colle sur place. A et F (clé précédente / suivante), F5 (nouvelle clé) et F6 (couper le plan) gardent les touches de SHOT, voulu par Anthony. Rien d'autre ne change."
+                "Pour l'instant, les mêmes touches que SHOT : A et F (clé précédente / suivante), F5 (nouvelle clé), F6 (couper le plan) et Ctrl+Maj+V (coller les clés à la tête de lecture) restent comme Anthony les a réglés. Le jeu ne fait que noter les commandes « à vérifier »."
             }
         }
     }

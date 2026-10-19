@@ -1,5 +1,6 @@
 //! Les jeux de raccourcis (2026-10-19) : « SHOT (par défaut) » et « Façon Storyboard Pro ». Le jeu
-//! Storyboard Pro ne redéfinit que ce que `keymap.toml` documente, n'a aucun conflit en lui, ne vise
+//! Storyboard Pro garde pour l'instant toutes les touches de SHOT (Ctrl+Maj+V, A / F et F5 comme
+//! Anthony les a réglées) et n'ajoute que des « à vérifier » ; il n'a aucun conflit en lui, ne vise
 //! que des commandes faites ; on passe de l'un à l'autre sans perdre une touche, et le fichier
 //! personnel reste par-dessus.
 
@@ -50,10 +51,11 @@ fn snapshot(map: &Keymap) -> Vec<String> {
     v
 }
 
-/// Ce que le jeu Storyboard Pro redéfinit, et les touches qu'il donne. Depuis le choix d'Anthony du
-/// 2026-10-19, A / F (clé précédente / suivante) et F5 (nouvelle clé) ne sont PAS dans le jeu : ils
-/// gardent ses touches de SHOT. Il ne reste que Ctrl+Maj+V (coller sur place, pas encore tranché).
-const SET: [(&str, &[&str]); 2] = [("edition.coller_sur_place", &["Ctrl+Maj+V"]), ("edition.coller_a_la_tete", &[])];
+/// Les touches du jeu Storyboard Pro sont celles de SHOT, sans exception : depuis les choix d'Anthony
+/// du 2026-10-19, A / F (clé précédente / suivante), F5 (nouvelle clé) et Ctrl+Maj+V (coller les clés à
+/// la tête de lecture) gardent leurs touches de SHOT. Le jeu n'a aucune redéfinition ; il ne montre
+/// que des « à vérifier ». Si une redéfinition revient, la mettre ici (action, touches données).
+const SET: [(&str, &[&str]); 0] = [];
 
 /// Un fichier personnel qui donne `key` à `action` dans l'état `map` (comme la fenêtre « Assigner »).
 fn user_text(map: &Keymap, action: &str, key: &str) -> String {
@@ -78,15 +80,17 @@ fn the_storyboard_pro_set_has_no_internal_conflict() {
 #[test]
 fn every_preset_binding_targets_an_implemented_action() {
     let map = sbp();
+    // Aujourd'hui le jeu n'a aucune redéfinition (la boucle ne tourne pas) ; si une revient, elle est
+    // vérifiée ici.
     let in_preset: Vec<_> = map.bindings.iter().filter(|b| b.preset).collect();
-    assert!(!in_preset.is_empty());
     for b in &in_preset {
         let info = action_info(&b.action).unwrap_or_else(|| panic!("{} n'existe pas", b.action));
         assert!(info.implemented, "{} n'est pas faite : le jeu ne peut pas lui donner de touche", b.action);
         assert!(b.active && !b.reserved, "{} doit être active", b.action);
         assert_eq!(b.combos.len() > 0, !b.keys.is_empty(), "{} : touches illisibles", b.action);
     }
-    // Les « à vérifier » aussi visent des commandes faites.
+    // Les « à vérifier » aussi visent des commandes faites, et le jeu les expose bien.
+    assert!(!map.notes.is_empty(), "le jeu doit toujours exposer ses « à vérifier »");
     for (action, note) in &map.notes {
         assert!(action_info(action).is_some_and(|i| i.implemented), "{action} : à vérifier mais pas faite");
         assert!(!note.trim().is_empty(), "{action} : note vide");
@@ -115,23 +119,41 @@ fn the_preset_redefines_only_what_keymap_toml_documents() {
             assert!(SBP27_IDS.contains(&id), "{id} n'est pas un raccourci de Storyboard Pro 27");
         }
     }
-    // Chaque touche donnée se retrouve, notée par le fichier de SHOT, comme celle de Storyboard Pro.
-    for (note, pourquoi) in [("PASTE_IN_PLACE_KEY (sa touche Ctrl+Maj+V", "Ctrl+Maj+V")] {
-        assert!(DEFAULT_KEYMAP.contains(note), "keymap.toml ne documente plus {pourquoi} ({note})");
-    }
-    // Le choix d'Anthony (2026-10-19) est écrit dans le jeu, et ses touches n'y sont pas.
+    // Les choix d'Anthony (2026-10-19) sont écrits dans le jeu, et leurs touches n'y sont pas :
+    // A / F, F5 (le commentaire du jeu) et Ctrl+Maj+V (coller à la tête, noté dans keymap.toml).
     assert!(STORYBOARD_PRO_KEYMAP.contains("VOLONTAIREMENT PAS pris à Storyboard Pro"));
-    for kept in ["cle.precedente", "cle.suivante", "dessin.nouvelle_cle", "panneau.precedent", "panneau.suivant", "panneau.couper"] {
+    assert!(STORYBOARD_PRO_KEYMAP.contains("Ctrl+Maj+V non plus"));
+    assert!(DEFAULT_KEYMAP.contains("PASTE_IN_PLACE_KEY (sa touche Ctrl+Maj+V va à edition.coller_a_la_tete)"));
+    for kept in [
+        "cle.precedente",
+        "cle.suivante",
+        "dessin.nouvelle_cle",
+        "panneau.precedent",
+        "panneau.suivant",
+        "panneau.couper",
+        "edition.coller_a_la_tete",
+        "edition.coller_sur_place",
+    ] {
         assert!(!redefined.contains(kept), "{kept} doit garder la touche de SHOT");
         assert_eq!(map.origin_of(kept), Origin::Default, "{kept}");
     }
-    // Tout le reste garde la touche de SHOT, à l'identique.
+    // Le jeu ne change AUCUNE touche : toutes les actions ont les mêmes blocs que sous SHOT, au
+    // caractère près (touches, contexte, état, réserve, source, origine).
     let (a, b) = (shot(), sbp());
-    for info in ACTIONS.iter().filter(|i| !redefined.contains(i.id)) {
-        let ba: Vec<_> = a.bindings.iter().filter(|x| x.action == info.id).map(|x| (&x.keys, x.context, x.active, &x.source)).collect();
-        let bb: Vec<_> = b.bindings.iter().filter(|x| x.action == info.id).map(|x| (&x.keys, x.context, x.active, &x.source)).collect();
+    assert!(redefined.is_empty(), "le jeu ne redéfinit rien : {redefined:?}");
+    assert_eq!(a.bindings.len(), b.bindings.len());
+    for info in ACTIONS.iter() {
+        let ba: Vec<_> = a.bindings.iter().filter(|x| x.action == info.id).map(|x| (&x.keys, x.context, x.active, x.reserved, &x.source)).collect();
+        let bb: Vec<_> = b.bindings.iter().filter(|x| x.action == info.id).map(|x| (&x.keys, x.context, x.active, x.reserved, &x.source)).collect();
         assert_eq!(ba, bb, "{} ne devait pas changer", info.id);
+        assert_eq!(a.keys_text(info.id), b.keys_text(info.id), "{}", info.id);
+        assert_eq!(b.origin_of(info.id), Origin::Default, "{}", info.id);
     }
+    // Seuls l'identité du jeu et ses « à vérifier » distinguent les deux cartes.
+    let (sa, sb) = (snapshot(&a), snapshot(&b));
+    assert_eq!(sa[..sa.len() - 1], sb[..sb.len() - 1]);
+    assert_eq!((a.preset, b.preset), (PresetId::Shot, PresetId::StoryboardPro));
+    assert!(a.notes.is_empty() && !b.notes.is_empty());
 }
 
 #[test]
@@ -146,9 +168,9 @@ fn the_preset_keys_work_and_their_old_owners_let_go() {
         assert_eq!(press(&shot, Key::F5, NONE, mode).as_deref(), Some("dessin.nouvelle_cle"));
         assert_eq!(press(&shot, Key::F6, NONE, mode).as_deref(), Some("panneau.couper"));
         assert_eq!(press(&shot, Key::V, ctrl_shift, mode).as_deref(), Some("edition.coller_a_la_tete"));
-        // Storyboard Pro : seul Ctrl+Maj+V change (il colle sur place). A / F (clé) et F5 (nouvelle
-        // clé) restent à Anthony (choix du 2026-10-19), PgPréc / PgSuiv et F6 aussi.
-        assert_eq!(press(&sbp, Key::V, ctrl_shift, mode).as_deref(), Some("edition.coller_sur_place"));
+        // Storyboard Pro : rien ne change. Ctrl+Maj+V colle les clés à la tête de lecture, A / F (clé)
+        // et F5 (nouvelle clé) restent à Anthony (choix du 2026-10-19), PgPréc / PgSuiv et F6 aussi.
+        assert_eq!(press(&sbp, Key::V, ctrl_shift, mode).as_deref(), Some("edition.coller_a_la_tete"));
         for (key, action) in [
             (Key::A, "cle.precedente"),
             (Key::F, "cle.suivante"),
@@ -175,8 +197,11 @@ fn the_preset_keys_work_and_their_old_owners_let_go() {
     assert_eq!(shot.keys_text("panneau.suivant"), "Pg suiv.");
     assert_eq!(sbp.keys_text("panneau.couper"), "F6");
     assert_eq!(sbp.keys_text("dessin.nouvelle_cle"), "F5");
-    assert_eq!(sbp.keys_text("edition.coller_sur_place"), "Ctrl+Maj+V");
-    assert_eq!(sbp.keys_text("edition.coller_a_la_tete"), "");
+    assert_eq!(sbp.keys_text("edition.coller_a_la_tete"), "Ctrl+Maj+V");
+    assert_eq!(shot.keys_text("edition.coller_a_la_tete"), "Ctrl+Maj+V");
+    // « Coller sur place » reste une commande sans touche, dans les deux jeux.
+    assert_eq!(sbp.keys_text("edition.coller_sur_place"), "");
+    assert_eq!(shot.keys_text("edition.coller_sur_place"), "");
 }
 
 #[test]
@@ -213,38 +238,63 @@ fn user_overrides_survive_a_switch() {
         assert_eq!(map.user_overrides(), 1, "{id:?}");
         assert!(map.warnings.is_empty(), "{id:?} : {:#?}", map.warnings);
     }
-    // 2. Une commande que le jeu redéfinit : le choix de l'utilisateur l'emporte sur le jeu, et il
-    //    reste quand on revient à SHOT.
+    // 2. Une commande sans touche dans les deux jeux (« Coller sur place ») : la touche de l'utilisateur
+    //    joue dans les deux, Ctrl+Maj+V reste à « Coller à la tête de lecture ».
     let user = user_text(&sbp(), "edition.coller_sur_place", "F9");
-    let map = Keymap::build(PresetId::StoryboardPro, Some(&user));
-    assert_eq!(press(&map, Key::F9, NONE, Mode::Storyboard).as_deref(), Some("edition.coller_sur_place"));
     let ctrl_shift = Modifiers::COMMAND | Modifiers::SHIFT;
-    assert_eq!(press(&map, Key::V, ctrl_shift, Mode::Storyboard), None, "Ctrl+Maj+V ne colle plus sur place : la commande a la touche de l'utilisateur");
-    assert_eq!(map.origin_of("edition.coller_sur_place"), Origin::User);
-    assert_eq!(map.verify_note("edition.coller_sur_place"), None);
-    let back = Keymap::build(PresetId::Shot, Some(&user));
-    assert_eq!(press(&back, Key::F9, NONE, Mode::Storyboard).as_deref(), Some("edition.coller_sur_place"));
-    assert_eq!(press(&back, Key::V, ctrl_shift, Mode::Storyboard).as_deref(), Some("edition.coller_a_la_tete"));
-    // 3. Une touche du jeu que l'utilisateur prend à une autre commande : la sienne joue, dans les
-    //    deux jeux. Sous Storyboard Pro, « Assigner » a retiré Ctrl+Maj+V à « Coller sur place » (aucun
-    //    conflit) ; sous SHOT la touche est aussi à « Coller à la tête » : la sienne l'emporte et une
-    //    remarque le dit.
+    for id in PresetId::ALL {
+        let map = Keymap::build(id, Some(&user));
+        assert_eq!(press(&map, Key::F9, NONE, Mode::Storyboard).as_deref(), Some("edition.coller_sur_place"), "{id:?}");
+        assert_eq!(press(&map, Key::V, ctrl_shift, Mode::Storyboard).as_deref(), Some("edition.coller_a_la_tete"), "{id:?}");
+        assert_eq!(map.origin_of("edition.coller_sur_place"), Origin::User, "{id:?}");
+        assert_eq!(map.origin_of("edition.coller_a_la_tete"), Origin::Default, "{id:?}");
+        assert_eq!(map.user_overrides(), 1, "{id:?}");
+        assert!(map.warnings.is_empty(), "{id:?} : {:#?}", map.warnings);
+    }
+    // Un « à vérifier » du jeu disparaît quand l'utilisateur a choisi la touche de la commande.
+    let user_tab = user_text(&sbp(), "mode.basculer", "F10");
+    let map = Keymap::build(PresetId::StoryboardPro, Some(&user_tab));
+    assert!(sbp().verify_note("mode.basculer").is_some());
+    assert_eq!(map.verify_note("mode.basculer"), None);
+    assert_eq!(map.origin_of("mode.basculer"), Origin::User);
+    assert_eq!(press(&map, Key::F10, NONE, Mode::Animation).as_deref(), Some("mode.basculer"));
+    // 3. Une touche de SHOT que l'utilisateur prend à une autre commande, avec « Assigner » : la
+    //    commande qui l'avait en perd la touche (aucun conflit), dans les deux jeux.
     let user = user_text(&sbp(), "outil.main", "Ctrl+Maj+V");
-    let map = Keymap::build(PresetId::StoryboardPro, Some(&user));
-    assert_eq!(press(&map, Key::V, ctrl_shift, Mode::Animation).as_deref(), Some("outil.main"));
-    assert!(map.labels_of("edition.coller_sur_place").is_empty());
-    assert!(map.warnings.is_empty(), "{:#?}", map.warnings);
-    let back = Keymap::build(PresetId::Shot, Some(&user));
-    assert_eq!(press(&back, Key::V, ctrl_shift, Mode::Animation).as_deref(), Some("outil.main"), "la touche de l'utilisateur l'emporte");
-    assert!(back.warnings.iter().any(|w| w.contains("conflit") && w.contains("edition.coller_a_la_tete")), "{:?}", back.warnings);
-    // Limite connue : le retrait écrit sous Storyboard Pro (« Ctrl+Maj+V n'est plus à Coller sur place »)
-    // est un choix du fichier personnel, il reste après le changement de jeu ; « Raccourci par défaut »
-    // (liste des raccourcis) rend sa touche à la commande, ici celle du jeu.
-    assert!(back.labels_of("edition.coller_sur_place").is_empty());
-    let undo = back
-        .edited_user_file(Some(&user), &[("edition.coller_sur_place".into(), None), ("outil.main".into(), None)])
+    for id in PresetId::ALL {
+        let map = Keymap::build(id, Some(&user));
+        assert_eq!(press(&map, Key::V, ctrl_shift, Mode::Animation).as_deref(), Some("outil.main"), "{id:?}");
+        assert!(map.labels_of("edition.coller_a_la_tete").is_empty(), "{id:?}");
+        assert_eq!(map.origin_of("edition.coller_a_la_tete"), Origin::User, "{id:?}");
+        assert!(map.warnings.is_empty(), "{id:?} : {:#?}", map.warnings);
+    }
+    // Limite connue : le retrait écrit par « Assigner » est un choix du fichier personnel ; « Raccourci
+    // par défaut » (liste des raccourcis) rend sa touche à la commande, dans les deux jeux.
+    let map = Keymap::build(PresetId::Shot, Some(&user));
+    let undo = map
+        .edited_user_file(Some(&user), &[("edition.coller_a_la_tete".into(), None), ("outil.main".into(), None)])
         .unwrap();
-    assert_eq!(Keymap::build(PresetId::StoryboardPro, Some(&undo)).labels_of("edition.coller_sur_place"), vec!["Ctrl+Maj+V".to_string()]);
+    for id in PresetId::ALL {
+        let map = Keymap::build(id, Some(&undo));
+        assert_eq!(map.labels_of("edition.coller_a_la_tete"), vec!["Ctrl+Maj+V".to_string()], "{id:?}");
+        assert_eq!(map.origin_of("edition.coller_a_la_tete"), Origin::Default, "{id:?}");
+        assert_eq!(map.user_overrides(), 0, "{id:?}");
+    }
+    // 3 ter. Le même vol de touche écrit à la main, sans retirer la touche à l'autre commande : celle
+    //    de l'utilisateur l'emporte dans les deux jeux, et une remarque signale le conflit.
+    let by_hand = r#"
+        version = 1
+        [[raccourci]]
+        action = "outil.main"
+        touches = ["Ctrl+Maj+V"]
+        source = "choisi dans SHOT"
+    "#;
+    for id in PresetId::ALL {
+        let map = Keymap::build(id, Some(by_hand));
+        assert_eq!(press(&map, Key::V, ctrl_shift, Mode::Animation).as_deref(), Some("outil.main"), "{id:?} : la touche de l'utilisateur l'emporte");
+        assert_eq!(map.origin_of("outil.main"), Origin::User, "{id:?}");
+        assert!(map.warnings.iter().any(|w| w.contains("conflit") && w.contains("edition.coller_a_la_tete")), "{id:?} : {:?}", map.warnings);
+    }
     // 3 bis. Une commande dont le jeu ne touche pas la touche (A, clé précédente) : la touche de
     //    l'utilisateur joue aussi, et le plan précédent n'est pas concerné.
     let user = user_text(&sbp(), "outil.main", "A");
@@ -252,14 +302,20 @@ fn user_overrides_survive_a_switch() {
     assert_eq!(press(&map, Key::A, NONE, Mode::Animation).as_deref(), Some("outil.main"));
     assert!(map.labels_of("cle.precedente").is_empty(), "« Assigner » retire A à la clé précédente");
     assert_eq!(map.labels_of("panneau.precedent"), vec!["Pg préc.".to_string()]);
-    // 4. Le retour au raccourci par défaut d'une commande redonne celui du jeu choisi.
+    // 4. Le retour au raccourci par défaut d'une commande redonne celui du jeu choisi (ici celui de
+    //    SHOT, que le jeu ne change pas) : « Coller sur place » n'a plus de touche, « Coller à la tête »
+    //    garde la sienne.
     let user = user_text(&sbp(), "edition.coller_sur_place", "F9");
     let map = Keymap::build(PresetId::StoryboardPro, Some(&user));
+    assert_eq!(map.labels_of("edition.coller_sur_place"), vec!["F9".to_string()]);
     let reset = map.edited_user_file(Some(&user), &[("edition.coller_sur_place".into(), None)]).unwrap();
     let map = Keymap::build(PresetId::StoryboardPro, Some(&reset));
-    assert_eq!(map.labels_of("edition.coller_sur_place"), vec!["Ctrl+Maj+V".to_string()]);
-    assert_eq!(map.origin_of("edition.coller_sur_place"), Origin::Preset);
+    assert!(map.labels_of("edition.coller_sur_place").is_empty());
+    assert_eq!(map.origin_of("edition.coller_sur_place"), Origin::Default);
+    assert_eq!(map.labels_of("edition.coller_a_la_tete"), vec!["Ctrl+Maj+V".to_string()]);
     assert_eq!(map.user_overrides(), 0);
+    // Et le fichier personnel remis à zéro redonne exactement la carte du jeu.
+    assert_eq!(snapshot(&map), snapshot(&sbp()));
 }
 
 #[test]
@@ -268,7 +324,7 @@ fn a_verbatim_copy_of_the_default_file_does_not_hide_the_preset() {
     // l'utilisateur, le jeu doit continuer à jouer.
     let with_copy = Keymap::build(PresetId::StoryboardPro, Some(DEFAULT_KEYMAP));
     assert_eq!(with_copy.user_overrides(), 0);
-    assert_eq!(press(&with_copy, Key::V, Modifiers::COMMAND | Modifiers::SHIFT, Mode::Storyboard).as_deref(), Some("edition.coller_sur_place"));
+    assert_eq!(press(&with_copy, Key::V, Modifiers::COMMAND | Modifiers::SHIFT, Mode::Storyboard).as_deref(), Some("edition.coller_a_la_tete"));
     assert_eq!(snapshot(&with_copy), snapshot(&sbp()));
     // Une action de la copie que l'utilisateur a changée, elle, reste la sienne ; son autre bloc
     // (inchangé) ne se perd pas.

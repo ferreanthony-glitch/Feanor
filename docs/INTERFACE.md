@@ -388,7 +388,7 @@ leur identifiant est dans le champ `source`). Au départ, SHOT s'écartait de St
 |---|---|---|---|
 | plan précédent | `PREV_PANEL_KEY` : A | PgPréc | A / F vont à la clé précédente / suivante (choix d'Anthony) ; **gardé ainsi dans le jeu** (voir plus bas) |
 | plan suivant | `NEXT_PANEL_KEY` : F | PgSuiv | idem |
-| coller sur place | `PASTE_IN_PLACE_KEY` : Ctrl+Maj+V | pas de touche | Ctrl+Maj+V colle à la tête de lecture (choix d'Anthony) |
+| coller sur place | `PASTE_IN_PLACE_KEY` : Ctrl+Maj+V | pas de touche | Ctrl+Maj+V colle à la tête de lecture (choix d'Anthony) ; **gardé ainsi dans le jeu** |
 | couper le plan | `SPLIT_PANEL_KEY` : F5 (ses réglages perso) | F6 | F5 pose une clé ; **gardé ainsi dans le jeu** |
 | supprimer et resserrer | `DELETE_ALT_KEY` : Maj+Suppr | pas de touche | commande pas faite, touche prise |
 | décharger la référence | `DRAWING_UNLOAD_MODEL_KEY` : Suppr | pas de touche | commande pas faite, touche prise |
@@ -398,22 +398,19 @@ leur identifiant est dans le champ `source`). Au départ, SHOT s'écartait de St
 **Ce qui est fait.** Deux jeux, au choix dans **Fichier > Préférences… > Raccourcis clavier** et en tête
 de la liste **Fichier > Raccourcis clavier… (F1)** : « Jeu de raccourcis » = *SHOT (par défaut)* ou
 *Façon Storyboard Pro*. Le second est le fichier `keymap-storyboard-pro.toml` (intégré au programme, même
-format que `keymap.toml`, avec un champ `source` par bloc). Il ne redéfinit que deux commandes (une touche
-donnée, une retirée), les seules dont l'écart est documenté dans `keymap.toml`, qui existent dans SHOT, et
-qu'Anthony n'a pas décidé de garder :
-
-| Commande SHOT | Touche du jeu | Source (champ `source` du jeu) | À vérifier |
-|---|---|---|---|
-| `edition.coller_sur_place` | Ctrl+Maj+V | Storyboard Pro 27 : `PASTE_IN_PLACE_KEY` | non |
-| `edition.coller_a_la_tete` | aucune (Ctrl+Maj+V rendue) | SHOT : choix d'Anthony du 2026-10-19, noté dans `keymap.toml` | non |
-
-Ctrl+Maj+V reste donc pris à « Coller à la tête de lecture » dans ce jeu : Anthony ne l'a pas encore
-tranché (question à lui poser).
+format que `keymap.toml`, avec un champ `source` par bloc). **Pour l'instant il garde toutes les touches de
+SHOT** : il ne redéfinit aucune commande (aucun bloc `[[raccourci]]`, le format l'accepte) et se contente de
+noter des commandes « à vérifier » (plus bas). Anthony garde A / F, F5 et Ctrl+Maj+V comme il les a réglés ;
+les deux jeux donnent donc les mêmes touches à chaque commande. S'il décide un jour de reprendre une touche de
+Storyboard Pro, elle s'ajoutera au jeu par un bloc `[[raccourci]]` (avec son `source`).
 
 **Pas pris à Storyboard Pro, volontairement (choix d'Anthony, 2026-10-19).** « A et F ne servent plus à aller
 de clé en clé dans ce jeu ; F5 ne crée plus de nouvelle clé : je veux garder ces raccourcis comme je les ai
-mis en place. » Le jeu ne touche donc pas à :
+mis en place. » Idem pour Ctrl+Maj+V. Le jeu ne touche donc pas à :
 
+- **Ctrl+Maj+V** : reste `edition.coller_a_la_tete` (« Coller les clés à la tête de lecture »), comme dans
+  SHOT ; `edition.coller_sur_place` (`PASTE_IN_PLACE_KEY` de Storyboard Pro, Ctrl+Maj+V chez lui) reste une
+  commande sans touche ;
 - **A / F** : restent `cle.precedente` / `cle.suivante` ; le plan précédent / suivant (`panneau.precedent` /
   `panneau.suivant`) garde PgPréc / PgSuiv, au lieu du A / F de Storyboard Pro (`PREV_PANEL_KEY` /
   `NEXT_PANEL_KEY`) ;

@@ -1,13 +1,13 @@
 # Jeu de raccourcis « Façon Storyboard Pro » (docs/INTERFACE.md, partie 6.2).
 #
-# Ce fichier ne redéfinit QUE les commandes où SHOT s'écarte de Storyboard Pro et dont la source est
+# Ce fichier ne redéfinirait QUE les commandes où SHOT s'écarte de Storyboard Pro et dont la source est
 # notée dans keymap.toml (champ `source`). Tout le reste garde le raccourci de SHOT (keymap.toml).
-# Aucune touche n'est inventée : chaque bloc cite l'identifiant de Storyboard Pro 27 (sb_shortcuts.xml)
+# Aucune touche n'est inventée : chaque bloc citerait l'identifiant de Storyboard Pro 27 (sb_shortcuts.xml)
 # ou les réglages perso d'Anthony (STB_Shortcuts.xml), tels que keymap.toml les rapporte.
 #
-# Mêmes blocs [[raccourci]] que keymap.toml. Une touche donnée ici est RETIRÉE à la commande qui la
-# portait dans keymap.toml : le jeu écrit lui-même ce retrait (touches = []), si bien qu'aucune
-# touche n'est partagée entre deux commandes dans le même contexte (essai
+# Même format que keymap.toml (blocs [[raccourci]]). Une touche donnée ici serait RETIRÉE à la commande
+# qui la portait dans keymap.toml : le jeu écrirait lui-même ce retrait (touches = []), si bien qu'aucune
+# touche ne serait partagée entre deux commandes dans le même contexte (essai
 # keymap_jeux_tests::the_storyboard_pro_set_has_no_internal_conflict).
 #
 # a_verifier = true : la touche ou son retrait n'est pas établi par Storyboard Pro ; à regarder dans
@@ -32,19 +32,12 @@ version = 1
 #     Storyboard Pro).
 # Ne pas les y remettre sans nouvelle décision d'Anthony.
 
-# --- Coller sur place : Ctrl+Maj+V.
-
-[[raccourci]]
-action = "edition.coller_sur_place"
-touches = ["Ctrl+Maj+V"]
-source = "Storyboard Pro 27 : PASTE_IN_PLACE_KEY"
-
-# Ctrl+Maj+V collait les clés à la tête de lecture (choix d'Anthony, 2026-10-19, noté dans
-# keymap.toml) : dans ce jeu la touche revient à « Coller sur place ».
-[[raccourci]]
-action = "edition.coller_a_la_tete"
-touches = []
-source = "SHOT : Ctrl+Maj+V rendue à PASTE_IN_PLACE_KEY (voir le bloc edition.coller_a_la_tete de keymap.toml)"
+# Ctrl+Maj+V non plus : elle reste « Coller les clés à la tête de lecture » (edition.coller_a_la_tete),
+# comme dans SHOT (choix d'Anthony, 2026-10-19). « Coller sur place » (PASTE_IN_PLACE_KEY, Ctrl+Maj+V
+# dans Storyboard Pro 27) reste une commande sans touche.
+#
+# Ce jeu ne redéfinit donc aucune touche pour l'instant : il garde les raccourcis de SHOT et ne fait
+# que montrer les « à vérifier » ci-dessous. Il peut n'avoir aucun bloc [[raccourci]].
 
 # --- Commandes qui gardent la touche de SHOT, et dont la touche de Storyboard Pro n'est pas vérifiée
 # (docs/INTERFACE.md 6.2 : « à vérifier »). Elles ne changent pas : cette liste ne sert qu'à les montrer.
