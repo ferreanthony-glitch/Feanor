@@ -55,49 +55,13 @@ impl App {
         }
     }
 
-    /// Barre de commandes, sous les menus.
+    /// Barre de commandes, sous les menus : Nouveau / Ouvrir / Enregistrer / Exporter, Annuler /
+    /// Rétablir, Couper / Copier / Coller ; le reste (les plans, le transport, le son) sous « Plus… »
+    /// (`barres.rs`). Les commandes de la vue sont sous le dessin (`viewbar::view_tools_bar`).
     pub(crate) fn command_bar(&mut self, ui: &mut egui::Ui) {
-        use egui_phosphor::regular as ph;
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
-            let sep = |ui: &mut egui::Ui| {
-                ui.add_space(4.0);
-                ui.separator();
-                ui.add_space(4.0);
-            };
-            self.command_button(ui, ph::FILE_PLUS, "fichier.nouveau", "Nouveau projet", "Commencer un projet vide.", None);
-            self.command_button(ui, ph::FOLDER_OPEN, "fichier.ouvrir", "Ouvrir", "Ouvrir un projet SHOT.", None);
-            self.command_button(ui, ph::FLOPPY_DISK, "fichier.enregistrer", "Enregistrer", "Enregistrer le projet.", None);
-            self.command_button(ui, ph::EXPORT, "fichier.exporter_film", "Exporter le film", "Exporter le montage.", None);
-            sep(ui);
-            self.command_button(ui, ph::ARROW_COUNTER_CLOCKWISE, "edition.annuler", "Annuler", "Défaire la dernière opération.", None);
-            self.command_button(ui, ph::ARROW_CLOCKWISE, "edition.retablir", "Rétablir", "Refaire ce qui vient d'être annulé.", None);
-            self.command_button(ui, ph::SCISSORS, "edition.couper", "Couper", "Couper la sélection.", None);
-            self.command_button(ui, ph::COPY, "edition.copier", "Copier", "Copier la sélection.", None);
-            self.command_button(ui, ph::CLIPBOARD, "edition.coller", "Coller", "Coller ce qui a été copié.", None);
-            sep(ui);
-            self.command_button(ui, ph::PLUS_SQUARE, "panneau.nouveau", "Nouveau plan", "Après le plan courant, dans la même séquence.", None);
-            self.command_button(ui, ph::COPY_SIMPLE, "panneau.dupliquer", "Dupliquer le plan", "Une copie du plan courant, juste après lui.", None);
-            self.command_button(ui, ph::TRASH, "panneau.supprimer", "Supprimer les plans choisis", "Le plan courant, et ceux choisis avec Ctrl ou Maj + clic.", None);
-            sep(ui);
-            // Les commandes de la vue sont sous le dessin (`viewbar::view_tools_bar`).
-            self.command_button(ui, ph::SKIP_BACK, "image.premiere", "Première image", "Première image du plan.", None);
-            self.command_button(ui, ph::CARET_LEFT, "image.precedente", "Image précédente", "", None);
-            let play = if self.playing { ph::PAUSE } else { ph::PLAY };
-            self.command_button(ui, play, "lecture.basculer", "Lecture / pause", "", None);
-            self.command_button(ui, ph::CARET_RIGHT, "image.suivante", "Image suivante", "", None);
-            self.command_button(ui, ph::SKIP_FORWARD, "image.derniere", "Dernière image", "Dernière image du plan.", None);
-            let looping = self.looping;
-            let resp = ui.add_sized([28.0, 26.0], egui::SelectableLabel::new(looping, RichText::new(ph::REPEAT).size(17.0)));
-            if self.aide(resp, "Lecture en boucle", "Reprendre au début une fois à la fin.", "lecture.boucle").clicked() {
-                self.looping = !self.looping;
-            }
-            let sound = self.sound_on;
-            let icon = if sound { ph::SPEAKER_HIGH } else { ph::SPEAKER_SLASH };
-            let resp = ui.add_sized([28.0, 26.0], egui::SelectableLabel::new(sound, RichText::new(icon).size(17.0)));
-            if self.aide(resp, "Son pendant la lecture", "Entendre les pistes son en lisant.", "son.lecture").clicked() {
-                self.sound_on = !self.sound_on;
-            }
+            self.barre_ui(ui, crate::barres::Barre::Commandes);
         });
     }
 

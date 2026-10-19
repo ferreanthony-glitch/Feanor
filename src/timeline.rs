@@ -1,6 +1,6 @@
 use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Pos2, Rect, RichText, Sense, Stroke, StrokeKind};
 
-use crate::app::{App, Mode};
+use crate::app::App;
 use crate::handles::{GridMenu, GridSelect, Handle};
 use crate::layerheads::{row_at, rows_height, rows_of, Row, HEAD_W};
 use crate::storyboard::duration_label;
@@ -91,179 +91,43 @@ impl App {
             });
     }
 
-    /// Barre de la timeline, sur une seule ligne (12c) : les commandes en icônes, leur nom, leur
-    /// raccourci et une description dans une bulle (12d) ; si la fenêtre est trop étroite, la ligne défile au lieu de passer à la
-    /// ligne.
+    /// Barre de la timeline, sur une seule ligne qui ne défile pas (`barres.rs`) : le plan, le
+    /// transport, les dessins, la caméra et la pelure ; le reste sous « Plus… ». Les commandes en
+    /// icônes ont leur nom, leur raccourci et une description dans une bulle (12d).
     fn timeline_toolbar(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| self.barre_ui(ui, crate::barres::Barre::Timeline));
+    }
+
+    /// Le titre du plan que l'on anime et sa durée (affichage fixe de la barre).
+    pub(crate) fn timeline_plan_ui(&mut self, ui: &mut egui::Ui) {
         use crate::bulles::bulle;
-        use egui_phosphor::regular as ph;
+        let (count, fps) = (self.frame_count(), self.doc.fps);
+        let resp = ui.label(RichText::new(crate::storyboard::panel_title(&self.doc, self.cur_panel)).strong());
+        bulle(resp, &crate::storyboard::panel_long_title(&self.doc, self.cur_panel), "Le plan que l'on anime.", "");
+        let resp = self.panel_length_field(ui, "");
+        bulle(resp, "Durée du plan", &format!("{} ; glisser ou taper pour la changer.", duration_label(count, fps)), "");
+    }
+
+    /// L'image courante (13d), où l'on tape un numéro ou un time code pour y aller, et la dernière
+    /// image du plan (affichage fixe de la barre).
+    pub(crate) fn timeline_image_ui(&mut self, ui: &mut egui::Ui) {
+        use crate::bulles::bulle;
         let count = self.frame_count();
-        let fps = self.doc.fps;
-        egui::ScrollArea::horizontal()
-            .id_salt("barre_timeline")
-            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 3.0;
-                    let sep = |ui: &mut egui::Ui| {
-                        ui.add_space(3.0);
-                        ui.separator();
-                        ui.add_space(3.0);
-                    };
-                    // La timeline se voit aussi en storyboard (chantier 6) : le bouton fait alors
-                    // entrer dans le plan pour l'animer.
-                    let (icon, name, what) = match self.mode {
-                        Mode::Animation => (ph::ARROW_U_UP_LEFT, "Retour au storyboard", "Revenir au montage des plans."),
-                        Mode::Storyboard => (ph::FILM_SLATE, "Animer ce plan", "Le dessin montre ce plan pour l'animer."),
-                    };
-                    if self.bouton(ui, icon, name, what, "mode.basculer").clicked() {
-                        match self.mode {
-                            Mode::Animation => self.set_mode(Mode::Storyboard),
-                            Mode::Storyboard => self.enter_animation(self.cur_panel),
-                        }
-                    }
-                    let resp = ui.label(RichText::new(crate::storyboard::panel_title(&self.doc, self.cur_panel)).strong());
-                    bulle(resp, &crate::storyboard::panel_long_title(&self.doc, self.cur_panel), "Le plan que l'on anime.", "");
-                    let resp = self.panel_length_field(ui, "");
-                    bulle(resp, "Durée du plan", &format!("{} ; glisser ou taper pour la changer.", duration_label(count, fps)), "");
-                    sep(ui);
-
-                    // Lecture.
-                    if self.bouton(ui, ph::SKIP_BACK, "Première image", "Première image du plan.", "image.premiere").clicked() {
-                        self.goto_frame(0);
-                    }
-                    if self.bouton(ui, ph::CARET_LEFT, "Image précédente", "", "image.precedente").clicked() {
-                        self.goto_frame(self.cur_frame.saturating_sub(1));
-                    }
-                    let play = if self.playing { ph::PAUSE } else { ph::PLAY };
-                    if self.bouton(ui, play, "Lecture / pause", "Lire le plan.", "lecture.basculer").clicked() {
-                        self.toggle_play_scope(false);
-                    }
-                    if self.bouton(ui, ph::CARET_RIGHT, "Image suivante", "", "image.suivante").clicked() {
-                        self.goto_frame(self.cur_frame + 1);
-                    }
-                    if self.bouton(ui, ph::SKIP_FORWARD, "Dernière image", "Dernière image du plan.", "image.derniere").clicked() {
-                        self.goto_frame(count - 1);
-                    }
-                    let key = self.raccourci("lecture.boucle");
-                    crate::bulles::interrupteur_a(ui, &mut self.looping, ph::REPEAT, "Lecture en boucle", "Reprendre au début une fois à la fin.", &key, "lecture.boucle");
-                    let mut fps = self.doc.fps;
-                    let resp = ui.add(egui::DragValue::new(&mut fps).range(1..=120).suffix(" i/s"));
-                    let resp = bulle(resp, "Cadence", "Images par seconde, pour tout le projet.", "");
-                    if self.edited(&resp) {
-                        self.doc.fps = fps;
-                    }
-                    // Image courante (13d) : on y tape un numéro ou un time code pour y aller.
-                    let (start, fps, how) = (self.doc.start_frame, self.doc.fps, self.time_display);
-                    let mut f = self.cur_frame as f64;
-                    let resp = ui.add(
-                        egui::DragValue::new(&mut f)
-                            .range(0.0..=(count.max(1) - 1) as f64)
-                            .speed(0.2)
-                            .custom_formatter(move |v, _| crate::cues::frame_label(v.max(0.0) as usize, start, fps, how))
-                            .custom_parser(move |s| crate::cues::parse_frame(s, start, fps, how).map(|f| f as f64)),
-                    );
-                    let resp = bulle(resp, "Image courante", "Glisser, ou taper un numéro (ou un time code) pour y aller.", "");
-                    if resp.changed() {
-                        self.goto_frame(f.max(0.0) as usize);
-                    }
-                    let resp = ui.label(RichText::new(format!("/ {}", self.frame_label(count.max(1) - 1))).monospace());
-                    bulle(resp, "Dernière image du plan", "", "");
-                    let resp = ui.menu_button(RichText::new(ph::BOOKMARK_SIMPLE).size(crate::bulles::TAILLE), |ui| self.cues_menu(ui)).response;
-                    bulle(resp, "Repères", "Signets, points d'entrée et de sortie, boucle, numéros (image, time code, trame), image de départ.", "");
-                    let resp = ui.menu_button(RichText::new(ph::MAGNIFYING_GLASS).size(crate::bulles::TAILLE), |ui| self.timeline_view_menu(ui)).response;
-                    bulle(resp, "Affichage de la timeline", "Zoom (aussi Ctrl + molette), Adapter, croix des instances vides, miniatures.", "");
-                    sep(ui);
-
-                    // Dessins et expositions.
-                    if self.bouton(ui, ph::FILE_PLUS, "Nouveau dessin", "Un dessin vide après l'exposition courante.", "dessin.nouveau").clicked() {
-                        self.new_image(false);
-                    }
-                    if self.bouton(ui, ph::COPY, "Dupliquer le dessin", "Une copie du dessin courant, après lui.", "dessin.dupliquer").clicked() {
-                        self.new_image(true);
-                    }
-                    if self.bouton(ui, ph::PLUS, "Allonger l'exposition", "Tenir le dessin une image de plus.", "exposition.allonger").clicked() {
-                        self.exposure_plus();
-                    }
-                    if self.bouton(ui, ph::MINUS, "Raccourcir l'exposition", "Tenir le dessin une image de moins.", "exposition.raccourcir").clicked() {
-                        self.exposure_minus();
-                    }
-                    if self.bouton(ui, ph::TRASH, "Supprimer le dessin", "Retirer le dessin et ses expositions de la timeline.", "dessin.supprimer").clicked() {
-                        self.delete_image();
-                    }
-                    if self.bouton(ui, ph::ERASER, "Vider le dessin", "Effacer tout ce qu'il contient ; il reste exposé.", "dessin.vider").clicked() {
-                        self.clear_image();
-                    }
-                    let resp = ui.add(egui::DragValue::new(&mut self.default_exposure).range(1..=12).prefix("en "));
-                    bulle(resp, "Exposition des nouveaux dessins", "Nombre d'images que tient chaque nouveau dessin (« en 1 », « en 2 »…).", "");
-                    // Images (13c) : opérations sur les images choisies (Maj + clic dans la grille).
-                    let resp = ui.menu_button(RichText::new(ph::FILM_STRIP).size(crate::bulles::TAILLE), |ui| self.images_menu(ui)).response;
-                    bulle(
-                        resp,
-                        "Images",
-                        "Supprimer, couper, copier, coller, dupliquer, inverser, insérer… Maj + clic dans la grille pour choisir des images.",
-                        "",
-                    );
-                    sep(ui);
-
-                    self.camera_keys_ui(ui);
-                    sep(ui);
-
-                    // Marque d'image (13a) : une image de storyboard de plus dans le plan.
-                    let here = self.panel().marks.iter().any(|m| m.frame == self.cur_frame);
-                    let resp = self.bouton_etat(
-                        ui,
-                        here,
-                        ph::FLAG_PENNANT,
-                        "Marque d'image",
-                        "Une image de storyboard de plus dans le plan, à l'image courante (vignettes, PDF). Clic : poser ou retirer.",
-                        "marque.basculer",
-                    );
-                    if resp.clicked() {
-                        self.toggle_mark();
-                    }
-                    // Commentaire : un fanion dans la règle, à l'image courante.
-                    if self
-                        .bouton(ui, ph::CHAT_CENTERED_TEXT, "Nouveau commentaire", "Laisser un commentaire à l'image courante : un fanion dans la règle (à déplacer), qui s'écrit dans le panneau Commentaires. Ou double-clic dans la règle.", "commentaire.ajouter")
-                        .clicked()
-                    {
-                        self.run_action("commentaire.ajouter");
-                    }
-                    sep(ui);
-
-                    // Pelure d'oignon.
-                    let key = self.raccourci("vue.pelure");
-                    crate::bulles::interrupteur_a(ui, &mut self.onion.enabled, ph::CIRCLES_THREE, "Pelure d'oignon", "Montrer les dessins d'avant et d'après.", &key, "vue.pelure");
-                    let max = crate::onion::MAX_NEIGHBOURS;
-                    let resp = ui.add(egui::DragValue::new(&mut self.onion.before).range(0..=max).prefix("‹ "));
-                    bulle(resp, "Avant", "Nombre de dessins (ou d'images) montrés avant.", "");
-                    let resp = ui.add(egui::DragValue::new(&mut self.onion.after).range(0..=max).suffix(" ›"));
-                    bulle(resp, "Après", "Nombre de dessins (ou d'images) montrés après.", "");
-                    let key = self.raccourci("pelure.panneau");
-                    let resp = ui.add(egui::Button::new(crate::bulles::symbole_etat(ph::GEAR, self.onion_window)).selected(self.onion_window).frame(false));
-                    if bulle(resp, "Réglages de la pelure d'oignon", "Mode, devant, couleurs, chaque image et son opacité, réglages rangés, décalage.", &key).clicked() {
-                        self.onion_window = !self.onion_window;
-                    }
-                    sep(ui);
-
-                    // Flips (13h).
-                    let key = self.raccourci("flip.panneau");
-                    let resp = ui.add(egui::Button::new(crate::bulles::symbole_etat(ph::BOOK_OPEN, self.flips_window)).selected(self.flips_window).frame(false));
-                    let what = format!("Feuilleter vite des images pour juger un mouvement. Flip courant : « {} ».", self.flips.current().name);
-                    if bulle(resp, "Flips", &what, &key).clicked() {
-                        self.flips_window = !self.flips_window;
-                    }
-
-                    // Pile d'effets du calque courant (13i).
-                    let key = self.raccourci("fx.panneau");
-                    let resp = ui.add(egui::Button::new(crate::bulles::symbole_etat(ph::MAGIC_WAND, self.pane_shown(crate::dock::Pane::Effects))).selected(self.pane_shown(crate::dock::Pane::Effects)).frame(false));
-                    let n = self.layer().fx.len();
-                    let what = format!("Le panneau des effets du calque courant (non destructifs, animables par clés). {n} effet{} sur ce calque.", if n > 1 { "s" } else { "" });
-                    if bulle(resp, "Effets", &what, &key).clicked() {
-                        self.toggle_pane(crate::dock::Pane::Effects);
-                    }
-                });
-            });
+        let (start, fps, how) = (self.doc.start_frame, self.doc.fps, self.time_display);
+        let mut f = self.cur_frame as f64;
+        let resp = ui.add(
+            egui::DragValue::new(&mut f)
+                .range(0.0..=(count.max(1) - 1) as f64)
+                .speed(0.2)
+                .custom_formatter(move |v, _| crate::cues::frame_label(v.max(0.0) as usize, start, fps, how))
+                .custom_parser(move |s| crate::cues::parse_frame(s, start, fps, how).map(|f| f as f64)),
+        );
+        let resp = bulle(resp, "Image courante", "Glisser, ou taper un numéro (ou un time code) pour y aller.", "");
+        if resp.changed() {
+            self.goto_frame(f.max(0.0) as usize);
+        }
+        let resp = ui.label(RichText::new(format!("/ {}", self.frame_label(count.max(1) - 1))).monospace());
+        bulle(resp, "Dernière image du plan", "", "");
     }
     /// En-tête des calques (13b, `layerheads.rs`), puis les noms des lignes caméra et son.
     fn timeline_names(&mut self, ui: &mut egui::Ui) {

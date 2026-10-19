@@ -4,8 +4,9 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::barres::ReglageBarres;
 use crate::onion::OnionSettings;
-use crate::workspace::{Layout, Workspace};
+use crate::workspace::{Espace, Layout, Workspace};
 
 #[derive(Serialize, Deserialize)]
 pub struct Settings {
@@ -40,9 +41,24 @@ pub struct Settings {
     /// (passe couleur).
     #[serde(default, rename = "couleurs")]
     pub colors: crate::couleur::ColorSettings,
-    /// Disposition de la fenêtre à la dernière fermeture.
+    /// Disposition de l'espace Storyboard (`Espace::Storyboard`), retenue au fil des changements. Le
+    /// champ garde son nom d'avant les espaces liés aux modes : l'unique disposition d'un ancien
+    /// fichier de réglages devient donc, sans conversion, celle du storyboard.
     #[serde(default, rename = "disposition", skip_serializing_if = "Option::is_none")]
     pub layout: Option<Layout>,
+    /// Dispositions des espaces Animation et Montage (absentes : leur disposition d'origine,
+    /// `Espace::defaut`), et celui des deux espaces du côté storyboard où l'on était (Storyboard ou
+    /// Montage : le retour de l'animation y revient).
+    #[serde(default, rename = "disposition_animation", skip_serializing_if = "Option::is_none")]
+    pub animation_layout: Option<Layout>,
+    #[serde(default, rename = "disposition_montage", skip_serializing_if = "Option::is_none")]
+    pub montage_layout: Option<Layout>,
+    #[serde(default, rename = "espace_storyboard")]
+    pub storyboard_space: Espace,
+    /// Commandes épinglées dans la barre de commandes, la barre du montage et celle de la timeline,
+    /// en plus ou en moins de celles que chaque barre montre d'office (`barres.rs`).
+    #[serde(default, rename = "barres", skip_serializing_if = "ReglageBarres::est_vide")]
+    pub bars: ReglageBarres,
     /// Espaces de travail enregistrés.
     #[serde(default, rename = "espaces")]
     pub workspaces: Vec<Workspace>,
@@ -129,6 +145,10 @@ impl Default for Settings {
             flips: Default::default(),
             colors: Default::default(),
             layout: None,
+            animation_layout: None,
+            montage_layout: None,
+            storyboard_space: Espace::Storyboard,
+            bars: ReglageBarres::default(),
             workspaces: Vec::new(),
             montage_head_w: default_head_w(),
             paint_behind: false,
@@ -151,6 +171,24 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// La disposition retenue de cet espace de travail, s'il en a une.
+    pub fn layout_of(&self, espace: Espace) -> Option<&Layout> {
+        match espace {
+            Espace::Storyboard => self.layout.as_ref(),
+            Espace::Animation => self.animation_layout.as_ref(),
+            Espace::Montage => self.montage_layout.as_ref(),
+        }
+    }
+
+    /// Retient la disposition de cet espace de travail.
+    pub fn set_layout_of(&mut self, espace: Espace, layout: Layout) {
+        match espace {
+            Espace::Storyboard => self.layout = Some(layout),
+            Espace::Animation => self.animation_layout = Some(layout),
+            Espace::Montage => self.montage_layout = Some(layout),
+        }
+    }
+
     fn path() -> Option<PathBuf> {
         crate::donnees::roaming().map(|d| d.join("reglages.toml"))
     }
@@ -164,6 +202,11 @@ impl Settings {
         s.onion.migrate();
         s.framing = s.framing.sanitized();
         s.perf = s.perf.sanitized();
+        s.bars = s.bars.nettoyees();
+        // (Le côté storyboard n'est jamais l'animation.)
+        if s.storyboard_space == Espace::Animation {
+            s.storyboard_space = Espace::Storyboard;
+        }
         s
     }
 

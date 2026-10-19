@@ -5,7 +5,7 @@ use eframe::egui::{
     self, pos2, vec2, Align2, Color32, CornerRadius, CursorIcon, FontId, Pos2, Rect, RichText, Sense, Stroke, StrokeKind,
 };
 
-use crate::app::{App, BoardView, Mode};
+use crate::app::App;
 use crate::document::Document;
 use crate::handles::Handle;
 use crate::soundtrack::{ClipDrag, ClipEdge, MenuTarget};
@@ -342,13 +342,9 @@ impl App {
 
     pub(crate) fn montage_panel(&mut self, ui: &mut egui::Ui) {
         ui.add_space(2.0);
-        let total = self.doc.total_frames();
-        let fps = self.doc.fps;
-        // Une seule ligne, comme la barre de la timeline (12c) : elle défile si la fenêtre est étroite.
-        egui::ScrollArea::horizontal()
-            .id_salt("barre_montage")
-            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
-            .show(ui, |ui| ui.horizontal(|ui| self.montage_toolbar(ui, total, fps)));
+        // Une seule ligne, comme la barre de la timeline (12c), qui ne défile pas : les commandes de
+        // `barres.rs`, le reste sous « Plus… ».
+        ui.horizontal(|ui| self.barre_ui(ui, crate::barres::Barre::Montage));
         ui.separator();
         // Le zoom, petit, tout en bas de la bande.
         egui::TopBottomPanel::bottom("zoom_montage")
@@ -379,165 +375,38 @@ impl App {
             });
     }
 
-    fn montage_toolbar(&mut self, ui: &mut egui::Ui, total: usize, fps: u32) {
-        use crate::bulles::{bulle, TAILLE};
-        use egui_phosphor::regular as ph;
-        ui.spacing_mut().item_spacing.x = 3.0;
-        let sep = |ui: &mut egui::Ui| {
-            ui.add_space(3.0);
-            ui.separator();
-            ui.add_space(3.0);
-        };
-
-        // Lecture.
-        if self.bouton(ui, ph::SKIP_BACK, "Début du montage", "Revenir à la première image du film.", "montage.debut").clicked() {
-            self.goto_global(0);
-        }
-        let play = if self.playing { ph::PAUSE } else { ph::PLAY };
-        if self.bouton(ui, play, "Lire le montage / pause", "Tout le film à la suite (animatique), avec le son.", "lecture.basculer").clicked() {
-            self.toggle_play_scope(true);
-        }
-        let key = self.raccourci("lecture.boucle");
-        crate::bulles::interrupteur_a(ui, &mut self.looping, ph::REPEAT, "Lecture en boucle", "Reprendre au début une fois à la fin.", &key, "lecture.boucle");
+    /// La position dans le film et sa durée (affichage fixe de la barre du montage).
+    pub(crate) fn montage_position_ui(&mut self, ui: &mut egui::Ui) {
+        let (total, fps) = (self.doc.total_frames(), self.doc.fps);
         let resp = ui.label(RichText::new(format!("{} / {}", timecode(self.global_frame(), fps), timecode(total, fps))).monospace());
-        bulle(resp, "Position", "Image courante / durée du montage (minutes:secondes:images).", "");
-        sep(ui);
+        crate::bulles::bulle(resp, "Position", "Image courante / durée du montage (minutes:secondes:images).", "");
+    }
 
-        // Plans et séquences.
-        if self.bouton(ui, ph::PLUS_SQUARE, "Nouveau plan", "Après le plan courant, dans la même séquence.", "panneau.nouveau").clicked() {
-            self.new_panel();
-        }
-        if self.bouton(ui, ph::STACK_PLUS, "Nouvelle séquence", "Après la séquence courante, avec un plan.", "sequence.nouvelle").clicked() {
-            self.new_sequence();
-        }
-        if self
-            .bouton(ui, ph::BEZIER_CURVE, "Nouveau calque vectoriel", "Dans le plan courant, au-dessus du calque courant : une piste de plus.", "calque.nouveau_vectoriel")
-            .clicked()
-        {
-            self.add_layer(crate::document::LayerKind::Vector);
-        }
-        // Plans choisis (Ctrl ou Maj + clic dans la bande) : copier, coller, supprimer (12e).
-        let n = self.board_selection().len();
-        let chosen = if n > 1 { format!("Les {n} plans choisis.") } else { "Le plan courant ; Ctrl ou Maj + clic pour en choisir plusieurs.".to_string() };
-        if self.bouton(ui, ph::COPY, "Copier les plans", &chosen, "edition.copier").clicked() {
-            self.copy_panels();
-        }
-        let can_paste = self.panel_clipboard.is_some();
-        if self.bouton_si(ui, can_paste, ph::CLIPBOARD, "Coller les plans", "Après le plan courant, dans sa séquence.", "edition.coller").clicked() {
-            self.paste_panels();
-        }
-        if self.bouton(ui, ph::TRASH, "Supprimer les plans", &chosen, "edition.supprimer").clicked() {
-            self.delete_chosen_panels();
-        }
-        let resp = ui
-            .menu_button(RichText::new(ph::DOTS_THREE).size(TAILLE), |ui| {
-                let item = |app: &mut App, ui: &mut egui::Ui, text: &str, action: &str| {
-                    let key = app.keymap.label(action);
-                    if ui.add(egui::Button::new(text).shortcut_text(key)).clicked() {
-                        ui.close_menu();
-                        app.run_action(action);
-                    }
-                };
-                item(self, ui, "Nouveau plan avant le plan courant", "plan.nouveau_avant");
-                item(self, ui, "Dupliquer le plan", "panneau.dupliquer");
-                ui.separator();
-                self.panel_clipboard_items(ui);
-                ui.separator();
-                item(self, ui, "Couper le plan à l'image courante", "panneau.couper");
-                item(self, ui, "Réunir le plan et le suivant", "panneau.fusionner_suivant");
-                item(self, ui, "Réunir avec le plan précédent", "scene.joindre_precedente");
-                let n = self.board_selection().len();
-                if n > 1 {
-                    item(self, ui, &format!("Fusionner les {n} plans choisis"), "panneau.fusionner_choisis");
-                }
-                item(self, ui, if n > 1 { "Retourner les plans choisis" } else { "Retourner le plan" }, "plan.retourner");
-                ui.separator();
-                item(self, ui, "Marque d'image ici (ajouter / retirer)", "marque.basculer");
-            })
-            .response;
-        bulle(resp, "Plans", "Dupliquer, copier, couper, réunir, marques d'image.", "");
-        if self.bouton(ui, ph::CARET_DOUBLE_LEFT, "Avancer le plan", "Le placer plus tôt dans le montage.", "plan.avancer").clicked() {
-            self.shift_panel(false);
-        }
-        if self.bouton(ui, ph::CARET_DOUBLE_RIGHT, "Reculer le plan", "Le placer plus tard dans le montage.", "plan.reculer").clicked() {
-            self.shift_panel(true);
-        }
-        let locked = self.doc.storyboard_locked;
-        let icon = if locked { ph::LOCK } else { ph::LOCK_OPEN };
-        let what = "Verrouillé : l'ordre, le nombre et la durée des plans, leurs dessins et leurs calques ne changent plus.";
-        if self.bouton_etat(ui, locked, icon, "Verrouiller le storyboard", what, "storyboard.verrouiller").clicked() {
-            self.toggle_storyboard_lock();
-        }
-        // Aimant : les bords des plans rognés à la souris se collent à la tête de lecture, aux autres
-        // coupes et aux clés de caméra et d'effets (`rognageui.rs`).
-        let key = self.raccourci("montage.aimanter");
-        crate::bulles::interrupteur_a(
-            ui,
-            &mut self.snap_on,
-            ph::MAGNET,
-            "Aimantation des bords",
-            "Rogner un plan à la souris : le bord se colle à la tête de lecture, aux autres coupes et aux clés de caméra et d'effets. Éteint, il suit la souris à l'image près.",
-            &key,
-            "montage.aimanter",
-        );
-        sep(ui);
-
-        // Son.
-        if self
-            .bouton(
-                ui,
-                ph::MUSIC_NOTES_PLUS,
-                "Importer un son",
-                "WAV, MP3, FLAC ou OGG, à l'image courante ; on peut aussi lâcher le fichier sur la fenêtre.",
-                "son.importer",
-            )
-            .clicked()
-        {
-            self.import_sound(None, None);
-        }
-        // Vidéo, à côté du son (Anthony, 2026-10-19) : un calque vidéo dans le plan courant.
-        if self
-            .bouton(
-                ui,
-                ph::FILE_VIDEO,
-                "Importer une vidéo",
-                "Une vidéo devient un calque vidéo du plan courant, image par image (à dessiner par-dessus, ou à transformer en calque d'animation).",
-                "fichier.importer_video",
-            )
-            .clicked()
-        {
-            self.import_video();
-        }
-        let resp = ui.menu_button(RichText::new(ph::SPEAKER_HIGH).size(TAILLE), |ui| self.sound_menu(ui)).response;
-        bulle(resp, "Son", "Pistes son, son au défilement et pendant la lecture.", "");
-        sep(ui);
-
-        // Commentaire : un fanion dans la règle, à l'image courante ; il s'écrit dans le panneau.
-        if self
-            .bouton(ui, ph::CHAT_CENTERED_TEXT, "Nouveau commentaire", "Laisser un commentaire à l'image courante : un fanion dans la règle (à déplacer), qui s'écrit dans le panneau Commentaires. Ou double-clic dans la règle.", "commentaire.ajouter")
-            .clicked()
-        {
-            self.run_action("commentaire.ajouter");
-        }
-        sep(ui);
-
-        // Le montage se voit aussi en animation (chantier 6) : le bouton fait alors revenir.
-        let (icon, name, what) = match self.mode {
-            Mode::Storyboard => (ph::FILM_SLATE, "Animer ce plan", "Entrer dans le plan courant pour l'animer (ou double-clic sur le plan)."),
-            Mode::Animation => (ph::ARROW_U_UP_LEFT, "Retour au storyboard", "Le dessin montre de nouveau le storyboard (Vue dessin ou vignettes)."),
-        };
-        if self.bouton(ui, icon, name, what, "mode.basculer").clicked() {
-            match self.mode {
-                Mode::Storyboard => self.enter_animation(self.cur_panel),
-                Mode::Animation => self.set_mode(Mode::Storyboard),
+    /// Le menu « Plans » de la barre du montage (`barres.rs`) : dupliquer, copier, couper, réunir,
+    /// marques d'image.
+    pub(crate) fn plans_barre_menu(&mut self, ui: &mut egui::Ui) {
+        let item = |app: &mut App, ui: &mut egui::Ui, text: &str, action: &str| {
+            let key = app.keymap.label(action);
+            if ui.add(egui::Button::new(text).shortcut_text(key)).clicked() {
+                ui.close_menu();
+                app.run_action(action);
             }
+        };
+        item(self, ui, "Nouveau plan avant le plan courant", "plan.nouveau_avant");
+        item(self, ui, "Dupliquer le plan", "panneau.dupliquer");
+        ui.separator();
+        self.panel_clipboard_items(ui);
+        ui.separator();
+        item(self, ui, "Couper le plan à l'image courante", "panneau.couper");
+        item(self, ui, "Réunir le plan et le suivant", "panneau.fusionner_suivant");
+        item(self, ui, "Réunir avec le plan précédent", "scene.joindre_precedente");
+        let n = self.board_selection().len();
+        if n > 1 {
+            item(self, ui, &format!("Fusionner les {n} plans choisis"), "panneau.fusionner_choisis");
         }
-        sep(ui);
-
-        // Vue : dessin du plan, ou vignettes de toutes les images de storyboard.
-        let key = self.raccourci("vue.planches");
-        crate::bulles::choix_a(ui, &mut self.board_view, BoardView::Scene, ph::PAINT_BRUSH, "Vue dessin", "Dessiner le plan courant.", &key, "vue.planches");
-        crate::bulles::choix_a(ui, &mut self.board_view, BoardView::Panels, ph::SQUARES_FOUR, "Vue vignettes", "Toutes les images de storyboard en planche : le début de chaque plan, puis ses marques d'image.", &key, "vue.planches");
+        item(self, ui, if n > 1 { "Retourner les plans choisis" } else { "Retourner le plan" }, "plan.retourner");
+        ui.separator();
+        item(self, ui, "Marque d'image ici (ajouter / retirer)", "marque.basculer");
     }
 
     /// Le zoom du montage, en bas de la bande et petit (Anthony, 2026-10-17 : « il faut le mettre

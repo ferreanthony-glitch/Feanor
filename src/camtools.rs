@@ -370,35 +370,8 @@ impl App {
         }
     }
 
-    /// Boutons des images clés de caméra, compacts (barre de la timeline, 12c) : clés début / ici /
-    /// fin, retirer, adoucir ; le détail est dans la fenêtre de la caméra (outil Caméra).
-    pub(crate) fn camera_keys_ui(&mut self, ui: &mut egui::Ui) {
-        use crate::bulles::{bulle, etat_si, TAILLE};
-        use egui_phosphor::regular as ph;
-        let here = self.camera_key_here().copied();
-        let resp = ui.label(RichText::new(ph::VIDEO_CAMERA).size(TAILLE).color(crate::theme::camera()));
-        bulle(resp, "Clés de caméra", "Position, focale et adoucis en détail : réglages de l'outil Caméra.", "");
-        if let Some(a) = self.camera_key_buttons(ui, here.is_some()) {
-            self.run_action(a);
-        }
-        if self.bouton_si(ui, here.is_some(), ph::X_CIRCLE, "Supprimer la clé de caméra", "Supprimer la clé de caméra de cette image.", "camera.cle_supprimer").clicked() {
-            self.run_action("camera.cle_supprimer");
-        }
-        let smooth = here.is_some_and(|k| k.smooth);
-        let resp = etat_si(
-            ui,
-            here.is_some(),
-            smooth,
-            ph::WAVE_SINE,
-            "Adoucir",
-            "La caméra arrive à cette clé et en repart en douceur ; réglage fin en images dans les réglages de l'outil Caméra.",
-            "",
-        );
-        if resp.clicked() {
-            self.toggle_camera_key_smooth();
-        }
-    }
-
+    /// (Les boutons compacts des clés de la barre de la timeline sont dans `barres.rs`.)
+    ///
     /// Boutons « clé au début », « clé ici », « clé à la fin » (« ici » grisé s'il y a déjà une
     /// clé à cette image) ; renvoie l'action du bouton cliqué.
     fn camera_key_buttons(&self, ui: &mut egui::Ui, key_here: bool) -> Option<&'static str> {

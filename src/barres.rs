@@ -1,0 +1,677 @@
+//! Barres de commandes à l'étroit (INTERFACE.md, 6.3) : la barre de commandes du haut, celle du
+//! montage et celle de la timeline ne montrent d'office que l'essentiel (9, 12 et une vingtaine de
+//! commandes au lieu de 19, 21 et une trentaine) ; le reste est sous un bouton « Plus… » (`DOTS_THREE`)
+//! au bout de la barre. Rien n'est retiré : chaque commande a son action (menus, palette Ctrl+K,
+//! raccourcis), et dans « Plus… » une ligne avec son icône, son nom et son raccourci.
+//!
+//! - **Épingler** : chaque ligne de « Plus… » a une épingle (« Épingler dans la barre ») qui remet la
+//!   commande dans la barre ; le sous-menu « Dans la barre » permet l'inverse (retirer une commande
+//!   montrée d'office). Le choix est retenu par barre dans les réglages (`Settings::bars`) ; le
+//!   fichier ne garde que l'écart avec les commandes d'origine.
+//! - **Jamais de défilement** : une barre ne défile plus. Si la place manque, les dernières commandes
+//!   de la ligne passent d'elles-mêmes sous « Plus… » (elles restent épinglées) et reviennent quand la
+//!   fenêtre s'élargit.
+//! - Les icônes allumées prennent l'encre lisible sur l'accent (`bulles::symbole_etat`, `theme::sur_accent`).
+//!
+//! Les barres sont des tableaux de `Cmd` (une ligne par commande, dans l'ordre d'affichage) ; ce
+//! qu'une commande fait vient de `executer_commande`, ce qu'elle montre de `vue_de`.
+
+use eframe::egui::{self, vec2, RichText, Ui};
+use egui_phosphor::regular as ph;
+use serde::{Deserialize, Serialize};
+
+use crate::app::{App, BoardView, Mode};
+use crate::bulles::{self, bulle, TAILLE};
+use crate::dock::Pane;
+
+/// Les trois barres qui ont un « Plus… ». (La barre des panneaux, à droite, n'en a pas.)
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Barre {
+    /// Sous les menus.
+    Commandes,
+    /// En tête de la bande du montage.
+    Montage,
+    /// En tête de la timeline.
+    Timeline,
+}
+
+impl Barre {
+    #[cfg(test)]
+    pub const TOUTES: [Barre; 3] = [Barre::Commandes, Barre::Montage, Barre::Timeline];
+
+    pub fn nom(self) -> &'static str {
+        match self {
+            Barre::Commandes => "Barre de commandes",
+            Barre::Montage => "Barre du montage",
+            Barre::Timeline => "Barre de la timeline",
+        }
+    }
+
+    /// Les commandes de la barre, dans l'ordre où elles s'affichent.
+    pub fn commandes(self) -> &'static [Cmd] {
+        match self {
+            Barre::Commandes => COMMANDES,
+            Barre::Montage => MONTAGE,
+            Barre::Timeline => TIMELINE,
+        }
+    }
+
+    pub fn cherche(self, id: &str) -> Option<&'static Cmd> {
+        self.commandes().iter().find(|c| c.id == id)
+    }
+}
+
+/// Ce que montre une ligne d'une barre.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Genre {
+    /// Un bouton icône qui lance son action.
+    Bouton,
+    /// Un bouton icône qui montre un état (enfoncé quand il est vrai).
+    Etat,
+    /// Un bouton icône qui ouvre un menu.
+    Menu,
+    /// Une valeur qu'on règle (un champ qu'on glisse ou qu'on tape).
+    Reglage,
+    /// Un affichage qui reste dans la barre (la position, le titre du plan…) : ni épingle ni « Plus… ».
+    Fixe,
+}
+
+/// Une commande d'une barre.
+pub struct Cmd {
+    /// Son identifiant dans la barre (l'action quand elle n'a qu'une icône) : celui des réglages.
+    pub id: &'static str,
+    pub genre: Genre,
+    pub icone: &'static str,
+    pub nom: &'static str,
+    pub description: &'static str,
+    /// Son action (`keymap::ACTIONS`), vide pour un menu, un réglage ou un affichage.
+    pub action: &'static str,
+    /// Dans la barre sans que l'utilisateur l'ait épinglée.
+    pub d_office: bool,
+    /// Les commandes d'un même groupe se suivent ; un trait sépare deux groupes.
+    pub groupe: u8,
+    /// Place qu'elle prend à l'écran (points), pour décider ce qui passe sous « Plus… » quand la
+    /// barre est trop étroite.
+    pub largeur: f32,
+}
+
+const fn cmd(id: &'static str, genre: Genre, icone: &'static str, nom: &'static str, description: &'static str, action: &'static str, d_office: bool, groupe: u8) -> Cmd {
+    let largeur = match genre {
+        Genre::Reglage => 62.0,
+        Genre::Fixe => 0.0,
+        _ => 30.0,
+    };
+    Cmd { id, genre, icone, nom, description, action, d_office, groupe, largeur }
+}
+
+const fn bouton(action: &'static str, icone: &'static str, nom: &'static str, description: &'static str, d_office: bool, groupe: u8) -> Cmd {
+    cmd(action, Genre::Bouton, icone, nom, description, action, d_office, groupe)
+}
+
+const fn etat(action: &'static str, icone: &'static str, nom: &'static str, description: &'static str, d_office: bool, groupe: u8) -> Cmd {
+    cmd(action, Genre::Etat, icone, nom, description, action, d_office, groupe)
+}
+
+const fn menu(id: &'static str, icone: &'static str, nom: &'static str, description: &'static str, d_office: bool, groupe: u8) -> Cmd {
+    cmd(id, Genre::Menu, icone, nom, description, "", d_office, groupe)
+}
+
+const fn reglage(id: &'static str, icone: &'static str, nom: &'static str, description: &'static str, d_office: bool, groupe: u8) -> Cmd {
+    cmd(id, Genre::Reglage, icone, nom, description, "", d_office, groupe)
+}
+
+const fn fixe(id: &'static str, groupe: u8) -> Cmd {
+    cmd(id, Genre::Fixe, "", "", "", "", true, groupe)
+}
+
+/// Barre de commandes : 9 icônes d'office (fichier, édition), le reste sous « Plus… ».
+pub(crate) const COMMANDES: &[Cmd] = &[
+    bouton("fichier.nouveau", ph::FILE_PLUS, "Nouveau projet", "Commencer un projet vide.", true, 0),
+    bouton("fichier.ouvrir", ph::FOLDER_OPEN, "Ouvrir", "Ouvrir un projet SHOT.", true, 0),
+    bouton("fichier.enregistrer", ph::FLOPPY_DISK, "Enregistrer", "Enregistrer le projet.", true, 0),
+    bouton("fichier.exporter_film", ph::EXPORT, "Exporter le film", "Exporter le montage.", true, 0),
+    bouton("edition.annuler", ph::ARROW_COUNTER_CLOCKWISE, "Annuler", "Défaire la dernière opération.", true, 1),
+    bouton("edition.retablir", ph::ARROW_CLOCKWISE, "Rétablir", "Refaire ce qui vient d'être annulé.", true, 1),
+    bouton("edition.couper", ph::SCISSORS, "Couper", "Couper la sélection.", true, 1),
+    bouton("edition.copier", ph::COPY, "Copier", "Copier la sélection.", true, 1),
+    bouton("edition.coller", ph::CLIPBOARD, "Coller", "Coller ce qui a été copié.", true, 1),
+    // Sous « Plus… » : les plans (aussi dans la barre du montage et ses menus), puis le transport,
+    // qui refait la barre du bas.
+    bouton("panneau.nouveau", ph::PLUS_SQUARE, "Nouveau plan", "Après le plan courant, dans la même séquence.", false, 2),
+    bouton("panneau.dupliquer", ph::COPY_SIMPLE, "Dupliquer le plan", "Une copie du plan courant, juste après lui.", false, 2),
+    bouton("panneau.supprimer", ph::TRASH, "Supprimer les plans choisis", "Le plan courant, et ceux choisis avec Ctrl ou Maj + clic.", false, 2),
+    bouton("image.premiere", ph::SKIP_BACK, "Première image", "Première image du plan.", false, 3),
+    bouton("image.precedente", ph::CARET_LEFT, "Image précédente", "Reculer d'une image.", false, 3),
+    bouton("lecture.basculer", ph::PLAY, "Lecture / pause", "Lire ou arrêter la lecture.", false, 3),
+    bouton("image.suivante", ph::CARET_RIGHT, "Image suivante", "Avancer d'une image.", false, 3),
+    bouton("image.derniere", ph::SKIP_FORWARD, "Dernière image", "Dernière image du plan.", false, 3),
+    etat("lecture.boucle", ph::REPEAT, "Lecture en boucle", "Reprendre au début une fois à la fin.", false, 3),
+    etat("son.lecture", ph::SPEAKER_HIGH, "Son pendant la lecture", "Entendre les pistes son en lisant.", false, 3),
+];
+
+/// Barre du montage : la lecture, un plan ou une séquence de plus, les menus Plans et Son, entrer
+/// dans le plan, la vue ; le reste sous « Plus… ».
+pub(crate) const MONTAGE: &[Cmd] = &[
+    bouton("montage.debut", ph::SKIP_BACK, "Début du montage", "Revenir à la première image du film.", true, 0),
+    bouton("lecture.basculer", ph::PLAY, "Lire le montage / pause", "Tout le film à la suite (animatique), avec le son.", true, 0),
+    etat("lecture.boucle", ph::REPEAT, "Lecture en boucle", "Reprendre au début une fois à la fin.", true, 0),
+    fixe("position", 0),
+    bouton("panneau.nouveau", ph::PLUS_SQUARE, "Nouveau plan", "Après le plan courant, dans la même séquence.", true, 1),
+    bouton("sequence.nouvelle", ph::STACK_PLUS, "Nouvelle séquence", "Après la séquence courante, avec un plan.", true, 1),
+    bouton("calque.nouveau_vectoriel", ph::BEZIER_CURVE, "Nouveau calque vectoriel", "Dans le plan courant, au-dessus du calque courant : une piste de plus.", false, 1),
+    bouton("edition.copier", ph::COPY, "Copier les plans", "Le plan courant ; Ctrl ou Maj + clic pour en choisir plusieurs.", false, 1),
+    bouton("edition.coller", ph::CLIPBOARD, "Coller les plans", "Après le plan courant, dans sa séquence.", false, 1),
+    bouton("edition.supprimer", ph::TRASH, "Supprimer les plans", "Le plan courant ; Ctrl ou Maj + clic pour en choisir plusieurs.", false, 1),
+    menu("plans", ph::LIST_BULLETS, "Plans", "Dupliquer, copier, couper, réunir, marques d'image.", true, 1),
+    bouton("plan.avancer", ph::CARET_DOUBLE_LEFT, "Avancer le plan", "Le placer plus tôt dans le montage.", false, 1),
+    bouton("plan.reculer", ph::CARET_DOUBLE_RIGHT, "Reculer le plan", "Le placer plus tard dans le montage.", false, 1),
+    etat(
+        "storyboard.verrouiller",
+        ph::LOCK_OPEN,
+        "Verrouiller le storyboard",
+        "Verrouillé : l'ordre, le nombre et la durée des plans, leurs dessins et leurs calques ne changent plus.",
+        false,
+        1,
+    ),
+    etat(
+        "montage.aimanter",
+        ph::MAGNET,
+        "Aimantation des bords",
+        "Rogner un plan à la souris : le bord se colle à la tête de lecture, aux autres coupes et aux clés de caméra et d'effets. Éteint, il suit la souris à l'image près.",
+        false,
+        1,
+    ),
+    bouton("son.importer", ph::MUSIC_NOTES_PLUS, "Importer un son", "WAV, MP3, FLAC ou OGG, à l'image courante ; on peut aussi lâcher le fichier sur la fenêtre.", true, 2),
+    menu("son", ph::SPEAKER_HIGH, "Son", "Pistes son, son au défilement et pendant la lecture.", true, 2),
+    bouton(
+        "fichier.importer_video",
+        ph::FILE_VIDEO,
+        "Importer une vidéo",
+        "Une vidéo devient un calque vidéo du plan courant, image par image (à dessiner par-dessus, ou à transformer en calque d'animation).",
+        false,
+        2,
+    ),
+    bouton(
+        "commentaire.ajouter",
+        ph::CHAT_CENTERED_TEXT,
+        "Nouveau commentaire",
+        "Laisser un commentaire à l'image courante : un fanion dans la règle (à déplacer), qui s'écrit dans le panneau Commentaires. Ou double-clic dans la règle.",
+        false,
+        3,
+    ),
+    bouton("mode.basculer", ph::FILM_SLATE, "Animer ce plan", "Entrer dans le plan courant pour l'animer (ou double-clic sur le plan).", true, 4),
+    cmd("vue.dessin", Genre::Etat, ph::PAINT_BRUSH, "Vue dessin", "Dessiner le plan courant.", "vue.planches", true, 5),
+    cmd(
+        "vue.vignettes",
+        Genre::Etat,
+        ph::SQUARES_FOUR,
+        "Vue vignettes",
+        "Toutes les images de storyboard en planche : le début de chaque plan, puis ses marques d'image.",
+        "vue.planches",
+        true,
+        5,
+    ),
+];
+
+/// Barre de la timeline : le plan, le transport, les dessins, la caméra et la pelure ; les dessins
+/// qu'on retire ou vide, la cadence, la marque, le commentaire, les flips et les effets sous « Plus… ».
+pub(crate) const TIMELINE: &[Cmd] = &[
+    bouton("mode.basculer", ph::FILM_SLATE, "Animer ce plan", "Le dessin montre ce plan pour l'animer.", true, 0),
+    fixe("plan", 0),
+    bouton("image.premiere", ph::SKIP_BACK, "Première image", "Première image du plan.", true, 1),
+    bouton("image.precedente", ph::CARET_LEFT, "Image précédente", "Reculer d'une image.", true, 1),
+    bouton("lecture.basculer", ph::PLAY, "Lecture / pause", "Lire le plan.", true, 1),
+    bouton("image.suivante", ph::CARET_RIGHT, "Image suivante", "Avancer d'une image.", true, 1),
+    bouton("image.derniere", ph::SKIP_FORWARD, "Dernière image", "Dernière image du plan.", true, 1),
+    etat("lecture.boucle", ph::REPEAT, "Lecture en boucle", "Reprendre au début une fois à la fin.", true, 1),
+    reglage("cadence", ph::GAUGE, "Cadence", "Images par seconde, pour tout le projet.", false, 1),
+    fixe("image_courante", 1),
+    menu("reperes", ph::BOOKMARK_SIMPLE, "Repères", "Signets, points d'entrée et de sortie, boucle, numéros (image, time code, trame), image de départ.", true, 1),
+    menu("affichage", ph::MAGNIFYING_GLASS, "Affichage de la timeline", "Zoom (aussi Ctrl + molette), Adapter, croix des instances vides, miniatures.", true, 1),
+    bouton("dessin.nouveau", ph::FILE_PLUS, "Nouveau dessin", "Un dessin vide après l'exposition courante.", true, 2),
+    bouton("dessin.dupliquer", ph::COPY, "Dupliquer le dessin", "Une copie du dessin courant, après lui.", false, 2),
+    bouton("exposition.allonger", ph::PLUS, "Allonger l'exposition", "Tenir le dessin une image de plus.", true, 2),
+    bouton("exposition.raccourcir", ph::MINUS, "Raccourcir l'exposition", "Tenir le dessin une image de moins.", true, 2),
+    bouton("dessin.supprimer", ph::TRASH, "Supprimer le dessin", "Retirer le dessin et ses expositions de la timeline.", false, 2),
+    bouton("dessin.vider", ph::ERASER, "Vider le dessin", "Effacer tout ce qu'il contient ; il reste exposé.", false, 2),
+    reglage("exposition_defaut", ph::HOURGLASS, "Exposition des nouveaux dessins", "Nombre d'images que tient chaque nouveau dessin (« en 1 », « en 2 »…).", true, 2),
+    menu(
+        "images",
+        ph::FILM_STRIP,
+        "Images",
+        "Supprimer, couper, copier, coller, dupliquer, inverser, insérer… Maj + clic dans la grille pour choisir des images.",
+        true,
+        2,
+    ),
+    bouton("camera.cle_debut", ph::DIAMOND, "Clé de caméra au début", "Une clé de caméra sur la première image du plan.", true, 3),
+    bouton("camera.cle_ici", ph::DIAMOND, "Clé de caméra ici", "Une clé de caméra à l'image courante.", true, 3),
+    bouton("camera.cle_fin", ph::DIAMOND, "Clé de caméra à la fin", "Une clé de caméra sur la dernière image du plan.", true, 3),
+    bouton("camera.cle_supprimer", ph::X_CIRCLE, "Supprimer la clé de caméra", "Supprimer la clé de caméra de cette image.", false, 3),
+    etat(
+        "camera.cle_adoucir",
+        ph::WAVE_SINE,
+        "Adoucir",
+        "La caméra arrive à cette clé et en repart en douceur ; réglage fin en images dans les réglages de l'outil Caméra.",
+        false,
+        3,
+    ),
+    etat(
+        "marque.basculer",
+        ph::FLAG_PENNANT,
+        "Marque d'image",
+        "Une image de storyboard de plus dans le plan, à l'image courante (vignettes, PDF). Clic : poser ou retirer.",
+        false,
+        4,
+    ),
+    bouton(
+        "commentaire.ajouter",
+        ph::CHAT_CENTERED_TEXT,
+        "Nouveau commentaire",
+        "Laisser un commentaire à l'image courante : un fanion dans la règle (à déplacer), qui s'écrit dans le panneau Commentaires. Ou double-clic dans la règle.",
+        false,
+        4,
+    ),
+    etat("vue.pelure", ph::CIRCLES_THREE, "Pelure d'oignon", "Montrer les dessins d'avant et d'après.", true, 5),
+    reglage("pelure_avant", ph::CARET_DOUBLE_LEFT, "Pelure : dessins avant", "Nombre de dessins (ou d'images) montrés avant.", true, 5),
+    reglage("pelure_apres", ph::CARET_DOUBLE_RIGHT, "Pelure : dessins après", "Nombre de dessins (ou d'images) montrés après.", true, 5),
+    etat(
+        "pelure.panneau",
+        ph::GEAR,
+        "Réglages de la pelure d'oignon",
+        "Mode, devant, couleurs, chaque image et son opacité, réglages rangés, décalage.",
+        true,
+        5,
+    ),
+    etat("flip.panneau", ph::BOOK_OPEN, "Flips", "Feuilleter vite des images pour juger un mouvement.", false, 6),
+    etat("fx.panneau", ph::MAGIC_WAND, "Effets", "Le panneau des effets du calque courant (non destructifs, animables par clés).", false, 6),
+];
+
+/// Ce que choisit l'utilisateur pour une barre, en écart avec ses commandes d'origine : les
+/// commandes épinglées en plus, et celles d'origine qu'il a retirées. (Vide : la barre d'origine.)
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ReglageBarre {
+    #[serde(default, rename = "epinglees", skip_serializing_if = "Vec::is_empty")]
+    pub epinglees: Vec<String>,
+    #[serde(default, rename = "retirees", skip_serializing_if = "Vec::is_empty")]
+    pub retirees: Vec<String>,
+}
+
+impl ReglageBarre {
+    pub fn est_vide(&self) -> bool {
+        self.epinglees.is_empty() && self.retirees.is_empty()
+    }
+
+    /// Cette commande est-elle dans la barre (avant que la place manque) ?
+    pub fn dans_la_barre(&self, c: &Cmd) -> bool {
+        if c.genre == Genre::Fixe {
+            return true;
+        }
+        if c.d_office {
+            !self.retirees.iter().any(|i| i == c.id)
+        } else {
+            self.epinglees.iter().any(|i| i == c.id)
+        }
+    }
+
+    /// Épingle la commande dans la barre (`oui`) ou la retire. Une commande qui revient à son état
+    /// d'origine ne laisse aucune trace.
+    pub fn epingler(&mut self, c: &Cmd, oui: bool) {
+        if c.genre == Genre::Fixe {
+            return;
+        }
+        let liste = if c.d_office { &mut self.retirees } else { &mut self.epinglees };
+        // D'origine dans la barre : on note qu'on la retire ; sinon, qu'on l'épingle.
+        let noter = oui != c.d_office;
+        liste.retain(|i| i != c.id);
+        if noter {
+            liste.push(c.id.to_string());
+        }
+    }
+
+    /// Le réglage lu d'un fichier, remis d'équerre : plus d'identifiant inconnu ni en double, chaque
+    /// identifiant dans la bonne liste.
+    pub fn nettoye(self, barre: Barre) -> ReglageBarre {
+        let propre = |liste: Vec<String>, office: bool| {
+            let mut out: Vec<String> = Vec::new();
+            for id in liste {
+                let bon = barre.cherche(&id).is_some_and(|c| c.genre != Genre::Fixe && c.d_office == office);
+                if bon && !out.contains(&id) {
+                    out.push(id);
+                }
+            }
+            out
+        };
+        ReglageBarre { epinglees: propre(self.epinglees, false), retirees: propre(self.retirees, true) }
+    }
+}
+
+/// Les réglages des trois barres.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ReglageBarres {
+    #[serde(default, skip_serializing_if = "ReglageBarre::est_vide")]
+    pub commandes: ReglageBarre,
+    #[serde(default, skip_serializing_if = "ReglageBarre::est_vide")]
+    pub montage: ReglageBarre,
+    #[serde(default, skip_serializing_if = "ReglageBarre::est_vide")]
+    pub timeline: ReglageBarre,
+}
+
+impl ReglageBarres {
+    pub fn est_vide(&self) -> bool {
+        self.commandes.est_vide() && self.montage.est_vide() && self.timeline.est_vide()
+    }
+
+    pub fn de(&self, barre: Barre) -> &ReglageBarre {
+        match barre {
+            Barre::Commandes => &self.commandes,
+            Barre::Montage => &self.montage,
+            Barre::Timeline => &self.timeline,
+        }
+    }
+
+    pub fn de_mut(&mut self, barre: Barre) -> &mut ReglageBarre {
+        match barre {
+            Barre::Commandes => &mut self.commandes,
+            Barre::Montage => &mut self.montage,
+            Barre::Timeline => &mut self.timeline,
+        }
+    }
+
+    pub fn nettoyees(self) -> ReglageBarres {
+        ReglageBarres {
+            commandes: self.commandes.nettoye(Barre::Commandes),
+            montage: self.montage.nettoye(Barre::Montage),
+            timeline: self.timeline.nettoye(Barre::Timeline),
+        }
+    }
+}
+
+/// Les commandes montrées dans la barre (avant que la place manque), dans l'ordre.
+pub fn dans_la_barre(barre: Barre, reglage: &ReglageBarre) -> Vec<&'static Cmd> {
+    barre.commandes().iter().filter(|c| reglage.dans_la_barre(c)).collect()
+}
+
+/// Les commandes qu'on trouve sous « Plus… » (hors celles que le manque de place y envoie).
+pub fn dans_plus(barre: Barre, reglage: &ReglageBarre) -> Vec<&'static Cmd> {
+    barre.commandes().iter().filter(|c| c.genre != Genre::Fixe && !reglage.dans_la_barre(c)).collect()
+}
+
+/// Place du bouton « Plus… », gardée à droite de la dernière commande.
+const PLUS_LARGEUR: f32 = 34.0;
+/// Largeur des lignes de « Plus… ».
+const LIGNE_LARGEUR: f32 = 270.0;
+
+/// Ce qu'une commande montre à l'instant : son icône, son nom, son état et si elle répond.
+pub(crate) struct Vue {
+    pub icone: String,
+    pub nom: String,
+    pub description: String,
+    pub etat: Option<bool>,
+    pub actif: bool,
+}
+
+impl App {
+    /// Une barre, sur une seule ligne, sans défilement : ses commandes, puis « Plus… ».
+    pub(crate) fn barre_ui(&mut self, ui: &mut Ui, barre: Barre) {
+        ui.spacing_mut().item_spacing.x = if barre == Barre::Commandes { 2.0 } else { 3.0 };
+        let reglage = self.settings.bars.de(barre).clone();
+        let mut debordent: Vec<&'static Cmd> = Vec::new();
+        let mut groupe: Option<u8> = None;
+        for c in dans_la_barre(barre, &reglage) {
+            // Plus de place (avec celle de « Plus… ») : cette commande et les suivantes y passent.
+            if c.genre != Genre::Fixe && (!debordent.is_empty() || ui.available_width() < c.largeur + PLUS_LARGEUR) {
+                debordent.push(c);
+                continue;
+            }
+            if groupe.is_some_and(|g| g != c.groupe) {
+                let marge = if barre == Barre::Commandes { 4.0 } else { 3.0 };
+                ui.add_space(marge);
+                ui.separator();
+                ui.add_space(marge);
+            }
+            groupe = Some(c.groupe);
+            self.commande_dans_la_barre(ui, barre, c);
+        }
+        let resp = ui.menu_button(RichText::new(ph::DOTS_THREE).size(TAILLE), |ui| self.plus_menu(ui, barre, &debordent)).response;
+        bulle(resp, "Plus…", "Les autres commandes de la barre. L'épingle d'une ligne la remet dans la barre.", "");
+    }
+
+    /// La commande `c` dans la barre : une icône, un menu, un champ ou un affichage.
+    fn commande_dans_la_barre(&mut self, ui: &mut Ui, barre: Barre, c: &'static Cmd) {
+        match c.genre {
+            Genre::Fixe => self.fixe_ui(ui, c.id),
+            Genre::Reglage => self.reglage_ui(ui, c.id),
+            Genre::Menu => {
+                let resp = ui.menu_button(RichText::new(c.icone).size(TAILLE), |ui| self.menu_de_barre(ui, c.id)).response;
+                bulle(resp, c.nom, c.description, "");
+            }
+            Genre::Bouton | Genre::Etat => {
+                let v = self.vue_de(barre, c);
+                let on = v.etat == Some(true);
+                let resp = if barre == Barre::Commandes {
+                    // La barre de commandes garde ses icônes plus grandes, sans cadre.
+                    let text = RichText::new(v.icone.as_str()).size(17.0);
+                    if v.etat.is_some() {
+                        ui.add_sized([28.0, 26.0], egui::SelectableLabel::new(on, text))
+                    } else {
+                        ui.add_sized([28.0, 26.0], egui::Button::new(text).frame(false))
+                    }
+                } else {
+                    ui.add_enabled(v.actif, egui::Button::new(bulles::symbole_etat(&v.icone, on)).selected(on).min_size(vec2(24.0, 0.0)))
+                };
+                if self.aide(resp, &v.nom, &v.description, c.action).clicked() && v.actif {
+                    self.executer_commande(barre, c);
+                }
+            }
+        }
+    }
+
+    /// Le menu « Plus… » : les commandes qui ne sont pas dans la barre, chacune avec son épingle ;
+    /// dessous, celles de la barre (pour en retirer) et le retour à la barre d'origine.
+    fn plus_menu(&mut self, ui: &mut Ui, barre: Barre, debordent: &[&'static Cmd]) {
+        ui.set_min_width(LIGNE_LARGEUR + 30.0);
+        let reglage = self.settings.bars.de(barre).clone();
+        let place = |c: &Cmd| barre.commandes().iter().position(|x| x.id == c.id).unwrap_or(usize::MAX);
+        let mut liste = dans_plus(barre, &reglage);
+        liste.extend(debordent.iter().copied());
+        liste.sort_by_key(|c| place(c));
+        let mut groupe: Option<u8> = None;
+        for c in liste.iter().copied() {
+            if groupe.is_some_and(|g| g != c.groupe) {
+                ui.separator();
+            }
+            groupe = Some(c.groupe);
+            self.ligne_de_plus(ui, barre, c);
+        }
+        if liste.is_empty() {
+            ui.label(RichText::new("Tout est dans la barre.").weak());
+        }
+        ui.separator();
+        ui.menu_button("Dans la barre", |ui| {
+            ui.set_min_width(LIGNE_LARGEUR + 30.0);
+            for c in dans_la_barre(barre, &reglage).into_iter().filter(|c| c.genre != Genre::Fixe && !debordent.iter().any(|d| d.id == c.id)) {
+                self.ligne_de_plus(ui, barre, c);
+            }
+        });
+        if ui.add_enabled(!reglage.est_vide(), egui::Button::new(format!("{}  Rétablir la barre d'origine", ph::ARROW_COUNTER_CLOCKWISE))).clicked() {
+            *self.settings.bars.de_mut(barre) = ReglageBarre::default();
+            let _ = self.settings.save();
+            ui.close_menu();
+        }
+    }
+
+    /// Une ligne de « Plus… » : l'épingle, puis l'icône, le nom et le raccourci de la commande.
+    fn ligne_de_plus(&mut self, ui: &mut Ui, barre: Barre, c: &'static Cmd) {
+        let epinglee = self.settings.bars.de(barre).dans_la_barre(c);
+        ui.horizontal(|ui| {
+            let pin = ui.add(egui::Button::new(bulles::symbole_etat(ph::PUSH_PIN, epinglee)).selected(epinglee).frame(false));
+            let nom = if epinglee { "Retirer de la barre" } else { "Épingler dans la barre" };
+            let pin = bulle(pin, nom, &format!("Dans la barre ou sous « Plus… » : le choix est retenu pour la {}.", barre.nom().to_lowercase()), "");
+            if pin.clicked() {
+                self.epingler_commande(barre, c, !epinglee);
+            }
+            match c.genre {
+                Genre::Menu => {
+                    ui.menu_button(format!("{}  {}", c.icone, c.nom), |ui| self.menu_de_barre(ui, c.id));
+                }
+                Genre::Reglage => {
+                    ui.label(format!("{}  {}", c.icone, c.nom));
+                    self.reglage_ui(ui, c.id);
+                }
+                Genre::Fixe => {}
+                Genre::Bouton | Genre::Etat => {
+                    let v = self.vue_de(barre, c);
+                    let on = v.etat == Some(true);
+                    let key = self.raccourci(c.action);
+                    let text = bulles::encre_etat(RichText::new(format!("{}  {}", v.icone, v.nom)), on);
+                    let button = egui::Button::new(text).selected(on).shortcut_text(key.clone()).min_size(vec2(LIGNE_LARGEUR - 24.0, 0.0));
+                    let resp = bulle(ui.add_enabled(v.actif, button), &v.nom, &v.description, &key);
+                    if resp.clicked() {
+                        ui.close_menu();
+                        self.executer_commande(barre, c);
+                    } else if resp.secondary_clicked() {
+                        ui.close_menu();
+                        self.start_assign(c.action);
+                    }
+                }
+            }
+        });
+    }
+
+    /// Épingle ou retire une commande, et retient le choix.
+    pub(crate) fn epingler_commande(&mut self, barre: Barre, c: &Cmd, oui: bool) {
+        self.settings.bars.de_mut(barre).epingler(c, oui);
+        let _ = self.settings.save();
+    }
+
+    /// Ce que la commande montre à l'instant (l'icône qui change, l'état, ce qui grise).
+    pub(crate) fn vue_de(&self, barre: Barre, c: &Cmd) -> Vue {
+        let mut v = Vue { icone: c.icone.to_string(), nom: c.nom.to_string(), description: c.description.to_string(), etat: None, actif: true };
+        match c.id {
+            "lecture.basculer" => v.icone = (if self.playing { ph::PAUSE } else { ph::PLAY }).to_string(),
+            "lecture.boucle" => v.etat = Some(self.looping),
+            "son.lecture" => {
+                v.etat = Some(self.sound_on);
+                v.icone = (if self.sound_on { ph::SPEAKER_HIGH } else { ph::SPEAKER_SLASH }).to_string();
+            }
+            "edition.copier" | "edition.supprimer" | "edition.coller" if barre == Barre::Montage => {
+                let n = self.board_selection().len();
+                let chosen = if n > 1 { format!("Les {n} plans choisis.") } else { "Le plan courant ; Ctrl ou Maj + clic pour en choisir plusieurs.".to_string() };
+                match c.id {
+                    "edition.copier" | "edition.supprimer" => v.description = chosen,
+                    _ => v.actif = self.panel_clipboard.is_some(),
+                }
+            }
+            "storyboard.verrouiller" => {
+                v.etat = Some(self.doc.storyboard_locked);
+                v.icone = (if self.doc.storyboard_locked { ph::LOCK } else { ph::LOCK_OPEN }).to_string();
+            }
+            "montage.aimanter" => v.etat = Some(self.snap_on),
+            "mode.basculer" => {
+                let (icone, nom, what) = match (self.mode, barre) {
+                    (Mode::Animation, Barre::Timeline) => (ph::ARROW_U_UP_LEFT, "Retour au storyboard", "Revenir au montage des plans."),
+                    (Mode::Animation, _) => (ph::ARROW_U_UP_LEFT, "Retour au storyboard", "Le dessin montre de nouveau le storyboard (Vue dessin ou vignettes)."),
+                    (Mode::Storyboard, _) => (ph::FILM_SLATE, "Animer ce plan", c.description),
+                };
+                (v.icone, v.nom, v.description) = (icone.to_string(), nom.to_string(), what.to_string());
+            }
+            "vue.dessin" => v.etat = Some(self.board_view == BoardView::Scene),
+            "vue.vignettes" => v.etat = Some(self.board_view == BoardView::Panels),
+            "marque.basculer" => v.etat = Some(self.panel().marks.iter().any(|m| m.frame == self.cur_frame)),
+            "camera.cle_debut" => v.icone = format!("|{}", ph::DIAMOND),
+            "camera.cle_fin" => v.icone = format!("{}|", ph::DIAMOND),
+            "camera.cle_ici" => v.actif = self.camera_key_here().is_none(),
+            "camera.cle_supprimer" => v.actif = self.camera_key_here().is_some(),
+            "camera.cle_adoucir" => {
+                v.actif = self.camera_key_here().is_some();
+                v.etat = Some(self.camera_key_here().is_some_and(|k| k.smooth));
+            }
+            "vue.pelure" => v.etat = Some(self.onion.enabled),
+            "pelure.panneau" => v.etat = Some(self.onion_window),
+            "flip.panneau" => {
+                v.etat = Some(self.flips_window);
+                v.description = format!("Feuilleter vite des images pour juger un mouvement. Flip courant : « {} ».", self.flips.current().name);
+            }
+            "fx.panneau" => {
+                let n = self.layer().fx.len();
+                v.etat = Some(self.pane_shown(Pane::Effects));
+                v.description = format!("{} {n} effet{} sur ce calque.", c.description, if n > 1 { "s" } else { "" });
+            }
+            _ => {}
+        }
+        if c.genre == Genre::Etat && v.etat.is_none() {
+            v.etat = Some(false);
+        }
+        v
+    }
+
+    /// Ce que fait la commande `c` de la barre `barre` quand on la choisit.
+    pub(crate) fn executer_commande(&mut self, barre: Barre, c: &Cmd) {
+        match (barre, c.id) {
+            // Le montage lit tout le film, la timeline le plan ; ailleurs, la zone active décide.
+            (Barre::Montage, "lecture.basculer") => self.toggle_play_scope(true),
+            (Barre::Timeline, "lecture.basculer") => self.toggle_play_scope(false),
+            // La timeline va d'une image à l'autre du plan, même quand le montage a la main.
+            (Barre::Timeline, "image.premiere") => self.goto_frame(0),
+            (Barre::Timeline, "image.precedente") => self.goto_frame(self.cur_frame.saturating_sub(1)),
+            (Barre::Timeline, "image.suivante") => self.goto_frame(self.cur_frame + 1),
+            (Barre::Timeline, "image.derniere") => self.goto_frame(self.frame_count().saturating_sub(1)),
+            // Dans la barre du montage, copier, coller et supprimer sont ceux des plans choisis.
+            (Barre::Montage, "edition.copier") => self.copy_panels(),
+            (Barre::Montage, "edition.coller") => self.paste_panels(),
+            (Barre::Montage, "edition.supprimer") => self.delete_chosen_panels(),
+            (_, "mode.basculer") => match self.mode {
+                Mode::Storyboard => self.enter_animation(self.cur_panel),
+                Mode::Animation => self.set_mode(Mode::Storyboard),
+            },
+            (_, "vue.dessin") => self.board_view = BoardView::Scene,
+            (_, "vue.vignettes") => self.board_view = BoardView::Panels,
+            (_, "fx.panneau") => self.toggle_pane(Pane::Effects),
+            _ => self.run_action(c.action),
+        }
+    }
+
+    /// Un affichage qui reste dans la barre.
+    fn fixe_ui(&mut self, ui: &mut Ui, id: &str) {
+        match id {
+            "position" => self.montage_position_ui(ui),
+            "plan" => self.timeline_plan_ui(ui),
+            "image_courante" => self.timeline_image_ui(ui),
+            _ => {}
+        }
+    }
+
+    /// Le contenu du menu d'une barre.
+    fn menu_de_barre(&mut self, ui: &mut Ui, id: &str) {
+        match id {
+            "plans" => self.plans_barre_menu(ui),
+            "son" => self.sound_menu(ui),
+            "reperes" => self.cues_menu(ui),
+            "affichage" => self.timeline_view_menu(ui),
+            "images" => self.images_menu(ui),
+            _ => {}
+        }
+    }
+
+    /// Un champ qu'on règle : la cadence, l'exposition des nouveaux dessins, la pelure.
+    fn reglage_ui(&mut self, ui: &mut Ui, id: &str) {
+        let max = crate::onion::MAX_NEIGHBOURS;
+        let Some(c) = Barre::Timeline.cherche(id) else { return };
+        let resp = match id {
+            "cadence" => {
+                let mut fps = self.doc.fps;
+                let resp = ui.add(egui::DragValue::new(&mut fps).range(1..=120).suffix(" i/s"));
+                let resp = bulle(resp, c.nom, c.description, "");
+                if self.edited(&resp) {
+                    self.doc.fps = fps;
+                }
+                return;
+            }
+            "exposition_defaut" => ui.add(egui::DragValue::new(&mut self.default_exposure).range(1..=12).prefix("en ")),
+            "pelure_avant" => ui.add(egui::DragValue::new(&mut self.onion.before).range(0..=max).prefix("‹ ")),
+            "pelure_apres" => ui.add(egui::DragValue::new(&mut self.onion.after).range(0..=max).suffix(" ›")),
+            _ => return,
+        };
+        bulle(resp, c.nom, c.description, "");
+    }
+}

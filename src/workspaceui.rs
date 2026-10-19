@@ -4,7 +4,7 @@ use eframe::egui;
 
 use crate::app::{App, BoardView, Mode};
 use crate::dock::{Group, Pane};
-use crate::workspace::{self, Layout};
+use crate::workspace::{self, Espace, Layout};
 
 impl App {
     /// La disposition telle qu'elle est à l'écran.
@@ -42,18 +42,69 @@ impl App {
         self.layout = layout;
     }
 
-    /// Retient la disposition quand elle change (pas pendant qu'on tire un panneau).
+    /// Retient la disposition quand elle change (pas pendant qu'on tire un panneau), dans celle de
+    /// l'espace de travail où l'on est (`Espace`).
     pub(crate) fn remember_layout(&mut self, ctx: &egui::Context) {
         // (Ni pendant qu'un panneau glisse vers la hauteur de son contenu : une fois arrêté.)
         if ctx.input(|i| i.pointer.any_down()) || self.fit_busy {
             return;
         }
         let current = self.current_layout();
-        let differs = self.settings.layout.as_ref().is_none_or(|l| !same_layout(l, &current));
-        if differs {
-            self.settings.layout = Some(current);
+        let differs = self.settings.layout_of(self.espace).is_none_or(|l| !same_layout(l, &current));
+        if differs || std::mem::take(&mut self.settings_a_ecrire) {
+            self.settings.set_layout_of(self.espace, current);
             let _ = self.settings.save();
         }
+    }
+
+    /// Va dans un espace de travail (INTERFACE.md, 6.1) : retient la disposition de celui qu'on quitte,
+    /// pose celle de l'autre (la sienne, retenue, ou sa disposition d'origine) et règle le mode. Rien
+    /// de lourd : une disposition de panneaux se pose en un instant, et l'écriture des réglages attend
+    /// l'image d'écran suivante (`remember_layout`).
+    ///
+    /// Les panneaux dans leur propre fenêtre restent où ils sont (ils sont sur un autre écran, ils ne
+    /// suivent pas le mode), sauf la feuille d'exposition, qui n'existe qu'en animation. Les
+    /// panneaux qui s'ajustent à leur contenu (`ajuste.rs`) repartent de la disposition posée, comme
+    /// à chaque nouvelle disposition.
+    pub(crate) fn aller_a_l_espace(&mut self, espace: Espace) {
+        if espace == self.espace {
+            self.mode = espace.mode();
+            return;
+        }
+        // 1. L'espace qu'on quitte garde ce qu'on y a fait (pas une disposition à mi-chemin d'un
+        // ajustement : l'espace garde alors la dernière qu'il a retenue).
+        if !self.fit_busy {
+            let current = self.current_layout();
+            if self.settings.layout_of(self.espace).is_none_or(|l| !same_layout(l, &current)) {
+                self.settings.set_layout_of(self.espace, current);
+                self.settings_a_ecrire = true;
+            }
+        }
+        // 2. Le mode d'abord : la feuille d'exposition se pose (ou se met de côté) selon lui.
+        self.mode = espace.mode();
+        // 3. La disposition de l'espace où l'on arrive.
+        let layout = self.settings.layout_of(espace).cloned().unwrap_or_else(|| espace.defaut()).modernisee();
+        let mut layout = layout.avec_les_reglages_de(&self.layout);
+        let dock = layout.dock_layout().avec_fenetres_detachees(&self.detached);
+        layout.panneaux = Some(dock);
+        self.apply_layout(layout);
+        self.espace = espace;
+        if espace != Espace::Animation && self.settings.storyboard_space != espace {
+            self.settings.storyboard_space = espace;
+            self.settings_a_ecrire = true;
+        }
+    }
+
+    /// « Rétablir la disposition » : l'espace de travail où l'on est reprend sa disposition d'origine.
+    /// Les panneaux dans leur propre fenêtre y restent, et les bords tirés à la main sont oubliés
+    /// (les panneaux s'ajustent de nouveau à leur contenu).
+    pub(crate) fn retablir_disposition(&mut self) {
+        let mut layout = self.espace.defaut().avec_les_reglages_de(&self.layout);
+        layout.panneaux = Some(layout.dock_layout().avec_fenetres_detachees(&self.detached));
+        self.apply_layout(layout);
+        self.settings.panes_fixed.clear();
+        self.settings_a_ecrire = true;
+        self.status = format!("Disposition « {} » rétablie.", self.espace.nom());
     }
 
     /// Actions des espaces de travail ; vrai si `action` en était une.
@@ -63,7 +114,12 @@ impl App {
             self.status = format!("Espace de travail « {name} ».");
             return true;
         }
+        if let Some(espace) = Espace::de_action(action) {
+            self.set_espace(espace);
+            return true;
+        }
         match action {
+            "espace.retablir" => self.retablir_disposition(),
             "espace.enregistrer" => self.workspace_name = Some(String::new()),
             "vue.panneau_outils" => self.toggle_pane_group(Group::Left),
             "vue.panneau_fiche" => self.toggle_pane_group(Group::Right),
@@ -82,6 +138,14 @@ impl App {
     /// Sous-menu « Espaces de travail » (menu Affichage).
     pub(crate) fn workspace_menu(&mut self, ui: &mut egui::Ui) {
         ui.menu_button("Espaces de travail", |ui| {
+            // Les trois espaces liés aux modes : chacun retient sa disposition (les boutons
+            // Storyboard et Animation, en haut à droite, y mènent aussi).
+            for espace in Espace::TOUS {
+                let name = if espace == self.espace { format!("{} (en cours)", espace.nom()) } else { espace.nom().to_string() };
+                self.action_item(ui, &name, espace.action());
+            }
+            self.action_item(ui, "Rétablir la disposition", "espace.retablir");
+            ui.separator();
             for (action, name, _) in workspace::builtin() {
                 self.action_item(ui, name, action);
             }
@@ -212,5 +276,9 @@ impl App {
 
 /// Deux dispositions identiques, aux parts près (elles bougent d'un rien d'une image à l'autre).
 fn same_layout(a: &Layout, b: &Layout) -> bool {
-    a.vignettes == b.vignettes && a.top_view == b.top_view && a.dock_layout().close_to(&b.dock_layout())
+    a.vignettes == b.vignettes
+        && a.top_view == b.top_view
+        && a.command_bar == b.command_bar
+        && a.tool_bar == b.tool_bar
+        && a.dock_layout().close_to(&b.dock_layout())
 }

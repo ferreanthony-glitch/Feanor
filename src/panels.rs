@@ -245,8 +245,13 @@ impl App {
                 let on = self.mode == Mode::Storyboard;
                 let board = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" Storyboard ").strong(), on));
                 let board = self.aide(board, "Storyboard", "Monter les plans et les séquences.", "mode.basculer");
-                if board.clicked() && self.mode != Mode::Storyboard {
-                    self.set_mode(Mode::Storyboard);
+                if board.clicked() {
+                    if self.mode != Mode::Storyboard {
+                        self.set_mode(Mode::Storyboard);
+                    } else if self.espace == crate::workspace::Espace::Montage {
+                        // Dans l'espace Montage, le bouton ramène à la disposition du storyboard.
+                        self.set_espace(crate::workspace::Espace::Storyboard);
+                    }
                 }
             });
         });

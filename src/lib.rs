@@ -43,6 +43,9 @@ mod audio_tests;
 mod barrepanneaux;
 #[cfg(test)]
 mod barrepanneaux_tests;
+mod barres;
+#[cfg(test)]
+mod barres_tests;
 pub mod fond;
 #[cfg(test)]
 mod fond_tests;

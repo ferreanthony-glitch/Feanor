@@ -584,6 +584,29 @@ impl DockLayout {
         out
     }
 
+    /// Cette disposition (celle d'un espace de travail qu'on rejoint) avec les panneaux dans leur
+    /// propre fenêtre `courantes` : une fenêtre à part est posée sur un autre écran, elle ne suit pas
+    /// le mode. Font exception les panneaux qui n'existent qu'en animation (la feuille d'exposition
+    /// détachée revient en animation, et elle quitte l'écran en storyboard) et ceux que cette
+    /// disposition détache et qui ne sont pas détachés maintenant : ils gardent leur fenêtre d'ici.
+    pub fn avec_fenetres_detachees(mut self, courantes: &[DetachedPanel]) -> DockLayout {
+        let propres: Vec<DetachedPanel> = std::mem::take(&mut self.detachees)
+            .into_iter()
+            .filter(|d| d.panneau.animation_only() || !courantes.iter().any(|c| c.panneau == d.panneau))
+            .collect();
+        let suivent: Vec<DetachedPanel> = courantes.iter().filter(|d| !d.panneau.animation_only()).cloned().collect();
+        for d in &suivent {
+            // Le panneau quitte l'arbre (il y serait en double), sa fenêtre reste où elle est.
+            self.close(d.panneau);
+        }
+        for d in &propres {
+            self.close(d.panneau);
+        }
+        self.detachees = suivent;
+        self.detachees.extend(propres);
+        self.sanitized()
+    }
+
     /// `pane` est dans la fenêtre principale (pas flottant ni détaché).
     fn principal_has(&self, pane: Pane) -> bool {
         let mut out = Vec::new();

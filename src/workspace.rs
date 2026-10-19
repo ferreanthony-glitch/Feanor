@@ -9,7 +9,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::dock::DockLayout;
+use crate::app::Mode;
+use crate::dock::{DockLayout, Pane};
 
 /// Disposition de la fenêtre.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -136,6 +137,113 @@ impl Layout {
     /// Disposition enregistrée avant 6a (on lui préfère la nouvelle disposition par défaut).
     pub fn is_before_6a(&self) -> bool {
         self.panneaux.as_ref().is_some_and(|d| d.version < 1)
+    }
+
+    /// Cette disposition (celle d'un espace de travail) avec les réglages de la vue de `vue`, la
+    /// disposition à l'écran : les cadres de composition et la planche des vignettes sont des choix
+    /// de l'utilisateur, pas d'un espace ; seuls les panneaux et les barres changent d'un espace à
+    /// l'autre.
+    pub fn avec_les_reglages_de(self, vue: &Layout) -> Layout {
+        Layout {
+            card_size: vue.card_size,
+            board_columns: vue.board_columns,
+            board_rows: vue.board_rows,
+            board_spacing: vue.board_spacing,
+            board_scene_breaks: vue.board_scene_breaks,
+            board_attach: vue.board_attach,
+            safe_frames: vue.safe_frames,
+            frame_format: vue.frame_format,
+            ..self
+        }
+    }
+
+    /// Une disposition lue dans les réglages, mise au goût du jour : celle d'avant 6a (barre d'outils
+    /// verticale, calques à côté du dessin) devient la disposition par défaut, en gardant les
+    /// panneaux qu'elle montrait.
+    pub fn modernisee(self) -> Layout {
+        if !self.is_before_6a() {
+            return self;
+        }
+        let d = self.dock_layout();
+        Layout {
+            tools: d.contains(Pane::ToolOptions),
+            sheet: d.contains(Pane::Layers) || d.contains(Pane::Sheet),
+            strip: d.contains(Pane::Montage),
+            panneaux: None,
+            ..Layout::default()
+        }
+    }
+}
+
+/// Les trois espaces de travail liés aux boutons de mode (INTERFACE.md, 6.1). Chacun retient sa
+/// propre disposition : passer en Animation ouvre la disposition d'animation, revenir en Storyboard
+/// remet celle du storyboard, et ce que l'utilisateur change dans l'une ne touche pas les autres.
+///
+/// « Montage » n'est pas un troisième mode : il garde les raccourcis, les outils et le dessin du
+/// storyboard (`Mode::Storyboard`) ; seule sa disposition diffère (la bande du montage en grand,
+/// les panneaux de dessin repliés). On y va par Affichage > Espaces de travail ou la palette
+/// (Ctrl+K), et le bouton « Storyboard » en revient.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Espace {
+    #[default]
+    #[serde(rename = "storyboard")]
+    Storyboard,
+    #[serde(rename = "animation")]
+    Animation,
+    #[serde(rename = "montage")]
+    Montage,
+}
+
+impl Espace {
+    pub const TOUS: [Espace; 3] = [Espace::Storyboard, Espace::Animation, Espace::Montage];
+
+    pub fn nom(self) -> &'static str {
+        match self {
+            Espace::Storyboard => "Storyboard",
+            Espace::Animation => "Animation",
+            Espace::Montage => "Montage",
+        }
+    }
+
+    /// L'action qui y mène (`keymap::ACTIONS`).
+    pub fn action(self) -> &'static str {
+        match self {
+            Espace::Storyboard => "espace.storyboard",
+            Espace::Animation => "espace.animation",
+            Espace::Montage => "espace.montage",
+        }
+    }
+
+    pub fn de_action(action: &str) -> Option<Espace> {
+        Espace::TOUS.into_iter().find(|e| e.action() == action)
+    }
+
+    /// Le mode dans lequel l'espace se voit.
+    pub fn mode(self) -> Mode {
+        match self {
+            Espace::Animation => Mode::Animation,
+            Espace::Storyboard | Espace::Montage => Mode::Storyboard,
+        }
+    }
+
+    /// Sa disposition d'origine (« Rétablir la disposition », et la première fois qu'on y va).
+    /// - Storyboard : la disposition standard (le dessin, les calques et les effets, les réglages et
+    ///   la fiche du plan, le montage en bas).
+    /// - Animation : la même, avec la bande (la timeline) plus haute et les calques plus larges.
+    /// - Montage : la bande du montage en grand ; ni calques, ni effets, ni réglages de l'outil, ni
+    ///   couleur : seule la fiche du plan reste, pour les textes et les durées.
+    pub fn defaut(self) -> Layout {
+        let standard = Layout::default();
+        match self {
+            Espace::Storyboard => standard,
+            Espace::Animation => Layout { montage_height: 340.0, sheet_width: 250.0, ..standard },
+            Espace::Montage => {
+                let base = Layout { tools: false, sheet: true, montage_height: 420.0, ..standard };
+                let mut dock = DockLayout::from_legacy(&Layout { sheet: false, ..base.clone() });
+                dock.open(Pane::Sheet);
+                Layout { panneaux: Some(dock), ..base }
+            }
+        }
     }
 }
 

@@ -527,6 +527,13 @@ pub struct App {
     /// La disposition d'animation dont la feuille d'exposition a été retirée en passant au
     /// storyboard (elle n'existe qu'en animation) ; elle revient à sa place au retour.
     pub(crate) exposition_masquee: Option<crate::dock::DockLayout>,
+    /// L'espace de travail où l'on est (Storyboard, Animation ou Montage) : sa disposition est celle
+    /// que `remember_layout` retient. Storyboard et Montage sont deux dispositions du mode
+    /// storyboard (`workspace::Espace`).
+    pub(crate) espace: crate::workspace::Espace,
+    /// Des réglages (la disposition d'un espace qu'on vient de quitter, l'espace du côté storyboard)
+    /// attendent d'être écrits : `remember_layout` s'en charge à l'image d'écran suivante.
+    pub(crate) settings_a_ecrire: bool,
     /// Nom en cours de saisie pour enregistrer l'espace de travail.
     pub(crate) workspace_name: Option<String>,
     /// Copie de secours de cette séance, et séances interrompues à proposer au démarrage.
@@ -993,6 +1000,8 @@ impl App {
             detached: Vec::new(),
             detach_request: None,
             exposition_masquee: None,
+            espace: crate::workspace::Espace::Storyboard,
+            settings_a_ecrire: false,
             workspace_name: None,
             settings,
             // Les séances interrompues d'abord (avant d'ouvrir la nôtre).
@@ -1155,19 +1164,14 @@ impl App {
             " · calques par le processeur"
         });
         // La disposition de la dernière fois.
-        if let Some(mut layout) = app.settings.layout.clone() {
-            // Disposition d'avant 6a : la nouvelle disposition par défaut (barre d'outils
-            // verticale, calques à côté du dessin), en gardant les panneaux affichés.
-            if layout.is_before_6a() {
-                let d = layout.dock_layout();
-                layout = crate::workspace::Layout {
-                    tools: d.contains(crate::dock::Pane::ToolOptions),
-                    sheet: d.contains(crate::dock::Pane::Layers) || d.contains(crate::dock::Pane::Sheet),
-                    strip: d.contains(crate::dock::Pane::Montage),
-                    panneaux: None,
-                    ..crate::workspace::Layout::default()
-                };
-            }
+        // On démarre en storyboard, dans l'espace du côté storyboard où l'on avait quitté
+        // (Storyboard, ou Montage) : l'unique disposition d'un ancien fichier de réglages est celle de
+        // Storyboard. Les dispositions des autres espaces attendent qu'on y aille.
+        app.espace = app.settings.storyboard_space;
+        let saved = app.settings.layout_of(app.espace).cloned();
+        if saved.is_some() || app.espace != crate::workspace::Espace::Storyboard {
+            // (Disposition d'avant 6a : la nouvelle disposition par défaut, `modernisee`.)
+            let layout = saved.unwrap_or_else(|| app.espace.defaut()).modernisee();
             // (Les cadres de composition de la dernière fois aussi.)
             app.layout.safe_frames = layout.safe_frames;
             app.layout.frame_format = layout.frame_format;
@@ -1449,11 +1453,25 @@ impl App {
         self.set_mode(Mode::Animation);
     }
 
+    /// Change de mode : l'animation a son espace de travail, le storyboard celui où l'on était de ce
+    /// côté (Storyboard ou Montage, `Settings::storyboard_space`).
     pub(crate) fn set_mode(&mut self, mode: Mode) {
+        let espace = match mode {
+            Mode::Animation => crate::workspace::Espace::Animation,
+            Mode::Storyboard => self.settings.storyboard_space,
+        };
+        self.set_espace(espace);
+    }
+
+    /// Va dans un espace de travail (Storyboard, Animation ou Montage) : le mode qui va avec, la
+    /// disposition qu'on y avait (`aller_a_l_espace`).
+    pub(crate) fn set_espace(&mut self, espace: crate::workspace::Espace) {
+        use crate::workspace::Espace;
         self.cancel_montage_drag();
         self.end_stroke();
         self.playing = false;
-        self.mode = mode;
+        self.aller_a_l_espace(espace);
+        let mode = self.mode;
         // Le dessin change : c'est lui qui prend la main (les raccourcis suivent le nouveau mode).
         self.panel_focus = false;
         self.images_focus = false;
@@ -1463,9 +1481,10 @@ impl App {
             self.cur_frame = self.cur_frame.min(self.frame_count() - 1);
         }
         self.follow_frame = true;
-        self.status = match mode {
-            Mode::Storyboard => "Storyboard : montage des plans.".into(),
-            Mode::Animation => format!("Animation de {} (Tab : retour au storyboard).", crate::storyboard::panel_long_title(&self.doc, self.cur_panel)),
+        self.status = match espace {
+            Espace::Storyboard => "Storyboard : montage des plans.".into(),
+            Espace::Montage => "Montage : la bande des plans en grand (Affichage > Espaces de travail > Storyboard pour en revenir).".into(),
+            Espace::Animation => format!("Animation de {} (Tab : retour au storyboard).", crate::storyboard::panel_long_title(&self.doc, self.cur_panel)),
         };
         // La feuille d'exposition n'existe qu'en animation.
         self.masquer_exposition();
@@ -4174,7 +4193,8 @@ impl App {
         if let Some(r) = self.recovery.take() {
             r.close();
         }
-        self.settings.layout = Some(self.current_layout());
+        let current = self.current_layout();
+        self.settings.set_layout_of(self.espace, current);
         let _ = self.settings.save();
     }
 }
