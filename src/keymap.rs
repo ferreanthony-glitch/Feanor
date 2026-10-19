@@ -144,6 +144,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("fichier.exporter_images", "Exporter des images (PNG)", true, false),
     act("fichier.exporter_son", "Exporter le son (WAV)", true, false),
     act("fichier.exporter_pdf", "Exporter le storyboard (PDF)", true, false),
+    act("numerotation.verrouiller", "Verrouiller / déverrouiller la numérotation des plans", true, false),
+    act("numerotation.renumeroter", "Renuméroter les plans (1, 2, 3… dans l'ordre du film)", true, false),
     act("fichier.exporter_image_courante", "Exporter l'image courante (PNG)", true, false),
     act("fichier.exporter", "Exporter (choisir le format : film, images, PDF, son…)", true, false),
     act("fichier.preferences", "Préférences de SHOT (copie de secours, curseur, panneaux, raccourcis)", true, false),

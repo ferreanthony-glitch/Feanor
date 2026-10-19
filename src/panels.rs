@@ -173,6 +173,9 @@ impl App {
                 ui.separator();
                 let lock = if self.doc.storyboard_locked { "Déverrouiller le storyboard" } else { "Verrouiller le storyboard" };
                 self.action_item(ui, lock, "storyboard.verrouiller");
+                let numbering = if self.doc.numbering_locked { "Déverrouiller la numérotation des plans" } else { "Verrouiller la numérotation des plans" };
+                self.action_item(ui, numbering, "numerotation.verrouiller");
+                self.action_item(ui, "Renuméroter les plans…", "numerotation.renumeroter");
                 ui.separator();
                 let label = match self.mode {
                     Mode::Storyboard => "Animer ce plan",
@@ -682,6 +685,8 @@ impl App {
         // Exporter… et Préférences… (`prefsui.rs`).
         self.export_hub_window(ctx);
         self.preferences_window(ctx);
+        // Renuméroter les plans : la confirmation.
+        self.renumber_window(ctx);
         // Suggestions sonores : confirmation d'envoi en ligne, « Modifier », saisie d'une clé.
         self.suggestions_windows(ctx);
         // À propos de SHOT (`aproposui.rs`).

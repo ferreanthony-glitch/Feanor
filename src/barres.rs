@@ -173,6 +173,23 @@ pub(crate) const MONTAGE: &[Cmd] = &[
         false,
         1,
     ),
+    // Numérotation des plans (`numerotation.rs`) : verrouillée, chaque plan garde son numéro (12, 12A, 13).
+    etat(
+        "numerotation.verrouiller",
+        ph::LIST_NUMBERS,
+        "Verrouiller la numérotation",
+        "Verrouillée : chaque plan garde son numéro. Inséré entre le 12 et le 13, un plan devient le 12A ; supprimé, il laisse un trou ; déplacé, il garde son numéro.",
+        false,
+        1,
+    ),
+    bouton(
+        "numerotation.renumeroter",
+        ph::HASH,
+        "Renuméroter les plans",
+        "Remet des numéros propres, 1, 2, 3… dans l'ordre du film (numérotation verrouillée ; après confirmation, une étape d'annulation).",
+        false,
+        1,
+    ),
     etat(
         "montage.aimanter",
         ph::MAGNET,
@@ -588,6 +605,11 @@ impl App {
                 v.icone = (if self.doc.storyboard_locked { ph::LOCK } else { ph::LOCK_OPEN }).to_string();
             }
             "montage.aimanter" => v.etat = Some(self.snap_on),
+            "numerotation.verrouiller" => {
+                v.etat = Some(self.doc.numbering_locked);
+                v.icone = (if self.doc.numbering_locked { ph::LOCK_KEY } else { ph::LIST_NUMBERS }).to_string();
+            }
+            "numerotation.renumeroter" => v.actif = self.doc.numbering_locked,
             "mode.basculer" => {
                 let (icone, nom, what) = match (self.mode, barre) {
                     (Mode::Animation, Barre::Timeline) => (ph::ARROW_U_UP_LEFT, "Retour au storyboard", "Revenir au montage des plans."),

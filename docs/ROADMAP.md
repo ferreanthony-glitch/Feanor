@@ -2921,3 +2921,21 @@ l'écran dans cette séance.
   `scripts\verifier.ps1 -Repetitions 2` : OK, compilation sans avertissement).
 - Pas fait : un réglage « barres complètes » (épingler tout y revient) ; miroir et table lumineuse sous « Plus… » dans
   la barre sous le dessin (proposition 4 de la partie 5) ; préréglage de raccourcis façon Storyboard Pro (6.2).
+
+## Numérotation robuste des plans (demandée par Anthony le 2026-10-20, branche `numerotation-export`) ✅
+
+Détail des règles dans `docs/INTERFACE.md` (« Numérotation des plans : suivie ou verrouillée ») et en tête de
+`src/numerotation.rs`. Pas vu à l'écran dans cette séance.
+
+- ✅ **Deux modes** dans Réglages du projet : « Suivie » (le rang, comme avant) et « Verrouillée » (numéros propres, 12,
+  12A, 12B…, trous après une suppression, numéro gardé par un plan déplacé).
+- ✅ **Renuméroter** : confirmation, une étape d'annulation nommée ; **Verrouiller** : une étape nommée aussi.
+- ✅ **Partout** : tous les titres passent par `Document::scene_label` / `plan_code` ; les noms de clips et de fichiers
+  des exports pour le montage par `plan_full_ref` (« SQ01_PL012A »).
+- ✅ **Format** : champs facultatifs du manifeste, `VERSION` reste 27 (l'autre session peut prendre 28).
+- ✅ **Essais** : `numerotation_tests.rs` (règle d'insertion, 1500 insertions au hasard ordonnées et uniques,
+  insertion / suppression / déplacement / duplication / coupe / collage / réunion dans les deux modes, renuméroter et
+  annuler, aller-retour d'enregistrement, ancien manifeste, projet suivi écrit comme avant) ; le projet d'essai de
+  fiabilité est maintenant verrouillé (un plan 2A, un trou, une séquence 1A).
+- Pas fait / à vérifier : la correspondance avec la numérotation de plan de Storyboard Pro (SHOT n'écrit que le nom du
+  plan) ; pas de numérotation de plan automatique par séquence (SQ01 → PL001…) : un seul compte pour tout le film.

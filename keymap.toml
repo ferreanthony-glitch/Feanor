@@ -2167,6 +2167,17 @@ action = "fichier.exporter_sboard"
 touches = []
 source = "SHOT (sans touche)"
 
+# Numérotation des plans (suivie ou verrouillée).
+[[raccourci]]
+action = "numerotation.verrouiller"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "numerotation.renumeroter"
+touches = []
+source = "SHOT (sans touche)"
+
 [[raccourci]]
 action = "aide.a_propos"
 touches = []

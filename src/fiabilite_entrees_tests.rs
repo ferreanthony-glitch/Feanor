@@ -46,6 +46,7 @@ fn the_fixture_really_holds_everything_the_project_can_store() {
     assert!(d.panels.iter().any(|p| p.camera.len() > 5), "clés de caméra, avec un effet de caméra posé");
     assert!(d.panels.iter().any(|p| p.ref3d.is_some()) && !d.models.is_empty(), "repère 3D");
     assert!(d.scenes3d.plans.values().any(|p| p.objects.len() >= 8 && p.objects.iter().any(|o| o.group.is_some())) && !d.scenes3d.decors.is_empty(), "scène 3D de blocage avec son décor");
+    assert!(d.numbering_locked && d.scenes.iter().any(|s| s.number == "2A") && d.sequences.iter().any(|s| s.number == "1A"), "numérotation verrouillée, avec un plan 2A et une séquence 1A");
     assert!(d.panels.iter().any(|p| !p.marks.is_empty()), "marques d'image");
     assert!(d.panels.iter().any(|p| p.color.is_some()), "couleur de plan");
     assert!(d.panels.iter().any(|p| !p.cues.bookmarks.is_empty() && !p.cues.notes.is_empty()), "signets et notes dessinées");

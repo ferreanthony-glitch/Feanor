@@ -75,6 +75,11 @@ dans `...\Pelure` y est copié (jamais déplacé ni supprimé) s'il n'y a pas en
     menu Storyboard. Ctrl+Z annule.
   - Numérotation automatique : plans 1, 2, 3… dans l'ordre du film. Un plan ou une séquence peut
     recevoir un nom ou un numéro à soi (fiche à droite).
+  - **Numérotation verrouillée** (Réglages du projet > Numérotation des plans) : chaque plan garde son numéro.
+    Un plan inséré entre le 12 et le 13 devient le **12A** (puis 12B), un plan supprimé laisse un trou (son
+    numéro n'est pas redonné), un plan déplacé garde son numéro. « Renuméroter les plans… » (menu Storyboard)
+    remet 1, 2, 3… dans l'ordre du film, avec confirmation et une étape d'annulation. Détail :
+    `docs/INTERFACE.md`.
   - La fiche montre les textes de l'image de storyboard où est la tête de lecture.
   - La lecture du montage (▶ de sa barre) enchaîne tout (animatique), en boucle si on veut, avec le son.
   - Vue « Vignettes » (Maj+Tab) : une **planche** de pages blanches où les images de storyboard

@@ -825,3 +825,44 @@ panneau détaché, chaque panneau de la barre s'ouvre dans chaque espace, change
 5. Passer de Storyboard à Animation et retour : le dessin ne saute pas, les panneaux ajustés se recalent en une ou
    deux images ; l'espace Montage depuis Ctrl+K ; le bouton « Storyboard » qui en revient.
 6. Un panneau détaché (Références) reste sur son écran en changeant d'espace.
+
+## Numérotation des plans : suivie ou verrouillée (2026-10-20, branche `numerotation-export`)
+
+Règles et code : `src/numerotation.rs` (module en tête), interface `src/numerotationui.rs`.
+
+- **Réglages du projet > Réglages > « Numérotation des plans »** : « Suivie » (comme avant : le numéro d'un plan est
+  son rang dans le film) ou « Verrouillée » (chaque plan garde son numéro). Le bouton « Renuméroter… » n'agit qu'en
+  numérotation verrouillée.
+- **Verrouillée** : les numéros d'aujourd'hui (1, 2, 3…) sont figés ; ensuite
+  - un plan **inséré** entre le 12 et le 13 devient **12A** (puis **12B** juste après le 12A) ; couper un plan, le
+    dupliquer, coller, « Nouveau plan » suivent la même règle ;
+  - un plan **supprimé** laisse un trou, son numéro n'est **jamais redonné** (un plan inséré à sa place reçoit une
+    lettre : le montage a peut-être déjà un « 13 ») ; réunir deux plans en supprime un ;
+  - un plan **déplacé** garde son numéro (les numéros ne sont alors plus dans l'ordre du film) ;
+  - à la fin du film, un plan prend l'entier suivant le dernier (13 après 12A, si 13 n'existe pas).
+- **Forme d'un numéro** : un entier puis une queue de chiffres et de lettres majuscules. Ordre : 12 < 12.5 < 12A <
+  12A1 < 12AA < 12B < 13. Entre 12A et 12B qui se touchent : **12A1** (puis 12A2…). Entre 12 et 12A (rien ne tient avec
+  des lettres) : **12.5** (le point sépare la base d'une queue qui commence par un chiffre). Avant le premier plan :
+  « 0 » puis « -1 ». Un numéro est toujours unique.
+- **Séquences** : même mécanique (SQ01, SQ01A…).
+- **Renuméroter** (menu Storyboard > « Renuméroter les plans… », « Plus… » du montage, Ctrl+K) : confirmation, puis 1, 2,
+  3… dans l'ordre du film, plans et séquences ; **une** étape d'annulation nommée « Renuméroter les plans ».
+  Verrouiller / déverrouiller : aussi une étape (« Verrouiller / déverrouiller la numérotation des plans »). Déverrouiller
+  oublie les numéros propres.
+- **Un nom à soi** (fiche du plan) l'emporte toujours à l'écran ; le numéro reste disponible pour les noms de fichiers
+  des exports pour le montage (« SQ01_PL012A »).
+- **Partout où un plan est nommé** : bande de montage, planche, titre du plan, fiche, fenêtre « Aller à », commentaires,
+  incrustations (nom du plan), PDF et page HTML du storyboard, lecture du storyboard pour les sons, export Storyboard
+  Pro (**le nom du plan SBP est le numéro ; la correspondance exacte avec un numéro de plan de Storyboard Pro est à
+  vérifier**, SHOT n'écrit que le nom).
+- **Fichier** : champs facultatifs du manifeste (`numerotation_verrouillee`, `numero` d'une séquence et d'un plan),
+  absents tant que la numérotation est suivie : un ancien projet s'ouvre tel quel et un projet suivi s'enregistre
+  exactement comme avant ; `VERSION` reste 27. Une version de SHOT d'avant ouvre un projet verrouillé mais perd les
+  numéros à l'enregistrement.
+
+### À voir à l'écran (numérotation)
+
+1. Réglages du projet : « Verrouillée » ; la bande du montage ne change pas. Nouveau plan après le 2 : « Plan 2A ».
+2. Supprimer le 3 : les autres gardent leur numéro ; un nouveau plan après le 2 se nomme 2A, pas 3.
+3. Glisser le plan 5 devant le 1 : il reste « 5 ». « Renuméroter les plans… » : confirmation, tout repart de 1 ; Ctrl+Z.
+4. Les titres (planche, fiche, PDF) disent « Plan 12A ».

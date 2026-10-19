@@ -501,6 +501,11 @@ mod shapes;
 mod shapes_tests;
 mod shapetools;
 mod soundtrack;
+// Numérotation des plans : suivie ou verrouillée (12, 12A, 13), renuméroter.
+mod numerotation;
+#[cfg(test)]
+mod numerotation_tests;
+mod numerotationui;
 // Transitions du montage (fondus, volet, noir) : modèle, rendu, interface.
 mod transitions;
 #[cfg(test)]

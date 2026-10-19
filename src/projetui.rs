@@ -375,6 +375,8 @@ impl App {
             ui.end_row();
         });
         ui.separator();
+        self.numbering_section(ui);
+        ui.separator();
         let doc = &self.doc;
         let total: usize = doc.panels.iter().map(|p| p.frame_count()).sum();
         let plans = doc.panels.len();
