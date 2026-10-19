@@ -20,8 +20,38 @@ use crate::document::{Cel, CelId};
 use crate::fx::FxStep;
 use crate::raster::{Raster, TILE_PIXELS};
 
-/// Mémoire gardée pour les dessins dérivés (octets de pixels).
+/// Mémoire gardée pour les dessins dérivés (octets de pixels), avant tout réglage.
 const CACHE_BYTES: usize = 768 << 20;
+/// La réserve en vigueur : `CACHE_BYTES`, ou ce que Aide > Diagnostic des performances ou les
+/// Préférences ont réglé (`set_limit`).
+static LIMIT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(CACHE_BYTES);
+
+/// La réserve en vigueur, en octets (essais).
+#[cfg(test)]
+pub(crate) fn limit() -> usize {
+    LIMIT.load(Ordering::Relaxed)
+}
+
+/// Règle la réserve à `bytes` octets ; les plus anciens dessins partent tout de suite si elle est
+/// déjà dépassée.
+pub(crate) fn set_limit(bytes: usize) {
+    let bytes = bytes.max(1 << 20);
+    if LIMIT.swap(bytes, Ordering::Relaxed) == bytes {
+        return;
+    }
+    let mut dropped = Vec::new();
+    {
+        let mut st = lock();
+        while st.bytes > bytes && !st.cache.is_empty() {
+            let Some(old) = st.cache.iter().min_by_key(|(_, e)| e.used).map(|(k, _)| *k) else { break };
+            if let Some(e) = st.cache.remove(&old) {
+                st.bytes -= e.bytes;
+                dropped.push(e.cel);
+            }
+        }
+    }
+    drop(dropped);
+}
 /// Nombre d'entrées au plus, quelle que soit leur taille.
 const CACHE_ENTRIES: usize = 2048;
 /// Dernier résultat gardé par dessin d'origine, pour l'afficher en attendant le suivant.
@@ -180,7 +210,7 @@ pub(crate) fn put(id: CelId, version: u64, cel: Arc<Cel>) {
 
 /// Range un dessin dérivé ; renvoie ceux que la réserve a dû lâcher (à libérer hors du verrou).
 fn insert(st: &mut State, id: CelId, version: u64, cel: Arc<Cel>, origin: Option<CelId>) -> Vec<Arc<Cel>> {
-    insert_within(st, id, version, cel, origin, CACHE_BYTES)
+    insert_within(st, id, version, cel, origin, LIMIT.load(Ordering::Relaxed))
 }
 
 /// `insert`, la réserve limitée à `limit` octets.
@@ -423,10 +453,10 @@ pub(crate) fn forget_all() {
 }
 
 fn worker_loop() {
-    // Le fil de fond laisse deux cœurs à l'interface et à la carte graphique.
-    let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
-    crate::render::set_thread_cap(cores.saturating_sub(2).max(1));
     loop {
+        // Le fil de fond laisse deux cœurs à l'interface et à la carte graphique (relu à chaque
+        // calcul : « fils de calcul » se règle sans redémarrer).
+        crate::render::set_thread_cap(crate::parallele::coeurs().saturating_sub(2).max(1));
         let job = {
             let mut st = lock();
             loop {

@@ -32,6 +32,12 @@ pub fn level_for_zoom(zoom: f32) -> u8 {
     }
 }
 
+/// Comme `level_for_zoom`, avec un niveau minimal `floor` (réglage « effets en aperçu réduit » du
+/// diagnostic des performances : même zoomé, l'aperçu est au moins à moitié de la résolution).
+pub fn level_with_floor(zoom: f32, floor: u8) -> u8 {
+    level_for_zoom(zoom).max(floor)
+}
+
 /// Tous les effets de la pile admettent-ils l'aperçu ?
 pub fn proxyable(steps: &[FxStep]) -> bool {
     steps.iter().all(|s| {

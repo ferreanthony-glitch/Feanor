@@ -1037,10 +1037,18 @@ pub fn draft_level(ctx: &eframe::egui::Context, panel: usize, frame: usize, play
     if now < DRAFT_UNTIL.load(std::sync::atomic::Ordering::Relaxed) {
         // Une fois le mouvement fini, l'image se redessine en pleine résolution.
         ctx.request_repaint_after(std::time::Duration::from_millis(DRAFT_MS + 50));
-        crate::fxproxy::level_for_zoom(zoom)
+        crate::fxproxy::level_with_floor(zoom, DRAFT_MIN.load(std::sync::atomic::Ordering::Relaxed))
     } else {
         0
     }
+}
+
+/// Niveau d'aperçu minimal pendant un mouvement (Aide > Diagnostic des performances, « effets en
+/// aperçu réduit ») : 0, celui du zoom seul ; 1, au moins la moitié de la résolution même zoomé.
+static DRAFT_MIN: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+pub fn set_draft_min(level: u8) {
+    DRAFT_MIN.store(level.min(2), std::sync::atomic::Ordering::Relaxed);
 }
 
 static DRAFT_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);

@@ -534,18 +534,24 @@ impl GpuCanvas {
         }
     }
 
-    /// Essais : la mémoire visée pour les textures des dessins (un Go d'ordinaire).
-    #[cfg(test)]
+    /// La mémoire visée pour les textures des dessins (un Go d'ordinaire ; les Préférences et le
+    /// diagnostic des performances la règlent). Les plus anciennes partent à la prochaine image si
+    /// elle est dépassée.
     pub fn set_cache_bytes(&self, bytes: u64) {
         if let Some(res) = self.render_state.renderer.write().callback_resources.get_mut::<CanvasResources>() {
             res.cache_bytes = bytes;
         }
     }
 
+    /// La mémoire visée pour les textures des dessins.
+    pub fn cache_bytes(&self) -> u64 {
+        self.render_state.renderer.read().callback_resources.get::<CanvasResources>().map_or(CACHE_BYTES, |r| r.cache_bytes)
+    }
+
     /// Nombre de dessins qu'on peut envoyer d'avance sans chasser ceux qui sont affichés.
     pub fn ahead_capacity(&self, doc: &Document, shown: usize) -> usize {
         let per = (doc.width as u64 * doc.height as u64 * 4).max(1);
-        ((CACHE_BYTES / per) as usize).saturating_sub(shown + 4) / 2
+        ((self.cache_bytes() / per) as usize).saturating_sub(shown + 4) / 2
     }
 
     /// Met à jour les textures des dessins du plan. `all` : tout a pu changer ; `tiles` : tuiles

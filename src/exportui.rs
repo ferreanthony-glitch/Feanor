@@ -178,6 +178,8 @@ impl App {
 
     /// Lance l'export choisi : demande où écrire, puis démarre (ou écrit directement le son).
     fn start_export(&mut self, s: &ExportSettings, frames: Vec<(usize, usize)>, first: usize, sound: bool) {
+        // (Traits texturés restés en rendu rapide : l'export les veut exacts.)
+        self.exactify_idle();
         let base = self.base_name();
         let fps = self.doc.fps;
         match s.format {

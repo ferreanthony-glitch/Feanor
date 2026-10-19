@@ -94,6 +94,14 @@ pub struct Settings {
     /// aspect (`cadrage.rs`).
     #[serde(default, rename = "aides_cadrage")]
     pub framing: crate::cadrage::FramingAids,
+    /// Réglages de performance (2026-10-19) : effets, traits texturés, caches, fils, vignettes,
+    /// animations (`diagnostic.rs`, Fichier > Préférences…, Aide > Diagnostic des performances).
+    #[serde(default, rename = "performance")]
+    pub perf: crate::diagnostic::PerfReglages,
+    /// Ce que le diagnostic des performances a fait : proposé au premier lancement, dernier profil
+    /// appliqué et réglages d'avant (« Revenir comme avant »).
+    #[serde(default, rename = "diagnostic")]
+    pub diagnostic: crate::diagnostic::EtatDiagnostic,
 }
 
 fn default_autosave() -> u32 {
@@ -136,6 +144,8 @@ impl Default for Settings {
             theme: Default::default(),
             comment_author: String::new(),
             framing: Default::default(),
+            perf: Default::default(),
+            diagnostic: Default::default(),
         }
     }
 }
@@ -153,6 +163,7 @@ impl Settings {
             .unwrap_or_default();
         s.onion.migrate();
         s.framing = s.framing.sanitized();
+        s.perf = s.perf.sanitized();
         s
     }
 

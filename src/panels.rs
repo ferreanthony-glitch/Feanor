@@ -212,6 +212,7 @@ impl App {
                 self.action_item(ui, "Raccourcis clavier…", "aide.raccourcis");
                 ui.separator();
                 self.action_item(ui, "À propos de SHOT…", "aide.a_propos");
+                self.action_item(ui, "Diagnostic des performances…", "aide.diagnostic");
                 ui.separator();
                 let rec = if self.record_strokes.is_some() { "Arrêter d'enregistrer mes traits" } else { "Enregistrer mes traits (banc d'essai du moteur)" };
                 self.action_item(ui, rec, "pinceau.enregistrer_traits");
@@ -645,6 +646,9 @@ impl App {
         self.preferences_window(ctx);
         // À propos de SHOT (`aproposui.rs`).
         self.about_window_ui(ctx);
+        // Diagnostic des performances et sa proposition du premier lancement (`diagnosticui.rs`).
+        self.diagnostic_window(ctx);
+        self.diagnostic_offer(ctx);
         // Écran d'accueil, sans projet ouvert (`accueil.rs`).
         self.welcome_ui(ctx);
         self.new_layer_window(ctx);

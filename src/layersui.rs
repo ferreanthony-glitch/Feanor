@@ -27,6 +27,11 @@ impl LayerThumbs {
     /// Nombre de vignettes gardées (une texture chacune) avant de lâcher celles qui ne servent plus.
     const LIMIT: usize = 1500;
 
+    /// Oublie toutes les vignettes (leur résolution a changé : elles se refont à leur tour).
+    pub(crate) fn clear(&mut self) {
+        self.cache.clear();
+    }
+
     /// Vignettes gardées (essais).
     #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
@@ -64,6 +69,9 @@ impl App {
         }
         let fr = self.doc.frame_rect();
         let [w, h] = THUMB;
+        // (Résolution des vignettes du diagnostic des performances : définition plus basse, même
+        // taille à l'écran.)
+        let w = crate::thumbs::scaled(w, crate::thumbs::scale_pct(), 16);
         let h = ((w as f32 * fr.height() / fr.width().max(1.0)).round() as usize).clamp(8, h * 2);
         let mut pixels = Vec::with_capacity(w * h);
         // Quatre échantillons par point de la vignette.

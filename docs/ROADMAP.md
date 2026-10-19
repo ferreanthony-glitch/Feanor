@@ -2030,6 +2030,27 @@ rapidement. C'est prioritaire. » Détail, mesures avant / après et leviers res
 - Reste (classé dans le document) : enregistrer en arrière-plan, textures de dessin à la taille du
   contenu, image composée gardée, vignettes hors du fil de l'interface.
 
+## Diagnostic des performances (2026-10-19, branche `diagnostic`) ✅
+
+Demande d'Anthony : « dans Aide, ajouter une option qui détecte le matériel et propose des
+ajustements de performances qui vont jusqu'à éteindre certaines fonctions gourmandes. »
+- Aide > Diagnostic des performances… (`aide.diagnostic`, aussi dans Ctrl+K) : détecte le processeur,
+  la mémoire, la carte graphique (et sa mémoire vidéo), l'écran ; mesure 13 secondes sur un autre fil
+  (disque, composition, trait texturé, flou plein et réduit, lecture, envoi à la carte) avec avancement
+  et annulation ; propose Qualité, Équilibré ou Performance avec ses raisons et ses réglages à cocher ;
+  Appliquer / Revenir comme avant ; rapport copié ou enregistré (`materiel.rs`, `diagbanc.rs`,
+  `diagnostic.rs`, `diagnosticui.rs`).
+- Dix vrais réglages, tous dans Fichier > Préférences… (section Performance) : aperçu réduit des effets,
+  rendu des traits texturés (exact / rapide jusqu'au repos / rapide partout), tremblement sans « Animer à
+  l'arrêt », plafond de pelure, caches carte graphique / traits / effets, fils de calcul, résolution des
+  vignettes, interface sans animations. Ajoutés : aperçu réduit même zoomé, rendu des traits à l'ouverture,
+  tremblement coupé, plafond de pelure, taille réglable des trois caches, plafond de fils, vignettes réduites,
+  animations coupées ; les valeurs par défaut sont le comportement d'avant.
+- Proposé une fois au premier lancement sur une machine sans diagnostic (« Lancer le diagnostic » /
+  « Plus tard »), jamais appliqué sans accord.
+- À essayer par Anthony : la fenêtre à l'écran, l'effet de « Performance » sur un vrai projet, le rendu
+  des traits texturés en « rapide partout » (l'export demande d'abord le rendu exact).
+
 ## Raccourcis proposés, à valider
 
 Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans `keymap.toml`) :

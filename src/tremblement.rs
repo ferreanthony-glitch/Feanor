@@ -87,6 +87,12 @@ pub struct Settings {
 
 impl Settings {
     pub fn of(values: &[f32]) -> Settings {
+        Self::of_with(values, !REST_OFF.load(std::sync::atomic::Ordering::Relaxed))
+    }
+
+    /// Comme `of`; `rest_allowed` faux : « Animer à l'arrêt » est éteint quel que soit le réglage
+    /// du calque (Aide > Diagnostic des performances).
+    pub fn of_with(values: &[f32], rest_allowed: bool) -> Settings {
         let at = |k: usize, default: f32| values.get(k).copied().filter(|v| v.is_finite()).unwrap_or(default);
         let variants = (at(VARIANTS, 3.0).round() as i64).clamp(MIN_VARIANTS as i64, MAX_VARIANTS as i64) as usize;
         Settings {
@@ -96,7 +102,7 @@ impl Settings {
             speed: (at(SPEED, 2.0).round() as i64).clamp(1, MAX_SPEED as i64) as usize,
             thickness: at(THICKNESS, 0.0).clamp(0.0, 100.0),
             seed: (at(SEED, 1.0).round() as i64).clamp(1, 999) as u32,
-            rest: at(REST, 0.0) >= 0.5,
+            rest: rest_allowed && at(REST, 0.0) >= 0.5,
             variant: (at(VARIANT, 0.0).round().max(0.0) as usize) % variants,
         }
     }
@@ -105,6 +111,13 @@ impl Settings {
     pub fn changes(&self) -> bool {
         self.intensity >= 0.05 || self.thickness > 0.0
     }
+}
+
+/// « Animer à l'arrêt » forcé éteint (réglage du diagnostic des performances).
+static REST_OFF: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_rest_off(off: bool) {
+    REST_OFF.store(off, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// La variante de l'image `frame` : `(image / vitesse) % variantes`.

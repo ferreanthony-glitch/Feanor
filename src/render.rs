@@ -231,7 +231,7 @@ pub fn composite_full(doc: &Document, plan: &Plan) -> Vec<Color32> {
 /// Traite `buf` par morceaux de `chunk` éléments, répartis sur les cœurs du processeur
 /// (`f` reçoit le numéro du morceau et le morceau).
 pub(crate) fn par_chunks<T: Send>(buf: &mut [T], chunk: usize, f: impl Fn(usize, &mut [T]) + Sync) {
-    let mut threads = std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(1, 16);
+    let mut threads = crate::parallele::coeurs().clamp(1, 16);
     // Un travail de fond (effets calculés en arrière-plan) laisse des cœurs libres à l'interface.
     let cap = THREAD_CAP.with(|c| c.get());
     if cap > 0 {

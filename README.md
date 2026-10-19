@@ -792,7 +792,36 @@ raccourcis à la main », puis « Recharger »). Détails et choix pour le clavi
 `docs/reference/sbpro_presets/README.md`.
 
 Documentation technique : `docs/ARCHITECTURE.md` ; avancement : `docs/ROADMAP.md` ; mesures et
-leviers de performance (superposition « Performance », banc `perf_tests.rs`) : `docs/PERFORMANCE.md`.
+leviers de performance (superposition « Performance », banc `perf_tests.rs`, diagnostic des
+performances) : `docs/PERFORMANCE.md`.
+
+## Diagnostic des performances
+
+**Aide > Diagnostic des performances…** (ou `Ctrl+K`, « Diagnostic ») règle SHOT pour la machine sur
+laquelle il tourne, sans rien appliquer sans ton accord :
+
+1. **Il détecte** le processeur (nom, cœurs, AVX2 / FMA / BMI2), la mémoire vive (totale et
+   disponible), la carte graphique (nom, API, pilote, mémoire vidéo quand Windows la donne), l'écran.
+2. **Il mesure**, une quinzaine de secondes sur un autre fil (barre d'avancement, bouton Annuler,
+   l'interface reste vivante) : écriture et lecture de 64 Mo sur le disque, composition de douze
+   calques, rejeu d'un trait texturé, un flou à pleine résolution et en aperçu réduit, une lecture
+   d'un plan chargé, l'envoi de dessins à la carte graphique. Aucun projet n'est ouvert.
+3. **Il propose un profil** : Qualité, Équilibré ou Performance, avec la raison (« 8 Go de mémoire
+   vive seulement », « rejeu d'un trait texturé 5 fois plus lent que sur le poste de référence »…) et,
+   pour chaque profil, la liste des réglages qu'il changerait, chacun à cocher ou décocher.
+4. **Appliquer** pose les réglages cochés ; **Revenir comme avant** remet exactement les valeurs
+   d'avant (elles sont gardées dans les réglages, même après un redémarrage). Le rapport (matériel,
+   mesures, réglages) se copie ou s'enregistre en texte.
+
+Au premier lancement sur une machine sans diagnostic, un petit message le propose une fois
+(« Lancer le diagnostic » / « Plus tard ») ; il ne bloque rien et n'applique rien.
+
+Les dix réglages sont de vrais réglages de SHOT, tous dans **Fichier > Préférences…, section
+Performance**, et jouent tout de suite (sauf le rendu des traits texturés, à l'ouverture d'un projet) :
+effets en aperçu réduit pendant la lecture et les gestes ; traits vectoriels texturés (rendu exact
+aussitôt, rapide jusqu'au repos, ou rapide partout) ; tremblement du trait sans « Animer à l'arrêt » ;
+pelure d'oignon plafonnée ; caches de la carte graphique, des traits et des effets ; fils de calcul ;
+résolution des vignettes ; interface sans animations. Détails : `docs/PERFORMANCE.md`.
 
 ## Messages
 
@@ -1194,7 +1223,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `model3d.rs`, `view3d.rs`, `ref3dtool.rs` | Repère 3D : lecture glTF, arêtes utiles ; caméra en orbite, fil de fer, arêtes cachées ; outil et affichage |
 | `thumbs.rs` | Cache des vignettes de panneaux |
 | `perf.rs`, `perf_tests.rs` | Profileur intégré et superposition « Performance » (`vue.performance`) ; banc sans fenêtre (voir `docs/PERFORMANCE.md`) |
-| `parallele.rs`, `ouverture.rs` | Travail réparti sur les cœurs (`par_map`) ; ouverture d'un projet sur un autre fil |
+| `parallele.rs`, `ouverture.rs` | Travail réparti sur les cœurs (`par_map`, plafond de fils) ; ouverture d'un projet sur un autre fil |
+| `materiel.rs`, `diagbanc.rs`, `diagnostic.rs`, `diagnosticui.rs` | Diagnostic des performances (`aide.diagnostic`) : détection du matériel, banc de mesures sur un autre fil, profils et réglages (appliquer, revenir), fenêtre, proposition du premier lancement, section Performance des Préférences |
 | `history.rs` | Annuler / rétablir |
 | `project.rs` | Projet en dossier (format 11), enregistrement préparé puis écrit |
 | `blend.rs` | Modes de fusion des calques (formules, composition d'un pixel) |
