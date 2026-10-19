@@ -59,7 +59,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("dessin.vider", "Vider le dessin de l'image courante", true, false),
     act("edition.supprimer_et_resserrer", "Supprimer et resserrer", false, false),
     act("edition.tout_selectionner", "Tout sélectionner", true, false),
-    act("edition.selectionner_dessins_scene", "Sélectionner tous les dessins de la scène", false, false),
+    act("edition.selectionner_dessins_scene", "Sélectionner tous les dessins du plan", false, false),
     act("edition.tout_deselectionner", "Tout désélectionner", true, false),
     act("vue.outil_zoom", "Outil zoom", false, false),
     act("vue.zoom_avant", "Zoom avant", true, true),
@@ -164,6 +164,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("panneau.suivant", "Plan suivant", true, true),
     act("panneau.nouveau", "Nouveau plan", true, false),
     act("panneau.dupliquer", "Dupliquer le plan", true, false),
+    // Les actions `scene.*` sont des doubles de `panneau.*` (voir `ALIASES`) : elles servent à poser
+    // une seconde touche, et la palette Ctrl+K ne les montre pas.
     act("scene.nouvelle", "Nouveau plan (second raccourci)", true, false),
     act("scene.dupliquer", "Dupliquer le plan (second raccourci)", true, false),
     act("scene.supprimer", "Supprimer les plans choisis (second raccourci)", true, false),
@@ -179,7 +181,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("panneau.couper", "Couper le plan à l'image courante", true, false),
     act("panneau.fusionner_suivant", "Réunir le plan et le suivant", true, false),
     act("panneau.fusionner_choisis", "Fusionner les plans choisis (qui se suivent)", true, false),
-    act("scene.couper", "Couper le plan à l'image courante (comme F5)", true, false),
+    act("scene.couper", "Couper le plan à l'image courante (second raccourci)", true, false),
     act("scene.joindre_precedente", "Réunir avec le plan précédent", true, false),
     act("scene.aller_a", "Aller à un plan", true, false),
     act("marque.basculer", "Marque d'image à l'image courante (ajouter / retirer)", true, false),
@@ -317,14 +319,14 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("pelure.panneau", "Panneau de la pelure d'oignon (ouvrir / fermer)", true, false),
     act("pelure.devant", "Pelure d'oignon devant le dessin (oui / non)", true, false),
     act("pelure.lier", "Lier les curseurs d'opacité de la pelure (oui / non)", true, false),
-    act("pelure.activer_tout", "Pelure : montrer toutes les images", true, false),
-    act("pelure.desactiver_tout", "Pelure : cacher toutes les images", true, false),
-    act("pelure.mode_instance", "Pelure : mode instance", true, false),
-    act("pelure.mode_image", "Pelure : mode image", true, false),
-    act("pelure.mode_signet", "Pelure : mode signet", true, false),
-    act("pelure.mode_marque", "Pelure : mode marque de couleur", true, false),
-    act("pelure.decaler", "Décaler les images de la pelure (glisser sur le dessin)", true, false),
-    act("pelure.remettre", "Remettre les images de la pelure en place", true, false),
+    act("pelure.activer_tout", "Pelure d'oignon : montrer toutes les images", true, false),
+    act("pelure.desactiver_tout", "Pelure d'oignon : cacher toutes les images", true, false),
+    act("pelure.mode_instance", "Pelure d'oignon : mode instance", true, false),
+    act("pelure.mode_image", "Pelure d'oignon : mode image", true, false),
+    act("pelure.mode_signet", "Pelure d'oignon : mode signet", true, false),
+    act("pelure.mode_marque", "Pelure d'oignon : mode marque de couleur", true, false),
+    act("pelure.decaler", "Décaler les images de la pelure d'oignon (glisser sur le dessin)", true, false),
+    act("pelure.remettre", "Remettre les images de la pelure d'oignon en place", true, false),
     act("vue.feuille_exposition", "Panneau Feuille d'exposition (ouvrir / fermer)", true, false),
     act("vue.historique", "Panneau Historique des annulations (ouvrir / fermer)", true, false),
     // Commentaires sur la timeline (`commentairesui.rs`).
@@ -403,11 +405,11 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("camera.vue", "Vue à travers la caméra", true, false),
     act("camera.masque", "Masque hors-champ de la caméra", true, false),
     act("camera.reinitialiser", "Réinitialiser la caméra", true, false),
-    act("camera.cle_debut", "Image clé de caméra au début du plan", true, false),
-    act("camera.cle_ici", "Image clé de caméra à l'image courante", true, false),
-    act("camera.cle_fin", "Image clé de caméra à la fin du plan", true, false),
-    act("camera.cle_supprimer", "Retirer l'image clé de caméra de l'image courante", true, false),
-    act("camera.cle_adoucir", "Adoucir le mouvement à cette image clé", true, false),
+    act("camera.cle_debut", "Clé de caméra au début du plan", true, false),
+    act("camera.cle_ici", "Clé de caméra à l'image courante", true, false),
+    act("camera.cle_fin", "Clé de caméra à la fin du plan", true, false),
+    act("camera.cle_supprimer", "Supprimer la clé de caméra de l'image courante", true, false),
+    act("camera.cle_adoucir", "Adoucir le mouvement à cette clé de caméra", true, false),
     act("camera.cles_copier", "Copier les clés de caméra choisies", true, false),
     act("camera.cles_coller", "Coller les clés de caméra (insérées après la clé de la tête de lecture)", true, false),
     act("camera.cles_supprimer", "Supprimer les clés de caméra choisies (rien sans clé choisie)", true, false),
@@ -438,9 +440,9 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("espace.timeline", "Espace de travail : Timeline", true, false),
     act("espace.ensemble", "Espace de travail : Vue d'ensemble", true, false),
     act("espace.enregistrer", "Enregistrer la disposition comme espace de travail", true, false),
-    act("vue.panneau_outils", "Afficher / masquer le panneau Outils", true, false),
-    act("vue.panneau_fiche", "Afficher / masquer la fiche et les calques", true, false),
-    act("vue.panneau_bande", "Afficher / masquer le montage ou la timeline", true, false),
+    act("vue.panneau_outils", "Colonne des réglages et fiche (montrer / cacher)", true, false),
+    act("vue.panneau_fiche", "Colonne des calques (montrer / cacher)", true, false),
+    act("vue.panneau_bande", "Montage et timeline (montrer / cacher)", true, false),
     act("vue.reajuster_panneaux", "Réajuster les panneaux à leur contenu", true, false),
     act("vue.performance", "Performance : superposition des temps (images, panneaux, arrière-plan)", true, false),
     act("guide.activer", "Guide de perspective : afficher et utiliser", true, false),
@@ -460,6 +462,22 @@ pub const ACTIONS: &[ActionInfo] = &[
 
 pub fn action_info(id: &str) -> Option<&'static ActionInfo> {
     ACTIONS.iter().find(|a| a.id == id)
+}
+
+/// Les doubles : (action double, action qu'elle répète). Même effet, autre identifiant, pour
+/// pouvoir poser une seconde touche sur une commande. La palette Ctrl+K ne montre que l'originale.
+pub const ALIASES: [(&str, &str); 6] = [
+    ("scene.nouvelle", "panneau.nouveau"),
+    ("scene.dupliquer", "panneau.dupliquer"),
+    ("scene.supprimer", "panneau.supprimer"),
+    ("scene.precedente", "panneau.precedent"),
+    ("scene.suivante", "panneau.suivant"),
+    ("scene.couper", "panneau.couper"),
+];
+
+/// L'action n'est qu'un double d'une autre (`ALIASES`).
+pub fn is_alias(id: &str) -> bool {
+    ALIASES.iter().any(|(alias, _)| *alias == id)
 }
 
 /// Comment reconnaître la touche.
@@ -848,7 +866,7 @@ fn parse_file(text: &str, warnings: &mut Vec<String>) -> Result<Vec<Binding>, St
     Ok(out)
 }
 
-fn contexts_overlap(a: Option<Mode>, b: Option<Mode>) -> bool {
+pub(crate) fn contexts_overlap(a: Option<Mode>, b: Option<Mode>) -> bool {
     a.is_none() || b.is_none() || a == b
 }
 

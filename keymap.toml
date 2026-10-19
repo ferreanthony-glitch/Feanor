@@ -2,10 +2,15 @@
 #
 # Chaque bloc [[raccourci]] associe une ou plusieurs touches à une action (identifiant stable).
 #
-# Pour personnaliser : « Aide > Modifier les raccourcis » crée une copie de ce fichier dans
+# Pour personnaliser : « Fichier > Préférences… > Raccourcis clavier > Modifier le fichier à la main »
+# (ou l'icône crayon de la liste « Aide > Raccourcis clavier… », F1) crée une copie de ce fichier dans
 # %APPDATA%\SHOT\keymap.toml et l'ouvre. Ne gardez-y que les actions que vous changez si vous
 # voulez : chaque action redéfinie remplace celle d'ici, les autres restent par défaut.
-# Puis « Aide > Recharger les raccourcis » (ou relancez SHOT). touches = [] retire un raccourci.
+# Puis « Recharger » (même endroit, ou relancez SHOT). touches = [] retire un raccourci.
+# Le plus simple reste le clic droit sur une icône ou une entrée de menu : « Assigner un raccourci… ».
+#
+# Deux actions ne peuvent pas avoir la même touche dans le même contexte, même « en réserve » :
+# l'essai keymap_tests::no_two_default_bindings_share_a_key_in_the_same_context le vérifie.
 #
 # Écriture des touches : modificateurs Ctrl, Maj (ou Shift), Alt, puis la touche, séparés par « + ».
 #   Exemples : "Ctrl+Z", "Ctrl+Maj+Z", "Alt+B", "F5", "Entrée", "Suppr", "Échap", "Espace", "+".
@@ -144,10 +149,13 @@ action = "edition.supprimer"
 touches = ["Retour arrière"]
 source = "proposition (second raccourci)"
 
+# Maj+Suppr (DELETE_ALT_KEY, Ripple Delete) est pris par « Effacer ce qui est hors de la sélection »
+# (DRAWING_DELETE_NON_SELECTION_KEY, plus bas) : la touche de la commande en réserve est retirée
+# pour ne pas faire de conflit le jour où elle sera faite.
 [[raccourci]]
 action = "edition.supprimer_et_resserrer"
-touches = ["Maj+Suppr"]
-source = "Storyboard Pro 27 : DELETE_ALT_KEY (Ripple Delete)"
+touches = []
+source = "Storyboard Pro 27 : DELETE_ALT_KEY (Ripple Delete, Maj+Suppr, déjà pris)"
 etat = "non implémenté"
 
 [[raccourci]]
@@ -1903,10 +1911,12 @@ source = "Storyboard Pro 27 sans touche par défaut : TOGGLE_SOUND_KEY"
 # Lier les clips au panneau (LINK_CLIP_AND_PANEL, Ctrl+L dans Storyboard Pro 27) : sans objet depuis
 # les plans ; action retirée le 2026-10-18. Ctrl+L reste à la pelure d'oignon du calque (13b).
 
+# Suppr (DRAWING_UNLOAD_MODEL_KEY dans la vue de référence) est la touche de « Supprimer » : retirée
+# de la commande en réserve pour ne pas faire de conflit.
 [[raccourci]]
 action = "reference.decharger"
-touches = ["Suppr"]
-source = "Storyboard Pro 27 : DRAWING_UNLOAD_MODEL_KEY (vue de référence)"
+touches = []
+source = "Storyboard Pro 27 : DRAWING_UNLOAD_MODEL_KEY (vue de référence, Suppr, déjà pris)"
 etat = "non implémenté"
 
 [[raccourci]]
@@ -1914,3 +1924,341 @@ action = "legende.chercher"
 touches = ["Ctrl+Maj+F"]
 source = "Storyboard Pro 27 : FIND_TEXT_KEY"
 etat = "non implémenté"
+
+# ------------------------------------------------------------------------------------ Sans touche par défaut
+# Commandes de SHOT qui n'ont pas de touche : elles sont ici pour que le fichier les nomme toutes
+# (liste F1, fichier personnel). On y pose une touche par le clic droit sur la commande, ou en
+# remplissant « touches » dans le fichier personnel. Palette de commandes : Ctrl+K.
+# (Passe d'interface du 2026-10-19 : l'essai keymap_tests::every_action_has_a_block_in_the_file
+# garde cette liste complète.)
+
+# Fichier et projet.
+[[raccourci]]
+action = "fichier.exporter"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fichier.preferences"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fichier.importer_sboard"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fichier.exporter_sboard"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "aide.a_propos"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "aide.diagnostic"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "pinceau.enregistrer_traits"
+touches = []
+source = "SHOT (sans touche)"
+
+# Dessin, pinceaux, fond sous le trait, sélection.
+[[raccourci]]
+action = "dessin.vider"
+touches = []
+source = "SHOT (sans touche : Suppr n'efface rien sans sélection)"
+
+[[raccourci]]
+action = "pinceau.derriere"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "pinceau.fond"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "pinceau.strate_fond"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "pinceau.remplir"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fond.calques_choisis"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fond.tout_le_plan"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fond.retirer_choisis"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fond.couleur_partout"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "deformer.enveloppe"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "deformer.perspective"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "selection.reinit_pivot"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "selection.proportions"
+touches = []
+source = "SHOT (sans touche)"
+
+# Plans, montage, rognage.
+[[raccourci]]
+action = "panneau.fusionner_choisis"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "plan.avancer"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "plan.reculer"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "lecture.boucle"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "montage.duree"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "montage.debut_a_tete"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "montage.fin_a_tete"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "montage.rognage_retablir"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "montage.rognage_oublier"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "montage.aimanter"
+touches = []
+source = "SHOT (sans touche)"
+
+# Panneaux et barre des panneaux.
+[[raccourci]]
+action = "vue.historique"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vue.commentaires"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vue.reglages"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vue.pinceaux"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vue.couleur"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vue.guides"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vue.calques"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vue.fiche"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vue.barre_panneaux"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vue.reajuster_panneaux"
+touches = []
+source = "SHOT (sans touche)"
+
+# Commentaires.
+[[raccourci]]
+action = "commentaire.ajouter"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "commentaire.resoudre"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "commentaire.supprimer"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "commentaire.precedent"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "commentaire.suivant"
+touches = []
+source = "SHOT (sans touche)"
+
+# Effets, propagation, caméra, aides au cadrage.
+[[raccourci]]
+action = "fx.choisir_aucun"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.cles_copier"
+touches = []
+source = "SHOT (sans touche : Ctrl+C copie les clés d'effets choisies)"
+
+[[raccourci]]
+action = "fx.cles_coller"
+touches = []
+source = "SHOT (sans touche : Ctrl+V colle les clés d'effets copiées)"
+
+[[raccourci]]
+action = "fx.cles_supprimer"
+touches = []
+source = "SHOT (sans touche : Suppr supprime les clés d'effets choisies)"
+
+[[raccourci]]
+action = "fx.tremblement"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.tremblement_repos"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "calque.propager"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "camera.cles_copier"
+touches = []
+source = "SHOT (sans touche : Ctrl+C copie les clés de caméra choisies)"
+
+[[raccourci]]
+action = "camera.cles_coller"
+touches = []
+source = "SHOT (sans touche : Ctrl+V colle les clés de caméra copiées)"
+
+[[raccourci]]
+action = "camera.cles_supprimer"
+touches = []
+source = "SHOT (sans touche : Suppr supprime les clés de caméra choisies)"
+
+[[raccourci]]
+action = "camera.cles_tout_choisir"
+touches = []
+source = "SHOT (sans touche : Ctrl+A choisit toutes les clés de caméra du plan)"
+
+[[raccourci]]
+action = "camera.effet_appliquer"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "cadrage.tiers"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "cadrage.grille_or"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "cadrage.spirale"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "cadrage.spirale_orientation"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "cadrage.diagonales"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "cadrage.croix"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "cadrage.aucune"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "cadrage.format_suivant"
+touches = []
+source = "SHOT (sans touche)"

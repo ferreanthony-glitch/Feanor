@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use eframe::egui::{Key, Modifiers};
 
 use crate::app::Mode;
-use crate::keymap::{parse_combo, KeyMatch, Keymap, ACTIONS, DEFAULT_KEYMAP};
+use crate::keymap::{contexts_overlap, is_alias, parse_combo, KeyMatch, Keymap, ALIASES, ACTIONS, DEFAULT_KEYMAP};
 
 /// Les 65 raccourcis par défaut avec touche de sb_shortcuts.xml (Storyboard Pro 27).
 const SBP27_IDS: [&str; 65] = [
@@ -56,6 +56,116 @@ fn default_file_is_clean() {
     assert!(map.warnings.is_empty(), "remarques : {:#?}", map.warnings);
     let ids: BTreeSet<&str> = ACTIONS.iter().map(|a| a.id).collect();
     assert_eq!(ids.len(), ACTIONS.len(), "identifiants d'actions en double");
+}
+
+// ------------------------------------------------------- passe d'interface du 2026-10-19
+
+#[test]
+fn no_two_default_bindings_share_a_key_in_the_same_context() {
+    // Toutes les touches par défaut, celles des commandes « en réserve » comprises : le jour où
+    // une commande en réserve est faite, sa touche ne doit pas déjà servir ailleurs.
+    let map = default_map();
+    let mut conflicts = Vec::new();
+    for (i, a) in map.bindings.iter().enumerate() {
+        for b in &map.bindings[i + 1..] {
+            if a.action == b.action || !contexts_overlap(a.context, b.context) {
+                continue;
+            }
+            if let Some(c) = a.combos.iter().find(|c| b.combos.contains(c)) {
+                conflicts.push(format!("{} et {} : {}", a.action, b.action, c.label()));
+            }
+        }
+    }
+    assert!(conflicts.is_empty(), "touches partagées : {conflicts:#?}");
+}
+
+#[test]
+fn a_key_written_twice_in_the_file_is_the_same_key_for_the_test() {
+    // Le contrôle ci-dessus lit les touches comme le programme (« Suppr » et « Delete », « Maj »
+    // et « Shift » sont une même touche) : un conflit écrit autrement serait vu.
+    let user = r#"
+        version = 1
+        [[raccourci]]
+        action = "outil.main"
+        touches = ["Shift+Delete"]
+        [[raccourci]]
+        action = "dessin.supprimer_hors_selection"
+        touches = ["Maj+Suppr"]
+    "#;
+    let map = Keymap::from_texts(DEFAULT_KEYMAP, Some(user));
+    assert!(map.warnings.iter().any(|w| w.contains("conflit")), "{:?}", map.warnings);
+}
+
+#[test]
+fn every_action_has_a_clear_french_label() {
+    let mut problems = Vec::new();
+    for a in ACTIONS {
+        let l = a.label;
+        if l.trim().is_empty() {
+            problems.push(format!("{} : nom vide", a.id));
+            continue;
+        }
+        if l != l.trim() || l.contains("  ") {
+            problems.push(format!("{} : espaces en trop dans « {l} »", a.id));
+        }
+        if !l.chars().next().is_some_and(char::is_uppercase) {
+            problems.push(format!("{} : « {l} » ne commence pas par une majuscule", a.id));
+        }
+        if l == a.id || l.contains('_') {
+            problems.push(format!("{} : « {l} » ressemble à un identifiant", a.id));
+        }
+        if l.chars().filter(|c| c.is_alphabetic()).count() < 4 {
+            problems.push(format!("{} : « {l} » est trop court pour se comprendre", a.id));
+        }
+    }
+    assert!(problems.is_empty(), "{problems:#?}");
+}
+
+#[test]
+fn the_command_palette_lists_each_command_once_under_its_own_name() {
+    let commands = crate::palette::palette_commands();
+    let mut seen = BTreeSet::new();
+    for (id, label) in &commands {
+        assert!(seen.insert(*label), "deux commandes s'appellent « {label} » (dont {id})");
+    }
+    // Les doubles ne sont pas proposés, leurs originales oui.
+    for (alias, original) in ALIASES {
+        assert!(is_alias(alias));
+        assert!(!commands.iter().any(|(id, _)| *id == alias), "{alias} est un double : la palette ne le montre pas");
+        let info = crate::keymap::action_info(original).expect("l'original existe");
+        assert!(info.implemented && commands.iter().any(|(id, _)| *id == original), "{original} est dans la palette");
+        assert!(crate::keymap::action_info(alias).is_some_and(|a| a.implemented), "{alias} existe");
+    }
+    // Rien d'inachevé n'est proposé.
+    assert!(commands.iter().all(|(id, _)| crate::keymap::action_info(id).is_some_and(|a| a.implemented)));
+    // Les commandes de la palette se trouvent par leur nom (un mot du nom suffit).
+    let all: Vec<(&str, &str)> = commands.clone();
+    assert!(!crate::palette::rank(&all, "caméra").is_empty());
+    assert!(!crate::palette::rank(&all, "pelure").is_empty());
+}
+
+#[test]
+fn every_action_has_a_block_in_the_file() {
+    // Le fichier de raccourcis nomme toutes les commandes (liste F1, fichier personnel), même
+    // celles qui n'ont pas de touche.
+    let map = default_map();
+    let in_file: BTreeSet<&str> = map.bindings.iter().map(|b| b.action.as_str()).collect();
+    let missing: Vec<&str> = ACTIONS.iter().map(|a| a.id).filter(|id| !in_file.contains(id)).collect();
+    assert!(missing.is_empty(), "absentes de keymap.toml : {missing:?}");
+}
+
+#[test]
+fn what_is_not_made_yet_has_no_active_key() {
+    // Les commandes pas encore faites sont « en réserve » : aucune touche ne les déclenche, et
+    // aucune ne cache une touche qui sert ailleurs.
+    let map = default_map();
+    for a in ACTIONS.iter().filter(|a| !a.implemented) {
+        assert!(map.bindings.iter().filter(|b| b.action == a.id).all(|b| !b.active && b.reserved), "{} est active alors qu'elle n'existe pas", a.id);
+    }
+    // Suppr et Maj+Suppr gardent leur sens.
+    let none = Modifiers::NONE;
+    assert_eq!(press(&map, Key::Delete, Key::Delete, none, Mode::Animation).as_deref(), Some("edition.supprimer"));
+    assert_eq!(press(&map, Key::Delete, Key::Delete, Modifiers::SHIFT, Mode::Animation).as_deref(), Some("dessin.supprimer_hors_selection"));
 }
 
 #[test]

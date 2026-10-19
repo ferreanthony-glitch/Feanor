@@ -203,7 +203,7 @@ impl App {
         }
     }
 
-    /// Fichier > Raccourcis clavier (et F1) : toutes les commandes, leurs raccourcis, et les
+    /// Aide > Raccourcis clavier… (et F1) : toutes les commandes, leurs raccourcis, et les
     /// boutons pour les changer.
     fn shortcuts_list_window(&mut self, ctx: &egui::Context) {
         if !self.show_help {
@@ -240,7 +240,7 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.label(ph::MAGNIFYING_GLASS);
                     ui.add(egui::TextEdit::singleline(&mut self.keys_filter).hint_text("Chercher une commande ou une touche").desired_width(260.0));
-                    if !self.keys_filter.is_empty() && ui.small_button(ph::X).clicked() {
+                    if !self.keys_filter.is_empty() && crate::bulles::bulle(ui.small_button(ph::X), "Effacer la recherche", "Montre de nouveau toutes les commandes.", "").clicked() {
                         self.keys_filter.clear();
                     }
                 });

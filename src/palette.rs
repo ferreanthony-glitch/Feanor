@@ -56,6 +56,16 @@ pub fn rank(commands: &[(&str, &str)], query: &str) -> Vec<usize> {
     hits.into_iter().map(|(i, _)| i).collect()
 }
 
+/// Les commandes que la palette propose : toutes celles qui existent, sauf les doubles
+/// (`keymap::ALIASES`), qui feraient deux fois le même nom dans la liste.
+pub fn palette_commands() -> Vec<(&'static str, &'static str)> {
+    crate::keymap::ACTIONS
+        .iter()
+        .filter(|a| a.implemented && !crate::keymap::is_alias(a.id))
+        .map(|a| (a.id, a.label))
+        .collect()
+}
+
 /// La palette ouverte : ce qui est tapé, et la ligne choisie.
 #[derive(Default)]
 pub(crate) struct Palette {
@@ -67,7 +77,7 @@ impl App {
     /// La palette de commandes, si elle est ouverte.
     pub(crate) fn palette_window(&mut self, ctx: &egui::Context) {
         let Some(mut p) = self.palette.take() else { return };
-        let commands: Vec<(&str, &str)> = crate::keymap::ACTIONS.iter().filter(|a| a.implemented).map(|a| (a.id, a.label)).collect();
+        let commands = palette_commands();
         let found = rank(&commands, &p.query);
         let shown = found.len().min(14);
         let (up, down, enter, escape) = ctx.input(|i| (i.key_pressed(egui::Key::ArrowUp), i.key_pressed(egui::Key::ArrowDown), i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape)));
