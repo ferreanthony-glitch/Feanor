@@ -40,6 +40,43 @@ mod app;
 mod audio;
 #[cfg(test)]
 mod audio_tests;
+// Effets sonores des extraits et des pistes : fondus, enchaîné, volume, égaliseur, écho, solo.
+mod audiofx;
+#[cfg(test)]
+mod audiofx_tests;
+mod audiofxui;
+// Bibliothèque de bruitages (panneau Bruitages) : dossiers, recherche, écoute, pose dans le montage.
+mod bruitages;
+#[cfg(test)]
+mod bruitages_tests;
+mod bruitagesui;
+// Sons proposés par la lecture du storyboard (panneau Suggestions sonores) : le modèle d'une
+// proposition et son fichier, la lecture (par règles ou par un modèle), les fournisseurs locaux et en
+// ligne, les tâches, l'interface et les Préférences.
+mod base64;
+#[cfg(test)]
+mod base64_tests;
+mod clessecretes;
+mod fournisseurs;
+mod fournisseursapi;
+#[cfg(test)]
+mod fournisseurs_tests;
+mod generation;
+mod genprefsui;
+mod genreglages;
+mod httplocal;
+mod indications;
+#[cfg(test)]
+mod indications_tests;
+mod lecturerules;
+mod lecturesb;
+mod serveurlocal;
+#[cfg(test)]
+mod serveurlocal_tests;
+mod sidecar;
+mod suggestionsui;
+#[cfg(test)]
+mod suggestions_tests;
 mod barrepanneaux;
 #[cfg(test)]
 mod barrepanneaux_tests;
@@ -415,6 +452,11 @@ mod shapes;
 mod shapes_tests;
 mod shapetools;
 mod soundtrack;
+// Transitions du montage (fondus, volet, noir) : modèle, rendu, interface.
+mod transitions;
+#[cfg(test)]
+mod transitions_tests;
+mod transitionsui;
 mod text;
 #[cfg(test)]
 mod text_tests;

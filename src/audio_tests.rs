@@ -74,13 +74,7 @@ fn decode_wav_and_reject_garbage() {
 
 #[test]
 fn mixer_positions_loop_and_stop() {
-    let clip = MixClip {
-        pcm: constant(1000, 0.5),
-        start: 100,
-        offset: 0,
-        len: 1000,
-        gain: 1.0,
-    };
+    let clip = MixClip::plain(constant(1000, 0.5), 100, 0, 1000, 1.0);
     let mut m = MixState {
         clips: vec![clip.clone()],
         playing: true,
@@ -116,13 +110,7 @@ fn mixer_positions_loop_and_stop() {
 #[test]
 fn scrub_plays_once() {
     let mut m = MixState {
-        clips: vec![MixClip {
-            pcm: constant(1000, 0.5),
-            start: 0,
-            offset: 0,
-            len: 1000,
-            gain: 0.5,
-        }],
+        clips: vec![MixClip::plain(constant(1000, 0.5), 0, 0, 1000, 0.5)],
         scrub: Some((10.0, 20.0)),
         ..Default::default()
     };

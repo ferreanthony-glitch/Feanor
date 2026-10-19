@@ -68,6 +68,16 @@ pub enum Pane {
     /// colonne de droite, en onglet avec les calques.
     #[serde(rename = "commentaires")]
     Comments,
+    /// La bibliothèque de bruitages (`bruitages.rs`) : les dossiers de sons de l'utilisateur, à
+    /// chercher, écouter et poser dans le montage. Fermé dans la disposition par défaut ; il s'ouvre
+    /// dans la colonne de droite, en onglet avec les calques.
+    #[serde(rename = "bruitages")]
+    Bruitages,
+    /// Les suggestions sonores (`suggestionsui.rs`) : SHOT lit le storyboard et propose des bruitages,
+    /// des ambiances et des voix témoins, qu'on écoute, accepte ou supprime. Fermé dans la disposition
+    /// par défaut ; il s'ouvre dans la colonne de droite, en onglet avec les calques.
+    #[serde(rename = "suggestions_sonores")]
+    SuggestionsSonores,
 }
 
 /// Où un panneau se range quand on le rouvre.
@@ -83,7 +93,7 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 13] = [
+    pub const ALL: [Pane; 15] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
@@ -97,11 +107,13 @@ impl Pane {
         Pane::Effects,
         Pane::History,
         Pane::Comments,
+        Pane::Bruitages,
+        Pane::SuggestionsSonores,
     ];
 
     /// Les panneaux fermés dans la disposition par défaut, qui ne s'ouvrent qu'à la demande.
     pub fn on_demand(self) -> bool {
-        matches!(self, Pane::XSheet | Pane::History | Pane::Comments)
+        matches!(self, Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores)
     }
 
     /// Les panneaux qui n'existent qu'en animation (Anthony, 2026-10-18 : « Exposition n'est
@@ -128,6 +140,8 @@ impl Pane {
             Pane::Effects => "Effets",
             Pane::History => "Historique",
             Pane::Comments => "Commentaires",
+            Pane::Bruitages => "Bruitages",
+            Pane::SuggestionsSonores => "Suggestions sonores",
         }
     }
 
@@ -137,6 +151,7 @@ impl Pane {
             Pane::ToolOptions => "Réglages",
             Pane::Sheet => "Fiche",
             Pane::XSheet => "Exposition",
+            Pane::SuggestionsSonores => "Suggestions",
             p => p.name(),
         }
     }
@@ -159,6 +174,8 @@ impl Pane {
             Pane::Effects => ph::MAGIC_WAND,
             Pane::History => ph::CLOCK_COUNTER_CLOCKWISE,
             Pane::Comments => ph::CHAT_TEXT,
+            Pane::Bruitages => ph::WAVEFORM,
+            Pane::SuggestionsSonores => ph::SPARKLE,
         }
     }
 
@@ -166,7 +183,7 @@ impl Pane {
         match self {
             Pane::Canvas => Group::Center,
             Pane::Tools | Pane::Color | Pane::Brushes | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet => Group::Left,
-            Pane::Layers | Pane::XSheet | Pane::Effects | Pane::History | Pane::Comments => Group::Right,
+            Pane::Layers | Pane::XSheet | Pane::Effects | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores => Group::Right,
             Pane::Montage | Pane::Timeline => Group::Bottom,
         }
     }

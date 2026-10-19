@@ -118,6 +118,11 @@ impl App {
                 self.record_step();
                 self.doc.audio_tracks[ti].muted = m;
             }
+            let mut solo = self.doc.audio_tracks[ti].solo;
+            if ui.checkbox(&mut solo, "solo").on_hover_text("Seules les pistes en solo s'entendent.").changed() {
+                self.record_step();
+                self.doc.audio_tracks[ti].solo = solo;
+            }
             let mut l = locked;
             let resp = crate::bulles::bulle(ui.checkbox(&mut l, ph::LOCK_SIMPLE), "Verrouiller la piste", "Verrouillée : ses extraits ne bougent plus.", "");
             if resp.changed() {

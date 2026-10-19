@@ -121,15 +121,40 @@ impl App {
             }
             None => Vec::new(),
         };
+        // Une transition du montage sous la tête de lecture (fondu, volet, noir) : les plans à
+        // superposer, composés par la carte graphique comme le plan courant (`transitionsui.rs`).
+        let mixed = if self.gpu.is_some() { self.transition_preview() } else { None };
+        let setup = mixed.map(|(_, mix)| self.mix_setup(&mix, &plan, rect, size));
         if let Some(gpu) = &mut self.gpu {
             // Les calques sont superposés par la carte graphique, directement à leur place.
             let (all, tiles) = self.renderer.take_gpu_dirty();
-            // (Le fond sous le trait se calcule en arrière-plan : `fx::differe`.)
-            let resolved = {
-                let _t = crate::perf::section("composition : envoi à la carte graphique");
-                crate::fx::differe(|| gpu.sync(&self.doc, &plan, all, &tiles, &ahead, level))
-            };
-            painter.add(gpu.paint(&plan, &resolved, corners, ws, rect, [self.doc.width, self.doc.height]));
+            let stage = [self.doc.width, self.doc.height];
+            match &setup {
+                None => {
+                    // (Le fond sous le trait se calcule en arrière-plan : `fx::differe`.)
+                    let resolved = {
+                        let _t = crate::perf::section("composition : envoi à la carte graphique");
+                        crate::fx::differe(|| gpu.sync(&self.doc, &plan, all, &tiles, &ahead, level))
+                    };
+                    painter.add(gpu.paint(&plan, &resolved, corners, ws, rect, stage));
+                }
+                Some(s) => {
+                    // Les dessins des deux plans partent ensemble à la carte (un seul `sync` : les
+                    // textures de l'un ne chassent pas celles de l'autre).
+                    let mut both = s.first.clone();
+                    if let Some((second, _, _)) = &s.second {
+                        both.items.extend(second.items.iter().cloned());
+                    }
+                    let resolved = {
+                        let _t = crate::perf::section("composition : envoi à la carte graphique (transition)");
+                        crate::fx::differe(|| gpu.sync(&self.doc, &both, all, &tiles, &ahead, level))
+                    };
+                    let n = s.first.items.len().min(resolved.len());
+                    let first = crate::gpu::MixLayer { plan: &s.first, resolved: &resolved[..n], corners: s.first_corners, ws: s.first_ws };
+                    let second = s.second.as_ref().map(|(p, c, w)| crate::gpu::MixLayer { plan: p, resolved: &resolved[n..], corners: *c, ws: *w });
+                    painter.add(gpu.paint_mix(first, second, Some(&s.display), rect, stage));
+                }
+            }
         } else {
             let _t = crate::perf::section("composition : processeur");
             let texture = crate::fx::differe(|| self.renderer.update(ui.ctx(), &self.doc, plan));

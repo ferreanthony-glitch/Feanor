@@ -8,3 +8,5 @@
 /src-tauri/gen/schemas
 /src-frontend/node_modules
 /src-frontend/dist
+# Serveur local de génération sonore (sidecar/) : le Python compilé.
+/sidecar/__pycache__

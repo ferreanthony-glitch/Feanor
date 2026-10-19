@@ -26,7 +26,8 @@ Un projet fabriqué par le code (pas un fichier d'Anthony), qui contient :
 | Plans | marques d'image avec textes et couleurs, signets, entrée / sortie, notes dessinées, couleur de plan, textes d'action / dialogue / notes |
 | Montage | plan **rogné** au début (6 images) et à la fin (8) avec sa **réserve** (dessins, clés d'effets, caméra, marques, signets, commentaires) |
 | Commentaires | 5 (dont 2 rangés dans la réserve), résolus et non, couleurs |
-| Son | un WAV fabriqué, deux pistes (une muette, verrouillée, volume 1,25), deux extraits |
+| Son | un WAV fabriqué, deux pistes (une muette, verrouillée, volume 1,25, en solo), deux extraits ; effets du premier (`effets_son.json` : volume, fondus, enchaîné, clés de volume, égaliseur, écho) |
+| Transitions | fondu enchaîné centré, volet décalé, fondu depuis le blanc au début du film, fondu au noir à la fin (`transitions.json`) |
 | Planche, guides | notes dessinées et texte de la planche (une attachée à un plan), guide de perspective |
 
 Manque (dit, pas caché) : les calques « toute la scène » (d'avant les plans, devenus des calques ordinaires à

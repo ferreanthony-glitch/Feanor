@@ -2162,6 +2162,105 @@ action = "commentaire.suivant"
 touches = []
 source = "SHOT (sans touche)"
 
+# Bibliothèque de bruitages (sans touche : à choisir).
+[[raccourci]]
+action = "vue.bruitages"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "bruitage.inserer"
+touches = []
+source = "SHOT (sans touche : un double-clic sur le son le pose aussi)"
+
+[[raccourci]]
+action = "bruitage.ecouter"
+touches = []
+source = "SHOT (sans touche : le bouton de la ligne l'écoute aussi)"
+
+# Suggestions sonores : SHOT lit le storyboard et propose des sons témoins (sans touche : à choisir).
+[[raccourci]]
+action = "vue.suggestions_sonores"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "suggestion.lire"
+touches = []
+source = "SHOT (sans touche : le bouton « Lire le storyboard » du panneau le lance aussi)"
+
+# Effets des extraits de son (sans touche : à choisir).
+[[raccourci]]
+action = "son.fondu_entree"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "son.fondu_sortie"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "son.enchaine"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "son.cle_volume"
+touches = []
+source = "SHOT (sans touche : un double-clic sur l'extrait pose aussi une clé)"
+
+[[raccourci]]
+action = "son.solo"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "son.effets_reinit"
+touches = []
+source = "SHOT (sans touche)"
+
+# Transitions du montage (sans touche : à choisir).
+[[raccourci]]
+action = "transition.ajouter"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "transition.supprimer"
+touches = []
+source = "SHOT (sans touche : Suppr supprime la transition choisie dans le montage)"
+
+[[raccourci]]
+action = "transition.fondu_enchaine"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "transition.fondu_noir"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "transition.fondu_blanc"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "transition.volet"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "transition.noir"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "transition.apercu"
+touches = []
+source = "SHOT (sans touche)"
+
 # Effets, propagation, caméra, aides au cadrage.
 [[raccourci]]
 action = "fx.choisir_aucun"

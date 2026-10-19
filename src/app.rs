@@ -551,6 +551,14 @@ pub struct App {
     pub(crate) heard_frame: Option<usize>,
     /// Extrait de son sélectionné dans la bande de montage.
     pub(crate) sel_clip: Option<u64>,
+    /// Transitions du montage : choix, geste en cours, aperçu (`transitionsui.rs`).
+    pub(crate) trans: crate::transitionsui::TransUi,
+    /// Effets des extraits de son : clé de volume choisie (`audiofxui.rs`).
+    pub(crate) sfx: crate::audiofxui::SoundFxUi,
+    /// La bibliothèque de bruitages : liste, recherche, écoute, sons en cours de pose (`bruitagesui.rs`).
+    pub(crate) brt: crate::bruitagesui::BruitagesUi,
+    /// Les suggestions sonores : portée, tâches en cours, fournisseurs (`suggestionsui.rs`).
+    pub(crate) sug: crate::suggestionsui::SuggestionsUi,
     /// Ce qu'on a cliqué du bouton droit dans la bande de montage.
     pub(crate) menu_target: Option<MenuTarget>,
     pub(crate) history: History,
@@ -1011,6 +1019,10 @@ impl App {
             sound_scrub: true,
             heard_frame: Some(0),
             sel_clip: None,
+            trans: Default::default(),
+            sfx: Default::default(),
+            brt: Default::default(),
+            sug: Default::default(),
             menu_target: None,
             history: History::default(),
             gesture: Gesture::default(),
@@ -2745,6 +2757,8 @@ impl App {
         self.rejeu_deferred.clear();
         self.rejeu_idle.clear();
         crate::fx::fond_cancel_all();
+        // (Les suggestions sonores de l'ancien projet s'arrêtent : rien n'est rendu au nouveau.)
+        self.reset_suggestions();
         self.doc = doc;
         self.doc_epoch += 1;
         // (Ses dessins portent les numéros et les versions de ceux de l'ancien : les dessins
@@ -3145,6 +3159,22 @@ impl App {
         }
         // Commentaires sur la timeline (`commentairesui.rs`).
         if self.comment_action(action) {
+            return;
+        }
+        // Transitions du montage (`transitionsui.rs`) ; Suppr vise celle qui a la main.
+        if self.transition_action(action) {
+            return;
+        }
+        // Effets des extraits de son (`audiofxui.rs`) ; Suppr retire la clé de volume choisie.
+        if self.sound_fx_action(action) {
+            return;
+        }
+        // Bibliothèque de bruitages (`bruitagesui.rs`).
+        if self.bruitage_action(action) {
+            return;
+        }
+        // Suggestions sonores (`suggestionsui.rs`).
+        if self.suggestion_action(action) {
             return;
         }
         // Suppr vise le commentaire seulement s'il a la main (le dernier clic était sur lui) ;
@@ -4111,6 +4141,8 @@ impl App {
             self.tick_open(ctx);
             self.tick_reopen();
             self.poll_brushes();
+            self.poll_bruitages(ctx);
+            self.poll_suggestions(ctx);
             self.tick_save(ctx);
         }
         // Export en cours : quelques images par image d'écran, la fenêtre reste vivante.
@@ -4176,6 +4208,8 @@ impl App {
         }
         self.settings.layout = Some(self.current_layout());
         let _ = self.settings.save();
+        // Le serveur de génération sonore que SHOT a lancé s'arrête avec lui (un serveur lancé à la main reste).
+        self.sug.serveur.arreter();
     }
 }
 

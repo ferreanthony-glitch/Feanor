@@ -1382,6 +1382,38 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   l'horloge de l'ordinateur, avec un message.
 - **Son au défilement** : quand l'image courante change hors lecture, une image de son est jouée.
 - Le mixage (`MixState`) se teste sans carte son.
+- **Effets** (`audiofx.rs`, 2026-10-19) : `build_mix(doc, wait)` est le seul endroit où les pistes deviennent des
+  `MixClip` (lecture, défilement, WAV, export vidéo, export vers Storyboard Pro). Un `MixClip` porte un gain fixe
+  (piste × général × extrait) et, s'il y a lieu, un `ClipEnv` (fondus, fondu enchaîné en puissance égale, clés de
+  volume) que le fil de la carte son évalue échantillon par échantillon ; l'égaliseur (étagères à 200 Hz et 4 kHz,
+  cloche à 1 kHz) et l'écho refont le son de l'extrait sur un fil à part (`processed`, 24 résultats gardés), jamais
+  sur le fil de l'interface ni celui de la carte son. Le fondu enchaîné relie deux extraits qui se touchent et utilise
+  les poignées de son de part et d'autre de la coupe. Réglages dans `SoundClip::fx` et `AudioTrack::solo` (donc
+  annulables), fichier `effets_son.json` sans changer `VERSION`.
+
+## Transitions du montage (2026-10-19)
+
+- `transitions.rs` : `Transition { sortant, entrant, sorte, images, calage }` rangées dans `Document` et `Structure`
+  (annulation), `zones(doc)` (où tombe chaque zone, bornée aux deux plans qu'elle relie, ignorée si les plans ne se
+  suivent plus), `Zone::mix(g)` (quelles images de quels plans, poids du plan entrant, volet, couche de couleur).
+  **La durée du film ne change pas** ; une image manquante est tenue. `blend_images` mélange sur le processeur
+  (export) ; fichier `transitions.json` (même protection que `commentaires.json` et `rognages.json`).
+- Écran (`gpu.rs`, `GpuCanvas::paint_mix`) : le second plan est composé dans une seconde image (`frame2`, gardée
+  comme la première tant que rien ne change : un plan tenu ne se recompose pas), les deux sont posées l'une sur
+  l'autre par l'affichage (opacité, volet par colonne, aplat de couleur : `fs_display`), chaque plan avec sa
+  propre caméra en vue caméra. `canvas.rs` construit les deux plans (`mix_setup`) ; sans carte graphique, pas
+  d'aperçu (l'export, lui, mélange sur le processeur).
+- Export (`export.rs`) : `ExportJob::with_transitions` ; les images d'une zone sont le mélange de deux images
+  calculées comme les autres (cache de quatre images pour ne pas recalculer le plan tenu).
+
+## Bibliothèque de bruitages (2026-10-19)
+
+- `bruitages.rs` : réglages (`[bruitages] dossiers` dans `reglages.toml`), parcours des dossiers sur un fil à part
+  (`Bibliotheque::scan`, paquets repris à chaque image), durées lues à la demande par une sonde (en-tête symphonia),
+  écoute en trois états (repos, chargement, lecture) sur un trait `Sortie` (la sortie audio de SHOT, ou un faux).
+- `bruitagesui.rs` : le panneau (`Pane::Bruitages`, fermé par défaut), le glisser-déposer d'egui (`SoundDrag`)
+  vers la bande de montage et la ligne du son de la timeline, la pose d'un son lu et décodé à part
+  (`place_imported_sound`, le chemin de l'import).
 
 ## Feuille et cadre (depuis 2b-1)
 

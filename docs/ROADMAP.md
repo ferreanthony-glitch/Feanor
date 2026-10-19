@@ -2508,3 +2508,71 @@ feuille entière) alors que 768 essais passaient ; et sur une machine chargée, 
 - Pas fait : la première image dans la vraie fenêtre (eframe, carte graphique, pipelines : à lire dans `demarrage.log`) ;
   `BrushLibrary::builtin()` (74 ms) reste avant la première image ; un son ou un modèle illisible sort du projet et ses
   extraits avec lui à l'enregistrement.
+
+## Transitions, effets sonores et bruitages (demandés par Anthony le 2026-10-19, branche `transitions-son`) ✅
+
+Trois chantiers du montage ; le détail est dans le README (sections « Transitions du montage », « Effets
+sonores », « Bruitages ») et le vocabulaire dans `docs/INTERFACE.md` (partie 8). **Rien n'a été regardé à l'écran dans
+cette séance** (consigne : aucun lancement de SHOT) ; la liste « à vérifier » est en tête de la partie 8.
+
+- ✅ **Transitions** (`transitions.rs`, `transitionsui.rs`) : fondu enchaîné, fondu au noir, fondu au blanc, volet,
+  noir, sur une coupe ou au bord du film. Durée de 12 images, tirée aux bords du nœud ou tapée ; calage centré /
+  finit à la coupe / commence à la coupe. **Temps : la durée du film ne change pas** (le son reste calé) ; les images
+  qui manquent d'un côté sont tenues. Lecture sur la carte graphique (second plan composé à part, posé par
+  l'affichage), export exact (mélange sur le processeur, image par image). `transitions.json`, sans nouvelle
+  version du projet.
+- ✅ **Effets sonores** (`audiofx.rs`, `audiofxui.rs`) : fondus par extrait (poignées aux coins du haut), fondu
+  enchaîné de deux extraits qui se touchent (puissance égale, poignées de son de part et d'autre de la coupe),
+  volume par extrait et par piste, solo, clés de volume (double-clic, glisser, Suppr), égaliseur trois bandes et
+  écho, sans nouvelle bibliothèque. Un seul calcul (`build_mix`) pour la lecture, le défilement, le WAV, la vidéo
+  et l'export vers Storyboard Pro ; le travail lourd hors des fils de l'interface et de la carte son.
+  `effets_son.json`, sans nouvelle version du projet.
+- ✅ **Bruitages** (`bruitages.rs`, `bruitagesui.rs`) : panneau fermé par défaut (`Pane::Bruitages`, icône de la
+  barre des panneaux, `vue.bruitages`), dossiers de l'utilisateur dans `reglages.toml`, parcours et durées sur
+  des fils à part, écoute au clic, glisser vers une piste du montage ou de la timeline, double-clic à la tête de
+  lecture, son copié dans le projet.
+- Pas fait / limites : les poignées du rognage (la réserve) ne fournissent pas d'images vivantes aux transitions
+  (images tenues) ; pas d'aperçu des transitions sans carte graphique (l'export, lui, les contient) ; le volet de
+  l'écran avance sur la largeur du cadre par défaut, pas du cadre d'une caméra qui bouge (l'export est exact) ;
+  les fondus enchaînés entre extraits ne partent pas vers Storyboard Pro ; l'égaliseur et l'écho refont le son
+  de l'extrait entier (un son très long a un petit délai avant d'être entendu avec ses effets) ; un chevauchement
+  d'extraits sur une même piste reste refusé (le fondu enchaîné passe par les poignées de son).
+- À vérifier face à Storyboard Pro et aux logiciels de montage : le calage centré par défaut, le fondu au noir
+  qui passe par la couleur sur une coupe, la courbe linéaire des fondus d'entrée et de sortie, la puissance
+  égale du fondu enchaîné, le solo qui l'emporte sur le muet.
+
+## Génération sonore à partir du storyboard, phase 1 (demandée par Anthony le 2026-10-19, branche `generation-son`)
+
+SHOT lit le storyboard et propose des sons témoins (bruitages, ambiances, musique d'intention, voix des
+dialogues) que l'on accepte, régénère ou supprime. Le détail, le contrat du serveur local et la liste des
+téléchargements de la phase 2 sont dans `docs/GENERATION_SON.md` ; le vocabulaire et le « à vérifier à l'écran » dans
+`docs/INTERFACE.md` (partie 9). **Rien n'a été regardé à l'écran** (consigne : aucun lancement de SHOT) ; aucun
+téléchargement, aucun modèle, aucune requête réseau.
+
+- ✅ **Le modèle et le fichier** (`indications.rs`) : proposition (plan, image, durée, sorte, description française,
+  prompt anglais, réplique / personnage / voix, état, fichier, extrait posé), `sons_proposes.json` sans changer la version
+  du projet, mêmes protections que les autres fichiers annexes (illisible ou plus récent jamais effacé, `.illisible`,
+  écriture atomique), fusion d'une relecture (ne ramène pas une proposition rejetée), état « accepté » qui suit le son posé.
+- ✅ **La lecture** : l'entrée commune (vignette PNG, action / dialogue / notes de la fiche et des images de storyboard,
+  durée, transitions, commentaires) pour tous les fournisseurs (`lecturesb.rs`) ; **lecture par règles sans modèle**
+  (`lecturerules.rs`) : répliques → voix, mots-clés → bruitages / ambiances / musique, consignes « SFX : … » reprises.
+- ✅ **Les fournisseurs** : trois traits (`LecteurStoryboard`, `GenerateurSon`, `GenerateurVoix`), annulation et avancement
+  (`Controle`), tâches sur des fils à part (`generation.rs`) ; client du serveur local en HTTP/1.1 minimal de boucle locale
+  (`httplocal.rs`, `sidecar.rs`) ; requêtes et réponses de Claude, ElevenLabs et Stable Audio (`fournisseursapi.rs`).
+- ✅ **Le panneau** `Pane::SuggestionsSonores` (fermé par défaut, icône de la barre, `vue.suggestions_sonores`,
+  `suggestion.lire`) ; accepter pose le son à la bonne image sur la piste « Sons proposés » (annulable) ; confirmation
+  d'envoi en ligne une fois par projet ; Préférences > Génération sonore (fournisseur de chaque rôle, port local,
+  « Tester », clés, « Tester la connexion »).
+- ✅ **Les clés** dans le Gestionnaire d'identifiants de Windows (`clessecretes.rs`), jamais dans un fichier.
+- ✅ **Phase 2 (branche `sidecar-son`)** : le **serveur local** `sidecar/serveur.py` (FastAPI, `127.0.0.1`, le contrat du §6)
+  avec Kokoro (voix) et Qwen2.5-VL AWQ chargé sans `gptqmodel` (`sidecar/awq.py`) ; lancé, attendu et arrêté par SHOT
+  (`serveurlocal.rs`, sans console, objet de travail Windows) ; Préférences : dossier des modèles, Python, Démarrer / Arrêter /
+  Tester, démarrage automatique. Essayé de bout en bout (voix → prête → accepter ; lecture Qwen). Mesures et manques dans
+  `docs/GENERATION_SON.md` §8.
+- **Pas fait / limites** : **Stable Audio Open n'est pas téléchargé** (licence à accepter par l'utilisateur, `t5-base` et
+  `stable-audio-tools` aussi) : pas de bruitage généré ; Qwen lit à ~4 jetons/s (pas de noyau AWQ) ; l'**envoi HTTPS
+  aux services en ligne est « à brancher »** (aucune caisse TLS hors ligne ; piste : WinHTTP déclaré à la main) ; les
+  adresses et formats des services en ligne sont à vérifier avant le premier appel ; le cache des sons générés n'est pas
+  nettoyé ; une seule génération à la fois ; pas de voix par personnage retenue d'un plan à l'autre (la voix se
+  choisit par proposition ou dans les Préférences) ; la lecture par règles ne connaît que le français.
+- **À vérifier** : les licences de chaque modèle et de chaque service (usage commercial des sons, données envoyées).

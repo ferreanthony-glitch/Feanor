@@ -71,6 +71,8 @@ pub struct ExportSettings {
     pub sound: bool,
     /// Images PNG sans le papier.
     pub transparent: bool,
+    /// Avec les transitions du montage (fondus, volet, noir : `transitions.rs`).
+    pub transitions: bool,
 }
 
 impl Default for ExportSettings {
@@ -81,6 +83,7 @@ impl Default for ExportSettings {
             half: false,
             sound: true,
             transparent: false,
+            transitions: true,
         }
     }
 }
@@ -559,8 +562,14 @@ pub struct ExportJob {
     frames: Vec<(usize, usize)>,
     paper: bool,
     next: usize,
-    /// Dernière image calculée : une image tenue (même plan, même caméra) n'est pas recalculée.
-    last: Option<(Plan, Camera, Image)>,
+    /// Dernières images calculées : une image tenue (même plan, même caméra) n'est pas recalculée.
+    /// Quatre, pour qu'une transition qui tient une image d'un côté ne la recalcule pas à chaque
+    /// image de l'autre.
+    cache: Vec<(Plan, Camera, Image)>,
+    /// Les zones des transitions et la première image de chaque plan (`with_transitions`) ; vides :
+    /// aucune transition.
+    zones: Vec<crate::transitions::Zone>,
+    starts: Vec<usize>,
     /// Image calculée qui attend une place dans la file d'écriture.
     pending: Option<Image>,
     sink: Sink,
@@ -692,7 +701,9 @@ impl ExportJob {
             frames,
             paper,
             next: 0,
-            last: None,
+            cache: Vec::new(),
+            zones: Vec::new(),
+            starts: Vec::new(),
             pending: None,
             sink,
             started: Instant::now(),
@@ -710,19 +721,48 @@ impl ExportJob {
         }
     }
 
-    fn render(&mut self, doc: &Document, i: usize) -> Image {
-        let (p, f) = self.frames[i];
+    /// Applique les transitions du montage à cet export (`transitions.rs`) : les images qu'une zone
+    /// recouvre sont le mélange des deux plans, calculé ici sur le processeur, comme le reste de
+    /// l'export (la carte graphique ne sert qu'à l'écran).
+    pub fn with_transitions(mut self, doc: &Document) -> ExportJob {
+        self.zones = crate::transitions::zones(doc);
+        if !self.zones.is_empty() {
+            self.starts = (0..doc.panels.len()).map(|i| doc.panel_start(i)).collect();
+        }
+        self
+    }
+
+    /// L'image d'un plan (caméra comprise), recalculée seulement si elle a changé.
+    fn render_plain(&mut self, doc: &Document, p: usize, f: usize) -> Image {
         // Arrière-plan (13e) : aucun ou damier → image transparente.
         let plan = render::panel_plan_at(doc, p, f, if self.paper { doc.render_paper() } else { None });
         let cam = doc.panel_camera(p, f);
-        if let Some((lp, lc, img)) = &self.last {
-            if *lp == plan && *lc == cam {
-                return img.clone();
-            }
+        if let Some(at) = self.cache.iter().position(|(lp, lc, _)| *lp == plan && *lc == cam) {
+            let entry = self.cache.remove(at);
+            let img = entry.2.clone();
+            self.cache.push(entry);
+            return img;
         }
         let img: Image = Arc::new(render::camera_image(doc, &plan, &cam));
-        self.last = Some((plan, cam, img.clone()));
+        self.cache.push((plan, cam, img.clone()));
+        if self.cache.len() > 4 {
+            self.cache.remove(0);
+        }
         img
+    }
+
+    fn render(&mut self, doc: &Document, i: usize) -> Image {
+        let (p, f) = self.frames[i];
+        let mix = match self.starts.get(p) {
+            Some(&start) => crate::transitions::mix_in(&self.zones, start + f).map(|(_, m)| m),
+            None => None,
+        };
+        let Some(mix) = mix else {
+            return self.render_plain(doc, p, f);
+        };
+        let a = mix.a.map(|(p, f)| self.render_plain(doc, p, f));
+        let b = mix.b.map(|(p, f)| self.render_plain(doc, p, f));
+        Arc::new(crate::transitions::blend_images(&mix, a.as_deref().map(|v| &v[..]), b.as_deref().map(|v| &v[..]), doc.frame))
     }
 
     /// Calcule des images pendant `budget` au plus, puis rend la main à l'interface.
