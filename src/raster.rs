@@ -4,10 +4,54 @@ use eframe::egui::Color32;
 pub const TILE: usize = 64;
 pub const TILE_PIXELS: usize = TILE * TILE;
 
-pub type Tile = Box<[Color32; TILE_PIXELS]>;
+/// Une tuile de pixels, **partagée à la copie** : cloner une tuile (ou un `Raster`, un `Cel`) ne
+/// recopie rien, les deux se partagent les 16 Ko ; la première écriture (`DerefMut`) en fait une
+/// copie à soi si la tuile est partagée (`Arc::make_mut`). Les valeurs se comportent comme celles
+/// d'un `Box` : ce que l'un écrit, l'autre ne le voit jamais. Ce qui change : le cliché d'un
+/// enregistrement (`enregistrement.rs`) et les étapes d'annulation ne coûtent plus une copie des
+/// pixels, seulement l'écriture qui suit sur une tuile encore partagée.
+#[derive(Clone)]
+pub struct Tile(std::sync::Arc<[Color32; TILE_PIXELS]>);
+
+impl Tile {
+    /// Une tuile des pixels `pixels`.
+    pub fn new(pixels: [Color32; TILE_PIXELS]) -> Self {
+        Tile(std::sync::Arc::new(pixels))
+    }
+
+    /// Les deux tuiles sont la même mémoire (rien n'a été écrit depuis la copie).
+    pub fn same_as(&self, other: &Tile) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl std::ops::Deref for Tile {
+    type Target = [Color32; TILE_PIXELS];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for Tile {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        std::sync::Arc::make_mut(&mut self.0)
+    }
+}
+
+impl PartialEq for Tile {
+    fn eq(&self, other: &Self) -> bool {
+        self.same_as(other) || self.0[..] == other.0[..]
+    }
+}
+
+impl std::fmt::Debug for Tile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Tile")
+    }
+}
 
 pub fn empty_tile() -> Tile {
-    Box::new([Color32::TRANSPARENT; TILE_PIXELS])
+    Tile::new([Color32::TRANSPARENT; TILE_PIXELS])
 }
 
 /// Nombre de tuiles en largeur pour une image de `width` pixels.
@@ -203,7 +247,8 @@ impl Raster {
                 if src.chunks_exact(4).fold(0u8, |acc, p| acc | p[3]) == 0 {
                     continue;
                 }
-                let t = tile.get_or_insert_with(empty_tile);
+                // (Le tableau, pris une fois : une écriture par la tuile passerait par `make_mut`.)
+                let t: &mut [Color32; TILE_PIXELS] = tile.get_or_insert_with(empty_tile);
                 for (x, p) in src.chunks_exact(4).enumerate() {
                     if p[3] != 0 {
                         t[y * TILE + x] = premultiply(p[0], p[1], p[2], p[3]);

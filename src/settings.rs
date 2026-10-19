@@ -173,6 +173,8 @@ impl Settings {
             std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         }
         let text = toml::to_string(self).map_err(|e| e.to_string())?;
-        std::fs::write(&path, text).map_err(|e| format!("{} : {e}", path.display()))
+        // (Atomique : un plantage ou un disque plein ne laisse pas des réglages tronqués, que `load`
+        // remplacerait par les réglages d'origine.)
+        crate::project::write_atomic(&path, text.as_bytes())
     }
 }

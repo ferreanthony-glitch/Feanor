@@ -146,7 +146,7 @@ impl App {
                 let path = path.clone();
                 self.reopen_probe = None;
                 // (Anthony a déjà ouvert, créé ou dessiné quelque chose : on ne lui prend pas la main.)
-                if self.path.is_none() && !self.modified && self.open_job.is_none() && self.new_dialog.is_none() && self.welcome {
+                if self.path.is_none() && !self.modified && self.open_job.is_none() && self.saving.is_none() && self.new_dialog.is_none() && self.welcome {
                     self.open_path(path);
                 }
             }

@@ -190,7 +190,8 @@ fn the_application_opens_and_saves_a_full_project_unchanged() {
     // « Enregistrer sous » un autre dossier, par l'application, puis relire.
     let c = travail.join("C").join("Film.pelure");
     b.app.written.clear();
-    assert!(b.app.save_to(c.clone()));
+    // (Par l'enregistrement en arrière-plan, dont on attend la fin.)
+    assert!(b.app.save_to_blocking(c.clone()));
     let l = lire(&c);
     // (L'application date l'enregistrement dans les propriétés du projet : c'est le seul écart.)
     assert!(b.app.doc.properties.modified >= f.doc.properties.modified);

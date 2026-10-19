@@ -6,7 +6,14 @@
 //! 2. **afficher** : cette image est posée à l'écran avec la vue (zoom, rotation, miroir), lissée
 //!    comme egui lisse ses images.
 //!
-//! Chaque dessin affiché est une texture. On n'envoie que ses tuiles dessinées (et on efface
+//! Chaque dessin affiché est une texture, **à la taille de son contenu** (la boîte des tuiles
+//! dessinées, avec un pixel transparent de marge, `texture_rect`) et non de la feuille entière :
+//! 1 Mo au lieu de 33 pour un dessin au trait, donc 30 à 40 fois plus de dessins gardés. Son
+//! rectangle (`rect`) dit quelle partie du dessin elle montre ; le dessin sur l'image composée
+//! (`paint`) en tient compte pour les coins du rectangle (transformation du calque, feuille
+//! flottante, aperçu réduit d'effet) et pour les coordonnées de texture des maillages. Un dessin qui
+//! sort de sa boîte, on le peint ou on l'agrandit, refait sa texture un peu plus grande et renvoie
+//! le dessin entier (`place_texture`). On n'envoie que ses tuiles dessinées (et on efface
 //! celles qui ne le sont plus), toutes regroupées en une seule copie ; pendant un trait, seulement
 //! les tuiles touchées. Pendant la lecture, les dessins des images suivantes partent d'avance, par
 //! petits morceaux (`playback.rs`). Le calcul sur processeur (`render.rs`) reste pour l'export,
@@ -20,7 +27,7 @@ use eframe::egui::{self, Pos2, Rect};
 use eframe::egui_wgpu::{self, wgpu, CallbackResources, CallbackTrait, RenderState};
 
 use crate::document::{CelId, Document};
-use crate::raster::{Raster, TILE};
+use crate::raster::{tile_bounds, Raster, TILE};
 use crate::render::Plan;
 
 /// Réglages d'un dessin dans le tampon : 4 coins (position, coordonnées de texture), une couleur,
@@ -30,6 +37,8 @@ const ITEM_BYTES: u64 = 96;
 const CACHE_BYTES: u64 = 1 << 30;
 /// Envoi d'avance, par image d'écran : 4 Mo de tuiles (256 tuiles), quelques millisecondes.
 const AHEAD_BYTES: usize = 4 << 20;
+/// Taille au-delà de laquelle le tampon d'envoi n'est pas gardé pour l'image suivante.
+const STAGING_KEEP: usize = 48 << 20;
 /// Un sommet de maillage : position normalisée et coordonnées de texture, 4 flottants.
 const MESH_VERTEX_BYTES: u64 = 16;
 /// Format des images composées : valeurs gamma, comme le calcul sur processeur.
@@ -293,15 +302,93 @@ fn fs_display(v: VOut) -> @location(0) vec4<f32> {
 struct CelTexture {
     bind_group: wgpu::BindGroup,
     texture: wgpu::Texture,
-    size: (u32, u32),
+    /// La partie du dessin que la texture montre : coin haut-gauche (x, y) et taille (largeur,
+    /// hauteur), en pixels du dessin. Une texture n'a que la place du contenu (`texture_rect`), pas
+    /// celle de la feuille entière.
+    rect: [u32; 4],
+    /// Taille de l'image du dessin (feuille, aperçu réduit d'un effet, feuille flottante agrandie).
+    dims: (u32, u32),
     /// Version du dessin envoyée (`u64::MAX` : rien d'envoyé).
     version: u64,
     last_used: u64,
+    /// Dernière image où elle a reçu des pixels, ou été refaite : l'image composée gardée n'est plus
+    /// bonne si elle change (`ItemKey`).
+    generation: u64,
     /// Tuiles non vides dans la texture (une texture neuve est transparente) : seules celles-ci
-    /// sont à effacer quand le dessin en perd.
+    /// sont à effacer quand le dessin en perd. Rangées comme les tuiles du dessin.
     filled: Vec<bool>,
     /// Envoi d'avance en cours : version visée et prochaine tuile.
     partial: Option<(u64, usize)>,
+}
+
+impl CelTexture {
+    /// Poids de la texture sur la carte.
+    fn bytes(&self) -> u64 {
+        self.rect[2] as u64 * self.rect[3] as u64 * 4
+    }
+}
+
+/// Multiple de pixels auquel la taille d'une texture est arrondie (vers le côté libre) : des
+/// dessins de contenu voisin ont ainsi la même taille et se recyclent l'un l'autre.
+const BUCKET: usize = 128;
+
+/// Les tuiles non vides d'un dessin : (tuile gauche, haute, droite, basse), bornes comprises.
+pub(crate) fn content_tiles(raster: &Raster) -> Option<[usize; 4]> {
+    let mut found: Option<[usize; 4]> = None;
+    for (idx, t) in raster.tiles.iter().enumerate() {
+        if t.is_some() {
+            let (tx, ty) = (idx % raster.tiles_x, idx / raster.tiles_x);
+            found = Some(match found {
+                None => [tx, ty, tx, ty],
+                Some([a, b, c, d]) => [a.min(tx), b.min(ty), c.max(tx), d.max(ty)],
+            });
+        }
+    }
+    found
+}
+
+/// Rectangle de pixels d'un tel contenu : [x0, y0, x1, y1) (x1 et y1 exclus), tuiles entières.
+pub(crate) fn content_pixels(dims: (u32, u32), tiles: [usize; 4]) -> [usize; 4] {
+    [tiles[0] * TILE, tiles[1] * TILE, ((tiles[2] + 1) * TILE).min(dims.0 as usize), ((tiles[3] + 1) * TILE).min(dims.1 as usize)]
+}
+
+/// Un axe de la texture : de `lo` à `hi` (exclu) dans `total` pixels. La texture déborde d'un pixel
+/// transparent de chaque côté qui n'est pas le bord de la feuille (le lissage d'un calque transformé
+/// y lit du transparent, comme dans la feuille entière ; au bord de la feuille, il lit le bord, comme
+/// avant), puis la taille est arrondie à `BUCKET` du côté libre, sans sortir de la feuille.
+fn texture_axis(lo: usize, hi: usize, total: usize) -> (usize, usize) {
+    let (before, after) = (usize::from(lo > 0), usize::from(hi < total));
+    let (mut origin, mut len) = (lo - before, hi - lo + before + after);
+    let want = len.div_ceil(BUCKET) * BUCKET;
+    if want > len {
+        if after == 1 {
+            len = want.min(total - origin);
+        } else if before == 1 && origin >= want - len {
+            origin -= want - len;
+            len = want;
+        }
+    }
+    (origin, len)
+}
+
+/// Le rectangle de la texture d'un dessin de taille `dims` dont le contenu occupe les tuiles
+/// `tiles`, avec `slack` pixels de plus de chaque côté (un dessin qu'on est en train d'agrandir :
+/// la texture ne se refait pas à chaque tuile de plus). Dessin vide : un pixel.
+pub(crate) fn texture_rect(dims: (u32, u32), tiles: Option<[usize; 4]>, slack: usize) -> [u32; 4] {
+    let Some(tiles) = tiles else { return [0, 0, 1, 1] };
+    let [x0, y0, x1, y1] = content_pixels(dims, tiles);
+    let (x0, y0, x1, y1) = (x0.saturating_sub(slack), y0.saturating_sub(slack), (x1 + slack).min(dims.0 as usize), (y1 + slack).min(dims.1 as usize));
+    let (ox, w) = texture_axis(x0, x1, dims.0 as usize);
+    let (oy, h) = texture_axis(y0, y1, dims.1 as usize);
+    [ox as u32, oy as u32, w as u32, h as u32]
+}
+
+/// La texture `rect` montre-t-elle tout ce contenu (pixels [x0, y0, x1, y1)) ? Il doit rester un
+/// pixel de transparent entre lui et chaque bord de la texture qui n'est pas celui de la feuille.
+pub(crate) fn covers(rect: [u32; 4], dims: (u32, u32), content: Option<[usize; 4]>) -> bool {
+    let Some([x0, y0, x1, y1]) = content else { return true };
+    let axis = |lo: usize, hi: usize, o: u32, len: u32, total: u32| (o == 0 || (o as usize) < lo) && (o + len == total || hi < (o + len) as usize);
+    axis(x0, x1, rect[0], rect[2], dims.0) && axis(y0, y1, rect[1], rect[3], dims.1)
 }
 
 /// Image composée, à la taille du projet.
@@ -314,6 +401,8 @@ struct Frame {
     /// Copie de l'image composée jusque-là, lue par les calques en mode de fusion (8).
     backdrop: wgpu::Texture,
     backdrop_group: wgpu::BindGroup,
+    /// Ce qui a servi à composer l'image qu'elle contient (rien : elle est vide ou à refaire).
+    composed: Option<Vec<ItemKey>>,
 }
 
 /// Ressources gardées par egui-wgpu d'une image à l'autre.
@@ -342,8 +431,31 @@ struct CanvasResources {
     textures: HashMap<CelId, CelTexture>,
     /// Mémoire visée pour les textures des dessins (`CACHE_BYTES`, plus petite dans les essais).
     cache_bytes: u64,
+    /// Essais : chaque texture couvre l'image entière de son dessin, comme avant la taille au
+    /// contenu (pour comparer les deux, pixel pour pixel).
+    whole_textures: bool,
+    /// Tampon des tuiles à envoyer, gardé d'une image à l'autre (vide entre deux).
+    staging: Vec<u8>,
+    /// Essais : un tampon neuf à chaque image, comme avant (pour mesurer ce que le garder rapporte).
+    fresh_staging: bool,
+    /// Tuiles envoyées depuis le début (pour les mesures).
+    copies: u64,
+    /// Compositions faites depuis le début (celles qu'une image composée gardée évite ne comptent pas).
+    composes: u64,
     frame: Option<Frame>,
     tick: u64,
+}
+
+/// Le contenu du cache de textures (`GpuCanvas::stats`).
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct GpuStats {
+    pub textures: usize,
+    pub bytes: u64,
+    /// Tuiles envoyées à la carte depuis le début.
+    pub copies: u64,
+    /// Compositions des calques faites depuis le début.
+    pub composes: u64,
 }
 
 /// Côté application : de quoi mettre à jour les textures et commander le dessin.
@@ -526,6 +638,11 @@ impl GpuCanvas {
             white,
             textures: HashMap::new(),
             cache_bytes: CACHE_BYTES,
+            whole_textures: false,
+            staging: Vec::new(),
+            fresh_staging: false,
+            copies: 0,
+            composes: 0,
             frame: None,
             tick: 0,
         });
@@ -543,15 +660,43 @@ impl GpuCanvas {
         }
     }
 
-    /// La mémoire visée pour les textures des dessins.
-    pub fn cache_bytes(&self) -> u64 {
-        self.render_state.renderer.read().callback_resources.get::<CanvasResources>().map_or(CACHE_BYTES, |r| r.cache_bytes)
+    /// Essais : les textures couvrent l'image entière de leur dessin (le comportement d'avant la
+    /// taille au contenu). Les textures déjà là sont jetées.
+    #[cfg(test)]
+    pub fn set_whole_textures(&self, whole: bool) {
+        if let Some(res) = self.render_state.renderer.write().callback_resources.get_mut::<CanvasResources>() {
+            res.whole_textures = whole;
+            res.textures.clear();
+        }
     }
 
-    /// Nombre de dessins qu'on peut envoyer d'avance sans chasser ceux qui sont affichés.
+    /// Essais : un tampon d'envoi neuf à chaque image (le comportement d'avant).
+    #[cfg(test)]
+    pub fn set_fresh_staging(&self, fresh: bool) {
+        if let Some(res) = self.render_state.renderer.write().callback_resources.get_mut::<CanvasResources>() {
+            res.fresh_staging = fresh;
+        }
+    }
+
+    /// Ce que le cache garde : nombre de textures de dessin et leur poids (octets de la carte).
+    /// Sert aux mesures (`perf_tests.rs`) et aux essais.
+    #[cfg(test)]
+    pub fn stats(&self) -> GpuStats {
+        let renderer = self.render_state.renderer.read();
+        let Some(res) = renderer.callback_resources.get::<CanvasResources>() else { return GpuStats::default() };
+        GpuStats { textures: res.textures.len(), bytes: res.textures.values().map(CelTexture::bytes).sum(), copies: res.copies, composes: res.composes }
+    }
+
+    /// Nombre de dessins qu'on peut envoyer d'avance sans chasser ceux qui sont affichés. Le poids
+    /// d'un dessin est celui des textures que le cache garde (elles n'ont que la place du contenu) ;
+    /// un cache encore presque vide compte un quart de feuille.
     pub fn ahead_capacity(&self, doc: &Document, shown: usize) -> usize {
-        let per = (doc.width as u64 * doc.height as u64 * 4).max(1);
-        ((self.cache_bytes() / per) as usize).saturating_sub(shown + 4) / 2
+        let sheet = (doc.width as u64 * doc.height as u64 * 4).max(1);
+        let renderer = self.render_state.renderer.read();
+        let Some(res) = renderer.callback_resources.get::<CanvasResources>() else { return 0 };
+        let n = res.textures.len() as u64;
+        let per = if n >= 8 { (res.textures.values().map(CelTexture::bytes).sum::<u64>() / n).clamp(64 << 10, sheet) } else { sheet / 4 };
+        ((res.cache_bytes / per) as usize).saturating_sub(shown + 4) / 2
     }
 
     /// Met à jour les textures des dessins du plan. `all` : tout a pu changer ; `tiles` : tuiles
@@ -568,9 +713,9 @@ impl GpuCanvas {
         res.tick += 1;
         let tick = res.tick;
         let size = (doc.width as u32, doc.height as u32);
-        let per = size.0 as u64 * size.1 as u64 * 4;
-        let max = (res.cache_bytes / per.max(1)).max(plan.items.len() as u64 + 8) as usize;
-        let mut up = Uploads::default();
+        let mut up = Uploads { tick, data: std::mem::take(&mut res.staging), ..Default::default() };
+        // Poids des textures gardées (mis à jour à chaque création, recyclage et départ).
+        let mut bytes: u64 = res.textures.values().map(CelTexture::bytes).sum();
         // Un dessin passé par des effets (13i) : son dessin dérivé, sous son propre numéro ; en
         // aperçu ou en attente du fil de fond, une texture plus petite ou plus ancienne. Cherché
         // une fois par élément.
@@ -592,23 +737,45 @@ impl GpuCanvas {
             resolved.push(Some(id));
             // (À la taille de son image : la feuille flottante d'une sélection peut dépasser la feuille.)
             let own = (cel.raster.width as u32, cel.raster.height as u32);
-            let entry = ensure_texture(rs, res, id, cel.raster.tiles.len(), own, max);
-            if all || entry.version != cel.version {
+            let n = cel.raster.tiles.len();
+            let known = res.textures.get(&id).filter(|e| e.dims == own).map(|e| (e.version, e.partial, e.rect));
+            if all || known.is_none_or(|(version, _, _)| version != cel.version) {
                 // Un envoi d'avance commencé pour cette version reprend où il en était.
-                let start = match entry.partial {
-                    Some((v, next)) if v == cel.version && !all => next,
+                let mut start = match known {
+                    Some((_, Some((v, next)), _)) if v == cel.version && !all => next,
                     _ => 0,
                 };
-                let rest: Vec<usize> = (start..cel.raster.tiles.len()).collect();
+                // La texture n'a que la place du contenu : elle se refait si le contenu en sort.
+                let content = content_tiles(&cel.raster);
+                if !known.is_some_and(|(_, _, rect)| covers(rect, own, content.map(|c| content_pixels(own, c)))) {
+                    let grow = if known.is_some() { growth(content, own) } else { 0 };
+                    place_texture(rs, res, id, own, texture_rect(own, content, grow), n, tick, &mut bytes, &mut up);
+                    start = 0;
+                }
+                let entry = res.textures.get_mut(&id).expect("texture présente");
+                let rest: Vec<usize> = (start..n).collect();
                 let _t = crate::perf::section("  gpu : tuiles copiées");
                 up.add(id, entry, &cel.raster, &rest);
                 entry.version = cel.version;
                 entry.partial = None;
             } else if !tiles.is_empty() && (id == item.cel || item.fond.is_some()) {
                 // (Un fond, pendant qu'on peint dedans, se suit aussi tuile par tuile : `fx::fond_patch`.)
-                up.add(id, entry, &cel.raster, tiles);
+                // Un trait qui sort de la texture la refait, plus grande, et renvoie le dessin entier.
+                let touched = content_of(&cel.raster, tiles).map(|c| content_pixels(own, c));
+                let rect = known.map_or([0; 4], |(_, _, rect)| rect);
+                if covers(rect, own, touched) {
+                    up.add(id, res.textures.get_mut(&id).expect("texture présente"), &cel.raster, tiles);
+                } else {
+                    let content = content_tiles(&cel.raster);
+                    place_texture(rs, res, id, own, texture_rect(own, content, growth(content, own)), n, tick, &mut bytes, &mut up);
+                    let entry = res.textures.get_mut(&id).expect("texture présente");
+                    entry.version = cel.version;
+                    up.add(id, entry, &cel.raster, &(0..n).collect::<Vec<_>>());
+                }
             }
-            entry.last_used = tick;
+            if let Some(entry) = res.textures.get_mut(&id) {
+                entry.last_used = tick;
+            }
         }
         // Envoi d'avance, borné à AHEAD_BYTES par image d'écran ; un dessin entamé reprend à sa
         // prochaine tuile à l'image suivante.
@@ -621,34 +788,48 @@ impl GpuCanvas {
             // Un dessin dérivé déjà calculé par le fil de fond, ou un dessin du projet.
             let Some(cel) = a.cel.as_deref().or_else(|| doc.cels.get(&id)) else { continue };
             let own = (cel.raster.width as u32, cel.raster.height as u32);
-            let entry = ensure_texture(rs, res, id, cel.raster.tiles.len(), own, max);
-            entry.last_used = tick;
-            if entry.version == cel.version {
-                continue;
+            let n = cel.raster.tiles.len();
+            let known = res.textures.get_mut(&id).filter(|e| e.dims == own);
+            if let Some(e) = known {
+                e.last_used = tick;
+                if e.version == cel.version {
+                    continue;
+                }
             }
+            let known = res.textures.get(&id).filter(|e| e.dims == own).map(|e| (e.partial, e.rect));
+            let content = content_tiles(&cel.raster);
+            if !known.is_some_and(|(_, rect)| covers(rect, own, content.map(|c| content_pixels(own, c)))) {
+                let grow = if known.is_some() { growth(content, own) } else { 0 };
+                place_texture(rs, res, id, own, texture_rect(own, content, grow), n, tick, &mut bytes, &mut up);
+            }
+            let entry = res.textures.get_mut(&id).expect("texture présente");
+            entry.last_used = tick;
             let mut next = match entry.partial {
                 Some((v, next)) if v == cel.version => next,
                 _ => 0,
             };
-            while next < cel.raster.tiles.len() && up.data.len() < shown + AHEAD_BYTES {
+            while next < n && up.data.len() < shown + AHEAD_BYTES {
                 up.add(id, entry, &cel.raster, &[next]);
                 next += 1;
             }
-            if next >= cel.raster.tiles.len() {
+            if next >= n {
                 entry.version = cel.version;
                 entry.partial = None;
             } else {
                 entry.partial = Some((cel.version, next));
             }
         }
-        up.submit(rs, &res.textures);
-        // Mémoire de la carte graphique : on libère les textures les plus anciennes au-delà d'un Go
-        // (en octets : un aperçu réduit pèse le quart ou moins d'une texture de la taille du
-        // projet) ; celles de cette image restent. Un cache plein recycle déjà ses textures
-        // (`ensure_texture`) ; ceci rattrape le reste, les dessins d'une autre taille.
-        let bytes_of = |t: &CelTexture| t.size.0 as u64 * t.size.1 as u64 * 4;
+        res.copies += up.copies.len() as u64;        let staging = up.submit(rs, &res.textures);
+        // (Le tampon d'envoi est gardé d'une image à l'autre, sauf s'il est devenu énorme.)
+        if staging.capacity() <= STAGING_KEEP && !res.fresh_staging {
+            res.staging = staging;
+        }
+        // Mémoire de la carte graphique : on libère les textures les plus anciennes au-delà du budget
+        // (en octets : une texture n'a que la place du contenu de son dessin, un aperçu réduit
+        // encore moins) ; celles de cette image restent. Un cache plein recycle déjà ses textures
+        // de même taille (`place_texture`) ; ceci rattrape le reste.
         let budget = res.cache_bytes;
-        let mut total: u64 = res.textures.values().map(bytes_of).sum();
+        let mut total: u64 = res.textures.values().map(CelTexture::bytes).sum();
         if total > budget {
             let mut ages: Vec<(u64, CelId)> = res.textures.iter().map(|(&id, t)| (t.last_used, id)).collect();
             ages.sort_unstable();
@@ -657,7 +838,7 @@ impl GpuCanvas {
                     break;
                 }
                 if let Some(t) = res.textures.remove(&id) {
-                    total -= bytes_of(&t);
+                    total -= t.bytes();
                 }
             }
         }
@@ -700,6 +881,7 @@ impl GpuCanvas {
                 display_group,
                 backdrop,
                 backdrop_group,
+                composed: None,
             });
         }
         resolved
@@ -733,6 +915,13 @@ impl GpuCanvas {
                 [p.x / w * 2.0 - 1.0, 1.0 - p.y / h * 2.0, uv[i][0], uv[i][1]]
             })
         };
+        // Ce que montre la texture de chaque dessin : sa place dans l'image du dessin (`rect`) et la
+        // taille de cette image.
+        let places: Vec<Option<([u32; 4], (u32, u32))>> = {
+            let renderer = self.render_state.renderer.read();
+            let textures = renderer.callback_resources.get::<CanvasResources>().map(|res| &res.textures);
+            resolved.iter().map(|id| id.and_then(|id| textures?.get(&id)).map(|t| (t.rect, t.dims))).collect()
+        };
         let mut items = Vec::with_capacity(plan.items.len() + 1);
         if let Some(p) = plan.paper {
             items.push(GpuItem {
@@ -744,9 +933,12 @@ impl GpuCanvas {
                 mesh: None,
             });
         }
-        for (item, id) in plan.items.iter().zip(resolved) {
+        for ((item, id), place) in plan.items.iter().zip(resolved).zip(&places) {
             // Un élément sans dessin n'est pas composé.
             let Some(id) = *id else { continue };
+            // (Sans texture, rien à poser : la passe de composition saute l'élément.)
+            let (rect, rdims) = place.unwrap_or(([0, 0, stage[0] as u32, stage[1] as u32], (stage[0] as u32, stage[1] as u32)));
+            let whole = rect == [0, 0, rdims.0, rdims.1];
             let (color, tinted) = match item.tint {
                 Some(t) => ([t[0] as f32 / 255.0, t[1] as f32 / 255.0, t[2] as f32 / 255.0], 1.0),
                 None => ([0.0; 3], 0.0),
@@ -756,11 +948,43 @@ impl GpuCanvas {
             // Feuille posée par un maillage : ses sommets, déjà à leur place dans l'image composée.
             let mesh = item.warp(pivot).map(|(warp, layer)| {
                 let dims = item.pre.as_ref().and_then(|p| p.dims).map_or((stage[0], stage[1]), |d| (d[0], d[1]));
-                warp.gpu_vertices(dims, layer.as_ref(), |p| [p.x / w * 2.0 - 1.0, 1.0 - p.y / h * 2.0])
+                let mut vertices = warp.gpu_vertices(dims, layer.as_ref(), |p| [p.x / w * 2.0 - 1.0, 1.0 - p.y / h * 2.0]);
+                if !whole {
+                    // Les coordonnées de texture étaient celles de l'image entière du dessin : elles
+                    // deviennent celles de la texture, qui n'en montre qu'une partie (le reste, hors
+                    // du contenu, est transparent : la lecture hors de la texture tombe sur son bord
+                    // transparent).
+                    let (rw, rh) = (rdims.0 as f32, rdims.1 as f32);
+                    for v in &mut vertices {
+                        v[2] = (v[2] * rw - rect[0] as f32) / rect[2] as f32;
+                        v[3] = (v[3] * rh - rect[1] as f32) / rect[3] as f32;
+                    }
+                }
+                vertices
             });
+            let aff = item.affine(pivot);
+            let corners = if whole {
+                aff.map_or(full, |aff| placed(aff, item.pre.as_ref().and_then(|p| p.dims)))
+            } else {
+                // La texture ne couvre qu'une partie de l'image du dessin : ses quatre coins sont
+                // ceux de ce rectangle, placés comme l'image entière l'aurait été.
+                let logical = item.pre.as_ref().and_then(|p| p.dims).map_or((w, h), |d| (d[0] as f32, d[1] as f32));
+                let (rw, rh) = (rdims.0 as f32, rdims.1 as f32);
+                std::array::from_fn(|i| {
+                    let uv = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]][i];
+                    let (px, py) = (rect[0] as f32 + uv[0] * rect[2] as f32, rect[1] as f32 + uv[1] * rect[3] as f32);
+                    match aff {
+                        Some(aff) => {
+                            let p = aff.apply(egui::pos2(px / rw * logical.0, py / rh * logical.1));
+                            [p.x / w * 2.0 - 1.0, 1.0 - p.y / h * 2.0, uv[0], uv[1]]
+                        }
+                        None => [px / rw * 2.0 - 1.0, 1.0 - py / rh * 2.0, uv[0], uv[1]],
+                    }
+                })
+            };
             items.push(GpuItem {
                 cel: Some(id),
-                corners: item.affine(pivot).map_or(full, |aff| placed(aff, item.pre.as_ref().and_then(|p| p.dims))),
+                corners,
                 color: [color[0], color[1], color[2], tinted],
                 params: [item.opacity as f32 / 255.0, 1.0, blend as f32, 0.0],
                 blend,
@@ -799,6 +1023,34 @@ struct GpuItem {
     blend: u32,
     /// Sommets du maillage qui pose la feuille (`warp.rs`) : à la place des quatre coins.
     mesh: Option<Vec<[f32; 4]>>,
+}
+
+/// Ce qui fait un élément de l'image composée : le dessin et la version de sa texture, sa place, sa
+/// couleur, ses réglages, son mode et son maillage. Deux listes égales donnent la même image.
+#[derive(Clone, PartialEq, Debug)]
+struct ItemKey {
+    cel: Option<CelId>,
+    /// Dernière image d'écran où la texture a reçu des pixels (ou a été refaite).
+    generation: Option<u64>,
+    numbers: [u32; 24],
+    blend: u32,
+    /// Nombre de sommets du maillage et leur empreinte.
+    mesh: Option<(usize, u64)>,
+}
+
+impl ItemKey {
+    fn of(item: &GpuItem, generation: Option<u64>) -> Self {
+        let mut numbers = [0u32; 24];
+        for (n, v) in numbers.iter_mut().zip(item.corners.iter().flatten().chain(&item.color).chain(&item.params)) {
+            *n = v.to_bits();
+        }
+        let mesh = item.mesh.as_ref().map(|m| {
+            // (FNV-1a sur les bits des sommets.)
+            let hash = m.iter().flatten().fold(0xcbf2_9ce4_8422_2325_u64, |h, v| (h ^ v.to_bits() as u64).wrapping_mul(0x0000_0100_0000_01b3));
+            (m.len(), hash)
+        });
+        ItemKey { cel: item.cel, generation, numbers, blend: item.blend, mesh }
+    }
 }
 
 /// Passe qui compose dans l'image `target` (effacée d'abord, ou reprise telle quelle).
@@ -867,6 +1119,15 @@ impl CallbackTrait for CanvasPaint {
         };
         put_item(&mut bytes[self.items.len() * stride..], &on_screen, &ws, &[1.0, 1.0, 0.0, persp]);
         queue.write_buffer(&res.uniforms, 0, &bytes);
+
+        // L'image composée est gardée : si rien de ce qui la fait n'a changé depuis la dernière fois
+        // (mêmes dessins aux mêmes versions, mêmes places, opacités et modes), elle est telle quelle ;
+        // seul l'affichage (la vue, le zoom) est refait. Souris qui bouge, panneaux qui s'animent,
+        // curseur : la pile de calques n'est plus recomposée à chaque image d'écran.
+        let keys: Vec<ItemKey> = self.items.iter().map(|item| ItemKey::of(item, item.cel.and_then(|id| res.textures.get(&id)).map(|t| t.generation))).collect();
+        if res.frame.as_ref().is_some_and(|f| f.composed.as_deref() == Some(&keys[..])) {
+            return Vec::new();
+        }
 
         // Les sommets des maillages (feuilles déformées), bout à bout dans un seul tampon : pour
         // chaque dessin, sa plage de sommets.
@@ -943,6 +1204,11 @@ impl CallbackTrait for CanvasPaint {
                 None => pass.draw(0..6, 0..1),
             }
         }
+        drop(pass);
+        res.composes += 1;
+        if let Some(frame) = res.frame.as_mut() {
+            frame.composed = Some(keys);
+        }
         Vec::new()
     }
 
@@ -989,44 +1255,80 @@ fn uniform_buffer(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, stride:
     (buffer, group)
 }
 
-/// Texture d'un dessin : valeurs gamma prémultipliées, telles qu'elles sont en mémoire.
-/// Texture du dessin `id`, créée (transparente) si besoin.
-fn ensure_texture<'a>(
-    rs: &RenderState,
-    res: &'a mut CanvasResources,
-    id: CelId,
-    tiles: usize,
-    size: (u32, u32),
-    max: usize,
-) -> &'a mut CelTexture {
-    if !res.textures.get(&id).is_some_and(|e| e.size == size) {
-        let _t = crate::perf::section("  gpu : textures créées");
-        // Cache plein : le dessin le moins récent prend sa place, avec sa texture, déjà payée (en
-        // créer une de 33 Mo oblige la carte à la remplir de zéros) ; ses tuiles dessinées sont
-        // encore dedans (`filled`), le premier envoi les efface ou les remplace. Un dessin de cette
-        // image d'écran (`last_used == tick`) n'est jamais pris.
-        let tick = res.tick;
-        let oldest = (res.textures.len() >= max)
-            .then(|| res.textures.iter().filter(|(_, t)| t.size == size && t.filled.len() == tiles && t.last_used < tick).min_by_key(|(_, t)| t.last_used).map(|(&k, _)| k))
-            .flatten();
-        let entry = match oldest.and_then(|k| res.textures.remove(&k)) {
-            Some(mut t) => {
-                t.version = u64::MAX;
-                t.last_used = tick;
-                t.partial = None;
-                t
-            }
-            None => {
-                let texture = cel_texture(&rs.device, size.0, size.1);
-                let view = texture.create_view(&Default::default());
-                let bind_group = texture_group(&rs.device, &res.texture_layout, &view, &res.nearest);
-                CelTexture { bind_group, texture, size, version: u64::MAX, last_used: tick, filled: vec![false; tiles], partial: None }
-            }
-        };
-        res.textures.insert(id, entry);
-    }
-    res.textures.get_mut(&id).expect("texture présente")
+/// Combien de pixels de plus de chaque côté pour la texture d'un dessin qui vient de sortir de la
+/// sienne (on le peint, ou on l'agrandit) : le quart de son contenu, au moins deux tuiles, pour que
+/// les tuiles suivantes d'un trait n'obligent pas à la refaire chaque fois.
+fn growth(content: Option<[usize; 4]>, dims: (u32, u32)) -> usize {
+    let Some(c) = content else { return 2 * TILE };
+    let (w, h) = (content_pixels(dims, c)[2] - c[0] * TILE, content_pixels(dims, c)[3] - c[1] * TILE);
+    (w.max(h) / 4).div_ceil(TILE).max(2) * TILE
 }
+
+/// Les tuiles non vides, parmi `tiles`, de ce dessin : leur boîte.
+fn content_of(raster: &Raster, tiles: &[usize]) -> Option<[usize; 4]> {
+    let mut found: Option<[usize; 4]> = None;
+    for &idx in tiles {
+        if raster.tiles.get(idx).is_some_and(Option::is_some) {
+            let (tx, ty) = (idx % raster.tiles_x, idx / raster.tiles_x);
+            found = Some(match found {
+                None => [tx, ty, tx, ty],
+                Some([a, b, c, d]) => [a.min(tx), b.min(ty), c.max(tx), d.max(ty)],
+            });
+        }
+    }
+    found
+}
+
+/// La texture du dessin `id` (image de taille `dims`, `tiles` tuiles), à la place `rect` de cette
+/// image : une neuve (transparente), ou, quand la carte est pleine, celle du dessin le moins récent
+/// qui a la même taille (en créer une oblige la carte à la remplir de zéros) ; les tuiles de son
+/// ancien dessin sont alors effacées par le prochain envoi. Un dessin de cette image d'écran
+/// (`last_used == tick`) n'est jamais pris. L'ancienne texture de `id`, s'il en avait une, est
+/// libérée. `bytes` est le poids du cache, tenu à jour.
+#[allow(clippy::too_many_arguments)]
+fn place_texture(rs: &RenderState, res: &mut CanvasResources, id: CelId, dims: (u32, u32), rect: [u32; 4], tiles: usize, tick: u64, bytes: &mut u64, up: &mut Uploads) {
+    let _t = crate::perf::section("  gpu : textures créées");
+    let rect = if res.whole_textures { [0, 0, dims.0, dims.1] } else { rect };
+    if let Some(old) = res.textures.remove(&id) {
+        *bytes -= old.bytes();
+    }
+    let new_bytes = rect[2] as u64 * rect[3] as u64 * 4;
+    let mut recycled = None;
+    if *bytes + new_bytes > res.cache_bytes {
+        let oldest = res
+            .textures
+            .iter()
+            .filter(|(_, t)| t.rect[2] == rect[2] && t.rect[3] == rect[3] && t.last_used < tick)
+            .min_by_key(|(_, t)| t.last_used)
+            .map(|(&k, _)| k);
+        if let Some(mut t) = oldest.and_then(|k| res.textures.remove(&k)) {
+            *bytes -= t.bytes();
+            // Les tuiles de l'ancien dessin sont encore dedans : on les efface, avant tout envoi.
+            for (idx, _) in t.filled.iter().enumerate().filter(|(_, f)| **f) {
+                let (ox, oy, tw, th) = tile_bounds(t.dims.0 as usize, t.dims.1 as usize, idx);
+                up.clear_rect(id, [(ox as u32).saturating_sub(t.rect[0]), (oy as u32).saturating_sub(t.rect[1]), tw as u32, th as u32]);
+            }
+            t.rect = rect;
+            t.dims = dims;
+            t.filled = vec![false; tiles];
+            t.version = u64::MAX;
+            t.last_used = tick;
+            t.generation = tick;
+            t.partial = None;
+            recycled = Some(t);
+        }
+    }
+    let entry = recycled.unwrap_or_else(|| {
+        let texture = cel_texture(&rs.device, rect[2], rect[3]);
+        let view = texture.create_view(&Default::default());
+        let bind_group = texture_group(&rs.device, &res.texture_layout, &view, &res.nearest);
+        CelTexture { bind_group, texture, rect, dims, version: u64::MAX, last_used: tick, generation: tick, filled: vec![false; tiles], partial: None }
+    });
+    *bytes += entry.bytes();
+    res.textures.insert(id, entry);
+}
+
+/// Texture d'un dessin : valeurs gamma prémultipliées, telles qu'elles sont en mémoire.
 
 fn cel_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {
     device.create_texture(&wgpu::TextureDescriptor {
@@ -1081,6 +1383,8 @@ fn write_region(queue: &wgpu::Queue, texture: &wgpu::Texture, x: u32, y: u32, w:
 /// Une tuile garde ses lignes de 64 pixels (256 octets), l'alignement que demande la copie.
 #[derive(Default)]
 struct Uploads {
+    /// L'image d'écran (`CanvasResources::tick`) : la `generation` des textures qui reçoivent des pixels.
+    tick: u64,
     data: Vec<u8>,
     /// Emplacement d'une tuile transparente, partagée par toutes les tuiles à effacer.
     zero: Option<u64>,
@@ -1091,12 +1395,20 @@ struct Uploads {
 impl Uploads {
     /// Ajoute les tuiles `tiles` du dessin `id` : pleines si dessinées, effacées si elles l'étaient.
     fn add(&mut self, id: CelId, entry: &mut CelTexture, raster: &Raster, tiles: &[usize]) {
+        let before = self.copies.len();
         for &idx in tiles {
             if idx >= raster.tiles.len() || idx >= entry.filled.len() {
                 continue;
             }
             let (ox, oy, tw, th) = raster.tile_bounds(idx);
+            // La tuile doit être dans la texture (le contenu y est toujours : `covers`).
+            let [rx, ry, rw, rh] = entry.rect.map(|v| v as usize);
+            let inside = ox >= rx && oy >= ry && ox + tw <= rx + rw && oy + th <= ry + rh;
             let offset = match &raster.tiles[idx] {
+                Some(_) if !inside => {
+                    debug_assert!(false, "tuile {idx} hors de la texture");
+                    continue;
+                }
                 Some(tile) => {
                     entry.filled[idx] = true;
                     let at = self.data.len() as u64;
@@ -1114,13 +1426,30 @@ impl Uploads {
                 }
                 None => continue,
             };
-            self.copies.push((id, offset, [ox as u32, oy as u32, tw as u32, th as u32]));
+            self.copies.push((id, offset, [(ox - rx) as u32, (oy - ry) as u32, tw as u32, th as u32]));
+        }
+        if self.copies.len() > before {
+            entry.generation = self.tick;
         }
     }
 
-    fn submit(self, rs: &RenderState, textures: &HashMap<CelId, CelTexture>) {
+    /// Efface le rectangle `rect` (de la taille d'une tuile au plus, dans la texture) du dessin `id`.
+    fn clear_rect(&mut self, id: CelId, rect: [u32; 4]) {
+        let data = &mut self.data;
+        let at = *self.zero.get_or_insert_with(|| {
+            let at = data.len() as u64;
+            data.resize(data.len() + TILE * TILE * 4, 0);
+            at
+        });
+        self.copies.push((id, at, rect));
+    }
+
+    /// Envoie tout. Rend le tampon, vidé, pour le prochain passage (le garder évite de redemander à
+    /// Windows des Mo de mémoire neuve, que le premier accès paie en fautes de page).
+    fn submit(mut self, rs: &RenderState, textures: &HashMap<CelId, CelTexture>) -> Vec<u8> {
         if self.copies.is_empty() {
-            return;
+            self.data.clear();
+            return self.data;
         }
         let _t = crate::perf::section("  gpu : tuiles envoyées");
         use wgpu::util::DeviceExt;
@@ -1130,7 +1459,7 @@ impl Uploads {
             usage: wgpu::BufferUsages::COPY_SRC,
         });
         let mut encoder = rs.device.create_command_encoder(&Default::default());
-        for (id, offset, [x, y, w, h]) in self.copies {
+        for &(id, offset, [x, y, w, h]) in &self.copies {
             let Some(t) = textures.get(&id) else { continue };
             encoder.copy_buffer_to_texture(
                 wgpu::TexelCopyBufferInfo {
@@ -1151,5 +1480,7 @@ impl Uploads {
             );
         }
         rs.queue.submit([encoder.finish()]);
+        self.data.clear();
+        self.data
     }
 }

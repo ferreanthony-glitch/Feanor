@@ -616,6 +616,7 @@ impl App {
                 ui.separator();
                 ui.label(format!("x {:.0}  y {:.0}", p.x, p.y));
             }
+            self.save_status_ui(ui);
             self.recovery_status_ui(ui);
             // Pendant la lecture : la cadence vraiment affichée (orange si la machine ne suit pas).
             if let (true, Some((rate, skipped))) = (self.playing, self.play_meter.rate) {
@@ -690,10 +691,9 @@ impl App {
                     });
                 });
             match choice {
+                // L'écriture se fait sur un autre fil : l'action suit à sa fin (`enregistrement.rs`).
                 Some(0) => {
-                    if self.save() {
-                        self.perform(action);
-                    }
+                    self.save_then(Some(action));
                 }
                 Some(1) => self.perform(action),
                 Some(_) => {}

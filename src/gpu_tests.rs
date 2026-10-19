@@ -31,7 +31,7 @@ fn block_on<F: Future>(f: F) -> F::Output {
 }
 
 /// Un périphérique sans fenêtre, ou `None` (aucune carte graphique).
-fn headless() -> Option<RenderState> {
+pub(crate) fn headless() -> Option<RenderState> {
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
     let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))?;
     let (device, queue) = block_on(adapter.request_device(
@@ -52,9 +52,15 @@ fn render_on_gpu(rs: &RenderState, doc: &Document, plan: &Plan) -> Vec<Color32> 
 
 /// Comme `render_on_gpu`, avec une carte déjà en route (ses textures gardées d'une image à l'autre) ;
 /// `all` : tout a pu changer.
-fn render_with(gpu: &mut GpuCanvas, rs: &RenderState, doc: &Document, plan: &Plan, all: bool) -> Vec<Color32> {
+pub(crate) fn render_with(gpu: &mut GpuCanvas, rs: &RenderState, doc: &Document, plan: &Plan, all: bool) -> Vec<Color32> {
+    render_with_tiles(gpu, rs, doc, plan, all, &[])
+}
+
+/// Comme `render_with`, avec les tuiles touchées depuis l'image précédente (un trait en train de se
+/// poser : `GpuCanvas::sync` n'envoie alors que celles-là).
+pub(crate) fn render_with_tiles(gpu: &mut GpuCanvas, rs: &RenderState, doc: &Document, plan: &Plan, all: bool, tiles: &[usize]) -> Vec<Color32> {
     let (w, h) = (doc.width as u32, doc.height as u32);
-    let resolved = gpu.sync(doc, plan, all, &[], &[], 0);
+    let resolved = gpu.sync(doc, plan, all, tiles, &[], 0);
     let rect = Rect::from_min_size(pos2(0.0, 0.0), vec2(w as f32, h as f32));
     let corners = [rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom()];
     let callback = gpu.paint(plan, &resolved, corners, None, rect, [doc.width, doc.height]);
@@ -118,7 +124,7 @@ fn ecarts(a: &[Color32], b: &[Color32], tol: i32) -> (usize, usize, usize) {
     (far, ia.abs_diff(ib), ib)
 }
 
-fn scene(w: usize, h: usize) -> (Document, crate::document::CelId, Vec<Element>, Rect) {
+pub(crate) fn scene(w: usize, h: usize) -> (Document, crate::document::CelId, Vec<Element>, Rect) {
     let elements = gros_traits(14, w, h, 9);
     let src = elements.iter().fold(Rect::NOTHING, |r, e| r.union(e.bounds()));
     let (doc, id) = doc_with(w, h, elements.clone());

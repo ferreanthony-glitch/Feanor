@@ -795,6 +795,12 @@ Documentation technique : `docs/ARCHITECTURE.md` ; avancement : `docs/ROADMAP.md
 leviers de performance (superposition « Performance », banc `perf_tests.rs`, diagnostic des
 performances) : `docs/PERFORMANCE.md`.
 
+**Enregistrer ne fige plus SHOT.** `Ctrl+S` (et Enregistrer sous) écrit le projet sur un autre fil :
+la barre d'état dit « Enregistrement… n / N », le point • du titre reste jusqu'à la fin, et ce que tu
+modifies pendant l'écriture reste « non enregistré ». Quitter, Fermer, Nouveau et Ouvrir attendent la
+fin de l'écriture (une petite fenêtre montre l'avancement si elle dure) ; si l'enregistrement échoue
+(disque plein, droits), une fenêtre le dit et le projet reste marqué comme modifié.
+
 ## Diagnostic des performances
 
 **Aide > Diagnostic des performances…** (ou `Ctrl+K`, « Diagnostic ») règle SHOT pour la machine sur
@@ -1225,7 +1231,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `stretch.rs` | Vitesse d'un son : rééchantillonnage, tempo sans changer la hauteur (WSOLA) (14a) |
 | `fill.rs` | Remplissage par zone et débord |
 | `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra |
-| `gpu.rs` | Composition et affichage par la carte graphique, envoi des dessins par tuiles |
+| `gpu.rs` | Composition et affichage par la carte graphique, envoi des dessins par tuiles ; une texture par dessin à la taille de son contenu (pas de la feuille) et image composée gardée tant que rien ne change |
 | `playback.rs` | Lecture fluide : dessins envoyés d'avance, cadence affichée |
 | `export.rs`, `exportui.rs` | Exports : film (ffmpeg), images, son, PDF ; fenêtres de choix et de progression |
 | `pdf.rs` | Écriture du PDF de storyboard : texte, images, mise en page |
@@ -1241,7 +1247,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `model3d.rs`, `view3d.rs`, `ref3dtool.rs` | Repère 3D : lecture glTF, arêtes utiles ; caméra en orbite, fil de fer, arêtes cachées ; outil et affichage |
 | `thumbs.rs` | Cache des vignettes de panneaux |
 | `perf.rs`, `perf_tests.rs` | Profileur intégré et superposition « Performance » (`vue.performance`) ; banc sans fenêtre (voir `docs/PERFORMANCE.md`) |
-| `parallele.rs`, `ouverture.rs` | Travail réparti sur les cœurs (`par_map`, plafond de fils) ; ouverture d'un projet sur un autre fil |
+| `parallele.rs`, `ouverture.rs`, `enregistrement.rs` | Travail réparti sur les cœurs (`par_map`, plafond de fils) ; ouverture d'un projet sur un autre fil ; enregistrement sur un autre fil (cliché, suites qui attendent, échec, file d'attente) |
 | `materiel.rs`, `diagbanc.rs`, `diagnostic.rs`, `diagnosticui.rs` | Diagnostic des performances (`aide.diagnostic`) : détection du matériel, banc de mesures sur un autre fil, profils et réglages (appliquer, revenir), fenêtre, proposition du premier lancement, section Performance des Préférences |
 | `history.rs` | Annuler / rétablir |
 | `project.rs` | Projet en dossier (format 11), enregistrement préparé puis écrit |

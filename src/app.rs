@@ -17,7 +17,6 @@ use crate::io;
 use crate::keymap::{self, Keymap};
 use crate::pixsel::Floating;
 use crate::pixtools::{BDrag, BSelection};
-use crate::project;
 use crate::raster::{premultiply, unpremultiply, Tile, TILE};
 use crate::render::{self, Plan, PlanItem, Renderer};
 use crate::soundtrack::MenuTarget;
@@ -732,8 +731,19 @@ pub struct App {
     /// Fenêtre « Nouveau calque » ouverte (13b).
     pub(crate) new_layer_dialog: Option<crate::newlayer::NewLayerForm>,
     pub(crate) pending: Option<Pending>,
+    /// Enregistrement qui s'écrit sur un autre fil (`enregistrement.rs`).
+    pub(crate) saving: Option<crate::enregistrement::Enregistrement>,
+    /// Enregistrement demandé pendant qu'un autre s'écrit : chemin et suite.
+    pub(crate) save_queue: Option<(PathBuf, Option<Pending>)>,
+    /// Action (Quitter, Nouveau, Ouvrir…) demandée pendant l'écriture : refaite à sa fin.
+    pub(crate) after_save: Option<Pending>,
+    /// Pourquoi le dernier enregistrement a échoué (fenêtre à fermer).
+    pub(crate) save_error: Option<String>,
+    /// Change à chaque projet remplacé (`load_doc`) : un enregistrement ne s'adopte que pour le
+    /// projet dont il est le cliché.
+    pub(crate) doc_epoch: u64,
     pub(crate) show_help: bool,
-    allow_close: bool,
+    pub(crate) allow_close: bool,
     pub(crate) export_transparent: bool,
     pub(crate) follow_frame: bool,
     /// Pendant l'affichage des panneaux : `follow_frame` de cette image d'écran. Le montage et la
@@ -1093,6 +1103,11 @@ impl App {
             new_dialog: None,
             new_layer_dialog: None,
             pending: None,
+            saving: None,
+            save_queue: None,
+            after_save: None,
+            save_error: None,
+            doc_epoch: 0,
             show_help: false,
             allow_close: false,
             export_transparent: false,
@@ -1234,6 +1249,8 @@ impl App {
             || !self.orphans.is_empty()
             || self.workspace_name.is_some()
             || self.open_job.is_some()
+            || self.after_save.is_some()
+            || self.save_error.is_some()
             || self.assign.is_some()
             || self.propagation.running()
             || self.sb_export.as_ref().is_some_and(crate::sbexportui::SbExportWindow::rendering)
@@ -2620,7 +2637,11 @@ impl App {
     pub(crate) fn request(&mut self, action: Pending) {
         self.end_stroke();
         self.playing = false;
-        if self.modified {
+        // Un enregistrement s'écrit : on l'attend, puis la demande est refaite (modifié depuis : la
+        // boîte « Modifications non enregistrées » ; sinon, l'action). `enregistrement.rs`.
+        if self.saving.is_some() {
+            self.after_save = Some(action);
+        } else if self.modified {
             self.pending = Some(action);
         } else {
             self.perform(action);
@@ -2660,73 +2681,7 @@ impl App {
         }
     }
 
-    pub(crate) fn save(&mut self) -> bool {
-        self.end_stroke();
-        match self.path.clone() {
-            Some(p) => self.save_to(p),
-            None => self.save_as(),
-        }
-    }
-
-    /// « Enregistrer sous » : on choisit un nom, SHOT crée le dossier du projet à ce nom.
-    pub(crate) fn save_as(&mut self) -> bool {
-        self.end_stroke();
-        // Sans nom de fichier : le titre du projet (un projet importé, 14a), sinon « Mon film ».
-        let title: String = self.doc.properties.title.trim().chars().map(|c| if r#"<>:"/\|?*"#.contains(c) { '_' } else { c }).collect();
-        let name = format!("{}.pelure", self.base_name_or(if title.is_empty() { "Mon film" } else { &title }));
-        let mut dialog = rfd::FileDialog::new()
-            .set_title("Enregistrer le projet (un dossier à ce nom sera créé)")
-            .add_filter("Projet SHOT", &["pelure"])
-            .set_file_name(name);
-        if let Some(dir) = self.import_source.as_ref().and_then(|p| p.parent()) {
-            dialog = dialog.set_directory(dir);
-        }
-        let Some(chosen) = dialog.save_file() else {
-            return false;
-        };
-        let (_, manifest) = project::target_for(&chosen);
-        if let Err(e) = project::check_target(&manifest, self.path.as_deref()) {
-            self.status = format!("Enregistrement annulé : {e}");
-            return false;
-        }
-        if self.path.as_ref() != Some(&manifest) {
-            // Nouveau dossier : tous les dessins y seront écrits.
-            self.written.clear();
-        }
-        self.save_to(manifest)
-    }
-
-    pub(crate) fn save_to(&mut self, manifest: PathBuf) -> bool {
-        // Dernière modification (13e, propriétés du projet).
-        self.doc.properties.modified = crate::recovery::now_secs();
-        match project::save(&self.doc, &manifest, &mut self.written) {
-            Ok(report) => {
-                // Le projet est un dossier à son nom (comme un projet Storyboard Pro) : on le dit, le
-                // fichier n'est pas là où l'on pensait l'avoir mis (Anthony, 2026-10-17 : « quand
-                // j'enregistre un fichier Pelure, il n'apparaît pas dans l'explorateur »).
-                let folder = manifest.parent().and_then(|d| d.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-                self.status = format!(
-                    "Enregistré dans le dossier « {folder} » : {} ({} dessin(s) écrit(s){}). Fichier > Afficher le projet dans l'Explorateur.",
-                    manifest.display(),
-                    report.written,
-                    if report.removed > 0 {
-                        format!(", {} inutilisé(s) effacé(s)", report.removed)
-                    } else {
-                        String::new()
-                    }
-                );
-                self.remember_project(&manifest);
-                self.path = Some(manifest);
-                self.import_source = None;
-                self.modified = false;
-                true
-            }
-            Err(e) => {
-                self.status = format!("Échec de l'enregistrement : {e}");
-                false
-            }
-        }
-    }
+    // (Enregistrer : `enregistrement.rs`, sur un autre fil.)
 
     fn open_dialog(&mut self) {
         let Some(path) = rfd::FileDialog::new()
@@ -2779,6 +2734,7 @@ impl App {
         self.rejeu_idle.clear();
         crate::fx::fond_cancel_all();
         self.doc = doc;
+        self.doc_epoch += 1;
         // (Ses dessins portent les numéros et les versions de ceux de l'ancien : les dessins
         // dérivés des effets de l'ancien ne lui servent pas.)
         crate::fx::forget_all();
@@ -3926,11 +3882,10 @@ impl App {
     }
 
     fn handle_close_request(&mut self, ctx: &egui::Context) {
-        if ctx.input(|i| i.viewport().close_requested()) && self.modified && !self.allow_close {
+        // (Pendant un enregistrement, la fermeture l'attend : `request` retient la demande.)
+        if ctx.input(|i| i.viewport().close_requested()) && (self.modified || self.saving.is_some()) && !self.allow_close {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-            self.end_stroke();
-            self.playing = false;
-            self.pending = Some(Pending::Quit);
+            self.request(Pending::Quit);
         }
     }
 
@@ -3941,7 +3896,7 @@ impl App {
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| "Sans titre".into());
-        let title = format!("{name}{} — SHOT", if self.modified { " •" } else { "" });
+        let title = format!("{name}{} — SHOT", if self.modified || self.saving.is_some() { " •" } else { "" });
         if title != self.title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.title = title;
@@ -4120,6 +4075,7 @@ impl App {
             self.tick_open(ctx);
             self.tick_reopen();
             self.poll_brushes();
+            self.tick_save(ctx);
         }
         // Export en cours : quelques images par image d'écran, la fenêtre reste vivante.
         if let Some(job) = &mut self.export_job {
@@ -4177,6 +4133,8 @@ impl App {
     /// Fermeture normale (même sans enregistrer) : la copie de secours de la séance est effacée,
     /// la disposition de la fenêtre retenue.
     pub(crate) fn fermeture(&mut self) {
+        // Un enregistrement qui dure encore est attendu : on ne perd jamais un projet à la fermeture.
+        self.finish_save_on_exit();
         if let Some(r) = self.recovery.take() {
             r.close();
         }
