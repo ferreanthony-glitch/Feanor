@@ -1626,6 +1626,21 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 - Pas encore : les calques vectoriels en traits (ils arrivent en images), la caméra, l'animation
   dans un panneau (premier dessin seulement).
 
+**Exporter pour le montage** : Fichier > Exporter… > « Pour le montage (EDL / XML / OTIO) ».
+- L'animatique découpée plan par plan pour un monteur : un fichier vidéo par plan (ProRes ou H.264)
+  dans `<Titre>_montage/media/`, et le montage en **EDL CMX 3600**, **Final Cut Pro 7 XML**
+  (Premiere Pro, DaVinci Resolve) et **OpenTimelineIO**, avec les durées à l'image, un time code de
+  départ (01:00:00:00), les fondus enchaînés (avec leurs poignées dans les vidéos) et les pistes son
+  (un fichier WAV par extrait, XML et OTIO).
+- Les clips portent les numéros des plans : `SQ01_PL012A` (voir « Numérotation verrouillée » plus
+  haut : les noms ne bougent plus quand un plan s'ajoute ou se déplace).
+- Cases : formats, dossier, titre, étendue (tout le film ou la séquence courante), time code de départ,
+  NTSC (23,976 / 29,97 / 59,94), ProRes ou H.264, moitié de taille, son, chemins relatifs ou absolus.
+  Les images se calculent par petits morceaux, ffmpeg et le son travaillent à côté ; « Arrêter » efface
+  ce qui a été écrit. Un `LISEZ-MOI.txt` dit ce qui a été écrit et ce qui reste à vérifier.
+- **Jamais ouvert dans Premiere Pro, DaVinci Resolve ni Avid** : les fichiers sont relus par les
+  essais, leur import est à vérifier. Détail et liste de contrôle : `docs/EXPORT_MONTAGE.md`.
+
 ## Organisation du code
 
 | Fichier | Rôle |
@@ -1741,6 +1756,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `fournisseurs.rs`, `generation.rs`, `genreglages.rs` | Génération sonore : les trois rôles (traits), annulation et avancement, tâches sur des fils à part, réglages `[generation_son]` |
 | `httplocal.rs`, `sidecar.rs`, `serveurlocal.rs`, `fournisseursapi.rs`, `clessecretes.rs`, `base64.rs` | Client HTTP de boucle locale et contrat du serveur local ; lancement, attente et arrêt du serveur Python (`sidecar/`) ; Claude, ElevenLabs, Stable Audio (requêtes prêtes, envoi à brancher) ; clés dans le Gestionnaire d'identifiants de Windows |
 | `suggestionsui.rs`, `genprefsui.rs` | Panneau Suggestions sonores et ses fenêtres ; section « Génération sonore » des Préférences |
+| `numerotation.rs`, `numerotationui.rs` | Numérotation des plans : suivie ou verrouillée (12, 12A, 13), renuméroter, noms `SQ01_PL012A` |
+| `editorial.rs`, `editorialjob.rs`, `editorialui.rs` | Export pour le montage : le plan d'export, l'EDL CMX 3600, le Final Cut XML, l'OpenTimelineIO ; la tâche (vidéos par plan, son, annulation) ; la fenêtre |
 | `canvas.rs`, `panels.rs`, `timeline.rs` | Interface |
 
 `cargo test --release` lance les tests (pinceau, vectoriel, remplissage, séquences/scènes/panneaux,

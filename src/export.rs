@@ -190,12 +190,30 @@ pub fn video_args(
     audio: Option<&Path>,
     out: &Path,
 ) -> Result<Vec<String>, String> {
+    video_args_rate(format, enc, frame, &fps.to_string(), half, audio, out)
+}
+
+/// Comme `video_args`, la cadence écrite comme ffmpeg la lit (`24`, `24000/1001` : les vidéos par plan
+/// de l'export pour le montage en NTSC, `editorial.rs`).
+pub fn video_args_rate(
+    format: Format,
+    enc: &Encoders,
+    frame: [usize; 2],
+    rate: &str,
+    half: bool,
+    audio: Option<&Path>,
+    out: &Path,
+) -> Result<Vec<String>, String> {
+    let fps: f64 = match rate.split_once('/') {
+        Some((n, d)) => n.parse::<f64>().unwrap_or(24.0) / d.parse::<f64>().unwrap_or(1.0).max(1.0),
+        None => rate.parse().unwrap_or(24.0),
+    };
     let [w, h] = frame;
     let [ow, oh] = video_size(frame, half);
     let s = |v: &str| v.to_string();
     let mut a: Vec<String> = ["-hide_banner", "-loglevel", "error", "-nostats", "-y"].map(s).to_vec();
     a.extend(["-f", "rawvideo", "-pix_fmt", "rgba"].map(s));
-    a.extend([s("-s"), format!("{w}x{h}"), s("-framerate"), fps.to_string(), s("-i"), s("-")]);
+    a.extend([s("-s"), format!("{w}x{h}"), s("-framerate"), rate.to_string(), s("-i"), s("-")]);
     if let Some(wav) = audio {
         a.extend([s("-i"), wav.to_string_lossy().into_owned()]);
     }
@@ -223,8 +241,8 @@ pub fn video_args(
                 Some("libx264") => a.extend(["-c:v", "libx264", "-preset", "medium", "-crf", "18"].map(s)),
                 Some(name) => {
                     // OpenH264 et Media Foundation se règlent au débit : ~0,25 bit par pixel.
-                    let rate = (ow * oh) as f64 * fps as f64 * 0.25;
-                    a.extend([s("-c:v"), s(name), s("-b:v"), format!("{}k", (rate / 1000.0).round())]);
+                    let bits = (ow * oh) as f64 * fps * 0.25;
+                    a.extend([s("-c:v"), s(name), s("-b:v"), format!("{}k", (bits / 1000.0).round())]);
                     if name == "libopenh264" {
                         a.extend(["-profile:v", "high"].map(s));
                     }

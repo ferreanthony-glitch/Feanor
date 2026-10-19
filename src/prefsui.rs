@@ -18,7 +18,7 @@ use crate::app::App;
 use crate::theme::ChoixTheme;
 
 /// Les exports proposés : icône, nom, explication, action (ou `None` : la page HTML, sans action).
-const EXPORTS: [(&str, &str, &str, Option<&str>); 7] = [
+const EXPORTS: [(&str, &str, &str, Option<&str>); 8] = [
     (ph::FILM_STRIP, "Le film (vidéo)", "Le montage ou le plan en vidéo, avec le son.", Some("fichier.exporter_film")),
     (ph::IMAGES, "Des images (PNG)", "Une image PNG par image du film.", Some("fichier.exporter_images")),
     (ph::IMAGE, "L'image courante (PNG)", "Seulement l'image affichée.", Some("fichier.exporter_image_courante")),
@@ -26,6 +26,7 @@ const EXPORTS: [(&str, &str, &str, Option<&str>); 7] = [
     (ph::BROWSER, "Le storyboard (page HTML + planches)", "Une page à ouvrir dans un navigateur, et ses images.", None),
     (ph::SPEAKER_HIGH, "Le son (WAV)", "Les pistes son mélangées.", Some("fichier.exporter_son")),
     (ph::EXPORT, "Vers Storyboard Pro", "Un projet .sboard fait à partir du modèle choisi.", Some("fichier.exporter_sboard")),
+    (ph::FILM_REEL, "Pour le montage (EDL / XML / OTIO)", "Un fichier vidéo par plan et le montage pour Premiere, DaVinci Resolve ou Avid.", Some("fichier.exporter_montage")),
 ];
 
 impl App {

@@ -866,3 +866,28 @@ Règles et code : `src/numerotation.rs` (module en tête), interface `src/numero
 2. Supprimer le 3 : les autres gardent leur numéro ; un nouveau plan après le 2 se nomme 2A, pas 3.
 3. Glisser le plan 5 devant le 1 : il reste « 5 ». « Renuméroter les plans… » : confirmation, tout repart de 1 ; Ctrl+Z.
 4. Les titres (planche, fiche, PDF) disent « Plan 12A ».
+## Exporter pour le montage (2026-10-20, branche `numerotation-export`)
+
+Détail, formats et liste de contrôle : `docs/EXPORT_MONTAGE.md`. Code : `src/editorial.rs`, `src/editorialjob.rs`,
+`src/editorialui.rs`.
+
+- **Où** : Fichier > Exporter… > « Pour le montage (EDL / XML / OTIO) » (icône `FILM_REEL`), Ctrl+K « Exporter pour le
+  montage », « Plus… » de la barre du montage ; action `fichier.exporter_montage` (un bloc dans `keymap.toml`, sans touche).
+- **La fenêtre** (comme celle de l'export vers Storyboard Pro) : formats (3 cases), dossier, titre, étendue (tout le film /
+  la séquence courante), time code de départ (rouge s'il est illisible), NTSC (pour 24, 30, 60 i/s), vidéos (ProRes /
+  H.264, moitié de taille), son, chemins (relatifs / absolus). Dessous : le résumé de ce qui partirait (plans, durée,
+  cadence, fondus écrits et poignées, extraits son), l'avertissement « la numérotation est suivie » (les noms des clips
+  changeraient), les transitions écrites comme des coupes, ffmpeg. Pendant l'export : le plan en cours, deux barres
+  (images, son), le temps restant, « Arrêter » (efface ce qui a été écrit). À la fin : les fichiers écrits et « Ouvrir le
+  dossier ».
+- **Pendant l'export** : le projet est verrouillé tant que les images se calculent (fenêtre modale, comme l'export du film),
+  puis libre pendant que le son finit.
+- **Numérotation verrouillée** : bouton « Verrouiller la numérotation » et « Renuméroter les plans » sous « Plus… » du montage
+  (icônes `LIST_NUMBERS` / `LOCK_KEY` et `HASH`, bulles), menu Storyboard, Réglages du projet.
+
+### À voir à l'écran (export pour le montage)
+
+1. La fenêtre sur un projet de quelques plans : résumé juste (plans, durée, fondus), time code rouge quand on tape n'importe quoi.
+2. Un export : la fenêtre reste vivante, les deux barres avancent, « Arrêter » efface le dossier.
+3. Le dossier produit : `media/` (un fichier par plan), `audio/`, les trois fichiers de montage, `LISEZ-MOI.txt`.
+4. Puis l'import dans Premiere Pro, DaVinci Resolve, Avid : voir la liste de `docs/EXPORT_MONTAGE.md` (« À vérifier par Anthony »).

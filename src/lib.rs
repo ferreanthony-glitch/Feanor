@@ -506,6 +506,12 @@ mod numerotation;
 #[cfg(test)]
 mod numerotation_tests;
 mod numerotationui;
+// Exports pour le montage (EDL, Final Cut XML, OpenTimelineIO) : un fichier vidéo par plan.
+mod editorial;
+#[cfg(test)]
+mod editorial_tests;
+mod editorialjob;
+mod editorialui;
 // Transitions du montage (fondus, volet, noir) : modèle, rendu, interface.
 mod transitions;
 #[cfg(test)]

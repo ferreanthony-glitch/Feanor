@@ -28,6 +28,9 @@ pub struct Settings {
     /// Dossier du dernier export vers Storyboard Pro.
     #[serde(default, rename = "dossier_export_storyboard_pro", skip_serializing_if = "Option::is_none")]
     pub sboard_export_dir: Option<PathBuf>,
+    /// Dossier du dernier export pour le montage (EDL, XML, OTIO : `editorialui.rs`).
+    #[serde(default, rename = "dossier_export_montage", skip_serializing_if = "Option::is_none")]
+    pub montage_export_dir: Option<PathBuf>,
     /// Pelure d'oignon.
     #[serde(default, rename = "pelure")]
     pub onion: OnionSettings,
@@ -152,6 +155,7 @@ impl Default for Settings {
             system_cursor: true,
             sboard_template: None,
             sboard_export_dir: None,
+            montage_export_dir: None,
             onion: OnionSettings::default(),
             xsheet: Default::default(),
             flips: Default::default(),

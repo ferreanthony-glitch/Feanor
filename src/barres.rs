@@ -208,6 +208,7 @@ pub(crate) const MONTAGE: &[Cmd] = &[
         false,
         1,
     ),
+    bouton("fichier.exporter_montage", ph::FILM_REEL, "Exporter pour le montage", "Un fichier vidéo par plan et le montage en EDL, Final Cut XML (Premiere, DaVinci Resolve) ou OpenTimelineIO.", false, 2),
     bouton("son.importer", ph::MUSIC_NOTES_PLUS, "Importer un son", "WAV, MP3, FLAC ou OGG, à l'image courante ; on peut aussi lâcher le fichier sur la fenêtre.", true, 2),
     menu("son", ph::SPEAKER_HIGH, "Son", "Pistes son, son au défilement et pendant la lecture.", true, 2),
     bouton(

@@ -686,6 +686,8 @@ pub struct App {
     pub(crate) prefs_window: bool,
     /// Confirmation « Renuméroter les plans » ouverte (`numerotationui.rs`).
     pub(crate) renumber_confirm: bool,
+    /// Fenêtre « Exporter pour le montage » (EDL, XML, OTIO : `editorialui.rs`).
+    pub(crate) editorial: Option<crate::editorialui::EditorialWindow>,
     /// Fenêtre « À propos de SHOT » (`aproposui.rs`).
     pub(crate) about_window: bool,
     /// Le thème dont les couleurs sont posées dans egui : quand le réglage change, tout est
@@ -1116,6 +1118,7 @@ impl App {
             export_hub: false,
             prefs_window: false,
             renumber_confirm: false,
+            editorial: None,
             about_window: false,
             theme_applied,
             theme_unsaved: false,
@@ -1309,6 +1312,7 @@ impl App {
             || self.propagation.running()
             || self.coloriage.running()
             || self.sb_export.as_ref().is_some_and(crate::sbexportui::SbExportWindow::rendering)
+            || self.editorial.as_ref().is_some_and(crate::editorialui::EditorialWindow::rendering)
     }
 
     pub(crate) fn current_brush(&self) -> Option<&BrushSettings> {
@@ -3319,6 +3323,7 @@ impl App {
             "fichier.exporter_images" => self.open_export(crate::export::Format::Png),
             "fichier.exporter_son" => self.open_export(crate::export::Format::Wav),
             "fichier.exporter_pdf" => self.open_export(crate::export::Format::Pdf),
+            "fichier.exporter_montage" => self.open_editorial(),
             "numerotation.verrouiller" => self.toggle_numbering_lock(),
             "numerotation.renumeroter" => self.renumber_confirm = true,
             "fichier.exporter_image_courante" => self.export_frame(),

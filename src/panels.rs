@@ -685,8 +685,9 @@ impl App {
         // Exporter… et Préférences… (`prefsui.rs`).
         self.export_hub_window(ctx);
         self.preferences_window(ctx);
-        // Renuméroter les plans : la confirmation.
+        // Renuméroter les plans : la confirmation ; Exporter pour le montage : sa fenêtre.
         self.renumber_window(ctx);
+        self.editorial_window(ctx);
         // Suggestions sonores : confirmation d'envoi en ligne, « Modifier », saisie d'une clé.
         self.suggestions_windows(ctx);
         // À propos de SHOT (`aproposui.rs`).

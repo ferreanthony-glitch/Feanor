@@ -33,7 +33,7 @@ impl App {
     }
 
     /// ffmpeg et ses encodeurs, cherchés une fois (et après un choix à la main).
-    fn ffmpeg_info(&mut self) -> Option<&(PathBuf, Result<export::Encoders, String>)> {
+    pub(crate) fn ffmpeg_info(&mut self) -> Option<&(PathBuf, Result<export::Encoders, String>)> {
         if self.ffmpeg.is_none() {
             let found = export::find_ffmpeg(self.settings.ffmpeg.as_deref()).map(|p| {
                 let enc = export::probe(&p);
@@ -44,7 +44,7 @@ impl App {
         self.ffmpeg.as_ref().and_then(|f| f.as_ref())
     }
 
-    fn choose_ffmpeg(&mut self) {
+    pub(crate) fn choose_ffmpeg(&mut self) {
         let Some(path) = rfd::FileDialog::new()
             .set_title("Où est ffmpeg.exe ?")
             .add_filter("ffmpeg", &["exe"])

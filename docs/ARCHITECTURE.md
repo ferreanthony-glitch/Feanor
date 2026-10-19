@@ -1698,3 +1698,14 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 | Commandes de pastille sur la pastille du menu ouvert, sinon celle sous la souris (passe couleur) | chaque commande passe par `action_item` et peut recevoir un raccourci, qui agit sur la pastille survolée | deux champs mis à jour à chaque image | faible : la souris doit être sur la pastille au moment de la touche | oui |
 | Nuanciers hors de l'annulation, suppression confirmée (passe couleur) | comme les espaces de travail : ce ne sont pas des données du projet | nul | une erreur sur une pastille ne se défait pas par Ctrl+Z | oui : un historique propre aux nuanciers pourrait s'ajouter |
 | `.aco` lu sans profil de couleur (CMJN simple, Lab D50) (passe couleur) | aucune bibliothèque de gestion des couleurs à ajouter ; RVB, TSV et gris exacts | nul | une couleur CMJN ou Lab peut différer un peu de ce que montre Photoshop | oui : seul `nuancier::aco_color` changerait |
+
+## Numérotation et export pour le montage (2026-10-20)
+
+- `numerotation.rs` : `Num` (entier + queue de chiffres / lettres, ordre, `Num::between` = règle d'insertion), `Scene::number`
+  / `Sequence::number` (vide en numérotation suivie), `Document::numbering_locked` (dans `Structure` : l'annulation les
+  rétablit). `Document::normalize` appelle `assign_numbers` : tout plan ou séquence neuf reçoit son numéro entre ses voisins ;
+  rien d'autre ne le fait. Fichier : champs facultatifs du manifeste, `VERSION` inchangée (27).
+- `editorial.rs` (pur) → `Plan` (clips, poignées, fondus, son) → `write_edl` / `write_xml` / `write_otio` / `readme` ;
+  `editorialjob.rs` : une `ExportJob::video` par plan (images calculées par tranches de 40 ms sur le fil de l'interface),
+  un fil pour les WAV, les fichiers de montage écrits à la fin, annulation qui efface ; `editorialui.rs` : la fenêtre.
+  `export::video_args_rate` (cadence `24000/1001`), `audiofx::bake_sound` (un extrait sans le document).
