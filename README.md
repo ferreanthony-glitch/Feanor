@@ -986,6 +986,24 @@ Il s'en va dès qu'un projet s'ouvre ou se crée, au premier trait, ou par « Co
 Entrée valide, Échap annule. La fenêtre repart des dernières valeurs, du dernier dossier et de tes
 préréglages, retenus dans `%APPDATA%\SHOT\reglages.toml`.
 
+## Fiabilité
+
+Un filet de sécurité contre « tous les essais passent mais SHOT ne s'ouvre plus » (`docs/FIABILITE.md`) :
+
+- un **projet d'essai complet** fabriqué par le code (séquences, plans, calques bitmap / vectoriel / vidéo / CTG /
+  dossier, traits texturés avec leur trace, fond sous le trait, effets à clés, caméra et effet de caméra, repère 3D,
+  marques, commentaires, plan rogné avec sa réserve, son…), enregistré et rouvert par trois chemins (une boucle,
+  plusieurs fils, copie de secours) et par l'application elle-même : le projet relu est le projet enregistré ;
+- un **essai de fumée** : 195 images de l'interface sans fenêtre (accueil, tous les panneaux, les outils, lecture,
+  sélection et déplacement, effet de caméra, annuler / rétablir), sur la carte graphique et sur le processeur ;
+- des **fichiers abîmés** (manifeste tronqué ou d'une version plus récente, dessin manquant ou aux valeurs absurdes,
+  `commentaires.json` / `rognages.json` d'une version plus récente) : un message clair, jamais de plantage ni de
+  blocage, aucun fichier effacé — y compris par l'enregistrement qui suit ;
+- un **démarrage** minuté (`SHOT_DEMARRAGE=1` écrit `%LOCALAPPDATA%\SHOT\demarrage.log`) : les pinceaux importés et la
+  présence du dernier projet ne retardent plus la première image ;
+- `.\scripts\verifier.ps1 [-Repetitions N]` : tout cela, la suite complète (N fois, pour débusquer un essai
+  intermittent) et le contrôle des avertissements, avec un résumé OK / ÉCHEC. Il ne lance pas `shot.exe`.
+
 ## Plantage
 
 Si Pelure se ferme sur une erreur, un rapport est écrit dans `%LOCALAPPDATA%\Pelure\plantages\`, et la

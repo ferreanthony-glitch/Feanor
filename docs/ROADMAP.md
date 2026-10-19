@@ -2344,3 +2344,25 @@ Anthony.
   glisserait sous la souris) ; noms d'instance et marques de couleur des dessins cachés (perdus à
   l'enregistrement) ; roll de plusieurs plans choisis ; glisser le contenu sans réserve ; « Retourner
   les plans » ne retourne pas leur contenu caché ; « Changer la cadence » oublie les réserves.
+
+## Fiabilité : un filet contre « tous les essais passent, SHOT ne s'ouvre plus » (2026-10-19, branche `fiabilite`) ✅
+
+Le point de départ : le 2026-10-18 SHOT ne s'ouvrait plus (`raster.rs:57`, l'aperçu réduit d'un effet lu comme une
+feuille entière) alors que 768 essais passaient ; et sur une machine chargée, la fenêtre est restée noire plus de
+14 s au lancement. Détail, chiffres et mode d'emploi : `docs/FIABILITE.md`.
+
+- ✅ **Projet d'essai complet** (`fiabilite_fixture.rs`), aller-retour sur trois chemins d'enregistrement et par
+  l'application, comparé champ par champ : aucun défaut d'enregistrement trouvé, mais le filet est là.
+- ✅ **Fumée de toute l'application** sans fenêtre (195 images, GPU et processeur, annuler / rétablir) et incident du
+  2026-10-18 refait (vignettes pendant le calcul des effets).
+- ✅ **Fichiers abîmés** et essais à la louche (troncatures, valeurs changées au hasard, PNG aux bits changés). Quatre
+  défauts réels corrigés : `Raster::get` et `composite_tile_into` hors du dessin ; **perte de données** (annexes, sons,
+  modèles illisibles effacés à l'enregistrement) ; manifeste (message, feuille démesurée) ; dessin vectoriel à
+  coordonnées absurdes (ouverture sans fin) et PNG à l'en-tête démesuré (arrêt brutal).
+- ✅ **Démarrage** : lecture des pinceaux importés et présence du dernier projet sortis de la première image (jusqu'à
+  3 695 → 324 ms sous charge) ; minutage dans `demarrage.log` (`SHOT_DEMARRAGE=1`).
+- ✅ **Essais déterministes** : dossiers de données isolés par fil, état commun des effets en lecteurs / écrivains
+  (`fxcache::monde`), attentes sur des conditions et horloge d'aperçu qu'on avance ; `scripts/verifier.ps1 -Repetitions N`.
+- Pas fait : la première image dans la vraie fenêtre (eframe, carte graphique, pipelines : à lire dans `demarrage.log`) ;
+  `BrushLibrary::builtin()` (74 ms) reste avant la première image ; un son ou un modèle illisible sort du projet et ses
+  extraits avec lui à l'enregistrement.

@@ -308,3 +308,12 @@ cinq passages, deux à trois séries) :
 - **Démarrage avec les brosses importées** : la liste des pinceaux, leurs grains et pointes comme avant.
 - **Compilation `x86-64-v3`** : si `shot.exe` ne démarre pas sur une autre machine, retirer
   `.cargo/config.toml`.
+
+## 8. Fiabilité : le temps jusqu'à la première image
+
+Voir `docs/FIABILITE.md`. La fenêtre n'apparaît qu'une fois la première image peinte, donc tout `App::new` se paie
+en fenêtre noire. Lire les pinceaux importés sur le fil de l'interface coûtait 90 % de ce temps (160 pointes + 60
+papiers : 205 ms au repos, 738 ms avec un calcul par cœur en parallèle, **3 695 ms** avec deux par cœur) ; sur un
+autre fil : 95 / 192 / 324 ms (banc `perf_startup_under_load`). `SHOT_DEMARRAGE=1` écrit le minutage étape par étape
+dans `%LOCALAPPDATA%\SHOT\demarrage.log`. Le banc des essais compose maintenant aussi à une taille d'écran choisie
+(`banc_taille`), et les essais d'effets partagent l'état commun du cache en lecteurs / écrivains (`fxcache::monde`).
