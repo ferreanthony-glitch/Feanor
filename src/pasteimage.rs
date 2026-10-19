@@ -50,6 +50,11 @@ pub fn to_floating(rgba: &[u8], w: usize, h: usize, x0: usize, y0: usize) -> Flo
 
 /// L'image du presse-papiers de Windows (largeur, hauteur, RVBA), si elle ne vient pas de SHOT.
 pub fn clipboard_image() -> Option<(usize, usize, Vec<u8>)> {
+    // Les essais ne lisent jamais le presse-papiers de la machine : une image qui s'y trouverait
+    // se collerait dans l'essai (Ctrl+V lancé par `run_action`).
+    if cfg!(test) {
+        return None;
+    }
     let mut clipboard = arboard::Clipboard::new().ok()?;
     if clipboard.get_text().is_ok_and(|t| est_copie_interne(&t)) {
         return None;

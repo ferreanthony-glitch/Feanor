@@ -466,6 +466,8 @@ impl App {
         self.key_anchor = None;
         self.frame_sel = None;
         self.panel_focus = false;
+        // (Les clés qu'on vient de créer ou de coller ont la main, pas le panneau Effets : `fxcopie.rs`.)
+        self.fx_pane_focus = false;
         if self.mode == Mode::Storyboard {
             self.key_focus = true;
         } else {
@@ -637,7 +639,7 @@ impl App {
     }
 
     /// Enregistre l'étape `snap` sous le nom `name` (le panneau Historique le montre).
-    fn commit_named(&mut self, snap: Edit, name: &str) {
+    pub(crate) fn commit_named(&mut self, snap: Edit, name: &str) {
         let before = self.history.context.replace(name.to_string());
         self.commit_structure(snap);
         self.history.context = before;

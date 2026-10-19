@@ -152,6 +152,9 @@ impl App {
                 }
             });
         }
+        // Copier-coller des effets d'un calque à un autre (`fxcopie.rs`).
+        ui.separator();
+        self.fx_clip_menu(ui, li, None, false);
     }
 
     /// Le sous-menu « Effets » d'un calque, puis son tremblement du trait à découvert : les menus
@@ -302,6 +305,10 @@ impl App {
 
 
     pub(crate) fn fx_panel(&mut self, ui: &mut egui::Ui) {
+        // Un clic dans le panneau lui donne la main : Ctrl+C / Ctrl+V visent ses effets (`fxcopie.rs`).
+        if ui.input(|i| i.pointer.any_pressed()) && ui.rect_contains_pointer(ui.clip_rect()) {
+            self.take_fx_pane_focus();
+        }
         let layer = self.layer();
         ui.label(RichText::new(format!("Calque « {} », image {}", layer.name, self.frame_label(self.cur_frame))).strong());
         if layer.folder {
@@ -339,6 +346,10 @@ impl App {
                 }
             });
             let any = !self.layers()[li].fx.is_empty();
+            let chosen = self.fx_index();
+            ui.menu_button(format!("{}  Copier / coller", ph::COPY), |ui| self.fx_clip_menu(ui, li, chosen, true))
+                .response
+                .on_hover_text("Copier un effet (réglages et clés) ou tous les effets du calque, les coller sur le calque ou sur les calques choisis. Ctrl+C / Ctrl+V font de même quand ce panneau a la main.");
             if ui.add_enabled(any, egui::Button::new("Tout réinitialiser")).on_hover_text("Chaque effet reprend ses réglages par défaut, sans clé.").clicked() {
                 self.record_step();
                 for e in &mut self.layers_mut()[li].fx {
@@ -385,18 +396,26 @@ impl App {
                         self.layers_mut()[li].fx[i].enabled = on;
                     }
                     // Le nom prend toute la place libre : une grande cible à cliquer.
-                    let w = (ui.available_width() - 3.0 * 26.0).max(60.0);
+                    let w = (ui.available_width() - 4.0 * 26.0).max(60.0);
                     let hint = if chosen {
                         "Effet choisi : ses clés se voient dans la timeline et le montage, et les boutons de clé le visent. Cliquer de nouveau pour ne plus en choisir."
                     } else {
                         "Choisir cet effet : ses clés se voient alors dans la timeline et le montage (les boutons de clé le visent)."
                     };
-                    if ui.add_sized(egui::vec2(w, ui.spacing().interact_size.y), egui::SelectableLabel::new(chosen, RichText::new(e.kind.label()).strong())).on_hover_text(hint).clicked() {
+                    let name_resp = ui.add_sized(egui::vec2(w, ui.spacing().interact_size.y), egui::SelectableLabel::new(chosen, RichText::new(e.kind.label()).strong())).on_hover_text(hint);
+                    // Clic droit sur le nom : copier cet effet ou la pile, coller (`fxcopie.rs`).
+                    name_resp.context_menu(|ui| self.fx_clip_menu(ui, li, Some(i), true));
+                    if name_resp.clicked() {
                         if chosen {
                             self.deselect_fx();
                         } else {
                             self.select_fx(i);
                         }
+                    }
+                    let key = self.raccourci("fx.copier");
+                    let resp = ui.add(egui::Button::new(ph::COPY).frame(false));
+                    if crate::bulles::bulle(resp, "Copier l'effet", "Réglages et clés. Ctrl+C le copie aussi quand l'effet est choisi dans ce panneau ; Ctrl+V colle sur le calque, ou sur les calques choisis.", &key).clicked() {
+                        self.fx_copy_effect(li, i);
                     }
                     if ui.add_enabled(i > 0, egui::Button::new(ph::ARROW_UP).frame(false)).on_hover_text("Plus tôt dans la pile").clicked() {
                         swap = Some((i, i - 1));

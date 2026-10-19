@@ -387,6 +387,18 @@ on les coche et décoche, le dessin reste tel quel).
   `docs/ROADMAP.md`.
 - Au clic droit sur un calque, la partie « Effets » : opacité, mode de fusion, chaque famille
   en cases à cocher ; on règle les paramètres dans le panneau Effets.
+- **Copier-coller des effets d'un calque à l'autre** : l'icône « Copier l'effet » de chaque effet (ou
+  son clic droit, ou le menu « Copier / coller » du panneau) copie l'effet avec ses réglages et toutes
+  ses clés ; « Copier tous les effets du calque » copie la pile (aussi dans « Effets » du clic droit
+  d'un calque). « Coller l'effet » / « Coller les effets » l'ajoutent à la fin de la pile du calque, ou
+  de tous les calques choisis (Ctrl / Maj + clic) ; « Remplacer les effets » remplace leur pile. Une
+  seule étape d'annulation. Les clés gardent leurs images (celles d'après la fin du plan sont laissées
+  de côté) ; le tremblement du trait est laissé de côté sur un calque bitmap ; la barre d'état dit ce
+  qui est collé où. Au clavier : quand le panneau Effets a la main (on y a cliqué en dernier), Ctrl+C
+  copie l'effet choisi (ou le seul de la pile) et Ctrl+V colle, avant les autres presse-papiers ; un
+  clic dans la timeline, le montage ou le dessin rend la main à ce qu'on y a choisi (les clés d'effets
+  gardent leur Ctrl+C / Ctrl+V). Actions `fx.copier`, `fx.copier_tout`, `fx.coller`, `fx.remplacer`
+  (Ctrl+K, sans raccourci par défaut). Détails dans `src/fxcopie.rs`.
 - On les active, les ordonne ou les retire à tout moment.
 - On peut les animer par clés : « Créer une clé » à une image, puis à une autre, et les
   paramètres vont de l'une à l'autre. Les clés de l'effet choisi dans le panneau Effets (clic sur
@@ -1267,6 +1279,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `propager.rs`, `propagerui.rs` | Propagation de la peinture sur une vidéo, façon EbSynth (voir `docs/PROPAGATION.md`) |
 | `handles.rs` | Poignées de la timeline (marques, signets, entrée / sortie, expositions) et menus de la grille |
 | `fxkeys.rs` | Clés d'effets dans le montage et la timeline : losanges, choix, déplacement, copier-coller, suppression |
+| `fxcopie.rs` | Copier-coller des effets (pile) d'un calque à l'autre : presse-papiers, calques choisis, clés hors du plan, tremblement sur bitmap |
 | `camkeys.rs` | Clés de caméra dans le montage et la timeline : choix, déplacement, copier-coller entre plans, suppression |
 | `camfx.rs`, `camfxui.rs` | Effets de caméra en préréglages (tremblements, explosion, zooms, vertigo) et liste des focales |
 | `cadrage.rs`, `cadrageui.rs` | Aides au cadrage (tiers, grille d'or, spirale, diagonales, croix) : géométrie, réglages, tracé |

@@ -2344,6 +2344,30 @@ Quatre retours d'Anthony, branche `retouches` (pas vus à l'écran dans cette s�
   est plus court que les deux (`list_height`) ; chaque ligne tient sur une ligne, coupée par « … »
   (`one_line`), l'heure et le plan ne se chevauchent plus.
 
+## Copier-coller des effets d'un calque à l'autre (demandé par Anthony le 2026-10-19) ✅
+
+La demande : « J'aimerais qu'on puisse copier-coller un effet d'un calque à un autre. » Branche
+`copier-effets` (`src/fxcopie.rs`, essais `fxcopie_tests.rs`). Pas vu à l'écran dans cette séance.
+
+- ✅ **Copier** : l'icône « Copier l'effet » de chaque effet du panneau Effets, son clic droit sur le
+  nom, le menu « Copier / coller » de la rangée du haut ; « Copier tous les effets du calque » aussi dans
+  « Effets » du clic droit d'un calque (panneau Calques, montage, timeline). On copie la sorte, l'état actif,
+  les valeurs et les clés : toute l'animation. Le presse-papiers d'effets est en mémoire (il survit à
+  l'ouverture d'un autre projet) et distinct de ceux des clés, des images et des plans.
+- ✅ **Coller** : « Coller l'effet » / « Coller les effets » ajoutent à la fin de la pile (comme « Ajouter un
+  effet ») ; « Remplacer les effets » remplace toute la pile. Sur le calque courant, ou sur tous les calques
+  choisis (Ctrl / Maj + clic) ; une seule étape d'annulation. Les clés gardent leurs images ; celles d'après
+  la fin du plan sont laissées de côté (si toutes le sont, l'effet garde fixes les valeurs de sa première
+  clé). Le tremblement du trait est laissé de côté sur un calque bitmap, et s'il est déjà sur le calque ; les
+  dossiers sont ignorés. La barre d'état dit ce qui est collé où (« Flou gaussien collé sur 3 calques ») et
+  ce qui est laissé de côté.
+- ✅ **Clavier** : actions `fx.copier`, `fx.copier_tout`, `fx.coller`, `fx.remplacer` (Ctrl+K, raccourcis à
+  donner soi-même, aucun par défaut). Ctrl+C / Ctrl+V visent les effets quand le panneau Effets a la main
+  (son dernier clic ; cadre d'accent discret) et passent avant les autres presse-papiers. Un clic ailleurs
+  rend la main ; « Créer une clé » la rend aux clés d'effets (Ctrl+C les copie comme avant).
+  Sans effet dans la pile, Ctrl+C suit les règles d'avant. Les essais ne lisent plus le presse-papiers de
+  Windows (`pasteimage::clipboard_image`).
+
 ## Outils de montage : rogner les plans (demandé par Anthony le 2026-10-19) ✅
 
 La demande : « J'ai besoin de plus d'outils de montage pour la timeline. Je ne peux pas saisir le

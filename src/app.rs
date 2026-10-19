@@ -365,6 +365,10 @@ pub struct App {
     pub(crate) fx_key_clipboard: Option<crate::fxkeys::FxClip>,
     pub(crate) fx_clip_recent: bool,
     pub(crate) fx_keys_drag: Option<crate::fxkeys::FxKeysDrag>,
+    /// Effets copiés d'un calque (`fxcopie.rs`), et le panneau Effets a la main (le dernier clic
+    /// était dedans : Ctrl+C et Ctrl+V visent ses effets).
+    pub(crate) fx_stack_clipboard: Option<crate::fxcopie::FxStackClip>,
+    pub(crate) fx_pane_focus: bool,
     /// Import vidéo en cours (13k, `videoui.rs`).
     pub(crate) video_import: Option<crate::videoui::VideoImport>,
     /// Propagation d'une peinture sur la vidéo, façon EbSynth (`propagerui.rs`).
@@ -897,6 +901,8 @@ impl App {
             fx_key_clipboard: None,
             fx_clip_recent: false,
             fx_keys_drag: None,
+            fx_stack_clipboard: None,
+            fx_pane_focus: false,
             video_import: None,
             propagation: crate::propagerui::Propagation::new(wgpu_render_state),
             sb_window: None,
@@ -3183,6 +3189,13 @@ impl App {
             "fichier.importer_modele3d" => self.import_model3d(),
             "edition.annuler" => self.undo(),
             "edition.retablir" => self.redo(),
+            // Le panneau Effets a la main (le dernier clic était dedans) : Ctrl+C copie l'effet
+            // choisi et Ctrl+V colle les effets copiés, avant tous les autres presse-papiers
+            // (`fxcopie.rs`). Sans effet sur la pile, Ctrl+C suit les règles d'avant.
+            "edition.copier" if self.fx_pane_has_focus() && !self.layer().fx.is_empty() => self.fx_copy_chosen(),
+            "edition.coller" if self.fx_pane_has_focus() && self.fx_stack_clipboard.is_some() => {
+                self.fx_paste(self.fx_paste_targets(self.cur_layer), false)
+            }
             // Des clés de caméra choisies (un losange jaune de la piste Caméra) : copier, couper,
             // supprimer les visent, coller aussi tant que c'est la dernière chose copiée
             // (`camkeys.rs`).
@@ -3641,6 +3654,10 @@ impl App {
                 self.status = format!("Création automatique des clés d'effets : {}.", if self.fx_auto_key { "oui" } else { "non" });
             }
             "fx.cles_timeline" => self.fx_keys_shown = !self.fx_keys_shown,
+            // Copier-coller des effets d'un calque à un autre (`fxcopie.rs`).
+            "fx.copier" | "fx.copier_tout" | "fx.coller" | "fx.remplacer" => {
+                self.fx_clip_action(action);
+            }
             // Tremblement du trait (`tremblement.rs`) du calque courant.
             "fx.tremblement" => self.toggle_fx(self.cur_layer, crate::fx::EffectKind::Boil),
             "fx.tremblement_repos" => self.set_boil_rest(self.cur_layer, !self.boil_rest_on(self.cur_layer)),
@@ -3999,6 +4016,9 @@ impl App {
         // ou dans le panneau Commentaires, l'interface le reprend pendant cette image.
         if ctx.input(|i| i.pointer.any_pressed()) {
             self.comment_ui.focus = false;
+            // De même pour le panneau Effets : s'il est sous le clic, il reprend la main pendant
+            // cette image (`fxcopie.rs`).
+            self.fx_pane_focus = false;
         }
         self.handle_shortcuts(ctx);
         self.sync_scene_layers();

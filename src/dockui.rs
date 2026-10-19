@@ -120,7 +120,7 @@ impl App {
                     self.canvas_panel(ui);
                 }
                 // Le dessin a la main (aucune bande) : un cadre discret.
-                let drawing = !self.panels_have_focus() && !self.images_focus && !self.key_focus;
+                let drawing = !self.panels_have_focus() && !self.images_focus && !self.key_focus && !self.fx_pane_focus;
                 self.focus_mark(ui, drawing, false);
             }
             Pane::Tools => self.tool_bar(ui),
@@ -145,7 +145,11 @@ impl App {
                 }
             },
             Pane::XSheet => self.xsheet_panel(ui),
-            Pane::Effects => self.fx_panel(ui),
+            Pane::Effects => {
+                self.fx_panel(ui);
+                // Quand il a la main (Ctrl+C / Ctrl+V visent ses effets), un cadre discret.
+                self.focus_mark(ui, self.fx_pane_focus, false);
+            }
             Pane::History => self.history_panel(ui),
             Pane::Comments => self.comments_panel(ui),
         }
