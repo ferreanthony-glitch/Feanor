@@ -3258,6 +3258,10 @@ impl App {
         if self.envois_action(action) {
             return;
         }
+        // Versions d'un plan (`planversui.rs`).
+        if self.version_action(action) {
+            return;
+        }
         // Effets des extraits de son (`audiofxui.rs`) ; Suppr retire la clé de volume choisie.
         if self.sound_fx_action(action) {
             return;

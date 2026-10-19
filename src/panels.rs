@@ -177,6 +177,11 @@ impl App {
                     self.action_item(ui, "Plan modifié précédent", "envoi.modifie_precedent");
                     self.action_item(ui, "Choisir les plans modifiés", "envoi.modifies_choisir");
                 });
+                ui.menu_button("Versions du plan", |ui| {
+                    self.action_item(ui, "Nouvelle version du plan", "version.nouvelle");
+                    self.action_item(ui, "Version précédente", "version.precedente");
+                    self.action_item(ui, "Version suivante", "version.suivante");
+                });
                 ui.separator();
                 let lock = if self.doc.storyboard_locked { "Déverrouiller le storyboard" } else { "Verrouiller le storyboard" };
                 self.action_item(ui, lock, "storyboard.verrouiller");

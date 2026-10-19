@@ -895,6 +895,11 @@ pub struct SaveJob {
     scenes3d: Option<Vec<u8>>,
     /// Le fichier des envois (`envois.json`) ; rien : il n'y en a pas (un fichier illisible reste là).
     envois: Option<Vec<u8>>,
+    /// Le fichier des autres versions des plans (`plans_versions.json`) ; rien : il n'y en a pas.
+    plans_versions: Option<Vec<u8>>,
+    /// Un `plans_versions.json` que cette version ne sait pas lire est là : ses dessins sont dans `dessins/`
+    /// et rien ne les cite, l'enregistrement n'en efface aucun.
+    keep_drawings: bool,
     /// Les instantanés d'envois à écrire dans `versions/`, les dessins de `dessins/` qui ont déjà
     /// leur contenu, et l'ancien dossier d'où recopier `versions/` (« Enregistrer sous », `envois.rs`).
     snapshots: Vec<Arc<crate::envois::Instantane>>,
@@ -976,7 +981,7 @@ pub fn prepare_save(
         .collect();
     // Images des calques vidéo : recopiées si elles ne sont pas déjà dans ce dossier.
     let mut videos = Vec::new();
-    for v in doc.panels.iter().flat_map(|p| &p.layers).filter_map(|l| l.video.as_ref()) {
+    for v in doc.panels.iter().chain(doc.plans_ranges()).flat_map(|p| &p.layers).filter_map(|l| l.video.as_ref()) {
         let to = dir.join(VIDEOS).join(v.id.to_string());
         if let Some(from) = crate::video::dir_of(v.id).filter(|from| *from != to) {
             if !videos.iter().any(|(w, _, _): &(crate::video::VideoClip, PathBuf, PathBuf)| w.id == v.id) {
@@ -986,6 +991,7 @@ pub fn prepare_save(
     }
     let manifest = serde_json::to_vec_pretty(&manifest_of(doc)).map_err(|e| e.to_string())?;
     let unreadable = unreadable_in(dir);
+    let keep_drawings = crate::planvers::illisible(dir);
     // Les instantanés d'envois pas encore écrits (`envois.rs`) : un dessin du projet qui a déjà leur contenu
     // dans `dessins/` est recopié (les dessins s'écrivent avant eux), pas encodé de nouveau ; un autre
     // dossier que celui du projet (« Enregistrer sous ») reçoit aussi les instantanés déjà écrits.
@@ -1004,7 +1010,7 @@ pub fn prepare_save(
         textures,
         videos,
         manifest,
-        has_unreadable: !unreadable.is_empty(),
+        has_unreadable: !unreadable.is_empty() || keep_drawings,
         kept: kept_files_in(dir),
         used: used.union(&unreadable).copied().collect(),
         fonds: fonds.union(&unreadable).copied().collect(),
@@ -1020,6 +1026,8 @@ pub fn prepare_save(
         crayonnes: (!doc.crayonnes.is_blank()).then(|| doc.crayonnes.clone()),
         scenes3d: crate::scene3dstore::to_bytes(doc)?,
         envois: crate::envois::to_bytes(doc)?,
+        plans_versions: crate::planvers::to_bytes(doc)?,
+        keep_drawings,
         snapshots,
         snapshot_reuse,
         versions_from,
@@ -1286,8 +1294,10 @@ impl SaveJob {
         // Les envois : les instantanés d'abord (dessins puis fichier), puis la liste qui les cite.
         count += crate::envois::ecrire(dir, &self.snapshots, &self.snapshot_reuse, self.versions_from.as_deref())?;
         write_sidecar(&dir.join(crate::envois::FILE), self.envois.as_deref(), |t| crate::envois::parse(t).is_ok())?;
+        // Les autres versions des plans (leurs dessins sont ceux de `dessins/`, déjà écrits).
+        write_sidecar(&dir.join(crate::planvers::FILE), self.plans_versions.as_deref(), |t| crate::planvers::parse(t).is_ok())?;
         write_atomic_synced(&self.manifest_path, &self.manifest)?;
-        let removed = remove_unused(dir, &self.used, &self.fonds)
+        let removed = if self.keep_drawings { 0 } else { remove_unused(dir, &self.used, &self.fonds) }
             + remove_unused_sounds(dir, &self.used_sounds, &self.kept)
             + remove_unused_models(dir, &self.used_models, &self.kept)
             + if self.has_unreadable { 0 } else { remove_unused_textures(dir, &self.used_textures) }
@@ -1486,6 +1496,12 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, digest: bool) -> Pan
         entry.notes_dessinees.clear();
         // Le repère 3D est un guide pour dessiner (ni à l'export ni dans les vignettes).
         entry.repere3d = None;
+        // Les numéros du plan et de ses marques disent qui il est, pas ce qu'il contient : deux versions d'un
+        // même plan (`planvers.rs`) se comparent sans eux.
+        entry.id = 0;
+        for m in &mut entry.marques {
+            m.id = 0;
+        }
         // Les numéros de calques de toute la scène sont neufs à chaque séance : seule leur présence compte.
         for l in &mut entry.calques {
             (l.nom, l.verrouille, l.pelure, l.transparence, l.pochoir, l.pochoir_negatif) = (String::new(), false, false, false, false, false);
@@ -1704,6 +1720,7 @@ fn used_models(doc: &Document) -> BTreeSet<u64> {
     // Les modèles du repère 3D des plans, et ceux que les scènes 3D de blocage montrent.
     doc.panels
         .iter()
+        .chain(doc.plans_ranges())
         .filter_map(|p| p.ref3d.as_ref().map(|r| r.model))
         .chain(doc.scenes3d.models_used())
         .filter(|id| doc.models.contains_key(id))
@@ -1725,6 +1742,13 @@ pub struct Loaded {
     /// Dessins vectoriels affichés en rendu rapide (`load_quick`) : leur rendu exact est à
     /// demander au rejeu en arrière-plan (`rejeu.rs`).
     pub approx: Vec<CelId>,
+}
+
+/// Le plus grand numéro de séquence, de scène, de plan, de marque, de piste, d'extrait ou de son du manifeste.
+fn top_id(m: &Manifest) -> u64 {
+    let plans = m.sequences.iter().flat_map(|q| std::iter::once(q.id).chain(q.scenes.iter().flat_map(|s| std::iter::once(s.id).chain(s.panneaux.iter().flat_map(|p| std::iter::once(p.id).chain(p.marques.iter().map(|k| k.id)))))));
+    let sons = m.pistes_son.iter().flat_map(|t| std::iter::once(t.id).chain(t.extraits.iter().map(|c| c.id))).chain(m.sons.iter().map(|s| s.id));
+    plans.chain(sons).max().unwrap_or(0)
 }
 
 /// Un projet enregistré avec des identifiants en double (deux plans collés qui gardaient le même,
@@ -1839,6 +1863,29 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
     let mut warnings = Vec::new();
     // Les textures d'abord : les dessins vectoriels texturés en ont besoin pour leur rendu.
     load_textures(dir, &mut warnings);
+    // Les autres versions des plans (`plans_versions.json`) : leurs plans passent par la même lecture que
+    // les autres, dans une séquence à part qu'on retire ensuite du film (`planvers.rs`).
+    let mut versions = crate::planvers::lire(dir, &mut warnings);
+    let mut a_ranger: Option<(u64, u64, Vec<(u64, u32)>)> = None;
+    if let Some(f) = versions.as_mut() {
+        let (mut cles, mut panneaux) = (Vec::new(), Vec::new());
+        for p in &mut f.plans {
+            for v in &mut p.autres {
+                match serde_json::from_value::<PanelEntry>(std::mem::take(&mut v.entree)) {
+                    Ok(e) => {
+                        cles.push((p.plan, v.numero));
+                        panneaux.push(e);
+                    }
+                    Err(e) => warnings.push(format!("version {} d'un plan : illisible ({e}), ignorée.", crate::planvers::etiquette(v.numero))),
+                }
+            }
+        }
+        if !panneaux.is_empty() {
+            let top = top_id(&manifest);
+            manifest.sequences.push(SequenceEntry { id: top + 1, nom: String::new(), scenes: vec![SceneEntry { id: top + 2, nom: String::new(), panneaux }] });
+            a_ranger = Some((top + 1, top + 2, cles));
+        }
+    }
     let mut cels: HashMap<CelId, Cel> = HashMap::new();
     let mut missing: BTreeSet<CelId> = BTreeSet::new();
     // Le contenu rogné des plans (`rognages.json`) : ses dessins se chargent avec les autres.
@@ -2014,6 +2061,8 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
         transitions: Vec::new(),
         // Les références visuelles aussi (`references.json`, `references::load`).
         references: Vec::new(),
+        // Les versions des plans : `plans_versions.json`, `planvers::installer`.
+        versions: Default::default(),
     };
     for seq in manifest.sequences {
         structure.sequences.push(Sequence {
@@ -2176,6 +2225,15 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
             }
         }
     }
+    // Les plans rangés des versions ne sont pas des plans du film : mis de côté pour `planvers::installer`.
+    let mut rangees: Vec<Panel> = Vec::new();
+    if let Some((sequence, scene, _)) = &a_ranger {
+        let (gardes, extra): (Vec<Panel>, Vec<Panel>) = std::mem::take(&mut structure.panels).into_iter().partition(|p| p.scene != *scene);
+        structure.panels = gardes;
+        rangees = extra;
+        structure.scenes.retain(|s| s.id != *scene);
+        structure.sequences.retain(|s| s.id != *sequence);
+    }
     if structure.panels.is_empty() {
         return Err("le projet ne contient aucun plan".into());
     }
@@ -2206,6 +2264,10 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
     doc.crayonnes = load_crayonnes(dir, &mut warnings);
     // Les envois (`envois.json`, absent : aucun) ; leurs instantanés ne se lisent qu'à la demande.
     doc.envois = crate::envois::load(dir, &mut warnings);
+    // Les autres versions des plans.
+    if let (Some(f), Some((_, _, cles))) = (versions, a_ranger) {
+        crate::planvers::installer(&mut doc, f, cles, rangees, &mut warnings);
+    }
     // Projet d'avant les plans (13a) : chaque scène devient un plan, ses panneaux bout à bout.
     if !doc.is_plans() {
         let n = doc.panels.len();

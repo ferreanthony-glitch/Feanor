@@ -197,6 +197,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
         reserves: Default::default(),
         transitions: Vec::new(),
         references: Vec::new(),
+        versions: Default::default(),
     };
     let mut shots = manifest.shots;
     if shots.is_empty() {

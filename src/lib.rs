@@ -29,6 +29,11 @@ mod envois;
 #[cfg(test)]
 mod envois_tests;
 mod envoisui;
+// Versions d'un plan (v1, v2, v3…) : le modèle et le fichier (`planvers`), l'interface (`planversui`).
+mod planvers;
+#[cfg(test)]
+mod planvers_tests;
+mod planversui;
 #[cfg(test)]
 mod gpu_contenu_tests;
 mod parallele;

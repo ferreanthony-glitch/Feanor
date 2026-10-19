@@ -650,6 +650,9 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("envoi.modifie_suivant", "Aller au plan modifié suivant (depuis le dernier envoi)", true, false),
     act("envoi.modifie_precedent", "Aller au plan modifié précédent (depuis le dernier envoi)", true, false),
     act("envoi.modifies_choisir", "Choisir les plans modifiés depuis le dernier envoi", true, false),
+    act("version.nouvelle", "Nouvelle version du plan (garde le plan tel qu'il est)", true, false),
+    act("version.precedente", "Passer à la version précédente du plan", true, false),
+    act("version.suivante", "Passer à la version suivante du plan", true, false),
     act("reference.decharger", "Décharger la référence courante", false, false),
     act("legende.chercher", "Chercher dans les légendes", false, false),
 ];

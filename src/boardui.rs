@@ -718,7 +718,7 @@ impl App {
             let first = place.starts_plan();
             let title = match self.doc.panels[i].marks.iter().position(|m| m.id == place.id) {
                 Some(k) => format!("{} · {}", panel_title(&self.doc, i), k + 2),
-                None => panel_title(&self.doc, i),
+                None => crate::planversui::titre_avec_version(&self.doc, i),
             };
             let galley = clip.layout_no_wrap(title, FontId::proportional(font), head_ink);
             let at = pos2(left + w + 6.0 * xf.zoom.min(1.5), header.center().y - galley.size().y * 0.5);
@@ -865,6 +865,7 @@ impl App {
         item(self, ui, "Nouveau plan après", &|a| a.new_panel());
         item(self, ui, "Dupliquer le plan", &|a| a.duplicate_panel());
         self.plan_color_menu(ui);
+        self.version_menu(ui, i);
         ui.separator();
         self.panel_clipboard_items(ui);
         ui.separator();

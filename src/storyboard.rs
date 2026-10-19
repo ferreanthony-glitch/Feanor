@@ -557,6 +557,8 @@ impl App {
             self.duplicate_panel();
         }
         self.plan_color_menu(ui);
+        // Les versions du plan : nouvelle, passer à, restaurer, supprimer (`planversui.rs`).
+        self.version_menu(ui, index);
         // Les coupes de part et d'autre du plan (`transitionsui.rs`).
         self.cut_menu_named(ui, index, "Transition au début du plan");
         self.cut_menu_named(ui, index + 1, "Transition à la fin du plan");
@@ -719,7 +721,7 @@ impl App {
                 crate::envoisui::peindre_repere(&clip, zone.center(), etat, crate::envoisui::REPERE);
                 reperes.push((zone, phrase));
             }
-            let title = clip.layout_no_wrap(panel_title(&self.doc, i), FontId::proportional(12.0), visuals.text_color());
+            let title = clip.layout_no_wrap(crate::planversui::titre_avec_version(&self.doc, i), FontId::proportional(12.0), visuals.text_color());
             let duration = clip.layout_no_wrap(
                 duration_label(len, self.doc.fps),
                 FontId::monospace(10.0),
@@ -1515,6 +1517,9 @@ impl App {
                 self.panel_length_field(ui, "");
                 ui.label(RichText::new(duration_label(self.frame_count(), fps)).weak());
             });
+            ui.end_row();
+            ui.label("Version");
+            self.version_ligne(ui);
             ui.end_row();
         });
         ui.label("Caméra").on_hover_text("Décalage du centre, zoom, rotation (outil Caméra pour la régler à la souris)");

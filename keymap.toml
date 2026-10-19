@@ -2502,6 +2502,22 @@ action = "envoi.modifies_choisir"
 touches = []
 source = "SHOT (sans touche)"
 
+# Versions d'un plan (v1, v2, v3…) : sans touche, à choisir.
+[[raccourci]]
+action = "version.nouvelle"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "version.precedente"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "version.suivante"
+touches = []
+source = "SHOT (sans touche)"
+
 # Références visuelles (sans touche : à choisir).
 [[raccourci]]
 action = "vue.references"

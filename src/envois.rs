@@ -220,13 +220,6 @@ pub fn etat_du_plan(envoi: &Envoi, plan: u64, empreinte: u64) -> Etat {
     }
 }
 
-impl Document {
-    /// Le numéro de la version active du plan `plan` (1 tant qu'il n'a qu'une version).
-    pub fn numero_de_version(&self, _plan: u64) -> u32 {
-        1
-    }
-}
-
 // ---------------------------------------------------------------------------------- les dates
 
 /// Jours depuis le 1er janvier 1970 de la date (`y`, `m`, `j`), calendrier grégorien.

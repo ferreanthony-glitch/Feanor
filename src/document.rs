@@ -865,6 +865,9 @@ pub struct Structure {
     pub transitions: Vec<crate::transitions::Transition>,
     /// Références visuelles (`references.rs`) : ajouter, retirer, déplacer s'annulent avec le reste.
     pub references: Vec<crate::references::Reference>,
+    /// Versions des plans (`planvers.rs`), par numéro de plan : créer, passer, restaurer, supprimer une
+    /// version s'annulent avec le reste.
+    pub versions: std::collections::BTreeMap<u64, crate::planvers::VersionsDuPlan>,
 }
 
 pub struct Document {
@@ -931,6 +934,10 @@ pub struct Document {
     /// manifeste (`envois.json`, `versions/`). Hors de l'annulation : marquer un envoi est un
     /// fait, pas une retouche du film.
     pub envois: crate::envois::Envois,
+    /// Les autres versions de chaque plan (`planvers.rs`), rangées par numéro de plan ; enregistrées à côté
+    /// du manifeste, dans `plans_versions.json`, leurs dessins dans `dessins/`. Le plan lui-même
+    /// (`panels`) est toujours la version active.
+    pub versions: std::collections::BTreeMap<u64, crate::planvers::VersionsDuPlan>,
     next_id: u64,
 }
 
@@ -980,6 +987,7 @@ impl Document {
             references: Vec::new(),
             crayonnes: Default::default(),
             envois: Default::default(),
+            versions: Default::default(),
             next_id: 1,
         };
         let seq = doc.new_sequence();
@@ -1042,6 +1050,7 @@ impl Document {
             references: structure.references,
             crayonnes: Default::default(),
             envois: Default::default(),
+            versions: structure.versions,
             next_id: max_id + 1,
         };
         doc.normalize();
@@ -1220,6 +1229,7 @@ impl Document {
             reserves: self.reserves.clone(),
             transitions: self.transitions.clone(),
             references: self.references.clone(),
+            versions: self.versions.clone(),
         }
     }
 
@@ -1251,6 +1261,7 @@ impl Document {
             reserves: std::mem::replace(&mut self.reserves, s.reserves),
             transitions: std::mem::replace(&mut self.transitions, s.transitions),
             references: std::mem::replace(&mut self.references, s.references),
+            versions: std::mem::replace(&mut self.versions, s.versions),
         }
     }
 
@@ -2648,6 +2659,10 @@ impl Document {
         // Le contenu rogné reste dans le projet (`rognage.rs`).
         for (_, r) in self.live_reserves() {
             used.extend(r.cels());
+        }
+        // Les autres versions des plans aussi (`planvers.rs`).
+        for p in self.plans_ranges() {
+            used.extend(p.layers.iter().flat_map(|l| l.frames.iter().flatten().copied()));
         }
         used
     }
