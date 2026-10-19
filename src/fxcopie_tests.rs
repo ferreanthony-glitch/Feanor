@@ -477,7 +477,8 @@ fn the_four_actions_are_registered_without_a_default_shortcut() {
     use crate::keymap::{action_info, DEFAULT_KEYMAP};
     for id in ["fx.copier", "fx.copier_tout", "fx.coller", "fx.remplacer"] {
         assert!(action_info(id).is_some_and(|a| a.implemented), "{id} n'est pas dans keymap::ACTIONS");
-        assert!(!DEFAULT_KEYMAP.contains(id), "{id} n'a pas de raccourci par défaut");
+        // Chaque commande a son bloc dans keymap.toml (`keymap_tests`), sans touche par défaut.
+        assert!(DEFAULT_KEYMAP.contains(&format!("action = \"{id}\"\ntouches = []")), "{id} n'a pas de raccourci par défaut");
     }
 }
 
