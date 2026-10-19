@@ -2048,9 +2048,9 @@ rapidement. C'est prioritaire. » Détail, mesures avant / après et leviers res
 - Compilation : `target-cpu=x86-64-v3` (interface -20 %, PNG -26 %) ; LTO et une seule unité de
   génération écartés (aucun gain, compilation ×2 à ×3,5) ; `panic = "abort"` écarté (SHOT compte sur
   les panics rattrapés).
-- Reste (classé dans le document) : vignettes hors du fil de l'interface, décodage PNG en flux, effets
-  sur la carte graphique. (Enregistrer en arrière-plan, textures à la taille du contenu et image
-  composée gardée : faits, ci-dessous.)
+- Reste (classé dans le document) : décodage PNG en flux, effets sur la carte graphique.
+  (Enregistrer en arrière-plan, textures à la taille du contenu, image composée gardée et vignettes hors
+  du fil de l'interface : faits, ci-dessous.)
 
 ## Deuxième passe de performance (2026-10-19, branche `perf2`) ✅
 
@@ -2073,6 +2073,26 @@ Suite de la passe précédente, leviers 1 à 3 de `docs/PERFORMANCE.md` (section
 - À essayer par Anthony : Ctrl+S dans un vrai gros projet (barre d'état, point • du titre, Quitter
   pendant l'écriture), un long trait qui traverse la feuille, des calques transformés, une
   enveloppe, la lecture d'un plan chargé.
+
+## Troisième passe de performance : vignettes hors du fil de l'interface (2026-10-19, branche `vignettes-fond`) ✅
+
+Levier 4 de `docs/PERFORMANCE.md` (section 11). Les vignettes des plans (bande du montage, planche) et les
+miniatures des dessins (timeline, panneau Calques) ne se composent plus sur le fil de l'interface.
+- Le fil de l'interface calcule la clé de chaque vignette (composition du plan, versions des dessins,
+  caméra, cadre), prend un cliché du plan (un projet minuscule dont les tuiles sont partagées par `Arc`,
+  presque gratuit depuis `perf2`) et le met en file ; il envoie les images finies à la carte graphique
+  (1 ms au plus par image d'écran). Les fils (jusqu'à quatre, deux cœurs restent à l'interface) composent
+  avec le code d'avant (`render::thumbnail_until`) : mêmes pixels, effets de calque, calques d'effets,
+  fonds sous le trait, vidéo et CTG compris.
+- Une demande par vignette : une nouvelle remplace l'ancienne et arrête son calcul ; les vignettes
+  qu'on ne renouvelle plus (hors de l'écran) sont abandonnées ; les dernières demandées passent d'abord.
+  L'ancienne image reste à l'écran en attendant la neuve.
+- Montage de 600 plans, vignettes à froid : image d'écran 6,8 → 2,2 ms à la molette, 11,1 → 3,4 ms en sautant
+  de plan en plan (pire image 13,2 → 4,6 ms) ; section Montage 9,9 → 1,8 ms.
+- Essais : `thumbs_tests.rs` (mêmes pixels que l'ancien chemin sur le projet d'essai complet, mise à jour
+  après onze sortes de changements, abandon des demandes périmées, rien composé sur le fil de l'interface).
+- À essayer par Anthony : défiler et zoomer un grand montage, sauter de plan en plan, dessiner montage visible,
+  changer un effet ou un calque d'effet d'un plan, la planche en vue Plans, la timeline zoomée.
 
 ## Diagnostic des performances (2026-10-19, branche `diagnostic`) ✅
 

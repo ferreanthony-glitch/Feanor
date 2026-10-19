@@ -2834,6 +2834,7 @@ impl App {
         self.heard_frame = Some(0);
         self.history.clear();
         self.thumbs.clear();
+        self.layer_thumbs.clear();
         self.renderer.invalidate_all();
         self.fit_pending = true;
         // Vue du plateau et vue 3D recadrées sur le nouveau projet (9d, 9e).
@@ -2865,6 +2866,7 @@ impl App {
         self.bdrag = None;
         self.history.clear();
         self.thumbs.clear();
+        self.layer_thumbs.clear();
         self.renderer.invalidate_all();
         self.fit_pending = true;
         self.stage_view = None;
@@ -4177,7 +4179,12 @@ impl App {
             let _t = crate::perf::section("vignettes (nettoyage)");
             self.thumbs.prune(&self.doc);
         }
-        self.thumbs.pending = false;
+        {
+            // (Les vignettes finies sur les fils de fond arrivent à la carte graphique ; aucune n'est composée ici.)
+            let _t = crate::perf::section("vignettes (arrivée)");
+            self.thumbs.begin_frame(ctx);
+            self.layer_thumbs.begin_frame(ctx);
+        }
 
         {
             let _t = crate::perf::section("barre de menus");
@@ -4268,7 +4275,7 @@ impl App {
         if crate::perf::actif() {
             crate::perf::file_attente("rejeu", usize::from(self.rejeu.has_pending()) + self.rejeu_deferred.len() + self.rejeu_again.len());
             crate::perf::file_attente("fonds", usize::from(crate::fx::fond_pending()));
-            crate::perf::file_attente("vignettes", usize::from(self.thumbs.pending));
+            crate::perf::file_attente("vignettes", self.thumbs.outstanding());
             crate::perf::overlay(ctx);
         }
         crate::perf::end_frame(ctx);
