@@ -587,8 +587,11 @@ fn to_exposures(frames: &[Option<u64>]) -> Vec<Exposure> {
 }
 
 fn from_exposures(runs: &[Exposure]) -> Vec<Option<u64>> {
+    // Au plus la durée d'un plan (`rognage::MAX_PLAN`) : un manifeste abîmé qui annonce des milliards
+    // d'images remplirait la mémoire.
     runs.iter()
-        .flat_map(|r| std::iter::repeat_n(r.dessin, r.images.min(1_000_000)))
+        .flat_map(|r| std::iter::repeat_n(r.dessin, r.images.min(crate::rognage::MAX_PLAN)))
+        .take(crate::rognage::MAX_PLAN)
         .collect()
 }
 
@@ -1783,7 +1786,7 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
                 structure.panels.push(Panel {
                     id: p.id,
                     scene: scene.id,
-                    length: p.duree,
+                    length: p.duree.min(crate::rognage::MAX_PLAN),
                     layers,
                     action: p.action,
                     dialogue: p.dialogue,
@@ -1988,12 +1991,36 @@ fn load_drawing(dir: &Path, id: CelId, w: usize, h: usize, quick: bool) -> Resul
     Ok((cel, approximate))
 }
 
+/// Coordonnée la plus lointaine qu'un élément vectoriel garde (une feuille fait 16 384 pixels au
+/// plus ; un trait traîné bien hors du dessin reste loin en deçà), et rayon le plus gros.
+const MAX_COORD: f32 = 1.0e5;
+const MAX_RADIUS: f32 = 5_000.0;
+
+/// Le rang du premier élément du dessin dont les valeurs sont absurdes (non finies, ou hors de ce
+/// qu'un geste peut produire), s'il y en a un. Un fichier abîmé qui annonce un trait de 3,4e38 pixels
+/// de long bloquait la lecture à le rejouer ; mieux vaut dire que le dessin est illisible (son fichier
+/// reste tel quel, comme tout dessin illisible).
+fn implausible(d: &VectorDrawing) -> Option<usize> {
+    use crate::vector::Element;
+    let coord = |v: f32| v.is_finite() && v.abs() <= MAX_COORD;
+    d.elements.iter().position(|e| match e {
+        Element::Stroke { points, opacity, hardness, .. } => {
+            !points.iter().all(|p| coord(p.x) && coord(p.y) && p.r.is_finite() && (0.0..=MAX_RADIUS).contains(&p.r)) || !opacity.is_finite() || !hardness.is_finite()
+        }
+        Element::Fill { contours, opacity, .. } => !contours.iter().flatten().all(|p| coord(p[0]) && coord(p[1])) || !opacity.is_finite(),
+        Element::Text { size, place, opacity, .. } => !(size.is_finite() && *size > 0.0 && *size <= MAX_RADIUS) || !place.iter().all(|v| v.is_finite() && v.abs() <= MAX_COORD * 10.0) || !opacity.is_finite(),
+    })
+}
+
 fn load_line(dir: &Path, id: CelId, w: usize, h: usize, quick: bool) -> Result<(Cel, bool), String> {
     let vector_path = drawing_path(dir, id, true);
     if vector_path.exists() {
         let text = fs::read_to_string(&vector_path).map_err(|e| format!("dessin {id} illisible : {e}"))?;
         let drawing: VectorDrawing =
             serde_json::from_str(&text).map_err(|e| format!("dessin {id} illisible : {e}"))?;
+        if let Some(k) = implausible(&drawing) {
+            return Err(format!("dessin {id} illisible : valeurs hors limites dans l'élément {} ; son fichier n'est pas modifié", k + 1));
+        }
         let textured = drawing.elements.iter().any(|e| matches!(e, crate::vector::Element::Stroke { brush: Some(_), .. }));
         let approximate = quick && textured;
         let raster = if approximate { drawing.render_quick(w, h) } else { drawing.render(w, h) };
@@ -2035,6 +2062,12 @@ fn read_rgba<R>(path: &Path, use_it: impl FnOnce(usize, usize, &[u8]) -> R) -> R
     if let Ok(decoder) = image::codecs::png::PngDecoder::new(std::io::Cursor::new(&bytes)) {
         if decoder.color_type() == image::ColorType::Rgba8 {
             let (w, h) = decoder.dimensions();
+            // L'en-tête d'un fichier abîmé peut annoncer des dimensions démesurées : le tampon
+            // demandé (des dizaines de Go) ferait tomber SHOT sans un mot (échec d'allocation).
+            // Une feuille ne dépasse pas `MAX_SIDE` de côté (8 192).
+            if w as usize > crate::vector::MAX_SIDE * 2 || h as usize > crate::vector::MAX_SIDE * 2 || decoder.total_bytes() > (1 << 30) {
+                return Err(format!("image démesurée ({w} × {h})"));
+            }
             let len = decoder.total_bytes() as usize;
             return DECODE_BUF.with(|buf| {
                 let mut buf = buf.borrow_mut();
