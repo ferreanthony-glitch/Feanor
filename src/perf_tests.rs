@@ -35,7 +35,7 @@ fn block_on<F: Future>(f: F) -> F::Output {
 }
 
 /// Un périphérique wgpu sans fenêtre, ou `None` (aucune carte graphique).
-fn headless() -> Option<RenderState> {
+pub(crate) fn headless() -> Option<RenderState> {
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
     let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))?;
     let (device, queue) = block_on(adapter.request_device(
@@ -132,6 +132,8 @@ pub(crate) struct Mesure {
     pub textures: usize,
     pub octets: usize,
     pub sommets: usize,
+    /// Formes qu'egui a reçues de l'interface (l'interface a bien été construite).
+    pub formes: usize,
     /// Dans combien de temps l'application demande à être repeinte.
     pub reveil: Duration,
     /// La carte graphique en détail : textures d'egui, préparation, passe, attente.
@@ -157,7 +159,14 @@ pub(crate) struct Banc {
 }
 
 pub(crate) fn banc(doc: Document, avec_gpu: bool) -> Banc {
-    let bac = std::env::temp_dir().join(format!("shot-perf-bac-{}", std::process::id()));
+    banc_taille(doc, avec_gpu, 1920, 1080)
+}
+
+/// Un banc dont l'écran fait `largeur` × `hauteur` pixels (les essais de fiabilité, qui peignent
+/// vraiment sur la carte graphique, se contentent d'un écran plus petit).
+pub(crate) fn banc_taille(doc: Document, avec_gpu: bool, largeur: u32, hauteur: u32) -> Banc {
+    // Un dossier par fil d'essai : `donnees::bac_a_sable` est propre à chaque fil.
+    let bac = std::env::temp_dir().join(format!("shot-perf-bac-{}-{:?}", std::process::id(), std::thread::current().id()));
     let _ = std::fs::create_dir_all(&bac);
     crate::donnees::bac_a_sable(&bac);
     let rs = if avec_gpu { headless() } else { None };
@@ -166,11 +175,11 @@ pub(crate) fn banc(doc: Document, avec_gpu: bool) -> Banc {
     app.doc = doc;
     app.welcome = false;
     app.maximized_once = 4;
-    let taille = vec2(1920.0, 1080.0);
+    let taille = vec2(largeur as f32, hauteur as f32);
     let cible = rs.as_ref().map(|rs| {
         rs.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("écran"),
-            size: wgpu::Extent3d { width: 1920, height: 1080, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d { width: largeur, height: hauteur, depth_or_array_layers: 1 },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -205,6 +214,7 @@ impl Banc {
         let ppp = out.pixels_per_point;
         let reveil = out.viewport_output.get(&ViewportId::ROOT).map_or(Duration::MAX, |v| v.repaint_delay);
         let (textures, octets) = (out.textures_delta.set.len(), out.textures_delta.set.iter().map(|(_, d)| d.image.width() * d.image.height() * 4).sum());
+        let formes = out.shapes.len();
         if self.garder_textes {
             self.textes = out
                 .shapes
@@ -218,10 +228,10 @@ impl Banc {
         let t2 = Instant::now();
         let mut detail = [0.0; 4];
         if let (Some(rs), Some(cible)) = (&self.rs, &self.cible) {
-            detail = peindre(rs, cible, &out.textures_delta, &prims);
+            detail = peindre(rs, cible, &out.textures_delta, &prims, [self.taille.x as u32, self.taille.y as u32]);
         }
         let carte = t2.elapsed().as_secs_f64() * 1e3;
-        Mesure { construction, decoupage, carte, textures, octets, sommets, reveil, detail }
+        Mesure { construction, decoupage, carte, textures, octets, sommets, formes, reveil, detail }
     }
 
     pub fn souris(&mut self, x: f32, y: f32) -> Vec<Event> {
@@ -237,14 +247,14 @@ impl Banc {
 /// Envoie les textures et peint l'image sur la cible, en attendant la fin du travail de la carte.
 /// Renvoie les temps (ms) : textures d'egui, préparation (`prepare` du dessin : composition des
 /// calques enregistrée), enregistrement de la passe, attente de la carte.
-fn peindre(rs: &RenderState, cible: &wgpu::Texture, delta: &egui::TexturesDelta, prims: &[ClippedPrimitive]) -> [f64; 4] {
+fn peindre(rs: &RenderState, cible: &wgpu::Texture, delta: &egui::TexturesDelta, prims: &[ClippedPrimitive], taille: [u32; 2]) -> [f64; 4] {
     let t = Instant::now();
     for (id, d) in &delta.set {
         rs.renderer.write().update_texture(&rs.device, &rs.queue, *id, d);
     }
     let t_tex = t.elapsed().as_secs_f64() * 1e3;
     let t = Instant::now();
-    let screen = ScreenDescriptor { size_in_pixels: [1920, 1080], pixels_per_point: 1.0 };
+    let screen = ScreenDescriptor { size_in_pixels: taille, pixels_per_point: 1.0 };
     let view = cible.create_view(&Default::default());
     let mut encoder = rs.device.create_command_encoder(&Default::default());
     let extra = rs.renderer.write().update_buffers(&rs.device, &rs.queue, &mut encoder, prims, &screen);

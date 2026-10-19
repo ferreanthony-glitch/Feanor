@@ -8,8 +8,19 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+#[cfg(test)]
+thread_local! {
+    /// Essais : tout le travail de ce fil se fait en une seule boucle (le chemin « séquentiel »
+    /// de l'enregistrement et de la lecture, celui d'une machine à un seul cœur).
+    pub static EN_SERIE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 /// Nombre de fils pour `n` travaux, au plus `max` (et jamais plus que de cœurs).
 fn fils(n: usize, max: usize) -> usize {
+    #[cfg(test)]
+    if EN_SERIE.with(|s| s.get()) {
+        return 1;
+    }
     std::thread::available_parallelism().map_or(4, |c| c.get()).clamp(1, max.max(1)).min(n.max(1))
 }
 

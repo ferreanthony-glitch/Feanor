@@ -187,6 +187,14 @@ mod export_tests;
 mod exportui;
 mod fill;
 mod folders;
+// Filet de sécurité de la fiabilité (`docs/FIABILITE.md`) : un projet d'essai complet et les essais
+// qui l'enregistrent, le rouvrent, le font tourner dans l'application et lui jettent des fichiers abîmés.
+#[cfg(test)]
+mod fiabilite_fixture;
+#[cfg(test)]
+mod fiabilite_aller_retour_tests;
+#[cfg(test)]
+mod fiabilite_entrees_tests;
 pub mod fx;
 mod fxcache;
 mod fxproxy;
