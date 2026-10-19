@@ -191,9 +191,19 @@ pub(crate) const MONTAGE: &[Cmd] = &[
         false,
         1,
     ),
-    // Les envois (`envoisui.rs`) : noter l'état de tous les plans quand le film part.
-    bouton("envoi.marquer", ph::PAPER_PLANE_TILT, "Marquer un envoi…", "Noter l'état de tous les plans (par exemple « v2 au réal »).", false, 1),
-    etat("envoi.liste", ph::GIT_DIFF, "Envois", "La liste des envois.", false, 1),
+    // Les envois (`envoisui.rs`) : noter l'état de tous les plans quand le film part, repérer ensuite
+    // ceux qui ont changé.
+    bouton(
+        "envoi.marquer",
+        ph::PAPER_PLANE_TILT,
+        "Marquer un envoi…",
+        "Noter l'état de tous les plans (par exemple « v2 au réal ») : ceux qui changent ensuite sont repérés dans la bande et sur la planche.",
+        false,
+        1,
+    ),
+    etat("envoi.liste", ph::GIT_DIFF, "Envois", "La liste des envois et des plans modifiés depuis le dernier.", false, 1),
+    bouton("envoi.modifie_precedent", ph::ARROW_FAT_LEFT, "Plan modifié précédent", "Aller au plan modifié avant le plan courant, depuis le dernier envoi.", false, 1),
+    bouton("envoi.modifie_suivant", ph::ARROW_FAT_RIGHT, "Plan modifié suivant", "Aller au plan modifié après le plan courant, depuis le dernier envoi.", false, 1),
     bouton("son.importer", ph::MUSIC_NOTES_PLUS, "Importer un son", "WAV, MP3, FLAC ou OGG, à l'image courante ; on peut aussi lâcher le fichier sur la fenêtre.", true, 2),
     menu("son", ph::SPEAKER_HIGH, "Son", "Pistes son, son au défilement et pendant la lecture.", true, 2),
     bouton(
@@ -592,6 +602,12 @@ impl App {
             }
             "montage.aimanter" => v.etat = Some(self.snap_on),
             "envoi.liste" => v.etat = Some(self.envois_ui.liste),
+            "envoi.modifie_suivant" | "envoi.modifie_precedent" => {
+                v.actif = !self.doc.envois.is_empty();
+                if !v.actif {
+                    v.description = "Aucun envoi pour l'instant : « Marquer un envoi… » d'abord.".to_string();
+                }
+            }
             "mode.basculer" => {
                 let (icone, nom, what) = match (self.mode, barre) {
                     (Mode::Animation, Barre::Timeline) => (ph::ARROW_U_UP_LEFT, "Retour au storyboard", "Revenir au montage des plans."),

@@ -201,7 +201,6 @@ impl Envois {
 }
 
 /// Où en est un plan par rapport au dernier envoi.
-#[allow(dead_code)] // (le suivi des plans modifiés s'en sert, commit suivant)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Etat {
     /// Son contenu est celui de l'envoi.
@@ -213,7 +212,6 @@ pub enum Etat {
 }
 
 /// L'état d'un plan d'empreinte `empreinte` au regard de `envoi`.
-#[allow(dead_code)] // (le suivi des plans modifiés s'en sert, commit suivant)
 pub fn etat_du_plan(envoi: &Envoi, plan: u64, empreinte: u64) -> Etat {
     match envoi.plan(plan) {
         None => Etat::Nouveau,
@@ -421,7 +419,6 @@ pub struct NouvelEnvoi {
     pub unique: u32,
 }
 
-#[allow(dead_code)] // (le suivi des plans modifiés lit `empreintes` et `plans`, commit suivant)
 pub struct Resultat {
     /// Numéro du dessin → (version, empreinte), pour tous ceux qui ont été hachés.
     pub empreintes: HashMap<CelId, (u64, u64)>,

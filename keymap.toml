@@ -2487,6 +2487,21 @@ action = "envoi.liste"
 touches = []
 source = "SHOT (sans touche)"
 
+[[raccourci]]
+action = "envoi.modifie_suivant"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "envoi.modifie_precedent"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "envoi.modifies_choisir"
+touches = []
+source = "SHOT (sans touche)"
+
 # Références visuelles (sans touche : à choisir).
 [[raccourci]]
 action = "vue.references"

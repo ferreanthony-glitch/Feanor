@@ -172,7 +172,10 @@ impl App {
                 self.action_item(ui, "Commentaires…", "vue.commentaires");
                 ui.menu_button("Envois", |ui| {
                     self.action_item(ui, "Marquer un envoi…", "envoi.marquer");
-                    self.action_item(ui, "Liste des envois…", "envoi.liste");
+                    self.action_item(ui, "Envois et plans modifiés…", "envoi.liste");
+                    self.action_item(ui, "Plan modifié suivant", "envoi.modifie_suivant");
+                    self.action_item(ui, "Plan modifié précédent", "envoi.modifie_precedent");
+                    self.action_item(ui, "Choisir les plans modifiés", "envoi.modifies_choisir");
                 });
                 ui.separator();
                 let lock = if self.doc.storyboard_locked { "Déverrouiller le storyboard" } else { "Verrouiller le storyboard" };

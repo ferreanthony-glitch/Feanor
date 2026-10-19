@@ -664,6 +664,8 @@ impl App {
         let thumb_h = (block_h - 24.0).max(10.0);
         let aspect = self.doc.frame[0] as f32 / self.doc.frame[1].max(1) as f32;
         let mut blocks: Vec<Rect> = Vec::with_capacity(self.doc.panels.len());
+        // Les repères « modifié depuis le dernier envoi » posés ce coup-ci, et leur phrase (`envoisui.rs`).
+        let mut reperes: Vec<(Rect, String)> = Vec::new();
         let mut start = 0;
         for i in 0..self.doc.panels.len() {
             let len = self.doc.panels[i].frame_count();
@@ -711,6 +713,11 @@ impl App {
                     Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
                     Color32::WHITE,
                 );
+            }
+            // Modifié (ou ajouté) depuis le dernier envoi : une pastille en haut à droite du bloc.
+            if let (Some((etat, phrase)), Some(zone)) = (self.envoi_repere(self.doc.panels[i].id), crate::envoisui::zone_repere(rect)) {
+                crate::envoisui::peindre_repere(&clip, zone.center(), etat, crate::envoisui::REPERE);
+                reperes.push((zone, phrase));
             }
             let title = clip.layout_no_wrap(panel_title(&self.doc, i), FontId::proportional(12.0), visuals.text_color());
             let duration = clip.layout_no_wrap(
@@ -884,6 +891,9 @@ impl App {
         );
 
         if let Some(p) = resp.hover_pos() {
+            if let Some((_, phrase)) = reperes.iter().find(|(z, _)| z.contains(p)) {
+                resp.clone().on_hover_text_at_pointer(phrase.clone());
+            }
             let clip_edge = matches!(
                 self.lane_hit(p, left, ppf, lanes_top),
                 Some((_, Some((_, edge)))) if edge.is_resize()

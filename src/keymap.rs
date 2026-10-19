@@ -646,7 +646,10 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("transition.noir", "Transition : noir", true, false),
     act("transition.apercu", "Aperçu des transitions à l'arrêt (oui / non)", true, false),
     act("envoi.marquer", "Marquer un envoi (noter l'état de tous les plans)", true, false),
-    act("envoi.liste", "Envois : la liste (ouvrir / fermer)", true, false),
+    act("envoi.liste", "Envois : liste et plans modifiés (ouvrir / fermer)", true, false),
+    act("envoi.modifie_suivant", "Aller au plan modifié suivant (depuis le dernier envoi)", true, false),
+    act("envoi.modifie_precedent", "Aller au plan modifié précédent (depuis le dernier envoi)", true, false),
+    act("envoi.modifies_choisir", "Choisir les plans modifiés depuis le dernier envoi", true, false),
     act("reference.decharger", "Décharger la référence courante", false, false),
     act("legende.chercher", "Chercher dans les légendes", false, false),
 ];

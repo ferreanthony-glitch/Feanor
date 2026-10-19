@@ -1,6 +1,6 @@
 //! Envois (`envois.rs`, `envoisui.rs`) : le fichier et ses protections, l'empreinte des plans (ce qui
 //! compte comme un changement, et ce qui n'en est pas un), les instantanés (écrits une fois, relus tels
-//! quels), marquer un envoi dans l'application.
+//! quels), le suivi des plans modifiés dans l'application.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -10,10 +10,10 @@ use eframe::egui::Color32;
 
 use crate::camera::{Camera, CameraKey};
 use crate::document::{Cel, CelId, Document, Layer, LayerKind};
-use crate::envois::{self, Copie, Demande, Envoi, NouvelEnvoi, PlanCopie, PlanEnvoye};
+use crate::envois::{self, Copie, Demande, Envoi, Etat, NouvelEnvoi, PlanCopie, PlanEnvoye};
 use crate::fiabilite_fixture::{arbre, dossier, projet_complet};
 use crate::fx::{Effect, EffectKind};
-use crate::perf_tests::{banc, Banc};
+use crate::perf_tests::{banc, se_reposer, Banc};
 use crate::project::{self, Tete};
 
 fn rouge(r: u8) -> Color32 {
@@ -572,33 +572,144 @@ fn marking_an_envoi_in_the_application_notes_every_plan_and_saves() {
     assert!(b.app.doc.envois.pending.is_empty(), "l'enregistrement a libéré les instantanés");
     assert!(!b.app.modified, "le projet est enregistré");
     assert!(m.parent().unwrap().join("envois.json").exists());
-    // Il se rouvre avec ses envois.
+    // Rien n'a changé depuis : aucun plan n'est repéré.
+    assert!(b.app.plans_modifies().is_empty());
+    for p in &b.app.doc.panels {
+        assert!(b.app.envoi_repere(p.id).is_none());
+    }
+    // Il se rouvre avec ses envois, et le suivi repart sans rien repérer.
     let ouvert = project::load(&m).expect("ouverture");
     assert_eq!(ouvert.doc.envois.list.len(), 1);
 }
 
 #[test]
-fn a_project_without_envois_does_no_work_and_asks_for_no_repaint() {
-    let (mut b, _m) = banc_projet("envois-aucun", 4);
-    for _ in 0..20 {
-        b.image(Vec::new(), 0.5);
-    }
-    assert!(!b.app.envois_ui.occupe());
-    let reveil = b.image(Vec::new(), 0.5).reveil;
-    assert!(reveil >= Duration::from_secs(1), "SHOT demande à être repeint dans {reveil:?}");
+fn changed_plans_are_flagged_after_a_calm_moment_and_unflagged_when_undone() {
+    let (mut b, _m) = banc_projet("envois-suivi", 3);
+    marquer_dans_l_appli(&mut b, "v1 au réal");
+    let (p0, p1) = (b.app.doc.panels[0].id, b.app.doc.panels[1].id);
+    // Un trait dans le plan 2 (le plan 1 ne bouge pas), comme le ferait un geste : l'historique garde le retour.
+    let id = b.app.doc.panels[1].layers[0].frames[0].unwrap();
+    let cel = b.app.doc.cels.get_mut(&id).unwrap();
+    cel.raster.tile_mut(5)[2] = rouge(180);
+    cel.version += 1;
+    // Pendant la première moitié de seconde, rien n'est encore repéré (on attend le calme).
+    b.image(Vec::new(), 0.1);
+    assert!(b.app.envoi_repere(p1).is_none());
+    pomper(&mut b);
+    let (etat, phrase) = b.app.envoi_repere(p1).expect("le plan retouché est repéré");
+    assert_eq!(etat, Etat::Modifie);
+    assert!(phrase.contains("v1 au réal") && phrase.contains("20/10/2026"), "{phrase}");
+    assert!(b.app.envoi_repere(p0).is_none());
+    assert_eq!(b.app.plans_modifies(), vec![1]);
+    // Revenir à l'état de l'envoi : le repère s'en va.
+    let cel = b.app.doc.cels.get_mut(&id).unwrap();
+    cel.raster.tile_mut(5)[2] = Color32::TRANSPARENT;
+    cel.version += 1;
+    pomper(&mut b);
+    assert!(b.app.envoi_repere(p1).is_none(), "revenu à l'état de l'envoi");
+    // Un plan neuf est « ajouté ».
+    b.app.doc.add_scene_after(2);
+    pomper(&mut b);
+    let neuf = b.app.doc.panels[3].id;
+    assert_eq!(b.app.envoi_repere(neuf).map(|r| r.0), Some(Etat::Nouveau));
 }
 
 #[test]
-fn the_marking_copy_stays_cheap_on_a_big_film() {
-    // 600 plans de 4 images, 1 200 dessins : la copie qui se fait sur le fil de l'interface.
+fn a_reopened_project_shows_no_modified_plan_until_something_changes() {
+    let (mut b, m) = banc_projet("envois-rouvert", 3);
+    marquer_dans_l_appli(&mut b, "v1 au réal");
+    // Ouvrir le projet enregistré, comme le fait l'application : un autre document, un autre projet.
+    let ouvert = project::load(&m).expect("ouverture");
+    b.app.doc = ouvert.doc;
+    b.app.doc_epoch += 1;
+    b.app.written = ouvert.written;
+    b.app.history.clear();
+    pomper(&mut b);
+    assert!(b.app.envois_ui.suivi_fait(), "le suivi a regardé le projet rouvert");
+    assert!(b.app.plans_modifies().is_empty(), "des dessins relus du disque ne sont pas des dessins modifiés");
+    // Le premier trait repère son plan.
+    let id = b.app.doc.panels[2].layers[0].frames[0].unwrap();
+    let cel = b.app.doc.cels.get_mut(&id).unwrap();
+    cel.raster.tile_mut(4)[4] = rouge(111);
+    cel.version += 1;
+    pomper(&mut b);
+    assert_eq!(b.app.plans_modifies(), vec![2]);
+}
+
+#[test]
+fn the_commands_jump_from_one_modified_plan_to_the_next() {
+    let (mut b, _m) = banc_projet("envois-navigation", 5);
+    b.app.run_action("envoi.modifie_suivant");
+    assert!(b.app.status.contains("Aucun envoi"), "{}", b.app.status);
+    marquer_dans_l_appli(&mut b, "v1");
+    b.app.run_action("envoi.modifie_suivant");
+    assert!(b.app.status.contains("Aucun plan modifié"), "{}", b.app.status);
+    for i in [1, 3] {
+        b.app.doc.panels[i].layers[0].opacity = 0.4;
+    }
+    b.app.doc.panels[1].action = "Elle sourit.".into();
+    b.app.doc.panels[3].action = "Il part.".into();
+    // (Le suivi regarde l'historique et les versions des dessins : une retouche de calque passe par l'historique.)
+    b.app.history.push(crate::history::Edit::Group(Vec::new()));
+    pomper(&mut b);
+    assert_eq!(b.app.plans_modifies(), vec![1, 3]);
+    b.app.select_panel(0);
+    b.app.run_action("envoi.modifie_suivant");
+    assert_eq!(b.app.cur_panel, 1);
+    b.app.run_action("envoi.modifie_suivant");
+    assert_eq!(b.app.cur_panel, 3);
+    b.app.run_action("envoi.modifie_suivant");
+    assert_eq!(b.app.cur_panel, 1, "il tourne");
+    b.app.run_action("envoi.modifie_precedent");
+    assert_eq!(b.app.cur_panel, 3);
+    b.app.run_action("envoi.modifies_choisir");
+    let ids: Vec<u64> = [1, 3].iter().map(|&i| b.app.doc.panels[i].id).collect();
+    assert_eq!(b.app.board_sel, ids);
+}
+
+#[test]
+fn a_project_without_envois_does_no_work_and_asks_for_no_repaint() {
+    // (Le moindre calcul d'effet d'un autre essai réveille cette application : état commun pour elle seule.)
+    crate::fxcache::monde::ecrire();
+    let (mut b, _m) = banc_projet("envois-aucun", 4);
+    assert!(se_reposer(&mut b, 3000) < 3000, "SHOT finit par se reposer");
+    assert!(!b.app.envois_ui.occupe());
+    let repos: Vec<_> = (0..6).map(|_| b.image(Vec::new(), 0.5).reveil).collect();
+    let pire = repos.iter().min().copied().unwrap_or(Duration::MAX);
+    assert!(pire >= Duration::from_secs(1), "SHOT demande à être repeint dans {pire:?}");
+}
+
+#[test]
+fn once_the_plans_are_followed_the_application_goes_back_to_rest() {
+    crate::fxcache::monde::ecrire();
+    let (mut b, _m) = banc_projet("envois-repos", 4);
+    marquer_dans_l_appli(&mut b, "v1");
+    assert!(se_reposer(&mut b, 3000) < 3000, "SHOT finit par se reposer après le suivi");
+    let repos: Vec<_> = (0..6).map(|_| b.image(Vec::new(), 0.5).reveil).collect();
+    let pire = repos.iter().min().copied().unwrap_or(Duration::MAX);
+    assert!(pire >= Duration::from_secs(1), "après le suivi, SHOT demande à être repeint dans {pire:?}");
+    assert!(b.app.envois_ui.au_repos());
+}
+
+#[test]
+fn the_per_frame_stamp_and_the_marking_copy_stay_cheap_on_a_big_film() {
+    // 600 plans de 4 images, 1 200 dessins : le relevé de chaque image d'écran, et la copie d'un marquage.
     let doc = film(600);
     let mut b = banc(doc, false);
+    let debut = std::time::Instant::now();
+    let mut dernier = None;
+    for _ in 0..200 {
+        dernier = Some(b.app.envois_releve());
+    }
+    let par_image = debut.elapsed() / 200;
+    assert!(dernier.is_some());
+    assert!(par_image < Duration::from_millis(1), "le relevé coûte {par_image:?} par image d'écran");
     let ctx = b.ctx.clone();
     b.app.envois_marquer(&ctx, "v1", 1_760_000_000);
     let copie = b.app.envois_ui.derniere_copie.expect("mesure");
-    eprintln!("envois : copie d'un marquage (600 plans, 1 200 dessins) {copie:?}");
+    eprintln!("envois : relevé par image d'écran {par_image:?} ; copie d'un marquage (600 plans, 1 200 dessins) {copie:?}");
     assert!(copie < Duration::from_millis(400), "la copie d'un marquage coûte {copie:?}");
-    // On laisse le fil finir avant la fin de l'essai.
+    // On laisse les fils finir avant la fin de l'essai.
     for _ in 0..800 {
         b.image(Vec::new(), 0.25);
         if b.app.envois_ui.au_repos() {
@@ -606,12 +717,11 @@ fn the_marking_copy_stays_cheap_on_a_big_film() {
         }
         std::thread::sleep(Duration::from_millis(5));
     }
-    assert_eq!(b.app.doc.envois.list.len(), 1);
 }
 
 #[test]
 fn the_envoi_commands_are_in_the_palette_the_menus_and_the_shortcut_file() {
-    for id in ["envoi.marquer", "envoi.liste"] {
+    for id in ["envoi.marquer", "envoi.liste", "envoi.modifie_suivant", "envoi.modifie_precedent", "envoi.modifies_choisir"] {
         assert!(crate::keymap::action_info(id).is_some_and(|a| a.implemented), "{id}");
     }
     assert!(crate::barres::Barre::Montage.cherche("envoi.marquer").is_some());

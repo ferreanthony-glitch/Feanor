@@ -753,6 +753,18 @@ impl App {
             }
         }
         painter.rect_stroke(thumb, 0.0, Stroke::new(1.0_f32, Color32::from_gray(40)), StrokeKind::Outside);
+        // Modifié (ou ajouté) depuis le dernier envoi : une pastille dans le coin de la première vignette
+        // du plan (`envoisui.rs`).
+        let repere = if place.starts_plan() {
+            self.envoi_repere(self.doc.panels[i].id).filter(|_| thumb.width() >= 24.0).map(|(etat, phrase)| {
+                let r = (crate::envoisui::REPERE * xf.zoom).clamp(5.0, 10.0);
+                let centre = pos2(thumb.right() - r - 3.0, thumb.top() + r + 3.0);
+                crate::envoisui::peindre_repere(&painter.with_clip_rect(view), centre, etat, r);
+                (Rect::from_center_size(centre, vec2(r * 2.0 + 2.0, r * 2.0 + 2.0)), phrase)
+            })
+        } else {
+            None
+        };
         // Couleur de repère du plan : un liseré dans la vignette et une bande sous l'en-tête.
         if let Some(tag) = self.doc.panels[i].color {
             let c = crate::marks::color(tag);
@@ -812,6 +824,11 @@ impl App {
         if resp.secondary_clicked() && !chosen {
             self.board_sel = vec![id];
             self.select_board(i, place.frame);
+        }
+        if let Some((zone, phrase)) = repere {
+            if resp.hover_pos().is_some_and(|p| zone.contains(p)) {
+                resp.clone().on_hover_text_at_pointer(phrase);
+            }
         }
         resp.context_menu(|ui| self.card_menu(ui, i, place.frame));
     }
