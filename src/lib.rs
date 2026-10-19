@@ -251,6 +251,9 @@ mod fxui;
 mod fxkeys;
 #[cfg(test)]
 mod fxkeys_tests;
+mod fxcopie;
+#[cfg(test)]
+mod fxcopie_tests;
 #[cfg(test)]
 mod folders_tests;
 mod frames;
