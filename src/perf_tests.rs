@@ -88,7 +88,7 @@ fn calque(doc: &mut Document, name: &str, frames: usize, every: usize, tiles: us
 
 /// Un long projet : `plans` plans en séquences de dix, `layers` calques de `frames` images
 /// (animé à l'image 2 sur le premier, plus lent sur les suivants, un fond tenu sur le dernier).
-fn projet_long(plans: usize, layers: usize, frames: usize, tiles: usize) -> Document {
+pub(crate) fn projet_long(plans: usize, layers: usize, frames: usize, tiles: usize) -> Document {
     let mut doc = Document::with_frame(1920, 1080, 24);
     let mut at = 0;
     for i in 1..plans {
@@ -146,6 +146,13 @@ impl Mesure {
     }
 }
 
+impl App {
+    /// Des vignettes (des plans, des dessins) se font sur les fils de fond ou attendent d'être envoyées.
+    pub(crate) fn vignettes_en_cours(&self) -> bool {
+        self.thumbs.busy() || self.layer_thumbs.busy()
+    }
+}
+
 pub(crate) struct Banc {
     pub ctx: egui::Context,
     pub app: App,
@@ -191,6 +198,7 @@ pub(crate) fn banc_taille(doc: Document, avec_gpu: bool, largeur: u32, hauteur: 
     let mut b = Banc { ctx, app, rs, taille, t: 0.0, cible, textes: Vec::new(), garder_textes: false };
     b.attendre_pinceaux();
     b.chauffer(8);
+    b.attendre_vignettes();
     b
 }
 
@@ -206,6 +214,19 @@ impl Banc {
             std::thread::sleep(Duration::from_millis(2));
             self.image(Vec::new(), 1.0 / 60.0);
         }
+    }
+
+    /// Les vignettes se font sur des fils de fond (`thumbs.rs`) et réveillent l'écran à leur fin : le banc
+    /// attend les premières, comme une application déjà ouverte depuis un instant, pour que « au repos »
+    /// veuille dire la même chose à chaque essai.
+    pub fn attendre_vignettes(&mut self) {
+        let debut = Instant::now();
+        while self.app.vignettes_en_cours() && debut.elapsed() < Duration::from_secs(60) {
+            std::thread::sleep(Duration::from_millis(1));
+            self.image(Vec::new(), 1.0 / 60.0);
+        }
+        // (Chaque réveil laisse derrière lui deux images, `egui::Context::request_repaint`.)
+        self.chauffer(3);
     }
 
     /// Quelques images pour que la mise en page se stabilise (egui mesure en deux passes).
@@ -377,9 +398,13 @@ fn jusqu_au_repos(b: &mut Banc, max: usize) -> (usize, f64) {
     let t = Instant::now();
     for k in 0..max {
         let m = b.image(Vec::new(), 1.0 / 60.0);
-        // (Le rafraîchissement de la superposition, 500 ms, ne compte pas.)
-        if m.reveil >= Duration::from_millis(400) {
+        // (Le rafraîchissement de la superposition, 500 ms, ne compte pas. Les vignettes qui se font sur
+        // les fils de fond réveillent l'écran à leur fin : on les attend.)
+        if m.reveil >= Duration::from_millis(400) && !b.app.vignettes_en_cours() {
             return (k + 1, t.elapsed().as_secs_f64() * 1e3);
+        }
+        if b.app.vignettes_en_cours() {
+            std::thread::sleep(Duration::from_micros(500));
         }
     }
     (max, t.elapsed().as_secs_f64() * 1e3)
@@ -425,7 +450,7 @@ pub(crate) fn se_reposer(b: &mut Banc, max: usize) -> usize {
     let mut calmes = 0;
     for k in 0..max {
         let m = b.image(Vec::new(), 0.5);
-        if m.reveil >= Duration::from_secs(1) {
+        if m.reveil >= Duration::from_secs(1) && !b.app.vignettes_en_cours() {
             calmes += 1;
             if calmes >= 5 {
                 return k + 1;
@@ -622,6 +647,7 @@ fn a_zoomed_timeline_keeps_its_thumbnails_instead_of_remaking_them() {
     b.app.set_mode(Mode::Animation);
     b.app.timeline_cell = 48.0;
     b.chauffer(10);
+    b.attendre_vignettes();
     let made = b.app.layer_thumbs.len();
     let cels = b.app.doc.cels.len();
     assert!(made > 20, "la timeline zoomée doit montrer des miniatures ({made})");
@@ -953,6 +979,45 @@ fn perf_thumbnail_cost() {
         }
         println!("PERF vignette {tw}x{th}, {layers} calques : {:.2} ms", t.elapsed().as_secs_f64() * 1e3 / n as f64);
     }
+}
+
+/// Le fil de l'interface pendant que les vignettes du montage se font (levier 4 de
+/// `docs/PERFORMANCE.md`) : un montage de 600 plans x 3 calques, vignettes toutes à refaire, défilé
+/// à la molette et par sauts de la tête de lecture, puis un trait de pinceau pendant que la vignette
+/// du plan courant change à chaque image. Chiffre qui compte : « interface » (moyenne, pire).
+#[test]
+#[ignore]
+fn perf_montage_thumbnails_ui_thread() {
+    let mut b = banc(projet_long(600, 3, 24, 6), true);
+    let (images, ms) = jusqu_au_repos(&mut b, 6000);
+    println!("PERF vignettes : ouverture du montage de 600 plans : {images} images, {ms:.0} ms avant le repos");
+    b.app.montage_zoom = 4.0;
+    b.app.follow_frame = false;
+    let zone = Rect::from_min_size(pos2(500.0, 880.0), vec2(900.0, 120.0));
+    b.app.thumbs.clear();
+    scenario("vignettes à froid : molette sur le montage", &mut b, 120, 1.0 / 60.0, |b, k| {
+        let mut ev = b.souris(900.0, 940.0);
+        ev.extend(b.molette(vec2(-120.0 - (k % 5) as f32 * 20.0, 0.0), Modifiers::NONE));
+        ev
+    });
+    let (images, ms) = jusqu_au_repos(&mut b, 6000);
+    println!("PERF vignettes : fin du défilement : {images} images, {ms:.0} ms avant le repos");
+    b.app.thumbs.clear();
+    let total = b.app.doc.total_frames();
+    b.app.follow_frame = true;
+    scenario("vignettes à froid : tête de lecture qui saute", &mut b, 120, 1.0 / 60.0, |b, k| {
+        b.app.goto_global((k * 977) % total);
+        bouge(k, zone)
+    });
+    let (images, ms) = jusqu_au_repos(&mut b, 6000);
+    println!("PERF vignettes : fin des sauts : {images} images, {ms:.0} ms avant le repos");
+    // Dessiner pendant que le montage est sous les yeux : la vignette du plan courant change.
+    b.app.goto_global(0);
+    b.chauffer(3);
+    let r = b.app.canvas_rect;
+    let dessin = r.shrink2(vec2(r.width() * 0.2, r.height() * 0.3));
+    scenario("vignettes : dessin au pinceau (8 pts/image), montage visible", &mut b, 60, 1.0 / 60.0, |_, k| trait_souris(k, 60, 8, dessin));
+    jusqu_au_repos(&mut b, 6000);
 }
 
 /// Chaque étape de l'écriture et de la lecture d'un dessin bitmap (3840 x 2160, 40 tuiles peintes).

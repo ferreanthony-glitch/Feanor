@@ -500,6 +500,20 @@ fn plan_with_camera(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera:
 
 /// Image réduite de ce que voit la caméra `cam` (moyenne de 4 échantillons par pixel).
 pub fn thumbnail(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize) -> ColorImage {
+    thumbnail_until(doc, plan, cam, tw, th, &|| false).expect("jamais interrompue")
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Vignettes composées par ce fil (essais : l'interface n'en compose aucune, `thumbs.rs`).
+    pub(crate) static THUMBNAILS_HERE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Comme `thumbnail`, mais `cancelled` est demandé entre deux lignes : vrai, le calcul s'arrête et
+/// rend `None` (une vignette que plus personne n'attend, `thumbs.rs`).
+pub fn thumbnail_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize, cancelled: &dyn Fn() -> bool) -> Option<ColorImage> {
+    #[cfg(test)]
+    THUMBNAILS_HERE.with(|n| n.set(n.get() + 1));
     let resolved = crate::calqueffet::resolve_auto(doc, plan);
     let plan = &*resolved;
     let [fw, fh] = doc.frame;
@@ -510,6 +524,9 @@ pub fn thumbnail(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize
     let layers = resolve(doc, plan);
     let base = paper_color(plan);
     for y in 0..th {
+        if cancelled() {
+            return None;
+        }
         for x in 0..tw {
             let mut acc = [0u32; 4];
             for (ox, oy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
@@ -531,10 +548,10 @@ pub fn thumbnail(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize
             ));
         }
     }
-    ColorImage {
+    Some(ColorImage {
         size: [tw, th],
         pixels,
-    }
+    })
 }
 
 /// Le dessin entier réduit à `max_w` pixels de large au plus (moyenne de 4 échantillons par

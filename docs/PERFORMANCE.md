@@ -13,6 +13,10 @@ Mise à jour du 2026-10-19 (branche `perf2`, partie de 8b49066) : les leviers 1,
 **image composée gardée** ; voir la section 9 (mesures avant / après, conception, risques). Les
 chiffres des tableaux 2 et suivants restent ceux de la première passe.
 
+Mise à jour du 2026-10-19 (branche `vignettes-fond`, partie de `main` 31b86f1) : le levier 4,
+**les vignettes hors du fil de l'interface** (montage, planche, miniatures de la timeline et du panneau
+Calques), est fait ; voir la section 11 (conception, mesures avant / après, risques, à regarder à l'écran).
+
 Ce document dit comment mesurer, ce qui a été mesuré avant et après, ce qui a été changé, ce qui reste
 (classé), et ce qu'il faut regarder à l'écran.
 
@@ -58,7 +62,9 @@ cargo test --release --offline --target-dir target\msvc perf_ -- --ignored --noc
 (ou un seul : `perf_long_project`, `perf_heavy_plan`, `perf_panels`, `perf_scale`,
 `perf_vector_drawing`, `perf_project_open_save`, `perf_cel_io_steps`, `perf_thumbnail_cost`,
 `perf_brush_library_startup`, `perf_cpu_bench`, et, depuis `perf2`, `perf_save_ui_thread` (Ctrl+S) et
-`perf_gpu_textures` (mémoire de la carte, défilement, lecture, repos). Un essai d'inactivité tourne toujours avec la suite :
+`perf_gpu_textures` (mémoire de la carte, défilement, lecture, repos), et, depuis `vignettes-fond`,
+`perf_montage_thumbnails_ui_thread` (le fil de l'interface pendant que les vignettes d'un montage de 600 plans
+se font) et `perf_thumbnail_request_cost` (ce que coûte une vignette à l'interface). Un essai d'inactivité tourne toujours avec la suite :
 au repos, après une lecture, après un trait, SHOT ne demande aucune image de plus.
 
 Limites : projets synthétiques (dessins bitmap de 40 tuiles de 64 × 64 sur une feuille de
@@ -289,7 +295,7 @@ cinq passages, deux à trois séries) :
 | 1 | ~~**Enregistrer en arrière-plan** (Ctrl+S) : l'écriture sort du fil de l'interface~~ **fait** (`perf2`, section 9.1) | Ctrl+S avec 50 dessins modifiés : 270 → 1,1 ms sur le fil de l'interface ; premier enregistrement de 500 dessins : 2 813 → 4 ms | fait |
 | 2 | ~~**Textures de dessin à la taille du contenu** (boîte des tuiles dessinées) au lieu de la feuille~~ **fait** (`perf2`, section 9.2) | 32 textures de 33 Mo → 1 093 de 1 Mo dans le même Go ; lecture 7,9 → 3,9 ms ; plan revu 14,0 → 3,1 ms | fait |
 | 3 | ~~**Image composée gardée** (dessous / dessus) tant que le plan et les versions ne changent pas~~ **fait** (`perf2`, section 9.3) | carte, 15 calques, souris qui bouge : 2,3 → 0,45 ms par image | fait |
-| 4 | **Vignettes du montage hors du fil de l'interface** | plus de pic de 6 ms en défilant un grand montage (600 plans : tête 11,4 → ≈ 3 ms) | L. Il faut des tuiles partageables (`Arc<Tile>`) pour ne pas copier les dessins vers le fil ; touche le moteur de pinceau. |
+| 4 | ~~**Vignettes du montage hors du fil de l'interface**~~ **fait** (`vignettes-fond`, section 11) | plus de pic de 6 ms en défilant un grand montage (600 plans, tête de lecture : interface 11,1 → 3,4 ms ; pire image 13,2 → 4,6 ms) | fait (les tuiles `Arc` de `perf2` rendaient le cliché presque gratuit) |
 | 5 | **Décodage PNG en flux vers les tuiles** (crate `png` en dépendance directe, déjà dans `Cargo.lock`) | ouverture 7,3 → ≈ 4 s, mémoire ÷30 par fil | S à M |
 | 6 | **Cache d'images composées en mémoire** pour la lecture des plans à effets | 24 images/s garanties avec 10 effets ou plus (les effets se calculent sur le processeur) | L. Avec la carte graphique pour les effets (7). |
 | 7 | **Effets sur la carte graphique** (flou, ombre, bruit, mosaïque) | enlève le processeur de la lecture des plans à effets | L. Mené par l'agent des effets. |
@@ -606,3 +612,128 @@ Reste : la pleine résolution (227 ms) n'est pas fluide, c'est le repos ; l'expo
 4 min 30 pour les images chargées (une secousse de pixels de la feuille entière, caméra hors de la feuille comprise :
 calculer seulement dans le cadre de la caméra serait un gain d'un facteur 3 à 4, non fait — les effets lisent des
 positions de la feuille entière).
+
+## 11. Vignettes hors du fil de l'interface (branche `vignettes-fond`, levier 4)
+
+Avant : le montage, la planche et les miniatures de calques se composaient sur le fil de l'interface
+(`render::thumbnail`), 6 ms par image d'écran au plus (`THUMB_TIME`) et au moins une vignette par image :
+en défilant un montage de 600 plans ou en sautant de plan en plan, chaque image d'écran portait 4 à 7 vignettes
+(1,5 ms chacune pour 3 calques, 5 ms pour 15). Depuis `perf2`, copier un `Raster` ne copie aucune tuile
+(`Arc`) : le cliché d'un plan est presque gratuit, et la composition peut partir sur d'autres fils.
+
+### Conception (`thumbs.rs`, `layersui.rs`)
+
+- **Le fil de l'interface** (`Thumbs::texture_at`) calcule la clé de la vignette (composition du plan : dessins,
+  opacités, teintes, transformations, modes, effets, calques d'effets ; version de chaque dessin ; caméra ;
+  fonds arrivés ; taille du cadre) et la compare à celle de la vignette gardée. Elle a changé : un **cliché** (un
+  `Document` minuscule qui ne porte que les dessins du plan, ceux de ses sources CTG et leur strate Fond, sans
+  le vecteur, tuiles partagées) part dans la file. Il rend tout de suite l'image gardée, même ancienne, ou celle
+  d'une autre taille du même plan ; rien si la vignette n'a jamais été faite (le bloc du montage reste vide un
+  instant). `Thumbs::begin_frame` envoie les images finies à la carte graphique, 1 ms au plus par image d'écran
+  (`UPLOAD_TIME`), et le reste à l'image suivante.
+- **Les fils** (`Pool`, un à quatre, deux cœurs restent à l'interface ; endormis sans réveil périodique) prennent
+  une demande, la composent avec **le code d'avant**, `render::thumbnail_until` (`thumbnail` plus un test
+  d'abandon entre deux lignes), dans le mode « doux » d'avant (`fx::differe` + `fxcache::soft_scope`) : les
+  effets de calque pas encore calculés sont demandés au fil des effets et remplacés par leur dernier résultat ou
+  le dessin sans effet, les calques d'effets (`calqueffet`) se résolvent de même, le fond sous le trait montre
+  celui d'avant jusqu'à l'arrivée du nouveau, les images de calque vidéo se lisent sur le fil de fond (elles se
+  lisaient sur l'interface). Une vignette incomplète se refait quand un calcul de fond finit
+  (`fxcache::generation`), comme avant. Un fil qui plante rend une vignette vide au lieu de fermer SHOT.
+- **File d'attente.** Une demande par vignette : la nouvelle **remplace** celle qui attend et **arrête** celle qui
+  se calcule (un indicateur testé entre deux lignes). Une demande que l'écran **ne renouvelle plus** depuis
+  3 images d'écran (la vignette n'est plus visible) est **abandonnée** ; parmi celles qui restent, la plus
+  récemment demandée passe la première, et dans une même image, dans l'ordre où l'écran les a demandées. Une
+  réponse plus ancienne que celle qu'on montre déjà ne la remplace pas (deux fils finissent dans le désordre).
+  Autre projet, nouvelle résolution : `clear` abandonne tout (file, calculs, images finies).
+- **Miniatures de dessins** (timeline, panneau Calques, en-têtes de calques, 64 × 36) : la même file (deux
+  fils), le calcul est `thumbs::cel_thumbnail`, déplacé tel quel de `App::layer_thumb`. L'ancienne miniature reste
+  en attendant la neuve ; un dessin qui n'en a pas montre un cadre vide. (Au passage : l'ouverture d'un autre
+  projet vide aussi ces miniatures, ce qu'elle ne faisait pas : des numéros et des versions de dessin
+  identiques d'un projet à l'autre en auraient montré de fausses.)
+- **Ce qui ne change pas** : les vignettes de l'export, de l'API locale (`noyau.rs`) et de la lecture du
+  storyboard par un modèle (`lecturesb.rs`, déjà bornée par `BUDGET_VIGNETTES`) restent des appels bloquants ;
+  la planche de crayonnés ne compose rien (elle envoie des tuiles) ; les références visuelles se décodent déjà
+  sur un autre fil ; le calque « Fond 3D » est un calque bitmap ordinaire, rendu en arrière-plan depuis
+  toujours. Les vignettes ne contiennent ni incrustations ni transitions (elles se posent à l'export), avant
+  comme après. Le format du projet n'a pas changé.
+
+### Mesures
+
+Même machine (Core i7-10700K, RTX 2080 SUPER), version release, essais `--ignored`, l'ancien et le nouveau
+exécutables lancés l'un après l'autre, deux séries. La machine était partagée avec un autre travail de
+compilation : une série sur trois a été jetée (temps de carte × 10). Temps de **l'interface** (`App::frame`,
+ms par image d'écran), moyenne et, entre parenthèses, la pire image. Banc : `perf_montage_thumbnails_ui_thread`
+(montage de 600 plans × 3 calques, vignettes toutes à refaire) et `perf_scale`.
+
+| Scénario | Avant | Après |
+|---|---|---|
+| Montage de 600 plans, vignettes à froid, molette (120 images) | 6,6–7,9 (9,6–11,3) | **2,3** (2,7–3,2) |
+| Montage de 600 plans, vignettes à froid, la tête de lecture saute de plan en plan | 10,2–11,0 (11,6–13,2) | **3,7–4,1** (5,2–5,9) |
+| `perf_scale` : montage de 600 plans, tête de lecture (section « Montage » : 9,9 → 1,8 ms) | 9,9 (12,1) | **3,2–3,3** (4,7) |
+| `perf_scale` : montage de 600 plans, souris qui bouge | 2,1 (2,3) | 2,1–2,3 (2,2–3,2), pas de vignette à refaire |
+| Dessin au pinceau, montage visible (60 images) | 2,4–2,9 (2,9–4,4) | 2,4–2,8 (3,3–3,9) : la vignette ne change qu'à la fin du trait |
+| Timeline de 2 000 images × 15 calques, tête de lecture (pas de miniature à cette échelle) | 3,7 (4,1) | 3,4–3,6 (4,0–4,7), inchangé |
+| Plan de 15 calques × 200 images, timeline zoomée, tête de lecture (15 miniatures neuves par image) | 12,4–14,8 (22,7–28,9) | 7,2 (8,7), moins sûr : la série suivante a été troublée |
+| Attente avant que les vignettes visibles soient toutes là (après un défilement / des sauts) | ≈ 70–95 ms / 250 ms | ≈ 65–76 ms / 250 ms (les 250 ms sont le délai de l'aperçu, `fx::DRAFT_MS`) |
+
+Coût d'une vignette pour le fil de l'interface (`perf_thumbnail_request_cost`, fils en pause) :
+
+| Plan | Demande à froid (clé, cliché, mise en file) | Vignette à jour | La composer sur ce fil (avant) |
+|---|---|---|---|
+| 3 calques | **36 µs** (dont cliché 12) | 1 µs | 1,99 ms |
+| 15 calques | **145 µs** (dont cliché 65) | 5 µs | 5,00 ms |
+
+Les 2 ms de `THUMB_TIME` ne servent plus que de garde-fou (plus de 50 demandes à froid dans une image
+d'écran) ; `pending` ne demande plus à repeindre à chaque image tant que les fils travaillent : ce sont eux
+qui réveillent l'écran à la fin de chaque vignette (egui regroupe les réveils).
+
+### Garde-fous
+
+- **Mêmes pixels** (`thumbs_tests.rs`) : sur le projet d'essai complet de la fiabilité (effets de calque à clés,
+  tremblement du trait, fond sous le trait, calque CTG, calque vidéo, dossier, mode de fusion, transformation,
+  caméra à clés, calque d'effet d'ajustement, incrustation ; quatre images par plan), chaque vignette faite par
+  les fils est identique, pixel pour pixel, à celle de l'ancien chemin ; idem pour les miniatures de dessins
+  (l'ancien calcul est recopié dans l'essai) ; un cliché se compose comme le projet, et ne bouge pas quand on
+  dessine pendant la composition (copie à la première écriture).
+- **Invalidation** : onze sortes de changement refont la bonne vignette, et seulement elle (un trait, l'opacité
+  d'un calque, un calque caché, le mode de fusion, la transformation d'un calque, un effet de calque, une clé de
+  caméra, la durée du plan d'avant — qui change la caméra du plan d'après —, le papier, le dessin d'une image,
+  un calque de moins) ; l'ancienne image reste à l'écran jusqu'à l'arrivée de la neuve ; un dessin modifié
+  refait sa miniature.
+- **Abandon** : une demande remplacée n'est jamais composée (huit états successifs, une composition) ; un calcul
+  en cours est arrêté quand sa vignette change encore ; une demande qu'on ne renouvelle plus n'est jamais
+  composée ; la plus récente passe la première ; autre projet : tout est jeté.
+- **Rien sur le fil de l'interface** : `render::THUMBNAILS_HERE` et `thumbs::CEL_THUMBNAILS_HERE` comptent par
+  fil les compositions ; l'essai fait défiler un montage, sauter la tête de lecture, dessiner, avec le montage
+  puis la timeline zoomée sous les yeux, et exige zéro sur le fil de l'interface (et des compositions sur les
+  fils de fond) ; 200 demandes à froid en moins de 250 ms.
+- Le banc des essais attend les fils de vignettes (`Banc::attendre_vignettes`, `App::vignettes_en_cours`) : un
+  réveil qui tombe au hasard ne trouble ni « au repos, SHOT ne repeint pas » ni les essais de fiabilité.
+  `scripts\verifier.ps1 -Repetitions 2` : OK (1 502 essais deux fois de suite, aucun intermittent).
+
+### Risques
+
+- Une vignette qui n'a jamais été faite s'affiche vide (un instant, 5 à 100 ms) au lieu d'apparaître dans
+  l'image d'écran où elle est demandée ; en défilant très vite, les vignettes arrivent par vagues derrière le
+  défilement.
+- Mémoire : le cliché garde les tuiles d'un dessin vivantes tant que sa vignette se compose. Si on dessine
+  dans ce dessin pendant ce temps, les tuiles touchées sont copiées (16 Ko) : négligeable.
+- Les fils des vignettes s'ajoutent à ceux des effets et de la carte : jusqu'à six fils au repos de plus, aucun
+  réveil périodique ; sous charge (un export), ils se disputent les cœurs comme les autres fils de fond.
+- Pendant un long trait sur un plan dont la vignette met plus longtemps qu'une image à se composer, chaque
+  version remplace la précédente : la vignette du plan courant se met à jour à la fin du trait, pas pendant.
+
+### À regarder à l'écran
+
+- **Montage** : défiler à la molette, zoomer, sauter de plan en plan (flèches, clic sur la règle) : les vignettes
+  apparaissent sans saccade derrière le mouvement, aucune vignette fausse (celle d'un autre plan), aucun bloc
+  qui reste vide à l'arrêt.
+- **Planche, vue Plans** : ouverture, zoom, défilement ; les marques d'image (une vignette par marque).
+- **Changements** : dessiner un plan et regarder sa vignette dans le montage (elle se met à jour à la fin du
+  trait) ; changer l'opacité, la visibilité, le mode de fusion, une transformation, un effet, un calque d'effet
+  (impact, lueur), le fond sous le trait, une clé de caméra, la durée du plan d'avant : la vignette suit.
+- **Timeline zoomée** et **panneau Calques** : les miniatures des dessins arrivent en défilant, le dessin
+  modifié refait la sienne.
+- **Autre projet** : ouvrir un projet puis un autre : aucune vignette ni miniature de l'ancien.
+- **Diagnostic des performances** : profil « Performance » (vignettes en moitié de définition) puis « Revenir
+  comme avant » : les vignettes se refont à la bonne taille.

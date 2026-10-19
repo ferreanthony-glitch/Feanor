@@ -72,7 +72,8 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   chasser les textures affichées. `PlayMeter` mesure la cadence réellement affichée (barre
   d'état). Mesure de référence (montage lourd) : changements de panneau de 45–75 ms → moins de
   5 ms.
-- **Rendu sur processeur** (`render.rs`) : export, vignettes (`thumbs.rs`), pipette, pot de
+- **Rendu sur processeur** (`render.rs`) : export, vignettes (`thumbs.rs`, sur des fils de fond),
+  pipette, pot de
   peinture, et affichage de secours (OpenGL, ou `PELURE_COMPOSITION=processeur`). Même calcul,
   même résultat : c'est la référence de comparaison. `camera_image` (export) ne compose que la
   zone filmée, en tuiles entières avec 2 px de marge pour l'interpolation, répartie sur les
@@ -245,7 +246,9 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   des panneaux), menus. `Document::move_panels` / `remove_panels` agissent sur plusieurs panneaux.
   La vignette du panneau courant appelle `canvas_panel` dans un `Ui` enfant, agrandi de la marge
   de la vue caméra et coupé à la vignette ; `canvas_input` n'accepte que la partie visible
-  (`interact_rect`). Vignettes : une par plan et par largeur affichée (`thumbs.rs`).
+  (`interact_rect`). Vignettes : une par plan et par largeur affichée (`thumbs.rs`), composées sur des
+  fils de fond à partir d'un cliché du plan (tuiles `Arc` partagées) ; le fil de l'interface compare
+  les clés et envoie les images finies à la carte graphique (`docs/PERFORMANCE.md`, section 11).
 - Traits vectoriels texturés : `Element::Stroke.brush` garde le réglage, pointe et papier
   désignés par une **clé tirée du contenu** (`brushtex::content_key`), stable d'une machine à
   l'autre. `brushtex` tient un registre partagé (bibliothèque + textures des projets ouverts),

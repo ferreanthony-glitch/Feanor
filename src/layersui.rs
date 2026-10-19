@@ -9,16 +9,30 @@ use eframe::egui::{self, vec2, Color32, RichText, Sense, Stroke, StrokeKind, Tex
 use crate::app::App;
 use crate::blend::BlendMode;
 use crate::document::{CelId, LayerKind};
-use crate::render::over;
 
 /// Taille des vignettes de calque.
 const THUMB: [usize; 2] = [64, 36];
 
-/// Vignettes des dessins (par dessin et version), refaites quand le dessin change.
+/// Vignettes des dessins (par dessin et version), refaites quand le dessin change. Elles se composent
+/// sur des fils de fond (`thumbs.rs`) : l'ancienne reste à l'écran en attendant la neuve, et un dessin
+/// qui n'en a pas encore montre un cadre vide.
 #[derive(Default)]
 pub(crate) struct LayerThumbs {
-    /// Dessin → (version du dessin, vignette, dernière image d'écran où elle a servi).
-    cache: HashMap<CelId, (u64, TextureHandle, u64)>,
+    cache: HashMap<CelId, LayerEntry>,
+    pool: Option<crate::thumbs::Pool>,
+}
+
+struct LayerEntry {
+    /// Version du dessin dont elle vient.
+    version: u64,
+    texture: TextureHandle,
+    /// Dernière image d'écran où elle a servi.
+    used: u64,
+    /// Numéro de la demande dont elle vient (une réponse plus ancienne ne la remplace pas).
+    seq: u64,
+    /// L'image envoyée à la carte graphique (essais).
+    #[cfg(test)]
+    image: egui::ColorImage,
 }
 
 impl LayerThumbs {
@@ -28,12 +42,98 @@ impl LayerThumbs {
     /// Oublie toutes les vignettes (leur résolution a changé : elles se refont à leur tour).
     pub(crate) fn clear(&mut self) {
         self.cache.clear();
+        if let Some(pool) = &self.pool {
+            pool.shared.reset();
+        }
+    }
+
+    /// Début d'une image d'écran : les demandes qu'on ne renouvelle pas vieillissent, les vignettes finies
+    /// arrivent à la carte graphique (`thumbs::UPLOAD_TIME` au plus).
+    pub(crate) fn begin_frame(&mut self, ctx: &egui::Context) {
+        let Some(pool) = &self.pool else { return };
+        let shared = pool.shared.clone();
+        shared.new_frame();
+        let pass = ctx.cumulative_pass_nr();
+        let start = std::time::Instant::now();
+        while let Some(done) = shared.next_done() {
+            self.apply(ctx, done, pass);
+            if start.elapsed() >= crate::thumbs::UPLOAD_TIME {
+                break;
+            }
+        }
+        if shared.has_done() {
+            ctx.request_repaint();
+        }
+    }
+
+    fn apply(&mut self, ctx: &egui::Context, done: crate::thumbs::Done, pass: u64) {
+        let cel = done.slot.0;
+        let crate::thumbs::Key::Cel(version, _, _) = *done.key else { return };
+        if let Some(e) = self.cache.get_mut(&cel) {
+            if done.seq >= e.seq {
+                #[cfg(test)]
+                {
+                    e.image = done.image.clone();
+                }
+                e.texture.set(done.image, egui::TextureOptions::LINEAR);
+                (e.version, e.used, e.seq) = (version, pass, done.seq);
+            }
+            return;
+        }
+        // Trop de vignettes : on garde celles des deux dernières images d'écran (ce qu'on voit) ;
+        // tout vider refaisait, à chaque image, toutes celles qui restaient à l'écran.
+        if self.cache.len() >= Self::LIMIT {
+            self.cache.retain(|_, e| pass.saturating_sub(e.used) <= 2);
+            if self.cache.len() >= Self::LIMIT {
+                self.cache.clear();
+            }
+        }
+        #[cfg(test)]
+        let image = done.image.clone();
+        let texture = ctx.load_texture(format!("calque {cel}"), done.image, egui::TextureOptions::LINEAR);
+        self.cache.insert(
+            cel,
+            LayerEntry {
+                version,
+                texture,
+                used: pass,
+                seq: done.seq,
+                #[cfg(test)]
+                image,
+            },
+        );
+    }
+
+    /// La vignette du dessin `cel` (`c`) : celle qu'on garde si elle est à jour ; sinon l'ancienne en
+    /// attendant (ou rien), et une demande aux fils de fond.
+    pub(crate) fn texture(&mut self, ctx: &egui::Context, cel: CelId, c: &crate::document::Cel, fr: egui::Rect, size: (usize, usize), pass: u64) -> Option<TextureHandle> {
+        if let Some(e) = self.cache.get_mut(&cel) {
+            e.used = pass;
+            if e.version == c.version {
+                return Some(e.texture.clone());
+            }
+        }
+        let pool = self.pool.get_or_insert_with(|| crate::thumbs::Pool::start(ctx, 2));
+        pool.request((cel, 0), crate::thumbs::Key::Cel(c.version, size.0, size.1), |_| crate::thumbs::Work::Cel { raster: c.raster.clone(), frame: fr, size });
+        self.cache.get(&cel).map(|e| e.texture.clone())
     }
 
     /// Vignettes gardées (essais).
     #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
         self.cache.len()
+    }
+
+    /// Des vignettes se font encore, ou attendent d'être envoyées (essais).
+    #[cfg(test)]
+    pub(crate) fn busy(&self) -> bool {
+        self.pool.as_ref().is_some_and(|p| p.shared.outstanding() > 0)
+    }
+
+    /// L'image de la vignette gardée du dessin `cel` (essais).
+    #[cfg(test)]
+    pub(crate) fn image_of(&self, cel: CelId) -> Option<&egui::ColorImage> {
+        self.cache.get(&cel).map(|e| &e.image)
     }
 }
 
@@ -58,49 +158,14 @@ impl App {
     /// Vignette du dessin `cel` : la partie filmée (le cadre), sur fond blanc.
     pub(crate) fn layer_thumb(&mut self, ctx: &egui::Context, cel: CelId) -> Option<TextureHandle> {
         let c = self.doc.cels.get(&cel)?;
-        let pass = ctx.cumulative_pass_nr();
-        if let Some((v, t, used)) = self.layer_thumbs.cache.get_mut(&cel) {
-            if *v == c.version {
-                *used = pass;
-                return Some(t.clone());
-            }
-        }
         let fr = self.doc.frame_rect();
         let [w, h] = THUMB;
         // (Résolution des vignettes du diagnostic des performances : définition plus basse, même
         // taille à l'écran.)
         let w = crate::thumbs::scaled(w, crate::thumbs::scale_pct(), 16);
         let h = ((w as f32 * fr.height() / fr.width().max(1.0)).round() as usize).clamp(8, h * 2);
-        let mut pixels = Vec::with_capacity(w * h);
-        // Quatre échantillons par point de la vignette.
-        for y in 0..h {
-            for x in 0..w {
-                let (mut r, mut g, mut b) = (0u32, 0u32, 0u32);
-                for (dx, dy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
-                    let sx = fr.min.x + (x as f32 + dx) / w as f32 * fr.width();
-                    let sy = fr.min.y + (y as f32 + dy) / h as f32 * fr.height();
-                    let (sx, sy) = (sx as usize, sy as usize);
-                    let p = if sx < c.raster.width && sy < c.raster.height { c.raster.get(sx, sy) } else { Color32::TRANSPARENT };
-                    let q = over(Color32::WHITE, p, 255, None);
-                    r += q.r() as u32;
-                    g += q.g() as u32;
-                    b += q.b() as u32;
-                }
-                pixels.push(Color32::from_rgb((r / 4) as u8, (g / 4) as u8, (b / 4) as u8));
-            }
-        }
-        let image = egui::ColorImage { size: [w, h], pixels };
-        let tex = ctx.load_texture(format!("calque {cel}"), image, egui::TextureOptions::LINEAR);
-        // Trop de vignettes : on garde celles des deux dernières images d'écran (ce qu'on voit) ;
-        // tout vider refaisait, à chaque image, toutes celles qui restaient à l'écran.
-        if self.layer_thumbs.cache.len() >= LayerThumbs::LIMIT {
-            self.layer_thumbs.cache.retain(|_, e| pass.saturating_sub(e.2) <= 2);
-            if self.layer_thumbs.cache.len() >= LayerThumbs::LIMIT {
-                self.layer_thumbs.cache.clear();
-            }
-        }
-        self.layer_thumbs.cache.insert(cel, (c.version, tex.clone(), pass));
-        Some(tex)
+        // (Composée sur un fil de fond, `thumbs.rs` : rien ici ne parcourt les pixels du dessin.)
+        self.layer_thumbs.texture(ctx, cel, c, fr, (w, h), ctx.cumulative_pass_nr())
     }
 
     /// Calques de toute la scène accordés d'un panneau à l'autre (6f), à chaque image ; le

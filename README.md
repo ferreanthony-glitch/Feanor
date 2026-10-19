@@ -844,6 +844,12 @@ Documentation technique : `docs/ARCHITECTURE.md` ; avancement : `docs/ROADMAP.md
 leviers de performance (superposition « Performance », banc `perf_tests.rs`, diagnostic des
 performances) : `docs/PERFORMANCE.md`.
 
+**Les vignettes ne ralentissent plus SHOT.** Les vignettes du montage et de la planche, et les
+miniatures des dessins dans la timeline et le panneau Calques, se composent sur des fils de fond : en
+défilant un montage de 600 plans ou en sautant de plan en plan, l'interface ne compose plus rien (chaque
+image d'écran passe de 7–11 ms à 2–3 ms). Une vignette qui change garde son ancienne image jusqu'à
+l'arrivée de la neuve ; celles qu'on voit passent d'abord, celles qu'on a quittées sont abandonnées.
+
 **Enregistrer ne fige plus SHOT.** `Ctrl+S` (et Enregistrer sous) écrit le projet sur un autre fil :
 la barre d'état dit « Enregistrement… n / N », le point • du titre reste jusqu'à la fin, et ce que tu
 modifies pendant l'écriture reste « non enregistré ». Quitter, Fermer, Nouveau et Ouvrir attendent la
@@ -1660,7 +1666,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `envelopetools.rs` | Outil Déformer : mode Enveloppe de Bézier (la perspective : `perstools.rs`) |
 | `topview.rs` | Vue de dessus (profondeur des calques) |
 | `model3d.rs`, `view3d.rs`, `ref3dtool.rs` | Repère 3D : lecture glTF, arêtes utiles ; caméra en orbite, fil de fer, arêtes cachées ; outil et affichage |
-| `thumbs.rs` | Cache des vignettes de panneaux |
+| `thumbs.rs` | Vignettes des plans (montage, planche) et miniatures des dessins (timeline, Calques) : composées sur des fils de fond, gardées par contenu, envoyées à la carte graphique par l'interface (voir `docs/PERFORMANCE.md`, section 11) |
 | `perf.rs`, `perf_tests.rs` | Profileur intégré et superposition « Performance » (`vue.performance`) ; banc sans fenêtre (voir `docs/PERFORMANCE.md`) |
 | `parallele.rs`, `ouverture.rs`, `enregistrement.rs` | Travail réparti sur les cœurs (`par_map`, plafond de fils) ; ouverture d'un projet sur un autre fil ; enregistrement sur un autre fil (cliché, suites qui attendent, échec, file d'attente) |
 | `materiel.rs`, `diagbanc.rs`, `diagnostic.rs`, `diagnosticui.rs` | Diagnostic des performances (`aide.diagnostic`) : détection du matériel, banc de mesures sur un autre fil, profils et réglages (appliquer, revenir), fenêtre, proposition du premier lancement, section Performance des Préférences |
