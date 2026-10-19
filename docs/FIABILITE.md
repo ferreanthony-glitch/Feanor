@@ -22,6 +22,7 @@ Un projet fabriqué par le code (pas un fichier d'Anthony), qui contient :
 | Dessin | traits vectoriels **texturés avec leur trace** (appui, instants, toucher) en gouache, feutre, fusain ; remplissage à trous ; trait lisse ; texte (son image n'est pas comparée : elle dépend des polices du poste) |
 | Fond sous le trait | réglages du calque ; strate peinte et coupe d'un dessin |
 | Effets | flou (clés), tremblement du trait (clés), teinte-saturation (clés), lueur (clés), bruit (éteint, puis avec clés dans le plan rogné) |
+| Calques d'effets (format 27) | un **ajustement** (opacité, mode Écran, expositions aux images 6 à 8, image d'impact + secousse + lueur diffuse à clés) et une **incrustation** réglée à fond (texte libre à mots remplacés, boîte, « seulement à l'export », police) : `Layer::effet` entre dans l'instantané, donc dans la comparaison de chaque aller-retour |
 | Caméra | clés avec adoucis, bascule, panoramique, avancée ; **effet de caméra posé** (explosion) ; repère 3D (un cube) |
 | Plans | marques d'image avec textes et couleurs, signets, entrée / sortie, notes dessinées, couleur de plan, textes d'action / dialogue / notes |
 | Montage | plan **rogné** au début (6 images) et à la fin (8) avec sa **réserve** (dessins, clés d'effets, caméra, marques, signets, commentaires) |

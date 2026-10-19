@@ -2508,3 +2508,41 @@ feuille entière) alors que 768 essais passaient ; et sur une machine chargée, 
 - Pas fait : la première image dans la vraie fenêtre (eframe, carte graphique, pipelines : à lire dans `demarrage.log`) ;
   `BrushLibrary::builtin()` (74 ms) reste avant la première image ; un son ou un modèle illisible sort du projet et ses
   extraits avec lui à l'enregistrement.
+
+## Calques d'effets et préréglages d'effets (demandés par Anthony le 2026-10-19, branche `calques-effets`) ✅
+
+« Création de calques d'effets après des préréglages d'animation d'effet comme des impact frames, glows, tremblements
+de caméra effectifs, timecode… ». Mode d'emploi : README (section du même nom) ; vocabulaire : `docs/INTERFACE.md`,
+partie 8 ; mesures : `docs/PERFORMANCE.md`, partie 10.
+
+- ✅ **Calque d'effet** (`calqueffet.rs`, `Layer::effet`) : un calque de la pile sans dessin. **Ajustement** : sa pile
+  d'effets (clés comprises) agit sur tout ce qui est dessous dans le plan, papier compris, ou dans son dossier ;
+  aux images où il a une exposition (un dessin vide tenu : la timeline l'étire et le coupe comme un dessin) ; œil,
+  opacité et mode de fusion du calque. **Incrustation** (`incrustation.rs`) : timecode HH:MM:SS:IM à la cadence du
+  projet (entière), numéro d'image, nom du plan ou de la séquence, titre, date, texte libre ; neuf places, taille,
+  couleur, boîte, « Seulement à l'écran / à l'export » ; gravée dans l'export, tracée avec les contours de l'outil Texte.
+- ✅ **Rendu** : le plan porte un repère (`FondPart::Reglage`) que l'écran remplace, avec ce qu'il couvre, par un dessin
+  dérivé (composition d'en dessous → effets → fusion), demandé au fil de fond (`fxcache::Job::base`) et jamais calculé
+  sur le fil de l'interface ; calcul bloquant et exact à l'export ; carte graphique et processeur composent le même
+  dessin. Aperçu d'un calque d'effet limité à 1 million de pixels (feuille 4K : le quart de la résolution).
+- ✅ **Sept effets « Cinéma »** (`fxcine.rs`) dans la pile d'effets (aussi sur un calque de dessin) : Flash, Image
+  d'impact (négatif, noir et blanc, postérisé, teinte, éclat de rayons et lignes de vitesse par graine), Lueur diffuse,
+  Secousse de l'image (décalage, rotation, zoom, flou de bougé), Vignettage, Grain de film (change à chaque image),
+  Aberration chromatique.
+- ✅ **Dix préréglages** (`prereglages.rs`, `prereglagesui.rs`) : image d'impact, lueur (pulsation), flash blanc, flash de
+  couleur, tremblement de l'image (mêmes générateurs de bruit que les effets de caméra, bornés par l'intensité), vignettage,
+  grain, aberration chromatique, flou de vitesse, timecode et incrustations. Une fenêtre par préréglage (intensité,
+  durée, couleur, graine, réglages propres) avec **aperçu en direct** sur le dessin, une étape d'annulation aux noms
+  français, « sur le calque courant » ou « nouveau calque d'effet », « dans tous les plans » pour ce qui dure jusqu'à la fin.
+- ✅ **Où** : bouton étincelle du panneau Calques, Calques > Nouveau calque > Calque d'effet (et clics droits), « Préréglages »
+  du panneau Effets, Ctrl+K (13 actions `effet.*`, sans touche). Étincelle et cyan dans le panneau Calques, la timeline
+  et le montage.
+- ✅ **Format 27** (voir `project.rs`) : `calque_effet` d'un calque ; sept sortes d'effets de plus. Anciens projets lus
+  tels quels. Projet d'essai de la fiabilité complété (un ajustement à clés, une incrustation réglée à fond).
+- Vérifié par 64 essais de plus (`fxcine_tests`, `calqueffet_tests`, `incrustation_tests`, `prereglages_tests`,
+  `prereglagesui_tests`) et deux mesures ignorées (`effetsperf_tests`) : 51 images/s au fil de fond en aperçu, 0,00 ms
+  sur le fil de l'interface.
+- Pas fait / à décider : calculer les effets dans le seul cadre de la caméra (gain d'un facteur 3 à 4 à l'export) ; fusionner
+  les calques avec un calque d'effet (refusé, avec un message) ; incrustations dans le PDF, le HTML et les vignettes ;
+  choix de la police de l'incrustation dans l'interface (le champ existe et s'enregistre) ; sélection flottante sous un
+  calque d'effet (l'effet attend la fin du geste). À vérifier à l'écran : voir `docs/INTERFACE.md`, partie 8.

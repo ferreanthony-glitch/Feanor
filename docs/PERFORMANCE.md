@@ -572,3 +572,37 @@ un mode de fusion, une tuile signalée, une version, un dessin de plus, une autr
   du trait animé à l'arrêt. Aller et venir très vite dans la timeline sans reste des dessins précédents.
 - La **lecture** d'un plan chargé reste régulière (superposition « Performance » : « Dessin » et
   « composition : envoi à la carte graphique » plus bas qu'avant).
+
+## 10. Calques d'effets : la lecture d'un plan avec impact, lueur, tremblement et timecode (2026-10-19)
+
+Règle : un calque d'effet (`calqueffet.rs`) passe par le chemin des effets d'un calque (`fxcache.rs`, fil de fond,
+aperçu réduit) ; le fil de l'interface ne calcule jamais rien. Mesures (`effetsperf_tests.rs`, tests `#[ignore]` :
+`cargo test --release --offline --target-dir target\msvc --lib effetsperf -- --ignored --nocapture --test-threads=1`),
+sur la scène de la partie 2 (feuille 3840 × 2160, cadre 1920 × 1080, 24 i/s, 48 images, deux calques de dessin) avec
+quatre calques d'effets par-dessus : une image d'impact (images 12 et 13 : négatif teinté, rayons, lignes de vitesse),
+une lueur qui pulse (tout le plan), un tremblement de l'image avec flou de bougé (images 20 à 43), un timecode.
+Machine de la séance : 16 cœurs logiques, fil de fond sur 14.
+
+| Mesure | Résultat |
+|---|---|
+| Fil de l'interface, une image dont les dessins dérivés sont prêts (plan, hachage, recherche) | **0,00 ms** (pire 0,01) |
+| Débit du fil de fond, aperçu servi au quart (zoom moyen, faible ou élevé en lecture), 48 images demandées d'un coup | **51 images/s** (19,5 ms par image) |
+| Idem, les images chargées (tremblement + lueur + timecode, images 20 à 43) | 36 images/s (27 ms par image) |
+| Une image à la moitié de la résolution (tremblement + lueur) | 67 ms |
+| Une image en pleine résolution, au repos (fil de fond) | 227 ms |
+| Export exact d'une image (calcul bloquant, pleine résolution, caméra comprise) | 270 ms |
+
+Ce qui tient les 24 images par seconde : en aperçu, un calque d'effet est calculé au plus à `PROXY_PIXELS` = 1 million
+de pixels (`calqueffet::proxy_level` : une feuille 4K en aperçu est servie au quart de sa résolution, une feuille de
+2560 × 1440 à la moitié), un cran plus bas que les effets d'un calque ordinaire ; au repos (un quart de seconde sans
+mouvement), la pleine résolution prend la place et l'image montre le dernier résultat en attendant. Les images qui
+viennent sont demandées d'avance pendant la lecture (`playback::upcoming_derived`). Sans l'abaissement, la moitié de la
+résolution donne 4,4 images/s au premier jet (225 ms par image : le tremblement avec flou de bougé et la lueur
+dominent), 15 images/s après optimisation (67 ms par image : lecture directe des pixels dans un tableau à plat, six
+lectures au plus pour le flou de bougé, halo de la lueur lu à sa taille réduite) : insuffisant, le quart de résolution
+est le réglage retenu.
+
+Reste : la pleine résolution (227 ms) n'est pas fluide, c'est le repos ; l'export de 1 000 images coûterait environ
+4 min 30 pour les images chargées (une secousse de pixels de la feuille entière, caméra hors de la feuille comprise :
+calculer seulement dans le cadre de la caméra serait un gain d'un facteur 3 à 4, non fait — les effets lisent des
+positions de la feuille entière).
