@@ -311,6 +311,9 @@ struct CelTexture {
     /// Version du dessin envoyée (`u64::MAX` : rien d'envoyé).
     version: u64,
     last_used: u64,
+    /// Dernière image où elle a reçu des pixels, ou été refaite : l'image composée gardée n'est plus
+    /// bonne si elle change (`ItemKey`).
+    generation: u64,
     /// Tuiles non vides dans la texture (une texture neuve est transparente) : seules celles-ci
     /// sont à effacer quand le dessin en perd. Rangées comme les tuiles du dessin.
     filled: Vec<bool>,
@@ -398,6 +401,8 @@ struct Frame {
     /// Copie de l'image composée jusque-là, lue par les calques en mode de fusion (8).
     backdrop: wgpu::Texture,
     backdrop_group: wgpu::BindGroup,
+    /// Ce qui a servi à composer l'image qu'elle contient (rien : elle est vide ou à refaire).
+    composed: Option<Vec<ItemKey>>,
 }
 
 /// Ressources gardées par egui-wgpu d'une image à l'autre.
@@ -435,6 +440,8 @@ struct CanvasResources {
     fresh_staging: bool,
     /// Tuiles envoyées depuis le début (pour les mesures).
     copies: u64,
+    /// Compositions faites depuis le début (celles qu'une image composée gardée évite ne comptent pas).
+    composes: u64,
     frame: Option<Frame>,
     tick: u64,
 }
@@ -447,6 +454,8 @@ pub struct GpuStats {
     pub bytes: u64,
     /// Tuiles envoyées à la carte depuis le début.
     pub copies: u64,
+    /// Compositions des calques faites depuis le début.
+    pub composes: u64,
 }
 
 /// Côté application : de quoi mettre à jour les textures et commander le dessin.
@@ -633,6 +642,7 @@ impl GpuCanvas {
             staging: Vec::new(),
             fresh_staging: false,
             copies: 0,
+            composes: 0,
             frame: None,
             tick: 0,
         });
@@ -674,7 +684,7 @@ impl GpuCanvas {
     pub fn stats(&self) -> GpuStats {
         let renderer = self.render_state.renderer.read();
         let Some(res) = renderer.callback_resources.get::<CanvasResources>() else { return GpuStats::default() };
-        GpuStats { textures: res.textures.len(), bytes: res.textures.values().map(CelTexture::bytes).sum(), copies: res.copies }
+        GpuStats { textures: res.textures.len(), bytes: res.textures.values().map(CelTexture::bytes).sum(), copies: res.copies, composes: res.composes }
     }
 
     /// Nombre de dessins qu'on peut envoyer d'avance sans chasser ceux qui sont affichés. Le poids
@@ -703,7 +713,7 @@ impl GpuCanvas {
         res.tick += 1;
         let tick = res.tick;
         let size = (doc.width as u32, doc.height as u32);
-        let mut up = Uploads { data: std::mem::take(&mut res.staging), ..Default::default() };
+        let mut up = Uploads { tick, data: std::mem::take(&mut res.staging), ..Default::default() };
         // Poids des textures gardées (mis à jour à chaque création, recyclage et départ).
         let mut bytes: u64 = res.textures.values().map(CelTexture::bytes).sum();
         // Un dessin passé par des effets (13i) : son dessin dérivé, sous son propre numéro ; en
@@ -871,6 +881,7 @@ impl GpuCanvas {
                 display_group,
                 backdrop,
                 backdrop_group,
+                composed: None,
             });
         }
         resolved
@@ -1014,6 +1025,34 @@ struct GpuItem {
     mesh: Option<Vec<[f32; 4]>>,
 }
 
+/// Ce qui fait un élément de l'image composée : le dessin et la version de sa texture, sa place, sa
+/// couleur, ses réglages, son mode et son maillage. Deux listes égales donnent la même image.
+#[derive(Clone, PartialEq, Debug)]
+struct ItemKey {
+    cel: Option<CelId>,
+    /// Dernière image d'écran où la texture a reçu des pixels (ou a été refaite).
+    generation: Option<u64>,
+    numbers: [u32; 24],
+    blend: u32,
+    /// Nombre de sommets du maillage et leur empreinte.
+    mesh: Option<(usize, u64)>,
+}
+
+impl ItemKey {
+    fn of(item: &GpuItem, generation: Option<u64>) -> Self {
+        let mut numbers = [0u32; 24];
+        for (n, v) in numbers.iter_mut().zip(item.corners.iter().flatten().chain(&item.color).chain(&item.params)) {
+            *n = v.to_bits();
+        }
+        let mesh = item.mesh.as_ref().map(|m| {
+            // (FNV-1a sur les bits des sommets.)
+            let hash = m.iter().flatten().fold(0xcbf2_9ce4_8422_2325_u64, |h, v| (h ^ v.to_bits() as u64).wrapping_mul(0x0000_0100_0000_01b3));
+            (m.len(), hash)
+        });
+        ItemKey { cel: item.cel, generation, numbers, blend: item.blend, mesh }
+    }
+}
+
 /// Passe qui compose dans l'image `target` (effacée d'abord, ou reprise telle quelle).
 fn compose_pass<'a>(encoder: &'a mut wgpu::CommandEncoder, target: &'a wgpu::TextureView, clear: bool) -> wgpu::RenderPass<'a> {
     encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -1080,6 +1119,15 @@ impl CallbackTrait for CanvasPaint {
         };
         put_item(&mut bytes[self.items.len() * stride..], &on_screen, &ws, &[1.0, 1.0, 0.0, persp]);
         queue.write_buffer(&res.uniforms, 0, &bytes);
+
+        // L'image composée est gardée : si rien de ce qui la fait n'a changé depuis la dernière fois
+        // (mêmes dessins aux mêmes versions, mêmes places, opacités et modes), elle est telle quelle ;
+        // seul l'affichage (la vue, le zoom) est refait. Souris qui bouge, panneaux qui s'animent,
+        // curseur : la pile de calques n'est plus recomposée à chaque image d'écran.
+        let keys: Vec<ItemKey> = self.items.iter().map(|item| ItemKey::of(item, item.cel.and_then(|id| res.textures.get(&id)).map(|t| t.generation))).collect();
+        if res.frame.as_ref().is_some_and(|f| f.composed.as_deref() == Some(&keys[..])) {
+            return Vec::new();
+        }
 
         // Les sommets des maillages (feuilles déformées), bout à bout dans un seul tampon : pour
         // chaque dessin, sa plage de sommets.
@@ -1155,6 +1203,11 @@ impl CallbackTrait for CanvasPaint {
                 }
                 None => pass.draw(0..6, 0..1),
             }
+        }
+        drop(pass);
+        res.composes += 1;
+        if let Some(frame) = res.frame.as_mut() {
+            frame.composed = Some(keys);
         }
         Vec::new()
     }
@@ -1260,6 +1313,7 @@ fn place_texture(rs: &RenderState, res: &mut CanvasResources, id: CelId, dims: (
             t.filled = vec![false; tiles];
             t.version = u64::MAX;
             t.last_used = tick;
+            t.generation = tick;
             t.partial = None;
             recycled = Some(t);
         }
@@ -1268,7 +1322,7 @@ fn place_texture(rs: &RenderState, res: &mut CanvasResources, id: CelId, dims: (
         let texture = cel_texture(&rs.device, rect[2], rect[3]);
         let view = texture.create_view(&Default::default());
         let bind_group = texture_group(&rs.device, &res.texture_layout, &view, &res.nearest);
-        CelTexture { bind_group, texture, rect, dims, version: u64::MAX, last_used: tick, filled: vec![false; tiles], partial: None }
+        CelTexture { bind_group, texture, rect, dims, version: u64::MAX, last_used: tick, generation: tick, filled: vec![false; tiles], partial: None }
     });
     *bytes += entry.bytes();
     res.textures.insert(id, entry);
@@ -1329,6 +1383,8 @@ fn write_region(queue: &wgpu::Queue, texture: &wgpu::Texture, x: u32, y: u32, w:
 /// Une tuile garde ses lignes de 64 pixels (256 octets), l'alignement que demande la copie.
 #[derive(Default)]
 struct Uploads {
+    /// L'image d'écran (`CanvasResources::tick`) : la `generation` des textures qui reçoivent des pixels.
+    tick: u64,
     data: Vec<u8>,
     /// Emplacement d'une tuile transparente, partagée par toutes les tuiles à effacer.
     zero: Option<u64>,
@@ -1339,6 +1395,7 @@ struct Uploads {
 impl Uploads {
     /// Ajoute les tuiles `tiles` du dessin `id` : pleines si dessinées, effacées si elles l'étaient.
     fn add(&mut self, id: CelId, entry: &mut CelTexture, raster: &Raster, tiles: &[usize]) {
+        let before = self.copies.len();
         for &idx in tiles {
             if idx >= raster.tiles.len() || idx >= entry.filled.len() {
                 continue;
@@ -1370,6 +1427,9 @@ impl Uploads {
                 None => continue,
             };
             self.copies.push((id, offset, [(ox - rx) as u32, (oy - ry) as u32, tw as u32, th as u32]));
+        }
+        if self.copies.len() > before {
+            entry.generation = self.tick;
         }
     }
 

@@ -160,6 +160,11 @@ fn content_sized_textures_render_a_warped_floating_sheet_like_whole_ones() {
         let cpu = render::composite_full(doc, &plan);
         let far = ecarts(&after, &before, 1);
         println!("{nom} : {far} pixels diffèrent de la texture entière, {} du calcul de secours", ecarts(&after, &cpu, 4));
+        // Même plan, même maillage : l'image composée gardée est la bonne.
+        let composes = gpu.stats().composes;
+        let kept = render_with_tiles(&mut gpu, &rs, doc, &plan, false, &[]);
+        assert_eq!(gpu.stats().composes, composes, "{nom} : recomposé sans raison");
+        assert_eq!(kept, after, "{nom} : l'image gardée diffère");
         assert_eq!(far, 0, "{nom} : {far} pixels diffèrent de la texture de la feuille entière");
         assert!(after.iter().filter(|c| c.g() < 200).count() > 3_000, "{nom} : vide");
     };
@@ -280,6 +285,76 @@ fn a_drawing_already_on_the_card_is_not_sent_again() {
     let d = bloc(&mut doc, 2, 2, 1, 1, 33);
     render_with(&mut gpu, &rs, &doc, &plan(vec![line_item(a), line_item(d)]), false);
     assert_eq!(gpu.stats().copies, first + 1, "seul le dessin neuf est envoyé");
+}
+
+#[test]
+fn the_composed_image_is_kept_while_nothing_changes_and_redone_when_anything_does() {
+    let Some(rs) = headless() else {
+        println!("pas de carte graphique : essai passé");
+        return;
+    };
+    let (w, h) = (640, 360);
+    let mut doc = Document::new(w, h, 24);
+    let a = bloc(&mut doc, 1, 1, 3, 2, 10);
+    let b = bloc(&mut doc, 5, 2, 2, 2, 90);
+    let mut gpu = GpuCanvas::new(&rs);
+    let mut p = plan(vec![line_item(a), line_item(b)]);
+    let exact = |gpu: &mut GpuCanvas, doc: &Document, p: &Plan, tiles: &[usize], what: &str| {
+        let image = render_with_tiles(gpu, &rs, doc, p, false, tiles);
+        assert_eq!(ecarts(&image, &render::composite_full(doc, p), 1), 0, "{what} : l'image n'est pas celle du calcul de secours");
+        image
+    };
+    let first = exact(&mut gpu, &doc, &p, &[], "premier affichage");
+    assert_eq!(gpu.stats().composes, 1);
+    // La souris bouge, les panneaux s'animent : plan et dessins sont les mêmes, rien n'est recomposé.
+    for _ in 0..4 {
+        let again = exact(&mut gpu, &doc, &p, &[], "même plan");
+        assert_eq!(again, first);
+    }
+    assert_eq!(gpu.stats().composes, 1, "la pile de calques n'est pas recomposée à chaque image");
+    // Chaque changement refait l'image.
+    p.items[1].opacity = 120;
+    exact(&mut gpu, &doc, &p, &[], "opacité");
+    assert_eq!(gpu.stats().composes, 2);
+    p.items[0].transform = Some(LayerTransform { x: 10.5, scale: 0.9, ..Default::default() });
+    exact(&mut gpu, &doc, &p, &[], "transformation");
+    assert_eq!(gpu.stats().composes, 3);
+    p.items[1].blend = BlendMode::Multiply;
+    exact(&mut gpu, &doc, &p, &[], "mode de fusion");
+    assert_eq!(gpu.stats().composes, 4);
+    // Un trait : tuile signalée, même version.
+    let across = doc.cels[&a].raster.tiles_x;
+    let idx = 2 * across + 2;
+    {
+        let cel = doc.cels.get_mut(&a).unwrap();
+        let version = cel.version;
+        for (k, px) in cel.raster.tile_mut(idx).iter_mut().enumerate() {
+            *px = Color32::from_rgba_premultiplied(250, (k % 90) as u8, 0, 255);
+        }
+        cel.version = version;
+    }
+    exact(&mut gpu, &doc, &p, &[idx], "tuile posée en cours de trait");
+    assert_eq!(gpu.stats().composes, 5);
+    // Une nouvelle version du dessin.
+    remplir(doc.cels.get_mut(&b).unwrap(), 6, 4, 1, 1, 200);
+    exact(&mut gpu, &doc, &p, &[], "nouvelle version");
+    assert_eq!(gpu.stats().composes, 6);
+    // Un dessin de plus.
+    let c = bloc(&mut doc, 0, 4, 1, 1, 40);
+    p.items.push(line_item(c));
+    exact(&mut gpu, &doc, &p, &[], "dessin de plus");
+    assert_eq!(gpu.stats().composes, 7);
+    // Et de nouveau stable.
+    exact(&mut gpu, &doc, &p, &[], "stable");
+    exact(&mut gpu, &doc, &p, &[], "stable");
+    assert_eq!(gpu.stats().composes, 7);
+    // Une taille de feuille différente refait l'image composée (nouvelle texture).
+    let mut small = Document::new(320, 180, 24);
+    let s = bloc(&mut small, 1, 1, 2, 1, 5);
+    let sp = plan(vec![line_item(s)]);
+    let image = render_with(&mut gpu, &rs, &small, &sp, false);
+    assert_eq!(ecarts(&image, &render::composite_full(&small, &sp), 1), 0);
+    assert_eq!(gpu.stats().composes, 8);
 }
 
 #[test]
