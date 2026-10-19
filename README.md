@@ -42,9 +42,11 @@ dans `...\Pelure` y est copié (jamais déplacé ni supprimé) s'il n'y a pas en
     « toute la scène » devient un calque ordinaire tenu sur tout le plan. Rien ne change à l'écran
     ni dans le temps (le son reste calé). Le fichier n'est réécrit qu'à l'enregistrement (format
     12, qu'une version plus ancienne de Pelure n'ouvre pas : garde une copie de tes projets).
-  - Nouveau plan (P), nouvelle séquence : icônes de la barre du montage ; le menu « … » à côté
-    duplique, copie, coupe ou réunit des plans. Les barres du montage et de la timeline tiennent
-    sur une ligne : des icônes, dont le nom et le raccourci s'affichent au survol.
+  - Nouveau plan (P), nouvelle séquence : icônes de la barre du montage ; le menu « Plans » (liste à
+    puces) à côté duplique, copie, coupe ou réunit des plans. Les barres du montage et de la
+    timeline tiennent sur une ligne qui ne défile pas : des icônes, dont le nom et le raccourci
+    s'affichent au survol, et un bouton « Plus… » (trois points) pour le reste (voir « Barres
+    minces et Plus… » plus bas).
   - F6 coupe le plan à l'image courante (la suite devient un nouveau plan, avec ses propres
     copies des dessins ; une marque à cette image devient le début du nouveau plan) ; « Réunir le
     plan et le suivant » fait l'inverse, sans laisser de repère (les textes du suivant rejoignent
@@ -760,11 +762,39 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
 - **Annuler / rétablir** (Ctrl+Z / Ctrl+Maj+Z) : 200 étapes, sur tout le projet : traits, vectoriel,
   sélections, panneaux, scènes, séquences, calques, sons, textes, noms, réglages des calques et des
   pistes, guides, papier, cadence. Une saisie ou un glissé de curseur compte pour une seule étape.
-- **Espaces de travail** (Affichage > Espaces de travail) : Standard, Dessin (plus de place pour
-  dessiner), Timeline (bande du bas plus haute), Vue d'ensemble (vignettes) ; « Enregistrer la
-  disposition… » garde la tienne sous un nom (panneaux aimantés et flottants compris).
-  Affichage > Panneaux masque ou affiche chaque panneau. Pelure rouvre avec la disposition de la
-  dernière fois.
+- **Espaces de travail liés aux modes** (Affichage > Espaces de travail) : **Storyboard**, **Animation**
+  et **Montage** retiennent chacun leur disposition des panneaux. Les boutons « Storyboard » et
+  « Animation » (en haut à droite), Tab et « Animer ce plan » changent d'espace et posent tout de
+  suite la disposition qu'on y avait ; ce qu'on change dans l'un (un panneau fermé, une colonne
+  déplacée) ne touche pas les autres. La première fois, chacun a sa disposition d'origine :
+  Storyboard (la disposition standard), Animation (la bande, c'est-à-dire la timeline, plus haute et
+  les calques plus larges), Montage (la bande du montage en grand ; ni calques, ni effets, ni réglages
+  de l'outil, ni couleur ; la fiche du plan, les bruitages et les suggestions sonores à droite).
+  Montage n'est pas un troisième mode : il garde les outils, les raccourcis et le dessin du
+  storyboard ; on y va par Affichage > Espaces de travail > Montage (ou Ctrl+K), et le bouton
+  « Storyboard » (ou « Storyboard » du menu) en revient. Quitter l'animation ramène à celui des deux
+  espaces du côté storyboard où l'on était. **Affichage > Espaces de travail > Rétablir la
+  disposition** remet celle d'origine de l'espace en cours, sans toucher aux autres. Les panneaux
+  dans leur propre fenêtre restent où ils sont (ils sont sur un autre écran), la feuille d'exposition
+  n'existe qu'en animation, et les panneaux qui s'ajustent à leur contenu repartent de la disposition
+  posée. Un ancien fichier de réglages garde sa disposition unique comme celle du Storyboard.
+  Les quatre dispositions d'avant (Standard, Dessin, Timeline, Vue d'ensemble) s'appliquent à
+  l'espace en cours ; « Enregistrer la disposition… » garde la tienne sous un nom (panneaux aimantés
+  et flottants compris). Affichage > Panneaux masque ou affiche chaque panneau. SHOT rouvre dans
+  l'espace du côté storyboard et la disposition de la dernière fois.
+- **Barres minces et « Plus… »** : la barre de commandes du haut ne garde que 9 icônes (Nouveau,
+  Ouvrir, Enregistrer, Exporter ; Annuler, Rétablir ; Couper, Copier, Coller) ; la barre du montage en
+  garde une douzaine (lecture et boucle, nouveau plan, nouvelle séquence, menus Plans et Son,
+  importer un son, animer ce plan, vue dessin / vignettes, planche de crayonnés) ; la barre de la
+  timeline (plan, transport, repères, dessins, expositions, clés de caméra, pelure) ne défile plus.
+  Le reste est sous le bouton « Plus… » (trois points) à droite de chaque barre : une ligne par
+  commande avec son icône, son nom et son raccourci. L'**épingle** de chaque ligne (« Épingler dans
+  la barre ») remet la commande dans la barre ; le sous-menu « Dans la barre » permet de retirer une
+  commande montrée d'office, « Rétablir la barre d'origine » efface les choix. Le choix est retenu
+  par barre (`reglages.toml`, table `barres`). Une barre trop étroite envoie d'elle-même ses
+  dernières commandes sous « Plus… » (elles reviennent quand la fenêtre s'élargit). Rien n'est
+  retiré : tout reste dans les menus, la palette Ctrl+K et les raccourcis. La barre des panneaux, à
+  droite, ne change pas.
 - **Copie de secours** : toutes les minutes (menu Fichier pour changer, 0 = jamais), Pelure copie
   le projet modifié à part, sans toucher au projet lui-même. Après un plantage, au démarrage
   suivant, Pelure propose d'ouvrir la copie ; « Enregistrer » la remet dans le projet.
@@ -1028,7 +1058,7 @@ qu'il reste du contenu caché de ce côté).
 
 - **Ripple** par défaut : les plans suivants se serrent ou s'écartent d'autant, sans trou. Le son ne
   bouge pas (la barre d'état prévient quand les plans se décalent par rapport à lui).
-- **Aimant** (bouton de la barre du montage) : un bord se colle, à six points d'écran près, à la tête
+- **Aimant** (bouton sous « Plus… » dans la barre du montage) : un bord se colle, à six points d'écran près, à la tête
   de lecture, aux autres coupes et aux clés de caméra et d'effets. Éteint, il suit la souris à
   l'image près. Pendant le geste, un repère montre où la coupe tombe dans le film d'avant et une
   étiquette donne la nouvelle durée et ce qui est caché. Échap rend tout comme avant.
@@ -1060,7 +1090,7 @@ fondu au noir, fondu au blanc, volet, noir. Elle se voit dans la bande de montag
 sur la coupe (papillon pour le fondu enchaîné, losange pour le noir ou le blanc, rampe au bord du film).
 
 - **Poser** : clic droit sur une coupe > « Transition ▸ » (aussi dans le menu d'un plan : « Transition au
-  début / à la fin du plan ») ; le bouton « Ajouter une transition » de la barre du montage vise la coupe la
+  début / à la fin du plan ») ; le bouton « Ajouter une transition » (sous « Plus… » dans la barre du montage) vise la coupe la
   plus proche de la tête de lecture (un fondu enchaîné entre deux plans, un fondu au noir au bord du film) ;
   ou une commande de Ctrl+K : `transition.ajouter`, `transition.fondu_enchaine`, `transition.fondu_noir`,
   `transition.fondu_blanc`, `transition.volet`, `transition.noir`, `transition.supprimer`,
@@ -1632,7 +1662,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `blend.rs` | Modes de fusion des calques (formules, composition d'un pixel) |
 | `board.rs`, `boardui.rs` | Planche de la vue Vignettes : disposition, notes, gestes, menus |
 | `recovery.rs`, `recoveryui.rs` | Copie de secours, récupération après plantage |
-| `workspace.rs`, `workspaceui.rs` | Espaces de travail, disposition retenue |
+| `workspace.rs`, `workspaceui.rs` | Espaces de travail (Storyboard, Animation, Montage : `Espace`, une disposition retenue chacun), disposition retenue |
+| `barres.rs`, `barres_tests.rs` | Barres de commandes minces et « Plus… » : une table de commandes par barre (commandes, montage, timeline), épingles retenues dans les réglages, passage automatique sous « Plus… » quand la barre est étroite |
 | `dock.rs`, `dockui.rs` | Panneaux modulables : disposition (format de Pelure), contenu des onglets, fenêtres à part |
 | `shapes.rs`, `shapetools.rs` | Formes : ligne (courbes), rectangle, ellipse, polyligne |
 | `text.rs`, `texttools.rs` | Texte : polices du poste, mise en page, outil |

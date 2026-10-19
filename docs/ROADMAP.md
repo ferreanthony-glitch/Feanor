@@ -2551,8 +2551,9 @@ tableaux et les propositions sont dans **`docs/INTERFACE.md`**. Pas vu à l'écr
   prend sur tous les calques du plan (Storyboard Pro) et choisit leurs clés dans le montage.
 - ✅ **Zoom de la bande sur la tête de lecture** (`zoombande.rs`) : curseur, boutons, raccourcis et Ctrl +
   molette gardent la tête de lecture au même endroit de l'écran (hors vue : d'abord au milieu).
-- Proposé, pas fait (INTERFACE.md, partie 6) : espaces de travail par tâche, préréglage de raccourcis façon
-  Storyboard Pro, barres par défaut plus minces. Reste aussi : choisir des clés au rectangle sur la timeline
+- Proposé (INTERFACE.md, partie 6) : les espaces de travail par tâche (6.1) et les barres par défaut plus
+  minces (6.3) sont **faits** (voir « Espaces de travail liés aux modes et barres minces », plus bas) ;
+  le préréglage de raccourcis façon Storyboard Pro (6.2) reste à faire. Reste aussi : choisir des clés au rectangle sur la timeline
   de l'animation (l'unité y est l'image), un rectangle pour les clés d'effets, les 150 infobulles d'egui
   restantes, « Arrière-plan » / « Fond » / « Propriétés du plan ».
 
@@ -2821,3 +2822,30 @@ Plateau, action `scene3d.basculer`), réglages dans le panneau Réglages. Code :
   déplacer, cercles pour tourner, cubes pour l'échelle ; tourner la vue au clic droit et la glisser au bouton du
   milieu (comme le plateau en 3D) ; Alt + glisser pour tourner ; rotation en degrés dans l'ordre lacet, tangage,
   roulis (Y, X, Z) ; focale équivalente sur pellicule de 36 mm (celle de la caméra 2D).
+
+## Espaces de travail liés aux modes et barres minces (demandés par Anthony le 2026-10-19, branche `espaces-barres`) ✅
+
+Les propositions 6.1 et 6.3 de `docs/INTERFACE.md`, faites ; détail dans la partie 14 de ce fichier. Pas vu à
+l'écran dans cette séance.
+
+- ✅ **Espaces de travail Storyboard, Animation, Montage** (`workspace::Espace`) : chacun retient sa disposition de
+  panneaux ; changer de mode pose celle de l'espace d'arrivée, instantanément ; « Rétablir la disposition »
+  (`espace.retablir`) remet celle d'origine de l'espace en cours. Montage est une disposition du mode Storyboard (pas un
+  troisième mode) : la bande en grand, la fiche du plan, Bruitages et Suggestions sonores à droite.
+- ✅ **Réglages** (`reglages.toml`) : `disposition` (Storyboard, c'est l'ancien champ : un ancien fichier est repris sans
+  conversion), `disposition_animation`, `disposition_montage`, `espace_storyboard`, tous avec une valeur d'origine.
+- ✅ **Compatible avec l'existant** : panneaux qui s'ajustent (`ajuste.rs`, ils repartent de la disposition posée),
+  fenêtres détachées (elles restent où elles sont), feuille d'exposition (animation seule), cadres de composition et
+  planche (réglages de la vue, pas d'un espace).
+- ✅ **Barres minces** (`barres.rs`) : barre de commandes 19 → 9 icônes, montage 21 → 12, timeline sans défilement ;
+  le reste sous « Plus… » (`DOTS_THREE`), chaque ligne avec icône, nom et raccourci ; épingle « Épingler dans la barre »
+  par ligne, retenue par barre (`[barres.*]`) ; une barre trop étroite envoie d'elle-même ses dernières commandes
+  sous « Plus… ». Rien n'est retiré (menus, Ctrl+K, raccourcis).
+- ✅ **Arrivées de main rangées** : « Ajouter une transition » et « Importer une vidéo » sous « Plus… » du montage, la
+  planche de crayonnés dans la barre à côté de « Vue vignettes » ; le cube de la scène 3D reste dans la barre de la vue.
+- ✅ **Correction** : Historique, Commentaires, Bruitages, Suggestions sonores et Références s'ouvrent aussi quand les
+  calques sont fermés (la colonne de droite se crée avec eux).
+- ✅ **Essais** : 23 nouveaux (`barres_tests.rs`, `workspace_tests.rs`), la suite complète passe (1511 essais,
+  `scripts\verifier.ps1 -Repetitions 2` : OK, compilation sans avertissement).
+- Pas fait : un réglage « barres complètes » (épingler tout y revient) ; miroir et table lumineuse sous « Plus… » dans
+  la barre sous le dessin (proposition 4 de la partie 5) ; préréglage de raccourcis façon Storyboard Pro (6.2).

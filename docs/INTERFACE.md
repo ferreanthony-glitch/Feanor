@@ -361,13 +361,14 @@ Constats (le nombre de commandes visibles en même temps, hors panneaux) :
 5. **Menus** : Animation (8) pourrait n'être que Lecture et Images ; Fichier : « Réglages du projet… » et
    « Préférences… » côte à côte.
 
-Aucune n'est faite ici : c'est la partie 6.3 (barre par défaut plus mince).
+Aucune n'était faite dans cette passe : c'est la partie 6.3 (barre par défaut plus mince), **faite le
+2026-10-19** (voir la partie 14).
 
 ---------------------------------------------------------------------------------------------------
 
-## 6. Propositions pour Anthony (non faites)
+## 6. Propositions pour Anthony (6.1 et 6.3 faites le 2026-10-19, voir la partie 14 ; 6.2 reste à faire)
 
-### 6.1 Espaces de travail par tâche : Storyboard, Animation, Montage
+### 6.1 Espaces de travail par tâche : Storyboard, Animation, Montage — ✅ fait (partie 14)
 
 - **Quoi** : trois dispositions enregistrées (panneaux visibles, leurs places, barres visibles), que les
   boutons de mode existants (« Storyboard » / « Animation ») et le menu Affichage > Espaces de travail
@@ -410,7 +411,7 @@ Le préréglage serait un fichier `keymap-storyboard-pro.toml` qui redéfinit se
 - **Ce qu'Anthony voit** : un choix « Raccourcis : SHOT / Storyboard Pro » ; en Storyboard Pro, A et F
   changent de plan comme dans son logiciel et F5 coupe un plan.
 
-### 6.3 Barre par défaut plus mince
+### 6.3 Barre par défaut plus mince — ✅ fait (partie 14)
 
 - **Quoi** : la barre de commandes du haut ne garde que Nouveau / Ouvrir / Enregistrer / Exporter,
   Annuler / Rétablir, Couper / Copier / Coller ; les barres du montage et de la timeline mettent leurs
@@ -689,3 +690,98 @@ en icônes avec bulle (nom, description, raccourci), comme le reste.
   thèmes ; le décor estompé quand on modifie le plan ; la taille des poignées à toutes les distances ; le panneau
   Réglages dans un panneau étroit ; les conventions empruntées aux logiciels 3D (rouge / vert / bleu pour X / Y / Z,
   flèches / cercles / cubes, tourner au clic droit) **à vérifier** avec ce qu'il attend.
+
+## 14. Espaces de travail liés aux modes, barres minces et « Plus… » (2026-10-19, branche `espaces-barres`)
+
+Les propositions 6.1 et 6.3, approuvées par Anthony. Rien n'a été regardé à l'écran dans cette séance (aucun
+lancement de SHOT) : voir « À vérifier » plus bas.
+
+### Espaces de travail (6.1)
+
+- **Trois espaces, chacun sa disposition** : Storyboard, Animation, Montage (`workspace::Espace`). Changer de mode
+  (boutons « Storyboard » / « Animation », Tab, « Animer ce plan ») pose la disposition de l'espace d'arrivée ;
+  ce qu'on change dans un espace se retient pour lui seul (réglages `disposition`, `disposition_animation`,
+  `disposition_montage`, `espace_storyboard`, toutes avec une valeur d'origine : un fichier ancien se lit tel quel).
+- **Montage est une disposition du mode Storyboard, pas un troisième mode** (choix expliqué) : mêmes outils,
+  mêmes raccourcis (les touches du montage), même dessin, et le bouton « Animer ce plan » entre en animation depuis lui.
+  Un troisième mode aurait doublé les contextes de raccourcis, les menus qui changent selon le mode et les essais qui
+  les suivent, pour une différence qui n'est qu'une disposition. On y va par Affichage > Espaces de travail ou
+  Ctrl+K ; le bouton « Storyboard » (ou l'entrée Storyboard du même sous-menu) en revient. Quitter l'animation
+  ramène à celui des deux espaces du côté storyboard où l'on était (`espace_storyboard`).
+- **Dispositions d'origine** : Storyboard = la disposition standard ; Animation = la bande (la timeline) plus haute
+  (340 au lieu de 290) et les calques plus larges (250 au lieu de 230) ; Montage = la bande à 420, ni calques, ni
+  effets, ni réglages de l'outil, ni couleur, la fiche du plan, **Bruitages et Suggestions sonores** à droite (on pose
+  les sons dans la bande). Références, Historique, Commentaires restent à la demande partout ; la feuille d'exposition
+  n'existe qu'en animation. Les valeurs sont modestes à dessein : l'essai de fumée déplace une sélection au pointeur
+  dans une fenêtre de 1280 × 720, et une bande à 400 laissait trop peu de dessin.
+- **Migration** : l'unique disposition d'un ancien `reglages.toml` devient celle du Storyboard sans conversion
+  (le champ garde son nom) ; les deux autres commencent par leur disposition d'origine.
+- **« Rétablir la disposition »** (Affichage > Espaces de travail, Ctrl+K `espace.retablir`) : l'espace en cours
+  reprend sa disposition d'origine, les bords tirés à la main sont oubliés (`panneaux_tires_a_la_main`), les autres espaces
+  ne bougent pas. Les quatre dispositions d'avant (Standard, Dessin, Timeline, Vue d'ensemble) et les dispositions
+  enregistrées s'appliquent à l'espace en cours.
+- **Ce qui ne bouge pas en changeant d'espace** : les cadres de composition, le format et la planche des vignettes
+  (réglages de la vue) ; les panneaux dans leur propre fenêtre (posés sur un autre écran) — sauf la feuille
+  d'exposition, qui suit l'animation ; l'état des panneaux qui s'ajustent à leur contenu (`ajuste.rs`) repart de la
+  disposition posée, comme à chaque nouvelle disposition. Le changement est instantané (aucun calcul d'image, aucun
+  rejeu) ; les réglages s'écrivent à l'image d'écran suivante.
+- **Correction au passage** : la colonne de droite ne savait recevoir que les calques, l'exposition et les effets ;
+  sans calques (c'est le cas de l'espace Montage), Historique, Commentaires, Bruitages, Suggestions sonores et
+  Références ne s'ouvraient pas. Ils forment maintenant leurs onglets (`dock.rs`, `right_column`).
+- **Actions** (`keymap.toml`, un bloc chacune, sans touche) : `espace.storyboard`, `espace.animation`,
+  `espace.montage`, `espace.retablir`.
+
+### Barres minces (6.3) et « Plus… »
+
+Tout est dans `src/barres.rs` : une table de commandes par barre, dans l'ordre d'affichage, avec le groupe (un trait
+entre deux groupes), si la commande est dans la barre d'office, son icône, son nom, sa bulle et son action.
+
+| Barre | Dans la barre | Sous « Plus… » |
+|---|---|---|
+| Commandes du haut (19 → 9) | Nouveau, Ouvrir, Enregistrer, Exporter ; Annuler, Rétablir ; Couper, Copier, Coller | Nouveau plan, Dupliquer le plan, Supprimer les plans ; le transport (première image, précédente, lecture, suivante, dernière) ; boucle ; son pendant la lecture |
+| Montage (21 → 12) | début, lecture, boucle, position ; nouveau plan, nouvelle séquence, menu Plans ; importer un son, menu Son ; animer ce plan ; vue dessin, vue vignettes, planche de crayonnés | calque vectoriel, copier / coller / supprimer les plans, avancer / reculer le plan, verrou, aimant, **ajouter une transition**, importer une vidéo, nouveau commentaire |
+| Timeline (ne défile plus) | animer / retour, titre et durée du plan ; transport, boucle, image courante, menus Repères et Affichage ; nouveau dessin, allonger / raccourcir l'exposition, « en N », menu Images ; clés de caméra début / ici / fin ; pelure (bouton, avant, après, réglages) | cadence, dupliquer / supprimer / vider le dessin, supprimer la clé de caméra, adoucir, marque d'image, nouveau commentaire, flips, effets |
+
+- **Le bouton « Plus… »** (`DOTS_THREE`) est au bout de chaque barre ; une ligne par commande avec son icône, son
+  nom et son raccourci (clic : elle s'exécute ; clic droit : « Assigner un raccourci » ; les états — boucle, verrou,
+  aimant, pelure… — sont enfoncés avec l'encre `theme::sur_accent`, `bulles::symbole_etat`). Les menus (Plans, Son,
+  Repères…) y sont des sous-menus, les réglages (cadence…) des champs.
+- **Épingler** : à gauche de chaque ligne, une épingle (« Épingler dans la barre ») remet la commande dans la barre ;
+  le sous-menu « Dans la barre » liste les commandes montrées d'office pour les retirer, « Rétablir la barre d'origine »
+  efface les choix. Le choix est retenu **par barre** (`reglages.toml`, `[barres.commandes]`, `[barres.montage]`,
+  `[barres.timeline]`, listes `epinglees` et `retirees` : seul l'écart avec la barre d'origine est écrit ; un fichier
+  abîmé est remis d'équerre à la lecture).
+- **Jamais de défilement** : les barres du montage et de la timeline n'ont plus de zone de défilement. Quand la place
+  manque, la commande qui ne tient plus et les suivantes passent d'elles-mêmes sous « Plus… » (elles restent
+  épinglées et reviennent quand la fenêtre s'élargit). Les affichages fixes (titre du plan, image courante, position)
+  ne passent jamais dessous.
+- **Rien n'est retiré** : chaque commande a son action dans `keymap::ACTIONS` (palette Ctrl+K, raccourci, assignation) ;
+  les menus du haut sont inchangés (sauf le menu Plans du montage, dont l'icône « trois points » est devenue une liste
+  à puces, pour ne pas ressembler à « Plus… »).
+- **Pas touchées** : la barre des panneaux à droite ; la barre sous le dessin et celle au-dessus (vue, caméra, plateau 3D,
+  **Scène 3D** — le cube —, zones de sécurité, format) : ce sont des vues, pas des commandes de ces trois barres ; la
+  scène 3D reste aussi dans Affichage > Plateau et Ctrl+K. Proposition 4 de la partie 5 (miroir et table lumineuse sous
+  « Plus… » dans la barre sous le dessin) : pas faite, elle n'était pas dans 6.3.
+- Le « Réglage Barres complètes » de 6.3 est remplacé par les épingles : épingler tout remet la barre complète.
+
+### Essais ajoutés
+
+`barres_tests.rs` (barres d'origine à 9 / 12 icônes et ce qui est sous « Plus… » ; pas de doublon, chaque commande
+d'un seul côté ; chaque action retirée d'une barre existe et est implémentée ; épingles, aller-retour dans les
+réglages, fichier abîmé nettoyé, pas de trace quand on revient à l'origine ; la barre dessinée dans 520 points ne
+dépasse pas ; les commandes font ce que faisaient leurs boutons) et `workspace_tests.rs` (dispositions d'origine,
+changer de mode restitue la disposition de l'espace, écriture dans les réglages, migration d'un ancien fichier,
+aller-retour de réglages, Montage et retour par le bouton, rétablir un seul espace, feuille d'exposition,
+panneau détaché, chaque panneau de la barre s'ouvre dans chaque espace, changement instantané).
+
+### À vérifier à l'écran
+
+1. Le menu « Plus… » : largeur des lignes, alignement de l'épingle et du raccourci, sous-menus (Plans, Son,
+   Repères, Affichage, Images) ouverts depuis une ligne qui porte une épingle, clic sur l'épingle (le menu reste ouvert).
+2. Une barre de la timeline dans un panneau étroit : où passe la coupure, le bouton « Plus… » toujours visible à droite.
+3. Les trois thèmes : icônes enfoncées lisibles dans la barre et dans « Plus… ».
+4. Les trois dispositions d'origine sur ton écran (la bande à 340 en animation, à 420 en Montage) ; ajuste si elles
+   mangent trop le dessin.
+5. Passer de Storyboard à Animation et retour : le dessin ne saute pas, les panneaux ajustés se recalent en une ou
+   deux images ; l'espace Montage depuis Ctrl+K ; le bouton « Storyboard » qui en revient.
+6. Un panneau détaché (Références) reste sur son écran en changeant d'espace.
