@@ -22,6 +22,13 @@ fn step(kind: EffectKind, values: &[f32]) -> FxStep {
     FxStep { kind, values: values.to_vec() }
 }
 
+/// Le tremblement du trait avec ses réglages par défaut et la variante 1 : le seul effet sans passe.
+fn boil() -> FxStep {
+    let mut values: Vec<f32> = EffectKind::Boil.params().iter().map(|p| p.default).collect();
+    values.push(1.0);
+    FxStep { kind: EffectKind::Boil, values }
+}
+
 /// Un dessin qui montre de tout : un disque en dégradé aux bords doux, des aplats francs, un aplat
 /// translucide, un trait fin en diagonale, un peu de couleur collée au bord droit et au bord bas de la
 /// feuille, et des zones vides.
@@ -154,15 +161,15 @@ fn the_blur_is_three_boxes_in_rows_then_three_in_columns_like_the_cpu() {
 }
 
 #[test]
-fn every_effect_but_the_warps_has_passes() {
+fn every_effect_but_the_boil_has_passes() {
     let sheet = (1920u32, 1080u32);
     let input = Geo { x: 100, y: 100, w: 512, h: 384 };
     for kind in EffectKind::ALL {
         let values: Vec<f32> = kind.params().iter().map(|p| p.default).collect();
         let s = FxStep { kind, values };
         let chain = plan_chain(std::slice::from_ref(&s), input, sheet);
-        // Les valeurs par défaut de certains effets ne changent rien (rayon, 0 %…) : une chaîne vide est permise,
-        // mais un effet pris pour pris en charge doit avoir une chaîne, et les autres aucune.
+        // Les valeurs par défaut de certains effets ne changent rien (rayon, 0 %…) : pas de chaîne alors ;
+        // un effet qui change quelque chose doit avoir sa chaîne, sauf le tremblement du trait.
         if crate::gpufx::supported(kind) && kind.changes(&s.values) {
             let chain = chain.unwrap_or_else(|| panic!("{kind:?} sans chaîne"));
             assert!(!chain.passes.is_empty());
@@ -170,6 +177,10 @@ fn every_effect_but_the_warps_has_passes() {
             assert_eq!(chain.passes.last().unwrap().dst, crate::gpufx::Tex::Temp(chain.out_temp));
             // Le résultat tient dans la feuille.
             assert!(chain.out.x >= 0 && chain.out.y >= 0 && chain.out.right() <= sheet.0 as i32 && chain.out.bottom() <= sheet.1 as i32, "{kind:?} : {:?}", chain.out);
+            // Chaque passe est un point d'entrée connu du shader.
+            for p in &chain.passes {
+                assert!(crate::gpufx::ENTRIES.contains(&p.entry), "{kind:?} : {}", p.entry);
+            }
         } else if !crate::gpufx::supported(kind) {
             assert!(chain.is_none(), "{kind:?} n'a pas de passe");
         }
@@ -180,7 +191,7 @@ fn every_effect_but_the_warps_has_passes() {
 fn a_stack_with_one_cpu_effect_stays_on_the_cpu() {
     let ok = [step(EffectKind::GaussianBlur, &[10.0]), step(EffectKind::Noise, &[20.0])];
     assert!(crate::gpufx::steps_supported(&ok));
-    let mixed = [step(EffectKind::GaussianBlur, &[10.0]), step(EffectKind::Wave, &[10.0, 100.0, 0.0]), step(EffectKind::Noise, &[20.0])];
+    let mixed = [step(EffectKind::GaussianBlur, &[10.0]), boil(), step(EffectKind::Noise, &[20.0])];
     assert!(!crate::gpufx::steps_supported(&mixed));
     assert!(plan_chain(&mixed, Geo { x: 0, y: 0, w: 64, h: 64 }, (640, 360)).is_none());
     assert!(!crate::gpufx::steps_supported(&[]));
@@ -215,19 +226,32 @@ macro_rules! gpu_or_return {
 }
 
 #[test]
+fn every_entry_point_of_the_shader_builds_a_pipeline() {
+    let rs = gpu_or_return!();
+    let fx = crate::gpufx::GpuFx::try_new(&rs.device, &rs.queue).expect("le shader est accepté par la carte");
+    fx.make_all();
+    // La liste des points d'entrée est celle du shader.
+    let mut declared: Vec<&str> = include_str!("gpufx.wgsl").lines().filter_map(|l| l.strip_prefix("fn fs_")).filter_map(|l| l.split('(').next()).collect();
+    declared.sort_unstable();
+    let mut listed: Vec<&str> = crate::gpufx::ENTRIES.iter().map(|e| &e[3..]).collect();
+    listed.sort_unstable();
+    assert_eq!(declared, listed);
+}
+
+#[test]
 fn color_adjustments_match_the_cpu() {
     let rs = gpu_or_return!();
     let mut gpu = GpuCanvas::new(&rs);
     let s = scene(W, H);
-    check("luminosité / contraste (30, 40)", &mut gpu, &rs, &s, &[step(EffectKind::BrightnessContrast, &[30.0, 40.0])], 0.6, 3);
-    check("luminosité / contraste (-50, -60)", &mut gpu, &rs, &s, &[step(EffectKind::BrightnessContrast, &[-50.0, -60.0])], 0.6, 3);
-    check("niveaux (20, 230, 1,8)", &mut gpu, &rs, &s, &[step(EffectKind::Levels, &[20.0, 230.0, 1.8])], 0.6, 3);
-    check("teinte / saturation (40, 30, 10)", &mut gpu, &rs, &s, &[step(EffectKind::HueSaturation, &[40.0, 30.0, 10.0])], 0.6, 4);
-    check("teinte / saturation (-120, -80, -20)", &mut gpu, &rs, &s, &[step(EffectKind::HueSaturation, &[-120.0, -80.0, -20.0])], 0.6, 4);
-    check("noir et blanc (80 %)", &mut gpu, &rs, &s, &[step(EffectKind::BlackWhite, &[80.0])], 0.6, 3);
-    check("négatif (100 %)", &mut gpu, &rs, &s, &[step(EffectKind::Invert, &[100.0])], 0.6, 3);
-    check("postérisation (5)", &mut gpu, &rs, &s, &[step(EffectKind::Posterize, &[5.0])], 0.8, 255);
-    check("seuil (128)", &mut gpu, &rs, &s, &[step(EffectKind::Threshold, &[128.0])], 0.8, 255);
+    check("luminosité / contraste (30, 40)", &mut gpu, &rs, &s, &[step(EffectKind::BrightnessContrast, &[30.0, 40.0])], 0.5, 4);
+    check("luminosité / contraste (-50, -60)", &mut gpu, &rs, &s, &[step(EffectKind::BrightnessContrast, &[-50.0, -60.0])], 0.5, 4);
+    check("niveaux (20, 230, 1,8)", &mut gpu, &rs, &s, &[step(EffectKind::Levels, &[20.0, 230.0, 1.8])], 0.5, 4);
+    check("teinte / saturation (40, 30, 10)", &mut gpu, &rs, &s, &[step(EffectKind::HueSaturation, &[40.0, 30.0, 10.0])], 0.5, 4);
+    check("teinte / saturation (-120, -80, -20)", &mut gpu, &rs, &s, &[step(EffectKind::HueSaturation, &[-120.0, -80.0, -20.0])], 0.5, 4);
+    check("noir et blanc (80 %)", &mut gpu, &rs, &s, &[step(EffectKind::BlackWhite, &[80.0])], 0.5, 4);
+    check("négatif (100 %)", &mut gpu, &rs, &s, &[step(EffectKind::Invert, &[100.0])], 0.5, 4);
+    check("postérisation (5)", &mut gpu, &rs, &s, &[step(EffectKind::Posterize, &[5.0])], 0.5, 4);
+    check("seuil (128)", &mut gpu, &rs, &s, &[step(EffectKind::Threshold, &[128.0])], 0.5, 4);
 }
 
 #[test]
@@ -235,10 +259,10 @@ fn noise_and_grain_use_the_same_hash_as_the_cpu() {
     let rs = gpu_or_return!();
     let mut gpu = GpuCanvas::new(&rs);
     let s = scene(W, H);
-    check("bruit (45 %)", &mut gpu, &rs, &s, &[step(EffectKind::Noise, &[45.0])], 0.6, 3);
-    check("bruit (100 %)", &mut gpu, &rs, &s, &[step(EffectKind::Noise, &[100.0])], 0.6, 3);
-    check("grain (25 %, 1 px, graine 1, image 0)", &mut gpu, &rs, &s, &[step(EffectKind::Grain, &[25.0, 1.0, 1.0, 0.0])], 0.6, 3);
-    check("grain (60 %, 3 px, graine 7, image 33)", &mut gpu, &rs, &s, &[step(EffectKind::Grain, &[60.0, 3.0, 7.0, 33.0])], 0.6, 3);
+    check("bruit (45 %)", &mut gpu, &rs, &s, &[step(EffectKind::Noise, &[45.0])], 0.5, 4);
+    check("bruit (100 %)", &mut gpu, &rs, &s, &[step(EffectKind::Noise, &[100.0])], 0.5, 4);
+    check("grain (25 %, 1 px, graine 1, image 0)", &mut gpu, &rs, &s, &[step(EffectKind::Grain, &[25.0, 1.0, 1.0, 0.0])], 0.5, 4);
+    check("grain (60 %, 3 px, graine 7, image 33)", &mut gpu, &rs, &s, &[step(EffectKind::Grain, &[60.0, 3.0, 7.0, 33.0])], 0.5, 4);
 }
 
 #[test]
@@ -246,12 +270,12 @@ fn full_frame_cinema_effects_match_the_cpu() {
     let rs = gpu_or_return!();
     let mut gpu = GpuCanvas::new(&rs);
     let s = scene(W, H);
-    check("flash en fondu (60 %, jaune)", &mut gpu, &rs, &s, &[step(EffectKind::Flash, &[60.0, 255.0, 240.0, 120.0, 0.0])], 0.6, 3);
-    check("flash en écran (70 %, orange)", &mut gpu, &rs, &s, &[step(EffectKind::Flash, &[70.0, 255.0, 140.0, 20.0, 1.0])], 0.6, 3);
-    check("vignettage (70 %, 50, 60)", &mut gpu, &rs, &s, &[step(EffectKind::Vignette, &[70.0, 50.0, 60.0, 45.0, 55.0, 100.0, 100.0])], 0.6, 3);
-    check("aberration chromatique (6 px)", &mut gpu, &rs, &s, &[step(EffectKind::Aberration, &[6.0, 50.0, 50.0])], 0.8, 8);
-    check("secousse (12, -8, 2°, 105 %)", &mut gpu, &rs, &s, &[step(EffectKind::Shake, &[12.0, -8.0, 2.0, 105.0, 0.0])], 0.8, 8);
-    check("secousse avec flou de bougé", &mut gpu, &rs, &s, &[step(EffectKind::Shake, &[40.0, 20.0, -1.0, 100.0, 60.0])], 0.8, 8);
+    check("flash en fondu (60 %, jaune)", &mut gpu, &rs, &s, &[step(EffectKind::Flash, &[60.0, 255.0, 240.0, 120.0, 0.0])], 0.5, 4);
+    check("flash en écran (70 %, orange)", &mut gpu, &rs, &s, &[step(EffectKind::Flash, &[70.0, 255.0, 140.0, 20.0, 1.0])], 0.5, 4);
+    check("vignettage (70 %, 50, 60)", &mut gpu, &rs, &s, &[step(EffectKind::Vignette, &[70.0, 50.0, 60.0, 45.0, 55.0, 100.0, 100.0])], 0.5, 4);
+    check("aberration chromatique (6 px)", &mut gpu, &rs, &s, &[step(EffectKind::Aberration, &[6.0, 50.0, 50.0])], 0.5, 4);
+    check("secousse (12, -8, 2°, 105 %)", &mut gpu, &rs, &s, &[step(EffectKind::Shake, &[12.0, -8.0, 2.0, 105.0, 0.0])], 0.5, 4);
+    check("secousse avec flou de bougé", &mut gpu, &rs, &s, &[step(EffectKind::Shake, &[40.0, 20.0, -1.0, 100.0, 60.0])], 0.5, 4);
 }
 
 #[test]
@@ -262,7 +286,7 @@ fn impact_frame_matches_the_cpu() {
     // Quantité, mode, seuil, teinte rgb, force, éclat, lignes, centre, graine.
     for (mode, burst, lines, name) in [(0.0, 0.0, 0.0, "négatif"), (1.0, 60.0, 0.0, "noir et blanc avec éclat"), (2.0, 0.0, 80.0, "inversé avec lignes"), (3.0, 100.0, 100.0, "postérisé, éclat et lignes")] {
         let v = [100.0, mode, 128.0, 230.0, 30.0, 30.0, 40.0, burst, lines, 50.0, 50.0, 3.0];
-        check(&format!("image d'impact : {name}"), &mut gpu, &rs, &s, &[step(EffectKind::Impact, &v)], 1.5, 255);
+        check(&format!("image d'impact : {name}"), &mut gpu, &rs, &s, &[step(EffectKind::Impact, &v)], 0.5, 4);
     }
 }
 
@@ -273,7 +297,7 @@ fn gaussian_blur_matches_the_cpu_within_the_kernel_difference() {
     let s = scene(W, H);
     // (Un seul noyau au lieu de trois flous en boîte arrondis chacun à 8 bits : quelques niveaux au plus.)
     for r in [4.0f32, 8.0, 25.0, 60.0] {
-        check(&format!("flou gaussien ({r} px)"), &mut gpu, &rs, &s, &[step(EffectKind::GaussianBlur, &[r])], 0.6, 4);
+        check(&format!("flou gaussien ({r} px)"), &mut gpu, &rs, &s, &[step(EffectKind::GaussianBlur, &[r])], 0.5, 4);
     }
 }
 
@@ -282,13 +306,13 @@ fn glow_sharpen_shadow_and_motion_match_the_cpu() {
     let rs = gpu_or_return!();
     let mut gpu = GpuCanvas::new(&rs);
     let s = scene(W, H);
-    check("lueur (12 px, 100 %)", &mut gpu, &rs, &s, &[step(EffectKind::Glow, &[12.0, 100.0])], 0.8, 5);
-    check("lueur (40 px, 160 %)", &mut gpu, &rs, &s, &[step(EffectKind::Glow, &[40.0, 160.0])], 0.8, 5);
-    check("netteté (120 %, 2 px)", &mut gpu, &rs, &s, &[step(EffectKind::Sharpen, &[120.0, 2.0])], 0.8, 6);
-    check("ombre portée (14, 10, 8 px, 70 %)", &mut gpu, &rs, &s, &[step(EffectKind::DropShadow, &[14.0, 10.0, 8.0, 70.0])], 0.8, 5);
-    check("ombre portée sans flou", &mut gpu, &rs, &s, &[step(EffectKind::DropShadow, &[-12.0, 6.0, 0.0, 80.0])], 0.6, 3);
-    check("flou de mouvement (30 px, 20°)", &mut gpu, &rs, &s, &[step(EffectKind::MotionBlur, &[30.0, 20.0])], 0.8, 4);
-    check("flou de mouvement (120 px, -75°)", &mut gpu, &rs, &s, &[step(EffectKind::MotionBlur, &[120.0, -75.0])], 0.8, 6);
+    check("lueur (12 px, 100 %)", &mut gpu, &rs, &s, &[step(EffectKind::Glow, &[12.0, 100.0])], 0.5, 4);
+    check("lueur (40 px, 160 %)", &mut gpu, &rs, &s, &[step(EffectKind::Glow, &[40.0, 160.0])], 0.5, 4);
+    check("netteté (120 %, 2 px)", &mut gpu, &rs, &s, &[step(EffectKind::Sharpen, &[120.0, 2.0])], 0.5, 4);
+    check("ombre portée (14, 10, 8 px, 70 %)", &mut gpu, &rs, &s, &[step(EffectKind::DropShadow, &[14.0, 10.0, 8.0, 70.0])], 0.5, 4);
+    check("ombre portée sans flou", &mut gpu, &rs, &s, &[step(EffectKind::DropShadow, &[-12.0, 6.0, 0.0, 80.0])], 0.5, 4);
+    check("flou de mouvement (30 px, 20°)", &mut gpu, &rs, &s, &[step(EffectKind::MotionBlur, &[30.0, 20.0])], 0.5, 4);
+    check("flou de mouvement (120 px, -75°)", &mut gpu, &rs, &s, &[step(EffectKind::MotionBlur, &[120.0, -75.0])], 0.5, 4);
 }
 
 #[test]
@@ -297,8 +321,26 @@ fn bloom_matches_the_cpu() {
     let mut gpu = GpuCanvas::new(&rs);
     let s = scene(W, H);
     for (r, i, t) in [(6.0, 100.0, 120.0), (20.0, 150.0, 140.0), (45.0, 100.0, 100.0), (110.0, 200.0, 140.0)] {
-        check(&format!("lueur diffuse ({r} px, {i} %, seuil {t})"), &mut gpu, &rs, &s, &[step(EffectKind::Bloom, &[r, i, t])], 0.8, 6);
+        check(&format!("lueur diffuse ({r} px, {i} %, seuil {t})"), &mut gpu, &rs, &s, &[step(EffectKind::Bloom, &[r, i, t])], 0.5, 4);
     }
+}
+
+#[test]
+fn warps_render_and_mosaic_match_the_cpu() {
+    let rs = gpu_or_return!();
+    let mut gpu = GpuCanvas::new(&rs);
+    let s = scene(W, H);
+    check("onde (12 px, 90 px, 20°)", &mut gpu, &rs, &s, &[step(EffectKind::Wave, &[12.0, 90.0, 20.0])], 0.5, 4);
+    check("ondulation (8 px, 40 px)", &mut gpu, &rs, &s, &[step(EffectKind::Ripple, &[8.0, 40.0, 40.0, 60.0])], 0.5, 4);
+    check("tourbillon (160°, 60 %)", &mut gpu, &rs, &s, &[step(EffectKind::Twirl, &[160.0, 60.0, 30.0, 50.0])], 0.5, 4);
+    check("pincement (60 %, 80 %)", &mut gpu, &rs, &s, &[step(EffectKind::Pinch, &[60.0, 80.0, 30.0, 50.0])], 0.5, 4);
+    check("pincement bombé (-70 %)", &mut gpu, &rs, &s, &[step(EffectKind::Pinch, &[-70.0, 80.0, 30.0, 50.0])], 0.5, 4);
+    check("nuages (80 px, 70 %, graine 3)", &mut gpu, &rs, &s, &[step(EffectKind::Clouds, &[80.0, 70.0, 3.0])], 0.5, 4);
+    check("éclairage (35 %, 35 %, 100 %, 40 %)", &mut gpu, &rs, &s, &[step(EffectKind::Lighting, &[35.0, 35.0, 100.0, 40.0])], 0.5, 4);
+    check("dégradé (120°, 60 %)", &mut gpu, &rs, &s, &[step(EffectKind::Gradient, &[120.0, 60.0])], 0.5, 4);
+    check("mosaïque (10 px)", &mut gpu, &rs, &s, &[step(EffectKind::Mosaic, &[10.0])], 0.5, 4);
+    check("mosaïque (37 px, hors de la grille de la feuille)", &mut gpu, &rs, &s, &[step(EffectKind::Mosaic, &[37.0])], 0.5, 4);
+    check("mosaïque (2 px)", &mut gpu, &rs, &s, &[step(EffectKind::Mosaic, &[2.0])], 0.5, 4);
 }
 
 #[test]
@@ -313,8 +355,8 @@ fn stacks_of_several_effects_match_the_cpu() {
         &rs,
         &s,
         &[step(EffectKind::GaussianBlur, &[50.0]), step(EffectKind::BrightnessContrast, &[80.0, -45.0]), step(EffectKind::Noise, &[30.0]), step(EffectKind::HueSaturation, &[10.0, -80.0, 0.0])],
-        0.8,
-        5,
+        0.5,
+        4,
     );
     // Impact, lueur, secousse.
     check(
@@ -327,10 +369,10 @@ fn stacks_of_several_effects_match_the_cpu() {
             step(EffectKind::Glow, &[18.0, 120.0]),
             step(EffectKind::Shake, &[15.0, 6.0, 1.0, 102.0, 40.0]),
         ],
-        1.5,
-        255,
+        0.5,
+        4,
     );
-    check("secousse + grain + vignettage", &mut gpu, &rs, &s, &[step(EffectKind::Shake, &[10.0, -5.0, 0.5, 100.0, 0.0]), step(EffectKind::Grain, &[30.0, 2.0, 5.0, 12.0]), step(EffectKind::Vignette, &[60.0, 55.0, 60.0, 50.0, 50.0, 100.0, 100.0])], 1.0, 8);
+    check("secousse + grain + vignettage", &mut gpu, &rs, &s, &[step(EffectKind::Shake, &[10.0, -5.0, 0.5, 100.0, 0.0]), step(EffectKind::Grain, &[30.0, 2.0, 5.0, 12.0]), step(EffectKind::Vignette, &[60.0, 55.0, 60.0, 50.0, 50.0, 100.0, 100.0])], 0.5, 4);
 }
 
 /// Essai de mise au point : où sont les plus grands écarts d'un effet.
@@ -457,7 +499,7 @@ fn a_stack_with_a_warp_and_the_switch_off_use_the_cpu_path() {
     let mut gpu = GpuCanvas::new(&rs);
     let s = scene(W, H);
     // Un effet sans passe au milieu : toute la pile reste sur le processeur.
-    let mixed = vec![step(EffectKind::GaussianBlur, &[6.0]), step(EffectKind::Wave, &[8.0, 80.0, 0.0]), step(EffectKind::Noise, &[20.0])];
+    let mixed = vec![step(EffectKind::GaussianBlur, &[6.0]), boil(), step(EffectKind::Noise, &[20.0])];
     let plan = Plan { paper: None, items: vec![item(s.id, mixed.clone())] };
     let _ = render_with(&mut gpu, &rs, &s.doc, &plan, true);
     assert_eq!(gpu.effects_passes(), 0, "aucune passe : la pile n'est pas entièrement sur la carte");

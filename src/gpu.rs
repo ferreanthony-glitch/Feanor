@@ -737,15 +737,17 @@ impl GpuCanvas {
         }
     }
 
-    /// Mémoire vidéo prise par les effets sur la carte graphique : textures de travail et textures de
-    /// résultat (octets).
+    /// Essais et mesures : mémoire vidéo prise par les effets sur la carte graphique, textures de travail
+    /// et textures de résultat (octets).
+    #[cfg(test)]
     pub fn effects_bytes(&self) -> u64 {
         let renderer = self.render_state.renderer.read();
         let Some(res) = renderer.callback_resources.get::<CanvasResources>() else { return 0 };
         res.gpufx.as_ref().map_or(0, crate::gpufx::GpuFx::bytes) + res.textures.values().filter(|t| t.fx.is_some()).map(CelTexture::bytes).sum::<u64>()
     }
 
-    /// Passes d'effets dessinées depuis le début (essais et mesures).
+    /// Essais et mesures : passes d'effets dessinées depuis le début.
+    #[cfg(test)]
     pub fn effects_passes(&self) -> u64 {
         let renderer = self.render_state.renderer.read();
         renderer.callback_resources.get::<CanvasResources>().map_or(0, |r| r.fx_passes)
@@ -816,8 +818,10 @@ impl GpuCanvas {
         let sheet = (doc.width as u64 * doc.height as u64 * 4).max(1);
         let renderer = self.render_state.renderer.read();
         let Some(res) = renderer.callback_resources.get::<CanvasResources>() else { return 0 };
-        let n = res.textures.len() as u64;
-        let per = if n >= 8 { (res.textures.values().map(CelTexture::bytes).sum::<u64>() / n).clamp(64 << 10, sheet) } else { sheet / 4 };
+        // (Les textures de résultat des effets ne comptent pas : on n'en envoie pas d'avance.)
+        let cels = || res.textures.values().filter(|t| t.fx.is_none());
+        let n = cels().count() as u64;
+        let per = if n >= 8 { (cels().map(CelTexture::bytes).sum::<u64>() / n).clamp(64 << 10, sheet) } else { sheet / 4 };
         ((res.cache_bytes / per) as usize).saturating_sub(shown + 4) / 2
     }
 

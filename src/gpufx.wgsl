@@ -490,6 +490,164 @@ fn fs_shake(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     return vec4<f32>(ch, a) / 255.0;
 }
 
+// ---------------------------------------------------------------------- déformations et rendu
+
+// Déformation (`fxwarp::warp`) : chaque pixel de la feuille va chercher sa couleur ailleurs dans le dessin,
+// en lecture bilinéaire. n.x = 0 onde (f[0] = amplitude, k, sin, cos), 1 ondulation (amplitude, k, centre),
+// 2 tourbillon (centre, rayon, angle), 3 pincement (centre, rayon, exposant).
+@fragment
+fn fs_warp(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    let sp = dst_px(pos);
+    let x = f32(sp.x) + 0.5;
+    let y = f32(sp.y) + 0.5;
+    var sx = x;
+    var sy = y;
+    let a = p.f[0];
+    switch p.n.x {
+        case 0: {
+            let d = a.x * sin((x * a.w + y * a.z) * a.y);
+            sx = x - a.z * d;
+            sy = y + a.w * d;
+        }
+        case 1: {
+            let dx = x - a.z;
+            let dy = y - a.w;
+            let d = sqrt(dx * dx + dy * dy);
+            if (d >= 1e-3) {
+                let m = a.x * sin(d * a.y) / d;
+                sx = x + dx * m;
+                sy = y + dy * m;
+            }
+        }
+        case 2: {
+            let dx = x - a.x;
+            let dy = y - a.y;
+            let d = sqrt(dx * dx + dy * dy);
+            if (d < a.z) {
+                let t = -a.w * (1.0 - d / a.z) * (1.0 - d / a.z);
+                let s = sin(t);
+                let c = cos(t);
+                sx = a.x + dx * c - dy * s;
+                sy = a.y + dx * s + dy * c;
+            }
+        }
+        default: {
+            let dx = x - a.x;
+            let dy = y - a.y;
+            let d = sqrt(dx * dx + dy * dy);
+            if (d < a.z && d >= 1e-3) {
+                let f = pow(d / a.z, a.w) * a.z / d;
+                sx = a.x + dx * f;
+                sy = a.y + dy * f;
+            }
+        }
+    }
+    let c = bil_a(sx, sy);
+    let al = clamp(floor(c.a + 0.5), 0.0, 255.0);
+    let ch = clamp(floor(c.rgb + vec3<f32>(0.5)), vec3<f32>(0.0), vec3<f32>(al));
+    return vec4<f32>(ch, al) / 255.0;
+}
+
+// Bruit lissé de `fxwarp::value_noise` (les nuages).
+fn vhash(i: i32, j: i32, seed: u32) -> f32 {
+    var h = (bitcast<u32>(i) * 0x8DA6B343u) ^ (bitcast<u32>(j) * 0xD8163841u) ^ (seed * 0xCB1AB31Fu);
+    h = h ^ (h >> 13u);
+    h = h * 0x5BD1E995u;
+    h = h ^ (h >> 15u);
+    return f32(h & 0xFFFFu) / 65535.0;
+}
+
+fn value_noise(x: f32, y: f32, seed: u32) -> f32 {
+    let ix = floor(x);
+    let iy = floor(y);
+    let tx = x - ix;
+    let ty = y - iy;
+    let sx = tx * tx * (3.0 - 2.0 * tx);
+    let sy = ty * ty * (3.0 - 2.0 * ty);
+    let i = i32(ix);
+    let j = i32(iy);
+    let top = vhash(i, j, seed) + (vhash(i + 1, j, seed) - vhash(i, j, seed)) * sx;
+    let bottom = vhash(i, j + 1, seed) + (vhash(i + 1, j + 1, seed) - vhash(i, j + 1, seed)) * sx;
+    return top + (bottom - top) * sy;
+}
+
+// Rendu (`fxwarp::shade`) : la couleur des pixels dessinés multipliée par un facteur ; la couverture reste.
+// n.x = 0 nuages (f[0] = 1 / échelle, quantité ; n.y = graine), 1 éclairage (f[0] = centre, rayon,
+// intensité), 2 dégradé (f[0] = centre, cos, sin ; f[1] = portée, force).
+@fragment
+fn fs_shade(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    let sp = dst_px(pos);
+    let t = lda(sp);
+    if (t.a <= 0.0) {
+        return t;
+    }
+    let x = f32(sp.x) + 0.5;
+    let y = f32(sp.y) + 0.5;
+    let a = p.f[0];
+    var k = 1.0;
+    switch p.n.x {
+        case 0: {
+            var n = 0.0;
+            var w = 1.0;
+            var f = a.x;
+            var total = 0.0;
+            for (var o = 0; o < 4; o++) {
+                n += value_noise(x * f, y * f, u32(p.n.y) + u32(o)) * w;
+                total += w;
+                w *= 0.5;
+                f *= 2.0;
+            }
+            k = 1.0 - a.y + a.y * (0.4 + 1.2 * n / total);
+        }
+        case 1: {
+            let d = sqrt((x - a.x) * (x - a.x) + (y - a.y) * (y - a.y)) / a.z;
+            var fall = clamp(1.0 - d, 0.0, 1.0);
+            fall = fall * fall * (3.0 - 2.0 * fall);
+            k = 1.0 + a.w * (2.0 * fall - 1.0);
+        }
+        default: {
+            let b = p.f[1];
+            var u = (((x - a.x) * a.z + (y - a.y) * a.w) / b.x + 1.0) / 2.0;
+            u = clamp(u, 0.0, 1.0);
+            k = 1.0 - b.y * u * u * (3.0 - 2.0 * u);
+        }
+    }
+    k = max(k, 0.0);
+    let t8 = round255(t);
+    let ch = clamp(floor(t8.rgb * k + vec3<f32>(0.5)), vec3<f32>(0.0), vec3<f32>(t8.a));
+    return vec4<f32>(ch, t8.a) / 255.0;
+}
+
+// Mosaïque, première passe : une valeur par carré de n.x pixels de la feuille (aligné sur la feuille,
+// borné par elle), la moyenne prémultipliée arrondie ; le pixel de la cible est le carré.
+@fragment
+fn fs_mosaic_avg(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    let cell = dst_px(pos);
+    let s = p.n.x;
+    let x0 = cell.x * s;
+    let y0 = cell.y * s;
+    let x1 = min(x0 + s, p.s.x);
+    let y1 = min(y0 + s, p.s.y);
+    var sum = vec4<u32>(0u);
+    for (var y = y0; y < y1; y++) {
+        for (var x = x0; x < x1; x++) {
+            sum += bytes4(lda(vec2<i32>(x, y)));
+        }
+    }
+    let n = u32(max((x1 - x0) * (y1 - y0), 0));
+    if (n == 0u || sum.a == 0u) {
+        return vec4<f32>(0.0);
+    }
+    return vec4<f32>((sum + vec4<u32>(n / 2u)) / vec4<u32>(n)) / 255.0;
+}
+
+// Mosaïque, seconde passe : chaque pixel de la feuille prend la valeur de son carré.
+@fragment
+fn fs_mosaic_fill(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    let sp = dst_px(pos);
+    return lda(vec2<i32>(sp.x / p.n.x, sp.y / p.n.x));
+}
+
 // ---------------------------------------------------------------------- flous
 
 // Un octet de 0 à 255 : la valeur de la texture, en entier.

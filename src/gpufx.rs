@@ -21,11 +21,13 @@
 //!
 //! # Ce qui reste sur le processeur
 //!
-//! Les effets sans passe (mosaïque, onde, ondulation, tourbillon, pincement, nuages, éclairage, dégradé,
-//! tremblement du trait) gardent le calcul de fond. Règle de mélange : **une pile qui contient un seul
-//! effet sans passe est calculée tout entière sur le processeur** (l'ordre des effets compte, et le
-//! calcul sur processeur ne sait pas partir d'une texture de la carte graphique). Un calque d'ajustement
-//! dans un dossier, ou à côté d'un qui ne passe pas, est de même résolu sur le processeur.
+//! Tous les effets de la pile ont une version sur la carte graphique sauf le tremblement du trait
+//! (`tremblement.rs` : il redessine le dessin vectoriel lui-même, calque vectoriel seulement), qui garde
+//! le calcul de fond. Règle de mélange : **une pile qui contient un seul effet sans passe est calculée
+//! tout entière sur le processeur** (l'ordre des effets compte, et le calcul sur processeur ne sait pas
+//! partir d'une texture de la carte graphique). Même chose pour un calque rempli par CTG, un fond sous le
+//! trait, une image de vidéo ou une feuille flottante en cours de geste. Un calque d'ajustement dans un
+//! dossier, ou à côté d'un qui ne passe pas, est de même résolu sur le processeur.
 //!
 //! # Géométrie
 //!
@@ -48,10 +50,12 @@ const SHADER: &str = include_str!("gpufx.wgsl");
 
 /// Octets de la structure d'uniformes `P` du shader : 5 vec4 d'entiers, 8 vec4 de réels.
 const PARAM_BYTES: u64 = 5 * 16 + 8 * 16;
-/// Passes que le tampon d'uniformes contient au départ.
-const FIRST_SLOTS: u64 = 256;
+/// Passes que le tampon d'uniformes contient (256 Ko ; une image en compte rarement plus de cent).
+const FIRST_SLOTS: u64 = 1024;
 /// Au-delà, les textures de travail libres sont jetées (octets).
-const POOL_BYTES: u64 = 512 << 20;
+const POOL_BYTES: u64 = 256 << 20;
+/// Une texture de travail libre depuis autant de préparations (8 s à 60 images/s) est jetée.
+const POOL_AGE: u64 = 480;
 
 // ---------------------------------------------------------------------- géométrie
 
@@ -140,18 +144,8 @@ pub struct Chain {
 
 /// L'effet a-t-il une version sur la carte graphique ?
 pub fn supported(kind: EffectKind) -> bool {
-    !matches!(
-        kind,
-        EffectKind::Mosaic
-            | EffectKind::Wave
-            | EffectKind::Ripple
-            | EffectKind::Twirl
-            | EffectKind::Pinch
-            | EffectKind::Clouds
-            | EffectKind::Lighting
-            | EffectKind::Gradient
-            | EffectKind::Boil
-    )
+    // (Le tremblement du trait redessine le dessin vectoriel lui-même : `tremblement.rs`.)
+    kind != EffectKind::Boil
 }
 
 /// Toute la pile passe-t-elle par la carte graphique ? (Un seul effet qui n'y passe pas : toute la pile
@@ -358,6 +352,53 @@ impl Builder {
                 self.pass("fs_shadow_over", cur, Some(shadow), dst, self.sheet, [0; 4], [[0.0; 4]; 8]);
                 dst
             }
+            EffectKind::Wave => {
+                let (sn, cs) = at(2).to_radians().sin_cos();
+                f[0] = [at(0), std::f32::consts::TAU / at(1).max(1.0), sn, cs];
+                self.into("fs_warp", cur, full, [0; 4], f)
+            }
+            EffectKind::Ripple => {
+                f[0] = [at(0), std::f32::consts::TAU / at(1).max(1.0), sw * at(2) / 100.0, sh * at(3) / 100.0];
+                self.into("fs_warp", cur, full, [1, 0, 0, 0], f)
+            }
+            EffectKind::Twirl => {
+                let half = sw.min(sh) / 2.0;
+                f[0] = [sw * at(2) / 100.0, sh * at(3) / 100.0, (half * at(1) / 100.0).max(1.0), at(0).to_radians()];
+                self.into("fs_warp", cur, full, [2, 0, 0, 0], f)
+            }
+            EffectKind::Pinch => {
+                let half = sw.min(sh) / 2.0;
+                f[0] = [sw * at(2) / 100.0, sh * at(3) / 100.0, (half * at(1) / 100.0).max(1.0), 1.0 - (at(0) / 100.0).clamp(-1.0, 1.0) * 0.9];
+                self.into("fs_warp", cur, full, [3, 0, 0, 0], f)
+            }
+            EffectKind::Clouds => {
+                f[0] = [1.0 / at(0).max(2.0), (at(1) / 100.0).clamp(0.0, 1.0), 0.0, 0.0];
+                self.same("fs_shade", cur, [0, at(2).round() as u32 as i32, 0, 0], f)
+            }
+            EffectKind::Lighting => {
+                let half = sw.min(sh) / 2.0;
+                f[0] = [sw * at(0) / 100.0, sh * at(1) / 100.0, (half * at(2) / 100.0).max(1.0), (at(3) / 100.0).clamp(0.0, 1.0)];
+                self.same("fs_shade", cur, [1, 0, 0, 0], f)
+            }
+            EffectKind::Gradient => {
+                let (sn, cs) = at(0).to_radians().sin_cos();
+                f[0] = [sw / 2.0, sh / 2.0, cs, sn];
+                f[1] = [(sw * cs.abs() + sh * sn.abs()).max(1.0) / 2.0, (at(1) / 100.0).clamp(0.0, 1.0), 0.0, 0.0];
+                self.same("fs_shade", cur, [2, 0, 0, 0], f)
+            }
+            EffectKind::Mosaic => {
+                // Une valeur par carré (texture de la taille des carrés, une passe par carré), puis chaque
+                // pixel prend celle de son carré.
+                let s = (at(0).round().max(1.0) as i32).max(1);
+                let cells = ((self.sheet.0 + s - 1) / s, (self.sheet.1 + s - 1) / s);
+                let (cx0, cy0) = (cur.1.x / s, cur.1.y / s);
+                let (cx1, cy1) = ((cur.1.right() + s - 1) / s, (cur.1.bottom() + s - 1) / s);
+                let small = bucket(cx0, cy0, cx1, cy1, cells);
+                let avg = self.temp(small);
+                self.pass("fs_mosaic_avg", cur, None, avg, self.sheet, [s, 0, 0, 0], f);
+                let g = bucket(small.x * s, small.y * s, small.right() * s, small.bottom() * s, self.sheet);
+                self.into("fs_mosaic_fill", avg, g, [s, 0, 0, 0], f)
+            }
             EffectKind::Bloom => {
                 let (radius, intensity, threshold) = (at(0), at(1), at(2));
                 let level = crate::fxcine::blur_level(radius);
@@ -455,13 +496,50 @@ pub fn target_texture(device: &wgpu::Device, w: u32, h: u32) -> wgpu::Texture {
     })
 }
 
-/// Les pipelines, les uniformes et les textures de travail des effets sur la carte graphique.
-pub struct GpuFx {
+/// Les points d'entrée du shader qui sont une passe (`gpufx.wgsl`).
+pub const ENTRIES: [&str; 27] = [
+    "fs_bc", "fs_levels", "fs_hue", "fs_bw", "fs_invert", "fs_poster", "fs_thresh", "fs_noise", "fs_grain", "fs_flash", "fs_impact", "fs_vignette", "fs_aberr", "fs_shake", "fs_warp", "fs_shade", "fs_mosaic_avg", "fs_mosaic_fill", "fs_box_h", "fs_box_v", "fs_motion",
+    "fs_shadow_sil", "fs_shadow_over", "fs_glow_over", "fs_sharpen", "fs_bloom_down", "fs_bloom_final",
+];
+
+/// Ce qu'il faut pour fabriquer les pipelines (aussi sur un autre fil : le périphérique, le shader et la
+/// disposition se partagent).
+#[derive(Clone)]
+struct Maker {
+    device: wgpu::Device,
     shader: wgpu::ShaderModule,
     layout: wgpu::PipelineLayout,
+}
+
+impl Maker {
+    fn make(&self, entry: &'static str) -> wgpu::RenderPipeline {
+        self.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some(entry),
+            layout: Some(&self.layout),
+            vertex: wgpu::VertexState { module: &self.shader, entry_point: Some("vs"), buffers: &[], compilation_options: Default::default() },
+            fragment: Some(wgpu::FragmentState {
+                module: &self.shader,
+                entry_point: Some(entry),
+                targets: &[Some(wgpu::ColorTargetState { format: FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        })
+    }
+}
+
+type Pipelines = std::sync::Arc<std::sync::Mutex<HashMap<&'static str, wgpu::RenderPipeline>>>;
+
+/// Les pipelines, les uniformes et les textures de travail des effets sur la carte graphique.
+pub struct GpuFx {
+    maker: Maker,
     param_layout: wgpu::BindGroupLayout,
     tex_layout: wgpu::BindGroupLayout,
-    pipelines: HashMap<&'static str, wgpu::RenderPipeline>,
+    pipelines: Pipelines,
     params: wgpu::Buffer,
     params_group: wgpu::BindGroup,
     capacity: u64,
@@ -559,42 +637,52 @@ impl GpuFx {
         let (params, params_group) = param_buffer(device, &param_layout, stride, FIRST_SLOTS);
         // (Une texture neuve est transparente : c'est ce que lit une passe qui n'a pas de seconde texture.)
         let empty = target_texture(device, 1, 1).create_view(&Default::default());
-        GpuFx { shader, layout, param_layout, tex_layout, pipelines: HashMap::new(), params, params_group, capacity: FIRST_SLOTS, stride, slot: 0, empty, pool: Vec::new(), tick: 0, passes_drawn: 0 }
+        let maker = Maker { device: device.clone(), shader, layout };
+        let pipelines: Pipelines = Default::default();
+        // Les pipelines se fabriquent d'avance sur un autre fil (de 5 à 30 ms chacun : le premier affichage
+        // d'un effet ne ferait sinon qu'un accroc, une seule fois). Un pipeline demandé avant d'être prêt est
+        // fabriqué tout de suite. Pas dans les essais : chacun lance sa propre carte.
+        if !cfg!(test) {
+            let (maker, pipelines) = (maker.clone(), pipelines.clone());
+            let _ = std::thread::Builder::new().name("effets : pipelines".into()).spawn(move || {
+                for entry in ENTRIES {
+                    let known = pipelines.lock().unwrap_or_else(|e| e.into_inner()).contains_key(entry);
+                    if !known {
+                        let p = maker.make(entry);
+                        pipelines.lock().unwrap_or_else(|e| e.into_inner()).entry(entry).or_insert(p);
+                    }
+                }
+            });
+        }
+        GpuFx { maker, param_layout, tex_layout, pipelines, params, params_group, capacity: FIRST_SLOTS, stride, slot: 0, empty, pool: Vec::new(), tick: 0, passes_drawn: 0 }
     }
 
-    /// Début d'une image d'écran : les emplacements d'uniformes repartent du début (la carte lit ceux de
-    /// l'image d'avant dans l'ordre de la file : on peut les réécrire).
+    /// Début d'une préparation : l'horloge des textures de travail avance.
     pub fn begin_frame(&mut self) {
-        self.slot = 0;
         self.tick += 1;
     }
 
-    /// Mémoire vidéo prise par les textures de travail (octets).
+    /// Essais et mesures : mémoire vidéo prise par les textures de travail (octets).
+    #[cfg(test)]
     pub fn bytes(&self) -> u64 {
         self.pool.iter().map(Scratch::bytes).sum()
     }
 
-    fn pipeline(&mut self, device: &wgpu::Device, entry: &'static str) -> &wgpu::RenderPipeline {
-        if !self.pipelines.contains_key(entry) {
-            let p = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some(entry),
-                layout: Some(&self.layout),
-                vertex: wgpu::VertexState { module: &self.shader, entry_point: Some("vs"), buffers: &[], compilation_options: Default::default() },
-                fragment: Some(wgpu::FragmentState {
-                    module: &self.shader,
-                    entry_point: Some(entry),
-                    targets: &[Some(wgpu::ColorTargetState { format: FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL })],
-                    compilation_options: Default::default(),
-                }),
-                primitive: wgpu::PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState::default(),
-                multiview: None,
-                cache: None,
-            });
-            self.pipelines.insert(entry, p);
+    /// Le pipeline de ce point d'entrée (fabriqué maintenant s'il n'est pas déjà prêt).
+    fn pipeline(&self, entry: &'static str) -> wgpu::RenderPipeline {
+        if let Some(p) = self.pipelines.lock().unwrap_or_else(|e| e.into_inner()).get(entry) {
+            return p.clone();
         }
-        &self.pipelines[entry]
+        let p = self.maker.make(entry);
+        self.pipelines.lock().unwrap_or_else(|e| e.into_inner()).entry(entry).or_insert(p).clone()
+    }
+
+    /// Essais : tous les pipelines sont fabriqués (un point d'entrée mal écrit se voit ici).
+    #[cfg(test)]
+    pub fn make_all(&self) {
+        for entry in ENTRIES {
+            self.pipeline(entry);
+        }
     }
 
     /// Une texture de travail de `w` × `h`, prise dans la réserve ou neuve. Rend son rang.
@@ -623,38 +711,40 @@ impl GpuFx {
         &self.pool[i].view
     }
 
-    /// Jette les textures libres au-delà de la réserve (les moins récentes d'abord).
+    /// Garde les textures de travail les plus récentes, dans la limite de la réserve, et jette celles qui
+    /// ne servent plus depuis `POOL_AGE` préparations (des tailles qui ne reviennent pas : un flou dont le
+    /// rayon a fini de bouger).
     fn trim(&mut self) {
-        let mut total = self.bytes();
-        if total <= POOL_BYTES {
+        // (Les rangs des textures encore prises changent en jetant : on ne jette que si aucune n'est prise.)
+        if !self.pool.iter().all(|s| s.free) {
             return;
         }
-        let mut order: Vec<usize> = (0..self.pool.len()).filter(|&i| self.pool[i].free).collect();
-        order.sort_by_key(|&i| self.pool[i].used);
-        let mut drop_ids = Vec::new();
+        let mut order: Vec<usize> = (0..self.pool.len()).collect();
+        order.sort_by_key(|&i| std::cmp::Reverse(self.pool[i].used));
+        let (mut keep, mut total) = (vec![false; self.pool.len()], 0u64);
         for i in order {
-            if total <= POOL_BYTES {
-                break;
-            }
-            total -= self.pool[i].bytes();
-            drop_ids.push(i);
-        }
-        drop_ids.sort_unstable_by(|a, b| b.cmp(a));
-        // (Les rangs des textures encore prises changent : on ne jette que si aucune n'est prise.)
-        if self.pool.iter().all(|s| s.free) {
-            for i in drop_ids {
-                self.pool.swap_remove(i);
+            let s = &self.pool[i];
+            if total + s.bytes() <= POOL_BYTES && self.tick.saturating_sub(s.used) <= POOL_AGE {
+                keep[i] = true;
+                total += s.bytes();
             }
         }
+        let mut k = 0;
+        self.pool.retain(|_| {
+            k += 1;
+            keep[k - 1]
+        });
     }
 
     fn write_params(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, pass: &Pass) -> u32 {
+        // Les emplacements ne repartent jamais du début : plusieurs commandes de dessin d'une même image
+        // d'écran (deux panneaux) préparent leurs passes avant que la carte n'en exécute une seule, et
+        // réécrire un emplacement déjà pris effacerait les réglages de l'autre. Quand le tampon est plein,
+        // un neuf le remplace (les passes déjà notées gardent l'ancien en vie).
         if self.slot >= self.capacity {
-            let capacity = self.capacity * 2;
-            let (buffer, group) = param_buffer(device, &self.param_layout, self.stride, capacity);
+            let (buffer, group) = param_buffer(device, &self.param_layout, self.stride, self.capacity);
             self.params = buffer;
             self.params_group = group;
-            self.capacity = capacity;
             self.slot = 0;
         }
         let mut bytes = [0u8; PARAM_BYTES as usize];
@@ -723,8 +813,7 @@ impl GpuFx {
             let b_view = p.b.map_or_else(|| self.empty.clone(), |t| view_of(self, t));
             let b_group = self.texture_group(device, &b_view);
             let dst_view = if d == chain.out_temp && output.is_some() { output.expect("sortie").clone() } else { self.pool[held[d].expect("cible")].view.clone() };
-            self.pipeline(device, p.entry);
-            let pipeline = &self.pipelines[p.entry];
+            let pipeline = self.pipeline(p.entry);
             {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some(p.entry),
@@ -737,7 +826,7 @@ impl GpuFx {
                     timestamp_writes: None,
                     occlusion_query_set: None,
                 });
-                pass.set_pipeline(pipeline);
+                pass.set_pipeline(&pipeline);
                 pass.set_bind_group(0, &self.params_group, &[offset]);
                 pass.set_bind_group(1, &a_group, &[]);
                 pass.set_bind_group(2, &b_group, &[]);

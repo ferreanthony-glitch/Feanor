@@ -6,7 +6,7 @@
 //!   dans les exports eux-mêmes).
 //! - Préférences… : les réglages de l'application (pas du projet) qui étaient éparpillés dans les
 //!   menus : copie de secours, dernier projet rouvert, croix du système, panneaux ajustés,
-//!   raccourcis clavier ; et la section « Performance » (`diagnosticui.rs`), les dix réglages que
+//!   raccourcis clavier ; et la section « Performance » (`diagnosticui.rs`), les onze réglages que
 //!   Aide > Diagnostic des performances propose.
 //!
 //! Apparence (en tête de Préférences…) : le thème et ses neuf couleurs (`theme.rs`).
