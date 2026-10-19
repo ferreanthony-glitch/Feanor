@@ -189,11 +189,25 @@ pub(crate) fn banc_taille(doc: Document, avec_gpu: bool, largeur: u32, hauteur: 
         })
     });
     let mut b = Banc { ctx, app, rs, taille, t: 0.0, cible, textes: Vec::new(), garder_textes: false };
+    b.attendre_pinceaux();
     b.chauffer(8);
     b
 }
 
 impl Banc {
+    /// La bibliothèque de pinceaux importés se lit sur un autre fil, qui réveille l'interface (une
+    /// seule fois) à sa fin : c'est voulu, et une application au repos n'en demande pas d'autre.
+    /// Mais ce réveil tombe à un moment qui dépend de la machine : le banc l'attend, comme le
+    /// ferait une application déjà ouverte depuis un instant, pour que « au repos » veuille dire
+    /// la même chose à chaque essai.
+    fn attendre_pinceaux(&mut self) {
+        let debut = Instant::now();
+        while self.app.brushes_job.is_some() && debut.elapsed() < Duration::from_secs(60) {
+            std::thread::sleep(Duration::from_millis(2));
+            self.image(Vec::new(), 1.0 / 60.0);
+        }
+    }
+
     /// Quelques images pour que la mise en page se stabilise (egui mesure en deux passes).
     pub fn chauffer(&mut self, n: usize) {
         for _ in 0..n {
@@ -407,7 +421,7 @@ fn trait_souris(k: usize, n: usize, par_image: usize, r: Rect) -> Vec<Event> {
 /// Des images (une demi-seconde d'écart) jusqu'à ce que cinq de suite n'aient plus rien à demander
 /// avant une seconde ; leur nombre, ou `max` si le repos n'arrive pas. Un petit sommeil quand
 /// quelque chose travaille encore en arrière-plan (vignettes, rejeux) : on lui laisse le processeur.
-fn se_reposer(b: &mut Banc, max: usize) -> usize {
+pub(crate) fn se_reposer(b: &mut Banc, max: usize) -> usize {
     let mut calmes = 0;
     for k in 0..max {
         let m = b.image(Vec::new(), 0.5);

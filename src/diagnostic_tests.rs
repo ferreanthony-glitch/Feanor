@@ -397,6 +397,10 @@ fn the_offer_is_shown_once_never_applies_anything_and_never_in_the_tests() {
     let joint = b.textes.join("\n");
     assert!(joint.contains("Lancer le diagnostic") && joint.contains("Plus tard"), "{joint}");
     assert!(joint.contains("Rien n'est appliqué sans votre accord"), "{joint}");
+    // Le message est fixe : visible, il ne fait pas repeindre l'application en continu.
+    assert!(crate::perf_tests::se_reposer(&mut b, 3000) < 3000, "SHOT se repose, message affiché");
+    let reveils: Vec<_> = (0..6).map(|_| b.image(Vec::new(), 0.5).reveil).collect();
+    assert!(reveils.iter().all(|r| *r >= std::time::Duration::from_secs(1)), "la proposition fait repeindre : {reveils:?}");
     // « Plus tard » : le message disparaît, la réponse est gardée, rien n'est appliqué.
     let avant = b.app.settings.perf;
     b.app.repondre_offre(false);
