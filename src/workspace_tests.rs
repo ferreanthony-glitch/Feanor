@@ -81,6 +81,13 @@ fn the_three_spaces_have_their_own_starting_layouts() {
     for gone in [Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::Guides, Pane::Layers, Pane::Effects] {
         assert!(!dock.contains(gone), "{gone:?} est replié dans l'espace Montage");
     }
+    // Les panneaux de son (arrivés depuis) s'ouvrent dans le montage, pas dans les deux autres espaces.
+    assert!(dock.contains(Pane::Bruitages) && dock.contains(Pane::SuggestionsSonores));
+    for autre in [&storyboard, &animation] {
+        for p in [Pane::Bruitages, Pane::SuggestionsSonores, Pane::References, Pane::XSheet] {
+            assert!(!autre.dock_layout().contains(p), "{p:?} reste à la demande");
+        }
+    }
     assert!(montage.montage_height > animation.montage_height);
     // Chacun est une disposition valable telle quelle.
     for e in Espace::TOUS {
@@ -256,6 +263,20 @@ fn a_panel_in_its_own_window_stays_where_it_is_when_the_space_changes() {
     app.run_action("espace.montage");
     assert!(app.detached.iter().any(|d| d.panneau == Pane::Color));
     assert_eq!(app.dock_layout().panes().iter().filter(|p| **p == Pane::Color).count(), 1);
+}
+
+#[test]
+fn every_panel_of_the_panel_bar_opens_in_every_space() {
+    // Même dans l'espace Montage, qui n'a ni calques ni effets : l'historique, les commentaires, les
+    // bruitages, les suggestions sonores et les références forment leur colonne à droite.
+    let (_ctx, mut app) = headless("barre");
+    for espace in Espace::TOUS {
+        app.set_espace(espace);
+        for e in crate::barrepanneaux::GROUPES.iter().flat_map(|g| g.iter()).filter(|e| e.visible(espace == Espace::Animation)) {
+            app.show_pane(e.pane);
+            assert!(has(&app, e.pane), "{:?} ne s'ouvre pas dans l'espace {}", e.pane, espace.nom());
+        }
+    }
 }
 
 #[test]

@@ -925,7 +925,7 @@ les panneaux à leur contenu » coupe le tout.
 
 Une fine bande d'icônes sur le bord droit de la fenêtre, une par panneau de côté : réglages de
 l'outil, pinceaux, couleur, guides ; calques, effets, fiche du plan, feuille d'exposition ;
-commentaires, historique. Un clic sur une icône ouvre le panneau, devant les onglets de son groupe. S'il est
+commentaires, historique, références. Un clic sur une icône ouvre le panneau, devant les onglets de son groupe. S'il est
 ouvert mais caché derrière un autre onglet, le clic le met devant ; s'il est visible, le clic le
 ferme. L'icône est enfoncée tant que le panneau est dans l'espace de travail. La bulle d'une
 icône donne son nom et son raccourci ; clic droit > « Assigner un raccourci… » (chaque icône est
@@ -966,6 +966,48 @@ ou le réunit à un autre.
   dans Fichier > Préférences… > Commentaires.
 - Enregistrés dans `commentaires.json`, à côté du manifeste du projet (le format du projet ne
   change pas) ; chaque changement s'annule et se rétablit.
+
+## Références visuelles
+
+Le panneau **Références** (icône dans la barre des panneaux, action `vue.references`, fermé par défaut)
+est un tableau libre d'images et de vidéos à regarder en dessinant. Clic droit sur son onglet >
+« Dans une fenêtre à part » : une vraie fenêtre, pour un deuxième écran (le bouton « Toujours
+au-dessus » y garde la fenêtre devant les autres).
+
+- **Ajouter** : les boutons du haut (images PNG ou JPEG, vidéo, coller), des fichiers déposés sur le
+  panneau, ou Ctrl+V quand le panneau a la main (l'image du presse-papiers de Windows : navigateur,
+  capture…). Fichier > Importer propose aussi les deux premiers. Les images sont copiées dans le projet
+  sur un autre fil ; une vidéo est extraite en images par ffmpeg, en arrière-plan (le même chemin que
+  les calques vidéo, limitée à 1280×720). WebP n'est pas lu (le programme n'a pas ce décodeur).
+- **Tableau** : glisser le fond (ou le bouton du milieu) pour se déplacer, la molette pour zoomer,
+  glisser une référence pour la placer, un coin pour l'agrandir, la poignée ronde pour la tourner
+  (Maj : par 15°), Maj+clic pour en choisir plusieurs, double-clic pour la cadrer (sur le fond :
+  tout voir). Les boutons de la ligne du dessous règlent la référence choisie : ajuster, 100 %,
+  miroirs, niveaux de gris (les valeurs, Rec. 709), nom, échelle, rotation, étiquettes. Trois façons de
+  parcourir : tableau, grille, liste. La recherche trouve les mots du nom ou des étiquettes sans tenir
+  compte des accents.
+- **Couleur** : Alt+clic (ou Alt+glisser) sur une référence prend la couleur vue sous la souris et en
+  fait la couleur courante de SHOT, comme la pipette du dessin (en gris, la valeur du gris).
+- **Vidéo** : lecture / pause, image par image, curseur, entrée et sortie, boucle, vitesse ; « suivre
+  la tête de lecture » montre l'image de la vidéo qui tombe sur l'image courante de SHOT, avec un
+  décalage en images.
+- **Plans** : « Lier au plan courant » (une référence peut aller avec plusieurs plans) ; le bouton en
+  entonnoir ne montre que les références du plan courant (ce qu'on ajoute alors est lié d'office).
+- **Rangement** : `references.json` à côté du manifeste et le dossier `references/` (le format du
+  projet ne change pas). Même protection que les commentaires : un fichier illisible ou d'une version
+  plus récente n'est jamais effacé (il est mis de côté en `.illisible`), et rien n'est effacé de
+  `references/` si `references.json` n'a pas pu être lu. Une image retirée pendant la séance reste dans
+  le dossier (annuler la suppression, même après avoir enregistré, la retrouve). Avant le premier
+  enregistrement, les fichiers attendent dans un dossier temporaire.
+- **Rapidité** : les images se décodent sur deux fils, à la définition que l'écran demande, et restent
+  en mémoire graphique dans un cache dont les moins récemment vues partent d'abord (un huitième du
+  réglage « cache de la carte graphique » du diagnostic des performances, 32 à 512 Mo ; la définition
+  suit le réglage « vignettes »). Au repos, le panneau ne repeint rien.
+- **Annulation** : ajouter, supprimer, déplacer, redimensionner, tourner, retourner, lier, nommer…
+  sont des étapes de l'historique (« Ajouter une référence », « Déplacer les références »…).
+- Actions : `vue.references`, `references.importer_image`, `references.importer_video`,
+  `references.coller`, `references.supprimer`, `references.lier_plan`, `references.filtre_plan`,
+  `references.tout_voir` (aucune touche par défaut ; Ctrl+V et Suppr agissent quand le panneau a la main).
 
 ## Rogner les plans dans le montage
 
@@ -1011,12 +1053,223 @@ qu'il reste du contenu caché de ce côté).
   Dupliquer ou copier un plan ne copie pas sa réserve ; couper un plan garde le début caché au premier
   plan, réunir deux plans ne garde que le début caché du premier.
 
+## Transitions du montage
+
+Une transition habille une **coupe** entre deux plans, ou le **début / la fin du film** : fondu enchaîné,
+fondu au noir, fondu au blanc, volet, noir. Elle se voit dans la bande de montage comme un petit nœud posé
+sur la coupe (papillon pour le fondu enchaîné, losange pour le noir ou le blanc, rampe au bord du film).
+
+- **Poser** : clic droit sur une coupe > « Transition ▸ » (aussi dans le menu d'un plan : « Transition au
+  début / à la fin du plan ») ; le bouton « Ajouter une transition » de la barre du montage vise la coupe la
+  plus proche de la tête de lecture (un fondu enchaîné entre deux plans, un fondu au noir au bord du film) ;
+  ou une commande de Ctrl+K : `transition.ajouter`, `transition.fondu_enchaine`, `transition.fondu_noir`,
+  `transition.fondu_blanc`, `transition.volet`, `transition.noir`, `transition.supprimer`,
+  `transition.apercu`, sans touche par défaut (clic droit sur l'entrée d'un menu pour leur en donner une).
+- **Durée** : 12 images par défaut. On tire l'un des bords du nœud, ou on tape la durée dans le menu du
+  clic droit sur la transition (avec la sorte et le calage). Clic : la choisit, Suppr : la supprime.
+- **Temps** (choix de SHOT, à confirmer à l'écran) : **le film ne change jamais de durée**. La transition est
+  centrée sur la coupe (calage « Finit à la coupe » ou « Commence à la coupe » aussi) et utilise les images
+  des deux plans autour d'elle ; l'image qui manque d'un côté est **tenue** (le plan sortant garde sa
+  dernière image, l'entrant sa première). Elle ne sort jamais des deux plans qu'elle relie. Les poignées du
+  rognage (la réserve) ne servent pas encore à avoir des images vivantes : à faire. Au début du film, le
+  fondu part de la couleur (la première image est toute noire) ; à la fin, il y va (la dernière est toute noire) ;
+  sur une coupe, il passe par la couleur.
+- **Lecture et export** : la carte graphique pose le plan entrant sur le plan sortant pendant la lecture
+  (chaque plan vu par sa propre caméra en vue caméra) ; à l'arrêt, le mélange se voit aussi
+  (`transition.apercu` pour le couper si l'on dessine dans la zone). Le film et les images exportés
+  contiennent les transitions, image par image (case « Avec les transitions du montage »). L'export vers
+  Storyboard Pro ne les reprend pas (comment Storyboard Pro range les siennes : à vérifier) ; le compte
+  rendu de l'export le signale.
+- Enregistrées dans `transitions.json`, à côté du manifeste (le format du projet ne change pas) ; un
+  fichier illisible ou d'une version plus récente ne bloque pas l'ouverture et n'est jamais effacé.
+  Chaque changement est une étape d'annulation nommée (« Ajouter une transition : fondu enchaîné »,
+  « Durée de la transition »…).
+- Une transition tient à deux plans (par leur numéro) : si l'un est supprimé, elle part avec lui ; si les deux
+  ne se suivent plus (plan déplacé, coupé ou réunion), elle est gardée sans jouer, et l'annulation la rend.
+
+## Effets sonores
+
+Sur les extraits de la bande de montage (l'extrait doit être choisi) :
+
+- **Fondus** : deux petites poignées aux coins du haut de l'extrait, qu'on tire dans le temps ; le coin qui
+  disparaît s'assombrit. Ou les commandes `son.fondu_entree` / `son.fondu_sortie`.
+- **Fondu enchaîné** entre deux extraits **qui se touchent** sur la même piste (`son.enchaine`, ou la case
+  du menu) : une croix sur la jonction dont on tire la poignée. Le fondu est centré sur la jonction, en
+  puissance égale, et utilise le son que chaque extrait a de l'autre côté de sa coupe ; s'il n'y en a
+  pas (extraits qui commencent au début de leur son), il se raccourcit jusqu'à la coupe sèche. Les extraits
+  d'une piste ne se chevauchent toujours pas.
+- **Volume** de l'extrait (curseur du menu, jusqu'à 400 %) et de la piste ; **muet**, **solo** (bouton S de
+  l'en-tête de la piste : seules les pistes en solo s'entendent, même muettes).
+- **Clés de volume** : double-clic sur l'extrait pose une clé là où l'on a cliqué, on la tire (temps et
+  niveau, collé à 100 % près de l'unité), Suppr la retire. La courbe est linéaire entre les clés.
+- **Égaliseur** à trois bandes (graves, médiums, aigus, ±12 dB) et **écho** (niveau, délai, retour) : dans
+  le menu du clic droit sur l'extrait > « Effets du son ». Sans nouvelle bibliothèque : filtres du second
+  ordre et ligne à retard. Ils se calculent sur un fil à part ; en attendant, on entend le son tel quel.
+- Lecture, son au défilement, WAV du film, son des vidéos exportées et fichiers son de l'export vers
+  Storyboard Pro passent tous par le même calcul (`audiofx::build_mix`) : ce qu'on entend est ce qu'on exporte.
+- Enregistrés dans `effets_son.json` (même principe que `transitions.json`) ; une étape d'annulation nommée par réglage et par geste.
+
+## Bruitages
+
+Le panneau **Bruitages** (barre des panneaux, ou Son > Bruitages…) garde les dossiers de sons de
+l'utilisateur : WAV, MP3, FLAC, OGG, sous-dossiers compris. Les dossiers sont un réglage de l'application
+(`reglages.toml`), retenus d'un projet à l'autre ; la liste se lit sur un fil à part à la première ouverture du
+panneau (« Actualiser » la relit).
+
+- **Chercher** : tous les mots tapés, dans le nom et le sous-dossier. La durée de chaque son se lit à la
+  demande, pour les seules lignes qu'on voit.
+- **Écouter** : le bouton ▶ de la ligne (le même une seconde fois arrête) ; la lecture du projet s'arrête.
+- **Poser** : glisser la ligne sur une piste son de la bande de montage (un repère montre l'image visée),
+  ou sur la ligne du son de la timeline ; un double-clic la pose à la tête de lecture (sur la piste de
+  l'extrait choisi, sinon la première libre). Le fichier est **copié dans le projet**, comme un son
+  importé. `bruitage.inserer` et `bruitage.ecouter` agissent sur le son choisi.
+
+## Suggestions sonores (phase 1)
+
+Le panneau **Suggestions sonores** (barre des panneaux, Son > Suggestions sonores…, `vue.suggestions_sonores`) lit
+le storyboard et **propose des sons témoins** pour l'animatique : bruitages, ambiances, musique d'intention, voix
+des dialogues. On les écoute, on les accepte, on les régénère ou on les supprime ; rien n'entre dans le montage
+sans accord. Le détail, le contrat du serveur local, comment le lancer et ce qui manque encore sont dans
+`docs/GENERATION_SON.md`.
+
+- **Lire le storyboard** (`suggestion.lire`) : tout le film, la séquence courante, le plan courant ou une plage de
+  plans. Chaque proposition a une sorte (icône), un plan et un moment, une description française, un prompt
+  anglais pour le générateur (une réplique, un personnage et une voix pour une voix) et un état : proposée, en
+  génération, prête, acceptée, rejetée. « Modifier » change tout cela ; une relecture ne ramène pas une
+  proposition rejetée.
+- **Marche tout de suite, sans modèle** : la lecture par **règles** (choix d'origine) lit l'action, les notes et le
+  dialogue : chaque ligne de dialogue devient une voix, des mots-clés font des bruitages, des ambiances et une musique,
+  et une ligne « SFX : porte qui grince, pas dans l'escalier » est reprise telle quelle. Elle ne génère pas de son.
+- **Trois rôles, un fournisseur chacun** (Fichier > Préférences > Génération sonore) : lecture (règles, Qwen2.5-VL
+  local ou Claude en ligne), bruitages et ambiances (Stable Audio Open local, ElevenLabs ou Stable Audio en ligne), voix
+  (Kokoro-82M local, ElevenLabs en ligne). Le **serveur local** (`sidecar/serveur.py`, Python, 127.0.0.1, port
+  réglable) est écrit : SHOT le lance tout seul (sans fenêtre) au premier « Générer » local et l'arrête en se
+  fermant, ou « Démarrer le serveur local » / « Arrêter » / « Tester » dans les Préférences (dossier `SHOT-modeles`
+  et Python réglables). **Les voix (Kokoro) et la lecture par Qwen2.5-VL marchent** ; les bruitages attendent
+  Stable Audio Open, pas encore téléchargé (licence à accepter par l'utilisateur). Les requêtes des services en
+  ligne sont prêtes, leur envoi HTTPS est **à brancher** (aucune caisse TLS hors ligne).
+- **Accepter** copie le son dans le projet et le pose à la bonne image sur la piste « Sons proposés » (une étape
+  d'annulation). Tout travail se fait sur un fil à part, avec son avancement, et s'annule.
+- **En ligne** : le panneau dit ce qui part (vignettes, textes, descriptions, répliques) et une fenêtre demande une
+  confirmation, une fois par projet, avant le premier envoi. Les **clés** sont dans le Gestionnaire d'identifiants de
+  Windows, jamais dans un fichier. Les licences des modèles et des services sont à vérifier.
+- Enregistré dans `sons_proposes.json`, à côté du manifeste (le format du projet ne change pas ; un fichier
+  illisible ou plus récent ne bloque pas l'ouverture et n'est jamais effacé). Les sons générés attendent dans
+  `%LOCALAPPDATA%\SHOT\sons_generes\`.
+
+## Crayonnés rapides (la planche)
+
+Une page de petites cases, toutes au rapport du cadre du projet, où l'on enchaîne des croquis très
+vite (thumbnailing) ; chaque case devient ensuite un plan. Ce n'est pas une vue des plans existants :
+c'est une surface de dessin. S'ouvre par Storyboard > Planche de crayonnés…, le bouton à côté de
+« Vue vignettes » (barre du montage), ou Ctrl+K > « Planche de crayonnés » (`storyboard.crayonnes`) ; elle
+prend la place du dessin en storyboard.
+
+- **Dessiner** : directement sur la page, au crayon (trait vectoriel lisse, net à toute échelle),
+  au pinceau du logiciel (bitmap) ou à la gomme (coupe les traits, efface la peinture) ; les touches
+  des outils marchent. Sans latence, comme dans le dessin : l'aperçu du trait est dans l'image de la
+  case à chaque point reçu, jamais de rejeu du moteur. **Un trait appartient à la case où il
+  commence** et est coupé à elle (à l'écran comme dans le plan).
+- **Barre** : crayon, pinceau, gomme · trois tailles · noir et deux gris · annuler, rétablir · vider la
+  case, insérer une case, supprimer la case · page précédente / suivante, ajouter une page · grille
+  (2×2, 3×2, 4×3 par défaut, 4×4, 6×4) · case suivante automatique (éteinte : après une pause d'une
+  seconde, la case suivante) · toutes les cases dessinées · Créer les plans · fermer.
+- **Aller de case en case** : Tab / Maj+Tab et les flèches (Page préc. / suiv. : la page) quand la planche
+  a la main (le dernier clic y était). Chaque case a son numéro et, dessous, une ligne de légende (texte
+  court) qui deviendra le texte d'action du plan.
+- **Choisir** : clic sur le numéro d'une case (Maj : jusqu'à la dernière cliquée, Ctrl : ajouter ou
+  retirer) ; Maj ou Ctrl + appui dans la case marchent aussi (sans tracer) ; « Toutes les cases dessinées ».
+  **Changer l'ordre** : glisser le numéro d'une case sur une autre. Clic droit sur une case : choisir,
+  créer son plan, insérer avant / après, reculer, avancer, vider, supprimer, cocher.
+- **Créer les plans** : une fenêtre demande où (après le plan courant, ou dans une nouvelle séquence) et la
+  durée de chaque plan (2 s). Un plan par case choisie, dans l'ordre de la planche ; le dessin de la case
+  va sur un calque « Crayonné » (les traits restent vectoriels et sont mis à l'échelle du cadre ; la peinture
+  du pinceau va sur un calque bitmap « Crayonné (pinceau) », rééchantillonnée) sous un calque « Dessin »
+  vide ; la légende devient le texte d'action. **Une seule étape d'annulation** du projet. Les cases restent
+  sur la page, avec une petite coche verte.
+- **Annuler** : la planche a sa propre pile (traits, gomme, ordre, cases ajoutées ou retirées, vidées,
+  légendes, grille). Ctrl+Z dans la planche défait aussi la création des plans quand c'est la dernière
+  étape du projet. Suppr vide les cases choisies (ou la courante) ; Ctrl+A les choisit.
+- **Enregistrée** dans `crayonnes.json`, à côté du manifeste (le format du projet ne change pas ; absent,
+  il n'y a pas de planche ; une planche sans rien dedans n'écrit rien). Les protections de la
+  fiabilité s'appliquent : un fichier illisible ou d'une version plus récente n'est jamais effacé ni
+  réécrit (il est mis de côté sous `.illisible` si une planche neuve doit prendre sa place), et l'écriture se
+  fait atomiquement sur le fil d'enregistrement.
+- Limites : les traits d'une case sont lisses (pas de pinceau texturé dans les cases : leur rendu est exact et
+  immédiat) ; une case garde la taille et le rapport qu'avait le cadre à sa création (un cadre d'un autre
+  rapport : la case est mise à l'échelle sans déformation, centrée) ; le pinceau bitmap rééchantillonné d'une
+  case de 640 px sur un cadre de 1 920 px est flou ; « Créer » rééchantillonne la peinture sur le fil de
+  l'interface (une peinture de pleine page prend une fraction de seconde par case).
+
 ## Palette de commandes
 
 Ctrl+K (ou Aide > Palette de commandes) : tape quelques lettres du nom d'une commande (« persp »,
 « retourner », « flou »), la palette propose les commandes avec leur raccourci. Flèches pour
 choisir, Entrée pour lancer, Échap pour fermer. Chaque commande y est une fois, sous son nom (les doubles
 `scene.*` des commandes de plan n'y sont pas).
+
+## Calques d'effets et préréglages d'effets (2026-10-19, branche `calques-effets`)
+
+Demande d'Anthony : des calques d'effets posés par des préréglages d'animation (impact frame, glow,
+tremblement de l'image, timecode…).
+
+**Un calque d'effet** est un calque de la pile sans dessin à lui (icône étincelle et teinte cyan dans le
+panneau Calques, le montage et la timeline) :
+- **Ajustement** (comme un calque de réglage de Photoshop ou d'After Effects) : sa pile d'effets, avec ses clés,
+  s'applique à **tout ce qui est dessous** dans le plan, papier compris, ou seulement dans son **dossier** s'il
+  est rangé dans un dossier. Il agit aux images où il a une **exposition** (un dessin vide tenu : on l'étire, le
+  coupe, le déplace dans la timeline comme un dessin) ; il a un œil, une opacité et un mode de fusion comme les
+  autres calques. On ne dessine pas dessus.
+- **Incrustation** : du texte posé sur l'image finale, dans le cadre de la caméra (il ne suit ni la caméra ni les
+  calques) : **timecode HH:MM:SS:IM** à la cadence du projet (entière : pas de « drop frame »), numéro d'image,
+  nom du plan, nom de la séquence, titre du projet, date ou texte libre (avec les mots `{timecode}` `{image}`
+  `{plan}` `{sequence}` `{titre}` `{date}`). Neuf places, taille (% de la hauteur du cadre), couleur, boîte
+  derrière le texte, marge, compté depuis le film ou depuis le plan, et **À l'écran et à l'export / Seulement à
+  l'écran / Seulement à l'export**. Gravée dans toute image exportée (film, images, image courante) quand le
+  calque est visible ; les vignettes, le PDF et le HTML de storyboard ne la portent pas. Se règle dans le panneau
+  Effets quand le calque est choisi. Texte tracé avec la mise en page de l'outil Texte (`text.rs`).
+
+**Où ajouter** : le bouton étincelle du panneau Calques, « Nouveau calque > Calque d'effet » du menu Calques et des
+clics droits des calques, « Préréglages » du panneau Effets, et Ctrl+K (`effet.impact`, `effet.lueur`,
+`effet.flash_blanc`, `effet.flash_couleur`, `effet.tremblement`, `effet.vignettage`, `effet.grain`,
+`effet.aberration`, `effet.flou_vitesse`, `effet.timecode`, `effet.vide`). Chaque préréglage ouvre une petite
+fenêtre (intensité, durée ou « jusqu'à la fin du plan », couleur, graine, et ses réglages à lui) qui **montre
+l'effet en direct sur le dessin** pendant qu'on la règle (par le chemin du fil de fond, sans jamais bloquer) ;
+« Appliquer » le pose, en **une étape d'annulation** (« Préréglage d'effet : Impact frame »). Les clés
+partent de la tête de lecture et restent toutes modifiables dans le panneau Effets, la timeline et le montage.
+« Sur le calque courant » ajoute les mêmes effets, avec leurs clés (et des clés « éteint » avant et après), à la pile
+du calque courant au lieu de créer un calque. Le nouveau calque est posé tout au-dessus (au-dessus du calque courant
+s'il est rangé dans un dossier). « Calque d'effet vide » couvre tout le plan, sans effet.
+
+| Préréglage | Ce qu'il pose | Réglages |
+|---|---|---|
+| Image d'impact | effet **Image d'impact** : négatif, noir et blanc, noir et blanc inversé ou postérisé, teinte, éclat de rayons, lignes de vitesse (tracés au calcul, graine). Allumé et éteint d'un coup | durée (2 images), mode, teinte + couleur, éclat, lignes, graine |
+| Lueur (glow) | effet **Lueur diffuse** : ce qui dépasse le seuil de brillance est flouté et ajouté en écran ; pulsation par clés | intensité, seuil, pulsation + période, durée (jusqu'à la fin) |
+| Flash blanc, flash de couleur | effet **Flash** : monte vite, redescend | intensité, durée (8 images à 24 i/s), couleur |
+| Tremblement de l'image | effet **Secousse de l'image** : un décalage et une rotation par image, tirés des **mêmes générateurs de bruit que les effets de caméra** (`camfx.rs` : léger, à l'épaule, explosion, secousse), bornés par l'intensité ; flou de bougé en option. Secoue l'image déjà dessinée, tout ce qui est dessous | style, intensité, fréquence, durée, flou de bougé, graine |
+| Vignettage | effet **Vignettage** centré sur le cadre de la caméra | intensité |
+| Grain de film | effet **Grain de film** (change à chaque image) | intensité, graine |
+| Aberration chromatique | effet **Aberration chromatique** légère | intensité |
+| Flou de vitesse | le **Flou de mouvement** existant, qui monte puis retombe | intensité, direction, durée |
+| Timecode et incrustations | un calque d'**incrustation** | contenu, place, taille, couleur, boîte, compté depuis, visible |
+
+Les sept effets nouveaux (famille **Cinéma** de « Ajouter un effet ») sont des effets ordinaires de la pile
+(`src/fxcine.rs`) : ils servent aussi sur un calque de dessin. Valeurs en pixels proportionnelles à la hauteur du
+cadre ; l'ampleur du tremblement est celle de `camfx.rs`, à régler à l'œil — aucun équivalent dans Storyboard Pro ni
+dans TVPaint n'a été vérifié (à vérifier).
+
+**Rendu** (`src/calqueffet.rs`) : un calque d'ajustement actif pose dans le plan un repère ; l'écran le remplace, avec ce
+qu'il couvre, par UN dessin dérivé (la composition d'en dessous passée par les effets, puis fondue avec l'opacité
+et le mode du calque), gardé par `fxcache.rs` comme ceux des effets d'un calque. À l'écran il est demandé au fil
+de fond (jamais calculé sur le fil de l'interface), à la taille de l'aperçu pendant la lecture et les gestes, et les
+images qui viennent sont préparées d'avance ; en attendant, l'image se montre sans l'effet. À l'export et dans les
+essais il est calculé tout de suite, à pleine résolution ; la carte graphique et le processeur composent le même dessin.
+Pendant le déplacement d'une sélection flottante sous un calque d'effet, l'effet attend la fin du geste. Mesure :
+`cargo test --release --offline --target-dir target\msvc --lib effetsperf -- --ignored --nocapture --test-threads=1`
+(voir `docs/PERFORMANCE.md`).
+
+**Format 27** : champ `calque_effet` d'un calque (`ajustement` ou `incrustation` et ses réglages) et sept sortes d'effets
+de plus ; un projet plus ancien s'ouvre tel quel, SHOT d'avant refuse un projet 27 (le film changerait sans prévenir).
 
 ## Passe d'interface (2026-10-19) : un mot par idée, les mêmes gestes pour les trois sortes de clés
 
@@ -1074,6 +1327,44 @@ Il s'en va dès qu'un projet s'ouvre ou se crée, au premier trait, ou par « Co
 Entrée valide, Échap annule. La fenêtre repart des dernières valeurs, du dernier dossier et de tes
 préréglages, retenus dans `%APPDATA%\SHOT\reglages.toml`.
 
+## Importer un scénario
+
+Fichier > Importer > « Un scénario… » (action `fichier.importer_scenario`, donc aussi dans Ctrl+K) : on
+choisit un fichier, SHOT le lit sur un autre fil (barre d'avancement), puis une fenêtre montre ce qui va
+être créé avant que rien ne soit touché. Exemple prêt à essayer : `docs/exemples/Le-Reveil.fountain`.
+
+**Formats lus** : Fountain (`.fountain`, `.spmd` : intitulés INT./EXT., personnages en majuscules,
+parenthèses, V.O., transitions, dialogues simultanés `^`, notes `[[ ]]`, cimetière `/* */`, sections `#`,
+synopsis `=`, centré `> <`, éléments forcés `.` `!` `@` `>` `~`, page de titre) ; texte brut (`.txt` et
+le reste : mêmes repères déduits de la forme, « NOM : réplique », indentation, numéros de page et
+« (SUITE) » d'un texte copié d'un PDF retirés) ; Final Draft (`.fdx`) ; Word (`.docx`, avec les styles
+d'un logiciel de scénario si le document en a, sinon un paragraphe = une ligne). **Pas lus** : le PDF
+(aucun lecteur de PDF hors connexion dans SHOT ; le message propose d'exporter en `.fountain` ou `.txt`
+ou de copier le texte dans un `.txt`), l'ancien `.doc`, le `.rtf`, l'`.odt`.
+
+**Ce qui est créé** :
+- chaque **intitulé de scène** (« INT. CUISINE – NUIT ») devient une **séquence** du même nom (« Ouverture »
+  pour ce qui précède le premier intitulé) ; ses **plans** viennent de l'action et des répliques ;
+- **découpage** au choix : *un plan par scène* (les paragraphes et les répliques en sont les images de
+  storyboard, avec leurs textes), *un plan par paragraphe* (par défaut : un plan par paragraphe d'action et un
+  par échange, les répliques qui se suivent), *un plan par réplique* ;
+- **action** → champ Action ; **répliques** → champ Dialogue, une ligne chacune, `MARIE (V.O.) (bas) : Viens
+  ici.` (deux personnages qui parlent ensemble : deux lignes du même plan) ; **notes** → champ Notes : notes
+  `[[ ]]` (« Note : … »), transitions (« Transition : CUT TO: »), synopsis, sections, et le décor
+  (« Décor : INT. CUISINE – NUIT », case à décocher) sur le premier plan de la séquence. Ce sont les
+  conventions du lecteur de sons par règles (`NOM : réplique`, lignes `SFX :`) ;
+- **durée** estimée du texte, réglable (« Rythme ») : répliques à 2,5 mots par seconde, action à 1 seconde par
+  ligne de 60 signes, au plus court 1 s, au plus long 30 s ; un plan dure la somme de ses textes ;
+- les **personnages** qui parlent, avec leur nombre de répliques, sont écrits dans les notes du projet
+  (Réglages du projet > Notes), sous « Personnages du scénario : » (`- MARIE (24 répliques)`) : un autre
+  import s'ajoute à la liste. Les voix provisoires la liront.
+
+**Destination** : un nouveau projet (au format du dernier « Nouveau projet », titre et auteur de la page de
+titre ; SHOT propose d'enregistrer le projet ouvert), ou le projet ouvert, à la fin ou après la séquence du
+plan courant (une séquence ne se coupe pas). Dans le projet ouvert, l'import est **une seule étape
+d'annulation**, « Importer un scénario » ; un projet encore vierge (un seul plan vide) est remplacé. Les
+derniers choix sont gardés le temps de la séance.
+
 ## Fiabilité
 
 Un filet de sécurité contre « tous les essais passent mais SHOT ne s'ouvre plus » (`docs/FIABILITE.md`) :
@@ -1111,6 +1402,10 @@ Bus/
   modeles/15.pelure3d  les modèles 3D de repère
   commentaires.json    les commentaires de la timeline (absent : aucun commentaire)
   rognages.json        le contenu rogné des plans (absent : rien de rogné)
+  references.json      les références visuelles (absent : aucune)
+  references/16.png    leurs images, copiées telles quelles (une vidéo : un dossier references/17/ d'images 000001.jpg…)
+  crayonnes.json       la planche de crayonnés rapides (absent : pas de planche)
+  scenes3d.json        les scènes 3D de blocage (absent : aucune scène)
 ```
 
 Si tu enregistres « Bus.pelure » dans `Films`, le fichier est donc dans `Films\Bus\Bus.pelure`, pas
@@ -1160,6 +1455,28 @@ Déplacer : glisser un calque le déplace dans son plan, Maj + glisser change sa
 l'œil de la caméra la déplace (Maj : avancée ; Ctrl : la tourner, panoramique et bascule). Boutons Face, Dessus, Côté, « Par la caméra », et
 recadrer. Pour dessiner, on revient au plateau à plat (bouton 3D).
 
+**Scène 3D de blocage** (bouton « Scène 3D » de la barre au-dessus du dessin, ou Affichage > Plateau) :
+une vue 3D pour poser des formes simples et des mannequins, placer la caméra, puis envoyer le résultat dans un
+calque de fond sur lequel dessiner. Les réglages sont dans le panneau Réglages.
+- **Formes** : cube, plan (sol, mur), cylindre, sphère, cône, escalier (nombre de marches), **mannequin**
+  (silhouette de capsules articulées : taille réglable, poses debout / assis / marche / bras levés, et chaque
+  articulation en chiffres) ; ou un modèle glTF importé. Choisir, Déplacer, Tourner, Échelle : flèches, cercles et
+  cubes par-dessus l'objet ; glisser un objet le pose ailleurs sur le sol (Maj : en hauteur). Aimantation à la
+  grille, par paliers de rotation, et au sol. Champs numériques, couleur ou gris par objet, grouper, dupliquer,
+  supprimer ; chaque geste s'annule (« Déplacer dans la scène 3D »…).
+- **Un décor par séquence, une scène par plan** : le décor (sol, murs, escalier) se place une fois et tous les plans
+  de la séquence le montrent ; chaque plan y met ses personnages et sa caméra. « Modifier : le décor » change le
+  décor pour tous.
+- **Caméra du plateau** : posée dans la scène avec sa pyramide de vision, déplaçable avec les mêmes poignées ; focale
+  en mm et objectifs de la caméra du plan ; « Vue par la caméra » montre l'image au format du cadre. « Caler sur la
+  caméra du plan » la place là où la caméra 2D est à l'image courante. Le plan z = 0 de la scène est la feuille : le
+  cadre par défaut y mesure 6 m. Les clés de caméra ne sont pas dans la scène : la caméra 2D continue de bouger par-dessus.
+- **Dessiner par-dessus** : « Envoyer vers un calque de fond » rend la scène par la caméra du plateau dans le calque
+  « Fond 3D » (en bas, verrouillé), en couleurs, **niveaux de gris** ou **contours**. Il se met à jour tout seul,
+  en arrière-plan, quand la scène change ; jamais pendant un trait. C'est un calque ordinaire.
+- Enregistré dans `scenes3d.json` (le format du projet ne change pas). Détails : `docs/ROADMAP.md`, « Scène 3D de
+  blocage ».
+
 **Repère 3D** : exporte ton décor en glTF depuis Blender (Fichier > Exporter > glTF 2.0, `.glb`),
 puis Fichier > « Importer un modèle 3D (glTF) comme repère… ». Il apparaît en fil de fer sur la
 feuille, comme un guide pour dessiner (il ne s'exporte pas). Outil « Repère 3D » : glisser pour
@@ -1174,6 +1491,21 @@ calque (montage, timeline ou panneau Calques) ou menu Calques > « Propager la p
 calque vectoriel (comme le calque « Dessin » d'un nouveau projet), l'entrée est grisée et sa bulle
 dit pourquoi. Les autres images suivent le mouvement de la vidéo. Détails :
 `docs/PROPAGATION.md`.
+
+**Colorier par zones** (animation « cel » à aplats) : on dessine le trait sur un calque, on pose les
+aplats de couleur dans les zones fermées d'un calque de couleur **sous le trait**, sur quelques clés
+(les images où ce calque est peint) ; menu Animation > « Colorier par zones… » ou clic droit sur le
+calque de trait (montage, timeline, Calques), ou Ctrl+K. SHOT retrouve les mêmes zones d'un dessin
+au suivant (centre, aire, recouvrement, forme, voisines ; une zone peut se couper ou se réunir),
+depuis la clé d'avant et celle d'après (la plus sûre l'emporte), et écrit de **vrais aplats** : des
+formes pleines vectorielles sur un calque vectoriel, des pixels unis sur un calque bitmap, un peu sous
+le trait, qui n'est jamais touché. Dans la fenêtre : le calque de trait, celui des clés, où écrire (le
+même, un nouveau calque « Couleur » sous le trait, ou un autre), les clés (peintes, ou des images
+tapées), la plage (tout le plan ou de telle à telle image), la fermeture des trous du trait, et ce qu'on
+fait des zones incertaines (les laisser vides, ou les marquer en magenta « à vérifier »). Les zones
+incertaines (zone nouvelle, appariement ambigu, clés qui se contredisent) sont listées, un clic va à
+l'image. Un calcul en arrière-plan avec progression et « Arrêter », une seule étape d'annulation. La
+méthode, ses limites et l'accroche d'un futur conseiller de couleur : `docs/COLORIAGE.md`.
 
 **Glisser et clic droit** (passe interface) :
 - **Timeline du plan** : on prend à la souris les marques d'image (triangles de la règle), les
@@ -1252,12 +1584,16 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `fx.rs`, `fxui.rs` | Pile d'effets : clés, flous, dessins dérivés, panneau (13i) |
 | `fxcache.rs`, `fxproxy.rs` | Effets : cache en octets, calcul de fond, dernier résultat en attendant ; aperçu réduit pendant la lecture et les gestes |
 | `tremblement.rs` | Tremblement du trait des calques vectoriels : champ de déplacement lisse, variantes, repos (effet de la pile) |
+| `calqueffet.rs`, `fxcine.rs` | Calques d'effets (ajustement, incrustation) : repère du plan, dessin dérivé de ce qui est dessous, enregistrement ; effets « Cinéma » (flash, impact, lueur diffuse, secousse, vignettage, grain, aberration) |
+| `prereglages.rs`, `prereglagesui.rs`, `incrustation.rs` | Préréglages d'effets (clés posées à la tête de lecture), fenêtre à aperçu en direct et menus ; texte des incrustations (timecode…) et son tracé |
 | `ctg.rs`, `ctgui.rs` | Calque CTG : remplissage par graffitis, sources, structure (13j) |
 | `video.rs`, `videoui.rs` | Calque vidéo : import par ffmpeg, images lues à la demande (13k) |
 | `tween.rs`, `tweenui.rs` | Interpolation : intervalles vectoriels, fondus, étirement, cadence (13l) |
 | `xml.rs`, `sboard.rs` | Lecture d'un XML en arbre ; lecture d'un projet Storyboard Pro (14a) |
 | `sbscript.rs`, `sbimport.rs`, `sbui.rs` | Script d'export des dessins et sa liste ; projet Pelure construit ; fenêtre d'ouverture (14a) |
 | `sbbatch.rs`, `sbvector.rs` | Storyboard Pro lancé en batch sur une copie du projet ; ses dessins vectoriels refaits en éléments Pelure (14a-2) |
+| `scenario.rs`, `scenariofdx.rs` | Importer un scénario : lecture de Fountain et de texte brut ; de Final Draft (`.fdx`) et de Word (`.docx`) |
+| `scenarioplans.rs`, `scenarioui.rs` | Importer un scénario : séquences, plans, durées et personnages ; la fenêtre d'aperçu et l'étape d'annulation |
 | `procreate.rs` | Import des brosses Procreate (`.brush`, `.brushset`) : listes de propriétés binaires d'Apple |
 | `abr.rs` | Import des brosses Photoshop (`.abr`) |
 | `kritabrush.rs`, `zipread.rs` | Import des réglages Krita (`.kpp`, `.bundle`) et MyPaint (`.myb`) ; lecture des archives zip |
@@ -1278,6 +1614,9 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `zoombande.rs` | Zoom du montage et de la timeline calé sur la tête de lecture |
 | `viewbar.rs`, `frames.rs` | Barre au-dessus du dessin (plateau / caméra / 3D) ; zones de sécurité, cadre de format |
 | `stage3d.rs`, `stage3dui.rs` | Plateau en 3D : géométrie (plans, caméra, rayons) ; affichage, navigation, outil Déplacer |
+| `scene3d.rs`, `scene3dmath.rs`, `scene3dmesh.rs` | Scène 3D de blocage : objets, mannequin, caméra du plateau, rangement par plan et par séquence ; maths (matrices, rayons, vue) ; maillages des formes et du mannequin |
+| `scene3dgizmo.rs`, `scene3drender.rs`, `scene3dgpu.rs` | Manipulateurs et aimantation ; rendu par le processeur (envoi vers un calque, sur un autre fil) ; vue d'édition par la carte graphique (wgpu) |
+| `scene3dstore.rs`, `scene3dui.rs`, `scene3dview.rs` | `scenes3d.json` (avec les protections des annexes) ; commandes, Réglages, calque « Fond 3D » ; la vue (souris, poignées, tracé) |
 | `layertools.rs` | Outil Transformer (calque entier) |
 | `selbox.rs`, `seltools.rs` | Boîte de sélection façon Storyboard Pro : parties sous le pointeur, gestes (échelle, rotation, inclinaison, pivot), valeurs chiffrées ; sa place dans l'application |
 | `multisel.rs`, `multitools.rs` | Sélection sur plusieurs calques choisis : parts par calque, boîte commune sur la feuille, geste appliqué à chaque calque (`T⁻¹·A·T`), une feuille flottante par calque, une étape d'annulation ; souris, commandes, écran |
@@ -1304,6 +1643,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `keymap.rs` | Raccourcis : actions, lecture de `keymap.toml`, touche tapée, fichier personnel |
 | `raccourcisui.rs` | Clic droit « Assigner un raccourci… », fenêtre d'assignation, liste des raccourcis |
 | `propager.rs`, `propagerui.rs` | Propagation de la peinture sur une vidéo, façon EbSynth (voir `docs/PROPAGATION.md`) |
+| `zones.rs` | Découpe d'un dessin au trait en zones fermées (cœur, trous fermés, sous le trait, voisines, forme), cache par version du dessin |
+| `coloriage.rs`, `coloriageui.rs` | Colorier par zones : appariement des zones d'une image à l'autre, aplats vectoriels ou bitmap, fenêtre, tâche, liste à vérifier (voir `docs/COLORIAGE.md`) |
 | `handles.rs` | Poignées de la timeline (marques, signets, entrée / sortie, expositions) et menus de la grille |
 | `fxkeys.rs` | Clés d'effets dans le montage et la timeline : losanges, choix, déplacement, copier-coller, suppression |
 | `fxcopie.rs` | Copier-coller des effets (pile) d'un calque à l'autre : presse-papiers, calques choisis, clés hors du plan, tremblement sur bitmap |
@@ -1311,6 +1652,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `camfx.rs`, `camfxui.rs` | Effets de caméra en préréglages (tremblements, explosion, zooms, vertigo) et liste des focales |
 | `cadrage.rs`, `cadrageui.rs` | Aides au cadrage (tiers, grille d'or, spirale, diagonales, croix) : géométrie, réglages, tracé |
 | `commentaires.rs`, `commentairesui.rs` | Commentaires sur la timeline : modèle, fichier `commentaires.json`, positions ; fanions, bulle, menu, panneau |
+| `references.rs`, `referencesui.rs` | Références visuelles : modèle, fichier `references.json` et dossier `references/`, vue du tableau, filtre, image d'une vidéo selon la tête de lecture, import, cache des images ; panneau (tableau, grille, liste, pipette, lecture) |
+| `crayonnes.rs`, `crayonnesui.rs` | Crayonnés rapides : planche de cases (traits vectoriels, pinceau bitmap), appartenance et coupe des traits, ordre, pages, annulation, création des plans (mise à l'échelle), fichier `crayonnes.json` ; page, barre, gestes, numéros, légendes, fenêtre « Créer les plans » |
 | `rognage.rs`, `rognageui.rs` | Rogner les plans sans rien détruire : réserve du début et de la fin, ripple, roll, glisser, aimantation, durée tapée, fichier `rognages.json` ; bords à la souris, flèches, commandes, fenêtre « Durée… » |
 | `app.rs` | État de l'application, actions, raccourcis |
 | `vtools.rs` | Outils des calques vectoriels |
@@ -1323,6 +1666,13 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `roue.rs` | Roue chromatique : géométrie (anneau, carré, triangle) et maillages colorés |
 | `nuancier.rs`, `nuancierui.rs` | Nuanciers personnels : modèle, formats GIMP (.gpl) et Photoshop (.aco) ; leur place dans le panneau Couleur |
 | `soundtrack.rs` | Pistes son : import, lecture synchronisée, affichage, glisser des extraits |
+| `transitions.rs`, `transitionsui.rs` | Transitions du montage : zones, mélange d'une image, fichier `transitions.json` ; nœud dans la bande, menus, commandes, aperçu |
+| `audiofx.rs`, `audiofxui.rs` | Effets sonores : fondus, enchaîné, clés de volume, égaliseur, écho, solo, fichier `effets_son.json` ; poignées, ligne du volume, menus |
+| `bruitages.rs`, `bruitagesui.rs` | Bibliothèque de bruitages : parcours des dossiers, recherche, durées, écoute ; panneau, glisser vers le montage |
+| `indications.rs`, `lecturesb.rs`, `lecturerules.rs` | Sons proposés : la proposition et `sons_proposes.json` ; l'entrée de la lecture du storyboard ; la lecture par règles, sans modèle |
+| `fournisseurs.rs`, `generation.rs`, `genreglages.rs` | Génération sonore : les trois rôles (traits), annulation et avancement, tâches sur des fils à part, réglages `[generation_son]` |
+| `httplocal.rs`, `sidecar.rs`, `serveurlocal.rs`, `fournisseursapi.rs`, `clessecretes.rs`, `base64.rs` | Client HTTP de boucle locale et contrat du serveur local ; lancement, attente et arrêt du serveur Python (`sidecar/`) ; Claude, ElevenLabs, Stable Audio (requêtes prêtes, envoi à brancher) ; clés dans le Gestionnaire d'identifiants de Windows |
+| `suggestionsui.rs`, `genprefsui.rs` | Panneau Suggestions sonores et ses fenêtres ; section « Génération sonore » des Préférences |
 | `canvas.rs`, `panels.rs`, `timeline.rs` | Interface |
 
 `cargo test --release` lance les tests (pinceau, vectoriel, remplissage, séquences/scènes/panneaux,

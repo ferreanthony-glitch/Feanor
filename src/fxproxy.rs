@@ -76,6 +76,9 @@ pub fn scaled_values(kind: EffectKind, values: &[f32], level: u8) -> Vec<f32> {
         EffectKind::Sharpen => scale(&mut v, &[1]),
         EffectKind::Glow => scale(&mut v, &[0]),
         EffectKind::DropShadow => scale(&mut v, &[0, 1, 2]),
+        EffectKind::Bloom => scale(&mut v, &[0]),
+        EffectKind::Shake => scale(&mut v, &[0, 1]),
+        EffectKind::Aberration => scale(&mut v, &[0]),
         _ => {}
     }
     v

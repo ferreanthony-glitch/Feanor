@@ -272,6 +272,8 @@ pub enum Pending {
     Close,
     /// Ouvrir un projet récent (`App::recent_to_open`).
     OpenRecent,
+    /// Importer un scénario dans un nouveau projet (`scenarioui.rs`), qui remplace le projet ouvert.
+    ScenarioNew,
 }
 
 /// Calque copié (W) : sa timeline, ses dessins, et la durée du panneau d'où il vient.
@@ -291,6 +293,9 @@ pub struct App {
     pub(crate) doc: Document,
     pub(crate) mode: Mode,
     pub(crate) board_view: BoardView,
+    /// Planche de crayonnés rapides (`crayonnesui.rs`) : ouverte, elle prend la place du dessin en
+    /// storyboard ; la planche elle-même est dans le projet (`Document::crayonnes`).
+    pub(crate) crayonnes: crate::crayonnesui::Etat,
     pub(crate) cur_panel: usize,
     pub(crate) cur_layer: usize,
     pub(crate) cur_frame: usize,
@@ -373,8 +378,12 @@ pub struct App {
     pub(crate) video_import: Option<crate::videoui::VideoImport>,
     /// Propagation d'une peinture sur la vidéo, façon EbSynth (`propagerui.rs`).
     pub(crate) propagation: crate::propagerui::Propagation,
+    /// Coloriage par zones : propager des aplats de couleur d'une image à l'autre (`coloriageui.rs`).
+    pub(crate) coloriage: crate::coloriageui::Coloriage,
     /// Fenêtre d'import d'un projet Storyboard Pro et import en cours (14a, `sbui.rs`).
     pub(crate) sb_window: Option<crate::sbui::SbWindow>,
+    /// Fenêtre « Importer un scénario » (`scenarioui.rs`).
+    pub(crate) scenario_window: Option<crate::scenarioui::ScenarioWindow>,
     /// Fenêtre « Exporter vers Storyboard Pro » (14b, `sbexportui.rs`).
     pub(crate) sb_export: Option<crate::sbexportui::SbExportWindow>,
     /// Fenêtre d'interpolation ouverte (13l, `tweenui.rs`).
@@ -431,6 +440,9 @@ pub struct App {
     /// Commentaires sur la timeline (`commentaires.rs`, `commentairesui.rs`) : le commentaire
     /// choisi, le repère pris à la souris, le filtre des résolus.
     pub(crate) comment_ui: crate::commentaires::CommentUi,
+    /// Le panneau Références (`references.rs`, `referencesui.rs`) : le tableau, la sélection, les
+    /// imports en cours, le cache des images en mémoire graphique.
+    pub(crate) refs: crate::referencesui::RefUi,
     pub(crate) hole: crate::images::Hole,
     pub(crate) images_focus: bool,
     /// Faux-fixe : nombre de fois que les images choisies sont jouées en tout (13c).
@@ -489,6 +501,8 @@ pub struct App {
     pub(crate) format_custom: bool,
     /// Plateau en 3D (9e) : affiché, outil, vue, geste en cours, textures.
     pub(crate) stage3d: crate::stage3dui::Stage3dState,
+    /// Scène 3D de blocage (`scene3dui.rs`) : affichée, objets choisis, vue, envoi vers un calque.
+    pub(crate) scene3d: crate::scene3dui::Scene3dState,
     /// Le dessin est affiché dans la vignette choisie de la vue Vignettes (6e).
     pub(crate) in_card: bool,
     /// Planche de la vue Vignettes (7) : zoom, décalage, panneaux choisis (ids), geste en cours.
@@ -558,6 +572,14 @@ pub struct App {
     pub(crate) heard_frame: Option<usize>,
     /// Extrait de son sélectionné dans la bande de montage.
     pub(crate) sel_clip: Option<u64>,
+    /// Transitions du montage : choix, geste en cours, aperçu (`transitionsui.rs`).
+    pub(crate) trans: crate::transitionsui::TransUi,
+    /// Effets des extraits de son : clé de volume choisie (`audiofxui.rs`).
+    pub(crate) sfx: crate::audiofxui::SoundFxUi,
+    /// La bibliothèque de bruitages : liste, recherche, écoute, sons en cours de pose (`bruitagesui.rs`).
+    pub(crate) brt: crate::bruitagesui::BruitagesUi,
+    /// Les suggestions sonores : portée, tâches en cours, fournisseurs (`suggestionsui.rs`).
+    pub(crate) sug: crate::suggestionsui::SuggestionsUi,
     /// Ce qu'on a cliqué du bouton droit dans la bande de montage.
     pub(crate) menu_target: Option<MenuTarget>,
     pub(crate) history: History,
@@ -745,6 +767,9 @@ pub struct App {
     pub(crate) new_dialog: Option<NewDocDialog>,
     /// Fenêtre « Nouveau calque » ouverte (13b).
     pub(crate) new_layer_dialog: Option<crate::newlayer::NewLayerForm>,
+    /// Préréglages d'effets : la fenêtre de réglage, les derniers réglages, les textures des incrustations
+    /// (`prereglagesui.rs`).
+    pub(crate) effets_ui: crate::prereglagesui::EffetsUi,
     pub(crate) pending: Option<Pending>,
     /// Enregistrement qui s'écrit sur un autre fil (`enregistrement.rs`).
     pub(crate) saving: Option<crate::enregistrement::Enregistrement>,
@@ -855,6 +880,7 @@ impl App {
             doc: Document::with_frame(1920, 1080, 24).created_now(),
             mode: Mode::Storyboard,
             board_view: BoardView::Scene,
+            crayonnes: Default::default(),
             cur_panel: 0,
             cur_layer: 0,
             cur_frame: 0,
@@ -916,7 +942,9 @@ impl App {
             fx_pane_focus: false,
             video_import: None,
             propagation: crate::propagerui::Propagation::new(wgpu_render_state),
+            coloriage: crate::coloriageui::Coloriage::new(),
             sb_window: None,
+            scenario_window: None,
             sb_export: None,
             tween_dialog: None,
             light_table: false,
@@ -945,6 +973,7 @@ impl App {
             ctrl_lasso: None,
             key_focus: false,
             comment_ui: Default::default(),
+            refs: Default::default(),
             hole: Default::default(),
             images_focus: false,
             fake_hold_times: 2,
@@ -978,6 +1007,7 @@ impl App {
             stage_view: None,
             format_custom: false,
             stage3d: Default::default(),
+            scene3d: Default::default(),
             in_card: false,
             // Nul : la page sera mise à la largeur de la vue au premier affichage.
             board_zoom: 0.0,
@@ -1020,6 +1050,10 @@ impl App {
             sound_scrub: true,
             heard_frame: Some(0),
             sel_clip: None,
+            trans: Default::default(),
+            sfx: Default::default(),
+            brt: Default::default(),
+            sug: Default::default(),
             menu_target: None,
             history: History::default(),
             gesture: Gesture::default(),
@@ -1123,6 +1157,7 @@ impl App {
             status: "Storyboard : dessine le premier plan ; P pour un nouveau plan, double-clic sur un plan pour l'animer (F1 : raccourcis).".into(),
             new_dialog: None,
             new_layer_dialog: None,
+            effets_ui: Default::default(),
             pending: None,
             saving: None,
             save_queue: None,
@@ -1269,6 +1304,7 @@ impl App {
             || self.save_error.is_some()
             || self.assign.is_some()
             || self.propagation.running()
+            || self.coloriage.running()
             || self.sb_export.as_ref().is_some_and(crate::sbexportui::SbExportWindow::rendering)
     }
 
@@ -1310,10 +1346,23 @@ impl App {
         // à l'arrêt suivent l'horloge ; l'export, les vignettes et la lecture, l'image.
         let rest = (onion && !self.playing).then(|| crate::tremblement::rest_frame(crate::fx::now_ms(), self.doc.fps));
         let editing = self.boil_editing();
-        for (li, layer) in self.layers().iter().enumerate() {
+        // Calque d'effet en cours de réglage (fenêtre des préréglages d'effets) : montré en direct, avant
+        // d'exister (`prereglagesui.rs`). `cur` : le calque courant dans cette pile.
+        let preview = if onion { self.effect_preview_layers() } else { None };
+        let layers: &[crate::document::Layer] = preview.as_ref().map_or(self.layers(), |p| p.0.as_slice());
+        let cur = preview.as_ref().map_or(self.cur_layer, |p| p.1);
+        // Pour chaque calque, le nombre d'éléments posés avant lui (un calque d'effet couvre ceux d'en dessous).
+        let mut starts: Vec<usize> = Vec::with_capacity(layers.len());
+        for (li, layer) in layers.iter().enumerate() {
+            starts.push(items.len());
             // Caché (lui ou son dossier) : rien ; sinon son opacité, avec celle de son dossier.
-            let Some(mut opacity) = crate::folders::effect(self.layers(), li) else { continue };
-            if washed && li != self.cur_layer {
+            let Some(mut opacity) = crate::folders::effect(layers, li) else { continue };
+            // Calque d'effet (`calqueffet.rs`) : son repère, qui couvre ce qui est dessous.
+            if layer.effet.is_some() {
+                items.extend(crate::calqueffet::marker(layers, li, frame, opacity, &starts));
+                continue;
+            }
+            if washed && li != cur {
                 opacity *= self.light_table_strength.clamp(0.05, 1.0);
             }
             // Derrière la caméra (elle a avancé au-delà) : on ne le voit pas.
@@ -1321,7 +1370,7 @@ impl App {
             let transform = (!seen.is_identity()).then_some(seen);
             // Pelure d'oignon : le calque courant, et ceux qui ont la leur (13b).
             let mut onion_items = Vec::new();
-            if onion && self.onion.enabled && !self.playing && (li == self.cur_layer || layer.onion) {
+            if onion && self.onion.enabled && !self.playing && (li == cur || layer.onion) {
                 let s = &self.onion;
                 let (before, after) = crate::onion::neighbours(layer, frame, s, &self.panel().cues.bookmarks);
                 // Décalage temporaire des images de la pelure (13f), sur la feuille.
@@ -1363,11 +1412,11 @@ impl App {
                     // Pile d'effets du calque (13i).
                     // (Le calque qu'on édite se montre sans tremblement : `boil_editing`.)
                     fx: match crate::fx::layer_steps(layer, frame, rest) {
-                        steps if editing && (li == self.cur_layer || self.multi.sel.as_ref().is_some_and(|s| s.has_layer(layer.id))) => crate::fx::without_boil(steps),
+                        steps if editing && (li == cur || self.multi.sel.as_ref().is_some_and(|s| s.has_layer(layer.id))) => crate::fx::without_boil(steps),
                         steps => steps,
                     },
                     // Calque CTG (13j) : rempli d'après les traits de ses sources.
-                    ctg: crate::ctg::input(self.layers(), li, frame),
+                    ctg: crate::ctg::input(layers, li, frame),
                     fond: None,
                     pre: None,
                 };
@@ -1381,7 +1430,7 @@ impl App {
                     None => items.push(line),
                 }
                 // Calque CTG courant, à l'écran seulement : ses graffitis, pâles, par-dessus.
-                if onion && layer.ctg.is_some() && li == self.cur_layer && !self.playing {
+                if onion && layer.ctg.is_some() && li == cur && !self.playing {
                     items.push(PlanItem { cel, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: None });
                 }
             }
@@ -2697,6 +2746,7 @@ impl App {
                     self.open_path(path);
                 }
             }
+            Pending::ScenarioNew => self.scenario_new_project(),
             Pending::Close => {
                 let (w, h, fps) = (self.doc.frame[0], self.doc.frame[1], self.doc.fps);
                 self.load_doc(Document::with_frame(w, h, fps).created_now());
@@ -2764,6 +2814,8 @@ impl App {
         self.rejeu_deferred.clear();
         self.rejeu_idle.clear();
         crate::fx::fond_cancel_all();
+        // (Les suggestions sonores de l'ancien projet s'arrêtent : rien n'est rendu au nouveau.)
+        self.reset_suggestions();
         self.doc = doc;
         self.doc_epoch += 1;
         // (Ses dessins portent les numéros et les versions de ceux de l'ancien : les dessins
@@ -2806,6 +2858,7 @@ impl App {
         // Vue du plateau et vue 3D recadrées sur le nouveau projet (9d, 9e).
         self.stage_view = None;
         self.stage3d.cam = None;
+        self.scene3d_reset();
         self.modified = false;
         self.path = None;
         self.import_source = None;
@@ -2835,6 +2888,7 @@ impl App {
         self.fit_pending = true;
         self.stage_view = None;
         self.stage3d.cam = None;
+        self.scene3d_reset();
         self.length_origin = None;
         self.modified = true;
     }
@@ -2928,7 +2982,10 @@ impl App {
         }
         let plan = self.build_plan(self.cur_frame, false, !self.export_transparent);
         let cam = self.doc.panel_camera(self.cur_panel, self.cur_frame);
-        let pixels = render::camera_image(&self.doc, &plan, &cam);
+        let mut pixels = render::camera_image(&self.doc, &plan, &cam);
+        // Les incrustations (timecode…) sont gravées dans l'image (`incrustation.rs`).
+        let boxes = crate::incrustation::boxes_for(&self.doc, self.cur_panel, self.cur_frame, true, crate::incrustation::now_secs());
+        crate::incrustation::burn(&mut pixels, self.doc.frame, &boxes);
         self.status = match io::write_png(&path, &pixels, self.doc.frame[0], self.doc.frame[1]) {
             Ok(()) => format!("Image exportée : {}", path.display()),
             Err(e) => format!("Échec de l'export : {e}"),
@@ -3098,6 +3155,10 @@ impl App {
             self.keep_gesture(crate::nudge::GESTURE);
         }
         for (key, physical, m, repeat) in keys {
+            // La planche de crayonnés rapides a la main : Tab et les flèches changent de case.
+            if self.crayonnes_key(key, m) {
+                continue;
+            }
             // Entrée, Échap, Retour arrière servent d'abord à l'outil en cours (forme à finir…).
             if !m.any() && self.tool_key(key) {
                 continue;
@@ -3139,6 +3200,11 @@ impl App {
     fn run_action_now(&mut self, action: &str) {
         // Un texte en cours de saisie est posé avant toute commande (annuler, changer d'image…).
         self.finish_text_edit();
+        // Le panneau Références a la main : Ctrl+V y colle l'image du presse-papiers.
+        if self.refs.focus && matches!(action, "edition.coller" | "edition.coller_a_la_tete" | "edition.coller_sur_place") {
+            self.refs_paste();
+            return;
+        }
         // Une image copiée ailleurs (navigateur…) passe avant le presse-papiers de SHOT, dont
         // les copies écrivent « SHOT : … » dans celui de Windows (`pasteimage.rs`).
         if action == "edition.coller" || action == "edition.coller_a_la_tete" {
@@ -3158,12 +3224,50 @@ impl App {
         if self.workspace_action(action) {
             return;
         }
+        // Planche de crayonnés rapides (`crayonnesui.rs`) : ses commandes, et annuler, rétablir,
+        // tout choisir, supprimer quand elle a la main.
+        if self.crayonnes_action(action) {
+            return;
+        }
         // Fond sous le trait (`fondui.rs`).
         if self.fond_action(action) {
             return;
         }
+        // Préréglages d'effets et calques d'effets (`prereglagesui.rs`).
+        if self.effet_action(action) {
+            return;
+        }
+        // Scène 3D de blocage (`scene3dui.rs`).
+        if self.scene3d_action(action) {
+            return;
+        }
         // Commentaires sur la timeline (`commentairesui.rs`).
         if self.comment_action(action) {
+            return;
+        }
+        // Transitions du montage (`transitionsui.rs`) ; Suppr vise celle qui a la main.
+        if self.transition_action(action) {
+            return;
+        }
+        // Effets des extraits de son (`audiofxui.rs`) ; Suppr retire la clé de volume choisie.
+        if self.sound_fx_action(action) {
+            return;
+        }
+        // Bibliothèque de bruitages (`bruitagesui.rs`).
+        if self.bruitage_action(action) {
+            return;
+        }
+        // Suggestions sonores (`suggestionsui.rs`).
+        if self.suggestion_action(action) {
+            return;
+        }
+        // Références visuelles (`referencesui.rs`) : leurs commandes ; le panneau qui a la main
+        // prend Ctrl+V (une image à coller) et Suppr avant les autres.
+        if self.references_action(action) {
+            return;
+        }
+        if action == "edition.supprimer" && self.refs_has_focus() {
+            self.refs_delete_selected();
             return;
         }
         // Suppr vise le commentaire seulement s'il a la main (le dernier clic était sur lui) ;
@@ -3703,6 +3807,7 @@ impl App {
             // Calque vidéo (13k, `videoui.rs`).
             "fichier.importer_video" => self.import_video(),
             "fichier.importer_sboard" => self.open_sb_window(),
+            "fichier.importer_scenario" => self.open_scenario_window(),
             "fichier.exporter_sboard" => self.open_sb_export(),
             "pinceau.enregistrer_traits" => {
                 self.record_strokes = match self.record_strokes {
@@ -3719,6 +3824,7 @@ impl App {
             "fichier.importer_sequence" => self.import_sequence(),
             "calque.video_en_animation" => self.video_to_animation(),
             "calque.propager" => self.open_propagation(),
+            "calque.colorier_zones" => self.open_coloriage(),
             // Interpolation d'images (13l, `tweenui.rs`).
             "images.intermediaire" => self.insert_intermediates(1),
             "images.intermediaires" => self.open_tween_dialog(crate::tweenui::TweenKind::Insert),
@@ -4054,6 +4160,8 @@ impl App {
             // De même pour le panneau Effets : s'il est sous le clic, il reprend la main pendant
             // cette image (`fxcopie.rs`).
             self.fx_pane_focus = false;
+            // Et pour le panneau Références (`referencesui.rs`).
+            self.refs.focus = false;
         }
         self.handle_shortcuts(ctx);
         self.sync_scene_layers();
@@ -4063,7 +4171,9 @@ impl App {
         self.tick_playback(ctx);
         self.tick_flip(ctx);
         self.tick_video_import(ctx);
+        self.tick_references(ctx);
         self.propagation_ui(ctx);
+        self.coloriage_ui(ctx);
         if self.playing {
             let now = ctx.input(|i| i.time);
             let g = self.global_frame();
@@ -4130,6 +4240,8 @@ impl App {
             self.tick_open(ctx);
             self.tick_reopen();
             self.poll_brushes();
+            self.poll_bruitages(ctx);
+            self.poll_suggestions(ctx);
             self.tick_save(ctx);
         }
         // Export en cours : quelques images par image d'écran, la fenêtre reste vivante.
@@ -4196,6 +4308,8 @@ impl App {
         let current = self.current_layout();
         self.settings.set_layout_of(self.espace, current);
         let _ = self.settings.save();
+        // Le serveur de génération sonore que SHOT a lancé s'arrête avec lui (un serveur lancé à la main reste).
+        self.sug.serveur.arreter();
     }
 }
 

@@ -1372,6 +1372,69 @@ action = "storyboard.verrouiller"
 touches = []
 source = "TVPaint 12 sans touche"
 
+# Crayonnés rapides. Dans la planche, Tab / Maj+Tab et les flèches changent de case (codés en dur,
+# comme les flèches du dessin : Tab sert aussi à passer en animation) ; ces commandes n'ont pas de
+# touche par défaut, mais restent dans la palette (Ctrl+K), les menus et « Assigner un raccourci… ».
+[[raccourci]]
+action = "storyboard.crayonnes"
+touches = []
+source = "proposition (sans touche : Ctrl+K)"
+
+[[raccourci]]
+action = "crayonnes.case_suivante"
+touches = []
+source = "proposition (sans touche : Tab dans la planche)"
+
+[[raccourci]]
+action = "crayonnes.case_precedente"
+touches = []
+source = "proposition (sans touche : Maj+Tab dans la planche)"
+
+[[raccourci]]
+action = "crayonnes.page_suivante"
+touches = []
+source = "proposition (sans touche)"
+
+[[raccourci]]
+action = "crayonnes.page_precedente"
+touches = []
+source = "proposition (sans touche)"
+
+[[raccourci]]
+action = "crayonnes.ajouter_page"
+touches = []
+source = "proposition (sans touche)"
+
+[[raccourci]]
+action = "crayonnes.inserer_case"
+touches = []
+source = "proposition (sans touche)"
+
+[[raccourci]]
+action = "crayonnes.supprimer_case"
+touches = []
+source = "proposition (sans touche)"
+
+[[raccourci]]
+action = "crayonnes.vider_case"
+touches = []
+source = "proposition (sans touche)"
+
+[[raccourci]]
+action = "crayonnes.tout_choisir"
+touches = []
+source = "proposition (sans touche)"
+
+[[raccourci]]
+action = "crayonnes.creer_plans"
+touches = []
+source = "proposition (sans touche)"
+
+[[raccourci]]
+action = "crayonnes.case_auto"
+touches = []
+source = "proposition (sans touche)"
+
 [[raccourci]]
 action = "projet.proprietes"
 touches = []
@@ -1765,6 +1828,130 @@ action = "outil3d.deplacer"
 touches = []
 source = "SHOT (plateau en 3D ; aucune touche choisie)"
 
+# ------------------------------------------------------------------------------------ Scène 3D de blocage
+# Aucune touche par défaut (à choisir par Anthony) : W / E / R pour déplacer / tourner / échelle sont
+# l'usage de plusieurs logiciels 3D, à vérifier avant de les adopter.
+
+[[raccourci]]
+action = "scene3d.basculer"
+touches = []
+source = "SHOT (scène 3D de blocage ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.outil_choisir"
+touches = []
+source = "SHOT (scène 3D de blocage ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.outil_deplacer"
+touches = []
+source = "SHOT (scène 3D de blocage ; outil déplacer comme les logiciels 3D courants, à vérifier ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.outil_tourner"
+touches = []
+source = "SHOT (scène 3D de blocage ; outil tourner comme les logiciels 3D courants, à vérifier ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.outil_echelle"
+touches = []
+source = "SHOT (scène 3D de blocage ; outil échelle comme les logiciels 3D courants, à vérifier ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.ajouter_cube"
+touches = []
+source = "SHOT (scène 3D de blocage ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.ajouter_plan"
+touches = []
+source = "SHOT (scène 3D de blocage ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.ajouter_cylindre"
+touches = []
+source = "SHOT (scène 3D de blocage ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.ajouter_sphere"
+touches = []
+source = "SHOT (scène 3D de blocage ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.ajouter_cone"
+touches = []
+source = "SHOT (scène 3D de blocage ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.ajouter_escalier"
+touches = []
+source = "SHOT (scène 3D de blocage ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.ajouter_mannequin"
+touches = []
+source = "SHOT (scène 3D de blocage ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.importer_modele"
+touches = []
+source = "SHOT (scène 3D de blocage, import glTF ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.dupliquer"
+touches = []
+source = "SHOT (scène 3D de blocage ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.supprimer"
+touches = []
+source = "SHOT (scène 3D de blocage ; Suppr supprime déjà les objets choisis quand la vue 3D a la main)"
+
+[[raccourci]]
+action = "scene3d.grouper"
+touches = []
+source = "SHOT (scène 3D de blocage ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.degrouper"
+touches = []
+source = "SHOT (scène 3D de blocage ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.vue_camera"
+touches = []
+source = "SHOT (scène 3D de blocage ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.cadrer"
+touches = []
+source = "SHOT (scène 3D de blocage ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.envoyer"
+touches = []
+source = "SHOT (scène 3D de blocage ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.camera_depuis_plan"
+touches = []
+source = "SHOT (scène 3D de blocage ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.aimanter"
+touches = []
+source = "SHOT (scène 3D de blocage ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.grille"
+touches = []
+source = "SHOT (scène 3D de blocage ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.decor"
+touches = []
+source = "SHOT (scène 3D de blocage ; aucune touche choisie)"
+
 # ------------------------------------------------------------------------------------ Repère 3D
 
 [[raccourci]]
@@ -1967,6 +2154,11 @@ source = "SHOT (sans touche)"
 
 [[raccourci]]
 action = "fichier.importer_sboard"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fichier.importer_scenario"
 touches = []
 source = "SHOT (sans touche)"
 
@@ -2184,6 +2376,146 @@ action = "commentaire.suivant"
 touches = []
 source = "SHOT (sans touche)"
 
+# Bibliothèque de bruitages (sans touche : à choisir).
+[[raccourci]]
+action = "vue.bruitages"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "bruitage.inserer"
+touches = []
+source = "SHOT (sans touche : un double-clic sur le son le pose aussi)"
+
+[[raccourci]]
+action = "bruitage.ecouter"
+touches = []
+source = "SHOT (sans touche : le bouton de la ligne l'écoute aussi)"
+
+# Suggestions sonores : SHOT lit le storyboard et propose des sons témoins (sans touche : à choisir).
+[[raccourci]]
+action = "vue.suggestions_sonores"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "suggestion.lire"
+touches = []
+source = "SHOT (sans touche : le bouton « Lire le storyboard » du panneau le lance aussi)"
+
+# Effets des extraits de son (sans touche : à choisir).
+[[raccourci]]
+action = "son.fondu_entree"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "son.fondu_sortie"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "son.enchaine"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "son.cle_volume"
+touches = []
+source = "SHOT (sans touche : un double-clic sur l'extrait pose aussi une clé)"
+
+[[raccourci]]
+action = "son.solo"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "son.effets_reinit"
+touches = []
+source = "SHOT (sans touche)"
+
+# Transitions du montage (sans touche : à choisir).
+[[raccourci]]
+action = "transition.ajouter"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "transition.supprimer"
+touches = []
+source = "SHOT (sans touche : Suppr supprime la transition choisie dans le montage)"
+
+[[raccourci]]
+action = "transition.fondu_enchaine"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "transition.fondu_noir"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "transition.fondu_blanc"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "transition.volet"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "transition.noir"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "transition.apercu"
+touches = []
+source = "SHOT (sans touche)"
+
+# Références visuelles (sans touche : à choisir).
+[[raccourci]]
+action = "vue.references"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.importer_image"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.importer_video"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.coller"
+touches = []
+source = "SHOT (sans touche : Ctrl+V dans le panneau Références colle l'image du presse-papiers)"
+
+[[raccourci]]
+action = "references.supprimer"
+touches = []
+source = "SHOT (sans touche : Suppr dans le panneau Références supprime les références choisies)"
+
+[[raccourci]]
+action = "references.lier_plan"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.filtre_plan"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.tout_voir"
+touches = []
+source = "SHOT (sans touche)"
+
 # Effets, propagation, caméra, aides au cadrage.
 [[raccourci]]
 action = "fx.choisir_aucun"
@@ -2241,6 +2573,11 @@ touches = []
 source = "SHOT (sans touche)"
 
 [[raccourci]]
+action = "calque.colorier_zones"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
 action = "camera.cles_copier"
 touches = []
 source = "SHOT (sans touche : Ctrl+C copie les clés de caméra choisies)"
@@ -2262,6 +2599,73 @@ source = "SHOT (sans touche : Ctrl+A choisit toutes les clés de caméra du plan
 
 [[raccourci]]
 action = "camera.effet_appliquer"
+touches = []
+source = "SHOT (sans touche)"
+
+# Préréglages d'effets et calques d'effets (effet.*) : sans touche par défaut, comme les effets de
+# caméra ; Ctrl+K les trouve par leur nom, et « Assigner un raccourci… » au clic droit leur en donne un.
+[[raccourci]]
+action = "effet.impact"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.lueur"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.flash_blanc"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.flash_couleur"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.tremblement"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.vignettage"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.grain"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.aberration"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.flou_vitesse"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.timecode"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.appliquer"
+touches = []
+source = "SHOT (sans touche : le bouton Appliquer de la fenêtre du préréglage)"
+
+[[raccourci]]
+action = "effet.fermer"
+touches = []
+source = "SHOT (sans touche : Échap ferme la fenêtre du préréglage)"
+
+[[raccourci]]
+action = "effet.vide"
 touches = []
 source = "SHOT (sans touche)"
 

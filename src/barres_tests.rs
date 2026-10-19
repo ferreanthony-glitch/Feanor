@@ -43,7 +43,7 @@ fn the_bars_are_slim_by_default() {
     assert_eq!(Barre::Commandes.commandes().len(), 19, "rien n'est perdu : les dix autres sont sous « Plus… »");
     // Barre du montage : 21 icônes avant, une douzaine maintenant (la position et « Plus… » en plus).
     let montage = d_office(Barre::Montage);
-    assert!((10..=12).contains(&montage.len()), "montage : {montage:?}");
+    assert!((11..=13).contains(&montage.len()), "montage : {montage:?}");
     // Barre de la timeline : les dessins qu'on retire ou vide, la cadence, la marque, le commentaire,
     // les flips et les effets sont sous « Plus… ».
     let timeline = d_office(Barre::Timeline);
@@ -58,11 +58,11 @@ fn the_bars_are_slim_by_default() {
 #[test]
 fn what_the_montage_bar_keeps_and_moves() {
     let montage = d_office(Barre::Montage);
-    for reste in ["montage.debut", "lecture.basculer", "lecture.boucle", "panneau.nouveau", "sequence.nouvelle", "plans", "son.importer", "son", "mode.basculer", "vue.dessin", "vue.vignettes"] {
+    for reste in ["montage.debut", "lecture.basculer", "lecture.boucle", "panneau.nouveau", "sequence.nouvelle", "plans", "son.importer", "son", "mode.basculer", "vue.dessin", "vue.vignettes", "storyboard.crayonnes"] {
         assert!(montage.contains(&reste), "{reste} reste dans la barre du montage");
     }
-    // Les commandes que INTERFACE.md range sous « Plus… ».
-    for sous_plus in ["plan.avancer", "plan.reculer", "storyboard.verrouiller", "montage.aimanter", "fichier.importer_video", "commentaire.ajouter"] {
+    // Les commandes que INTERFACE.md range sous « Plus… », et la transition (arrivée depuis).
+    for sous_plus in ["plan.avancer", "plan.reculer", "storyboard.verrouiller", "montage.aimanter", "fichier.importer_video", "commentaire.ajouter", "transition.ajouter"] {
         assert!(!montage.contains(&sous_plus), "{sous_plus} est sous « Plus… »");
     }
 }

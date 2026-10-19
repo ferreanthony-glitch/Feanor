@@ -9,7 +9,8 @@ sans changer le comportement, et propose le reste (partie 6).
 Branche `simplicite` (coupée de `main` à `9a33cd5`). Rien n'est fusionné.
 
 Sommaire : 1 raccourcis, 2 vocabulaire, 3 doublons et impasses, 4 cohérence des gestes (clés),
-5 encombrement, 6 propositions, 7 à vérifier à l'écran.
+5 encombrement, 6 propositions, 7 à vérifier à l'écran, 8 transitions, effets sonores et bruitages
+(branche `transitions-son`, vocabulaire ajouté), 9 suggestions sonores (branche `generation-son`).
 
 ---------------------------------------------------------------------------------------------------
 
@@ -60,6 +61,11 @@ Elles sont dans la palette (Ctrl+K) et au clic droit « Assigner un raccourci…
 `fx.panneau`, `vue.calques`, `vue.couleur`, `lecture.boucle`, `plan.avancer` / `reculer`,
 `panneau.dupliquer`, `dessin.vider`. **Rien n'a été posé** : ce sont des choix d'Anthony (partie 6.2).
 
+Le panneau Références (`vue.references`, `references.importer_image`, `references.importer_video`,
+`references.coller`, `references.supprimer`, `references.lier_plan`, `references.filtre_plan`,
+`references.tout_voir`) n'a pas de touche non plus ; Ctrl+V et Suppr y agissent quand le panneau a la
+main (le dernier clic y était), comme pour les panneaux Effets et Commentaires.
+
 ### Fichier complété
 
 60 commandes n'avaient pas de bloc dans `keymap.toml` (exports, panneaux, commentaires, aides au
@@ -99,10 +105,12 @@ et les calques » (c'est la colonne des calques).
 | Retirer une propriété | **Retirer** (raccourci, marque, signet, rôle, pastille, fond) | |
 | Vider du contenu dessiné | **Effacer** / **Vider** | |
 | Les dessins d'avant et d'après | **pelure d'oignon** (jamais « Pelure » seule dans un titre) | |
+| Région fermée par le trait, coloriée d'un aplat | **zone** ; le coloriage s'appelle **Colorier par zones** (calque de **trait**, calque de **couleur**, **clés**) ; ce qu'on ne sait pas colorier : **zone à vérifier**, repérée en **magenta** | cellule, région, masque |
 | Vue sur le film | **montage** (storyboard) ; **timeline** (animation) ; **bande** seulement pour les deux ensemble | |
 | Traits d'aide du cadre | **aides au cadrage** | repères (réservé aux repères de la timeline : signets, entrée, sortie) |
 | Menu ⋮ d'un calque ou d'un groupe | **Commandes du calque** / **du groupe** | options |
 | Importer un projet Storyboard Pro | **Importer** (l'accueil disait « Ouvrir ») | |
+| Les objets 3D posés pour le blocage | **scène 3D** (« scène » n'est plus le mot du plan) ; **décor** (commun à la séquence) ; **caméra du plateau** (celle de la scène 3D, distincte de la **caméra** 2D du plan) ; **calque « Fond 3D »** | maquette, set, vue 3D (la « vue 3D » est le plateau en 3D) |
 | Basculer | « (montrer / cacher) » pour les barres et colonnes, « (ouvrir / fermer) » pour les panneaux, « (oui / non) » pour une option, « (allumer / éteindre) » pour la pelure et les pochoirs, « (poser / retirer) » pour les marques et signets | afficher / masquer |
 
 ### Changements faits (étiquettes seulement)
@@ -121,6 +129,19 @@ et les calques » (c'est la colonne des calques).
 - Les doubles `scene.*` ne font plus qu'une ligne dans la palette.
 - Chemins de menu périmés dans les messages (« Aide > Recharger les raccourcis », « Calques > Nouveau
   calque vectoriel », « Fichier > Exporter le film », « Fichier > Ouvrir un projet Storyboard Pro »).
+
+### Ajout du 2026-10-19 : « Colorier par zones… »
+
+- Commande `calque.colorier_zones` (sans touche, comme `calque.propager`) : menu Animation, clic droit
+  d'un calque (montage, timeline, panneau Calques : la ligne cliquée est le calque de trait), palette
+  Ctrl+K, et « Assigner un raccourci… » au clic droit de l'entrée. Elle ouvre la fenêtre « Colorier par
+  zones » (`coloriageui.rs`) ; la tâche tourne sur un autre fil (fenêtre de progression, « Arrêter ») ;
+  une seule étape d'annulation, « Colorier par zones ».
+- Vocabulaire de la fenêtre : « Trait », « Clés peintes sur », « Écrire les aplats », « Images », « Fermer
+  les trous du trait jusqu'à », « Zone incertaine », « Confiance minimale ». La liste « N à vérifier » dit
+  « Image 12 · zone 3 · nouvelle zone » ; un clic va à l'image.
+- Distinct de « Propager la peinture… » (EbSynth : peinture sur une vidéo) : ici on retrouve les mêmes
+  zones fermées d'un dessin au suivant et on pose des aplats nets, sans pixels générés.
 
 ### Restes à décider (non changés)
 
@@ -422,10 +443,249 @@ Rien de cette passe n'a été regardé : aucun lancement de SHOT (consigne). À 
 7. **Camera** : le cadre de la caméra a la couleur de la palette (jaune dans les thèmes sombres,
    brun ocre dans Gris clair).
 8. **Palette Ctrl+K** : pas de double.
+9. **Panneau Références** (icône de la barre des panneaux, une de plus : onze) : déposer des images
+   sur le panneau, Ctrl+V d'une image copiée dans un navigateur, glisser / agrandir / tourner une
+   référence, Alt+clic = pipette, lecture d'une vidéo et « suivre la tête de lecture », puis « Dans
+   une fenêtre à part » sur un deuxième écran avec « Toujours au-dessus » (les fichiers y sont lâchés
+   dans la fenêtre à part elle-même). La bulle de chaque icône vient de `bulles.rs`.
+
+---------------------------------------------------------------------------------------------------
+
+## 8. Transitions, effets sonores, bruitages (2026-10-19, branche `transitions-son`)
+
+### Vocabulaire ajouté
+
+| Idée | Mot | À éviter |
+|---|---|---|
+| La jointure de deux plans dans le montage | **coupe** | raccord, cut |
+| Ce qui habille une coupe, ou le bord du film | **transition** | effet (réservé à la pile d'effets d'un calque) |
+| Les sortes | **fondu enchaîné**, **fondu au noir**, **fondu au blanc**, **volet**, **noir** | dissolve, fade |
+| Où la zone se pose par rapport à la coupe | **calage** : « Centrée sur la coupe », « Finit à la coupe », « Commence à la coupe » | alignement |
+| Plan qui part / plan qui arrive | **plan sortant** / **plan entrant** | A / B |
+| Le fondu des bords d'un extrait de son | **fondu d'entrée**, **fondu de sortie** | fade in / out |
+| Le fondu entre deux extraits qui se touchent | **fondu enchaîné** du son (centré sur la jonction) | crossfade |
+| Le son qui existe de l'autre côté d'un bord d'extrait | **poignée** (le mot des logiciels de montage) | marge |
+| Les points de la courbe de volume d'un extrait | **clés de volume** (une clé est un début : voir le glossaire de la partie 2) | points, nœuds |
+| Seules ces pistes s'entendent | **solo** | — |
+| Le panneau des sons de l'utilisateur | **Bruitages** (bibliothèque, dossiers) | effets sonores (réservé à `audiofx`) |
+
+### Ce qui a été posé
+
+- **Montage** : un nœud papillon (fondu enchaîné), un losange (noir ou blanc), une rampe (bord du film), un carré
+  divisé (volet) ou un bloc noir, au milieu des plans, sur la coupe. Ses bords sont des poignées de durée ;
+  clic = choisir, Suppr = supprimer, clic droit = sorte / durée / calage ; clic droit sur une coupe =
+  « Transition ▸ ». Bouton « Ajouter une transition » de la barre du montage (un seul appel, `transition_button`, à
+  ranger sous « Plus… » si la barre l'exige).
+- **Pistes son** : bouton S à côté de M ; sur l'extrait choisi, deux poignées carrées au coin du haut, une
+  ligne de volume (double-clic pour une clé), une croix à la jonction de deux extraits qui se touchent.
+  Clic droit sur un extrait > « Effets du son » (volume, fondus, fondu enchaîné, clés, égaliseur, écho).
+- **Barre des panneaux** : une icône de plus (onde), groupe des commentaires et de l'historique.
+- **Menus** : Son > Bruitages… ; menu d'un plan : « Transition au début du plan » / « … à la fin du plan ».
+- **Commandes** (Ctrl+K, sans touche par défaut) : `transition.*` (8), `son.fondu_entree`, `son.fondu_sortie`,
+  `son.enchaine`, `son.cle_volume`, `son.solo`, `son.effets_reinit`, `vue.bruitages`, `bruitage.inserer`,
+  `bruitage.ecouter`. Suppr supprime la transition choisie, ou la clé de volume choisie, quand le dernier
+  clic du montage l'a visée.
+- **Historique** : chaque geste a un nom français (« Ajouter une transition : fondu enchaîné », « Durée de la
+  transition », « Fondu d'entrée », « Clé de volume », « Piste en solo », « Insérer un bruitage »…).
+
+### À vérifier à l'écran (rien n'a été lancé dans cette séance)
+
+1. **Nœud de transition** : lisible dans les trois thèmes, en zoom arrière (largeur minimale 18 points), sur un plan
+   coloré ; ses poignées de bord ne gênent pas celles du rognage (les bords de plan sont plus bas dans la pile des
+   gestes : la transition passe d'abord).
+2. **Clic droit sur une coupe** : à ± 4 points de la jonction des blocs ; le menu du plan reste ailleurs.
+3. **Lecture avec transition** : fondu fluide à la cadence, en vue caméra avec deux caméras différentes ; le volet
+   avance sur le cadre par défaut, pas sur celui d'une caméra qui bouge (à l'écran seulement).
+4. **Aperçu à l'arrêt** : le dessin dans une zone de transition montre le mélange ; `transition.apercu` le coupe
+   (à décider si le défaut doit être l'inverse en mode Animation : il est déjà coupé là).
+5. **Poignées de fondu** aux coins d'un extrait : prise à 6 points, bande du haut de 12 points ; la poignée sur le
+   coin gauche prend le pas sur le bord (taille de l'extrait) pour l'extrait choisi seulement.
+6. **Ligne de volume** : double-clic sur un extrait pas encore choisi (le premier clic le choisit).
+7. **Panneau Bruitages** : liste de plusieurs milliers de sons (défilement), glisser vers la bande et vers la
+   timeline, repère de dépôt.
+8. **Entrée de menu** « Bruitages… » dans le menu Son et l'icône de la barre : bulle et raccourci.
 
 ### Essais ajoutés
 
-`keymap_tests` (6), `clescommun_tests` (7), `clesmulti_tests` (7), `multiall_tests` (6),
-`zoombande_tests` (7), `bulles_tests` (3), `theme_tests` (2), `montagerows_tests` (2 remplacés).
-La suite passe de 1008 à 1046 essais ; `scripts\verifier.ps1 -Repetitions 2` : OK, compilation sans
-avertissement.
+`transitions_tests` (27), `audiofx_tests` (28), `bruitages_tests` (17) ; les essais de la barre des panneaux et
+des dispositions comptent un panneau de plus ; le projet d'essai de fiabilité contient transitions, effets
+de sons et solo.
+
+---------------------------------------------------------------------------------------------------
+
+## 9. Suggestions sonores (2026-10-19, branche `generation-son`, phase 1)
+
+### Vocabulaire ajouté
+
+| Idée | Mot | À éviter |
+|---|---|---|
+| Un son que SHOT propose d'après le storyboard | **proposition** (panneau « Suggestions sonores ») | suggestion de son, cue (réservé aux signets du plan) |
+| Les états | **proposée**, **en génération**, **prête**, **acceptée**, **rejetée** | brouillon, validée |
+| Les sortes | **bruitage**, **ambiance**, **musique d'intention**, **voix** | SFX, musique du film |
+| Poser dans le montage | **accepter** (« Accepter » copie le son dans le projet) | insérer, valider |
+| La piste où elles se posent | **« Sons proposés »** (« Sons proposés 2 »…) | — |
+| Qui fait le travail d'un rôle | **règles**, **local**, **service en ligne** | sidecar, API (mots du code et du contrat) |
+| Lire le texte du plan pour en tirer des sons | **Lire le storyboard** | analyser, scanner |
+
+### Ce qui a été posé
+
+- **Panneau** « Suggestions sonores » : la portée (tout le film, séquence courante, plan courant, des plans choisis) et
+  « Lire le storyboard » ; une ligne qui dit qui fait quoi (« Lecture : règles · Sons : local · Voix : local ») et, en
+  couleur d'avertissement, ce qui partira en ligne ; l'avancement des tâches ; « Tout générer », « Tout accepter »,
+  « Supprimer les rejetées » ; la proposition choisie et ses boutons (Générer / Régénérer, Écouter, Accepter, Rejeter,
+  Reprendre, Modifier, Supprimer) ; la liste (icône de la sorte, plan et moment, titre, état), même menu au clic droit.
+- **Fenêtres** : « Envoyer vers un service en ligne ? » (une fois par projet), « Modifier la proposition », « Clé de … ».
+- **Préférences** : section « Génération sonore » repliée (les trois rôles ; le serveur local : dossier des modèles,
+  Python, case « Démarrer le serveur tout seul… », port, « Démarrer le serveur local », « Arrêter », « Tester » ; les
+  clés, « Tester la connexion », une note de licences). La fenêtre Préférences défile quand elle dépasse l'écran.
+- **Barre des panneaux** : une icône de plus (étincelle), même groupe que les bruitages ; menu Son > Suggestions
+  sonores… ; commandes `vue.suggestions_sonores` et `suggestion.lire` (sans touche par défaut).
+- **Historique** : « Accepter un son proposé ».
+
+### À vérifier à l'écran (rien n'a été lancé dans cette séance)
+
+1. **Le panneau dans sa colonne** : la hauteur de la liste quand les lignes d'avertissement en ligne et les barres
+   d'avancement sont là (le panneau ne défile pas : l'en-tête est fixe, seule la liste défile) ; les lignes de 44 points
+   dans les trois thèmes ; les états lisibles (couleurs d'accent, d'avertissement, atténuées).
+2. **Les icônes** : étincelle (générer), flèches (régénérer), coches (tout accepter), croix, crayon, corbeille ; choix de
+   l'icône de la barre (`SPARKLE`) face à « Effets » (baguette).
+3. **Double-clic** sur une ligne : écoute si le son existe, sinon génère ; clic droit : menu complet.
+4. **Fenêtres** : confirmation en ligne (texte long, bouton), « Modifier » (champs selon la sorte), saisie de la clé
+   (champ masqué).
+5. **Préférences** : la section repliée ouverte avec les trois rôles en ligne (hauteur, défilement de la fenêtre sur un
+   écran de 1080 points) ; « Démarrer le serveur local » (le message d'attente, puis la phrase de « Tester ») ;
+   « Arrêter » ; « Tester » quand le serveur ne tourne pas (« Le serveur local ne tourne pas… »).
+6. **Piste « Sons proposés »** dans la bande de montage et dans la timeline : nom, couleur, extraits posés à la bonne image.
+7. **Lire un film de plusieurs dizaines de plans** : l'interface reste fluide pendant les vignettes (8 ms par image
+   d'écran) et la lecture.
+
+### Essais ajoutés
+
+`indications_tests` (13), `fournisseurs_tests` (42), `suggestions_tests` (26), `base64_tests` (2), plus les essais de la barre
+des panneaux et des dispositions (un panneau de plus). Le projet d'essai de fiabilité contient des sons proposés
+(un bruitage, une voix rejetée et modifiée, une ambiance acceptée) et la confirmation d'envoi en ligne.
+
+---------------------------------------------------------------------------------------------------
+
+## 10. Importer un scénario (2026-10-19, branche `import-scenario`)
+
+Fichier > Importer > « Un scénario (Fountain, Final Draft, Word, texte)… », commande `fichier.importer_scenario`
+(dans Ctrl+K, sans touche par défaut). Une fenêtre « Importer un scénario » montre, avant tout changement :
+le format lu, les séquences et leurs plans, la durée estimée, les personnages, les remarques de lecture, et
+les choix (découpage en plans, rythme, destination).
+
+- **Vocabulaire** : un intitulé de scène (« INT. CUISINE – NUIT ») devient une **séquence** ; l'action et les
+  répliques deviennent des **plans** (jamais « scène » ni « panneau » dans les textes visibles) ; les
+  paragraphes d'un plan « par scène » en sont les **images de storyboard** (marques d'image).
+- **Menu** : l'entrée est sous Importer, après « Un projet Storyboard Pro (.sboard)… » (qui ouvre aussi une
+  fenêtre de lecture avant d'importer).
+- **Annuler** : un import dans le projet ouvert est une seule étape, « Importer un scénario » (panneau
+  Historique) ; un import dans un nouveau projet remplace le projet ouvert après la question habituelle
+  « Modifications non enregistrées ».
+- **À vérifier à l'écran** (rien lancé ici) : la fenêtre en thème clair et sombre (barre d'avancement d'un gros
+  fichier, liste des séquences défilante, remarques en couleur d'avertissement), les plans créés dans le montage
+  (titres, durées) et la fiche du plan (champs Action, Dialogue, Notes remplis ; notes « Décor : … »).
+
+---------------------------------------------------------------------------------------------------
+
+## 11. Crayonnés rapides (la planche, 2026-10-19, branche `crayonnes`)
+
+Une page de petites cases où l'on enchaîne des croquis, puis chaque case devient un plan
+(`crayonnes.rs`, `crayonnesui.rs`). Elle prend la place du dessin en storyboard ; elle se ferme par la croix
+de sa barre ou la même commande. Vocabulaire : **case** (un croquis de la planche), **planche** (toutes les
+cases), **page** (une grille de cases), **plan** pour ce qu'on en tire.
+
+- **Ouvrir** : Storyboard > Planche de crayonnés…, le bouton de la barre du montage (à côté de Vue dessin /
+  Vue vignettes), Ctrl+K > « Planche de crayonnés rapides » (`storyboard.crayonnes`). Ouvrir prend l'outil
+  Crayon (sauf si la Gomme est l'outil).
+- **Commandes** (palette Ctrl+K, clic droit sur une icône > assigner une touche, sans touche par défaut) :
+  `crayonnes.case_suivante`, `case_precedente`, `page_suivante`, `page_precedente`, `ajouter_page`,
+  `inserer_case`, `supprimer_case`, `vider_case`, `tout_choisir`, `creer_plans`, `case_auto`.
+- **Touches qui ne passent pas par le fichier** (comme les flèches du dessin) : quand la planche a la main (le
+  dernier appui y était), Tab / Maj+Tab et les flèches changent de case, Page préc. / suiv. de page ; Ctrl+Z /
+  Ctrl+Y, Ctrl+A et Suppr y sont l'annulation de la planche, « choisir toutes les cases dessinées » et « vider
+  les cases choisies » (Tab redevient « passer en animation » dès qu'une bande reprend la main).
+- **Gestes** : appui dans une case = tracer (le trait appartient à cette case) ; Maj ou Ctrl + appui dans une
+  case, ou clic sur son numéro = choisir ; glisser le numéro = changer l'ordre ; clic droit = menu de la case.
+- **Annulation** : la planche a sa propre pile ; « Créer les plans » est une seule étape de l'historique du
+  projet (nommée « Créer les plans des crayonnés »), que Ctrl+Z dans la planche défait aussi si elle est
+  toujours la dernière.
+
+À regarder à l'écran : les cases et leurs numéros dans les trois thèmes (la coche verte, l'anneau de la case
+choisie et de la case courante), le trait qui reste collé à la pointe pendant le geste, le glisser d'un numéro
+(barre d'insertion devant la case visée), la fenêtre « Créer les plans », la grille 6 × 4 sur un petit écran,
+le pinceau et la gomme à la tablette (pression), la barre sur une fenêtre étroite (elle défile).
+
+### Essais ajoutés
+
+`crayonnes_tests` (38 : appartenance, coupe, navigation, ordre, création des plans, fichier, annulation, écran).
+Le projet d'essai de fiabilité contient une planche de crayonnés (trois cases, dont une peinte au pinceau).
+
+---------------------------------------------------------------------------------------------------
+
+## 12. Calques d'effets et préréglages d'effets (2026-10-19, branche `calques-effets`)
+
+Demande d'Anthony : « des calques d'effets après des préréglages d'animation d'effet comme des impact frames,
+glows, tremblements de caméra effectifs, timecode ». Détail : README (section du même nom) et `docs/ROADMAP.md`.
+
+### Mots
+
+| Idée | Mot | À éviter |
+|---|---|---|
+| Calque qui agit sur ce qui est dessous | **calque d'effet** (sorte « ajustement ») | calque de réglage, filtre |
+| Calque qui écrit du texte sur l'image finale | **incrustation** (timecode, numéro d'image…) | overlay, sous-titre |
+| Effets tout réglés avec leurs clés | **préréglage d'effet** (menu **Préréglages**, bouton étincelle) | preset, modèle |
+| Durée d'un calque d'effet | son **exposition** (comme un dessin tenu) | durée en secondes cachée |
+| Secouer l'image déjà dessinée | **tremblement de l'image** (≠ « Effets de caméra », qui bougent la caméra) | tremblement de caméra effectif |
+
+### Où et quels gestes
+
+- **Ajouter** : bouton étincelle du panneau Calques ; Calques > Nouveau calque > Calque d'effet (et clic droit d'un
+  calque) ; « Préréglages » du panneau Effets ; Ctrl+K (`effet.*`, sans touche par défaut, « Assigner un
+  raccourci… » au clic droit d'une entrée de menu).
+- **Fenêtre du préréglage** (à droite de l'écran, ne cache pas le dessin) : l'effet se voit en direct sur le dessin
+  pendant les réglages ; Appliquer (une étape d'annulation « Préréglage d'effet : … »), Annuler ou Échap (rien n'est posé).
+- **Distinguer** : un calque d'effet a une étincelle à la place de la lettre B / V, la teinte cyan (`theme::dessin_cfx`,
+  `calque_cfx`) dans le panneau Calques, la timeline et le montage, et le mot « effet » sous son nom.
+- **Régler après coup** : choisir le calque, panneau Effets (pile, clés en losanges violets, comme tout calque) ;
+  une incrustation a son éditeur en tête du panneau. Étirer / couper / déplacer l'exposition dans la timeline change
+  les images où l'effet agit.
+
+### À vérifier
+
+- Photoshop et After Effects : le calque de réglage agit sur tout ce qui est dessous, et dans un groupe seulement
+  sur ce groupe ; SHOT l'a repris tel quel (**à vérifier** que les dossiers de SHOT se comportent comme les
+  groupes de Photoshop — « passer à travers » n'existe pas ici).
+- Une incrustation suit le cadre de la caméra (texte à l'écran de l'export) : **à vérifier** dans Storyboard Pro
+  (calque d'incrustation / « burn-in » du timecode, nom du plan en surimpression).
+- Les valeurs d'ampleur des préréglages (impact, lueur, flash, secousse, vignettage, grain, aberration) sont des choix
+  de SHOT, à régler à l'œil.
+- Pas vu à l'écran dans cette séance (aucun lancement de SHOT, consigne) : fenêtre du préréglage (largeur, placement),
+  icône et cyan dans les trois thèmes, boîte de l'incrustation sur le dessin, aperçu en direct avec un gros dessin.
+
+---------------------------------------------------------------------------------------------------
+
+## 13. Scène 3D de blocage (2026-10-19, branche `scene3d`)
+
+Une vue de plus dans la barre au-dessus du dessin (icône cube, à côté de « Plateau en 3D » ; les deux s'excluent),
+avec ses réglages dans le panneau **Réglages** (qui montre la scène 3D tant qu'elle est ouverte). Tout y est
+en icônes avec bulle (nom, description, raccourci), comme le reste.
+
+- **Commandes** (`scene3d.*`, aucune touche par défaut, toutes dans Ctrl+K) : afficher / quitter, outils
+  (choisir, déplacer, tourner, échelle), ajouter (cube, plan, cylindre, sphère, cône, escalier, mannequin),
+  importer un modèle, dupliquer, supprimer (Suppr y suffit), grouper, dégrouper, vue par la caméra, cadrer,
+  envoyer vers un calque de fond, caler la caméra sur la caméra 2D, aimantation, grille, décor / plan.
+- **Souris dans la vue** : clic = choisir (Maj ou Ctrl : ajouter) ; glisser un objet = le poser sur le sol (Maj :
+  en hauteur) ; poignées du manipulateur pour déplacer, tourner, mettre à l'échelle ; clic droit ou Alt + glisser =
+  tourner la vue ; bouton du milieu = la glisser ; molette = avancer. En « Vue par la caméra », ces gestes
+  déplacent la caméra du plateau. Mêmes gestes que le plateau en 3D (clic droit, milieu, molette).
+- **Annulation** : une étape par geste, au nom français : « Ajouter : cube », « Déplacer dans la scène 3D »,
+  « Tourner dans la scène 3D », « Mettre à l'échelle dans la scène 3D », « Supprimer des objets 3D », « Dupliquer… »,
+  « Grouper… », « Envoyer la scène 3D vers un calque de fond »…
+- **Aucun repaint au repos** : la vue ne demande une image que si on la touche ou si un rendu vers le calque est en
+  cours (toutes les 40 ms, jusqu'à sa fin). Le dessin n'est jamais ralenti : le rendu part sur un autre fil (la moitié
+  des cœurs), et son résultat n'est posé ni pendant un trait, ni pendant un geste dans la vue 3D, ni en lecture.
+- **À vérifier à l'écran (par Anthony)** : lisibilité des poignées et de la boîte de sélection dans les trois
+  thèmes ; le décor estompé quand on modifie le plan ; la taille des poignées à toutes les distances ; le panneau
+  Réglages dans un panneau étroit ; les conventions empruntées aux logiciels 3D (rouge / vert / bleu pour X / Y / Z,
+  flèches / cercles / cubes, tourner au clic droit) **à vérifier** avec ce qu'il attend.

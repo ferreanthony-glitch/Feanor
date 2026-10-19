@@ -29,6 +29,19 @@ pub(crate) enum ClipEdge {
     Move,
     Left,
     Right,
+    /// Effets de l'extrait (`audiofxui.rs`) : poignées des fondus aux coins du haut, clé de volume
+    /// (son rang), croix du fondu enchaîné avec l'extrait suivant.
+    FadeIn,
+    FadeOut,
+    Key(usize),
+    Xfade,
+}
+
+impl ClipEdge {
+    /// Un bord tiré dans le temps (le curseur devient une flèche gauche-droite).
+    pub(crate) fn is_resize(self) -> bool {
+        matches!(self, ClipEdge::Left | ClipEdge::Right | ClipEdge::FadeIn | ClipEdge::FadeOut | ClipEdge::Xfade)
+    }
 }
 
 /// Extrait de son glissé dans la bande de montage.
@@ -56,13 +69,16 @@ pub(crate) enum MenuTarget {
     Ruler,
     /// Le repère d'un commentaire (son id) dans la règle (`commentairesui.rs`).
     Comment(u64),
+    /// Une transition (son id) du montage, ou une coupe entre deux plans (`transitionsui.rs`).
+    Transition(u64),
+    Cut(usize),
 }
 
 impl App {
     // ------------------------------------------------------------------ sortie audio et lecture
 
     /// Sortie audio, ouverte à la première utilisation. `None` : pas de sortie utilisable.
-    fn audio_engine(&mut self) -> Option<&AudioEngine> {
+    pub(crate) fn audio_engine(&mut self) -> Option<&AudioEngine> {
         if self.audio.as_ref().is_some_and(|e| !e.ok()) {
             // Sortie en panne (casque débranché…) : on rouvre la sortie par défaut.
             self.audio = None;
@@ -187,7 +203,7 @@ impl App {
     // ------------------------------------------------------------------ opérations
 
     /// Opération sur les pistes son, avec annulation. `op` renvoie faux si rien n'a changé.
-    fn audio_op(&mut self, op: impl FnOnce(&mut Document) -> bool) -> bool {
+    pub(crate) fn audio_op(&mut self, op: impl FnOnce(&mut Document) -> bool) -> bool {
         self.end_stroke();
         self.playing = false;
         let snap = self.snapshot();
@@ -242,6 +258,12 @@ impl App {
             }
         };
         let start = at.unwrap_or_else(|| self.global_frame());
+        self.place_imported_sound(name, ext, bytes, pcm, track, start);
+    }
+
+    /// Un son lu et décodé entre dans le projet (copié tel quel) et se pose sur une piste : une étape
+    /// d'annulation. Le même chemin pour l'import d'un fichier et pour un bruitage de la bibliothèque.
+    pub(crate) fn place_imported_sound(&mut self, name: String, ext: String, bytes: Vec<u8>, pcm: Pcm, track: Option<usize>, start: usize) {
         let mut clip = None;
         self.audio_op(|d| {
             let sound = d.add_sound(name.clone(), ext, Arc::new(bytes), Arc::new(pcm));
@@ -267,6 +289,10 @@ impl App {
     /// calque vidéo (13k) ; un projet Storyboard Pro ouvre la fenêtre d'import (14a).
     pub(crate) fn handle_dropped_files(&mut self, ctx: &egui::Context) {
         let paths: Vec<_> = ctx.input(|i| i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect());
+        // Lâchés sur le panneau Références : ce sont des références (`referencesui.rs`).
+        if !paths.is_empty() && self.refs_take_drop(ctx, &paths) {
+            return;
+        }
         for path in paths {
             if !self.import_dropped_sboard(&path) && !self.import_dropped_video(&path) {
                 self.import_sound_path(&path, None, None);
@@ -371,10 +397,15 @@ impl App {
         }
         let t = ((p.y - lanes_top) / TRACK_H) as usize;
         let track = self.doc.audio_tracks.get(t)?;
-        let hit = track.clips.iter().find_map(|c| {
+        let hit = track.clips.iter().enumerate().find_map(|(ci, c)| {
             let (x0, x1) = (left + c.start as f32 * ppf, left + c.end() as f32 * ppf);
             if p.x < x0 - 1.0 || p.x > x1 + 1.0 {
                 return None;
+            }
+            // Poignées de fondu, clés de volume, croix du fondu enchaîné (`audiofxui.rs`), avant les bords.
+            let junction = crate::audiofx::junction_frames(&self.doc, track, ci);
+            if let Some(edge) = crate::audiofxui::fx_hit(self.sel_clip == Some(c.id), c, junction, t, p, left, ppf, lanes_top) {
+                return Some((c.id, edge));
             }
             let grip = 5.0f32.min((x1 - x0) / 3.0);
             let edge = if p.x <= x0 + grip {
@@ -391,6 +422,10 @@ impl App {
 
     pub(crate) fn begin_clip_drag(&mut self, id: u64, edge: ClipEdge, origin: Pos2) {
         self.sel_clip = Some(id);
+        self.sfx.key = match edge {
+            ClipEdge::Key(i) => Some((id, i)),
+            _ => None,
+        };
         if self.doc.clip_locked(id) {
             self.status = TRACK_LOCKED.into();
             return;
@@ -418,6 +453,10 @@ impl App {
             self.montage_drag = None;
             return;
         };
+        // Un fondu, une clé de volume, le fondu enchaîné : un geste d'effet (`audiofxui.rs`).
+        if self.update_fx_drag(id, edge, origin, p, ppf, lanes_top, before.clone()) {
+            return;
+        }
         let fps = self.doc.fps;
         let total = self
             .doc
@@ -442,6 +481,8 @@ impl App {
                 let e = (orig.end() as i64 + delta).clamp(orig.start as i64 + 1, max.max(orig.start + 1) as i64) as usize;
                 (t0, orig.start, e, false)
             }
+            // (Les gestes d'effet sont réglés plus haut.)
+            ClipEdge::FadeIn | ClipEdge::FadeOut | ClipEdge::Key(_) | ClipEdge::Xfade => return,
         };
         let last = std::mem::replace(&mut self.doc.audio_tracks, before);
         if !self.doc.set_clip_span(id, track, start, end, keep) {
@@ -459,8 +500,15 @@ impl App {
 
     pub(crate) fn finish_clip_drag(&mut self, d: ClipDrag) {
         if self.doc.audio_tracks != d.before {
+            // Un geste d'effet porte son nom dans l'historique (fondu, clé de volume…).
+            let name = Self::fx_drag_name(d.edge).map(str::to_string);
+            let kept = self.history.context.clone();
+            let before = std::mem::replace(&mut self.history.context, name.or(kept));
             self.history.push(d.snap);
+            self.history.context = before;
             self.modified = true;
+            // Le son refait (égaliseur, écho) est demandé tout de suite.
+            let _ = audio::mix_clips(&self.doc);
         }
     }
 
@@ -473,7 +521,7 @@ impl App {
             let y = lanes_top + t as f32 * TRACK_H;
             let lane = Rect::from_min_max(pos2(r.left(), y + 1.0), pos2(r.right(), y + TRACK_H - 1.0));
             painter.rect_filled(lane, 0.0, theme::rangee_sombre());
-            for clip in &track.clips {
+            for (ci, clip) in track.clips.iter().enumerate() {
                 let cr = Rect::from_min_max(
                     pos2(left + clip.start as f32 * ppf + 0.5, lane.top() + 1.0),
                     pos2(left + clip.end() as f32 * ppf - 0.5, lane.bottom() - 1.0),
@@ -482,14 +530,16 @@ impl App {
                     continue;
                 }
                 let selected = self.sel_clip == Some(clip.id);
-                let fill = match (track.muted, selected) {
+                // (Muette, ou une autre piste en solo : estompée.)
+                let silent = !crate::audiofx::audible(&self.doc, track);
+                let fill = match (silent, selected) {
                     (true, _) => theme::controle(),
                     (false, true) => theme::son_choisi(),
                     (false, false) => theme::son_extrait(),
                 };
                 painter.rect_filled(cr, 3.0, fill);
                 if let Some(sound) = self.doc.sounds.get(&clip.sound) {
-                    let wave = if track.muted {
+                    let wave = if silent {
                         theme::texte_doux()
                     } else {
                         theme::son_onde()
@@ -501,9 +551,13 @@ impl App {
                         Align2::LEFT_TOP,
                         &sound.name,
                         FontId::proportional(10.0),
-                        if track.muted { theme::texte_fort() } else { theme::sur_calque() },
+                        if silent { theme::texte_fort() } else { theme::sur_calque() },
                     );
                 }
+                // Fondus, ligne du volume, clés, croix du fondu enchaîné (`audiofxui.rs`).
+                let junction = crate::audiofx::junction_frames(&self.doc, track, ci);
+                let key = self.sfx.key.filter(|(id, _)| *id == clip.id).map(|(_, i)| i);
+                crate::audiofxui::paint_clip_fx(painter, cr, clip, junction, selected, key, ppf);
                 if selected {
                     painter.rect_stroke(cr, 3.0, Stroke::new(2.0_f32, select), StrokeKind::Inside);
                 }
@@ -522,6 +576,7 @@ impl App {
         let visuals = ui.visuals().clone();
         let painter = ui.painter_at(rect);
         let mut toggle = None;
+        let mut toggle_solo = None;
         for t in 0..n {
             let track = &self.doc.audio_tracks[t];
             let lane = Rect::from_min_size(
@@ -552,11 +607,15 @@ impl App {
                 },
             );
             painter.text(mute.center(), Align2::CENTER_CENTER, "M", FontId::monospace(10.0), if track.muted { Color32::WHITE } else { theme::texte_fort() });
+            // Solo : seules les pistes en solo s'entendent (`audiofx::audible`).
+            let solo = Rect::from_min_size(pos2(mute.right() + 3.0, mute.top()), vec2(18.0, 15.0));
+            painter.rect_filled(solo, 2.0, if track.solo { theme::avertissement() } else { theme::controle_survol() });
+            painter.text(solo.center(), Align2::CENTER_CENTER, "S", FontId::monospace(10.0), if track.solo { Color32::BLACK } else { theme::texte_fort() });
             if track.locked {
                 painter.text(pos2(lane.right() - 6.0, lane.top() + 3.0), Align2::RIGHT_TOP, "🔒", FontId::proportional(11.0), visuals.text_color());
             }
             painter.text(
-                pos2(mute.right() + 6.0, mute.center().y),
+                pos2(solo.right() + 6.0, mute.center().y),
                 Align2::LEFT_CENTER,
                 format!("{:.0} %", track.volume * 100.0),
                 FontId::monospace(10.0),
@@ -564,9 +623,12 @@ impl App {
             );
             let resp = ui
                 .interact(lane, ui.id().with(("piste_son", track.id)), Sense::click())
-                .on_hover_text("M : rendre la piste muette. Clic droit : nom, volume, import, suppression.");
+                .on_hover_text("M : rendre la piste muette. S : solo (seules les pistes en solo s'entendent). Clic droit : nom, volume, import, suppression.");
             if resp.clicked() && resp.interact_pointer_pos().is_some_and(|p| mute.expand(2.0).contains(p)) {
                 toggle = Some(t);
+            }
+            if resp.clicked() && resp.interact_pointer_pos().is_some_and(|p| solo.expand(2.0).contains(p)) {
+                toggle_solo = Some(t);
             }
             resp.context_menu(|ui| self.track_menu(ui, t));
         }
@@ -574,6 +636,9 @@ impl App {
             self.record_step();
             let track = &mut self.doc.audio_tracks[t];
             track.muted = !track.muted;
+        }
+        if let Some(t) = toggle_solo {
+            self.toggle_solo(t);
         }
         rect
     }
@@ -596,6 +661,11 @@ impl App {
         let resp = ui.checkbox(&mut muted, "Piste muette");
         if self.edited(&resp) {
             self.doc.audio_tracks[t].muted = muted;
+        }
+        let mut solo = self.doc.audio_tracks[t].solo;
+        let resp = ui.checkbox(&mut solo, "Piste en solo").on_hover_text("Seules les pistes en solo s'entendent (même muettes).");
+        if self.edited(&resp) {
+            self.doc.audio_tracks[t].solo = solo;
         }
         let mut locked = self.doc.audio_tracks[t].locked;
         let resp = ui.checkbox(&mut locked, "Piste verrouillée").on_hover_text("Ses extraits ne se déplacent, ne se coupent ni ne se suppriment plus.");
@@ -637,6 +707,8 @@ impl App {
                 ui.close_menu();
                 self.delete_clip(id);
             }
+            // Volume, fondus, clés de volume, égaliseur, écho (`audiofxui.rs`).
+            self.clip_fx_menu(ui, id);
             ui.separator();
         }
         if ui.button(format!("Importer un son ici ({})…", timecode(frame, fps))).clicked() {

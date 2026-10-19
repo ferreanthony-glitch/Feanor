@@ -60,7 +60,7 @@ fn sound_tracks_lock_duplicate_and_master_volume() {
     use crate::document::SoundClip;
     let mut doc = Document::new(16, 16, 24);
     doc.add_audio_track();
-    doc.audio_tracks[0].clips.push(SoundClip { id: 900, sound: 1, start: 4, offset: 0, length: 10 });
+    doc.audio_tracks[0].clips.push(SoundClip::new(900, 1, 4, 0, 10));
     assert!(!doc.clip_locked(900));
     doc.audio_tracks[0].locked = true;
     assert!(doc.clip_locked(900));

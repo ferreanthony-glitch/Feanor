@@ -166,7 +166,7 @@ fn wav_mixdown() {
     let path = dir.join("son.wav");
     // Un son constant de 0,5 à gauche et −0,25 à droite, de l'échantillon 100 à 300.
     let pcm = Pcm::from_interleaved(&[0.5, -0.25].repeat(1000), 2, crate::audio::RATE);
-    let clip = MixClip { pcm: Arc::new(pcm), start: 100, offset: 0, len: 200, gain: 1.0 };
+    let clip = MixClip::plain(Arc::new(pcm), 100, 0, 200, 1.0);
     assert!(export::has_sound(std::slice::from_ref(&clip), 0, 150));
     assert!(!export::has_sound(std::slice::from_ref(&clip), 300, 50));
     export::write_wav(&path, vec![clip], 50, 400).unwrap();
@@ -235,7 +235,7 @@ fn video_export_with_ffmpeg_if_installed() {
     let out = dir.join("essai.mp4");
     let wav = dir.join("son.wav");
     let pcm = Pcm::from_interleaved(&[0.3, 0.3].repeat(48_000), 2, crate::audio::RATE);
-    export::write_wav(&wav, vec![MixClip { pcm: Arc::new(pcm), start: 0, offset: 0, len: 48_000, gain: 1.0 }], 0, 48_000).unwrap();
+    export::write_wav(&wav, vec![MixClip::plain(Arc::new(pcm), 0, 0, 48_000, 1.0)], 0, 48_000).unwrap();
     let frames = export::frames_for(&doc, Range::Montage, 0);
     let args = export::video_args(Format::Mp4, &enc, doc.frame, doc.fps, false, Some(&wav), &out).unwrap();
     let mut job = ExportJob::video(&ffmpeg, args, &out, frames, Some(wav.clone())).unwrap();

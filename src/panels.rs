@@ -123,9 +123,12 @@ impl App {
                     }
                     self.action_item(ui, "Une vidéo (calque vidéo)…", "fichier.importer_video");
                     self.action_item(ui, "Une séquence d'images (calque vidéo)…", "fichier.importer_sequence");
+                    self.action_item(ui, "Des images comme références…", "references.importer_image");
+                    self.action_item(ui, "Une vidéo comme référence…", "references.importer_video");
                     self.action_item(ui, "Un modèle 3D (glTF) comme repère…", "fichier.importer_modele3d");
                     ui.separator();
                     self.action_item(ui, "Un projet Storyboard Pro (.sboard)…", "fichier.importer_sboard");
+                    self.action_item(ui, "Un scénario (Fountain, Final Draft, Word, texte)…", "fichier.importer_scenario");
                 });
                 self.action_item(ui, "Exporter…", "fichier.exporter");
                 ui.separator();
@@ -158,6 +161,8 @@ impl App {
             ui.menu_button("Storyboard", |ui| {
                 self.action_item(ui, "Nouveau plan", "panneau.nouveau");
                 self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
+                ui.separator();
+                self.action_item(ui, "Planche de crayonnés…", "storyboard.crayonnes");
                 ui.separator();
                 self.action_item(ui, "Aller à un plan…", "scene.aller_a");
                 self.action_item(ui, "Propriétés du plan", "panneau.proprietes");
@@ -193,6 +198,8 @@ impl App {
                 self.action_item(ui, "Retirer le dessin de la timeline", "dessin.supprimer");
                 ui.separator();
                 ui.menu_button("Images", |ui| self.images_menu(ui));
+                ui.separator();
+                self.action_item(ui, "Colorier par zones…", "calque.colorier_zones");
             });
             ui.menu_button("Affichage", |ui| {
                 // Zoom, rotation, miroir, pelure, table lumineuse : boutons sous le dessin.
@@ -209,6 +216,7 @@ impl App {
                 });
                 ui.menu_button("Plateau", |ui| {
                     self.action_item(ui, "Plateau en 3D", "vue.3d");
+                    self.action_item(ui, "Scène 3D de blocage", "scene3d.basculer");
                     self.action_item(ui, "Vue de dessus (profondeur des calques)", "vue.dessus");
                 });
                 ui.menu_button("Guides", |ui| {
@@ -302,6 +310,11 @@ impl App {
 
     /// Panneau des réglages de l'outil courant.
     pub(crate) fn tool_options_panel(&mut self, ui: &mut egui::Ui) {
+        // La scène 3D de blocage a ses propres réglages (`scene3dui.rs`).
+        if self.scene3d.on && !self.camera_view {
+            self.scene3d_options_panel(ui);
+            return;
+        }
         let vector = self.layer().kind == LayerKind::Vector;
         ui.horizontal(|ui| {
             ui.heading(format!("{}  {}", self.tool.icon(), self.tool.label()));
@@ -669,6 +682,8 @@ impl App {
         // Exporter… et Préférences… (`prefsui.rs`).
         self.export_hub_window(ctx);
         self.preferences_window(ctx);
+        // Suggestions sonores : confirmation d'envoi en ligne, « Modifier », saisie d'une clé.
+        self.suggestions_windows(ctx);
         // À propos de SHOT (`aproposui.rs`).
         self.about_window_ui(ctx);
         // Diagnostic des performances et sa proposition du premier lancement (`diagnosticui.rs`).
@@ -677,6 +692,8 @@ impl App {
         // Écran d'accueil, sans projet ouvert (`accueil.rs`).
         self.welcome_ui(ctx);
         self.new_layer_window(ctx);
+        // Préréglages d'effets (`prereglagesui.rs`).
+        self.effect_dialog_window(ctx);
         self.groups_window_ui(ctx);
         self.properties_window_ui(ctx);
         self.onion_window_ui(ctx);
@@ -684,6 +701,8 @@ impl App {
 
         self.tween_window_ui(ctx);
         self.sb_window_ui(ctx);
+        // Importer un scénario (`scenarioui.rs`).
+        self.scenario_window_ui(ctx);
         self.brush_import_window(ctx);
         self.sb_export_ui(ctx);
         self.smart_rename_window(ctx);

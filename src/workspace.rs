@@ -231,7 +231,11 @@ impl Espace {
     ///   la fiche du plan, le montage en bas).
     /// - Animation : la même, avec la bande (la timeline) plus haute et les calques plus larges.
     /// - Montage : la bande du montage en grand ; ni calques, ni effets, ni réglages de l'outil, ni
-    ///   couleur : seule la fiche du plan reste, pour les textes et les durées.
+    ///   couleur : la fiche du plan reste, pour les textes et les durées, et les bruitages et les
+    ///   suggestions sonores s'ouvrent à droite (on pose les sons dans la bande).
+    ///
+    /// Les Références, l'Historique, les Commentaires et la feuille d'exposition restent à la demande
+    /// partout (barre des panneaux) ; la feuille d'exposition n'existe qu'en animation.
     pub fn defaut(self) -> Layout {
         let standard = Layout::default();
         match self {
@@ -241,6 +245,8 @@ impl Espace {
                 let base = Layout { tools: false, sheet: true, montage_height: 420.0, ..standard };
                 let mut dock = DockLayout::from_legacy(&Layout { sheet: false, ..base.clone() });
                 dock.open(Pane::Sheet);
+                dock.open(Pane::Bruitages);
+                dock.open(Pane::SuggestionsSonores);
                 Layout { panneaux: Some(dock), ..base }
             }
         }

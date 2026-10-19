@@ -215,6 +215,15 @@ pub fn prepare(doc: &Document, title: &str) -> SbOut {
     if muted > 0 {
         out.notes.push(format!("Son : {muted} piste(s) coupée(s) dans SHOT, exportées quand même (et pas coupées dans Storyboard Pro)."));
     }
+    // Transitions et effets des sons (`transitions.rs`, `audiofx.rs`).
+    let zones = crate::transitions::zones(doc).len();
+    if zones > 0 {
+        out.notes.push(format!("Transitions : {zones} transition(s) du montage non reprises (comment Storyboard Pro range les siennes : à vérifier) ; l'export du film les contient."));
+    }
+    let fx_clips = doc.audio_tracks.iter().flat_map(|t| &t.clips).filter(|c| !c.fx.is_default()).count();
+    if fx_clips > 0 {
+        out.notes.push(format!("Son : les effets de {fx_clips} extrait(s) (fondus, volume, clés, égaliseur, écho) sont appliqués dans les fichiers son exportés ; les fondus enchaînés entre extraits ne le sont pas."));
+    }
     out
 }
 
@@ -330,13 +339,16 @@ pub struct Built {
     pub report: BuildReport,
 }
 
-/// Un son à écrire : le son, ses échantillons de `from` à `to`, son gain, et son fichier.
+/// Un son à écrire : le son, ses échantillons de `from` à `to`, son gain, et son fichier. Un extrait
+/// qui a des effets (`audiofx.rs`) arrive déjà refait dans `baked` (fondus, volume, clés, égaliseur,
+/// écho) : Storyboard Pro n'a pas nos effets, il reçoit le son tel qu'on l'entend.
 struct SoundOut {
     pcm: Arc<Pcm>,
     from: usize,
     to: usize,
     gain: f32,
     file: String,
+    baked: Option<Vec<[f32; 2]>>,
 }
 
 fn sounds_of(doc: &Document, out: &SbOut) -> Vec<SoundOut> {
@@ -347,7 +359,8 @@ fn sounds_of(doc: &Document, out: &SbOut) -> Vec<SoundOut> {
             let Some(clip) = track.clips.get(c.clip) else { continue };
             let Some(sound) = doc.sounds.get(&clip.sound) else { continue };
             let (from, len) = crate::export::sample_span(doc.fps, clip.offset, clip.length);
-            v.push(SoundOut { pcm: sound.pcm.clone(), from: from as usize, to: (from + len) as usize, gain: track.volume, file: c.file.clone() });
+            let baked = (!clip.fx.is_default()).then(|| crate::audiofx::bake_clip(doc, clip));
+            v.push(SoundOut { pcm: sound.pcm.clone(), from: from as usize, to: (from + len) as usize, gain: track.volume, file: c.file.clone(), baked });
         }
     }
     v
@@ -358,7 +371,10 @@ fn write_sounds(data: &Path, sounds: &[SoundOut]) -> Result<(), String> {
         std::fs::create_dir_all(data.join("sons")).map_err(|e| format!("dossier des sons impossible ({e})"))?;
     }
     for s in sounds {
-        let mut samples = crate::stretch::slice(&s.pcm, s.from, s.to);
+        let mut samples = match &s.baked {
+            Some(b) => b.clone(),
+            None => crate::stretch::slice(&s.pcm, s.from, s.to),
+        };
         crate::stretch::gain(&mut samples, s.gain);
         let (_, bytes) = crate::stretch::to_sound(&samples);
         let path = data.join(&s.file);

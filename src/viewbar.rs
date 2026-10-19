@@ -150,7 +150,8 @@ impl App {
             self.command_button(ui, ph::SQUARES_FOUR, "vue.planches", "Vue dessin / vignettes", "Dessiner le plan, ou voir toutes ses images de storyboard en planche.", Some(thumbs));
             self.command_button(ui, ph::FRAME_CORNERS, "camera.vue", "Vue à travers la caméra", "Voir ce que filme la caméra du plan.", Some(self.camera_view));
             self.command_button(ui, ph::CUBE_FOCUS, "vue.3d", "Plateau en 3D", "Les calques à leur profondeur, la caméra et le sol, vus en 3D.", Some(in3d));
-            if in3d {
+            self.command_button(ui, ph::CUBE, "scene3d.basculer", "Scène 3D", "Blocage en 3D : formes simples, mannequins, caméra du plateau, envoyés vers un calque de fond.", Some(self.scene3d.on && !self.camera_view));
+            if in3d || (self.scene3d.on && !self.camera_view) {
                 return;
             }
             sep(ui);
@@ -256,6 +257,15 @@ impl App {
             }
             if in3d {
                 self.stage3d_tools(ui);
+                return;
+            }
+            // Scène 3D de blocage et ses outils.
+            let in_scene = self.scene3d.on && !cam;
+            if self.bouton_etat(ui, in_scene, ph::CUBE, "Scène 3D", "Blocage en 3D : formes simples, mannequins, caméra du plateau, envoyés vers un calque de fond.", "scene3d.basculer").clicked() {
+                self.run_action("scene3d.basculer");
+            }
+            if in_scene {
+                self.scene3d_tools(ui);
                 return;
             }
             ui.add_space(6.0);

@@ -340,6 +340,8 @@ voir le plateau dans l'espace, naviguer et y déplacer les objets.
   caméra. Même géométrie que le multiplan (testée).
   Pas encore : modes de fusion dans la vue 3D (tout y est en Normal), repère 3D (glTF) dans la
   vue 3D, échelle et rotation d'un calque dans la vue 3D (outil Transformer en 2D).
+  Placer des objets 3D (formes, mannequins) et en faire un calque de fond : voir plus bas « Scène 3D de
+  blocage » (une vue à part, qui ne remplace pas ce plateau).
 - ✅ 9f. Bascule et panoramique de la caméra (demandés par Anthony) : la caméra tourne sur
   elle-même. Fenêtre de la caméra (Bascule, Panoramique, interpolés entre les clés), vue 3D
   (outil Déplacer, Ctrl + glisser l'œil). Vue caméra, export et vignettes en perspective ; sur le
@@ -822,6 +824,25 @@ ECMAScript 3), elle, est documentée (aide `help/storyboard`). Choix d'Anthony (
 - ✅ Étape e (fusionnée le 2026-10-16, cdb93d2) : « Propager la peinture sur la vidéo… », au clic
   droit sur la ligne d'un calque peint au-dessus d'un calque vidéo (commande `calque.propager`).
   Tout est décrit dans `docs/PROPAGATION.md`.
+
+## Coloriage par zones (2026-10-19, branche `coloriage-zones`)
+
+Propager des aplats de couleur le long d'une animation en retrouvant les mêmes zones fermées ; distinct
+de la propagation EbSynth (rien de généré, de vrais aplats modifiables sous le trait intact).
+
+- ✅ `zones.rs` : découpe en zones fermées (fermeture des trous comme le fond sous le trait, petites
+  zones gardées, bord de l'image fermant, zone sous le trait), voisines, invariants de Hu, cache par
+  version du dessin.
+- ✅ `coloriage.rs` : couleur dominante des zones d'une clé, appariement (hongrois, coûts de position,
+  aire, recouvrement, forme, voisines ; coupures et réunions), propagation depuis la clé d'avant et celle
+  d'après, confiance, zones à vérifier, aplats vectoriels (formes pleines) et bitmap.
+- ✅ `coloriageui.rs` : « Colorier par zones… » (Animation, clic droit des calques, Ctrl+K), fenêtre,
+  tâche en arrière-plan avec « Arrêter », une étape d'annulation, liste des zones à vérifier.
+- ✅ Accroche du « conseiller de couleur » (`ConseillerCouleur`, sans avis aujourd'hui) pour un modèle
+  génératif, plus tard, comme simple indice.
+- ⬜ Aperçu avant de poser (l'annulation en tient lieu), mouvement estimé par flux optique pour les très
+  grands déplacements, transformation de calque différente entre trait et couleur, zones qui fuient par un
+  trou plus large que la fermeture : voir « Limites » dans `docs/COLORIAGE.md`.
 
 ## Passe interface (demandée par Anthony le 2026-10-16, avant 14b)
 
@@ -2176,6 +2197,54 @@ curseur, etc. Le curseur sur la timeline est déplaçable. » Menée sur la bran
 - Pas faits : longueur d'un commentaire (une plage dans la règle) ; réponses à un commentaire ; les
   commentaires ne sont ni exportés (PDF, Storyboard Pro) ni copiés avec des plans copiés ou dupliqués.
 
+## Références visuelles (fenêtre « Références », 2026-10-19) ✅
+
+Un tableau d'images et de vidéos à regarder pendant qu'on dessine, détachable sur un deuxième écran.
+Menée sur la branche `references`.
+
+- ✅ Panneau `Pane::References` (colonne de droite, fermé par défaut, icône dans la barre des
+  panneaux, `vue.references`), détachable (« Dans une fenêtre à part ») avec « Toujours au-dessus »
+  (`ViewportBuilder::with_always_on_top`, puis `ViewportCommand::WindowLevel`).
+- ✅ Ajouter : images PNG / JPEG (copiées telles quelles dans `references/`, sur un autre fil),
+  vidéos (ffmpeg, chemin de `video::start_import`, 1280×720 au plus, images JPEG dans
+  `references/<n>/`), fichiers déposés sur le panneau (`soundtrack::handle_dropped_files` les lui
+  donne s'ils tombent dessus ; fenêtre détachée : ses propres fichiers lâchés), Ctrl+V (réutilise
+  `pasteimage::clipboard_image`), boutons et Fichier > Importer.
+- ✅ Tableau libre : déplacer, zoomer (molette, autour de la souris), déplacer le fond, glisser,
+  agrandir par les coins, tourner par la poignée ronde (Maj : 15°), choix multiple (Maj+clic), grille et
+  liste, recherche (accents et majuscules ignorés) et filtre par étiquette.
+- ✅ Outils de la référence choisie : ajuster, 100 %, miroirs H / V, niveaux de gris (Rec. 709), nom,
+  échelle, rotation, étiquettes ; Alt+clic = pipette vers la couleur courante de SHOT ; vidéo :
+  lecture, image par image, curseur, entrée / sortie, boucle, vitesse, « suivre la tête de lecture »
+  avec décalage (`Clip::follow_index`).
+- ✅ Plans : « Lier au plan courant » (`references.lier_plan`), filtre « références du plan courant »
+  (`references.filtre_plan`). Un plan retiré n'est plus cité ; deux plans réunis réunissent leurs liens.
+- ✅ Rangement sans changer `project::VERSION` (26) : `references.json` (`format` `shot-references`,
+  `version` 1) et dossier `references/`, par `Document::references` / `Structure::references` et
+  `SaveJob` (`references::plan_save` au cliché, `SavePlan::write` / `cleanup` sur le fil d'écriture).
+  Mêmes protections que `commentaires.json` : fichier illisible ou plus récent jamais effacé
+  (`write_sidecar`, `.illisible`), `references/` intact si le fichier n'a pas pu être lu, et un fichier
+  touché pendant la séance n'est jamais effacé (annuler / rétablir une suppression après
+  l'enregistrement le retrouve). Avant le premier enregistrement : dossier temporaire
+  (`Reference::home`), recopié à l'enregistrement et aux copies de secours.
+- ✅ Rapidité : décodage sur deux fils à la définition demandée (128 à 4096 pixels), cache de textures
+  LRU (`references::Lru`) borné à un huitième du « cache de la carte graphique » du diagnostic des
+  performances, définition qui suit le réglage « vignettes » ; trois textures téléversées au plus par
+  image d'écran ; au repos, aucun repaint.
+- ✅ Annulation (`Edit::Structure`) avec des noms français : « Ajouter une référence », « Supprimer la
+  référence », « Déplacer les références », « Redimensionner la référence », « Tourner la référence »,
+  « Retourner la référence », « Lier la référence au plan »…
+- ✅ Tests dans `references_tests.rs` et `fiabilite_annexes_tests.rs` (aller-retour du fichier,
+  fichiers abîmés ou plus récents, nettoyage, import, transformations, plans et filtre, image de
+  vidéo selon tête de lecture / décalage / vitesse / boucle, couleur prise, cache, annulation, panneau
+  dessiné dans ses trois modes). Pas vu à l'écran dans cette séance : à essayer par Anthony.
+- Pas faits : WebP (pas de décodeur dans le programme), GIF animé, séquence d'images comme référence,
+  son des vidéos de référence, texte et flèches sur le tableau, export du tableau, copie des
+  références avec des plans copiés ; un fichier lâché sur la fenêtre principale est une référence si
+  la dernière position de souris connue est sur le panneau (à vérifier à l'écran : si Windows ne la
+  donne pas pendant le glisser, les boutons restent) ; l'extraction d'une vidéo longue garde toutes
+  ses images (de l'espace disque).
+
 ## Boîte de sélection façon Storyboard Pro (demandée par Anthony le 2026-10-18) ✅
 
 La demande : « revoir le système de transformation après sélection pour singer le système de
@@ -2487,6 +2556,29 @@ tableaux et les propositions sont dans **`docs/INTERFACE.md`**. Pas vu à l'écr
   de l'animation (l'unité y est l'image), un rectangle pour les clés d'effets, les 150 infobulles d'egui
   restantes, « Arrière-plan » / « Fond » / « Propriétés du plan ».
 
+## Importer un scénario (demandé par Anthony le 2026-10-19, branche `import-scenario`) ✅
+
+Fichier > Importer > Un scénario… (`fichier.importer_scenario`, aussi dans Ctrl+K) : un scénario devient des
+séquences et des plans, avec leurs textes et une durée estimée. Détail : README, « Importer un scénario ».
+
+- ✅ **Lecture** (`scenario.rs`, `scenariofdx.rs`) : Fountain (intitulés, personnages, parenthèses, V.O.,
+  transitions, dialogues simultanés, notes, cimetière, sections, synopsis, centré, éléments forcés, page de
+  titre), texte brut par heuristiques (majuscules, « NOM : réplique », indentation, numéros de page d'un PDF
+  copié), Final Draft `.fdx` (quick-xml en flux : les espaces entre morceaux de texte comptent), Word `.docx`
+  (`zipread.rs` : par styles de scénario s'il y en a, sinon un paragraphe par ligne). Fichier abîmé : une
+  erreur en français, jamais un plantage (lecture rattrapée en cas de panique).
+- ✅ **Structure** (`scenarioplans.rs`) : intitulé → séquence ; plans par scène (images de storyboard), par
+  paragraphe ou par réplique ; action / dialogue (`NOM (V.O.) (jeu) : réplique`, comme le lit le lecteur de
+  sons) / notes (notes, transitions, synopsis, sections, décor) ; durée = mots ÷ 2,5 par seconde + 1 seconde par
+  ligne de 60 signes, entre 1 et 30 s, réglable ; personnages notés dans les notes du projet.
+- ✅ **Fenêtre** (`scenarioui.rs`) : lecture sur un autre fil avec avancement, aperçu (séquences, plans, durée,
+  personnages, remarques), destination (nouveau projet, fin du projet, après la séquence du plan courant),
+  une seule étape d'annulation « Importer un scénario ».
+- Pas fait : le **PDF** (aucun lecteur de PDF hors connexion ; copier le texte dans un `.txt`, ou exporter en
+  `.fountain`), `.doc` / `.rtf` / `.odt`, glisser le fichier sur la fenêtre, un bouton sur l'accueil, les
+  transitions de montage (autre branche : elles restent des notes), les voix provisoires (la liste des
+  personnages est prête pour elles).
+
 ## Fiabilité : un filet contre « tous les essais passent, SHOT ne s'ouvre plus » (2026-10-19, branche `fiabilite`) ✅
 
 Le point de départ : le 2026-10-18 SHOT ne s'ouvrait plus (`raster.rs:57`, l'aperçu réduit d'un effet lu comme une
@@ -2508,3 +2600,224 @@ feuille entière) alors que 768 essais passaient ; et sur une machine chargée, 
 - Pas fait : la première image dans la vraie fenêtre (eframe, carte graphique, pipelines : à lire dans `demarrage.log`) ;
   `BrushLibrary::builtin()` (74 ms) reste avant la première image ; un son ou un modèle illisible sort du projet et ses
   extraits avec lui à l'enregistrement.
+
+## Transitions, effets sonores et bruitages (demandés par Anthony le 2026-10-19, branche `transitions-son`) ✅
+
+Trois chantiers du montage ; le détail est dans le README (sections « Transitions du montage », « Effets
+sonores », « Bruitages ») et le vocabulaire dans `docs/INTERFACE.md` (partie 8). **Rien n'a été regardé à l'écran dans
+cette séance** (consigne : aucun lancement de SHOT) ; la liste « à vérifier » est en tête de la partie 8.
+
+- ✅ **Transitions** (`transitions.rs`, `transitionsui.rs`) : fondu enchaîné, fondu au noir, fondu au blanc, volet,
+  noir, sur une coupe ou au bord du film. Durée de 12 images, tirée aux bords du nœud ou tapée ; calage centré /
+  finit à la coupe / commence à la coupe. **Temps : la durée du film ne change pas** (le son reste calé) ; les images
+  qui manquent d'un côté sont tenues. Lecture sur la carte graphique (second plan composé à part, posé par
+  l'affichage), export exact (mélange sur le processeur, image par image). `transitions.json`, sans nouvelle
+  version du projet.
+- ✅ **Effets sonores** (`audiofx.rs`, `audiofxui.rs`) : fondus par extrait (poignées aux coins du haut), fondu
+  enchaîné de deux extraits qui se touchent (puissance égale, poignées de son de part et d'autre de la coupe),
+  volume par extrait et par piste, solo, clés de volume (double-clic, glisser, Suppr), égaliseur trois bandes et
+  écho, sans nouvelle bibliothèque. Un seul calcul (`build_mix`) pour la lecture, le défilement, le WAV, la vidéo
+  et l'export vers Storyboard Pro ; le travail lourd hors des fils de l'interface et de la carte son.
+  `effets_son.json`, sans nouvelle version du projet.
+- ✅ **Bruitages** (`bruitages.rs`, `bruitagesui.rs`) : panneau fermé par défaut (`Pane::Bruitages`, icône de la
+  barre des panneaux, `vue.bruitages`), dossiers de l'utilisateur dans `reglages.toml`, parcours et durées sur
+  des fils à part, écoute au clic, glisser vers une piste du montage ou de la timeline, double-clic à la tête de
+  lecture, son copié dans le projet.
+- Pas fait / limites : les poignées du rognage (la réserve) ne fournissent pas d'images vivantes aux transitions
+  (images tenues) ; pas d'aperçu des transitions sans carte graphique (l'export, lui, les contient) ; le volet de
+  l'écran avance sur la largeur du cadre par défaut, pas du cadre d'une caméra qui bouge (l'export est exact) ;
+  les fondus enchaînés entre extraits ne partent pas vers Storyboard Pro ; l'égaliseur et l'écho refont le son
+  de l'extrait entier (un son très long a un petit délai avant d'être entendu avec ses effets) ; un chevauchement
+  d'extraits sur une même piste reste refusé (le fondu enchaîné passe par les poignées de son).
+- À vérifier face à Storyboard Pro et aux logiciels de montage : le calage centré par défaut, le fondu au noir
+  qui passe par la couleur sur une coupe, la courbe linéaire des fondus d'entrée et de sortie, la puissance
+  égale du fondu enchaîné, le solo qui l'emporte sur le muet.
+
+## Génération sonore à partir du storyboard, phase 1 (demandée par Anthony le 2026-10-19, branche `generation-son`)
+
+SHOT lit le storyboard et propose des sons témoins (bruitages, ambiances, musique d'intention, voix des
+dialogues) que l'on accepte, régénère ou supprime. Le détail, le contrat du serveur local et la liste des
+téléchargements de la phase 2 sont dans `docs/GENERATION_SON.md` ; le vocabulaire et le « à vérifier à l'écran » dans
+`docs/INTERFACE.md` (partie 9). **Rien n'a été regardé à l'écran** (consigne : aucun lancement de SHOT) ; aucun
+téléchargement, aucun modèle, aucune requête réseau.
+
+- ✅ **Le modèle et le fichier** (`indications.rs`) : proposition (plan, image, durée, sorte, description française,
+  prompt anglais, réplique / personnage / voix, état, fichier, extrait posé), `sons_proposes.json` sans changer la version
+  du projet, mêmes protections que les autres fichiers annexes (illisible ou plus récent jamais effacé, `.illisible`,
+  écriture atomique), fusion d'une relecture (ne ramène pas une proposition rejetée), état « accepté » qui suit le son posé.
+- ✅ **La lecture** : l'entrée commune (vignette PNG, action / dialogue / notes de la fiche et des images de storyboard,
+  durée, transitions, commentaires) pour tous les fournisseurs (`lecturesb.rs`) ; **lecture par règles sans modèle**
+  (`lecturerules.rs`) : répliques → voix, mots-clés → bruitages / ambiances / musique, consignes « SFX : … » reprises.
+- ✅ **Les fournisseurs** : trois traits (`LecteurStoryboard`, `GenerateurSon`, `GenerateurVoix`), annulation et avancement
+  (`Controle`), tâches sur des fils à part (`generation.rs`) ; client du serveur local en HTTP/1.1 minimal de boucle locale
+  (`httplocal.rs`, `sidecar.rs`) ; requêtes et réponses de Claude, ElevenLabs et Stable Audio (`fournisseursapi.rs`).
+- ✅ **Le panneau** `Pane::SuggestionsSonores` (fermé par défaut, icône de la barre, `vue.suggestions_sonores`,
+  `suggestion.lire`) ; accepter pose le son à la bonne image sur la piste « Sons proposés » (annulable) ; confirmation
+  d'envoi en ligne une fois par projet ; Préférences > Génération sonore (fournisseur de chaque rôle, port local,
+  « Tester », clés, « Tester la connexion »).
+- ✅ **Les clés** dans le Gestionnaire d'identifiants de Windows (`clessecretes.rs`), jamais dans un fichier.
+- ✅ **Phase 2 (branche `sidecar-son`)** : le **serveur local** `sidecar/serveur.py` (FastAPI, `127.0.0.1`, le contrat du §6)
+  avec Kokoro (voix) et Qwen2.5-VL AWQ chargé sans `gptqmodel` (`sidecar/awq.py`) ; lancé, attendu et arrêté par SHOT
+  (`serveurlocal.rs`, sans console, objet de travail Windows) ; Préférences : dossier des modèles, Python, Démarrer / Arrêter /
+  Tester, démarrage automatique. Essayé de bout en bout (voix → prête → accepter ; lecture Qwen). Mesures et manques dans
+  `docs/GENERATION_SON.md` §8.
+- **Pas fait / limites** : **Stable Audio Open n'est pas téléchargé** (licence à accepter par l'utilisateur, `t5-base` et
+  `stable-audio-tools` aussi) : pas de bruitage généré ; Qwen lit à ~4 jetons/s (pas de noyau AWQ) ; l'**envoi HTTPS
+  aux services en ligne est « à brancher »** (aucune caisse TLS hors ligne ; piste : WinHTTP déclaré à la main) ; les
+  adresses et formats des services en ligne sont à vérifier avant le premier appel ; le cache des sons générés n'est pas
+  nettoyé ; une seule génération à la fois ; pas de voix par personnage retenue d'un plan à l'autre (la voix se
+  choisit par proposition ou dans les Préférences) ; la lecture par règles ne connaît que le français.
+- **À vérifier** : les licences de chaque modèle et de chaque service (usage commercial des sons, données envoyées).
+
+## Crayonnés rapides : la planche (demandée par Anthony le 2026-10-19, branche `crayonnes`) ✅
+
+« Crayonnés rapides » (thumbnailing) : une page de petites cases où il enchaîne des croquis très vite, puis
+chaque case devient un plan. Ce n'est pas une vue des plans existants. Mode d'emploi : README, « Crayonnés
+rapides (la planche) » ; boutons et gestes : `docs/INTERFACE.md`, partie 11.
+
+- ✅ **La page** (`crayonnesui.rs`) : prend la place du dessin en storyboard (Storyboard > Planche de
+  crayonnés…, bouton à côté de « Vue vignettes », Ctrl+K > `storyboard.crayonnes`). 4 × 3 cases par page, ou
+  2 × 2, 3 × 2, 4 × 4, 6 × 4 ; plusieurs pages ; toutes au rapport du cadre. Numéro (poignée) et légende sous
+  chaque case ; Tab, Maj+Tab et flèches changent de case ; « case suivante automatique » après une pause
+  (éteinte au départ).
+- ✅ **Dessin sans latence** : crayon (trait vectoriel lisse), pinceau du logiciel (bitmap), gomme (coupe les
+  traits, efface la peinture) ; même moteur (`StrokeState`) que le dessin, aperçu posé dans l'image de la case à
+  chaque point, textures de l'écran mises à jour par tuiles, aucun rejeu du moteur sur le fil de l'interface.
+  Un trait appartient à la case où il commence, coupé à elle. Mesuré sans fenêtre : une page de 24 cases pleines
+  de croquis, 0,7 ms par image d'écran en traçant.
+- ✅ **Choisir, ordonner** : clic sur le numéro (Maj, Ctrl), Maj / Ctrl + appui, « Toutes les cases
+  dessinées » ; glisser le numéro change l'ordre ; clic droit : insérer avant / après, vider, supprimer,
+  reculer, avancer, cocher. Barre : crayon, pinceau, gomme, trois tailles, noir et deux gris, annuler, vider,
+  insérer, supprimer, pages, grille.
+- ✅ **Créer les plans** : après le plan courant ou dans une nouvelle séquence, durée de chaque plan (2 s) ; le
+  dessin va sur un calque « Crayonné » (traits vectoriels mis à l'échelle et coupés à la case, peinture
+  bitmap rééchantillonnée sur un calque à part), la légende dans le texte d'action ; une seule étape
+  d'annulation du projet ; les cases restent sur la page, cochées.
+- ✅ **Fichier** : `crayonnes.json` à côté du manifeste (pas de nouvelle version du format), écrit par le fil
+  d'enregistrement avec les protections de la fiabilité (jamais effacé s'il est illisible ou plus récent,
+  `.illisible` si une planche neuve le remplace, écriture atomique) ; annulation propre à la planche, qui
+  renvoie au projet pour la création des plans.
+- Pas fait : pinceaux texturés dans les cases (leur rejeu en arrière-plan), choisir plusieurs cases au
+  rectangle, glisser des cases d'une page à l'autre (passer par « Reculer / Avancer »), changer le rapport des
+  cases d'une planche déjà dessinée quand le cadre change, vérification à la tablette.
+
+## Calques d'effets et préréglages d'effets (demandés par Anthony le 2026-10-19, branche `calques-effets`) ✅
+
+« Création de calques d'effets après des préréglages d'animation d'effet comme des impact frames, glows, tremblements
+de caméra effectifs, timecode… ». Mode d'emploi : README (section du même nom) ; vocabulaire : `docs/INTERFACE.md`,
+partie 12 ; mesures : `docs/PERFORMANCE.md`, partie 10.
+
+- ✅ **Calque d'effet** (`calqueffet.rs`, `Layer::effet`) : un calque de la pile sans dessin. **Ajustement** : sa pile
+  d'effets (clés comprises) agit sur tout ce qui est dessous dans le plan, papier compris, ou dans son dossier ;
+  aux images où il a une exposition (un dessin vide tenu : la timeline l'étire et le coupe comme un dessin) ; œil,
+  opacité et mode de fusion du calque. **Incrustation** (`incrustation.rs`) : timecode HH:MM:SS:IM à la cadence du
+  projet (entière), numéro d'image, nom du plan ou de la séquence, titre, date, texte libre ; neuf places, taille,
+  couleur, boîte, « Seulement à l'écran / à l'export » ; gravée dans l'export, tracée avec les contours de l'outil Texte.
+- ✅ **Rendu** : le plan porte un repère (`FondPart::Reglage`) que l'écran remplace, avec ce qu'il couvre, par un dessin
+  dérivé (composition d'en dessous → effets → fusion), demandé au fil de fond (`fxcache::Job::base`) et jamais calculé
+  sur le fil de l'interface ; calcul bloquant et exact à l'export ; carte graphique et processeur composent le même
+  dessin. Aperçu d'un calque d'effet limité à 1 million de pixels (feuille 4K : le quart de la résolution).
+- ✅ **Sept effets « Cinéma »** (`fxcine.rs`) dans la pile d'effets (aussi sur un calque de dessin) : Flash, Image
+  d'impact (négatif, noir et blanc, postérisé, teinte, éclat de rayons et lignes de vitesse par graine), Lueur diffuse,
+  Secousse de l'image (décalage, rotation, zoom, flou de bougé), Vignettage, Grain de film (change à chaque image),
+  Aberration chromatique.
+- ✅ **Dix préréglages** (`prereglages.rs`, `prereglagesui.rs`) : image d'impact, lueur (pulsation), flash blanc, flash de
+  couleur, tremblement de l'image (mêmes générateurs de bruit que les effets de caméra, bornés par l'intensité), vignettage,
+  grain, aberration chromatique, flou de vitesse, timecode et incrustations. Une fenêtre par préréglage (intensité,
+  durée, couleur, graine, réglages propres) avec **aperçu en direct** sur le dessin, une étape d'annulation aux noms
+  français, « sur le calque courant » ou « nouveau calque d'effet », « dans tous les plans » pour ce qui dure jusqu'à la fin.
+- ✅ **Où** : bouton étincelle du panneau Calques, Calques > Nouveau calque > Calque d'effet (et clics droits), « Préréglages »
+  du panneau Effets, Ctrl+K (13 actions `effet.*`, sans touche). Étincelle et cyan dans le panneau Calques, la timeline
+  et le montage.
+- ✅ **Format 27** (voir `project.rs`) : `calque_effet` d'un calque ; sept sortes d'effets de plus. Anciens projets lus
+  tels quels. Projet d'essai de la fiabilité complété (un ajustement à clés, une incrustation réglée à fond).
+- Vérifié par 64 essais de plus (`fxcine_tests`, `calqueffet_tests`, `incrustation_tests`, `prereglages_tests`,
+  `prereglagesui_tests`) et deux mesures ignorées (`effetsperf_tests`) : 51 images/s au fil de fond en aperçu, 0,00 ms
+  sur le fil de l'interface.
+- Pas fait / à décider : calculer les effets dans le seul cadre de la caméra (gain d'un facteur 3 à 4 à l'export) ; fusionner
+  les calques avec un calque d'effet (refusé, avec un message) ; incrustations dans le PDF, le HTML et les vignettes ;
+  choix de la police de l'incrustation dans l'interface (le champ existe et s'enregistre) ; sélection flottante sous un
+  calque d'effet (l'effet attend la fin du geste). À vérifier à l'écran : voir `docs/INTERFACE.md`, partie 12.
+
+## Scène 3D de blocage (demandée par Anthony le 2026-10-19, branche `scene3d`) ✅
+
+Le choix d'Anthony : **blocage simple** — des formes (cube, plan, cylindre, sphère, escalier), les déplacer, les
+tourner, les mettre à l'échelle ; la caméra du plan dans la scène ; des silhouettes de personnages ; puis dessiner
+par-dessus. Pas d'édition de sommets. Vue **Scène 3D** (bouton de la barre au-dessus du dessin, menu Affichage >
+Plateau, action `scene3d.basculer`), réglages dans le panneau Réglages. Code : `scene3d*.rs` (huit fichiers), essais
+`scene3d_tests.rs`. Pas vu sur l'écran d'Anthony : captures faites avec le banc d'essai (voir plus bas), à regarder.
+
+- ✅ **Le modèle** (`scene3d.rs`). Chaque **plan** a sa scène : ses objets (personnages, accessoires), sa caméra du
+  plateau, sa lumière, son style de rendu. Chaque **séquence** peut avoir un **décor** : une liste d'objets que tous
+  ses plans montrent (case « Montrer le décor de la séquence » ; le plan qu'on modifie estompe le décor, et
+  « Modifier : le décor » inverse). On place un décor une fois ; chaque plan y pose ses personnages et sa caméra ;
+  changer le décor le change dans tous les plans qui l'utilisent. Un modèle importé (`.pelure3d`, glTF) est un objet
+  de plus (`Shape3d::Model`).
+- ✅ **Formes** : cube, plan (sol ou mur), cylindre, sphère, cône, escalier (nombre de marches réglable, 2 à 40),
+  **mannequin** (capsules articulées, 10 articulations : colonne, tête, épaules, coudes, hanches, genoux ; taille
+  réglable ; poses *debout, assis, marche, bras levés* ; une articulation touchée rend la pose « libre » ; les pieds
+  sont toujours au sol). Mètres, Y vers le haut, un personnage regarde vers +Z. Nom, couleur, ombrage gris par objet,
+  cacher, verrouiller, grouper (un groupe se choisit et se manie d'un bloc), dupliquer, supprimer.
+- ✅ **Vue d'édition sur la carte graphique** (`scene3dgpu.rs`, wgpu) : un appel de dessin par objet sur un maillage
+  gardé dans la carte (déplacer un objet n'envoie qu'une matrice de 176 octets), tampon de profondeur, lissage 4×,
+  coque de contour, arêtes vives, sol quadrillé, une lumière réglable (direction, force, ambiante). Tourner : clic
+  droit ou Alt + glisser ; glisser la vue : bouton du milieu ; avancer : molette ; **Cadrer**.
+- ✅ **Manipulateurs** (`scene3dgizmo.rs`) : Choisir, Déplacer (flèches et carrés de plan), Tourner (trois cercles),
+  Échelle (cubes d'axe et cube central, uniforme si plusieurs objets). Repère du monde ou de l'objet. Un objet se
+  tire directement sur le sol (Maj : en hauteur). Boîte de sélection en pointillés avec ses petits carrés d'angle,
+  comme celle du dessin. **Aimantation** : grille (pas réglable, 0,25 m), rotations par paliers (15°), tailles, et
+  pose sur le sol quand l'objet en est à moins de 15 cm. Champs numériques (position, rotation, taille, articulation)
+  dans les Réglages. **Annulation** : chaque geste est une étape au nom français (« Déplacer dans la scène 3D »,
+  « Ajouter : mannequin », « Grouper des objets 3D »…).
+- ✅ **Caméra du plateau** (`SceneCam`) : une caméra posée dans la scène, avec sa pyramide de vision tracée ; on la
+  choisit et on la déplace ou la tourne avec les mêmes poignées ; **Vue par la caméra** montre ce qu'elle filme au
+  format du cadre (et déplace alors la caméra elle-même : milieu = glisser, clic droit = tourner, molette = avancer).
+  Focale en mm sur une pellicule de 36 mm, avec la liste des objectifs de la caméra du plan (`FOCAL_PRESETS`), même
+  angle de champ que `camera::angle_of_view`. **Choix : une caméra à part, liée à la caméra 2D par une conversion
+  exacte, pas fusionnée avec elle.** Convention : le plan z = 0 de la scène est la feuille (le plan de référence) et
+  le cadre par défaut y mesure 6 m de large (`PLATE_WIDTH_M`) ; « Caler sur la caméra du plan » (`SceneCam::
+  from_plan_camera`) pose la scène-caméra là où la caméra 2D est à l'image courante (position, focale, panoramique,
+  bascule, rotation) — essai : les coins du cadre vus par l'une retombent sur ceux de l'autre, caméras droite,
+  zoomée, avancée, tournée, basculée, en panoramique. Pourquoi à part : la caméra 2D bouge pendant le plan (clés,
+  adoucis) au-dessus d'un fond qui, lui, est une image fixe ; fusionner les deux ferait appliquer le mouvement deux
+  fois. **Clés de caméra en 3D : pas faites** (la caméra du plateau est fixe pour tout le plan ; les clés de la
+  caméra 2D continuent de la faire bouger par-dessus le fond rendu). À reprendre si Anthony veut des travellings
+  filmés dans la scène : il faudrait rendre une image par image, ou la scène par la caméra 2D.
+- ✅ **Dessiner par-dessus** (`scene3drender.rs`) : « Envoyer vers un calque de fond » rend la scène par la caméra du
+  plateau dans un calque bitmap « Fond 3D », **tout en bas du plan et verrouillé**, à la taille de la feuille (le cadre
+  seul, ou toute la feuille au choix : la caméra 2D peut alors s'éloigner sans sortir du rendu). Styles : couleurs,
+  **niveaux de gris**, **contours** (aplats clairs et traits noirs sur silhouettes, cassures et profondeurs). Le
+  calque suit la scène (« Suivre ») : rendu sur un **autre fil** (la moitié des cœurs, sur-échantillonnage 2 à 3), posé
+  seulement quand on ne dessine pas (ni trait, ni geste dans la vue 3D, ni lecture), jeté s'il est périmé. Rien ne
+  tourne au repos et aucune image n'est demandée. C'est un calque ordinaire : il s'enregistre en PNG, s'exporte, se
+  copie. Le rendu vient du processeur (déterministe, indépendant de la carte graphique) avec les mêmes formules que la
+  vue d'édition (essai : mêmes silhouettes à moins de 0,5 %).
+- ✅ **Enregistrement** : `scenes3d.json` à côté du manifeste (`scene3dstore.rs`), écrit par le même `SaveJob`
+  (atomique, sur le disque), **sans changer `project::VERSION`** (resté à 26) : une version qui ne le connaît pas ouvre
+  le projet sans la scène, le calque « Fond 3D » étant un dessin ordinaire — au lieu de refuser le projet. Protections
+  de `docs/FIABILITE.md` : fichier d'une version plus récente ou abîmé = avertissement, jamais effacé, mis de côté en
+  `.illisible` si une scène neuve est à écrire ; valeurs bornées à la lecture (nombre d'objets, marches, tailles,
+  articulations, numéros doubles renumérotés). Les modèles importés qu'une scène montre sont gardés dans `modeles/`.
+  Le projet d'essai de la fiabilité contient une scène (aller-retour par les trois chemins d'enregistrement, fumée,
+  fichiers coupés et mutés).
+- ✅ **Essais** : 38 (`scene3d_tests.rs`, dont un qui passe par la carte graphique de la machine, sauté s'il n'y en a
+  pas) et la suite complète passe (1114 essais, `scripts\verifier.ps1 -Repetitions 2` : OK, compilation sans
+  avertissement) : nombre de sommets et normales des formes, mannequin (hauteur, pieds au sol,
+  poses, articulations), transformations et manipulateurs, aimantation, caméra et cadrage face à la caméra 2D,
+  taille et alignement du rendu vers un calque, aller-retour et protections du fichier, annulation, application sans
+  fenêtre (envoi, suivi, attente quand on est occupé, repos), carte graphique contre processeur. Un banc `#[ignore]`
+  (`perf_100_primitives`) et des captures (`images_of_the_scene_views`, `SHOT_SCENE3D_IMAGE=<dossier>`).
+- ✅ **Mesures** (`perf_100_primitives`, 100 formes de toutes sortes, carte graphique de la machine de développement) :
+  vue d'édition **1,9 ms** par image d'application entière (3,7 ms au plus), repos atteint en 6 images ; maillages
+  construits en 0,5 ms ; rendu vers un calque 1920 × 1080 en **102 ms** (sur-échantillonnage 2), toute la feuille
+  3840 × 2160 en **202 ms**, sur un autre fil.
+- Pas fait : pas d'édition de sommets ni de modèle à plusieurs matières ; pas de clés de caméra 3D (voir plus haut) ;
+  les scènes ne suivent pas un plan qu'on duplique, coupe ou assemble (la scène reste au plan d'origine) ; pas
+  d'ombres portées ni de textures ; pas de poses animées du mannequin ; un modèle importé de plus de 400 000 triangles
+  s'affiche en boîte dans la vue d'édition (le rendu vers un calque le trace en entier) ; pas de raccourci par défaut
+  (aucune touche choisie ; W / E / R pour déplacer / tourner / échelle sont l'usage de plusieurs logiciels 3D, **à
+  vérifier** avant de les adopter).
+- Conventions empruntées à d'autres logiciels, **à vérifier** : rouge / vert / bleu pour X / Y / Z ; flèches pour
+  déplacer, cercles pour tourner, cubes pour l'échelle ; tourner la vue au clic droit et la glisser au bouton du
+  milieu (comme le plateau en 3D) ; Alt + glisser pour tourner ; rotation en degrés dans l'ordre lacet, tangage,
+  roulis (Y, X, Z) ; focale équivalente sur pellicule de 36 mm (celle de la caméra 2D).

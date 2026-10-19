@@ -280,8 +280,14 @@ fn gamma_from_linear_rgb(rgb: vec3<f32>) -> vec3<f32> {
 // En réduisant fort (vignette, vue très éloignée), une seule lecture par pixel d'écran sauterait
 // des pixels de l'image et les traits fins disparaîtraient : on moyenne n×n lectures réparties
 // sur ce que couvre le pixel (n selon la réduction, 8 au plus).
+// Transitions (`transitions.rs`) : params.x est l'opacité de l'image posée ; params.y le mode
+// (1 : image, 0 : aplat de gris params.z, par exemple le noir d'un fondu au noir, 2 : volet, l'image
+// ne se voit qu'à gauche de la colonne params.z de la feuille). Une image seule : x = 1, y = 1.
 @fragment
 fn fs_display(v: VOut) -> @location(0) vec4<f32> {
+    if (item.params.y < 0.5) {
+        return vec4<f32>(vec3<f32>(item.params.z), 1.0) * item.params.x;
+    }
     let dx = dpdx(v.uv);
     let dy = dpdy(v.uv);
     let size = vec2<f32>(textureDimensions(tex));
@@ -295,7 +301,11 @@ fn fs_display(v: VOut) -> @location(0) vec4<f32> {
         }
     }
     let lin = acc / f32(n * n);
-    return vec4<f32>(gamma_from_linear_rgb(lin.rgb), lin.a);
+    // (Le volet écarte les pixels après les dérivées : elles se calculent en flot uniforme.)
+    if (item.params.y > 1.5 && v.uv.x > item.params.z) {
+        discard;
+    }
+    return vec4<f32>(gamma_from_linear_rgb(lin.rgb), lin.a) * item.params.x;
 }
 "#;
 
@@ -443,6 +453,8 @@ struct CanvasResources {
     /// Compositions faites depuis le début (celles qu'une image composée gardée évite ne comptent pas).
     composes: u64,
     frame: Option<Frame>,
+    /// Le second plan d'une transition (fondu enchaîné, volet), composé à part ; créé à la demande.
+    frame2: Option<Frame>,
     tick: u64,
 }
 
@@ -644,11 +656,17 @@ impl GpuCanvas {
             copies: 0,
             composes: 0,
             frame: None,
+            frame2: None,
             tick: 0,
         });
         Self {
             render_state: rs.clone(),
         }
+    }
+
+    /// L'état de rendu partagé avec eframe (la scène 3D y installe ses propres ressources).
+    pub fn render_state(&self) -> &RenderState {
+        &self.render_state
     }
 
     /// La mémoire visée pour les textures des dessins (un Go d'ordinaire ; les Préférences et le
@@ -844,45 +862,9 @@ impl GpuCanvas {
         }
         // Image composée à la taille du projet.
         if res.frame.as_ref().is_none_or(|f| f.size != size) {
-            let texture = rs.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("image composée"),
-                size: extent(size.0, size.1),
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: FRAME_FORMAT,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::COPY_SRC,
-                view_formats: &[wgpu::TextureFormat::Rgba8UnormSrgb],
-            });
-            let target = texture.create_view(&Default::default());
-            let srgb = texture.create_view(&wgpu::TextureViewDescriptor {
-                format: Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-                ..Default::default()
-            });
-            let display_group = texture_group(&rs.device, &res.texture_layout, &srgb, &res.smooth);
-            let backdrop = rs.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("fond des modes de fusion"),
-                size: extent(size.0, size.1),
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: FRAME_FORMAT,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            });
-            let backdrop_group =
-                texture_group(&rs.device, &res.texture_layout, &backdrop.create_view(&Default::default()), &res.nearest);
-            res.frame = Some(Frame {
-                size,
-                texture,
-                target,
-                display_group,
-                backdrop,
-                backdrop_group,
-                composed: None,
-            });
+            res.frame = Some(make_frame(&rs.device, &res.texture_layout, &res.smooth, &res.nearest, size));
+            // (Celle de la transition suit la taille : elle est refaite à la demande.)
+            res.frame2 = None;
         }
         resolved
     }
@@ -901,6 +883,61 @@ impl GpuCanvas {
         rect: Rect,
         stage: [usize; 2],
     ) -> egui::PaintCallback {
+        self.paint_mix(MixLayer { plan, resolved, corners, ws }, None, None, rect, stage)
+    }
+
+    /// Comme `paint`, avec une transition (`transitions.rs`) : `first` est le plan montré (le plan
+    /// sortant s'il y en a deux), `second` le plan entrant d'un fondu enchaîné ou d'un volet (composé
+    /// à part, avec sa propre caméra), `mix` dit comment les poser l'un sur l'autre, et la couche de
+    /// couleur d'un fondu au noir ou au blanc.
+    /// Tout est fait par l'affichage : deux images posées l'une sur l'autre, sans recomposer.
+    pub fn paint_mix(&self, first: MixLayer, second: Option<MixLayer>, mix: Option<&DisplayMix>, rect: Rect, stage: [usize; 2]) -> egui::PaintCallback {
+        let mut items = self.gpu_items(first.plan, first.resolved, stage);
+        let split = items.len();
+        if let Some(s) = &second {
+            items.extend(self.gpu_items(s.plan, s.resolved, stage));
+        }
+        // w ramenés autour de 1 (une homographie vaut à un facteur positif près).
+        let norm = |ws: Option<[f32; 4]>| {
+            ws.map(|w| {
+                let m = w.iter().fold(0.0_f32, |m, v| m.max(v.abs())).max(1e-12);
+                w.map(|v| {
+                    let v = v / m;
+                    if v.abs() < 1e-6 { 1e-6_f32.copysign(v) } else { v }
+                })
+            })
+        };
+        // Afficher : positions en points ; elles passent en coordonnées de l'écran entier au moment
+        // du dessin (taille exacte en pixels), pour tomber sur les mêmes pixels que l'ancien affichage.
+        let uv = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
+        let quad = |layer: &MixLayer, second: bool, params: [f32; 3]| Show {
+            screen: std::array::from_fn(|i| [layer.corners[i].x, layer.corners[i].y, uv[i][0], uv[i][1]]),
+            ws: norm(layer.ws),
+            params,
+            second,
+        };
+        let mut shows = Vec::new();
+        match (&second, mix) {
+            (Some(s), Some(m)) => {
+                // Le plan sortant (`first`) d'abord, l'entrant par-dessus (poids `m`, ou volet).
+                shows.push(quad(&first, false, [1.0, 1.0, 0.0]));
+                if m.wipe {
+                    shows.push(quad(s, true, [1.0, 2.0, m.wipe_u[0] + m.m.clamp(0.0, 1.0) * (m.wipe_u[1] - m.wipe_u[0])]));
+                } else {
+                    shows.push(quad(s, true, [m.m.clamp(0.0, 1.0), 1.0, 0.0]));
+                }
+            }
+            _ => shows.push(quad(&first, false, [1.0, 1.0, 0.0])),
+        }
+        if let Some(m) = mix.filter(|m| m.k > 0.0) {
+            // La couche de couleur : un aplat sur la feuille, d'opacité `k`.
+            shows.push(quad(&first, false, [m.k.clamp(0.0, 1.0), 0.0, m.grey]));
+        }
+        egui_wgpu::Callback::new_paint_callback(rect, CanvasPaint { items, split, shows })
+    }
+
+    /// Les éléments à composer pour un plan : papier, puis un par dessin (voir `paint`).
+    fn gpu_items(&self, plan: &Plan, resolved: &[Option<CelId>], stage: [usize; 2]) -> Vec<GpuItem> {
         // Composer : l'image entière, en coordonnées normalisées.
         let full = [[-1.0, 1.0, 0.0, 0.0], [1.0, 1.0, 1.0, 0.0], [1.0, -1.0, 1.0, 1.0], [-1.0, -1.0, 0.0, 1.0]];
         let (w, h) = (stage[0] as f32, stage[1] as f32);
@@ -991,20 +1028,30 @@ impl GpuCanvas {
                 mesh,
             });
         }
-        // Afficher : positions en points ; elles passent en coordonnées de l'écran entier au moment
-        // du dessin (taille exacte en pixels), pour tomber sur les mêmes pixels que l'ancien affichage.
-        let uv = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
-        let screen = std::array::from_fn(|i| [corners[i].x, corners[i].y, uv[i][0], uv[i][1]]);
-        // w ramenés autour de 1 (une homographie vaut à un facteur positif près).
-        let ws = ws.map(|w| {
-            let m = w.iter().fold(0.0_f32, |m, v| m.max(v.abs())).max(1e-12);
-            w.map(|v| {
-                let v = v / m;
-                if v.abs() < 1e-6 { 1e-6_f32.copysign(v) } else { v }
-            })
-        });
-        egui_wgpu::Callback::new_paint_callback(rect, CanvasPaint { items, screen, ws })
+        items
     }
+}
+
+/// Un plan à montrer : ses éléments (`Plan`), leurs textures (`GpuCanvas::sync`), et où est la
+/// feuille à l'écran (coins en points, avec leur w si la vue est en perspective).
+pub struct MixLayer<'a> {
+    pub plan: &'a Plan,
+    pub resolved: &'a [Option<CelId>],
+    pub corners: [Pos2; 4],
+    pub ws: Option<[f32; 4]>,
+}
+
+/// Comment poser les images d'une transition à l'écran (voir `GpuCanvas::paint_mix`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DisplayMix {
+    pub wipe: bool,
+    /// Poids du plan entrant (ou avancée du volet), de 0 à 1.
+    pub m: f32,
+    /// Couche de couleur : gris (0 noir, 1 blanc) et opacité.
+    pub grey: f32,
+    pub k: f32,
+    /// Colonnes de la feuille (0 à 1) où le cadre filmé commence et finit : le volet y avance.
+    pub wipe_u: [f32; 2],
 }
 
 /// Un dessin à envoyer d'avance à la carte graphique : un dessin du projet (`cel` rien), ou un
@@ -1071,13 +1118,71 @@ fn compose_pass<'a>(encoder: &'a mut wgpu::CommandEncoder, target: &'a wgpu::Tex
     })
 }
 
-struct CanvasPaint {
-    /// Ce qu'on compose, du fond vers le dessus.
-    items: Vec<GpuItem>,
+/// Une image composée posée à l'écran (une, ou deux avec une couche pour une transition).
+struct Show {
     /// Coins de l'image à l'écran, en points.
     screen: [[f32; 4]; 4],
     /// Leur w, en perspective.
     ws: Option<[f32; 4]>,
+    /// Opacité, mode et réglage de `fs_display` (voir le shader).
+    params: [f32; 3],
+    /// L'image du second plan d'une transition, au lieu de la première.
+    second: bool,
+}
+
+struct CanvasPaint {
+    /// Ce qu'on compose, du fond vers le dessus : les éléments du premier plan, puis ceux du second
+    /// (à partir de `split`).
+    items: Vec<GpuItem>,
+    split: usize,
+    /// Ce qu'on pose à l'écran, dans l'ordre.
+    shows: Vec<Show>,
+}
+
+/// Compose les éléments `span` de `items` dans `frame` (effacée d'abord). Un calque en mode de
+/// fusion lit ce qui est déjà composé : on le copie à part avant (fin de passe, copie, nouvelle
+/// passe).
+fn compose_span(encoder: &mut wgpu::CommandEncoder, res: &CanvasResources, frame: &Frame, items: &[GpuItem], ranges: &[Option<std::ops::Range<u32>>], span: std::ops::Range<usize>) {
+    let stride = res.stride as usize;
+    let mut pass = compose_pass(encoder, &frame.target, true);
+    for i in span {
+        let item = &items[i];
+        let group = match item.cel {
+            None => &res.white,
+            Some(id) => match res.textures.get(&id) {
+                Some(t) => &t.bind_group,
+                None => continue,
+            },
+        };
+        // (Une feuille posée par un maillage sans rien à dessiner : rien.)
+        let meshed = item.mesh.is_some();
+        let range = ranges[i].clone();
+        if meshed && range.is_none() {
+            continue;
+        }
+        if item.blend != 0 {
+            drop(pass);
+            encoder.copy_texture_to_texture(frame.texture.as_image_copy(), frame.backdrop.as_image_copy(), extent(frame.size.0, frame.size.1));
+            pass = compose_pass(encoder, &frame.target, false);
+            pass.set_bind_group(2, &frame.backdrop_group, &[]);
+        }
+        pass.set_pipeline(match (item.blend != 0, meshed) {
+            (false, false) => &res.compose,
+            (false, true) => &res.compose_mesh,
+            (true, false) => &res.blend,
+            (true, true) => &res.blend_mesh,
+        });
+        pass.set_bind_group(0, &res.uniform_group, &[(i * stride) as u32]);
+        pass.set_bind_group(1, group, &[]);
+        match range {
+            Some(range) => {
+                let Some((buffer, _)) = &res.mesh_vertices else { continue };
+                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.draw(range, 0..1);
+            }
+            None => pass.draw(0..6, 0..1),
+        }
+    }
 }
 
 fn put_item(bytes: &mut [u8], corners: &[[f32; 4]; 4], color: &[f32; 4], params: &[f32; 4]) {
@@ -1097,7 +1202,7 @@ impl CallbackTrait for CanvasPaint {
     ) -> Vec<wgpu::CommandBuffer> {
         let Some(res) = resources.get_mut::<CanvasResources>() else { return Vec::new() };
         // Les réglages des dessins à composer, puis ceux de l'affichage (en dernier).
-        let n = self.items.len() as u64 + 1;
+        let n = (self.items.len() + self.shows.len()) as u64;
         if n > res.uniform_capacity {
             let capacity = n.next_power_of_two();
             let (buffer, group) = uniform_buffer(device, &res.uniform_layout, res.stride, capacity);
@@ -1112,20 +1217,32 @@ impl CallbackTrait for CanvasPaint {
         }
         let [w, h] = screen.size_in_pixels.map(|v| v.max(1) as f32);
         let ppp = screen.pixels_per_point;
-        let on_screen = self.screen.map(|c| [c[0] * ppp / w * 2.0 - 1.0, 1.0 - c[1] * ppp / h * 2.0, c[2], c[3]]);
-        let (ws, persp) = match self.ws {
-            Some(w) => (w, 1.0),
-            None => ([0.0; 4], 0.0),
-        };
-        put_item(&mut bytes[self.items.len() * stride..], &on_screen, &ws, &[1.0, 1.0, 0.0, persp]);
+        for (k, show) in self.shows.iter().enumerate() {
+            let on_screen = show.screen.map(|c| [c[0] * ppp / w * 2.0 - 1.0, 1.0 - c[1] * ppp / h * 2.0, c[2], c[3]]);
+            let (ws, persp) = match show.ws {
+                Some(w) => (w, 1.0),
+                None => ([0.0; 4], 0.0),
+            };
+            put_item(&mut bytes[(self.items.len() + k) * stride..], &on_screen, &ws, &[show.params[0], show.params[1], show.params[2], persp]);
+        }
         queue.write_buffer(&res.uniforms, 0, &bytes);
 
         // L'image composée est gardée : si rien de ce qui la fait n'a changé depuis la dernière fois
         // (mêmes dessins aux mêmes versions, mêmes places, opacités et modes), elle est telle quelle ;
         // seul l'affichage (la vue, le zoom) est refait. Souris qui bouge, panneaux qui s'animent,
-        // curseur : la pile de calques n'est plus recomposée à chaque image d'écran.
+        // curseur : la pile de calques n'est plus recomposée à chaque image d'écran. Le second plan
+        // d'une transition a la sienne, gardée de même (le plan tenu d'un fondu ne se recompose pas).
         let keys: Vec<ItemKey> = self.items.iter().map(|item| ItemKey::of(item, item.cel.and_then(|id| res.textures.get(&id)).map(|t| t.generation))).collect();
-        if res.frame.as_ref().is_some_and(|f| f.composed.as_deref() == Some(&keys[..])) {
+        let (keys1, keys2) = keys.split_at(self.split.min(keys.len()));
+        let two = self.shows.iter().any(|s| s.second);
+        if two && res.frame2.as_ref().map(|f| f.size) != res.frame.as_ref().map(|f| f.size) {
+            if let Some(size) = res.frame.as_ref().map(|f| f.size) {
+                res.frame2 = Some(make_frame(device, &res.texture_layout, &res.smooth, &res.nearest, size));
+            }
+        }
+        let fresh1 = !res.frame.as_ref().is_some_and(|f| f.composed.as_deref() == Some(keys1));
+        let fresh2 = two && !res.frame2.as_ref().is_some_and(|f| f.composed.as_deref() == Some(keys2));
+        if !fresh1 && !fresh2 {
             return Vec::new();
         }
 
@@ -1159,70 +1276,76 @@ impl CallbackTrait for CanvasPaint {
             }
         }
 
-        // Composer dans l'image à la taille du projet. Un calque en mode de fusion lit ce qui est
-        // déjà composé : on le copie à part avant (fin de passe, copie, nouvelle passe).
-        let Some(frame) = &res.frame else { return Vec::new() };
-        let mut pass = compose_pass(encoder, &frame.target, true);
-        for (i, item) in self.items.iter().enumerate() {
-            let group = match item.cel {
-                None => &res.white,
-                Some(id) => match res.textures.get(&id) {
-                    Some(t) => &t.bind_group,
-                    None => continue,
-                },
-            };
-            // (Une feuille posée par un maillage sans rien à dessiner : rien.)
-            let meshed = item.mesh.is_some();
-            let range = ranges[i].clone();
-            if meshed && range.is_none() {
-                continue;
-            }
-            if item.blend != 0 {
-                drop(pass);
-                encoder.copy_texture_to_texture(
-                    frame.texture.as_image_copy(),
-                    frame.backdrop.as_image_copy(),
-                    extent(frame.size.0, frame.size.1),
-                );
-                pass = compose_pass(encoder, &frame.target, false);
-                pass.set_bind_group(2, &frame.backdrop_group, &[]);
-            }
-            pass.set_pipeline(match (item.blend != 0, meshed) {
-                (false, false) => &res.compose,
-                (false, true) => &res.compose_mesh,
-                (true, false) => &res.blend,
-                (true, true) => &res.blend_mesh,
-            });
-            pass.set_bind_group(0, &res.uniform_group, &[(i * stride) as u32]);
-            pass.set_bind_group(1, group, &[]);
-            match range {
-                Some(range) => {
-                    let Some((buffer, _)) = &res.mesh_vertices else { continue };
-                    pass.set_vertex_buffer(0, buffer.slice(..));
-                    pass.draw(range, 0..1);
-                }
-                None => pass.draw(0..6, 0..1),
+        // Composer dans l'image à la taille du projet (et dans celle du second plan d'une transition).
+        let split = self.split.min(self.items.len());
+        if fresh1 {
+            let Some(frame) = &res.frame else { return Vec::new() };
+            compose_span(encoder, res, frame, &self.items, &ranges, 0..split);
+            res.composes += 1;
+        }
+        if fresh2 {
+            let Some(frame) = &res.frame2 else { return Vec::new() };
+            compose_span(encoder, res, frame, &self.items, &ranges, split..self.items.len());
+            res.composes += 1;
+        }
+        if fresh1 {
+            if let Some(frame) = res.frame.as_mut() {
+                frame.composed = Some(keys1.to_vec());
             }
         }
-        drop(pass);
-        res.composes += 1;
-        if let Some(frame) = res.frame.as_mut() {
-            frame.composed = Some(keys);
+        if fresh2 {
+            if let Some(frame) = res.frame2.as_mut() {
+                frame.composed = Some(keys2.to_vec());
+            }
         }
         Vec::new()
     }
 
     fn paint(&self, info: egui::PaintCallbackInfo, pass: &mut wgpu::RenderPass<'static>, resources: &CallbackResources) {
         let Some(res) = resources.get::<CanvasResources>() else { return };
-        let Some(frame) = &res.frame else { return };
         // Tout l'écran comme repère (la zone d'affichage reste la limite, par le découpage d'egui).
         let [w, h] = info.screen_size_px;
         pass.set_viewport(0.0, 0.0, w as f32, h as f32, 0.0, 1.0);
         pass.set_pipeline(&res.display);
-        pass.set_bind_group(0, &res.uniform_group, &[(self.items.len() as u64 * res.stride) as u32]);
-        pass.set_bind_group(1, &frame.display_group, &[]);
-        pass.draw(0..6, 0..1);
+        for (k, show) in self.shows.iter().enumerate() {
+            let Some(frame) = (if show.second { &res.frame2 } else { &res.frame }) else { continue };
+            pass.set_bind_group(0, &res.uniform_group, &[((self.items.len() + k) as u64 * res.stride) as u32]);
+            pass.set_bind_group(1, &frame.display_group, &[]);
+            pass.draw(0..6, 0..1);
+        }
     }
+}
+
+/// Une image composée neuve, à la taille du projet.
+fn make_frame(device: &wgpu::Device, texture_layout: &wgpu::BindGroupLayout, smooth: &wgpu::Sampler, nearest: &wgpu::Sampler, size: (u32, u32)) -> Frame {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("image composée"),
+        size: extent(size.0, size.1),
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: FRAME_FORMAT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[wgpu::TextureFormat::Rgba8UnormSrgb],
+    });
+    let target = texture.create_view(&Default::default());
+    let srgb = texture.create_view(&wgpu::TextureViewDescriptor {
+        format: Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+        ..Default::default()
+    });
+    let display_group = texture_group(device, texture_layout, &srgb, smooth);
+    let backdrop = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("fond des modes de fusion"),
+        size: extent(size.0, size.1),
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: FRAME_FORMAT,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let backdrop_group = texture_group(device, texture_layout, &backdrop.create_view(&Default::default()), nearest);
+    Frame { size, texture, target, display_group, backdrop, backdrop_group, composed: None }
 }
 
 fn extent(width: u32, height: u32) -> wgpu::Extent3d {

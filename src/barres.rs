@@ -181,6 +181,16 @@ pub(crate) const MONTAGE: &[Cmd] = &[
         false,
         1,
     ),
+    // Une transition à la coupe la plus proche de la tête de lecture (`transitionsui.rs`) ; le clic
+    // droit sur une coupe, dans la bande, en choisit la sorte.
+    bouton(
+        "transition.ajouter",
+        ph::GRADIENT,
+        "Ajouter une transition",
+        "À la coupe la plus proche de la tête de lecture : un fondu enchaîné entre deux plans, un fondu au noir au bord du film. Clic droit sur une coupe pour choisir la sorte.",
+        false,
+        1,
+    ),
     bouton("son.importer", ph::MUSIC_NOTES_PLUS, "Importer un son", "WAV, MP3, FLAC ou OGG, à l'image courante ; on peut aussi lâcher le fichier sur la fenêtre.", true, 2),
     menu("son", ph::SPEAKER_HIGH, "Son", "Pistes son, son au défilement et pendant la lecture.", true, 2),
     bouton(
@@ -208,6 +218,15 @@ pub(crate) const MONTAGE: &[Cmd] = &[
         "Vue vignettes",
         "Toutes les images de storyboard en planche : le début de chaque plan, puis ses marques d'image.",
         "vue.planches",
+        true,
+        5,
+    ),
+    // Crayonnés rapides : une page de petites cases à dessiner d'un trait, qui deviennent des plans.
+    etat(
+        "storyboard.crayonnes",
+        ph::NOTE_PENCIL,
+        "Planche de crayonnés",
+        "Une page de petites cases où enchaîner des croquis très vite ; chaque case devient un plan.",
         true,
         5,
     ),
@@ -577,6 +596,7 @@ impl App {
             }
             "vue.dessin" => v.etat = Some(self.board_view == BoardView::Scene),
             "vue.vignettes" => v.etat = Some(self.board_view == BoardView::Panels),
+            "storyboard.crayonnes" => v.etat = Some(self.crayonnes_shown()),
             "marque.basculer" => v.etat = Some(self.panel().marks.iter().any(|m| m.frame == self.cur_frame)),
             "camera.cle_debut" => v.icone = format!("|{}", ph::DIAMOND),
             "camera.cle_fin" => v.icone = format!("{}|", ph::DIAMOND),

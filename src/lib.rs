@@ -40,6 +40,43 @@ mod app;
 mod audio;
 #[cfg(test)]
 mod audio_tests;
+// Effets sonores des extraits et des pistes : fondus, enchaîné, volume, égaliseur, écho, solo.
+mod audiofx;
+#[cfg(test)]
+mod audiofx_tests;
+mod audiofxui;
+// Bibliothèque de bruitages (panneau Bruitages) : dossiers, recherche, écoute, pose dans le montage.
+mod bruitages;
+#[cfg(test)]
+mod bruitages_tests;
+mod bruitagesui;
+// Sons proposés par la lecture du storyboard (panneau Suggestions sonores) : le modèle d'une
+// proposition et son fichier, la lecture (par règles ou par un modèle), les fournisseurs locaux et en
+// ligne, les tâches, l'interface et les Préférences.
+mod base64;
+#[cfg(test)]
+mod base64_tests;
+mod clessecretes;
+mod fournisseurs;
+mod fournisseursapi;
+#[cfg(test)]
+mod fournisseurs_tests;
+mod generation;
+mod genprefsui;
+mod genreglages;
+mod httplocal;
+mod indications;
+#[cfg(test)]
+mod indications_tests;
+mod lecturerules;
+mod lecturesb;
+mod serveurlocal;
+#[cfg(test)]
+mod serveurlocal_tests;
+mod sidecar;
+mod suggestionsui;
+#[cfg(test)]
+mod suggestions_tests;
 mod barrepanneaux;
 #[cfg(test)]
 mod barrepanneaux_tests;
@@ -137,11 +174,18 @@ mod clescommun_tests;
 mod clesmulti_tests;
 #[cfg(test)]
 mod multiall_tests;
+mod zones;
+#[cfg(test)]
+mod zones_tests;
 mod zoombande;
 #[cfg(test)]
 mod zoombande_tests;
 mod camtools;
 mod canvas;
+mod crayonnes;
+#[cfg(test)]
+mod crayonnes_tests;
+mod crayonnesui;
 #[cfg(test)]
 mod color_tests;
 mod commentaires;
@@ -247,6 +291,24 @@ mod fxfilters_tests;
 mod fxwarp;
 #[cfg(test)]
 mod fxwarp_tests;
+// Calques d'effets et préréglages d'effets (impact frame, lueur, flash, secousse, timecode…).
+mod fxcine;
+#[cfg(test)]
+mod fxcine_tests;
+mod calqueffet;
+#[cfg(test)]
+mod calqueffet_tests;
+mod incrustation;
+#[cfg(test)]
+mod incrustation_tests;
+mod prereglages;
+#[cfg(test)]
+mod prereglages_tests;
+mod prereglagesui;
+#[cfg(test)]
+mod prereglagesui_tests;
+#[cfg(test)]
+mod effetsperf_tests;
 mod tremblement;
 #[cfg(test)]
 mod tremblement_tests;
@@ -300,6 +362,10 @@ mod keymap_tests;
 mod ops_tests;
 mod model3d;
 mod montagekeys;
+mod references;
+#[cfg(test)]
+mod references_tests;
+mod referencesui;
 mod rognage;
 #[cfg(test)]
 mod rognage_tests;
@@ -364,6 +430,10 @@ mod pixtools;
 #[cfg(test)]
 mod plans_tests;
 mod project;
+mod coloriage;
+#[cfg(test)]
+mod coloriage_tests;
+mod coloriageui;
 mod propager;
 #[cfg(test)]
 mod propager_tests;
@@ -406,6 +476,12 @@ mod rolesui;
 mod roue;
 #[cfg(test)]
 mod roue_tests;
+mod scenario;
+mod scenariofdx;
+mod scenarioplans;
+mod scenarioui;
+#[cfg(test)]
+mod scenario_tests;
 #[cfg(test)]
 mod scenelayer_tests;
 mod selbox;
@@ -418,6 +494,11 @@ mod shapes;
 mod shapes_tests;
 mod shapetools;
 mod soundtrack;
+// Transitions du montage (fondus, volet, noir) : modèle, rendu, interface.
+mod transitions;
+#[cfg(test)]
+mod transitions_tests;
+mod transitionsui;
 mod text;
 #[cfg(test)]
 mod text_tests;
@@ -429,6 +510,20 @@ mod stage3d;
 #[cfg(test)]
 mod stage3d_tests;
 mod stage3dui;
+// Scène 3D de blocage (`docs/ROADMAP.md`, « Scène 3D ») : modèle, maths, maillages, rendu par le
+// processeur (envoi vers un calque), rendu par la carte graphique (vue d'édition), enregistrement,
+// interface.
+mod scene3d;
+mod scene3dgizmo;
+mod scene3dgpu;
+mod scene3dmath;
+mod scene3dmesh;
+mod scene3drender;
+mod scene3dstore;
+mod scene3dui;
+mod scene3dview;
+#[cfg(test)]
+mod scene3d_tests;
 #[cfg(test)]
 mod stage_tests;
 mod storyboard;

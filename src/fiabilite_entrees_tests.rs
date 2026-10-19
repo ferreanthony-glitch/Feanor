@@ -45,6 +45,7 @@ fn the_fixture_really_holds_everything_the_project_can_store() {
     );
     assert!(d.panels.iter().any(|p| p.camera.len() > 5), "clés de caméra, avec un effet de caméra posé");
     assert!(d.panels.iter().any(|p| p.ref3d.is_some()) && !d.models.is_empty(), "repère 3D");
+    assert!(d.scenes3d.plans.values().any(|p| p.objects.len() >= 8 && p.objects.iter().any(|o| o.group.is_some())) && !d.scenes3d.decors.is_empty(), "scène 3D de blocage avec son décor");
     assert!(d.panels.iter().any(|p| !p.marks.is_empty()), "marques d'image");
     assert!(d.panels.iter().any(|p| p.color.is_some()), "couleur de plan");
     assert!(d.panels.iter().any(|p| !p.cues.bookmarks.is_empty() && !p.cues.notes.is_empty()), "signets et notes dessinées");
@@ -52,6 +53,17 @@ fn the_fixture_really_holds_everything_the_project_can_store() {
     assert!(d.comments.len() >= 3 && rangés >= 2, "commentaires, dont deux rangés dans la réserve d'un plan rogné");
     assert!(d.reserves.values().any(|r| r.head.len > 0 && r.tail.len > 0), "plan rogné des deux côtés, avec sa réserve");
     assert!(!d.sounds.is_empty() && d.audio_tracks.len() >= 2, "son sur deux pistes");
+    assert!(d.audio_tracks.iter().flat_map(|t| &t.clips).any(|c| !c.fx.is_default() && !c.fx.keys.is_empty() && !c.fx.is_dry()) && d.audio_tracks.iter().any(|t| t.solo), "effets des sons et solo");
+    assert!(d.transitions.len() >= 4 && d.transitions.iter().any(|t| t.out.is_none()) && d.transitions.iter().any(|t| t.inn.is_none()), "transitions : au bord du film et entre deux plans");
+    assert!(!d.sons_proposes.indications.is_empty() && d.sons_proposes.envoi_en_ligne_confirme, "sons proposés (suggestions sonores)");
+    assert!(
+        d.references.len() >= 2 && d.references.iter().any(|r| r.is_video()) && d.references.iter().any(|r| !r.plans.is_empty() && !r.tags.is_empty()),
+        "références visuelles : une image étiquetée et liée, une vidéo"
+    );
+    assert!(
+        d.crayonnes.cases.len() >= 24 && d.crayonnes.cases.iter().any(|c| c.has_ink()) && d.crayonnes.cases.iter().any(|c| c.has_paint() && c.used) && d.crayonnes.cases.iter().any(|c| !c.caption.is_empty() && !c.has_drawing()),
+        "planche de crayonnés : traits, case peinte et cochée, légende seule"
+    );
     assert!(!d.guides.is_empty() && !d.board.strokes.is_empty() && !d.board.texts.is_empty(), "guides et notes de la planche");
     assert!(d.storyboard_locked && d.start_frame != 1 && d.master_volume != 1.0, "réglages du projet");
     let _ = std::fs::remove_dir_all(&travail);
@@ -80,6 +92,11 @@ fn the_comparison_notices_a_difference() {
         ("réserve", Box::new(|d| d.reserves.values_mut().next().expect("réserve").head.len += 1)),
         ("propriété", Box::new(|d| d.properties.copyright.clear())),
         ("effet", Box::new(|d| d.panels[0].layers[2].fx[0].values[0] += 1.0)),
+        ("référence", Box::new(|d| d.references[0].rotation += 1.0)),
+        ("lecture d'une vidéo de référence", Box::new(|d| d.references[1].video.as_mut().expect("vidéo").speed += 0.25)),
+        ("son proposé", Box::new(|d| d.sons_proposes.indications[0].description.push('!'))),
+        ("légende d'une case de crayonné", Box::new(|d| d.crayonnes.cases[0].caption.push('!'))),
+        ("coche d'une case de crayonné", Box::new(|d| d.crayonnes.cases[13].used = true)),
     ];
     let mut f = projet_complet(&travail);
     let sans = f.sans_pixels.clone();
@@ -264,6 +281,7 @@ fn sidecars_with_random_values_changed_never_crash_the_reader() {
     let (_f, manifeste) = projet_enregistre("fuzz-annexes");
     muter_fichier(&manifeste, crate::commentaires::FILE, 40, 12);
     muter_fichier(&manifeste, crate::rognage::FILE, 40, 13);
+    muter_fichier(&manifeste, crate::scene3dstore::FILE, 40, 14);
 }
 
 /// Coupe le manifeste en 120 endroits : toujours un refus clair (jamais un plantage).
@@ -284,7 +302,7 @@ fn a_truncated_manifest_is_always_a_clear_refusal() {
     }
     // Les fichiers annexes coupés n'empêchent pas d'ouvrir le projet.
     std::fs::write(&manifeste, &original).expect("écriture");
-    for fichier in [crate::commentaires::FILE, crate::rognage::FILE] {
+    for fichier in [crate::commentaires::FILE, crate::rognage::FILE, crate::scene3dstore::FILE] {
         let chemin = racine(&manifeste).join(fichier);
         let octets = std::fs::read(&chemin).expect("annexe");
         for _ in 0..25 {

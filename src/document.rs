@@ -324,6 +324,10 @@ pub struct Layer {
     /// Fond sous le trait (`fond.rs`) : chaque dessin du calque a un fond déduit de son trait,
     /// sous lui ; rien : pas de fond.
     pub fond: Option<crate::fond::FondReglages>,
+    /// Calque d'effet (`calqueffet.rs`) : pas de dessin, une pile d'effets pour tout ce qui est
+    /// dessous (ajustement) ou du texte sur l'image finale (incrustation) ; ses images sont ses
+    /// expositions.
+    pub effet: Option<crate::calqueffet::CalqueEffet>,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -389,6 +393,7 @@ impl Layer {
             ctg: None,
             video: None,
             fond: None,
+            effet: None,
         }
     }
 
@@ -400,7 +405,7 @@ impl Layer {
     /// On peut dessiner sur le calque : ni verrouillé, ni de position verrouillée (13b), et ce
     /// n'est pas un dossier.
     pub fn drawable(&self) -> bool {
-        !self.locked && !self.position_locked && !self.folder
+        !self.locked && !self.position_locked && !self.folder && self.effet.is_none()
     }
 
     /// Plus proche que ça, le calque serait derrière la caméra.
@@ -787,9 +792,16 @@ pub struct SoundClip {
     /// Images sautées au début du son (extrait raccourci par la gauche).
     pub offset: usize,
     pub length: usize,
+    /// Fondus, volume, clés de volume, égaliseur, écho (`audiofx.rs`).
+    pub fx: crate::audiofx::ClipFx,
 }
 
 impl SoundClip {
+    /// Un extrait sans effet.
+    pub fn new(id: u64, sound: u64, start: usize, offset: usize, length: usize) -> SoundClip {
+        SoundClip { id, sound, start, offset, length, fx: Default::default() }
+    }
+
     pub fn end(&self) -> usize {
         self.start + self.length
     }
@@ -801,6 +813,8 @@ pub struct AudioTrack {
     pub id: u64,
     pub name: String,
     pub muted: bool,
+    /// Solo : quand une piste au moins l'est, seules les pistes en solo s'entendent (`audiofx::audible`).
+    pub solo: bool,
     /// Gain linéaire (1 = inchangé).
     pub volume: f32,
     pub clips: Vec<SoundClip>,
@@ -838,12 +852,19 @@ pub struct Structure {
     /// Storyboard verrouillé (13e) et propriétés du projet.
     pub storyboard_locked: bool,
     pub properties: Properties,
+    /// Scènes 3D de blocage, par plan, et décors par séquence (`scene3d.rs`) : une étape
+    /// d'annulation les rétablit avec le reste.
+    pub scenes3d: crate::scene3d::Scenes3d,
     /// Commentaires sur la timeline (`commentaires.rs`) : une étape d'annulation les rétablit avec
     /// le reste.
     pub comments: Vec<crate::commentaires::Comment>,
     /// Ce que le rognage a mis de côté, par numéro de plan (`rognage.rs`) : l'annulation le
     /// rétablit avec le reste.
     pub reserves: std::collections::BTreeMap<u64, crate::rognage::Reserve>,
+    /// Transitions du montage (`transitions.rs`) : l'annulation les rétablit avec le reste.
+    pub transitions: Vec<crate::transitions::Transition>,
+    /// Références visuelles (`references.rs`) : ajouter, retirer, déplacer s'annulent avec le reste.
+    pub references: Vec<crate::references::Reference>,
 }
 
 pub struct Document {
@@ -885,12 +906,27 @@ pub struct Document {
     pub storyboard_locked: bool,
     /// Propriétés du projet (13e).
     pub properties: Properties,
+    /// Scènes 3D de blocage (`scene3d.rs`) ; enregistrées à côté du manifeste, dans `scenes3d.json`.
+    pub scenes3d: crate::scene3d::Scenes3d,
     /// Commentaires sur la timeline, rangés par plan (`commentaires.rs`) ; enregistrés à côté du
     /// manifeste, dans `commentaires.json`.
     pub comments: Vec<crate::commentaires::Comment>,
     /// Contenu rogné hors des plans, rangé par numéro de plan (`rognage.rs`) ; enregistré à côté du
     /// manifeste, dans `rognages.json`.
     pub reserves: std::collections::BTreeMap<u64, crate::rognage::Reserve>,
+    /// Transitions du montage, rangées par coupe (`transitions.rs`) ; enregistrées à côté du
+    /// manifeste, dans `transitions.json`.
+    pub transitions: Vec<crate::transitions::Transition>,
+    /// Sons proposés par la lecture du storyboard (`indications.rs`) ; enregistrés à côté du
+    /// manifeste, dans `sons_proposes.json`. Hors de l'annulation.
+    pub sons_proposes: crate::indications::SonsProposes,
+    /// Références visuelles du projet (`references.rs`) ; enregistrées à côté du manifeste, dans
+    /// `references.json`, leurs fichiers dans `references/`.
+    pub references: Vec<crate::references::Reference>,
+    /// La planche de crayonnés rapides (`crayonnes.rs`) : des cases de croquis qui deviennent des
+    /// plans. Hors de `Structure` (elle a sa propre annulation) ; enregistrée à côté du manifeste,
+    /// dans `crayonnes.json`.
+    pub(crate) crayonnes: crate::crayonnes::Planche,
     next_id: u64,
 }
 
@@ -932,8 +968,13 @@ impl Document {
             master_volume: 1.0,
             storyboard_locked: false,
             properties: Properties::default(),
+            scenes3d: Default::default(),
             comments: Vec::new(),
             reserves: Default::default(),
+            transitions: Vec::new(),
+            sons_proposes: Default::default(),
+            references: Vec::new(),
+            crayonnes: Default::default(),
             next_id: 1,
         };
         let seq = doc.new_sequence();
@@ -960,6 +1001,8 @@ impl Document {
             .chain(structure.audio_tracks.iter().map(|t| t.id))
             .chain(structure.audio_tracks.iter().flat_map(|t| t.clips.iter().map(|c| c.id)))
             .chain(structure.comments.iter().map(|c| c.id))
+            .chain(structure.transitions.iter().map(|t| t.id))
+            .chain(structure.references.iter().map(|r| r.id))
             .chain(cels.keys().copied())
             .chain(sounds.keys().copied())
             .max()
@@ -986,8 +1029,13 @@ impl Document {
             master_volume: structure.master_volume,
             storyboard_locked: structure.storyboard_locked,
             properties: structure.properties,
+            scenes3d: structure.scenes3d,
             comments: structure.comments,
             reserves: structure.reserves,
+            transitions: structure.transitions,
+            sons_proposes: Default::default(),
+            references: structure.references,
+            crayonnes: Default::default(),
             next_id: max_id + 1,
         };
         doc.normalize();
@@ -1161,8 +1209,11 @@ impl Document {
             master_volume: self.master_volume,
             storyboard_locked: self.storyboard_locked,
             properties: self.properties.clone(),
+            scenes3d: self.scenes3d.clone(),
             comments: self.comments.clone(),
             reserves: self.reserves.clone(),
+            transitions: self.transitions.clone(),
+            references: self.references.clone(),
         }
     }
 
@@ -1189,8 +1240,11 @@ impl Document {
             master_volume: std::mem::replace(&mut self.master_volume, s.master_volume),
             storyboard_locked: std::mem::replace(&mut self.storyboard_locked, s.storyboard_locked),
             properties: std::mem::replace(&mut self.properties, s.properties),
+            scenes3d: std::mem::replace(&mut self.scenes3d, s.scenes3d),
             comments: std::mem::replace(&mut self.comments, s.comments),
             reserves: std::mem::replace(&mut self.reserves, s.reserves),
+            transitions: std::mem::replace(&mut self.transitions, s.transitions),
+            references: std::mem::replace(&mut self.references, s.references),
         }
     }
 
@@ -1378,6 +1432,10 @@ impl Document {
         self.sequences.retain(|q| seq_order.contains(&q.id));
         // Un plan retiré emporte ses commentaires (l'annulation les ramène avec lui).
         self.prune_comments();
+        // Une transition dont un plan a disparu part avec lui (`transitions.rs`).
+        self.prune_transitions();
+        // Les références liées à un plan retiré ne le sont plus (elles restent sur le tableau).
+        self.prune_references();
     }
 
     // ---------------------------------------------------------------- opérations de montage
@@ -1669,6 +1727,7 @@ impl Document {
         let a_len = self.panels[index].frame_count();
         // Les commentaires du suivant suivent ses images.
         self.rehome_comments(next.id, self.panels[index].id, next_len, a_len);
+        self.rehome_references(next.id, self.panels[index].id);
         let a = &mut self.panels[index];
         a.camera = camera::join_keys(&a.camera, a_len, cam_a, &next.camera, next_len, cam_b);
         // Les calques de toute la scène sont déjà dans le premier : seuls les autres se suivent,
@@ -1749,6 +1808,9 @@ impl Document {
         let (above, below) = (panel.layers[layer].clone(), panel.layers[layer - 1].clone());
         if above.folder || below.folder {
             return Err("Un dossier ne se fusionne pas : fusionne ses calques.".into());
+        }
+        if above.effet.is_some() || below.effet.is_some() {
+            return Err("Un calque d'effet ne se fusionne pas : il agit sur tout ce qui est dessous.".into());
         }
         if !above.visible || !below.visible {
             return Err("Affiche les deux calques avant de les fusionner.".into());
@@ -1852,6 +1914,12 @@ impl Document {
         let id = self.alloc();
         self.cels.insert(id, cel);
         id
+    }
+
+    /// Insère des plans faits ailleurs (chacun dans sa propre scène, déjà créée) à la place `at`
+    /// des plans (`crayonnes.rs`). Renvoie le rang du premier.
+    pub(crate) fn insert_plans(&mut self, at: usize, panels: Vec<Panel>) -> usize {
+        self.insert_and_normalize(at, panels)
     }
 
     fn insert_and_normalize(&mut self, at: usize, panels: Vec<Panel>) -> usize {
@@ -2081,6 +2149,7 @@ impl Document {
         let b_len = b.frame_count();
         // Les commentaires de `b` suivent ses images, au bout du plan.
         self.rehome_comments(b.id, self.panels[index].id, b_len, a_len);
+        self.rehome_references(b.id, self.panels[index].id);
         let a = &mut self.panels[index];
 
         // Caméra : chaque partie tient sa caméra jusqu'à ses bords.
@@ -2629,6 +2698,7 @@ impl Document {
             id,
             name: format!("Son {n}"),
             muted: false,
+            solo: false,
             volume: 1.0,
             clips: Vec::new(),
             locked: false,
@@ -2700,13 +2770,7 @@ impl Document {
             });
         let id = self.alloc();
         let clips = &mut self.audio_tracks[t].clips;
-        clips.push(SoundClip {
-            id,
-            sound,
-            start,
-            offset: 0,
-            length,
-        });
+        clips.push(SoundClip::new(id, sound, start, 0, length));
         clips.sort_by_key(|c| c.start);
         Some(id)
     }
@@ -2720,7 +2784,7 @@ impl Document {
         }
         let id = self.alloc();
         let clips = &mut self.audio_tracks[track].clips;
-        clips.push(SoundClip { id, sound, start, offset, length: length.max(1) });
+        clips.push(SoundClip::new(id, sound, start, offset, length.max(1)));
         clips.sort_by_key(|c| c.start);
         Some(id)
     }
@@ -2744,15 +2808,31 @@ impl Document {
         }
         let right_id = self.alloc();
         let cut = at - clip.start;
-        let right = SoundClip {
+        let mut right = SoundClip {
             id: right_id,
             sound: clip.sound,
             start: at,
             offset: clip.offset + cut,
             length: clip.length - cut,
+            fx: clip.fx.clone(),
         };
+        // Les effets suivent la coupe : volume, égaliseur et écho aux deux ; le fondu d'entrée reste
+        // à gauche, celui de sortie et l'enchaîné avec le suivant passent à droite ; les clés de volume
+        // se partagent (chaque morceau garde la valeur de la courbe à la coupe).
+        let cut_t = cut as f32;
+        let at_cut = clip.fx.key_gain(cut_t);
+        let has_keys = !clip.fx.keys.is_empty();
+        right.fx.fade_in = 0;
         let clips = &mut self.audio_tracks[t].clips;
         clips[c].length = cut;
+        clips[c].fx.fade_out = 0;
+        clips[c].fx.xfade = 0;
+        if has_keys {
+            clips[c].fx.keys.retain(|k| k.t < cut_t);
+            clips[c].fx.set_key(cut_t, at_cut);
+            right.fx.keys = clip.fx.keys.iter().filter(|k| k.t > cut_t).map(|k| crate::audiofx::VolumeKey { t: k.t - cut_t, v: k.v }).collect();
+            right.fx.set_key(0.0, at_cut);
+        }
         clips.insert(c + 1, right);
         Some(right_id)
     }
@@ -2781,6 +2861,24 @@ impl Document {
             return false;
         }
         let mut moved = self.audio_tracks[t].clips.remove(c);
+        // Une poignée de bord découvre ou cache du son sans le bouger : les clés de volume restent
+        // sous les mêmes images du son (leur temps est compté depuis le début de l'extrait).
+        let shift = start as f32 - moved.start as f32;
+        if !keep_offset && shift != 0.0 && !moved.fx.keys.is_empty() {
+            let lead = moved.fx.key_gain(shift.max(0.0));
+            for k in &mut moved.fx.keys {
+                k.t -= shift;
+            }
+            if shift > 0.0 {
+                // Les clés qui passent avant le nouveau début sortent ; la courbe garde alors la
+                // valeur qu'elle avait là, par une clé au bord.
+                let n = moved.fx.keys.len();
+                moved.fx.keys.retain(|k| k.t > 0.0);
+                if moved.fx.keys.len() < n && moved.fx.keys.first().is_none_or(|k| k.t > 0.0) {
+                    moved.fx.set_key(0.0, lead);
+                }
+            }
+        }
         moved.start = start;
         moved.length = end - start;
         moved.offset = offset as usize;
