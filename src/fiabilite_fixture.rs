@@ -7,7 +7,8 @@
 //! toucher) ; le « fond sous le trait » (réglages du calque, strate peinte et coupe d'un dessin) ;
 //! des effets de calque avec clés (flou, bruit, teinte-saturation, tremblement du trait), dont un
 //! éteint ; un mode de fusion, de l'opacité, une transformation, de la profondeur ; un dossier de
-//! calques et un de ses calques ; un calque CTG ; un calque vidéo (dix images PNG minuscules
+//! calques et un de ses calques ; un calque CTG ; des calques d'effets (un ajustement à clés et une
+//! incrustation, format 27) ; un calque vidéo (dix images PNG minuscules
 //! fabriquées sur disque) ; des rôles d'images, des noms d'instance, des marques de couleur ; une
 //! caméra à clés avec adoucis, un effet de caméra posé (explosion) et un repère 3D (un cube) ;
 //! des marques d'image, des signets, des points d'entrée et de sortie, des notes dessinées, la
@@ -266,7 +267,44 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
     ctg.ctg = Some(crate::ctg::Ctg { sources: vec![perso.id], gap: 6 });
     ctg.locked = true;
     ctg.visible = false;
-    let mut calques = vec![calque_fond, calque_video, perso, nuage, dossier, ctg];
+    // Calques d'effets (format 27, `calqueffet.rs`) : un ajustement à clés (image d'impact, secousse,
+    // lueur diffuse ; opacité, mode de fusion, images 6 à 8 seulement) et une incrustation réglée à
+    // fond (texte libre à mots remplacés, boîte, « seulement à l'export »).
+    let pose = doc.new_cel(LayerKind::Bitmap);
+    let mut ajustement = Layer::new_effect("Impact", crate::calqueffet::CalqueEffet::ajustement("Image d'impact (impact frame)"));
+    ajustement.frames = [vec![None; 6], vec![Some(pose); 3]].concat();
+    ajustement.opacity = 0.8;
+    ajustement.blend = BlendMode::Screen;
+    let mut impact = Effect::new(EffectKind::Impact);
+    impact.set_key(6, vec![100.0, 1.0, 128.0, 230.0, 30.0, 30.0, 60.0, 70.0, 40.0, 50.0, 50.0, 7.0]);
+    impact.set_key(8, vec![0.0, 1.0, 128.0, 230.0, 30.0, 30.0, 60.0, 70.0, 40.0, 50.0, 50.0, 7.0]);
+    let mut secousse = Effect::new(EffectKind::Shake);
+    secousse.set_key(6, vec![6.0, -4.0, 1.5, 102.0, 40.0]);
+    secousse.set_key(7, vec![-3.0, 2.0, -0.5, 100.0, 40.0]);
+    let mut lueur = Effect::new(EffectKind::Bloom);
+    lueur.set_param(1, 120.0);
+    ajustement.fx = vec![impact, secousse, lueur];
+    let pose_tc = doc.new_cel(LayerKind::Bitmap);
+    let mut timecode = Layer::new_effect(
+        "Timecode",
+        crate::calqueffet::CalqueEffet::incrustation(
+            crate::incrustation::Incrustation {
+                source: crate::incrustation::Source::Libre,
+                texte: "{plan} · {timecode} · {image}".into(),
+                portee: crate::incrustation::Portee::Plan,
+                ancre: crate::incrustation::Ancre::HautDroite,
+                taille: 4.5,
+                couleur: [250, 240, 120, 230],
+                fond: Some([10, 20, 30, 170]),
+                marge: 2.5,
+                quand: crate::incrustation::Quand::ExportSeulement,
+                police: "Ubuntu Light".into(),
+            },
+            "Timecode et incrustations",
+        ),
+    );
+    timecode.frames = vec![Some(pose_tc); 24];
+    let mut calques = vec![calque_fond, calque_video, perso, nuage, dossier, ctg, ajustement, timecode];
     crate::folders::normalize(&mut calques);
     doc.panels[0].layers = calques;
     doc.panels[0].length = 24;

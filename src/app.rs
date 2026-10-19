@@ -738,6 +738,9 @@ pub struct App {
     pub(crate) new_dialog: Option<NewDocDialog>,
     /// Fenêtre « Nouveau calque » ouverte (13b).
     pub(crate) new_layer_dialog: Option<crate::newlayer::NewLayerForm>,
+    /// Préréglages d'effets : la fenêtre de réglage, les derniers réglages, les textures des incrustations
+    /// (`prereglagesui.rs`).
+    pub(crate) effets_ui: crate::prereglagesui::EffetsUi,
     pub(crate) pending: Option<Pending>,
     /// Enregistrement qui s'écrit sur un autre fil (`enregistrement.rs`).
     pub(crate) saving: Option<crate::enregistrement::Enregistrement>,
@@ -1114,6 +1117,7 @@ impl App {
             status: "Storyboard : dessine le premier plan ; P pour un nouveau plan, double-clic sur un plan pour l'animer (F1 : raccourcis).".into(),
             new_dialog: None,
             new_layer_dialog: None,
+            effets_ui: Default::default(),
             pending: None,
             saving: None,
             save_queue: None,
@@ -1306,10 +1310,23 @@ impl App {
         // à l'arrêt suivent l'horloge ; l'export, les vignettes et la lecture, l'image.
         let rest = (onion && !self.playing).then(|| crate::tremblement::rest_frame(crate::fx::now_ms(), self.doc.fps));
         let editing = self.boil_editing();
-        for (li, layer) in self.layers().iter().enumerate() {
+        // Calque d'effet en cours de réglage (fenêtre des préréglages d'effets) : montré en direct, avant
+        // d'exister (`prereglagesui.rs`). `cur` : le calque courant dans cette pile.
+        let preview = if onion { self.effect_preview_layers() } else { None };
+        let layers: &[crate::document::Layer] = preview.as_ref().map_or(self.layers(), |p| p.0.as_slice());
+        let cur = preview.as_ref().map_or(self.cur_layer, |p| p.1);
+        // Pour chaque calque, le nombre d'éléments posés avant lui (un calque d'effet couvre ceux d'en dessous).
+        let mut starts: Vec<usize> = Vec::with_capacity(layers.len());
+        for (li, layer) in layers.iter().enumerate() {
+            starts.push(items.len());
             // Caché (lui ou son dossier) : rien ; sinon son opacité, avec celle de son dossier.
-            let Some(mut opacity) = crate::folders::effect(self.layers(), li) else { continue };
-            if washed && li != self.cur_layer {
+            let Some(mut opacity) = crate::folders::effect(layers, li) else { continue };
+            // Calque d'effet (`calqueffet.rs`) : son repère, qui couvre ce qui est dessous.
+            if layer.effet.is_some() {
+                items.extend(crate::calqueffet::marker(layers, li, frame, opacity, &starts));
+                continue;
+            }
+            if washed && li != cur {
                 opacity *= self.light_table_strength.clamp(0.05, 1.0);
             }
             // Derrière la caméra (elle a avancé au-delà) : on ne le voit pas.
@@ -1317,7 +1334,7 @@ impl App {
             let transform = (!seen.is_identity()).then_some(seen);
             // Pelure d'oignon : le calque courant, et ceux qui ont la leur (13b).
             let mut onion_items = Vec::new();
-            if onion && self.onion.enabled && !self.playing && (li == self.cur_layer || layer.onion) {
+            if onion && self.onion.enabled && !self.playing && (li == cur || layer.onion) {
                 let s = &self.onion;
                 let (before, after) = crate::onion::neighbours(layer, frame, s, &self.panel().cues.bookmarks);
                 // Décalage temporaire des images de la pelure (13f), sur la feuille.
@@ -1359,11 +1376,11 @@ impl App {
                     // Pile d'effets du calque (13i).
                     // (Le calque qu'on édite se montre sans tremblement : `boil_editing`.)
                     fx: match crate::fx::layer_steps(layer, frame, rest) {
-                        steps if editing && (li == self.cur_layer || self.multi.sel.as_ref().is_some_and(|s| s.has_layer(layer.id))) => crate::fx::without_boil(steps),
+                        steps if editing && (li == cur || self.multi.sel.as_ref().is_some_and(|s| s.has_layer(layer.id))) => crate::fx::without_boil(steps),
                         steps => steps,
                     },
                     // Calque CTG (13j) : rempli d'après les traits de ses sources.
-                    ctg: crate::ctg::input(self.layers(), li, frame),
+                    ctg: crate::ctg::input(layers, li, frame),
                     fond: None,
                     pre: None,
                 };
@@ -1377,7 +1394,7 @@ impl App {
                     None => items.push(line),
                 }
                 // Calque CTG courant, à l'écran seulement : ses graffitis, pâles, par-dessus.
-                if onion && layer.ctg.is_some() && li == self.cur_layer && !self.playing {
+                if onion && layer.ctg.is_some() && li == cur && !self.playing {
                     items.push(PlanItem { cel, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: None });
                 }
             }
@@ -2909,7 +2926,10 @@ impl App {
         }
         let plan = self.build_plan(self.cur_frame, false, !self.export_transparent);
         let cam = self.doc.panel_camera(self.cur_panel, self.cur_frame);
-        let pixels = render::camera_image(&self.doc, &plan, &cam);
+        let mut pixels = render::camera_image(&self.doc, &plan, &cam);
+        // Les incrustations (timecode…) sont gravées dans l'image (`incrustation.rs`).
+        let boxes = crate::incrustation::boxes_for(&self.doc, self.cur_panel, self.cur_frame, true, crate::incrustation::now_secs());
+        crate::incrustation::burn(&mut pixels, self.doc.frame, &boxes);
         self.status = match io::write_png(&path, &pixels, self.doc.frame[0], self.doc.frame[1]) {
             Ok(()) => format!("Image exportée : {}", path.display()),
             Err(e) => format!("Échec de l'export : {e}"),
@@ -3141,6 +3161,10 @@ impl App {
         }
         // Fond sous le trait (`fondui.rs`).
         if self.fond_action(action) {
+            return;
+        }
+        // Préréglages d'effets et calques d'effets (`prereglagesui.rs`).
+        if self.effet_action(action) {
             return;
         }
         // Commentaires sur la timeline (`commentairesui.rs`).

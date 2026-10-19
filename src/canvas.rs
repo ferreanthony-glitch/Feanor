@@ -73,6 +73,19 @@ impl App {
                 ui.ctx().request_repaint_after(wait);
             }
         }
+        // Effets (13i) : jamais calculés ici. En lecture, au défilement et pendant un geste sur un
+        // effet, l'aperçu à la taille de l'écran ; au repos, la pleine résolution, calculée par le
+        // fil de fond (`fxcache.rs`) ; l'écran montre le dernier résultat en attendant.
+        let level = match &self.gpu {
+            Some(_) => crate::fx::draft_level(ui.ctx(), self.cur_panel, self.cur_frame, self.playing, self.view.zoom * ui.ctx().pixels_per_point()),
+            None => 0,
+        };
+        // Calques d'effets (`calqueffet.rs`) : le repère de chacun et ce qu'il couvre deviennent le
+        // dessin dérivé, demandé au fil de fond et montré quand il est prêt (sans l'effet avant).
+        let plan = match crate::calqueffet::resolve(&self.doc, &plan, crate::calqueffet::Mode::Display { level, prio: 0 }) {
+            std::borrow::Cow::Borrowed(_) => plan,
+            std::borrow::Cow::Owned(resolved) => resolved,
+        };
         let painter = ui.painter_at(rect);
         let stage_corners = [pos2(0.0, 0.0), pos2(size.x, 0.0), pos2(size.x, size.y), pos2(0.0, size.y)];
         let corners_h = stage_corners.map(|p| self.view.to_screen_h(rect, size, p));
@@ -88,13 +101,6 @@ impl App {
         }
         // Arrière-plan (13e) : aucun → noir ; damier → cases des couleurs A et B sous les calques.
         self.paint_background(ui.ctx(), &painter, corners, size);
-        // Effets (13i) : jamais calculés ici. En lecture, au défilement et pendant un geste sur un
-        // effet, l'aperçu à la taille de l'écran ; au repos, la pleine résolution, calculée par le
-        // fil de fond (`fxcache.rs`) ; l'écran montre le dernier résultat en attendant.
-        let level = match &self.gpu {
-            Some(_) => crate::fx::draft_level(ui.ctx(), self.cur_panel, self.cur_frame, self.playing, self.view.zoom * ui.ctx().pixels_per_point()),
-            None => 0,
-        };
         // Dessins des images qui viennent, à envoyer d'avance à la carte graphique (leurs effets
         // sont demandés au fil de fond en même temps).
         let ahead: Vec<crate::gpu::Ahead> = match &self.gpu {
@@ -161,6 +167,8 @@ impl App {
 
         self.paint_ref3d(&painter, rect);
         self.paint_camera(&painter, rect);
+        // Incrustations (timecode…) : sur l'image finale, dans le cadre (`prereglagesui.rs`).
+        self.paint_incrustations(ui.ctx(), &painter);
         // Notes dessinées par-dessus l'image pendant la lecture (13e).
         self.paint_notes_overlay(&painter, rect);
         if !self.in_card {

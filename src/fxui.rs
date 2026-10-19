@@ -319,6 +319,8 @@ impl App {
         if locked {
             ui.label(RichText::new("Storyboard verrouillé : les effets ne changent pas.").weak());
         }
+        // Calque d'effet : ce qu'il fait (et l'éditeur d'une incrustation).
+        self.effect_layer_section(ui);
         ui.add_enabled_ui(!locked, |ui| self.fx_stack_ui(ui));
     }
 
@@ -345,9 +347,14 @@ impl App {
                     });
                 }
             });
+            // Préréglages d'effets (impact frame, lueur, flash, tremblement…) : un calque d'effet ou
+            // des effets sur ce calque, avec leurs clés (`prereglagesui.rs`).
+            ui.menu_button(format!("{}  Préréglages", ph::SPARKLE), |ui| self.effect_preset_menu(ui))
+                .response
+                .on_hover_text("Des effets tout réglés, avec leurs clés à partir de la tête de lecture : impact frame, lueur, flash, tremblement de l'image, vignettage, grain, timecode…");
             let any = !self.layers()[li].fx.is_empty();
             let chosen = self.fx_index();
-            ui.menu_button(format!("{}  Copier / coller", ph::COPY), |ui| self.fx_clip_menu(ui, li, chosen, true))
+            ui.menu_button(format!("{}  Copier / coller", ph::COPY),|ui| self.fx_clip_menu(ui, li, chosen, true))
                 .response
                 .on_hover_text("Copier un effet (réglages et clés) ou tous les effets du calque, les coller sur le calque ou sur les calques choisis. Ctrl+C / Ctrl+V font de même quand ce panneau a la main.");
             if ui.add_enabled(any, egui::Button::new("Tout réinitialiser")).on_hover_text("Chaque effet reprend ses réglages par défaut, sans clé.").clicked() {

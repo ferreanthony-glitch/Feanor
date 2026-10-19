@@ -199,6 +199,10 @@ impl App {
             {
                 self.add_scene_background();
             }
+            // Calque d'effet (`prereglagesui.rs`) : un menu de préréglages (impact frame, lueur, flash,
+            // tremblement, timecode…) ou un calque d'effet vide.
+            let resp = ui.menu_button(egui::RichText::new(ph::SPARKLE), |ui| self.effect_preset_menu(ui)).response;
+            crate::bulles::bulle(resp, "Ajouter un calque d'effet", "Un calque d'effet agit sur tout ce qui est dessous : choisir un préréglage (impact frame, lueur, flash, tremblement de l'image, vignettage, grain, timecode…).", "");
             if self
                 .bouton(ui, ph::COPY_SIMPLE, "Dupliquer les calques choisis", "Une copie de chaque calque choisi et de ses dessins, juste au-dessus de lui.", "calque.dupliquer")
                 .clicked()
@@ -279,7 +283,14 @@ impl App {
                 (l.id, l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame), l.folder, l.ctg.is_some(), l.fond.is_some())
             };
             // Code couleur de sa sorte (bitmap vert, vectoriel bleu, CTG rose ; Anthony, 2026-10-17).
-            let hue = if folder { accent } else { crate::theme::couleur_calque(kind, ctg) };
+            let cfx = self.layers()[li].effet.is_some();
+            let hue = if folder {
+                accent
+            } else if cfx {
+                crate::theme::palette().dessin_cfx
+            } else {
+                crate::theme::couleur_calque(kind, ctg)
+            };
             let current = li == self.cur_layer;
             let chosen = !current && self.is_chosen_layer(li);
             let thumb = cel.and_then(|c| self.layer_thumb(ui.ctx(), c));
@@ -353,6 +364,7 @@ impl App {
                             }
                             let kind = match kind {
                                 _ if folder => "dossier",
+                                _ if cfx => "effet",
                                 _ if ctg => "CTG",
                                 LayerKind::Vector => "vectoriel",
                                 LayerKind::Bitmap => "bitmap",

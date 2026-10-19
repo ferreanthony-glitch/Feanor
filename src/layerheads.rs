@@ -134,6 +134,8 @@ struct Head {
     kind: LayerKind,
     /// Calque CTG (13j) : son code couleur est rose.
     ctg: bool,
+    /// Calque d'effet (`calqueffet.rs`) : une étincelle cyan à la place de la lettre.
+    cfx: bool,
     visible: bool,
     locked: bool,
     onion: bool,
@@ -282,6 +284,7 @@ impl App {
                 name: l.name.clone(),
                 kind: l.kind,
                 ctg: l.ctg.is_some(),
+                cfx: l.effet.is_some(),
                 visible: l.visible,
                 locked: l.locked,
                 onion: l.onion,
@@ -375,7 +378,7 @@ impl App {
 
         // Nom (ou son champ quand on le renomme), sorte du calque, menu d'options.
         let line1 = r.top() + 11.0;
-        let badge = if current { fg } else { theme::couleur_calque(h.kind, h.ctg) };
+        let badge = if current { fg } else if h.cfx { theme::palette().dessin_cfx } else { theme::couleur_calque(h.kind, h.ctg) };
         if h.collapsed && !h.folder {
             let eye = Rect::from_min_size(pos2(r.left() + 20.0, r.top() + 2.0), vec2(ICON_W, 18.0));
             self.eye_button(ui, eye, li, h.visible, fg);
@@ -383,6 +386,8 @@ impl App {
         if h.folder {
             let icon = if h.collapsed { ph::FOLDER } else { ph::FOLDER_OPEN };
             painter.text(pos2(x0 - 2.0, line1), Align2::LEFT_CENTER, icon, FontId::proportional(14.0), fg);
+        } else if h.cfx {
+            painter.text(pos2(x0 - 1.0, line1), Align2::LEFT_CENTER, ph::SPARKLE, FontId::proportional(13.0), badge);
         } else {
             painter.text(pos2(x0, line1), Align2::LEFT_CENTER, h.kind.badge(), FontId::monospace(11.0), badge);
         }

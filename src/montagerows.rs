@@ -147,7 +147,7 @@ impl App {
             let l = &self.doc.panels[self.cur_panel].layers[k];
             if !l.folder {
                 let band = Rect::from_min_size(r.left_top() + vec2(0.0, 3.0), vec2(3.0, r.height() - 6.0));
-                painter.rect_filled(band, 1.0, theme::couleur_calque(l.kind, l.ctg.is_some()));
+                painter.rect_filled(band, 1.0, theme::couleur_du_calque(l));
             }
             if current {
                 painter.rect_stroke(r, 3.0, Stroke::new(1.5_f32, theme::contour()), StrokeKind::Inside);
@@ -471,9 +471,9 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, curr
     let (hot, held) = (hot.map(|h| h.0), hot.is_some_and(|h| h.1));
     painter.rect_filled(cell, 2.0, theme::etiquette());
     // Un calque de toute la scène : ses dessins teintés « fond ».
-    let fill = match (layer.scene_wide.is_some(), layer.kind) {
-        (true, _) => theme::calque_decor(),
-        (false, kind) => theme::fond_calque(kind, layer.ctg.is_some()),
+    let fill = match layer.scene_wide.is_some() {
+        true => theme::calque_decor(),
+        false => theme::fond_du_calque(layer),
     };
     let fill = if layer.visible { fill } else { fill.gamma_multiply(0.35) };
     let x0 = cell.left() - 1.0;
@@ -523,7 +523,7 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, curr
             pos2((x0 + b as f32 * ppf - 1.0).min(cell.right()), cell.bottom() - 2.0),
         );
         if bar.width() > 0.0 {
-            let base = theme::couleur_calque(layer.kind, layer.ctg.is_some());
+            let base = theme::couleur_du_calque(layer);
             let moving = matches!(hot, Some(Handle::LayerMove { .. }));
             painter.rect_filled(bar, 1.0, if moving { base } else { base.gamma_multiply(0.5) });
             let cap = (bar.width() * 0.5).min(3.0);

@@ -280,6 +280,9 @@ pub struct Palette {
     pub calque_bitmap: Color32,
     pub dessin_ctg: Color32,
     pub calque_ctg: Color32,
+    /// Calque d'effet (`calqueffet.rs`) : cyan, vif et sourd.
+    pub dessin_cfx: Color32,
+    pub calque_cfx: Color32,
     /// Calques de toute la scène (le décor) : la teinte « fond » des noms, et celle de leurs dessins
     /// sous les plans du montage.
     pub decor: Color32,
@@ -366,6 +369,8 @@ impl Palette {
             calque_bitmap: if claire { Color32::from_rgb(90, 175, 150) } else { Color32::from_rgb(6, 122, 103) },
             dessin_ctg: jeu([229, 91, 182], [180, 30, 130]),
             calque_ctg: if claire { Color32::from_rgb(210, 120, 185) } else { Color32::from_rgb(176, 52, 136) },
+            dessin_cfx: jeu([48, 208, 236], [0, 128, 168]),
+            calque_cfx: if claire { Color32::from_rgb(120, 200, 224) } else { Color32::from_rgb(14, 130, 160) },
             decor: jeu([214, 170, 92], [140, 92, 10]),
             calque_decor: if claire { Color32::from_rgb(228, 196, 130) } else { Color32::from_rgb(214, 170, 92) },
             image_courante: jeu([252, 67, 46], [205, 30, 20]),
@@ -524,6 +529,9 @@ couleurs_courantes! {
     /// Calque CTG (13j) : rose, vif et sourd.
     dessin_ctg,
     calque_ctg,
+    /// Calque d'effet : cyan, vif et sourd.
+    dessin_cfx,
+    calque_cfx,
     /// Calques de toute la scène (le décor) : le nom, puis les dessins sous les plans du montage.
     decor,
     calque_decor,
@@ -551,6 +559,24 @@ pub fn couleur_calque(kind: LayerKind, ctg: bool) -> Color32 {
         (true, _) => p.dessin_ctg,
         (false, LayerKind::Vector) => p.dessin_vectoriel,
         (false, LayerKind::Bitmap) => p.dessin_bitmap,
+    }
+}
+
+/// La couleur vive d'un calque : celle de sa sorte, ou le cyan d'un calque d'effet.
+pub fn couleur_du_calque(l: &crate::document::Layer) -> Color32 {
+    if l.effet.is_some() {
+        palette().dessin_cfx
+    } else {
+        couleur_calque(l.kind, l.ctg.is_some())
+    }
+}
+
+/// La même, sourde (voir `fond_calque`), pour un calque.
+pub fn fond_du_calque(l: &crate::document::Layer) -> Color32 {
+    if l.effet.is_some() {
+        palette().calque_cfx
+    } else {
+        fond_calque(l.kind, l.ctg.is_some())
     }
 }
 

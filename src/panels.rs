@@ -672,6 +672,8 @@ impl App {
         // Écran d'accueil, sans projet ouvert (`accueil.rs`).
         self.welcome_ui(ctx);
         self.new_layer_window(ctx);
+        // Préréglages d'effets (`prereglagesui.rs`).
+        self.effect_dialog_window(ctx);
         self.groups_window_ui(ctx);
         self.properties_window_ui(ctx);
         self.onion_window_ui(ctx);
