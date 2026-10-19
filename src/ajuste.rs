@@ -81,10 +81,22 @@ pub fn fraction_for(total: f32, sep: f32, top: f32) -> f32 {
     ((top + sep * 0.5) / total).clamp(0.05, 0.95)
 }
 
+/// Interface sans animations (réglage du diagnostic des performances) : les bords sautent.
+static ANIMATIONS_OFF: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_animations_off(off: bool) {
+    ANIMATIONS_OFF.store(off, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// Un pas de `current` vers `target` : le bord glisse en quelques images au lieu de sauter.
 pub fn ease(current: f32, target: f32) -> f32 {
+    ease_with(current, target, ANIMATIONS_OFF.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+/// `ease`; `instant` : d'un coup.
+pub fn ease_with(current: f32, target: f32, instant: bool) -> f32 {
     let d = target - current;
-    if d.abs() < 1.0 {
+    if instant || d.abs() < 1.0 {
         target
     } else {
         current + d * 0.45

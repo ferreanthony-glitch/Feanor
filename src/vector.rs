@@ -1136,7 +1136,7 @@ const BAND: usize = 2 * TILE;
 /// résultat est le même pixel pour pixel. Saisir 300 longs traits : 112 ms d'un seul fil.
 fn render_in_bands(elems: &[&Element], w: usize, h: usize, shift: (i64, i64), sheet: (usize, usize)) -> Raster {
     let bands = h.div_ceil(BAND);
-    let threads = std::thread::available_parallelism().map_or(1, |n| n.get()).min(8);
+    let threads = crate::parallele::coeurs().min(8);
     if elems.len() < 8 || bands < 2 || threads < 2 || !elems.iter().all(|e| e.cache_ready()) {
         let mut raster = Raster::new(w, h);
         for e in elems {

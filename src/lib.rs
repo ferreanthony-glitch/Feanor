@@ -7,9 +7,15 @@ mod accueil;
 mod aproposui;
 #[cfg(test)]
 mod aproposui_tests;
+mod diagbanc;
+mod diagnostic;
+#[cfg(test)]
+mod diagnostic_tests;
+mod diagnosticui;
 mod donnees;
 #[cfg(test)]
 mod donnees_tests;
+mod materiel;
 #[cfg(test)]
 mod demarrage_tests;
 mod ouverture;

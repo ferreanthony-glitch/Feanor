@@ -286,12 +286,91 @@ cinq passages, deux à trois séries) :
 | 5 | **Décodage PNG en flux vers les tuiles** (crate `png` en dépendance directe, déjà dans `Cargo.lock`) | ouverture 7,3 → ≈ 4 s, mémoire ÷30 par fil | S à M |
 | 6 | **Cache d'images composées en mémoire** pour la lecture des plans à effets | 24 images/s garanties avec 10 effets ou plus (les effets se calculent sur le processeur) | L. Avec la carte graphique pour les effets (7). |
 | 7 | **Effets sur la carte graphique** (flou, ombre, bruit, mosaïque) | enlève le processeur de la lecture des plans à effets | L. Mené par l'agent des effets. |
-| 8 | **Taille mémoire de la carte réglable** (`CACHE_BYTES` = 1 Go aujourd'hui, sur 8 Go) | ×3 de dessins en cache à coût nul | S. wgpu n'expose pas la mémoire : un réglage dans les Préférences. |
+| 8 | ~~**Taille mémoire de la carte réglable** (`CACHE_BYTES` = 1 Go, sur 8 Go)~~ **fait** par le diagnostic (section 7) : réglage « Cache de la carte graphique » dans les Préférences, qui monte à 2 Go sur une carte de 8 Go (profil Qualité) | ×2 de dessins en cache à coût nul | fait |
 | 9 | **Résolution d'affichage** (réduite pour la vue éloignée) | composition ÷4 en zoom arrière | M à L |
 | 10 | **PGO** (optimisation guidée par un profil) | 5 à 15 % sur le rendu des traits (non mesuré) | M. Demande `llvm-profdata` et une procédure hors ligne. |
 
-## 7. À regarder à l'écran
+## 7. Diagnostic des performances (Aide > Diagnostic des performances…)
 
+Action `aide.diagnostic` (menu Aide, Ctrl+K). Demande d'Anthony, 2026-10-19 : une option qui détecte le
+matériel et propose des ajustements qui vont jusqu'à éteindre certaines fonctions gourmandes. Code :
+`materiel.rs` (détection), `diagbanc.rs` (banc), `diagnostic.rs` (réglages, profils, rapport),
+`diagnosticui.rs` (fenêtre, Préférences, pose des réglages), essais `diagnostic_tests.rs`.
+
+**Détecté** (rien de téléchargé, aucune caisse de plus) : processeur (nom lu dans le registre de Windows,
+fils par la bibliothèque standard, cœurs physiques par `GetLogicalProcessorInformation`, AVX2 / FMA / BMI2
+par `is_x86_feature_detected`) ; mémoire vive totale et disponible (`GlobalMemoryStatusEx`) ; carte
+graphique (adaptateur wgpu : nom, API, pilote, genre) et sa mémoire vidéo, lue dans le registre
+(`HardwareInformation.qwMemorySize` de la carte du même nom), « inconnue » si Windows ne la donne pas ;
+écran (moniteur, pixels par point) ; disque (64 Mo écrits puis relus dans le dossier temporaire,
+effacés ensuite). Les appels système sont déclarés dans `materiel.rs` (kernel32 et advapi32, déjà liés).
+
+**Mesuré** sur un autre fil, 13 secondes (plan synthétique de douze calques, aucun projet ouvert ; le
+fil laisse un cœur à l'interface ; Annuler arrête dans la seconde) :
+
+| Étape | Durée visée | Ce qui est chronométré (médiane) |
+|---|---|---|
+| Disque | ≈ 0,5 s | écriture + `sync_all`, lecture de 64 Mo |
+| Composition | 2,5 s | `render::composite_full`, 12 calques de 3840 × 2160 |
+| Trait texturé | 2,5 s | rejeu d'un trait large de gouache par le moteur (`vector::render_element`) |
+| Flou plein | 2 s | `fx::apply_scaled` niveau 0, feuille de 3840 × 2160 |
+| Flou réduit | 1,5 s | `fxproxy::downscale` puis `apply_scaled` niveau 1 |
+| Lecture | 4 s | `render::camera_image` image après image : moyenne et pire |
+| Carte graphique | 1,5 s | écriture d'une texture de 1920 × 1080 et attente de la carte (Mo/s) |
+
+Poste de référence (Core i7-10700K, RTX 2080 SUPER ; deux séries, 2026-10-19) : composition 19,5 à 36 ms,
+trait 106 à 155 ms, flou 43 à 63 ms (réduit 14 à 20 ms), lecture 12,7 à 17 ms par image (pire 17 à 24 ms),
+carte 6 800 Mo/s, disque 100 à 1 400 Mo/s. Les constantes `REF_*` de `diagnostic.rs` sont ces temps arrondis
+au-dessus de la meilleure série.
+
+**Règles du profil** (`choisir_profil`) : chaque constat a un poids. Poids 2 → Performance : moins de
+8 Go de mémoire vive ou moins de 2 Go disponibles, moins de 4 fils, pas de carte graphique ou rendu
+logiciel, moins de 2 Go de mémoire vidéo, une mesure plus de 4,5 fois plus lente que la référence. Poids 1
+→ Équilibré : moins de 16 Go ou moins de 4 Go disponibles, moins de 8 fils, graphisme intégré ou carte
+virtuelle, moins de 4 Go de mémoire vidéo, une mesure plus de 2,2 fois plus lente. Sinon Qualité. Un disque
+lent se dit mais ne change rien. La phrase d'explication cite les constats avec leurs chiffres.
+
+**Les dix réglages** (`PerfReglages`, `[performance]` dans reglages.toml ; tous modifiables dans
+Fichier > Préférences… > Performance ; la valeur par défaut est le comportement d'avant) :
+
+| Réglage | Branché sur | Qualité | Équilibré | Performance | Prise d'effet |
+|---|---|---|---|---|---|
+| Effets en aperçu réduit | `fx::draft_level` (niveau minimal 1, même zoomé) | non | oui | oui | tout de suite |
+| Traits vectoriels texturés | `App::finish_open`, `rejeu_idle_tick` | exact aussitôt | rapide jusqu'au repos (2 s de calme) | rapide partout | à l'ouverture d'un projet |
+| Tremblement : couper « Animer à l'arrêt » | `tremblement::Settings::of` | non | non | oui | tout de suite |
+| Pelure : images au plus | `onion::neighbours` | sans plafond | 6 | 2 | tout de suite |
+| Cache de la carte graphique | `GpuCanvas::set_cache_bytes` | 1 Go (2 Go si 8 Go de mémoire vidéo) | 0,5 à 1 Go | 256 à 512 Mo | tout de suite |
+| Cache des traits | `vector::set_cache_budget` | 512 Mo (1 Go si 32 Go de mémoire) | 512 (384 si < 16 Go) | 256 Mo | tout de suite |
+| Cache des effets | `fxcache::set_limit` | 768 Mo (1,5 Go si 32 Go) | 768 (512 si < 16 Go) | 384 (256 si < 8 Go) | tout de suite |
+| Fils de calcul | `parallele::coeurs` (tous les calculs répartis, fil des effets) | automatique | automatique | un cœur libre sur 3 à 4 fils | tout de suite |
+| Vignettes | `thumbs::thumb_size`, vignettes de calque | normales | normales | moitié (quart si faible) | tout de suite, vignettes refaites |
+| Animations | `egui::Style::animation_time`, `ajuste::ease` | non | non | oui | tout de suite |
+
+« Rapide partout » : le rendu exact des traits texturés ne vient que pour l'image affichée à l'arrêt
+(`warm_current_cel`) ; avant un export (images, film, PDF, image courante, Storyboard Pro) les autres
+sont rendus exactement d'un coup, sur plusieurs cœurs (`App::exactify_idle`) : c'est le seul endroit où
+ce réglage fait attendre, à la demande de l'utilisateur.
+
+**Appliquer / revenir.** « Appliquer » garde les valeurs d'avant (`EtatDiagnostic`, `[diagnostic]`), pose
+les réglages cochés ; « Revenir comme avant » remet ceux-là, exactement (un autre réglage changé à la main
+entre-temps reste). **Premier lancement** : sans trace d'un diagnostic dans les réglages, un message propose
+« Lancer le diagnostic » / « Plus tard » ; la réponse est gardée, il ne revient pas, rien n'est appliqué.
+
+**Essais** : `cargo test --release --offline --target-dir target\msvc diagnostic_tests` (profils d'après des
+mesures inventées, chaque réglage branché sur ce qu'il commande, appliquer puis revenir, anciens fichiers
+de réglages, premier lancement, fenêtre et Préférences, annulation du banc). À la main :
+`... diag_bench -- --ignored --nocapture` (le banc réel et ses chiffres) et `... diag_capture -- --ignored`
+(images PNG de la fenêtre dans `SHOT_CAPTURE_DIR`).
+
+## 8. À regarder à l'écran
+
+- **Diagnostic des performances** : Aide > Diagnostic des performances… (ou `Ctrl+K`, « Diagnostic »).
+  La fenêtre s'ouvre en haut au centre, la machine détectée dessous (processeur, mémoire, carte et sa
+  mémoire vidéo) ; « Lancer le diagnostic » : barre d'avancement et Annuler, l'interface reste vivante ;
+  puis mesures, profil conseillé avec ses raisons, trois profils à comparer, réglages à cocher, boutons
+  Appliquer / Revenir comme avant / Relancer / Copier le rapport / Enregistrer le rapport…, toujours
+  visibles en bas. Essayer « Performance » sur un vrai projet (lecture, pelure, traits texturés) puis
+  « Revenir comme avant » ; vérifier la section Performance de Fichier > Préférences… avant et après.
 - **Superposition** : `Ctrl+K` → « Performance » (ou Affichage > Performance). Le cadre est lisible
   sur les trois thèmes, ne gêne pas le dessin (il ne prend pas les clics), et se ferme avec la même
   commande. Regarder « Images » au repos : 0/s ; et les réveils.

@@ -85,14 +85,25 @@ impl App {
         self.finish_open(path, job.join());
     }
 
+    /// Le dessin `id` vient de s'ouvrir en rendu rapide : son rendu exact se demande selon le
+    /// réglage « traits vectoriels texturés » (`diagnostic.rs`).
+    pub(crate) fn rejeu_apres_ouverture(&mut self, id: crate::document::CelId) {
+        match self.settings.perf.traits_textures {
+            // (Derrière tout geste de l'utilisateur : le chargement attend son tour.)
+            crate::diagnostic::TraitsTextures::Exact => self.rejeu_with(id, false),
+            // Rendu rapide jusqu'au repos, ou pour tout sauf l'image affichée
+            // (`App::rejeu_idle_tick`, `warm_current_cel`).
+            _ => self.rejeu_idle.push(id),
+        }
+    }
+
     /// Le projet est lu (ou ne l'a pas pu être) : il devient le projet courant.
     pub(crate) fn finish_open(&mut self, path: PathBuf, loaded: Result<Loaded, String>) {
         match loaded {
             Ok(loaded) => {
                 self.load_doc(loaded.doc);
                 for id in loaded.approx {
-                    // (Derrière tout geste de l'utilisateur : le chargement attend son tour.)
-                    self.rejeu_with(id, false);
+                    self.rejeu_apres_ouverture(id);
                 }
                 self.written = loaded.written;
                 self.status = if loaded.warnings.is_empty() {

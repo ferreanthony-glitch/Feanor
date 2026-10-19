@@ -80,6 +80,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("mode.basculer", "Passer du storyboard à l'animation, et retour", true, false),
     act("aide.raccourcis", "Liste des raccourcis", true, false),
     act("aide.a_propos", "À propos de SHOT (version, logo)", true, false),
+    act("aide.diagnostic", "Diagnostic des performances de SHOT : détecter la machine, mesurer, proposer des réglages", true, false),
     act("aide.palette","Palette de commandes : chercher une commande par son nom", true, false),
     act("outil.pinceau", "Outil pinceau", true, false),
     act("outil.crayon", "Outil crayon", true, false),

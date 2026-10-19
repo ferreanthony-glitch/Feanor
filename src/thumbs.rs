@@ -34,8 +34,31 @@ pub struct Thumbs {
 /// Largeur des vignettes de la bande de montage.
 pub const STRIP_WIDTH: usize = 192;
 
+/// Résolution des vignettes, en pour cent de la largeur demandée (100, 50 ou 25 ; réglage
+/// « vignettes » du diagnostic des performances). L'affichage agrandit la vignette à sa place :
+/// seule la définition baisse.
+static SCALE_PCT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(100);
+
+pub fn set_scale_pct(pct: u32) {
+    SCALE_PCT.store(pct.clamp(10, 100), std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn scale_pct() -> u32 {
+    SCALE_PCT.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// `width` à l'échelle `pct` pour cent (jamais sous `min`).
+pub fn scaled(width: usize, pct: u32, min: usize) -> usize {
+    (width * pct as usize / 100).max(min).min(width.max(min))
+}
+
 pub fn thumb_size(doc: &Document, width: usize) -> (usize, usize) {
-    let tw = width.clamp(32, 2048);
+    thumb_size_at(doc, width, scale_pct())
+}
+
+/// `thumb_size` à l'échelle `pct`.
+pub fn thumb_size_at(doc: &Document, width: usize, pct: u32) -> (usize, usize) {
+    let tw = scaled(width.clamp(32, 2048), pct, 32);
     let [fw, fh] = doc.frame;
     let th = ((tw as f32 * fh as f32 / fw.max(1) as f32).round() as usize).clamp(8, 2048);
     (tw, th)

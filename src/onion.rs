@@ -247,10 +247,25 @@ impl OnionSettings {
     }
 }
 
+/// Images de pelure au plus de chaque côté (réglage du diagnostic des performances ; sans plafond,
+/// le maximum de la pelure).
+static CAP: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(MAX_NEIGHBOURS);
+
+pub fn set_cap(cap: usize) {
+    CAP.store(cap.min(MAX_NEIGHBOURS), std::sync::atomic::Ordering::Relaxed);
+}
+
 /// Voisins du dessin de l'image `frame` : (dessin, rang), rang 0 = le plus proche. Le dessin
 /// courant et les images vides ne sont jamais montrés. `bookmarks` : les signets du plan (mode
 /// signet).
 pub fn neighbours(layer: &Layer, frame: usize, s: &OnionSettings, bookmarks: &[usize]) -> (Vec<(CelId, usize)>, Vec<(CelId, usize)>) {
+    neighbours_within(layer, frame, s, bookmarks, CAP.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+/// Comme `neighbours`, avec au plus `cap` images de chaque côté : le plafond du diagnostic des
+/// performances borne les voisins montrés, sans toucher au réglage de la pelure.
+pub fn neighbours_within(layer: &Layer, frame: usize, s: &OnionSettings, bookmarks: &[usize], cap: usize) -> (Vec<(CelId, usize)>, Vec<(CelId, usize)>) {
+    let (max_before, max_after) = (s.before.min(cap), s.after.min(cap));
     let current = layer.cel_at(frame);
     let len = layer.frames.len();
     let mut before: Vec<(CelId, usize)> = Vec::new();
@@ -265,23 +280,23 @@ pub fn neighbours(layer: &Layer, frame: usize, s: &OnionSettings, bookmarks: &[u
     match s.mode {
         OnionMode::Drawings => {
             let mut f = frame.min(len);
-            while f > 0 && before.len() < s.before {
+            while f > 0 && before.len() < max_before {
                 f -= 1;
                 let rank = before.len();
                 add(&mut before, f, rank);
             }
             let mut f = frame + 1;
-            while f < len && after.len() < s.after {
+            while f < len && after.len() < max_after {
                 let rank = after.len();
                 add(&mut after, f, rank);
                 f += 1;
             }
         }
         OnionMode::Frames => {
-            for d in 1..=s.before.min(frame) {
+            for d in 1..=max_before.min(frame) {
                 add(&mut before, frame - d, d - 1);
             }
-            for d in 1..=s.after {
+            for d in 1..=max_after {
                 if frame + d < len {
                     add(&mut after, frame + d, d - 1);
                 }
@@ -294,14 +309,14 @@ pub fn neighbours(layer: &Layer, frame: usize, s: &OnionSettings, bookmarks: &[u
                 _ => layer.cel_at(f).is_some_and(|id| layer.color_marks.contains_key(&id)),
             };
             for f in (0..frame.min(len)).rev().filter(|&f| stop(f)) {
-                if before.len() >= s.before {
+                if before.len() >= max_before {
                     break;
                 }
                 let rank = before.len();
                 add(&mut before, f, rank);
             }
             for f in (frame + 1..len).filter(|&f| stop(f)) {
-                if after.len() >= s.after {
+                if after.len() >= max_after {
                     break;
                 }
                 let rank = after.len();

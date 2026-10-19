@@ -8,9 +8,31 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+/// Plafond de fils de calcul choisi dans les Préférences ou par le diagnostic des performances
+/// (0 : tous les cœurs).
+static PLAFOND: AtomicUsize = AtomicUsize::new(0);
+
+pub fn set_plafond(fils: usize) {
+    PLAFOND.store(fils, Ordering::Relaxed);
+}
+
+/// Les cœurs dont les calculs répartis disposent : ceux du processeur, au plus le plafond.
+pub fn coeurs() -> usize {
+    coeurs_avec(std::thread::available_parallelism().map_or(4, |c| c.get()), PLAFOND.load(Ordering::Relaxed))
+}
+
+/// `coeurs` pour `total` cœurs et un plafond `plafond` (0 : aucun).
+pub fn coeurs_avec(total: usize, plafond: usize) -> usize {
+    if plafond == 0 {
+        total.max(1)
+    } else {
+        total.min(plafond).max(1)
+    }
+}
+
 /// Nombre de fils pour `n` travaux, au plus `max` (et jamais plus que de cœurs).
 fn fils(n: usize, max: usize) -> usize {
-    std::thread::available_parallelism().map_or(4, |c| c.get()).clamp(1, max.max(1)).min(n.max(1))
+    coeurs().clamp(1, max.max(1)).min(n.max(1))
 }
 
 /// `f(rang, élément)` pour chaque élément de `items`, sur au plus `max` fils ; les résultats dans

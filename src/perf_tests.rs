@@ -35,7 +35,7 @@ fn block_on<F: Future>(f: F) -> F::Output {
 }
 
 /// Un périphérique wgpu sans fenêtre, ou `None` (aucune carte graphique).
-fn headless() -> Option<RenderState> {
+pub(crate) fn headless() -> Option<RenderState> {
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
     let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))?;
     let (device, queue) = block_on(adapter.request_device(
@@ -148,7 +148,7 @@ pub(crate) struct Banc {
     pub ctx: egui::Context,
     pub app: App,
     rs: Option<RenderState>,
-    taille: egui::Vec2,
+    pub taille: egui::Vec2,
     t: f64,
     cible: Option<wgpu::Texture>,
     /// Les textes peints par la dernière image (si `garder_textes`).
@@ -222,6 +222,31 @@ impl Banc {
         }
         let carte = t2.elapsed().as_secs_f64() * 1e3;
         Mesure { construction, decoupage, carte, textures, octets, sommets, reveil, detail }
+    }
+
+    /// L'image peinte par la dernière `image` (1920 × 1080, RGBA), pour voir une mise en page ;
+    /// rien sans carte graphique.
+    pub(crate) fn capturer(&self) -> Option<Vec<u8>> {
+        let (rs, cible) = (self.rs.as_ref()?, self.cible.as_ref()?);
+        let (w, h) = (1920u32, 1080u32);
+        let row = (w * 4).div_ceil(256) * 256;
+        let lecture = rs.device.create_buffer(&wgpu::BufferDescriptor { label: Some("lecture"), size: (row * h) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
+        let mut encoder = rs.device.create_command_encoder(&Default::default());
+        encoder.copy_texture_to_buffer(
+            cible.as_image_copy(),
+            wgpu::TexelCopyBufferInfo { buffer: &lecture, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(h) } },
+            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        );
+        rs.queue.submit([encoder.finish()]);
+        let tranche = lecture.slice(..);
+        tranche.map_async(wgpu::MapMode::Read, |r| r.expect("lecture"));
+        rs.device.poll(wgpu::Maintain::Wait);
+        let data = tranche.get_mapped_range();
+        let mut out = Vec::with_capacity((w * h * 4) as usize);
+        for y in 0..h as usize {
+            out.extend_from_slice(&data[y * row as usize..y * row as usize + (w * 4) as usize]);
+        }
+        Some(out)
     }
 
     pub fn souris(&mut self, x: f32, y: f32) -> Vec<Event> {

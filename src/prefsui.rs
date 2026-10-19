@@ -6,7 +6,8 @@
 //!   dans les exports eux-mêmes).
 //! - Préférences… : les réglages de l'application (pas du projet) qui étaient éparpillés dans les
 //!   menus : copie de secours, dernier projet rouvert, croix du système, panneaux ajustés,
-//!   raccourcis clavier.
+//!   raccourcis clavier ; et la section « Performance » (`diagnosticui.rs`), les dix réglages que
+//!   Aide > Diagnostic des performances propose.
 //!
 //! Apparence (en tête de Préférences…) : le thème et ses neuf couleurs (`theme.rs`).
 
@@ -158,6 +159,10 @@ impl App {
                 if ui.button("Réajuster les panneaux").clicked() {
                     action = Some("vue.reajuster_panneaux");
                 }
+                ui.add_space(6.0);
+                // Performance (`diagnosticui.rs`) : les réglages que Aide > Diagnostic des
+                // performances propose, un par un.
+                self.performance_prefs_ui(ui);
                 ui.add_space(6.0);
                 ui.label(RichText::new("Raccourcis clavier").strong());
                 ui.horizontal_wrapped(|ui| {

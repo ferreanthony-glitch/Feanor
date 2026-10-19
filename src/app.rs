@@ -562,6 +562,15 @@ pub struct App {
     pub(crate) rejeu_warm: std::collections::HashMap<CelId, u64>,
     /// Rendus exacts arrivés pendant un geste sur leur dessin, adoptés à la fin du geste.
     pub(crate) rejeu_deferred: Vec<crate::rejeu::Done>,
+    /// Dessins ouverts en rendu rapide dont le rendu exact attend le repos (ou l'image affichée),
+    /// d'après le réglage « traits vectoriels texturés » (`diagnostic.rs`).
+    pub(crate) rejeu_idle: Vec<CelId>,
+    /// Dernier instant d'activité de l'utilisateur ou de la lecture, en secondes d'egui.
+    pub(crate) activity: f64,
+    /// Réglages de performance posés dans le programme (`App::appliquer_performance`).
+    pub(crate) perf_applied: crate::diagnostic::PerfReglages,
+    /// Fenêtre « Diagnostic des performances » (`diagnosticui.rs`).
+    pub(crate) diag: crate::diagnosticui::DiagnosticUi,
     /// Sélection dans un dessin bitmap, et geste en cours avec l'outil Sélection.
     pub(crate) bsel: Option<BSelection>,
     pub(crate) bdrag: Option<BDrag>,
@@ -764,6 +773,9 @@ impl App {
         crate::theme::appliquer(egui_ctx);
         let montage_head_w = crate::montagehead::clamp_head_w(settings.montage_head_w);
         let (paint_behind, fill_shapes) = (settings.paint_behind, settings.fill_shapes);
+        // Diagnostic des performances : proposé une fois, sur une machine qui n'en a jamais eu
+        // (jamais dans les essais).
+        let diag_offer = reel && settings.diagnostic.a_proposer();
         let mut app = Self {
             ctx: egui_ctx.clone(),
             doc: Document::with_frame(1920, 1080, 24).created_now(),
@@ -940,6 +952,10 @@ impl App {
             rejeu_again: Default::default(),
             rejeu_warm: Default::default(),
             rejeu_deferred: Vec::new(),
+            rejeu_idle: Vec::new(),
+            activity: 0.0,
+            perf_applied: Default::default(),
+            diag: crate::diagnosticui::DiagnosticUi::new(diag_offer, wgpu_render_state),
             bsel: None,
             bdrag: None,
             sel_box: None,
@@ -1873,6 +1889,7 @@ impl App {
     /// pour ce qui n'est pas un geste ; voir `rejeu_cel`).
     pub(crate) fn refresh_cel(&mut self, cel: CelId) {
         self.rejeu.cancel(cel);
+        self.rejeu_idle.retain(|&c| c != cel);
         self.rejeu_again.remove(&cel);
         if let Some(c) = self.doc.cels.get_mut(&cel) {
             let tiles = c.rerender();
@@ -1903,6 +1920,8 @@ impl App {
     }
 
     pub(crate) fn rejeu_with(&mut self, cel: CelId, priority: bool) {
+        // (Le rendu exact vient : il n'attend plus le repos.)
+        self.rejeu_idle.retain(|&c| c != cel);
         let (w, h) = (self.doc.width, self.doc.height);
         if let Some((d, version)) = self.doc.cels.get(&cel).and_then(|c| c.vector.as_ref().map(|d| (d, c.version))) {
             self.rejeu.submit_with(cel, d, w, h, version, priority);
@@ -2650,6 +2669,7 @@ impl App {
         self.rejeu_again.clear();
         self.rejeu_warm.clear();
         self.rejeu_deferred.clear();
+        self.rejeu_idle.clear();
         crate::fx::fond_cancel_all();
         self.doc = doc;
         // (Ses dessins portent les numéros et les versions de ceux de l'ancien : les dessins
@@ -2744,6 +2764,7 @@ impl App {
     /// Une planche par plan (première image) et une page HTML imprimable avec les indications.
     pub(crate) fn export_storyboard(&mut self) {
         self.end_stroke();
+        self.exactify_idle();
         let Some(dir) = Self::pick_folder("Dossier où exporter le storyboard") else { return };
         let title = io::html_escape(&self.base_name());
         let mut html = format!(
@@ -2798,6 +2819,7 @@ impl App {
 
     pub(crate) fn export_frame(&mut self) {
         self.end_stroke();
+        self.exactify_idle();
         let Some(mut path) = rfd::FileDialog::new()
             .add_filter("Image PNG", &["png"])
             .set_file_name(format!("image_{:04}.png", self.global_frame() + 1))
@@ -3081,6 +3103,7 @@ impl App {
             "fichier.exporter" => self.export_hub = true,
             "fichier.preferences" => self.prefs_window = true,
             "aide.a_propos" => self.about_window = true,
+            "aide.diagnostic" => self.open_diagnostic(),
             // Le collage pose déjà les éléments et les zones à leur place d'origine.
             "edition.coller_sur_place" => self.run_action("edition.coller"),
             // Les propriétés du plan : la fiche (action, dialogue, notes, durée…).
@@ -3854,6 +3877,9 @@ impl App {
             self.theme_unsaved = false;
             let _ = self.settings.save();
         }
+        // Réglages de performance (Préférences, Aide > Diagnostic des performances) : posés dans
+        // le programme dès qu'ils changent.
+        self.appliquer_performance(ctx);
         // Effets de calque : l'horloge de leurs demandes avance (calculs de fond, `fxcache.rs`).
         crate::fx::begin_frame(ctx);
         let prep = crate::perf::section("préparation (raccourcis, lecture)");
@@ -3892,6 +3918,7 @@ impl App {
         {
             let _t = crate::perf::section("arrière-plan (rejeu, fonds)");
             self.poll_rejeu(ctx);
+            self.rejeu_idle_tick(ctx);
             self.warm_current_cel();
         }
         self.update_title(ctx);
