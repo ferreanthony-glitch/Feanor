@@ -31,6 +31,7 @@ use crate::dock::Pane;
 use crate::fournisseurs::{Controle, DemandeLecture, EntreePlan, LecteurStoryboard};
 use crate::fournisseursapi::{Transport, TransportABrancher};
 use crate::generation::{dossier_cache, lancer_generation, lancer_lecture, Fabrique, FabriqueReelle, Rapport, Tache, Travail};
+use crate::serveurlocal::GestionnaireServeur;
 use crate::genreglages::{Mode, Role};
 use crate::indications::{debut_montage, piste_pour, Genre, Indication, Statut};
 use crate::lecturesb::{entree_plan, plans_de_la_portee, vignette_png, Portee, LARGEUR_VIGNETTE};
@@ -105,6 +106,8 @@ pub(crate) struct SuggestionsUi {
     pub fabrique: Arc<dyn Fabrique>,
     pub coffre: Arc<dyn Coffre>,
     pub transport: Arc<dyn Transport>,
+    /// Le serveur local lancé par SHOT (Préférences > Génération sonore, ou à la première génération locale).
+    pub serveur: Arc<GestionnaireServeur>,
     /// Où les sons générés sont écrits.
     pub dossier: PathBuf,
     pub portee: ChoixPortee,
@@ -125,10 +128,16 @@ impl Default for SuggestionsUi {
     fn default() -> Self {
         let coffre: Arc<dyn Coffre> = Arc::new(CoffreWindows::new());
         let transport: Arc<dyn Transport> = Arc::new(TransportABrancher);
+        // (Les essais ne lancent jamais le vrai serveur : ils n'ont pas besoin de Python.)
+        #[cfg(test)]
+        let serveur = GestionnaireServeur::inactif();
+        #[cfg(not(test))]
+        let serveur = GestionnaireServeur::reel();
         SuggestionsUi {
-            fabrique: Arc::new(FabriqueReelle { transport: transport.clone(), coffre: coffre.clone() }),
+            fabrique: Arc::new(FabriqueReelle { transport: transport.clone(), coffre: coffre.clone(), serveur: serveur.clone() }),
             coffre,
             transport,
+            serveur,
             dossier: dossier_cache(),
             portee: ChoixPortee::Film,
             plage: (1, 1),

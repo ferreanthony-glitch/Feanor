@@ -1,12 +1,12 @@
 # Génération sonore à partir du storyboard
 
-Branche `generation-son` (coupée de `transitions-son`, `5598977`). **Phase 1 : tout ce qui se passe du côté
-de SHOT.** La phase 2 — installer le serveur Python et les modèles — attend l'accord d'Anthony pour chaque
-téléchargement (liste en fin de document). Rien n'a été téléchargé, rien n'a été envoyé sur le réseau, aucun
-modèle n'a été lancé pendant cette phase : les essais utilisent des fournisseurs simulés.
+Branche `generation-son` (phase 1 : tout ce qui se passe du côté de SHOT), puis branche `sidecar-son`
+(**phase 2 : le serveur Python local est écrit, branché à SHOT et essayé de bout en bout**, voir §8). Aucun
+téléchargement n'a été fait pour l'écrire : le Python, le venv et les modèles de `SHOT-modeles` étaient déjà
+installés avec l'accord d'Anthony ; le serveur n'a aucun accès au réseau (`HF_HUB_OFFLINE=1`).
 
-Ce document sert à trois choses : dire ce que SHOT fait maintenant, **fixer le contrat** que le serveur de
-la phase 2 devra respecter, et lister ce qu'il faudra télécharger.
+Ce document sert à quatre choses : dire ce que SHOT fait, **fixer le contrat** du serveur local (§6), dire
+**comment le lancer et ce qui est installé** (§8), et ce qui manque encore (§8.5).
 
 ---------------------------------------------------------------------------------------------------
 
@@ -65,8 +65,9 @@ les notes du plan (et ceux de ses images de storyboard) :
   seule ambiance par règle et par plan, une seule musique par plan, 40 propositions au plus par plan.
 
 Les règles proposent ; elles ne **génèrent** pas de son. Générer demande le rôle 2 (et le rôle 3 pour les voix) :
-tant que le serveur local n'est pas installé et qu'aucun service n'est branché, « Générer » répond « non installé » ou
-« connexion en ligne à brancher ».
+si le modèle du rôle n'est pas installé (Stable Audio Open, pour l'instant) ou qu'aucun service n'est branché,
+« Générer » répond « non installé » ou « connexion en ligne à brancher ». Les voix (Kokoro) marchent déjà ; les
+bruitages attendent Stable Audio (§8.5).
 
 ---------------------------------------------------------------------------------------------------
 
@@ -83,7 +84,10 @@ tant que le serveur local n'est pas installé et qu'aucun service n'est branché
 
 Réglages (`[generation_son]`) : `lecture`, `sons`, `voix` (`"regles"`, `"local"`, `"en_ligne"`), `lecture_service`,
 `sons_service`, `voix_service` (`"claude"`, `"elevenlabs"`, `"stableaudio"`), `port_local` (8765),
-`modele_claude`, `envoyer_vignettes` (vrai), `voix_locale` (`"ff_siwis"`), `voix_en_ligne` (vide).
+`modele_claude`, `envoyer_vignettes` (vrai), `voix_locale` (`"ff_siwis"`), `voix_en_ligne` (vide), et pour le
+serveur local : `modeles_local` (le dossier `SHOT-modeles` ; vide : `Documents\Work\SHOT-modeles`), `python_local` (le
+`python.exe` du venv ; vide : `<modeles_local>\venv\Scripts\python.exe`), `demarrage_auto` (vrai). Le journal du
+serveur lancé par SHOT : `%LOCALAPPDATA%\SHOT\serveur_son.log`.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -127,7 +131,7 @@ Le lecteur par règles et le serveur local n'envoient rien hors de l'ordinateur 
 | Transport | État |
 |---|---|
 | Lecture par règles | ✅ fait, sans réseau |
-| **Serveur local** sur `127.0.0.1` (`httplocal.rs`, `sidecar.rs`) | ✅ client écrit et essayé contre un petit serveur de l'essai ; **le serveur lui-même n'existe pas encore** (phase 2) : « Tester » répond « non installé » |
+| **Serveur local** sur `127.0.0.1` (`httplocal.rs`, `sidecar.rs`, `serveurlocal.rs` ; serveur : `sidecar/serveur.py`) | ✅ client et serveur écrits, **essayés de bout en bout** (voix Kokoro, lecture Qwen2.5-VL) ; les bruitages attendent Stable Audio (§8.5) |
 | **Services en ligne** (`fournisseursapi.rs`) | ⚠ **requêtes construites et réponses relues**, essayées contre un transport simulé ; **l'envoi (HTTPS) est « à brancher »** |
 
 Pourquoi : le cache de caisses hors ligne n'a ni `ureq`, ni `reqwest`, ni aucune caisse TLS (le seul client TLS possible
@@ -160,7 +164,7 @@ premier vrai appel** (aucun n'a pu être essayé) :
 
 ---------------------------------------------------------------------------------------------------
 
-## 6. Le contrat du serveur local (à écrire en phase 2)
+## 6. Le contrat du serveur local (écrit : `sidecar/serveur.py`, voir §8)
 
 Un seul processus Python, lancé par SHOT ou par l'utilisateur, qui écoute **uniquement sur `127.0.0.1`** (jamais `0.0.0.0`),
 port `8765` par défaut (réglage `port_local`). JSON UTF-8 sur HTTP/1.1, requêtes `Connection: close`. Pas
@@ -253,6 +257,11 @@ lisible par le réalisateur. SHOT s'en sert tel quel.
 `non_installe`, `occupe` et `interne` **arrêtent la tâche** en cours (rien ne changera au plan ou au son suivant) ;
 `invalide` ne l'arrête pas.
 
+Ce que `sidecar/serveur.py` fait de ce contrat : un corps de plus de 20 Mo reçoit `413 invalide` ; une version du contrat
+plus récente que 1 reçoit `400 invalide` ; la mémoire graphique pleine donne `503 indisponible` ; une voix qui n'est pas
+installée donne `400 invalide` avec la liste des voix ; le champ `consignes` de la lecture est ignoré et les voix d'un plan
+sont tirées de ses lignes de dialogue (§8.3).
+
 ---------------------------------------------------------------------------------------------------
 
 ## 7. Choix des modèles, et pourquoi
@@ -272,11 +281,17 @@ SHOT produit ici des **sons témoins pour l'animatique**. Avant de garder un son
 vérifie les conditions de chaque modèle et de chaque service — l'usage commercial des sons générés, la réutilisation
 des données envoyées, l'attribution :
 
-- Qwen2.5-VL : licence variable selon la taille (Apache 2.0 pour certaines, licence Qwen pour d'autres) — **à vérifier**
-  pour la taille choisie.
-- Stable Audio Open : licence communautaire de Stability AI (conditions liées au chiffre d'affaires, jeux de données
-  sous licences Creative Commons) — **à vérifier**, y compris pour un film commercial.
-- Kokoro-82M : licence Apache 2.0 annoncée — **à vérifier** ; `espeak-ng` (GPL) reste un programme à part.
+- Qwen2.5-VL-7B-Instruct-AWQ (installé) : la fiche `README.md` du dossier annonce `license: apache-2.0`, **mais le dossier
+  contient aussi un fichier `LICENSE` « Qwen LICENSE AGREEMENT » (19 septembre 2024)** : les deux ne disent pas la même
+  chose, **à vérifier** (la licence Qwen n'est pas Apache 2.0). Ici Qwen ne fait que lire le texte du storyboard : aucun son
+  n'en sort.
+- Stable Audio Open (non installé) : licence communautaire de Stability AI (conditions liées au chiffre d'affaires, jeux de
+  données sous licences Creative Commons) à accepter sur la page du modèle — **à vérifier**, y compris pour un film
+  commercial.
+- Kokoro-82M (installé) : la fiche annonce `license: apache-2.0` (poids) ; `espeak-ng` (GPL) reste un programme à part
+  (bibliothèque `espeakng-loader`), appelé par Kokoro pour le français. À vérifier.
+- Le code de `sidecar/` utilise `torch` (BSD), `transformers` (Apache 2.0), `fastapi`/`uvicorn` (MIT/BSD), `kokoro`
+  (Apache 2.0) : voir leurs dépôts.
 - Claude, ElevenLabs, Stability AI (API) : conditions d'utilisation et politique de données du compte — **à vérifier**,
   en particulier si le projet est confidentiel (les images et les textes quittent l'ordinateur).
 
@@ -284,25 +299,91 @@ Une note le rappelle dans les Préférences et dans la fenêtre de confirmation.
 
 ---------------------------------------------------------------------------------------------------
 
-## 8. Phase 2 : ce qu'il faudrait télécharger (à confirmer avec Anthony, élément par élément)
+## 8. Le serveur local (phase 2, branche `sidecar-son`)
 
-**Rien de ceci n'est fait.** Les tailles sont des ordres de grandeur à vérifier au moment du téléchargement ; le total
-dépend des choix.
+Le serveur est un script lisible, versionné avec SHOT, dans **`sidecar/`** (jamais dans `SHOT-modeles`, qui ne contient
+que le Python, le venv et les modèles) :
 
-| # | Élément | Taille approximative | Remarque |
-|---|---|---|---|
-| 1 | Python 3.11 ou 3.12 (si absent) + un environnement virtuel dédié (`%LOCALAPPDATA%\SHOT\serveur_son\`) | 0,1 Go | Hors du dossier du projet. |
-| 2 | PyTorch (version CUDA) | 2,5 à 3 Go | Dépend de la carte graphique d'Anthony (CUDA ou processeur) : à lire avec le diagnostic de SHOT. |
-| 3 | Bibliothèques Python : `transformers`, `accelerate`, `qwen-vl-utils`, `stable-audio-tools` (ou `diffusers`), `kokoro`, `soundfile`, `fastapi` + `uvicorn` (ou la bibliothèque standard seule) | 0,5 à 1 Go | La liste exacte avec les versions fixées sera donnée avant. |
-| 4 | **Qwen2.5-VL-7B-Instruct** (poids) — ou 3B | ~16 Go (7B) ; ~5 à 6 Go quantifié ; ~7 Go (3B) | Le choix dépend de la mémoire de la carte. |
-| 5 | **Stable Audio Open Small** (poids) | ~1,5 Go | Recommandé pour commencer (rapide). |
-| 6 | **Stable Audio Open 1.0** (poids) | ~5 Go | Facultatif : ambiances plus longues. Compte Hugging Face et acceptation de la licence. |
-| 7 | **Kokoro-82M** (poids et voix) + `espeak-ng` | ~0,4 Go | |
-| | **Total** | **environ 12 à 30 Go** | Selon les choix 4 à 6. |
+| Fichier | Rôle |
+|---|---|
+| `sidecar/serveur.py` | L'application FastAPI : le contrat du §6, rien de plus. `127.0.0.1` seulement ; une demande à la fois (`503 occupe`) ; fermer la connexion annule ; erreurs en JSON français ; refuse plus de 20 Mo ; quitte si SHOT disparaît (`--parent-pid`) ; rend la mémoire graphique après 10 minutes sans demande. |
+| `sidecar/modeles.py` | Kokoro, Qwen (lecture), Stable Audio, et le gestionnaire de mémoire graphique (un seul gros modèle à la fois : Qwen est déchargé avant Kokoro ou Stable Audio, Kokoro avant Qwen). |
+| `sidecar/awq.py` | Qwen2.5-VL **AWQ chargé sans `gptqmodel`** (voir 8.3). |
+| `sidecar/config.toml` | Les noms des dossiers de modèles, la voix par défaut, la longueur de réponse. **Aucun chemin d'utilisateur** : le dossier `SHOT-modeles` est donné par SHOT (`--racine`) ou par la variable `SHOT_MODELES`. |
+| `sidecar/lancer.ps1` | Lance le serveur à la main (PowerShell 5.1). |
+| `sidecar/essai.py` | L'essai de fumée, à lancer à la main (`pytest` n'est pas installé dans le venv). |
 
-Avant tout téléchargement : confirmer la carte graphique (mémoire), les modèles retenus (4 à 6), l'emplacement (disque et
-dossier), et qui donne le jeton Hugging Face (SHOT ne le stocke pas). Le serveur sera un script lisible, versionné avec
-SHOT, qui implémente exactement le §6 ; `GET /v1/etat` dira ce qui est installé.
+### 8.1 Ce qui est installé (dans `Documents\Work\SHOT-modeles`, installé avec l'accord d'Anthony)
+
+- `python\` : CPython 3.12.10 ; `venv\` : torch 2.14.1+cu126 (CUDA marche sur la RTX 2080 SUPER, 8 Go), transformers 5.20.1,
+  accelerate, qwen-vl-utils, kokoro 0.9.4 (avec espeakng-loader), soundfile, fastapi, uvicorn, huggingface_hub.
+- `modeles\Qwen2.5-VL-7B-Instruct-AWQ` (6,9 Go), `modeles\Kokoro-82M` (voix `ff_siwis`, `af_heart`, `am_michael`).
+- **Pas installé** : Stable Audio Open (8.4).
+
+### 8.2 Le lancer
+
+- **Par SHOT** (le plus simple) : Fichier > Préférences > Génération sonore > « Serveur local » : le dossier des modèles et
+  le Python (par défaut ceux de `Documents\Work\SHOT-modeles`), « Démarrer le serveur local » / « Arrêter » / « Tester ».
+  Avec la case « Démarrer le serveur tout seul… » (cochée d'origine), un « Générer » local ou une lecture par Qwen lance le
+  serveur si personne n'écoute, **en arrière-plan, sans fenêtre**, attend qu'il réponde et reprend. SHOT l'arrête en se
+  fermant (le processus est dans un objet de travail Windows qui le tue même si SHOT plante, avec le Python de base que le
+  lanceur du venv démarre). Un serveur lancé à la main n'est jamais arrêté par SHOT. Rien ne bloque l'interface : le
+  lancement, l'attente et l'arrêt se font sur des fils de travail ; le chargement d'un modèle se fait dans le serveur.
+  Le journal du serveur : `%LOCALAPPDATA%\SHOT\serveur_son.log`.
+- **À la main** : `.\sidecar\lancer.ps1 [-Racine D:\SHOT-modeles] [-Port 8765]`, ou
+  `<venv>\Scripts\python.exe -I sidecar\serveur.py --racine <SHOT-modeles> --port 8765`.
+- **Essai de fumée** : `<venv>\Scripts\python.exe -I sidecar\essai.py --racine <SHOT-modeles> [--sans-lecture]`.
+
+### 8.3 Qwen2.5-VL en AWQ sans `gptqmodel`
+
+`transformers` 5.20.1 refuse un modèle AWQ tant que **`gptqmodel`** n'est pas installé (« Loading an AWQ quantized model
+requires gptqmodel »), et ce paquet compile des noyaux CUDA : non installé, par la règle « aucun téléchargement ». Plutôt
+que de laisser la lecture par Qwen hors d'usage, `sidecar/awq.py` lit les poids AWQ (4 bits, groupes de 128) directement dans
+les fichiers safetensors et les déquantifie couche par couche dans PyTorch. Les poids restent en 4 bits dans la carte ;
+les plongements (1,1 Go, une table de consultation) restent dans la mémoire de l'ordinateur ; la tour visuelle (1,4 Go) vient
+sur la carte le temps de lire la vignette, puis repart. Le prix : pas de noyau CUDA dédié, donc **environ 4 jetons par seconde**.
+Pour que cela reste supportable, le serveur demande à Qwen une réponse courte (une ligne par bruitage, ambiance ou musique)
+et construit **lui-même les voix à partir des lignes de dialogue** (comme `lecturerules.rs` : une voix par ligne, l'une après
+l'autre) : jamais de réplique déformée, et la moitié des jetons en moins. Le serveur ignore donc le champ `consignes` de
+SHOT (le contrat le permet) ; il bride aussi un bruitage à 3 s et une ambiance à 30 s.
+
+### 8.4 Mesures (RTX 2080 SUPER 8 Go, dont ~1 à 2 Go déjà pris par Windows et les autres programmes)
+
+| | Mesure |
+|---|---|
+| Kokoro, premier appel (importer torch, spaCy, kokoro ; charger le modèle) | 17 à 20 s, une fois par démarrage du serveur |
+| Kokoro, ensuite | 0,1 à 0,2 s pour 2 à 7 s de parole (30 à 50 fois plus vite que le temps réel) ; 24 kHz, WAV 16 bits mono |
+| Kokoro, mémoire graphique | environ 0,95 Go (contexte CUDA compris) |
+| Kokoro rechargé après Qwen | 1 s |
+| Qwen2.5-VL AWQ, chargement (fichiers déjà dans le cache de Windows) | 3 à 4 s ; compter plus pour une première lecture du disque (6,9 Go) |
+| Qwen, mémoire graphique | 4,6 Go réservés au repos, 5,7 Go au pic (lecture d'une vignette) : tient dans 8 Go **si rien d'autre ne prend plus de ~2 Go** ; SHOT lui-même et Windows comptent |
+| Qwen, un plan (texte seul ou avec vignette) | 12 à 19 s : 4 jetons par seconde, 50 à 60 jetons de réponse |
+| Lecture d'un film de 30 plans | de l'ordre de 7 à 8 minutes ; les règles (par défaut) le font instantanément |
+| Fermer la connexion pendant que Qwen écrit | le serveur est libre 2 s plus tard |
+| De bout en bout dans SHOT (essai `sidecar_reel_*`) | voix : « Générer » → fichier WAV → « prête » → « Accepter » → posée sur la piste « Sons proposés » : 21 s la première fois (le serveur démarre et Kokoro se charge), 0,13 s ensuite. Lecture Qwen d'un plan avec sa vignette : 33 s en tout (serveur + modèle + plan). |
+
+### 8.5 Ce qui manque
+
+- **Stable Audio Open** (bruitages, ambiances, musique) : `GET /v1/etat` répond `son: installé false`, `/v1/son` répond
+  `501 modele_absent` avec la raison, et « Générer » dit « non installé » dans SHOT. Le code de `/v1/son` est écrit
+  (`stable-audio-tools`, 8 étapes « pingpong », durée voulue respectée jusqu'à ~11,9 s) et sa plomberie est essayée avec un
+  **faux** module, mais **le vrai modèle n'a jamais tourné** ici. Il faut :
+  1. **accepter la licence** de `stabilityai/stable-audio-open-small` sur huggingface.co/stabilityai/stable-audio-open-small
+     (modèle à accès restreint), puis **se connecter soi-même** avec `huggingface-cli login` ou `hf auth login` en tapant
+     son propre jeton — SHOT ne le demande, ne le lit et ne le range nulle part ; le téléchargement se fait ensuite dans
+     `SHOT-modeles\modeles\stable-audio-open-small\` (`model.safetensors` ≈ 1,2 à 1,5 Go + `model_config.json`) ;
+  2. l'encodeur de texte **`google-t5/t5-base`** (public, ≈ 0,9 Go) dans `SHOT-modeles\modeles\t5-base\` : la configuration de
+     Stable Audio Open Small le nomme et la bibliothèque irait le chercher en ligne ;
+  3. la bibliothèque Python **`stable-audio-tools`** (`pip install stable-audio-tools` ; la roue est petite mais elle tire
+     beaucoup de dépendances absentes du venv — `einops`, `k-diffusion`, `alias-free-torch`, `vector-quantize-pytorch`,
+     `x-transformers`, `laion-clap`, `gradio`, `wandb`… — de l'ordre de 0,3 à 0,6 Go **à vérifier au téléchargement**) ; elle
+     a été écrite pour `transformers` 4 : un conflit avec le 5.20.1 du venv est possible, auquel cas il faudra un second venv ou
+     passer par `diffusers` (`pip install diffusers`, petit), que le serveur sait aussi lire pour Stable Audio Open 1.0.
+- **Qwen plus rapide** : un noyau AWQ (`gptqmodel`, à compiler pour Windows) ferait passer la lecture de ~4 à plusieurs dizaines
+  de jetons par seconde. Rien n'est installé pour cela.
+- Les services en ligne (§5) et le cache des sons générés (jamais nettoyé) restent à faire.
+- Une carte plus grande, ou rien d'autre sur la carte pendant que Qwen lit, laisse plus de marge : si la mémoire manque, le
+  serveur répond `503 indisponible` avec le message « Plus assez de mémoire graphique… » et SHOT s'arrête en le disant.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -315,6 +396,8 @@ SHOT, qui implémente exactement le §6 ; `GET /v1/etat` dira ce qui est install
 | `lecturerules.rs` | Le lecteur sans modèle |
 | `fournisseurs.rs` | Les traits `LecteurStoryboard`, `GenerateurSon`, `GenerateurVoix`, `Controle` (annulation, avancement), `ErreurGen` |
 | `httplocal.rs`, `sidecar.rs` | Le client HTTP de boucle locale et le contrat du serveur local |
+| `serveurlocal.rs` | Le serveur lancé par SHOT : chemins (`Documents\Work\SHOT-modeles` par défaut), processus sans console dans un objet de travail Windows, attente, arrêt, démarrage automatique (`Demarrage`) |
+| `sidecar/` | Le serveur Python (voir §8) |
 | `fournisseursapi.rs` | Claude, ElevenLabs, Stable Audio : requêtes, réponses, erreurs, `Transport` (à brancher) |
 | `clessecretes.rs` | Le Gestionnaire d'identifiants de Windows (`CredWriteW` / `CredReadW` / `CredDeleteW`) |
 | `genreglages.rs` | Les réglages (`[generation_son]`) |
@@ -322,7 +405,12 @@ SHOT, qui implémente exactement le §6 ; `GET /v1/etat` dira ce qui est install
 | `suggestionsui.rs`, `genprefsui.rs` | Le panneau, ses fenêtres ; la section des Préférences |
 | `base64.rs` | Base64, pour les vignettes et les sons dans le JSON |
 
-Essais (83) : `indications_tests`, `fournisseurs_tests` (avec les fournisseurs simulés), `suggestions_tests`,
-`base64_tests`. Aucun n'ouvre le réseau (sauf `127.0.0.1` contre un serveur de l'essai) ni ne lance de modèle.
+Essais Rust : `indications_tests`, `fournisseurs_tests` (avec les fournisseurs simulés), `suggestions_tests`,
+`base64_tests`, `serveurlocal_tests` (14 : le contrat contre un **faux serveur** qui rend les réponses relevées sur le vrai
+`serveur.py`, le démarrage automatique avec un faux lanceur, et un vrai processus `cmd` pour l'arrêt de tout l'arbre). Aucun
+n'ouvre le réseau (sauf `127.0.0.1` contre un serveur de l'essai), ne lance Python ni un modèle. Deux essais **ignorés**
+(`sidecar_reel_*` dans `suggestions_tests.rs`) lancent le vrai serveur et se lancent à la main :
+`cargo test --release --offline --target-dir target\msvc --lib sidecar_reel -- --ignored --nocapture --test-threads=1`.
+Côté Python : `sidecar/essai.py` (§8.2).
 Le seul essai qui touche au système est celui du Gestionnaire d'identifiants de Windows, sous un nom d'essai
 (`SHOT-essai-<pid>/…`) qu'il efface.

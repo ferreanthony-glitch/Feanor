@@ -17,6 +17,7 @@ use crate::fournisseurs::{Controle, DemandeLecture, DemandeSon, DemandeVoix, Err
 use crate::httplocal::{requete, ReponseHttp};
 use crate::indications::IndicationBrute;
 use crate::lecturesb;
+use crate::serveurlocal::Demarrage;
 
 /// Le port où le serveur local écoute, sauf réglage contraire.
 pub const PORT_PAR_DEFAUT: u16 = 8765;
@@ -61,17 +62,39 @@ impl EtatSidecar {
 #[derive(Clone, Debug)]
 pub struct ClientSidecar {
     pub adresse: SocketAddr,
+    /// Si le serveur ne répond pas : SHOT le lance et l'attend (réglage « démarrage automatique »).
+    /// Jamais pour `etat` (le bouton « Tester » ne lance rien).
+    pub demarrage: Option<Demarrage>,
 }
 
 impl ClientSidecar {
     /// Le serveur de cet ordinateur, sur le port `port`.
     pub fn sur_le_port(port: u16) -> ClientSidecar {
-        ClientSidecar { adresse: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port) }
+        ClientSidecar { adresse: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port), demarrage: None }
+    }
+
+    /// Le même client, qui lance le serveur au besoin.
+    pub fn avec_demarrage(mut self, demarrage: Demarrage) -> ClientSidecar {
+        self.demarrage = Some(demarrage);
+        self
+    }
+
+    /// Une requête, avec le lancement du serveur si personne n'écoute (la connexion refusée, pas une
+    /// réponse « non installé » du serveur lui-même).
+    fn envoyer(&self, methode: &str, chemin: &str, octets: Option<&[u8]>, controle: &Controle, delai: Duration) -> Result<ReponseHttp, ErreurGen> {
+        let une_fois = || requete(self.adresse, methode, chemin, octets.map(|b| ("application/json", b)), controle, delai);
+        match (une_fois(), &self.demarrage) {
+            (Err(ErreurGen::NonInstalle(_)), Some(d)) => {
+                d.assurer(&ClientSidecar::sur_le_port(self.adresse.port()), controle)?;
+                une_fois()
+            }
+            (r, _) => r,
+        }
     }
 
     fn appeler(&self, methode: &str, chemin: &str, corps: Option<&Value>, controle: &Controle, delai: Duration) -> Result<ReponseHttp, ErreurGen> {
         let octets = corps.map(|c| serde_json::to_vec(c).map_err(|e| ErreurGen::Invalide(e.to_string()))).transpose()?;
-        let reponse = requete(self.adresse, methode, chemin, octets.as_deref().map(|b| ("application/json", b)), controle, delai)?;
+        let reponse = self.envoyer(methode, chemin, octets.as_deref(), controle, delai)?;
         if reponse.reussie() {
             Ok(reponse)
         } else {
@@ -86,7 +109,9 @@ impl ClientSidecar {
 
     /// `GET /v1/etat` : le serveur répond-il, et quels modèles a-t-il ?
     pub fn etat(&self, controle: &Controle) -> Result<EtatSidecar, ErreurGen> {
-        let v = self.json("GET", "/v1/etat", None, controle, DELAI_ETAT)?;
+        // (Sans lancement automatique, même si le client en a un : on demande, on ne démarre rien.)
+        let r = ClientSidecar::sur_le_port(self.adresse.port()).appeler("GET", "/v1/etat", None, controle, DELAI_ETAT)?;
+        let v: Value = serde_json::from_slice(&r.corps).map_err(|e| ErreurGen::Invalide(format!("réponse du serveur local illisible ({e})")))?;
         let modele = |role: &str| {
             let m = &v["modeles"][role];
             EtatModele { installe: m["installe"].as_bool().unwrap_or(false), nom: m["nom"].as_str().unwrap_or("").chars().take(80).collect() }

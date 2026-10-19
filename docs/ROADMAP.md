@@ -2564,7 +2564,13 @@ téléchargement, aucun modèle, aucune requête réseau.
   d'envoi en ligne une fois par projet ; Préférences > Génération sonore (fournisseur de chaque rôle, port local,
   « Tester », clés, « Tester la connexion »).
 - ✅ **Les clés** dans le Gestionnaire d'identifiants de Windows (`clessecretes.rs`), jamais dans un fichier.
-- **Pas fait / limites** : le **serveur local n'existe pas** (phase 2, accord de chaque téléchargement) ; l'**envoi HTTPS
+- ✅ **Phase 2 (branche `sidecar-son`)** : le **serveur local** `sidecar/serveur.py` (FastAPI, `127.0.0.1`, le contrat du §6)
+  avec Kokoro (voix) et Qwen2.5-VL AWQ chargé sans `gptqmodel` (`sidecar/awq.py`) ; lancé, attendu et arrêté par SHOT
+  (`serveurlocal.rs`, sans console, objet de travail Windows) ; Préférences : dossier des modèles, Python, Démarrer / Arrêter /
+  Tester, démarrage automatique. Essayé de bout en bout (voix → prête → accepter ; lecture Qwen). Mesures et manques dans
+  `docs/GENERATION_SON.md` §8.
+- **Pas fait / limites** : **Stable Audio Open n'est pas téléchargé** (licence à accepter par l'utilisateur, `t5-base` et
+  `stable-audio-tools` aussi) : pas de bruitage généré ; Qwen lit à ~4 jetons/s (pas de noyau AWQ) ; l'**envoi HTTPS
   aux services en ligne est « à brancher »** (aucune caisse TLS hors ligne ; piste : WinHTTP déclaré à la main) ; les
   adresses et formats des services en ligne sont à vérifier avant le premier appel ; le cache des sons générés n'est pas
   nettoyé ; une seule génération à la fois ; pas de voix par personnage retenue d'un plan à l'autre (la voix se

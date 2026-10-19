@@ -70,6 +70,9 @@ mod indications;
 mod indications_tests;
 mod lecturerules;
 mod lecturesb;
+mod serveurlocal;
+#[cfg(test)]
+mod serveurlocal_tests;
 mod sidecar;
 mod suggestionsui;
 #[cfg(test)]

@@ -4208,6 +4208,8 @@ impl App {
         }
         self.settings.layout = Some(self.current_layout());
         let _ = self.settings.save();
+        // Le serveur de génération sonore que SHOT a lancé s'arrête avec lui (un serveur lancé à la main reste).
+        self.sug.serveur.arreter();
     }
 }
 

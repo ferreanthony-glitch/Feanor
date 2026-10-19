@@ -103,6 +103,16 @@ pub struct GenerationSonReglages {
     pub voix_locale: String,
     #[serde(rename = "voix_en_ligne")]
     pub voix_en_ligne: String,
+    /// Le Python du serveur local (celui du venv de `SHOT-modeles`). Vide : `<modèles>\venv\Scripts\python.exe`.
+    #[serde(rename = "python_local")]
+    pub python_local: String,
+    /// Le dossier `SHOT-modeles` (python, venv, modèles). Vide : `Documents\Work\SHOT-modeles`.
+    #[serde(rename = "modeles_local")]
+    pub modeles_local: String,
+    /// SHOT lance le serveur local tout seul quand une génération locale le demande, et l'arrête en
+    /// se fermant.
+    #[serde(rename = "demarrage_auto")]
+    pub demarrage_auto: bool,
 }
 
 impl Default for GenerationSonReglages {
@@ -119,6 +129,9 @@ impl Default for GenerationSonReglages {
             vignettes: true,
             voix_locale: "ff_siwis".into(),
             voix_en_ligne: String::new(),
+            python_local: String::new(),
+            modeles_local: String::new(),
+            demarrage_auto: true,
         }
     }
 }
@@ -202,6 +215,8 @@ impl GenerationSonReglages {
         self.modele_claude = self.modele_claude.trim().chars().take(80).collect();
         self.voix_locale = self.voix_locale.trim().chars().take(80).collect();
         self.voix_en_ligne = self.voix_en_ligne.trim().chars().take(80).collect();
+        self.python_local = self.python_local.trim().trim_matches('"').chars().take(500).collect();
+        self.modeles_local = self.modeles_local.trim().trim_matches('"').chars().take(500).collect();
         self
     }
 }

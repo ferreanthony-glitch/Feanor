@@ -663,7 +663,7 @@ fn with_no_server_installed_every_local_role_says_not_installed() {
     assert!(matches!(SonSidecar(client.clone()).generer(&DemandeSon { genre: Genre::Bruitage, prompt: "x".into(), secondes: 1.0 }, &c), Err(ErreurGen::NonInstalle(_))));
     assert!(matches!(VoixSidecar(client.clone()).generer(&DemandeVoix { texte: "x".into(), personnage: String::new(), voix: String::new(), langue: "fr".into() }, &c), Err(ErreurGen::NonInstalle(_))));
     let texte = crate::generation::tester_local(libre, &c);
-    assert!(texte.starts_with("Non installé"), "{texte}");
+    assert!(texte.starts_with("Le serveur local ne tourne pas"), "{texte}");
 }
 
 // ================================================================================ services en ligne

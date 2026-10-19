@@ -517,8 +517,9 @@ de sons et solo.
   « Supprimer les rejetées » ; la proposition choisie et ses boutons (Générer / Régénérer, Écouter, Accepter, Rejeter,
   Reprendre, Modifier, Supprimer) ; la liste (icône de la sorte, plan et moment, titre, état), même menu au clic droit.
 - **Fenêtres** : « Envoyer vers un service en ligne ? » (une fois par projet), « Modifier la proposition », « Clé de … ».
-- **Préférences** : section « Génération sonore » repliée (les trois rôles, le port du serveur local, « Tester », les clés,
-  « Tester la connexion », une note de licences). La fenêtre Préférences défile quand elle dépasse l'écran.
+- **Préférences** : section « Génération sonore » repliée (les trois rôles ; le serveur local : dossier des modèles,
+  Python, case « Démarrer le serveur tout seul… », port, « Démarrer le serveur local », « Arrêter », « Tester » ; les
+  clés, « Tester la connexion », une note de licences). La fenêtre Préférences défile quand elle dépasse l'écran.
 - **Barre des panneaux** : une icône de plus (étincelle), même groupe que les bruitages ; menu Son > Suggestions
   sonores… ; commandes `vue.suggestions_sonores` et `suggestion.lire` (sans touche par défaut).
 - **Historique** : « Accepter un son proposé ».
@@ -534,7 +535,8 @@ de sons et solo.
 4. **Fenêtres** : confirmation en ligne (texte long, bouton), « Modifier » (champs selon la sorte), saisie de la clé
    (champ masqué).
 5. **Préférences** : la section repliée ouverte avec les trois rôles en ligne (hauteur, défilement de la fenêtre sur un
-   écran de 1080 points) ; le bouton « Tester » du serveur local (« Non installé… »).
+   écran de 1080 points) ; « Démarrer le serveur local » (le message d'attente, puis la phrase de « Tester ») ;
+   « Arrêter » ; « Tester » quand le serveur ne tourne pas (« Le serveur local ne tourne pas… »).
 6. **Piste « Sons proposés »** dans la bande de montage et dans la timeline : nom, couleur, extraits posés à la bonne image.
 7. **Lire un film de plusieurs dizaines de plans** : l'interface reste fluide pendant les vignettes (8 ms par image
    d'écran) et la lecture.

@@ -90,7 +90,7 @@ fn proposes_et_pretes(app: &mut App) -> Vec<u64> {
 fn reading_the_storyboard_by_rules_needs_no_model_and_fills_the_list() {
     let (mut app, _fab, dir) = application("regles", un_son_par_plan());
     // Le vrai fournisseur, avec le choix d'origine (règles) : aucun serveur, aucune clé.
-    app.sug.fabrique = Arc::new(FabriqueReelle { transport: Arc::new(TransportABrancher), coffre: Arc::new(CoffreMemoire::default()) });
+    app.sug.fabrique = Arc::new(FabriqueReelle { transport: Arc::new(TransportABrancher), coffre: Arc::new(CoffreMemoire::default()), serveur: crate::serveurlocal::GestionnaireServeur::inactif() });
     assert_eq!(app.settings.generation_son.lecture, Mode::Regles);
     app.doc.panels[0].action = "La porte claque. Il pleut dehors.".into();
     app.doc.panels[0].dialogue = "MARIE : Viens ici.".into();
@@ -707,7 +707,7 @@ fn the_test_buttons_report_not_installed_and_a_connection_to_plug_in_without_blo
     assert_eq!(app.sug.prefs.resultats[&None], "Essai en cours…", "l'essai ne bloque pas : il rend la main aussitôt");
     attendre_essai(&mut app);
     let texte = &app.sug.prefs.resultats[&None];
-    assert!(texte.starts_with("Non installé") && texte.contains(&libre.to_string()), "{texte}");
+    assert!(texte.starts_with("Le serveur local ne tourne pas") && texte.contains(&libre.to_string()), "{texte}");
     // Le service en ligne : sans clé, puis avec une clé mais sans transport.
     app.lancer_essai(Some(Role::Lecture));
     attendre_essai(&mut app);
@@ -832,5 +832,105 @@ fn a_provider_error_is_told_in_the_status_bar_and_the_cue_keeps_its_state() {
     pomper(&mut app);
     assert!(app.status.contains("non installé"), "{}", app.status);
     assert_eq!(ids(&app).len(), 3);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+// ================================================================ de bout en bout avec le VRAI serveur
+//
+// Ces deux essais lancent le vrai serveur Python (sidecar/serveur.py) avec le venv de SHOT-modeles : ils
+// sont donc ignorés par `cargo test` et se lancent à la main :
+//   cargo test --release --offline --target-dir target\msvc --lib sidecar_reel -- --ignored --nocapture --test-threads=1
+
+/// Comme `pomper`, avec le temps d'un vrai modèle.
+fn pomper_longtemps(app: &mut App, secondes: u64) {
+    let ctx = egui::Context::default();
+    let t = Instant::now();
+    loop {
+        app.poll_suggestions(&ctx);
+        if !app.sug.occupe() {
+            break;
+        }
+        assert!(t.elapsed() < Duration::from_secs(secondes), "les suggestions ne finissent pas : {}", app.status);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    app.poll_suggestions(&ctx);
+}
+
+fn application_avec_le_vrai_serveur(nom: &str) -> (App, PathBuf) {
+    let (mut app, _f, dir) = application(nom, un_son_par_plan());
+    app.sug.serveur = crate::serveurlocal::GestionnaireServeur::reel();
+    app.sug.fabrique = Arc::new(FabriqueReelle { transport: Arc::new(TransportABrancher), coffre: Arc::new(CoffreMemoire::default()), serveur: app.sug.serveur.clone() });
+    // Un port à soi : le serveur de l'utilisateur, s'il tourne, n'est pas dérangé.
+    app.settings.generation_son.port_local = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    app.settings.generation_son.demarrage_auto = true;
+    (app, dir)
+}
+
+#[test]
+#[ignore = "lance le vrai serveur Python et Kokoro (SHOT-modeles requis)"]
+fn sidecar_reel_a_voice_cue_is_generated_by_kokoro_listened_to_and_accepted() {
+    let (mut app, dir) = application_avec_le_vrai_serveur("sidecar-reel-voix");
+    app.doc.panels[0].dialogue = "MARIE : Viens ici, il pleut sur la ville.".into();
+    app.lire_storyboard(Portee::Plans(vec![app.doc.panels[0].id]));
+    pomper(&mut app);
+    let voix: Vec<u64> = ids(&app).into_iter().filter(|&i| app.doc.sons_proposes.get(i).unwrap().kind.est_voix()).collect();
+    assert_eq!(voix.len(), 1, "{:#?}", app.doc.sons_proposes.indications);
+    let id = voix[0];
+    let t = Instant::now();
+    app.generer_indications(vec![id]);
+    assert_eq!(app.doc.sons_proposes.get(id).unwrap().status, Statut::EnGeneration);
+    pomper_longtemps(&mut app, 240);
+    println!("voix : premier appel (le serveur démarre, Kokoro se charge) en {:.1} s", t.elapsed().as_secs_f32());
+    assert_eq!(app.doc.sons_proposes.get(id).unwrap().status, Statut::Prete, "{}", app.status);
+    let fichier = app.doc.sons_proposes.get(id).unwrap().file.clone().unwrap();
+    let octets = std::fs::read(&fichier).unwrap();
+    let pcm = crate::audio::decode(&octets, "wav").expect("un WAV lisible");
+    println!("voix : {} octets, {:?}", octets.len(), fichier.file_name().unwrap());
+    assert!(pcm.frames() > 1000);
+    assert!(app.sug.serveur.en_marche(), "SHOT a lancé le serveur");
+    // Une deuxième réplique : le serveur est chaud.
+    let deux = app.doc.sons_proposes.ajouter(app.doc.panels[1].id, IndicationBrute { start: 0, frames: 48, kind: Some(Genre::Voix), description: "x".into(), text: "Il pleut toujours.".into(), character: "PAUL".into(), ..Default::default() });
+    let t = Instant::now();
+    app.generer_indications(vec![deux]);
+    pomper_longtemps(&mut app, 60);
+    println!("voix : deuxième appel en {:.2} s", t.elapsed().as_secs_f32());
+    assert_eq!(app.doc.sons_proposes.get(deux).unwrap().status, Statut::Prete, "{}", app.status);
+    // Accepter : le son se pose sur la piste « Sons proposés ».
+    app.accepter_indication(id);
+    pomper(&mut app);
+    assert_eq!(app.doc.audio_tracks[0].name, PISTE);
+    assert_eq!(app.doc.sons_proposes.get(id).unwrap().status, Statut::Acceptee);
+    // Les bruitages : Stable Audio n'est pas téléchargé, le message le dit.
+    let bruit = app.doc.sons_proposes.ajouter(app.doc.panels[2].id, IndicationBrute { start: 0, frames: 24, kind: Some(Genre::Bruitage), description: "Porte".into(), prompt: "door slam".into(), ..Default::default() });
+    app.generer_indications(vec![bruit]);
+    pomper_longtemps(&mut app, 60);
+    println!("bruitage : {}", app.status);
+    assert_eq!(app.doc.sons_proposes.get(bruit).unwrap().status, Statut::Proposee);
+    assert!(app.status.contains("Stable Audio"), "{}", app.status);
+    // SHOT se ferme : le serveur s'arrête.
+    app.fermeture();
+    assert!(!app.sug.serveur.en_marche());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+#[ignore = "lance le vrai serveur Python et Qwen2.5-VL (SHOT-modeles requis, ~5 Go de mémoire graphique)"]
+fn sidecar_reel_the_storyboard_is_read_by_qwen_with_its_thumbnail() {
+    let (mut app, dir) = application_avec_le_vrai_serveur("sidecar-reel-qwen");
+    app.settings.generation_son.lecture = Mode::Local;
+    app.doc.panels[0].action = "Une jeune femme referme la porte d'entrée en claquant. Il pleut dehors.".into();
+    app.doc.panels[0].dialogue = "MARIE : Viens ici.".into();
+    app.doc.panels[0].notes = "SFX : pas dans l'escalier".into();
+    let t = Instant::now();
+    app.lire_storyboard(Portee::Plans(vec![app.doc.panels[0].id]));
+    pomper_longtemps(&mut app, 300);
+    println!("lecture Qwen (démarrage du serveur + chargement du modèle + un plan) : {:.1} s", t.elapsed().as_secs_f32());
+    println!("{}", app.status);
+    for i in &app.doc.sons_proposes.indications {
+        println!("  {:?} image {} : {} | {} | {}", i.kind, i.start, i.description, i.prompt, i.text);
+    }
+    assert!(app.doc.sons_proposes.indications.iter().any(|i| i.kind.est_voix() && i.text.contains("Viens ici")), "la voix vient du dialogue");
+    assert!(app.doc.sons_proposes.indications.iter().any(|i| !i.kind.est_voix()), "Qwen propose au moins un son");
+    app.fermeture();
     std::fs::remove_dir_all(&dir).ok();
 }

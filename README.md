@@ -1087,7 +1087,7 @@ panneau (« Actualiser » la relit).
 Le panneau **Suggestions sonores** (barre des panneaux, Son > Suggestions sonores…, `vue.suggestions_sonores`) lit
 le storyboard et **propose des sons témoins** pour l'animatique : bruitages, ambiances, musique d'intention, voix
 des dialogues. On les écoute, on les accepte, on les régénère ou on les supprime ; rien n'entre dans le montage
-sans accord. Le détail, le contrat du futur serveur local et la liste de ce qu'il faudrait télécharger sont dans
+sans accord. Le détail, le contrat du serveur local, comment le lancer et ce qui manque encore sont dans
 `docs/GENERATION_SON.md`.
 
 - **Lire le storyboard** (`suggestion.lire`) : tout le film, la séquence courante, le plan courant ou une plage de
@@ -1100,8 +1100,11 @@ sans accord. Le détail, le contrat du futur serveur local et la liste de ce qu'
   et une ligne « SFX : porte qui grince, pas dans l'escalier » est reprise telle quelle. Elle ne génère pas de son.
 - **Trois rôles, un fournisseur chacun** (Fichier > Préférences > Génération sonore) : lecture (règles, Qwen2.5-VL
   local ou Claude en ligne), bruitages et ambiances (Stable Audio Open local, ElevenLabs ou Stable Audio en ligne), voix
-  (Kokoro-82M local, ElevenLabs en ligne). Le serveur local (127.0.0.1, port réglable) **n'est pas encore installé**
-  (phase 2, après accord de chaque téléchargement) : « Tester » répond « non installé ». Les requêtes des services en
+  (Kokoro-82M local, ElevenLabs en ligne). Le **serveur local** (`sidecar/serveur.py`, Python, 127.0.0.1, port
+  réglable) est écrit : SHOT le lance tout seul (sans fenêtre) au premier « Générer » local et l'arrête en se
+  fermant, ou « Démarrer le serveur local » / « Arrêter » / « Tester » dans les Préférences (dossier `SHOT-modeles`
+  et Python réglables). **Les voix (Kokoro) et la lecture par Qwen2.5-VL marchent** ; les bruitages attendent
+  Stable Audio Open, pas encore téléchargé (licence à accepter par l'utilisateur). Les requêtes des services en
   ligne sont prêtes, leur envoi HTTPS est **à brancher** (aucune caisse TLS hors ligne).
 - **Accepter** copie le son dans le projet et le pose à la bonne image sur la piste « Sons proposés » (une étape
   d'annulation). Tout travail se fait sur un fil à part, avec son avancement, et s'annule.
@@ -1429,7 +1432,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `bruitages.rs`, `bruitagesui.rs` | Bibliothèque de bruitages : parcours des dossiers, recherche, durées, écoute ; panneau, glisser vers le montage |
 | `indications.rs`, `lecturesb.rs`, `lecturerules.rs` | Sons proposés : la proposition et `sons_proposes.json` ; l'entrée de la lecture du storyboard ; la lecture par règles, sans modèle |
 | `fournisseurs.rs`, `generation.rs`, `genreglages.rs` | Génération sonore : les trois rôles (traits), annulation et avancement, tâches sur des fils à part, réglages `[generation_son]` |
-| `httplocal.rs`, `sidecar.rs`, `fournisseursapi.rs`, `clessecretes.rs`, `base64.rs` | Client HTTP de boucle locale et contrat du serveur local ; Claude, ElevenLabs, Stable Audio (requêtes prêtes, envoi à brancher) ; clés dans le Gestionnaire d'identifiants de Windows |
+| `httplocal.rs`, `sidecar.rs`, `serveurlocal.rs`, `fournisseursapi.rs`, `clessecretes.rs`, `base64.rs` | Client HTTP de boucle locale et contrat du serveur local ; lancement, attente et arrêt du serveur Python (`sidecar/`) ; Claude, ElevenLabs, Stable Audio (requêtes prêtes, envoi à brancher) ; clés dans le Gestionnaire d'identifiants de Windows |
 | `suggestionsui.rs`, `genprefsui.rs` | Panneau Suggestions sonores et ses fenêtres ; section « Génération sonore » des Préférences |
 | `canvas.rs`, `panels.rs`, `timeline.rs` | Interface |
 

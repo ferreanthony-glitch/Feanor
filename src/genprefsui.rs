@@ -2,8 +2,9 @@
 //! lire le storyboard, générer les bruitages et ambiances, générer les voix témoin — le fournisseur,
 //! **local** (le serveur de cet ordinateur) ou **service en ligne**.
 //!
-//! - Local : l'adresse (toujours `127.0.0.1`) et le port, et un bouton « Tester » qui dit
-//!   « non installé » tant que le serveur de la phase 2 n'est pas là.
+//! - Local : le serveur Python de `sidecar/` — le dossier `SHOT-modeles` et le Python à utiliser, le
+//!   démarrage automatique, l'adresse (toujours `127.0.0.1`) et le port, « Démarrer le serveur local »,
+//!   « Arrêter » et « Tester » (`serveurlocal.rs` : tout se fait sur des fils à part).
 //! - En ligne : le service, « Saisir la clé… » (rangée dans le Gestionnaire d'identifiants de Windows,
 //!   `clessecretes.rs` : jamais dans `reglages.toml`), « Tester la connexion ».
 //! - Une note sur les licences : les conditions d'utilisation de chaque service et de chaque modèle
@@ -21,6 +22,7 @@ use crate::app::App;
 use crate::clessecretes::{Cle, Service};
 use crate::fournisseurs::Controle;
 use crate::genreglages::{Mode, Role};
+use crate::serveurlocal::{config_des_reglages, demarrer_et_attendre};
 
 /// L'état de la partie « Génération sonore » des Préférences.
 #[derive(Default)]
@@ -63,6 +65,43 @@ impl App {
             }
         }
         self.sug.prefs.presence.get(&service).copied().unwrap_or(false)
+    }
+
+    /// « Démarrer le serveur local » : sur un fil à part, SHOT lance le serveur, attend qu'il réponde et
+    /// dit ce qu'il a (la même phrase que « Tester »). Le fil de l'interface n'attend rien.
+    pub(crate) fn lancer_demarrage_serveur(&mut self) {
+        if self.sug.prefs.essai.is_some() {
+            return;
+        }
+        let (tx, rx) = channel();
+        let (r, serveur) = (self.settings.generation_son.clone(), self.sug.serveur.clone());
+        std::thread::spawn(move || {
+            let texte = match config_des_reglages(&r) {
+                Err(m) => format!("Le serveur local ne peut pas démarrer : {m}"),
+                Ok(config) => match demarrer_et_attendre(&serveur, &config, &Controle::new()) {
+                    Ok(etat) => format!("{} (journal : {})", etat.resume(), crate::serveurlocal::fichier_journal().display()),
+                    Err(e) => format!("Le serveur local n'a pas démarré : {e}."),
+                },
+            };
+            let _ = tx.send(texte);
+        });
+        self.sug.prefs.resultats.insert(None, "Démarrage du serveur local… (le premier démarrage prend quelques secondes ; les modèles ne se chargent qu'à la première demande)".into());
+        self.sug.prefs.essai = Some((None, rx));
+    }
+
+    /// « Arrêter » : tue le serveur que SHOT a lancé, sur un fil à part.
+    pub(crate) fn lancer_arret_serveur(&mut self) {
+        if self.sug.prefs.essai.is_some() {
+            return;
+        }
+        let (tx, rx) = channel();
+        let serveur = self.sug.serveur.clone();
+        std::thread::spawn(move || {
+            let texte = if serveur.arreter() { "Serveur local arrêté. La mémoire graphique est rendue.".to_string() } else { "SHOT n'a pas lancé de serveur local (un serveur lancé à la main s'arrête dans sa fenêtre).".to_string() };
+            let _ = tx.send(texte);
+        });
+        self.sug.prefs.resultats.insert(None, "Arrêt du serveur local…".into());
+        self.sug.prefs.essai = Some((None, rx));
     }
 
     /// Lance un essai de connexion sur un fil à part : `role` = `None` pour le serveur local.
@@ -134,7 +173,7 @@ impl App {
                     ui.label(RichText::new("Lit l'action, le dialogue et les notes des plans avec des mots-clés, sans modèle : rien à installer, rien n'est envoyé.").small().weak());
                 }
                 Mode::Local => {
-                    ui.label(RichText::new(format!("{} par le serveur local (phase 2), sur 127.0.0.1.", role.modele_local())).small().weak());
+                    ui.label(RichText::new(format!("{} par le serveur local, sur 127.0.0.1.", role.modele_local())).small().weak());
                 }
                 Mode::EnLigne => change |= self.service_prefs_ui(ui, role),
             }
@@ -154,27 +193,74 @@ impl App {
             }
         }
         ui.add_space(6.0);
-        ui.label(RichText::new("Serveur local").strong());
-        ui.horizontal(|ui| {
-            ui.label("Adresse 127.0.0.1, port");
-            let r = ui.add(egui::DragValue::new(&mut self.settings.generation_son.port_local).range(1..=65535));
-            if r.lost_focus() || r.drag_stopped() {
-                change = true;
-            }
-            let occupe = self.sug.prefs.essai_en_cours();
-            if ui.add_enabled(!occupe, egui::Button::new("Tester")).on_hover_text("Demande au serveur local s'il répond et quels modèles il a. Tant qu'il n'est pas installé : « non installé ».").clicked() {
-                self.lancer_essai(None);
-            }
-        });
-        if let Some(t) = self.sug.prefs.resultats.get(&None) {
-            ui.label(RichText::new(t).small());
-        }
+        change |= self.serveur_local_prefs_ui(ui);
         ui.add_space(6.0);
         ui.label(RichText::new("Licences : les conditions d'utilisation de chaque service et de chaque modèle (en particulier l'usage commercial des sons générés et le sort des données envoyées) sont à vérifier par toi. Ce sont ici des sons témoins, pour l'animatique.").small().weak());
         if change {
             self.settings.generation_son = std::mem::take(&mut self.settings.generation_son).sanitized();
             let _ = self.settings.save();
         }
+    }
+
+    /// Le serveur local : où sont son Python et ses modèles, le lancement automatique, Démarrer / Arrêter /
+    /// Tester. Vrai si un réglage a changé.
+    fn serveur_local_prefs_ui(&mut self, ui: &mut egui::Ui) -> bool {
+        let mut change = false;
+        ui.label(RichText::new("Serveur local").strong());
+        ui.label(RichText::new("Un petit programme Python (sidecar/serveur.py) qui tourne sur cet ordinateur et fait tourner les modèles : rien ne sort de la machine. Les modèles et le Python sont dans le dossier SHOT-modeles.").small().weak());
+        let (defaut_racine, defaut_python) = (crate::serveurlocal::racine_par_defaut(), crate::serveurlocal::python_de(&crate::serveurlocal::racine_des_reglages(&self.settings.generation_son)));
+        ui.horizontal(|ui| {
+            ui.label("Dossier des modèles");
+            let r = ui.add(egui::TextEdit::singleline(&mut self.settings.generation_son.modeles_local).hint_text(defaut_racine.display().to_string()).desired_width(300.0));
+            change |= r.lost_focus();
+            if ui.button("Choisir…").on_hover_text("Le dossier SHOT-modeles (il contient python, venv et modeles). Vide : le dossier par défaut.").clicked() {
+                if let Some(d) = rfd::FileDialog::new().set_title("Dossier SHOT-modeles").pick_folder() {
+                    self.settings.generation_son.modeles_local = d.display().to_string();
+                    change = true;
+                }
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label("Python du serveur");
+            let r = ui.add(egui::TextEdit::singleline(&mut self.settings.generation_son.python_local).hint_text(defaut_python.display().to_string()).desired_width(300.0));
+            change |= r.lost_focus();
+            if ui.button("Choisir…").on_hover_text("Le python.exe du venv de SHOT-modeles. Vide : celui du dossier des modèles.").clicked() {
+                if let Some(f) = rfd::FileDialog::new().set_title("python.exe du serveur local").add_filter("python.exe", &["exe"]).pick_file() {
+                    self.settings.generation_son.python_local = f.display().to_string();
+                    change = true;
+                }
+            }
+        });
+        let r = ui
+            .checkbox(&mut self.settings.generation_son.demarrage_auto, "Démarrer le serveur tout seul quand une génération locale en a besoin")
+            .on_hover_text("SHOT lance le serveur en arrière-plan, sans fenêtre, au premier « Générer » local, et l'arrête en se fermant. Sans cette case, lance-le ici (ou à la main avec sidecar/lancer.ps1).");
+        change |= r.changed();
+        let (occupe, en_marche) = (self.sug.prefs.essai_en_cours(), self.sug.serveur.en_marche());
+        ui.horizontal(|ui| {
+            ui.label("Adresse 127.0.0.1, port");
+            let r = ui.add(egui::DragValue::new(&mut self.settings.generation_son.port_local).range(1..=65535));
+            change |= r.lost_focus() || r.drag_stopped();
+        });
+        ui.horizontal(|ui| {
+            if ui.add_enabled(!occupe && !en_marche, egui::Button::new("Démarrer le serveur local")).on_hover_text("Lance le serveur, sans fenêtre, et attend qu'il réponde. Les modèles ne se chargent qu'à la première demande.").clicked() {
+                self.lancer_demarrage_serveur();
+            }
+            if ui.add_enabled(!occupe && en_marche, egui::Button::new("Arrêter")).on_hover_text("Arrête le serveur lancé par SHOT et rend la mémoire graphique.").clicked() {
+                self.lancer_arret_serveur();
+            }
+            if ui.add_enabled(!occupe, egui::Button::new("Tester")).on_hover_text("Demande au serveur local s'il répond et quels modèles il a (rien n'est lancé).").clicked() {
+                self.lancer_essai(None);
+            }
+            let etat = match self.sug.serveur.pid() {
+                Some(pid) => format!("lancé par SHOT (processus {pid})"),
+                None => "pas lancé par SHOT".to_string(),
+            };
+            ui.label(RichText::new(etat).small().weak());
+        });
+        if let Some(t) = self.sug.prefs.resultats.get(&None) {
+            ui.label(RichText::new(t).small());
+        }
+        change
     }
 
     /// Le service en ligne d'un rôle : le choix, la clé, l'essai. Vrai si un réglage a changé.

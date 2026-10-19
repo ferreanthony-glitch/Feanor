@@ -24,6 +24,7 @@ use crate::fournisseursapi::{LecteurClaude, SonElevenLabs, SonStableAudio, Trans
 use crate::genreglages::{GenerationSonReglages, Mode, Role};
 use crate::indications::{Fusion, Genre, IndicationBrute, SonsProposes, Statut};
 use crate::lecturerules::LecteurRegles;
+use crate::serveurlocal::{config_des_reglages, Demarrage, GestionnaireServeur};
 use crate::sidecar::{ClientSidecar, LecteurSidecar, SonSidecar, VoixSidecar};
 
 // ------------------------------------------------------------------------------------ fabrique
@@ -39,13 +40,27 @@ pub trait Fabrique: Send + Sync {
 pub struct FabriqueReelle {
     pub transport: Arc<dyn Transport>,
     pub coffre: Arc<dyn Coffre>,
+    /// Le serveur local que SHOT lance au besoin (réglage `demarrage_auto`).
+    pub serveur: Arc<GestionnaireServeur>,
+}
+
+impl FabriqueReelle {
+    /// Le client du serveur local : il le lance tout seul s'il ne répond pas et que les réglages le permettent.
+    fn client_local(&self, r: &GenerationSonReglages) -> ClientSidecar {
+        let client = ClientSidecar::sur_le_port(r.port_local);
+        if r.demarrage_auto {
+            client.avec_demarrage(Demarrage { gestionnaire: self.serveur.clone(), config: config_des_reglages(r) })
+        } else {
+            client
+        }
+    }
 }
 
 impl Fabrique for FabriqueReelle {
     fn lecteur(&self, r: &GenerationSonReglages) -> Arc<dyn LecteurStoryboard> {
         match r.lecture {
             Mode::Regles => Arc::new(LecteurRegles),
-            Mode::Local => Arc::new(LecteurSidecar(ClientSidecar::sur_le_port(r.port_local))),
+            Mode::Local => Arc::new(LecteurSidecar(self.client_local(r))),
             Mode::EnLigne => Arc::new(LecteurClaude { transport: self.transport.clone(), coffre: self.coffre.clone(), modele: r.modele_claude.clone() }),
         }
     }
@@ -54,14 +69,14 @@ impl Fabrique for FabriqueReelle {
         match (r.son, r.son_service) {
             (Mode::EnLigne, Service::StableAudio) => Arc::new(SonStableAudio { transport: self.transport.clone(), coffre: self.coffre.clone() }),
             (Mode::EnLigne, _) => Arc::new(SonElevenLabs { transport: self.transport.clone(), coffre: self.coffre.clone() }),
-            _ => Arc::new(SonSidecar(ClientSidecar::sur_le_port(r.port_local))),
+            _ => Arc::new(SonSidecar(self.client_local(r))),
         }
     }
 
     fn voix(&self, r: &GenerationSonReglages) -> Arc<dyn GenerateurVoix> {
         match r.voix {
             Mode::EnLigne => Arc::new(VoixElevenLabs { transport: self.transport.clone(), coffre: self.coffre.clone() }),
-            _ => Arc::new(VoixSidecar(ClientSidecar::sur_le_port(r.port_local))),
+            _ => Arc::new(VoixSidecar(self.client_local(r))),
         }
     }
 }
@@ -265,7 +280,7 @@ impl Tache {
 pub fn tester_local(port: u16, controle: &Controle) -> String {
     match ClientSidecar::sur_le_port(port).etat(controle) {
         Ok(etat) => etat.resume(),
-        Err(ErreurGen::NonInstalle(m)) => format!("Non installé : {m}. Le serveur local sera installé en phase 2 (voir docs/GENERATION_SON.md)."),
+        Err(ErreurGen::NonInstalle(m)) => format!("Le serveur local ne tourne pas : {m}. Démarre-le ici, ou voir docs/GENERATION_SON.md."),
         Err(e) => format!("Le serveur local ne répond pas comme prévu : {e}."),
     }
 }
