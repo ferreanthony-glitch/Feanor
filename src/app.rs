@@ -574,6 +574,8 @@ pub struct App {
     pub(crate) sel_clip: Option<u64>,
     /// Transitions du montage : choix, geste en cours, aperçu (`transitionsui.rs`).
     pub(crate) trans: crate::transitionsui::TransUi,
+    /// Les envois : suivi des plans modifiés depuis le dernier, fenêtres (`envoisui.rs`).
+    pub(crate) envois_ui: crate::envoisui::EnvoisUi,
     /// Effets des extraits de son : clé de volume choisie (`audiofxui.rs`).
     pub(crate) sfx: crate::audiofxui::SoundFxUi,
     /// La bibliothèque de bruitages : liste, recherche, écoute, sons en cours de pose (`bruitagesui.rs`).
@@ -1051,6 +1053,7 @@ impl App {
             heard_frame: Some(0),
             sel_clip: None,
             trans: Default::default(),
+            envois_ui: Default::default(),
             sfx: Default::default(),
             brt: Default::default(),
             sug: Default::default(),
@@ -3251,6 +3254,10 @@ impl App {
         if self.transition_action(action) {
             return;
         }
+        // Envois et plans modifiés depuis le dernier (`envoisui.rs`).
+        if self.envois_action(action) {
+            return;
+        }
         // Effets des extraits de son (`audiofxui.rs`) ; Suppr retire la clé de volume choisie.
         if self.sound_fx_action(action) {
             return;
@@ -4251,6 +4258,8 @@ impl App {
             self.poll_bruitages(ctx);
             self.poll_suggestions(ctx);
             self.tick_save(ctx);
+            self.envois_tick(ctx);
+            self.envois_windows(ctx);
         }
         // Export en cours : quelques images par image d'écran, la fenêtre reste vivante.
         if let Some(job) = &mut self.export_job {

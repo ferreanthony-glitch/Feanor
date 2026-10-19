@@ -170,6 +170,10 @@ impl App {
                 self.action_item(ui, "Marque d'image ici (ajouter / retirer)", "marque.basculer");
                 self.action_item(ui, "Nouveau commentaire ici", "commentaire.ajouter");
                 self.action_item(ui, "Commentaires…", "vue.commentaires");
+                ui.menu_button("Envois", |ui| {
+                    self.action_item(ui, "Marquer un envoi…", "envoi.marquer");
+                    self.action_item(ui, "Liste des envois…", "envoi.liste");
+                });
                 ui.separator();
                 let lock = if self.doc.storyboard_locked { "Déverrouiller le storyboard" } else { "Verrouiller le storyboard" };
                 self.action_item(ui, lock, "storyboard.verrouiller");

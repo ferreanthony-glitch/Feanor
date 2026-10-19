@@ -2475,6 +2475,18 @@ action = "transition.apercu"
 touches = []
 source = "SHOT (sans touche)"
 
+# Envois : l'état de chaque plan quand le film part chez le réalisateur, et les plans qui ont changé
+# depuis (sans touche : à choisir).
+[[raccourci]]
+action = "envoi.marquer"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "envoi.liste"
+touches = []
+source = "SHOT (sans touche)"
+
 # Références visuelles (sans touche : à choisir).
 [[raccourci]]
 action = "vue.references"

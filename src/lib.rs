@@ -22,6 +22,13 @@ mod ouverture;
 mod enregistrement;
 #[cfg(test)]
 mod enregistrement_tests;
+// Empreintes de contenu, envois (« v2 au réal ») et plans modifiés depuis le dernier : le modèle et le
+// fichier (`envois`), l'interface (`envoisui`).
+mod empreinte;
+mod envois;
+#[cfg(test)]
+mod envois_tests;
+mod envoisui;
 #[cfg(test)]
 mod gpu_contenu_tests;
 mod parallele;

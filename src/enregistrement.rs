@@ -214,6 +214,10 @@ impl App {
                     if report.removed > 0 { format!(", {} inutilisé(s) effacé(s)", report.removed) } else { String::new() }
                 );
                 if same {
+                    // Les instantanés d'envois sont dans le dossier : la mémoire qu'ils tenaient est rendue, et
+                    // « Enregistrer sous » reprendra `versions/` de ce dossier-ci (`envois.rs`).
+                    self.doc.envois.liberer(&report.snapshots);
+                    self.doc.envois.dossier = manifest.parent().map(std::path::Path::to_path_buf);
                     self.remember_project(&manifest);
                     self.path = Some(manifest);
                     self.import_source = None;

@@ -697,8 +697,16 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
 /// Comme `write_atomic`, en attendant que le disque ait reçu les octets avant le renommage : pour
 /// le manifeste et les petits fichiers qui le suivent (une coupure de courant ne laisse pas un
 /// fichier vide à la place d'un bon).
-fn write_atomic_synced(path: &Path, bytes: &[u8]) -> Result<(), String> {
+pub(crate) fn write_atomic_synced(path: &Path, bytes: &[u8]) -> Result<(), String> {
     write_atomic_with(path, bytes, true)
+}
+
+/// Une texture de trait (pointe ou papier) en PNG de niveaux de gris, comme `textures/` la garde.
+pub(crate) fn texture_png(img: &GrayImage) -> Result<Vec<u8>, String> {
+    let gray = image::GrayImage::from_raw(img.width as u32, img.height as u32, crate::brushtex::quantized(img)).ok_or("texture de taille invalide")?;
+    let mut bytes = Vec::new();
+    gray.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).map_err(|e| e.to_string())?;
+    Ok(bytes)
 }
 
 fn write_atomic_with(path: &Path, bytes: &[u8], sync: bool) -> Result<(), String> {
@@ -814,6 +822,8 @@ fn remove_unused_textures(dir: &Path, used: &BTreeSet<(TextureKind, u32)>) -> us
 pub struct SaveReport {
     pub written: usize,
     pub removed: usize,
+    /// Les instantanés d'envois écrits (`envois.rs`) : l'application libère leur mémoire.
+    pub snapshots: Vec<u64>,
 }
 
 /// Enregistre le projet. `written` retient la version de chaque dessin déjà écrit dans ce dossier.
@@ -883,6 +893,13 @@ pub struct SaveJob {
     crayonnes: Option<crate::crayonnes::Planche>,
     /// Le fichier des scènes 3D (`scenes3d.json`) ; rien : il n'y en a plus, le fichier part.
     scenes3d: Option<Vec<u8>>,
+    /// Le fichier des envois (`envois.json`) ; rien : il n'y en a pas (un fichier illisible reste là).
+    envois: Option<Vec<u8>>,
+    /// Les instantanés d'envois à écrire dans `versions/`, les dessins de `dessins/` qui ont déjà
+    /// leur contenu, et l'ancien dossier d'où recopier `versions/` (« Enregistrer sous », `envois.rs`).
+    snapshots: Vec<Arc<crate::envois::Instantane>>,
+    snapshot_reuse: HashMap<u64, PathBuf>,
+    versions_from: Option<PathBuf>,
 }
 
 /// Prépare l'enregistrement de `doc` dans `manifest_path`. `written` est mis à jour comme si
@@ -969,6 +986,16 @@ pub fn prepare_save(
     }
     let manifest = serde_json::to_vec_pretty(&manifest_of(doc)).map_err(|e| e.to_string())?;
     let unreadable = unreadable_in(dir);
+    // Les instantanés d'envois pas encore écrits (`envois.rs`) : un dessin du projet qui a déjà leur contenu
+    // dans `dessins/` est recopié (les dessins s'écrivent avant eux), pas encodé de nouveau ; un autre
+    // dossier que celui du projet (« Enregistrer sous ») reçoit aussi les instantanés déjà écrits.
+    let snapshots = doc.envois.pending.clone();
+    let snapshot_reuse = crate::envois::dessins_reutilisables(&snapshots, written, &|id| Some(drawing_path(dir, id, false)));
+    let versions_from = if reuse.is_none() {
+        doc.envois.dossier.as_ref().filter(|d| d.as_path() != dir).map(|d| d.join(crate::envois::DIR)).filter(|v| v.is_dir())
+    } else {
+        None
+    };
     Ok(SaveJob {
         manifest_path: manifest_path.to_path_buf(),
         drawings,
@@ -992,6 +1019,10 @@ pub fn prepare_save(
         references: crate::references::plan_save(doc, dir)?,
         crayonnes: (!doc.crayonnes.is_blank()).then(|| doc.crayonnes.clone()),
         scenes3d: crate::scene3dstore::to_bytes(doc)?,
+        envois: crate::envois::to_bytes(doc)?,
+        snapshots,
+        snapshot_reuse,
+        versions_from,
     })
 }
 
@@ -1224,11 +1255,7 @@ impl SaveJob {
             fs::create_dir_all(dir.join(TEXTURES)).map_err(|e| format!("{} : {e}", dir.display()))?;
         }
         for (path, img) in &self.textures {
-            let gray = image::GrayImage::from_raw(img.width as u32, img.height as u32, crate::brushtex::quantized(img))
-                .ok_or("texture de taille invalide")?;
-            let mut bytes = Vec::new();
-            gray.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).map_err(|e| e.to_string())?;
-            write_atomic(path, &bytes)?;
+            write_atomic(path, &texture_png(img)?)?;
             count += 1;
         }
         for (clip, from, to) in &self.videos {
@@ -1256,13 +1283,16 @@ impl SaveJob {
         write_sidecar(&dir.join(crate::crayonnes::FILE), crayonnes.as_deref(), |t| crate::crayonnes::parse(t).is_ok())?;
         // Les scènes 3D de blocage (`scene3dstore.rs`), de même.
         write_sidecar(&dir.join(crate::scene3dstore::FILE), self.scenes3d.as_deref(), |t| crate::scene3dstore::parse(t).is_ok())?;
+        // Les envois : les instantanés d'abord (dessins puis fichier), puis la liste qui les cite.
+        count += crate::envois::ecrire(dir, &self.snapshots, &self.snapshot_reuse, self.versions_from.as_deref())?;
+        write_sidecar(&dir.join(crate::envois::FILE), self.envois.as_deref(), |t| crate::envois::parse(t).is_ok())?;
         write_atomic_synced(&self.manifest_path, &self.manifest)?;
         let removed = remove_unused(dir, &self.used, &self.fonds)
             + remove_unused_sounds(dir, &self.used_sounds, &self.kept)
             + remove_unused_models(dir, &self.used_models, &self.kept)
             + if self.has_unreadable { 0 } else { remove_unused_textures(dir, &self.used_textures) }
             + self.references.cleanup(dir);
-        Ok(SaveReport { written: count, removed })
+        Ok(SaveReport { written: count, removed, snapshots: self.snapshots.iter().map(|s| s.id).collect() })
     }
 }
 
@@ -1331,6 +1361,219 @@ fn remove_unused(dir: &Path, used: &BTreeSet<CelId>, fonds: &BTreeSet<CelId>) ->
     removed
 }
 
+/// L'entrée du manifeste pour un plan : tout ce que le fichier garde de lui. `key` donne le numéro sous
+/// lequel chaque dessin y est cité (le même, pour un enregistrement ; l'empreinte du dessin, pour un
+/// instantané d'envoi, qui se lit alors sans rien devoir aux numéros de la séance).
+///
+/// `digest` : ne garde que ce qui compte quand on se demande si le plan **a changé** (`envois.rs`) — ce
+/// qui se voit et ce qui dure (dessins, calques réglés, effets, caméra, textes du storyboard, marques
+/// d'image, durée) ; pas ce qui aide à travailler (couleur de repère du plan, signets, entrée et
+/// sortie, notes dessinées sur la timeline, repère 3D, noms et marques de couleur des dessins, rôles
+/// des images, verrous, calque replié, groupe de couleur, pelure d'oignon et pochoir, nom du calque).
+fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, digest: bool) -> PanelEntry {
+    let mut entry = PanelEntry {
+        id: panel.id,
+        duree: panel.length,
+        action: panel.action.clone(),
+        dialogue: panel.dialogue.clone(),
+        notes: panel.notes.clone(),
+        calques: panel
+            .layers
+            .iter()
+            .map(|l| LayerEntry {
+                nom: l.name.clone(),
+                kind: match l.kind {
+                    LayerKind::Vector => "vectoriel".into(),
+                    LayerKind::Bitmap => "bitmap".into(),
+                },
+                visible: l.visible,
+                opacite: l.opacity,
+                verrouille: l.locked,
+                transformation: (!l.transform.is_identity()).then(|| TransformEntry {
+                    x: l.transform.x,
+                    y: l.transform.y,
+                    echelle: l.transform.scale,
+                    rotation: l.transform.angle,
+                    etirement_x: l.transform.stretch_x,
+                    etirement_y: l.transform.stretch_y,
+                }),
+                profondeur: l.depth,
+                toute_la_scene: l.scene_wide.map(|w| w.key),
+                fusion: l.blend,
+                pelure: l.onion,
+                transparence: l.keep_alpha,
+                pochoir: l.stencil,
+                pochoir_negatif: l.stencil_negative,
+                position_verrouillee: l.position_locked,
+                groupe: l.group,
+                replie: l.collapsed,
+                dossier: l.folder,
+                dans_dossier: l.parent.and_then(|p| panel.layers.iter().position(|f| f.folder && f.id == p)),
+                avant: l.pre,
+                apres: l.post,
+                cassure_auto: l.auto_break,
+                creation_auto: l.auto_create,
+                // Seulement les noms des dessins encore dans la timeline du calque.
+                noms: l.names.iter().filter(|(id, _)| l.frames.contains(&Some(**id))).map(|(id, n)| (key(*id), n.clone())).collect(),
+                marques_couleur: l.color_marks.iter().filter(|(id, _)| l.frames.contains(&Some(**id))).map(|(id, k)| (key(*id), *k)).collect(),
+                roles: l.roles.clone(),
+                effets: l.fx.clone(),
+                ctg: l.ctg.as_ref().map(|c| CtgEntry {
+                    sources: c.sources.iter().filter_map(|id| panel.layers.iter().position(|s| s.id == *id)).collect(),
+                    trou: c.gap,
+                }),
+                video: l.video.as_ref().map(|v| VideoEntry { id: v.id, nom: v.name.clone(), images: v.frames, ips: v.fps, debut: v.start, ext: v.ext.clone() }),
+                fond: l.fond,
+                calque_effet: l.effet.as_ref().map(crate::calqueffet::Entree::from),
+                expositions: to_exposures(&l.frames.iter().map(|f| f.map(key)).collect::<Vec<_>>()),
+            })
+            .collect(),
+        camera: panel
+            .camera
+            .iter()
+            .map(|k| CameraEntry {
+                image: k.frame,
+                x: k.cam.x,
+                y: k.cam.y,
+                zoom: k.cam.zoom,
+                rotation: k.cam.angle,
+                doux: k.smooth,
+                avance: k.cam.dolly,
+                adoucir_entree: k.ease_in,
+                adoucir_sortie: k.ease_out,
+                bascule: k.cam.tilt,
+                panoramique: k.cam.pan,
+            })
+            .collect(),
+        repere3d: panel.ref3d.as_ref().map(|r| Ref3dEntry {
+            modele: r.model,
+            cible: r.cam.target,
+            azimut: r.cam.azimuth,
+            elevation: r.cam.elevation,
+            distance: r.cam.distance,
+            focale: r.cam.focal,
+            visible: r.visible,
+            aretes_cachees: r.hidden_lines,
+            couleur: r.color,
+            opacite: r.opacity,
+        }),
+        marques: panel
+            .marks
+            .iter()
+            .map(|m| MarkEntry {
+                id: m.id,
+                image: m.frame,
+                couleur: m.color,
+                action: m.action.clone(),
+                dialogue: m.dialogue.clone(),
+                notes: m.notes.clone(),
+            })
+            .collect(),
+        signets: panel.cues.bookmarks.clone(),
+        entree: panel.cues.in_point,
+        sortie: panel.cues.out_point,
+        couleur: panel.color,
+        notes_dessinees: panel
+            .cues
+            .notes
+            .iter()
+            .map(|n| TimeNoteEntry { couleur: n.color, epaisseur: n.width, points: n.points.clone() })
+            .collect(),
+    };
+    if digest {
+        entry.signets.clear();
+        (entry.entree, entry.sortie, entry.couleur) = (None, None, None);
+        entry.notes_dessinees.clear();
+        // Le repère 3D est un guide pour dessiner (ni à l'export ni dans les vignettes).
+        entry.repere3d = None;
+        // Les numéros de calques de toute la scène sont neufs à chaque séance : seule leur présence compte.
+        for l in &mut entry.calques {
+            (l.nom, l.verrouille, l.pelure, l.transparence, l.pochoir, l.pochoir_negatif) = (String::new(), false, false, false, false, false);
+            (l.position_verrouillee, l.groupe, l.replie, l.cassure_auto, l.creation_auto) = (false, 0, false, false, true);
+            l.noms.clear();
+            l.marques_couleur.clear();
+            l.roles.clear();
+            l.toute_la_scene = l.toute_la_scene.map(|_| 1);
+        }
+    }
+    entry
+}
+
+/// Les octets qui disent ce qu'est un plan, pour l'empreinte « le plan a-t-il changé ? » (`envois.rs`) :
+/// son entrée du manifeste réduite à ce qui compte (`panel_entry`), les dessins cités par leur
+/// empreinte (`key`).
+pub(crate) fn digest_bytes(panel: &Panel, key: &dyn Fn(CelId) -> CelId) -> Vec<u8> {
+    serde_json::to_vec(&panel_entry(panel, key, true)).unwrap_or_default()
+}
+
+/// L'entrée complète d'un plan pour un instantané (envoi, version) : le même JSON que dans le
+/// manifeste, les dessins cités par `key`.
+pub(crate) fn snapshot_value(panel: &Panel, key: &dyn Fn(CelId) -> CelId) -> Result<serde_json::Value, String> {
+    serde_json::to_value(panel_entry(panel, key, false)).map_err(|e| e.to_string())
+}
+
+/// En-tête d'un instantané : la feuille, le cadre, la cadence et le papier du projet au moment où il a été
+/// pris (les dessins qu'il cite ont cette taille, même si le projet a changé de résolution depuis).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct Tete {
+    pub largeur: usize,
+    pub hauteur: usize,
+    pub cadre: [usize; 2],
+    pub cadence: u32,
+    pub papier: [u8; 3],
+}
+
+impl Tete {
+    pub fn de(doc: &Document) -> Tete {
+        Tete { largeur: doc.width, hauteur: doc.height, cadre: doc.frame, cadence: doc.fps, papier: doc.paper }
+    }
+}
+
+/// Relit des plans d'un instantané : `entrees` (les valeurs de `snapshot_value`) deviennent un petit projet
+/// dont les dessins sont ceux de `dir/dessins/<empreinte>.png|json`. C'est l'ouverture ordinaire d'un
+/// projet (`load_manifest`), donc avec ses protections : un dessin manquant ou abîmé est un
+/// avertissement, le plan s'ouvre quand même. `scene` : le numéro de scène que prend le plan.
+#[allow(dead_code)] // (`envois::charger_plan`, que la comparaison utilise, étape 4)
+pub(crate) fn charger_plans(dir: &Path, tete: &Tete, scene: u64, entrees: Vec<serde_json::Value>, quick: bool) -> Result<Loaded, String> {
+    let panneaux: Vec<PanelEntry> = entrees
+        .into_iter()
+        .map(|v| serde_json::from_value(v).map_err(|e| format!("plan illisible : {e}")))
+        .collect::<Result<_, _>>()?;
+    // Une vidéo de l'instantané ne doit pas faire perdre au projet en cours le dossier de la sienne
+    // (`video::register_dir` est commun à tout le programme).
+    let videos: Vec<(u64, Option<PathBuf>)> =
+        panneaux.iter().flat_map(|p| &p.calques).filter_map(|l| l.video.as_ref()).map(|v| (v.id, crate::video::dir_of(v.id))).collect();
+    let manifest = Manifest {
+        format: FORMAT.into(),
+        version: VERSION,
+        largeur: tete.largeur,
+        hauteur: tete.hauteur,
+        cadre: Some(tete.cadre),
+        cadence: tete.cadence.max(1),
+        papier: tete.papier,
+        sequences: vec![SequenceEntry { id: 1, nom: String::new(), scenes: vec![SceneEntry { id: scene.max(1), nom: String::new(), panneaux }] }],
+        sons: Vec::new(),
+        pistes_son: Vec::new(),
+        guides: Vec::new(),
+        modeles: Vec::new(),
+        planche: Vec::new(),
+        planche_textes: Vec::new(),
+        groupes: Vec::new(),
+        image_de_depart: 1,
+        fond: BackgroundEntry::default(),
+        volume_general: 1.0,
+        storyboard_verrouille: false,
+        proprietes: PropertiesEntry::default(),
+    };
+    let loaded = load_manifest(manifest, dir, quick, None);
+    for (id, previous) in videos {
+        if let Some(p) = previous {
+            crate::video::register_dir(id, p);
+        }
+    }
+    loaded
+}
+
 fn manifest_of(doc: &Document) -> Manifest {
     let mut sequences: Vec<SequenceEntry> = Vec::new();
     for (i, panel) in doc.panels.iter().enumerate() {
@@ -1352,115 +1595,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                 panneaux: Vec::new(),
             });
         }
-        scenes.last_mut().expect("scène ajoutée juste avant").panneaux.push(PanelEntry {
-            id: panel.id,
-            duree: panel.length,
-            action: panel.action.clone(),
-            dialogue: panel.dialogue.clone(),
-            notes: panel.notes.clone(),
-            calques: panel
-                .layers
-                .iter()
-                .map(|l| LayerEntry {
-                    nom: l.name.clone(),
-                    kind: match l.kind {
-                        LayerKind::Vector => "vectoriel".into(),
-                        LayerKind::Bitmap => "bitmap".into(),
-                    },
-                    visible: l.visible,
-                    opacite: l.opacity,
-                    verrouille: l.locked,
-                    transformation: (!l.transform.is_identity()).then(|| TransformEntry {
-                        x: l.transform.x,
-                        y: l.transform.y,
-                        echelle: l.transform.scale,
-                        rotation: l.transform.angle,
-                        etirement_x: l.transform.stretch_x,
-                        etirement_y: l.transform.stretch_y,
-                    }),
-                    profondeur: l.depth,
-                    toute_la_scene: l.scene_wide.map(|w| w.key),
-                    fusion: l.blend,
-                    pelure: l.onion,
-                    transparence: l.keep_alpha,
-                    pochoir: l.stencil,
-                    pochoir_negatif: l.stencil_negative,
-                    position_verrouillee: l.position_locked,
-                    groupe: l.group,
-                    replie: l.collapsed,
-                    dossier: l.folder,
-                    dans_dossier: l.parent.and_then(|p| panel.layers.iter().position(|f| f.folder && f.id == p)),
-                    avant: l.pre,
-                    apres: l.post,
-                    cassure_auto: l.auto_break,
-                    creation_auto: l.auto_create,
-                    // Seulement les noms des dessins encore dans la timeline du calque.
-                    noms: l.names.iter().filter(|(id, _)| l.frames.contains(&Some(**id))).map(|(id, n)| (*id, n.clone())).collect(),
-                    marques_couleur: l.color_marks.iter().filter(|(id, _)| l.frames.contains(&Some(**id))).map(|(id, k)| (*id, *k)).collect(),
-                    roles: l.roles.clone(),
-                    effets: l.fx.clone(),
-                    ctg: l.ctg.as_ref().map(|c| CtgEntry {
-                        sources: c.sources.iter().filter_map(|id| panel.layers.iter().position(|s| s.id == *id)).collect(),
-                        trou: c.gap,
-                    }),
-                    video: l.video.as_ref().map(|v| VideoEntry { id: v.id, nom: v.name.clone(), images: v.frames, ips: v.fps, debut: v.start, ext: v.ext.clone() }),
-                    fond: l.fond,
-                    calque_effet: l.effet.as_ref().map(crate::calqueffet::Entree::from),
-                    expositions: to_exposures(&l.frames),
-                })
-                .collect(),
-            camera: panel
-                .camera
-                .iter()
-                .map(|k| CameraEntry {
-                    image: k.frame,
-                    x: k.cam.x,
-                    y: k.cam.y,
-                    zoom: k.cam.zoom,
-                    rotation: k.cam.angle,
-                    doux: k.smooth,
-                    avance: k.cam.dolly,
-                    adoucir_entree: k.ease_in,
-                    adoucir_sortie: k.ease_out,
-                    bascule: k.cam.tilt,
-                    panoramique: k.cam.pan,
-                })
-                .collect(),
-            repere3d: panel.ref3d.as_ref().map(|r| Ref3dEntry {
-                modele: r.model,
-                cible: r.cam.target,
-                azimut: r.cam.azimuth,
-                elevation: r.cam.elevation,
-                distance: r.cam.distance,
-                focale: r.cam.focal,
-                visible: r.visible,
-                aretes_cachees: r.hidden_lines,
-                couleur: r.color,
-                opacite: r.opacity,
-            }),
-            marques: panel
-                .marks
-                .iter()
-                .map(|m| MarkEntry {
-                    id: m.id,
-                    image: m.frame,
-                    couleur: m.color,
-                    action: m.action.clone(),
-                    dialogue: m.dialogue.clone(),
-                    notes: m.notes.clone(),
-                })
-                .collect(),
-            signets: panel.cues.bookmarks.clone(),
-            entree: panel.cues.in_point,
-            sortie: panel.cues.out_point,
-            couleur: panel.color,
-            notes_dessinees: panel
-                .cues
-                .notes
-                .iter()
-                .map(|n| TimeNoteEntry { couleur: n.color, epaisseur: n.width, points: n.points.clone() })
-                .collect(),
-        });
+        scenes.last_mut().expect("scène ajoutée juste avant").panneaux.push(panel_entry(panel, &|c| c, false));
     }
     let used = used_sounds(doc);
     Manifest {
@@ -1674,7 +1809,7 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
         }
     })?;
     let text = String::from_utf8(octets).map_err(|_| "manifeste illisible : le fichier n'est pas du texte (UTF-8), il est abîmé".to_string())?;
-    let mut manifest: Manifest =
+    let manifest: Manifest =
         serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("manifeste illisible : {e}"))?;
     if manifest.format != FORMAT {
         return Err("ce fichier n'est pas un projet SHOT".into());
@@ -1686,6 +1821,12 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
         ));
     }
     let dir = manifest_path.parent().unwrap_or(Path::new("."));
+    load_manifest(manifest, dir, quick, progress)
+}
+
+/// La suite de l'ouverture, une fois le manifeste lu : les dessins de `dir/dessins/`, les sons, les
+/// annexes, puis le document. (Les instantanés des envois passent aussi par là, `charger_plans`.)
+fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Option<&Progress>) -> Result<Loaded, String> {
     let (w, h) = (manifest.largeur, manifest.hauteur);
     if w == 0 || h == 0 {
         return Err("taille d'image invalide dans le manifeste".into());
@@ -2063,6 +2204,8 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
     }
     // La planche de crayonnés rapides, dans son fichier (absent : aucune).
     doc.crayonnes = load_crayonnes(dir, &mut warnings);
+    // Les envois (`envois.json`, absent : aucun) ; leurs instantanés ne se lisent qu'à la demande.
+    doc.envois = crate::envois::load(dir, &mut warnings);
     // Projet d'avant les plans (13a) : chaque scène devient un plan, ses panneaux bout à bout.
     if !doc.is_plans() {
         let n = doc.panels.len();

@@ -927,6 +927,10 @@ pub struct Document {
     /// plans. Hors de `Structure` (elle a sa propre annulation) ; enregistrée à côté du manifeste,
     /// dans `crayonnes.json`.
     pub(crate) crayonnes: crate::crayonnes::Planche,
+    /// Les envois (`envois.rs`) : l'état de chaque plan quand le film est parti ; enregistrés à côté du
+    /// manifeste (`envois.json`, `versions/`). Hors de l'annulation : marquer un envoi est un
+    /// fait, pas une retouche du film.
+    pub envois: crate::envois::Envois,
     next_id: u64,
 }
 
@@ -975,6 +979,7 @@ impl Document {
             sons_proposes: Default::default(),
             references: Vec::new(),
             crayonnes: Default::default(),
+            envois: Default::default(),
             next_id: 1,
         };
         let seq = doc.new_sequence();
@@ -1036,6 +1041,7 @@ impl Document {
             sons_proposes: Default::default(),
             references: structure.references,
             crayonnes: Default::default(),
+            envois: Default::default(),
             next_id: max_id + 1,
         };
         doc.normalize();

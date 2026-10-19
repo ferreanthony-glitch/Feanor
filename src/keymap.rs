@@ -645,6 +645,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("transition.volet", "Transition : volet", true, false),
     act("transition.noir", "Transition : noir", true, false),
     act("transition.apercu", "Aperçu des transitions à l'arrêt (oui / non)", true, false),
+    act("envoi.marquer", "Marquer un envoi (noter l'état de tous les plans)", true, false),
+    act("envoi.liste", "Envois : la liste (ouvrir / fermer)", true, false),
     act("reference.decharger", "Décharger la référence courante", false, false),
     act("legende.chercher", "Chercher dans les légendes", false, false),
 ];
