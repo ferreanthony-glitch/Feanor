@@ -565,7 +565,7 @@ impl App {
             let first = layer.frames.iter().position(Option::is_some);
             let last = layer.frames.iter().rposition(Option::is_some);
             if let (Some(first), Some(last)) = (first, last) {
-                let base = theme::couleur_calque(layer.kind, layer.ctg.is_some());
+                let base = theme::couleur_du_calque(layer);
                 // (Les parties visibles seulement.)
                 let ranges = [(c0, first.min(c1 + 1)), ((last + 1).max(c0), cols.min(c1 + 1))];
                 for (a, b) in ranges {
@@ -609,7 +609,8 @@ impl App {
                         pos2(r.left() + end as f32 * cell - 1.0, body_bottom(y, row.h)),
                     );
                     let empty = self.doc.cels.get(&id).is_none_or(|c| c.is_empty());
-                    let mut fill = if empty { theme::dessin_vide() } else { theme::couleur_calque(layer.kind, layer.ctg.is_some()) };
+                    // (Un calque d'effet n'a que des dessins vides : ses images sont cyan.)
+                    let mut fill = if empty && layer.effet.is_none() { theme::dessin_vide() } else { theme::couleur_du_calque(layer) };
                     if !layer.visible {
                         fill = fill.gamma_multiply(0.5);
                     }
@@ -674,7 +675,7 @@ impl App {
             if !bar.is_positive() {
                 continue;
             }
-            let base = theme::couleur_calque(layer.kind, layer.ctg.is_some());
+            let base = theme::couleur_du_calque(layer);
             let on = |h: Option<Handle>| match h {
                 Some(Handle::LayerMove { layer, .. }) => layer == row.li,
                 _ => false,

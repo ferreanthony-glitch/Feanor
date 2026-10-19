@@ -2456,6 +2456,73 @@ action = "camera.effet_appliquer"
 touches = []
 source = "SHOT (sans touche)"
 
+# Préréglages d'effets et calques d'effets (effet.*) : sans touche par défaut, comme les effets de
+# caméra ; Ctrl+K les trouve par leur nom, et « Assigner un raccourci… » au clic droit leur en donne un.
+[[raccourci]]
+action = "effet.impact"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.lueur"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.flash_blanc"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.flash_couleur"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.tremblement"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.vignettage"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.grain"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.aberration"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.flou_vitesse"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.timecode"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "effet.appliquer"
+touches = []
+source = "SHOT (sans touche : le bouton Appliquer de la fenêtre du préréglage)"
+
+[[raccourci]]
+action = "effet.fermer"
+touches = []
+source = "SHOT (sans touche : Échap ferme la fenêtre du préréglage)"
+
+[[raccourci]]
+action = "effet.vide"
+touches = []
+source = "SHOT (sans touche)"
+
 [[raccourci]]
 action = "cadrage.tiers"
 touches = []

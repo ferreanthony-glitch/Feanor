@@ -1208,6 +1208,69 @@ Ctrl+K (ou Aide > Palette de commandes) : tape quelques lettres du nom d'une com
 choisir, Entrée pour lancer, Échap pour fermer. Chaque commande y est une fois, sous son nom (les doubles
 `scene.*` des commandes de plan n'y sont pas).
 
+## Calques d'effets et préréglages d'effets (2026-10-19, branche `calques-effets`)
+
+Demande d'Anthony : des calques d'effets posés par des préréglages d'animation (impact frame, glow,
+tremblement de l'image, timecode…).
+
+**Un calque d'effet** est un calque de la pile sans dessin à lui (icône étincelle et teinte cyan dans le
+panneau Calques, le montage et la timeline) :
+- **Ajustement** (comme un calque de réglage de Photoshop ou d'After Effects) : sa pile d'effets, avec ses clés,
+  s'applique à **tout ce qui est dessous** dans le plan, papier compris, ou seulement dans son **dossier** s'il
+  est rangé dans un dossier. Il agit aux images où il a une **exposition** (un dessin vide tenu : on l'étire, le
+  coupe, le déplace dans la timeline comme un dessin) ; il a un œil, une opacité et un mode de fusion comme les
+  autres calques. On ne dessine pas dessus.
+- **Incrustation** : du texte posé sur l'image finale, dans le cadre de la caméra (il ne suit ni la caméra ni les
+  calques) : **timecode HH:MM:SS:IM** à la cadence du projet (entière : pas de « drop frame »), numéro d'image,
+  nom du plan, nom de la séquence, titre du projet, date ou texte libre (avec les mots `{timecode}` `{image}`
+  `{plan}` `{sequence}` `{titre}` `{date}`). Neuf places, taille (% de la hauteur du cadre), couleur, boîte
+  derrière le texte, marge, compté depuis le film ou depuis le plan, et **À l'écran et à l'export / Seulement à
+  l'écran / Seulement à l'export**. Gravée dans toute image exportée (film, images, image courante) quand le
+  calque est visible ; les vignettes, le PDF et le HTML de storyboard ne la portent pas. Se règle dans le panneau
+  Effets quand le calque est choisi. Texte tracé avec la mise en page de l'outil Texte (`text.rs`).
+
+**Où ajouter** : le bouton étincelle du panneau Calques, « Nouveau calque > Calque d'effet » du menu Calques et des
+clics droits des calques, « Préréglages » du panneau Effets, et Ctrl+K (`effet.impact`, `effet.lueur`,
+`effet.flash_blanc`, `effet.flash_couleur`, `effet.tremblement`, `effet.vignettage`, `effet.grain`,
+`effet.aberration`, `effet.flou_vitesse`, `effet.timecode`, `effet.vide`). Chaque préréglage ouvre une petite
+fenêtre (intensité, durée ou « jusqu'à la fin du plan », couleur, graine, et ses réglages à lui) qui **montre
+l'effet en direct sur le dessin** pendant qu'on la règle (par le chemin du fil de fond, sans jamais bloquer) ;
+« Appliquer » le pose, en **une étape d'annulation** (« Préréglage d'effet : Impact frame »). Les clés
+partent de la tête de lecture et restent toutes modifiables dans le panneau Effets, la timeline et le montage.
+« Sur le calque courant » ajoute les mêmes effets, avec leurs clés (et des clés « éteint » avant et après), à la pile
+du calque courant au lieu de créer un calque. Le nouveau calque est posé tout au-dessus (au-dessus du calque courant
+s'il est rangé dans un dossier). « Calque d'effet vide » couvre tout le plan, sans effet.
+
+| Préréglage | Ce qu'il pose | Réglages |
+|---|---|---|
+| Image d'impact | effet **Image d'impact** : négatif, noir et blanc, noir et blanc inversé ou postérisé, teinte, éclat de rayons, lignes de vitesse (tracés au calcul, graine). Allumé et éteint d'un coup | durée (2 images), mode, teinte + couleur, éclat, lignes, graine |
+| Lueur (glow) | effet **Lueur diffuse** : ce qui dépasse le seuil de brillance est flouté et ajouté en écran ; pulsation par clés | intensité, seuil, pulsation + période, durée (jusqu'à la fin) |
+| Flash blanc, flash de couleur | effet **Flash** : monte vite, redescend | intensité, durée (8 images à 24 i/s), couleur |
+| Tremblement de l'image | effet **Secousse de l'image** : un décalage et une rotation par image, tirés des **mêmes générateurs de bruit que les effets de caméra** (`camfx.rs` : léger, à l'épaule, explosion, secousse), bornés par l'intensité ; flou de bougé en option. Secoue l'image déjà dessinée, tout ce qui est dessous | style, intensité, fréquence, durée, flou de bougé, graine |
+| Vignettage | effet **Vignettage** centré sur le cadre de la caméra | intensité |
+| Grain de film | effet **Grain de film** (change à chaque image) | intensité, graine |
+| Aberration chromatique | effet **Aberration chromatique** légère | intensité |
+| Flou de vitesse | le **Flou de mouvement** existant, qui monte puis retombe | intensité, direction, durée |
+| Timecode et incrustations | un calque d'**incrustation** | contenu, place, taille, couleur, boîte, compté depuis, visible |
+
+Les sept effets nouveaux (famille **Cinéma** de « Ajouter un effet ») sont des effets ordinaires de la pile
+(`src/fxcine.rs`) : ils servent aussi sur un calque de dessin. Valeurs en pixels proportionnelles à la hauteur du
+cadre ; l'ampleur du tremblement est celle de `camfx.rs`, à régler à l'œil — aucun équivalent dans Storyboard Pro ni
+dans TVPaint n'a été vérifié (à vérifier).
+
+**Rendu** (`src/calqueffet.rs`) : un calque d'ajustement actif pose dans le plan un repère ; l'écran le remplace, avec ce
+qu'il couvre, par UN dessin dérivé (la composition d'en dessous passée par les effets, puis fondue avec l'opacité
+et le mode du calque), gardé par `fxcache.rs` comme ceux des effets d'un calque. À l'écran il est demandé au fil
+de fond (jamais calculé sur le fil de l'interface), à la taille de l'aperçu pendant la lecture et les gestes, et les
+images qui viennent sont préparées d'avance ; en attendant, l'image se montre sans l'effet. À l'export et dans les
+essais il est calculé tout de suite, à pleine résolution ; la carte graphique et le processeur composent le même dessin.
+Pendant le déplacement d'une sélection flottante sous un calque d'effet, l'effet attend la fin du geste. Mesure :
+`cargo test --release --offline --target-dir target\msvc --lib effetsperf -- --ignored --nocapture --test-threads=1`
+(voir `docs/PERFORMANCE.md`).
+
+**Format 27** : champ `calque_effet` d'un calque (`ajustement` ou `incrustation` et ses réglages) et sept sortes d'effets
+de plus ; un projet plus ancien s'ouvre tel quel, SHOT d'avant refuse un projet 27 (le film changerait sans prévenir).
+
 ## Passe d'interface (2026-10-19) : un mot par idée, les mêmes gestes pour les trois sortes de clés
 
 Détail et propositions : `docs/INTERFACE.md`.
@@ -1498,6 +1561,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `fx.rs`, `fxui.rs` | Pile d'effets : clés, flous, dessins dérivés, panneau (13i) |
 | `fxcache.rs`, `fxproxy.rs` | Effets : cache en octets, calcul de fond, dernier résultat en attendant ; aperçu réduit pendant la lecture et les gestes |
 | `tremblement.rs` | Tremblement du trait des calques vectoriels : champ de déplacement lisse, variantes, repos (effet de la pile) |
+| `calqueffet.rs`, `fxcine.rs` | Calques d'effets (ajustement, incrustation) : repère du plan, dessin dérivé de ce qui est dessous, enregistrement ; effets « Cinéma » (flash, impact, lueur diffuse, secousse, vignettage, grain, aberration) |
+| `prereglages.rs`, `prereglagesui.rs`, `incrustation.rs` | Préréglages d'effets (clés posées à la tête de lecture), fenêtre à aperçu en direct et menus ; texte des incrustations (timecode…) et son tracé |
 | `ctg.rs`, `ctgui.rs` | Calque CTG : remplissage par graffitis, sources, structure (13j) |
 | `video.rs`, `videoui.rs` | Calque vidéo : import par ffmpeg, images lues à la demande (13k) |
 | `tween.rs`, `tweenui.rs` | Interpolation : intervalles vectoriels, fondus, étirement, cadence (13l) |

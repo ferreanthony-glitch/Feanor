@@ -288,6 +288,24 @@ mod fxfilters_tests;
 mod fxwarp;
 #[cfg(test)]
 mod fxwarp_tests;
+// Calques d'effets et préréglages d'effets (impact frame, lueur, flash, secousse, timecode…).
+mod fxcine;
+#[cfg(test)]
+mod fxcine_tests;
+mod calqueffet;
+#[cfg(test)]
+mod calqueffet_tests;
+mod incrustation;
+#[cfg(test)]
+mod incrustation_tests;
+mod prereglages;
+#[cfg(test)]
+mod prereglages_tests;
+mod prereglagesui;
+#[cfg(test)]
+mod prereglagesui_tests;
+#[cfg(test)]
+mod effetsperf_tests;
 mod tremblement;
 #[cfg(test)]
 mod tremblement_tests;

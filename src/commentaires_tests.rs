@@ -146,8 +146,9 @@ fn saving_leaves_the_other_files_of_the_folder_alone() {
 #[test]
 fn the_format_version_of_the_project_is_untouched() {
     // Les commentaires n'ont pas de version de projet à eux : le manifeste reste celui d'avant.
-    // (26 : la version de main avec le tremblement du trait ; les commentaires n'y ont pas touché.)
-    assert_eq!(project::VERSION, 26);
+    // (27 : la version des calques d'effets, après 26 avec le tremblement du trait ; les commentaires
+    // n'y ont pas touché.)
+    assert_eq!(project::VERSION, 27);
 }
 
 #[test]

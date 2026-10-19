@@ -24,7 +24,7 @@ fn cel_of_tiles(n: usize) -> Arc<Cel> {
 const TILE_BYTES: usize = TILE_PIXELS * 4;
 
 fn job(id: CelId, version: u64, prio: u32, epoch: u64) -> Job {
-    Job { id, version, src: Arc::new(Raster::new(64, 64)), steps: Vec::new(), level: 0, prio, epoch, origin: id, seq: 0, world: 0 }
+    Job { id, version, src: Arc::new(Raster::new(64, 64)), steps: Vec::new(), level: 0, prio, epoch, origin: id, seq: 0, world: 0, base: None }
 }
 
 #[test]

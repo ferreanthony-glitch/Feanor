@@ -163,6 +163,7 @@ impl App {
                 self.action_item(ui, "De fond", "calque.nouveau_fond");
             }
             self.action_item(ui, "CTG (sous le calque courant)", "calque.nouveau_ctg");
+            ui.menu_button("Calque d'effet", |ui| self.effect_preset_menu(ui));
             ui.separator();
             self.action_item(ui, "Choisir la sorte et le nom…", "calque.nouveau");
         });

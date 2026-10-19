@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use eframe::egui::{self, Color32, ColorImage, TextureFilter, TextureHandle, TextureOptions};
 
 use crate::blend::{blend_over, BlendMode};
@@ -63,13 +65,17 @@ impl PlanItem {
     }
 }
 
-/// Ce que montre un élément de fond.
-#[derive(Clone, Copy, PartialEq, Debug)]
+/// Ce que montre un élément qui n'est pas le dessin de son numéro : le fond d'un dessin, ou le
+/// repère d'un calque d'effet.
+#[derive(Clone, PartialEq, Debug)]
 pub enum FondPart {
     /// La forme déduite du trait, de ces réglages, moins ce qu'on en a coupé, avec ce qu'on a
     /// peint dans le fond, dans la forme (recalculée quand le dessin change ; refaite tuile par
     /// tuile pendant qu'on peint dedans, `fx::fond_patch`).
     Forme(crate::fond::FondReglages),
+    /// Le repère d'un calque d'effet d'ajustement (`calqueffet.rs`) : il se résout, avec les éléments
+    /// qu'il couvre, en un dessin dérivé (`calqueffet::resolve`). Jamais composé tel quel.
+    Reglage(std::sync::Arc<crate::calqueffet::Reglage>),
 }
 
 /// L'élément du fond sous le trait du calque `layer` (s'il en a un), à placer juste sous `line`,
@@ -237,6 +243,8 @@ fn tile_count(doc: &Document) -> usize {
 }
 
 pub fn composite_full(doc: &Document, plan: &Plan) -> Vec<Color32> {
+    let resolved = crate::calqueffet::resolve_auto(doc, plan);
+    let plan = &*resolved;
     let mut buf = vec![Color32::TRANSPARENT; doc.width * doc.height];
     for idx in 0..tile_count(doc) {
         composite_tile(doc, plan, idx, &mut buf);
@@ -298,6 +306,8 @@ pub(crate) fn set_thread_cap(cap: usize) {
 /// Seule la zone filmée de la feuille est composée (en tuiles entières, avec une marge pour
 /// l'interpolation), et le travail est réparti sur les cœurs du processeur.
 pub fn camera_image(doc: &Document, plan: &Plan, cam: &Camera) -> Vec<Color32> {
+    let resolved = crate::calqueffet::resolve_auto(doc, plan);
+    let plan = &*resolved;
     let [fw, fh] = doc.frame;
     let mut out = vec![Color32::TRANSPARENT; fw * fh];
     let (w, h) = (doc.width, doc.height);
@@ -363,6 +373,8 @@ pub fn camera_image(doc: &Document, plan: &Plan, cam: &Camera) -> Vec<Color32> {
 }
 
 pub fn composite_pixel(doc: &Document, plan: &Plan, x: usize, y: usize) -> Color32 {
+    let resolved = crate::calqueffet::resolve_auto(doc, plan);
+    let plan = &*resolved;
     pixel_of(&resolve(doc, plan), paper_color(plan), x, y)
 }
 
@@ -431,7 +443,7 @@ pub fn panel_plan_at(doc: &Document, index: usize, frame: usize, paper: Option<[
 pub fn layer_plan_at(doc: &Document, index: usize, li: usize, frame: usize) -> Option<Plan> {
     let panel = doc.panels.get(index)?;
     let l = panel.layers.get(li)?;
-    if l.folder {
+    if l.folder || l.effet.is_some() {
         return None;
     }
     let cel = crate::video::cel_at(l, frame, doc.fps)?;
@@ -452,38 +464,44 @@ pub fn layer_plan_at(doc: &Document, index: usize, li: usize, frame: usize) -> O
 }
 
 fn plan_with_camera(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, fps: u32) -> Plan {
-    Plan {
-        paper,
-        items: panel
-            .layers
-            .iter()
-            .enumerate()
-            .filter_map(|(li, l)| {
-                // Caché (lui ou son dossier, 13b-5) : rien ; l'opacité du dossier s'ajoute.
-                let opacity = crate::folders::effect(&panel.layers, li)?;
-                let t = l.transform_seen(camera)?;
-                // Calque vidéo (13k) : l'image de la vidéo qui tombe là.
-                crate::video::cel_at(l, frame, fps).map(|cel| PlanItem {
-                    cel,
-                    opacity: (opacity * 255.0).round() as u8,
-                    tint: None,
-                    transform: (!t.is_identity()).then_some(t),
-                    blend: l.blend,
-                    fx: crate::fx::layer_steps(l, frame, None),
-                    ctg: crate::ctg::input(&panel.layers, li, frame),
-                    fond: None,
-                    pre: None,
-                })
-                .map(|line| (li, line))
-            })
-            // Le fond sous le trait (`fond.rs`), juste sous le dessin de son calque.
-            .flat_map(|(li, line)| fond_item(&panel.layers[li], &line).into_iter().chain([line]))
-            .collect(),
+    let mut items: Vec<PlanItem> = Vec::new();
+    // Pour chaque calque, le nombre d'éléments posés avant lui (un calque d'effet couvre ceux d'en dessous).
+    let mut starts: Vec<usize> = Vec::with_capacity(panel.layers.len());
+    for (li, l) in panel.layers.iter().enumerate() {
+        starts.push(items.len());
+        // Caché (lui ou son dossier, 13b-5) : rien ; l'opacité du dossier s'ajoute.
+        let Some(opacity) = crate::folders::effect(&panel.layers, li) else { continue };
+        // Calque d'effet (`calqueffet.rs`) : son repère, ou rien (une incrustation se pose sur l'image
+        // finale, `incrustation.rs`).
+        if l.effet.is_some() {
+            items.extend(crate::calqueffet::marker(&panel.layers, li, frame, opacity, &starts));
+            continue;
+        }
+        let Some(t) = l.transform_seen(camera) else { continue };
+        // Calque vidéo (13k) : l'image de la vidéo qui tombe là.
+        let Some(cel) = crate::video::cel_at(l, frame, fps) else { continue };
+        let line = PlanItem {
+            cel,
+            opacity: (opacity * 255.0).round() as u8,
+            tint: None,
+            transform: (!t.is_identity()).then_some(t),
+            blend: l.blend,
+            fx: crate::fx::layer_steps(l, frame, None),
+            ctg: crate::ctg::input(&panel.layers, li, frame),
+            fond: None,
+            pre: None,
+        };
+        // Le fond sous le trait (`fond.rs`), juste sous le dessin de son calque.
+        items.extend(fond_item(l, &line));
+        items.push(line);
     }
+    Plan { paper, items }
 }
 
 /// Image réduite de ce que voit la caméra `cam` (moyenne de 4 échantillons par pixel).
 pub fn thumbnail(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize) -> ColorImage {
+    let resolved = crate::calqueffet::resolve_auto(doc, plan);
+    let plan = &*resolved;
     let [fw, fh] = doc.frame;
     let (sx, sy) = (fw as f32 / tw as f32, fh as f32 / th as f32);
     let map = cam.frame_map(doc.frame);
@@ -630,6 +648,11 @@ impl Renderer {
             self.texture = None;
             self.dirty_all = true;
         }
+        // (Les repères de calques d'effets sont déjà résolus par l'écran, `calqueffet::resolve` ; sinon, ici.)
+        let plan = match crate::calqueffet::resolve_auto(doc, &plan) {
+            Cow::Borrowed(_) => plan,
+            Cow::Owned(resolved) => resolved,
+        };
         if self.plan.as_ref() != Some(&plan) {
             self.plan = Some(plan);
             self.dirty_all = true;

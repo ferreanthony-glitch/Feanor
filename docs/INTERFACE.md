@@ -619,3 +619,45 @@ le pinceau et la gomme à la tablette (pression), la barre sur une fenêtre étr
 
 `crayonnes_tests` (38 : appartenance, coupe, navigation, ordre, création des plans, fichier, annulation, écran).
 Le projet d'essai de fiabilité contient une planche de crayonnés (trois cases, dont une peinte au pinceau).
+
+---------------------------------------------------------------------------------------------------
+
+## 12. Calques d'effets et préréglages d'effets (2026-10-19, branche `calques-effets`)
+
+Demande d'Anthony : « des calques d'effets après des préréglages d'animation d'effet comme des impact frames,
+glows, tremblements de caméra effectifs, timecode ». Détail : README (section du même nom) et `docs/ROADMAP.md`.
+
+### Mots
+
+| Idée | Mot | À éviter |
+|---|---|---|
+| Calque qui agit sur ce qui est dessous | **calque d'effet** (sorte « ajustement ») | calque de réglage, filtre |
+| Calque qui écrit du texte sur l'image finale | **incrustation** (timecode, numéro d'image…) | overlay, sous-titre |
+| Effets tout réglés avec leurs clés | **préréglage d'effet** (menu **Préréglages**, bouton étincelle) | preset, modèle |
+| Durée d'un calque d'effet | son **exposition** (comme un dessin tenu) | durée en secondes cachée |
+| Secouer l'image déjà dessinée | **tremblement de l'image** (≠ « Effets de caméra », qui bougent la caméra) | tremblement de caméra effectif |
+
+### Où et quels gestes
+
+- **Ajouter** : bouton étincelle du panneau Calques ; Calques > Nouveau calque > Calque d'effet (et clic droit d'un
+  calque) ; « Préréglages » du panneau Effets ; Ctrl+K (`effet.*`, sans touche par défaut, « Assigner un
+  raccourci… » au clic droit d'une entrée de menu).
+- **Fenêtre du préréglage** (à droite de l'écran, ne cache pas le dessin) : l'effet se voit en direct sur le dessin
+  pendant les réglages ; Appliquer (une étape d'annulation « Préréglage d'effet : … »), Annuler ou Échap (rien n'est posé).
+- **Distinguer** : un calque d'effet a une étincelle à la place de la lettre B / V, la teinte cyan (`theme::dessin_cfx`,
+  `calque_cfx`) dans le panneau Calques, la timeline et le montage, et le mot « effet » sous son nom.
+- **Régler après coup** : choisir le calque, panneau Effets (pile, clés en losanges violets, comme tout calque) ;
+  une incrustation a son éditeur en tête du panneau. Étirer / couper / déplacer l'exposition dans la timeline change
+  les images où l'effet agit.
+
+### À vérifier
+
+- Photoshop et After Effects : le calque de réglage agit sur tout ce qui est dessous, et dans un groupe seulement
+  sur ce groupe ; SHOT l'a repris tel quel (**à vérifier** que les dossiers de SHOT se comportent comme les
+  groupes de Photoshop — « passer à travers » n'existe pas ici).
+- Une incrustation suit le cadre de la caméra (texte à l'écran de l'export) : **à vérifier** dans Storyboard Pro
+  (calque d'incrustation / « burn-in » du timecode, nom du plan en surimpression).
+- Les valeurs d'ampleur des préréglages (impact, lueur, flash, secousse, vignettage, grain, aberration) sont des choix
+  de SHOT, à régler à l'œil.
+- Pas vu à l'écran dans cette séance (aucun lancement de SHOT, consigne) : fenêtre du préréglage (largeur, placement),
+  icône et cyan dans les trois thèmes, boîte de l'incrustation sur le dessin, aperçu en direct avec un gros dessin.

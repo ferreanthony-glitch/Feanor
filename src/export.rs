@@ -324,6 +324,19 @@ pub fn write_wav(path: &Path, clips: Vec<MixClip>, start: u64, len: u64) -> std:
 
 type Image = Arc<Vec<Color32>>;
 
+/// L'image finale du plan `p`, image `f`, avec les incrustations gravées (timecode…) des calques
+/// d'incrustation visibles qui ne sont pas réglés « Seulement à l'écran » (`incrustation.rs`). L'image
+/// d'origine, gardée pour l'image suivante si rien n'a changé, n'est pas touchée.
+fn burned(doc: &Document, p: usize, f: usize, img: Image) -> Image {
+    if !crate::incrustation::any_for(doc, p, f, true) {
+        return img;
+    }
+    let boxes = crate::incrustation::boxes_for(doc, p, f, true, crate::incrustation::now_secs());
+    let mut pixels = (*img).clone();
+    crate::incrustation::burn(&mut pixels, doc.frame, &boxes);
+    Arc::new(pixels)
+}
+
 /// Où partent les images calculées.
 enum Sink {
     /// Fils d'écriture PNG : (numéro de l'image, image).
@@ -737,18 +750,20 @@ impl ExportJob {
         // Arrière-plan (13e) : aucun ou damier → image transparente.
         let plan = render::panel_plan_at(doc, p, f, if self.paper { doc.render_paper() } else { None });
         let cam = doc.panel_camera(p, f);
+        // (Le cache garde l'image sans incrustation : le timecode change à chaque image, `burned` la
+        // grave sur la copie qu'on rend.)
         if let Some(at) = self.cache.iter().position(|(lp, lc, _)| *lp == plan && *lc == cam) {
             let entry = self.cache.remove(at);
             let img = entry.2.clone();
             self.cache.push(entry);
-            return img;
+            return burned(doc, p, f, img);
         }
         let img: Image = Arc::new(render::camera_image(doc, &plan, &cam));
         self.cache.push((plan, cam, img.clone()));
         if self.cache.len() > 4 {
             self.cache.remove(0);
         }
-        img
+        burned(doc, p, f, img)
     }
 
     fn render(&mut self, doc: &Document, i: usize) -> Image {

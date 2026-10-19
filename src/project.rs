@@ -102,7 +102,13 @@ pub const FORMAT: &str = "pelure-projet";
 /// `effets` : intensité, fréquence, variantes, vitesse, épaisseur, graine, animer à l'arrêt ; voir
 /// `tremblement.rs`). Une version précédente refuse le projet au lieu de montrer le dessin sans
 /// son tremblement (elle ne connaît pas la sorte d'effet) : le film changerait sans prévenir.
-pub const VERSION: u32 = 26;
+/// 27 (2026-10-19) : calques d'effets (`calque_effet` d'un calque : ajustement, qui applique sa pile
+/// d'effets à tout ce qui est dessous, ou incrustation de texte sur l'image finale — timecode, numéro
+/// d'image, nom du plan… ; voir `calqueffet.rs`) et sept effets « Cinéma » dans la pile `effets`
+/// (flash, image d'impact, lueur diffuse, secousse, vignettage, grain, aberration chromatique ; voir
+/// `fxcine.rs`). Une version précédente refuse le projet : elle en ferait des calques vides et
+/// perdrait l'effet, le film changerait sans prévenir.
+pub const VERSION: u32 = 27;
 const DRAWINGS: &str = "dessins";
 /// Fils qui lisent ou écrivent les dessins d'un projet en parallèle : au-delà de huit, le disque et
 /// la mémoire (une feuille décodée pèse 33 Mo) limitent plus que le processeur.
@@ -552,6 +558,10 @@ struct LayerEntry {
     /// de fond. Ce qu'on a peint dans le fond d'un dessin : `dessins/<id>_fond.png`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     fond: Option<crate::fond::FondReglages>,
+    /// Calque d'effet (format 27) : ajustement ou incrustation ; absent : calque ordinaire. Ses
+    /// expositions sont les images où il agit (un dessin vide tenu).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    calque_effet: Option<crate::calqueffet::Entree>,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -1366,6 +1376,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                     }),
                     video: l.video.as_ref().map(|v| VideoEntry { id: v.id, nom: v.name.clone(), images: v.frames, ips: v.fps, debut: v.start, ext: v.ext.clone() }),
                     fond: l.fond,
+                    calque_effet: l.effet.as_ref().map(crate::calqueffet::Entree::from),
                     expositions: to_exposures(&l.frames),
                 })
                 .collect(),
@@ -1912,6 +1923,8 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
                         }),
                         // Fond sous le trait (format 23).
                         fond: l.fond,
+                        // Calque d'effet (format 27).
+                        effet: l.calque_effet.map(crate::calqueffet::Entree::into_model),
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.

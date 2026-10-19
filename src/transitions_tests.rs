@@ -319,7 +319,7 @@ fn without_a_transition_there_is_no_file_and_the_manifest_version_is_unchanged()
     let manifest = dir.join("F.pelure");
     project::save(&doc, &manifest, &mut Default::default()).unwrap();
     assert!(!dir.join(FILE).exists());
-    assert_eq!(project::VERSION, 26, "pas de nouvelle version du projet : un fichier à côté suffit");
+    assert_eq!(project::VERSION, 27, "pas de version du projet pour les transitions (la 27 est celle des calques d'effets) : un fichier à côté suffit");
     // Des transitions, puis plus aucune : le fichier part.
     let id = doc.set_transition(1, Kind::Dissolve).unwrap();
     project::save(&doc, &manifest, &mut Default::default()).unwrap();

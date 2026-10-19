@@ -324,6 +324,10 @@ pub struct Layer {
     /// Fond sous le trait (`fond.rs`) : chaque dessin du calque a un fond déduit de son trait,
     /// sous lui ; rien : pas de fond.
     pub fond: Option<crate::fond::FondReglages>,
+    /// Calque d'effet (`calqueffet.rs`) : pas de dessin, une pile d'effets pour tout ce qui est
+    /// dessous (ajustement) ou du texte sur l'image finale (incrustation) ; ses images sont ses
+    /// expositions.
+    pub effet: Option<crate::calqueffet::CalqueEffet>,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -389,6 +393,7 @@ impl Layer {
             ctg: None,
             video: None,
             fond: None,
+            effet: None,
         }
     }
 
@@ -400,7 +405,7 @@ impl Layer {
     /// On peut dessiner sur le calque : ni verrouillé, ni de position verrouillée (13b), et ce
     /// n'est pas un dossier.
     pub fn drawable(&self) -> bool {
-        !self.locked && !self.position_locked && !self.folder
+        !self.locked && !self.position_locked && !self.folder && self.effet.is_none()
     }
 
     /// Plus proche que ça, le calque serait derrière la caméra.
@@ -1794,6 +1799,9 @@ impl Document {
         let (above, below) = (panel.layers[layer].clone(), panel.layers[layer - 1].clone());
         if above.folder || below.folder {
             return Err("Un dossier ne se fusionne pas : fusionne ses calques.".into());
+        }
+        if above.effet.is_some() || below.effet.is_some() {
+            return Err("Un calque d'effet ne se fusionne pas : il agit sur tout ce qui est dessous.".into());
         }
         if !above.visible || !below.visible {
             return Err("Affiche les deux calques avant de les fusionner.".into());
