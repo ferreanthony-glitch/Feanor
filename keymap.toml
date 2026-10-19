@@ -2178,6 +2178,17 @@ action = "bruitage.ecouter"
 touches = []
 source = "SHOT (sans touche : le bouton de la ligne l'écoute aussi)"
 
+# Suggestions sonores : SHOT lit le storyboard et propose des sons témoins (sans touche : à choisir).
+[[raccourci]]
+action = "vue.suggestions_sonores"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "suggestion.lire"
+touches = []
+source = "SHOT (sans touche : le bouton « Lire le storyboard » du panneau le lance aussi)"
+
 # Effets des extraits de son (sans touche : à choisir).
 [[raccourci]]
 action = "son.fondu_entree"

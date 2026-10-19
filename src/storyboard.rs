@@ -582,6 +582,7 @@ impl App {
         };
         item(self, ui, "Importer un son…", "son.importer");
         item(self, ui, "Bruitages…", "vue.bruitages");
+        item(self, ui, "Suggestions sonores…", "vue.suggestions_sonores");
         item(self, ui, "Nouvelle piste son", "son.nouvelle_piste");
         item(self, ui, "Couper le son à l'image courante", "son.couper");
         if let Some(id) = self.sel_clip.filter(|&id| self.doc.clip(id).is_some()) {

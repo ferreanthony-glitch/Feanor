@@ -557,6 +557,8 @@ pub struct App {
     pub(crate) sfx: crate::audiofxui::SoundFxUi,
     /// La bibliothèque de bruitages : liste, recherche, écoute, sons en cours de pose (`bruitagesui.rs`).
     pub(crate) brt: crate::bruitagesui::BruitagesUi,
+    /// Les suggestions sonores : portée, tâches en cours, fournisseurs (`suggestionsui.rs`).
+    pub(crate) sug: crate::suggestionsui::SuggestionsUi,
     /// Ce qu'on a cliqué du bouton droit dans la bande de montage.
     pub(crate) menu_target: Option<MenuTarget>,
     pub(crate) history: History,
@@ -1020,6 +1022,7 @@ impl App {
             trans: Default::default(),
             sfx: Default::default(),
             brt: Default::default(),
+            sug: Default::default(),
             menu_target: None,
             history: History::default(),
             gesture: Gesture::default(),
@@ -2754,6 +2757,8 @@ impl App {
         self.rejeu_deferred.clear();
         self.rejeu_idle.clear();
         crate::fx::fond_cancel_all();
+        // (Les suggestions sonores de l'ancien projet s'arrêtent : rien n'est rendu au nouveau.)
+        self.reset_suggestions();
         self.doc = doc;
         self.doc_epoch += 1;
         // (Ses dessins portent les numéros et les versions de ceux de l'ancien : les dessins
@@ -3166,6 +3171,10 @@ impl App {
         }
         // Bibliothèque de bruitages (`bruitagesui.rs`).
         if self.bruitage_action(action) {
+            return;
+        }
+        // Suggestions sonores (`suggestionsui.rs`).
+        if self.suggestion_action(action) {
             return;
         }
         // Suppr vise le commentaire seulement s'il a la main (le dernier clic était sur lui) ;
@@ -4133,6 +4142,7 @@ impl App {
             self.tick_reopen();
             self.poll_brushes();
             self.poll_bruitages(ctx);
+            self.poll_suggestions(ctx);
             self.tick_save(ctx);
         }
         // Export en cours : quelques images par image d'écran, la fenêtre reste vivante.

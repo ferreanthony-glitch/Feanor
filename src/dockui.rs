@@ -68,7 +68,7 @@ impl egui_dock::TabViewer for Panes<'_> {
             // Calques : l'en-tête (mode, opacité, commandes) reste en haut, seule la liste défile
             // (`layers_panel`). L'historique défile seul, pour rester sur la dernière étape. Pinceaux : la
             // taille et les onglets restent en haut, les boutons en bas, la liste défile entre les deux.
-            Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::XSheet | Pane::Layers | Pane::History | Pane::Brushes | Pane::Comments | Pane::Bruitages => [false, false],
+            Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::XSheet | Pane::Layers | Pane::History | Pane::Brushes | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores => [false, false],
             _ => [false, true],
         }
     }
@@ -153,6 +153,7 @@ impl App {
             Pane::History => self.history_panel(ui),
             Pane::Comments => self.comments_panel(ui),
             Pane::Bruitages => self.bruitages_panel(ui),
+            Pane::SuggestionsSonores => self.suggestions_panel(ui),
         }
     }
 
@@ -214,7 +215,7 @@ impl App {
             let pane = d.panneau;
             let (closed, rect) = ctx.show_viewport_immediate(id, builder, |ctx, _class| {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    if matches!(pane, Pane::Montage | Pane::Timeline | Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages) {
+                    if matches!(pane, Pane::Montage | Pane::Timeline | Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores) {
                         self.pane_ui(ui, pane);
                     } else {
                         egui::ScrollArea::vertical().show(ui, |ui| self.pane_ui(ui, pane));

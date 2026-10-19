@@ -18,6 +18,9 @@
 //!                         une version qui ne le connaît pas le laisse en place et montre le film
 //!                         sans les fondus
 //!   effets_son.json       réglages d'effets des extraits et des pistes son (`audiofx.rs`), de même
+//!   sons_proposes.json    sons proposés par la lecture du storyboard (`indications.rs`), de même sans
+//!                         changer `VERSION` ; les sons générés, eux, restent dans le cache de SHOT
+//!                         jusqu'à leur acceptation (copiés alors dans sons/)
 //! ```
 //!
 //! Un enregistrement n'écrit que les dessins modifiés depuis le précédent, puis le manifeste.
@@ -850,6 +853,8 @@ pub struct SaveJob {
     transitions: Option<Vec<u8>>,
     /// Le fichier des effets des sons (`effets_son.json`) ; rien : il n'y en a plus, le fichier part.
     sound_fx: Option<Vec<u8>>,
+    /// Le fichier des sons proposés (`sons_proposes.json`) ; rien : il n'y en a plus, le fichier part.
+    sons_proposes: Option<Vec<u8>>,
 }
 
 /// Prépare l'enregistrement de `doc` dans `manifest_path`. `written` est mis à jour comme si
@@ -955,7 +960,32 @@ pub fn prepare_save(
         reserves: crate::rognage::to_bytes(doc)?,
         transitions: crate::transitions::to_bytes(doc)?,
         sound_fx: crate::audiofx::to_bytes(doc)?,
+        sons_proposes: crate::indications::to_bytes(doc)?,
     })
+}
+
+/// Les sons proposés, lus dans `sons_proposes.json` (absent : aucun). Un fichier illisible ou d'une
+/// version plus récente n'empêche pas d'ouvrir le projet : on le dit, sans propositions, et il reste
+/// en place (`write_sidecar`).
+fn load_sons_proposes(dir: &Path, warnings: &mut Vec<String>) -> crate::indications::SonsProposes {
+    let path = dir.join(crate::indications::FILE);
+    match fs::read_to_string(&path) {
+        Ok(text) => match crate::indications::parse(&text) {
+            Ok(mut s) => {
+                crate::indications::verifier_fichiers(&mut s);
+                s
+            }
+            Err(e) => {
+                warnings.push(format!("{} : {e} ; les sons proposés ne sont pas chargés.", crate::indications::FILE));
+                Default::default()
+            }
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Default::default(),
+        Err(e) => {
+            warnings.push(format!("{} : {e} ; les sons proposés ne sont pas chargés.", path.display()));
+            Default::default()
+        }
+    }
 }
 
 /// Les effets des sons, lus dans `effets_son.json` (absent : aucun). Un fichier illisible ou d'une
@@ -1144,6 +1174,8 @@ impl SaveJob {
         write_sidecar(&dir.join(crate::transitions::FILE), self.transitions.as_deref(), |t| crate::transitions::parse(t).is_ok())?;
         // Et les effets des sons.
         write_sidecar(&dir.join(crate::audiofx::FILE), self.sound_fx.as_deref(), |t| crate::audiofx::parse(t).is_ok())?;
+        // Et les sons proposés par la lecture du storyboard.
+        write_sidecar(&dir.join(crate::indications::FILE), self.sons_proposes.as_deref(), |t| crate::indications::parse(t).is_ok())?;
         write_atomic_synced(&self.manifest_path, &self.manifest)?;
         let removed = remove_unused(dir, &self.used, &self.fonds)
             + remove_unused_sounds(dir, &self.used_sounds, &self.kept)
@@ -1927,6 +1959,8 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
     if let Some(fx) = load_sound_fx(dir, &mut warnings) {
         fx.install(&mut doc);
     }
+    // Les sons proposés (`sons_proposes.json`).
+    doc.sons_proposes = load_sons_proposes(dir, &mut warnings);
     for model in models.into_values() {
         doc.insert_model(model);
     }

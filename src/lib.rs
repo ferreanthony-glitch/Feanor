@@ -50,6 +50,30 @@ mod bruitages;
 #[cfg(test)]
 mod bruitages_tests;
 mod bruitagesui;
+// Sons proposés par la lecture du storyboard (panneau Suggestions sonores) : le modèle d'une
+// proposition et son fichier, la lecture (par règles ou par un modèle), les fournisseurs locaux et en
+// ligne, les tâches, l'interface et les Préférences.
+mod base64;
+#[cfg(test)]
+mod base64_tests;
+mod clessecretes;
+mod fournisseurs;
+mod fournisseursapi;
+#[cfg(test)]
+mod fournisseurs_tests;
+mod generation;
+mod genprefsui;
+mod genreglages;
+mod httplocal;
+mod indications;
+#[cfg(test)]
+mod indications_tests;
+mod lecturerules;
+mod lecturesb;
+mod sidecar;
+mod suggestionsui;
+#[cfg(test)]
+mod suggestions_tests;
 mod barrepanneaux;
 #[cfg(test)]
 mod barrepanneaux_tests;

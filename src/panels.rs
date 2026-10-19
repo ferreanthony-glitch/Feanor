@@ -664,6 +664,8 @@ impl App {
         // Exporter… et Préférences… (`prefsui.rs`).
         self.export_hub_window(ctx);
         self.preferences_window(ctx);
+        // Suggestions sonores : confirmation d'envoi en ligne, « Modifier », saisie d'une clé.
+        self.suggestions_windows(ctx);
         // À propos de SHOT (`aproposui.rs`).
         self.about_window_ui(ctx);
         // Diagnostic des performances et sa proposition du premier lancement (`diagnosticui.rs`).

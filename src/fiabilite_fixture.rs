@@ -465,6 +465,24 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
     doc.set_transition(0, crate::transitions::Kind::White).expect("début du film");
     let n = doc.panels.len();
     doc.set_transition(n, crate::transitions::Kind::Black).expect("fin du film");
+    // Sons proposés par la lecture du storyboard (`sons_proposes.json`) : un bruitage à générer, une
+    // voix rejetée et modifiée à la main, une ambiance acceptée (son posé), et la confirmation d'envoi
+    // en ligne du projet.
+    {
+        use crate::indications::{Genre, IndicationBrute, Statut};
+        let clip = doc.audio_tracks.iter().flat_map(|t| t.clips.iter()).map(|c| c.id).next();
+        let (p0, p1, p4) = (doc.panels[0].id, doc.panels[i1].id, doc.panels[i4].id);
+        doc.sons_proposes.ajouter(p0, IndicationBrute { start: 3, frames: 36, kind: Some(Genre::Bruitage), description: "Porte qui claque".into(), prompt: "heavy wooden door slamming shut".into(), ..Default::default() });
+        let voix = doc.sons_proposes.ajouter(p1, IndicationBrute { start: 0, frames: 30, kind: Some(Genre::Voix), description: "MARIE : « Viens ici. »".into(), text: "Viens ici.".into(), character: "MARIE".into(), voice: "ff_siwis".into(), ..Default::default() });
+        let ambiance = doc.sons_proposes.ajouter(p4, IndicationBrute { start: 0, frames: 120, kind: Some(Genre::Ambiance), description: "Pluie".into(), prompt: "steady rain".into(), ..Default::default() });
+        for (id, statut) in [(voix, Statut::Rejetee), (ambiance, Statut::Acceptee)] {
+            let i = doc.sons_proposes.get_mut(id).expect("proposition");
+            i.status = statut;
+            i.edited = id == voix;
+            i.clip = (id == ambiance).then_some(clip).flatten();
+        }
+        doc.sons_proposes.envoi_en_ligne_confirme = true;
+    }
 
     Fixture { doc, sans_pixels }
 }
@@ -504,6 +522,10 @@ pub(crate) fn instantane(doc: &Document, sans_pixels: &BTreeSet<CelId>) -> Strin
     let mut transitions = doc.transitions.clone();
     transitions.sort_by_key(|t| t.id);
     let _ = writeln!(s, "transitions {:?}", transitions);
+    // (Le fichier des sons proposés les range dans l'ordre du film : leurs numéros sont gardés.)
+    let mut proposes = doc.sons_proposes.clone();
+    proposes.indications.sort_by_key(|i| i.id);
+    let _ = writeln!(s, "sons_proposes {:?}", proposes);
     let mut sons: Vec<_> = doc.sounds.values().collect();
     sons.sort_by_key(|k| k.id);
     for k in sons {

@@ -905,6 +905,9 @@ pub struct Document {
     /// Transitions du montage, rangées par coupe (`transitions.rs`) ; enregistrées à côté du
     /// manifeste, dans `transitions.json`.
     pub transitions: Vec<crate::transitions::Transition>,
+    /// Sons proposés par la lecture du storyboard (`indications.rs`) ; enregistrés à côté du
+    /// manifeste, dans `sons_proposes.json`. Hors de l'annulation.
+    pub sons_proposes: crate::indications::SonsProposes,
     next_id: u64,
 }
 
@@ -949,6 +952,7 @@ impl Document {
             comments: Vec::new(),
             reserves: Default::default(),
             transitions: Vec::new(),
+            sons_proposes: Default::default(),
             next_id: 1,
         };
         let seq = doc.new_sequence();
@@ -1005,6 +1009,7 @@ impl Document {
             comments: structure.comments,
             reserves: structure.reserves,
             transitions: structure.transitions,
+            sons_proposes: Default::default(),
             next_id: max_id + 1,
         };
         doc.normalize();
