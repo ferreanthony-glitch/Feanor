@@ -543,7 +543,9 @@ impl App {
                     let on = v.etat == Some(true);
                     let key = self.raccourci(c.action);
                     let text = bulles::encre_etat(RichText::new(format!("{}  {}", v.icone, v.nom)), on);
-                    let button = egui::Button::new(text).selected(on).shortcut_text(key.clone()).min_size(vec2(LIGNE_LARGEUR - 24.0, 0.0));
+                    // Sans raccourci, egui centre le nom dans la ligne : un raccourci blanc le garde à gauche.
+                    let affiche = if key.is_empty() { " ".to_string() } else { key.clone() };
+                    let button = egui::Button::new(text).selected(on).shortcut_text(affiche).min_size(vec2(LIGNE_LARGEUR - 24.0, 0.0));
                     let resp = bulle(ui.add_enabled(v.actif, button), &v.nom, &v.description, &key);
                     if resp.clicked() {
                         ui.close_menu();
