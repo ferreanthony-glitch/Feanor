@@ -414,6 +414,18 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
     doc.audio_tracks[1].locked = true;
     doc.audio_tracks[1].volume = 1.25;
     doc.add_clip(1, son, 10, 2, 4).expect("extrait de la seconde piste");
+    // Effets des sons (`effets_son.json`) : volume, fondus, enchaîné, clés de volume, égaliseur, écho, solo.
+    {
+        let fx = &mut doc.audio_tracks[0].clips[0].fx;
+        fx.gain = 1.25;
+        fx.fade_in = 2;
+        fx.fade_out = 3;
+        fx.xfade = 4;
+        fx.keys = vec![crate::audiofx::VolumeKey { t: 1.0, v: 0.5 }, crate::audiofx::VolumeKey { t: 4.0, v: 1.5 }];
+        fx.eq = [3.0, -2.0, 6.0];
+        fx.echo = crate::audiofx::Echo { mix: 0.35, delay_ms: 180.0, feedback: 0.4 };
+    }
+    doc.audio_tracks[1].solo = true;
     doc.guides.push(crate::guides::Guide { name: "Fuite à deux points".into(), points: vec![[40.0, 100.0], [440.0, 100.0]] });
     doc.board.strokes.push(crate::board::NoteStroke { points: (0..5).map(|k| VPoint { x: k as f32 * 7.0, y: 3.0 + k as f32, r: 1.5 }).collect(), color: [200, 40, 40], anchor: Some(doc.panels[i1].id) });
     doc.board.texts.push(crate::board::NoteText { pos: pos2(12.0, 30.0), text: "À revoir avec Léa".into(), size: 18.0, color: [20, 80, 160], anchor: None });
@@ -440,6 +452,19 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
     doc.comment_mut(id).expect("commentaire").text = "Le flou arrive trop tôt.\nVoir avec le son.".into();
     let id = doc.add_comment(doc.panels[i4].id, 0, "Anthony", 1_760_000_600);
     doc.comment_mut(id).expect("commentaire").color = [10, 200, 90];
+    // Transitions du montage (`transitions.json`) : un fondu enchaîné centré, un volet décalé, un fondu
+    // depuis le blanc au début du film et un fondu au noir à la fin.
+    let enchaine = doc.set_transition(1, crate::transitions::Kind::Dissolve).expect("transition");
+    doc.transitions.iter_mut().find(|t| t.id == enchaine).expect("transition").frames = 6;
+    let volet = doc.set_transition(2, crate::transitions::Kind::Wipe).expect("volet");
+    {
+        let t = doc.transitions.iter_mut().find(|t| t.id == volet).expect("volet");
+        t.frames = 4;
+        t.align = crate::transitions::Align::After;
+    }
+    doc.set_transition(0, crate::transitions::Kind::White).expect("début du film");
+    let n = doc.panels.len();
+    doc.set_transition(n, crate::transitions::Kind::Black).expect("fin du film");
 
     Fixture { doc, sans_pixels }
 }
@@ -475,6 +500,10 @@ pub(crate) fn instantane(doc: &Document, sans_pixels: &BTreeSet<CelId>) -> Strin
     commentaires.sort_by_key(|c| c.id);
     let _ = writeln!(s, "commentaires {:?}", commentaires);
     let _ = writeln!(s, "pistes {:?}", doc.audio_tracks);
+    // (Le fichier des transitions les range dans l'ordre du film : leurs numéros, eux, sont gardés.)
+    let mut transitions = doc.transitions.clone();
+    transitions.sort_by_key(|t| t.id);
+    let _ = writeln!(s, "transitions {:?}", transitions);
     let mut sons: Vec<_> = doc.sounds.values().collect();
     sons.sort_by_key(|k| k.id);
     for k in sons {

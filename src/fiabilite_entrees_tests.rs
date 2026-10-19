@@ -52,6 +52,8 @@ fn the_fixture_really_holds_everything_the_project_can_store() {
     assert!(d.comments.len() >= 3 && rangés >= 2, "commentaires, dont deux rangés dans la réserve d'un plan rogné");
     assert!(d.reserves.values().any(|r| r.head.len > 0 && r.tail.len > 0), "plan rogné des deux côtés, avec sa réserve");
     assert!(!d.sounds.is_empty() && d.audio_tracks.len() >= 2, "son sur deux pistes");
+    assert!(d.audio_tracks.iter().flat_map(|t| &t.clips).any(|c| !c.fx.is_default() && !c.fx.keys.is_empty() && !c.fx.is_dry()) && d.audio_tracks.iter().any(|t| t.solo), "effets des sons et solo");
+    assert!(d.transitions.len() >= 4 && d.transitions.iter().any(|t| t.out.is_none()) && d.transitions.iter().any(|t| t.inn.is_none()), "transitions : au bord du film et entre deux plans");
     assert!(!d.guides.is_empty() && !d.board.strokes.is_empty() && !d.board.texts.is_empty(), "guides et notes de la planche");
     assert!(d.storyboard_locked && d.start_frame != 1 && d.master_volume != 1.0, "réglages du projet");
     let _ = std::fs::remove_dir_all(&travail);
