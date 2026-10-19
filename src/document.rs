@@ -838,6 +838,9 @@ pub struct Structure {
     /// Storyboard verrouillé (13e) et propriétés du projet.
     pub storyboard_locked: bool,
     pub properties: Properties,
+    /// Scènes 3D de blocage, par plan, et décors par séquence (`scene3d.rs`) : une étape
+    /// d'annulation les rétablit avec le reste.
+    pub scenes3d: crate::scene3d::Scenes3d,
     /// Commentaires sur la timeline (`commentaires.rs`) : une étape d'annulation les rétablit avec
     /// le reste.
     pub comments: Vec<crate::commentaires::Comment>,
@@ -885,6 +888,8 @@ pub struct Document {
     pub storyboard_locked: bool,
     /// Propriétés du projet (13e).
     pub properties: Properties,
+    /// Scènes 3D de blocage (`scene3d.rs`) ; enregistrées à côté du manifeste, dans `scenes3d.json`.
+    pub scenes3d: crate::scene3d::Scenes3d,
     /// Commentaires sur la timeline, rangés par plan (`commentaires.rs`) ; enregistrés à côté du
     /// manifeste, dans `commentaires.json`.
     pub comments: Vec<crate::commentaires::Comment>,
@@ -932,6 +937,7 @@ impl Document {
             master_volume: 1.0,
             storyboard_locked: false,
             properties: Properties::default(),
+            scenes3d: Default::default(),
             comments: Vec::new(),
             reserves: Default::default(),
             next_id: 1,
@@ -986,6 +992,7 @@ impl Document {
             master_volume: structure.master_volume,
             storyboard_locked: structure.storyboard_locked,
             properties: structure.properties,
+            scenes3d: structure.scenes3d,
             comments: structure.comments,
             reserves: structure.reserves,
             next_id: max_id + 1,
@@ -1161,6 +1168,7 @@ impl Document {
             master_volume: self.master_volume,
             storyboard_locked: self.storyboard_locked,
             properties: self.properties.clone(),
+            scenes3d: self.scenes3d.clone(),
             comments: self.comments.clone(),
             reserves: self.reserves.clone(),
         }
@@ -1189,6 +1197,7 @@ impl Document {
             master_volume: std::mem::replace(&mut self.master_volume, s.master_volume),
             storyboard_locked: std::mem::replace(&mut self.storyboard_locked, s.storyboard_locked),
             properties: std::mem::replace(&mut self.properties, s.properties),
+            scenes3d: std::mem::replace(&mut self.scenes3d, s.scenes3d),
             comments: std::mem::replace(&mut self.comments, s.comments),
             reserves: std::mem::replace(&mut self.reserves, s.reserves),
         }

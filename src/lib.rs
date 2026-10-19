@@ -426,6 +426,20 @@ mod stage3d;
 #[cfg(test)]
 mod stage3d_tests;
 mod stage3dui;
+// Scène 3D de blocage (`docs/ROADMAP.md`, « Scène 3D ») : modèle, maths, maillages, rendu par le
+// processeur (envoi vers un calque), rendu par la carte graphique (vue d'édition), enregistrement,
+// interface.
+mod scene3d;
+mod scene3dgizmo;
+mod scene3dgpu;
+mod scene3dmath;
+mod scene3dmesh;
+mod scene3drender;
+mod scene3dstore;
+mod scene3dui;
+mod scene3dview;
+#[cfg(test)]
+mod scene3d_tests;
 #[cfg(test)]
 mod stage_tests;
 mod storyboard;

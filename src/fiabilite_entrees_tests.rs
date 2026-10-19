@@ -45,6 +45,7 @@ fn the_fixture_really_holds_everything_the_project_can_store() {
     );
     assert!(d.panels.iter().any(|p| p.camera.len() > 5), "clés de caméra, avec un effet de caméra posé");
     assert!(d.panels.iter().any(|p| p.ref3d.is_some()) && !d.models.is_empty(), "repère 3D");
+    assert!(d.scenes3d.plans.values().any(|p| p.objects.len() >= 8 && p.objects.iter().any(|o| o.group.is_some())) && !d.scenes3d.decors.is_empty(), "scène 3D de blocage avec son décor");
     assert!(d.panels.iter().any(|p| !p.marks.is_empty()), "marques d'image");
     assert!(d.panels.iter().any(|p| p.color.is_some()), "couleur de plan");
     assert!(d.panels.iter().any(|p| !p.cues.bookmarks.is_empty() && !p.cues.notes.is_empty()), "signets et notes dessinées");
@@ -264,6 +265,7 @@ fn sidecars_with_random_values_changed_never_crash_the_reader() {
     let (_f, manifeste) = projet_enregistre("fuzz-annexes");
     muter_fichier(&manifeste, crate::commentaires::FILE, 40, 12);
     muter_fichier(&manifeste, crate::rognage::FILE, 40, 13);
+    muter_fichier(&manifeste, crate::scene3dstore::FILE, 40, 14);
 }
 
 /// Coupe le manifeste en 120 endroits : toujours un refus clair (jamais un plantage).
@@ -284,7 +286,7 @@ fn a_truncated_manifest_is_always_a_clear_refusal() {
     }
     // Les fichiers annexes coupés n'empêchent pas d'ouvrir le projet.
     std::fs::write(&manifeste, &original).expect("écriture");
-    for fichier in [crate::commentaires::FILE, crate::rognage::FILE] {
+    for fichier in [crate::commentaires::FILE, crate::rognage::FILE, crate::scene3dstore::FILE] {
         let chemin = racine(&manifeste).join(fichier);
         let octets = std::fs::read(&chemin).expect("annexe");
         for _ in 0..25 {

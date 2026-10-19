@@ -318,6 +318,32 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
         r.color = [200, 60, 90];
         r.opacity = 0.6;
         doc.panels[0].ref3d = Some(r);
+        // Scène 3D de blocage (`scene3d.rs`, `scenes3d.json`) : toutes les formes, un mannequin à la pose
+        // libre, un groupe, un modèle importé, un décor de séquence, la caméra du plateau et son rendu.
+        use crate::scene3d::{joint, Light, Mannequin, Pose, RenderArea, RenderSettings, RenderStyle, SceneCam, Shape3d, Target};
+        let (plan, seq) = (doc.panels[0].id, doc.sequence_of(0));
+        let formes = [Shape3d::Cube, Shape3d::Plane, Shape3d::Cylinder, Shape3d::Sphere, Shape3d::Cone, Shape3d::Stairs { steps: 7 }, Shape3d::Model { id }];
+        let mut numeros = Vec::new();
+        for (k, forme) in formes.into_iter().enumerate() {
+            numeros.extend(doc.scenes3d.add(plan, seq, Target::Plan, forme, [k as f32 * 1.5 - 4.0, 0.0, -1.0 * k as f32]));
+        }
+        let mut mannequin = Mannequin::new(Pose::Walking, 1.68);
+        mannequin.set_joint(joint::ELBOW_R, [35.0, 4.0, 0.0]);
+        let mannequin = doc.scenes3d.add(plan, seq, Target::Plan, Shape3d::Mannequin(Box::new(mannequin)), [0.5, 0.0, 1.0]).expect("mannequin");
+        if let Some(o) = doc.scenes3d.find_mut(plan, seq, mannequin) {
+            o.name = "Léa".into();
+            o.color = [210, 120, 90];
+            o.xf.rot = [0.0, 25.0, 0.0];
+        }
+        numeros.push(mannequin);
+        doc.scenes3d.group(plan, seq, &numeros[..2]);
+        doc.scenes3d.add(plan, seq, Target::Decor, Shape3d::Plane, [0.0; 3]);
+        doc.scenes3d.add(plan, seq, Target::Decor, Shape3d::Cylinder, [-3.0, 0.0, -3.0]);
+        let scene = doc.scenes3d.plan_mut(plan);
+        scene.cam = SceneCam { pos: [0.3, 1.6, 6.5], pan: -8.0, tilt: -3.0, roll: 1.0, focal: 50.0 };
+        scene.light = Light { azimuth: 70.0, elevation: 40.0, intensity: 0.9, ambient: 0.3 };
+        scene.render = RenderSettings { style: RenderStyle::Outline, lines: true, line_px: 2.5, area: RenderArea::Frame };
+        scene.follow = false;
     }
 
     // ---------------------------------------------------------------- plan 2 : le plan rogné
@@ -469,6 +495,8 @@ pub(crate) fn instantane(doc: &Document, sans_pixels: &BTreeSet<CelId>) -> Strin
     let _ = writeln!(s, "groupes {:?}", doc.groups);
     let _ = writeln!(s, "guides {:?}", doc.guides);
     let _ = writeln!(s, "planche {:?}", doc.board);
+    // (Les scènes 3D de blocage : le contenu, sans la version ni le compteur, qui ne sont pas enregistrés.)
+    let _ = writeln!(s, "scenes3d plans {:?} decors {:?}", doc.scenes3d.plans, doc.scenes3d.decors);
     // (Le fichier des commentaires les range dans l'ordre du film, `commentaires::to_bytes` : leur
     // ordre dans la liste n'est pas persistant, leurs numéros le sont.)
     let mut commentaires = doc.comments.clone();

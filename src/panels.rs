@@ -209,6 +209,7 @@ impl App {
                 });
                 ui.menu_button("Plateau", |ui| {
                     self.action_item(ui, "Plateau en 3D", "vue.3d");
+                    self.action_item(ui, "Scène 3D de blocage", "scene3d.basculer");
                     self.action_item(ui, "Vue de dessus (profondeur des calques)", "vue.dessus");
                 });
                 ui.menu_button("Guides", |ui| {
@@ -297,6 +298,11 @@ impl App {
 
     /// Panneau des réglages de l'outil courant.
     pub(crate) fn tool_options_panel(&mut self, ui: &mut egui::Ui) {
+        // La scène 3D de blocage a ses propres réglages (`scene3dui.rs`).
+        if self.scene3d.on && !self.camera_view {
+            self.scene3d_options_panel(ui);
+            return;
+        }
         let vector = self.layer().kind == LayerKind::Vector;
         ui.horizontal(|ui| {
             ui.heading(format!("{}  {}", self.tool.icon(), self.tool.label()));
