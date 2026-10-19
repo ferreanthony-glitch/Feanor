@@ -70,8 +70,10 @@ impl<'a> Zip<'a> {
         match e.method {
             0 => Some(raw.to_vec()),
             8 => {
-                let mut out = Vec::with_capacity(e.size);
-                flate2::read::DeflateDecoder::new(raw).read_to_end(&mut out).ok()?;
+                // (Un fichier abîmé ou piégé qui annonce des gigaoctets n'épuise pas la mémoire.)
+                const LIMIT: u64 = 256 * 1024 * 1024;
+                let mut out = Vec::with_capacity(e.size.min(LIMIT as usize));
+                flate2::read::DeflateDecoder::new(raw).take(LIMIT).read_to_end(&mut out).ok()?;
                 Some(out)
             }
             _ => None,

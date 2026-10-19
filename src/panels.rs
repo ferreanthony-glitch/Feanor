@@ -126,6 +126,7 @@ impl App {
                     self.action_item(ui, "Un modèle 3D (glTF) comme repère…", "fichier.importer_modele3d");
                     ui.separator();
                     self.action_item(ui, "Un projet Storyboard Pro (.sboard)…", "fichier.importer_sboard");
+                    self.action_item(ui, "Un scénario (Fountain, Final Draft, Word, texte)…", "fichier.importer_scenario");
                 });
                 self.action_item(ui, "Exporter…", "fichier.exporter");
                 ui.separator();
@@ -683,6 +684,8 @@ impl App {
 
         self.tween_window_ui(ctx);
         self.sb_window_ui(ctx);
+        // Importer un scénario (`scenarioui.rs`).
+        self.scenario_window_ui(ctx);
         self.brush_import_window(ctx);
         self.sb_export_ui(ctx);
         self.smart_rename_window(ctx);

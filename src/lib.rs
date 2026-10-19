@@ -447,6 +447,12 @@ mod rolesui;
 mod roue;
 #[cfg(test)]
 mod roue_tests;
+mod scenario;
+mod scenariofdx;
+mod scenarioplans;
+mod scenarioui;
+#[cfg(test)]
+mod scenario_tests;
 #[cfg(test)]
 mod scenelayer_tests;
 mod selbox;

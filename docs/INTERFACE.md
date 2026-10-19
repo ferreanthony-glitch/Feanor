@@ -560,3 +560,24 @@ de sons et solo.
 `indications_tests` (13), `fournisseurs_tests` (42), `suggestions_tests` (26), `base64_tests` (2), plus les essais de la barre
 des panneaux et des dispositions (un panneau de plus). Le projet d'essai de fiabilité contient des sons proposés
 (un bruitage, une voix rejetée et modifiée, une ambiance acceptée) et la confirmation d'envoi en ligne.
+
+---------------------------------------------------------------------------------------------------
+
+## 10. Importer un scénario (2026-10-19, branche `import-scenario`)
+
+Fichier > Importer > « Un scénario (Fountain, Final Draft, Word, texte)… », commande `fichier.importer_scenario`
+(dans Ctrl+K, sans touche par défaut). Une fenêtre « Importer un scénario » montre, avant tout changement :
+le format lu, les séquences et leurs plans, la durée estimée, les personnages, les remarques de lecture, et
+les choix (découpage en plans, rythme, destination).
+
+- **Vocabulaire** : un intitulé de scène (« INT. CUISINE – NUIT ») devient une **séquence** ; l'action et les
+  répliques deviennent des **plans** (jamais « scène » ni « panneau » dans les textes visibles) ; les
+  paragraphes d'un plan « par scène » en sont les **images de storyboard** (marques d'image).
+- **Menu** : l'entrée est sous Importer, après « Un projet Storyboard Pro (.sboard)… » (qui ouvre aussi une
+  fenêtre de lecture avant d'importer).
+- **Annuler** : un import dans le projet ouvert est une seule étape, « Importer un scénario » (panneau
+  Historique) ; un import dans un nouveau projet remplace le projet ouvert après la question habituelle
+  « Modifications non enregistrées ».
+- **À vérifier à l'écran** (rien lancé ici) : la fenêtre en thème clair et sombre (barre d'avancement d'un gros
+  fichier, liste des séquences défilante, remarques en couleur d'avertissement), les plans créés dans le montage
+  (titres, durées) et la fiche du plan (champs Action, Dialogue, Notes remplis ; notes « Décor : … »).
