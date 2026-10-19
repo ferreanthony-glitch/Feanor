@@ -2571,14 +2571,9 @@ tableaux et les propositions sont dans **`docs/INTERFACE.md`**. Pas vu à l'écr
   prend sur tous les calques du plan (Storyboard Pro) et choisit leurs clés dans le montage.
 - ✅ **Zoom de la bande sur la tête de lecture** (`zoombande.rs`) : curseur, boutons, raccourcis et Ctrl +
   molette gardent la tête de lecture au même endroit de l'écran (hors vue : d'abord au milieu).
-<<<<<<< HEAD
-- Proposé (INTERFACE.md, partie 6) : les espaces de travail par tâche (6.1) et les barres par défaut plus
-  minces (6.3) sont **faits** (voir « Espaces de travail liés aux modes et barres minces », plus bas) ;
-  le préréglage de raccourcis façon Storyboard Pro (6.2) reste à faire. Reste aussi : choisir des clés au rectangle sur la timeline
-=======
-- Proposé, pas fait (INTERFACE.md, partie 6) : espaces de travail par tâche, barres par défaut plus minces
-  (le jeu de raccourcis façon Storyboard Pro est fait : section suivante). Reste aussi : choisir des clés au rectangle sur la timeline
->>>>>>> raccourcis-sbp
+- Proposé (INTERFACE.md, partie 6) : les espaces de travail par tâche (6.1), le jeu de raccourcis façon
+  Storyboard Pro (6.2) et les barres par défaut plus minces (6.3) sont **faits** (voir « Espaces de travail
+  liés aux modes et barres minces » et le jeu de raccourcis, plus bas). Reste aussi : choisir des clés au rectangle sur la timeline
   de l'animation (l'unité y est l'image), un rectangle pour les clés d'effets, les 150 infobulles d'egui
   restantes, « Arrière-plan » / « Fond » / « Propriétés du plan ».
 

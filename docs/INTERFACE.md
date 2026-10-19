@@ -366,11 +366,7 @@ Aucune n'était faite dans cette passe : c'est la partie 6.3 (barre par défaut 
 
 ---------------------------------------------------------------------------------------------------
 
-<<<<<<< HEAD
-## 6. Propositions pour Anthony (6.1 et 6.3 faites le 2026-10-19, voir la partie 14 ; 6.2 reste à faire)
-=======
-## 6. Propositions pour Anthony (la 6.2 est faite, les autres non)
->>>>>>> raccourcis-sbp
+## 6. Propositions pour Anthony (toutes faites le 2026-10-19 : 6.1 et 6.3 dans la partie 14, 6.2 ci-dessous)
 
 ### 6.1 Espaces de travail par tâche : Storyboard, Animation, Montage — ✅ fait (partie 14)
 
