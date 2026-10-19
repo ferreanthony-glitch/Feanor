@@ -913,6 +913,10 @@ pub struct Document {
     /// Références visuelles du projet (`references.rs`) ; enregistrées à côté du manifeste, dans
     /// `references.json`, leurs fichiers dans `references/`.
     pub references: Vec<crate::references::Reference>,
+    /// La planche de crayonnés rapides (`crayonnes.rs`) : des cases de croquis qui deviennent des
+    /// plans. Hors de `Structure` (elle a sa propre annulation) ; enregistrée à côté du manifeste,
+    /// dans `crayonnes.json`.
+    pub(crate) crayonnes: crate::crayonnes::Planche,
     next_id: u64,
 }
 
@@ -959,6 +963,7 @@ impl Document {
             transitions: Vec::new(),
             sons_proposes: Default::default(),
             references: Vec::new(),
+            crayonnes: Default::default(),
             next_id: 1,
         };
         let seq = doc.new_sequence();
@@ -1018,6 +1023,7 @@ impl Document {
             transitions: structure.transitions,
             sons_proposes: Default::default(),
             references: structure.references,
+            crayonnes: Default::default(),
             next_id: max_id + 1,
         };
         doc.normalize();
@@ -1891,6 +1897,12 @@ impl Document {
         let id = self.alloc();
         self.cels.insert(id, cel);
         id
+    }
+
+    /// Insère des plans faits ailleurs (chacun dans sa propre scène, déjà créée) à la place `at`
+    /// des plans (`crayonnes.rs`). Renvoie le rang du premier.
+    pub(crate) fn insert_plans(&mut self, at: usize, panels: Vec<Panel>) -> usize {
+        self.insert_and_normalize(at, panels)
     }
 
     fn insert_and_normalize(&mut self, at: usize, panels: Vec<Panel>) -> usize {

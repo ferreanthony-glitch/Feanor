@@ -293,6 +293,9 @@ pub struct App {
     pub(crate) doc: Document,
     pub(crate) mode: Mode,
     pub(crate) board_view: BoardView,
+    /// Planche de crayonnés rapides (`crayonnesui.rs`) : ouverte, elle prend la place du dessin en
+    /// storyboard ; la planche elle-même est dans le projet (`Document::crayonnes`).
+    pub(crate) crayonnes: crate::crayonnesui::Etat,
     pub(crate) cur_panel: usize,
     pub(crate) cur_layer: usize,
     pub(crate) cur_frame: usize,
@@ -865,6 +868,7 @@ impl App {
             doc: Document::with_frame(1920, 1080, 24).created_now(),
             mode: Mode::Storyboard,
             board_view: BoardView::Scene,
+            crayonnes: Default::default(),
             cur_panel: 0,
             cur_layer: 0,
             cur_frame: 0,
@@ -3107,6 +3111,10 @@ impl App {
             self.keep_gesture(crate::nudge::GESTURE);
         }
         for (key, physical, m, repeat) in keys {
+            // La planche de crayonnés rapides a la main : Tab et les flèches changent de case.
+            if self.crayonnes_key(key, m) {
+                continue;
+            }
             // Entrée, Échap, Retour arrière servent d'abord à l'outil en cours (forme à finir…).
             if !m.any() && self.tool_key(key) {
                 continue;
@@ -3170,6 +3178,11 @@ impl App {
             self.envelope = None;
         }
         if self.workspace_action(action) {
+            return;
+        }
+        // Planche de crayonnés rapides (`crayonnesui.rs`) : ses commandes, et annuler, rétablir,
+        // tout choisir, supprimer quand elle a la main.
+        if self.crayonnes_action(action) {
             return;
         }
         // Fond sous le trait (`fondui.rs`).

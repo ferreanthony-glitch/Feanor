@@ -448,13 +448,6 @@ Rien de cette passe n'a été regardé : aucun lancement de SHOT (consigne). À 
    une fenêtre à part » sur un deuxième écran avec « Toujours au-dessus » (les fichiers y sont lâchés
    dans la fenêtre à part elle-même). La bulle de chaque icône vient de `bulles.rs`.
 
-### Essais ajoutés
-
-`keymap_tests` (6), `clescommun_tests` (7), `clesmulti_tests` (7), `multiall_tests` (6),
-`zoombande_tests` (7), `bulles_tests` (3), `theme_tests` (2), `montagerows_tests` (2 remplacés).
-La suite passe de 1008 à 1046 essais ; `scripts\verifier.ps1 -Repetitions 2` : OK, compilation sans
-avertissement.
-
 ---------------------------------------------------------------------------------------------------
 
 ## 8. Transitions, effets sonores, bruitages (2026-10-19, branche `transitions-son`)
@@ -591,3 +584,38 @@ les choix (découpage en plans, rythme, destination).
 - **À vérifier à l'écran** (rien lancé ici) : la fenêtre en thème clair et sombre (barre d'avancement d'un gros
   fichier, liste des séquences défilante, remarques en couleur d'avertissement), les plans créés dans le montage
   (titres, durées) et la fiche du plan (champs Action, Dialogue, Notes remplis ; notes « Décor : … »).
+
+---------------------------------------------------------------------------------------------------
+
+## 11. Crayonnés rapides (la planche, 2026-10-19, branche `crayonnes`)
+
+Une page de petites cases où l'on enchaîne des croquis, puis chaque case devient un plan
+(`crayonnes.rs`, `crayonnesui.rs`). Elle prend la place du dessin en storyboard ; elle se ferme par la croix
+de sa barre ou la même commande. Vocabulaire : **case** (un croquis de la planche), **planche** (toutes les
+cases), **page** (une grille de cases), **plan** pour ce qu'on en tire.
+
+- **Ouvrir** : Storyboard > Planche de crayonnés…, le bouton de la barre du montage (à côté de Vue dessin /
+  Vue vignettes), Ctrl+K > « Planche de crayonnés rapides » (`storyboard.crayonnes`). Ouvrir prend l'outil
+  Crayon (sauf si la Gomme est l'outil).
+- **Commandes** (palette Ctrl+K, clic droit sur une icône > assigner une touche, sans touche par défaut) :
+  `crayonnes.case_suivante`, `case_precedente`, `page_suivante`, `page_precedente`, `ajouter_page`,
+  `inserer_case`, `supprimer_case`, `vider_case`, `tout_choisir`, `creer_plans`, `case_auto`.
+- **Touches qui ne passent pas par le fichier** (comme les flèches du dessin) : quand la planche a la main (le
+  dernier appui y était), Tab / Maj+Tab et les flèches changent de case, Page préc. / suiv. de page ; Ctrl+Z /
+  Ctrl+Y, Ctrl+A et Suppr y sont l'annulation de la planche, « choisir toutes les cases dessinées » et « vider
+  les cases choisies » (Tab redevient « passer en animation » dès qu'une bande reprend la main).
+- **Gestes** : appui dans une case = tracer (le trait appartient à cette case) ; Maj ou Ctrl + appui dans une
+  case, ou clic sur son numéro = choisir ; glisser le numéro = changer l'ordre ; clic droit = menu de la case.
+- **Annulation** : la planche a sa propre pile ; « Créer les plans » est une seule étape de l'historique du
+  projet (nommée « Créer les plans des crayonnés »), que Ctrl+Z dans la planche défait aussi si elle est
+  toujours la dernière.
+
+À regarder à l'écran : les cases et leurs numéros dans les trois thèmes (la coche verte, l'anneau de la case
+choisie et de la case courante), le trait qui reste collé à la pointe pendant le geste, le glisser d'un numéro
+(barre d'insertion devant la case visée), la fenêtre « Créer les plans », la grille 6 × 4 sur un petit écran,
+le pinceau et la gomme à la tablette (pression), la barre sur une fenêtre étroite (elle défile).
+
+### Essais ajoutés
+
+`crayonnes_tests` (38 : appartenance, coupe, navigation, ordre, création des plans, fichier, annulation, écran).
+Le projet d'essai de fiabilité contient une planche de crayonnés (trois cases, dont une peinte au pinceau).

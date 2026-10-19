@@ -2666,3 +2666,35 @@ téléchargement, aucun modèle, aucune requête réseau.
   nettoyé ; une seule génération à la fois ; pas de voix par personnage retenue d'un plan à l'autre (la voix se
   choisit par proposition ou dans les Préférences) ; la lecture par règles ne connaît que le français.
 - **À vérifier** : les licences de chaque modèle et de chaque service (usage commercial des sons, données envoyées).
+
+## Crayonnés rapides : la planche (demandée par Anthony le 2026-10-19, branche `crayonnes`) ✅
+
+« Crayonnés rapides » (thumbnailing) : une page de petites cases où il enchaîne des croquis très vite, puis
+chaque case devient un plan. Ce n'est pas une vue des plans existants. Mode d'emploi : README, « Crayonnés
+rapides (la planche) » ; boutons et gestes : `docs/INTERFACE.md`, partie 11.
+
+- ✅ **La page** (`crayonnesui.rs`) : prend la place du dessin en storyboard (Storyboard > Planche de
+  crayonnés…, bouton à côté de « Vue vignettes », Ctrl+K > `storyboard.crayonnes`). 4 × 3 cases par page, ou
+  2 × 2, 3 × 2, 4 × 4, 6 × 4 ; plusieurs pages ; toutes au rapport du cadre. Numéro (poignée) et légende sous
+  chaque case ; Tab, Maj+Tab et flèches changent de case ; « case suivante automatique » après une pause
+  (éteinte au départ).
+- ✅ **Dessin sans latence** : crayon (trait vectoriel lisse), pinceau du logiciel (bitmap), gomme (coupe les
+  traits, efface la peinture) ; même moteur (`StrokeState`) que le dessin, aperçu posé dans l'image de la case à
+  chaque point, textures de l'écran mises à jour par tuiles, aucun rejeu du moteur sur le fil de l'interface.
+  Un trait appartient à la case où il commence, coupé à elle. Mesuré sans fenêtre : une page de 24 cases pleines
+  de croquis, 0,7 ms par image d'écran en traçant.
+- ✅ **Choisir, ordonner** : clic sur le numéro (Maj, Ctrl), Maj / Ctrl + appui, « Toutes les cases
+  dessinées » ; glisser le numéro change l'ordre ; clic droit : insérer avant / après, vider, supprimer,
+  reculer, avancer, cocher. Barre : crayon, pinceau, gomme, trois tailles, noir et deux gris, annuler, vider,
+  insérer, supprimer, pages, grille.
+- ✅ **Créer les plans** : après le plan courant ou dans une nouvelle séquence, durée de chaque plan (2 s) ; le
+  dessin va sur un calque « Crayonné » (traits vectoriels mis à l'échelle et coupés à la case, peinture
+  bitmap rééchantillonnée sur un calque à part), la légende dans le texte d'action ; une seule étape
+  d'annulation du projet ; les cases restent sur la page, cochées.
+- ✅ **Fichier** : `crayonnes.json` à côté du manifeste (pas de nouvelle version du format), écrit par le fil
+  d'enregistrement avec les protections de la fiabilité (jamais effacé s'il est illisible ou plus récent,
+  `.illisible` si une planche neuve le remplace, écriture atomique) ; annulation propre à la planche, qui
+  renvoie au projet pour la création des plans.
+- Pas fait : pinceaux texturés dans les cases (leur rejeu en arrière-plan), choisir plusieurs cases au
+  rectangle, glisser des cases d'une page à l'autre (passer par « Reculer / Avancer »), changer le rapport des
+  cases d'une planche déjà dessinée quand le cadre change, vérification à la tablette.
