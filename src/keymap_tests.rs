@@ -6,7 +6,7 @@ use crate::app::Mode;
 use crate::keymap::{contexts_overlap, is_alias, parse_combo, KeyMatch, Keymap, ALIASES, ACTIONS, DEFAULT_KEYMAP};
 
 /// Les 65 raccourcis par défaut avec touche de sb_shortcuts.xml (Storyboard Pro 27).
-const SBP27_IDS: [&str; 65] = [
+pub(crate) const SBP27_IDS: [&str; 65] = [
     "NEW_KEY", "SAVE_ALL_KEY", "OPEN_KEY", "QUIT_KEY", "CLOSE_KEY",
     "UNDO_KEY", "REDO_KEY", "CUT_KEY", "COPY_KEY", "PASTE_KEY", "PASTE_IN_PLACE_KEY", "DELETE_KEY",
     "DELETE_ALT_KEY", "SELECT_ALL_KEY", "SELECT_ALL_DRAWING_IN_SHOT", "DESELECT_ALL_KEY",
@@ -39,7 +39,7 @@ const PERSO: [(&str, &str, &[&str]); 7] = [
     ("BLUR_BITMAP_LAYER_KEY", "calque.flou", &["Maj+D"]),
 ];
 
-fn default_map() -> Keymap {
+pub(crate) fn default_map() -> Keymap {
     Keymap::from_texts(DEFAULT_KEYMAP, None)
 }
 
@@ -60,11 +60,10 @@ fn default_file_is_clean() {
 
 // ------------------------------------------------------- passe d'interface du 2026-10-19
 
-#[test]
-fn no_two_default_bindings_share_a_key_in_the_same_context() {
-    // Toutes les touches par défaut, celles des commandes « en réserve » comprises : le jour où
-    // une commande en réserve est faite, sa touche ne doit pas déjà servir ailleurs.
-    let map = default_map();
+/// Les touches que deux commandes se partagent dans un même contexte (storyboard / animation /
+/// partout qui se recouvrent), celles des commandes « en réserve » comprises. Sert aux raccourcis
+/// par défaut et à chaque jeu de raccourcis (`keymap_jeux_tests`).
+pub(crate) fn shared_keys(map: &Keymap) -> Vec<String> {
     let mut conflicts = Vec::new();
     for (i, a) in map.bindings.iter().enumerate() {
         for b in &map.bindings[i + 1..] {
@@ -76,6 +75,14 @@ fn no_two_default_bindings_share_a_key_in_the_same_context() {
             }
         }
     }
+    conflicts
+}
+
+#[test]
+fn no_two_default_bindings_share_a_key_in_the_same_context() {
+    // Toutes les touches par défaut, celles des commandes « en réserve » comprises : le jour où
+    // une commande en réserve est faite, sa touche ne doit pas déjà servir ailleurs.
+    let conflicts = shared_keys(&default_map());
     assert!(conflicts.is_empty(), "touches partagées : {conflicts:#?}");
 }
 

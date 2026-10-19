@@ -1,0 +1,59 @@
+# Jeu de raccourcis « Façon Storyboard Pro » (docs/INTERFACE.md, partie 6.2).
+#
+# Ce fichier ne redéfinirait QUE les commandes où SHOT s'écarte de Storyboard Pro et dont la source est
+# notée dans keymap.toml (champ `source`). Tout le reste garde le raccourci de SHOT (keymap.toml).
+# Aucune touche n'est inventée : chaque bloc citerait l'identifiant de Storyboard Pro 27 (sb_shortcuts.xml)
+# ou les réglages perso d'Anthony (STB_Shortcuts.xml), tels que keymap.toml les rapporte.
+#
+# Même format que keymap.toml (blocs [[raccourci]]). Une touche donnée ici serait RETIRÉE à la commande
+# qui la portait dans keymap.toml : le jeu écrirait lui-même ce retrait (touches = []), si bien qu'aucune
+# touche ne serait partagée entre deux commandes dans le même contexte (essai
+# keymap_jeux_tests::the_storyboard_pro_set_has_no_internal_conflict).
+#
+# a_verifier = true : la touche ou son retrait n'est pas établi par Storyboard Pro ; à regarder dans
+# le logiciel avant de s'y fier.
+#
+# Le fichier personnel (%APPDATA%\SHOT\keymap.toml) passe par-dessus ce jeu, commande par commande.
+#
+# Commandes de Storyboard Pro 27 SANS action dans SHOT (rien à poser ici, voir docs/INTERFACE.md) :
+# DELETE_ALT_KEY (Maj+Suppr, supprimer et resserrer : pas faite), DRAWING_UNLOAD_MODEL_KEY (Suppr :
+# décharger la référence, pas faite), LINK_CLIP_AND_PANEL (Ctrl+L : sans objet depuis les plans),
+# DRAWING_STENCIL_BRUSH_TOOL_KEY (Alt+X : retiré, le pochoir de calque existe). Ctrl+L garde donc
+# la pelure du calque, Suppr et Maj+Suppr leur sens d'aujourd'hui.
+
+version = 1
+
+# A / F et F5 ne sont VOLONTAIREMENT PAS pris à Storyboard Pro, par choix d'Anthony (2026-10-19) : « A et F
+# ne servent plus à aller de clé en clé dans ce jeu ; F5 ne crée plus de nouvelle clé — je veux garder ces
+# raccourcis comme je les ai mis en place. » Ce jeu laisse donc ses raccourcis SHOT :
+#   - A / F : cle.precedente / cle.suivante (le plan précédent / suivant reste sur PgPréc / PgSuiv, au
+#     lieu des PREV_PANEL_KEY / NEXT_PANEL_KEY = A / F de Storyboard Pro) ;
+#   - F5 : dessin.nouvelle_cle (« couper le plan » reste sur F6, au lieu de SPLIT_PANEL_KEY = F5 de son
+#     Storyboard Pro).
+# Ne pas les y remettre sans nouvelle décision d'Anthony.
+
+# Ctrl+Maj+V non plus : elle reste « Coller les clés à la tête de lecture » (edition.coller_a_la_tete),
+# comme dans SHOT (choix d'Anthony, 2026-10-19). « Coller sur place » (PASTE_IN_PLACE_KEY, Ctrl+Maj+V
+# dans Storyboard Pro 27) reste une commande sans touche.
+#
+# Ce jeu ne redéfinit donc aucune touche pour l'instant : il garde les raccourcis de SHOT et ne fait
+# que montrer les « à vérifier » ci-dessous. Il peut n'avoir aucun bloc [[raccourci]].
+
+# --- Commandes qui gardent la touche de SHOT, et dont la touche de Storyboard Pro n'est pas vérifiée
+# (docs/INTERFACE.md 6.2 : « à vérifier »). Elles ne changent pas : cette liste ne sert qu'à les montrer.
+
+[[a_verifier]]
+action = "mode.basculer"
+note = "Tab : proposition de SHOT, ce que Storyboard Pro fait sur Tab n'est pas vérifié"
+
+[[a_verifier]]
+action = "vue.planches"
+note = "Maj+Tab : proposition de SHOT, ce que Storyboard Pro fait sur Maj+Tab n'est pas vérifié"
+
+[[a_verifier]]
+action = "aide.palette"
+note = "Ctrl+K : proposition de SHOT (palette de commandes), pas une touche de Storyboard Pro"
+
+[[a_verifier]]
+action = "dessin.nouvelle_cle_vide"
+note = "F4 : réglage perso d'Anthony dans SHOT, la touche de Storyboard Pro pour une nouvelle clé n'est pas vérifiée"

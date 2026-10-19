@@ -1599,6 +1599,10 @@ MonFilm/
   personnel (à côté de l'exécutable, sinon `%APPDATA%\Pelure\keymap.toml`) remplace action par action
   ce qu'il redéfinit ; si une de ses touches est aussi prise par le fichier par défaut, la sienne
   l'emporte (et l'aide signale le conflit). Menu « Aide > Modifier / Recharger les raccourcis ».
+- Trois couches (`Keymap::from_layers`) : `keymap.toml` < jeu choisi (`PresetId`, `keymap-storyboard-pro.toml`,
+  réglage `jeu_raccourcis`) < fichier personnel. Chaque couche remplace la précédente action par action ; une copie
+  mot pour mot du fichier par défaut dans le fichier personnel est ignorée. `Keymap::origin_of` dit d'où vient la
+  touche d'une action (SHOT, jeu, perso). Détails : `docs/INTERFACE.md`, 6.2.
 - Les raccourcis viennent de Storyboard Pro 27 (65 par défaut, plus 4 du module Guides) et des
   réglages perso (8). Ceux dont
   la fonction n'existe pas encore sont gardés avec `etat = "non implémenté"`. Les ajouts de Pelure

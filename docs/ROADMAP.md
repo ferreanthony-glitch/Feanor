@@ -2551,9 +2551,14 @@ tableaux et les propositions sont dans **`docs/INTERFACE.md`**. Pas vu à l'écr
   prend sur tous les calques du plan (Storyboard Pro) et choisit leurs clés dans le montage.
 - ✅ **Zoom de la bande sur la tête de lecture** (`zoombande.rs`) : curseur, boutons, raccourcis et Ctrl +
   molette gardent la tête de lecture au même endroit de l'écran (hors vue : d'abord au milieu).
+<<<<<<< HEAD
 - Proposé (INTERFACE.md, partie 6) : les espaces de travail par tâche (6.1) et les barres par défaut plus
   minces (6.3) sont **faits** (voir « Espaces de travail liés aux modes et barres minces », plus bas) ;
   le préréglage de raccourcis façon Storyboard Pro (6.2) reste à faire. Reste aussi : choisir des clés au rectangle sur la timeline
+=======
+- Proposé, pas fait (INTERFACE.md, partie 6) : espaces de travail par tâche, barres par défaut plus minces
+  (le jeu de raccourcis façon Storyboard Pro est fait : section suivante). Reste aussi : choisir des clés au rectangle sur la timeline
+>>>>>>> raccourcis-sbp
   de l'animation (l'unité y est l'image), un rectangle pour les clés d'effets, les 150 infobulles d'egui
   restantes, « Arrière-plan » / « Fond » / « Propriétés du plan ».
 
@@ -2601,6 +2606,25 @@ feuille entière) alors que 768 essais passaient ; et sur une machine chargée, 
 - Pas fait : la première image dans la vraie fenêtre (eframe, carte graphique, pipelines : à lire dans `demarrage.log`) ;
   `BrushLibrary::builtin()` (74 ms) reste avant la première image ; un son ou un modèle illisible sort du projet et ses
   extraits avec lui à l'enregistrement.
+
+## Jeu de raccourcis « Façon Storyboard Pro » (2026-10-19, branche `raccourcis-sbp`) ✅
+
+Proposition 6.2 de `docs/INTERFACE.md`, faite ; le tableau des touches, leurs sources et la règle de fusion y sont.
+
+- ✅ **Deux jeux** au choix (Fichier > Préférences… et liste des raccourcis F1, « Jeu de raccourcis ») : *SHOT (par
+  défaut)* et *Façon Storyboard Pro* (`keymap-storyboard-pro.toml`). Le second ne redéfinit que deux commandes, documentées
+  dans `keymap.toml` : Ctrl+Maj+V colle sur place (à confirmer avec Anthony). **A / F et F5 ne sont pas pris** (choix
+  d'Anthony, 2026-10-19) : A / F restent clé précédente / suivante, F5 reste nouvelle clé, F6 coupe le plan.
+- ✅ **Aucune touche inventée** : chaque bloc cite son identifiant Storyboard Pro 27 ou les réglages perso d'Anthony ;
+  4 points « à vérifier » (Tab, Maj+Tab, Ctrl+K, F4) sont marqués dans le jeu et dans la liste F1.
+- ✅ **Les raccourcis d'Anthony restent par-dessus le jeu**, commande par commande ; changer de jeu demande
+  confirmation s'il en a ; revenir à SHOT redonne exactement les touches d'avant.
+- ✅ **D'où vient la touche** : la liste F1 dit SHOT / jeu / perso pour chaque commande ; la palette Ctrl+K montre
+  toutes les touches actives. Choix retenu dans les réglages (`jeu_raccourcis`, absent = SHOT).
+- ✅ **Dix essais** (`keymap_jeux_tests.rs`) : pas de conflit dans le jeu, que des commandes faites, aller-retour exact,
+  raccourcis personnels gardés, anciens réglages lus.
+- Pas fait / limites : Suppr, Maj+Suppr, Ctrl+L, Alt+X de Storyboard Pro n'ont pas de commande dans SHOT (rien à poser) ;
+  une touche prise à une autre commande sous un jeu y reste retirée après le changement de jeu ; pas vu à l'écran.
 
 ## Transitions, effets sonores et bruitages (demandés par Anthony le 2026-10-19, branche `transitions-son`) ✅
 

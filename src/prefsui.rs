@@ -112,6 +112,7 @@ impl App {
         }
         let mut open = true;
         let mut action: Option<&str> = None;
+        let mut jeu: Option<crate::keymap::PresetId> = None;
         egui::Window::new("Préférences")
             .open(&mut open)
             .collapsible(false)
@@ -174,6 +175,8 @@ impl App {
                 self.generation_prefs_ui(ui);
                 ui.add_space(6.0);
                 ui.label(RichText::new("Raccourcis clavier").strong());
+                jeu = crate::raccourcisui::preset_combo(ui, "jeu_raccourcis_prefs", self.settings.keymap_preset);
+                ui.label(RichText::new(crate::raccourcisui::MERGE_RULE).small().weak());
                 ui.horizontal_wrapped(|ui| {
                     if ui.button("Voir et changer les raccourcis…").clicked() {
                         action = Some("aide.raccourcis");
@@ -190,6 +193,9 @@ impl App {
                 });
             });
         self.prefs_window = open;
+        if let Some(p) = jeu {
+            self.request_preset(ctx, p);
+        }
         if let Some(a) = action {
             self.run_action(a);
         }

@@ -870,7 +870,7 @@ impl App {
             }
         });
         crate::demarrage::marque("pinceaux importés : lecture lancée sur un autre fil");
-        let keymap = Keymap::load();
+        let keymap = Keymap::load(settings.keymap_preset);
         crate::demarrage::marque("raccourcis (Keymap::load)");
         let orphans = crate::recovery::root().filter(|_| reel).map(|r| crate::recovery::orphans(&r, None)).unwrap_or_default();
         let recovery = crate::recovery::root().filter(|_| reel).and_then(|r| crate::recovery::Recovery::start(&r).ok());
@@ -3999,12 +3999,13 @@ impl App {
 
     /// Recharge les raccourcis (après modification du fichier).
     pub(crate) fn reload_keymap(&mut self) {
-        self.keymap = Keymap::load();
+        self.keymap = Keymap::load(self.settings.keymap_preset);
+        let jeu = if self.keymap.preset.is_default() { String::new() } else { format!(" Jeu « {} ».", self.keymap.preset.label()) };
         self.status = match (&self.keymap.user_file, self.keymap.warnings.len()) {
-            (Some(p), 0) => format!("Raccourcis rechargés depuis {}.", p.display()),
-            (Some(p), n) => format!("Raccourcis rechargés depuis {} ({n} remarque(s), voir F1).", p.display()),
-            (None, 0) => "Raccourcis par défaut.".into(),
-            (None, n) => format!("Raccourcis par défaut ({n} remarque(s), voir F1)."),
+            (Some(p), 0) => format!("Raccourcis rechargés depuis {}.{jeu}", p.display()),
+            (Some(p), n) => format!("Raccourcis rechargés depuis {} ({n} remarque(s), voir F1).{jeu}", p.display()),
+            (None, 0) => format!("Raccourcis par défaut.{jeu}"),
+            (None, n) => format!("Raccourcis par défaut ({n} remarque(s), voir F1).{jeu}"),
         };
     }
 
