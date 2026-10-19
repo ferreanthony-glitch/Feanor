@@ -788,7 +788,7 @@ fn transpose(px: &[Color32], w: usize, h: usize) -> Vec<Color32> {
 }
 
 /// Rayons des trois flous en boîte qui approchent un flou gaussien d'écart type `sigma`.
-fn boxes_for(sigma: f32) -> [usize; 3] {
+pub(crate) fn boxes_for(sigma: f32) -> [usize; 3] {
     let ideal = (12.0 * sigma * sigma / 3.0 + 1.0).sqrt();
     let mut wl = ideal.floor() as i64;
     if wl % 2 == 0 {

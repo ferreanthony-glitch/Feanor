@@ -189,7 +189,7 @@ fn lines_mask(x: usize, y: usize, w: f32, h: f32, (px, _py): (f32, f32), seed: u
 
 /// Niveau de réduction (puissance de deux) pour flouter un rayon de `radius` pixels : le flou
 /// large se fait sur une image réduite, puis agrandie (une lueur n'a pas de détail fin).
-fn blur_level(radius: f32) -> u8 {
+pub(crate) fn blur_level(radius: f32) -> u8 {
     if radius >= 80.0 {
         3
     } else if radius >= 30.0 {

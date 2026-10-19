@@ -91,9 +91,16 @@ impl App {
         };
         // Calques d'effets (`calqueffet.rs`) : le repère de chacun et ce qu'il couvre deviennent le
         // dessin dérivé, demandé au fil de fond et montré quand il est prêt (sans l'effet avant).
-        let plan = match crate::calqueffet::resolve(&self.doc, &plan, crate::calqueffet::Mode::Display { level, prio: 0 }) {
-            std::borrow::Cow::Borrowed(_) => plan,
-            std::borrow::Cow::Owned(resolved) => resolved,
+        // Sur la carte graphique (`gpufx.rs`), les calques d'ajustement hors dossier restent des repères :
+        // la carte passe leurs effets sur l'image composée, à pleine résolution, à chaque image.
+        let gpu_fx = self.gpu.as_ref().is_some_and(|g| g.effects_on());
+        let plan = if gpu_fx && crate::gpufx::adjustments_supported(&plan) {
+            plan
+        } else {
+            match crate::calqueffet::resolve(&self.doc, &plan, crate::calqueffet::Mode::Display { level, prio: 0 }) {
+                std::borrow::Cow::Borrowed(_) => plan,
+                std::borrow::Cow::Owned(resolved) => resolved,
+            }
         };
         let painter = ui.painter_at(rect);
         let stage_corners = [pos2(0.0, 0.0), pos2(size.x, 0.0), pos2(size.x, size.y), pos2(0.0, size.y)];
@@ -115,9 +122,9 @@ impl App {
         let ahead: Vec<crate::gpu::Ahead> = match &self.gpu {
             Some(gpu) => {
                 let (at, cap) = (self.play_position(), gpu.ahead_capacity(&self.doc, plan.items.len()));
-                let mut ahead = crate::playback::upcoming_derived(&self.doc, at, level, cap);
+                let mut ahead = crate::playback::upcoming_derived_with(&self.doc, at, level, cap, gpu_fx);
                 ahead.extend(
-                    crate::playback::upcoming_cels(&self.doc, at, &plan, cap).into_iter().map(|id| crate::gpu::Ahead { id, cel: None }),
+                    crate::playback::upcoming_cels_with(&self.doc, at, &plan, cap, gpu_fx).into_iter().map(|id| crate::gpu::Ahead { id, cel: None }),
                 );
                 // Les autres variantes d'un tremblement animé à l'arrêt : demandées au fil de fond
                 // et envoyées d'avance, pour que l'écran passe de l'une à l'autre sans attendre.

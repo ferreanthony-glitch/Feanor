@@ -329,6 +329,17 @@ struct CelTexture {
     filled: Vec<bool>,
     /// Envoi d'avance en cours : version visée et prochaine tuile.
     partial: Option<(u64, usize)>,
+    /// Résultat des effets sur la carte graphique d'un calque (`gpufx.rs`) : la texture est dessinée
+    /// par des passes, jamais remplie de tuiles, et ne sert pas à recycler celle d'un dessin.
+    fx: Option<FxState>,
+}
+
+/// Où en est la texture résultat des effets d'un calque.
+#[derive(Clone, Copy, Debug, Default)]
+struct FxState {
+    /// Signature de ce qu'il faut montrer (effets, dessin d'origine) et de ce que la texture montre.
+    wanted: u64,
+    done: u64,
 }
 
 impl CelTexture {
@@ -366,7 +377,7 @@ pub(crate) fn content_pixels(dims: (u32, u32), tiles: [usize; 4]) -> [usize; 4] 
 /// transparent de chaque côté qui n'est pas le bord de la feuille (le lissage d'un calque transformé
 /// y lit du transparent, comme dans la feuille entière ; au bord de la feuille, il lit le bord, comme
 /// avant), puis la taille est arrondie à `BUCKET` du côté libre, sans sortir de la feuille.
-fn texture_axis(lo: usize, hi: usize, total: usize) -> (usize, usize) {
+pub(crate) fn texture_axis(lo: usize, hi: usize, total: usize) -> (usize, usize) {
     let (before, after) = (usize::from(lo > 0), usize::from(hi < total));
     let (mut origin, mut len) = (lo - before, hi - lo + before + after);
     let want = len.div_ceil(BUCKET) * BUCKET;
@@ -456,6 +467,24 @@ struct CanvasResources {
     /// Le second plan d'une transition (fondu enchaîné, volet), composé à part ; créé à la demande.
     frame2: Option<Frame>,
     tick: u64,
+    /// Effets de calque sur la carte graphique (`gpufx.rs`) ; rien si le shader n'a pas pu être
+    /// compilé (le calcul de fond sur processeur sert alors).
+    gpufx: Option<crate::gpufx::GpuFx>,
+    /// Le réglage « Effets sur la carte graphique » (Préférences, diagnostic).
+    fx_enabled: bool,
+    /// Les chaînes de passes à exécuter à la prochaine composition (`sync` les pose).
+    fx_jobs: Vec<FxJob>,
+    /// Passes d'effets dessinées, pour les mesures.
+    fx_passes: u64,
+}
+
+/// Un calque dont la texture d'effets est à refaire : la texture du dessin d'origine, celle du
+/// résultat, la chaîne, la signature à laquelle la texture sera à jour.
+struct FxJob {
+    src: CelId,
+    out: CelId,
+    chain: std::sync::Arc<crate::gpufx::Chain>,
+    sig: u64,
 }
 
 /// Le contenu du cache de textures (`GpuCanvas::stats`).
@@ -658,6 +687,10 @@ impl GpuCanvas {
             frame: None,
             frame2: None,
             tick: 0,
+            gpufx: crate::gpufx::GpuFx::try_new(device, &rs.queue),
+            fx_enabled: true,
+            fx_jobs: Vec::new(),
+            fx_passes: 0,
         });
         Self {
             render_state: rs.clone(),
@@ -676,6 +709,46 @@ impl GpuCanvas {
         if let Some(res) = self.render_state.renderer.write().callback_resources.get_mut::<CanvasResources>() {
             res.cache_bytes = bytes;
         }
+    }
+
+    /// Les effets de calque passent-ils par la carte graphique (réglage « Effets sur la carte
+    /// graphique » allumé, et shader compilé) ?
+    pub fn effects_on(&self) -> bool {
+        self.render_state.renderer.read().callback_resources.get::<CanvasResources>().is_some_and(|r| r.fx_enabled && r.gpufx.is_some())
+    }
+
+    /// Cette carte graphique sait-elle dessiner les effets (le shader a été accepté au démarrage) ?
+    pub fn effects_supported(&self) -> bool {
+        self.render_state.renderer.read().callback_resources.get::<CanvasResources>().is_some_and(|r| r.gpufx.is_some())
+    }
+
+    /// Allume ou éteint les effets sur la carte graphique (Préférences, diagnostic). Éteints, tout
+    /// passe par le calcul de fond sur processeur, comme avant.
+    pub fn set_effects_gpu(&self, on: bool) {
+        if let Some(res) = self.render_state.renderer.write().callback_resources.get_mut::<CanvasResources>() {
+            if res.fx_enabled != on {
+                res.fx_enabled = on;
+                // (Les textures de résultat n'ont plus lieu d'être ; l'image composée gardée non plus.)
+                res.textures.retain(|_, t| t.fx.is_none());
+                res.fx_jobs.clear();
+                res.frame = None;
+                res.frame2 = None;
+            }
+        }
+    }
+
+    /// Mémoire vidéo prise par les effets sur la carte graphique : textures de travail et textures de
+    /// résultat (octets).
+    pub fn effects_bytes(&self) -> u64 {
+        let renderer = self.render_state.renderer.read();
+        let Some(res) = renderer.callback_resources.get::<CanvasResources>() else { return 0 };
+        res.gpufx.as_ref().map_or(0, crate::gpufx::GpuFx::bytes) + res.textures.values().filter(|t| t.fx.is_some()).map(CelTexture::bytes).sum::<u64>()
+    }
+
+    /// Passes d'effets dessinées depuis le début (essais et mesures).
+    pub fn effects_passes(&self) -> u64 {
+        let renderer = self.render_state.renderer.read();
+        renderer.callback_resources.get::<CanvasResources>().map_or(0, |r| r.fx_passes)
     }
 
     /// Essais : les textures couvrent l'image entière de leur dessin (le comportement d'avant la
@@ -703,6 +776,37 @@ impl GpuCanvas {
         let renderer = self.render_state.renderer.read();
         let Some(res) = renderer.callback_resources.get::<CanvasResources>() else { return GpuStats::default() };
         GpuStats { textures: res.textures.len(), bytes: res.textures.values().map(CelTexture::bytes).sum(), copies: res.copies, composes: res.composes }
+    }
+
+    /// Essais : l'image composée telle qu'elle est en mémoire de la carte (valeurs gamma
+    /// prémultipliées, comme les dessins), sans passer par l'affichage.
+    #[cfg(test)]
+    pub fn read_frame(&self) -> Vec<eframe::egui::Color32> {
+        let rs = &self.render_state;
+        let renderer = rs.renderer.read();
+        let Some(frame) = renderer.callback_resources.get::<CanvasResources>().and_then(|r| r.frame.as_ref()) else { return Vec::new() };
+        let (w, h) = frame.size;
+        let row = (w * 4).div_ceil(256) * 256;
+        let readback = rs.device.create_buffer(&wgpu::BufferDescriptor { label: Some("lecture de l'image composée"), size: (row * h) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
+        let mut encoder = rs.device.create_command_encoder(&Default::default());
+        encoder.copy_texture_to_buffer(
+            frame.texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo { buffer: &readback, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(h) } },
+            extent(w, h),
+        );
+        rs.queue.submit([encoder.finish()]);
+        let slice = readback.slice(..);
+        slice.map_async(wgpu::MapMode::Read, |r| r.expect("lecture"));
+        rs.device.poll(wgpu::Maintain::Wait);
+        let data = slice.get_mapped_range();
+        let mut out = Vec::with_capacity((w * h) as usize);
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let i = y * row as usize + x * 4;
+                out.push(eframe::egui::Color32::from_rgba_premultiplied(data[i], data[i + 1], data[i + 2], data[i + 3]));
+            }
+        }
+        out
     }
 
     /// Nombre de dessins qu'on peut envoyer d'avance sans chasser ceux qui sont affichés. Le poids
@@ -737,7 +841,23 @@ impl GpuCanvas {
         // Un dessin passé par des effets (13i) : son dessin dérivé, sous son propre numéro ; en
         // aperçu ou en attente du fil de fond, une texture plus petite ou plus ancienne. Cherché
         // une fois par élément.
-        let displays: Vec<Option<crate::fx::Display>> = plan.items.iter().map(|item| crate::fx::display(doc, item, level)).collect();
+        // Une pile dont tous les effets ont une version sur la carte graphique (`gpufx.rs`) n'est pas
+        // calculée par le fil de fond : seul le dessin d'origine part à la carte, les effets se
+        // dessinent à la composition, à pleine résolution, à chaque image.
+        let fx_on = res.fx_enabled && res.gpufx.is_some();
+        let on_gpu: Vec<bool> = plan.items.iter().map(|item| fx_on && gpu_fx_item(doc, item)).collect();
+        let displays: Vec<Option<crate::fx::Display>> = plan
+            .items
+            .iter()
+            .zip(&on_gpu)
+            .map(|(item, &gpu)| {
+                if gpu {
+                    doc.cels.get(&item.cel).map(|cel| crate::fx::Display { cel: crate::fx::Shown::Plain(cel), id: item.cel, ready: true })
+                } else {
+                    crate::fx::display(doc, item, level)
+                }
+            })
+            .collect();
         // Les dessins de cette image sont les plus récents avant tout : en créer un ne chasse pas
         // un autre dessin de la même image.
         let mut resolved = Vec::with_capacity(plan.items.len());
@@ -793,6 +913,21 @@ impl GpuCanvas {
             }
             if let Some(entry) = res.textures.get_mut(&id) {
                 entry.last_used = tick;
+            }
+        }
+        // Les calques à effets sur la carte graphique : la texture du résultat de chaque pile (créée à
+        // la taille de ce que les effets touchent), et la chaîne de passes à y dessiner si elle n'est
+        // pas à jour (exécutée à la composition, `prepare`).
+        let sheet = size;
+        let mut seen: Vec<CelId> = Vec::new();
+        for (i, item) in plan.items.iter().enumerate() {
+            if !on_gpu[i] {
+                continue;
+            }
+            let nth = seen.iter().filter(|&&c| c == item.cel).count();
+            seen.push(item.cel);
+            if let Some(out) = place_fx(rs, res, item, nth, sheet, tick, &mut bytes) {
+                resolved[i] = Some(out);
             }
         }
         // Envoi d'avance, borné à AHEAD_BYTES par image d'écran ; un dessin entamé reprend à sa
@@ -968,9 +1103,28 @@ impl GpuCanvas {
                 params: [1.0, 0.0, 0.0, 0.0],
                 blend: 0,
                 mesh: None,
+                adjust: None,
             });
         }
         for ((item, id), place) in plan.items.iter().zip(resolved).zip(&places) {
+            // Le repère d'un calque d'effet d'ajustement : ses effets passent sur l'image composée jusqu'ici
+            // (`gpufx.rs`), le résultat est posé dessus avec l'opacité et le mode du calque. Un repère
+            // qui n'a pas pu être résolu par la carte (calque dans un dossier…) ne montre rien : il est
+            // résolu sur le processeur avant (`canvas.rs`, `gpufx::adjustments_supported`).
+            if let Some(crate::render::FondPart::Reglage(r)) = &item.fond {
+                if r.root && crate::gpufx::steps_supported(&r.steps) {
+                    items.push(GpuItem {
+                        cel: None,
+                        corners: full,
+                        color: [0.0; 4],
+                        params: [r.opacity as f32 / 255.0, 1.0, r.blend.index() as f32, 0.0],
+                        blend: r.blend.index(),
+                        mesh: None,
+                        adjust: Some(r.steps.clone()),
+                    });
+                }
+                continue;
+            }
             // Un élément sans dessin n'est pas composé.
             let Some(id) = *id else { continue };
             // (Sans texture, rien à poser : la passe de composition saute l'élément.)
@@ -1026,6 +1180,7 @@ impl GpuCanvas {
                 params: [item.opacity as f32 / 255.0, 1.0, blend as f32, 0.0],
                 blend,
                 mesh,
+                adjust: None,
             });
         }
         items
@@ -1070,6 +1225,9 @@ struct GpuItem {
     blend: u32,
     /// Sommets du maillage qui pose la feuille (`warp.rs`) : à la place des quatre coins.
     mesh: Option<Vec<[f32; 4]>>,
+    /// Calque d'effet d'ajustement (`calqueffet.rs`) : ses effets s'appliquent à l'image composée
+    /// jusque-là, le résultat est posé dessus avec l'opacité et le mode de l'élément.
+    adjust: Option<Vec<crate::fx::FxStep>>,
 }
 
 /// Ce qui fait un élément de l'image composée : le dessin et la version de sa texture, sa place, sa
@@ -1083,6 +1241,8 @@ struct ItemKey {
     blend: u32,
     /// Nombre de sommets du maillage et leur empreinte.
     mesh: Option<(usize, u64)>,
+    /// Empreinte des effets d'un calque d'ajustement.
+    adjust: Option<u64>,
 }
 
 impl ItemKey {
@@ -1096,7 +1256,17 @@ impl ItemKey {
             let hash = m.iter().flatten().fold(0xcbf2_9ce4_8422_2325_u64, |h, v| (h ^ v.to_bits() as u64).wrapping_mul(0x0000_0100_0000_01b3));
             (m.len(), hash)
         });
-        ItemKey { cel: item.cel, generation, numbers, blend: item.blend, mesh }
+        let adjust = item.adjust.as_ref().map(|steps| {
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            for s in steps {
+                std::hash::Hash::hash(&s.kind, &mut h);
+                for v in &s.values {
+                    std::hash::Hash::hash(&v.to_bits(), &mut h);
+                }
+            }
+            std::hash::Hasher::finish(&h)
+        });
+        ItemKey { cel: item.cel, generation, numbers, blend: item.blend, mesh, adjust }
     }
 }
 
@@ -1142,17 +1312,47 @@ struct CanvasPaint {
 /// Compose les éléments `span` de `items` dans `frame` (effacée d'abord). Un calque en mode de
 /// fusion lit ce qui est déjà composé : on le copie à part avant (fin de passe, copie, nouvelle
 /// passe).
-fn compose_span(encoder: &mut wgpu::CommandEncoder, res: &CanvasResources, frame: &Frame, items: &[GpuItem], ranges: &[Option<std::ops::Range<u32>>], span: std::ops::Range<usize>) {
+fn compose_span(
+    encoder: &mut wgpu::CommandEncoder,
+    res: &CanvasResources,
+    frame: &Frame,
+    items: &[GpuItem],
+    ranges: &[Option<std::ops::Range<u32>>],
+    span: std::ops::Range<usize>,
+    fx: &mut Option<crate::gpufx::GpuFx>,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+) -> u64 {
     let stride = res.stride as usize;
+    let mut passes = 0u64;
     let mut pass = compose_pass(encoder, &frame.target, true);
     for i in span {
         let item = &items[i];
-        let group = match item.cel {
-            None => &res.white,
-            Some(id) => match res.textures.get(&id) {
-                Some(t) => &t.bind_group,
-                None => continue,
-            },
+        // Calque d'effet d'ajustement : ses effets passent sur l'image composée jusqu'ici (il faut finir
+        // la passe de composition pour la lire), le résultat est posé comme un dessin plein cadre.
+        let adjusted;
+        let mut leased = None;
+        let group = if let Some(steps) = &item.adjust {
+            let Some(fx) = fx.as_mut() else { continue };
+            let sheet = frame.size;
+            let input = crate::gpufx::Geo { x: 0, y: 0, w: sheet.0 as i32, h: sheet.1 as i32 };
+            let Some(chain) = crate::gpufx::plan_chain(steps, input, sheet) else { continue };
+            drop(pass);
+            let source = frame.texture.create_view(&Default::default());
+            leased = fx.run(device, queue, encoder, &chain, &source, None);
+            passes += chain.passes.len() as u64;
+            pass = compose_pass(encoder, &frame.target, false);
+            let Some(l) = leased else { continue };
+            adjusted = texture_group(device, &res.texture_layout, fx.view(l), &res.nearest);
+            &adjusted
+        } else {
+            match item.cel {
+                None => &res.white,
+                Some(id) => match res.textures.get(&id) {
+                    Some(t) => &t.bind_group,
+                    None => continue,
+                },
+            }
         };
         // (Une feuille posée par un maillage sans rien à dessiner : rien.)
         let meshed = item.mesh.is_some();
@@ -1182,7 +1382,13 @@ fn compose_span(encoder: &mut wgpu::CommandEncoder, res: &CanvasResources, frame
             }
             None => pass.draw(0..6, 0..1),
         }
+        // (La texture de travail du résultat est rendue : la passe ci-dessus l'a déjà notée, un calque
+        // d'ajustement plus haut peut la réécrire dans une passe suivante.)
+        if let (Some(l), Some(fx)) = (leased, fx.as_mut()) {
+            fx.release(l);
+        }
     }
+    passes
 }
 
 fn put_item(bytes: &mut [u8], corners: &[[f32; 4]; 4], color: &[f32; 4], params: &[f32; 4]) {
@@ -1201,6 +1407,21 @@ impl CallbackTrait for CanvasPaint {
         resources: &mut CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
         let Some(res) = resources.get_mut::<CanvasResources>() else { return Vec::new() };
+        // Effets de calque sur la carte graphique (`gpufx.rs`) : les textures de résultat dont la
+        // signature a changé sont redessinées, avant la composition qui les lit.
+        if let Some(mut fx) = res.gpufx.take() {
+            fx.begin_frame();
+            for job in std::mem::take(&mut res.fx_jobs) {
+                let (Some(src), Some(out)) = (res.textures.get(&job.src), res.textures.get(&job.out)) else { continue };
+                let (src_view, out_view) = (src.texture.create_view(&Default::default()), out.texture.create_view(&Default::default()));
+                fx.run(device, queue, encoder, &job.chain, &src_view, Some(&out_view));
+                res.fx_passes += job.chain.passes.len() as u64;
+                if let Some(state) = res.textures.get_mut(&job.out).and_then(|t| t.fx.as_mut()) {
+                    state.done = job.sig;
+                }
+            }
+            res.gpufx = Some(fx);
+        }
         // Les réglages des dessins à composer, puis ceux de l'affichage (en dernier).
         let n = (self.items.len() + self.shows.len()) as u64;
         if n > res.uniform_capacity {
@@ -1278,16 +1499,23 @@ impl CallbackTrait for CanvasPaint {
 
         // Composer dans l'image à la taille du projet (et dans celle du second plan d'une transition).
         let split = self.split.min(self.items.len());
+        // (Les calques d'ajustement ont besoin des effets : on les sort le temps de la composition.)
+        let mut fx = res.gpufx.take();
+        let mut passes = 0;
         if fresh1 {
-            let Some(frame) = &res.frame else { return Vec::new() };
-            compose_span(encoder, res, frame, &self.items, &ranges, 0..split);
-            res.composes += 1;
+            if let Some(frame) = &res.frame {
+                passes += compose_span(encoder, res, frame, &self.items, &ranges, 0..split, &mut fx, device, queue);
+                res.composes += 1;
+            }
         }
         if fresh2 {
-            let Some(frame) = &res.frame2 else { return Vec::new() };
-            compose_span(encoder, res, frame, &self.items, &ranges, split..self.items.len());
-            res.composes += 1;
+            if let Some(frame) = &res.frame2 {
+                passes += compose_span(encoder, res, frame, &self.items, &ranges, split..self.items.len(), &mut fx, device, queue);
+                res.composes += 1;
+            }
         }
+        res.gpufx = fx;
+        res.fx_passes += passes;
         if fresh1 {
             if let Some(frame) = res.frame.as_mut() {
                 frame.composed = Some(keys1.to_vec());
@@ -1402,6 +1630,65 @@ fn content_of(raster: &Raster, tiles: &[usize]) -> Option<[usize; 4]> {
     found
 }
 
+/// Les effets de cet élément du plan se dessinent-ils sur la carte graphique ? Oui si toute sa pile y
+/// passe (`gpufx::steps_supported`) et s'il s'agit d'un dessin ordinaire du projet, à la taille de la
+/// feuille (ni remplissage CTG, ni fond sous le trait, ni feuille flottante, ni image de vidéo).
+pub(crate) fn gpu_fx_item(doc: &Document, item: &crate::render::PlanItem) -> bool {
+    item.ctg.is_none()
+        && item.fond.is_none()
+        && item.pre.is_none()
+        && crate::gpufx::steps_supported(&item.fx)
+        && doc.cels.get(&item.cel).is_some_and(|c| c.raster.width == doc.width && c.raster.height == doc.height)
+}
+
+/// La texture résultat des effets de l'élément `item` (dessin d'origine déjà envoyé sous son numéro) :
+/// créée ou reprise, à la taille de ce que les effets touchent ; la chaîne qui la remplit est mise dans
+/// les travaux de la prochaine composition si elle n'est pas à jour. Rend son numéro, ou rien (pile sans
+/// passe : le dessin d'origine est montré tel quel).
+fn place_fx(rs: &RenderState, res: &mut CanvasResources, item: &crate::render::PlanItem, nth: usize, sheet: (u32, u32), tick: u64, bytes: &mut u64) -> Option<CelId> {
+    let src = item.cel;
+    let (rect, generation) = res.textures.get(&src).filter(|t| t.dims == sheet).map(|t| (t.rect, t.generation))?;
+    let chain = crate::gpufx::plan_chain(&item.fx, crate::gpufx::Geo::from_rect(rect), sheet)?;
+    let out = crate::gpufx::out_id(src, nth, &item.fx);
+    let sig = crate::gpufx::signature(&item.fx, rect, generation, sheet);
+    let want = chain.out.rect();
+    if !res.textures.get(&out).is_some_and(|t| t.fx.is_some() && t.rect == want) {
+        if let Some(old) = res.textures.remove(&out) {
+            *bytes -= old.bytes();
+        }
+        let texture = crate::gpufx::target_texture(&rs.device, want[2], want[3]);
+        let view = texture.create_view(&Default::default());
+        let bind_group = texture_group(&rs.device, &res.texture_layout, &view, &res.nearest);
+        let entry = CelTexture {
+            bind_group,
+            texture,
+            rect: want,
+            dims: sheet,
+            version: 0,
+            last_used: tick,
+            generation: tick,
+            filled: Vec::new(),
+            partial: None,
+            fx: Some(FxState::default()),
+        };
+        *bytes += entry.bytes();
+        res.textures.insert(out, entry);
+    }
+    let entry = res.textures.get_mut(&out).expect("texture d'effets présente");
+    entry.last_used = tick;
+    let state = entry.fx.as_mut().expect("texture d'effets");
+    if state.wanted != sig {
+        state.wanted = sig;
+        // La texture va changer : l'image composée gardée n'est plus bonne.
+        entry.generation = tick;
+    }
+    if entry.fx.is_some_and(|s| s.done != sig) {
+        res.fx_jobs.retain(|j| j.out != out);
+        res.fx_jobs.push(FxJob { src, out, chain: std::sync::Arc::new(chain), sig });
+    }
+    Some(out)
+}
+
 /// La texture du dessin `id` (image de taille `dims`, `tiles` tuiles), à la place `rect` de cette
 /// image : une neuve (transparente), ou, quand la carte est pleine, celle du dessin le moins récent
 /// qui a la même taille (en créer une oblige la carte à la remplir de zéros) ; les tuiles de son
@@ -1421,7 +1708,7 @@ fn place_texture(rs: &RenderState, res: &mut CanvasResources, id: CelId, dims: (
         let oldest = res
             .textures
             .iter()
-            .filter(|(_, t)| t.rect[2] == rect[2] && t.rect[3] == rect[3] && t.last_used < tick)
+            .filter(|(_, t)| t.rect[2] == rect[2] && t.rect[3] == rect[3] && t.last_used < tick && t.fx.is_none())
             .min_by_key(|(_, t)| t.last_used)
             .map(|(&k, _)| k);
         if let Some(mut t) = oldest.and_then(|k| res.textures.remove(&k)) {
@@ -1445,7 +1732,7 @@ fn place_texture(rs: &RenderState, res: &mut CanvasResources, id: CelId, dims: (
         let texture = cel_texture(&rs.device, rect[2], rect[3]);
         let view = texture.create_view(&Default::default());
         let bind_group = texture_group(&rs.device, &res.texture_layout, &view, &res.nearest);
-        CelTexture { bind_group, texture, rect, dims, version: u64::MAX, last_used: tick, generation: tick, filled: vec![false; tiles], partial: None }
+        CelTexture { bind_group, texture, rect, dims, version: u64::MAX, last_used: tick, generation: tick, filled: vec![false; tiles], partial: None, fx: None }
     });
     *bytes += entry.bytes();
     res.textures.insert(id, entry);
