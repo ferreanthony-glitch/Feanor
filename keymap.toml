@@ -2174,6 +2174,26 @@ touches = []
 source = "SHOT (sans touche : Ctrl+C copie les clés d'effets choisies)"
 
 [[raccourci]]
+action = "fx.copier"
+touches = []
+source = "SHOT (sans touche : Ctrl+C dans le panneau Effets copie l'effet choisi)"
+
+[[raccourci]]
+action = "fx.copier_tout"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.coller"
+touches = []
+source = "SHOT (sans touche : Ctrl+V dans le panneau Effets colle les effets copiés)"
+
+[[raccourci]]
+action = "fx.remplacer"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
 action = "fx.cles_coller"
 touches = []
 source = "SHOT (sans touche : Ctrl+V colle les clés d'effets copiées)"
