@@ -1011,6 +1011,77 @@ qu'il reste du contenu caché de ce côté).
   Dupliquer ou copier un plan ne copie pas sa réserve ; couper un plan garde le début caché au premier
   plan, réunir deux plans ne garde que le début caché du premier.
 
+## Transitions du montage
+
+Une transition habille une **coupe** entre deux plans, ou le **début / la fin du film** : fondu enchaîné,
+fondu au noir, fondu au blanc, volet, noir. Elle se voit dans la bande de montage comme un petit nœud posé
+sur la coupe (papillon pour le fondu enchaîné, losange pour le noir ou le blanc, rampe au bord du film).
+
+- **Poser** : clic droit sur une coupe > « Transition ▸ » (aussi dans le menu d'un plan : « Transition au
+  début / à la fin du plan ») ; le bouton « Ajouter une transition » de la barre du montage vise la coupe la
+  plus proche de la tête de lecture (un fondu enchaîné entre deux plans, un fondu au noir au bord du film) ;
+  ou une commande de Ctrl+K : `transition.ajouter`, `transition.fondu_enchaine`, `transition.fondu_noir`,
+  `transition.fondu_blanc`, `transition.volet`, `transition.noir`, `transition.supprimer`,
+  `transition.apercu`, sans touche par défaut (clic droit sur l'entrée d'un menu pour leur en donner une).
+- **Durée** : 12 images par défaut. On tire l'un des bords du nœud, ou on tape la durée dans le menu du
+  clic droit sur la transition (avec la sorte et le calage). Clic : la choisit, Suppr : la supprime.
+- **Temps** (choix de SHOT, à confirmer à l'écran) : **le film ne change jamais de durée**. La transition est
+  centrée sur la coupe (calage « Finit à la coupe » ou « Commence à la coupe » aussi) et utilise les images
+  des deux plans autour d'elle ; l'image qui manque d'un côté est **tenue** (le plan sortant garde sa
+  dernière image, l'entrant sa première). Elle ne sort jamais des deux plans qu'elle relie. Les poignées du
+  rognage (la réserve) ne servent pas encore à avoir des images vivantes : à faire. Au début du film, le
+  fondu part de la couleur (la première image est toute noire) ; à la fin, il y va (la dernière est toute noire) ;
+  sur une coupe, il passe par la couleur.
+- **Lecture et export** : la carte graphique pose le plan entrant sur le plan sortant pendant la lecture
+  (chaque plan vu par sa propre caméra en vue caméra) ; à l'arrêt, le mélange se voit aussi
+  (`transition.apercu` pour le couper si l'on dessine dans la zone). Le film et les images exportés
+  contiennent les transitions, image par image (case « Avec les transitions du montage »). L'export vers
+  Storyboard Pro ne les reprend pas (comment Storyboard Pro range les siennes : à vérifier) ; le compte
+  rendu de l'export le signale.
+- Enregistrées dans `transitions.json`, à côté du manifeste (le format du projet ne change pas) ; un
+  fichier illisible ou d'une version plus récente ne bloque pas l'ouverture et n'est jamais effacé.
+  Chaque changement est une étape d'annulation nommée (« Ajouter une transition : fondu enchaîné »,
+  « Durée de la transition »…).
+- Une transition tient à deux plans (par leur numéro) : si l'un est supprimé, elle part avec lui ; si les deux
+  ne se suivent plus (plan déplacé, coupé ou réunion), elle est gardée sans jouer, et l'annulation la rend.
+
+## Effets sonores
+
+Sur les extraits de la bande de montage (l'extrait doit être choisi) :
+
+- **Fondus** : deux petites poignées aux coins du haut de l'extrait, qu'on tire dans le temps ; le coin qui
+  disparaît s'assombrit. Ou les commandes `son.fondu_entree` / `son.fondu_sortie`.
+- **Fondu enchaîné** entre deux extraits **qui se touchent** sur la même piste (`son.enchaine`, ou la case
+  du menu) : une croix sur la jonction dont on tire la poignée. Le fondu est centré sur la jonction, en
+  puissance égale, et utilise le son que chaque extrait a de l'autre côté de sa coupe ; s'il n'y en a
+  pas (extraits qui commencent au début de leur son), il se raccourcit jusqu'à la coupe sèche. Les extraits
+  d'une piste ne se chevauchent toujours pas.
+- **Volume** de l'extrait (curseur du menu, jusqu'à 400 %) et de la piste ; **muet**, **solo** (bouton S de
+  l'en-tête de la piste : seules les pistes en solo s'entendent, même muettes).
+- **Clés de volume** : double-clic sur l'extrait pose une clé là où l'on a cliqué, on la tire (temps et
+  niveau, collé à 100 % près de l'unité), Suppr la retire. La courbe est linéaire entre les clés.
+- **Égaliseur** à trois bandes (graves, médiums, aigus, ±12 dB) et **écho** (niveau, délai, retour) : dans
+  le menu du clic droit sur l'extrait > « Effets du son ». Sans nouvelle bibliothèque : filtres du second
+  ordre et ligne à retard. Ils se calculent sur un fil à part ; en attendant, on entend le son tel quel.
+- Lecture, son au défilement, WAV du film, son des vidéos exportées et fichiers son de l'export vers
+  Storyboard Pro passent tous par le même calcul (`audiofx::build_mix`) : ce qu'on entend est ce qu'on exporte.
+- Enregistrés dans `effets_son.json` (même principe que `transitions.json`) ; une étape d'annulation nommée par réglage et par geste.
+
+## Bruitages
+
+Le panneau **Bruitages** (barre des panneaux, ou Son > Bruitages…) garde les dossiers de sons de
+l'utilisateur : WAV, MP3, FLAC, OGG, sous-dossiers compris. Les dossiers sont un réglage de l'application
+(`reglages.toml`), retenus d'un projet à l'autre ; la liste se lit sur un fil à part à la première ouverture du
+panneau (« Actualiser » la relit).
+
+- **Chercher** : tous les mots tapés, dans le nom et le sous-dossier. La durée de chaque son se lit à la
+  demande, pour les seules lignes qu'on voit.
+- **Écouter** : le bouton ▶ de la ligne (le même une seconde fois arrête) ; la lecture du projet s'arrête.
+- **Poser** : glisser la ligne sur une piste son de la bande de montage (un repère montre l'image visée),
+  ou sur la ligne du son de la timeline ; un double-clic la pose à la tête de lecture (sur la piste de
+  l'extrait choisi, sinon la première libre). Le fichier est **copié dans le projet**, comme un son
+  importé. `bruitage.inserer` et `bruitage.ecouter` agissent sur le son choisi.
+
 ## Palette de commandes
 
 Ctrl+K (ou Aide > Palette de commandes) : tape quelques lettres du nom d'une commande (« persp »,
@@ -1323,6 +1394,9 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `roue.rs` | Roue chromatique : géométrie (anneau, carré, triangle) et maillages colorés |
 | `nuancier.rs`, `nuancierui.rs` | Nuanciers personnels : modèle, formats GIMP (.gpl) et Photoshop (.aco) ; leur place dans le panneau Couleur |
 | `soundtrack.rs` | Pistes son : import, lecture synchronisée, affichage, glisser des extraits |
+| `transitions.rs`, `transitionsui.rs` | Transitions du montage : zones, mélange d'une image, fichier `transitions.json` ; nœud dans la bande, menus, commandes, aperçu |
+| `audiofx.rs`, `audiofxui.rs` | Effets sonores : fondus, enchaîné, clés de volume, égaliseur, écho, solo, fichier `effets_son.json` ; poignées, ligne du volume, menus |
+| `bruitages.rs`, `bruitagesui.rs` | Bibliothèque de bruitages : parcours des dossiers, recherche, durées, écoute ; panneau, glisser vers le montage |
 | `canvas.rs`, `panels.rs`, `timeline.rs` | Interface |
 
 `cargo test --release` lance les tests (pinceau, vectoriel, remplissage, séquences/scènes/panneaux,

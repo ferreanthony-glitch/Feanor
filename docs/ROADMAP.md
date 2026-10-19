@@ -2508,3 +2508,35 @@ feuille entière) alors que 768 essais passaient ; et sur une machine chargée, 
 - Pas fait : la première image dans la vraie fenêtre (eframe, carte graphique, pipelines : à lire dans `demarrage.log`) ;
   `BrushLibrary::builtin()` (74 ms) reste avant la première image ; un son ou un modèle illisible sort du projet et ses
   extraits avec lui à l'enregistrement.
+
+## Transitions, effets sonores et bruitages (demandés par Anthony le 2026-10-19, branche `transitions-son`) ✅
+
+Trois chantiers du montage ; le détail est dans le README (sections « Transitions du montage », « Effets
+sonores », « Bruitages ») et le vocabulaire dans `docs/INTERFACE.md` (partie 8). **Rien n'a été regardé à l'écran dans
+cette séance** (consigne : aucun lancement de SHOT) ; la liste « à vérifier » est en tête de la partie 8.
+
+- ✅ **Transitions** (`transitions.rs`, `transitionsui.rs`) : fondu enchaîné, fondu au noir, fondu au blanc, volet,
+  noir, sur une coupe ou au bord du film. Durée de 12 images, tirée aux bords du nœud ou tapée ; calage centré /
+  finit à la coupe / commence à la coupe. **Temps : la durée du film ne change pas** (le son reste calé) ; les images
+  qui manquent d'un côté sont tenues. Lecture sur la carte graphique (second plan composé à part, posé par
+  l'affichage), export exact (mélange sur le processeur, image par image). `transitions.json`, sans nouvelle
+  version du projet.
+- ✅ **Effets sonores** (`audiofx.rs`, `audiofxui.rs`) : fondus par extrait (poignées aux coins du haut), fondu
+  enchaîné de deux extraits qui se touchent (puissance égale, poignées de son de part et d'autre de la coupe),
+  volume par extrait et par piste, solo, clés de volume (double-clic, glisser, Suppr), égaliseur trois bandes et
+  écho, sans nouvelle bibliothèque. Un seul calcul (`build_mix`) pour la lecture, le défilement, le WAV, la vidéo
+  et l'export vers Storyboard Pro ; le travail lourd hors des fils de l'interface et de la carte son.
+  `effets_son.json`, sans nouvelle version du projet.
+- ✅ **Bruitages** (`bruitages.rs`, `bruitagesui.rs`) : panneau fermé par défaut (`Pane::Bruitages`, icône de la
+  barre des panneaux, `vue.bruitages`), dossiers de l'utilisateur dans `reglages.toml`, parcours et durées sur
+  des fils à part, écoute au clic, glisser vers une piste du montage ou de la timeline, double-clic à la tête de
+  lecture, son copié dans le projet.
+- Pas fait / limites : les poignées du rognage (la réserve) ne fournissent pas d'images vivantes aux transitions
+  (images tenues) ; pas d'aperçu des transitions sans carte graphique (l'export, lui, les contient) ; le volet de
+  l'écran avance sur la largeur du cadre par défaut, pas du cadre d'une caméra qui bouge (l'export est exact) ;
+  les fondus enchaînés entre extraits ne partent pas vers Storyboard Pro ; l'égaliseur et l'écho refont le son
+  de l'extrait entier (un son très long a un petit délai avant d'être entendu avec ses effets) ; un chevauchement
+  d'extraits sur une même piste reste refusé (le fondu enchaîné passe par les poignées de son).
+- À vérifier face à Storyboard Pro et aux logiciels de montage : le calage centré par défaut, le fondu au noir
+  qui passe par la couleur sur une coupe, la courbe linéaire des fondus d'entrée et de sortie, la puissance
+  égale du fondu enchaîné, le solo qui l'emporte sur le muet.

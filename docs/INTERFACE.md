@@ -9,7 +9,8 @@ sans changer le comportement, et propose le reste (partie 6).
 Branche `simplicite` (coupée de `main` à `9a33cd5`). Rien n'est fusionné.
 
 Sommaire : 1 raccourcis, 2 vocabulaire, 3 doublons et impasses, 4 cohérence des gestes (clés),
-5 encombrement, 6 propositions, 7 à vérifier à l'écran.
+5 encombrement, 6 propositions, 7 à vérifier à l'écran, 8 transitions, effets sonores et bruitages
+(branche `transitions-son`, vocabulaire ajouté).
 
 ---------------------------------------------------------------------------------------------------
 
@@ -429,3 +430,65 @@ Rien de cette passe n'a été regardé : aucun lancement de SHOT (consigne). À 
 `zoombande_tests` (7), `bulles_tests` (3), `theme_tests` (2), `montagerows_tests` (2 remplacés).
 La suite passe de 1008 à 1046 essais ; `scripts\verifier.ps1 -Repetitions 2` : OK, compilation sans
 avertissement.
+
+---------------------------------------------------------------------------------------------------
+
+## 8. Transitions, effets sonores, bruitages (2026-10-19, branche `transitions-son`)
+
+### Vocabulaire ajouté
+
+| Idée | Mot | À éviter |
+|---|---|---|
+| La jointure de deux plans dans le montage | **coupe** | raccord, cut |
+| Ce qui habille une coupe, ou le bord du film | **transition** | effet (réservé à la pile d'effets d'un calque) |
+| Les sortes | **fondu enchaîné**, **fondu au noir**, **fondu au blanc**, **volet**, **noir** | dissolve, fade |
+| Où la zone se pose par rapport à la coupe | **calage** : « Centrée sur la coupe », « Finit à la coupe », « Commence à la coupe » | alignement |
+| Plan qui part / plan qui arrive | **plan sortant** / **plan entrant** | A / B |
+| Le fondu des bords d'un extrait de son | **fondu d'entrée**, **fondu de sortie** | fade in / out |
+| Le fondu entre deux extraits qui se touchent | **fondu enchaîné** du son (centré sur la jonction) | crossfade |
+| Le son qui existe de l'autre côté d'un bord d'extrait | **poignée** (le mot des logiciels de montage) | marge |
+| Les points de la courbe de volume d'un extrait | **clés de volume** (une clé est un début : voir le glossaire de la partie 2) | points, nœuds |
+| Seules ces pistes s'entendent | **solo** | — |
+| Le panneau des sons de l'utilisateur | **Bruitages** (bibliothèque, dossiers) | effets sonores (réservé à `audiofx`) |
+
+### Ce qui a été posé
+
+- **Montage** : un nœud papillon (fondu enchaîné), un losange (noir ou blanc), une rampe (bord du film), un carré
+  divisé (volet) ou un bloc noir, au milieu des plans, sur la coupe. Ses bords sont des poignées de durée ;
+  clic = choisir, Suppr = supprimer, clic droit = sorte / durée / calage ; clic droit sur une coupe =
+  « Transition ▸ ». Bouton « Ajouter une transition » de la barre du montage (un seul appel, `transition_button`, à
+  ranger sous « Plus… » si la barre l'exige).
+- **Pistes son** : bouton S à côté de M ; sur l'extrait choisi, deux poignées carrées au coin du haut, une
+  ligne de volume (double-clic pour une clé), une croix à la jonction de deux extraits qui se touchent.
+  Clic droit sur un extrait > « Effets du son » (volume, fondus, fondu enchaîné, clés, égaliseur, écho).
+- **Barre des panneaux** : une icône de plus (onde), groupe des commentaires et de l'historique.
+- **Menus** : Son > Bruitages… ; menu d'un plan : « Transition au début du plan » / « … à la fin du plan ».
+- **Commandes** (Ctrl+K, sans touche par défaut) : `transition.*` (8), `son.fondu_entree`, `son.fondu_sortie`,
+  `son.enchaine`, `son.cle_volume`, `son.solo`, `son.effets_reinit`, `vue.bruitages`, `bruitage.inserer`,
+  `bruitage.ecouter`. Suppr supprime la transition choisie, ou la clé de volume choisie, quand le dernier
+  clic du montage l'a visée.
+- **Historique** : chaque geste a un nom français (« Ajouter une transition : fondu enchaîné », « Durée de la
+  transition », « Fondu d'entrée », « Clé de volume », « Piste en solo », « Insérer un bruitage »…).
+
+### À vérifier à l'écran (rien n'a été lancé dans cette séance)
+
+1. **Nœud de transition** : lisible dans les trois thèmes, en zoom arrière (largeur minimale 18 points), sur un plan
+   coloré ; ses poignées de bord ne gênent pas celles du rognage (les bords de plan sont plus bas dans la pile des
+   gestes : la transition passe d'abord).
+2. **Clic droit sur une coupe** : à ± 4 points de la jonction des blocs ; le menu du plan reste ailleurs.
+3. **Lecture avec transition** : fondu fluide à la cadence, en vue caméra avec deux caméras différentes ; le volet
+   avance sur le cadre par défaut, pas sur celui d'une caméra qui bouge (à l'écran seulement).
+4. **Aperçu à l'arrêt** : le dessin dans une zone de transition montre le mélange ; `transition.apercu` le coupe
+   (à décider si le défaut doit être l'inverse en mode Animation : il est déjà coupé là).
+5. **Poignées de fondu** aux coins d'un extrait : prise à 6 points, bande du haut de 12 points ; la poignée sur le
+   coin gauche prend le pas sur le bord (taille de l'extrait) pour l'extrait choisi seulement.
+6. **Ligne de volume** : double-clic sur un extrait pas encore choisi (le premier clic le choisit).
+7. **Panneau Bruitages** : liste de plusieurs milliers de sons (défilement), glisser vers la bande et vers la
+   timeline, repère de dépôt.
+8. **Entrée de menu** « Bruitages… » dans le menu Son et l'icône de la barre : bulle et raccourci.
+
+### Essais ajoutés
+
+`transitions_tests` (27), `audiofx_tests` (28), `bruitages_tests` (17) ; les essais de la barre des panneaux et
+des dispositions comptent un panneau de plus ; le projet d'essai de fiabilité contient transitions, effets
+de sons et solo.
