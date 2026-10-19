@@ -2162,6 +2162,22 @@ action = "commentaire.suivant"
 touches = []
 source = "SHOT (sans touche)"
 
+# Bibliothèque de bruitages (sans touche : à choisir).
+[[raccourci]]
+action = "vue.bruitages"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "bruitage.inserer"
+touches = []
+source = "SHOT (sans touche : un double-clic sur le son le pose aussi)"
+
+[[raccourci]]
+action = "bruitage.ecouter"
+touches = []
+source = "SHOT (sans touche : le bouton de la ligne l'écoute aussi)"
+
 # Effets des extraits de son (sans touche : à choisir).
 [[raccourci]]
 action = "son.fondu_entree"

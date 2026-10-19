@@ -555,6 +555,8 @@ pub struct App {
     pub(crate) trans: crate::transitionsui::TransUi,
     /// Effets des extraits de son : clé de volume choisie (`audiofxui.rs`).
     pub(crate) sfx: crate::audiofxui::SoundFxUi,
+    /// La bibliothèque de bruitages : liste, recherche, écoute, sons en cours de pose (`bruitagesui.rs`).
+    pub(crate) brt: crate::bruitagesui::BruitagesUi,
     /// Ce qu'on a cliqué du bouton droit dans la bande de montage.
     pub(crate) menu_target: Option<MenuTarget>,
     pub(crate) history: History,
@@ -1017,6 +1019,7 @@ impl App {
             sel_clip: None,
             trans: Default::default(),
             sfx: Default::default(),
+            brt: Default::default(),
             menu_target: None,
             history: History::default(),
             gesture: Gesture::default(),
@@ -3161,6 +3164,10 @@ impl App {
         if self.sound_fx_action(action) {
             return;
         }
+        // Bibliothèque de bruitages (`bruitagesui.rs`).
+        if self.bruitage_action(action) {
+            return;
+        }
         // Suppr vise le commentaire seulement s'il a la main (le dernier clic était sur lui) ;
         // sinon elle suit les règles d'avant (rien sans sélection).
         if action == "edition.supprimer" && self.comment_has_focus() {
@@ -4125,6 +4132,7 @@ impl App {
             self.tick_open(ctx);
             self.tick_reopen();
             self.poll_brushes();
+            self.poll_bruitages(ctx);
             self.tick_save(ctx);
         }
         // Export en cours : quelques images par image d'écran, la fenêtre reste vivante.

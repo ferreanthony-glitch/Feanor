@@ -78,7 +78,7 @@ impl App {
     // ------------------------------------------------------------------ sortie audio et lecture
 
     /// Sortie audio, ouverte à la première utilisation. `None` : pas de sortie utilisable.
-    fn audio_engine(&mut self) -> Option<&AudioEngine> {
+    pub(crate) fn audio_engine(&mut self) -> Option<&AudioEngine> {
         if self.audio.as_ref().is_some_and(|e| !e.ok()) {
             // Sortie en panne (casque débranché…) : on rouvre la sortie par défaut.
             self.audio = None;
@@ -258,6 +258,12 @@ impl App {
             }
         };
         let start = at.unwrap_or_else(|| self.global_frame());
+        self.place_imported_sound(name, ext, bytes, pcm, track, start);
+    }
+
+    /// Un son lu et décodé entre dans le projet (copié tel quel) et se pose sur une piste : une étape
+    /// d'annulation. Le même chemin pour l'import d'un fichier et pour un bruitage de la bibliothèque.
+    pub(crate) fn place_imported_sound(&mut self, name: String, ext: String, bytes: Vec<u8>, pcm: Pcm, track: Option<usize>, start: usize) {
         let mut clip = None;
         self.audio_op(|d| {
             let sound = d.add_sound(name.clone(), ext, Arc::new(bytes), Arc::new(pcm));

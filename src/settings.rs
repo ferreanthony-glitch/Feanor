@@ -102,6 +102,9 @@ pub struct Settings {
     /// appliqué et réglages d'avant (« Revenir comme avant »).
     #[serde(default, rename = "diagnostic")]
     pub diagnostic: crate::diagnostic::EtatDiagnostic,
+    /// Les dossiers de sons de la bibliothèque de bruitages (`bruitages.rs`).
+    #[serde(default, rename = "bruitages")]
+    pub bruitages: crate::bruitages::BruitagesReglages,
 }
 
 fn default_autosave() -> u32 {
@@ -146,6 +149,7 @@ impl Default for Settings {
             framing: Default::default(),
             perf: Default::default(),
             diagnostic: Default::default(),
+            bruitages: Default::default(),
         }
     }
 }

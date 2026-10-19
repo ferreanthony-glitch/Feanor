@@ -45,6 +45,11 @@ mod audiofx;
 #[cfg(test)]
 mod audiofx_tests;
 mod audiofxui;
+// Bibliothèque de bruitages (panneau Bruitages) : dossiers, recherche, écoute, pose dans le montage.
+mod bruitages;
+#[cfg(test)]
+mod bruitages_tests;
+mod bruitagesui;
 mod barrepanneaux;
 #[cfg(test)]
 mod barrepanneaux_tests;

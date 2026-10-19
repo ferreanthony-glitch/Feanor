@@ -161,8 +161,7 @@ pub struct MixClip {
 }
 
 impl MixClip {
-    /// Un extrait sans effet (essais).
-    #[cfg(test)]
+    /// Un extrait sans effet.
     pub fn plain(pcm: Arc<Pcm>, start: u64, offset: u64, len: u64, gain: f32) -> MixClip {
         MixClip { pcm, start, offset, len, gain, env: None }
     }

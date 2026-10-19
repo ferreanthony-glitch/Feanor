@@ -581,6 +581,7 @@ impl App {
             }
         };
         item(self, ui, "Importer un son…", "son.importer");
+        item(self, ui, "Bruitages…", "vue.bruitages");
         item(self, ui, "Nouvelle piste son", "son.nouvelle_piste");
         item(self, ui, "Couper le son à l'image courante", "son.couper");
         if let Some(id) = self.sel_clip.filter(|&id| self.doc.clip(id).is_some()) {
@@ -981,6 +982,8 @@ impl App {
         self.paint_track_rows(&painter, r, &blocks, ppf, rows, lit, &drops);
         self.paint_lanes(&painter, r, left, ppf, lanes_top, theme::contour());
         self.paint_transitions(&painter, &badges);
+        // Un bruitage glissé depuis le panneau Bruitages : il se pose là où on le lâche.
+        self.bruitage_drop(ui, &resp, left, ppf, lanes_top);
 
         let panel_at = |x: f32| blocks.iter().position(|b| x >= b.left() - 1.0 && x <= b.right() + 1.0);
         // Le bord d'un plan sous le point : son début ou sa fin (`rognageui::edge_hit`).

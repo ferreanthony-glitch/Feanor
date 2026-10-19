@@ -406,6 +406,8 @@ impl App {
             let start = self.doc.panel_start(self.cur_panel);
             let left = r.left() - start as f32 * cell;
             let fps = self.doc.fps;
+            // Un bruitage glissé depuis le panneau Bruitages se pose ici (`bruitagesui.rs`).
+            self.bruitage_drop_row(ui, row, left, cell);
             for track in &self.doc.audio_tracks {
                 // (Muette, ou une autre piste en solo : estompée.)
                 let color = if !crate::audiofx::audible(&self.doc, track) {

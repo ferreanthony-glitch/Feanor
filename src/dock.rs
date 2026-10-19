@@ -68,6 +68,11 @@ pub enum Pane {
     /// colonne de droite, en onglet avec les calques.
     #[serde(rename = "commentaires")]
     Comments,
+    /// La bibliothèque de bruitages (`bruitages.rs`) : les dossiers de sons de l'utilisateur, à
+    /// chercher, écouter et poser dans le montage. Fermé dans la disposition par défaut ; il s'ouvre
+    /// dans la colonne de droite, en onglet avec les calques.
+    #[serde(rename = "bruitages")]
+    Bruitages,
 }
 
 /// Où un panneau se range quand on le rouvre.
@@ -83,7 +88,7 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 13] = [
+    pub const ALL: [Pane; 14] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
@@ -97,11 +102,12 @@ impl Pane {
         Pane::Effects,
         Pane::History,
         Pane::Comments,
+        Pane::Bruitages,
     ];
 
     /// Les panneaux fermés dans la disposition par défaut, qui ne s'ouvrent qu'à la demande.
     pub fn on_demand(self) -> bool {
-        matches!(self, Pane::XSheet | Pane::History | Pane::Comments)
+        matches!(self, Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages)
     }
 
     /// Les panneaux qui n'existent qu'en animation (Anthony, 2026-10-18 : « Exposition n'est
@@ -128,6 +134,7 @@ impl Pane {
             Pane::Effects => "Effets",
             Pane::History => "Historique",
             Pane::Comments => "Commentaires",
+            Pane::Bruitages => "Bruitages",
         }
     }
 
@@ -159,6 +166,7 @@ impl Pane {
             Pane::Effects => ph::MAGIC_WAND,
             Pane::History => ph::CLOCK_COUNTER_CLOCKWISE,
             Pane::Comments => ph::CHAT_TEXT,
+            Pane::Bruitages => ph::WAVEFORM,
         }
     }
 
@@ -166,7 +174,7 @@ impl Pane {
         match self {
             Pane::Canvas => Group::Center,
             Pane::Tools | Pane::Color | Pane::Brushes | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet => Group::Left,
-            Pane::Layers | Pane::XSheet | Pane::Effects | Pane::History | Pane::Comments => Group::Right,
+            Pane::Layers | Pane::XSheet | Pane::Effects | Pane::History | Pane::Comments | Pane::Bruitages => Group::Right,
             Pane::Montage | Pane::Timeline => Group::Bottom,
         }
     }

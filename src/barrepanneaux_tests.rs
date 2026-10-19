@@ -10,7 +10,7 @@ fn panes() -> Vec<Pane> {
 }
 
 #[test]
-fn the_bar_has_the_ten_side_panels_in_order() {
+fn the_bar_has_the_eleven_side_panels_in_order() {
     assert_eq!(
         panes(),
         vec![
@@ -24,19 +24,20 @@ fn the_bar_has_the_ten_side_panels_in_order() {
             Pane::XSheet,
             Pane::Comments,
             Pane::History,
+            Pane::Bruitages,
         ]
     );
-    // Trois groupes : le dessin, le plan, puis les commentaires et l'historique.
-    assert_eq!(GROUPES.iter().map(|g| g.len()).collect::<Vec<_>>(), vec![4, 4, 2]);
+    // Trois groupes : le dessin, le plan, puis les commentaires, l'historique et les bruitages.
+    assert_eq!(GROUPES.iter().map(|g| g.len()).collect::<Vec<_>>(), vec![4, 4, 3]);
 }
 
 #[test]
 fn the_exposure_sheet_icon_is_only_there_in_animation() {
     use crate::barrepanneaux::icones;
     let panes = |animation: bool| icones(animation).into_iter().flatten().map(|e| e.pane).collect::<Vec<_>>();
-    assert_eq!(panes(true), self::panes(), "en animation : les dix icônes");
+    assert_eq!(panes(true), self::panes(), "en animation : les onze icônes");
     let storyboard = panes(false);
-    assert_eq!(storyboard.len(), 9);
+    assert_eq!(storyboard.len(), 10);
     assert!(!storyboard.contains(&Pane::XSheet), "pas de feuille d'exposition en storyboard");
     assert!(storyboard.contains(&Pane::Sheet) && storyboard.contains(&Pane::History) && storyboard.contains(&Pane::Comments));
     // Les trois groupes restent là (aucun ne s'est vidé).
