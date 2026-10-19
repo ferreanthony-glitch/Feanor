@@ -68,7 +68,7 @@ impl egui_dock::TabViewer for Panes<'_> {
             // Calques : l'en-tête (mode, opacité, commandes) reste en haut, seule la liste défile
             // (`layers_panel`). L'historique défile seul, pour rester sur la dernière étape. Pinceaux : la
             // taille et les onglets restent en haut, les boutons en bas, la liste défile entre les deux.
-            Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::XSheet | Pane::Layers | Pane::History | Pane::Brushes | Pane::Comments => [false, false],
+            Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::XSheet | Pane::Layers | Pane::History | Pane::Brushes | Pane::Comments | Pane::References => [false, false],
             _ => [false, true],
         }
     }
@@ -111,6 +111,10 @@ impl App {
         if !matches!(pane, Pane::Canvas | Pane::Montage | Pane::Timeline | Pane::XSheet) {
             fit_to_pane(ui);
         }
+        // Références : la place du panneau docké (pour y recevoir les fichiers lâchés, `referencesui.rs`).
+        if pane == Pane::References && ui.ctx().viewport_id() == egui::ViewportId::ROOT {
+            self.refs.pane_rect = Some(ui.max_rect());
+        }
         match pane {
             Pane::Canvas => {
                 ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::fond());
@@ -152,6 +156,7 @@ impl App {
             }
             Pane::History => self.history_panel(ui),
             Pane::Comments => self.comments_panel(ui),
+            Pane::References => self.references_panel(ui),
         }
     }
 
@@ -169,6 +174,8 @@ impl App {
     /// Les panneaux, sous la barre de menus et au-dessus de la barre d'état ; puis ceux qui ont
     /// leur propre fenêtre.
     pub(crate) fn show_dock(&mut self, ctx: &egui::Context) {
+        // (Le panneau Références se redit à chaque image où il est dessiné ici.)
+        self.refs.pane_rect = None;
         let mut state = self.dock.take().unwrap_or_else(|| dock::to_state(&self.layout.dock_layout()));
         // La bande suit l'image courante ; ce que l'on fait pendant l'affichage se suit à l'image
         // d'écran d'après.
@@ -209,11 +216,15 @@ impl App {
             } else {
                 builder = builder.with_inner_size([300.0, 420.0]);
             }
+            // Références : « toujours au-dessus » pour la garder à l'œil sur un autre écran.
+            if d.panneau == Pane::References && self.refs.always_on_top {
+                builder = builder.with_always_on_top();
+            }
             let id = egui::ViewportId::from_hash_of(("panneau détaché", d.panneau));
             let pane = d.panneau;
             let (closed, rect) = ctx.show_viewport_immediate(id, builder, |ctx, _class| {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    if matches!(pane, Pane::Montage | Pane::Timeline | Pane::XSheet | Pane::History | Pane::Comments) {
+                    if matches!(pane, Pane::Montage | Pane::Timeline | Pane::XSheet | Pane::History | Pane::Comments | Pane::References) {
                         self.pane_ui(ui, pane);
                     } else {
                         egui::ScrollArea::vertical().show(ui, |ui| self.pane_ui(ui, pane));

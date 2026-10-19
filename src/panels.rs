@@ -123,6 +123,8 @@ impl App {
                     }
                     self.action_item(ui, "Une vidéo (calque vidéo)…", "fichier.importer_video");
                     self.action_item(ui, "Une séquence d'images (calque vidéo)…", "fichier.importer_sequence");
+                    self.action_item(ui, "Des images comme références…", "references.importer_image");
+                    self.action_item(ui, "Une vidéo comme référence…", "references.importer_video");
                     self.action_item(ui, "Un modèle 3D (glTF) comme repère…", "fichier.importer_modele3d");
                     ui.separator();
                     self.action_item(ui, "Un projet Storyboard Pro (.sboard)…", "fichier.importer_sboard");

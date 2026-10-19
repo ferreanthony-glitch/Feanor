@@ -60,6 +60,11 @@ Elles sont dans la palette (Ctrl+K) et au clic droit « Assigner un raccourci…
 `fx.panneau`, `vue.calques`, `vue.couleur`, `lecture.boucle`, `plan.avancer` / `reculer`,
 `panneau.dupliquer`, `dessin.vider`. **Rien n'a été posé** : ce sont des choix d'Anthony (partie 6.2).
 
+Le panneau Références (`vue.references`, `references.importer_image`, `references.importer_video`,
+`references.coller`, `references.supprimer`, `references.lier_plan`, `references.filtre_plan`,
+`references.tout_voir`) n'a pas de touche non plus ; Ctrl+V et Suppr y agissent quand le panneau a la
+main (le dernier clic y était), comme pour les panneaux Effets et Commentaires.
+
 ### Fichier complété
 
 60 commandes n'avaient pas de bloc dans `keymap.toml` (exports, panneaux, commentaires, aides au
@@ -422,6 +427,11 @@ Rien de cette passe n'a été regardé : aucun lancement de SHOT (consigne). À 
 7. **Camera** : le cadre de la caméra a la couleur de la palette (jaune dans les thèmes sombres,
    brun ocre dans Gris clair).
 8. **Palette Ctrl+K** : pas de double.
+9. **Panneau Références** (icône de la barre des panneaux, une de plus : onze) : déposer des images
+   sur le panneau, Ctrl+V d'une image copiée dans un navigateur, glisser / agrandir / tourner une
+   référence, Alt+clic = pipette, lecture d'une vidéo et « suivre la tête de lecture », puis « Dans
+   une fenêtre à part » sur un deuxième écran avec « Toujours au-dessus » (les fichiers y sont lâchés
+   dans la fenêtre à part elle-même). La bulle de chaque icône vient de `bulles.rs`.
 
 ### Essais ajoutés
 

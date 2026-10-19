@@ -844,6 +844,8 @@ pub struct Structure {
     /// Ce que le rognage a mis de côté, par numéro de plan (`rognage.rs`) : l'annulation le
     /// rétablit avec le reste.
     pub reserves: std::collections::BTreeMap<u64, crate::rognage::Reserve>,
+    /// Références visuelles (`references.rs`) : ajouter, retirer, déplacer s'annulent avec le reste.
+    pub references: Vec<crate::references::Reference>,
 }
 
 pub struct Document {
@@ -891,6 +893,9 @@ pub struct Document {
     /// Contenu rogné hors des plans, rangé par numéro de plan (`rognage.rs`) ; enregistré à côté du
     /// manifeste, dans `rognages.json`.
     pub reserves: std::collections::BTreeMap<u64, crate::rognage::Reserve>,
+    /// Références visuelles du projet (`references.rs`) ; enregistrées à côté du manifeste, dans
+    /// `references.json`, leurs fichiers dans `references/`.
+    pub references: Vec<crate::references::Reference>,
     next_id: u64,
 }
 
@@ -934,6 +939,7 @@ impl Document {
             properties: Properties::default(),
             comments: Vec::new(),
             reserves: Default::default(),
+            references: Vec::new(),
             next_id: 1,
         };
         let seq = doc.new_sequence();
@@ -960,6 +966,7 @@ impl Document {
             .chain(structure.audio_tracks.iter().map(|t| t.id))
             .chain(structure.audio_tracks.iter().flat_map(|t| t.clips.iter().map(|c| c.id)))
             .chain(structure.comments.iter().map(|c| c.id))
+            .chain(structure.references.iter().map(|r| r.id))
             .chain(cels.keys().copied())
             .chain(sounds.keys().copied())
             .max()
@@ -988,6 +995,7 @@ impl Document {
             properties: structure.properties,
             comments: structure.comments,
             reserves: structure.reserves,
+            references: structure.references,
             next_id: max_id + 1,
         };
         doc.normalize();
@@ -1163,6 +1171,7 @@ impl Document {
             properties: self.properties.clone(),
             comments: self.comments.clone(),
             reserves: self.reserves.clone(),
+            references: self.references.clone(),
         }
     }
 
@@ -1191,6 +1200,7 @@ impl Document {
             properties: std::mem::replace(&mut self.properties, s.properties),
             comments: std::mem::replace(&mut self.comments, s.comments),
             reserves: std::mem::replace(&mut self.reserves, s.reserves),
+            references: std::mem::replace(&mut self.references, s.references),
         }
     }
 
@@ -1378,6 +1388,8 @@ impl Document {
         self.sequences.retain(|q| seq_order.contains(&q.id));
         // Un plan retiré emporte ses commentaires (l'annulation les ramène avec lui).
         self.prune_comments();
+        // Les références liées à un plan retiré ne le sont plus (elles restent sur le tableau).
+        self.prune_references();
     }
 
     // ---------------------------------------------------------------- opérations de montage
@@ -1669,6 +1681,7 @@ impl Document {
         let a_len = self.panels[index].frame_count();
         // Les commentaires du suivant suivent ses images.
         self.rehome_comments(next.id, self.panels[index].id, next_len, a_len);
+        self.rehome_references(next.id, self.panels[index].id);
         let a = &mut self.panels[index];
         a.camera = camera::join_keys(&a.camera, a_len, cam_a, &next.camera, next_len, cam_b);
         // Les calques de toute la scène sont déjà dans le premier : seuls les autres se suivent,
@@ -2081,6 +2094,7 @@ impl Document {
         let b_len = b.frame_count();
         // Les commentaires de `b` suivent ses images, au bout du plan.
         self.rehome_comments(b.id, self.panels[index].id, b_len, a_len);
+        self.rehome_references(b.id, self.panels[index].id);
         let a = &mut self.panels[index];
 
         // Caméra : chaque partie tient sa caméra jusqu'à ses bords.

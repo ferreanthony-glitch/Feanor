@@ -925,7 +925,7 @@ les panneaux à leur contenu » coupe le tout.
 
 Une fine bande d'icônes sur le bord droit de la fenêtre, une par panneau de côté : réglages de
 l'outil, pinceaux, couleur, guides ; calques, effets, fiche du plan, feuille d'exposition ;
-commentaires, historique. Un clic sur une icône ouvre le panneau, devant les onglets de son groupe. S'il est
+commentaires, historique, références. Un clic sur une icône ouvre le panneau, devant les onglets de son groupe. S'il est
 ouvert mais caché derrière un autre onglet, le clic le met devant ; s'il est visible, le clic le
 ferme. L'icône est enfoncée tant que le panneau est dans l'espace de travail. La bulle d'une
 icône donne son nom et son raccourci ; clic droit > « Assigner un raccourci… » (chaque icône est
@@ -966,6 +966,48 @@ ou le réunit à un autre.
   dans Fichier > Préférences… > Commentaires.
 - Enregistrés dans `commentaires.json`, à côté du manifeste du projet (le format du projet ne
   change pas) ; chaque changement s'annule et se rétablit.
+
+## Références visuelles
+
+Le panneau **Références** (icône dans la barre des panneaux, action `vue.references`, fermé par défaut)
+est un tableau libre d'images et de vidéos à regarder en dessinant. Clic droit sur son onglet >
+« Dans une fenêtre à part » : une vraie fenêtre, pour un deuxième écran (le bouton « Toujours
+au-dessus » y garde la fenêtre devant les autres).
+
+- **Ajouter** : les boutons du haut (images PNG ou JPEG, vidéo, coller), des fichiers déposés sur le
+  panneau, ou Ctrl+V quand le panneau a la main (l'image du presse-papiers de Windows : navigateur,
+  capture…). Fichier > Importer propose aussi les deux premiers. Les images sont copiées dans le projet
+  sur un autre fil ; une vidéo est extraite en images par ffmpeg, en arrière-plan (le même chemin que
+  les calques vidéo, limitée à 1280×720). WebP n'est pas lu (le programme n'a pas ce décodeur).
+- **Tableau** : glisser le fond (ou le bouton du milieu) pour se déplacer, la molette pour zoomer,
+  glisser une référence pour la placer, un coin pour l'agrandir, la poignée ronde pour la tourner
+  (Maj : par 15°), Maj+clic pour en choisir plusieurs, double-clic pour la cadrer (sur le fond :
+  tout voir). Les boutons de la ligne du dessous règlent la référence choisie : ajuster, 100 %,
+  miroirs, niveaux de gris (les valeurs, Rec. 709), nom, échelle, rotation, étiquettes. Trois façons de
+  parcourir : tableau, grille, liste. La recherche trouve les mots du nom ou des étiquettes sans tenir
+  compte des accents.
+- **Couleur** : Alt+clic (ou Alt+glisser) sur une référence prend la couleur vue sous la souris et en
+  fait la couleur courante de SHOT, comme la pipette du dessin (en gris, la valeur du gris).
+- **Vidéo** : lecture / pause, image par image, curseur, entrée et sortie, boucle, vitesse ; « suivre
+  la tête de lecture » montre l'image de la vidéo qui tombe sur l'image courante de SHOT, avec un
+  décalage en images.
+- **Plans** : « Lier au plan courant » (une référence peut aller avec plusieurs plans) ; le bouton en
+  entonnoir ne montre que les références du plan courant (ce qu'on ajoute alors est lié d'office).
+- **Rangement** : `references.json` à côté du manifeste et le dossier `references/` (le format du
+  projet ne change pas). Même protection que les commentaires : un fichier illisible ou d'une version
+  plus récente n'est jamais effacé (il est mis de côté en `.illisible`), et rien n'est effacé de
+  `references/` si `references.json` n'a pas pu être lu. Une image retirée pendant la séance reste dans
+  le dossier (annuler la suppression, même après avoir enregistré, la retrouve). Avant le premier
+  enregistrement, les fichiers attendent dans un dossier temporaire.
+- **Rapidité** : les images se décodent sur deux fils, à la définition que l'écran demande, et restent
+  en mémoire graphique dans un cache dont les moins récemment vues partent d'abord (un huitième du
+  réglage « cache de la carte graphique » du diagnostic des performances, 32 à 512 Mo ; la définition
+  suit le réglage « vignettes »). Au repos, le panneau ne repeint rien.
+- **Annulation** : ajouter, supprimer, déplacer, redimensionner, tourner, retourner, lier, nommer…
+  sont des étapes de l'historique (« Ajouter une référence », « Déplacer les références »…).
+- Actions : `vue.references`, `references.importer_image`, `references.importer_video`,
+  `references.coller`, `references.supprimer`, `references.lier_plan`, `references.filtre_plan`,
+  `references.tout_voir` (aucune touche par défaut ; Ctrl+V et Suppr agissent quand le panneau a la main).
 
 ## Rogner les plans dans le montage
 
@@ -1111,6 +1153,8 @@ Bus/
   modeles/15.pelure3d  les modèles 3D de repère
   commentaires.json    les commentaires de la timeline (absent : aucun commentaire)
   rognages.json        le contenu rogné des plans (absent : rien de rogné)
+  references.json      les références visuelles (absent : aucune)
+  references/16.png    leurs images, copiées telles quelles (une vidéo : un dossier references/17/ d'images 000001.jpg…)
 ```
 
 Si tu enregistres « Bus.pelure » dans `Films`, le fichier est donc dans `Films\Bus\Bus.pelure`, pas
@@ -1311,6 +1355,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `camfx.rs`, `camfxui.rs` | Effets de caméra en préréglages (tremblements, explosion, zooms, vertigo) et liste des focales |
 | `cadrage.rs`, `cadrageui.rs` | Aides au cadrage (tiers, grille d'or, spirale, diagonales, croix) : géométrie, réglages, tracé |
 | `commentaires.rs`, `commentairesui.rs` | Commentaires sur la timeline : modèle, fichier `commentaires.json`, positions ; fanions, bulle, menu, panneau |
+| `references.rs`, `referencesui.rs` | Références visuelles : modèle, fichier `references.json` et dossier `references/`, vue du tableau, filtre, image d'une vidéo selon la tête de lecture, import, cache des images ; panneau (tableau, grille, liste, pipette, lecture) |
 | `rognage.rs`, `rognageui.rs` | Rogner les plans sans rien détruire : réserve du début et de la fin, ripple, roll, glisser, aimantation, durée tapée, fichier `rognages.json` ; bords à la souris, flèches, commandes, fenêtre « Durée… » |
 | `app.rs` | État de l'application, actions, raccourcis |
 | `vtools.rs` | Outils des calques vectoriels |

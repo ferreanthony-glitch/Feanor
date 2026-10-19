@@ -14,9 +14,9 @@ fn count(layout: &DockLayout, pane: Pane) -> usize {
 }
 
 /// Panneaux d'une disposition par défaut : tous, sauf les icônes des outils (barre verticale), la
-/// feuille d'exposition (13g), l'historique et les commentaires (ouverts à la demande).
+/// feuille d'exposition (13g), l'historique, les commentaires et les références (ouverts à la demande).
 fn default_panes() -> impl Iterator<Item = Pane> {
-    Pane::ALL.into_iter().filter(|p| !matches!(p, Pane::Tools | Pane::XSheet | Pane::History | Pane::Comments))
+    Pane::ALL.into_iter().filter(|p| !matches!(p, Pane::Tools | Pane::XSheet | Pane::History | Pane::Comments | Pane::References))
 }
 
 #[test]

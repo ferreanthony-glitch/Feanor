@@ -71,7 +71,7 @@ par l'enregistrement qui suit pour ce que cette version n'a pas su lire.
 | `fiabilite_manifestes_tests` | manifeste vide, coupé, octets quelconques, objet vide, autre format, version plus récente, feuille nulle ou démesurée, aucun plan, absent, BOM |
 | `fiabilite_entrees_tests` | version plus récente (par l'application aussi : message dans la barre d'état, projet en cours intact), 120 troncatures du manifeste, 90 manifestes aux valeurs changées au hasard, 80 fichiers annexes changés ou coupés |
 | `fiabilite_dessins_tests` | dessin manquant, JSON tronqué, PNG tronqué, pas une image, mauvaise taille, en-tête démesuré : un avertissement chacun, fichiers intacts ; 122 PNG coupés ou aux bits changés ; 180 dessins vectoriels aux valeurs changées ; coordonnée de 3,4e38 |
-| `fiabilite_annexes_tests` | `commentaires.json` / `rognages.json` d'une version plus récente ou abîmés ; sons et modèles 3D illisibles |
+| `fiabilite_annexes_tests` | `commentaires.json` / `rognages.json` / `references.json` d'une version plus récente ou abîmés ; sons et modèles 3D illisibles ; images de `references/` jamais effacées quand le fichier est illisible |
 | `fiabilite_raster_tests` | `Raster::get` hors du dessin ; dessins de 5 tailles par toutes les compositions |
 
 ### Défauts trouvés par ces essais, et corrigés (un commit chacun)

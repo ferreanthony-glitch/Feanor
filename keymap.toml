@@ -2162,6 +2162,47 @@ action = "commentaire.suivant"
 touches = []
 source = "SHOT (sans touche)"
 
+# Références visuelles.
+[[raccourci]]
+action = "vue.references"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.importer_image"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.importer_video"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.coller"
+touches = []
+source = "SHOT (sans touche : Ctrl+V dans le panneau Références colle l'image du presse-papiers)"
+
+[[raccourci]]
+action = "references.supprimer"
+touches = []
+source = "SHOT (sans touche : Suppr dans le panneau Références supprime les références choisies)"
+
+[[raccourci]]
+action = "references.lier_plan"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.filtre_plan"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.tout_voir"
+touches = []
+source = "SHOT (sans touche)"
+
 # Effets, propagation, caméra, aides au cadrage.
 [[raccourci]]
 action = "fx.choisir_aucun"
