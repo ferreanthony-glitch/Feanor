@@ -116,7 +116,7 @@ dans `...\Pelure` y est copié (jamais déplacé ni supprimé) s'il n'y a pas en
 
 Chaque plan a ses calques, de deux sortes :
 
-- **Vectoriel** (V, par défaut, façon Storyboard Pro) : les traits restent des objets modifiables.
+- **Vectoriel** (Maj+S pour en créer un, par défaut, façon Storyboard Pro) : les traits restent des objets modifiables.
   - Pinceau et crayon tracent des traits à épaisseur variable (pression du stylet comprise).
     Deux interrupteurs en haut de leurs réglages, aussi sur un calque bitmap : **Peint derrière**
     (la peinture passe sous ce qui est déjà dessiné) et **Remplir la forme** (au lâcher, un trait
@@ -154,7 +154,7 @@ Chaque plan a ses calques, de deux sortes :
     d'état et les Réglages disent lesquels et pourquoi (« 3 calques, 42 éléments »). L'outil
     **Transformer** déplace, tourne et agrandit (un coin) de même les calques choisis ensemble ;
     l'outil **Déformer** reste sur le calque courant seul (il le dit).
-- **Bitmap** (B, façon TVPaint) : peinture en pixels, avec le pinceau, le crayon (anticrénelé ;
+- **Bitmap** (Maj+B pour en créer un, façon TVPaint) : peinture en pixels, avec le pinceau, le crayon (anticrénelé ;
   « Pixels nets » pour le pixel art), la gomme, le remplissage avec débord sous le trait et
   l'import d'images PNG/JPEG.
   - L'outil Sélection y découpe une zone au lasso ou au rectangle (Maj : ajouter). On la déplace
@@ -1003,7 +1003,32 @@ qu'il reste du contenu caché de ce côté).
 
 Ctrl+K (ou Aide > Palette de commandes) : tape quelques lettres du nom d'une commande (« persp »,
 « retourner », « flou »), la palette propose les commandes avec leur raccourci. Flèches pour
-choisir, Entrée pour lancer, Échap pour fermer.
+choisir, Entrée pour lancer, Échap pour fermer. Chaque commande y est une fois, sous son nom (les doubles
+`scene.*` des commandes de plan n'y sont pas).
+
+## Passe d'interface (2026-10-19) : un mot par idée, les mêmes gestes pour les trois sortes de clés
+
+Détail et propositions : `docs/INTERFACE.md`.
+
+- **Vocabulaire** : plan (et non scène), clé / clé de caméra / clé d'effet (et non « image clé »),
+  choisir (calques, images, clés, plans) et sélectionner (éléments d'un dessin), Réglages (et non
+  options), Supprimer un objet / Retirer une propriété / Effacer du dessin, pelure d'oignon, aides au
+  cadrage.
+- **Clés de dessins, de caméra, d'effets** : le même menu du clic droit (Copier, Coller, Coller à la tête de
+  lecture, Supprimer, Choisir toutes les clés), le même choix (clic, Ctrl + clic, Maj + clic, rectangle :
+  Maj ajoute, Ctrl bascule), Ctrl+A pour toutes celles de la sorte qui a la main.
+- **Plusieurs clés de plusieurs calques** (montage) : le rectangle couvre toutes les rangées qu'il touche ; Maj
+  + clic prend le rectangle entre la clé de départ et celle cliquée ; glisser les emmène toutes, calque par
+  calque ; Ctrl+V garde chaque clé sur son calque **relativement au plus haut calque copié** (celui-ci sur le
+  calque courant, les autres dessous, calques créés au besoin) ; la barre d'état dit « 12 clés sur 3
+  calques ».
+- **Ctrl+Maj + outil Sélection** (lasso, rectangle ou clic sur le dessin) : prend sur **tous** les calques
+  du plan à l'image courante (visibles, déverrouillés, non vidéo), comme dans Storyboard Pro ; leurs clés se
+  choisissent aussi dans le montage. Ctrl seul et Maj seul gardent leur sens.
+- **Zoom de la bande** (montage et timeline) : le curseur, les boutons, Alt+1 / Alt+2 et Ctrl + molette
+  gardent la tête de lecture au même endroit de l'écran ; hors de la vue, elle vient d'abord au milieu.
+- **Icônes allumées** : une icône de bouton allumé (boucle, outil actif, aimant, vue…) prend la couleur
+  lisible sur l'accent, dans tous les thèmes.
 
 ## Projets récents
 
@@ -1237,6 +1262,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `pdf.rs` | Écriture du PDF de storyboard : texte, images, mise en page |
 | `settings.rs` | Réglages de l'application (emplacement de ffmpeg) |
 | `camera.rs`, `camtools.rs` | Caméra du panneau : images clés, adoucis, avancée, focale ; outil Caméra, sa fenêtre, vue caméra |
+| `clescommun.rs` | Ce que les clés de dessins, de caméra et d'effets ont en commun : menu du clic droit, règle de choix (clic, Ctrl, Maj, rectangle) |
+| `zoombande.rs` | Zoom du montage et de la timeline calé sur la tête de lecture |
 | `viewbar.rs`, `frames.rs` | Barre au-dessus du dessin (plateau / caméra / 3D) ; zones de sécurité, cadre de format |
 | `stage3d.rs`, `stage3dui.rs` | Plateau en 3D : géométrie (plans, caméra, rayons) ; affichage, navigation, outil Déplacer |
 | `layertools.rs` | Outil Transformer (calque entier) |

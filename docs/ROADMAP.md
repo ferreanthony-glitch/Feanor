@@ -2432,6 +2432,37 @@ l'écran ; essais `multisel_tests.rs`). Pas vu à l'écran dans cette séance : 
   posées à chaque geste, elles s'oublient en changeant d'outil), les traits vectoriels restent choisis ;
   la boîte est l'enveloppe droite des parts sur la feuille (un calque tourné la fait grossir).
 
+## Passe d'interface : simplicité et cohérence (2026-10-19, branche `simplicite`) ✅
+
+Relecture d'ensemble de l'interface (menus, barres, bulles, raccourcis, clic droit) ; le détail, les
+tableaux et les propositions sont dans **`docs/INTERFACE.md`**. Pas vu à l'écran dans cette séance.
+
+- ✅ **Raccourcis** : plus aucune touche partagée dans un même contexte, même « en réserve » (Suppr et
+  Maj+Suppr volées par deux commandes pas encore faites) ; chaque commande a un bloc dans `keymap.toml` et un
+  nom français net ; la palette Ctrl+K ne montre plus les doubles `scene.*`. Aucun raccourci d'Anthony changé.
+- ✅ **Vocabulaire** : un glossaire (plan, clé / clé de caméra / clé d'effet, choisir / sélectionner, effet,
+  Réglages, Supprimer / Retirer / Effacer, pelure d'oignon, aides au cadrage) appliqué aux étiquettes, aux
+  bulles et aux messages ; chemins de menu périmés corrigés.
+- ✅ **Bulles et couleurs** : les icônes sans bulle passent par `bulles.rs` ; les couleurs de surimpression
+  (poignées, cadres, décor, caméra) sont écrites une fois dans `theme.rs`.
+- ✅ **Icônes allumées lisibles** : un bouton d'état allumé dessine son icône avec `theme::sur_accent`
+  dans tous les thèmes (`bulles::symbole_etat` / `encre_etat`), les noms en gras des choix aussi (nom
+  d'un effet choisi, onglets, modes) ; un essai interdit de l'oublier.
+- ✅ **Les trois sortes de clés** (`clescommun.rs`) : même menu du clic droit (Copier, Coller, Coller à la
+  tête, Supprimer, Choisir toutes), même règle de choix (clic, Ctrl, Maj, rectangle), Ctrl+A pour les clés de
+  caméra et d'effets.
+- ✅ **Plusieurs clés de plusieurs calques** (demande d'Anthony) : rectangle sur toutes les rangées couvertes
+  (Ctrl bascule, Maj ajoute), Maj + clic en rectangle entre la clé de départ et celle cliquée, collage relatif
+  au calque courant (le plus haut calque copié va sur le calque courant, les autres dessous, calques créés
+  si besoin), « 12 clés sur 3 calques » dans la barre d'état. **Ctrl+Maj + outil Sélection** sur le canevas :
+  prend sur tous les calques du plan (Storyboard Pro) et choisit leurs clés dans le montage.
+- ✅ **Zoom de la bande sur la tête de lecture** (`zoombande.rs`) : curseur, boutons, raccourcis et Ctrl +
+  molette gardent la tête de lecture au même endroit de l'écran (hors vue : d'abord au milieu).
+- Proposé, pas fait (INTERFACE.md, partie 6) : espaces de travail par tâche, préréglage de raccourcis façon
+  Storyboard Pro, barres par défaut plus minces. Reste aussi : choisir des clés au rectangle sur la timeline
+  de l'animation (l'unité y est l'image), un rectangle pour les clés d'effets, les 150 infobulles d'egui
+  restantes, « Arrière-plan » / « Fond » / « Propriétés du plan ».
+
 ## Fiabilité : un filet contre « tous les essais passent, SHOT ne s'ouvre plus » (2026-10-19, branche `fiabilite`) ✅
 
 Le point de départ : le 2026-10-18 SHOT ne s'ouvrait plus (`raster.rs:57`, l'aperçu réduit d'un effet lu comme une
