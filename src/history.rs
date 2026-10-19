@@ -173,6 +173,25 @@ impl History {
         }
     }
 
+    /// Ajoute `edit` à la dernière étape, qui devient un groupe (aux flèches tenues : chaque
+    /// appui garde son propre retour en arrière, et une seule étape les annule tous). Sans étape
+    /// à prolonger, c'est un `push`.
+    pub fn extend_last(&mut self, edit: Edit) {
+        let Some(last) = self.undo.pop() else {
+            self.push(edit);
+            return;
+        };
+        let mut edits = match last {
+            Edit::Group(edits) => edits,
+            single => vec![single],
+        };
+        edits.push(edit);
+        self.undo.push(Edit::Group(edits));
+        self.redo.clear();
+        self.redo_names.clear();
+        self.serial += 1;
+    }
+
     pub fn undo(&mut self, doc: &mut Document, nav: &mut Nav) -> bool {
         let Some(edit) = self.undo.pop() else {
             return false;

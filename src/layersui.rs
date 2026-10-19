@@ -266,6 +266,7 @@ impl App {
         // pour savoir où elle se pose.
         let list_top = ui.cursor().top();
         let mut drag_rows: Vec<crate::layerheads::Row> = Vec::new();
+        let several = self.chosen_layers().len() >= 2;
         for li in (0..self.layers().len()).rev() {
             let (id, visible, locked, kind, name, cel, folder, ctg, has_fond) = {
                 let l = &self.layers()[li];
@@ -351,7 +352,17 @@ impl App {
                                 LayerKind::Bitmap => "bitmap",
                             };
                             let label = RichText::new(kind).small();
-                            ui.label(if folder || current { label.weak() } else { label.color(hue) });
+                            ui.horizontal(|ui| {
+                                ui.spacing_mut().item_spacing.x = 4.0;
+                                ui.label(if folder || current { label.weak() } else { label.color(hue) });
+                                // Plusieurs calques choisis : une marque pour chacun, et une autre
+                                // pour le courant (c'est lui que les réglages montrent).
+                                if several && current {
+                                    ui.label(RichText::new(ph::TARGET).small()).on_hover_text("Calque courant : celui des réglages. Les autres calques choisis portent une coche.");
+                                } else if several && chosen {
+                                    ui.label(RichText::new(ph::CHECK_CIRCLE).small().color(hue)).on_hover_text("Calque choisi avec les autres (Ctrl ou Maj + clic) : les commandes sur plusieurs calques, la sélection et l'outil Transformer le prennent.");
+                                }
+                            });
                             // Fond sous le trait (`fondui.rs`) : sur le calque courant, où peint le
                             // pinceau (le trait ou le fond) ; sur les autres, qu'il en a un.
                             if has_fond && current {

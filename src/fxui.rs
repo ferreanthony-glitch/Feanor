@@ -64,6 +64,8 @@ impl App {
             || self.vsel.as_ref().is_some_and(|s| !s.items.is_empty())
             || self.vdrag.is_some()
             || self.flottante.is_some()
+            || self.multi.sel.is_some()
+            || !self.multi.floats.is_empty()
             || self.cut_gesture.is_some()
             || self.envelope.is_some()
             || self.persp.is_some()

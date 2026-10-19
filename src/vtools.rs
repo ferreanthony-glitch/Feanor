@@ -353,6 +353,8 @@ impl App {
     // ------------------------------------------------------------------ sélection
 
     pub(crate) fn select_press(&mut self, p: Pos2, screen: Pos2, shift: bool) {
+        // Un seul calque : la sélection sur plusieurs calques s'efface (`multitools.rs`).
+        self.drop_multi();
         if !self.layer().drawable() {
             self.layer_editable();
             return;
@@ -480,7 +482,8 @@ impl App {
     /// (clic, touche) avant qu'il arrive, on met d'abord l'image du dessin à jour, à l'ancienne,
     /// pour que tout ce qui suit parte d'une image juste.
     pub(crate) fn flush_flottante_on_input(&mut self, ctx: &eframe::egui::Context) {
-        if !self.flottante.as_ref().is_some_and(|f| f.pending.is_some()) {
+        let multi_pending = self.multi.has_pending();
+        if !self.flottante.as_ref().is_some_and(|f| f.pending.is_some()) && !multi_pending {
             return;
         }
         use eframe::egui::{Event, Key};
@@ -499,6 +502,7 @@ impl App {
         });
         if acts {
             self.flush_flottante();
+            self.multi_flush();
         }
     }
 
@@ -619,6 +623,11 @@ impl App {
     }
 
     pub(crate) fn select_all(&mut self) {
+        // Plusieurs calques choisis : tout ce que contient leur dessin de l'image courante.
+        if self.chosen_layers().len() >= 2 {
+            self.multi_select_all();
+            return;
+        }
         if self.layer().kind != LayerKind::Vector {
             self.bitmap_select_all();
             return;
@@ -644,6 +653,8 @@ impl App {
         self.ctx
             .copy_text(format!("SHOT : {} élément(s) vectoriel(s)", items.len()));
         self.clipboard = items;
+        // (La dernière copie est celle-ci : plus celle d'une sélection sur plusieurs calques.)
+        self.multi.clip = None;
         true
     }
 

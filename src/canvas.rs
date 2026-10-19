@@ -342,9 +342,14 @@ impl App {
                         Tool::Text => self.text_press(p),
                         // Déformer : l'enveloppe de Bézier ou la perspective (`envelopetools.rs`,
                         // `perstools.rs`).
-                        Tool::Perspective => self.deform_press(p, *pos),
+                        Tool::Perspective => {
+                            self.deform_many_note();
+                            self.deform_press(p, *pos)
+                        }
                         // La boîte de la sélection : déplacer, échelle, rotation, inclinaison, pivot
-                        // (`seltools.rs`).
+                        // (`seltools.rs`). Avec plusieurs calques choisis, le lasso prend sur tous
+                        // et la boîte les entoure (`multitools.rs`).
+                        Tool::Select if self.multi_wanted() => self.multi_press(stage, *pos, modifiers.shift),
                         Tool::Select => self.select_press(p, *pos, modifiers.shift),
                         Tool::SelectColor => self.color_select_press(p, *pos, modifiers.shift),
                         Tool::Cutter => self.cutter_press(p),
@@ -384,6 +389,8 @@ impl App {
                     } else if self.shape_bend_move(p) {
                     } else if let Some((_, end)) = &mut self.shape_drag {
                         *end = p;
+                    } else if self.multi.drag.is_some() {
+                        self.multi_drag(stage, mods.shift, mods.command || mods.ctrl);
                     } else if self.vdrag.is_some() {
                         self.select_drag(p, mods.shift, mods.command || mods.ctrl);
                     } else if self.bdrag.is_some() {
@@ -407,6 +414,9 @@ impl App {
                     self.shape_release(mods.shift);
                     self.persp_release();
                     self.envelope_release();
+                    if self.multi.drag.is_some() {
+                        self.multi_finish_drag();
+                    }
                     if self.vdrag.is_some() {
                         self.finish_vdrag(mods.shift);
                     }
@@ -470,6 +480,10 @@ impl App {
             painter.extend(Shape::dashed_line(&pts, Stroke::new(1.0_f32, Color32::BLACK), 5.0, 5.0));
         }
 
+        // Sélection sur plusieurs calques : lasso, contours de chaque calque et boîte commune.
+        if self.paint_multi_overlay(painter) {
+            return;
+        }
         if self.sel_frame().is_none() {
             return;
         }

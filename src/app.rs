@@ -557,6 +557,9 @@ pub struct App {
     /// Contours à l'écran de la sélection vectorielle, gardés d'une image à l'autre
     /// (`contours.rs`) ; dans une `RefCell` : la peinture n'a que `&self`.
     pub(crate) sel_contours: std::cell::RefCell<Option<crate::contours::Contours>>,
+    /// Sélection sur plusieurs calques choisis, son geste et ses feuilles flottantes
+    /// (`multisel.rs`, `multitools.rs`).
+    pub(crate) multi: crate::multisel::Multi,
     /// Dessins dont le rendu exact est à redemander dès qu'aucun geste n'y travaille (`rejeu.rs`).
     pub(crate) rejeu_again: std::collections::BTreeSet<CelId>,
     /// Pour chaque dessin vectoriel regardé, la version dont on a vérifié que tous les traits
@@ -949,6 +952,7 @@ impl App {
             vdrag: None,
             flottante: None,
             sel_contours: Default::default(),
+            multi: Default::default(),
             rejeu_again: Default::default(),
             rejeu_warm: Default::default(),
             rejeu_deferred: Vec::new(),
@@ -1270,7 +1274,7 @@ impl App {
                     // Pile d'effets du calque (13i).
                     // (Le calque qu'on édite se montre sans tremblement : `boil_editing`.)
                     fx: match crate::fx::layer_steps(layer, frame, rest) {
-                        steps if editing && li == self.cur_layer => crate::fx::without_boil(steps),
+                        steps if editing && (li == self.cur_layer || self.multi.sel.as_ref().is_some_and(|s| s.has_layer(layer.id))) => crate::fx::without_boil(steps),
                         steps => steps,
                     },
                     // Calque CTG (13j) : rempli d'après les traits de ses sources.
@@ -1280,9 +1284,10 @@ impl App {
                 };
                 // Fond sous le trait (`fond.rs`), le trait par-dessus.
                 items.extend(crate::render::fond_item(layer, &line));
-                match self.flottante.as_ref().filter(|f| f.src == cel) {
+                match self.flottante.as_ref().filter(|f| f.src == cel).or_else(|| self.multi.float_for(cel)) {
                     // Sélection vectorielle en cours de transformation : le dessin sans elle, et sa
-                    // feuille flottante par-dessus (`flottante.rs`).
+                    // feuille flottante par-dessus (`flottante.rs`) ; avec plusieurs calques
+                    // choisis, une feuille par calque (`multisel.rs`).
                     Some(f) => items.extend(f.items(&line)),
                     None => items.push(line),
                 }
@@ -1798,6 +1803,9 @@ impl App {
         if self.bdrag.is_some() && !matches!(&self.bdrag, Some(BDrag::Transform { field: true, .. })) {
             self.finish_bdrag();
         }
+        if self.multi.drag.is_some() && !matches!(&self.multi.drag, Some(crate::multisel::MDrag::Transform { field: true, .. })) {
+            self.multi_finish_drag();
+        }
         self.finish_camera_drag();
         self.finish_layer_drag();
         self.finish_ref3d_drag();
@@ -1934,10 +1942,22 @@ impl App {
         if self.playing {
             return;
         }
-        let Some(cel) = self.cel_here() else { return };
+        // Le dessin du calque courant, et ceux des autres calques choisis (une sélection sur
+        // plusieurs calques les saisit tous : `multisel.rs`).
+        let frame = self.cur_frame;
+        let cels: Vec<CelId> = std::iter::once(self.cel_here())
+            .chain(self.layer_sel.iter().filter_map(|id| self.layers().iter().find(|l| l.id == *id)).map(|l| l.cel_at(frame)))
+            .flatten()
+            .collect();
+        for cel in cels {
+            self.warm_cel(cel);
+        }
+    }
+
+    fn warm_cel(&mut self, cel: CelId) {
         let Some(c) = self.doc.cels.get(&cel) else { return };
         let Some(d) = &c.vector else { return };
-        if self.rejeu_warm.get(&cel) == Some(&c.version) || self.cel_busy(cel) || self.rejeu.is_pending(cel) || self.flottante.is_some() {
+        if self.rejeu_warm.get(&cel) == Some(&c.version) || self.cel_busy(cel) || self.rejeu.is_pending(cel) || self.flottante.is_some() || !self.multi.floats.is_empty() {
             return;
         }
         self.rejeu_warm.insert(cel, c.version);
@@ -1952,6 +1972,7 @@ impl App {
             || self.vstroke.as_ref().is_some_and(|s| s.cel == cel)
             || self.verase.as_ref().is_some_and(|e| e.cel == cel)
             || matches!(&self.vdrag, Some(VDrag::Transform { cel: c, .. }) if *c == cel)
+            || self.multi.busy_on(cel)
             || self.envelope.as_ref().is_some_and(|e| e.busy_on(cel))
             || self.persp.as_ref().is_some_and(|e| e.busy_on(cel))
     }
@@ -1992,6 +2013,8 @@ impl App {
             }
             // La feuille flottante d'un geste lâché sur ce dessin laisse la place au rendu exact.
             let waiting = self.flottante.as_ref().is_some_and(|f| f.pending.is_some() && f.src == done.cel);
+            // Les feuilles d'un geste lâché sur plusieurs calques (`multisel.rs`).
+            let waiting_multi = self.multi.floats.iter().any(|f| f.pending.is_some() && f.src == done.cel);
             let Some(c) = self.doc.cels.get(&done.cel) else { continue };
             if !crate::rejeu::adoptable(c, &done) {
                 // Une enveloppe ou une perspective qu'on a reprise avant l'arrivée du rendu : un
@@ -2005,6 +2028,9 @@ impl App {
                 if waiting {
                     self.flush_flottante();
                 }
+                if waiting_multi {
+                    self.multi_settle(done.cel, false);
+                }
                 if vector {
                     self.rejeu_cel(done.cel);
                 }
@@ -2013,6 +2039,9 @@ impl App {
             if waiting {
                 self.flottante = None;
                 crate::flottante::Flottante::release(&mut self.doc);
+            }
+            if waiting_multi {
+                self.multi_settle(done.cel, true);
             }
             let Some(c) = self.doc.cels.get_mut(&done.cel) else { continue };
             let Some(d) = c.vector.as_mut() else { continue };
@@ -2096,6 +2125,25 @@ impl App {
     /// Le geste `key` continue pendant cette image (`gesture_change`).
     pub(crate) fn keep_gesture(&mut self, key: u64) {
         self.gesture.keep(key);
+    }
+
+    /// Enregistre `edits` (les retours en arrière d'un coup sur plusieurs dessins) comme une
+    /// seule étape au nom `name` ; les appuis suivants du même geste `key` (une flèche tenue) se
+    /// joignent à cette étape, qui les annule tous (`History::extend_last`).
+    pub(crate) fn gesture_group(&mut self, key: u64, name: &str, edits: Vec<Edit>) {
+        if edits.is_empty() {
+            return;
+        }
+        let group = Edit::Group(edits);
+        let before = self.history.context.replace(name.to_string());
+        if self.gesture.needs_step(key, self.history.serial()) {
+            self.history.push(group);
+        } else {
+            self.history.extend_last(group);
+        }
+        self.history.context = before;
+        self.gesture.started(key, self.history.serial());
+        self.modified = true;
     }
 
     /// Distance (en pixels du dessin) sous laquelle le bout d'un trait rejoint son début : la
@@ -2461,6 +2509,7 @@ impl App {
         self.end_stroke();
         // Une zone bitmap déplacée est d'abord reposée : l'annulation défait alors ce déplacement.
         self.drop_bitmap_selection();
+        self.multi_before_history();
         let mut nav = Nav {
             panel: self.cur_panel,
             layer: self.cur_layer,
@@ -2477,6 +2526,7 @@ impl App {
         self.plan_len_seen = None;
         self.end_stroke();
         self.drop_bitmap_selection();
+        self.multi_before_history();
         let mut nav = Nav {
             panel: self.cur_panel,
             layer: self.cur_layer,
@@ -2693,6 +2743,7 @@ impl App {
         self.vdrag = None;
         self.flottante = None;
         crate::flottante::Flottante::release(&mut self.doc);
+        self.multi_cancel();
         self.bsel = None;
         self.bdrag = None;
         self.playing = false;
@@ -2728,6 +2779,7 @@ impl App {
         self.vdrag = None;
         self.flottante = None;
         crate::flottante::Flottante::release(&mut self.doc);
+        self.multi_cancel();
         self.bsel = None;
         self.bdrag = None;
         self.history.clear();
@@ -3198,6 +3250,12 @@ impl App {
             // Après un clic dans la grille, sans images choisies : Suppr supprime l'image courante
             // des calques choisis (audit A3) ; le dessin se vide après un clic dans le dessin.
             "edition.supprimer" if self.images_focus && !self.panels_have_focus() => self.delete_images(false),
+            // Une sélection sur plusieurs calques copie, coupe et colle calque par calque.
+            "edition.couper" if self.multi.sel.is_some() => self.multi_cut(),
+            "edition.copier" if self.multi.sel.is_some() => {
+                self.multi_copy();
+            }
+            "edition.coller" if self.multi.clip.is_some() && self.chosen_layers().len() >= 2 => self.multi_paste(),
             "edition.couper" if self.bsel.is_some() => self.bitmap_cut(),
             "edition.couper" => self.cut_selection(),
             "edition.copier" if self.bsel.is_some() => {
@@ -3223,6 +3281,9 @@ impl App {
                     self.delete_clip(id);
                 } else if self.panels_have_focus() {
                     self.delete_chosen_panels();
+                } else if self.multi.sel.is_some() {
+                    // Plusieurs calques : ce qui est choisi sur chacun s'efface, en une étape.
+                    self.multi_delete();
                 } else if self.bsel.is_some() {
                     self.bitmap_erase(true);
                 } else if self.vsel.as_ref().is_some_and(|s| !s.items.is_empty() && Some(s.cel) == self.cel_here()) {
@@ -3238,7 +3299,9 @@ impl App {
             }
             "dessin.vider" => self.clear_image(),
             "dessin.supprimer_hors_selection" => {
-                if self.bsel.is_some() {
+                if self.multi.sel.is_some() {
+                    self.status = "Effacer hors de la sélection se fait sur un seul calque : choisis-en un seul (clic sans Ctrl ni Maj).".into();
+                } else if self.bsel.is_some() {
                     self.bitmap_erase(false);
                 } else if self.vsel.is_some() {
                     self.delete_unselected();
@@ -3253,6 +3316,7 @@ impl App {
                 self.end_stroke();
                 self.vsel = None;
                 self.drop_bitmap_selection();
+                self.drop_multi();
             }
             // Sur la planche (vue Vignettes), le zoom et l'ajustement sont ceux de la planche.
             "vue.zoom_avant" if self.board_shown() => self.board_zoom_step(1.25),
@@ -3326,6 +3390,8 @@ impl App {
             "calque.miroir_h" => self.flip_layer(true),
             "calque.miroir_v" => self.flip_layer(false),
             "plan.retourner" => self.flip_panels(),
+            "selection.miroir_h" if self.multi.sel.is_some() => self.multi_flip(true),
+            "selection.miroir_v" if self.multi.sel.is_some() => self.multi_flip(false),
             "selection.miroir_h" if self.bsel.is_some() => self.bitmap_flip(true),
             "selection.miroir_v" if self.bsel.is_some() => self.bitmap_flip(false),
             "selection.miroir_h" => self.flip_selection(true),
@@ -3931,6 +3997,7 @@ impl App {
         }
         self.validate_selection();
         self.validate_bitmap_selection();
+        self.multi_sync();
         drop(prep);
         {
             let _t = crate::perf::section("arrière-plan (rejeu, fonds)");

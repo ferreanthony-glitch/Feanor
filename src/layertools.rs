@@ -57,9 +57,28 @@ pub(crate) fn stretched(t0: LayerTransform, pivot: Pos2, b: Rect, handle: BoxHan
     LayerTransform { x: t1.x + keep.x, y: t1.y + keep.y, ..t1 }
 }
 
+/// Un calque choisi qui suit l'outil Transformer avec les autres : sa transformation d'avant le
+/// geste, et de combien le défilement multiplan le décale (le point fixe se lit sans lui).
+struct Peer {
+    li: usize,
+    t0: LayerTransform,
+    off: Vec2,
+}
+
+/// Plusieurs calques choisis transformés ensemble (Anthony, 2026-10-19) : déplacer, tourner et
+/// agrandir (un coin, en gardant les proportions) autour de la boîte commune, sur la feuille.
+struct Many {
+    peers: Vec<Peer>,
+    /// La boîte commune au début du geste, et la similitude du geste (sur la feuille) : la boîte
+    /// suit les calques sans grossir quand on tourne.
+    box0: Rect,
+    a: crate::vector::Affine,
+}
+
 pub(crate) struct LayerDrag {
     handle: BoxHandle,
     start: Pos2,
+    many: Option<Many>,
     t0: LayerTransform,
     /// Centre de la boîte dans le repère de la transformation du calque : point fixe de l'échelle
     /// et de la rotation.
@@ -99,14 +118,56 @@ impl App {
             .unwrap_or_else(|| self.doc.frame_rect())
     }
 
+    /// Les calques choisis que l'outil Transformer peut bouger ensemble : ni dossier, ni caché, ni
+    /// verrouillé (eux ou leur dossier), ni de position verrouillée. Moins de deux : l'outil sert
+    /// le calque courant seul.
+    pub(crate) fn transform_peers(&self) -> Vec<usize> {
+        let layers = self.layers();
+        let peers: Vec<usize> = self
+            .chosen_layers()
+            .into_iter()
+            .filter(|&li| layers[li].drawable() && !crate::folders::locked_by_folder(layers, li) && crate::folders::effect(layers, li).is_some())
+            .collect();
+        if peers.len() >= 2 {
+            peers
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// La boîte commune de ces calques sur la feuille : leurs contenus à l'image courante (le cadre
+    /// de la caméra s'ils sont vides).
+    fn many_box(&self, peers: &[usize]) -> Rect {
+        let mut r = Rect::NOTHING;
+        for &li in peers {
+            let (Some(b), Some(m)) = (self.layer_content_box(li, self.cur_frame), crate::multisel::layer_to_stage(&self.doc, self.cur_panel, self.cur_frame, li)) else { continue };
+            r = r.union(m.apply_rect(b));
+        }
+        if r.is_finite() && r.width() > 0.0 && r.height() > 0.0 {
+            r
+        } else {
+            self.doc.frame_rect()
+        }
+    }
+
     /// Coins de la boîte sur la feuille (haut-gauche, haut-droite, bas-droite, bas-gauche).
     fn box_corners(&self) -> [Pos2; 4] {
+        // Plusieurs calques choisis : la boîte qui les entoure tous.
+        if let Some(m) = self.layer_drag.as_ref().and_then(|d| d.many.as_ref()) {
+            let b = m.box0;
+            return [b.left_top(), b.right_top(), b.right_bottom(), b.left_bottom()].map(|p| m.a.apply(p));
+        }
+        let peers = self.transform_peers();
+        if !peers.is_empty() && self.tool == crate::app::Tool::Transform {
+            let b = self.many_box(&peers);
+            return [b.left_top(), b.right_top(), b.right_bottom(), b.left_bottom()];
+        }
         let b = self.content_box();
         let aff = self.layer_affine();
         [b.left_top(), b.right_top(), b.right_bottom(), b.left_bottom()].map(|p| aff.apply(p))
     }
 
-    fn stage_to_screen(&self, p: Pos2) -> Pos2 {
+    pub(crate) fn stage_to_screen(&self, p: Pos2) -> Pos2 {
         self.view.to_screen(self.canvas_rect, self.canvas_size(), p)
     }
 
@@ -147,6 +208,16 @@ impl App {
         if self.content_refuses() {
             return;
         }
+        // Plusieurs calques choisis : ils suivent ensemble (ceux qui sont cachés ou verrouillés
+        // restent où ils sont, le message le dit).
+        let peers = self.transform_peers();
+        if !peers.is_empty() {
+            match self.transform_handle_at(screen) {
+                Some(handle) => self.transform_many_press(stage, handle, &peers),
+                None => self.status = "Transformer : glisser dans la boîte pour déplacer les calques choisis, un coin pour les agrandir, la poignée ronde pour les tourner.".into(),
+            }
+            return;
+        }
         if !self.layer().drawable() {
             self.layer_editable();
             return;
@@ -170,6 +241,7 @@ impl App {
         self.layer_drag = Some(LayerDrag {
             handle,
             start: stage,
+            many: None,
             t0: own,
             center,
             seen_center,
@@ -180,7 +252,112 @@ impl App {
         });
     }
 
+    /// Un appui sur la boîte commune de plusieurs calques choisis : le geste commence.
+    fn transform_many_press(&mut self, stage: Pos2, handle: BoxHandle, peers: &[usize]) {
+        // Un côté étire dans un seul sens : le repère de chaque calque n'est pas le même.
+        if matches!(handle, BoxHandle::Edge(_)) {
+            self.status = "Étirer par le milieu d'un côté se fait sur un seul calque (choisis-en un). Un coin agrandit tous les calques choisis.".into();
+            return;
+        }
+        let box0 = self.many_box(peers);
+        let camera = self.doc.camera_seen(self.cur_panel, self.cur_frame);
+        let list: Vec<Peer> = peers
+            .iter()
+            .map(|&li| {
+                let l = &self.layers()[li];
+                let own = l.transform;
+                let seen = l.transform_seen(&camera).unwrap_or(own);
+                Peer { li, t0: own, off: vec2(seen.x - own.x, seen.y - own.y) }
+            })
+            .collect();
+        let skipped = self.chosen_layers().len() - list.len();
+        if skipped > 0 {
+            self.status = format!("{skipped} calque{} choisi{} reste{} en place (caché ou verrouillé).", if skipped > 1 { "s" } else { "" }, if skipped > 1 { "s" } else { "" }, if skipped > 1 { "nt" } else { "" });
+        }
+        self.layer_drag = Some(LayerDrag {
+            handle,
+            start: stage,
+            many: Some(Many { peers: list, box0, a: crate::vector::Affine::IDENTITY }),
+            t0: self.layer().transform,
+            center: Pos2::ZERO,
+            seen_center: Pos2::ZERO,
+            content: box0,
+            to_local: None,
+            snap: self.snapshot(),
+            changed: false,
+        });
+    }
+
+    /// Le geste sur plusieurs calques : la même similitude de la feuille pour chacun, `T = D(t0)`.
+    fn transform_many_drag(&mut self, p: Pos2, shift: bool) {
+        use crate::vector::Affine;
+        let pivot = self.doc.stage_center();
+        let Some(d) = &mut self.layer_drag else { return };
+        let (handle, start) = (d.handle, d.start);
+        let Some(m) = &mut d.many else { return };
+        let c = m.box0.center();
+        let corners = [m.box0.left_top(), m.box0.right_top(), m.box0.right_bottom(), m.box0.left_bottom()];
+        // La similitude : décalage `delta`, ou rotation `turn` degrés autour du centre, ou facteur
+        // `f` autour du coin opposé.
+        enum Op {
+            Shift(Vec2),
+            Turn(f32),
+            Scale(f32, Pos2),
+        }
+        let (a, text, op) = match handle {
+            BoxHandle::Move => {
+                let mut delta = p - start;
+                if shift {
+                    if delta.x.abs() > delta.y.abs() {
+                        delta.y = 0.0;
+                    } else {
+                        delta.x = 0.0;
+                    }
+                }
+                (Affine::translate(delta), format!("décalés de {:+.0} × {:+.0} px", delta.x, delta.y), Op::Shift(delta))
+            }
+            BoxHandle::Rotate => {
+                let mut turn = ((p - c).angle() - (start - c).angle()).to_degrees();
+                if shift {
+                    turn = (turn / 15.0).round() * 15.0;
+                }
+                (Affine::rotate_about(c, turn.to_radians()), format!("tournés de {turn:.1}°"), Op::Turn(turn))
+            }
+            BoxHandle::Corner(k) => {
+                let (corner, anchor) = (corners[k % 4], corners[(k + 2) % 4]);
+                let dir = corner - anchor;
+                let f = ((p - anchor).dot(dir) / dir.length_sq().max(1e-6)).clamp(0.01, 100.0);
+                (Affine::scale_about(anchor, f, f), format!("à {:.0} %", f * 100.0), Op::Scale(f, anchor))
+            }
+            BoxHandle::Edge(_) => return,
+        };
+        m.a = a;
+        let n = m.peers.len();
+        let moved: Vec<(usize, LayerTransform)> = m
+            .peers
+            .iter()
+            .map(|q| {
+                let t = match op {
+                    Op::Shift(delta) => LayerTransform { x: q.t0.x + delta.x, y: q.t0.y + delta.y, ..q.t0 },
+                    Op::Turn(turn) => q.t0.around(pivot, c - q.off, 1.0, turn),
+                    Op::Scale(f, anchor) => q.t0.around(pivot, anchor - q.off, f, 0.0),
+                };
+                (q.li, t)
+            })
+            .collect();
+        d.changed = true;
+        for (li, t) in moved {
+            self.layers_mut()[li].transform = t;
+        }
+        self.modified = true;
+        self.status = format!("{n} calques {text}.");
+    }
+
     pub(crate) fn transform_drag(&mut self, p: Pos2, shift: bool) {
+        if self.layer_drag.as_ref().is_some_and(|d| d.many.is_some()) {
+            self.transform_many_drag(p, shift);
+            return;
+        }
         let pivot = self.doc.stage_center();
         let Some(d) = &mut self.layer_drag else { return };
         let (t0, start, q, seen) = (d.t0, d.start, d.center, d.seen_center);
@@ -229,13 +406,41 @@ impl App {
     pub(crate) fn finish_layer_drag(&mut self) {
         let Some(d) = self.layer_drag.take() else { return };
         if d.changed {
-            self.history.push(d.snap);
+            // Plusieurs calques : une seule étape, au nom du geste.
+            let name = match d.handle {
+                BoxHandle::Move => "Déplacer",
+                BoxHandle::Rotate => "Tourner",
+                BoxHandle::Corner(_) | BoxHandle::Edge(_) => "Mettre à l'échelle",
+            };
+            if d.many.is_some() {
+                let snap = d.snap;
+                self.named_step(name, |app| app.history.push(snap));
+            } else {
+                self.history.push(d.snap);
+            }
             self.modified = true;
         }
     }
 
     /// Ctrl+R : le calque courant retrouve sa place, sa taille et son orientation d'origine.
     pub(crate) fn reset_layer_transform(&mut self) {
+        // Plusieurs calques choisis : tous retrouvent leur place, en une étape.
+        let peers = self.transform_peers();
+        if !peers.is_empty() {
+            if self.content_refuses() {
+                return;
+            }
+            if peers.iter().all(|&li| self.layers()[li].transform.is_identity()) {
+                self.status = "Ces calques ne sont pas transformés.".into();
+                return;
+            }
+            self.record_step();
+            for &li in &peers {
+                self.layers_mut()[li].transform = LayerTransform::default();
+            }
+            self.status = format!("Transformation de {} calques annulée.", peers.len());
+            return;
+        }
         if self.layer().transform.is_identity() {
             self.status = "Ce calque n'est pas transformé.".into();
             return;

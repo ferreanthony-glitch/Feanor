@@ -2344,3 +2344,46 @@ Anthony.
   glisserait sous la souris) ; noms d'instance et marques de couleur des dessins cachés (perdus à
   l'enregistrement) ; roll de plusieurs plans choisis ; glisser le contenu sans réserve ; « Retourner
   les plans » ne retourne pas leur contenu caché ; « Changer la cadence » oublie les réserves.
+
+## Sélection sur plusieurs calques (demandée par Anthony le 2026-10-19) ✅
+
+La demande : « Ajoute la possibilité de sélectionner deux calques pour ensuite sélectionner les
+deux dessins de chaque calque pour les transformer, les déplacer. » Branche `multi-calques`
+(`src/multisel.rs` : le cœur, sans interface ; `src/multitools.rs` : la souris, les commandes,
+l'écran ; essais `multisel_tests.rs`). Pas vu à l'écran dans cette séance : à essayer par Anthony.
+
+- ✅ **Choisir des calques** : existait déjà (13b) — Ctrl + clic ajoute / retire, Maj + clic prend tous
+  ceux entre le courant et le cliqué, dans le panneau Calques, la colonne du montage et la timeline.
+  Ajouté : une marque distincte (⌖ pour le courant, coche pour les autres dans le panneau Calques ;
+  un cadre à chaque ligne choisie ailleurs).
+- ✅ **Sélectionner** : avec l'outil Sélection et deux calques choisis ou plus, le lasso, le
+  rectangle, un clic sur un trait (Maj : ajouter / retirer) et « Tout sélectionner » prennent sur
+  **tous les calques choisis** : les traits dans le lasso de chaque calque vectoriel, la zone de chaque
+  calque bitmap (s'il y a des pixels dedans), au dessin de l'image courante. Les dossiers ne comptent
+  que par leurs calques choisis un à un ; cachés, verrouillés (eux, leur dossier, position verrouillée),
+  vidéo, sans dessin à l'image : laissés de côté, et le message dit lesquels et pourquoi.
+- ✅ **Un seul geste** : la boîte (`selbox.rs`) est sur la feuille, autour de la réunion des parts ;
+  déplacer, échelle, rotation, inclinaison, champs chiffrés, flèches, miroir s'appliquent à tous autour
+  du même pivot. Le geste de la feuille `A` devient, dans le repère de chaque calque de transformation
+  `T`, `T⁻¹·A·T` : un calque décalé, tourné, agrandi ou en profondeur suit là où on le voit. Suppr,
+  copier, couper, coller marchent calque par calque (le collage remet chaque calque sur lui-même).
+- ✅ **Sans latence** : une feuille flottante par calque vectoriel (`flottante.rs`, une « place » par
+  calque : `slot_ids`) — jamais de rejeu du moteur pendant le geste, le rendu exact arrive d'un fil de
+  travail au lâcher ; les zones bitmap soulèvent leurs pixels une fois (tourner deux fois ne floute pas
+  deux fois). Mesure (`three_layers_thirty_strokes_move_at_one_ms_per_frame`, `--ignored`) : 3 calques ×
+  30 traits texturés, 0,001 ms par image pour poser les trois feuilles et le plan, saisie de 10 ms une
+  seule fois, lâcher 0,13 ms, 0 rejeu.
+- ✅ **Annulation** : un geste sur N calques = une étape (`Edit::Group`), au nom du geste (« Déplacer »,
+  « Mettre à l'échelle », « Tourner », « Incliner », « Retourner », « Supprimer », « Coller »). Une flèche tenue
+  = une étape (`History::extend_last`). Annuler rend tous les calques.
+- ✅ **Outil Transformer** : avec plusieurs calques choisis (non cachés, non verrouillés), il les
+  déplace, les tourne et les agrandit ensemble (un coin, proportions gardées) autour de leur boîte
+  commune, en une étape ; Ctrl+R les remet tous en place.
+- ✅ **Indications** : « 3 calques, 42 éléments » dans la barre d'état et le panneau Réglages (avec le
+  détail calque par calque), ligne d'aide sous le dessin pour les outils Sélection, Transformer et
+  Déformer.
+- Pas faits / limites : l'outil **Déformer** (enveloppe, perspective) reste sur le calque courant seul
+  (il le dit) ; l'étirement par le milieu d'un côté de l'outil Transformer se fait sur un seul calque ;
+  « Effacer hors de la sélection » aussi ; les zones bitmap ne vivent qu'avec l'outil Sélection (déjà
+  posées à chaque geste, elles s'oublient en changeant d'outil), les traits vectoriels restent choisis ;
+  la boîte est l'enveloppe droite des parts sur la feuille (un calque tourné la fait grossir).

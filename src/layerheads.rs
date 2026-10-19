@@ -318,6 +318,11 @@ impl App {
             (false, false) => theme::etiquette(),
         };
         painter.rect_filled(r, 2.0, bg);
+        // Plusieurs calques choisis : un cadre à chacun, plus épais au courant (qui garde le plein).
+        if !self.layer_sel.is_empty() && self.is_chosen_layer(li) {
+            let width = if current { 2.0_f32 } else { 1.25_f32 };
+            painter.rect_stroke(r, 2.0, Stroke::new(width, visuals.selection.bg_fill), egui::StrokeKind::Inside);
+        }
         // Sur le bleu du calque courant, tout passe en blanc (le seul lisible sur l'accent).
         let fg = match (current, h.visible) {
             (true, _) => visuals.selection.stroke.color,

@@ -1,0 +1,668 @@
+//! La sélection sur plusieurs calques dans l'application (Anthony, 2026-10-19 : « Ajoute la
+//! possibilité de sélectionner deux calques pour ensuite sélectionner les deux dessins de chaque
+//! calque pour les transformer, les déplacer »). Le cœur — quels traits, quelles zones, comment
+//! un geste s'applique à chaque calque — est dans `multisel.rs`, sans interface ; ici : la souris,
+//! la boîte à l'écran, les commandes (Suppr, copier, couper, coller, miroir, flèches), l'annulation
+//! et les feuilles flottantes qui rendent le geste sans latence.
+//!
+//! - Plusieurs calques choisis (Ctrl ou Maj + clic dans le panneau Calques, la timeline ou le
+//!   montage) et l'outil Sélection : le lasso, le rectangle et « Tout sélectionner » prennent sur
+//!   tous les calques choisis (`multi_wanted`).
+//! - La boîte (`selbox.rs`) est sur la feuille : `sel_frame` la donne, comme pour un seul calque,
+//!   et tout ce qui l'utilise (poignées, curseurs, champs chiffrés) marche sans changement.
+//! - Un geste de la boîte = une étape d'annulation (`Edit::Group`) au nom du geste.
+//! - L'outil Transformer, lui, déplace, tourne et agrandit les calques choisis ensemble
+//!   (`layertools.rs`) ; l'outil Déformer reste sur le calque courant.
+
+use eframe::egui::{self, Color32, Painter, Pos2, Rect, Shape, Stroke, Vec2};
+
+use crate::app::{App, Tool};
+use crate::contours::{self, Contours};
+use crate::flottante::Flottante;
+use crate::multisel::{self, MDrag, MultiSel, PartKind, Targets};
+use crate::selbox::{self, BoxParams, Handle, SelFrame};
+use crate::vector::Affine;
+
+const ACCENT: Color32 = Color32::from_rgb(70, 165, 255);
+/// À moins de tant de pixels d'écran du centre, le pivot tiré s'y remet.
+const PIVOT_SNAP: f32 = 6.0;
+/// Geste d'annulation des flèches : une flèche tenue = une étape.
+const NUDGE_GESTURE: u64 = 0x6d75_6c74_696e_7564;
+
+impl App {
+    // ------------------------------------------------------------------ ce qui est choisi
+
+    /// Le lasso prend-il sur plusieurs calques ? L'outil Sélection, et plusieurs calques choisis.
+    pub(crate) fn multi_wanted(&self) -> bool {
+        self.tool == Tool::Select && self.chosen_layers().len() >= 2
+    }
+
+    /// Les calques choisis que la sélection peut toucher à l'image courante, et ceux qu'elle laisse.
+    pub(crate) fn multi_targets(&self) -> Targets {
+        multisel::targets(&self.doc, self.cur_panel, self.cur_frame, &self.chosen_layers())
+    }
+
+    /// La boîte telle qu'on la voit (le geste en cours compris).
+    pub(crate) fn multi_live_frame(&self) -> Option<SelFrame> {
+        let sel = self.multi.sel.as_ref()?;
+        if let Some(MDrag::Transform { frame, aff, .. }) = &self.multi.drag {
+            return Some(frame.then(aff));
+        }
+        sel.base_frame(&self.doc)
+    }
+
+    /// « 3 calques, 42 éléments » pour la barre d'état et le panneau Réglages.
+    pub(crate) fn multi_summary(&self) -> Option<String> {
+        self.multi.sel.as_ref().map(MultiSel::summary)
+    }
+
+    // ------------------------------------------------------------------ la souris
+
+    /// Un appui avec l'outil Sélection et plusieurs calques choisis : une poignée de la boîte, un
+    /// trait, ou le début d'un lasso (ou d'un rectangle).
+    pub(crate) fn multi_press(&mut self, stage: Pos2, screen: Pos2, shift: bool) {
+        self.end_stroke();
+        self.playing = false;
+        self.finish_field_edit();
+        if self.content_refuses() {
+            return;
+        }
+        // Une sélection sur un seul calque laisse la place.
+        if self.vsel.is_some() || self.bsel.is_some() {
+            self.vsel = None;
+            self.drop_bitmap_selection();
+        }
+        // Un geste lâché dont la feuille attend encore le rendu exact : on le termine d'abord.
+        self.multi_flush();
+        // La boîte : une poignée, un bord, l'extérieur d'un coin, le pivot ou l'intérieur.
+        if let Some((handle, frame)) = self.box_press(screen, shift) {
+            self.multi.drag = Some(if handle == Handle::Pivot {
+                // Le pivot déplacé est gardé avec la boîte.
+                if let Some(sel) = self.multi.sel.as_mut() {
+                    sel.keep_frame(&self.doc, frame);
+                }
+                MDrag::Pivot { start: stage, frame }
+            } else {
+                MDrag::Transform { handle, start: stage, frame, snaps: None, aff: Affine::IDENTITY, field: false }
+            });
+            return;
+        }
+        let targets = self.multi_targets();
+        let tol = 4.0 / self.view.zoom.max(1e-3);
+        if let Some((t, item)) = multisel::hit_item(&self.doc, &targets, stage, tol) {
+            let t = t.clone();
+            let (panel, frame) = (self.cur_panel, self.cur_frame);
+            if shift {
+                let sel = self.multi.sel.get_or_insert_with(|| MultiSel::new(panel, frame, Vec::new()));
+                sel.toggle_item(&t, item);
+                if sel.parts.is_empty() {
+                    self.multi.sel = None;
+                } else {
+                    self.status = format!("{} choisis.", sel.summary());
+                }
+                return;
+            }
+            let already = self
+                .multi
+                .sel
+                .as_ref()
+                .is_some_and(|s| s.parts.iter().any(|p| p.layer == t.id && matches!(&p.kind, PartKind::Vector { items } if items.contains(&item))));
+            if !already {
+                self.multi.sel = Some(MultiSel::new(panel, frame, vec![multisel::vector_part(&t, vec![item])]));
+            }
+            // Un clic sur un trait choisi : on le tient, et il suit la souris.
+            if let Some(frame) = self.multi_live_frame() {
+                self.multi.drag = Some(MDrag::Transform { handle: Handle::Move, start: stage, frame, snaps: None, aff: Affine::IDENTITY, field: false });
+            }
+            return;
+        }
+        // Dans le vide : un lasso (ou un rectangle) ; sans Maj, l'ancienne sélection s'en va.
+        if !shift {
+            self.drop_multi();
+        }
+        self.multi.drag = Some(if self.select_rect {
+            MDrag::Rect { from: stage, to: stage, add: shift }
+        } else {
+            MDrag::Lasso { points: vec![stage], add: shift }
+        });
+    }
+
+    /// La souris est en `stage` (point de la feuille) : le lasso grandit, ou le geste de la boîte
+    /// suit (`shift`, `ctrl` : les touches tenues maintenant, `selbox::gesture`).
+    pub(crate) fn multi_drag(&mut self, stage: Pos2, shift: bool, ctrl: bool) {
+        let zoom = self.view.zoom.max(1e-3);
+        let mods = self.box_mods(shift, ctrl);
+        match &mut self.multi.drag {
+            Some(MDrag::Lasso { points, .. }) => {
+                if points.last().is_none_or(|q| q.distance(stage) * zoom > 1.5) {
+                    points.push(stage);
+                }
+            }
+            Some(MDrag::Rect { to, .. }) => *to = stage,
+            Some(MDrag::Transform { handle, start, frame, field: false, .. }) => {
+                let aff = selbox::gesture(*handle, frame, *start, stage, mods);
+                self.multi_set_gesture(aff);
+            }
+            Some(MDrag::Pivot { start, frame }) => {
+                let (start, frame) = (*start, *frame);
+                let local = selbox::move_pivot(&frame, start, stage, PIVOT_SNAP, zoom);
+                if let Some(b) = self.multi.sel.as_mut().and_then(|s| s.boxed.as_mut()) {
+                    b.frame.pivot = local;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// La transformation `aff` (sur la feuille) du geste en cours. À la première image : chaque
+    /// calque vectoriel reçoit sa feuille flottante (le dessin sans la sélection, et la sélection
+    /// seule), chaque zone bitmap soulève ses pixels. Ensuite, seule la transformation change :
+    /// rien à refaire, rien à renvoyer à la carte graphique.
+    pub(crate) fn multi_set_gesture(&mut self, aff: Affine) {
+        let Some(MDrag::Transform { handle, frame, snaps, aff: now, .. }) = &mut self.multi.drag else { return };
+        let (handle, frame) = (*handle, *frame);
+        *now = aff;
+        let Some(sel) = self.multi.sel.as_mut() else { return };
+        if snaps.is_none() {
+            *snaps = Some(multisel::begin_gesture(&mut self.doc, sel, &mut self.multi.floats));
+        }
+        let Some(snaps) = snaps.as_ref() else { return };
+        let dirty = multisel::set_gesture(&mut self.doc, sel, &mut self.multi.floats, snaps, &aff, handle == Handle::Move);
+        if !dirty.is_empty() {
+            self.renderer.invalidate_tiles(&dirty);
+            self.modified = true;
+        }
+        let text = crate::seltools::gesture_text(handle, &frame.then(&aff).params());
+        self.status = format!("{} ({}).", text.trim_end_matches('.'), sel.summary());
+    }
+
+    /// Le bouton est relâché : le lasso prend, ou le geste est posé.
+    pub(crate) fn multi_finish_drag(&mut self) {
+        let Some(drag) = self.multi.drag.take() else { return };
+        match drag {
+            MDrag::Lasso { points, add } => {
+                if self.big_enough(&points) {
+                    self.multi_select_polygon(&points, add);
+                } else if !add {
+                    self.multi.sel = None;
+                }
+            }
+            MDrag::Rect { from, to, add } => {
+                let r = Rect::from_two_pos(from, to);
+                if r.width().min(r.height()) * self.view.zoom >= 3.0 {
+                    self.multi_select_polygon(&crate::pixsel::rect_polygon(r), add);
+                } else if !add {
+                    self.multi.sel = None;
+                }
+            }
+            MDrag::Pivot { .. } => {}
+            MDrag::Transform { handle, frame, snaps, aff, .. } => {
+                if let Some(snaps) = snaps {
+                    self.multi_commit(handle, frame, snaps, aff);
+                }
+            }
+        }
+    }
+
+    /// Un lasso d'au moins trois points et quatre pixels d'écran.
+    fn big_enough(&self, points: &[Pos2]) -> bool {
+        let screen: Vec<Pos2> = points.iter().map(|q| self.stage_to_screen(*q)).collect();
+        let extent = Rect::from_points(&screen);
+        points.len() >= 3 && extent.width().max(extent.height()) >= 4.0
+    }
+
+    /// Ce que prend le polygone `poly` (sur la feuille) sur les calques choisis.
+    fn multi_select_polygon(&mut self, poly: &[Pos2], add: bool) {
+        let targets = self.multi_targets();
+        let parts = multisel::select_polygon(&self.doc, &targets, poly);
+        let left = targets.skipped_text();
+        let (panel, frame) = (self.cur_panel, self.cur_frame);
+        if parts.is_empty() {
+            if !add {
+                self.multi.sel = None;
+            }
+            let none = if targets.list.is_empty() { "Aucun des calques choisis ne peut être sélectionné." } else { "Rien dans le lasso sur les calques choisis." };
+            self.status = match left {
+                Some(l) => format!("{none} {l}"),
+                None => none.into(),
+            };
+            return;
+        }
+        match self.multi.sel.as_mut().filter(|_| add) {
+            Some(sel) => sel.merge(parts),
+            None => self.multi.sel = Some(MultiSel::new(panel, frame, parts)),
+        }
+        let summary = self.multi_summary().unwrap_or_default();
+        self.status = match left {
+            Some(l) => format!("{summary} choisis. {l}"),
+            None => format!("{summary} choisis."),
+        };
+    }
+
+    /// « Tout sélectionner » avec plusieurs calques choisis : tout ce que contient le dessin de
+    /// chacun à l'image courante.
+    pub(crate) fn multi_select_all(&mut self) {
+        self.end_stroke();
+        if self.content_refuses() {
+            return;
+        }
+        self.vsel = None;
+        self.drop_bitmap_selection();
+        self.multi_flush();
+        let targets = self.multi_targets();
+        let parts = multisel::select_everything(&self.doc, &targets);
+        let left = targets.skipped_text();
+        if parts.is_empty() {
+            self.multi.sel = None;
+            let none = if targets.list.is_empty() { "Aucun des calques choisis ne peut être sélectionné." } else { "Rien à sélectionner : les dessins des calques choisis sont vides." };
+            self.status = match left {
+                Some(l) => format!("{none} {l}"),
+                None => none.into(),
+            };
+            return;
+        }
+        self.multi.sel = Some(MultiSel::new(self.cur_panel, self.cur_frame, parts));
+        self.tool = Tool::Select;
+        let summary = self.multi_summary().unwrap_or_default();
+        self.status = match left {
+            Some(l) => format!("{summary} choisis. {l}"),
+            None => format!("{summary} choisis."),
+        };
+    }
+
+    // ------------------------------------------------------------------ poser un geste
+
+    /// Le geste est lâché : la géométrie des traits reçoit la transformation (leur feuille reste
+    /// affichée jusqu'au rendu exact, qui vient d'un fil de travail), les zones bitmap gardent leur
+    /// place, et tout forme une seule étape d'annulation au nom du geste.
+    fn multi_commit(&mut self, handle: Handle, frame: SelFrame, snaps: Vec<multisel::Snap>, aff: Affine) {
+        let Some(sel) = self.multi.sel.as_mut() else { return };
+        let edits = multisel::commit_gesture(&mut self.doc, sel, &mut self.multi.floats, snaps, &aff);
+        sel.keep_frame(&self.doc, frame.then(&aff));
+        self.multi_replay();
+        if !edits.is_empty() {
+            self.named_step(handle.step_name(), |app| app.history.push(crate::history::Edit::Group(edits)));
+            self.modified = true;
+        }
+    }
+
+    /// Demande le rendu exact des dessins vectoriels de la sélection (en arrière-plan).
+    fn multi_replay(&mut self) {
+        let cels: Vec<_> = self.multi.sel.iter().flat_map(|s| s.parts.iter()).filter(|p| matches!(p.kind, PartKind::Vector { .. })).map(|p| p.cel).collect();
+        for cel in cels {
+            self.rejeu_cel(cel);
+        }
+    }
+
+    /// Les champs chiffrés de la boîte ont changé : la boîte devient celle de `params`. Le premier
+    /// changement ouvre un geste, les suivants le prolongent ; il se ferme quand plus aucun champ
+    /// n'a la main (`finish_field_edit_if_idle`).
+    pub(crate) fn multi_apply_params(&mut self, live: SelFrame, params: BoxParams, handle: Handle) {
+        let open = matches!(&self.multi.drag, Some(MDrag::Transform { field: true, .. }));
+        if !open {
+            if self.content_refuses() {
+                return;
+            }
+            self.multi_flush();
+            self.multi.drag = Some(MDrag::Transform { handle, start: Pos2::ZERO, frame: live, snaps: None, aff: Affine::IDENTITY, field: true });
+        }
+        let Some(MDrag::Transform { frame: frame0, field: true, .. }) = &self.multi.drag else { return };
+        let frame0 = *frame0;
+        let Some(target) = live.with_params(&params) else { return };
+        if let Some(d) = frame0.delta_to(&target) {
+            self.multi_set_gesture(d);
+        }
+    }
+
+    /// Un geste d'un seul coup (flèches, miroir) : saisie, pose et lâché, puis le rendu exact.
+    /// `grouped` : les appuis successifs de la même touche se joignent en une étape.
+    fn multi_instant(&mut self, a: Affine, name: &str, grouped: bool, keep_box: bool) {
+        if self.content_refuses() {
+            return;
+        }
+        self.multi_flush();
+        let Some(sel) = self.multi.sel.as_mut() else { return };
+        let Some(frame0) = sel.base_frame(&self.doc) else { return };
+        let (edits, dirty) = multisel::run_gesture(&mut self.doc, sel, &mut self.multi.floats, &a, true);
+        if keep_box {
+            sel.keep_frame(&self.doc, frame0.then(&a));
+        } else {
+            sel.boxed = None;
+        }
+        if !dirty.is_empty() {
+            self.renderer.invalidate_tiles(&dirty);
+        }
+        self.multi_replay();
+        if grouped {
+            self.gesture_group(NUDGE_GESTURE, name, edits);
+        } else if !edits.is_empty() {
+            self.named_step(name, |app| app.history.push(crate::history::Edit::Group(edits)));
+            self.modified = true;
+        }
+    }
+
+    /// Les flèches : la sélection bouge de `d` pixels de la feuille (Maj : dix).
+    pub(crate) fn multi_nudge(&mut self, d: Vec2) {
+        self.multi_instant(Affine::translate(d), "Déplacer", true, true);
+        let summary = self.multi_summary().unwrap_or_default();
+        self.status = format!("{summary} déplacés de {} px (flèches ; Maj + flèche : {} px).", d.length().round(), crate::nudge::BIG_STEP);
+    }
+
+    /// Miroir de toute la sélection autour du centre de sa boîte.
+    pub(crate) fn multi_flip(&mut self, horizontal: bool) {
+        let Some(c) = self.multi.sel.as_ref().and_then(|s| s.stage_bounds(&self.doc)).map(|b| b.center()) else { return };
+        let a = if horizontal { Affine::scale_about(c, -1.0, 1.0) } else { Affine::scale_about(c, 1.0, -1.0) };
+        self.multi_instant(a, "Retourner", false, false);
+        let summary = self.multi_summary().unwrap_or_default();
+        self.status = format!("{summary} retournés.");
+    }
+
+    // ------------------------------------------------------------------ copier, couper, coller
+
+    pub(crate) fn multi_copy(&mut self) -> bool {
+        let Some(sel) = &self.multi.sel else { return false };
+        let clip = multisel::copy_selection(&self.doc, sel);
+        if clip.items.is_empty() {
+            self.status = "Rien à copier dans la sélection.".into();
+            return false;
+        }
+        let text = format!("SHOT : {}", sel.summary());
+        self.status = format!("{} ({}).", clip.summary(), sel.summary());
+        // Un texte dans le presse-papiers du système : sans lui, Ctrl+V n'arrive pas jusqu'à nous.
+        self.ctx.copy_text(text);
+        self.multi.clip = Some(clip);
+        true
+    }
+
+    pub(crate) fn multi_cut(&mut self) {
+        if self.multi_copy() {
+            self.multi_delete();
+        }
+    }
+
+    /// Colle sur les calques choisis ce que la copie avait pris sur eux, à la même place.
+    pub(crate) fn multi_paste(&mut self) {
+        if self.content_refuses() {
+            return;
+        }
+        self.end_stroke();
+        self.multi_flush();
+        self.drop_multi();
+        self.vsel = None;
+        self.drop_bitmap_selection();
+        let targets = self.multi_targets();
+        let Some(clip) = self.multi.clip.as_ref() else { return };
+        let (parts, edits) = multisel::paste_clip(&mut self.doc, &targets, clip);
+        if parts.is_empty() {
+            self.status = "Rien à coller : les calques de la copie ne sont pas parmi les calques choisis, ou ils ne peuvent pas être modifiés.".into();
+            return;
+        }
+        self.renderer.invalidate_all();
+        self.multi.sel = Some(MultiSel::new(self.cur_panel, self.cur_frame, parts));
+        self.tool = Tool::Select;
+        self.named_step("Coller", |app| app.history.push(crate::history::Edit::Group(edits)));
+        self.modified = true;
+        let summary = self.multi_summary().unwrap_or_default();
+        self.status = format!("{summary} collés : déplace-les.");
+    }
+
+    /// Suppr : ce qui est choisi sur chaque calque s'efface, en une seule étape.
+    pub(crate) fn multi_delete(&mut self) {
+        if self.content_refuses() {
+            return;
+        }
+        self.end_stroke();
+        self.multi_flush();
+        let Some(sel) = self.multi.sel.take() else { return };
+        let edits = multisel::delete_selection(&mut self.doc, &sel);
+        self.renderer.invalidate_all();
+        let summary = sel.summary();
+        if !edits.is_empty() {
+            self.named_step("Supprimer", |app| app.history.push(crate::history::Edit::Group(edits)));
+            self.modified = true;
+        }
+        self.status = format!("{summary} supprimés.");
+    }
+
+    // ------------------------------------------------------------------ la vie de la sélection
+
+    /// Oublie la sélection sur plusieurs calques (les feuilles lâchées attendent leur rendu).
+    pub(crate) fn drop_multi(&mut self) {
+        if matches!(&self.multi.drag, Some(MDrag::Transform { .. })) {
+            self.multi_finish_drag();
+        }
+        self.multi.drag = None;
+        self.multi.sel = None;
+    }
+
+    /// Avant une annulation ou un rétablissement : les feuilles lâchées sont terminées, la
+    /// sélection s'en va (elle ne serait plus celle des dessins refaits).
+    pub(crate) fn multi_before_history(&mut self) {
+        self.drop_multi();
+        self.multi_flush();
+    }
+
+    /// Un autre projet, une autre taille de feuille : tout s'en va, sans toucher aux dessins.
+    pub(crate) fn multi_cancel(&mut self) {
+        self.multi.drag = None;
+        self.multi.sel = None;
+        for f in std::mem::take(&mut self.multi.floats) {
+            Flottante::release_slot(&mut self.doc, f.slot);
+        }
+        *self.multi.contours.borrow_mut() = None;
+    }
+
+    /// Termine tout de suite les gestes lâchés dont la feuille attend le rendu exact : les
+    /// éléments reprennent leurs pixels en cache suivis, l'image du dessin est refaite là où
+    /// quelque chose a changé, la feuille s'en va. (Les gestes en cours gardent la leur.)
+    pub(crate) fn multi_flush(&mut self) {
+        let (done, rest): (Vec<Flottante>, Vec<Flottante>) = std::mem::take(&mut self.multi.floats).into_iter().partition(|f| f.pending.is_some());
+        self.multi.floats = rest;
+        for f in done {
+            self.settle_float(f, false);
+        }
+    }
+
+    /// Le rendu exact du dessin `cel` est arrivé (`adopted`) ou n'est plus bon : les feuilles
+    /// lâchées sur ce dessin s'en vont, après avoir refait son image à l'ancienne dans le second cas.
+    pub(crate) fn multi_settle(&mut self, cel: crate::document::CelId, adopted: bool) {
+        let (done, rest): (Vec<Flottante>, Vec<Flottante>) = std::mem::take(&mut self.multi.floats).into_iter().partition(|f| f.src == cel && f.pending.is_some());
+        self.multi.floats = rest;
+        for f in done {
+            self.settle_float(f, adopted);
+        }
+    }
+
+    fn settle_float(&mut self, f: Flottante, adopted: bool) {
+        Flottante::release_slot(&mut self.doc, f.slot);
+        if adopted {
+            return;
+        }
+        if let Some(p) = f.pending {
+            let tiles = Flottante::apply_preview(&mut self.doc, f.src, &p.items, &p.originals, &f.aff);
+            self.renderer.invalidate_tiles(&tiles);
+        }
+    }
+
+    /// Une fois par image, avant d'agir : la sélection ne vaut que pour le plan, l'image et les
+    /// calques choisis où on l'a prise ; les zones bitmap n'existent qu'avec l'outil Sélection.
+    pub(crate) fn multi_sync(&mut self) {
+        let Some(sel) = self.multi.sel.as_ref() else { return };
+        // Un geste de la boîte en cours : rien ne change sous la main.
+        if matches!(&self.multi.drag, Some(MDrag::Transform { .. })) {
+            return;
+        }
+        let chosen: Vec<u64> = self.chosen_layers().iter().filter_map(|&li| self.layers().get(li).map(|l| l.id)).collect();
+        let valid = sel.still_valid(&self.doc, self.cur_panel, self.cur_frame) && sel.parts.iter().all(|p| chosen.contains(&p.layer));
+        if !valid {
+            self.multi.sel = None;
+            return;
+        }
+        let bitmap_here = self.tool == Tool::Select;
+        let doc = &self.doc;
+        if let Some(sel) = self.multi.sel.as_mut() {
+            if !bitmap_here && sel.has_bitmap() {
+                // Les zones bitmap n'existent qu'avec l'outil Sélection ; les traits restent.
+                sel.parts.retain(|p| matches!(p.kind, PartKind::Vector { .. }));
+                sel.boxed = None;
+                if sel.parts.is_empty() {
+                    self.multi.sel = None;
+                }
+                return;
+            }
+            sel.refresh_maps(doc);
+        }
+    }
+
+    // ------------------------------------------------------------------ l'écran
+
+    /// Le lasso en cours, les contours des traits choisis, le contour des zones et la boîte.
+    /// Rend vrai quand la boîte commune est tracée (rien d'autre à montrer pour la sélection).
+    pub(crate) fn paint_multi_overlay(&self, painter: &Painter) -> bool {
+        let to_s = |p: Pos2| self.stage_to_screen(p);
+        let lasso: Option<Vec<Pos2>> = match &self.multi.drag {
+            Some(MDrag::Lasso { points, .. }) => Some(points.clone()),
+            Some(MDrag::Rect { from, to, .. }) => Some(crate::pixsel::rect_polygon(Rect::from_two_pos(*from, *to))),
+            _ => None,
+        };
+        if let Some(points) = lasso.filter(|p| p.len() >= 2) {
+            let pts: Vec<Pos2> = points.iter().map(|p| to_s(*p)).collect();
+            painter.add(Shape::closed_line(pts.clone(), Stroke::new(2.5_f32, Color32::from_black_alpha(120))));
+            painter.add(Shape::closed_line(pts, Stroke::new(1.0_f32, ACCENT)));
+        }
+        let Some(sel) = &self.multi.sel else { return false };
+        if self.multi_live_frame().is_none() {
+            return false;
+        }
+        // Geste en cours : les traits n'ont pas bougé, leurs contours suivent la feuille.
+        let (moved, gesture) = match &self.multi.drag {
+            Some(MDrag::Transform { aff, snaps: Some(_), .. }) => (*aff, true),
+            _ => (Affine::IDENTITY, false),
+        };
+        if let Some(shape) = self.multi_contours(sel, moved, gesture) {
+            painter.add(shape);
+        }
+        // Contour des zones bitmap : pointillés noirs et blancs.
+        for part in &sel.parts {
+            if let PartKind::Bitmap { outline, lift, .. } = &part.kind {
+                let aff = lift.as_ref().map_or(Affine::IDENTITY, |l| l.aff);
+                for poly in outline {
+                    let mut pts: Vec<Pos2> = poly.iter().map(|q| to_s(part.to_stage.apply(aff.apply(*q)))).collect();
+                    if let Some(&first) = pts.first() {
+                        pts.push(first);
+                    }
+                    painter.add(Shape::line(pts.clone(), Stroke::new(1.0_f32, Color32::WHITE)));
+                    painter.extend(Shape::dashed_line(&pts, Stroke::new(1.0_f32, Color32::BLACK), 5.0, 5.0));
+                }
+            }
+        }
+        self.paint_selection_box(painter);
+        true
+    }
+
+    /// Les contours des traits choisis de tous les calques, sur la feuille, gardés d'une image à
+    /// l'autre (`contours.rs`) : refaits seulement si la sélection ou un dessin change, jamais
+    /// pendant un geste (seulement déplacés).
+    fn multi_contours(&self, sel: &MultiSel, moved: Affine, gesture: bool) -> Option<Shape> {
+        let mut key: u64 = 0xcbf2_9ce4_8422_2325;
+        let mut any = false;
+        for p in &sel.parts {
+            let PartKind::Vector { items } = &p.kind else { continue };
+            let c = self.doc.cels.get(&p.cel)?;
+            let d = c.vector.as_ref()?;
+            any = true;
+            for v in [contours::fingerprint(p.cel, c.version, d, items), p.to_stage.a.to_bits() as u64, p.to_stage.d.to_bits() as u64, p.to_stage.tx.to_bits() as u64, p.to_stage.ty.to_bits() as u64] {
+                key ^= v;
+                key = key.wrapping_mul(0x100_0000_01b3);
+            }
+        }
+        if !any {
+            return None;
+        }
+        let to_s = |p: Pos2| self.stage_to_screen(moved.apply(p));
+        let now = contours::ANCHORS.map(to_s);
+        let mut slot = self.multi.contours.borrow_mut();
+        let reuse = slot.as_ref().filter(|k| k.key() == key).and_then(|k| k.transform_to(&now)).filter(|t| gesture || !Contours::too_scaled(t));
+        if let (Some(t), Some(k)) = (reuse, slot.as_ref()) {
+            return Some(k.shape(&t));
+        }
+        let mut lines: Vec<Vec<Pos2>> = Vec::new();
+        for p in &sel.parts {
+            if let PartKind::Vector { items } = &p.kind {
+                if let Some(d) = self.doc.cels.get(&p.cel).and_then(|c| c.vector.as_ref()) {
+                    lines.extend(contours::lines_of(d, items).into_iter().map(|l| l.into_iter().map(|q| p.to_stage.apply(q)).collect()));
+                }
+            }
+        }
+        let built = Contours::build(key, &lines, to_s, now, ACCENT.gamma_multiply(0.85));
+        let shape = built.shape(&Affine::IDENTITY);
+        *slot = Some(built);
+        Some(shape)
+    }
+
+    /// Outil Déformer avec plusieurs calques choisis : il agit sur le calque courant seul.
+    pub(crate) fn deform_many_note(&mut self) {
+        let n = self.chosen_layers().len();
+        if n >= 2 {
+            self.status = format!("Déformer agit sur le calque courant seul ({n} calques choisis) : choisis-en un seul pour déformer son contenu.");
+        }
+    }
+
+    /// Réglages de l'outil Sélection avec plusieurs calques choisis.
+    pub(crate) fn multi_selection_ui(&mut self, ui: &mut egui::Ui, lasso: bool) {
+        use crate::bulles::choix;
+        use egui_phosphor::regular as ph;
+        let targets = self.multi_targets();
+        let chosen = self.chosen_layers().len();
+        ui.label(egui::RichText::new(format!("{chosen} calques choisis : le lasso prend sur tous.")).strong());
+        if let Some(left) = targets.skipped_text() {
+            ui.label(egui::RichText::new(left).small().weak());
+        }
+        if lasso {
+            ui.horizontal(|ui| {
+                choix(ui, &mut self.select_rect, false, ph::LASSO, "Lasso", "Entourer la zone à main levée.", "");
+                choix(ui, &mut self.select_rect, true, ph::RECTANGLE_DASHED, "Rectangle", "Tirer un rectangle.", "");
+            });
+        }
+        let summary = self.multi_summary();
+        let has = summary.is_some();
+        ui.label(match &summary {
+            Some(s) => format!("{s} sélectionnés."),
+            None => "Rien de sélectionné.".to_string(),
+        });
+        if let Some(sel) = &self.multi.sel {
+            ui.label(egui::RichText::new(sel.per_layer()).small().weak());
+        }
+        ui.horizontal_wrapped(|ui| {
+            if self.bouton_si(ui, has, ph::FLIP_HORIZONTAL, "Miroir horizontal", "Retourner de gauche à droite, tous les calques ensemble.", "selection.miroir_h").clicked() {
+                self.multi_flip(true);
+            }
+            if self.bouton_si(ui, has, ph::FLIP_VERTICAL, "Miroir vertical", "Retourner de haut en bas, tous les calques ensemble.", "selection.miroir_v").clicked() {
+                self.multi_flip(false);
+            }
+            if self.bouton_si(ui, has, ph::COPY, "Copier", "Copier ce qui est choisi sur chaque calque.", "edition.copier").clicked() {
+                self.multi_copy();
+            }
+            if self.bouton_si(ui, has, ph::SCISSORS, "Couper", "Copier, puis effacer.", "edition.couper").clicked() {
+                self.multi_cut();
+            }
+            if self.bouton_si(ui, has, ph::TRASH, "Supprimer", "Effacer ce qui est choisi sur chaque calque, en une étape.", "edition.supprimer").clicked() {
+                self.multi_delete();
+            }
+            ui.separator();
+            if self.bouton(ui, ph::SELECTION_ALL, "Tout sélectionner", "Tout ce que contiennent les dessins des calques choisis.", "edition.tout_selectionner").clicked() {
+                self.multi_select_all();
+            }
+            let can_paste = self.multi.clip.is_some();
+            if self.bouton_si(ui, can_paste, ph::CLIPBOARD, "Coller", "Coller sur chaque calque ce qu'il avait copié, à la même place.", "edition.coller").clicked() {
+                self.multi_paste();
+            }
+        });
+        if has {
+            self.box_fields_ui(ui);
+        }
+        if lasso {
+            ui.label(egui::RichText::new("Une seule boîte entoure tout : chaque geste (déplacer, échelle, tourner, incliner, flèches, champs) s'applique à tous les calques autour du même pivot, en une étape d'annulation. Un clic sur un trait le prend ; Maj : ajouter ou retirer. Les calques cachés ou verrouillés sont laissés de côté.").small().weak());
+        }
+    }
+}

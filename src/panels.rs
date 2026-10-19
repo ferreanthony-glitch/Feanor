@@ -377,6 +377,11 @@ impl App {
                 note(ui, "Sinon : Espace + glisser, ou bouton du milieu.");
             }
             Tool::Transform => {
+                let peers = self.transform_peers().len();
+                if peers >= 2 {
+                    ui.label(RichText::new(format!("{peers} calques choisis : ils se déplacent, tournent et grandissent ensemble.")).strong());
+                    note(ui, "Un coin agrandit tous les calques en gardant les proportions ; l'étirement par un côté se fait sur un seul calque. Ctrl+R remet tous les calques choisis en place. Les calques cachés ou verrouillés restent où ils sont.");
+                }
                 self.transform_fields(ui);
                 note(
                     ui,
@@ -498,6 +503,11 @@ impl App {
 
     pub(crate) fn selection_ui(&mut self, ui: &mut egui::Ui, lasso: bool) {
         use egui_phosphor::regular as ph;
+        // Plusieurs calques choisis, ou une sélection qui les couvre : `multitools.rs`.
+        if lasso && (self.multi_wanted() || self.multi.sel.is_some()) {
+            self.multi_selection_ui(ui, lasso);
+            return;
+        }
         if self.layer().kind != LayerKind::Vector {
             self.bitmap_selection_ui(ui, lasso);
             return;
@@ -585,6 +595,13 @@ impl App {
                 "Image finale {}×{} px ; feuille de dessin {}×{} px",
                 self.doc.frame[0], self.doc.frame[1], self.doc.width, self.doc.height
             ));
+            // Sélection sur plusieurs calques : « 3 calques, 42 éléments ».
+            if let Some(summary) = self.multi_summary() {
+                ui.separator();
+                ui.label(RichText::new(summary).color(ui.visuals().selection.stroke.color)).on_hover_text(
+                    "Ce qui est choisi sur les calques choisis : une seule boîte, un seul geste, une seule étape d'annulation.",
+                );
+            }
             ui.separator();
             ui.label(format!("Zoom {:.0} %", self.view.zoom * self.ppp * 100.0));
             let degrees = self.view.rotation.to_degrees();

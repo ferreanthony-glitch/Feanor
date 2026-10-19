@@ -271,6 +271,10 @@ mod brushfill_tests;
 mod nudge;
 #[cfg(test)]
 mod nudge_tests;
+mod multisel;
+#[cfg(test)]
+mod multisel_tests;
+mod multitools;
 pub mod moteur;
 mod newlayer;
 mod notes;

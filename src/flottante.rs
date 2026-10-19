@@ -43,9 +43,18 @@ pub const SHEET_CEL: CelId = (1 << 62) + 1;
 /// Numéro de version des feuilles : neuf à chaque saisie (la carte graphique les renvoie).
 static VERSION: AtomicU64 = AtomicU64::new(1 << 40);
 
+/// Les numéros des deux dessins temporaires de la place `slot` : la place 0 est celle d'une
+/// sélection sur un seul calque (`BASE_CEL`, `SHEET_CEL`) ; une sélection sur plusieurs calques
+/// (`multisel.rs`) a une place par calque, de la 1 à la suivante.
+pub const fn slot_ids(slot: usize) -> (CelId, CelId) {
+    (BASE_CEL + 2 * slot as u64, SHEET_CEL + 2 * slot as u64)
+}
+
 /// Un geste en cours sur la sélection du dessin `src`.
 pub struct Flottante {
     pub src: CelId,
+    /// Sa place : où vivent ses deux dessins temporaires (`slot_ids`).
+    pub slot: usize,
     /// La transformation du geste, en coordonnées du dessin.
     pub aff: Affine,
     /// Geste lâché : les éléments ont leur nouvelle géométrie, mais l'image du dessin (`raster`)
@@ -117,10 +126,15 @@ impl Flottante {
     /// Saisie : sépare le dessin `src` en deux images (depuis les caches des traits) et les range
     /// dans `doc` sous `BASE_CEL` et `SHEET_CEL`.
     pub fn lift(doc: &mut Document, src: CelId, items: &[usize]) -> Option<Flottante> {
+        Self::lift_slot(doc, src, items, 0)
+    }
+
+    /// Comme `lift`, dans la place `slot` (plusieurs feuilles à la fois : `multisel.rs`).
+    pub fn lift_slot(doc: &mut Document, src: CelId, items: &[usize], slot: usize) -> Option<Flottante> {
         let cel = doc.cels.get(&src)?;
         let d = cel.vector.as_ref()?;
         let split = d.render_split_extended(items, cel.raster.width, cel.raster.height);
-        Some(Self::store(doc, src, split))
+        Some(Self::store(doc, src, split, slot))
     }
 
     /// Comme `lift`, mais depuis un autre état du dessin `src` que celui du document : l'enveloppe
@@ -129,19 +143,20 @@ impl Flottante {
     pub fn lift_from(doc: &mut Document, src: CelId, drawing: &VectorDrawing, items: &[usize]) -> Option<Flottante> {
         let cel = doc.cels.get(&src)?;
         let split = drawing.render_split_extended(items, cel.raster.width, cel.raster.height);
-        Some(Flottante { for_warp: true, ..Self::store(doc, src, split) })
+        Some(Flottante { for_warp: true, ..Self::store(doc, src, split, 0) })
     }
 
-    fn store(doc: &mut Document, src: CelId, (base, sheet, margin): (Raster, Raster, (usize, usize))) -> Flottante {
+    fn store(doc: &mut Document, src: CelId, (base, sheet, margin): (Raster, Raster, (usize, usize)), slot: usize) -> Flottante {
         let (w, h) = (base.width, base.height);
         let dims = ((sheet.width, sheet.height) != (w, h)).then_some([sheet.width, sheet.height]);
         let version = VERSION.fetch_add(2, Ordering::Relaxed);
-        for (id, raster, version) in [(BASE_CEL, base, version), (SHEET_CEL, sheet, version + 1)] {
+        let (base_id, sheet_id) = slot_ids(slot);
+        for (id, raster, version) in [(base_id, base, version), (sheet_id, sheet, version + 1)] {
             let mut c = Cel::bitmap(raster);
             c.version = version;
             doc.cels.insert(id, c);
         }
-        Flottante { src, aff: Affine::IDENTITY, pending: None, margin, dims, warp: None, for_warp: false }
+        Flottante { src, slot, aff: Affine::IDENTITY, pending: None, margin, dims, warp: None, for_warp: false }
     }
 
     /// Le maillage du geste en cours : la région `src` du dessin (le cadre de l'enveloppe), chaque
@@ -206,14 +221,21 @@ impl Flottante {
 
     /// Lâcher : les deux dessins temporaires s'en vont.
     pub fn release(doc: &mut Document) {
-        doc.cels.remove(&BASE_CEL);
-        doc.cels.remove(&SHEET_CEL);
+        Self::release_slot(doc, 0);
+    }
+
+    /// Lâcher la place `slot` : ses deux dessins temporaires s'en vont.
+    pub fn release_slot(doc: &mut Document, slot: usize) {
+        let (base, sheet) = slot_ids(slot);
+        doc.cels.remove(&base);
+        doc.cels.remove(&sheet);
     }
 
     /// Ce que montre le plan à la place de `line`, l'élément du dessin `src` : le dessin sans la
     /// sélection, et sa feuille transformée par-dessus (mêmes opacité, mode et effets).
     pub fn items(&self, line: &PlanItem) -> [PlanItem; 2] {
-        let base = PlanItem { cel: BASE_CEL, ..line.clone() };
+        let (base_id, sheet_id) = slot_ids(self.slot);
+        let base = PlanItem { cel: base_id, ..line.clone() };
         // (Du pixel de la feuille élargie au point du dessin, puis le geste. Un maillage compte
         // déjà la marge.)
         let aff = match self.margin {
@@ -221,7 +243,7 @@ impl Flottante {
             _ if self.warp.is_some() => self.aff,
             (l, t) => Affine::translate(vec2(-(l as f32), -(t as f32))).then(&self.aff),
         };
-        let sheet = PlanItem { cel: SHEET_CEL, ctg: None, pre: Some(Pre { aff, dims: self.dims, warp: self.warp.clone() }), ..line.clone() };
+        let sheet = PlanItem { cel: sheet_id, ctg: None, pre: Some(Pre { aff, dims: self.dims, warp: self.warp.clone() }), ..line.clone() };
         [base, sheet]
     }
 }

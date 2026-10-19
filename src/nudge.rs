@@ -47,11 +47,17 @@ impl App {
         let drawing_has_focus = !self.panel_focus && !self.images_focus && !self.key_focus;
         let vector = self.vsel.as_ref().is_some_and(|s| !s.items.is_empty() && Some(s.cel) == self.cel_here());
         let bitmap = self.bsel.is_some() && self.tool.keeps_zone();
-        drawing_has_focus && (vector || bitmap)
+        // Une sélection sur plusieurs calques (`multitools.rs`).
+        let several = self.multi.sel.is_some();
+        drawing_has_focus && (vector || bitmap || several)
     }
 
-    /// Déplace la sélection de `d` pixels du dessin.
+    /// Déplace la sélection de `d` pixels du dessin (de la feuille, pour plusieurs calques).
     pub(crate) fn nudge_selection(&mut self, d: Vec2) {
+        if self.multi.sel.is_some() {
+            self.multi_nudge(d);
+            return;
+        }
         if !self.layer_editable() {
             return;
         }

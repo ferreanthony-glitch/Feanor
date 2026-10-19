@@ -138,6 +138,22 @@ Chaque plan a ses calques, de deux sortes :
     (« Déplacer », « Mettre à l'échelle », « Tourner », « Incliner »). On peut aussi appliquer la couleur
     courante, épaissir, affiner, faire un miroir, passer devant ou derrière, supprimer. Copier, couper
     et coller (Ctrl+C/X/V) marchent d'un plan à l'autre.
+  - **Plusieurs calques d'un coup** (2026-10-19, `multisel.rs`, `multitools.rs`) : on choisit les
+    calques par Ctrl + clic (ajouter / retirer) ou Maj + clic (tous ceux entre le courant et le
+    cliqué) sur leur ligne, dans le panneau Calques, la timeline ou la colonne du montage ; ils sont
+    surlignés, le courant d'une cible (⌖), les autres d'une coche. Avec l'outil Sélection, le lasso, le
+    rectangle et « Tout sélectionner » (Ctrl+A) prennent alors **sur tous les calques choisis** : les
+    traits dans le lasso de chaque calque vectoriel, la zone de chaque calque bitmap, au dessin de
+    l'image courante. Une seule boîte entoure le tout et chaque geste — déplacer, échelle, rotation,
+    inclinaison, champs chiffrés, flèches, miroir (Alt+H / Alt+V) — s'applique à tous autour du
+    même pivot, calque décalé, tourné ou en profondeur compris. Suppr, Ctrl+C / X / V marchent
+    calque par calque ; un geste sur N calques est **une seule étape d'annulation**, à son nom. Sans
+    latence : chaque calque a sa feuille flottante (jamais de rejeu du moteur pendant le geste ;
+    3 calques de 30 traits texturés : 0,001 ms par image, saisie de 10 ms une fois). Les calques
+    cachés, verrouillés, sans dessin à l'image, vidéo et les dossiers sont laissés de côté, la barre
+    d'état et les Réglages disent lesquels et pourquoi (« 3 calques, 42 éléments »). L'outil
+    **Transformer** déplace, tourne et agrandit (un coin) de même les calques choisis ensemble ;
+    l'outil **Déformer** reste sur le calque courant seul (il le dit).
 - **Bitmap** (B, façon TVPaint) : peinture en pixels, avec le pinceau, le crayon (anticrénelé ;
   « Pixels nets » pour le pixel art), la gomme, le remplissage avec débord sous le trait et
   l'import d'images PNG/JPEG.
@@ -1172,6 +1188,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `stage3d.rs`, `stage3dui.rs` | Plateau en 3D : géométrie (plans, caméra, rayons) ; affichage, navigation, outil Déplacer |
 | `layertools.rs` | Outil Transformer (calque entier) |
 | `selbox.rs`, `seltools.rs` | Boîte de sélection façon Storyboard Pro : parties sous le pointeur, gestes (échelle, rotation, inclinaison, pivot), valeurs chiffrées ; sa place dans l'application |
+| `multisel.rs`, `multitools.rs` | Sélection sur plusieurs calques choisis : parts par calque, boîte commune sur la feuille, geste appliqué à chaque calque (`T⁻¹·A·T`), une feuille flottante par calque, une étape d'annulation ; souris, commandes, écran |
 | `envelopetools.rs` | Outil Déformer : mode Enveloppe de Bézier (la perspective : `perstools.rs`) |
 | `topview.rs` | Vue de dessus (profondeur des calques) |
 | `model3d.rs`, `view3d.rs`, `ref3dtool.rs` | Repère 3D : lecture glTF, arêtes utiles ; caméra en orbite, fil de fer, arêtes cachées ; outil et affichage |

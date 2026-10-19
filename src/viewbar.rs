@@ -204,6 +204,10 @@ impl App {
                     crate::app::Tool::Cutter if fond => "Strate Fond · clic : retirer la zone fermée du fond",
                     crate::app::Tool::Eraser if fond => "Strate Fond · la gomme coupe le fond",
                     crate::app::Tool::Brush | crate::app::Tool::Pencil if fond => "Strate Fond · peindre sous le trait, dans la forme (recoud le fond coupé)",
+                    // Plusieurs calques choisis (Ctrl ou Maj + clic sur leur ligne).
+                    crate::app::Tool::Select if self.chosen_layers().len() >= 2 => "Calques choisis : le lasso prend sur tous · une boîte commune : dedans déplacer · coin : échelle · hors d'un coin : tourner · bord : incliner · point rond : pivot · flèches : 1 px (Maj : 10) · Suppr",
+                    crate::app::Tool::Transform if self.chosen_layers().len() >= 2 => "Calques choisis ensemble : glisser dans la boîte : déplacer · coin : agrandir · rond : tourner · Ctrl+R : remettre en place",
+                    crate::app::Tool::Perspective if self.chosen_layers().len() >= 2 => "Enveloppe ou perspective : le calque courant seul (choisis un seul calque pour déformer)",
                     t => tool_hint(t),
                 };
                 ui.add(egui::Label::new(egui::RichText::new(hint).small().weak()).truncate()).on_hover_text(hint);

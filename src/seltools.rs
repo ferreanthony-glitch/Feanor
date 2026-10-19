@@ -87,6 +87,11 @@ impl App {
     /// Une fois par image, avant d'agir : la boîte vectorielle ne vaut que pour la sélection et
     /// les éléments qu'elle a vus ; sinon elle repart du rectangle des éléments, droit.
     pub(crate) fn sync_sel_box(&mut self) {
+        // Plusieurs calques : la boîte est celle de `multitools.rs`.
+        if self.multi.sel.is_some() {
+            self.sel_box = None;
+            return;
+        }
         if let Some(sel) = &self.bsel {
             let (cel, rect0) = (sel.cel, sel.mask.bounds());
             if !self.sel_box.as_ref().is_some_and(|b| b.cel == cel && b.rect0 == rect0 && b.items.is_empty()) {
@@ -113,6 +118,9 @@ impl App {
 
     /// La boîte de la sélection telle qu'on la voit (le geste en cours compris), ou rien.
     pub(crate) fn sel_frame(&self) -> Option<SelFrame> {
+        if self.multi.sel.is_some() {
+            return self.multi_live_frame();
+        }
         if let Some(sel) = &self.bsel {
             let rect0 = sel.mask.bounds();
             let pivot = self.sel_box.as_ref().filter(|b| b.cel == sel.cel && b.rect0 == rect0).and_then(|b| b.pivot);
@@ -135,6 +143,10 @@ impl App {
 
     /// Les coins de la boîte à l'écran et son pivot.
     fn frame_on_screen(&self, frame: &SelFrame) -> ([Pos2; 4], Pos2) {
+        // Plusieurs calques : la boîte est sur la feuille, pas dans le dessin d'un calque.
+        if self.multi.sel.is_some() {
+            return (frame.corners().map(|q| self.stage_to_screen(q)), self.stage_to_screen(frame.pivot_world()));
+        }
         (frame.corners().map(|q| self.layer_to_screen(q)), self.layer_to_screen(frame.pivot_world()))
     }
 
@@ -165,6 +177,11 @@ impl App {
 
     /// La partie de la boîte tenue en ce moment (curseur, poignée éclairée).
     fn active_handle(&self) -> Option<Handle> {
+        match &self.multi.drag {
+            Some(crate::multisel::MDrag::Transform { handle, field: false, .. }) => return Some(*handle),
+            Some(crate::multisel::MDrag::Pivot { .. }) => return Some(Handle::Pivot),
+            _ => {}
+        }
         match (&self.vdrag, &self.bdrag) {
             (Some(VDrag::Transform { handle, field: false, .. }), _) | (_, Some(BDrag::Transform { handle, field: false, .. })) => Some(*handle),
             (Some(VDrag::Pivot { .. }), _) | (_, Some(BDrag::Pivot { .. })) => Some(Handle::Pivot),
@@ -190,6 +207,9 @@ impl App {
     pub(crate) fn reset_pivot(&mut self) {
         if let Some(b) = &mut self.sel_box {
             b.pivot = None;
+        }
+        if let Some(b) = self.multi.sel.as_mut().and_then(|s| s.boxed.as_mut()) {
+            b.frame.pivot = None;
         }
         self.status = "Pivot remis au centre de la boîte.".into();
     }
@@ -273,6 +293,10 @@ impl App {
     fn apply_box_params(&mut self, live: SelFrame, params: BoxParams, field: Field) {
         let handle = field.handle();
         self.field_edit_alive = true;
+        if self.multi.sel.is_some() {
+            self.multi_apply_params(live, params, handle);
+            return;
+        }
         // Le geste en cours est-il celui des champs ?
         let open = matches!(&self.vdrag, Some(VDrag::Transform { field: true, .. })) || matches!(&self.bdrag, Some(BDrag::Transform { field: true, .. }));
         if !open {
@@ -319,12 +343,17 @@ impl App {
         if matches!(&self.bdrag, Some(BDrag::Transform { field: true, .. })) {
             self.bdrag = None;
         }
+        if matches!(&self.multi.drag, Some(crate::multisel::MDrag::Transform { field: true, .. })) {
+            self.multi_finish_drag();
+        }
         self.field_edit_alive = false;
     }
 
     /// Début d'image : un champ qui n'a plus la main termine son geste.
     pub(crate) fn finish_field_edit_if_idle(&mut self) {
-        let open = matches!(&self.vdrag, Some(VDrag::Transform { field: true, .. })) || matches!(&self.bdrag, Some(BDrag::Transform { field: true, .. }));
+        let open = matches!(&self.vdrag, Some(VDrag::Transform { field: true, .. }))
+            || matches!(&self.bdrag, Some(BDrag::Transform { field: true, .. }))
+            || matches!(&self.multi.drag, Some(crate::multisel::MDrag::Transform { field: true, .. }));
         if open && !std::mem::take(&mut self.field_edit_alive) {
             self.finish_field_edit();
         }
@@ -369,7 +398,8 @@ impl App {
         ui.horizontal_wrapped(|ui| {
             field(ui, &mut p.angle, Field::Angle, "", "°", 0.5, -180.0..=180.0, ("Angle", "Rotation de la boîte autour du pivot, en degrés."));
             field(ui, &mut p.skew, Field::Skew, "inclin. ", "°", 0.5, -selbox::SKEW_MAX..=selbox::SKEW_MAX, ("Inclinaison", "Cisaillement le long du bord du haut, en degrés."));
-            let moved = self.sel_box.as_ref().is_some_and(|b| b.pivot.is_some());
+            let moved = self.sel_box.as_ref().is_some_and(|b| b.pivot.is_some())
+                || self.multi.sel.as_ref().and_then(|s| s.boxed.as_ref()).is_some_and(|b| b.frame.pivot.is_some());
             if crate::bulles::icone_si(ui, moved, ph::CROSSHAIR, "Réinitialiser le pivot", "Le pivot revient au centre de la boîte.", "").clicked() {
                 self.reset_pivot();
             }
