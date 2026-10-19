@@ -798,8 +798,14 @@ rangés dans `keymap.toml`. Pour en changer un :
 Fichier > Raccourcis clavier… (ou F1) liste toutes les commandes. On y trouve une recherche, les
 mêmes boutons, et l'origine de chaque raccourci en bulle.
 
+**Jeu de raccourcis** (Fichier > Préférences… ou en tête de la liste F1) : « SHOT (par défaut) » ou
+« Façon Storyboard Pro ». Ce dernier ne change que ce que `keymap.toml` documente (A et F changent de
+plan, Ctrl+Maj+V colle sur place, F5 coupe le plan) ; le reste garde les touches de SHOT, et tes
+raccourcis personnels restent par-dessus le jeu. La liste dit d'où vient chaque touche (SHOT, jeu, perso).
+Tableau et sources : `docs/INTERFACE.md`, 6.2.
+
 Les choix vont dans un fichier personnel (`%APPDATA%\SHOT\keymap.toml`), qui remplace, action par
-action, le fichier par défaut. On peut aussi l'écrire à la main (« Aide > Modifier le fichier de
+action, le fichier par défaut (et le jeu choisi). On peut aussi l'écrire à la main (« Aide > Modifier le fichier de
 raccourcis à la main », puis « Recharger »). Détails et choix pour le clavier AZERTY :
 `docs/reference/sbpro_presets/README.md`.
 

@@ -3,12 +3,41 @@
 //! Pelure dit si elle sert déjà, et l'écrit dans le fichier de raccourcis personnel (qui
 //! remplace, action par action, le fichier par défaut). La fenêtre « Raccourcis clavier » liste
 //! toutes les commandes, avec une recherche, et les mêmes boutons.
+//!
+//! Jeu de raccourcis (2026-10-19) : la liste déroulante « Jeu de raccourcis » (ici et dans
+//! Préférences…) choisit « SHOT (par défaut) » ou « Façon Storyboard Pro ». Le fichier personnel
+//! reste par-dessus le jeu ; changer de jeu demande confirmation quand il en a. Chaque ligne de la
+//! liste dit d'où vient son raccourci : SHOT, le jeu ou l'utilisateur (« perso »).
 
 use eframe::egui::{self, vec2, Align2, Event, Id, Response, RichText};
 use egui_phosphor::regular as ph;
 
 use crate::app::{App, Mode};
-use crate::keymap::{self, Keymap};
+use crate::keymap::{self, Keymap, Origin, PresetId};
+
+/// Le jeu en attente de confirmation (dans les données d'egui : la fenêtre est dessinée à l'image
+/// suivante, d'où qu'on l'ait demandée).
+const PENDING_PRESET: &str = "shot_jeu_raccourcis_attente";
+
+/// La règle de fusion, dite en clair là où on choisit le jeu.
+pub(crate) const MERGE_RULE: &str = "Tes raccourcis personnels restent par-dessus le jeu : une commande que tu as changée garde ta touche, \
+     les autres prennent celles du jeu. Si ta touche est aussi dans le jeu, la tienne joue et la liste (F1) le signale.";
+
+/// La liste déroulante « Jeu de raccourcis » ; renvoie le jeu qu'on vient de choisir, s'il change.
+pub(crate) fn preset_combo(ui: &mut egui::Ui, salt: &str, current: PresetId) -> Option<PresetId> {
+    let mut chosen = None;
+    ui.horizontal(|ui| {
+        ui.label("Jeu de raccourcis");
+        egui::ComboBox::from_id_salt(salt).selected_text(current.label()).show_ui(ui, |ui| {
+            for p in PresetId::ALL {
+                if ui.selectable_label(p == current, p.label()).on_hover_text(p.description()).clicked() && p != current {
+                    chosen = Some(p);
+                }
+            }
+        });
+    });
+    chosen
+}
 
 /// Une assignation en cours : l'action, et la combinaison tapée (pas encore).
 pub(crate) struct Assign {
@@ -105,12 +134,79 @@ impl App {
         true
     }
 
-    /// Les fenêtres des raccourcis : l'assignation en cours, et la liste.
+    /// Demande de passer à ce jeu de raccourcis. Sans raccourci personnel, c'est immédiat ; sinon
+    /// une fenêtre demande confirmation d'abord (les raccourcis personnels sont gardés).
+    pub(crate) fn request_preset(&mut self, ctx: &egui::Context, id: PresetId) {
+        if id == self.settings.keymap_preset {
+            return;
+        }
+        if self.keymap.user_overrides() > 0 {
+            ctx.data_mut(|d| d.insert_temp(Id::new(PENDING_PRESET), id));
+        } else {
+            self.apply_preset(id);
+        }
+    }
+
+    /// Change de jeu de raccourcis : retenu dans les réglages, raccourcis relus.
+    pub(crate) fn apply_preset(&mut self, id: PresetId) {
+        self.settings.keymap_preset = id;
+        let saved = self.settings.save();
+        self.reload_keymap();
+        let n = self.keymap.user_overrides();
+        let mut text = format!("Jeu de raccourcis « {} ».", id.label());
+        if n > 0 {
+            text += &format!(" {n} raccourci(s) personnel(s) gardé(s) par-dessus.");
+        }
+        if !self.keymap.warnings.is_empty() {
+            text += &format!(" {} remarque(s), voir F1.", self.keymap.warnings.len());
+        }
+        if let Err(e) = saved {
+            text += &format!(" Choix non enregistré : {e}");
+        }
+        self.status = text;
+    }
+
+    /// La confirmation d'un changement de jeu quand l'utilisateur a des raccourcis personnels.
+    fn preset_confirm_window(&mut self, ctx: &egui::Context) {
+        let Some(id) = ctx.data(|d| d.get_temp::<PresetId>(Id::new(PENDING_PRESET))) else { return };
+        let n = self.keymap.user_overrides();
+        let mut choice: Option<bool> = None;
+        egui::Window::new("Changer de jeu de raccourcis")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.set_max_width(420.0);
+                ui.label(format!("Passer au jeu « {} » ?", id.label()));
+                ui.label(RichText::new(id.description()).small().weak());
+                ui.add_space(4.0);
+                ui.label(format!("Tu as {n} raccourci(s) personnel(s). {MERGE_RULE}"));
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Changer de jeu").clicked() {
+                        choice = Some(true);
+                    }
+                    if ui.button("Annuler").clicked() {
+                        choice = Some(false);
+                    }
+                });
+            });
+        if let Some(go) = choice {
+            ctx.data_mut(|d| d.remove_temp::<PresetId>(Id::new(PENDING_PRESET)));
+            if go {
+                self.apply_preset(id);
+            }
+        }
+    }
+
+    /// Les fenêtres des raccourcis : l'assignation en cours, la confirmation d'un changement de jeu,
+    /// et la liste.
     pub(crate) fn shortcut_windows(&mut self, ctx: &egui::Context) {
         if let Some(action) = ctx.data_mut(|d| d.remove_temp::<String>(Id::new(ASK))) {
             self.start_assign(&action);
         }
         self.assign_window(ctx);
+        self.preset_confirm_window(ctx);
         self.shortcuts_list_window(ctx);
     }
 
@@ -213,6 +309,7 @@ impl App {
         let mut edit = false;
         let mut reload = false;
         let mut assign: Option<String> = None;
+        let mut new_preset: Option<PresetId> = None;
         let mut changes: Vec<(String, Option<Vec<String>>)> = Vec::new();
         egui::Window::new("Raccourcis clavier")
             .open(&mut open)
@@ -229,6 +326,8 @@ impl App {
                     edit = crate::bulles::icone(ui, ph::PENCIL_SIMPLE, "Modifier à la main", "Ouvrir le fichier de raccourcis dans le Bloc-notes.", "").clicked();
                     reload = crate::bulles::icone(ui, ph::ARROW_CLOCKWISE, "Recharger", "Relire le fichier après l'avoir modifié.", "").clicked();
                 });
+                new_preset = preset_combo(ui, "jeu_raccourcis_liste", self.settings.keymap_preset);
+                ui.label(RichText::new(MERGE_RULE).small().weak());
                 ui.label(
                     RichText::new("Astuce : un clic droit sur une icône ou une entrée de menu permet aussi de lui donner un raccourci.")
                         .small()
@@ -246,8 +345,10 @@ impl App {
                 });
                 ui.separator();
                 let filter = self.keys_filter.to_lowercase();
+                let accent = crate::theme::palette().accent_texte;
+                let preset_name = self.keymap.preset.label();
                 egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                    egui::Grid::new("grille_raccourcis").num_columns(3).striped(true).show(ui, |ui| {
+                    egui::Grid::new("grille_raccourcis").num_columns(4).striped(true).show(ui, |ui| {
                         for info in keymap::ACTIONS.iter().filter(|a| a.implemented) {
                             let keys = self.keymap.labels_of(info.id);
                             let mut label = info.label.to_string();
@@ -257,20 +358,44 @@ impl App {
                                 None => {}
                             }
                             let keys_text = keys.join("  ou  ");
-                            if !filter.is_empty() && !label.to_lowercase().contains(&filter) && !keys_text.to_lowercase().contains(&filter) {
+                            let origin = self.keymap.origin_of(info.id);
+                            let to_verify = self.keymap.verify_note(info.id);
+                            if !filter.is_empty()
+                                && !label.to_lowercase().contains(&filter)
+                                && !keys_text.to_lowercase().contains(&filter)
+                                && !origin.label().contains(&filter)
+                            {
                                 continue;
                             }
                             let resp = ui.label(&label);
                             shortcut_menu(&resp, info.id, &keys_text);
+                            let source = self.keymap.source_of(info.id);
                             if keys.is_empty() {
-                                ui.label(RichText::new("—").weak());
+                                let resp = ui.label(RichText::new("—").weak());
+                                if origin == Origin::Preset && !source.is_empty() {
+                                    resp.on_hover_text(format!("Le jeu « {preset_name} » n'a pas de touche pour cette commande. {source}"));
+                                }
                             } else {
-                                let source = self.keymap.source_of(info.id);
                                 let resp = ui.label(RichText::new(&keys_text).strong());
                                 if !source.is_empty() {
                                     resp.on_hover_text(format!("Origine : {source}"));
                                 }
                             }
+                            // D'où vient la touche : SHOT, le jeu choisi ou l'utilisateur.
+                            ui.horizontal(|ui| {
+                                let (text, hint) = match origin {
+                                    Origin::Default => (RichText::new(origin.label()).small().weak(), "Raccourci de SHOT (keymap.toml).".to_string()),
+                                    Origin::Preset => (
+                                        RichText::new(origin.label()).small().color(accent),
+                                        format!("Raccourci du jeu « {preset_name} » : il remplace celui de SHOT."),
+                                    ),
+                                    Origin::User => (RichText::new(origin.label()).small().strong(), "Ton raccourci : il remplace celui du jeu et de SHOT.".to_string()),
+                                };
+                                ui.label(text).on_hover_text(hint);
+                                if let Some(note) = to_verify {
+                                    ui.label(RichText::new("à vérifier").small().color(crate::theme::avertissement())).on_hover_text(note);
+                                }
+                            });
                             ui.horizontal(|ui| {
                                 if crate::bulles::icone(ui, ph::KEYBOARD, "Assigner", "Taper un nouveau raccourci pour cette commande.", "").clicked() {
                                     assign = Some(info.id.to_string());
@@ -279,7 +404,7 @@ impl App {
                                     changes.push((info.id.to_string(), Some(Vec::new())));
                                 }
                                 if self.keymap.is_user(info.id)
-                                    && crate::bulles::icone(ui, ph::ARROW_COUNTER_CLOCKWISE, "Par défaut", "Revenir au raccourci par défaut.", "").clicked()
+                                    && crate::bulles::icone(ui, ph::ARROW_COUNTER_CLOCKWISE, "Par défaut", "Revenir au raccourci du jeu choisi (ou de SHOT).", "").clicked()
                                 {
                                     changes.push((info.id.to_string(), None));
                                 }
@@ -305,6 +430,9 @@ impl App {
                 });
             });
         self.show_help = open;
+        if let Some(p) = new_preset {
+            self.request_preset(ctx, p);
+        }
         if edit {
             self.edit_keymap();
         }

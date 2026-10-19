@@ -110,7 +110,10 @@ impl App {
                 }
                 for (row, &i) in found.iter().take(shown).enumerate() {
                     let (id, name) = commands[i];
-                    let key = self.keymap.label(id);
+                    // Toutes les touches actives de la commande (celles du jeu choisi et les siennes
+                    // comprises), et d'où elles viennent quand ce n'est pas SHOT.
+                    let key = self.keymap.keys_text(id);
+                    let origin = self.keymap.origin_of(id);
                     let r = ui
                         .horizontal(|ui| {
                             let r = ui.add(egui::SelectableLabel::new(row == p.selected, name));
@@ -118,6 +121,9 @@ impl App {
                                 ui.label(RichText::new(id).small().weak());
                                 if !key.is_empty() {
                                     ui.label(RichText::new(key).small().strong());
+                                    if origin != crate::keymap::Origin::Default {
+                                        ui.label(RichText::new(origin.label()).small().weak());
+                                    }
                                 }
                             });
                             r

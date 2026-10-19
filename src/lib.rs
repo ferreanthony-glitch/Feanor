@@ -294,6 +294,8 @@ mod revue_tests;
 #[cfg(test)]
 mod keymap_tests;
 #[cfg(test)]
+mod keymap_jeux_tests;
+#[cfg(test)]
 mod ops_tests;
 mod model3d;
 mod montagekeys;

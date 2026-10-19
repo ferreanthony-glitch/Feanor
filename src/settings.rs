@@ -102,6 +102,11 @@ pub struct Settings {
     /// appliqué et réglages d'avant (« Revenir comme avant »).
     #[serde(default, rename = "diagnostic")]
     pub diagnostic: crate::diagnostic::EtatDiagnostic,
+    /// Jeu de raccourcis (2026-10-19) : « SHOT » (par défaut) ou « Façon Storyboard Pro ». Le fichier
+    /// personnel de raccourcis joue par-dessus (`keymap.rs`, Fichier > Préférences…, liste des
+    /// raccourcis). Absent des anciens réglages : SHOT.
+    #[serde(default, rename = "jeu_raccourcis", skip_serializing_if = "crate::keymap::PresetId::is_default")]
+    pub keymap_preset: crate::keymap::PresetId,
 }
 
 fn default_autosave() -> u32 {
@@ -146,6 +151,7 @@ impl Default for Settings {
             framing: Default::default(),
             perf: Default::default(),
             diagnostic: Default::default(),
+            keymap_preset: Default::default(),
         }
     }
 }

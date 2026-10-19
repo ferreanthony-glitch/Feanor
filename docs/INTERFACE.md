@@ -344,7 +344,7 @@ Aucune n'est faite ici : c'est la partie 6.3 (barre par défaut plus mince).
 
 ---------------------------------------------------------------------------------------------------
 
-## 6. Propositions pour Anthony (non faites)
+## 6. Propositions pour Anthony (la 6.2 est faite, les autres non)
 
 ### 6.1 Espaces de travail par tâche : Storyboard, Animation, Montage
 
@@ -358,10 +358,10 @@ Aucune n'est faite ici : c'est la partie 6.3 (barre par défaut plus mince).
 - **Ce qu'Anthony voit** : passer en Animation ouvre les panneaux Calques, Effets et la timeline en grand ;
   revenir en Storyboard remet le montage et la fiche du plan. Sa disposition de chaque mode se retient.
 
-### 6.2 Préréglage « raccourcis façon Storyboard Pro »
+### 6.2 Jeu de raccourcis « Façon Storyboard Pro » (FAIT, branche `raccourcis-sbp`)
 
 Seulement ce que `keymap.toml` documente (les 65 raccourcis de `sb_shortcuts.xml` de Storyboard Pro 27,
-leur identifiant est dans le champ `source`). Aujourd'hui SHOT s'écarte de Storyboard Pro sur :
+leur identifiant est dans le champ `source`). Au départ, SHOT s'écartait de Storyboard Pro sur :
 
 | Commande SHOT | Storyboard Pro 27 | SHOT aujourd'hui | Raison notée dans le fichier |
 |---|---|---|---|
@@ -374,20 +374,53 @@ leur identifiant est dans le champ `source`). Aujourd'hui SHOT s'écarte de Stor
 | lier les clips au panneau | `LINK_CLIP_AND_PANEL` : Ctrl+L | retirée (Ctrl+L = pelure du calque) | sans objet depuis les plans |
 | pinceau pochoir | `DRAWING_STENCIL_BRUSH_TOOL_KEY` : Alt+X | retirée | le pochoir de calque existe |
 
-Le préréglage serait un fichier `keymap-storyboard-pro.toml` qui redéfinit seulement ces actions
-(`panneau.precedent` = A, `panneau.suivant` = F, `cle.precedente` / `suivante` = rien,
-`edition.coller_sur_place` = Ctrl+Maj+V, `edition.coller_a_la_tete` = rien, `panneau.couper` = F5,
-`dessin.nouvelle_cle` = rien tant que F5 sert à couper), choisi dans Préférences > Raccourcis clavier.
+**Ce qui est fait.** Deux jeux, au choix dans **Fichier > Préférences… > Raccourcis clavier** et en tête
+de la liste **Fichier > Raccourcis clavier… (F1)** : « Jeu de raccourcis » = *SHOT (par défaut)* ou
+*Façon Storyboard Pro*. Le second est le fichier `keymap-storyboard-pro.toml` (intégré au programme, même
+format que `keymap.toml`, avec un champ `source` par bloc). Il ne redéfinit que huit commandes, les seules
+dont l'écart est documenté dans `keymap.toml` ET qui existent dans SHOT :
 
-- **À vérifier** (rien d'écrit sans la source) : ce que Storyboard Pro fait sur Tab et Maj+Tab ; les
-  touches de la Palette de commandes (Ctrl+K est une proposition de SHOT) ; les touches F4 / F5 pour une
-  nouvelle clé (SHOT les a prises de ses réglages perso : « à vérifier » dans Storyboard Pro) ; toutes les
-  commandes que SHOT a et que Storyboard Pro 27 n'a pas par défaut (marquées « sans touche par défaut »
-  dans le fichier : on n'invente pas).
-- **Coût** : petit, 0,5 à 1 jour (le fichier, un sélecteur dans Préférences, un essai qui compare le
-  fichier aux sources du `keymap.toml`).
-- **Ce qu'Anthony voit** : un choix « Raccourcis : SHOT / Storyboard Pro » ; en Storyboard Pro, A et F
-  changent de plan comme dans son logiciel et F5 coupe un plan.
+| Commande SHOT | Touche du jeu | Source (champ `source` du jeu) | À vérifier |
+|---|---|---|---|
+| `panneau.precedent` (plan précédent) | A | Storyboard Pro 27 : `PREV_PANEL_KEY` | non |
+| `panneau.suivant` (plan suivant) | F | Storyboard Pro 27 : `NEXT_PANEL_KEY` | non |
+| `cle.precedente` | aucune (A rendue au plan) | SHOT : choix d'Anthony du 2026-10-17, noté dans `keymap.toml` | non |
+| `cle.suivante` | aucune (F rendue au plan) | idem | non |
+| `edition.coller_sur_place` | Ctrl+Maj+V | Storyboard Pro 27 : `PASTE_IN_PLACE_KEY` | non |
+| `edition.coller_a_la_tete` | aucune (Ctrl+Maj+V rendue) | SHOT : choix d'Anthony du 2026-10-19, noté dans `keymap.toml` | non |
+| `panneau.couper` (couper le plan) | F5 | perso : `SPLIT_PANEL_KEY`, F5 dans son Storyboard Pro (noté dans `keymap.toml`) | non |
+| `dessin.nouvelle_cle` | aucune (F5 rendue à la coupe) | SHOT ; la touche de Storyboard Pro pour une nouvelle clé n'est pas établie | **oui** |
+
+Quatre autres commandes **gardent la touche de SHOT** (elles ne changent pas) et sont notées « à vérifier »
+dans le jeu, parce que la touche de Storyboard Pro n'est établie nulle part : `mode.basculer` (Tab) et
+`vue.planches` (Maj+Tab), dont le rôle dans Storyboard Pro n'est pas vérifié ; `aide.palette` (Ctrl+K,
+proposition de SHOT) ; `dessin.nouvelle_cle_vide` (F4, réglage perso d'Anthony dans SHOT). Total : **5
+« à vérifier »** (1 dans les huit, 4 qui gardent SHOT) ; la liste F1 les marque d'une étiquette « à vérifier ».
+
+**Pas reprises (rien à poser, la commande n'existe pas dans SHOT)** : `DELETE_ALT_KEY` (Maj+Suppr, supprimer
+et resserrer : pas faite), `DRAWING_UNLOAD_MODEL_KEY` (Suppr, décharger la référence : pas faite),
+`LINK_CLIP_AND_PANEL` (Ctrl+L : sans objet depuis les plans), `DRAWING_STENCIL_BRUSH_TOOL_KEY` (Alt+X :
+retiré, le pochoir de calque existe). Suppr, Maj+Suppr et Ctrl+L gardent donc leur sens dans les deux jeux.
+Toutes les autres commandes de Storyboard Pro 27 que `keymap.toml` cite ont déjà la même touche dans SHOT,
+ou n'en ont pas dans Storyboard Pro (« sans touche par défaut » : on n'invente pas).
+
+**Règle de fusion** (trois couches, chacune remplace la précédente *commande par commande*) :
+`keymap.toml` (SHOT) < jeu choisi < fichier personnel (`%APPDATA%\SHOT\keymap.toml`).
+
+- Un jeu ne touche que ses commandes ; il écrit lui-même les retraits (une touche donnée à une commande est
+  retirée à celle qui la portait), donc il n'a aucun conflit en lui (essai
+  `keymap_jeux_tests::the_storyboard_pro_set_has_no_internal_conflict`, même contrôle que pour SHOT).
+- Les raccourcis de l'utilisateur sont **gardés par-dessus le jeu**, dans les deux sens : une commande qu'il
+  a changée garde sa touche quel que soit le jeu ; les autres prennent celles du jeu. Si sa touche est aussi
+  dans le jeu, la sienne joue et la liste (F1) signale le conflit.
+- Une copie du fichier par défaut, mot pour mot (ce que « Modifier le fichier à la main » crée), ne compte
+  pas comme personnelle : sinon elle cacherait le jeu en entier.
+- Limite : si l'utilisateur prend à une autre commande une touche du jeu (fenêtre « Assigner »), le retrait
+  est écrit dans son fichier ; il reste après un changement de jeu. « Par défaut » (liste F1) rend la touche.
+- Changer de jeu demande confirmation quand il y a des raccourcis personnels ; sinon c'est immédiat. Le choix
+  est dans les réglages (`jeu_raccourcis`, absent = SHOT : les anciens réglages se lisent comme avant).
+- La liste F1 dit, par commande, d'où vient sa touche (*SHOT*, *jeu* ou *perso*) ; la palette Ctrl+K montre
+  toutes les touches actives de la commande, avec *jeu* ou *perso* quand ce n'est pas SHOT.
 
 ### 6.3 Barre par défaut plus mince
 

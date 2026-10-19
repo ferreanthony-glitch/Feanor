@@ -1,0 +1,96 @@
+# Jeu de raccourcis « Façon Storyboard Pro » (docs/INTERFACE.md, partie 6.2).
+#
+# Ce fichier ne redéfinit QUE les commandes où SHOT s'écarte de Storyboard Pro et dont la source est
+# notée dans keymap.toml (champ `source`). Tout le reste garde le raccourci de SHOT (keymap.toml).
+# Aucune touche n'est inventée : chaque bloc cite l'identifiant de Storyboard Pro 27 (sb_shortcuts.xml)
+# ou les réglages perso d'Anthony (STB_Shortcuts.xml), tels que keymap.toml les rapporte.
+#
+# Mêmes blocs [[raccourci]] que keymap.toml. Une touche donnée ici est RETIRÉE à la commande qui la
+# portait dans keymap.toml : le jeu écrit lui-même ce retrait (touches = []), si bien qu'aucune
+# touche n'est partagée entre deux commandes dans le même contexte (essai
+# keymap_jeux_tests::the_storyboard_pro_set_has_no_internal_conflict).
+#
+# a_verifier = true : la touche ou son retrait n'est pas établi par Storyboard Pro ; à regarder dans
+# le logiciel avant de s'y fier.
+#
+# Le fichier personnel (%APPDATA%\SHOT\keymap.toml) passe par-dessus ce jeu, commande par commande.
+#
+# Commandes de Storyboard Pro 27 SANS action dans SHOT (rien à poser ici, voir docs/INTERFACE.md) :
+# DELETE_ALT_KEY (Maj+Suppr, supprimer et resserrer : pas faite), DRAWING_UNLOAD_MODEL_KEY (Suppr :
+# décharger la référence, pas faite), LINK_CLIP_AND_PANEL (Ctrl+L : sans objet depuis les plans),
+# DRAWING_STENCIL_BRUSH_TOOL_KEY (Alt+X : retiré, le pochoir de calque existe). Ctrl+L garde donc
+# la pelure du calque, Suppr et Maj+Suppr leur sens d'aujourd'hui.
+
+version = 1
+
+# --- Plan précédent / suivant : A et F, comme dans Storyboard Pro.
+
+[[raccourci]]
+action = "panneau.precedent"
+touches = ["A"]
+source = "Storyboard Pro 27 : PREV_PANEL_KEY"
+
+[[raccourci]]
+action = "panneau.suivant"
+touches = ["F"]
+source = "Storyboard Pro 27 : NEXT_PANEL_KEY"
+
+# A et F servaient la clé précédente / suivante (choix d'Anthony, 2026-10-17, noté dans keymap.toml) :
+# dans ce jeu elles passent au plan, la clé n'a plus de touche.
+[[raccourci]]
+action = "cle.precedente"
+touches = []
+source = "SHOT : A rendue à PREV_PANEL_KEY (voir le bloc cle.precedente de keymap.toml)"
+
+[[raccourci]]
+action = "cle.suivante"
+touches = []
+source = "SHOT : F rendue à NEXT_PANEL_KEY (voir le bloc cle.suivante de keymap.toml)"
+
+# --- Coller sur place : Ctrl+Maj+V.
+
+[[raccourci]]
+action = "edition.coller_sur_place"
+touches = ["Ctrl+Maj+V"]
+source = "Storyboard Pro 27 : PASTE_IN_PLACE_KEY"
+
+# Ctrl+Maj+V collait les clés à la tête de lecture (choix d'Anthony, 2026-10-19, noté dans
+# keymap.toml) : dans ce jeu la touche revient à « Coller sur place ».
+[[raccourci]]
+action = "edition.coller_a_la_tete"
+touches = []
+source = "SHOT : Ctrl+Maj+V rendue à PASTE_IN_PLACE_KEY (voir le bloc edition.coller_a_la_tete de keymap.toml)"
+
+# --- Couper le plan : F5, comme dans le Storyboard Pro d'Anthony.
+
+[[raccourci]]
+action = "panneau.couper"
+touches = ["F5"]
+source = "perso : SPLIT_PANEL_KEY (F5 dans son Storyboard Pro, noté dans keymap.toml)"
+
+# F5 posait une nouvelle clé (copie du dessin) dans SHOT. Storyboard Pro n'a pas de touche établie
+# pour cette commande : elle n'en a plus dans ce jeu (la clé vide garde F4, voir [[a_verifier]]).
+[[raccourci]]
+action = "dessin.nouvelle_cle"
+touches = []
+a_verifier = true
+source = "SHOT : F5 rendue à SPLIT_PANEL_KEY ; touche de nouvelle clé de Storyboard Pro non vérifiée (docs/INTERFACE.md 6.2)"
+
+# --- Commandes qui gardent la touche de SHOT, et dont la touche de Storyboard Pro n'est pas vérifiée
+# (docs/INTERFACE.md 6.2 : « à vérifier »). Elles ne changent pas : cette liste ne sert qu'à les montrer.
+
+[[a_verifier]]
+action = "mode.basculer"
+note = "Tab : proposition de SHOT, ce que Storyboard Pro fait sur Tab n'est pas vérifié"
+
+[[a_verifier]]
+action = "vue.planches"
+note = "Maj+Tab : proposition de SHOT, ce que Storyboard Pro fait sur Maj+Tab n'est pas vérifié"
+
+[[a_verifier]]
+action = "aide.palette"
+note = "Ctrl+K : proposition de SHOT (palette de commandes), pas une touche de Storyboard Pro"
+
+[[a_verifier]]
+action = "dessin.nouvelle_cle_vide"
+note = "F4 : réglage perso d'Anthony dans SHOT, la touche de Storyboard Pro pour une nouvelle clé n'est pas vérifiée"

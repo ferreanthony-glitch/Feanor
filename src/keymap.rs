@@ -3,6 +3,11 @@
 //! Chaque action du logiciel a un identifiant stable (`ACTIONS`). Le fichier associe des touches
 //! à ces identifiants. Le fichier par défaut est intégré au programme ; un fichier utilisateur
 //! (à côté de l'exécutable, ou dans %APPDATA%\SHOT) remplace action par action ce qu'il redéfinit.
+//!
+//! Trois couches, de la plus basse à la plus haute, chacune remplaçant la précédente action par
+//! action : 1. `keymap.toml` (SHOT) ; 2. le jeu de raccourcis choisi (`PresetId`, par exemple
+//! `keymap-storyboard-pro.toml`), qui ne redéfinit que les actions où il s'écarte de SHOT ; 3. le
+//! fichier personnel. Voir `Keymap::from_layers`.
 
 use std::path::PathBuf;
 
@@ -13,6 +18,99 @@ use crate::app::Mode;
 
 /// Fichier de raccourcis par défaut, intégré au programme.
 pub const DEFAULT_KEYMAP: &str = include_str!("../keymap.toml");
+
+/// Jeu « Façon Storyboard Pro », intégré au programme (docs/INTERFACE.md, partie 6.2).
+pub const STORYBOARD_PRO_KEYMAP: &str = include_str!("../keymap-storyboard-pro.toml");
+
+/// Un jeu de raccourcis qu'on choisit dans Préférences ou dans la liste des raccourcis.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PresetId {
+    /// Les raccourcis de SHOT (`keymap.toml`), sans rien par-dessus.
+    #[default]
+    Shot,
+    /// Les raccourcis de SHOT, avec par-dessus ceux de Storyboard Pro que `keymap.toml` documente.
+    StoryboardPro,
+}
+
+impl PresetId {
+    pub const ALL: [PresetId; 2] = [PresetId::Shot, PresetId::StoryboardPro];
+
+    /// Le nom écrit dans les réglages (`reglages.toml`).
+    pub fn name(self) -> &'static str {
+        match self {
+            PresetId::Shot => "shot",
+            PresetId::StoryboardPro => "storyboard_pro",
+        }
+    }
+
+    /// Le nom montré dans les listes déroulantes.
+    pub fn label(self) -> &'static str {
+        match self {
+            PresetId::Shot => "SHOT (par défaut)",
+            PresetId::StoryboardPro => "Façon Storyboard Pro",
+        }
+    }
+
+    pub fn description(self) -> &'static str {
+        match self {
+            PresetId::Shot => "Les raccourcis de SHOT : A et F vont de clé en clé, PgPréc et PgSuiv de plan en plan, F5 pose une clé, F6 coupe le plan.",
+            PresetId::StoryboardPro => {
+                "SHOT, avec quatre touches de Storyboard Pro par-dessus : A et F changent de plan, Ctrl+Maj+V colle sur place, F5 coupe le plan. Rien d'autre ne change."
+            }
+        }
+    }
+
+    /// Le texte du jeu (`None` : SHOT seul).
+    pub fn text(self) -> Option<&'static str> {
+        match self {
+            PresetId::Shot => None,
+            PresetId::StoryboardPro => Some(STORYBOARD_PRO_KEYMAP),
+        }
+    }
+
+    /// Le jeu qui porte ce nom dans les réglages ; SHOT si on ne le connaît pas (un réglage écrit
+    /// par une version plus récente ne doit jamais empêcher de démarrer).
+    pub fn from_name(name: &str) -> PresetId {
+        PresetId::ALL.into_iter().find(|p| p.name() == name.trim()).unwrap_or_default()
+    }
+
+    pub fn is_default(&self) -> bool {
+        *self == PresetId::Shot
+    }
+}
+
+impl Serialize for PresetId {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self.name())
+    }
+}
+
+impl<'de> Deserialize<'de> for PresetId {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        Ok(PresetId::from_name(&String::deserialize(d)?))
+    }
+}
+
+/// D'où vient le raccourci d'une action.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Origin {
+    /// `keymap.toml`.
+    Default,
+    /// Le jeu de raccourcis choisi (autre que SHOT).
+    Preset,
+    /// Le fichier personnel.
+    User,
+}
+
+impl Origin {
+    pub fn label(self) -> &'static str {
+        match self {
+            Origin::Default => "SHOT",
+            Origin::Preset => "jeu",
+            Origin::User => "perso",
+        }
+    }
+}
 
 pub struct ActionInfo {
     pub id: &'static str,
@@ -795,8 +893,10 @@ pub struct Binding {
     /// Marqué « non implémenté » dans le fichier.
     pub reserved: bool,
     pub source: String,
-    /// Vient du fichier personnel (il remplace le raccourci par défaut).
+    /// Vient du fichier personnel (il remplace le raccourci par défaut ou celui du jeu).
     pub user: bool,
+    /// Vient du jeu de raccourcis choisi (il remplace le raccourci par défaut).
+    pub preset: bool,
 }
 
 #[derive(Deserialize)]
@@ -804,6 +904,21 @@ struct FileFormat {
     version: u32,
     #[serde(default)]
     raccourci: Vec<Entry>,
+    /// Seulement dans un jeu : des commandes qui gardent la touche de SHOT et dont celle de
+    /// Storyboard Pro n'est pas vérifiée.
+    #[serde(default)]
+    a_verifier: Vec<VerifyNote>,
+}
+
+#[derive(Deserialize)]
+struct VerifyNote {
+    action: String,
+    #[serde(default)]
+    note: String,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -817,6 +932,9 @@ struct Entry {
     contexte: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     etat: Option<String>,
+    /// La touche n'est pas établie (jeux de raccourcis).
+    #[serde(default, skip_serializing_if = "is_false")]
+    a_verifier: bool,
 }
 
 fn parse_file(text: &str, warnings: &mut Vec<String>) -> Result<Vec<Binding>, String> {
@@ -865,9 +983,27 @@ fn parse_file(text: &str, warnings: &mut Vec<String>) -> Result<Vec<Binding>, St
             reserved: reserved || !implemented,
             source: e.source,
             user: false,
+            preset: false,
         });
     }
     Ok(out)
+}
+
+/// Met `layer` par-dessus `bindings` : chaque action que la couche redéfinit perd ses anciens
+/// blocs, ceux de la couche passent devant (en cas de touche partagée, la couche haute l'emporte).
+fn overlay(bindings: &mut Vec<Binding>, layer: Vec<Binding>) {
+    let redefined: Vec<&str> = layer.iter().map(|b| b.action.as_str()).collect();
+    bindings.retain(|b| !redefined.contains(&b.action.as_str()));
+    bindings.splice(0..0, layer);
+}
+
+/// Les « à vérifier » d'un jeu : ses blocs marqués `a_verifier = true` (avec leur source) et sa liste
+/// `[[a_verifier]]` (commandes qui gardent la touche de SHOT, avec la note).
+fn parse_notes(text: &str) -> Vec<(String, String)> {
+    let Ok(file) = toml::from_str::<FileFormat>(text) else { return Vec::new() };
+    let mut out: Vec<(String, String)> = file.raccourci.into_iter().filter(|e| e.a_verifier).map(|e| (e.action, e.source)).collect();
+    out.extend(file.a_verifier.into_iter().map(|n| (n.action, n.note)));
+    out
 }
 
 pub(crate) fn contexts_overlap(a: Option<Mode>, b: Option<Mode>) -> bool {
@@ -880,11 +1016,30 @@ pub struct Keymap {
     pub warnings: Vec<String>,
     /// Fichier utilisateur pris en compte, le cas échéant.
     pub user_file: Option<PathBuf>,
+    /// Le jeu de raccourcis par-dessus lequel le fichier personnel joue.
+    pub preset: PresetId,
+    /// « À vérifier » du jeu : (action, note).
+    pub notes: Vec<(String, String)>,
 }
 
 impl Keymap {
-    /// Raccourcis par défaut, puis ceux du fichier utilisateur qui remplacent action par action.
+    /// Raccourcis par défaut, puis ceux du fichier utilisateur qui remplacent action par action
+    /// (SHOT seul : les essais ; le programme passe par `build`).
+    #[cfg(test)]
     pub fn from_texts(default: &str, user: Option<&str>) -> Keymap {
+        Keymap::from_layers(default, None, user)
+    }
+
+    /// Les trois couches : les raccourcis par défaut, le jeu choisi (le texte de `preset`) puis le
+    /// fichier personnel, chacune remplaçant la précédente action par action.
+    ///
+    /// - Le jeu ne redéfinit que ses actions ; il écrit lui-même les retraits (une touche donnée à
+    ///   une action est retirée à celle qui la portait), donc il n'a aucun conflit en lui.
+    /// - Le fichier personnel garde la main : ce qu'il redéfinit l'emporte sur le jeu comme sur SHOT,
+    ///   et si une de ses touches est aussi dans le jeu, la sienne joue et une remarque le dit.
+    /// - Une copie telle quelle du fichier par défaut (ce que « Modifier à la main » crée) ne compte
+    ///   pas comme personnelle : sinon elle cacherait le jeu en entier.
+    pub fn from_layers(default: &str, preset: Option<(PresetId, &str)>, user: Option<&str>) -> Keymap {
         let mut warnings = Vec::new();
         let mut bindings = match parse_file(default, &mut warnings) {
             Ok(b) => b,
@@ -893,16 +1048,39 @@ impl Keymap {
                 Vec::new()
             }
         };
+        let defaults = bindings.clone();
+        let mut chosen = PresetId::Shot;
+        let mut notes = Vec::new();
+        if let Some((id, text)) = preset {
+            match parse_file(text, &mut warnings) {
+                Ok(mut layer) => {
+                    for b in &mut layer {
+                        b.preset = true;
+                    }
+                    overlay(&mut bindings, layer);
+                    chosen = id;
+                    notes = parse_notes(text);
+                }
+                Err(e) => warnings.push(format!("jeu de raccourcis « {} » illisible, raccourcis de SHOT utilisés : {e}", id.label())),
+            }
+        }
         if let Some(text) = user {
             match parse_file(text, &mut warnings) {
                 Ok(mut user_bindings) => {
+                    // Une action dont tous les blocs sont ceux du fichier par défaut, mot pour mot,
+                    // n'est pas un choix de l'utilisateur.
+                    let is_copy = |b: &Binding| defaults.iter().any(|d| d.action == b.action && d.keys == b.keys && d.source == b.source && d.context == b.context);
+                    let copies: Vec<String> = user_bindings
+                        .iter()
+                        .filter(|b| user_bindings.iter().filter(|o| o.action == b.action).all(is_copy))
+                        .map(|b| b.action.clone())
+                        .collect();
+                    user_bindings.retain(|b| !copies.contains(&b.action));
                     for b in &mut user_bindings {
                         b.user = true;
                     }
-                    let redefined: Vec<String> = user_bindings.iter().map(|b| b.action.clone()).collect();
-                    bindings.retain(|b| !redefined.contains(&b.action));
                     // Placés devant : en cas de touche partagée, le fichier personnel l'emporte.
-                    bindings.splice(0..0, user_bindings);
+                    overlay(&mut bindings, user_bindings);
                 }
                 Err(e) => warnings.push(format!("fichier de raccourcis illisible, raccourcis par défaut utilisés : {e}")),
             }
@@ -911,16 +1089,24 @@ impl Keymap {
             bindings,
             warnings,
             user_file: None,
+            preset: chosen,
+            notes,
         };
         map.check_conflicts();
         map
     }
 
-    /// Charge le fichier à côté de l'exécutable, sinon celui de %APPDATA%\SHOT, sinon le défaut.
-    pub fn load() -> Keymap {
+    /// Les raccourcis d'un jeu et d'un texte de fichier personnel (sans toucher au disque).
+    pub fn build(preset: PresetId, user: Option<&str>) -> Keymap {
+        Keymap::from_layers(DEFAULT_KEYMAP, preset.text().map(|t| (preset, t)), user)
+    }
+
+    /// Charge le fichier à côté de l'exécutable, sinon celui de %APPDATA%\SHOT, par-dessus le jeu
+    /// choisi, sinon le défaut.
+    pub fn load(preset: PresetId) -> Keymap {
         let path = Self::candidate_paths().into_iter().find(|p| p.is_file());
         let user = path.as_ref().and_then(|p| std::fs::read_to_string(p).ok());
-        let mut map = Keymap::from_texts(DEFAULT_KEYMAP, user.as_deref());
+        let mut map = Keymap::build(preset, user.as_deref());
         map.user_file = path;
         map
     }
@@ -1006,6 +1192,38 @@ impl Keymap {
         self.bindings.iter().any(|b| b.action == action && b.user)
     }
 
+    /// D'où vient le raccourci de l'action : du fichier personnel, du jeu choisi ou de SHOT.
+    pub fn origin_of(&self, action: &str) -> Origin {
+        match self.bindings.iter().find(|b| b.action == action) {
+            Some(b) if b.user => Origin::User,
+            Some(b) if b.preset => Origin::Preset,
+            _ => Origin::Default,
+        }
+    }
+
+    /// Combien d'actions le fichier personnel redéfinit.
+    pub fn user_overrides(&self) -> usize {
+        let mut actions: Vec<&str> = self.bindings.iter().filter(|b| b.user).map(|b| b.action.as_str()).collect();
+        actions.sort_unstable();
+        actions.dedup();
+        actions.len()
+    }
+
+    /// Ce que le jeu note « à vérifier » pour cette action (rien si le fichier personnel la redéfinit :
+    /// c'est alors le choix de l'utilisateur).
+    pub fn verify_note(&self, action: &str) -> Option<&str> {
+        if self.origin_of(action) == Origin::User {
+            return None;
+        }
+        self.notes.iter().find(|(a, _)| a == action).map(|(_, n)| n.as_str())
+    }
+
+    /// Les raccourcis d'une action, pour la palette et les listes : toutes les touches, « ou » entre
+    /// elles ; vide s'il n'y en a pas.
+    pub fn keys_text(&self, action: &str) -> String {
+        self.labels_of(action).join(" ou ")
+    }
+
     /// Contexte (mode) où joue le raccourci de l'action ; partout s'il n'en a pas.
     pub fn context_of(&self, action: &str) -> Option<Mode> {
         self.bindings.iter().find(|b| b.action == action).and_then(|b| b.context)
@@ -1051,6 +1269,7 @@ impl Keymap {
                     source: "choisi dans SHOT".into(),
                     contexte,
                     etat: None,
+                    a_verifier: false,
                 });
             }
         }
@@ -1062,7 +1281,7 @@ impl Keymap {
         let body = toml::to_string(&Out { version: 1, raccourci: &entries }).map_err(|e| e.to_string())?;
         Ok(format!(
             "# Raccourcis personnels de SHOT : chacun remplace, action par action, celui du fichier\n\
-             # par défaut. Écrit par SHOT (clic droit sur une commande > « Assigner un raccourci »,\n\
+             # par défaut et celui du jeu de raccourcis choisi. Écrit par SHOT (clic droit sur une commande > « Assigner un raccourci »,\n\
              # ou Fichier > Raccourcis clavier) ; on peut aussi le modifier à la main.\n\n{body}"
         ))
     }
