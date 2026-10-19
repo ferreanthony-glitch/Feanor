@@ -13,7 +13,7 @@ use crate::history::Edit;
 
 const GRAB: f32 = 10.0;
 const ROTATE_UP: f32 = 28.0;
-const COLOR: Color32 = Color32::from_rgb(120, 220, 140);
+const COLOR: Color32 = crate::theme::POIGNEE_CALQUE;
 
 /// Partie de la boîte de l'outil Transformer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

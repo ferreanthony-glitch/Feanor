@@ -195,7 +195,7 @@ impl App {
             .iter()
             .map(|p| to_s(st.place.apply(*p)))
             .collect();
-        painter.extend(Shape::dashed_line(&quad, Stroke::new(1.0_f32, Color32::from_rgb(70, 165, 255)), 4.0, 3.0));
+        painter.extend(Shape::dashed_line(&quad, Stroke::new(1.0_f32, crate::theme::POIGNEE_SELECTION), 4.0, 3.0));
     }
 
     /// Petite fenêtre de saisie sous le texte en cours.

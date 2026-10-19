@@ -43,6 +43,24 @@ fn texte(symbole: &str) -> RichText {
     RichText::new(symbole).size(TAILLE)
 }
 
+/// L'encre d'un bouton qui montre un état : quand il est allumé (`on`), la couleur lisible sur
+/// l'accent (`theme::sur_accent`), dans tous les thèmes. egui dessine un `Button::selected` avec la
+/// couleur de texte du survol, pas celle de la sélection : sur l'accent clair du thème Gris sombre,
+/// l'icône restait claire sur clair. Tout bouton fait à la main avec `.selected(on)` passe par ici
+/// (les `SelectableLabel` d'egui prennent déjà la bonne couleur).
+pub(crate) fn encre_etat(texte: RichText, on: bool) -> RichText {
+    if on {
+        texte.color(theme::sur_accent())
+    } else {
+        texte
+    }
+}
+
+/// L'icône d'un bouton d'état, à sa taille d'icône.
+pub(crate) fn symbole_etat(symbole: &str, on: bool) -> RichText {
+    encre_etat(texte(symbole), on)
+}
+
 /// Icône à la place du nom d'un réglage (devant un curseur ou une valeur), avec sa bulle.
 pub(crate) fn etiquette(ui: &mut Ui, symbole: &str, nom: &str, description: &str) -> Response {
     let resp = ui.label(texte(symbole).color(theme::texte_doux()));
@@ -67,7 +85,7 @@ pub(crate) fn etat(ui: &mut Ui, on: bool, symbole: &str, nom: &str, description:
 
 /// Bouton icône qui montre un état, grisé si `actif` est faux.
 pub(crate) fn etat_si(ui: &mut Ui, actif: bool, on: bool, symbole: &str, nom: &str, description: &str, raccourci: &str) -> Response {
-    let resp = ui.add_enabled(actif, egui::Button::new(texte(symbole)).selected(on).min_size(vec2(24.0, 0.0)));
+    let resp = ui.add_enabled(actif, egui::Button::new(symbole_etat(symbole, on)).selected(on).min_size(vec2(24.0, 0.0)));
     bulle(resp, nom, description, raccourci)
 }
 

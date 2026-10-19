@@ -138,6 +138,49 @@ fn each_kind_of_layer_has_its_colour() {
 }
 
 #[test]
+fn the_scene_wide_layers_keep_a_readable_tint_in_every_theme() {
+    // Le nom d'un calque de toute la scène s'écrit dans la teinte « décor » sur la ligne du calque ;
+    // ses dessins la prennent en fond sous les plans (avant, une couleur fixe, pâle sur les thèmes clairs).
+    for (choix, p) in livres() {
+        assert!(contraste(p.decor, p.etiquette) >= 3.0, "{choix:?} : le nom d'un calque de décor se lit ({:.1})", contraste(p.decor, p.etiquette));
+        assert!(contraste(p.decor, p.rangee) >= 3.0, "{choix:?} : sur les rangées aussi");
+        // (Le texte posé sur un dessin de décor est à 1,9:1 dans les thèmes sombres, comme avant :
+        // noté dans docs/INTERFACE.md, pas changé ici pour ne pas déplacer l'aspect du montage.)
+        if p.claire {
+            assert!(contraste(p.sur_calque, p.calque_decor) >= 3.0, "{choix:?} : le texte posé sur un dessin de décor se lit ({:.1})", contraste(p.sur_calque, p.calque_decor));
+        }
+        assert!(p.decor.r() > p.decor.b(), "{choix:?} : la teinte reste chaude (ocre)");
+    }
+    // Le thème par défaut garde l'ocre d'avant.
+    let sombre = Palette::depuis(&Couleurs::gris_sombre());
+    assert_eq!(sombre.decor, Color32::from_rgb(214, 170, 92));
+    assert_eq!(sombre.calque_decor, Color32::from_rgb(214, 170, 92));
+}
+
+#[test]
+fn the_overlay_colours_are_written_once_in_the_theme() {
+    // Poignées de sélection, de déformation, de transformation et cadres de composition : avant,
+    // le même bleu était recopié dans six fichiers et la caméra jaune dans trois.
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let wanted = ["from_rgb(70, 165, 255)", "from_rgb(255, 150, 60)", "from_rgb(120, 220, 140)", "from_rgb(0, 165, 195)", "from_rgb(230, 60, 160)", "from_rgb(255, 196, 60)", "from_rgb(214, 170, 92)"];
+    let mut found = Vec::new();
+    for entry in std::fs::read_dir(dir).expect("dossier src") {
+        let path = entry.expect("fichier").path();
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        if !name.ends_with(".rs") || name.ends_with("_tests.rs") || name == "theme.rs" {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path).expect("source lisible");
+        for w in wanted {
+            if text.contains(w) {
+                found.push(format!("{name} : {w}"));
+            }
+        }
+    }
+    assert!(found.is_empty(), "couleurs recopiées hors de theme.rs : {found:?}");
+}
+
+#[test]
 fn bands_alternate_so_limits_show() {
     for (choix, p) in livres() {
         theme::installer(&ReglageTheme { choix, perso: Couleurs::default() });

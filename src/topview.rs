@@ -18,7 +18,10 @@ use crate::history::Edit;
 const FAR: f32 = 12.0;
 const GRAB: f32 = 7.0;
 const MARGIN: f32 = 18.0;
-const CAMERA: Color32 = Color32::from_rgb(255, 196, 60);
+/// La couleur de la caméra : celle de ses clés dans la timeline et le montage (palette du thème).
+fn camera_color() -> Color32 {
+    crate::theme::camera()
+}
 const CURRENT: Color32 = Color32::from_rgb(120, 190, 255);
 
 /// Distance d'un calque de profondeur `depth` (1 = plan de référence).
@@ -302,17 +305,17 @@ impl App {
         if self.panel().camera.len() > 1 {
             for f in [0, self.frame_count().saturating_sub(1)] {
                 let [o, a, b] = cone(f);
-                let ghost = Stroke::new(1.0_f32, CAMERA.gamma_multiply(0.35));
+                let ghost = Stroke::new(1.0_f32, camera_color().gamma_multiply(0.35));
                 painter.add(Shape::dashed_line(&[a, o, b], ghost, 4.0, 4.0));
             }
         }
         let [o, a, b] = cone(self.cur_frame);
-        painter.add(Shape::convex_polygon(vec![o, a, b], CAMERA.gamma_multiply(0.08), Stroke::NONE));
-        painter.line_segment([o, a], Stroke::new(1.5_f32, CAMERA));
-        painter.line_segment([o, b], Stroke::new(1.5_f32, CAMERA));
+        painter.add(Shape::convex_polygon(vec![o, a, b], camera_color().gamma_multiply(0.08), Stroke::NONE));
+        painter.line_segment([o, a], Stroke::new(1.5_f32, camera_color()));
+        painter.line_segment([o, b], Stroke::new(1.5_f32, camera_color()));
         painter.add(Shape::convex_polygon(
             vec![o + vec2(-8.0, 10.0), o + vec2(8.0, 10.0), o + vec2(5.0, 0.0), o + vec2(-5.0, 0.0)],
-            CAMERA,
+            camera_color(),
             Stroke::NONE,
         ));
 

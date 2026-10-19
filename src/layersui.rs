@@ -13,8 +13,6 @@ use crate::render::over;
 
 /// Taille des vignettes de calque.
 const THUMB: [usize; 2] = [64, 36];
-/// Marque des calques de toute la scène (6f).
-pub(crate) const SCENE_WIDE: Color32 = Color32::from_rgb(214, 170, 92);
 
 /// Vignettes des dessins (par dessin et version), refaites quand le dessin change.
 #[derive(Default)]

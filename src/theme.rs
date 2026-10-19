@@ -280,6 +280,10 @@ pub struct Palette {
     pub calque_bitmap: Color32,
     pub dessin_ctg: Color32,
     pub calque_ctg: Color32,
+    /// Calques de toute la scène (le décor) : la teinte « fond » des noms, et celle de leurs dessins
+    /// sous les plans du montage.
+    pub decor: Color32,
+    pub calque_decor: Color32,
     pub image_courante: Color32,
     pub camera: Color32,
     pub marque: Color32,
@@ -362,6 +366,8 @@ impl Palette {
             calque_bitmap: if claire { Color32::from_rgb(90, 175, 150) } else { Color32::from_rgb(6, 122, 103) },
             dessin_ctg: jeu([229, 91, 182], [180, 30, 130]),
             calque_ctg: if claire { Color32::from_rgb(210, 120, 185) } else { Color32::from_rgb(176, 52, 136) },
+            decor: jeu([214, 170, 92], [140, 92, 10]),
+            calque_decor: if claire { Color32::from_rgb(228, 196, 130) } else { Color32::from_rgb(214, 170, 92) },
             image_courante: jeu([252, 67, 46], [205, 30, 20]),
             camera: jeu([255, 196, 60], [150, 92, 0]),
             marque: jeu([244, 129, 12], [170, 70, 0]),
@@ -518,6 +524,9 @@ couleurs_courantes! {
     /// Calque CTG (13j) : rose, vif et sourd.
     dessin_ctg,
     calque_ctg,
+    /// Calques de toute la scène (le décor) : le nom, puis les dessins sous les plans du montage.
+    decor,
+    calque_decor,
     /// Image courante, clés de caméra, marques d'image, clés d'effets.
     image_courante,
     camera,
@@ -564,6 +573,25 @@ pub fn barre(sequence: bool, impaire: bool) -> Color32 {
         (false, true) => 3,
     }]
 }
+
+// ------------------------------------------------------------------- surimpressions du dessin
+
+// Couleurs posées PAR-DESSUS le dessin : poignées et contours de sélection, cadre de la caméra,
+// aides au cadrage. Elles ne suivent pas les neuf couleurs de l'interface, parce qu'elles doivent se
+// voir sur le papier du projet, quel qu'il soit (blanc, noir, couleur, damier) ; mais chacune n'est
+// écrite qu'ici (avant, le même bleu était recopié dans six fichiers). La caméra prend la couleur
+// de la palette (`camera()`), comme ses clés dans la timeline.
+
+/// Poignées, contours et lasso de la sélection, de la boîte de transformation et de la 3D.
+pub const POIGNEE_SELECTION: Color32 = Color32::from_rgb(70, 165, 255);
+/// Poignées de l'outil Déformer (enveloppe de Bézier).
+pub const POIGNEE_DEFORMER: Color32 = Color32::from_rgb(255, 150, 60);
+/// Boîte de l'outil Transformer le calque.
+pub const POIGNEE_CALQUE: Color32 = Color32::from_rgb(120, 220, 140);
+/// Zones de sécurité (action, titres).
+pub const CADRAGE_SECURITE: Color32 = Color32::from_rgb(0, 165, 195);
+/// Cadre d'un format de diffusion (16:9, 2,39:1…).
+pub const CADRAGE_FORMAT: Color32 = Color32::from_rgb(230, 60, 160);
 
 // ------------------------------------------------------------------- egui
 

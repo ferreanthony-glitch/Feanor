@@ -25,7 +25,7 @@ use crate::vector::VectorDrawing;
 
 /// Rayon de prise des coins et des poignées, en pixels d'écran.
 const GRAB: f32 = 9.0;
-const ACCENT: Color32 = Color32::from_rgb(255, 150, 60);
+const ACCENT: Color32 = crate::theme::POIGNEE_DEFORMER;
 
 /// Mode de l'outil Déformer.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

@@ -240,15 +240,15 @@ impl App {
                     let resp = ui.add(egui::DragValue::new(&mut self.onion.after).range(0..=max).suffix(" ›"));
                     bulle(resp, "Après", "Nombre de dessins (ou d'images) montrés après.", "");
                     let key = self.raccourci("pelure.panneau");
-                    let resp = ui.add(egui::Button::new(RichText::new(ph::GEAR).size(crate::bulles::TAILLE)).selected(self.onion_window).frame(false));
-                    if bulle(resp, "Panneau de la pelure", "Mode, devant, couleurs, chaque image et son opacité, réglages rangés, décalage.", &key).clicked() {
+                    let resp = ui.add(egui::Button::new(crate::bulles::symbole_etat(ph::GEAR, self.onion_window)).selected(self.onion_window).frame(false));
+                    if bulle(resp, "Réglages de la pelure d'oignon", "Mode, devant, couleurs, chaque image et son opacité, réglages rangés, décalage.", &key).clicked() {
                         self.onion_window = !self.onion_window;
                     }
                     sep(ui);
 
                     // Flips (13h).
                     let key = self.raccourci("flip.panneau");
-                    let resp = ui.add(egui::Button::new(RichText::new(ph::BOOK_OPEN).size(crate::bulles::TAILLE)).selected(self.flips_window).frame(false));
+                    let resp = ui.add(egui::Button::new(crate::bulles::symbole_etat(ph::BOOK_OPEN, self.flips_window)).selected(self.flips_window).frame(false));
                     let what = format!("Feuilleter vite des images pour juger un mouvement. Flip courant : « {} ».", self.flips.current().name);
                     if bulle(resp, "Flips", &what, &key).clicked() {
                         self.flips_window = !self.flips_window;
@@ -256,7 +256,7 @@ impl App {
 
                     // Pile d'effets du calque courant (13i).
                     let key = self.raccourci("fx.panneau");
-                    let resp = ui.add(egui::Button::new(RichText::new(ph::MAGIC_WAND).size(crate::bulles::TAILLE)).selected(self.pane_shown(crate::dock::Pane::Effects)).frame(false));
+                    let resp = ui.add(egui::Button::new(crate::bulles::symbole_etat(ph::MAGIC_WAND, self.pane_shown(crate::dock::Pane::Effects))).selected(self.pane_shown(crate::dock::Pane::Effects)).frame(false));
                     let n = self.layer().fx.len();
                     let what = format!("Le panneau des effets du calque courant (non destructifs, animables par clés). {n} effet{} sur ce calque.", if n > 1 { "s" } else { "" });
                     if bulle(resp, "Effets", &what, &key).clicked() {

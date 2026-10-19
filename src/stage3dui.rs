@@ -18,8 +18,11 @@ use crate::vector::Affine;
 use crate::view3d::Cam3d;
 use crate::viewbar::veil;
 
-const CAMERA: Color32 = Color32::from_rgb(255, 196, 60);
-const ACCENT: Color32 = Color32::from_rgb(70, 165, 255);
+/// La couleur de la caméra : celle de ses clés dans la timeline et le montage (palette du thème).
+fn camera_color() -> Color32 {
+    crate::theme::camera()
+}
+const ACCENT: Color32 = crate::theme::POIGNEE_SELECTION;
 /// Rayon de prise de l'œil de la caméra, en pixels d'écran.
 const GRAB: f32 = 14.0;
 /// Subdivisions d'un plan (la texture est posée par triangles : sans elles, la perspective
@@ -362,11 +365,11 @@ impl App {
                 painter.line_segment(s, stroke);
             }
         };
-        let strong = Stroke::new(1.5_f32, CAMERA);
-        let faint = Stroke::new(1.0_f32, CAMERA.gamma_multiply(0.45));
+        let strong = Stroke::new(1.5_f32, camera_color());
+        let faint = Stroke::new(1.0_f32, camera_color().gamma_multiply(0.45));
         for k in 0..4 {
             line(eye, corners[k], strong);
-            line(corners[k], corners[(k + 1) % 4], Stroke::new(2.0_f32, CAMERA));
+            line(corners[k], corners[(k + 1) % 4], Stroke::new(2.0_f32, camera_color()));
         }
         // Au-delà du cadre, jusqu'au plan le plus lointain.
         if far_z < -1.0 && eye[2] > 0.0 {
@@ -396,12 +399,12 @@ impl App {
             let pts: Vec<Pos2> = (0..n)
                 .filter_map(|f| proj.project(world.eye(&self.doc.panel_camera(self.cur_panel, f))))
                 .collect();
-            painter.add(Shape::line(pts, Stroke::new(1.0_f32, CAMERA.gamma_multiply(0.7))));
+            painter.add(Shape::line(pts, Stroke::new(1.0_f32, camera_color().gamma_multiply(0.7))));
         }
         if let Some(p) = proj.project(eye) {
             let editing = self.stage3d.tool == Nav3d::Move;
-            painter.circle(p, if editing { 6.0 } else { 4.5 }, CAMERA, Stroke::new(1.5_f32, Color32::from_black_alpha(160)));
-            painter.text(p + vec2(9.0, -4.0), Align2::LEFT_BOTTOM, "Caméra", FontId::proportional(11.0), CAMERA);
+            painter.circle(p, if editing { 6.0 } else { 4.5 }, camera_color(), Stroke::new(1.5_f32, Color32::from_black_alpha(160)));
+            painter.text(p + vec2(9.0, -4.0), Align2::LEFT_BOTTOM, "Caméra", FontId::proportional(11.0), camera_color());
         }
     }
 

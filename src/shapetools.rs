@@ -199,7 +199,7 @@ impl App {
         let to_s = |p: Pos2| self.layer_to_screen(p);
         let width = (self.shape.width * self.layer_zoom()).clamp(1.0, 40.0);
         let color = self.preview_color();
-        let guide = Stroke::new(1.0_f32, Color32::from_rgb(70, 165, 255));
+        let guide = Stroke::new(1.0_f32, crate::theme::POIGNEE_SELECTION);
         if let (Some((a, b)), Some(kind)) = (self.shape_drag, self.tool.shape_kind()) {
             let pts: Vec<Pos2> = self.drag_shape_points(kind, a, b, shift).into_iter().map(to_s).collect();
             painter.add(Shape::line(pts, Stroke::new(width, color)));

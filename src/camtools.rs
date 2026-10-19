@@ -12,7 +12,10 @@ use crate::view::View;
 const GRAB: f32 = 10.0;
 /// Distance de la poignée de rotation au-dessus du cadre, en pixels d'écran.
 const ROTATE_UP: f32 = 28.0;
-const CAMERA: Color32 = Color32::from_rgb(255, 196, 60);
+/// La couleur de la caméra : celle de ses clés dans la timeline et le montage (palette du thème).
+fn camera_color() -> Color32 {
+    crate::theme::camera()
+}
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub(crate) enum CamHandle {
@@ -121,7 +124,7 @@ impl App {
         camera::set_key(keys, frame, cam);
         let n = keys.len();
         self.status = format!(
-            "Image clé de caméra à l'image {} ({n} clé{} dans ce plan). Règle la caméra avec l'outil Caméra.",
+            "Clé de caméra à l'image {} ({n} clé{} dans ce plan). Règle la caméra avec l'outil Caméra.",
             frame + 1,
             if n > 1 { "s" } else { "" }
         );
@@ -131,12 +134,12 @@ impl App {
     pub(crate) fn remove_camera_key_here(&mut self) {
         let frame = self.cur_frame;
         let Some(i) = self.doc.panels[self.cur_panel].camera.iter().position(|k| k.frame == frame) else {
-            self.status = "Pas d'image clé de caméra sur cette image.".into();
+            self.status = "Pas de clé de caméra sur cette image.".into();
             return;
         };
         self.record_step();
         self.doc.panels[self.cur_panel].camera.remove(i);
-        self.status = "Image clé de caméra retirée.".into();
+        self.status = "Clé de caméra supprimée.".into();
     }
 
     /// Image clé de caméra de l'image courante, s'il y en a une.
@@ -150,7 +153,7 @@ impl App {
     pub(crate) fn toggle_camera_key_smooth(&mut self) {
         let frame = self.cur_frame;
         if self.camera_key_here().is_none() {
-            self.status = "Place-toi sur une image clé de caméra pour l'adoucir.".into();
+            self.status = "Place-toi sur une clé de caméra pour l'adoucir.".into();
             return;
         }
         self.record_step();
@@ -333,7 +336,7 @@ impl App {
         painter.add(Shape::closed_line(quad.clone(), Stroke::new(3.0_f32, Color32::from_black_alpha(120))));
         painter.add(Shape::closed_line(
             quad.clone(),
-            Stroke::new(if editing { 2.0_f32 } else { 1.0 }, if editing { CAMERA } else { Color32::from_gray(235) }),
+            Stroke::new(if editing { 2.0_f32 } else { 1.0 }, if editing { camera_color() } else { Color32::from_gray(235) }),
         ));
         painter.text(
             quad[0] + vec2(4.0, -3.0),
@@ -344,26 +347,26 @@ impl App {
                 "Caméra"
             },
             egui::FontId::proportional(11.0),
-            if editing { CAMERA } else { Color32::from_gray(225) },
+            if editing { camera_color() } else { Color32::from_gray(225) },
         );
         if editing {
             let r = self.rotate_handle(&corners);
-            painter.line_segment([quad[0] + (quad[1] - quad[0]) * 0.5, r], Stroke::new(1.0_f32, CAMERA));
-            painter.circle(r, 5.5, Color32::WHITE, Stroke::new(1.5_f32, CAMERA));
+            painter.line_segment([quad[0] + (quad[1] - quad[0]) * 0.5, r], Stroke::new(1.0_f32, camera_color()));
+            painter.circle(r, 5.5, Color32::WHITE, Stroke::new(1.5_f32, camera_color()));
             for q in &quad {
                 painter.rect(
                     Rect::from_center_size(*q, Vec2::splat(9.0)),
                     1.0,
                     Color32::WHITE,
-                    Stroke::new(1.5_f32, CAMERA),
+                    Stroke::new(1.5_f32, camera_color()),
                     egui::StrokeKind::Middle,
                 );
             }
             // Centre du cadre (caméra tournée : le point visé).
             let [fw, fh] = self.doc.frame;
             let c = to_s(cam.to_stage(self.doc.frame, fw as f32 / 2.0, fh as f32 / 2.0));
-            painter.line_segment([c - vec2(6.0, 0.0), c + vec2(6.0, 0.0)], Stroke::new(1.0_f32, CAMERA));
-            painter.line_segment([c - vec2(0.0, 6.0), c + vec2(0.0, 6.0)], Stroke::new(1.0_f32, CAMERA));
+            painter.line_segment([c - vec2(6.0, 0.0), c + vec2(6.0, 0.0)], Stroke::new(1.0_f32, camera_color()));
+            painter.line_segment([c - vec2(0.0, 6.0), c + vec2(0.0, 6.0)], Stroke::new(1.0_f32, camera_color()));
         }
     }
 
@@ -374,11 +377,11 @@ impl App {
         use egui_phosphor::regular as ph;
         let here = self.camera_key_here().copied();
         let resp = ui.label(RichText::new(ph::VIDEO_CAMERA).size(TAILLE).color(crate::theme::camera()));
-        bulle(resp, "Images clés de la caméra", "Position, focale et adoucis en détail : réglages de l'outil Caméra.", "");
+        bulle(resp, "Clés de caméra", "Position, focale et adoucis en détail : réglages de l'outil Caméra.", "");
         if let Some(a) = self.camera_key_buttons(ui, here.is_some()) {
             self.run_action(a);
         }
-        if self.bouton_si(ui, here.is_some(), ph::X_CIRCLE, "Retirer la clé", "Retirer l'image clé de cette image.", "camera.cle_supprimer").clicked() {
+        if self.bouton_si(ui, here.is_some(), ph::X_CIRCLE, "Supprimer la clé de caméra", "Supprimer la clé de caméra de cette image.", "camera.cle_supprimer").clicked() {
             self.run_action("camera.cle_supprimer");
         }
         let smooth = here.is_some_and(|k| k.smooth);
@@ -401,9 +404,9 @@ impl App {
     fn camera_key_buttons(&self, ui: &mut egui::Ui, key_here: bool) -> Option<&'static str> {
         use egui_phosphor::regular as ph;
         let buttons = [
-            (format!("|{}", ph::DIAMOND), "Clé au début", "Image clé de caméra sur la première image du plan.", "camera.cle_debut", true),
-            (ph::DIAMOND.to_string(), "Clé ici", "Image clé de caméra à l'image courante.", "camera.cle_ici", !key_here),
-            (format!("{}|", ph::DIAMOND), "Clé à la fin", "Image clé de caméra sur la dernière image du plan.", "camera.cle_fin", true),
+            (format!("|{}", ph::DIAMOND), "Clé de caméra au début", "Une clé de caméra sur la première image du plan.", "camera.cle_debut", true),
+            (ph::DIAMOND.to_string(), "Clé de caméra ici", "Une clé de caméra à l'image courante.", "camera.cle_ici", !key_here),
+            (format!("{}|", ph::DIAMOND), "Clé de caméra à la fin", "Une clé de caméra sur la dernière image du plan.", "camera.cle_fin", true),
         ];
         let mut clicked = None;
         for (icon, name, description, action, enabled) in buttons {
@@ -433,18 +436,18 @@ impl App {
         let mut action = None;
         let mut goto = None;
         let mut eases: Option<(f32, f32)> = None;
-        section(ui, "Images clés", &mut |ui| {
+        section(ui, "Clés de caméra", &mut |ui| {
             ui.horizontal_wrapped(|ui| {
                 action = self.camera_key_buttons(ui, here.is_some());
                 let prev = keys.iter().rev().find(|&&f| f < self.cur_frame).copied();
                 let next = keys.iter().find(|&&f| f > self.cur_frame).copied();
-                if crate::bulles::icone_si(ui, prev.is_some(), ph::CARET_LEFT, "Clé précédente", "Aller à l'image clé d'avant.", "").clicked() {
+                if crate::bulles::icone_si(ui, prev.is_some(), ph::CARET_LEFT, "Clé de caméra précédente", "Aller à la clé de caméra d'avant.", "").clicked() {
                     goto = prev;
                 }
-                if crate::bulles::icone_si(ui, next.is_some(), ph::CARET_RIGHT, "Clé suivante", "Aller à l'image clé d'après.", "").clicked() {
+                if crate::bulles::icone_si(ui, next.is_some(), ph::CARET_RIGHT, "Clé de caméra suivante", "Aller à la clé de caméra d'après.", "").clicked() {
                     goto = next;
                 }
-                if self.bouton_si(ui, here.is_some(), ph::TRASH, "Retirer la clé", "Retirer l'image clé de cette image.", "camera.cle_supprimer").clicked() {
+                if self.bouton_si(ui, here.is_some(), ph::TRASH, "Supprimer la clé de caméra", "Supprimer la clé de caméra de cette image.", "camera.cle_supprimer").clicked() {
                     action = Some("camera.cle_supprimer");
                 }
             });
@@ -458,9 +461,8 @@ impl App {
                     ];
                     for (k, (label, hint)) in rows.into_iter().enumerate() {
                         ui.label(label);
-                        let r = ui
-                            .add(egui::DragValue::new(&mut values[k]).range(0.0..=10_000.0).speed(0.2).max_decimals(0).suffix(" i"))
-                            .on_hover_text(hint);
+                        let r = ui.add(egui::DragValue::new(&mut values[k]).range(0.0..=10_000.0).speed(0.2).max_decimals(0).suffix(" i"));
+                        let r = crate::bulles::bulle(r, label, hint, "");
                         ui.label(RichText::new(crate::storyboard::timecode(values[k].round() as usize, fps)).small().weak());
                         changed |= self.edited(&r);
                         ui.end_row();
@@ -471,7 +473,7 @@ impl App {
                 }
             });
             if here.is_none() {
-                ui.label(RichText::new("Place-toi sur une image clé pour régler ses adoucis.").small().weak());
+                ui.label(RichText::new("Place-toi sur une clé de caméra pour régler ses adoucis.").small().weak());
             }
         });
         if let Some((ein, eout)) = eases {

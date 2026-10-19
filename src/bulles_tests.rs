@@ -195,6 +195,96 @@ fn every_shortcut_announced_by_a_button_is_a_known_action() {
     assert!(unknown.is_empty(), "actions inconnues : {unknown:?}");
 }
 
+/// Les couleurs avec lesquelles les textes d'une image sont dessinés (celle de chaque morceau de
+/// texte : la sienne si elle est posée, sinon celle que le widget donne au dessin).
+fn text_colors(output: &egui::FullOutput) -> Vec<egui::Color32> {
+    fn walk(shape: &egui::Shape, out: &mut Vec<egui::Color32>) {
+        match shape {
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+            egui::Shape::Text(t) => {
+                for section in &t.galley.job.sections {
+                    let own = if section.format.color == egui::Color32::PLACEHOLDER { t.fallback_color } else { section.format.color };
+                    out.push(t.override_text_color.unwrap_or(own));
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    for clipped in &output.shapes {
+        walk(&clipped.shape, &mut out);
+    }
+    out
+}
+
+#[test]
+fn a_toggled_on_icon_button_is_drawn_in_the_colour_that_reads_on_the_accent_in_every_theme() {
+    use crate::theme::{self, ChoixTheme, ReglageTheme};
+    for choix in ChoixTheme::TOUS {
+        theme::installer(&ReglageTheme { choix, ..ReglageTheme::default() });
+        let ink = theme::sur_accent();
+        let ctx = egui::Context::default();
+        theme::appliquer(&ctx);
+        let (mut on, mut pick) = (true, 1);
+        let input = RawInput { screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(400.0, 300.0))), time: Some(0.0), ..Default::default() };
+        let output = ctx.run(input, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                // Les aides de bulles.rs.
+                bulles::etat(ui, true, "A", "", "", "");
+                bulles::interrupteur(ui, &mut on, "B", "", "", "");
+                bulles::choix(ui, &mut pick, 1, "C", "", "", "");
+                // Un `SelectableLabel` d'egui (barre de commandes, d'outils, des panneaux).
+                ui.add(egui::SelectableLabel::new(true, egui::RichText::new("D").size(17.0)));
+                // Un bouton fait à la main avec `.selected(on)`.
+                ui.add(egui::Button::new(bulles::symbole_etat("E", true)).selected(true));
+            });
+        });
+        let colors = text_colors(&output);
+        assert_eq!(colors.len(), 5, "{choix:?} : un texte par bouton");
+        for c in colors {
+            assert_eq!(c, ink, "{choix:?} : l'icône d'un bouton allumé doit avoir la couleur de `sur_accent`");
+        }
+    }
+    theme::installer(&ReglageTheme::default());
+}
+
+#[test]
+fn the_ink_of_a_toggle_only_changes_when_it_is_on() {
+    use crate::theme;
+    let off = bulles::encre_etat(egui::RichText::new("x"), false);
+    let on = bulles::encre_etat(egui::RichText::new("x"), true);
+    assert_eq!(off, egui::RichText::new("x"), "éteint : l'encre du widget reste");
+    assert_ne!(on, egui::RichText::new("x"), "allumé : l'encre est posée");
+    assert_eq!(on, egui::RichText::new("x").color(theme::sur_accent()));
+}
+
+#[test]
+fn no_hand_made_selected_button_forgets_its_ink() {
+    // Un `Button::…selected(…)` dessine son texte avec la couleur du survol, pas celle de la
+    // sélection : chaque appel doit passer son texte par `symbole_etat` / `encre_etat`.
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut bad = Vec::new();
+    for entry in std::fs::read_dir(dir).expect("dossier src") {
+        let path = entry.expect("fichier").path();
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        if !name.ends_with(".rs") || name.ends_with("_tests.rs") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path).expect("source lisible");
+        let lines: Vec<&str> = text.lines().collect();
+        for (n, line) in lines.iter().enumerate() {
+            // Le texte est passé par l'aide sur la ligne, ou sur celle d'avant (`let text = …`).
+            let ink = |l: &str| l.contains("symbole_etat") || l.contains("encre_etat");
+            if line.contains(".selected(") && line.contains("Button::new(") && !ink(line) && !(n > 0 && ink(lines[n - 1])) {
+                bad.push(format!("{name}:{}", n + 1));
+            }
+        }
+    }
+    // (Seul le choix d'un groupe de calques garde la couleur de son groupe, exprès.)
+    bad.retain(|b| !b.starts_with("layerheads.rs"));
+    assert!(bad.is_empty(), "boutons « selected » sans l'encre de l'accent : {bad:?}");
+}
+
 #[test]
 fn every_tool_and_3d_tool_has_a_description() {
     for tool in crate::app::Tool::ALL {

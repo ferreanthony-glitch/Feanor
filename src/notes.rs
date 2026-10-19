@@ -136,7 +136,8 @@ impl App {
     pub(crate) fn notes_strip_ui(&mut self, ui: &mut egui::Ui) {
         for tool in NoteTool::ALL {
             let (icon, name, description) = tool.label();
-            let resp = ui.add(egui::Button::new(RichText::new(icon).size(crate::bulles::TAILLE)).selected(self.notes.tool == tool));
+            let on = self.notes.tool == tool;
+            let resp = ui.add(egui::Button::new(crate::bulles::encre_etat(RichText::new(icon).size(crate::bulles::TAILLE), on)).selected(on));
             if bulle(resp, name, description, "").clicked() {
                 self.notes.tool = tool;
             }

@@ -7,7 +7,7 @@ use crate::app::{App, Tool};
 use crate::pixtools::BDrag;
 use crate::vtools::VDrag;
 
-const ACCENT: Color32 = Color32::from_rgb(70, 165, 255);
+const ACCENT: Color32 = crate::theme::POIGNEE_SELECTION;
 
 impl App {
     pub(crate) fn canvas_panel(&mut self, ui: &mut egui::Ui) {

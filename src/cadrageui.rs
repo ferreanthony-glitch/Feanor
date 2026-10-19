@@ -127,7 +127,7 @@ impl App {
                 if self.cadrage.color == c {
                     ui.painter().rect_stroke(rect.expand(1.5), 3.0, Stroke::new(1.5_f32, ui.visuals().text_color()), egui::StrokeKind::Outside);
                 }
-                if resp.on_hover_text("Couleur des repères").clicked() {
+                if crate::bulles::bulle(resp, "Couleur des aides au cadrage", "Tiers, grille d'or, spirale, diagonales et croix.", "").clicked() {
                     self.cadrage.color = c;
                 }
             }
@@ -141,15 +141,17 @@ impl App {
         });
         ui.horizontal(|ui| {
             let mut pct = self.cadrage.opacity * 100.0;
-            if ui.add(egui::DragValue::new(&mut pct).range(5.0..=100.0).speed(1.0).max_decimals(0).suffix(" %")).on_hover_text("Opacité des repères").changed() {
+            let resp = ui.add(egui::DragValue::new(&mut pct).range(5.0..=100.0).speed(1.0).max_decimals(0).suffix(" %"));
+            if crate::bulles::bulle(resp, "Opacité des aides au cadrage", "Glisser ou taper une valeur.", "").changed() {
                 self.cadrage.opacity = pct / 100.0;
             }
-            ui.add(egui::DragValue::new(&mut self.cadrage.width).range(0.5..=6.0).speed(0.05).max_decimals(1).suffix(" px")).on_hover_text("Épaisseur des traits");
-            if self.bouton(ui, ph::X, "Éteindre les repères", "Tiers, grille d'or, spirale, diagonales et croix. Les zones de sécurité et le cadre de format restent.", "cadrage.aucune").clicked() {
+            let resp = ui.add(egui::DragValue::new(&mut self.cadrage.width).range(0.5..=6.0).speed(0.05).max_decimals(1).suffix(" px"));
+            crate::bulles::bulle(resp, "Épaisseur des traits", "Glisser ou taper une valeur.", "");
+            if self.bouton(ui, ph::X, "Éteindre les aides au cadrage", "Tiers, grille d'or, spirale, diagonales et croix. Les zones de sécurité et le cadre de format restent.", "cadrage.aucune").clicked() {
                 self.run_action("cadrage.aucune");
             }
         });
-        ui.label(RichText::new("Repères d'écran : ils suivent le cadre de la caméra et ne sont jamais exportés.").small().weak());
+        ui.label(RichText::new("Aides d'écran : elles suivent le cadre de la caméra et ne sont jamais exportées.").small().weak());
     }
 
     /// Le bouton de la barre au-dessus du dessin : un menu avec toutes les aides au cadrage. Il
@@ -157,7 +159,7 @@ impl App {
     pub(crate) fn framing_aids_button(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         let on = self.framing_any_on();
-        let text = RichText::new(format!("{} Cadrage", ph::RULER)).size(crate::bulles::TAILLE);
+        let text = crate::bulles::encre_etat(RichText::new(format!("{} Cadrage", ph::RULER)).size(crate::bulles::TAILLE), on);
         let resp = egui::menu::menu_custom_button(ui, egui::Button::new(text).selected(on), |ui| {
             ui.set_min_width(260.0);
             self.framing_aids_ui(ui);

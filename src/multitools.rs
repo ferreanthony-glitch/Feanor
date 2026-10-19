@@ -23,7 +23,7 @@ use crate::multisel::{self, MDrag, MultiSel, PartKind, Targets};
 use crate::selbox::{self, BoxParams, Handle, SelFrame};
 use crate::vector::Affine;
 
-const ACCENT: Color32 = Color32::from_rgb(70, 165, 255);
+const ACCENT: Color32 = crate::theme::POIGNEE_SELECTION;
 /// À moins de tant de pixels d'écran du centre, le pivot tiré s'y remet.
 const PIVOT_SNAP: f32 = 6.0;
 /// Geste d'annulation des flèches : une flèche tenue = une étape.

@@ -14,7 +14,7 @@ use crate::vector::VectorDrawing;
 
 /// Rayon de prise des coins, en pixels d'écran.
 const GRAB: f32 = 9.0;
-const ACCENT: Color32 = Color32::from_rgb(70, 165, 255);
+const ACCENT: Color32 = crate::theme::POIGNEE_SELECTION;
 
 enum Original {
     Bitmap(Raster),

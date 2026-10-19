@@ -20,7 +20,6 @@ use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rec
 use crate::app::App;
 use crate::document::{Behaviour, Layer};
 use crate::handles::{content_bounds, Handle};
-use crate::layersui::SCENE_WIDE;
 use crate::soundtrack::{LANE_GAP, TRACK_H};
 use crate::storyboard::{BANDS_H, RULER_H};
 use crate::theme;
@@ -157,7 +156,7 @@ impl App {
             // Un calque de toute la scène : son nom teinté « fond ».
             let wide = self.doc.panels[self.cur_panel].layers[k].scene_wide.is_some();
             let color = match (wide, current) {
-                (true, _) => SCENE_WIDE,
+                (true, _) => theme::decor(),
                 (false, true) => visuals.strong_text_color(),
                 (false, false) => visuals.text_color(),
             };
@@ -493,7 +492,7 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, curr
     painter.rect_filled(cell, 2.0, theme::etiquette());
     // Un calque de toute la scène : ses dessins teintés « fond ».
     let fill = match (layer.scene_wide.is_some(), layer.kind) {
-        (true, _) => SCENE_WIDE,
+        (true, _) => theme::calque_decor(),
         (false, kind) => theme::fond_calque(kind, layer.ctg.is_some()),
     };
     let fill = if layer.visible { fill } else { fill.gamma_multiply(0.35) };

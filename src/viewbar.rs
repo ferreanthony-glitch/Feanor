@@ -35,8 +35,8 @@ pub(crate) fn tool_hint(tool: crate::app::Tool) -> &'static str {
 /// Hauteur de la barre des commandes de la vue, sous le dessin.
 pub(crate) const TOOLS_BAR_H: f32 = 30.0;
 /// Couleurs des zones de sécurité et du cadre de format.
-const SAFE: Color32 = Color32::from_rgb(0, 165, 195);
-const FORMAT: Color32 = Color32::from_rgb(230, 60, 160);
+const SAFE: Color32 = crate::theme::CADRAGE_SECURITE;
+const FORMAT: Color32 = crate::theme::CADRAGE_FORMAT;
 
 /// Voile blanc d'opacité `a` (couleur prémultipliée : `Color32::from_white_alpha` passe par
 /// l'espace linéaire et donne un voile bien plus clair).
@@ -184,8 +184,8 @@ impl App {
                 crate::bulles::bulle(resp, "Après", "Nombre de dessins (ou d'images) montrés après.", "");
             }
             let key = self.raccourci("pelure.panneau");
-            let resp = ui.add(egui::Button::new(egui::RichText::new(ph::GEAR).size(crate::bulles::TAILLE)).selected(self.onion_window).frame(false));
-            if crate::bulles::bulle(resp, "Réglages de la pelure", "Avant et après, mode, devant, couleurs, opacité de chaque image, réglages rangés, décalage.", &key).clicked() {
+            let resp = ui.add(egui::Button::new(crate::bulles::symbole_etat(ph::GEAR, self.onion_window)).selected(self.onion_window).frame(false));
+            if crate::bulles::bulle(resp, "Réglages de la pelure d'oignon", "Avant et après, mode, devant, couleurs, opacité de chaque image, réglages rangés, décalage.", &key).clicked() {
                 self.onion_window = !self.onion_window;
             }
             self.command_button(ui, ph::LIGHTBULB, "vue.table_lumineuse", "Table lumineuse", "Les autres calques du plan estompés ; le calque courant reste net.", Some(self.light_table));
