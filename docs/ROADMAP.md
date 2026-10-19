@@ -2540,3 +2540,33 @@ cette séance** (consigne : aucun lancement de SHOT) ; la liste « à vérifier 
 - À vérifier face à Storyboard Pro et aux logiciels de montage : le calage centré par défaut, le fondu au noir
   qui passe par la couleur sur une coupe, la courbe linéaire des fondus d'entrée et de sortie, la puissance
   égale du fondu enchaîné, le solo qui l'emporte sur le muet.
+
+## Génération sonore à partir du storyboard, phase 1 (demandée par Anthony le 2026-10-19, branche `generation-son`)
+
+SHOT lit le storyboard et propose des sons témoins (bruitages, ambiances, musique d'intention, voix des
+dialogues) que l'on accepte, régénère ou supprime. Le détail, le contrat du serveur local et la liste des
+téléchargements de la phase 2 sont dans `docs/GENERATION_SON.md` ; le vocabulaire et le « à vérifier à l'écran » dans
+`docs/INTERFACE.md` (partie 9). **Rien n'a été regardé à l'écran** (consigne : aucun lancement de SHOT) ; aucun
+téléchargement, aucun modèle, aucune requête réseau.
+
+- ✅ **Le modèle et le fichier** (`indications.rs`) : proposition (plan, image, durée, sorte, description française,
+  prompt anglais, réplique / personnage / voix, état, fichier, extrait posé), `sons_proposes.json` sans changer la version
+  du projet, mêmes protections que les autres fichiers annexes (illisible ou plus récent jamais effacé, `.illisible`,
+  écriture atomique), fusion d'une relecture (ne ramène pas une proposition rejetée), état « accepté » qui suit le son posé.
+- ✅ **La lecture** : l'entrée commune (vignette PNG, action / dialogue / notes de la fiche et des images de storyboard,
+  durée, transitions, commentaires) pour tous les fournisseurs (`lecturesb.rs`) ; **lecture par règles sans modèle**
+  (`lecturerules.rs`) : répliques → voix, mots-clés → bruitages / ambiances / musique, consignes « SFX : … » reprises.
+- ✅ **Les fournisseurs** : trois traits (`LecteurStoryboard`, `GenerateurSon`, `GenerateurVoix`), annulation et avancement
+  (`Controle`), tâches sur des fils à part (`generation.rs`) ; client du serveur local en HTTP/1.1 minimal de boucle locale
+  (`httplocal.rs`, `sidecar.rs`) ; requêtes et réponses de Claude, ElevenLabs et Stable Audio (`fournisseursapi.rs`).
+- ✅ **Le panneau** `Pane::SuggestionsSonores` (fermé par défaut, icône de la barre, `vue.suggestions_sonores`,
+  `suggestion.lire`) ; accepter pose le son à la bonne image sur la piste « Sons proposés » (annulable) ; confirmation
+  d'envoi en ligne une fois par projet ; Préférences > Génération sonore (fournisseur de chaque rôle, port local,
+  « Tester », clés, « Tester la connexion »).
+- ✅ **Les clés** dans le Gestionnaire d'identifiants de Windows (`clessecretes.rs`), jamais dans un fichier.
+- **Pas fait / limites** : le **serveur local n'existe pas** (phase 2, accord de chaque téléchargement) ; l'**envoi HTTPS
+  aux services en ligne est « à brancher »** (aucune caisse TLS hors ligne ; piste : WinHTTP déclaré à la main) ; les
+  adresses et formats des services en ligne sont à vérifier avant le premier appel ; le cache des sons générés n'est pas
+  nettoyé ; une seule génération à la fois ; pas de voix par personnage retenue d'un plan à l'autre (la voix se
+  choisit par proposition ou dans les Préférences) ; la lecture par règles ne connaît que le français.
+- **À vérifier** : les licences de chaque modèle et de chaque service (usage commercial des sons, données envoyées).

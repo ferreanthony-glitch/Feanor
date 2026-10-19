@@ -10,7 +10,7 @@ Branche `simplicite` (coupée de `main` à `9a33cd5`). Rien n'est fusionné.
 
 Sommaire : 1 raccourcis, 2 vocabulaire, 3 doublons et impasses, 4 cohérence des gestes (clés),
 5 encombrement, 6 propositions, 7 à vérifier à l'écran, 8 transitions, effets sonores et bruitages
-(branche `transitions-son`, vocabulaire ajouté).
+(branche `transitions-son`, vocabulaire ajouté), 9 suggestions sonores (branche `generation-son`).
 
 ---------------------------------------------------------------------------------------------------
 
@@ -492,3 +492,55 @@ avertissement.
 `transitions_tests` (27), `audiofx_tests` (28), `bruitages_tests` (17) ; les essais de la barre des panneaux et
 des dispositions comptent un panneau de plus ; le projet d'essai de fiabilité contient transitions, effets
 de sons et solo.
+
+---------------------------------------------------------------------------------------------------
+
+## 9. Suggestions sonores (2026-10-19, branche `generation-son`, phase 1)
+
+### Vocabulaire ajouté
+
+| Idée | Mot | À éviter |
+|---|---|---|
+| Un son que SHOT propose d'après le storyboard | **proposition** (panneau « Suggestions sonores ») | suggestion de son, cue (réservé aux signets du plan) |
+| Les états | **proposée**, **en génération**, **prête**, **acceptée**, **rejetée** | brouillon, validée |
+| Les sortes | **bruitage**, **ambiance**, **musique d'intention**, **voix** | SFX, musique du film |
+| Poser dans le montage | **accepter** (« Accepter » copie le son dans le projet) | insérer, valider |
+| La piste où elles se posent | **« Sons proposés »** (« Sons proposés 2 »…) | — |
+| Qui fait le travail d'un rôle | **règles**, **local**, **service en ligne** | sidecar, API (mots du code et du contrat) |
+| Lire le texte du plan pour en tirer des sons | **Lire le storyboard** | analyser, scanner |
+
+### Ce qui a été posé
+
+- **Panneau** « Suggestions sonores » : la portée (tout le film, séquence courante, plan courant, des plans choisis) et
+  « Lire le storyboard » ; une ligne qui dit qui fait quoi (« Lecture : règles · Sons : local · Voix : local ») et, en
+  couleur d'avertissement, ce qui partira en ligne ; l'avancement des tâches ; « Tout générer », « Tout accepter »,
+  « Supprimer les rejetées » ; la proposition choisie et ses boutons (Générer / Régénérer, Écouter, Accepter, Rejeter,
+  Reprendre, Modifier, Supprimer) ; la liste (icône de la sorte, plan et moment, titre, état), même menu au clic droit.
+- **Fenêtres** : « Envoyer vers un service en ligne ? » (une fois par projet), « Modifier la proposition », « Clé de … ».
+- **Préférences** : section « Génération sonore » repliée (les trois rôles, le port du serveur local, « Tester », les clés,
+  « Tester la connexion », une note de licences). La fenêtre Préférences défile quand elle dépasse l'écran.
+- **Barre des panneaux** : une icône de plus (étincelle), même groupe que les bruitages ; menu Son > Suggestions
+  sonores… ; commandes `vue.suggestions_sonores` et `suggestion.lire` (sans touche par défaut).
+- **Historique** : « Accepter un son proposé ».
+
+### À vérifier à l'écran (rien n'a été lancé dans cette séance)
+
+1. **Le panneau dans sa colonne** : la hauteur de la liste quand les lignes d'avertissement en ligne et les barres
+   d'avancement sont là (le panneau ne défile pas : l'en-tête est fixe, seule la liste défile) ; les lignes de 44 points
+   dans les trois thèmes ; les états lisibles (couleurs d'accent, d'avertissement, atténuées).
+2. **Les icônes** : étincelle (générer), flèches (régénérer), coches (tout accepter), croix, crayon, corbeille ; choix de
+   l'icône de la barre (`SPARKLE`) face à « Effets » (baguette).
+3. **Double-clic** sur une ligne : écoute si le son existe, sinon génère ; clic droit : menu complet.
+4. **Fenêtres** : confirmation en ligne (texte long, bouton), « Modifier » (champs selon la sorte), saisie de la clé
+   (champ masqué).
+5. **Préférences** : la section repliée ouverte avec les trois rôles en ligne (hauteur, défilement de la fenêtre sur un
+   écran de 1080 points) ; le bouton « Tester » du serveur local (« Non installé… »).
+6. **Piste « Sons proposés »** dans la bande de montage et dans la timeline : nom, couleur, extraits posés à la bonne image.
+7. **Lire un film de plusieurs dizaines de plans** : l'interface reste fluide pendant les vignettes (8 ms par image
+   d'écran) et la lecture.
+
+### Essais ajoutés
+
+`indications_tests` (13), `fournisseurs_tests` (42), `suggestions_tests` (26), `base64_tests` (2), plus les essais de la barre
+des panneaux et des dispositions (un panneau de plus). Le projet d'essai de fiabilité contient des sons proposés
+(un bruitage, une voix rejetée et modifiée, une ambiance acceptée) et la confirmation d'envoi en ligne.

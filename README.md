@@ -1082,6 +1082,36 @@ panneau (« Actualiser » la relit).
   l'extrait choisi, sinon la première libre). Le fichier est **copié dans le projet**, comme un son
   importé. `bruitage.inserer` et `bruitage.ecouter` agissent sur le son choisi.
 
+## Suggestions sonores (phase 1)
+
+Le panneau **Suggestions sonores** (barre des panneaux, Son > Suggestions sonores…, `vue.suggestions_sonores`) lit
+le storyboard et **propose des sons témoins** pour l'animatique : bruitages, ambiances, musique d'intention, voix
+des dialogues. On les écoute, on les accepte, on les régénère ou on les supprime ; rien n'entre dans le montage
+sans accord. Le détail, le contrat du futur serveur local et la liste de ce qu'il faudrait télécharger sont dans
+`docs/GENERATION_SON.md`.
+
+- **Lire le storyboard** (`suggestion.lire`) : tout le film, la séquence courante, le plan courant ou une plage de
+  plans. Chaque proposition a une sorte (icône), un plan et un moment, une description française, un prompt
+  anglais pour le générateur (une réplique, un personnage et une voix pour une voix) et un état : proposée, en
+  génération, prête, acceptée, rejetée. « Modifier » change tout cela ; une relecture ne ramène pas une
+  proposition rejetée.
+- **Marche tout de suite, sans modèle** : la lecture par **règles** (choix d'origine) lit l'action, les notes et le
+  dialogue : chaque ligne de dialogue devient une voix, des mots-clés font des bruitages, des ambiances et une musique,
+  et une ligne « SFX : porte qui grince, pas dans l'escalier » est reprise telle quelle. Elle ne génère pas de son.
+- **Trois rôles, un fournisseur chacun** (Fichier > Préférences > Génération sonore) : lecture (règles, Qwen2.5-VL
+  local ou Claude en ligne), bruitages et ambiances (Stable Audio Open local, ElevenLabs ou Stable Audio en ligne), voix
+  (Kokoro-82M local, ElevenLabs en ligne). Le serveur local (127.0.0.1, port réglable) **n'est pas encore installé**
+  (phase 2, après accord de chaque téléchargement) : « Tester » répond « non installé ». Les requêtes des services en
+  ligne sont prêtes, leur envoi HTTPS est **à brancher** (aucune caisse TLS hors ligne).
+- **Accepter** copie le son dans le projet et le pose à la bonne image sur la piste « Sons proposés » (une étape
+  d'annulation). Tout travail se fait sur un fil à part, avec son avancement, et s'annule.
+- **En ligne** : le panneau dit ce qui part (vignettes, textes, descriptions, répliques) et une fenêtre demande une
+  confirmation, une fois par projet, avant le premier envoi. Les **clés** sont dans le Gestionnaire d'identifiants de
+  Windows, jamais dans un fichier. Les licences des modèles et des services sont à vérifier.
+- Enregistré dans `sons_proposes.json`, à côté du manifeste (le format du projet ne change pas ; un fichier
+  illisible ou plus récent ne bloque pas l'ouverture et n'est jamais effacé). Les sons générés attendent dans
+  `%LOCALAPPDATA%\SHOT\sons_generes\`.
+
 ## Palette de commandes
 
 Ctrl+K (ou Aide > Palette de commandes) : tape quelques lettres du nom d'une commande (« persp »,
@@ -1397,6 +1427,10 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `transitions.rs`, `transitionsui.rs` | Transitions du montage : zones, mélange d'une image, fichier `transitions.json` ; nœud dans la bande, menus, commandes, aperçu |
 | `audiofx.rs`, `audiofxui.rs` | Effets sonores : fondus, enchaîné, clés de volume, égaliseur, écho, solo, fichier `effets_son.json` ; poignées, ligne du volume, menus |
 | `bruitages.rs`, `bruitagesui.rs` | Bibliothèque de bruitages : parcours des dossiers, recherche, durées, écoute ; panneau, glisser vers le montage |
+| `indications.rs`, `lecturesb.rs`, `lecturerules.rs` | Sons proposés : la proposition et `sons_proposes.json` ; l'entrée de la lecture du storyboard ; la lecture par règles, sans modèle |
+| `fournisseurs.rs`, `generation.rs`, `genreglages.rs` | Génération sonore : les trois rôles (traits), annulation et avancement, tâches sur des fils à part, réglages `[generation_son]` |
+| `httplocal.rs`, `sidecar.rs`, `fournisseursapi.rs`, `clessecretes.rs`, `base64.rs` | Client HTTP de boucle locale et contrat du serveur local ; Claude, ElevenLabs, Stable Audio (requêtes prêtes, envoi à brancher) ; clés dans le Gestionnaire d'identifiants de Windows |
+| `suggestionsui.rs`, `genprefsui.rs` | Panneau Suggestions sonores et ses fenêtres ; section « Génération sonore » des Préférences |
 | `canvas.rs`, `panels.rs`, `timeline.rs` | Interface |
 
 `cargo test --release` lance les tests (pinceau, vectoriel, remplissage, séquences/scènes/panneaux,
