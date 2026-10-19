@@ -373,6 +373,8 @@ pub struct App {
     pub(crate) video_import: Option<crate::videoui::VideoImport>,
     /// Propagation d'une peinture sur la vidéo, façon EbSynth (`propagerui.rs`).
     pub(crate) propagation: crate::propagerui::Propagation,
+    /// Coloriage par zones : propager des aplats de couleur d'une image à l'autre (`coloriageui.rs`).
+    pub(crate) coloriage: crate::coloriageui::Coloriage,
     /// Fenêtre d'import d'un projet Storyboard Pro et import en cours (14a, `sbui.rs`).
     pub(crate) sb_window: Option<crate::sbui::SbWindow>,
     /// Fenêtre « Exporter vers Storyboard Pro » (14b, `sbexportui.rs`).
@@ -909,6 +911,7 @@ impl App {
             fx_pane_focus: false,
             video_import: None,
             propagation: crate::propagerui::Propagation::new(wgpu_render_state),
+            coloriage: crate::coloriageui::Coloriage::new(),
             sb_window: None,
             sb_export: None,
             tween_dialog: None,
@@ -1265,6 +1268,7 @@ impl App {
             || self.save_error.is_some()
             || self.assign.is_some()
             || self.propagation.running()
+            || self.coloriage.running()
             || self.sb_export.as_ref().is_some_and(crate::sbexportui::SbExportWindow::rendering)
     }
 
@@ -3700,6 +3704,7 @@ impl App {
             "fichier.importer_sequence" => self.import_sequence(),
             "calque.video_en_animation" => self.video_to_animation(),
             "calque.propager" => self.open_propagation(),
+            "calque.colorier_zones" => self.open_coloriage(),
             // Interpolation d'images (13l, `tweenui.rs`).
             "images.intermediaire" => self.insert_intermediates(1),
             "images.intermediaires" => self.open_tween_dialog(crate::tweenui::TweenKind::Insert),
@@ -4045,6 +4050,7 @@ impl App {
         self.tick_flip(ctx);
         self.tick_video_import(ctx);
         self.propagation_ui(ctx);
+        self.coloriage_ui(ctx);
         if self.playing {
             let now = ctx.input(|i| i.time);
             let g = self.global_frame();

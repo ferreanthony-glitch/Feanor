@@ -134,6 +134,9 @@ mod clescommun_tests;
 mod clesmulti_tests;
 #[cfg(test)]
 mod multiall_tests;
+mod zones;
+#[cfg(test)]
+mod zones_tests;
 mod zoombande;
 #[cfg(test)]
 mod zoombande_tests;
@@ -361,6 +364,10 @@ mod pixtools;
 #[cfg(test)]
 mod plans_tests;
 mod project;
+mod coloriage;
+#[cfg(test)]
+mod coloriage_tests;
+mod coloriageui;
 mod propager;
 #[cfg(test)]
 mod propager_tests;

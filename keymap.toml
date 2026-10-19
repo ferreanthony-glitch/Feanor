@@ -2219,6 +2219,11 @@ touches = []
 source = "SHOT (sans touche)"
 
 [[raccourci]]
+action = "calque.colorier_zones"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
 action = "camera.cles_copier"
 touches = []
 source = "SHOT (sans touche : Ctrl+C copie les clés de caméra choisies)"

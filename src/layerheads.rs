@@ -641,6 +641,8 @@ impl App {
         self.layer_fx_items(ui, li);
         // Propager la peinture sur la vidéo (façon EbSynth, `propagerui.rs`), grisé s'il ne se peut pas.
         self.propagation_item(ui, li);
+        // Colorier par zones : les aplats des clés, reportés sur les autres images (`coloriageui.rs`).
+        self.coloriage_item(ui, li);
         // Avant / après ses images, automatismes : dans un sous-menu, comme au montage (menus
         // courts, 2026-10-18).
         if self.layers().get(li).is_some_and(|l| !l.folder) {
