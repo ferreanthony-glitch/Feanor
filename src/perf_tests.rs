@@ -1021,7 +1021,7 @@ fn plan_charge_groupe(layers: usize, frames: usize) -> Document {
 fn carte_cache(b: &Banc, titre: &str) {
     if let Some(g) = &b.app.gpu {
         let s = g.stats();
-        println!("PERF cache de la carte ({titre}) : {} textures, {:.0} Mo, {:.2} Mo par texture", s.textures, s.bytes as f64 / 1e6, s.bytes as f64 / 1e6 / s.textures.max(1) as f64);
+        println!("PERF cache de la carte ({titre}) : {} textures, {:.0} Mo, {:.2} Mo par texture, {} tuiles envoyées depuis le début", s.textures, s.bytes as f64 / 1e6, s.bytes as f64 / 1e6 / s.textures.max(1) as f64, s.copies);
     }
 }
 
@@ -1030,18 +1030,38 @@ fn carte_cache(b: &Banc, titre: &str) {
 #[test]
 #[ignore]
 fn perf_gpu_textures() {
-    for (nom, doc) in [("dessins éparpillés (40 tuiles sur toute la feuille)", plan_charge(15, 200, 40)), ("dessins d'un bloc (8 x 5 tuiles)", plan_charge_groupe(15, 200))] {
+    // (« Avant » : textures de la feuille entière et tampon d'envoi neuf à chaque image, deux
+    // réglages d'essai qui rendent le comportement d'avant ; le recyclage, lui, est celui d'après.)
+    for (nom, doc, entieres, neuf) in [
+        ("dessins éparpillés (40 tuiles sur toute la feuille) : AVANT (feuille entière, tampon neuf)", plan_charge(15, 200, 40), true, true),
+        ("dessins éparpillés : tampon gardé", plan_charge(15, 200, 40), true, false),
+        ("dessins éparpillés : APRÈS (textures au contenu, tampon gardé)", plan_charge(15, 200, 40), false, false),
+        ("dessins d'un bloc (8 x 5 tuiles) : AVANT (feuille entière, tampon neuf)", plan_charge_groupe(15, 200), true, true),
+        ("dessins d'un bloc : tampon gardé", plan_charge_groupe(15, 200), true, false),
+        ("dessins d'un bloc : APRÈS (textures au contenu, tampon gardé)", plan_charge_groupe(15, 200), false, false),
+    ] {
         println!("PERF --- {nom}");
         let mut b = banc(doc, true);
+        if let Some(g) = &b.app.gpu {
+            g.set_whole_textures(entieres);
+            g.set_fresh_staging(neuf);
+        }
         b.app.set_mode(Mode::Animation);
         b.chauffer(10);
         jusqu_au_repos(&mut b, 600);
         let zone = Rect::from_min_size(pos2(500.0, 880.0), vec2(900.0, 120.0));
-        scenario("défilement : tête de lecture à chaque image", &mut b, 120, 1.0 / 60.0, |b, k| {
+        // (30 images : 15 dessins neufs à chaque image, tous différents ; puis le même parcours.
+        // Plus long, il dépasserait le cache même au contenu et chaque passage chasserait le suivant.)
+        scenario("défilement, premier passage : 15 dessins neufs par image", &mut b, 30, 1.0 / 60.0, |b, k| {
             b.app.cur_frame = (k * 3) % 200;
             bouge(k, zone)
         });
         carte_cache(&b, "après le défilement");
+        scenario("défilement, deuxième passage (mêmes dessins)", &mut b, 30, 1.0 / 60.0, |b, k| {
+            b.app.cur_frame = (k * 3) % 200;
+            bouge(k, zone)
+        });
+        carte_cache(&b, "après le deuxième passage");
         b.app.cur_frame = 0;
         b.app.toggle_play_scope(false);
         let m = scenario("lecture du plan (24 images/s, 15 calques)", &mut b, 144, 1.0 / 24.0, |_, _| Vec::new());
