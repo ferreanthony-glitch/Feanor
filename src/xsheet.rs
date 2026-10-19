@@ -112,7 +112,8 @@ pub fn audio_levels(doc: &Document, index: usize) -> Vec<f32> {
     let start = doc.panel_start(index);
     let spf = crate::audio::samples_per_frame(doc.fps);
     let mut levels = vec![0.0f32; len];
-    for track in doc.audio_tracks.iter().filter(|t| !t.muted) {
+    // (Muettes et solo : `audiofx::audible` ; le volume de l'extrait, ses fondus et ses clés comptent aussi.)
+    for track in doc.audio_tracks.iter().filter(|t| crate::audiofx::audible(doc, t)) {
         for clip in &track.clips {
             let Some(sound) = doc.sounds.get(&clip.sound) else { continue };
             for (f, level) in levels.iter_mut().enumerate() {
@@ -122,7 +123,8 @@ pub fn audio_levels(doc: &Document, index: usize) -> Vec<f32> {
                 }
                 let s = g - clip.start + clip.offset;
                 let a = sound.pcm.peak_between((s as f64 * spf) as usize, ((s + 1) as f64 * spf) as usize);
-                *level = level.max((a * track.volume * doc.master_volume).min(1.0));
+                let fx = crate::audiofx::level_in_frame(&clip.fx, (g - clip.start) as f32, clip.length);
+                *level = level.max((a * track.volume * doc.master_volume * fx).min(1.0));
             }
         }
     }

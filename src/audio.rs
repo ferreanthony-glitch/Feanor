@@ -153,7 +153,72 @@ pub struct MixClip {
     /// Échantillons sautés au début du son.
     pub offset: u64,
     pub len: u64,
+    /// Volume de la piste × volume général × volume de l'extrait.
     pub gain: f32,
+    /// Fondus, enchaîné et clés de volume (`audiofx.rs`) ; rien : le son tel quel (le plus courant, et
+    /// le plus rapide à mixer).
+    pub env: Option<Arc<ClipEnv>>,
+}
+
+impl MixClip {
+    /// Un extrait sans effet.
+    pub fn plain(pcm: Arc<Pcm>, start: u64, offset: u64, len: u64, gain: f32) -> MixClip {
+        MixClip { pcm, start, offset, len, gain, env: None }
+    }
+
+    /// Le gain à l'échantillon `rel` depuis le début de l'extrait (le volume fixe et l'enveloppe).
+    #[inline]
+    pub fn gain_at(&self, rel: u64) -> f32 {
+        match &self.env {
+            Some(env) => self.gain * env.gain_at(rel),
+            None => self.gain,
+        }
+    }
+}
+
+/// Ce qui fait varier le volume d'un extrait dans le temps, en échantillons depuis son début (qui est
+/// avancé de `lead` échantillons quand un fondu enchaîné commence avant la coupe). Le calcul est pur :
+/// la lecture, le défilement et l'export l'appellent de la même façon.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClipEnv {
+    /// Échantillons du début de l'`MixClip` qui précèdent le début nominal de l'extrait.
+    pub lead: u64,
+    /// Durée nominale de l'extrait.
+    pub nominal: u64,
+    /// Fondus linéaires, comptés depuis le début et la fin nominaux (0 : aucun).
+    pub fade_in: u64,
+    pub fade_out: u64,
+    /// Fondu enchaîné entrant : puissance égale sur les `xf_in` premiers échantillons.
+    pub xf_in: u64,
+    /// Fondu enchaîné sortant : à partir de l'échantillon `xf_out_at`, sur `xf_out` échantillons.
+    pub xf_out_at: u64,
+    pub xf_out: u64,
+    /// Clés de volume : (échantillons depuis le début nominal, gain), triées.
+    pub keys: Vec<(f64, f32)>,
+}
+
+impl ClipEnv {
+    pub fn gain_at(&self, rel: u64) -> f32 {
+        // Temps depuis le début nominal (négatif pendant l'avance d'un enchaîné).
+        let t = rel as f64 - self.lead as f64;
+        let mut g = 1.0f32;
+        if self.fade_in > 0 {
+            g *= crate::audiofx::fade_in_gain(t, self.fade_in);
+        }
+        if self.fade_out > 0 {
+            g *= crate::audiofx::fade_out_gain(self.nominal as f64 - t, self.fade_out);
+        }
+        if self.xf_in > 0 && rel < self.xf_in {
+            g *= crate::audiofx::crossfade_gains(rel as f64 / self.xf_in as f64).1;
+        }
+        if self.xf_out > 0 && rel >= self.xf_out_at {
+            g *= crate::audiofx::crossfade_gains((rel - self.xf_out_at) as f64 / self.xf_out as f64).0;
+        }
+        if !self.keys.is_empty() {
+            g *= crate::audiofx::envelope_at(&self.keys, t);
+        }
+        g
+    }
 }
 
 /// Échantillons par image du film.
@@ -161,25 +226,17 @@ pub fn samples_per_frame(fps: u32) -> f64 {
     RATE as f64 / fps.max(1) as f64
 }
 
-/// Les extraits des pistes non muettes du document.
+/// Les extraits des pistes qu'on entend (muettes et solo : `audiofx::audible`), avec leurs effets.
+/// Ne bloque jamais : un égaliseur ou un écho pas encore calculé (sur un fil à part) laisse entendre
+/// le son tel quel en attendant.
 pub fn mix_clips(doc: &Document) -> Vec<MixClip> {
-    let spf = samples_per_frame(doc.fps);
-    doc.audio_tracks
-        .iter()
-        .filter(|t| !t.muted)
-        // Volume de la piste × volume général (13e).
-        .flat_map(|t| t.clips.iter().map(move |c| (t.volume * doc.master_volume, c)))
-        .filter_map(|(gain, c)| {
-            let sound = doc.sounds.get(&c.sound)?;
-            Some(MixClip {
-                pcm: sound.pcm.clone(),
-                start: (c.start as f64 * spf) as u64,
-                offset: (c.offset as f64 * spf) as u64,
-                len: (c.length as f64 * spf) as u64,
-                gain,
-            })
-        })
-        .collect()
+    crate::audiofx::build_mix(doc, false)
+}
+
+/// Comme `mix_clips`, mais attend le résultat des effets calculés : pour l'export et les essais, où
+/// le son doit être exact.
+pub fn mix_clips_blocking(doc: &Document) -> Vec<MixClip> {
+    crate::audiofx::build_mix(doc, true)
 }
 
 /// État partagé avec le fil de la carte son.
@@ -234,8 +291,9 @@ impl MixState {
                 let i = (p - c.start + c.offset) as usize;
                 if i < c.pcm.frames() {
                     let (a, b) = c.pcm.frame(i);
-                    l += a * c.gain;
-                    r += b * c.gain;
+                    let g = c.gain_at(p - c.start);
+                    l += a * g;
+                    r += b * g;
                 }
             }
         }

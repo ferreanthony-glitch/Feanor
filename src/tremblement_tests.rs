@@ -313,8 +313,9 @@ fn the_effect_only_applies_to_vector_layers() {
 // ------------------------------------------------------------------ enregistrement
 
 #[test]
-fn the_settings_are_saved_with_the_layer_and_the_format_version_is_26() {
-    assert_eq!(crate::project::VERSION, 26);
+fn the_settings_are_saved_with_the_layer_and_the_format_version_is_27() {
+    // (26 pour le tremblement du trait ; 27 depuis les calques d'effets, qui ne le changent pas.)
+    assert_eq!(crate::project::VERSION, 27);
     let mut doc = Document::new(64, 64, 24);
     let id = doc.new_cel(LayerKind::Vector);
     let layer = &mut doc.panels[0].layers[0];
@@ -331,11 +332,11 @@ fn the_settings_are_saved_with_the_layer_and_the_format_version_is_26() {
     crate::project::save(&doc, &manifest, &mut Default::default()).unwrap();
     let text = std::fs::read_to_string(&manifest).unwrap();
     assert!(text.contains("\"tremblement\""), "{text}");
-    assert!(text.contains("\"version\": 26"), "un fichier d'avant refuse celui-ci");
+    assert!(text.contains("\"version\": 27"), "un fichier d'avant refuse celui-ci");
     let back = crate::project::load(&manifest).unwrap().doc;
     assert_eq!(back.panels[0].layers[0].fx, doc.panels[0].layers[0].fx, "mêmes réglages et mêmes clés");
     // Une version d'après est refusée, comme toujours.
-    let newer = text.replace("\"version\": 26", "\"version\": 27");
+    let newer = text.replace("\"version\": 27", "\"version\": 28");
     std::fs::write(&manifest, newer).unwrap();
     assert!(crate::project::load(&manifest).is_err());
     std::fs::remove_dir_all(&dir).ok();

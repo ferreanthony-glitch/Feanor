@@ -120,6 +120,12 @@ impl App {
             .anchor(egui::Align2::CENTER_TOP, [0.0, 80.0])
             .show(ctx, |ui| {
                 ui.set_width(440.0);
+                // Défile quand la fenêtre dépasse l'écran (la section Génération sonore l'allonge). Une
+                // fenêtre non redimensionnable ne donne à son contenu que la hauteur qu'il avait à
+                // l'image d'avant : `min_scrolled_height` lui donne tout de suite la hauteur voulue, et
+                // `auto_shrink` la ramène à celle du contenu quand il est plus court.
+                let hauteur = (ctx.screen_rect().height() - 170.0).max(240.0);
+                egui::ScrollArea::vertical().max_height(hauteur).min_scrolled_height(hauteur).auto_shrink([false, true]).show(ui, |ui| {
                 self.theme_prefs_ui(ui);
                 ui.add_space(6.0);
                 ui.label(RichText::new("Projets").strong());
@@ -165,6 +171,9 @@ impl App {
                 // performances propose, un par un.
                 self.performance_prefs_ui(ui);
                 ui.add_space(6.0);
+                // Génération sonore (`genprefsui.rs`) : le fournisseur de chaque rôle, les clés.
+                self.generation_prefs_ui(ui);
+                ui.add_space(6.0);
                 ui.label(RichText::new("Raccourcis clavier").strong());
                 jeu = crate::raccourcisui::preset_combo(ui, "jeu_raccourcis_prefs", self.settings.keymap_preset);
                 ui.label(RichText::new(crate::raccourcisui::MERGE_RULE).small().weak());
@@ -181,6 +190,7 @@ impl App {
                 });
                 ui.add_space(6.0);
                 ui.label(RichText::new(format!("Affichage : {}", self.display_info)).small().weak());
+                });
             });
         self.prefs_window = open;
         if let Some(p) = jeu {

@@ -7,14 +7,18 @@
 //! toucher) ; le « fond sous le trait » (réglages du calque, strate peinte et coupe d'un dessin) ;
 //! des effets de calque avec clés (flou, bruit, teinte-saturation, tremblement du trait), dont un
 //! éteint ; un mode de fusion, de l'opacité, une transformation, de la profondeur ; un dossier de
-//! calques et un de ses calques ; un calque CTG ; un calque vidéo (dix images PNG minuscules
+//! calques et un de ses calques ; un calque CTG ; des calques d'effets (un ajustement à clés et une
+//! incrustation, format 27) ; un calque vidéo (dix images PNG minuscules
 //! fabriquées sur disque) ; des rôles d'images, des noms d'instance, des marques de couleur ; une
 //! caméra à clés avec adoucis, un effet de caméra posé (explosion) et un repère 3D (un cube) ;
 //! des marques d'image, des signets, des points d'entrée et de sortie, des notes dessinées, la
 //! couleur d'un plan ; des commentaires (dont un rangé hors du plan rogné) ; un plan rogné au début
 //! et à la fin, avec sa réserve ; un son (WAV fabriqué) sur deux pistes ; les guides de
 //! perspective, les notes de la planche, les groupes de couleur, l'arrière-plan en damier, les
-//! propriétés du projet, le volume général, l'image de départ.
+//! propriétés du projet, le volume général, l'image de départ ; des transitions du montage ; les
+//! effets des extraits de son et le solo d'une piste ; des sons proposés (suggestions sonores) ; des
+//! références visuelles (une image, une vidéo de trois images) ; la planche de crayonnés (deux pages,
+//! des traits lisses, une case peinte et cochée, une légende seule).
 //!
 //! Il ne contient pas : de texte vectoriel dont l'image soit comparée (son rendu dépend des
 //! polices du poste, voir `Fixture::sans_pixels`) et de calques « toute la scène » (un projet d'avant
@@ -266,7 +270,44 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
     ctg.ctg = Some(crate::ctg::Ctg { sources: vec![perso.id], gap: 6 });
     ctg.locked = true;
     ctg.visible = false;
-    let mut calques = vec![calque_fond, calque_video, perso, nuage, dossier, ctg];
+    // Calques d'effets (format 27, `calqueffet.rs`) : un ajustement à clés (image d'impact, secousse,
+    // lueur diffuse ; opacité, mode de fusion, images 6 à 8 seulement) et une incrustation réglée à
+    // fond (texte libre à mots remplacés, boîte, « seulement à l'export »).
+    let pose = doc.new_cel(LayerKind::Bitmap);
+    let mut ajustement = Layer::new_effect("Impact", crate::calqueffet::CalqueEffet::ajustement("Image d'impact (impact frame)"));
+    ajustement.frames = [vec![None; 6], vec![Some(pose); 3]].concat();
+    ajustement.opacity = 0.8;
+    ajustement.blend = BlendMode::Screen;
+    let mut impact = Effect::new(EffectKind::Impact);
+    impact.set_key(6, vec![100.0, 1.0, 128.0, 230.0, 30.0, 30.0, 60.0, 70.0, 40.0, 50.0, 50.0, 7.0]);
+    impact.set_key(8, vec![0.0, 1.0, 128.0, 230.0, 30.0, 30.0, 60.0, 70.0, 40.0, 50.0, 50.0, 7.0]);
+    let mut secousse = Effect::new(EffectKind::Shake);
+    secousse.set_key(6, vec![6.0, -4.0, 1.5, 102.0, 40.0]);
+    secousse.set_key(7, vec![-3.0, 2.0, -0.5, 100.0, 40.0]);
+    let mut lueur = Effect::new(EffectKind::Bloom);
+    lueur.set_param(1, 120.0);
+    ajustement.fx = vec![impact, secousse, lueur];
+    let pose_tc = doc.new_cel(LayerKind::Bitmap);
+    let mut timecode = Layer::new_effect(
+        "Timecode",
+        crate::calqueffet::CalqueEffet::incrustation(
+            crate::incrustation::Incrustation {
+                source: crate::incrustation::Source::Libre,
+                texte: "{plan} · {timecode} · {image}".into(),
+                portee: crate::incrustation::Portee::Plan,
+                ancre: crate::incrustation::Ancre::HautDroite,
+                taille: 4.5,
+                couleur: [250, 240, 120, 230],
+                fond: Some([10, 20, 30, 170]),
+                marge: 2.5,
+                quand: crate::incrustation::Quand::ExportSeulement,
+                police: "Ubuntu Light".into(),
+            },
+            "Timecode et incrustations",
+        ),
+    );
+    timecode.frames = vec![Some(pose_tc); 24];
+    let mut calques = vec![calque_fond, calque_video, perso, nuage, dossier, ctg, ajustement, timecode];
     crate::folders::normalize(&mut calques);
     doc.panels[0].layers = calques;
     doc.panels[0].length = 24;
@@ -318,6 +359,32 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
         r.color = [200, 60, 90];
         r.opacity = 0.6;
         doc.panels[0].ref3d = Some(r);
+        // Scène 3D de blocage (`scene3d.rs`, `scenes3d.json`) : toutes les formes, un mannequin à la pose
+        // libre, un groupe, un modèle importé, un décor de séquence, la caméra du plateau et son rendu.
+        use crate::scene3d::{joint, Light, Mannequin, Pose, RenderArea, RenderSettings, RenderStyle, SceneCam, Shape3d, Target};
+        let (plan, seq) = (doc.panels[0].id, doc.sequence_of(0));
+        let formes = [Shape3d::Cube, Shape3d::Plane, Shape3d::Cylinder, Shape3d::Sphere, Shape3d::Cone, Shape3d::Stairs { steps: 7 }, Shape3d::Model { id }];
+        let mut numeros = Vec::new();
+        for (k, forme) in formes.into_iter().enumerate() {
+            numeros.extend(doc.scenes3d.add(plan, seq, Target::Plan, forme, [k as f32 * 1.5 - 4.0, 0.0, -1.0 * k as f32]));
+        }
+        let mut mannequin = Mannequin::new(Pose::Walking, 1.68);
+        mannequin.set_joint(joint::ELBOW_R, [35.0, 4.0, 0.0]);
+        let mannequin = doc.scenes3d.add(plan, seq, Target::Plan, Shape3d::Mannequin(Box::new(mannequin)), [0.5, 0.0, 1.0]).expect("mannequin");
+        if let Some(o) = doc.scenes3d.find_mut(plan, seq, mannequin) {
+            o.name = "Léa".into();
+            o.color = [210, 120, 90];
+            o.xf.rot = [0.0, 25.0, 0.0];
+        }
+        numeros.push(mannequin);
+        doc.scenes3d.group(plan, seq, &numeros[..2]);
+        doc.scenes3d.add(plan, seq, Target::Decor, Shape3d::Plane, [0.0; 3]);
+        doc.scenes3d.add(plan, seq, Target::Decor, Shape3d::Cylinder, [-3.0, 0.0, -3.0]);
+        let scene = doc.scenes3d.plan_mut(plan);
+        scene.cam = SceneCam { pos: [0.3, 1.6, 6.5], pan: -8.0, tilt: -3.0, roll: 1.0, focal: 50.0 };
+        scene.light = Light { azimuth: 70.0, elevation: 40.0, intensity: 0.9, ambient: 0.3 };
+        scene.render = RenderSettings { style: RenderStyle::Outline, lines: true, line_px: 2.5, area: RenderArea::Frame };
+        scene.follow = false;
     }
 
     // ---------------------------------------------------------------- plan 2 : le plan rogné
@@ -414,6 +481,18 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
     doc.audio_tracks[1].locked = true;
     doc.audio_tracks[1].volume = 1.25;
     doc.add_clip(1, son, 10, 2, 4).expect("extrait de la seconde piste");
+    // Effets des sons (`effets_son.json`) : volume, fondus, enchaîné, clés de volume, égaliseur, écho, solo.
+    {
+        let fx = &mut doc.audio_tracks[0].clips[0].fx;
+        fx.gain = 1.25;
+        fx.fade_in = 2;
+        fx.fade_out = 3;
+        fx.xfade = 4;
+        fx.keys = vec![crate::audiofx::VolumeKey { t: 1.0, v: 0.5 }, crate::audiofx::VolumeKey { t: 4.0, v: 1.5 }];
+        fx.eq = [3.0, -2.0, 6.0];
+        fx.echo = crate::audiofx::Echo { mix: 0.35, delay_ms: 180.0, feedback: 0.4 };
+    }
+    doc.audio_tracks[1].solo = true;
     doc.guides.push(crate::guides::Guide { name: "Fuite à deux points".into(), points: vec![[40.0, 100.0], [440.0, 100.0]] });
     doc.board.strokes.push(crate::board::NoteStroke { points: (0..5).map(|k| VPoint { x: k as f32 * 7.0, y: 3.0 + k as f32, r: 1.5 }).collect(), color: [200, 40, 40], anchor: Some(doc.panels[i1].id) });
     doc.board.texts.push(crate::board::NoteText { pos: pos2(12.0, 30.0), text: "À revoir avec Léa".into(), size: 18.0, color: [20, 80, 160], anchor: None });
@@ -440,6 +519,102 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
     doc.comment_mut(id).expect("commentaire").text = "Le flou arrive trop tôt.\nVoir avec le son.".into();
     let id = doc.add_comment(doc.panels[i4].id, 0, "Anthony", 1_760_000_600);
     doc.comment_mut(id).expect("commentaire").color = [10, 200, 90];
+    // Transitions du montage (`transitions.json`) : un fondu enchaîné centré, un volet décalé, un fondu
+    // depuis le blanc au début du film et un fondu au noir à la fin.
+    let enchaine = doc.set_transition(1, crate::transitions::Kind::Dissolve).expect("transition");
+    doc.transitions.iter_mut().find(|t| t.id == enchaine).expect("transition").frames = 6;
+    let volet = doc.set_transition(2, crate::transitions::Kind::Wipe).expect("volet");
+    {
+        let t = doc.transitions.iter_mut().find(|t| t.id == volet).expect("volet");
+        t.frames = 4;
+        t.align = crate::transitions::Align::After;
+    }
+    doc.set_transition(0, crate::transitions::Kind::White).expect("début du film");
+    let n = doc.panels.len();
+    doc.set_transition(n, crate::transitions::Kind::Black).expect("fin du film");
+    // Sons proposés par la lecture du storyboard (`sons_proposes.json`) : un bruitage à générer, une
+    // voix rejetée et modifiée à la main, une ambiance acceptée (son posé), et la confirmation d'envoi
+    // en ligne du projet.
+    {
+        use crate::indications::{Genre, IndicationBrute, Statut};
+        let clip = doc.audio_tracks.iter().flat_map(|t| t.clips.iter()).map(|c| c.id).next();
+        let (p0, p1, p4) = (doc.panels[0].id, doc.panels[i1].id, doc.panels[i4].id);
+        doc.sons_proposes.ajouter(p0, IndicationBrute { start: 3, frames: 36, kind: Some(Genre::Bruitage), description: "Porte qui claque".into(), prompt: "heavy wooden door slamming shut".into(), ..Default::default() });
+        let voix = doc.sons_proposes.ajouter(p1, IndicationBrute { start: 0, frames: 30, kind: Some(Genre::Voix), description: "MARIE : « Viens ici. »".into(), text: "Viens ici.".into(), character: "MARIE".into(), voice: "ff_siwis".into(), ..Default::default() });
+        let ambiance = doc.sons_proposes.ajouter(p4, IndicationBrute { start: 0, frames: 120, kind: Some(Genre::Ambiance), description: "Pluie".into(), prompt: "steady rain".into(), ..Default::default() });
+        for (id, statut) in [(voix, Statut::Rejetee), (ambiance, Statut::Acceptee)] {
+            let i = doc.sons_proposes.get_mut(id).expect("proposition");
+            i.status = statut;
+            i.edited = id == voix;
+            i.clip = (id == ambiance).then_some(clip).flatten();
+        }
+        doc.sons_proposes.envoi_en_ligne_confirme = true;
+    }
+    // Références visuelles (`references.json` et `references/`) : une image étiquetée, tournée, en gris,
+    // liée à deux plans ; une vidéo (trois images PNG) aux réglages de lecture changés, liée au plan 3.
+    {
+        use crate::references::{Clip, Reference};
+        let origine = travail.join("references-origine");
+        std::fs::create_dir_all(&origine).expect("dossier des références");
+        image::RgbaImage::from_pixel(8, 6, image::Rgba([180, 120, 40, 255])).save(origine.join("rue.png")).expect("image de référence");
+        let id = doc.new_reference_id();
+        let mut rue = Reference::image(id, "Rue de nuit", "rue.png", [8, 6], pos2(-40.0, 25.0));
+        rue.tags = vec!["décor".into(), "lumière".into()];
+        rue.rotation = 12.5;
+        rue.scale = 20.0;
+        rue.flip_h = true;
+        rue.grey = true;
+        rue.plans = vec![doc.panels[0].id, doc.panels[i2].id];
+        rue.home = Some(origine.clone());
+        doc.add_reference(rue);
+        let dossier_video = origine.join("course");
+        std::fs::create_dir_all(&dossier_video).expect("dossier des images de la vidéo de référence");
+        for k in 0..3usize {
+            image::RgbaImage::from_pixel(8, 6, image::Rgba([(k * 60) as u8, 100, 160, 255])).save(crate::video::frame_file(&dossier_video, k, "png")).expect("image de la vidéo de référence");
+        }
+        let id = doc.new_reference_id();
+        let mut course = Reference::image(id, "Course à pied", "course", [8, 6], pos2(210.0, -60.0));
+        course.video = Some(Clip { in_point: 1, out_point: Some(2), looping: true, speed: 1.5, follow: true, offset: -3, ..Clip::new(3, 12.0, "png") });
+        course.plans = vec![doc.panels[i3].id];
+        course.home = Some(origine);
+        doc.add_reference(course);
+    }
+    // La planche de crayonnés (`crayonnes.json`) : deux pages de la grille 4 × 3 ; une case au crayon (deux
+    // traits lisses), une case peinte au pinceau, légendée et déjà servie (cochée), une case avec une
+    // légende seule dans la deuxième page.
+    {
+        let planche = &mut doc.crayonnes;
+        planche.ensure(doc.frame);
+        planche.add_page();
+        let [cw, ch] = planche.size;
+        let trait_lisse = |x: f32, y: f32, couleur: [u8; 3]| Element::Stroke {
+            points: (0..9).map(|k| VPoint { x: x + k as f32 * 30.0, y: y + (k as f32 * 0.8).sin() * 25.0, r: 2.0 + k as f32 * 0.3 }).collect(),
+            color: couleur,
+            opacity: 0.9,
+            hardness: 0.8,
+            brush: None,
+            trace: Trace::default(),
+        };
+        {
+            let c = &mut planche.cases[0];
+            c.caption = "Léa sort de la cour".into();
+            c.ink.vector = Some(VectorDrawing { elements: vec![trait_lisse(60.0, 120.0, [20, 20, 20]), trait_lisse(80.0, 250.0, [90, 90, 90])] });
+        }
+        {
+            let mut peinture = Raster::new(cw, ch);
+            for y in 40..140 {
+                for x in 200..380 {
+                    let i = peinture.tile_index_of(x, y);
+                    peinture.tile_mut(i)[(y % TILE) * TILE + x % TILE] = premultiply(30, 30, 30, 255);
+                }
+            }
+            let c = &mut planche.cases[1];
+            c.caption = "Gros plan : la clé".into();
+            c.used = true;
+            c.paint = Cel::bitmap(peinture);
+        }
+        planche.cases[13].caption = "Plan large, la voiture arrive".into();
+    }
 
     Fixture { doc, sans_pixels }
 }
@@ -469,12 +644,36 @@ pub(crate) fn instantane(doc: &Document, sans_pixels: &BTreeSet<CelId>) -> Strin
     let _ = writeln!(s, "groupes {:?}", doc.groups);
     let _ = writeln!(s, "guides {:?}", doc.guides);
     let _ = writeln!(s, "planche {:?}", doc.board);
+    // (Les scènes 3D de blocage : le contenu, sans la version ni le compteur, qui ne sont pas enregistrés.)
+    let _ = writeln!(s, "scenes3d plans {:?} decors {:?}", doc.scenes3d.plans, doc.scenes3d.decors);
     // (Le fichier des commentaires les range dans l'ordre du film, `commentaires::to_bytes` : leur
     // ordre dans la liste n'est pas persistant, leurs numéros le sont.)
     let mut commentaires = doc.comments.clone();
     commentaires.sort_by_key(|c| c.id);
     let _ = writeln!(s, "commentaires {:?}", commentaires);
     let _ = writeln!(s, "pistes {:?}", doc.audio_tracks);
+    // (Le fichier des transitions les range dans l'ordre du film : leurs numéros, eux, sont gardés.)
+    let mut transitions = doc.transitions.clone();
+    transitions.sort_by_key(|t| t.id);
+    let _ = writeln!(s, "transitions {:?}", transitions);
+    // (Le fichier des sons proposés les range dans l'ordre du film : leurs numéros sont gardés.)
+    let mut proposes = doc.sons_proposes.clone();
+    proposes.indications.sort_by_key(|i| i.id);
+    let _ = writeln!(s, "sons_proposes {:?}", proposes);
+    // (Le dossier où attendent les fichiers d'une référence n'est pas enregistré : `home` ne compte pas.)
+    let mut references = doc.references.clone();
+    for r in &mut references {
+        r.home = None;
+    }
+    let _ = writeln!(s, "references {:?}", references);
+    // La planche de crayonnés : sa grille, sa taille de case, puis chaque case (légende, coche, traits
+    // dans leur forme enregistrée, empreinte de la peinture).
+    let p = &doc.crayonnes;
+    let _ = writeln!(s, "crayonnes grille {:?} taille {:?} cases {}", p.grid, p.size, p.cases.len());
+    for c in &p.cases {
+        let traits = c.ink.vector.as_ref().map(|v| serde_json::to_string(&v.elements).expect("écriture des traits"));
+        let _ = writeln!(s, "  case {} {:?} utilisee {} traits {traits:?} peinture {:016x}", c.id, c.caption, c.used, empreinte(&c.paint.raster.to_rgba()));
+    }
     let mut sons: Vec<_> = doc.sounds.values().collect();
     sons.sort_by_key(|k| k.id);
     for k in sons {

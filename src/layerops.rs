@@ -163,6 +163,7 @@ impl App {
                 self.action_item(ui, "De fond", "calque.nouveau_fond");
             }
             self.action_item(ui, "CTG (sous le calque courant)", "calque.nouveau_ctg");
+            ui.menu_button("Calque d'effet", |ui| self.effect_preset_menu(ui));
             ui.separator();
             self.action_item(ui, "Choisir la sorte et le nom…", "calque.nouveau");
         });
@@ -197,6 +198,7 @@ impl App {
         if all {
             // La propagation (façon EbSynth) du calque courant, aussi dans le menu Calques.
             self.propagation_item(ui, self.cur_layer);
+            self.coloriage_item(ui, self.cur_layer);
         }
         ui.separator();
         ui.menu_button("Ordre", |ui| {

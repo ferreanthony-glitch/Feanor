@@ -89,6 +89,9 @@ pub(crate) struct Job {
     pub seq: u64,
     /// Le projet pour lequel le calcul est demandé (`world`).
     pub world: u64,
+    /// Calque d'effet d'ajustement (`calqueffet.rs`) : ce qui est dessous, à composer puis passer par
+    /// les effets (`steps` reste vide, `src` est vide). Rien : le dessin `src` passé par `steps`.
+    pub base: Option<Arc<crate::calqueffet::Snapshot>>,
 }
 
 struct Last {
@@ -533,14 +536,16 @@ fn worker_loop() {
         let _guard = Inflight { id: job.id, version: job.version };
         // Un effet qui plante ne doit pas tuer le fil ni être redemandé sans fin : on garde alors
         // le dessin sans effet.
-        let raster = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            if job.level == 0 {
-                crate::fx::apply_scaled(&job.src, &job.steps, 0)
-            } else {
-                crate::fx::apply_scaled(&reduced_source(&job), &job.steps, job.level)
-            }
+        let raster = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match &job.base {
+            Some(base) => base.render(job.level),
+            None if job.level == 0 => crate::fx::apply_scaled(&job.src, &job.steps, 0),
+            None => crate::fx::apply_scaled(&reduced_source(&job), &job.steps, job.level),
         }))
-        .unwrap_or_else(|_| crate::fxproxy::downscale(&job.src, job.level));
+        .unwrap_or_else(|_| match &job.base {
+            // (Un effet qui plante : ce qui est dessous, sans lui.)
+            Some(base) => std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| base.compose(job.level))).unwrap_or_else(|_| Raster::new(0, 0)),
+            None => crate::fxproxy::downscale(&job.src, job.level),
+        });
         let cel = Arc::new(Cel { raster, vector: None, version: job.version, fond: None });
         // (Un autre projet s'est ouvert pendant le calcul : le résultat ne lui appartient pas.)
         if job.world == world() {
@@ -578,4 +583,11 @@ pub(crate) fn soft_active() -> bool {
 
 pub(crate) fn mark_incomplete() {
     SOFT.with(|s| s.set(Some(true)));
+}
+
+/// Comme `mark_incomplete`, seulement en mode doux (rien ailleurs).
+pub(crate) fn mark_incomplete_if_soft() {
+    if soft_active() {
+        mark_incomplete();
+    }
 }

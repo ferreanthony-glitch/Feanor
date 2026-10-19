@@ -11,9 +11,25 @@
 //!   commentaires.json     commentaires sur la timeline (`commentaires.rs`), sans changer `VERSION` :
 //!                         absent, il n'y a pas de commentaires ; une version qui ne le connaît pas
 //!                         le laisse en place (elle n'efface que le contenu de dessins/, sons/…)
+//!   references.json      références visuelles (`references.rs`), de même sans changer `VERSION` ;
+//!   references/<id>.<ext> leurs fichiers (images copiées telles quelles, images extraites des vidéos
+//!                         dans references/<id>/) : une version qui ne les connaît pas les laisse là
+//!   scenes3d.json        scènes 3D de blocage, par plan, et décors par séquence (`scene3d.rs`,
+//!                         `scene3dstore.rs`), de même sans changer `VERSION` ; le calque « Fond 3D »
+//!                         où une scène est envoyée est un calque bitmap ordinaire
 //!   rognages.json         contenu rogné au début et à la fin des plans (`rognage.rs`), de même sans
 //!                         changer `VERSION` ; ses dessins restent dans dessins/ (une version qui ne
 //!                         le connaît pas les efface à l'enregistrement : le plan reste tel qu'il est)
+//!   transitions.json      transitions du montage (`transitions.rs`), de même sans changer `VERSION` :
+//!                         une version qui ne le connaît pas le laisse en place et montre le film
+//!                         sans les fondus
+//!   effets_son.json       réglages d'effets des extraits et des pistes son (`audiofx.rs`), de même
+//!   sons_proposes.json    sons proposés par la lecture du storyboard (`indications.rs`), de même sans
+//!                         changer `VERSION` ; les sons générés, eux, restent dans le cache de SHOT
+//!                         jusqu'à leur acceptation (copiés alors dans sons/)
+//!   crayonnes.json        la planche de crayonnés rapides (`crayonnes.rs`), de même sans changer
+//!                         `VERSION` : absent, il n'y a pas de planche ; une version qui ne le connaît
+//!                         pas le laisse en place
 //! ```
 //!
 //! Un enregistrement n'écrit que les dessins modifiés depuis le précédent, puis le manifeste.
@@ -89,7 +105,13 @@ pub const FORMAT: &str = "pelure-projet";
 /// `effets` : intensité, fréquence, variantes, vitesse, épaisseur, graine, animer à l'arrêt ; voir
 /// `tremblement.rs`). Une version précédente refuse le projet au lieu de montrer le dessin sans
 /// son tremblement (elle ne connaît pas la sorte d'effet) : le film changerait sans prévenir.
-pub const VERSION: u32 = 26;
+/// 27 (2026-10-19) : calques d'effets (`calque_effet` d'un calque : ajustement, qui applique sa pile
+/// d'effets à tout ce qui est dessous, ou incrustation de texte sur l'image finale — timecode, numéro
+/// d'image, nom du plan… ; voir `calqueffet.rs`) et sept effets « Cinéma » dans la pile `effets`
+/// (flash, image d'impact, lueur diffuse, secousse, vignettage, grain, aberration chromatique ; voir
+/// `fxcine.rs`). Une version précédente refuse le projet : elle en ferait des calques vides et
+/// perdrait l'effet, le film changerait sans prévenir.
+pub const VERSION: u32 = 27;
 const DRAWINGS: &str = "dessins";
 /// Fils qui lisent ou écrivent les dessins d'un projet en parallèle : au-delà de huit, le disque et
 /// la mémoire (une feuille décodée pèse 33 Mo) limitent plus que le processeur.
@@ -539,6 +561,10 @@ struct LayerEntry {
     /// de fond. Ce qu'on a peint dans le fond d'un dessin : `dessins/<id>_fond.png`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     fond: Option<crate::fond::FondReglages>,
+    /// Calque d'effet (format 27) : ajustement ou incrustation ; absent : calque ordinaire. Ses
+    /// expositions sont les images où il agit (un dessin vide tenu).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    calque_effet: Option<crate::calqueffet::Entree>,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -650,7 +676,7 @@ pub fn check_target(manifest: &Path, current: Option<&Path>) -> Result<(), Strin
             manifest.display()
         ));
     }
-    for sub in [DRAWINGS, SOUNDS, MODELS, VIDEOS] {
+    for sub in [DRAWINGS, SOUNDS, MODELS, VIDEOS, crate::references::DIR] {
         if dir.join(sub).exists() {
             return Err(format!(
                 "le dossier {} contient déjà un dossier « {sub} ». Choisis un autre nom.",
@@ -842,6 +868,21 @@ pub struct SaveJob {
     comments: Option<Vec<u8>>,
     /// Le fichier du contenu rogné (`rognages.json`) ; rien : il n'y en a plus, le fichier part.
     reserves: Option<Vec<u8>>,
+    /// Le fichier des transitions (`transitions.json`) ; rien : il n'y en a plus, le fichier part.
+    transitions: Option<Vec<u8>>,
+    /// Le fichier des effets des sons (`effets_son.json`) ; rien : il n'y en a plus, le fichier part.
+    sound_fx: Option<Vec<u8>>,
+    /// Le fichier des sons proposés (`sons_proposes.json`) ; rien : il n'y en a plus, le fichier part.
+    sons_proposes: Option<Vec<u8>>,
+    /// Les références visuelles : fichiers à recopier dans `references/`, `references.json`, et ce
+    /// qui peut s'effacer (`references.rs`).
+    references: crate::references::SavePlan,
+    /// La planche de crayonnés (`crayonnes.json`) : une copie, mise en fichier par le fil
+    /// d'écriture (l'encodage des peintures ne se fait pas sur le fil de l'interface) ; rien :
+    /// la planche est vide, le fichier part (s'il est lisible).
+    crayonnes: Option<crate::crayonnes::Planche>,
+    /// Le fichier des scènes 3D (`scenes3d.json`) ; rien : il n'y en a plus, le fichier part.
+    scenes3d: Option<Vec<u8>>,
 }
 
 /// Prépare l'enregistrement de `doc` dans `manifest_path`. `written` est mis à jour comme si
@@ -945,7 +986,94 @@ pub fn prepare_save(
         used_textures,
         comments: crate::commentaires::to_bytes(doc)?,
         reserves: crate::rognage::to_bytes(doc)?,
+        transitions: crate::transitions::to_bytes(doc)?,
+        sound_fx: crate::audiofx::to_bytes(doc)?,
+        sons_proposes: crate::indications::to_bytes(doc)?,
+        references: crate::references::plan_save(doc, dir)?,
+        crayonnes: (!doc.crayonnes.is_blank()).then(|| doc.crayonnes.clone()),
+        scenes3d: crate::scene3dstore::to_bytes(doc)?,
     })
+}
+
+/// Les sons proposés, lus dans `sons_proposes.json` (absent : aucun). Un fichier illisible ou d'une
+/// version plus récente n'empêche pas d'ouvrir le projet : on le dit, sans propositions, et il reste
+/// en place (`write_sidecar`).
+fn load_sons_proposes(dir: &Path, warnings: &mut Vec<String>) -> crate::indications::SonsProposes {
+    let path = dir.join(crate::indications::FILE);
+    match fs::read_to_string(&path) {
+        Ok(text) => match crate::indications::parse(&text) {
+            Ok(mut s) => {
+                crate::indications::verifier_fichiers(&mut s);
+                s
+            }
+            Err(e) => {
+                warnings.push(format!("{} : {e} ; les sons proposés ne sont pas chargés.", crate::indications::FILE));
+                Default::default()
+            }
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Default::default(),
+        Err(e) => {
+            warnings.push(format!("{} : {e} ; les sons proposés ne sont pas chargés.", path.display()));
+            Default::default()
+        }
+    }
+}
+
+/// La planche de crayonnés du projet, lue dans `crayonnes.json` (absent : une planche neuve). Un
+/// fichier illisible n'empêche pas d'ouvrir le projet : on le dit, sans planche ; il reste en place
+/// (`write_sidecar`).
+fn load_crayonnes(dir: &Path, warnings: &mut Vec<String>) -> crate::crayonnes::Planche {
+    let path = dir.join(crate::crayonnes::FILE);
+    match fs::read_to_string(&path) {
+        Ok(text) => crate::crayonnes::parse(&text).unwrap_or_else(|e| {
+            warnings.push(format!("{} : {e} ; la planche de crayonnés n'est pas chargée.", crate::crayonnes::FILE));
+            Default::default()
+        }),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Default::default(),
+        Err(e) => {
+            warnings.push(format!("{} : {e} ; la planche de crayonnés n'est pas chargée.", path.display()));
+            Default::default()
+        }
+    }
+}
+
+/// Les effets des sons, lus dans `effets_son.json` (absent : aucun). Un fichier illisible ou d'une
+/// version plus récente n'empêche pas d'ouvrir le projet : on le dit, sans effets, et il reste en
+/// place (`write_sidecar`).
+fn load_sound_fx(dir: &Path, warnings: &mut Vec<String>) -> Option<crate::audiofx::Loaded> {
+    let path = dir.join(crate::audiofx::FILE);
+    match fs::read_to_string(&path) {
+        Ok(text) => match crate::audiofx::parse(&text) {
+            Ok(l) => Some(l),
+            Err(e) => {
+                warnings.push(format!("{} : {e} ; les effets des sons ne sont pas chargés.", crate::audiofx::FILE));
+                None
+            }
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => {
+            warnings.push(format!("{} : {e} ; les effets des sons ne sont pas chargés.", path.display()));
+            None
+        }
+    }
+}
+
+/// Les transitions du montage, lues dans `transitions.json` (absent : aucune). Un fichier illisible
+/// ou d'une version plus récente n'empêche pas d'ouvrir le projet : on le dit, sans transitions, et
+/// il reste en place (`write_sidecar`).
+fn load_transitions(dir: &Path, warnings: &mut Vec<String>) -> Vec<crate::transitions::Transition> {
+    let path = dir.join(crate::transitions::FILE);
+    match fs::read_to_string(&path) {
+        Ok(text) => crate::transitions::parse(&text).unwrap_or_else(|e| {
+            warnings.push(format!("{} : {e} ; les transitions ne sont pas chargées.", crate::transitions::FILE));
+            Vec::new()
+        }),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(e) => {
+            warnings.push(format!("{} : {e} ; les transitions ne sont pas chargées.", path.display()));
+            Vec::new()
+        }
+    }
 }
 
 /// Le contenu rogné des plans, lu dans `rognages.json` (absent : rien n'est rogné). Un fichier
@@ -964,6 +1092,27 @@ fn load_reserves(dir: &Path, warnings: &mut Vec<String>) -> Option<crate::rognag
         Err(e) => {
             warnings.push(format!("{} : {e} ; le contenu rogné des plans n'est pas chargé.", path.display()));
             None
+        }
+    }
+}
+
+/// Les scènes 3D du projet, lues dans `scenes3d.json` (absent : aucune scène). Un fichier illisible
+/// (abîmé, ou d'une version plus récente) n'empêche pas d'ouvrir le projet : on le dit, sans scènes ;
+/// il reste en place (`write_sidecar`).
+fn load_scenes3d(dir: &Path, warnings: &mut Vec<String>) -> crate::scene3d::Scenes3d {
+    let path = dir.join(crate::scene3dstore::FILE);
+    match fs::read(&path) {
+        Ok(bytes) => String::from_utf8(bytes)
+            .map_err(|_| "le fichier n'est pas du texte (UTF-8)".to_string())
+            .and_then(|text| crate::scene3dstore::parse(&text))
+            .unwrap_or_else(|e| {
+                warnings.push(format!("{} : {e} ; les scènes 3D ne sont pas chargées.", crate::scene3dstore::FILE));
+                Default::default()
+            }),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Default::default(),
+        Err(e) => {
+            warnings.push(format!("{} : {e} ; les scènes 3D ne sont pas chargées.", path.display()));
+            Default::default()
         }
     }
 }
@@ -991,7 +1140,7 @@ fn load_comments(dir: &Path, warnings: &mut Vec<String>) -> Vec<crate::commentai
 /// (avec un avertissement) : « aucun commentaire » ne veut alors pas dire « fichier à effacer ». Il
 /// reste en place s'il n'y a rien à écrire ; sinon il est mis de côté sous le nom `<fichier>.illisible`
 /// avant que le neuf prenne sa place.
-fn write_sidecar(path: &Path, bytes: Option<&[u8]>, lisible: impl Fn(&str) -> bool) -> Result<(), String> {
+pub(crate) fn write_sidecar(path: &Path, bytes: Option<&[u8]>, lisible: impl Fn(&str) -> bool) -> Result<(), String> {
     let existant = match fs::read(path) {
         Ok(b) => Some(String::from_utf8(b).ok().filter(|t| lisible(t.trim_start_matches('\u{feff}'))).is_some()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
@@ -1091,11 +1240,28 @@ impl SaveJob {
         write_sidecar(&dir.join(crate::commentaires::FILE), self.comments.as_deref(), |t| crate::commentaires::parse(t).is_ok())?;
         // Le contenu rogné des plans : son fichier à côté du manifeste (rien de rogné, il part).
         write_sidecar(&dir.join(crate::rognage::FILE), self.reserves.as_deref(), |t| crate::rognage::parse(t).is_ok())?;
+        // Les transitions du montage, de même.
+        write_sidecar(&dir.join(crate::transitions::FILE), self.transitions.as_deref(), |t| crate::transitions::parse(t).is_ok())?;
+        // Et les effets des sons.
+        write_sidecar(&dir.join(crate::audiofx::FILE), self.sound_fx.as_deref(), |t| crate::audiofx::parse(t).is_ok())?;
+        // Et les sons proposés par la lecture du storyboard.
+        write_sidecar(&dir.join(crate::indications::FILE), self.sons_proposes.as_deref(), |t| crate::indications::parse(t).is_ok())?;
+        // Les références visuelles : leurs fichiers dans `references/`, puis `references.json`.
+        count += self.references.write(dir)?;
+        // La planche de crayonnés rapides : de même (mise en fichier ici, sur le fil d'écriture).
+        let crayonnes = match &self.crayonnes {
+            Some(p) => crate::crayonnes::bytes_of(p)?,
+            None => None,
+        };
+        write_sidecar(&dir.join(crate::crayonnes::FILE), crayonnes.as_deref(), |t| crate::crayonnes::parse(t).is_ok())?;
+        // Les scènes 3D de blocage (`scene3dstore.rs`), de même.
+        write_sidecar(&dir.join(crate::scene3dstore::FILE), self.scenes3d.as_deref(), |t| crate::scene3dstore::parse(t).is_ok())?;
         write_atomic_synced(&self.manifest_path, &self.manifest)?;
         let removed = remove_unused(dir, &self.used, &self.fonds)
             + remove_unused_sounds(dir, &self.used_sounds, &self.kept)
             + remove_unused_models(dir, &self.used_models, &self.kept)
-            + if self.has_unreadable { 0 } else { remove_unused_textures(dir, &self.used_textures) };
+            + if self.has_unreadable { 0 } else { remove_unused_textures(dir, &self.used_textures) }
+            + self.references.cleanup(dir);
         Ok(SaveReport { written: count, removed })
     }
 }
@@ -1239,6 +1405,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                     }),
                     video: l.video.as_ref().map(|v| VideoEntry { id: v.id, nom: v.name.clone(), images: v.frames, ips: v.fps, debut: v.start, ext: v.ext.clone() }),
                     fond: l.fond,
+                    calque_effet: l.effet.as_ref().map(crate::calqueffet::Entree::from),
                     expositions: to_exposures(&l.frames),
                 })
                 .collect(),
@@ -1399,9 +1566,11 @@ fn manifest_of(doc: &Document) -> Manifest {
 
 /// Modèles 3D cités par au moins un panneau.
 fn used_models(doc: &Document) -> BTreeSet<u64> {
+    // Les modèles du repère 3D des plans, et ceux que les scènes 3D de blocage montrent.
     doc.panels
         .iter()
         .filter_map(|p| p.ref3d.as_ref().map(|r| r.model))
+        .chain(doc.scenes3d.models_used())
         .filter(|id| doc.models.contains_key(id))
         .collect()
 }
@@ -1611,18 +1780,14 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
             id: t.id,
             name: t.nom.clone(),
             muted: t.muette,
+            // (Le solo vient de `effets_son.json`.)
+            solo: false,
             volume: t.volume.clamp(0.0, 4.0),
             clips: t
                 .extraits
                 .iter()
                 .filter(|c| sounds.contains_key(&c.son) && c.duree > 0)
-                .map(|c| SoundClip {
-                    id: c.id,
-                    sound: c.son,
-                    start: c.debut,
-                    offset: c.decalage,
-                    length: c.duree,
-                })
+                .map(|c| SoundClip::new(c.id, c.son, c.debut, c.decalage, c.duree))
                 .collect(),
             locked: t.verrouillee,
         })
@@ -1698,10 +1863,16 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
                 fond: p.fond,
             }
         },
+        // Les scènes 3D viennent de leur fichier (`scenes3d.json`, `load_scenes3d`).
+        scenes3d: Default::default(),
         // Les commentaires viennent de leur fichier, après les plans (`load_comments`).
         comments: Vec::new(),
         // La réserve du rognage aussi (`rognages.json`, `load_reserves`).
         reserves: Default::default(),
+        // Les transitions : `transitions.json`, `load_transitions`.
+        transitions: Vec::new(),
+        // Les références visuelles aussi (`references.json`, `references::load`).
+        references: Vec::new(),
     };
     for seq in manifest.sequences {
         structure.sequences.push(Sequence {
@@ -1785,6 +1956,8 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
                         }),
                         // Fond sous le trait (format 23).
                         fond: l.fond,
+                        // Calque d'effet (format 27).
+                        effet: l.calque_effet.map(crate::calqueffet::Entree::into_model),
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.
@@ -1865,17 +2038,31 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
     if structure.panels.is_empty() {
         return Err("le projet ne contient aucun plan".into());
     }
+    // Les scènes 3D, dans leur fichier à côté du manifeste (absent : aucune scène).
+    structure.scenes3d = load_scenes3d(dir, &mut warnings);
     // Les commentaires, dans leur fichier à côté du manifeste (absent : aucun commentaire).
     structure.comments = load_comments(dir, &mut warnings);
+    // Les transitions du montage, de même (`transitions.json`).
+    structure.transitions = load_transitions(dir, &mut warnings);
+    // Les références visuelles : `references.json` et le dossier `references/` (absents : aucune).
+    structure.references = crate::references::load(dir, &mut warnings);
     let frame = manifest.cadre;
     let mut written: HashMap<CelId, u64> = cels.keys().map(|&id| (id, 0)).collect();
     let mut doc = Document::from_parts(w, h, structure, cels, sounds);
+    // Les effets des sons (fondus, volume, égaliseur, écho, solo : `effets_son.json`).
+    if let Some(fx) = load_sound_fx(dir, &mut warnings) {
+        fx.install(&mut doc);
+    }
+    // Les sons proposés (`sons_proposes.json`).
+    doc.sons_proposes = load_sons_proposes(dir, &mut warnings);
     for model in models.into_values() {
         doc.insert_model(model);
     }
     if let Some(r) = reserves {
         r.install(&mut doc, &missing);
     }
+    // La planche de crayonnés rapides, dans son fichier (absent : aucune).
+    doc.crayonnes = load_crayonnes(dir, &mut warnings);
     // Projet d'avant les plans (13a) : chaque scène devient un plan, ses panneaux bout à bout.
     if !doc.is_plans() {
         let n = doc.panels.len();

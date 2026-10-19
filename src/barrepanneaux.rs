@@ -61,6 +61,9 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
     &[
         entree(Pane::Comments, "vue.commentaires", "Commentaires", "Les commentaires laissés sur la timeline : la liste, et le texte, l'auteur et la couleur du fanion choisi. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::History, "vue.historique", "Historique", "Les étapes d'annulation, par leur nom. Un clic l'ouvre ou le met devant, un autre le ferme."),
+        entree(Pane::Bruitages, "vue.bruitages", "Bruitages", "Tes dossiers de sons : les chercher, les écouter et les poser dans le montage. Un clic l'ouvre ou le met devant, un autre le ferme."),
+        entree(Pane::SuggestionsSonores, "vue.suggestions_sonores", "Suggestions sonores", "SHOT lit le storyboard et propose des bruitages, des ambiances et des voix témoins, que tu écoutes, acceptes ou supprimes. Un clic l'ouvre ou le met devant, un autre le ferme."),
+        entree(Pane::References, "vue.references", "Références", "Un tableau d'images et de vidéos à regarder en dessinant ; se détache dans sa fenêtre pour un deuxième écran. Un clic l'ouvre ou le met devant, un autre le ferme."),
     ],
 ];
 

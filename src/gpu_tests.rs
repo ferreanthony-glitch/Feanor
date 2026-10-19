@@ -64,6 +64,12 @@ pub(crate) fn render_with_tiles(gpu: &mut GpuCanvas, rs: &RenderState, doc: &Doc
     let rect = Rect::from_min_size(pos2(0.0, 0.0), vec2(w as f32, h as f32));
     let corners = [rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom()];
     let callback = gpu.paint(plan, &resolved, corners, None, rect, [doc.width, doc.height]);
+    read_callback(rs, w, h, rect, callback)
+}
+
+/// Ce que la carte graphique affiche pour une commande de dessin (`GpuCanvas::paint`, `paint_mix`) :
+/// un écran de `w` × `h` pixels, lu en entier.
+pub(crate) fn read_callback(rs: &RenderState, w: u32, h: u32, rect: Rect, callback: eframe::egui::PaintCallback) -> Vec<Color32> {
     let jobs = [ClippedPrimitive { clip_rect: rect, primitive: Primitive::Callback(callback) }];
     let screen = ScreenDescriptor { size_in_pixels: [w, h], pixels_per_point: 1.0 };
     let target = rs.device.create_texture(&wgpu::TextureDescriptor {

@@ -145,6 +145,7 @@ impl App {
         if on {
             self.set_camera_view(false);
             self.end_stroke();
+            self.scene3d.on = false;
         }
         self.stage3d.on = on;
         self.stage3d.drag = None;

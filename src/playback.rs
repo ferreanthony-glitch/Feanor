@@ -69,6 +69,10 @@ pub fn upcoming_cels(doc: &Document, at: Position, shown: &Plan, cap: usize) -> 
     for (p, f) in upcoming_frames(doc, at) {
         let layers = &doc.panels[p].layers;
         for layer in (0..layers.len()).filter(|&li| crate::folders::effect(layers, li).is_some()).map(|li| &layers[li]) {
+            // Un calque d'effet n'a pas de dessin à envoyer (ses images sont des expositions vides).
+            if layer.effet.is_some() {
+                continue;
+            }
             let Some(id) = layer.shown_at(f) else { continue };
             // Un calque à effets montre son dessin dérivé (`upcoming_derived`), pas le dessin même.
             if !crate::fx::layer_steps(layer, f, None).is_empty() {
@@ -92,8 +96,16 @@ pub fn upcoming_cels(doc: &Document, at: Position, shown: &Plan, cap: usize) -> 
 pub fn upcoming_derived(doc: &Document, at: Position, level: u8, cap: usize) -> Vec<crate::gpu::Ahead> {
     let mut out: Vec<crate::gpu::Ahead> = Vec::new();
     for (k, (p, f)) in upcoming_frames(doc, at).into_iter().enumerate() {
-        let plan = crate::render::panel_plan_at(doc, p, f, None);
+        // (Avec le papier de l'écran : le dessin d'un calque d'effet au plus bas le compte.)
+        let plan = crate::render::panel_plan_at(doc, p, f, doc.render_paper());
         crate::fx::prefetch(doc, &plan.items, k as u32 + 1, level);
+        // Les calques d'effets de cette image : leurs dessins sont demandés au fil de fond, et ceux qui
+        // sont prêts partent d'avance à la carte graphique (`calqueffet.rs`).
+        for (id, cel) in crate::calqueffet::ahead(doc, &plan, k as u32 + 1, level) {
+            if out.len() < cap && !out.iter().any(|a| a.id == id) {
+                out.push(crate::gpu::Ahead { id, cel: Some(cel) });
+            }
+        }
         for item in &plan.items {
             if out.len() >= cap {
                 break;

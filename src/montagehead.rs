@@ -335,6 +335,7 @@ impl App {
             self.layer_fx_items(ui, li);
         }
         self.propagation_item(ui, li);
+        self.coloriage_item(ui, li);
         // Fonctions d'état, puis d'animation (Anthony, 2026-10-17 : « en premier les fonctions
         // simples, puis les fonctions d'état, ensuite les fonctions d'animation »).
         ui.separator();

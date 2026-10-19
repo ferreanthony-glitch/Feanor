@@ -107,6 +107,13 @@ pub struct Settings {
     /// raccourcis). Absent des anciens réglages : SHOT.
     #[serde(default, rename = "jeu_raccourcis", skip_serializing_if = "crate::keymap::PresetId::is_default")]
     pub keymap_preset: crate::keymap::PresetId,
+    /// Les dossiers de sons de la bibliothèque de bruitages (`bruitages.rs`).
+    #[serde(default, rename = "bruitages")]
+    pub bruitages: crate::bruitages::BruitagesReglages,
+    /// La génération sonore (`genreglages.rs`) : pour chaque rôle, local ou service en ligne. Jamais
+    /// une clé : elles sont dans le Gestionnaire d'identifiants de Windows (`clessecretes.rs`).
+    #[serde(default, rename = "generation_son")]
+    pub generation_son: crate::genreglages::GenerationSonReglages,
 }
 
 fn default_autosave() -> u32 {
@@ -152,6 +159,8 @@ impl Default for Settings {
             perf: Default::default(),
             diagnostic: Default::default(),
             keymap_preset: Default::default(),
+            bruitages: Default::default(),
+            generation_son: Default::default(),
         }
     }
 }
@@ -170,6 +179,7 @@ impl Settings {
         s.onion.migrate();
         s.framing = s.framing.sanitized();
         s.perf = s.perf.sanitized();
+        s.generation_son = std::mem::take(&mut s.generation_son).sanitized();
         s
     }
 

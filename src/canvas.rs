@@ -14,6 +14,8 @@ impl App {
         let mut rect = ui.available_rect_before_wrap();
         // Barre de la vue (plateau / caméra, cadres de composition), sauf dans une vignette.
         if !self.in_card {
+            // Scène 3D : le calque « Fond 3D » se met à jour en arrière-plan (jamais pendant un trait).
+            self.update_scene3d(ui.ctx());
             let bar = Rect::from_min_size(rect.min, vec2(rect.width(), crate::viewbar::VIEW_BAR_H));
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(bar).id_salt("barre_vue"));
             self.view_bar(&mut child);
@@ -23,6 +25,13 @@ impl App {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(tools).id_salt("outils_vue"));
             self.view_tools_bar(&mut child);
             rect.max.y = tools.min.y;
+            // Scène 3D de blocage : à la place du dessin à plat, avec ses commandes dans les Réglages.
+            if self.scene3d.on && !self.camera_view {
+                let response = ui.allocate_rect(rect, Sense::click_and_drag());
+                self.canvas_rect = rect;
+                self.scene3d_panel(ui, rect, &response);
+                return;
+            }
             // Plateau en 3D (9e) : à la place du dessin à plat.
             if self.stage3d.on && !self.camera_view {
                 let response = ui.allocate_rect(rect, Sense::click_and_drag());
@@ -73,6 +82,19 @@ impl App {
                 ui.ctx().request_repaint_after(wait);
             }
         }
+        // Effets (13i) : jamais calculés ici. En lecture, au défilement et pendant un geste sur un
+        // effet, l'aperçu à la taille de l'écran ; au repos, la pleine résolution, calculée par le
+        // fil de fond (`fxcache.rs`) ; l'écran montre le dernier résultat en attendant.
+        let level = match &self.gpu {
+            Some(_) => crate::fx::draft_level(ui.ctx(), self.cur_panel, self.cur_frame, self.playing, self.view.zoom * ui.ctx().pixels_per_point()),
+            None => 0,
+        };
+        // Calques d'effets (`calqueffet.rs`) : le repère de chacun et ce qu'il couvre deviennent le
+        // dessin dérivé, demandé au fil de fond et montré quand il est prêt (sans l'effet avant).
+        let plan = match crate::calqueffet::resolve(&self.doc, &plan, crate::calqueffet::Mode::Display { level, prio: 0 }) {
+            std::borrow::Cow::Borrowed(_) => plan,
+            std::borrow::Cow::Owned(resolved) => resolved,
+        };
         let painter = ui.painter_at(rect);
         let stage_corners = [pos2(0.0, 0.0), pos2(size.x, 0.0), pos2(size.x, size.y), pos2(0.0, size.y)];
         let corners_h = stage_corners.map(|p| self.view.to_screen_h(rect, size, p));
@@ -88,13 +110,6 @@ impl App {
         }
         // Arrière-plan (13e) : aucun → noir ; damier → cases des couleurs A et B sous les calques.
         self.paint_background(ui.ctx(), &painter, corners, size);
-        // Effets (13i) : jamais calculés ici. En lecture, au défilement et pendant un geste sur un
-        // effet, l'aperçu à la taille de l'écran ; au repos, la pleine résolution, calculée par le
-        // fil de fond (`fxcache.rs`) ; l'écran montre le dernier résultat en attendant.
-        let level = match &self.gpu {
-            Some(_) => crate::fx::draft_level(ui.ctx(), self.cur_panel, self.cur_frame, self.playing, self.view.zoom * ui.ctx().pixels_per_point()),
-            None => 0,
-        };
         // Dessins des images qui viennent, à envoyer d'avance à la carte graphique (leurs effets
         // sont demandés au fil de fond en même temps).
         let ahead: Vec<crate::gpu::Ahead> = match &self.gpu {
@@ -121,15 +136,40 @@ impl App {
             }
             None => Vec::new(),
         };
+        // Une transition du montage sous la tête de lecture (fondu, volet, noir) : les plans à
+        // superposer, composés par la carte graphique comme le plan courant (`transitionsui.rs`).
+        let mixed = if self.gpu.is_some() { self.transition_preview() } else { None };
+        let setup = mixed.map(|(_, mix)| self.mix_setup(&mix, &plan, rect, size));
         if let Some(gpu) = &mut self.gpu {
             // Les calques sont superposés par la carte graphique, directement à leur place.
             let (all, tiles) = self.renderer.take_gpu_dirty();
-            // (Le fond sous le trait se calcule en arrière-plan : `fx::differe`.)
-            let resolved = {
-                let _t = crate::perf::section("composition : envoi à la carte graphique");
-                crate::fx::differe(|| gpu.sync(&self.doc, &plan, all, &tiles, &ahead, level))
-            };
-            painter.add(gpu.paint(&plan, &resolved, corners, ws, rect, [self.doc.width, self.doc.height]));
+            let stage = [self.doc.width, self.doc.height];
+            match &setup {
+                None => {
+                    // (Le fond sous le trait se calcule en arrière-plan : `fx::differe`.)
+                    let resolved = {
+                        let _t = crate::perf::section("composition : envoi à la carte graphique");
+                        crate::fx::differe(|| gpu.sync(&self.doc, &plan, all, &tiles, &ahead, level))
+                    };
+                    painter.add(gpu.paint(&plan, &resolved, corners, ws, rect, stage));
+                }
+                Some(s) => {
+                    // Les dessins des deux plans partent ensemble à la carte (un seul `sync` : les
+                    // textures de l'un ne chassent pas celles de l'autre).
+                    let mut both = s.first.clone();
+                    if let Some((second, _, _)) = &s.second {
+                        both.items.extend(second.items.iter().cloned());
+                    }
+                    let resolved = {
+                        let _t = crate::perf::section("composition : envoi à la carte graphique (transition)");
+                        crate::fx::differe(|| gpu.sync(&self.doc, &both, all, &tiles, &ahead, level))
+                    };
+                    let n = s.first.items.len().min(resolved.len());
+                    let first = crate::gpu::MixLayer { plan: &s.first, resolved: &resolved[..n], corners: s.first_corners, ws: s.first_ws };
+                    let second = s.second.as_ref().map(|(p, c, w)| crate::gpu::MixLayer { plan: p, resolved: &resolved[n..], corners: *c, ws: *w });
+                    painter.add(gpu.paint_mix(first, second, Some(&s.display), rect, stage));
+                }
+            }
         } else {
             let _t = crate::perf::section("composition : processeur");
             let texture = crate::fx::differe(|| self.renderer.update(ui.ctx(), &self.doc, plan));
@@ -161,6 +201,8 @@ impl App {
 
         self.paint_ref3d(&painter, rect);
         self.paint_camera(&painter, rect);
+        // Incrustations (timecode…) : sur l'image finale, dans le cadre (`prereglagesui.rs`).
+        self.paint_incrustations(ui.ctx(), &painter);
         // Notes dessinées par-dessus l'image pendant la lecture (13e).
         self.paint_notes_overlay(&painter, rect);
         if !self.in_card {

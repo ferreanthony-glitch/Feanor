@@ -9,7 +9,7 @@ use crate::document::{Layer, LayerKind};
 use crate::video::{self, Source};
 
 /// Extensions de vidéo proposées à l'import.
-const VIDEO_EXTS: [&str; 9] = ["mp4", "mov", "avi", "mkv", "webm", "m4v", "mpg", "mpeg", "wmv"];
+pub(crate) const VIDEO_EXTS: [&str; 9] = ["mp4", "mov", "avi", "mkv", "webm", "m4v", "mpg", "mpeg", "wmv"];
 /// Extensions d'images d'une séquence.
 const IMAGE_EXTS: [&str; 5] = ["png", "jpg", "jpeg", "bmp", "tga"];
 

@@ -79,6 +79,21 @@ pub enum EffectKind {
     // Tremblement du trait (`tremblement.rs`, Anthony, 2026-10-19), calques vectoriels seulement.
     #[serde(rename = "tremblement")]
     Boil,
+    // Effets « Cinéma » (`fxcine.rs`, calques d'effets et préréglages d'effets, 2026-10-19).
+    #[serde(rename = "flash")]
+    Flash,
+    #[serde(rename = "image_impact")]
+    Impact,
+    #[serde(rename = "lueur_diffuse")]
+    Bloom,
+    #[serde(rename = "secousse")]
+    Shake,
+    #[serde(rename = "vignettage")]
+    Vignette,
+    #[serde(rename = "grain")]
+    Grain,
+    #[serde(rename = "aberration")]
+    Aberration,
 }
 
 const GAUSSIAN: [Param; 1] = [Param { name: "Rayon", min: 0.0, max: 200.0, default: 8.0, unit: " px" }];
@@ -171,6 +186,62 @@ const BOIL: [Param; 7] = [
     Param { name: "Animer à l'arrêt", min: 0.0, max: 1.0, default: 0.0, unit: "" },
 ];
 
+/// Effets « Cinéma » (`fxcine.rs`). Les rangs de l'image d'impact sont ceux de `fxcine::IMPACT_*`.
+const FLASH: [Param; 5] = [
+    Param { name: "Quantité", min: 0.0, max: 100.0, default: 100.0, unit: " %" },
+    Param { name: "Rouge", min: 0.0, max: 255.0, default: 255.0, unit: "" },
+    Param { name: "Vert", min: 0.0, max: 255.0, default: 255.0, unit: "" },
+    Param { name: "Bleu", min: 0.0, max: 255.0, default: 255.0, unit: "" },
+    Param { name: "Écran (éclaircit seulement)", min: 0.0, max: 1.0, default: 0.0, unit: "" },
+];
+const IMPACT: [Param; 12] = [
+    Param { name: "Quantité", min: 0.0, max: 100.0, default: 100.0, unit: " %" },
+    Param { name: "Mode (0 négatif, 1 noir et blanc, 2 inversé, 3 postérisé)", min: 0.0, max: 3.0, default: 0.0, unit: "" },
+    Param { name: "Seuil", min: 0.0, max: 255.0, default: 128.0, unit: "" },
+    Param { name: "Teinte : rouge", min: 0.0, max: 255.0, default: 230.0, unit: "" },
+    Param { name: "Teinte : vert", min: 0.0, max: 255.0, default: 30.0, unit: "" },
+    Param { name: "Teinte : bleu", min: 0.0, max: 255.0, default: 30.0, unit: "" },
+    Param { name: "Force de la teinte", min: 0.0, max: 100.0, default: 0.0, unit: " %" },
+    Param { name: "Éclat (rayons)", min: 0.0, max: 100.0, default: 0.0, unit: " %" },
+    Param { name: "Lignes de vitesse", min: 0.0, max: 100.0, default: 0.0, unit: " %" },
+    Param { name: "Centre x", min: 0.0, max: 100.0, default: 50.0, unit: " %" },
+    Param { name: "Centre y", min: 0.0, max: 100.0, default: 50.0, unit: " %" },
+    Param { name: "Graine", min: 1.0, max: 999.0, default: 1.0, unit: "" },
+];
+const BLOOM: [Param; 3] = [
+    Param { name: "Rayon", min: 1.0, max: 300.0, default: 30.0, unit: " px" },
+    Param { name: "Intensité", min: 0.0, max: 300.0, default: 100.0, unit: " %" },
+    Param { name: "Seuil", min: 0.0, max: 255.0, default: 140.0, unit: "" },
+];
+const SHAKE: [Param; 5] = [
+    Param { name: "Décalage x", min: -300.0, max: 300.0, default: 0.0, unit: " px" },
+    Param { name: "Décalage y", min: -300.0, max: 300.0, default: 0.0, unit: " px" },
+    Param { name: "Rotation", min: -20.0, max: 20.0, default: 0.0, unit: "°" },
+    Param { name: "Zoom", min: 50.0, max: 200.0, default: 100.0, unit: " %" },
+    Param { name: "Flou de bougé", min: 0.0, max: 100.0, default: 0.0, unit: " %" },
+];
+const VIGNETTE: [Param; 7] = [
+    Param { name: "Intensité", min: 0.0, max: 100.0, default: 50.0, unit: " %" },
+    Param { name: "Rayon", min: 0.0, max: 150.0, default: 60.0, unit: " %" },
+    Param { name: "Douceur", min: 1.0, max: 150.0, default: 60.0, unit: " %" },
+    Param { name: "Centre x", min: 0.0, max: 100.0, default: 50.0, unit: " %" },
+    Param { name: "Centre y", min: 0.0, max: 100.0, default: 50.0, unit: " %" },
+    Param { name: "Largeur du cadre", min: 1.0, max: 200.0, default: 100.0, unit: " %" },
+    Param { name: "Hauteur du cadre", min: 1.0, max: 200.0, default: 100.0, unit: " %" },
+];
+/// Le grain porte à la fin de ses valeurs l'image (comme le tremblement sa variante) : il change à
+/// chaque image, même quand rien d'autre ne bouge.
+const GRAIN: [Param; 3] = [
+    Param { name: "Quantité", min: 0.0, max: 100.0, default: 25.0, unit: " %" },
+    Param { name: "Taille", min: 1.0, max: 8.0, default: 1.0, unit: " px" },
+    Param { name: "Graine", min: 1.0, max: 999.0, default: 1.0, unit: "" },
+];
+const ABERRATION: [Param; 3] = [
+    Param { name: "Force", min: 0.0, max: 60.0, default: 6.0, unit: " px" },
+    Param { name: "Centre x", min: 0.0, max: 100.0, default: 50.0, unit: " %" },
+    Param { name: "Centre y", min: 0.0, max: 100.0, default: 50.0, unit: " %" },
+];
+
 /// Comment se règle un paramètre dans le panneau Effets.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ParamStyle {
@@ -184,10 +255,10 @@ pub enum ParamStyle {
 
 /// Familles d'effets, dans l'ordre des menus (inspirées du menu Filtre et des réglages de
 /// Photoshop).
-pub const FAMILIES: [&str; 8] = ["Flou", "Déformation", "Réglages", "Bruit", "Pixéliser", "Rendu", "Netteté", "Styliser"];
+pub const FAMILIES: [&str; 9] = ["Flou", "Déformation", "Réglages", "Bruit", "Pixéliser", "Rendu", "Netteté", "Styliser", "Cinéma"];
 
 impl EffectKind {
-    pub const ALL: [EffectKind; 22] = [
+    pub const ALL: [EffectKind; 29] = [
         EffectKind::GaussianBlur,
         EffectKind::MotionBlur,
         EffectKind::BrightnessContrast,
@@ -210,6 +281,13 @@ impl EffectKind {
         EffectKind::Lighting,
         EffectKind::Gradient,
         EffectKind::Boil,
+        EffectKind::Flash,
+        EffectKind::Impact,
+        EffectKind::Bloom,
+        EffectKind::Shake,
+        EffectKind::Vignette,
+        EffectKind::Grain,
+        EffectKind::Aberration,
     ];
 
     /// L'effet n'a de sens que sur un calque vectoriel (le tremblement du trait).
@@ -222,6 +300,9 @@ impl EffectKind {
         match (self, k) {
             (EffectKind::Boil, crate::tremblement::VARIANTS | crate::tremblement::SPEED | crate::tremblement::SEED) => ParamStyle::Integer,
             (EffectKind::Boil, crate::tremblement::REST) => ParamStyle::Switch,
+            (EffectKind::Flash, 4) => ParamStyle::Switch,
+            (EffectKind::Impact, crate::fxcine::IMPACT_MODE | crate::fxcine::IMPACT_SEED) => ParamStyle::Integer,
+            (EffectKind::Grain, 1 | 2) => ParamStyle::Integer,
             _ => ParamStyle::Slider,
         }
     }
@@ -250,6 +331,13 @@ impl EffectKind {
             EffectKind::Lighting => "Éclairage",
             EffectKind::Gradient => "Dégradé",
             EffectKind::Boil => "Tremblement du trait",
+            EffectKind::Flash => "Flash",
+            EffectKind::Impact => "Image d'impact",
+            EffectKind::Bloom => "Lueur diffuse",
+            EffectKind::Shake => "Secousse de l'image",
+            EffectKind::Vignette => "Vignettage",
+            EffectKind::Grain => "Grain de film",
+            EffectKind::Aberration => "Aberration chromatique",
         }
     }
 
@@ -270,6 +358,13 @@ impl EffectKind {
             EffectKind::DropShadow | EffectKind::Glow => "Styliser",
             EffectKind::Wave | EffectKind::Ripple | EffectKind::Twirl | EffectKind::Pinch | EffectKind::Boil => "Déformation",
             EffectKind::Clouds | EffectKind::Lighting | EffectKind::Gradient => "Rendu",
+            EffectKind::Flash
+            | EffectKind::Impact
+            | EffectKind::Bloom
+            | EffectKind::Shake
+            | EffectKind::Vignette
+            | EffectKind::Grain
+            | EffectKind::Aberration => "Cinéma",
         }
     }
 
@@ -296,6 +391,13 @@ impl EffectKind {
             EffectKind::Lighting => &LIGHTING,
             EffectKind::Gradient => &GRADIENT,
             EffectKind::Boil => &BOIL,
+            EffectKind::Flash => &FLASH,
+            EffectKind::Impact => &IMPACT,
+            EffectKind::Bloom => &BLOOM,
+            EffectKind::Shake => &SHAKE,
+            EffectKind::Vignette => &VIGNETTE,
+            EffectKind::Grain => &GRAIN,
+            EffectKind::Aberration => &ABERRATION,
         }
     }
 
@@ -320,6 +422,9 @@ impl EffectKind {
             EffectKind::Lighting => at(3) > 0.0,
             EffectKind::Gradient => at(1) > 0.0,
             EffectKind::Boil => crate::tremblement::Settings::of(v).changes(),
+            EffectKind::Flash | EffectKind::Impact | EffectKind::Vignette | EffectKind::Grain | EffectKind::Aberration => at(0) > 0.0,
+            EffectKind::Bloom => at(1) > 0.0,
+            EffectKind::Shake => at(0) != 0.0 || at(1) != 0.0 || at(2) != 0.0 || (at(3) - 100.0).abs() > 1e-3,
         }
     }
 
@@ -481,6 +586,10 @@ pub fn steps_at_with(fx: &[Effect], frame: usize, rest: Option<usize>, vector: b
             if e.kind == EffectKind::Boil {
                 let variant = crate::tremblement::variant_for(&values, frame, rest);
                 values.push(variant as f32);
+            }
+            // Le grain de film change à chaque image : l'image est la dernière de ses valeurs.
+            if e.kind == EffectKind::Grain {
+                values.push(frame as f32);
             }
             FxStep { kind: e.kind, values }
         })
@@ -789,6 +898,13 @@ pub fn apply_scaled(raster: &Raster, steps: &[FxStep], level: u8) -> Raster {
             EffectKind::Lighting => crate::fxwarp::lighting(src, v[0], v[1], v[2], v[3]),
             EffectKind::Gradient => crate::fxwarp::gradient(src, v[0], v[1]),
             EffectKind::Boil => crate::tremblement::boil(src, v, level),
+            EffectKind::Flash => crate::fxcine::flash(src, v[0], [v[1], v[2], v[3]], v[4] >= 0.5),
+            EffectKind::Impact => crate::fxcine::impact(src, v),
+            EffectKind::Bloom => crate::fxcine::bloom(src, v[0], v[1], v[2]),
+            EffectKind::Shake => crate::fxcine::shake(src, v[0], v[1], v[2], v[3], v[4]),
+            EffectKind::Vignette => crate::fxcine::vignette(src, v[0], v[1], v[2], v[3], v[4], v[5], v[6]),
+            EffectKind::Grain => crate::fxcine::grain(src, v[0], v[1], v[2], v.get(3).copied().unwrap_or(0.0), level),
+            EffectKind::Aberration => crate::fxcine::aberration(src, v[0], v[1], v[2]),
         };
         cur = Some(next);
     }
@@ -865,9 +981,11 @@ pub fn shown<'a>(doc: &'a Document, item: &crate::render::PlanItem) -> Option<Sh
 }
 
 fn shown_blocking<'a>(doc: &'a Document, item: &crate::render::PlanItem) -> Option<Shown<'a>> {
-    match item.fond {
+    match &item.fond {
         None => shown_with(doc, item.cel, &item.fx, item.ctg.as_ref()),
-        Some(crate::render::FondPart::Forme(r)) => fond_shown(doc, item, &r),
+        Some(crate::render::FondPart::Forme(r)) => fond_shown(doc, item, r),
+        // Le repère d'un calque d'effet non résolu (`calqueffet::resolve`) ne montre rien.
+        Some(crate::render::FondPart::Reglage(_)) => None,
     }
 }
 
@@ -917,7 +1035,7 @@ pub fn display<'a>(doc: &'a Document, item: &crate::render::PlanItem, level: u8)
 /// Priorité des calculs demandés pour les vignettes (après l'image affichée et les suivantes).
 const THUMB_PRIO: u32 = 100;
 
-fn display_with<'a>(doc: &'a Document, item: &crate::render::PlanItem, level: u8, prio: u32) -> Option<Display<'a>> {
+pub(crate) fn display_with<'a>(doc: &'a Document, item: &crate::render::PlanItem, level: u8, prio: u32) -> Option<Display<'a>> {
     let Some((src, level)) = wanted(doc, item, level) else {
         return Some(Display { cel: shown_blocking(doc, item)?, id: shown_id(item), ready: true });
     };
@@ -962,6 +1080,7 @@ fn job_for(item: &crate::render::PlanItem, src: &Cel, id: CelId, level: u8, prio
         origin: item.cel,
         seq: 0,
         world: crate::fxcache::world(),
+        base: None,
     }
 }
 
@@ -1078,6 +1197,12 @@ static DRAFT_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::
 /// L'image est-elle en aperçu (lecture, défilement, geste sur un effet) ?
 fn draft_active() -> bool {
     now_ms() < DRAFT_UNTIL.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// L'image est-elle en aperçu ? (Pour les calques d'effets, `calqueffet.rs` : leur dessin est celui de
+/// toute l'image, il passe un cran plus bas que les effets d'un calque pendant l'aperçu.)
+pub(crate) fn drafting() -> bool {
+    draft_active()
 }
 
 /// Formes de fond gardées (`fond::silhouette`, pour refaire le fond tuile par tuile pendant qu'on
@@ -1273,8 +1398,11 @@ pub fn fond_patch(doc: &Document, cel: CelId, r: &crate::fond::FondReglages, til
 /// Le dessin `cel`, rempli d'après `ctg` (dessins des sources, trous) s'il est d'un calque CTG, puis passé par
 /// les effets `steps` (calculé une fois, puis gardé tant qu'aucun de ces dessins ne change).
 pub fn shown_with<'a>(doc: &'a Document, cel: CelId, steps: &[FxStep], ctg: Option<&crate::ctg::CtgInput>) -> Option<Shown<'a>> {
-    // Pas un dessin du projet : une image de calque vidéo (13k), lue à la demande.
-    let Some(src) = doc.cels.get(&cel) else { return crate::video::shown(doc, cel).map(Shown::Fx) };
+    // Pas un dessin du projet : le dessin dérivé d'un calque d'effet (`calqueffet.rs`), ou une image
+    // de calque vidéo (13k), lue à la demande.
+    let Some(src) = doc.cels.get(&cel) else {
+        return crate::calqueffet::derived(cel).map(Shown::Fx).or_else(|| crate::video::shown(doc, cel).map(Shown::Fx));
+    };
     if steps.is_empty() && ctg.is_none() {
         return Some(Shown::Plain(src));
     }
