@@ -1449,7 +1449,16 @@ pub struct Progress {
 }
 
 fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> Result<Loaded, String> {
-    let text = fs::read_to_string(manifest_path).map_err(|e| e.to_string())?;
+    // (Des messages en français qui disent quel fichier : « stream did not contain valid UTF-8 »
+    // ou « Le chemin d'accès spécifié est introuvable » ne disent pas ce qui ne va pas.)
+    let octets = fs::read(manifest_path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            format!("projet introuvable : {}", manifest_path.display())
+        } else {
+            format!("manifeste illisible : {} ({e})", manifest_path.display())
+        }
+    })?;
+    let text = String::from_utf8(octets).map_err(|_| "manifeste illisible : le fichier n'est pas du texte (UTF-8), il est abîmé".to_string())?;
     let mut manifest: Manifest =
         serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("manifeste illisible : {e}"))?;
     if manifest.format != FORMAT {
@@ -1465,6 +1474,11 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
     let (w, h) = (manifest.largeur, manifest.hauteur);
     if w == 0 || h == 0 {
         return Err("taille d'image invalide dans le manifeste".into());
+    }
+    // (Un manifeste abîmé qui annonce une feuille de milliards de pixels ferait demander à SHOT des
+    // milliards de tuiles : il tomberait sans un mot.)
+    if w > crate::vector::MAX_SIDE * 2 || h > crate::vector::MAX_SIDE * 2 {
+        return Err(format!("taille d'image démesurée dans le manifeste ({w} × {h})"));
     }
     let mut warnings = Vec::new();
     // Les textures d'abord : les dessins vectoriels texturés en ont besoin pour leur rendu.
