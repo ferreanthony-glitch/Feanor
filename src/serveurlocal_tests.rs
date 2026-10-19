@@ -133,8 +133,21 @@ fn servir(mut flux: TcpStream, requetes: &Mutex<Vec<(String, String, Value)>>, c
     let _ = flux.write_all(&comportement(&methode, &chemin, &valeur));
 }
 
-fn libre() -> u16 {
-    TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
+/// Un port où personne n'écoute, et que personne d'autre ne recevra pendant la suite. (Avant, le port
+/// venait d'un `bind(":0")` refermé aussitôt : Windows le redonnait à un faux serveur d'un autre essai
+/// (`Faux::contrat`), et l'essai « le serveur meurt au démarrage » tombait sur un serveur bien vivant.
+/// Ici : des ports sous la plage que le système donne aux `bind(":0")` (49152 et au-delà), pris un à
+/// un, chacun une seule fois.)
+pub(crate) fn libre() -> u16 {
+    use std::sync::atomic::AtomicU16;
+    static SUIVANT: AtomicU16 = AtomicU16::new(0);
+    loop {
+        let n = SUIVANT.fetch_add(1, Ordering::SeqCst);
+        let port = 20_000 + ((std::process::id() % 400) as u16) * 60 + n % 3_000;
+        if TcpListener::bind(("127.0.0.1", port)).is_ok() {
+            return port;
+        }
+    }
 }
 
 fn plan(action: &str, dialogue: &str) -> EntreePlan {

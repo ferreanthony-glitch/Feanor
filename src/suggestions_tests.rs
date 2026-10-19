@@ -701,7 +701,7 @@ fn attendre_essai(app: &mut App) {
 fn the_test_buttons_report_not_installed_and_a_connection_to_plug_in_without_blocking() {
     let (mut app, _f, dir) = application("essais", un_son_par_plan());
     // Le serveur local : rien n'écoute sur ce port.
-    let libre = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let libre = crate::serveurlocal_tests::libre();
     app.settings.generation_son.port_local = libre;
     app.lancer_essai(None);
     assert_eq!(app.sug.prefs.resultats[&None], "Essai en cours…", "l'essai ne bloque pas : il rend la main aussitôt");
@@ -730,7 +730,7 @@ fn the_pane_is_closed_by_default_opens_on_the_right_and_has_its_icon_and_command
     assert!(Pane::SuggestionsSonores.on_demand());
     assert_eq!(Pane::SuggestionsSonores.group(), Group::Right);
     assert_eq!(serde_json::to_string(&Pane::SuggestionsSonores).unwrap(), "\"suggestions_sonores\"");
-    assert_eq!(Pane::ALL.len(), 15);
+    assert_eq!(Pane::ALL.len(), 16);
     assert!(Pane::ALL.contains(&Pane::SuggestionsSonores));
     let mut l = DockLayout::from_legacy(&Layout::default());
     assert!(!l.contains(Pane::SuggestionsSonores), "fermé par défaut");
@@ -861,7 +861,7 @@ fn application_avec_le_vrai_serveur(nom: &str) -> (App, PathBuf) {
     app.sug.serveur = crate::serveurlocal::GestionnaireServeur::reel();
     app.sug.fabrique = Arc::new(FabriqueReelle { transport: Arc::new(TransportABrancher), coffre: Arc::new(CoffreMemoire::default()), serveur: app.sug.serveur.clone() });
     // Un port à soi : le serveur de l'utilisateur, s'il tourne, n'est pas dérangé.
-    app.settings.generation_son.port_local = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    app.settings.generation_son.port_local = crate::serveurlocal_tests::libre();
     app.settings.generation_son.demarrage_auto = true;
     (app, dir)
 }

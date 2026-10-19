@@ -289,6 +289,10 @@ impl App {
     /// calque vidéo (13k) ; un projet Storyboard Pro ouvre la fenêtre d'import (14a).
     pub(crate) fn handle_dropped_files(&mut self, ctx: &egui::Context) {
         let paths: Vec<_> = ctx.input(|i| i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect());
+        // Lâchés sur le panneau Références : ce sont des références (`referencesui.rs`).
+        if !paths.is_empty() && self.refs_take_drop(ctx, &paths) {
+            return;
+        }
         for path in paths {
             if !self.import_dropped_sboard(&path) && !self.import_dropped_video(&path) {
                 self.import_sound_path(&path, None, None);

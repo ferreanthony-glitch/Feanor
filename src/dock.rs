@@ -78,6 +78,11 @@ pub enum Pane {
     /// par défaut ; il s'ouvre dans la colonne de droite, en onglet avec les calques.
     #[serde(rename = "suggestions_sonores")]
     SuggestionsSonores,
+    /// Les références visuelles du projet (`references.rs`, `referencesui.rs`) : un tableau libre
+    /// d'images et de vidéos à regarder pendant qu'on dessine. Fermé dans la disposition par défaut ;
+    /// il s'ouvre dans la colonne de droite, et se détache dans sa fenêtre pour un deuxième écran.
+    #[serde(rename = "references")]
+    References,
 }
 
 /// Où un panneau se range quand on le rouvre.
@@ -93,7 +98,7 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 15] = [
+    pub const ALL: [Pane; 16] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
@@ -109,11 +114,15 @@ impl Pane {
         Pane::Comments,
         Pane::Bruitages,
         Pane::SuggestionsSonores,
+        Pane::References,
     ];
 
     /// Les panneaux fermés dans la disposition par défaut, qui ne s'ouvrent qu'à la demande.
     pub fn on_demand(self) -> bool {
-        matches!(self, Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores)
+        matches!(
+            self,
+            Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores | Pane::References
+        )
     }
 
     /// Les panneaux qui n'existent qu'en animation (Anthony, 2026-10-18 : « Exposition n'est
@@ -142,6 +151,7 @@ impl Pane {
             Pane::Comments => "Commentaires",
             Pane::Bruitages => "Bruitages",
             Pane::SuggestionsSonores => "Suggestions sonores",
+            Pane::References => "Références",
         }
     }
 
@@ -176,6 +186,7 @@ impl Pane {
             Pane::Comments => ph::CHAT_TEXT,
             Pane::Bruitages => ph::WAVEFORM,
             Pane::SuggestionsSonores => ph::SPARKLE,
+            Pane::References => ph::IMAGES,
         }
     }
 
@@ -183,7 +194,14 @@ impl Pane {
         match self {
             Pane::Canvas => Group::Center,
             Pane::Tools | Pane::Color | Pane::Brushes | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet => Group::Left,
-            Pane::Layers | Pane::XSheet | Pane::Effects | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores => Group::Right,
+            Pane::Layers
+            | Pane::XSheet
+            | Pane::Effects
+            | Pane::History
+            | Pane::Comments
+            | Pane::Bruitages
+            | Pane::SuggestionsSonores
+            | Pane::References => Group::Right,
             Pane::Montage | Pane::Timeline => Group::Bottom,
         }
     }

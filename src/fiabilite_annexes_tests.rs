@@ -163,6 +163,52 @@ fn a_background_save_job_keeps_unreadable_sidecars_sounds_and_models() {
     assert_eq!(relu.doc.comments.len(), 1, "le commentaire neuf se relit");
 }
 
+/// Les références visuelles (`references.json` et `references/`) suivent la même règle : un fichier
+/// abîmé ou d'une version plus récente, ou une image que cette version ne cite pas, n'est jamais
+/// effacé par l'enregistrement ; un fichier neuf met l'ancien de côté.
+#[test]
+fn references_sidecar_and_files_survive_a_save_when_unreadable() {
+    let (_f, manifeste) = projet_enregistre("annexes-references");
+    let dir = racine(&manifeste).to_path_buf();
+    let mut l = project::load(&manifeste).expect("lecture");
+    let work = dir.join("..").join(format!("attente-references-{}", std::process::id()));
+    std::fs::create_dir_all(&work).expect("dossier");
+    image::RgbaImage::from_pixel(4, 4, image::Rgba([9, 9, 9, 255])).save(work.join("900201.png")).expect("image");
+    let id = l.doc.new_reference_id();
+    let mut r = crate::references::Reference::image(id, "Rue", "900201.png", [4, 4], eframe::egui::pos2(0.0, 0.0));
+    r.home = Some(work.clone());
+    l.doc.add_reference(r);
+    project::save(&l.doc, &manifeste, &mut l.written).expect("enregistrement");
+    assert!(dir.join("references").join("900201.png").exists() && dir.join(crate::references::FILE).exists());
+
+    // Une version plus récente écrit son fichier ; une image inconnue traîne dans references/.
+    let mut v = lire_json(&dir.join(crate::references::FILE));
+    v["version"] = Value::from(2);
+    v["champ_inconnu_d_une_version_future"] = Value::from("à garder");
+    ecrire_json(&dir.join(crate::references::FILE), &v);
+    std::fs::write(dir.join("references").join("900202.png"), b"image que cette version ne cite pas").expect("écriture");
+    let avant = arbre(&dir);
+    let mut l = project::load(&manifeste).expect("le projet s'ouvre sans les références");
+    assert!(l.warnings.iter().any(|w| w.contains(crate::references::FILE) && w.contains("plus récente")), "{:?}", l.warnings);
+    assert!(l.doc.references.is_empty());
+    assert_eq!(arbre(&dir), avant, "ouvrir ne touche à aucun fichier");
+    project::save(&l.doc, &manifeste, &mut l.written).expect("enregistrement");
+    assert_eq!(arbre(&dir), avant, "le fichier d'une version plus récente et les images restent tels quels");
+
+    // Une référence neuve : son fichier est écrit, l'ancien est gardé à côté, les images ne bougent pas.
+    let id = l.doc.new_reference_id();
+    l.doc.add_reference(crate::references::Reference::image(id, "Neuve", "900203.png", [4, 4], eframe::egui::pos2(0.0, 0.0)));
+    project::save(&l.doc, &manifeste, &mut l.written).expect("enregistrement");
+    let apres = arbre(&dir);
+    let garde = format!("{}.illisible", crate::references::FILE);
+    assert_eq!(apres.get(&garde), avant.get(crate::references::FILE), "l'ancien références.json est gardé");
+    assert_eq!(apres.get("references/900202.png"), avant.get("references/900202.png"));
+    assert_eq!(apres.get("references/900201.png"), avant.get("references/900201.png"));
+    assert!(!apres.keys().any(|k| k.ends_with(".tmp")), "{:?}", apres.keys().collect::<Vec<_>>());
+    assert_eq!(project::load(&manifeste).expect("relecture").doc.references.len(), 1);
+    std::fs::remove_dir_all(&work).ok();
+}
+
 /// Un projet sans annexes (sans commentaire ni rognage) n'en écrit pas, et retire celles qu'un
 /// ancien enregistrement avait laissées : le comportement d'avant ne change pas pour un fichier lisible.
 #[test]

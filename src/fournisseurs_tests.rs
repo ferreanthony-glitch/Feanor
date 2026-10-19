@@ -509,7 +509,7 @@ fn the_local_client_reads_chunked_and_close_delimited_replies() {
 #[test]
 fn the_local_client_reports_a_missing_server_and_refuses_other_machines() {
     // Rien n'écoute sur ce port : « non installé », sans panne.
-    let libre = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let libre = crate::serveurlocal_tests::libre();
     let e = requete(adresse(libre), "GET", "/", None, &Controle::new(), DELAI).unwrap_err();
     assert!(matches!(&e, ErreurGen::NonInstalle(m) if m.contains("127.0.0.1")), "{e:?}");
     // Une adresse qui n'est pas de cet ordinateur n'est même pas essayée.
@@ -655,7 +655,7 @@ fn the_local_reader_sends_the_plan_and_its_thumbnail_and_reads_the_cues() {
 
 #[test]
 fn with_no_server_installed_every_local_role_says_not_installed() {
-    let libre = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let libre = crate::serveurlocal_tests::libre();
     let client = ClientSidecar::sur_le_port(libre);
     let c = Controle::new();
     let demande = DemandeLecture { plans: vec![plan("x", "", "", 10)], fps: 24 };

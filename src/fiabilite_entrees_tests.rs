@@ -54,6 +54,11 @@ fn the_fixture_really_holds_everything_the_project_can_store() {
     assert!(!d.sounds.is_empty() && d.audio_tracks.len() >= 2, "son sur deux pistes");
     assert!(d.audio_tracks.iter().flat_map(|t| &t.clips).any(|c| !c.fx.is_default() && !c.fx.keys.is_empty() && !c.fx.is_dry()) && d.audio_tracks.iter().any(|t| t.solo), "effets des sons et solo");
     assert!(d.transitions.len() >= 4 && d.transitions.iter().any(|t| t.out.is_none()) && d.transitions.iter().any(|t| t.inn.is_none()), "transitions : au bord du film et entre deux plans");
+    assert!(!d.sons_proposes.indications.is_empty() && d.sons_proposes.envoi_en_ligne_confirme, "sons proposés (suggestions sonores)");
+    assert!(
+        d.references.len() >= 2 && d.references.iter().any(|r| r.is_video()) && d.references.iter().any(|r| !r.plans.is_empty() && !r.tags.is_empty()),
+        "références visuelles : une image étiquetée et liée, une vidéo"
+    );
     assert!(!d.guides.is_empty() && !d.board.strokes.is_empty() && !d.board.texts.is_empty(), "guides et notes de la planche");
     assert!(d.storyboard_locked && d.start_frame != 1 && d.master_volume != 1.0, "réglages du projet");
     let _ = std::fs::remove_dir_all(&travail);
@@ -82,6 +87,9 @@ fn the_comparison_notices_a_difference() {
         ("réserve", Box::new(|d| d.reserves.values_mut().next().expect("réserve").head.len += 1)),
         ("propriété", Box::new(|d| d.properties.copyright.clear())),
         ("effet", Box::new(|d| d.panels[0].layers[2].fx[0].values[0] += 1.0)),
+        ("référence", Box::new(|d| d.references[0].rotation += 1.0)),
+        ("lecture d'une vidéo de référence", Box::new(|d| d.references[1].video.as_mut().expect("vidéo").speed += 0.25)),
+        ("son proposé", Box::new(|d| d.sons_proposes.indications[0].description.push('!'))),
     ];
     let mut f = projet_complet(&travail);
     let sans = f.sans_pixels.clone();

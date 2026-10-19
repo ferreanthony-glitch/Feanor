@@ -2195,6 +2195,54 @@ curseur, etc. Le curseur sur la timeline est déplaçable. » Menée sur la bran
 - Pas faits : longueur d'un commentaire (une plage dans la règle) ; réponses à un commentaire ; les
   commentaires ne sont ni exportés (PDF, Storyboard Pro) ni copiés avec des plans copiés ou dupliqués.
 
+## Références visuelles (fenêtre « Références », 2026-10-19) ✅
+
+Un tableau d'images et de vidéos à regarder pendant qu'on dessine, détachable sur un deuxième écran.
+Menée sur la branche `references`.
+
+- ✅ Panneau `Pane::References` (colonne de droite, fermé par défaut, icône dans la barre des
+  panneaux, `vue.references`), détachable (« Dans une fenêtre à part ») avec « Toujours au-dessus »
+  (`ViewportBuilder::with_always_on_top`, puis `ViewportCommand::WindowLevel`).
+- ✅ Ajouter : images PNG / JPEG (copiées telles quelles dans `references/`, sur un autre fil),
+  vidéos (ffmpeg, chemin de `video::start_import`, 1280×720 au plus, images JPEG dans
+  `references/<n>/`), fichiers déposés sur le panneau (`soundtrack::handle_dropped_files` les lui
+  donne s'ils tombent dessus ; fenêtre détachée : ses propres fichiers lâchés), Ctrl+V (réutilise
+  `pasteimage::clipboard_image`), boutons et Fichier > Importer.
+- ✅ Tableau libre : déplacer, zoomer (molette, autour de la souris), déplacer le fond, glisser,
+  agrandir par les coins, tourner par la poignée ronde (Maj : 15°), choix multiple (Maj+clic), grille et
+  liste, recherche (accents et majuscules ignorés) et filtre par étiquette.
+- ✅ Outils de la référence choisie : ajuster, 100 %, miroirs H / V, niveaux de gris (Rec. 709), nom,
+  échelle, rotation, étiquettes ; Alt+clic = pipette vers la couleur courante de SHOT ; vidéo :
+  lecture, image par image, curseur, entrée / sortie, boucle, vitesse, « suivre la tête de lecture »
+  avec décalage (`Clip::follow_index`).
+- ✅ Plans : « Lier au plan courant » (`references.lier_plan`), filtre « références du plan courant »
+  (`references.filtre_plan`). Un plan retiré n'est plus cité ; deux plans réunis réunissent leurs liens.
+- ✅ Rangement sans changer `project::VERSION` (26) : `references.json` (`format` `shot-references`,
+  `version` 1) et dossier `references/`, par `Document::references` / `Structure::references` et
+  `SaveJob` (`references::plan_save` au cliché, `SavePlan::write` / `cleanup` sur le fil d'écriture).
+  Mêmes protections que `commentaires.json` : fichier illisible ou plus récent jamais effacé
+  (`write_sidecar`, `.illisible`), `references/` intact si le fichier n'a pas pu être lu, et un fichier
+  touché pendant la séance n'est jamais effacé (annuler / rétablir une suppression après
+  l'enregistrement le retrouve). Avant le premier enregistrement : dossier temporaire
+  (`Reference::home`), recopié à l'enregistrement et aux copies de secours.
+- ✅ Rapidité : décodage sur deux fils à la définition demandée (128 à 4096 pixels), cache de textures
+  LRU (`references::Lru`) borné à un huitième du « cache de la carte graphique » du diagnostic des
+  performances, définition qui suit le réglage « vignettes » ; trois textures téléversées au plus par
+  image d'écran ; au repos, aucun repaint.
+- ✅ Annulation (`Edit::Structure`) avec des noms français : « Ajouter une référence », « Supprimer la
+  référence », « Déplacer les références », « Redimensionner la référence », « Tourner la référence »,
+  « Retourner la référence », « Lier la référence au plan »…
+- ✅ Tests dans `references_tests.rs` et `fiabilite_annexes_tests.rs` (aller-retour du fichier,
+  fichiers abîmés ou plus récents, nettoyage, import, transformations, plans et filtre, image de
+  vidéo selon tête de lecture / décalage / vitesse / boucle, couleur prise, cache, annulation, panneau
+  dessiné dans ses trois modes). Pas vu à l'écran dans cette séance : à essayer par Anthony.
+- Pas faits : WebP (pas de décodeur dans le programme), GIF animé, séquence d'images comme référence,
+  son des vidéos de référence, texte et flèches sur le tableau, export du tableau, copie des
+  références avec des plans copiés ; un fichier lâché sur la fenêtre principale est une référence si
+  la dernière position de souris connue est sur le panneau (à vérifier à l'écran : si Windows ne la
+  donne pas pendant le glisser, les boutons restent) ; l'extraction d'une vidéo longue garde toutes
+  ses images (de l'espace disque).
+
 ## Boîte de sélection façon Storyboard Pro (demandée par Anthony le 2026-10-18) ✅
 
 La demande : « revoir le système de transformation après sélection pour singer le système de

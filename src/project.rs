@@ -11,6 +11,9 @@
 //!   commentaires.json     commentaires sur la timeline (`commentaires.rs`), sans changer `VERSION` :
 //!                         absent, il n'y a pas de commentaires ; une version qui ne le connaît pas
 //!                         le laisse en place (elle n'efface que le contenu de dessins/, sons/…)
+//!   references.json       références visuelles (`references.rs`), de même sans changer `VERSION` ;
+//!   references/<id>.<ext> leurs fichiers (images copiées telles quelles, images extraites des vidéos
+//!                         dans references/<id>/) : une version qui ne les connaît pas les laisse là
 //!   rognages.json         contenu rogné au début et à la fin des plans (`rognage.rs`), de même sans
 //!                         changer `VERSION` ; ses dessins restent dans dessins/ (une version qui ne
 //!                         le connaît pas les efface à l'enregistrement : le plan reste tel qu'il est)
@@ -657,7 +660,7 @@ pub fn check_target(manifest: &Path, current: Option<&Path>) -> Result<(), Strin
             manifest.display()
         ));
     }
-    for sub in [DRAWINGS, SOUNDS, MODELS, VIDEOS] {
+    for sub in [DRAWINGS, SOUNDS, MODELS, VIDEOS, crate::references::DIR] {
         if dir.join(sub).exists() {
             return Err(format!(
                 "le dossier {} contient déjà un dossier « {sub} ». Choisis un autre nom.",
@@ -855,6 +858,9 @@ pub struct SaveJob {
     sound_fx: Option<Vec<u8>>,
     /// Le fichier des sons proposés (`sons_proposes.json`) ; rien : il n'y en a plus, le fichier part.
     sons_proposes: Option<Vec<u8>>,
+    /// Les références visuelles : fichiers à recopier dans `references/`, `references.json`, et ce
+    /// qui peut s'effacer (`references.rs`).
+    references: crate::references::SavePlan,
 }
 
 /// Prépare l'enregistrement de `doc` dans `manifest_path`. `written` est mis à jour comme si
@@ -961,6 +967,7 @@ pub fn prepare_save(
         transitions: crate::transitions::to_bytes(doc)?,
         sound_fx: crate::audiofx::to_bytes(doc)?,
         sons_proposes: crate::indications::to_bytes(doc)?,
+        references: crate::references::plan_save(doc, dir)?,
     })
 }
 
@@ -1070,7 +1077,7 @@ fn load_comments(dir: &Path, warnings: &mut Vec<String>) -> Vec<crate::commentai
 /// (avec un avertissement) : « aucun commentaire » ne veut alors pas dire « fichier à effacer ». Il
 /// reste en place s'il n'y a rien à écrire ; sinon il est mis de côté sous le nom `<fichier>.illisible`
 /// avant que le neuf prenne sa place.
-fn write_sidecar(path: &Path, bytes: Option<&[u8]>, lisible: impl Fn(&str) -> bool) -> Result<(), String> {
+pub(crate) fn write_sidecar(path: &Path, bytes: Option<&[u8]>, lisible: impl Fn(&str) -> bool) -> Result<(), String> {
     let existant = match fs::read(path) {
         Ok(b) => Some(String::from_utf8(b).ok().filter(|t| lisible(t.trim_start_matches('\u{feff}'))).is_some()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
@@ -1176,11 +1183,14 @@ impl SaveJob {
         write_sidecar(&dir.join(crate::audiofx::FILE), self.sound_fx.as_deref(), |t| crate::audiofx::parse(t).is_ok())?;
         // Et les sons proposés par la lecture du storyboard.
         write_sidecar(&dir.join(crate::indications::FILE), self.sons_proposes.as_deref(), |t| crate::indications::parse(t).is_ok())?;
+        // Les références visuelles : leurs fichiers dans `references/`, puis `references.json`.
+        count += self.references.write(dir)?;
         write_atomic_synced(&self.manifest_path, &self.manifest)?;
         let removed = remove_unused(dir, &self.used, &self.fonds)
             + remove_unused_sounds(dir, &self.used_sounds, &self.kept)
             + remove_unused_models(dir, &self.used_models, &self.kept)
-            + if self.has_unreadable { 0 } else { remove_unused_textures(dir, &self.used_textures) };
+            + if self.has_unreadable { 0 } else { remove_unused_textures(dir, &self.used_textures) }
+            + self.references.cleanup(dir);
         Ok(SaveReport { written: count, removed })
     }
 }
@@ -1785,6 +1795,8 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
         reserves: Default::default(),
         // Les transitions : `transitions.json`, `load_transitions`.
         transitions: Vec::new(),
+        // Les références visuelles aussi (`references.json`, `references::load`).
+        references: Vec::new(),
     };
     for seq in manifest.sequences {
         structure.sequences.push(Sequence {
@@ -1952,6 +1964,8 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
     structure.comments = load_comments(dir, &mut warnings);
     // Les transitions du montage, de même (`transitions.json`).
     structure.transitions = load_transitions(dir, &mut warnings);
+    // Les références visuelles : `references.json` et le dossier `references/` (absents : aucune).
+    structure.references = crate::references::load(dir, &mut warnings);
     let frame = manifest.cadre;
     let mut written: HashMap<CelId, u64> = cels.keys().map(|&id| (id, 0)).collect();
     let mut doc = Document::from_parts(w, h, structure, cels, sounds);

@@ -28,6 +28,8 @@ Un projet fabriqué par le code (pas un fichier d'Anthony), qui contient :
 | Commentaires | 5 (dont 2 rangés dans la réserve), résolus et non, couleurs |
 | Son | un WAV fabriqué, deux pistes (une muette, verrouillée, volume 1,25, en solo), deux extraits ; effets du premier (`effets_son.json` : volume, fondus, enchaîné, clés de volume, égaliseur, écho) |
 | Transitions | fondu enchaîné centré, volet décalé, fondu depuis le blanc au début du film, fondu au noir à la fin (`transitions.json`) |
+| Sons proposés | un bruitage à générer, une voix rejetée et modifiée, une ambiance acceptée (son posé), confirmation d'envoi en ligne (`sons_proposes.json`) |
+| Références | une image étiquetée, tournée, en gris, liée à deux plans, et une vidéo de trois images aux réglages de lecture changés (`references.json` et `references/`) |
 | Planche, guides | notes dessinées et texte de la planche (une attachée à un plan), guide de perspective |
 
 Manque (dit, pas caché) : les calques « toute la scène » (d'avant les plans, devenus des calques ordinaires à
@@ -53,7 +55,7 @@ Durée : moins d'une seconde pour les quatre.
 ## 3. Fumée de toute l'application (`fiabilite_fumee_tests.rs`)
 
 `App::sans_fenetre` + `App::frame`, 1280 × 720, sur le projet d'essai : 195 images à travers l'accueil, « Nouveau projet »,
-Préférences, « À propos », storyboard et animation avec les 13 panneaux, les réglages des 18 outils, les repères de
+Préférences, « À propos », storyboard et animation avec tous les panneaux (`Pane::ALL`, 16 dont Bruitages, Suggestions sonores et Références), les réglages des 18 outils, les repères de
 cadrage, une lecture de 48 images, un défilement aller-retour, **tout sélectionner puis déplacer à la souris par la boîte
 de sélection**, un effet de caméra, et l'annulation / le rétablissement de chacun. Chaque image : pas de plantage,
 de l'interface produite, et un budget de temps large (15 s d'interface ; au-delà de 500 ms, « ATTENTION » est affiché ;
@@ -72,7 +74,7 @@ par l'enregistrement qui suit pour ce que cette version n'a pas su lire.
 | `fiabilite_manifestes_tests` | manifeste vide, coupé, octets quelconques, objet vide, autre format, version plus récente, feuille nulle ou démesurée, aucun plan, absent, BOM |
 | `fiabilite_entrees_tests` | version plus récente (par l'application aussi : message dans la barre d'état, projet en cours intact), 120 troncatures du manifeste, 90 manifestes aux valeurs changées au hasard, 80 fichiers annexes changés ou coupés |
 | `fiabilite_dessins_tests` | dessin manquant, JSON tronqué, PNG tronqué, pas une image, mauvaise taille, en-tête démesuré : un avertissement chacun, fichiers intacts ; 122 PNG coupés ou aux bits changés ; 180 dessins vectoriels aux valeurs changées ; coordonnée de 3,4e38 |
-| `fiabilite_annexes_tests` | `commentaires.json` / `rognages.json` d'une version plus récente ou abîmés ; sons et modèles 3D illisibles |
+| `fiabilite_annexes_tests` | `commentaires.json` / `rognages.json` / `references.json` d'une version plus récente ou abîmés ; sons et modèles 3D illisibles ; images de `references/` jamais effacées quand le fichier est illisible |
 | `fiabilite_raster_tests` | `Raster::get` hors du dessin ; dessins de 5 tailles par toutes les compositions |
 
 ### Défauts trouvés par ces essais, et corrigés (un commit chacun)

@@ -336,6 +336,15 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("commentaire.supprimer", "Supprimer le commentaire choisi", true, false),
     act("commentaire.precedent", "Aller au commentaire précédent", true, false),
     act("commentaire.suivant", "Aller au commentaire suivant", true, false),
+    // Références visuelles (`referencesui.rs`).
+    act("vue.references", "Panneau Références (ouvrir / fermer)", true, false),
+    act("references.importer_image", "Importer des images dans les références", true, false),
+    act("references.importer_video", "Importer une vidéo dans les références", true, false),
+    act("references.coller", "Coller l'image du presse-papiers dans les références", true, false),
+    act("references.supprimer", "Supprimer les références choisies", true, false),
+    act("references.lier_plan", "Lier les références choisies au plan courant (ou délier)", true, false),
+    act("references.filtre_plan", "Références : montrer seulement celles du plan courant (oui / non)", true, false),
+    act("references.tout_voir", "Références : tout voir sur le tableau", true, false),
     // Barre des panneaux (`barrepanneaux.rs`) : ouvrir, mettre devant ou fermer un panneau de côté.
     act("vue.reglages", "Panneau Réglages de l'outil (ouvrir / fermer)", true, false),
     act("vue.pinceaux", "Panneau Pinceaux (ouvrir / fermer)", true, false),

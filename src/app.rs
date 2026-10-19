@@ -437,6 +437,9 @@ pub struct App {
     /// Commentaires sur la timeline (`commentaires.rs`, `commentairesui.rs`) : le commentaire
     /// choisi, le repère pris à la souris, le filtre des résolus.
     pub(crate) comment_ui: crate::commentaires::CommentUi,
+    /// Le panneau Références (`references.rs`, `referencesui.rs`) : le tableau, la sélection, les
+    /// imports en cours, le cache des images en mémoire graphique.
+    pub(crate) refs: crate::referencesui::RefUi,
     pub(crate) hole: crate::images::Hole,
     pub(crate) images_focus: bool,
     /// Faux-fixe : nombre de fois que les images choisies sont jouées en tout (13c).
@@ -954,6 +957,7 @@ impl App {
             ctrl_lasso: None,
             key_focus: false,
             comment_ui: Default::default(),
+            refs: Default::default(),
             hole: Default::default(),
             images_focus: false,
             fake_hold_times: 2,
@@ -3144,6 +3148,11 @@ impl App {
     fn run_action_now(&mut self, action: &str) {
         // Un texte en cours de saisie est posé avant toute commande (annuler, changer d'image…).
         self.finish_text_edit();
+        // Le panneau Références a la main : Ctrl+V y colle l'image du presse-papiers.
+        if self.refs.focus && matches!(action, "edition.coller" | "edition.coller_a_la_tete" | "edition.coller_sur_place") {
+            self.refs_paste();
+            return;
+        }
         // Une image copiée ailleurs (navigateur…) passe avant le presse-papiers de SHOT, dont
         // les copies écrivent « SHOT : … » dans celui de Windows (`pasteimage.rs`).
         if action == "edition.coller" || action == "edition.coller_a_la_tete" {
@@ -3185,6 +3194,15 @@ impl App {
         }
         // Suggestions sonores (`suggestionsui.rs`).
         if self.suggestion_action(action) {
+            return;
+        }
+        // Références visuelles (`referencesui.rs`) : leurs commandes ; le panneau qui a la main
+        // prend Ctrl+V (une image à coller) et Suppr avant les autres.
+        if self.references_action(action) {
+            return;
+        }
+        if action == "edition.supprimer" && self.refs_has_focus() {
+            self.refs_delete_selected();
             return;
         }
         // Suppr vise le commentaire seulement s'il a la main (le dernier clic était sur lui) ;
@@ -4077,6 +4095,8 @@ impl App {
             // De même pour le panneau Effets : s'il est sous le clic, il reprend la main pendant
             // cette image (`fxcopie.rs`).
             self.fx_pane_focus = false;
+            // Et pour le panneau Références (`referencesui.rs`).
+            self.refs.focus = false;
         }
         self.handle_shortcuts(ctx);
         self.sync_scene_layers();
@@ -4086,6 +4106,7 @@ impl App {
         self.tick_playback(ctx);
         self.tick_flip(ctx);
         self.tick_video_import(ctx);
+        self.tick_references(ctx);
         self.propagation_ui(ctx);
         self.coloriage_ui(ctx);
         if self.playing {

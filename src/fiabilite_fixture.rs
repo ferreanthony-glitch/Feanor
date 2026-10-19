@@ -14,7 +14,9 @@
 //! couleur d'un plan ; des commentaires (dont un rangé hors du plan rogné) ; un plan rogné au début
 //! et à la fin, avec sa réserve ; un son (WAV fabriqué) sur deux pistes ; les guides de
 //! perspective, les notes de la planche, les groupes de couleur, l'arrière-plan en damier, les
-//! propriétés du projet, le volume général, l'image de départ.
+//! propriétés du projet, le volume général, l'image de départ ; des transitions du montage ; les
+//! effets des extraits de son et le solo d'une piste ; des sons proposés (suggestions sonores) ; des
+//! références visuelles (une image, une vidéo de trois images).
 //!
 //! Il ne contient pas : de texte vectoriel dont l'image soit comparée (son rendu dépend des
 //! polices du poste, voir `Fixture::sans_pixels`) et de calques « toute la scène » (un projet d'avant
@@ -483,6 +485,35 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
         }
         doc.sons_proposes.envoi_en_ligne_confirme = true;
     }
+    // Références visuelles (`references.json` et `references/`) : une image étiquetée, tournée, en gris,
+    // liée à deux plans ; une vidéo (trois images PNG) aux réglages de lecture changés, liée au plan 3.
+    {
+        use crate::references::{Clip, Reference};
+        let origine = travail.join("references-origine");
+        std::fs::create_dir_all(&origine).expect("dossier des références");
+        image::RgbaImage::from_pixel(8, 6, image::Rgba([180, 120, 40, 255])).save(origine.join("rue.png")).expect("image de référence");
+        let id = doc.new_reference_id();
+        let mut rue = Reference::image(id, "Rue de nuit", "rue.png", [8, 6], pos2(-40.0, 25.0));
+        rue.tags = vec!["décor".into(), "lumière".into()];
+        rue.rotation = 12.5;
+        rue.scale = 20.0;
+        rue.flip_h = true;
+        rue.grey = true;
+        rue.plans = vec![doc.panels[0].id, doc.panels[i2].id];
+        rue.home = Some(origine.clone());
+        doc.add_reference(rue);
+        let dossier_video = origine.join("course");
+        std::fs::create_dir_all(&dossier_video).expect("dossier des images de la vidéo de référence");
+        for k in 0..3usize {
+            image::RgbaImage::from_pixel(8, 6, image::Rgba([(k * 60) as u8, 100, 160, 255])).save(crate::video::frame_file(&dossier_video, k, "png")).expect("image de la vidéo de référence");
+        }
+        let id = doc.new_reference_id();
+        let mut course = Reference::image(id, "Course à pied", "course", [8, 6], pos2(210.0, -60.0));
+        course.video = Some(Clip { in_point: 1, out_point: Some(2), looping: true, speed: 1.5, follow: true, offset: -3, ..Clip::new(3, 12.0, "png") });
+        course.plans = vec![doc.panels[i3].id];
+        course.home = Some(origine);
+        doc.add_reference(course);
+    }
 
     Fixture { doc, sans_pixels }
 }
@@ -526,6 +557,12 @@ pub(crate) fn instantane(doc: &Document, sans_pixels: &BTreeSet<CelId>) -> Strin
     let mut proposes = doc.sons_proposes.clone();
     proposes.indications.sort_by_key(|i| i.id);
     let _ = writeln!(s, "sons_proposes {:?}", proposes);
+    // (Le dossier où attendent les fichiers d'une référence n'est pas enregistré : `home` ne compte pas.)
+    let mut references = doc.references.clone();
+    for r in &mut references {
+        r.home = None;
+    }
+    let _ = writeln!(s, "references {:?}", references);
     let mut sons: Vec<_> = doc.sounds.values().collect();
     sons.sort_by_key(|k| k.id);
     for k in sons {

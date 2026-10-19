@@ -337,6 +337,10 @@ mod keymap_tests;
 mod ops_tests;
 mod model3d;
 mod montagekeys;
+mod references;
+#[cfg(test)]
+mod references_tests;
+mod referencesui;
 mod rognage;
 #[cfg(test)]
 mod rognage_tests;
