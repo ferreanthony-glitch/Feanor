@@ -796,6 +796,10 @@ pub struct SaveJob {
     /// Des dessins du dossier n'ont pas pu être lus à l'ouverture : leurs fichiers (et les textures
     /// qu'ils pourraient utiliser) ne sont pas effacés.
     has_unreadable: bool,
+    /// Fichiers de sons et de modèles 3D du dossier que cette version n'a pas pu lire à l'ouverture :
+    /// l'enregistrement ne les efface pas (ils ne sont plus dans le projet, mais ils sont à
+    /// Anthony : une autre version les lira, ou il les réparera).
+    kept: BTreeSet<PathBuf>,
     /// Dessins à garder dans le dossier : ceux du projet, et les illisibles.
     used: BTreeSet<CelId>,
     /// Dessins qui ont une strate Fond peinte (format 23).
@@ -902,6 +906,7 @@ pub fn prepare_save(
         videos,
         manifest,
         has_unreadable: !unreadable.is_empty(),
+        kept: kept_files_in(dir),
         used: used.union(&unreadable).copied().collect(),
         fonds: fonds.union(&unreadable).copied().collect(),
         used_sounds,
@@ -945,6 +950,44 @@ fn load_comments(dir: &Path, warnings: &mut Vec<String>) -> Vec<crate::commentai
         Err(e) => {
             warnings.push(format!("{} : {e} ; les commentaires ne sont pas chargés.", path.display()));
             Vec::new()
+        }
+    }
+}
+
+/// Écrit le fichier annexe `path` (`bytes`), ou le retire s'il n'y a plus rien à y mettre — sans
+/// jamais détruire un fichier que cette version ne sait pas lire (`lisible` en juge). Un
+/// `commentaires.json` écrit par une version plus récente, ou abîmé, s'ouvre sans ses commentaires
+/// (avec un avertissement) : « aucun commentaire » ne veut alors pas dire « fichier à effacer ». Il
+/// reste en place s'il n'y a rien à écrire ; sinon il est mis de côté sous le nom `<fichier>.illisible`
+/// avant que le neuf prenne sa place.
+fn write_sidecar(path: &Path, bytes: Option<&[u8]>, lisible: impl Fn(&str) -> bool) -> Result<(), String> {
+    let existant = match fs::read(path) {
+        Ok(b) => Some(String::from_utf8(b).ok().filter(|t| lisible(t.trim_start_matches('\u{feff}'))).is_some()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(_) => Some(false),
+    };
+    match (bytes, existant) {
+        (Some(b), Some(false)) => {
+            let mut aside = None;
+            for k in 1..100 {
+                let mut name = path.as_os_str().to_owned();
+                name.push(if k == 1 { ".illisible".to_string() } else { format!(".illisible{k}") });
+                let candidate = PathBuf::from(name);
+                if !candidate.exists() {
+                    aside = Some(candidate);
+                    break;
+                }
+            }
+            if let Some(to) = aside {
+                fs::rename(path, &to).map_err(|e| format!("{} : {e}", path.display()))?;
+            }
+            write_atomic(path, b)
+        }
+        (Some(b), _) => write_atomic(path, b),
+        (None, Some(false)) => Ok(()),
+        (None, _) => {
+            let _ = fs::remove_file(path);
+            Ok(())
         }
     }
 }
@@ -999,36 +1042,27 @@ impl SaveJob {
             count += crate::video::copy_frames(clip, from, to)?;
         }
         // Les commentaires : leur fichier à côté du manifeste (sans commentaire, il part).
-        let sidecar = dir.join(crate::commentaires::FILE);
-        match &self.comments {
-            Some(bytes) => write_atomic(&sidecar, bytes)?,
-            None => {
-                let _ = fs::remove_file(&sidecar);
-            }
-        }
+        write_sidecar(&dir.join(crate::commentaires::FILE), self.comments.as_deref(), |t| crate::commentaires::parse(t).is_ok())?;
         // Le contenu rogné des plans : son fichier à côté du manifeste (rien de rogné, il part).
-        let rognages = dir.join(crate::rognage::FILE);
-        match &self.reserves {
-            Some(bytes) => write_atomic(&rognages, bytes)?,
-            None => {
-                let _ = fs::remove_file(&rognages);
-            }
-        }
+        write_sidecar(&dir.join(crate::rognage::FILE), self.reserves.as_deref(), |t| crate::rognage::parse(t).is_ok())?;
         write_atomic(&self.manifest_path, &self.manifest)?;
         let removed = remove_unused(dir, &self.used, &self.fonds)
-            + remove_unused_sounds(dir, &self.used_sounds)
-            + remove_unused_models(dir, &self.used_models)
+            + remove_unused_sounds(dir, &self.used_sounds, &self.kept)
+            + remove_unused_models(dir, &self.used_models, &self.kept)
             + if self.has_unreadable { 0 } else { remove_unused_textures(dir, &self.used_textures) };
         Ok(SaveReport { written: count, removed })
     }
 }
 
 /// Efface les modèles 3D du dossier qui ne servent plus (seulement « <nombre>.pelure3d »).
-fn remove_unused_models(dir: &Path, used: &BTreeSet<u64>) -> usize {
+fn remove_unused_models(dir: &Path, used: &BTreeSet<u64>, kept: &BTreeSet<PathBuf>) -> usize {
     let Ok(entries) = fs::read_dir(dir.join(MODELS)) else { return 0 };
     let mut removed = 0;
     for entry in entries.flatten() {
         let path = entry.path();
+        if kept.contains(&path) {
+            continue;
+        }
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
         let id = path.file_stem().and_then(|s| s.to_str()).and_then(|s| s.parse::<u64>().ok());
         if let (Some(id), "pelure3d") = (id, ext) {
@@ -1041,11 +1075,14 @@ fn remove_unused_models(dir: &Path, used: &BTreeSet<u64>) -> usize {
 }
 
 /// Efface les sons du dossier qui ne servent plus (seulement les fichiers « <nombre>.<ext> »).
-fn remove_unused_sounds(dir: &Path, used: &BTreeSet<u64>) -> usize {
+fn remove_unused_sounds(dir: &Path, used: &BTreeSet<u64>, kept: &BTreeSet<PathBuf>) -> usize {
     let Ok(entries) = fs::read_dir(dir.join(SOUNDS)) else { return 0 };
     let mut removed = 0;
     for entry in entries.flatten() {
         let path = entry.path();
+        if kept.contains(&path) {
+            continue;
+        }
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
         let id = path.file_stem().and_then(|s| s.to_str()).and_then(|s| s.parse::<u64>().ok());
         if let Some(id) = id {
@@ -1477,12 +1514,19 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
     }
 
     let mut sounds: HashMap<u64, Sound> = HashMap::new();
+    // Fichiers de sons et de modèles illisibles : l'enregistrement ne les efface pas.
+    let mut unreadable_files: BTreeSet<PathBuf> = BTreeSet::new();
     for entry in &manifest.sons {
         match load_sound(dir, entry) {
             Ok(sound) => {
                 sounds.insert(sound.id, sound);
             }
-            Err(e) => warnings.push(e),
+            Err(e) => {
+                if Path::new(&entry.fichier).components().count() == 1 {
+                    unreadable_files.insert(dir.join(SOUNDS).join(&entry.fichier));
+                }
+                warnings.push(e);
+            }
         }
     }
     let mut models: HashMap<u64, Model3d> = HashMap::new();
@@ -1494,7 +1538,10 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
             Ok(mesh) => {
                 models.insert(entry.id, Model3d::new(entry.id, entry.nom.clone(), mesh));
             }
-            Err(e) => warnings.push(format!("modèle 3D « {} » illisible ({e})", entry.nom)),
+            Err(e) => {
+                unreadable_files.insert(model_file(dir, entry.id));
+                warnings.push(format!("modèle 3D « {} » illisible ({e})", entry.nom));
+            }
         }
     }
     let audio_tracks = manifest
@@ -1797,6 +1844,7 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
     // version qui les lit).
     // (Chacun a déjà son avertissement, plus haut.)
     keep_unreadable(dir, &missing);
+    keep_files(dir, unreadable_files);
     Ok(Loaded {
         doc,
         written,
@@ -1817,6 +1865,22 @@ fn keep_unreadable(dir: &Path, ids: &BTreeSet<CelId>) {
     } else {
         m.insert(dir.to_path_buf(), ids.clone());
     }
+}
+
+/// Fichiers de sons et de modèles 3D illisibles à l'ouverture, par dossier de projet.
+static KEPT_FILES: std::sync::Mutex<BTreeMap<PathBuf, BTreeSet<PathBuf>>> = std::sync::Mutex::new(BTreeMap::new());
+
+fn keep_files(dir: &Path, files: BTreeSet<PathBuf>) {
+    let mut m = KEPT_FILES.lock().unwrap_or_else(|e| e.into_inner());
+    if files.is_empty() {
+        m.remove(dir);
+    } else {
+        m.insert(dir.to_path_buf(), files);
+    }
+}
+
+fn kept_files_in(dir: &Path) -> BTreeSet<PathBuf> {
+    KEPT_FILES.lock().unwrap_or_else(|e| e.into_inner()).get(dir).cloned().unwrap_or_default()
 }
 
 fn unreadable_in(dir: &Path) -> BTreeSet<CelId> {

@@ -197,6 +197,8 @@ mod fiabilite_aller_retour_tests;
 mod fiabilite_entrees_tests;
 #[cfg(test)]
 mod fiabilite_raster_tests;
+#[cfg(test)]
+mod fiabilite_annexes_tests;
 pub mod fx;
 mod fxcache;
 mod fxproxy;
