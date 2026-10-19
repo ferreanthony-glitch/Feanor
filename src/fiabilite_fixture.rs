@@ -307,7 +307,17 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
         ),
     );
     timecode.frames = vec![Some(pose_tc); 24];
-    let mut calques = vec![calque_fond, calque_video, perso, nuage, dossier, ctg, ajustement, timecode];
+    // Calque de couleur (format 30, `calquecouleur.rs`) : sous les nuages, dans leur dossier ; son dessin
+    // répond à celui des nuages, ses réglages ne sont pas ceux d'un calque neuf.
+    let aplat_nuages = dessin_bitmap(&mut doc, 4);
+    let mut couleur = crate::calquecouleur::nouveau(&nuage, "Nuages couleur".into());
+    couleur.frames = nuage.frames.iter().map(|f| f.map(|_| aplat_nuages)).collect();
+    if let Some(c) = couleur.couleur.as_mut() {
+        c.dessins.insert(nuages, aplat_nuages);
+        c.trous = 7;
+        c.zone = false;
+    }
+    let mut calques = vec![calque_fond, calque_video, perso, couleur, nuage, dossier, ctg, ajustement, timecode];
     crate::folders::normalize(&mut calques);
     doc.panels[0].layers = calques;
     doc.panels[0].length = 24;
@@ -700,6 +710,9 @@ pub(crate) fn instantane(doc: &Document, sans_pixels: &BTreeSet<CelId>) -> Strin
                 for src in &mut c.sources {
                     *src = rang.get(src).copied().unwrap_or(usize::MAX) as u64;
                 }
+            }
+            if let Some(c) = l.couleur.as_mut() {
+                c.trait_id = rang.get(&c.trait_id).copied().unwrap_or(usize::MAX) as u64;
             }
             let _ = writeln!(s, "  calque {k} {l:?}");
         }

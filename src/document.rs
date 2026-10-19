@@ -328,6 +328,9 @@ pub struct Layer {
     /// dessous (ajustement) ou du texte sur l'image finale (incrustation) ; ses images sont ses
     /// expositions.
     pub effet: Option<crate::calqueffet::CalqueEffet>,
+    /// Calque de couleur (`calquecouleur.rs`) : la couleur sous le trait d'un autre calque. Ses
+    /// images suivent celles de ce calque de trait ; on y colorie sans abîmer le trait.
+    pub couleur: Option<crate::calquecouleur::CalqueCouleur>,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -394,7 +397,14 @@ impl Layer {
             video: None,
             fond: None,
             effet: None,
+            couleur: None,
         }
+    }
+
+    /// Les images de ce calque suivent celles d'un autre (calque de couleur) : on n'y pose, déplace
+    /// ni supprime de clé soi-même.
+    pub fn keys_follow_line(&self) -> bool {
+        self.couleur.is_some()
     }
 
     /// Nouveau dossier de calques (13b-5), vide.
@@ -601,6 +611,10 @@ pub fn relink_copies(layers: &mut [Layer], old_ids: &[u64], cels: &HashMap<CelId
             for s in &mut ctg.sources {
                 *s = ids.get(s).copied().unwrap_or(*s);
             }
+        }
+        // Calque de couleur copié avec son trait : il colore la copie, avec les copies des dessins.
+        if let Some(c) = &mut l.couleur {
+            c.relink(&ids, cels);
         }
     }
 }
@@ -1736,6 +1750,10 @@ impl Document {
         for (i, lb) in next.layers.into_iter().filter(|l| l.scene_wide.is_none()).enumerate() {
             if let Some(&k) = own.get(i).filter(|&&k| a.layers[k].kind == lb.kind) {
                 let la = &mut a.layers[k];
+                // Deux calques de couleur qui se suivent : les couleurs du second gardent leur trait.
+                if let (Some(ca), Some(cb)) = (la.couleur.as_mut(), lb.couleur.as_ref()) {
+                    ca.dessins.extend(cb.dessins.iter().map(|(t, c)| (*t, *c)));
+                }
                 la.append_at(a_len, lb.frames, &lb.roles);
                 la.trim();
             } else {

@@ -827,3 +827,76 @@ panneau détaché, chaque panneau de la barre s'ouvre dans chaque espace, change
 5. Passer de Storyboard à Animation et retour : le dessin ne saute pas, les panneaux ajustés se recalent en une ou
    deux images ; l'espace Montage depuis Ctrl+K ; le bouton « Storyboard » qui en revient.
 6. Un panneau détaché (Références) reste sur son écran en changeant d'espace.
+
+---------------------------------------------------------------------------------------------------
+
+## 15. Calque de couleur (la couleur sous le trait, 2026-10-20, branche `canevas-couleur`)
+
+Demande d'Anthony : pouvoir colorier sous le trait sans l'abîmer, avec des images qui suivent celles du trait
+(l'idée « trait / couleur » de Toon Boom ; le comportement exact de Storyboard Pro ou de Harmony n'a pas été
+vérifié : **à vérifier**, rien n'est copié). Code : `src/calquecouleur.rs` (modèle, miroir, zones),
+`src/calquecouleurui.rs` (commandes, menu, pot de peinture, pinceau dans la zone).
+
+### Vocabulaire et commandes
+
+- « Calque de couleur », « calque de trait », « sous le trait », « Pinceau dans la zone fermée », « Fermer les
+  trous jusqu'à N px », « Détacher du calque de trait ».
+- `calque.nouveau_couleur` (« Nouveau calque de couleur (sous le trait du calque courant) ») : icône palette du
+  panneau Calques (bulle : nom, raccourci, description), Calques > Nouveau calque > « De couleur », clic droit
+  sur un calque (vide du panneau compris) > « Nouveau calque de couleur » et « Calque de couleur » >
+  « Ajouter… », Ctrl+K. Aucune touche par défaut (bloc dans `keymap.toml`). `calque.detacher_couleur` : le
+  calque de couleur courant redevient un calque bitmap ordinaire.
+- Dans le panneau Calques : la ligne d'un calque de couleur est en retrait, avec « couleur » et « sous <trait> » ;
+  celle d'un trait en porte le nombre. Dans la timeline : la lettre C à la place de B / V, ligne décalée sous son trait.
+
+### Comportement
+
+| Opération | Sur le calque de trait | Sur le calque de couleur |
+|---|---|---|
+| Images (clés, expositions, trous) | La couleur les suit (miroir à chaque image d'écran et à chaque étape) | Refusé avec un message (« pose, déplace ou supprime les clés sur le trait ») ; poignées de la timeline et du montage absentes |
+| Nouveau dessin / copie / casser l'instance / dupliquer | Un dessin de trait copié emporte la couleur du dessin copié ; un nouveau dessin a une couleur vide | — |
+| Monter / descendre / glisser dans la pile | La couleur le suit, toujours juste dessous (dans le même dossier) | Refusé (« reste sous son calque de trait ») |
+| Œil | Cache aussi la couleur | Cache la couleur seule |
+| Verrou, opacité, mode de fusion, pelure d'oignon, effets, groupe | À chacun (on colorie sous un trait verrouillé) | À chacun |
+| Transformation, profondeur, pré / post-comportement | Ceux de la couleur | Recopiés du trait |
+| Supprimer | Emporte ses couleurs | La couleur seule |
+| Dupliquer, copier / coller | Les couleurs partent avec lui (leurs dessins sont copiés) ; coller dans un autre plan garde le lien | Une copie de plus sur le même trait (ou ordinaire si le trait n'est pas là) |
+| Fusionner avec le dessous | Le trait + sa couleur = un seul calque bitmap ordinaire | idem |
+| Trait disparu (fusion, coupe) | — | Le lien s'oublie, le calque reste |
+
+- **Annulation** : une commande = une étape (la couleur est accordée dans la même étape).
+- **Pot de peinture** : un clic remplit la zone fermée par le trait de l'image courante, sous le trait (la couleur
+  passe 2 px sous lui) ; les trous du trait jusqu'à 2 × N px sont fermés (N = 4 : 8 px, réglable). Un clic juste sur un
+  trait fin prend la zone la plus proche ; au cœur d'un aplat noir : un message. Si la zone fuit (trou trop grand),
+  tout le dehors est colorié et le message le dit (Ctrl+Z). La couleur remplace celle d'avant dans la zone.
+- **Pinceau et crayon** : par défaut, le trait reste dans la zone fermée où il commence (un pochoir calculé à partir
+  des murs du trait, `Zone::pochoir`) ; « Pinceau dans la zone fermée » le débranche. La gomme n'est pas limitée.
+- **Latence** : les murs du trait (distance au trait, `fond::edt`) coûtent le plus ; ils sont gardés par version du
+  dessin du trait (`calquecouleur::Cache`) et précalculés **sur un autre fil** dès qu'on est sur un calque de couleur
+  avec le pot de peinture, le pinceau ou le crayon. Un clic ou un trait ne calcule plus que la zone (un remplissage
+  de la région touchée). Mesure d'un projet 3840 × 2160, un personnage de 1000 × 1500 px : voir
+  `filling_a_big_sheet_is_fast_enough_to_click` (affiche les temps).
+- **Format** : `calque_couleur` (rang du trait, couples de dessins, trous, zone), **format 30**. Un projet d'avant s'ouvre
+  tel quel ; un projet enregistré en 30 n'est pas lisible par une version d'avant (même règle que 25 à 27). Les numéros
+  28 et 29 sont ceux d'autres chantiers menés en parallèle.
+- **Export, PDF, vignettes, montage, GPU** : la couleur est un calque bitmap ordinaire pour eux (rien n'a changé). Export
+  Storyboard Pro : calque bitmap sous le trait, avec une note dans la fenêtre d'export (le lien n'y existe pas : à vérifier).
+- **Avec « Fond sous le trait »** (`fond.rs`) : les deux coexistent, rien n'a changé dans l'un pour l'autre. Le fond est
+  une strate du même calque, déduite du trait (une forme, une couleur) ; le calque de couleur est un calque à part,
+  colorié zone par zone, avec ses propres images. Ordre de composition : fond du trait, couleur, trait.
+- **Limites connues** : couper / coller une clé du trait (même calque) ne remet pas sa couleur (elle reste dans le
+  dessin d'origine : glisser la clé la garde) ; un effet du trait (tremblement) ne bouge pas la couleur ; le trait
+  doit exister à l'image pour colorier (sinon, un pinceau en pose un vide) ; un calque de toute la scène, un dossier,
+  un calque d'effet, vidéo ou CTG ne portent pas de couleur.
+
+### À vérifier à l'écran (calque de couleur)
+
+1. Icône palette dans le panneau Calques : bulle (nom, description), calque créé sous le trait, en retrait, « sous Trait ».
+2. Pot de peinture sur le calque de couleur : un clic dans un contour fermé le remplit sous le trait, sans liseré clair
+   entre la couleur et le trait ; un contour avec un petit trou ne fuit pas ; un grand trou : message + tout le dehors.
+3. Pinceau : un trait qui déborde du contour reste dedans ; « Pinceau dans la zone fermée » (clic droit sur le calque >
+   Calque de couleur) le laisse déborder.
+4. Dans la timeline : poser, allonger, supprimer une clé du trait : la couleur suit ; un dessin dupliqué garde sa couleur.
+5. Œil du trait : cache aussi la couleur ; œil de la couleur : la couleur seule.
+6. Dupliquer, copier / coller le trait : les couleurs viennent avec lui ; Ctrl+Z revient d'un coup.
+7. Export d'images et PDF : la couleur est sous le trait.

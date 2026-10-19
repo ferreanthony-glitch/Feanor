@@ -2921,3 +2921,15 @@ l'écran dans cette séance.
   `scripts\verifier.ps1 -Repetitions 2` : OK, compilation sans avertissement).
 - Pas fait : un réglage « barres complètes » (épingler tout y revient) ; miroir et table lumineuse sous « Plus… » dans
   la barre sous le dessin (proposition 4 de la partie 5) ; préréglage de raccourcis façon Storyboard Pro (6.2).
+
+## Calque de couleur : la couleur sous le trait (demandé par Anthony le 2026-10-20, branche `canevas-couleur`) ✅
+
+- Un calque de couleur est lié à un calque de dessin (le trait) : juste dessous dans la pile, il en suit les images
+  (miroir des clés, des expositions et des trous), on y colorie sans abîmer le trait. Pot de peinture borné par le trait
+  (trous fermés comme le fond sous le trait et le calque CTG), pinceau dans la zone fermée (réglable). Créer, déplacer,
+  cacher, supprimer, dupliquer, copier / coller avec le trait ; une annulation par commande ; format 30. Détails et
+  vérifications : `docs/INTERFACE.md` partie 15, `README.md` « Calque de couleur ».
+- Comparaison avec Toon Boom (Storyboard Pro, Harmony) : **à vérifier** — SHOT reprend l'idée « trait / couleur », pas le
+  fonctionnement exact.
+- Reste : réglage de la fermeture des trous par zone (aujourd'hui par calque) ; une couleur qui suit le tremblement du
+  trait ; remettre sa couleur à une clé du trait coupée / collée ; un panneau de palette de couleurs par personnage.

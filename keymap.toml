@@ -1636,6 +1636,16 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
+action = "calque.nouveau_couleur"
+touches = []
+source = "SHOT (calque de couleur sous le trait, choix d'Anthony 2026-10-20 ; la façon de faire de Storyboard Pro ou de Harmony n'est pas vérifiée : à vérifier)"
+
+[[raccourci]]
+action = "calque.detacher_couleur"
+touches = []
+source = "SHOT (calque de couleur sous le trait)"
+
+[[raccourci]]
 action = "calque.transformer_ctg"
 touches = []
 source = "TVPaint 12 sans touche"

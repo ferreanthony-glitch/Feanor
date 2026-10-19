@@ -1107,7 +1107,8 @@ impl App {
         }
         let row = row_at(rows, p.y - grid_top)?;
         let layer = self.layers().get(row.li)?;
-        if layer.folder || layer.video.is_some() {
+        // (Un calque de couleur suit les images de son trait : pas de poignée pour les déplacer.)
+        if layer.folder || layer.video.is_some() || layer.keys_follow_line() {
             return None;
         }
         if let Some((li, f)) = self.fx_marker_in_timeline(p, r, cell, rows, grid_top) {

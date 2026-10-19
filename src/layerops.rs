@@ -65,7 +65,12 @@ fn layer_copy(doc: &mut Document, source: &Layer, copies: &mut HashMap<CelId, Ce
     // suivent les copies des dessins.
     let names = source.names.iter().map(|(c, n)| (copies.get(c).copied().unwrap_or(*c), n.clone())).collect();
     let color_marks = source.color_marks.iter().map(|(c, k)| (copies.get(c).copied().unwrap_or(*c), *k)).collect();
-    Layer { id: fresh_layer_id(), frames, scene_wide: None, names, color_marks, ..source.clone() }
+    let mut copy = Layer { id: fresh_layer_id(), frames, scene_wide: None, names, color_marks, ..source.clone() };
+    // Un calque de couleur copié seul garde son trait, avec les copies de ses dessins de couleur.
+    if let Some(c) = copy.couleur.as_mut() {
+        c.relink(&HashMap::new(), copies);
+    }
+    copy
 }
 
 /// Copie du calque `li` du plan `index`, avec ses propres copies des dessins, posée juste
@@ -75,6 +80,8 @@ pub(crate) fn duplicate_layer(doc: &mut Document, index: usize, li: usize) -> us
     let layers = &doc.panels[index].layers;
     let source = layers[li].clone();
     let children: Vec<Layer> = crate::folders::children_of(layers, li).into_iter().map(|i| layers[i].clone()).collect();
+    // Les calques de couleur du trait partent avec lui : leurs copies colorent la copie.
+    let colours: Vec<Layer> = crate::calquecouleur::couleurs_de(layers, li).into_iter().map(|i| layers[i].clone()).collect();
     let mut copies: HashMap<CelId, CelId> = HashMap::new();
     let mut copy = layer_copy(doc, &source, &mut copies);
     copy.name = format!("{} copie", source.name);
@@ -83,6 +90,15 @@ pub(crate) fn duplicate_layer(doc: &mut Document, index: usize, li: usize) -> us
         let mut child = layer_copy(doc, c, &mut copies);
         child.parent = Some(copy.id);
         block.push(child);
+    }
+    for c in &colours {
+        let mut colour = layer_copy(doc, c, &mut copies);
+        colour.name = format!("{} copie", c.name);
+        colour.parent = copy.parent;
+        if let Some(link) = colour.couleur.as_mut() {
+            link.relink(&HashMap::from([(source.id, copy.id)]), &copies);
+        }
+        block.push(colour);
     }
     block.push(copy);
     let n = block.len();
@@ -162,6 +178,7 @@ impl App {
                 self.action_item(ui, "Bitmap", "calque.nouveau_bitmap");
                 self.action_item(ui, "De fond", "calque.nouveau_fond");
             }
+            self.action_item(ui, "De couleur (sous le trait du calque courant)", "calque.nouveau_couleur");
             self.action_item(ui, "CTG (sous le calque courant)", "calque.nouveau_ctg");
             ui.menu_button("Calque d'effet", |ui| self.effect_preset_menu(ui));
             ui.separator();
@@ -329,6 +346,8 @@ impl App {
         // Un calque dont le dossier est aussi choisi part avec la copie du dossier.
         let all = chosen.clone();
         chosen.retain(|&li| crate::folders::parent_index(self.layers(), li).is_none_or(|fi| !all.contains(&fi)));
+        // De même un calque de couleur dont le trait est aussi choisi : il part avec la copie du trait.
+        chosen.retain(|&li| crate::calquecouleur::trait_de(self.layers(), li).is_none_or(|ti| !all.contains(&ti)));
         let current = self.layer().id;
         let snap = self.snapshot();
         let mut copies = Vec::new();
@@ -360,6 +379,8 @@ impl App {
         let mut lis: Vec<usize> = lis.iter().flat_map(|&li| crate::folders::block_of(self.layers(), li)).collect();
         lis.sort_unstable();
         lis.dedup();
+        // Un calque de trait emmène ses calques de couleur.
+        let lis = crate::calquecouleur::avec_couleurs(self.layers(), &lis);
         let lis = &lis[..];
         if lis.is_empty() {
             self.status = format!("Aucun calque {what}.");
@@ -461,7 +482,10 @@ impl App {
     /// Le calque courant seul visible.
     pub(crate) fn show_current_layer_only(&mut self) {
         let cur = self.cur_layer;
-        self.set_all_layers(move |i, l| l.visible = i == cur, "Seul le calque courant est visible.");
+        // (Un calque de trait garde ses calques de couleur : ils font un seul dessin.)
+        let mut keep = crate::calquecouleur::couleurs_de(self.layers(), cur);
+        keep.push(cur);
+        self.set_all_layers(move |i, l| l.visible = keep.contains(&i), "Seul le calque courant est visible.");
     }
 
     /// Tous les pochoirs éteints.

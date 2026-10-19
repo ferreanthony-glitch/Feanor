@@ -131,13 +131,14 @@ pub fn safe_name(title: &str) -> String {
 /// Ce qui partira vers Storyboard Pro (sans les images, calculées ensuite).
 pub fn prepare(doc: &Document, title: &str) -> SbOut {
     let mut out = SbOut { title: title.trim().to_string(), fps: doc.fps, size: doc.frame, ..Default::default() };
-    let (mut animated, mut camera, mut blends, mut folders) = (0, 0, 0, false);
+    let (mut animated, mut camera, mut blends, mut folders, mut colours) = (0, 0, 0, false, 0);
     for (i, p) in doc.panels.iter().enumerate() {
         if !p.camera.is_empty() {
             camera += 1;
         }
         folders |= p.layers.iter().any(|l| l.folder);
         blends += p.layers.iter().filter(|l| !l.folder && l.blend != crate::blend::BlendMode::Normal).count();
+        colours += p.layers.iter().filter(|l| l.couleur.is_some()).count();
         let mut scene = OutScene { name: doc.scene_label(p.scene), plan: i, panels: Vec::new() };
         for (id, start, end) in crate::board::plan_boards(doc, i) {
             if end <= start {
@@ -211,6 +212,9 @@ pub fn prepare(doc: &Document, title: &str) -> SbOut {
     }
     if folders {
         out.notes.push("Dossiers de calques : mis à plat (leur visibilité et leur opacité passent à leurs calques).".into());
+    }
+    if colours > 0 {
+        out.notes.push(format!("Calques de couleur : {colours} calque(s) exportés comme des calques bitmap ordinaires, sous leur trait (le lien trait / couleur de SHOT n'existe pas dans Storyboard Pro : à vérifier)."));
     }
     if muted > 0 {
         out.notes.push(format!("Son : {muted} piste(s) coupée(s) dans SHOT, exportées quand même (et pas coupées dans Storyboard Pro)."));

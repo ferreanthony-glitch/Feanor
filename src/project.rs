@@ -111,7 +111,12 @@ pub const FORMAT: &str = "pelure-projet";
 /// (flash, image d'impact, lueur diffuse, secousse, vignettage, grain, aberration chromatique ; voir
 /// `fxcine.rs`). Une version précédente refuse le projet : elle en ferait des calques vides et
 /// perdrait l'effet, le film changerait sans prévenir.
-pub const VERSION: u32 = 27;
+/// 30 (2026-10-20) : calques de couleur (`calque_couleur` d'un calque : rang du calque de trait, dessins de
+/// couleur qui répondent aux dessins du trait, fermeture des trous, pinceau dans la zone ; voir
+/// `calquecouleur.rs`). Une version précédente refuse le projet : elle en ferait des calques bitmap
+/// ordinaires aux images indépendantes, et la couleur ne suivrait plus le trait. (Les numéros 28 et 29
+/// sont ceux d'autres chantiers menés en parallèle.)
+pub const VERSION: u32 = 30;
 const DRAWINGS: &str = "dessins";
 /// Fils qui lisent ou écrivent les dessins d'un projet en parallèle : au-delà de huit, le disque et
 /// la mémoire (une feuille décodée pèse 33 Mo) limitent plus que le processeur.
@@ -565,6 +570,10 @@ struct LayerEntry {
     /// expositions sont les images où il agit (un dessin vide tenu).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     calque_effet: Option<crate::calqueffet::Entree>,
+    /// Calque de couleur (format 30) : il colore le calque de trait de ce rang ; absent : calque
+    /// ordinaire.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    calque_couleur: Option<CouleurEntry>,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -580,6 +589,27 @@ struct VideoEntry {
     #[serde(default)]
     debut: i64,
     ext: String,
+}
+
+/// Le lien d'un calque de couleur avec son calque de trait (format 30).
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+struct CouleurEntry {
+    /// Rang, dans le plan, du calque de trait.
+    #[serde(rename = "trait")]
+    ligne: usize,
+    /// Les couples (dessin du trait, dessin de couleur qui lui répond).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    dessins: Vec<[u64; 2]>,
+    /// Fermeture des trous (pixels de chaque côté du trou).
+    #[serde(default = "default_couleur_trous")]
+    trous: u8,
+    /// Un trait de pinceau reste dans la zone fermée où il commence.
+    #[serde(default = "yes")]
+    zone: bool,
+}
+
+fn default_couleur_trous() -> u8 {
+    crate::calquecouleur::TROUS
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -1333,6 +1363,9 @@ fn remove_unused(dir: &Path, used: &BTreeSet<CelId>, fonds: &BTreeSet<CelId>) ->
 
 fn manifest_of(doc: &Document) -> Manifest {
     let mut sequences: Vec<SequenceEntry> = Vec::new();
+    // Les dessins qui seront enregistrés : un calque de couleur n'écrit que les couples dont les deux
+    // dessins le sont.
+    let drawn = doc.used_cels();
     for (i, panel) in doc.panels.iter().enumerate() {
         let seq = doc.sequence_of(i);
         if sequences.last().is_none_or(|s| s.id != seq) {
@@ -1406,6 +1439,14 @@ fn manifest_of(doc: &Document) -> Manifest {
                     video: l.video.as_ref().map(|v| VideoEntry { id: v.id, nom: v.name.clone(), images: v.frames, ips: v.fps, debut: v.start, ext: v.ext.clone() }),
                     fond: l.fond,
                     calque_effet: l.effet.as_ref().map(crate::calqueffet::Entree::from),
+                    calque_couleur: l.couleur.as_ref().and_then(|c| {
+                        Some(CouleurEntry {
+                            ligne: panel.layers.iter().position(|s| s.id == c.trait_id)?,
+                            dessins: c.dessins.iter().filter(|(t, k)| drawn.contains(t) && drawn.contains(k)).map(|(t, k)| [*t, *k]).collect(),
+                            trous: c.trous,
+                            zone: c.zone,
+                        })
+                    }),
                     expositions: to_exposures(&l.frames),
                 })
                 .collect(),
@@ -1890,6 +1931,7 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
             for p in scene.panneaux {
                 let parents: Vec<Option<usize>> = p.calques.iter().map(|l| l.dans_dossier).collect();
                 let ctg_sources: Vec<Option<(Vec<usize>, u8)>> = p.calques.iter().map(|l| l.ctg.as_ref().map(|c| (c.sources.clone(), c.trou))).collect();
+                let couleurs: Vec<Option<CouleurEntry>> = p.calques.iter().map(|l| l.calque_couleur.clone()).collect();
                 let mut layers: Vec<Layer> = p
                     .calques
                     .into_iter()
@@ -1958,6 +2000,8 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
                         fond: l.fond,
                         // Calque d'effet (format 27).
                         effet: l.calque_effet.map(crate::calqueffet::Entree::into_model),
+                        // Calque de couleur (format 30) : le lien vient après (rang du trait → son id).
+                        couleur: None,
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.
@@ -1973,6 +2017,18 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
                         layers[i].ctg = Some(crate::ctg::Ctg { sources: ids, gap: gap.min(50) });
                     }
                 }
+                // Calques de couleur (format 30) : le rang du calque de trait devient son id, les
+                // couples de dessins sont gardés si leurs deux dessins sont là.
+                for (i, entry) in couleurs.into_iter().enumerate() {
+                    let Some(e) = entry else { continue };
+                    let Some(line) = layers.get(e.ligne).filter(|_| e.ligne != i).map(|l| l.id) else { continue };
+                    let mut c = crate::calquecouleur::CalqueCouleur::new(line);
+                    c.dessins = e.dessins.into_iter().filter(|[t, k]| cels.contains_key(t) && cels.contains_key(k)).map(|[t, k]| (t, k)).collect();
+                    c.trous = e.trous.min(50);
+                    c.zone = e.zone;
+                    layers[i].couleur = Some(c);
+                }
+                crate::calquecouleur::reparer(&mut layers);
                 crate::folders::normalize(&mut layers);
                 if layers.is_empty() {
                     layers.push(Layer::new("Dessin", LayerKind::Vector));

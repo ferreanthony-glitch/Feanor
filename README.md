@@ -934,6 +934,46 @@ fond du décor. La couleur d'un fond neuf se règle par projet (Fichier > Régla
 « Couleur des fonds sous le trait », par exemple un gris clair) ; « Aux fonds déjà posés » la
 donne à tous les fonds du projet.
 
+## Calque de couleur (la couleur sous le trait)
+
+Pour colorier sans abîmer le trait : un **calque de couleur** est lié à un calque de dessin (le
+« trait »), posé juste dessous, et il en suit les images. C'est l'idée « trait / couleur » de
+Toon Boom ; la façon exacte de Storyboard Pro ou de Harmony n'a pas été vérifiée (à vérifier).
+
+- **Créer** : l'icône palette du panneau Calques (« Nouveau calque de couleur »), Calques > Nouveau
+  calque > « De couleur », clic droit sur un calque > « Calque de couleur » > « Ajouter… », ou Ctrl+K.
+  Il se range sous le trait du calque courant, en retrait, avec la mention « sous le trait » ; un
+  trait peut en porter plusieurs. Ctrl+Z annule d'un coup.
+- **Les images suivent le trait** : pour chaque image où le trait montre un dessin, la couleur a le
+  sien (vide au début). Poser, allonger, déplacer ou supprimer une clé du trait emmène sa couleur ;
+  « Nouveau dessin en copie » emporte la couleur du dessin copié. On ne pose pas de clé sur la couleur
+  elle-même (le message le dit : fais-le sur le trait). Le pré / post-comportement, la
+  transformation et la profondeur du trait sont ceux de sa couleur.
+- **Colorier** : le pinceau et le crayon peignent comme sur un calque bitmap ; par défaut, un trait
+  de pinceau **reste dans la zone fermée** où il commence (et passe sous le trait). Le **pot de
+  peinture** remplit la zone fermée par le trait où l'on clique, sous le trait (les trous du trait
+  jusqu'à 8 px sont fermés, réglable dans le menu du calque). Un clic dehors colorie tout le dehors,
+  et le message prévient quand la zone fuit par un trou. Le trait n'est jamais touché ; la gomme n'est
+  pas limitée à la zone.
+- **Trait vectoriel ou bitmap** : la couleur est toujours en pixels (un aplat n'a pas besoin d'être
+  modifiable point par point) ; le pot de peinture lit les pixels rendus du trait, quel que soit le calque.
+- **Ensemble** : l'œil du trait cache aussi sa couleur (l'œil de la couleur la cache seule) ; supprimer
+  ou dupliquer le trait supprime ou duplique ses couleurs ; copier-coller le trait les emmène ; le
+  monter ou le descendre déplace la couleur avec lui (la couleur seule ne se déplace pas). **Indépendants** : le
+  verrou (on colorie sous un trait verrouillé), l'opacité, le mode de fusion, la pelure d'oignon et les
+  effets de chaque calque. Un effet du trait (tremblement…) ne bouge donc pas la couleur : à vérifier
+  si c'est ce que tu veux.
+- **Détacher** (clic droit > Calque de couleur) : la couleur redevient un calque bitmap ordinaire, aux
+  images à elle. Si le trait disparaît (fusion, suppression), le lien s'oublie tout seul et la couleur reste.
+- **Fond sous le trait** (juste au-dessus) : l'autre façon d'avoir de la couleur sous le trait, dans le
+  même calque. Les deux se cumulent (la strate du trait, puis la couleur, puis le trait) ; ce qui
+  les distingue : le fond est déduit du trait (une seule forme, pas de choix de couleur par zone), la
+  couleur se colorie zone par zone, avec ses propres images.
+- Export, PDF, vignettes, montage, export Storyboard Pro : la couleur est un calque bitmap de plus
+  (l'export Storyboard Pro le dit : le lien trait / couleur n'y existe pas, à vérifier).
+- Projets : format **30** (un projet enregistré ainsi n'est pas lisible par une version d'avant) ; un projet
+  d'avant s'ouvre tel quel. Détails : `src/calquecouleur.rs`, `docs/INTERFACE.md` partie 15.
+
 ## Couleur des plans
 
 Pour repérer les plans d'un coup d'œil : clic droit sur un plan de la bande du montage (ou sur
@@ -1649,6 +1689,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `calqueffet.rs`, `fxcine.rs` | Calques d'effets (ajustement, incrustation) : repère du plan, dessin dérivé de ce qui est dessous, enregistrement ; effets « Cinéma » (flash, impact, lueur diffuse, secousse, vignettage, grain, aberration) |
 | `prereglages.rs`, `prereglagesui.rs`, `incrustation.rs` | Préréglages d'effets (clés posées à la tête de lecture), fenêtre à aperçu en direct et menus ; texte des incrustations (timecode…) et son tracé |
 | `ctg.rs`, `ctgui.rs` | Calque CTG : remplissage par graffitis, sources, structure (13j) |
+| `calquecouleur.rs`, `calquecouleurui.rs` | Calque de couleur sous le trait : lien, miroir des images du trait, murs et zones fermées (pot de peinture, pinceau dans la zone), commandes et menu |
 | `video.rs`, `videoui.rs` | Calque vidéo : import par ffmpeg, images lues à la demande (13k) |
 | `tween.rs`, `tweenui.rs` | Interpolation : intervalles vectoriels, fondus, étirement, cadence (13l) |
 | `xml.rs`, `sboard.rs` | Lecture d'un XML en arbre ; lecture d'un projet Storyboard Pro (14a) |

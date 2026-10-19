@@ -432,7 +432,7 @@ fn paint_drop(painter: &Painter, cell: Rect, ppf: f32, d: &crate::montagekeys::D
 /// Poignée du calque `layer` (rang `k`) sous le point `p` ; `x0` : l'abscisse de la première
 /// image de son plan, `lane_top` : le haut de sa piste.
 pub(crate) fn cell_handle(layer: &Layer, k: usize, p: Pos2, x0: f32, lane_top: f32, ppf: f32, tol: f32) -> Option<Handle> {
-    if layer.folder || layer.video.is_some() {
+    if layer.folder || layer.video.is_some() || layer.keys_follow_line() {
         return None;
     }
     let x = |f: usize| x0 + f as f32 * ppf;
