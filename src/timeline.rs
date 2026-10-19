@@ -341,10 +341,15 @@ impl App {
             let target = Rect::from_min_max(pos2(r.left() + a as f32 * cell, r.top()), pos2(r.left() + b as f32 * cell, r.top() + HEADER_H));
             ui.scroll_to_rect(target, Some(egui::Align::Min));
         }
-        // Ctrl + molette sur la grille : zoom de la timeline.
+        // Un zoom a eu lieu à l'image d'écran d'avant : la grille défile pour que la tête de lecture
+        // reste en place (`zoombande.rs`).
+        let head = self.cur_frame as f32 + 0.5;
+        self.follow_strip_anchor(ui, crate::zoombande::Strip::Timeline, r.left(), cell, head);
+        // Ctrl + molette sur la grille : zoom de la timeline, autour de la tête de lecture.
         if resp.hovered() {
             let zoom = ui.input(|i| i.zoom_delta());
             if zoom != 1.0 {
+                self.anchor_strip_zoom(crate::zoombande::Strip::Timeline);
                 self.timeline_cell = (self.timeline_cell * zoom).clamp(CELL_MIN, CELL_MAX);
             }
         }

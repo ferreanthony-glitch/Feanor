@@ -237,10 +237,12 @@ fn a_toggled_on_icon_button_is_drawn_in_the_colour_that_reads_on_the_accent_in_e
                 ui.add(egui::SelectableLabel::new(true, egui::RichText::new("D").size(17.0)));
                 // Un bouton fait à la main avec `.selected(on)`.
                 ui.add(egui::Button::new(bulles::symbole_etat("E", true)).selected(true));
+                // Un nom en gras dans un choix (le nom d'un effet choisi, les modes).
+                ui.add(egui::SelectableLabel::new(true, bulles::encre_etat(egui::RichText::new("F").strong(), true)));
             });
         });
         let colors = text_colors(&output);
-        assert_eq!(colors.len(), 5, "{choix:?} : un texte par bouton");
+        assert_eq!(colors.len(), 6, "{choix:?} : un texte par bouton");
         for c in colors {
             assert_eq!(c, ink, "{choix:?} : l'icône d'un bouton allumé doit avoir la couleur de `sur_accent`");
         }
@@ -277,6 +279,12 @@ fn no_hand_made_selected_button_forgets_its_ink() {
             let ink = |l: &str| l.contains("symbole_etat") || l.contains("encre_etat");
             if line.contains(".selected(") && line.contains("Button::new(") && !ink(line) && !(n > 0 && ink(lines[n - 1])) {
                 bad.push(format!("{name}:{}", n + 1));
+            }
+            // Un texte « fort » ou coloré dans un choix d'egui garde sa couleur même choisi : blanc sur
+            // le gris clair de l'accent (le nom d'un effet choisi, les onglets, les modes).
+            let selectable = line.contains("SelectableLabel::new(") || line.contains("selectable_label(") || line.contains("selectable_value(");
+            if selectable && (line.contains(".strong()") || line.contains(".color(")) && !ink(line) {
+                bad.push(format!("{name}:{} (choix avec un texte qui force sa couleur)", n + 1));
             }
         }
     }

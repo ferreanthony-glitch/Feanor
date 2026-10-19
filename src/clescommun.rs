@@ -27,6 +27,7 @@ pub(crate) enum KeyKind {
 }
 
 impl KeyKind {
+    #[cfg(test)]
     pub(crate) const ALL: [KeyKind; 3] = [KeyKind::Drawing, KeyKind::Camera, KeyKind::Effect];
 
     /// « clé », « clé de caméra », « clé d'effet » (`many` : au pluriel).
@@ -162,6 +163,28 @@ pub(crate) fn choose_group<K: Copy + PartialEq>(chosen: &[K], anchor: Option<K>,
         return (out, Some(first));
     }
     (group.to_vec(), Some(first))
+}
+
+/// Le choix une fois le rectangle tendu sur `picked` : sans touche, ces clés seules ; `add` (Maj) :
+/// elles s'ajoutent au choix d'avant ; `toggle` (Ctrl) : celles du choix d'avant qu'il touche sont
+/// retirées, les autres ajoutées. Le même pour les clés de dessins et de caméra.
+///
+/// Quelle sorte de clé le rectangle choisit-il ? Celle de la rangée où il PART : la piste Caméra,
+/// les clés de caméra ; les pistes des calques, les clés de dessins, sur toutes les rangées qu'il
+/// couvre. (Les clés d'effets sont en haut d'une piste de calque : elles se choisissent au clic.)
+pub(crate) fn rect_choice<K: Copy + PartialEq>(before: &[K], picked: &[K], add: bool, toggle: bool) -> Vec<K> {
+    if toggle {
+        let mut out: Vec<K> = before.iter().copied().filter(|k| !picked.contains(k)).collect();
+        out.extend(picked.iter().copied().filter(|k| !before.contains(k)));
+        return out;
+    }
+    let mut out = if add { before.to_vec() } else { Vec::new() };
+    for k in picked {
+        if !out.contains(k) {
+            out.push(*k);
+        }
+    }
+    out
 }
 
 impl App {

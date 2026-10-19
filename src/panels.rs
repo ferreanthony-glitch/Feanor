@@ -4,7 +4,7 @@ use crate::app::{App, Mode, Tool};
 use crate::document::LayerKind;
 
 /// Gestes à la souris et au stylet (hors fichier de raccourcis).
-pub(crate) const MOUSE_GESTURES: [(&str, &str); 21] = [
+pub(crate) const MOUSE_GESTURES: [(&str, &str); 24] = [
     ("Clic droit sur une commande", "lui assigner un raccourci"),
     ("Alt + clic", "prélever une couleur"),
     ("Ctrl tenu sur le dessin", "le lasso le temps de le tenir"),
@@ -23,7 +23,10 @@ pub(crate) const MOUSE_GESTURES: [(&str, &str); 21] = [
     ("Montage : limite entre deux dessins d'un calque", "allonger l'un, raccourcir l'autre"),
     ("Montage : milieu d'un dessin d'un calque", "le placer avant ou après un autre (chacun garde sa durée)"),
     ("Montage : double-clic sur la piste d'un calque", "nouveau dessin (clé) à cette image"),
-    ("Montage : Ctrl ou Maj + clic sur des dessins", "choisir plusieurs clés (Ctrl : une de plus ou de moins ; Maj : celles d'entre)"),
+    ("Montage : Ctrl ou Maj + clic sur des dessins", "choisir plusieurs clés (Ctrl : une de plus ou de moins, sur n'importe quel calque ; Maj : le rectangle entre la clé de départ et celle-ci, tous calques d'entre compris)"),
+    ("Montage : glisser dans le vide des pistes", "choisir toutes les clés que le rectangle touche, sur toutes les rangées qu'il couvre (Ctrl ou Maj : les ajouter)"),
+    ("Montage : prendre une clé choisie", "toutes les clés choisies glissent, calque par calque (Maj : seules celles-ci)"),
+    ("Sélection : Ctrl+Maj + lasso, rectangle ou clic", "prendre sur tous les calques du plan à l'image courante (Storyboard Pro) ; leurs clés se choisissent aussi dans le montage"),
     ("Timeline : prise au bout de la règle", "changer la durée du plan"),
     ("Échap ou Ctrl+Z pendant un glisser", "abandonner le geste"),
 ];
@@ -233,12 +236,14 @@ impl App {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 // Les deux niveaux restent écrits en toutes lettres : on voit d'un coup d'œil où
                 // l'on est.
-                let animation = ui.selectable_label(self.mode == Mode::Animation, RichText::new(" Animation ").strong());
+                let on = self.mode == Mode::Animation;
+                let animation = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" Animation ").strong(), on));
                 let animation = self.aide(animation, "Animation", "Animer le plan courant, image par image.", "mode.basculer");
                 if animation.clicked() && self.mode != Mode::Animation {
                     self.set_mode(Mode::Animation);
                 }
-                let board = ui.selectable_label(self.mode == Mode::Storyboard, RichText::new(" Storyboard ").strong());
+                let on = self.mode == Mode::Storyboard;
+                let board = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" Storyboard ").strong(), on));
                 let board = self.aide(board, "Storyboard", "Monter les plans et les séquences.", "mode.basculer");
                 if board.clicked() && self.mode != Mode::Storyboard {
                     self.set_mode(Mode::Storyboard);
@@ -576,7 +581,7 @@ impl App {
         }
         if lasso {
             note(ui, BOX_NOTE);
-            note(ui, "Clic : un élément. Glisser dans le vide : lasso. Maj : ajouter / retirer.");
+            note(ui, "Clic : un élément. Glisser dans le vide : lasso. Maj : ajouter / retirer. Ctrl+Maj : prendre sur tous les calques du plan (pas seulement les calques choisis).");
         }
     }
     pub(crate) fn status_bar(&mut self, ui: &mut egui::Ui) {

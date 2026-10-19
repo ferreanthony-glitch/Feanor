@@ -692,6 +692,10 @@ pub struct App {
     pub(crate) renderer: Renderer,
     pub(crate) thumbs: Thumbs,
     pub(crate) montage_zoom: f32,
+    /// Le zoom du montage et de la timeline reste calé sur la tête de lecture (`zoombande.rs`) :
+    /// où elle était dans la vue au dernier affichage, et le défilement demandé par un zoom.
+    pub(crate) strip_geo: [crate::zoombande::StripGeo; 2],
+    pub(crate) strip_anchor: [Option<crate::zoombande::Anchor>; 2],
     /// « Tout voir » demandé dans le montage : le zoom s'ajuste à la prochaine image d'écran (il
     /// faut la largeur de la bande).
     pub(crate) montage_fit: bool,
@@ -1081,6 +1085,8 @@ impl App {
             renderer: Renderer::new(),
             thumbs: Thumbs::default(),
             montage_zoom: 4.0,
+            strip_geo: Default::default(),
+            strip_anchor: [None, None],
             montage_fit: false,
             montage_head_w,
             montage_drag: None,
@@ -3799,13 +3805,19 @@ impl App {
     }
 
     /// Zoom de la bande du bas par le facteur `f` : le montage en storyboard, la timeline en
-    /// animation. L'image courante reste en vue.
+    /// animation. La tête de lecture reste au même endroit de l'écran (`zoombande.rs`).
     pub(crate) fn zoom_strip(&mut self, f: f32) {
+        use crate::zoombande::Strip;
         match self.mode {
-            Mode::Storyboard => self.montage_zoom = (self.montage_zoom * f).clamp(0.5, 16.0),
-            Mode::Animation => self.timeline_cell = (self.timeline_cell * f).clamp(crate::timeline::CELL_MIN, crate::timeline::CELL_MAX),
+            Mode::Storyboard => {
+                self.anchor_strip_zoom(Strip::Montage);
+                self.montage_zoom = (self.montage_zoom * f).clamp(0.5, 16.0);
+            }
+            Mode::Animation => {
+                self.anchor_strip_zoom(Strip::Timeline);
+                self.timeline_cell = (self.timeline_cell * f).clamp(crate::timeline::CELL_MIN, crate::timeline::CELL_MAX);
+            }
         }
-        self.follow_frame = true;
     }
 
     /// Zoom par pas, autour du centre de la vue.

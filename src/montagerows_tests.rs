@@ -1,20 +1,16 @@
 //! Rangées de calques du montage : chaque plan montre ses calques dans son propre ordre (depuis
-//! le 2026-10-17), toutes les rangées ; les poignées de la timeline sous la souris ; la piste
-//! d'un calque (son nom) sert au collage sur plusieurs calques.
+//! le 2026-10-17), toutes les rangées ; les poignées de la timeline sous la souris ; le collage
+//! de clés sur plusieurs calques (relatif au calque courant, 2026-10-19).
 
 use eframe::egui::pos2;
 
 use crate::document::{Layer, LayerKind, SceneWide};
 use crate::handles::Handle;
-use crate::montagerows::{cell_handle, layer_in_row, layer_on_track, TrackKey, LAYER_H};
+use crate::montagerows::{cell_handle, layer_in_row, LAYER_H};
 
 /// Calques d'un plan, donnés du haut vers le bas (la pile est rangée du bas vers le haut).
 fn plan(names: &[&str]) -> Vec<Layer> {
     names.iter().rev().map(|n| Layer::new(*n, LayerKind::Vector)).collect()
-}
-
-fn key(name: &str, nth: usize) -> TrackKey {
-    TrackKey { name: name.into(), nth }
 }
 
 /// Les noms montrés à chaque rangée d'un plan, du haut vers le bas.
@@ -42,15 +38,14 @@ fn each_plan_shows_its_layers_in_its_own_order() {
 }
 
 #[test]
-fn a_layer_track_is_its_name_for_pasting() {
-    // Le collage sur plusieurs calques retrouve un calque par son nom, où qu'il soit dans la pile.
-    let a = plan(&["Perso", "Décor"]);
-    let b = plan(&["Effets", "Perso"]);
-    assert_eq!(layer_on_track(&a, &key("Perso", 0)), Some(1));
-    assert_eq!(layer_on_track(&b, &key("Perso", 0)), Some(0));
-    assert_eq!(layer_on_track(&b, &key("Décor", 0)), None);
-    let twice = plan(&["Trait", "Trait"]);
-    assert_eq!(layer_on_track(&twice, &key("Trait", 1)), Some(0), "le deuxième « Trait » en partant du haut");
+fn a_pasted_layer_keeps_its_place_relative_to_the_top_most_copied_one() {
+    use crate::montagekeys::target_rank;
+    // Calques copiés aux rangs 1, 2 et 4 (depuis le haut) : le rang 1 va sur le calque courant.
+    for cur in [0, 2, 5] {
+        assert_eq!([1, 2, 4].map(|r| target_rank(cur, 1, r)), [cur, cur + 1, cur + 3], "même ordre, mêmes écarts, sous le calque courant");
+    }
+    // Un seul calque copié : le calque courant.
+    assert_eq!(target_rank(3, 7, 7), 3);
 }
 /// Un calque dessiné de l'image 2 à 8 (exclue) : un dessin tenu de 2 à 5, un autre de 5 à 8.
 fn drawn() -> Layer {
@@ -147,21 +142,24 @@ fn a_new_key_becomes_the_only_choice() {
 }
 
 #[test]
-fn keys_pasted_from_several_layers_find_or_create_their_layers() {
-    use crate::montagekeys::ensure_tracks;
-    use crate::montagerows::track_of;
-    // La pile d'origine, du haut vers le bas : Perso, Ombre, Décor. Le plan d'arrivée n'a que Décor.
-    let src = plan(&["Perso", "Ombre", "Décor"]);
-    let wanted: Vec<(TrackKey, LayerKind, usize)> = (0..3).map(|li| (track_of(&src, li), LayerKind::Vector, src.len() - 1 - li)).collect();
+fn keys_pasted_below_the_stack_create_the_missing_layers_at_the_bottom() {
+    use crate::montagekeys::ensure_layers_below;
+    // Trois calques copiés (rangs 0, 1, 2 de leur pile) ; le calque courant du plan d'arrivée est son
+    // dernier (rang 0 sur une pile de 1) : il en manque deux, en dessous.
     let mut dst = plan(&["Décor"]);
-    assert_eq!(ensure_tracks(&mut dst, &wanted), 2);
+    let specs = vec![
+        (0, "Perso".to_string(), LayerKind::Vector),
+        (1, "Ombre".to_string(), LayerKind::Bitmap),
+        (2, "Fond".to_string(), LayerKind::Vector),
+    ];
+    assert_eq!(ensure_layers_below(&mut dst, &specs), 2);
     let names: Vec<&str> = dst.iter().rev().map(|l| l.name.as_str()).collect();
-    assert_eq!(names, ["Perso", "Ombre", "Décor"], "les calques créés gardent l'ordre d'origine, au-dessus");
-    assert_eq!(ensure_tracks(&mut dst, &wanted), 0, "rien à créer une seconde fois");
-    // La piste d'un calque : son nom et son rang parmi ceux du même nom, en partant du haut.
-    let twice = plan(&["Trait", "Trait"]);
-    assert_eq!((track_of(&twice, 1), track_of(&twice, 0)), (key("Trait", 0), key("Trait", 1)));
+    assert_eq!(names, ["Décor", "Ombre", "Fond"], "le calque courant garde sa place, les nouveaux sont dessous, dans l'ordre");
+    assert_eq!(dst[1].kind, LayerKind::Bitmap);
+    assert_eq!(ensure_layers_below(&mut dst, &specs), 0, "rien à créer une seconde fois");
+    assert_eq!(ensure_layers_below(&mut dst, &[]), 0);
 }
+
 #[test]
 fn keys_are_visited_one_after_the_other_across_all_layers() {
     use crate::app::Mode;

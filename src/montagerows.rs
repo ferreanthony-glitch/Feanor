@@ -37,14 +37,6 @@ fn cam_color() -> Color32 {
     theme::camera()
 }
 
-/// Une piste de calque du montage (chantier 5) : un nom de calque et, quand un plan a plusieurs
-/// calques de ce nom, le rang de celui-ci parmi eux (0 : le plus haut).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct TrackKey {
-    pub name: String,
-    pub nth: usize,
-}
-
 
 /// Le calque d'un plan (`layers`, du bas vers le haut) à la rangée `row` du montage (0 : en
 /// haut) : chaque plan montre ses calques dans son propre ordre, du haut de sa pile vers le bas
@@ -52,18 +44,6 @@ pub(crate) struct TrackKey {
 /// autre »).
 pub(crate) fn layer_in_row(layers: &[Layer], row: usize) -> Option<usize> {
     layers.len().checked_sub(row + 1)
-}
-/// La piste du calque `li` d'un plan (`layers`, du bas vers le haut) : son nom, et son rang parmi
-/// les calques du même nom en partant du haut.
-pub(crate) fn track_of(layers: &[Layer], li: usize) -> TrackKey {
-    let name = layers[li].name.clone();
-    let nth = layers[li + 1..].iter().filter(|l| l.name == name).count();
-    TrackKey { name, nth }
-}
-
-/// Le calque d'un plan (`layers`, du bas vers le haut) sur la piste `key`.
-pub(crate) fn layer_on_track(layers: &[Layer], key: &TrackKey) -> Option<usize> {
-    (0..layers.len()).rev().filter(|&k| layers[k].name == key.name).nth(key.nth)
 }
 
 /// Rangées de la bande, en distance depuis son haut.

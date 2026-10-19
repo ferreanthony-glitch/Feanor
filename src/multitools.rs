@@ -29,17 +29,55 @@ const PIVOT_SNAP: f32 = 6.0;
 /// Geste d'annulation des flèches : une flèche tenue = une étape.
 const NUDGE_GESTURE: u64 = 0x6d75_6c74_696e_7564;
 
+/// Les touches tenues font-elles le geste « tous les calques » (Storyboard Pro : Ctrl+Maj avec
+/// l'outil Sélection) ? Ctrl seul garde le lasso temporaire et la boîte autour du pivot, Maj seul
+/// ajoute ou retire ; Alt est la pipette.
+pub(crate) fn is_all_layers_gesture(m: &egui::Modifiers) -> bool {
+    (m.command || m.ctrl) && m.shift && !m.alt
+}
+
 impl App {
     // ------------------------------------------------------------------ ce qui est choisi
 
     /// Le lasso prend-il sur plusieurs calques ? L'outil Sélection, et plusieurs calques choisis.
     pub(crate) fn multi_wanted(&self) -> bool {
-        self.tool == Tool::Select && self.chosen_layers().len() >= 2
+        self.tool == Tool::Select && (self.chosen_layers().len() >= 2 || self.multi.sel.is_some())
     }
 
-    /// Les calques choisis que la sélection peut toucher à l'image courante, et ceux qu'elle laisse.
+    /// Les rangs de tous les calques du plan courant qui ont un dessin (les dossiers n'en ont pas :
+    /// leurs calques comptent par eux-mêmes ; `multisel::targets` écarte les cachés, les verrouillés
+    /// et les calques vidéo).
+    pub(crate) fn all_layer_ranks(&self) -> Vec<usize> {
+        (0..self.layers().len()).filter(|&li| !self.layers()[li].folder).collect()
+    }
+
+    /// Les calques que la sélection peut toucher à l'image courante, et ceux qu'elle laisse : les
+    /// calques choisis, ou tous ceux du plan pendant un geste Ctrl+Maj (`Multi::all_layers`).
     pub(crate) fn multi_targets(&self) -> Targets {
-        multisel::targets(&self.doc, self.cur_panel, self.cur_frame, &self.chosen_layers())
+        let ranks = if self.multi.all_layers { self.all_layer_ranks() } else { self.chosen_layers() };
+        multisel::targets(&self.doc, self.cur_panel, self.cur_frame, &ranks)
+    }
+
+    /// Ctrl+Maj : les calques où la sélection a pris quelque chose deviennent les calques choisis
+    /// (le calque courant reste le courant), et leurs clés à l'image courante, des clés choisies de
+    /// la timeline et du montage. Le geste « tous les calques » est fini.
+    fn multi_adopt_layers(&mut self) {
+        let was_all = std::mem::take(&mut self.multi.all_layers);
+        if !was_all {
+            return;
+        }
+        let Some(sel) = self.multi.sel.as_ref() else { return };
+        let ids: Vec<u64> = sel.parts.iter().map(|p| p.layer).collect();
+        let cur_id = self.layers().get(self.cur_layer).map(|l| l.id);
+        self.layer_sel = ids.iter().copied().filter(|id| Some(*id) != cur_id).collect();
+        let (pi, f) = (self.cur_panel, self.cur_frame);
+        let keys: Vec<crate::montagekeys::KeyRef> = ids
+            .iter()
+            .filter_map(|id| self.layers().iter().position(|l| l.id == *id))
+            .filter_map(|li| self.key_ref(pi, li, f))
+            .collect();
+        self.key_anchor = keys.first().copied();
+        self.key_sel = keys;
     }
 
     /// La boîte telle qu'on la voit (le geste en cours compris).
@@ -60,7 +98,10 @@ impl App {
 
     /// Un appui avec l'outil Sélection et plusieurs calques choisis : une poignée de la boîte, un
     /// trait, ou le début d'un lasso (ou d'un rectangle).
-    pub(crate) fn multi_press(&mut self, stage: Pos2, screen: Pos2, shift: bool) {
+    /// `all` : Ctrl+Maj tenus (comme dans Storyboard Pro) : le geste prend sur tous les calques du
+    /// plan à l'image courante, comme une nouvelle sélection (Maj seul garde son sens : ajouter ou
+    /// retirer ; Ctrl seul, celui de la boîte, autour du pivot).
+    pub(crate) fn multi_press(&mut self, stage: Pos2, screen: Pos2, shift: bool, all: bool) {
         self.end_stroke();
         self.playing = false;
         self.finish_field_edit();
@@ -87,6 +128,9 @@ impl App {
             });
             return;
         }
+        // Ctrl+Maj : tous les calques du plan, en nouvelle sélection (pas d'ajout).
+        self.multi.all_layers = all;
+        let shift = shift && !all;
         let targets = self.multi_targets();
         let tol = 4.0 / self.view.zoom.max(1e-3);
         if let Some((t, item)) = multisel::hit_item(&self.doc, &targets, stage, tol) {
@@ -110,6 +154,8 @@ impl App {
             if !already {
                 self.multi.sel = Some(MultiSel::new(panel, frame, vec![multisel::vector_part(&t, vec![item])]));
             }
+            // Ctrl+Maj + clic sur un trait : son calque devient un calque choisi.
+            self.multi_adopt_layers();
             // Un clic sur un trait choisi : on le tient, et il suit la souris.
             if let Some(frame) = self.multi_live_frame() {
                 self.multi.drag = Some(MDrag::Transform { handle: Handle::Move, start: stage, frame, snaps: None, aff: Affine::IDENTITY, field: false });
@@ -202,6 +248,8 @@ impl App {
                 }
             }
         }
+        // Ctrl+Maj ne vaut que pour le geste qui vient de finir.
+        self.multi.all_layers = false;
     }
 
     /// Un lasso d'au moins trois points et quatre pixels d'écran.
@@ -212,7 +260,7 @@ impl App {
     }
 
     /// Ce que prend le polygone `poly` (sur la feuille) sur les calques choisis.
-    fn multi_select_polygon(&mut self, poly: &[Pos2], add: bool) {
+    pub(crate) fn multi_select_polygon(&mut self, poly: &[Pos2], add: bool) {
         let targets = self.multi_targets();
         let parts = multisel::select_polygon(&self.doc, &targets, poly);
         let left = targets.skipped_text();
@@ -232,10 +280,13 @@ impl App {
             Some(sel) => sel.merge(parts),
             None => self.multi.sel = Some(MultiSel::new(panel, frame, parts)),
         }
+        let all = self.multi.all_layers;
+        self.multi_adopt_layers();
         let summary = self.multi_summary().unwrap_or_default();
+        let keys = if all && !self.key_sel.is_empty() { format!(" Clés de ces calques choisies dans le montage et la timeline ({}).", crate::montagekeys::key_counts_text(&self.key_sel)) } else { String::new() };
         self.status = match left {
-            Some(l) => format!("{summary} choisis. {l}"),
-            None => format!("{summary} choisis."),
+            Some(l) => format!("{summary} choisis. {l}{keys}"),
+            None => format!("{summary} choisis.{keys}"),
         };
     }
 
@@ -614,7 +665,8 @@ impl App {
         use egui_phosphor::regular as ph;
         let targets = self.multi_targets();
         let chosen = self.chosen_layers().len();
-        ui.label(egui::RichText::new(format!("{chosen} calques choisis : le lasso prend sur tous.")).strong());
+        let plural = if chosen > 1 { "calques choisis : le lasso prend sur tous" } else { "calque choisi" };
+        ui.label(egui::RichText::new(format!("{chosen} {plural}.")).strong());
         if let Some(left) = targets.skipped_text() {
             ui.label(egui::RichText::new(left).small().weak());
         }
@@ -662,7 +714,7 @@ impl App {
             self.box_fields_ui(ui);
         }
         if lasso {
-            ui.label(egui::RichText::new("Une seule boîte entoure tout : chaque geste (déplacer, échelle, tourner, incliner, flèches, champs) s'applique à tous les calques autour du même pivot, en une étape d'annulation. Un clic sur un trait le prend ; Maj : ajouter ou retirer. Les calques cachés ou verrouillés sont laissés de côté.").small().weak());
+            ui.label(egui::RichText::new("Une seule boîte entoure tout : chaque geste (déplacer, échelle, tourner, incliner, flèches, champs) s'applique à tous les calques autour du même pivot, en une étape d'annulation. Un clic sur un trait le prend ; Maj : ajouter ou retirer ; Ctrl+Maj : prendre sur tous les calques du plan (leurs clés se choisissent aussi dans le montage). Les calques cachés ou verrouillés sont laissés de côté.").small().weak());
         }
     }
 }

@@ -130,6 +130,13 @@ mod camkeys_tests;
 mod clescommun;
 #[cfg(test)]
 mod clescommun_tests;
+#[cfg(test)]
+mod clesmulti_tests;
+#[cfg(test)]
+mod multiall_tests;
+mod zoombande;
+#[cfg(test)]
+mod zoombande_tests;
 mod camtools;
 mod canvas;
 #[cfg(test)]

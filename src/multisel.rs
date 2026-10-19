@@ -749,6 +749,10 @@ pub(crate) struct Multi {
     pub clip: Option<MultiClip>,
     /// Les contours des traits choisis, gardés d'une image à l'autre (`contours.rs`).
     pub contours: std::cell::RefCell<Option<crate::contours::Contours>>,
+    /// Ctrl+Maj tenus au début du geste (comme dans Storyboard Pro) : le lasso, le rectangle ou le
+    /// clic prennent sur TOUS les calques du plan à l'image courante, pas seulement les calques
+    /// choisis. Une fois le geste fini, les calques touchés deviennent les calques choisis.
+    pub all_layers: bool,
 }
 
 impl Multi {

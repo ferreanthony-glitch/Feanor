@@ -391,7 +391,7 @@ impl App {
                     } else {
                         "Choisir cet effet : ses clés se voient alors dans la timeline et le montage (les boutons de clé le visent)."
                     };
-                    let name = ui.add_sized(egui::vec2(w, ui.spacing().interact_size.y), egui::SelectableLabel::new(chosen, RichText::new(e.kind.label()).strong()));
+                    let name = ui.add_sized(egui::vec2(w, ui.spacing().interact_size.y), egui::SelectableLabel::new(chosen, crate::bulles::encre_etat(RichText::new(e.kind.label()).strong(), chosen)));
                     if crate::bulles::bulle(name, if chosen { "Effet choisi" } else { "Choisir l'effet" }, hint, "").clicked() {
                         if chosen {
                             self.deselect_fx();

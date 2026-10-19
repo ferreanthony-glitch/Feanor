@@ -1,12 +1,14 @@
 //! Clés du montage choisies à plusieurs (Anthony, 2026-10-17 : « choix et sélection de
 //! plusieurs clés à la fois ») et leurs commandes.
 //! - Un clic sur un dessin de la piste d'un calque le choisit seul ; Ctrl + clic l'ajoute ou le
-//!   retire ; Maj + clic choisit toutes les clés de la rangée entre la dernière cliquée et
-//!   celle-ci, d'un plan à l'autre ; un clic à côté des dessins vide le choix. Ctrl+A : toutes
-//!   les clés du calque courant dans le plan courant.
+//!   retire, sur n'importe quel calque ; Maj + clic choisit le rectangle entre la clé de départ et
+//!   celle-ci (les rangées d'entre comprises, d'un plan à l'autre, `keys_between`) ; un clic à côté
+//!   des dessins vide le choix. Ctrl+A : toutes les clés du calque courant dans le plan courant.
 //! - Au rectangle : un glisser qui part d'un espace vide des pistes de calques (ou avec Ctrl ou
-//!   Maj, de n'importe où dans les pistes) choisit les clés que le rectangle touche ; avec Ctrl
-//!   ou Maj, il les ajoute au choix. Échap rend le choix d'avant (`KeyRect`).
+//!   Maj, de n'importe où dans les pistes) choisit les clés que le rectangle touche, sur TOUTES les
+//!   rangées qu'il couvre ; Maj les ajoute au choix, Ctrl bascule celles qu'il touche (comme les
+//!   clés de caméra). Échap rend le choix d'avant (`KeyRect`). La barre d'état dit « 12 clés sur
+//!   3 calques ».
 //! - Une clé choisie prise par son milieu (ou la limite de deux expositions) emmène les autres clés
 //!   choisies (`KeysDrag`). Mêmes règles que les clés de caméra et d'effets (Anthony, 2026-10-19) :
 //!   par défaut la clé prise (la première des choisies de chaque calque) et TOUTES les clés d'après
@@ -28,15 +30,18 @@
 //!   absorbe) et rien n'est collé si une clé entière sortirait du plan. Maj+Ctrl+V colle « à la
 //!   tête de lecture » (`edition.coller_a_la_tete`) : le bloc commence exactement sur la tête, par-
 //!   dessus ce qui y était, sans rien repousser (« Coller les clés à la tête de lecture »). Venues
-//!   d'un seul calque, les clés vont sur le calque courant ; de plusieurs, chacune sur le calque de
-//!   même nom du plan courant (créé s'il manque, à la même place dans la pile).
+//!   d'un seul calque, les clés vont sur le calque courant ; de plusieurs, chacune garde son calque
+//!   RELATIVEMENT au plus haut calque copié (Anthony, 2026-10-19) : celui-ci va sur le calque
+//!   courant, les autres sur les calques en dessous, dans le même ordre et avec les mêmes écarts
+//!   (`target_rank`) ; ceux qui manquent sous la pile sont créés (`ensure_layers_below`). Avant,
+//!   la règle cherchait un calque de même nom.
 //! - Clé précédente / suivante (A / F) : la tête de lecture va au début de dessin
 //!   d'avant ou d'après, tous les calques compris (`goto_key`).
 
 use crate::app::App;
 use crate::document::{Cel, CelId, Layer, LayerKind};
 use crate::handles::{apply_key_move, clamp_key_delta, duplicate_run, key_preview, overwrite_run, remove_run, runs, Handle, KeyMove};
-use crate::montagerows::{layer_in_row, layer_on_track, track_of, TrackKey};
+use crate::montagerows::layer_in_row;
 
 /// Une clé : plan (id), calque (id), image où commence son exposition.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -52,14 +57,14 @@ pub(crate) struct KeyClip {
 }
 
 /// Une clé copiée : son écart à la première (en images du montage), sa durée, son dessin copié
-/// tel qu'il était, la sorte de son calque, sa piste (nom du calque) et le rang de son calque
-/// en partant du haut de sa pile (pour recréer les calques manquants dans le même ordre).
+/// tel qu'il était, la sorte et le nom de son calque, et le rang de son calque en partant du haut
+/// de sa pile (pour le poser sur le même calque relatif, `target_rank`).
 pub(crate) struct ClipKey {
     pub offset: usize,
     pub len: usize,
     pub cel: Cel,
     pub kind: LayerKind,
-    pub track: TrackKey,
+    pub name: String,
     pub rank: usize,
 }
 
@@ -84,12 +89,14 @@ struct DragLayer {
     starts: Vec<usize>,
 }
 
-/// Un choix au rectangle en cours : son coin de départ (à l'écran), le choix d'avant, et s'il
-/// s'y ajoute (Ctrl ou Maj).
+/// Un choix au rectangle en cours : son coin de départ (à l'écran), le choix d'avant, et la touche
+/// tenue au départ : Maj ajoute au choix, Ctrl bascule les clés touchées (comme pour les clés de
+/// caméra, `clescommun::rect_choice`).
 pub(crate) struct KeyRect {
     pub origin: eframe::egui::Pos2,
     pub before: Vec<KeyRef>,
     pub add: bool,
+    pub toggle: bool,
 }
 
 /// Ce que montre le montage pendant qu'on glisse des clés, pour un calque d'un plan : les
@@ -124,27 +131,46 @@ pub(crate) fn choose(chosen: &[KeyRef], anchor: Option<KeyRef>, key: Option<KeyR
     crate::clescommun::choose_group(chosen, anchor, &[k], toggle, range)
 }
 
-/// Avant de coller des clés venues de plusieurs calques : les calques de leurs pistes `wanted`
-/// (piste, sorte, rang en partant du haut de leur pile d'origine) qui manquent dans `layers`
-/// sont créés, du plus bas au plus haut de leur pile d'origine, chacun posé en haut (ils gardent
-/// donc leur ordre) ; un deuxième calque du même nom va en bas. Renvoie le nombre de créés.
-pub(crate) fn ensure_tracks(layers: &mut Vec<Layer>, wanted: &[(TrackKey, LayerKind, usize)]) -> usize {
-    let mut missing: Vec<&(TrackKey, LayerKind, usize)> = Vec::new();
-    for w in wanted {
-        if layer_on_track(layers, &w.0).is_none() && !missing.iter().any(|m| m.0 == w.0) {
-            missing.push(w);
-        }
+/// Le rang (en partant du haut de la pile du plan) du calque où se pose une clé copiée du rang
+/// `rank` : le plus haut calque copié (`min_rank`) va sur le calque courant (`cur_rank`), les
+/// autres en dessous, dans le même ordre et avec les mêmes écarts (Anthony, 2026-10-19 : « chaque
+/// clé garde son calque relativement au calque le plus haut copié »).
+pub(crate) fn target_rank(cur_rank: usize, min_rank: usize, rank: usize) -> usize {
+    cur_rank + rank.saturating_sub(min_rank)
+}
+
+/// Crée, au bas de la pile `layers` (du bas vers le haut), les calques qui manquent pour que tous
+/// les rangs de `specs` (rang depuis le haut, nom du calque d'origine, sorte) existent. Un calque
+/// créé reprend le nom et la sorte de la clé qui le vise. Renvoie le nombre de créés.
+pub(crate) fn ensure_layers_below(layers: &mut Vec<Layer>, specs: &[(usize, String, LayerKind)]) -> usize {
+    let need = specs.iter().map(|s| s.0 + 1).max().unwrap_or(0);
+    let mut made = 0;
+    while layers.len() < need {
+        // Le rang du calque à créer est le nombre de calques qu'il y a déjà (0 : le plus haut).
+        let rank = layers.len();
+        let (name, kind) = specs
+            .iter()
+            .find(|s| s.0 == rank)
+            .or_else(|| specs.first())
+            .map_or(("Calque".to_string(), LayerKind::Vector), |s| (s.1.clone(), s.2));
+        layers.insert(0, Layer::new(name, kind));
+        made += 1;
     }
-    missing.sort_by_key(|m| std::cmp::Reverse(m.2));
-    for (track, kind, _) in &missing {
-        let layer = Layer::new(track.name.clone(), *kind);
-        if track.nth > 0 {
-            layers.insert(0, layer);
-        } else {
-            layers.push(layer);
-        }
-    }
-    missing.len()
+    made
+}
+
+/// Combien de clés et de calques une liste de clés couvre (« 12 clés sur 3 calques »).
+pub(crate) fn key_counts(keys: &[KeyRef]) -> (usize, usize) {
+    let mut layers: Vec<(u64, u64)> = keys.iter().map(|k| (k.panel, k.layer)).collect();
+    layers.sort_unstable();
+    layers.dedup();
+    (keys.len(), layers.len())
+}
+
+/// « 12 clés sur 3 calques » (ou « 1 clé sur 1 calque »).
+pub(crate) fn key_counts_text(keys: &[KeyRef]) -> String {
+    let (n, m) = key_counts(keys);
+    format!("{n} clé{} sur {m} calque{}", s(n), s(m))
 }
 
 /// Ce qui est choisi (donc éclairé) juste après qu'une clé ou une image a été ajoutée (Anthony,
@@ -309,11 +335,12 @@ impl App {
     }
 
 
-    /// Un clic sur la rangée `row` du montage, sur la clé `key` (rien : à côté des dessins), avec
-    /// Ctrl (`toggle`) ou Maj (`range`).
-    pub(crate) fn click_key(&mut self, key: Option<KeyRef>, row: Option<usize>, toggle: bool, range: bool) {
-        let between = match (range, key, self.key_anchor, row) {
-            (true, Some(k), Some(a), Some(row)) => Some(self.keys_between(a, k, row)),
+    /// Un clic sur la clé `key` (rien : à côté des dessins) d'une piste du montage, avec Ctrl
+    /// (`toggle` : sur n'importe quel calque) ou Maj (`range` : le rectangle entre la clé de départ
+    /// et celle-ci, rangées d'entre comprises).
+    pub(crate) fn click_key(&mut self, key: Option<KeyRef>, toggle: bool, range: bool) {
+        let between = match (range, key, self.key_anchor) {
+            (true, Some(k), Some(a)) => Some(self.keys_between(a, k)),
             _ => None,
         };
         let (sel, anchor) = choose(&self.key_sel, self.key_anchor, key, toggle, between);
@@ -321,8 +348,8 @@ impl App {
         self.key_anchor = anchor;
         if self.key_sel.len() > 1 {
             self.status = format!(
-                "{} clés choisies : glisser pour décaler (Maj : seules celles-ci), Ctrl+C, Ctrl+V (insérer), Maj+Ctrl+V (sur la tête), Suppr, Ctrl+D (dupliquer) ; clic droit pour le reste.",
-                self.key_sel.len()
+                "{} choisies : glisser pour décaler (Maj : seules celles-ci), Ctrl+C, Ctrl+V (insérer), Maj+Ctrl+V (sur la tête), Suppr, Ctrl+D (dupliquer) ; clic droit pour le reste.",
+                key_counts_text(&self.key_sel)
             );
         }
     }
@@ -454,19 +481,30 @@ impl App {
         Vec::new()
     }
 
-    /// Les clés de la rangée `row` entre `a` et `b` (comprises), d'un plan à l'autre.
-    fn keys_between(&self, a: KeyRef, b: KeyRef, row: usize) -> Vec<KeyRef> {
+    /// La rangée (0 : en haut) d'une clé dans la pile de son plan.
+    fn key_row(&self, k: KeyRef) -> Option<usize> {
+        let (pi, li, _, _) = self.locate(k)?;
+        Some(self.doc.panels[pi].layers.len() - 1 - li)
+    }
+
+    /// Maj + clic : le rectangle entre la clé de départ `a` et la clé cliquée `b` : toutes les
+    /// rangées d'entre (les leurs comprises), et sur chacune les clés dont le début est entre les
+    /// deux images, d'un plan à l'autre. Sur une seule rangée, c'est la plage d'une piste.
+    pub(crate) fn keys_between(&self, a: KeyRef, b: KeyRef) -> Vec<KeyRef> {
         let global = |k: KeyRef| self.locate(k).map(|(pi, _, s, _)| self.doc.panel_start(pi) + s);
-        let (Some(ga), Some(gb)) = (global(a), global(b)) else { return vec![b] };
+        let (Some(ga), Some(gb), Some(ra), Some(rb)) = (global(a), global(b), self.key_row(a), self.key_row(b)) else { return vec![b] };
         let (lo, hi) = (ga.min(gb), ga.max(gb));
+        let rows = ra.min(rb)..=ra.max(rb);
         let mut out = Vec::new();
         let mut start = 0;
         for p in &self.doc.panels {
-            if let Some(li) = layer_in_row(&p.layers, row) {
-                let l = &p.layers[li];
-                for (s, _, cel) in runs(l) {
-                    if cel.is_some() && (lo..=hi).contains(&(start + s)) {
-                        out.push(KeyRef { panel: p.id, layer: l.id, start: s });
+            for row in rows.clone() {
+                if let Some(li) = layer_in_row(&p.layers, row) {
+                    let l = &p.layers[li];
+                    for (s, _, cel) in runs(l) {
+                        if cel.is_some() && (lo..=hi).contains(&(start + s)) {
+                            out.push(KeyRef { panel: p.id, layer: l.id, start: s });
+                        }
                     }
                 }
             }
@@ -497,14 +535,9 @@ impl App {
 
     /// Le choix au rectangle suit la souris : les clés des rangées `rows`, images `g0` à `g1`.
     pub(crate) fn drag_key_rect(&mut self, rows: std::ops::RangeInclusive<usize>, g0: usize, g1: usize) {
-        let Some((before, add)) = self.key_rect.as_ref().map(|r| (r.before.clone(), r.add)) else { return };
-        let mut sel = if add { before } else { Vec::new() };
-        for k in self.keys_in_rect(rows, g0, g1) {
-            if !sel.contains(&k) {
-                sel.push(k);
-            }
-        }
-        self.key_sel = sel;
+        let Some((before, add, toggle)) = self.key_rect.as_ref().map(|r| (r.before.clone(), r.add, r.toggle)) else { return };
+        let picked = self.keys_in_rect(rows, g0, g1);
+        self.key_sel = crate::clescommun::rect_choice(&before, &picked, add, toggle);
     }
 
     /// Ctrl+A après un clic sur une piste : toutes les clés du calque courant dans le plan courant.
@@ -549,8 +582,8 @@ impl App {
         for &(pi, li, s, e) in &targets {
             let Some(cel) = self.key_cel(pi, li, s).and_then(|id| self.doc.cels.get(&id)).cloned() else { continue };
             let layers = &self.doc.panels[pi].layers;
-            let (kind, track, rank) = (layers[li].kind, track_of(layers, li), layers.len() - 1 - li);
-            keys.push(ClipKey { offset: self.doc.panel_start(pi) + s - g0, len: e - s, cel, kind, track, rank });
+            let (kind, name, rank) = (layers[li].kind, layers[li].name.clone(), layers.len() - 1 - li);
+            keys.push(ClipKey { offset: self.doc.panel_start(pi) + s - g0, len: e - s, cel, kind, name, rank });
         }
         keys.sort_by_key(|k| k.offset);
         let n = keys.len();
@@ -577,7 +610,7 @@ impl App {
 
     /// Colle les clés copiées, chacune avec son écart et sa durée (sans dépasser la fin du plan) ;
     /// de nouveaux dessins, copies des siens. Venues d'un seul calque : sur le calque courant. De
-    /// plusieurs : chacune sur le calque de même nom du plan courant, créé s'il manque. Les clés
+    /// plusieurs : chacune relativement au plus haut calque copié (`target_rank`), créé s'il manque. Les clés
     /// collées deviennent le choix. `insert` : après la clé de la tête de lecture, en repoussant la
     /// suite ; sinon à la tête de lecture, à la place de ce qui y était.
     fn paste_keys_with(&mut self, insert: bool) {
@@ -591,26 +624,25 @@ impl App {
             self.cur_frame.min(plan.saturating_sub(1))
         };
         let (pi, cur) = (self.cur_panel, self.cur_layer);
-        // (image, durée, dessin, sorte, piste, rang) des clés qui tiennent dans le plan.
-        let wanted: Vec<(usize, usize, Cel, LayerKind, TrackKey, usize)> = self
+        // Chaque clé garde son calque RELATIVEMENT au plus haut calque copié : celui-ci va sur le
+        // calque courant, les autres sur les calques en dessous, dans le même ordre et avec les
+        // mêmes écarts (`target_rank`). Des clés d'un seul calque vont sur le calque courant.
+        let stack = self.doc.panels[pi].layers.len();
+        let cur_rank = stack.saturating_sub(1 + cur);
+        let min_rank = self.key_clipboard.as_ref().and_then(|c| c.keys.iter().map(|k| k.rank).min()).unwrap_or(0);
+        // (image, durée, dessin, sorte, nom du calque d'origine, rang visé) des clés qui tiennent dans le plan.
+        let wanted: Vec<(usize, usize, Cel, LayerKind, String, usize)> = self
             .key_clipboard
             .as_ref()
             .map(|c| {
                 c.keys
                     .iter()
                     .filter(|k| f0 + k.offset < plan)
-                    .map(|k| (f0 + k.offset, k.len.min(plan - f0 - k.offset).max(1), k.cel.clone(), k.kind, k.track.clone(), k.rank))
+                    .map(|k| (f0 + k.offset, k.len.min(plan - f0 - k.offset).max(1), k.cel.clone(), k.kind, k.name.clone(), target_rank(cur_rank, min_rank, k.rank)))
                     .collect()
             })
             .unwrap_or_default();
         let total = self.key_clipboard.as_ref().map_or(0, |c| c.keys.len());
-        let mut tracks: Vec<TrackKey> = Vec::new();
-        for w in &wanted {
-            if !tracks.contains(&w.4) {
-                tracks.push(w.4.clone());
-            }
-        }
-        let several = tracks.len() > 1;
         if wanted.is_empty() {
             self.status = "Rien à coller ici : l'image courante est trop près de la fin du plan.".into();
             return;
@@ -620,8 +652,10 @@ impl App {
         let block = wanted.iter().map(|w| w.0 + w.1 - f0).max().unwrap_or(0);
         if insert {
             let layers = &self.doc.panels[pi].layers;
-            let existing: Vec<usize> = if several { tracks.iter().filter_map(|t| layer_on_track(layers, t)).collect() } else { vec![cur] };
-            let short = existing.iter().filter_map(|&li| layers.get(li)).map(|l| gap_short(l, f0, block, plan)).max().unwrap_or(0);
+            let mut ranks: Vec<usize> = wanted.iter().map(|w| w.5).collect();
+            ranks.sort_unstable();
+            ranks.dedup();
+            let short = ranks.iter().filter_map(|&r| layers.get(stack.checked_sub(1 + r)?)).map(|l| gap_short(l, f0, block, plan)).max().unwrap_or(0);
             if short > 0 {
                 self.status = format!(
                     "Rien collé : les clés d'après sortiraient du plan ({short} image{} de trop). Maj+Ctrl+V colle sur la tête de lecture sans rien repousser.",
@@ -632,28 +666,18 @@ impl App {
         }
         self.end_stroke();
         let snap = self.snapshot();
-        // Plusieurs calques : ceux qui manquent sont créés (`ensure_tracks`).
-        let created = if several {
-            let specs: Vec<(TrackKey, LayerKind, usize)> = wanted.iter().map(|w| (w.4.clone(), w.3, w.5)).collect();
-            ensure_tracks(&mut self.doc.panels[pi].layers, &specs)
-        } else {
-            0
-        };
+        // Les calques qui manquent sous la pile sont créés (`ensure_layers_below`).
+        let specs: Vec<(usize, String, LayerKind)> = wanted.iter().map(|w| (w.5, w.4.clone(), w.3)).collect();
+        let cur_id = self.doc.panels[pi].layers.get(cur).map(|l| l.id);
+        let created = ensure_layers_below(&mut self.doc.panels[pi].layers, &specs);
+        let stack = self.doc.panels[pi].layers.len();
         let panel = self.doc.panels[pi].id;
         let mut pasted = Vec::new();
         let mut layers_used: Vec<u64> = Vec::new();
         let mut opened: Vec<u64> = Vec::new();
-        let cur_kind = self.doc.panels[pi].layers.get(cur).map(|l| l.kind);
-        let cur_id = self.doc.panels[pi].layers.get(cur).map(|l| l.id);
-        for (f, n, cel, kind, track, _) in wanted {
-            let li = if several {
-                layer_on_track(&self.doc.panels[pi].layers, &track)
-            } else {
-                cur_id.and_then(|id| self.doc.panels[pi].layers.iter().position(|l| l.id == id))
-            };
-            let Some(li) = li else { continue };
-            let layer_kind = if several { self.doc.panels[pi].layers[li].kind } else { cur_kind.unwrap_or(kind) };
-            if layer_kind != kind || self.doc.panels[pi].layers[li].folder {
+        for (f, n, cel, kind, _, rank) in wanted {
+            let Some(li) = stack.checked_sub(1 + rank) else { continue };
+            if self.doc.panels[pi].layers[li].kind != kind || self.doc.panels[pi].layers[li].folder {
                 continue;
             }
             let id = self.doc.add_cel(cel);

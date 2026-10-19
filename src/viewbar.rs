@@ -18,7 +18,7 @@ pub(crate) fn tool_hint(tool: crate::app::Tool) -> &'static str {
         Tool::Brush | Tool::Pencil | Tool::Eraser => "Alt + clic : pipette · Ctrl tenu : lasso · Espace : déplacer la vue · ^ $ : taille",
         Tool::Fill => "Clic : remplir · Alt + clic : pipette",
         Tool::Cutter => "Glisser en travers des bouts à enlever · clic : un bout",
-        Tool::Select => "Lasso (Maj : ajouter) · boîte : dedans déplacer · coin ou côté : échelle (Maj : proportions) · hors d'un coin : tourner · bord : incliner · point rond : pivot · flèches : 1 px (Maj : 10)",
+        Tool::Select => "Lasso (Maj : ajouter · Ctrl+Maj : tous les calques) · boîte : dedans déplacer · coin ou côté : échelle (Maj : proportions) · hors d'un coin : tourner · bord : incliner · point rond : pivot · flèches : 1 px (Maj : 10)",
         Tool::SelectColor => "Clic : une couleur (Maj : ajouter) · la boîte se manie comme avec la Sélection",
         Tool::Line => "Glisser : tracer · Maj : par 15°",
         Tool::Rect | Tool::Ellipse => "Glisser : tracer · Maj : carré ou cercle",

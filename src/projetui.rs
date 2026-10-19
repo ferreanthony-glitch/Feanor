@@ -178,8 +178,9 @@ impl App {
             .pivot(Align2::LEFT_TOP)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.selectable_value(&mut self.settings_tab, SettingsTab::Settings, RichText::new("Réglages").strong());
-                    ui.selectable_value(&mut self.settings_tab, SettingsTab::Resolution, RichText::new("Résolution").strong());
+                    let tab = self.settings_tab;
+                    ui.selectable_value(&mut self.settings_tab, SettingsTab::Settings, crate::bulles::encre_etat(RichText::new("Réglages").strong(), tab == SettingsTab::Settings));
+                    ui.selectable_value(&mut self.settings_tab, SettingsTab::Resolution, crate::bulles::encre_etat(RichText::new("Résolution").strong(), tab == SettingsTab::Resolution));
                 });
                 ui.separator();
                 match self.settings_tab {

@@ -256,13 +256,16 @@ impl App {
     pub(crate) fn timeline_view_menu(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label("Zoom");
-            ui.add(
+            let resp = ui.add(
                 egui::Slider::new(&mut self.timeline_cell, crate::timeline::CELL_MIN..=crate::timeline::CELL_MAX)
                     .logarithmic(true)
                     .suffix(" px par image"),
             );
+            if resp.changed() {
+                self.anchor_strip_zoom(crate::zoombande::Strip::Timeline);
+            }
         });
-        ui.label(egui::RichText::new("Ctrl + molette sur la grille : zoomer.").weak().small());
+        ui.label(egui::RichText::new("Ctrl + molette sur la grille : zoomer autour de la tête de lecture.").weak().small());
         ui.separator();
         ui.label(egui::RichText::new("Adapter").strong());
         self.action_item(ui, "Le plan", "timeline.adapter_plan");

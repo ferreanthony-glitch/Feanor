@@ -156,18 +156,8 @@ pub(crate) fn pick_in_rect(diamonds: &[(CamKeyRef, Pos2)], rect: Rect, half: f32
 /// elles s'ajoutent au choix d'avant ; `toggle` (Ctrl) : celles du choix d'avant qu'il touche sont
 /// retirées, les autres ajoutées.
 pub(crate) fn rect_choice(before: &[CamKeyRef], picked: &[CamKeyRef], add: bool, toggle: bool) -> Vec<CamKeyRef> {
-    if toggle {
-        let mut out: Vec<CamKeyRef> = before.iter().copied().filter(|k| !picked.contains(k)).collect();
-        out.extend(picked.iter().copied().filter(|k| !before.contains(k)));
-        return out;
-    }
-    let mut out = if add { before.to_vec() } else { Vec::new() };
-    for k in picked {
-        if !out.contains(k) {
-            out.push(*k);
-        }
-    }
-    out
+    // La règle est la même pour les clés de dessins et de caméra (`clescommun.rs`).
+    crate::clescommun::rect_choice(before, picked, add, toggle)
 }
 
 /// Demi-diagonale d'un losange de clé de caméra à l'écran, en points.

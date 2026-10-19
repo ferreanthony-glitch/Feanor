@@ -555,7 +555,10 @@ impl App {
                 self.run_action("bande.zoom_arriere");
             }
             let resp = ui.add(egui::Slider::new(&mut self.montage_zoom, 0.5..=16.0).logarithmic(true).show_value(false));
-            bulle(resp, "Zoom du montage", "Largeur d'une image dans la bande.", "");
+            if resp.changed() {
+                self.anchor_strip_zoom(crate::zoombande::Strip::Montage);
+            }
+            bulle(resp, "Zoom du montage", "Largeur d'une image dans la bande ; la tête de lecture reste en place.", "");
             if bulle(ui.add(small(ph::MAGNIFYING_GLASS_PLUS)), "Zoom avant", "Ou Ctrl + molette sur la bande.", &inn).clicked() {
                 self.run_action("bande.zoom_avant");
             }
@@ -731,16 +734,20 @@ impl App {
         let height = rows.height(n_tracks);
         let (resp, painter) = ui.allocate_painter(vec2(width, height), Sense::click_and_drag());
         let r = resp.rect;
-        // Ctrl + molette sur la bande : zoom du montage (comme sur la grille de la timeline) ; il
-        // compte à l'image d'écran suivante, l'image courante reste en vue.
+        let left = r.left() + 6.0;
+        // Un zoom a eu lieu à l'image d'écran d'avant : la bande défile pour que la tête de lecture
+        // reste en place (`zoombande.rs`).
+        let head = self.global_frame() as f32;
+        self.follow_strip_anchor(ui, crate::zoombande::Strip::Montage, left, ppf, head);
+        // Ctrl + molette sur la bande : zoom du montage (comme sur la grille de la timeline), autour
+        // de la tête de lecture ; il compte à l'image d'écran suivante.
         if resp.hovered() {
             let zoom = ui.input(|i| i.zoom_delta());
             if zoom != 1.0 {
+                self.anchor_strip_zoom(crate::zoombande::Strip::Montage);
                 self.montage_zoom = (self.montage_zoom * zoom).clamp(0.5, 16.0);
-                self.follow_frame = true;
             }
         }
-        let left = r.left() + 6.0;
         let x_of = |g: usize| left + g as f32 * ppf;
         let bands_top = r.top() + RULER_H;
         let top = r.top() + rows.blocks_top();
@@ -1065,10 +1072,11 @@ impl App {
                 // Un choix au rectangle : depuis un espace vide des pistes de calques, ou avec Ctrl
                 // ou Maj depuis n'importe où dans les pistes (`montagekeys::KeyRect`).
                 let mods = ui.input(|i| i.modifiers);
-                let add = mods.command || mods.shift;
+                let held = mods.command || mods.shift;
                 let in_tracks = self.row_at(origin, r.top(), rows).is_some();
                 let free = self.montage_layer_handle_at(origin, r.top(), &blocks, ppf, rows).is_none();
-                (in_tracks && (add || free)).then(|| crate::montagekeys::KeyRect { origin, before: self.key_sel.clone(), add })
+                // Maj ajoute au choix, Ctrl bascule les clés touchées (comme pour la caméra).
+                (in_tracks && (held || free)).then(|| crate::montagekeys::KeyRect { origin, before: self.key_sel.clone(), add: mods.shift, toggle: mods.command && !mods.shift })
             } {
                 self.sel_clip = None;
                 self.key_focus = true;
@@ -1181,7 +1189,11 @@ impl App {
             if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
                 self.key_rect = None;
                 let n = self.key_sel.len();
-                self.status = format!("{n} clé{} choisie{} : Ctrl+C, Ctrl+V (insérer), Maj+Ctrl+V (sur la tête), Suppr, Ctrl+D ; une clé choisie prise par son milieu décale la suite avec elle (Maj : seules les clés choisies).", if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" });
+                self.status = format!(
+                    "{} choisie{} : Ctrl+C, Ctrl+V (insérer), Maj+Ctrl+V (sur la tête), Suppr, Ctrl+D ; une clé choisie prise par son milieu décale la suite avec elle, calque par calque (Maj : seules les clés choisies).",
+                    crate::montagekeys::key_counts_text(&self.key_sel),
+                    if n > 1 { "s" } else { "" }
+                );
             }
         }
         // Plusieurs clés choisies prises à la fois (`montagekeys`).
@@ -1269,13 +1281,12 @@ impl App {
                     self.sel_clip = None;
                     let f = (((p.x - x_of(self.doc.panel_start(i))) / ppf).floor().max(0.0)) as usize;
                     let key = self.key_ref(i, k, f);
-                    let track = self.row_at(p, r.top(), rows);
                     let mods = ui.input(|i| i.modifiers);
                     self.goto_global(frame_at(p.x));
                     if self.cur_panel == i {
                         self.select_layer(k);
                     }
-                    self.click_key(key, track, mods.command, mods.shift);
+                    self.click_key(key, mods.command, mods.shift);
                 } else if let Some((_, hit)) = self.lane_hit(p, left, ppf, lanes_top) {
                     // Clic dans une piste son : sélectionne l'extrait (ou rien) et y place la tête.
                     self.sel_clip = hit.map(|(id, _)| id);
