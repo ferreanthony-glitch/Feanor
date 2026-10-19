@@ -13,6 +13,12 @@ Mise à jour du 2026-10-19 (branche `perf2`, partie de 8b49066) : les leviers 1,
 **image composée gardée** ; voir la section 9 (mesures avant / après, conception, risques). Les
 chiffres des tableaux 2 et suivants restent ceux de la première passe.
 
+Mise à jour du 2026-10-19 (branche `effets-gpu`, partie de 31b86f1) : les leviers 6 et 7 (**effets sur la
+carte graphique**) sont faits pour tous les effets sauf le tremblement du trait ; voir la section 11
+(conception, écarts avec le processeur, mesures avant / après, risques). Les effets d'un calque et les
+calques d'ajustement se dessinent à pleine résolution, à chaque image, sur la carte ; le calcul de fond
+sur processeur reste pour l'export, les vignettes, le repli sans carte et le réglage éteint.
+
 Ce document dit comment mesurer, ce qui a été mesuré avant et après, ce qui a été changé, ce qui reste
 (classé), et ce qu'il faut regarder à l'écran.
 
@@ -291,8 +297,8 @@ cinq passages, deux à trois séries) :
 | 3 | ~~**Image composée gardée** (dessous / dessus) tant que le plan et les versions ne changent pas~~ **fait** (`perf2`, section 9.3) | carte, 15 calques, souris qui bouge : 2,3 → 0,45 ms par image | fait |
 | 4 | **Vignettes du montage hors du fil de l'interface** | plus de pic de 6 ms en défilant un grand montage (600 plans : tête 11,4 → ≈ 3 ms) | L. Il faut des tuiles partageables (`Arc<Tile>`) pour ne pas copier les dessins vers le fil ; touche le moteur de pinceau. |
 | 5 | **Décodage PNG en flux vers les tuiles** (crate `png` en dépendance directe, déjà dans `Cargo.lock`) | ouverture 7,3 → ≈ 4 s, mémoire ÷30 par fil | S à M |
-| 6 | **Cache d'images composées en mémoire** pour la lecture des plans à effets | 24 images/s garanties avec 10 effets ou plus (les effets se calculent sur le processeur) | L. Avec la carte graphique pour les effets (7). |
-| 7 | **Effets sur la carte graphique** (flou, ombre, bruit, mosaïque) | enlève le processeur de la lecture des plans à effets | L. Mené par l'agent des effets. |
+| 6 | ~~**Cache d'images composées en mémoire** pour la lecture des plans à effets~~ **sans objet** : la carte dessine les effets à chaque image (section 11), plus rien à garder | 24 images/s garanties avec 10 effets ou plus : 1,5 à 22 ms par image, pleine résolution | fait |
+| 7 | ~~**Effets sur la carte graphique** (flou, ombre, bruit, mosaïque)~~ **fait** (`effets-gpu`, section 11) : 28 effets sur 29, calques d'ajustement hors dossier | scène d'Anthony : 2,9 ms par image en pleine résolution (avant : aperçu au quart, pleine résolution au repos seulement) ; curseur du flou 3,5 ms | fait |
 | 8 | ~~**Taille mémoire de la carte réglable** (`CACHE_BYTES` = 1 Go, sur 8 Go)~~ **fait** par le diagnostic (section 7) : réglage « Cache de la carte graphique » dans les Préférences, qui monte à 2 Go sur une carte de 8 Go (profil Qualité) | ×2 de dessins en cache à coût nul | fait |
 | 9 | **Résolution d'affichage** (réduite pour la vue éloignée) | composition ÷4 en zoom arrière | M à L |
 | 10 | **PGO** (optimisation guidée par un profil) | 5 à 15 % sur le rendu des traits (non mesuré) | M. Demande `llvm-profdata` et une procédure hors ligne. |
@@ -337,7 +343,7 @@ logiciel, moins de 2 Go de mémoire vidéo, une mesure plus de 4,5 fois plus len
 virtuelle, moins de 4 Go de mémoire vidéo, une mesure plus de 2,2 fois plus lente. Sinon Qualité. Un disque
 lent se dit mais ne change rien. La phrase d'explication cite les constats avec leurs chiffres.
 
-**Les dix réglages** (`PerfReglages`, `[performance]` dans reglages.toml ; tous modifiables dans
+**Les onze réglages** (`PerfReglages`, `[performance]` dans reglages.toml ; tous modifiables dans
 Fichier > Préférences… > Performance ; la valeur par défaut est le comportement d'avant) :
 
 | Réglage | Branché sur | Qualité | Équilibré | Performance | Prise d'effet |
@@ -352,6 +358,7 @@ Fichier > Préférences… > Performance ; la valeur par défaut est le comporte
 | Fils de calcul | `parallele::coeurs` (tous les calculs répartis, fil des effets) | automatique | automatique | un cœur libre sur 3 à 4 fils | tout de suite |
 | Vignettes | `thumbs::thumb_size`, vignettes de calque | normales | normales | moitié (quart si faible) | tout de suite, vignettes refaites |
 | Animations | `egui::Style::animation_time`, `ajuste::ease` | non | non | oui | tout de suite |
+| Effets sur la carte graphique | `GpuCanvas::set_effects_gpu` (`gpufx.rs`) | oui | oui (non sur un rendu logiciel) | oui seulement sur une carte dédiée | tout de suite |
 
 « Rapide partout » : le rendu exact des traits texturés ne vient que pour l'image affichée à l'arrêt
 (`warm_current_cel`) ; avant un export (images, film, PDF, image courante, Storyboard Pro) les autres
@@ -605,4 +612,155 @@ est le réglage retenu.
 Reste : la pleine résolution (227 ms) n'est pas fluide, c'est le repos ; l'export de 1 000 images coûterait environ
 4 min 30 pour les images chargées (une secousse de pixels de la feuille entière, caméra hors de la feuille comprise :
 calculer seulement dans le cadre de la caméra serait un gain d'un facteur 3 à 4, non fait — les effets lisent des
-positions de la feuille entière).
+positions de la feuille entière). *(Mise à jour : sur la carte graphique, section 11, la pleine résolution tient en
+lecture : 1,5 à 1,8 ms par image sur cette scène.)*
+
+## 11. Effets sur la carte graphique (2026-10-19, branche `effets-gpu`, partie de 31b86f1)
+
+Demande d'Anthony : des effets en temps réel, à pleine résolution, pendant la lecture et pendant qu'on tire un
+curseur ; le calcul sur processeur reste la référence exacte de l'export. Code : `gpufx.rs` (chaînes de passes,
+textures de travail, pipelines), `gpufx.wgsl` (les 27 passes), `gpu.rs` (branchement), essais `gpufx_tests.rs` (carte
+contre processeur), mesures `gpufxperf_tests.rs`.
+
+### 11.1 Comment ça marche
+
+- **Un calque dont toute la pile d'effets passe par la carte n'est plus calculé par le fil de fond.** `GpuCanvas::sync`
+  n'envoie que son dessin d'origine (texture à la taille du contenu, comme tout dessin) ; la pile de ses effets à cette
+  image (`fx::steps_at` : réglages déjà interpolés entre les clés, sur le processeur, très peu coûteux) devient une
+  **chaîne de passes** (`gpufx::plan_chain`) : chaque effet est une à huit passes de dessin (un réglage de couleur une,
+  le flou six, la lueur sept, l'ombre portée et la lueur diffuse huit) sur des textures de travail en 8 bits, avec
+  va-et-vient entre elles (une réserve les recycle). La dernière passe écrit la **texture résultat** du calque, composée ensuite comme n'importe quel dessin :
+  transformation du calque, opacité, mode de fusion, pelure d'oignon, maillage d'une enveloppe, tout est inchangé.
+- **Une texture par calque à effets**, à la taille de ce que les effets touchent (le contenu, plus la portée du flou, de
+  l'ombre ou du flou de mouvement ; la feuille entière pour ce qui remplit l'image : flash, vignettage, secousse,
+  image d'impact, lueur diffuse, déformations), arrondie à 128 pixels. Elle est gardée d'une image à l'autre et
+  **redessinée seulement si sa signature change** (effets et réglages, version du dessin d'origine) : une image fixe, un
+  plan arrêté, une souris qui bouge ne dessinent aucune passe (essai `only_changed_effects_are_redrawn`).
+- **Calques d'ajustement** (`calqueffet.rs`) hors dossier : le repère reste dans le plan ; à sa place dans la pile, la
+  composition passe en lecture, la chaîne de passes s'applique à l'image composée jusque-là (papier compris), et le
+  résultat est posé dessus avec l'opacité et le mode du calque (`compose_span`). Plus de dessin dérivé, plus de
+  copie, plus d'attente : l'image n'est plus montrée « sans l'effet » en attendant.
+- **Tout est à pleine résolution** : l'aperçu réduit (`fxproxy.rs`) ne sert plus aux piles qui passent par la carte.
+- **Les passes sont exactes** : mêmes formules, mêmes arrondis (textures de travail en 8 bits comme les dessins,
+  sommes entières pour les flous et la mosaïque), même hasard (bruit, grain, rayons et lignes de l'image d'impact : la
+  même fonction de hachage en WGSL, `hash01`, `noise_at`, `value_noise`). Le **flou gaussien** est celui du processeur :
+  trois flous en boîte en lignes, trois en colonnes, avec la même perte d'énergie au bord de la feuille (un noyau unique
+  — la convolution des trois boîtes — avait donné jusqu'à 40 niveaux d'écart sur les bords de la feuille, où le
+  processeur coupe chaque passe à la limite de la zone).
+
+### 11.2 Écart avec le processeur (essais, feuille 640 × 360 : disque, aplats, trait fin, bords collés à la feuille)
+
+Niveaux de 0 à 255, sur les pixels qui portent quelque chose d'un côté ou de l'autre. Seuil des essais : moyenne ≤ 0,5,
+maximum ≤ 4 (sauf la composition entière avec transformation, 1 % de pixels au-delà de 2).
+
+| Effet | Moyenne | Maximum |
+|---|---|---|
+| flou gaussien (4 à 60 px), lueur, ombre portée, aberration chromatique, négatif, seuil, éclairage, dégradé, mosaïque | 0 | 0 à 1 |
+| luminosité / contraste, niveaux, teinte / saturation, noir et blanc | 0,003 à 0,09 | 1 |
+| bruit, grain de film (même hasard) | 0,02 | 1 |
+| netteté, flou de mouvement, secousse (avec flou de bougé), vignettage | < 0,01 | 1 |
+| image d'impact (négatif, noir et blanc, inversé, postérisé ; éclat, lignes) | 0,001 à 0,035 | 1 |
+| flash en fondu / en écran | 0 / 0,32 | 0 / 1 |
+| postérisation | 0,2 | 2 |
+| lueur diffuse (6 à 110 px) | 0,005 à 0,01 | 1 à 2 |
+| onde, ondulation, tourbillon, pincement, nuages | 0 | 1 |
+| piles (flou + bruit + teinte ; impact + lueur + secousse ; secousse + grain + vignettage) | 0,013 à 0,042 | 1 à 2 |
+| calque d'ajustement (lueur + vignettage ; flou + grain à 60 % ; flash en Produit ; secousse + aberration), composition entière | 0,017 à 0,032 | 1 à 4 (79 pixels sur 230 400 au-delà de 2 pour la fusion Produit) |
+| pile avec opacité 170, Produit et transformation (rotation 6°, échelle 0,9) | 0,039 | 26 sur 189 pixels (lissage de la carte aux bords du calque tourné, pas l'effet) |
+
+Les écarts de 1 niveau sont les arrondis de la carte (le rond « au plus proche » du 8 bits) contre ceux du
+processeur, aux demi-niveaux exacts.
+
+### 11.3 Ce qui reste sur le processeur, et la règle de mélange
+
+- **Le tremblement du trait** (`tremblement.rs`, calque vectoriel seulement) : il redessine le dessin vectoriel ;
+  calcul de fond, aperçu réduit, comme avant.
+- **Une pile qui contient un seul effet sans passe est calculée tout entière sur le processeur.** L'ordre des effets
+  compte et le calcul sur processeur ne sait pas partir d'une texture de la carte : mélanger (carte puis processeur)
+  demanderait de relire l'image à chaque étape. Aujourd'hui seul le tremblement du trait est dans ce cas, et il est
+  d'ordinaire le premier de la pile.
+- Un calque rempli par CTG, un fond sous le trait, une image de vidéo, une feuille flottante en cours de geste :
+  chemin d'avant (la carte n'a que leur dessin dérivé).
+- **Un calque d'ajustement dans un dossier** (il ne couvre que les calques de son dossier), ou à côté d'un
+  calque d'ajustement qui ne passe pas : tous les repères du plan sont résolus sur le processeur
+  (`gpufx::adjustments_supported`), comme avant. Reste à faire si on en a besoin : composer le dossier à part.
+- **L'export, les vignettes, la pipette, le pot de peinture** : calcul sur processeur, exact, inchangé (les vignettes
+  enregistrées et l'export n'ont jamais passé par l'écran). Sans carte graphique (OpenGL de secours), ou si le shader est
+  refusé au démarrage (`GpuFx::try_new`, message sur la sortie d'erreur), ou réglage éteint : le chemin d'avant,
+  tel quel.
+
+### 11.4 Réglage
+
+« Effets sur la carte graphique » (Fichier > Préférences… > Performance, `effets_carte_graphique` dans
+`reglages.toml`), allumé par défaut ; onzième réglage du diagnostic. Qualité : allumé. Équilibré : allumé sauf rendu
+logiciel. Performance : allumé seulement sur une carte dédiée (un graphisme intégré ou virtuel n'a pas la puissance
+pour 8 millions de pixels à chaque image ; le calcul réduit au quart peut faire mieux). La case est grisée
+(« non disponible sur cette carte graphique ») si le shader n'a pas été accepté. Éteindre ou rallumer joue tout de suite.
+
+### 11.5 Mesures
+
+Poste de référence (Core i7-10700K, RTX 2080 SUPER, pilote d'origine), 2026-10-19, feuille 3840 × 2160, cadre 1920 × 1080,
+24 images/s, dessins réels de la scène d'Anthony (`TEST PELURE_effets`, copie lue en lecture seule). Commandes :
+
+```
+cargo test --release --offline --target-dir target\msvc --lib gpufxperf -- --ignored --nocapture --test-threads=1
+cargo test --release --offline --target-dir target\msvc --lib -- mesure_scene_calcul_de_fond mesure_calques_effets_en_lecture --ignored --nocapture --test-threads=1
+```
+
+Le temps de la carte est **mesuré en entier** : `sync` (envoi des tuiles, plan), passes d'effets, composition, affichage
+d'un écran de 1920 × 1080, attente de la fin du travail de la carte. Pas de relecture de l'image.
+
+| Mesure | Avant (calcul de fond, aperçu) | Après (carte graphique, pleine résolution) |
+|---|---|---|
+| **Scène 1** : flou animé 8 → 130 px + luminosité sur le vecto ; bruit animé + teinte / saturation + fusion sur le bitmap. Lecture, 47 images | aperçu réduit en lecture (1/2 sous 80 % de zoom, 1/4 sous 35 %) ; 1ᵉʳ tour à froid : aucune image avec ses effets (0 sur 47) ; 24 images/s tenues une fois le cache chaud | **2,9 ms par image** en moyenne (2,85 médiane, 5,1 p95, 5,7 pire) = 340 images/s ; toutes les images avec leurs effets dès le 1ᵉʳ tour (157 ms en tout au 1ᵉʳ tour : envoi des dessins et pipelines) |
+| Scène 1, curseur du flou (rayon change, image fixe) | résultat après 17 ms (pleine) ou 11 ms (aperçu) | **3,5 ms** (pleine résolution) |
+| Scène 1, curseur du bruit | résultat après 50 ms (pleine) ou 18 ms (aperçu) | **0,9 ms** |
+| **Scène 2** : image d'impact, lueur qui pulse, secousse avec flou de bougé (images 20 à 43), timecode, en calques d'ajustement par-dessus deux dessins. Lecture, 48 images | débit du fil de fond, aperçu au quart : 27 à 31 images/s (33 à 37 ms par image ; 12 images/s à froid) ; pleine résolution au repos : 308 ms par image ; export exact : 310 ms | **1,5 ms par image** en moyenne (2,5 pire) ; images chargées (20 à 43) : 1,8 ms ; 680 images/s |
+| Mémoire vidéo, scène 1 | dessins dérivés envoyés (jusqu'au cache de 1 Go) | dessins 82 Mo + effets 218 Mo (textures résultat et de travail) |
+| Mémoire vidéo, scène 2 | idem | dessins 24 Mo + effets 37 Mo |
+
+Un effet à la fois sur le grand bitmap de la scène 1 (859 tuiles ; ms par image pour redessiner l'effet, image fixe : 0,16
+à 0,22 ms avec la composition gardée) :
+
+| Effet | ms | Effet | ms |
+|---|---|---|---|
+| luminosité / contraste | 0,6 | netteté | 1,0 |
+| niveaux | 0,6 | ombre portée (20, 12 px de flou) | 2,5 |
+| teinte / saturation | 0,6 | lueur (20 px) | 3,1 |
+| bruit | 0,6 | flou gaussien 40 px | 4,4 |
+| image d'impact | 0,8 | flou de mouvement 120 px | 4,3 |
+| aberration chromatique | 0,8 | lueur diffuse 60 px | 1,1 |
+| secousse avec flou de bougé | 1,3 | flou gaussien 130 px | 11,7 |
+
+**Pire cas** (un dessin opaque qui couvre toute la feuille de 3840 × 2160, effets redessinés à chaque image) :
+flou 190 px : 24 ms ; flou 100 + lueur 60 + lueur diffuse 150 + secousse avec flou + teinte + bruit : 22 ms ;
+flou de mouvement 300 + ombre portée + netteté : 15 ms. Les 24 images/s (41,7 ms) tiennent même là ; mémoire vidéo
+jusqu'à 133 Mo de dessins + 200 Mo d'effets.
+
+### 11.6 Risques et limites
+
+- **Mémoire vidéo** : une texture résultat par calque à effets (jusqu'à 33 Mo pour une feuille 4K entière), comptée dans
+  le cache de la carte (réglage « Cache de la carte graphique ») et chassée comme les autres, plus des textures de travail
+  (256 Mo au plus, libérées après 8 s d'inutilité). Une animation image par image où chaque dessin est différent a une
+  texture résultat par dessin affiché.
+- **Le premier affichage d'un effet** fabrique son pipeline (5 à 30 ms) si le fil de préparation du démarrage n'a pas fini ;
+  d'ordinaire déjà prêts.
+- **Flou de 130 px et plus sur un très grand dessin** : jusqu'à 25 ms sur cette carte (une carte plus faible ferait moins de
+  24 images/s) ; l'aperçu réduit sur processeur reste disponible en éteignant le réglage.
+- **Les calques d'ajustement dans un dossier** retombent sur le calcul de fond (11.3).
+- **Pas vu à l'écran** (aucune application lancée dans cette séance, les essais comparent des pixels) : voir 11.7.
+
+### 11.7 À regarder à l'écran
+
+- Une pile de la scène 1 (flou animé, bruit, teinte, fusion) en lecture : l'image doit être la même qu'avant au repos, sans
+  l'instant « sans effet » quand on change de réglage ; un curseur de flou, de bruit, de lueur, de grain : suit la souris sans
+  retard.
+- Les sept effets du menu Cinéma sur un calque et en calque d'ajustement (impact, lueur, secousse avec flou, vignettage,
+  grain, aberration, flash) : mêmes images qu'avant, un grain qui change à chaque image, une secousse qui suit ses clés.
+- Une pile avec un tremblement du trait puis un flou : elle reste calculée sur le processeur (aperçu en lecture) ; ajouter ou
+  retirer le tremblement ne change pas l'aspect au repos.
+- Un calque d'ajustement dans un dossier : même rendu que hors dossier, un peu moins fluide.
+- Éteindre « Effets sur la carte graphique » dans les Préférences, en lecture : retour au calcul de fond sans clignotement
+  (l'image reste, l'aperçu réduit revient) ; le rallumer.
+- Le diagnostic : la ligne « Effets sur la carte graphique » dans la liste des réglages et dans le rapport.
+- Mémoire vidéo dans le Gestionnaire des tâches pendant une longue lecture d'un plan où chaque dessin a des effets.

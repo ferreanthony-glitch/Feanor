@@ -2008,9 +2008,10 @@ saturation 129 → 24 ; noir et blanc 34 → 13 ; négatif 33 → 12 ; postéris
 - un calque déplacé ou tourné par la caméra (multiplan), la mosaïque, les déformations et le rendu
   restent en pleine résolution, et attendent leur calcul de fond (dernier résultat montré).
 
-**Reste pour une passe sur la carte graphique** (pas fait : le calcul de fond et l'aperçu tiennent
-la scène d'Anthony en temps réel sur processeur ; la carte graphique le ferait sans copier le
-dessin d'origine ni envoyer le résultat) :
+**Reste pour une passe sur la carte graphique** *(fait le 2026-10-19, branche `effets-gpu` : voir « Effets de
+calque sur la carte graphique » plus bas ; ce qui suit est le plan d'origine, 8 à 10 jours estimés)* (pas fait au
+moment de cette passe : le calcul de fond et l'aperçu tiennent la scène d'Anthony en temps réel sur processeur ; la
+carte graphique le ferait sans copier le dessin d'origine ni envoyer le résultat) :
 - fragment unique pour les réglages de couleur et le bruit (luminosité, niveaux, teinte, noir et
   blanc, négatif, postérisation, seuil, bruit : même hachage en WGSL), appliqué dans `fs_compose`
   avant l'opacité — 1 à 2 jours, sans cache ni texture en plus ;
@@ -2073,6 +2074,38 @@ Suite de la passe précédente, leviers 1 à 3 de `docs/PERFORMANCE.md` (section
 - À essayer par Anthony : Ctrl+S dans un vrai gros projet (barre d'état, point • du titre, Quitter
   pendant l'écriture), un long trait qui traverse la feuille, des calques transformés, une
   enveloppe, la lecture d'un plan chargé.
+
+## Effets de calque sur la carte graphique (2026-10-19, branche `effets-gpu`) ✅
+
+Demande d'Anthony : les effets de calque sur la carte graphique, en temps réel, à pleine résolution pendant la lecture et
+les curseurs ; le calcul sur processeur reste la référence de l'export. Détail, écarts et mesures :
+`docs/PERFORMANCE.md`, section 11.
+- **Chaînes de passes** (`gpufx.rs`, `gpufx.wgsl`, branchées dans `gpu.rs`) : la pile d'effets d'un calque se dessine
+  à la composition sur des textures de travail en 8 bits (va-et-vient, réserve recyclée), les réglages déjà interpolés
+  entre les clés partent en uniformes à chaque image. La texture résultat est gardée et redessinée seulement quand sa
+  signature change. 28 effets sur 29 : réglages de couleur, flou gaussien (trois boîtes, comme le processeur), flou de
+  mouvement, netteté, bruit, mosaïque, ombre portée, lueur, onde, ondulation, tourbillon, pincement, nuages, éclairage,
+  dégradé, flash, image d'impact, lueur diffuse, secousse, vignettage, grain, aberration chromatique. Seul le tremblement du
+  trait reste sur le processeur ; une pile qui en contient un (ou un calque CTG, un fond, une vidéo) est calculée tout
+  entière sur le processeur.
+- **Calques d'ajustement hors dossier** : leurs effets passent sur l'image composée jusque-là (papier compris), résultat
+  posé avec l'opacité et le mode du calque. Dans un dossier : calcul de fond comme avant.
+- **Même hasard, mêmes arrondis** : écart de 0 à 2 niveaux avec le processeur sur tous les effets (4 au plus sur la
+  composition entière avec un mode de fusion), flou et déformations compris (`gpufx_tests.rs`, 19 essais, passés
+  s'il n'y a pas de carte ; les mesures sont dans `gpufxperf_tests.rs`, essais `#[ignore]`).
+- **Réglage « Effets sur la carte graphique »** (allumé par défaut, Préférences > Performance, onzième réglage du
+  diagnostic ; Équilibré l'éteint sans carte réelle, Performance hors carte dédiée) ; repli sur le processeur si le shader
+  est refusé.
+- **Mesures** (RTX 2080 SUPER, feuille 3840 × 2160, pleine résolution) : scène d'Anthony 2,9 ms par image en lecture,
+  curseur du flou 3,5 ms, curseur du bruit 0,9 ms ; scène impact + lueur + secousse 1,5 ms par image (avant : quart de
+  résolution, 33 à 37 ms par image sur le fil de fond, pleine résolution 308 ms au repos) ; pire cas d'une feuille pleine avec
+  six effets lourds : 22 ms.
+- À essayer par Anthony (rien n'a été lancé à l'écran) : `docs/PERFORMANCE.md` 11.7 (lecture et curseurs de la scène, les
+  sept effets Cinéma sur un calque et en calque d'ajustement, tremblement + flou, calque d'ajustement dans un dossier,
+  réglage éteint en lecture, mémoire vidéo).
+- Reste : calques d'ajustement dans un dossier (composer le dossier à part), le tremblement du trait, un mélange carte /
+  processeur dans une même pile, un aperçu réduit sur la carte pour les cartes faibles, les vignettes de la timeline (elles
+  passent encore par le calcul de fond).
 
 ## Diagnostic des performances (2026-10-19, branche `diagnostic`) ✅
 

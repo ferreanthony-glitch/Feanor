@@ -375,25 +375,6 @@ fn stacks_of_several_effects_match_the_cpu() {
     check("secousse + grain + vignettage", &mut gpu, &rs, &s, &[step(EffectKind::Shake, &[10.0, -5.0, 0.5, 100.0, 0.0]), step(EffectKind::Grain, &[30.0, 2.0, 5.0, 12.0]), step(EffectKind::Vignette, &[60.0, 55.0, 60.0, 50.0, 50.0, 100.0, 100.0])], 0.5, 4);
 }
 
-/// Essai de mise au point : où sont les plus grands écarts d'un effet.
-#[test]
-#[ignore]
-fn debug_where_the_gap_is() {
-    let rs = gpu_or_return!();
-    let mut gpu = GpuCanvas::new(&rs);
-    let s = scene(W, H);
-    let steps = [step(EffectKind::GaussianBlur, &[4.0])];
-    let (a, b) = (on_gpu(&mut gpu, &rs, &s, &steps), on_cpu(&s, &steps));
-    let mut shown = 0;
-    for (i, (p, q)) in a.iter().zip(&b).enumerate() {
-        let d = p.to_array().iter().zip(q.to_array()).map(|(x, y)| (*x as i32 - y as i32).abs()).max().unwrap();
-        if d > 8 && shown < 25 {
-            println!("({}, {}) carte {:?} processeur {:?}", i % W, i / W, p, q);
-            shown += 1;
-        }
-    }
-}
-
 // ---------------------------------------------------------------------- la composition entière
 
 /// Le plan entier par la carte (image composée) et par le calcul sur processeur (l'export).

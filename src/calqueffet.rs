@@ -22,6 +22,11 @@
 //! essais il est calculé tout de suite, à pleine résolution (`Mode::Blocking`). En attendant le
 //! résultat l'image se montre sans l'effet. La carte graphique et le processeur composent le même
 //! dessin dérivé : ils ne peuvent pas différer.
+//!
+//! **Sur la carte graphique** (`gpufx.rs`, réglage allumé par défaut), l'écran ne résout pas les repères des
+//! calques hors dossier dont toute la pile a des passes : la carte applique la pile à l'image composée jusque-là,
+//! à pleine résolution, à chaque image, et pose le résultat avec l'opacité et le mode du calque. Le chemin
+//! ci-dessus sert alors à l'export, aux vignettes, aux calques dans un dossier et quand le réglage est éteint.
 
 use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
