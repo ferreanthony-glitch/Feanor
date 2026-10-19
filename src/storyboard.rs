@@ -538,6 +538,9 @@ impl App {
         let key = self.raccourci("vue.planches");
         crate::bulles::choix_a(ui, &mut self.board_view, BoardView::Scene, ph::PAINT_BRUSH, "Vue dessin", "Dessiner le plan courant.", &key, "vue.planches");
         crate::bulles::choix_a(ui, &mut self.board_view, BoardView::Panels, ph::SQUARES_FOUR, "Vue vignettes", "Toutes les images de storyboard en planche : le début de chaque plan, puis ses marques d'image.", &key, "vue.planches");
+        // Crayonnés rapides : une page de petites cases à dessiner d'un trait, qui deviennent des plans.
+        let shown = self.crayonnes_shown();
+        self.command_button(ui, ph::NOTE_PENCIL, "storyboard.crayonnes", "Planche de crayonnés", "Une page de petites cases où enchaîner des croquis très vite ; chaque case devient un plan.", Some(shown));
     }
 
     /// Le zoom du montage, en bas de la bande et petit (Anthony, 2026-10-17 : « il faut le mettre

@@ -159,6 +159,8 @@ impl App {
                 self.action_item(ui, "Nouveau plan", "panneau.nouveau");
                 self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
                 ui.separator();
+                self.action_item(ui, "Planche de crayonnés…", "storyboard.crayonnes");
+                ui.separator();
                 self.action_item(ui, "Aller à un plan…", "scene.aller_a");
                 self.action_item(ui, "Propriétés du plan", "panneau.proprietes");
                 ui.menu_button("Plans", |ui| self.plans_menu(ui));

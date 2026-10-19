@@ -86,6 +86,7 @@ impl App {
         match pane {
             Pane::Montage | Pane::Timeline if self.mode == Mode::Animation => "Timeline",
             Pane::Montage | Pane::Timeline => "Montage",
+            Pane::Canvas if self.crayonnes_shown() => "Crayonnés",
             Pane::Canvas if self.mode == Mode::Storyboard && self.board_view == BoardView::Panels => "Vignettes",
             p => p.tab_name(),
         }
@@ -114,7 +115,9 @@ impl App {
         match pane {
             Pane::Canvas => {
                 ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::fond());
-                if self.mode == Mode::Storyboard && self.board_view == BoardView::Panels {
+                if self.crayonnes_shown() {
+                    self.crayonnes_panel(ui);
+                } else if self.mode == Mode::Storyboard && self.board_view == BoardView::Panels {
                     self.board_view(ui);
                 } else {
                     self.canvas_panel(ui);

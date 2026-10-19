@@ -1011,6 +1011,50 @@ qu'il reste du contenu caché de ce côté).
   Dupliquer ou copier un plan ne copie pas sa réserve ; couper un plan garde le début caché au premier
   plan, réunir deux plans ne garde que le début caché du premier.
 
+## Crayonnés rapides (la planche)
+
+Une page de petites cases, toutes au rapport du cadre du projet, où l'on enchaîne des croquis très
+vite (thumbnailing) ; chaque case devient ensuite un plan. Ce n'est pas une vue des plans existants :
+c'est une surface de dessin. S'ouvre par Storyboard > Planche de crayonnés…, le bouton à côté de
+« Vue vignettes » (barre du montage), ou Ctrl+K > « Planche de crayonnés » (`storyboard.crayonnes`) ; elle
+prend la place du dessin en storyboard.
+
+- **Dessiner** : directement sur la page, au crayon (trait vectoriel lisse, net à toute échelle),
+  au pinceau du logiciel (bitmap) ou à la gomme (coupe les traits, efface la peinture) ; les touches
+  des outils marchent. Sans latence, comme dans le dessin : l'aperçu du trait est dans l'image de la
+  case à chaque point reçu, jamais de rejeu du moteur. **Un trait appartient à la case où il
+  commence** et est coupé à elle (à l'écran comme dans le plan).
+- **Barre** : crayon, pinceau, gomme · trois tailles · noir et deux gris · annuler, rétablir · vider la
+  case, insérer une case, supprimer la case · page précédente / suivante, ajouter une page · grille
+  (2×2, 3×2, 4×3 par défaut, 4×4, 6×4) · case suivante automatique (éteinte : après une pause d'une
+  seconde, la case suivante) · toutes les cases dessinées · Créer les plans · fermer.
+- **Aller de case en case** : Tab / Maj+Tab et les flèches (Page préc. / suiv. : la page) quand la planche
+  a la main (le dernier clic y était). Chaque case a son numéro et, dessous, une ligne de légende (texte
+  court) qui deviendra le texte d'action du plan.
+- **Choisir** : clic sur le numéro d'une case (Maj : jusqu'à la dernière cliquée, Ctrl : ajouter ou
+  retirer) ; Maj ou Ctrl + appui dans la case marchent aussi (sans tracer) ; « Toutes les cases dessinées ».
+  **Changer l'ordre** : glisser le numéro d'une case sur une autre. Clic droit sur une case : choisir,
+  créer son plan, insérer avant / après, reculer, avancer, vider, supprimer, cocher.
+- **Créer les plans** : une fenêtre demande où (après le plan courant, ou dans une nouvelle séquence) et la
+  durée de chaque plan (2 s). Un plan par case choisie, dans l'ordre de la planche ; le dessin de la case
+  va sur un calque « Crayonné » (les traits restent vectoriels et sont mis à l'échelle du cadre ; la peinture
+  du pinceau va sur un calque bitmap « Crayonné (pinceau) », rééchantillonnée) sous un calque « Dessin »
+  vide ; la légende devient le texte d'action. **Une seule étape d'annulation** du projet. Les cases restent
+  sur la page, avec une petite coche verte.
+- **Annuler** : la planche a sa propre pile (traits, gomme, ordre, cases ajoutées ou retirées, vidées,
+  légendes, grille). Ctrl+Z dans la planche défait aussi la création des plans quand c'est la dernière
+  étape du projet. Suppr vide les cases choisies (ou la courante) ; Ctrl+A les choisit.
+- **Enregistrée** dans `crayonnes.json`, à côté du manifeste (le format du projet ne change pas ; absent,
+  il n'y a pas de planche ; une planche sans rien dedans n'écrit rien). Les protections de la
+  fiabilité s'appliquent : un fichier illisible ou d'une version plus récente n'est jamais effacé ni
+  réécrit (il est mis de côté sous `.illisible` si une planche neuve doit prendre sa place), et l'écriture se
+  fait atomiquement sur le fil d'enregistrement.
+- Limites : les traits d'une case sont lisses (pas de pinceau texturé dans les cases : leur rendu est exact et
+  immédiat) ; une case garde la taille et le rapport qu'avait le cadre à sa création (un cadre d'un autre
+  rapport : la case est mise à l'échelle sans déformation, centrée) ; le pinceau bitmap rééchantillonné d'une
+  case de 640 px sur un cadre de 1 920 px est flou ; « Créer » rééchantillonne la peinture sur le fil de
+  l'interface (une peinture de pleine page prend une fraction de seconde par case).
+
 ## Palette de commandes
 
 Ctrl+K (ou Aide > Palette de commandes) : tape quelques lettres du nom d'une commande (« persp »,
@@ -1111,6 +1155,7 @@ Bus/
   modeles/15.pelure3d  les modèles 3D de repère
   commentaires.json    les commentaires de la timeline (absent : aucun commentaire)
   rognages.json        le contenu rogné des plans (absent : rien de rogné)
+  crayonnes.json       la planche de crayonnés rapides (absent : pas de planche)
 ```
 
 Si tu enregistres « Bus.pelure » dans `Films`, le fichier est donc dans `Films\Bus\Bus.pelure`, pas
@@ -1311,6 +1356,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `camfx.rs`, `camfxui.rs` | Effets de caméra en préréglages (tremblements, explosion, zooms, vertigo) et liste des focales |
 | `cadrage.rs`, `cadrageui.rs` | Aides au cadrage (tiers, grille d'or, spirale, diagonales, croix) : géométrie, réglages, tracé |
 | `commentaires.rs`, `commentairesui.rs` | Commentaires sur la timeline : modèle, fichier `commentaires.json`, positions ; fanions, bulle, menu, panneau |
+| `crayonnes.rs`, `crayonnesui.rs` | Crayonnés rapides : planche de cases (traits vectoriels, pinceau bitmap), appartenance et coupe des traits, ordre, pages, annulation, création des plans (mise à l'échelle), fichier `crayonnes.json` ; page, barre, gestes, numéros, légendes, fenêtre « Créer les plans » |
 | `rognage.rs`, `rognageui.rs` | Rogner les plans sans rien détruire : réserve du début et de la fin, ripple, roll, glisser, aimantation, durée tapée, fichier `rognages.json` ; bords à la souris, flèches, commandes, fenêtre « Durée… » |
 | `app.rs` | État de l'application, actions, raccourcis |
 | `vtools.rs` | Outils des calques vectoriels |

@@ -139,6 +139,10 @@ mod zoombande;
 mod zoombande_tests;
 mod camtools;
 mod canvas;
+mod crayonnes;
+#[cfg(test)]
+mod crayonnes_tests;
+mod crayonnesui;
 #[cfg(test)]
 mod color_tests;
 mod commentaires;
