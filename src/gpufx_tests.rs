@@ -76,10 +76,17 @@ struct Scene {
     id: CelId,
 }
 
+/// Version des dessins de ces essais. Le cache des effets du processeur de référence, commun à tous les essais
+/// du processus, est indexé par numéro et version de dessin : des dessins d'autres essais, de même numéro et de
+/// même version (0 ou 1), mais d'un autre contenu, s'y confondraient. Ceux-ci portent une version à eux.
+const OWN_VERSION: u64 = 5_000_000;
+
 fn scene(w: usize, h: usize) -> Scene {
     let mut doc = Document::new(w, h, 24);
     let id = doc.new_cel(LayerKind::Bitmap);
-    doc.cels.get_mut(&id).unwrap().raster = content(w, h);
+    let cel = doc.cels.get_mut(&id).unwrap();
+    cel.raster = content(w, h);
+    cel.version = OWN_VERSION;
     Scene { doc, id }
 }
 
@@ -386,6 +393,32 @@ fn whole_plan(gpu: &mut GpuCanvas, rs: &RenderState, s: &Scene, plan: &Plan) -> 
     (a, crate::render::composite_full(&s.doc, plan))
 }
 
+/// Les deux scènes d'Anthony, en 3840 × 2160 : la composition entière sur la carte et sur le processeur (l'export).
+#[test]
+fn the_users_scenes_match_the_cpu_at_full_size() {
+    crate::fxcache::monde::lire();
+    let rs = gpu_or_return!();
+    let mut gpu = GpuCanvas::new(&rs);
+    // (Chaque scène a ses versions de dessins à elle : voir `OWN_VERSION`. Les deux ont les mêmes numéros.)
+    let (mut scene_1, _) = crate::fxperf_tests::scene();
+    let mut scene_2 = crate::effetsperf_tests::scene_with_effects();
+    for (k, doc) in [&mut scene_1, &mut scene_2].into_iter().enumerate() {
+        for cel in doc.cels.values_mut() {
+            cel.version += OWN_VERSION + 1_000_000 * (k as u64 + 1);
+        }
+    }
+    for (name, doc, frames) in [("flou + bruit + fusion", &scene_1, [1usize, 22, 40]), ("impact + lueur + secousse", &scene_2, [12, 25, 38])] {
+        for f in frames {
+            let plan = crate::render::panel_plan_at(doc, 0, f, doc.render_paper());
+            let _ = render_with(&mut gpu, &rs, doc, &plan, true);
+            let (a, b) = (gpu.read_frame(), crate::render::composite_full(doc, &plan));
+            let g = gap(&a, &b);
+            println!("{name}, image {f:>2} : moyenne {:.4}  max {:>3}  > 2 niveaux : {} sur {}", g.mean, g.max, g.over2, g.counted);
+            assert!(g.mean <= 0.5 && (g.over2 as f64) < g.counted as f64 * 0.005, "{name}, image {f} : {g:?}");
+        }
+    }
+}
+
 #[test]
 fn opacity_blend_mode_and_transform_apply_after_the_effects() {
     crate::fxcache::monde::lire();
@@ -406,9 +439,15 @@ fn opacity_blend_mode_and_transform_apply_after_the_effects() {
 
 /// Un repère de calque d'ajustement hors dossier.
 fn adjustment(steps: Vec<FxStep>, opacity: u8, blend: crate::blend::BlendMode) -> PlanItem {
+    marker(steps, opacity, blend, 0, true)
+}
+
+/// Un repère de calque d'ajustement : `from` est le rang, dans les éléments du plan, du premier élément qu'il
+/// couvre (dans un dossier : `root` faux).
+fn marker(steps: Vec<FxStep>, opacity: u8, blend: crate::blend::BlendMode, from: usize, root: bool) -> PlanItem {
     use crate::calqueffet::Reglage;
     use crate::render::FondPart;
-    let r = Reglage { layer: 7, from: 0, root: true, steps, opacity, blend };
+    let r = Reglage { layer: 7, from, root, steps, opacity, blend };
     PlanItem { cel: (1 << 62) | 7, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: Some(FondPart::Reglage(std::sync::Arc::new(r))), pre: None }
 }
 
@@ -473,9 +512,28 @@ fn only_changed_effects_are_redrawn() {
     assert!(gpu.stats().textures <= textures + 1, "{} textures, il y en avait {textures}", gpu.stats().textures);
 }
 
+/// L'image que montre la carte quand le calcul de fond sur processeur a répondu : on redemande tant que le
+/// résultat n'est pas arrivé (une demande peut être abandonnée par l'écran d'un autre essai : l'état des effets en
+/// attente est commun à tous les essais du processus, `fxcache::monde`).
+fn background_frame(gpu: &mut GpuCanvas, rs: &RenderState, s: &Scene, plan: &Plan, steps: &[FxStep]) -> Vec<Color32> {
+    let want = on_cpu(s, steps);
+    let mut frame = Vec::new();
+    for _ in 0..300 {
+        let _ = render_with(gpu, rs, &s.doc, plan, true);
+        crate::fxcache::settle();
+        let _ = render_with(gpu, rs, &s.doc, plan, true);
+        frame = gpu.read_frame();
+        if gap(&frame, &want).max == 0 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    frame
+}
+
 #[test]
 fn a_stack_with_a_warp_and_the_switch_off_use_the_cpu_path() {
-    crate::fxcache::monde::ecrire();
+    crate::fxcache::monde::lire();
     let rs = gpu_or_return!();
     let mut gpu = GpuCanvas::new(&rs);
     let s = scene(W, H);
@@ -484,20 +542,17 @@ fn a_stack_with_a_warp_and_the_switch_off_use_the_cpu_path() {
     let plan = Plan { paper: None, items: vec![item(s.id, mixed.clone())] };
     let _ = render_with(&mut gpu, &rs, &s.doc, &plan, true);
     assert_eq!(gpu.effects_passes(), 0, "aucune passe : la pile n'est pas entièrement sur la carte");
-    crate::fxcache::settle();
-    let _ = render_with(&mut gpu, &rs, &s.doc, &plan, true);
-    let g = gap(&gpu.read_frame(), &on_cpu(&s, &mixed));
+    let g = gap(&background_frame(&mut gpu, &rs, &s, &plan, &mixed), &on_cpu(&s, &mixed));
     assert!(g.max == 0, "le calcul de fond donne exactement la référence : {g:?}");
+    assert_eq!(gpu.effects_passes(), 0);
     // Le réglage éteint : même une pile entièrement sur la carte passe par le calcul de fond.
     let simple = vec![step(EffectKind::GaussianBlur, &[9.0])];
     let plan = Plan { paper: None, items: vec![item(s.id, simple.clone())] };
     gpu.set_effects_gpu(false);
     assert!(!gpu.effects_on());
-    let _ = render_with(&mut gpu, &rs, &s.doc, &plan, true);
+    let g = gap(&background_frame(&mut gpu, &rs, &s, &plan, &simple), &on_cpu(&s, &simple));
+    assert_eq!(g.max, 0, "le calcul de fond donne exactement la référence : {g:?}");
     assert_eq!(gpu.effects_passes(), 0);
-    crate::fxcache::settle();
-    let _ = render_with(&mut gpu, &rs, &s.doc, &plan, true);
-    assert_eq!(gap(&gpu.read_frame(), &on_cpu(&s, &simple)).max, 0);
     // Rallumé : la carte reprend.
     gpu.set_effects_gpu(true);
     assert!(gpu.effects_on());

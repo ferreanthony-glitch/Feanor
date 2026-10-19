@@ -667,6 +667,12 @@ maximum ≤ 4 (sauf la composition entière avec transformation, 1 % de pixels a
 | piles (flou + bruit + teinte ; impact + lueur + secousse ; secousse + grain + vignettage) | 0,013 à 0,042 | 1 à 2 |
 | calque d'ajustement (lueur + vignettage ; flou + grain à 60 % ; flash en Produit ; secousse + aberration), composition entière | 0,017 à 0,032 | 1 à 4 (79 pixels sur 230 400 au-delà de 2 pour la fusion Produit) |
 | pile avec opacité 170, Produit et transformation (rotation 6°, échelle 0,9) | 0,039 | 26 sur 189 pixels (lissage de la carte aux bords du calque tourné, pas l'effet) |
+| **les deux scènes d'Anthony en 3840 × 2160**, composition entière contre `render::composite_full` (images 1, 22, 40 de la scène 1 ; 12, 25, 38 de la scène 2), 8 294 400 pixels | 0 à 0,007 (0,18 sur l'image 12, l'image d'impact) | 1 à 2, aucun pixel à plus de 2 niveaux |
+
+*Piste non terminée* : composer un calque d'ajustement **dans un dossier** sur la carte (calques du dossier dans une image
+à part, effets, pose en mode normal). Un essai donnait, sous charge (suite complète en parallèle), des écarts intermittents
+énormes avec le processeur de référence (cause non trouvée : état commun du cache des effets entre essais, ou course) ; non
+livré, ces calques restent résolus sur le processeur.
 
 Les écarts de 1 niveau sont les arrondis de la carte (le rond « au plus proche » du 8 bits) contre ceux du
 processeur, aux demi-niveaux exacts.
