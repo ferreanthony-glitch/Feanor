@@ -152,7 +152,7 @@ fn each_profile_sets_what_it_promises() {
 fn each_switch_maps_to_exactly_one_setting_and_changes_what_the_program_reads() {
     let loin = d::reglages_du_profil(Profil::Performance, &machine(6, 4, GenreCarte::Integree, Some(1)));
     let origine = PerfReglages::default();
-    assert_eq!(Interrupteur::TOUS.len(), 10);
+    assert_eq!(Interrupteur::TOUS.len(), 11);
     for i in Interrupteur::TOUS {
         let mut x = origine;
         i.copier(&mut x, &loin);
@@ -167,13 +167,13 @@ fn each_switch_maps_to_exactly_one_setting_and_changes_what_the_program_reads() 
         assert_ne!(i.texte(&x), i.texte(&origine), "{i:?}");
         assert!(!i.nom().is_empty() && !i.aide().is_empty());
     }
-    // Les dix réglages sont toute la structure : un seul tour de table les remet tous.
+    // Les onze réglages sont toute la structure : un seul tour de table les remet tous.
     let mut tout = origine;
     for i in Interrupteur::TOUS {
         i.copier(&mut tout, &loin);
     }
     assert_eq!(tout, loin);
-    assert_eq!(d::differences(&origine, &loin).len(), 10);
+    assert_eq!(d::differences(&origine, &loin).len(), 11);
     assert!(d::differences(&loin, &loin).is_empty());
     // Un seul réglage ne demande pas d'ouvrir un projet de nouveau : les traits texturés.
     assert_eq!(Interrupteur::TOUS.iter().filter(|i| !i.immediat()).collect::<Vec<_>>(), vec![&Interrupteur::TraitsTextures]);
@@ -182,7 +182,7 @@ fn each_switch_maps_to_exactly_one_setting_and_changes_what_the_program_reads() 
 #[test]
 fn the_settings_become_the_values_the_program_reads() {
     let c = PerfReglages::default().cibles();
-    assert_eq!((c.effets_min, c.tremblement_coupe, c.fils, c.vignettes_pct, c.animations_coupees), (0, false, 0, 100, false));
+    assert_eq!((c.effets_min, c.tremblement_coupe, c.fils, c.vignettes_pct, c.animations_coupees, c.effets_gpu), (0, false, 0, 100, false, true));
     assert_eq!(c.pelure_max, crate::onion::MAX_NEIGHBOURS);
     assert_eq!((c.cache_carte, c.cache_traits, c.cache_effets), (1 << 30, 512 << 20, 768 << 20));
     let p = PerfReglages {
@@ -196,9 +196,10 @@ fn the_settings_become_the_values_the_program_reads() {
         vignettes: Vignettes::Minimales,
         animations_coupees: true,
         traits_textures: TraitsTextures::Rapide,
+        effets_gpu: false,
     }
     .cibles();
-    assert_eq!((p.effets_min, p.tremblement_coupe, p.pelure_max, p.fils, p.vignettes_pct, p.animations_coupees), (1, true, 2, 3, 25, true));
+    assert_eq!((p.effets_min, p.tremblement_coupe, p.pelure_max, p.fils, p.vignettes_pct, p.animations_coupees, p.effets_gpu), (1, true, 2, 3, 25, true, false));
     assert_eq!((p.cache_carte, p.cache_traits, p.cache_effets), (512 << 20, 256 << 20, 384 << 20));
     // Hors bornes (fichier édité à la main) : ramené dans les bornes.
     let fou = PerfReglages { pelure_max: 99, cache_carte_mo: 1, cache_traits_mo: 999_999, cache_effets_mo: 0, fils: 9999, ..Default::default() }.sanitized();

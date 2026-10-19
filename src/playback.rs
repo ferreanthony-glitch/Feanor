@@ -61,7 +61,14 @@ pub fn upcoming_frames(doc: &Document, at: Position) -> Vec<(usize, usize)> {
 
 /// Dessins visibles des images à venir, dans l'ordre où ils serviront, sans ceux déjà affichés,
 /// au plus `cap`.
+#[cfg(test)]
 pub fn upcoming_cels(doc: &Document, at: Position, shown: &Plan, cap: usize) -> Vec<CelId> {
+    upcoming_cels_with(doc, at, shown, cap, false)
+}
+
+/// Comme `upcoming_cels`. `gpu_fx` : les effets de calque passent par la carte graphique (`gpufx.rs`) ;
+/// un calque dont toute la pile y passe envoie son dessin d'origine, pas un dessin dérivé.
+pub fn upcoming_cels_with(doc: &Document, at: Position, shown: &Plan, cap: usize, gpu_fx: bool) -> Vec<CelId> {
     let mut out = Vec::new();
     if cap == 0 {
         return out;
@@ -75,7 +82,8 @@ pub fn upcoming_cels(doc: &Document, at: Position, shown: &Plan, cap: usize) -> 
             }
             let Some(id) = layer.shown_at(f) else { continue };
             // Un calque à effets montre son dessin dérivé (`upcoming_derived`), pas le dessin même.
-            if !crate::fx::layer_steps(layer, f, None).is_empty() {
+            let steps = crate::fx::layer_steps(layer, f, None);
+            if !steps.is_empty() && !(gpu_fx && layer.ctg.is_none() && layer.video.is_none() && crate::gpufx::steps_supported(&steps)) {
                 continue;
             }
             if out.contains(&id) || shown.items.iter().any(|i| i.cel == id) {
@@ -93,20 +101,34 @@ pub fn upcoming_cels(doc: &Document, at: Position, shown: &Plan, cap: usize) -> 
 /// Les effets des images qui viennent (13i) : leurs dessins dérivés sont demandés au fil de fond,
 /// la plus proche d'abord (`fx::prefetch`), et ceux qui sont déjà calculés sont rendus pour être
 /// envoyés d'avance à la carte graphique, au plus `cap`. `level` : aperçu des effets (`fx::draft_level`).
+#[cfg(test)]
 pub fn upcoming_derived(doc: &Document, at: Position, level: u8, cap: usize) -> Vec<crate::gpu::Ahead> {
+    upcoming_derived_with(doc, at, level, cap, false)
+}
+
+/// Comme `upcoming_derived`. `gpu_fx` : les effets de calque passent par la carte graphique
+/// (`gpufx.rs`) : les piles qui y passent entièrement ne sont pas demandées au fil de fond (la carte
+/// les dessine à l'image), pas plus que les calques d'ajustement dont tous les repères y passent.
+pub fn upcoming_derived_with(doc: &Document, at: Position, level: u8, cap: usize, gpu_fx: bool) -> Vec<crate::gpu::Ahead> {
     let mut out: Vec<crate::gpu::Ahead> = Vec::new();
     for (k, (p, f)) in upcoming_frames(doc, at).into_iter().enumerate() {
         // (Avec le papier de l'écran : le dessin d'un calque d'effet au plus bas le compte.)
         let plan = crate::render::panel_plan_at(doc, p, f, doc.render_paper());
-        crate::fx::prefetch(doc, &plan.items, k as u32 + 1, level);
+        let on_gpu = |item: &crate::render::PlanItem| gpu_fx && crate::gpu::gpu_fx_item(doc, item);
+        let adjust_on_gpu = gpu_fx && crate::gpufx::adjustments_supported(&plan);
+        for item in plan.items.iter().filter(|i| !on_gpu(i)) {
+            crate::fx::prefetch(doc, std::slice::from_ref(item), k as u32 + 1, level);
+        }
         // Les calques d'effets de cette image : leurs dessins sont demandés au fil de fond, et ceux qui
         // sont prêts partent d'avance à la carte graphique (`calqueffet.rs`).
-        for (id, cel) in crate::calqueffet::ahead(doc, &plan, k as u32 + 1, level) {
-            if out.len() < cap && !out.iter().any(|a| a.id == id) {
-                out.push(crate::gpu::Ahead { id, cel: Some(cel) });
+        if !adjust_on_gpu {
+            for (id, cel) in crate::calqueffet::ahead(doc, &plan, k as u32 + 1, level) {
+                if out.len() < cap && !out.iter().any(|a| a.id == id) {
+                    out.push(crate::gpu::Ahead { id, cel: Some(cel) });
+                }
             }
         }
-        for item in &plan.items {
+        for item in plan.items.iter().filter(|i| !on_gpu(i)) {
             if out.len() >= cap {
                 break;
             }

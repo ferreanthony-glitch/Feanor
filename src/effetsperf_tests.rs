@@ -30,7 +30,7 @@ fn ms(t: Instant) -> f64 {
 }
 
 /// Le plan de l'utilisateur, ses effets de calques retirés, avec les quatre calques d'effets.
-fn scene_with_effects() -> Document {
+pub(crate) fn scene_with_effects() -> Document {
     let (mut doc, _) = crate::fxperf_tests::scene();
     for l in &mut doc.panels[0].layers {
         l.fx.clear();

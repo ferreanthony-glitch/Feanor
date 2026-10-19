@@ -61,7 +61,7 @@ pub(crate) struct DiagnosticUi {
     pub(crate) fait: Option<Termine>,
     /// Le profil regardé, et les réglages cochés.
     profil: Profil,
-    coches: [bool; 10],
+    coches: [bool; 11],
     message: String,
     /// Durée d'animation d'egui avant qu'on la coupe.
     animation: f32,
@@ -78,7 +78,7 @@ impl DiagnosticUi {
             banc: None,
             fait: None,
             profil: Profil::Equilibre,
-            coches: [false; 10],
+            coches: [false; 11],
             message: String::new(),
             animation: egui::Style::default().animation_time,
         }
@@ -120,6 +120,7 @@ impl App {
             c.appliquer_globales();
             if let Some(gpu) = &self.gpu {
                 gpu.set_cache_bytes(c.cache_carte);
+                gpu.set_effects_gpu(c.effets_gpu);
             }
             if avant.vignettes != p.vignettes {
                 self.thumbs.clear();
@@ -571,6 +572,10 @@ impl App {
             ui.end_row();
             aide(ui, "Animations", Interrupteur::Animations);
             ui.checkbox(&mut p.animations_coupees, "interface sans animations");
+            ui.end_row();
+            aide(ui, "Effets sur la carte graphique", Interrupteur::EffetsGpu);
+            let gpu_ok = self.gpu.as_ref().is_none_or(|g| g.effects_supported());
+            ui.add_enabled(gpu_ok, egui::Checkbox::new(&mut p.effets_gpu, if gpu_ok { "flous, lueurs, bruit… dessinés par la carte, à chaque image" } else { "non disponible sur cette carte graphique" }));
             ui.end_row();
         });
         ui.horizontal_wrapped(|ui| {

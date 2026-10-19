@@ -325,6 +325,11 @@ mod frames;
 #[cfg(test)]
 mod frames_tests;
 mod gpu;
+mod gpufx;
+#[cfg(test)]
+mod gpufx_tests;
+#[cfg(test)]
+mod gpufxperf_tests;
 mod groups;
 mod groupsui;
 mod handles;

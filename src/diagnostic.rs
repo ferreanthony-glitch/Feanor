@@ -10,7 +10,7 @@
 //! 4. **appliquer**, ou **revenir comme avant** : les valeurs d'avant sont gardées dans les réglages
 //!    (`EtatDiagnostic`), même après un redémarrage.
 //!
-//! Les dix réglages (`Interrupteur`) sont de vrais réglages de SHOT, tous visibles dans
+//! Les onze réglages (`Interrupteur`) sont de vrais réglages de SHOT, tous visibles dans
 //! Fichier > Préférences… (section « Performance ») : le diagnostic ne fait que les poser. Leur
 //! valeur par défaut est le comportement d'avant le diagnostic. Ils s'appliquent tout de suite,
 //! sans redémarrer, sauf le rendu des traits vectoriels texturés, qui joue à l'ouverture d'un
@@ -28,6 +28,7 @@
 //! | fils de calcul | `parallele::coeurs` (tous les calculs répartis) et fil des effets |
 //! | vignettes | `thumbs::thumb_size`, vignettes de calque |
 //! | animations de l'interface | `egui::Style::animation_time`, glissement des panneaux |
+//! | effets sur la carte graphique | `GpuCanvas::set_effects_gpu` : les effets de calque se dessinent sur la carte à chaque image (`gpufx.rs`) ; éteint, calcul de fond sur processeur |
 
 use serde::{Deserialize, Serialize};
 
@@ -142,6 +143,11 @@ pub struct PerfReglages {
     /// Interface sans animations (survols, panneaux qui glissent).
     #[serde(rename = "animations_coupees")]
     pub animations_coupees: bool,
+    /// Les effets de calque se dessinent sur la carte graphique, à pleine résolution, à chaque image
+    /// (`gpufx.rs`) ; éteint, ils se calculent en arrière-plan sur le processeur, en aperçu réduit pendant
+    /// la lecture (le comportement d'avant).
+    #[serde(rename = "effets_carte_graphique")]
+    pub effets_gpu: bool,
 }
 
 impl Default for PerfReglages {
@@ -157,6 +163,7 @@ impl Default for PerfReglages {
             fils: 0,
             vignettes: Vignettes::Normales,
             animations_coupees: false,
+            effets_gpu: true,
         }
     }
 }
@@ -186,6 +193,7 @@ impl PerfReglages {
             fils: r.fils as usize,
             vignettes_pct: r.vignettes.pourcent(),
             animations_coupees: r.animations_coupees,
+            effets_gpu: r.effets_gpu,
         }
     }
 }
@@ -208,6 +216,8 @@ pub struct Cibles {
     pub fils: usize,
     pub vignettes_pct: u32,
     pub animations_coupees: bool,
+    /// Effets de calque dessinés par la carte graphique (`GpuCanvas::set_effects_gpu`).
+    pub effets_gpu: bool,
 }
 
 impl Cibles {
@@ -225,7 +235,7 @@ impl Cibles {
     }
 }
 
-/// Un des dix réglages que le diagnostic propose.
+/// Un des onze réglages que le diagnostic propose.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Interrupteur {
     #[serde(rename = "effets_reduits")]
@@ -248,6 +258,8 @@ pub enum Interrupteur {
     Vignettes,
     #[serde(rename = "animations")]
     Animations,
+    #[serde(rename = "effets_gpu")]
+    EffetsGpu,
 }
 
 fn oui_non(b: bool) -> String {
@@ -265,7 +277,7 @@ fn mo(n: u32) -> String {
 }
 
 impl Interrupteur {
-    pub const TOUS: [Interrupteur; 10] = [
+    pub const TOUS: [Interrupteur; 11] = [
         Interrupteur::EffetsReduits,
         Interrupteur::TraitsTextures,
         Interrupteur::Tremblement,
@@ -276,6 +288,7 @@ impl Interrupteur {
         Interrupteur::Fils,
         Interrupteur::Vignettes,
         Interrupteur::Animations,
+        Interrupteur::EffetsGpu,
     ];
 
     pub fn nom(self) -> &'static str {
@@ -290,6 +303,7 @@ impl Interrupteur {
             Interrupteur::Fils => "Fils de calcul",
             Interrupteur::Vignettes => "Vignettes du montage et de la timeline",
             Interrupteur::Animations => "Animations de l'interface",
+            Interrupteur::EffetsGpu => "Effets sur la carte graphique",
         }
     }
 
@@ -306,6 +320,7 @@ impl Interrupteur {
             Interrupteur::Fils => "Nombre de cœurs au plus pour les calculs répartis (ouverture, enregistrement, effets, rendus). Automatique : tous. Moins de fils laisse de la place à l'interface.",
             Interrupteur::Vignettes => "Les vignettes se calculent à une résolution plus basse (agrandies à l'affichage) : moins de calcul et de mémoire.",
             Interrupteur::Animations => "Pas de transitions sur les survols et les menus, et les panneaux s'ajustent d'un coup au lieu de glisser.",
+            Interrupteur::EffetsGpu => "Flous, lueurs, bruit, grain, secousse… se dessinent sur la carte graphique, à pleine résolution, à chaque image : lecture et curseurs en temps réel. Éteint, ils se calculent sur le processeur, en arrière-plan, en aperçu réduit pendant la lecture. L'export est identique dans les deux cas. Sans carte graphique ou si elle refuse le calcul, le processeur sert de lui-même.",
         }
     }
 
@@ -334,6 +349,7 @@ impl Interrupteur {
             },
             Interrupteur::Vignettes => r.vignettes.nom().into(),
             Interrupteur::Animations => oui_non(r.animations_coupees),
+            Interrupteur::EffetsGpu => oui_non(r.effets_gpu),
         }
     }
 
@@ -350,6 +366,7 @@ impl Interrupteur {
             Interrupteur::Fils => vers.fils = depuis.fils,
             Interrupteur::Vignettes => vers.vignettes = depuis.vignettes,
             Interrupteur::Animations => vers.animations_coupees = depuis.animations_coupees,
+            Interrupteur::EffetsGpu => vers.effets_gpu = depuis.effets_gpu,
         }
     }
 
@@ -376,6 +393,7 @@ impl Interrupteur {
             Interrupteur::Fils => format!("{} fils", c.fils),
             Interrupteur::Vignettes => format!("{} %", c.vignettes_pct),
             Interrupteur::Animations => format!("animations coupées : {}", c.animations_coupees),
+            Interrupteur::EffetsGpu => format!("effets sur la carte graphique : {}", c.effets_gpu),
         }
     }
 }
@@ -603,6 +621,12 @@ pub fn reglages_du_profil(profil: Profil, m: &Materiel) -> PerfReglages {
     let vram_mo = m.carte.as_ref().and_then(|c| c.vram).map(|v| (v >> 20) as u32);
     let logiques = m.processeur.logiques;
     let peu_de_ram = ram.is_some_and(|g| g < 16.0);
+    // Effets sur la carte graphique : pleine résolution à chaque image. Une vraie carte les tient (Équilibré) ;
+    // un graphisme intégré ou virtuel, pas toujours (Performance : le calcul réduit sur processeur, qui
+    // travaille sur un quart des pixels en lecture, peut faire mieux) ; un rendu logiciel jamais.
+    let genre = m.carte.as_ref().map(|c| c.genre);
+    let vraie_carte = genre.is_some_and(|g| g != GenreCarte::Logicielle);
+    let carte_dediee = genre == Some(GenreCarte::Dediee);
     match profil {
         Profil::Qualite => {
             let mut r = PerfReglages::default();
@@ -623,6 +647,7 @@ pub fn reglages_du_profil(profil: Profil, m: &Materiel) -> PerfReglages {
             cache_carte_mo: vram_mo.map_or(768, |v| (v / 8).clamp(512, CACHE_CARTE_MO)),
             cache_traits_mo: if peu_de_ram { 384 } else { CACHE_TRAITS_MO },
             cache_effets_mo: if peu_de_ram { 512 } else { CACHE_EFFETS_MO },
+            effets_gpu: vraie_carte,
             ..PerfReglages::default()
         },
         Profil::Performance => {
@@ -639,6 +664,7 @@ pub fn reglages_du_profil(profil: Profil, m: &Materiel) -> PerfReglages {
                 fils: if (3..=4).contains(&logiques) { logiques as u32 - 1 } else { 0 },
                 vignettes: if tres_peu { Vignettes::Minimales } else { Vignettes::Reduites },
                 animations_coupees: true,
+                effets_gpu: carte_dediee,
             }
         }
     }

@@ -467,6 +467,20 @@ on les coche et décoche, le dessin reste tel quel).
   enregistrées et le calcul sans écran donnent exactement les mêmes pixels qu'avant : seule la
   vitesse a changé. Mesures dans `docs/ROADMAP.md` (« Effets de calque : vitesse »), à relancer
   par `cargo test --release --lib fxperf -- --ignored --nocapture --test-threads=1`.
+- **Effets sur la carte graphique** (2026-10-19, `src/gpufx.rs`, `src/gpufx.wgsl`). Les effets d'un calque
+  et ceux des calques d'ajustement hors dossier se dessinent sur la carte graphique, **à pleine résolution, à
+  chaque image** : plus d'aperçu réduit en lecture, plus d'attente quand on change un réglage, les curseurs
+  suivent la souris. 28 effets sur 29 y passent (réglages de couleur, flous, netteté, bruit, grain, mosaïque,
+  ombre, lueur, déformations, nuages, éclairage, dégradé, flash, image d'impact, lueur diffuse, secousse,
+  vignettage, aberration) avec le même hasard et les mêmes arrondis que le calcul sur processeur (écart de 0
+  à 2 niveaux sur 255, flou exact). Scène d'Anthony en 3840 × 2160 : 2,9 ms par image en lecture (avant :
+  aperçu au quart), 3,5 ms par cran du curseur du flou. **Le tremblement du trait** reste sur le processeur, et
+  **une pile qui en contient un est calculée tout entière sur le processeur** (comme un calque CTG, un fond sous
+  le trait ou une vidéo) ; un calque d'ajustement dans un dossier aussi. **L'export, les vignettes et le repli
+  sans carte graphique restent le calcul exact sur processeur.** Réglage : Fichier > Préférences… >
+  Performance > « Effets sur la carte graphique » (allumé par défaut, grisé si la carte refuse le shader).
+  Détails, écarts et mesures : `docs/PERFORMANCE.md` (section 12), à relancer par
+  `cargo test --release --lib gpufxperf -- --ignored --nocapture --test-threads=1`.
 
 **Calque CTG** (Calques > Calque CTG > Nouveau calque CTG) : un calque de couleur sous les
 traits.
@@ -877,12 +891,14 @@ laquelle il tourne, sans rien appliquer sans ton accord :
 Au premier lancement sur une machine sans diagnostic, un petit message le propose une fois
 (« Lancer le diagnostic » / « Plus tard ») ; il ne bloque rien et n'applique rien.
 
-Les dix réglages sont de vrais réglages de SHOT, tous dans **Fichier > Préférences…, section
+Les onze réglages sont de vrais réglages de SHOT, tous dans **Fichier > Préférences…, section
 Performance**, et jouent tout de suite (sauf le rendu des traits texturés, à l'ouverture d'un projet) :
 effets en aperçu réduit pendant la lecture et les gestes ; traits vectoriels texturés (rendu exact
 aussitôt, rapide jusqu'au repos, ou rapide partout) ; tremblement du trait sans « Animer à l'arrêt » ;
 pelure d'oignon plafonnée ; caches de la carte graphique, des traits et des effets ; fils de calcul ;
-résolution des vignettes ; interface sans animations. Détails : `docs/PERFORMANCE.md`.
+résolution des vignettes ; interface sans animations ; **effets sur la carte graphique** (allumé par
+défaut ; le profil Équilibré l'éteint sur un rendu logiciel, le profil Performance hors d'une carte
+dédiée, où le calcul réduit sur processeur peut faire mieux). Détails : `docs/PERFORMANCE.md`.
 
 ## Messages
 
@@ -1307,7 +1323,10 @@ et le mode du calque), gardé par `fxcache.rs` comme ceux des effets d'un calque
 de fond (jamais calculé sur le fil de l'interface), à la taille de l'aperçu pendant la lecture et les gestes, et les
 images qui viennent sont préparées d'avance ; en attendant, l'image se montre sans l'effet. À l'export et dans les
 essais il est calculé tout de suite, à pleine résolution ; la carte graphique et le processeur composent le même dessin.
-Pendant le déplacement d'une sélection flottante sous un calque d'effet, l'effet attend la fin du geste. Mesure :
+Pendant le déplacement d'une sélection flottante sous un calque d'effet, l'effet attend la fin du geste. **Sur la carte
+graphique** (réglage allumé par défaut, `src/gpufx.rs`), un calque d'ajustement hors dossier ne passe plus par ce dessin
+dérivé : la carte applique ses effets à l'image composée jusque-là, à pleine résolution, à chaque image ; le chemin
+ci-dessus sert pour un calque dans un dossier, avec le réglage éteint, sans carte graphique et à l'export. Mesure :
 `cargo test --release --offline --target-dir target\msvc --lib effetsperf -- --ignored --nocapture --test-threads=1`
 (voir `docs/PERFORMANCE.md`).
 

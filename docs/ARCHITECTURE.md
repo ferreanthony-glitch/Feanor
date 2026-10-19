@@ -564,6 +564,18 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     (`fxcache::fallback`, par dessin d'origine) ou le dessin sans effet ; `gpu::sync` rend le
     numéro de texture réellement composé pour chaque élément (celui du dernier résultat, donc
     sans nouvel envoi). Le fil de fond redessine l'écran à chaque résultat.
+  - **Effets sur la carte graphique** (`gpufx.rs`, `gpufx.wgsl`, `gpu.rs`, 2026-10-19) : si toute la pile d'un élément du
+    plan a une version sur la carte (`gpufx::steps_supported`, `gpu::gpu_fx_item` : dessin du projet à la taille de la
+    feuille, ni CTG, ni fond, ni feuille flottante) et que le réglage est allumé, `gpu::sync` n'appelle pas `fx::display` :
+    il envoie le dessin d'origine et pose une texture résultat (`place_fx`, numéro `gpufx::out_id`, à la taille de ce que les
+    effets touchent) avec sa chaîne de passes (`gpufx::plan_chain`) dans `CanvasResources::fx_jobs`. `CanvasPaint::prepare`
+    dessine les chaînes dont la signature a changé (`gpufx::signature` : effets et réglages à cette image, génération et
+    place de la texture d'origine) avant la composition, qui lit la texture résultat comme un dessin. Les calques
+    d'ajustement hors dossier restent des repères (`canvas.rs` ne les résout pas, `gpufx::adjustments_supported`) :
+    `compose_span` finit la passe de composition, applique la chaîne à l'image composée jusque-là, puis pose le résultat avec
+    l'opacité et le mode du calque. Les passes (`gpufx.wgsl`) reproduisent le calcul sur processeur au niveau près ; le
+    chemin de fond ci-dessus reste pour l'export, les vignettes, le repli et le réglage éteint (aperçu et pleine
+    résolution : `fxproxy.rs`). Détail : `docs/PERFORMANCE.md`, section 12.
   - Aperçu (`fxproxy.rs`, `fx::draft_level`) : lecture, défilement et gestes sur un curseur
     (`fx::note_interaction`) calculent sur un dessin réduit `1 << niveau` fois (niveau selon le
     zoom : moitié sous 0,8, quart sous 0,35), numéro de dessin dérivé à part, texture plus
