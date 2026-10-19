@@ -274,7 +274,7 @@ pub fn start_import(ffmpeg: Option<PathBuf>, source: Source, frame: [usize; 2], 
         let [fw, fh] = frame;
         match source {
             Source::Video(path) => {
-                let ffmpeg = ffmpeg.ok_or("ffmpeg introuvable : choisis-le dans la fenêtre d'export (Fichier > Exporter le film)")?;
+                let ffmpeg = ffmpeg.ok_or("ffmpeg introuvable : choisis-le dans la fenêtre d'export (Fichier > Exporter… > Le film)")?;
                 let mut child = command(&ffmpeg)
                     .args(["-hide_banner", "-y", "-i"])
                     .arg(&path)

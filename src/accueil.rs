@@ -80,7 +80,7 @@ impl App {
                     action = Some("fichier.ouvrir");
                 }
                 ui.add_space(2.0);
-                if big(ui, ph::FILE_ARROW_DOWN, "Ouvrir un projet Storyboard Pro (.sboard)…").clicked() {
+                if big(ui, ph::FILE_ARROW_DOWN, "Importer un projet Storyboard Pro (.sboard)…").clicked() {
                     action = Some("fichier.importer_sboard");
                 }
                 ui.add_space(10.0);

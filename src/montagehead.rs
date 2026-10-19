@@ -184,7 +184,7 @@ impl App {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(slot).id_salt(("options_calque_montage", id)));
             let button = egui::Button::new(RichText::new(ph::DOTS_THREE_VERTICAL).size(13.0).color(fg)).frame(false);
             let resp = egui::menu::menu_custom_button(&mut child, button, |ui| self.montage_layer_menu(ui, li)).response;
-            bulle(resp, "Tout ce qui touche au calque", "Réglages, avant / après ses images, groupe, renommer, dupliquer, supprimer… (aussi : clic droit sur la rangée).", "");
+            bulle(resp, "Commandes du calque", "Réglages, avant / après ses images, groupe, renommer, dupliquer, supprimer… (aussi : clic droit sur la rangée).", "");
         }
         if let Some(bar) = at.opacity {
             self.opacity_bar(ui, &painter, bar, r, li, egui::Id::new(("opacite_montage", id)), opacity, current, "Opacité du calque", "Cliquer ou tirer dans la barre.");
@@ -246,7 +246,7 @@ impl App {
             None => Some("Aucun calque."),
             Some(l) if l.video.is_some() => Some("C'est un calque vidéo : peins sur un calque bitmap au-dessus, puis propage ce calque-là."),
             Some(l) if l.folder || l.kind != LayerKind::Bitmap => {
-                Some("La propagation se fait sur un calque bitmap : crée-en un (Calques > Nouveau calque bitmap) au-dessus de la vidéo ou de l'animation, et peins dessus.")
+                Some("La propagation se fait sur un calque bitmap : crée-en un (Calques > Nouveau calque > Bitmap) au-dessus de la vidéo ou de l'animation, et peins dessus.")
             }
             Some(_) if crate::propager::guides(&self.doc, self.cur_panel, li).is_empty() => Some("Rien à suivre : il faut un autre calque dans le plan (vidéo, animation…)."),
             Some(_) => None,
@@ -338,7 +338,7 @@ impl App {
         // Fonctions d'état, puis d'animation (Anthony, 2026-10-17 : « en premier les fonctions
         // simples, puis les fonctions d'état, ensuite les fonctions d'animation »).
         ui.separator();
-        ui.menu_button("Options du calque", |ui| {
+        ui.menu_button("Réglages du calque", |ui| {
             if !folder {
                 if ui
                     .checkbox(&mut keep_alpha.clone(), "Préserver la transparence")

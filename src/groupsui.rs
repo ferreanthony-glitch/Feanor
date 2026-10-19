@@ -248,7 +248,8 @@ impl App {
                     if bulle(resp, "Appliquer au calque", "Le calque courant et les calques choisis passent dans ce groupe.", "").clicked() {
                         self.apply_group(g);
                     }
-                    ui.menu_button(RichText::new(ph::DOTS_THREE_VERTICAL).size(13.0), |ui| self.group_row_menu(ui, g));
+                    let resp = ui.menu_button(RichText::new(ph::DOTS_THREE_VERTICAL).size(13.0), |ui| self.group_row_menu(ui, g)).response;
+                    bulle(resp, "Commandes du groupe", "Choisir, verrouiller, cacher ou afficher les calques de ce groupe.", "");
                 });
                 ui.end_row();
             }

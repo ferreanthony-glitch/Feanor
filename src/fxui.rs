@@ -14,7 +14,7 @@ use crate::fx::{Effect, EffectKind, FAMILIES};
 
 /// Pourquoi le tremblement du trait est grisé sur un calque bitmap (bulle des menus).
 pub(crate) const BOIL_VECTOR_ONLY: &str =
-    "Le tremblement du trait ne va que sur un calque vectoriel : il déplace un peu les points de chaque trait, d'une variante à l'autre. Choisis un calque vectoriel, ou crée-en un (Calques > Nouveau calque vectoriel).";
+    "Le tremblement du trait ne va que sur un calque vectoriel : il déplace un peu les points de chaque trait, d'une variante à l'autre. Choisis un calque vectoriel, ou crée-en un (Calques > Nouveau calque > Vectoriel).";
 
 /// Ce qu'un menu montre d'un effet pour un calque : rien (un dossier n'a pas d'effets), l'entrée
 /// grisée avec la raison (Anthony, 2026-10-19 : « je ne trouve pas l'effet de tremblement » — il
@@ -380,7 +380,7 @@ impl App {
             frame.show(ui, |ui| {
                 ui.horizontal(|ui| {
                     let mut on = e.enabled;
-                    if ui.checkbox(&mut on, "").on_hover_text("Effet actif").changed() {
+                    if crate::bulles::bulle(ui.checkbox(&mut on, ""), "Effet actif", "Éteint, l'effet ne s'applique plus ; il reste dans la pile.", "").changed() {
                         self.record_step();
                         self.layers_mut()[li].fx[i].enabled = on;
                     }
@@ -391,20 +391,23 @@ impl App {
                     } else {
                         "Choisir cet effet : ses clés se voient alors dans la timeline et le montage (les boutons de clé le visent)."
                     };
-                    if ui.add_sized(egui::vec2(w, ui.spacing().interact_size.y), egui::SelectableLabel::new(chosen, RichText::new(e.kind.label()).strong())).on_hover_text(hint).clicked() {
+                    let name = ui.add_sized(egui::vec2(w, ui.spacing().interact_size.y), egui::SelectableLabel::new(chosen, RichText::new(e.kind.label()).strong()));
+                    if crate::bulles::bulle(name, if chosen { "Effet choisi" } else { "Choisir l'effet" }, hint, "").clicked() {
                         if chosen {
                             self.deselect_fx();
                         } else {
                             self.select_fx(i);
                         }
                     }
-                    if ui.add_enabled(i > 0, egui::Button::new(ph::ARROW_UP).frame(false)).on_hover_text("Plus tôt dans la pile").clicked() {
+                    let up = ui.add_enabled(i > 0, egui::Button::new(ph::ARROW_UP).frame(false));
+                    if crate::bulles::bulle(up, "Monter l'effet", "Le placer plus tôt dans la pile du calque.", "").clicked() {
                         swap = Some((i, i - 1));
                     }
-                    if ui.add_enabled(i + 1 < n, egui::Button::new(ph::ARROW_DOWN).frame(false)).on_hover_text("Plus tard dans la pile").clicked() {
+                    let down = ui.add_enabled(i + 1 < n, egui::Button::new(ph::ARROW_DOWN).frame(false));
+                    if crate::bulles::bulle(down, "Descendre l'effet", "Le placer plus tard dans la pile du calque.", "").clicked() {
                         swap = Some((i, i + 1));
                     }
-                    if ui.add(egui::Button::new(ph::TRASH).frame(false)).on_hover_text("Retirer l'effet").clicked() {
+                    if crate::bulles::bulle(ui.add(egui::Button::new(ph::TRASH).frame(false)), "Supprimer l'effet", "Le retire de la pile du calque, avec ses clés.", "").clicked() {
                         remove = Some(i);
                     }
                 });
@@ -461,11 +464,11 @@ impl App {
                         self.fx_delete_key();
                     }
                     if !e.keys.is_empty() {
-                        if ui.button(ph::CARET_LEFT).on_hover_text("Clé précédente").clicked() {
+                        if crate::bulles::bulle(ui.button(ph::CARET_LEFT), "Clé précédente", "Aller à la clé d'effet d'avant.", "").clicked() {
                             self.select_fx(i);
                             self.fx_goto_key(-1);
                         }
-                        if ui.button(ph::CARET_RIGHT).on_hover_text("Clé suivante").clicked() {
+                        if crate::bulles::bulle(ui.button(ph::CARET_RIGHT), "Clé suivante", "Aller à la clé d'effet d'après.", "").clicked() {
                             self.select_fx(i);
                             self.fx_goto_key(1);
                         }

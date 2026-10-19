@@ -139,8 +139,8 @@ impl App {
             ui.separator();
             // … ou par groupe (actions du fichier de raccourcis).
             let groups = [
-                ("Colonne des réglages (et fiche)", "vue.panneau_outils", Group::Left),
-                ("Calques", "vue.panneau_fiche", Group::Right),
+                ("Colonne des réglages et fiche", "vue.panneau_outils", Group::Left),
+                ("Colonne des calques", "vue.panneau_fiche", Group::Right),
                 ("Montage et timeline", "vue.panneau_bande", Group::Bottom),
             ];
             for (label, action, group) in groups {

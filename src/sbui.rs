@@ -247,7 +247,7 @@ fn window_body(ui: &mut egui::Ui, w: &mut SbWindow, ctx: &egui::Context) -> bool
             ui.colored_label(warn, format!("Illisible : {e}"));
         }
         None => {
-            ui.label("Aucun projet : Fichier > Ouvrir un projet Storyboard Pro.");
+            ui.label("Aucun projet : Fichier > Importer > Un projet Storyboard Pro (.sboard)…");
         }
     }
     ui.separator();

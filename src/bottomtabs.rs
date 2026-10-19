@@ -119,7 +119,8 @@ impl App {
                 self.doc.audio_tracks[ti].muted = m;
             }
             let mut l = locked;
-            if ui.checkbox(&mut l, ph::LOCK_SIMPLE).on_hover_text("Verrouillée : ses extraits ne bougent plus.").changed() {
+            let resp = crate::bulles::bulle(ui.checkbox(&mut l, ph::LOCK_SIMPLE), "Verrouiller la piste", "Verrouillée : ses extraits ne bougent plus.", "");
+            if resp.changed() {
                 self.record_step();
                 self.doc.audio_tracks[ti].locked = l;
             }
@@ -128,10 +129,10 @@ impl App {
             if self.edited(&resp) {
                 self.doc.audio_tracks[ti].volume = v / 100.0;
             }
-            if ui.small_button(ph::COPY).on_hover_text("Dupliquer la piste").clicked() {
+            if crate::bulles::bulle(ui.small_button(ph::COPY), "Dupliquer la piste", "Une copie de la piste son, avec ses extraits.", "").clicked() {
                 duplicate = Some(ti);
             }
-            if ui.small_button(ph::TRASH).on_hover_text("Supprimer la piste").clicked() {
+            if crate::bulles::bulle(ui.small_button(ph::TRASH), "Supprimer la piste", "La piste son et ses extraits.", "").clicked() {
                 delete = Some(ti);
             }
             ui.separator();

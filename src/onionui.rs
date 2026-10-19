@@ -142,11 +142,11 @@ impl App {
         }
         for name in names {
             ui.horizontal(|ui| {
-                if ui.button(&name).on_hover_text("Reprendre ces réglages").clicked() && self.onion.recall(&name) {
-                    self.status = format!("Pelure : réglages « {name} » repris.");
+                if bulle(ui.button(&name), "Reprendre ces réglages", "Les réglages de la pelure d'oignon reprennent ceux rangés sous ce nom.", "").clicked() && self.onion.recall(&name) {
+                    self.status = format!("Pelure d'oignon : réglages « {name} » repris.");
                 }
                 let resp = ui.add(egui::Button::new(RichText::new(ph::TRASH).size(13.0)).frame(false));
-                if bulle(resp, "Effacer", "Retirer ces réglages rangés.", "").clicked() {
+                if bulle(resp, "Supprimer", "Supprimer ces réglages rangés.", "").clicked() {
                     self.onion.bin.retain(|p| p.name != name);
                 }
             });
@@ -160,7 +160,7 @@ impl App {
                 let name = self.onion_preset_name.trim().to_string();
                 if !name.is_empty() {
                     self.onion.store(&name);
-                    self.status = format!("Pelure : réglages rangés sous « {name} ».");
+                    self.status = format!("Pelure d'oignon : réglages rangés sous « {name} ».");
                 }
             }
         });
@@ -169,7 +169,7 @@ impl App {
     /// Les images de la pelure reviennent à leur place.
     pub(crate) fn reset_onion_offset(&mut self) {
         self.onion_offset = Vec2::ZERO;
-        self.status = "Pelure remise en place.".into();
+        self.status = "Pelure d'oignon remise en place.".into();
     }
 
     /// Change le mode de la pelure (action du clavier).
