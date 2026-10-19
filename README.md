@@ -1509,7 +1509,7 @@ plateau, la vue est celle qu'on avait laissée. « Sécurité » trace les zones
 de la caméra, le reste estompé, pour composer une version pour les réseaux. Ces cadres suivent la
 caméra et ne s'exportent pas.
 
-**Plateau en 3D** (bouton 3D, barre de commandes ou barre de la vue) : les calques du plan
+**Plateau en 3D** (bouton 3D de la barre sous le dessin, ou Affichage > Plateau) : les calques du plan
 sont des plans posés à leur profondeur, la caméra une pyramide de vision (avec sa course si elle
 bouge), sur un sol quadrillé. Outils : tourner autour, glisser la vue, avancer / reculer ; partout,
 molette = avancer, bouton du milieu = glisser, clic droit ou Alt + glisser = tourner. Outil
@@ -1517,7 +1517,7 @@ Déplacer : glisser un calque le déplace dans son plan, Maj + glisser change sa
 l'œil de la caméra la déplace (Maj : avancée ; Ctrl : la tourner, panoramique et bascule). Boutons Face, Dessus, Côté, « Par la caméra », et
 recadrer. Pour dessiner, on revient au plateau à plat (bouton 3D).
 
-**Scène 3D de blocage** (bouton « Scène 3D » de la barre au-dessus du dessin, ou Affichage > Plateau) :
+**Scène 3D de blocage** (bouton « Scène 3D » de la barre sous le dessin, ou Affichage > Plateau) :
 une vue 3D pour poser des formes simples et des mannequins, placer la caméra, puis envoyer le résultat dans un
 calque de fond sur lequel dessiner. Les réglages sont dans le panneau Réglages.
 - **Formes** : cube, plan (sol, mur), cylindre, sphère, cône, escalier (nombre de marches), **mannequin**

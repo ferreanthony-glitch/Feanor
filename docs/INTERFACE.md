@@ -708,7 +708,8 @@ glows, tremblements de caméra effectifs, timecode ». Détail : README (section
 
 ## 13. Scène 3D de blocage (2026-10-19, branche `scene3d`)
 
-Une vue de plus dans la barre au-dessus du dessin (icône cube, à côté de « Plateau en 3D » ; les deux s'excluent),
+Une vue de plus (icône cube, à côté de « Plateau en 3D » dans la barre sous le dessin ; les deux s'excluent ; depuis
+2026-10-20 la barre au-dessus du dessin ne les répète plus, elle ne montre que leurs outils quand l'une est active),
 avec ses réglages dans le panneau **Réglages** (qui montre la scène 3D tant qu'elle est ouverte). Tout y est
 en icônes avec bulle (nom, description, raccourci), comme le reste.
 
@@ -798,8 +799,9 @@ entre deux groupes), si la commande est dans la barre d'office, son icône, son 
 - **Rien n'est retiré** : chaque commande a son action dans `keymap::ACTIONS` (palette Ctrl+K, raccourci, assignation) ;
   les menus du haut sont inchangés (sauf le menu Plans du montage, dont l'icône « trois points » est devenue une liste
   à puces, pour ne pas ressembler à « Plus… »).
-- **Pas touchées** : la barre des panneaux à droite ; la barre sous le dessin et celle au-dessus (vue, caméra, plateau 3D,
-  **Scène 3D** — le cube —, zones de sécurité, format) : ce sont des vues, pas des commandes de ces trois barres ; la
+- **Pas touchées** : la barre des panneaux à droite ; la barre sous le dessin (vue, caméra, plateau 3D,
+  **Scène 3D** — le cube) et celle au-dessus (vue du plateau / caméra, zones de sécurité, format ; plus de boutons 3D
+  depuis 2026-10-20 : ils n'étaient que des doublons de ceux du bas, seuls les outils 3D y restent) : ce sont des vues, pas des commandes de ces trois barres ; la
   scène 3D reste aussi dans Affichage > Plateau et Ctrl+K. Proposition 4 de la partie 5 (miroir et table lumineuse sous
   « Plus… » dans la barre sous le dessin) : pas faite, elle n'était pas dans 6.3.
 - Le « Réglage Barres complètes » de 6.3 est remplacé par les épingles : épingler tout remet la barre complète.

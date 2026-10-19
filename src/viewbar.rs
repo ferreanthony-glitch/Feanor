@@ -250,25 +250,19 @@ impl App {
             ui.add_space(6.0);
             ui.separator();
             ui.add_space(6.0);
-            // Plateau en 3D (9e) et ses outils.
+            // Les boutons « Plateau en 3D » et « Scène 3D » ne sont que dans la barre du bas
+            // (`view_tools_bar`, Anthony 2026-10-20 : pas deux fois la même icône) ; ici, seulement
+            // leurs outils quand l'un des deux est actif.
             let in3d = self.stage3d.on && !cam;
-            if self.bouton_etat(ui, in3d, ph::CUBE_FOCUS, "Plateau en 3D", "Les calques à leur profondeur, la caméra et le sol, vus en 3D.", "vue.3d").clicked() {
-                self.run_action("vue.3d");
-            }
             if in3d {
                 self.stage3d_tools(ui);
                 return;
             }
-            // Scène 3D de blocage et ses outils.
             let in_scene = self.scene3d.on && !cam;
-            if self.bouton_etat(ui, in_scene, ph::CUBE, "Scène 3D", "Blocage en 3D : formes simples, mannequins, caméra du plateau, envoyés vers un calque de fond.", "scene3d.basculer").clicked() {
-                self.run_action("scene3d.basculer");
-            }
             if in_scene {
                 self.scene3d_tools(ui);
                 return;
             }
-            ui.add_space(6.0);
             ui.separator();
             ui.add_space(6.0);
             if self
