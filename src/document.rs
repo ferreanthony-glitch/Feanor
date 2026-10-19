@@ -787,9 +787,16 @@ pub struct SoundClip {
     /// Images sautées au début du son (extrait raccourci par la gauche).
     pub offset: usize,
     pub length: usize,
+    /// Fondus, volume, clés de volume, égaliseur, écho (`audiofx.rs`).
+    pub fx: crate::audiofx::ClipFx,
 }
 
 impl SoundClip {
+    /// Un extrait sans effet.
+    pub fn new(id: u64, sound: u64, start: usize, offset: usize, length: usize) -> SoundClip {
+        SoundClip { id, sound, start, offset, length, fx: Default::default() }
+    }
+
     pub fn end(&self) -> usize {
         self.start + self.length
     }
@@ -801,6 +808,8 @@ pub struct AudioTrack {
     pub id: u64,
     pub name: String,
     pub muted: bool,
+    /// Solo : quand une piste au moins l'est, seules les pistes en solo s'entendent (`audiofx::audible`).
+    pub solo: bool,
     /// Gain linéaire (1 = inchangé).
     pub volume: f32,
     pub clips: Vec<SoundClip>,
@@ -2641,6 +2650,7 @@ impl Document {
             id,
             name: format!("Son {n}"),
             muted: false,
+            solo: false,
             volume: 1.0,
             clips: Vec::new(),
             locked: false,
@@ -2712,13 +2722,7 @@ impl Document {
             });
         let id = self.alloc();
         let clips = &mut self.audio_tracks[t].clips;
-        clips.push(SoundClip {
-            id,
-            sound,
-            start,
-            offset: 0,
-            length,
-        });
+        clips.push(SoundClip::new(id, sound, start, 0, length));
         clips.sort_by_key(|c| c.start);
         Some(id)
     }
@@ -2732,7 +2736,7 @@ impl Document {
         }
         let id = self.alloc();
         let clips = &mut self.audio_tracks[track].clips;
-        clips.push(SoundClip { id, sound, start, offset, length: length.max(1) });
+        clips.push(SoundClip::new(id, sound, start, offset, length.max(1)));
         clips.sort_by_key(|c| c.start);
         Some(id)
     }
@@ -2756,15 +2760,31 @@ impl Document {
         }
         let right_id = self.alloc();
         let cut = at - clip.start;
-        let right = SoundClip {
+        let mut right = SoundClip {
             id: right_id,
             sound: clip.sound,
             start: at,
             offset: clip.offset + cut,
             length: clip.length - cut,
+            fx: clip.fx.clone(),
         };
+        // Les effets suivent la coupe : volume, égaliseur et écho aux deux ; le fondu d'entrée reste
+        // à gauche, celui de sortie et l'enchaîné avec le suivant passent à droite ; les clés de volume
+        // se partagent (chaque morceau garde la valeur de la courbe à la coupe).
+        let cut_t = cut as f32;
+        let at_cut = clip.fx.key_gain(cut_t);
+        let has_keys = !clip.fx.keys.is_empty();
+        right.fx.fade_in = 0;
         let clips = &mut self.audio_tracks[t].clips;
         clips[c].length = cut;
+        clips[c].fx.fade_out = 0;
+        clips[c].fx.xfade = 0;
+        if has_keys {
+            clips[c].fx.keys.retain(|k| k.t < cut_t);
+            clips[c].fx.set_key(cut_t, at_cut);
+            right.fx.keys = clip.fx.keys.iter().filter(|k| k.t > cut_t).map(|k| crate::audiofx::VolumeKey { t: k.t - cut_t, v: k.v }).collect();
+            right.fx.set_key(0.0, at_cut);
+        }
         clips.insert(c + 1, right);
         Some(right_id)
     }
@@ -2793,6 +2813,24 @@ impl Document {
             return false;
         }
         let mut moved = self.audio_tracks[t].clips.remove(c);
+        // Une poignée de bord découvre ou cache du son sans le bouger : les clés de volume restent
+        // sous les mêmes images du son (leur temps est compté depuis le début de l'extrait).
+        let shift = start as f32 - moved.start as f32;
+        if !keep_offset && shift != 0.0 && !moved.fx.keys.is_empty() {
+            let lead = moved.fx.key_gain(shift.max(0.0));
+            for k in &mut moved.fx.keys {
+                k.t -= shift;
+            }
+            if shift > 0.0 {
+                // Les clés qui passent avant le nouveau début sortent ; la courbe garde alors la
+                // valeur qu'elle avait là, par une clé au bord.
+                let n = moved.fx.keys.len();
+                moved.fx.keys.retain(|k| k.t > 0.0);
+                if moved.fx.keys.len() < n && moved.fx.keys.first().is_none_or(|k| k.t > 0.0) {
+                    moved.fx.set_key(0.0, lead);
+                }
+            }
+        }
         moved.start = start;
         moved.length = end - start;
         moved.offset = offset as usize;

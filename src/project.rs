@@ -848,6 +848,8 @@ pub struct SaveJob {
     reserves: Option<Vec<u8>>,
     /// Le fichier des transitions (`transitions.json`) ; rien : il n'y en a plus, le fichier part.
     transitions: Option<Vec<u8>>,
+    /// Le fichier des effets des sons (`effets_son.json`) ; rien : il n'y en a plus, le fichier part.
+    sound_fx: Option<Vec<u8>>,
 }
 
 /// Prépare l'enregistrement de `doc` dans `manifest_path`. `written` est mis à jour comme si
@@ -952,7 +954,29 @@ pub fn prepare_save(
         comments: crate::commentaires::to_bytes(doc)?,
         reserves: crate::rognage::to_bytes(doc)?,
         transitions: crate::transitions::to_bytes(doc)?,
+        sound_fx: crate::audiofx::to_bytes(doc)?,
     })
+}
+
+/// Les effets des sons, lus dans `effets_son.json` (absent : aucun). Un fichier illisible ou d'une
+/// version plus récente n'empêche pas d'ouvrir le projet : on le dit, sans effets, et il reste en
+/// place (`write_sidecar`).
+fn load_sound_fx(dir: &Path, warnings: &mut Vec<String>) -> Option<crate::audiofx::Loaded> {
+    let path = dir.join(crate::audiofx::FILE);
+    match fs::read_to_string(&path) {
+        Ok(text) => match crate::audiofx::parse(&text) {
+            Ok(l) => Some(l),
+            Err(e) => {
+                warnings.push(format!("{} : {e} ; les effets des sons ne sont pas chargés.", crate::audiofx::FILE));
+                None
+            }
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => {
+            warnings.push(format!("{} : {e} ; les effets des sons ne sont pas chargés.", path.display()));
+            None
+        }
+    }
 }
 
 /// Les transitions du montage, lues dans `transitions.json` (absent : aucune). Un fichier illisible
@@ -1118,6 +1142,8 @@ impl SaveJob {
         write_sidecar(&dir.join(crate::rognage::FILE), self.reserves.as_deref(), |t| crate::rognage::parse(t).is_ok())?;
         // Les transitions du montage, de même.
         write_sidecar(&dir.join(crate::transitions::FILE), self.transitions.as_deref(), |t| crate::transitions::parse(t).is_ok())?;
+        // Et les effets des sons.
+        write_sidecar(&dir.join(crate::audiofx::FILE), self.sound_fx.as_deref(), |t| crate::audiofx::parse(t).is_ok())?;
         write_atomic_synced(&self.manifest_path, &self.manifest)?;
         let removed = remove_unused(dir, &self.used, &self.fonds)
             + remove_unused_sounds(dir, &self.used_sounds, &self.kept)
@@ -1638,18 +1664,14 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
             id: t.id,
             name: t.nom.clone(),
             muted: t.muette,
+            // (Le solo vient de `effets_son.json`.)
+            solo: false,
             volume: t.volume.clamp(0.0, 4.0),
             clips: t
                 .extraits
                 .iter()
                 .filter(|c| sounds.contains_key(&c.son) && c.duree > 0)
-                .map(|c| SoundClip {
-                    id: c.id,
-                    sound: c.son,
-                    start: c.debut,
-                    offset: c.decalage,
-                    length: c.duree,
-                })
+                .map(|c| SoundClip::new(c.id, c.son, c.debut, c.decalage, c.duree))
                 .collect(),
             locked: t.verrouillee,
         })
@@ -1901,6 +1923,10 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
     let frame = manifest.cadre;
     let mut written: HashMap<CelId, u64> = cels.keys().map(|&id| (id, 0)).collect();
     let mut doc = Document::from_parts(w, h, structure, cels, sounds);
+    // Les effets des sons (fondus, volume, égaliseur, écho, solo : `effets_son.json`).
+    if let Some(fx) = load_sound_fx(dir, &mut warnings) {
+        fx.install(&mut doc);
+    }
     for model in models.into_values() {
         doc.insert_model(model);
     }

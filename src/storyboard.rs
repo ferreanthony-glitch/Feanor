@@ -1015,10 +1015,10 @@ impl App {
         if let Some(p) = resp.hover_pos() {
             let clip_edge = matches!(
                 self.lane_hit(p, left, ppf, lanes_top),
-                Some((_, Some((_, ClipEdge::Left | ClipEdge::Right))))
+                Some((_, Some((_, edge)))) if edge.is_resize()
             );
             let resizing = matches!(&self.montage_drag, Some(MontageDrag::Edge(d)) if d.kind != crate::rognageui::EdgeKind::Slip)
-                || matches!(&self.montage_drag, Some(MontageDrag::Clip(d)) if d.edge != ClipEdge::Move);
+                || matches!(&self.montage_drag, Some(MontageDrag::Clip(d)) if d.edge.is_resize());
             if edge_at(p).is_some() || clip_edge || resizing {
                 ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
             }
@@ -1321,8 +1321,13 @@ impl App {
                     }
                     self.click_key(key, mods.command, mods.shift);
                 } else if let Some((_, hit)) = self.lane_hit(p, left, ppf, lanes_top) {
-                    // Clic dans une piste son : sélectionne l'extrait (ou rien) et y place la tête.
+                    // Clic dans une piste son : sélectionne l'extrait (ou rien) et y place la tête ;
+                    // une clé de volume touchée est choisie (Suppr la retire).
                     self.sel_clip = hit.map(|(id, _)| id);
+                    self.sfx.key = match hit {
+                        Some((id, ClipEdge::Key(i))) => Some((id, i)),
+                        _ => None,
+                    };
                     self.goto_global(frame_at(p.x));
                 } else {
                     self.sel_clip = None;
@@ -1384,6 +1389,9 @@ impl App {
                     // dessin comme F5.
                     let f = (((p.x - x_of(self.doc.panel_start(i))) / ppf).floor().max(0.0)) as usize;
                     self.montage_new_key(i, k, f, true);
+                } else if let Some((track, Some((id, _)))) = self.lane_hit(p, left, ppf, lanes_top) {
+                    // Double-clic sur un extrait de son : une clé de volume là où l'on a cliqué.
+                    self.double_click_clip(track, id, p, left, ppf, lanes_top);
                 }
             }
         }

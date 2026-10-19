@@ -2162,6 +2162,37 @@ action = "commentaire.suivant"
 touches = []
 source = "SHOT (sans touche)"
 
+# Effets des extraits de son (sans touche : à choisir).
+[[raccourci]]
+action = "son.fondu_entree"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "son.fondu_sortie"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "son.enchaine"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "son.cle_volume"
+touches = []
+source = "SHOT (sans touche : un double-clic sur l'extrait pose aussi une clé)"
+
+[[raccourci]]
+action = "son.solo"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "son.effets_reinit"
+touches = []
+source = "SHOT (sans touche)"
+
 # Transitions du montage (sans touche : à choisir).
 [[raccourci]]
 action = "transition.ajouter"

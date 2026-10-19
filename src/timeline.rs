@@ -407,7 +407,8 @@ impl App {
             let left = r.left() - start as f32 * cell;
             let fps = self.doc.fps;
             for track in &self.doc.audio_tracks {
-                let color = if track.muted {
+                // (Muette, ou une autre piste en solo : estompée.)
+                let color = if !crate::audiofx::audible(&self.doc, track) {
                     theme::texte_doux()
                 } else {
                     theme::son_onde()

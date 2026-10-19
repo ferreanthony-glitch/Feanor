@@ -194,7 +194,8 @@ impl App {
             Format::Wav => {
                 let Some(path) = save_dialog(&base, Format::Wav) else { return };
                 let (start, len) = export::sample_span(fps, first, frames.len());
-                self.status = match export::write_wav(&path, audio::mix_clips(&self.doc), start, len) {
+                // (Le son exporté attend l'égaliseur et l'écho : `mix_clips_blocking`.)
+                self.status = match export::write_wav(&path, audio::mix_clips_blocking(&self.doc), start, len) {
                     Ok(()) => format!("Son exporté : {}", path.display()),
                     Err(e) => format!("Échec de l'export du son : {e}"),
                 };
@@ -219,7 +220,7 @@ impl App {
                 let wav = if sound {
                     let path = std::env::temp_dir().join(format!("pelure-export-{}.wav", std::process::id()));
                     let (start, len) = export::sample_span(fps, first, frames.len());
-                    if let Err(e) = export::write_wav(&path, audio::mix_clips(&self.doc), start, len) {
+                    if let Err(e) = export::write_wav(&path, audio::mix_clips_blocking(&self.doc), start, len) {
                         self.status = format!("Échec du mixage du son : {e}");
                         return;
                     }

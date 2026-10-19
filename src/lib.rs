@@ -40,6 +40,11 @@ mod app;
 mod audio;
 #[cfg(test)]
 mod audio_tests;
+// Effets sonores des extraits et des pistes : fondus, enchaîné, volume, égaliseur, écho, solo.
+mod audiofx;
+#[cfg(test)]
+mod audiofx_tests;
+mod audiofxui;
 mod barrepanneaux;
 #[cfg(test)]
 mod barrepanneaux_tests;

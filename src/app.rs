@@ -553,6 +553,8 @@ pub struct App {
     pub(crate) sel_clip: Option<u64>,
     /// Transitions du montage : choix, geste en cours, aperçu (`transitionsui.rs`).
     pub(crate) trans: crate::transitionsui::TransUi,
+    /// Effets des extraits de son : clé de volume choisie (`audiofxui.rs`).
+    pub(crate) sfx: crate::audiofxui::SoundFxUi,
     /// Ce qu'on a cliqué du bouton droit dans la bande de montage.
     pub(crate) menu_target: Option<MenuTarget>,
     pub(crate) history: History,
@@ -1014,6 +1016,7 @@ impl App {
             heard_frame: Some(0),
             sel_clip: None,
             trans: Default::default(),
+            sfx: Default::default(),
             menu_target: None,
             history: History::default(),
             gesture: Gesture::default(),
@@ -3152,6 +3155,10 @@ impl App {
         }
         // Transitions du montage (`transitionsui.rs`) ; Suppr vise celle qui a la main.
         if self.transition_action(action) {
+            return;
+        }
+        // Effets des extraits de son (`audiofxui.rs`) ; Suppr retire la clé de volume choisie.
+        if self.sound_fx_action(action) {
             return;
         }
         // Suppr vise le commentaire seulement s'il a la main (le dernier clic était sur lui) ;
