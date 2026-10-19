@@ -841,6 +841,9 @@ pub struct Structure {
     /// Commentaires sur la timeline (`commentaires.rs`) : une étape d'annulation les rétablit avec
     /// le reste.
     pub comments: Vec<crate::commentaires::Comment>,
+    /// Ce que le rognage a mis de côté, par numéro de plan (`rognage.rs`) : l'annulation le
+    /// rétablit avec le reste.
+    pub reserves: std::collections::BTreeMap<u64, crate::rognage::Reserve>,
 }
 
 pub struct Document {
@@ -885,6 +888,9 @@ pub struct Document {
     /// Commentaires sur la timeline, rangés par plan (`commentaires.rs`) ; enregistrés à côté du
     /// manifeste, dans `commentaires.json`.
     pub comments: Vec<crate::commentaires::Comment>,
+    /// Contenu rogné hors des plans, rangé par numéro de plan (`rognage.rs`) ; enregistré à côté du
+    /// manifeste, dans `rognages.json`.
+    pub reserves: std::collections::BTreeMap<u64, crate::rognage::Reserve>,
     next_id: u64,
 }
 
@@ -927,6 +933,7 @@ impl Document {
             storyboard_locked: false,
             properties: Properties::default(),
             comments: Vec::new(),
+            reserves: Default::default(),
             next_id: 1,
         };
         let seq = doc.new_sequence();
@@ -980,6 +987,7 @@ impl Document {
             storyboard_locked: structure.storyboard_locked,
             properties: structure.properties,
             comments: structure.comments,
+            reserves: structure.reserves,
             next_id: max_id + 1,
         };
         doc.normalize();
@@ -1028,6 +1036,7 @@ impl Document {
                 k.cam = k.cam.shifted(dx as f32, dy as f32);
             }
         }
+        self.map_reserve_cameras(|c| c.shifted(dx as f32, dy as f32));
         self.width = width;
         self.height = height;
     }
@@ -1094,6 +1103,7 @@ impl Document {
                 l.transform.y *= s;
             }
         }
+        self.map_reserve_cameras(|c| Camera { x: c.x * s, y: c.y * s, dolly: c.dolly * s, ..*c });
         self.width = nw;
         self.height = nh;
     }
@@ -1152,6 +1162,7 @@ impl Document {
             storyboard_locked: self.storyboard_locked,
             properties: self.properties.clone(),
             comments: self.comments.clone(),
+            reserves: self.reserves.clone(),
         }
     }
 
@@ -1179,6 +1190,7 @@ impl Document {
             storyboard_locked: std::mem::replace(&mut self.storyboard_locked, s.storyboard_locked),
             properties: std::mem::replace(&mut self.properties, s.properties),
             comments: std::mem::replace(&mut self.comments, s.comments),
+            reserves: std::mem::replace(&mut self.reserves, s.reserves),
         }
     }
 
@@ -1186,6 +1198,11 @@ impl Document {
         let id = self.next_id;
         self.next_id += 1;
         id
+    }
+
+    /// Les numéros jusqu'à `id` sont pris (marques et commentaires d'une réserve relue).
+    pub(crate) fn reserve_id(&mut self, id: u64) {
+        self.next_id = self.next_id.max(id + 1);
     }
 
     pub fn new_sequence(&mut self) -> u64 {
@@ -1418,11 +1435,15 @@ impl Document {
             fond: self.properties.fond,
             ..Default::default()
         };
+        // Le contenu rogné des plans gardés les suit, avec ses dessins (`rognage.rs`).
+        s.reserves.retain(|id, _| ids.contains(id));
+        let rogne: Vec<CelId> = s.reserves.values().flat_map(|r| r.cels()).collect();
         let cels = s
             .panels
             .iter()
             .flat_map(|p| &p.layers)
             .flat_map(|l| l.frames.iter().flatten())
+            .chain(rogne.iter())
             .filter_map(|id| self.cels.get(id).map(|c| (*id, c.clone())))
             .collect();
         let mut doc = Document::from_parts(self.width, self.height, s, cels, HashMap::new());
@@ -1613,6 +1634,8 @@ impl Document {
             cues: Cues { bookmarks: source.cues.bookmarks.iter().filter(|&&b| b >= at).map(|b| b - at).collect(), ..Cues::default() },
             color: source.color,
         };
+        // Le contenu rogné à la fin du plan ne se rattache plus à rien (le second a ses copies).
+        self.forget_tail_reserve(source.id);
         let first = &mut self.panels[index];
         for l in &mut first.layers {
             l.frames.truncate(at);
@@ -1641,6 +1664,7 @@ impl Document {
         // Caméras qu'ils montraient (un panneau sans clé hérite de ses voisins) : gardées.
         let (cam_a, cam_b) = (self.panel_camera(index, 0), self.panel_camera(index + 1, 0));
         let next = self.panels.remove(index + 1);
+        self.forget_joint_reserves(self.panels[index].id, next.id);
         let next_len = next.frame_count();
         let a_len = self.panels[index].frame_count();
         // Les commentaires du suivant suivent ses images.
@@ -2051,6 +2075,7 @@ impl Document {
     /// Renvoie un avertissement si le repère 3D de `b` n'a pas pu être gardé.
     fn append_plan(&mut self, index: usize, b: Panel, cams_a: (Camera, Camera), cams_b: (Camera, Camera)) -> Option<String> {
         let mark_id = self.alloc();
+        self.forget_joint_reserves(self.panels[index].id, b.id);
         let label = self.scene_label(self.panels[index].scene);
         let a_len = self.panels[index].frame_count();
         let b_len = b.frame_count();
@@ -2539,11 +2564,17 @@ impl Document {
     }
 
     pub fn used_cels(&self) -> BTreeSet<CelId> {
-        self.panels
+        let mut used: BTreeSet<CelId> = self
+            .panels
             .iter()
             .flat_map(|s| s.layers.iter())
             .flat_map(|l| l.frames.iter().flatten().copied())
-            .collect()
+            .collect();
+        // Le contenu rogné reste dans le projet (`rognage.rs`).
+        for (_, r) in self.live_reserves() {
+            used.extend(r.cels());
+        }
+        used
     }
 
     /// Première image du plan `index` dans le montage.

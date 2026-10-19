@@ -74,6 +74,9 @@ impl App {
         ui.separator();
         self.action_item(ui, "Allonger le plan d'une image", "panneau.ajouter_image");
         self.action_item(ui, "Raccourcir le plan d'une image", "panneau.retirer_image");
+        // Rogner : durée exacte, début et fin à la tête de lecture, contenu rogné (`rognageui.rs`).
+        let cur = self.cur_panel;
+        ui.menu_button("Rogner le plan", |ui| self.trim_menu_items(ui, cur));
         ui.separator();
         self.action_item(ui, "Couper le plan à l'image courante", "panneau.couper");
         self.action_item(ui, "Réunir avec le plan suivant", "panneau.fusionner_suivant");
@@ -639,6 +642,7 @@ impl App {
         self.sb_export_ui(ctx);
         self.smart_rename_window(ctx);
         self.goto_window(ctx);
+        self.duration_dialog_ui(ctx);
         self.palette_window(ctx);
         // Nouveau projet (`nouveauui.rs`).
         self.new_project_window(ctx);

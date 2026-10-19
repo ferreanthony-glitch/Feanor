@@ -680,9 +680,16 @@ pub struct App {
     /// Largeur de la colonne de gauche du montage (`montagehead.rs`), retenue dans les réglages.
     pub(crate) montage_head_w: f32,
     pub(crate) montage_drag: Option<MontageDrag>,
+    /// Rognage (`rognageui.rs`) : le bord que les flèches déplacent, l'aimantation des bords
+    /// (l'aimant de la barre du montage), la fenêtre « Durée… », et le plan visé par le menu du
+    /// montage avec la tête de lecture d'alors (id du plan, image du film).
+    pub(crate) edge_sel: Option<crate::rognageui::EdgeSel>,
+    pub(crate) snap_on: bool,
+    pub(crate) duration_dialog: Option<crate::rognageui::DurationDialog>,
+    pub(crate) trim_menu: Option<(u64, usize)>,
     /// Plan tel qu'il était au début du réglage de sa durée : chaque valeur intermédiaire
     /// repart de lui, rien n'est perdu avant la fin du geste.
-    pub(crate) length_origin: Option<Panel>,
+    pub(crate) length_origin: Option<crate::rognageui::PlanBackup>,
     /// Un champ de durée est en cours d'utilisation pendant cette image d'écran.
     pub(crate) length_field_active: bool,
     pub(crate) pen_pressure: f32,
@@ -1010,6 +1017,10 @@ impl App {
             montage_fit: false,
             montage_head_w,
             montage_drag: None,
+            edge_sel: None,
+            snap_on: true,
+            duration_dialog: None,
+            trim_menu: None,
             length_origin: None,
             length_field_active: false,
             pen_pressure: 1.0,
@@ -3320,6 +3331,9 @@ impl App {
             "selection.miroir_h" => self.flip_selection(true),
             "selection.miroir_v" => self.flip_selection(false),
             "lecture.basculer" => self.toggle_play(),
+            // Un bord de plan choisi dans le montage : les flèches le déplacent d'une image.
+            "image.precedente" if self.edge_nudge_ready() => self.nudge_edge(-1),
+            "image.suivante" if self.edge_nudge_ready() => self.nudge_edge(1),
             "image.precedente" if board => self.step_global(-1),
             "image.suivante" if board => self.step_global(1),
             "image.precedente" => self.goto_frame(self.cur_frame.saturating_sub(1)),
@@ -3487,6 +3501,16 @@ impl App {
                 self.status = if self.looping { "Lecture en boucle.".into() } else { "Lecture une seule fois.".into() };
             }
             "storyboard.verrouiller" => self.toggle_storyboard_lock(),
+            // Rognage des plans (`rognageui.rs`).
+            "montage.duree" => self.open_duration_dialog(),
+            "montage.debut_a_tete" => self.trim_head_to_playhead(),
+            "montage.fin_a_tete" => self.trim_tail_to_playhead(),
+            "montage.rognage_retablir" => self.restore_trimmed(),
+            "montage.rognage_oublier" => self.forget_trimmed(),
+            "montage.aimanter" => {
+                self.snap_on = !self.snap_on;
+                self.status = format!("Aimantation des bords du montage : {}.", if self.snap_on { "oui" } else { "non" });
+            }
             "projet.proprietes" => self.properties_window = !self.properties_window,
             "projet.nouveau_depuis_plans" => self.request(Pending::FromChosen),
             // Panneau de la pelure d'oignon (13f, `onionui.rs`).
@@ -3720,7 +3744,8 @@ impl App {
         }
         self.end_stroke();
         let snap = self.snapshot();
-        self.panel_mut().set_length(n);
+        // Raccourcir garde le reste en réserve (`rognage.rs`) : « Allonger » le rend d'abord.
+        self.doc.set_duration(self.cur_panel, n);
         self.length_origin = None;
         self.commit_structure(snap);
         self.status = format!(

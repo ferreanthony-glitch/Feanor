@@ -99,6 +99,8 @@ pub(crate) struct HandleDrag {
     pub handle: Handle,
     panel: u64,
     before: Panel,
+    /// Le plan, sa réserve et ses commentaires d'avant le geste (le rognage de la fin les change).
+    backup: crate::rognageui::PlanBackup,
     snap: Edit,
 }
 
@@ -671,8 +673,9 @@ impl App {
         self.end_stroke();
         self.playing = false;
         let snap = self.snapshot();
-        let before = self.panel().clone();
-        self.handle_drag = Some(HandleDrag { handle, panel: before.id, before, snap });
+        let backup = crate::rognageui::PlanBackup::capture(&self.doc, self.cur_panel);
+        let before = backup.panel.clone();
+        self.handle_drag = Some(HandleDrag { handle, panel: before.id, before, backup, snap });
         true
     }
 
@@ -809,11 +812,12 @@ impl App {
                 format!("Expositions : {before} image{} avant la limite, {after} après.", if before > 1 { "s" } else { "" })
             }
             Handle::PlanEnd => {
-                let Some(before) = self.handle_drag.as_ref().map(|d| d.before.clone()) else { return };
-                let (old, n) = (before.frame_count(), edge.max(1));
-                let mut p = before;
-                p.set_length(n);
-                self.doc.panels[pi] = p;
+                // La fin se rogne sans rien détruire : ce qui sort va dans la réserve du plan
+                // (`rognage.rs`) et revient en rallongeant. Chaque valeur repart du plan d'avant.
+                let Some(backup) = self.handle_drag.as_ref().map(|d| d.backup.clone()) else { return };
+                let (old, n) = (backup.panel.frame_count(), edge.max(1));
+                backup.restore(&mut self.doc);
+                self.doc.set_duration(pi, n);
                 self.renderer.invalidate_all();
                 let base = format!("Durée du plan : {}", crate::storyboard::duration_label(n, self.doc.fps));
                 match sound_shift_note(&self.doc, pi, old, n) {
@@ -921,15 +925,30 @@ impl App {
         };
         let plan_now = p.frame_count();
         if changed {
-            // Glisser une clé de dessin : « Décaler les clés », « Déplacer une clé »…
             if matches!(d.handle, Handle::Key { .. } | Handle::Boundary { .. } | Handle::Exposure { .. }) {
+                // Glisser une clé de dessin : « Décaler les clés », « Déplacer une clé »…
                 self.commit_as(d.snap, crate::montagekeys::key_move_name(move_mode, false));
             } else {
+                // La poignée de fin du plan : « Allonger la fin » ou « Raccourcir la fin ».
+                let name = (d.handle == Handle::PlanEnd).then(|| {
+                    if plan_now > d.before.frame_count() {
+                        crate::rognage::noms::FIN_LONGUE
+                    } else {
+                        crate::rognage::noms::FIN_COURTE
+                    }
+                });
+                let ctx = name.map(|n| self.history.context.replace(n.to_string()));
                 self.history.push(d.snap);
+                if let Some(before) = ctx {
+                    self.history.context = before;
+                }
             }
             self.modified = true;
             // La note du son reste lisible après le geste ; la durée vue est à jour.
             self.plan_len_seen = Some((d.panel, plan_now));
+        } else if d.handle == Handle::PlanEnd {
+            // Rien n'a changé : le plan, sa réserve et ses commentaires reprennent leur état.
+            d.backup.restore(&mut self.doc);
         } else if let Some(p) = self.doc.panels.iter_mut().find(|p| p.id == d.panel) {
             // Rien n'a changé : le plan reprend exactement son état (durée minimale comprise).
             *p = d.before;
@@ -949,6 +968,10 @@ impl App {
                 self.action_item(ui, "Point d'entrée ici", "entree.poser");
                 self.action_item(ui, "Point de sortie ici", "sortie.poser");
                 self.action_item(ui, "Enlever l'entrée et la sortie", "entree_sortie.enlever");
+                ui.separator();
+                // Rogner le plan à la tête de lecture (le contenu rogné reste en réserve).
+                let cur = self.cur_panel;
+                self.trim_menu_items(ui, cur);
                 ui.separator();
                 self.action_item(ui, "Adapter la timeline au plan", "timeline.adapter_plan");
                 self.action_item(ui, "Timeline : tout voir", "timeline.tout_voir");
@@ -991,7 +1014,10 @@ impl App {
         self.key_drag_delta = 0;
         self.key_drag_mode = KeyMove::Ripple;
         let Some(d) = self.handle_drag.take() else { return };
-        if let Some(p) = self.doc.panels.iter_mut().find(|p| p.id == d.panel) {
+        if d.handle == Handle::PlanEnd {
+            d.backup.restore(&mut self.doc);
+            self.renderer.invalidate_all();
+        } else if let Some(p) = self.doc.panels.iter_mut().find(|p| p.id == d.panel) {
             *p = d.before;
             self.renderer.invalidate_all();
         }

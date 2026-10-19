@@ -92,7 +92,7 @@ impl App {
         if let Some(i) = self.doc.panels.iter().position(|p| p.id == panel) {
             self.set_panel(i);
         }
-        clip.start = at;
+        clip.start = at as i64;
         let (name, fps) = (clip.name.clone(), self.doc.fps);
         let end = clip.end(fps);
         let snap = self.snapshot();
@@ -168,9 +168,10 @@ impl App {
         ui.label(egui::RichText::new(format!("« {} » : {} images à {:.3} i/s", clip.name, clip.frames, clip.fps)).weak());
         ui.horizontal(|ui| {
             ui.label("Commence à l'image");
+            // Une vidéo qui a commencé avant le plan (début rogné) a un début négatif.
             let mut start = clip.start;
-            let first = self.doc.start_frame;
-            let resp = ui.add(egui::DragValue::new(&mut start).range(0..=100_000).custom_formatter(move |v, _| (v as usize + first).to_string()));
+            let first = self.doc.start_frame as i64;
+            let resp = ui.add(egui::DragValue::new(&mut start).range(-100_000..=100_000).custom_formatter(move |v, _| (v as i64 + first).to_string()));
             if self.edited(&resp) {
                 if let Some(v) = self.layers_mut()[li].video.as_mut() {
                     v.start = start;

@@ -7,7 +7,7 @@ use eframe::egui::Color32;
 use crate::document::{Document, Layer, LayerKind};
 use crate::video::{self, VideoClip};
 
-fn clip(frames: usize, fps: f64, start: usize) -> VideoClip {
+fn clip(frames: usize, fps: f64, start: i64) -> VideoClip {
     VideoClip { id: video::new_id(), name: "essai.mp4".into(), frames, fps, start, ext: "png".into() }
 }
 

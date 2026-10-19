@@ -193,6 +193,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
         storyboard_locked: false,
         properties: Default::default(),
         comments: Vec::new(),
+        reserves: Default::default(),
     };
     let mut shots = manifest.shots;
     if shots.is_empty() {

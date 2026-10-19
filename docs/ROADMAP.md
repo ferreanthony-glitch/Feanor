@@ -2299,3 +2299,48 @@ Quatre retours d'Anthony, branche `retouches` (pas vus à l'écran dans cette s�
   (cadre, défilement propre, au moins trois lignes) puis l'éditeur dessous, dans un panneau qui défile s'il
   est plus court que les deux (`list_height`) ; chaque ligne tient sur une ligne, coupée par « … »
   (`one_line`), l'heure et le plan ne se chevauchent plus.
+
+## Outils de montage : rogner les plans (demandé par Anthony le 2026-10-19) ✅
+
+La demande : « J'ai besoin de plus d'outils de montage pour la timeline. Je ne peux pas saisir le
+début d'un shot pour le raccourcir en l'état. » Branche `outils-montage` (`src/rognage.rs`,
+`src/rognageui.rs`, essais `rognage_tests.rs`). Pas vu à l'écran dans cette séance : à essayer par
+Anthony.
+
+- Avant : seule la fin d'un plan se tirait (`set_length`, qui jetait ce qu'on coupait : un plan n'a
+  pas d'autre notion d'« entrée / sortie » que les limites de lecture de 13d, qui ne rognent rien),
+  les plans suivants suivant d'autant ; on pouvait aussi déplacer, couper, dupliquer, réunir un plan
+  et taper sa durée dans la fiche.
+- ✅ **Rognage sans rien détruire** (choix de conception) : un plan commence à l'image 0 de ses calques,
+  de sa caméra, de ses marques… ; décaler tout cela pour un « point d'entrée » aurait touché tout le
+  code. Ce qui sort du plan, au début ou à la fin, va donc dans une **réserve** rangée par numéro de
+  plan (`Document::reserves`), et le plan vivant reste complet et cohérent (écran, export, PDF). Elle
+  revient en rallongeant le côté. Dans la réserve : dessins, rôles et clés d'effets de chaque calque
+  (par numéro de calque), clés de caméra, marques d'image, signets, entrée / sortie et commentaires de
+  ces images. L'annulation la rétablit avec le reste (`Structure::reserves`).
+- ✅ **Mouvements continus** : rogner pose au bord une clé de caméra (et d'effet) qui garde la valeur de
+  la courbe à cet endroit, notée dans la réserve ; elle repart quand le contenu revient, donc rien ne
+  s'accumule (essais : rogner puis rendre redonne le plan à l'identique). Avec des adoucis de caméra,
+  la forme du mouvement près de la coupure est approchée, comme pour « Couper le plan » (F6).
+- ✅ **Gestes** : bord gauche = début, bord droit = fin ; Alt + bord = roll ; Alt dans un plan = glisser
+  le contenu (limité à la réserve : rien à faire glisser sans rognage). Ripple par défaut. Aimant
+  (`MAGNET`, action `montage.aimanter`) : tête de lecture, coupes, clés de caméra et d'effets, à six
+  points d'écran. Clic sur un bord + flèches : une image ; Alt + clic : la coupe. Menu du plan :
+  « Durée… » (images, `1:12`, `1s12`, `+n`, `-n`), « Raccourcir le début / la fin jusqu'à la tête de
+  lecture », « Rétablir » et « Oublier le contenu rogné ». Mêmes commandes dans le menu Storyboard >
+  Plans et dans la règle de la timeline, dont la poignée de fin ne détruit plus rien.
+- ✅ **À vérifier** (conventions supposées, pas relevées dans Storyboard Pro) : Alt pour le roll et le
+  glisser ; la coupe « jusqu'à la tête de lecture » au trait de la tête (le bord gauche de l'image
+  courante : l'image sous la tête sort de la fin) ; le premier dessin tenu quand on rallonge le début
+  au-delà de la réserve. Le son ne bouge pas (la barre d'état prévient du décalage des plans).
+- ✅ **Fichier** : `rognages.json` à côté du manifeste, sans changer `VERSION` (comme
+  `commentaires.json`) ; les dessins cachés restent dans le projet. Un calque vidéo dont le début est
+  rogné commence avant le plan : `VideoClip::start` devient signé (le manifeste lit toujours les
+  anciennes valeurs ; une version d'avant ne lirait pas un début négatif).
+- ✅ **Couper / réunir** : couper un plan garde le début caché au premier (la fin cachée est
+  oubliée) ; réunir ne garde que le début caché du premier ; dupliquer ou copier un plan n'emporte pas
+  sa réserve.
+- Pas faits : poignée de début dans la timeline du plan (la grille y est ancrée à l'image 0 : le contenu
+  glisserait sous la souris) ; noms d'instance et marques de couleur des dessins cachés (perdus à
+  l'enregistrement) ; roll de plusieurs plans choisis ; glisser le contenu sans réserve ; « Retourner
+  les plans » ne retourne pas leur contenu caché ; « Changer la cadence » oublie les réserves.

@@ -252,6 +252,10 @@ mod keymap_tests;
 mod ops_tests;
 mod model3d;
 mod montagekeys;
+mod rognage;
+#[cfg(test)]
+mod rognage_tests;
+mod rognageui;
 mod springtools;
 #[cfg(test)]
 mod springtools_tests;

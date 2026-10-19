@@ -6,23 +6,17 @@ use eframe::egui::{
 };
 
 use crate::app::{App, BoardView, Mode};
-use crate::document::{Document, Panel};
+use crate::document::Document;
 use crate::handles::Handle;
-use crate::history::Edit;
 use crate::soundtrack::{ClipDrag, ClipEdge, MenuTarget};
 use crate::theme;
 use crate::timeline::cur_frame;
 
 pub(crate) enum MontageDrag {
-    /// Bord droit d'un plan tiré : on change sa durée. Les calques sont recalculés depuis
-    /// l'original à chaque mouvement, rien n'est perdu tant qu'on n'a pas relâché.
-    Trim {
-        panel: usize,
-        original: Panel,
-        start_len: usize,
-        origin_x: f32,
-        snap: Edit,
-    },
+    /// Bord d'un plan tiré (début, fin, coupe entre deux plans) ou contenu glissé : le plan est
+    /// refait depuis l'original à chaque mouvement, rien n'est perdu tant qu'on n'a pas relâché
+    /// (`rognageui.rs`).
+    Edge(crate::rognageui::EdgeDrag),
     /// Plan déplacé dans le montage ; `target` est la place où il sera inséré.
     Move { panel: usize, target: usize },
     Scrub,
@@ -292,16 +286,16 @@ impl App {
         }
         self.length_field_active = true;
         let id = self.panel().id;
-        if self.length_origin.as_ref().is_none_or(|s| s.id != id) {
+        if self.length_origin.as_ref().is_none_or(|s| s.panel.id != id) {
             self.end_stroke();
             let snap = self.snapshot();
             self.history.push(snap);
-            self.length_origin = Some(self.panel().clone());
+            self.length_origin = Some(crate::rognageui::PlanBackup::capture(&self.doc, self.cur_panel));
         }
         let Some(origin) = &self.length_origin else { return };
-        let mut panel = origin.clone();
-        panel.set_length(n);
-        *self.panel_mut() = panel;
+        // Raccourcir garde le reste en réserve (`rognage.rs`) ; chaque valeur repart du plan d'avant.
+        origin.restore(&mut self.doc);
+        self.doc.set_duration(self.cur_panel, n);
         self.vsel = None;
         self.modified = true;
         self.renderer.invalidate_all();
@@ -338,12 +332,7 @@ impl App {
         self.cancel_cam_keys_drag();
         self.cancel_handle_drag();
         match self.montage_drag.take() {
-            Some(MontageDrag::Trim { panel, original, .. }) => {
-                if self.doc.panels.get(panel).is_some_and(|s| s.id == original.id) {
-                    self.doc.panels[panel] = original;
-                    self.renderer.invalidate_all();
-                }
-            }
+            Some(MontageDrag::Edge(d)) => self.cancel_edge_drag(d),
             Some(MontageDrag::Clip(d)) => self.doc.audio_tracks = d.before,
             _ => {}
         }
@@ -479,6 +468,18 @@ impl App {
         if self.bouton_etat(ui, locked, icon, "Verrouiller le storyboard", what, "storyboard.verrouiller").clicked() {
             self.toggle_storyboard_lock();
         }
+        // Aimant : les bords des plans rognés à la souris se collent à la tête de lecture, aux autres
+        // coupes et aux clés de caméra et d'effets (`rognageui.rs`).
+        let key = self.raccourci("montage.aimanter");
+        crate::bulles::interrupteur_a(
+            ui,
+            &mut self.snap_on,
+            ph::MAGNET,
+            "Aimantation des bords",
+            "Rogner un plan à la souris : le bord se colle à la tête de lecture, aux autres coupes et aux clés de caméra et d'effets. Éteint, il suit la souris à l'image près.",
+            &key,
+            "montage.aimanter",
+        );
         sep(ui);
 
         // Son.
@@ -699,6 +700,10 @@ impl App {
             self.merge_chosen_panels();
         }
         ui.separator();
+        // Rogner : la durée exacte et les coupes à la tête de lecture ; le contenu rogné reste en
+        // réserve et revient en rallongeant le plan (`rognage.rs`).
+        self.trim_menu_items(ui, index);
+        ui.separator();
         if ui.button("Importer un son au début du plan…").clicked() {
             ui.close_menu();
             let at = self.doc.panel_start(index.min(self.doc.panels.len() - 1));
@@ -853,12 +858,35 @@ impl App {
                     StrokeKind::Inside,
                 );
             }
-            // Poignée de durée sur le bord droit.
-            painter.rect_filled(
-                Rect::from_min_max(pos2(rect.right() - 4.0, rect.top() + 10.0), pos2(rect.right() - 1.0, rect.bottom() - 10.0)),
-                1.0,
-                theme::poignee(),
-            );
+            // Poignées de rognage sur les bords : le début à gauche, la fin (la durée) à droite ;
+            // un triangle dit qu'il reste du contenu rogné de ce côté (`rognage.rs`).
+            let (hid_head, hid_tail) = self.doc.hidden(i);
+            let edge_lit = |side: crate::rognageui::Side| {
+                self.edge_sel.is_some_and(|e| {
+                    e.panel == self.doc.panels[i].id && e.side == side
+                        || (e.side == crate::rognageui::Side::Cut
+                            && ((side == crate::rognageui::Side::Tail && e.panel == self.doc.panels[i].id)
+                                || (side == crate::rognageui::Side::Head && i > 0 && e.panel == self.doc.panels[i - 1].id)))
+                })
+            };
+            for (side, x0, hidden) in [
+                (crate::rognageui::Side::Head, rect.left() + 1.0, hid_head),
+                (crate::rognageui::Side::Tail, rect.right() - 4.0, hid_tail),
+            ] {
+                let lit = edge_lit(side);
+                let color = if lit { theme::contour() } else { theme::poignee() };
+                let w = if lit { 4.0 } else { 3.0 };
+                painter.rect_filled(Rect::from_min_max(pos2(x0, rect.top() + 10.0), pos2(x0 + w, rect.bottom() - 10.0)), 1.0, color);
+                if hidden > 0 {
+                    let (x, dir) = if side == crate::rognageui::Side::Head { (rect.left() + 6.0, -1.0) } else { (rect.right() - 6.0, 1.0) };
+                    let y = rect.center().y;
+                    painter.add(egui::Shape::convex_polygon(
+                        vec![pos2(x, y - 4.0), pos2(x, y + 4.0), pos2(x + dir * 5.0, y)],
+                        theme::contour(),
+                        Stroke::NONE,
+                    ));
+                }
+            }
         }
 
         // Barre des séquences au-dessus des plans (13a : un plan = un bloc, plus de barre de scène).
@@ -938,11 +966,12 @@ impl App {
         self.paint_lanes(&painter, r, left, ppf, lanes_top, theme::contour());
 
         let panel_at = |x: f32| blocks.iter().position(|b| x >= b.left() - 1.0 && x <= b.right() + 1.0);
+        // Le bord d'un plan sous le point : son début ou sa fin (`rognageui::edge_hit`).
         let edge_at = |p: Pos2| {
             if !in_blocks(p) {
                 return None;
             }
-            blocks.iter().position(|b| (p.x - b.right()).abs() <= 5.0)
+            crate::rognageui::edge_hit(&blocks, p.x)
         };
         let frame_at = |x: f32| (((x - left) / ppf).floor().max(0.0) as usize).min(total - 1);
         // Marque d'image sous le point (son triangle en haut du plan) : (plan, rang de la marque).
@@ -971,12 +1000,13 @@ impl App {
                 self.lane_hit(p, left, ppf, lanes_top),
                 Some((_, Some((_, ClipEdge::Left | ClipEdge::Right))))
             );
-            let resizing = matches!(
-                &self.montage_drag,
-                Some(MontageDrag::Trim { .. })
-            ) || matches!(&self.montage_drag, Some(MontageDrag::Clip(d)) if d.edge != ClipEdge::Move);
+            let resizing = matches!(&self.montage_drag, Some(MontageDrag::Edge(d)) if d.kind != crate::rognageui::EdgeKind::Slip)
+                || matches!(&self.montage_drag, Some(MontageDrag::Clip(d)) if d.edge != ClipEdge::Move);
             if edge_at(p).is_some() || clip_edge || resizing {
                 ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
+            }
+            if matches!(&self.montage_drag, Some(MontageDrag::Edge(d)) if d.kind == crate::rognageui::EdgeKind::Slip) {
+                ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
             }
             // Un losange de clé d'effet se prend (`fxkeys.rs`).
             if self.montage_fx_key_at(p, r.top(), &blocks, ppf, rows).is_some() {
@@ -1065,22 +1095,30 @@ impl App {
                     // Storyboard verrouillé (13e) : ni durée ni place des plans ne bougent.
                     self.status = crate::projetui::STORYBOARD_LOCKED.into();
                     MontageDrag::Scrub
-                } else if let Some(i) = edge_at(origin) {
-                    self.set_panel(i);
-                    MontageDrag::Trim {
-                        panel: i,
-                        original: self.doc.panels[i].clone(),
-                        start_len: self.doc.panels[i].frame_count(),
-                        origin_x: origin.x,
-                        snap: self.snapshot(),
-                    }
+                } else if let Some((i, side)) = edge_at(origin) {
+                    // Un bord de plan (`rognageui.rs`) : le début ou la fin, qui rognent sans rien
+                    // détruire et font suivre les plans d'après (ripple) ; avec Alt, entre deux
+                    // plans, la coupe se déplace (roll) et le total ne change pas.
+                    let alt = ui.input(|inp| inp.modifiers.alt);
+                    let (kind, plan) = match side {
+                        crate::rognageui::Side::Tail if alt && i + 1 < self.doc.panels.len() => (crate::rognageui::EdgeKind::Roll, i),
+                        crate::rognageui::Side::Head if alt && i > 0 => (crate::rognageui::EdgeKind::Roll, i - 1),
+                        crate::rognageui::Side::Head => (crate::rognageui::EdgeKind::Head, i),
+                        _ => (crate::rognageui::EdgeKind::Tail, i),
+                    };
+                    self.begin_edge_drag(kind, plan, origin.x).unwrap_or(MontageDrag::Scrub)
                 } else if let Some(i) = panel_at(origin.x) {
-                    // Un panneau qui n'était pas choisi part seul ; sinon tout le groupe le suit.
-                    if !self.board_selection().contains(&self.doc.panels[i].id) {
-                        self.board_sel.clear();
+                    if ui.input(|inp| inp.modifiers.alt) {
+                        // Alt + glisser dans un plan : son contenu glisse sous sa fenêtre.
+                        self.begin_edge_drag(crate::rognageui::EdgeKind::Slip, i, origin.x).unwrap_or(MontageDrag::Scrub)
+                    } else {
+                        // Un panneau qui n'était pas choisi part seul ; sinon tout le groupe le suit.
+                        if !self.board_selection().contains(&self.doc.panels[i].id) {
+                            self.board_sel.clear();
+                        }
+                        self.set_panel(i);
+                        MontageDrag::Move { panel: i, target: i }
                     }
-                    self.set_panel(i);
-                    MontageDrag::Move { panel: i, target: i }
                 } else {
                     MontageDrag::Scrub
                 };
@@ -1178,7 +1216,7 @@ impl App {
                     Some(MontageDrag::Move { target, .. }) => {
                         *target = blocks.iter().filter(|b| b.center().x < p.x).count();
                     }
-                    Some(MontageDrag::Trim { .. }) => self.update_trim(p.x),
+                    Some(MontageDrag::Edge(_)) => self.update_edge_drag(p.x),
                     Some(MontageDrag::Clip(_)) => self.update_clip_drag(p, ppf, lanes_top),
                     None => {}
                 }
@@ -1187,22 +1225,7 @@ impl App {
 
         if resp.drag_stopped() {
             match self.montage_drag.take() {
-                Some(MontageDrag::Trim {
-                    snap,
-                    original,
-                    panel,
-                    ..
-                }) => {
-                    let changed = self
-                        .doc
-                        .panels
-                        .get(panel)
-                        .is_some_and(|s| s.id == original.id && s.frame_count() != original.frame_count());
-                    if changed {
-                        self.history.push(snap);
-                        self.modified = true;
-                    }
-                }
+                Some(MontageDrag::Edge(d)) => self.finish_edge_drag(d),
                 Some(MontageDrag::Move { panel, target }) => {
                     let ids = self.board_selection();
                     if ids.len() > 1 {
@@ -1217,6 +1240,8 @@ impl App {
         }
 
         if resp.clicked() && !comment_ptr.busy {
+            // Le bord choisi pour les flèches ne l'est que par un clic sur un bord (ci-dessous).
+            self.edge_sel = None;
             if let Some(p) = resp.interact_pointer_pos() {
                 let fx_hit = self.montage_fx_key_at(p, r.top(), &blocks, ppf, rows);
                 if fx_hit.is_none() {
@@ -1259,6 +1284,17 @@ impl App {
                     self.sel_clip = None;
                     self.key_sel.clear();
                     let mods = ui.input(|i| i.modifiers);
+                    // Un clic sur un bord de plan le choisit : les flèches le déplacent d'une
+                    // image (Alt : la coupe entre deux plans, `rognageui.rs`).
+                    self.edge_sel = None;
+                    if let Some((i, side)) = edge_at(p) {
+                        let (plan, side) = match side {
+                            crate::rognageui::Side::Tail if mods.alt && i + 1 < self.doc.panels.len() => (i, crate::rognageui::Side::Cut),
+                            crate::rognageui::Side::Head if mods.alt && i > 0 => (i - 1, crate::rognageui::Side::Cut),
+                            s => (i, s),
+                        };
+                        self.select_edge(plan, side);
+                    }
                     let block = in_blocks(p).then(|| panel_at(p.x)).flatten();
                     // Clic sur une barre de scène ou de séquence : son premier panneau.
                     match (runs.iter().find(|(rect, _)| rect.contains(p)), block) {
@@ -1326,6 +1362,9 @@ impl App {
                         if !self.board_selection().contains(&self.doc.panels[i].id) {
                             self.board_sel.clear();
                         }
+                        // Les commandes de rognage du menu visent ce plan et la tête de lecture
+                        // d'avant le clic (choisir le plan la ramène à son début).
+                        self.trim_menu = Some((self.doc.panels[i].id, self.global_frame()));
                         self.select_panel(i);
                         MenuTarget::Panel(i)
                     })
@@ -1377,7 +1416,7 @@ impl App {
             }
         }
         if let Some(target) = self.menu_target {
-            resp.context_menu(|ui| match target {
+            let menu_open = resp.context_menu(|ui| match target {
                 MenuTarget::Panel(i) => self.panel_menu(ui, i),
                 MenuTarget::Comment(id) => self.comment_menu(ui, id),
                 MenuTarget::Lane { track, clip, frame } => self.lane_menu(ui, track, clip, frame),
@@ -1462,9 +1501,16 @@ impl App {
                     self.action_item(ui, "Signet du plan ici (poser / retirer)", "signet.basculer");
                     self.action_item(ui, "Commentaire ici", "commentaire.ajouter");
                     ui.separator();
+                    self.action_item(ui, "Raccourcir le début du plan jusqu'ici", "montage.debut_a_tete");
+                    self.action_item(ui, "Raccourcir la fin du plan jusqu'ici", "montage.fin_a_tete");
+                    ui.separator();
                     self.action_item(ui, "Importer un son ici…", "son.importer");
                 }
             });
+            // Le menu est fermé : les commandes de rognage visent de nouveau le plan courant.
+            if menu_open.is_none() && !resp.secondary_clicked() {
+                self.trim_menu = None;
+            }
         }
 
         // Tête de lecture et repère de déplacement.
@@ -1485,6 +1531,10 @@ impl App {
                 Stroke::new(3.0_f32, theme::contour()),
             );
         }
+        // Rognage en cours : le repère de la coupe dans le film d'avant le geste, et la durée.
+        if matches!(self.montage_drag, Some(MontageDrag::Edge(_))) {
+            self.paint_edge_drag(&painter, &blocks, &x_of, top, top + block_h, theme::contour());
+        }
         // Les fanions des commentaires, par-dessus la tête de lecture.
         crate::commentairesui::paint_flags(&painter, ruler_rect, &comments, &comment_pole, self.comment_ui.sel, comment_ptr.hover);
 
@@ -1493,37 +1543,6 @@ impl App {
                 Rect::from_center_size(pos2(gx, top + block_h * 0.5), vec2(ppf * 24.0, 10.0)),
                 None,
             );
-        }
-    }
-
-    fn update_trim(&mut self, x: f32) {
-        let ppf = self.montage_zoom;
-        let fps = self.doc.fps;
-        let Some(MontageDrag::Trim {
-            panel,
-            original,
-            start_len,
-            origin_x,
-            ..
-        }) = &self.montage_drag
-        else {
-            return;
-        };
-        let n = ((*start_len as f32) + ((x - *origin_x) / ppf).round()).max(1.0) as usize;
-        let i = *panel;
-        if self.doc.panels.get(i).is_none_or(|s| s.id != original.id) {
-            self.montage_drag = None;
-            return;
-        }
-        let old = original.frame_count();
-        let mut s = original.clone();
-        s.set_length(n);
-        self.doc.panels[i] = s;
-        self.renderer.invalidate_all();
-        self.status = format!("{} : {}", panel_long_title(&self.doc, i), duration_label(n, fps));
-        // Les plans suivants se décalent par rapport au son (chantier 4).
-        if let Some(note) = crate::handles::sound_shift_note(&self.doc, i, old, n) {
-            self.status = format!("{}. {note}", self.status);
         }
     }
 
