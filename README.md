@@ -1074,6 +1074,44 @@ Il s'en va dès qu'un projet s'ouvre ou se crée, au premier trait, ou par « Co
 Entrée valide, Échap annule. La fenêtre repart des dernières valeurs, du dernier dossier et de tes
 préréglages, retenus dans `%APPDATA%\SHOT\reglages.toml`.
 
+## Importer un scénario
+
+Fichier > Importer > « Un scénario… » (action `fichier.importer_scenario`, donc aussi dans Ctrl+K) : on
+choisit un fichier, SHOT le lit sur un autre fil (barre d'avancement), puis une fenêtre montre ce qui va
+être créé avant que rien ne soit touché. Exemple prêt à essayer : `docs/exemples/Le-Reveil.fountain`.
+
+**Formats lus** : Fountain (`.fountain`, `.spmd` : intitulés INT./EXT., personnages en majuscules,
+parenthèses, V.O., transitions, dialogues simultanés `^`, notes `[[ ]]`, cimetière `/* */`, sections `#`,
+synopsis `=`, centré `> <`, éléments forcés `.` `!` `@` `>` `~`, page de titre) ; texte brut (`.txt` et
+le reste : mêmes repères déduits de la forme, « NOM : réplique », indentation, numéros de page et
+« (SUITE) » d'un texte copié d'un PDF retirés) ; Final Draft (`.fdx`) ; Word (`.docx`, avec les styles
+d'un logiciel de scénario si le document en a, sinon un paragraphe = une ligne). **Pas lus** : le PDF
+(aucun lecteur de PDF hors connexion dans SHOT ; le message propose d'exporter en `.fountain` ou `.txt`
+ou de copier le texte dans un `.txt`), l'ancien `.doc`, le `.rtf`, l'`.odt`.
+
+**Ce qui est créé** :
+- chaque **intitulé de scène** (« INT. CUISINE – NUIT ») devient une **séquence** du même nom (« Ouverture »
+  pour ce qui précède le premier intitulé) ; ses **plans** viennent de l'action et des répliques ;
+- **découpage** au choix : *un plan par scène* (les paragraphes et les répliques en sont les images de
+  storyboard, avec leurs textes), *un plan par paragraphe* (par défaut : un plan par paragraphe d'action et un
+  par échange, les répliques qui se suivent), *un plan par réplique* ;
+- **action** → champ Action ; **répliques** → champ Dialogue, une ligne chacune, `MARIE (V.O.) (bas) : Viens
+  ici.` (deux personnages qui parlent ensemble : deux lignes du même plan) ; **notes** → champ Notes : notes
+  `[[ ]]` (« Note : … »), transitions (« Transition : CUT TO: »), synopsis, sections, et le décor
+  (« Décor : INT. CUISINE – NUIT », case à décocher) sur le premier plan de la séquence. Ce sont les
+  conventions du lecteur de sons par règles (`NOM : réplique`, lignes `SFX :`) ;
+- **durée** estimée du texte, réglable (« Rythme ») : répliques à 2,5 mots par seconde, action à 1 seconde par
+  ligne de 60 signes, au plus court 1 s, au plus long 30 s ; un plan dure la somme de ses textes ;
+- les **personnages** qui parlent, avec leur nombre de répliques, sont écrits dans les notes du projet
+  (Réglages du projet > Notes), sous « Personnages du scénario : » (`- MARIE (24 répliques)`) : un autre
+  import s'ajoute à la liste. Les voix provisoires la liront.
+
+**Destination** : un nouveau projet (au format du dernier « Nouveau projet », titre et auteur de la page de
+titre ; SHOT propose d'enregistrer le projet ouvert), ou le projet ouvert, à la fin ou après la séquence du
+plan courant (une séquence ne se coupe pas). Dans le projet ouvert, l'import est **une seule étape
+d'annulation**, « Importer un scénario » ; un projet encore vierge (un seul plan vide) est remplacé. Les
+derniers choix sont gardés le temps de la séance.
+
 ## Fiabilité
 
 Un filet de sécurité contre « tous les essais passent mais SHOT ne s'ouvre plus » (`docs/FIABILITE.md`) :
@@ -1258,6 +1296,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `xml.rs`, `sboard.rs` | Lecture d'un XML en arbre ; lecture d'un projet Storyboard Pro (14a) |
 | `sbscript.rs`, `sbimport.rs`, `sbui.rs` | Script d'export des dessins et sa liste ; projet Pelure construit ; fenêtre d'ouverture (14a) |
 | `sbbatch.rs`, `sbvector.rs` | Storyboard Pro lancé en batch sur une copie du projet ; ses dessins vectoriels refaits en éléments Pelure (14a-2) |
+| `scenario.rs`, `scenariofdx.rs` | Importer un scénario : lecture de Fountain et de texte brut ; de Final Draft (`.fdx`) et de Word (`.docx`) |
+| `scenarioplans.rs`, `scenarioui.rs` | Importer un scénario : séquences, plans, durées et personnages ; la fenêtre d'aperçu et l'étape d'annulation |
 | `procreate.rs` | Import des brosses Procreate (`.brush`, `.brushset`) : listes de propriétés binaires d'Apple |
 | `abr.rs` | Import des brosses Photoshop (`.abr`) |
 | `kritabrush.rs`, `zipread.rs` | Import des réglages Krita (`.kpp`, `.bundle`) et MyPaint (`.myb`) ; lecture des archives zip |

@@ -1949,6 +1949,11 @@ touches = []
 source = "SHOT (sans touche)"
 
 [[raccourci]]
+action = "fichier.importer_scenario"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
 action = "fichier.exporter_sboard"
 touches = []
 source = "SHOT (sans touche)"

@@ -429,3 +429,25 @@ Rien de cette passe n'a été regardé : aucun lancement de SHOT (consigne). À 
 `zoombande_tests` (7), `bulles_tests` (3), `theme_tests` (2), `montagerows_tests` (2 remplacés).
 La suite passe de 1008 à 1046 essais ; `scripts\verifier.ps1 -Repetitions 2` : OK, compilation sans
 avertissement.
+
+
+---------------------------------------------------------------------------------------------------
+
+## 8. Importer un scénario (2026-10-19, branche `import-scenario`)
+
+Fichier > Importer > « Un scénario (Fountain, Final Draft, Word, texte)… », commande `fichier.importer_scenario`
+(dans Ctrl+K, sans touche par défaut). Une fenêtre « Importer un scénario » montre, avant tout changement :
+le format lu, les séquences et leurs plans, la durée estimée, les personnages, les remarques de lecture, et
+les choix (découpage en plans, rythme, destination).
+
+- **Vocabulaire** : un intitulé de scène (« INT. CUISINE – NUIT ») devient une **séquence** ; l'action et les
+  répliques deviennent des **plans** (jamais « scène » ni « panneau » dans les textes visibles) ; les
+  paragraphes d'un plan « par scène » en sont les **images de storyboard** (marques d'image).
+- **Menu** : l'entrée est sous Importer, après « Un projet Storyboard Pro (.sboard)… » (qui ouvre aussi une
+  fenêtre de lecture avant d'importer).
+- **Annuler** : un import dans le projet ouvert est une seule étape, « Importer un scénario » (panneau
+  Historique) ; un import dans un nouveau projet remplace le projet ouvert après la question habituelle
+  « Modifications non enregistrées ».
+- **À vérifier à l'écran** (rien lancé ici) : la fenêtre en thème clair et sombre (barre d'avancement d'un gros
+  fichier, liste des séquences défilante, remarques en couleur d'avertissement), les plans créés dans le montage
+  (titres, durées) et la fiche du plan (champs Action, Dialogue, Notes remplis ; notes « Décor : … »).

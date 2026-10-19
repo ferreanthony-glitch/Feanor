@@ -272,6 +272,8 @@ pub enum Pending {
     Close,
     /// Ouvrir un projet récent (`App::recent_to_open`).
     OpenRecent,
+    /// Importer un scénario dans un nouveau projet (`scenarioui.rs`), qui remplace le projet ouvert.
+    ScenarioNew,
 }
 
 /// Calque copié (W) : sa timeline, ses dessins, et la durée du panneau d'où il vient.
@@ -375,6 +377,8 @@ pub struct App {
     pub(crate) propagation: crate::propagerui::Propagation,
     /// Fenêtre d'import d'un projet Storyboard Pro et import en cours (14a, `sbui.rs`).
     pub(crate) sb_window: Option<crate::sbui::SbWindow>,
+    /// Fenêtre « Importer un scénario » (`scenarioui.rs`).
+    pub(crate) scenario_window: Option<crate::scenarioui::ScenarioWindow>,
     /// Fenêtre « Exporter vers Storyboard Pro » (14b, `sbexportui.rs`).
     pub(crate) sb_export: Option<crate::sbexportui::SbExportWindow>,
     /// Fenêtre d'interpolation ouverte (13l, `tweenui.rs`).
@@ -910,6 +914,7 @@ impl App {
             video_import: None,
             propagation: crate::propagerui::Propagation::new(wgpu_render_state),
             sb_window: None,
+            scenario_window: None,
             sb_export: None,
             tween_dialog: None,
             light_table: false,
@@ -2678,6 +2683,7 @@ impl App {
                     self.open_path(path);
                 }
             }
+            Pending::ScenarioNew => self.scenario_new_project(),
             Pending::Close => {
                 let (w, h, fps) = (self.doc.frame[0], self.doc.frame[1], self.doc.fps);
                 self.load_doc(Document::with_frame(w, h, fps).created_now());
@@ -3684,6 +3690,7 @@ impl App {
             // Calque vidéo (13k, `videoui.rs`).
             "fichier.importer_video" => self.import_video(),
             "fichier.importer_sboard" => self.open_sb_window(),
+            "fichier.importer_scenario" => self.open_scenario_window(),
             "fichier.exporter_sboard" => self.open_sb_export(),
             "pinceau.enregistrer_traits" => {
                 self.record_strokes = match self.record_strokes {

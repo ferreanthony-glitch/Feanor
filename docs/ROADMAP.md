@@ -2487,6 +2487,29 @@ tableaux et les propositions sont dans **`docs/INTERFACE.md`**. Pas vu à l'écr
   de l'animation (l'unité y est l'image), un rectangle pour les clés d'effets, les 150 infobulles d'egui
   restantes, « Arrière-plan » / « Fond » / « Propriétés du plan ».
 
+## Importer un scénario (demandé par Anthony le 2026-10-19, branche `import-scenario`) ✅
+
+Fichier > Importer > Un scénario… (`fichier.importer_scenario`, aussi dans Ctrl+K) : un scénario devient des
+séquences et des plans, avec leurs textes et une durée estimée. Détail : README, « Importer un scénario ».
+
+- ✅ **Lecture** (`scenario.rs`, `scenariofdx.rs`) : Fountain (intitulés, personnages, parenthèses, V.O.,
+  transitions, dialogues simultanés, notes, cimetière, sections, synopsis, centré, éléments forcés, page de
+  titre), texte brut par heuristiques (majuscules, « NOM : réplique », indentation, numéros de page d'un PDF
+  copié), Final Draft `.fdx` (quick-xml en flux : les espaces entre morceaux de texte comptent), Word `.docx`
+  (`zipread.rs` : par styles de scénario s'il y en a, sinon un paragraphe par ligne). Fichier abîmé : une
+  erreur en français, jamais un plantage (lecture rattrapée en cas de panique).
+- ✅ **Structure** (`scenarioplans.rs`) : intitulé → séquence ; plans par scène (images de storyboard), par
+  paragraphe ou par réplique ; action / dialogue (`NOM (V.O.) (jeu) : réplique`, comme le lit le lecteur de
+  sons) / notes (notes, transitions, synopsis, sections, décor) ; durée = mots ÷ 2,5 par seconde + 1 seconde par
+  ligne de 60 signes, entre 1 et 30 s, réglable ; personnages notés dans les notes du projet.
+- ✅ **Fenêtre** (`scenarioui.rs`) : lecture sur un autre fil avec avancement, aperçu (séquences, plans, durée,
+  personnages, remarques), destination (nouveau projet, fin du projet, après la séquence du plan courant),
+  une seule étape d'annulation « Importer un scénario ».
+- Pas fait : le **PDF** (aucun lecteur de PDF hors connexion ; copier le texte dans un `.txt`, ou exporter en
+  `.fountain`), `.doc` / `.rtf` / `.odt`, glisser le fichier sur la fenêtre, un bouton sur l'accueil, les
+  transitions de montage (autre branche : elles restent des notes), les voix provisoires (la liste des
+  personnages est prête pour elles).
+
 ## Fiabilité : un filet contre « tous les essais passent, SHOT ne s'ouvre plus » (2026-10-19, branche `fiabilite`) ✅
 
 Le point de départ : le 2026-10-18 SHOT ne s'ouvrait plus (`raster.rs:57`, l'aperçu réduit d'un effet lu comme une
