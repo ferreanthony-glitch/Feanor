@@ -187,6 +187,7 @@ mod export_tests;
 mod exportui;
 mod fill;
 mod folders;
+pub mod demarrage;
 // Filet de sécurité de la fiabilité (`docs/FIABILITE.md`) : un projet d'essai complet et les essais
 // qui l'enregistrent, le rouvrent, le font tourner dans l'application et lui jettent des fichiers abîmés.
 #[cfg(test)]
@@ -205,6 +206,8 @@ mod fiabilite_manifestes_tests;
 mod fiabilite_dessins_tests;
 #[cfg(test)]
 mod fiabilite_fumee_tests;
+#[cfg(test)]
+mod fiabilite_demarrage_tests;
 pub mod fx;
 mod fxcache;
 mod fxproxy;
@@ -441,8 +444,10 @@ mod xsheetui;
 /// Lance SHOT (l'application egui). Un projet passé en argument (ou par double-clic sur un
 /// .pelure) est ouvert au démarrage.
 pub fn lancer() -> eframe::Result<()> {
+    demarrage::debut();
     // Une erreur de programme laisse un rapport (`plantage.rs`).
     plantage::install();
+    demarrage::marque("rapport de plantage installé");
     let initial = std::env::args_os().nth(1).map(std::path::PathBuf::from);
     // Affichage par la carte graphique (wgpu). PELURE_AFFICHAGE=opengl force l'ancien moteur, et si
     // wgpu ne démarre pas sur cette machine, on repart avec OpenGL.
@@ -483,12 +488,16 @@ fn run(renderer: eframe::Renderer, initial: Option<std::path::PathBuf>) -> efram
         "SHOT",
         options,
         Box::new(move |cc| {
+            // (Fenêtre créée, carte graphique choisie et initialisée par eframe : ce temps-là n'est pas à nous.)
+            demarrage::marque("fenêtre et carte graphique prêtes (eframe)");
             let mut app = app::App::new(cc);
+            demarrage::marque("App::new");
             match initial {
                 Some(path) => app.open_path(path),
-                // Sans projet demandé : le dernier ouvert (`recents.rs`).
+                // Sans projet demandé : le dernier ouvert (`recents.rs`), si son disque répond.
                 None => app.reopen_last_project(),
             }
+            demarrage::marque("projet demandé au lancement");
             // La séance d'avant s'est fermée sur une erreur : on le dit, avec où lire le rapport.
             if let Some(report) = plantage::dir().and_then(|d| plantage::take_new(&d)) {
                 app.status = format!("Une erreur a été notée pendant la dernière séance : rapport dans {}.", report.display());
