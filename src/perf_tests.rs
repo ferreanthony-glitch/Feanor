@@ -979,3 +979,120 @@ fn perf_project_open_save() {
     drop(l);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ------------------------------------------------------------------ enregistrer, textures de la carte
+
+/// Un dessin bitmap dont les `bw` × `bh` tuiles forment un bloc d'un seul tenant (un personnage, un
+/// décor : comme un vrai dessin au trait), placé selon `seed`. (`dessin`, lui, éparpille ses tuiles
+/// sur toute la feuille : la boîte du contenu y est toute la feuille.)
+fn dessin_groupe(doc: &mut Document, bw: usize, bh: usize, seed: usize) -> CelId {
+    let mut cel = Cel::new(doc.width, doc.height, LayerKind::Bitmap);
+    let (tx, ty) = (cel.raster.tiles_x, cel.raster.tiles.len() / cel.raster.tiles_x);
+    let (x0, y0) = ((seed * 7) % (tx - bw), (seed * 5) % (ty - bh));
+    for j in 0..bh {
+        for i in 0..bw {
+            cel.raster.tiles[(y0 + j) * tx + x0 + i] = Some(tuile((seed + i + j * bw) as u32));
+        }
+    }
+    doc.add_cel(cel)
+}
+
+/// Comme `plan_charge`, avec des dessins d'un seul bloc de 8 × 5 tuiles.
+fn plan_charge_groupe(layers: usize, frames: usize) -> Document {
+    let mut doc = Document::with_frame(1920, 1080, 24);
+    let mut ls = Vec::new();
+    for l in 0..layers {
+        let mut layer = Layer::new(&format!("Calque {}", l + 1), LayerKind::Bitmap);
+        let mut last = None;
+        for f in 0..frames {
+            if f % 2 == 0 {
+                last = Some(dessin_groupe(&mut doc, 8, 5, l * 1000 + f));
+            }
+            layer.frames.push(last);
+        }
+        ls.push(layer);
+    }
+    doc.panels[0].layers = ls;
+    doc.panels[0].length = frames;
+    doc
+}
+
+/// Ce que contient le cache de la carte, en une ligne.
+fn carte_cache(b: &Banc, titre: &str) {
+    if let Some(g) = &b.app.gpu {
+        let s = g.stats();
+        println!("PERF cache de la carte ({titre}) : {} textures, {:.0} Mo, {:.2} Mo par texture", s.textures, s.bytes as f64 / 1e6, s.bytes as f64 / 1e6 / s.textures.max(1) as f64);
+    }
+}
+
+/// Dessins éparpillés (la boîte du contenu est toute la feuille) puis dessins d'un bloc : mémoire de
+/// la carte par dessin, nombre de dessins gardés, coût du défilement et de la lecture.
+#[test]
+#[ignore]
+fn perf_gpu_textures() {
+    for (nom, doc) in [("dessins éparpillés (40 tuiles sur toute la feuille)", plan_charge(15, 200, 40)), ("dessins d'un bloc (8 x 5 tuiles)", plan_charge_groupe(15, 200))] {
+        println!("PERF --- {nom}");
+        let mut b = banc(doc, true);
+        b.app.set_mode(Mode::Animation);
+        b.chauffer(10);
+        jusqu_au_repos(&mut b, 600);
+        let zone = Rect::from_min_size(pos2(500.0, 880.0), vec2(900.0, 120.0));
+        scenario("défilement : tête de lecture à chaque image", &mut b, 120, 1.0 / 60.0, |b, k| {
+            b.app.cur_frame = (k * 3) % 200;
+            bouge(k, zone)
+        });
+        carte_cache(&b, "après le défilement");
+        b.app.cur_frame = 0;
+        b.app.toggle_play_scope(false);
+        let m = scenario("lecture du plan (24 images/s, 15 calques)", &mut b, 144, 1.0 / 24.0, |_, _| Vec::new());
+        println!("PERF lecture : {} images sur {} dépassent 41,7 ms", m.iter().filter(|x| x.total() > 41.7).count(), m.len());
+        b.app.playing = false;
+        carte_cache(&b, "après la lecture");
+        // Tête de lecture sur place, rien ne change : la composition de 15 calques par la carte.
+        b.app.cur_frame = 40;
+        b.chauffer(6);
+        scenario("repos de contenu (15 calques composés à chaque image)", &mut b, 90, 1.0 / 60.0, |_, k| bouge(k, zone));
+    }
+}
+
+/// `Ctrl+S` : ce que coûte le fil de l'interface (l'appel) et le temps jusqu'à la fin de l'écriture,
+/// 50 dessins modifiés sur 500 (40 tuiles chacun), puis rien de modifié.
+#[test]
+#[ignore]
+fn perf_save_ui_thread() {
+    let mut b = banc(plan_charge_groupe(10, 100), false);
+    let dir = std::env::temp_dir().join(format!("shot-perf-ctrls-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("dossier");
+    b.app.path = Some(dir.join("Essai.pelure"));
+    let mesurer = |b: &mut Banc, titre: &str| {
+        let t = Instant::now();
+        b.app.save();
+        let appel = t.elapsed().as_secs_f64() * 1e3;
+        // (Tant que l'écriture dure, l'interface continue de tourner.)
+        let mut images = 0;
+        let mut pire = 0.0f64;
+        while b.app.save_en_cours() {
+            let m = b.image(Vec::new(), 0.016);
+            pire = pire.max(m.construction);
+            images += 1;
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        println!("PERF {titre} : appel sur le fil de l'interface {appel:.1} ms, fin au bout de {:.0} ms ({images} images d'écran pendant l'écriture, la plus lente {pire:.1} ms), modifié : {}", t.elapsed().as_secs_f64() * 1e3, b.app.modified);
+    };
+    mesurer(&mut b, "premier enregistrement (500 dessins)");
+    for essai in 0..3 {
+        let ids: Vec<CelId> = b.app.doc.cels.keys().copied().take(50).collect();
+        for id in ids {
+            let cel = b.app.doc.cels.get_mut(&id).expect("dessin");
+            if let Some(t) = cel.raster.tiles.iter_mut().flatten().next() {
+                t[0] = Color32::from_rgba_premultiplied(9, 9, 9, 255);
+            }
+            cel.version += 1;
+        }
+        b.app.modified = true;
+        mesurer(&mut b, &format!("50 dessins modifiés (essai {essai})"));
+    }
+    mesurer(&mut b, "rien de modifié");
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -453,7 +453,7 @@ pub fn compose_tile(out: &mut Raster, idx: usize, cover: &[u8], couleur: [u8; 3]
         }
     }
     if any {
-        out.tiles[idx] = Some(Box::new(tile));
+        out.tiles[idx] = Some(crate::raster::Tile::new(tile));
     } else {
         out.tiles[idx] = None;
     }

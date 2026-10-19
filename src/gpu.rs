@@ -346,6 +346,14 @@ struct CanvasResources {
     tick: u64,
 }
 
+/// Le contenu du cache de textures (`GpuCanvas::stats`).
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct GpuStats {
+    pub textures: usize,
+    pub bytes: u64,
+}
+
 /// Côté application : de quoi mettre à jour les textures et commander le dessin.
 pub struct GpuCanvas {
     render_state: RenderState,
@@ -546,6 +554,15 @@ impl GpuCanvas {
     /// La mémoire visée pour les textures des dessins.
     pub fn cache_bytes(&self) -> u64 {
         self.render_state.renderer.read().callback_resources.get::<CanvasResources>().map_or(CACHE_BYTES, |r| r.cache_bytes)
+    }
+
+    /// Ce que le cache garde : nombre de textures de dessin et leur poids (octets de la carte).
+    /// Sert aux mesures (`perf_tests.rs`) et aux essais.
+    #[cfg(test)]
+    pub fn stats(&self) -> GpuStats {
+        let renderer = self.render_state.renderer.read();
+        let Some(res) = renderer.callback_resources.get::<CanvasResources>() else { return GpuStats::default() };
+        GpuStats { textures: res.textures.len(), bytes: res.textures.values().map(|t| t.size.0 as u64 * t.size.1 as u64 * 4).sum() }
     }
 
     /// Nombre de dessins qu'on peut envoyer d'avance sans chasser ceux qui sont affichés.

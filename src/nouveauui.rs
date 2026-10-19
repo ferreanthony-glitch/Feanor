@@ -361,7 +361,7 @@ impl App {
         let frame = format!("cadre {}×{} à {} i/s, feuille de dessin {}×{}", values.width, values.height, values.fps, values.width * 2, values.height * 2);
         match d.target() {
             Some((_, manifest)) => {
-                if self.save_to(manifest) {
+                if self.save_to_blocking(manifest) {
                     let status = std::mem::take(&mut self.status);
                     self.status = format!("Nouveau projet : {frame}. {status}");
                 } else {

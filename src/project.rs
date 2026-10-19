@@ -658,12 +658,40 @@ pub fn check_target(manifest: &Path, current: Option<&Path>) -> Result<(), Strin
     Ok(())
 }
 
-fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
+/// Écrit `bytes` dans `path` sans jamais laisser un fichier à moitié écrit : tout va d'abord dans
+/// `<path>.tmp`, qui prend la place de `path` d'un seul geste (renommage, atomique sur Windows).
+/// Un échec (disque plein, droits) ou un plantage au milieu laisse `path` tel qu'il était.
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    write_atomic_with(path, bytes, false)
+}
+
+/// Comme `write_atomic`, en attendant que le disque ait reçu les octets avant le renommage : pour
+/// le manifeste et les petits fichiers qui le suivent (une coupure de courant ne laisse pas un
+/// fichier vide à la place d'un bon).
+fn write_atomic_synced(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    write_atomic_with(path, bytes, true)
+}
+
+fn write_atomic_with(path: &Path, bytes: &[u8], sync: bool) -> Result<(), String> {
     let mut tmp = path.as_os_str().to_owned();
     tmp.push(".tmp");
     let tmp = PathBuf::from(tmp);
-    fs::write(&tmp, bytes).map_err(|e| format!("{} : {e}", tmp.display()))?;
-    fs::rename(&tmp, path).map_err(|e| format!("{} : {e}", path.display()))
+    let written = (|| -> std::io::Result<()> {
+        let mut file = fs::File::create(&tmp)?;
+        std::io::Write::write_all(&mut file, bytes)?;
+        if sync {
+            file.sync_all()?;
+        }
+        Ok(())
+    })();
+    if let Err(e) = written {
+        let _ = fs::remove_file(&tmp);
+        return Err(format!("{} : {e}", tmp.display()));
+    }
+    fs::rename(&tmp, path).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        format!("{} : {e}", path.display())
+    })
 }
 
 /// La peinture de la strate Fond du dessin `id` (format 23), à côté de lui.
@@ -953,18 +981,31 @@ impl SaveJob {
     /// Écrit les dessins, puis les sons, puis le manifeste (en dernier : un manifeste ne cite
     /// jamais un dessin pas encore écrit), puis efface ce qui ne sert plus.
     pub fn run(self) -> Result<SaveReport, String> {
+        self.run_with(None, LOAD_THREADS)
+    }
+
+    /// Comme `run`, sur au plus `threads` fils, en comptant dans `progress` les dessins écrits (un
+    /// autre fil l'affiche pendant que celui-ci écrit : `enregistrement.rs`).
+    pub fn run_with(self, progress: Option<&Progress>, threads: usize) -> Result<SaveReport, String> {
         let dir = self.manifest_path.parent().ok_or("chemin de projet invalide")?;
         fs::create_dir_all(dir.join(DRAWINGS)).map_err(|e| format!("{} : {e}", dir.display()))?;
         let mut count = 0;
+        if let Some(p) = progress {
+            p.total.store(self.drawings.len(), std::sync::atomic::Ordering::Relaxed);
+        }
         // Les dessins s'encodent et s'écrivent en parallèle (11 ms de PNG chacun) ; la première
         // erreur, dans l'ordre des dessins, est celle qui est rendue.
-        let written = crate::parallele::par_map(&self.drawings, LOAD_THREADS, |_, (path, data)| -> Result<(), String> {
+        let written = crate::parallele::par_map(&self.drawings, threads, |_, (path, data)| -> Result<(), String> {
             let bytes: std::borrow::Cow<[u8]> = match data {
                 DrawingData::Bytes(b) => std::borrow::Cow::Borrowed(b),
                 DrawingData::Raster(r) => std::borrow::Cow::Owned(encode_png(&r.to_rgba(), r.width, r.height)?),
                 DrawingData::CopyFrom(from) => std::borrow::Cow::Owned(fs::read(from).map_err(|e| format!("{} : {e}", from.display()))?),
             };
-            write_atomic(path, &bytes)
+            let result = write_atomic(path, &bytes);
+            if let Some(p) = progress {
+                p.done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+            result
         });
         for result in written {
             result?;
@@ -1001,7 +1042,7 @@ impl SaveJob {
         // Les commentaires : leur fichier à côté du manifeste (sans commentaire, il part).
         let sidecar = dir.join(crate::commentaires::FILE);
         match &self.comments {
-            Some(bytes) => write_atomic(&sidecar, bytes)?,
+            Some(bytes) => write_atomic_synced(&sidecar, bytes)?,
             None => {
                 let _ = fs::remove_file(&sidecar);
             }
@@ -1009,12 +1050,12 @@ impl SaveJob {
         // Le contenu rogné des plans : son fichier à côté du manifeste (rien de rogné, il part).
         let rognages = dir.join(crate::rognage::FILE);
         match &self.reserves {
-            Some(bytes) => write_atomic(&rognages, bytes)?,
+            Some(bytes) => write_atomic_synced(&rognages, bytes)?,
             None => {
                 let _ = fs::remove_file(&rognages);
             }
         }
-        write_atomic(&self.manifest_path, &self.manifest)?;
+        write_atomic_synced(&self.manifest_path, &self.manifest)?;
         let removed = remove_unused(dir, &self.used, &self.fonds)
             + remove_unused_sounds(dir, &self.used_sounds)
             + remove_unused_models(dir, &self.used_models)

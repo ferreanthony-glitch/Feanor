@@ -104,6 +104,8 @@ pub fn downscale(raster: &Raster, level: u8) -> Raster {
                 continue;
             }
             let mut tile = crate::raster::empty_tile();
+            // (Le tableau, pris une fois : écrire par la tuile passerait chaque fois par `make_mut`.)
+            let pixels: &mut [Color32; crate::raster::TILE_PIXELS] = &mut tile;
             let mut any = false;
             for y in 0..th {
                 for x in 0..tw {
@@ -129,7 +131,7 @@ pub fn downscale(raster: &Raster, level: u8) -> Raster {
                     let c = Color32::from_rgba_premultiplied(m(acc[0]), m(acc[1]), m(acc[2]), m(acc[3]));
                     if c.a() != 0 {
                         any = true;
-                        tile[y * TILE + x] = c;
+                        pixels[y * TILE + x] = c;
                     }
                 }
             }

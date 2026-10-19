@@ -19,6 +19,9 @@ mod materiel;
 #[cfg(test)]
 mod demarrage_tests;
 mod ouverture;
+mod enregistrement;
+#[cfg(test)]
+mod enregistrement_tests;
 mod parallele;
 #[cfg(test)]
 mod parallele_tests;

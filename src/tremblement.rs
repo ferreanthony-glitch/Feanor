@@ -269,6 +269,8 @@ pub fn boil(raster: &Raster, values: &[f32], level: u8) -> Raster {
             }
             let lattice = Lattice::covering(&field, ox as f32 * k, (ox + tw) as f32 * k, oy as f32 * k, (oy + th) as f32 * k);
             let mut tile = empty_tile();
+            // (Le tableau, pris une fois : écrire par la tuile passerait chaque fois par `make_mut`.)
+            let pixels: &mut [Color32; crate::raster::TILE_PIXELS] = &mut tile;
             let mut any = false;
             for y in 0..th {
                 for x in 0..tw {
@@ -281,7 +283,7 @@ pub fn boil(raster: &Raster, values: &[f32], level: u8) -> Raster {
                     let a = c[3].round().clamp(0.0, 255.0);
                     if a > 0.0 {
                         let ch = |v: f32| v.round().clamp(0.0, a) as u8;
-                        tile[y * TILE + x] = Color32::from_rgba_premultiplied(ch(c[0]), ch(c[1]), ch(c[2]), a as u8);
+                        pixels[y * TILE + x] = Color32::from_rgba_premultiplied(ch(c[0]), ch(c[1]), ch(c[2]), a as u8);
                         any = true;
                     }
                 }
