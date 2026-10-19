@@ -113,6 +113,7 @@ fn what_is_kept_or_being_computed_is_not_requested_again() {
 
 #[test]
 fn several_threads_asking_for_the_same_drawing_compute_it_once() {
+    monde::ecrire();
     let id = (1 << 63) | 0x5151_0001;
     let calls = std::sync::atomic::AtomicUsize::new(0);
     let make = || {
@@ -135,6 +136,7 @@ fn several_threads_asking_for_the_same_drawing_compute_it_once() {
 
 #[test]
 fn a_calculation_that_fails_does_not_block_the_next_one() {
+    monde::ecrire();
     let id = (1 << 63) | 0x5151_0002;
     let r = std::panic::catch_unwind(|| get_or_compute(id, 0, None, || panic!("effet qui plante")));
     assert!(r.is_err());
@@ -171,6 +173,7 @@ fn blur(r: f32) -> FxStep {
 
 #[test]
 fn display_never_waits_it_shows_the_drawing_then_the_computed_effect() {
+    monde::ecrire();
     let (doc, item) = doc_and_item(900_000_001, vec![blur(6.17)]);
     let d = fx::display(&doc, &item, 0).unwrap();
     assert!(!d.ready, "calculé en arrière-plan");
@@ -187,6 +190,7 @@ fn display_never_waits_it_shows_the_drawing_then_the_computed_effect() {
 
 #[test]
 fn while_a_setting_changes_the_previous_result_stays_on_screen() {
+    monde::ecrire();
     let (doc, mut item) = doc_and_item(900_000_002, vec![blur(5.31)]);
     fx::display(&doc, &item, 0);
     settle();
@@ -206,6 +210,7 @@ fn while_a_setting_changes_the_previous_result_stays_on_screen() {
 
 #[test]
 fn a_retouched_drawing_is_computed_again_and_the_others_are_not() {
+    monde::ecrire();
     let (mut doc, item) = doc_and_item(900_000_003, vec![blur(4.77)]);
     let other = {
         let (d2, i2) = doc_and_item(900_000_004, vec![blur(4.77)]);
@@ -252,6 +257,7 @@ fn frames_with_equal_settings_share_one_derived_drawing() {
 
 #[test]
 fn a_soft_thumbnail_does_not_wait_and_is_complete_once_the_effects_are_there() {
+    monde::ecrire();
     let _one_at_a_time = DRAFT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let (doc, item) = doc_and_item(900_000_006, vec![blur(5.93)]);
     let plan = Plan { paper: None, items: vec![item.clone()] };
@@ -269,6 +275,7 @@ fn a_soft_thumbnail_does_not_wait_and_is_complete_once_the_effects_are_there() {
 
 #[test]
 fn prefetch_computes_the_next_frames_before_they_are_shown() {
+    monde::ecrire();
     let (doc, item) = doc_and_item(900_000_007, vec![blur(3.61)]);
     assert!(fx::ready(&doc, &item, 0).is_none());
     fx::prefetch(&doc, std::slice::from_ref(&item), 3, 0);
@@ -286,6 +293,7 @@ fn prefetch_computes_the_next_frames_before_they_are_shown() {
 
 #[test]
 fn the_preview_is_a_smaller_drawing_with_its_own_number_and_full_size_comes_back_after() {
+    monde::ecrire();
     let (doc, item) = doc_and_item(900_000_008, vec![blur(40.0), FxStep { kind: EffectKind::HueSaturation, values: vec![20.0, -30.0, 0.0] }]);
     let d = fx::display(&doc, &item, 1).unwrap();
     assert!(!d.ready);
@@ -307,6 +315,7 @@ fn the_preview_is_a_smaller_drawing_with_its_own_number_and_full_size_comes_back
 
 #[test]
 fn the_preview_is_not_used_for_layers_that_move_or_for_effects_that_do_not_scale() {
+    monde::ecrire();
     let (doc, mut item) = doc_and_item(900_000_009, vec![blur(8.0)]);
     item.transform = Some(crate::document::LayerTransform { x: 5.0, ..Default::default() });
     fx::display(&doc, &item, 1);
@@ -333,9 +342,11 @@ static DRAFT_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
 fn the_preview_lasts_a_quarter_second_after_the_last_movement() {
+    monde::ecrire();
     let _one_at_a_time = DRAFT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let ctx = eframe::egui::Context::default();
-    let wait = |ms| std::thread::sleep(std::time::Duration::from_millis(ms));
+    // (L'horloge de l'aperçu avance d'elle-même : aucun sommeil, donc aucune dépendance à la machine.)
+    let wait = fx::advance_clock;
     // Une première image affichée, et chaque changement d'image : aperçu.
     assert_eq!(fx::draft_level(&ctx, 91, 0, false, 0.5), 1);
     assert_eq!(fx::draft_level(&ctx, 91, 1, false, 0.5), 1);
@@ -357,6 +368,7 @@ fn the_preview_lasts_a_quarter_second_after_the_last_movement() {
     assert!(!complete);
     wait(150);
     assert!(fx::ready(&doc, &item, 0).is_none(), "rien n'a été demandé pendant l'aperçu");
+    assert_eq!(pending(), 0, "ni mis en file");
     let before = generation();
     wait(330);
     fx::begin_frame(&ctx);

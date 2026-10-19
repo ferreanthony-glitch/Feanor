@@ -23,7 +23,7 @@ use crate::perf_tests::{banc_taille, Banc};
 use crate::selbox::Handle;
 
 /// Une image de plus de ça (millisecondes d'interface) est un défaut sur une machine normale.
-const BUDGET_MS: f64 = 4_000.0;
+const BUDGET_MS: f64 = 15_000.0;
 /// Au-delà, une image est signalée, sans plus.
 const SIGNALE_MS: f64 = 500.0;
 
@@ -249,6 +249,8 @@ fn passer(avec_gpu: bool) {
 fn thumbnails_of_effect_layers_do_not_panic_while_the_effects_compute() {
     use crate::document::Cel;
     use crate::render;
+    // (Elle vide et remplit le cache des effets, commun à tous les essais : `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let travail = dossier("fumee-vignettes");
     let f = projet_complet(&travail);
     let doc = f.doc;

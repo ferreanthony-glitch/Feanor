@@ -1010,7 +1010,29 @@ const DRAFT_MS: u64 = 250;
 
 pub(crate) fn now_ms() -> u64 {
     static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-    START.get_or_init(std::time::Instant::now).elapsed().as_millis() as u64
+    let real = START.get_or_init(std::time::Instant::now).elapsed().as_millis() as u64;
+    #[cfg(test)]
+    let real = real + CLOCK_SKEW.load(std::sync::atomic::Ordering::Relaxed);
+    real
+}
+
+/// Essais : avance l'horloge de l'aperçu sans attendre (un essai qui dort 330 ms pour passer les
+/// 250 ms de l'aperçu dépend de l'ordonnancement de la machine ; celui-ci non).
+#[cfg(test)]
+static CLOCK_SKEW: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+#[cfg(test)]
+pub(crate) fn advance_clock(ms: u64) {
+    CLOCK_SKEW.fetch_add(ms, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Essais : l'aperçu d'une application qui vient de tourner (défilement, lecture : 250 ms
+/// d'aperçu devant elle) ne déborde pas sur l'essai suivant (`fxcache::monde::ecrire`).
+#[cfg(test)]
+pub(crate) fn reset_draft() {
+    DRAFT_UNTIL.store(0, std::sync::atomic::Ordering::Relaxed);
+    DRAFT_ON.store(false, std::sync::atomic::Ordering::Relaxed);
+    *LAST_SHOWN.lock().unwrap_or_else(|e| e.into_inner()) = None;
 }
 
 /// Un curseur d'effet bouge : l'image passe en aperçu le temps du geste.

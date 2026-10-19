@@ -29,10 +29,20 @@ pub fn local() -> Option<PathBuf> {
 }
 
 fn dossier(variable: &str) -> Option<PathBuf> {
+    // Les essais ne touchent JAMAIS aux dossiers d'Anthony ni à ceux d'un autre essai (qui tournent
+    // en même temps) : sans bac à sable demandé (`bac_a_sable`), chaque fil d'essai a le sien, neuf.
+    // (Deux essais qui lisaient et écrivaient les mêmes réglages en parallèle se marchaient dessus.)
     #[cfg(test)]
-    if let Some(bac) = BAC.with(|b| b.borrow().clone()) {
+    {
+        let bac = BAC.with(|b| {
+            b.borrow_mut()
+                .get_or_insert_with(|| std::env::temp_dir().join(format!("shot-essais-{}", std::process::id())).join(format!("{:?}", std::thread::current().id()).replace(['(', ')'], "")))
+                .clone()
+        });
+        let _ = variable;
         return Some(sous(&bac));
     }
+    #[cfg(not(test))]
     Some(sous(Path::new(&std::env::var_os(variable)?)))
 }
 

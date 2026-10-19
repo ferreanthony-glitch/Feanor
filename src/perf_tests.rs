@@ -379,25 +379,49 @@ fn trait_souris(k: usize, n: usize, par_image: usize, r: Rect) -> Vec<Event> {
 
 // ------------------------------------------------------------------ essais
 
+/// Des images (une demi-seconde d'écart) jusqu'à ce que cinq de suite n'aient plus rien à demander
+/// avant une seconde ; leur nombre, ou `max` si le repos n'arrive pas. Un petit sommeil quand
+/// quelque chose travaille encore en arrière-plan (vignettes, rejeux) : on lui laisse le processeur.
+fn se_reposer(b: &mut Banc, max: usize) -> usize {
+    let mut calmes = 0;
+    for k in 0..max {
+        let m = b.image(Vec::new(), 0.5);
+        if m.reveil >= Duration::from_secs(1) {
+            calmes += 1;
+            if calmes >= 5 {
+                return k + 1;
+            }
+        } else {
+            calmes = 0;
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+    max
+}
+
 /// Au repos, SHOT ne demande aucune image de plus : processeur à zéro (règle « sans latence »,
 /// et pas de chauffage inutile). Tourne toujours.
 #[test]
 fn an_idle_application_does_not_repaint() {
+    // (Le moindre calcul d'effet d'un autre essai réveille cette application : état commun pour elle seule.)
+    crate::fxcache::monde::ecrire();
     let doc = projet_long(12, 3, 24, 4);
     let mut b = banc(doc, false);
-    b.chauffer(30);
+    // (Les vignettes se font par petites tranches de temps par image d'écran : combien d'images il en
+    // faut dépend de la vitesse de la machine. On attend le repos, on ne compte pas les images.)
+    assert!(se_reposer(&mut b, 3000) < 3000, "SHOT finit par se reposer");
     let mesures: Vec<Mesure> = (0..10).map(|_| b.image(Vec::new(), 0.5)).collect();
     let pire = mesures.iter().map(|m| m.reveil).min().unwrap_or(Duration::MAX);
     assert!(pire >= Duration::from_secs(1), "au repos, SHOT demande à être repeint dans {pire:?}");
     // Pendant la lecture, une image après l'autre ; une fois arrêtée, plus rien.
     b.app.set_mode(Mode::Animation);
-    b.chauffer(10);
+    assert!(se_reposer(&mut b, 3000) < 3000, "SHOT se repose en animation");
     b.app.toggle_play_scope(false);
     let lecture: Vec<Mesure> = (0..6).map(|_| b.image(Vec::new(), 1.0 / 24.0)).collect();
     assert!(lecture.iter().all(|m| m.reveil < Duration::from_millis(100)), "la lecture doit demander l'image suivante");
     b.app.toggle_play_scope(false);
     assert!(!b.app.playing);
-    b.chauffer(10);
+    assert!(se_reposer(&mut b, 3000) < 3000, "SHOT se repose après la lecture");
     let repos: Vec<Mesure> = (0..6).map(|_| b.image(Vec::new(), 0.5)).collect();
     let pire = repos.iter().map(|m| m.reveil).min().unwrap_or(Duration::MAX);
     assert!(pire >= Duration::from_secs(1), "lecture arrêtée, SHOT demande à être repeint dans {pire:?}");
@@ -407,7 +431,7 @@ fn an_idle_application_does_not_repaint() {
     for k in 0..20 {
         b.image(trait_souris(k, 20, 6, zone), 1.0 / 60.0);
     }
-    b.chauffer(20);
+    assert!(se_reposer(&mut b, 3000) < 3000, "SHOT se repose après un trait");
     let repos: Vec<Mesure> = (0..6).map(|_| b.image(Vec::new(), 0.5)).collect();
     let pire = repos.iter().map(|m| m.reveil).min().unwrap_or(Duration::MAX);
     assert!(pire >= Duration::from_secs(1), "après un trait, SHOT demande à être repeint dans {pire:?}");
@@ -554,6 +578,7 @@ fn the_thumbnail_samples_the_full_composition() {
 /// image (130 ms par image, 1 500 textures envoyées).
 #[test]
 fn a_zoomed_timeline_keeps_its_thumbnails_instead_of_remaking_them() {
+    crate::fxcache::monde::ecrire();
     let mut b = banc(plan_charge(10, 160, 2), false);
     b.app.set_mode(Mode::Animation);
     b.app.timeline_cell = 48.0;

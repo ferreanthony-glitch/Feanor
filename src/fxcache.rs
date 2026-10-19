@@ -391,10 +391,74 @@ pub(crate) fn pending() -> usize {
 /// Attend que le fil de fond ait tout fini (tests).
 #[cfg(test)]
 pub(crate) fn settle() {
+    // Attente sur la fin d'un calcul (la condition `DONE`, réveillée à chaque calcul fini), pas sur
+    // une durée : le délai de 20 ms ne sert qu'à revérifier, jamais à décider.
     let start = std::time::Instant::now();
-    while pending() > 0 {
+    let mut st = lock();
+    while st.queue.len() + st.inflight.len() > 0 {
         assert!(start.elapsed() < std::time::Duration::from_secs(60), "le fil de fond n'a pas fini");
-        std::thread::sleep(std::time::Duration::from_millis(5));
+        st = DONE.wait_timeout(st, std::time::Duration::from_millis(20)).unwrap_or_else(|e| e.into_inner()).0;
+    }
+}
+
+/// Essais : le cache des effets, son fil de fond, son horloge (`begin_frame`), l'état de l'aperçu
+/// (`fx::draft_level`) et les vignettes qui attendent (`generation`) sont COMMUNS à tous les essais
+/// d'un même processus, qui tournent ensemble. Un essai qui compte sur ces états (ceux de
+/// `fxcache_tests.rs`, la mesure d'inactivité, les mesures de `fxperf_tests.rs`) ne peut pas les
+/// partager avec un autre qui fait tourner l'application (`begin_frame` fait vieillir et abandonner
+/// ses demandes), ouvre un projet (`forget_all` vide tout) ou calcule des effets. Deux rôles, pris
+/// pour toute la durée de l'essai (le verrou est gardé par le fil, rendu quand il s'arrête) :
+/// - `lire()` : fait tourner l'application ou calcule des effets, sans rien exiger de l'état commun
+///   (pris tout seul par `App::sans_fenetre`) ; les lecteurs tournent ensemble ;
+/// - `ecrire()` : exige l'état commun pour lui seul ; il attend la fin des lecteurs et des autres
+///   écrivains, et personne ne démarre pendant ce temps.
+#[cfg(test)]
+pub(crate) mod monde {
+    use std::cell::RefCell;
+    use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+
+    static MONDE: RwLock<()> = RwLock::new(());
+
+    enum Tenu {
+        Lecture(#[allow(dead_code)] RwLockReadGuard<'static, ()>),
+        Ecriture(#[allow(dead_code)] RwLockWriteGuard<'static, ()>),
+    }
+
+    thread_local! {
+        static TENU: RefCell<Option<Tenu>> = const { RefCell::new(None) };
+    }
+
+    /// Cet essai peut tourner avec d'autres (rien ne le gêne, sauf un écrivain, qu'il attend).
+    pub(crate) fn lire() {
+        TENU.with(|t| {
+            let mut t = t.borrow_mut();
+            if t.is_none() {
+                *t = Some(Tenu::Lecture(MONDE.read().unwrap_or_else(|e| e.into_inner())));
+            }
+        });
+    }
+
+    /// Cet essai veut l'état commun pour lui seul.
+    pub(crate) fn ecrire() {
+        let neuf = TENU.with(|t| {
+            let mut t = t.borrow_mut();
+            if matches!(*t, Some(Tenu::Ecriture(_))) {
+                return false;
+            }
+            // (Un fil qui lisait déjà — `--test-threads=1` fait tourner tous les essais sur le même — rend
+            // sa lecture avant de prendre l'écriture.)
+            *t = None;
+            *t = Some(Tenu::Ecriture(MONDE.write().unwrap_or_else(|e| e.into_inner())));
+            true
+        });
+        if !neuf {
+            return;
+        }
+        // Page blanche : ce que les essais d'avant ont laissé (résultats gardés, demandes, calculs en
+        // cours, 250 ms d'aperçu devant une application qui défilait) n'est pas à cet essai.
+        super::forget_all();
+        crate::fx::reset_draft();
+        super::settle();
     }
 }
 

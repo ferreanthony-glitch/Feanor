@@ -763,6 +763,9 @@ impl App {
     /// s'écrivent là où `donnees::bac_a_sable` les a envoyés.
     #[cfg(test)]
     pub(crate) fn sans_fenetre(ctx: &egui::Context, rs: Option<&eframe::egui_wgpu::RenderState>) -> Self {
+        // Une application qui tourne fait vieillir les demandes du cache des effets et peut le vider :
+        // elle ne tourne pas pendant un essai qui compte sur cet état commun (`fxcache::monde`).
+        crate::fxcache::monde::lire();
         Self::construire(ctx, rs, false)
     }
 
