@@ -3254,6 +3254,10 @@ impl App {
                 let (pi, li, f) = (self.cur_panel, self.cur_layer, self.cur_frame);
                 self.montage_new_key(pi, li, f, action == "dessin.nouvelle_cle");
             }
+            // Ctrl+A choisit toutes les clés de la sorte qui a la main : caméra, effet, ou dessins
+            // (les clés de caméra et d'effets donnent aussi `key_focus` : elles passent d'abord).
+            "edition.tout_selectionner" if self.cam_keys_have_focus() => self.choose_all_cam_keys(),
+            "edition.tout_selectionner" if self.fx_keys_have_focus() => self.choose_all_fx_keys(),
             "edition.tout_selectionner" if self.key_focus => self.choose_all_keys(),
             // Après un clic dans le montage (ou la planche), l'édition vise les panneaux choisis (12e).
             "edition.couper" if self.panels_have_focus() => self.cut_panels(),
@@ -3873,7 +3877,7 @@ impl App {
         match std::process::Command::new("notepad.exe").arg(&path).spawn() {
             Ok(_) => {
                 self.status = format!(
-                    "Raccourcis ouverts dans le Bloc-notes ({}). Enregistre, puis « Aide > Recharger les raccourcis ».",
+                    "Raccourcis ouverts dans le Bloc-notes ({}). Enregistre, puis « Recharger » (Fichier > Préférences…, ou la liste des raccourcis, F1).",
                     path.display()
                 )
             }

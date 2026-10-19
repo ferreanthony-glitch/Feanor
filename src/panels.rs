@@ -48,6 +48,16 @@ fn note(ui: &mut egui::Ui, text: &str) {
     ui.label(RichText::new(text).small().weak());
 }
 
+/// « (Alt+S) » d'un raccourci, pour une phrase ; rien s'il n'y en a pas. Les phrases d'aide lisent
+/// ainsi la touche dans le fichier de raccourcis au lieu de l'écrire en dur.
+pub(crate) fn between_parens(shortcut: &str) -> String {
+    if shortcut.is_empty() {
+        String::new()
+    } else {
+        format!(" ({shortcut})")
+    }
+}
+
 impl App {
     /// Entrée de menu reliée à une action ; le raccourci affiché vient du fichier de raccourcis.
     /// Clic droit : lui assigner un raccourci.
@@ -129,7 +139,9 @@ impl App {
                 self.action_item(ui, "Couper", "edition.couper");
                 self.action_item(ui, "Copier", "edition.copier");
                 self.action_item(ui, "Coller", "edition.coller");
-                self.action_item(ui, "Coller sur place", "edition.coller_sur_place");
+                // « Coller sur place » fait la même chose que Coller (le collage pose déjà tout à sa
+                // place) : il reste une commande de la palette, sans entrée de menu.
+                self.action_item(ui, "Coller à la tête de lecture (clés)", "edition.coller_a_la_tete");
                 self.action_item(ui, "Supprimer", "edition.supprimer");
                 self.action_item(ui, "Vider le dessin", "dessin.vider");
                 ui.separator();
@@ -301,8 +313,9 @@ impl App {
                 self.brush_settings_ui(ui);
                 self.brush_extras_ui(ui);
                 if vector {
-                    note(ui, "Le trait reste modifiable avec l'outil Sélection (V), même texturé (pointe en \
-                              image, grain du papier).");
+                    let key = between_parens(&self.raccourci("outil.selection"));
+                    note(ui, &format!("Le trait reste modifiable avec l'outil Sélection{key}, même texturé (pointe en \
+                              image, grain du papier)."));
                     self.boil_tool_toggle(ui);
                 }
             }
@@ -311,7 +324,8 @@ impl App {
                 self.brush_settings_ui(ui);
                 self.brush_extras_ui(ui);
                 if vector {
-                    note(ui, "Le trait reste modifiable avec l'outil Sélection (V).");
+                    let key = between_parens(&self.raccourci("outil.selection"));
+                    note(ui, &format!("Le trait reste modifiable avec l'outil Sélection{key}."));
                     self.boil_tool_toggle(ui);
                 }
             }

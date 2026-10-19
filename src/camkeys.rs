@@ -131,20 +131,8 @@ pub(crate) fn between(doc: &Document, a: CamKeyRef, b: CamKeyRef) -> Vec<CamKeyR
 /// se retire si elle était choisie ; `range` (Maj) : les clés `between` (de l'ancre à elle), s'il y
 /// a une ancre. Renvoie aussi la nouvelle ancre.
 pub(crate) fn choose(chosen: &[CamKeyRef], anchor: Option<CamKeyRef>, clicked: CamKeyRef, toggle: bool, range: Option<Vec<CamKeyRef>>) -> (Vec<CamKeyRef>, Option<CamKeyRef>) {
-    if let Some(between) = range.filter(|_| anchor.is_some()) {
-        return (between, anchor);
-    }
-    if toggle {
-        let mut out = chosen.to_vec();
-        match out.iter().position(|c| *c == clicked) {
-            Some(i) => {
-                out.remove(i);
-            }
-            None => out.push(clicked),
-        }
-        return (out, Some(clicked));
-    }
-    (vec![clicked], Some(clicked))
+    // La règle est la même pour les trois sortes de clés (`clescommun.rs`).
+    crate::clescommun::choose_group(chosen, anchor, &[clicked], toggle, range)
 }
 
 // ---------------------------------------------------------------------- choix au rectangle
@@ -810,38 +798,8 @@ impl App {
 
     /// Les commandes des clés de caméra choisies, pour le menu de la piste Caméra (montage et timeline).
     pub(crate) fn cam_key_menu_items(&mut self, ui: &mut egui::Ui) {
-        let n = self.cam_targets().len();
-        let what = |one: &str, many: &str| if n > 1 { format!("{many} ({n})") } else { one.to_string() };
-        let key = |app: &App, a: &str| app.keymap.label(a);
-        if ui.add_enabled(n > 0, egui::Button::new(what("Copier la clé de caméra", "Copier les clés de caméra")).shortcut_text(key(self, "edition.copier"))).clicked() {
-            ui.close_menu();
-            self.copy_cam_keys();
-        }
-        let can_paste = self.cam_key_clipboard.is_some();
-        if ui
-            .add_enabled(can_paste, egui::Button::new("Coller les clés de caméra").shortcut_text(key(self, "edition.coller")))
-            .on_hover_text("Insère les clés après la clé de la tête de lecture, en gardant l'écart entre elles ; les clés d'après sont repoussées. Dans le montage, d'un plan à l'autre.")
-            .clicked()
-        {
-            ui.close_menu();
-            self.paste_cam_keys();
-        }
-        if ui
-            .add_enabled(can_paste, egui::Button::new("Coller à la tête de lecture").shortcut_text(key(self, "edition.coller_a_la_tete")))
-            .on_hover_text("La première clé tombe sur la tête de lecture ; rien n'est repoussé, les clés rencontrées sont remplacées.")
-            .clicked()
-        {
-            ui.close_menu();
-            self.paste_cam_keys_at_head();
-        }
-        if ui.add_enabled(n > 0, egui::Button::new(what("Supprimer la clé de caméra", "Supprimer les clés de caméra")).shortcut_text(key(self, "edition.supprimer"))).clicked() {
-            ui.close_menu();
-            self.delete_cam_keys();
-        }
-        if ui.button("Choisir toutes les clés de caméra du plan").clicked() {
-            ui.close_menu();
-            self.choose_all_cam_keys();
-        }
+        // Les cinq commandes communes aux trois sortes de clés (`clescommun.rs`).
+        self.key_menu_core(ui, crate::clescommun::KeyKind::Camera);
     }
 
     /// Un losange de clé de caméra dessiné : plus grand et cerclé du contour du thème s'il est choisi.

@@ -158,20 +158,8 @@ pub(crate) fn keys_between(sel: FxSel, e: &Effect, a: usize, b: usize) -> Vec<Fx
 /// il s'ajoute, ou se retire s'il était entièrement choisi ; `range` (Maj) : les clés `between`
 /// (de l'ancre à lui). Renvoie aussi la nouvelle ancre des Maj + clic.
 pub(crate) fn choose(chosen: &[FxKeyRef], anchor: Option<FxKeyRef>, marker: &[FxKeyRef], toggle: bool, range: Option<Vec<FxKeyRef>>) -> (Vec<FxKeyRef>, Option<FxKeyRef>) {
-    let Some(first) = marker.first().copied() else { return (chosen.to_vec(), anchor) };
-    if let Some(between) = range.filter(|_| anchor.is_some()) {
-        return (between, anchor);
-    }
-    if toggle {
-        let mut out = chosen.to_vec();
-        if marker.iter().all(|m| out.contains(m)) {
-            out.retain(|c| !marker.contains(c));
-        } else {
-            out.extend(marker.iter().filter(|m| !chosen.contains(m)));
-        }
-        return (out, Some(first));
-    }
-    (marker.to_vec(), Some(first))
+    // La règle est la même pour les trois sortes de clés (`clescommun.rs`).
+    crate::clescommun::choose_group(chosen, anchor, marker, toggle, range)
 }
 
 // ---------------------------------------------------------------------- déplacer
@@ -511,6 +499,27 @@ impl App {
         };
     }
 
+    /// Choisit toutes les clés de l'effet choisi (Ctrl+A après un clic sur un losange violet, ou
+    /// « Choisir toutes les clés de l'effet » du clic droit) : comme pour les clés de caméra et
+    /// de dessins (`clescommun.rs`).
+    pub(crate) fn choose_all_fx_keys(&mut self) {
+        let all = self.fx_choice.and_then(|c| {
+            let (pi, li) = self.fx_layer_at(c.panel, c.layer)?;
+            let layer = &self.doc.panels[pi].layers[li];
+            let shown = self.fx_shown(c.panel, layer)?;
+            Some(keys_between(shown, &layer.fx[shown.effect], 0, usize::MAX))
+        });
+        let Some(all) = all.filter(|a| !a.is_empty()) else {
+            self.status = "Pas de clé d'effet à choisir : choisir un effet qui a des clés dans le panneau Effets.".into();
+            return;
+        };
+        self.fx_key_anchor = all.first().copied();
+        self.fx_key_sel = all;
+        self.give_fx_keys_focus();
+        let n = self.fx_key_sel.len();
+        self.status = format!("{n} clé{} d'effet choisie{} (tout l'effet).", s(n), s(n));
+    }
+
     /// Une clé d'effet vient d'être créée (panneau Effets) : elle seule est choisie.
     pub(crate) fn select_new_fx_key(&mut self, li: usize, effect: usize, frame: usize) {
         let Some((panel, layer)) = self.doc.panels.get(self.cur_panel).and_then(|p| p.layers.get(li).map(|l| (p.id, l.id))) else { return };
@@ -758,34 +767,9 @@ impl App {
 
     /// Le menu du clic droit sur un losange (montage et timeline).
     pub(crate) fn fx_key_menu(&mut self, ui: &mut egui::Ui) {
-        let n = self.fx_targets().iter().map(|t| t.2.len()).sum::<usize>().max(1);
-        let what = |one: &str, many: &str| if n > 1 { format!("{many} ({n})") } else { one.to_string() };
-        let key = |app: &App, a: &str| app.keymap.label(a);
-        if ui.add(egui::Button::new(what("Copier la clé d'effet", "Copier les clés d'effet")).shortcut_text(key(self, "edition.copier"))).clicked() {
-            ui.close_menu();
-            self.copy_fx_keys();
-        }
-        let can_paste = self.fx_key_clipboard.is_some();
-        if ui
-            .add_enabled(can_paste, egui::Button::new("Coller les clés d'effet").shortcut_text(key(self, "edition.coller")))
-            .on_hover_text("Insère les clés après la clé de la tête de lecture, sur l'effet choisi dans le panneau Effets (de la même sorte que celui copié) ; les clés d'après sont repoussées.")
-            .clicked()
-        {
-            ui.close_menu();
-            self.paste_fx_keys();
-        }
-        if ui
-            .add_enabled(can_paste, egui::Button::new("Coller à la tête de lecture").shortcut_text(key(self, "edition.coller_a_la_tete")))
-            .on_hover_text("La première clé tombe sur la tête de lecture ; rien n'est repoussé, les clés rencontrées sont remplacées.")
-            .clicked()
-        {
-            ui.close_menu();
-            self.paste_fx_keys_at_head();
-        }
-        if ui.add(egui::Button::new(what("Supprimer la clé d'effet", "Supprimer les clés d'effet")).shortcut_text(key(self, "edition.supprimer"))).clicked() {
-            ui.close_menu();
-            self.delete_fx_keys();
-        }
+        // Les cinq commandes communes aux trois sortes de clés (`clescommun.rs`), puis ce qui est
+        // propre aux effets.
+        self.key_menu_core(ui, crate::clescommun::KeyKind::Effect);
         ui.separator();
         self.action_item(ui, "Pile d'effets du calque…", "fx.panneau");
         self.action_item(ui, "Clés d'effets (montrer / cacher)", "fx.cles_timeline");

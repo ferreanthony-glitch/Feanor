@@ -120,20 +120,8 @@ pub(crate) fn choose(chosen: &[KeyRef], anchor: Option<KeyRef>, key: Option<KeyR
         // À côté des dessins : sans touche, le choix se vide.
         return if toggle || range.is_some() { (chosen.to_vec(), anchor) } else { (Vec::new(), anchor) };
     };
-    if let Some(between) = range.filter(|_| anchor.is_some()) {
-        return (between, anchor);
-    }
-    if toggle {
-        let mut out = chosen.to_vec();
-        match out.iter().position(|c| *c == k) {
-            Some(i) => {
-                out.remove(i);
-            }
-            None => out.push(k),
-        }
-        return (out, Some(k));
-    }
-    (vec![k], Some(k))
+    // La règle est la même pour les trois sortes de clés (`clescommun.rs`).
+    crate::clescommun::choose_group(chosen, anchor, &[k], toggle, range)
 }
 
 /// Avant de coller des clés venues de plusieurs calques : les calques de leurs pistes `wanted`

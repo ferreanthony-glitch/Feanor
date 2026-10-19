@@ -127,6 +127,9 @@ mod camfxui;
 mod camkeys;
 #[cfg(test)]
 mod camkeys_tests;
+mod clescommun;
+#[cfg(test)]
+mod clescommun_tests;
 mod camtools;
 mod canvas;
 #[cfg(test)]

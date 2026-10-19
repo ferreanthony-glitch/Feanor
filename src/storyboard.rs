@@ -390,7 +390,7 @@ impl App {
         };
 
         // Lecture.
-        if self.bouton(ui, ph::SKIP_BACK, "Début du montage", "Revenir à la première image du film.", "image.premiere").clicked() {
+        if self.bouton(ui, ph::SKIP_BACK, "Début du montage", "Revenir à la première image du film.", "montage.debut").clicked() {
             self.goto_global(0);
         }
         let play = if self.playing { ph::PAUSE } else { ph::PLAY };
@@ -411,7 +411,7 @@ impl App {
             self.new_sequence();
         }
         if self
-            .bouton(ui, ph::BEZIER_CURVE, "Nouveau calque", "Un calque vectoriel dans le plan courant, au-dessus du calque courant : une piste de plus.", "calque.nouveau_vectoriel")
+            .bouton(ui, ph::BEZIER_CURVE, "Nouveau calque vectoriel", "Dans le plan courant, au-dessus du calque courant : une piste de plus.", "calque.nouveau_vectoriel")
             .clicked()
         {
             self.add_layer(crate::document::LayerKind::Vector);
@@ -1422,11 +1422,8 @@ impl App {
                 MenuTarget::Lane { track, clip, frame } => self.lane_menu(ui, track, clip, frame),
                 MenuTarget::Layer(k) => {
                     // La piste d'un calque : les clés à l'image du clic, puis le menu du calque.
-                    if ui
-                        .add(egui::Button::new("Nouvelle clé ici (copie du dessin)").shortcut_text(self.keymap.label("dessin.nouvelle_cle")))
-                        .on_hover_text("Elle part du dessin montré ici (sinon du dernier d'avant). Ou double-clic sur la piste.")
-                        .clicked()
-                    {
+                    let resp = ui.add(egui::Button::new("Nouvelle clé ici (copie du dessin)").shortcut_text(self.keymap.label("dessin.nouvelle_cle")));
+                    if crate::bulles::bulle(resp, "Nouvelle clé ici", "Elle part du dessin montré ici (sinon du dernier d'avant). Ou double-clic sur la piste.", "").clicked() {
                         ui.close_menu();
                         let (pi, f) = (self.cur_panel, self.cur_frame);
                         self.montage_new_key(pi, k, f, true);
@@ -1437,47 +1434,19 @@ impl App {
                         self.montage_new_key(pi, k, f, false);
                     }
                     self.key_focus = true;
-                    let key = |app: &App, a: &str| app.keymap.label(a);
+                    // Les cinq commandes communes aux trois sortes de clés (`clescommun.rs`), puis
+                    // ce qui est propre aux clés de dessins.
+                    self.key_menu_core(ui, crate::clescommun::KeyKind::Drawing);
                     let n = self.key_sel.len().max(1);
                     let what = |one: &str, many: &str| if n > 1 { format!("{many} ({n})") } else { one.to_string() };
-                    if ui.add(egui::Button::new(what("Copier la clé", "Copier les clés")).shortcut_text(key(self, "edition.copier"))).clicked() {
-                        ui.close_menu();
-                        self.copy_keys();
-                    }
-                    let can_paste = self.key_clipboard.is_some();
-                    if ui
-                        .add_enabled(can_paste, egui::Button::new("Coller les clés").shortcut_text(key(self, "edition.coller")))
-                        .on_hover_text("Insère les clés après la clé de la tête de lecture ; le reste de la piste est repoussé.")
-                        .clicked()
-                    {
-                        ui.close_menu();
-                        self.paste_keys();
-                    }
-                    if ui
-                        .add_enabled(can_paste, egui::Button::new("Coller à la tête de lecture").shortcut_text(key(self, "edition.coller_a_la_tete")))
-                        .on_hover_text("La première clé commence sur la tête de lecture, par-dessus ce qui y était ; rien n'est repoussé.")
-                        .clicked()
-                    {
-                        ui.close_menu();
-                        self.paste_keys_at_head();
-                    }
-                    if ui
-                        .add(egui::Button::new(what("Dupliquer la clé sur place", "Dupliquer les clés sur place")).shortcut_text(key(self, "dessin.dupliquer")))
-                        .on_hover_text("La copie prend la seconde moitié de l'exposition ; la suite ne bouge pas.")
-                        .clicked()
-                    {
+                    let dup = self.keymap.label("dessin.dupliquer");
+                    let resp = ui.add(egui::Button::new(what("Dupliquer la clé sur place", "Dupliquer les clés sur place")).shortcut_text(dup));
+                    if crate::bulles::bulle(resp, "Dupliquer sur place", "La copie prend la seconde moitié de l'exposition ; la suite ne bouge pas.", "").clicked() {
                         ui.close_menu();
                         self.duplicate_keys();
                     }
-                    if ui
-                        .add(egui::Button::new(what("Supprimer la clé", "Supprimer les clés")).shortcut_text(key(self, "edition.supprimer")))
-                        .on_hover_text("Le dessin d'avant la remplace en tenant plus longtemps (sinon celui d'après).")
-                        .clicked()
-                    {
-                        ui.close_menu();
-                        self.delete_keys(false);
-                    }
-                    if ui.button(what("Supprimer la clé en laissant un vide", "Supprimer les clés en laissant un vide")).on_hover_text("Leurs images restent vides ; les autres clés ne bougent pas.").clicked() {
+                    let resp = ui.button(what("Supprimer la clé en laissant un vide", "Supprimer les clés en laissant un vide"));
+                    if crate::bulles::bulle(resp, "Laisser un vide", "Leurs images restent vides ; les autres clés ne bougent pas.", "").clicked() {
                         ui.close_menu();
                         self.delete_keys(true);
                     }

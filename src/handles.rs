@@ -977,20 +977,22 @@ impl App {
                 self.action_item(ui, "Timeline : tout voir", "timeline.tout_voir");
             }
             GridMenu::Camera => {
-                self.action_item(ui, "Image clé de caméra ici", "camera.cle_ici");
-                self.action_item(ui, "Retirer la clé de caméra d'ici", "camera.cle_supprimer");
+                // Même ordre que les menus des clés de dessins et d'effets : poser une clé, les
+                // cinq commandes communes sur les clés choisies (`clescommun.rs`), puis ce qui est
+                // propre à la caméra.
+                self.action_item(ui, "Clé de caméra ici", "camera.cle_ici");
+                self.action_item(ui, "Clé de caméra au début du plan", "camera.cle_debut");
+                self.action_item(ui, "Clé de caméra à la fin du plan", "camera.cle_fin");
                 self.action_item(ui, "Adoucir le mouvement à cette clé", "camera.cle_adoucir");
+                self.action_item(ui, "Supprimer la clé de caméra d'ici", "camera.cle_supprimer");
                 ui.separator();
-                self.action_item(ui, "Clé au début du plan", "camera.cle_debut");
-                self.action_item(ui, "Clé à la fin du plan", "camera.cle_fin");
-                self.action_item(ui, "Adapter la timeline aux clés", "timeline.adapter_cles");
+                // Les clés choisies (clic sur un losange jaune).
+                self.cam_key_menu_items(ui);
                 ui.separator();
+                self.action_item(ui, "Effets de caméra (réglages de l'outil Caméra)", "outil.camera");
                 self.action_item(ui, "Vue à travers la caméra", "camera.vue");
                 self.action_item(ui, "Réinitialiser la caméra", "camera.reinitialiser");
-                ui.separator();
-                // Les clés choisies (clic sur un losange jaune), puis les effets en préréglage.
-                self.cam_key_menu_items(ui);
-                self.action_item(ui, "Effets de caméra (réglages de l'outil Caméra)", "outil.camera");
+                self.action_item(ui, "Adapter la timeline aux clés", "timeline.adapter_cles");
             }
             GridMenu::FxKey => self.fx_key_menu(ui),
             GridMenu::Sound { track, clip, frame } => self.lane_menu(ui, track, clip, frame),
