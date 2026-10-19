@@ -200,7 +200,23 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
             continue;
         }
         let Some(cel) = crate::fx::shown(doc, item) else { continue };
-        let Some(tile) = cel.raster.tiles[idx].as_ref() else {
+        // Un dessin d'une autre taille que la feuille (aperçu réduit d'un effet, dessin d'un projet
+        // abîmé) : lu à l'échelle, comme `composite_pixel` ; ses tuiles ne sont pas celles de la feuille.
+        let r = &cel.raster;
+        if r.width != doc.width || r.height != doc.height {
+            let (kx, ky) = (r.width as f32 / doc.width.max(1) as f32, r.height as f32 / doc.height.max(1) as f32);
+            for y in 0..th {
+                let s = at(ox, oy + y);
+                for (x, d) in buf[s..s + tw].iter_mut().enumerate() {
+                    let src = r.get((((ox + x) as f32 + 0.5) * kx) as usize, (((oy + y) as f32 + 0.5) * ky) as usize);
+                    if src.a() != 0 {
+                        *d = blend_over(*d, src, item.opacity, item.tint, item.blend, (ox + x, oy + y));
+                    }
+                }
+            }
+            continue;
+        }
+        let Some(tile) = cel.raster.tiles.get(idx).and_then(Option::as_ref) else {
             continue;
         };
         let tile: &[Color32; TILE_PIXELS] = tile;

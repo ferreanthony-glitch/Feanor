@@ -53,10 +53,17 @@ impl Raster {
         (y / TILE) * self.tiles_x + x / TILE
     }
 
+    /// Le pixel (`x`, `y`) ; transparent hors du dessin. Un dessin n'a pas toujours la taille de la
+    /// feuille (aperçu réduit d'un effet, feuille flottante élargie, image de vidéo, dessin d'un
+    /// projet abîmé) : lire un point de la feuille dedans ne doit jamais fermer SHOT (le lire sans
+    /// ce contrôle sortait des tuiles, `raster.rs:57`, 2026-10-18).
     pub fn get(&self, x: usize, y: usize) -> Color32 {
-        match &self.tiles[self.tile_index_of(x, y)] {
-            Some(t) => t[(y % TILE) * TILE + x % TILE],
-            None => Color32::TRANSPARENT,
+        if x >= self.width || y >= self.height {
+            return Color32::TRANSPARENT;
+        }
+        match self.tiles.get(self.tile_index_of(x, y)) {
+            Some(Some(t)) => t[(y % TILE) * TILE + x % TILE],
+            _ => Color32::TRANSPARENT,
         }
     }
 

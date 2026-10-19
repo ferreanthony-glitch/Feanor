@@ -872,6 +872,19 @@ struct SavedLibrary {
     presets: Vec<Preset>,
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Essais : combien de fois ce fil a lu la bibliothèque de pinceaux (`load`).
+    static LOADS_HERE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Essais : combien de fois ce fil a lu la bibliothèque de pinceaux. La lire sur le fil de
+/// l'interface retarde la première image de tout ce temps (`demarrage.rs`).
+#[cfg(test)]
+pub fn loads_on_this_thread() -> usize {
+    LOADS_HERE.with(|c| c.get())
+}
+
 impl BrushLibrary {
     /// Les pinceaux de Pelure (sans les importés).
     pub fn builtin() -> BrushLibrary {
@@ -1028,6 +1041,8 @@ impl BrushLibrary {
 
     /// Les pinceaux de Pelure, plus ceux importés et gardés dans `dir`.
     pub fn load(dir: Option<&Path>) -> BrushLibrary {
+        #[cfg(test)]
+        LOADS_HERE.with(|c| c.set(c.get() + 1));
         let mut lib = BrushLibrary::builtin();
         let Some(dir) = dir else { return lib };
         let Ok(text) = std::fs::read_to_string(dir.join("pinceaux.json")) else { return lib };

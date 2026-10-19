@@ -587,8 +587,11 @@ fn to_exposures(frames: &[Option<u64>]) -> Vec<Exposure> {
 }
 
 fn from_exposures(runs: &[Exposure]) -> Vec<Option<u64>> {
+    // Au plus la durée d'un plan (`rognage::MAX_PLAN`) : un manifeste abîmé qui annonce des milliards
+    // d'images remplirait la mémoire.
     runs.iter()
-        .flat_map(|r| std::iter::repeat_n(r.dessin, r.images.min(1_000_000)))
+        .flat_map(|r| std::iter::repeat_n(r.dessin, r.images.min(crate::rognage::MAX_PLAN)))
+        .take(crate::rognage::MAX_PLAN)
         .collect()
 }
 
@@ -796,6 +799,10 @@ pub struct SaveJob {
     /// Des dessins du dossier n'ont pas pu être lus à l'ouverture : leurs fichiers (et les textures
     /// qu'ils pourraient utiliser) ne sont pas effacés.
     has_unreadable: bool,
+    /// Fichiers de sons et de modèles 3D du dossier que cette version n'a pas pu lire à l'ouverture :
+    /// l'enregistrement ne les efface pas (ils ne sont plus dans le projet, mais ils sont à
+    /// Anthony : une autre version les lira, ou il les réparera).
+    kept: BTreeSet<PathBuf>,
     /// Dessins à garder dans le dossier : ceux du projet, et les illisibles.
     used: BTreeSet<CelId>,
     /// Dessins qui ont une strate Fond peinte (format 23).
@@ -902,6 +909,7 @@ pub fn prepare_save(
         videos,
         manifest,
         has_unreadable: !unreadable.is_empty(),
+        kept: kept_files_in(dir),
         used: used.union(&unreadable).copied().collect(),
         fonds: fonds.union(&unreadable).copied().collect(),
         used_sounds,
@@ -945,6 +953,44 @@ fn load_comments(dir: &Path, warnings: &mut Vec<String>) -> Vec<crate::commentai
         Err(e) => {
             warnings.push(format!("{} : {e} ; les commentaires ne sont pas chargés.", path.display()));
             Vec::new()
+        }
+    }
+}
+
+/// Écrit le fichier annexe `path` (`bytes`), ou le retire s'il n'y a plus rien à y mettre — sans
+/// jamais détruire un fichier que cette version ne sait pas lire (`lisible` en juge). Un
+/// `commentaires.json` écrit par une version plus récente, ou abîmé, s'ouvre sans ses commentaires
+/// (avec un avertissement) : « aucun commentaire » ne veut alors pas dire « fichier à effacer ». Il
+/// reste en place s'il n'y a rien à écrire ; sinon il est mis de côté sous le nom `<fichier>.illisible`
+/// avant que le neuf prenne sa place.
+fn write_sidecar(path: &Path, bytes: Option<&[u8]>, lisible: impl Fn(&str) -> bool) -> Result<(), String> {
+    let existant = match fs::read(path) {
+        Ok(b) => Some(String::from_utf8(b).ok().filter(|t| lisible(t.trim_start_matches('\u{feff}'))).is_some()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(_) => Some(false),
+    };
+    match (bytes, existant) {
+        (Some(b), Some(false)) => {
+            let mut aside = None;
+            for k in 1..100 {
+                let mut name = path.as_os_str().to_owned();
+                name.push(if k == 1 { ".illisible".to_string() } else { format!(".illisible{k}") });
+                let candidate = PathBuf::from(name);
+                if !candidate.exists() {
+                    aside = Some(candidate);
+                    break;
+                }
+            }
+            if let Some(to) = aside {
+                fs::rename(path, &to).map_err(|e| format!("{} : {e}", path.display()))?;
+            }
+            write_atomic(path, b)
+        }
+        (Some(b), _) => write_atomic(path, b),
+        (None, Some(false)) => Ok(()),
+        (None, _) => {
+            let _ = fs::remove_file(path);
+            Ok(())
         }
     }
 }
@@ -999,36 +1045,27 @@ impl SaveJob {
             count += crate::video::copy_frames(clip, from, to)?;
         }
         // Les commentaires : leur fichier à côté du manifeste (sans commentaire, il part).
-        let sidecar = dir.join(crate::commentaires::FILE);
-        match &self.comments {
-            Some(bytes) => write_atomic(&sidecar, bytes)?,
-            None => {
-                let _ = fs::remove_file(&sidecar);
-            }
-        }
+        write_sidecar(&dir.join(crate::commentaires::FILE), self.comments.as_deref(), |t| crate::commentaires::parse(t).is_ok())?;
         // Le contenu rogné des plans : son fichier à côté du manifeste (rien de rogné, il part).
-        let rognages = dir.join(crate::rognage::FILE);
-        match &self.reserves {
-            Some(bytes) => write_atomic(&rognages, bytes)?,
-            None => {
-                let _ = fs::remove_file(&rognages);
-            }
-        }
+        write_sidecar(&dir.join(crate::rognage::FILE), self.reserves.as_deref(), |t| crate::rognage::parse(t).is_ok())?;
         write_atomic(&self.manifest_path, &self.manifest)?;
         let removed = remove_unused(dir, &self.used, &self.fonds)
-            + remove_unused_sounds(dir, &self.used_sounds)
-            + remove_unused_models(dir, &self.used_models)
+            + remove_unused_sounds(dir, &self.used_sounds, &self.kept)
+            + remove_unused_models(dir, &self.used_models, &self.kept)
             + if self.has_unreadable { 0 } else { remove_unused_textures(dir, &self.used_textures) };
         Ok(SaveReport { written: count, removed })
     }
 }
 
 /// Efface les modèles 3D du dossier qui ne servent plus (seulement « <nombre>.pelure3d »).
-fn remove_unused_models(dir: &Path, used: &BTreeSet<u64>) -> usize {
+fn remove_unused_models(dir: &Path, used: &BTreeSet<u64>, kept: &BTreeSet<PathBuf>) -> usize {
     let Ok(entries) = fs::read_dir(dir.join(MODELS)) else { return 0 };
     let mut removed = 0;
     for entry in entries.flatten() {
         let path = entry.path();
+        if kept.contains(&path) {
+            continue;
+        }
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
         let id = path.file_stem().and_then(|s| s.to_str()).and_then(|s| s.parse::<u64>().ok());
         if let (Some(id), "pelure3d") = (id, ext) {
@@ -1041,11 +1078,14 @@ fn remove_unused_models(dir: &Path, used: &BTreeSet<u64>) -> usize {
 }
 
 /// Efface les sons du dossier qui ne servent plus (seulement les fichiers « <nombre>.<ext> »).
-fn remove_unused_sounds(dir: &Path, used: &BTreeSet<u64>) -> usize {
+fn remove_unused_sounds(dir: &Path, used: &BTreeSet<u64>, kept: &BTreeSet<PathBuf>) -> usize {
     let Ok(entries) = fs::read_dir(dir.join(SOUNDS)) else { return 0 };
     let mut removed = 0;
     for entry in entries.flatten() {
         let path = entry.path();
+        if kept.contains(&path) {
+            continue;
+        }
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
         let id = path.file_stem().and_then(|s| s.to_str()).and_then(|s| s.parse::<u64>().ok());
         if let Some(id) = id {
@@ -1412,7 +1452,16 @@ pub struct Progress {
 }
 
 fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> Result<Loaded, String> {
-    let text = fs::read_to_string(manifest_path).map_err(|e| e.to_string())?;
+    // (Des messages en français qui disent quel fichier : « stream did not contain valid UTF-8 »
+    // ou « Le chemin d'accès spécifié est introuvable » ne disent pas ce qui ne va pas.)
+    let octets = fs::read(manifest_path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            format!("projet introuvable : {}", manifest_path.display())
+        } else {
+            format!("manifeste illisible : {} ({e})", manifest_path.display())
+        }
+    })?;
+    let text = String::from_utf8(octets).map_err(|_| "manifeste illisible : le fichier n'est pas du texte (UTF-8), il est abîmé".to_string())?;
     let mut manifest: Manifest =
         serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("manifeste illisible : {e}"))?;
     if manifest.format != FORMAT {
@@ -1428,6 +1477,11 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
     let (w, h) = (manifest.largeur, manifest.hauteur);
     if w == 0 || h == 0 {
         return Err("taille d'image invalide dans le manifeste".into());
+    }
+    // (Un manifeste abîmé qui annonce une feuille de milliards de pixels ferait demander à SHOT des
+    // milliards de tuiles : il tomberait sans un mot.)
+    if w > crate::vector::MAX_SIDE * 2 || h > crate::vector::MAX_SIDE * 2 {
+        return Err(format!("taille d'image démesurée dans le manifeste ({w} × {h})"));
     }
     let mut warnings = Vec::new();
     // Les textures d'abord : les dessins vectoriels texturés en ont besoin pour leur rendu.
@@ -1477,12 +1531,19 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
     }
 
     let mut sounds: HashMap<u64, Sound> = HashMap::new();
+    // Fichiers de sons et de modèles illisibles : l'enregistrement ne les efface pas.
+    let mut unreadable_files: BTreeSet<PathBuf> = BTreeSet::new();
     for entry in &manifest.sons {
         match load_sound(dir, entry) {
             Ok(sound) => {
                 sounds.insert(sound.id, sound);
             }
-            Err(e) => warnings.push(e),
+            Err(e) => {
+                if Path::new(&entry.fichier).components().count() == 1 {
+                    unreadable_files.insert(dir.join(SOUNDS).join(&entry.fichier));
+                }
+                warnings.push(e);
+            }
         }
     }
     let mut models: HashMap<u64, Model3d> = HashMap::new();
@@ -1494,7 +1555,10 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
             Ok(mesh) => {
                 models.insert(entry.id, Model3d::new(entry.id, entry.nom.clone(), mesh));
             }
-            Err(e) => warnings.push(format!("modèle 3D « {} » illisible ({e})", entry.nom)),
+            Err(e) => {
+                unreadable_files.insert(model_file(dir, entry.id));
+                warnings.push(format!("modèle 3D « {} » illisible ({e})", entry.nom));
+            }
         }
     }
     let audio_tracks = manifest
@@ -1722,7 +1786,7 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
                 structure.panels.push(Panel {
                     id: p.id,
                     scene: scene.id,
-                    length: p.duree,
+                    length: p.duree.min(crate::rognage::MAX_PLAN),
                     layers,
                     action: p.action,
                     dialogue: p.dialogue,
@@ -1797,6 +1861,7 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
     // version qui les lit).
     // (Chacun a déjà son avertissement, plus haut.)
     keep_unreadable(dir, &missing);
+    keep_files(dir, unreadable_files);
     Ok(Loaded {
         doc,
         written,
@@ -1817,6 +1882,22 @@ fn keep_unreadable(dir: &Path, ids: &BTreeSet<CelId>) {
     } else {
         m.insert(dir.to_path_buf(), ids.clone());
     }
+}
+
+/// Fichiers de sons et de modèles 3D illisibles à l'ouverture, par dossier de projet.
+static KEPT_FILES: std::sync::Mutex<BTreeMap<PathBuf, BTreeSet<PathBuf>>> = std::sync::Mutex::new(BTreeMap::new());
+
+fn keep_files(dir: &Path, files: BTreeSet<PathBuf>) {
+    let mut m = KEPT_FILES.lock().unwrap_or_else(|e| e.into_inner());
+    if files.is_empty() {
+        m.remove(dir);
+    } else {
+        m.insert(dir.to_path_buf(), files);
+    }
+}
+
+fn kept_files_in(dir: &Path) -> BTreeSet<PathBuf> {
+    KEPT_FILES.lock().unwrap_or_else(|e| e.into_inner()).get(dir).cloned().unwrap_or_default()
 }
 
 fn unreadable_in(dir: &Path) -> BTreeSet<CelId> {
@@ -1910,12 +1991,36 @@ fn load_drawing(dir: &Path, id: CelId, w: usize, h: usize, quick: bool) -> Resul
     Ok((cel, approximate))
 }
 
+/// Coordonnée la plus lointaine qu'un élément vectoriel garde (une feuille fait 16 384 pixels au
+/// plus ; un trait traîné bien hors du dessin reste loin en deçà), et rayon le plus gros.
+const MAX_COORD: f32 = 1.0e5;
+const MAX_RADIUS: f32 = 5_000.0;
+
+/// Le rang du premier élément du dessin dont les valeurs sont absurdes (non finies, ou hors de ce
+/// qu'un geste peut produire), s'il y en a un. Un fichier abîmé qui annonce un trait de 3,4e38 pixels
+/// de long bloquait la lecture à le rejouer ; mieux vaut dire que le dessin est illisible (son fichier
+/// reste tel quel, comme tout dessin illisible).
+fn implausible(d: &VectorDrawing) -> Option<usize> {
+    use crate::vector::Element;
+    let coord = |v: f32| v.is_finite() && v.abs() <= MAX_COORD;
+    d.elements.iter().position(|e| match e {
+        Element::Stroke { points, opacity, hardness, .. } => {
+            !points.iter().all(|p| coord(p.x) && coord(p.y) && p.r.is_finite() && (0.0..=MAX_RADIUS).contains(&p.r)) || !opacity.is_finite() || !hardness.is_finite()
+        }
+        Element::Fill { contours, opacity, .. } => !contours.iter().flatten().all(|p| coord(p[0]) && coord(p[1])) || !opacity.is_finite(),
+        Element::Text { size, place, opacity, .. } => !(size.is_finite() && *size > 0.0 && *size <= MAX_RADIUS) || !place.iter().all(|v| v.is_finite() && v.abs() <= MAX_COORD * 10.0) || !opacity.is_finite(),
+    })
+}
+
 fn load_line(dir: &Path, id: CelId, w: usize, h: usize, quick: bool) -> Result<(Cel, bool), String> {
     let vector_path = drawing_path(dir, id, true);
     if vector_path.exists() {
         let text = fs::read_to_string(&vector_path).map_err(|e| format!("dessin {id} illisible : {e}"))?;
         let drawing: VectorDrawing =
             serde_json::from_str(&text).map_err(|e| format!("dessin {id} illisible : {e}"))?;
+        if let Some(k) = implausible(&drawing) {
+            return Err(format!("dessin {id} illisible : valeurs hors limites dans l'élément {} ; son fichier n'est pas modifié", k + 1));
+        }
         let textured = drawing.elements.iter().any(|e| matches!(e, crate::vector::Element::Stroke { brush: Some(_), .. }));
         let approximate = quick && textured;
         let raster = if approximate { drawing.render_quick(w, h) } else { drawing.render(w, h) };
@@ -1957,6 +2062,12 @@ fn read_rgba<R>(path: &Path, use_it: impl FnOnce(usize, usize, &[u8]) -> R) -> R
     if let Ok(decoder) = image::codecs::png::PngDecoder::new(std::io::Cursor::new(&bytes)) {
         if decoder.color_type() == image::ColorType::Rgba8 {
             let (w, h) = decoder.dimensions();
+            // L'en-tête d'un fichier abîmé peut annoncer des dimensions démesurées : le tampon
+            // demandé (des dizaines de Go) ferait tomber SHOT sans un mot (échec d'allocation).
+            // Une feuille ne dépasse pas `MAX_SIDE` de côté (8 192).
+            if w as usize > crate::vector::MAX_SIDE * 2 || h as usize > crate::vector::MAX_SIDE * 2 || decoder.total_bytes() > (1 << 30) {
+                return Err(format!("image démesurée ({w} × {h})"));
+            }
             let len = decoder.total_bytes() as usize;
             return DECODE_BUF.with(|buf| {
                 let mut buf = buf.borrow_mut();

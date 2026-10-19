@@ -89,6 +89,35 @@ impl App {
         Some(self.panel_brush_mut())
     }
 
+    /// La bibliothèque des pinceaux importés se lit encore (sur un autre fil, depuis le lancement) : on
+    /// n'y touche pas pour l'instant, sans quoi la lecture écraserait le changement, ou
+    /// l'enregistrement effacerait les pinceaux pas encore arrivés. Dit pourquoi dans la barre d'état.
+    pub(crate) fn brushes_busy(&mut self) -> bool {
+        if self.brushes_job.is_some() {
+            self.status = "Les pinceaux importés se chargent encore : réessaie dans un instant.".into();
+            return true;
+        }
+        false
+    }
+
+    /// À chaque image : la bibliothèque complète est-elle lue ? Elle remplace alors celle de SHOT seule
+    /// (les aperçus se refont).
+    pub(crate) fn poll_brushes(&mut self) {
+        if !self.brushes_job.as_ref().is_some_and(|j| j.is_finished()) {
+            return;
+        }
+        let Some(job) = self.brushes_job.take() else { return };
+        match job.join() {
+            Ok(lib) => {
+                self.brushes = lib;
+                self.brush_previews = BrushPreviews::default();
+                crate::demarrage::marque("pinceaux importés arrivés");
+            }
+            // (La lecture a planté : les pinceaux de SHOT restent ; rien n'est modifié sur le disque.)
+            Err(_) => self.status = "Les pinceaux importés n'ont pas pu être lus ; ceux de SHOT restent disponibles.".into(),
+        }
+    }
+
     /// Garde la bibliothèque (importés et « Mes brosses ») ; l'erreur s'il y en a une.
     pub(crate) fn save_brushes(&self) -> Option<String> {
         match BrushLibrary::user_dir() {
@@ -99,6 +128,9 @@ impl App {
 
     /// Commence l'enregistrement du réglage courant dans « Mes brosses ».
     pub(crate) fn start_save_preset(&mut self, target: Target) {
+        if self.brushes_busy() {
+            return;
+        }
         let name = self.brushes.free_name("Ma brosse", target);
         self.preset_edit = Some(PresetEdit { name, target, rename: None, focused: false });
     }
@@ -141,6 +173,9 @@ impl App {
 
     /// Fait ce que demande le menu du réglage `i`.
     pub(crate) fn apply_preset_menu(&mut self, i: usize, action: PresetMenu, target: Target, current: BrushSettings) {
+        if self.brushes_busy() {
+            return;
+        }
         let Some(p) = self.brushes.presets.get(i).cloned() else { return };
         match action {
             PresetMenu::Rename => {
@@ -226,6 +261,9 @@ impl App {
     /// Une image choisie devient une pointe de la bibliothèque, gardée pour les fois suivantes, et
     /// la pointe de l'outil courant.
     pub(crate) fn import_tip(&mut self) {
+        if self.brushes_busy() {
+            return;
+        }
         let Some(path) = rfd::FileDialog::new()
             .set_title("Image à prendre comme pointe")
             .add_filter("Images", &["png", "jpg", "jpeg", "bmp", "tif", "tiff", "webp"])
@@ -310,6 +348,9 @@ impl App {
     /// Une image choisie devient un papier de la bibliothèque, gardé pour les fois suivantes, et
     /// le papier de l'outil courant.
     pub(crate) fn import_paper(&mut self) {
+        if self.brushes_busy() {
+            return;
+        }
         let Some(path) = rfd::FileDialog::new()
             .set_title("Image à prendre comme papier")
             .add_filter("Images", &["png", "jpg", "jpeg", "bmp", "tif", "tiff", "webp"])
@@ -343,6 +384,9 @@ impl App {
     /// Importe un fichier de brosses : TVPaint (`.tvpx`, `.bin`, `.ini`, moteur de dessin,
     /// étape 10) ou Toon Boom (`.xml`) ; réimporter le même fichier remplace ses pinceaux.
     pub(crate) fn import_brushes(&mut self) {
+        if self.brushes_busy() {
+            return;
+        }
         let Some(paths) = rfd::FileDialog::new()
             .set_title("Brosses à importer")
             .add_filter("Brosses (TVPaint, Photoshop, Procreate, Krita, MyPaint, Toon Boom)", &["tvpx", "bin", "ini", "abr", "brush", "brushset", "kpp", "bundle", "myb", "xml"])

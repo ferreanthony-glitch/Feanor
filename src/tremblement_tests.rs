@@ -356,6 +356,7 @@ fn doc_and_item(id: u64, steps: Vec<FxStep>) -> (Document, PlanItem) {
 
 #[test]
 fn every_setting_has_its_own_derived_drawing() {
+    crate::fxcache::monde::ecrire();
     let base = values(4.0, 50.0, 3.0, 2.0, 10.0, false, 1);
     let id = |v: &[f32]| fx::fx_id(55, &[step(v.to_vec())]);
     let reference = id(&base);
@@ -370,6 +371,7 @@ fn every_setting_has_its_own_derived_drawing() {
 
 #[test]
 fn changing_a_setting_recomputes_and_the_previous_variant_stays_on_screen_meanwhile() {
+    crate::fxcache::monde::ecrire();
     let a = step(values(4.0, 50.0, 3.0, 2.0, 0.0, false, 0));
     let (doc, mut item) = doc_and_item(900_000_301, vec![a]);
     assert!(!fx::display(&doc, &item, 0).unwrap().ready, "calculé en arrière-plan");
@@ -394,6 +396,7 @@ fn changing_a_setting_recomputes_and_the_previous_variant_stays_on_screen_meanwh
 
 #[test]
 fn a_retouched_drawing_never_shows_the_boiled_version_from_before_the_retouch() {
+    crate::fxcache::monde::ecrire();
     let (mut doc, item) = doc_and_item(900_000_302, vec![step(values(5.0, 50.0, 3.0, 2.0, 0.0, false, 0))]);
     fx::display(&doc, &item, 0);
     crate::fxcache::settle();
@@ -444,6 +447,7 @@ fn boiling_doc(frames: usize) -> Document {
 
 #[test]
 fn the_export_and_the_thumbnails_show_the_variant_of_each_frame() {
+    crate::fxcache::monde::ecrire();
     let doc = boiling_doc(8);
     let image = |frame: usize| render::composite_full(&doc, &render::panel_plan_at(&doc, 0, frame, None));
     let (f0, f1, f2, f6) = (image(0), image(1), image(2), image(6));
@@ -582,6 +586,7 @@ fn play_boiling_plan(strokes: usize, w: usize, h: usize, frames: usize, real_tim
 
 #[test]
 fn playing_a_boiling_vector_plan_never_replays_the_engine_on_the_interface_thread() {
+    crate::fxcache::monde::ecrire();
     let (ui, _waited, ready) = play_boiling_plan(6, 640, 360, 24, false);
     assert_eq!(ui.len(), 24);
     assert!(ready > 0, "des variantes ont été servies prêtes");

@@ -117,12 +117,40 @@ impl App {
 
     /// Au lancement sans projet demandé : le dernier, s'il existe encore et qu'aucune séance
     /// interrompue n'attend d'être récupérée.
+    ///
+    /// Le projet est-il encore là ? Un `exists` sur le fil de l'interface, avant la première image,
+    /// gelait SHOT le temps que répond un disque réseau éteint ou un disque externe qui se réveille
+    /// (fenêtre noire, puis rien). La question est posée sur un autre fil ; `tick_reopen` ouvre le
+    /// projet à une image d'écran suivante, si rien d'autre n'a été ouvert entre-temps.
     pub(crate) fn reopen_last_project(&mut self) {
         if !self.settings.reopen_last || !self.orphans.is_empty() {
             return;
         }
-        if let Some(path) = self.settings.recent_projects.first().filter(|p| p.exists()).cloned() {
-            self.open_path(path);
+        let Some(path) = self.settings.recent_projects.first().cloned() else { return };
+        let (tx, rx) = std::sync::mpsc::channel();
+        let (ctx, probe) = (self.ctx.clone(), path.clone());
+        std::thread::spawn(move || {
+            let _ = tx.send(probe.exists());
+            ctx.request_repaint();
+        });
+        self.reopen_probe = Some((path, rx));
+    }
+
+    /// À chaque image d'écran : la réponse de `reopen_last_project`, s'il en attend une.
+    pub(crate) fn tick_reopen(&mut self) {
+        use std::sync::mpsc::TryRecvError;
+        let Some((path, rx)) = &self.reopen_probe else { return };
+        match rx.try_recv() {
+            Err(TryRecvError::Empty) => {}
+            Ok(true) => {
+                let path = path.clone();
+                self.reopen_probe = None;
+                // (Anthony a déjà ouvert, créé ou dessiné quelque chose : on ne lui prend pas la main.)
+                if self.path.is_none() && !self.modified && self.open_job.is_none() && self.new_dialog.is_none() && self.welcome {
+                    self.open_path(path);
+                }
+            }
+            Ok(false) | Err(TryRecvError::Disconnected) => self.reopen_probe = None,
         }
     }
 }

@@ -301,6 +301,13 @@ pub struct App {
     pub(crate) eraser: BrushSettings,
     /// Pointes, papiers et réglages de pinceau (ceux de SHOT et les importés).
     pub(crate) brushes: crate::brushtex::BrushLibrary,
+    /// La bibliothèque complète (pinceaux importés compris) en cours de lecture sur un autre fil
+    /// (`brushui::poll_brushes`) : tant qu'elle n'est pas là, `brushes` ne contient que les pinceaux
+    /// de SHOT, et rien ne modifie ni n'enregistre la bibliothèque (`brushes_busy`).
+    pub(crate) brushes_job: Option<std::thread::JoinHandle<crate::brushtex::BrushLibrary>>,
+    /// Le dernier projet du lancement : sa présence se vérifie sur un autre fil (`recents.rs`), un
+    /// disque réseau éteint ne gèle pas la première image.
+    pub(crate) reopen_probe: Option<(PathBuf, std::sync::mpsc::Receiver<bool>)>,
     pub(crate) fill: FillSettings,
     pub(crate) shape: ShapeSettings,
     pub(crate) vector_erase_whole: bool,
@@ -768,6 +775,9 @@ impl App {
     /// s'écrivent là où `donnees::bac_a_sable` les a envoyés.
     #[cfg(test)]
     pub(crate) fn sans_fenetre(ctx: &egui::Context, rs: Option<&eframe::egui_wgpu::RenderState>) -> Self {
+        // Une application qui tourne fait vieillir les demandes du cache des effets et peut le vider :
+        // elle ne tourne pas pendant un essai qui compte sur cet état commun (`fxcache::monde`).
+        crate::fxcache::monde::lire();
         Self::construire(ctx, rs, false)
     }
 
@@ -776,20 +786,45 @@ impl App {
     fn construire(egui_ctx: &egui::Context, wgpu_render_state: Option<&eframe::egui_wgpu::RenderState>, reel: bool) -> Self {
         // Police de l'interface (Segoe UI si Windows l'a) et icônes (Phosphor), utilisables dans
         // tout texte.
+        crate::demarrage::debut();
         let mut fonts = egui::FontDefinitions::default();
         crate::theme::polices(&mut fonts);
         egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
         egui_ctx.set_fonts(fonts);
+        crate::demarrage::marque("polices (Segoe UI, icônes)");
         let settings = crate::settings::Settings::load();
+        crate::demarrage::marque("réglages (Settings::load)");
         // Thème de l'interface, dense (12a, `theme.rs`) : celui des réglages.
         let theme_applied = settings.theme;
         crate::theme::installer(&theme_applied);
         crate::theme::appliquer(egui_ctx);
+        crate::demarrage::marque("thème");
         let montage_head_w = crate::montagehead::clamp_head_w(settings.montage_head_w);
         let (paint_behind, fill_shapes) = (settings.paint_behind, settings.fill_shapes);
         // Diagnostic des performances : proposé une fois, sur une machine qui n'en a jamais eu
         // (jamais dans les essais).
         let diag_offer = reel && settings.diagnostic.a_proposer();
+        // La bibliothèque de pinceaux : les pinceaux de SHOT tout de suite ; les importés (des
+        // centaines : plusieurs secondes de calcul sur une machine chargée) se lisent sur un autre fil
+        // et arrivent à une image d'écran quelconque (`poll_brushes`). La lire ici retardait la
+        // première image de tout ce temps.
+        let brushes = crate::brushtex::BrushLibrary::builtin();
+        crate::demarrage::marque("pinceaux de SHOT (BrushLibrary::builtin)");
+        let user_dir = crate::brushtex::BrushLibrary::user_dir();
+        let brushes_job = std::thread::Builder::new().name("pinceaux".into()).spawn({
+            let ctx = egui_ctx.clone();
+            move || {
+                let lib = crate::brushtex::BrushLibrary::load(user_dir.as_deref());
+                ctx.request_repaint();
+                lib
+            }
+        });
+        crate::demarrage::marque("pinceaux importés : lecture lancée sur un autre fil");
+        let keymap = Keymap::load();
+        crate::demarrage::marque("raccourcis (Keymap::load)");
+        let orphans = crate::recovery::root().filter(|_| reel).map(|r| crate::recovery::orphans(&r, None)).unwrap_or_default();
+        let recovery = crate::recovery::root().filter(|_| reel).and_then(|r| crate::recovery::Recovery::start(&r).ok());
+        crate::demarrage::marque("copie de secours (séances interrompues)");
         let mut app = Self {
             ctx: egui_ctx.clone(),
             doc: Document::with_frame(1920, 1080, 24).created_now(),
@@ -804,7 +839,9 @@ impl App {
             // d'avant reste dans les réglages.
             pencil: BrushSettings::graphite(),
             eraser: BrushSettings::eraser(),
-            brushes: crate::brushtex::BrushLibrary::load(crate::brushtex::BrushLibrary::user_dir().as_deref()),
+            brushes,
+            brushes_job: brushes_job.ok(),
+            reopen_probe: None,
             fill: FillSettings::default(),
             shape: ShapeSettings {
                 filled: false,
@@ -939,8 +976,8 @@ impl App {
             workspace_name: None,
             settings,
             // Les séances interrompues d'abord (avant d'ouvrir la nôtre).
-            orphans: crate::recovery::root().filter(|_| reel).map(|r| crate::recovery::orphans(&r, None)).unwrap_or_default(),
-            recovery: crate::recovery::root().filter(|_| reel).and_then(|r| crate::recovery::Recovery::start(&r).ok()),
+            orphans,
+            recovery,
             default_exposure: 1,
             playing: false,
             play_montage: false,
@@ -1066,7 +1103,7 @@ impl App {
             pending_keys: Vec::new(),
             assign: None,
             keys_filter: String::new(),
-            keymap: Keymap::load(),
+            keymap,
             title: String::new(),
             display_info: match wgpu_render_state {
                 Some(rs) => {
@@ -1077,11 +1114,13 @@ impl App {
             },
             gpu: None,
         };
+        crate::demarrage::marque("état de l'application (le reste du constructeur)");
         // Calques superposés par la carte graphique, sauf PELURE_COMPOSITION=processeur.
         let cpu = std::env::var("PELURE_COMPOSITION").is_ok_and(|v| v.eq_ignore_ascii_case("processeur"));
         if !cpu {
             app.gpu = wgpu_render_state.map(GpuCanvas::new);
         }
+        crate::demarrage::marque("carte graphique : pipelines des calques (GpuCanvas::new)");
         app.renderer.set_gpu(app.gpu.is_some());
         app.display_info.push_str(if app.gpu.is_some() {
             " · calques par la carte graphique"
@@ -1107,6 +1146,7 @@ impl App {
             app.layout.frame_format = layout.frame_format;
             app.apply_layout(layout);
         }
+        crate::demarrage::marque("disposition des panneaux");
         app
     }
 
@@ -4078,6 +4118,8 @@ impl App {
             self.dialogs(ctx);
             self.top_view_window(ctx);
             self.tick_open(ctx);
+            self.tick_reopen();
+            self.poll_brushes();
         }
         // Export en cours : quelques images par image d'écran, la fenêtre reste vivante.
         if let Some(job) = &mut self.export_job {
@@ -4126,6 +4168,8 @@ impl App {
             crate::perf::overlay(ctx);
         }
         crate::perf::end_frame(ctx);
+        // (Minuterie du démarrage : la première interface est construite.)
+        crate::demarrage::premiere_image();
     }
 }
 

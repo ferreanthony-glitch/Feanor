@@ -132,6 +132,8 @@ pub(crate) struct Mesure {
     pub textures: usize,
     pub octets: usize,
     pub sommets: usize,
+    /// Formes qu'egui a reçues de l'interface (l'interface a bien été construite).
+    pub formes: usize,
     /// Dans combien de temps l'application demande à être repeinte.
     pub reveil: Duration,
     /// La carte graphique en détail : textures d'egui, préparation, passe, attente.
@@ -157,7 +159,14 @@ pub(crate) struct Banc {
 }
 
 pub(crate) fn banc(doc: Document, avec_gpu: bool) -> Banc {
-    let bac = std::env::temp_dir().join(format!("shot-perf-bac-{}", std::process::id()));
+    banc_taille(doc, avec_gpu, 1920, 1080)
+}
+
+/// Un banc dont l'écran fait `largeur` × `hauteur` pixels (les essais de fiabilité, qui peignent
+/// vraiment sur la carte graphique, se contentent d'un écran plus petit).
+pub(crate) fn banc_taille(doc: Document, avec_gpu: bool, largeur: u32, hauteur: u32) -> Banc {
+    // Un dossier par fil d'essai : `donnees::bac_a_sable` est propre à chaque fil.
+    let bac = std::env::temp_dir().join(format!("shot-perf-bac-{}-{:?}", std::process::id(), std::thread::current().id()));
     let _ = std::fs::create_dir_all(&bac);
     crate::donnees::bac_a_sable(&bac);
     let rs = if avec_gpu { headless() } else { None };
@@ -166,11 +175,11 @@ pub(crate) fn banc(doc: Document, avec_gpu: bool) -> Banc {
     app.doc = doc;
     app.welcome = false;
     app.maximized_once = 4;
-    let taille = vec2(1920.0, 1080.0);
+    let taille = vec2(largeur as f32, hauteur as f32);
     let cible = rs.as_ref().map(|rs| {
         rs.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("écran"),
-            size: wgpu::Extent3d { width: 1920, height: 1080, depth_or_array_layers: 1 },
+            size: wgpu::Extent3d { width: largeur, height: hauteur, depth_or_array_layers: 1 },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -205,6 +214,7 @@ impl Banc {
         let ppp = out.pixels_per_point;
         let reveil = out.viewport_output.get(&ViewportId::ROOT).map_or(Duration::MAX, |v| v.repaint_delay);
         let (textures, octets) = (out.textures_delta.set.len(), out.textures_delta.set.iter().map(|(_, d)| d.image.width() * d.image.height() * 4).sum());
+        let formes = out.shapes.len();
         if self.garder_textes {
             self.textes = out
                 .shapes
@@ -218,10 +228,10 @@ impl Banc {
         let t2 = Instant::now();
         let mut detail = [0.0; 4];
         if let (Some(rs), Some(cible)) = (&self.rs, &self.cible) {
-            detail = peindre(rs, cible, &out.textures_delta, &prims);
+            detail = peindre(rs, cible, &out.textures_delta, &prims, [self.taille.x as u32, self.taille.y as u32]);
         }
         let carte = t2.elapsed().as_secs_f64() * 1e3;
-        Mesure { construction, decoupage, carte, textures, octets, sommets, reveil, detail }
+        Mesure { construction, decoupage, carte, textures, octets, sommets, formes, reveil, detail }
     }
 
     /// L'image peinte par la dernière `image` (1920 × 1080, RGBA), pour voir une mise en page ;
@@ -262,14 +272,14 @@ impl Banc {
 /// Envoie les textures et peint l'image sur la cible, en attendant la fin du travail de la carte.
 /// Renvoie les temps (ms) : textures d'egui, préparation (`prepare` du dessin : composition des
 /// calques enregistrée), enregistrement de la passe, attente de la carte.
-fn peindre(rs: &RenderState, cible: &wgpu::Texture, delta: &egui::TexturesDelta, prims: &[ClippedPrimitive]) -> [f64; 4] {
+fn peindre(rs: &RenderState, cible: &wgpu::Texture, delta: &egui::TexturesDelta, prims: &[ClippedPrimitive], taille: [u32; 2]) -> [f64; 4] {
     let t = Instant::now();
     for (id, d) in &delta.set {
         rs.renderer.write().update_texture(&rs.device, &rs.queue, *id, d);
     }
     let t_tex = t.elapsed().as_secs_f64() * 1e3;
     let t = Instant::now();
-    let screen = ScreenDescriptor { size_in_pixels: [1920, 1080], pixels_per_point: 1.0 };
+    let screen = ScreenDescriptor { size_in_pixels: taille, pixels_per_point: 1.0 };
     let view = cible.create_view(&Default::default());
     let mut encoder = rs.device.create_command_encoder(&Default::default());
     let extra = rs.renderer.write().update_buffers(&rs.device, &rs.queue, &mut encoder, prims, &screen);
@@ -394,25 +404,49 @@ fn trait_souris(k: usize, n: usize, par_image: usize, r: Rect) -> Vec<Event> {
 
 // ------------------------------------------------------------------ essais
 
+/// Des images (une demi-seconde d'écart) jusqu'à ce que cinq de suite n'aient plus rien à demander
+/// avant une seconde ; leur nombre, ou `max` si le repos n'arrive pas. Un petit sommeil quand
+/// quelque chose travaille encore en arrière-plan (vignettes, rejeux) : on lui laisse le processeur.
+fn se_reposer(b: &mut Banc, max: usize) -> usize {
+    let mut calmes = 0;
+    for k in 0..max {
+        let m = b.image(Vec::new(), 0.5);
+        if m.reveil >= Duration::from_secs(1) {
+            calmes += 1;
+            if calmes >= 5 {
+                return k + 1;
+            }
+        } else {
+            calmes = 0;
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+    max
+}
+
 /// Au repos, SHOT ne demande aucune image de plus : processeur à zéro (règle « sans latence »,
 /// et pas de chauffage inutile). Tourne toujours.
 #[test]
 fn an_idle_application_does_not_repaint() {
+    // (Le moindre calcul d'effet d'un autre essai réveille cette application : état commun pour elle seule.)
+    crate::fxcache::monde::ecrire();
     let doc = projet_long(12, 3, 24, 4);
     let mut b = banc(doc, false);
-    b.chauffer(30);
+    // (Les vignettes se font par petites tranches de temps par image d'écran : combien d'images il en
+    // faut dépend de la vitesse de la machine. On attend le repos, on ne compte pas les images.)
+    assert!(se_reposer(&mut b, 3000) < 3000, "SHOT finit par se reposer");
     let mesures: Vec<Mesure> = (0..10).map(|_| b.image(Vec::new(), 0.5)).collect();
     let pire = mesures.iter().map(|m| m.reveil).min().unwrap_or(Duration::MAX);
     assert!(pire >= Duration::from_secs(1), "au repos, SHOT demande à être repeint dans {pire:?}");
     // Pendant la lecture, une image après l'autre ; une fois arrêtée, plus rien.
     b.app.set_mode(Mode::Animation);
-    b.chauffer(10);
+    assert!(se_reposer(&mut b, 3000) < 3000, "SHOT se repose en animation");
     b.app.toggle_play_scope(false);
     let lecture: Vec<Mesure> = (0..6).map(|_| b.image(Vec::new(), 1.0 / 24.0)).collect();
     assert!(lecture.iter().all(|m| m.reveil < Duration::from_millis(100)), "la lecture doit demander l'image suivante");
     b.app.toggle_play_scope(false);
     assert!(!b.app.playing);
-    b.chauffer(10);
+    assert!(se_reposer(&mut b, 3000) < 3000, "SHOT se repose après la lecture");
     let repos: Vec<Mesure> = (0..6).map(|_| b.image(Vec::new(), 0.5)).collect();
     let pire = repos.iter().map(|m| m.reveil).min().unwrap_or(Duration::MAX);
     assert!(pire >= Duration::from_secs(1), "lecture arrêtée, SHOT demande à être repeint dans {pire:?}");
@@ -422,7 +456,7 @@ fn an_idle_application_does_not_repaint() {
     for k in 0..20 {
         b.image(trait_souris(k, 20, 6, zone), 1.0 / 60.0);
     }
-    b.chauffer(20);
+    assert!(se_reposer(&mut b, 3000) < 3000, "SHOT se repose après un trait");
     let repos: Vec<Mesure> = (0..6).map(|_| b.image(Vec::new(), 0.5)).collect();
     let pire = repos.iter().map(|m| m.reveil).min().unwrap_or(Duration::MAX);
     assert!(pire >= Duration::from_secs(1), "après un trait, SHOT demande à être repeint dans {pire:?}");
@@ -569,6 +603,7 @@ fn the_thumbnail_samples_the_full_composition() {
 /// image (130 ms par image, 1 500 textures envoyées).
 #[test]
 fn a_zoomed_timeline_keeps_its_thumbnails_instead_of_remaking_them() {
+    crate::fxcache::monde::ecrire();
     let mut b = banc(plan_charge(10, 160, 2), false);
     b.app.set_mode(Mode::Animation);
     b.app.timeline_cell = 48.0;
