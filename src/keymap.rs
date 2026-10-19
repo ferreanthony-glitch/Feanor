@@ -55,7 +55,7 @@ impl PresetId {
         match self {
             PresetId::Shot => "Les raccourcis de SHOT : A et F vont de clé en clé, PgPréc et PgSuiv de plan en plan, F5 pose une clé, F6 coupe le plan.",
             PresetId::StoryboardPro => {
-                "SHOT, avec quatre touches de Storyboard Pro par-dessus : A et F changent de plan, Ctrl+Maj+V colle sur place, F5 coupe le plan. Rien d'autre ne change."
+                "SHOT, avec une touche de Storyboard Pro par-dessus : Ctrl+Maj+V colle sur place. A et F (clé précédente / suivante), F5 (nouvelle clé) et F6 (couper le plan) gardent les touches de SHOT, voulu par Anthony. Rien d'autre ne change."
             }
         }
     }

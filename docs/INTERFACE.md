@@ -386,10 +386,10 @@ leur identifiant est dans le champ `source`). Au départ, SHOT s'écartait de St
 
 | Commande SHOT | Storyboard Pro 27 | SHOT aujourd'hui | Raison notée dans le fichier |
 |---|---|---|---|
-| plan précédent | `PREV_PANEL_KEY` : A | PgPréc | A / F vont à la clé précédente / suivante (choix d'Anthony) |
+| plan précédent | `PREV_PANEL_KEY` : A | PgPréc | A / F vont à la clé précédente / suivante (choix d'Anthony) ; **gardé ainsi dans le jeu** (voir plus bas) |
 | plan suivant | `NEXT_PANEL_KEY` : F | PgSuiv | idem |
 | coller sur place | `PASTE_IN_PLACE_KEY` : Ctrl+Maj+V | pas de touche | Ctrl+Maj+V colle à la tête de lecture (choix d'Anthony) |
-| couper le plan | `SPLIT_PANEL_KEY` : F5 (ses réglages perso) | F6 | F5 pose une clé |
+| couper le plan | `SPLIT_PANEL_KEY` : F5 (ses réglages perso) | F6 | F5 pose une clé ; **gardé ainsi dans le jeu** |
 | supprimer et resserrer | `DELETE_ALT_KEY` : Maj+Suppr | pas de touche | commande pas faite, touche prise |
 | décharger la référence | `DRAWING_UNLOAD_MODEL_KEY` : Suppr | pas de touche | commande pas faite, touche prise |
 | lier les clips au panneau | `LINK_CLIP_AND_PANEL` : Ctrl+L | retirée (Ctrl+L = pelure du calque) | sans objet depuis les plans |
@@ -398,25 +398,35 @@ leur identifiant est dans le champ `source`). Au départ, SHOT s'écartait de St
 **Ce qui est fait.** Deux jeux, au choix dans **Fichier > Préférences… > Raccourcis clavier** et en tête
 de la liste **Fichier > Raccourcis clavier… (F1)** : « Jeu de raccourcis » = *SHOT (par défaut)* ou
 *Façon Storyboard Pro*. Le second est le fichier `keymap-storyboard-pro.toml` (intégré au programme, même
-format que `keymap.toml`, avec un champ `source` par bloc). Il ne redéfinit que huit commandes, les seules
-dont l'écart est documenté dans `keymap.toml` ET qui existent dans SHOT :
+format que `keymap.toml`, avec un champ `source` par bloc). Il ne redéfinit que deux commandes (une touche
+donnée, une retirée), les seules dont l'écart est documenté dans `keymap.toml`, qui existent dans SHOT, et
+qu'Anthony n'a pas décidé de garder :
 
 | Commande SHOT | Touche du jeu | Source (champ `source` du jeu) | À vérifier |
 |---|---|---|---|
-| `panneau.precedent` (plan précédent) | A | Storyboard Pro 27 : `PREV_PANEL_KEY` | non |
-| `panneau.suivant` (plan suivant) | F | Storyboard Pro 27 : `NEXT_PANEL_KEY` | non |
-| `cle.precedente` | aucune (A rendue au plan) | SHOT : choix d'Anthony du 2026-10-17, noté dans `keymap.toml` | non |
-| `cle.suivante` | aucune (F rendue au plan) | idem | non |
 | `edition.coller_sur_place` | Ctrl+Maj+V | Storyboard Pro 27 : `PASTE_IN_PLACE_KEY` | non |
 | `edition.coller_a_la_tete` | aucune (Ctrl+Maj+V rendue) | SHOT : choix d'Anthony du 2026-10-19, noté dans `keymap.toml` | non |
-| `panneau.couper` (couper le plan) | F5 | perso : `SPLIT_PANEL_KEY`, F5 dans son Storyboard Pro (noté dans `keymap.toml`) | non |
-| `dessin.nouvelle_cle` | aucune (F5 rendue à la coupe) | SHOT ; la touche de Storyboard Pro pour une nouvelle clé n'est pas établie | **oui** |
 
-Quatre autres commandes **gardent la touche de SHOT** (elles ne changent pas) et sont notées « à vérifier »
+Ctrl+Maj+V reste donc pris à « Coller à la tête de lecture » dans ce jeu : Anthony ne l'a pas encore
+tranché (question à lui poser).
+
+**Pas pris à Storyboard Pro, volontairement (choix d'Anthony, 2026-10-19).** « A et F ne servent plus à aller
+de clé en clé dans ce jeu ; F5 ne crée plus de nouvelle clé : je veux garder ces raccourcis comme je les ai
+mis en place. » Le jeu ne touche donc pas à :
+
+- **A / F** : restent `cle.precedente` / `cle.suivante` ; le plan précédent / suivant (`panneau.precedent` /
+  `panneau.suivant`) garde PgPréc / PgSuiv, au lieu du A / F de Storyboard Pro (`PREV_PANEL_KEY` /
+  `NEXT_PANEL_KEY`) ;
+- **F5** : reste `dessin.nouvelle_cle` (plus « à vérifier » : elle garde sa touche) ; `panneau.couper` garde F6,
+  au lieu du F5 de son Storyboard Pro (`SPLIT_PANEL_KEY`).
+
+Le fichier du jeu le dit en commentaire ; ne les y remettre qu'après une nouvelle décision d'Anthony.
+
+Quatre commandes **gardent la touche de SHOT** (elles ne changent pas) et sont notées « à vérifier »
 dans le jeu, parce que la touche de Storyboard Pro n'est établie nulle part : `mode.basculer` (Tab) et
 `vue.planches` (Maj+Tab), dont le rôle dans Storyboard Pro n'est pas vérifié ; `aide.palette` (Ctrl+K,
-proposition de SHOT) ; `dessin.nouvelle_cle_vide` (F4, réglage perso d'Anthony dans SHOT). Total : **5
-« à vérifier »** (1 dans les huit, 4 qui gardent SHOT) ; la liste F1 les marque d'une étiquette « à vérifier ».
+proposition de SHOT) ; `dessin.nouvelle_cle_vide` (F4, réglage perso d'Anthony dans SHOT). Total : **4
+« à vérifier »**, toutes sur des touches de SHOT ; la liste F1 les marque d'une étiquette « à vérifier ».
 
 **Pas reprises (rien à poser, la commande n'existe pas dans SHOT)** : `DELETE_ALT_KEY` (Maj+Suppr, supprimer
 et resserrer : pas faite), `DRAWING_UNLOAD_MODEL_KEY` (Suppr, décharger la référence : pas faite),

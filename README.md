@@ -799,8 +799,9 @@ Fichier > Raccourcis clavier… (ou F1) liste toutes les commandes. On y trouve 
 mêmes boutons, et l'origine de chaque raccourci en bulle.
 
 **Jeu de raccourcis** (Fichier > Préférences… ou en tête de la liste F1) : « SHOT (par défaut) » ou
-« Façon Storyboard Pro ». Ce dernier ne change que ce que `keymap.toml` documente (A et F changent de
-plan, Ctrl+Maj+V colle sur place, F5 coupe le plan) ; le reste garde les touches de SHOT, et tes
+« Façon Storyboard Pro ». Ce dernier ne change que ce que `keymap.toml` documente (Ctrl+Maj+V colle sur
+place) ; A / F (clé précédente / suivante), F5 (nouvelle clé) et F6 (couper le plan) restent à tes
+réglages, voulu ainsi ; le reste garde les touches de SHOT, et tes
 raccourcis personnels restent par-dessus le jeu. La liste dit d'où vient chaque touche (SHOT, jeu, perso).
 Tableau et sources : `docs/INTERFACE.md`, 6.2.
 

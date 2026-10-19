@@ -23,29 +23,14 @@
 
 version = 1
 
-# --- Plan précédent / suivant : A et F, comme dans Storyboard Pro.
-
-[[raccourci]]
-action = "panneau.precedent"
-touches = ["A"]
-source = "Storyboard Pro 27 : PREV_PANEL_KEY"
-
-[[raccourci]]
-action = "panneau.suivant"
-touches = ["F"]
-source = "Storyboard Pro 27 : NEXT_PANEL_KEY"
-
-# A et F servaient la clé précédente / suivante (choix d'Anthony, 2026-10-17, noté dans keymap.toml) :
-# dans ce jeu elles passent au plan, la clé n'a plus de touche.
-[[raccourci]]
-action = "cle.precedente"
-touches = []
-source = "SHOT : A rendue à PREV_PANEL_KEY (voir le bloc cle.precedente de keymap.toml)"
-
-[[raccourci]]
-action = "cle.suivante"
-touches = []
-source = "SHOT : F rendue à NEXT_PANEL_KEY (voir le bloc cle.suivante de keymap.toml)"
+# A / F et F5 ne sont VOLONTAIREMENT PAS pris à Storyboard Pro, par choix d'Anthony (2026-10-19) : « A et F
+# ne servent plus à aller de clé en clé dans ce jeu ; F5 ne crée plus de nouvelle clé — je veux garder ces
+# raccourcis comme je les ai mis en place. » Ce jeu laisse donc ses raccourcis SHOT :
+#   - A / F : cle.precedente / cle.suivante (le plan précédent / suivant reste sur PgPréc / PgSuiv, au
+#     lieu des PREV_PANEL_KEY / NEXT_PANEL_KEY = A / F de Storyboard Pro) ;
+#   - F5 : dessin.nouvelle_cle (« couper le plan » reste sur F6, au lieu de SPLIT_PANEL_KEY = F5 de son
+#     Storyboard Pro).
+# Ne pas les y remettre sans nouvelle décision d'Anthony.
 
 # --- Coller sur place : Ctrl+Maj+V.
 
@@ -60,21 +45,6 @@ source = "Storyboard Pro 27 : PASTE_IN_PLACE_KEY"
 action = "edition.coller_a_la_tete"
 touches = []
 source = "SHOT : Ctrl+Maj+V rendue à PASTE_IN_PLACE_KEY (voir le bloc edition.coller_a_la_tete de keymap.toml)"
-
-# --- Couper le plan : F5, comme dans le Storyboard Pro d'Anthony.
-
-[[raccourci]]
-action = "panneau.couper"
-touches = ["F5"]
-source = "perso : SPLIT_PANEL_KEY (F5 dans son Storyboard Pro, noté dans keymap.toml)"
-
-# F5 posait une nouvelle clé (copie du dessin) dans SHOT. Storyboard Pro n'a pas de touche établie
-# pour cette commande : elle n'en a plus dans ce jeu (la clé vide garde F4, voir [[a_verifier]]).
-[[raccourci]]
-action = "dessin.nouvelle_cle"
-touches = []
-a_verifier = true
-source = "SHOT : F5 rendue à SPLIT_PANEL_KEY ; touche de nouvelle clé de Storyboard Pro non vérifiée (docs/INTERFACE.md 6.2)"
 
 # --- Commandes qui gardent la touche de SHOT, et dont la touche de Storyboard Pro n'est pas vérifiée
 # (docs/INTERFACE.md 6.2 : « à vérifier »). Elles ne changent pas : cette liste ne sert qu'à les montrer.

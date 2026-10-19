@@ -2606,10 +2606,11 @@ feuille entière) alors que 768 essais passaient ; et sur une machine chargée, 
 Proposition 6.2 de `docs/INTERFACE.md`, faite ; le tableau des touches, leurs sources et la règle de fusion y sont.
 
 - ✅ **Deux jeux** au choix (Fichier > Préférences… et liste des raccourcis F1, « Jeu de raccourcis ») : *SHOT (par
-  défaut)* et *Façon Storyboard Pro* (`keymap-storyboard-pro.toml`). Le second ne redéfinit que huit commandes, toutes
-  documentées dans `keymap.toml` : A / F changent de plan, Ctrl+Maj+V colle sur place, F5 coupe le plan.
+  défaut)* et *Façon Storyboard Pro* (`keymap-storyboard-pro.toml`). Le second ne redéfinit que deux commandes, documentées
+  dans `keymap.toml` : Ctrl+Maj+V colle sur place (à confirmer avec Anthony). **A / F et F5 ne sont pas pris** (choix
+  d'Anthony, 2026-10-19) : A / F restent clé précédente / suivante, F5 reste nouvelle clé, F6 coupe le plan.
 - ✅ **Aucune touche inventée** : chaque bloc cite son identifiant Storyboard Pro 27 ou les réglages perso d'Anthony ;
-  5 points « à vérifier » (Tab, Maj+Tab, Ctrl+K, F4, la nouvelle clé) sont marqués dans le jeu et dans la liste F1.
+  4 points « à vérifier » (Tab, Maj+Tab, Ctrl+K, F4) sont marqués dans le jeu et dans la liste F1.
 - ✅ **Les raccourcis d'Anthony restent par-dessus le jeu**, commande par commande ; changer de jeu demande
   confirmation s'il en a ; revenir à SHOT redonne exactement les touches d'avant.
 - ✅ **D'où vient la touche** : la liste F1 dit SHOT / jeu / perso pour chaque commande ; la palette Ctrl+K montre
