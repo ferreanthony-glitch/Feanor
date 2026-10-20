@@ -1785,3 +1785,167 @@ les conflits contrôlés. Essais : `src/dessin_notes_tests.rs`.
    calque : une clé naît, la lecture le déplace d'une clé à l'autre ; losanges verts dans la timeline ; cliquer sur un
    losange, le glisser, Suppr ; clic droit > Lisser : le losange devient rond et le mouvement ralentit à ses bouts ;
    exporter les images : le calque bouge dans l'export.
+
+## 26. Fiche technique : le découpage du film en tableur (2026-10-20, branche `fiche-technique`)
+
+Demande d'Anthony : une fiche de découpage pour la production, le layout et le montage, une ligne par plan (ou par image
+de storyboard), qui s'ouvre dans Excel, LibreOffice et Google Sheets. Code : `src/fiche.rs` (colonnes, contenu,
+mouvement de caméra), `src/ficheformats.rs` (CSV, presse-papiers, XLSX), `src/zipwrite.rs` (l'archive du XLSX),
+`src/fichejob.rs` (la tâche), `src/ficheui.rs` (la fenêtre). Essais : `src/fiche_tests.rs`. **Aucun changement de format
+du projet** (`VERSION` reste 33).
+
+### 26.1 Où et comment
+
+- **Où** : Fichier > Exporter… > « Fiche technique (tableur) » (icône `TABLE`) ; « Plus… » de la barre du montage ;
+  Ctrl+K « Exporter la fiche technique » ; action `fichier.exporter_fiche` (un bloc dans `keymap.toml`, **sans touche**).
+- **La fenêtre** : *Plans* (tout le film, la séquence courante, les plans choisis, seulement les plans modifiés depuis un
+  envoi : les mêmes choix que « Exporter pour relecture ») ; *Envoi* (l'envoi de référence, s'il y en a) ; *Lignes* (une par
+  plan, ou une par image de storyboard) ; *Time code de départ* (01:00:00:00, rouge s'il est illisible) ; *Format*
+  (classeur XLSX ou CSV, et pour le CSV point-virgule ou virgule) ; *Colonnes* (cases, flèches pour monter et descendre, tout
+  cocher, tout décocher, colonnes d'origine ; une bulle d'une seconde dit ce que contient chaque colonne). Dessous, ce qui
+  partirait (« 12 plans, 12 lignes, 15 colonnes, 12 vignettes à dessiner »), puis deux icônes : **Exporter la fiche…**
+  (choisir le fichier, écrire en tâche de fond) et **Copier dans le presse-papiers**. Colonnes, ordre, format, séparateur,
+  time code et dernier dossier sont retenus d'une séance à l'autre (`reglages.toml`, `[fiche_technique]`).
+- **Pendant l'export** : une barre « vignette n / total », le temps restant, la croix « Arrêter » (efface tout ce qui a
+  été commencé). Le projet est verrouillé tant que les vignettes se dessinent (comme les autres exports), puis libre.
+  On ne change pas d'onglet pendant que la fiche s'écrit.
+- **À la fin** : « Terminé : 12 lignes, 12 vignettes », le chemin et la taille, le dossier des vignettes, les
+  avertissements, et l'icône qui montre le dossier dans l'explorateur.
+
+### 26.2 Les colonnes (29, choisies et ordonnées par l'utilisateur)
+
+| Colonne | Contenu |
+|---|---|
+| Séquence | nom ou numéro de la séquence |
+| N° de plan | le numéro de la numérotation (`12A` pour un plan inséré en numérotation verrouillée) |
+| Référence | le nom de clip de l'export pour le montage : `SQ01_PL012A`, avec `_V2` si le plan a plusieurs versions |
+| Version | `V2` quand le plan a plusieurs versions (la version affichée), sinon vide |
+| Nom du plan | le nom donné au plan, s'il en a un |
+| Image | « 2 / 3 » en mode « une ligne par image de storyboard » ; vide sinon |
+| Vignette | chemin `vignettes/SQ01_PL012A.png` ; dans le XLSX, l'image dans la cellule |
+| Durée (images), Durée (s), Durée (TC) | **nombres** pour les deux premières (on calcule dessus), time code en texte pour la troisième |
+| TC entrée, TC sortie | time codes du **film entier** (un plan garde son time code même si l'on n'écrit que quelques plans) ; la sortie est l'image qui suit le plan |
+| Cadrage | le nom de l'objectif si c'en est un de la liste de la caméra (« Portrait · 85 mm »), sinon « 52,5 mm » ; au début du plan |
+| Mouvement de caméra, Détail du mouvement | voir 26.3 |
+| Images de storyboard | le plan et ses marques d'image |
+| Action, Dialogue, Notes | les textes du plan (ceux de l'image de storyboard en mode « par image ») |
+| Transition d'entrée, de sortie | « Fondu enchaîné (12 i) » : la transition posée sur la coupe qui précède / suit |
+| Sons | les noms des sons posés sur les pistes pendant le plan (toutes les pistes, séparés par « ; ») |
+| Commentaires ouverts, Texte des commentaires | le nombre de commentaires **pas résolus**, puis leur texte avec l'auteur (un par ligne) |
+| Modifié depuis l'envoi, Dernier envoi | « Modifié » ou « Ajouté » au regard de l'envoi de référence (vide : inchangé) ; son nom |
+| Couleur du plan | la couleur de repère |
+| Calques, Effets | nombre de calques (sans les dossiers) ; effets allumés (« Flou gaussien × 2; Lueur ») |
+
+Colonnes cochées d'office : Séquence, N° de plan, Version, Nom du plan, Vignette, Durée (images), Durée (s), TC entrée,
+TC sortie, Cadrage, Mouvement de caméra, Action, Dialogue, Notes, Transition d'entrée et de sortie, Sons, Commentaires
+ouverts, Modifié depuis l'envoi.
+
+### 26.3 Mouvement de caméra : les règles
+
+Déduit des images clés de la caméra du plan (de la part du plan qui est l'image de storyboard, en mode « par image »).
+Entre deux clés chaque réglage va de l'un à l'autre sans détour : on ne regarde donc que la caméra au début, à la fin
+et à chaque clé. Un réglage « bouge » quand son **étendue** (le plus grand moins le plus petit) dépasse un seuil ; son
+sens est celui du début à la fin, ou « aller-retour » s'il revient presque à son point de départ.
+
+| Réglage de la caméra | Seuil | Mot |
+|---|---|---|
+| X (la caméra glisse sur la feuille) | 1 % de la largeur du cadre | travelling à droite / à gauche |
+| Y | 1 % de la hauteur du cadre | travelling vers le haut / vers le bas |
+| Z (avancée vers la feuille) | 2 % de la distance de référence | travelling avant / arrière |
+| Panoramique (la caméra tourne sur place) | 0,5° | panoramique à droite / à gauche |
+| Bascule | 0,5° | bascule vers le haut / vers le bas |
+| Zoom (focale) | rapport de 1,02 | zoom avant / arrière |
+| Rotation (roulis) | 0,5° | rotation horaire / antihoraire |
+
+Rien ne bouge (ni clé, ni une seule, ni deux clés égales, ni un tremblement sous les seuils) : « fixe ». Plusieurs
+réglages : leurs mots dans l'ordre du tableau, séparés par « + » (« panoramique à droite + zoom avant ») ; X et Y ensemble
+font un seul mot (« travelling à droite et vers le bas »). **Choix à confirmer** : un glissement de la caméra sur la feuille
+(X, Y) est écrit « travelling », et seul le réglage « panoramique » de la caméra (qui tourne sur place, sans parallaxe)
+est écrit « panoramique ». Si en animation vous appelez « panoramique » le glissement sur un décor, c'est un tableau à
+changer à un seul endroit (`Mouvement::label`, `fiche.rs`). La colonne de détail dit, pour chaque réglage qui bouge, sa
+valeur au début et à la fin (« X : 960 → 1200 px ; Focale : 35 → 49 mm »).
+
+### 26.4 Formats
+
+- **CSV** : UTF-8 **avec BOM** (Excel lit les accents), fins de ligne `\r\n`, séparateur `;` (Excel en français, d'office)
+  ou `,`. Un champ est entre guillemets s'il contient le séparateur, un guillemet ou un retour à la ligne (le guillemet
+  est doublé, le retour à la ligne est gardé dans la cellule). Les décimales prennent la virgule avec `;` (Excel en
+  français les lit comme des nombres) et le point avec `,`. Les textes ne sont jamais raccourcis.
+- **Formules (injection CSV)** : un tableur évalue une cellule de texte qui commence par `=`, `+`, `-`, `@` (ou une
+  tabulation, un retour chariot). **Choix : une apostrophe `'` est ajoutée devant** ces textes dans le CSV et dans le
+  presse-papiers (elle se voit : `'- à refaire`, c'est voulu, la protection ne se cache pas). Les nombres écrits par
+  SHOT ne sont pas du texte et ne sont pas touchés. Dans le XLSX les textes sont des chaînes que le tableur ne lit jamais
+  comme une formule : rien n'y est ajouté (essayé dans Excel : `=1+1` reste du texte).
+- **XLSX** : un classeur Office Open XML écrit à la main puis zippé (aucune caisse de plus). Une feuille « Fiche
+  technique » ; en-tête en gras sur fond gris, **figé** (la première ligne reste en haut) avec **filtre automatique** ;
+  largeurs de colonnes ; texte qui passe à la ligne dans les colonnes de texte ; durées en nombres, time codes en texte ;
+  chaînes partagées (le texte est échappé, les caractères interdits en XML sont retirés) ; mise en page paysage, une page
+  de large. Une cellule XLSX tient 32 767 caractères : au-delà, le texte est coupé dans le classeur (avec « … ») et la
+  fenêtre le dit ; le CSV garde tout.
+- **Vignettes** : un PNG par ligne dans `vignettes/` **à côté de la fiche** (`SQ01_PL012A.png`, `SQ01_PL012A_img02.png`
+  pour la 2e image de storyboard), 320 pixels de large au plus, la première image du plan (ou de l'image de storyboard),
+  sur fond blanc. Dans le XLSX, chaque image est posée dans sa cellule (160 × 90 pixels au plus, proportions gardées,
+  hauteur de ligne réglée) ; le chemin reste écrit dans la cellule, dessous. Une image répétée n'est écrite qu'une fois
+  dans le classeur.
+- **Presse-papiers** : texte séparé par des tabulations (en-tête d'abord, champs entre guillemets comme les tableurs les
+  collent), décimales à la virgule, formules neutralisées, **sans la colonne des vignettes** (les fichiers n'existent pas).
+  Rien n'est copié avant le clic sur le bouton.
+
+### 26.5 Sécurité de l'écriture
+
+- **Atomique** : la fiche et chaque vignette sont écrites sous un nom en `.part` puis renommées. Un export arrêté, un
+  disque plein ou un fichier verrouillé ne laissent ni demi-fichier, ni fiche d'avant abîmée.
+- **Fichier ouvert dans Excel** : Excel tient le classeur verrouillé. SHOT essaie d'ouvrir la fiche existante en
+  écriture **avant** de commencer ; s'il ne peut pas : « « fiche.xlsx » est ouvert dans un autre programme (Excel ?) ou
+  protégé en écriture : ferme-le puis recommence. Rien n'a été modifié. », sans rien écrire. Si le fichier se verrouille
+  pendant l'export, le renommage final échoue avec le même message, la fiche d'avant est intacte, les `.part` et les
+  vignettes posées par cet export sont effacés.
+- **Arrêter / fermer SHOT** : efface les `.part` et les vignettes que l'export a posées (une vignette d'une fiche
+  précédente, remplacée, n'est jamais effacée).
+- **Zéro latence** : seules les images des vignettes se dessinent sur le fil de l'interface, 40 ms au plus par image
+  d'écran ; les PNG, le classeur et les fichiers sont écrits sur un fil à part. Sans colonne « Vignette », rien n'est
+  dessiné.
+
+### 26.6 Limites
+
+- **Vérifié ici** : Excel (installé sur ce poste) a ouvert un classeur d'essai sans réparation, avec les images dans
+  leurs cellules, la première ligne figée, le filtre, l'en-tête en gras, les durées en nombres et `=1+1` resté du texte.
+  **Pas vérifié** : LibreOffice et Google Sheets (absents). Google Sheets ignore en général les images posées sur une
+  feuille importée : le chemin de la vignette reste alors dans la cellule.
+- Le cadrage est celui du **début** du plan ; la colonne « Détail du mouvement » dit la focale du début et de la fin.
+- Un plan sans clé de caméra garde celle que le plan d'avant (dans la même scène) a laissée (règle de `panel_camera`).
+- Les vignettes sont la première image du plan : pas de choix de l'image.
+- « Modifié depuis l'envoi » attend que le relevé des plans soit prêt (quelques secondes après l'ouverture du projet) ; la
+  fenêtre le dit.
+- Les time codes sont sans saut d'images (comme l'export pour le montage), à la cadence du projet.
+- Pas de formules ni de mise en forme conditionnelle dans le classeur : c'est une photo du film à l'instant de l'export.
+
+### 26.7 À regarder à l'écran (liste pour Anthony)
+
+1. Fichier > Exporter… : la ligne « Fiche technique (tableur) » ; la fenêtre s'ouvre ; passer la souris une seconde sur
+   une colonne, sur les icônes de format et sur les deux icônes du bas : les bulles.
+2. Décocher « Notes », monter « Mouvement de caméra » avant « Action » avec les flèches ; exporter en **XLSX** avec les
+   vignettes : la barre avance, le projet ne réagit plus pendant les vignettes (c'est voulu) puis redevient libre.
+3. **Ouvrir le .xlsx dans Excel** : pas de message de réparation ; la ligne 1 en gras, grise, restée en haut quand on
+   défile ; le filtre sur chaque colonne ; les vignettes dans leurs cellules (pas coupées, pas décalées) ; les durées sont
+   des nombres (les additionner : la barre d'état d'Excel donne la somme) ; les time codes restent « 01:00:00:00 » ;
+   les textes à plusieurs lignes se lisent ; un dialogue qui commence par `=` ou `-` reste du texte.
+4. **Ouvrir le même fichier dans LibreOffice Calc et dans Google Sheets** (import) : mêmes colonnes et mêmes valeurs ; dire
+   si les vignettes apparaissent (Google Sheets les perd d'ordinaire : le chemin reste lisible).
+5. Exporter en **CSV point-virgule** et l'ouvrir en double-cliquant dans Excel français : accents justes, une colonne par
+   rubrique, « 0,5 » reconnu comme nombre ; en **CSV virgule** dans Google Sheets (Fichier > Importer) : pareil.
+6. Un plan en « V2 » : la colonne Version, la référence `…_V2`. Un plan inséré en numérotation verrouillée : « 12A ».
+7. Un plan avec un panoramique, un zoom, un travelling : les mots de « Mouvement de caméra » et les valeurs du détail
+   correspondent à ce que la caméra fait ; dire si « travelling » (glissement) et « panoramique » (rotation) sont les bons
+   mots pour vous (26.3).
+8. « Une ligne par image de storyboard » sur un plan à plusieurs marques d'image : une ligne par image, ses textes, ses
+   time codes, sa vignette.
+9. « Seulement les plans modifiés depuis l'envoi » après avoir retouché un plan envoyé : une ligne ; la colonne
+   « Modifié depuis l'envoi » dit « Modifié ».
+10. **Excel ouvert sur la fiche pendant l'export** : choisir le même fichier, ouvert dans Excel, puis « Exporter » : le
+    message « ouvert dans un autre programme (Excel ?) » apparaît tout de suite et rien n'est écrit. Fermer Excel, refaire.
+11. Arrêter l'export en cours : aucun fichier ni dossier « vignettes » laissé, la fiche d'avant intacte.
+12. « Copier dans le presse-papiers », puis coller dans la case A1 d'un tableur : les colonnes se répartissent ; rien n'est
+    dans le presse-papiers avant ce clic.
+13. Sur un vrai projet de plusieurs dizaines de plans avec vignettes : le temps de l'export (la barre dit le temps
+    restant) et la taille du dossier `vignettes/`.

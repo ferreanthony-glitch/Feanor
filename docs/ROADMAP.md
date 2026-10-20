@@ -3245,3 +3245,40 @@ Huit notes du réalisateur ; le détail, les règles de touches et la liste à r
   glisser, Suppr, clic droit), clés qui suivent les images insérées, la coupe et la réunion des plans, les miroirs.
   **Format 33** (`cles_position`). Pas fait : montage, copier / coller des clés, courbe de vitesse libre, clé d'opacité,
   propagation EbSynth (lit la pose fixe).
+
+## Fiche technique : le découpage du film en tableur (demandée par Anthony le 2026-10-20, branche `fiche-technique`) ✅
+
+Une fiche de découpage pour la production, le layout et le montage : une ligne par plan (ou par image de storyboard),
+en classeur XLSX ou en CSV. Détail, règles du mouvement de caméra, limites et liste à regarder à l'écran :
+`docs/INTERFACE.md`, partie 26 ; usage : `README.md`, « Fiche technique (tableur) ». **Aucun changement de format du
+projet** (`VERSION` reste 33).
+
+- ✅ **29 colonnes au choix et dans l'ordre voulu** (retenues dans les réglages) : séquence, n° de plan (`12A`), référence
+  (`SQ01_PL012A_V2`), version, nom, durée en images / secondes / time code, TC entrée et sortie (départ réglable,
+  01:00:00:00 d'office, time codes du film entier), cadrage (objectif ou focale), mouvement de caméra et son détail,
+  images de storyboard, action, dialogue, notes, transitions d'entrée et de sortie, sons, commentaires ouverts et leur
+  texte, modifié depuis l'envoi et son nom, couleur, calques, effets, vignette.
+- ✅ **Mouvement de caméra déduit des clés** : fixe, travelling (X, Y, avancée), panoramique, bascule, zoom, rotation,
+  seuls ou ensemble, avec le sens (« panoramique à droite + zoom avant ») ; aller-retour reconnu ; seuils nommés
+  (`SEUIL_*`). À confirmer par Anthony : un glissement sur la feuille s'écrit « travelling », seule la rotation sur place
+  est « panoramique ».
+- ✅ **Formats** : XLSX écrit à la main (aucune caisse de plus ; `zipwrite.rs` écrit l'archive, `flate2` déjà là compresse) avec
+  en-tête gras et figé, filtre, largeurs, nombres pour les durées, time codes en texte, **vignettes dans les cellules** ;
+  CSV UTF-8 avec BOM, `;` ou `,`, guillemets et retours à la ligne gardés ; presse-papiers à tabulations (bouton, jamais
+  automatique). Textes qui commencent par `=` `+` `-` `@` : apostrophe devant (CSV, presse-papiers) ; XLSX échappé ;
+  texte coupé à 32 767 caractères dans le XLSX seulement, et dit.
+- ✅ **Étendue** : tout le film, séquence courante, plans choisis, plans modifiés depuis un envoi (les choix de la
+  relecture, `relectureui::plans_de`).
+- ✅ **Tâche de fond** : vignettes dessinées 40 ms par image d'écran (`ExportJob::collect`), PNG et fichiers sur un fil à
+  part, barre, temps restant, « Arrêter » (efface tout) ; écriture en `.part` puis renommage ; un fichier tenu ouvert par
+  Excel est refusé tout de suite (« ouvert dans un autre programme ») et, s'il se verrouille en cours de route, la fiche
+  d'avant reste intacte.
+- ✅ **Vérifié dans Excel** (installé ici, ouverture automatisée) : pas de réparation, images dans leurs cellules, première
+  ligne figée, filtre, en-tête gras, durées en nombres, `=1+1` resté du texte. Pas vérifié : LibreOffice, Google Sheets.
+- ✅ **Essais** : 51 nouveaux (`fiche_tests.rs` : colonnes et réglages, numéros et versions, time codes, cadrage,
+  classification du mouvement sur des clés synthétiques et seuils, une ligne par image, transitions, sons, commentaires,
+  effets, envois ; CSV (BOM, séparateurs, guillemets, formules), presse-papiers, archive zip relue, classeur relu (parties,
+  relations, XML, cellules, styles, volet figé, images), tâche (atomique, annulation, fichier verrouillé au début et en
+  cours de route), fenêtre, étendues, onglets) ; la suite complète passe, `scripts\verifier.ps1 -Repetitions 2`.
+- Pas fait : choix de l'image de la vignette (c'est la première du plan) ; mise en page à imprimer au-delà du paysage une
+  page de large ; export Google Sheets direct ; colonnes calculées (formules) ; mouvement des calques (clés de position).

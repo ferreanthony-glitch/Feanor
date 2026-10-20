@@ -1240,6 +1240,32 @@ tant que les images se calculent.
 Code : `src/relecture.rs` (modèle, page, notes, placement), `src/relecturejob.rs` (tâche), `src/relectureui.rs`
 (fenêtres, dessin sur l'image), `assets/relecture/page.js` et `page.css` (la page), `src/relecture_tests.rs`.
 
+## Fiche technique (tableur)
+
+Le découpage du film en tableau pour la production, le layout et le montage : **une ligne par plan** (ou par image de
+storyboard), à ouvrir dans Excel, LibreOffice ou Google Sheets. **Fichier > Exporter… > « Fiche technique (tableur) »**
+(action `fichier.exporter_fiche`, sans touche ; aussi sous « Plus… » du montage et Ctrl+K).
+
+- **Colonnes au choix, dans l'ordre voulu** (29, retenues d'une séance à l'autre) : séquence, n° de plan (`12A`),
+  référence (`SQ01_PL012A_V2`), version, nom, durée en images / en secondes / en time code, TC entrée et sortie (départ
+  01:00:00:00 d'office, ceux du film entier), cadrage (nom de l'objectif ou focale), **mouvement de caméra** (fixe,
+  travelling, panoramique, bascule, zoom, rotation, ou plusieurs ensemble, déduit des clés de la caméra) et son détail,
+  images de storyboard, action, dialogue, notes, transitions d'entrée et de sortie, sons, commentaires ouverts et leur
+  texte, « modifié depuis l'envoi » et le nom de l'envoi, couleur du plan, calques, effets, vignette.
+- **Formats** : classeur **XLSX** (en-tête en gras et figé, filtre, largeurs, durées en nombres, **vignettes dans les
+  cellules**) ou **CSV** (UTF-8 avec BOM, `;` pour Excel en français ou `,`). Un bouton **Copier dans le presse-papiers**
+  (texte à tabulations, sans les vignettes) ne copie que sur un clic.
+- **Étendue** : tout le film, la séquence courante, les plans choisis, ou seulement les plans modifiés depuis un envoi.
+- **Écriture** : en tâche de fond, avec barre, temps restant et « Arrêter » ; les vignettes (PNG, dossier `vignettes/` à
+  côté de la fiche) se dessinent par tranches de 40 ms. Chaque fichier est écrit en `.part` puis renommé ; un fichier
+  **ouvert dans Excel** est refusé tout de suite avec un message clair ; arrêter ne laisse rien.
+- **Sécurité** : les textes qui commencent par `=`, `+`, `-` ou `@` reçoivent une apostrophe dans le CSV et le
+  presse-papiers (jamais lus comme une formule) ; tout est échappé dans le XLSX ; les textes longs sont gardés entiers
+  (le XLSX coupe à 32 767 caractères, une limite du format, et le dit).
+
+Règles du mouvement de caméra, détail des colonnes, limites et liste à regarder à l'écran : `docs/INTERFACE.md`, partie 26.
+Code : `src/fiche.rs`, `src/ficheformats.rs`, `src/zipwrite.rs`, `src/fichejob.rs`, `src/ficheui.rs`, `src/fiche_tests.rs`.
+
 ## Notes d'Anthony : dessin (2026-10-20, branche `notes-dessin`)
 
 Huit notes du réalisateur sur le dessin. Le détail, les règles de touches et la liste à regarder à l'écran sont
@@ -2203,6 +2229,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `suggestionsui.rs`, `genprefsui.rs` | Panneau Suggestions sonores et ses fenêtres ; section « Génération sonore » des Préférences |
 | `numerotation.rs`, `numerotationui.rs` | Numérotation des plans : suivie ou verrouillée (12, 12A, 13), renuméroter, noms `SQ01_PL012A` |
 | `editorial.rs`, `editorialjob.rs`, `editorialui.rs` | Export pour le montage : le plan d'export, l'EDL CMX 3600, le Final Cut XML, l'OpenTimelineIO ; la tâche (vidéos par plan, son, annulation) ; la fenêtre |
+| `fiche.rs`, `ficheformats.rs`, `zipwrite.rs`, `fichejob.rs`, `ficheui.rs` | Fiche technique (tableur) : les colonnes, le contenu et le mouvement de caméra ; CSV, presse-papiers et classeur XLSX écrit à la main ; l'archive zip ; la tâche (vignettes, écriture atomique, annulation) ; la fenêtre |
 | `canvas.rs`, `panels.rs`, `timeline.rs` | Interface |
 
 `cargo test --release` lance les tests (pinceau, vectoriel, remplissage, séquences/scènes/panneaux,
