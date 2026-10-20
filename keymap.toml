@@ -2919,3 +2919,8 @@ source = "SHOT (sans touche)"
 action = "calque.effets"
 touches = []
 source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fichier.exporter_gif"
+touches = []
+source = "SHOT (sans touche)"

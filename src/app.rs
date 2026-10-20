@@ -3426,6 +3426,7 @@ impl App {
             "fichier.exporter_images" => self.open_export(crate::export::Format::Png),
             "fichier.exporter_son" => self.open_export(crate::export::Format::Wav),
             "fichier.exporter_pdf" => self.open_export(crate::export::Format::Pdf),
+            "fichier.exporter_gif" => self.open_export(crate::export::Format::Gif),
             "fichier.exporter_montage" => self.open_editorial(),
             "fichier.exporter_relecture" | "fichier.importer_notes" => {
                 self.relecture_action(action);

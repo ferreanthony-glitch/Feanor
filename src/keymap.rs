@@ -144,6 +144,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("fichier.exporter_images", "Exporter des images (PNG)", true, false),
     act("fichier.exporter_son", "Exporter le son (WAV)", true, false),
     act("fichier.exporter_pdf", "Exporter le storyboard (PDF)", true, false),
+    act("fichier.exporter_gif", "Exporter un GIF animé (le film, le plan courant ou les plans choisis)", true, false),
     act("fichier.exporter_montage", "Exporter pour le montage (EDL, Final Cut XML, OpenTimelineIO)", true, false),
     act("fichier.exporter_relecture", "Exporter pour relecture (page HTML à envoyer au réalisateur)", true, false),
     act("fichier.importer_notes", "Importer les notes de relecture (fichier .json)", true, false),

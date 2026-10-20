@@ -34,6 +34,8 @@ pub enum Format {
     Wav,
     /// Storyboard PDF : planches A4 paysage, 6 panneaux par page.
     Pdf,
+    /// GIF animé (ffmpeg : palette calculée sur tout le film, puis appliquée) : pour montrer, partager. Sans son.
+    Gif,
 }
 
 impl Format {
@@ -44,11 +46,17 @@ impl Format {
             Format::Png => "png",
             Format::Wav => "wav",
             Format::Pdf => "pdf",
+            Format::Gif => "gif",
         }
     }
 
     pub fn is_video(self) -> bool {
         matches!(self, Format::Mp4 | Format::ProRes)
+    }
+
+    /// Les images passent par ffmpeg (les films et le GIF).
+    pub fn uses_ffmpeg(self) -> bool {
+        matches!(self, Format::Mp4 | Format::ProRes | Format::Gif)
     }
 }
 
@@ -59,6 +67,114 @@ pub enum Range {
     Scene,
     /// Le plan courant.
     Panel,
+    /// Les plans choisis (le plan courant et ceux qu'on a choisis avec lui : `App::board_selection`).
+    Selection,
+}
+
+/// La taille d'un GIF : une largeur en pixels (jamais plus que l'image finale : on ne l'agrandit pas) ou
+/// une part de l'image finale.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum GifSize {
+    Width(u32),
+    Percent(u32),
+}
+
+impl GifSize {
+    /// Les choix de la fenêtre.
+    pub const CHOICES: [GifSize; 4] = [GifSize::Width(480), GifSize::Width(720), GifSize::Percent(50), GifSize::Percent(100)];
+
+    pub fn label(self) -> String {
+        match self {
+            GifSize::Width(w) => format!("{w} px de large"),
+            GifSize::Percent(100) => "Image finale".to_string(),
+            GifSize::Percent(p) => format!("{p} % de l'image finale"),
+        }
+    }
+
+    /// Largeur et hauteur du GIF pour une image finale de `frame` : les proportions sont gardées, jamais plus
+    /// grand que l'image finale, au moins 2 points.
+    pub fn dimensions(self, frame: [usize; 2]) -> [usize; 2] {
+        let [fw, fh] = frame;
+        let w = match self {
+            GifSize::Width(w) => (w as usize).min(fw),
+            GifSize::Percent(p) => (fw as f64 * p.clamp(1, 100) as f64 / 100.0).round() as usize,
+        }
+        .clamp(2, fw.max(2));
+        let h = ((fh as f64 * w as f64 / fw.max(1) as f64).round() as usize).max(2);
+        [w, h]
+    }
+}
+
+/// Les réglages propres au GIF.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct GifSettings {
+    pub size: GifSize,
+    /// Images par seconde du GIF, au plus celles du projet (`gif_fps`).
+    pub fps: u32,
+    /// Il recommence quand il finit (sinon il joue une fois).
+    pub looped: bool,
+    /// Tramage : des dégradés plus doux avec 256 couleurs, au prix d'un fichier plus lourd.
+    pub dither: bool,
+}
+
+impl Default for GifSettings {
+    fn default() -> Self {
+        Self { size: GifSize::Width(480), fps: 15, looped: true, dither: true }
+    }
+}
+
+/// Cadences proposées pour un GIF (celle du projet s'y ajoute, et rien au-dessus).
+pub const GIF_FPS_CHOICES: [u32; 7] = [6, 8, 10, 12, 15, 20, 24];
+
+/// Les cadences permises pour un projet à `project_fps` : celles de la liste qui n'y dépassent pas, et la
+/// sienne.
+pub fn gif_fps_choices(project_fps: u32) -> Vec<u32> {
+    let project_fps = project_fps.max(1);
+    let mut out: Vec<u32> = GIF_FPS_CHOICES.into_iter().filter(|f| *f < project_fps).collect();
+    out.push(project_fps);
+    out
+}
+
+/// La cadence du GIF ramenée à ce qui se peut : au moins 1, jamais au-dessus de celle du projet.
+pub fn gif_fps(wanted: u32, project_fps: u32) -> u32 {
+    wanted.clamp(1, project_fps.max(1))
+}
+
+/// Les images d'un GIF à `fps` images par seconde tirées des images `frames` du film à `project_fps` : à la
+/// seconde `k / fps`, l'image du film qui s'affiche alors. Aucune image du film n'est calculée pour rien (le
+/// GIF n'en garde qu'une sur deux à 12 images par seconde pour un film à 24), et la durée est celle du film.
+pub fn gif_sample(frames: &[(usize, usize)], project_fps: u32, fps: u32) -> Vec<(usize, usize)> {
+    let fps = gif_fps(fps, project_fps) as u64;
+    let project_fps = project_fps.max(1) as u64;
+    let n = frames.len() as u64;
+    if n == 0 {
+        return Vec::new();
+    }
+    // Autant d'images de GIF que la durée du film le permet (au moins une).
+    let count = (n * fps).div_ceil(project_fps).max(1);
+    (0..count).map(|k| frames[((k * project_fps / fps).min(n - 1)) as usize]).collect()
+}
+
+/// Arguments de ffmpeg pour un GIF : images brutes RGBA (déjà à la cadence du GIF : `gif_sample`) sur l'entrée
+/// standard, redimensionnées à `size`, une palette calculée sur l'ensemble (`palettegen`) puis appliquée
+/// (`paletteuse`) — sans quoi les couleurs d'un dessin se voient en aplats grossiers.
+pub fn gif_args(frame: [usize; 2], fps: u32, s: &GifSettings, out: &Path) -> Vec<String> {
+    let [w, h] = frame;
+    let [ow, oh] = s.size.dimensions(frame);
+    let text = |v: &str| v.to_string();
+    let mut a: Vec<String> = ["-hide_banner", "-loglevel", "error", "-nostats", "-y"].map(text).to_vec();
+    a.extend(["-f", "rawvideo", "-pix_fmt", "rgba"].map(text));
+    a.extend([text("-s"), format!("{w}x{h}"), text("-framerate"), fps.to_string(), text("-i"), text("-")]);
+    let dither = if s.dither { "sierra2_4a" } else { "none" };
+    let scale = if [ow, oh] == [w, h] { String::new() } else { format!("scale={ow}:{oh}:flags=lanczos,") };
+    a.extend([
+        text("-vf"),
+        format!("{scale}split[a][b];[a]palettegen=stats_mode=full[p];[b][p]paletteuse=dither={dither}:diff_mode=rectangle"),
+    ]);
+    // `-loop 0` : en boucle sans fin ; `-loop -1` : une seule fois.
+    a.extend([text("-loop"), text(if s.looped { "0" } else { "-1" })]);
+    a.push(out.to_string_lossy().into_owned());
+    a
 }
 
 /// Choix de la fenêtre d'export.
@@ -75,6 +191,8 @@ pub struct ExportSettings {
     pub transitions: bool,
     /// Storyboard PDF avec les commentaires de la timeline (non résolus), sous l'image où ils tombent.
     pub comments: bool,
+    /// Taille, cadence, boucle et tramage du GIF (`Format::Gif`).
+    pub gif: GifSettings,
 }
 
 impl Default for ExportSettings {
@@ -87,17 +205,30 @@ impl Default for ExportSettings {
             transparent: false,
             transitions: true,
             comments: false,
+            gif: GifSettings::default(),
         }
     }
 }
 
-/// Images à exporter (panneau, image), dans l'ordre du montage.
+/// Images à exporter (panneau, image), dans l'ordre du montage (sans plans choisis : voir `frames_for_chosen`).
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn frames_for(doc: &Document, range: Range, panel: usize) -> Vec<(usize, usize)> {
+    frames_for_chosen(doc, range, panel, &[])
+}
+
+/// Comme `frames_for` ; `chosen` : les numéros des plans choisis (pour `Range::Selection`), pris dans l'ordre du
+/// montage. Sans plan choisi, la sélection est le plan courant.
+pub fn frames_for_chosen(doc: &Document, range: Range, panel: usize, chosen: &[u64]) -> Vec<(usize, usize)> {
     let (a, b) = match range {
         Range::Montage => (0, doc.panels.len()),
         // Un plan est une scène (13a) : « Scene » est la séquence courante.
         Range::Scene => doc.sequence_run(panel),
         Range::Panel => (panel, panel + 1),
+        Range::Selection => {
+            let picked: Vec<usize> = (0..doc.panels.len()).filter(|&p| chosen.contains(&doc.panels[p].id)).collect();
+            let picked = if picked.is_empty() { vec![panel] } else { picked };
+            return picked.into_iter().flat_map(|p| (0..doc.panels[p].frame_count()).map(move |f| (p, f))).collect();
+        }
     };
     (a..b).flat_map(|p| (0..doc.panels[p].frame_count()).map(move |f| (p, f))).collect()
 }
@@ -717,6 +848,16 @@ impl ExportJob {
                 wav,
             },
         ))
+    }
+
+    /// GIF animé encodé par ffmpeg (`args` : voir `gif_args`) : les images `frames` sont déjà celles du GIF
+    /// (`gif_sample`). Même tâche de fond, même progression et même annulation que le film (le GIF inachevé est
+    /// effacé).
+    pub fn gif(ffmpeg: &Path, args: Vec<String>, out: &Path, frames: Vec<(usize, usize)>) -> Result<ExportJob, String> {
+        let n = frames.len();
+        let mut job = ExportJob::video(ffmpeg, args, out, frames, None)?;
+        job.title = format!("Export du GIF ({n} images)");
+        Ok(job)
     }
 
     /// Storyboard PDF `out` : une planche par image de storyboard de `boards`, rendue à l'image

@@ -68,18 +68,26 @@ impl App {
         let Some(mut s) = self.export_dialog.take() else { return };
         let fps = self.doc.fps;
         let [fw, fh] = self.doc.frame;
-        let count = |range| export::frames_for(&self.doc, range, self.cur_panel).len();
+        let chosen = self.board_selection();
+        // Les plans choisis ne se proposent que là où le son ne compte pas (des plans qui ne se suivent pas n'ont
+        // pas un son d'un seul tenant) : le GIF, les images, le storyboard PDF.
+        let by_selection = matches!(s.format, Format::Gif | Format::Png | Format::Pdf);
+        if s.range == Range::Selection && !by_selection {
+            s.range = Range::Panel;
+        }
+        let count = |range| export::frames_for_chosen(&self.doc, range, self.cur_panel, &chosen).len();
         let ranges = [
             (Range::Montage, "Tout le montage", count(Range::Montage)),
             (Range::Scene, "Séquence courante", count(Range::Scene)),
             (Range::Panel, "Plan courant", count(Range::Panel)),
+            (Range::Selection, if chosen.len() > 1 { "Plans choisis" } else { "Plans choisis (aucun autre que le plan courant)" }, count(Range::Selection)),
         ];
         // Le son de l'étendue choisie (pour griser « avec le son » s'il n'y en a pas).
-        let frames = export::frames_for(&self.doc, s.range, self.cur_panel);
+        let frames = export::frames_for_chosen(&self.doc, s.range, self.cur_panel, &chosen);
         let first = frames.first().map_or(0, |&(p, f)| self.doc.panel_start(p) + f);
         let (start, len) = export::sample_span(fps, first, frames.len());
         let sound_here = export::has_sound(&audio::mix_clips(&self.doc), start, len);
-        let ffmpeg = if s.format.is_video() { self.ffmpeg_info().cloned() } else { None };
+        let ffmpeg = if s.format.uses_ffmpeg() { self.ffmpeg_info().cloned() } else { None };
         let has_transitions = !self.doc.transitions.is_empty();
 
         let mut go = false;
@@ -94,6 +102,7 @@ impl App {
                 ui.vertical(|ui| {
                     ui.radio_value(&mut s.format, Format::Mp4, "Film MP4 (H.264) : pour regarder, envoyer");
                     ui.radio_value(&mut s.format, Format::ProRes, "Film MOV (ProRes 422 HQ) : pour le montage");
+                    ui.radio_value(&mut s.format, Format::Gif, "GIF animé : pour montrer, partager (sans le son)");
                     ui.radio_value(&mut s.format, Format::Png, "Images PNG (une par image)");
                     ui.radio_value(&mut s.format, Format::Wav, "Son seul (WAV)");
                     ui.radio_value(&mut s.format, Format::Pdf, "Storyboard PDF (A4 paysage, 6 images par page)");
@@ -102,10 +111,46 @@ impl App {
                 ui.label("Étendue");
                 ui.vertical(|ui| {
                     for (range, label, n) in ranges {
+                        if range == Range::Selection && !by_selection {
+                            continue;
+                        }
                         ui.radio_value(&mut s.range, range, format!("{label} ({})", duration_label(n, fps)));
                     }
                 });
                 ui.end_row();
+                // GIF : taille, cadence (au plus celle du projet), boucle, tramage.
+                if s.format == Format::Gif {
+                    ui.label("Taille");
+                    ui.vertical(|ui| {
+                        for size in export::GifSize::CHOICES {
+                            let [w, h] = size.dimensions([fw, fh]);
+                            ui.radio_value(&mut s.gif.size, size, format!("{} ({w}×{h})", size.label()));
+                        }
+                    });
+                    ui.end_row();
+                    ui.label("Cadence");
+                    ui.horizontal(|ui| {
+                        s.gif.fps = export::gif_fps(s.gif.fps, fps);
+                        egui::ComboBox::from_id_salt("gif_cadence")
+                            .selected_text(format!("{} images par seconde", s.gif.fps))
+                            .show_ui(ui, |ui| {
+                                for f in export::gif_fps_choices(fps) {
+                                    ui.selectable_value(&mut s.gif.fps, f, format!("{f} images par seconde"));
+                                }
+                            })
+                            .response
+                            .on_hover_text("Jamais plus que la cadence du projet. Moins d'images : un fichier plus léger.");
+                        let n = export::gif_sample(&frames, fps, s.gif.fps).len();
+                        ui.label(RichText::new(format!("{n} images")).weak());
+                    });
+                    ui.end_row();
+                    ui.label("Lecture");
+                    ui.vertical(|ui| {
+                        ui.checkbox(&mut s.gif.looped, "Tourne en boucle");
+                        ui.checkbox(&mut s.gif.dither, "Tramage (dégradés plus doux, fichier plus lourd)");
+                    });
+                    ui.end_row();
+                }
                 if s.format.is_video() {
                     ui.label("Taille");
                     ui.vertical(|ui| {
@@ -138,13 +183,13 @@ impl App {
                 }
                 // Les fondus, volets et noirs du montage (`transitions.rs`) : calculés comme le reste
                 // de l'export, image par image.
-                if (s.format.is_video() || s.format == Format::Png) && has_transitions {
+                if (s.format.is_video() || matches!(s.format, Format::Png | Format::Gif)) && has_transitions {
                     ui.label("Transitions");
                     ui.checkbox(&mut s.transitions, "Avec les transitions du montage");
                     ui.end_row();
                 }
             });
-            if s.format.is_video() {
+            if s.format.uses_ffmpeg() {
                 ui.add_space(6.0);
                 ui.separator();
                 match &ffmpeg {
@@ -217,6 +262,21 @@ impl App {
                 let Some(out) = save_dialog(&base, Format::Pdf) else { return };
                 let (shots, boards) = export::storyboard_of_with(&self.doc, &export::panels_of(&frames), s.comments);
                 self.export_job = Some(ExportJob::pdf(&out, &base, shots, boards, self.doc.frame));
+            }
+            Format::Gif => {
+                let Some((ffmpeg, Ok(_))) = self.ffmpeg_info().cloned() else {
+                    self.status = "Export impossible : ffmpeg introuvable ou inutilisable.".into();
+                    return;
+                };
+                let Some(out) = save_dialog(&base, Format::Gif) else { return };
+                // Seules les images que le GIF garde sont calculées (à 12 images par seconde sur un film à 24, une sur deux).
+                let rate = export::gif_fps(s.gif.fps, fps);
+                let kept = export::gif_sample(&frames, fps, rate);
+                let args = export::gif_args(self.doc.frame, rate, &s.gif, &out);
+                match ExportJob::gif(&ffmpeg, args, &out, kept) {
+                    Ok(job) => self.export_job = Some(if s.transitions { job.with_transitions(&self.doc) } else { job }),
+                    Err(e) => self.status = format!("Export impossible : {e}"),
+                }
             }
             Format::Mp4 | Format::ProRes => {
                 let Some((ffmpeg, Ok(enc))) = self.ffmpeg_info().cloned() else {
@@ -326,6 +386,7 @@ fn save_dialog(base: &str, format: Format) -> Option<PathBuf> {
         Format::Mp4 => ("Exporter le film", "Vidéo MP4"),
         Format::ProRes => ("Exporter le film", "Vidéo MOV (ProRes)"),
         Format::Pdf => ("Exporter le storyboard", "Document PDF"),
+        Format::Gif => ("Exporter un GIF animé", "Image GIF animée"),
         _ => ("Exporter le son", "Son WAV"),
     };
     let mut path = rfd::FileDialog::new()

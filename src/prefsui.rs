@@ -18,8 +18,9 @@ use crate::app::App;
 use crate::theme::ChoixTheme;
 
 /// Les exports proposés : icône, nom, explication, action (ou `None` : la page HTML, sans action).
-const EXPORTS: [(&str, &str, &str, Option<&str>); 9] = [
+const EXPORTS: [(&str, &str, &str, Option<&str>); 10] = [
     (ph::FILM_STRIP, "Le film (vidéo)", "Le montage ou le plan en vidéo, avec le son.", Some("fichier.exporter_film")),
+    (ph::GIF, "Un GIF animé", "Le film, le plan courant ou les plans choisis, en petit GIF à partager (sans le son).", Some("fichier.exporter_gif")),
     (ph::IMAGES, "Des images (PNG)", "Une image PNG par image du film.", Some("fichier.exporter_images")),
     (ph::IMAGE, "L'image courante (PNG)", "Seulement l'image affichée.", Some("fichier.exporter_image_courante")),
     (ph::FILE_PDF, "Le storyboard (PDF)", "Les plans en planches, avec leurs textes.", Some("fichier.exporter_pdf")),
