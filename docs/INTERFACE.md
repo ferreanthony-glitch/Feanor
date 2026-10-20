@@ -840,8 +840,9 @@ cette séance (aucun lancement de SHOT) : voir « À vérifier à l'écran » pl
 | **Envoi** | l'état de tous les plans à un moment, avec un nom (« v2 au réal ») et une date |
 | **Marquer un envoi** | la commande qui le crée (aussi « Noter » dans le texte de la fenêtre) |
 | **Modifié / ajouté depuis l'envoi** | un plan qui n'est plus comme au dernier envoi / qui n'y était pas ; la pastille ambre |
-| **Version** (v1, v2…) | une autre forme du même plan, gardée à côté ; « la version active » est celle du film |
-| **Nouvelle version du plan** | garde le plan tel qu'il est et continue sur une copie |
+| **Version** (V1, V2…) | une autre forme du même plan, gardée à côté ; « la version active » (ou affichée) est celle du film |
+| **Nouvelle version du plan** | garde le plan tel qu'il est et continue sur une copie (« en dupliquant »), ou sur un calque vide (« en partant d'un plan vide ») |
+| **Pile des versions** | les cartes qui s'ouvrent au-dessus du bloc du plan, dans le montage, quand on survole « V2 » |
 | **Passer à une version** | elle devient l'active, l'ancienne active est gardée |
 | **Restaurer une version** | une copie d'elle devient une nouvelle version active |
 | **Comparer** | la fenêtre à deux côtés, en lecture seule |
@@ -854,9 +855,11 @@ cette séance (aucun lancement de SHOT) : voir « À vérifier à l'écran » pl
 | Envois (`envoi.liste`, la fenêtre) | barre du montage > Plus… (icône à l'état) ; Storyboard > Envois ; Ctrl+K | aucun |
 | Plan modifié suivant / précédent (`envoi.modifie_suivant`, `envoi.modifie_precedent`) | barre du montage > Plus… ; Storyboard > Envois ; fenêtre « Envois » ; Ctrl+K | aucun |
 | Choisir les plans modifiés (`envoi.modifies_choisir`) | Storyboard > Envois ; fenêtre « Envois » ; Ctrl+K | aucun |
-| Nouvelle version du plan (`version.nouvelle`) | barre du montage > Plus… ; Storyboard > Versions du plan ; fiche du plan (icône fourche) ; clic droit sur un plan > Version du plan ; Ctrl+K | aucun |
+| Nouvelle version, en dupliquant (`version.nouvelle`) | barre du montage > Plus… ; Storyboard > Versions du plan ; fiche du plan (icône fourche) ; clic droit sur un plan > Nouvelle version > En dupliquant la version en cours ; Ctrl+K | aucun |
+| Nouvelle version, en partant d'un plan vide (`version.vide`) | Storyboard > Versions du plan ; fiche du plan (icône page +) ; clic droit sur un plan > Nouvelle version > En partant d'un plan vide ; Ctrl+K | aucun |
+| Supprimer les versions non affichées (`version.purger`, `version.purger_plan`) | Storyboard > Versions du plan (deux entrées, grisées s'il n'y a rien à supprimer) ; Ctrl+K | aucun |
 | Version précédente / suivante (`version.precedente`, `version.suivante`) | Storyboard > Versions du plan ; Ctrl+K | aucun |
-| Passer à, Restaurer, Supprimer une version | fiche du plan (ligne « Version ») ; clic droit sur un plan > Version du plan | aucun |
+| Passer à, Restaurer, Supprimer une version | **la pile des versions** (survol de « V2 » sur le bloc du plan : clic sur une carte pour passer, croix pour supprimer) ; fiche du plan (ligne « Version ») ; clic droit sur un plan > Version du plan | aucun |
 | Comparer le plan (`comparer.ouvrir`) | barre du montage > Plus… (icône à l'état) ; Storyboard > Versions du plan ; clic droit > Version du plan ; fenêtre « Envois » (une icône par envoi) ; fiche (une icône par version) ; Ctrl+K | aucun |
 
 Tout se fait par la table des barres (`barres.rs`) et les actions (`keymap.rs`, un bloc chacune dans `keymap.toml`, sans
@@ -874,22 +877,114 @@ thème (`theme::avertissement`) ; les états allumés (Envois, Comparer) prennen
   Sur un bloc de moins de 44 points de large (la bande zoomée très loin : la pastille cacherait la poignée du bord) ou de
   moins de 40 de haut, une **bande ambre de 5 points le long du bord haut** la remplace, avec la même bulle. Le « dernier
   envoi » est le dernier marqué (pas le plus tardif par sa date : la date se tape).
-- **Fiche du plan, ligne « Version »** : « v2 » en gras (et « sur 3 » s'il y en a plusieurs), l'icône « Nouvelle version » ; une
+- **Fiche du plan, ligne « Version »** : « V2 » en gras (et « sur 3 » s'il y en a plusieurs), les icônes « Nouvelle version » (en dupliquant, en partant d'un plan vide) ; une
   ligne par autre version : son numéro et sa date, puis passer (flèches), comparer (colonnes), restaurer (flèche arrière),
   supprimer (corbeille).
-- **Titre** : « Plan 3 · v2 » dans la bande et sur la planche pour un plan qui a plusieurs versions.
+- **Titre** : « Plan 3 · V2 » dans la bande, sur la planche, dans la fiche, la timeline, la barre d'état et le titre de la
+  fenêtre « Comparer » pour un plan qui a plusieurs versions.
 - **Fenêtre « Envois »** : la ligne de commandes (marquer, plan modifié précédent / suivant, choisir les modifiés), le
   résumé (« Depuis « v2 au réal » : 7 plans modifiés, 1 ajouté »), la liste des plans modifiés (un clic y va), puis les
   envois du plus récent au plus ancien avec le nombre de plans qui diffèrent d'aujourd'hui, l'icône de comparaison et la
   corbeille (« Retirer de la liste », avec confirmation ; les fichiers de `versions/` restent).
-- **Fenêtre « Comparer · Plan 3 · v2 »** : deux listes (les côtés possibles : Aujourd'hui, Version vN, Envoi « nom » (date)),
+- **Fenêtre « Comparer · Plan 3 · V2 »** : deux listes (les côtés possibles : Aujourd'hui, Version VN, Envoi « nom » (date)),
   l'icône qui échange, l'icône qui relit ; quatre icônes de mode (côte à côte, volet, fondu, superposition) ; la glissière de
   l'image du plan ; pour le volet et le fondu, la glissière du mélange (le volet se tire aussi à la souris dans l'image) ; en
   bas la part de l'image qui diffère et « Lecture seule : cette vue ne change pas le plan. »
 
+### Les versions dans le montage (2026-10-20, branche `versions-montage`)
+
+Demande d'Anthony : itérer un plan en plusieurs versions depuis le montage, sans ouvrir la fiche. Code : `pilevers.rs`
+(logique sans interface), `pileversui.rs` (dessin et gestes), `planvers.rs` / `planversui.rs` (modèle et commandes).
+**Aucun changement de format** (`VERSION` reste 30) : tout repose sur `plans_versions.json` d'avant.
+
+**Nomenclature** : « **V1, V2, V3…** » en majuscule partout (étiquette de la bande, cartes, fiche, planche, timeline, barre
+d'état, fenêtre « Comparer », messages, étapes d'annulation : « Passer à la version V1 », « Supprimer la version V2 »,
+« Nouvelle version du plan, vide »). Les numéros ne se réutilisent pas : le prochain est toujours au-dessus de tous. Les
+**envois** gardent leur nom libre (« v2 au réal » est la livraison du film, pas la version d'un plan).
+
+**Étiquette « V2 » sur le bloc du plan** : seulement quand le plan a **au moins deux versions** (un plan à une seule reste
+propre). Une pastille arrondie (fond de fenêtre, texte fort, trait de bordure : lisible dans les trois thèmes) près du haut,
+au milieu du bloc, 8 points sous le bord ; allumée à l'accent quand sa pile est ouverte. Elle laisse sa place à la
+pastille ambre « modifié depuis l'envoi » (en haut à droite) : si le milieu est pris, elle se décale à gauche ; sur un bloc
+étroit elle devient un **point** (qui s'ouvre de même) ; sur un bloc trop bas ou trop étroit pour le point, elle disparaît (le
+clic droit reste). Toujours à 10 points au moins des poignées de rognage.
+
+**La pile** : survoler l'étiquette ouvre, **au-dessus du bloc**, une carte par version, de haut en bas par numéro croissant
+(la plus récente près du bloc). Chaque carte : un aperçu à gauche (la première image de cette version), son nom, la date
+(ou « affichée »), et une croix en haut à droite. La version affichée est sur l'accent et n'a pas de croix.
+- Elle reste ouverte tant que le pointeur est sur l'étiquette, sur les cartes ou dans le petit vide entre les deux ; elle
+  se ferme **0,25 s** après qu'il les a quittés. Un **clic sur l'étiquette l'épingle** (stylet sans survol) : elle reste
+  jusqu'à un appui ailleurs. Elle se ferme aussi pendant un geste de la bande (glisser un plan, rogner…) et quand un menu
+  s'ouvre.
+- Clic sur une carte : « Passer à la version Vn » (une étape d'annulation nommée) ; la pile reste ouverte pour comparer.
+- Croix : une **confirmation sur la carte même** (« Supprimer V2 ? » avec Supprimer / Garder), puis « Supprimer la version
+  V2 » (annulable, Ctrl+Z). La version affichée n'a pas de croix : on ne supprime jamais la dernière version.
+- Plus de six versions : six cartes et la molette fait défiler (petites flèches). Peu de place au-dessus : moins de cartes.
+- **Zéro latence** : les aperçus passent par la file des vignettes de fond (`thumbs.rs`, `texture_rangee`), jamais
+  composés sur le fil de l'interface ; gabarit gris tant qu'ils ne sont pas prêts ; seules les cartes visibles en demandent.
+  Fermée ou ouverte pointeur immobile, la pile ne demande aucune image d'écran (essai d'inactivité).
+- Bulles d'une seconde (`bulles.rs`) sur les cartes et les croix ; les couleurs viennent de `theme::`.
+
+**Clic droit sur un plan de la bande ou de la planche** → **Nouvelle version ›** : *En dupliquant la version en cours*
+(`version.nouvelle` : le plan tel qu'il est est gardé, on continue sur une copie) ou *En partant d'un plan vide*
+(`version.vide`). Les deux sont une étape d'annulation nommée et la nouvelle version devient l'active. Elles sont aussi
+dans la fiche (icônes à côté de la version), Storyboard > Versions du plan, Ctrl+K, et ont un bloc sans touche dans
+`keymap.toml`.
+
+**Ce qu'une version « plan vide » garde et remet à zéro** :
+- gardé : la **durée**, la **taille du cadre** (celle du film), la **caméra** (ses clés : le cadrage ne bouge pas, décision
+  d'Anthony), le repère 3D, les textes d'action / dialogue / notes, la couleur de repère, les calques de toute la scène (le
+  décor) ;
+- remis à zéro : les calques de dessin (un seul calque vectoriel « Dessin » vide, au-dessus du décor, comme dans un plan
+  neuf), les marques d'image, les signets et points d'entrée / sortie.
+La version d'avant est rangée telle quelle sous son numéro.
+
+**Supprimer les versions non affichées…** (Storyboard > Versions du plan, deux entrées : tous les plans, ou le plan courant ;
+`version.purger`, `version.purger_plan`, Ctrl+K) : supprime toutes les versions rangées, la version affichée de chaque plan
+reste. Une **confirmation** donne le compte (« 7 versions de 4 plans seront supprimées »), puis **une étape d'annulation**
+« Supprimer les versions non affichées » (Ctrl+Z les ramène toutes). Grisées quand il n'y a rien à supprimer (par Ctrl+K :
+le message « Aucune version à supprimer »). Les états gardés par les **envois** (`versions/`, `envois.json`) ne sont pas
+des versions du plan et **ne sont pas touchés** : un envoi se rouvre et se compare comme avant. Un plan qui n'a plus que sa
+version affichée n'a plus de versions : il redevient « V1 » et la prochaine nouvelle version sera « V2 ».
+
+**Envois et comparaison** : passer d'une version à l'autre change le contenu du plan, donc (empreinte existante) le plan est
+repéré « modifié depuis l'envoi » s'il diffère de l'état envoyé, et perd son repère quand on revient à la version
+envoyée. « Comparer » propose toutes les versions comme côtés.
+
+**Export pour le montage** : un plan qui a plusieurs versions porte celle qui part dans le nom de son clip et de son
+fichier : `SQ01_PL012A_V2` (`media/SQ01_PL012A_V2.mov`) ; un plan à une seule version garde `SQ01_PL012A`. La bobine de
+l'EDL reste celle du plan (« PL012A », 8 caractères au plus), le titre long dit « · V2 ». Revenir à V1 avant d'exporter
+donne `…_V1`.
+
+**Limites connues** : une version rangée ne se lit pas image par image dans la pile (première image seulement) ; l'étiquette
+est peinte sur la première vignette du bloc (pas dans la vue Vignettes / planche, qui garde « Plan 3 · V2 » dans son titre et
+le clic droit) ; sur un bloc très étroit seul le point ou le clic droit donnent accès aux versions.
+
+### À vérifier à l'écran (versions dans le montage)
+
+1. Un plan à une seule version : aucune étiquette. Clic droit > Nouvelle version > En dupliquant : « V2 » apparaît, près du haut
+   au milieu du bloc ; lisible dans les trois thèmes, sur un bloc large et sur un bloc étroit (point), avec la pastille ambre
+   (après avoir retouché un plan envoyé) : les deux se voient sans se chevaucher.
+2. Survoler « V2 » : les cartes montent **au-dessus du bloc** (pas coupées par la bande) ; les aperçus arrivent un instant
+   après (gabarit d'abord) ; la lecture n'accroche pas pendant le survol.
+3. Aller de l'étiquette aux cartes sans la perdre ; la quitter : elle se ferme au bout d'un quart de seconde. Clic sur une
+   carte : le plan change de version tout de suite (Historique : « Passer à la version V1 ») ; Ctrl+Z.
+4. Croix > « Supprimer V1 ? » > Garder, puis Supprimer ; Ctrl+Z la ramène. Pas de croix sur la version affichée.
+5. Clic droit > Nouvelle version > En partant d'un plan vide : même durée, même caméra (le cadrage ne bouge pas), un calque
+   « Dessin » vide ; Ctrl+Z.
+6. Avec 8 versions : six cartes, la molette fait défiler.
+7. Storyboard > Versions du plan > Supprimer les versions non affichées… : le compte dans la confirmation, annulation ;
+   grisé quand rien à supprimer.
+8. Exporter pour le montage avec un plan en V2 : les clips s'appellent `…_V2`.
+9. Dire si l'étiquette (place, taille) et l'ordre des cartes (la plus récente près du bloc) conviennent, et si l'on veut aussi
+   l'étiquette dans la vue Vignettes.
+
 ### Essais ajoutés
 
-`envois_tests.rs` (dates ; fichier et protections ; empreintes — ce qui compte, ce qui ne compte pas, stabilité après
+`pilevers_tests.rs` (nomenclature, règle de visibilité de l'étiquette, placement sur blocs larges / étroits / avec pastille,
+machine d'ouverture et de fermeture, disposition de la pile, nouvelle version vide, étapes d'annulation, dernière version,
+suppression des versions non affichées avec compte et annulation, envois intacts, noms de clips de l'export, survol / clic /
+croix / confirmation / inactivité dans l'application, aperçus par la file de fond) ; `envois_tests.rs` (dates ; fichier et protections ; empreintes — ce qui compte, ce qui ne compte pas, stabilité après
 enregistrement et réouverture sur le projet complet de `fiabilite_fixture` ; instantané écrit une fois, relu à l'identique,
 copié par « Enregistrer sous », jamais effacé ; suivi dans l'application : repère, retour à l'état de l'envoi, projet rouvert,
 navigation, repos, coût) ; `planvers_tests.rs` (modèle, annulation et noms des étapes, fichier et protections, storyboard

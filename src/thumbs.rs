@@ -205,9 +205,24 @@ impl Thumbs {
         width: usize,
         deadline: Instant,
     ) -> Option<TextureId> {
+        let plan = render::panel_plan_at(doc, panel, frame, Some(doc.paper));
+        let cam = doc.panel_camera(panel, frame);
+        self.texture_of(ctx, doc, id, plan, cam, width, deadline)
+    }
+
+    /// Vignette de la première image d'un plan **rangé** (une autre version du plan, `planvers.rs` ; la pile des
+    /// versions du montage), rangée sous le numéro du plan rangé. Même chemin que les autres : l'interface ne
+    /// fait que la clé et le cliché, la composition est sur un fil de fond ; rien tant qu'elle n'est pas prête.
+    pub fn texture_rangee(&mut self, ctx: &egui::Context, doc: &Document, panel: &crate::document::Panel, width: usize, deadline: Instant) -> Option<TextureId> {
+        let plan = render::stored_panel_plan(doc, panel, 0, Some(doc.paper));
+        let cam = doc.camera_du_plan_range(panel, 0);
+        self.texture_of(ctx, doc, panel.id, plan, cam, width, deadline)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn texture_of(&mut self, ctx: &egui::Context, doc: &Document, id: u64, plan: Plan, cam: Camera, width: usize, deadline: Instant) -> Option<TextureId> {
         let _t = crate::perf::section("vignettes : clés et demandes");
         let slot = (id, width);
-        let plan = render::panel_plan_at(doc, panel, frame, Some(doc.paper));
         // (Plus le nombre de fonds sous le trait arrivés de l'arrière-plan : la vignette montre le
         // fond d'avant jusqu'à l'arrivée du nouveau ; et la taille du cadre, qui donne celle de la vignette.)
         let versions = plan
@@ -216,7 +231,6 @@ impl Thumbs {
             .map(|i| doc.cels.get(&i.cel).map_or(0, |c| c.version))
             .chain([crate::fx::fond_epoch(), doc.frame[0] as u64, doc.frame[1] as u64])
             .collect();
-        let cam = doc.panel_camera(panel, frame);
         let key = Key::Plan(plan, versions, [cam.x, cam.y, cam.zoom, cam.angle, cam.dolly, cam.tilt, cam.pan].map(f32::to_bits));
         let generation = crate::fxcache::generation();
         let fresh = self.entries.get(&slot).is_some_and(|e| *e.key == key && e.waiting.is_none_or(|g| g == generation));
@@ -241,7 +255,9 @@ impl Thumbs {
         }
         // (Les identifiants des plans et de leurs marques d'abord : chercher chaque vignette parmi
         // tous les plans, à chaque image d'écran, coûtait le carré du nombre de plans.)
-        let ids: std::collections::HashSet<u64> = doc.panels.iter().flat_map(|p| std::iter::once(p.id).chain(p.marks.iter().map(|m| m.id))).collect();
+        // (Et les plans rangés des versions : les cartes de la pile les demandent.)
+        let ids: std::collections::HashSet<u64> =
+            doc.panels.iter().flat_map(|p| std::iter::once(p.id).chain(p.marks.iter().map(|m| m.id))).chain(doc.plans_ranges().map(|p| p.id)).collect();
         self.entries.retain(|(id, _), _| ids.contains(id));
     }
 

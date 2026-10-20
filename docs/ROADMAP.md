@@ -3019,3 +3019,14 @@ Détail dans `docs/EXPORT_MONTAGE.md`. **Jamais ouvert dans Premiere Pro, DaVinc
   calque de couleur, déformations (enveloppe, perspective), import / export Storyboard Pro et propagation à la
   feuille seulement ; effets de la carte graphique sur le hors-feuille ; « Tout voir » (cadrer tout ce qui est
   dessiné) en plus de « Ajuster à la fenêtre » ; zoom arrière extrême plus net (tuiles réduites par niveaux).
+
+## Versions d'un plan dans le montage (demandées par Anthony le 2026-10-20, branche `versions-montage`) ✅
+
+- Nomenclature **V1, V2, V3…** partout. Une étiquette « V2 » sur le bloc d'un plan qui a plusieurs versions ; la survoler
+  ouvre une pile de cartes au-dessus du bloc (aperçu par la file de fond, nom, croix) ; clic = passer à la version, croix
+  = supprimer après confirmation. Clic droit sur le plan > Nouvelle version > en dupliquant / en partant d'un plan vide
+  (même durée, même cadre, **même caméra**, un calque vide). Storyboard > Versions du plan > Supprimer les versions non
+  affichées (film ou plan courant, confirmation avec le compte, une étape d'annulation). Clips de l'export pour le montage
+  suffixés `_V2`. Aucun changement de format. Détails et vérifications : `docs/INTERFACE.md` partie 15.
+- Reste : l'étiquette dans la vue Vignettes ; défilement des cartes au clavier ; aperçu animé (toutes les images) d'une
+  version au survol.

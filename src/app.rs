@@ -580,6 +580,12 @@ pub struct App {
     pub(crate) envois_ui: crate::envoisui::EnvoisUi,
     /// La fenêtre « Comparer » : deux côtés d'un même plan, en lecture seule (`comparerui.rs`).
     pub(crate) comparaison: Option<crate::comparerui::Comparaison>,
+    /// La pile des versions d'un plan, ouverte en survolant « V2 » sur son bloc du montage, et la
+    /// confirmation de « Supprimer les versions non affichées » (`pileversui.rs`).
+    pub(crate) pile_versions: crate::pilevers::Pile,
+    /// Quand le projet change, le plan dont on propose de supprimer les versions non affichées : le
+    /// plan seul (`Some`) ou tout le film (`None`) ; rien : pas de confirmation en cours.
+    pub(crate) purge_versions: Option<Option<u64>>,
     /// Effets des extraits de son : clé de volume choisie (`audiofxui.rs`).
     pub(crate) sfx: crate::audiofxui::SoundFxUi,
     /// La bibliothèque de bruitages : liste, recherche, écoute, sons en cours de pose (`bruitagesui.rs`).
@@ -1067,6 +1073,8 @@ impl App {
             trans: Default::default(),
             envois_ui: Default::default(),
             comparaison: None,
+            pile_versions: Default::default(),
+            purge_versions: None,
             sfx: Default::default(),
             brt: Default::default(),
             sug: Default::default(),
@@ -4360,6 +4368,7 @@ impl App {
             self.envois_tick(ctx);
             self.envois_windows(ctx);
             self.comparer_fenetre(ctx);
+            self.purge_versions_fenetre(ctx);
         }
         // Export en cours : quelques images par image d'écran, la fenêtre reste vivante.
         if let Some(job) = &mut self.export_job {

@@ -260,7 +260,7 @@ impl App {
 
     /// Scène et panneau en cours, en haut à droite du dessin.
     fn paint_canvas_title(&self, painter: &egui::Painter, rect: Rect) {
-        let text = crate::storyboard::panel_long_title(&self.doc, self.cur_panel);
+        let text = crate::planversui::titre_long_avec_version(&self.doc, self.cur_panel);
         let galley = painter.layout_no_wrap(text, egui::FontId::proportional(17.0), Color32::from_gray(235));
         let at = egui::pos2(rect.right() - galley.size().x - 14.0, rect.top() + 8.0);
         let bg = Rect::from_min_size(at - vec2(8.0, 4.0), galley.size() + vec2(16.0, 8.0));

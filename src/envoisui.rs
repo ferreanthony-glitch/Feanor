@@ -641,11 +641,17 @@ const BLOC_ETROIT: f32 = 44.0;
 /// Épaisseur de la bande qui tient lieu de pastille sur un bloc étroit.
 const BANDE: f32 = 5.0;
 
+/// Le repère d'un bloc de cette taille est une pastille (sinon une bande le long du bord haut). L'étiquette de
+/// version (`pilevers.rs`) s'en sert pour lui laisser sa place.
+pub(crate) fn repere_en_pastille(bloc: Rect) -> bool {
+    bloc.width() >= BLOC_ETROIT && bloc.height() >= 40.0
+}
+
 /// Peint le repère d'un plan sur son bloc de la bande et rend la zone où la souris le survole : une pastille en
 /// haut à droite si le bloc est assez large pour ne pas cacher sa poignée de bord, sinon (la bande zoomée loin) une
 /// bande ambre le long de son bord haut, qui se voit à n'importe quel zoom.
 pub(crate) fn peindre_repere_du_bloc(painter: &egui::Painter, bloc: Rect, etat: Etat) -> Rect {
-    if bloc.width() >= BLOC_ETROIT && bloc.height() >= 40.0 {
+    if repere_en_pastille(bloc) {
         let zone = Rect::from_center_size(pos2(bloc.right() - 18.0, bloc.top() + 18.0), vec2(REPERE * 2.0 + 2.0, REPERE * 2.0 + 2.0));
         peindre_repere(painter, zone.center(), etat, REPERE);
         zone

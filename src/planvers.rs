@@ -37,7 +37,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::document::{relink_copies, CelId, Cues, Document, Panel};
+use crate::document::{relink_copies, CelId, Cues, Document, Layer, LayerKind, Panel};
 
 pub(crate) const FILE: &str = "plans_versions.json";
 const FORMAT: &str = "shot-plans-versions";
@@ -83,9 +83,10 @@ impl VersionsDuPlan {
     }
 }
 
-/// « v3 ».
+/// « V3 » : le nom d'une version, en majuscule, partout (bande, cartes, fiche, planche, comparaison,
+/// messages, noms de clips de l'export pour le montage).
 pub fn etiquette(numero: u32) -> String {
-    format!("v{numero}")
+    format!("V{numero}")
 }
 
 /// Échange le contenu de deux plans : tout, sauf leur numéro et leur scène.
@@ -186,6 +187,34 @@ impl Document {
         Some(v.actuelle)
     }
 
+    /// « Nouvelle version, en partant d'un plan vide » : comme `nouvelle_version` (le plan tel qu'il est est rangé
+    /// sous le numéro qu'il portait), mais la version active qui suit repart à neuf : **même durée**, **même
+    /// taille de cadre** (celle du film), **un seul calque de dessin vide** comme dans un plan tout neuf, posé
+    /// au-dessus des calques de toute la scène (le décor, qui est à la scène et pas à la version).
+    ///
+    /// Ce qui est gardé, parce que c'est le cadrage et le texte du plan et pas son dessin : la **caméra** (ses
+    /// clés), le **repère 3D**, les textes d'action, de dialogue et de notes, la couleur de repère. Ce qui repart
+    /// à zéro : les calques de dessin, les marques d'image, les signets et points d'entrée / sortie.
+    /// Rend le numéro de la nouvelle version active.
+    pub fn nouvelle_version_vide(&mut self, index: usize, now: u64) -> Option<u32> {
+        let numero = self.nouvelle_version(index, now)?;
+        let p = &mut self.panels[index];
+        let duree = p.frame_count();
+        p.layers.retain(|l| l.scene_wide.is_some());
+        // (Un calque de scène rangé dans un dossier du plan qui part avec lui n'a plus de dossier.)
+        let gardes: Vec<u64> = p.layers.iter().map(|l| l.id).collect();
+        for l in &mut p.layers {
+            if l.parent.is_some_and(|d| !gardes.contains(&d)) {
+                l.parent = None;
+            }
+        }
+        p.layers.push(Layer::new("Dessin", LayerKind::Vector));
+        p.length = duree;
+        p.marks.clear();
+        p.cues = Cues::default();
+        Some(numero)
+    }
+
     /// Fait de la version rangée `numero` la version active du plan `index` : les deux échangent leur
     /// contenu. Rend faux si ce numéro n'est pas rangé.
     pub fn changer_de_version(&mut self, index: usize, numero: u32) -> bool {
@@ -235,6 +264,30 @@ impl Document {
             self.versions.remove(&plan);
         }
         true
+    }
+
+    /// Les versions « non affichées » : toutes les versions rangées (pas les actives) des plans qui existent
+    /// encore, ou de ce seul plan (`seulement`). Rend (versions, plans). Les états gardés par les envois
+    /// (`versions/`) n'en font pas partie : ils ne sont pas des versions du plan.
+    pub fn versions_non_affichees(&self, seulement: Option<u64>) -> (usize, usize) {
+        let mut plans = 0;
+        let mut versions = 0;
+        for (i, v) in self.versions_vivantes() {
+            if seulement.is_some_and(|p| p != self.panels[i].id) || v.autres.is_empty() {
+                continue;
+            }
+            plans += 1;
+            versions += v.autres.len();
+        }
+        (versions, plans)
+    }
+
+    /// Supprime les versions non affichées (voir `versions_non_affichees`) ; rend (versions, plans) supprimées.
+    pub fn supprimer_versions_non_affichees(&mut self, seulement: Option<u64>) -> (usize, usize) {
+        let compte = self.versions_non_affichees(seulement);
+        let vivants: Vec<u64> = self.panels.iter().map(|p| p.id).collect();
+        self.versions.retain(|plan, _| !(vivants.contains(plan) && seulement.is_none_or(|p| p == *plan)));
+        compte
     }
 
     /// Le numéro de la version avant / après l'active (en tournant), pour passer de l'une à l'autre au clavier.
