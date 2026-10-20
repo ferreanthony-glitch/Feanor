@@ -920,15 +920,14 @@ impl App {
 
     /// Préférences > Équipe.
     pub(crate) fn equipe_prefs_ui(&mut self, ui: &mut egui::Ui) {
-        ui.label(RichText::new("Équipe").strong());
         let mut change = false;
         ui.horizontal(|ui| {
             ui.label("Mon nom :");
             let hint = crate::commentaires::author_name(&self.settings.comment_author);
-            let resp = ui.add(egui::TextEdit::singleline(&mut self.settings.equipe.nom).hint_text(hint).desired_width(140.0));
+            let resp = ui.add(egui::TextEdit::singleline(&mut self.settings.equipe.nom).hint_text(hint).desired_width(140.0)).on_hover_text("Le nom que les autres équipiers voient sur les plans que tu tiens. Vide : le nom de la signature des commentaires.");
             change |= resp.lost_focus();
             let mut c = couleur(self.settings.equipe.couleur.unwrap_or_else(|| crate::equipe::couleur_pour(&self.settings.equipe.id)));
-            if ui.color_edit_button_srgba(&mut c).changed() {
+            if ui.color_edit_button_srgba(&mut c).on_hover_text("Ta couleur dans l'équipe : le liseré des plans que tu tiens.").changed() {
                 self.settings.equipe.couleur = Some([c.r(), c.g(), c.b()]);
                 change = true;
             }
@@ -937,7 +936,7 @@ impl App {
         ui.horizontal(|ui| {
             ui.label("Une prise périme après");
             let mut m = self.settings.equipe.bail_minutes;
-            if ui.add(egui::DragValue::new(&mut m).range(2..=240).suffix(" min")).changed() {
+            if ui.add(egui::DragValue::new(&mut m).range(2..=240).suffix(" min")).on_hover_text("Un plan tenu par un équipier qui ne donne plus de nouvelles redevient libre après ce temps.").changed() {
                 self.settings.equipe.bail_minutes = m;
                 change = true;
             }

@@ -508,7 +508,6 @@ impl App {
     /// La section « Performance » de Fichier > Préférences… : chaque réglage que le diagnostic
     /// pose, modifiable à la main.
     pub(crate) fn performance_prefs_ui(&mut self, ui: &mut egui::Ui) {
-        ui.label(RichText::new("Performance").strong());
         let avant = self.settings.perf;
         let mut p = avant;
         let aide = |ui: &mut egui::Ui, nom: &str, i: Interrupteur| {

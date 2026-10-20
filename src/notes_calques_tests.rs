@@ -845,6 +845,7 @@ fn the_passe_partout_setting_is_saved_and_old_settings_keep_the_old_look() {
 #[test]
 fn the_preferences_window_has_the_passe_partout_slider() {
     let mut app = app_one_layer("prefs", LayerKind::Vector);
+    app.settings.prefs_onglet = crate::prefsonglets::Onglet::Dessin;
     app.prefs_window = true;
     let mut ecran = Ecran::new();
     let mut ui_prefs = |a: &mut App, ui: &mut egui::Ui| {

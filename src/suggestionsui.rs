@@ -728,7 +728,8 @@ impl App {
             .collect();
         ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new(texte).small().weak());
-            if ui.small_button(ph::GEAR).on_hover_text("Choisir les fournisseurs (Fichier > Préférences > Génération sonore)").clicked() {
+            if ui.small_button(ph::GEAR).on_hover_text("Choisir les fournisseurs (Fichier > Préférences > Génération)").clicked() {
+                self.settings.prefs_onglet = crate::prefsonglets::Onglet::Generation;
                 self.prefs_window = true;
             }
         });

@@ -974,8 +974,7 @@ laquelle il tourne, sans rien appliquer sans ton accord :
 Au premier lancement sur une machine sans diagnostic, un petit message le propose une fois
 (« Lancer le diagnostic » / « Plus tard ») ; il ne bloque rien et n'applique rien.
 
-Les onze réglages sont de vrais réglages de SHOT, tous dans **Fichier > Préférences…, section
-Performance**, et jouent tout de suite (sauf le rendu des traits texturés, à l'ouverture d'un projet) :
+Les onze réglages sont de vrais réglages de SHOT, tous dans **Fichier > Préférences… > Performance**, et jouent tout de suite (sauf le rendu des traits texturés, à l'ouverture d'un projet) :
 effets en aperçu réduit pendant la lecture et les gestes ; traits vectoriels texturés (rendu exact
 aussitôt, rapide jusqu'au repos, ou rapide partout) ; tremblement du trait sans « Animer à l'arrêt » ;
 pelure d'oignon plafonnée ; caches de la carte graphique, des traits et des effets ; fils de calcul ;
@@ -1105,17 +1104,64 @@ Les menus montrent l'essentiel ; le reste est rangé dans un sous-menu (« Plans
 « Ordre », « Plus »…) ou une fenêtre :
 - Fichier > Exporter… : film, images, image courante, PDF, page HTML, son, Storyboard Pro, et la
   case « PNG sans le papier » ;
-- Fichier > Préférences… : l'apparence (voir ci-dessous), copie de secours, dernier projet rouvert,
-  croix du système, panneaux ajustés, raccourcis clavier ;
+- Fichier > Préférences… : une fenêtre à onglets (voir « Préférences en onglets » ci-dessous) ;
 - Aide > À propos de SHOT… : le logo, la version et le nom d'avant (Échap ferme la fenêtre).
 - **Labo** (2026-10-20, demande d'Anthony) : les fonctions à l'essai, rangées ensemble — Suggestions sonores…,
   Lire le storyboard (proposer des sons), Propager la peinture du calque…, Enregistrer mes traits (banc
   d'essai du moteur). Le panneau Suggestions sonores n'a plus d'icône dans la barre des panneaux ni
   d'entrée dans le menu Son ; « Propager… » reste aussi au clic droit d'un calque bitmap qui s'y prête.
 
+## Préférences en onglets (2026-10-21, branche `preferences-onglets`)
+
+« La fenêtre Préférences est très mal organisée et trop verticale » (Anthony) : Fichier > Préférences…
+est maintenant une fenêtre **plus large que haute** (800 × 540 au départ, redimensionnable, elle ne dépasse
+jamais l'écran), avec **une liste d'onglets à gauche** (icône et nom ; une rangée de neuf noms ne tiendrait pas
+dans une fenêtre de cette largeur, et la liste laisse toute la hauteur au contenu), le contenu de l'onglet à
+droite, et **un champ de recherche** en haut. Chaque onglet est une suite de **groupes** (un titre court, un
+trait, les réglages). La fenêtre rouvre sur le dernier onglet utilisé (clé `onglet_preferences` de
+`reglages.toml`) ; les réglages jouent tout de suite, comme avant, et gardent les mêmes clés.
+
+| Onglet | Groupes et réglages |
+|---|---|
+| **Général** | Au lancement et à l'ouverture (rouvrir le dernier projet, ouvrir dans un nouvel onglet) ; En cas de plantage (copie de secours toutes les N minutes) ; Coller depuis un autre projet (proportions, cadence, demander) |
+| **Apparence** | Thème et couleurs (le thème, les neuf couleurs, « Rétablir ») ; Panneaux (ajuster à leur contenu, « Réajuster ») |
+| **Dessin** | Stylet et pinceau (croix du système) ; Caméra (opacité du passe-partout, « Rétablir ») |
+| **Montage** | Pistes du montage (repliage commun ou par plan, déplier le calque courant tout seul) |
+| **Raccourcis** | Jeu de raccourcis (SHOT ou façon Storyboard Pro), voir et changer les raccourcis, modifier le fichier à la main, recharger |
+| **Export** | Programmes et modèles : ffmpeg (« Choisir… », « Automatique »), modèle Storyboard Pro ; accès à la fenêtre Exporter… |
+| **Équipe** | Commentaires (signature) ; Travail à plusieurs (mon nom et ma couleur, durée d'une prise, prise automatique, notifications) |
+| **Génération** | Génération sonore : le fournisseur de chaque rôle, les clés (Gestionnaire d'identifiants, inchangé), le serveur local |
+| **Performance** | Les onze réglages du diagnostic, « Diagnostic des performances… », « Valeurs d'origine » ; Affichage (le moteur de rendu) |
+
+- **Recherche** : tape un mot (couleur, cache, clé, équipe, voile…), avec ou sans accents ; les groupes qui répondent,
+  **de tous les onglets**, s'affichent à la place de l'onglet, avec « trouvé : … » en couleur d'accent et un lien
+  « Onglet › » qui ouvre l'onglet. La liste montre, devant chaque onglet qui répond, le nombre de réglages trouvés
+  (les autres sont grisés). La croix efface la recherche.
+- Tous les contrôles ont leur bulle au bout d'une seconde. Le petit engrenage du panneau Suggestions sonores ouvre
+  les Préférences directement sur l'onglet **Génération**.
+- **Nouveau, sans nouveau réglage** : l'onglet Export montre deux réglages qui existaient déjà (le chemin de ffmpeg et le
+  projet modèle de Storyboard Pro, choisis jusque-là dans les fenêtres d'export, qui gardent leurs boutons).
+- Le code : `src/prefsonglets.rs` est **la table des réglages** (onglet, groupe, étiquette lue à l'écran, mots de
+  recherche) ; `src/prefsui.rs` dessine un onglet en la parcourant ; `src/prefsui_tests.rs` vérifie que chaque réglage de
+  l'ancienne fenêtre est dans un seul onglet, que chaque onglet montre les siens et pas ceux des autres, la mémoire de
+  l'onglet, la recherche, la taille de la fenêtre et le repos.
+
+**À regarder à l'écran (Préférences en onglets)**
+1. Fichier > Préférences… : une fenêtre plus large que haute, la liste des neuf onglets à gauche (icône, nom), le champ
+   « Chercher un réglage… » en haut. Elle se redimensionne en tirant un bord, et se déplace par sa barre de titre.
+2. Cliquer chaque onglet : un titre, une phrase, des groupes à titre court ; rien de coupé en largeur, un
+   ascenseur à droite seulement si le contenu dépasse (Génération).
+3. Fermer, rouvrir : le dernier onglet est celui ouvert. Quitter SHOT, relancer, rouvrir : encore le même.
+4. Apparence : changer le thème, modifier une couleur (« Personnalisé »), « Rétablir » ; Dessin : l'opacité du
+   passe-partout se voit tout de suite dans la caméra ; Performance : cocher « Animations » coupe les animations.
+5. Chercher « couleur » : les neuf couleurs et l'onglet Équipe (ma couleur) répondent ; « Apparence › » ouvre l'onglet ;
+   chercher « cache » : les trois caches de Performance ; chercher « zzz » : « Aucun réglage ne répond ».
+6. Laisser la souris une seconde sur un réglage, une icône d'onglet ou le champ de recherche : la bulle s'affiche.
+7. Au repos, fenêtre ouverte, l'application ne repeint pas.
+
 ### Apparence
 
-Fichier > Préférences…, en tête : le **thème** de l'interface, qui change tout de suite.
+Fichier > Préférences… > Apparence : le **thème** de l'interface, qui change tout de suite.
 - **Gris sombre** (par défaut) : gris neutres moyens, plus proches de Storyboard Pro ou de Clip
   Studio Paint que du noir ; **Gris clair** (texte sombre, logo clair) ; **Sombre**, l'ancien thème
   presque noir ; **Personnalisé**.
@@ -1183,7 +1229,7 @@ ou le réunit à un autre.
   est dans un cadre qui défile seul (chaque ligne tient sur une ligne, coupée par « … »), l'éditeur
   dessous : ils ne se superposent à aucune taille (panneau trop court : le panneau défile).
 - Un commentaire résolu est estompé. L'auteur par défaut est l'utilisateur Windows, ou le nom donné
-  dans Fichier > Préférences… > Commentaires.
+  dans Fichier > Préférences… > Équipe > Commentaires.
 - Enregistrés dans `commentaires.json`, à côté du manifeste du projet (le format du projet ne
   change pas) ; chaque changement s'annule et se rétablit.
 - **Dans le PDF** : Fichier > Exporter > Storyboard PDF écrit aussi les commentaires non résolus sous
@@ -1632,7 +1678,7 @@ sans accord. Le détail, le contrat du serveur local, comment le lancer et ce qu
 - **Marche tout de suite, sans modèle** : la lecture par **règles** (choix d'origine) lit l'action, les notes et le
   dialogue : chaque ligne de dialogue devient une voix, des mots-clés font des bruitages, des ambiances et une musique,
   et une ligne « SFX : porte qui grince, pas dans l'escalier » est reprise telle quelle. Elle ne génère pas de son.
-- **Trois rôles, un fournisseur chacun** (Fichier > Préférences > Génération sonore) : lecture (règles, Qwen2.5-VL
+- **Trois rôles, un fournisseur chacun** (Fichier > Préférences… > Génération) : lecture (règles, Qwen2.5-VL
   local ou Claude en ligne), bruitages et ambiances (Stable Audio Open local, ElevenLabs ou Stable Audio en ligne), voix
   (Kokoro-82M local, ElevenLabs en ligne). Le **serveur local** (`sidecar/serveur.py`, Python, 127.0.0.1, port
   réglable) est écrit : SHOT le lance tout seul (sans fenêtre) au premier « Générer » local et l'arrête en se
@@ -1833,7 +1879,7 @@ annulation, sa tête de lecture, sa sélection, sa vue (zoom, mode storyboard / 
 l'autre est instantané (aucune relecture du disque : 7 à 14 µs, l'image d'écran suivante ne coûte pas plus qu'une autre).
 
 - **Ouvrir** : Fichier > Ouvrir, Nouveau, un projet récent, un import Storyboard Pro ou de scénario, « nouveau projet à partir
-  des plans choisis », ou un `.pelure` lâché sur la fenêtre prennent un **nouvel onglet** (Préférences > « Ouvrir dans un nouvel
+  des plans choisis », ou un `.pelure` lâché sur la fenêtre prennent un **nouvel onglet** (Préférences > Général > « Ouvrir dans un nouvel
   onglet », allumé ; éteint, ils remplacent le projet affiché après la question habituelle). Un projet déjà ouvert : son onglet
   passe à l'écran. L'accueil (un onglet « Nouvel onglet ») est réutilisé par le premier projet qu'on y ouvre.
 - **Gestes** : clic = passer à l'onglet ; clic du milieu ou croix = fermer ; clic droit = Fermer, Fermer les autres, Afficher dans
@@ -1871,7 +1917,7 @@ d'un même facteur en largeur et en hauteur, centre sur centre — ce que la cam
 - **Autres proportions** (16:9 vers carré) : une petite fenêtre propose **Contenir** (tout le cadre copié reste visible, des bandes
   au besoin, d'office) ou **Remplir** (le cadre est rempli, ce qui dépasse sort du cadre). **Autre cadence** : **garder les images**
   (d'office, la durée change) ou **garder la durée en secondes** (images, clés, marques recalculées). Les choix sont retenus dans
-  les réglages (Fichier > Préférences… > Projets) ; « Ne plus demander » les applique sans question.
+  les réglages (Fichier > Préférences… > Général > Coller depuis un autre projet) ; « Ne plus demander » les applique sans question.
 - **Même taille** : exactement comme avant, sans fenêtre ni calcul.
 - **Sans latence** : le rééchantillonnage se fait sur des fils de fond (« Collage en cours… 12/72 dessins ») ; un plan 4K de
   3 calques × 24 dessins est prêt en une demi-seconde pendant que l'interface reste vivante (`docs/PERFORMANCE.md`, section 18).
@@ -2262,7 +2308,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `thumbs.rs` | Vignettes des plans (montage, planche) et miniatures des dessins (timeline, Calques) : composées sur des fils de fond, gardées par contenu, envoyées à la carte graphique par l'interface (voir `docs/PERFORMANCE.md`, section 11) |
 | `perf.rs`, `perf_tests.rs` | Profileur intégré et superposition « Performance » (`vue.performance`) ; banc sans fenêtre (voir `docs/PERFORMANCE.md`) |
 | `parallele.rs`, `ouverture.rs`, `enregistrement.rs` | Travail réparti sur les cœurs (`par_map`, plafond de fils) ; ouverture d'un projet sur un autre fil ; enregistrement sur un autre fil (cliché, suites qui attendent, échec, file d'attente) |
-| `materiel.rs`, `diagbanc.rs`, `diagnostic.rs`, `diagnosticui.rs` | Diagnostic des performances (`aide.diagnostic`) : détection du matériel, banc de mesures sur un autre fil, profils et réglages (appliquer, revenir), fenêtre, proposition du premier lancement, section Performance des Préférences |
+| `materiel.rs`, `diagbanc.rs`, `diagnostic.rs`, `diagnosticui.rs` | Diagnostic des performances (`aide.diagnostic`) : détection du matériel, banc de mesures sur un autre fil, profils et réglages (appliquer, revenir), fenêtre, proposition du premier lancement, onglet Performance des Préférences |
 | `history.rs` | Annuler / rétablir |
 | `project.rs` | Projet en dossier (format 11), enregistrement préparé puis écrit |
 | `blend.rs` | Modes de fusion des calques (formules, composition d'un pixel) |
@@ -2313,7 +2359,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `indications.rs`, `lecturesb.rs`, `lecturerules.rs` | Sons proposés : la proposition et `sons_proposes.json` ; l'entrée de la lecture du storyboard ; la lecture par règles, sans modèle |
 | `fournisseurs.rs`, `generation.rs`, `genreglages.rs` | Génération sonore : les trois rôles (traits), annulation et avancement, tâches sur des fils à part, réglages `[generation_son]` |
 | `httplocal.rs`, `sidecar.rs`, `serveurlocal.rs`, `fournisseursapi.rs`, `clessecretes.rs`, `base64.rs` | Client HTTP de boucle locale et contrat du serveur local ; lancement, attente et arrêt du serveur Python (`sidecar/`) ; Claude, ElevenLabs, Stable Audio (requêtes prêtes, envoi à brancher) ; clés dans le Gestionnaire d'identifiants de Windows |
-| `suggestionsui.rs`, `genprefsui.rs` | Panneau Suggestions sonores et ses fenêtres ; section « Génération sonore » des Préférences |
+| `suggestionsui.rs`, `genprefsui.rs` | Panneau Suggestions sonores et ses fenêtres ; onglet Génération des Préférences |
+| `prefsonglets.rs`, `prefsui.rs`, `prefsui_tests.rs` | Fichier > Préférences… en onglets : la table des réglages (onglet, groupe, étiquette, mots de recherche), les onglets, la recherche, la fenêtre ; Exporter… |
 | `numerotation.rs`, `numerotationui.rs` | Numérotation des plans : suivie ou verrouillée (12, 12A, 13), renuméroter, noms `SQ01_PL012A` |
 | `editorial.rs`, `editorialjob.rs`, `editorialui.rs` | Export pour le montage : le plan d'export, l'EDL CMX 3600, le Final Cut XML, l'OpenTimelineIO ; la tâche (vidéos par plan, son, annulation) ; la fenêtre |
 | `fiche.rs`, `ficheformats.rs`, `zipwrite.rs`, `fichejob.rs`, `ficheui.rs` | Fiche technique (tableur) : les colonnes, le contenu et le mouvement de caméra ; CSV, presse-papiers et classeur XLSX écrit à la main ; l'archive zip ; la tâche (vignettes, écriture atomique, annulation) ; la fenêtre |

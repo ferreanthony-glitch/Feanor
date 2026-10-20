@@ -284,7 +284,10 @@ mod messages_tests;
 mod palette;
 #[cfg(test)]
 mod palette_tests;
+mod prefsonglets;
 mod prefsui;
+#[cfg(test)]
+mod prefsui_tests;
 mod recents;
 #[cfg(test)]
 mod recents_tests;

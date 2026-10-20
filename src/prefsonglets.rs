@@ -1,0 +1,289 @@
+//! Les onglets de la fenêtre Préférences… (Anthony, 2026-10-21 : « la fenêtre Préférences est très mal
+//! organisée et trop verticale »). Ce fichier est la table des réglages : chaque réglage que la fenêtre montre
+//! y figure une fois, avec son onglet, son groupe, le texte de son étiquette (celui qu'on lit à l'écran) et des
+//! mots pour la recherche. `prefsui.rs` dessine un onglet en parcourant cette table, la recherche la lit, et un
+//! essai (`prefsui_tests.rs`) vérifie que chaque réglage se trouve dans un seul onglet, étiquette lisible.
+//!
+//! Neuf onglets, dans une liste verticale à gauche (icône et nom) : une rangée de neuf noms ne tiendrait pas dans
+//! une fenêtre de largeur raisonnable, et une liste à gauche laisse toute la hauteur au contenu.
+
+use egui_phosphor::regular as ph;
+use serde::{Deserialize, Serialize};
+
+/// Un onglet de la fenêtre. Retenu dans les réglages (`onglet_preferences`) : la fenêtre rouvre là où on l'a quittée.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Onglet {
+    #[default]
+    General,
+    Apparence,
+    Dessin,
+    Montage,
+    Raccourcis,
+    Export,
+    Equipe,
+    Generation,
+    Performance,
+}
+
+impl Onglet {
+    /// Dans l'ordre de la liste.
+    pub const TOUS: [Onglet; 9] = [
+        Onglet::General,
+        Onglet::Apparence,
+        Onglet::Dessin,
+        Onglet::Montage,
+        Onglet::Raccourcis,
+        Onglet::Export,
+        Onglet::Equipe,
+        Onglet::Generation,
+        Onglet::Performance,
+    ];
+
+    pub fn est_defaut(&self) -> bool {
+        *self == Onglet::default()
+    }
+
+    pub fn nom(self) -> &'static str {
+        match self {
+            Onglet::General => "Général",
+            Onglet::Apparence => "Apparence",
+            Onglet::Dessin => "Dessin",
+            Onglet::Montage => "Montage",
+            Onglet::Raccourcis => "Raccourcis",
+            Onglet::Export => "Export",
+            Onglet::Equipe => "Équipe",
+            Onglet::Generation => "Génération",
+            Onglet::Performance => "Performance",
+        }
+    }
+
+    pub fn icone(self) -> &'static str {
+        match self {
+            Onglet::General => ph::GEAR_SIX,
+            Onglet::Apparence => ph::PALETTE,
+            Onglet::Dessin => ph::PENCIL_SIMPLE,
+            Onglet::Montage => ph::FILM_STRIP,
+            Onglet::Raccourcis => ph::KEYBOARD,
+            Onglet::Export => ph::EXPORT,
+            Onglet::Equipe => ph::USERS_THREE,
+            Onglet::Generation => ph::SPARKLE,
+            Onglet::Performance => ph::GAUGE,
+        }
+    }
+
+    /// Une phrase sous le titre de l'onglet, et dans la bulle de son entrée.
+    pub fn resume(self) -> &'static str {
+        match self {
+            Onglet::General => "Ouvrir et rouvrir les projets, copies de secours, collage entre projets.",
+            Onglet::Apparence => "Le thème et ses couleurs, la hauteur des panneaux.",
+            Onglet::Dessin => "Le curseur du stylet et le voile autour de la caméra.",
+            Onglet::Montage => "Les pistes du montage et leur repliage.",
+            Onglet::Raccourcis => "Le jeu de raccourcis du clavier et ses fichiers.",
+            Onglet::Export => "Les programmes et les modèles dont les exports ont besoin.",
+            Onglet::Equipe => "Ton nom, ta couleur et la façon de travailler à plusieurs.",
+            Onglet::Generation => "Les fournisseurs des sons générés, le serveur local, les clés.",
+            Onglet::Performance => "Les effets, les caches et les fils de calcul de cet ordinateur.",
+        }
+    }
+}
+
+/// Un groupe de réglages : un titre court et un bloc dessiné d'un seul tenant (`prefsui.rs`). Un groupe est dans
+/// un seul onglet.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Groupe {
+    Ouverture,
+    Secours,
+    Collage,
+    Theme,
+    Panneaux,
+    Stylet,
+    Camera,
+    Pistes,
+    Raccourcis,
+    Programmes,
+    Commentaires,
+    Equipe,
+    Generation,
+    Performance,
+    Affichage,
+}
+
+impl Groupe {
+    pub fn titre(self) -> &'static str {
+        match self {
+            Groupe::Ouverture => "Au lancement et à l'ouverture",
+            Groupe::Secours => "En cas de plantage",
+            Groupe::Collage => "Coller depuis un autre projet",
+            Groupe::Theme => "Thème et couleurs",
+            Groupe::Panneaux => "Panneaux",
+            Groupe::Stylet => "Stylet et pinceau",
+            Groupe::Camera => "Caméra",
+            Groupe::Pistes => "Pistes du montage",
+            Groupe::Raccourcis => "Raccourcis clavier",
+            Groupe::Programmes => "Programmes et modèles",
+            Groupe::Commentaires => "Commentaires",
+            Groupe::Equipe => "Travail à plusieurs",
+            Groupe::Generation => "Génération sonore",
+            Groupe::Performance => "Réglages de performance",
+            Groupe::Affichage => "Affichage",
+        }
+    }
+}
+
+/// Un réglage montré par la fenêtre.
+#[derive(Clone, Copy, Debug)]
+pub struct Reglage {
+    pub onglet: Onglet,
+    pub groupe: Groupe,
+    /// Identifiant stable (`onglet.nom`), lu par les essais.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub id: &'static str,
+    /// Le début du texte qu'on lit à l'écran devant (ou sur) le réglage.
+    pub libelle: &'static str,
+    /// Mots en plus, pour la recherche.
+    pub mots: &'static str,
+}
+
+const fn r(onglet: Onglet, groupe: Groupe, id: &'static str, libelle: &'static str, mots: &'static str) -> Reglage {
+    Reglage { onglet, groupe, id, libelle, mots }
+}
+
+use Groupe as G;
+use Onglet as O;
+
+/// Tous les réglages de la fenêtre, onglet par onglet, groupe par groupe, dans l'ordre où ils se lisent.
+pub const REGLAGES: &[Reglage] = &[
+    // ---- Général
+    r(O::General, G::Ouverture, "general.rouvrir", "Rouvrir le dernier projet au lancement", "démarrage session onglets rouvrir"),
+    r(O::General, G::Ouverture, "general.nouvel_onglet", "Ouvrir dans un nouvel onglet", "projet récent importer nouveau remplacer"),
+    r(O::General, G::Secours, "general.secours", "Copie de secours toutes les", "sauvegarde automatique autosave plantage minutes"),
+    r(O::General, G::Collage, "collage.proportions", "Proportions différentes", "contenir remplir taille"),
+    r(O::General, G::Collage, "collage.cadence", "Cadence différente", "images secondes durée fps"),
+    r(O::General, G::Collage, "collage.demander", "Demander à chaque collage", "question fenêtre"),
+    // ---- Apparence
+    r(O::Apparence, G::Theme, "theme.choix", "Thème", "gris sombre clair personnalisé rétablir"),
+    r(O::Apparence, G::Theme, "theme.panneau", "Fond des panneaux", "couleur"),
+    r(O::Apparence, G::Theme, "theme.barres", "Barres", "couleur onglets outils règle"),
+    r(O::Apparence, G::Theme, "theme.fenetres", "Fenêtres et menus", "couleur listes"),
+    r(O::Apparence, G::Theme, "theme.boutons", "Boutons et curseurs", "couleur cases"),
+    r(O::Apparence, G::Theme, "theme.texte", "Texte", "couleur police"),
+    r(O::Apparence, G::Theme, "theme.accent", "Accent et sélection", "couleur poignées"),
+    r(O::Apparence, G::Theme, "theme.autour", "Autour du dessin", "couleur fond feuille"),
+    r(O::Apparence, G::Theme, "theme.timeline", "Timeline et montage", "couleur rangées"),
+    r(O::Apparence, G::Theme, "theme.bordures", "Bordures", "couleur traits quadrillage"),
+    r(O::Apparence, G::Panneaux, "panneaux.ajuster", "Ajuster les panneaux à leur contenu", "hauteur fiche guides effets réglages"),
+    r(O::Apparence, G::Panneaux, "panneaux.reajuster", "Réajuster les panneaux", "hauteur"),
+    // ---- Dessin
+    r(O::Dessin, G::Stylet, "dessin.croix", "Croix du système sur le pinceau", "curseur stylet retard pointe"),
+    r(O::Dessin, G::Camera, "dessin.passe_partout", "Opacité du passe-partout", "voile hors-champ estomper cadre caméra rétablir"),
+    // ---- Montage
+    r(O::Montage, G::Pistes, "montage.repliage", "Repliage des pistes", "replier commun plan calques"),
+    r(O::Montage, G::Pistes, "montage.deplier", "Déplier le calque courant tout seul", "piste automatique"),
+    // ---- Raccourcis
+    r(O::Raccourcis, G::Raccourcis, "raccourcis.jeu", "Jeu de raccourcis", "clavier storyboard pro touches"),
+    r(O::Raccourcis, G::Raccourcis, "raccourcis.liste", "Voir et changer les raccourcis", "assigner touche"),
+    r(O::Raccourcis, G::Raccourcis, "raccourcis.fichier", "Modifier le fichier à la main", "toml perso"),
+    r(O::Raccourcis, G::Raccourcis, "raccourcis.recharger", "Recharger", "fichier"),
+    // ---- Export
+    r(O::Export, G::Programmes, "export.ffmpeg", "ffmpeg", "vidéo gif encodeur film son"),
+    r(O::Export, G::Programmes, "export.modele_sbp", "Modèle Storyboard Pro", "sboard export projet vide"),
+    r(O::Export, G::Programmes, "export.fenetre", "Ouvrir la fenêtre Exporter", "film pdf png gif"),
+    // ---- Équipe
+    r(O::Equipe, G::Commentaires, "equipe.signature", "Signer mes commentaires", "auteur nom timeline"),
+    r(O::Equipe, G::Equipe, "equipe.nom", "Mon nom", "identité couleur équipier coopération"),
+    r(O::Equipe, G::Equipe, "equipe.bail", "Une prise périme après", "plan tenu verrou minutes"),
+    r(O::Equipe, G::Equipe, "equipe.prise_auto", "Prendre le plan libre que je commence à modifier", "automatique prise"),
+    r(O::Equipe, G::Equipe, "equipe.notifications", "Dire dans la barre d'état ce que font les autres", "notifications état"),
+    // ---- Génération
+    r(O::Generation, G::Generation, "generation.lecture", "Lecture du storyboard", "fournisseur claude règles local en ligne suggestions"),
+    r(O::Generation, G::Generation, "generation.son", "Bruitages et ambiances", "fournisseur modèle local en ligne elevenlabs"),
+    r(O::Generation, G::Generation, "generation.voix", "Voix témoin des dialogues", "fournisseur voix elevenlabs"),
+    r(O::Generation, G::Generation, "generation.dossier", "Dossier des modèles", "serveur local python modèles"),
+    r(O::Generation, G::Generation, "generation.python", "Python du serveur", "serveur local venv"),
+    r(O::Generation, G::Generation, "generation.demarrage", "Démarrer le serveur tout seul", "serveur local automatique"),
+    r(O::Generation, G::Generation, "generation.port", "Adresse 127.0.0.1, port", "serveur local réseau"),
+    // ---- Performance
+    r(O::Performance, G::Performance, "performance.effets_reduits", "Effets en aperçu réduit", "lecture gestes lent"),
+    r(O::Performance, G::Performance, "performance.traits_textures", "Traits vectoriels texturés", "rendu trait texture"),
+    r(O::Performance, G::Performance, "performance.tremblement", "Tremblement du trait", "animer à l'arrêt"),
+    r(O::Performance, G::Performance, "performance.pelure", "Pelure d'oignon", "images voisines plafond"),
+    r(O::Performance, G::Performance, "performance.cache_carte", "Cache de la carte graphique", "mémoire gpu mo"),
+    r(O::Performance, G::Performance, "performance.cache_traits", "Cache des traits vectoriels", "mémoire mo"),
+    r(O::Performance, G::Performance, "performance.cache_effets", "Cache des effets", "mémoire mo"),
+    r(O::Performance, G::Performance, "performance.fils", "Fils de calcul", "processeur threads"),
+    r(O::Performance, G::Performance, "performance.vignettes", "Vignettes", "miniatures"),
+    r(O::Performance, G::Performance, "performance.animations", "Animations", "interface"),
+    r(O::Performance, G::Performance, "performance.effets_gpu", "Effets sur la carte graphique", "flous lueurs bruit gpu"),
+    r(O::Performance, G::Performance, "performance.diagnostic", "Diagnostic des performances", "détecter mesurer profil valeurs d'origine"),
+    r(O::Performance, G::Affichage, "performance.affichage", "Affichage", "carte graphique moteur"),
+];
+
+/// Les groupes d'un onglet, dans l'ordre de la table, chacun une fois.
+pub fn groupes_de(onglet: Onglet) -> Vec<Groupe> {
+    let mut v: Vec<Groupe> = Vec::new();
+    for g in REGLAGES.iter().filter(|r| r.onglet == onglet).map(|r| r.groupe) {
+        if !v.contains(&g) {
+            v.push(g);
+        }
+    }
+    v
+}
+
+/// Minuscules sans accents, pour chercher « couleur » comme « Couleur » et « theme » comme « Thème ».
+pub fn plier(texte: &str) -> String {
+    texte
+        .chars()
+        .flat_map(char::to_lowercase)
+        .map(|c| match c {
+            'é' | 'è' | 'ê' | 'ë' => 'e',
+            'à' | 'â' | 'ä' => 'a',
+            'î' | 'ï' => 'i',
+            'ô' | 'ö' => 'o',
+            'ù' | 'û' | 'ü' => 'u',
+            'ç' => 'c',
+            c => c,
+        })
+        .collect()
+}
+
+/// Ce que la recherche trouve : pour chaque groupe qui répond, ses réglages qui répondent (ou, si seul le titre du
+/// groupe ou de l'onglet répond, tous les réglages du groupe).
+pub struct Trouve {
+    pub onglet: Onglet,
+    pub groupe: Groupe,
+    pub libelles: Vec<&'static str>,
+}
+
+/// Cherche `requete` (tous ses mots, sans tenir compte des majuscules ni des accents) dans les étiquettes, les mots
+/// ajoutés, les titres de groupe et les noms d'onglet. Une requête vide ne trouve rien.
+pub fn chercher(requete: &str) -> Vec<Trouve> {
+    let mots: Vec<String> = plier(requete).split_whitespace().map(str::to_string).collect();
+    if mots.is_empty() {
+        return Vec::new();
+    }
+    let tous = |texte: &str| {
+        let t = plier(texte);
+        mots.iter().all(|m| t.contains(m.as_str()))
+    };
+    let mut trouves: Vec<Trouve> = Vec::new();
+    for onglet in Onglet::TOUS {
+        for groupe in groupes_de(onglet) {
+            let du_groupe: Vec<&Reglage> = REGLAGES.iter().filter(|r| r.groupe == groupe).collect();
+            let contexte = format!("{} {}", onglet.nom(), groupe.titre());
+            let propres: Vec<&'static str> = du_groupe.iter().filter(|r| tous(&format!("{} {}", r.libelle, r.mots))).map(|r| r.libelle).collect();
+            let libelles = if !propres.is_empty() {
+                propres
+            } else if tous(&contexte) {
+                du_groupe.iter().map(|r| r.libelle).collect()
+            } else {
+                // Les mots peuvent se partager entre le contexte et l'étiquette (« équipe prise »).
+                du_groupe.iter().filter(|r| tous(&format!("{contexte} {} {}", r.libelle, r.mots))).map(|r| r.libelle).collect()
+            };
+            if !libelles.is_empty() {
+                trouves.push(Trouve { onglet, groupe, libelles });
+            }
+        }
+    }
+    trouves
+}

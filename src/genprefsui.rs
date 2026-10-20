@@ -148,7 +148,7 @@ impl App {
     pub(crate) fn generation_prefs_ui(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         self.suivre_essai(&ctx);
-        egui::CollapsingHeader::new(RichText::new("Génération sonore").strong()).id_salt("prefs_generation_son").default_open(false).show(ui, |ui| self.generation_prefs_corps(ui));
+        self.generation_prefs_corps(ui);
     }
 
     /// Le contenu de la section : les trois rôles, le serveur local, la note de licences.
