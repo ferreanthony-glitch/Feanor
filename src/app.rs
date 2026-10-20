@@ -727,6 +727,8 @@ pub struct App {
     pub(crate) rejeu: crate::rejeu::Rejeu,
     pub(crate) clipboard: Vec<Element>,
     pub(crate) renderer: Renderer,
+    /// Le monde hors de la feuille à l'écran (toile infinie, `monde.rs`).
+    pub(crate) monde: crate::monde::Monde,
     pub(crate) thumbs: Thumbs,
     pub(crate) montage_zoom: f32,
     /// Le zoom du montage et de la timeline reste calé sur la tête de lecture (`zoombande.rs`) :
@@ -1137,6 +1139,7 @@ impl App {
             rejeu: crate::rejeu::Rejeu::new(),
             clipboard: Vec::new(),
             renderer: Renderer::new(),
+            monde: crate::monde::Monde::new(),
             thumbs: Thumbs::default(),
             montage_zoom: 4.0,
             strip_geo: Default::default(),
@@ -1989,17 +1992,30 @@ impl App {
     }
 
     pub(crate) fn pick_color(&mut self, p: Pos2) {
-        if p.x < 0.0 || p.y < 0.0 || p.x >= self.doc.width as f32 || p.y >= self.doc.height as f32 {
+        if !p.x.is_finite() || !p.y.is_finite() {
             return;
         }
         let plan = self.build_plan(self.cur_frame, false, true);
-        let c = render::composite_pixel(&self.doc, &plan, p.x as usize, p.y as usize);
+        let c = if p.x < 0.0 || p.y < 0.0 || p.x >= self.doc.width as f32 || p.y >= self.doc.height as f32 {
+            // Toile infinie : la pipette prend aussi hors de la feuille (le pixel du monde, papier compris).
+            let (x, y) = (p.x.floor(), p.y.floor());
+            let area = render::Area::around((x, y), (x + 1.0, y + 1.0));
+            match render::composite_area(&self.doc, &plan, area).first() {
+                Some(&c) => c,
+                None => return,
+            }
+        } else {
+            render::composite_pixel(&self.doc, &plan, p.x as usize, p.y as usize)
+        };
         let [r, g, b, _] = unpremultiply(c);
         self.color = [r, g, b];
     }
 
     pub(crate) fn fill_at(&mut self, p: Pos2) {
         if p.x < 0.0 || p.y < 0.0 || p.x >= self.doc.width as f32 || p.y >= self.doc.height as f32 {
+            // Toile infinie : le pot de peinture cherche ses contours sur la feuille (une zone qui
+            // s'étendrait à l'infini n'a pas de fin) ; hors de la feuille, il ne remplit pas.
+            self.status = "Le pot de peinture remplit dans la feuille : clique sur une zone fermée de la feuille.".into();
             return;
         }
         // Strate Fond (`fondui.rs`) : la zone fermée par le trait se remplit dans le fond.

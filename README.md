@@ -974,6 +974,36 @@ Toon Boom ; la façon exacte de Storyboard Pro ou de Harmony n'a pas été véri
 - Projets : format **30** (un projet enregistré ainsi n'est pas lisible par une version d'avant) ; un projet
   d'avant s'ouvre tel quel. Détails : `src/calquecouleur.rs`, `docs/INTERFACE.md` partie 15.
 
+## Toile infinie (dessiner hors de la feuille)
+
+La feuille n'est plus une page cernée d'une ombre : on peut dessiner **n'importe où autour d'elle**, comme
+dans Storyboard Pro (le fonctionnement exact de Storyboard Pro est **à vérifier**, SHOT reprend l'idée).
+
+- **À l'écran** : le papier (ou le damier, ou le noir de l'arrière-plan) couvre tout ce que la vue regarde,
+  plus d'ombre ni de zone hachurée autour de la feuille. Le **cadre de la caméra** est un trait fin et
+  discret ; « Estomper le hors-champ » (Caméra) voile, plus légèrement, tout ce qui est autour du cadre.
+- **Dessiner** : le pinceau, le crayon, la gomme et les formes vont où on les mène, coordonnées négatives
+  comprises (de −32 768 à 32 768 pixels autour de la feuille). Les traits vectoriels n'ont pas de limite
+  de feuille. Une zone où l'on n'a rien dessiné ne coûte aucune mémoire (tuiles de 64 px à la demande).
+- **Annuler / rétablir, enregistrer, ouvrir** : comme pour le reste. Ce qui est hors de la feuille est
+  gardé dans deux petits fichiers par dessin (`<n>_hors.png` et `<n>_hors.json`), lus seulement s'il y en a ;
+  un fichier abîmé ne coûte que le hors-feuille. Un projet d'avant s'ouvre tel quel, identique.
+- **Caméra, export, PDF** : le cadre de la caméra peut regarder ce qui est hors de la feuille, l'image
+  exportée le montre ; une caméra qui regarde un endroit vide donne du papier.
+- **Pipette** : prend aussi hors de la feuille.
+- **Ajuster à la fenêtre** (bouton de la barre sous le dessin) : cadre toujours la **caméra** (la feuille, pour un nouveau plan), avec
+  un peu d'air autour, et non « tout ce qui est dessiné » (choix de SHOT ; le comportement de Storyboard Pro
+  est à vérifier). Le zoom va de 2 % à 6 400 %, le défilement n'a pas de bord.
+- **Limites connues** (à la feuille seulement) : le pot de peinture (il cherche ses contours sur la feuille ;
+  hors d'elle il le dit et ne fait rien) ; les zones bitmap sélectionnées (lasso, baguette) ; les effets de
+  calque, les calques d'ajustement, le fond sous le trait, les calques de couleur, les déformations
+  (enveloppe, perspective) ; l'import et l'export Storyboard Pro ; la propagation. Ce qui est dessiné hors de
+  la feuille s'y voit, s'y exporte, mais ces fonctions ne le touchent pas.
+- **En dessous** : la feuille se compose comme avant (carte graphique) ; le reste du monde visible est une
+  texture composée par le processeur (`src/monde.rs`), seulement là où il y a du dessin, par petits morceaux
+  (5 ms par image au plus), de 4 096 px de côté au plus (réduite quand on dézoome beaucoup). Un trait loin de la
+  feuille ne recompose que les tuiles qu'il touche. Mesure : 12 traits de 20 points à 12 000 px de la feuille,
+  puis 40 défilements, pire image 2,4 ms. Détails : `docs/ARCHITECTURE.md` « Toile infinie ».
 ## Couleur des plans
 
 Pour repérer les plans d'un coup d'œil : clic droit sur un plan de la bande du montage (ou sur
@@ -1706,7 +1736,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `sbexport.rs`, `sbexportui.rs` | Export vers Storyboard Pro : images des calques, sons, script de construction ; sa fenêtre (14b-1) |
 | `stretch.rs` | Vitesse d'un son : rééchantillonnage, tempo sans changer la hauteur (WSOLA) (14a) |
 | `fill.rs` | Remplissage par zone et débord |
-| `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra |
+| `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra, tuiles du monde (toile infinie) |
+| `monde.rs` | Toile infinie à l'écran : texture du monde hors de la feuille, composée par le processeur par petits morceaux |
 | `gpu.rs` | Composition et affichage par la carte graphique, envoi des dessins par tuiles ; une texture par dessin à la taille de son contenu (pas de la feuille) et image composée gardée tant que rien ne change |
 | `playback.rs` | Lecture fluide : dessins envoyés d'avance, cadence affichée |
 | `export.rs`, `exportui.rs` | Exports : film (ffmpeg), images, son, PDF ; fenêtres de choix et de progression |

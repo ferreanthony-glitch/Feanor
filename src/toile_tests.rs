@@ -421,3 +421,241 @@ fn a_vector_stroke_drawn_outside_the_sheet_is_kept_undone_and_saved() {
     assert!(c.raster.get_i(-450, -300).a() > 150, "relu : le trait est toujours là, dehors");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+// ---------------------------------------------------------------------------------------------
+// L'écran : la texture du monde hors de la feuille (`monde.rs`).
+// ---------------------------------------------------------------------------------------------
+
+use crate::monde::Monde;
+use crate::render::Area;
+
+/// Fait avancer `monde` jusqu'à ce qu'il n'ait plus rien à composer (une image d'écran à la fois).
+fn settle(monde: &mut Monde, ctx: &egui::Context, app: &mut App, plan: &render::Plan, view: Area) -> Option<crate::monde::Shown> {
+    let (all, ids) = app.renderer.take_world_dirty();
+    let mut shown = monde.update(ctx, &app.doc, plan, view, all, &ids);
+    for _ in 0..2000 {
+        if monde.pending() == 0 {
+            break;
+        }
+        shown = monde.update(ctx, &app.doc, plan, view, false, &[]);
+    }
+    shown
+}
+
+#[test]
+fn the_world_texture_completes_the_sheet_pixel_for_pixel() {
+    let mut app = app_bitmap("monde-egal");
+    stroke(&mut app, (-300.0, 140.0), (-200.0, 140.0));
+    stroke(&mut app, (-60.0, 150.0), (60.0, 150.0));
+    stroke(&mut app, (380.0, 280.0), (520.0, 330.0));
+    stroke(&mut app, (1500.0, 1200.0), (1600.0, 1250.0));
+    let plan = render::panel_plan_at(&app.doc, 0, 0, Some([255, 255, 255]));
+    let ctx = egui::Context::default();
+    let mut monde = Monde::new();
+    let view = Area { x0: -512, y0: -256, x1: 1792, y1: 1536 };
+    let shown = settle(&mut monde, &ctx, &mut app, &plan, view).expect("quelque chose hors de la feuille");
+    assert!(shown.area.x0 <= -300 && shown.area.y1 >= 1250 && shown.area.x1 >= 1600, "la zone couvre ce qui est dessiné dans la vue : {:?}", shown.area);
+    let (area, k) = monde.coverage().expect("zone");
+    assert_eq!(k, 1);
+    let reference = render::composite_area(&app.doc, &plan, area);
+    let mut drawn = 0;
+    for y in area.y0..area.y1 {
+        for x in area.x0..area.x1 {
+            let m = monde.pixel(x, y).expect("dans la zone");
+            let c = reference[((y - area.y0) as usize) * area.width() + (x - area.x0) as usize];
+            if x >= 0 && y >= 0 && x < 400 && y < 300 {
+                assert_eq!(m, Color32::TRANSPARENT, "la feuille a sa propre image ({x},{y})");
+            } else if c != Color32::WHITE {
+                assert_eq!(m, c, "({x},{y})");
+                drawn += 1;
+            } else {
+                assert!(m == c || m.a() == 0, "({x},{y}) : {m:?}");
+            }
+        }
+    }
+    assert!(drawn > 400, "le dessin hors de la feuille est dans la texture ({drawn} pixels)");
+    // Peu de tuiles composées : celles qui portent du dessin, pas toute la zone.
+    assert!(monde.composed() < 80, "{} tuiles composées", monde.composed());
+}
+
+#[test]
+fn nothing_outside_the_sheet_costs_nothing() {
+    let mut app = app_bitmap("monde-rien");
+    stroke(&mut app, (50.0, 50.0), (150.0, 90.0));
+    let plan = render::panel_plan_at(&app.doc, 0, 0, Some([255, 255, 255]));
+    let ctx = egui::Context::default();
+    let mut monde = Monde::new();
+    assert!(settle(&mut monde, &ctx, &mut app, &plan, Area { x0: -2000, y0: -2000, x1: 4000, y1: 4000 }).is_none());
+    assert_eq!(monde.bytes(), 0);
+    assert_eq!(monde.composed(), 0);
+    // Du dessin hors de la feuille, mais que la vue ne regarde pas : rien non plus.
+    stroke(&mut app, (-900.0, 100.0), (-800.0, 100.0));
+    let plan = render::panel_plan_at(&app.doc, 0, 0, Some([255, 255, 255]));
+    assert!(settle(&mut monde, &ctx, &mut app, &plan, Area { x0: 0, y0: 0, x1: 400, y1: 300 }).is_none());
+    assert_eq!(monde.composed(), 0);
+    // La vue y va : la texture apparaît.
+    assert!(settle(&mut monde, &ctx, &mut app, &plan, Area { x0: -1000, y0: -100, x1: 200, y1: 400 }).is_some());
+    assert!(monde.composed() > 0 && monde.bytes() > 0);
+}
+
+#[test]
+fn a_new_stroke_far_from_the_sheet_recomposes_a_few_tiles_only() {
+    let mut app = app_bitmap("monde-incremental");
+    stroke(&mut app, (-2000.0, -1500.0), (-1900.0, -1500.0));
+    let plan = render::panel_plan_at(&app.doc, 0, 0, Some([255, 255, 255]));
+    let ctx = egui::Context::default();
+    let mut monde = Monde::new();
+    let view = Area { x0: -2400, y0: -1800, x1: 600, y1: 600 };
+    settle(&mut monde, &ctx, &mut app, &plan, view).expect("monde");
+    let before = monde.composed();
+    // Un second trait, plus loin dans la même vue.
+    stroke(&mut app, (-1200.0, -1000.0), (-1100.0, -960.0));
+    let plan = render::panel_plan_at(&app.doc, 0, 0, Some([255, 255, 255]));
+    let t = std::time::Instant::now();
+    settle(&mut monde, &ctx, &mut app, &plan, view).expect("monde");
+    let took = t.elapsed();
+    let more = monde.composed() - before;
+    assert!(more > 0 && more < 12, "{more} tuiles pour un petit trait");
+    assert!(took.as_millis() < 100, "{took:?} pour un petit trait hors de la feuille");
+    // Le résultat est celui d'un monde refait de zéro.
+    let (area, _) = monde.coverage().expect("zone");
+    let reference = render::composite_area(&app.doc, &plan, area);
+    for y in (area.y0..area.y1).step_by(3) {
+        for x in (area.x0..area.x1).step_by(3) {
+            let c = reference[((y - area.y0) as usize) * area.width() + (x - area.x0) as usize];
+            let m = monde.pixel(x, y).expect("pixel");
+            if c != Color32::WHITE && !(x >= 0 && y >= 0 && x < 400 && y < 300) {
+                assert_eq!(m, c, "({x},{y})");
+            }
+        }
+    }
+    // Annuler le trait : la texture le perd.
+    app.undo();
+    let plan = render::panel_plan_at(&app.doc, 0, 0, Some([255, 255, 255]));
+    settle(&mut monde, &ctx, &mut app, &plan, view).expect("monde");
+    assert_eq!(monde.pixel(-1150, -980).map(|c| c.a()), Some(0), "le second trait est parti");
+    assert!(monde.pixel(-1950, -1500).is_some_and(|c| c.a() > 200), "le premier reste");
+}
+
+#[test]
+fn a_zoomed_out_view_gets_a_bounded_reduced_texture() {
+    let mut app = app_bitmap("monde-reduit");
+    stroke(&mut app, (-20000.0, -15000.0), (-19900.0, -15000.0));
+    stroke(&mut app, (20000.0, 9000.0), (20100.0, 9000.0));
+    let plan = render::panel_plan_at(&app.doc, 0, 0, Some([255, 255, 255]));
+    let ctx = egui::Context::default();
+    let mut monde = Monde::new();
+    let view = Area { x0: -30000, y0: -30000, x1: 30000, y1: 30000 };
+    settle(&mut monde, &ctx, &mut app, &plan, view).expect("monde");
+    let (area, k) = monde.coverage().expect("zone");
+    assert!(k > 1, "réduit : {k}");
+    assert!(area.width() / k <= crate::monde::MAX_SIDE as usize && area.height() / k <= crate::monde::MAX_SIDE as usize);
+    assert!(monde.bytes() <= 2 * 4 * (crate::monde::MAX_SIDE * crate::monde::MAX_SIDE) as u64, "{} octets", monde.bytes());
+    // Les deux traits se voient encore, en plus petit.
+    assert!(monde.pixel(-19950, -15000).is_some_and(|c| c.a() > 0));
+    assert!(monde.pixel(20050, 9000).is_some_and(|c| c.a() > 0));
+}
+
+#[test]
+fn drawing_and_panning_far_from_the_origin_stays_fast() {
+    let mut app = app_bitmap("monde-perf");
+    let (ox, oy) = (12000.0_f32, -9000.0_f32);
+    let ctx = egui::Context::default();
+    let mut monde = Monde::new();
+    let mut worst = std::time::Duration::ZERO;
+    let mut view = Area { x0: ox as i64 - 800, y0: oy as i64 - 500, x1: ox as i64 + 800, y1: oy as i64 + 500 };
+    // Une série de traits, chacun suivi d'une image d'écran.
+    for k in 0..12 {
+        let y = oy + k as f32 * 20.0;
+        app.begin_paint(pos2(ox, y), 1.0, false);
+        for s in 1..=20 {
+            app.stroke_to(pos2(ox + s as f32 * 8.0, y + (s as f32 * 0.3).sin() * 6.0), 1.0);
+            let plan = render::panel_plan_at(&app.doc, 0, 0, Some([255, 255, 255]));
+            let (all, ids) = app.renderer.take_world_dirty();
+            let t = std::time::Instant::now();
+            monde.update(&ctx, &app.doc, &plan, view, all, &ids);
+            worst = worst.max(t.elapsed());
+        }
+        app.end_stroke();
+    }
+    // Un défilement de la vue, d'une image à l'autre.
+    let plan = render::panel_plan_at(&app.doc, 0, 0, Some([255, 255, 255]));
+    for step in 0..40 {
+        view.x0 += 25;
+        view.x1 += 25;
+        view.y0 += step % 3;
+        view.y1 += step % 3;
+        let (all, ids) = app.renderer.take_world_dirty();
+        let t = std::time::Instant::now();
+        monde.update(&ctx, &app.doc, &plan, view, all, &ids);
+        worst = worst.max(t.elapsed());
+    }
+    println!("pire image hors de la feuille : {worst:?} ; {} tuiles composées", monde.composed());
+    assert!(worst.as_millis() < 60, "pire image : {worst:?}");
+}
+
+#[test]
+fn the_picker_reads_outside_the_sheet_and_the_fill_stays_on_it() {
+    let mut app = app_bitmap("pipette-dehors");
+    stroke(&mut app, (-300.0, 140.0), (-200.0, 140.0));
+    app.color = [10, 20, 30];
+    app.pick_color(pos2(-250.0, 140.0));
+    assert!(app.color[0] > 200 && app.color[1] < 60, "la pipette prend le rouge du trait hors de la feuille : {:?}", app.color);
+    // Le pot de peinture ne remplit pas hors de la feuille, et le dit.
+    let cel = app.layers()[0].frames[0].expect("dessin");
+    let tiles = app.doc.cels[&cel].raster.outer.len();
+    app.status.clear();
+    app.fill_at(pos2(-250.0, 300.0));
+    assert_eq!(app.doc.cels[&cel].raster.outer.len(), tiles);
+    assert!(app.status.contains("pot de peinture"), "{}", app.status);
+}
+/// Des images d'écran entières avec du dessin hors de la feuille : la vue le montre, quelle que soit
+/// la rotation, le miroir, la caméra, et rien ne plante.
+#[test]
+fn the_canvas_shows_what_is_drawn_outside_the_sheet_in_every_view() {
+    let mut app = app_bitmap("ecran-dehors");
+    stroke(&mut app, (-300.0, 140.0), (-200.0, 140.0));
+    stroke(&mut app, (900.0, 700.0), (1000.0, 720.0));
+    let ctx = egui::Context::default();
+    let mut time = 0.0;
+    let mut frame = |app: &mut App| {
+        time += 1.0 / 60.0;
+        let mut input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(pos2(0.0, 0.0), egui::vec2(1280.0, 720.0))), time: Some(time), ..Default::default() };
+        input.viewports.entry(egui::ViewportId::ROOT).or_default().native_pixels_per_point = Some(1.0);
+        let out = ctx.run(input, |ctx| app.frame(ctx));
+        out.shapes.len()
+    };
+    frame(&mut app);
+    app.fit_pending = false;
+    app.view.zoom = 0.25;
+    app.view.pan = egui::vec2(0.0, 0.0);
+    for _ in 0..4 {
+        frame(&mut app);
+    }
+    assert!(app.monde.coverage().is_some(), "la vue regarde le trait hors de la feuille");
+    assert!(app.monde.pixel(-250, 140).is_some_and(|c| c.a() > 200), "le trait est dans la texture");
+    // Autres vues : tournée, en miroir, loin, caméra, zoom extrême.
+    for (rotation, flip, zoom, pan) in [(0.7, false, 0.25, egui::vec2(30.0, -20.0)), (0.0, true, 0.1, egui::vec2(-200.0, 100.0)), (2.5, true, 0.02, egui::vec2(0.0, 0.0)), (0.0, false, 8.0, egui::vec2(400.0, 300.0))] {
+        app.view.rotation = rotation;
+        app.view.flip = flip;
+        app.view.zoom = zoom;
+        app.view.pan = pan;
+        for _ in 0..3 {
+            frame(&mut app);
+        }
+    }
+    app.camera_view = true;
+    frame(&mut app);
+    app.camera_view = false;
+    // Le dessin hors de la feuille disparaît (annuler tout) : la texture est lâchée.
+    app.undo();
+    app.undo();
+    app.view.rotation = 0.0;
+    app.view.flip = false;
+    app.view.zoom = 0.25;
+    app.view.pan = egui::vec2(0.0, 0.0);
+    for _ in 0..3 {
+        frame(&mut app);
+    }
+    assert!(app.monde.coverage().is_none() && app.monde.bytes() == 0, "plus rien hors de la feuille, plus de mémoire");
+}

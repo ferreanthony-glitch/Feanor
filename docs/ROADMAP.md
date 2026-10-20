@@ -2933,3 +2933,19 @@ l'écran dans cette séance.
   fonctionnement exact.
 - Reste : réglage de la fermeture des trous par zone (aujourd'hui par calque) ; une couleur qui suit le tremblement du
   trait ; remettre sa couleur à une clé du trait coupée / collée ; un panneau de palette de couleurs par personnage.
+
+## Toile infinie : dessiner hors de la feuille (demandé par Anthony le 2026-10-20, branche `canevas-couleur`) ✅
+
+- Dessiner partout autour de la feuille (jusqu'à 32 768 px), comme Storyboard Pro (**à vérifier**) : tuiles
+  éparses à coordonnées signées (`Raster::outer`), numéros de tuiles stables pour l'historique, trait vectoriel
+  sans limite de feuille, composition par tuiles du monde, caméra qui regarde hors de la feuille, papier partout,
+  plus d'ombre sous la feuille, cadre de caméra discret. Enregistrement : fichiers `<n>_hors.png / .json`
+  (format 30). Un projet d'avant s'ouvre tel quel.
+- À l'écran, la feuille garde sa composition d'avant (carte graphique) et le reste du monde visible est une texture
+  composée par le processeur (`monde.rs`), 5 ms par image au plus, mise à jour par tuiles. Pire image mesurée loin
+  de l'origine : 2,4 ms. Détails : `docs/ARCHITECTURE.md` « Toile infinie », vérifications : `docs/INTERFACE.md`
+  partie 16.
+- Reste : pot de peinture, zones bitmap sélectionnées, effets de calque et d'ajustement, fond sous le trait,
+  calque de couleur, déformations (enveloppe, perspective), import / export Storyboard Pro et propagation à la
+  feuille seulement ; effets de la carte graphique sur le hors-feuille ; « Tout voir » (cadrer tout ce qui est
+  dessiné) en plus de « Ajuster à la fenêtre » ; zoom arrière extrême plus net (tuiles réduites par niveaux).

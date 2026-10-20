@@ -284,7 +284,17 @@ impl App {
         let corners = cam.corners(self.doc.frame);
         let stage = Rect::from_min_size(Pos2::ZERO, size);
         let fills_stage = cam == self.doc.default_camera() && self.doc.frame_rect() == stage;
-        if fills_stage && !self.camera_view {
+        // Toile infinie : le hors-champ est tout ce que la vue montre autour du cadre, pas seulement la
+        // feuille (une vignette ou une vue en perspective restent à la feuille).
+        let infinite = !self.in_card && self.view.persp.is_none() && !self.camera_view;
+        let around = |inner: &[Pos2]| -> [Pos2; 4] {
+            let mut r = rect.expand(16.0);
+            for p in inner {
+                r.extend_with(*p);
+            }
+            [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom()]
+        };
+        if fills_stage && !self.camera_view && !infinite {
             return;
         }
         // Hors-champ : en vue caméra, tout l'écran autour du cadre ; sinon la feuille, si on veut.
@@ -294,18 +304,39 @@ impl App {
             0
         } else if self.playing {
             150
+        } else if infinite {
+            // (Plus léger : le hors-champ est tout l'écran autour du cadre.)
+            45
         } else {
             70
         };
+        if fills_stage && infinite {
+            // Le cadre de la caméra est la feuille : voile léger autour, et un trait fin, discret.
+            let quad = corners.map(to_s);
+            if alpha > 0 {
+                painter.add(crate::viewbar::band(around(&quad), quad, Color32::from_black_alpha(alpha)));
+            }
+            painter.add(Shape::closed_line(quad.to_vec(), Stroke::new(1.0_f32, Color32::from_rgba_unmultiplied(120, 120, 120, 150))));
+            return;
+        }
         // Caméra tournée, sur la feuille : le cadre filmé (un trapèze) peut déborder de la
         // feuille ; on estompe la feuille moins le cadre coupé à la feuille (9f).
         if alpha > 0 && !self.camera_view && !cam.is_level() {
-            let outer = [stage.left_top(), stage.right_top(), stage.right_bottom(), stage.left_bottom()].map(to_s);
-            let inner: Vec<Pos2> = crate::viewbar::clip_to_rect(&corners, stage).into_iter().map(to_s).collect();
+            let (outer, inner): (Vec<Pos2>, Vec<Pos2>) = if infinite {
+                let inner = corners.map(to_s);
+                (around(&inner).to_vec(), inner.to_vec())
+            } else {
+                (
+                    [stage.left_top(), stage.right_top(), stage.right_bottom(), stage.left_bottom()].map(to_s).to_vec(),
+                    crate::viewbar::clip_to_rect(&corners, stage).into_iter().map(to_s).collect(),
+                )
+            };
             painter.add(crate::viewbar::nested_band(&outer, &inner, Color32::from_black_alpha(alpha)));
         } else if alpha > 0 {
             let outer: [Pos2; 4] = if self.camera_view {
                 [rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom()]
+            } else if infinite {
+                around(&corners.map(to_s))
             } else {
                 [stage.left_top(), stage.right_top(), stage.right_bottom(), stage.left_bottom()].map(to_s)
             };

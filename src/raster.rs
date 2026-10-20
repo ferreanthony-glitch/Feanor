@@ -247,29 +247,42 @@ impl Raster {
         tx * TILE + x >= self.width || ty * TILE + y >= self.height
     }
 
+    /// Ce qui est dessiné hors de la feuille dans la tuile (`tx`, `ty`) : une tuile hors de la
+    /// fenêtre telle qu'elle est, ou, pour une tuile de bord de la fenêtre, la part qui dépasse de la
+    /// feuille (le reste effacé) ; rien si la tuile n'a rien là.
+    pub fn beyond_tile(&self, tx: i32, ty: i32) -> Option<Tile> {
+        if !self.in_window(tx, ty) {
+            return self.outer.get(&(tx, ty)).filter(|t| t.iter().any(|c| c.a() != 0)).cloned();
+        }
+        let (utx, uty) = (tx as usize, ty as usize);
+        if !self.straddles(utx, uty) {
+            return None;
+        }
+        let tile = self.tiles[uty * self.tiles_x + utx].as_ref()?;
+        let mut masked = [Color32::TRANSPARENT; TILE_PIXELS];
+        let mut any = false;
+        for y in 0..TILE {
+            for x in 0..TILE {
+                if self.beyond(utx, uty, x, y) && tile[y * TILE + x].a() != 0 {
+                    masked[y * TILE + x] = tile[y * TILE + x];
+                    any = true;
+                }
+            }
+        }
+        any.then(|| Tile::new(masked))
+    }
+
     /// Ce qui est dessiné hors de la feuille : les tuiles de `outer`, et, pour une tuile de bord, la
     /// part qui dépasse (la part de la feuille effacée), rangées par coordonnées de tuile. Ce que
     /// l'enregistrement garde en plus du PNG de la feuille.
     pub fn beyond_sheet_tiles(&self) -> Vec<((i32, i32), Tile)> {
-        let mut out: Vec<((i32, i32), Tile)> = self.outer.iter().filter(|(_, t)| t.iter().any(|c| c.a() != 0)).map(|(&k, t)| (k, t.clone())).collect();
-        for (idx, slot) in self.tiles.iter().enumerate() {
-            let Some(tile) = slot else { continue };
-            let (tx, ty) = (idx % self.tiles_x, idx / self.tiles_x);
-            if !self.straddles(tx, ty) {
-                continue;
-            }
-            let mut masked = [Color32::TRANSPARENT; TILE_PIXELS];
-            let mut any = false;
-            for y in 0..TILE {
-                for x in 0..TILE {
-                    if self.beyond(tx, ty, x, y) && tile[y * TILE + x].a() != 0 {
-                        masked[y * TILE + x] = tile[y * TILE + x];
-                        any = true;
-                    }
+        let mut out: Vec<((i32, i32), Tile)> = self.outer.keys().filter_map(|&(tx, ty)| Some(((tx, ty), self.beyond_tile(tx, ty)?))).collect();
+        for idx in 0..self.tiles.len() {
+            let (tx, ty) = ((idx % self.tiles_x) as i32, (idx / self.tiles_x) as i32);
+            if self.tiles[idx].is_some() && self.straddles(tx as usize, ty as usize) {
+                if let Some(t) = self.beyond_tile(tx, ty) {
+                    out.push(((tx, ty), t));
                 }
-            }
-            if any {
-                out.push(((tx as i32, ty as i32), Tile::new(masked)));
             }
         }
         out.sort_by_key(|(k, _)| *k);

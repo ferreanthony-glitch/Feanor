@@ -6,7 +6,7 @@
 //! L'arrière-plan se dessine ici aussi : aucun (noir à l'écran, transparent à l'export), la
 //! couleur du papier, ou un damier des couleurs A et B (transparent à l'export).
 
-use eframe::egui::{self, pos2, Color32, Pos2, RichText, Shape, Stroke, TextureHandle, Vec2};
+use eframe::egui::{self, pos2, Color32, Rect, RichText, Shape, Stroke, TextureHandle, Vec2};
 use egui_phosphor::regular as ph;
 
 use crate::app::App;
@@ -194,10 +194,21 @@ impl App {
         ui.menu_button("Commandes de groupes", |ui| self.groups_menu(ui));
     }
 
-    /// Dessine l'arrière-plan sous les calques, aux coins de la feuille à l'écran.
-    pub(crate) fn paint_background(&mut self, ctx: &egui::Context, painter: &egui::Painter, corners: [Pos2; 4], size: Vec2) {
+    /// Dessine l'arrière-plan sous les calques. Toile infinie : sur tout le monde visible (`world`, la
+    /// zone du monde que la vue regarde) ; sinon (vignette, vue en perspective), sur la feuille seule.
+    /// `paper` : la couleur du papier du plan, que la feuille posera aussi ; hors de la feuille, il
+    /// faut la peindre ici.
+    pub(crate) fn paint_background(&mut self, ctx: &egui::Context, painter: &egui::Painter, rect: Rect, size: Vec2, world: Option<crate::render::Area>, paper: Option<[u8; 3]>) {
+        let sheet = crate::render::Area::sheet(&self.doc);
+        let area = world.map_or(sheet, |w| w.union(&sheet));
+        let (x0, y0, x1, y1) = (area.x0 as f32, area.y0 as f32, area.x1 as f32, area.y1 as f32);
+        let corners = [pos2(x0, y0), pos2(x1, y0), pos2(x1, y1), pos2(x0, y1)].map(|p| self.view.to_screen(rect, size, p));
         match self.doc.background {
-            BackgroundKind::Color => {}
+            BackgroundKind::Color => {
+                if let (Some(_), Some(p)) = (world, paper) {
+                    painter.add(Shape::convex_polygon(corners.to_vec(), Color32::from_rgb(p[0], p[1], p[2]), Stroke::NONE));
+                }
+            }
             BackgroundKind::None => {
                 painter.add(Shape::convex_polygon(corners.to_vec(), Color32::BLACK, Stroke::NONE));
             }
@@ -219,10 +230,11 @@ impl App {
                         t
                     }
                 };
-                // Une case = 32 pixels de la feuille.
-                let (u, v) = (size.x / 64.0, size.y / 64.0);
+                // Une case = 32 pixels de la feuille ; le damier part du coin de la feuille et continue dans
+                // tout le monde.
+                let (u0, v0, u1, v1) = (x0 / 64.0, y0 / 64.0, x1 / 64.0, y1 / 64.0);
                 let mut mesh = egui::Mesh::with_texture(texture.id());
-                for (p, uv) in corners.iter().zip([pos2(0.0, 0.0), pos2(u, 0.0), pos2(u, v), pos2(0.0, v)]) {
+                for (p, uv) in corners.iter().zip([pos2(u0, v0), pos2(u1, v0), pos2(u1, v1), pos2(u0, v1)]) {
                     mesh.vertices.push(egui::epaint::Vertex { pos: *p, uv, color: Color32::WHITE });
                 }
                 mesh.add_triangle(0, 1, 2);

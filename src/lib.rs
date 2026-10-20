@@ -217,6 +217,7 @@ pub mod calquecouleur;
 #[cfg(test)]
 mod calquecouleur_tests;
 mod calquecouleurui;
+pub mod monde;
 // Toile infinie : tuiles hors de la feuille (essais).
 #[cfg(test)]
 mod toile_tests;

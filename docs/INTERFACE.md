@@ -900,3 +900,57 @@ vérifié : **à vérifier**, rien n'est copié). Code : `src/calquecouleur.rs` 
 5. Œil du trait : cache aussi la couleur ; œil de la couleur : la couleur seule.
 6. Dupliquer, copier / coller le trait : les couleurs viennent avec lui ; Ctrl+Z revient d'un coup.
 7. Export d'images et PDF : la couleur est sous le trait.
+
+## 16. Toile infinie (dessiner hors de la feuille, 2026-10-20, branche `canevas-couleur`)
+
+Ce qui change à l'écran. Le fonctionnement de Storyboard Pro est **à vérifier** : SHOT reprend l'idée d'une toile
+sans bord, pas son détail.
+
+- **Plus de page** : l'ombre sous la feuille a disparu. Le papier (ou le damier, ou le noir de l'arrière-plan,
+  onglet « Arrière-plan » sous la timeline) remplit tout l'espace de dessin, à tout zoom (de 2 % à 6 400 %), et le défilement
+  (bouton du milieu, Espace + glisser, outil Main) n'a pas de bord. Il n'y avait pas de zone hachurée à
+  proprement parler dans cette version : ce qui entourait la feuille était l'ombre et le fond sombre.
+- **Cadre de la caméra** : un trait fin et discret (gris) quand il se confond avec la feuille ; avec l'outil
+  Caméra, ou quand le cadre est déplacé ou tourné, le cadre habituel (blanc, étiqueté « Caméra »). Le bouton
+  « Estomper le hors-champ » (réglages de la caméra, `camera.masque`) voile tout ce qui est autour du cadre, y compris
+  loin de la feuille (voile plus léger qu'avant à l'écran, 45 au lieu de 70 sur 255).
+- **Dessiner** : pinceau, crayon, gomme, formes, texte, lignes vectorielles : partout, y compris à gauche et
+  au-dessus de la feuille. Un trait qui traverse le bord de la feuille se continue dehors. Ctrl+Z / Ctrl+Maj+Z :
+  d'un coup, comme un trait ordinaire.
+- **Pipette** (Alt + clic, ou outil Pipette) : prend la couleur affichée aussi hors de la feuille (papier compris).
+- **Pot de peinture** : borné par la feuille ; un clic hors d'elle ne fait rien et le dit dans la barre d'état
+  (« Le pot de peinture remplit dans la feuille… »).
+- **Ajuster à la fenêtre** (barre sous le dessin, menu du clic droit, `vue.ajuster`) : cadre la **caméra**, pas
+  tout ce qui est dessiné (choix de SHOT : prévisible, le même qu'avant). Pour voir tout ce qu'on a dessiné
+  loin : dézoomer à la molette.
+- **Exports** (images, vidéo, PDF) : le cadre filmé décide ; s'il regarde hors de la feuille il montre ce qui y est
+  dessiné, sinon du papier. Rien n'est exporté hors du cadre.
+- **Limites** : les zones bitmap sélectionnées (lasso, baguette de couleur) et leur déplacement prennent les
+  pixels de la feuille (on peut déplacer ce qu'on a pris vers l'extérieur) ; les effets de calque, les calques
+  d'ajustement, le fond sous le trait, les calques de couleur, l'enveloppe et la perspective, la propagation,
+  l'import / export Storyboard Pro restent à la feuille. Le zoom arrière extrême (plus de 4 096 px de monde
+  dessiné à l'écran) montre ce qui est hors de la feuille un peu plus flou (la texture est réduite).
+  Au-delà de 32 768 px de la feuille, rien ne se pose.
+- Code : `src/monde.rs`, `src/raster.rs` (tuiles hors-feuille), `src/render.rs`, `src/canvas.rs`,
+  `src/bottomtabs.rs` (arrière-plan), `src/camtools.rs` ; `docs/ARCHITECTURE.md` « Toile infinie ».
+
+### À vérifier à l'écran (toile infinie)
+
+1. Ouvrir un projet existant : il s'affiche comme avant dans la feuille ; autour, du papier (même couleur) à la
+   place de l'ombre ; aucun dessin ne manque ni ne change.
+2. Dézoomer (molette) et déplacer la vue loin (Espace + glisser) : le papier suit sans bord ni trou, sans
+   ralentissement. Arrière-plan damier : le damier continue hors de la feuille ; noir : tout est noir.
+3. Dessiner au pinceau à gauche de la feuille, au-dessus, puis un trait qui traverse le bord : pas de retard au
+   bout du pinceau, pas de coupure au bord de la feuille (zoom 100 % et zoom arrière), pas de scintillement
+   pendant le trait.
+4. Ctrl+Z / Ctrl+Maj+Z sur ces traits ; enregistrer, fermer, rouvrir : tout est là (hors de la feuille aussi).
+5. Gomme hors de la feuille, formes (ligne, rectangle, ellipse), texte, trait vectoriel loin de la feuille.
+6. Rotation (Maj + molette) et miroir de la vue avec du dessin hors de la feuille : il tourne avec le reste.
+7. Caméra : déplacer le cadre sur du dessin hors de la feuille (outil Caméra) ; l'export d'images montre ce dessin ;
+   « Estomper le hors-champ » voile autour du cadre, discrètement.
+8. Pot de peinture hors de la feuille : rien ne bouge, message dans la barre d'état. Pipette hors de la feuille :
+   prend la couleur du trait.
+9. Pelure d'oignon et table lumineuse avec des dessins hors de la feuille : ils apparaissent teintés.
+10. Un plan avec des effets de calque et du dessin hors de la feuille : les effets agissent dans la feuille, le
+    dessin hors feuille est montré sans effet (limite connue).
+11. Les vignettes de la planche (storyboard) montrent le cadre, comme avant.

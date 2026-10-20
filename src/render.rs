@@ -310,12 +310,62 @@ pub fn plan_bounds(doc: &Document, plan: &Plan) -> Area {
     area
 }
 
+/// Les tuiles du monde de `area` où le plan peut montrer autre chose que du papier et qui ne sont
+/// pas entièrement dans la feuille : celles des dessins (hors de la feuille, et les bords qui
+/// débordent), et, pour un calque transformé, toutes celles que son rectangle déplacé touche.
+/// Ce que l'écran compose en plus de la feuille (`monde.rs`).
+pub fn plan_world_tiles(doc: &Document, plan: &Plan, area: Area) -> Vec<(i32, i32)> {
+    let t = TILE as i64;
+    let (w, h) = (doc.width as i64, doc.height as i64);
+    let pivot = doc.stage_center();
+    let mut set = std::collections::BTreeSet::new();
+    let wanted = |tx: i64, ty: i64| {
+        let inside = tx >= 0 && ty >= 0 && (tx + 1) * t <= w && (ty + 1) * t <= h;
+        !inside && tx * t < area.x1 && (tx + 1) * t > area.x0 && ty * t < area.y1 && (ty + 1) * t > area.y0
+    };
+    for item in &plan.items {
+        let Some(cel) = doc.cels.get(&item.cel) else { continue };
+        if item.warp(pivot).is_some() {
+            continue;
+        }
+        let Some((tx0, ty0, tx1, ty1)) = cel.raster.drawn_tile_range() else { continue };
+        match item.affine(pivot) {
+            Some(a) => {
+                let (x0, y0, x1, y1) = ((tx0 as i64 * t) as f32, (ty0 as i64 * t) as f32, ((tx1 as i64 + 1) * t) as f32, ((ty1 as i64 + 1) * t) as f32);
+                let pts = [egui::pos2(x0, y0), egui::pos2(x1, y0), egui::pos2(x1, y1), egui::pos2(x0, y1)].map(|p| a.apply(p));
+                let lo = pts.iter().fold((f32::MAX, f32::MAX), |(x, y), p| (x.min(p.x), y.min(p.y)));
+                let hi = pts.iter().fold((f32::MIN, f32::MIN), |(x, y), p| (x.max(p.x), y.max(p.y)));
+                if ![lo.0, lo.1, hi.0, hi.1].iter().all(|v| v.is_finite()) {
+                    continue;
+                }
+                let r = Area::around((lo.0 - 2.0, lo.1 - 2.0), (hi.0 + 2.0, hi.1 + 2.0)).tile_aligned();
+                let (ax0, ay0, ax1, ay1) = (r.x0.max(area.x0).div_euclid(t), r.y0.max(area.y0).div_euclid(t), (r.x1.min(area.x1) + t - 1).div_euclid(t), (r.y1.min(area.y1) + t - 1).div_euclid(t));
+                for ty in ay0..ay1 {
+                    for tx in ax0..ax1 {
+                        if wanted(tx, ty) {
+                            set.insert((tx as i32, ty as i32));
+                        }
+                    }
+                }
+            }
+            None => {
+                for id in cel.raster.drawn_ids() {
+                    let (tx, ty) = cel.raster.key_of(id);
+                    if wanted(tx as i64, ty as i64) {
+                        set.insert((tx, ty));
+                    }
+                }
+            }
+        }
+    }
+    set.into_iter().collect()
+}
 /// Compose la tuile du monde (`tx`, `ty`), en entier (soixante-quatre pixels de côté, y compris la
 /// bande d'une tuile de bord qui dépasse la feuille), dans `buf` : une zone de largeur `stride` dont
 /// le coin haut gauche est au point `origin` du monde. Hors de la feuille, ce qu'on y a dessiné
 /// (`Raster::outer`) ; les feuilles déformées par un maillage (enveloppe, perspective) restent à la
 /// feuille.
-fn composite_world_tile(doc: &Document, plan: &Plan, tx: i32, ty: i32, buf: &mut [Color32], stride: usize, origin: (i64, i64)) {
+pub(crate) fn composite_world_tile(doc: &Document, plan: &Plan, tx: i32, ty: i32, buf: &mut [Color32], stride: usize, origin: (i64, i64)) {
     let t = TILE as i64;
     let (ox, oy) = (tx as i64 * t, ty as i64 * t);
     let at = |x: i64, y: i64| ((y - origin.1) as usize) * stride + (x - origin.0) as usize;
@@ -795,6 +845,10 @@ pub struct Renderer {
     gpu: bool,
     gpu_all: bool,
     gpu_tiles: Vec<usize>,
+    /// Ce qui a changé depuis la dernière image pour le hors-feuille (toile infinie, `monde.rs`) : tout,
+    /// ou ces tuiles (numéros de la fenêtre et du hors-feuille).
+    world_all: bool,
+    world_tiles: Vec<usize>,
 }
 
 impl Renderer {
@@ -811,6 +865,8 @@ impl Renderer {
             gpu: false,
             gpu_all: true,
             gpu_tiles: Vec::new(),
+            world_all: true,
+            world_tiles: Vec::new(),
         }
     }
 
@@ -821,6 +877,7 @@ impl Renderer {
     pub fn invalidate_all(&mut self) {
         self.dirty_all = true;
         self.gpu_all = true;
+        self.world_all = true;
     }
 
     /// Un fond arrivé de l'arrière-plan (`fx::fond_poll`) remplace celui d'avant : le plan est le
@@ -828,9 +885,18 @@ impl Renderer {
     /// des dessins dérivés toute seule).
     pub fn invalidate_composed(&mut self) {
         self.dirty_all = true;
+        self.world_all = true;
     }
 
     pub fn invalidate_tiles(&mut self, tiles: &[usize]) {
+        if !self.world_all {
+            self.world_tiles.extend_from_slice(tiles);
+            // (Au-delà de quelques milliers de tuiles, tout refaire coûte moins que les suivre.)
+            if self.world_tiles.len() > 8192 {
+                self.world_all = true;
+                self.world_tiles.clear();
+            }
+        }
         for &t in tiles {
             if let Some(d) = self.dirty.get_mut(t) {
                 *d = true;
@@ -843,6 +909,14 @@ impl Renderer {
     }
 
     /// Changements à envoyer à la carte graphique depuis la dernière fois : tout, ou ces tuiles.
+    /// Changements à montrer hors de la feuille depuis la dernière fois : tout, ou ces tuiles.
+    pub fn take_world_dirty(&mut self) -> (bool, Vec<usize>) {
+        let mut tiles = std::mem::take(&mut self.world_tiles);
+        tiles.sort_unstable();
+        tiles.dedup();
+        (std::mem::take(&mut self.world_all), tiles)
+    }
+
     pub fn take_gpu_dirty(&mut self) -> (bool, Vec<usize>) {
         let mut tiles = std::mem::take(&mut self.gpu_tiles);
         tiles.sort_unstable();
