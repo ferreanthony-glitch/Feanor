@@ -317,6 +317,11 @@ impl App {
                 // Clés d'effets (13i) : un losange violet en haut de la piste, par image clée.
                 let x0 = cell.left() - 1.0;
                 self.paint_fx_markers(painter, p.id, &p.layers[k], |f| x0 + f as f32 * ppf + ppf * 0.5, cell.top() + 8.0, p.frame_count(), (painter.clip_rect().left(), painter.clip_rect().right()));
+                // Clés de position (`poskeysui.rs`) : les losanges verts au milieu de la piste, comme dans la
+                // timeline (Anthony : « les clés de position d'un calque n'apparaissent pas sur le calque »).
+                if !p.layers[k].pos_keys.is_empty() {
+                    self.paint_pos_markers(painter, &p.layers[k], |f| x0 + f as f32 * ppf + ppf * 0.5, cell.center().y, p.frame_count(), (painter.clip_rect().left(), painter.clip_rect().right()));
+                }
                 // Clés qu'on glisse : leur fantôme suit la souris, un repère montre où elles se
                 // poseront (comme le repère de Storyboard Pro entre deux panneaux).
                 if let Some(d) = drops.iter().find(|d| d.panel == p.id && d.layer == p.layers[k].id) {

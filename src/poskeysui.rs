@@ -400,7 +400,8 @@ impl App {
 /// Un losange vert (la couleur des poignées du calque), cerclé de noir ; adouci : un rond ; choisi :
 /// plus grand et cerclé de blanc.
 fn paint_marker(painter: &Painter, c: Pos2, chosen: bool, eased: bool) {
-    let d = if chosen { 6.0 } else { 4.5 };
+    // Assez grands pour se voir sur les blocs de dessins (bleus ou verts) de la timeline et du montage.
+    let d = if chosen { 7.0 } else { 5.5 };
     let (fill, edge) = (crate::theme::POIGNEE_CALQUE, if chosen { Color32::WHITE } else { Color32::from_black_alpha(190) });
     let stroke = Stroke::new(if chosen { 1.8_f32 } else { 1.2_f32 }, edge);
     if eased {
