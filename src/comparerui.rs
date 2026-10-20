@@ -99,7 +99,7 @@ impl App {
             out.extend(v.autres.iter().rev().map(|r| Source::Version(r.numero)));
         }
         let mut envois: Vec<&crate::envois::Envoi> = self.doc.envois.list.iter().filter(|e| e.plan(plan).is_some()).collect();
-        envois.sort_by_key(|e| std::cmp::Reverse((e.date, e.id)));
+        envois.sort_by_key(|e| std::cmp::Reverse(e.id));
         out.extend(envois.into_iter().map(|e| Source::Envoi(e.id)));
         out
     }
@@ -194,7 +194,7 @@ impl App {
                 return Some(Source::Version(n));
             }
         }
-        self.doc.envois.list.iter().filter(|e| e.plan(plan).is_some() && !e.fichier.is_empty()).max_by_key(|e| (e.date, e.id)).map(|e| Source::Envoi(e.id))
+        self.doc.envois.list.iter().filter(|e| e.plan(plan).is_some() && !e.fichier.is_empty()).max_by_key(|e| e.id).map(|e| Source::Envoi(e.id))
     }
 
     /// Relit les deux côtés (autres côtés choisis, ou « Rafraîchir »).

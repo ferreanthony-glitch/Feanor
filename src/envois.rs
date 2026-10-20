@@ -166,9 +166,11 @@ impl Envois {
         self.list.is_empty()
     }
 
-    /// Le dernier envoi (le plus récent par la date, à égalité le dernier noté).
+    /// Le dernier envoi : le dernier marqué (les numéros ne font que croître). Pas le plus tardif par sa date :
+    /// la date se tape, elle peut être celle d'un jour qui vient, et un envoi marqué aujourd'hui est toujours
+    /// l'état le plus récent du film.
     pub fn dernier(&self) -> Option<&Envoi> {
-        self.list.iter().max_by_key(|e| (e.date, e.id))
+        self.list.iter().max_by_key(|e| e.id)
     }
 
     pub fn trouve(&self, id: u64) -> Option<&Envoi> {
@@ -272,7 +274,7 @@ pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
         return Ok(None);
     }
     let mut envois = doc.envois.list.clone();
-    envois.sort_by_key(|e| (e.date, e.id));
+    envois.sort_by_key(|e| e.id);
     serde_json::to_vec_pretty(&Sidecar { format: FORMAT.into(), version: VERSION, envois }).map(Some).map_err(|e| e.to_string())
 }
 

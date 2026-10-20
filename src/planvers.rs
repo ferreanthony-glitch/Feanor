@@ -119,7 +119,9 @@ impl Document {
 
     /// Les versions des plans qui existent encore (les autres ne s'enregistrent pas).
     pub fn versions_vivantes(&self) -> impl Iterator<Item = (usize, &VersionsDuPlan)> {
-        self.panels.iter().enumerate().filter_map(|(i, p)| self.versions.get(&p.id).map(|v| (i, v)))
+        // (Sans aucune version, on ne parcourt pas les plans : cette liste se demande à chaque enregistrement.)
+        let n = if self.versions.is_empty() { 0 } else { self.panels.len() };
+        self.panels.iter().enumerate().take(n).filter_map(|(i, p)| self.versions.get(&p.id).map(|v| (i, v)))
     }
 
     /// Les plans rangés des versions des plans qui existent encore.

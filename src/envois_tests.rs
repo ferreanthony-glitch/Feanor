@@ -726,3 +726,37 @@ fn the_envoi_commands_are_in_the_palette_the_menus_and_the_shortcut_file() {
     }
     assert!(crate::barres::Barre::Montage.cherche("envoi.marquer").is_some());
 }
+
+#[test]
+fn the_last_envoi_is_the_last_marked_not_the_latest_dated() {
+    // La date se tape : un envoi daté d'un jour qui vient ne doit pas rester « le dernier » quand on en marque un autre.
+    let mut doc = film(1);
+    for (id, nom, date) in [(1, "v1 au réal", 1_800_000_000), (2, "v2 au réal", 1_760_000_000)] {
+        let n = NouvelEnvoi { id, nom: nom.into(), date, note_le: 0, unique: id as u32 };
+        let (envoi, instantane) = envois::construire(demande(&doc, Some(n))).unwrap().envoi.unwrap();
+        doc.envois.ajouter(envoi, instantane);
+    }
+    assert_eq!(doc.envois.dernier().map(|e| e.nom.as_str()), Some("v2 au réal"));
+    let texte = String::from_utf8(envois::to_bytes(&doc).unwrap().unwrap()).unwrap();
+    assert_eq!(envois::parse(&texte).unwrap().iter().map(|e| e.id).collect::<Vec<_>>(), vec![1, 2]);
+}
+
+#[test]
+fn the_marker_is_a_badge_on_a_wide_block_and_a_stripe_on_a_narrow_one() {
+    use eframe::egui::{pos2, vec2, LayerId, Rect};
+    let ctx = eframe::egui::Context::default();
+    // (Le tracé du crayon demande les polices : il se fait dans une image d'écran.)
+    let _ = ctx.run(eframe::egui::RawInput::default(), |ctx| {
+        let painter = ctx.layer_painter(LayerId::background());
+        let large = Rect::from_min_size(pos2(10.0, 10.0), vec2(120.0, 90.0));
+        let zone = crate::envoisui::peindre_repere_du_bloc(&painter, large, Etat::Modifie);
+        assert!(large.contains_rect(zone) && zone.width() < 20.0 && zone.right() > large.right() - 30.0, "pastille en haut à droite : {zone:?}");
+        // Un bloc de quelques points (la bande zoomée loin) : une bande le long du bord haut, aussi large que lui.
+        let etroit = Rect::from_min_size(pos2(10.0, 10.0), vec2(6.0, 90.0));
+        let zone = crate::envoisui::peindre_repere_du_bloc(&painter, etroit, Etat::Nouveau);
+        assert!(zone.width() >= etroit.width() && zone.height() < 12.0 && zone.top() <= etroit.top() + 1.0, "bande au bord haut : {zone:?}");
+        // Un bloc large mais bas : pas de pastille non plus (elle cacherait la poignée de bord).
+        let bas = Rect::from_min_size(pos2(10.0, 10.0), vec2(120.0, 30.0));
+        assert!(crate::envoisui::peindre_repere_du_bloc(&painter, bas, Etat::Modifie).height() < 12.0);
+    });
+}

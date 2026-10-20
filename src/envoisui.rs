@@ -27,7 +27,7 @@ use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::{Duration, Instant};
 
-use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Rect, RichText, Stroke};
+use eframe::egui::{self, pos2, vec2, Align2, FontId, Rect, RichText, Stroke};
 use egui_phosphor::regular as ph;
 
 use crate::app::App;
@@ -575,7 +575,7 @@ impl App {
             ui.separator();
             ui.label(RichText::new("Les envois").strong());
             let mut lignes: Vec<&envois::Envoi> = self.doc.envois.list.iter().collect();
-            lignes.sort_by_key(|e| std::cmp::Reverse((e.date, e.id)));
+            lignes.sort_by_key(|e| std::cmp::Reverse(e.id));
             egui::ScrollArea::vertical().id_salt("envois_liste").max_height(220.0).show(ui, |ui| {
                 for e in lignes {
                     ui.horizontal(|ui| {
@@ -627,18 +627,31 @@ impl App {
     }
 }
 
-/// Dessine le repère « modifié depuis l'envoi » centré en `centre` : une pastille d'avertissement avec un
-/// crayon (modifié) ou un plus (ajouté).
+/// Dessine le repère « modifié depuis l'envoi » centré en `centre` : une pastille d'avertissement du thème avec
+/// un crayon (modifié) ou un plus (ajouté).
 pub(crate) fn peindre_repere(painter: &egui::Painter, centre: egui::Pos2, etat: Etat, rayon: f32) {
-    let fond = theme::avertissement();
-    painter.circle_filled(centre, rayon, fond);
-    painter.circle_stroke(centre, rayon, Stroke::new(1.0_f32, Color32::from_black_alpha(110)));
+    painter.circle_filled(centre, rayon, theme::avertissement());
+    painter.circle_stroke(centre, rayon, Stroke::new(1.0_f32, theme::encre()));
     let glyphe = if etat == Etat::Nouveau { ph::PLUS } else { ph::PENCIL_SIMPLE };
-    painter.text(pos2(centre.x, centre.y), Align2::CENTER_CENTER, glyphe, FontId::proportional(rayon * 1.25), Color32::from_gray(20));
+    painter.text(centre, Align2::CENTER_CENTER, glyphe, FontId::proportional(rayon * 1.25), theme::encre());
 }
 
-/// La zone où le repère se pose dans un bloc de plan de la bande (en haut à droite), si le bloc est assez
-/// large pour ne pas cacher sa poignée.
-pub(crate) fn zone_repere(bloc: Rect) -> Option<Rect> {
-    (bloc.width() >= 44.0 && bloc.height() >= 40.0).then(|| Rect::from_center_size(pos2(bloc.right() - 18.0, bloc.top() + 18.0), vec2(REPERE * 2.0 + 2.0, REPERE * 2.0 + 2.0)))
+/// Largeur en dessous de laquelle un bloc de la bande n'a plus la place d'une pastille.
+const BLOC_ETROIT: f32 = 44.0;
+/// Épaisseur de la bande qui tient lieu de pastille sur un bloc étroit.
+const BANDE: f32 = 5.0;
+
+/// Peint le repère d'un plan sur son bloc de la bande et rend la zone où la souris le survole : une pastille en
+/// haut à droite si le bloc est assez large pour ne pas cacher sa poignée de bord, sinon (la bande zoomée loin) une
+/// bande ambre le long de son bord haut, qui se voit à n'importe quel zoom.
+pub(crate) fn peindre_repere_du_bloc(painter: &egui::Painter, bloc: Rect, etat: Etat) -> Rect {
+    if bloc.width() >= BLOC_ETROIT && bloc.height() >= 40.0 {
+        let zone = Rect::from_center_size(pos2(bloc.right() - 18.0, bloc.top() + 18.0), vec2(REPERE * 2.0 + 2.0, REPERE * 2.0 + 2.0));
+        peindre_repere(painter, zone.center(), etat, REPERE);
+        zone
+    } else {
+        let bande = Rect::from_min_max(bloc.min, pos2(bloc.right(), bloc.top() + BANDE));
+        painter.rect_filled(bande, 1.0, theme::avertissement());
+        bande.expand2(vec2(0.0, 2.0))
+    }
 }
