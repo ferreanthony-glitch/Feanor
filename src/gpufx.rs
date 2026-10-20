@@ -21,8 +21,10 @@
 //!
 //! # Ce qui reste sur le processeur
 //!
-//! Tous les effets de la pile ont une version sur la carte graphique sauf le tremblement du trait
-//! (`tremblement.rs` : il redessine le dessin vectoriel lui-même, calque vectoriel seulement), qui garde
+//! Tous les effets de la pile ont une version sur la carte graphique, le tremblement du trait compris
+//! (`fs_boil` : il relit les pixels du dessin à travers le même champ de déplacement que le calcul sur
+//! processeur, `tremblement.rs`), sauf les effets du trait (`fxtrait.rs` : écriture, crayonné, respiration,
+//! ondulation, pointillés, désagrégation), qui lisent la géométrie des traits du dessin vectoriel et gardent
 //! le calcul de fond. Règle de mélange : **une pile qui contient un seul effet sans passe est calculée
 //! tout entière sur le processeur** (l'ordre des effets compte, et le calcul sur processeur ne sait pas
 //! partir d'une texture de la carte graphique). Même chose pour un calque rempli par CTG, un fond sous le
@@ -146,7 +148,7 @@ pub struct Chain {
 pub fn supported(kind: EffectKind) -> bool {
     // (Les effets du trait lisent la géométrie du dessin vectoriel : `fxtrait.rs`, calcul de fond. Le
     // tremblement, lui, relit les pixels du dessin à travers un champ de déplacement : `fs_boil`.)
-    kind != EffectKind::Boil && !kind.is_trait()
+    !kind.is_trait()
 }
 
 /// Toute la pile passe-t-elle par la carte graphique ? (Un seul effet qui n'y passe pas : toute la pile
@@ -353,6 +355,16 @@ impl Builder {
                 self.pass("fs_shadow_over", cur, Some(shadow), dst, self.sheet, [0; 4], [[0.0; 4]; 8]);
                 dst
             }
+            EffectKind::Boil => {
+                // Le champ du processeur (`tremblement::Field`) : amplitude, maille, graine (variante comprise).
+                let set = crate::tremblement::Settings::of(&s.values);
+                let field = crate::tremblement::Field::new(&set);
+                f[0] = [field.amp, field.cell, set.thickness / 100.0, 0.0];
+                n[0] = field.seed() as i32;
+                let m = field.amp.ceil() as i32 + 2;
+                let g = bucket(cur.1.x - m, cur.1.y - m, cur.1.right() + m, cur.1.bottom() + m, self.sheet);
+                self.into("fs_boil", cur, g, n, f)
+            }
             EffectKind::Wave => {
                 let (sn, cs) = at(2).to_radians().sin_cos();
                 f[0] = [at(0), std::f32::consts::TAU / at(1).max(1.0), sn, cs];
@@ -498,9 +510,9 @@ pub fn target_texture(device: &wgpu::Device, w: u32, h: u32) -> wgpu::Texture {
 }
 
 /// Les points d'entrée du shader qui sont une passe (`gpufx.wgsl`).
-pub const ENTRIES: [&str; 27] = [
+pub const ENTRIES: [&str; 28] = [
     "fs_bc", "fs_levels", "fs_hue", "fs_bw", "fs_invert", "fs_poster", "fs_thresh", "fs_noise", "fs_grain", "fs_flash", "fs_impact", "fs_vignette", "fs_aberr", "fs_shake", "fs_warp", "fs_shade", "fs_mosaic_avg", "fs_mosaic_fill", "fs_box_h", "fs_box_v", "fs_motion",
-    "fs_shadow_sil", "fs_shadow_over", "fs_glow_over", "fs_sharpen", "fs_bloom_down", "fs_bloom_final",
+    "fs_shadow_sil", "fs_shadow_over", "fs_glow_over", "fs_sharpen", "fs_bloom_down", "fs_bloom_final", "fs_boil",
 ];
 
 /// Ce qu'il faut pour fabriquer les pipelines (aussi sur un autre fil : le périphérique, le shader et la

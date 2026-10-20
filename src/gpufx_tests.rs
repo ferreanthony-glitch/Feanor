@@ -22,11 +22,21 @@ fn step(kind: EffectKind, values: &[f32]) -> FxStep {
     FxStep { kind, values: values.to_vec() }
 }
 
-/// Le tremblement du trait avec ses réglages par défaut et la variante 1 : le seul effet sans passe.
-fn boil() -> FxStep {
+/// Le tremblement du trait (intensité, fréquence, variantes, vitesse, épaisseur, graine, repos) à la
+/// variante `variant`.
+fn boil_with(set: &[(usize, f32)], variant: usize) -> FxStep {
     let mut values: Vec<f32> = EffectKind::Boil.params().iter().map(|p| p.default).collect();
-    values.push(1.0);
+    for &(k, v) in set {
+        values[k] = v;
+    }
+    values.push(variant as f32);
     FxStep { kind: EffectKind::Boil, values }
+}
+
+/// Un effet du trait (écriture, réglages par défaut) : il lit la géométrie du dessin vectoriel, il n'a pas
+/// de passe sur la carte graphique.
+fn stroke_effect() -> FxStep {
+    FxStep { kind: EffectKind::Write, values: EffectKind::Write.params().iter().map(|p| p.default).collect() }
 }
 
 /// Un dessin qui montre de tout : un disque en dégradé aux bords doux, des aplats francs, un aplat
@@ -168,7 +178,7 @@ fn the_blur_is_three_boxes_in_rows_then_three_in_columns_like_the_cpu() {
 }
 
 #[test]
-fn every_effect_but_the_boil_has_passes() {
+fn every_effect_but_the_stroke_effects_has_passes() {
     let sheet = (1920u32, 1080u32);
     let input = Geo { x: 100, y: 100, w: 512, h: 384 };
     for kind in EffectKind::ALL {
@@ -176,7 +186,8 @@ fn every_effect_but_the_boil_has_passes() {
         let s = FxStep { kind, values };
         let chain = plan_chain(std::slice::from_ref(&s), input, sheet);
         // Les valeurs par défaut de certains effets ne changent rien (rayon, 0 %…) : pas de chaîne alors ;
-        // un effet qui change quelque chose doit avoir sa chaîne, sauf le tremblement du trait.
+        // un effet qui change quelque chose doit avoir sa chaîne, sauf les effets du trait (ils lisent la
+        // géométrie du dessin vectoriel).
         if crate::gpufx::supported(kind) && kind.changes(&s.values) {
             let chain = chain.unwrap_or_else(|| panic!("{kind:?} sans chaîne"));
             assert!(!chain.passes.is_empty());
@@ -198,7 +209,10 @@ fn every_effect_but_the_boil_has_passes() {
 fn a_stack_with_one_cpu_effect_stays_on_the_cpu() {
     let ok = [step(EffectKind::GaussianBlur, &[10.0]), step(EffectKind::Noise, &[20.0])];
     assert!(crate::gpufx::steps_supported(&ok));
-    let mixed = [step(EffectKind::GaussianBlur, &[10.0]), boil(), step(EffectKind::Noise, &[20.0])];
+    let mixed = [step(EffectKind::GaussianBlur, &[10.0]), stroke_effect(), step(EffectKind::Noise, &[20.0])];
+    // (Le tremblement du trait, lui, a sa passe : il ne fait plus passer toute la pile sur le processeur.)
+    let with_boil = [step(EffectKind::GaussianBlur, &[10.0]), boil_with(&[], 1), step(EffectKind::Noise, &[20.0])];
+    assert!(crate::gpufx::steps_supported(&with_boil));
     assert!(!crate::gpufx::steps_supported(&mixed));
     assert!(plan_chain(&mixed, Geo { x: 0, y: 0, w: 64, h: 64 }, (640, 360)).is_none());
     assert!(!crate::gpufx::steps_supported(&[]));
@@ -350,6 +364,31 @@ fn warps_render_and_mosaic_match_the_cpu() {
     check("mosaïque (2 px)", &mut gpu, &rs, &s, &[step(EffectKind::Mosaic, &[2.0])], 0.5, 4);
 }
 
+#[test]
+fn the_boil_matches_the_cpu() {
+    use crate::tremblement as t;
+    let rs = gpu_or_return!();
+    let mut gpu = GpuCanvas::new(&rs);
+    let s = scene(W, H);
+    for variant in 0..3 {
+        check(&format!("tremblement (3 px, variante {variant})"), &mut gpu, &rs, &s, &[boil_with(&[], variant)], 0.5, 4);
+    }
+    check("tremblement nerveux (9 px, fréquence 90 %)", &mut gpu, &rs, &s, &[boil_with(&[(t::INTENSITY, 9.0), (t::FREQUENCY, 90.0)], 1)], 0.5, 4);
+    check("tremblement doux (14 px, fréquence 5 %)", &mut gpu, &rs, &s, &[boil_with(&[(t::INTENSITY, 14.0), (t::FREQUENCY, 5.0)], 2)], 0.5, 4);
+    check("tremblement avec variation d'épaisseur (60 %)", &mut gpu, &rs, &s, &[boil_with(&[(t::INTENSITY, 4.0), (t::THICKNESS, 60.0)], 1)], 0.5, 4);
+    check("tremblement, épaisseur seule (100 %, intensité nulle)", &mut gpu, &rs, &s, &[boil_with(&[(t::INTENSITY, 0.0), (t::THICKNESS, 100.0)], 0)], 0.5, 4);
+    check("tremblement, autre graine", &mut gpu, &rs, &s, &[boil_with(&[(t::SEED, 77.0), (t::INTENSITY, 6.0)], 1)], 0.5, 4);
+    // Dans une pile : le tremblement, un flou, une teinte.
+    check(
+        "pile : tremblement, flou, teinte / saturation",
+        &mut gpu,
+        &rs,
+        &s,
+        &[boil_with(&[(t::INTENSITY, 5.0)], 2), step(EffectKind::GaussianBlur, &[6.0]), step(EffectKind::HueSaturation, &[30.0, 20.0, 0.0])],
+        0.5,
+        4,
+    );
+}
 #[test]
 fn stacks_of_several_effects_match_the_cpu() {
     let rs = gpu_or_return!();
@@ -538,7 +577,7 @@ fn a_stack_with_a_warp_and_the_switch_off_use_the_cpu_path() {
     let mut gpu = GpuCanvas::new(&rs);
     let s = scene(W, H);
     // Un effet sans passe au milieu : toute la pile reste sur le processeur.
-    let mixed = vec![step(EffectKind::GaussianBlur, &[6.0]), boil(), step(EffectKind::Noise, &[20.0])];
+    let mixed = vec![step(EffectKind::GaussianBlur, &[6.0]), stroke_effect(), step(EffectKind::Noise, &[20.0])];
     let plan = Plan { paper: None, items: vec![item(s.id, mixed.clone())] };
     let _ = render_with(&mut gpu, &rs, &s.doc, &plan, true);
     assert_eq!(gpu.effects_passes(), 0, "aucune passe : la pile n'est pas entièrement sur la carte");

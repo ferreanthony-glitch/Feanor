@@ -175,6 +175,12 @@ impl Field {
         Field { amp, cell: cell.max(2.0), seed: mix(seed) }
     }
 
+    /// La graine du champ (le tremblement sur la carte graphique, `gpufx.rs`, la lit pour tirer les
+    /// mêmes nœuds).
+    pub(crate) fn seed(&self) -> u32 {
+        self.seed
+    }
+
     /// Le nœud (i, j) : un vecteur de norme au plus 1 et une valeur d'épaisseur dans [−1, 1].
     fn node(&self, i: i32, j: i32) -> [f32; 3] {
         let (mut u, mut v) = (unit(i, j, self.seed, 0), unit(i, j, self.seed, 1));
