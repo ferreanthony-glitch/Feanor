@@ -1267,7 +1267,7 @@ Le cliché (`perf_export_snapshot_cost`, ce que l'interface paie au départ, une
 La structure reste sous 15 ms même pour 600 plans de 8 calques de 48 images (4 800 calques) ; les dessins, par tranches de 8 ms, ne
 retiennent jamais l'interface plus de 9 ms d'un coup.
 
-### Garde-fous (`exportrender_tests.rs`, 50 essais ; la suite complète : 2 158)
+### Garde-fous (`exportrender_tests.rs`, 46 essais et 6 mesures ignorées ; la suite complète : 2 072 essais, deux fois de suite, aucun intermittent)
 
 - **Mêmes pixels** : sur le projet d'essai complet de la fiabilité (effets de calque à clés, tremblement du trait, fond sous le trait,
   CTG, vidéo, dossier, fusion, transformation, caméra à clés, calques d'effets d'ajustement, incrustation, damier), chaque image du
