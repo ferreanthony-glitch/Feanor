@@ -229,4 +229,9 @@ impl History {
     pub fn serial(&self) -> u64 {
         self.serial
     }
+
+    /// Aucune étape à annuler ni à rétablir (un projet qu'on n'a pas encore touché, `onglets.rs`).
+    pub fn is_empty(&self) -> bool {
+        self.undo.is_empty() && self.redo.is_empty()
+    }
 }

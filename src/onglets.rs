@@ -332,13 +332,13 @@ impl App {
     // ------------------------------------------------------------------ renseignements
 
     /// Le projet n'a jamais servi : l'accueil, rien d'ouvert ni de dessiné. Un projet qu'on ouvre y prend la place.
-    fn est_vierge(welcome: bool, path: &Option<PathBuf>, import: &Option<PathBuf>, modified: bool, serial: u64, saving: bool, ouvre: bool) -> bool {
-        welcome && path.is_none() && import.is_none() && !modified && serial == 0 && !saving && !ouvre
+    fn est_vierge(welcome: bool, path: &Option<PathBuf>, import: &Option<PathBuf>, modified: bool, intact: bool, saving: bool, ouvre: bool) -> bool {
+        welcome && path.is_none() && import.is_none() && !modified && intact && !saving && !ouvre
     }
 
     /// L'onglet affiché n'a servi à rien.
     pub(crate) fn onglet_vierge(&self) -> bool {
-        Self::est_vierge(self.welcome, &self.path, &self.import_source, self.modified, self.history.serial(), self.saving.is_some(), self.open_job.is_some())
+        Self::est_vierge(self.welcome, &self.path, &self.import_source, self.modified, self.history.is_empty(), self.saving.is_some(), self.open_job.is_some())
     }
 
     /// Ce que la bande d'onglets montre de l'onglet `i`.
@@ -358,7 +358,7 @@ impl App {
                 }
             }
             Some(e) => {
-                let vierge = Self::est_vierge(e.welcome, &e.path, &e.import_source, e.modified, e.history.serial(), e.saving.is_some(), e.open_job.is_some());
+                let vierge = Self::est_vierge(e.welcome, &e.path, &e.import_source, e.modified, e.history.is_empty(), e.saving.is_some(), e.open_job.is_some());
                 InfosOnglet {
                     id: t.id,
                     nom: nom_de(e.path.as_deref(), e.import_source.as_deref(), vierge),
@@ -374,7 +374,16 @@ impl App {
 
     /// Les onglets, dans l'ordre de la bande.
     pub(crate) fn infos_onglets(&self) -> Vec<InfosOnglet> {
-        (0..self.onglets.len()).map(|i| self.infos_onglet(i)).collect()
+        let mut infos: Vec<InfosOnglet> = (0..self.onglets.len()).map(|i| self.infos_onglet(i)).collect();
+        // Plusieurs projets pas encore enregistrés ne portent pas le même nom : « Sans titre », « Sans titre 2 »…
+        let mut sans_titre = 0;
+        for info in infos.iter_mut().filter(|i| i.chemin.is_none() && !i.vierge && i.nom == "Sans titre") {
+            sans_titre += 1;
+            if sans_titre > 1 {
+                info.nom = format!("Sans titre {sans_titre}");
+            }
+        }
+        infos
     }
 
     /// Le rang de l'onglet de numéro `id`.
@@ -440,17 +449,12 @@ impl App {
 
     /// L'onglet affiché s'en va : les gestes se terminent, la lecture s'arrête, ses caches sont rangés et ses
     /// demandes de fond abandonnées. Rend ce qu'il faut ranger avec lui.
-    fn sortir_de_l_onglet(&mut self, fermeture: bool) -> (crate::fxcache::Reserve, Option<crate::gpu::TexturesDeProjet>) {
+    fn sortir_de_l_onglet(&mut self) -> (crate::fxcache::Reserve, Option<crate::gpu::TexturesDeProjet>) {
         self.finish_text_edit();
         self.finish_field_edit();
         self.end_stroke();
         self.playing = false;
         self.stop_audio();
-        if !fermeture {
-            // Un projet modifié que personne ne regarde est protégé tout de suite : sa copie de secours est
-            // écrite sur un fil, sans attendre le délai.
-            self.copie_de_secours_maintenant();
-        }
         self.thumbs.abandonner();
         self.layer_thumbs.abandonner();
         // Les sons proposés (choix, portée) visaient les plans de ce projet ; rien n'est en cours (`onglet_occupe`).
@@ -499,11 +503,12 @@ impl App {
         self.borner_la_memoire_des_onglets();
     }
 
-    /// Les caches des onglets cachés ne grossissent pas sans fin : au-delà de la limite des effets et de celle
-    /// des textures, les plus anciennement vus sont lâchés (ils se recalculent au retour, sans rien perdre).
+    /// Les caches des onglets cachés ne grossissent pas sans fin : au-delà de la moitié de la limite des effets et
+    /// de celle des textures, tous onglets cachés ensemble, les plus anciennement vus sont lâchés (ils se recalculent au retour, sans rien perdre).
     fn borner_la_memoire_des_onglets(&mut self) {
-        let limite_fx = crate::fxcache::limite_octets();
-        let limite_gpu = self.gpu.as_ref().map_or(0, |g| g.limite_octets());
+        // (La moitié de la réserve : l'onglet affiché garde la sienne entière.)
+        let limite_fx = crate::fxcache::limite_octets() / 2;
+        let limite_gpu = self.gpu.as_ref().map_or(0, |g| g.limite_octets()) / 2;
         let mut ordre: Vec<usize> = (0..self.onglets.len()).filter(|&i| i != self.actif).collect();
         ordre.sort_by_key(|&i| std::cmp::Reverse(self.onglets[i].vu_le));
         let (mut fx, mut gpu) = (0usize, 0u64);
@@ -534,12 +539,14 @@ impl App {
             return false;
         }
         self.bascule(vers, false);
+        // (Le message d'état d'avant parlait d'un autre projet.)
+        self.status = format!("Onglet « {} ».", nom_de(self.path.as_deref(), self.import_source.as_deref(), self.onglet_vierge()));
         true
     }
 
     /// Le changement lui-même. `fermeture` : l'ancien onglet est jeté après (il ne range pas ses caches).
     fn bascule(&mut self, vers: usize, fermeture: bool) {
-        let (reserve, textures) = self.sortir_de_l_onglet(fermeture);
+        let (reserve, textures) = self.sortir_de_l_onglet();
         let mut e = self.onglets[vers].etat.take().expect("un onglet inactif a son état rangé");
         let (reserve_b, textures_b) = (e.reserve_fx.take(), e.textures_gpu.take());
         self.echanger_etat(&mut e);
@@ -574,7 +581,7 @@ impl App {
         if !self.onglet_libre() {
             return false;
         }
-        let (reserve, textures) = self.sortir_de_l_onglet(false);
+        let (reserve, textures) = self.sortir_de_l_onglet();
         let mut e = Box::new(EtatProjet::vierge(self.gpu.is_some()));
         self.echanger_etat(&mut e);
         e.reserve_fx = Some(reserve);
@@ -765,25 +772,6 @@ impl App {
         self.recovery = crate::recovery::root().and_then(|r| crate::recovery::Recovery::start(&r).ok());
     }
 
-    /// Lance tout de suite la copie de secours du projet affiché s'il est modifié (sans attendre le délai).
-    fn copie_de_secours_maintenant(&mut self) {
-        let title = self.base_name_or("Sans titre");
-        let Some(rec) = &mut self.recovery else { return };
-        // (Un enregistrement en cours écrit le dossier du projet : la copie recopierait des dessins qu'il n'a pas encore.)
-        if !self.modified || self.settings.autosave_minutes == 0 || self.saving.is_some() {
-            return;
-        }
-        let snap = crate::recovery::Snapshot {
-            doc: &self.doc,
-            serial: self.history.serial(),
-            modified: self.modified,
-            title,
-            project: self.path.clone(),
-            project_written: &self.written,
-        };
-        rec.tick(snap, Some(Duration::ZERO), false);
-    }
-
     // ------------------------------------------------------------------ tâches des onglets qui ne sont pas affichés
 
     /// À chaque image d'écran : ce que les onglets cachés ont à faire. Presque toujours rien (aucun calcul, aucune
@@ -791,15 +779,16 @@ impl App {
     /// (l'onglet est échangé un instant pour que le code d'enregistrement fasse son travail, puis rangé de nouveau).
     pub(crate) fn tick_onglets(&mut self, ctx: &egui::Context) {
         let mut a_regarder = false;
+        let mut revoir: Option<Duration> = None;
         let mut a_montrer: Option<usize> = None;
+        let interval = self.autosave_interval();
         for i in 0..self.onglets.len() {
             if i == self.actif {
                 continue;
             }
             let Some(e) = &self.onglets[i].etat else { continue };
             let fini = e.saving.as_ref().is_some_and(crate::enregistrement::Enregistrement::fini);
-            let copie = e.recovery.as_ref().is_some_and(crate::recovery::Recovery::busy);
-            if e.saving.is_some() && !fini || copie {
+            if e.saving.is_some() && !fini {
                 a_regarder = true;
             }
             if fini {
@@ -810,8 +799,10 @@ impl App {
                 } else if self.adopter_ecriture(i) {
                     a_montrer = Some(i);
                 }
-            } else if copie {
-                self.tick_secours_cache(i);
+            }
+            // La copie de secours d'un onglet caché suit le même rythme que celle de l'onglet affiché.
+            if let Some(d) = self.tick_secours_cache(i, interval) {
+                revoir = Some(revoir.map_or(d, |r: Duration| r.min(d)));
             }
         }
         if let Some(i) = a_montrer {
@@ -819,7 +810,10 @@ impl App {
             self.activer_onglet(i);
         }
         if a_regarder {
-            ctx.request_repaint_after(Duration::from_millis(200));
+            revoir = Some(revoir.map_or(Duration::from_millis(200), |r| r.min(Duration::from_millis(200))));
+        }
+        if let Some(d) = revoir {
+            ctx.request_repaint_after(d);
         }
     }
 
@@ -853,21 +847,33 @@ impl App {
         erreur
     }
 
-    /// Termine la copie de secours de l'onglet caché `i`.
-    fn tick_secours_cache(&mut self, i: usize) {
-        if let Some(e) = self.onglets[i].etat.as_mut() {
-            if let Some(rec) = e.recovery.as_mut() {
-                let snap = crate::recovery::Snapshot {
-                    doc: &e.doc,
-                    serial: e.history.serial(),
-                    modified: e.modified,
-                    title: String::new(),
-                    project: e.path.clone(),
-                    project_written: &e.written,
-                };
-                rec.tick(snap, None, true);
-            }
+    /// La copie de secours de l'onglet caché `i` : termine celle qui s'écrit, ou en lance une si le délai est passé et
+    /// que le projet a changé (comme `tick_recovery` pour l'onglet affiché : l'échange d'onglet, lui, ne prend jamais
+    /// de cliché). Rend dans combien de temps revenir la regarder (copie en cours : bientôt ; projet modifié à copier au
+    /// prochain délai : au plus dix secondes, comme l'onglet affiché).
+    pub(crate) fn tick_secours_cache(&mut self, i: usize, interval: Option<Duration>) -> Option<Duration> {
+        let Some(e) = self.onglets[i].etat.as_mut() else { return None };
+        let Some(rec) = e.recovery.as_mut() else { return None };
+        let snap = crate::recovery::Snapshot {
+            doc: &e.doc,
+            serial: e.history.serial(),
+            modified: e.modified,
+            title: nom_de(e.path.as_deref(), e.import_source.as_deref(), false),
+            project: e.path.clone(),
+            project_written: &e.written,
+        };
+        // (Pas pendant que le projet s'écrit dans son dossier : la copie recopierait des dessins qu'il n'a pas encore.)
+        rec.tick(snap, interval, e.saving.is_some());
+        let erreur = rec.error.take();
+        let revoir = if rec.busy() {
+            Some(Duration::from_millis(200))
+        } else {
+            interval.filter(|_| e.modified).map(|i| i.min(Duration::from_secs(10)))
+        };
+        if let Some(erreur) = erreur {
+            self.status = format!("Copie de secours impossible : {erreur}");
         }
+        revoir
     }
 
     // ------------------------------------------------------------------ quitter, fermer plusieurs onglets

@@ -54,6 +54,9 @@ pub(crate) struct KeyRef {
 /// Clés copiées, dans l'ordre du montage.
 pub(crate) struct KeyClip {
     pub keys: Vec<ClipKey>,
+    /// La feuille du projet d'où elles viennent (elles se collent aussi dans un autre onglet : un dessin n'a de
+    /// sens qu'à sa taille).
+    pub size: [usize; 2],
 }
 
 /// Une clé copiée : son écart à la première (en images du montage), sa durée, son dessin copié
@@ -587,7 +590,7 @@ impl App {
         }
         keys.sort_by_key(|k| k.offset);
         let n = keys.len();
-        self.key_clipboard = Some(KeyClip { keys });
+        self.key_clipboard = Some(KeyClip { keys, size: [self.doc.width, self.doc.height] });
         self.fx_clip_recent = false;
         self.cam_clip_recent = false;
         // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau Pelure (`pasteimage`).
@@ -615,6 +618,10 @@ impl App {
     /// suite ; sinon à la tête de lecture, à la place de ce qui y était.
     fn paste_keys_with(&mut self, insert: bool) {
         if self.key_clipboard.is_none() || self.refuse_on_folder() {
+            return;
+        }
+        if let Some(size) = self.key_clipboard.as_ref().map(|c| c.size).filter(|s| *s != [self.doc.width, self.doc.height]) {
+            self.status = crate::onglets::refus_de_taille("Ces clés viennent", size, [self.doc.width, self.doc.height]);
             return;
         }
         let plan = self.frame_count();

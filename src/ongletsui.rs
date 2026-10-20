@@ -62,15 +62,33 @@ impl App {
         let largeur = ((place - 2.0 * n) / n).clamp(LARGEUR_MIN, LARGEUR_MAX);
         let raccourci_fermer = self.raccourci("fichier.fermer");
         let raccourci_nouveau = self.raccourci("onglet.nouveau");
+        // L'onglet affiché vient d'en changer : la bande le ramène en vue (elle défile quand les onglets débordent).
+        let dernier_id = egui::Id::new("onglets_dernier_affiche");
+        let dernier: Option<u64> = ui.data(|d| d.get_temp(dernier_id));
+        let affiche = infos.iter().find(|i| i.actif).map(|i| i.id);
+        if dernier != affiche {
+            ui.data_mut(|d| match affiche {
+                Some(id) => d.insert_temp(dernier_id, id),
+                None => d.remove::<u64>(dernier_id),
+            });
+        }
         ui.add_enabled_ui(libre, |ui| {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
+                let bande = Rect::from_min_size(ui.cursor().min, vec2(place, HAUTEUR));
                 egui::ScrollArea::horizontal()
                     .id_salt("onglets_defilement")
                     .max_width(place)
                     .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
                     .auto_shrink([true, true])
                     .show(ui, |ui| {
+                        // La molette fait défiler la bande quand elle déborde.
+                        if ui.ctx().pointer_hover_pos().is_some_and(|p| bande.contains(p)) {
+                            let dy = ui.input(|i| i.smooth_scroll_delta.y);
+                            if dy != 0.0 {
+                                ui.scroll_with_delta(vec2(dy, 0.0));
+                            }
+                        }
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 2.0;
                             let mut rects: Vec<Rect> = Vec::with_capacity(infos.len());
@@ -80,6 +98,9 @@ impl App {
                             for (i, info) in infos.iter().enumerate() {
                                 let (rect, resp) = ui.allocate_exact_size(vec2(largeur, HAUTEUR), Sense::click_and_drag());
                                 rects.push(rect);
+                                if info.actif && dernier != Some(info.id) {
+                                    ui.scroll_to_rect(rect, None);
+                                }
                                 let survol = resp.hovered();
                                 let croix_rect = Rect::from_center_size(pos2(rect.right() - CROIX * 0.5 - 4.0, rect.center().y), vec2(CROIX, CROIX));
                                 #[cfg(test)]

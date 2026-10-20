@@ -237,6 +237,8 @@ impl App {
                     self.remember_project(&manifest);
                     self.path = Some(manifest);
                     self.import_source = None;
+                    // (Le projet a un nom et un chemin : la session le retient, `onglets.rs`.)
+                    self.session_a_ecrire = true;
                 }
             }
             Err(e) => {

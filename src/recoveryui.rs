@@ -28,7 +28,7 @@ pub fn ago(secs: u64) -> String {
 
 impl App {
     /// Délai entre deux copies (aucun : copie désactivée).
-    fn autosave_interval(&self) -> Option<Duration> {
+    pub(crate) fn autosave_interval(&self) -> Option<Duration> {
         (self.settings.autosave_minutes > 0).then(|| Duration::from_secs(60 * self.settings.autosave_minutes as u64))
     }
 

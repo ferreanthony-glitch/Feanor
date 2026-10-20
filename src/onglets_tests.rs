@@ -255,6 +255,15 @@ fn a_new_tab_is_the_welcome_screen_and_the_first_tab_is_kept_aside() {
 }
 
 #[test]
+fn projects_not_yet_saved_get_numbered_names() {
+    let mut b = banc(projet(1, 1), false);
+    onglet_avec(&mut b, projet(2, 1));
+    onglet_avec(&mut b, projet(3, 1));
+    assert!(b.app.nouvel_onglet());
+    assert_eq!(noms(&b), ["Sans titre", "Sans titre 2", "Sans titre 3", "Nouvel onglet"]);
+}
+
+#[test]
 fn undo_is_isolated_per_tab() {
     let mut b = banc(projet(200, 2), false);
     let n0 = b.app.layers().len();
@@ -503,6 +512,7 @@ fn closing_the_last_tab_leaves_an_empty_project_and_the_welcome_screen() {
     b.app.fermer_onglet(0);
     assert_eq!(b.app.onglets.len(), 1);
     assert!(b.app.welcome_shown());
+    assert!(b.app.onglet_vierge(), "l'accueil est de nouveau un onglet vierge : un projet qu'on ouvre y prend la place");
     assert_eq!(b.app.doc.frame, [320, 180], "un projet vide du même format");
     assert!(b.app.path.is_none() && !b.app.modified);
 }
@@ -533,6 +543,64 @@ fn saving_then_closing_writes_the_project_and_closes_its_tab() {
     assert!(jusqu_a(&mut b, Duration::from_secs(60), |b| b.app.onglets.len() == 1), "l'onglet se ferme à la fin de l'écriture");
     assert_eq!(rouge_sur_disque(&a), 66);
     assert_eq!(rouge(&b), 90);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_close_waiting_for_a_save_follows_it_even_when_another_tab_is_shown_meanwhile() {
+    let dir = dossier("onglets-fermer-apres");
+    let mut b = banc(projet(200, 6), false);
+    let a = dir.join("A").join("A.pelure");
+    b.app.path = Some(a.clone());
+    modifier(&mut b, 150);
+    onglet_avec(&mut b, projet(90, 2));
+    assert!(b.app.activer_onglet(0));
+    // « Enregistrer » dans la boîte de fermeture, puis on regarde l'autre onglet avant la fin de l'écriture.
+    assert!(b.app.save_then(Some(Pending::Close)));
+    assert!(b.app.activer_onglet(1));
+    assert!(jusqu_a(&mut b, Duration::from_secs(60), |b| b.app.onglets.len() == 1), "l'onglet se ferme à la fin de son écriture : {}", b.app.status);
+    assert_eq!(rouge_sur_disque(&a), 150);
+    assert_eq!(rouge(&b), 90, "l'autre projet est resté affiché");
+    // Fermer l'onglet affiché pendant qu'il s'écrit (rien de modifié depuis le cliché) : la fermeture suit l'écriture.
+    let mut c = banc(projet(120, 5), false);
+    c.app.path = Some(dir.join("C").join("C.pelure"));
+    modifier(&mut c, 121);
+    onglet_avec(&mut c, projet(1, 1));
+    assert!(c.app.activer_onglet(0));
+    assert!(c.app.save());
+    c.app.fermer_onglet(0);
+    assert!(c.app.after_save.is_some(), "la fermeture attend l'écriture");
+    assert!(jusqu_a(&mut c, Duration::from_secs(60), |c| c.app.onglets.len() == 1));
+    assert_eq!(rouge_sur_disque(&dir.join("C").join("C.pelure")), 121);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_stroke_in_progress_ends_in_its_own_tab_when_switching() {
+    let mut b = banc(projet(200, 2), false);
+    b.app.begin_paint(pos2(40.0, 40.0), 1.0, false);
+    b.app.stroke_to(pos2(90.0, 70.0), 1.0);
+    assert!(b.app.stroke.is_some() || b.app.vstroke.is_some(), "un trait est en cours");
+    onglet_avec(&mut b, projet(90, 2));
+    assert!(b.app.stroke.is_none() && b.app.vstroke.is_none(), "le nouvel onglet n'a pas de trait en cours");
+    assert!(b.app.history.is_empty() && !b.app.modified);
+    assert!(b.app.activer_onglet(0));
+    assert!(b.app.stroke.is_none() && b.app.vstroke.is_none(), "le trait s'est terminé dans son onglet");
+    assert!(b.app.history.serial() > 0 && b.app.modified, "une étape d'annulation, dans le premier onglet");
+}
+
+#[test]
+fn a_project_file_dropped_on_the_window_opens_in_a_tab() {
+    let dir = dossier("onglets-depot");
+    let mut a = banc(projet(77, 2), false);
+    let chemin = enregistrer_a(&mut a, &dir, "Depose");
+    let mut b = banc(projet(1, 1), false);
+    assert!(!b.app.import_dropped_project(&dir.join("notes.txt")));
+    assert!(b.app.import_dropped_project(&chemin));
+    assert!(jusqu_a(&mut b, Duration::from_secs(60), |b| b.app.open_job.is_none()));
+    b.chauffer(2);
+    assert_eq!(b.app.onglets.len(), 2);
+    assert_eq!(rouge(&b), 77);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -633,6 +701,22 @@ fn quitting_waits_for_a_save_in_a_hidden_tab() {
 
 // ---------------------------------------------------------------------------------------------- caches
 
+/// Les fils de vignettes n'ont plus rien à faire pour l'onglet caché `i` (au plus dix secondes d'attente : un calcul
+/// déjà commencé finit de lui-même quand il voit qu'on l'a abandonné).
+fn calme_de_l_onglet(b: &Banc, i: usize) -> bool {
+    let t = Instant::now();
+    loop {
+        let e = b.app.onglets[i].etat.as_ref().expect("rangé");
+        if e.thumbs.outstanding() == 0 && !e.layer_thumbs.busy() {
+            return true;
+        }
+        if t.elapsed() > Duration::from_secs(10) {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
+
 /// Des images jusqu'à ce que les vignettes de l'onglet affiché soient faites ; leur teinte moyenne.
 fn teinte_du_montage(b: &mut Banc) -> [f32; 3] {
     b.attendre_vignettes();
@@ -681,9 +765,8 @@ fn thumbnails_asked_before_a_switch_never_answer_the_new_tab() {
     assert!(b.app.nouvel_onglet());
     assert!(b.app.charger_projet(projet_plein(Color32::from_rgb(20, 20, 220), 2)));
     b.app.welcome = false;
-    let range = b.app.onglets[0].etat.as_ref().expect("rangé");
-    assert_eq!(range.thumbs.outstanding(), 0, "plus de demande en file pour l'onglet caché");
-    assert!(!range.layer_thumbs.busy());
+    // (Un calcul déjà parti s'arrête de lui-même, dès qu'il voit son abandon : on lui laisse le temps de le voir.)
+    assert!(calme_de_l_onglet(&b, 0), "plus de demande en file ni en calcul pour l'onglet caché");
     let bleu = teinte_du_montage(&mut b);
     assert!(bleu[2] > 150.0 && bleu[0] < 100.0, "{bleu:?}");
 }
@@ -791,8 +874,9 @@ fn hidden_tabs_run_nothing_and_hold_no_pending_work() {
     onglet_avec(&mut b, projet(1, 1));
     let range = b.app.onglets[0].etat.as_ref().expect("rangé");
     assert!(!range.playing, "la lecture s'arrête avec l'onglet");
-    assert_eq!(range.thumbs.outstanding(), 0);
     assert!(!range.rejeu.has_pending());
+    assert!(calme_de_l_onglet(&b, 0), "plus de vignette en file ni en calcul pour l'onglet caché");
+    let range = b.app.onglets[0].etat.as_ref().expect("rangé");
     // Des images pendant que l'autre onglet est affiché : l'onglet caché ne change pas d'un bit.
     let version_avant = range.doc.cels.values().map(|c| c.version).sum::<u64>();
     let serie_avant = range.history.serial();
@@ -1037,6 +1121,38 @@ fn the_strip_shows_each_tab_and_answers_clicks() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Peint la fenêtre avec trois onglets (un modifié, un survolé) dans un PNG, pour regarder la bande :
+/// `SHOT_CAPTURE_DIR=… cargo test --release --offline --target-dir target\msvc capture_the_strip -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn capture_the_strip() {
+    let Ok(sortie) = std::env::var("SHOT_CAPTURE_DIR") else {
+        println!("SHOT_CAPTURE_DIR n'est pas défini : rien à peindre");
+        return;
+    };
+    let dir = dossier("onglets-capture");
+    let mut b = banc(projet_plein(Color32::from_rgb(220, 90, 40), 3), true);
+    enregistrer_a(&mut b, &dir, "La poursuite");
+    onglet_avec(&mut b, projet_plein(Color32::from_rgb(40, 120, 220), 3));
+    enregistrer_a(&mut b, &dir, "Bus de nuit (v2)");
+    modifier(&mut b, 91);
+    onglet_avec(&mut b, projet_plein(Color32::from_rgb(60, 180, 90), 3));
+    b.app.activer_onglet(1);
+    b.chauffer(6);
+    let p = places(&b);
+    // La souris sur le premier onglet (survol, croix visible).
+    b.image(vec![Event::PointerMoved(p[0].1.center() - egui::vec2(30.0, 0.0))], 1.0 / 60.0);
+    b.chauffer(3);
+    let Some(rgba) = b.capturer() else {
+        println!("pas de carte graphique : rien à peindre");
+        return;
+    };
+    let fichier = Path::new(&sortie).join("onglets-bande.png");
+    image::save_buffer(&fichier, &rgba, 1920, 1080, image::ColorType::Rgba8).expect("png");
+    println!("ONGLETS capture : {}", fichier.display());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn a_modified_tab_is_marked_and_a_dialog_freezes_the_strip() {
     let mut b = banc(projet(200, 2), false);
@@ -1155,14 +1271,15 @@ fn each_tab_has_its_own_rescue_copy_and_a_crash_offers_every_project() {
     onglet_avec(&mut b, projet(90, 2));
     assert!(b.app.recovery.is_some(), "le nouvel onglet a la sienne");
     modifier(&mut b, 91);
-    // Passer d'un onglet modifié à l'autre lance sa copie tout de suite.
+    // Changer d'onglet ne prend aucun cliché (il reste instantané) : le premier onglet, caché, a sa copie au rythme du
+    // délai, comme l'onglet affiché. Ici le délai est nul.
     assert!(b.app.activer_onglet(0));
     assert!(b.app.activer_onglet(1));
+    assert!(b.app.onglets[0].etat.as_ref().expect("rangé").recovery.as_ref().is_some_and(|r| !r.busy() && r.info.copied.is_none()), "rien n'a été copié par le changement lui-même");
+    assert!(b.app.tick_secours_cache(0, Some(Duration::ZERO)).is_some(), "la copie du premier onglet part");
+    // (Les images d'écran suivantes terminent la copie : `tick_onglets`.)
     assert!(
-        jusqu_a(&mut b, Duration::from_secs(60), |b| {
-            let e = b.app.onglets[0].etat.as_ref().expect("rangé");
-            e.recovery.as_ref().is_some_and(|r| !r.busy() && r.info.copied.is_some())
-        }),
+        jusqu_a(&mut b, Duration::from_secs(60), |b| b.app.onglets[0].etat.as_ref().expect("rangé").recovery.as_ref().is_some_and(|r| !r.busy() && r.info.copied.is_some())),
         "la copie du premier onglet (caché) se termine"
     );
     // Le deuxième est affiché : sa copie est celle du délai ; on la demande.
@@ -1279,8 +1396,27 @@ fn perf_tabs() {
     for k in 1..4 {
         onglet_avec(&mut b, crate::perf_tests::projet_long(30, 3, 24, 6));
         b.chauffer(10);
-        println!("ONGLETS mémoire : {} projets ouverts {:.0} Mo (+{:.0} Mo pour le dernier)", k + 1, memoire_mo(), memoire_mo() - un_projet);
+        let maintenant = memoire_mo();
+        println!("ONGLETS mémoire : {} projets ouverts {maintenant:.0} Mo (+{:.0} Mo depuis le premier, {:.0} Mo par projet de plus)", k + 1, maintenant - un_projet, (maintenant - un_projet) / k as f64);
     }
+    // Au repos avec quatre onglets : le processeur que le processus consomme en trois secondes (les fils de fond,
+    // l'interface ne tourne pas pendant ce temps).
+    fn processeur_ms() -> f64 {
+        let sortie = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-Command", &format!("(Get-Process -Id {}).TotalProcessorTime.TotalMilliseconds", std::process::id())])
+            .output()
+            .expect("powershell");
+        String::from_utf8_lossy(&sortie.stdout).trim().replace(',', ".").parse::<f64>().unwrap_or(0.0)
+    }
+    assert!(se_reposer(&mut b, 3000) < 3000);
+    let avant_cpu = processeur_ms();
+    std::thread::sleep(Duration::from_secs(3));
+    let apres_cpu = processeur_ms();
+    println!("ONGLETS repos : quatre onglets ouverts, {:.0} ms de processeur en 3 s sans image d'écran", apres_cpu - avant_cpu);
+    // Pour comparer : des images d'écran sans changer d'onglet.
+    let mut calmes: Vec<f64> = (0..60).map(|_| b.image(Vec::new(), 1.0 / 60.0).total()).collect();
+    calmes.sort_by(f64::total_cmp);
+    println!("ONGLETS image d'écran sans changement d'onglet : médiane {:.2} ms (p95 {:.2})", calmes[30], calmes[57]);
     // Changer d'onglet : l'action seule, puis l'image d'écran qui montre le nouvel onglet.
     let mut actions = Vec::new();
     let mut images = Vec::new();
@@ -1291,6 +1427,29 @@ fn perf_tabs() {
         let m = b.image(Vec::new(), 1.0 / 60.0);
         images.push(m.total());
     }
+    // Avec la copie de secours active : changer d'onglet ne prend aucun cliché (elle suit le délai, `tick_onglets`).
+    b.app.secours_actif = true;
+    b.app.settings.autosave_minutes = 1;
+    let mut avec_secours = Vec::new();
+    for k in 0..24 {
+        if k < 4 {
+            b.app.demarrer_secours();
+            b.app.activer_onglet(k % 4);
+            b.app.demarrer_secours();
+        }
+        b.app.record_step();
+        let t = Instant::now();
+        assert!(b.app.activer_onglet((b.app.actif + 1) % 4));
+        avec_secours.push(t.elapsed().as_secs_f64() * 1e3);
+        b.image(Vec::new(), 1.0 / 60.0);
+    }
+    avec_secours.sort_by(f64::total_cmp);
+    println!(
+        "ONGLETS changement d'onglet depuis un onglet modifié, copie de secours active (aucun cliché au changement) : médiane {:.3} ms (max {:.3})",
+        avec_secours[avec_secours.len() / 2],
+        avec_secours[avec_secours.len() - 1]
+    );
+    b.app.secours_actif = false;
     actions.sort_by(f64::total_cmp);
     images.sort_by(f64::total_cmp);
     let med = |v: &Vec<f64>| v[v.len() / 2];
