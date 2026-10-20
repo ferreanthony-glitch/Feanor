@@ -264,6 +264,18 @@ impl App {
             {
                 self.add_scene_background();
             }
+            if self
+                .bouton(
+                    ui,
+                    ph::PALETTE,
+                    "Nouveau calque de couleur",
+                    "Un calque de couleur sous le trait du calque courant : on colorie dessous sans abîmer le trait, et il suit les images du trait. Le pot de peinture remplit la zone fermée par le trait.",
+                    "calque.nouveau_couleur",
+                )
+                .clicked()
+            {
+                self.new_colour_layer();
+            }
             // Calque d'effet (`prereglagesui.rs`) : un menu de préréglages (impact frame, lueur, flash,
             // tremblement, timecode…) ou un calque d'effet vide.
             let resp = ui.menu_button(egui::RichText::new(ph::SPARKLE), |ui| self.effect_preset_menu(ui)).response;
@@ -347,6 +359,10 @@ impl App {
                 let l = &self.layers()[li];
                 (l.id, l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame), l.folder, l.ctg.is_some(), l.fond.is_some())
             };
+            // Calque de couleur : rangé sous son trait, en retrait ; calque de trait : le nombre de
+            // couleurs qu'il porte (`calquecouleur.rs`).
+            let colour_of = crate::calquecouleur::trait_de(self.layers(), li).map(|ti| self.layers()[ti].name.clone());
+            let colours = crate::calquecouleur::couleurs_de(self.layers(), li).len();
             // Code couleur de sa sorte (bitmap vert, vectoriel bleu, CTG rose ; Anthony, 2026-10-17).
             let cfx = self.layers()[li].effet.is_some();
             let hue = if folder {
@@ -375,6 +391,9 @@ impl App {
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = vec2(3.0, 0.0);
+                        if colour_of.is_some() {
+                            ui.add_space(14.0);
+                        }
                         let eye = if visible { ph::EYE } else { ph::EYE_SLASH };
                         let resp = ui.add(egui::Button::new(RichText::new(eye).size(15.0)).frame(false).min_size(vec2(20.0, 36.0)));
                         let resp = crate::bulles::bulle(resp, "Afficher / masquer", "Montrer ou cacher le calque.", "");
@@ -431,6 +450,7 @@ impl App {
                                 _ if folder => "dossier",
                                 _ if cfx => "effet",
                                 _ if ctg => "CTG",
+                                _ if colour_of.is_some() => "couleur",
                                 LayerKind::Vector => "vectoriel",
                                 LayerKind::Bitmap => "bitmap",
                             };
@@ -438,6 +458,13 @@ impl App {
                             ui.horizontal(|ui| {
                                 ui.spacing_mut().item_spacing.x = 4.0;
                                 ui.label(if folder || current { label.weak() } else { label.color(hue) });
+                                if let Some(line) = &colour_of {
+                                    ui.label(RichText::new(format!("{} sous {line}", ph::LINK_SIMPLE)).small().weak())
+                                        .on_hover_text("Calque de couleur : ses images suivent celles du calque de trait. On colorie dessous, le trait reste intact.");
+                                } else if colours > 0 {
+                                    ui.label(RichText::new(format!("{} {colours}", ph::PALETTE)).small().weak())
+                                        .on_hover_text("Ce calque de trait porte des calques de couleur, rangés juste dessous.");
+                                }
                                 // Plusieurs calques choisis : une marque pour chacun, et une autre
                                 // pour le courant (c'est lui que les réglages montrent).
                                 if several && current {
@@ -503,9 +530,8 @@ impl App {
             }
         }
         if let Some(li) = toggle {
-            self.record_step();
-            let layer = &mut self.layers_mut()[li];
-            layer.visible = !layer.visible;
+            // (Un calque de trait emmène ses calques de couleur.)
+            self.toggle_layer_visible(li);
         }
         if let Some(li) = lock {
             self.toggle_layer_lock(li);
@@ -529,6 +555,7 @@ impl App {
                 self.action_item(ui, "Nouveau calque vectoriel", "calque.nouveau_vectoriel");
                 self.action_item(ui, "Nouveau calque bitmap", "calque.nouveau_bitmap");
                 self.action_item(ui, "Nouveau calque de fond", "calque.nouveau_fond");
+                self.action_item(ui, "Nouveau calque de couleur (sous le calque courant)", "calque.nouveau_couleur");
                 ui.separator();
                 self.action_item(ui, "Coller le calque", "calque.coller");
             });

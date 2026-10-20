@@ -469,7 +469,7 @@ fn the_effects_file_round_trips_with_the_project() {
     assert_eq!(loaded.doc.audio_tracks, doc.audio_tracks);
     // Les effets des sons n'ont pas de version du projet à eux : ils sont à côté du manifeste (la 27 est
     // celle des calques d'effets).
-    assert_eq!(project::VERSION, 27);
+    assert!(project::VERSION >= 27);
     std::fs::remove_dir_all(&dir).ok();
 }
 

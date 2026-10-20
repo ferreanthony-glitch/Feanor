@@ -939,6 +939,76 @@ fond du décor. La couleur d'un fond neuf se règle par projet (Fichier > Régla
 « Couleur des fonds sous le trait », par exemple un gris clair) ; « Aux fonds déjà posés » la
 donne à tous les fonds du projet.
 
+## Calque de couleur (la couleur sous le trait)
+
+Pour colorier sans abîmer le trait : un **calque de couleur** est lié à un calque de dessin (le
+« trait »), posé juste dessous, et il en suit les images. C'est l'idée « trait / couleur » de
+Toon Boom ; la façon exacte de Storyboard Pro ou de Harmony n'a pas été vérifiée (à vérifier).
+
+- **Créer** : l'icône palette du panneau Calques (« Nouveau calque de couleur »), Calques > Nouveau
+  calque > « De couleur », clic droit sur un calque > « Calque de couleur » > « Ajouter… », ou Ctrl+K.
+  Il se range sous le trait du calque courant, en retrait, avec la mention « sous le trait » ; un
+  trait peut en porter plusieurs. Ctrl+Z annule d'un coup.
+- **Les images suivent le trait** : pour chaque image où le trait montre un dessin, la couleur a le
+  sien (vide au début). Poser, allonger, déplacer ou supprimer une clé du trait emmène sa couleur ;
+  « Nouveau dessin en copie » emporte la couleur du dessin copié. On ne pose pas de clé sur la couleur
+  elle-même (le message le dit : fais-le sur le trait). Le pré / post-comportement, la
+  transformation et la profondeur du trait sont ceux de sa couleur.
+- **Colorier** : le pinceau et le crayon peignent comme sur un calque bitmap ; par défaut, un trait
+  de pinceau **reste dans la zone fermée** où il commence (et passe sous le trait). Le **pot de
+  peinture** remplit la zone fermée par le trait où l'on clique, sous le trait (les trous du trait
+  jusqu'à 8 px sont fermés, réglable dans le menu du calque). Un clic dehors colorie tout le dehors,
+  et le message prévient quand la zone fuit par un trou. Le trait n'est jamais touché ; la gomme n'est
+  pas limitée à la zone.
+- **Trait vectoriel ou bitmap** : la couleur est toujours en pixels (un aplat n'a pas besoin d'être
+  modifiable point par point) ; le pot de peinture lit les pixels rendus du trait, quel que soit le calque.
+- **Ensemble** : l'œil du trait cache aussi sa couleur (l'œil de la couleur la cache seule) ; supprimer
+  ou dupliquer le trait supprime ou duplique ses couleurs ; copier-coller le trait les emmène ; le
+  monter ou le descendre déplace la couleur avec lui (la couleur seule ne se déplace pas). **Indépendants** : le
+  verrou (on colorie sous un trait verrouillé), l'opacité, le mode de fusion, la pelure d'oignon et les
+  effets de chaque calque. Un effet du trait (tremblement…) ne bouge donc pas la couleur : à vérifier
+  si c'est ce que tu veux.
+- **Détacher** (clic droit > Calque de couleur) : la couleur redevient un calque bitmap ordinaire, aux
+  images à elle. Si le trait disparaît (fusion, suppression), le lien s'oublie tout seul et la couleur reste.
+- **Fond sous le trait** (juste au-dessus) : l'autre façon d'avoir de la couleur sous le trait, dans le
+  même calque. Les deux se cumulent (la strate du trait, puis la couleur, puis le trait) ; ce qui
+  les distingue : le fond est déduit du trait (une seule forme, pas de choix de couleur par zone), la
+  couleur se colorie zone par zone, avec ses propres images.
+- Export, PDF, vignettes, montage, export Storyboard Pro : la couleur est un calque bitmap de plus
+  (l'export Storyboard Pro le dit : le lien trait / couleur n'y existe pas, à vérifier).
+- Projets : format **30** (un projet enregistré ainsi n'est pas lisible par une version d'avant) ; un projet
+  d'avant s'ouvre tel quel. Détails : `src/calquecouleur.rs`, `docs/INTERFACE.md` partie 18.
+
+## Toile infinie (dessiner hors de la feuille)
+
+La feuille n'est plus une page cernée d'une ombre : on peut dessiner **n'importe où autour d'elle**, comme
+dans Storyboard Pro (le fonctionnement exact de Storyboard Pro est **à vérifier**, SHOT reprend l'idée).
+
+- **À l'écran** : le papier (ou le damier, ou le noir de l'arrière-plan) couvre tout ce que la vue regarde,
+  plus d'ombre ni de zone hachurée autour de la feuille. Le **cadre de la caméra** est un trait fin et
+  discret ; « Estomper le hors-champ » (Caméra) voile, plus légèrement, tout ce qui est autour du cadre.
+- **Dessiner** : le pinceau, le crayon, la gomme et les formes vont où on les mène, coordonnées négatives
+  comprises (de −32 768 à 32 768 pixels autour de la feuille). Les traits vectoriels n'ont pas de limite
+  de feuille. Une zone où l'on n'a rien dessiné ne coûte aucune mémoire (tuiles de 64 px à la demande).
+- **Annuler / rétablir, enregistrer, ouvrir** : comme pour le reste. Ce qui est hors de la feuille est
+  gardé dans deux petits fichiers par dessin (`<n>_hors.png` et `<n>_hors.json`), lus seulement s'il y en a ;
+  un fichier abîmé ne coûte que le hors-feuille. Un projet d'avant s'ouvre tel quel, identique.
+- **Caméra, export, PDF** : le cadre de la caméra peut regarder ce qui est hors de la feuille, l'image
+  exportée le montre ; une caméra qui regarde un endroit vide donne du papier.
+- **Pipette** : prend aussi hors de la feuille.
+- **Ajuster à la fenêtre** (bouton de la barre sous le dessin) : cadre toujours la **caméra** (la feuille, pour un nouveau plan), avec
+  un peu d'air autour, et non « tout ce qui est dessiné » (choix de SHOT ; le comportement de Storyboard Pro
+  est à vérifier). Le zoom va de 2 % à 6 400 %, le défilement n'a pas de bord.
+- **Limites connues** (à la feuille seulement) : le pot de peinture (il cherche ses contours sur la feuille ;
+  hors d'elle il le dit et ne fait rien) ; les zones bitmap sélectionnées (lasso, baguette) ; les effets de
+  calque, les calques d'ajustement, le fond sous le trait, les calques de couleur, les déformations
+  (enveloppe, perspective) ; l'import et l'export Storyboard Pro ; la propagation. Ce qui est dessiné hors de
+  la feuille s'y voit, s'y exporte, mais ces fonctions ne le touchent pas.
+- **En dessous** : la feuille se compose comme avant (carte graphique) ; le reste du monde visible est une
+  texture composée par le processeur (`src/monde.rs`), seulement là où il y a du dessin, par petits morceaux
+  (5 ms par image au plus), de 4 096 px de côté au plus (réduite quand on dézoome beaucoup). Un trait loin de la
+  feuille ne recompose que les tuiles qu'il touche. Mesure : 12 traits de 20 points à 12 000 px de la feuille,
+  puis 40 défilements, pire image 2,4 ms. Détails : `docs/ARCHITECTURE.md` « Toile infinie ».
 ## Couleur des plans
 
 Pour repérer les plans d'un coup d'œil : clic droit sur un plan de la bande du montage (ou sur
@@ -1595,7 +1665,7 @@ plateau, la vue est celle qu'on avait laissée. « Sécurité » trace les zones
 de la caméra, le reste estompé, pour composer une version pour les réseaux. Ces cadres suivent la
 caméra et ne s'exportent pas.
 
-**Plateau en 3D** (bouton 3D, barre de commandes ou barre de la vue) : les calques du plan
+**Plateau en 3D** (bouton 3D de la barre sous le dessin, ou Affichage > Plateau) : les calques du plan
 sont des plans posés à leur profondeur, la caméra une pyramide de vision (avec sa course si elle
 bouge), sur un sol quadrillé. Outils : tourner autour, glisser la vue, avancer / reculer ; partout,
 molette = avancer, bouton du milieu = glisser, clic droit ou Alt + glisser = tourner. Outil
@@ -1603,7 +1673,7 @@ Déplacer : glisser un calque le déplace dans son plan, Maj + glisser change sa
 l'œil de la caméra la déplace (Maj : avancée ; Ctrl : la tourner, panoramique et bascule). Boutons Face, Dessus, Côté, « Par la caméra », et
 recadrer. Pour dessiner, on revient au plateau à plat (bouton 3D).
 
-**Scène 3D de blocage** (bouton « Scène 3D » de la barre au-dessus du dessin, ou Affichage > Plateau) :
+**Scène 3D de blocage** (bouton « Scène 3D » de la barre sous le dessin, ou Affichage > Plateau) :
 une vue 3D pour poser des formes simples et des mannequins, placer la caméra, puis envoyer le résultat dans un
 calque de fond sur lequel dessiner. Les réglages sont dans le panneau Réglages.
 - **Formes** : cube, plan (sol, mur), cylindre, sphère, cône, escalier (nombre de marches), **mannequin**
@@ -1750,6 +1820,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `calqueffet.rs`, `fxcine.rs` | Calques d'effets (ajustement, incrustation) : repère du plan, dessin dérivé de ce qui est dessous, enregistrement ; effets « Cinéma » (flash, impact, lueur diffuse, secousse, vignettage, grain, aberration) |
 | `prereglages.rs`, `prereglagesui.rs`, `incrustation.rs` | Préréglages d'effets (clés posées à la tête de lecture), fenêtre à aperçu en direct et menus ; texte des incrustations (timecode…) et son tracé |
 | `ctg.rs`, `ctgui.rs` | Calque CTG : remplissage par graffitis, sources, structure (13j) |
+| `calquecouleur.rs`, `calquecouleurui.rs` | Calque de couleur sous le trait : lien, miroir des images du trait, murs et zones fermées (pot de peinture, pinceau dans la zone), commandes et menu |
 | `video.rs`, `videoui.rs` | Calque vidéo : import par ffmpeg, images lues à la demande (13k) |
 | `tween.rs`, `tweenui.rs` | Interpolation : intervalles vectoriels, fondus, étirement, cadence (13l) |
 | `xml.rs`, `sboard.rs` | Lecture d'un XML en arbre ; lecture d'un projet Storyboard Pro (14a) |
@@ -1766,7 +1837,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `sbexport.rs`, `sbexportui.rs` | Export vers Storyboard Pro : images des calques, sons, script de construction ; sa fenêtre (14b-1) |
 | `stretch.rs` | Vitesse d'un son : rééchantillonnage, tempo sans changer la hauteur (WSOLA) (14a) |
 | `fill.rs` | Remplissage par zone et débord |
-| `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra |
+| `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra, tuiles du monde (toile infinie) |
+| `monde.rs` | Toile infinie à l'écran : texture du monde hors de la feuille, composée par le processeur par petits morceaux |
 | `gpu.rs` | Composition et affichage par la carte graphique, envoi des dessins par tuiles ; une texture par dessin à la taille de son contenu (pas de la feuille) et image composée gardée tant que rien ne change |
 | `playback.rs` | Lecture fluide : dessins envoyés d'avance, cadence affichée |
 | `export.rs`, `exportui.rs` | Exports : film (ffmpeg), images, son, PDF ; fenêtres de choix et de progression |

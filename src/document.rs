@@ -81,7 +81,7 @@ impl Cel {
     pub fn is_empty(&self) -> bool {
         match &self.vector {
             Some(v) => v.elements.is_empty(),
-            None => self.raster.tiles.iter().all(Option::is_none),
+            None => self.raster.is_blank(),
         }
     }
 
@@ -91,9 +91,8 @@ impl Cel {
             return Vec::new();
         };
         let fresh = v.render(self.raster.width, self.raster.height);
-        let changed = (0..fresh.tiles.len())
-            .filter(|&i| self.raster.tiles[i].is_some() || fresh.tiles[i].is_some())
-            .collect();
+        // (Toile infinie : les tuiles hors de la feuille comptent aussi.)
+        let changed = self.raster.ids_either(&fresh);
         self.raster = fresh;
         self.version += 1;
         changed
@@ -106,10 +105,10 @@ impl Cel {
     pub fn render_on_top(&mut self, before: Vec<(usize, Option<crate::raster::Tile>)>, element: &crate::vector::Element) -> Vec<usize> {
         let mut changed: Vec<usize> = before.iter().map(|t| t.0).collect();
         for (i, t) in before {
-            self.raster.tiles[i] = t;
+            self.raster.replace_slot(i, t);
         }
         crate::vector::render_element(&mut self.raster, element);
-        changed.extend(crate::vector::tiles_in(&self.raster, element.bounds().expand(1.5)));
+        changed.extend(crate::vector::tiles_in_world(&self.raster, element.bounds().expand(1.5)));
         changed.sort_unstable();
         changed.dedup();
         self.version += 1;
@@ -124,17 +123,18 @@ impl Cel {
         let Some(v) = &self.vector else {
             return Vec::new();
         };
-        let tiles = crate::vector::tiles_in(&self.raster, region);
+        let tiles = crate::vector::tiles_in_world(&self.raster, region);
         if tiles.is_empty() {
             return tiles;
         }
-        // Rectangle exact des tuiles : on y redessine tout, pixel pour pixel.
+        // Rectangle exact des tuiles (entières, hors de la feuille comprises) : on y redessine tout,
+        // pixel pour pixel.
         let clip = tiles.iter().fold(Rect::NOTHING, |r, &i| {
-            let (x, y, w, h) = self.raster.tile_bounds(i);
-            r.union(Rect::from_min_size(pos2(x as f32, y as f32), vec2(w as f32, h as f32)))
+            let (x, y) = self.raster.tile_origin(i);
+            r.union(Rect::from_min_size(pos2(x as f32, y as f32), vec2(crate::raster::TILE as f32, crate::raster::TILE as f32)))
         });
         for &i in &tiles {
-            self.raster.tiles[i] = None;
+            self.raster.replace_slot(i, None);
         }
         for e in &v.elements {
             if e.bounds().expand(1.5).intersects(clip) {
@@ -328,6 +328,9 @@ pub struct Layer {
     /// dessous (ajustement) ou du texte sur l'image finale (incrustation) ; ses images sont ses
     /// expositions.
     pub effet: Option<crate::calqueffet::CalqueEffet>,
+    /// Calque de couleur (`calquecouleur.rs`) : la couleur sous le trait d'un autre calque. Ses
+    /// images suivent celles de ce calque de trait ; on y colorie sans abîmer le trait.
+    pub couleur: Option<crate::calquecouleur::CalqueCouleur>,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -394,7 +397,14 @@ impl Layer {
             video: None,
             fond: None,
             effet: None,
+            couleur: None,
         }
+    }
+
+    /// Les images de ce calque suivent celles d'un autre (calque de couleur) : on n'y pose, déplace
+    /// ni supprime de clé soi-même.
+    pub fn keys_follow_line(&self) -> bool {
+        self.couleur.is_some()
     }
 
     /// Nouveau dossier de calques (13b-5), vide.
@@ -605,6 +615,10 @@ pub fn relink_copies(layers: &mut [Layer], old_ids: &[u64], cels: &HashMap<CelId
             for s in &mut ctg.sources {
                 *s = ids.get(s).copied().unwrap_or(*s);
             }
+        }
+        // Calque de couleur copié avec son trait : il colore la copie, avec les copies des dessins.
+        if let Some(c) = &mut l.couleur {
+            c.relink(&ids, cels);
         }
     }
 }
@@ -1768,6 +1782,10 @@ impl Document {
         for (i, lb) in next.layers.into_iter().filter(|l| l.scene_wide.is_none()).enumerate() {
             if let Some(&k) = own.get(i).filter(|&&k| a.layers[k].kind == lb.kind) {
                 let la = &mut a.layers[k];
+                // Deux calques de couleur qui se suivent : les couleurs du second gardent leur trait.
+                if let (Some(ca), Some(cb)) = (la.couleur.as_mut(), lb.couleur.as_ref()) {
+                    ca.dessins.extend(cb.dessins.iter().map(|(t, c)| (*t, *c)));
+                }
                 la.append_at(a_len, lb.frames, &lb.roles);
                 la.trim();
             } else {

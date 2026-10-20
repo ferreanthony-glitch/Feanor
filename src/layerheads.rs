@@ -136,6 +136,8 @@ struct Head {
     ctg: bool,
     /// Calque d'effet (`calqueffet.rs`) : une étincelle cyan à la place de la lettre.
     cfx: bool,
+    /// Calque de couleur (`calquecouleur.rs`) : la lettre C, la ligne décalée sous son trait.
+    couleur: bool,
     visible: bool,
     locked: bool,
     onion: bool,
@@ -285,6 +287,7 @@ impl App {
                 kind: l.kind,
                 ctg: l.ctg.is_some(),
                 cfx: l.effet.is_some(),
+                couleur: l.couleur.is_some(),
                 visible: l.visible,
                 locked: l.locked,
                 onion: l.onion,
@@ -305,7 +308,7 @@ impl App {
         let current = li == self.cur_layer;
         let visuals = ui.visuals().clone();
         // Calque rangé dans un dossier : la ligne est décalée, un trait la relie à son dossier.
-        let rect = if h.in_folder {
+        let rect = if h.in_folder || h.couleur {
             let gap = Rect::from_min_size(rect.min, vec2(INDENT, rect.height()));
             ui.painter().rect_filled(gap.shrink2(vec2(5.0, 0.0)), 0.0, theme::texte_doux().gamma_multiply(0.6));
             Rect::from_min_max(pos2(rect.left() + INDENT, rect.top()), rect.max)
@@ -389,7 +392,7 @@ impl App {
         } else if h.cfx {
             painter.text(pos2(x0 - 1.0, line1), Align2::LEFT_CENTER, ph::SPARKLE, FontId::proportional(13.0), badge);
         } else {
-            painter.text(pos2(x0, line1), Align2::LEFT_CENTER, h.kind.badge(), FontId::monospace(11.0), badge);
+            painter.text(pos2(x0, line1), Align2::LEFT_CENTER, if h.couleur { "C" } else { h.kind.badge() }, FontId::monospace(11.0), badge);
         }
         let renaming = self.layer_rename.as_ref().is_some_and(|n| n.id == h.id && n.in_timeline);
         if renaming {
@@ -578,8 +581,8 @@ impl App {
 
     pub(crate) fn eye_button(&mut self, ui: &mut Ui, rect: Rect, li: usize, visible: bool, color: Color32) {
         let resp = icon_at(ui, rect, if visible { ph::EYE } else { ph::EYE_SLASH }, color);
-        if bulle(resp, "Afficher / cacher", "Montrer ou cacher le calque.", "").clicked() {
-            self.set_layer_flag(li, |l| l.visible = !l.visible);
+        if bulle(resp, "Afficher / cacher", "Montrer ou cacher le calque (et sa couleur, si c'est un trait).", "").clicked() {
+            self.toggle_layer_visible(li);
         }
     }
 
@@ -702,6 +705,10 @@ impl App {
     pub(crate) fn move_layer_to(&mut self, from: usize, to: usize) {
         let n = self.layers().len();
         if from >= n || to >= n || from == to {
+            return;
+        }
+        if self.layers()[from].couleur.is_some() {
+            self.status = "Un calque de couleur reste sous son calque de trait : déplace le trait, la couleur le suit.".into();
             return;
         }
         self.end_stroke();

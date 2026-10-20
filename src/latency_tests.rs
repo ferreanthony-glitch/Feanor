@@ -63,10 +63,13 @@ fn region_rerender_matches_full_rerender() {
         full.rerender();
         assert_eq!(same(&partial, &full), 0, "élément {i}");
     }
-    // Zone vide ou hors de la feuille : rien ne change.
+    // Zone vide ou hors de la feuille : rien ne change, et rien n'est alloué hors de la feuille (toile
+    // infinie : la zone existe, elle est seulement vide).
     let mut c = base.clone();
-    assert!(c.rerender_region(Rect::from_min_max(pos2(500.0, 500.0), pos2(600.0, 600.0))).is_empty());
+    c.rerender_region(Rect::from_min_max(pos2(500.0, 500.0), pos2(600.0, 600.0)));
     assert_eq!(same(&c, &base), 0);
+    // (Les traits de ce dessin débordent un peu de la feuille : ils ont leurs tuiles hors-feuille, rien de plus.)
+    assert_eq!(c.raster.outer.len(), base.raster.outer.len());
 }
 
 /// Précision de `thread::sleep` sous Windows (sensation des brosses, §2.6) : le rythme des images

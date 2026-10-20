@@ -1442,7 +1442,70 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   l'ouverture, `Document::enlarge_stage` double la feuille et décale tout le contenu au centre
   (dessins bitmap et vectoriels, guides) : le cadrage ne change pas.
 - Taille maximale du cadre : 4096 px (feuille 8192 px, limite des textures de la carte graphique).
+- Depuis la toile infinie, la feuille n'est plus la limite du dessin : voir « Toile infinie » plus bas.
 
+## Toile infinie (2026-10-20, branche `canevas-couleur`)
+
+Dessiner hors de la feuille, sans que rien de ce qui dépend de la feuille (annuler, carte graphique, effets,
+export, enregistrement) change pour les projets d'avant.
+
+- **Choix de stockage** : un `Raster` garde sa **fenêtre** (les tuiles de la feuille, rangées comme toujours,
+  `tiles[rang]`) et, en plus, `outer : BTreeMap<(i32, i32), Tile>` pour les tuiles hors de la feuille
+  (coordonnées de tuile signées). Numéro d'une tuile (`usize`, ce que gardent l'historique, les listes de
+  tuiles touchées…) : le rang dans la fenêtre, ou `OUTER | codage de (tx, ty)` (`outer_id`, `outer_key`). Le
+  code d'avant ne voit jamais un numéro hors fenêtre (il l'ignore) : rien n'a changé pour lui. Écartés : une
+  feuille qui s'agrandit (casse les numéros de l'historique, les textures de la carte plafonnent à 8 192) et
+  des marges par dessin (numéros instables).
+- **Limite** : `WORLD = 32 768` pixels de chaque côté de l'origine (`raster::WORLD`) ; au-delà, rien ne se
+  pose (pas de plantage). Une tuile de bord de la fenêtre garde sa part hors feuille dans sa propre tuile
+  (valide pour le code nouveau, ignorée par l'ancien).
+- **Pinceaux** (`brush.rs`) : le moteur peint par tuile du monde, `Raster::tile_mut(id)` crée la tuile voulue ;
+  le papier texturé et le grain se lisent en coordonnées signées. **Vectoriel** (`vector.rs`, `vtools.rs`) : le
+  rendu d'un dessin sait rendre hors de la feuille (`Place.open`, `Mask::open`) ; les chemins qui travaillent
+  sur une feuille flottante ou un aperçu restent bornés et identiques.
+- **Annuler** : `Edit::Tiles` porte les numéros ci-dessus (`replace_slot` sait les deux espaces). Une annulation
+  rend la mémoire.
+- **Composition sur processeur** (`render.rs`) : `composite_world_tile` compose une tuile du monde (papier,
+  calques transformés, modes de fusion, pelure), `composite_area` une zone, `plan_bounds` dit où le plan peut
+  montrer autre chose que du papier, `plan_world_tiles` quelles tuiles d'une zone portent du dessin. Dans la
+  feuille le résultat est celui d'avant, pixel pour pixel (essais). Les feuilles déformées par un maillage
+  (enveloppe, perspective) et les images d'une autre taille que la feuille (aperçus réduits d'effets) restent à
+  la feuille. L'image filmée (`camera_image`) lit le monde : la caméra peut regarder hors de la feuille.
+- **À l'écran** (`monde.rs`, `canvas.rs`) : la feuille se compose comme avant (carte graphique, `gpu.rs`, ou
+  `Renderer`) ; `Monde` compose, **par le processeur**, les tuiles du monde visible qui portent du dessin
+  hors de la feuille et en fait une texture posée **sous** la feuille (la feuille y est transparente). Les deux
+  se complètent pixel pour pixel. Écartée : agrandir les textures de la carte (`gpu.rs`) pour tout composer
+  par la carte : beaucoup plus de risque pour une carte plafonnée à 8 192 px, et la feuille aurait cessé d'être
+  identique à avant. Le prix : ce qui est hors de la feuille est composé par le processeur (seules les
+  tuiles dessinées ; pire image mesurée : 2,4 ms en dessinant et en défilant loin de la feuille) et ne passe pas par les effets de la carte.
+  - Zone : la vue ∩ `plan_bounds`, alignée sur des pages de 1 024 px ; refaite seulement si la vue en sort,
+    si le plan change, ou si on zoome assez pour demander plus fin. Texture ≤ 4 096 px de côté ; au-delà
+    réduite par 2, 4, 8… (moyenne des pixels prémultipliés) : 64 Mo la texture et autant sa copie en mémoire, au plus, lâchés dès que le plan n'a plus rien
+    hors de la feuille.
+  - **Sans latence** : jamais plus de `BUDGET` (5 ms) de composition par image ; le reste attend l'image
+    suivante (`request_repaint`), les tuiles les plus proches du centre de la vue d'abord ; les tuiles qu'un
+    trait vient de toucher (`Renderer::take_world_dirty`, numéros de tuiles) passent avant tout, et seule leur
+    bande est renvoyée à la texture. Un défilement de la vue dans la zone ne recompose rien.
+  - Fond : `paint_background` peint le papier, le damier (qui continue) ou le noir sur tout le monde visible
+    (plus d'ombre sous la feuille) ; une vignette de la planche ou une vue en perspective restent à la feuille.
+  - Caméra : `paint_camera` voile (si « Estomper le hors-champ », plus léger) tout l'écran autour du cadre au
+    lieu de la seule feuille, et trace un cadre fin et discret quand le cadre est la feuille.
+- **Enregistrement** (`project.rs`, format 30) : un dessin bitmap qui a quelque chose hors de la feuille écrit
+  `<n>_hors.png` (atlas : les tuiles bout à bout) et `<n>_hors.json` (leurs coordonnées), listés dans
+  `dessins_hors` du manifeste ; l'atlas et l'index passent par `prepare_save` / `SaveJob` comme le reste. À la
+  lecture, un fichier manquant ou abîmé n'empêche pas d'ouvrir (le hors-feuille est perdu, le reste non) ; un
+  dessin vectoriel ne garde rien à part (ses traits se rendent hors de la feuille aussi). Un projet sans dessin
+  hors feuille s'écrit comme avant, aux fichiers hors près (aucun).
+- **Ajuster à la fenêtre** : cadre la caméra du plan (`View::fit` sur `doc.frame`, 1,12 de marge hors caméra),
+  pas tout le contenu : c'est le choix de SHOT, simple et prévisible ; le choix de Storyboard Pro est **à
+  vérifier**.
+- **Reste borné à la feuille** : pot de peinture (`fill.rs` : image de la taille de la feuille), zones bitmap
+  (`PixelMask` : taille de la feuille), effets de calque et calques d'ajustement, fond sous le trait, calque de
+  couleur, enveloppe / perspective, import et export Storyboard Pro, propagation (`synthese/`, intact).
+- **Essais** : `toile_tests.rs` (numéros de tuiles, mémoire, annuler / rétablir, enregistrer / relire, fichier
+  abîmé, vecteur hors feuille, caméra, texture du monde pixel pour pixel contre `composite_area`, mise à jour
+  par tuiles, texture réduite, vitesse loin de l'origine, images d'écran complètes en rotation / miroir / caméra),
+  `export_tests.rs`, `latency_tests.rs`, `affichage_tests.rs`.
 ## Transformation de calque (depuis 2c-1)
 
 - `Layer::transform` (`LayerTransform`) : décalage, échelle uniforme, rotation, autour du centre

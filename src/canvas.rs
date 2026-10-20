@@ -108,15 +108,15 @@ impl App {
         let corners = corners_h.map(|c| c.0);
         // Vue en perspective (caméra tournée, 9f) : w des coins pour la carte graphique.
         let ws = self.view.persp.is_some().then(|| corners_h.map(|c| c.1));
-        if ws.is_none() {
-            painter.add(Shape::convex_polygon(
-                corners.iter().map(|p| *p + vec2(4.0, 5.0)).collect(),
-                Color32::from_black_alpha(110),
-                Stroke::NONE,
-            ));
-        }
+        // Toile infinie : la feuille n'est plus une page cernée d'une ombre, le papier et l'arrière-plan
+        // couvrent tout ce que la vue regarde, et ce qui est dessiné hors de la feuille s'y voit
+        // (`monde.rs`). Une vignette ou une vue en perspective restent à la feuille.
+        let world = (!self.in_card && ws.is_none()).then(|| self.visible_world(rect, size));
         // Arrière-plan (13e) : aucun → noir ; damier → cases des couleurs A et B sous les calques.
-        self.paint_background(ui.ctx(), &painter, corners, size);
+        self.paint_background(ui.ctx(), &painter, rect, size, world, plan.paper);
+        if let Some(view) = world {
+            self.paint_monde(ui.ctx(), &painter, rect, size, &plan, view);
+        }
         // Dessins des images qui viennent, à envoyer d'avance à la carte graphique (leurs effets
         // sont demandés au fil de fond en même temps).
         let ahead: Vec<crate::gpu::Ahead> = match &self.gpu {
@@ -228,6 +228,34 @@ impl App {
         }
         self.paint_cursor(ui.ctx(), &painter, &response);
         self.text_edit_window(ui.ctx());
+    }
+
+    /// La zone du monde (pixels de la toile infinie) que la vue regarde : le rectangle d'écran `rect`
+    /// ramené dans le monde, rotation et miroir compris, à un pixel près.
+    pub(crate) fn visible_world(&self, rect: Rect, size: egui::Vec2) -> crate::render::Area {
+        let pts = [rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom()].map(|p| self.view.to_canvas(rect, size, p));
+        let lo = pts.iter().fold((f32::MAX, f32::MAX), |(x, y), p| (x.min(p.x), y.min(p.y)));
+        let hi = pts.iter().fold((f32::MIN, f32::MIN), |(x, y), p| (x.max(p.x), y.max(p.y)));
+        if ![lo.0, lo.1, hi.0, hi.1].iter().all(|v| v.is_finite()) {
+            return crate::render::Area::sheet(&self.doc);
+        }
+        crate::render::Area::around((lo.0 - 1.0, lo.1 - 1.0), (hi.0 + 1.0, hi.1 + 1.0))
+    }
+
+    /// Pose sous la feuille ce que le plan montre hors d'elle (`monde.rs`).
+    fn paint_monde(&mut self, ctx: &egui::Context, painter: &egui::Painter, rect: Rect, size: egui::Vec2, plan: &crate::render::Plan, view: crate::render::Area) {
+        let (all, ids) = self.renderer.take_world_dirty();
+        let _t = crate::perf::section("composition : hors de la feuille");
+        let Some(shown) = self.monde.update(ctx, &self.doc, plan, view, all, &ids) else { return };
+        let a = shown.area;
+        let (x0, y0, x1, y1) = (a.x0 as f32, a.y0 as f32, a.x1 as f32, a.y1 as f32);
+        let mut mesh = egui::Mesh::with_texture(shown.id);
+        for (p, uv) in [pos2(x0, y0), pos2(x1, y0), pos2(x1, y1), pos2(x0, y1)].into_iter().zip([pos2(0.0, 0.0), pos2(1.0, 0.0), pos2(1.0, 1.0), pos2(0.0, 1.0)]) {
+            mesh.vertices.push(egui::epaint::Vertex { pos: self.view.to_screen(rect, size, p), uv, color: Color32::WHITE });
+        }
+        mesh.add_triangle(0, 1, 2);
+        mesh.add_triangle(0, 2, 3);
+        painter.add(Shape::mesh(mesh));
     }
 
     /// Scène et panneau en cours, en haut à droite du dessin.

@@ -708,7 +708,8 @@ glows, tremblements de caméra effectifs, timecode ». Détail : README (section
 
 ## 13. Scène 3D de blocage (2026-10-19, branche `scene3d`)
 
-Une vue de plus dans la barre au-dessus du dessin (icône cube, à côté de « Plateau en 3D » ; les deux s'excluent),
+Une vue de plus (icône cube, à côté de « Plateau en 3D » dans la barre sous le dessin ; les deux s'excluent ; depuis
+2026-10-20 la barre au-dessus du dessin ne les répète plus, elle ne montre que leurs outils quand l'une est active),
 avec ses réglages dans le panneau **Réglages** (qui montre la scène 3D tant qu'elle est ouverte). Tout y est
 en icônes avec bulle (nom, description, raccourci), comme le reste.
 
@@ -798,8 +799,9 @@ entre deux groupes), si la commande est dans la barre d'office, son icône, son 
 - **Rien n'est retiré** : chaque commande a son action dans `keymap::ACTIONS` (palette Ctrl+K, raccourci, assignation) ;
   les menus du haut sont inchangés (sauf le menu Plans du montage, dont l'icône « trois points » est devenue une liste
   à puces, pour ne pas ressembler à « Plus… »).
-- **Pas touchées** : la barre des panneaux à droite ; la barre sous le dessin et celle au-dessus (vue, caméra, plateau 3D,
-  **Scène 3D** — le cube —, zones de sécurité, format) : ce sont des vues, pas des commandes de ces trois barres ; la
+- **Pas touchées** : la barre des panneaux à droite ; la barre sous le dessin (vue, caméra, plateau 3D,
+  **Scène 3D** — le cube) et celle au-dessus (vue du plateau / caméra, zones de sécurité, format ; plus de boutons 3D
+  depuis 2026-10-20 : ils n'étaient que des doublons de ceux du bas, seuls les outils 3D y restent) : ce sont des vues, pas des commandes de ces trois barres ; la
   scène 3D reste aussi dans Affichage > Plateau et Ctrl+K. Proposition 4 de la partie 5 (miroir et table lumineuse sous
   « Plus… » dans la barre sous le dessin) : pas faite, elle n'était pas dans 6.3.
 - Le « Réglage Barres complètes » de 6.3 est remplacé par les épingles : épingler tout remet la barre complète.
@@ -977,3 +979,130 @@ Détail, formats et liste de contrôle : `docs/EXPORT_MONTAGE.md`. Code : `src/e
 2. Un export : la fenêtre reste vivante, les deux barres avancent, « Arrêter » efface le dossier.
 3. Le dossier produit : `media/` (un fichier par plan), `audio/`, les trois fichiers de montage, `LISEZ-MOI.txt`.
 4. Puis l'import dans Premiere Pro, DaVinci Resolve, Avid : voir la liste de `docs/EXPORT_MONTAGE.md` (« À vérifier par Anthony »).
+
+---------------------------------------------------------------------------------------------------
+
+## 18. Calque de couleur (la couleur sous le trait, 2026-10-20, branche `canevas-couleur`)
+
+Demande d'Anthony : pouvoir colorier sous le trait sans l'abîmer, avec des images qui suivent celles du trait
+(l'idée « trait / couleur » de Toon Boom ; le comportement exact de Storyboard Pro ou de Harmony n'a pas été
+vérifié : **à vérifier**, rien n'est copié). Code : `src/calquecouleur.rs` (modèle, miroir, zones),
+`src/calquecouleurui.rs` (commandes, menu, pot de peinture, pinceau dans la zone).
+
+### Vocabulaire et commandes
+
+- « Calque de couleur », « calque de trait », « sous le trait », « Pinceau dans la zone fermée », « Fermer les
+  trous jusqu'à N px », « Détacher du calque de trait ».
+- `calque.nouveau_couleur` (« Nouveau calque de couleur (sous le trait du calque courant) ») : icône palette du
+  panneau Calques (bulle : nom, raccourci, description), Calques > Nouveau calque > « De couleur », clic droit
+  sur un calque (vide du panneau compris) > « Nouveau calque de couleur » et « Calque de couleur » >
+  « Ajouter… », Ctrl+K. Aucune touche par défaut (bloc dans `keymap.toml`). `calque.detacher_couleur` : le
+  calque de couleur courant redevient un calque bitmap ordinaire.
+- Dans le panneau Calques : la ligne d'un calque de couleur est en retrait, avec « couleur » et « sous <trait> » ;
+  celle d'un trait en porte le nombre. Dans la timeline : la lettre C à la place de B / V, ligne décalée sous son trait.
+
+### Comportement
+
+| Opération | Sur le calque de trait | Sur le calque de couleur |
+|---|---|---|
+| Images (clés, expositions, trous) | La couleur les suit (miroir à chaque image d'écran et à chaque étape) | Refusé avec un message (« pose, déplace ou supprime les clés sur le trait ») ; poignées de la timeline et du montage absentes |
+| Nouveau dessin / copie / casser l'instance / dupliquer | Un dessin de trait copié emporte la couleur du dessin copié ; un nouveau dessin a une couleur vide | — |
+| Monter / descendre / glisser dans la pile | La couleur le suit, toujours juste dessous (dans le même dossier) | Refusé (« reste sous son calque de trait ») |
+| Œil | Cache aussi la couleur | Cache la couleur seule |
+| Verrou, opacité, mode de fusion, pelure d'oignon, effets, groupe | À chacun (on colorie sous un trait verrouillé) | À chacun |
+| Transformation, profondeur, pré / post-comportement | Ceux de la couleur | Recopiés du trait |
+| Supprimer | Emporte ses couleurs | La couleur seule |
+| Dupliquer, copier / coller | Les couleurs partent avec lui (leurs dessins sont copiés) ; coller dans un autre plan garde le lien | Une copie de plus sur le même trait (ou ordinaire si le trait n'est pas là) |
+| Fusionner avec le dessous | Le trait + sa couleur = un seul calque bitmap ordinaire | idem |
+| Trait disparu (fusion, coupe) | — | Le lien s'oublie, le calque reste |
+
+- **Annulation** : une commande = une étape (la couleur est accordée dans la même étape).
+- **Pot de peinture** : un clic remplit la zone fermée par le trait de l'image courante, sous le trait (la couleur
+  passe 2 px sous lui) ; les trous du trait jusqu'à 2 × N px sont fermés (N = 4 : 8 px, réglable). Un clic juste sur un
+  trait fin prend la zone la plus proche ; au cœur d'un aplat noir : un message. Si la zone fuit (trou trop grand),
+  tout le dehors est colorié et le message le dit (Ctrl+Z). La couleur remplace celle d'avant dans la zone.
+- **Pinceau et crayon** : par défaut, le trait reste dans la zone fermée où il commence (un pochoir calculé à partir
+  des murs du trait, `Zone::pochoir`) ; « Pinceau dans la zone fermée » le débranche. La gomme n'est pas limitée.
+- **Latence** : les murs du trait (distance au trait, `fond::edt`) coûtent le plus ; ils sont gardés par version du
+  dessin du trait (`calquecouleur::Cache`) et précalculés **sur un autre fil** dès qu'on est sur un calque de couleur
+  avec le pot de peinture, le pinceau ou le crayon. Un clic ou un trait ne calcule plus que la zone (un remplissage
+  de la région touchée). Mesure d'un projet 3840 × 2160, un personnage de 1000 × 1500 px : voir
+  `filling_a_big_sheet_is_fast_enough_to_click` (affiche les temps).
+- **Format** : `calque_couleur` (rang du trait, couples de dessins, trous, zone), **format 30**. Un projet d'avant s'ouvre
+  tel quel ; un projet enregistré en 30 n'est pas lisible par une version d'avant (même règle que 25 à 27). Les numéros
+  28 et 29 sont ceux d'autres chantiers menés en parallèle.
+- **Export, PDF, vignettes, montage, GPU** : la couleur est un calque bitmap ordinaire pour eux (rien n'a changé). Export
+  Storyboard Pro : calque bitmap sous le trait, avec une note dans la fenêtre d'export (le lien n'y existe pas : à vérifier).
+- **Avec « Fond sous le trait »** (`fond.rs`) : les deux coexistent, rien n'a changé dans l'un pour l'autre. Le fond est
+  une strate du même calque, déduite du trait (une forme, une couleur) ; le calque de couleur est un calque à part,
+  colorié zone par zone, avec ses propres images. Ordre de composition : fond du trait, couleur, trait.
+- **Limites connues** : couper / coller une clé du trait (même calque) ne remet pas sa couleur (elle reste dans le
+  dessin d'origine : glisser la clé la garde) ; un effet du trait (tremblement) ne bouge pas la couleur ; le trait
+  doit exister à l'image pour colorier (sinon, un pinceau en pose un vide) ; un calque de toute la scène, un dossier,
+  un calque d'effet, vidéo ou CTG ne portent pas de couleur.
+
+### À vérifier à l'écran (calque de couleur)
+
+1. Icône palette dans le panneau Calques : bulle (nom, description), calque créé sous le trait, en retrait, « sous Trait ».
+2. Pot de peinture sur le calque de couleur : un clic dans un contour fermé le remplit sous le trait, sans liseré clair
+   entre la couleur et le trait ; un contour avec un petit trou ne fuit pas ; un grand trou : message + tout le dehors.
+3. Pinceau : un trait qui déborde du contour reste dedans ; « Pinceau dans la zone fermée » (clic droit sur le calque >
+   Calque de couleur) le laisse déborder.
+4. Dans la timeline : poser, allonger, supprimer une clé du trait : la couleur suit ; un dessin dupliqué garde sa couleur.
+5. Œil du trait : cache aussi la couleur ; œil de la couleur : la couleur seule.
+6. Dupliquer, copier / coller le trait : les couleurs viennent avec lui ; Ctrl+Z revient d'un coup.
+7. Export d'images et PDF : la couleur est sous le trait.
+
+## 19. Toile infinie (dessiner hors de la feuille, 2026-10-20, branche `canevas-couleur`)
+
+Ce qui change à l'écran. Le fonctionnement de Storyboard Pro est **à vérifier** : SHOT reprend l'idée d'une toile
+sans bord, pas son détail.
+
+- **Plus de page** : l'ombre sous la feuille a disparu. Le papier (ou le damier, ou le noir de l'arrière-plan,
+  onglet « Arrière-plan » sous la timeline) remplit tout l'espace de dessin, à tout zoom (de 2 % à 6 400 %), et le défilement
+  (bouton du milieu, Espace + glisser, outil Main) n'a pas de bord. Il n'y avait pas de zone hachurée à
+  proprement parler dans cette version : ce qui entourait la feuille était l'ombre et le fond sombre.
+- **Cadre de la caméra** : un trait fin et discret (gris) quand il se confond avec la feuille ; avec l'outil
+  Caméra, ou quand le cadre est déplacé ou tourné, le cadre habituel (blanc, étiqueté « Caméra »). Le bouton
+  « Estomper le hors-champ » (réglages de la caméra, `camera.masque`) voile tout ce qui est autour du cadre, y compris
+  loin de la feuille (voile plus léger qu'avant à l'écran, 45 au lieu de 70 sur 255).
+- **Dessiner** : pinceau, crayon, gomme, formes, texte, lignes vectorielles : partout, y compris à gauche et
+  au-dessus de la feuille. Un trait qui traverse le bord de la feuille se continue dehors. Ctrl+Z / Ctrl+Maj+Z :
+  d'un coup, comme un trait ordinaire.
+- **Pipette** (Alt + clic, ou outil Pipette) : prend la couleur affichée aussi hors de la feuille (papier compris).
+- **Pot de peinture** : borné par la feuille ; un clic hors d'elle ne fait rien et le dit dans la barre d'état
+  (« Le pot de peinture remplit dans la feuille… »).
+- **Ajuster à la fenêtre** (barre sous le dessin, menu du clic droit, `vue.ajuster`) : cadre la **caméra**, pas
+  tout ce qui est dessiné (choix de SHOT : prévisible, le même qu'avant). Pour voir tout ce qu'on a dessiné
+  loin : dézoomer à la molette.
+- **Exports** (images, vidéo, PDF) : le cadre filmé décide ; s'il regarde hors de la feuille il montre ce qui y est
+  dessiné, sinon du papier. Rien n'est exporté hors du cadre.
+- **Limites** : les zones bitmap sélectionnées (lasso, baguette de couleur) et leur déplacement prennent les
+  pixels de la feuille (on peut déplacer ce qu'on a pris vers l'extérieur) ; les effets de calque, les calques
+  d'ajustement, le fond sous le trait, les calques de couleur, l'enveloppe et la perspective, la propagation,
+  l'import / export Storyboard Pro restent à la feuille. Le zoom arrière extrême (plus de 4 096 px de monde
+  dessiné à l'écran) montre ce qui est hors de la feuille un peu plus flou (la texture est réduite).
+  Au-delà de 32 768 px de la feuille, rien ne se pose.
+- Code : `src/monde.rs`, `src/raster.rs` (tuiles hors-feuille), `src/render.rs`, `src/canvas.rs`,
+  `src/bottomtabs.rs` (arrière-plan), `src/camtools.rs` ; `docs/ARCHITECTURE.md` « Toile infinie ».
+
+### À vérifier à l'écran (toile infinie)
+
+1. Ouvrir un projet existant : il s'affiche comme avant dans la feuille ; autour, du papier (même couleur) à la
+   place de l'ombre ; aucun dessin ne manque ni ne change.
+2. Dézoomer (molette) et déplacer la vue loin (Espace + glisser) : le papier suit sans bord ni trou, sans
+   ralentissement. Arrière-plan damier : le damier continue hors de la feuille ; noir : tout est noir.
+3. Dessiner au pinceau à gauche de la feuille, au-dessus, puis un trait qui traverse le bord : pas de retard au
+   bout du pinceau, pas de coupure au bord de la feuille (zoom 100 % et zoom arrière), pas de scintillement
+   pendant le trait.
+4. Ctrl+Z / Ctrl+Maj+Z sur ces traits ; enregistrer, fermer, rouvrir : tout est là (hors de la feuille aussi).
+5. Gomme hors de la feuille, formes (ligne, rectangle, ellipse), texte, trait vectoriel loin de la feuille.
+6. Rotation (Maj + molette) et miroir de la vue avec du dessin hors de la feuille : il tourne avec le reste.
+7. Caméra : déplacer le cadre sur du dessin hors de la feuille (outil Caméra) ; l'export d'images montre ce dessin ;
+   « Estomper le hors-champ » voile autour du cadre, discrètement.
+8. Pot de peinture hors de la feuille : rien ne bouge, message dans la barre d'état. Pipette hors de la feuille :
+   prend la couleur du trait.
+9. Pelure d'oignon et table lumineuse avec des dessins hors de la feuille : ils apparaissent teintés.
+10. Un plan avec des effets de calque et du dessin hors de la feuille : les effets agissent dans la feuille, le
+    dessin hors feuille est montré sans effet (limite connue).
+11. Les vignettes de la planche (storyboard) montrent le cadre, comme avant.

@@ -118,7 +118,12 @@ pub const FORMAT: &str = "pelure-projet";
 /// (flash, image d'impact, lueur diffuse, secousse, vignettage, grain, aberration chromatique ; voir
 /// `fxcine.rs`). Une version précédente refuse le projet : elle en ferait des calques vides et
 /// perdrait l'effet, le film changerait sans prévenir.
-pub const VERSION: u32 = 27;
+/// 30 (2026-10-20) : calques de couleur (`calque_couleur` d'un calque : rang du calque de trait, dessins de
+/// couleur qui répondent aux dessins du trait, fermeture des trous, pinceau dans la zone ; voir
+/// `calquecouleur.rs`). Une version précédente refuse le projet : elle en ferait des calques bitmap
+/// ordinaires aux images indépendantes, et la couleur ne suivrait plus le trait. (Les numéros 28 et 29
+/// sont ceux d'autres chantiers menés en parallèle.)
+pub const VERSION: u32 = 30;
 const DRAWINGS: &str = "dessins";
 /// Fils qui lisent ou écrivent les dessins d'un projet en parallèle : au-delà de huit, le disque et
 /// la mémoire (une feuille décodée pèse 33 Mo) limitent plus que le processeur.
@@ -186,6 +191,10 @@ struct Manifest {
     /// Propriétés du projet (format 17 ; absentes : vides).
     #[serde(default, skip_serializing_if = "PropertiesEntry::is_empty")]
     proprietes: PropertiesEntry,
+    /// Dessins bitmap qui ont quelque chose hors de la feuille (format 30, toile infinie) : leur atlas
+    /// `dessins/<id>_hors.png` et son index `<id>_hors.json` ; absent : aucun.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    dessins_hors: Vec<u64>,
 }
 
 /// Propriétés du projet (format 17). Dates en secondes depuis 1970.
@@ -581,6 +590,10 @@ struct LayerEntry {
     /// expositions sont les images où il agit (un dessin vide tenu).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     calque_effet: Option<crate::calqueffet::Entree>,
+    /// Calque de couleur (format 30) : il colore le calque de trait de ce rang ; absent : calque
+    /// ordinaire.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    calque_couleur: Option<CouleurEntry>,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -596,6 +609,27 @@ struct VideoEntry {
     #[serde(default)]
     debut: i64,
     ext: String,
+}
+
+/// Le lien d'un calque de couleur avec son calque de trait (format 30).
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+struct CouleurEntry {
+    /// Rang, dans le plan, du calque de trait.
+    #[serde(rename = "trait")]
+    ligne: usize,
+    /// Les couples (dessin du trait, dessin de couleur qui lui répond).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    dessins: Vec<[u64; 2]>,
+    /// Fermeture des trous (pixels de chaque côté du trou).
+    #[serde(default = "default_couleur_trous")]
+    trous: u8,
+    /// Un trait de pinceau reste dans la zone fermée où il commence.
+    #[serde(default = "yes")]
+    zone: bool,
+}
+
+fn default_couleur_trous() -> u8 {
+    crate::calquecouleur::TROUS
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -757,6 +791,63 @@ fn coupe_path(dir: &Path, id: CelId) -> PathBuf {
     dir.join(DRAWINGS).join(format!("{id}_coupe.png"))
 }
 
+/// Ce que le dessin bitmap `id` a hors de la feuille (toile infinie, format 30) : un PNG qui range
+/// ses tuiles côte à côte (« atlas »), et leurs coordonnées de tuile dans un petit fichier JSON.
+fn hors_png_path(dir: &Path, id: CelId) -> PathBuf {
+    dir.join(DRAWINGS).join(format!("{id}_hors.png"))
+}
+
+fn hors_json_path(dir: &Path, id: CelId) -> PathBuf {
+    dir.join(DRAWINGS).join(format!("{id}_hors.json"))
+}
+
+/// Les coordonnées des tuiles de l'atlas hors-feuille, dans l'ordre de l'atlas (de gauche à droite,
+/// puis de haut en bas), et sa largeur en tuiles.
+#[derive(Serialize, Deserialize)]
+struct HorsIndex {
+    colonnes: usize,
+    tuiles: Vec<[i32; 2]>,
+}
+
+/// Le plus de tuiles qu'un atlas hors-feuille accepte à la lecture (un fichier abîmé qui en annonce
+/// des millions ne doit pas remplir la mémoire).
+const MAX_HORS_TUILES: usize = 60_000;
+
+/// L'atlas des tuiles `tiles`, et son index.
+fn hors_atlas(tiles: &[((i32, i32), crate::raster::Tile)]) -> (Raster, HorsIndex) {
+    let cols = (tiles.len() as f64).sqrt().ceil().max(1.0) as usize;
+    let rows = tiles.len().div_ceil(cols).max(1);
+    let mut atlas = Raster::new(cols * crate::raster::TILE, rows * crate::raster::TILE);
+    for (i, (_, tile)) in tiles.iter().enumerate() {
+        let id = (i / cols) * atlas.tiles_x + i % cols;
+        atlas.tiles[id] = Some(tile.clone());
+    }
+    (atlas, HorsIndex { colonnes: cols, tuiles: tiles.iter().map(|((x, y), _)| [*x, *y]).collect() })
+}
+
+/// Remet dans le dessin `cel` ce qu'il avait hors de la feuille (rien, sans bruit, si les fichiers
+/// sont abîmés : un avertissement le dit).
+fn read_hors(dir: &Path, id: CelId, cel: &mut Cel) -> Result<(), String> {
+    let text = fs::read_to_string(hors_json_path(dir, id)).map_err(|e| format!("dessin {id} : ce qu'il a hors de la feuille est illisible ({e})"))?;
+    let index: HorsIndex = serde_json::from_str(&text).map_err(|e| format!("dessin {id} : ce qu'il a hors de la feuille est illisible ({e})"))?;
+    if index.tuiles.len() > MAX_HORS_TUILES || index.colonnes == 0 || index.colonnes > 4096 {
+        return Err(format!("dessin {id} : ce qu'il a hors de la feuille est démesuré"));
+    }
+    let tile = crate::raster::TILE;
+    let atlas = read_rgba(&hors_png_path(dir, id), |pw, ph, data| {
+        (pw % tile == 0 && ph % tile == 0 && pw / tile >= index.colonnes && (ph / tile) * index.colonnes >= index.tuiles.len()).then(|| Raster::from_rgba(pw, ph, data))
+    })
+    .map_err(|e| format!("dessin {id} : ce qu'il a hors de la feuille est illisible ({e})"))?
+    .ok_or_else(|| format!("dessin {id} : l'image de ce qu'il a hors de la feuille ne correspond pas à son index"))?;
+    for (i, [tx, ty]) in index.tuiles.iter().enumerate() {
+        let slot = (i / index.colonnes) * atlas.tiles_x + i % index.colonnes;
+        if let Some(Some(t)) = atlas.tiles.get(slot) {
+            cel.raster.absorb_beyond(*tx, *ty, t.clone());
+        }
+    }
+    Ok(())
+}
+
 fn drawing_path(dir: &Path, id: CelId, vector: bool) -> PathBuf {
     dir.join(DRAWINGS).join(format!("{id}.{}", if vector { "json" } else { "png" }))
 }
@@ -772,6 +863,12 @@ fn used_sounds(doc: &Document) -> BTreeSet<u64> {
         .flat_map(|t| t.clips.iter().map(|c| c.sound))
         .filter(|id| doc.sounds.contains_key(id))
         .collect()
+}
+
+/// Les dessins bitmap parmi `used` qui ont quelque chose hors de la feuille (toile infinie). Un dessin
+/// vectoriel ne garde rien à part : ses traits se rendent à la lecture, hors de la feuille aussi.
+fn hors_of(doc: &Document, used: &BTreeSet<CelId>) -> BTreeSet<CelId> {
+    used.iter().copied().filter(|id| doc.cels.get(id).is_some_and(|c| c.vector.is_none() && c.raster.has_beyond())).collect()
 }
 
 /// Textures citées par les traits vectoriels texturés des dessins `used` : (sorte, clé).
@@ -854,6 +951,8 @@ pub fn save(doc: &Document, manifest_path: &Path, written: &mut HashMap<CelId, u
 enum DrawingData {
     Bytes(Vec<u8>),
     Raster(Raster),
+    /// Les tuiles d'un dessin hors de la feuille (toile infinie), rangées en atlas à l'écriture.
+    Atlas(Vec<((i32, i32), crate::raster::Tile)>),
     CopyFrom(PathBuf),
 }
 
@@ -887,6 +986,8 @@ pub struct SaveJob {
     used: BTreeSet<CelId>,
     /// Dessins qui ont une strate Fond peinte (format 23).
     fonds: BTreeSet<CelId>,
+    /// Dessins bitmap qui ont quelque chose hors de la feuille (toile infinie, format 30).
+    hors: BTreeSet<CelId>,
     used_sounds: BTreeSet<u64>,
     used_models: BTreeSet<u64>,
     used_textures: BTreeSet<(TextureKind, u32)>,
@@ -938,6 +1039,7 @@ pub fn prepare_save(
     let mut drawings = Vec::new();
     // Les dessins qui ont une strate Fond peinte (format 23) : les autres `<id>_fond.png` partent.
     let fonds: BTreeSet<CelId> = used.iter().copied().filter(|id| doc.cels.get(id).and_then(|c| c.fond.as_ref()).is_some_and(|f| !f.is_empty())).collect();
+    let hors = hors_of(doc, &used);
     // Les fichiers déjà là, d'une seule lecture du dossier : un `exists` par dessin coûtait 0,15 ms
     // chacun sur le fil de l'interface (450 ms pour un enregistrement de 3 000 dessins où rien
     // n'avait changé).
@@ -948,7 +1050,11 @@ pub fn prepare_save(
         let Some(cel) = doc.cels.get(&id) else { continue };
         let vector = cel.vector.is_some();
         let path = drawing_path(dir, id, vector);
-        if written.get(&id) == Some(&cel.version) && there(&path) && (!fonds.contains(&id) || there(&fond_path(dir, id))) {
+        if written.get(&id) == Some(&cel.version)
+            && there(&path)
+            && (!fonds.contains(&id) || there(&fond_path(dir, id)))
+            && (!hors.contains(&id) || (there(&hors_png_path(dir, id)) && there(&hors_json_path(dir, id))))
+        {
             continue;
         }
         let same_elsewhere = reuse_dir.zip(reuse.as_ref()).filter(|(_, r)| r.written.get(&id) == Some(&cel.version)).map(|(d, _)| d);
@@ -959,6 +1065,22 @@ pub fn prepare_save(
             (None, None) => DrawingData::Raster(cel.raster.clone()),
         };
         drawings.push((path, data));
+        // Ce que le dessin a hors de la feuille (toile infinie) : son atlas et son index, à côté.
+        if hors.contains(&id) {
+            let elsewhere = |path_of: fn(&Path, CelId) -> PathBuf| same_elsewhere.map(|d| path_of(d, id)).filter(|p| p.exists());
+            match (elsewhere(hors_png_path), elsewhere(hors_json_path)) {
+                (Some(png), Some(json)) => {
+                    drawings.push((hors_png_path(dir, id), DrawingData::CopyFrom(png)));
+                    drawings.push((hors_json_path(dir, id), DrawingData::CopyFrom(json)));
+                }
+                _ => {
+                    let tiles = cel.raster.beyond_sheet_tiles();
+                    let index = HorsIndex { colonnes: (tiles.len() as f64).sqrt().ceil().max(1.0) as usize, tuiles: tiles.iter().map(|((x, y), _)| [*x, *y]).collect() };
+                    drawings.push((hors_json_path(dir, id), DrawingData::Bytes(serde_json::to_vec(&index).map_err(|e| e.to_string())?)));
+                    drawings.push((hors_png_path(dir, id), DrawingData::Atlas(tiles)));
+                }
+            }
+        }
         // La strate Fond : sa peinture et sa coupe, à côté du dessin.
         if let (true, Some(s)) = (fonds.contains(&id), cel.fond.as_ref()) {
             let parts: [(fn(&Path, CelId) -> PathBuf, &Raster); 2] = [(fond_path, &s.peinture.raster), (coupe_path, &s.coupe)];
@@ -1030,6 +1152,7 @@ pub fn prepare_save(
         kept: kept_files_in(dir),
         used: used.union(&unreadable).copied().collect(),
         fonds: fonds.union(&unreadable).copied().collect(),
+        hors: hors.union(&unreadable).copied().collect(),
         used_sounds,
         used_models,
         used_textures,
@@ -1249,6 +1372,10 @@ impl SaveJob {
             let bytes: std::borrow::Cow<[u8]> = match data {
                 DrawingData::Bytes(b) => std::borrow::Cow::Borrowed(b),
                 DrawingData::Raster(r) => std::borrow::Cow::Owned(encode_png(&r.to_rgba(), r.width, r.height)?),
+                DrawingData::Atlas(tiles) => {
+                    let (atlas, _) = hors_atlas(tiles);
+                    std::borrow::Cow::Owned(encode_png(&atlas.to_rgba(), atlas.width, atlas.height)?)
+                }
                 DrawingData::CopyFrom(from) => std::borrow::Cow::Owned(fs::read(from).map_err(|e| format!("{} : {e}", from.display()))?),
             };
             let result = write_atomic(path, &bytes);
@@ -1313,7 +1440,7 @@ impl SaveJob {
         // Les autres versions des plans (leurs dessins sont ceux de `dessins/`, déjà écrits).
         write_sidecar(&dir.join(crate::planvers::FILE), self.plans_versions.as_deref(), |t| crate::planvers::parse(t).is_ok())?;
         write_atomic_synced(&self.manifest_path, &self.manifest)?;
-        let removed = if self.keep_drawings { 0 } else { remove_unused(dir, &self.used, &self.fonds) }
+        let removed = if self.keep_drawings { 0 } else { remove_unused(dir, &self.used, &self.fonds, &self.hors) }
             + remove_unused_sounds(dir, &self.used_sounds, &self.kept)
             + remove_unused_models(dir, &self.used_models, &self.kept)
             + if self.has_unreadable { 0 } else { remove_unused_textures(dir, &self.used_textures) }
@@ -1364,13 +1491,20 @@ fn remove_unused_sounds(dir: &Path, used: &BTreeSet<u64>, kept: &BTreeSet<PathBu
 
 /// Efface les dessins du dossier qui ne servent plus (seulement les fichiers « <nombre>.png/json »),
 /// et les strates Fond « <nombre>_fond.png » et « <nombre>_coupe.png » des dessins qui n'en ont plus.
-fn remove_unused(dir: &Path, used: &BTreeSet<CelId>, fonds: &BTreeSet<CelId>) -> usize {
+fn remove_unused(dir: &Path, used: &BTreeSet<CelId>, fonds: &BTreeSet<CelId>, hors: &BTreeSet<CelId>) -> usize {
     let Ok(entries) = fs::read_dir(dir.join(DRAWINGS)) else { return 0 };
     let mut removed = 0;
     for entry in entries.flatten() {
         let path = entry.path();
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
         let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        // Ce qu'un dessin a hors de la feuille : « <nombre>_hors.png » et « <nombre>_hors.json ».
+        if let (Some(id), "png" | "json") = (stem.strip_suffix("_hors").and_then(|s| s.parse::<CelId>().ok()), ext) {
+            if !hors.contains(&id) && fs::remove_file(&path).is_ok() {
+                removed += 1;
+            }
+            continue;
+        }
         if let (Some(id), "png") = (stem.strip_suffix("_fond").or_else(|| stem.strip_suffix("_coupe")).and_then(|s| s.parse::<CelId>().ok()), ext) {
             if !fonds.contains(&id) && fs::remove_file(&path).is_ok() {
                 removed += 1;
@@ -1396,7 +1530,7 @@ fn remove_unused(dir: &Path, used: &BTreeSet<CelId>, fonds: &BTreeSet<CelId>) ->
 /// d'image, durée) ; pas ce qui aide à travailler (couleur de repère du plan, signets, entrée et
 /// sortie, notes dessinées sur la timeline, repère 3D, noms et marques de couleur des dessins, rôles
 /// des images, verrous, calque replié, groupe de couleur, pelure d'oignon et pochoir, nom du calque).
-fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, digest: bool) -> PanelEntry {
+fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId) -> bool, digest: bool) -> PanelEntry {
     let mut entry = PanelEntry {
         id: panel.id,
         duree: panel.length,
@@ -1451,6 +1585,14 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, digest: bool) -> Pan
                 video: l.video.as_ref().map(|v| VideoEntry { id: v.id, nom: v.name.clone(), images: v.frames, ips: v.fps, debut: v.start, ext: v.ext.clone() }),
                 fond: l.fond,
                 calque_effet: l.effet.as_ref().map(crate::calqueffet::Entree::from),
+                calque_couleur: l.couleur.as_ref().and_then(|c| {
+                    Some(CouleurEntry {
+                        ligne: panel.layers.iter().position(|s| s.id == c.trait_id)?,
+                        dessins: c.dessins.iter().filter(|(t, k)| garde(**t) && garde(**k)).map(|(t, k)| [key(*t), key(*k)]).collect(),
+                        trous: c.trous,
+                        zone: c.zone,
+                    })
+                }),
                 expositions: to_exposures(&l.frames.iter().map(|f| f.map(key)).collect::<Vec<_>>()),
             })
             .collect(),
@@ -1535,13 +1677,19 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, digest: bool) -> Pan
 /// son entrée du manifeste réduite à ce qui compte (`panel_entry`), les dessins cités par leur
 /// empreinte (`key`).
 pub(crate) fn digest_bytes(panel: &Panel, key: &dyn Fn(CelId) -> CelId) -> Vec<u8> {
-    serde_json::to_vec(&panel_entry(panel, key, true)).unwrap_or_default()
+    serde_json::to_vec(&panel_entry(panel, key, &|c| dans_le_plan(panel, c), true)).unwrap_or_default()
 }
 
 /// L'entrée complète d'un plan pour un instantané (envoi, version) : le même JSON que dans le
 /// manifeste, les dessins cités par `key`.
 pub(crate) fn snapshot_value(panel: &Panel, key: &dyn Fn(CelId) -> CelId) -> Result<serde_json::Value, String> {
-    serde_json::to_value(panel_entry(panel, key, false)).map_err(|e| e.to_string())
+    serde_json::to_value(panel_entry(panel, key, &|c| dans_le_plan(panel, c), false)).map_err(|e| e.to_string())
+}
+
+/// Un instantané ne garde des couples trait / couleur (`calque_couleur`) que ceux dont les deux dessins
+/// sont dans une timeline du plan : ce sont les seuls dessins qu'il emporte.
+fn dans_le_plan(panel: &Panel, cel: CelId) -> bool {
+    panel.layers.iter().any(|l| l.frames.contains(&Some(cel)))
 }
 
 /// En-tête d'un instantané : la feuille, le cadre, la cadence et le papier du projet au moment où il a été
@@ -1596,6 +1744,8 @@ pub(crate) fn charger_plans(dir: &Path, tete: &Tete, scene: u64, entrees: Vec<se
         storyboard_verrouille: false,
         numerotation_verrouillee: false,
         proprietes: PropertiesEntry::default(),
+        // Les instantanés ne gardent que la feuille de leurs dessins (pas leur hors-feuille, `monde.rs`).
+        dessins_hors: Vec::new(),
     };
     let loaded = load_manifest(manifest, dir, quick, None);
     for (id, previous) in videos {
@@ -1608,6 +1758,9 @@ pub(crate) fn charger_plans(dir: &Path, tete: &Tete, scene: u64, entrees: Vec<se
 
 fn manifest_of(doc: &Document) -> Manifest {
     let mut sequences: Vec<SequenceEntry> = Vec::new();
+    // Les dessins qui seront enregistrés : un calque de couleur n'écrit que les couples dont les deux
+    // dessins le sont.
+    let drawn = doc.used_cels();
     for (i, panel) in doc.panels.iter().enumerate() {
         let seq = doc.sequence_of(i);
         if sequences.last().is_none_or(|s| s.id != seq) {
@@ -1631,7 +1784,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                 panneaux: Vec::new(),
             });
         }
-        scenes.last_mut().expect("scène ajoutée juste avant").panneaux.push(panel_entry(panel, &|c| c, false));
+        scenes.last_mut().expect("scène ajoutée juste avant").panneaux.push(panel_entry(panel, &|c| c, &|c| drawn.contains(&c), false));
     }
     let used = used_sounds(doc);
     Manifest {
@@ -1733,6 +1886,7 @@ fn manifest_of(doc: &Document) -> Manifest {
                 fond: p.fond,
             }
         },
+        dessins_hors: hors_of(doc, &drawn).into_iter().collect(),
     }
 }
 
@@ -1929,8 +2083,9 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
     if let Some(p) = progress {
         p.total.store(referenced.len(), std::sync::atomic::Ordering::Relaxed);
     }
+    let hors: BTreeSet<CelId> = manifest.dessins_hors.iter().copied().collect();
     let loaded = crate::parallele::par_map(&referenced, LOAD_THREADS, |_, &id| {
-        let r = load_drawing(dir, id, w, h, quick);
+        let r = load_drawing(dir, id, w, h, quick, hors.contains(&id));
         if let Some(p) = progress {
             p.done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
@@ -1938,10 +2093,11 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
     });
     for (id, result) in referenced.into_iter().zip(loaded) {
         match result {
-            Ok((cel, approximate)) => {
+            Ok((cel, approximate, warning)) => {
                 if approximate {
                     approx.push(id);
                 }
+                warnings.extend(warning);
                 cels.insert(id, cel);
             }
             Err(e) => {
@@ -2104,6 +2260,7 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
             for p in scene.panneaux {
                 let parents: Vec<Option<usize>> = p.calques.iter().map(|l| l.dans_dossier).collect();
                 let ctg_sources: Vec<Option<(Vec<usize>, u8)>> = p.calques.iter().map(|l| l.ctg.as_ref().map(|c| (c.sources.clone(), c.trou))).collect();
+                let couleurs: Vec<Option<CouleurEntry>> = p.calques.iter().map(|l| l.calque_couleur.clone()).collect();
                 let mut layers: Vec<Layer> = p
                     .calques
                     .into_iter()
@@ -2172,6 +2329,8 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
                         fond: l.fond,
                         // Calque d'effet (format 27).
                         effet: l.calque_effet.map(crate::calqueffet::Entree::into_model),
+                        // Calque de couleur (format 30) : le lien vient après (rang du trait → son id).
+                        couleur: None,
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.
@@ -2187,6 +2346,18 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
                         layers[i].ctg = Some(crate::ctg::Ctg { sources: ids, gap: gap.min(50) });
                     }
                 }
+                // Calques de couleur (format 30) : le rang du calque de trait devient son id, les
+                // couples de dessins sont gardés si leurs deux dessins sont là.
+                for (i, entry) in couleurs.into_iter().enumerate() {
+                    let Some(e) = entry else { continue };
+                    let Some(line) = layers.get(e.ligne).filter(|_| e.ligne != i).map(|l| l.id) else { continue };
+                    let mut c = crate::calquecouleur::CalqueCouleur::new(line);
+                    c.dessins = e.dessins.into_iter().filter(|[t, k]| cels.contains_key(t) && cels.contains_key(k)).map(|[t, k]| (t, k)).collect();
+                    c.trous = e.trous.min(50);
+                    c.zone = e.zone;
+                    layers[i].couleur = Some(c);
+                }
+                crate::calquecouleur::reparer(&mut layers);
                 crate::folders::normalize(&mut layers);
                 if layers.is_empty() {
                     layers.push(Layer::new("Dessin", LayerKind::Vector));
@@ -2430,8 +2601,11 @@ fn load_sound(dir: &Path, entry: &SoundEntry) -> Result<Sound, String> {
 /// Le dessin `id`, avec sa strate Fond s'il en a une (format 23 ; illisible ou d'une autre taille :
 /// ignorée, le dessin reste) ; et s'il est affiché en rendu rapide (`quick`, dessin vectoriel
 /// texturé).
-fn load_drawing(dir: &Path, id: CelId, w: usize, h: usize, quick: bool) -> Result<(Cel, bool), String> {
+fn load_drawing(dir: &Path, id: CelId, w: usize, h: usize, quick: bool, hors: bool) -> Result<(Cel, bool, Option<String>), String> {
     let (mut cel, approximate) = load_line(dir, id, w, h, quick)?;
+    // Ce que le dessin a hors de la feuille (toile infinie) : un fichier illisible n'empêche pas d'ouvrir
+    // le dessin, il perd cette part et le dit.
+    let warning = if hors && cel.vector.is_none() { read_hors(dir, id, &mut cel).err() } else { None };
     let read = |path: PathBuf| -> Option<Raster> {
         // (Pas même un `exists` d'avance : presque aucun dessin n'a de strate Fond.)
         read_rgba(&path, |pw, ph, data| (pw == w && ph == h).then(|| Raster::from_rgba(w, h, data))).ok().flatten()
@@ -2447,7 +2621,7 @@ fn load_drawing(dir: &Path, id: CelId, w: usize, h: usize, quick: bool) -> Resul
         }
         cel.fond = Some(Box::new(s));
     }
-    Ok((cel, approximate))
+    Ok((cel, approximate, warning))
 }
 
 /// Coordonnée la plus lointaine qu'un élément vectoriel garde (une feuille fait 16 384 pixels au

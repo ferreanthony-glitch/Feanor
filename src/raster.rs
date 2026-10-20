@@ -67,14 +67,48 @@ pub fn tile_bounds(width: usize, height: usize, idx: usize) -> (usize, usize, us
     (ox, oy, TILE.min(width - ox), TILE.min(height - oy))
 }
 
+/// Toile infinie : on peut dessiner n'importe où autour de la feuille, jusqu'à `WORLD` pixels de
+/// l'origine (de chaque côté, coordonnées négatives comprises). Bornée pour que les numéros de
+/// tuiles tiennent dans un entier ; 32 768 px, c'est dix feuilles de 3 840 px.
+pub const WORLD: i64 = 1 << 15;
+
+/// Les numéros de tuile (`usize`) qui circulent (annulation, tuiles touchées, textures) sont des rangs
+/// de `Raster::tiles` pour les tuiles de la fenêtre (la feuille), et, à partir de `OUTER`, le
+/// codage des coordonnées signées d'une tuile hors de la feuille (`outer_id`).
+pub const OUTER: usize = 1 << 40;
+const BIAS: i64 = 1 << 19;
+
+/// Numéro de la tuile (`tx`, `ty`) hors de la fenêtre d'un dessin (coordonnées de tuile signées).
+pub fn outer_id(tx: i32, ty: i32) -> usize {
+    OUTER | ((((ty as i64 + BIAS) as usize) & 0xF_FFFF) << 20) | (((tx as i64 + BIAS) as usize) & 0xF_FFFF)
+}
+
+/// Le numéro est celui d'une tuile hors de la fenêtre (`outer_id`).
+pub fn is_outer_id(id: usize) -> bool {
+    id >= OUTER
+}
+
+/// Coordonnées de tuile d'un numéro `outer_id`.
+pub fn outer_key(id: usize) -> (i32, i32) {
+    let v = id & (OUTER - 1);
+    (((v & 0xF_FFFF) as i64 - BIAS) as i32, ((v >> 20) as i64 - BIAS) as i32)
+}
+
 /// Image RGBA prémultipliée, découpée en tuiles allouées seulement là où l'on a dessiné.
 /// Un dessin au trait n'occupe ainsi qu'une petite partie de la mémoire d'une image pleine.
+///
+/// Deux espaces de tuiles : la **fenêtre** (`tiles`, la feuille, tuiles entières : rang = ligne ×
+/// `tiles_x` + colonne, comme toujours) et le **hors-feuille** (`outer`, toute tuile hors de la
+/// fenêtre, par coordonnées de tuile signées : la toile infinie). Le code qui ne connaît que la
+/// feuille ne voit que `tiles` ; le dessin, l'affichage, l'export et l'enregistrement voient les deux
+/// par `slot`, `tile_at`, `get_i`…
 #[derive(Clone)]
 pub struct Raster {
     pub width: usize,
     pub height: usize,
     pub tiles_x: usize,
     pub tiles: Vec<Option<Tile>>,
+    pub outer: std::collections::BTreeMap<(i32, i32), Tile>,
 }
 
 impl Raster {
@@ -86,6 +120,211 @@ impl Raster {
             height,
             tiles_x,
             tiles: vec![None; tiles_x * tiles_y],
+            outer: Default::default(),
+        }
+    }
+
+    /// Nombre de rangées de tuiles de la fenêtre.
+    pub fn tiles_y(&self) -> usize {
+        self.tiles.len().checked_div(self.tiles_x).unwrap_or(0)
+    }
+
+    /// La tuile (`tx`, `ty`) est dans la fenêtre (la feuille).
+    pub fn in_window(&self, tx: i32, ty: i32) -> bool {
+        tx >= 0 && ty >= 0 && (tx as usize) < self.tiles_x && (ty as usize) < self.tiles_y()
+    }
+
+    /// Numéro de la tuile (`tx`, `ty`) : son rang dans la fenêtre, sinon son codage hors-feuille.
+    pub fn id_of(&self, tx: i32, ty: i32) -> usize {
+        if self.in_window(tx, ty) {
+            ty as usize * self.tiles_x + tx as usize
+        } else {
+            outer_id(tx, ty)
+        }
+    }
+
+    /// Coordonnées de tuile du numéro `id`.
+    pub fn key_of(&self, id: usize) -> (i32, i32) {
+        if is_outer_id(id) {
+            outer_key(id)
+        } else {
+            let tx = self.tiles_x.max(1);
+            ((id % tx) as i32, (id / tx) as i32)
+        }
+    }
+
+    /// Coin haut gauche, en pixels, de la tuile `id`.
+    pub fn tile_origin(&self, id: usize) -> (i64, i64) {
+        let (tx, ty) = self.key_of(id);
+        (tx as i64 * TILE as i64, ty as i64 * TILE as i64)
+    }
+
+    /// La tuile `id`, si elle est dessinée.
+    pub fn slot(&self, id: usize) -> Option<&Tile> {
+        if is_outer_id(id) {
+            self.outer.get(&outer_key(id))
+        } else {
+            self.tiles.get(id)?.as_ref()
+        }
+    }
+
+    /// La tuile (`tx`, `ty`), si elle est dessinée.
+    pub fn tile_at(&self, tx: i32, ty: i32) -> Option<&Tile> {
+        self.slot(self.id_of(tx, ty))
+    }
+
+    /// Remplace la tuile `id` (rien : la vide) et rend l'ancienne. Un numéro de fenêtre hors de la
+    /// fenêtre est ignoré.
+    pub fn replace_slot(&mut self, id: usize, tile: Option<Tile>) -> Option<Tile> {
+        if is_outer_id(id) {
+            let key = outer_key(id);
+            match tile {
+                Some(t) => self.outer.insert(key, t),
+                None => self.outer.remove(&key),
+            }
+        } else {
+            match self.tiles.get_mut(id) {
+                Some(slot) => std::mem::replace(slot, tile),
+                None => None,
+            }
+        }
+    }
+
+    /// Le pixel (`x`, `y`) du monde (négatif ou hors de la feuille compris) ; transparent hors d'une
+    /// tuile dessinée.
+    pub fn get_i(&self, x: i64, y: i64) -> Color32 {
+        let (tx, ty) = (x.div_euclid(TILE as i64), y.div_euclid(TILE as i64));
+        if tx.abs() > WORLD || ty.abs() > WORLD {
+            return Color32::TRANSPARENT;
+        }
+        match self.tile_at(tx as i32, ty as i32) {
+            Some(t) => t[y.rem_euclid(TILE as i64) as usize * TILE + x.rem_euclid(TILE as i64) as usize],
+            None => Color32::TRANSPARENT,
+        }
+    }
+
+    /// Les numéros de toutes les tuiles dessinées : la fenêtre, puis le hors-feuille.
+    pub fn drawn_ids(&self) -> Vec<usize> {
+        let mut out: Vec<usize> = self.tiles.iter().enumerate().filter(|(_, t)| t.is_some()).map(|(i, _)| i).collect();
+        out.extend(self.outer.keys().map(|&(tx, ty)| outer_id(tx, ty)));
+        out
+    }
+
+    /// Le rectangle de tuiles qui contient tout ce qui est dessiné, fenêtre et hors-feuille :
+    /// (tuile gauche, haute, droite, basse), bornes comprises.
+    pub fn drawn_tile_range(&self) -> Option<(i32, i32, i32, i32)> {
+        let mut found: Option<(i32, i32, i32, i32)> = None;
+        let mut add = |tx: i32, ty: i32| {
+            found = Some(match found {
+                None => (tx, ty, tx, ty),
+                Some((a, b, c, d)) => (a.min(tx), b.min(ty), c.max(tx), d.max(ty)),
+            });
+        };
+        for (idx, t) in self.tiles.iter().enumerate() {
+            if t.is_some() {
+                add((idx % self.tiles_x) as i32, (idx / self.tiles_x) as i32);
+            }
+        }
+        for &(tx, ty) in self.outer.keys() {
+            add(tx, ty);
+        }
+        found
+    }
+
+    /// Aucune tuile dessinée, dans la fenêtre comme hors d'elle.
+    pub fn is_blank(&self) -> bool {
+        self.outer.is_empty() && self.tiles.iter().all(Option::is_none)
+    }
+
+    /// La tuile (`tx`, `ty`) de la fenêtre déborde de la feuille (dernière colonne ou dernière
+    /// rangée, quand la feuille n'est pas un multiple de la tuile).
+    fn straddles(&self, tx: usize, ty: usize) -> bool {
+        (tx + 1) * TILE > self.width || (ty + 1) * TILE > self.height
+    }
+
+    /// Le pixel (`x`, `y`) de la tuile (`tx`, `ty`) est hors de la feuille.
+    fn beyond(&self, tx: usize, ty: usize, x: usize, y: usize) -> bool {
+        tx * TILE + x >= self.width || ty * TILE + y >= self.height
+    }
+
+    /// Ce qui est dessiné hors de la feuille dans la tuile (`tx`, `ty`) : une tuile hors de la
+    /// fenêtre telle qu'elle est, ou, pour une tuile de bord de la fenêtre, la part qui dépasse de la
+    /// feuille (le reste effacé) ; rien si la tuile n'a rien là.
+    pub fn beyond_tile(&self, tx: i32, ty: i32) -> Option<Tile> {
+        if !self.in_window(tx, ty) {
+            return self.outer.get(&(tx, ty)).filter(|t| t.iter().any(|c| c.a() != 0)).cloned();
+        }
+        let (utx, uty) = (tx as usize, ty as usize);
+        if !self.straddles(utx, uty) {
+            return None;
+        }
+        let tile = self.tiles[uty * self.tiles_x + utx].as_ref()?;
+        let mut masked = [Color32::TRANSPARENT; TILE_PIXELS];
+        let mut any = false;
+        for y in 0..TILE {
+            for x in 0..TILE {
+                if self.beyond(utx, uty, x, y) && tile[y * TILE + x].a() != 0 {
+                    masked[y * TILE + x] = tile[y * TILE + x];
+                    any = true;
+                }
+            }
+        }
+        any.then(|| Tile::new(masked))
+    }
+
+    /// Ce qui est dessiné hors de la feuille : les tuiles de `outer`, et, pour une tuile de bord, la
+    /// part qui dépasse (la part de la feuille effacée), rangées par coordonnées de tuile. Ce que
+    /// l'enregistrement garde en plus du PNG de la feuille.
+    pub fn beyond_sheet_tiles(&self) -> Vec<((i32, i32), Tile)> {
+        let mut out: Vec<((i32, i32), Tile)> = self.outer.keys().filter_map(|&(tx, ty)| Some(((tx, ty), self.beyond_tile(tx, ty)?))).collect();
+        for idx in 0..self.tiles.len() {
+            let (tx, ty) = ((idx % self.tiles_x) as i32, (idx / self.tiles_x) as i32);
+            if self.tiles[idx].is_some() && self.straddles(tx as usize, ty as usize) {
+                if let Some(t) = self.beyond_tile(tx, ty) {
+                    out.push(((tx, ty), t));
+                }
+            }
+        }
+        out.sort_by_key(|(k, _)| *k);
+        out
+    }
+
+    /// Y a-t-il quelque chose de dessiné hors de la feuille ?
+    pub fn has_beyond(&self) -> bool {
+        if self.outer.values().any(|t| t.iter().any(|c| c.a() != 0)) {
+            return true;
+        }
+        self.tiles.iter().enumerate().any(|(idx, slot)| {
+            let Some(tile) = slot else { return false };
+            let (tx, ty) = (idx % self.tiles_x, idx / self.tiles_x);
+            self.straddles(tx, ty) && (0..TILE_PIXELS).any(|i| self.beyond(tx, ty, i % TILE, i / TILE) && tile[i].a() != 0)
+        })
+    }
+
+    /// Remet une tuile lue de l'enregistrement (`beyond_sheet_tiles`) : hors de la fenêtre, elle va
+    /// dans `outer` ; sur une tuile de bord, ses pixels hors de la feuille sont posés dans la tuile
+    /// de la fenêtre.
+    pub fn absorb_beyond(&mut self, tx: i32, ty: i32, tile: Tile) {
+        if !self.in_window(tx, ty) {
+            if (tx as i64).abs() <= WORLD / TILE as i64 && (ty as i64).abs() <= WORLD / TILE as i64 {
+                self.outer.insert((tx, ty), tile);
+            }
+            return;
+        }
+        let (utx, uty) = (tx as usize, ty as usize);
+        let mut wanted = Vec::new();
+        for i in 0..TILE_PIXELS {
+            if self.beyond(utx, uty, i % TILE, i / TILE) && tile[i].a() != 0 {
+                wanted.push(i);
+            }
+        }
+        if wanted.is_empty() {
+            return;
+        }
+        let id = uty * self.tiles_x + utx;
+        let target = self.tile_mut(id);
+        for i in wanted {
+            target[i] = tile[i];
         }
     }
 
@@ -111,7 +350,41 @@ impl Raster {
         }
     }
 
+    /// Les numéros des tuiles où `self` ou `other` a quelque chose (fenêtre et hors-feuille) : ce qu'une
+    /// image refaite peut avoir changé.
+    pub fn ids_either(&self, other: &Raster) -> Vec<usize> {
+        let mut out: Vec<usize> = (0..self.tiles.len().max(other.tiles.len()))
+            .filter(|&i| self.tiles.get(i).is_some_and(Option::is_some) || other.tiles.get(i).is_some_and(Option::is_some))
+            .collect();
+        let keys: std::collections::BTreeSet<(i32, i32)> = self.outer.keys().chain(other.outer.keys()).copied().collect();
+        out.extend(keys.into_iter().map(|(tx, ty)| outer_id(tx, ty)));
+        out
+    }
+
+    /// Les numéros des tuiles qui recouvrent le rectangle `x0..x1` × `y0..y1` (pixels du monde,
+    /// bornes ramenées dans le monde) : celles de la fenêtre par leur rang, les autres par leur
+    /// codage hors-feuille.
+    pub fn ids_covering(&self, x0: i64, y0: i64, x1: i64, y1: i64) -> Vec<usize> {
+        let (lo, hi) = (-WORLD, WORLD);
+        let (x0, y0, x1, y1) = (x0.clamp(lo, hi), y0.clamp(lo, hi), x1.clamp(lo, hi), y1.clamp(lo, hi));
+        if x0 >= x1 || y0 >= y1 {
+            return Vec::new();
+        }
+        let t = TILE as i64;
+        let mut out = Vec::new();
+        for ty in y0.div_euclid(t)..=(y1 - 1).div_euclid(t) {
+            for tx in x0.div_euclid(t)..=(x1 - 1).div_euclid(t) {
+                out.push(self.id_of(tx as i32, ty as i32));
+            }
+        }
+        out
+    }
+
+    /// La tuile `idx` (rang de la fenêtre, ou numéro hors-feuille), créée vide au besoin.
     pub fn tile_mut(&mut self, idx: usize) -> &mut [Color32; TILE_PIXELS] {
+        if is_outer_id(idx) {
+            return self.outer.entry(outer_key(idx)).or_insert_with(empty_tile);
+        }
         self.tiles[idx].get_or_insert_with(empty_tile)
     }
 

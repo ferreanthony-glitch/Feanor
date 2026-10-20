@@ -12,16 +12,23 @@ use crate::document::{Document, Layer, LayerKind, LayerTransform};
 use crate::export::{self, Encoders, ExportJob, Format, Range};
 use crate::render::{self, Plan};
 
-/// Ancien calcul de l'image filmée (toute la feuille composée, sur un seul fil) : la référence.
+/// Ancien calcul de l'image filmée (toute la zone composée d'un coup, sur un seul fil) : la
+/// référence. Depuis la toile infinie, « toute la zone » est la feuille et une feuille de marge de chaque côté.
 fn camera_image_reference(doc: &Document, plan: &Plan, cam: &Camera) -> Vec<Color32> {
-    let full = render::composite_full(doc, plan);
-    let [fw, fh] = doc.frame;
     let (w, h) = (doc.width as i64, doc.height as i64);
+    let area = render::Area { x0: -w, y0: -h, x1: 2 * w, y1: 2 * h };
+    let full = render::composite_area(doc, plan, area);
+    let [fw, fh] = doc.frame;
+    // Toile infinie : hors de la zone, il y a le papier (transparent si le plan n'en a pas).
+    let outside = match plan.paper {
+        Some(p) => [p[0] as f32, p[1] as f32, p[2] as f32, 255.0],
+        None => [0.0; 4],
+    };
     let get = |x: i64, y: i64| -> [f32; 4] {
-        if x < 0 || y < 0 || x >= w || y >= h {
-            return [0.0; 4];
+        if !area.contains(x, y) {
+            return outside;
         }
-        let c = full[(y * w + x) as usize];
+        let c = full[((y - area.y0) * area.width() as i64 + (x - area.x0)) as usize];
         [c.r() as f32, c.g() as f32, c.b() as f32, c.a() as f32]
     };
     let mut out = Vec::with_capacity(fw * fh);

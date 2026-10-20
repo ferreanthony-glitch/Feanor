@@ -5,7 +5,7 @@ use eframe::egui::{self, Color32, ColorImage, TextureFilter, TextureHandle, Text
 use crate::blend::{blend_over, BlendMode};
 use crate::camera::Camera;
 use crate::document::{CameraSeen, CelId, Document, LayerTransform, Panel};
-use crate::raster::{tile_bounds, tiles_across, Raster, TILE, TILE_PIXELS};
+use crate::raster::{tile_bounds, tiles_across, Raster, TILE, TILE_PIXELS, WORLD};
 use crate::vector::Affine;
 
 /// Un dessin à superposer, avec son opacité, une teinte éventuelle (pelure d'oignon) et la
@@ -91,11 +91,9 @@ pub fn sample(raster: &Raster, x: f32, y: f32) -> Color32 {
     let (ix, iy) = (fx.floor(), fy.floor());
     let (tx, ty) = (fx - ix, fy - iy);
     let (ix, iy) = (ix as i64, iy as i64);
+    // (Toile infinie : le monde entier, hors de la feuille aussi ; vide hors des tuiles dessinées.)
     let get = |x: i64, y: i64| -> [f32; 4] {
-        if x < 0 || y < 0 || x >= raster.width as i64 || y >= raster.height as i64 {
-            return [0.0; 4];
-        }
-        let c = raster.get(x as usize, y as usize);
+        let c = raster.get_i(x, y);
         [c.r() as f32, c.g() as f32, c.b() as f32, c.a() as f32]
     };
     let (a, b, c, d) = (get(ix, iy), get(ix + 1, iy), get(ix, iy + 1), get(ix + 1, iy + 1));
@@ -238,8 +236,257 @@ fn composite_tile_into(doc: &Document, plan: &Plan, idx: usize, buf: &mut [Color
     }
 }
 
+/// Un rectangle du monde, en pixels entiers : [x0, x1) × [y0, y1). Les coordonnées vont de
+/// `-WORLD` à `WORLD` (toile infinie).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Area {
+    pub x0: i64,
+    pub y0: i64,
+    pub x1: i64,
+    pub y1: i64,
+}
+
+impl Area {
+    pub fn width(&self) -> usize {
+        (self.x1 - self.x0).max(0) as usize
+    }
+
+    pub fn height(&self) -> usize {
+        (self.y1 - self.y0).max(0) as usize
+    }
+
+    /// La feuille du document.
+    pub fn sheet(doc: &Document) -> Area {
+        Area { x0: 0, y0: 0, x1: doc.width as i64, y1: doc.height as i64 }
+    }
+
+    /// Le plus petit rectangle de tuiles entières qui contient `self`.
+    pub fn tile_aligned(&self) -> Area {
+        let t = TILE as i64;
+        Area { x0: self.x0.div_euclid(t) * t, y0: self.y0.div_euclid(t) * t, x1: (self.x1 + t - 1).div_euclid(t) * t, y1: (self.y1 + t - 1).div_euclid(t) * t }
+    }
+
+    pub fn union(&self, o: &Area) -> Area {
+        Area { x0: self.x0.min(o.x0), y0: self.y0.min(o.y0), x1: self.x1.max(o.x1), y1: self.y1.max(o.y1) }
+    }
+
+    pub fn contains(&self, x: i64, y: i64) -> bool {
+        x >= self.x0 && x < self.x1 && y >= self.y0 && y < self.y1
+    }
+
+    /// Le rectangle des flottants `lo` à `hi`, arrondi vers l'extérieur et ramené dans le monde.
+    pub fn around(lo: (f32, f32), hi: (f32, f32)) -> Area {
+        let w = WORLD as f32;
+        let c = |v: f32, up: bool| (if up { v.ceil() } else { v.floor() }).clamp(-w, w) as i64;
+        Area { x0: c(lo.0, false), y0: c(lo.1, false), x1: c(hi.0, true), y1: c(hi.1, true) }
+    }
+}
+
+/// Où le plan peut montrer autre chose que du papier : la feuille, et les tuiles dessinées des
+/// dessins du plan (hors de la feuille aussi), déplacées par la transformation de leur calque. Rien
+/// d'autre ne se compose : partout ailleurs, c'est le papier.
+pub fn plan_bounds(doc: &Document, plan: &Plan) -> Area {
+    let mut area = Area::sheet(doc);
+    let pivot = doc.stage_center();
+    let t = TILE as i64;
+    for item in &plan.items {
+        let Some(cel) = doc.cels.get(&item.cel) else { continue };
+        let Some((tx0, ty0, tx1, ty1)) = cel.raster.drawn_tile_range() else { continue };
+        let (x0, y0, x1, y1) = ((tx0 as i64 * t) as f32, (ty0 as i64 * t) as f32, ((tx1 as i64 + 1) * t) as f32, ((ty1 as i64 + 1) * t) as f32);
+        let r = match item.affine(pivot) {
+            Some(a) => {
+                let pts = [egui::pos2(x0, y0), egui::pos2(x1, y0), egui::pos2(x1, y1), egui::pos2(x0, y1)].map(|p| a.apply(p));
+                let lo = pts.iter().fold((f32::MAX, f32::MAX), |(x, y), p| (x.min(p.x), y.min(p.y)));
+                let hi = pts.iter().fold((f32::MIN, f32::MIN), |(x, y), p| (x.max(p.x), y.max(p.y)));
+                if ![lo.0, lo.1, hi.0, hi.1].iter().all(|v| v.is_finite()) {
+                    continue;
+                }
+                Area::around((lo.0 - 2.0, lo.1 - 2.0), (hi.0 + 2.0, hi.1 + 2.0))
+            }
+            None => Area::around((x0, y0), (x1, y1)),
+        };
+        area = area.union(&r);
+    }
+    area
+}
+
+/// Les tuiles du monde de `area` où le plan peut montrer autre chose que du papier et qui ne sont
+/// pas entièrement dans la feuille : celles des dessins (hors de la feuille, et les bords qui
+/// débordent), et, pour un calque transformé, toutes celles que son rectangle déplacé touche.
+/// Ce que l'écran compose en plus de la feuille (`monde.rs`).
+pub fn plan_world_tiles(doc: &Document, plan: &Plan, area: Area) -> Vec<(i32, i32)> {
+    let t = TILE as i64;
+    let (w, h) = (doc.width as i64, doc.height as i64);
+    let pivot = doc.stage_center();
+    let mut set = std::collections::BTreeSet::new();
+    let wanted = |tx: i64, ty: i64| {
+        let inside = tx >= 0 && ty >= 0 && (tx + 1) * t <= w && (ty + 1) * t <= h;
+        !inside && tx * t < area.x1 && (tx + 1) * t > area.x0 && ty * t < area.y1 && (ty + 1) * t > area.y0
+    };
+    for item in &plan.items {
+        let Some(cel) = doc.cels.get(&item.cel) else { continue };
+        if item.warp(pivot).is_some() {
+            continue;
+        }
+        let Some((tx0, ty0, tx1, ty1)) = cel.raster.drawn_tile_range() else { continue };
+        match item.affine(pivot) {
+            Some(a) => {
+                let (x0, y0, x1, y1) = ((tx0 as i64 * t) as f32, (ty0 as i64 * t) as f32, ((tx1 as i64 + 1) * t) as f32, ((ty1 as i64 + 1) * t) as f32);
+                let pts = [egui::pos2(x0, y0), egui::pos2(x1, y0), egui::pos2(x1, y1), egui::pos2(x0, y1)].map(|p| a.apply(p));
+                let lo = pts.iter().fold((f32::MAX, f32::MAX), |(x, y), p| (x.min(p.x), y.min(p.y)));
+                let hi = pts.iter().fold((f32::MIN, f32::MIN), |(x, y), p| (x.max(p.x), y.max(p.y)));
+                if ![lo.0, lo.1, hi.0, hi.1].iter().all(|v| v.is_finite()) {
+                    continue;
+                }
+                let r = Area::around((lo.0 - 2.0, lo.1 - 2.0), (hi.0 + 2.0, hi.1 + 2.0)).tile_aligned();
+                let (ax0, ay0, ax1, ay1) = (r.x0.max(area.x0).div_euclid(t), r.y0.max(area.y0).div_euclid(t), (r.x1.min(area.x1) + t - 1).div_euclid(t), (r.y1.min(area.y1) + t - 1).div_euclid(t));
+                for ty in ay0..ay1 {
+                    for tx in ax0..ax1 {
+                        if wanted(tx, ty) {
+                            set.insert((tx as i32, ty as i32));
+                        }
+                    }
+                }
+            }
+            None => {
+                for id in cel.raster.drawn_ids() {
+                    let (tx, ty) = cel.raster.key_of(id);
+                    if wanted(tx as i64, ty as i64) {
+                        set.insert((tx, ty));
+                    }
+                }
+            }
+        }
+    }
+    set.into_iter().collect()
+}
+/// Compose la tuile du monde (`tx`, `ty`), en entier (soixante-quatre pixels de côté, y compris la
+/// bande d'une tuile de bord qui dépasse la feuille), dans `buf` : une zone de largeur `stride` dont
+/// le coin haut gauche est au point `origin` du monde. Hors de la feuille, ce qu'on y a dessiné
+/// (`Raster::outer`) ; les feuilles déformées par un maillage (enveloppe, perspective) restent à la
+/// feuille.
+pub(crate) fn composite_world_tile(doc: &Document, plan: &Plan, tx: i32, ty: i32, buf: &mut [Color32], stride: usize, origin: (i64, i64)) {
+    let t = TILE as i64;
+    let (ox, oy) = (tx as i64 * t, ty as i64 * t);
+    let at = |x: i64, y: i64| ((y - origin.1) as usize) * stride + (x - origin.0) as usize;
+    let base = paper_color(plan);
+    for y in 0..t {
+        let s = at(ox, oy + y);
+        buf[s..s + TILE].fill(base);
+    }
+    let in_window = tx >= 0 && ty >= 0 && ox < doc.width as i64 && oy < doc.height as i64;
+    for item in &plan.items {
+        if let Some((warp, layer)) = item.warp(doc.stage_center()) {
+            if !in_window {
+                continue;
+            }
+            let Some(cel) = crate::fx::shown(doc, item) else { continue };
+            let (tw, th) = (TILE.min(doc.width - ox as usize), TILE.min(doc.height - oy as usize));
+            let mut laid = vec![Color32::TRANSPARENT; tw * th];
+            warp.fill(&cel.raster, layer.as_ref(), (ox as usize, oy as usize, tw, th), |x, y, src| laid[(y - oy as usize) * tw + (x - ox as usize)] = src);
+            for y in 0..th {
+                let s = at(ox, oy + y as i64);
+                for (x, (d, &src)) in buf[s..s + tw].iter_mut().zip(&laid[y * tw..(y + 1) * tw]).enumerate() {
+                    if src.a() != 0 {
+                        *d = blend_over(*d, src, item.opacity, item.tint, item.blend, ((ox + x as i64) as usize, (oy + y as i64) as usize));
+                    }
+                }
+            }
+            continue;
+        }
+        // Calque transformé : chaque pixel va chercher le point correspondant du dessin.
+        if let Some(inv) = inverse_of(doc, item) {
+            let Some(cel) = crate::fx::shown(doc, item) else { continue };
+            for y in 0..t {
+                let s = at(ox, oy + y);
+                for (x, d) in buf[s..s + TILE].iter_mut().enumerate() {
+                    let p = inv.apply(egui::pos2((ox + x as i64) as f32 + 0.5, (oy + y) as f32 + 0.5));
+                    let src = sample(&cel.raster, p.x, p.y);
+                    if src.a() != 0 {
+                        *d = blend_over(*d, src, item.opacity, item.tint, item.blend, (world_dither(ox + x as i64), world_dither(oy + y)));
+                    }
+                }
+            }
+            continue;
+        }
+        let Some(cel) = crate::fx::shown(doc, item) else { continue };
+        let r = &cel.raster;
+        // Un dessin d'une autre taille que la feuille (aperçu réduit d'un effet) : lu à l'échelle,
+        // sur la feuille seulement.
+        if r.width != doc.width || r.height != doc.height {
+            if !in_window {
+                continue;
+            }
+            let (kx, ky) = (r.width as f32 / doc.width.max(1) as f32, r.height as f32 / doc.height.max(1) as f32);
+            for y in 0..t {
+                let s = at(ox, oy + y);
+                for (x, d) in buf[s..s + TILE].iter_mut().enumerate() {
+                    let (wx, wy) = (ox + x as i64, oy + y);
+                    if wx >= doc.width as i64 || wy >= doc.height as i64 {
+                        continue;
+                    }
+                    let src = r.get((((wx as f32) + 0.5) * kx) as usize, (((wy as f32) + 0.5) * ky) as usize);
+                    if src.a() != 0 {
+                        *d = blend_over(*d, src, item.opacity, item.tint, item.blend, (wx as usize, wy as usize));
+                    }
+                }
+            }
+            continue;
+        }
+        let Some(tile) = r.tile_at(tx, ty) else { continue };
+        let tile: &[Color32; TILE_PIXELS] = tile;
+        for y in 0..TILE {
+            let s = at(ox, oy + y as i64);
+            let row = &tile[y * TILE..y * TILE + TILE];
+            for (x, (d, &src)) in buf[s..s + TILE].iter_mut().zip(row).enumerate() {
+                if src.a() != 0 {
+                    *d = blend_over(*d, src, item.opacity, item.tint, item.blend, (world_dither(ox + x as i64), world_dither(oy + y as i64)));
+                }
+            }
+        }
+    }
+}
+
+/// La position d'un pixel du monde pour les motifs qui en dépendent (le tramage du mode « Dissoudre ») :
+/// sur la feuille, la même que toujours ; hors d'elle, le reste de la division par 4 096 (les
+/// motifs se répètent, ils n'ont pas besoin d'un entier signé).
+fn world_dither(v: i64) -> usize {
+    v.rem_euclid(1 << 20) as usize
+}
+
 fn tile_count(doc: &Document) -> usize {
     tiles_across(doc.width) * doc.height.div_ceil(TILE)
+}
+
+/// Compose le plan sur la zone `area` du monde (toile infinie) : une image `area.width() ×
+/// area.height()`, papier compris. Les tuiles du monde sont réparties sur les cœurs, une rangée de
+/// tuiles par morceau.
+pub fn composite_area(doc: &Document, plan: &Plan, area: Area) -> Vec<Color32> {
+    let resolved = crate::calqueffet::resolve_auto(doc, plan);
+    let plan = &*resolved;
+    let (w, h) = (area.width(), area.height());
+    if w == 0 || h == 0 {
+        return Vec::new();
+    }
+    let al = area.tile_aligned();
+    let (aw, ah) = (al.width(), al.height());
+    let mut buf = vec![Color32::TRANSPARENT; aw * ah];
+    let t = TILE as i64;
+    par_chunks(&mut buf, TILE * aw, |band, rows| {
+        let ty = (al.y0 / t) as i32 + band as i32;
+        for tx in (al.x0 / t) as i32..(al.x1 / t) as i32 {
+            composite_world_tile(doc, plan, tx, ty, rows, aw, (al.x0, ty as i64 * t));
+        }
+    });
+    if al == area {
+        return buf;
+    }
+    let mut out = Vec::with_capacity(w * h);
+    for y in 0..h {
+        let s = ((area.y0 - al.y0) as usize + y) * aw + (area.x0 - al.x0) as usize;
+        out.extend_from_slice(&buf[s..s + w]);
+    }
+    out
 }
 
 pub fn composite_full(doc: &Document, plan: &Plan) -> Vec<Color32> {
@@ -301,10 +548,12 @@ pub(crate) fn set_thread_cap(cap: usize) {
 
 /// Ce que voit la caméra `cam` : l'image finale (`doc.frame`). Chaque pixel prend la couleur de
 /// la feuille au point filmé (interpolation bilinéaire) ; caméra centrée sans zoom ni rotation :
-/// les pixels de la feuille, tels quels. Hors de la feuille : transparent.
+/// les pixels de la feuille, tels quels. Hors de la feuille (toile infinie) : ce qu'on y a dessiné,
+/// sur le papier (transparent si le plan n'a pas de papier).
 ///
-/// Seule la zone filmée de la feuille est composée (en tuiles entières, avec une marge pour
-/// l'interpolation), et le travail est réparti sur les cœurs du processeur.
+/// Seule la zone filmée est composée, et seulement là où il y a autre chose que du papier (la
+/// feuille et ce que les dessins ont hors d'elle), en tuiles entières avec une marge pour
+/// l'interpolation ; le travail est réparti sur les cœurs du processeur.
 pub fn camera_image(doc: &Document, plan: &Plan, cam: &Camera) -> Vec<Color32> {
     let resolved = crate::calqueffet::resolve_auto(doc, plan);
     let plan = &*resolved;
@@ -319,37 +568,26 @@ pub fn camera_image(doc: &Document, plan: &Plan, cam: &Camera) -> Vec<Color32> {
     if !cam.sees_reference(doc.frame) {
         (lo, hi) = ((0.0, 0.0), (w as f32, h as f32));
     }
-    if w == 0 || h == 0 || hi.0 + 2.0 < 0.0 || hi.1 + 2.0 < 0.0 || lo.0 - 2.0 >= w as f32 || lo.1 - 2.0 >= h as f32 {
+    if w == 0 || h == 0 || ![lo.0, lo.1, hi.0, hi.1].iter().all(|v| v.is_finite()) {
         return out;
     }
-    let clamp = |v: f32, max: usize| (v.max(0.0) as usize).min(max - 1);
-    let (tx0, ty0) = (clamp(lo.0 - 2.0, w) / TILE, clamp(lo.1 - 2.0, h) / TILE);
-    let (tx1, ty1) = (clamp(hi.0 + 2.0, w) / TILE, clamp(hi.1 + 2.0, h) / TILE);
-    let (rx, ry) = (tx0 * TILE, ty0 * TILE);
-    let rw = ((tx1 + 1) * TILE).min(w) - rx;
-    let rh = ((ty1 + 1) * TILE).min(h) - ry;
-    let tiles_x = tiles_across(w);
-
+    // Où il y a autre chose que du papier : la feuille et ce que les dessins ont autour d'elle.
+    let busy = plan_bounds(doc, plan);
+    let want = Area::around((lo.0 - 2.0, lo.1 - 2.0), (hi.0 + 2.0, hi.1 + 2.0));
+    let seen = Area { x0: want.x0.max(busy.x0), y0: want.y0.max(busy.y0), x1: want.x1.min(busy.x1), y1: want.y1.min(busy.y1) };
+    let base = paper_color(plan);
+    let area = if seen.x1 > seen.x0 && seen.y1 > seen.y0 { seen.tile_aligned() } else { Area { x0: 0, y0: 0, x1: 0, y1: 0 } };
+    let (rw, rh) = (area.width(), area.height());
     // Composer la zone, une bande de tuiles par morceau.
-    let mut region = vec![Color32::TRANSPARENT; rw * rh];
-    par_chunks(&mut region, TILE * rw, |band, buf| {
-        let ty = ty0 + band;
-        for tx in tx0..=tx1 {
-            composite_tile_into(doc, plan, ty * tiles_x + tx, buf, rw, (rx, ty * TILE));
-        }
-    });
+    let region = composite_area(doc, plan, area);
 
-    // Échantillonner ce que filme la caméra. Hors de la zone (donc hors de la feuille, grâce à la
-    // marge) : transparent.
+    // Échantillonner ce que filme la caméra. Hors de la zone : le papier.
     let region = &region;
     let get = |x: i64, y: i64| -> [f32; 4] {
-        let (x, y) = (x - rx as i64, y - ry as i64);
-        if x < 0 || y < 0 || x >= rw as i64 || y >= rh as i64 {
-            return [0.0; 4];
-        }
-        let c = region[y as usize * rw + x as usize];
+        let c = if area.contains(x, y) { region[(y - area.y0) as usize * rw + (x - area.x0) as usize] } else { base };
         [c.r() as f32, c.g() as f32, c.b() as f32, c.a() as f32]
     };
+    let _ = rh;
     const ROWS: usize = 16;
     par_chunks(&mut out, fw * ROWS, |chunk, rows| {
         for (k, px_out) in rows.iter_mut().enumerate() {
@@ -373,9 +611,7 @@ pub fn camera_image(doc: &Document, plan: &Plan, cam: &Camera) -> Vec<Color32> {
 }
 
 pub fn composite_pixel(doc: &Document, plan: &Plan, x: usize, y: usize) -> Color32 {
-    let resolved = crate::calqueffet::resolve_auto(doc, plan);
-    let plan = &*resolved;
-    pixel_of(&resolve(doc, plan), paper_color(plan), x, y)
+    composite_pixel_i(doc, plan, x as i64, y as i64)
 }
 
 /// Un élément du plan dont le dessin affiché (effets compris) et la transformation inverse sont
@@ -407,8 +643,9 @@ fn resolve<'a>(doc: &'a Document, plan: &'a Plan) -> Vec<Resolved<'a>> {
         .collect()
 }
 
-/// Le pixel (`x`, `y`) de la feuille : le papier `base`, puis chaque élément.
-fn pixel_of(layers: &[Resolved], base: Color32, x: usize, y: usize) -> Color32 {
+/// Le pixel (`x`, `y`) du monde (la feuille, ou la toile autour d'elle) : le papier `base`, puis
+/// chaque élément.
+fn pixel_of(layers: &[Resolved], base: Color32, x: i64, y: i64) -> Color32 {
     let mut c = base;
     for l in layers {
         let r = &l.cel.raster;
@@ -417,17 +654,25 @@ fn pixel_of(layers: &[Resolved], base: Color32, x: usize, y: usize) -> Color32 {
                 let p = inv.apply(egui::pos2(x as f32 + 0.5, y as f32 + 0.5));
                 sample(r, p.x * l.kx, p.y * l.ky)
             }
-            None if l.same => r.get(x, y),
+            None if l.same => r.get_i(x, y),
+            None if x < 0 || y < 0 => Color32::TRANSPARENT,
             None => {
                 let (rx, ry) = (((x as f32 + 0.5) * l.kx) as usize, ((y as f32 + 0.5) * l.ky) as usize);
                 if rx < r.width && ry < r.height { r.get(rx, ry) } else { Color32::TRANSPARENT }
             }
         };
         if s.a() != 0 {
-            c = blend_over(c, s, l.item.opacity, l.item.tint, l.item.blend, (x, y));
+            c = blend_over(c, s, l.item.opacity, l.item.tint, l.item.blend, (world_dither(x), world_dither(y)));
         }
     }
     c
+}
+
+/// Le pixel (`x`, `y`) du monde, hors de la feuille aussi (la pipette sur la toile infinie).
+pub fn composite_pixel_i(doc: &Document, plan: &Plan, x: i64, y: i64) -> Color32 {
+    let resolved = crate::calqueffet::resolve_auto(doc, plan);
+    let plan = &*resolved;
+    pixel_of(&resolve(doc, plan), paper_color(plan), x, y)
 }
 
 /// Plan de l'image `frame` du panneau `index` tel que la caméra le filme (vignettes, export) :
@@ -530,10 +775,9 @@ pub fn thumbnail_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th:
         for x in 0..tw {
             let mut acc = [0u32; 4];
             for (ox, oy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
+                // (Toile infinie : le cadre peut filmer hors de la feuille.)
                 let c = match map.at((x as f32 + ox) * sx, (y as f32 + oy) * sy) {
-                    Some(p) if p.x >= 0.0 && p.y >= 0.0 && p.x < doc.width as f32 && p.y < doc.height as f32 => {
-                        pixel_of(&layers, base, p.x as usize, p.y as usize)
-                    }
+                    Some(p) if p.x.abs() < WORLD as f32 && p.y.abs() < WORLD as f32 => pixel_of(&layers, base, p.x.floor() as i64, p.y.floor() as i64),
                     _ => Color32::TRANSPARENT,
                 };
                 for (a, v) in acc.iter_mut().zip(c.to_array()) {
@@ -601,6 +845,10 @@ pub struct Renderer {
     gpu: bool,
     gpu_all: bool,
     gpu_tiles: Vec<usize>,
+    /// Ce qui a changé depuis la dernière image pour le hors-feuille (toile infinie, `monde.rs`) : tout,
+    /// ou ces tuiles (numéros de la fenêtre et du hors-feuille).
+    world_all: bool,
+    world_tiles: Vec<usize>,
 }
 
 impl Renderer {
@@ -617,6 +865,8 @@ impl Renderer {
             gpu: false,
             gpu_all: true,
             gpu_tiles: Vec::new(),
+            world_all: true,
+            world_tiles: Vec::new(),
         }
     }
 
@@ -627,6 +877,7 @@ impl Renderer {
     pub fn invalidate_all(&mut self) {
         self.dirty_all = true;
         self.gpu_all = true;
+        self.world_all = true;
     }
 
     /// Un fond arrivé de l'arrière-plan (`fx::fond_poll`) remplace celui d'avant : le plan est le
@@ -634,9 +885,18 @@ impl Renderer {
     /// des dessins dérivés toute seule).
     pub fn invalidate_composed(&mut self) {
         self.dirty_all = true;
+        self.world_all = true;
     }
 
     pub fn invalidate_tiles(&mut self, tiles: &[usize]) {
+        if !self.world_all {
+            self.world_tiles.extend_from_slice(tiles);
+            // (Au-delà de quelques milliers de tuiles, tout refaire coûte moins que les suivre.)
+            if self.world_tiles.len() > 8192 {
+                self.world_all = true;
+                self.world_tiles.clear();
+            }
+        }
         for &t in tiles {
             if let Some(d) = self.dirty.get_mut(t) {
                 *d = true;
@@ -649,6 +909,14 @@ impl Renderer {
     }
 
     /// Changements à envoyer à la carte graphique depuis la dernière fois : tout, ou ces tuiles.
+    /// Changements à montrer hors de la feuille depuis la dernière fois : tout, ou ces tuiles.
+    pub fn take_world_dirty(&mut self) -> (bool, Vec<usize>) {
+        let mut tiles = std::mem::take(&mut self.world_tiles);
+        tiles.sort_unstable();
+        tiles.dedup();
+        (std::mem::take(&mut self.world_all), tiles)
+    }
+
     pub fn take_gpu_dirty(&mut self) -> (bool, Vec<usize>) {
         let mut tiles = std::mem::take(&mut self.gpu_tiles);
         tiles.sort_unstable();

@@ -863,6 +863,9 @@ impl App {
             None => self.doc.new_cel(kind),
         };
         let end = key_at(&mut self.doc.panels[pi].layers[li], f, cel, len).unwrap_or(f + 1);
+        if let Some(src) = source {
+            crate::calquecouleur::noter_copie(&mut self.doc, pi, li, src, cel);
+        }
         self.cur_frame = f;
         self.vsel = None;
         self.commit_structure(snap);

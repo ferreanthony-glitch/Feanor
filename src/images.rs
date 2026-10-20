@@ -654,6 +654,8 @@ impl App {
                         None => {
                             let c = self.doc.duplicate_cel(old);
                             copies.insert(old, c);
+                            // (Le dessin d'un trait copié emporte sa couleur.)
+                            crate::calquecouleur::noter_copie(&mut self.doc, self.cur_panel, li, old, c);
                             c
                         }
                     })
@@ -744,6 +746,7 @@ impl App {
         let copy = self.doc.duplicate_cel(id);
         let (f, li) = (self.cur_frame, self.cur_layer);
         break_instance(&mut self.layers_mut()[li].frames, f, copy);
+        crate::calquecouleur::noter_copie(&mut self.doc, self.cur_panel, li, id, copy);
         self.done(snap, "Instance cassée : la suite est un nouveau dessin.".into());
     }
 

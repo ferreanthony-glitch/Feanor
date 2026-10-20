@@ -300,7 +300,8 @@ impl App {
         // deux sous-menus.
         ui.separator();
         if in_montage && ui.checkbox(&mut visible.clone(), "Afficher").clicked() {
-            self.set_layer_flag(li, |l| l.visible = !visible);
+            let _ = visible;
+            self.toggle_layer_visible(li);
         }
         if !folder && ui.checkbox(&mut onion.clone(), "Pelure d'oignon du calque").clicked() {
             self.set_layer_flag(li, |l| l.onion = !onion);
@@ -377,6 +378,10 @@ impl App {
         }
         if video {
             ui.menu_button("Calque vidéo", |ui| self.video_menu(ui, li));
+        }
+        // Calque de couleur sous le trait (`calquecouleurui.rs`) : en ajouter un, ou ses réglages.
+        if !folder && !video && !ctg {
+            ui.menu_button("Calque de couleur", |ui| self.couleur_menu(ui, li));
         }
         let (label, from) = if in_montage {
             ("Toutes les commandes des calques", crate::layerops::OpsFrom::LayerMenu)

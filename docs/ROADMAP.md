@@ -1798,7 +1798,8 @@ Choix d'Anthony :
   l'arrivée du nouveau (demande caduque jetée) ; export et enregistrement restent exacts. Rendu du
   plan après le 60e trait : 91 → 6 ms, glissé de 50 traits 71 → 1,6 ms par image
   (`fond_background_keeps_the_ui_thread_free`). **Perte de données** corrigée : les traces en
-  flottants de d01fffe se relisent, un dessin illisible n'est plus effacé à l'enregistrement. **Rejeu** (contre-vérification de 55b35a3, ejeu_tests.rs) : Ctrl+Z n'annule plus que les dessins qu'il a refaits (N1), un rendu dépassé est redemandé et les demandes interactives passent devant la file du chargement (N2), pas d'adoption pendant un geste sur le dessin ni si sa version a changé (N3), Ctrl+Z du second geste d'une enveloppe ou d'une perspective bitmap revient au premier (N4), l'adoption ne fait plus réécrire tous les dessins au premier enregistrement (N7), un panic du rendu est signalé sans tuer le fil (N9).- ✅ Étude « vectoriel comme bitmap » (Fable, 2026-10-18, `docs/VECTORIEL-COMME-BITMAP.md`) :
+  flottants de d01fffe se relisent, un dessin illisible n'est plus effacé à l'enregistrement. **Rejeu** (contre-vérification de 55b35a3, 
+ejeu_tests.rs) : Ctrl+Z n'annule plus que les dessins qu'il a refaits (N1), un rendu dépassé est redemandé et les demandes interactives passent devant la file du chargement (N2), pas d'adoption pendant un geste sur le dessin ni si sa version a changé (N3), Ctrl+Z du second geste d'une enveloppe ou d'une perspective bitmap revient au premier (N4), l'adoption ne fait plus réécrire tous les dessins au premier enregistrement (N7), un panic du rendu est signalé sans tuer le fil (N9).- ✅ Étude « vectoriel comme bitmap » (Fable, 2026-10-18, `docs/VECTORIEL-COMME-BITMAP.md`) :
   l'existant en images (le trait vectoriel perd au lâcher opacité ↔ appui, connexions, humide,
   accumulation, et garde l'ancien bord), toutes les pistes (rejeu du moteur depuis le chemin avec
   appui, instant, réglage complet et graine ; cache par trait ; GPU ; état de départ des morceaux ;
@@ -2990,3 +2991,31 @@ Détail dans `docs/EXPORT_MONTAGE.md`. **Jamais ouvert dans Premiere Pro, DaVinc
 - Pas fait : calcul des images sur un fil à part (elles se calculent sur le fil de l'interface, 40 ms par image d'écran, comme
   l'export du film) ; time code à sauts d'images ; AAF ; son dans l'EDL ; fondus par le noir ou le blanc entre deux plans et volets
   (coupes dites) ; poignées lues dans le contenu rogné (elles sont des images tenues).
+
+## Calque de couleur : la couleur sous le trait (demandé par Anthony le 2026-10-20, branche `canevas-couleur`) ✅
+
+- Un calque de couleur est lié à un calque de dessin (le trait) : juste dessous dans la pile, il en suit les images
+  (miroir des clés, des expositions et des trous), on y colorie sans abîmer le trait. Pot de peinture borné par le trait
+  (trous fermés comme le fond sous le trait et le calque CTG), pinceau dans la zone fermée (réglable). Créer, déplacer,
+  cacher, supprimer, dupliquer, copier / coller avec le trait ; une annulation par commande ; format 30. Détails et
+  vérifications : `docs/INTERFACE.md` partie 18, `README.md` « Calque de couleur ».
+- Comparaison avec Toon Boom (Storyboard Pro, Harmony) : **à vérifier** — SHOT reprend l'idée « trait / couleur », pas le
+  fonctionnement exact.
+- Reste : réglage de la fermeture des trous par zone (aujourd'hui par calque) ; une couleur qui suit le tremblement du
+  trait ; remettre sa couleur à une clé du trait coupée / collée ; un panneau de palette de couleurs par personnage.
+
+## Toile infinie : dessiner hors de la feuille (demandé par Anthony le 2026-10-20, branche `canevas-couleur`) ✅
+
+- Dessiner partout autour de la feuille (jusqu'à 32 768 px), comme Storyboard Pro (**à vérifier**) : tuiles
+  éparses à coordonnées signées (`Raster::outer`), numéros de tuiles stables pour l'historique, trait vectoriel
+  sans limite de feuille, composition par tuiles du monde, caméra qui regarde hors de la feuille, papier partout,
+  plus d'ombre sous la feuille, cadre de caméra discret. Enregistrement : fichiers `<n>_hors.png / .json`
+  (format 30). Un projet d'avant s'ouvre tel quel.
+- À l'écran, la feuille garde sa composition d'avant (carte graphique) et le reste du monde visible est une texture
+  composée par le processeur (`monde.rs`), 5 ms par image au plus, mise à jour par tuiles. Pire image mesurée loin
+  de l'origine : 2,4 ms. Détails : `docs/ARCHITECTURE.md` « Toile infinie », vérifications : `docs/INTERFACE.md`
+  partie 19.
+- Reste : pot de peinture, zones bitmap sélectionnées, effets de calque et d'ajustement, fond sous le trait,
+  calque de couleur, déformations (enveloppe, perspective), import / export Storyboard Pro et propagation à la
+  feuille seulement ; effets de la carte graphique sur le hors-feuille ; « Tout voir » (cadrer tout ce qui est
+  dessiné) en plus de « Ajuster à la fenêtre » ; zoom arrière extrême plus net (tuiles réduites par niveaux).

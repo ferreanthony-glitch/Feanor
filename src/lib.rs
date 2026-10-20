@@ -230,6 +230,15 @@ pub mod ctg;
 #[cfg(test)]
 mod ctg_tests;
 mod ctgui;
+// Calque de couleur : la couleur sous le trait d'un calque, qui suit ses images.
+pub mod calquecouleur;
+#[cfg(test)]
+mod calquecouleur_tests;
+mod calquecouleurui;
+pub mod monde;
+// Toile infinie : tuiles hors de la feuille (essais).
+#[cfg(test)]
+mod toile_tests;
 mod historyui;
 #[cfg(test)]
 mod historyui_tests;

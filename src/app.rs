@@ -282,6 +282,8 @@ pub(crate) struct LayerClip {
     pub layer: Layer,
     /// Calques du dossier copié (13b-5), du plus bas au plus haut ; vide pour un calque.
     pub children: Vec<Layer>,
+    /// Calques de couleur du calque copié (`calquecouleur.rs`) : ils sont collés avec lui.
+    pub colours: Vec<Layer>,
     pub cels: HashMap<CelId, crate::document::Cel>,
     pub panel_len: usize,
 }
@@ -636,6 +638,8 @@ pub struct App {
     pub(crate) pixel_clipboard: Option<Floating>,
     /// Calque copié (W / X).
     pub(crate) layer_clipboard: Option<LayerClip>,
+    /// Les murs du trait que colore le calque de couleur courant (`calquecouleur.rs`).
+    pub(crate) murs: crate::calquecouleur::Cache,
     /// Panneaux copiés (12e).
     pub(crate) panel_clipboard: Option<crate::document::PanelClip>,
     /// Le montage (ou la planche des vignettes) a la main : on y a cliqué en dernier, pas dans le
@@ -731,6 +735,8 @@ pub struct App {
     pub(crate) rejeu: crate::rejeu::Rejeu,
     pub(crate) clipboard: Vec<Element>,
     pub(crate) renderer: Renderer,
+    /// Le monde hors de la feuille à l'écran (toile infinie, `monde.rs`).
+    pub(crate) monde: crate::monde::Monde,
     pub(crate) thumbs: Thumbs,
     pub(crate) montage_zoom: f32,
     /// Le zoom du montage et de la timeline reste calé sur la tête de lecture (`zoombande.rs`) :
@@ -1091,6 +1097,7 @@ impl App {
             select_rect: false,
             pixel_clipboard: None,
             layer_clipboard: None,
+            murs: Default::default(),
             panel_clipboard: None,
             panel_focus: false,
             cam_key_sel: Vec::new(),
@@ -1144,6 +1151,7 @@ impl App {
             rejeu: crate::rejeu::Rejeu::new(),
             clipboard: Vec::new(),
             renderer: Renderer::new(),
+            monde: crate::monde::Monde::new(),
             thumbs: Thumbs::default(),
             montage_zoom: 4.0,
             strip_geo: Default::default(),
@@ -1645,6 +1653,10 @@ impl App {
     /// tenu jusqu'au prochain dessin ou à la fin du plan ; en animation, sur le nombre d'images
     /// choisi (« sur 1 », « sur 2 »…) : `images::new_drawing_span`.
     pub(crate) fn ensure_cel(&mut self) -> (CelId, Option<Edit>) {
+        // Calque de couleur : son dessin est celui que le miroir du trait lui donne.
+        if self.layer().couleur.is_some() {
+            return self.ensure_colour_cel();
+        }
         if let Some(id) = self.cel_here() {
             // Cassure automatique (13c) : sur une image tenue, ailleurs qu'au début de son
             // exposition, on dessine sur une copie, jusqu'à la fin de l'exposition.
@@ -1654,6 +1666,7 @@ impl App {
                 let copy = self.doc.duplicate_cel(id);
                 let li = self.cur_layer;
                 crate::images::break_instance(&mut self.layers_mut()[li].frames, f, copy);
+                crate::calquecouleur::noter_copie(&mut self.doc, self.cur_panel, li, id, copy);
                 self.status = "Cassure automatique : un nouveau dessin à partir de cette image.".into();
                 return (copy, Some(snap));
             }
@@ -1720,6 +1733,11 @@ impl App {
             self.status = FOLDER_NOT_DRAWABLE.into();
             return true;
         }
+        // Un calque de couleur n'a pas d'images à lui : celles de son calque de trait.
+        if self.layers().get(self.cur_layer).is_some_and(|l| l.keys_follow_line()) {
+            self.status = "Les images d'un calque de couleur suivent celles de son calque de trait : pose, déplace ou supprime les clés sur le trait.".into();
+            return true;
+        }
         false
     }
 
@@ -1765,6 +1783,8 @@ impl App {
         };
         let textures = self.brushes.textures(&settings);
         let stencil = self.stencil_for(cel);
+        // Calque de couleur : le trait reste dans la zone fermée par le trait où il commence.
+        let stencil = self.couleur_pochoir(stencil, p);
         let painting = self.tool != Tool::Eraser;
         let (behind, fill, tol) = (painting && self.paint_behind, painting && self.fill_shapes, self.close_tolerance());
         let mut stroke = StrokeState::new(cel, mode, settings, prefix, pen)
@@ -1774,6 +1794,11 @@ impl App {
             .with_secondary(self.couleurs.prefs.back)
             .on_layer(self.layer().keep_alpha, stencil)
             .with_options(behind, fill, tol);
+        // Toile infinie : on peint aussi hors de la feuille (tuiles gardées à part, `Raster::outer`) ;
+        // sauf dans la zone fermée d'un calque de couleur (son pochoir est celui de la feuille).
+        if !(painting && self.layer().couleur.as_ref().is_some_and(|c| c.zone)) {
+            stroke = stroke.on_infinite_canvas();
+        }
         let mut dirty = Vec::new();
         // L'instant de l'événement (étalé dans l'image d'écran, `canvas_input`) : la vitesse du
         // trait et le lissage selon le temps en viennent.
@@ -1980,22 +2005,40 @@ impl App {
     }
 
     pub(crate) fn pick_color(&mut self, p: Pos2) {
-        if p.x < 0.0 || p.y < 0.0 || p.x >= self.doc.width as f32 || p.y >= self.doc.height as f32 {
+        if !p.x.is_finite() || !p.y.is_finite() {
             return;
         }
         let plan = self.build_plan(self.cur_frame, false, true);
-        let c = render::composite_pixel(&self.doc, &plan, p.x as usize, p.y as usize);
+        let c = if p.x < 0.0 || p.y < 0.0 || p.x >= self.doc.width as f32 || p.y >= self.doc.height as f32 {
+            // Toile infinie : la pipette prend aussi hors de la feuille (le pixel du monde, papier compris).
+            let (x, y) = (p.x.floor(), p.y.floor());
+            let area = render::Area::around((x, y), (x + 1.0, y + 1.0));
+            match render::composite_area(&self.doc, &plan, area).first() {
+                Some(&c) => c,
+                None => return,
+            }
+        } else {
+            render::composite_pixel(&self.doc, &plan, p.x as usize, p.y as usize)
+        };
         let [r, g, b, _] = unpremultiply(c);
         self.color = [r, g, b];
     }
 
     pub(crate) fn fill_at(&mut self, p: Pos2) {
         if p.x < 0.0 || p.y < 0.0 || p.x >= self.doc.width as f32 || p.y >= self.doc.height as f32 {
+            // Toile infinie : le pot de peinture cherche ses contours sur la feuille (une zone qui
+            // s'étendrait à l'infini n'a pas de fin) ; hors de la feuille, il ne remplit pas.
+            self.status = "Le pot de peinture remplit dans la feuille : clique sur une zone fermée de la feuille.".into();
             return;
         }
         // Strate Fond (`fondui.rs`) : la zone fermée par le trait se remplit dans le fond.
         if self.paint_fond && self.layer().fond.is_some() {
             self.fond_zone_at(p, false);
+            return;
+        }
+        // Calque de couleur (`calquecouleurui.rs`) : la zone fermée par le trait de son calque de trait.
+        if self.layer().couleur.is_some() {
+            self.fill_couleur(p);
             return;
         }
         self.end_stroke();
@@ -2265,6 +2308,8 @@ impl App {
     pub(crate) fn commit_structure(&mut self, snap: Edit) {
         self.history.push(snap);
         self.modified = true;
+        // Les calques de couleur suivent le trait tout de suite, dans la même étape d'annulation.
+        self.sync_couleurs();
         self.renderer.invalidate_all();
     }
 
@@ -2374,6 +2419,10 @@ impl App {
         let layer = &mut self.layers_mut()[li];
         let at = if current.is_some() { layer.run_bounds(f).1 } else { f };
         layer.insert(at, Some(id), n);
+        // Une copie du dessin emporte la couleur du dessin copié.
+        if let (true, Some(src)) = (duplicate, current) {
+            crate::calquecouleur::noter_copie(&mut self.doc, self.cur_panel, li, src, id);
+        }
         self.cur_frame = at;
         self.follow_frame = true;
         self.vsel = None;
@@ -2470,7 +2519,7 @@ impl App {
             self.push_vector(id, before, None);
             return;
         }
-        let tiles: Vec<(usize, Option<Tile>)> = c
+        let mut tiles: Vec<(usize, Option<Tile>)> = c
             .raster
             .tiles
             .iter_mut()
@@ -2478,6 +2527,11 @@ impl App {
             .filter(|(_, t)| t.is_some())
             .map(|(i, t)| (i, t.take()))
             .collect();
+        // (Toile infinie : ce qui est hors de la feuille part aussi.)
+        let outside: Vec<usize> = c.raster.outer.keys().map(|&(tx, ty)| crate::raster::outer_id(tx, ty)).collect();
+        for id in outside {
+            tiles.push((id, c.raster.replace_slot(id, None)));
+        }
         if !tiles.is_empty() {
             self.push_pixels(id, None, tiles);
         }
@@ -2522,6 +2576,10 @@ impl App {
     /// bord de son dossier en sort (13b-5).
     pub(crate) fn move_layer(&mut self, up: bool) {
         self.end_stroke();
+        if self.layer().couleur.is_some() {
+            self.status = "Un calque de couleur reste sous son calque de trait : déplace le trait, la couleur le suit.".into();
+            return;
+        }
         let id = self.layer().id;
         let mut layers = self.layers().to_vec();
         if !crate::folders::move_step(&mut layers, self.cur_layer, up) {
@@ -2557,8 +2615,11 @@ impl App {
         let layer = self.layer().clone();
         let children: Vec<Layer> =
             crate::folders::children_of(self.layers(), self.cur_layer).into_iter().map(|i| self.layers()[i].clone()).collect();
+        let colours: Vec<Layer> =
+            crate::calquecouleur::couleurs_de(self.layers(), self.cur_layer).into_iter().map(|i| self.layers()[i].clone()).collect();
         let cels = children
             .iter()
+            .chain(colours.iter())
             .chain(std::iter::once(&layer))
             .flat_map(|l| l.frames.iter().flatten())
             .filter_map(|id| self.doc.cels.get(id).map(|c| (*id, c.clone())))
@@ -2568,6 +2629,7 @@ impl App {
         self.layer_clipboard = Some(LayerClip {
             layer,
             children,
+            colours,
             cels,
             panel_len: self.frame_count(),
         });
@@ -2591,6 +2653,10 @@ impl App {
         }
         layer.names = source.names.iter().filter_map(|(c, n)| copies.get(c).map(|d| (*d, n.clone()))).collect();
         layer.color_marks = source.color_marks.iter().filter_map(|(c, k)| copies.get(c).map(|d| (*d, *k))).collect();
+        // Un calque de couleur collé : les copies de ses dessins de couleur.
+        if let Some(c) = layer.couleur.as_mut() {
+            c.relink(&HashMap::new(), copies);
+        }
         let n = self.frame_count();
         let held = source.frames.len() >= clip.panel_len && source.frames.last().is_some_and(Option::is_some);
         layer.roles.retain(|f, _| *f < n);
@@ -2626,6 +2692,14 @@ impl App {
             child.parent = Some(layer.id);
             children.push(child);
         }
+        // Ses calques de couleur reviennent avec lui, sous la copie.
+        for c in &clip.colours {
+            let mut colour = self.pasted_layer(c, &clip, &mut copies);
+            if let Some(link) = colour.couleur.as_mut() {
+                link.relink(&HashMap::from([(clip.layer.id, layer.id)]), &copies);
+            }
+            children.push(colour);
+        }
         let cur = self.cur_layer;
         let folder_of_current = crate::folders::parent_index(self.layers(), cur);
         let at = match (layer.folder, folder_of_current) {
@@ -2634,6 +2708,9 @@ impl App {
             _ => cur + 1,
         };
         layer.parent = if layer.folder { None } else { folder_of_current.map(|fi| self.layers()[fi].id) };
+        for c in children.iter_mut().filter(|c| c.couleur.is_some()) {
+            c.parent = layer.parent;
+        }
         let name = layer.name.clone();
         let id = layer.id;
         let block: Vec<Layer> = children.into_iter().chain(std::iter::once(layer)).collect();
@@ -3826,6 +3903,8 @@ impl App {
             }
             // Calque CTG (13j, `ctgui.rs`).
             "calque.nouveau_ctg" => self.new_ctg_layer(),
+            "calque.nouveau_couleur" => self.new_colour_layer(),
+            "calque.detacher_couleur" => self.detach_colour_layer(),
             "calque.transformer_ctg" => self.convert_to_ctg(),
             "calque.desactiver_ctg" => self.disable_ctg(),
             "ctg.charger_structure" => self.load_ctg_structure(false),
@@ -4192,6 +4271,9 @@ impl App {
         }
         self.handle_shortcuts(ctx);
         self.sync_scene_layers();
+        // Calques de couleur : leurs images suivent celles du trait (`calquecouleur.rs`).
+        self.sync_couleurs();
+        self.warm_couleur();
         if !self.modal_open() {
             self.handle_dropped_files(ctx);
         }

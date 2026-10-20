@@ -505,6 +505,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("fx.tremblement", "Tremblement du trait du calque courant (boil)", true, false),
     act("fx.tremblement_repos", "Tremblement du trait : animer aussi à l'arrêt (oui / non)", true, false),
     act("calque.nouveau_ctg", "Nouveau calque CTG", true, false),
+    act("calque.nouveau_couleur", "Nouveau calque de couleur (sous le trait du calque courant)", true, false),
+    act("calque.detacher_couleur", "Détacher le calque de couleur de son trait", true, false),
     act("calque.transformer_ctg", "Transformer en calque CTG", true, false),
     act("calque.desactiver_ctg", "Désactiver le calque CTG", true, false),
     act("ctg.charger_structure", "Calque CTG : charger la structure à partir des sources", true, false),

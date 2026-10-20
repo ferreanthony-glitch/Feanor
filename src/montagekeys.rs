@@ -769,6 +769,7 @@ impl App {
             }
             let Some(src) = self.key_cel(pi, li, s) else { continue };
             let copy = self.doc.duplicate_cel(src);
+            crate::calquecouleur::noter_copie(&mut self.doc, pi, li, src, copy);
             if let Some(mid) = duplicate_run(&mut self.doc.panels[pi].layers[li], s, copy) {
                 let (p, l) = (&self.doc.panels[pi], &self.doc.panels[pi].layers[li]);
                 done.push(KeyRef { panel: p.id, layer: l.id, start: mid });

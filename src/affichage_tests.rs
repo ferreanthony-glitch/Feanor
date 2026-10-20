@@ -471,7 +471,7 @@ fn lifting_a_big_selection_by_bands_gives_the_same_sheets_as_one_stroke_at_a_tim
     assert!(l > 0 && t > 0, "des traits dépassent");
     // La référence : un à un, d'un seul fil.
     let (mut rbase, mut rsheet) = (Raster::new(w, h), Raster::new(sheet.width, sheet.height));
-    let place = Place { shift: (l as i64, t as i64), sheet: (w, h) };
+    let place = Place { shift: (l as i64, t as i64), sheet: (w, h), open: false };
     for (i, e) in d.elements.iter().enumerate() {
         if items.contains(&i) {
             render_element_in(&mut rsheet, e, eframe::egui::Rect::EVERYTHING, place);
