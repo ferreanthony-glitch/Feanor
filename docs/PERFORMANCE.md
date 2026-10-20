@@ -23,6 +23,12 @@ carte graphique**) sont faits pour tous les effets sauf le tremblement du trait 
 calques d'ajustement se dessinent à pleine résolution, à chaque image, sur la carte ; le calcul de fond
 sur processeur reste pour l'export, les vignettes, le repli sans carte et le réglage éteint.
 
+Mise à jour du 2026-10-20 (branche `effets-trait`, partie de `main` 7562800) : **le tremblement du trait passe sur la
+carte graphique** (plus aucun effet « ordinaire » ne force une pile sur le processeur ; sections 12.3 et 13.6), et six
+**effets du trait** (écriture, crayonné multiple, respiration, ondulation, pointillés, désagrégation) lisent la
+géométrie des traits en calcul de fond ; voir la section 13 (conception, mesures sur 2 000 traits, règle de mélange
+réduite, risques, à regarder à l'écran).
+
 Ce document dit comment mesurer, ce qui a été mesuré avant et après, ce qui a été changé, ce qui reste
 (classé), et ce qu'il faut regarder à l'écran.
 
@@ -304,7 +310,7 @@ cinq passages, deux à trois séries) :
 | 4 | ~~**Vignettes du montage hors du fil de l'interface**~~ **fait** (`vignettes-fond`, section 11) | plus de pic de 6 ms en défilant un grand montage (600 plans, tête de lecture : interface 11,1 → 3,4 ms ; pire image 13,2 → 4,6 ms) | fait (les tuiles `Arc` de `perf2` rendaient le cliché presque gratuit) |
 | 5 | **Décodage PNG en flux vers les tuiles** (crate `png` en dépendance directe, déjà dans `Cargo.lock`) | ouverture 7,3 → ≈ 4 s, mémoire ÷30 par fil | S à M |
 | 6 | ~~**Cache d'images composées en mémoire** pour la lecture des plans à effets~~ **sans objet** : la carte dessine les effets à chaque image (section 11), plus rien à garder | 24 images/s garanties avec 10 effets ou plus : 1,5 à 22 ms par image, pleine résolution | fait |
-| 7 | ~~**Effets sur la carte graphique** (flou, ombre, bruit, mosaïque)~~ **fait** (`effets-gpu`, section 12) : 28 effets sur 29, calques d'ajustement hors dossier | scène d'Anthony : 2,9 ms par image en pleine résolution (avant : aperçu au quart, pleine résolution au repos seulement) ; curseur du flou 3,5 ms | fait |
+| 7 | ~~**Effets sur la carte graphique** (flou, ombre, bruit, mosaïque)~~ **fait** (`effets-gpu`, section 12) : 28 effets sur 29 (29 sur 29 depuis le 2026-10-20, section 13.4), calques d'ajustement hors dossier | scène d'Anthony : 2,9 ms par image en pleine résolution (avant : aperçu au quart, pleine résolution au repos seulement) ; curseur du flou 3,5 ms | fait |
 | 8 | ~~**Taille mémoire de la carte réglable** (`CACHE_BYTES` = 1 Go, sur 8 Go)~~ **fait** par le diagnostic (section 7) : réglage « Cache de la carte graphique » dans les Préférences, qui monte à 2 Go sur une carte de 8 Go (profil Qualité) | ×2 de dessins en cache à coût nul | fait |
 | 9 | **Résolution d'affichage** (réduite pour la vue éloignée) | composition ÷4 en zoom arrière | M à L |
 | 10 | **PGO** (optimisation guidée par un profil) | 5 à 15 % sur le rendu des traits (non mesuré) | M. Demande `llvm-profdata` et une procédure hors ligne. |
@@ -750,7 +756,7 @@ qui réveillent l'écran à la fin de chaque vignette (egui regroupe les réveil
 
 Demande d'Anthony : des effets en temps réel, à pleine résolution, pendant la lecture et pendant qu'on tire un
 curseur ; le calcul sur processeur reste la référence exacte de l'export. Code : `gpufx.rs` (chaînes de passes,
-textures de travail, pipelines), `gpufx.wgsl` (les 27 passes), `gpu.rs` (branchement), essais `gpufx_tests.rs` (carte
+textures de travail, pipelines), `gpufx.wgsl` (les 28 passes, dont `fs_boil`), `gpu.rs` (branchement), essais `gpufx_tests.rs` (carte
 contre processeur), mesures `gpufxperf_tests.rs`.
 
 ### 12.1 Comment ça marche
@@ -810,12 +816,15 @@ processeur, aux demi-niveaux exacts.
 
 ### 12.3 Ce qui reste sur le processeur, et la règle de mélange
 
-- **Le tremblement du trait** (`tremblement.rs`, calque vectoriel seulement) : il redessine le dessin vectoriel ;
-  calcul de fond, aperçu réduit, comme avant.
-- **Une pile qui contient un seul effet sans passe est calculée tout entière sur le processeur.** L'ordre des effets
-  compte et le calcul sur processeur ne sait pas partir d'une texture de la carte : mélanger (carte puis processeur)
-  demanderait de relire l'image à chaque étape. Aujourd'hui seul le tremblement du trait est dans ce cas, et il est
-  d'ordinaire le premier de la pile.
+- **Le tremblement du trait** (`tremblement.rs`, calque vectoriel seulement) *était* l'unique effet sans passe : il
+  redessine le dessin déjà rendu à travers un champ de déplacement, il n'a donc besoin d'aucune géométrie et a sa passe
+  depuis le 2026-10-20 (`fs_boil`, section 13.6). **Il ne force plus la pile sur le processeur.**
+- **Une pile qui contient un effet sans passe est calculée sur le processeur.** L'ordre des effets compte et le calcul sur
+  processeur ne sait pas partir d'une texture de la carte : mélanger (carte puis processeur) demanderait de relire
+  l'image à chaque étape. Aujourd'hui les seuls effets sans passe sont **les effets du trait** (`fxtrait.rs`, section 13),
+  et ils agissent toujours les premiers, sur le dessin vectoriel : la pile est alors **coupée en deux**
+  (`fx::hybrid_split`) — le fil de fond calcule le dessin dérivé par les effets du trait seuls, la carte passe tous les
+  autres effets dessus, à pleine résolution. Plus aucune pile d'effets « ordinaires » n'est entièrement sur le processeur.
 - Un calque rempli par CTG, un fond sous le trait, une image de vidéo, une feuille flottante en cours de geste :
   chemin d'avant (la carte n'a que leur dessin dérivé).
 - **Un calque d'ajustement dans un dossier** (il ne couvre que les calques de son dossier), ou à côté d'un
@@ -894,10 +903,138 @@ jusqu'à 133 Mo de dessins + 200 Mo d'effets.
   retard.
 - Les sept effets du menu Cinéma sur un calque et en calque d'ajustement (impact, lueur, secousse avec flou, vignettage,
   grain, aberration, flash) : mêmes images qu'avant, un grain qui change à chaque image, une secousse qui suit ses clés.
-- Une pile avec un tremblement du trait puis un flou : elle reste calculée sur le processeur (aperçu en lecture) ; ajouter ou
+- Une pile avec un tremblement du trait puis un flou : elle est désormais dessinée par la carte (section 13.6) ; ajouter ou
   retirer le tremblement ne change pas l'aspect au repos.
 - Un calque d'ajustement dans un dossier : même rendu que hors dossier, un peu moins fluide.
 - Éteindre « Effets sur la carte graphique » dans les Préférences, en lecture : retour au calcul de fond sans clignotement
   (l'image reste, l'aperçu réduit revient) ; le rallumer.
 - Le diagnostic : la ligne « Effets sur la carte graphique » dans la liste des réglages et dans le rapport.
 - Mémoire vidéo dans le Gestionnaire des tâches pendant une longue lecture d'un plan où chaque dessin a des effets.
+
+## 13. Effets du trait, et le tremblement sur la carte graphique (2026-10-20, branche `effets-trait`)
+
+Demande d'Anthony : « le tremblement, j'adore » — encore des effets qui agissent sur le trait lui-même (écriture, crayonné
+multiple, respiration, ondulation le long du trait, pointillés qui défilent, désagrégation), et si possible le tremblement
+sur la carte graphique (c'était le seul effet sans passe : il obligeait les piles qui le contenaient à rester sur le
+processeur). Code : `fxtrait.rs` (effets, essais `fxtrait_tests.rs`), `gpufx.wgsl` (`fs_boil`), `fx.rs`
+(`apply_with`, `hybrid_split`), `fxcache.rs` (le dessin vectoriel suit le travail de fond). La règle de la passe tient :
+**le fil de l'interface ne calcule jamais un de ces effets** (ni ne rejoue le moteur de brosses).
+
+### 13.1 Comment ça marche
+
+- **Les effets du trait lisent la géométrie du dessin vectoriel**, pas ses pixels. Le fil de fond (`fxcache.rs`) reçoit
+  avec le dessin d'origine une copie du `VectorDrawing` (`fxcache::vector_source`, une fois par version du dessin ; les
+  pixels gardés de chaque trait sont partagés, la copie ne coûte que les points : 0,5 à 1 ms pour 2 000 traits, **sur le
+  fil de l'interface, une fois par retouche du dessin**). `fx::apply_with` passe d'abord les effets du trait, quelle que
+  soit leur place dans la pile, puis les autres effets sur l'image qu'ils ont faite.
+- **Chaque trait est rendu seul depuis son cache** (les pixels exacts, `vector.rs`), puis transformé **en pixels** : le
+  moteur de brosses n'est rejoué qu'une fois par trait (en arrière-plan, comme à l'ouverture d'un projet ; 1,1 s pour 200
+  traits de gouache, fusain et feutre) et jamais à chaque image — une gouache qui coûte 2,5 s au rejeu coûte, à chaque
+  image, la même chose qu'un trait lisse. La texture de la brosse suit la déformation.
+- **L'axe du trait** (rééchantillonné tous les 2 px) et une carte « point de l'axe le plus proche » (calculée une fois par
+  trait, en traçant le disque de chaque point) donnent à chaque pixel son abscisse curviligne, sa normale et le rayon.
+- **Un trait que l'effet ne touche pas n'est pas calculé** : écriture « l'un après l'autre » à 50 %, 1 000 traits sont
+  posés tels quels depuis leur cache, 1 000 sautés, un seul est transformé.
+- **Réparti sur les cœurs, déterministe** : morceaux de 96 éléments transformés en parallèle (`parallele::par_map`, le
+  fil de fond laisse deux cœurs à l'interface), puis posés **par bandes de tuiles** (`compose_banded`) : chaque pixel
+  reçoit les couches dans l'ordre des traits, comme avec un seul fil (essai : un fil ou plusieurs, mêmes pixels). Le
+  hasard (crayonné, poussière) vient d'un hachage entier de (graine, trait, passe, variante).
+- **Dessins dérivés** : un par jeu de réglages ; les valeurs d'une image portent sa variante (crayonné) ou son numéro
+  (respiration, ondulation, pointillés), donc chaque image est un dessin dérivé à part, gardé par le cache de 768 Mo,
+  demandé d'avance en lecture (`playback::upcoming_derived`) et montré à l'identique à l'export et dans les vignettes.
+  En attendant : le dernier résultat du même dessin, ou le dessin tel quel (jamais un résultat d'avant la dernière retouche).
+- **Pas d'aperçu réduit** pour ces effets (`fxproxy::proxyable` : leurs longueurs sont en pixels de la feuille).
+- **Pendant qu'on dessine** sur le calque (geste de dessin, de gomme, de sélection, de transformation), ses effets du trait
+  et son tremblement se taisent (`fx::without_boil`) : on prend ce qu'on voit.
+
+### 13.2 Mesures
+
+`cargo test --release --offline --target-dir target\msvc --lib fxtrait_tests::measure -- --ignored --nocapture --test-threads=1`.
+Poste de référence (Core i7-10700K, 16 fils, RTX 2080 SUPER, d'autres compilations tournaient en même temps : les
+chiffres varient de ± 30 %), 2026-10-20. Calque vectoriel dense sur une feuille de 1920 × 1080 : **2 000 traits** (1 800
+lisses, 200 de feutre, fusain et gouache de 120 à 400 px) ; le travail est celui du fil de fond, caches chauds, image par
+image (valeurs d'une image différente à chaque fois). « Dessin sans effet » : `VectorDrawing::render`, 60 ms ; la première
+fois 1,1 s (rejeu des 200 traits texturés).
+
+| Effet (2 000 traits) | ms par image | 200 traits | Remarque |
+|---|---|---|---|
+| Écriture 50 %, un trait après l'autre | 34 | 5 | un seul trait transformé, le reste posé ou sauté |
+| Écriture 50 %, tous ensemble | 85 | 10 | chaque trait est transformé |
+| Écriture 100 % (rien à faire) | 59 | 8 | tout est posé tel quel : le coût du dessin |
+| Crayonné, 2 passes en plus | 174 | 21 | 3 variantes seulement : les 3 images calculées, la lecture n'attend plus |
+| Crayonné, 4 passes, décalage 8 | 345 | 49 | |
+| Respiration (35 %) | 114 | 17 | |
+| Ondulation du trait (4 px) | 139 | 24 | |
+| Pointillés | 68 | 11 | |
+| Désagrégation 40 % | 123 | 16 | |
+| Désagrégation 40 %, selon le sens du trait, 300 px | 277 | 50 | les grains tombent sur beaucoup de tuiles |
+| Écriture 80 % + respiration + ondulation + crayonné | 300 | 39 | tout à la fois |
+
+**Fil de l'interface** (même dessin, 2 000 traits, calque à effet du trait) : copie du dessin vectoriel 0,5 à 1,1 ms,
+une fois par version du dessin (une retouche) ; ensuite 0,000 ms ; demande d'un dessin dérivé 0,08 ms ; image dont le
+dessin dérivé est prêt **0,000 ms (pire 0,002)**. Aucun rejeu du moteur sur ce fil (essai
+`playing_a_written_plan_never_replays_the_engine_on_the_interface_thread`).
+
+À lire ainsi : à 24 images par seconde il faut 41,7 ms par image. Sur un dessin de 200 traits (un storyboard ou un plan
+d'animation ordinaire) tous les effets tiennent, y compris tous empilés (39 ms). Sur 2 000 traits, les effets dont chaque
+image est un calcul à part (écriture, respiration, ondulation, pointillés, désagrégation) tournent à 4 à 30 images par
+seconde en arrière-plan : la lecture du premier tour montre l'image d'avant en attendant, les images qui viennent sont
+demandées d'avance, et le deuxième tour est servi par le cache. Le crayonné, lui, n'a que 3 variantes (réglable) : après
+trois images il est fluide.
+
+### 13.3 Règle de mélange
+
+Les effets du trait sont les seuls effets sans passe sur la carte. Une pile qui en contient est **coupée en deux**
+(`fx::hybrid_split`, `gpu.rs`) : le fil de fond calcule le dessin dérivé par les effets du trait seuls (envoyé à la carte
+comme n'importe quel dessin dérivé, `playback` le demande d'avance), puis la carte passe les autres effets dessus à pleine
+résolution, à chaque image. Essai `a_mixed_stack_gives_the_cpu_pixels_with_the_card_drawing_the_card_effects` : écriture
++ flou + tremblement, aucun pixel à plus de 2 niveaux de la référence sur processeur. Une pile sans autre effet que
+ceux du trait reste un dessin dérivé (comme avant). Un calque CTG, un fond sous le trait, une vidéo, une feuille
+flottante : chemin d'avant. L'export, les vignettes et le repli sans carte : calcul exact sur processeur.
+
+### 13.4 Le tremblement du trait sur la carte graphique
+
+`fs_boil` (`gpufx.wgsl`) : le même champ que `tremblement::Field` — mêmes nœuds (hachage entier de (graine de la
+variante, nœud, canal), norme au plus 1), même interpolation 3t² − 2t³, même lecture bilinéaire des pixels du dessin, même
+variation d'épaisseur (puissance de la couverture) — la graine (variante comprise) calculée par le processeur. Écart avec
+le processeur (`gpufx_tests::the_boil_matches_the_cpu`, feuille 640 × 360) : **moyenne 0,000, maximum 1 niveau**, aucun
+pixel à plus de 2 niveaux, pour trois variantes, intensités de 0 à 14 px, fréquences de 5 à 90 %, épaisseur de 0 à 100 %,
+et en pile avec un flou et une teinte (moyenne 0,043, maximum 2).
+
+| Mesure (2 000 traits, 1920 × 1080, 24 images, 3 variantes) | Avant (fil de fond, 16 fils) | Après (carte, pleine résolution) |
+|---|---|---|
+| Une variante | 11 à 12 ms (3,4 Mo d'images dérivées par variante, envoyées à la carte) | une passe de dessin |
+| Lecture, moyenne sur 144 images (`gpufxperf_tests::mesure_tremblement_gpu_contre_cpu`) | variantes servies par le cache des dessins dérivés, en aperçu réduit en lecture ; pleine résolution au repos | **0,22 ms par image** (pire 1,5 ms) à pleine résolution ; mémoire vidéo : dessin 17 Mo + 8 Mo d'effets |
+| « Animer à l'arrêt » | variantes demandées d'avance au fil de fond | rien à demander : la passe se redessine au changement de variante |
+
+### 13.5 Risques et limites
+
+- **Mémoire** : une image dérivée par effet du trait et par image, jusqu'au cache de 768 Mo (un dessin dense couvert d'encre
+  pèse quelques Mo) ; la copie du dessin vectoriel pour le fil de fond (jusqu'à 8 copies gardées) pèse les points des
+  traits, pas leurs pixels.
+- **2 000 traits à 24 images par seconde en temps réel** : pas tenu par les effets qui changent à chaque image (calcul de
+  fond de 70 à 300 ms par image) ; le plan et l'interface restent fluides, les images arrivent plus tard.
+  Pistes : carte des points les plus proches gardée par version du dessin ; calcul du seul cadre de la caméra ; une version
+  sur la carte graphique de l'écriture (masque par trait envoyé en texture).
+- **Un trait que le moteur n'a jamais rendu** (projet qui vient de s'ouvrir) est rejoué par le fil de fond au premier calcul
+  d'un effet du trait : 1,1 s pour 200 traits texturés, une seule fois.
+- **L'abscisse d'un pixel est celle du point de l'axe le plus proche** : une brosse très large qui se recoupe elle-même
+  (une boucle serrée) peut se démasquer dans un autre ordre que celui de la plume.
+- **Pas vu à l'écran** dans cette séance (aucune application lancée, consigne) : voir 13.6.
+
+### 13.6 À regarder à l'écran
+
+- Un calque vectoriel avec un visage et un décor : « Écriture du trait » avec les clés 0 → 100 % sur une seconde (le
+  préréglage « Apparition écrite ») : le dessin se trace trait par trait, la pointe se fond, l'image fixe à 100 % est le
+  dessin d'avant ; avec « Tous les traits ensemble », tous avancent à la fois ; « Effacement » le défait dans l'ordre.
+- Pendant qu'on dessine sur ce calque, le trait posé se voit en entier (l'effet se tait le temps du geste), puis l'effet
+  revient sans clignotement.
+- « Crayonné multiple » : des passes pâles de part et d'autre du trait, qui changent toutes les deux images ; « Variantes »
+  et « Vitesse » comme le tremblement.
+- « Respiration » (le trait pulse, avec ou sans vague le long du trait), « Ondulation du trait » (bouts fixes, vague qui
+  avance), « Pointillés » (tirets qui défilent dans les deux sens), « Désagrégation » (poussière, sens du trait, vent) : en
+  lecture, en défilement, au curseur.
+- Le tremblement du trait sur un dessin chargé : même aspect qu'avant (au repos et en lecture), « Animer à l'arrêt » sans
+  à-coup, une pile « tremblement + flou + lueur » sans l'instant « sans effet » quand on change un réglage.
+- Une pile « écriture du trait + flou » : le flou se règle au curseur sans retard (la carte), l'écriture suit ses clés.
+- Éteindre « Effets sur la carte graphique » (Préférences) : retour au calcul de fond, mêmes images.

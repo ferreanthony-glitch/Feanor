@@ -19,6 +19,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 use crate::document::{Cel, CelId};
 use crate::fx::FxStep;
 use crate::raster::{Raster, TILE_PIXELS};
+use crate::vector::VectorDrawing;
 
 /// Mémoire gardée pour les dessins dérivés (octets de pixels), avant tout réglage.
 const CACHE_BYTES: usize = 768 << 20;
@@ -76,6 +77,8 @@ pub(crate) struct Job {
     pub version: u64,
     /// Le dessin d'origine (une copie, partagée entre les demandes de la même version).
     pub src: Arc<Raster>,
+    /// Le dessin vectoriel d'origine, pour les effets du trait (`fxtrait.rs`) ; rien sans eux.
+    pub vector: Option<Arc<VectorDrawing>>,
     pub steps: Vec<FxStep>,
     /// Aperçu : réduction `1 << level` (0 : pleine résolution).
     pub level: u8,
@@ -110,6 +113,8 @@ struct State {
     last: BTreeMap<CelId, Last>,
     /// Dessin d'origine → (version, copie, dernier usage).
     sources: BTreeMap<CelId, (u64, Arc<Raster>, u64)>,
+    /// Dessin d'origine → (version, copie du dessin vectoriel, dernier usage).
+    vsources: BTreeMap<CelId, (u64, Arc<VectorDrawing>, u64)>,
     /// (Dessin d'origine, niveau) → (version, copie réduite pour l'aperçu, dernier usage) : le même
     /// dessin sert à toutes les images d'une animation d'effet.
     small: BTreeMap<(CelId, u8), (u64, Arc<Raster>, u64)>,
@@ -125,6 +130,7 @@ impl State {
             queue: Vec::new(),
             last: BTreeMap::new(),
             sources: BTreeMap::new(),
+            vsources: BTreeMap::new(),
             small: BTreeMap::new(),
             seq: 0,
         }
@@ -329,6 +335,35 @@ pub(crate) fn source(origin: CelId, cel: &Cel) -> Arc<Raster> {
     copy
 }
 
+/// Le dessin vectoriel d'origine `cel` (version `version`) copié pour le fil de fond, une fois par
+/// version : les effets du trait en lisent les traits. Rien si le dessin n'est pas vectoriel. La copie
+/// partage les pixels gardés de chaque trait (leur cache est une référence partagée) : elle ne coûte
+/// que les points.
+pub(crate) fn vector_source(origin: CelId, cel: &Cel) -> Option<Arc<VectorDrawing>> {
+    let vector = cel.vector.as_ref()?;
+    if let Some((v, a, used)) = lock().vsources.get_mut(&origin) {
+        if *v == cel.version {
+            *used = tick();
+            return Some(a.clone());
+        }
+    }
+    let copy = Arc::new(vector.clone());
+    let mut st = lock();
+    let mut dropped = Vec::new();
+    if let Some(old) = st.vsources.insert(origin, (cel.version, copy.clone(), tick())) {
+        dropped.push(old.1);
+    }
+    while st.vsources.len() > SOURCES_MAX {
+        let Some(old) = st.vsources.iter().min_by_key(|(_, s)| s.2).map(|(k, _)| *k) else { break };
+        if let Some(s) = st.vsources.remove(&old) {
+            dropped.push(s.1);
+        }
+    }
+    drop(st);
+    drop(dropped);
+    Some(copy)
+}
+
 /// Le dessin d'origine de `job`, réduit pour l'aperçu `job.level` (calculé une fois par version du
 /// dessin, par le fil de fond).
 fn reduced_source(job: &Job) -> Arc<Raster> {
@@ -512,6 +547,7 @@ pub(crate) fn forget_all() {
         std::mem::take(&mut st.last),
         std::mem::take(&mut st.sources),
         std::mem::take(&mut st.small),
+        std::mem::take(&mut st.vsources),
     );
     st.bytes = 0;
     st.queue.clear();
@@ -538,7 +574,7 @@ fn worker_loop() {
         // le dessin sans effet.
         let raster = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match &job.base {
             Some(base) => base.render(job.level),
-            None if job.level == 0 => crate::fx::apply_scaled(&job.src, &job.steps, 0),
+            None if job.level == 0 => crate::fx::apply_with(&job.src, job.vector.as_deref(), &job.steps, 0),
             None => crate::fx::apply_scaled(&reduced_source(&job), &job.steps, job.level),
         }))
         .unwrap_or_else(|_| match &job.base {

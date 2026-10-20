@@ -611,9 +611,9 @@ fn the_boil_is_offered_in_every_menu_on_vector_layers_and_shown_disabled_on_bitm
         assert_eq!(offer(kind, LayerKind::Vector, false), Offer::Enabled, "{kind:?}");
         assert_eq!(offer(kind, LayerKind::Vector, true), Offer::Absent, "{kind:?}");
     }
-    // Le tremblement est le seul effet réservé au vectoriel : l'entrée qui le montre en tête de
-    // « Ajouter un effet » suffit.
-    assert_eq!(EffectKind::ALL.into_iter().filter(|k| k.vector_only()).collect::<Vec<_>>(), vec![EffectKind::Boil]);
+    // Le tremblement et les effets du trait (`fxtrait.rs`) sont les seuls réservés au vectoriel.
+    let only: Vec<_> = EffectKind::ALL.into_iter().filter(|k| k.vector_only()).collect();
+    assert!(only.contains(&EffectKind::Boil) && only.iter().all(|k| *k == EffectKind::Boil || k.is_trait()));
 }
 
 #[test]

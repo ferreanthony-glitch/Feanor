@@ -41,7 +41,9 @@ pub fn level_with_floor(zoom: f32, floor: u8) -> u8 {
 /// Tous les effets de la pile admettent-ils l'aperçu ?
 pub fn proxyable(steps: &[FxStep]) -> bool {
     steps.iter().all(|s| {
-        !matches!(
+        // (Les effets du trait lisent la géométrie du dessin vectoriel, en pixels de la feuille.)
+        !s.kind.is_trait()
+            && !matches!(
             s.kind,
             EffectKind::Mosaic
                 | EffectKind::Wave

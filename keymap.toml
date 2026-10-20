@@ -2643,6 +2643,53 @@ action = "fx.tremblement_repos"
 touches = []
 source = "SHOT (sans touche)"
 
+# Effets du trait (fxtrait.rs) et leurs préréglages : sans touche par défaut, comme le tremblement du
+# trait ; Ctrl+K les trouve par leur nom, et « Assigner un raccourci… » au clic droit leur en donne un.
+[[raccourci]]
+action = "fx.ecriture"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.crayonne"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.respiration"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.ondulation_trait"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.pointilles"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.desagregation"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.preset_apparition"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.preset_croquis"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.preset_poussiere"
+touches = []
+source = "SHOT (sans touche)"
+
 [[raccourci]]
 action = "calque.propager"
 touches = []

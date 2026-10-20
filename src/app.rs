@@ -3897,6 +3897,17 @@ impl App {
             // Tremblement du trait (`tremblement.rs`) du calque courant.
             "fx.tremblement" => self.toggle_fx(self.cur_layer, crate::fx::EffectKind::Boil),
             "fx.tremblement_repos" => self.set_boil_rest(self.cur_layer, !self.boil_rest_on(self.cur_layer)),
+            // Effets du trait (`fxtrait.rs`) du calque courant, et leurs préréglages.
+            a if crate::fxtrait::kind_of_action(a).is_some() => {
+                if let Some(kind) = crate::fxtrait::kind_of_action(a) {
+                    self.toggle_fx(self.cur_layer, kind);
+                }
+            }
+            a if crate::fxtrait::Preset::from_action(a).is_some() => {
+                if let Some(preset) = crate::fxtrait::Preset::from_action(a) {
+                    self.apply_trait_preset(preset);
+                }
+            }
             "fx.choisir_aucun" => {
                 self.deselect_fx();
                 self.status = "Aucun effet choisi : plus de clé d'effet dans la timeline ni le montage.".into();

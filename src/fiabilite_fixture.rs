@@ -248,7 +248,15 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
     let mut teinte = Effect::new(EffectKind::HueSaturation);
     teinte.set_key(0, vec![0.0, 0.0, 0.0]);
     teinte.set_key(23, vec![-90.0, 40.0, -10.0]);
-    perso.fx = vec![tremble, flou, bruit, teinte];
+    // Effets du trait (`fxtrait.rs`) : écriture (clés, effacement), crayonné (éteint).
+    let mut ecriture = Effect::new(EffectKind::Write);
+    ecriture.set_param(crate::fxtrait::WRITE_SOFT, 12.0);
+    ecriture.set_key(0, ecriture.values.iter().enumerate().map(|(k, v)| if k == crate::fxtrait::WRITE_PROGRESS { 0.0 } else { *v }).collect());
+    ecriture.set_key(14, ecriture.values.iter().enumerate().map(|(k, v)| if k == crate::fxtrait::WRITE_PROGRESS { 100.0 } else { *v }).collect());
+    let mut crayonne = Effect::new(EffectKind::Sketch);
+    crayonne.enabled = false;
+    crayonne.set_param(crate::fxtrait::SKETCH_PASSES, 3.0);
+    perso.fx = vec![tremble, flou, bruit, teinte, ecriture, crayonne];
 
     let mut dossier = Layer::new_folder("Décors");
     dossier.collapsed = true;

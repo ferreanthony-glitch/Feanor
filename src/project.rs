@@ -120,10 +120,14 @@ pub const FORMAT: &str = "pelure-projet";
 /// perdrait l'effet, le film changerait sans prévenir.
 /// 30 (2026-10-20) : calques de couleur (`calque_couleur` d'un calque : rang du calque de trait, dessins de
 /// couleur qui répondent aux dessins du trait, fermeture des trous, pinceau dans la zone ; voir
-/// `calquecouleur.rs`). Une version précédente refuse le projet : elle en ferait des calques bitmap
-/// ordinaires aux images indépendantes, et la couleur ne suivrait plus le trait. (Les numéros 28 et 29
-/// sont ceux d'autres chantiers menés en parallèle.)
-pub const VERSION: u32 = 30;
+/// `calquecouleur.rs`) et toile infinie (`dessins_hors`). Une version précédente refuse le projet : elle en
+/// ferait des calques bitmap ordinaires aux images indépendantes, et la couleur ne suivrait plus le trait.
+/// (Les numéros 28 et 29 sont ceux d'autres chantiers menés en parallèle, restés sans changement de format.)
+/// 31 (2026-10-20) : effets du trait des calques vectoriels dans la pile `effets` (écriture du trait,
+/// crayonné multiple, respiration, ondulation du trait, pointillés, désagrégation ; voir
+/// `fxtrait.rs`). Une version précédente refuse le projet : elle ne connaît pas ces sortes d'effet et
+/// montrerait le dessin sans eux, le film changerait sans prévenir.
+pub const VERSION: u32 = 31;
 const DRAWINGS: &str = "dessins";
 /// Fils qui lisent ou écrivent les dessins d'un projet en parallèle : au-delà de huit, le disque et
 /// la mémoire (une feuille décodée pèse 33 Mo) limitent plus que le processeur.

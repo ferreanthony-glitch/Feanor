@@ -94,6 +94,19 @@ pub enum EffectKind {
     Grain,
     #[serde(rename = "aberration")]
     Aberration,
+    // Effets du trait (`fxtrait.rs`, Anthony, 2026-10-20), calques vectoriels seulement.
+    #[serde(rename = "ecriture_trait")]
+    Write,
+    #[serde(rename = "crayonne")]
+    Sketch,
+    #[serde(rename = "respiration")]
+    Breath,
+    #[serde(rename = "ondulation_trait")]
+    StrokeWave,
+    #[serde(rename = "pointilles")]
+    Dashes,
+    #[serde(rename = "desagregation")]
+    Dust,
 }
 
 const GAUSSIAN: [Param; 1] = [Param { name: "Rayon", min: 0.0, max: 200.0, default: 8.0, unit: " px" }];
@@ -255,10 +268,10 @@ pub enum ParamStyle {
 
 /// Familles d'effets, dans l'ordre des menus (inspirées du menu Filtre et des réglages de
 /// Photoshop).
-pub const FAMILIES: [&str; 9] = ["Flou", "Déformation", "Réglages", "Bruit", "Pixéliser", "Rendu", "Netteté", "Styliser", "Cinéma"];
+pub const FAMILIES: [&str; 10] = ["Trait", "Flou", "Déformation", "Réglages", "Bruit", "Pixéliser", "Rendu", "Netteté", "Styliser", "Cinéma"];
 
 impl EffectKind {
-    pub const ALL: [EffectKind; 29] = [
+    pub const ALL: [EffectKind; 35] = [
         EffectKind::GaussianBlur,
         EffectKind::MotionBlur,
         EffectKind::BrightnessContrast,
@@ -288,11 +301,24 @@ impl EffectKind {
         EffectKind::Vignette,
         EffectKind::Grain,
         EffectKind::Aberration,
+        EffectKind::Write,
+        EffectKind::Sketch,
+        EffectKind::Breath,
+        EffectKind::StrokeWave,
+        EffectKind::Dashes,
+        EffectKind::Dust,
     ];
 
-    /// L'effet n'a de sens que sur un calque vectoriel (le tremblement du trait).
+    /// L'effet agit sur la géométrie des traits d'un dessin vectoriel (`fxtrait.rs`) : il lit le
+    /// dessin vectoriel lui-même, pas ses pixels.
+    pub fn is_trait(self) -> bool {
+        matches!(self, EffectKind::Write | EffectKind::Sketch | EffectKind::Breath | EffectKind::StrokeWave | EffectKind::Dashes | EffectKind::Dust)
+    }
+
+    /// L'effet n'a de sens que sur un calque vectoriel (le tremblement du trait et les effets du
+    /// trait).
     pub fn vector_only(self) -> bool {
-        self == EffectKind::Boil
+        self == EffectKind::Boil || self.is_trait()
     }
 
     /// Le réglage `k` de l'effet se règle-t-il par un curseur, un curseur entier ou une case ?
@@ -300,11 +326,28 @@ impl EffectKind {
         match (self, k) {
             (EffectKind::Boil, crate::tremblement::VARIANTS | crate::tremblement::SPEED | crate::tremblement::SEED) => ParamStyle::Integer,
             (EffectKind::Boil, crate::tremblement::REST) => ParamStyle::Switch,
+            (EffectKind::Write, 1 | 2 | 3 | 6) | (EffectKind::StrokeWave, 3) | (EffectKind::Dust, 7) => ParamStyle::Switch,
+            (EffectKind::Sketch, 0 | 4 | 5 | 6) | (EffectKind::Breath, 2) | (EffectKind::Dust, 1 | 6) => ParamStyle::Integer,
             (EffectKind::Flash, 4) => ParamStyle::Switch,
             (EffectKind::Impact, crate::fxcine::IMPACT_MODE | crate::fxcine::IMPACT_SEED) => ParamStyle::Integer,
             (EffectKind::Grain, 1 | 2) => ParamStyle::Integer,
             _ => ParamStyle::Slider,
         }
+    }
+
+    /// Ce que fait l'effet, en une ou deux phrases (bulle du nom dans le panneau Effets) ; vide pour
+    /// les effets classiques.
+    pub fn hint(self) -> &'static str {
+        match self {
+            EffectKind::Boil => "Le trait « bout » comme dans WigglyPaint : le dessin est montré en quelques variantes légèrement déplacées, qui se suivent. Les dessins ne changent pas.",
+            k if k.is_trait() => crate::fxtrait::hint(k),
+            _ => "",
+        }
+    }
+
+    /// Ce que règle le paramètre `k` (bulle de son nom) ; vide s'il n'y a rien à dire.
+    pub fn param_hint(self, k: usize) -> &'static str {
+        crate::fxtrait::param_hint(self, k)
     }
 
     pub fn label(self) -> &'static str {
@@ -338,6 +381,12 @@ impl EffectKind {
             EffectKind::Vignette => "Vignettage",
             EffectKind::Grain => "Grain de film",
             EffectKind::Aberration => "Aberration chromatique",
+            EffectKind::Write => "Écriture du trait",
+            EffectKind::Sketch => "Crayonné multiple",
+            EffectKind::Breath => "Respiration du trait",
+            EffectKind::StrokeWave => "Ondulation du trait",
+            EffectKind::Dashes => "Pointillés qui défilent",
+            EffectKind::Dust => "Désagrégation",
         }
     }
 
@@ -365,6 +414,7 @@ impl EffectKind {
             | EffectKind::Vignette
             | EffectKind::Grain
             | EffectKind::Aberration => "Cinéma",
+            EffectKind::Write | EffectKind::Sketch | EffectKind::Breath | EffectKind::StrokeWave | EffectKind::Dashes | EffectKind::Dust => "Trait",
         }
     }
 
@@ -398,6 +448,12 @@ impl EffectKind {
             EffectKind::Vignette => &VIGNETTE,
             EffectKind::Grain => &GRAIN,
             EffectKind::Aberration => &ABERRATION,
+            EffectKind::Write => &crate::fxtrait::WRITE,
+            EffectKind::Sketch => &crate::fxtrait::SKETCH,
+            EffectKind::Breath => &crate::fxtrait::BREATH,
+            EffectKind::StrokeWave => &crate::fxtrait::WAVE,
+            EffectKind::Dashes => &crate::fxtrait::DASH,
+            EffectKind::Dust => &crate::fxtrait::DUST,
         }
     }
 
@@ -425,6 +481,12 @@ impl EffectKind {
             EffectKind::Flash | EffectKind::Impact | EffectKind::Vignette | EffectKind::Grain | EffectKind::Aberration => at(0) > 0.0,
             EffectKind::Bloom => at(1) > 0.0,
             EffectKind::Shake => at(0) != 0.0 || at(1) != 0.0 || at(2) != 0.0 || (at(3) - 100.0).abs() > 1e-3,
+            EffectKind::Write => crate::fxtrait::WriteS::of(v).changes(),
+            EffectKind::Sketch => crate::fxtrait::SketchS::of(v).changes(),
+            EffectKind::Breath => crate::fxtrait::BreathS::of(v).changes(),
+            EffectKind::StrokeWave => crate::fxtrait::WaveS::of(v).changes(),
+            EffectKind::Dashes => true,
+            EffectKind::Dust => crate::fxtrait::DustS::of(v).changes(),
         }
     }
 
@@ -591,6 +653,13 @@ pub fn steps_at_with(fx: &[Effect], frame: usize, rest: Option<usize>, vector: b
             if e.kind == EffectKind::Grain {
                 values.push(frame as f32);
             }
+            // Le crayonné se retire toutes les N images (sa variante) ; la respiration, l'ondulation et
+            // les pointillés battent avec le temps (l'image).
+            match e.kind {
+                EffectKind::Sketch => values.push(crate::fxtrait::sketch_variant(&values, frame) as f32),
+                EffectKind::Breath | EffectKind::StrokeWave | EffectKind::Dashes => values.push(frame as f32),
+                _ => {}
+            }
             FxStep { kind: e.kind, values }
         })
         .filter(|s| s.kind.changes(&s.values))
@@ -603,9 +672,27 @@ pub fn layer_steps(layer: &crate::document::Layer, frame: usize, rest: Option<us
     steps_at_with(&layer.fx, frame, rest, layer.kind == crate::document::LayerKind::Vector)
 }
 
-/// Les mêmes effets sans le tremblement (le calque qu'on édite se montre tel qu'il est).
+/// Un élément du plan dont la pile mêle des effets du trait (calculés en arrière-plan : ils lisent les
+/// traits du dessin vectoriel, `fxtrait.rs`) et des effets qui ont une version sur la carte graphique
+/// (`gpufx.rs`) : l'élément réduit aux effets du trait — dont le dessin dérivé devient le dessin d'origine
+/// de la carte —, et les effets que la carte passe dessus, dans leur ordre. Rien pour une pile sans effet du
+/// trait, sans autre effet, ou dont un autre effet n'a pas de passe ; rien non plus pour un remplissage
+/// CTG, un fond sous le trait ou une feuille flottante.
+pub fn hybrid_split(item: &crate::render::PlanItem) -> Option<(crate::render::PlanItem, Vec<FxStep>)> {
+    if item.ctg.is_some() || item.fond.is_some() || item.pre.is_some() {
+        return None;
+    }
+    let (line, rest): (Vec<FxStep>, Vec<FxStep>) = item.fx.iter().cloned().partition(|s| s.kind.is_trait());
+    if line.is_empty() || !crate::gpufx::steps_supported(&rest) {
+        return None;
+    }
+    Some((crate::render::PlanItem { fx: line, ..item.clone() }, rest))
+}
+
+/// Les mêmes effets sans le tremblement ni les effets du trait (le calque qu'on édite se montre tel
+/// qu'il est : on dessine, on prend et on déplace ce qu'on voit).
 pub fn without_boil(steps: Vec<FxStep>) -> Vec<FxStep> {
-    steps.into_iter().filter(|s| s.kind != EffectKind::Boil).collect()
+    steps.into_iter().filter(|s| !s.kind.vector_only()).collect()
 }
 
 /// Numéro du dessin dérivé : le dessin `cel` passé par `steps` (bit de poids fort mis : il ne
@@ -868,8 +955,23 @@ pub fn apply(raster: &Raster, steps: &[FxStep]) -> Raster {
 /// Comme `apply`, sur un dessin réduit `1 << level` fois (aperçu pendant la lecture et les
 /// gestes, `fxproxy.rs`) : les paramètres en pixels sont réduits d'autant. `level` 0 : exact.
 pub fn apply_scaled(raster: &Raster, steps: &[FxStep], level: u8) -> Raster {
+    apply_with(raster, None, steps, level)
+}
+
+/// Comme `apply_scaled`, avec le dessin vectoriel d'où vient `raster` : les effets du trait
+/// (`fxtrait.rs`) le lisent et passent d'abord, quelle que soit leur place dans la pile ; les autres
+/// effets suivent, dans l'ordre, sur l'image qu'ils ont faite. Sans dessin vectoriel (ou en aperçu
+/// réduit, `level` > 0 : ils ne le supportent pas, `fxproxy::proxyable`), les effets du trait sont
+/// laissés.
+pub fn apply_with(raster: &Raster, vector: Option<&crate::vector::VectorDrawing>, steps: &[FxStep], level: u8) -> Raster {
     let mut cur: Option<Raster> = None;
-    for s in steps {
+    if let (Some(v), 0) = (vector, level) {
+        let line: Vec<FxStep> = steps.iter().filter(|s| s.kind.is_trait()).cloned().collect();
+        if !line.is_empty() {
+            cur = Some(crate::fxtrait::render(v, raster.width, raster.height, &line));
+        }
+    }
+    for s in steps.iter().filter(|s| !s.kind.is_trait()) {
         use crate::fxfilters as f;
         // (Le premier effet lit le dessin lui-même : pas de copie d'avance.)
         let src = cur.as_ref().unwrap_or(raster);
@@ -905,6 +1007,8 @@ pub fn apply_scaled(raster: &Raster, steps: &[FxStep], level: u8) -> Raster {
             EffectKind::Vignette => crate::fxcine::vignette(src, v[0], v[1], v[2], v[3], v[4], v[5], v[6]),
             EffectKind::Grain => crate::fxcine::grain(src, v[0], v[1], v[2], v.get(3).copied().unwrap_or(0.0), level),
             EffectKind::Aberration => crate::fxcine::aberration(src, v[0], v[1], v[2]),
+            // (Les effets du trait sont passés plus haut.)
+            EffectKind::Write | EffectKind::Sketch | EffectKind::Breath | EffectKind::StrokeWave | EffectKind::Dashes | EffectKind::Dust => unreachable!("effet du trait"),
         };
         cur = Some(next);
     }
@@ -1050,7 +1154,7 @@ pub(crate) fn display_with<'a>(doc: &'a Document, item: &crate::render::PlanItem
     // (Un tremblement n'a rien à gagner d'un résultat d'avant la dernière retouche du dessin : il
     // ferait disparaître le trait qu'on vient de poser ; il montre alors le dessin tel quel.
     // L'autre variante du même dessin, elle, est un bon remplaçant.)
-    let boil = item.fx.iter().any(|s| s.kind == EffectKind::Boil);
+    let boil = item.fx.iter().any(|s| s.kind.vector_only());
     Some(match crate::fxcache::fallback(item.cel) {
         Some((last, cel)) if !boil || cel.version == src.version => Display { cel: Shown::Fx(cel), id: last, ready: false },
         _ => Display { cel: Shown::Plain(src), id: item.cel, ready: false },
@@ -1073,6 +1177,7 @@ fn job_for(item: &crate::render::PlanItem, src: &Cel, id: CelId, level: u8, prio
         id,
         version: src.version,
         src: crate::fxcache::source(item.cel, src),
+        vector: if item.fx.iter().any(|s| s.kind.is_trait()) { crate::fxcache::vector_source(item.cel, src) } else { None },
         steps: item.fx.clone(),
         level,
         prio,
@@ -1433,7 +1538,7 @@ pub fn shown_with<'a>(doc: &'a Document, cel: CelId, steps: &[FxStep], ctg: Opti
     let derived = crate::fxcache::get_or_compute(id, version, ctg.is_none().then_some(cel), || {
         let raster = match ctg {
             // (Sans CTG, `apply` lit le dessin lui-même : pas de copie.)
-            None => apply(&src.raster, steps),
+            None => apply_with(&src.raster, src.vector.as_ref(), steps, 0),
             Some(input) => {
                 let rasters: Vec<&Raster> = input.sources.iter().filter_map(|s| doc.cels.get(s)).map(|c| &c.raster).collect();
                 apply(&crate::ctg::fill(&rasters, &src.raster, input.gap as usize), steps)

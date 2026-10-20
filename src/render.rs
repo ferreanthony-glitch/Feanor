@@ -546,6 +546,12 @@ pub(crate) fn set_thread_cap(cap: usize) {
     THREAD_CAP.with(|c| c.set(cap));
 }
 
+/// La limite de fils de ce fil de fond (0 : aucune), pour les travaux qui répartissent eux-mêmes
+/// leur travail (`fxtrait.rs`).
+pub(crate) fn thread_cap() -> usize {
+    THREAD_CAP.with(|c| c.get())
+}
+
 /// Ce que voit la caméra `cam` : l'image finale (`doc.frame`). Chaque pixel prend la couleur de
 /// la feuille au point filmé (interpolation bilinéaire) ; caméra centrée sans zoom ni rotation :
 /// les pixels de la feuille, tels quels. Hors de la feuille (toile infinie) : ce qu'on y a dessiné,

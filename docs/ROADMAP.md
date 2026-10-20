@@ -2108,7 +2108,9 @@ les curseurs ; le calcul sur processeur reste la référence de l'export. Détai
   mouvement, netteté, bruit, mosaïque, ombre portée, lueur, onde, ondulation, tourbillon, pincement, nuages, éclairage,
   dégradé, flash, image d'impact, lueur diffuse, secousse, vignettage, grain, aberration chromatique. Seul le tremblement du
   trait reste sur le processeur ; une pile qui en contient un (ou un calque CTG, un fond, une vidéo) est calculée tout
-  entière sur le processeur.
+  entière sur le processeur. *(Mise à jour du 2026-10-20 : le tremblement a sa passe, `fs_boil`, 29 effets sur 29 ; seuls
+  les effets du trait, section « Effets du trait » plus bas, restent un calcul de fond, et une pile qui en mêle à des effets
+  de la carte est coupée en deux.)*
 - **Calques d'ajustement hors dossier** : leurs effets passent sur l'image composée jusque-là (papier compris), résultat
   posé avec l'opacité et le mode du calque. Dans un dossier : calcul de fond comme avant.
 - **Même hasard, mêmes arrondis** : écart de 0 à 2 niveaux avec le processeur sur tous les effets (4 au plus sur la
@@ -2432,6 +2434,62 @@ par Anthony.
   pour un rendu net, éteindre le tremblement à l'export final ou demander un rejeu par variante (piste
   écartée plus haut).
 
+## Effets du trait : écriture, crayonné, respiration, ondulation, pointillés, désagrégation (demandés par Anthony le 2026-10-20) ✅
+
+La demande : « le tremblement, j'adore » — d'autres effets qui agissent sur le trait lui-même (« effets de matière » plus
+tard, pas maintenant), et le tremblement sur la carte graphique si c'est faisable. Branche `effets-trait` (partie de `main`
+7562800 ; `src/fxtrait.rs`, essais `fxtrait_tests.rs`, `gpufx_tests.rs`). Pas vu à l'écran dans cette séance (aucune
+application lancée, consigne) : liste à regarder dans `docs/INTERFACE.md` (section 20).
+
+- ✅ **Où** : six effets de la pile du calque, famille **Trait**, **calques vectoriels seulement** (grisés avec la raison sur
+  un calque bitmap, dans le panneau Effets, les menus et la rangée d'icônes : aucun repli raisonnable sur des pixels, ils
+  lisent l'ordre, la longueur et la forme des traits). Même interface que le tremblement : panneau Effets, clés (losanges
+  de la timeline et du montage), copier-coller (une seule fois par calque et par sorte), enregistrement dans le projet.
+  Une **rangée d'icônes** en tête du panneau Effets coche et décoche chacun (bulle : nom, raccourci, description ;
+  `bulles::etat_si`) ; un menu baguette pose trois **préréglages** (« Apparition écrite », « Croquis nerveux »,
+  « Poussière ») avec leurs clés à partir de la tête de lecture, en une étape d'annulation ; neuf actions `fx.*` sans touche
+  (Ctrl+K, clic droit sur une icône pour assigner un raccourci).
+- ✅ **Écriture du trait** : avancement 0–100 % (animable), effacement, tous les traits ensemble, durée selon la longueur,
+  douceur du rythme, bord doux (pointe qui se fond sur N pixels), zones remplies avec le trait. Ordre = ordre de dessin.
+  Chaque pixel d'un trait a une abscisse curviligne (le point de l'axe le plus proche) donc un instant de tracé ; 0 % rend
+  un dessin vide, 100 % exactement le dessin (rien à calculer), et à 50 % « l'un après l'autre » un seul trait est
+  vraiment transformé (les tracés sont posés depuis leur cache, les autres sautés).
+- ✅ **Crayonné multiple** : 1 à 4 passes, décalage, opacité des passes, nervosité (maille du champ de déplacement), variantes
+  et vitesse (retirage toutes les N images, comme le tremblement), graine ; le trait d'origine reste dessus, intact. Une
+  passe = le trait relu à travers une translation de travers (d'un côté puis de l'autre) plus un champ de déplacement doux
+  (le champ du tremblement, un par trait, passe et variante) ; jamais plus loin que le décalage.
+- ✅ **Respiration** : épaisseur de base (clés), amplitude, période, vague le long du trait. Chaque pixel est remis à
+  l'échelle autour de l'axe (l'épaisseur étire la texture de la brosse, elle ne la rejoue pas).
+- ✅ **Ondulation du trait** : amplitude, longueur d'onde, vitesse (négative : l'autre sens), bouts fixes ; déplacement le long
+  de la normale, période exacte (vitesse × images = longueur d'onde : même image).
+- ✅ **Pointillés** : tiret, intervalle, vitesse, bord doux ; le motif de l'image k est celui de l'image 0 décalé de vitesse × k.
+- ✅ **Désagrégation** : avancement (animable), taille des grains, dispersion, sens du trait, direction et force du vent,
+  graine, zones remplies. Un grain (carré de la grille de la feuille) part à son heure, dans une direction tirée par hachage,
+  ses pixels se séparent en route, il s'efface en fin de course ; 100 % : plus rien. Mêmes réglages, même poussière.
+- ✅ **Le tremblement du trait sur la carte graphique** : `fs_boil` reproduit le champ (mêmes nœuds, même interpolation, même
+  épaisseur) ; écart avec le processeur : moyenne 0,000, maximum 1 niveau. C'était le seul effet qui obligeait une pile à
+  rester sur le processeur. Choix : le tremblement relit les pixels déjà rendus, il ne touche pas la géométrie vectorielle ;
+  il n'a donc pas besoin d'un calcul de fond de la géométrie, et le shader est l'exacte copie du champ.
+- ✅ **Règle de mélange réduite** : les effets du trait sont les seuls sans passe ; une pile qui en mêle à d'autres effets est
+  coupée en deux (`fx::hybrid_split`) : le fond calcule le dessin dérivé par eux, la carte passe le reste dessus.
+- ✅ **Sans latence, déterministe** : jamais sur le fil de l'interface (copie du dessin vectoriel 0,5 à 1 ms par retouche,
+  puis 0,000 ms par image) ; le calcul de fond transforme les traits en parallèle et les pose par bandes de tuiles dans
+  l'ordre : même image à chaque fois, sur un fil ou plusieurs ; export et vignettes = écran. Mesures sur 2 000 traits (60 ms
+  pour le dessin seul) : écriture 34 à 85 ms, crayonné 174 ms, respiration 114 ms, ondulation 139 ms, pointillés 68 ms,
+  désagrégation 123 ms ; sur 200 traits de 5 à 50 ms, tout tient à 24 images par seconde (`docs/PERFORMANCE.md`, section 13).
+- ✅ **Format** : `project::VERSION` 27 → **31** (les sorties 28 à 30 sont réservées à d'autres chantiers) ; les projets d'avant
+  s'ouvrent tels quels, une version précédente refuse le projet (elle ne connaît pas ces sortes d'effet).
+- ✅ **Essais** (`fxtrait_tests.rs`, 33 dont deux à lancer à la main — mesures et planche de contact en PNG ; `gpufx_tests.rs`, un de plus) : écriture à 0, 50 et 100 %, sens, ensemble, durées égales, bord doux,
+  zones remplies, clés, déterminisme (un fil ou plusieurs), enregistrement et projets d'avant, calque vectoriel seulement,
+  export = vignettes = écran, dessin dérivé, traits texturés sans rejeu, lecture sans rejeu sur le fil de l'interface,
+  actions, préréglages, copier-coller, accord carte / processeur du tremblement et de la pile mêlée.
+- Pas faits : un « animer à l'arrêt » pour le crayonné (seul le tremblement l'a ; les autres suivent l'image courante) ; un
+  aperçu réduit de ces effets (longueurs en pixels de la feuille) ; l'effet par trait choisi (ils s'appliquent à tout le
+  calque : un calque par groupe de traits) ; les zones remplies et les textes ne sont pas des traits (réglage dédié pour
+  l'écriture et la désagrégation) ; un fond sous le trait reste fixe ; 2 000 traits à 24 images par seconde en temps réel
+  pour les effets qui changent à chaque image (pistes : carte des points les plus proches gardée par version du dessin,
+  version sur la carte de l'écriture) ; les « effets de matière » (prochaine série). Comparaisons avec d'autres logiciels :
+  aucune vérifiée (**à vérifier**).
 ## Retouches du 2026-10-19 (aides au cadrage, choix au rectangle, tremblement, commentaires) ✅
 
 Quatre retours d'Anthony, branche `retouches` (pas vus à l'écran dans cette séance : à regarder).

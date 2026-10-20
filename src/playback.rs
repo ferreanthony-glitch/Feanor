@@ -116,7 +116,14 @@ pub fn upcoming_derived_with(doc: &Document, at: Position, level: u8, cap: usize
         let plan = crate::render::panel_plan_at(doc, p, f, doc.render_paper());
         let on_gpu = |item: &crate::render::PlanItem| gpu_fx && crate::gpu::gpu_fx_item(doc, item);
         let adjust_on_gpu = gpu_fx && crate::gpufx::adjustments_supported(&plan);
-        for item in plan.items.iter().filter(|i| !on_gpu(i)) {
+        // Ce que le fil de fond calcule pour chaque élément : sa pile entière, ou, quand la carte graphique
+        // passe une partie des effets (`fx::hybrid_split`), le dessin dérivé par les effets du trait seuls.
+        let computed: Vec<crate::render::PlanItem> = plan
+            .items
+            .iter()
+            .filter_map(|i| if on_gpu(i) { crate::fx::hybrid_split(i).map(|(line, _)| line) } else { Some(i.clone()) })
+            .collect();
+        for item in &computed {
             crate::fx::prefetch(doc, std::slice::from_ref(item), k as u32 + 1, level);
         }
         // Les calques d'effets de cette image : leurs dessins sont demandés au fil de fond, et ceux qui
@@ -128,7 +135,7 @@ pub fn upcoming_derived_with(doc: &Document, at: Position, level: u8, cap: usize
                 }
             }
         }
-        for item in plan.items.iter().filter(|i| !on_gpu(i)) {
+        for item in &computed {
             if out.len() >= cap {
                 break;
             }

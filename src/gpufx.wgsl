@@ -548,6 +548,69 @@ fn fs_warp(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     return vec4<f32>(ch, al) / 255.0;
 }
 
+// ---------------------------------------------------------------------- tremblement du trait
+
+// Le champ de déplacement du tremblement (`tremblement::Field`), tiré des mêmes nœuds : un hachage entier
+// de (graine, nœud, canal), un vecteur de norme au plus 1 et une valeur d'épaisseur par nœud, interpolés
+// en 3t² - 2t³ ; la graine (variante comprise) est calculée par le processeur.
+fn bmix(h0: u32) -> u32 {
+    var h = h0;
+    h = h ^ (h >> 16u);
+    h = h * 0x85EBCA6Bu;
+    h = h ^ (h >> 13u);
+    h = h * 0xC2B2AE35u;
+    return h ^ (h >> 16u);
+}
+
+fn bunit(i: i32, j: i32, seed: u32, k: u32) -> f32 {
+    let h = bmix((bitcast<u32>(i) * 0x8DA6B343u) ^ bmix((bitcast<u32>(j) * 0xD8163841u) ^ bmix(seed ^ (k * 0x9E3779B9u))));
+    return f32(h >> 8u) / 8388608.0 - 1.0;
+}
+
+fn bnode(i: i32, j: i32, seed: u32) -> vec3<f32> {
+    var u = bunit(i, j, seed, 0u);
+    var v = bunit(i, j, seed, 1u);
+    let n2 = u * u + v * v;
+    if (n2 > 1.0) {
+        let k = 1.0 / sqrt(n2);
+        u = u * k;
+        v = v * k;
+    }
+    return vec3<f32>(u, v, bunit(i, j, seed, 2u));
+}
+
+// Tremblement du trait : f[0] = (amplitude, maille du champ, variation d'épaisseur 0 à 1), n.x = graine.
+@fragment
+fn fs_boil(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    let sp = dst_px(pos);
+    let x = f32(sp.x) + 0.5;
+    let y = f32(sp.y) + 0.5;
+    let amp = p.f[0].x;
+    let cell = p.f[0].y;
+    let seed = u32(p.n.x);
+    let gx = x / cell;
+    let gy = y / cell;
+    let fx = floor(gx);
+    let fy = floor(gy);
+    let i = i32(fx);
+    let j = i32(fy);
+    let tx = gx - fx;
+    let ty = gy - fy;
+    let sx = tx * tx * (3.0 - 2.0 * tx);
+    let sy = ty * ty * (3.0 - 2.0 * ty);
+    let fld = bnode(i, j, seed) * ((1.0 - sx) * (1.0 - sy)) + bnode(i + 1, j, seed) * (sx * (1.0 - sy)) + bnode(i, j + 1, seed) * ((1.0 - sx) * sy) + bnode(i + 1, j + 1, seed) * (sx * sy);
+    var c = bil_a(x + fld.x * amp, y + fld.y * amp);
+    let thick = p.f[0].z;
+    if (thick > 0.0 && c.a >= 1.0 && c.a < 254.5) {
+        let a = c.a / 255.0;
+        let a2 = pow(a, 1.0 / exp2(1.5 * thick * fld.z));
+        let m = a2 / a;
+        c = vec4<f32>(c.rgb * m, a2 * 255.0);
+    }
+    let al = clamp(floor(c.a + 0.5), 0.0, 255.0);
+    let ch = clamp(floor(c.rgb + vec3<f32>(0.5)), vec3<f32>(0.0), vec3<f32>(al));
+    return vec4<f32>(ch, al) / 255.0;
+}
 // Bruit lissé de `fxwarp::value_noise` (les nuages).
 fn vhash(i: i32, j: i32, seed: u32) -> f32 {
     var h = (bitcast<u32>(i) * 0x8DA6B343u) ^ (bitcast<u32>(j) * 0xD8163841u) ^ (seed * 0xCB1AB31Fu);

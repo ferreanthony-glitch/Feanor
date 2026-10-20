@@ -129,7 +129,8 @@ impl App {
                 // Les autres variantes d'un tremblement animé à l'arrêt : demandées au fil de fond
                 // et envoyées d'avance, pour que l'écran passe de l'une à l'autre sans attendre.
                 if !self.playing {
-                    let others = crate::tremblement::other_variants(&plan.items);
+                    // (Sur la carte graphique, le tremblement se redessine à chaque image : rien à demander.)
+                    let others: Vec<_> = crate::tremblement::other_variants(&plan.items).into_iter().filter(|i| !(gpu_fx && crate::gpu::gpu_fx_item(&self.doc, i))).collect();
                     crate::fx::prefetch(&self.doc, &others, 1, level);
                     for item in &others {
                         if let Some((id, cel)) = crate::fx::ready(&self.doc, item, level) {

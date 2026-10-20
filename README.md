@@ -391,7 +391,39 @@ on les coche et décoche, le dessin reste tel quel).
   mêmes pixels (lecture, export, défilement). Les dessins ne changent pas : tant que tu dessines, gommes,
   sélectionnes ou transformes sur le calque, il se montre sans tremblement, à la vraie place de ses
   traits. Actions : `fx.tremblement`, `fx.tremblement_repos`. Détails dans `src/tremblement.rs` et
-  `docs/ROADMAP.md`.
+  `docs/ROADMAP.md`. Le tremblement est dessiné **par la carte graphique** depuis le 2026-10-20 (même champ,
+  écart d'un niveau au plus avec le processeur).
+- **Effets du trait** (2026-10-20, famille **Trait**, **calques vectoriels seulement** : grisés avec la raison sur un
+  calque bitmap ; `src/fxtrait.rs`). Six effets de plus de la pile, qui agissent sur les traits eux-mêmes ; mêmes
+  réglages enregistrés, mêmes clés, même copier-coller que le reste. Une **rangée d'icônes** en tête du panneau
+  Effets les coche et les décoche (bulle : nom, raccourci, description), un menu baguette pose des **préréglages** :
+  - **Écriture du trait** (icône signature) : le dessin se trace de lui-même, trait par trait dans l'ordre où ils ont été
+    dessinés (ou tous ensemble), selon un **avancement** de 0 à 100 % animable (une clé à 0 %, une à 100 %).
+    Réglages : effacement (le dessin se défait dans le même ordre), tous les traits ensemble, durée selon la longueur
+    (un trait long prend plus de temps), douceur du rythme (départ et arrivée en douceur), bord doux de la pointe,
+    zones remplies avec le trait (les aplats de couleur apparaissent en fondu à la fin).
+  - **Crayonné multiple** (icône gribouillis) : chaque trait est redoublé de 1 à 4 passes décalées et plus pâles,
+    comme un dessin repris au crayon, sous le trait d'origine resté intact ; décalage, opacité, nervosité, et
+    **retirage toutes les N images** (variantes et vitesse, comme le tremblement).
+  - **Respiration** (icône battement) : l'épaisseur du trait pulse (amplitude, période en images) autour d'une
+    épaisseur de base animable ; une vague de pulsation peut courir le long du trait.
+  - **Ondulation du trait** (icône vague) : une vague court le long de chaque trait (amplitude, longueur d'onde,
+    vitesse, bouts fixes ou libres).
+  - **Pointillés qui défilent** (icône points) : le trait devient des tirets (longueur, intervalle, vitesse dans un
+    sens ou l'autre, bord doux).
+  - **Désagrégation** (icône grains) : le trait se défait en poussière grain par grain, avancement animable : pour
+    une disparition ou une transition (taille des grains, dispersion, sens du trait, direction et force du vent,
+    graine ; mêmes réglages : même poussière).
+  - **Préréglages du trait** (baguette) : « Apparition écrite » (le dessin s'écrit en une seconde), « Croquis nerveux »
+    (crayonné et léger tremblement), « Poussière » (le dessin part en poussière en une seconde) ; les clés partent de
+    la tête de lecture. Actions `fx.ecriture`, `fx.crayonne`, `fx.respiration`, `fx.ondulation_trait`,
+    `fx.pointilles`, `fx.desagregation`, `fx.preset_apparition`, `fx.preset_croquis`, `fx.preset_poussiere` (Ctrl+K,
+    sans touche par défaut ; clic droit sur une icône : lui assigner un raccourci).
+  Chaque trait est transformé **en pixels**, depuis les pixels exacts que son cache garde : la texture de la brosse suit la
+  déformation, et le moteur de brosses n'est jamais rejoué à chaque image. Calcul de fond, sans latence ; le même
+  dessin donne toujours les mêmes pixels (lecture, export, vignettes). Tant que tu dessines sur le calque, ses effets du
+  trait se taisent. Un fond sous le trait reste fixe. Mesures sur 2 000 traits : `docs/PERFORMANCE.md` (section 13) ;
+  liste de ce qu'il faut regarder à l'écran : `docs/INTERFACE.md` (section 20).
 - Au clic droit sur un calque, la partie « Effets » : opacité, mode de fusion, chaque famille
   en cases à cocher ; on règle les paramètres dans le panneau Effets.
 - **Copier-coller des effets d'un calque à l'autre** : l'icône « Copier l'effet » de chaque effet (ou
@@ -475,13 +507,15 @@ on les coche et décoche, le dessin reste tel quel).
 - **Effets sur la carte graphique** (2026-10-19, `src/gpufx.rs`, `src/gpufx.wgsl`). Les effets d'un calque
   et ceux des calques d'ajustement hors dossier se dessinent sur la carte graphique, **à pleine résolution, à
   chaque image** : plus d'aperçu réduit en lecture, plus d'attente quand on change un réglage, les curseurs
-  suivent la souris. 28 effets sur 29 y passent (réglages de couleur, flous, netteté, bruit, grain, mosaïque,
+  suivent la souris. Les 29 effets ordinaires y passent (réglages de couleur, flous, netteté, bruit, grain, mosaïque,
   ombre, lueur, déformations, nuages, éclairage, dégradé, flash, image d'impact, lueur diffuse, secousse,
-  vignettage, aberration) avec le même hasard et les mêmes arrondis que le calcul sur processeur (écart de 0
-  à 2 niveaux sur 255, flou exact). Scène d'Anthony en 3840 × 2160 : 2,9 ms par image en lecture (avant :
-  aperçu au quart), 3,5 ms par cran du curseur du flou. **Le tremblement du trait** reste sur le processeur, et
-  **une pile qui en contient un est calculée tout entière sur le processeur** (comme un calque CTG, un fond sous
-  le trait ou une vidéo) ; un calque d'ajustement dans un dossier aussi. **L'export, les vignettes et le repli
+  vignettage, aberration, et depuis le 2026-10-20 le tremblement du trait) avec le même hasard et les mêmes arrondis
+  que le calcul sur processeur (écart de 0 à 2 niveaux sur 255, flou exact, tremblement à 1 niveau). Scène d'Anthony
+  en 3840 × 2160 : 2,9 ms par image en lecture (avant : aperçu au quart), 3,5 ms par cran du curseur du flou. **Les
+  effets du trait** (famille Trait ci-dessus) lisent la géométrie des traits : ils restent un calcul de fond, et une
+  pile qui en mêle à des effets de la carte est **coupée en deux** (le fond calcule le dessin dérivé par les effets du
+  trait, la carte passe le reste dessus) ; un calque CTG, un fond sous le trait ou une vidéo restent sur le processeur,
+  un calque d'ajustement dans un dossier aussi. **L'export, les vignettes et le repli
   sans carte graphique restent le calcul exact sur processeur.** Réglage : Fichier > Préférences… >
   Performance > « Effets sur la carte graphique » (allumé par défaut, grisé si la carte refuse le shader).
   Détails, écarts et mesures : `docs/PERFORMANCE.md` (section 12), à relancer par
@@ -1816,7 +1850,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `flips.rs`, `flipsui.rs` | Flips : limites, checkpoints, pas, panneau et flip en cours (13h) |
 | `fx.rs`, `fxui.rs` | Pile d'effets : clés, flous, dessins dérivés, panneau (13i) |
 | `fxcache.rs`, `fxproxy.rs` | Effets : cache en octets, calcul de fond, dernier résultat en attendant ; aperçu réduit pendant la lecture et les gestes |
-| `tremblement.rs` | Tremblement du trait des calques vectoriels : champ de déplacement lisse, variantes, repos (effet de la pile) |
+| `tremblement.rs` | Tremblement du trait des calques vectoriels : champ de déplacement lisse, variantes, repos (effet de la pile) ; aussi sur la carte graphique (`fs_boil`) |
+| `fxtrait.rs` | Effets du trait des calques vectoriels (écriture, crayonné multiple, respiration, ondulation, pointillés, désagrégation) : axe des traits, rendu en pixels par trait, bandes de tuiles, préréglages, bulles |
 | `calqueffet.rs`, `fxcine.rs` | Calques d'effets (ajustement, incrustation) : repère du plan, dessin dérivé de ce qui est dessous, enregistrement ; effets « Cinéma » (flash, impact, lueur diffuse, secousse, vignettage, grain, aberration) |
 | `prereglages.rs`, `prereglagesui.rs`, `incrustation.rs` | Préréglages d'effets (clés posées à la tête de lecture), fenêtre à aperçu en direct et menus ; texte des incrustations (timecode…) et son tracé |
 | `ctg.rs`, `ctgui.rs` | Calque CTG : remplissage par graffitis, sources, structure (13j) |
