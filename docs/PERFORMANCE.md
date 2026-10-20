@@ -1366,3 +1366,25 @@ le tableau dit sur quel fil chaque coût tombe.
 - Le coût réel d'un dossier synchronisé est celui du client (Dropbox, Drive) : SHOT n'écrit qu'un petit fichier de fiche toutes les
   30 s par fenêtre ouverte, et les plans que l'on a vraiment changés.
 - Les dessins ne sont jamais relus à chaque balayage : seulement quand le fichier de leur plan change.
+
+## 20. Espace 3D (2026-10-20, branche `espace-3d`)
+
+Règle « sans latence » : tourner la vue, tirer une carte ou un objet ne touche pas le processeur lourd ; le rendu des objets pour
+l'image part sur un autre fil. Mesures de cette séance (processeur et carte graphique de la machine de développement, `cargo test
+--release`, essais `espace3d_tests`, lignes `PERF`) :
+
+| Mesure | Valeur |
+|---|---|
+| image de l'Espace 3D avec **10 cartes et 20 objets** (carte graphique), par image d'interface | ≈ 2 ms (budget : 16 ms, 60 images par seconde) |
+| choisir à la souris dans cette scène (rayon contre 20 maillages et 10 cartes) | ≈ 0,06 ms |
+| construire le plan d'une image avec 10 cartes inclinées (10 maillages de 65 × 65 points) | ≈ 1,5 à 2,5 ms |
+| composer une carte inclinée de 320 × 180, carte graphique contre processeur | 0 pixel à plus de 2 niveaux d'écart (sur 53 000 peints) |
+| objets (rendu par l'œil, 320 × 180) en arrière-plan, l'écran n'attend pas | la demande rend la main en moins de 100 ms (essai) |
+
+À savoir :
+- Une carte inclinée coûte, sur le processeur (export), un remplissage par triangles (8 192) comme une feuille déformée ; sur la
+  carte graphique, un maillage de plus (le même qu'une enveloppe).
+- Les objets de l'image se rendent avec un sur-échantillonnage de 2 (1 au-delà de 2,5 millions de pixels de feuille). Un
+  travelling demande un rendu par image : à l'export, c'est calculé image par image (exact) ; en lecture, un rendu à la fois
+  part en arrière-plan et les objets peuvent retarder de quelques images.
+- Aucun repaint au repos : ni la vue, ni le rendu des objets ne réveillent l'écran quand rien ne change.

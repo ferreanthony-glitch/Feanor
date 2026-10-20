@@ -334,7 +334,7 @@ voir le plateau dans l'espace, naviguer et y déplacer les objets.
   format 16:9, 9:16, 4:5, 1:1 ou personnalisé, centré dans le cadre de la caméra, hors-format
   estompé. Retenus avec la disposition.
   Pas encore : décaler le cadre de format dans le cadre de la caméra.
-- ✅ 9e. Plateau en 3D (bouton 3D) : plans des calques à leur profondeur, texturés par leur
+- ✅ 9e. Plateau en 3D (bouton 3D ; **repris et remplacé par l'Espace 3D** le 2026-10-20, voir plus bas) : plans des calques à leur profondeur, texturés par leur
   dessin ; caméra en pyramide de vision (et sa course si elle bouge) ; sol quadrillé. Outils :
   tourner autour, glisser la vue, avancer ; Déplacer un calque dans son plan (Maj : en
   profondeur) ou la caméra par son œil (Maj : avancée). Vues de face, de dessus, de côté, par la
@@ -342,7 +342,7 @@ voir le plateau dans l'espace, naviguer et y déplacer les objets.
   Pas encore : modes de fusion dans la vue 3D (tout y est en Normal), repère 3D (glTF) dans la
   vue 3D, échelle et rotation d'un calque dans la vue 3D (outil Transformer en 2D).
   Placer des objets 3D (formes, mannequins) et en faire un calque de fond : voir plus bas « Scène 3D de
-  blocage » (une vue à part, qui ne remplace pas ce plateau).
+  blocage » (qui fut une vue à part ; l'Espace 3D les a réunies).
 - ✅ 9f. Bascule et panoramique de la caméra (demandés par Anthony) : la caméra tourne sur
   elle-même. Fenêtre de la caméra (Bascule, Panoramique, interpolés entre les clés), vue 3D
   (outil Déplacer, Ctrl + glisser l'œil). Vue caméra, export et vignettes en perspective ; sur le
@@ -2925,7 +2925,7 @@ partie 12 ; mesures : `docs/PERFORMANCE.md`, partie 10.
   choix de la police de l'incrustation dans l'interface (le champ existe et s'enregistre) ; sélection flottante sous un
   calque d'effet (l'effet attend la fin du geste). À vérifier à l'écran : voir `docs/INTERFACE.md`, partie 12.
 
-## Scène 3D de blocage (demandée par Anthony le 2026-10-19, branche `scene3d`) ✅
+## Scène 3D de blocage (demandée par Anthony le 2026-10-19, branche `scene3d`) ✅ — devenue l'Espace 3D (voir la dernière partie)
 
 Le choix d'Anthony : **blocage simple** — des formes (cube, plan, cylindre, sphère, escalier), les déplacer, les
 tourner, les mettre à l'échelle ; la caméra du plan dans la scène ; des silhouettes de personnages ; puis dessiner
@@ -3347,3 +3347,27 @@ Conception écrite d'abord : `docs/COOPERATION.md`.
 - ✅ **Essais** : 62 (+1 mesure), famille ajoutée à `scripts\verifier.ps1` ; mesures dans `docs/PERFORMANCE.md`, 18.
 - Pas fait : le serveur SHOT ; l'enregistrement automatique dans le dossier partagé ; le nettoyage du dossier ; importer un montage perdu ; retenir les copies
   en conflit ignorées ; deux porteurs écrivant le même dessin plus de huit secondes d'affilée laissent des « copies en conflit » de dessins (rien n'est perdu).
+
+## Espace 3D (demandé par Anthony le 2026-10-20, branche `espace-3d`) ✅ (cœur)
+
+Sa demande : « Il y a quelque chose de très confus entre ces deux espaces 3D [le plateau en 3D et la scène 3D de blocage]. Il nous
+faut un seul espace 3D où les calques apparaissent et donnent la possibilité de les déplacer dans l'espace pour créer un
+environnement 3D avec, et ainsi une parallaxe. Ça implique donc d'importer dans cet espace tous les outils 3D et de pouvoir
+déplacer, pivoter, modifier les calques dans cet espace comme de vrais objets 3D. »
+
+Fait (conception : `docs/ESPACE3D.md` ; interface et liste de contrôle : `docs/INTERFACE.md`, partie 13 ; code : `espace3d.rs`,
+`espace3dobjets.rs`, `scene3dui.rs`, `scene3dview.rs`) :
+- ✅ **Un seul espace** : un bouton (cube), une entrée de menu, une commande `espace3d.basculer` ; les anciens identifiants
+  (`vue.3d`, `scene3d.basculer`, `vue3d.recadrer`, `outil3d.*`) restent en doubles. Le plateau en 3D est retiré.
+- ✅ **Les calques sont des cartes** : déplacer / tourner / incliner / mettre à l'échelle avec les poignées des objets (axes
+  locaux, aimantation, multi-choix), champs chiffrés, verrous, annulation par geste ; la profondeur du multiplan est la position Z.
+- ✅ **Une seule caméra** : celle du plan, avec ses clés ; plus de caméra du plateau (l'ancienne reste pour le calque « Fond 3D »).
+- ✅ **Parallaxe dans l'image** : cartes à plat = rendu d'avant (mêmes pixels) ; cartes inclinées en perspective (maillage, écran,
+  vignettes, export, calques d'ajustement) ; carte graphique = processeur à 2 niveaux près ; objets 3D dans l'image, sous les cartes.
+- ✅ **Clés 3D** (inclinaison, profondeur) comme les clés de position ; **format 35** (projets partagés : le plus grand des numéros) ;
+  anciens projets identiques ; objets d'un ancien projet hors de l'image.
+- ✅ Pinceau sur une carte inclinée ; « Ordonner la pile selon la profondeur » ; budget 10 cartes + 20 objets ≈ 2 ms par image.
+- Pas encore (détail et raisons : `docs/ESPACE3D.md`, 11) : objet devant une carte (tampon de profondeur partagé), tri des cartes par
+  profondeur, cartes inclinées au-delà de la feuille, effets et fusions dans la vue d'édition, objets animés, préchargement des
+  objets en lecture, outils 2D sur une carte inclinée, inclinaison au-delà de 85°, dossiers comme groupes dans l'espace, comparaison
+  avec Storyboard Pro / Harmony (à vérifier), et **tout ce qui se voit à l'écran** (aucun lancement de SHOT dans cette séance).

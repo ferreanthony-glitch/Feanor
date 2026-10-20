@@ -197,11 +197,11 @@ pixels. Un plan neuf l'a allumé.
 - Tourner la vue, tirer une carte ou un objet : rien ne passe par le processeur lourd. Les objets sont dessinés par la carte
   graphique (maillages gardés, une matrice de 176 octets par objet) ; les cartes sont des maillages egui de 16 × 16 cases,
   leurs textures (≤ 1024 px) sont refaites quand le dessin change seulement. Objectif : 60 images par seconde avec 10 cartes
-  et 20 objets (essai de budget sur le calcul de l'image : sélection, projection, maillages).
+  et 20 objets : mesuré ≈ 2 ms par image d'interface (essai de budget `the_view_with_ten_cards_and_twenty_objects_stays_within_the_frame_budget`).
 - Le rendu des objets vers l'image se fait sur un autre fil, jamais pendant un trait ni un geste dans la vue (comme le
   calque « Fond 3D » avant).
-- Le maillage d'une carte inclinée ne dépend que de la pose et de l'œil : il est refait à l'image, pas à chaque affichage,
-  et reste une structure légère (4 225 points).
+- Le maillage d'une carte inclinée ne dépend que de la pose et de l'œil : il est refait à la construction du plan d'une image
+  (≈ 0,15 à 0,25 ms par carte), et reste une structure légère (4 225 points).
 - Aucun repaint au repos.
 
 ## 9. Essais
@@ -218,6 +218,53 @@ Storyboard Pro a, d'après sa documentation, un « stage 3D » où les couches s
 détail (inclinaison, ordre de rendu, caméra) n'a pas été comparé. Rien de ce document ne prétend reproduire un comportement
 de Storyboard Pro ou de Harmony.
 
-## 11. État (fin de séance)
+## 11. État (fin de séance, 2026-10-20)
 
-Voir la section « État » en bas de ce fichier, remplie à la fin du travail.
+**Fait, testé** (essais dans `espace3d_tests.rs`, plus `scene3d_tests.rs`, `keymap_tests.rs`, `cooperation_*tests.rs` adaptés) :
+
+- Un seul espace : un bouton, une entrée de menu, une commande `espace3d.basculer` ; `vue.3d`, `scene3d.basculer`, `vue3d.recadrer`,
+  `outil3d.*` en doubles (`keymap::ALIASES`). Le plateau en 3D (`stage3d.rs`, `stage3dui.rs`) est retiré.
+- Les calques sont des cartes : pose 3D calculée des champs du calque (et chemin inverse, aller-retour testé), choisies au
+  rayon (la carte dessinée la plus proche, la feuille en dernier recours) ou dans la liste, manipulées par les poignées des
+  objets (déplacer, tourner, échelle, axes locaux, aimantation, multi-choix), champs chiffrés, verrous respectés, une étape
+  d'annulation par geste, le calque courant et la carte choisie se suivent.
+- Une carte reculée garde sa taille dans le monde ; le champ « Profondeur » du panneau Calques garde son sens (taille vue).
+- Une seule caméra : celle du plan, avec ses clés ; choisie, déplacée, tournée par les mêmes poignées ; « Vue par la caméra »
+  la déplace ; plus de caméra du plateau dans l'interface (l'ancienne reste enregistrée pour le calque « Fond 3D »).
+- Rendu : carte à plat = les pixels d'avant (plan identique, essai) ; carte inclinée = maillage projeté de l'œil sur la feuille,
+  écran (carte graphique), vignettes, export et calques d'ajustement ; processeur contre carte graphique : 0 pixel à plus de 2
+  niveaux sur 53 000 (carte inclinée) et sur 21 000 (objets + carte inclinée).
+- Parallaxe : une carte plus loin bouge moins quand la caméra se déplace (rapport 6 mesuré pour des profondeurs 2 et −0,5,
+  à plat et incliné) ; les objets aussi (23,7 px mesurés, 23,7 attendus).
+- Clés : inclinaison, écart de profondeur interpolés comme le reste (adoucis compris) ; un calque animé tiré à l'image 5
+  crée la clé de l'image 5 ; enregistrés, relus.
+- Format 35, projets partagés au plus grand des deux numéros ; un projet d'avant (≤ 34) s'ouvre identique, pixel pour pixel ;
+  un projet d'un format plus récent est refusé.
+- Objets dans l'image, sous toutes les cartes, par la caméra du plan, en arrière-plan à l'écran, immédiat à l'export ;
+  un plan d'un ancien projet ne les montre pas (rien de plus dans l'image).
+- Pinceau sur une carte inclinée (aller-retour carte ↔ feuille ↔ écran). « Ordonner la pile selon la profondeur » (une étape,
+  refusé si la pile a des dossiers ou des calques liés).
+- Budget : 10 cartes et 20 objets, ≈ 2 ms par image d'interface (60 images par seconde tenues avec une grande marge).
+
+**Reste à faire, précisément** :
+
+1. **Objet devant une carte** (un pilier devant un personnage) : demande un tampon de profondeur partagé entre les objets et la
+   composition de la carte graphique (`gpu.rs`) et son équivalent sur processeur. Aujourd'hui : objets sous toutes les cartes.
+2. **Tri des cartes par profondeur** comme réglage de plan (et cartes qui se traversent) : incompatible, tel quel, avec les modes de
+   fusion et les calques d'ajustement, qui travaillent sur « ce qui est dessous ».
+3. **Cartes inclinées plus grandes que la feuille** (toile infinie) : elles sont coupées aux bords de la feuille.
+4. **Vue d'édition** : les effets, modes de fusion et opacités des calques n'y sont pas montrés (le dessin brut) ; pas de test de
+   profondeur entre cartes dans cette vue (ordre de la pile).
+5. **Objets animés** : seuls la caméra et les cartes ont des clés ; les objets 3D sont fixes dans le plan.
+6. **Lecture d'un travelling avec objets** : préchargement des rendus des images à venir (aujourd'hui un rendu à la fois, les
+   objets peuvent retarder à l'écran ; l'export est exact).
+7. **Outils 2D sur une carte inclinée** : le pinceau suit l'inclinaison, pas la boîte de sélection, le Transformer ni la
+   multisélection (ils travaillent sur la carte à plat) ; l'export vers Storyboard Pro ignore l'inclinaison.
+8. **Inclinaison** limitée à ±85° (pas de retournement, pas de vue du dos d'une carte) ; la pose est donnée en angles d'Euler
+   (ordre Y · X · Z), la poignée de rotation peut donc sembler sauter près de ±90°.
+9. **Interpolation** linéaire dans les champs du calque : entre deux clés de profondeurs différentes, la trajectoire vue par la
+   caméra de référence est droite, celle du monde est une courbe douce.
+10. **Dossiers** : un dossier n'est pas une carte ; sa pose ne place pas ses calques dans l'espace.
+11. **Rien n'a été regardé à l'écran** (aucun lancement de SHOT, consigne) : tout l'aspect (poignées, contours, voiles, lisibilité
+    dans les trois thèmes, fluidité réelle) est à voir avec la liste de contrôle de `docs/INTERFACE.md`, partie 13.
+12. **Comparaison avec Storyboard Pro / Harmony** : non faite (à vérifier).

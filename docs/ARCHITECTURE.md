@@ -309,8 +309,8 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   cadre du format s'il y en a un, sinon du cadre de la caméra. Réglages de la vue : gardés avec la
   disposition (`Layout::safe_frames`, `frame_format`), pas dans le projet ; changer d'espace de
   travail ne les change pas.
-- **Plateau en 3D** (9e, `stage3d.rs` : géométrie testée ; `stage3dui.rs` : affichage et
-  gestes). Monde en pixels de la feuille, x à droite, y en haut, z vers la caméra ; plan de
+- **Plateau en 3D** (9e) — **remplacé par l'Espace 3D** (voir « Espace 3D » plus bas : `stage3d*.rs` n'existent plus ; ce qui
+  suit est l'histoire de la phase 9 et reste vrai pour le calcul du multiplan). Monde en pixels de la feuille, x à droite, y en haut, z vers la caméra ; plan de
   référence z = 0, caméra de référence en z = D. Un calque de profondeur d est le plan
   z = −D·d, agrandi de (1 + d) : vu de l'œil de la caméra (`World::eye`, z = D − avancée), il
   tombe exactement là où le rendu 2D le met (testé avec décalage, avancée, transformation du
@@ -1799,7 +1799,7 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 | `src-tauri` projet Cargo à part, pas membre d'un espace de travail (10b) | Tauri ne change aucune version des dépendances de Pelure | le noyau est compilé deux fois (deux dossiers `target`) | faible | oui : en faire un membre plus tard |
 | Bascule et panoramique = homographie du plan de référence déjà composé (9f) | exact (le multiplan ne dépend que de l'œil), sans toucher à la composition ni aux calques | une homographie par image ; vue caméra par la carte graphique avec un w par coin | faible : au ras de l'horizon, la feuille est très étirée (bornée à 5°) ; hors de la feuille, rien | oui : caméra droite = calcul d'avant ; deux champs du manifeste |
 | Cadres de composition dans la disposition, pas dans le projet (9d) | ce sont des réglages de la vue, comme le zoom | nul | un format de diffusion propre au projet n'est pas transmis avec lui | oui : un champ du manifeste pourrait s'ajouter |
-| Plateau 3D dessiné par egui (maillages subdivisés, textures réduites), pas par une passe wgpu à part (9e) | aucun shader ni pipeline de plus ; marche aussi en OpenGL | ≈ 600 triangles par calque ; texture refaite (≈ 10 ms) quand un dessin change | faible : pas de tampon de profondeur (plans parallèles triés, suffisant) | oui : `stage3dui.rs` seul à remplacer |
+| Cartes de l'Espace 3D dessinées par egui (maillages subdivisés, textures réduites) par-dessus la passe wgpu des objets, dans l'ordre de la pile (9e, repris par l'Espace 3D) | aucun shader ni pipeline de plus ; marche aussi en OpenGL | ≈ 600 triangles par carte ; texture refaite (≈ 10 ms) quand un dessin change | pas de tampon de profondeur partagé entre cartes et objets (les objets sont sous les cartes) | oui : `scene3dview::s3_paint_cards` seul à remplacer |
 | Repère 3D : lecteur glTF et fil de fer écrits pour Pelure, sur le processeur (2d) | glTF = format ouvert que Blender exporte ; pas de bibliothèque ni de passe GPU à ajouter pour un guide en fil de fer | ≈ 900 lignes ; calcul 0,15 s par vue sur un gros décor (sur un autre fil) | faible : mauvais fichier → message | oui : affichage par la carte graphique ou rendu ombré possibles plus tard, le format `.pelure3d` ne change pas |
 | Couleurs et nuanciers dans les réglages de l'application, pas dans le projet (passe couleur) | ce sont les outils de celui qui dessine, d'un film à l'autre, comme les pinceaux importés ; le format du projet ne change pas | nul | un nuancier propre à un film ne voyage pas avec lui (on l'exporte en .gpl ou .aco) | oui : un champ du manifeste pourrait s'ajouter (format versionné) |
 | Avant-plan = `App::color`, l'existant ; arrière-plan à côté (passe couleur) | aucun outil à modifier : ils lisaient déjà `App::color` | nul | faible | oui |
@@ -2076,3 +2076,51 @@ equipe.rs          identité, séance, couleur, réglages
 | Empreintes des dessins dans le fichier du plan | un plan n'est jamais pris à moitié arrivé ; un pixel changé change le plan | une relecture des fichiers de dessins par le lecteur | un dessin lu deux fois (cache du système) | oui : champ facultatif |
 | Moteur sur un fil, interface sans entrée-sortie | règle « sans latence » | un canal et un instantané `Arc` | un événement qui attend dans un onglet caché | oui |
 | Numéros préfixés par équipier | deux postes ne se rencontrent jamais | numéros plus grands (≤ 2⁵², sans perte en JSON) | tirage du même préfixe (1 sur un million, vérifié à l'arrivée) | oui |
+
+## Espace 3D (2026-10-20, branche `espace-3d`)
+
+Un seul monde pour les calques (cartes), les objets 3D et la caméra du plan. Conception, formules et état : `docs/ESPACE3D.md` ;
+ici, le placement dans le code.
+
+**Le monde** (`espace3d::Monde`) : mètres, Y vers le haut, Z vers la caméra, origine au centre de la feuille, plan z = 0 = la
+feuille ; `k = PLATE_WIDTH_M / largeur du cadre` mètres par pixel. C'est le monde de l'ancienne scène 3D (`SceneCam::from_plan_camera`
+posait déjà la caméra du plan dedans) ; le plateau en 3D en pixels (`stage3d.rs`) disparaît.
+
+**La carte n'est pas un nouveau type de données** : un calque garde `LayerTransform` (x, y, échelle, angle, étirements) et `Layer::depth`
+et gagne `tilt_x`, `tilt_y`, `dz`. `Monde::card_xf` en calcule le placement 3D (`scene3d::Xf`, celui des objets : mêmes poignées,
+`scene3dgizmo`), `card_from_xf` / `apply_card_xf` écrivent le résultat dans les champs (la clé de l'image si le calque est animé :
+`Layer::set_pose`). Les numéros de sélection d'une carte ont le bit `CARD_TAG` (`espace3d::card_selection`), celui de la caméra est
+`CAMERA_ID` : `scene3dui::s3_xfs` / `s3_set_xfs` sont les seuls à savoir ce que chaque numéro désigne, tout le reste de la
+manipulation (aimantation, annulation, groupes) est resté celui des objets. Les clés (`poskeys`) interpolent les trois champs de
+plus avec les mêmes adoucis ; `Entree` (le fichier) les écrit seulement quand ils ne sont pas nuls.
+
+**Rendu** (deux temps, inchangés) : (1) chaque élément se compose sur la feuille, vu par l'**œil** de la caméra (le multiplan) ;
+(2) la caméra (zoom, rotation, bascule, panoramique) prend la feuille en homographie (`camera.rs`). Carte à plat : l'affinité d'avant
+(`Layer::transform_seen_at`, même code, mêmes pixels). Carte inclinée : `espace3d::place` donne un `Pre { warp, card: true }` — le
+maillage de `warp.rs` (64 × 64 cases ; `Warp::partial` cache les cases derrière l'œil), un `PlanItem` de plus que la carte graphique
+(`gpu.rs`, `gpu_items`) et le processeur (`render.rs`, trois chemins : écran par tuiles, toile infinie, vignettes via `Resolved::laid`)
+dessinent déjà pour les feuilles déformées ; `calqueffet::Low::warp` pose la carte avant un calque d'ajustement. Les effets du calque
+sont ceux de son dessin à plat (`fx::shown`) : ils passent avant la déformation.
+
+**Objets dans l'image** (`espace3dobjets.rs`) : un élément `FondPart::Objets(ObjetsCle)` en tête du plan (avant le rang de départ du
+premier calque : un calque d'ajustement qui couvre toute la pile le couvre). `fx::shown_blocking` le résout par
+`espace3dobjets::shown` : rendu gardé s'il existe ; à l'écran (`fx::differe`), demande à un fil de fond (`scene3drender::render_plate_eye`,
+la moitié des cœurs, le plus récent demandé gagne) et dernier rendu du plan en attendant, `poll` (une fois par image d'écran, `app.rs`)
+pose le nouveau et invalide l'image composée ; ailleurs (export, essais), rendu immédiat. La clé porte la version de la scène
+(`Scenes3d::rev`), la feuille, le cadre et l'œil : changer la caméra refait le rendu, déplacer une carte non.
+
+**Caméra** : `Monde::camera_xf` / `camera_from_xf` (l'œil, panoramique, bascule, rotation) ; l'écriture passe par
+`App::set_current_camera` (clé de l'image courante si la caméra a plusieurs clés, comme l'outil Caméra). `PlanScene::cam` ne sert
+plus qu'au calque « Fond 3D » figé (`PlanScene::sheet_aligned`) ou ancien.
+
+**Format** : `project::VERSION` = 35 ; `version_partage_ecrite()` = max(34, 35) pour les projets partagés (voir `docs/ESPACE3D.md`, 6).
+
+### Décisions (coût / risque / réversibilité)
+
+| Décision | Pourquoi | Coût | Risque | Réversible |
+|---|---|---|---|---|
+| Garder `LayerTransform` + `depth` et y ajouter l'inclinaison, plutôt qu'une pose 3D à la place | tout l'existant (Transformer, multisélection, clés, vue de dessus, SB, propagation) continue de lire les mêmes champs ; un ancien projet passe par le même code | deux représentations (champs ↔ `Xf`) à tenir d'accord : `card_xf` / `card_from_xf` testés dans les deux sens | une conversion qui dérive : l'essai d'aller-retour la voit | oui : la pose 3D se calcule, elle n'est pas écrite |
+| Cartes inclinées par le maillage des feuilles déformées | carte graphique et processeur le dessinent déjà, à l'identique (essai ≤ 2 niveaux) ; effets, opacité, fusion, calques d'ajustement gratuits | une carte inclinée est coupée aux bords de la feuille ; 8 192 triangles par carte | cases étirées près de l'horizon (cachées derrière l'œil) | oui : `espace3d::place` seul décide |
+| Cartes composées dans l'ordre de la pile, pas par distance | les modes de fusion, calques d'ajustement et dossiers sont des opérations « sur ce qui est dessous » | une carte plus proche peut être cachée par une plus loin si la pile le dit (commande « Ordonner… ») | surprise de l'utilisateur : dit dans la vue et l'aide | oui : un tri par distance serait un réglage de plan |
+| Objets sous toutes les cartes, rendus par le processeur | pas de tampon de profondeur à partager avec la composition de la carte graphique | un objet ne peut pas être devant une carte | à lever avec un tampon de profondeur dans `gpu.rs` | oui : `espace3dobjets` seul |
+| Rendu des objets sur un fil de fond, dernier rendu en attendant | règle « sans latence » : l'écran n'attend jamais | en lecture d'un travelling, les objets peuvent retarder ; l'export est exact | une image de retard visible | oui |
