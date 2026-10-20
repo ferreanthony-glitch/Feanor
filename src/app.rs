@@ -84,8 +84,6 @@ pub enum Tool {
     Pan,
     Camera,
     Transform,
-    /// Repère 3D (2d) : tourner autour du modèle 3D du panneau.
-    Ref3d,
     /// Texte (5d).
     Text,
     /// Déformer en perspective (5f).
@@ -93,7 +91,7 @@ pub enum Tool {
 }
 
 impl Tool {
-    pub const ALL: [Tool; 18] = [
+    pub const ALL: [Tool; 17] = [
         Tool::Brush,
         Tool::Pencil,
         Tool::Eraser,
@@ -111,7 +109,6 @@ impl Tool {
         Tool::Camera,
         Tool::Transform,
         Tool::Perspective,
-        Tool::Ref3d,
     ];
 
     pub fn label(self) -> &'static str {
@@ -131,7 +128,6 @@ impl Tool {
             Tool::Pan => "Main",
             Tool::Camera => "Caméra",
             Tool::Transform => "Transformer",
-            Tool::Ref3d => "Repère 3D",
             Tool::Text => "Texte",
             Tool::Perspective => "Déformer",
         }
@@ -155,7 +151,6 @@ impl Tool {
             Tool::Pan => "Déplacer la vue.",
             Tool::Camera => "Régler le cadre de la caméra du plan : déplacer, zoomer par un coin, tourner.",
             Tool::Transform => "Déplacer, agrandir ou tourner le calque entier (tous ses dessins).",
-            Tool::Ref3d => "Un modèle 3D en fil de fer comme guide, vu depuis le cadre du plan.",
             Tool::Text => "Clic : poser un texte ; Ctrl + Entrée pour le valider.",
             Tool::Perspective => "Déformer le dessin, la sélection ou la zone choisie : en enveloppe de Bézier (coins et poignées pour courber les côtés) ou en perspective (les quatre coins). Le mode se choisit dans Réglages.",
         }
@@ -180,7 +175,6 @@ impl Tool {
             Tool::Pan => ph::HAND,
             Tool::Camera => ph::VIDEO_CAMERA,
             Tool::Transform => ph::BOUNDING_BOX,
-            Tool::Ref3d => ph::CUBE,
             Tool::Text => ph::TEXT_T,
             Tool::Perspective => ph::PERSPECTIVE,
         }
@@ -204,7 +198,6 @@ impl Tool {
             Tool::Pan => "outil.main",
             Tool::Camera => "outil.camera",
             Tool::Transform => "outil.transformer",
-            Tool::Ref3d => "outil.repere3d",
             Tool::Text => "outil.texte",
             Tool::Perspective => "outil.perspective",
         }
@@ -500,16 +493,14 @@ pub struct App {
     /// Banc de traits (moteur de dessin, étape 1) : chaque trait est gardé, tel que reçu ; le
     /// nombre de traits enregistrés depuis l'allumage.
     pub(crate) record_strokes: Option<usize>,
-    /// Repère 3D : geste en cours, fil de fer calculé (image) et calcul en cours.
-    pub(crate) ref3d: crate::ref3dtool::Ref3dState,
     /// Vue à travers la caméra du plan (sinon : la feuille, avec le cadre tracé).
     pub(crate) camera_view: bool,
     /// Vue du plateau laissée en passant à la vue caméra, remise au retour (9d).
     pub(crate) stage_view: Option<View>,
     /// Cadre de format personnalisé choisi (même s'il vaut l'un des formats proposés).
     pub(crate) format_custom: bool,
-    /// Espace 3D (`scene3dui.rs`, `docs/ESPACE3D.md`) : affiché, cartes et objets choisis, vue, envoi vers un calque.
-    pub(crate) scene3d: crate::scene3dui::Scene3dState,
+    /// Espace 3D (`espace3dui.rs`, `docs/ESPACE3D.md`) : affiché, cartes choisies, vue.
+    pub(crate) espace3d: crate::espace3dui::Espace3dState,
     /// Le dessin est affiché dans la vignette choisie de la vue Vignettes (6e).
     pub(crate) in_card: bool,
     /// Planche de la vue Vignettes (7) : zoom, décalage, panneaux choisis (ids), geste en cours.
@@ -1065,11 +1056,10 @@ impl App {
             preset_edit: None,
             brush_import_notes: None,
             record_strokes: None,
-            ref3d: Default::default(),
             camera_view: false,
             stage_view: None,
             format_custom: false,
-            scene3d: Default::default(),
+            espace3d: Default::default(),
             in_card: false,
             // Nul : la page sera mise à la largeur de la vue au premier affichage.
             board_zoom: 0.0,
@@ -1362,7 +1352,7 @@ impl App {
 
     /// Le calque courant est une carte inclinée (Espace 3D) : le monde, son placement, l'œil de la caméra. Il ne se pose
     /// plus par une affinité mais par une projection (`espace3d.rs`).
-    fn tilted_card(&self) -> Option<(crate::espace3d::Monde, crate::scene3d::Xf, [f32; 3])> {
+    fn tilted_card(&self) -> Option<(crate::espace3d::Monde, crate::espace3d::Xf, [f32; 3])> {
         let l = self.layer();
         let t = l.pose(self.cur_frame);
         if !t.is_tilted() {
@@ -1465,8 +1455,6 @@ impl App {
         // Multiplan : les calques en profondeur défilent selon la position de la caméra.
         let camera = self.doc.camera_seen(self.cur_panel, frame);
         let world = crate::espace3d::Monde::of(&self.doc);
-        // Les objets 3D du plan, s'ils sont dans l'image : sous tous les calques (`espace3dobjets.rs`).
-        let mut objects = crate::espace3dobjets::key_for(&self.doc, self.cur_panel, &camera).map(|k| crate::espace3dobjets::item(&k));
         // Tremblement du trait (`tremblement.rs`) : à l'écran et à l'arrêt, les calques qui animent
         // à l'arrêt suivent l'horloge ; l'export, les vignettes et la lecture, l'image.
         let rest = (onion && !self.playing).then(|| crate::tremblement::rest_frame(crate::fx::now_ms(), self.doc.fps));
@@ -1480,9 +1468,6 @@ impl App {
         let mut starts: Vec<usize> = Vec::with_capacity(layers.len());
         for (li, layer) in layers.iter().enumerate() {
             starts.push(items.len());
-            if li == 0 {
-                items.extend(objects.take());
-            }
             // Caché (lui ou son dossier) : rien ; sinon son opacité, avec celle de son dossier.
             let Some(mut opacity) = crate::folders::effect(layers, li) else { continue };
             // Calque d'effet (`calqueffet.rs`) : son repère, qui couvre ce qui est dessous.
@@ -1565,8 +1550,6 @@ impl App {
             }
             items.append(&mut onion_items);
         }
-        // (Une pile sans calque : les objets seuls.)
-        items.extend(objects);
         Plan {
             // Arrière-plan (13e) : le papier seulement si c'est une couleur.
             paper: if paper { self.doc.render_paper() } else { None },
@@ -2111,7 +2094,6 @@ impl App {
         }
         self.finish_camera_drag();
         self.finish_layer_drag();
-        self.finish_ref3d_drag();
         self.guides.stroke = None;
         self.shape_drag = None;
     }
@@ -2393,15 +2375,6 @@ impl App {
             ctx.request_repaint();
         }
         if crate::fx::fond_pending() {
-            ctx.request_repaint_after(std::time::Duration::from_millis(16));
-        }
-        // Objets 3D rendus en arrière-plan pour l'image (`espace3dobjets.rs`).
-        if crate::espace3dobjets::poll(self.doc.scenes3d.rev) {
-            self.renderer.invalidate_composed();
-            self.renderer.invalidate_all();
-            ctx.request_repaint();
-        }
-        if crate::espace3dobjets::pending(self.doc.scenes3d.rev) {
             ctx.request_repaint_after(std::time::Duration::from_millis(16));
         }
     }
@@ -3100,7 +3073,7 @@ impl App {
         self.fit_pending = true;
         // Vue du plateau et vue 3D recadrées sur le nouveau projet (9d, 9e).
         self.stage_view = None;
-        self.scene3d_reset();
+        self.espace3d_reset();
         self.modified = false;
         self.path = None;
         self.import_source = None;
@@ -3130,7 +3103,7 @@ impl App {
         self.renderer.invalidate_all();
         self.fit_pending = true;
         self.stage_view = None;
-        self.scene3d_reset();
+        self.espace3d_reset();
         self.length_origin = None;
         self.modified = true;
     }
@@ -3434,8 +3407,8 @@ impl App {
         if self.effet_action(action) {
             return;
         }
-        // Scène 3D de blocage (`scene3dui.rs`).
-        if self.scene3d_action(action) {
+        // Espace 3D (`espace3dui.rs`).
+        if self.espace3d_action(action) {
             return;
         }
         // Commentaires sur la timeline (`commentairesui.rs`).
@@ -3542,7 +3515,6 @@ impl App {
             "numerotation.verrouiller" => self.toggle_numbering_lock(),
             "numerotation.renumeroter" => self.renumber_confirm = true,
             "fichier.exporter_image_courante" => self.export_frame(),
-            "fichier.importer_modele3d" => self.import_model3d(),
             "edition.annuler" => self.undo(),
             "edition.retablir" => self.redo(),
             // Le panneau Effets a la main (le dernier clic était dedans) : Ctrl+C copie l'effet
@@ -3834,6 +3806,7 @@ impl App {
             "exposition.raccourcir" => self.exposure_minus(),
             "calque.nouveau_vectoriel" => self.add_layer(LayerKind::Vector),
             "calque.nouveau_bitmap" => self.add_layer(LayerKind::Bitmap),
+            "calque.nouveau_fond" => self.add_scene_background(),
             "calque.supprimer" => self.delete_chosen_layers(),
             "calque.dessus" => self.select_layer(self.cur_layer + 1),
             "calque.dessous" => self.select_layer(self.cur_layer.saturating_sub(1)),
@@ -4126,10 +4099,8 @@ impl App {
             "calque.coller" => self.paste_layer(),
             "calque.verrouiller" => self.toggle_layer_lock(self.cur_layer),
             "calque.fusionner_dessous" => self.merge_layer_down(),
-            "calque.nouveau_fond" => self.add_scene_background(),
 
             "outil.camera" => self.set_tool(Tool::Camera),
-            "outil.repere3d" => self.set_tool(Tool::Ref3d),
             "outil.transformer" => self.set_tool(Tool::Transform),
             "calque.reinit_transformation" => self.reset_layer_transform(),
             "camera.vue" => self.set_camera_view(!self.camera_view),

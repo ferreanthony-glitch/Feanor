@@ -8,17 +8,15 @@ use eframe::egui::{pos2, vec2, Color32};
 
 use crate::camera::{Camera, CameraKey};
 use crate::perf_tests::{banc_taille, se_reposer, Banc};
-use crate::scene3d::{Shape3d, Target};
-use crate::scene3dgizmo::{self as gz, Handle, Mode, CAMERA_ID};
-use crate::scene3dmath as m;
-use crate::view3d::Cam3d;
+use crate::espace3dgizmo::{self as gz, Handle, Mode, CAMERA_ID};
+use crate::espace3dmath::{self as m, Orbite};
 use crate::document::{CameraSeen, Document, Layer, LayerKind, LayerTransform};
 use crate::espace3d::{self, Monde};
 use crate::poskeys::{self, PosKey};
 use crate::project;
 use crate::raster::TILE;
 use crate::render;
-use crate::scene3d::Xf;
+use crate::espace3d::Xf;
 
 const RED: Color32 = Color32::from_rgb(220, 20, 20);
 const GREEN: Color32 = Color32::from_rgb(20, 200, 40);
@@ -164,7 +162,7 @@ fn the_card_is_the_flat_multiplan_layer_seen_from_the_eye() {
             let mx = xf.matrix();
             for p in [pos2(0.0, 0.0), pos2(320.0, 0.0), pos2(320.0, 180.0), pos2(37.0, 121.0)] {
                 let want = affine.apply(p);
-                let world = crate::scene3dmath::point(&mx, [p.x / 320.0 - 0.5, -(p.y / 180.0 - 0.5), 0.0]);
+                let world = crate::espace3dmath::point(&mx, [p.x / 320.0 - 0.5, -(p.y / 180.0 - 0.5), 0.0]);
                 let got = w.to_sheet(w.eye_seen(&seen), world).expect("devant l'œil");
                 assert!((got - want).length() < 0.05, "profondeur {depth}, caméra {offset:?}/{dolly} : {got:?} contre {want:?}");
             }
@@ -189,9 +187,9 @@ fn the_plan_camera_is_the_3d_camera_in_both_directions() {
         }
         // L'œil de la scène 3D est celui du plan.
         assert!(near3(w.scene_cam(&cam).pos, w.eye(&cam), 1e-4));
-        // Et l'ancienne caméra de blocage donne une caméra du plan qui voit la même chose.
+        // Et la prise de vue de l'espace redonne une caméra du plan qui voit la même chose.
         let sc = w.scene_cam(&cam);
-        let plan = w.plan_camera_of(&sc);
+        let plan = w.camera_from_scene(&sc);
         assert!(near3(w.eye(&plan), sc.pos, 1e-3) && near(plan.pan, sc.pan, 1e-3) && near(plan.tilt, sc.tilt, 1e-3) && near(plan.angle, sc.roll, 1e-3), "{plan:?}");
     }
 }
@@ -226,7 +224,7 @@ fn a_tilted_card_is_foreshortened_and_projected_where_the_geometry_says() {
         let mx = xf.matrix();
         let pts: Vec<_> = [(80.0, 45.0), (240.0, 45.0), (240.0, 135.0), (80.0, 135.0)]
             .iter()
-            .map(|&(x, y)| w.to_sheet(eye, crate::scene3dmath::point(&mx, [x / 320.0 - 0.5, -(y / 180.0 - 0.5), 0.0])).expect("devant l'œil"))
+            .map(|&(x, y)| w.to_sheet(eye, crate::espace3dmath::point(&mx, [x / 320.0 - 0.5, -(y / 180.0 - 0.5), 0.0])).expect("devant l'œil"))
             .collect();
         let f = |g: fn(f32, f32) -> f32, init: f32, v: fn(&eframe::egui::Pos2) -> f32| pts.iter().map(v).fold(init, g);
         (f(f32::min, f32::MAX, |p| p.x), f(f32::min, f32::MAX, |p| p.y), f(f32::max, f32::MIN, |p| p.x), f(f32::max, f32::MIN, |p| p.y))
@@ -496,7 +494,7 @@ fn layer_selection_numbers_are_told_from_objects_and_the_camera() {
     let s = espace3d::card_selection(42);
     assert_eq!(espace3d::card_of(s), Some(42));
     assert_eq!(espace3d::card_of(42), None, "un petit numéro est un objet");
-    assert_eq!(espace3d::card_of(crate::scene3dgizmo::CAMERA_ID), None, "la caméra n'est pas une carte");
+    assert_eq!(espace3d::card_of(crate::espace3dgizmo::CAMERA_ID), None, "la caméra n'est pas une carte");
     // Les calques qui ne sont pas des cartes.
     let mut folder = Layer::new_folder("D");
     assert!(!espace3d::is_card(&folder));
@@ -512,34 +510,34 @@ fn space(cards: &[(Color32, [usize; 4], f32)]) -> Banc {
     let mut b = banc_taille(doc_with_cards(cards), false, 1280, 720);
     b.chauffer(2);
     b.app.run_action("espace3d.basculer");
-    b.app.scene3d.show_grid = false;
-    b.app.scene3d.snap = false;
+    b.app.espace3d.show_grid = false;
+    b.app.espace3d.snap = false;
     b.chauffer(4);
-    b.app.scene3d.cam = Some(Cam3d { target: [0.0, 0.0, 0.0], azimuth: 0.0, elevation: 0.0, distance: 12.0, focal: 35.0 });
+    b.app.espace3d.cam = Some(Orbite { target: [0.0, 0.0, 0.0], azimuth: 0.0, elevation: 0.0, distance: 12.0, focal: 35.0 });
     b.chauffer(2);
     b
 }
 
-fn orbit(b: &Banc) -> (crate::scene3dmath::View, [f32; 2]) {
+fn orbit(b: &Banc) -> (crate::espace3dmath::View, [f32; 2]) {
     let rect = b.app.canvas_rect;
-    (crate::scene3dview::orbit_view(&b.app.scene3d.cam.expect("vue"), rect.width()), [rect.width() / 2.0, rect.height() / 2.0])
+    (b.app.espace3d.cam.expect("vue").view(rect.width()), [rect.width() / 2.0, rect.height() / 2.0])
 }
 
 /// Le geste d'un manipulateur : de l'écran `from` à l'écran `to` (relatifs à la zone de dessin), en une seule étape
 /// d'annulation, avec ce nom.
 fn gesture(b: &mut Banc, handle: Handle, from: [f32; 2], to: [f32; 2]) {
     let (view, center) = orbit(b);
-    let gizmo = b.app.s3_gizmo(&view).expect("un manipulateur");
-    let mode = b.app.scene3d.mode;
-    b.app.s3_begin(handle, mode, gizmo, view.ray(from, center), from, "Geste d'essai");
-    b.app.s3_drag(&view, center, to);
-    b.app.s3_finish_drag();
+    let gizmo = b.app.e3_gizmo(&view).expect("un manipulateur");
+    let mode = b.app.espace3d.mode;
+    b.app.e3_begin(handle, mode, gizmo, view.ray(from, center), from, "Geste d'essai");
+    b.app.e3_drag(&view, center, to);
+    b.app.e3_finish_drag();
 }
 
 #[test]
 fn one_3d_button_one_command_and_the_old_names_still_work() {
     // Les anciens noms du plateau en 3D et de la scène 3D sont des doubles de la commande unique.
-    for (alias, original) in [("vue.3d", "espace3d.basculer"), ("scene3d.basculer", "espace3d.basculer"), ("vue3d.recadrer", "scene3d.cadrer"), ("outil3d.deplacer", "scene3d.outil_deplacer"), ("outil3d.orbite", "scene3d.outil_choisir")] {
+    for (alias, original) in [("vue.3d", "espace3d.basculer"), ("scene3d.basculer", "espace3d.basculer"), ("vue3d.recadrer", "espace3d.cadrer"), ("outil3d.deplacer", "espace3d.outil_deplacer"), ("outil3d.orbite", "espace3d.outil_choisir"), ("scene3d.outil_tourner", "espace3d.outil_tourner"), ("scene3d.vue_camera", "espace3d.vue_camera")] {
         assert!(crate::keymap::ALIASES.contains(&(alias, original)), "{alias} double {original}");
         assert!(crate::keymap::action_info(alias).is_some_and(|a| a.implemented));
     }
@@ -549,13 +547,13 @@ fn one_3d_button_one_command_and_the_old_names_still_work() {
     let mut b = banc_taille(doc_with_cards(&[(RED, [10, 10, 80, 60], 0.0)]), false, 1280, 720);
     b.chauffer(2);
     for name in ["vue.3d", "espace3d.basculer", "scene3d.basculer"] {
-        let was = b.app.scene3d.on;
+        let was = b.app.espace3d.on;
         b.app.run_action(name);
-        assert_eq!(b.app.scene3d.on, !was, "{name} ouvre ou ferme l'Espace 3D");
+        assert_eq!(b.app.espace3d.on, !was, "{name} ouvre ou ferme l'Espace 3D");
     }
     // Les outils du plateau en 3D mènent aux outils de l'espace.
     b.app.run_action("outil3d.deplacer");
-    assert!(b.app.scene3d.on && b.app.scene3d.mode == Mode::Move);
+    assert!(b.app.espace3d.on && b.app.espace3d.mode == Mode::Move);
 }
 
 #[test]
@@ -565,18 +563,18 @@ fn the_ray_picks_the_nearest_drawn_card_and_a_click_chooses_it_and_its_layer() {
     let (view, center) = orbit(&b);
     let (red, blue) = (b.app.layers()[1].id, b.app.layers()[0].id);
     let centre = view.ray(view.project([0.0, 0.0, 0.0], center).expect("visible"), center);
-    assert_eq!(b.app.s3_pick(&centre), Some(espace3d::card_selection(red)), "le rouge, plus près, est devant le bleu");
+    assert_eq!(b.app.e3_pick(&centre), Some(espace3d::card_selection(red)), "le rouge, plus près, est devant le bleu");
     // Hors du rouge (sur le bleu seulement).
     let edge = view.ray(view.project([-2.5, 0.0, 0.0], center).expect("visible"), center);
-    assert_eq!(b.app.s3_pick(&edge), Some(espace3d::card_selection(blue)));
+    assert_eq!(b.app.e3_pick(&edge), Some(espace3d::card_selection(blue)));
     // Un clic de souris choisit la carte et fait de son calque le calque courant.
-    b.app.scene3d.mode = Mode::Select;
+    b.app.espace3d.mode = Mode::Select;
     b.app.select_layer(1);
     b.chauffer(2);
-    assert_eq!(b.app.scene3d.sel, vec![espace3d::card_selection(red)]);
+    assert_eq!(b.app.espace3d.sel, vec![espace3d::card_selection(red)]);
     b.app.select_layer(0);
     b.chauffer(2);
-    assert_eq!(b.app.scene3d.sel, vec![espace3d::card_selection(blue)], "le choix suit le panneau Calques");
+    assert_eq!(b.app.espace3d.sel, vec![espace3d::card_selection(blue)], "le choix suit le panneau Calques");
     let rect = b.app.canvas_rect;
     let p = view.project([0.0, 0.0, 0.0], center).expect("visible");
     let at = pos2(rect.left() + p[0], rect.top() + p[1]);
@@ -585,7 +583,7 @@ fn the_ray_picks_the_nearest_drawn_card_and_a_click_chooses_it_and_its_layer() {
     b.image(vec![button(at, true)], 0.02);
     b.image(vec![button(at, false)], 0.02);
     b.chauffer(2);
-    assert_eq!(b.app.scene3d.sel, vec![espace3d::card_selection(red)], "le clic choisit la carte rouge");
+    assert_eq!(b.app.espace3d.sel, vec![espace3d::card_selection(red)], "le clic choisit la carte rouge");
     assert_eq!(b.app.layer().id, red, "son calque devient le calque courant");
     assert!(b.app.history.names().0.is_empty(), "choisir n'est pas une étape d'annulation");
 }
@@ -594,12 +592,12 @@ fn the_ray_picks_the_nearest_drawn_card_and_a_click_chooses_it_and_its_layer() {
 fn a_card_is_moved_tilted_and_scaled_by_the_same_handles_as_an_object_each_gesture_one_undo_step() {
     let mut b = space(&[(RED, [100, 50, 220, 130], 0.0)]);
     let card = espace3d::card_selection(b.app.layers()[0].id);
-    b.app.scene3d.sel = vec![card];
+    b.app.espace3d.sel = vec![card];
     let (view, center) = orbit(&b);
-    let w = b.app.s3_world();
+    let w = b.app.e3_world();
     let before = b.app.history.names().0.len();
     // Déplacer le long de X : une carte à 12 m, 0,5 m vers la droite.
-    b.app.scene3d.mode = Mode::Move;
+    b.app.espace3d.mode = Mode::Move;
     let (from, to) = (view.project([0.0, 0.0, 0.0], center).expect("visible"), view.project([0.5, 0.0, 0.0], center).expect("visible"));
     gesture(&mut b, Handle::Axis(0), from, to);
     let t = b.app.layers()[0].pose(0);
@@ -610,22 +608,22 @@ fn a_card_is_moved_tilted_and_scaled_by_the_same_handles_as_an_object_each_gestu
     b.app.redo();
     // En profondeur (axe Z) : la profondeur du calque suit, la taille dans le monde reste.
     let size_before = w.card_xf(&b.app.layers()[0].pose(0), b.app.layers()[0].depth_at(0)).size;
-    let xfs = b.app.s3_xfs(&[card]);
-    b.app.s3_set_xfs(&gz::move_xfs(&xfs, [0.0, 0.0, -2.0]));
+    let xfs = b.app.e3_xfs(&[card]);
+    b.app.e3_set_xfs(&gz::move_xfs(&xfs, [0.0, 0.0, -2.0]));
     let l = &b.app.layers()[0];
     assert!(l.depth > 0.3 && near(l.depth, 2.0 / w.d0, 1e-3), "reculée de 2 m : profondeur {}", l.depth);
     let size_after = w.card_xf(&l.pose(0), l.depth_at(0)).size;
     assert!(near3(size_after, size_before, 1e-3), "la taille dans le monde est gardée : {size_before:?} → {size_after:?}");
     // (Remise à sa place : le reste de l'essai part d'une carte à profondeur 0.)
-    let xfs = b.app.s3_xfs(&[card]);
-    b.app.s3_set_xfs(&gz::move_xfs(&xfs, [0.0, 0.0, 2.0]));
+    let xfs = b.app.e3_xfs(&[card]);
+    b.app.e3_set_xfs(&gz::move_xfs(&xfs, [0.0, 0.0, 2.0]));
     assert!(b.app.layers()[0].depth.abs() < 1e-3);
     // Tourner autour de Y : l'inclinaison de la carte. (Vu de face, à la hauteur de la carte, le cercle est de chant : on
     // regarde un peu de côté et d'au-dessus.)
-    b.app.scene3d.cam = Some(Cam3d { target: [0.0, 0.0, 0.0], azimuth: 35.0, elevation: 25.0, distance: 12.0, focal: 35.0 });
-    b.app.scene3d.mode = Mode::Rotate;
+    b.app.espace3d.cam = Some(Orbite { target: [0.0, 0.0, 0.0], azimuth: 35.0, elevation: 25.0, distance: 12.0, focal: 35.0 });
+    b.app.espace3d.mode = Mode::Rotate;
     let (view, center) = orbit(&b);
-    let g = b.app.s3_gizmo(&view).expect("manipulateur");
+    let g = b.app.e3_gizmo(&view).expect("manipulateur");
     let ring = |deg: f32| {
         let t = deg.to_radians();
         let p = m::add(g.origin, m::scale(m::add(m::scale(g.axes[2], t.cos()), m::scale(g.axes[0], t.sin())), g.len));
@@ -636,7 +634,7 @@ fn a_card_is_moved_tilted_and_scaled_by_the_same_handles_as_an_object_each_gestu
     assert!(near(t.tilt_y, 30.0, 0.5) && t.tilt_x.abs() < 0.01, "inclinée de 30° autour de Y : {t:?}");
     assert!(near(t.angle, 0.0, 0.01), "l'angle dans le plan ne bouge pas");
     // Échelle uniforme (cube du centre) : plus grande.
-    b.app.scene3d.mode = Mode::Scale;
+    b.app.espace3d.mode = Mode::Scale;
     let (view, center) = orbit(&b);
     let o = view.project(w.card_xf(&b.app.layers()[0].pose(0), b.app.layers()[0].depth_at(0)).pos, center).expect("visible");
     let scale0 = b.app.layers()[0].pose(0).scale;
@@ -654,28 +652,28 @@ fn a_locked_card_does_not_move_and_says_why() {
     let mut b = space(&[(RED, [100, 50, 220, 130], 0.0), (GREEN, [10, 10, 60, 60], 0.0)]);
     b.app.layers_mut()[0].locked = true;
     let card = espace3d::card_selection(b.app.layers()[0].id);
-    let xfs = b.app.s3_xfs(&[card]);
-    b.app.s3_set_xfs(&gz::move_xfs(&xfs, [1.0, 1.0, 0.0]));
+    let xfs = b.app.e3_xfs(&[card]);
+    b.app.e3_set_xfs(&gz::move_xfs(&xfs, [1.0, 1.0, 0.0]));
     assert_eq!(b.app.layers()[0].pose(0), LayerTransform::default(), "un calque verrouillé ne bouge pas");
     b.app.layers_mut()[0].locked = false;
     b.app.layers_mut()[0].position_locked = true;
-    b.app.s3_set_xfs(&gz::move_xfs(&xfs, [1.0, 1.0, 0.0]));
+    b.app.e3_set_xfs(&gz::move_xfs(&xfs, [1.0, 1.0, 0.0]));
     assert_eq!(b.app.layers()[0].pose(0), LayerTransform::default(), "ni un calque de position verrouillée");
     b.app.layers_mut()[0].position_locked = false;
-    b.app.s3_set_xfs(&gz::move_xfs(&xfs, [1.0, 0.0, 0.0]));
+    b.app.e3_set_xfs(&gz::move_xfs(&xfs, [1.0, 0.0, 0.0]));
     assert!(b.app.layers()[0].pose(0).x != 0.0);
 }
 
 #[test]
 fn an_animated_card_moves_its_key_and_the_camera_is_the_plan_camera() {
     let mut b = space(&[(RED, [100, 50, 220, 130], 0.0)]);
-    let w = b.app.s3_world();
+    let w = b.app.e3_world();
     // La carte animée : tirée à l'image 5, elle règle (crée) la clé de l'image 5.
     b.app.layers_mut()[0].pos_keys = vec![PosKey::new(0, LayerTransform::default()), PosKey::new(10, LayerTransform::default())];
     b.app.cur_frame = 5;
     let card = espace3d::card_selection(b.app.layers()[0].id);
-    let xfs = b.app.s3_xfs(&[card]);
-    b.app.s3_set_xfs(&gz::move_xfs(&xfs, [0.4, 0.0, -1.0]));
+    let xfs = b.app.e3_xfs(&[card]);
+    b.app.e3_set_xfs(&gz::move_xfs(&xfs, [0.4, 0.0, -1.0]));
     let l = &b.app.layers()[0];
     assert_eq!(l.pos_keys.len(), 3, "une clé à l'image 5");
     assert!(l.pos_keys[1].frame == 5 && l.pos_keys[1].t.x > 0.0 && l.pos_keys[1].t.dz > 0.0, "{:?}", l.pos_keys[1]);
@@ -683,17 +681,17 @@ fn an_animated_card_moves_its_key_and_the_camera_is_the_plan_camera() {
     // La caméra : choisie, elle se déplace par les mêmes poignées et c'est la caméra du plan qui bouge.
     b.app.cur_frame = 0;
     assert!(b.app.doc.panels[0].camera.is_empty());
-    let cam_xf = b.app.s3_xfs(&[CAMERA_ID]);
+    let cam_xf = b.app.e3_xfs(&[CAMERA_ID]);
     assert!(near3(cam_xf[0].1.pos, w.eye(&b.app.current_camera()), 1e-4), "l'œil de la caméra du plan");
-    b.app.s3_set_xfs(&gz::move_xfs(&cam_xf, [0.5, 0.2, -1.0]));
+    b.app.e3_set_xfs(&gz::move_xfs(&cam_xf, [0.5, 0.2, -1.0]));
     let cam = b.app.current_camera();
     let base = Camera::centered(320, 180);
     assert!(near(cam.x, base.x + 0.5 / w.k, 0.1) && near(cam.y, base.y - 0.2 / w.k, 0.1) && near(cam.dolly, 1.0 / w.k, 0.1), "{cam:?}");
     // Animée (deux clés) : on règle la clé de l'image courante.
     b.app.doc.panels[0].camera = vec![CameraKey::new(0, base), CameraKey::new(10, base)];
     b.app.cur_frame = 4;
-    let cam_xf = b.app.s3_xfs(&[CAMERA_ID]);
-    b.app.s3_set_xfs(&gz::move_xfs(&cam_xf, [1.0, 0.0, 0.0]));
+    let cam_xf = b.app.e3_xfs(&[CAMERA_ID]);
+    b.app.e3_set_xfs(&gz::move_xfs(&cam_xf, [1.0, 0.0, 0.0]));
     let keys = &b.app.doc.panels[0].camera;
     assert_eq!(keys.len(), 3, "une clé de caméra de plus, à l'image 4 : {keys:?}");
     assert!(keys[1].frame == 4 && keys[1].cam.x > base.x + 10.0);
@@ -703,12 +701,12 @@ fn an_animated_card_moves_its_key_and_the_camera_is_the_plan_camera() {
 #[test]
 fn the_camera_gesture_is_one_named_undo_step_and_undo_restores_the_plan_camera() {
     let mut b = space(&[(RED, [100, 50, 220, 130], 0.0)]);
-    b.app.scene3d.sel = vec![CAMERA_ID];
-    b.app.scene3d.mode = Mode::Move;
+    b.app.espace3d.sel = vec![CAMERA_ID];
+    b.app.espace3d.mode = Mode::Move;
     let (view, center) = orbit(&b);
     let before = b.app.doc.panels[0].camera.clone();
     let steps = b.app.history.names().0.len();
-    let eye = b.app.s3_world().eye(&b.app.current_camera());
+    let eye = b.app.e3_world().eye(&b.app.current_camera());
     let (from, to) = (view.project(eye, center).expect("visible"), view.project([eye[0] + 0.3, eye[1], eye[2]], center).expect("visible"));
     gesture(&mut b, Handle::Axis(0), from, to);
     assert_ne!(b.app.doc.panels[0].camera, before);
@@ -742,7 +740,7 @@ fn drawing_on_a_tilted_card_follows_the_tilt_both_ways() {
     doc.panels[0].camera = vec![CameraKey::new(0, Camera { x: 170.0, y: 95.0, dolly: 30.0, ..doc.default_camera() })];
     let mut b = banc_taille(doc, false, 1280, 720);
     b.chauffer(2);
-    let (world, xf, eye) = (b.app.s3_world(), b.app.s3_world().card_xf(&b.app.layer().pose(0), b.app.layer().depth_at(0)), b.app.s3_world().eye_seen(&b.app.doc.camera_seen(0, 0)));
+    let (world, xf, eye) = (b.app.e3_world(), b.app.e3_world().card_xf(&b.app.layer().pose(0), b.app.layer().depth_at(0)), b.app.e3_world().eye_seen(&b.app.doc.camera_seen(0, 0)));
     for p in [pos2(160.0, 90.0), pos2(40.0, 30.0), pos2(300.0, 150.0)] {
         let sheet = world.card_to_sheet(eye, &xf, p).expect("devant l'œil");
         let back = b.app.to_layer(sheet);
@@ -754,206 +752,34 @@ fn drawing_on_a_tilted_card_follows_the_tilt_both_ways() {
 }
 
 #[test]
-fn the_view_with_ten_cards_and_twenty_objects_stays_within_the_frame_budget() {
+fn the_view_with_ten_cards_stays_within_the_frame_budget() {
     let cards: Vec<_> = (0..10).map(|k| (if k % 2 == 0 { RED } else { GREEN }, [10 + k * 20, 20, 90 + k * 20, 140], k as f32 * 0.4 - 1.0)).collect();
-    let mut doc = doc_with_cards(&cards);
-    let (panel, seq) = (doc.panels[0].id, doc.sequence_of(0));
-    let shapes = Shape3d::basics();
-    for k in 0..20 {
-        doc.scenes3d.add(panel, seq, Target::Plan, shapes[k % shapes.len()].clone(), [(k % 5) as f32 * 1.4 - 3.0, 0.0, -((k / 5) as f32) * 1.2]);
-    }
+    let doc = doc_with_cards(&cards);
     let mut b = banc_taille(doc, true, 1280, 720);
     b.chauffer(2);
     b.app.run_action("espace3d.basculer");
     b.chauffer(6);
     let ids: Vec<u64> = b.app.layers().iter().map(|l| espace3d::card_selection(l.id)).collect();
-    b.app.scene3d.sel = ids;
+    b.app.espace3d.sel = ids;
     let frames: Vec<f64> = (0..60).map(|k| b.image(vec![eframe::egui::Event::PointerMoved(pos2(900.0 + k as f32, 500.0))], 1.0 / 60.0).total()).collect();
     let mean = frames.iter().sum::<f64>() / frames.len() as f64;
-    println!("PERF Espace 3D : 10 cartes, 20 objets, carte graphique {} : {mean:.2} ms par image (max {:.2})", b.app.gpu.is_some(), frames.iter().cloned().fold(0.0, f64::max));
-    assert!(mean < 16.0, "{mean:.2} ms par image : l'Espace 3D doit tenir 60 images par seconde (10 cartes, 20 objets)");
+    println!("PERF Espace 3D : 10 cartes, carte graphique {} : {mean:.2} ms par image (max {:.2})", b.app.gpu.is_some(), frames.iter().cloned().fold(0.0, f64::max));
+    assert!(mean < 16.0, "{mean:.2} ms par image : l'Espace 3D doit tenir 60 images par seconde (10 cartes)");
     // Choisir à la souris, aussi.
     let (view, center) = orbit(&b);
     let ray = view.ray(center, center);
     let t = std::time::Instant::now();
     for _ in 0..20 {
-        let _ = b.app.s3_pick(&ray);
+        let _ = b.app.e3_pick(&ray);
     }
     let pick = t.elapsed().as_secs_f64() * 1000.0 / 20.0;
-    println!("PERF Espace 3D : choisir à la souris (10 cartes, 20 objets) : {pick:.2} ms");
+    println!("PERF Espace 3D : choisir à la souris (10 cartes) : {pick:.2} ms");
     assert!(pick < 5.0, "{pick:.2} ms pour choisir");
 }
-// ============================================================================ les objets dans l'image
-
-/// Un projet 320 × 180 avec un cube de 1 m posé sur le sol, à `z` mètres du plan de référence, dans l'image.
-fn doc_with_cube(z: f32) -> Document {
-    let mut doc = Document::new(320, 180, 24);
-    let (panel, seq) = (doc.panels[0].id, doc.sequence_of(0));
-    doc.scenes3d.add(panel, seq, Target::Plan, Shape3d::Cube, [0.0, 0.0, z]).expect("cube");
-    doc
-}
-
-fn opaque(img: &[Color32], w: usize) -> Option<(f32, f32)> {
-    let (mut sx, mut sy, mut n) = (0.0f64, 0.0f64, 0.0f64);
-    for (i, p) in img.iter().enumerate() {
-        if p.a() > 200 {
-            sx += (i % w) as f64 + 0.5;
-            sy += (i / w) as f64 + 0.5;
-            n += 1.0;
-        }
-    }
-    (n > 0.0).then(|| ((sx / n) as f32, (sy / n) as f32))
-}
-
 #[test]
-fn a_cube_is_in_the_final_image_under_the_cards() {
-    let mut doc = doc_with_cube(0.0);
-    assert!(doc.scenes3d.plan(doc.panels[0].id).is_some_and(|p| p.in_image), "une scène neuve montre ses objets");
-    let plan = render::panel_plan_at(&doc, 0, 0, None);
-    assert!(matches!(plan.items[0].fond, Some(render::FondPart::Objets(_))), "les objets sont le premier élément du plan");
-    let img = render::composite_full(&doc, &plan);
-    // Le cube de 1 m, posé sur le sol à l'origine, est au-dessus du centre de la feuille : 0,5 m = 27 px.
-    let at = |x: usize, y: usize| img[y * 320 + x];
-    assert!(at(160, 90 - 27).a() > 200, "le cube est là : {:?}", at(160, 90 - 27));
-    assert!(at(20, 20).a() == 0 && at(300, 170).a() == 0, "et seulement lui");
-    // Une carte par-dessus le recouvre.
-    let mut layer = Layer::new("Carte", LayerKind::Bitmap);
-    let cel = doc.new_cel(LayerKind::Bitmap);
-    fill_rect(&mut doc, cel, 120, 40, 200, 100, RED);
-    layer.frames = vec![Some(cel)];
-    doc.panels[0].layers = vec![layer];
-    let img = render::composite_full(&doc, &render::panel_plan_at(&doc, 0, 0, None));
-    let c = img[63 * 320 + 160];
-    assert!(c.r() > 200 && c.g() < 60, "la carte recouvre le cube : {c:?}");
-    // Le cube reste visible là où la carte ne le couvre pas : à côté de la carte rouge.
-    assert!(opaque(&img, 320).is_some());
-}
-
-#[test]
-fn objects_of_an_older_project_stay_blocking_aids_and_leave_the_image_untouched() {
-    let mut doc = doc_with_cube(0.0);
-    let panel = doc.panels[0].id;
-    let with = render::composite_full(&doc, &render::panel_plan_at(&doc, 0, 0, None));
-    assert!(with.iter().any(|c| c.a() > 0));
-    // Un fichier d'avant l'Espace 3D n'a pas « en_image » : faux.
-    let text = std::fs::read_to_string({
-        let dir = dir_for("scenes");
-        let manifest = dir.join("P.pelure");
-        project::save(&doc, &manifest, &mut Default::default()).expect("enregistré");
-        dir.join("scenes3d.json")
-    })
-    .expect("scenes3d.json");
-    assert!(text.contains("\"en_image\": true"));
-    let mut old = text.clone();
-    while let Some(i) = old.find("\"en_image\"") {
-        // (Le champ, sa virgule d'avant et sa valeur : le fichier écrit par une version d'avant n'en a pas.)
-        let start = old[..i].rfind(',').expect("une virgule avant");
-        let end = i + old[i..].find("true").expect("vrai") + 4;
-        old.replace_range(start..end, "");
-    }
-    assert!(!old.contains("en_image"));
-    let scenes = crate::scene3dstore::parse(&old).expect("un fichier d'avant se lit");
-    assert!(scenes.plan(panel).is_some_and(|p| !p.in_image), "absent : les objets restent des repères");
-    doc.scenes3d = scenes;
-    let plan = render::panel_plan_at(&doc, 0, 0, None);
-    assert!(plan.items.iter().all(|i| i.fond.is_none()), "aucun objet dans le plan");
-    assert!(render::composite_full(&doc, &plan).iter().all(|c| c.a() == 0), "l'image est celle d'avant : rien de plus");
-}
-
-#[test]
-fn objects_follow_the_camera_with_the_parallax_of_their_depth() {
-    // Un cube à 4 m derrière le plan de référence : la caméra se décale de 40 px, il se décale moins qu'une carte.
-    let mut doc = doc_with_cube(-4.0);
-    let start = Camera::centered(320, 180);
-    doc.panels[0].camera = vec![CameraKey::new(0, start), CameraKey::new(1, Camera { x: start.x + 40.0, ..start })];
-    // (Deux calques vides pour que le plan ait deux images.)
-    let mut layer = Layer::new("Vide", LayerKind::Bitmap);
-    let cel = doc.new_cel(LayerKind::Bitmap);
-    layer.frames = vec![Some(cel); 4];
-    doc.panels[0].layers = vec![layer];
-    let at = |frame: usize| {
-        let plan = render::panel_plan_at(&doc, 0, frame, None);
-        let img = render::camera_image(&doc, &plan, &doc.panel_camera(0, frame));
-        opaque(&img, 320).expect("le cube est dans l'image")
-    };
-    let (a, b) = (at(0), at(1));
-    let d0 = crate::camera::ref_distance(doc.frame) * crate::scene3d::SceneCam::meters_per_px(320);
-    let want = 40.0 * d0 / (d0 + 4.0);
-    assert!((a.0 - b.0 - want).abs() < 2.5, "le cube se décale de {} px au lieu de {want}", a.0 - b.0);
-    assert!((a.0 - b.0).abs() < 40.0 - 8.0, "moins vite qu'un calque au plan de référence (40 px)");
-}
-
-#[test]
-fn the_screen_never_waits_for_the_objects_and_gets_them_from_the_background() {
-    let doc = doc_with_cube(0.0);
-    let plan = render::panel_plan_at(&doc, 0, 0, None);
-    let Some(render::FondPart::Objets(key)) = plan.items[0].fond.clone() else { panic!("les objets sont dans le plan") };
-    crate::espace3dobjets::clear_for_tests();
-    // À l'écran : rien tout de suite (aucun rendu avant), le rendu part en arrière-plan.
-    let t = std::time::Instant::now();
-    let first = crate::fx::differe(|| crate::espace3dobjets::shown(&doc, &key));
-    assert!(first.is_none(), "pas de rendu avant : rien en attendant");
-    assert!(t.elapsed() < std::time::Duration::from_millis(100), "la demande n'attend pas le rendu ({:?})", t.elapsed());
-    assert!(crate::espace3dobjets::pending(key.rev));
-    crate::espace3dobjets::wait_idle();
-    let ready = crate::fx::differe(|| crate::espace3dobjets::shown(&doc, &key)).expect("le rendu est arrivé");
-    assert!(ready.raster.drawn_tile_range().is_some(), "le cube est dessiné");
-    // Ailleurs (export) : calculé tout de suite, le même.
-    crate::espace3dobjets::clear_for_tests();
-    let exact = crate::espace3dobjets::shown(&doc, &key).expect("calculé");
-    assert!(exact.raster.tiles.iter().zip(&ready.raster.tiles).all(|(a, b)| a.as_deref() == b.as_deref()), "mêmes pixels à l'écran et à l'export");
-}
-
-#[test]
-fn the_gpu_composes_the_objects_and_a_tilted_card_like_the_cpu_does() {
-    let Some(rs) = crate::gpu_tests::headless() else {
-        println!("pas de carte graphique : essai passé");
-        return;
-    };
-    let mut doc = doc_with_cube(-1.0);
-    let mut layer = Layer::new("Carte", LayerKind::Bitmap);
-    let cel = doc.new_cel(LayerKind::Bitmap);
-    fill_rect(&mut doc, cel, 200, 30, 300, 150, RED);
-    layer.frames = vec![Some(cel)];
-    layer.transform.tilt_y = -30.0;
-    doc.panels[0].layers = vec![layer];
-    doc.panels[0].camera = vec![CameraKey::new(0, Camera { x: 170.0, y: 90.0, dolly: 25.0, ..doc.default_camera() })];
-    let plan = render::panel_plan_at(&doc, 0, 0, Some([255, 255, 255]));
-    assert!(matches!(plan.items[0].fond, Some(render::FondPart::Objets(_))));
-    let mut gpu = crate::gpu::GpuCanvas::new(&rs);
-    let on_gpu = crate::gpu_tests::render_with(&mut gpu, &rs, &doc, &plan, true);
-    let on_cpu = render::composite_full(&doc, &plan);
-    let far2 = on_gpu.iter().zip(&on_cpu).filter(|(a, b)| a.to_array().iter().zip(b.to_array()).any(|(p, q)| (*p as i32 - q as i32).abs() > 2)).count();
-    let painted = on_cpu.iter().filter(|c| c.g() < 235).count();
-    println!("objets et carte inclinée : {far2} pixels à plus de 2 niveaux, sur {painted} peints");
-    assert!(painted > 5_000);
-    assert!(far2 * 50 < painted, "{far2} pixels diffèrent de plus de 2 niveaux");
-}
-#[test]
-fn the_application_rests_once_the_objects_of_the_image_are_rendered() {
-    // (Seul avec les caches communs : un fil de fond d'un autre essai réveillerait cet écran.)
-    crate::fxcache::monde::ecrire();
-    let doc = doc_with_cube(0.0);
-    let mut b = banc_taille(doc, false, 1280, 720);
-    b.chauffer(2);
-    // Le rendu des objets part en arrière-plan ; l'interface n'attend pas, et finit par se reposer.
-    let start = std::time::Instant::now();
-    while crate::espace3dobjets::pending(b.app.doc.scenes3d.rev) {
-        assert!(start.elapsed() < std::time::Duration::from_secs(60), "le rendu des objets ne finit pas");
-        std::thread::sleep(std::time::Duration::from_millis(5));
-        b.image(Vec::new(), 0.05);
-    }
-    let calm = se_reposer(&mut b, 80);
-    assert!(calm < 80, "l'application finit par se reposer ({calm} images)");
-    for _ in 0..10 {
-        let m = b.image(Vec::new(), 0.5);
-        assert!(m.reveil >= std::time::Duration::from_millis(900), "rien à refaire : pas de réveil ({:?})", m.reveil);
-    }
-}
-#[test]
-fn the_export_composes_the_same_image_as_the_plan_of_the_screen_with_tilted_cards_objects_and_a_turned_camera() {
+fn the_export_composes_the_same_image_as_the_plan_of_the_screen_with_tilted_cards_and_a_turned_camera() {
     use crate::exportrender::{self, Papier, Rendu};
-    let mut doc = doc_with_cube(-2.0);
+    let mut doc = Document::new(320, 180, 24);
     let mut card = Layer::new("Carte", LayerKind::Bitmap);
     let cel = doc.new_cel(LayerKind::Bitmap);
     fill_rect(&mut doc, cel, 60, 30, 260, 150, RED);
@@ -973,59 +799,6 @@ fn the_export_composes_the_same_image_as_the_plan_of_the_screen_with_tilted_card
     }
 }
 #[test]
-fn an_old_background_layer_is_rendered_again_exactly_as_before() {
-    use crate::scene3drender::{self as sr, Opts};
-    // Un « Fond 3D » d'avant l'Espace 3D : la caméra de blocage d'alors, la zone et le style d'alors. Le refaire donne les
-    // mêmes octets que le calcul d'avant (rien n'a été touché pour lui : ni « en_image », ni « feuille alignée »).
-    let mut doc = Document::new(240, 135, 24);
-    let (panel, seq) = (doc.panels[0].id, doc.sequence_of(0));
-    doc.scenes3d.add(panel, seq, Target::Plan, Shape3d::Cube, [0.5, 0.0, 0.0]);
-    doc.scenes3d.add(panel, seq, Target::Plan, Shape3d::Cylinder, [-1.2, 0.0, -1.0]);
-    {
-        let plan = doc.scenes3d.plan_mut(panel);
-        plan.in_image = false;
-        plan.sheet_aligned = false;
-        plan.cam = crate::scene3d::SceneCam { pos: [0.7, 1.4, 6.5], pan: -4.0, tilt: -6.0, roll: 0.0, focal: 40.0 };
-    }
-    let stage = [doc.width, doc.height];
-    let now = sr::render_plate(&doc.scenes3d, panel, seq, &doc.models, stage, doc.frame, 1, 2);
-    // Le calcul d'avant, écrit à la main.
-    let plan = doc.scenes3d.plan(panel).cloned().expect("scène");
-    let mut lib = crate::scene3dmesh::MeshLib::default();
-    let items = sr::items_of(&doc.scenes3d, panel, seq, &doc.models, &mut lib);
-    let at = sr::frame_origin(stage, doc.frame);
-    let center = [at[0] as f32 + doc.frame[0] as f32 / 2.0 - 0.0, at[1] as f32 + doc.frame[1] as f32 / 2.0 - 0.0];
-    let (size, origin) = match plan.render.area {
-        crate::scene3d::RenderArea::Frame => (doc.frame, at),
-        crate::scene3d::RenderArea::Sheet => (stage, [0, 0]),
-    };
-    let center = [center[0] - origin[0] as f32, center[1] - origin[1] as f32];
-    let opts = Opts {
-        view: plan.cam.view(doc.frame[0] as f32),
-        size,
-        center,
-        light: plan.light,
-        style: plan.render.style,
-        lines: plan.render.has_lines(),
-        line_px: plan.render.line_px,
-        ss: 1,
-        paper: None,
-        threads: 2,
-    };
-    let before = sr::render(&items, &opts);
-    assert!(now.rgba == before, "le calque « Fond 3D » d'un ancien projet se refait à l'identique");
-    assert!(now.rgba.chunks_exact(4).any(|p| p[3] > 0));
-    // Et un calque figé par l'Espace 3D est, lui, la feuille vue de l'œil : décalée d'autant que l'œil l'est du centre.
-    {
-        let plan = doc.scenes3d.plan_mut(panel);
-        plan.sheet_aligned = true;
-        plan.cam = crate::scene3d::SceneCam { pos: [0.5, 0.2, 5.83], pan: 0.0, tilt: 0.0, roll: 0.0, focal: 35.0 };
-    }
-    let aligned = sr::render_plate(&doc.scenes3d, panel, seq, &doc.models, stage, doc.frame, 1, 2);
-    let eye = sr::render_plate_eye(&doc.scenes3d, panel, seq, &doc.models, stage, doc.frame, [0.5, 0.2, 5.83], 1, 2);
-    assert!(aligned.rgba == eye.rgba, "figé par l'Espace 3D = les objets vus de l'œil");
-}
-#[test]
 fn mirroring_a_plan_mirrors_the_tilt_of_its_cards_and_the_stack_beats_the_depth_in_the_image() {
     // Retourner un plan de gauche à droite : une carte inclinée autour de la verticale l'est dans l'autre sens.
     let t = LayerTransform { x: 20.0, tilt_x: 12.0, tilt_y: 30.0, angle: 7.0, ..Default::default() };
@@ -1039,50 +812,6 @@ fn mirroring_a_plan_mirrors_the_tilt_of_its_cards_and_the_stack_beats_the_depth_
     let img = sheet(&doc, 0);
     let c = img[90 * 320 + 160];
     assert!(c.g() > 150 && c.r() < 80, "la carte lointaine, dessus dans la pile, est ce qu'on voit : {c:?}");
-}
-#[test]
-fn an_old_project_with_depths_and_a_3d_background_layer_opens_with_the_same_pixels() {
-    use crate::scene3drender as sr;
-    // Un projet d'avant l'Espace 3D : des calques en profondeur, des clés de caméra et de position, une scène de blocage dont les
-    // objets sont rendus dans le calque « Fond 3D » (en bas, verrouillé). Enregistré, rouvert comme un projet de format 33 :
-    // mêmes images, pixel pour pixel, et le calque se refait à l'identique.
-    let dir = dir_for("ancien-fond");
-    let manifest = dir.join("P.pelure");
-    let mut doc = doc_with_cards(&[(RED, [10, 10, 80, 60], -0.4), (GREEN, [100, 40, 200, 120], 1.5)]);
-    doc.panels[0].layers[1].transform = pose(15.0, -8.0);
-    doc.panels[0].layers[0].pos_keys = vec![PosKey::new(0, pose(0.0, 0.0)), PosKey::new(8, pose(30.0, 5.0))];
-    let start = Camera { x: 150.0, y: 85.0, dolly: 10.0, ..doc.default_camera() };
-    doc.panels[0].camera = vec![CameraKey::new(0, start), CameraKey::new(8, Camera { x: 190.0, ..start })];
-    let (panel, seq) = (doc.panels[0].id, doc.sequence_of(0));
-    doc.scenes3d.add(panel, seq, Target::Plan, Shape3d::Cube, [0.4, 0.0, 0.0]).expect("cube");
-    {
-        let p = doc.scenes3d.plan_mut(panel);
-        (p.in_image, p.sheet_aligned) = (false, false);
-        p.cam = crate::scene3d::SceneCam { pos: [0.3, 1.2, 6.0], pan: 2.0, tilt: -5.0, roll: 0.0, focal: 35.0 };
-    }
-    let stage = [doc.width, doc.height];
-    let plate = sr::render_plate(&doc.scenes3d, panel, seq, &doc.models, stage, doc.frame, 1, 2);
-    let cel = doc.add_cel(crate::document::Cel::bitmap(sr::plate_raster(&plate, stage)));
-    let mut back = Layer::new(crate::scene3dui::LAYER_NAME, LayerKind::Bitmap);
-    back.locked = true;
-    back.frames = vec![Some(cel); 12];
-    doc.panels[0].layers.insert(0, back);
-    doc.scenes3d.plan_mut(panel).bake_cel = Some(cel);
-    let before: Vec<Vec<Color32>> = (0..9).map(|f| sheet(&doc, f)).collect();
-    assert!(before[0].iter().any(|c| c.a() > 0));
-    project::save(&doc, &manifest, &mut Default::default()).expect("enregistré");
-    let text = std::fs::read_to_string(&manifest).expect("manifeste");
-    std::fs::write(&manifest, text.replace(&format!("\"version\": {}", project::VERSION), "\"version\": 33")).expect("écrit");
-    let old = project::load(&manifest).expect("un projet d'avant s'ouvre").doc;
-    for (f, want) in before.iter().enumerate() {
-        assert!(sheet(&old, f) == *want, "l'image {f} est la même, pixel pour pixel (profondeurs, clés, calque « Fond 3D »)");
-    }
-    let (panel2, seq2) = (old.panels[0].id, old.sequence_of(0));
-    let scene = old.scenes3d.plan(panel2).expect("la scène est relue");
-    assert!(!scene.in_image && !scene.sheet_aligned, "les objets d'avant restent hors de l'image");
-    let again = sr::render_plate(&old.scenes3d, panel2, seq2, &old.models, stage, old.frame, 1, 2);
-    assert!(again.rgba == plate.rgba, "le calque « Fond 3D » se refait à l'identique");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `cargo test --release espace3d_tests::perf -- --ignored --nocapture`
@@ -1105,13 +834,131 @@ fn perf_espace3d() {
     let t = Instant::now();
     let img = render::composite_full(&doc, &plan);
     println!("PERF Espace 3D : composer la feuille 1920 x 1080 avec une carte inclinée (processeur, tous les cœurs) : {:.0} ms ({} pixels)", t.elapsed().as_secs_f64() * 1e3, img.len());
-    let (panel, seq) = (doc.panels[0].id, doc.sequence_of(0));
-    let shapes = Shape3d::basics();
-    for k in 0..20 {
-        doc.scenes3d.add(panel, seq, Target::Plan, shapes[k % shapes.len()].clone(), [(k % 5) as f32 * 1.4 - 3.0, 0.0, -((k / 5) as f32) * 1.2]);
+}
+
+// ============================================================================ simplification : plus d'objets 3D
+
+#[test]
+fn an_old_project_with_scene_objects_a_3d_reference_and_a_3d_background_layer_opens_with_the_same_pixels_and_keeps_its_files() {
+    use crate::fiabilite_fixture::{ajouter_heritage_3d, arbre, ecrire_json, lire_json, racine};
+    // Un projet d'avant la suppression des objets 3D et du repère 3D : des calques en profondeur, des clés de caméra et de
+    // position, un calque « Fond 3D » (un calque bitmap ordinaire, en bas, verrouillé, qui garde ses pixels), un
+    // `scenes3d.json` avec des objets et un décor, un modèle glTF converti dans `modeles/` et un `repere3d` dans le
+    // manifeste. Il s'ouvre sans avertissement, les images sont les mêmes pixel pour pixel, et ni l'enregistrement ni
+    // l'enregistrement en arrière-plan ne touchent à `scenes3d.json` ni au modèle.
+    let dir = dir_for("ancien-fond");
+    let manifest = dir.join("P.pelure");
+    let mut doc = doc_with_cards(&[(RED, [10, 10, 80, 60], -0.4), (GREEN, [100, 40, 200, 120], 1.5)]);
+    doc.panels[0].layers[1].transform = pose(15.0, -8.0);
+    doc.panels[0].layers[0].pos_keys = vec![PosKey::new(0, pose(0.0, 0.0)), PosKey::new(8, pose(30.0, 5.0))];
+    let start = Camera { x: 150.0, y: 85.0, dolly: 10.0, ..doc.default_camera() };
+    doc.panels[0].camera = vec![CameraKey::new(0, start), CameraKey::new(8, Camera { x: 190.0, ..start })];
+    let fond = doc.new_cel(LayerKind::Bitmap);
+    fill_rect(&mut doc, fond, 30, 100, 290, 170, BLUE);
+    let mut back = Layer::new("Fond 3D", LayerKind::Bitmap);
+    back.locked = true;
+    back.frames = vec![Some(fond); 12];
+    doc.panels[0].layers.insert(0, back);
+    let before: Vec<Vec<Color32>> = (0..9).map(|f| sheet(&doc, f)).collect();
+    assert!(before[0].iter().any(|c| c.a() > 0));
+    project::save(&doc, &manifest, &mut Default::default()).expect("enregistré");
+    let mut m = lire_json(&manifest);
+    m["version"] = serde_json::Value::from(33);
+    ecrire_json(&manifest, &m);
+    let [scenes, modele] = ajouter_heritage_3d(&manifest);
+    let tree = arbre(racine(&manifest));
+    let mut old = project::load(&manifest).expect("un projet d'avant s'ouvre");
+    assert!(old.warnings.is_empty(), "aucun avertissement : {:?}", old.warnings);
+    assert_eq!(old.doc.panels[0].layers[0].name, "Fond 3D");
+    assert!(old.doc.panels[0].layers[0].locked, "le calque « Fond 3D » reste verrouillé, tout en bas");
+    for (f, want) in before.iter().enumerate() {
+        assert!(sheet(&old.doc, f) == *want, "l'image {f} est la même, pixel pour pixel (profondeurs, clés, calque « Fond 3D »)");
     }
-    let key = crate::espace3dobjets::key_for(&doc, 0, &doc.camera_seen(0, 0)).expect("objets");
-    let t = Instant::now();
-    let shown = crate::espace3dobjets::shown(&doc, &key).expect("rendu");
-    println!("PERF Espace 3D : rendre 20 objets vus de l'œil, feuille 1920 x 1080, sur-échantillonnage 2 (processeur) : {:.0} ms ({} tuiles)", t.elapsed().as_secs_f64() * 1e3, shown.raster.tiles.iter().flatten().count());
+    assert_eq!(arbre(racine(&manifest)), tree, "ouvrir ne touche à aucun fichier");
+    // Enregistrer : le sidecar et le modèle restent tels quels ; le manifeste n'écrit plus le repère ni les modèles.
+    project::save(&old.doc, &manifest, &mut old.written).expect("enregistré");
+    let after = arbre(racine(&manifest));
+    for f in [&scenes, &modele] {
+        assert_eq!(after.get(f), tree.get(f), "{f} est intact après l'enregistrement");
+    }
+    let text = std::fs::read_to_string(&manifest).expect("manifeste");
+    assert!(!text.contains("repere3d") && !text.contains("\"modeles\""), "le manifeste n'écrit plus de repère 3D ni de modèles");
+    // Et en arrière-plan (le travail d'écriture de l'application).
+    old.written.clear();
+    let job = project::prepare_save(&old.doc, &manifest, &mut old.written, None).expect("cliché");
+    job.run_with(None, 2).expect("écriture");
+    let after = arbre(racine(&manifest));
+    for f in [&scenes, &modele] {
+        assert_eq!(after.get(f), tree.get(f), "{f} est intact après l'enregistrement en arrière-plan");
+    }
+    let again = project::load(&manifest).expect("relu").doc;
+    for (f, want) in before.iter().enumerate() {
+        assert!(sheet(&again, f) == *want, "l'image {f} est la même après un aller-retour");
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn an_unreadable_old_scene_file_is_neither_read_nor_reported_nor_touched() {
+    use crate::fiabilite_fixture::{arbre, projet_enregistre, racine};
+    let (_f, manifeste) = projet_enregistre("scenes3d-abime");
+    let chemin = racine(&manifeste).join("scenes3d.json");
+    std::fs::write(&chemin, b"{ pas du json").expect("écriture");
+    let tree = arbre(racine(&manifeste));
+    let mut l = project::load(&manifeste).expect("le projet s'ouvre");
+    assert!(!l.warnings.iter().any(|w| w.contains("scenes3d")), "le fichier n'est plus lu : {:?}", l.warnings);
+    project::save(&l.doc, &manifeste, &mut l.written).expect("enregistré");
+    assert_eq!(arbre(racine(&manifeste)).get("scenes3d.json"), tree.get("scenes3d.json"), "il reste tel quel");
+}
+
+#[test]
+fn no_object_or_reference_model_command_remains() {
+    // Les commandes des objets 3D et du repère 3D n'existent plus : ni dans la liste des actions, ni dans la palette, ni
+    // dans le fichier de raccourcis.
+    let gone = [
+        "scene3d.ajouter_cube", "scene3d.ajouter_plan", "scene3d.ajouter_cylindre", "scene3d.ajouter_sphere", "scene3d.ajouter_cone", "scene3d.ajouter_escalier",
+        "scene3d.ajouter_mannequin", "scene3d.importer_modele", "scene3d.dupliquer", "scene3d.supprimer", "scene3d.grouper", "scene3d.degrouper", "scene3d.envoyer",
+        "scene3d.camera_depuis_plan", "scene3d.decor", "outil.repere3d", "fichier.importer_modele3d",
+    ];
+    for id in gone {
+        assert!(crate::keymap::action_info(id).is_none(), "{id} ne doit plus exister");
+        assert!(!crate::keymap::DEFAULT_KEYMAP.contains(&format!("\"{id}\"")), "{id} est encore dans keymap.toml");
+    }
+    for (id, label) in crate::palette::palette_commands() {
+        let l = label.to_lowercase();
+        assert!(!["cube", "mannequin", "cylindre", "sphère", "escalier", "gltf", "repère 3d"].iter().any(|w| l.contains(w)), "{id} « {label} » parle d'un objet 3D ou du repère");
+    }
+    // Les doubles qui ont encore un sens sont gardés, et seulement eux.
+    for (alias, original) in crate::keymap::ALIASES.iter().filter(|(a, _)| a.starts_with("scene3d.") || a.starts_with("outil3d.") || a.starts_with("vue")) {
+        assert!(original.starts_with("espace3d."), "{alias} → {original}");
+    }
+    // Lancer une commande disparue ne fait rien (un raccourci d'avant posé dessus ne casse rien).
+    let mut b = banc_taille(doc_with_cards(&[(RED, [10, 10, 80, 60], 0.0)]), false, 1280, 720);
+    b.chauffer(2);
+    let layers = b.app.layers().len();
+    let steps = b.app.history.names().0.len();
+    for id in gone {
+        b.app.run_action(id);
+    }
+    assert_eq!((b.app.layers().len(), b.app.history.names().0.len()), (layers, steps));
+    assert!(!b.app.espace3d.on);
+}
+
+#[test]
+fn the_space_toolbar_is_one_row_of_tools_and_the_application_rests_with_it_open() {
+    // (Seul avec les caches communs : un fil de fond d'un autre essai réveillerait cet écran.)
+    crate::fxcache::monde::ecrire();
+    let mut b = space(&[(RED, [100, 50, 220, 130], 0.0), (GREEN, [10, 10, 60, 60], 0.5)]);
+    for action in ["espace3d.outil_choisir", "espace3d.outil_deplacer", "espace3d.outil_tourner", "espace3d.outil_echelle", "espace3d.outil_camera", "espace3d.cadrer", "espace3d.vue_camera", "espace3d.vue_camera"] {
+        b.app.run_action(action);
+        b.chauffer(2);
+        assert!(b.app.espace3d.on, "{action} garde l'Espace 3D ouvert");
+    }
+    assert!(b.app.espace3d.sel.contains(&CAMERA_ID) && !b.app.espace3d.through_camera);
+    let calm = se_reposer(&mut b, 80);
+    assert!(calm < 80, "l'application finit par se reposer ({calm} images)");
+    for _ in 0..10 {
+        let m = b.image(Vec::new(), 0.5);
+        assert!(m.reveil >= std::time::Duration::from_millis(900), "rien à refaire : pas de réveil ({:?})", m.reveil);
+    }
 }

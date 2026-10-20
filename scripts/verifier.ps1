@@ -146,7 +146,7 @@ $groupes = @(
     @('dessins d''une autre taille que la feuille', 'fiabilite_raster'),
     @('demarrage (premiere image, pinceaux, dernier projet)', 'fiabilite_demarrage'),
     @('travail a plusieurs (prises, dossiers synchronises, fil de fond, barrieres)', 'cooperation'),
-    @('Espace 3D (cartes, camera, rendu, format 35, anciens projets, objets dans l''image)', 'espace3d')
+    @('Espace 3D (cartes, camera, rendu, format 35, anciens projets avec objets et repere 3D)', 'espace3d')
 )
 Write-Host "== Essais de fiabilite, un par un =="
 foreach ($g in $groupes) {

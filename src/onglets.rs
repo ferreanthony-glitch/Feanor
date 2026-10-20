@@ -204,9 +204,8 @@ etat_projet! {
     timeline_sound_track: Option<usize> = None,
     flip_run: Option<crate::flipsui::FlipRun> = None,
     flip_manual: Option<(usize, usize)> = None,
-    // --- vue 3D, références, envois, versions
-    ref3d: crate::ref3dtool::Ref3dState = Default::default(),
-    scene3d: crate::scene3dui::Scene3dState = Default::default(),
+    // --- Espace 3D, références, envois, versions
+    espace3d: crate::espace3dui::Espace3dState = Default::default(),
     refs: crate::referencesui::RefUi = Default::default(),
     envois_ui: crate::envoisui::EnvoisUi = Default::default(),
     comparaison: Option<crate::comparerui::Comparaison> = None,
@@ -491,9 +490,6 @@ impl App {
             self.fiche = None;
         }
         self.scenario_window = None;
-        // (Les ressources de la scène 3D sont communes à la carte graphique : un modèle importé a un numéro propre
-        // à son projet. Elles se refont à la demande.)
-        self.scene3d.gpu = None;
         let reserve = crate::fx::mettre_de_cote();
         let textures = self.gpu.as_ref().map(|g| g.prendre_textures());
         (reserve, textures)

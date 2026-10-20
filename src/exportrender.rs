@@ -79,7 +79,6 @@ fn plan_leger(p: &Panel) -> Panel {
         dialogue: p.dialogue.clone(),
         notes: p.notes.clone(),
         camera: p.camera.clone(),
-        ref3d: p.ref3d.clone(),
         marks: p.marks.clone(),
         cues: p.cues.clone(),
         color: p.color,
@@ -141,9 +140,8 @@ impl SnapshotBuilder {
         s.scenes = doc.scenes.clone();
         s.panels = doc.panels.iter().enumerate().map(|(i, p)| if wanted.contains(&i) { p.clone() } else { plan_leger(p) }).collect();
         s.audio_tracks = doc.audio_tracks.clone();
-        // (Les sons et les modèles 3D sont des `Arc` : copier la table ne copie aucun échantillon.)
+        // (Les sons sont des `Arc` : copier la table ne copie aucun échantillon.)
         s.sounds = doc.sounds.clone();
-        s.models = doc.models.clone();
         s.guides = doc.guides.clone();
         s.board = doc.board.clone();
         s.groups = doc.groups.clone();
@@ -154,7 +152,6 @@ impl SnapshotBuilder {
         s.storyboard_locked = doc.storyboard_locked;
         s.numbering_locked = doc.numbering_locked;
         s.properties = doc.properties.clone();
-        s.scenes3d = doc.scenes3d.clone();
         s.comments = doc.comments.clone();
         s.transitions = doc.transitions.clone();
         // Pas copiés : ce que le rendu ne lit jamais (autres versions des plans, références visuelles, rognages,

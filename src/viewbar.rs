@@ -29,7 +29,6 @@ pub(crate) fn tool_hint(tool: crate::app::Tool) -> &'static str {
         Tool::Picker => "Clic : prendre la couleur",
         Tool::Pan => "Glisser : déplacer la vue",
         Tool::Camera => "Glisser : déplacer (Maj : à l'horizontale ou à la verticale) · coin : zoomer · rond : tourner (Maj : 15°)",
-        Tool::Ref3d => "Glisser : tourner · Maj : déplacer · Ctrl : avancer ou reculer",
     }
 }
 /// Hauteur de la barre des commandes de la vue, sous le dessin.
@@ -135,7 +134,7 @@ impl App {
     pub(crate) fn view_tools_bar(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::entete());
-        let in3d = self.scene3d.on && !self.camera_view;
+        let in3d = self.espace3d.on && !self.camera_view;
         // Étroit : curseurs plus courts, sans la force de la table lumineuse.
         let narrow = ui.available_width() < 700.0;
         ui.horizontal_centered(|ui| {
@@ -149,7 +148,7 @@ impl App {
             let thumbs = self.board_view == crate::app::BoardView::Panels && self.mode == crate::app::Mode::Storyboard;
             self.command_button(ui, ph::SQUARES_FOUR, "vue.planches", "Vue dessin / vignettes", "Dessiner le plan, ou voir toutes ses images de storyboard en planche.", Some(thumbs));
             self.command_button(ui, ph::FRAME_CORNERS, "camera.vue", "Vue à travers la caméra", "Voir ce que filme la caméra du plan.", Some(self.camera_view));
-            self.command_button(ui, ph::CUBE, "espace3d.basculer", "Espace 3D", "Les calques (cartes), les objets 3D et la caméra du plan dans un seul espace : les déplacer, les tourner, les mettre à l'échelle, pour la profondeur et la parallaxe.", Some(in3d));
+            self.command_button(ui, ph::CUBE, "espace3d.basculer", "Espace 3D", "Les calques (cartes) et la caméra du plan dans un seul espace : les déplacer, les tourner, les mettre à l'échelle, pour la profondeur et la parallaxe.", Some(in3d));
             if in3d {
                 return;
             }
@@ -251,9 +250,9 @@ impl App {
             ui.add_space(6.0);
             // Le bouton « Espace 3D » n'est que dans la barre du bas (`view_tools_bar`, Anthony 2026-10-20 : pas
             // deux fois la même icône) ; ici, seulement ses outils quand il est actif.
-            let in_scene = self.scene3d.on && !cam;
+            let in_scene = self.espace3d.on && !cam;
             if in_scene {
-                self.scene3d_tools(ui);
+                self.espace3d_tools(ui);
                 return;
             }
             ui.separator();

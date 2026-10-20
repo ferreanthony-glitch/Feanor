@@ -1393,3 +1393,25 @@ l'image part sur un autre fil. Mesures de cette séance (processeur et carte gra
   travelling demande un rendu par image : à l'export, c'est calculé image par image (exact) ; en lecture, un rendu à la fois
   part en arrière-plan et les objets peuvent retarder de quelques images.
 - Aucun repaint au repos : ni la vue, ni le rendu des objets ne réveillent l'écran quand rien ne change.
+
+## 21. Espace 3D simplifié : ce que le retrait des objets et du repère a rendu (2026-10-21, branche `espace3d-simple`)
+
+Décision d'Anthony : plus d'objets 3D, plus de repère 3D. Le code et le travail par image qui servaient à eux disparaissent.
+
+| Mesure | Avant (`5f3fda7`) | Après |
+|---|---|---|
+| `shot.exe` (release, `target\msvc\release`) | 36 142 080 octets | **35 367 936 octets** (− 774 144, − 2,1 %) |
+| lignes de code Rust retirées (`src/`, `git diff --shortstat`) | | environ 9 700 supprimées, 1 800 ajoutées (docs et essais compris) |
+| image de l'Espace 3D avec 10 cartes (carte graphique), par image d'interface | ≈ 2 ms avec 20 objets en plus | ≈ 1,6 ms (max 2,3) |
+| plan d'une image avec 10 cartes inclinées | ≈ 1,5 à 2,5 ms | ≈ 1,3 ms |
+| choisir à la souris (10 cartes) | ≈ 0,06 ms (avec 20 objets) | < 0,01 ms |
+| fils de fond au repos et à l'écran | un rendu d'objets par changement de caméra | aucun : plus de rendu d'objets, plus de `poll` ni de `pending` à chaque image |
+
+À savoir :
+- La vue d'édition n'a plus de passe wgpu (maillages, tampon de profondeur, lissage 4×) : tout est dessiné par egui ; elle ne crée plus de
+  ressources dans la carte graphique, donc plus rien à lâcher quand on change d'onglet.
+- Chaque image de l'écran ne passe plus par `espace3dobjets::key_for` (construction du plan) : le plan d'une image est le même
+  qu'avant pour les calques, sans l'élément « objets » en tête.
+- Le repère 3D n'a plus de fil de calcul (fil de fer, arêtes cachées) ni d'aperçu à tracer pendant qu'on tourne.
+- Mesures refaites avec `cargo test --release espace3d_tests::the_view_with_ten -- --nocapture` et
+  `espace3d_tests::perf -- --ignored --nocapture`.

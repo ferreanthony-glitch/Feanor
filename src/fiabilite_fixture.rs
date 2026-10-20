@@ -35,14 +35,13 @@ use crate::blend::BlendMode;
 use crate::brushtex::BrushLibrary;
 use crate::camera::{Camera, CameraKey};
 use crate::camfx::{self, Generator, Params, Preset};
-use crate::document::{Behaviour, Cel, CelId, Cues, Document, Layer, LayerKind, LayerTransform, Ref3d, Strate, TimeNote};
+use crate::document::{Behaviour, Cel, CelId, Cues, Document, Layer, LayerKind, LayerTransform, Strate, TimeNote};
 use crate::fond::FondReglages;
 use crate::fx::{Effect, EffectKind};
 use crate::raster::{premultiply, Raster, TILE};
 use crate::roles::Role;
 use crate::vector::{Element, Trace, VPoint, VectorDrawing};
 use crate::video::VideoClip;
-use crate::view3d::Cam3d;
 
 /// Taille de la feuille de dessin du projet d'essai (le cadre fait la moitié).
 pub(crate) const FEUILLE: (usize, usize) = (480, 270);
@@ -369,44 +368,6 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
         out_point: Some(21),
         notes: vec![TimeNote { color: 1, width: 2.5, points: vec![[1.0, 0.2], [5.0, 0.7], [9.0, 0.4]] }],
     };
-    // Le repère 3D : un cube.
-    {
-        let sommets = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [1.0, 1.0, 1.0], [0.0, 1.0, 1.0]];
-        let faces = [[0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7], [0, 1, 5], [0, 5, 4], [2, 3, 7], [2, 7, 6], [1, 2, 6], [1, 6, 5], [3, 0, 4], [3, 4, 7]];
-        let id = doc.add_model("cube.glb".into(), crate::model3d::Mesh3d { positions: sommets.to_vec(), triangles: faces.to_vec() });
-        let mut r = Ref3d::new(id, Cam3d { target: [0.5, 0.5, 0.5], azimuth: 35.0, elevation: 20.0, distance: 6.0, focal: 50.0 });
-        r.hidden_lines = false;
-        r.color = [200, 60, 90];
-        r.opacity = 0.6;
-        doc.panels[0].ref3d = Some(r);
-        // Scène 3D de blocage (`scene3d.rs`, `scenes3d.json`) : toutes les formes, un mannequin à la pose
-        // libre, un groupe, un modèle importé, un décor de séquence, la caméra du plateau et son rendu.
-        use crate::scene3d::{joint, Light, Mannequin, Pose, RenderArea, RenderSettings, RenderStyle, SceneCam, Shape3d, Target};
-        let (plan, seq) = (doc.panels[0].id, doc.sequence_of(0));
-        let formes = [Shape3d::Cube, Shape3d::Plane, Shape3d::Cylinder, Shape3d::Sphere, Shape3d::Cone, Shape3d::Stairs { steps: 7 }, Shape3d::Model { id }];
-        let mut numeros = Vec::new();
-        for (k, forme) in formes.into_iter().enumerate() {
-            numeros.extend(doc.scenes3d.add(plan, seq, Target::Plan, forme, [k as f32 * 1.5 - 4.0, 0.0, -1.0 * k as f32]));
-        }
-        let mut mannequin = Mannequin::new(Pose::Walking, 1.68);
-        mannequin.set_joint(joint::ELBOW_R, [35.0, 4.0, 0.0]);
-        let mannequin = doc.scenes3d.add(plan, seq, Target::Plan, Shape3d::Mannequin(Box::new(mannequin)), [0.5, 0.0, 1.0]).expect("mannequin");
-        if let Some(o) = doc.scenes3d.find_mut(plan, seq, mannequin) {
-            o.name = "Léa".into();
-            o.color = [210, 120, 90];
-            o.xf.rot = [0.0, 25.0, 0.0];
-        }
-        numeros.push(mannequin);
-        doc.scenes3d.group(plan, seq, &numeros[..2]);
-        doc.scenes3d.add(plan, seq, Target::Decor, Shape3d::Plane, [0.0; 3]);
-        doc.scenes3d.add(plan, seq, Target::Decor, Shape3d::Cylinder, [-3.0, 0.0, -3.0]);
-        let scene = doc.scenes3d.plan_mut(plan);
-        scene.cam = SceneCam { pos: [0.3, 1.6, 6.5], pan: -8.0, tilt: -3.0, roll: 1.0, focal: 50.0 };
-        scene.light = Light { azimuth: 70.0, elevation: 40.0, intensity: 0.9, ambient: 0.3 };
-        scene.render = RenderSettings { style: RenderStyle::Outline, lines: true, line_px: 2.5, area: RenderArea::Frame };
-        scene.follow = false;
-    }
-
     // ---------------------------------------------------------------- plan 2 : le plan rogné
     {
         let anciens: Vec<CelId> = (0..6).map(|k| dessin_bitmap(&mut doc, 10 + k)).collect();
@@ -687,8 +648,6 @@ pub(crate) fn instantane(doc: &Document, sans_pixels: &BTreeSet<CelId>) -> Strin
     let _ = writeln!(s, "groupes {:?}", doc.groups);
     let _ = writeln!(s, "guides {:?}", doc.guides);
     let _ = writeln!(s, "planche {:?}", doc.board);
-    // (Les scènes 3D de blocage : le contenu, sans la version ni le compteur, qui ne sont pas enregistrés.)
-    let _ = writeln!(s, "scenes3d plans {:?} decors {:?}", doc.scenes3d.plans, doc.scenes3d.decors);
     // (Le fichier des commentaires les range dans l'ordre du film, `commentaires::to_bytes` : leur
     // ordre dans la liste n'est pas persistant, leurs numéros le sont.)
     let mut commentaires = doc.comments.clone();
@@ -722,17 +681,11 @@ pub(crate) fn instantane(doc: &Document, sans_pixels: &BTreeSet<CelId>) -> Strin
     for k in sons {
         let _ = writeln!(s, "son {} {:?} {} octets {:016x} pcm {:016x}", k.id, k.name, k.ext, empreinte(&k.bytes), empreinte(&k.pcm.data.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>()));
     }
-    let mut modeles: Vec<_> = doc.models.values().collect();
-    modeles.sort_by_key(|m| m.id);
-    for m in modeles {
-        let _ = writeln!(s, "modele {} {:?} {:?}", m.id, m.name, m.mesh);
-    }
     for (i, p) in doc.panels.iter().enumerate() {
         let rang: BTreeMap<u64, usize> = p.layers.iter().enumerate().map(|(k, l)| (l.id, k)).collect();
         let _ = writeln!(s, "plan {i} id {} scene {} duree {} couleur {:?}", p.id, p.scene, p.length, p.color);
         let _ = writeln!(s, "  textes {:?} {:?} {:?}", p.action, p.dialogue, p.notes);
         let _ = writeln!(s, "  camera {:?}", p.camera);
-        let _ = writeln!(s, "  repere3d {:?}", p.ref3d);
         let _ = writeln!(s, "  marques {:?}", p.marks);
         let _ = writeln!(s, "  reperes {:?}", p.cues);
         for (k, l) in p.layers.iter().enumerate() {
@@ -838,15 +791,53 @@ pub(crate) fn arbre(dir: &Path) -> BTreeMap<String, u64> {
     out
 }
 
-/// Le projet d'essai enregistré dans un dossier neuf : (projet, manifeste).
+/// Le projet d'essai enregistré dans un dossier neuf : (projet, manifeste). Il porte, en plus, ce qu'un projet d'avant la
+/// suppression des objets 3D et du repère 3D avait (`ajouter_heritage_3d`) : cette version doit l'ignorer sans y toucher.
 pub(crate) fn projet_enregistre(nom: &str) -> (Fixture, PathBuf) {
     let travail = dossier(nom);
     let f = projet_complet(&travail);
     let manifeste = travail.join("Film").join("Film.pelure");
     crate::project::save(&f.doc, &manifeste, &mut Default::default()).expect("enregistrement");
+    ajouter_heritage_3d(&manifeste);
     (f, manifeste)
 }
 
+/// Numéro du modèle 3D que le projet d'essai « d'avant » garde dans `modeles/` (le repère 3D, retiré le 2026-10-21).
+pub(crate) const ANCIEN_MODELE: u64 = 7_777;
+
+/// Le contenu d'un `scenes3d.json` d'avant la suppression des objets 3D (cube, mannequin, décor, caméra de blocage).
+pub(crate) const ANCIEN_SCENES3D: &str = r#"{
+  "format": "shot-scenes3d",
+  "version": 1,
+  "plans": [{"plan": 1, "scene": {
+    "objets": [
+      {"id": 1, "nom": "Cube", "forme": "cube", "placement": {"position": [0.0, 0.5, 0.0], "rotation": [0.0, 20.0, 0.0], "taille": [1.0, 1.0, 1.0]}, "couleur": [200, 120, 80]},
+      {"id": 2, "nom": "Léa", "forme": "mannequin", "placement": {"position": [1.5, 0.0, 1.0], "rotation": [0.0, 0.0, 0.0], "taille": [1.0, 1.0, 1.0]}, "couleur": [210, 120, 90]}
+    ],
+    "decor": true,
+    "camera": {"position": [0.3, 1.6, 6.5], "panoramique": -8.0, "bascule": -3.0, "rotation": 1.0, "focale": 50.0},
+    "en_image": true
+  }}],
+  "decors": [{"sequence": 1, "objets": [{"id": 3, "nom": "Sol", "forme": "plan", "placement": {"position": [0.0, 0.0, 0.0], "rotation": [0.0, 0.0, 0.0], "taille": [8.0, 1.0, 8.0]}, "couleur": [120, 120, 120]}]}]
+}
+"#;
+
+/// Fait du projet enregistré à `manifeste` un projet « d'avant » la suppression des objets 3D et du repère 3D : un
+/// `scenes3d.json` avec des objets et un décor, un modèle glTF converti dans `modeles/`, et dans le manifeste le champ
+/// `modeles` et un `repere3d` sur le premier plan. Rend les chemins relatifs des deux fichiers ajoutés.
+pub(crate) fn ajouter_heritage_3d(manifeste: &Path) -> [String; 2] {
+    let dir = racine(manifeste);
+    std::fs::write(dir.join("scenes3d.json"), ANCIEN_SCENES3D).expect("écriture de scenes3d.json");
+    std::fs::create_dir_all(dir.join("modeles")).expect("dossier des modèles");
+    let modele = format!("modeles/{ANCIEN_MODELE}.pelure3d");
+    std::fs::write(dir.join(&modele), b"SHOT3D\0\0 un ancien modele de repere").expect("écriture du modèle");
+    let mut m = lire_json(manifeste);
+    m["modeles"] = serde_json::json!([{"id": ANCIEN_MODELE, "nom": "cube.glb"}]);
+    let premier = &mut m["sequences"][0]["scenes"][0]["panneaux"][0];
+    premier["repere3d"] = serde_json::json!({"modele": ANCIEN_MODELE, "cible": [0.5, 0.5, 0.5], "azimut": 35.0, "elevation": 20.0, "distance": 6.0, "focale": 50.0, "visible": true, "aretes_cachees": false, "couleur": [200, 60, 90], "opacite": 0.6});
+    ecrire_json(manifeste, &m);
+    ["scenes3d.json".into(), modele]
+}
 /// Le dossier du projet dont `manifeste` est le manifeste.
 pub(crate) fn racine(manifeste: &Path) -> &Path {
     manifeste.parent().expect("dossier du projet")

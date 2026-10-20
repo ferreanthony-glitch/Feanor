@@ -71,7 +71,7 @@ fn damaged_sidecars_are_reported_and_survive_a_save() {
     }
 }
 
-/// Un son ou un modèle 3D que cette version ne lit pas (fichier abîmé, codec absent) sort du projet,
+/// Un son que cette version ne lit pas (fichier abîmé, codec absent) sort du projet, et un ancien modèle 3D n'est plus lu :
 /// mais son fichier reste dans le dossier après l'enregistrement.
 #[test]
 fn unreadable_sounds_and_models_keep_their_files_through_a_save() {
@@ -84,8 +84,9 @@ fn unreadable_sounds_and_models_keep_their_files_through_a_save() {
     std::fs::write(dir.join(&modele), b"pas un modele").expect("écriture");
     let abimes = arbre(&dir);
     let mut l = project::load(&manifeste).expect("le projet s'ouvre");
-    assert_eq!(l.warnings.len(), 2, "{:#?}", l.warnings);
-    assert!(l.doc.sounds.is_empty() && l.doc.models.is_empty());
+    // (Le modèle 3D du repère n'est plus lu du tout : seul le son illisible est signalé.)
+    assert_eq!(l.warnings.len(), 1, "{:#?}", l.warnings);
+    assert!(l.doc.sounds.is_empty());
     assert_eq!(arbre(&dir), abimes, "ouvrir ne touche à aucun fichier");
     project::save(&l.doc, &manifeste, &mut l.written).expect("enregistrement");
     let apres = arbre(&dir);
@@ -123,8 +124,8 @@ fn a_background_save_job_keeps_unreadable_sidecars_sounds_and_models() {
     let dir = racine(&manifeste).to_path_buf();
     let (abimes, son, modele) = abimer_les_annexes(&dir);
     let mut l = project::load(&manifeste).expect("le projet s'ouvre");
-    assert!(l.warnings.len() >= 4, "{:#?}", l.warnings);
-    assert!(l.doc.comments.is_empty() && l.doc.reserves.is_empty() && l.doc.sounds.is_empty() && l.doc.models.is_empty());
+    assert!(l.warnings.len() >= 3, "{:#?}", l.warnings);
+    assert!(l.doc.comments.is_empty() && l.doc.reserves.is_empty() && l.doc.sounds.is_empty());
 
     let ecrire = |doc: &crate::document::Document, written: &mut std::collections::HashMap<crate::document::CelId, u64>| {
         let job = project::prepare_save(doc, &manifeste, written, None).expect("cliché");

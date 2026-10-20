@@ -1,13 +1,12 @@
-//! Mathématiques de la scène 3D (blocage) : vecteurs, matrices 4×4 en colonnes, rayons, et les
-//! calculs des manipulateurs (déplacer, tourner, mettre à l'échelle) et de l'aimantation. Rien ici
-//! ne dépend de l'interface : tout se teste sans fenêtre.
+//! Mathématiques de l'Espace 3D (`docs/ESPACE3D.md`) : vecteurs, matrices 4×4 en colonnes, rayons, prise de vue
+//! (`View`), caméra d'orbite de la vue d'édition (`Orbite`) et les calculs des manipulateurs (déplacer, tourner,
+//! mettre à l'échelle) et de l'aimantation. Rien ici ne dépend de l'interface : tout se teste sans fenêtre.
 //!
-//! Conventions de la scène : mètres, Y vers le haut, un personnage regarde vers +Z. Une rotation
-//! s'écrit en degrés [x, y, z] et s'applique dans l'ordre Y puis X puis Z (R = Ry · Rx · Rz) :
-//! lacet, tangage, roulis.
+//! Conventions : mètres, Y vers le haut, Z vers la caméra. Une rotation s'écrit en degrés [x, y, z] et s'applique
+//! dans l'ordre Y puis X puis Z (R = Ry · Rx · Rz) : lacet, tangage, roulis.
 
 pub type V3 = [f32; 3];
-/// Matrice 4×4 en colonnes (l'élément ligne r, colonne c est `m[c * 4 + r]`), comme glTF.
+/// Matrice 4×4 en colonnes (l'élément ligne r, colonne c est `m[c * 4 + r]`).
 pub type M4 = [f32; 16];
 
 pub const IDENT: M4 = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0];
@@ -37,12 +36,6 @@ pub fn normalize(a: V3) -> V3 {
     } else {
         scale(a, 1.0 / l)
     }
-}
-pub fn lerp(a: V3, b: V3, t: f32) -> V3 {
-    add(a, scale(sub(b, a), t))
-}
-pub fn mul_each(a: V3, b: V3) -> V3 {
-    [a[0] * b[0], a[1] * b[1], a[2] * b[2]]
 }
 
 // ---------------------------------------------------------------------------------- matrices
@@ -158,19 +151,6 @@ pub fn inverse_affine(m: &M4) -> M4 {
     ]
 }
 
-/// Matrice des normales : l'inverse transposée de la partie 3×3 (juste, même avec une échelle
-/// inégale).
-pub fn normal_matrix(m: &M4) -> M4 {
-    let inv = inverse_affine(m);
-    let mut n = IDENT;
-    for r in 0..3 {
-        for c in 0..3 {
-            n[c * 4 + r] = inv[r * 4 + c];
-        }
-    }
-    n
-}
-
 /// Rotation [x, y, z] en degrés (ordre de `rotation`) d'une matrice, sans tenir compte de l'échelle.
 pub fn euler_of(m: &M4) -> V3 {
     let col = |c: usize| normalize([m[c * 4], m[c * 4 + 1], m[c * 4 + 2]]);
@@ -214,46 +194,6 @@ impl Ray {
     pub fn to_local(&self, inv: &M4) -> (V3, V3) {
         (point(inv, self.o), dir(inv, self.d))
     }
-}
-
-/// Möller–Trumbore, sans tenir compte du sens de la face. Renvoie la distance le long du rayon.
-pub fn ray_triangle(o: V3, d: V3, a: V3, b: V3, c: V3) -> Option<f32> {
-    let (e1, e2) = (sub(b, a), sub(c, a));
-    let p = cross(d, e2);
-    let det = dot(e1, p);
-    if det.abs() < 1e-12 {
-        return None;
-    }
-    let inv = 1.0 / det;
-    let t0 = sub(o, a);
-    let u = dot(t0, p) * inv;
-    if !(0.0..=1.0).contains(&u) {
-        return None;
-    }
-    let q = cross(t0, e1);
-    let v = dot(d, q) * inv;
-    if v < 0.0 || u + v > 1.0 {
-        return None;
-    }
-    let t = dot(e2, q) * inv;
-    (t > 1e-6).then_some(t)
-}
-
-/// Entrée et sortie du rayon dans la boîte [lo, hi] (méthode des dalles).
-pub fn ray_box(o: V3, d: V3, lo: V3, hi: V3) -> Option<(f32, f32)> {
-    let (mut t0, mut t1) = (f32::NEG_INFINITY, f32::INFINITY);
-    for k in 0..3 {
-        if d[k].abs() < 1e-12 {
-            if o[k] < lo[k] || o[k] > hi[k] {
-                return None;
-            }
-        } else {
-            let (a, b) = ((lo[k] - o[k]) / d[k], (hi[k] - o[k]) / d[k]);
-            t0 = t0.max(a.min(b));
-            t1 = t1.min(a.max(b));
-        }
-    }
-    (t0 <= t1 && t1 > 0.0).then_some((t0, t1))
 }
 
 /// Où le rayon coupe le plan passant par `p0` de normale `n` ; rien s'il lui est parallèle ou si le
@@ -336,22 +276,11 @@ pub fn snap_position(p: V3, step: f32, axes: [bool; 3]) -> V3 {
     [0, 1, 2].map(|k| if axes[k] { snap(p[k], step) } else { p[k] })
 }
 
-/// Décalage vertical qui pose le bas d'un objet sur le sol, s'il en est à moins de `reach` mètres
-/// (au-dessus ou en dessous) ; rien sinon.
-pub fn floor_snap(lowest_y: f32, reach: f32) -> Option<f32> {
-    (lowest_y.abs() <= reach).then_some(-lowest_y)
-}
-
 /// Boîte englobante (min, max) de points.
 pub fn bounds_of(points: impl IntoIterator<Item = V3>) -> Option<(V3, V3)> {
     let mut it = points.into_iter();
     let first = it.next()?;
     Some(it.fold((first, first), |(lo, hi), p| ([0, 1, 2].map(|k| lo[k].min(p[k])), [0, 1, 2].map(|k| hi[k].max(p[k])))))
-}
-
-/// Les 8 coins d'une boîte.
-pub fn corners_of(lo: V3, hi: V3) -> [V3; 8] {
-    [0, 1, 2, 3, 4, 5, 6, 7].map(|i| [if i & 1 == 0 { lo[0] } else { hi[0] }, if i & 2 == 0 { lo[1] } else { hi[1] }, if i & 4 == 0 { lo[2] } else { hi[2] }])
 }
 
 // ------------------------------------------------------------------------------- caméra (vue)
@@ -402,28 +331,93 @@ impl View {
         let d = [0, 1, 2].map(|k| self.right[k] * x + self.up[k] * y + self.forward[k]);
         Ray::new(self.eye, d)
     }
+}
 
-    /// Matrice monde → espace de découpe pour la carte graphique : image de `size` pixels, regard
-    /// au centre ; profondeur de 0 (plan proche `near`) à 1 (plan lointain `far`).
-    pub fn clip_matrix(&self, size: [f32; 2], near: f32, far: f32) -> M4 {
-        let s = self.px_per_unit();
-        let (kx, ky) = (2.0 * s / size[0].max(1.0), 2.0 * s / size[1].max(1.0));
-        let k = far / (far - near);
-        let row = |axis: V3| -dot(axis, self.eye);
-        let (r, u, f) = (self.right, self.up, self.forward);
-        // Lignes : x, y, z, w de l'espace de découpe.
-        let rows = [
-            [r[0] * kx, r[1] * kx, r[2] * kx, row(r) * kx],
-            [u[0] * ky, u[1] * ky, u[2] * ky, row(u) * ky],
-            [f[0] * k, f[1] * k, f[2] * k, (row(f) - near) * k],
-            [f[0], f[1], f[2], row(f)],
-        ];
-        let mut m = [0.0; 16];
-        for (i, rw) in rows.iter().enumerate() {
-            for (c, v) in rw.iter().enumerate() {
-                m[c * 4 + i] = *v;
-            }
+// ------------------------------------------------------------------- caméra d'orbite
+
+/// Hauteur de regard maximale de la vue d'édition (au-delà, la caméra se retournerait).
+pub const MAX_ELEVATION: f32 = 89.0;
+
+/// La caméra de la vue d'édition de l'Espace 3D : elle regarde `target` depuis la distance `distance`, en faisant le
+/// tour (`azimuth`, degrés, 0 = depuis +Z) à une hauteur de regard (`elevation`, degrés, 90 = du dessus). Focale en mm
+/// pour une pellicule de 36 mm de large.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Orbite {
+    pub target: V3,
+    pub azimuth: f32,
+    pub elevation: f32,
+    pub distance: f32,
+    pub focal: f32,
+}
+
+impl Orbite {
+    /// Direction du point visé vers l'œil.
+    fn dir(&self) -> V3 {
+        let (a, e) = (self.azimuth.to_radians(), self.elevation.clamp(-MAX_ELEVATION, MAX_ELEVATION).to_radians());
+        [e.cos() * a.sin(), e.sin(), e.cos() * a.cos()]
+    }
+
+    pub fn eye(&self) -> V3 {
+        add(self.target, scale(self.dir(), self.distance))
+    }
+
+    /// Repère de la caméra : droite, haut, avant (vers le point visé).
+    pub fn basis(&self) -> (V3, V3, V3) {
+        let forward = scale(self.dir(), -1.0);
+        let right = normalize(cross(forward, [0.0, 1.0, 0.0]));
+        let up = cross(right, forward);
+        (right, up, forward)
+    }
+
+    /// Pixels de la zone par unité de x/z (largeur de la zone ↔ 36 mm de pellicule).
+    pub fn pixels_per_unit(&self, width: f32) -> f32 {
+        width / 2.0 * self.focal.max(1.0) / 18.0
+    }
+
+    /// La prise de vue de cette caméra, pour une zone de `width` pixels.
+    pub fn view(&self, width: f32) -> View {
+        let (right, up, forward) = self.basis();
+        View { eye: self.eye(), right, up, forward, focal: self.focal, ref_width: width }
+    }
+
+    /// Cadre toute la boîte `bounds`, vue sous l'angle donné (degrés : `azimuth` autour, `elevation` au-dessus) : la
+    /// caméra recule juste assez pour que les 8 coins tiennent dans la zone (à 92 %).
+    pub fn fit_at(bounds: (V3, V3), frame: [f32; 2], azimuth: f32, elevation: f32) -> Orbite {
+        let (lo, hi) = bounds;
+        let center = scale(add(lo, hi), 0.5);
+        let radius = (dot(sub(hi, lo), sub(hi, lo)).sqrt() / 2.0).max(1e-3);
+        let mut cam = Orbite { target: center, azimuth, elevation, distance: 1.0, focal: 35.0 };
+        let (r, u, f) = cam.basis();
+        let s = cam.pixels_per_unit(frame[0]);
+        let (hw, hh) = ((frame[0] * 0.46).max(1.0), (frame[1] * 0.46).max(1.0));
+        // Un coin à (x, y) du centre et `ahead` plus loin que lui, vu à la distance D : sa profondeur est D + ahead, et
+        // il tient si |x|·s ≤ hw·(D + ahead).
+        let mut distance = radius * 1e-3;
+        for i in 0..8 {
+            let corner = [0, 1, 2].map(|k| if i >> k & 1 == 0 { lo[k] } else { hi[k] });
+            let v = sub(corner, center);
+            let ahead = dot(v, f);
+            distance = distance.max(dot(v, r).abs() * s / hw - ahead).max(dot(v, u).abs() * s / hh - ahead).max(radius * 0.01 - ahead);
         }
-        m
+        cam.distance = distance;
+        cam
+    }
+
+    /// Tourner autour du point visé.
+    pub fn orbit(&mut self, d_azimuth: f32, d_elevation: f32) {
+        self.azimuth = (self.azimuth + d_azimuth).rem_euclid(360.0);
+        self.elevation = (self.elevation + d_elevation).clamp(-MAX_ELEVATION, MAX_ELEVATION);
+    }
+
+    /// Glisser la vue de (`dx`, `dy`) pixels : le point visé suit la souris.
+    pub fn pan(&mut self, dx: f32, dy: f32, width: f32) {
+        let (r, u, _) = self.basis();
+        let k = self.distance / self.pixels_per_unit(width);
+        self.target = add(self.target, add(scale(r, -dx * k), scale(u, dy * k)));
+    }
+
+    /// Avancer (`factor` < 1) ou reculer (> 1).
+    pub fn dolly(&mut self, factor: f32) {
+        self.distance = (self.distance * factor).max(1e-4);
     }
 }

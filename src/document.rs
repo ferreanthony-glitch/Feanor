@@ -694,8 +694,6 @@ pub struct Panel {
     pub notes: String,
     /// Images clés de la caméra, triées (aucune : caméra au centre de la feuille).
     pub camera: Vec<CameraKey>,
-    /// Repère 3D (2d) : modèle importé vu par sa propre caméra, en fil de fer dans le cadre.
-    pub ref3d: Option<Ref3d>,
     /// Marques d'image (13a), triées par image, toutes après la première image du plan.
     pub marks: Vec<ImageMark>,
     /// Signets, points d'entrée et de sortie (13d).
@@ -806,26 +804,6 @@ pub struct ImageMark {
     pub action: String,
     pub dialogue: String,
     pub notes: String,
-}
-
-/// Repère 3D d'un panneau : un modèle de `Document::models`, vu par sa caméra, dessiné en fil
-/// de fer dans le cadre comme un guide (ni à l'export ni dans les vignettes ; « Dessiner dans un
-/// calque » en fait un dessin).
-#[derive(Clone, Debug, PartialEq)]
-pub struct Ref3d {
-    pub model: u64,
-    pub cam: crate::view3d::Cam3d,
-    pub visible: bool,
-    /// Masquer les arêtes cachées par des faces plus proches.
-    pub hidden_lines: bool,
-    pub color: [u8; 3],
-    pub opacity: f32,
-}
-
-impl Ref3d {
-    pub fn new(model: u64, cam: crate::view3d::Cam3d) -> Ref3d {
-        Ref3d { model, cam, visible: true, hidden_lines: true, color: [40, 150, 230], opacity: 0.8 }
-    }
 }
 
 impl Panel {
@@ -975,9 +953,6 @@ pub struct Structure {
     /// Numérotation des plans verrouillée (`numerotation.rs`) : chaque plan garde son numéro.
     pub numbering_locked: bool,
     pub properties: Properties,
-    /// Scènes 3D de blocage, par plan, et décors par séquence (`scene3d.rs`) : une étape
-    /// d'annulation les rétablit avec le reste.
-    pub scenes3d: crate::scene3d::Scenes3d,
     /// Commentaires sur la timeline (`commentaires.rs`) : une étape d'annulation les rétablit avec
     /// le reste.
     pub comments: Vec<crate::commentaires::Comment>,
@@ -1012,8 +987,6 @@ pub struct Document {
     pub audio_tracks: Vec<AudioTrack>,
     /// Sons importés. Comme les dessins, on n'en retire pas pendant la session.
     pub sounds: HashMap<u64, Sound>,
-    /// Modèles 3D importés (repères, 2d). Comme les sons, on n'en retire pas pendant la session.
-    pub models: HashMap<u64, Arc<crate::model3d::Model3d>>,
     /// Guides de perspective du projet.
     pub guides: Vec<Guide>,
     /// Notes de la planche (vue Vignettes, phase 7).
@@ -1034,8 +1007,6 @@ pub struct Document {
     pub numbering_locked: bool,
     /// Propriétés du projet (13e).
     pub properties: Properties,
-    /// Scènes 3D de blocage (`scene3d.rs`) ; enregistrées à côté du manifeste, dans `scenes3d.json`.
-    pub scenes3d: crate::scene3d::Scenes3d,
     /// Commentaires sur la timeline, rangés par plan (`commentaires.rs`) ; enregistrés à côté du
     /// manifeste, dans `commentaires.json`.
     pub comments: Vec<crate::commentaires::Comment>,
@@ -1100,7 +1071,6 @@ impl Document {
             cels: HashMap::new(),
             audio_tracks: Vec::new(),
             sounds: HashMap::new(),
-            models: HashMap::new(),
             guides: Vec::new(),
             board: Default::default(),
             groups: crate::groups::defaults(),
@@ -1111,7 +1081,6 @@ impl Document {
             storyboard_locked: false,
             numbering_locked: false,
             properties: Properties::default(),
-            scenes3d: Default::default(),
             comments: Vec::new(),
             reserves: Default::default(),
             transitions: Vec::new(),
@@ -1165,7 +1134,6 @@ impl Document {
             cels,
             audio_tracks: structure.audio_tracks,
             sounds,
-            models: HashMap::new(),
             guides: structure.guides,
             board: structure.board,
             groups: crate::groups::completed(structure.groups),
@@ -1176,7 +1144,6 @@ impl Document {
             storyboard_locked: structure.storyboard_locked,
             numbering_locked: structure.numbering_locked,
             properties: structure.properties,
-            scenes3d: structure.scenes3d,
             comments: structure.comments,
             reserves: structure.reserves,
             transitions: structure.transitions,
@@ -1365,7 +1332,6 @@ impl Document {
             storyboard_locked: self.storyboard_locked,
             numbering_locked: self.numbering_locked,
             properties: self.properties.clone(),
-            scenes3d: self.scenes3d.clone(),
             comments: self.comments.clone(),
             reserves: self.reserves.clone(),
             transitions: self.transitions.clone(),
@@ -1398,7 +1364,6 @@ impl Document {
             storyboard_locked: std::mem::replace(&mut self.storyboard_locked, s.storyboard_locked),
             numbering_locked: std::mem::replace(&mut self.numbering_locked, s.numbering_locked),
             properties: std::mem::replace(&mut self.properties, s.properties),
-            scenes3d: std::mem::replace(&mut self.scenes3d, s.scenes3d),
             comments: std::mem::replace(&mut self.comments, s.comments),
             reserves: std::mem::replace(&mut self.reserves, s.reserves),
             transitions: std::mem::replace(&mut self.transitions, s.transitions),
@@ -1457,7 +1422,6 @@ impl Document {
         self.references.iter().for_each(|r| see(r.id));
         self.cels.keys().for_each(|&c| see(c));
         self.sounds.keys().for_each(|&s| see(s));
-        self.models.keys().for_each(|&m| see(m));
         for r in self.reserves.values() {
             for piece in [&r.head, &r.tail] {
                 piece.marks.iter().for_each(|m| see(m.id));
@@ -1717,7 +1681,6 @@ impl Document {
             .collect();
         let mut doc = Document::from_parts(self.width, self.height, s, cels, HashMap::new());
         doc.frame = self.frame;
-        doc.models = self.models.clone();
         Some(doc)
     }
 
@@ -1898,7 +1861,6 @@ impl Document {
             dialogue: String::new(),
             notes: String::new(),
             camera: keys_after,
-            ref3d: source.ref3d.clone(),
             marks: Vec::new(),
             // Les signets d'après la coupe passent au nouveau plan ; les points d'entrée et de
             // sortie restent au premier.
@@ -2168,7 +2130,6 @@ impl Document {
             dialogue: String::new(),
             notes: String::new(),
             camera: Vec::new(),
-            ref3d: None,
             marks: Vec::new(),
             cues: Cues::default(),
             color: None,
@@ -2362,11 +2323,10 @@ impl Document {
     /// - Le début de `b` devient une marque d'image avec ses textes ; ses marques suivent.
     /// - Les notes de la planche attachées à `b` s'attachent à cette marque.
     ///
-    /// Renvoie un avertissement si le repère 3D de `b` n'a pas pu être gardé.
+    /// Renvoie un avertissement si quelque chose de `b` n'a pas pu être gardé (plus rien aujourd'hui : l'ancien repère 3D du plan a disparu).
     fn append_plan(&mut self, index: usize, b: Panel, cams_a: (Camera, Camera), cams_b: (Camera, Camera)) -> Option<String> {
         let mark_id = self.alloc();
         self.forget_joint_reserves(self.panels[index].id, b.id);
-        let label = self.scene_label(self.panels[index].scene);
         let a_len = self.panels[index].frame_count();
         let b_len = b.frame_count();
         // Les commentaires de `b` suivent ses images, au bout du plan.
@@ -2441,19 +2401,8 @@ impl Document {
         a.marks.push(ImageMark { id: mark_id, frame: a_len, color: 0, action: b.action, dialogue: b.dialogue, notes: b.notes });
         a.marks.extend(b.marks.into_iter().map(|m| ImageMark { frame: m.frame + a_len, ..m }));
         a.length = a_len + b_len;
-        let warning = match (&a.ref3d, b.ref3d) {
-            (None, r) => {
-                a.ref3d = r;
-                None
-            }
-            (Some(x), Some(y)) if *x != y => Some(format!(
-                "Plan {label} : il garde son repère 3D ; celui de la partie qui commence à l'image {} n'est pas repris.",
-                a_len + 1
-            )),
-            _ => None,
-        };
         self.reanchor_notes(b.id, mark_id);
-        warning
+        None
     }
 
     /// Les notes de la planche attachées à `from` (un plan ou une marque) s'attachent à `to`.
@@ -2899,19 +2848,6 @@ impl Document {
     }
 
     // ---------------------------------------------------------------------------- son
-
-    /// Ajoute un modèle 3D importé ; renvoie son identifiant.
-    pub fn add_model(&mut self, name: String, mesh: crate::model3d::Mesh3d) -> u64 {
-        let id = self.alloc();
-        self.models.insert(id, Arc::new(crate::model3d::Model3d::new(id, name, mesh)));
-        id
-    }
-
-    /// Remet un modèle relu d'un projet, avec son identifiant.
-    pub fn insert_model(&mut self, model: crate::model3d::Model3d) {
-        self.reserve_id(model.id);
-        self.models.insert(model.id, Arc::new(model));
-    }
 
     pub fn add_sound(&mut self, name: String, ext: String, bytes: Arc<Vec<u8>>, pcm: Arc<Pcm>) -> u64 {
         let id = self.alloc();

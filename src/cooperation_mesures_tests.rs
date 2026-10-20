@@ -98,7 +98,7 @@ fn cooperation_mesures_a_big_shared_film() {
     // Le montage : relire la structure de 600 plans (fil) et la poser (interface).
     let octets = std::fs::read(&manifeste).expect("structure");
     let t = Instant::now();
-    let lue = partage_io::charger_structure(fx::racine(&manifeste), &octets, &Default::default(), &Default::default()).expect("structure");
+    let lue = partage_io::charger_structure(fx::racine(&manifeste), &octets, &Default::default()).expect("structure");
     println!("relire la structure de 600 plans (fil de fond) : {:.1} ms", ms(t));
     let t = Instant::now();
     let mut attente = std::collections::HashMap::new();

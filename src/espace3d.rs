@@ -1,14 +1,13 @@
-//! Espace 3D : un seul monde pour les calques (les « cartes »), les objets 3D et la caméra du plan
-//! (`docs/ESPACE3D.md`).
+//! Espace 3D : un seul monde pour les calques (les « cartes ») et la caméra du plan (`docs/ESPACE3D.md`).
 //!
-//! Le monde est celui de la scène 3D de blocage : mètres, Y vers le haut, Z vers la caméra, l'origine au centre
+//! Le monde : mètres, Y vers le haut, Z vers la caméra, l'origine au centre
 //! de la feuille, le plan z = 0 est la feuille (le plan de référence de la caméra 2D). Un pixel de la feuille vaut
 //! `k = PLATE_WIDTH_M / largeur du cadre` mètres. Ce fichier ne fait que des maths et des conversions, sans
 //! interface ni carte graphique : tout se teste sans fenêtre.
 //!
 //! - **Une carte** est un calque du plan : un rectangle de la taille de la feuille, posé par sa `LayerTransform`
 //!   (décalage, échelle, étirements, angle, inclinaison) et sa profondeur. `Monde::card_xf` en tire le placement 3D
-//!   (`Xf`, celui des objets : les mêmes manipulateurs s'en servent) et `Monde::card_from_xf` fait le chemin inverse.
+//!   (`Xf` : les manipulateurs s'en servent) et `Monde::card_from_xf` fait le chemin inverse.
 //!   Une carte à plat se pose comme avant (`Layer::transform_seen_at`, une affinité) : mêmes pixels. Une carte
 //!   inclinée se pose par un maillage (`Warp`) : chaque point de la carte est projeté de l'œil de la caméra sur la
 //!   feuille. La suite (bascule, panoramique, zoom, rotation de la caméra) est l'homographie d'avant (`camera.rs`).
@@ -20,15 +19,147 @@ use eframe::egui::{pos2, vec2, Pos2, Rect};
 
 use crate::camera::{ref_distance, Camera, REF_FOCAL};
 use crate::document::{CameraSeen, Layer, LayerTransform};
+use crate::espace3dgizmo as gz;
+use crate::espace3dmath::{self as m, Ray, V3};
 use crate::render::Pre;
-use crate::scene3d::{SceneCam, Xf};
-use crate::scene3dgizmo as gz;
-use crate::scene3dmath::{self as m, Ray, V3};
 use crate::vector::Affine;
 use crate::warp::Warp;
 
-/// Étiquette d'une carte dans une sélection de l'Espace 3D : les numéros d'objets sont petits, celui de la caméra
-/// (`scene3dgizmo::CAMERA_ID`) est le plus grand ; une carte est son numéro de calque avec ce bit.
+/// Largeur, en mètres, du cadre de la caméra par défaut du plan à la distance de référence : la feuille (le plan de
+/// référence de la caméra 2D) est le plan z = 0 de l'espace, et ce plan mesure `PLATE_WIDTH_M` mètres dans le cadre. C'est
+/// la seule échelle qui lie l'espace (en mètres) à la feuille (en pixels).
+pub const PLATE_WIDTH_M: f32 = 6.0;
+
+/// Position, rotation (degrés, ordre de `espace3dmath::rotation`) et taille d'une carte (ou de la caméra) dans l'espace.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Xf {
+    pub pos: V3,
+    pub rot: V3,
+    pub size: V3,
+}
+
+impl Default for Xf {
+    fn default() -> Xf {
+        Xf { pos: [0.0; 3], rot: [0.0; 3], size: [1.0; 3] }
+    }
+}
+
+impl Xf {
+    pub fn matrix(&self) -> m::M4 {
+        m::trs(self.pos, self.rot, self.size)
+    }
+}
+
+/// La caméra du plan vue comme une prise de vue de l'espace. Mêmes conventions que la caméra 2D du plan (`camera.rs`) :
+/// panoramique positif vers la droite, bascule positive vers le haut, rotation (roulis) positive dans le sens horaire à
+/// l'écran ; la focale en mm sur une pellicule de 36 mm de large, donc le même angle de champ que `camera::angle_of_view`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SceneCam {
+    pub pos: V3,
+    pub pan: f32,
+    pub tilt: f32,
+    pub roll: f32,
+    pub focal: f32,
+}
+
+impl Default for SceneCam {
+    fn default() -> SceneCam {
+        SceneCam { pos: [0.0, 1.5, 6.0], pan: 0.0, tilt: -4.0, roll: 0.0, focal: REF_FOCAL }
+    }
+}
+
+pub const MIN_FOCAL: f32 = 8.0;
+pub const MAX_FOCAL: f32 = 300.0;
+/// La bascule et le panoramique restent loin de la verticale (la caméra se retournerait).
+pub const MAX_TILT: f32 = 89.0;
+
+impl SceneCam {
+    /// Vers où la caméra regarde. À panoramique et bascule nuls : vers −Z, comme la caméra 2D qui regarde la feuille de
+    /// face.
+    pub fn forward(&self) -> V3 {
+        let (st, ct) = self.tilt.to_radians().sin_cos();
+        let (sp, cp) = self.pan.to_radians().sin_cos();
+        [ct * sp, st, -ct * cp]
+    }
+
+    /// Le point de vue pour une image dont `ref_width` pixels représentent les 36 mm de pellicule.
+    pub fn view(&self, ref_width: f32) -> m::View {
+        let forward = self.forward();
+        let right0 = m::normalize(m::cross(forward, [0.0, 1.0, 0.0]));
+        let up0 = m::cross(right0, forward);
+        // Rotation du cadre dans le sens horaire (vu de derrière la caméra) : la droite du cadre descend, le haut penche
+        // vers la droite.
+        let (s, c) = self.roll.to_radians().sin_cos();
+        let right = m::add(m::scale(right0, c), m::scale(up0, -s));
+        let up = m::add(m::scale(up0, c), m::scale(right0, s));
+        m::View { eye: self.pos, right, up, forward, focal: self.focal, ref_width }
+    }
+
+    pub fn sanitized(self) -> SceneCam {
+        let fin = |v: f32, lo: f32, hi: f32, d: f32| if v.is_finite() { v.clamp(lo, hi) } else { d };
+        SceneCam {
+            pos: self.pos.map(|v| fin(v, -1e4, 1e4, 0.0)),
+            pan: fin(self.pan, -3600.0, 3600.0, 0.0),
+            tilt: fin(self.tilt, -MAX_TILT, MAX_TILT, 0.0),
+            roll: fin(self.roll, -3600.0, 3600.0, 0.0),
+            focal: fin(self.focal, MIN_FOCAL, MAX_FOCAL, REF_FOCAL),
+        }
+    }
+
+    /// Angle de champ horizontal, en degrés (celui de l'objectif de la caméra 2D).
+    pub fn angle_of_view(&self) -> f32 {
+        crate::camera::angle_of_view(self.focal)
+    }
+
+    /// Les quatre coins du cadre à la distance `d` devant la caméra : haut-gauche, haut-droite, bas-droite, bas-gauche.
+    /// `frame` : l'image finale (pour les proportions).
+    pub fn corners_at(&self, d: f32, frame: [usize; 2]) -> [V3; 4] {
+        let v = self.view(frame[0].max(1) as f32);
+        let half_w = d * 18.0 / self.focal.max(1.0);
+        let half_h = half_w * frame[1].max(1) as f32 / frame[0].max(1) as f32;
+        let at = |x: f32, y: f32| {
+            let on_axis = m::add(self.pos, m::scale(v.forward, d));
+            m::add(on_axis, m::add(m::scale(v.right, x), m::scale(v.up, y)))
+        };
+        [at(-half_w, half_h), at(half_w, half_h), at(half_w, -half_h), at(-half_w, -half_h)]
+    }
+
+    /// Regarde le point `target` (panoramique et bascule ; la rotation est gardée).
+    pub fn aim_at(&mut self, target: V3) {
+        let d = m::sub(target, self.pos);
+        if m::length(d) < 1e-6 {
+            return;
+        }
+        let d = m::normalize(d);
+        self.tilt = d[1].clamp(-1.0, 1.0).asin().to_degrees().clamp(-MAX_TILT, MAX_TILT);
+        self.pan = d[0].atan2(-d[2]).to_degrees();
+    }
+
+    /// Mètres par pixel de la feuille quand le cadre de `frame_w` pixels mesure `PLATE_WIDTH_M` mètres à la distance de
+    /// référence de la caméra 2D.
+    pub fn meters_per_px(frame_w: usize) -> f32 {
+        PLATE_WIDTH_M / frame_w.max(1) as f32
+    }
+
+    /// La caméra 2D du plan, à l'image où elle est, posée dans l'espace : le plan z = 0 est la feuille (le plan de
+    /// référence), à l'échelle de `meters_per_px`. Même focale, même panoramique, même bascule, même rotation, et l'œil là
+    /// où `Monde::eye` le met : l'espace vu par cette caméra et la feuille vue par la caméra 2D se superposent.
+    pub fn from_plan_camera(cam: &Camera, stage: [usize; 2], frame: [usize; 2]) -> SceneCam {
+        let k = Self::meters_per_px(frame[0]);
+        let d0 = crate::camera::ref_distance(frame);
+        SceneCam {
+            pos: [(cam.x - stage[0] as f32 / 2.0) * k, -(cam.y - stage[1] as f32 / 2.0) * k, (d0 - cam.dolly) * k],
+            pan: cam.pan,
+            tilt: cam.tilt,
+            roll: cam.angle,
+            focal: cam.focal().clamp(MIN_FOCAL, MAX_FOCAL),
+        }
+        .sanitized()
+    }
+}
+
+/// Étiquette d'une carte dans une sélection de l'Espace 3D : le numéro de la caméra (`espace3dgizmo::CAMERA_ID`) est le
+/// plus grand ; une carte est son numéro de calque avec ce bit.
 pub const CARD_TAG: u64 = 1 << 62;
 
 /// Le numéro de sélection de la carte du calque `layer_id`.
@@ -89,12 +220,12 @@ impl Monde {
         [seen.offset.x * self.k, -seen.offset.y * self.k, (seen.d0 - seen.dolly) * self.k]
     }
 
-    /// La caméra du plan comme la scène 3D la voit (position, panoramique, bascule, rotation, focale).
+    /// La caméra du plan comme prise de vue de l'espace (position, panoramique, bascule, rotation, focale).
     pub fn scene_cam(&self, cam: &Camera) -> SceneCam {
         SceneCam::from_plan_camera(cam, [self.stage[0] as usize, self.stage[1] as usize], self.frame)
     }
 
-    /// La caméra du plan comme un objet de l'espace (pour les manipulateurs).
+    /// La caméra du plan comme un placement de l'espace (pour les manipulateurs).
     pub fn camera_xf(&self, cam: &Camera) -> Xf {
         gz::cam_xf(&self.scene_cam(cam))
     }
@@ -116,12 +247,6 @@ impl Monde {
             tilt: sc.tilt,
             pan: sc.pan,
         }
-    }
-
-    /// Le point de la caméra de blocage d'un ancien projet (`PlanScene::cam`), pour une feuille de ce plan : la caméra du
-    /// plan qui voit la même chose (position, panoramique, bascule, rotation, focale). Sert à reprendre l'ancienne caméra.
-    pub fn plan_camera_of(&self, sc: &SceneCam) -> Camera {
-        self.camera_from_scene(sc)
     }
 
     // ------------------------------------------------------------------------------ cartes

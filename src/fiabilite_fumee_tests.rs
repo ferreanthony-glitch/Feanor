@@ -225,31 +225,22 @@ fn passer(avec_gpu: bool) {
     f.pas_simple("rétablir l'effet de caméra");
     assert_eq!(format!("{:?}", f.b.app.doc.panels[0].camera), cles_apres);
 
-    // ------------------------------------------------------------ la scène 3D de blocage
-    let calques = f.b.app.layers().len();
-    f.b.app.run_action("scene3d.basculer");
-    assert!(f.b.app.scene3d.on, "la scène 3D s'ouvre");
-    f.images("scène 3D", 3);
+    // ------------------------------------------------------------ l'Espace 3D (cartes et caméra)
+    f.b.app.run_action("espace3d.basculer");
+    assert!(f.b.app.espace3d.on, "l'Espace 3D s'ouvre");
+    f.images("Espace 3D", 3);
     f.b.app.show_pane(Pane::ToolOptions);
-    let (plan, seq) = f.b.app.s3_ids();
-    let premier = f.b.app.doc.scenes3d.list(plan, seq, crate::scene3d::Target::Plan).first().map(|o| o.id).expect("des objets dans la scène d'essai");
-    f.b.app.scene3d.sel = vec![premier];
-    f.images("scène 3D, réglages d'un objet", 2);
-    f.b.app.scene3d.sel = vec![crate::scene3dgizmo::CAMERA_ID];
-    f.b.app.scene3d.through_camera = true;
-    f.images("scène 3D, par la caméra", 2);
-    f.b.app.scene3d.through_camera = false;
-    f.b.app.scene3d.sel.clear();
-    f.b.app.run_action("scene3d.envoyer");
-    assert_eq!(f.b.app.layers().len(), calques + 1, "un calque « Fond 3D »");
-    f.images("scène 3D, envoi vers un calque", 4);
-    f.b.app.undo();
-    f.pas_simple("annuler l'envoi");
-    assert_eq!(f.b.app.layers().len(), calques, "annuler retire le calque");
-    f.b.app.run_action("scene3d.basculer");
-    assert!(!f.b.app.scene3d.on);
+    let carte = crate::espace3d::card_selection(f.b.app.layer().id);
+    f.b.app.espace3d.sel = vec![carte];
+    f.images("Espace 3D, réglages d'une carte", 2);
+    f.b.app.espace3d.sel = vec![crate::espace3dgizmo::CAMERA_ID];
+    f.b.app.espace3d.through_camera = true;
+    f.images("Espace 3D, par la caméra", 2);
+    f.b.app.espace3d.through_camera = false;
+    f.b.app.espace3d.sel.clear();
+    f.b.app.run_action("espace3d.basculer");
+    assert!(!f.b.app.espace3d.on);
     f.images("retour au dessin", 2);
-
     // ------------------------------------------------------------ retour au storyboard, plans suivants
     f.b.app.set_mode(Mode::Storyboard);
     for plan in 0..f.b.app.doc.panels.len() {

@@ -15,7 +15,6 @@ use crate::empreinte;
 use crate::partagecom::{self, Enregistrement};
 use crate::planvers::VersionsDuPlan;
 use crate::rognage::Reserve;
-use crate::scene3d::PlanScene;
 
 /// Format du fichier d'un plan (`plans/<n°>.json`).
 pub(crate) const FORMAT_PLAN: &str = "shot-plan";
@@ -64,9 +63,6 @@ pub(crate) struct ContenuPlan {
     /// Le contenu rogné (au format de `rognages.json`, pour ce plan seul).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rognage: Option<serde_json::Value>,
-    /// La scène 3D de blocage du plan.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub scene3d: Option<PlanScene>,
     /// L'empreinte du fichier de chacun de ses dessins, telle que son porteur l'a écrite : un lecteur ne prend le plan que
     /// si les fichiers qu'il a sous les yeux ont ces empreintes (un dossier synchronisé peut livrer le plan avant ses
     /// dessins, ou garder un ancien dessin sous le même nom). Vide : pas de vérification (brouillons).
@@ -120,7 +116,6 @@ pub(crate) struct DonneesPlan {
     pub panel: Panel,
     pub versions: Option<VersionsDuPlan>,
     pub reserve: Option<Reserve>,
-    pub scene3d: Option<PlanScene>,
     pub hors: Vec<CelId>,
     /// L'empreinte du fichier de chaque dessin (voir `ContenuPlan::dessins`).
     pub dessins: BTreeMap<u64, u64>,
@@ -144,8 +139,7 @@ impl DonneesPlan {
         let panel = doc.panels[index].clone();
         let versions = doc.versions.get(&panel.id).filter(|v| !v.autres.is_empty()).cloned();
         let reserve = doc.reserves.get(&panel.id).filter(|r| !r.is_empty()).cloned();
-        let scene3d = doc.scenes3d.plans.get(&panel.id).filter(|s| **s != PlanScene::default()).cloned();
-        let mut d = DonneesPlan { panel, versions, reserve, scene3d, hors: Vec::new(), dessins: BTreeMap::new() };
+        let mut d = DonneesPlan { panel, versions, reserve, hors: Vec::new(), dessins: BTreeMap::new() };
         let cels = d.cels();
         d.hors = hors_of(doc, &cels).into_iter().collect();
         d.dessins = dessins.iter().filter(|(id, _)| cels.contains(id)).map(|(k, v)| (*k, *v)).collect();
@@ -177,7 +171,7 @@ impl DonneesPlan {
             Some(r) => Some(crate::rognage::plan_value(&self.panel, r)?),
             None => None,
         };
-        Ok(ContenuPlan { panneau, hors: self.hors.clone(), versions, rognage, scene3d: self.scene3d.clone(), dessins: self.dessins.clone() })
+        Ok(ContenuPlan { panneau, hors: self.hors.clone(), versions, rognage, dessins: self.dessins.clone() })
     }
 
     /// L'empreinte du contenu : la même à l'enregistrement et à la lecture d'un plan, donc un plan qu'on n'a pas touché ne
@@ -220,7 +214,6 @@ pub(crate) struct PlanCharge {
     pub cels: HashMap<CelId, Cel>,
     pub versions: Option<VersionsDuPlan>,
     pub reserve: Option<Reserve>,
-    pub scene3d: Option<PlanScene>,
     /// Empreinte des octets du fichier lu (voir que le fichier a changé), et du contenu (voir que le plan a changé).
     pub hash_fichier: u64,
     pub hash_contenu: u64,
@@ -263,9 +256,8 @@ pub(crate) fn charger_plan(dir: &Path, tete: &Tete, plan: u64, octets: &[u8], qu
         Some(v) => Some(crate::rognage::parse(&v.to_string())?),
         None => None,
     };
-    let scenes3d = crate::scene3dstore::assembler(None, fichier.contenu.scene3d.map(|s| vec![(plan, s)]).unwrap_or_default())?;
     let manifest = manifest_de_tete(tete, vec![SequenceEntry { id: 1, nom: String::new(), numero: String::new(), scenes: vec![SceneEntry { id: scene, nom: String::new(), numero: String::new(), panneaux: vec![panneau] }] }], fichier.contenu.hors);
-    let annexes = Annexes { fournies: true, plans_seuls: true, versions, reserves, scenes3d: Some(scenes3d), ..Default::default() };
+    let annexes = Annexes { fournies: true, plans_seuls: true, versions, reserves, ..Default::default() };
     let loaded = load_manifest_avec(manifest, dir, quick, None, annexes)?;
     let Loaded { mut doc, approx, manquants, .. } = loaded;
     let index = doc.panels.iter().position(|p| p.id == plan).ok_or("le plan n'a pas pu être lu")?;
@@ -280,7 +272,6 @@ pub(crate) fn charger_plan(dir: &Path, tete: &Tete, plan: u64, octets: &[u8], qu
         panel,
         versions: doc.versions.remove(&plan),
         reserve: doc.reserves.remove(&plan),
-        scene3d: doc.scenes3d.plans.remove(&plan),
         cels: std::mem::take(&mut doc.cels),
         hash_fichier,
         hash_contenu,
@@ -303,7 +294,6 @@ fn manifest_de_tete(tete: &Tete, sequences: Vec<SequenceEntry>, hors: Vec<u64>) 
         sons: Vec::new(),
         pistes_son: Vec::new(),
         guides: Vec::new(),
-        modeles: Vec::new(),
         planche: Vec::new(),
         planche_textes: Vec::new(),
         groupes: Vec::new(),
@@ -324,7 +314,7 @@ impl Document {
     /// n'est pas dans le document (la structure n'est pas encore arrivée).
     pub(crate) fn installer_plan(&mut self, pc: PlanCharge) -> Result<usize, Box<PlanCharge>> {
         let Some(i) = self.panels.iter().position(|p| p.id == pc.plan) else { return Err(Box::new(pc)) };
-        let PlanCharge { plan, mut panel, cels, versions, reserve, scene3d, .. } = pc;
+        let PlanCharge { plan, mut panel, cels, versions, reserve, .. } = pc;
         panel.scene = self.panels[i].scene;
         for (id, mut cel) in cels {
             if let Some(old) = self.cels.get(&id) {
@@ -356,15 +346,6 @@ impl Document {
                 self.reserves.remove(&plan);
             }
         }
-        match scene3d {
-            Some(s) => {
-                self.scenes3d.plans.insert(plan, s);
-            }
-            None => {
-                self.scenes3d.plans.remove(&plan);
-            }
-        }
-        self.scenes3d.touch();
         Ok(i)
     }
 }
@@ -376,8 +357,8 @@ pub(crate) struct StructureLue {
 }
 
 /// Relit la structure d'un projet partagé (`octets` : le fichier de structure) sans toucher aux plans : chaque scène reçoit
-/// une coquille. Les sons et les modèles déjà connus ne sont pas décodés de nouveau. Sur un fil de fond.
-pub(crate) fn charger_structure(dir: &Path, octets: &[u8], sons: &HashMap<u64, Sound>, modeles: &HashMap<u64, Arc<Model3d>>) -> Result<StructureLue, String> {
+/// une coquille. Les sons déjà connus ne sont pas décodés de nouveau. Sur un fil de fond.
+pub(crate) fn charger_structure(dir: &Path, octets: &[u8], sons: &HashMap<u64, Sound>) -> Result<StructureLue, String> {
     let texte = std::str::from_utf8(octets).map_err(|_| "la structure n'est pas du texte (UTF-8)".to_string())?;
     let mut m: Manifest = serde_json::from_str(texte.trim_start_matches('\u{feff}')).map_err(|e| format!("structure illisible ({e})"))?;
     if m.format != FORMAT || m.version > crate::project::version_partage_ecrite() {
@@ -392,9 +373,7 @@ pub(crate) fn charger_structure(dir: &Path, octets: &[u8], sons: &HashMap<u64, S
     }
     m.version = VERSION;
     m.dessins_hors = Vec::new();
-    let decors = fs::read_to_string(dir.join(crate::scene3dstore::FILE)).ok();
-    let scenes = crate::scene3dstore::assembler(decors.as_deref(), Vec::new()).ok();
-    let annexes = Annexes { fournies: true, plans_seuls: false, scenes3d: scenes, sons_connus: sons.clone(), modeles_connus: modeles.clone(), ..Default::default() };
+    let annexes = Annexes { fournies: true, plans_seuls: false, sons_connus: sons.clone(), ..Default::default() };
     let loaded = load_manifest_avec(m, dir, true, None, annexes)?;
     Ok(StructureLue { doc: loaded.doc, bloc })
 }
@@ -426,20 +405,12 @@ impl Document {
         s.versions = std::mem::take(&mut self.versions).into_iter().filter(|(p, _)| existe.contains(p)).collect();
         s.reserves = std::mem::take(&mut self.reserves).into_iter().filter(|(p, _)| existe.contains(p)).collect();
         s.comments = std::mem::take(&mut self.comments).into_iter().filter(|c| existe.contains(&c.panel)).collect();
-        let mut scenes3d = std::mem::take(&mut self.scenes3d);
-        scenes3d.plans.retain(|p, _| existe.contains(p));
-        scenes3d.decors = s.scenes3d.decors.clone();
-        scenes3d.touch();
-        s.scenes3d = scenes3d;
         let _ = self.replace_structure(s);
         self.sons_proposes = stub.sons_proposes;
         self.crayonnes = stub.crayonnes;
         self.envois = stub.envois;
         for (k, v) in stub.sounds {
             self.sounds.entry(k).or_insert(v);
-        }
-        for (k, v) in stub.models {
-            self.models.entry(k).or_insert(v);
         }
         retires
     }
@@ -529,10 +500,10 @@ pub(crate) fn structure_octets(m: &mut Manifest, revision: u64, signature: Optio
 }
 
 /// L'empreinte de la structure : le manifeste sans plans et sans révision, plus les annexes du montage dont le document
-/// répond (transitions, effets des sons, décors). Ce qui changerait sans le jeton.
+/// répond (transitions, effets des sons). Ce qui changerait sans le jeton.
 pub(crate) fn empreinte_structure(doc: &Document, projet: &str) -> Result<u64, String> {
     let mut octets = serde_json::to_vec(&structure_manifest(doc, projet)).map_err(|e| e.to_string())?;
-    for annexe in [crate::transitions::to_bytes(doc)?, crate::audiofx::to_bytes(doc)?, crate::scene3dstore::to_bytes_decors(doc)?] {
+    for annexe in [crate::transitions::to_bytes(doc)?, crate::audiofx::to_bytes(doc)?] {
         octets.extend(annexe.unwrap_or_default());
     }
     Ok(empreinte::de_octets(&octets))
@@ -576,7 +547,6 @@ pub(super) fn ouvrir(mut structure: Manifest, dir: &Path, quick: bool, progress:
     let mut hors_total: BTreeSet<u64> = BTreeSet::new();
     let mut versions: Vec<crate::planvers::PlanFichier> = Vec::new();
     let mut reserves: Vec<crate::rognage::Loaded> = Vec::new();
-    let mut scenes3d: Vec<(u64, PlanScene)> = Vec::new();
     let mut etats: BTreeMap<u64, EtatPlan> = BTreeMap::new();
     let mut vus_plans: BTreeSet<u64> = BTreeSet::new();
     for seq in &mut structure.sequences {
@@ -600,9 +570,6 @@ pub(super) fn ouvrir(mut structure: Manifest, dir: &Path, quick: bool, progress:
                             Ok(l) => reserves.push(l),
                             Err(e) => avertissements.push(format!("plan {plan} : contenu rogné illisible ({e})")),
                         }
-                    }
-                    if let Some(s) = f.contenu.scene3d {
-                        scenes3d.push((plan, s));
                     }
                     if pas_encore > 0 {
                         avertissements.push(format!("plan {plan} : {pas_encore} dessin(s) pas encore arrivés (le plan n'est pas prêt)"));
@@ -634,21 +601,11 @@ pub(super) fn ouvrir(mut structure: Manifest, dir: &Path, quick: bool, progress:
     }
     par_auteur.sort_by(|a, b| a.0.cmp(&b.0));
     let commentaires: Vec<Comment> = partagecom::fusionner(&par_auteur).into_values().filter(|c| vus_plans.contains(&c.panel)).collect();
-    // Les décors de séquence (`scenes3d.json`) et la scène de chaque plan.
-    let decors = fs::read_to_string(dir.join(crate::scene3dstore::FILE)).ok();
-    let scenes = match crate::scene3dstore::assembler(decors.as_deref(), scenes3d) {
-        Ok(s) => Some(s),
-        Err(e) => {
-            avertissements.push(format!("{} : {e} ; les décors 3D ne sont pas chargés.", crate::scene3dstore::FILE));
-            None
-        }
-    };
     let annexes = Annexes {
         fournies: true,
         plans_seuls: false,
         versions: if versions.is_empty() { None } else { Some(crate::planvers::fichier_de(versions)?) },
         reserves: if reserves.is_empty() { None } else { Some(crate::rognage::Loaded::fusion(reserves)) },
-        scenes3d: scenes,
         commentaires,
         ..Default::default()
     };
@@ -795,16 +752,12 @@ pub(crate) fn preparer(doc: &Document, manifest_path: &Path, written: &mut HashM
         structure = Some(structure_manifest(doc, &ctx.projet));
         let used_sounds = used_sounds(doc);
         job.sounds = used_sounds.iter().map(|id| &doc.sounds[id]).map(|s| (dir.join(SOUNDS).join(sound_file(s)), s.bytes.clone())).filter(|(path, _)| !path.exists()).collect();
-        let used_models = used_models(doc);
-        job.models = used_models.iter().map(|id| (model_file(dir, *id), doc.models[id].clone())).filter(|(path, _)| !path.exists()).collect();
         job.used_sounds = used_sounds;
-        job.used_models = used_models;
         job.transitions = crate::transitions::to_bytes(doc)?;
         job.sound_fx = crate::audiofx::to_bytes(doc)?;
         job.sons_proposes = crate::indications::to_bytes(doc)?;
         job.references = crate::references::plan_save(doc, dir)?;
         job.crayonnes = (!doc.crayonnes.is_blank()).then(|| doc.crayonnes.clone());
-        job.scenes3d = crate::scene3dstore::to_bytes_decors(doc)?;
         job.envois = crate::envois::to_bytes(doc)?;
         job.snapshots = doc.envois.pending.clone();
         job.snapshot_reuse = crate::envois::dessins_reutilisables(&job.snapshots, written, &|id| Some(drawing_path(dir, id, false)));
@@ -820,7 +773,6 @@ impl SaveJob {
             manifest_path: manifest_path.to_path_buf(),
             drawings: Vec::new(),
             sounds: Vec::new(),
-            models: Vec::new(),
             textures: Vec::new(),
             videos: Vec::new(),
             manifest: Vec::new(),
@@ -830,7 +782,6 @@ impl SaveJob {
             fonds: BTreeSet::new(),
             hors: BTreeSet::new(),
             used_sounds: BTreeSet::new(),
-            used_models: BTreeSet::new(),
             used_textures: BTreeSet::new(),
             comments: None,
             reserves: None,
@@ -839,7 +790,6 @@ impl SaveJob {
             sons_proposes: None,
             references: Default::default(),
             crayonnes: None,
-            scenes3d: None,
             envois: None,
             plans_versions: None,
             keep_drawings: false,
@@ -904,13 +854,6 @@ impl SaveJob {
             write_atomic(path, bytes)?;
             count += 1;
         }
-        if !self.models.is_empty() {
-            fs::create_dir_all(dir.join(MODELS)).map_err(|e| format!("{} : {e}", dir.display()))?;
-        }
-        for (path, model) in &self.models {
-            write_atomic(path, &crate::model3d::to_bytes(&model.mesh))?;
-            count += 1;
-        }
         // Les plans que je tiens : seulement ceux dont le contenu a changé.
         let reecrits = std::mem::take(&mut travail.reecrits);
         for (tenu, data) in &mut travail.plans {
@@ -954,7 +897,6 @@ impl SaveJob {
             ecrire(dir.join(crate::transitions::FILE), self.transitions.as_deref(), &|t| crate::transitions::parse(t).is_ok())?;
             ecrire(dir.join(crate::audiofx::FILE), self.sound_fx.as_deref(), &|t| crate::audiofx::parse(t).is_ok())?;
             ecrire(dir.join(crate::indications::FILE), self.sons_proposes.as_deref(), &|t| crate::indications::parse(t).is_ok())?;
-            ecrire(dir.join(crate::scene3dstore::FILE), self.scenes3d.as_deref(), &|t| crate::scene3dstore::parse(t).is_ok())?;
             ecrire(dir.join(crate::envois::FILE), self.envois.as_deref(), &|t| crate::envois::parse(t).is_ok())?;
             let crayonnes = match &self.crayonnes {
                 Some(p) => crate::crayonnes::bytes_of(p)?,
@@ -1002,7 +944,6 @@ pub(crate) struct PartageAEcrire {
     job: SaveJob,
     manifeste: PathBuf,
     plans: Vec<(u64, u64, DonneesPlan)>,
-    decors: Option<Vec<u8>>,
     commentaires: Option<Vec<u8>>,
     structure: Manifest,
     moi: Signature,
@@ -1026,13 +967,13 @@ pub(crate) fn preparer_partage(doc: &Document, manifeste: &Path, moi: &Signature
         suivi.relever(&doc.comments, &|_| true, moi.le);
         Some(suivi.fichier(&moi.id)?)
     };
-    Ok(PartageAEcrire { job, manifeste: manifeste.to_path_buf(), plans, decors: crate::scene3dstore::to_bytes_decors(doc)?, commentaires, structure: structure_manifest(doc, projet), moi: moi.clone() })
+    Ok(PartageAEcrire { job, manifeste: manifeste.to_path_buf(), plans, commentaires, structure: structure_manifest(doc, projet), moi: moi.clone() })
 }
 
 impl PartageAEcrire {
     /// Seconde moitié : écrit le dossier du projet partagé. Sur un fil de fond.
     pub(crate) fn ecrire(self, progress: Option<&Progress>, threads: usize) -> Result<(), String> {
-        let PartageAEcrire { job, manifeste, plans, decors, commentaires, mut structure, moi } = self;
+        let PartageAEcrire { job, manifeste, plans, commentaires, mut structure, moi } = self;
         let dir = manifeste.parent().ok_or("chemin de projet invalide")?.to_path_buf();
         job.run_with(progress, threads)?;
         // Un fichier par plan.
@@ -1053,7 +994,6 @@ impl PartageAEcrire {
         for nom in [crate::rognage::FILE, crate::planvers::FILE, crate::commentaires::FILE] {
             let _ = fs::remove_file(dir.join(nom));
         }
-        write_sidecar(&dir.join(crate::scene3dstore::FILE), decors.as_deref(), |t| crate::scene3dstore::parse(t).is_ok())?;
         // Les commentaires, au nom de celui qui partage.
         if let Some(octets) = commentaires {
             let chemin = dir.join(depot::COMMENTAIRES).join(format!("{}.json", moi.id));

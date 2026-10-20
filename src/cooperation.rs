@@ -241,7 +241,6 @@ pub(crate) struct Moteur {
     structure_hash_fichier: u64,
     structure_a_reessayer: bool,
     sons: HashMap<u64, crate::document::Sound>,
-    modeles: HashMap<u64, Arc<crate::model3d::Model3d>>,
     commentaires_hash: u64,
     commentaires_a_relire: bool,
     copies: Vec<CopieEnConflit>,
@@ -485,13 +484,12 @@ impl Moteur {
             self.envoyer(Evenement::Intrus { cible: Cible::Montage, par });
             return;
         }
-        match partage_io::charger_structure(self.depot.racine(), &f.octets, &self.sons, &self.modeles) {
+        match partage_io::charger_structure(self.depot.racine(), &f.octets, &self.sons) {
             Ok(rec) => {
                 self.structure_a_reessayer = false;
                 self.structure_hash_fichier = hash;
                 self.structure_revision = rec.bloc.revision;
                 self.sons.extend(rec.doc.sounds.iter().map(|(k, v)| (*k, v.clone())));
-                self.modeles.extend(rec.doc.models.iter().map(|(k, v)| (*k, v.clone())));
                 // Les plans que la structure cite et que je ne connais pas : à lire.
                 let now = self.horloge.maintenant();
                 for pl in &rec.bloc.plans {
@@ -835,7 +833,6 @@ impl Session {
             structure_hash_fichier: o.hash_fichier_structure,
             structure_a_reessayer: false,
             sons: doc.sounds.clone(),
-            modeles: doc.models.clone(),
             commentaires_hash: 0,
             commentaires_a_relire: false,
             copies: Vec::new(),

@@ -1,4 +1,4 @@
-﻿//! Tests des plans (13a) : un projet Ã  panneaux devient un projet Ã  plans (une scÃ¨ne = un plan,
+//! Tests des plans (13a) : un projet Ã  panneaux devient un projet Ã  plans (une scÃ¨ne = un plan,
 //! ses panneaux bout Ã  bout) sans rien perdre ni rien changer Ã  l'Ã©cran ; puis les opÃ©rations
 //! de plan (couper, rÃ©unir, dÃ©placer, coller) gardent un plan par scÃ¨ne.
 
@@ -189,18 +189,6 @@ fn moving_and_pasting_keep_one_plan_per_scene() {
     assert!(doc.is_plans());
     assert_ne!(doc.panels[1].scene, doc.panels[2].scene);
     assert_eq!(doc.sequence_of(1), s1);
-}
-
-#[test]
-fn a_second_3d_reference_is_reported() {
-    let (mut doc, _, _) = old_project();
-    let r = crate::document::Ref3d::new(1, crate::view3d::Cam3d::fit(([0.0; 3], [1.0; 3]), [32.0, 24.0]));
-    doc.panels[0].ref3d = Some(r.clone());
-    doc.panels[1].ref3d = Some(crate::document::Ref3d { opacity: 0.3, ..r.clone() });
-    doc.panels[2].ref3d = Some(r.clone());
-    let warnings = doc.into_plans();
-    assert_eq!(warnings.len(), 1, "seul celui qui diffÃ¨re est signalÃ© : {warnings:?}");
-    assert_eq!(doc.panels[0].ref3d, Some(r), "le plan garde le sien");
 }
 
 #[test]

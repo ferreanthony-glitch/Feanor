@@ -612,43 +612,37 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("vue.table_lumineuse", "Table lumineuse (autres calques estompés)", true, false),
     act("vue.dessus", "Vue de dessus (profondeur des calques)", true, false),
     act("vue.cadres_securite", "Zones de sécurité (action, titres)", true, false),
-    // Espace 3D (`scene3dui.rs`, `docs/ESPACE3D.md`) : le plateau en 3D et la scène 3D de blocage réunis. Les anciens
-    // identifiants du plateau en 3D (`vue.3d`, `vue3d.recadrer`, `outil3d.*`) et `scene3d.basculer` en sont des doubles
-    // (`ALIASES`) : un raccourci posé sur l'un d'eux marche toujours.
+    // Espace 3D (`espace3dui.rs`, `docs/ESPACE3D.md`) : les calques (cartes) et la caméra du plan. Les anciens
+    // identifiants du plateau en 3D (`vue.3d`, `vue3d.recadrer`, `outil3d.*`) et de la scène 3D (`scene3d.*` qui ont
+    // encore un sens) en sont des doubles (`ALIASES`) : un raccourci posé sur l'un d'eux marche toujours. Les
+    // commandes d'objets (`scene3d.ajouter_*`, `importer_modele`, `dupliquer`, `grouper`, `envoyer`…), du repère 3D
+    // (`outil.repere3d`, `fichier.importer_modele3d`) n'existent plus.
     act("espace3d.basculer", "Espace 3D (afficher / quitter)", true, false),
+    act("espace3d.outil_choisir", "Espace 3D : outil choisir", true, false),
+    act("espace3d.outil_deplacer", "Espace 3D : outil déplacer", true, false),
+    act("espace3d.outil_tourner", "Espace 3D : outil tourner", true, false),
+    act("espace3d.outil_echelle", "Espace 3D : outil mettre à l'échelle", true, false),
+    act("espace3d.outil_camera", "Espace 3D : choisir la caméra du plan", true, false),
+    act("espace3d.cadrer", "Espace 3D : recadrer la vue sur tout l'espace", true, false),
+    act("espace3d.vue_camera", "Espace 3D : regarder par la caméra du plan", true, false),
     act("espace3d.ordonner_profondeur", "Espace 3D : ordonner la pile des calques selon la profondeur", true, false),
+    act("espace3d.aimanter", "Espace 3D : aimantation à la grille (oui / non)", true, false),
+    act("espace3d.grille", "Espace 3D : grille du sol (oui / non)", true, false),
     act("vue.3d", "Espace 3D (ancien plateau en 3D)", true, false),
-    act("vue3d.recadrer", "Espace 3D : cadrer sur tout l'espace (ancien plateau en 3D)", true, false),
-    act("outil3d.orbite", "Espace 3D : tourner la vue (ancien outil du plateau en 3D)", true, false),
-    act("outil3d.glisser", "Espace 3D : glisser la vue (ancien outil du plateau en 3D)", true, false),
-    act("outil3d.avancer", "Espace 3D : avancer ou reculer la vue (ancien outil du plateau en 3D)", true, false),
-    act("outil3d.deplacer", "Espace 3D : outil déplacer (ancien outil du plateau en 3D)", true, false),
     act("scene3d.basculer", "Espace 3D (ancien nom : scène 3D de blocage)", true, false),
-    act("scene3d.outil_choisir", "Espace 3D : outil choisir", true, false),
-    act("scene3d.outil_deplacer", "Espace 3D : outil déplacer", true, false),
-    act("scene3d.outil_tourner", "Espace 3D : outil tourner", true, false),
-    act("scene3d.outil_echelle", "Espace 3D : outil mettre à l'échelle", true, false),
-    act("scene3d.ajouter_cube", "Espace 3D : ajouter un cube", true, false),
-    act("scene3d.ajouter_plan", "Espace 3D : ajouter un plan (sol, mur)", true, false),
-    act("scene3d.ajouter_cylindre", "Espace 3D : ajouter un cylindre", true, false),
-    act("scene3d.ajouter_sphere", "Espace 3D : ajouter une sphère", true, false),
-    act("scene3d.ajouter_cone", "Espace 3D : ajouter un cône", true, false),
-    act("scene3d.ajouter_escalier", "Espace 3D : ajouter un escalier", true, false),
-    act("scene3d.ajouter_mannequin", "Espace 3D : ajouter un mannequin", true, false),
-    act("scene3d.importer_modele", "Espace 3D : importer un modèle (glTF)", true, false),
-    act("scene3d.dupliquer", "Espace 3D : dupliquer les objets choisis", true, false),
-    act("scene3d.supprimer", "Espace 3D : supprimer les objets choisis", true, false),
-    act("scene3d.grouper", "Espace 3D : grouper les objets choisis", true, false),
-    act("scene3d.degrouper", "Espace 3D : dégrouper les objets choisis", true, false),
-    act("scene3d.vue_camera", "Espace 3D : vue par la caméra du plan", true, false),
-    act("scene3d.cadrer", "Espace 3D : cadrer sur tout l'espace", true, false),
-    act("scene3d.envoyer", "Espace 3D : figer les objets dans un calque de fond", true, false),
-    act("scene3d.camera_depuis_plan", "Espace 3D : reprendre l'ancienne caméra de blocage comme caméra du plan", true, false),
-    act("scene3d.aimanter", "Espace 3D : aimantation à la grille et au sol (oui / non)", true, false),
-    act("scene3d.grille", "Espace 3D : grille du sol (oui / non)", true, false),
-    act("scene3d.decor", "Espace 3D : modifier le décor ou le plan (bascule)", true, false),
-    act("outil.repere3d", "Outil repère 3D (tourner autour du modèle)", true, false),
-    act("fichier.importer_modele3d", "Importer un modèle 3D (glTF) comme repère", true, false),
+    act("vue3d.recadrer", "Espace 3D : recadrer (ancien plateau en 3D)", true, false),
+    act("scene3d.cadrer", "Espace 3D : recadrer (ancien nom)", true, false),
+    act("outil3d.orbite", "Espace 3D : outil choisir (ancien outil du plateau en 3D)", true, false),
+    act("outil3d.glisser", "Espace 3D : outil choisir (ancien outil du plateau en 3D)", true, false),
+    act("outil3d.avancer", "Espace 3D : outil choisir (ancien outil du plateau en 3D)", true, false),
+    act("outil3d.deplacer", "Espace 3D : outil déplacer (ancien outil du plateau en 3D)", true, false),
+    act("scene3d.outil_choisir", "Espace 3D : outil choisir (ancien nom)", true, false),
+    act("scene3d.outil_deplacer", "Espace 3D : outil déplacer (ancien nom)", true, false),
+    act("scene3d.outil_tourner", "Espace 3D : outil tourner (ancien nom)", true, false),
+    act("scene3d.outil_echelle", "Espace 3D : outil mettre à l'échelle (ancien nom)", true, false),
+    act("scene3d.vue_camera", "Espace 3D : regarder par la caméra (ancien nom)", true, false),
+    act("scene3d.aimanter", "Espace 3D : aimantation à la grille (ancien nom)", true, false),
+    act("scene3d.grille", "Espace 3D : grille du sol (ancien nom)", true, false),
     act("calque.nouveau_fond", "Nouveau calque de fond (tout en bas, tenu sur tout le plan)", true, false),
     act("espace.standard", "Espace de travail : Standard", true, false),
     act("espace.dessin", "Espace de travail : Dessin", true, false),
@@ -725,21 +719,30 @@ pub fn action_info(id: &str) -> Option<&'static ActionInfo> {
 
 /// Les doubles : (action double, action qu'elle répète). Même effet, autre identifiant, pour
 /// pouvoir poser une seconde touche sur une commande. La palette Ctrl+K ne montre que l'originale.
-pub const ALIASES: [(&str, &str); 13] = [
+pub const ALIASES: [(&str, &str); 21] = [
     ("scene.nouvelle", "panneau.nouveau"),
     ("scene.dupliquer", "panneau.dupliquer"),
     ("scene.supprimer", "panneau.supprimer"),
     ("scene.precedente", "panneau.precedent"),
     ("scene.suivante", "panneau.suivant"),
     ("scene.couper", "panneau.couper"),
-    // L'Espace 3D remplace le plateau en 3D et la scène 3D : leurs identifiants restent, pour les raccourcis déjà posés.
+    // L'Espace 3D remplace le plateau en 3D et la scène 3D : leurs identifiants qui ont encore un sens restent, pour les
+    // raccourcis déjà posés.
     ("vue.3d", "espace3d.basculer"),
     ("scene3d.basculer", "espace3d.basculer"),
-    ("vue3d.recadrer", "scene3d.cadrer"),
-    ("outil3d.deplacer", "scene3d.outil_deplacer"),
-    ("outil3d.orbite", "scene3d.outil_choisir"),
-    ("outil3d.glisser", "scene3d.outil_choisir"),
-    ("outil3d.avancer", "scene3d.outil_choisir"),
+    ("vue3d.recadrer", "espace3d.cadrer"),
+    ("scene3d.cadrer", "espace3d.cadrer"),
+    ("outil3d.deplacer", "espace3d.outil_deplacer"),
+    ("scene3d.outil_deplacer", "espace3d.outil_deplacer"),
+    ("outil3d.orbite", "espace3d.outil_choisir"),
+    ("outil3d.glisser", "espace3d.outil_choisir"),
+    ("outil3d.avancer", "espace3d.outil_choisir"),
+    ("scene3d.outil_choisir", "espace3d.outil_choisir"),
+    ("scene3d.outil_tourner", "espace3d.outil_tourner"),
+    ("scene3d.outil_echelle", "espace3d.outil_echelle"),
+    ("scene3d.vue_camera", "espace3d.vue_camera"),
+    ("scene3d.aimanter", "espace3d.aimanter"),
+    ("scene3d.grille", "espace3d.grille"),
 ];
 
 /// L'action n'est qu'un double d'une autre (`ALIASES`).

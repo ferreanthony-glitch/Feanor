@@ -1860,10 +1860,49 @@ action = "vue.cadres_securite"
 touches = []
 source = "SHOT (zones de sécurité EBU R 95 ; aucune touche choisie)"
 
+# ------------------------------------------------------------------------------------ Espace 3D (calques en cartes + caméra du plan)
+# Aucune touche par défaut (à choisir par Anthony). Les objets 3D (cube, mannequin, modèle glTF…) et le repère 3D
+# ont été retirés (2026-10-21) : leurs commandes n'existent plus.
+
 [[raccourci]]
 action = "espace3d.basculer"
 touches = []
 source = "SHOT (Espace 3D ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.outil_choisir"
+touches = []
+source = "SHOT (Espace 3D, outil choisir ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.outil_deplacer"
+touches = []
+source = "SHOT (Espace 3D, outil déplacer ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.outil_tourner"
+touches = []
+source = "SHOT (Espace 3D, outil tourner ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.outil_echelle"
+touches = []
+source = "SHOT (Espace 3D, outil échelle ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.outil_camera"
+touches = []
+source = "SHOT (Espace 3D, choisir la caméra du plan ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.cadrer"
+touches = []
+source = "SHOT (Espace 3D, recadrer la vue ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.vue_camera"
+touches = []
+source = "SHOT (Espace 3D, regarder par la caméra ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.ordonner_profondeur"
@@ -1871,170 +1910,89 @@ touches = []
 source = "SHOT (Espace 3D, ordre des calques selon la profondeur ; aucune touche choisie)"
 
 [[raccourci]]
+action = "espace3d.aimanter"
+touches = []
+source = "SHOT (Espace 3D, aimantation ; aucune touche choisie)"
+
+[[raccourci]]
+action = "espace3d.grille"
+touches = []
+source = "SHOT (Espace 3D, grille du sol ; aucune touche choisie)"
+
+[[raccourci]]
 action = "vue.3d"
 touches = []
-source = "SHOT (ancien plateau en 3D, double d'une commande de l'Espace 3D ; aucune touche choisie)"
-
-[[raccourci]]
-action = "vue3d.recadrer"
-touches = []
-source = "SHOT (ancien plateau en 3D, double d'une commande de l'Espace 3D ; aucune touche choisie)"
-
-[[raccourci]]
-action = "outil3d.orbite"
-touches = []
-source = "SHOT (ancien plateau en 3D, double d'une commande de l'Espace 3D ; aucune touche choisie)"
-
-[[raccourci]]
-action = "outil3d.glisser"
-touches = []
-source = "SHOT (ancien plateau en 3D, double d'une commande de l'Espace 3D ; aucune touche choisie)"
-
-[[raccourci]]
-action = "outil3d.avancer"
-touches = []
-source = "SHOT (ancien plateau en 3D, double d'une commande de l'Espace 3D ; aucune touche choisie)"
-
-[[raccourci]]
-action = "outil3d.deplacer"
-touches = []
-source = "SHOT (ancien plateau en 3D, double d'une commande de l'Espace 3D ; aucune touche choisie)"
-
-# ------------------------------------------------------------------------------------ Espace 3D (plateau en 3D + scène 3D de blocage)
-# Aucune touche par défaut (à choisir par Anthony) : W / E / R pour déplacer / tourner / échelle sont
-# l'usage de plusieurs logiciels 3D, à vérifier avant de les adopter.
+source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "scene3d.basculer"
 touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
+source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
-action = "scene3d.outil_choisir"
+action = "vue3d.recadrer"
 touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
-
-[[raccourci]]
-action = "scene3d.outil_deplacer"
-touches = []
-source = "SHOT (Espace 3D ; outil déplacer comme les logiciels 3D courants, à vérifier ; aucune touche choisie)"
-
-[[raccourci]]
-action = "scene3d.outil_tourner"
-touches = []
-source = "SHOT (Espace 3D ; outil tourner comme les logiciels 3D courants, à vérifier ; aucune touche choisie)"
-
-[[raccourci]]
-action = "scene3d.outil_echelle"
-touches = []
-source = "SHOT (Espace 3D ; outil échelle comme les logiciels 3D courants, à vérifier ; aucune touche choisie)"
-
-[[raccourci]]
-action = "scene3d.ajouter_cube"
-touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
-
-[[raccourci]]
-action = "scene3d.ajouter_plan"
-touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
-
-[[raccourci]]
-action = "scene3d.ajouter_cylindre"
-touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
-
-[[raccourci]]
-action = "scene3d.ajouter_sphere"
-touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
-
-[[raccourci]]
-action = "scene3d.ajouter_cone"
-touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
-
-[[raccourci]]
-action = "scene3d.ajouter_escalier"
-touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
-
-[[raccourci]]
-action = "scene3d.ajouter_mannequin"
-touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
-
-[[raccourci]]
-action = "scene3d.importer_modele"
-touches = []
-source = "SHOT (Espace 3D, import glTF ; aucune touche choisie)"
-
-[[raccourci]]
-action = "scene3d.dupliquer"
-touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
-
-[[raccourci]]
-action = "scene3d.supprimer"
-touches = []
-source = "SHOT (Espace 3D ; Suppr supprime déjà les objets choisis quand la vue 3D a la main)"
-
-[[raccourci]]
-action = "scene3d.grouper"
-touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
-
-[[raccourci]]
-action = "scene3d.degrouper"
-touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
-
-[[raccourci]]
-action = "scene3d.vue_camera"
-touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
+source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "scene3d.cadrer"
 touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
+source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
-action = "scene3d.envoyer"
+action = "outil3d.orbite"
 touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
+source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
-action = "scene3d.camera_depuis_plan"
+action = "outil3d.glisser"
 touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
+source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+
+[[raccourci]]
+action = "outil3d.avancer"
+touches = []
+source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+
+[[raccourci]]
+action = "outil3d.deplacer"
+touches = []
+source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.outil_choisir"
+touches = []
+source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.outil_deplacer"
+touches = []
+source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.outil_tourner"
+touches = []
+source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.outil_echelle"
+touches = []
+source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+
+[[raccourci]]
+action = "scene3d.vue_camera"
+touches = []
+source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "scene3d.aimanter"
 touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
+source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "scene3d.grille"
 touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
-
-[[raccourci]]
-action = "scene3d.decor"
-touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
-
-# ------------------------------------------------------------------------------------ Repère 3D
-
-[[raccourci]]
-action = "outil.repere3d"
-touches = []
-source = "Storyboard Pro 27 sans touche par défaut : CANVAS_THIRD_PERSON_NAVIGATION_3D_TOOL_KEY (navigation 3D ; le repère en fil de fer est propre à SHOT)"
-
-[[raccourci]]
-action = "fichier.importer_modele3d"
-touches = []
-source = "SHOT (import glTF ; aucune commande équivalente vérifiée dans sb_shortcuts.xml de Storyboard Pro 27)"
+source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 # ------------------------------------------------------------------------------------ Calques de toute la scène (6f)
 

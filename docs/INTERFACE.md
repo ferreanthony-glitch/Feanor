@@ -113,7 +113,7 @@ et les calques » (c'est la colonne des calques).
 | Traits d'aide du cadre | **aides au cadrage** | repères (réservé aux repères de la timeline : signets, entrée, sortie) |
 | Menu ⋮ d'un calque ou d'un groupe | **Commandes du calque** / **du groupe** | options |
 | Importer un projet Storyboard Pro | **Importer** (l'accueil disait « Ouvrir ») | |
-| L'espace où l'on place les calques, les objets 3D et la caméra | **Espace 3D** (le plateau en 3D et la scène 3D d'avant ne font plus qu'un) ; **carte** (un calque du plan posé dans l'espace) ; **objet** (cube, mannequin, modèle…) ; **décor** (commun à la séquence) ; **caméra** (celle du plan, la seule) ; **calque « Fond 3D »** (les objets figés dans un calque) | maquette, set, scène 3D, plateau en 3D, caméra du plateau |
+| L'espace où l'on place les calques et la caméra | **Espace 3D** (le plateau en 3D et la scène 3D d'avant ne font plus qu'un, sans objets depuis le 2026-10-21) ; **carte** (un calque du plan posé dans l'espace) ; **caméra** (celle du plan, la seule) | maquette, set, scène 3D, plateau en 3D, caméra du plateau, objet 3D, repère 3D |
 | Basculer | « (montrer / cacher) » pour les barres et colonnes, « (ouvrir / fermer) » pour les panneaux, « (oui / non) » pour une option, « (allumer / éteindre) » pour la pelure et les pochoirs, « (poser / retirer) » pour les marques et signets | afficher / masquer |
 
 ### Changements faits (étiquettes seulement)
@@ -151,8 +151,8 @@ et les calques » (c'est la colonne des calques).
 - **« Arrière-plan »** désigne à la fois la couleur de la feuille (onglet Arrière-plan, `fond.*`) ET la
   deuxième couleur du couple de couleurs (avant-plan / arrière-plan). Proposition : la feuille devient
   « Fond de la feuille ».
-- **« Fond »** : fond sous le trait (fonction du calque), calque de fond (décor commun), fond de la feuille,
-  fond du thème. Trois sens produits par l'application ; garder « Fond sous le trait » en entier.
+- **« Fond »** : fond sous le trait (fonction du calque), fond de la feuille,
+  fond du thème. Trois sens produits par l'application (le « calque de fond » du panneau Calques a disparu le 2026-10-21 : un calque bitmap ordinaire fait la même chose) ; garder « Fond sous le trait » en entier.
 - **« Propriétés du plan »** (action, Alt+Entrée, nom de Storyboard Pro) ouvre le panneau « Fiche du plan »
   (onglet « Fiche »). Trois noms pour une chose. Proposition : « Fiche du plan » partout.
 - « Image clé » reste dans les textes de la propagation (EbSynth : les images peintes à la main) ;
@@ -710,80 +710,81 @@ glows, tremblements de caméra effectifs, timecode ». Détail : README (section
 
 ---------------------------------------------------------------------------------------------------
 
-## 13. Espace 3D (2026-10-20, branche `espace-3d` ; avant : « Scène 3D de blocage » de la branche `scene3d` et « Plateau en 3D » de la phase 9)
+## 13. Espace 3D (2026-10-21, branche `espace3d-simple` ; avant : l'Espace 3D unifié du 2026-10-20 avec objets 3D, mannequin, rendu dans l'image)
 
-**Un seul espace** : l'icône cube de la barre sous le dessin (`espace3d.basculer`, aussi Affichage > Plateau et Ctrl+K) ouvre
-une vue 3D à la place du dessin, avec ses réglages dans le panneau **Réglages** (qui montre l'Espace 3D tant qu'il est
-ouvert). Le « Plateau en 3D » et la « Scène 3D » d'avant n'existent plus comme vues : leurs identifiants de commande
-(`vue.3d`, `scene3d.basculer`, `vue3d.recadrer`, `outil3d.*`) sont des doubles (`keymap::ALIASES`), un raccourci posé sur
-l'un d'eux marche toujours. Conception, formules, format : `docs/ESPACE3D.md`. Tout est en icônes avec bulle (nom,
-description, raccourci).
+Décision d'Anthony : « On va rester simple et focus sur le dessin. Un espace 3D où je peux bouger les dessins dans
+l'environnement suffit. On peut supprimer les objets 3D comme les cubes, cylindres, personnages… ça alourdit le logiciel et
+l'interface pour pas grand-chose. » Le **repère 3D** (modèle glTF en fil de fer par-dessus le dessin) est retiré aussi.
 
-- **Ce qu'on y voit** : les **cartes** (les calques visibles du plan, texturés par leur dessin de l'image courante, dans
-  l'ordre de la pile, voile clair et contour de leur feuille, nom et profondeur), les **objets** (cube, plan, cylindre,
-  sphère, cône, escalier, mannequin, modèle glTF ; le sol quadrillé), la **caméra du plan** (pyramide de vision, cadre, haut
-  de l'image, sa course si elle a des clés). Les cartes se dessinent par-dessus les objets : c'est la règle de l'image
-  (les objets sont sous tous les calques).
-- **Commandes** (`scene3d.*` et `espace3d.*`, aucune touche par défaut, toutes dans Ctrl+K) : afficher / quitter, outils
-  (choisir, déplacer, tourner, échelle), ajouter (cube, plan, cylindre, sphère, cône, escalier, mannequin), importer un
-  modèle, dupliquer, supprimer (Suppr y suffit), grouper, dégrouper, vue par la caméra, cadrer, figer les objets dans un
-  calque de fond, reprendre l'ancienne caméra de blocage, aimantation, grille, décor / plan, **ordonner la pile selon la
-  profondeur**.
-- **Souris dans la vue** : clic = choisir une carte, un objet ou la caméra (Maj ou Ctrl : en ajouter) ; un clic sur une
-  carte en fait aussi le calque courant (et le calque choisi dans le panneau Calques choisit sa carte) ; poignées du
-  manipulateur pour déplacer, tourner, mettre à l'échelle ce qui est choisi ; glisser un objet le pose sur le sol (Maj :
-  en hauteur), glisser une carte la déplace dans son plan (Maj : en profondeur) ; clic droit ou Alt + glisser = tourner
-  la vue ; bouton du milieu = la glisser ; molette = avancer. En « Vue par la caméra », ces gestes déplacent la caméra du
-  plan (sa clé de l'image courante si elle est animée).
-- **Réglages** : plan ou décor ; « Objets dans l'image » ; formes à ajouter ; outil, repère local, aimantation (pas de
-  grille, de rotation, de taille) ; la liste des **cartes** (le dessus de la pile d'abord ; un verrou si le calque est
-  verrouillé), « Montrer les cartes », « Ordonner la pile selon la profondeur » ; les réglages de la carte choisie :
-  position (m), rotation (°) — Z est le tour dans le plan, X et Y inclinent —, échelle (%), étirement X / Y (%),
-  profondeur (comme le panneau Calques), « Remettre à plat » ; la liste des objets ; les réglages d'un objet ; la
-  **caméra du plan** (position en m, panoramique, bascule, rotation, focale et objectifs, « Reprendre l'ancienne caméra de
-  blocage », « Viser la sélection ») ; lumière et rendu.
-- **Annulation** : une étape par geste, au nom français : « Ajouter : cube », « Déplacer dans l'espace 3D », « Tourner
-  dans l'espace 3D », « Mettre à l'échelle dans l'espace 3D », « Déplacer la caméra », « Placer la carte dans l'espace 3D »,
-  « Ordonner la pile selon la profondeur », « Objets 3D dans l'image », « Figer les objets 3D dans un calque de fond »,
-  « Supprimer des objets 3D », « Dupliquer… », « Grouper… ».
-- **Aucun repaint au repos** : la vue ne demande une image que si on la touche ou si un rendu (calque figé, objets de
-  l'image) est en cours. Le dessin n'est jamais ralenti : ces rendus partent sur un autre fil (la moitié des cœurs), et
-  leur résultat n'est posé ni pendant un trait, ni pendant un geste dans la vue 3D, ni en lecture.
-- **Limites visibles** : une carte inclinée est coupée aux bords de la feuille ; une carte ne se recouvre pas par
-  profondeur mais par l'ordre de la pile ; un objet est toujours derrière les cartes ; la vue d'édition montre le dessin
-  de la carte sans ses effets ; une carte ne s'incline pas au-delà de 85°.
+**Un seul espace, que des calques et la caméra** : l'icône cube de la barre sous le dessin (`espace3d.basculer`, aussi
+Affichage > Plateau et Ctrl+K) ouvre une vue 3D à la place du dessin, avec ses réglages dans le panneau **Réglages** (qui montre
+l'Espace 3D tant qu'il est ouvert). Les identifiants d'avant (`vue.3d`, `scene3d.basculer`, `vue3d.recadrer`, `scene3d.cadrer`,
+`outil3d.*`, `scene3d.outil_*`, `scene3d.vue_camera`, `scene3d.aimanter`, `scene3d.grille`) sont des doubles
+(`keymap::ALIASES`) : un raccourci posé sur l'un d'eux marche toujours. Conception, formules, format, anciens projets :
+`docs/ESPACE3D.md`. Tout est en icônes avec bulle d'une seconde (nom, raccourci, description).
+
+- **Ce qu'on y voit** : les **cartes** (les calques visibles du plan, texturés par leur dessin de l'image courante, dans l'ordre
+  de la pile, voile clair et contour de leur feuille, nom et profondeur), un sol quadrillé pour l'orientation, la **caméra du plan**
+  (pyramide de vision, cadre, haut de l'image, sa course si elle a des clés). Plus d'objet, de décor ni de lumière.
+- **Une rangée d'outils** (barre au-dessus de la vue) : **Choisir · Déplacer · Tourner · Mettre à l'échelle · Caméra · Recadrer ·
+  Regarder par la caméra**. Commandes (`espace3d.*`, aucune touche par défaut, toutes dans Ctrl+K) : afficher / quitter, les
+  quatre outils, choisir la caméra, recadrer, regarder par la caméra, aimantation, grille, **ordonner la pile selon la profondeur**.
+- **Souris dans la vue** : clic = choisir une carte ou la caméra (Maj ou Ctrl : en ajouter) ; un clic sur une carte en fait aussi
+  le calque courant (et le calque choisi dans le panneau Calques choisit sa carte) ; poignées du manipulateur pour déplacer,
+  tourner, mettre à l'échelle ce qui est choisi ; glisser une carte la déplace dans son plan (Maj : en profondeur) ; clic droit
+  ou Alt + glisser = tourner la vue ; bouton du milieu = la glisser ; molette = avancer. En « Regarder par la caméra », ces
+  gestes déplacent la caméra du plan (sa clé de l'image courante si elle est animée).
+- **Réglages** : repère de la carte pour les poignées, aimantation (pas de grille, de rotation, de taille), grille ; la liste des
+  **cartes** (le dessus de la pile d'abord ; un verrou si le calque est verrouillé), « Montrer les cartes », « Ordonner la pile
+  selon la profondeur » ; les réglages de la carte choisie : position (m), rotation (°) — Z est le tour dans le plan, X et Y
+  inclinent —, échelle (%), étirement X / Y (%), profondeur (comme le panneau Calques), « Remettre à plat » ; la **caméra du plan**
+  (position en m, panoramique, bascule, rotation, focale et objectifs, « Viser la sélection »).
+- **Barre d'état** : « Espace 3D : clic sur une carte (un calque) ou sur la caméra pour la choisir, glisser pour la déplacer, clic
+  droit pour tourner la vue, bouton du milieu pour la glisser, molette pour avancer. » — plus un mot sur des objets.
+- **Annulation** : une étape par geste, au nom français : « Déplacer dans l'espace 3D », « Tourner dans l'espace 3D »,
+  « Mettre à l'échelle dans l'espace 3D », « Déplacer la caméra », « Placer la carte dans l'espace 3D », « Ordonner la pile selon
+  la profondeur », « Viser avec la caméra ».
+- **Aucun repaint au repos** : la vue ne demande une image que si on la touche. Plus de rendu de fond (plus d'objets).
+- **Ce qui a disparu** : cube, plan, cylindre, sphère, cône, escalier, mannequin, modèle glTF comme objet ; « Objets dans l'image » ;
+  « Figer les objets dans un calque de fond » ; « Reprendre l'ancienne caméra de blocage » ; décor / plan ; lumière et rendu ;
+  Fichier > Importer > « Un modèle 3D (glTF) comme repère » ; l'outil « Repère 3D » (barre d'outils de dessin, Réglages, curseur).
+  **Anciens projets** : un calque « Fond 3D » est un calque bitmap ordinaire (mêmes pixels) ; `scenes3d.json` et les fichiers
+  de `modeles/` restent dans le dossier du projet, ni lus, ni réécrits, ni effacés.
+- **Limites visibles** : une carte inclinée est coupée aux bords de la feuille ; une carte ne se recouvre pas par profondeur mais
+  par l'ordre de la pile ; la vue d'édition montre le dessin de la carte sans ses effets ; une carte ne s'incline pas au-delà de 85°.
 - **Vérifié par le programme** (pas à l'écran) : voir `docs/ESPACE3D.md`, « Essais ». **À vérifier à l'écran (par
   Anthony)** : la liste de contrôle ci-dessous.
 
 ### Liste de contrôle visuelle pour Anthony
 
-1. **Un seul bouton 3D** (cube) dans la barre sous le dessin ; plus de bouton « Plateau en 3D » ni « Scène 3D » ; dans
-   Affichage > Plateau une seule entrée « Espace 3D » ; Ctrl+K « Espace 3D » ne se trouve qu'une fois.
-2. **Les calques sont là** : ouvrir un plan à plusieurs calques à des profondeurs différentes (plan d'un ancien projet) ;
-   les cartes apparaissent à leur profondeur, dans l'ordre de la pile, avec leur dessin, leur nom, leur profondeur ; la
-   pyramide de la caméra est dessinée.
-3. **Choisir une carte** : un clic dessus la choisit (contour orange, poignées), son calque devient le calque courant ;
-   choisir un autre calque dans le panneau Calques change la carte choisie.
-4. **Déplacer** : les flèches rouge / verte / bleue déplacent la carte en X / Y / Z ; en la reculant elle rapetisse ;
-   le champ « Profondeur » du panneau Calques la recule, lui, en gardant sa taille vue de la caméra.
-5. **Tourner / incliner** : les cercles inclinent la carte ; le cercle bleu la tourne dans son plan ; revenir en vue
-   normale : la carte inclinée est bien déformée en perspective, et on peut dessiner dessus (le trait tombe sous le
-   pointeur).
-6. **Échelle** : cube du centre = uniforme ; cubes d'axe = étirement ; le chiffre « Échelle » du panneau suit.
-7. **Chiffres** : position, rotation, échelle, étirement, profondeur dans Réglages ; « Remettre à plat ».
-8. **Parallaxe** : placer trois cartes à des profondeurs différentes, bouger la caméra (poignées de la pyramide, ou
-   Vue par la caméra puis bouton du milieu) : revenir en vue normale, jouer le plan : le fond bouge moins que le
-   premier plan. Un cube dans l'espace : il est dans l'image, sous les cartes, et bouge aussi avec la parallaxe.
-9. **Clés** : sur une carte animée (clés de position), la tirer à une autre image règle sa clé (losange vert) ;
-   lire le plan : elle s'incline et recule en douceur.
-10. **Caméra animée** : avec des clés de caméra, tirer la pyramide à une autre image règle la clé de cette image.
+1. **Un seul bouton 3D** (cube) dans la barre sous le dessin ; dans Affichage > Plateau une seule entrée « Espace 3D » ; Ctrl+K
+   « Espace 3D » ne se trouve qu'une fois ; **aucune** commande de cube, mannequin, modèle ni « repère 3D » dans Ctrl+K.
+2. **Une rangée d'outils** en ouvrant l'Espace 3D : Choisir, Déplacer, Tourner, Échelle, Caméra | Recadrer, Regarder par la
+   caméra. Icônes distinctes de celles de la barre du haut (la « Vue caméra » du dessin garde sa caméra vidéo) ; bulles à 1 s ;
+   l'outil actif est en accent.
+3. **Les calques sont là** : ouvrir un plan à plusieurs calques à des profondeurs différentes ; les cartes apparaissent à leur
+   profondeur, dans l'ordre de la pile, avec leur dessin, leur nom, leur profondeur ; la pyramide de la caméra est dessinée ; le
+   sol quadrillé se lit.
+4. **Choisir une carte** : un clic dessus la choisit (contour d'accent, poignées), son calque devient le calque courant ; choisir
+   un autre calque dans le panneau Calques change la carte choisie ; le bouton « Caméra » choisit la pyramide.
+5. **Déplacer** : les flèches rouge / verte / bleue déplacent la carte en X / Y / Z ; en la reculant elle rapetisse ; le champ
+   « Profondeur » du panneau Calques la recule, lui, en gardant sa taille vue de la caméra.
+6. **Tourner / incliner** : les cercles inclinent la carte ; le cercle bleu la tourne dans son plan ; revenir en vue normale : la
+   carte inclinée est bien déformée en perspective, et on peut dessiner dessus (le trait tombe sous le pointeur).
+7. **Échelle** : cube du centre = uniforme ; cubes d'axe = étirement ; le chiffre « Échelle » du panneau suit.
+8. **Chiffres** : position, rotation, échelle, étirement, profondeur dans Réglages ; « Remettre à plat » ; « Ordonner la pile
+   selon la profondeur ».
+9. **Parallaxe** : trois cartes à des profondeurs différentes, bouger la caméra (poignées de la pyramide, ou « Regarder par la
+   caméra » puis bouton du milieu) : revenir en vue normale, jouer le plan : le fond bouge moins que le premier plan.
+10. **Clés** : sur une carte animée, la tirer à une autre image règle sa clé (losange vert) ; lire le plan : elle s'incline et
+    recule en douceur. Avec des clés de caméra, tirer la pyramide à une autre image règle la clé de cette image.
 11. **Annuler** : Ctrl+Z après chaque geste rend l'état d'avant, en une étape au nom lisible dans l'historique.
-12. **Un ancien projet** s'ouvre identique (même image qu'avant, objets 3D d'avant hors de l'image, calque « Fond 3D »
-    intact) ; l'enregistrer le passe au format 35 (un SHOT d'avant le refuse — c'est voulu).
-13. **Fluidité** : 10 cartes et 20 objets, tourner la vue et tirer une carte restent fluides ; un trait de pinceau ne
-    ralentit pas.
-14. **Thèmes** : poignées, contours de cartes et pyramide lisibles dans les trois thèmes (l'espace a son fond sombre
-    propre, comme la vue de dessus).
+12. **Un ancien projet** (objets 3D, repère 3D, calque « Fond 3D ») s'ouvre sans avertissement, avec la même image qu'avant ; le
+    calque « Fond 3D » est là, verrouillé ; l'enregistrer ne supprime pas `scenes3d.json` du dossier.
+13. **Menus** : Fichier > Importer n'a plus « Un modèle 3D (glTF) comme repère » ; la barre d'outils de dessin n'a plus d'outil
+    « Repère 3D » ; le panneau Calques n'a plus « Nouveau calque de fond » (icône des montagnes).
+14. **Fluidité et thèmes** : 10 cartes, tourner la vue et tirer une carte restent fluides ; poignées, contours de cartes et
+    pyramide lisibles dans les trois thèmes (l'espace a son fond sombre propre).
 ## 14. Espaces de travail liés aux modes, barres minces et « Plus… » (2026-10-19, branche `espaces-barres`)
 
 Les propositions 6.1 et 6.3, approuvées par Anthony. Rien n'a été regardé à l'écran dans cette séance (aucun
@@ -985,7 +986,7 @@ dans la fiche (icônes à côté de la version), Storyboard > Versions du plan, 
 
 **Ce qu'une version « plan vide » garde et remet à zéro** :
 - gardé : la **durée**, la **taille du cadre** (celle du film), la **caméra** (ses clés : le cadrage ne bouge pas, décision
-  d'Anthony), le repère 3D, les textes d'action / dialogue / notes, la couleur de repère, les calques de toute la scène (le
+  d'Anthony), les textes d'action / dialogue / notes, la couleur de repère, les calques de toute la scène (le
   décor) ;
 - remis à zéro : les calques de dessin (un seul calque vectoriel « Dessin » vide, au-dessus du décor, comme dans un plan
   neuf), les marques d'image, les signets et points d'entrée / sortie.
@@ -1463,7 +1464,7 @@ décalage de l'ombre, liseré, grain, tremblement… clés comprises, dans les b
 par 100 px de trait, est divisée), débord du fond sous le trait, fermeture des trous des calques de couleur et CTG, zones bitmap et
 éléments vectoriels collés sur le dessin (ils gardent leur place dans le cadre). **Ne change pas** : les paramètres en pour cent,
 les incrustations (en pour cent de la hauteur du cadre), les marques d'image, les textes, et — comme pour un collage de plans dans
-le même projet — la scène 3D de blocage, les références liées, les commentaires, les transitions et les sons des plans.
+le même projet — les références liées, les commentaires, les transitions et les sons des plans.
 
 **La question** (petite fenêtre « Coller depuis un autre projet ») : seulement pour un plan, un calque, des images ou des clés, et
 seulement si les **proportions** ou les **cadences** diffèrent. Elle montre d'où vient la copie et ce qui va se passer ; « Ne plus
@@ -1676,7 +1677,7 @@ Les icônes ont leur bulle d'une seconde (nom, raccourci, description : `bulles.
   le calque est enfoncé dans la liste ; le titre compte les effets allumés (« Trait (2) ▾ »). Sur un calque bitmap, les entrées qu'il
   refuse sont grisées et la bulle dit pourquoi. Les préréglages sont sous un petit titre « Préréglages ». Si les effets du calque sont
   éteints (bouton fx), une ligne le dit, avec « Rallumer ».
-- **Panneau Calques** : dans les commandes, après « Nouveau calque de fond » : « Nouveau dossier » (et, avec plusieurs calques choisis,
+- **Panneau Calques** : dans les commandes, après « Nouveau calque bitmap » : « Nouveau dossier » (et, avec plusieurs calques choisis,
   « Ranger les calques choisis dans un dossier »), puis le bouton de fond et, s'il y a des effets, « fx » pour le calque courant. Chaque
   ligne : [triangle si dossier] œil, cadenas, [fx], vignette (l'icône d'un dossier pour un dossier), nom, puis « vectoriel » (ou « dossier ·
   3 calques ») et le bouton de fond. Un calque rangé est décalé vers la droite ; un dossier fermé n'a plus les lignes de ses calques (sauf le

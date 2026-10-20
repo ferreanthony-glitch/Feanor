@@ -226,8 +226,7 @@ l'export. Fusionner un tel calque avec celui du dessous applique le mode aux pix
 dessous, les commandes en icônes restent en haut ; seule la liste défile. Double-clic sur le nom
 pour renommer ; le clic droit sur un calque donne ce que le panneau ne montre pas déjà (pelure,
 préserver la transparence, pochoir, position verrouillée, avant / après ses images, groupe,
-renommer, profondeur, puis les autres commandes des calques). **Nouveau calque de fond** (icône des montagnes) crée, tout en
-bas, un calque bitmap avec un seul dessin tenu sur tout le plan (un décor).
+renommer, profondeur, puis les autres commandes des calques).
 
 **En-tête des calques de la timeline** (13b, comme dans TVPaint). Chaque ligne montre :
 - la vignette, le nom et le menu ⋮ ;
@@ -1417,9 +1416,9 @@ bord haut du bloc remplace la pastille. Le « dernier envoi » est le dernier ma
   leurs réglages (visibilité, opacité, mode de fusion, transformation, profondeur, effets, calques d'effets), la
   caméra, la durée, les textes d'action, de dialogue et de notes, les marques d'image.
 - *Ce qui n'en est pas un* : ce qui aide à travailler : la couleur du plan, les signets et points d'entrée / sortie, les
-  notes dessinées de la timeline, le repère 3D, le nom d'un calque, son verrou, sa ligne repliée, son groupe de
+  notes dessinées de la timeline, le nom d'un calque, son verrou, sa ligne repliée, son groupe de
   couleur, la pelure d'oignon et le pochoir, les noms d'instance et marques de couleur des dessins, les rôles des
-  images, le déplacement du plan dans le film. Les commentaires, les transitions, le son et les scènes 3D de blocage ne
+  images, le déplacement du plan dans le film. Les commentaires, les transitions et le son ne
   sont pas non plus dans l'empreinte d'un plan.
 - *Parcourir* : « Plan modifié suivant / précédent » (barre du montage sous « Plus… », menu Storyboard > Envois, fenêtre
   « Envois ») va au plan modifié suivant en tournant ; « Choisir les plans modifiés » les choisit tous (pour les
@@ -1974,7 +1973,7 @@ derniers choix sont gardés le temps de la séance.
 Un filet de sécurité contre « tous les essais passent mais SHOT ne s'ouvre plus » (`docs/FIABILITE.md`) :
 
 - un **projet d'essai complet** fabriqué par le code (séquences, plans, calques bitmap / vectoriel / vidéo / CTG /
-  dossier, traits texturés avec leur trace, fond sous le trait, effets à clés, caméra et effet de caméra, repère 3D,
+  dossier, traits texturés avec leur trace, fond sous le trait, effets à clés, caméra et effet de caméra,
   marques, commentaires, plan rogné avec sa réserve, son…), enregistré et rouvert par trois chemins (une boucle,
   plusieurs fils, copie de secours) et par l'application elle-même : le projet relu est le projet enregistré ;
 - un **essai de fumée** : 195 images de l'interface sans fenêtre (accueil, tous les panneaux, les outils, lecture,
@@ -2003,13 +2002,13 @@ Bus/
   dessins/12.png    un fichier par dessin bitmap
   dessins/13.json   un fichier par dessin vectoriel
   sons/14.mp3       les sons importés, copiés tels quels
-  modeles/15.pelure3d  les modèles 3D de repère
+  modeles/15.pelure3d  (ancien) les modèles 3D de repère : plus lus ni écrits, jamais effacés
   commentaires.json    les commentaires de la timeline (absent : aucun commentaire)
   rognages.json        le contenu rogné des plans (absent : rien de rogné)
   references.json      les références visuelles (absent : aucune)
   references/16.png    leurs images, copiées telles quelles (une vidéo : un dossier references/17/ d'images 000001.jpg…)
   crayonnes.json       la planche de crayonnés rapides (absent : pas de planche)
-  scenes3d.json        les scènes 3D de blocage (absent : aucune scène)
+  scenes3d.json        (ancien) les scènes 3D de blocage : plus lu ni écrit, jamais effacé
   envois.json          les envois (« v2 au réal ») et l'empreinte de chaque plan à chacun (absent : aucun envoi)
   versions/            les instantanés des envois et leurs dessins, rangés par contenu (absent : aucun envoi)
   plans_versions.json  les autres versions de chaque plan (absent : aucun plan n'a de version)
@@ -2055,47 +2054,33 @@ de la caméra, le reste estompé, pour composer une version pour les réseaux. C
 caméra et ne s'exportent pas.
 
 **Espace 3D** (bouton « Espace 3D » — le cube — de la barre sous le dessin, ou Affichage > Plateau ; il remplace le
-« Plateau en 3D » et la « Scène 3D » d'avant, qui étaient deux espaces différents) : un seul espace où les calques du
-plan, les objets 3D et la caméra du plan vivent ensemble, pour créer un environnement en profondeur et une parallaxe.
-Les réglages sont dans le panneau Réglages ; conception : `docs/ESPACE3D.md`.
-- **Les calques sont des cartes**, de vrais objets 3D : un clic en choisit une (ou la liste « Cartes » des Réglages ;
-  Maj ou Ctrl : en ajouter), et les mêmes poignées que pour un objet la manient — flèches pour déplacer (X, Y, Z),
-  cercles pour la tourner et l'**incliner**, cubes pour la mettre à l'échelle (le cube du centre : uniforme) ; axes du
-  monde ou de la carte ; aimantation ; plusieurs cartes ensemble. Glisser une carte la déplace dans son plan (Maj :
-  en profondeur). En chiffres : position (m), rotation (°), échelle (%), étirement, profondeur. Chaque geste est une
-  étape d'annulation (« Déplacer dans l'espace 3D »…). Un calque verrouillé, ou de position verrouillée, ne bouge pas.
-  Reculée avec la poignée, une carte rapetisse à l'écran (elle garde sa taille dans l'espace) ; le champ « Profondeur »
-  du panneau Calques, lui, garde son sens d'avant.
-- **Les clés suivent** : sur un calque animé (clés de position), tirer la carte règle la clé de l'image courante, en
-  3D aussi (inclinaison, profondeur) ; mêmes adoucis, mêmes losanges verts dans la timeline et le montage.
-- **Une seule caméra** : celle du plan, avec ses clés. Sa pyramide de vision (et sa course) est dans l'espace ; on la
-  choisit et on la manie avec les mêmes poignées ; focale, panoramique, bascule, rotation en chiffres ; « Vue par la
-  caméra » montre l'image au format du cadre (glisser ou tourner la vue déplace alors la caméra, sa clé si elle est
-  animée). Il n'y a plus de « caméra du plateau » à part.
-- **Parallaxe dans l'image** : l'image finale (écran, lecture, vignettes, export) est la vue par la caméra du plan, les
-  cartes dessinées **en perspective** — une carte inclinée est déformée comme un vrai plan — et plus elle est loin,
-  moins elle bouge quand la caméra se déplace. Les effets, l'opacité et le mode de fusion du calque s'appliquent
-  avant la déformation. Les cartes se composent **dans l'ordre de la pile des calques** (pas par distance) :
-  « Ordonner la pile selon la profondeur » met le plus loin en bas.
-- **Formes, mannequins, modèles glTF** : cube, plan (sol, mur), cylindre, sphère, cône, escalier, **mannequin**
-  (silhouette de capsules articulées : poses debout / assis / marche / bras levés, articulations en chiffres), modèle
-  glTF importé ; couleur ou gris, grouper, dupliquer, supprimer. Un décor par séquence, une scène par plan. Les objets
-  sont **dans l'image** (interrupteur « Objets dans l'image » des Réglages) : rendus par la caméra du plan, **sous
-  tous les calques**, avec leur parallaxe ; un projet d'avant l'Espace 3D les garde comme repères (hors image).
-- **Dessiner par-dessus** : en vue normale, on dessine sur la carte (sa texture), même inclinée : le pinceau suit
-  l'inclinaison. « Figer les objets dans un calque de fond » les rend, vus de l'œil de la caméra à cette image, dans le
-  calque « Fond 3D » (en bas, verrouillé), en couleurs, **niveaux de gris** ou **contours** ; il se met à jour en
-  arrière-plan. Un ancien calque « Fond 3D » s'ouvre tel quel.
-- Enregistré : poses et clés dans le projet (**format 35** : un SHOT d'avant refuse ce projet), objets dans
-  `scenes3d.json`. Détails et limites : `docs/ESPACE3D.md`, `docs/INTERFACE.md` (partie « Espace 3D »).
-**Repère 3D** : exporte ton décor en glTF depuis Blender (Fichier > Exporter > glTF 2.0, `.glb`),
-puis Fichier > « Importer un modèle 3D (glTF) comme repère… ». Il apparaît en fil de fer sur la
-feuille, comme un guide pour dessiner (il ne s'exporte pas). Outil « Repère 3D » : glisser pour
-tourner autour, Maj + glisser pour déplacer, Ctrl + glisser pour avancer ou reculer ; azimut,
-hauteur, distance et focale se règlent aussi en chiffres. Chaque plan a son point de vue
-(« Comme le plan précédent » le recopie). « Dessiner dans un calque » transforme le fil de fer
-en calque bitmap, tout en bas, qui lui s'exporte. Le modèle est gardé dans le projet (`modeles/`).
-
+« Plateau en 3D » et la « Scène 3D » d'avant) : un seul espace où les calques du plan et la caméra du plan vivent ensemble,
+pour créer un environnement en profondeur et une parallaxe. **Rien d'autre** : depuis le 2026-10-21, sur décision d'Anthony
+(« on va rester simple et focus sur le dessin »), il n'y a plus d'objets 3D (cube, cylindre, mannequin, modèle glTF…) ni de
+repère 3D. Les réglages sont dans le panneau Réglages ; conception : `docs/ESPACE3D.md`.
+- **Les calques sont des cartes**, posées dans l'espace : un clic en choisit une (ou la liste « Cartes » des Réglages ;
+  Maj ou Ctrl : en ajouter), et les poignées la manient — flèches pour déplacer (X, Y, Z), cercles pour la tourner et
+  l'**incliner**, cubes pour la mettre à l'échelle (le cube du centre : uniforme) ; axes du monde ou de la carte ;
+  aimantation ; plusieurs cartes ensemble. Glisser une carte la déplace dans son plan (Maj : en profondeur). En chiffres :
+  position (m), rotation (°), échelle (%), étirement, profondeur. Chaque geste est une étape d'annulation (« Déplacer dans
+  l'espace 3D »…). Un calque verrouillé, ou de position verrouillée, ne bouge pas. Reculée avec la poignée, une carte rapetisse
+  à l'écran (elle garde sa taille dans l'espace) ; le champ « Profondeur » du panneau Calques, lui, garde son sens d'avant.
+- **Les clés suivent** : sur un calque animé (clés de position), tirer la carte règle la clé de l'image courante, en 3D aussi
+  (inclinaison, profondeur) ; mêmes adoucis, mêmes losanges verts dans la timeline et le montage.
+- **Une seule caméra** : celle du plan, avec ses clés. Sa pyramide de vision (et sa course) est dans l'espace ; on la choisit
+  (bouton « Caméra ») et on la manie avec les mêmes poignées ; focale, panoramique, bascule, rotation en chiffres ; « Regarder
+  par la caméra » montre l'image au format du cadre (glisser ou tourner la vue déplace alors la caméra, sa clé si elle est
+  animée). Une seule rangée d'outils : Choisir · Déplacer · Tourner · Échelle · Caméra · Recadrer · Regarder par la caméra.
+- **Parallaxe dans l'image** : l'image finale (écran, lecture, vignettes, export) est la vue par la caméra du plan, les cartes
+  dessinées **en perspective** — une carte inclinée est déformée comme un vrai plan — et plus elle est loin, moins elle bouge
+  quand la caméra se déplace. Les effets, l'opacité et le mode de fusion du calque s'appliquent avant la déformation. Les cartes
+  se composent **dans l'ordre de la pile des calques** (pas par distance) : « Ordonner la pile selon la profondeur » met le plus
+  loin en bas ; « Remettre à plat » annule l'inclinaison.
+- **Dessiner dessus** : en vue normale, on dessine sur la carte (sa texture), même inclinée : le pinceau suit l'inclinaison.
+- **Anciens projets** : un calque « Fond 3D » (rendu des objets d'avant) est un calque bitmap ordinaire, mêmes pixels ;
+  `scenes3d.json`, le champ `repere3d` et les fichiers de `modeles/` ne sont plus lus ni écrits, et jamais effacés.
+- Enregistré : poses et clés dans le projet (**format 35** : un SHOT d'avant refuse ce projet). Détails et limites :
+  `docs/ESPACE3D.md`, `docs/INTERFACE.md` (partie « Espace 3D »).
 **Propager une peinture sur une vidéo** (façon EbSynth) : on peint quelques images clés sur un
 calque **bitmap** posé au-dessus d'un calque vidéo (ou d'une animation), puis clic droit sur ce
 calque (montage, timeline ou panneau Calques) ou menu Calques > « Propager la peinture… ». Sur un
@@ -2249,16 +2234,14 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `clescommun.rs` | Ce que les clés de dessins, de caméra et d'effets ont en commun : menu du clic droit, règle de choix (clic, Ctrl, Maj, rectangle) |
 | `zoombande.rs` | Zoom du montage et de la timeline calé sur la tête de lecture |
 | `viewbar.rs`, `frames.rs` | Barre au-dessus du dessin (plateau / caméra / 3D) ; zones de sécurité, cadre de format |
-| `espace3d.rs`, `espace3dobjets.rs` | Espace 3D : le monde commun (mètres), la pose 3D d'une carte ↔ les champs du calque, la caméra du plan comme caméra 3D, le maillage des cartes inclinées ; les objets dans l'image (rendu par l'œil de la caméra, en arrière-plan à l'écran) |
-| `scene3d.rs`, `scene3dmath.rs`, `scene3dmesh.rs` | Objets de l'Espace 3D : formes, mannequin, rangement par plan et par séquence, ancienne caméra de blocage (gardée pour le calque « Fond 3D ») ; maths (matrices, rayons, vue) ; maillages des formes et du mannequin |
-| `scene3dgizmo.rs`, `scene3drender.rs`, `scene3dgpu.rs` | Manipulateurs et aimantation ; rendu par le processeur (envoi vers un calque, sur un autre fil) ; vue d'édition par la carte graphique (wgpu) |
-| `scene3dstore.rs`, `scene3dui.rs`, `scene3dview.rs` | `scenes3d.json` (avec les protections des annexes) ; commandes, Réglages (cartes, objets, caméra), calque « Fond 3D » ; la vue (souris, poignées, cartes, tracé) |
+| `espace3d.rs` | Espace 3D : le monde commun (mètres), la pose 3D d'une carte ↔ les champs du calque, la caméra du plan comme caméra 3D, le maillage des cartes inclinées |
+| `espace3dmath.rs`, `espace3dgizmo.rs` | Maths (matrices, rayons, vue, caméra d'orbite de la vue d'édition) ; manipulateurs et aimantation |
+| `espace3dui.rs`, `espace3dview.rs` | Commandes, barre d'outils, Réglages (cartes, caméra) ; la vue (souris, poignées, cartes, tracé) |
 | `layertools.rs` | Outil Transformer (calque entier) |
 | `selbox.rs`, `seltools.rs` | Boîte de sélection façon Storyboard Pro : parties sous le pointeur, gestes (échelle, rotation, inclinaison, pivot), valeurs chiffrées ; sa place dans l'application |
 | `multisel.rs`, `multitools.rs` | Sélection sur plusieurs calques choisis : parts par calque, boîte commune sur la feuille, geste appliqué à chaque calque (`T⁻¹·A·T`), une feuille flottante par calque, une étape d'annulation ; souris, commandes, écran |
 | `envelopetools.rs` | Outil Déformer : mode Enveloppe de Bézier (la perspective : `perstools.rs`) |
 | `topview.rs` | Vue de dessus (profondeur des calques) |
-| `model3d.rs`, `view3d.rs`, `ref3dtool.rs` | Repère 3D : lecture glTF, arêtes utiles ; caméra en orbite, fil de fer, arêtes cachées ; outil et affichage |
 | `thumbs.rs` | Vignettes des plans (montage, planche) et miniatures des dessins (timeline, Calques) : composées sur des fils de fond, gardées par contenu, envoyées à la carte graphique par l'interface (voir `docs/PERFORMANCE.md`, section 11) |
 | `perf.rs`, `perf_tests.rs` | Profileur intégré et superposition « Performance » (`vue.performance`) ; banc sans fenêtre (voir `docs/PERFORMANCE.md`) |
 | `parallele.rs`, `ouverture.rs`, `enregistrement.rs` | Travail réparti sur les cœurs (`par_map`, plafond de fils) ; ouverture d'un projet sur un autre fil ; enregistrement sur un autre fil (cliché, suites qui attendent, échec, file d'attente) |
@@ -2321,7 +2304,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 
 `cargo test --release` lance les tests (pinceau, vectoriel, remplissage, séquences/scènes/panneaux,
 annulation, projet en dossier, anciens fichiers, raccourcis, son, caméra, transformation,
-profondeur, vue de dessus, lecture, repère 3D, formes, texte, perspective, couleur,
+profondeur, vue de dessus, lecture, formes, texte, perspective, couleur,
 roue chromatique, nuanciers et leurs formats, panneaux modulables, calques de toute la scène,
 planche, modes de fusion, cadres de composition, Espace 3D).
 

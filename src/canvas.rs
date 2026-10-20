@@ -14,8 +14,6 @@ impl App {
         let mut rect = ui.available_rect_before_wrap();
         // Barre de la vue (plateau / caméra, cadres de composition), sauf dans une vignette.
         if !self.in_card {
-            // Espace 3D : le calque « Fond 3D » se met à jour en arrière-plan (jamais pendant un trait).
-            self.update_scene3d(ui.ctx());
             let bar = Rect::from_min_size(rect.min, vec2(rect.width(), crate::viewbar::VIEW_BAR_H));
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(bar).id_salt("barre_vue"));
             self.view_bar(&mut child);
@@ -26,10 +24,10 @@ impl App {
             self.view_tools_bar(&mut child);
             rect.max.y = tools.min.y;
             // Espace 3D : à la place du dessin à plat, avec ses commandes dans les Réglages.
-            if self.scene3d.on && !self.camera_view {
+            if self.espace3d.on && !self.camera_view {
                 let response = ui.allocate_rect(rect, Sense::click_and_drag());
                 self.canvas_rect = rect;
-                self.scene3d_panel(ui, rect, &response);
+                self.espace3d_panel(ui, rect, &response);
                 return;
             }
         }
@@ -62,7 +60,6 @@ impl App {
         if !self.in_card && !self.modal_open() {
             response.context_menu(|ui| self.canvas_menu(ui));
         }
-        self.update_ref3d(ui.ctx());
         self.update_text_preview(ui.ctx());
         self.check_persp();
         self.check_envelope();
@@ -200,7 +197,6 @@ impl App {
             painter.add(Shape::mesh(mesh));
         }
 
-        self.paint_ref3d(&painter, rect);
         self.paint_camera(&painter, rect);
         // Incrustations (timecode…) : sur l'image finale, dans le cadre (`prereglagesui.rs`).
         self.paint_incrustations(ui.ctx(), &painter);
@@ -441,7 +437,6 @@ impl App {
                                 self.transform_press(stage, *pos);
                             }
                         }
-                        Tool::Ref3d => self.ref3d_press(*pos, *modifiers),
                         Tool::Picker | Tool::Pan => {}
                     }
                 }
@@ -478,8 +473,6 @@ impl App {
                         self.camera_drag(stage, mods.shift);
                     } else if self.layer_drag.is_some() {
                         self.transform_drag(stage, mods.shift);
-                    } else if self.ref3d.dragging() {
-                        self.ref3d_drag_to(*pos);
                     } else if self.picking {
                         self.pick_color(stage);
                     }
@@ -619,10 +612,6 @@ impl App {
         }
         if self.tool == Tool::Perspective {
             ctx.set_cursor_icon(self.deform_cursor(p));
-            return;
-        }
-        if self.tool == Tool::Ref3d {
-            ctx.set_cursor_icon(if self.ref3d.dragging() { CursorIcon::Grabbing } else { CursorIcon::Grab });
             return;
         }
         // La zone bitmap choisie reste transformable avec l'outil Transformer.

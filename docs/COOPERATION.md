@@ -59,12 +59,13 @@ MonFilm/
                            groupes de couleur, propriétés, cadence, feuille… + un bloc « partage » (voir plus bas).
                            Écrite par qui tient le jeton du montage.
   plans/<n° de plan>.json  UN PLAN : ses calques, sa caméra, ses marques, ses textes, sa durée, ses versions rangées,
-                           son contenu rogné, sa scène 3D, et l'empreinte du fichier de chacun de ses dessins.
+                           son contenu rogné, et l'empreinte du fichier de chacun de ses dessins.
                            Écrit par qui tient le plan.
   dessins/<n°>.png|json    un fichier par dessin (comme avant) ; écrits par qui tient le plan qui les cite
   sons/ modeles/ textures/ references/ videos/         comme avant ; ajoutés par qui tient le jeton
-  transitions.json effets_son.json sons_proposes.json references.json crayonnes.json envois.json versions/ scenes3d.json
-                           (les décors de séquence)     comme avant, au nom d'avant ; écrits par qui tient le jeton
+  transitions.json effets_son.json sons_proposes.json references.json crayonnes.json envois.json versions/
+                           comme avant, au nom d'avant ; écrits par qui tient le jeton. (Un ancien `scenes3d.json`, les décors 3D,
+                           n'est plus lu ni écrit depuis le 2026-10-21, jamais effacé.)
   commentaires/<équipier>.json     les commentaires de CET équipier (un fichier chacun, fusionnés à la lecture)
   partage/
     equipe/<équipier>.<séance>.json   la FICHE d'un équipier : qui il est, ce qu'il tient (§5), où il est (§9) ; une
@@ -95,8 +96,8 @@ plans. Les fichiers de plan, de fiche, de membre et de commentaires ont chacun l
 quand ils sont plus récents, jamais effacés quand ils sont illisibles (`write_sidecar`).
 
 **Ce qui est au plan, ce qui est au montage.** Au plan (il faut tenir le plan) : tout ce qui se dessine ou se règle dans le
-plan — calques, dessins, expositions, effets, caméra, marques d'image, textes d'action / dialogue / notes, signets, repère 3D,
-versions rangées, contenu rogné, scène 3D de blocage. Au montage (il faut tenir le jeton) : ordre, nombre, noms et numéros des
+plan — calques, dessins, expositions, effets, caméra, marques d'image, textes d'action / dialogue / notes, signets,
+versions rangées, contenu rogné. Au montage (il faut tenir le jeton) : ordre, nombre, noms et numéros des
 plans et des séquences, **durée** d'un plan, rognage du montage, pistes et extraits de son, transitions, guides, groupes,
 planche (notes), fond, cadence, propriétés, envois, références, crayonnés, verrous du storyboard et de la numérotation.
 **Les commentaires, eux, n'ont pas besoin de rien tenir** : on peut commenter n'importe quel plan.
@@ -390,8 +391,8 @@ et `the_thread_never_asks_for_a_repaint_when_nothing_changes`).
 - **Le montage perdu** (jeton pris avant nous) est mis de côté en brouillon mais ne s'importe pas encore : c'est un fichier à lire.
 - Importer un brouillon ou une copie en conflit lit les fichiers sur l'interface (un plan, une action de l'utilisateur).
 - Les copies en conflit « ignorées » reviennent au prochain lancement (la liste n'est pas retenue).
-- Importer un son ou un modèle 3D, créer une planche de crayonnés, marquer un envoi, nommer une séquence… demandent le jeton
-  (c'est du montage) ; un repère 3D dont le modèle vient d'être importé par quelqu'un d'autre perd son modèle chez qui ne l'a pas.
+- Importer un son, créer une planche de crayonnés, marquer un envoi, nommer une séquence… demandent le jeton
+  (c'est du montage).
 - Pas d'enregistrement automatique dans le dossier partagé : les autres ne voient votre travail qu'à Ctrl+S (ou « Rendre »).
 - Les exports (montage, fiche, relecture) travaillent sur la copie locale : un plan encore « en attente » y est vide. La fenêtre
   Équipe le dit.

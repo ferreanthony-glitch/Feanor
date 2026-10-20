@@ -277,7 +277,7 @@ impl App {
                     }
                     None => BoardDrag::Rubber { start, now: start, add },
                 },
-                Tool::Camera | Tool::Transform | Tool::Picker | Tool::Perspective | Tool::Ref3d | Tool::Text => {
+                Tool::Camera | Tool::Transform | Tool::Picker | Tool::Perspective | Tool::Text => {
                     BoardDrag::Rubber { start, now: start, add }
                 }
                 _ => BoardDrag::Note { points: vec![self.note_point(start, touch.is_some())], pen: touch.is_some() },

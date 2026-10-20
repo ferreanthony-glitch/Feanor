@@ -1,63 +1,61 @@
-# Espace 3D : un seul espace pour les calques, les objets et la caméra
+# Espace 3D : les calques et la caméra, rien d'autre
 
-Branche `espace-3d` (depuis `main` 1d1ccca), 2026-10-20. Demande d'Anthony : « Il y a quelque chose de très confus entre
-ces deux espaces 3D. Il nous faut un seul espace 3D où les calques apparaissent et donnent la possibilité de les déplacer
-dans l'espace pour créer un environnement 3D avec, et ainsi une parallaxe. Ça implique donc d'importer dans cet espace tous
-les outils 3D et de pouvoir déplacer, pivoter, modifier les calques dans cet espace comme de vrais objets 3D. »
+Branche `espace3d-simple` (depuis `integration14` 5f3fda7), 2026-10-21. Décision d'Anthony, le directeur :
 
-Ce document est la conception (écrite avant le code) puis, en dernière partie, l'état de ce qui est fait. Les mots du
-produit : **Espace 3D** (la vue), **carte** (un calque du plan posé dans l'espace), **objet** (cube, plan, cylindre, sphère,
-cône, escalier, mannequin, modèle glTF), **caméra** (celle du plan, une seule).
+> « On va rester simple et focus sur le dessin. Un espace 3D où je peux bouger les dessins dans l'environnement suffit.
+> On peut supprimer les objets 3D comme les cubes, cylindres, personnages… ça alourdit le logiciel et l'interface pour pas
+> grand-chose. Revenons à quelque chose de simple. »
 
-## 1. Ce qui existe, et pourquoi c'est confus
+Et, dans la foulée : le **repère 3D** (un modèle glTF en fil de fer montré par-dessus le dessin) part aussi.
 
-| | Plateau en 3D (`stage3d.rs`, `stage3dui.rs`) | Scène 3D de blocage (`scene3d*.rs`) |
-|---|---|---|
-| Ce qu'on y voit | les calques du plan, plats, à leur profondeur ; la caméra du plan (pyramide, cadre) ; un sol | cube, plan, cylindre, sphère, cône, escalier, mannequin, modèle glTF ; un sol quadrillé ; une « caméra du plateau » |
-| Unités | pixels de la feuille | mètres |
-| Ce qu'on y manie | un calque : glisser dans son plan, Maj : en profondeur ; la caméra par son œil | tout : manipulateurs (déplacer, tourner, échelle), axes locaux, aimantation, groupes |
-| Caméra | celle du plan (clés `camkeys.rs`) | une autre, fixe, propre à la scène (`PlanScene::cam`) |
-| Résultat dans l'image | oui, tout de suite : c'est le rendu 2D (multiplan) | non : il faut « envoyer vers un calque de fond » (une image figée, calque « Fond 3D ») |
+Ce document décrit ce qui reste. L'historique (la conception de l'Espace 3D unifié du 2026-10-20, avec ses objets, son
+rasteriseur et son rendu dans l'image) est dans l'historique git (`espace-3d`, `5f3fda7`) et dans `docs/ROADMAP.md`.
 
-Deux mondes, deux caméras, deux jeux d'outils, et un seul des deux change l'image. Un calque ne peut pas être tourné
-dans l'espace ; un cube ne bouge pas avec la caméra du film.
+Les mots du produit : **Espace 3D** (la vue), **carte** (un calque du plan posé dans l'espace), **caméra** (celle du plan,
+une seule).
 
-## 2. Le principe : un monde, trois sortes d'habitants
+## 1. Ce qui reste, ce qui part
 
-Un seul monde, celui de la scène 3D de blocage (il est déjà le plus riche) :
+| Reste | Part (supprimé du code, de l'interface, des tests) |
+|---|---|
+| La vue **Espace 3D** : les calques du plan comme cartes, la caméra du plan (pyramide, cadre), un sol quadrillé pour l'orientation | Les objets 3D : cube, plan, cylindre, sphère, cône, escalier, mannequin, modèles glTF comme objets |
+| Déplacer, tourner (inclinaison), mettre à l'échelle, étirer une carte : poignées dans la vue et champs chiffrés dans Réglages | Matières et couleurs d'objets, lumière, styles de rendu, groupes d'objets, décor de séquence |
+| Plusieurs cartes choisies à la fois, aimantation (grille, paliers) | « Objets dans l'image » (rendu des objets sous les calques), « Figer les objets dans un calque de fond » |
+| Choisir, déplacer, tourner la caméra du plan ; la regarder ; « Regarder par la caméra » | Le rasteriseur, les maillages, la carte graphique de la vue d'édition (`scene3d*.rs`, `espace3dobjets.rs`) |
+| Clés de position des cartes (inclinaison et écart de profondeur compris) et clés de caméra | Le **repère 3D** : l'outil, l'import glTF (Fichier > Importer), le lecteur glTF, la vue en orbite, le fil de fer |
+| La parallaxe : les cartes en profondeur défilent selon la caméra, à l'écran, à l'export, dans les vignettes | `Tool::Ref3d`, `model3d.rs`, `view3d.rs`, `ref3dtool.rs` |
+| « Ordonner la pile selon la profondeur », « Remettre à plat » | Les commandes `scene3d.ajouter_*`, `importer_modele`, `dupliquer`, `supprimer`, `grouper`, `degrouper`, `envoyer`, `camera_depuis_plan`, `decor`, `outil.repere3d`, `fichier.importer_modele3d` |
+
+Pourquoi : l'Espace 3D unifié du 2026-10-20 avait fait de SHOT un petit logiciel 3D (objets, mannequin, éclairage,
+rasteriseur) à côté d'un logiciel de dessin. Ce que le film demande, c'est de bouger les dessins dans un environnement pour
+créer de la profondeur et de la parallaxe ; les objets alourdissaient l'interface et le code pour pas grand-chose.
+
+## 2. Un seul monde, deux sortes d'habitants
 
 - **mètres**, Y vers le haut, X vers la droite, Z vers la caméra ;
 - **l'origine est le centre de la feuille** ; le plan z = 0 est la feuille (le « plan de référence » de la caméra 2D) ;
-- l'échelle est celle de `scene3d::PLATE_WIDTH_M` : le cadre de l'image finale mesure 6 m de large à la distance de
-  référence, donc 1 pixel de la feuille vaut `k = 6 / largeur du cadre` mètres (`SceneCam::from_plan_camera` le faisait déjà) ;
+- l'échelle est celle de `espace3d::PLATE_WIDTH_M` : le cadre de l'image finale mesure 6 m de large à la distance de
+  référence, donc 1 pixel de la feuille vaut `k = 6 / largeur du cadre` mètres ;
 - la distance de référence (`camera::ref_distance`, 35 mm voient exactement le cadre) vaut `d0 = 5,83 m`.
 
-Les habitants :
+Les habitants : les **cartes** (un calque du plan = un rectangle de la taille de la feuille, texturé par son dessin) et la
+**caméra** du plan, avec ses clés (dolly, bascule, panoramique, zoom, rotation).
 
-1. les **cartes** : un calque du plan = un rectangle de la taille de la feuille, texturé par son dessin ;
-2. les **objets** : tout ce que la scène 3D contenait (par plan, plus le décor de la séquence) ;
-3. la **caméra** : celle du plan, avec ses clés (dolly, bascule, panoramique, zoom, rotation).
-
-Le plateau en 3D (`stage3d`) n'a plus de vue à lui : ses maths (`World`) restent pour les tests et la vue de dessus, son
-interface (`stage3dui.rs`) disparaît ; ses gestes (glisser un calque, prendre la caméra par l'œil) sont ceux de l'Espace 3D.
-
-## 3. La carte : un calque est un vrai objet 3D
+## 3. La carte : un calque est un rectangle posé dans l'espace
 
 ### 3.1 Pose d'une carte
 
-Position X/Y/Z, rotation X/Y/Z, échelle uniforme et par axe, comme un objet (`Xf` : position, rotation, taille). La carte
-tourne autour de son centre. Rotation : l'ordre des objets (`Ry · Rx · Rz`) ; Z est le tour dans le plan de la carte (le
-« angle » du calque), X et Y sont **l'inclinaison**. Inclinaison X positive : le haut de la carte vient vers la caméra.
-Inclinaison Y positive : le bord droit s'éloigne.
+Position X/Y/Z, rotation X/Y/Z, échelle uniforme et par axe (`Xf`). La carte tourne autour de son centre. Rotation : l'ordre
+`Ry · Rx · Rz` ; Z est le tour dans le plan de la carte (le « angle » du calque), X et Y sont **l'inclinaison**. Inclinaison
+X positive : le haut de la carte vient vers la caméra. Inclinaison Y positive : le bord droit s'éloigne.
 
-### 3.2 Correspondance avec les champs existants (rien n'est perdu, les anciens projets sont identiques)
+### 3.2 Correspondance avec les champs du calque (rien n'est perdu, les anciens projets sont identiques)
 
-On **garde** les champs du calque (`LayerTransform` : x, y, échelle, angle, étirements ; `Layer::depth`) et on y **ajoute**
-l'inclinaison (`tilt_x`, `tilt_y`, en degrés) et un écart de profondeur de clé (`dz`). La pose 3D d'une carte est *calculée*
-à partir d'eux (`espace3d::Monde::card_xf`), et les manipulateurs *écrivent* ces champs (`card_from_xf`). Avantage : tout
-l'existant (outil Transformer, multisélection, clés de position, vue de dessus, export Storyboard Pro, propagation) continue
-de lire les mêmes champs ; un projet d'avant a inclinaison 0 et écart 0, et son rendu passe par **le même code** qu'avant (pas
-une réécriture qui donnerait « presque » les mêmes pixels).
+Les champs du calque (`LayerTransform` : x, y, échelle, angle, étirements, `tilt_x`, `tilt_y`, `dz` ; `Layer::depth`) restent
+la seule source. La pose 3D est *calculée* à partir d'eux (`Monde::card_xf`), et les poignées *écrivent* ces champs
+(`Monde::card_from_xf`, `apply_card_xf`). Tout l'existant (outil Transformer, multisélection, clés de position, vue de
+dessus, export Storyboard Pro, propagation) lit les mêmes champs ; un projet d'avant a inclinaison 0 et écart 0, et son rendu
+passe par **le même code** qu'avant.
 
 Avec `d` la profondeur du calque (`depth` + `dz`, au plus −0,9), `s = 1 + d`, `W×H` la feuille en pixels :
 
@@ -71,220 +69,138 @@ Avec `d` la profondeur du calque (`depth` + `dz`, au plus −0,9), `s = 1 + d`, 
 | largeur | `W · k · s · échelle · étirement_x` |
 | hauteur | `H · k · s · échelle · étirement_y` |
 
-Le facteur `s` est le « agrandi de (1 + d) » du multiplan : un calque reculé garde, vu par la caméra de référence, la
-taille qu'il a à plat ; il ne défile moins vite que quand la caméra bouge. **Dans l'Espace 3D un calque que l'on recule avec le
-manipulateur rapetisse à l'écran** (c'est un vrai objet : sa taille dans le monde est gardée, `échelle` et `x`, `y`
-s'ajustent) ; le champ « Profondeur » du panneau Calques garde son sens d'avant (la taille vue reste la même). Les deux
-écrivent les mêmes champs, aucun état en double.
+Dans l'Espace 3D, une carte que l'on recule avec la poignée rapetisse à l'écran (sa taille dans le monde est gardée) ; le champ
+« Profondeur » du panneau Calques garde son sens d'avant (la taille vue reste la même). Les deux écrivent les mêmes champs.
+Un calque verrouillé, ou de position verrouillée, ne bouge pas.
 
-Retour (manipulateur → calque) : `d = −Z / d0` ; `x = X / (s·k)`, `y = −Y / (s·k)` ; l'échelle et les étirements se déduisent
-du rapport entre la nouvelle taille et celle que la carte aurait au nouveau `s` ; si les deux axes ont changé du même
-rapport, c'est l'échelle uniforme qui bouge, sinon les étirements (un cube central = échelle uniforme, une poignée d'axe =
-un étirement). Un calque dont la position est verrouillée, ou verrouillé, ne bouge pas.
+### 3.3 Clés
 
-### 3.3 Clés (déplacer dans le temps)
-
-Les clés de position (`poskeys.rs`) portent déjà x, y, échelle, angle, étirements, adoucis. Elles portent maintenant aussi
-`tilt_x`, `tilt_y` et `dz` : même interpolation (ligne droite, adoucis d'entrée et de sortie), mêmes losanges verts dans la
-timeline et le montage. Un calque animé dont on tire la carte à l'image `f` met à jour (ou crée) sa clé de l'image `f`
-(`Layer::set_pose`), comme l'outil Transformer. Un calque fixe garde l'inclinaison dans sa pose fixe ; son écart de profondeur
-est ajouté à `depth` (jamais deux sources). Un projet d'avant a des clés sans ces valeurs : elles valent 0, il se lit tel quel.
+Les clés de position (`poskeys.rs`) portent x, y, échelle, angle, étirements, `tilt_x`, `tilt_y` et `dz`, adoucis compris. Tirer
+une carte animée à l'image `f` met à jour (ou crée) la clé de l'image `f` (`Layer::set_pose`).
 
 ## 4. Une seule caméra
 
-La caméra du plan (`camera::Camera`) *est* la caméra 3D : position de l'œil (x, y de la feuille, avancée), panoramique,
-bascule, rotation, zoom. `SceneCam::from_plan_camera` montre que la correspondance est exacte dans les deux sens : l'œil est à
-`((cam.x − W/2)·k, −(cam.y − H/2)·k, (d0_px − dolly)·k)`. Elle a ses clés (`camkeys.rs`) : tirer la caméra dans l'Espace 3D
-règle la caméra de l'image courante, ou la clé de cette image si le plan a plusieurs clés (`App::set_current_camera`), comme
-l'outil Caméra. La pyramide (œil, cadre, haut du cadre) est dessinée à la place de la « caméra du plateau ». « Vue caméra »
-de l'Espace 3D regarde par elle, au format du cadre.
-
-**La caméra du plateau de la scène 3D disparaît de l'interface** (champs, bouton « choisir », « Caler sur la caméra du plan »).
-Migration : son réglage reste enregistré (`PlanScene::cam`) parce que l'image du calque « Fond 3D » d'un ancien projet a été
-rendue par elle et doit pouvoir être refaite à l'identique ; il ne sert plus qu'à cela. « Figer en calque de fond » (l'ancien
-« Envoyer… ») le remplace d'abord par la caméra du plan à l'image courante.
+La caméra du plan (`camera::Camera`) *est* la caméra 3D : `Monde::scene_cam` en donne la prise de vue (position de l'œil,
+panoramique, bascule, rotation, focale) et `camera_from_scene` fait le chemin inverse. Elle a ses clés (`camkeys.rs`) : la
+tirer dans l'Espace 3D règle la caméra de l'image courante, ou la clé de cette image si le plan en a plusieurs
+(`App::set_current_camera`), comme l'outil Caméra. « Regarder par la caméra » montre ce que le plan filme, au format du cadre ;
+glisser la vue, la tourner ou avancer y déplace alors la caméra elle-même.
 
 ## 5. Ce que donne l'image finale
 
-La chaîne de rendu de SHOT est en deux temps, et on **la garde** : (1) tous les éléments se composent sur la feuille, vus
-par l'**œil** de la caméra (position seulement : c'est le multiplan) ; (2) la caméra (zoom, rotation, bascule, panoramique)
-prend cette feuille en homographie. Une rotation de la caméra autour de son œil ne crée pas de parallaxe : séparer les deux
-temps est exact.
+La chaîne de rendu est en deux temps : (1) les cartes se composent sur la feuille, vues par l'**œil** de la caméra (position
+seulement : c'est le multiplan) ; (2) la caméra (zoom, rotation, bascule, panoramique) prend cette feuille en homographie.
 
-- **Carte à plat** (inclinaison 0) : exactement le rendu d'avant (`Layer::transform_seen_at`, une affinité). Même code, mêmes
-  pixels.
-- **Carte inclinée** : la carte est projetée, point par point, de l'œil sur le plan z = 0 (une homographie). Elle est posée
-  sur la feuille par un maillage (`warp.rs`, le même que l'enveloppe et la perspective du Déformer : 64 × 64 cases, des
-  triangles que la carte graphique et le processeur dessinent identiquement). Les effets du calque, son opacité, son mode de
-  fusion, ses clés s'appliquent *avant*, sur l'image de la carte à plat (les effets sont calculés sur le dessin du calque, puis
-  le dessin est posé ; un calque d'ajustement au-dessus voit la carte posée).
-- **Objets** : rendus par le rasteriseur à tampon de profondeur de la scène (`scene3drender.rs`), vus par le même œil, et posés
-  comme une image de la feuille tout en bas du plan (voir 5.2).
+- **Carte à plat** (inclinaison 0) : exactement le rendu d'avant (`Layer::transform_seen_at`, une affinité). Mêmes pixels.
+- **Carte inclinée** : projetée, point par point, de l'œil sur le plan z = 0 (une homographie), posée sur la feuille par un
+  maillage (`warp.rs`, 64 × 64 cases). Les effets, l'opacité, le mode de fusion, les clés s'appliquent *avant*, sur l'image de
+  la carte à plat.
 - **Écran, lecture, vignettes, export** : un seul chemin de composition (`render::panel_plan_at`) ; le processeur est la
-  référence (export) et la carte graphique la reproduit à ≤ 2 niveaux près, comme pour les feuilles déformées.
+  référence et la carte graphique la reproduit à ≤ 2 niveaux près.
 
-### 5.1 Ordre
+**Ordre** : les cartes se composent dans l'ordre de la pile des calques, pas par distance (modes de fusion, calques
+d'ajustement et dossiers travaillent sur « ce qui est dessous »). « Ordonner la pile selon la profondeur » met les calques du
+plus loin au plus près (une étape d'annulation) quand on veut que les deux coïncident.
 
-**Les cartes se composent dans l'ordre de la pile des calques**, pas par distance. C'est ce qu'il faut pour les modes de
-fusion, les calques d'ajustement et les dossiers (ce sont des opérations « sur ce qui est dessous »), et c'est le
-comportement de tout le reste de SHOT. L'Espace 3D dessine donc les cartes dans le même ordre, pour que ce qu'on voit soit
-ce qu'on filme. La commande **Ordonner la pile selon la profondeur** met les calques du plus loin au plus près (une étape
-d'annulation) quand on veut que les deux coïncident. Pas de test de profondeur entre cartes qui se traversent : elles se
-recouvrent dans l'ordre de la pile.
+Limites connues : une carte inclinée est coupée aux bords de la feuille ; une partie de carte derrière l'œil n'est pas dessinée ;
+le panoramique / la bascule restent à plus de 5° de l'horizon (`Camera::limited`) ; l'aperçu réduit des effets n'est pas utilisé
+pour une carte inclinée.
 
-### 5.2 Les objets dans l'image
+## 6. Format et anciens projets (rien ne casse, rien n'est effacé)
 
-Les objets 3D (cube, mannequin, modèle…) sont rendus *par la caméra du film* : ils suivent ses clés (parallaxe), sans
-« envoi » à refaire. Ils sont posés **sous toutes les cartes** (comme l'était le calque « Fond 3D »), donc une carte
-recouvre un objet, jamais l'inverse. Règle d'ordre documentée faute de mieux : un objet opaque *devant* une carte (un pilier
-devant un personnage) demanderait un tampon de profondeur partagé entre l'objet et les cartes dans la composition de la
-carte graphique ; ce n'est pas fait (voir « Ce qui reste »). La vue d'édition de l'Espace 3D suit la même règle (objets
-d'abord, cartes ensuite) pour ne pas promettre ce que l'image ne fait pas.
+Aucun changement de format (`project::VERSION` reste 35) : les objets et le repère disparaissent par *oubli à la lecture*.
 
-Un objet est dans l'image si son plan a **« Objets dans l'image » allumé**. Un plan d'un ancien projet l'a *éteint* : ses
-objets étaient des repères de blocage (ils n'apparaissaient que dans le calque « Fond 3D »), les montrer ajouterait des
-pixels. Un plan neuf l'a allumé.
-
-### 5.3 Limites connues
-
-- Une carte inclinée est coupée aux bords de la feuille (comme une feuille déformée). Les cartes à plat gardent la toile
-  infinie.
-- Une partie de carte qui passe derrière l'œil (ou à moins de 1 % de la distance de référence) n'est pas dessinée.
-- Le panoramique / bascule ne peut pas aller jusqu'à l'horizon (`Camera::limited` : la feuille doit rester visible sous au
-  moins 5°) : c'est la limite d'avant, elle vaut pour les cartes inclinées.
-- L'aperçu réduit des effets (`fxproxy`) n'est pas utilisé pour une carte inclinée (elle est calculée en pleine résolution).
-
-## 6. Format et migration
-
-- **Projet** : `project::VERSION` passe de 33 à **35** (champs `inclinaison_x`, `inclinaison_y` de la pose d'un calque,
-  et dans une clé de position `inclinaison_x`, `inclinaison_y`, `ecart_profondeur` ; tous omis quand ils valent 0). Une
-  version précédente refuse le projet au lieu de montrer des cartes à plat. Règle des projets partagés : ils écrivent
-  `max(VERSION_PARTAGE, VERSION)` — le numéro 34 des projets partagés n'était qu'un numéro plus grand que le classique ; il
-  reste lisible, et un projet partagé s'écrit désormais 35. Le test « projet partagé > VERSION » devient « projet partagé ≥ VERSION
-  et porte son bloc `partage` ».
-- **Anciens projets** (≤ 34) : champs absents = 0 ; rendu identique, pixel pour pixel (essai : un plan avec profondeurs et un
-  calque « Fond 3D » rendu avant / après).
-- **Profondeur du plateau en 3D** : c'est déjà `Layer::depth`, devenue la position Z de la carte (`Z = −d0·d`). Aucune conversion
-  à l'ouverture.
-- **Scènes 3D** (`scenes3d.json`, sans toucher à son numéro de format) : un champ en plus par plan, `en_image` (absent = faux).
-  Les objets restent là où ils sont, la caméra du plateau reste enregistrée (4). Le calque « Fond 3D » d'un ancien projet reste
-  un calque bitmap ordinaire, verrouillé, tout en bas ; « Suivre » continue de le mettre à jour avec la même caméra.
-- Une version précédente lit toujours `scenes3d.json` (elle ignore `en_image`).
+- **Calque « Fond 3D »** d'un ancien projet (le rendu des objets figé par la scène de blocage) : un calque bitmap ordinaire,
+  verrouillé, tout en bas. Il garde ses pixels ; il ne se met plus à jour tout seul (plus de scène derrière).
+- **`scenes3d.json`** (objets, décors, caméra de blocage) : plus lu, plus écrit, **jamais effacé ni réécrit** — l'enregistrement
+  (classique, en arrière-plan, projets partagés) le laisse tel quel, même abîmé ; plus d'avertissement non plus. Il est dans
+  le dossier du projet si une version plus ancienne doit le relire.
+- **Repère 3D** : le champ `repere3d` des plans et la liste `modeles` du manifeste sont ignorés à la lecture et ne sont plus
+  écrits ; les fichiers `modeles/<id>.pelure3d` restent dans le dossier du projet (l'enregistrement ne nettoie plus
+  `modeles/`). Un projet enregistré par cette version ne dit donc plus à une version plus ancienne qu'il avait un repère 3D.
+- **Projets partagés** : un fichier de plan qui porte une `scene3d` l'ignore à la lecture (le champ n'est pas récrit quand le
+  plan est ré-enregistré par cette version) ; `scenes3d.json` du dossier partagé reste en place.
+- Anciens identifiants de commandes : `vue.3d`, `scene3d.basculer`, `vue3d.recadrer`, `scene3d.cadrer`, `outil3d.*`,
+  `scene3d.outil_*`, `scene3d.vue_camera`, `scene3d.aimanter`, `scene3d.grille` restent des doubles (`keymap::ALIASES`) des
+  commandes `espace3d.*` : un raccourci posé dessus marche toujours. Ceux des objets et du repère n'existent plus (un raccourci
+  posé dessus ne fait rien).
 
 ## 7. Interface
 
-- **Un seul bouton** « Espace 3D » (icône cube) dans la barre sous le dessin, une seule entrée du menu Affichage, une seule
-  commande `espace3d.basculer`. `vue.3d` et `scene3d.basculer` en sont des doubles (`keymap::ALIASES`) : un raccourci posé
-  sur l'un des deux marche. `vue3d.recadrer` double `scene3d.cadrer` ; `outil3d.deplacer` double `scene3d.outil_deplacer` ;
-  `outil3d.orbite`, `outil3d.glisser`, `outil3d.avancer` doublent `scene3d.outil_choisir` (glisser dans le vide tourne la vue,
-  bouton du milieu la glisse, molette avance : il n'y a plus d'outils de navigation à choisir).
-- **Gestes** : clic = choisir (une carte, un objet ou la caméra ; Maj / Ctrl : ajouter) ; glisser un objet = le poser sur le
-  sol ; poignées du manipulateur (déplacer, tourner, échelle ; axes du monde ou de l'objet ; aimantation) pour tout ce qui est
-  choisi ; clic droit tourne la vue ; milieu la glisse ; molette avance. Une carte se tire dans son plan (plan z) ou, avec Maj,
-  en profondeur.
-- **Une étape d'annulation par geste**, au nom français : « Déplacer dans l'espace 3D », « Tourner dans l'espace 3D »,
-  « Mettre à l'échelle dans l'espace 3D », « Déplacer la caméra », « Ordonner la pile selon la profondeur »…
-- **Réglages** (panneau Réglages tant que l'Espace 3D est ouvert) : la liste des cartes (calques) et des objets, cliquables ;
-  pour une carte : position X/Y/Z (m), rotation X/Y/Z (°), échelle (%), étirement X/Y (%), profondeur multiplan, inclinaison
-  remise à plat ; pour la caméra : position, panoramique, bascule, rotation, focale.
-- Icônes et bulles d'une seconde (nom, raccourci, description) par `bulles.rs` ; boutons à état par `bulles::bouton_etat`
-  (`encre_etat` / `symbole_etat`) ; couleurs du thème (`theme::`).
-- Toujours dans le Plateau à plat (vue normale) : dessiner sur une carte se fait sur sa texture, comme avant. Pour une carte
-  inclinée, le pinceau suit l'inclinaison (inverse de l'homographie au point visé).
+- Un seul bouton « Espace 3D » (icône cube) dans la barre sous le dessin, une seule entrée du menu Affichage, une seule
+  commande `espace3d.basculer`.
+- **Une seule rangée d'outils** (barre au-dessus de la vue) : Choisir · Déplacer · Tourner · Mettre à l'échelle · Caméra ·
+  Recadrer · Regarder par la caméra. Chacun : icône, bulle d'une seconde (nom, raccourci, description) par `bulles.rs` ; l'outil
+  actif en `bouton_etat`.
+- **Gestes** : clic = choisir une carte ou la caméra (Maj / Ctrl : ajouter) ; glisser une carte la déplace dans son plan (Maj :
+  en profondeur) ; poignées (déplacer, tourner, échelle ; axes du monde ou de la carte ; aimantation) pour tout ce qui est
+  choisi ; clic droit ou Alt + glisser tourne la vue, bouton du milieu la glisse, molette avance.
+- **Une étape d'annulation par geste**, au nom français : « Déplacer dans l'espace 3D », « Tourner dans l'espace 3D », « Mettre
+  à l'échelle dans l'espace 3D », « Déplacer la caméra », « Ordonner la pile selon la profondeur »…
+- **Réglages** (panneau Réglages tant que l'Espace 3D est ouvert) : manipulateur dans le repère de la carte, aimantation et
+  pas, grille ; la liste des cartes (calques) ; pour une carte : position X/Y/Z (m), rotation X/Y/Z (°), échelle (%), étirement
+  X/Y (%), profondeur multiplan, « Remettre à plat » ; pour la caméra : position, panoramique, bascule, rotation, focale.
+- Barre d'état : « Espace 3D : clic sur une carte (un calque) ou sur la caméra pour la choisir, glisser pour la déplacer… ».
 
 ## 8. Performance (règle « sans latence »)
 
-- Tourner la vue, tirer une carte ou un objet : rien ne passe par le processeur lourd. Les objets sont dessinés par la carte
-  graphique (maillages gardés, une matrice de 176 octets par objet) ; les cartes sont des maillages egui de 16 × 16 cases,
-  leurs textures (≤ 1024 px) sont refaites quand le dessin change seulement. Objectif : 60 images par seconde avec 10 cartes
-  et 20 objets : mesuré ≈ 2 ms par image d'interface (essai de budget `the_view_with_ten_cards_and_twenty_objects_stays_within_the_frame_budget`).
-- Le rendu des objets vers l'image se fait sur un autre fil, jamais pendant un trait ni un geste dans la vue (comme le
-  calque « Fond 3D » avant).
-- Le maillage d'une carte inclinée ne dépend que de la pose et de l'œil : il est refait à la construction du plan d'une image
-  (≈ 0,15 à 0,25 ms par carte), et reste une structure légère (4 225 points).
-- Aucun repaint au repos.
+- Tourner la vue, tirer une carte : rien ne passe par le processeur lourd. Les cartes sont des maillages egui de 16 × 16 cases,
+  leurs textures (≤ 1024 px) sont refaites quand le dessin change seulement ; le quadrillage est tracé par egui (une quarantaine
+  de segments). Plus de rendu d'objets, plus de fil de fond, plus de carte graphique dédiée à la vue.
+- 10 cartes : ≈ 1,6 ms par image d'interface, carte graphique (essai de budget `the_view_with_ten_cards_stays_within_the_frame_budget`) ;
+  choisir à la souris < 0,01 ms ; plan d'une image avec 10 cartes inclinées ≈ 1,3 ms.
+- Le maillage d'une carte inclinée est refait à la construction du plan d'une image (≈ 0,15 à 0,25 ms par carte).
+- Aucun repaint au repos (essai `the_space_toolbar_is_one_row_of_tools_and_the_application_rests_with_it_open`).
+- Taille de `shot.exe` (release) : voir `docs/PERFORMANCE.md` (« Espace 3D simplifié »).
 
 ## 9. Essais
 
-`espace3d_tests.rs` (38 essais et une mesure `perf_espace3d` ; le script `scripts/verifier.ps1` les nomme dans une famille « Espace 3D »), plus des essais adaptés
-ailleurs (`scene3d_tests`, `keymap_tests`, `cooperation_tests`, `cooperation_ui_tests`, `calqueffet_tests`, `bulles_tests`) :
+`espace3d_tests.rs` (cartes, caméra, rendu, parallaxe, clés, format, interface, anciens projets) et `espace3dmath_tests.rs`
+(maths, rayons, poignées, aimantation, caméra d'orbite, pyramide). Le script `scripts/verifier.ps1` les nomme dans la famille
+« Espace 3D ».
 
-- **Pose d'une carte** : aller-retour monde ↔ champs du calque (plusieurs poses, profondeurs, inclinaisons, étirement négatif) ;
-  reculer une carte garde sa taille et sa position dans le monde ; échelle sur un axe = étirement, uniforme = échelle ; la carte
-  est le calque du multiplan vu de l'œil (profondeurs −0,5 à 6, caméra décalée ou avancée, à 0,05 px près) ; calque fixe : pas
-  d'écart de profondeur, calque animé : la clé de l'image.
-- **Caméra** : la caméra du plan ↔ la caméra 3D dans les deux sens ; l'ancienne caméra de blocage donne la caméra du plan qui
-  voit la même chose.
-- **Rendu** : le plan d'une image est celui d'avant pour des cartes à plat ; carte inclinée = projection de la géométrie (boîte à
-  1,5 px près) ; opacité et fusion gardées ; carte derrière l'œil non dessinée ; vignette (`composite_pixel`) = composition ;
-  processeur contre carte graphique ≤ 2 niveaux (carte inclinée ; objets + carte inclinée) ; calque d'ajustement au-dessus d'une
-  carte inclinée ; l'export compose la même image que l'écran avec cartes inclinées, objets et caméra tournée.
-- **Parallaxe** : une carte plus loin bouge moins (rapport 6 à ±0,6, à plat et incliné) ; les objets aussi (valeur attendue à
-  2,5 px).
-- **Ordre** : la pile l'emporte sur la distance ; les objets sont sous les cartes ; « Ordonner la pile » (une étape, refusé avec des
-  dossiers).
-- **Clés** : interpolation, adoucis, écart de profondeur ; enregistrement et relecture ; retourner un plan retourne l'inclinaison.
-- **Format et anciens projets** : un projet sans inclinaison n'écrit aucun champ nouveau ; un projet de format 33 s'ouvre avec les
-  mêmes pixels (7 images) ; un format plus récent est refusé ; un projet partagé écrit `version_partage_ecrite()` ; une scène sans
-  `en_image` garde ses objets hors de l'image ; un « Fond 3D » d'avant se refait octet pour octet.
-- **Interface** : un seul bouton / une seule commande dans la palette, anciens noms en doubles ; choisir une carte au rayon et à la
-  souris, le calque courant suit ; déplacer, incliner, mettre à l'échelle par les poignées, une étape d'annulation par geste ;
-  calque verrouillé immobile ; caméra du plan déplacée (clé de l'image si animée) ; pinceau sur une carte inclinée (aller-retour) ;
-  l'application finit par se reposer avec des objets dans l'image ; le rendu des objets ne bloque pas l'écran.
-- **Budget** : 10 cartes et 20 objets, ≈ 2 ms par image ; choisir à la souris ≈ 0,06 ms ; plan de 10 cartes inclinées ≈ 2 ms.
-## 10. Comparaison avec Storyboard Pro et Harmony (à vérifier)
+- **Pose d'une carte** : aller-retour monde ↔ champs du calque ; reculer une carte garde sa taille et sa position dans le monde ;
+  échelle sur un axe = étirement, uniforme = échelle ; la carte est le calque du multiplan vu de l'œil (à 0,05 px près).
+- **Caméra** : la caméra du plan ↔ la prise de vue de l'espace dans les deux sens.
+- **Rendu** : carte à plat = plan d'avant ; carte inclinée = projection de la géométrie ; opacité et fusion gardées ; carte
+  derrière l'œil non dessinée ; vignette = composition ; processeur contre carte graphique ≤ 2 niveaux ; l'export compose la
+  même image que l'écran (cartes inclinées, caméra tournée).
+- **Parallaxe** : une carte plus loin bouge moins (rapport 6 à ±0,6, à plat et incliné).
+- **Ordre** : la pile l'emporte sur la distance ; « Ordonner la pile » (une étape, refusé avec des dossiers).
+- **Anciens projets** : un projet avec objets, décor, repère 3D, modèle et calque « Fond 3D » s'ouvre sans avertissement avec les
+  mêmes pixels ; `scenes3d.json` (même abîmé) et le modèle sont intacts après l'enregistrement classique et en arrière-plan ;
+  le manifeste n'écrit plus `repere3d` ni `modeles`.
+- **Interface** : plus aucune commande d'objet ni de repère (actions, palette, keymap) ; anciens noms en doubles ; choisir au
+  rayon et à la souris ; déplacer, incliner, mettre à l'échelle par les poignées, une étape d'annulation par geste ; calque
+  verrouillé immobile ; caméra du plan déplacée (clé de l'image si animée) ; pinceau sur une carte inclinée (aller-retour) ;
+  l'application finit par se reposer, Espace 3D ouvert.
 
-Storyboard Pro a, d'après sa documentation, un « stage 3D » où les couches sont des plans que l'on place dans l'espace ; le
-détail (inclinaison, ordre de rendu, caméra) n'a pas été comparé. Rien de ce document ne prétend reproduire un comportement
-de Storyboard Pro ou de Harmony.
+## 10. Liste de contrôle à l'écran (rien n'a été regardé : consigne de ne pas lancer SHOT)
 
-## 11. État (fin de séance, 2026-10-20)
+À voir une fois, dans les trois thèmes :
 
-**Fait, testé** (essais dans `espace3d_tests.rs`, plus `scene3d_tests.rs`, `keymap_tests.rs`, `cooperation_*tests.rs` adaptés) :
+1. Barre du bas : un seul bouton cube ; l'ouvrir : la rangée d'outils (Choisir, Déplacer, Tourner, Échelle, Caméra | Recadrer,
+   Regarder par la caméra) avec des icônes lisibles et des bulles à 1 s ; l'outil actif est en couleur d'accent.
+2. Cartes : chaque calque est un rectangle texturé, contour d'accent quand il est choisi, nom et profondeur en légende ; clic
+   sur un calque du panneau Calques = carte choisie ; clic sur une carte = calque courant.
+3. Poignées : flèches, carrés de plan, cercles, cubes d'échelle ; couleurs rouge / vert / bleu ; survol en jaune.
+4. Caméra : pyramide, cadre, triangle du haut de l'image ; « Caméra » la choisit ; « Regarder par la caméra » montre le cadre.
+5. Réglages : liste des cartes, champs de position / rotation / échelle / étirement / profondeur, « Remettre à plat », champs de la
+   caméra ; aucune mention d'objet, de décor, de lumière.
+6. Barre d'état : le message d'aide ne parle que de cartes et de caméra.
+7. Menu Fichier > Importer : plus de « modèle 3D (glTF) comme repère » ; barre d'outils de dessin : plus d'outil « Repère 3D ».
+8. Ouvrir une copie d'un ancien projet qui avait des objets et un calque « Fond 3D » : le calque est là, mêmes pixels, verrouillé ;
+   l'enregistrer ; `scenes3d.json` est toujours dans le dossier.
 
-- Un seul espace : un bouton, une entrée de menu, une commande `espace3d.basculer` ; `vue.3d`, `scene3d.basculer`, `vue3d.recadrer`,
-  `outil3d.*` en doubles (`keymap::ALIASES`). Le plateau en 3D (`stage3d.rs`, `stage3dui.rs`) est retiré.
-- Les calques sont des cartes : pose 3D calculée des champs du calque (et chemin inverse, aller-retour testé), choisies au
-  rayon (la carte dessinée la plus proche, la feuille en dernier recours) ou dans la liste, manipulées par les poignées des
-  objets (déplacer, tourner, échelle, axes locaux, aimantation, multi-choix), champs chiffrés, verrous respectés, une étape
-  d'annulation par geste, le calque courant et la carte choisie se suivent.
-- Une carte reculée garde sa taille dans le monde ; le champ « Profondeur » du panneau Calques garde son sens (taille vue).
-- Une seule caméra : celle du plan, avec ses clés ; choisie, déplacée, tournée par les mêmes poignées ; « Vue par la caméra »
-  la déplace ; plus de caméra du plateau dans l'interface (l'ancienne reste enregistrée pour le calque « Fond 3D »).
-- Rendu : carte à plat = les pixels d'avant (plan identique, essai) ; carte inclinée = maillage projeté de l'œil sur la feuille,
-  écran (carte graphique), vignettes, export et calques d'ajustement ; processeur contre carte graphique : 0 pixel à plus de 2
-  niveaux sur 53 000 (carte inclinée) et sur 21 000 (objets + carte inclinée).
-- Parallaxe : une carte plus loin bouge moins quand la caméra se déplace (rapport 6 mesuré pour des profondeurs 2 et −0,5,
-  à plat et incliné) ; les objets aussi (23,7 px mesurés, 23,7 attendus).
-- Clés : inclinaison, écart de profondeur interpolés comme le reste (adoucis compris) ; un calque animé tiré à l'image 5
-  crée la clé de l'image 5 ; enregistrés, relus.
-- Format 35, projets partagés au plus grand des deux numéros ; un projet d'avant (≤ 34) s'ouvre identique, pixel pour pixel ;
-  un projet d'un format plus récent est refusé.
-- Objets dans l'image, sous toutes les cartes, par la caméra du plan, en arrière-plan à l'écran, immédiat à l'export ;
-  un plan d'un ancien projet ne les montre pas (rien de plus dans l'image).
-- Pinceau sur une carte inclinée (aller-retour carte ↔ feuille ↔ écran). « Ordonner la pile selon la profondeur » (une étape,
-  refusé si la pile a des dossiers ou des calques liés).
-- Budget : 10 cartes et 20 objets, ≈ 2 ms par image d'interface (60 images par seconde tenues avec une grande marge).
+## 11. Ce qui reste à faire (et ne le sera pas, sauf demande)
 
-**Reste à faire, précisément** :
-
-1. **Objet devant une carte** (un pilier devant un personnage) : demande un tampon de profondeur partagé entre les objets et la
-   composition de la carte graphique (`gpu.rs`) et son équivalent sur processeur. Aujourd'hui : objets sous toutes les cartes.
-2. **Tri des cartes par profondeur** comme réglage de plan (et cartes qui se traversent) : incompatible, tel quel, avec les modes de
-   fusion et les calques d'ajustement, qui travaillent sur « ce qui est dessous ».
-3. **Cartes inclinées plus grandes que la feuille** (toile infinie) : elles sont coupées aux bords de la feuille.
-4. **Vue d'édition** : les effets, modes de fusion et opacités des calques n'y sont pas montrés (le dessin brut) ; pas de test de
-   profondeur entre cartes dans cette vue (ordre de la pile).
-5. **Objets animés** : seuls la caméra et les cartes ont des clés ; les objets 3D sont fixes dans le plan.
-6. **Lecture d'un travelling avec objets** : préchargement des rendus des images à venir (aujourd'hui un rendu à la fois, les
-   objets peuvent retarder à l'écran ; l'export est exact).
-7. **Outils 2D sur une carte inclinée** : le pinceau suit l'inclinaison, pas la boîte de sélection, le Transformer ni la
-   multisélection (ils travaillent sur la carte à plat) ; l'export vers Storyboard Pro ignore l'inclinaison.
-8. **Inclinaison** limitée à ±85° (pas de retournement, pas de vue du dos d'une carte) ; la pose est donnée en angles d'Euler
-   (ordre Y · X · Z), la poignée de rotation peut donc sembler sauter près de ±90°.
-9. **Interpolation** linéaire dans les champs du calque : entre deux clés de profondeurs différentes, la trajectoire vue par la
-   caméra de référence est droite, celle du monde est une courbe douce.
-10. **Dossiers** : un dossier n'est pas une carte ; sa pose ne place pas ses calques dans l'espace.
-11. **Rien n'a été regardé à l'écran** (aucun lancement de SHOT, consigne) : tout l'aspect (poignées, contours, voiles, lisibilité
-    dans les trois thèmes, fluidité réelle) est à voir avec la liste de contrôle de `docs/INTERFACE.md`, partie 13.
-12. **Comparaison avec Storyboard Pro / Harmony** : non faite (à vérifier).
+1. Objet devant une carte, cartes qui se traversent, tri des cartes par profondeur comme réglage de plan : sans objet, plus
+   d'objet ; le tri reste incompatible avec les modes de fusion et les calques d'ajustement.
+2. Cartes inclinées plus grandes que la feuille (toile infinie) : coupées aux bords de la feuille.
+3. Vue d'édition : les effets, modes de fusion et opacités des calques n'y sont pas montrés (le dessin brut).
+4. Outils 2D sur une carte inclinée : le pinceau suit l'inclinaison, pas la boîte de sélection, le Transformer ni la
+   multisélection ; l'export vers Storyboard Pro ignore l'inclinaison.
+5. Inclinaison limitée à ±85° ; la pose est donnée en angles d'Euler (ordre Y · X · Z), la poignée de rotation peut sembler
+   sauter près de ±90°.
+6. Dossiers : un dossier n'est pas une carte ; sa pose ne place pas ses calques dans l'espace.
+7. Comparaison avec Storyboard Pro / Harmony : non faite (à vérifier).

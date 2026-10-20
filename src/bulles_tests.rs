@@ -294,12 +294,12 @@ fn no_hand_made_selected_button_forgets_its_ink() {
 }
 
 #[test]
-fn every_tool_and_3d_tool_has_a_description() {
+fn every_tool_and_3d_mode_has_a_description() {
     for tool in crate::app::Tool::ALL {
         let d = tool.description();
         assert!(d.ends_with('.') && d.len() > 10, "{} : « {d} »", tool.label());
     }
-    for mode in crate::scene3dgizmo::Mode::ALL {
-        assert!(crate::scene3dui::mode_description(mode).ends_with('.'), "{}", mode.label());
+    for mode in crate::espace3dgizmo::Mode::ALL {
+        assert!(crate::espace3dui::mode_description(mode).ends_with('.'), "{}", mode.label());
     }
 }

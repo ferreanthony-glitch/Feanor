@@ -91,7 +91,7 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
     du mouvement en pointillés), chaque calque à sa distance avec sa largeur réelle ; glisser un
     calque vers le haut / le bas change sa profondeur (Maj : par pas de 0,1), annulable en une
     étape. Pas encore : déplacer la caméra depuis cette vue, vue de côté, vraie vue 3D.
-- ✅ 2d. Import glTF de repère, en fil de fer (choix d'Anthony).
+- ✅ 2d. Import glTF de repère, en fil de fer (choix d'Anthony). **Retiré le 2026-10-21** (« on va rester simple ») : voir tout en bas, « Espace 3D simplifié ».
   - Fichier > Importer un modèle 3D (glTF) : `.glb` ou `.gltf` (tampons intégrés ou à côté),
     lecteur écrit pour Pelure. Sommets soudés, seules les arêtes utiles sont tracées (bords,
     cassures de plus de 25°), arêtes cachées masquées. Le modèle est gardé dans le projet
@@ -2925,7 +2925,7 @@ partie 12 ; mesures : `docs/PERFORMANCE.md`, partie 10.
   choix de la police de l'incrustation dans l'interface (le champ existe et s'enregistre) ; sélection flottante sous un
   calque d'effet (l'effet attend la fin du geste). À vérifier à l'écran : voir `docs/INTERFACE.md`, partie 12.
 
-## Scène 3D de blocage (demandée par Anthony le 2026-10-19, branche `scene3d`) ✅ — devenue l'Espace 3D (voir la dernière partie)
+## Scène 3D de blocage (demandée par Anthony le 2026-10-19, branche `scene3d`) ✅ — devenue l'Espace 3D, puis **retirée le 2026-10-21** (objets 3D supprimés : voir la dernière partie)
 
 Le choix d'Anthony : **blocage simple** — des formes (cube, plan, cylindre, sphère, escalier), les déplacer, les
 tourner, les mettre à l'échelle ; la caméra du plan dans la scène ; des silhouettes de personnages ; puis dessiner
@@ -3390,3 +3390,31 @@ Anthony garde les deux comportements : **Préférences > Montage > « Repliage d
 **commun à tous les plans** (d'origine) et **propre à chaque plan** (chaque plan retient ses replis ; hauteurs du plan courant, prises au relâchement de la souris ; triangle et « tout replier » sur
 le plan courant seulement, « … de tous les plans » au clic droit). Réglage de l'application (`repliage_pistes`), rien de neuf dans le projet ; passage d'un mode à l'autre sans perte ; en mode par
 plan, aucune écriture dans les plans qu'on ne tient pas (film partagé). Détail : `docs/INTERFACE.md` § 29.8, liste de contrôle § 29.9 ; code : `src/pistes.rs`.
+
+## Espace 3D simplifié : plus d'objets 3D, plus de repère 3D, plus de calque de fond (demandé par Anthony le 2026-10-21, branche `espace3d-simple`) ✅
+
+Anthony : « On va rester simple et focus sur le dessin. Un espace 3D où je peux bouger les dessins dans l'environnement suffit. On
+peut supprimer les objets 3D comme les cubes, cylindres, personnages… ça alourdit le logiciel et l'interface pour pas grand-chose. »
+Puis : le repère 3D (glTF) part aussi, et « les calques de fond qui ne servent à rien ».
+
+- ✅ **Gardé** : la vue Espace 3D (les calques en cartes : déplacer, tourner / incliner, échelle, étirement par poignées et en chiffres ;
+  plusieurs cartes ; aimantation ; sol quadrillé), la caméra du plan (la choisir, la déplacer, la regarder), les clés de position et de
+  caméra, la parallaxe dans l'image (écran, lecture, vignettes, export), « Ordonner la pile selon la profondeur », « Remettre à plat ».
+  Une seule rangée d'outils : Choisir · Déplacer · Tourner · Échelle · Caméra · Recadrer · Regarder par la caméra.
+- ✅ **Supprimé** : objets 3D (cube, plan, cylindre, sphère, cône, escalier, mannequin, modèle glTF), matières et couleurs, lumière et
+  styles de rendu, groupes, décor de séquence, « Objets dans l'image », « Figer les objets dans un calque de fond » (`scene3d.rs`,
+  `scene3dmesh.rs`, `scene3drender.rs`, `scene3dgpu.rs`, `scene3dstore.rs`, `espace3dobjets.rs`) ; le repère 3D (`model3d.rs`,
+  `view3d.rs`, `ref3dtool.rs`, `Tool::Ref3d`, Fichier > Importer > « Un modèle 3D (glTF) comme repère ») ; le bouton « Nouveau calque de
+  fond » (icône des montagnes, `calque.nouveau_fond`) et ses menus.
+- ✅ **Anciens projets sûrs** : un calque « Fond 3D » est un calque bitmap ordinaire (mêmes pixels) ; `scenes3d.json`, le champ `repere3d`
+  et `modeles/*.pelure3d` ne sont plus lus ni écrits et jamais effacés ; plus d'avertissement pour un `scenes3d.json` abîmé ; aucun
+  changement de `VERSION` (35). Un calque « de fond » d'un ancien projet était déjà un calque bitmap ordinaire.
+- ✅ Les identifiants de commandes d'objets et du repère n'existent plus ; ceux qui gardent un sens (`vue.3d`, `scene3d.basculer`,
+  `outil3d.*`, `scene3d.outil_*`, `scene3d.cadrer`, `scene3d.vue_camera`, `scene3d.aimanter`, `scene3d.grille`) sont des doubles des commandes
+  `espace3d.*`.
+- Essais : objets, mannequin, rasteriseur, rendu dans l'image, repère glTF retirés ; maths, poignées, caméra, cartes, parallaxe, export,
+  format et migration gardés ; ajoutés : un ancien projet (objets, décor, repère, modèle, « Fond 3D ») s'ouvre sans avertissement avec les
+  mêmes pixels et garde ses fichiers à l'enregistrement (classique et en arrière-plan) ; plus aucune commande d'objet ni de repère
+  (actions, palette, keymap) ; le repos de l'application avec l'Espace 3D ouvert.
+- Taille de `shot.exe` (release) et lignes : voir `docs/PERFORMANCE.md`.
+- **Pas fait / à voir à l'écran** : la liste de contrôle de `docs/INTERFACE.md`, partie 13.

@@ -127,7 +127,6 @@ impl App {
                     self.action_item(ui, "Une séquence d'images (calque vidéo)…", "fichier.importer_sequence");
                     self.action_item(ui, "Des images comme références…", "references.importer_image");
                     self.action_item(ui, "Une vidéo comme référence…", "references.importer_video");
-                    self.action_item(ui, "Un modèle 3D (glTF) comme repère…", "fichier.importer_modele3d");
                     ui.separator();
                     self.action_item(ui, "Un projet Storyboard Pro (.sboard)…", "fichier.importer_sboard");
                     self.action_item(ui, "Un scénario (Fountain, Final Draft, Word, texte)…", "fichier.importer_scenario");
@@ -348,9 +347,9 @@ impl App {
 
     /// Panneau des réglages de l'outil courant.
     pub(crate) fn tool_options_panel(&mut self, ui: &mut egui::Ui) {
-        // La scène 3D de blocage a ses propres réglages (`scene3dui.rs`).
-        if self.scene3d.on && !self.camera_view {
-            self.scene3d_options_panel(ui);
+        // L'Espace 3D a ses propres réglages (`espace3dui.rs`).
+        if self.espace3d.on && !self.camera_view {
+            self.espace3d_options_panel(ui);
             return;
         }
         let vector = self.layer().kind == LayerKind::Vector;
@@ -468,7 +467,6 @@ impl App {
                      Les dessins ne sont pas modifiés : on peut annuler la transformation à tout moment.",
                 );
             }
-            Tool::Ref3d => self.ref3d_panel(ui),
             Tool::Camera => self.camera_panel(ui),
         }
         if self.current_brush().is_some_and(|b| b.pressure_size || b.pressure_opacity) {

@@ -17,7 +17,7 @@ pub(crate) const TOOL_GROUPS: &[&[&[Tool]]] = &[
     &[&[Tool::Rect, Tool::Line, Tool::Ellipse, Tool::Polyline], &[Tool::Text]],
     // Transformer et Perspective dans une seule case (Anthony, 2026-10-18).
     &[&[Tool::Transform, Tool::Perspective], &[Tool::Picker]],
-    &[&[Tool::Pan], &[Tool::Camera], &[Tool::Ref3d]],
+    &[&[Tool::Pan], &[Tool::Camera]],
 ];
 
 /// Clic maintenu si longtemps (secondes) sur une case à plusieurs outils : ils s'affichent.

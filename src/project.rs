@@ -8,16 +8,17 @@
 //!   dessins/<id>.png      dessins bitmap
 //!   dessins/<id>.json     dessins vectoriels
 //!   sons/<id>.<ext>       fichiers son importés, copiés tels quels
-//!   modeles/<id>.pelure3d modèles 3D de repère (format 5), maillage soudé (voir `model3d`)
+//!   modeles/<id>.pelure3d anciens modèles 3D de repère (format 5) : plus lus ni écrits depuis la suppression du
+//!                         repère 3D (2026-10-21), mais jamais effacés non plus
 //!   commentaires.json     commentaires sur la timeline (`commentaires.rs`), sans changer `VERSION` :
 //!                         absent, il n'y a pas de commentaires ; une version qui ne le connaît pas
 //!                         le laisse en place (elle n'efface que le contenu de dessins/, sons/…)
 //!   references.json      références visuelles (`references.rs`), de même sans changer `VERSION` ;
 //!   references/<id>.<ext> leurs fichiers (images copiées telles quelles, images extraites des vidéos
 //!                         dans references/<id>/) : une version qui ne les connaît pas les laisse là
-//!   scenes3d.json        scènes 3D de blocage, par plan, et décors par séquence (`scene3d.rs`,
-//!                         `scene3dstore.rs`), de même sans changer `VERSION` ; le calque « Fond 3D »
-//!                         où une scène est envoyée est un calque bitmap ordinaire
+//!   scenes3d.json        anciennes scènes 3D de blocage : plus lues ni écrites depuis la suppression des objets 3D
+//!                         (2026-10-21), jamais effacées ; le calque « Fond 3D » qu'elles avaient produit est un
+//!                         calque bitmap ordinaire
 //!   rognages.json         contenu rogné au début et à la fin des plans (`rognage.rs`), de même sans
 //!                         changer `VERSION` ; ses dessins restent dans dessins/ (une version qui ne
 //!                         le connaît pas les efface à l'enregistrement : le plan reste tel qu'il est)
@@ -51,15 +52,13 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::document::{
-    fresh_layer_id, AudioTrack, Behaviour, Cel, CelId, Document, Layer, LayerKind, LayerTransform, Panel, Ref3d, Scene, SceneWide,
+    fresh_layer_id, AudioTrack, Behaviour, Cel, CelId, Document, Layer, LayerKind, LayerTransform, Panel, Scene, SceneWide,
     Sequence, Sound, SoundClip, Structure,
 };
 use crate::brushtex::{GrayImage, TextureKind};
 use crate::camera::{Camera, CameraKey};
 use crate::guides::Guide;
 use crate::io::encode_png;
-use crate::model3d::Model3d;
-use crate::view3d::{Cam3d, MAX_ELEVATION};
 use crate::raster::Raster;
 use crate::vector::VectorDrawing;
 
@@ -69,7 +68,8 @@ pub(crate) mod partage_io;
 
 pub const FORMAT: &str = "pelure-projet";
 /// 4 (phase 2b) : la feuille de dessin est plus grande que le cadre de la caméra (`cadre`).
-/// 5 (phase 2d) : modèles 3D (`modeles`) et repère 3D par panneau (`repere3d`).
+/// 5 (phase 2d) : modèles 3D (`modeles`) et repère 3D par panneau (`repere3d`) ; ces champs sont ignorés à la lecture
+/// depuis la suppression du repère 3D (2026-10-21).
 /// 6 (phase 5d) : textes dans les dessins vectoriels (éléments `Text`, inconnus des versions
 /// précédentes : elles refusent le projet plutôt que de perdre ces dessins).
 /// 7 (phase 6f) : calques de toute la scène (`toute_la_scene`) ; une version précédente en ferait
@@ -206,9 +206,6 @@ pub(crate) struct Manifest {
     /// Guides de perspective (ajouté en 1c).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     guides: Vec<Guide>,
-    /// Modèles 3D de repère (format 5).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    modeles: Vec<ModelEntry>,
     /// Notes de la planche (format 8) : traits de la vue Vignettes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     planche: Vec<NoteEntry>,
@@ -347,37 +344,6 @@ struct NoteTextEntry {
 }
 
 #[derive(Serialize, Deserialize)]
-struct ModelEntry {
-    id: u64,
-    /// Nom du fichier d'origine (affiché).
-    #[serde(default)]
-    nom: String,
-}
-
-/// Repère 3D d'un panneau (format 5) : modèle, caméra en orbite, affichage.
-#[derive(Serialize, Deserialize)]
-struct Ref3dEntry {
-    modele: u64,
-    cible: [f32; 3],
-    azimut: f32,
-    elevation: f32,
-    distance: f32,
-    focale: f32,
-    #[serde(default = "yes")]
-    visible: bool,
-    #[serde(default = "yes")]
-    aretes_cachees: bool,
-    #[serde(default = "default_ref_color")]
-    couleur: [u8; 3],
-    #[serde(default = "one")]
-    opacite: f32,
-}
-
-fn default_ref_color() -> [u8; 3] {
-    [40, 150, 230]
-}
-
-#[derive(Serialize, Deserialize)]
 struct SoundEntry {
     id: u64,
     /// Nom du fichier d'origine (affiché).
@@ -452,9 +418,6 @@ pub(crate) struct PanelEntry {
     /// Images clés de la caméra (absent : caméra au centre de la feuille).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     camera: Vec<CameraEntry>,
-    /// Repère 3D (format 5 ; absent : aucun).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    repere3d: Option<Ref3dEntry>,
     /// Marques d'image du plan (format 12 ; absent : aucune).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     marques: Vec<MarkEntry>,
@@ -1042,7 +1005,6 @@ pub struct SaveJob {
     manifest_path: PathBuf,
     drawings: Vec<(PathBuf, DrawingData)>,
     sounds: Vec<(PathBuf, Arc<Vec<u8>>)>,
-    models: Vec<(PathBuf, Arc<Model3d>)>,
     textures: Vec<(PathBuf, GrayImage)>,
     /// Images des calques vidéo à recopier dans le dossier du projet (13k) : d'où, vers où.
     videos: Vec<(crate::video::VideoClip, PathBuf, PathBuf)>,
@@ -1061,7 +1023,6 @@ pub struct SaveJob {
     /// Dessins bitmap qui ont quelque chose hors de la feuille (toile infinie, format 30).
     hors: BTreeSet<CelId>,
     used_sounds: BTreeSet<u64>,
-    used_models: BTreeSet<u64>,
     used_textures: BTreeSet<(TextureKind, u32)>,
     /// Le fichier des commentaires (`commentaires.json`) ; rien : il n'y en a plus, le fichier part.
     comments: Option<Vec<u8>>,
@@ -1080,8 +1041,6 @@ pub struct SaveJob {
     /// d'écriture (l'encodage des peintures ne se fait pas sur le fil de l'interface) ; rien :
     /// la planche est vide, le fichier part (s'il est lisible).
     crayonnes: Option<crate::crayonnes::Planche>,
-    /// Le fichier des scènes 3D (`scenes3d.json`) ; rien : il n'y en a plus, le fichier part.
-    scenes3d: Option<Vec<u8>>,
     /// Le fichier des envois (`envois.json`) ; rien : il n'y en a pas (un fichier illisible reste là).
     envois: Option<Vec<u8>>,
     /// Le fichier des autres versions des plans (`plans_versions.json`) ; rien : il n'y en a pas.
@@ -1193,13 +1152,6 @@ pub fn prepare_save(
         .map(|s| (dir.join(SOUNDS).join(sound_file(s)), s.bytes.clone()))
         .filter(|(path, _)| !path.exists())
         .collect();
-    // Un modèle 3D non plus ; il est converti à l'écriture (sur l'autre fil), s'il manque.
-    let used_models = used_models(doc);
-    let models = used_models
-        .iter()
-        .map(|id| (model_file(dir, *id), doc.models[id].clone()))
-        .filter(|(path, _)| !path.exists())
-        .collect();
     // Une texture non plus (sa clé vient de son contenu) : écrite seulement si elle manque.
     let used_textures = used_textures(doc, &used);
     let textures = used_textures
@@ -1235,7 +1187,6 @@ pub fn prepare_save(
         manifest_path: manifest_path.to_path_buf(),
         drawings,
         sounds,
-        models,
         textures,
         videos,
         manifest,
@@ -1245,7 +1196,6 @@ pub fn prepare_save(
         fonds: fonds.union(&unreadable).copied().collect(),
         hors: hors.union(&unreadable).copied().collect(),
         used_sounds,
-        used_models,
         used_textures,
         comments: crate::commentaires::to_bytes(doc)?,
         reserves: crate::rognage::to_bytes(doc)?,
@@ -1254,7 +1204,6 @@ pub fn prepare_save(
         sons_proposes: crate::indications::to_bytes(doc)?,
         references: crate::references::plan_save(doc, dir)?,
         crayonnes: (!doc.crayonnes.is_blank()).then(|| doc.crayonnes.clone()),
-        scenes3d: crate::scene3dstore::to_bytes(doc)?,
         envois: crate::envois::to_bytes(doc)?,
         plans_versions: crate::planvers::to_bytes(doc)?,
         keep_drawings,
@@ -1366,27 +1315,6 @@ fn load_reserves(dir: &Path, warnings: &mut Vec<String>) -> Option<crate::rognag
     }
 }
 
-/// Les scènes 3D du projet, lues dans `scenes3d.json` (absent : aucune scène). Un fichier illisible
-/// (abîmé, ou d'une version plus récente) n'empêche pas d'ouvrir le projet : on le dit, sans scènes ;
-/// il reste en place (`write_sidecar`).
-fn load_scenes3d(dir: &Path, warnings: &mut Vec<String>) -> crate::scene3d::Scenes3d {
-    let path = dir.join(crate::scene3dstore::FILE);
-    match fs::read(&path) {
-        Ok(bytes) => String::from_utf8(bytes)
-            .map_err(|_| "le fichier n'est pas du texte (UTF-8)".to_string())
-            .and_then(|text| crate::scene3dstore::parse(&text))
-            .unwrap_or_else(|e| {
-                warnings.push(format!("{} : {e} ; les scènes 3D ne sont pas chargées.", crate::scene3dstore::FILE));
-                Default::default()
-            }),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Default::default(),
-        Err(e) => {
-            warnings.push(format!("{} : {e} ; les scènes 3D ne sont pas chargées.", path.display()));
-            Default::default()
-        }
-    }
-}
-
 /// Les commentaires du projet, lus dans `commentaires.json` (absent : aucun commentaire). Un
 /// fichier illisible n'empêche pas d'ouvrir le projet : on le dit, sans commentaires.
 fn load_comments(dir: &Path, warnings: &mut Vec<String>) -> Vec<crate::commentaires::Comment> {
@@ -1490,13 +1418,6 @@ impl SaveJob {
             write_atomic(path, bytes)?;
             count += 1;
         }
-        if !self.models.is_empty() {
-            fs::create_dir_all(dir.join(MODELS)).map_err(|e| format!("{} : {e}", dir.display()))?;
-        }
-        for (path, model) in &self.models {
-            write_atomic(path, &crate::model3d::to_bytes(&model.mesh))?;
-            count += 1;
-        }
         if !self.textures.is_empty() {
             fs::create_dir_all(dir.join(TEXTURES)).map_err(|e| format!("{} : {e}", dir.display()))?;
         }
@@ -1527,8 +1448,6 @@ impl SaveJob {
             None => None,
         };
         write_sidecar(&dir.join(crate::crayonnes::FILE), crayonnes.as_deref(), |t| crate::crayonnes::parse(t).is_ok())?;
-        // Les scènes 3D de blocage (`scene3dstore.rs`), de même.
-        write_sidecar(&dir.join(crate::scene3dstore::FILE), self.scenes3d.as_deref(), |t| crate::scene3dstore::parse(t).is_ok())?;
         // Les envois : les instantanés d'abord (dessins puis fichier), puis la liste qui les cite.
         count += crate::envois::ecrire(dir, &self.snapshots, &self.snapshot_reuse, self.versions_from.as_deref())?;
         write_sidecar(&dir.join(crate::envois::FILE), self.envois.as_deref(), |t| crate::envois::parse(t).is_ok())?;
@@ -1537,31 +1456,10 @@ impl SaveJob {
         write_atomic_synced(&self.manifest_path, &self.manifest)?;
         let removed = if self.keep_drawings { 0 } else { remove_unused(dir, &self.used, &self.fonds, &self.hors) }
             + remove_unused_sounds(dir, &self.used_sounds, &self.kept)
-            + remove_unused_models(dir, &self.used_models, &self.kept)
             + if self.has_unreadable { 0 } else { remove_unused_textures(dir, &self.used_textures) }
             + self.references.cleanup(dir);
         Ok(SaveReport { written: count, removed, snapshots: self.snapshots.iter().map(|s| s.id).collect(), partage: None })
     }
-}
-
-/// Efface les modèles 3D du dossier qui ne servent plus (seulement « <nombre>.pelure3d »).
-fn remove_unused_models(dir: &Path, used: &BTreeSet<u64>, kept: &BTreeSet<PathBuf>) -> usize {
-    let Ok(entries) = fs::read_dir(dir.join(MODELS)) else { return 0 };
-    let mut removed = 0;
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if kept.contains(&path) {
-            continue;
-        }
-        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-        let id = path.file_stem().and_then(|s| s.to_str()).and_then(|s| s.parse::<u64>().ok());
-        if let (Some(id), "pelure3d") = (id, ext) {
-            if !used.contains(&id) && fs::remove_file(&path).is_ok() {
-                removed += 1;
-            }
-        }
-    }
-    removed
 }
 
 /// Efface les sons du dossier qui ne servent plus (seulement les fichiers « <nombre>.<ext> »).
@@ -1713,18 +1611,6 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                 panoramique: k.cam.pan,
             })
             .collect(),
-        repere3d: panel.ref3d.as_ref().map(|r| Ref3dEntry {
-            modele: r.model,
-            cible: r.cam.target,
-            azimut: r.cam.azimuth,
-            elevation: r.cam.elevation,
-            distance: r.cam.distance,
-            focale: r.cam.focal,
-            visible: r.visible,
-            aretes_cachees: r.hidden_lines,
-            couleur: r.color,
-            opacite: r.opacity,
-        }),
         marques: panel
             .marks
             .iter()
@@ -1752,8 +1638,6 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
         entry.signets.clear();
         (entry.entree, entry.sortie, entry.couleur) = (None, None, None);
         entry.notes_dessinees.clear();
-        // Le repère 3D est un guide pour dessiner (ni à l'export ni dans les vignettes).
-        entry.repere3d = None;
         // Les numéros du plan et de ses marques disent qui il est, pas ce qu'il contient : deux versions d'un
         // même plan (`planvers.rs`) se comparent sans eux.
         entry.id = 0;
@@ -1834,7 +1718,6 @@ pub(crate) fn charger_plans(dir: &Path, tete: &Tete, scene: u64, entrees: Vec<se
         sons: Vec::new(),
         pistes_son: Vec::new(),
         guides: Vec::new(),
-        modeles: Vec::new(),
         planche: Vec::new(),
         planche_textes: Vec::new(),
         groupes: Vec::new(),
@@ -1940,13 +1823,6 @@ fn manifest_de(doc: &Document, avec_plans: bool) -> Manifest {
             })
             .collect(),
         guides: doc.guides.clone(),
-        modeles: used_models(doc)
-            .iter()
-            .map(|id| ModelEntry {
-                id: *id,
-                nom: doc.models[id].name.clone(),
-            })
-            .collect(),
         planche: doc
             .board
             .strokes
@@ -1998,22 +1874,6 @@ fn manifest_de(doc: &Document, avec_plans: bool) -> Manifest {
         dessins_hors: if avec_plans { hors_of(doc, &drawn).into_iter().collect() } else { Vec::new() },
         partage: None,
     }
-}
-
-/// Modèles 3D cités par au moins un panneau.
-fn used_models(doc: &Document) -> BTreeSet<u64> {
-    // Les modèles du repère 3D des plans, et ceux que les scènes 3D de blocage montrent.
-    doc.panels
-        .iter()
-        .chain(doc.plans_ranges())
-        .filter_map(|p| p.ref3d.as_ref().map(|r| r.model))
-        .chain(doc.scenes3d.models_used())
-        .filter(|id| doc.models.contains_key(id))
-        .collect()
-}
-
-fn model_file(dir: &Path, id: u64) -> PathBuf {
-    dir.join(MODELS).join(format!("{id}.pelure3d"))
 }
 
 pub struct Loaded {
@@ -2172,11 +2032,9 @@ pub(crate) struct Annexes {
     pub plans_seuls: bool,
     pub versions: Option<crate::planvers::Fichier>,
     pub reserves: Option<crate::rognage::Loaded>,
-    pub scenes3d: Option<crate::scene3d::Scenes3d>,
     pub commentaires: Vec<crate::commentaires::Comment>,
-    /// Sons et modèles déjà en mémoire, par numéro : ils ne sont pas relus du dossier (relecture de la structure).
+    /// Sons déjà en mémoire, par numéro : ils ne sont pas relus du dossier (relecture de la structure).
     pub sons_connus: HashMap<u64, Sound>,
-    pub modeles_connus: HashMap<u64, Arc<Model3d>>,
 }
 
 fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress: Option<&Progress>, mut annexes: Annexes) -> Result<Loaded, String> {
@@ -2281,26 +2139,6 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
             }
         }
     }
-    let mut models: HashMap<u64, Model3d> = HashMap::new();
-    let mut known_models: Vec<Arc<Model3d>> = Vec::new();
-    for entry in &manifest.modeles {
-        if let Some(known) = annexes.modeles_connus.get(&entry.id) {
-            known_models.push(known.clone());
-            continue;
-        }
-        match fs::read(model_file(dir, entry.id))
-            .map_err(|e| e.to_string())
-            .and_then(|b| crate::model3d::from_bytes(&b))
-        {
-            Ok(mesh) => {
-                models.insert(entry.id, Model3d::new(entry.id, entry.nom.clone(), mesh));
-            }
-            Err(e) => {
-                unreadable_files.insert(model_file(dir, entry.id));
-                warnings.push(format!("modèle 3D « {} » illisible ({e})", entry.nom));
-            }
-        }
-    }
     let audio_tracks = manifest
         .pistes_son
         .iter()
@@ -2392,8 +2230,6 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                 fond: p.fond,
             }
         },
-        // Les scènes 3D viennent de leur fichier (`scenes3d.json`, `load_scenes3d`).
-        scenes3d: Default::default(),
         // Les commentaires viennent de leur fichier, après les plans (`load_comments`).
         comments: Vec::new(),
         // La réserve du rognage aussi (`rognages.json`, `load_reserves`).
@@ -2561,7 +2397,6 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                     dialogue: p.dialogue,
                     notes: p.notes,
                     camera,
-                    ref3d: p.repere3d.as_ref().filter(|r| models.contains_key(&r.modele) || known_models.iter().any(|m| m.id == r.modele)).and_then(ref3d_of),
                     marks: marks_of(p.marques),
                     cues: crate::document::Cues {
                         bookmarks: {
@@ -2600,8 +2435,6 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
     if structure.panels.is_empty() {
         return Err("le projet ne contient aucun plan".into());
     }
-    // Les scènes 3D, dans leur fichier à côté du manifeste (absent : aucune scène).
-    structure.scenes3d = if annexes.fournies { annexes.scenes3d.take().unwrap_or_default() } else { load_scenes3d(dir, &mut warnings) };
     // Les commentaires, dans leur fichier à côté du manifeste (absent : aucun commentaire).
     structure.comments = if annexes.fournies { std::mem::take(&mut annexes.commentaires) } else { load_comments(dir, &mut warnings) };
     if !annexes.plans_seuls {
@@ -2620,13 +2453,6 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         }
         // Les sons proposés (`sons_proposes.json`).
         doc.sons_proposes = load_sons_proposes(dir, &mut warnings);
-    }
-    for model in models.into_values() {
-        doc.insert_model(model);
-    }
-    for model in known_models {
-        doc.reserve_id(model.id);
-        doc.models.insert(model.id, model);
     }
     if let Some(r) = reserves {
         r.install(&mut doc, &missing);
@@ -2737,28 +2563,6 @@ fn marks_of(entries: Vec<MarkEntry>) -> Vec<crate::document::ImageMark> {
     marks.sort_by_key(|m| m.frame);
     marks.dedup_by_key(|m| m.frame);
     marks
-}
-
-/// Repère 3D relu du manifeste ; `None` si ses valeurs sont absurdes.
-fn ref3d_of(r: &Ref3dEntry) -> Option<Ref3d> {
-    let values = [r.azimut, r.elevation, r.distance, r.focale, r.opacite];
-    if !values.iter().chain(&r.cible).all(|v| v.is_finite()) || r.distance <= 0.0 || r.focale <= 0.0 {
-        return None;
-    }
-    Some(Ref3d {
-        model: r.modele,
-        cam: Cam3d {
-            target: r.cible,
-            azimuth: r.azimut,
-            elevation: r.elevation.clamp(-MAX_ELEVATION, MAX_ELEVATION),
-            distance: r.distance,
-            focal: r.focale,
-        },
-        visible: r.visible,
-        hidden_lines: r.aretes_cachees,
-        color: r.couleur,
-        opacity: r.opacite.clamp(0.0, 1.0),
-    })
 }
 
 fn load_sound(dir: &Path, entry: &SoundEntry) -> Result<Sound, String> {

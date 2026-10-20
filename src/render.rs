@@ -79,9 +79,6 @@ pub enum FondPart {
     /// Le repère d'un calque d'effet d'ajustement (`calqueffet.rs`) : il se résout, avec les éléments
     /// qu'il couvre, en un dessin dérivé (`calqueffet::resolve`). Jamais composé tel quel.
     Reglage(std::sync::Arc<crate::calqueffet::Reglage>),
-    /// Les objets 3D du plan, vus de l'œil de la caméra à cette image (`espace3dobjets.rs`) : l'élément le plus bas
-    /// du plan, sous tous les calques.
-    Objets(crate::espace3dobjets::ObjetsCle),
 }
 
 /// L'élément du fond sous le trait du calque `layer` (s'il en a un), à placer juste sous `line`,
@@ -701,15 +698,13 @@ pub fn composite_pixel_i(doc: &Document, plan: &Plan, x: i64, y: i64) -> Color32
 /// les calques en profondeur défilent selon le décalage de la caméra (multiplan).
 pub fn panel_plan_at(doc: &Document, index: usize, frame: usize, paper: Option<[u8; 3]>) -> Plan {
     let camera = doc.camera_seen(index, frame);
-    // Les objets 3D du plan, s'ils sont dans l'image : sous tous les calques.
-    let objects = crate::espace3dobjets::key_for(doc, index, &camera);
-    plan_with_camera(&crate::espace3d::Monde::of(doc), &doc.panels[index], frame, paper, &camera, doc.fps, objects)
+    plan_with_camera(&crate::espace3d::Monde::of(doc), &doc.panels[index], frame, paper, &camera, doc.fps)
 }
 
 /// L'image `frame` d'un plan rangé (une version qui n'est pas dans `doc.panels`), avec sa propre caméra : la
 /// vignette d'une carte de la pile des versions.
 pub fn stored_panel_plan(doc: &Document, panel: &Panel, frame: usize, paper: Option<[u8; 3]>) -> Plan {
-    plan_with_camera(&crate::espace3d::Monde::of(doc), panel, frame, paper, &doc.camera_seen_du_plan_range(panel, frame), doc.fps, None)
+    plan_with_camera(&crate::espace3d::Monde::of(doc), panel, frame, paper, &doc.camera_seen_du_plan_range(panel, frame), doc.fps)
 }
 
 /// Le calque `li` du plan `index` seul, à l'image `frame`, tel que la caméra au centre le voit
@@ -739,18 +734,12 @@ pub fn layer_plan_at(doc: &Document, index: usize, li: usize, frame: usize) -> O
     Some(Plan { paper: None, items: fond_item(l, &line).into_iter().chain([line]).collect() })
 }
 
-fn plan_with_camera(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, fps: u32, objects: Option<crate::espace3dobjets::ObjetsCle>) -> Plan {
+fn plan_with_camera(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, fps: u32) -> Plan {
     let mut items: Vec<PlanItem> = Vec::new();
-    // Les objets 3D passent avant le premier calque, mais après son rang de départ : un calque d'ajustement qui couvre
-    // toute la pile les couvre aussi.
-    let mut objects = objects.map(|k| crate::espace3dobjets::item(&k));
     // Pour chaque calque, le nombre d'éléments posés avant lui (un calque d'effet couvre ceux d'en dessous).
     let mut starts: Vec<usize> = Vec::with_capacity(panel.layers.len());
     for (li, l) in panel.layers.iter().enumerate() {
         starts.push(items.len());
-        if li == 0 {
-            items.extend(objects.take());
-        }
         // Caché (lui ou son dossier, 13b-5) : rien ; l'opacité du dossier s'ajoute.
         let Some(opacity) = crate::folders::effect(&panel.layers, li) else { continue };
         // Calque d'effet (`calqueffet.rs`) : son repère, ou rien (une incrustation se pose sur l'image
@@ -779,8 +768,6 @@ fn plan_with_camera(world: &crate::espace3d::Monde, panel: &Panel, frame: usize,
         items.extend(fond_item(l, &line));
         items.push(line);
     }
-    // (Une pile sans calque : les objets seuls.)
-    items.extend(objects);
     Plan { paper, items }
 }
 

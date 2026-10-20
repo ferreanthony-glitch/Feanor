@@ -23,7 +23,7 @@ Un projet fabriqué par le code (pas un fichier d'Anthony), qui contient :
 | Fond sous le trait | réglages du calque ; strate peinte et coupe d'un dessin |
 | Effets | flou (clés), tremblement du trait (clés), teinte-saturation (clés), lueur (clés), bruit (éteint, puis avec clés dans le plan rogné) |
 | Calques d'effets (format 27) | un **ajustement** (opacité, mode Écran, expositions aux images 6 à 8, image d'impact + secousse + lueur diffuse à clés) et une **incrustation** réglée à fond (texte libre à mots remplacés, boîte, « seulement à l'export », police) : `Layer::effet` entre dans l'instantané, donc dans la comparaison de chaque aller-retour |
-| Caméra | clés avec adoucis, bascule, panoramique, avancée ; **effet de caméra posé** (explosion) ; repère 3D (un cube) |
+| Caméra | clés avec adoucis, bascule, panoramique, avancée ; **effet de caméra posé** (explosion) |
 | Plans | marques d'image avec textes et couleurs, signets, entrée / sortie, notes dessinées, couleur de plan, textes d'action / dialogue / notes |
 | Montage | plan **rogné** au début (6 images) et à la fin (8) avec sa **réserve** (dessins, clés d'effets, caméra, marques, signets, commentaires) |
 | Commentaires | 5 (dont 2 rangés dans la réserve), résolus et non, couleurs |
@@ -33,7 +33,7 @@ Un projet fabriqué par le code (pas un fichier d'Anthony), qui contient :
 | Références | une image étiquetée, tournée, en gris, liée à deux plans, et une vidéo de trois images aux réglages de lecture changés (`references.json` et `references/`) |
 | Crayonnés | la planche de crayonnés (`crayonnes.json`) : 2 pages de 4 × 3 cases, deux traits lisses dans une case, une case peinte au pinceau et cochée, une légende seule |
 | Planche, guides | notes dessinées et texte de la planche (une attachée à un plan), guide de perspective |
-| Scène 3D | `scenes3d.json` : toutes les formes, un mannequin à la pose libre, un groupe, un modèle importé, un décor de séquence, la caméra du plateau (aller-retour, fumée, fichier coupé et muté ; protections de `write_sidecar`) |
+| Héritage 3D (retiré le 2026-10-21) | un `scenes3d.json` avec objets et décor, un modèle `modeles/7777.pelure3d` et un `repere3d` dans le manifeste sont ajoutés au projet d'essai enregistré (`ajouter_heritage_3d`) : le projet s'ouvre sans avertissement, et ni l'enregistrement classique, ni celui en arrière-plan, ni celui d'un projet partagé n'y touchent |
 
 Manque (dit, pas caché) : les calques « toute la scène » (d'avant les plans, devenus des calques ordinaires à
 l'ouverture), le texte vectoriel comparé pixel à pixel (polices du poste). `the_fixture_really_holds_everything_the_project_can_store`

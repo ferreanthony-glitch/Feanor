@@ -320,7 +320,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   retirés, segments coupés (`Projector::segment`). Textures : chaque dessin réduit à 1024 px de
   large sur le processeur (`render::cel_image`, réparti sur les cœurs), en cache par dessin et
   version ; la transformation du calque est appliquée aux sommets, pas à la texture (déplacer un
-  calque ne la refait pas). La vue réutilise `view3d::Cam3d` (orbite, glisser, avancer,
+  calque ne la refait pas). La vue réutilise `espace3dmath::Orbite` (orbite, glisser, avancer,
   `fit_at`). Outil Déplacer : rayon de la souris (`Projector::ray`) coupé avec les plans
   (`stage3d::pick` : d'abord un plan dessiné à cet endroit, sinon la feuille la plus proche) ;
   dans son plan, le déplacement monde ÷ (1 + d) va dans `Layer::transform` ; avec Maj, la
@@ -450,12 +450,11 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   réunie en un plan par `append_plan` : caméra tenue aux jointures (`held_keys`, clés au début
   et à la fin de chaque partie), calques appariés par nom puis par rang s'ils sont réglés pareil
   (sinon un calque de plus, juste au-dessus de celui où va le calque d'en dessous), début de
-  chaque partie = marque d'image avec ses textes, notes ré-attachées (`reanchor_notes`), repère
-  3D du premier gardé (avertissement sinon). Durée totale inchangée : le son reste calé.
+  chaque partie = marque d'image avec ses textes, notes ré-attachées (`reanchor_notes`). Durée totale inchangée : le son reste calé.
   `split_plan` fait l'inverse (une marque à l'image de coupe redevient le début du plan).
-- Les calques de toute la scène (6f) ne se créent plus : « Nouveau calque de fond » fait un
-  calque ordinaire dont un seul dessin est tenu sur tout le plan. `sync_scene_layers` reste pour
-  les projets en cours d'ouverture, sans effet sur un projet en plans.
+- Les calques de toute la scène (6f) ne se créent plus (« Nouveau calque de fond », qui faisait un calque ordinaire dont un seul
+  dessin était tenu sur tout le plan, a disparu le 2026-10-21 : un calque bitmap ordinaire fait la même chose). `sync_scene_layers`
+  reste pour les projets en cours d'ouverture, sans effet sur un projet en plans.
 
 ## Réglages des calques (phase 13b)
 
@@ -1572,33 +1571,13 @@ export, enregistrement) change pour les projets d'avant.
   non adoucies = mouvement régulier). C'est un choix de Pelure : la façon dont Storyboard Pro règle
   les vitesses de caméra n'a pas été vérifiée.
 
-## Repère 3D (2d)
+## Repère 3D (2d) — retiré le 2026-10-21
 
-- `model3d.rs` : lecteur **glTF 2.0** écrit pour Pelure (pas de bibliothèque ajoutée) : `.glb`, ou
-  `.gltf` avec tampons intégrés (base64) ou à côté (jamais hors de son dossier). On prend les
-  triangles de la scène (listes, bandes, éventails ; indices 8, 16, 32 bits), avec les
-  transformations des nœuds (matrice ou translation, rotation, échelle). Matières, textures,
-  animations ignorées ; accesseurs « clairsemés », Draco et données quantifiées refusés avec un
-  message. Sommets **soudés** (les exports dupliquent les sommets aux coutures), puis **arêtes
-  utiles** : bord, cassure de plus de 25° entre deux faces (en valeur absolue : une face retournée
-  ne fait pas apparaître de diagonale), arête partagée par plus de deux faces. Tri plutôt que
-  tables de hachage : 1,77 million de triangles en 0,33 s. Arêtes rangées des plus longues aux
-  plus courtes (pour l'aperçu).
-- `view3d.rs` : caméra en orbite (`Cam3d` : point visé, azimut, hauteur, distance, focale en mm pour
-  36 mm de large). Fil de fer en pixels du cadre ; arêtes cachées par un **tampon de profondeur**
-  calculé sur le processeur (1/z, ≈ 1300 pixels sur la largeur du cadre ; une arête est visible si
-  aucun des 9 pixels autour n'est nettement plus proche). Tout est réparti sur les cœurs (bandes du
-  tampon, paquets d'arêtes). `rasterize` trace les segments, lissés, dans un masque.
-- `ref3dtool.rs` : `Panel.ref3d` = modèle, caméra, visible, arêtes cachées, couleur, opacité ;
-  modèles dans `Document::models` (partagés entre panneaux, jamais retirés pendant la séance). Le
-  repère couvre **toute la feuille** (le décor continue dans le hors-champ). Affichage : le fil de
-  fer complet est calculé sur un autre fil et tracé dans **une image** (taille de la feuille × le
-  zoom de l'écran, par paliers), posée sur la feuille comme un dessin : une seule texture par
-  image d'écran, le pinceau ne ralentit pas. Pendant qu'on tourne, ou le temps du calcul, un
-  aperçu des 6 000 plus longues arêtes est tracé directement. Le repère n'entre ni dans les
-  exports ni dans les vignettes ; « Dessiner dans un calque » le trace dans un calque bitmap.
-- Annulation : le repère fait partie de la structure (copie au début du geste, une étape au
-  lâcher, comme l'outil Caméra).
+Le repère 3D (lecteur glTF `model3d.rs`, vue en orbite et fil de fer `view3d.rs`, outil `ref3dtool.rs`, `Panel.ref3d`,
+`Document::models`, `Tool::Ref3d`, import Fichier > Importer) a été supprimé sur décision d'Anthony (« on va rester simple »). Ce qui
+reste : la caméra d'orbite de la vue d'édition de l'Espace 3D est devenue `espace3dmath::Orbite`. Les anciens projets : le champ
+`repere3d` et la liste `modeles` du manifeste sont ignorés à la lecture et ne sont plus écrits, les fichiers `modeles/*.pelure3d`
+ne sont ni lus ni effacés (`remove_unused_models` a disparu).
 
 ## Format de projet (version 17, dossier)
 
@@ -1613,8 +1592,7 @@ MonFilm/
   dessins/<id>.png    dessin bitmap (RGBA non prémultiplié)
   dessins/<id>.json   dessin vectoriel (éléments sérialisés)
   sons/<id>.<ext>     fichier son importé, copié tel quel (wav, mp3, flac, ogg)
-  modeles/<id>.pelure3d  modèle 3D soudé : "PELURE3D", version, nombre de sommets et de
-                      triangles, positions (3 × f32) puis triangles (3 × u32), petit-boutiste
+  modeles/<id>.pelure3d  (ancien) modèle 3D du repère : plus lu, plus écrit, jamais effacé (2026-10-21)
 ```
 
 - Format 21 (13k) : `video` sur un calque, { `id`, `nom`, `images`, `ips`, `debut`, `ext` } ; ses
@@ -1799,8 +1777,6 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 | `src-tauri` projet Cargo à part, pas membre d'un espace de travail (10b) | Tauri ne change aucune version des dépendances de Pelure | le noyau est compilé deux fois (deux dossiers `target`) | faible | oui : en faire un membre plus tard |
 | Bascule et panoramique = homographie du plan de référence déjà composé (9f) | exact (le multiplan ne dépend que de l'œil), sans toucher à la composition ni aux calques | une homographie par image ; vue caméra par la carte graphique avec un w par coin | faible : au ras de l'horizon, la feuille est très étirée (bornée à 5°) ; hors de la feuille, rien | oui : caméra droite = calcul d'avant ; deux champs du manifeste |
 | Cadres de composition dans la disposition, pas dans le projet (9d) | ce sont des réglages de la vue, comme le zoom | nul | un format de diffusion propre au projet n'est pas transmis avec lui | oui : un champ du manifeste pourrait s'ajouter |
-| Cartes de l'Espace 3D dessinées par egui (maillages subdivisés, textures réduites) par-dessus la passe wgpu des objets, dans l'ordre de la pile (9e, repris par l'Espace 3D) | aucun shader ni pipeline de plus ; marche aussi en OpenGL | ≈ 600 triangles par carte ; texture refaite (≈ 10 ms) quand un dessin change | pas de tampon de profondeur partagé entre cartes et objets (les objets sont sous les cartes) | oui : `scene3dview::s3_paint_cards` seul à remplacer |
-| Repère 3D : lecteur glTF et fil de fer écrits pour Pelure, sur le processeur (2d) | glTF = format ouvert que Blender exporte ; pas de bibliothèque ni de passe GPU à ajouter pour un guide en fil de fer | ≈ 900 lignes ; calcul 0,15 s par vue sur un gros décor (sur un autre fil) | faible : mauvais fichier → message | oui : affichage par la carte graphique ou rendu ombré possibles plus tard, le format `.pelure3d` ne change pas |
 | Couleurs et nuanciers dans les réglages de l'application, pas dans le projet (passe couleur) | ce sont les outils de celui qui dessine, d'un film à l'autre, comme les pinceaux importés ; le format du projet ne change pas | nul | un nuancier propre à un film ne voyage pas avec lui (on l'exporte en .gpl ou .aco) | oui : un champ du manifeste pourrait s'ajouter (format versionné) |
 | Avant-plan = `App::color`, l'existant ; arrière-plan à côté (passe couleur) | aucun outil à modifier : ils lisaient déjà `App::color` | nul | faible | oui |
 | Opacité = celle du pinceau, pas une couleur RVBA (passe couleur) | le moteur de pinceau (repris bientôt) et les éléments vectoriels ne connaissent qu'une couleur RVB, et le pinceau a déjà son opacité | nul | la même valeur se règle à deux endroits (panneau Couleur, réglages du pinceau) | oui : une couleur RVBA demanderait de changer `StrokeMode` et le format des dessins vectoriels |
@@ -1849,7 +1825,7 @@ Aucun appel existant ne change : `self.doc` est toujours le projet affiché.
 | `doc`, `history` (annuler / rétablir isolés), `gesture`, `path`, `import_source`, `written`, `modified`, `doc_epoch`, `welcome` | fenêtre, `settings`, raccourcis (`keymap`), thème, `dock` et les espaces de travail (`layout`, `espace`, `detached`) |
 | tête de lecture (`cur_panel`, `cur_layer`, `cur_frame`, `mode`), lecture (`playing`, `play_*`), `view` (zoom, rotation, miroir), zoom du montage et de la timeline, planche (`board_*`) | outil, pinceaux, couleurs, options du pinceau, bibliothèque de pinceaux, pelure d'oignon et feuille d'exposition (réglages), textes (police) |
 | sélections (calques, images, clés de caméra / d'effets / de montage, sélection bitmap / vectorielle, `multi`), gestes en cours (`stroke`, `vdrag`, `bdrag`, `cam_drag`…), boîte de sélection | **presse-papiers** : plans, calques, images, clés de montage, de caméra et d'effets, effets d'un calque, pixels, éléments vectoriels, sélection sur plusieurs calques (`multi_clip`) : ils voyagent entre les onglets |
-| caches : `renderer`, `monde` (hors de la feuille), `thumbs`, `layer_thumbs`, `murs`, `rejeu` (et ses files), textures du plateau 3D, références, scène 3D, effets calculés (`fxcache`), textures de la carte graphique | carte graphique (`gpu`, pipelines), `audio` (moteur de sortie), `ffmpeg`, `diag`, messages et barre d'état, suggestions sonores (`sug`, remises à zéro à chaque changement) |
+| caches : `renderer`, `monde` (hors de la feuille), `thumbs`, `layer_thumbs`, `murs`, `rejeu` (et ses files), textures de l'Espace 3D, références, effets calculés (`fxcache`), textures de la carte graphique | carte graphique (`gpu`, pipelines), `audio` (moteur de sortie), `ffmpeg`, `diag`, messages et barre d'état, suggestions sonores (`sug`, remises à zéro à chaque changement) |
 | travaux : `saving` / `save_queue` / `after_save` / `save_error` (enregistrement), `open_job`, `video_import`, `recovery` (copie de secours), suivi des envois, comparaison | fenêtres qui demandent un projet entier (propagation, coloriage, import Storyboard Pro) : **modales ou refusées** pendant qu'elles travaillent (`onglet_occupe`). **Les exports** (film, images, PDF, page, montage, fiche, relecture, Storyboard Pro) ne retiennent le projet que le temps de la copie : ils continuent quand on change d'onglet (`App::export_projet` dit à quel projet ils parlent ; la page de relecture, rangée dans l'état de son onglet, est suivie par `tick_onglets`) |
 
 `doc_epoch` (le numéro du projet que les tâches de fond recopient pour savoir à qui elles répondent) vient d'un compteur
@@ -1873,7 +1849,6 @@ un plan 1). Tout cache indexé par `CelId` est donc rangé par onglet ou vidé a
 | formes de fond (`fx::COVERS`), fonds en calcul (`fondfil`) | statiques globaux | vidés / annulés (recalcul d'un fond seulement) |
 | textures des dessins sur la carte graphique | `GpuCanvas` | `prendre_textures()` / `poser_textures()` : rangées avec l'onglet, l'image composée gardée est abandonnée ; aucune tuile n'est renvoyée au retour (essai `gpu_textures_follow_their_tab…`) ; moitié du budget de textures pour les onglets cachés |
 | vignettes en cours sur un fil de fond | `Thumbs` / `Pool` | `reset()` à la sortie, et `fxcache::avec_monde` : le fil garde le « monde » du moment où la demande est partie, il ne lit ni ne remplit le cache d'un autre onglet (`get`, `request`, `source`, `get_or_compute`… rendent « périmé ») |
-| ressources de la scène 3D (`Gpu3d`, partagées par la carte) | `scene3d.gpu` | lâchées à la sortie (elles se refont à la demande) : un modèle importé n'a pas le même numéro d'un projet à l'autre |
 | vidéos (`video::FRAMES`, `DIRS`) | statiques globaux | rien à faire : leurs numéros viennent de l'heure (« pas de collision entre projets », déjà écrit) |
 | caches par contenu (`vector::REGISTRY`, `RESTYLED`, `audiofx::CACHE`, `cadrage_cache`) | statiques ou partagés | rien à faire : indexés par le contenu, jamais par un numéro de dessin |
 
@@ -1946,7 +1921,7 @@ nouveaux numéros (essais `copied_*`, `camera_keys_and_effects_travel_between_ta
 | Sélection sur plusieurs calques (`multi_clip`) | commune ; elle vise des calques par numéro, qu'un autre projet n'a pas : chaque calque copié va alors sur le premier calque choisi de même sorte encore libre (et la copie est adaptée si la feuille diffère) |
 
 Perdu au passage d'un projet à l'autre (comme pour un collage de plans dans le même projet) : ce qui est rangé à côté du plan
-par son numéro — commentaires, scène 3D de blocage, références liées, versions, envois, transitions.
+par son numéro — commentaires, références liées, versions, envois, transitions.
 
 ### Décisions (coût / risque / réversibilité)
 
@@ -2048,8 +2023,8 @@ equipe.rs          identité, séance, couleur, réglages
   annexes — versions, contenu rogné, scènes 3D, commentaires — peuvent être données au lieu d'être lues dans le dossier ; un plan relu
   seul ne lit que ses dessins) ; la boucle des dessins de `prepare_save` est `dessins_a_ecrire` ; `SaveJob` a un champ `partage`
   (rien pour un projet classique) ; `Loaded` a `manquants`, `partage`, `session`, `erreur_equipe`.
-- `document.rs` : `id_prefix` (0 = classique), `alloc` / `reserve_id` / `insert_model` qui le respectent ; rien d'autre.
-- `planvers.rs`, `rognage.rs`, `scene3dstore.rs`, `brushtex.rs` : de petites fonctions pour lire / écrire **un seul plan** de ces annexes.
+- `document.rs` : `id_prefix` (0 = classique), `alloc` / `reserve_id` qui le respectent ; rien d'autre.
+- `planvers.rs`, `rognage.rs`, `brushtex.rs` : de petites fonctions pour lire / écrire **un seul plan** de ces annexes.
 
 ### La session
 
@@ -2077,22 +2052,26 @@ equipe.rs          identité, séance, couleur, réglages
 | Moteur sur un fil, interface sans entrée-sortie | règle « sans latence » | un canal et un instantané `Arc` | un événement qui attend dans un onglet caché | oui |
 | Numéros préfixés par équipier | deux postes ne se rencontrent jamais | numéros plus grands (≤ 2⁵², sans perte en JSON) | tirage du même préfixe (1 sur un million, vérifié à l'arrivée) | oui |
 
-## Espace 3D (2026-10-20, branche `espace-3d`)
+## Espace 3D (2026-10-20, simplifié le 2026-10-21, branche `espace3d-simple`)
 
-Un seul monde pour les calques (cartes), les objets 3D et la caméra du plan. Conception, formules et état : `docs/ESPACE3D.md` ;
-ici, le placement dans le code.
+Un seul monde pour les calques (cartes) et la caméra du plan. Conception, formules et état : `docs/ESPACE3D.md` ; ici, le placement
+dans le code. Anthony a retiré les objets 3D (cube, mannequin, modèles glTF…) et le repère 3D : il ne reste ni modèle de scène, ni
+rasteriseur, ni maillages, ni rendu dans l'image.
 
-**Le monde** (`espace3d::Monde`) : mètres, Y vers le haut, Z vers la caméra, origine au centre de la feuille, plan z = 0 = la
-feuille ; `k = PLATE_WIDTH_M / largeur du cadre` mètres par pixel. C'est le monde de l'ancienne scène 3D (`SceneCam::from_plan_camera`
-posait déjà la caméra du plan dedans) ; le plateau en 3D en pixels (`stage3d.rs`) disparaît.
+**Les modules** : `espace3d.rs` (le monde `Monde`, `Xf`, `SceneCam`, la pose d'une carte, `place`), `espace3dmath.rs` (vecteurs, matrices,
+rayons, `View`, `Orbite` : la caméra d'orbite de la vue d'édition), `espace3dgizmo.rs` (poignées, effet d'un geste, `CAMERA_ID`),
+`espace3dui.rs` (état `Espace3dState`, commandes, barre d'outils, Réglages), `espace3dview.rs` (souris, choix au rayon, tracé par
+egui : cartes, sol, caméra, poignées). Tests : `espace3d_tests.rs`, `espace3dmath_tests.rs`.
+
+**Le monde** (`espace3d::Monde`) : mètres, Y vers le haut, Z vers la caméra, origine au centre de la feuille, plan z = 0 = la feuille ;
+`k = PLATE_WIDTH_M / largeur du cadre` mètres par pixel (`SceneCam::from_plan_camera` pose la caméra du plan dedans).
 
 **La carte n'est pas un nouveau type de données** : un calque garde `LayerTransform` (x, y, échelle, angle, étirements) et `Layer::depth`
-et gagne `tilt_x`, `tilt_y`, `dz`. `Monde::card_xf` en calcule le placement 3D (`scene3d::Xf`, celui des objets : mêmes poignées,
-`scene3dgizmo`), `card_from_xf` / `apply_card_xf` écrivent le résultat dans les champs (la clé de l'image si le calque est animé :
-`Layer::set_pose`). Les numéros de sélection d'une carte ont le bit `CARD_TAG` (`espace3d::card_selection`), celui de la caméra est
-`CAMERA_ID` : `scene3dui::s3_xfs` / `s3_set_xfs` sont les seuls à savoir ce que chaque numéro désigne, tout le reste de la
-manipulation (aimantation, annulation, groupes) est resté celui des objets. Les clés (`poskeys`) interpolent les trois champs de
-plus avec les mêmes adoucis ; `Entree` (le fichier) les écrit seulement quand ils ne sont pas nuls.
+et gagne `tilt_x`, `tilt_y`, `dz`. `Monde::card_xf` en calcule le placement 3D (`Xf`, que les poignées manient), `card_from_xf` /
+`apply_card_xf` écrivent le résultat dans les champs (la clé de l'image si le calque est animé : `Layer::set_pose`). Les numéros de
+sélection d'une carte ont le bit `CARD_TAG` (`espace3d::card_selection`), celui de la caméra est `CAMERA_ID` : `espace3dui::e3_xfs` /
+`e3_set_xfs` sont les seuls à savoir ce que chaque numéro désigne. Les clés (`poskeys`) interpolent les trois champs de plus avec les
+mêmes adoucis ; `Entree` (le fichier) les écrit seulement quand ils ne sont pas nuls.
 
 **Rendu** (deux temps, inchangés) : (1) chaque élément se compose sur la feuille, vu par l'**œil** de la caméra (le multiplan) ;
 (2) la caméra (zoom, rotation, bascule, panoramique) prend la feuille en homographie (`camera.rs`). Carte à plat : l'affinité d'avant
@@ -2100,20 +2079,23 @@ plus avec les mêmes adoucis ; `Entree` (le fichier) les écrit seulement quand 
 maillage de `warp.rs` (64 × 64 cases ; `Warp::partial` cache les cases derrière l'œil), un `PlanItem` de plus que la carte graphique
 (`gpu.rs`, `gpu_items`) et le processeur (`render.rs`, trois chemins : écran par tuiles, toile infinie, vignettes via `Resolved::laid`)
 dessinent déjà pour les feuilles déformées ; `calqueffet::Low::warp` pose la carte avant un calque d'ajustement. Les effets du calque
-sont ceux de son dessin à plat (`fx::shown`) : ils passent avant la déformation.
+sont ceux de son dessin à plat (`fx::shown`) : ils passent avant la déformation. `render::PlanItem::fond` ne porte plus que `Forme`
+(fond sous le trait) et `Reglage` (calque d'ajustement) : `FondPart::Objets` a disparu.
 
-**Objets dans l'image** (`espace3dobjets.rs`) : un élément `FondPart::Objets(ObjetsCle)` en tête du plan (avant le rang de départ du
-premier calque : un calque d'ajustement qui couvre toute la pile le couvre). `fx::shown_blocking` le résout par
-`espace3dobjets::shown` : rendu gardé s'il existe ; à l'écran (`fx::differe`), demande à un fil de fond (`scene3drender::render_plate_eye`,
-la moitié des cœurs, le plus récent demandé gagne) et dernier rendu du plan en attendant, `poll` (une fois par image d'écran, `app.rs`)
-pose le nouveau et invalide l'image composée ; ailleurs (export, essais), rendu immédiat. La clé porte la version de la scène
-(`Scenes3d::rev`), la feuille, le cadre et l'œil : changer la caméra refait le rendu, déplacer une carte non.
+**La vue d'édition** : tout est dessiné par egui (cartes en maillages de 16 × 16 cases, texture ≤ 1024 px refaite quand le dessin change ;
+quadrillage du sol en segments) — plus de passe wgpu ni de tampon de profondeur : les cartes se tracent dans l'ordre de la pile, comme
+l'image les compose.
 
 **Caméra** : `Monde::camera_xf` / `camera_from_xf` (l'œil, panoramique, bascule, rotation) ; l'écriture passe par
-`App::set_current_camera` (clé de l'image courante si la caméra a plusieurs clés, comme l'outil Caméra). `PlanScene::cam` ne sert
-plus qu'au calque « Fond 3D » figé (`PlanScene::sheet_aligned`) ou ancien.
+`App::set_current_camera` (clé de l'image courante si la caméra a plusieurs clés, comme l'outil Caméra).
 
-**Format** : `project::VERSION` = 35 ; `version_partage_ecrite()` = max(34, 35) pour les projets partagés (voir `docs/ESPACE3D.md`, 6).
+**Anciens projets** : `Document` n'a plus ni `scenes3d`, ni `models`, ni `Panel::ref3d`. Le manifeste ignore `repere3d` et `modeles` (champs
+absents des structures de lecture : serde les passe) ; `scenes3d.json` n'est plus connu du code ; `remove_unused_models` a disparu, donc
+aucun fichier de `modeles/` n'est jamais effacé. Le calque « Fond 3D » est un calque bitmap ordinaire. Projets partagés : `DonneesPlan` /
+`ContenuPlan` n'ont plus de `scene3d` (ignoré à la lecture), `Annexes` plus de `scenes3d` ni de `modeles_connus`.
+
+**Format** : `project::VERSION` = 35 (inchangé par la simplification) ; `version_partage_ecrite()` = max(34, 35) pour les projets partagés
+(voir `docs/ESPACE3D.md`, 6).
 
 ### Décisions (coût / risque / réversibilité)
 
@@ -2122,5 +2104,5 @@ plus qu'au calque « Fond 3D » figé (`PlanScene::sheet_aligned`) ou ancien.
 | Garder `LayerTransform` + `depth` et y ajouter l'inclinaison, plutôt qu'une pose 3D à la place | tout l'existant (Transformer, multisélection, clés, vue de dessus, SB, propagation) continue de lire les mêmes champs ; un ancien projet passe par le même code | deux représentations (champs ↔ `Xf`) à tenir d'accord : `card_xf` / `card_from_xf` testés dans les deux sens | une conversion qui dérive : l'essai d'aller-retour la voit | oui : la pose 3D se calcule, elle n'est pas écrite |
 | Cartes inclinées par le maillage des feuilles déformées | carte graphique et processeur le dessinent déjà, à l'identique (essai ≤ 2 niveaux) ; effets, opacité, fusion, calques d'ajustement gratuits | une carte inclinée est coupée aux bords de la feuille ; 8 192 triangles par carte | cases étirées près de l'horizon (cachées derrière l'œil) | oui : `espace3d::place` seul décide |
 | Cartes composées dans l'ordre de la pile, pas par distance | les modes de fusion, calques d'ajustement et dossiers sont des opérations « sur ce qui est dessous » | une carte plus proche peut être cachée par une plus loin si la pile le dit (commande « Ordonner… ») | surprise de l'utilisateur : dit dans la vue et l'aide | oui : un tri par distance serait un réglage de plan |
-| Objets sous toutes les cartes, rendus par le processeur | pas de tampon de profondeur à partager avec la composition de la carte graphique | un objet ne peut pas être devant une carte | à lever avec un tampon de profondeur dans `gpu.rs` | oui : `espace3dobjets` seul |
-| Rendu des objets sur un fil de fond, dernier rendu en attendant | règle « sans latence » : l'écran n'attend jamais | en lecture d'un travelling, les objets peuvent retarder ; l'export est exact | une image de retard visible | oui |
+| Supprimer les objets 3D et le repère 3D (décision d'Anthony, 2026-10-21) | « focus sur le dessin » : ils alourdissaient le logiciel et l'interface pour pas grand-chose | environ 9 000 lignes de code et leurs essais en moins ; plus de calque « Fond 3D » mis à jour tout seul | un ancien projet : lecture qui ignore, jamais d'effacement (essais) | oui, par l'historique git (`5f3fda7`) |
+| Vue d'édition toute en egui | plus d'objets, donc plus de passe wgpu ni de tampon de profondeur | aucun | cartes très nombreuses : 16 × 16 cases chacune (10 cartes ≈ 1 ms) | oui |

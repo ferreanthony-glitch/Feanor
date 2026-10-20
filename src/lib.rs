@@ -439,7 +439,6 @@ mod keymap_tests;
 mod keymap_jeux_tests;
 #[cfg(test)]
 mod ops_tests;
-mod model3d;
 mod montagekeys;
 mod references;
 #[cfg(test)]
@@ -547,7 +546,6 @@ mod recovery;
 #[cfg(test)]
 mod recovery_tests;
 mod recoveryui;
-mod ref3dtool;
 mod render;
 #[cfg(test)]
 mod rendu_audit_tests;
@@ -626,26 +624,16 @@ mod texttools;
 mod stencil;
 #[cfg(test)]
 mod tabs_tests;
-// Espace 3D (`docs/ESPACE3D.md`) : le plateau en 3D et la scène 3D de blocage réunis, calques (cartes), objets et
-// caméra du plan dans un seul monde.
+// Espace 3D (`docs/ESPACE3D.md`) : les calques (cartes) et la caméra du plan dans un seul espace, sans objets 3D.
 mod espace3d;
-mod espace3dobjets;
+mod espace3dgizmo;
+mod espace3dmath;
+#[cfg(test)]
+mod espace3dmath_tests;
+mod espace3dui;
+mod espace3dview;
 #[cfg(test)]
 mod espace3d_tests;
-// Scène 3D de blocage (`docs/ROADMAP.md`, « Scène 3D ») : modèle, maths, maillages, rendu par le
-// processeur (envoi vers un calque), rendu par la carte graphique (vue d'édition), enregistrement,
-// interface.
-mod scene3d;
-mod scene3dgizmo;
-mod scene3dgpu;
-mod scene3dmath;
-mod scene3dmesh;
-mod scene3drender;
-mod scene3dstore;
-mod scene3dui;
-mod scene3dview;
-#[cfg(test)]
-mod scene3d_tests;
 #[cfg(test)]
 mod stage_tests;
 mod storyboard;
@@ -673,9 +661,6 @@ pub mod video;
 mod video_tests;
 mod videoui;
 mod view;
-mod view3d;
-#[cfg(test)]
-mod view3d_tests;
 mod viewbar;
 #[cfg(test)]
 mod vtexture_tests;

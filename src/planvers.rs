@@ -97,7 +97,6 @@ fn echanger(a: &mut Panel, b: &mut Panel) {
     std::mem::swap(&mut a.dialogue, &mut b.dialogue);
     std::mem::swap(&mut a.notes, &mut b.notes);
     std::mem::swap(&mut a.camera, &mut b.camera);
-    std::mem::swap(&mut a.ref3d, &mut b.ref3d);
     std::mem::swap(&mut a.marks, &mut b.marks);
     std::mem::swap(&mut a.cues, &mut b.cues);
     std::mem::swap(&mut a.color, &mut b.color);

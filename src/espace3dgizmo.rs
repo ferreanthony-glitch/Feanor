@@ -1,5 +1,5 @@
-//! Manipulateurs de la scène 3D : la géométrie des poignées (déplacer, tourner, mettre à l'échelle),
-//! leur détection à la souris, et l'effet d'un geste sur les placements des objets choisis. Pas
+//! Manipulateurs de l'Espace 3D : la géométrie des poignées (déplacer, tourner, mettre à l'échelle),
+//! leur détection à la souris, et l'effet d'un geste sur les placements des cartes et de la caméra choisies. Pas
 //! d'interface ici : l'application trace les poignées et transmet les rayons de la souris.
 //!
 //! Poignées (conventions des logiciels 3D courants, à vérifier : couleurs rouge/vert/bleu pour X/Y/Z,
@@ -9,10 +9,10 @@
 //! - tourner : trois cercles ;
 //! - échelle : trois cubes (axes) et un cube central (uniforme).
 
-use crate::scene3d::{SceneCam, Xf};
-use crate::scene3dmath::{self as m, V3, View};
+use crate::espace3d::{SceneCam, Xf};
+use crate::espace3dmath::{self as m, V3, View};
 
-/// Numéro réservé à la caméra du plateau dans une sélection.
+/// Numéro réservé à la caméra du plan dans une sélection.
 pub const CAMERA_ID: u64 = u64::MAX;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -39,10 +39,10 @@ impl Mode {
 
     pub fn action(self) -> &'static str {
         match self {
-            Mode::Select => "scene3d.outil_choisir",
-            Mode::Move => "scene3d.outil_deplacer",
-            Mode::Rotate => "scene3d.outil_tourner",
-            Mode::Scale => "scene3d.outil_echelle",
+            Mode::Select => "espace3d.outil_choisir",
+            Mode::Move => "espace3d.outil_deplacer",
+            Mode::Rotate => "espace3d.outil_tourner",
+            Mode::Scale => "espace3d.outil_echelle",
         }
     }
 }
@@ -161,7 +161,7 @@ fn point_in_quad(p: [f32; 2], q: [[f32; 2]; 4]) -> bool {
 
 // ------------------------------------------------------------------- effet d'un geste
 
-/// Les placements d'origine des objets choisis.
+/// Les placements d'origine des cartes et de la caméra choisies.
 pub type Originals = Vec<(u64, Xf)>;
 
 /// Tous déplacés de `delta`.
@@ -170,7 +170,7 @@ pub fn move_xfs(originals: &[(u64, Xf)], delta: V3) -> Originals {
 }
 
 /// Tous tournés de `deg` degrés autour de l'axe `axis` (du monde) qui passe par `origin` : les
-/// positions tournent autour du pivot, chaque objet tourne sur lui-même du même angle.
+/// positions tournent autour du pivot, chaque carte tourne sur elle-même du même angle.
 pub fn rotate_xfs(originals: &[(u64, Xf)], origin: V3, axis: V3, deg: f32) -> Originals {
     let r = m::rot_axis(axis, deg);
     originals
@@ -183,7 +183,7 @@ pub fn rotate_xfs(originals: &[(u64, Xf)], origin: V3, axis: V3, deg: f32) -> Or
         .collect()
 }
 
-/// Mis à l'échelle : un objet seul sur son axe local `axis`, ou, `axis` = rien, tous de `factor`
+/// Mis à l'échelle : une carte seule sur son axe local `axis`, ou, `axis` = rien, tous de `factor`
 /// autour de `origin`.
 pub fn scale_xfs(originals: &[(u64, Xf)], origin: V3, axis: Option<usize>, factor: f32) -> Originals {
     originals
@@ -215,8 +215,8 @@ pub fn axes_for(local: bool, xf: &Xf) -> [V3; 3] {
 
 // ----------------------------------------------------------------------------- la caméra
 
-/// La caméra du plateau vue comme un objet : sa rotation est (bascule, −panoramique, −rotation) dans
-/// l'ordre des objets (lacet, tangage, roulis), si bien que les mêmes poignées la manient.
+/// La caméra du plan vue comme une carte : sa rotation est (bascule, −panoramique, −rotation) dans
+/// l'ordre des cartes (lacet, tangage, roulis), si bien que les mêmes poignées la manient.
 pub fn cam_xf(cam: &SceneCam) -> Xf {
     Xf { pos: cam.pos, rot: [cam.tilt, -cam.pan, -cam.roll], size: [1.0; 3] }
 }
