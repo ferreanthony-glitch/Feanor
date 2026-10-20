@@ -105,6 +105,7 @@ pub fn nouveau(line: &Layer, name: String) -> Layer {
     l.couleur = Some(CalqueCouleur::new(line.id));
     l.parent = line.parent;
     l.transform = line.transform;
+    l.pos_keys = line.pos_keys.clone();
     l.depth = line.depth;
     l.pre = line.pre;
     l.post = line.post;
@@ -167,9 +168,9 @@ pub fn refleter(doc: &mut Document, pi: usize) -> bool {
         .collect();
     let mut changed = false;
     for (ci, li) in jobs {
-        let (frames_of_line, pre, post, transform, depth) = {
+        let (frames_of_line, pre, post, transform, depth, pos_keys) = {
             let l = &doc.panels[pi].layers[li];
-            (l.frames.clone(), l.pre, l.post, l.transform, l.depth)
+            (l.frames.clone(), l.pre, l.post, l.transform, l.depth, l.pos_keys.clone())
         };
         let mut map = doc.panels[pi].layers[ci].couleur.as_ref().map(|c| c.dessins.clone()).unwrap_or_default();
         let old_frames = doc.panels[pi].layers[ci].frames.clone();
@@ -210,8 +211,9 @@ pub fn refleter(doc: &mut Document, pi: usize) -> bool {
             }
             changed = true;
         }
-        if (layer.pre, layer.post, layer.transform, layer.depth) != (pre, post, transform, depth) {
+        if (layer.pre, layer.post, layer.transform, layer.depth) != (pre, post, transform, depth) || layer.pos_keys != pos_keys {
             (layer.pre, layer.post, layer.transform, layer.depth) = (pre, post, transform, depth);
+            layer.pos_keys = pos_keys;
             changed = true;
         }
     }

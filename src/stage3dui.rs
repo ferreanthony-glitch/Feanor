@@ -229,7 +229,7 @@ impl App {
     fn layer_drawn_at(&self, li: usize, p: Pos2) -> bool {
         let Some(layer) = self.layers().get(li) else { return false };
         let Some(cel) = layer.shown_at(self.cur_frame).and_then(|c| self.doc.cels.get(&c)) else { return false };
-        let Some(inv) = layer.transform.affine(self.doc.stage_center()).inverse() else { return false };
+        let Some(inv) = layer.pose(self.cur_frame).affine(self.doc.stage_center()).inverse() else { return false };
         let q = inv.apply(p);
         const R: f32 = 8.0;
         (-2..=2).any(|j| {
@@ -328,7 +328,7 @@ impl App {
     fn paint_plane(&mut self, ctx: &egui::Context, painter: &egui::Painter, proj: &Projector, world: &World, li: usize) {
         let layer = &self.layers()[li];
         let (depth, opacity, name) = (layer.depth, layer.opacity.clamp(0.0, 1.0), layer.name.clone());
-        let own: Affine = layer.transform.affine(self.doc.stage_center());
+        let own: Affine = layer.pose(self.cur_frame).affine(self.doc.stage_center());
         let cel = layer.shown_at(self.cur_frame);
         let current = li == self.cur_layer;
         let [w, h] = world.stage;
@@ -521,7 +521,7 @@ impl App {
             self.stage3d.drag = Some(Drag3d::View);
             return;
         }
-        let (id, depth0, t0) = (layer.id, layer.depth, layer.transform);
+        let (id, depth0, t0) = (layer.id, layer.depth, layer.pose(self.cur_frame));
         let z0 = world.plane_z(depth0);
         let hit0 = stage3d::ray_plane_z(o, d, z0).map_or([0.0, 0.0, z0], |h| h.0);
         let snap = self.snapshot();
@@ -533,6 +533,7 @@ impl App {
         match &mut self.stage3d.drag {
             Some(Drag3d::Layer { id, along, z0, depth0, hit0, screen0, t0, changed, .. }) => {
                 let Some(li) = self.doc.panels[self.cur_panel].layers.iter().position(|l| l.id == *id) else { return };
+                let frame = self.cur_frame;
                 let layer = &mut self.doc.panels[self.cur_panel].layers[li];
                 if *along {
                     let dz = stage3d::z_motion(proj, *hit0, *screen0, p);
@@ -540,8 +541,10 @@ impl App {
                     self.status = format!("Calque « {} » : profondeur {:+.2}", layer.name, layer.depth);
                 } else if let Some((hit, _)) = stage3d::ray_plane_z(o, d, *z0) {
                     let dv = world.stage_delta(*hit0, hit, *depth0);
-                    layer.transform = LayerTransform { x: t0.x + dv.x, y: t0.y + dv.y, ..*t0 };
-                    self.status = format!("Calque « {} » : décalage {:+.0} × {:+.0} px", layer.name, layer.transform.x, layer.transform.y);
+                    // (Un calque animé bouge à cette image : sa clé de position, `Layer::set_pose`.)
+                    layer.set_pose(frame, LayerTransform { x: t0.x + dv.x, y: t0.y + dv.y, ..*t0 });
+                    let now = layer.pose(frame);
+                    self.status = format!("Calque « {} » : décalage {:+.0} × {:+.0} px", layer.name, now.x, now.y);
                 }
                 *changed = true;
                 self.modified = true;

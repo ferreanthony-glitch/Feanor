@@ -432,6 +432,10 @@ pub struct App {
     /// Outil pris par une touche encore tenue, et lasso tant que Ctrl est tenu (`springtools`).
     pub(crate) tool_spring: Option<crate::springtools::ToolSpring>,
     pub(crate) ctrl_lasso: Option<crate::springtools::CtrlLasso>,
+    /// Tracé droit (Maj tenue pendant un trait, `tracedroit.rs`).
+    pub(crate) droit: crate::tracedroit::Droit,
+    /// Clés de position choisies dans la timeline et clés en cours de glisser (`poskeysui.rs`).
+    pub(crate) pos_ui: crate::poskeysui::PosUi,
     /// Choix de clés au rectangle en cours dans le montage.
     pub(crate) key_rect: Option<crate::montagekeys::KeyRect>,
     /// Une clé seule prise dans le montage (`Handle::Key`) : de combien d'images elle est glissée.
@@ -1015,6 +1019,8 @@ impl App {
             key_rect: None,
             tool_spring: None,
             ctrl_lasso: None,
+            droit: Default::default(),
+            pos_ui: Default::default(),
             key_focus: false,
             comment_ui: Default::default(),
             refs: Default::default(),
@@ -1327,7 +1333,7 @@ impl App {
     /// défilement multiplan si le calque est en profondeur et la caméra décalée.
     pub(crate) fn layer_seen(&self) -> crate::document::LayerTransform {
         let seen = self.doc.camera_seen(self.cur_panel, self.cur_frame);
-        self.layer().transform_seen(&seen).unwrap_or(self.layer().transform)
+        self.layer().transform_seen_at(&seen, self.cur_frame).unwrap_or(self.layer().pose(self.cur_frame))
     }
 
     /// Transformation du calque courant (de son dessin vers la feuille).
@@ -1355,7 +1361,7 @@ impl App {
 
     /// Pixels d'écran par pixel du dessin du calque courant.
     pub(crate) fn layer_zoom(&self) -> f32 {
-        let t = self.layer().transform;
+        let t = self.layer().pose(self.cur_frame);
         self.view.zoom * t.scale * (t.stretch_x * t.stretch_y).abs().sqrt()
     }
 
@@ -1437,7 +1443,7 @@ impl App {
                 opacity *= self.light_table_strength.clamp(0.05, 1.0);
             }
             // Derrière la caméra (elle a avancé au-delà) : on ne le voit pas.
-            let Some(seen) = layer.transform_seen(&camera) else { continue };
+            let Some(seen) = layer.transform_seen_at(&camera, frame) else { continue };
             let transform = (!seen.is_identity()).then_some(seen);
             // Pelure d'oignon : le calque courant, et ceux qui ont la leur (13b).
             let mut onion_items = Vec::new();
@@ -1929,7 +1935,7 @@ impl App {
                 continue;
             }
             // Derrière la caméra, on ne le voit pas : il ne cache rien.
-            let Some(theirs) = l.transform_seen(&seen) else { continue };
+            let Some(theirs) = l.transform_seen_at(&seen, self.cur_frame) else { continue };
             let to_stencil = if theirs == mine {
                 None
             } else {
@@ -1970,6 +1976,8 @@ impl App {
 
     /// Termine tout geste en cours : trait, gomme vectorielle, transformation, forme.
     pub(crate) fn end_stroke(&mut self) {
+        // Un segment droit en attente (Maj tenue) est posé avant de finir le trait.
+        self.droit_flush();
         if let Some(mut stroke) = self.stroke.take() {
             // Banc de traits : le trait tel que reçu, avec son réglage.
             if let Some(n) = self.record_strokes.as_mut() {
@@ -2108,7 +2116,7 @@ impl App {
         let (w, h) = (self.doc.width, self.doc.height);
         // Les contours de tous les calques sont pris sur la feuille : sur un calque transformé, ils
         // ne tomberaient pas au bon endroit de son dessin ; on prend alors le calque seul.
-        if self.fill.sample_all && self.layer().transform.is_identity() {
+        if self.fill.sample_all && self.layer().pose(self.cur_frame).is_identity() {
             return render::composite_full(&self.doc, &self.build_plan(self.cur_frame, false, false));
         }
         match self.cel_here() {
@@ -3529,6 +3537,12 @@ impl App {
             "edition.coller_a_la_tete" if self.cam_clip_recent && self.cam_key_clipboard.is_some() && (self.key_focus || self.images_focus) => {
                 self.paste_cam_keys_at_head()
             }
+            // Des clés de position choisies dans la timeline (`poskeysui.rs`).
+            "edition.supprimer" if self.pos_keys_have_focus() => self.pos_keys_delete(),
+            "calque.cle_position" => self.pos_key_here(),
+            "calque.cle_position_lisser" => self.pos_key_smooth(),
+            "calque.cle_position_supprimer" => self.pos_keys_delete(),
+            "calque.cles_position_supprimer" => self.pos_keys_clear(),
             "edition.supprimer" if self.cam_keys_have_focus() => self.delete_cam_keys(),
             "camera.cles_copier" => self.copy_cam_keys(),
             "camera.cles_coller" => self.paste_cam_keys(),
@@ -3653,7 +3667,12 @@ impl App {
                 }
             }
             "dessin.vider" => self.clear_image(),
-            "dessin.supprimer_hors_selection" => {
+            // Maj+Suppr : une zone bitmap choisie est remplie de la couleur courante (`remplirsel.rs`) ;
+            // sinon la touche garde son ancien sens : effacer hors de la sélection.
+            "selection.remplir" if self.bsel.is_some() && self.multi.sel.is_none() => {
+                self.bitmap_fill_selection();
+            }
+            "dessin.supprimer_hors_selection" | "selection.remplir" => {
                 if self.multi.sel.is_some() {
                     self.status = "Effacer hors de la sélection se fait sur un seul calque : choisis-en un seul (clic sans Ctrl ni Maj).".into();
                 } else if self.bsel.is_some() {
@@ -4497,6 +4516,7 @@ impl App {
         self.workspace_name_window(ctx);
         self.scrub_audio();
         self.drop_stale_drags(ctx.input(|i| i.pointer.any_down()));
+        self.suivre_sorte_pinceau();
         self.watch_plan_length();
         if self.thumbs.pending {
             ctx.request_repaint();

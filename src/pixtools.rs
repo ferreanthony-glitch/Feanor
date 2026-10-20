@@ -227,28 +227,33 @@ impl App {
 
     pub(crate) fn finish_bdrag(&mut self) {
         let Some(drag) = self.bdrag.take() else { return };
-        let (polygon, add) = match drag {
+        let (polygon, add, click) = match drag {
             BDrag::Transform { .. } | BDrag::Pivot { .. } => return,
             BDrag::Lasso { points, add } => {
+                let click = points.first().copied();
                 let screen: Vec<Pos2> = points.iter().map(|q| self.layer_to_screen(*q)).collect();
                 let extent = Rect::from_points(&screen);
                 if points.len() < 3 || extent.width().max(extent.height()) < 4.0 {
-                    (None, add)
+                    (None, add, click)
                 } else {
-                    (Some(points), add)
+                    (Some(points), add, click)
                 }
             }
             BDrag::Rect { from, to, add } => {
                 let r = Rect::from_two_pos(from, to);
                 if r.width().min(r.height()) * self.layer_zoom() < 3.0 {
-                    (None, add)
+                    (None, add, Some(from))
                 } else {
-                    (Some(pixsel::rect_polygon(r)), add)
+                    (Some(pixsel::rect_polygon(r)), add, Some(from))
                 }
             }
         };
-        // Un simple clic dans le vide désélectionne.
+        // Un simple clic sur un dessin choisit l'objet sous la souris (`selobjet.rs`) ; dans le vide,
+        // il désélectionne.
         let Some(polygon) = polygon else {
+            if click.is_some_and(|p| self.bitmap_pick_object(p, add)) {
+                return;
+            }
             if !add {
                 self.drop_bitmap_selection();
             }

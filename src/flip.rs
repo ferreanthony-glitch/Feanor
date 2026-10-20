@@ -55,8 +55,12 @@ impl App {
         self.end_stroke();
         self.record_step();
         let li = self.cur_layer;
-        let t = flipped_in_place(self.layers()[li].transform, pivot, center, horizontal);
-        self.layers_mut()[li].transform = t;
+        // (Un calque animé se retourne à toutes ses clés : le mouvement est retourné avec lui.)
+        let l = &mut self.layers_mut()[li];
+        l.transform = flipped_in_place(l.transform, pivot, center, horizontal);
+        for k in &mut l.pos_keys {
+            k.t = flipped_in_place(k.t, pivot, center, horizontal);
+        }
         self.renderer.invalidate_all();
         self.status = format!("Calque retourné {} (ses dessins ne changent pas ; Ctrl+R annule la transformation).", if horizontal { "de gauche à droite" } else { "de haut en bas" });
     }
@@ -86,6 +90,9 @@ impl App {
                     continue;
                 }
                 l.transform = mirror_transform_x(l.transform, pivot, axis);
+                for k in &mut l.pos_keys {
+                    k.t = mirror_transform_x(k.t, pivot, axis);
+                }
             }
             for k in &mut p.camera {
                 k.cam = mirror_camera_x(k.cam, axis);

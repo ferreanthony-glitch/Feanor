@@ -551,6 +551,9 @@ impl App {
             if self.bouton_si(ui, has, ph::SELECTION_INVERSE, "Effacer autour", "Effacer tout ce qui est hors de la zone.", "").clicked() {
                 self.bitmap_erase(false);
             }
+            if self.bouton_si(ui, has, ph::PAINT_BUCKET, "Remplir", "Remplir la zone de la couleur courante (le calque verrouillé refuse ; « préserver la transparence » ne change que la couleur de ce qui est dessiné).", "selection.remplir").clicked() {
+                self.bitmap_fill_selection();
+            }
             if self.bouton_si(ui, has, ph::CHECK, "Poser", "Reposer la zone et quitter la sélection (Échap).", "").clicked() {
                 self.drop_bitmap_selection();
             }
@@ -568,7 +571,7 @@ impl App {
         }
         if lasso {
             note(ui, BOX_NOTE);
-            note(ui, "Glisser dans le vide : lasso ou rectangle (Maj : ajouter). Échap ou autre outil : poser la zone.");
+            note(ui, "Glisser dans le vide : lasso ou rectangle (Maj : ajouter). Un clic sur un dessin choisit sa forme (Ctrl+Maj + clic : en ajouter une autre, sur tous les calques). Échap ou autre outil : poser la zone.");
         }
     }
 

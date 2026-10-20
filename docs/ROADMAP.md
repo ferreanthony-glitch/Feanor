@@ -3219,3 +3219,29 @@ d'Anthony du 2026-10-20 »), vérifications à l'écran : `docs/INTERFACE.md`, p
 - Reste : l'étiquette « fx » dans la colonne du montage (pas de place : seulement dans les menus) ; un GIF avec des plans
   choisis qui ne se suivent pas n'a pas de son (le GIF n'en a jamais) ; la réserve de rognage reste attachée au plan et non à
   la version (une version plus longue ne ramène pas les images rognées de l'autre).
+
+## Notes d'Anthony : dessin (demandées par Anthony le 2026-10-20, branche `notes-dessin`) ✅
+
+Huit notes du réalisateur ; le détail, les règles de touches et la liste à regarder à l'écran sont dans
+`docs/INTERFACE.md`, partie 24. Essais : `src/dessin_notes_tests.rs`.
+
+- ✅ **Tracé droit** : Maj tenue pendant un trait (pinceau, crayon, gomme, vectoriel ou bitmap) : un segment droit du
+  dernier point posé à la pointe, en aperçu, posé au relâché ; Maj+Alt : angle par 15° ; une étape d'annulation. Pas
+  fait : Maj + clic, Maj + clic façon Photoshop ; aperçu en ligne, pas avec le vrai pinceau.
+- ✅ **Choisir un objet au clic** : Ctrl + clic (existait en vectoriel) choisit aussi, sur un calque bitmap, la forme d'un
+  seul tenant sous la souris ; Ctrl+Maj + clic ajoute ou retire un objet sur n'importe quel calque, Ctrl+Maj + lasso
+  ajoute (avant : remplaçait) ; la sélection d'un seul calque est reprise dans le cumul ; Ctrl+Maj ne prend plus les
+  poignées ; le lasso temporaire de Ctrl accepte Maj.
+- ✅ **Un pinceau par sorte de calque** (vectoriel, bitmap), retenu dans les réglages de l'application.
+- ✅ **Enregistrer la brosse** : disquette dans le panneau Réglages : dans la brosse d'où vient le réglage (rétablissable),
+  ou comme nouvelle brosse ; « (réglé à la main) d'après « X » ». Existait caché : « Remplacer par le réglage courant »
+  (clic droit de la bibliothèque).
+- ✅ **Réglages repliés** sous l'aperçu du trait (flèche, état retenu) et **fond de l'aperçu** gris un peu plus clair que le
+  panneau (trois thèmes, contraste gardé).
+- ✅ **Remplir la sélection bitmap** : Maj+Suppr (prise à « effacer hors de la sélection », qui garde Maj+Retour arrière et
+  l'ancien sens de Maj+Suppr sans zone bitmap) ; verrou, préserver la transparence, pochoirs respectés ; icône « Remplir ».
+- ✅ **Clés de position** : outil Transformer > « Clés de position » : un calque animé va d'une clé à l'autre (lecture,
+  export, vignettes, 3D), adoucis comme les clés de caméra (`camera::ease`), losanges verts dans la timeline (choisir,
+  glisser, Suppr, clic droit), clés qui suivent les images insérées, la coupe et la réunion des plans, les miroirs.
+  **Format 33** (`cles_position`). Pas fait : montage, copier / coller des clés, courbe de vitesse libre, clé d'opacité,
+  propagation EbSynth (lit la pose fixe).

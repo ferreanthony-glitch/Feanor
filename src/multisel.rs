@@ -72,7 +72,7 @@ impl Targets {
 pub(crate) fn layer_to_stage(doc: &Document, panel: usize, frame: usize, li: usize) -> Option<Affine> {
     let layer = doc.panels.get(panel)?.layers.get(li)?;
     let seen = doc.camera_seen(panel, frame);
-    Some(layer.transform_seen(&seen)?.affine(doc.stage_center()))
+    Some(layer.transform_seen_at(&seen, frame)?.affine(doc.stage_center()))
 }
 
 /// Les calques `chosen` (rangs) que la sélection peut toucher. Un dossier n'a pas de dessin : ses
@@ -336,7 +336,7 @@ pub(crate) fn vector_part(t: &Target, items: Vec<usize>) -> Part {
 }
 
 /// La part bitmap d'un calque : sa zone (`outline`, `mask`), pixels pas encore soulevés.
-fn bitmap_part(t: &Target, mask: PixelMask, outline: Vec<Vec<Pos2>>, lift: Option<Lift>) -> Part {
+pub(crate) fn bitmap_part(t: &Target, mask: PixelMask, outline: Vec<Vec<Pos2>>, lift: Option<Lift>) -> Part {
     Part { layer: t.id, name: t.name.clone(), cel: t.cel, elements: 0, to_stage: t.to_stage, kind: PartKind::Bitmap { mask, outline, lift } }
 }
 

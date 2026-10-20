@@ -169,10 +169,13 @@ fn what_is_not_made_yet_has_no_active_key() {
     for a in ACTIONS.iter().filter(|a| !a.implemented) {
         assert!(map.bindings.iter().filter(|b| b.action == a.id).all(|b| !b.active && b.reserved), "{} est active alors qu'elle n'existe pas", a.id);
     }
-    // Suppr et Maj+Suppr gardent leur sens.
+    // Suppr garde son sens. Maj+Suppr remplit la zone bitmap de la couleur courante (Anthony,
+    // 2026-10-20) ; « Effacer ce qui est hors de la sélection » lui reste sur Maj+Retour arrière (et
+    // sur Maj+Suppr quand aucune zone bitmap n'est choisie : voir `app.rs`).
     let none = Modifiers::NONE;
     assert_eq!(press(&map, Key::Delete, Key::Delete, none, Mode::Animation).as_deref(), Some("edition.supprimer"));
-    assert_eq!(press(&map, Key::Delete, Key::Delete, Modifiers::SHIFT, Mode::Animation).as_deref(), Some("dessin.supprimer_hors_selection"));
+    assert_eq!(press(&map, Key::Delete, Key::Delete, Modifiers::SHIFT, Mode::Animation).as_deref(), Some("selection.remplir"));
+    assert_eq!(press(&map, Key::Backspace, Key::Backspace, Modifiers::SHIFT, Mode::Animation).as_deref(), Some("dessin.supprimer_hors_selection"));
 }
 
 #[test]
@@ -216,6 +219,9 @@ fn storyboard_pro_sources_are_exact() {
     // tous les calques (choix d'Anthony, 2026-10-17) ; les plans passent sur PgPréc / PgSuiv.
     cited.insert("PREV_PANEL_KEY");
     cited.insert("NEXT_PANEL_KEY");
+    // Maj+Suppr (DRAWING_DELETE_NON_SELECTION_KEY) remplit la zone bitmap (choix d'Anthony, 2026-10-20) ;
+    // « Effacer ce qui est hors de la sélection » garde Maj+Retour arrière (…_BACKSPACE_KEY).
+    cited.insert("DRAWING_DELETE_NON_SELECTION_KEY");
     let missing: Vec<_> = SBP27_IDS.iter().filter(|id| !cited.contains(*id)).collect();
     assert!(missing.is_empty(), "raccourcis Storyboard Pro 27 oubliés : {missing:?}");
 }

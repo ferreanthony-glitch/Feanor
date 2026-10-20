@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::brush::{BrushSettings, Connection, Source};
 use crate::brushtex::{Preset, Target, MINE, PAPER_DRAWING};
+use crate::document::LayerKind;
 
 /// Source des réglages fournis par SHOT. Étiquette interne, jamais montrée et gardée telle quelle
 /// (ancien nom du logiciel : Pelure) pour ne pas toucher aux réglages déjà enregistrés.
@@ -144,15 +145,66 @@ pub struct Panneau {
     /// État de chaque dossier que l'utilisateur a ouvert ou replié (vrai : ouvert) ; ceux qu'il
     /// n'a pas touchés suivent `ouvert_par_defaut`.
     pub dossiers: BTreeMap<String, bool>,
+    /// Les réglages détaillés (catégories et leurs réglages), sous l'aperçu du trait, sont dépliés
+    /// (Anthony, 2026-10-20 : repliés par défaut, une petite flèche les déplie).
+    pub reglages_ouverts: bool,
+    /// Le dernier pinceau utilisé sur un calque vectoriel, et sur un calque bitmap : changer de sorte
+    /// de calque rend le pinceau qu'on avait sur cette sorte (Anthony, 2026-10-20). Absent : pas
+    /// encore utilisé, le pinceau du moment reste.
+    pub pinceau_vecto: Option<BrushSettings>,
+    pub pinceau_bitmap: Option<BrushSettings>,
+    /// La sorte de calque dont le pinceau du moment est le pinceau (pas gardé dans les réglages).
+    #[serde(skip)]
+    pub sorte_vue: Option<crate::document::LayerKind>,
 }
 
 impl Default for Panneau {
     fn default() -> Self {
-        Panneau { onglet: Onglet::Pinceaux, liste: true, categorie: Categorie::Pointe, dossiers: BTreeMap::new() }
+        Panneau {
+            onglet: Onglet::Pinceaux,
+            liste: true,
+            categorie: Categorie::Pointe,
+            dossiers: BTreeMap::new(),
+            reglages_ouverts: false,
+            pinceau_vecto: None,
+            pinceau_bitmap: None,
+            sorte_vue: None,
+        }
     }
 }
 
 impl Panneau {
+    /// Le pinceau retenu pour cette sorte de calque.
+    fn retenu(&mut self, sorte: LayerKind) -> &mut Option<BrushSettings> {
+        match sorte {
+            LayerKind::Vector => &mut self.pinceau_vecto,
+            LayerKind::Bitmap => &mut self.pinceau_bitmap,
+        }
+    }
+
+    /// Une fois par image, avec la sorte du calque courant et le pinceau du moment : retient ce
+    /// pinceau pour cette sorte, et, quand on vient de passer à l'autre sorte de calque, rend le
+    /// pinceau qu'on avait sur celle-ci (rien : cette sorte n'a pas encore servi, le pinceau du
+    /// moment reste et devient le sien). Au premier appel (lancement), le pinceau retenu des
+    /// dernières séances revient.
+    pub fn suivre_sorte(&mut self, sorte: LayerKind, pinceau: &BrushSettings) -> Option<BrushSettings> {
+        let avant = self.sorte_vue.replace(sorte);
+        let slot = self.retenu(sorte);
+        if avant == Some(sorte) {
+            if slot.as_ref() != Some(pinceau) {
+                *slot = Some(*pinceau);
+            }
+            return None;
+        }
+        match *slot {
+            Some(retenu) => (retenu != *pinceau).then_some(retenu),
+            None => {
+                *slot = Some(*pinceau);
+                None
+            }
+        }
+    }
+
     pub fn ouvert(&self, nom: &str) -> bool {
         self.dossiers.get(nom).copied().unwrap_or_else(|| ouvert_par_defaut(nom))
     }

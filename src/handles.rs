@@ -83,6 +83,8 @@ pub(crate) enum GridMenu {
     Camera,
     /// Une clé d'effet (le calque et l'effet deviennent courants).
     FxKey,
+    /// Une clé de position d'un calque (`poskeysui.rs`).
+    PosKey,
     /// La ligne du son : la piste et l'extrait sous le clic, l'image du montage.
     Sound { track: usize, clip: Option<u64>, frame: usize },
     /// Le nom de la ligne du son.
@@ -998,6 +1000,7 @@ impl App {
                 self.action_item(ui, "Adapter la timeline aux clés", "timeline.adapter_cles");
             }
             GridMenu::FxKey => self.fx_key_menu(ui),
+            GridMenu::PosKey => self.pos_key_menu(ui),
             GridMenu::Sound { track, clip, frame } => self.lane_menu(ui, track, clip, frame),
             GridMenu::SoundHeader => {
                 self.action_item(ui, "Importer un son…", "son.importer");

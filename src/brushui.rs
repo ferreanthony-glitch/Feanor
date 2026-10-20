@@ -23,7 +23,21 @@ pub(crate) struct PresetEdit {
     pub name: String,
     pub target: Target,
     pub rename: Option<usize>,
+    /// La saisie vient de l'icône « Enregistrer » du panneau Réglages (elle s'y montre, pas dans
+    /// la bibliothèque).
+    pub summary: bool,
     focused: bool,
+}
+
+/// Un réglage de la bibliothèque tel qu'il était avant d'être remplacé par le réglage courant
+/// (icône « Enregistrer » du panneau Réglages) : de quoi rétablir l'ancien.
+#[derive(Clone)]
+pub(crate) struct Ancien {
+    pub target: Target,
+    pub name: String,
+    pub source: String,
+    pub before: BrushSettings,
+    pub after: BrushSettings,
 }
 
 /// Ce que demande le menu d'un réglage (clic droit).
@@ -71,6 +85,11 @@ pub(crate) struct BrushPreviews {
     pub(crate) search: String,
     /// Les valeurs d'une catégorie au moment où on l'a éteinte (par outil), pour la rallumer.
     pub(crate) memory: HashMap<(crate::pinceaux::Categorie, u8), BrushSettings>,
+    /// Le dernier réglage choisi dans la bibliothèque (cible, nom, source) : celui que l'icône
+    /// « Enregistrer » du panneau Réglages remplace, même une fois le réglage retouché à la main.
+    pub(crate) base: Option<(Target, String, String)>,
+    /// Le dernier réglage remplacé par « Enregistrer » : on peut le rétablir.
+    pub(crate) ancien: Option<Ancien>,
 }
 
 impl App {
@@ -132,12 +151,22 @@ impl App {
             return;
         }
         let name = self.brushes.free_name("Ma brosse", target);
-        self.preset_edit = Some(PresetEdit { name, target, rename: None, focused: false });
+        self.preset_edit = Some(PresetEdit { name, target, rename: None, summary: false, focused: false });
     }
 
-    /// La ligne du nom en cours de saisie (enregistrer ou renommer), s'il y en a une pour cet outil.
-    pub(crate) fn preset_edit_row(&mut self, ui: &mut egui::Ui, target: Target, current: BrushSettings) {
-        let Some(edit) = self.preset_edit.as_mut().filter(|e| e.target == target) else { return };
+    /// Comme `start_save_preset`, depuis l'icône « Enregistrer » du panneau Réglages : le nom se
+    /// saisit dans ce panneau.
+    pub(crate) fn start_save_preset_from_summary(&mut self, target: Target) {
+        self.start_save_preset(target);
+        if let Some(e) = self.preset_edit.as_mut() {
+            e.summary = true;
+        }
+    }
+
+    /// La ligne du nom en cours de saisie (enregistrer ou renommer), s'il y en a une pour cet outil
+    /// (`summary` : dans le panneau Réglages ou dans la bibliothèque, selon d'où elle est partie).
+    pub(crate) fn preset_edit_row(&mut self, ui: &mut egui::Ui, target: Target, current: BrushSettings, summary: bool) {
+        let Some(edit) = self.preset_edit.as_mut().filter(|e| e.target == target && e.summary == summary) else { return };
         let mut done = None;
         ui.horizontal(|ui| {
             ui.label(if edit.rename.is_some() { "Nouveau nom" } else { "Enregistrer sous" });
@@ -166,6 +195,8 @@ impl App {
             }
             let err = self.save_brushes();
             self.status = format!("Réglage « {name} » gardé dans « Mes brosses »{}", err.map_or(String::new(), |e| format!(" (pas pour la prochaine fois : {e})")));
+            // Le réglage qu'on vient de garder devient celui que « Enregistrer » remplacera.
+            self.brush_previews.base = Some((target, name, crate::brushtex::MINE.to_string()));
         } else if done == Some(false) {
             self.preset_edit = None;
         }
@@ -179,7 +210,7 @@ impl App {
         let Some(p) = self.brushes.presets.get(i).cloned() else { return };
         match action {
             PresetMenu::Rename => {
-                self.preset_edit = Some(PresetEdit { name: p.name, target, rename: Some(i), focused: false });
+                self.preset_edit = Some(PresetEdit { name: p.name, target, rename: Some(i), summary: false, focused: false });
                 return;
             }
             PresetMenu::Duplicate => {
@@ -189,6 +220,8 @@ impl App {
             }
             PresetMenu::Update => {
                 self.brushes.presets[i].settings = current;
+                self.brush_previews.ancien = Some(Ancien { target: p.target, name: p.name.clone(), source: p.source.clone(), before: p.settings, after: current });
+                self.brush_previews.base = Some((p.target, p.name.clone(), p.source.clone()));
                 self.status = format!("« {} » prend le réglage courant.", p.name);
             }
             PresetMenu::Delete => {
@@ -198,6 +231,20 @@ impl App {
                 self.status = format!("« {} » supprimé.", p.name);
             }
         }
+        if let Some(e) = self.save_brushes() {
+            self.status = format!("{} (pas gardé pour la prochaine fois : {e})", self.status);
+        }
+    }
+
+    /// Rétablit le réglage de la bibliothèque que « Enregistrer » vient de remplacer.
+    pub(crate) fn restore_preset(&mut self) {
+        if self.brushes_busy() {
+            return;
+        }
+        let Some(a) = self.brush_previews.ancien.take() else { return };
+        let Some(p) = self.brushes.presets.iter_mut().find(|p| p.target == a.target && p.name == a.name && p.source == a.source) else { return };
+        p.settings = a.before;
+        self.status = format!("« {} » retrouve son ancien réglage.", a.name);
         if let Some(e) = self.save_brushes() {
             self.status = format!("{} (pas gardé pour la prochaine fois : {e})", self.status);
         }

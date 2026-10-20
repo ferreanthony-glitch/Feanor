@@ -169,9 +169,12 @@ Chaque plan a ses calques, de deux sortes :
     pour des traits vectoriels choisis), sa boîte (mêmes gestes que sur un calque vectoriel : échelle,
     rotation, inclinaison, pivot) la transforme, Alt+H / Alt+V la retournent. Tant que la zone reste sélectionnée, chaque
     transformation repart de l'image d'origine : tourner deux fois ne floute pas deux fois.
-  - Suppr efface dedans, Maj+Suppr efface autour, Ctrl+C / X / V copient, coupent, collent
+  - Suppr efface dedans, **Maj+Suppr remplit la zone de la couleur courante** (une étape « Remplir la
+    sélection » ; l'icône « Remplir » des réglages de l'outil fait pareil), **Maj+Retour arrière efface
+    autour**, Ctrl+C / X / V copient, coupent, collent
     (la zone collée arrive à sa place, prête à être déplacée). Échap ou un autre outil la pose ;
-    Ctrl+Z annule toute la transformation d'un coup.
+    Ctrl+Z annule toute la transformation d'un coup. **Un clic (sans glisser) sur un dessin choisit la
+    forme d'un seul tenant sous la souris** ; voir « Notes d'Anthony : dessin ».
 
 Les traits vectoriels sont rendus à la résolution du projet : en zoomant très fort, on voit les pixels
 (comme à l'export), mais le trait reste modifiable.
@@ -1237,6 +1240,44 @@ tant que les images se calculent.
 Code : `src/relecture.rs` (modèle, page, notes, placement), `src/relecturejob.rs` (tâche), `src/relectureui.rs`
 (fenêtres, dessin sur l'image), `assets/relecture/page.js` et `page.css` (la page), `src/relecture_tests.rs`.
 
+## Notes d'Anthony : dessin (2026-10-20, branche `notes-dessin`)
+
+Huit notes du réalisateur sur le dessin. Le détail, les règles de touches et la liste à regarder à l'écran sont
+dans `docs/INTERFACE.md`, partie 24.
+
+- **Tracé droit** : **Maj tenue pendant un trait** (pinceau, crayon, gomme ; vectoriel ou bitmap), le trait
+  s'arrête là où il était et un segment droit le relie à la pointe (aperçu en ligne à la largeur du pinceau) ;
+  **Maj+Alt** : l'angle par pas de 15° (comme la Maj des formes) ; Maj relâchée ou bouton relâché, le segment est
+  posé d'un coup. Maj tenue dès l'appui : du début du trait à la pointe. Un seul geste, une seule étape
+  d'annulation. Un trait aligné sur un guide est déjà droit : Maj n'y change rien. Pas de « Maj + clic, clic »
+  façon Photoshop.
+- **Choisir un objet au clic** : **Ctrl + clic** (le lasso temporaire de Ctrl) choisit l'objet sous la souris :
+  sur un calque vectoriel le trait ou la zone remplie (comme avant), sur un calque bitmap **la forme d'un seul
+  tenant** (pixels dessinés qui se touchent, huit voisins ; un trait fin se vise à quatre pixels d'écran près).
+  **Ctrl+Maj + clic** ajoute un autre objet à la sélection, sur n'importe quel calque, ou le retire s'il y était ;
+  Ctrl+Maj + lasso ajoute tout ce qu'il prend. Un clic dans le vide désélectionne ; un glisser reste un lasso.
+- **Un pinceau par sorte de calque** : SHOT retient le dernier pinceau utilisé sur un calque vectoriel et le
+  dernier sur un calque bitmap, et rend celui de la sorte du calque quand on change de calque. Retenus dans les
+  réglages de l'application, ils reviennent au lancement suivant.
+- **Enregistrer la brosse** : une icône disquette à côté du nom du réglage (panneau Réglages de l'outil) :
+  « Enregistrer dans la brosse » (remplace la brosse d'où vient le réglage ; rétablissable aussitôt),
+  « Enregistrer comme nouvelle brosse… » (nom demandé sur place). Retouché à la main, le nom devient
+  « (réglé à la main) d'après « Encre » ». Les brosses de SHOT ne se remplacent pas.
+- **Réglages repliés** : tout ce qui est sous l'aperçu du trait (catégories et réglages) est replié derrière une
+  petite flèche, l'état est retenu. **Fond de l'aperçu** : un gris un peu plus clair que le panneau (les trois
+  thèmes), poussé vers le blanc ou le noir si le trait lui ressemble.
+- **Remplir la sélection** : Maj+Suppr, sur une zone bitmap (voir plus haut).
+- **Clés de position** (outil Transformer, réglages > « Clés de position ») : un bouton pose une clé avec la pose
+  du calque à l'image courante ; un calque qui a des clés est animé, le déplacer / agrandir / tourner à une autre
+  image pose ou met à jour la clé de cette image, et entre deux clés il va de l'une à l'autre (lecture, export,
+  vignettes). **Lisser** : la clé arrive et repart lentement ; arrivée et départ se règlent en images, comme les
+  clés de caméra (`camera::ease`). Dans la timeline : losanges verts sur la ligne du calque (ronds quand la clé est
+  adoucie), clic pour choisir, glisser pour déplacer, Suppr, clic droit. Le format du projet passe à **33**
+  (`cles_position` d'un calque).
+
+Code : `src/tracedroit.rs`, `src/selobjet.rs`, `src/remplirsel.rs`, `src/poskeys.rs` (modèle), `src/poskeysui.rs`
+(écran), `src/pinceaux.rs` / `src/pinceauxui.rs` / `src/brushui.rs` (brosses), `src/dessin_notes_tests.rs`.
+
 ## Références visuelles
 
 Le panneau **Références** (icône dans la barre des panneaux, action `vue.references`, fermé par défaut)
@@ -1711,7 +1752,9 @@ Détail et propositions : `docs/INTERFACE.md`.
   calques ».
 - **Ctrl+Maj + outil Sélection** (lasso, rectangle ou clic sur le dessin) : prend sur **tous** les calques
   du plan à l'image courante (visibles, déverrouillés, non vidéo), comme dans Storyboard Pro ; leurs clés se
-  choisissent aussi dans le montage. Ctrl seul et Maj seul gardent leur sens.
+  choisissent aussi dans le montage. Ctrl seul et Maj seul gardent leur sens. **Depuis le 2026-10-20, Ctrl+Maj
+  cumule** : un objet s'ajoute à la sélection (ou en est retiré s'il y était), un lasso ajoute ce qu'il prend
+  (avant : la sélection était remplacée).
 - **Zoom de la bande** (montage et timeline) : le curseur, les boutons, Alt+1 / Alt+2 et Ctrl + molette
   gardent la tête de lecture au même endroit de l'écran ; hors de la vue, elle vient d'abord au milieu.
 - **Icônes allumées** : une icône de bouton allumé (boucle, outil actif, aimant, vue…) prend la couleur
@@ -2047,6 +2090,9 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `brush.rs` | Moteur de pinceau : empreintes, pression, lissage, pointe en image, grain |
 | `brushtex.rs`, `brushui.rs` | Pointes, papiers, réglages nommés ; leur panneau |
 | `tbbrush.rs` | Import des pinceaux Toon Boom (XML) |
+| `tracedroit.rs` | Tracé droit (Maj pendant un trait) : segment en attente, aperçu, pose par le moteur au relâché |
+| `selobjet.rs`, `remplirsel.rs` | Choisir un objet au clic (forme d'un seul tenant, Ctrl / Ctrl+Maj, cumul) ; remplir la zone bitmap (Maj+Suppr) |
+| `poskeys.rs`, `poskeysui.rs` | Clés de position des calques : pose entre les clés, adoucis, coupe et réunion des plans, enregistrement ; réglages de l'outil Transformer, losanges de la timeline |
 | `onion.rs` | Pelure d'oignon |
 | `onionui.rs` | Panneau de la pelure d'oignon (13f) |
 | `bottomtabs.rs`, `notes.rs` | Onglets du bas de la timeline, notes dessinées (13e) |

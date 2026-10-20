@@ -61,7 +61,7 @@ impl App {
     /// Ctrl+Maj : les calques où la sélection a pris quelque chose deviennent les calques choisis
     /// (le calque courant reste le courant), et leurs clés à l'image courante, des clés choisies de
     /// la timeline et du montage. Le geste « tous les calques » est fini.
-    fn multi_adopt_layers(&mut self) {
+    pub(crate) fn multi_adopt_layers(&mut self) {
         let was_all = std::mem::take(&mut self.multi.all_layers);
         if !was_all {
             return;
@@ -108,7 +108,11 @@ impl App {
         if self.content_refuses() {
             return;
         }
-        // Une sélection sur un seul calque laisse la place.
+        // Une sélection sur un seul calque laisse la place — sauf avec Ctrl+Maj, qui cumule : elle
+        // est reprise dans la sélection sur plusieurs calques (`selobjet.rs`).
+        if all {
+            self.carry_single_selection();
+        }
         if self.vsel.is_some() || self.bsel.is_some() {
             self.vsel = None;
             self.drop_bitmap_selection();
@@ -116,7 +120,9 @@ impl App {
         // Un geste lâché dont la feuille attend encore le rendu exact : on le termine d'abord.
         self.multi_flush();
         // La boîte : une poignée, un bord, l'extérieur d'un coin, le pivot ou l'intérieur.
-        if let Some((handle, frame)) = self.box_press(screen, shift) {
+        // (Ctrl+Maj est un geste de choix : il ne prend jamais une poignée de la boîte, même quand le
+        // trait visé est tout contre un de ses bords.)
+        if let Some((handle, frame)) = self.box_press(screen, shift).filter(|_| !all) {
             self.multi.drag = Some(if handle == Handle::Pivot {
                 // Le pivot déplacé est gardé avec la boîte.
                 if let Some(sel) = self.multi.sel.as_mut() {
@@ -128,9 +134,10 @@ impl App {
             });
             return;
         }
-        // Ctrl+Maj : tous les calques du plan, en nouvelle sélection (pas d'ajout).
+        // Ctrl+Maj : tous les calques du plan, et la sélection se cumule : un objet s'ajoute, ou se
+        // retire s'il était déjà choisi (Anthony, 2026-10-20 ; avant : nouvelle sélection).
         self.multi.all_layers = all;
-        let shift = shift && !all;
+        let shift = shift || all;
         let targets = self.multi_targets();
         let tol = 4.0 / self.view.zoom.max(1e-3);
         if let Some((t, item)) = multisel::hit_item(&self.doc, &targets, stage, tol) {
@@ -144,6 +151,9 @@ impl App {
                 } else {
                     self.status = format!("{} choisis.", sel.summary());
                 }
+                // Ctrl+Maj : les calques touchés deviennent les calques choisis ; le geste est fini.
+                self.multi_adopt_layers();
+                self.multi.all_layers = false;
                 return;
             }
             let already = self
@@ -229,6 +239,8 @@ impl App {
             MDrag::Lasso { points, add } => {
                 if self.big_enough(&points) {
                     self.multi_select_polygon(&points, add);
+                } else if points.first().is_some_and(|&p| self.multi_pick_object(p, add)) {
+                    // (Un clic sur un dessin bitmap : l'objet, `selobjet.rs`.)
                 } else if !add {
                     self.multi.sel = None;
                 }
@@ -237,6 +249,7 @@ impl App {
                 let r = Rect::from_two_pos(from, to);
                 if r.width().min(r.height()) * self.view.zoom >= 3.0 {
                     self.multi_select_polygon(&crate::pixsel::rect_polygon(r), add);
+                } else if self.multi_pick_object(from, add) {
                 } else if !add {
                     self.multi.sel = None;
                 }

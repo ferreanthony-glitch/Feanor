@@ -4,7 +4,8 @@
 //! - La touche d'un outil tenue (au moins `HOLD` secondes, ou l'outil utilisé sur le dessin
 //!   pendant qu'on la tient) : au relâché, l'outil d'avant revient. Une pression brève change
 //!   d'outil, comme avant (sinon on ne pourrait plus changer d'outil d'une touche).
-//! - Ctrl tenu seul sur le dessin : l'outil Sélection (son lasso), le temps de le tenir. Une
+//! - Ctrl tenu sur le dessin (seul, ou avec Maj : Ctrl+Maj, « tous les calques » et le cumul de la
+//!   sélection, `selobjet.rs`) : l'outil Sélection (son lasso), le temps de le tenir. Une
 //!   autre touche (Ctrl+Z…) ou la molette pendant qu'on le tient : ce n'était pas pour le lasso.
 //!   Une zone bitmap choisie pendant qu'on le tient garde l'outil Sélection au relâché (elle
 //!   n'existe qu'avec lui) ; des traits vectoriels choisis restent choisis avec l'outil d'avant.
@@ -75,7 +76,8 @@ impl App {
             let other = i.events.iter().any(|e| matches!(e, Event::Key { pressed: true, .. }));
             let m = i.modifiers;
             let wheel = i.zoom_delta() != 1.0 || i.raw_scroll_delta != egui::Vec2::ZERO;
-            (i.time, released, other, m.ctrl && !m.alt && !m.shift, wheel, i.pointer.any_down(), i.pointer.any_pressed())
+            // (Ctrl+Maj compte aussi : « tous les calques » et le cumul de la sélection, `selobjet.rs`.)
+            (i.time, released, other, m.ctrl && !m.alt, wheel, i.pointer.any_down(), i.pointer.any_pressed())
         });
         // Touche d'outil relâchée : l'outil d'avant revient (une fois la souris relâchée).
         if let Some(s) = &mut self.tool_spring {

@@ -263,8 +263,12 @@ pub struct Layer {
     pub opacity: f32,
     /// Verrouillé : on ne peut plus dessiner dessus (la timeline reste modifiable).
     pub locked: bool,
-    /// Transformation du calque entier (identité par défaut).
+    /// Transformation du calque entier (identité par défaut). Un calque animé (`pos_keys`) prend la
+    /// pose de ses clés à chaque image : voir `Layer::pose`.
     pub transform: LayerTransform,
+    /// Clés de position (`poskeys.rs`, Anthony 2026-10-20) : la pose du calque à certaines images du plan,
+    /// triées par image ; entre deux clés elle va de l'une à l'autre. Vide : le calque a sa pose fixe.
+    pub pos_keys: Vec<crate::poskeys::PosKey>,
     /// Profondeur (multiplan) : 0 = plan de référence ; 1 = deux fois plus loin de la caméra
     /// (défile deux fois moins vite) ; négatif = premier plan (défile plus vite).
     pub depth: f32,
@@ -378,6 +382,7 @@ impl Layer {
             opacity: 1.0,
             locked: false,
             transform: LayerTransform::default(),
+            pos_keys: Vec::new(),
             depth: 0.0,
             frames: Vec::new(),
             scene_wide: None,
@@ -443,8 +448,40 @@ impl Layer {
     /// caméra avancée de z et décalée de o, puis ramené sur le plan de référence : son dessin est
     /// agrandi de s(1 + d) autour du centre et décalé de (1 − s) o, avec s = (D − z) / (D(1 + d) − z).
     pub fn transform_seen(&self, seen: &CameraSeen) -> Option<LayerTransform> {
+        self.pose_seen(self.transform, seen)
+    }
+
+    /// Comme `transform_seen`, pour un calque qui peut être animé : la pose est celle de l'image `frame`
+    /// (`pose`). Tout ce qui fabrique l'image d'un plan, d'une vignette ou d'un export passe par là.
+    pub fn transform_seen_at(&self, seen: &CameraSeen, frame: usize) -> Option<LayerTransform> {
+        self.pose_seen(self.pose(frame), seen)
+    }
+
+    /// La pose du calque à l'image `frame` du plan : celle que donnent ses clés de position, sinon sa
+    /// transformation fixe (`transform`).
+    pub fn pose(&self, frame: usize) -> LayerTransform {
+        crate::poskeys::pose_at(&self.pos_keys, frame, self.transform)
+    }
+
+    /// Le calque a des clés de position : il est animé.
+    pub fn is_animated(&self) -> bool {
+        !self.pos_keys.is_empty()
+    }
+
+    /// Donne au calque la pose `t` à l'image `frame` : sa transformation fixe s'il n'a pas de clé, sinon
+    /// la clé de cette image (créée au besoin, avec les adoucis de celle qu'elle remplace).
+    pub fn set_pose(&mut self, frame: usize, t: LayerTransform) {
+        if self.pos_keys.is_empty() {
+            self.transform = t;
+        } else {
+            crate::poskeys::set_key(&mut self.pos_keys, frame, t);
+        }
+    }
+
+    /// `t`, la pose du calque, vue par la caméra `seen` (voir `transform_seen`).
+    fn pose_seen(&self, t: LayerTransform, seen: &CameraSeen) -> Option<LayerTransform> {
         if self.depth == 0.0 || (seen.offset == Vec2::ZERO && seen.dolly == 0.0) {
-            return Some(self.transform);
+            return Some(t);
         }
         let d = self.depth.max(Self::MIN_DEPTH);
         let dist = seen.d0 * (1.0 + d) - seen.dolly;
@@ -454,10 +491,10 @@ impl Layer {
         let s = (seen.d0 - seen.dolly) / dist;
         let k = s * (1.0 + d);
         Some(LayerTransform {
-            x: self.transform.x * k + seen.offset.x * (1.0 - s),
-            y: self.transform.y * k + seen.offset.y * (1.0 - s),
-            scale: self.transform.scale * k,
-            ..self.transform
+            x: t.x * k + seen.offset.x * (1.0 - s),
+            y: t.y * k + seen.offset.y * (1.0 - s),
+            scale: t.scale * k,
+            ..t
         })
     }
 
@@ -543,6 +580,13 @@ impl Layer {
     pub fn shift_frames(&mut self, at: usize, n: usize, removed: bool) {
         crate::roles::shift(&mut self.roles, at, n, removed);
         crate::fx::shift_keys(&mut self.fx, at, n, removed);
+        crate::poskeys::shift_keys(&mut self.pos_keys, at, n, removed);
+    }
+
+    /// Réunion de deux plans : les clés de position du même calque de l'autre plan (`keys`, `base` : sa
+    /// pose fixe, `b_len` : sa durée) suivent les siennes, décalées de `a_len` images.
+    pub fn join_pos_keys(&mut self, a_len: usize, keys: &[crate::poskeys::PosKey], base: LayerTransform, b_len: usize) {
+        self.pos_keys = crate::poskeys::join_keys(&self.pos_keys, a_len, self.transform, keys, b_len, base);
     }
 
     /// Ajoute à la fin du calque, à partir de l'image `at`, les images `frames` d'un autre calque
@@ -1195,6 +1239,10 @@ impl Document {
             for l in &mut panel.layers {
                 l.transform.x *= s;
                 l.transform.y *= s;
+                for k in &mut l.pos_keys {
+                    k.t.x *= s;
+                    k.t.y *= s;
+                }
             }
         }
         self.map_reserve_cameras(|c| Camera { x: c.x * s, y: c.y * s, dolly: c.dolly * s, ..*c });
@@ -1738,6 +1786,8 @@ impl Document {
                 // Les rôles d'après la coupe passent au second (13g-2), comme les clés d'effets (13i).
                 roles: layer.roles.range(at..).map(|(f, r)| (f - at, *r)).collect(),
                 fx: crate::fx::keys_from(&layer.fx, at),
+                // Les clés de position d'après la coupe passent au second (`poskeys::split_keys`).
+                pos_keys: crate::poskeys::split_keys(&layer.pos_keys, at, layer.transform).1,
                 ..layer.clone()
             };
             l.trim();
@@ -1771,6 +1821,7 @@ impl Document {
             for e in &mut l.fx {
                 e.keys.retain(|k| k.frame < at);
             }
+            l.pos_keys = crate::poskeys::split_keys(&l.pos_keys, at, l.transform).0;
             l.trim();
         }
         first.length = at;
@@ -1811,6 +1862,7 @@ impl Document {
                     ca.dessins.extend(cb.dessins.iter().map(|(t, c)| (*t, *c)));
                 }
                 la.append_at(a_len, lb.frames, &lb.roles);
+                la.join_pos_keys(a_len, &lb.pos_keys, lb.transform, next_len);
                 la.trim();
             } else {
                 let mut l = lb;
@@ -1894,6 +1946,9 @@ impl Document {
         }
         if !above.transform.is_identity() || !below.transform.is_identity() {
             return Err("Un des deux calques est transformé : annule la transformation (Ctrl+R) avant de fusionner.".into());
+        }
+        if above.is_animated() || below.is_animated() {
+            return Err("Un des deux calques est animé (clés de position) : supprime ses clés de position avant de fusionner.".into());
         }
         if above.depth != below.depth {
             return Err("Les deux calques ne sont pas à la même profondeur.".into());
@@ -2240,6 +2295,9 @@ impl Document {
                 && x.opacity == y.opacity
                 && x.blend == y.blend
                 && x.transform == y.transform
+                // (Un calque animé ne se réunit pas à un autre : il reste un calque à part.)
+                && x.pos_keys.is_empty()
+                && y.pos_keys.is_empty()
                 && x.depth == y.depth
         };
         let mut used = vec![false; a.layers.len()];
