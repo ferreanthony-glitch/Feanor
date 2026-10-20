@@ -1223,7 +1223,8 @@ Demande d'Anthony : « le tremblement, j'adore » — d'autres effets qui agisse
 
 ### Où et quels gestes
 
-- **Rangée d'icônes « Trait »** en tête du panneau Effets : six icônes (signature, gribouillis, battement, vague en dents
+- **(Depuis le 2026-10-20 : un bouton déroulant « Trait ▾ », partie 25 ; la rangée d'icônes décrite ici n'existe plus.)**
+  **Rangée d'icônes « Trait »** en tête du panneau Effets : six icônes (signature, gribouillis, battement, vague en dents
   de scie, trois points, grains) cochent et décochent chaque effet sur le calque courant (une étape d'annulation) ; enfoncée =
   l'effet est sur le calque et actif ; grisée, avec la raison dans la bulle, sur un calque bitmap. Clic droit sur une
   icône : lui assigner un raccourci. À droite, la **baguette** : « Apparition écrite », « Croquis nerveux »,
@@ -1292,7 +1293,7 @@ Suite des effets du trait, demandée par Anthony après les effets animés. Dét
 
 ### Où et quels gestes
 
-- **Deuxième rangée d'icônes « Matière »** dans le panneau Effets, sous celle du Trait : liseré (sélection), trait sec (pinceau
+- **(Depuis le 2026-10-20 : un bouton déroulant « Matière ▾ », partie 25.)** **Deuxième rangée d'icônes « Matière »** dans le panneau Effets, sous celle du Trait : liseré (sélection), trait sec (pinceau
   large), encre (goutte), dégradé, plume. Enfoncée = l'effet est sur le calque et actif ; **grisée avec la raison dans la
   bulle** pour le dégradé et la plume sur un calque bitmap (le liseré, le trait sec et l'encre y marchent). À droite, la
   baguette : « Encre de Chine », « Feutre usé », « Contour blanc », « Arc-en-ciel », « Plume calligraphique ». Clic droit sur
@@ -1432,3 +1433,106 @@ gros), dessins (décodage sous limites, réduction, transparent, refus), fichier
 identifiant / numéro / sans plan / image perdue, import (commentaires, idempotence, rouvrir le projet, dessin abîmé), compte rendu en
 français, une seule étape d'annulation nommée, PDF avec commentaires et cadres de notes, tâche d'export (page + PDF, arrêt, fermeture,
 fichier d'avant gardé), fenêtres, dessin montré / caché, aucun fichier créé à l'import.
+
+---------------------------------------------------------------------------------------------------
+
+## 25. Notes d'Anthony — calques, effets, montage, export, caméra (2026-10-20, branche `notes-calques`)
+
+Sept demandes d'une même note. Pour chacune : ce qui existait déjà (rien n'est en double), ce qui a changé. Détail :
+`README.md` (« Notes d'Anthony du 2026-10-20 »). Rien n'a été regardé à l'écran dans cette séance (aucun lancement de
+SHOT) : voir « À vérifier à l'écran ».
+
+### Mots
+
+| Mot | Sens | À éviter |
+|---|---|---|
+| **Trait ▾**, **Matière ▾** | les deux boutons déroulants du panneau Effets (famille Trait, famille Matière) | « rangée d'icônes » (c'était avant) |
+| **Dossier** | un calque sans dessin qui range des calques (un seul niveau) ; son triangle l'ouvre ou le ferme | groupe (le « groupe de couleur » est autre chose) |
+| **fx** | le petit bouton de la ligne d'un calque qui allume ou éteint toute sa pile d'effets | |
+| **Fond sous le trait** | un réglage **du calque**, avec son bouton sur sa ligne | option du pinceau (c'était avant) |
+| **Passe-partout** | le voile autour du cadre de la caméra de « Estomper le hors-champ » | masque |
+| **GIF animé** | l'export `.gif`, sans son | |
+
+### Où et quels gestes
+
+| Commande | Où | Raccourci |
+|---|---|---|
+| Effets du trait, de matière (`fx.ecriture`…, `fx.preset_*`) | panneau Effets : boutons « Trait ▾ » et « Matière ▾ » (icône + nom ; section « Préréglages ») ; « Ajouter un effet » ; clic droit sur un calque > Effets ; Ctrl+K | aucun |
+| Nouveau dossier (`dossier.nouveau`) | panneau Calques : icône dossier + de ses commandes, clic droit dans le vide de la liste ; en-tête de la timeline (déjà là) ; menu Calques > Dossiers (déjà là) | aucun |
+| Ranger les calques choisis dans un dossier (`dossier.ranger`) | panneau Calques : icône (quand plusieurs calques sont choisis) ; menu Calques > Dossiers | aucun |
+| Ouvrir / fermer un dossier | triangle de sa ligne dans le panneau Calques et dans la timeline (le même réglage) | aucun |
+| Fond sous le trait du calque (`pinceau.fond`) | bouton carré-utilisateur sur la ligne de chaque calque de dessin du panneau Calques, et dans ses commandes (calque courant) ; menu Calques > Fond sous le trait | aucun |
+| Effets du calque allumés / éteints (`calque.effets`) | bouton « fx » de la ligne du calque (panneau Calques, timeline), seulement s'il a des effets ; « Effets du calque allumés » dans les menus de calque ; Ctrl+K | aucun |
+| Exporter un GIF animé (`fichier.exporter_gif`) | Fichier > Exporter… > « Un GIF animé » ; fenêtre d'export (choix « GIF animé ») ; Ctrl+K | aucun |
+| Opacité du passe-partout | Fichier > Préférences… > Dessin (curseur 0 à 100 %, « Rétablir ») | |
+
+Les icônes ont leur bulle d'une seconde (nom, raccourci, description : `bulles.rs`), un bloc sans touche par action dans `keymap.toml`
+(clic droit sur une icône : lui en donner une), les boutons allumés prennent `bulles::encre_etat`, les couleurs viennent de `theme::`.
+
+### Ce que voit l'utilisateur
+
+- **Panneau Effets** : sous « Ajouter un effet / Préréglages / Copier-coller », deux boutons « Trait ▾ » et « Matière ▾ ». Un effet allumé sur
+  le calque est enfoncé dans la liste ; le titre compte les effets allumés (« Trait (2) ▾ »). Sur un calque bitmap, les entrées qu'il
+  refuse sont grisées et la bulle dit pourquoi. Les préréglages sont sous un petit titre « Préréglages ». Si les effets du calque sont
+  éteints (bouton fx), une ligne le dit, avec « Rallumer ».
+- **Panneau Calques** : dans les commandes, après « Nouveau calque de fond » : « Nouveau dossier » (et, avec plusieurs calques choisis,
+  « Ranger les calques choisis dans un dossier »), puis le bouton de fond et, s'il y a des effets, « fx » pour le calque courant. Chaque
+  ligne : [triangle si dossier] œil, cadenas, [fx], vignette (l'icône d'un dossier pour un dossier), nom, puis « vectoriel » (ou « dossier ·
+  3 calques ») et le bouton de fond. Un calque rangé est décalé vers la droite ; un dossier fermé n'a plus les lignes de ses calques (sauf le
+  calque courant).
+- **Timeline** : « fx » sur la deuxième rangée de réglages (après le groupe), ou à côté du cadenas sur une ligne réduite.
+- **Pile des versions** : chaque carte porte la durée de sa version à côté du nom (« V2 3s 00 ») ; la bulle d'une carte dit de combien la
+  durée change. La fiche du plan et le menu « Version du plan » montrent aussi la durée de chaque version. En passant à une version, la
+  barre d'état dit « Durée du plan : 2s 00 → 3s 00 ; les plans suivants reculent de 24 i, le son reste en place. ».
+- **Fenêtre d'export, GIF** : « Étendue » (avec « Plans choisis » pour le GIF, les images et le PDF), « Taille » (480 px, 720 px, 50 %, image
+  finale, avec les dimensions), « Cadence » (images par seconde, au plus celles du projet, et le nombre d'images du GIF), « Lecture »
+  (« Tourne en boucle », « Tramage »), « Transitions », ffmpeg. La progression est celle du film (« Image 12 sur 48 », reste environ,
+  Annuler : le GIF inachevé est effacé).
+- **Dessin** : le cadre de la caméra est un trait de 1 pixel sur un liseré sombre fin ; « Estomper le hors-champ » voile avec
+  l'opacité des Préférences.
+
+### Limites
+
+- « fx » n'a pas de bouton dans la colonne du montage (pas de place) : son entrée de menu y est.
+- Un GIF de plans choisis qui ne se suivent pas est fait de leurs images bout à bout, dans l'ordre du film.
+- Le contenu rogné (réserve) reste attaché au plan et non à la version : passer à une version de durée différente ne le change pas.
+- Les réglages du fond (couleur, débord, trous) restent sous le pinceau (visibles quand le calque courant a un fond), pas sur la ligne du calque.
+
+### Essais ajoutés
+
+`notes_calques_tests.rs` (39 essais) : les deux menus déroulants (rien d'une rangée d'icônes, toutes les entrées et préréglages listés,
+une entrée coche l'effet en une étape d'annulation, le titre compte, entrées grisées sans effet sur un bitmap, un préréglage de matière) ;
+le panneau Calques (dossier, calques décalés, bouton, triangle qui plie et déplie, calque courant toujours listé, nouveau dossier en une
+étape, glisser dedans et dehors, monter un dossier, œil / verrou / opacité) ; le fond (par calque, une étape, refus sur un dossier, bouton
+sur chaque ligne, plus de bouton dans les réglages du pinceau, enregistré avec le calque) ; « fx » (une étape, plan, export, bouton
+montré seulement avec des effets, peint dans le panneau et la timeline, enregistré, projet d'avant, copie du calque) ; les durées par
+version (ondulation des plans suivants, une étape d'annulation, cartes, tête de lecture, export pour le montage, empreinte, comparaison) ;
+le GIF (tailles, cadences, images gardées, ligne de commande, plans choisis, fenêtre et action, vrai GIF avec ffmpeg, annulation) ; la
+caméra (opacité du passe-partout, réglage enregistré, curseur des Préférences, cadre de 1 pixel, voile suivant le réglage).
+
+### À vérifier à l'écran (par Anthony)
+
+1. Panneau Effets : « Trait ▾ » et « Matière ▾ » côte à côte ; ouvrir « Trait » : six effets avec leurs icônes, « Préréglages » dessous ;
+   cliquer « Écriture du trait » : le menu se ferme, le titre devient « Trait (1) ▾ », l'effet est dans la pile ; Ctrl+Z. Sur un calque
+   bitmap : les effets du trait sont grisés, la bulle (une seconde) dit pourquoi ; « Matière » : liseré, trait sec, encre y marchent.
+2. Panneau Calques : cliquer l'icône « Nouveau dossier » ; glisser deux calques dedans ; le triangle du dossier le ferme (les lignes
+   disparaissent aussi de la timeline) puis le rouvre ; le calque courant dans un dossier fermé reste visible ; choisir le dossier,
+   baisser son opacité, cacher son œil, verrouiller son cadenas : ses calques suivent ; monter le dossier avec la flèche : ses calques
+   aussi. Plusieurs calques choisis (Ctrl + clic) : l'icône « Ranger les calques choisis dans un dossier ».
+3. Fond sous le trait : plus de bouton dans les réglages du pinceau ni du crayon ; sur la ligne d'un calque de dessin, le bouton carré-
+   utilisateur (éteint) ; un clic le donne au calque (même un autre que le courant), les réglages du fond apparaissent sous le pinceau
+   quand ce calque est courant ; Ctrl+Z. Dans le thème Gris clair, l'icône allumée se lit.
+4. « fx » : absent sur un calque sans effet ; poser un flou : « fx » apparaît à côté de l'œil et du cadenas (panneau Calques, timeline) ;
+   un clic éteint l'effet à l'écran (barré), le panneau Effets le dit ; un clic le rallume ; Ctrl+Z / Ctrl+Maj+Z ; enregistrer, fermer,
+   rouvrir : l'état est gardé.
+5. Versions : un plan de 2 s, « Nouvelle version », rallonger V2 à 3 s ; survoler « V2 » : chaque carte donne sa durée ; cliquer V1 : la
+   bande se resserre, la barre d'état dit de combien, les plans suivants avancent ; Ctrl+Z les repousse ; la tête de lecture ne reste pas
+   après la fin d'une version plus courte ; exporter pour le montage : les clips ont les durées de la version affichée.
+6. GIF : Fichier > Exporter… > « Un GIF animé » ; plan courant, 480 px, 12 images par seconde, boucle : ouvrir le `.gif` dans un
+   navigateur (il tourne en boucle, couleurs correctes, dessin lisible) ; sans tramage : fichier plus léger, aplats plus durs ; le film
+   entier : la barre avance, le dessin reste vivant, Annuler efface le fichier ; avec « Plans choisis » (Ctrl + clic dans la bande).
+7. Caméra : le cadre est fin (1 pixel) et se lit sur fond blanc, sur fond noir et sur une peinture sombre ; avec l'outil Caméra il est un
+   peu plus épais et de la couleur de la caméra ; Fichier > Préférences… > « Opacité du passe-partout » : à 0 % rien n'est voilé, à
+   100 % le hors-champ est noir, 27 % retrouve l'aspect d'avant ; le réglage est gardé au prochain lancement. Dire si 27 % convient
+   comme valeur d'origine et si la toile infinie (65 % de la valeur) devrait avoir la même opacité que la feuille.
+8. Les trois thèmes : les boutons enfoncés des deux menus, de « fx » et du fond restent lisibles.

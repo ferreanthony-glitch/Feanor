@@ -352,6 +352,8 @@ mod fxmatiere;
 #[cfg(test)]
 mod fxmatiere_tests;
 mod fxui;
+#[cfg(test)]
+mod notes_calques_tests;
 mod fxkeys;
 #[cfg(test)]
 mod fxkeys_tests;
