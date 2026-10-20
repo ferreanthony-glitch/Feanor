@@ -211,6 +211,8 @@ impl App {
         self.paint_camera(&painter, rect);
         // Incrustations (timecode…) : sur l'image finale, dans le cadre (`prereglagesui.rs`).
         self.paint_incrustations(ui.ctx(), &painter);
+        // Le dessin d'un relecteur, quand son commentaire est choisi (`relectureui.rs`).
+        self.paint_review_drawing(ui.ctx(), &painter);
         // Notes dessinées par-dessus l'image pendant la lecture (13e).
         self.paint_notes_overlay(&painter, rect);
         if !self.in_card {

@@ -412,6 +412,13 @@ mod references;
 #[cfg(test)]
 mod references_tests;
 mod referencesui;
+// Relecture par le réalisateur : la page HTML hors ligne, les notes qui reviennent (`relecture`), la tâche
+// d'export (`relecturejob`) et les fenêtres (`relectureui`).
+mod relecture;
+#[cfg(test)]
+mod relecture_tests;
+mod relecturejob;
+mod relectureui;
 mod rognage;
 #[cfg(test)]
 mod rognage_tests;

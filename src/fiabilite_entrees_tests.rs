@@ -53,6 +53,7 @@ fn the_fixture_really_holds_everything_the_project_can_store() {
     assert!(d.panels.iter().any(|p| !p.cues.bookmarks.is_empty() && !p.cues.notes.is_empty()), "signets et notes dessinées");
     let rangés: usize = d.reserves.values().map(|r| r.head.comments.len() + r.tail.comments.len()).sum();
     assert!(d.comments.len() >= 3 && rangés >= 2, "commentaires, dont deux rangés dans la réserve d'un plan rogné");
+    assert!(d.comments.iter().any(|c| c.note.is_some() && c.annotation.is_some()), "une note de relecture avec son dessin");
     assert!(d.reserves.values().any(|r| r.head.len > 0 && r.tail.len > 0), "plan rogné des deux côtés, avec sa réserve");
     assert!(!d.sounds.is_empty() && d.audio_tracks.len() >= 2, "son sur deux pistes");
     assert!(d.audio_tracks.iter().flat_map(|t| &t.clips).any(|c| !c.fx.is_default() && !c.fx.keys.is_empty() && !c.fx.is_dry()) && d.audio_tracks.iter().any(|t| t.solo), "effets des sons et solo");

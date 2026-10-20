@@ -175,7 +175,7 @@ fn a_comment_of_a_removed_plan_is_not_written() {
     let mut doc = film();
     let c = doc.panels[2].id;
     let id = doc.add_comment(c, 3, "A", 1);
-    doc.comments.push(Comment { id: 999, panel: 123_456, frame: 0, text: "orphelin".into(), author: String::new(), color: DEFAULT_COLOR, created: 0, done: false });
+    doc.comments.push(Comment { id: 999, panel: 123_456, frame: 0, text: "orphelin".into(), author: String::new(), color: DEFAULT_COLOR, created: 0, done: false, note: None, annotation: None });
     let bytes = commentaires::to_bytes(&doc).unwrap().unwrap();
     let list = commentaires::parse(std::str::from_utf8(&bytes).unwrap()).unwrap();
     assert_eq!(list.iter().map(|c| c.id).collect::<Vec<_>>(), vec![id]);

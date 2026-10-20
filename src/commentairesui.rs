@@ -157,7 +157,7 @@ impl App {
 
     /// Une étape d'annulation qui porte le nom `name` (« Nouveau commentaire »…), faite AVANT le
     /// changement.
-    fn comment_step(&mut self, name: &str) {
+    pub(crate) fn comment_step(&mut self, name: &str) {
         let before = self.history.context.replace(name.to_string());
         self.record_step();
         self.history.context = before;
@@ -658,5 +658,9 @@ impl App {
                 ui.label(RichText::new(format!("Créé le {}", crate::projetui::date_label(c.created))).small().weak());
             }
         });
+        // Une note de relecture avec son dessin : l'interrupteur qui le montre sur l'image (`relectureui.rs`).
+        if c.annotation.is_some() {
+            self.relecture_drawing_row(ui, id);
+        }
     }
 }

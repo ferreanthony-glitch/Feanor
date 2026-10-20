@@ -118,6 +118,16 @@ impl EnvoisUi {
         self.etats.get(&plan).copied()
     }
 
+    /// L'empreinte du plan `plan` au dernier relevé analysé.
+    pub(crate) fn empreinte(&self, plan: u64) -> Option<u64> {
+        self.digests.get(&plan).copied()
+    }
+
+    /// Aucun relevé des plans n'est encore analysé.
+    pub(crate) fn empreintes_vides(&self) -> bool {
+        self.digests.is_empty()
+    }
+
     /// Rien à faire : le dernier relevé est analysé et le projet n'a pas bougé depuis.
     #[cfg(test)]
     pub(crate) fn au_repos(&self) -> bool {
@@ -524,6 +534,7 @@ impl App {
         let mut aller: Option<usize> = None;
         let mut retirer: Option<u64> = None;
         let mut comparer: Option<u64> = None;
+        let mut relire: Option<u64> = None;
         egui::Window::new("Envois").open(&mut ouverte).default_width(420.0).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if bulles::icone(ui, ph::PAPER_PLANE_TILT, "Marquer un envoi…", "Noter l'état de tous les plans : ce qui change ensuite sera repéré.", &self.raccourci("envoi.marquer")).clicked() {
@@ -590,6 +601,10 @@ impl App {
                         if r.clicked() {
                             comparer = Some(e.id);
                         }
+                        // La page de relecture de cet envoi : les plans qui ont changé depuis, à envoyer au réalisateur.
+                        if bulles::icone(ui, ph::EYEGLASSES, "Exporter pour relecture", "Une page à envoyer au réalisateur (qui n'a pas SHOT) pour qu'il écrive ses notes dessus ; proposée avec les plans modifiés depuis cet envoi.", &self.raccourci("fichier.exporter_relecture")).clicked() {
+                            relire = Some(e.id);
+                        }
                         if bulles::icone(ui, ph::TRASH, "Retirer de la liste", "L'envoi sort de la liste. Ses fichiers dans « versions » ne sont jamais effacés.", "").clicked() {
                             retirer = Some(e.id);
                         }
@@ -615,6 +630,9 @@ impl App {
         });
         if let Some(id) = retirer {
             self.envois_ui.retrait = Some(id);
+        }
+        if let Some(id) = relire {
+            self.open_relecture_export(Some(id));
         }
         if let Some(id) = comparer {
             self.comparer_ouvrir(self.cur_panel, Some(crate::comparer::Source::Envoi(id)), Some(crate::comparer::Source::Actuelle));

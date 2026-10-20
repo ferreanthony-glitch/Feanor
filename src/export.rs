@@ -73,6 +73,8 @@ pub struct ExportSettings {
     pub transparent: bool,
     /// Avec les transitions du montage (fondus, volet, noir : `transitions.rs`).
     pub transitions: bool,
+    /// Storyboard PDF avec les commentaires de la timeline (non résolus), sous l'image où ils tombent.
+    pub comments: bool,
 }
 
 impl Default for ExportSettings {
@@ -84,6 +86,7 @@ impl Default for ExportSettings {
             sound: true,
             transparent: false,
             transitions: true,
+            comments: false,
         }
     }
 }
@@ -385,6 +388,13 @@ const PDF_IMAGE_WIDTH: u32 = 800;
 
 /// Image d'un panneau pour le PDF : sur fond blanc, réduite, en JPEG.
 pub fn board_image(img: &[Color32], size: [usize; 2]) -> Result<pdf::BoardImage, String> {
+    let (width, height, jpeg) = jpeg_on_white(img, size, PDF_IMAGE_WIDTH, 88)?;
+    Ok(pdf::BoardImage { width, height, jpeg })
+}
+
+/// Une image du film en JPEG (qualité `quality`) sur fond blanc, réduite à `max_width` de large au plus :
+/// (largeur, hauteur, octets). Le PDF et la page de relecture s'en servent.
+pub fn jpeg_on_white(img: &[Color32], size: [usize; 2], max_width: u32, quality: u8) -> Result<(u32, u32, Vec<u8>), String> {
     let [w, h] = size;
     let rgb: Vec<u8> = img
         .iter()
@@ -395,19 +405,15 @@ pub fn board_image(img: &[Color32], size: [usize; 2]) -> Result<pdf::BoardImage,
         })
         .collect();
     let mut image = image::RgbImage::from_raw(w as u32, h as u32, rgb).ok_or("image invalide")?;
-    if image.width() > PDF_IMAGE_WIDTH {
-        let nh = ((image.height() as f32 * PDF_IMAGE_WIDTH as f32 / image.width() as f32).round() as u32).max(1);
-        image = image::imageops::resize(&image, PDF_IMAGE_WIDTH, nh, image::imageops::FilterType::Lanczos3);
+    if image.width() > max_width {
+        let nh = ((image.height() as f32 * max_width as f32 / image.width() as f32).round() as u32).max(1);
+        image = image::imageops::resize(&image, max_width, nh, image::imageops::FilterType::Lanczos3);
     }
     let mut jpeg = Vec::new();
-    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 88)
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, quality)
         .encode(image.as_raw(), image.width(), image.height(), image::ExtendedColorType::Rgb8)
         .map_err(|e| e.to_string())?;
-    Ok(pdf::BoardImage {
-        width: image.width(),
-        height: image.height(),
-        jpeg,
-    })
+    Ok((image.width(), image.height(), jpeg))
 }
 
 /// Panneaux (une fois chacun, dans l'ordre) des images `frames`.
@@ -425,11 +431,20 @@ pub fn panels_of(frames: &[(usize, usize)]) -> Vec<usize> {
 /// marques d'image ; pour chacune, l'image à rendre (plan, image du plan) et ce que le PDF en
 /// écrit (ses textes à elle).
 pub fn storyboard_of(doc: &Document, panels: &[usize]) -> (Vec<(usize, usize)>, Vec<pdf::Board>) {
+    storyboard_of_with(doc, panels, false)
+}
+
+/// Comme `storyboard_of` ; `with_comments` : les commentaires de la timeline qui tombent sur chaque
+/// image de storyboard sont écrits dessous (`pdf::Board::comments`).
+pub fn storyboard_of_with(doc: &Document, panels: &[usize], with_comments: bool) -> (Vec<(usize, usize)>, Vec<pdf::Board>) {
     let mut frames = Vec::new();
     let mut boards = Vec::new();
     for &i in panels {
         let p = &doc.panels[i];
-        for (k, (id, start, end)) in crate::board::plan_boards(doc, i).into_iter().enumerate() {
+        let len = p.frame_count();
+        let spans = crate::board::plan_boards(doc, i);
+        let last = spans.len().saturating_sub(1);
+        for (k, (id, start, end)) in spans.into_iter().enumerate() {
             let (action, dialogue, notes) = match p.marks.iter().find(|m| m.id == id) {
                 Some(m) => (m.action.clone(), m.dialogue.clone(), m.notes.clone()),
                 None => (p.action.clone(), p.dialogue.clone(), p.notes.clone()),
@@ -438,6 +453,23 @@ pub fn storyboard_of(doc: &Document, panels: &[usize]) -> (Vec<(usize, usize)>, 
             if k > 0 {
                 title = format!("{title} · image {}", k + 1);
             }
+            // Les commentaires de ce plan qui se montrent entre `start` et `end` (sur la dernière image du plan
+            // s'ils sont plus loin : `Document::comment_spot`).
+            let comments = if with_comments {
+                let mut here: Vec<&crate::commentaires::Comment> = doc
+                    .comments
+                    .iter()
+                    .filter(|c| c.panel == p.id && !c.done)
+                    .filter(|c| {
+                        let at = c.frame.min(len.saturating_sub(1));
+                        at >= start && (at < end || k == last)
+                    })
+                    .collect();
+                here.sort_by_key(|c| (c.frame, c.id));
+                here.into_iter().map(|c| (c.author.clone(), c.text.clone())).collect()
+            } else {
+                Vec::new()
+            };
             frames.push((i, start));
             boards.push(pdf::Board {
                 title,
@@ -446,6 +478,7 @@ pub fn storyboard_of(doc: &Document, panels: &[usize]) -> (Vec<(usize, usize)>, 
                 action,
                 dialogue,
                 notes,
+                comments,
             });
         }
     }
@@ -689,38 +722,61 @@ impl ExportJob {
     /// Storyboard PDF `out` : une planche par image de storyboard de `boards`, rendue à l'image
     /// `frames` correspondante (plan, image du plan ; voir `storyboard_of`).
     pub fn pdf(out: &Path, title: &str, frames: Vec<(usize, usize)>, boards: Vec<pdf::Board>, frame: [usize; 2]) -> ExportJob {
+        ExportJob::pdf_with(out, title, frames, boards, frame, false)
+    }
+
+    /// Comme `pdf` ; `notes_area` : la version à imprimer pour relire (`pdf::storyboard_with`).
+    pub fn pdf_with(out: &Path, title: &str, frames: Vec<(usize, usize)>, boards: Vec<pdf::Board>, frame: [usize; 2], notes_area: bool) -> ExportJob {
+        let n = boards.len();
+        let (path, name) = (out.to_path_buf(), title.to_string());
+        let aspect = frame[0] as f32 / frame[1].max(1) as f32;
+        let mut job = ExportJob::collect(
+            format!("Export du storyboard ({n} images)"),
+            "Image de storyboard",
+            out,
+            frames,
+            move |_, img| board_image(img, frame),
+            move |images: Vec<pdf::BoardImage>| {
+                let bytes = pdf::storyboard_with(&name, &boards, &images, aspect, notes_area);
+                std::fs::write(&path, bytes).map_err(|e| format!("{} : {e}", path.display()))
+            },
+        );
+        job.unit = "Image de storyboard";
+        job
+    }
+
+    /// Un export qui garde chaque image calculée sous une autre forme et écrit le tout à la fin
+    /// (un PDF, une page de relecture) : `encode(rang, pixels)` s'exécute sur un fil à part, image
+    /// après image, `finish(toutes)` une fois qu'elles sont toutes arrivées. Annuler ou fermer SHOT
+    /// arrête le fil et efface `out` (`finish` ne s'exécute pas).
+    pub fn collect<T, E, F>(title: String, unit: &'static str, out: &Path, frames: Vec<(usize, usize)>, encode: E, finish: F) -> ExportJob
+    where
+        T: Send + 'static,
+        E: Fn(usize, &[Color32]) -> Result<T, String> + Send + 'static,
+        F: FnOnce(Vec<T>) -> Result<(), String> + Send + 'static,
+    {
         let (tx, rx) = sync_channel::<(usize, Image)>(QUEUE);
         let cancelled = Arc::new(AtomicBool::new(false));
-        let (stop, path, name) = (cancelled.clone(), out.to_path_buf(), title.to_string());
-        let n = boards.len();
+        let stop = cancelled.clone();
+        let n = frames.len();
         let writer = std::thread::spawn(move || -> Result<(), String> {
-            let mut images: Vec<Option<pdf::BoardImage>> = (0..n).map(|_| None).collect();
+            let mut done: Vec<Option<T>> = (0..n).map(|_| None).collect();
             for (i, img) in rx {
                 if stop.load(Ordering::Relaxed) {
                     return Err("annulé".into());
                 }
-                images[i] = Some(board_image(&img, frame)?);
+                if i < n {
+                    done[i] = Some(encode(i, &img)?);
+                }
             }
             if stop.load(Ordering::Relaxed) {
                 return Err("annulé".into());
             }
-            let images: Vec<pdf::BoardImage> = images.into_iter().collect::<Option<_>>().ok_or("image manquante")?;
-            let aspect = frame[0] as f32 / frame[1].max(1) as f32;
-            let bytes = pdf::storyboard(&name, &boards, &images, aspect);
-            std::fs::write(&path, bytes).map_err(|e| format!("{} : {e}", path.display()))
+            let all: Vec<T> = done.into_iter().collect::<Option<_>>().ok_or("image manquante")?;
+            finish(all)
         });
-        let mut job = ExportJob::new(
-            format!("Export du storyboard ({n} images)"),
-            out.to_path_buf(),
-            frames,
-            true,
-            Sink::Pdf {
-                tx: Some(tx),
-                writer: Some(writer),
-                cancelled,
-            },
-        );
-        job.unit = "Image de storyboard";
+        let mut job = ExportJob::new(title, out.to_path_buf(), frames, true, Sink::Pdf { tx: Some(tx), writer: Some(writer), cancelled });
+        job.unit = unit;
         job
     }
 

@@ -46,6 +46,7 @@ fn board(seq: &str, action: &str) -> Board {
         action: action.into(),
         dialogue: String::new(),
         notes: String::new(),
+        comments: Vec::new(),
     }
 }
 

@@ -547,6 +547,19 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
     doc.comment_mut(id).expect("commentaire").text = "Le flou arrive trop tôt.\nVoir avec le son.".into();
     let id = doc.add_comment(doc.panels[i4].id, 0, "Anthony", 1_760_000_600);
     doc.comment_mut(id).expect("commentaire").color = [10, 200, 90];
+    // Une note de relecture (`relecture.rs`) : sa clé d'importation et le dessin du relecteur.
+    let id = doc.add_comment(doc.panels[0].id, 3, "Claire", 1_760_000_700);
+    {
+        let mut rgba = vec![0u8; 12 * 8 * 4];
+        for x in 0..12 {
+            rgba[(4 * 12 + x) * 4..(4 * 12 + x) * 4 + 4].copy_from_slice(&[214, 38, 28, 255]);
+        }
+        let c = doc.comment_mut(id).expect("commentaire");
+        c.text = "Plus large ?".into();
+        c.color = crate::relecture::REVIEW_COLOR;
+        c.note = Some("a1b2c3-12-12".into());
+        c.annotation = crate::commentaires::Annotation::from_png(crate::io::encode_png(&rgba, 12, 8).expect("png"));
+    }
     // Transitions du montage (`transitions.json`) : un fondu enchaîné centré, un volet décalé, un fondu
     // depuis le blanc au début du film et un fondu au noir à la fin.
     let enchaine = doc.set_transition(1, crate::transitions::Kind::Dissolve).expect("transition");

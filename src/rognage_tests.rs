@@ -18,7 +18,7 @@ fn cam(x: f32) -> Camera {
 }
 
 fn comment(id: u64, panel: u64, frame: usize) -> Comment {
-    Comment { id, panel, frame, text: format!("c{id}"), author: "A".into(), color: [1, 2, 3], created: 0, done: false }
+    Comment { id, panel, frame, text: format!("c{id}"), author: "A".into(), color: [1, 2, 3], created: 0, done: false, note: None, annotation: None }
 }
 
 /// Un plan de 24 images dont le calque montre le dessin k à l'image k, avec des rôles, un effet

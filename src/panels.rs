@@ -129,6 +129,7 @@ impl App {
                     ui.separator();
                     self.action_item(ui, "Un projet Storyboard Pro (.sboard)…", "fichier.importer_sboard");
                     self.action_item(ui, "Un scénario (Fountain, Final Draft, Word, texte)…", "fichier.importer_scenario");
+                    self.action_item(ui, "Des notes de relecture (.json)…", "fichier.importer_notes");
                 });
                 self.action_item(ui, "Exporter…", "fichier.exporter");
                 ui.separator();
@@ -705,6 +706,8 @@ impl App {
         // Renuméroter les plans : la confirmation ; Exporter pour le montage : sa fenêtre.
         self.renumber_window(ctx);
         self.editorial_window(ctx);
+        // Relecture par le réalisateur : exporter la page, importer ses notes (`relectureui.rs`).
+        self.relecture_windows(ctx);
         // Suggestions sonores : confirmation d'envoi en ligne, « Modifier », saisie d'une clé.
         self.suggestions_windows(ctx);
         // À propos de SHOT (`aproposui.rs`).

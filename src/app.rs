@@ -702,6 +702,8 @@ pub struct App {
     pub(crate) renumber_confirm: bool,
     /// Fenêtre « Exporter pour le montage » (EDL, XML, OTIO : `editorialui.rs`).
     pub(crate) editorial: Option<crate::editorialui::EditorialWindow>,
+    /// Relecture par le réalisateur : export de la page, import des notes, dessin du relecteur (`relectureui.rs`).
+    pub(crate) relecture: crate::relectureui::RelectureUi,
     /// Fenêtre « À propos de SHOT » (`aproposui.rs`).
     pub(crate) about_window: bool,
     /// Le thème dont les couleurs sont posées dans egui : quand le réglage change, tout est
@@ -1140,6 +1142,7 @@ impl App {
             prefs_window: false,
             renumber_confirm: false,
             editorial: None,
+            relecture: Default::default(),
             about_window: false,
             theme_applied,
             theme_unsaved: false,
@@ -1335,6 +1338,7 @@ impl App {
             || self.coloriage.running()
             || self.sb_export.as_ref().is_some_and(crate::sbexportui::SbExportWindow::rendering)
             || self.editorial.as_ref().is_some_and(crate::editorialui::EditorialWindow::rendering)
+            || self.relecture.rendering()
     }
 
     pub(crate) fn current_brush(&self) -> Option<&BrushSettings> {
@@ -3423,6 +3427,9 @@ impl App {
             "fichier.exporter_son" => self.open_export(crate::export::Format::Wav),
             "fichier.exporter_pdf" => self.open_export(crate::export::Format::Pdf),
             "fichier.exporter_montage" => self.open_editorial(),
+            "fichier.exporter_relecture" | "fichier.importer_notes" => {
+                self.relecture_action(action);
+            }
             "numerotation.verrouiller" => self.toggle_numbering_lock(),
             "numerotation.renumeroter" => self.renumber_confirm = true,
             "fichier.exporter_image_courante" => self.export_frame(),
