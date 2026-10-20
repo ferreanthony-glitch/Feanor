@@ -3157,10 +3157,10 @@ Détail dans `docs/EXPORT_MONTAGE.md`. **Jamais ouvert dans Premiere Pro, DaVinc
   d'`App` non classé. `docs/ARCHITECTURE.md`, « Onglets de projets ».
 - **Mesures** (`docs/PERFORMANCE.md`, section 15) : changer d'onglet 7 à 14 µs, l'image d'écran suivante ne coûte pas plus qu'une
   autre (1,9 contre 1,8 ms), +54 Mo par projet lourd de plus, 0 ms de processeur et aucune repeinture au repos avec 3-4 onglets.
-- **Presse-papiers** communs : plans, calques, images, clés, effets, zones, éléments ; feuille d'une autre taille refusée (avec les
-  deux tailles), autre cadence signalée. Session : les onglets reviennent au lancement. Quitter / fermer les autres : une seule
-  boîte.
-- Reste : adapter les plans copiés dans une feuille d'une autre taille (décalage de cadrage) ; les travaux qui parlent à l'interface
+- **Presse-papiers** communs : plans, calques, images, clés, effets, zones, éléments ; feuille d'une autre taille **adaptée**
+  (voir « Coller depuis un projet d'une autre taille » plus bas), autre cadence signalée ou recalculée. Session : les onglets
+  reviennent au lancement. Quitter / fermer les autres : une seule boîte.
+- Reste : les travaux qui parlent à l'interface
   (export, propagation, sons proposés) suivraient leur onglet au lieu de refuser le changement ; ranger par onglet les
   commentaires, la scène 3D de blocage et les références liées aux plans copiés d'un projet à l'autre ; Alt+1…9 pour aller à un
   onglet ; un menu des onglets quand la bande déborde ; réouvrir le dernier onglet fermé ; plusieurs fenêtres (glisser un onglet
@@ -3282,3 +3282,24 @@ projet** (`VERSION` reste 33).
   cours de route), fenêtre, étendues, onglets) ; la suite complète passe, `scripts\verifier.ps1 -Repetitions 2`.
 - Pas fait : choix de l'image de la vignette (c'est la première du plan) ; mise en page à imprimer au-delà du paysage une
   page de large ; export Google Sheets direct ; colonnes calculées (formules) ; mouvement des calques (clés de position).
+
+## Coller depuis un projet d'une autre taille (demandé par Anthony le 2026-10-20, branche `coller-adapter`) ✅
+
+« Onglets : un plan collé dans un projet d'une autre taille de feuille doit s'adapter. » Avant, la copie était refusée.
+
+- **La règle** (`src/adaptation.rs`, pure) : le cadre de la caméra d'origine est ajusté au cadre de la caméra d'arrivée, d'un même
+  facteur en largeur et en hauteur, centre sur centre ; même cadre et même feuille : rien ne change. **Contenir** (d'office) ou
+  **Remplir** quand les proportions diffèrent ; **garder les images** (d'office) ou **garder la durée en secondes** quand les
+  cadences diffèrent (arrondi de « Changer la cadence », dont la règle est partagée : `retemps_reglages_calque`/`_plan`).
+- **Mis à l'échelle** : bitmap (feuille et hors-feuille, filtre prémultiplié), vectoriel, fond sous le trait, pose et clés de
+  position, clés de caméra, effets en pixels (reconnus à leur unité `px` ; un essai garde la liste), fermetures de trous.
+  Appliqué aux plans, calques, images, clés du montage, clés de caméra et d'effets, effets, zones, éléments et sélection sur
+  plusieurs calques.
+- **Parcours** (`src/collage.rs`) : petite fenêtre (proportions, cadence) seulement s'il y a un choix, choix retenus dans les
+  réglages et dans Préférences > Projets ; calcul sur des fils de fond avec avancement ; une étape d'annulation nommée ; message
+  d'état « Collé depuis un projet 3840×2160 : mis à l'échelle ×0,5. » ; le presse-papiers reste la copie d'origine.
+- **Mesures** (`docs/PERFORMANCE.md`, section 17) : lancer le collage 3 ms, plan 4K de 72 dessins prêt en 0,5 s, pire image d'écran
+  8 ms pendant le calcul. Aucun changement du format du projet (version 33).
+- Reste : « Contenir / Remplir » pour les paramètres d'effets en pour cent d'une image (centre, rayon) quand les proportions
+  diffèrent ; les calques vidéo (images de la vidéo, non copiées) ; une barre de progression plutôt que la barre d'état ; annuler
+  le calcul en cours ; un aperçu du résultat dans la fenêtre.

@@ -203,7 +203,7 @@ essais de `onglets_tests.rs` (`docs/ARCHITECTURE.md`, « Onglets de projets ») 
 | Une fermeture ou un « Quitter » perd un projet | boîte par onglet, boîte unique pour plusieurs, attente des écritures | `closing_*`, `quitting_with_several_modified_tabs_asks_once_and_lists_them`, `quitting_waits_for_a_save_in_a_hidden_tab`, `a_close_waiting_for_a_save_follows_it_…` |
 | Une vignette, un effet calculé ou une texture montre les pixels d'un autre projet (mêmes numéros de dessin) | caches rangés par onglet, demandes de fond périmées à la sortie | `thumbnails_never_show_another_projects_pixels`, `thumbnails_asked_before_a_switch_never_answer_the_new_tab`, `derived_effect_drawings_never_cross_from_one_project_to_the_other`, `gpu_textures_follow_their_tab_and_are_not_sent_again` |
 | Un onglet caché travaille pour rien | rien n'est en file, lecture arrêtée ; trois onglets au repos ne repeignent pas | `hidden_tabs_run_nothing_and_hold_no_pending_work`, `three_open_tabs_at_rest_ask_for_no_repaint` |
-| Un collage entre onglets abîme un projet (feuille d'une autre taille) | refus avec les deux tailles ; cadence signalée | `plans_from_a_sheet_of_another_size_are_refused_…`, `a_copied_layer_pastes_into_…`, `copied_images_paste_into_…` |
+| Un collage entre onglets abîme un projet (feuille d'une autre taille) | la copie est adaptée à la feuille qui reçoit (`adaptation.rs`) ; cadence signalée ; voir la section 12 | `plans_from_a_sheet_of_another_size_are_adapted_…`, `a_copied_layer_pastes_into_…`, `copied_images_paste_into_…` |
 | Un plantage perd un onglet | une copie de secours par onglet ; chacune proposée au démarrage | `each_tab_has_its_own_rescue_copy_and_a_crash_offers_every_project`, `closing_a_tab_removes_its_rescue_copy` |
 | La session écrasée pendant qu'elle revient | `retenir_la_session` attend `session_prete` | `the_session_is_not_overwritten_while_it_comes_back`, `the_session_is_remembered_and_comes_back_in_order` |
 
@@ -225,3 +225,20 @@ politique de contenu `default-src 'none'`, tout texte du projet échappé (`the_
 `hostile_titles_and_texts_cannot_break_out_of_the_page`, `the_script_is_the_same_for_every_project_and_calls_nothing_outside`).
 L'export écrit `<nom>.html.part` puis renomme : un arrêt ou une erreur ne laisse pas de demi-fichier et ne détruit pas une page
 exportée avant (`stopping_the_export_leaves_no_file_and_keeps_an_older_page`). Le format du projet ne change pas (`VERSION` 32).
+
+## 12. Coller depuis un projet d'une autre taille (2026-10-20, branche `coller-adapter`)
+
+Une copie qui vient d'une autre feuille est adaptée (`docs/ARCHITECTURE.md`, « Coller depuis un projet d'une autre taille »). Ce qui
+pourrait mal tourner, et ce qui le garde :
+
+| Risque | Garde | Essai |
+|---|---|---|
+| Un collage d'une feuille de même taille change, ou coûte un calcul de fond | identité de la règle : la copie est collée telle quelle, sans question, sans fil de fond, une seule étape d'annulation sans « adapté » | `a_project_of_the_same_size_pastes_exactly_as_before`, `the_same_frame_and_sheet_change_nothing_and_a_bigger_sheet_only_shifts` |
+| Un plan 4K collé en 1080 (ou l'inverse) n'a pas la bonne taille : pixels, traits, caméra, poses, effets | une similitude unique pour tout, vérifiée dans les deux sens | `a_4k_plan_pasted_into_a_1080_project_is_scaled_and_scaled_back`, `a_bitmap_is_resampled_with_its_area_and_its_colour_kept`, `upscaling_keeps_flat_colours_flat_and_edges_soft`, `vector_strokes_scale_…`, `camera_keys_follow_the_rule_…`, `layer_poses_position_keys_and_pixel_effect_parameters_follow_the_rule` |
+| Ce qui est hors de la feuille (toile infinie) se perd | les tuiles hors-feuille sont lues et écrites comme les autres | `what_is_drawn_off_the_sheet_follows_the_rule_too` |
+| Un effet neuf en pixels oublié par la règle | chaque effet est passé en revue par son unité (`px`) | `every_pixel_parameter_of_every_effect_is_recognised_by_its_unit` |
+| Proportions ou cadence différentes : un collage surprenant | la fenêtre, annulable ; les choix retenus ; « contenir » et « remplir » | `different_proportions_ask_…`, `contain_keeps_the_whole_source_frame_visible`, `a_different_rate_asks_…`, `contain_and_fill_differ_only_when_the_proportions_differ` |
+| Le rééchantillonnage fige l'interface | fil de fond, lancement < 60 ms et image d'écran < 400 ms bornés ; pas de changement d'onglet pendant le calcul | `a_big_paste_never_blocks_the_interface_thread` |
+| Le presse-papiers perd sa copie d'origine après un collage adapté | les fonctions de collage clonent ; la copie d'origine sert encore | `the_original_stays_in_the_clipboard_and_pastes_at_its_own_size_elsewhere` |
+| Un collage adapté s'annule en plusieurs étapes | une étape, nommée ; annuler / rétablir d'un coup | `a_4k_plan_pasted_into_…` (annuler, rétablir), `a_layer_pasted_from_a_smaller_project_is_scaled` |
+| Une cadence recalculée perd des clés ou des marques | une règle d'arrondi commune avec « Changer la cadence » ; marques après la première image, une par image | `keeping_the_duration_in_seconds_rescales_every_frame_count`, `space_and_time_adapt_together` |
