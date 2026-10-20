@@ -52,16 +52,18 @@ pub(crate) struct KeyRef {
 }
 
 /// Clés copiées, dans l'ordre du montage.
+#[derive(Clone)]
 pub(crate) struct KeyClip {
     pub keys: Vec<ClipKey>,
-    /// La feuille du projet d'où elles viennent (elles se collent aussi dans un autre onglet : un dessin n'a de
-    /// sens qu'à sa taille).
-    pub size: [usize; 2],
+    /// D'où elles viennent (cadre, feuille, cadence) : elles se collent aussi dans un autre onglet, adaptées à sa feuille
+    /// (`adaptation.rs`).
+    pub origine: crate::adaptation::Origine,
 }
 
 /// Une clé copiée : son écart à la première (en images du montage), sa durée, son dessin copié
 /// tel qu'il était, la sorte et le nom de son calque, et le rang de son calque en partant du haut
 /// de sa pile (pour le poser sur le même calque relatif, `target_rank`).
+#[derive(Clone)]
 pub(crate) struct ClipKey {
     pub offset: usize,
     pub len: usize,
@@ -590,7 +592,7 @@ impl App {
         }
         keys.sort_by_key(|k| k.offset);
         let n = keys.len();
-        self.key_clipboard = Some(KeyClip { keys, size: [self.doc.width, self.doc.height] });
+        self.key_clipboard = Some(KeyClip { keys, origine: crate::adaptation::Origine::de(&self.doc) });
         self.fx_clip_recent = false;
         self.cam_clip_recent = false;
         // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau Pelure (`pasteimage`).
@@ -616,14 +618,17 @@ impl App {
     /// plusieurs : chacune relativement au plus haut calque copié (`target_rank`), créé s'il manque. Les clés
     /// collées deviennent le choix. `insert` : après la clé de la tête de lecture, en repoussant la
     /// suite ; sinon à la tête de lecture, à la place de ce qui y était.
-    fn paste_keys_with(&mut self, insert: bool) {
+    pub(crate) fn paste_keys_with(&mut self, insert: bool) {
         if self.key_clipboard.is_none() || self.refuse_on_folder() {
             return;
         }
-        if let Some(size) = self.key_clipboard.as_ref().map(|c| c.size).filter(|s| *s != [self.doc.width, self.doc.height]) {
-            self.status = crate::onglets::refus_de_taille("Ces clés viennent", size, [self.doc.width, self.doc.height]);
-            return;
-        }
+        // D'un projet d'une autre feuille : adaptées (`adaptation.rs`, `collage.rs`). L'original reste dans le
+        // presse-papiers ; le travail repart de la copie adaptée.
+        let Some(original) = self.key_clipboard.clone() else { return };
+        let adaptee = match self.collage_preparer(crate::collage::Colle::Cles(original), crate::collage::Reprise::Cles { insert }) {
+            crate::collage::Preparation::Pret(crate::collage::Colle::Cles(c)) => c,
+            _ => return,
+        };
         let plan = self.frame_count();
         let f0 = if insert {
             self.layers().get(self.cur_layer).map_or(self.cur_frame, |l| insert_point(l, self.cur_frame))
@@ -636,20 +641,15 @@ impl App {
         // mêmes écarts (`target_rank`). Des clés d'un seul calque vont sur le calque courant.
         let stack = self.doc.panels[pi].layers.len();
         let cur_rank = stack.saturating_sub(1 + cur);
-        let min_rank = self.key_clipboard.as_ref().and_then(|c| c.keys.iter().map(|k| k.rank).min()).unwrap_or(0);
+        let min_rank = adaptee.keys.iter().map(|k| k.rank).min().unwrap_or(0);
         // (image, durée, dessin, sorte, nom du calque d'origine, rang visé) des clés qui tiennent dans le plan.
-        let wanted: Vec<(usize, usize, Cel, LayerKind, String, usize)> = self
-            .key_clipboard
-            .as_ref()
-            .map(|c| {
-                c.keys
-                    .iter()
-                    .filter(|k| f0 + k.offset < plan)
-                    .map(|k| (f0 + k.offset, k.len.min(plan - f0 - k.offset).max(1), k.cel.clone(), k.kind, k.name.clone(), target_rank(cur_rank, min_rank, k.rank)))
-                    .collect()
-            })
-            .unwrap_or_default();
-        let total = self.key_clipboard.as_ref().map_or(0, |c| c.keys.len());
+        let wanted: Vec<(usize, usize, Cel, LayerKind, String, usize)> = adaptee
+            .keys
+            .iter()
+            .filter(|k| f0 + k.offset < plan)
+            .map(|k| (f0 + k.offset, k.len.min(plan - f0 - k.offset).max(1), k.cel.clone(), k.kind, k.name.clone(), target_rank(cur_rank, min_rank, k.rank)))
+            .collect();
+        let total = adaptee.keys.len();
         if wanted.is_empty() {
             self.status = "Rien à coller ici : l'image courante est trop près de la fin du plan.".into();
             return;

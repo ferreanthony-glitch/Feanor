@@ -1938,12 +1938,12 @@ nouveaux numéros (essais `copied_*`, `camera_keys_and_effects_travel_between_ta
 
 | Sorte | Entre deux onglets |
 |---|---|
-| Plans (`PanelClip`) | collés avec leurs propres dessins ; **feuille d'une autre taille : refusé**, message avec les deux tailles (existait, message précisé) ; **autre cadence : collé, avec un avertissement** (`PanelClip::fps`) |
-| Calque (`LayerClip`), images (`ImageClip`) | collés avec leurs propres dessins ; **feuille d'une autre taille : refusé**, avec les deux tailles (champ `size` ajouté : un dessin n'a de sens qu'à sa taille) |
-| Clés de caméra, d'effets ; effets d'un calque | des valeurs : collés tels quels (`load_doc` n'efface plus les clés de caméra copiées) |
-| Clés de montage (`KeyClip`) | elles portent leur dessin : **feuille d'une autre taille refusée** (champ `size`), comme un calque |
-| Zone bitmap (`Floating`), éléments vectoriels | collés à leur place d'origine (essais `pixels_copied_…`, `vector_elements_copied_…`) |
-| Sélection sur plusieurs calques (`multi_clip`) | commune, mais elle vise des calques par numéro : dans un autre projet, rien n'y correspond et rien n'est collé |
+| Plans (`PanelClip`) | collés avec leurs propres dessins ; **feuille d'une autre taille : adaptés** (« Coller depuis un autre projet » plus bas) ; **autre cadence** : avertissement, ou images recalculées au choix (`PanelClip::origine`) |
+| Calque (`LayerClip`), images (`ImageClip`) | collés avec leurs propres dessins ; **feuille d'une autre taille : adaptés** (champ `origine` : cadre, feuille et cadence du projet d'où ils viennent) |
+| Clés de caméra, d'effets ; effets d'un calque | des valeurs : collés tels quels d'un projet de même feuille (`load_doc` n'efface plus les clés de caméra copiées) ; d'une autre feuille, positions, avancées et paramètres en pixels sont adaptés (leur origine est dans `collage::Etat::origines`) |
+| Clés de montage (`KeyClip`) | elles portent leur dessin : **feuille d'une autre taille : adaptées** (champ `origine`), comme un calque |
+| Zone bitmap (`Floating`), éléments vectoriels | collés à leur place d'origine (essais `pixels_copied_…`, `vector_elements_copied_…`) ; d'une autre feuille, adaptés par la même règle : ils gardent leur place dans le cadre |
+| Sélection sur plusieurs calques (`multi_clip`) | commune ; elle vise des calques par numéro, qu'un autre projet n'a pas : chaque calque copié va alors sur le premier calque choisi de même sorte encore libre (et la copie est adaptée si la feuille diffère) |
 
 Perdu au passage d'un projet à l'autre (comme pour un collage de plans dans le même projet) : ce qui est rangé à côté du plan
 par son numéro — commentaires, scène 3D de blocage, références liées, versions, envois, transitions.
@@ -1959,3 +1959,69 @@ par son numéro — commentaires, scène 3D de blocage, références liées, ver
 | Le projet n'est jamais ouvert deux fois | deux copies en mémoire du même dossier s'écraseraient à l'enregistrement | une comparaison de chemins | faible | oui |
 | Changer d'onglet refusé pendant un travail qui parle à l'interface | leurs résultats visent « le projet affiché » (export, suggestions sonores…) | un message dans la barre d'état | faible | oui : leur état pourrait être rangé par onglet |
 | `Ctrl+W` garde son sens (fermer le projet) | il existait ; devenu « fermer l'onglet », le dernier onglet est remplacé par un projet vide | nul | faible | oui |
+
+## Coller depuis un projet d'une autre taille (2026-10-20, branche `coller-adapter`)
+
+Demande d'Anthony : « un plan collé dans un projet d'une autre taille de feuille doit s'adapter ». Deux modules : `adaptation.rs`
+(la règle, pure : ni `App`, ni interface) et `collage.rs` (le parcours dans l'application). Essais : `adaptation_tests.rs` (la règle,
+19 essais), `collage_tests.rs` (le parcours, 13 essais et une mesure `#[ignore]`) et les quatre essais de `onglets_tests.rs` qui
+refusaient et adaptent maintenant.
+
+### La règle : une similitude
+
+`Adaptation::new(origine, destination, ajustement, durée)` : `p' = s·p + t`. `Origine` = cadre de la caméra, feuille, cadence
+(`Origine::de(&doc)`). `s` = rapport des cadres (contenir : le plus petit rapport, remplir : le plus grand ; égaux quand les
+proportions sont les mêmes) ; `t` pose le centre de la feuille d'origine sur celui de la feuille d'arrivée (`Document::frame_rect`
+centre le cadre sur la feuille, donc centre de feuille = centre de cadre). Sans changement d'échelle, `t` est arrondi à l'entier.
+`identite()` (mêmes cadre et feuille, et pas de recalcul de cadence) : rien n'est touché, pas même un clone.
+
+| Quoi | Où | Comment |
+|---|---|---|
+| Dessins bitmap, strate Fond | `reechantillonne` | par tuile d'arrivée (64 × 64) : les tuiles d'origine (feuille et `outer`) donnent l'ensemble des tuiles touchées, chacune lit son bloc d'origine, filtre séparable en pixels **prémultipliés** flottants (triangle de `1/s` pixels en réduction, Catmull-Rom en agrandissement ; à `s = 1` et décalage entier, un seul pixel par poids : copie exacte), résultat borné par l'alpha. Les tuiles d'arrivée se répartissent sur des fils (`std::thread::scope`) |
+| Dessins vectoriels | `adapte_dessin` | `Element::transformed` (points, épaisseurs, pinceau, texte) puis `rerender` : le rendu exact |
+| Pose du calque, clés de position | `adapte_calque` | `x`, `y` × `s` (le pivot est le centre de la feuille, qui se retrouve) ; échelle, étirement, rotation inchangés |
+| Clés de caméra | `adapte_camera` | position par la similitude ; avancée × rapport des largeurs de cadre (c'est lui qui règle `camera::ref_distance`) ; zoom, angles inchangés |
+| Effets | `adapte_valeurs` | les paramètres dont l'unité commence par `px` (`" px"`, `" px/img"`), valeurs et clés, × `s` et rabotés aux bornes ; entiers arrondis ; le trait sec : trous pour 100 px de trait ÷ `s`. Un essai passe en revue tous les effets : un paramètre en pixels dont l'unité ne le dit pas ferait échouer la suite |
+| Fond sous le trait, calque de couleur, CTG | `adapte_calque` | débord / fermeture des trous en pixels entiers × `s`, au moins 1 |
+| Cadence | `retemps_*` | `f' = tween::rescale_frame(f, de, vers)` ; les images d'un calque par `tween::resample` sans interpolation (dessins tenus) ; `retemps_reglages_calque` / `_plan` (rôles, clés d'effets / de position / de caméra, vidéo, marques, repères, notes) sont **aussi** ceux de « Changer la cadence » (`tweenui.rs`), qui ignorait les clés de position |
+
+**Fichier > Réglages du projet > Résolution** (« mettre les dessins à l'échelle ») utilise la même règle : `Document::scale_stage` est maintenant
+une similitude de pivot l'origine de la feuille (`t = 0`) passée à `adapte_dessins`, `adapte_calque` et `adapte_cle_camera`. Il n'y a donc qu'un code
+de mise à l'échelle ; changer la résolution met désormais aussi à l'échelle les effets en pixels, le fond sous le trait, ce qui est
+dessiné hors de la feuille, et fait suivre l'avancée de la caméra au rapport des largeurs de cadre (essai
+`resize_tests::scaling_uses_the_rule_of_pasting_…`).
+
+Pour la sélection sur plusieurs calques d'un autre projet (aucun numéro de calque ne correspond), `multi_paste` met chaque calque copié
+sur le premier calque choisi de même sorte encore libre.
+
+### Le parcours (`collage.rs`)
+
+Chaque collage commence par `collage_preparer(Colle, Reprise)` :
+
+1. `Etat::pret` contient la copie adaptée de ce même collage (c'est un rappel) : elle est rendue.
+2. L'origine de la copie : dans le clip (`origine` de `PanelClip`, `LayerClip`, `ImageClip`, `KeyClip`) ou, pour les presse-papiers
+   nus (éléments, zone, sélection multiple, clés de caméra et d'effets, effets), dans `Etat::origines`, posée à la copie.
+3. Un choix à faire (proportions ou cadence différentes) pour un plan, un calque, des images, des clés, et `Settings::collage.demander` :
+   la fenêtre (`Dialogue`) ; `collage_valider` retient les choix dans les réglages.
+4. `collage_lancer` : identité → le collage continue tel quel ; copie légère → adaptée tout de suite ; sinon un fil de fond
+   (`Tache`, canal + `Progression`, avancement dans la barre d'état). `tick_collage` (à chaque image d'écran) reçoit le résultat.
+5. `collage_reprendre` pose la copie adaptée dans `Etat::pret`, nomme l'étape d'annulation (`history.context`), **rappelle la fonction de
+   collage d'origine** (`Reprise` : `paste_panels`, `paste_layer`, `paste_images`, `paste_keys_with`, `bitmap_paste`, `paste`,
+   `multi_paste`, `paste_cam_keys*`, `paste_fx_keys*`, `fx_paste`), qui trouve la copie adaptée à la place du presse-papiers, puis ajoute le
+   résumé (`Adaptation::resume`) au message d'état si une étape d'annulation a bien été écrite.
+
+Toute la logique de collage existante (insertion, identifiants neufs, rangs de calques, dossiers, calques de couleur, étape
+d'annulation) reste donc la seule : on ne l'a pas dupliquée pour le cas adapté. Le presse-papiers garde la copie d'origine (les
+fonctions de collage clonent au lieu de prendre : `paste_panels` ne fait plus `take`). `collage_occupe()` (question ou calcul)
+est dans `modal_open` et dans `onglet_occupe` : pas de changement d'onglet ni de raccourci pendant ce temps ; la tête de lecture
+est remise sur le plan, le calque et l'image où le collage avait été demandé (`Ancre`).
+
+### Décisions (coût / risque / réversibilité)
+
+| Décision | Pourquoi | Coût | Risque | Réversible |
+|---|---|---|---|---|
+| Adapter la copie, puis rappeler le collage existant | une seule logique de collage ; l'étape d'annulation et le message restent ceux d'avant | un rappel récursif, un état `pret` | un collage qui refuse avant de lire la copie la laisse dans `pret` (effacé au retour de `collage_reprendre`) | oui |
+| Même facteur en largeur et en hauteur, centre sur centre | rien n'est déformé ; ce que la caméra voit reste ce qu'elle voit | des bandes (contenir) ou du hors-cadre (remplir) quand les proportions diffèrent | les effets en pour cent d'une image (centre, rayon) ne suivent pas « contenir » | oui |
+| Rééchantillonner par tuile d'arrivée, sur des fils de fond | pas de bloc géant (la toile infinie va jusqu'à ±32 768 px), parallèle, exact au pixel près à `s = 1` | 0,26 s (1 fil) à 33 ms (15 fils) pour une feuille 4K entièrement peinte | un fil de plus en route pendant le calcul (on en laisse un à l'interface) | oui |
+| Choix retenus dans les réglages, « Ne plus demander » | un choix par type de projet qu'on colle souvent, sans fenêtre à chaque fois | un bloc de réglages | on oublie qu'on a coché : Préférences > Projets le dit | oui |
+| Pas de question pour les clés, effets, éléments, zones | de petits gestes ; la fenêtre les alourdirait | ils suivent les choix retenus | un choix « remplir » s'applique sans qu'on le revoie | oui |

@@ -61,3 +61,20 @@ fn scaling_fills_the_new_frame() {
     assert_eq!(doc.frame, [64, 64]);
     assert_eq!((doc.width, doc.height), (256, 128), "rapport 2 (la hauteur) sur les deux axes");
 }
+
+#[test]
+fn scaling_uses_the_rule_of_pasting_from_another_size_so_effects_and_the_infinite_canvas_follow() {
+    // Changer la taille avec mise à l'échelle et coller depuis un projet d'une autre taille (`adaptation.rs`) ont une seule
+    // règle : les paramètres d'effets en pixels et ce qui est dessiné hors de la feuille suivent aussi.
+    let (mut doc, c) = project();
+    let i = doc.cels[&c].raster.id_of(-1, -1);
+    doc.cels.get_mut(&c).unwrap().raster.tile_mut(i)[63 * TILE + 63] = Color32::from_rgb(0, 200, 0);
+    let mut flou = crate::fx::Effect::new(crate::fx::EffectKind::GaussianBlur);
+    flou.values[0] = 4.0;
+    doc.panels[0].layers[0].fx = vec![flou];
+    doc.resize_frame(128, 64, true);
+    assert_eq!(doc.panels[0].layers[0].fx[0].values[0], 8.0, "le rayon du flou est en pixels");
+    let r = &doc.cels[&c].raster;
+    assert!(r.has_beyond(), "le dessin hors de la feuille est gardé");
+    assert!((-3..=-1).any(|d| r.get_i(d, d).a() > 0), "(-1, -1) devient (-2, -2) : le pixel hors feuille a suivi");
+}

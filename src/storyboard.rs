@@ -140,9 +140,15 @@ impl App {
         if self.storyboard_refuses() {
             return;
         }
-        let Some(clip) = self.panel_clipboard.take() else {
+        let Some(original) = self.panel_clipboard.clone() else {
             self.status = "Aucun plan copié.".into();
             return;
+        };
+        // Copiés dans un autre onglet, d'une autre feuille : adaptés (`adaptation.rs`, `collage.rs`). L'original reste
+        // dans le presse-papiers : on peut le coller ailleurs, à sa taille.
+        let clip = match self.collage_preparer(crate::collage::Colle::Plans(original), crate::collage::Reprise::Plans) {
+            crate::collage::Preparation::Pret(crate::collage::Colle::Plans(c)) => c,
+            _ => return,
         };
         let n = clip.panels.len();
         let after = panel_title(&self.doc, self.cur_panel);
@@ -153,15 +159,14 @@ impl App {
                 1 => format!("Plan collé après le {}.", after.to_lowercase()),
                 n => format!("{n} plans collés après le {}.", after.to_lowercase()),
             };
-            // Copiés dans un autre onglet, d'un projet d'une autre cadence : les plans gardent leurs images, donc
-            // leur durée change (24 images = une seconde à 24 i/s, un peu moins à 25).
-            if clip.fps != self.doc.fps {
-                self.status += &format!(" Attention : ils viennent d'un projet à {} i/s, celui-ci tourne à {} i/s : leur durée change.", clip.fps, self.doc.fps);
+            // Copiés d'un projet d'une autre cadence, les images gardées et rien d'adapté : la durée change (24 images =
+            // une seconde à 24 i/s, un peu moins à 25). Une copie adaptée a déjà son message (`collage.rs`).
+            if clip.origine.cadence != self.doc.fps {
+                self.status += &format!(" Attention : ils viennent d'un projet à {} i/s, celui-ci tourne à {} i/s : leur durée change.", clip.origine.cadence, self.doc.fps);
             }
         } else {
-            self.status = crate::onglets::refus_de_taille(if n > 1 { "Ces plans viennent" } else { "Ce plan vient" }, clip.size, [self.doc.width, self.doc.height]);
+            self.status = crate::onglets::refus_de_taille(if n > 1 { "Ces plans viennent" } else { "Ce plan vient" }, clip.origine.feuille, [self.doc.width, self.doc.height]);
         }
-        self.panel_clipboard = Some(clip);
     }
 
     /// Supprime les plans choisis (une étape d'annulation).

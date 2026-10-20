@@ -1848,8 +1848,8 @@ l'autre est instantané (aucune relecture du disque : 7 à 14 µs, l'image d'éc
 - **Copie de secours** : une par onglet (un dossier de séance chacun) ; après un plantage, la fenêtre de récupération liste chaque
   projet (« Tout ouvrir » : chacun dans son onglet).
 - **Copier-coller** : plans, calques, images, clés de caméra / de montage / d'effets, effets d'un calque, zones bitmap et éléments
-  vectoriels se collent d'un onglet à l'autre, avec leurs propres dessins. Une feuille d'une autre taille refuse (message avec les
-  deux tailles) ; une autre cadence prévient (la durée des plans change).
+  vectoriels se collent d'un onglet à l'autre, avec leurs propres dessins. Une feuille d'une autre taille **s'adapte** (voir
+  « Coller depuis un projet d'une autre taille » ci-dessous) ; une autre cadence est signalée, ou recalculée si on le demande.
 - **Pendant un travail qui parle à l'interface** (export, propagation, coloriage, génération des sons proposés) on ne change pas
   d'onglet : la barre d'état dit pourquoi.
 - **Au repos** : trois onglets ouverts ne demandent aucune image de plus, le processeur reste à zéro ; un onglet caché n'a pas de
@@ -1857,6 +1857,28 @@ l'autre est instantané (aucune relecture du disque : 7 à 14 µs, l'image d'éc
   30 plans × 3 calques × 24 images (mesure de `docs/PERFORMANCE.md`, section 15).
 
 Détails : `docs/ARCHITECTURE.md` (« Onglets de projets »), `docs/INTERFACE.md` partie 23 (vérifications à l'écran).
+
+### Coller depuis un projet d'une autre taille
+
+Un plan, un calque, des images, des clés de montage ou de caméra, des effets, des éléments vectoriels, une zone de pixels ou une
+sélection sur plusieurs calques copiés dans un projet **d'une autre taille de feuille** ne sont plus refusés : ils sont adaptés
+(2026-10-20, demande d'Anthony). La règle : le cadre de la caméra du projet d'origine est ajusté à celui du projet qui reçoit,
+d'un même facteur en largeur et en hauteur, centre sur centre — ce que la caméra voyait reste ce que la caméra voit.
+
+- **Mis à l'échelle** : dessins bitmap (feuille et hors-feuille, rééchantillonnés en qualité), traits vectoriels (points,
+  épaisseurs), fond sous le trait, pose des calques et clés de position, clés de caméra, paramètres d'effets en pixels (flous,
+  ombre, liseré, grain…), fermeture des trous du fond, des calques de couleur et CTG.
+- **Autres proportions** (16:9 vers carré) : une petite fenêtre propose **Contenir** (tout le cadre copié reste visible, des bandes
+  au besoin, d'office) ou **Remplir** (le cadre est rempli, ce qui dépasse sort du cadre). **Autre cadence** : **garder les images**
+  (d'office, la durée change) ou **garder la durée en secondes** (images, clés, marques recalculées). Les choix sont retenus dans
+  les réglages (Fichier > Préférences… > Projets) ; « Ne plus demander » les applique sans question.
+- **Même taille** : exactement comme avant, sans fenêtre ni calcul.
+- **Sans latence** : le rééchantillonnage se fait sur des fils de fond (« Collage en cours… 12/72 dessins ») ; un plan 4K de
+  3 calques × 24 dessins est prêt en une demi-seconde pendant que l'interface reste vivante (`docs/PERFORMANCE.md`, section 18).
+- Une seule étape d'annulation, nommée « Coller des plans (adapté de 3840×2160) » ; la barre d'état dit ce qui a été adapté ; le
+  presse-papiers n'est pas modifié.
+
+Détails : `src/adaptation.rs` (la règle), `src/collage.rs` (le parcours), `docs/INTERFACE.md` partie 23 (vérifications à l'écran).
 ## Importer un scénario
 
 Fichier > Importer > « Un scénario… » (action `fichier.importer_scenario`, donc aussi dans Ctrl+K) : on

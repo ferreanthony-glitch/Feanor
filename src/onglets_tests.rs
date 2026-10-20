@@ -182,7 +182,7 @@ const PARTAGES: &[&str] = &[
     "prefs_window", "editorial", "fiche", "about_window", "theme_applied", "theme_unsaved", "paint_fond", "pane_heights", "fit_set", "fit_busy", "recent_to_open", "recent_presence",
     "maximized_once", "clipboard", "montage_head_w", "snap_on", "length_field_active", "pen_pressure", "pen_touch", "input_time", "last_frame_time", "picking", "status", "new_dialog",
     "show_help", "allow_close", "export_transparent", "follow_frame", "following", "hover_canvas", "pending_keys", "assign", "keys_filter", "keymap", "title", "display_info", "gpu",
-    "quitter_prevenu", "onglets", "actif", "prochain_onglet", "secours_actif", "session_a_ecrire", "session_prete", "session_file", "session_affichee", "groupe",
+    "quitter_prevenu", "collage", "onglets", "actif", "prochain_onglet", "secours_actif", "session_a_ecrire", "session_prete", "session_file", "session_affichee", "groupe",
 ];
 
 /// Les noms des champs de `pub struct App`, lus dans `app.rs`.
@@ -949,21 +949,23 @@ fn copied_plans_paste_into_another_tab_as_independent_copies() {
 }
 
 #[test]
-fn plans_from_a_sheet_of_another_size_are_refused_with_both_sizes_and_a_different_rate_is_flagged() {
+fn plans_from_a_sheet_of_another_size_are_adapted_and_a_different_rate_is_flagged() {
     let mut b = banc(projet_deux_plans(200), false);
     b.app.board_sel = vec![b.app.doc.panels[0].id];
     b.app.copy_panels();
-    // Une feuille d'une autre taille.
+    // Une feuille d'une autre taille : adaptée (ex-refus, `collage.rs`).
     onglet_avec(&mut b, projet_grand());
     let n = b.app.doc.panels.len();
     b.app.paste_panels();
-    assert_eq!(b.app.doc.panels.len(), n, "rien n'est collé");
-    assert!(b.app.status.contains("640×360") && b.app.status.contains("1280×720"), "le message donne les deux tailles : {}", b.app.status);
+    assert!(jusqu_a(&mut b, Duration::from_secs(60), |b| b.app.collage.tache.is_none()), "{}", b.app.status);
+    assert_eq!(b.app.doc.panels.len(), n + 1, "{}", b.app.status);
+    assert!(b.app.status.contains("320×180") && b.app.status.contains("×2"), "le message dit d'où elle vient et l'échelle : {}", b.app.status);
     assert!(b.app.panel_clipboard.is_some(), "la copie reste, pour un projet de la bonne taille");
-    // La même taille, une autre cadence : collé, et prévenu.
+    // La même taille, une autre cadence : collé, et prévenu (sans la question, qu'on a coupée).
     let mut autre_cadence = projet_deux_plans(50);
     autre_cadence.fps = 25;
     onglet_avec(&mut b, autre_cadence);
+    b.app.settings.collage.demander = false;
     let n = b.app.doc.panels.len();
     b.app.paste_panels();
     assert_eq!(b.app.doc.panels.len(), n + 1);
@@ -983,12 +985,13 @@ fn a_copied_layer_pastes_into_another_tab_with_its_own_drawings() {
     let id = colle.frames[0].expect("image");
     assert_eq!(b.app.doc.cels[&id].raster.get(0, 0).r(), 200, "le dessin collé est celui du premier projet");
     assert!(b.app.modified && b.app.history.serial() > 0, "une étape d'annulation");
-    // Une feuille d'une autre taille : refusé, avec les tailles.
+    // Une feuille d'une autre taille : adapté (ex-refus, `collage.rs`).
     onglet_avec(&mut b, projet_grand());
     let calques = b.app.layers().len();
     b.app.paste_layer();
-    assert_eq!(b.app.layers().len(), calques);
-    assert!(b.app.status.contains("640×360"), "{}", b.app.status);
+    assert!(jusqu_a(&mut b, Duration::from_secs(60), |b| b.app.collage.tache.is_none()), "{}", b.app.status);
+    assert_eq!(b.app.layers().len(), calques + 1, "{}", b.app.status);
+    assert!(b.app.status.contains("320×180") && b.app.status.contains("×2"), "{}", b.app.status);
 }
 
 #[test]
@@ -1006,10 +1009,13 @@ fn copied_images_paste_into_another_tab() {
     let layer = b.app.layer();
     let colles: Vec<u8> = layer.frames.iter().take(2).map(|f| b.app.doc.cels[&f.expect("image")].raster.get(0, 0).r()).collect();
     assert_eq!(colles.len(), 2);
-    // Autre taille de feuille : refusé.
+    // Autre taille de feuille : adaptées (ex-refus, `collage.rs`).
     onglet_avec(&mut b, projet_grand());
     b.app.paste_images(false);
-    assert!(b.app.status.contains("640×360"), "{}", b.app.status);
+    assert!(jusqu_a(&mut b, Duration::from_secs(60), |b| b.app.collage.tache.is_none()), "{}", b.app.status);
+    assert!(b.app.status.contains("320×180") && b.app.status.contains("×2"), "{}", b.app.status);
+    let colle = b.app.layer().frames[0].expect("image collée");
+    assert_eq!(b.app.doc.cels[&colle].raster.width, 1280, "à la taille de la feuille qui reçoit");
 }
 
 #[test]
@@ -1044,7 +1050,7 @@ fn camera_keys_and_effects_travel_between_tabs() {
 }
 
 #[test]
-fn montage_keys_travel_between_tabs_and_refuse_another_sheet_size() {
+fn montage_keys_travel_between_tabs_and_adapt_to_another_sheet_size() {
     let mut b = banc(projet(200, 4), false);
     b.app.cur_frame = 0;
     b.app.copy_keys();
@@ -1054,10 +1060,11 @@ fn montage_keys_travel_between_tabs_and_refuse_another_sheet_size() {
     b.app.paste_keys_at_head();
     let id = b.app.layer().frames[2].expect("clé collée");
     assert_eq!(b.app.doc.cels[&id].raster.get(0, 0).r(), 200, "le dessin de la clé copiée dans l'autre onglet : {}", b.app.status);
-    // Une feuille d'une autre taille : refusé.
+    // Une feuille d'une autre taille : adaptées (ex-refus, `collage.rs`).
     onglet_avec(&mut b, projet_grand());
     b.app.paste_keys_at_head();
-    assert!(b.app.status.contains("640×360"), "{}", b.app.status);
+    assert!(jusqu_a(&mut b, Duration::from_secs(60), |b| b.app.collage.tache.is_none()), "{}", b.app.status);
+    assert!(b.app.status.contains("320×180") && b.app.status.contains("×2"), "{}", b.app.status);
 }
 
 #[test]

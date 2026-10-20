@@ -274,6 +274,7 @@ impl App {
 
     fn set_fx_stack_clip(&mut self, effects: Vec<Effect>) {
         self.fx_stack_clipboard = Some(FxStackClip { effects });
+        self.collage.origines.pile = Some(crate::adaptation::Origine::de(&self.doc));
         // La dernière chose copiée : les clés (d'effets, de caméra) ne se collent plus au clavier
         // dans la timeline (Ctrl+V y vise ce qui a été copié en dernier).
         self.fx_clip_recent = false;
@@ -335,6 +336,11 @@ impl App {
         if self.content_refuses() {
             return;
         }
+        // D'un projet d'une autre feuille : leurs paramètres en pixels sont adaptés (adaptation.rs, collage.rs).
+        let clip = match self.collage_preparer(crate::collage::Colle::FxPile(clip), crate::collage::Reprise::FxPile { targets: targets.clone(), replace }) {
+            crate::collage::Preparation::Pret(crate::collage::Colle::FxPile(c)) => c,
+            _ => return,
+        };
         let len = self.frame_count();
         let mut rep = Report::default();
         // (calque, nouvelle pile, rang du premier effet collé)

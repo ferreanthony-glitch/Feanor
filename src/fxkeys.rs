@@ -667,6 +667,7 @@ impl App {
         let clip = copy_keys(e, &keys.iter().map(|k| k.1).collect::<Vec<_>>());
         let (n, kind) = (clip.keys.len(), clip.kind.label());
         self.fx_key_clipboard = Some(clip);
+        self.collage.origines.effets_cles = Some(crate::adaptation::Origine::de(&self.doc));
         self.fx_clip_recent = true;
         self.cam_clip_recent = false;
         // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau SHOT (`pasteimage`).
@@ -696,6 +697,11 @@ impl App {
         if self.refuse_on_folder() {
             return;
         }
+        // D'un projet d'une autre feuille ou cadence : adaptées (adaptation.rs, collage.rs).
+        let clip = match self.collage_preparer(crate::collage::Colle::FxKeys(clip), crate::collage::Reprise::FxKeys { insert }) {
+            crate::collage::Preparation::Pret(crate::collage::Colle::FxKeys(c)) => c,
+            _ => return,
+        };
         let Some(sel) = self.fx_choice.filter(|c| self.fx_keys_shown && self.fx_layer_at(c.panel, c.layer).is_some()) else {
             self.status = "Pas d'effet choisi : en choisir un dans le panneau Effets (et garder cochée la case des clés d'effets) pour y coller les clés.".into();
             return;

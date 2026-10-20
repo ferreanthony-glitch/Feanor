@@ -1306,3 +1306,26 @@ retiennent jamais l'interface plus de 9 ms d'un coup.
 La liste de `docs/INTERFACE.md` § 28 : film 4K avec une interface qui répond, le film est celui du départ (un trait dessiné pendant
 l'export n'y est pas), annuler, deux projets, quitter pendant l'export, image courante / page HTML / son sans gel, montage / fiche /
 relecture / Storyboard Pro, mémoire.
+
+## 18. Coller depuis un projet d'une autre taille (2026-10-20, branche `coller-adapter`)
+
+Rééchantillonner les dessins d'une copie (`src/adaptation.rs`, `reechantillonne`) est lourd : il se fait sur des fils de fond
+(`src/collage.rs`), jamais sur le fil de l'interface. Mesures (`collage_tests`, carte graphique absente, machine de 16 fils) :
+
+| Mesure | Résultat |
+|---|---|
+| Un dessin **plein** sur toute la feuille 4K (7 680 × 4 320, 8 160 tuiles) vers 1080 | **257 ms** sur un fil, **33 ms** sur 15 fils |
+| Le même, 1080 vers 4K (agrandi, 8 160 tuiles d'arrivée) | 617 ms sur un fil, 90 ms sur 15 fils |
+| Le même, 4K vers 720 | 206 ms sur un fil, 25 ms sur 15 fils |
+| Plan 4K de 3 calques × 24 dessins (fond rectangulaire, trait vectoriel, peinture sur le quart d'une zone de 3 840 × 1 920), collé en 1080 (`a_big_paste_never_blocks_the_interface_thread`) | lancer le collage : **2,9 ms** ; calcul de fond : **0,54 s** ; **pire image d'écran pendant le calcul : 7,7 ms** |
+| Même plan avec 24 dessins pleins, si c'était sur le fil de l'interface (estimation : 24 × 257 ms) | de l'ordre de 6 s : c'est ce que la règle « sans latence » interdit |
+
+Seuil de décision : tout ce qui porte des dessins entiers (plans, calque, images, clés) passe par un fil de fond ; une zone de
+pixels ou une sélection sur plusieurs calques le fait au-delà de `ZONE_LOURDE` (1 million de pixels) ; les clés de caméra et
+d'effets, les effets et les éléments vectoriels (des nombres) sont adaptés tout de suite. Le calcul laisse un cœur à l'interface
+(`fils_disponibles` : tous sauf un, de 1 à 8) ; les dessins se répartissent sur les fils, le reste des fils sert chaque dessin.
+Mémoire : les tuiles de la copie sont partagées (`Arc`), seules les tuiles d'arrivée sont nouvelles ; une copie qui ne change pas
+d'échelle (cadence seule) ne rééchantillonne rien et partage ses tuiles.
+
+Pour refaire les mesures : `cargo test --release --offline --target-dir target\msvc perf_collage -- --ignored --nocapture`
+(dessins pleins) et `a_big_paste_never_blocks_the_interface_thread -- --nocapture` (le plan 4K).

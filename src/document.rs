@@ -148,15 +148,14 @@ impl Cel {
 
 static NEXT_LAYER_ID: AtomicU64 = AtomicU64::new(1);
 
-/// Panneaux copiés (12e) : les panneaux tels qu'ils étaient, une copie de leurs dessins, et la
-/// taille du projet d'où ils viennent (un dessin n'a de sens qu'à cette taille).
+/// Panneaux copiés (12e) : les panneaux tels qu'ils étaient, une copie de leurs dessins, et d'où ils viennent (cadre,
+/// feuille et cadence du projet : un dessin n'a de sens qu'à sa taille, `adaptation.rs` les adapte à celle du projet qui
+/// les reçoit).
 #[derive(Clone)]
 pub struct PanelClip {
     pub panels: Vec<Panel>,
     pub cels: HashMap<CelId, Cel>,
-    pub size: [usize; 2],
-    /// La cadence du projet d'où ils viennent (ils se collent aussi dans un autre onglet).
-    pub fps: u32,
+    pub origine: crate::adaptation::Origine,
 }
 
 /// Identifiant de calque, unique pendant la session (il n'est pas enregistré).
@@ -1192,7 +1191,7 @@ impl Document {
         if scale {
             let s = (w as f32 / fw.max(1) as f32).max(h as f32 / fh.max(1) as f32);
             if (s - 1.0).abs() > 1e-6 {
-                self.scale_stage(s);
+                self.scale_stage(s, [w, h]);
             }
         }
         self.frame = [w, h];
@@ -1204,26 +1203,18 @@ impl Document {
         }
     }
 
-    /// Multiplie par `s` tout ce qui est en pixels de la feuille, feuille comprise.
-    fn scale_stage(&mut self, s: f32) {
+    /// Multiplie par `s` tout ce qui est en pixels de la feuille, feuille comprise ; `cadre` : le cadre d'après. C'est la
+    /// règle du collage depuis un projet d'une autre taille (`adaptation.rs`) avec l'origine de la feuille pour pivot : les
+    /// dessins (feuille et hors-feuille, fond sous le trait compris), la pose et les clés de position des calques, les
+    /// paramètres d'effets en pixels et la caméra suivent d'un seul code.
+    fn scale_stage(&mut self, s: f32, cadre: [usize; 2]) {
+        use crate::adaptation::{Adaptation, Ajustement, Duree, Origine, Progression};
         let nw = ((self.width as f32 * s).round() as usize).max(1);
         let nh = ((self.height as f32 * s).round() as usize).max(1);
-        let m = crate::vector::Affine::scale_about(pos2(0.0, 0.0), s, s);
-        for cel in self.cels.values_mut() {
-            match &mut cel.vector {
-                Some(d) => {
-                    for e in &mut d.elements {
-                        *e = e.transformed(&m);
-                    }
-                    cel.raster = Raster::new(nw, nh);
-                    cel.rerender();
-                }
-                None => {
-                    cel.raster = cel.raster.scaled(nw, nh, s);
-                    cel.version += 1;
-                }
-            }
-        }
+        let src = Origine::de(self);
+        let dst = Origine { cadre, feuille: [nw, nh], cadence: src.cadence };
+        let a = Adaptation { src, dst, ajustement: Ajustement::Remplir, duree: Duree::Images, s, t: Vec2::ZERO };
+        self.cels = crate::adaptation::adapte_dessins(&self.cels, &a, &Progression::default());
         for g in &mut self.guides {
             for p in &mut g.points {
                 p[0] *= s;
@@ -1232,24 +1223,16 @@ impl Document {
         }
         for panel in &mut self.panels {
             for k in &mut panel.camera {
-                k.cam.x *= s;
-                k.cam.y *= s;
-                k.cam.dolly *= s;
+                *k = crate::adaptation::adapte_cle_camera(k, &a);
             }
             for l in &mut panel.layers {
-                l.transform.x *= s;
-                l.transform.y *= s;
-                for k in &mut l.pos_keys {
-                    k.t.x *= s;
-                    k.t.y *= s;
-                }
+                crate::adaptation::adapte_calque(l, &a);
             }
         }
-        self.map_reserve_cameras(|c| Camera { x: c.x * s, y: c.y * s, dolly: c.dolly * s, ..*c });
+        self.map_reserve_cameras(|c| crate::adaptation::adapte_camera(c, &a));
         self.width = nw;
         self.height = nh;
     }
-
     /// Centre de la feuille (pivot des transformations de calque).
     pub fn stage_center(&self) -> Pos2 {
         pos2(self.width as f32 / 2.0, self.height as f32 / 2.0)
@@ -2150,7 +2133,7 @@ impl Document {
             .flat_map(|l| l.frames.iter().flatten())
             .filter_map(|id| self.cels.get(id).map(|c| (*id, c.clone())))
             .collect();
-        Some(PanelClip { panels, cels, size: [self.width, self.height], fps: self.fps })
+        Some(PanelClip { panels, cels, origine: crate::adaptation::Origine::de(self) })
     }
 
     /// Colle les panneaux copiés juste après le panneau `index`, dans sa scène, chacun avec ses
@@ -2161,7 +2144,7 @@ impl Document {
     /// scène : ce n'est pas un collage de plans (l'application passe par `paste_plans`), et à la
     /// relecture d'un projet enregistré ainsi, ils sont mis bout à bout avec le panneau voisin.
     pub fn paste_panels(&mut self, clip: &PanelClip, index: usize) -> Option<usize> {
-        if clip.panels.is_empty() || clip.size != [self.width, self.height] {
+        if clip.panels.is_empty() || clip.origine.feuille != [self.width, self.height] {
             return None;
         }
         let scene = self.panels[index.min(self.panels.len() - 1)].scene;

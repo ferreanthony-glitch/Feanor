@@ -453,9 +453,9 @@ pub(crate) struct ImageClip {
     pub cels: HashMap<CelId, Cel>,
     /// Les rôles des images copiées (13g-2), une rangée par calque, à partir de 0.
     pub roles: Vec<Vec<(usize, crate::roles::Role)>>,
-    /// La feuille du projet d'où elles viennent (elles se collent aussi dans un autre onglet : leurs dessins
-    /// n'ont de sens qu'à cette taille).
-    pub size: [usize; 2],
+    /// D'où elles viennent (cadre, feuille, cadence) : elles se collent aussi dans un autre onglet, adaptées à sa feuille
+    /// (`adaptation.rs`).
+    pub origine: crate::adaptation::Origine,
 }
 
 impl App {
@@ -573,7 +573,7 @@ impl App {
             .filter_map(|id| self.doc.cels.get(id).map(|c| (*id, c.clone())))
             .collect();
         let (n, k) = (b - a, rows.len());
-        self.image_clipboard = Some(ImageClip { rows, cels, roles: role_rows, size: [self.doc.width, self.doc.height] });
+        self.image_clipboard = Some(ImageClip { rows, cels, roles: role_rows, origine: crate::adaptation::Origine::de(&self.doc) });
         self.fx_clip_recent = false;
         self.cam_clip_recent = false;
         // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau Pelure (`pasteimage`).
@@ -595,13 +595,15 @@ impl App {
             self.status = "Aucune image copiée.".into();
             return;
         };
-        if clip.size != [self.doc.width, self.doc.height] {
-            self.status = crate::onglets::refus_de_taille("Ces images viennent", clip.size, [self.doc.width, self.doc.height]);
-            return;
-        }
         if self.refuse_on_folder() {
             return;
         }
+        // D'un projet d'une autre feuille : adaptées (`adaptation.rs`, `collage.rs`) ; l'original reste dans le
+        // presse-papiers.
+        let clip = match self.collage_preparer(crate::collage::Colle::Images(clip), crate::collage::Reprise::Images { replace }) {
+            crate::collage::Preparation::Pret(crate::collage::Colle::Images(c)) => c,
+            _ => return,
+        };
         self.end_stroke();
         self.drop_bitmap_selection();
         let targets: Vec<usize> = (self.cur_layer..self.layers().len()).filter(|&li| !self.layers()[li].folder).take(clip.rows.len()).collect();

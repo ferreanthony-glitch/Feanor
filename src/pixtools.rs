@@ -380,6 +380,7 @@ impl App {
         // Un texte dans le presse-papiers du système : sans lui, Ctrl+V n'arrive pas jusqu'à nous.
         self.ctx.copy_text(format!("SHOT : zone bitmap {}×{}", f.w, f.h));
         self.pixel_clipboard = Some(f);
+        self.collage.origines.zone = Some(crate::adaptation::Origine::de(&self.doc));
         self.multi_clip = None;
         true
     }
@@ -393,6 +394,11 @@ impl App {
     /// Colle la zone copiée à sa place d'origine, sélectionnée et prête à être déplacée.
     pub(crate) fn bitmap_paste(&mut self) {
         let Some(f) = self.pixel_clipboard.clone() else { return };
+        // D'un projet d'une autre feuille : la zone est adaptée et garde sa place dans le cadre (adaptation.rs).
+        let f = match self.collage_preparer(crate::collage::Colle::Zone(f), crate::collage::Reprise::Zone) {
+            crate::collage::Preparation::Pret(crate::collage::Colle::Zone(f)) => f,
+            _ => return,
+        };
         if self.paste_floating(f) {
             self.status = "Zone collée : déplace-la, puis Échap ou change d'outil pour la poser.".into();
         }

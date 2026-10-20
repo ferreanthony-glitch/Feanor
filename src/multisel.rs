@@ -630,12 +630,14 @@ pub(crate) fn delete_selection(doc: &mut Document, sel: &MultiSel) -> Vec<Edit> 
 // -------------------------------------------------------------------------- copier et coller
 
 /// Ce qu'une part a copié.
+#[derive(Clone)]
 pub(crate) enum ClipWhat {
     Vector(Vec<Element>),
     Pixels(Floating),
 }
 
 /// Ce qu'a copié la sélection sur plusieurs calques : par calque, ses éléments ou ses pixels.
+#[derive(Clone)]
 pub(crate) struct MultiClip {
     pub items: Vec<(u64, ClipWhat)>,
 }

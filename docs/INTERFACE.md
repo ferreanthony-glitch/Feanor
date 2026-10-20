@@ -1383,12 +1383,64 @@ Demande d'Anthony : « ouvrir plusieurs fichiers dans la même fenêtre avec un 
   d'écran) ou une boîte de dialogue : on ne change pas d'onglet (la barre d'état dit pourquoi). **Un export qui tourne n'empêche
   plus de changer d'onglet** (§ 28).
 
+- **Copier-coller** : plans, calques, images, clés, effets, zones et éléments se collent d'un onglet à l'autre. Un projet d'une
+  **autre taille de feuille** n'est plus refusé : la copie est adaptée (voir « Coller depuis un projet d'une autre taille »,
+  plus bas) ; une autre cadence est signalée, ou recalculée si on le demande.
+- **Pendant un export, la propagation, le coloriage, la génération des sons proposés** ou une boîte de dialogue : on ne change pas
+  d'onglet (la barre d'état dit pourquoi).
+
+### Coller depuis un projet d'une autre taille
+
+Demande d'Anthony (2026-10-20) : « Un plan collé dans un projet d'une autre taille de feuille doit s'adapter. » Avant, la copie
+était refusée (« un dessin n'a de sens qu'à sa taille »). Maintenant elle est **adaptée** (`src/adaptation.rs` : la règle, pure ;
+`src/collage.rs` : la question, le calcul de fond, la reprise du collage).
+
+**La règle** — ce que la caméra voyait reste ce que la caméra voit : le cadre de la caméra du projet d'origine est ajusté au cadre
+de la caméra du projet qui reçoit, d'un même facteur en largeur et en hauteur (rien n'est déformé), centre de feuille sur centre
+de feuille.
+
+| Cas | Ce qui se passe |
+|---|---|
+| Même cadre et même feuille | rien n'est changé, aucune question, aucun calcul : comme avant |
+| Mêmes proportions (4K → 1080, 1080 → 4K) | échelle = cadre d'arrivée / cadre d'origine (×0,5, ×2…) |
+| Proportions différentes (16:9 → carré) | **Contenir** (d'office) : tout le cadre copié reste visible, des bandes de l'autre côté ; **Remplir** : le cadre d'arrivée est rempli, ce qui dépasse sort du cadre mais reste sur la feuille (toile infinie : rien n'est perdu) |
+| Même cadre, feuille agrandie à la main | un simple décalage entier : les pixels sont copiés, pas mélangés |
+| Cadence différente | **Garder les images** (d'office : la durée en secondes change, la barre d'état le dit) ou **garder la durée en secondes** (images, clés, rôles, marques et repères recalculés : `f' = arrondi(f × cadence d'arrivée / cadence d'origine)`, durées d'au moins 1 image ; plus lent : dessins tenus plus longtemps, plus rapide : des images sautées, un dessin d'une seule image peut disparaître) |
+
+**Ce qui est mis à l'échelle** : dessins bitmap (feuille **et** hors-feuille, rééchantillonnés : triangle en réduction, Catmull-Rom
+en agrandissement, sur des pixels prémultipliés : pas de frange de couleur), dessins vectoriels (points, épaisseurs, taille du
+pinceau et du texte, puis rendu exact), fond sous le trait (peinture et coupe), pose des calques et clés de position, clés de
+caméra (position ; l'avancée suit la largeur du cadre ; zoom et angles inchangés), paramètres d'effets en pixels (rayon des flous,
+décalage de l'ombre, liseré, grain, tremblement… clés comprises, dans les bornes de l'effet ; la densité de trous du trait sec,
+par 100 px de trait, est divisée), débord du fond sous le trait, fermeture des trous des calques de couleur et CTG, zones bitmap et
+éléments vectoriels collés sur le dessin (ils gardent leur place dans le cadre). **Ne change pas** : les paramètres en pour cent,
+les incrustations (en pour cent de la hauteur du cadre), les marques d'image, les textes, et — comme pour un collage de plans dans
+le même projet — la scène 3D de blocage, les références liées, les commentaires, les transitions et les sons des plans.
+
+**La question** (petite fenêtre « Coller depuis un autre projet ») : seulement pour un plan, un calque, des images ou des clés, et
+seulement si les **proportions** ou les **cadences** diffèrent. Elle montre d'où vient la copie et ce qui va se passer ; « Ne plus
+demander » applique ensuite les derniers choix sans question. Les choix sont retenus dans les réglages et se changent dans Fichier
+> Préférences… > Projets > « Coller depuis un autre projet ». Les clés de caméra et d'effets, les effets, les éléments, les zones
+et la sélection sur plusieurs calques appliquent ces choix retenus sans poser la question.
+
+**Pendant le calcul** : les dessins sont rééchantillonnés sur des fils de fond (tous les cœurs sauf un) : « Collage en cours… 12/72
+dessins » dans la barre d'état, la fenêtre reste vivante ; raccourcis et bande d'onglets sont figés (comme pendant un export) et le
+collage se pose dans le plan, le calque et l'image où il a été demandé. Mesures : `docs/PERFORMANCE.md`, section 18.
+
+**Après** : une seule étape d'annulation, nommée « Coller des plans (adapté de 3840×2160) » (ou « un calque », « des images »…) ;
+la barre d'état dit ce qui a été adapté : « Collé depuis un projet 3840×2160 : mis à l'échelle ×0,5. Plan collé après le plan 1. »
+Le presse-papiers n'est pas touché : la même copie se colle ensuite ailleurs, à sa propre taille ou adaptée à une autre.
+
+**Sélection sur plusieurs calques** : copiée dans un autre projet, aucun numéro de calque ne correspond ; chaque calque copié va
+sur le premier calque choisi de même sorte (vectoriel pour des éléments, bitmap pour des pixels) encore libre, dans l'ordre.
+
 ### À vérifier
 
 - Les largeurs de la bande (96 à 220 px) et sa hauteur (26 px) sont des choix de SHOT, à régler à l'œil.
 - Les raccourcis Ctrl+T / Ctrl+Tab sont ceux d'un navigateur (proposition, pas ceux de Storyboard Pro).
-- Les plans copiés dans un projet d'une autre taille ne sont pas adaptés (refusés) : adapter le cadrage par un décalage est possible
-  plus tard (même cadre, feuille plus grande).
+- Les plans copiés dans un projet d'une autre taille sont adaptés (2026-10-20, branche `coller-adapter`) : voir la section
+  suivante. Ses choix de départ — « contenir » plutôt que « remplir », « garder les images » plutôt que « garder les secondes » —
+  sont à régler à l'œil.
 
 ### À vérifier à l'écran (par Anthony)
 
@@ -1407,12 +1459,33 @@ Demande d'Anthony : « ouvrir plusieurs fichiers dans la même fenêtre avec un 
    Enregistrer tout écrit les deux puis quitte.
 7. Copier un plan (clic dans le montage, Ctrl+C), aller dans un autre projet, Ctrl+V : le plan est là, ses dessins aussi, et
    modifier la copie ne touche pas à l'original. Même chose pour un calque (W puis X), des images, des clés de caméra, des effets.
-   Coller dans un projet d'une autre taille : le message donne les deux tailles.
+   Coller dans un projet d'une autre taille : voir « Coller depuis un projet d'une autre taille » (vérifications 11 à 17).
 8. Deux projets avec le même effet (flou) sur leur premier dessin, de couleurs différentes : chaque onglet montre ses couleurs,
    aussi après plusieurs allers-retours ; les vignettes du montage aussi.
 9. Fermer SHOT avec trois onglets, le rouvrir : les trois reviennent, le même est affiché. Désactiver « Rouvrir le dernier projet
    au lancement » : SHOT s'ouvre sur l'accueil.
 10. Fichier > Préférences > « Ouvrir dans un nouvel onglet » décoché : Ouvrir remplace le projet affiché (après la question).
+
+### À vérifier à l'écran : coller depuis un projet d'une autre taille (par Anthony)
+
+11. Un projet 1080 et un projet 4K ouverts dans deux onglets. Copier un plan du 4K (clic dans le montage, Ctrl+C), aller dans le
+    1080, Ctrl+V : pas de question (mêmes proportions) ; « Collage en cours… » une fraction de seconde, puis le plan est là,
+    **deux fois plus petit** : ce que la caméra voyait dans le 4K, elle le voit dans le 1080 (dessins bitmap nets, traits à la
+    bonne place et à la bonne épaisseur, flou au même aspect, caméra qui bouge de la même façon). La barre d'état dit
+    « Collé depuis un projet 3840×2160 : mis à l'échelle ×0,5. ». Ctrl+Z : tout le plan part d'un coup ; l'historique l'appelle
+    « Coller des plans (adapté de 3840×2160) ».
+12. Le contraire : copier ce plan du 1080 et le coller dans le 4K : il revient à sa taille (un peu plus doux, il a été réduit).
+13. Un projet carré 1080 × 1080 et un projet 16:9 : la fenêtre « Coller depuis un autre projet » apparaît, avec « Contenir » et
+    « Remplir ». Contenir : le plan entier tient dans le carré. Remplir : le carré est rempli, les côtés du plan dépassent du cadre
+    (ils sont toujours sur la feuille : élargir la vue pour les voir). Annuler : rien n'est collé. Cocher « Ne plus demander » : le
+    collage suivant se fait sans fenêtre avec le même choix ; Fichier > Préférences… > Projets le change.
+14. Un projet à 24 i/s et un à 25 i/s, même taille : la fenêtre propose « Garder les images » ou « Garder la durée en secondes ».
+    Le second choix : un plan de 24 images dure 25 images, ses clés de caméra et d'effets suivent.
+15. Un calque (W puis X), des images, des clés du montage, des clés de caméra, des effets : même règle, dans un projet d'une autre
+    taille. Un trait copié (Ctrl+C / Ctrl+V sur un calque vectoriel) et une zone de pixels gardent leur place dans le cadre.
+16. Deux projets de même taille : tout se colle comme avant, sans fenêtre ni message d'adaptation.
+17. Pendant « Collage en cours… » (plan lourd) : l'interface répond (barre d'état, souris), mais on ne change pas d'onglet et les
+    raccourcis sont figés jusqu'à la fin.
 11. Les trois thèmes : la bande est lisible (nom, « • », croix) ; la fenêtre étroite : la bande défile.
 12. Laisser SHOT ouvert avec trois projets sans toucher à rien : le processeur reste à zéro (Gestionnaire des tâches).
 

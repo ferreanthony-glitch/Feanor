@@ -655,6 +655,7 @@ impl App {
         self.ctx
             .copy_text(format!("SHOT : {} élément(s) vectoriel(s)", items.len()));
         self.clipboard = items;
+        self.collage.origines.elements = Some(crate::adaptation::Origine::de(&self.doc));
         // (La dernière copie est celle-ci : plus celle d'une sélection sur plusieurs calques.)
         self.multi_clip = None;
         true
@@ -674,6 +675,11 @@ impl App {
             self.status = "Le collage se fait dans un calque vectoriel.".into();
             return;
         }
+        // D'un projet d'une autre feuille : adaptés, ils gardent leur place dans le cadre (adaptation.rs).
+        let items = match self.collage_preparer(crate::collage::Colle::Elements(self.clipboard.clone()), crate::collage::Reprise::Elements) {
+            crate::collage::Preparation::Pret(crate::collage::Colle::Elements(e)) => e,
+            _ => return,
+        };
         self.end_stroke();
         if !self.layer_editable() {
             return;
@@ -682,8 +688,8 @@ impl App {
         let Some(d) = self.doc.cels.get_mut(&cel).and_then(|c| c.vector.as_mut()) else { return };
         let before = d.clone();
         let start = d.elements.len();
-        d.elements.extend(self.clipboard.iter().cloned());
-        let n = self.clipboard.len();
+        let n = items.len();
+        d.elements.extend(items);
         self.refresh_cel(cel);
         self.push_vector(cel, before, prefix);
         self.vsel = Some(VSelection {

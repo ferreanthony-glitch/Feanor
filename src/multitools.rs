@@ -435,6 +435,7 @@ impl App {
         // Un texte dans le presse-papiers du système : sans lui, Ctrl+V n'arrive pas jusqu'à nous.
         self.ctx.copy_text(text);
         self.multi_clip = Some(clip);
+        self.collage.origines.multi = Some(crate::adaptation::Origine::de(&self.doc));
         true
     }
 
@@ -449,14 +450,36 @@ impl App {
         if self.content_refuses() {
             return;
         }
+        let Some(original) = self.multi_clip.clone() else { return };
+        // D'un projet d'une autre feuille : adaptée, elle garde sa place dans le cadre (`adaptation.rs`).
+        let mut clip = match self.collage_preparer(crate::collage::Colle::Multi(original), crate::collage::Reprise::Multi) {
+            crate::collage::Preparation::Pret(crate::collage::Colle::Multi(c)) => c,
+            _ => return,
+        };
         self.end_stroke();
         self.multi_flush();
         self.drop_multi();
         self.vsel = None;
         self.drop_bitmap_selection();
         let targets = self.multi_targets();
-        let Some(clip) = self.multi_clip.as_ref() else { return };
-        let (parts, edits) = multisel::paste_clip(&mut self.doc, &targets, clip);
+        // Copiée dans un autre projet, aucun numéro de calque ne correspond : chaque calque copié va sur le premier
+        // calque choisi de même sorte (vectoriel pour des éléments, bitmap pour des pixels) encore libre, dans l'ordre ;
+        // ce qui n'a pas de calque en face est laissé de côté.
+        if !clip.items.iter().any(|(l, _)| targets.list.iter().any(|t| t.id == *l)) {
+            let mut pris = vec![false; targets.list.len()];
+            for item in &mut clip.items {
+                let vectoriel = matches!(item.1, crate::multisel::ClipWhat::Vector(_));
+                let place = targets.list.iter().enumerate().find(|(i, t)| !pris[*i] && t.vector == vectoriel);
+                item.0 = match place {
+                    Some((i, t)) => {
+                        pris[i] = true;
+                        t.id
+                    }
+                    None => 0,
+                };
+            }
+        }
+        let (parts, edits) = multisel::paste_clip(&mut self.doc, &targets, &clip);
         if parts.is_empty() {
             self.status = "Rien à coller : les calques de la copie ne sont pas parmi les calques choisis, ou ils ne peuvent pas être modifiés.".into();
             return;
