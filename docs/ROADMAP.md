@@ -3140,3 +3140,27 @@ Détail dans `docs/EXPORT_MONTAGE.md`. **Jamais ouvert dans Premiere Pro, DaVinc
   suffixés `_V2`. Aucun changement de format. Détails et vérifications : `docs/INTERFACE.md` partie 15.
 - Reste : l'étiquette dans la vue Vignettes ; défilement des cartes au clavier ; aperçu animé (toutes les images) d'une
   version au survol.
+
+## Onglets de projets (demandés par Anthony le 2026-10-20, branche `onglets`) ✅
+
+« J'aimerais qu'on travaille sur la possibilité d'ouvrir plusieurs fichiers dans la même fenêtre avec un système d'onglets. »
+
+- Une **bande d'onglets** sous les menus : un projet par onglet, « • » s'il n'est pas enregistré, croix, clic du milieu, clic droit
+  (Fermer, Fermer les autres, Afficher dans l'Explorateur), glisser pour réordonner, « + » et Ctrl+T (accueil), Ctrl+W, Ctrl+Tab /
+  Ctrl+Maj+Tab. Ouvrir, Nouveau, récents, imports et un `.pelure` lâché prennent un nouvel onglet (Préférences) ; un projet déjà
+  ouvert donne la main à son onglet. Détails et vérifications : `docs/INTERFACE.md` partie 23, `README.md` « Onglets de projets ».
+- **Architecture** : l'état d'un projet (139 champs d'`App`) est échangé avec celui de l'onglet qu'on affiche (`onglets.rs`,
+  macro `etat_projet!`), plutôt que d'écrire `self.projet().doc` partout ; les caches indexés par numéro de dessin (effets,
+  textures, vignettes) sont rangés avec leur onglet, les tâches de fond répondent à leur onglet (époques uniques,
+  enregistrement adopté par l'onglet caché), une copie de secours par onglet. Un essai lit `app.rs` et refuse tout champ
+  d'`App` non classé. `docs/ARCHITECTURE.md`, « Onglets de projets ».
+- **Mesures** (`docs/PERFORMANCE.md`, section 15) : changer d'onglet 7 à 14 µs, l'image d'écran suivante ne coûte pas plus qu'une
+  autre (1,9 contre 1,8 ms), +54 Mo par projet lourd de plus, 0 ms de processeur et aucune repeinture au repos avec 3-4 onglets.
+- **Presse-papiers** communs : plans, calques, images, clés, effets, zones, éléments ; feuille d'une autre taille refusée (avec les
+  deux tailles), autre cadence signalée. Session : les onglets reviennent au lancement. Quitter / fermer les autres : une seule
+  boîte.
+- Reste : adapter les plans copiés dans une feuille d'une autre taille (décalage de cadrage) ; les travaux qui parlent à l'interface
+  (export, propagation, sons proposés) suivraient leur onglet au lieu de refuser le changement ; ranger par onglet les
+  commentaires, la scène 3D de blocage et les références liées aux plans copiés d'un projet à l'autre ; Alt+1…9 pour aller à un
+  onglet ; un menu des onglets quand la bande déborde ; réouvrir le dernier onglet fermé ; plusieurs fenêtres (glisser un onglet
+  hors de la bande).

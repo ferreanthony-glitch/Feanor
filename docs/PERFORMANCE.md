@@ -1126,3 +1126,37 @@ trait sec fixes (une seule image à calculer) sont prêts en moins d'un quart de
 - Le bord de l'encre est le contour à 25 % de couverture : un pinceau très doux (aérographe) a un liseré qui suit ce contour.
 - **Pas vu à l'écran** dans cette séance (aucune application lancée, consigne) : voir `docs/INTERFACE.md` section 21 ; planche de
   contact : `$env:FXMATIERE_PNG = '...'` puis `fxmatiere_tests::dump -- --ignored`.
+
+## 15. Onglets de projets (2026-10-20, branche `onglets`)
+
+Plusieurs projets ouverts dans la même fenêtre (`docs/ARCHITECTURE.md`, « Onglets de projets »). Mesures de
+`onglets_tests::perf_tabs` (`cargo test --release --offline --target-dir target\msvc perf_tabs -- --ignored --nocapture
+--test-threads=1`, carte graphique réelle sans fenêtre, écran de 1920 × 1080, projets de 30 plans × 3 calques × 24 images,
+6 tuiles par dessin) :
+
+| Mesure | Résultat |
+|---|---|
+| Changer d'onglet (l'échange et le rangement des caches, hors image d'écran) | **7 à 14 µs** médiane, 19 à 37 µs au pire (60 changements entre 4 onglets) |
+| L'image d'écran qui suit le changement (interface complète + composition par la carte) | **1,9 ms** médiane (p95 2,1 ms) contre 1,8 ms (p95 2,2 ms) pour une image d'écran ordinaire de ces projets, machine au repos ; sur une machine chargée : 5,1 contre 4,4 ms. Le changement ne coûte donc pas une image de plus |
+| Lecture disque pendant un changement | aucune (essai `switching_does_not_read_the_disk_again` : le dossier du projet est effacé, les changements marchent) |
+| Mémoire d'un projet de plus | **+54 Mo** par projet de ce genre (284 Mo avec un projet, 336 / 391 / 448 Mo avec 2 / 3 / 4 ; le processus de départ en compte 9) |
+| Processeur au repos, quatre onglets ouverts | **0 ms** en 3 s sans image d'écran (aucun fil de fond ne travaille ; 16 ms une fois, juste après des calculs de fond encore en route) |
+| Repeinture au repos, trois onglets | aucune : `reveil` ≥ 1 s à chaque image (essai `three_open_tabs_at_rest_ask_for_no_repaint`, y compris après six changements d'onglet) |
+| Changer d'onglet sans interface, 480 dessins par projet (200 changements) | 0,001 ms en moyenne (borne de l'essai `switching_is_a_swap_not_a_reload` : 25 ms) |
+
+Pourquoi c'est instantané : il n'y a ni relecture, ni copie de dessin, ni recalcul. Les 139 champs d'un projet changent de
+place par `std::mem::swap` ; les dessins dérivés des effets (`fxcache::Reserve`) et les textures de la carte graphique
+(`gpu::TexturesDeProjet`) sont rangés avec leur onglet (des `HashMap` qui changent de propriétaire) ; seule l'image composée
+gardée est abandonnée, la première image d'écran du nouvel onglet la refait (une composition, comme à chaque changement de plan).
+
+**Pour un onglet caché** : aucune image d'écran, aucun calcul sur le fil de l'interface. Ses vignettes en file sont abandonnées
+(`Thumbs::abandonner`), sa lecture arrêtée. Il ne réveille l'application que pour une écriture ou une copie de secours en cours
+(`tick_onglets`, 200 ms). Les calculs de fond qu'il avait demandés (effets, rejeu des traits) finissent seuls ou sont jetés à
+leur arrivée (le « monde » des effets change à chaque changement d'onglet).
+
+**Mémoire des onglets cachés** : la moitié de la limite des dessins dérivés (384 Mo) et la moitié du budget de textures de la
+carte graphique (500 Mo), tous onglets cachés ensemble ; les plus anciennement vus sont lâchés d'abord (ils se recalculent au
+retour). L'essai `the_caches_of_hidden_tabs_stay_within_the_effect_cache_limit` le vérifie avec une limite d'un mégaoctet.
+
+À regarder à l'écran : ouvrir quatre projets lourds, passer de l'un à l'autre à la souris et à Ctrl+Tab : aucun à-coup, la
+lecture et les clés reviennent là où elles étaient.

@@ -1815,18 +1815,21 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 ## Onglets de projets (2026-10-20, branche `onglets`)
 
 Demande d'Anthony : « ouvrir plusieurs fichiers dans la même fenêtre avec un système d'onglets ». Un onglet = un projet
-ouvert, en mémoire, avec tout ce qui le concerne ; passer de l'un à l'autre ne relit rien sur le disque.
+ouvert, en mémoire, avec tout ce qui le concerne ; passer de l'un à l'autre ne relit rien sur le disque. Code :
+`onglets.rs` (l'état échangé et les opérations), `ongletsui.rs` (la bande), `onglets_tests.rs` (45 essais).
 
 ### Le choix : un état de projet qu'on échange, pas un `App` découpé
 
 `App` compte ~330 champs et des dizaines de milliers de lignes écrivent `self.doc`, `self.history`, `self.cur_panel`…
 Passer à `self.projet().doc` partout ferait un diff énorme, et l'agent qui retouche l'export à côté en aurait les
 conflits. On garde donc **tous les champs dans `App`** et on range ceux qui sont propres à un projet dans une structure,
-`EtatProjet` (`onglets.rs`), que l'on **échange** avec `std::mem::swap` au changement d'onglet. Une macro
-(`etat_projet!`) liste chaque champ une fois : elle écrit la structure, l'échange (`App::echanger_etat`) et l'état d'un
-onglet neuf (`EtatProjet::vierge`). Oublier un champ ne se voit pas à la compilation ; deux garde-fous : la liste est
-relue champ par champ dans ce document, et un essai (`onglets_tests.rs`) vérifie que chaque champ de projet dit ici est
-bien échangé (un onglet ne doit pas voir le curseur, la sélection ou la vue d'un autre).
+`EtatProjet` (`onglets.rs`), que l'on **échange** avec `std::mem::swap` au changement d'onglet (7 à 14 µs mesurés). Une macro
+(`etat_projet!`) liste chaque champ une seule fois : elle écrit la structure, l'échange (`App::echanger_etat`) et l'état
+d'un onglet neuf (`EtatProjet::vierge`, aussi celui du premier onglet au démarrage : une seule source des valeurs de départ).
+
+**Garde** : `onglets_tests::every_field_of_the_app_is_either_a_project_field_or_shared` lit `app.rs` et exige que chaque
+champ d'`App` soit soit dans `etat_projet!` (139 champs), soit dans la liste `PARTAGES` de l'essai (168). Un champ neuf
+non classé fait échouer la suite avec la consigne : sans cela, un champ de projet oublié fuirait d'un onglet à l'autre.
 
 L'onglet actif vit dans les champs d'`App` (`onglets[actif].etat == None`) ; les autres ont leur `EtatProjet` rangé.
 Aucun appel existant ne change : `self.doc` est toujours le projet affiché.
@@ -1835,77 +1838,115 @@ Aucun appel existant ne change : `self.doc` est toujours le projet affiché.
 
 | Par onglet (échangé) | Commun à tous (reste dans `App`) |
 |---|---|
-| `doc`, `history` (annuler / rétablir isolés), `gesture`, `path`, `import_source`, `written`, `modified`, `doc_epoch` | fenêtre, `settings`, raccourcis (`keymap`), thème, `dock` et les espaces de travail (`layout`, `espace`, `detached`) |
+| `doc`, `history` (annuler / rétablir isolés), `gesture`, `path`, `import_source`, `written`, `modified`, `doc_epoch`, `welcome` | fenêtre, `settings`, raccourcis (`keymap`), thème, `dock` et les espaces de travail (`layout`, `espace`, `detached`) |
 | tête de lecture (`cur_panel`, `cur_layer`, `cur_frame`, `mode`), lecture (`playing`, `play_*`), `view` (zoom, rotation, miroir), zoom du montage et de la timeline, planche (`board_*`) | outil, pinceaux, couleurs, options du pinceau, bibliothèque de pinceaux, pelure d'oignon et feuille d'exposition (réglages), textes (police) |
-| sélections (calques, images, clés de caméra / d'effets / de montage, sélection bitmap / vectorielle, `multi`), gestes en cours (`stroke`, `vdrag`, `bdrag`, `cam_drag`…), boîte de sélection | presse-papiers (plans, calques, images, clés, effets, pixels, éléments) : **ils voyagent entre les onglets** |
-| caches : `renderer`, `monde` (hors de la feuille), `thumbs`, `layer_thumbs`, `murs`, `rejeu` (et ses files), textures du plateau 3D, références, scène 3D, effets calculés (`fxcache`), textures de la carte graphique | carte graphique (`gpu`, pipelines), `audio` (moteur de sortie), `ffmpeg`, `diag`, messages et barre d'état |
-| travaux : `saving` / `save_queue` / `after_save` (enregistrement), `open_job`, `video_import`, `recovery` (copie de secours), suivi des envois, comparaison, suggestions sonores | fenêtres qui demandent un projet entier (export, propagation, coloriage, import Storyboard Pro) : **modales**, elles interdisent de changer d'onglet |
-| `welcome` (un onglet vierge montre l'accueil) | |
+| sélections (calques, images, clés de caméra / d'effets / de montage, sélection bitmap / vectorielle, `multi`), gestes en cours (`stroke`, `vdrag`, `bdrag`, `cam_drag`…), boîte de sélection | **presse-papiers** : plans, calques, images, clés de montage, de caméra et d'effets, effets d'un calque, pixels, éléments vectoriels, sélection sur plusieurs calques (`multi_clip`) : ils voyagent entre les onglets |
+| caches : `renderer`, `monde` (hors de la feuille), `thumbs`, `layer_thumbs`, `murs`, `rejeu` (et ses files), textures du plateau 3D, références, scène 3D, effets calculés (`fxcache`), textures de la carte graphique | carte graphique (`gpu`, pipelines), `audio` (moteur de sortie), `ffmpeg`, `diag`, messages et barre d'état, suggestions sonores (`sug`, remises à zéro à chaque changement) |
+| travaux : `saving` / `save_queue` / `after_save` / `save_error` (enregistrement), `open_job`, `video_import`, `recovery` (copie de secours), suivi des envois, comparaison | fenêtres qui demandent un projet entier (export, propagation, coloriage, import Storyboard Pro) : **modales ou refusées** pendant qu'elles travaillent (`onglet_occupe`) |
 
 `doc_epoch` (le numéro du projet que les tâches de fond recopient pour savoir à qui elles répondent) vient d'un compteur
-global : deux onglets n'ont jamais la même époque, et une époque ne revient pas. Le contrôle existant (`epoch != self.doc_epoch`
-dans l'enregistrement, les références, les crayonnés, les envois, la comparaison) devient donc aussi un contrôle d'onglet.
+global : deux onglets n'ont jamais la même époque, et une époque ne revient pas (0 est celle du premier projet au démarrage,
+que les états remis à zéro d'un projet à l'autre — références, crayonnés, envois — ont déjà). Le contrôle existant
+(`epoch != self.doc_epoch` dans l'enregistrement, les références, les crayonnés, les envois, la comparaison) devient
+donc aussi un contrôle d'onglet.
+
+Un onglet **vierge** (`welcome` et rien d'ouvert, de dessiné ni d'annulable) montre l'accueil ; un projet qu'on ouvre ou
+qu'on crée y prend la place au lieu d'ouvrir un onglet de plus (`cible_projet`).
 
 ### Les caches ne doivent jamais montrer les pixels d'un autre projet
 
-Les numéros de dessin (`CelId`) naissent d'un compteur **par projet** : deux projets ouverts ont tous deux un dessin 3. Tout
-cache indexé par `CelId` est donc rangé par onglet ou vidé au changement :
+Les numéros de dessin (`CelId`) naissent d'un compteur **par projet** : deux projets ouverts ont tous deux un dessin 3 (et
+un plan 1). Tout cache indexé par `CelId` est donc rangé par onglet ou vidé au changement :
 
 | Cache | Où il vit | Au changement d'onglet |
 |---|---|---|
-| `Renderer`, `Monde`, `Thumbs`, `LayerThumbs`, `murs`, `rejeu`, textures du plateau 3D, références | champ échangé | rangé avec l'onglet (instantané au retour) ; demandes en file annulées (`reset`) pour que l'onglet qui part n'occupe plus les fils |
-| effets calculés (`fxcache` : `cache`, `last`, `sources`, `small`) | statique global → `fxcache::Reserve` | `mettre_de_cote()` prend le tout et change de « monde » (les résultats des calculs en cours seront jetés, ce que le mécanisme de `forget_all` faisait déjà) ; `rendre()` le remet au retour. Réserve totale des onglets inactifs bornée à la limite du cache : les plus anciens sont lâchés |
+| `Renderer`, `Monde`, `Thumbs`, `LayerThumbs`, `murs`, `rejeu`, textures du plateau 3D, références | champ échangé | rangé avec l'onglet (instantané au retour) ; demandes en file annulées (`abandonner`) pour que l'onglet qui part n'occupe plus les fils |
+| effets calculés (`fxcache` : `cache`, `last`, `sources`, `small`) | statique global → `fxcache::Reserve` | `mettre_de_cote()` prend le tout et change de « monde » (les résultats des calculs en cours seront jetés, ce que `forget_all` faisait déjà) ; `rendre()` le remet au retour (le même `Arc`, pas un recalcul : essai `derived_effect_drawings_never_cross…`). Réserves des onglets cachés : la moitié de la limite du cache au total, les plus anciennement vus partent d'abord |
 | formes de fond (`fx::COVERS`), fonds en calcul (`fondfil`) | statiques globaux | vidés / annulés (recalcul d'un fond seulement) |
-| textures des dessins sur la carte graphique | `GpuCanvas` | `prendre_textures()` / `poser_textures()` : rangées avec l'onglet, l'image composée est refaite ; bornées comme le cache d'effets |
-| vignettes demandées sur un fil de fond | `Thumbs` / `Pool` | `reset()` à la sortie (une vignette en route ne répond plus), et `fxcache::avec_monde` : un fil de vignettes garde le « monde » du moment où la demande est partie |
+| textures des dessins sur la carte graphique | `GpuCanvas` | `prendre_textures()` / `poser_textures()` : rangées avec l'onglet, l'image composée gardée est abandonnée ; aucune tuile n'est renvoyée au retour (essai `gpu_textures_follow_their_tab…`) ; moitié du budget de textures pour les onglets cachés |
+| vignettes en cours sur un fil de fond | `Thumbs` / `Pool` | `reset()` à la sortie, et `fxcache::avec_monde` : le fil garde le « monde » du moment où la demande est partie, il ne lit ni ne remplit le cache d'un autre onglet (`get`, `request`, `source`, `get_or_compute`… rendent « périmé ») |
 | ressources de la scène 3D (`Gpu3d`, partagées par la carte) | `scene3d.gpu` | lâchées à la sortie (elles se refont à la demande) : un modèle importé n'a pas le même numéro d'un projet à l'autre |
 | vidéos (`video::FRAMES`, `DIRS`) | statiques globaux | rien à faire : leurs numéros viennent de l'heure (« pas de collision entre projets », déjà écrit) |
-| caches par contenu (`vector::REGISTRY`, `RESTYLED`, `audiofx::CACHE`) | statiques globaux | rien à faire : indexés par le contenu, jamais par un numéro de dessin |
+| caches par contenu (`vector::REGISTRY`, `RESTYLED`, `audiofx::CACHE`, `cadrage_cache`) | statiques ou partagés | rien à faire : indexés par le contenu, jamais par un numéro de dessin |
 
 ### Les tâches de fond répondent à leur onglet
 
 - **Enregistrement** (`SaveJob`) : le fil tient son cliché ; `Enregistrement` est dans l'état de l'onglet, avec son `epoch`. Un onglet
-  inactif dont l'écriture est finie est **échangé un instant** (`tick_onglets`) pour que `finish_job` fasse son travail
-  (chemin, `modified`, récents) ; s'il y avait une suite (fermer l'onglet…) ou une erreur, l'onglet devient actif pour que
-  Anthony la voie. Sinon rien n'est affiché : la pastille « • » de l'onglet disparaît.
-- **Copie de secours** : un `Recovery` par onglet (un dossier de séance chacun, avec son verrou) ; l'onglet qui part lance une
-  copie tout de suite s'il a changé, son fil l'écrit en paix. Après un plantage, `recovery_window` propose chaque projet.
-- **Ouverture** : toujours dans l'onglet actif et modale (`modal_open`) ; on ne change pas d'onglet pendant la lecture d'un
-  projet. Un projet déjà ouvert donne la main à son onglet au lieu de s'ouvrir deux fois.
-- **Rejeu, importations, références, envois** : leurs résultats s'adoptent à l'image d'écran où leur onglet est actif (ils
-  attendent sinon ; leurs fils continuent seuls). Rien ne tourne pour un onglet inactif sur le fil de l'interface.
-- **Lecture et son** : arrêtées à la sortie (`playing = false`, `stop_audio`).
+  inactif dont l'écriture est finie est **échangé un instant** (`tick_onglets` → `adopter_ecriture`) pour que `finish_job` fasse son
+  travail (chemin, `modified`, récents, session) ; le message d'état dit de quel onglet il parle. S'il y a une suite (fermer
+  l'onglet…) ou une erreur, l'onglet passe à l'écran pour que la boîte soit vue. Sinon rien n'est affiché : la pastille « • »
+  de l'onglet disparaît.
+- **Copie de secours** : un `Recovery` par onglet (un dossier de séance chacun, avec son verrou ; le nom du dossier porte
+  un compteur : deux onglets ouverts dans la même seconde n'ont pas le même) ; un onglet caché garde le rythme de l'onglet affiché
+  (`tick_onglets` → `tick_secours_cache` : copie lancée quand le délai est passé et que le projet a changé, écrite sur un
+  fil, terminée à l'image suivante) ; changer d'onglet ne prend aucun cliché, il reste instantané. Un onglet qu'on ferme efface la sienne (sur
+  un fil). Après un plantage, `recovery_window` propose chaque projet (« Tout ouvrir » : chaque copie dans son onglet).
+- **Ouverture** : toujours dans l'onglet affiché et modale (`modal_open`) ; on ne change pas d'onglet pendant la lecture d'un
+  projet. Un projet déjà ouvert donne la main à son onglet au lieu de s'ouvrir deux fois (`montrer_si_deja_ouvert`).
+- **Rejeu, importations, références, envois** : leurs résultats s'adoptent à l'image d'écran où leur onglet est affiché (ils
+  attendent sinon ; leurs fils continuent seuls). Rien ne tourne pour un onglet caché sur le fil de l'interface.
+- **Lecture et son** : arrêtées à la sortie (`playing = false`, `stop_audio`) ; un geste en cours se termine dans son onglet
+  (`end_stroke`, champ de texte, champ numérique).
+- **Travaux qui parlent à l'interface** (export, propagation, coloriage, export pour le montage, génération des sons proposés,
+  pose d'un bruitage) : `onglet_occupe` refuse le changement avec la raison dans la barre d'état ; les boîtes de dialogue
+  (`modal_open`) figent la bande et les raccourcis.
 
 ### Interface
 
-Une bande d'onglets entre la barre de menus et la barre de commandes (`ongletsui.rs`) : nom, « • » si modifié, croix ;
-clic du milieu ferme ; clic droit : Fermer, Fermer les autres, Afficher dans l'Explorateur ; « + » = nouvel onglet vierge (l'accueil).
-Glisser un onglet le déplace. Raccourcis : Ctrl+T (nouvel onglet), Ctrl+W (fermer — il existait : « Fermer le projet »),
-Ctrl+Tab / Ctrl+Maj+Tab (onglet suivant / précédent ; `Tab` et `Maj+Tab` restent le mode et la planche). Fichier > Ouvrir,
-Nouveau, projets récents, import Storyboard Pro / scénario et « nouveau projet à partir des plans choisis » créent un
-**nouvel onglet** (Préférences > « Ouvrir dans un nouvel onglet », allumé), sauf si l'onglet courant est vierge (il est
-alors réutilisé). Fermer un onglet modifié passe par la boîte « Modifications non enregistrées » existante. Quitter avec
-plusieurs onglets modifiés : une seule boîte les liste (Enregistrer tout / Ne pas enregistrer / Annuler).
+Une bande d'onglets entre la barre de menus et la barre de commandes (`ongletsui.rs`) : nom, « • » si modifié ou en
+écriture, croix (sur l'onglet affiché et au survol) ; clic du milieu ferme ; clic droit : Fermer, Fermer les autres,
+Afficher dans l'Explorateur ; « + » = nouvel onglet vierge (l'accueil) ; glisser un onglet le déplace. Largeur 96 à 220 px,
+la bande défile au-delà. Bulle d'un onglet : le chemin du projet et son état.
+
+Raccourcis : **Ctrl+T** (nouvel onglet), **Ctrl+W** (fermer l'onglet — il existait : « Fermer le projet »), **Ctrl+Tab** /
+**Ctrl+Maj+Tab** (onglet suivant / précédent, en boucle). `Tab` et `Maj+Tab` restent le passage storyboard / animation et la
+planche : Ctrl+Tab était libre (vérifié par `keymap_tests::no_two_default_bindings_share_a_key_in_the_same_context`,
+et `raw_input_hook` le retire à egui comme Tab, sinon egui y verrait un changement de champ).
+
+Fichier > Ouvrir, Nouveau, projets récents, import Storyboard Pro / scénario, « nouveau projet à partir des plans choisis » et
+un `.pelure` lâché sur la fenêtre créent un **nouvel onglet** (Préférences > « Ouvrir dans un nouvel onglet », allumé), sauf si
+l'onglet affiché est vierge (il est alors réutilisé). Éteint : le projet remplace celui qui est affiché, après la question
+habituelle. Pas de question quand le projet arrive dans un onglet à lui : rien n'est écrasé.
+
+Fermer un onglet modifié passe par la boîte « Modifications non enregistrées » existante (elle nomme le projet) ; le voisin de
+droite (de gauche pour le dernier) prend la place. Le dernier onglet ne se ferme pas : un projet vide du même format le
+remplace et l'accueil revient. Quitter ou fermer les autres avec plusieurs onglets modifiés : **une seule boîte** (`Groupe`)
+les liste (Enregistrer tout / Ne pas enregistrer / Annuler) ; « Enregistrer tout » demande où ranger un projet sans nom, un à la
+fois, puis attend la fin des écritures avant d'agir. Avec un seul onglet à perdre, la question est celle de toujours.
 
 ### Session
 
-`Settings::session_tabs` (chemins) et `session_active` sont écrits à chaque ouverture / fermeture / changement d'onglet ;
-au lancement, avec « Rouvrir le dernier projet au lancement » (`reopen_last`), tous les onglets reviennent, l'actif en dernier
-(`tick_reopen`, un projet à la fois pour que l'ouverture reste modale et lisible). Un projet passé en argument n'ouvre que lui.
+`Settings::session_tabs` (chemins) et `session_active` sont écrits à chaque ouverture, fermeture, déplacement, changement
+d'onglet et enregistrement (`session_a_ecrire`, écrit à l'image suivante, jamais pendant que la session précédente se rouvre).
+Au lancement, avec « Rouvrir le dernier projet au lancement » (`reopen_last`), `reopen_last_project` sonde les chemins sur un
+autre fil (un disque éteint ne fige rien) ; `tick_session_ouverture` ouvre un projet à la fois (chacun est modal et lisible),
+puis affiche l'onglet qui l'était à la fin ; un projet disparu est sauté sans bruit. Sans session retenue : le dernier projet,
+comme avant. Un projet passé en argument n'ouvre que lui.
 
 ### Presse-papiers entre onglets
 
-Tous les presse-papiers étaient déjà des **copies** (plans : `PanelClip` avec ses dessins et la taille de la feuille ; calques :
-`LayerClip` avec ses dessins ; images, clés, effets : des données) : ils sont communs à l'application et se collent dans
-l'autre onglet avec de nouveaux numéros. Les cas particuliers sont dits à Anthony : plans d'un projet de feuille d'une autre
-taille (refusé, avec les deux tailles), de cadence différente (collé, avec un avertissement).
+Tous les presse-papiers étaient déjà des **copies** : ils sont communs à l'application et se collent dans l'autre onglet avec de
+nouveaux numéros (essais `copied_*`, `camera_keys_and_effects_travel_between_tabs`, `pixels_copied_…`).
+
+| Sorte | Entre deux onglets |
+|---|---|
+| Plans (`PanelClip`) | collés avec leurs propres dessins ; **feuille d'une autre taille : refusé**, message avec les deux tailles (existait, message précisé) ; **autre cadence : collé, avec un avertissement** (`PanelClip::fps`) |
+| Calque (`LayerClip`), images (`ImageClip`) | collés avec leurs propres dessins ; **feuille d'une autre taille : refusé**, avec les deux tailles (champ `size` ajouté : un dessin n'a de sens qu'à sa taille) |
+| Clés de caméra, de montage, d'effets ; effets d'un calque | des valeurs : collés tels quels (`load_doc` n'efface plus les clés de caméra copiées) |
+| Zone bitmap (`Floating`), éléments vectoriels | collés à leur place d'origine |
+| Sélection sur plusieurs calques (`multi_clip`) | commune, mais elle vise des calques par numéro : dans un autre projet, rien n'y correspond et rien n'est collé |
+
+Perdu au passage d'un projet à l'autre (comme pour un collage de plans dans le même projet) : ce qui est rangé à côté du plan
+par son numéro — commentaires, scène 3D de blocage, références liées, versions, envois, transitions.
 
 ### Décisions (coût / risque / réversibilité)
 
 | Décision | Pourquoi | Coût | Risque | Réversible |
 |---|---|---|---|---|
-| Échange d'un `EtatProjet` plutôt qu'un `App` par onglet ou un `Projet` partout | zéro changement dans les ~100 000 lignes qui écrivent `self.doc` ; un seul `Context`, une seule carte graphique | ~5 µs à ~50 µs par changement (mesuré) ; la liste des champs à tenir | un champ de projet oublié dans la macro fuit d'un onglet à l'autre (essai de garde) | oui : tout est dans `onglets.rs` |
-| Caches rangés avec l'onglet plutôt que vidés | le retour est instantané, sans recalcul d'effets ni renvoi de textures | mémoire des onglets inactifs (mesurée, bornée par la limite des caches) | un cache oublié montre un autre projet (couvert par les essais de fuite) | oui : vider au lieu de ranger |
-| Une copie de secours par onglet | un plantage ne doit perdre aucun projet | un dossier de séance et un verrou par onglet | faible | oui |
+| Échange d'un `EtatProjet` plutôt qu'un `App` par onglet ou un `Projet` partout | zéro changement dans les ~100 000 lignes qui écrivent `self.doc` ; un seul `Context`, une seule carte graphique | 7 à 14 µs par changement ; la liste des champs à tenir (essai de garde) | un champ de projet oublié fuit d'un onglet à l'autre : l'essai de garde le refuse | oui : tout est dans `onglets.rs` |
+| Caches rangés avec l'onglet plutôt que vidés | le retour est instantané, sans recalcul d'effets ni renvoi de textures | mémoire des onglets cachés, bornée (moitié de la limite des caches) | un cache oublié montre un autre projet (essais de fuite : vignettes, effets, textures) | oui : vider au lieu de ranger |
+| Une copie de secours par onglet, au même rythme que celle de l'onglet affiché | un plantage ne doit perdre aucun projet ; un cliché pris au changement d'onglet (39 ms mesurés pour 480 dessins la première fois) aurait cassé l'instantané | un dossier de séance et un verrou par onglet ; un onglet modifié caché réveille l'application toutes les 10 s au plus | une modification faite juste avant de changer d'onglet n'est copiée qu'au prochain délai (comme dans un seul onglet) | oui |
 | Onglet vierge = accueil | « + » ouvre l'accueil habituel (Nouveau, Ouvrir, récents) | nul | faible | oui |
 | Le projet n'est jamais ouvert deux fois | deux copies en mémoire du même dossier s'écraseraient à l'enregistrement | une comparaison de chemins | faible | oui |
+| Changer d'onglet refusé pendant un travail qui parle à l'interface | leurs résultats visent « le projet affiché » (export, suggestions sonores…) | un message dans la barre d'état | faible | oui : leur état pourrait être rangé par onglet |
+| `Ctrl+W` garde son sens (fermer le projet) | il existait ; devenu « fermer l'onglet », le dernier onglet est remplacé par un projet vide | nul | faible | oui |

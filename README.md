@@ -1589,9 +1589,10 @@ Détail et propositions : `docs/INTERFACE.md`.
 
 ## Projets récents
 
-Fichier > Projets récents : les dix derniers projets ouverts ou enregistrés. Au lancement, Pelure
-rouvre le dernier (sauf si tu en ouvres un autre, ou si une séance interrompue attend d'être
-récupérée) ; une case du même menu le désactive.
+Fichier > Projets récents : les dix derniers projets ouverts ou enregistrés. Au lancement, SHOT
+rouvre le dernier — et, si plusieurs onglets étaient ouverts à la fermeture, tous (voir « Onglets de projets »),
+l'onglet affiché à la fin en dernier — sauf si tu en ouvres un autre, ou si une séance interrompue attend
+d'être récupérée ; une case du même menu le désactive.
 
 Sans projet ouvert (au lancement, ou après « Fermer le projet »), un écran d'accueil propose :
 - un nouveau projet ;
@@ -1619,6 +1620,38 @@ Il s'en va dès qu'un projet s'ouvre ou se crée, au premier trait, ou par « Co
 Entrée valide, Échap annule. La fenêtre repart des dernières valeurs, du dernier dossier et de tes
 préréglages, retenus dans `%APPDATA%\SHOT\reglages.toml`.
 
+## Onglets de projets
+
+Plusieurs projets ouverts dans la même fenêtre (demande d'Anthony, 2026-10-20). Une bande d'onglets sous la barre de menus : un
+onglet par projet, avec son nom, une pastille « • » orange s'il n'est pas enregistré et une croix. Chaque onglet garde **son**
+annulation, sa tête de lecture, sa sélection, sa vue (zoom, mode storyboard / animation) et ses caches ; passer de l'un à
+l'autre est instantané (aucune relecture du disque : 7 à 14 µs, l'image d'écran suivante ne coûte pas plus qu'une autre).
+
+- **Ouvrir** : Fichier > Ouvrir, Nouveau, un projet récent, un import Storyboard Pro ou de scénario, « nouveau projet à partir
+  des plans choisis », ou un `.pelure` lâché sur la fenêtre prennent un **nouvel onglet** (Préférences > « Ouvrir dans un nouvel
+  onglet », allumé ; éteint, ils remplacent le projet affiché après la question habituelle). Un projet déjà ouvert : son onglet
+  passe à l'écran. L'accueil (un onglet « Nouvel onglet ») est réutilisé par le premier projet qu'on y ouvre.
+- **Gestes** : clic = passer à l'onglet ; clic du milieu ou croix = fermer ; clic droit = Fermer, Fermer les autres, Afficher dans
+  l'Explorateur ; glisser = déplacer ; « + » ou **Ctrl+T** = un onglet vierge. **Ctrl+W** ferme l'onglet affiché (le dernier est
+  remplacé par un projet vide et l'accueil revient) ; **Ctrl+Tab** / **Ctrl+Maj+Tab** passent à l'onglet suivant / précédent.
+  `Tab` et `Maj+Tab` gardent leur sens (storyboard / animation, planche).
+- **Fermer un onglet modifié** : la boîte « Modifications non enregistrées » nomme le projet (Enregistrer / Ne pas enregistrer /
+  Annuler). **Quitter** (ou « Fermer les autres ») avec plusieurs onglets modifiés : une seule boîte les liste.
+- **Enregistrer** : chaque onglet s'écrit sur son fil ; on peut changer d'onglet pendant l'écriture, son résultat revient à son
+  onglet (la pastille s'éteint, la barre d'état dit de quel projet elle parle). Une écriture n'est jamais coupée : fermer l'onglet
+  ou quitter l'attend.
+- **Copie de secours** : une par onglet (un dossier de séance chacun) ; après un plantage, la fenêtre de récupération liste chaque
+  projet (« Tout ouvrir » : chacun dans son onglet).
+- **Copier-coller** : plans, calques, images, clés de caméra / de montage / d'effets, effets d'un calque, zones bitmap et éléments
+  vectoriels se collent d'un onglet à l'autre, avec leurs propres dessins. Une feuille d'une autre taille refuse (message avec les
+  deux tailles) ; une autre cadence prévient (la durée des plans change).
+- **Pendant un travail qui parle à l'interface** (export, propagation, coloriage, génération des sons proposés) on ne change pas
+  d'onglet : la barre d'état dit pourquoi.
+- **Au repos** : trois onglets ouverts ne demandent aucune image de plus, le processeur reste à zéro ; un onglet caché n'a pas de
+  vignette en cours, pas de lecture, pas de calcul sur le fil de l'interface. Mémoire : environ 54 Mo de plus par projet de
+  30 plans × 3 calques × 24 images (mesure de `docs/PERFORMANCE.md`, section 15).
+
+Détails : `docs/ARCHITECTURE.md` (« Onglets de projets »), `docs/INTERFACE.md` partie 23 (vérifications à l'écran).
 ## Importer un scénario
 
 Fichier > Importer > « Un scénario… » (action `fichier.importer_scenario`, donc aussi dans Ctrl+K) : on

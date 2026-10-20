@@ -1334,3 +1334,78 @@ Suite des effets du trait, demandée par Anthony après les effets animés. Dét
    dégradé et la plume sont laissés de côté, la barre d'état le dit) ; enregistrer, rouvrir.
 9. Lecture et export : même image à l'écran, dans l'export et les vignettes ; un calque de 2 000 traits reste fluide.
 10. Les trois thèmes : icônes enfoncées lisibles dans les deux rangées.
+
+## 23. Onglets de projets (2026-10-20, branche `onglets`)
+
+Demande d'Anthony : « ouvrir plusieurs fichiers dans la même fenêtre avec un système d'onglets ». Un onglet = un projet ouvert
+(son annulation, sa tête de lecture, sa sélection, sa vue, ses caches). Détail : `docs/ARCHITECTURE.md` (« Onglets de projets »),
+`docs/PERFORMANCE.md` (section 15), `README.md` (« Onglets de projets »).
+
+### Mots
+
+| Idée | Mot | À éviter |
+|---|---|---|
+| Un projet ouvert dans la bande | **Onglet** | fenêtre, document |
+| Un onglet qui n'a servi à rien (l'accueil) | **Nouvel onglet** | onglet vide |
+| Fermer un projet | **Fermer l'onglet** (menu) ; l'action garde son nom `fichier.fermer` | fermer le projet (sauf dans une phrase) |
+| Pastille d'un projet pas enregistré | **•** (orange) | astérisque |
+
+### Où et quels gestes
+
+- **La bande** : entre la barre de menus et la barre de commandes. Un onglet par projet : son nom, « • » orange s'il est modifié ou
+  s'écrit encore, une croix (sur l'onglet affiché et sous la souris). L'onglet affiché est du ton du panneau, avec un filet à
+  l'accent ; les autres sont plus bas. Deux projets pas encore enregistrés : « Sans titre », « Sans titre 2 ».
+- **Clic** : passe à l'onglet. **Clic du milieu** ou croix : le ferme. **Clic droit** : Fermer, Fermer les autres, Afficher dans
+  l'Explorateur. **Glisser** un onglet : le déplace (un trait d'accent montre où il tombe). **« + »** : un onglet vierge
+  (l'accueil). Bulle (une seconde) : le chemin du projet et son état.
+- **Raccourcis** : Ctrl+T nouvel onglet, Ctrl+W fermer l'onglet, Ctrl+Tab / Ctrl+Maj+Tab onglet suivant / précédent (en boucle).
+  `Tab` et `Maj+Tab` restent le mode et la planche. Tous dans Ctrl+K et assignables (clic droit sur une entrée de menu).
+- **Menu Fichier** : Nouvel onglet, Fermer l'onglet, Fermer les autres onglets.
+- **Ouvrir, Nouveau, Projets récents, imports** : dans un nouvel onglet (réglable : Fichier > Préférences > Projets > « Ouvrir
+  dans un nouvel onglet »). Si l'onglet affiché est l'accueil, le projet y prend la place. Un projet déjà ouvert : son onglet
+  passe à l'écran (« … est déjà ouvert »). Un fichier `.pelure` lâché sur la fenêtre s'ouvre de même.
+- **Fermer un onglet modifié** : la boîte « Modifications non enregistrées » (elle nomme le projet) ; un onglet caché passe d'abord
+  à l'écran. Le voisin de droite prend la place (celui de gauche pour le dernier). Le dernier onglet ne se ferme pas : l'accueil
+  revient.
+- **Quitter, ou Fermer les autres, avec plusieurs onglets modifiés** : une seule boîte « Projets non enregistrés » qui les
+  liste : Enregistrer tout / Ne pas enregistrer / Annuler.
+- **Au lancement** : tous les onglets de la dernière séance reviennent, dans l'ordre, l'onglet affiché à la fin en dernier
+  (« Rouvrir le dernier projet au lancement »). Un projet disparu est sauté.
+- **Plantage** : la fenêtre de récupération liste une copie par projet ; « Tout ouvrir » met chacune dans son onglet.
+- **Copier-coller** : plans, calques, images, clés, effets, zones et éléments se collent d'un onglet à l'autre ; une feuille d'une
+  autre taille refuse (message avec les deux tailles), une autre cadence prévient.
+- **Pendant un export, la propagation, le coloriage, la génération des sons proposés** ou une boîte de dialogue : on ne change pas
+  d'onglet (la barre d'état dit pourquoi).
+
+### À vérifier
+
+- Les largeurs de la bande (96 à 220 px) et sa hauteur (26 px) sont des choix de SHOT, à régler à l'œil.
+- Les raccourcis Ctrl+T / Ctrl+Tab sont ceux d'un navigateur (proposition, pas ceux de Storyboard Pro).
+- Les plans copiés dans un projet d'une autre taille ne sont pas adaptés (refusés) : adapter le cadrage par un décalage est possible
+  plus tard (même cadre, feuille plus grande).
+
+### À vérifier à l'écran (par Anthony)
+
+1. Lancer SHOT, ouvrir trois projets (Ctrl+O, ou les projets récents) : trois onglets, l'un après l'autre à droite, chacun avec
+   son nom ; le dernier ouvert est affiché.
+2. Passer de l'un à l'autre à la souris puis à Ctrl+Tab / Ctrl+Maj+Tab : instantané, la tête de lecture, la sélection, le
+   zoom et le mode (storyboard / animation) de chaque projet sont retrouvés. Dessiner un trait dans un onglet, Ctrl+Z : seul
+   cet onglet recule.
+3. Modifier un projet : « • » orange sur son onglet ; l'enregistrer (Ctrl+S) : il disparaît. Lancer un enregistrement lourd et passer
+   tout de suite à un autre onglet : l'écriture finit seule, le « • » s'en va, la barre d'état dit « Nom — Enregistré… ».
+4. Ctrl+T : un onglet « Nouvel onglet » avec l'accueil ; « Nouveau projet » ou un projet récent y prend la place (pas d'onglet de
+   plus). Ctrl+W ferme l'onglet affiché ; sur un projet modifié, la boîte nomme le projet.
+5. Clic du milieu sur un onglet : il se ferme ; clic droit : Fermer, Fermer les autres, Afficher dans l'Explorateur ; glisser un
+   onglet à gauche d'un autre le déplace.
+6. Modifier deux onglets (dont un caché), Quitter (Ctrl+Q) : une seule boîte liste les deux projets ; Annuler ne fait rien ;
+   Enregistrer tout écrit les deux puis quitte.
+7. Copier un plan (clic dans le montage, Ctrl+C), aller dans un autre projet, Ctrl+V : le plan est là, ses dessins aussi, et
+   modifier la copie ne touche pas à l'original. Même chose pour un calque (W puis X), des images, des clés de caméra, des effets.
+   Coller dans un projet d'une autre taille : le message donne les deux tailles.
+8. Deux projets avec le même effet (flou) sur leur premier dessin, de couleurs différentes : chaque onglet montre ses couleurs,
+   aussi après plusieurs allers-retours ; les vignettes du montage aussi.
+9. Fermer SHOT avec trois onglets, le rouvrir : les trois reviennent, le même est affiché. Désactiver « Rouvrir le dernier projet
+   au lancement » : SHOT s'ouvre sur l'accueil.
+10. Fichier > Préférences > « Ouvrir dans un nouvel onglet » décoché : Ouvrir remplace le projet affiché (après la question).
+11. Les trois thèmes : la bande est lisible (nom, « • », croix) ; la fenêtre étroite : la bande défile.
+12. Laisser SHOT ouvert avec trois projets sans toucher à rien : le processeur reste à zéro (Gestionnaire des tâches).

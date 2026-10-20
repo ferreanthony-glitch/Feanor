@@ -189,3 +189,20 @@ reste 27, un projet sans envoi ni version n'a ni leurs fichiers ni leur travail.
   (`once_the_plans_are_followed_the_application_goes_back_to_rest`, `the_comparison_window_does_not_keep_the_application_awake`).
 
 À regarder à l'écran : voir `docs/INTERFACE.md`, partie 15.
+
+## 10. Onglets de projets (2026-10-20, branche `onglets`)
+
+Plusieurs projets ouverts dans la même fenêtre : le risque nouveau est qu'un projet voie, ou écrase, ce qui est à un autre. Les
+essais de `onglets_tests.rs` (`docs/ARCHITECTURE.md`, « Onglets de projets ») :
+
+| Risque | Garde | Essai |
+|---|---|---|
+| Un champ de projet oublié dans l'échange fuit d'un onglet à l'autre | l'essai lit `app.rs` : chaque champ d'`App` est de projet (`etat_projet!`) ou partagé (`PARTAGES`), jamais les deux, jamais aucun | `every_field_of_the_app_is_either_a_project_field_or_shared` |
+| Une annulation touche un autre projet | chaque onglet a son `History` | `undo_is_isolated_per_tab` |
+| Un enregistrement écrit le mauvais projet, ou donne son chemin à un autre | `Enregistrement` rangé avec son onglet, époque unique | `saving_goes_to_the_right_project`, `a_save_started_in_a_tab_is_adopted_by_that_tab_after_switching`, `epochs_are_unique_so_a_job_only_answers_its_own_tab` |
+| Une fermeture ou un « Quitter » perd un projet | boîte par onglet, boîte unique pour plusieurs, attente des écritures | `closing_*`, `quitting_with_several_modified_tabs_asks_once_and_lists_them`, `quitting_waits_for_a_save_in_a_hidden_tab`, `a_close_waiting_for_a_save_follows_it_…` |
+| Une vignette, un effet calculé ou une texture montre les pixels d'un autre projet (mêmes numéros de dessin) | caches rangés par onglet, demandes de fond périmées à la sortie | `thumbnails_never_show_another_projects_pixels`, `thumbnails_asked_before_a_switch_never_answer_the_new_tab`, `derived_effect_drawings_never_cross_from_one_project_to_the_other`, `gpu_textures_follow_their_tab_and_are_not_sent_again` |
+| Un onglet caché travaille pour rien | rien n'est en file, lecture arrêtée ; trois onglets au repos ne repeignent pas | `hidden_tabs_run_nothing_and_hold_no_pending_work`, `three_open_tabs_at_rest_ask_for_no_repaint` |
+| Un collage entre onglets abîme un projet (feuille d'une autre taille) | refus avec les deux tailles ; cadence signalée | `plans_from_a_sheet_of_another_size_are_refused_…`, `a_copied_layer_pastes_into_…`, `copied_images_paste_into_…` |
+| Un plantage perd un onglet | une copie de secours par onglet ; chacune proposée au démarrage | `each_tab_has_its_own_rescue_copy_and_a_crash_offers_every_project`, `closing_a_tab_removes_its_rescue_copy` |
+| La session écrasée pendant qu'elle revient | `retenir_la_session` attend `session_prete` | `the_session_is_not_overwritten_while_it_comes_back`, `the_session_is_remembered_and_comes_back_in_order` |
