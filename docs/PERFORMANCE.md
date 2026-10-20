@@ -1380,10 +1380,15 @@ l'image part sur un autre fil. Mesures de cette séance (processeur et carte gra
 | construire le plan d'une image avec 10 cartes inclinées (10 maillages de 65 × 65 points) | ≈ 1,5 à 2,5 ms |
 | composer une carte inclinée de 320 × 180, carte graphique contre processeur | 0 pixel à plus de 2 niveaux d'écart (sur 53 000 peints) |
 | objets (rendu par l'œil, 320 × 180) en arrière-plan, l'écran n'attend pas | la demande rend la main en moins de 100 ms (essai) |
+| plan d'une image avec une carte inclinée de 1920 × 1080 (maillage) | ≈ 0,13 ms |
+| composer la feuille 1920 × 1080 avec cette carte inclinée, **processeur** (export), tous les cœurs | ≈ 140 ms |
+| rendre 20 objets vus de l'œil, feuille 1920 × 1080, sur-échantillonnage 2, processeur (fil de fond à l'écran ; à l'export, par image) | ≈ 50 ms |
 
 À savoir :
 - Une carte inclinée coûte, sur le processeur (export), un remplissage par triangles (8 192) comme une feuille déformée ; sur la
-  carte graphique, un maillage de plus (le même qu'une enveloppe).
+  carte graphique, un maillage de plus (le même qu'une enveloppe). Une vignette d'un plan à carte inclinée pose d'abord la carte sur
+  la feuille entière (≈ le prix de la ligne ci-dessus) avant de réduire : elle se fait sur les fils de fond des vignettes.
+- Mesures refaites avec `cargo test --release espace3d_tests::perf -- --ignored --nocapture` (essai `perf_espace3d`).
 - Les objets de l'image se rendent avec un sur-échantillonnage de 2 (1 au-delà de 2,5 millions de pixels de feuille). Un
   travelling demande un rendu par image : à l'export, c'est calculé image par image (exact) ; en lecture, un rendu à la fois
   part en arrière-plan et les objets peuvent retarder de quelques images.

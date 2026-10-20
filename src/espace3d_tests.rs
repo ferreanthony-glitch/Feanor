@@ -1040,3 +1040,78 @@ fn mirroring_a_plan_mirrors_the_tilt_of_its_cards_and_the_stack_beats_the_depth_
     let c = img[90 * 320 + 160];
     assert!(c.g() > 150 && c.r() < 80, "la carte lointaine, dessus dans la pile, est ce qu'on voit : {c:?}");
 }
+#[test]
+fn an_old_project_with_depths_and_a_3d_background_layer_opens_with_the_same_pixels() {
+    use crate::scene3drender as sr;
+    // Un projet d'avant l'Espace 3D : des calques en profondeur, des clés de caméra et de position, une scène de blocage dont les
+    // objets sont rendus dans le calque « Fond 3D » (en bas, verrouillé). Enregistré, rouvert comme un projet de format 33 :
+    // mêmes images, pixel pour pixel, et le calque se refait à l'identique.
+    let dir = dir_for("ancien-fond");
+    let manifest = dir.join("P.pelure");
+    let mut doc = doc_with_cards(&[(RED, [10, 10, 80, 60], -0.4), (GREEN, [100, 40, 200, 120], 1.5)]);
+    doc.panels[0].layers[1].transform = pose(15.0, -8.0);
+    doc.panels[0].layers[0].pos_keys = vec![PosKey::new(0, pose(0.0, 0.0)), PosKey::new(8, pose(30.0, 5.0))];
+    let start = Camera { x: 150.0, y: 85.0, dolly: 10.0, ..doc.default_camera() };
+    doc.panels[0].camera = vec![CameraKey::new(0, start), CameraKey::new(8, Camera { x: 190.0, ..start })];
+    let (panel, seq) = (doc.panels[0].id, doc.sequence_of(0));
+    doc.scenes3d.add(panel, seq, Target::Plan, Shape3d::Cube, [0.4, 0.0, 0.0]).expect("cube");
+    {
+        let p = doc.scenes3d.plan_mut(panel);
+        (p.in_image, p.sheet_aligned) = (false, false);
+        p.cam = crate::scene3d::SceneCam { pos: [0.3, 1.2, 6.0], pan: 2.0, tilt: -5.0, roll: 0.0, focal: 35.0 };
+    }
+    let stage = [doc.width, doc.height];
+    let plate = sr::render_plate(&doc.scenes3d, panel, seq, &doc.models, stage, doc.frame, 1, 2);
+    let cel = doc.add_cel(crate::document::Cel::bitmap(sr::plate_raster(&plate, stage)));
+    let mut back = Layer::new(crate::scene3dui::LAYER_NAME, LayerKind::Bitmap);
+    back.locked = true;
+    back.frames = vec![Some(cel); 12];
+    doc.panels[0].layers.insert(0, back);
+    doc.scenes3d.plan_mut(panel).bake_cel = Some(cel);
+    let before: Vec<Vec<Color32>> = (0..9).map(|f| sheet(&doc, f)).collect();
+    assert!(before[0].iter().any(|c| c.a() > 0));
+    project::save(&doc, &manifest, &mut Default::default()).expect("enregistré");
+    let text = std::fs::read_to_string(&manifest).expect("manifeste");
+    std::fs::write(&manifest, text.replace(&format!("\"version\": {}", project::VERSION), "\"version\": 33")).expect("écrit");
+    let old = project::load(&manifest).expect("un projet d'avant s'ouvre").doc;
+    for (f, want) in before.iter().enumerate() {
+        assert!(sheet(&old, f) == *want, "l'image {f} est la même, pixel pour pixel (profondeurs, clés, calque « Fond 3D »)");
+    }
+    let (panel2, seq2) = (old.panels[0].id, old.sequence_of(0));
+    let scene = old.scenes3d.plan(panel2).expect("la scène est relue");
+    assert!(!scene.in_image && !scene.sheet_aligned, "les objets d'avant restent hors de l'image");
+    let again = sr::render_plate(&old.scenes3d, panel2, seq2, &old.models, stage, old.frame, 1, 2);
+    assert!(again.rgba == plate.rgba, "le calque « Fond 3D » se refait à l'identique");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `cargo test --release espace3d_tests::perf -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn perf_espace3d() {
+    use std::time::Instant;
+    let mut doc = Document::new(1920, 1080, 24);
+    let mut layer = Layer::new("Carte", LayerKind::Bitmap);
+    let cel = doc.new_cel(LayerKind::Bitmap);
+    for k in 0..8 {
+        fill_rect(&mut doc, cel, 100 + k * 200, 100, 200 + k * 200, 980, if k % 2 == 0 { RED } else { BLUE });
+    }
+    layer.frames = vec![Some(cel); 4];
+    layer.transform = LayerTransform { tilt_x: 20.0, tilt_y: -30.0, ..Default::default() };
+    doc.panels[0].layers = vec![layer];
+    let t = Instant::now();
+    let plan = render::panel_plan_at(&doc, 0, 0, None);
+    println!("PERF Espace 3D : plan d'une carte inclinée (maillage 65 x 65) : {:.2} ms", t.elapsed().as_secs_f64() * 1e3);
+    let t = Instant::now();
+    let img = render::composite_full(&doc, &plan);
+    println!("PERF Espace 3D : composer la feuille 1920 x 1080 avec une carte inclinée (processeur, tous les cœurs) : {:.0} ms ({} pixels)", t.elapsed().as_secs_f64() * 1e3, img.len());
+    let (panel, seq) = (doc.panels[0].id, doc.sequence_of(0));
+    let shapes = Shape3d::basics();
+    for k in 0..20 {
+        doc.scenes3d.add(panel, seq, Target::Plan, shapes[k % shapes.len()].clone(), [(k % 5) as f32 * 1.4 - 3.0, 0.0, -((k / 5) as f32) * 1.2]);
+    }
+    let key = crate::espace3dobjets::key_for(&doc, 0, &doc.camera_seen(0, 0)).expect("objets");
+    let t = Instant::now();
+    let shown = crate::espace3dobjets::shown(&doc, &key).expect("rendu");
+    println!("PERF Espace 3D : rendre 20 objets vus de l'œil, feuille 1920 x 1080, sur-échantillonnage 2 (processeur) : {:.0} ms ({} tuiles)", t.elapsed().as_secs_f64() * 1e3, shown.raster.tiles.iter().flatten().count());
+}
