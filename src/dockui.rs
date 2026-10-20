@@ -149,7 +149,11 @@ impl App {
             Pane::View => self.view_panel(ui),
             Pane::Guides => self.guides_ui(ui),
             Pane::Sheet => self.panel_inspector(ui),
-            Pane::Layers => self.layers_panel(ui),
+            Pane::Layers => {
+                self.layers_panel(ui);
+                // Des effets viennent d'être copiés et ce panneau a la main : Ctrl+V les colle sur le calque cliqué.
+                self.focus_mark(ui, self.layers_pane_focus && self.fx_pile_recent && self.fx_stack_clipboard.is_some(), false);
+            }
             // Une seule bande : le montage en storyboard, la timeline en animation. Quand elle a la
             // main (copier, coller, supprimer visent ses plans, ses clés ou ses images), un cadre de
             // la couleur d'accent.

@@ -596,6 +596,7 @@ impl App {
         let n = keys.len();
         self.key_clipboard = Some(KeyClip { keys, origine: crate::adaptation::Origine::de(&self.doc) });
         self.fx_clip_recent = false;
+        self.fx_pile_recent = false;
         self.cam_clip_recent = false;
         // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau Pelure (`pasteimage`).
         self.ctx.copy_text(format!("{}clés copiées", crate::pasteimage::MARK));

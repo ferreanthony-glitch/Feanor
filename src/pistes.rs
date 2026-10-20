@@ -587,7 +587,6 @@ impl App {
     /// La section « Montage » de Fichier > Préférences… : le repliage des pistes (deux icônes à choisir, une
     /// phrase de bulle pour chacune) et « Déplier le calque courant ».
     pub(crate) fn montage_prefs_ui(&mut self, ui: &mut Ui) {
-        ui.label(RichText::new("Montage").strong());
         ui.horizontal(|ui| {
             let label = ui.label("Repliage des pistes");
             crate::bulles::bulle(label, "Repliage des pistes", &format!("{REPLIS_COMMUN} {REPLIS_PAR_PLAN}"), "");

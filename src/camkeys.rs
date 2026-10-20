@@ -695,6 +695,7 @@ impl App {
         self.collage.origines.camera = Some(crate::adaptation::Origine::de(&self.doc));
         self.cam_clip_recent = true;
         self.fx_clip_recent = false;
+        self.fx_pile_recent = false;
         // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau SHOT (`pasteimage`).
         self.ctx.copy_text(format!("{}clés de caméra copiées", crate::pasteimage::MARK));
         self.status = format!("{n} clé{} de caméra copiée{} : Ctrl+V pour les insérer après la clé de la tête de lecture, Maj+Ctrl+V pour les coller sur la tête.", s(n), s(n));

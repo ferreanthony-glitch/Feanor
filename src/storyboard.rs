@@ -131,6 +131,7 @@ impl App {
         self.ctx.copy_text(format!("{}plans copiés", crate::pasteimage::MARK));
         self.panel_clipboard = Some(clip);
         self.fx_clip_recent = false;
+        self.fx_pile_recent = false;
         self.cam_clip_recent = false;
     }
 

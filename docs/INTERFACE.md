@@ -580,9 +580,10 @@ de sons et solo.
   « Supprimer les rejetées » ; la proposition choisie et ses boutons (Générer / Régénérer, Écouter, Accepter, Rejeter,
   Reprendre, Modifier, Supprimer) ; la liste (icône de la sorte, plan et moment, titre, état), même menu au clic droit.
 - **Fenêtres** : « Envoyer vers un service en ligne ? » (une fois par projet), « Modifier la proposition », « Clé de … ».
-- **Préférences** : section « Génération sonore » repliée (les trois rôles ; le serveur local : dossier des modèles,
-  Python, case « Démarrer le serveur tout seul… », port, « Démarrer le serveur local », « Arrêter », « Tester » ; les
-  clés, « Tester la connexion », une note de licences). La fenêtre Préférences défile quand elle dépasse l'écran.
+- **Préférences** : onglet « Génération » (depuis le § 30 ; avant, une section repliée) : les trois rôles ; le serveur
+  local : dossier des modèles, Python, case « Démarrer le serveur tout seul… », port, « Démarrer le serveur local »,
+  « Arrêter », « Tester » ; les clés, « Tester la connexion », une note de licences. Le contenu de l'onglet défile quand
+  il dépasse la fenêtre.
 - **Barre des panneaux** : une icône de plus (étincelle), même groupe que les bruitages ; menu Son > Suggestions
   sonores… ; commandes `vue.suggestions_sonores` et `suggestion.lire` (sans touche par défaut).
 - **Historique** : « Accepter un son proposé ».
@@ -597,7 +598,7 @@ de sons et solo.
 3. **Double-clic** sur une ligne : écoute si le son existe, sinon génère ; clic droit : menu complet.
 4. **Fenêtres** : confirmation en ligne (texte long, bouton), « Modifier » (champs selon la sorte), saisie de la clé
    (champ masqué).
-5. **Préférences** : la section repliée ouverte avec les trois rôles en ligne (hauteur, défilement de la fenêtre sur un
+5. **Préférences** : l'onglet Génération avec les trois rôles en ligne (hauteur, défilement de l'onglet sur un
    écran de 1080 points) ; « Démarrer le serveur local » (le message d'attente, puis la phrase de « Tester ») ;
    « Arrêter » ; « Tester » quand le serveur ne tourne pas (« Le serveur local ne tourne pas… »).
 6. **Piste « Sons proposés »** dans la bande de montage et dans la timeline : nom, couleur, extraits posés à la bonne image.
@@ -1499,7 +1500,7 @@ Demande d'Anthony : « ouvrir plusieurs fichiers dans la même fenêtre avec un 
 - **Raccourcis** : Ctrl+T nouvel onglet, Ctrl+W fermer l'onglet, Ctrl+Tab / Ctrl+Maj+Tab onglet suivant / précédent (en boucle).
   `Tab` et `Maj+Tab` restent le mode et la planche. Tous dans Ctrl+K et assignables (clic droit sur une entrée de menu).
 - **Menu Fichier** : Nouvel onglet, Fermer l'onglet, Fermer les autres onglets.
-- **Ouvrir, Nouveau, Projets récents, imports** : dans un nouvel onglet (réglable : Fichier > Préférences > Projets > « Ouvrir
+- **Ouvrir, Nouveau, Projets récents, imports** : dans un nouvel onglet (réglable : Fichier > Préférences > Général > « Ouvrir
   dans un nouvel onglet »). Si l'onglet affiché est l'accueil, le projet y prend la place. Un projet déjà ouvert : son onglet
   passe à l'écran (« … est déjà ouvert »). Un fichier `.pelure` lâché sur la fenêtre s'ouvre de même.
 - **Fermer un onglet modifié** : la boîte « Modifications non enregistrées » (elle nomme le projet) ; un onglet caché passe d'abord
@@ -1553,7 +1554,7 @@ le même projet — la scène 3D de blocage, les références liées, les commen
 **La question** (petite fenêtre « Coller depuis un autre projet ») : seulement pour un plan, un calque, des images ou des clés, et
 seulement si les **proportions** ou les **cadences** diffèrent. Elle montre d'où vient la copie et ce qui va se passer ; « Ne plus
 demander » applique ensuite les derniers choix sans question. Les choix sont retenus dans les réglages et se changent dans Fichier
-> Préférences… > Projets > « Coller depuis un autre projet ». Les clés de caméra et d'effets, les effets, les éléments, les zones
+> Préférences… > Général > « Coller depuis un autre projet ». Les clés de caméra et d'effets, les effets, les éléments, les zones
 et la sélection sur plusieurs calques appliquent ces choix retenus sans poser la question.
 
 **Pendant le calcul** : les dessins sont rééchantillonnés sur des fils de fond (tous les cœurs sauf un) : « Collage en cours… 12/72
@@ -1597,7 +1598,7 @@ sur le premier calque choisi de même sorte (vectoriel pour des éléments, bitm
    aussi après plusieurs allers-retours ; les vignettes du montage aussi.
 9. Fermer SHOT avec trois onglets, le rouvrir : les trois reviennent, le même est affiché. Désactiver « Rouvrir le dernier projet
    au lancement » : SHOT s'ouvre sur l'accueil.
-10. Fichier > Préférences > « Ouvrir dans un nouvel onglet » décoché : Ouvrir remplace le projet affiché (après la question).
+10. Fichier > Préférences > Général > « Ouvrir dans un nouvel onglet » décoché : Ouvrir remplace le projet affiché (après la question).
 
 ### À vérifier à l'écran : coller depuis un projet d'une autre taille (par Anthony)
 
@@ -1611,7 +1612,7 @@ sur le premier calque choisi de même sorte (vectoriel pour des éléments, bitm
 13. Un projet carré 1080 × 1080 et un projet 16:9 : la fenêtre « Coller depuis un autre projet » apparaît, avec « Contenir » et
     « Remplir ». Contenir : le plan entier tient dans le carré. Remplir : le carré est rempli, les côtés du plan dépassent du cadre
     (ils sont toujours sur la feuille : élargir la vue pour les voir). Annuler : rien n'est collé. Cocher « Ne plus demander » : le
-    collage suivant se fait sans fenêtre avec le même choix ; Fichier > Préférences… > Projets le change.
+    collage suivant se fait sans fenêtre avec le même choix ; Fichier > Préférences… > Général le change.
 14. Un projet à 24 i/s et un à 25 i/s, même taille : la fenêtre propose « Garder les images » ou « Garder la durée en secondes ».
     Le second choix : un plan de 24 images dure 25 images, ses clés de caméra et d'effets suivent.
 15. Un calque (W puis X), des images, des clés du montage, des clés de caméra, des effets : même règle, dans un projet d'une autre
@@ -1757,7 +1758,7 @@ Les icônes ont leur bulle d'une seconde (nom, raccourci, description : `bulles.
 
 ### Ce que voit l'utilisateur
 
-- **Panneau Effets** : sous « Ajouter un effet / Préréglages / Copier-coller », deux boutons « Trait ▾ » et « Matière ▾ ». Un effet allumé sur
+- **Panneau Effets** : sous « Ajouter un effet / Préréglages » (le bouton « Copier / coller » a disparu le 2026-10-21, partie 31), deux boutons « Trait ▾ » et « Matière ▾ ». Un effet allumé sur
   le calque est enfoncé dans la liste ; le titre compte les effets allumés (« Trait (2) ▾ »). Sur un calque bitmap, les entrées qu'il
   refuse sont grisées et la bulle dit pourquoi. Les préréglages sont sous un petit titre « Préréglages ». Si les effets du calque sont
   éteints (bouton fx), une ligne le dit, avec « Rallumer ».
@@ -2419,3 +2420,169 @@ hauteur à chaque plan.
    seulement celles du plan courant.
 7. En animation, la timeline du plan courant montre les mêmes lignes réduites que le montage en mode par plan. Enregistrer, quitter, rouvrir : mêmes replis par plan, même mode (c'est une préférence).
 8. Au repos, l'application ne repeint pas, dans les deux modes.
+
+
+## 30. Préférences en onglets (2026-10-21, branche `preferences-onglets`)
+
+Demande d'Anthony : « La fenêtre Préférences est très mal organisée et trop verticale. J'aimerais que tu l'organises par
+onglets pour la rendre plus ergonomique et compréhensible. » Code : `src/prefsonglets.rs` (la table des réglages),
+`src/prefsui.rs` (la fenêtre), essais dans `src/prefsui_tests.rs`. Rien dans les réglages eux-mêmes n'a changé : leurs
+clés de `reglages.toml`, leurs effets et leur moment d'application (tout de suite) sont ceux d'avant ; seule la mise en
+page est neuve, plus la clé `onglet_preferences` (l'onglet ouvert).
+
+### 30.1 La mise en page
+
+- **Une liste d'onglets verticale à gauche** (icône Phosphor et nom, 156 points), **le contenu à droite**, **un champ de
+  recherche en haut**. Choisie plutôt qu'une rangée d'onglets en haut : neuf noms ne tiennent pas côte à côte dans une
+  fenêtre de 800 points sans deuxième ligne ni défilement, et la liste laisse toute la hauteur au contenu (c'est aussi la
+  façon de nombreux logiciels de création, Blender par exemple).
+- **La fenêtre** : 800 × 540 au départ (plus large que haute), redimensionnable (minimum 560 × 320), ramenée à la taille
+  de l'écran si celui-ci est petit, ouverte en haut au centre ; le contenu de l'onglet défile (une barre par onglet, la
+  position de chacune est retenue) quand il dépasse. La croix de la barre de titre la ferme ; plus d'ancrage : on la déplace.
+- **Un onglet** : son icône et son nom en grand, une phrase, puis des groupes. **Un groupe** : un titre court, un trait, les
+  réglages (étiquette à gauche, contrôle à droite quand le réglage a une valeur : couleurs du thème, performance,
+  programmes).
+- **L'onglet ouvert est retenu** (réglages : `onglet_preferences`, absent pour Général) : la fenêtre rouvre là où on l'a
+  laissée, d'une séance à l'autre. Le petit engrenage du panneau Suggestions sonores l'ouvre sur Génération.
+- **Les bulles** : une seconde sur un onglet (nom et phrase), sur le champ de recherche, sur chaque réglage (le survol
+  d'egui est réglé à 1 s pour toute l'application).
+
+### 30.2 Qui est où
+
+| Onglet (icône) | Groupe | Réglages (étiquette lue à l'écran) |
+|---|---|---|
+| **Général** (engrenage) | Au lancement et à l'ouverture | Rouvrir le dernier projet au lancement ; Ouvrir dans un nouvel onglet |
+| | En cas de plantage | Copie de secours toutes les N min |
+| | Coller depuis un autre projet | Proportions différentes (Contenir / Remplir) ; Cadence différente (images / secondes) ; Demander à chaque collage |
+| **Apparence** (palette) | Thème et couleurs | Thème + Rétablir ; neuf couleurs (fond des panneaux, barres, fenêtres et menus, boutons et curseurs, texte, accent et sélection, autour du dessin, timeline et montage, bordures) |
+| | Panneaux | Ajuster les panneaux à leur contenu ; Réajuster les panneaux |
+| **Dessin** (crayon) | Stylet et pinceau | Croix du système sur le pinceau |
+| | Caméra | Opacité du passe-partout + Rétablir |
+| **Montage** (bobine) | Pistes du montage | Repliage des pistes (commun / par plan) ; Déplier le calque courant tout seul |
+| **Raccourcis** (clavier) | Raccourcis clavier | Jeu de raccourcis ; Voir et changer les raccourcis… ; Modifier le fichier à la main… ; Recharger |
+| **Export** (export) | Programmes et modèles | ffmpeg (Choisir…, Automatique) ; Modèle Storyboard Pro (Choisir…) ; Ouvrir la fenêtre Exporter… |
+| **Équipe** (trois personnes) | Commentaires | Signer mes commentaires |
+| | Travail à plusieurs | Mon nom et ma couleur ; Une prise périme après N min ; Prendre le plan libre que je commence à modifier ; Dire dans la barre d'état ce que font les autres |
+| **Génération** (étincelle) | Génération sonore | Les trois rôles (lecture, bruitages et ambiances, voix) et leur fournisseur, les clés (inchangées), Dossier des modèles, Python du serveur, Démarrer le serveur tout seul, port, Démarrer / Arrêter / Tester |
+| **Performance** (jauge) | Réglages de performance | Les onze réglages du diagnostic (effets en aperçu réduit, traits texturés, tremblement, pelure, trois caches, fils, vignettes, animations, effets sur la carte graphique) ; Diagnostic des performances… ; Revenir comme avant ; Valeurs d'origine |
+| | Affichage | Le moteur de rendu et la carte graphique |
+
+« Export » est le seul onglet qui montre des réglages qu'on ne trouvait pas dans les Préférences : le chemin de ffmpeg et le
+projet modèle de Storyboard Pro existaient déjà (`ffmpeg`, `modele_storyboard_pro` dans `reglages.toml`) mais ne se
+choisissaient que dans les fenêtres d'export, qui gardent leurs boutons. Le dossier du dernier export, la fiche technique
+(colonnes, format) et les options propres à chaque export restent dans leur fenêtre.
+
+### 30.3 La recherche
+
+Un ou plusieurs mots (tous doivent répondre), sans tenir compte des majuscules ni des accents, dans l'étiquette du réglage,
+quelques mots ajoutés (« voile » pour le passe-partout, « mo » pour les caches…), le titre du groupe et le nom de l'onglet.
+Quand le champ n'est pas vide, **les groupes qui répondent, de tous les onglets, remplacent le contenu** : au-dessus de
+chacun, un lien « Onglet › » (ouvre l'onglet et vide la recherche) et « trouvé : … » en couleur d'accent (les étiquettes
+qui répondent) ; dans la liste, les onglets qui répondent portent le nombre de réponses (les autres sont grisés).
+Les groupes de la recherche sont dessinés par le même code que dans leur onglet (même réglage, mêmes bulles). La croix du
+champ efface la recherche ; choisir un onglet aussi.
+
+### 30.4 La table des réglages
+
+`REGLAGES` (`prefsonglets.rs`) : une ligne par réglage, `(onglet, groupe, identifiant, étiquette, mots)`. Un groupe n'a qu'un
+onglet. `prefsui.rs` dessine un onglet en parcourant les groupes de la table ; la recherche lit la même table. Pour ajouter
+un réglage : l'ajouter à la table (et à son dessin dans `groupe_ui` ou dans la fonction que le groupe appelle) ; pour en
+retirer un, le retirer des deux. Les essais (`prefsui_tests.rs`) échouent si une étiquette de l'ancienne fenêtre manque dans
+la table, si une étiquette est dans deux onglets, si un onglet ne montre pas toutes les siennes (la molette fait défiler
+l'onglet jusqu'en bas), ou montre une étiquette d'un autre onglet.
+
+### 30.5 Limites
+
+- Les réglages gardent leur dessin d'avant (étiquette à côté du contrôle sur une ligne) sauf ceux de l'apparence, de la
+  performance et des programmes, déjà en deux colonnes : les grouper tous dans une grille demanderait de réécrire les
+  fonctions des autres sections.
+- Pas de bouton « Rétablir » par groupe là où il n'y en avait pas (thème, passe-partout et performance ont le leur).
+- La fenêtre n'a pas de boutons OK / Annuler : comme avant, chaque réglage joue et s'enregistre tout de suite.
+- La recherche ne surligne pas le mot dans le réglage : elle montre les groupes et dit « trouvé : … ».
+- L'ouverture de la fenêtre n'a pas de raccourci propre (menu Fichier, Ctrl+K : « Préférences »).
+
+### 30.6 À regarder à l'écran (liste pour Anthony)
+
+1. Fichier > Préférences… : une fenêtre plus large que haute, neuf onglets à gauche (icône + nom), champ de recherche en
+   haut ; on la tire par un bord (elle grandit), par sa barre de titre (elle se déplace).
+2. Les neuf onglets, un à un : titre, phrase, groupes ; chaque groupe a un titre court et un trait ; rien n'est coupé ;
+   l'ascenseur n'apparaît que sur Génération (sur un écran de 1080 points, il peut apparaître ailleurs si on rétrécit la
+   fenêtre).
+3. L'onglet choisi garde son fond d'accent et son texte lisible dans les trois thèmes (Gris sombre, Gris clair, Sombre).
+4. Fermer, rouvrir : même onglet. Quitter SHOT, relancer, rouvrir : même onglet. Le petit engrenage de Suggestions sonores :
+   l'onglet Génération.
+5. Apparence : le thème, une couleur (« Personnalisé »), « Rétablir ». Dessin : le curseur du passe-partout et « Rétablir ».
+   Montage : les deux icônes de repliage. Raccourcis : le jeu, les trois boutons. Performance : une case, une valeur.
+   Équipe : le nom, la couleur, la durée d'une prise. Général : les deux cases, la copie de secours, les choix du collage.
+6. Export : « Choisir… » ffmpeg ouvre le choix de fichier ; une fois choisi, le nom du fichier remplace « cherché tout
+   seul » et « Automatique » apparaît ; « Ouvrir la fenêtre Exporter… » ouvre Exporter.
+7. Chercher « couleur » (le thème et l'équipe), « cache » (trois caches), « cle » ou « clé » (Génération), « voile »
+   (Caméra), « zzz » (rien ne répond) ; cliquer « Dessin › » ; effacer par la croix.
+8. Une seconde sur un onglet, le champ de recherche, un réglage : la bulle.
+9. Écran de 1366 × 768 ou fenêtre de SHOT réduite : la fenêtre se ramène à l'écran et son contenu défile.
+10. Fenêtre ouverte, application au repos : aucun repeint (le processeur reste à zéro).
+
+## 31. Effets au clavier et tremblement dans « Trait » (2026-10-21, branche `effets-clavier`)
+
+Deux demandes d'Anthony : le bouton « Copier / coller » du panneau Effets ne sert à rien (on choisit un effet, Ctrl+C, on clique un
+autre calque, Ctrl+V) ; le tremblement du trait est de la famille Trait et doit être avec les autres.
+
+### Mots
+
+| Mot | Sens | À éviter |
+|---|---|---|
+| **Effet choisi** | l'effet dont le nom est encadré dans le panneau Effets (ses clés se voient dans la timeline et le montage) ; Ctrl / Maj + clic en choisit plusieurs | sélectionné (pour les clés, c'est autre chose) |
+| **Coller en fin de pile** | l'effet est ajouté après ceux du calque (il s'applique après eux), comme « Ajouter un effet » ; jamais à la place d'un autre | écraser |
+
+### Où et quels gestes
+
+| Geste | Où | Effet |
+|---|---|---|
+| Clic sur le nom d'un effet | panneau Effets | le choisit ; le panneau a la main (cadre discret) ; un second clic le lâche |
+| Ctrl + clic / Maj + clic sur un nom | panneau Effets | ajoute ou retire un effet du choix / prend la plage jusqu'à l'effet choisi |
+| Ctrl+C | panneau Effets a la main, un effet choisi (ou un seul effet sur le calque) | copie les effets choisis : réglages et clés |
+| Clic sur un calque | panneau Calques | le calque devient courant ; le panneau a la main (cadre discret s'il y a des effets copiés) |
+| Ctrl+V | panneau Effets a la main, ou panneau Calques a la main après une copie d'effets | colle à la fin de la pile du calque courant (ou des calques choisis) : une étape « Coller l'effet » / « Coller 2 effets » |
+| « Copier tous les effets du calque », « Coller », « Remplacer les effets » | clic droit sur un calque > Effets ; clic droit sur le nom d'un effet ; Ctrl+K (`fx.copier_tout`, `fx.coller`, `fx.remplacer`) | comme avant |
+| Tremblement du trait | bouton « Trait ▾ » du panneau Effets, premier de la liste (icône vague) ; aussi menus de calque, en-tête de la timeline, outils vectoriels, Ctrl+K (`fx.tremblement`) | coche / décoche, grisé avec la raison sur un calque bitmap |
+
+### Ce que voit l'utilisateur
+
+- **Panneau Effets** : « Ajouter un effet » et « Préréglages » ; plus de bouton « Copier / coller ». Chaque effet a toujours son icône « Copier l'effet »
+  (elle copie tout le choix si l'effet en fait partie). Les effets choisis ont le cadre de la couleur de sélection.
+- **Menu « Trait ▾ »** : « Tremblement du trait », puis écriture, crayonné, respiration, ondulation, pointillés, désagrégation ; le titre compte
+  les effets allumés (le tremblement compte), la section « Préréglages » est inchangée (le tremblement n'a pas de préréglage ; ceux de « Tremblement
+  de l'image » restent dans « Préréglages » du panneau).
+- **« Ajouter un effet »** : plus d'entrée « Tremblement du trait » en tête ; il est dans la famille « Trait » de ce menu, avec les autres.
+- **Panneau Calques** : un cadre discret quand Ctrl+V va y coller des effets.
+- **Barre d'état** : « 2 effets copiés : Flou gaussien, Lueur. Ctrl+V sur un autre calque… », puis « 2 effets collés sur le calque « B ». ».
+
+### Limites
+
+- Ctrl+V depuis la timeline ou le montage garde son sens d'avant (images, clés, plans) : pour coller des effets, cliquer le calque dans le panneau
+  Calques (ou travailler dans le panneau Effets).
+- Les effets du trait et de matière, ainsi que le tremblement, ne sont qu'une fois par calque : sur un calque qui l'a déjà, la copie n'est pas ajoutée (la barre d'état le dit).
+- Seul le premier effet choisi (le dernier cliqué) montre ses clés dans la timeline.
+- Ni Ctrl+X sur les effets, ni glisser-déposer d'un effet sur un calque.
+- Le tremblement ne change que de menu : son rendu (processeur et carte graphique) et l'enregistrement des projets sont ceux d'avant (la famille n'est pas enregistrée).
+
+### Essais ajoutés
+
+`fxclavier_tests.rs` (16 essais) : clic sur un nom (choix, main au panneau, second clic), Ctrl / Maj + clic, choix perdu en changeant de calque, Ctrl+C /
+Ctrl+V vers un autre calque (réglages et clés identiques, une étape nommée, annulation), plusieurs effets d'un coup, effet de même sorte ajouté et non
+remplacé, `fx.remplacer` et `fx.coller` toujours là, Ctrl+V depuis le panneau Calques seulement après une copie d'effets, rien sans la main, un appui ailleurs
+rend la main, collage d'une feuille 320×180 dans une 640×360 (pixels doublés), bouton disparu, tremblement premier du menu « Trait » et absent en tête
+de « Ajouter un effet », grisé sur un bitmap, projet avec tremblement enregistré et relu à l'identique.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Panneau Effets : plus de bouton « Copier / coller » à côté de « Préréglages ».
+2. Sur un calque avec trois effets, cliquer le nom du premier : cadre ; Ctrl + clic sur le troisième : deux cadres ; Maj + clic : la plage ; un clic simple :
+   un seul ; re-cliquer l'unique : plus aucun.
+3. Choisir deux effets, Ctrl+C ; cliquer un autre calque dans le panneau Calques (un cadre discret apparaît) ; Ctrl+V : les deux effets arrivent
+   en bas de sa pile, avec leurs réglages et leurs clés ; Historique : « Coller 2 effets » ; Ctrl+Z les retire d'un coup.
+4. Coller deux fois le même flou : deux flous (aucun n'en remplace un autre). Ctrl+K « remplacer les effets » : la pile est remplacée.
+5. Copier un effet, puis copier un dessin (outil de sélection, Ctrl+C), cliquer un calque : Ctrl+V colle le dessin, plus l'effet.
+6. Copier un effet dans un projet, ouvrir un autre onglet d'une autre taille de feuille, cliquer un calque, Ctrl+V : l'effet arrive, ses pixels adaptés.
+7. Menu « Trait ▾ » : « Tremblement du trait » est le premier ; grisé (bulle) sur un calque bitmap ; « Ajouter un effet » : pas d'entrée à part
+   en tête, mais « Trait > Tremblement du trait ». Rouvrir un projet d'avant avec un tremblement : il tremble comme avant.

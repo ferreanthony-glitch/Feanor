@@ -284,7 +284,10 @@ mod messages_tests;
 mod palette;
 #[cfg(test)]
 mod palette_tests;
+mod prefsonglets;
 mod prefsui;
+#[cfg(test)]
+mod prefsui_tests;
 mod recents;
 #[cfg(test)]
 mod recents_tests;
@@ -389,6 +392,8 @@ mod fxkeys;
 #[cfg(test)]
 mod fxkeys_tests;
 mod fxcopie;
+#[cfg(test)]
+mod fxclavier_tests;
 #[cfg(test)]
 mod fxcopie_tests;
 #[cfg(test)]

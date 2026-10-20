@@ -276,35 +276,6 @@ impl App {
         }
     }
 
-    /// Le tremblement du trait dans « Ajouter un effet » : en tête du menu, avant les familles. Déjà
-    /// sur le calque, il est choisi dans la pile (actif) au lieu d'être ajouté une deuxième fois.
-    fn add_boil_entry(&mut self, ui: &mut egui::Ui, li: usize) {
-        let kind = EffectKind::Boil;
-        let offer = self.fx_offer(li, kind);
-        if offer == Offer::Absent {
-            return;
-        }
-        let resp = ui.add_enabled(offer == Offer::Enabled, egui::Button::new(format!("{}  {}", ph::WAVE_SINE, kind.label())));
-        let resp = match offer {
-            Offer::Disabled(why) => resp.on_disabled_hover_text(why),
-            _ => resp.on_hover_text("Le trait « bout » comme dans WigglyPaint (calques vectoriels). Les dessins ne changent pas."),
-        };
-        if offer == Offer::Enabled && resp.clicked() {
-            ui.close_menu();
-            if let Some(i) = self.layers()[li].fx.iter().position(|e| e.kind == kind) {
-                if !self.layers()[li].fx[i].enabled {
-                    self.toggle_fx(li, kind);
-                }
-                self.select_fx(i);
-            } else {
-                self.record_step();
-                self.layers_mut()[li].fx.push(Effect::new(kind));
-                self.select_fx(self.layers()[li].fx.len() - 1);
-            }
-        }
-        ui.separator();
-    }
-
     /// Le réglage « tremblement du trait » des outils de dessin vectoriels (Réglages du pinceau et
     /// du crayon) : un interrupteur pour le calque courant, comme l'action `fx.tremblement`.
     pub(crate) fn boil_tool_toggle(&mut self, ui: &mut egui::Ui) {
@@ -374,15 +345,16 @@ impl App {
         kinds.iter().filter(|k| self.fx_on(li, **k)).count()
     }
 
-    /// Le menu déroulant « Trait » (`fxtrait.rs`) : tous les effets du trait, icône et nom, puis dans une
-    /// section les préréglages. Un effet allumé est sur le calque et actif ; grisé avec la raison dans la
+    /// Le menu déroulant « Trait » (`fxtrait.rs`) : le tremblement du trait en tête (même famille, depuis le
+    /// 2026-10-21), puis tous les effets du trait, icône et nom, puis dans une section les préréglages. Un effet allumé est sur le calque et actif ; grisé avec la raison dans la
     /// bulle sur un calque bitmap. Il remplace la rangée d'icônes d'avant (Anthony, 2026-10-20 : « un seul
     /// menu déroulant »).
     pub(crate) fn trait_menu(&mut self, ui: &mut egui::Ui, li: usize) {
-        let n = self.fx_count_on(li, &crate::fxtrait::KINDS);
+        let n = self.fx_count_on(li, &crate::fxtrait::menu_kinds());
         let title = if n > 0 { format!("Trait ({n}) {}", ph::CARET_DOWN) } else { format!("Trait {}", ph::CARET_DOWN) };
         let menu = ui.menu_button(title, |ui| {
-            for kind in crate::fxtrait::KINDS {
+            // Le tremblement du trait en tête (même famille), puis les effets du trait.
+            for kind in crate::fxtrait::menu_kinds() {
                 self.fx_menu_entry(ui, li, kind, crate::fxtrait::icon(kind), crate::fxtrait::action(kind));
             }
             ui.separator();
@@ -398,7 +370,7 @@ impl App {
                 }
             }
         });
-        crate::bulles::bulle(menu.response, "Effets du trait", "Écriture, crayonné, respiration, ondulation, pointillés, désagrégation, et des préréglages tout réglés. Les effets cochés sont sur ce calque.", "");
+        crate::bulles::bulle(menu.response, "Effets du trait", "Tremblement, écriture, crayonné, respiration, ondulation, pointillés, désagrégation, et des préréglages tout réglés. Les effets cochés sont sur ce calque.", "");
     }
 
     /// Pose les effets du préréglage `preset` sur le calque courant (une étape d'annulation) : ceux de
@@ -625,21 +597,21 @@ impl App {
         // (À la ligne quand le panneau est étroit.)
         ui.horizontal_wrapped(|ui| {
             ui.menu_button(format!("{}  Ajouter un effet", ph::PLUS), |ui| {
-                // Le tremblement du trait d'abord (calques vectoriels ; grisé sur un bitmap, avec la
-                // raison), puis par familles, comme le menu Filtre de Photoshop. Les effets réservés
-                // au vectoriel (famille « Trait ») sont grisés avec la raison sur un calque bitmap.
-                self.add_boil_entry(ui, li);
+                // Par familles, comme le menu Filtre de Photoshop. Les effets réservés au vectoriel
+                // (famille « Trait », où est aussi le tremblement du trait) sont grisés avec la raison
+                // sur un calque bitmap.
                 for family in FAMILIES {
                     ui.menu_button(family, |ui| {
-                        let kinds: Vec<EffectKind> = EffectKind::ALL.into_iter().filter(|k| k.family() == family && *k != EffectKind::Boil).collect();
+                        let kinds: Vec<EffectKind> = EffectKind::ALL.into_iter().filter(|k| k.family() == family).collect();
                         for k in kinds {
                             match self.fx_offer(li, k) {
                                 Offer::Absent => {}
                                 Offer::Disabled(why) => {
-                                    ui.add_enabled(false, egui::Button::new(format!("{}  {}", crate::fxtrait::icon(k), k.label()))).on_disabled_hover_text(why);
+                                    let label = if k.is_trait() || k == EffectKind::Boil { format!("{}  {}", crate::fxtrait::icon(k), k.label()) } else { k.label().to_string() };
+                                    ui.add_enabled(false, egui::Button::new(label)).on_disabled_hover_text(why);
                                 }
                                 Offer::Enabled => {
-                                    let label = if k.is_trait() { format!("{}  {}", crate::fxtrait::icon(k), k.label()) } else { k.label().to_string() };
+                                    let label = if k.is_trait() || k == EffectKind::Boil { format!("{}  {}", crate::fxtrait::icon(k), k.label()) } else { k.label().to_string() };
                                     let resp = ui.button(label);
                                     let resp = if k.hint().is_empty() { resp } else { resp.on_hover_text(k.hint()) };
                                     if resp.clicked() {
@@ -658,10 +630,7 @@ impl App {
                 .response
                 .on_hover_text("Des effets tout réglés, avec leurs clés à partir de la tête de lecture : impact frame, lueur, flash, tremblement de l'image, vignettage, grain, timecode…");
             let any = !self.layers()[li].fx.is_empty();
-            let chosen = self.fx_index();
-            ui.menu_button(format!("{}  Copier / coller", ph::COPY),|ui| self.fx_clip_menu(ui, li, chosen, true))
-                .response
-                .on_hover_text("Copier un effet (réglages et clés) ou tous les effets du calque, les coller sur le calque ou sur les calques choisis. Ctrl+C / Ctrl+V font de même quand ce panneau a la main.");
+
             if ui.add_enabled(any, egui::Button::new("Tout réinitialiser")).on_hover_text("Chaque effet reprend ses réglages par défaut, sans clé.").clicked() {
                 self.record_step();
                 for e in &mut self.layers_mut()[li].fx {
@@ -692,14 +661,16 @@ impl App {
             return;
         }
         if self.fx_index().is_none() {
-            ui.label(RichText::new("Clique sur le nom d'un effet pour voir ses clés dans la timeline et le montage.").weak());
+            ui.label(RichText::new("Clique sur le nom d'un effet pour le choisir : ses clés se voient dans la timeline et le montage, et Ctrl+C le copie (Ctrl ou Maj + clic : plusieurs).").weak());
         }
+        // Les effets choisis (Ctrl / Maj + clic) : tous sont encadrés ; le principal montre ses clés.
+        let picked = self.fx_selected();
         let mut remove = None;
         let mut swap = None;
         let mut bake = false;
         for i in 0..n {
             let e = self.layers()[li].fx[i].clone();
-            let chosen = self.fx_index() == Some(i);
+            let chosen = picked.contains(&i);
             // L'effet choisi se voit : cadre et fond de la couleur de sélection.
             let sel = ui.visuals().selection;
             let mut frame = egui::Frame::group(ui.style());
@@ -716,26 +687,28 @@ impl App {
                     // Le nom prend toute la place libre : une grande cible à cliquer.
                     let w = (ui.available_width() - 4.0 * 26.0).max(60.0);
                     let hint = if chosen {
-                        "Effet choisi : ses clés se voient dans la timeline et le montage, et les boutons de clé le visent. Cliquer de nouveau pour ne plus en choisir."
+                        "Effet choisi : Ctrl+C le copie avec ses réglages et ses clés ; Ctrl+V sur un autre calque le colle. Cliquer de nouveau pour ne plus en choisir. Ctrl ou Maj + clic : choisir plusieurs effets."
                     } else {
-                        "Choisir cet effet : ses clés se voient alors dans la timeline et le montage (les boutons de clé le visent)."
+                        "Choisir cet effet : ses clés se voient dans la timeline et le montage, et Ctrl+C le copie (avec ses réglages et ses clés). Ctrl ou Maj + clic : en choisir plusieurs."
                     };
                     let name = ui.add_sized(egui::vec2(w, ui.spacing().interact_size.y), egui::SelectableLabel::new(chosen, crate::bulles::encre_etat(RichText::new(e.kind.label()).strong(), chosen)));
                     let about = if e.kind.hint().is_empty() { hint.to_string() } else { format!("{}\n{}", e.kind.hint(), hint) };
                     let name_resp = crate::bulles::bulle(name, if chosen { "Effet choisi" } else { "Choisir l'effet" }, &about, "");
                     // Clic droit sur le nom : copier cet effet ou la pile, coller (`fxcopie.rs`).
                     name_resp.context_menu(|ui| self.fx_clip_menu(ui, li, Some(i), true));
+                    // Le clic le choisit et donne la main au panneau : Ctrl+C copie les effets choisis.
                     if name_resp.clicked() {
-                        if chosen {
-                            self.deselect_fx();
-                        } else {
-                            self.select_fx(i);
-                        }
+                        let m = ui.input(|inp| inp.modifiers);
+                        self.fx_click_name(i, m.command || m.ctrl, m.shift);
                     }
                     let key = self.raccourci("fx.copier");
                     let resp = ui.add(egui::Button::new(ph::COPY).frame(false));
-                    if crate::bulles::bulle(resp, "Copier l'effet", "Réglages et clés. Ctrl+C le copie aussi quand l'effet est choisi dans ce panneau ; Ctrl+V colle sur le calque, ou sur les calques choisis.", &key).clicked() {
-                        self.fx_copy_effect(li, i);
+                    if crate::bulles::bulle(resp, "Copier l'effet", "Réglages et clés. Parmi plusieurs effets choisis, copie tous les choisis. Ctrl+C fait de même ; Ctrl+V sur un autre calque (cliqué dans le panneau Calques) les colle.", &key).clicked() {
+                        if picked.len() > 1 && chosen {
+                            self.fx_copy_effects(li, &picked);
+                        } else {
+                            self.fx_copy_effect(li, i);
+                        }
                     }
                     let up = ui.add_enabled(i > 0, egui::Button::new(ph::ARROW_UP).frame(false));
                     if crate::bulles::bulle(up, "Monter l'effet", "Le placer plus tôt dans la pile du calque.", "").clicked() {

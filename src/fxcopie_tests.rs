@@ -251,7 +251,7 @@ fn copy_all_and_paste_on_several_chosen_layers_in_one_undo_step() {
     assert_eq!(stack_of(&b, 0).len(), 2, "le calque non choisi ne change pas");
     assert_eq!(b.app.status, "2 effets collés sur 3 calques.");
     assert_eq!(step_names(&b).len(), steps + 1, "une seule étape pour trois calques");
-    assert_eq!(step_names(&b).last().map(String::as_str), Some("Coller les effets"));
+    assert_eq!(step_names(&b).last().map(String::as_str), Some("Coller 2 effets"));
     b.app.undo();
     for li in [1, 2, 3] {
         assert!(stack_of(&b, li).is_empty(), "l'annulation d'un coup restaure les trois calques ({li})");

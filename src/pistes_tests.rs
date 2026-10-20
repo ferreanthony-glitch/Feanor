@@ -1056,6 +1056,7 @@ fn the_choice_has_an_action_a_bar_command_and_a_preferences_section() {
 fn the_preferences_offer_the_choice_and_changing_it_there_writes_only_the_setting() {
     let mut b = banc_taille(film(), false, 1920, 3200);
     b.garder_textes = true;
+    b.app.settings.prefs_onglet = crate::prefsonglets::Onglet::Montage;
     b.app.run_action("fichier.preferences");
     b.chauffer(8);
     b.image(Vec::new(), 1.0 / 60.0);

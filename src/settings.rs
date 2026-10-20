@@ -168,6 +168,9 @@ pub struct Settings {
     /// prise sans nouvelles, la prise automatique, les notifications.
     #[serde(default, rename = "equipe")]
     pub equipe: crate::equipe::ReglageEquipe,
+    /// L'onglet ouvert de la fenêtre Préférences… (`prefsui.rs`), retenu d'une séance à l'autre.
+    #[serde(default, rename = "onglet_preferences", skip_serializing_if = "crate::prefsonglets::Onglet::est_defaut")]
+    pub prefs_onglet: crate::prefsonglets::Onglet,
 }
 
 fn default_passe_partout() -> u8 {
@@ -237,6 +240,7 @@ impl Default for Settings {
             passe_partout: default_passe_partout(),
             collage: Default::default(),
             equipe: Default::default(),
+            prefs_onglet: Default::default(),
         }
     }
 }

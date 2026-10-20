@@ -218,6 +218,11 @@ impl App {
     }
     pub(crate) fn layers_panel(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
+        // Un clic dans le panneau lui donne la main : après une copie d'effets, Ctrl+V les colle sur le
+        // calque cliqué (`fxcopie.rs`).
+        if ui.input(|i| i.pointer.any_pressed()) && ui.rect_contains_pointer(ui.clip_rect()) {
+            self.take_layers_pane_focus();
+        }
         // Opacité du calque courant (comme en haut d'une liste de calques).
         let li = self.cur_layer;
         let mut opacity = self.layers()[li].opacity * 100.0;

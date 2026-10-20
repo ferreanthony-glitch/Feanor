@@ -171,7 +171,7 @@ fn projet_grand() -> Document {
 const PARTAGES: &[&str] = &[
     "ctx", "board_view", "tool", "brush", "pencil", "eraser", "brushes", "brushes_job", "reopen_probe", "fill", "shape", "vector_erase_whole", "paint_behind", "fill_shapes", "toucher",
     "pinceaux", "color", "hsv", "couleurs", "canvas_rect", "ppp", "onion", "onion_window", "onion_shift", "onion_preset_name", "xsheet", "roles_view", "role_menu", "xsheet_role_menu",
-    "flips", "flips_window", "fx_auto_key", "fx_keys_shown", "fx_key_clipboard", "fx_clip_recent", "fx_stack_clipboard", "fx_pane_focus", "propagation", "coloriage", "sb_window",
+    "flips", "flips_window", "fx_auto_key", "fx_keys_shown", "fx_key_clipboard", "fx_clip_recent", "fx_stack_clipboard", "fx_pane_focus", "fx_pile_recent", "layers_pane_focus","propagation", "coloriage", "sb_window",
     "scenario_window", "sb_export", "light_table", "light_table_strength", "groups_window", "groups_used_only", "image_clipboard", "key_clipboard", "tool_spring", "fake_hold_times",
     "time_display", "empty_x", "timeline_thumbs", "mark_color", "mark_repeat", "mark_next_layer", "mark_used_only", "bottom_tab", "checker", "notes", "properties_window", "settings_tab",
     "brush_previews", "preset_edit", "brush_import_notes", "record_strokes", "camera_mask", "top_view", "play_meter", "frame_start", "export_dialog", "export_last", "export_job", "export_projet", "ffmpeg",
