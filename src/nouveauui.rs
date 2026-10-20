@@ -353,7 +353,10 @@ impl App {
         let mut values = d.values.clone();
         values.clamp();
         let doc = build_document(&values, &d.name);
-        self.load_doc(doc);
+        if !self.charger_projet(doc) {
+            self.status = "Le projet n'a pas pu s'ouvrir dans un nouvel onglet : un travail attend l'onglet affiché.".into();
+            return;
+        }
         self.welcome = false;
         self.settings.new_project.values = values.clone();
         self.settings.new_project.folder = Some(d.folder.clone());

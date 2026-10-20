@@ -122,35 +122,47 @@ impl App {
     /// gelait SHOT le temps que répond un disque réseau éteint ou un disque externe qui se réveille
     /// (fenêtre noire, puis rien). La question est posée sur un autre fil ; `tick_reopen` ouvre le
     /// projet à une image d'écran suivante, si rien d'autre n'a été ouvert entre-temps.
+    ///
+    /// Les onglets (`onglets.rs`) : ce sont ceux de la séance d'avant qui reviennent (tous les projets qui
+    /// étaient ouverts, l'onglet affiché à la fin) ; une séance sans onglets retenus rouvre le dernier projet.
     pub(crate) fn reopen_last_project(&mut self) {
         if !self.settings.reopen_last || !self.orphans.is_empty() {
             return;
         }
-        let Some(path) = self.settings.recent_projects.first().cloned() else { return };
+        let mut candidats = self.settings.session_tabs.clone();
+        if candidats.is_empty() {
+            candidats.extend(self.settings.recent_projects.first().cloned());
+        }
+        if candidats.is_empty() {
+            return;
+        }
         let (tx, rx) = std::sync::mpsc::channel();
-        let (ctx, probe) = (self.ctx.clone(), path.clone());
+        let (ctx, a_sonder) = (self.ctx.clone(), candidats.clone());
         std::thread::spawn(move || {
-            let _ = tx.send(probe.exists());
+            let presents: Vec<PathBuf> = a_sonder.into_iter().filter(|p| p.exists()).collect();
+            let _ = tx.send(presents);
             ctx.request_repaint();
         });
-        self.reopen_probe = Some((path, rx));
+        self.reopen_probe = Some((candidats, rx));
     }
 
     /// À chaque image d'écran : la réponse de `reopen_last_project`, s'il en attend une.
     pub(crate) fn tick_reopen(&mut self) {
         use std::sync::mpsc::TryRecvError;
-        let Some((path, rx)) = &self.reopen_probe else { return };
+        let Some((candidats, rx)) = &self.reopen_probe else { return };
         match rx.try_recv() {
             Err(TryRecvError::Empty) => {}
-            Ok(true) => {
-                let path = path.clone();
+            Ok(presents) => {
+                // Celui qui était affiché à la fin de la séance d'avant, s'il est encore là.
+                let affiche = self.settings.session_tabs.get(self.settings.session_active).filter(|p| presents.contains(p)).cloned().or_else(|| presents.first().cloned());
+                let _ = candidats;
                 self.reopen_probe = None;
                 // (Anthony a déjà ouvert, créé ou dessiné quelque chose : on ne lui prend pas la main.)
-                if self.path.is_none() && !self.modified && self.open_job.is_none() && self.saving.is_none() && self.new_dialog.is_none() && self.welcome {
-                    self.open_path(path);
+                if !presents.is_empty() && self.path.is_none() && !self.modified && self.open_job.is_none() && self.saving.is_none() && self.new_dialog.is_none() && self.welcome {
+                    self.rouvrir_ces_projets(presents, affiche);
                 }
             }
-            Ok(false) | Err(TryRecvError::Disconnected) => self.reopen_probe = None,
+            Err(TryRecvError::Disconnected) => self.reopen_probe = None,
         }
     }
 }

@@ -163,6 +163,9 @@ pub(crate) struct Banc {
     /// Les textes peints par la dernière image (si `garder_textes`).
     pub textes: Vec<String>,
     pub garder_textes: bool,
+    /// Passe les événements par `raw_input_hook` d'eframe, comme la vraie fenêtre (Tab retiré à egui, traité
+    /// comme raccourci) ; faux par défaut, comme avant.
+    pub crochet: bool,
 }
 
 pub(crate) fn banc(doc: Document, avec_gpu: bool) -> Banc {
@@ -195,7 +198,7 @@ pub(crate) fn banc_taille(doc: Document, avec_gpu: bool, largeur: u32, hauteur: 
             view_formats: &[],
         })
     });
-    let mut b = Banc { ctx, app, rs, taille, t: 0.0, cible, textes: Vec::new(), garder_textes: false };
+    let mut b = Banc { ctx, app, rs, taille, t: 0.0, cible, textes: Vec::new(), garder_textes: false, crochet: false };
     b.attendre_pinceaux();
     b.chauffer(8);
     b.attendre_vignettes();
@@ -243,6 +246,9 @@ impl Banc {
         input.viewports.entry(ViewportId::ROOT).or_default().native_pixels_per_point = Some(1.0);
         let t0 = Instant::now();
         let app = &mut self.app;
+        if self.crochet {
+            eframe::App::raw_input_hook(app, &self.ctx, &mut input);
+        }
         let out = self.ctx.run(input, |ctx| app.frame(ctx));
         let construction = t0.elapsed().as_secs_f64() * 1e3;
         let t1 = Instant::now();

@@ -286,6 +286,9 @@ pub(crate) struct LayerClip {
     pub colours: Vec<Layer>,
     pub cels: HashMap<CelId, crate::document::Cel>,
     pub panel_len: usize,
+    /// La feuille du projet d'où il vient : ses dessins n'ont de sens qu'à cette taille (le calque se colle
+    /// aussi dans un autre onglet, `onglets.rs`).
+    pub size: [usize; 2],
 }
 
 pub(crate) use crate::nouveauui::NewDocDialog;
@@ -313,7 +316,7 @@ pub struct App {
     pub(crate) brushes_job: Option<std::thread::JoinHandle<crate::brushtex::BrushLibrary>>,
     /// Le dernier projet du lancement : sa présence se vérifie sur un autre fil (`recents.rs`), un
     /// disque réseau éteint ne gèle pas la première image.
-    pub(crate) reopen_probe: Option<(PathBuf, std::sync::mpsc::Receiver<bool>)>,
+    pub(crate) reopen_probe: Option<(Vec<PathBuf>, std::sync::mpsc::Receiver<Vec<PathBuf>>)>,
     pub(crate) fill: FillSettings,
     pub(crate) shape: ShapeSettings,
     pub(crate) vector_erase_whole: bool,
@@ -559,8 +562,8 @@ pub struct App {
     pub(crate) playing: bool,
     pub(crate) play_montage: bool,
     pub(crate) looping: bool,
-    play_accum: f64,
-    last_time: Option<f64>,
+    pub(crate) play_accum: f64,
+    pub(crate) last_time: Option<f64>,
     /// Sortie audio (ouverte à la première lecture avec du son).
     pub(crate) audio: Option<AudioEngine>,
     pub(crate) audio_tried: bool,
@@ -596,7 +599,7 @@ pub struct App {
     pub(crate) menu_target: Option<MenuTarget>,
     pub(crate) history: History,
     /// Geste de réglage en cours (champ, curseur, point de fuite) : une étape d'annulation par geste.
-    gesture: Gesture,
+    pub(crate) gesture: Gesture,
     pub(crate) stroke: Option<StrokeState>,
     pub(crate) vstroke: Option<VectorStroke>,
     pub(crate) verase: Option<VectorErase>,
@@ -644,6 +647,9 @@ pub struct App {
     pub(crate) pixel_clipboard: Option<Floating>,
     /// Calque copié (W / X).
     pub(crate) layer_clipboard: Option<LayerClip>,
+    /// Ce qu'a copié la sélection sur plusieurs calques (`multisel.rs`) : commun à tous les onglets, comme les
+    /// autres presse-papiers (la dernière copie est celle qui se colle).
+    pub(crate) multi_clip: Option<crate::multisel::MultiClip>,
     /// Les murs du trait que colore le calque de couleur courant (`calquecouleur.rs`).
     pub(crate) murs: crate::calquecouleur::Cache,
     /// Panneaux copiés (12e).
@@ -823,6 +829,22 @@ pub struct App {
     pub(crate) display_info: String,
     /// Superposition des calques par la carte graphique (absente en OpenGL ou si on la coupe).
     pub(crate) gpu: Option<GpuCanvas>,
+    /// Les onglets de projets (`onglets.rs`) : le projet affiché est dans les champs ci-dessus ; celui des
+    /// autres onglets est rangé dans leur `EtatProjet`.
+    pub(crate) onglets: Vec<crate::onglets::Onglet>,
+    /// Le rang de l'onglet affiché, et le numéro du prochain onglet.
+    pub(crate) actif: usize,
+    pub(crate) prochain_onglet: u64,
+    /// Chaque onglet a sa copie de secours (faux dans les essais).
+    pub(crate) secours_actif: bool,
+    /// La session (les projets ouverts) est à retenir ; faux tant que celle de la séance d'avant se rouvre.
+    pub(crate) session_a_ecrire: bool,
+    pub(crate) session_prete: bool,
+    /// Les projets de la séance d'avant qui restent à rouvrir, et celui à afficher à la fin.
+    pub(crate) session_file: std::collections::VecDeque<PathBuf>,
+    pub(crate) session_affichee: Option<PathBuf>,
+    /// Plusieurs projets à enregistrer ou à fermer d'un coup (quitter, fermer les autres).
+    pub(crate) groupe: Option<crate::onglets::Groupe>,
 }
 
 impl App {
@@ -1105,6 +1127,7 @@ impl App {
             select_rect: false,
             pixel_clipboard: None,
             layer_clipboard: None,
+            multi_clip: None,
             murs: Default::default(),
             panel_clipboard: None,
             panel_focus: false,
@@ -1212,6 +1235,15 @@ impl App {
                 None => "OpenGL (moteur de secours)".into(),
             },
             gpu: None,
+            onglets: Vec::new(),
+            actif: 0,
+            prochain_onglet: 1,
+            secours_actif: reel,
+            session_a_ecrire: false,
+            session_prete: true,
+            session_file: Default::default(),
+            session_affichee: None,
+            groupe: None,
         };
         crate::demarrage::marque("état de l'application (le reste du constructeur)");
         // Calques superposés par la carte graphique, sauf PELURE_COMPOSITION=processeur.
@@ -1226,6 +1258,11 @@ impl App {
         } else {
             " · calques par le processeur"
         });
+        // Onglets de projets (`onglets.rs`) : les champs de projet deviennent ceux du premier onglet, vierge
+        // (sa copie de secours, ouverte plus haut, lui reste).
+        let recovery = app.recovery.take();
+        app.onglets_init();
+        app.recovery = recovery;
         // La disposition de la dernière fois.
         // On démarre en storyboard, dans l'espace du côté storyboard où l'on avait quitté
         // (Storyboard, ou Montage) : l'unique disposition d'un ancien fichier de réglages est celle de
@@ -1323,6 +1360,7 @@ impl App {
         self.new_dialog.is_some()
             || self.about_window
             || self.pending.is_some()
+            || self.groupe.is_some()
             || self.export_dialog.is_some()
             || self.export_job.is_some()
             || !self.orphans.is_empty()
@@ -2640,6 +2678,7 @@ impl App {
             colours,
             cels,
             panel_len: self.frame_count(),
+            size: [self.doc.width, self.doc.height],
         });
     }
 
@@ -2689,6 +2728,11 @@ impl App {
             self.status = "Aucun calque copié (W pour copier le calque courant).".into();
             return;
         };
+        // Copié dans un autre onglet : ses dessins n'ont de sens que sur une feuille de la même taille.
+        if clip.size != [self.doc.width, self.doc.height] {
+            self.status = crate::onglets::refus_de_taille("Ce calque vient", clip.size, [self.doc.width, self.doc.height]);
+            return;
+        }
         self.end_stroke();
         self.drop_bitmap_selection();
         let snap = self.snapshot();
@@ -2815,6 +2859,21 @@ impl App {
     pub(crate) fn request(&mut self, action: Pending) {
         self.end_stroke();
         self.playing = false;
+        // Quitter : si d'autres onglets ont quelque chose à perdre, une seule boîte les liste tous (`onglets.rs`) ;
+        // sinon la question est celle de toujours, pour le projet affiché.
+        if matches!(action, Pending::Quit) && self.d_autres_onglets_a_perdre() {
+            self.demander_a_quitter();
+            return;
+        }
+        // Un projet qui arrive dans un onglet à lui (ou dans l'onglet vierge) n'écrase rien : pas de question.
+        let nouveau_projet = matches!(
+            action,
+            Pending::New | Pending::Open | Pending::OpenRecent | Pending::FromChosen | Pending::SbImport | Pending::ScenarioNew
+        );
+        if nouveau_projet && !self.remplace_le_projet() {
+            self.perform(action);
+            return;
+        }
         // Un enregistrement s'écrit : on l'attend, puis la demande est refaite (modifié depuis : la
         // boîte « Modifications non enregistrées » ; sinon, l'action). `enregistrement.rs`.
         if self.saving.is_some() {
@@ -2845,14 +2904,9 @@ impl App {
                 }
             }
             Pending::ScenarioNew => self.scenario_new_project(),
-            Pending::Close => {
-                let (w, h, fps) = (self.doc.frame[0], self.doc.frame[1], self.doc.fps);
-                self.load_doc(Document::with_frame(w, h, fps).created_now());
-                self.path = None;
-                // L'accueil revient (`accueil.rs`).
-                self.welcome = true;
-                self.status = "Projet fermé : un projet vide du même format le remplace.".into();
-            }
+            // Ferme l'onglet affiché (le dernier est remplacé par un projet vide et l'accueil revient,
+            // `accueil.rs`) : `onglets.rs`.
+            Pending::Close => self.fermer_l_onglet_affiche(),
             Pending::Quit => {
                 self.allow_close = true;
                 self.ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -2880,6 +2934,10 @@ impl App {
         if self.import_dropped_sboard(&path) {
             return;
         }
+        // Déjà ouvert dans un onglet : on le montre au lieu de l'ouvrir une seconde fois (`onglets.rs`).
+        if self.montrer_si_deja_ouvert(&path) {
+            return;
+        }
         if io::is_legacy_file(&path) {
             match io::load_legacy(&path) {
                 Ok(mut doc) => {
@@ -2887,7 +2945,9 @@ impl App {
                     let (w, h) = (doc.width, doc.height);
                     doc.enlarge_stage(w * 2, h * 2);
                     doc.frame = [w, h];
-                    self.load_doc(doc);
+                    if !self.charger_projet(doc) {
+                        return;
+                    }
                     self.status = format!(
                         "Ancien format importé ({}). « Enregistrer » créera le dossier du projet.",
                         path.display()
@@ -2915,7 +2975,8 @@ impl App {
         // (Les suggestions sonores de l'ancien projet s'arrêtent : rien n'est rendu au nouveau.)
         self.reset_suggestions();
         self.doc = doc;
-        self.doc_epoch += 1;
+        // (Une époque que ni cet onglet ni un autre n'a eue : les tâches de fond de l'ancien projet ne lui répondent plus.)
+        self.doc_epoch = crate::onglets::nouvelle_epoque();
         // (Ses dessins portent les numéros et les versions de ceux de l'ancien : les dessins
         // dérivés des effets de l'ancien ne lui servent pas.)
         crate::fx::forget_all();
@@ -2924,8 +2985,8 @@ impl App {
         self.fx_key_sel.clear();
         self.fx_key_anchor = None;
         self.clear_cam_keys();
-        self.cam_key_clipboard = None;
-        self.cam_clip_recent = false;
+        // (Les clés de caméra copiées restent : ce sont des valeurs, sans numéro de projet — elles se collent dans
+        // l'autre onglet, `onglets.rs`.)
         self.comment_ui = Default::default();
         self.mode = Mode::Storyboard;
         self.cur_panel = 0;
@@ -3407,6 +3468,16 @@ impl App {
             }
             "fichier.quitter" => self.request(Pending::Quit),
             "fichier.fermer" => self.request(Pending::Close),
+            // Onglets de projets (`onglets.rs`).
+            "onglet.nouveau" => {
+                self.nouvel_onglet();
+            }
+            "onglet.suivant" => self.onglet_voisin(1),
+            "onglet.precedent" => self.onglet_voisin(-1),
+            "onglet.fermer_autres" => {
+                let garde = self.onglets[self.actif].id;
+                self.fermer_les_autres(garde);
+            }
             "aide.palette" => self.palette = Some(Default::default()),
             "fichier.exporter" => self.export_hub = true,
             "fichier.preferences" => self.prefs_window = true,
@@ -3531,7 +3602,7 @@ impl App {
             "edition.copier" if self.multi.sel.is_some() => {
                 self.multi_copy();
             }
-            "edition.coller" if self.multi.clip.is_some() && self.chosen_layers().len() >= 2 => self.multi_paste(),
+            "edition.coller" if self.multi_clip.is_some() && self.chosen_layers().len() >= 2 => self.multi_paste(),
             "edition.couper" if self.bsel.is_some() => self.bitmap_cut(),
             "edition.couper" => self.cut_selection(),
             "edition.copier" if self.bsel.is_some() => {
@@ -4178,7 +4249,8 @@ impl App {
 
     fn handle_close_request(&mut self, ctx: &egui::Context) {
         // (Pendant un enregistrement, la fermeture l'attend : `request` retient la demande.)
-        if ctx.input(|i| i.viewport().close_requested()) && (self.modified || self.saving.is_some()) && !self.allow_close {
+        // (Tous les onglets comptent : un projet modifié dans un onglet caché retient aussi la fermeture.)
+        if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close && self.infos_onglets().iter().any(|i| i.a_perdre()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.request(Pending::Quit);
         }
@@ -4207,13 +4279,14 @@ impl eframe::App for App {
             return;
         }
         raw_input.events.retain(|e| match e {
+            // (Ctrl+Tab aussi : egui y verrait un changement de champ ; ici c'est l'onglet suivant, `onglets.rs`.)
             Event::Key {
                 key: Key::Tab,
                 physical_key,
                 pressed,
                 modifiers,
                 ..
-            } if !modifiers.command => {
+            } => {
                 if *pressed {
                     self.pending_keys.push((Key::Tab, *physical_key, *modifiers));
                 }
@@ -4347,6 +4420,11 @@ impl App {
             let _t = crate::perf::section("barre de menus");
             egui::TopBottomPanel::top("menu").show(ctx, |ui| self.menu_bar(ui));
         }
+        {
+            // La bande des onglets de projets (`ongletsui.rs`), sous les menus.
+            let _t = crate::perf::section("onglets");
+            egui::TopBottomPanel::top("onglets").show(ctx, |ui| self.onglets_bar(ui));
+        }
         if self.layout.command_bar {
             let _t = crate::perf::section("barre de commandes");
             egui::TopBottomPanel::top("commandes").show(ctx, |ui| self.command_bar(ui));
@@ -4388,6 +4466,10 @@ impl App {
             self.poll_bruitages(ctx);
             self.poll_suggestions(ctx);
             self.tick_save(ctx);
+            // Les onglets cachés : une écriture finie est adoptée, rien d'autre ne tourne pour eux.
+            self.tick_onglets(ctx);
+            self.groupe_fenetre(ctx);
+            self.tick_session_ouverture();
             self.envois_tick(ctx);
             self.envois_windows(ctx);
             self.comparer_fenetre(ctx);
@@ -4429,6 +4511,7 @@ impl App {
         // Couleurs et nuanciers : enregistrés quand ils changent (passe couleur).
         self.color_tick(ctx);
         self.tick_recovery(ctx);
+        self.tick_session();
         {
             let _t = crate::perf::section("disposition (mémoire)");
             self.remember_layout(ctx);
@@ -4450,10 +4533,9 @@ impl App {
     /// la disposition de la fenêtre retenue.
     pub(crate) fn fermeture(&mut self) {
         // Un enregistrement qui dure encore est attendu : on ne perd jamais un projet à la fermeture.
-        self.finish_save_on_exit();
-        if let Some(r) = self.recovery.take() {
-            r.close();
-        }
+        // Même règle pour chaque onglet, dont la copie de secours est effacée (`onglets.rs`).
+        self.retenir_la_session();
+        self.fermer_tous_les_onglets();
         let current = self.current_layout();
         self.settings.set_layout_of(self.espace, current);
         let _ = self.settings.save();

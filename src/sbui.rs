@@ -175,7 +175,12 @@ impl App {
             let name = w.job.take().map(|j| j.name).unwrap_or_default();
             let (plans, marks) = (doc.panels.len(), doc.panels.iter().map(|p| p.marks.len()).sum::<usize>());
             let sounds = doc.audio_tracks.iter().map(|t| t.clips.len()).sum::<usize>();
-            self.load_doc(doc);
+            if !self.charger_projet(doc) {
+                self.status = format!("« {name} » n'a pas pu s'ouvrir dans un nouvel onglet : un travail attend l'onglet affiché.");
+                w.report = Some(warnings);
+                self.sb_window = Some(w);
+                return;
+            }
             self.modified = true;
             self.status = format!(
                 "« {name} » ouvert : {plans} plan(s), {} image(s) de storyboard, {sounds} extrait(s) de son{}. « Enregistrer sous » pour le garder en projet SHOT.",

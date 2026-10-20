@@ -19,6 +19,11 @@ mod materiel;
 #[cfg(test)]
 mod demarrage_tests;
 mod ouverture;
+// Onglets de projets : l'état échangé et les opérations (`onglets`), la bande d'onglets (`ongletsui`).
+mod onglets;
+#[cfg(test)]
+mod onglets_tests;
+mod ongletsui;
 mod enregistrement;
 #[cfg(test)]
 mod enregistrement_tests;

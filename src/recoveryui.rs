@@ -92,12 +92,13 @@ impl App {
             return;
         }
         let mut open = None;
+        let mut open_all = false;
         let mut delete = None;
         let mut later = false;
         egui::Modal::new(egui::Id::new("recuperation")).show(ctx, |ui| {
             ui.set_width(480.0);
             ui.heading("SHOT s'est fermé sans enregistrer");
-            ui.label("Une copie de secours a été trouvée :");
+            ui.label(if self.orphans.len() > 1 { "Des copies de secours ont été trouvées, une par projet :" } else { "Une copie de secours a été trouvée :" });
             ui.add_space(6.0);
             for (i, o) in self.orphans.iter().enumerate() {
                 ui.group(|ui| {
@@ -124,16 +125,25 @@ impl App {
                 });
             }
             ui.add_space(6.0);
-            later = ui
-                .button("Plus tard")
-                .on_hover_text("Les copies restent ; SHOT les proposera au prochain démarrage.")
-                .clicked();
+            ui.horizontal(|ui| {
+                if self.orphans.len() > 1 && ui.button("Tout ouvrir").on_hover_text("Chaque copie dans son onglet.").clicked() {
+                    open_all = true;
+                }
+                later = ui
+                    .button("Plus tard")
+                    .on_hover_text("Les copies restent ; SHOT les proposera au prochain démarrage.")
+                    .clicked();
+            });
         });
-        if let Some(i) = open {
+        if open_all {
+            // Chaque copie dans son onglet.
+            for o in std::mem::take(&mut self.orphans) {
+                self.open_orphan(o);
+            }
+        } else if let Some(i) = open {
+            // (Les autres copies restent proposées : chacune s'ouvre dans son onglet.)
             let o = self.orphans.remove(i);
             self.open_orphan(o);
-            // Une seule copie ouverte à la fois : les autres attendront le prochain démarrage.
-            self.orphans.clear();
         } else if let Some(i) = delete {
             let o = self.orphans.remove(i);
             let _ = std::fs::remove_dir_all(&o.dir);
@@ -145,7 +155,10 @@ impl App {
     pub(crate) fn open_orphan(&mut self, o: Orphan) {
         match crate::project::load(&o.manifest) {
             Ok(loaded) => {
-                self.load_doc(loaded.doc);
+                if !self.charger_projet(loaded.doc) {
+                    self.status = "La copie de secours n'a pas pu s'ouvrir dans un nouvel onglet : un travail attend l'onglet affiché.".into();
+                    return;
+                }
                 // « Enregistrer » écrira dans le projet d'origine, s'il existe encore.
                 self.path = o.info.project.clone().filter(|p| p.parent().is_some_and(|d| d.exists()));
                 self.modified = true;

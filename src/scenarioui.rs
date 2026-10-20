@@ -119,8 +119,11 @@ impl App {
         let mut doc = crate::nouveau::build_document(&self.settings.new_project.values, &title);
         let Some(applied) = scenarioplans::fill_new_project(&mut doc, &outline, &title, &script.author) else { return };
         let (seqs, plans, seconds) = (applied.sequences, applied.plans, outline.seconds());
+        if !self.charger_projet(doc) {
+            self.status = "Le scénario n'a pas pu s'ouvrir dans un nouvel onglet : un travail attend l'onglet affiché.".into();
+            return;
+        }
         self.welcome = false;
-        self.load_doc(doc);
         self.modified = true;
         self.status = format!("Scénario « {} » importé dans un nouveau projet : {seqs} séquence(s), {plans} plan(s), environ {}. « Enregistrer sous » pour le garder.", w.name, duration_text(seconds));
     }

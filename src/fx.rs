@@ -1548,6 +1548,17 @@ pub fn fond_cancel_all() {
     forget_all();
 }
 
+/// Le projet affiché s'en va (onglets de projets) : les fonds en calcul sont abandonnés, les formes de
+/// fond gardées vidées, et les dessins dérivés rangés dans la réserve rendue — l'onglet les reprend à
+/// son retour (`fxcache::rendre`), sans rien recalculer.
+pub(crate) fn mettre_de_cote() -> crate::fxcache::Reserve {
+    if let Some(f) = FIL.get() {
+        f.lock().unwrap_or_else(|e| e.into_inner()).cancel_all();
+    }
+    COVERS.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    crate::fxcache::mettre_de_cote()
+}
+
 /// Nombre de fonds adoptés depuis le début.
 pub fn fond_epoch() -> u64 {
     FOND_EPOCH.load(std::sync::atomic::Ordering::Relaxed)

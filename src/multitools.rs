@@ -421,7 +421,7 @@ impl App {
         self.status = format!("{} ({}).", clip.summary(), sel.summary());
         // Un texte dans le presse-papiers du système : sans lui, Ctrl+V n'arrive pas jusqu'à nous.
         self.ctx.copy_text(text);
-        self.multi.clip = Some(clip);
+        self.multi_clip = Some(clip);
         true
     }
 
@@ -442,7 +442,7 @@ impl App {
         self.vsel = None;
         self.drop_bitmap_selection();
         let targets = self.multi_targets();
-        let Some(clip) = self.multi.clip.as_ref() else { return };
+        let Some(clip) = self.multi_clip.as_ref() else { return };
         let (parts, edits) = multisel::paste_clip(&mut self.doc, &targets, clip);
         if parts.is_empty() {
             self.status = "Rien à coller : les calques de la copie ne sont pas parmi les calques choisis, ou ils ne peuvent pas être modifiés.".into();
@@ -705,7 +705,7 @@ impl App {
             if self.bouton(ui, ph::SELECTION_ALL, "Tout sélectionner", "Tout ce que contiennent les dessins des calques choisis.", "edition.tout_selectionner").clicked() {
                 self.multi_select_all();
             }
-            let can_paste = self.multi.clip.is_some();
+            let can_paste = self.multi_clip.is_some();
             if self.bouton_si(ui, can_paste, ph::CLIPBOARD, "Coller", "Coller sur chaque calque ce qu'il avait copié, à la même place.", "edition.coller").clicked() {
                 self.multi_paste();
             }

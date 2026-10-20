@@ -307,6 +307,7 @@ fn fake_job(doc: &Document, slot: Slot, tint: u8) -> Job {
         wanted: 0,
         order: 0,
         cancel: Arc::new(AtomicBool::new(false)),
+        world: None,
     }
 }
 

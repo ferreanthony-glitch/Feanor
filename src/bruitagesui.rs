@@ -146,8 +146,7 @@ impl App {
 
     // ------------------------------------------------------------------ opérations
 
-    /// Plus aucun son en cours de pose (essais).
-    #[cfg(test)]
+    /// Plus aucun son en cours de pose (essais, et changement d'onglet : `onglets.rs`).
     pub(crate) fn brt_pending_is_empty(&self) -> bool {
         self.brt.pending.is_empty()
     }

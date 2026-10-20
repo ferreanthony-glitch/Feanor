@@ -487,6 +487,16 @@ struct FxJob {
     sig: u64,
 }
 
+/// Les textures de dessin d'un projet qui n'est pas affiché (un onglet inactif, `onglets.rs`).
+pub(crate) struct TexturesDeProjet(HashMap<CelId, CelTexture>);
+
+impl TexturesDeProjet {
+    /// Mémoire de la carte graphique qu'elles tiennent (octets).
+    pub(crate) fn bytes(&self) -> u64 {
+        self.0.values().map(CelTexture::bytes).sum()
+    }
+}
+
 /// Le contenu du cache de textures (`GpuCanvas::stats`).
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -809,6 +819,43 @@ impl GpuCanvas {
             }
         }
         out
+    }
+
+    /// Le projet affiché s'en va (onglets de projets) : ses textures de dessin sont rangées dans ce qui est
+    /// rendu — les numéros de dessin sont ceux d'un projet, l'autre ne doit pas les voir — et l'image composée
+    /// gardée est abandonnée. L'onglet les reprend à son retour (`poser_textures`), sans renvoyer un pixel.
+    pub(crate) fn prendre_textures(&self) -> TexturesDeProjet {
+        let mut renderer = self.render_state.renderer.write();
+        let Some(res) = renderer.callback_resources.get_mut::<CanvasResources>() else { return TexturesDeProjet(HashMap::new()) };
+        res.fx_jobs.clear();
+        if let Some(f) = res.frame.as_mut() {
+            f.composed = None;
+        }
+        if let Some(f) = res.frame2.as_mut() {
+            f.composed = None;
+        }
+        TexturesDeProjet(std::mem::take(&mut res.textures))
+    }
+
+    /// La mémoire visée pour les textures des dessins (octets) : les onglets cachés n'en gardent pas plus,
+    /// tous ensemble.
+    pub(crate) fn limite_octets(&self) -> u64 {
+        self.render_state.renderer.read().callback_resources.get::<CanvasResources>().map_or(0, |r| r.cache_bytes)
+    }
+
+    /// Le projet qui revient reprend ses textures (le cache est celui de l'onglet qui part, vidé par
+    /// `prendre_textures`).
+    pub(crate) fn poser_textures(&self, textures: TexturesDeProjet) {
+        let mut renderer = self.render_state.renderer.write();
+        let Some(res) = renderer.callback_resources.get_mut::<CanvasResources>() else { return };
+        res.textures = textures.0;
+        res.fx_jobs.clear();
+        if let Some(f) = res.frame.as_mut() {
+            f.composed = None;
+        }
+        if let Some(f) = res.frame2.as_mut() {
+            f.composed = None;
+        }
     }
 
     /// Nombre de dessins qu'on peut envoyer d'avance sans chasser ceux qui sont affichés. Le poids

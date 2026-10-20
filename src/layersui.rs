@@ -22,6 +22,15 @@ pub(crate) struct LayerThumbs {
     pool: Option<crate::thumbs::Pool>,
 }
 
+impl Drop for LayerThumbs {
+    /// Un onglet qu'on ferme rend ses fils de vignettes (sans cela ils attendraient pour toujours).
+    fn drop(&mut self) {
+        if let Some(pool) = self.pool.take() {
+            pool.stop();
+        }
+    }
+}
+
 struct LayerEntry {
     /// Version du dessin dont elle vient.
     version: u64,
@@ -42,6 +51,14 @@ impl LayerThumbs {
     /// Oublie toutes les vignettes (leur résolution a changé : elles se refont à leur tour).
     pub(crate) fn clear(&mut self) {
         self.cache.clear();
+        if let Some(pool) = &self.pool {
+            pool.shared.reset();
+        }
+    }
+
+    /// Le projet n'est plus affiché (onglet inactif) : les vignettes finies restent, les demandes en cours
+    /// sont abandonnées (`Thumbs::abandonner`).
+    pub(crate) fn abandonner(&mut self) {
         if let Some(pool) = &self.pool {
             pool.shared.reset();
         }

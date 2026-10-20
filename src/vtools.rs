@@ -656,7 +656,7 @@ impl App {
             .copy_text(format!("SHOT : {} élément(s) vectoriel(s)", items.len()));
         self.clipboard = items;
         // (La dernière copie est celle-ci : plus celle d'une sélection sur plusieurs calques.)
-        self.multi.clip = None;
+        self.multi_clip = None;
         true
     }
 

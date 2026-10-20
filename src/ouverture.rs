@@ -101,7 +101,10 @@ impl App {
     pub(crate) fn finish_open(&mut self, path: PathBuf, loaded: Result<Loaded, String>) {
         match loaded {
             Ok(loaded) => {
-                self.load_doc(loaded.doc);
+                if !self.charger_projet(loaded.doc) {
+                    self.status = format!("« {} » n'a pas pu s'ouvrir dans un nouvel onglet : un travail attend l'onglet affiché.", path.display());
+                    return;
+                }
                 for id in loaded.approx {
                     self.rejeu_apres_ouverture(id);
                 }

@@ -56,6 +56,22 @@ impl Enregistrement {
     pub(crate) fn advance(&self) -> (usize, usize) {
         (self.progress.done.load(Ordering::Relaxed), self.progress.total.load(Ordering::Relaxed))
     }
+
+    /// Le fil d'écriture a fini (son résultat est à adopter).
+    pub(crate) fn fini(&self) -> bool {
+        self.handle.is_finished()
+    }
+
+    /// Une action attend la fin de cette écriture (fermer l'onglet…).
+    pub(crate) fn a_une_suite(&self) -> bool {
+        self.then.is_some()
+    }
+
+    /// Attend la fin de l'écriture et jette son résultat (un onglet qui se ferme, l'application qui quitte :
+    /// une écriture en cours n'est jamais coupée).
+    pub(crate) fn attendre(self) {
+        let _ = self.handle.join();
+    }
 }
 
 /// Fils de l'écriture : la moitié des cœurs, pour que l'interface garde les siens.
@@ -190,7 +206,7 @@ impl App {
     }
 
     /// Joint le fil d'écriture et adopte son résultat.
-    fn finish_job(&mut self) -> bool {
+    pub(crate) fn finish_job(&mut self) -> bool {
         let Some(Enregistrement { manifest, handle, epoch, then, .. }) = self.saving.take() else { return true };
         let result = handle.join().unwrap_or_else(|_| Err("l'écriture a planté".into()));
         self.finish_save(manifest, epoch, then, result)

@@ -155,7 +155,10 @@ impl App {
         };
         let doc = doc.created_now();
         let n = doc.panels.len();
-        self.load_doc(doc);
+        if !self.charger_projet(doc) {
+            self.status = "Le projet n'a pas pu s'ouvrir dans un nouvel onglet : un travail attend l'onglet affiché.".into();
+            return;
+        }
         // Pas encore enregistré : quitter le proposera.
         self.modified = true;
         let s = if n > 1 { "s" } else { "" };

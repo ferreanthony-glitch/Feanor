@@ -33,6 +33,11 @@ pub(crate) fn limit() -> usize {
     LIMIT.load(Ordering::Relaxed)
 }
 
+/// La réserve en vigueur, en octets : les onglets cachés n'en gardent pas plus, tous ensemble (`onglets.rs`).
+pub(crate) fn limite_octets() -> usize {
+    LIMIT.load(Ordering::Relaxed)
+}
+
 /// Règle la réserve à `bytes` octets ; les plus anciens dessins partent tout de suite si elle est
 /// déjà dépassée.
 pub(crate) fn set_limit(bytes: usize) {
@@ -153,8 +158,35 @@ static GENERATION: AtomicU64 = AtomicU64::new(0);
 /// Change quand on oublie tout (`forget_all`).
 static WORLD: AtomicU64 = AtomicU64::new(0);
 
+thread_local! {
+    /// Le « monde » qu'un fil de fond a reçu avec son travail (vignettes, `avec_monde`), à la place du monde
+    /// du moment : une vignette demandée pour un onglet qui n'est plus affiché ne demande rien au nouveau.
+    static MONDE_DU_FIL: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
+}
+
+/// Le monde des dessins dérivés : change à chaque `forget_all` et à chaque changement d'onglet. Un travail
+/// de fond demandé dans un monde dont le résultat arrive dans un autre est jeté.
 pub(crate) fn world() -> u64 {
-    WORLD.load(Ordering::Relaxed)
+    MONDE_DU_FIL.with(std::cell::Cell::get).unwrap_or_else(|| WORLD.load(Ordering::Relaxed))
+}
+
+/// Ce fil travaille pour un monde qui n'est plus le courant : ce qu'il lit ici ne lui appartient pas.
+fn monde_perime() -> bool {
+    MONDE_DU_FIL.with(std::cell::Cell::get).is_some_and(|w| w != WORLD.load(Ordering::Relaxed))
+}
+
+/// Exécute `f` pour le monde `w` (celui où la demande est partie, sur le fil de l'interface) : les
+/// demandes qu'elle fait portent ce monde, et tant que le monde courant est un autre, elle ne lit rien
+/// du cache et ne demande aucun calcul.
+pub(crate) fn avec_monde<R>(w: u64, f: impl FnOnce() -> R) -> R {
+    struct Garde(Option<u64>);
+    impl Drop for Garde {
+        fn drop(&mut self) {
+            MONDE_DU_FIL.with(|m| m.set(self.0));
+        }
+    }
+    let _garde = Garde(MONDE_DU_FIL.with(|m| m.replace(Some(w))));
+    f()
 }
 static WORKER: OnceLock<()> = OnceLock::new();
 static REPAINT: OnceLock<eframe::egui::Context> = OnceLock::new();
@@ -196,6 +228,9 @@ pub(crate) fn bump_generation() {
 
 /// Le dessin dérivé `id` de la version `version`, s'il est gardé.
 pub(crate) fn get(id: CelId, version: u64) -> Option<Arc<Cel>> {
+    if monde_perime() {
+        return None;
+    }
     let mut st = lock();
     let e = st.cache.get_mut(&id).filter(|e| e.version == version)?;
     e.used = tick();
@@ -205,6 +240,9 @@ pub(crate) fn get(id: CelId, version: u64) -> Option<Arc<Cel>> {
 /// Le dessin dérivé `id` gardé, quelle que soit sa version (avec sa version) : le fond sous le
 /// trait montre l'ancien en attendant le nouveau (`fx::fond_shown`).
 pub(crate) fn get_any(id: CelId) -> Option<(u64, Arc<Cel>)> {
+    if monde_perime() {
+        return None;
+    }
     let mut st = lock();
     let e = st.cache.get_mut(&id)?;
     e.used = tick();
@@ -213,6 +251,9 @@ pub(crate) fn get_any(id: CelId) -> Option<(u64, Arc<Cel>)> {
 
 /// Range un dessin dérivé arrivé d'ailleurs (le fond calculé en arrière-plan, `fx::fond_poll`).
 pub(crate) fn put(id: CelId, version: u64, cel: Arc<Cel>) {
+    if monde_perime() {
+        return;
+    }
     let dropped = insert(&mut lock(), id, version, cel, None);
     drop(dropped);
 }
@@ -274,6 +315,10 @@ impl Drop for Inflight {
 /// Le dessin dérivé `id` de la version `version` : gardé, ou calculé par `make` (bloquant, hors
 /// verrou). Si un autre fil le calcule déjà, on l'attend au lieu de le refaire.
 pub(crate) fn get_or_compute(id: CelId, version: u64, origin: Option<CelId>, make: impl FnOnce() -> Cel) -> Arc<Cel> {
+    // (Un fil qui travaille pour un onglet qui n'est plus affiché ne touche pas au cache de celui qui l'est.)
+    if monde_perime() {
+        return Arc::new(make());
+    }
     let mut st = lock();
     loop {
         if let Some(e) = st.cache.get_mut(&id).filter(|e| e.version == version) {
@@ -298,6 +343,9 @@ pub(crate) fn get_or_compute(id: CelId, version: u64, origin: Option<CelId>, mak
 /// Remplace le dessin dérivé `id` (sans changer sa version) par ce que `f` fait de l'ancien (le
 /// fond refait tuile par tuile pendant qu'on peint, `fx::fond_patch`).
 pub(crate) fn update(id: CelId, f: impl FnOnce(&Arc<Cel>) -> Arc<Cel>) {
+    if monde_perime() {
+        return;
+    }
     let mut st = lock();
     let Some(e) = st.cache.get_mut(&id) else { return };
     let new = f(&e.cel);
@@ -312,6 +360,9 @@ pub(crate) fn update(id: CelId, f: impl FnOnce(&Arc<Cel>) -> Arc<Cel>) {
 
 /// Le dessin d'origine `cel` (version `version`) copié pour le fil de fond, une fois par version.
 pub(crate) fn source(origin: CelId, cel: &Cel) -> Arc<Raster> {
+    if monde_perime() {
+        return Arc::new(cel.raster.clone());
+    }
     if let Some((v, a, used)) = lock().sources.get_mut(&origin) {
         if *v == cel.version {
             *used = tick();
@@ -341,6 +392,9 @@ pub(crate) fn source(origin: CelId, cel: &Cel) -> Arc<Raster> {
 /// que les points.
 pub(crate) fn vector_source(origin: CelId, cel: &Cel) -> Option<Arc<VectorDrawing>> {
     let vector = cel.vector.as_ref()?;
+    if monde_perime() {
+        return Some(Arc::new(vector.clone()));
+    }
     if let Some((v, a, used)) = lock().vsources.get_mut(&origin) {
         if *v == cel.version {
             *used = tick();
@@ -393,6 +447,9 @@ fn reduced_source(job: &Job) -> Arc<Raster> {
 
 /// Le dernier dessin dérivé du dessin d'origine `origin` (numéro sous lequel il est gardé, dessin).
 pub(crate) fn fallback(origin: CelId) -> Option<(CelId, Arc<Cel>)> {
+    if monde_perime() {
+        return None;
+    }
     let mut st = lock();
     let l = st.last.get_mut(&origin)?;
     l.used = tick();
@@ -402,6 +459,10 @@ pub(crate) fn fallback(origin: CelId) -> Option<(CelId, Arc<Cel>)> {
 /// Demande le calcul de `job` au fil de fond (sans attendre). Rien si le dessin est déjà gardé ou
 /// en cours de calcul ; une demande déjà en file voit sa priorité remontée.
 pub(crate) fn request(job: Job) {
+    // (Un travail de fond qui a perdu son monde — l'onglet a changé — ne demande rien.)
+    if monde_perime() {
+        return;
+    }
     if !enqueue(&mut lock(), job) {
         return;
     }
@@ -550,6 +611,59 @@ pub(crate) fn forget_all() {
         std::mem::take(&mut st.vsources),
     );
     st.bytes = 0;
+    st.queue.clear();
+    drop(st);
+    drop(old);
+}
+
+/// Les dessins dérivés d'un projet mis de côté pendant qu'un autre onglet est affiché (onglets de
+/// projets, `onglets.rs`) : les numéros de dessin sont ceux d'un projet, il ne faut ni les mélanger avec
+/// ceux de l'autre, ni les recalculer au retour.
+pub(crate) struct Reserve {
+    cache: BTreeMap<CelId, Entry>,
+    last: BTreeMap<CelId, Last>,
+    sources: BTreeMap<CelId, (u64, Arc<Raster>, u64)>,
+    small: BTreeMap<(CelId, u8), (u64, Arc<Raster>, u64)>,
+    vsources: BTreeMap<CelId, (u64, Arc<VectorDrawing>, u64)>,
+    bytes: usize,
+}
+
+impl Reserve {
+    /// Octets de pixels gardés.
+    pub(crate) fn bytes(&self) -> usize {
+        self.bytes
+    }
+}
+
+/// Le projet affiché s'en va : ses dessins dérivés sont rangés dans la réserve rendue, le cache est vide
+/// pour le suivant, et les calculs en cours (demandés dans l'ancien monde) seront jetés à leur arrivée.
+pub(crate) fn mettre_de_cote() -> Reserve {
+    WORLD.fetch_add(1, Ordering::Relaxed);
+    let mut st = lock();
+    let r = Reserve {
+        cache: std::mem::take(&mut st.cache),
+        last: std::mem::take(&mut st.last),
+        sources: std::mem::take(&mut st.sources),
+        small: std::mem::take(&mut st.small),
+        vsources: std::mem::take(&mut st.vsources),
+        bytes: std::mem::take(&mut st.bytes),
+    };
+    st.queue.clear();
+    r
+}
+
+/// Le projet qui revient reprend ses dessins dérivés (le cache est celui de l'onglet qui part : vide, ou
+/// vidé par `mettre_de_cote`).
+pub(crate) fn rendre(r: Reserve) {
+    let mut st = lock();
+    let old = (
+        std::mem::replace(&mut st.cache, r.cache),
+        std::mem::replace(&mut st.last, r.last),
+        std::mem::replace(&mut st.sources, r.sources),
+        std::mem::replace(&mut st.small, r.small),
+        std::mem::replace(&mut st.vsources, r.vsources),
+    );
+    st.bytes = r.bytes;
     st.queue.clear();
     drop(st);
     drop(old);

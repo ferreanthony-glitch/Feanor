@@ -746,7 +746,6 @@ pub(crate) struct Multi {
     pub drag: Option<MDrag>,
     /// Les feuilles flottantes d'un geste (en cours, ou lâché et en attente du rendu exact).
     pub floats: Vec<Flottante>,
-    pub clip: Option<MultiClip>,
     /// Les contours des traits choisis, gardés d'une image à l'autre (`contours.rs`).
     pub contours: std::cell::RefCell<Option<crate::contours::Contours>>,
     /// Ctrl+Maj tenus au début du geste (comme dans Storyboard Pro) : le lasso, le rectangle ou le

@@ -270,6 +270,16 @@ impl Thumbs {
         }
     }
 
+    /// Le projet n'est plus affiché (onglet inactif) : les vignettes finies restent, mais les demandes en
+    /// file, les calculs en cours et les images pas encore envoyées sont abandonnés — l'onglet inactif
+    /// n'occupe plus les fils de fond, et ses demandes ne répondent plus à personne.
+    pub fn abandonner(&mut self) {
+        self.pending = false;
+        if let Some(pool) = &self.pool {
+            pool.shared.reset();
+        }
+    }
+
     /// Demandes en file, calculs en cours et images finies qui n'ont pas encore été envoyées à la
     /// carte graphique (profileur : « vignettes »).
     pub fn outstanding(&self) -> usize {
@@ -390,6 +400,10 @@ struct Job {
     /// Rang de cette demande à cette image (l'ordre dans lequel l'écran les a demandées).
     order: u64,
     cancel: Arc<AtomicBool>,
+    /// Le « monde » des effets (`fxcache::world`) au moment de la demande, sur le fil de l'interface : si un
+    /// autre onglet est affiché quand le fil compose, la vignette ne lit ni ne demande rien aux effets de
+    /// celui-ci (ses numéros de dessin ne sont pas ceux de l'autre projet). Rien : le monde du moment.
+    world: Option<u64>,
 }
 
 struct Running {
@@ -575,7 +589,7 @@ impl Pool {
             return;
         }
         let work = work(&key);
-        self.shared.push(Job { slot, key: Arc::new(key), work, seq: 0, era: 0, wanted: 0, order: 0, cancel: Arc::new(AtomicBool::new(false)) });
+        self.shared.push(Job { slot, key: Arc::new(key), work, seq: 0, era: 0, wanted: 0, order: 0, cancel: Arc::new(AtomicBool::new(false)), world: Some(crate::fxcache::world()) });
     }
 
     /// Arrête les fils : les calculs en cours s'interrompent, les autres fils s'éteignent. (Les essais
@@ -650,8 +664,11 @@ fn render_job(job: &Job) -> Option<(ColorImage, Option<u64>)> {
             // (Le fil de fond laisse deux cœurs à l'interface, comme celui des effets.)
             render::set_thread_cap(crate::parallele::coeurs().saturating_sub(2).max(1));
             let cancelled = || job.cancel.load(Ordering::Relaxed);
-            let (image, complete) =
-                crate::fx::differe(|| crate::fxcache::soft_scope(|| render::thumbnail_until(doc, plan, cam, size.0, size.1, &cancelled)));
+            let compose = || crate::fx::differe(|| crate::fxcache::soft_scope(|| render::thumbnail_until(doc, plan, cam, size.0, size.1, &cancelled)));
+            let (image, complete) = match job.world {
+                Some(w) => crate::fxcache::avec_monde(w, compose),
+                None => compose(),
+            };
             Some((image?, (!complete).then_some(*generation)))
         }
         (Work::Cel { raster, frame, size }, _) => Some((cel_thumbnail(raster, *frame, size.0, size.1), None)),

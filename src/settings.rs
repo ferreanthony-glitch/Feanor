@@ -80,6 +80,16 @@ pub struct Settings {
     pub recent_projects: Vec<PathBuf>,
     #[serde(default = "yes", rename = "rouvrir_dernier_projet")]
     pub reopen_last: bool,
+    /// Onglets de projets (`onglets.rs`) : Ouvrir, Nouveau, projets récents et imports ouvrent un nouvel
+    /// onglet (sinon : le projet courant est remplacé, après la question habituelle).
+    #[serde(default = "yes", rename = "ouvrir_dans_un_nouvel_onglet")]
+    pub open_in_new_tab: bool,
+    /// Les projets ouverts dans les onglets à la fin de la séance, dans l'ordre, et l'onglet actif : ils
+    /// reviennent au lancement avec « Rouvrir le dernier projet au lancement ».
+    #[serde(default, rename = "onglets_ouverts", skip_serializing_if = "Vec::is_empty")]
+    pub session_tabs: Vec<PathBuf>,
+    #[serde(default, rename = "onglet_actif", skip_serializing_if = "is_zero")]
+    pub session_active: usize,
     /// Les panneaux de réglages prennent la hauteur de leur contenu (`ajuste.rs`), sauf entre les
     /// paires (premier panneau du haut, premier du bas) dont on a tiré le bord à la main.
     #[serde(default = "yes", rename = "panneaux_ajustes")]
@@ -147,6 +157,10 @@ fn yes() -> bool {
     true
 }
 
+fn is_zero(n: &usize) -> bool {
+    *n == 0
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Settings {
@@ -171,6 +185,9 @@ impl Default for Settings {
             fill_shapes: false,
             recent_projects: Vec::new(),
             reopen_last: true,
+            open_in_new_tab: true,
+            session_tabs: Vec::new(),
+            session_active: 0,
             panes_fit: true,
             panel_bar: true,
             panes_fixed: Vec::new(),

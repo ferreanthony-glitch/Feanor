@@ -148,7 +148,10 @@ pub struct Recovery {
 impl Recovery {
     /// Ouvre le dossier de la séance dans `root`.
     pub fn start(root: &Path) -> Result<Recovery, String> {
-        let name = format!("{}-{}", now_secs(), std::process::id());
+        // Un dossier par projet ouvert (onglets de projets, `onglets.rs`) : deux onglets ouverts dans la même
+        // seconde n'ont pas le même nom.
+        static NUMERO: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let name = format!("{}-{}-{}", now_secs(), std::process::id(), NUMERO.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
         let dir = root.join(name);
         fs::create_dir_all(&dir).map_err(|e| format!("{} : {e}", dir.display()))?;
         let lock = open_lock(&dir.join(LOCK)).map_err(|e| format!("{} : {e}", dir.display()))?;
