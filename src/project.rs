@@ -3,7 +3,8 @@
 //! ```text
 //! MonFilm/
 //!   MonFilm.pelure        manifeste JSON lisible : réglages, séquences > scènes > panneaux > calques,
-//!                         pistes son
+//!                         pistes son ; numérotation verrouillée (`numerotation_verrouillee`, `numero` des
+//!                         séquences et des plans : champs facultatifs, `numerotation.rs`)
 //!   dessins/<id>.png      dessins bitmap
 //!   dessins/<id>.json     dessins vectoriels
 //!   sons/<id>.<ext>       fichiers son importés, copiés tels quels
@@ -179,6 +180,9 @@ struct Manifest {
     /// Storyboard verrouillé (format 17 ; absent : non).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     storyboard_verrouille: bool,
+    /// Numérotation des plans verrouillée (`numerotation.rs` ; absent : suivie, sans changer `VERSION`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    numerotation_verrouillee: bool,
     /// Propriétés du projet (format 17 ; absentes : vides).
     #[serde(default, skip_serializing_if = "PropertiesEntry::is_empty")]
     proprietes: PropertiesEntry,
@@ -358,6 +362,9 @@ struct SequenceEntry {
     id: u64,
     #[serde(default)]
     nom: String,
+    /// Numéro propre, en numérotation verrouillée (`numerotation.rs` ; absent : le rang).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    numero: String,
     scenes: Vec<SceneEntry>,
 }
 
@@ -366,6 +373,9 @@ struct SceneEntry {
     id: u64,
     #[serde(default)]
     nom: String,
+    /// Numéro propre du plan, en numérotation verrouillée (absent : le rang).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    numero: String,
     panneaux: Vec<PanelEntry>,
 }
 
@@ -1601,18 +1611,22 @@ fn manifest_of(doc: &Document) -> Manifest {
         let seq = doc.sequence_of(i);
         if sequences.last().is_none_or(|s| s.id != seq) {
             let nom = doc.sequences.iter().find(|s| s.id == seq).map(|s| s.name.clone()).unwrap_or_default();
+            let numero = doc.sequences.iter().find(|s| s.id == seq).map(|s| s.number.clone()).unwrap_or_default();
             sequences.push(SequenceEntry {
                 id: seq,
                 nom,
+                numero,
                 scenes: Vec::new(),
             });
         }
         let scenes = &mut sequences.last_mut().expect("séquence ajoutée juste avant").scenes;
         if scenes.last().is_none_or(|s| s.id != panel.scene) {
             let nom = doc.scene(panel.scene).map(|s| s.name.clone()).unwrap_or_default();
+            let numero = doc.scene(panel.scene).map(|s| s.number.clone()).unwrap_or_default();
             scenes.push(SceneEntry {
                 id: panel.scene,
                 nom,
+                numero,
                 panneaux: Vec::new(),
             });
         }
@@ -1704,6 +1718,7 @@ fn manifest_of(doc: &Document) -> Manifest {
         fond: BackgroundEntry { sorte: doc.background, couleur_b: doc.paper_b },
         volume_general: doc.master_volume,
         storyboard_verrouille: doc.storyboard_locked,
+        numerotation_verrouillee: doc.numbering_locked,
         proprietes: {
             let p = &doc.properties;
             PropertiesEntry {
@@ -2043,6 +2058,7 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
         paper_b: manifest.fond.couleur_b,
         master_volume: if manifest.volume_general.is_finite() { manifest.volume_general.clamp(0.0, 4.0) } else { 1.0 },
         storyboard_locked: manifest.storyboard_verrouille,
+        numbering_locked: manifest.numerotation_verrouillee,
         properties: {
             let p = manifest.proprietes;
             crate::document::Properties {
@@ -2073,11 +2089,13 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
         structure.sequences.push(Sequence {
             id: seq.id,
             name: seq.nom,
+            number: seq.numero,
         });
         for scene in seq.scenes {
             structure.scenes.push(Scene {
                 id: scene.id,
                 name: scene.nom,
+                number: scene.numero,
                 sequence: seq.id,
             });
             // Numéros des calques de toute la scène : neufs pour la session.

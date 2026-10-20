@@ -810,7 +810,7 @@ impl App {
                     let number = seq_order.iter().position(|&s| s == seq).map_or(0, |k| k + 1);
                     let label = match self.doc.sequences.iter().find(|s| s.id == seq) {
                         Some(s) if !s.name.trim().is_empty() => s.name.trim().to_string(),
-                        _ => number.to_string(),
+                        _ => self.doc.sequence_code(seq),
                     };
                     (format!("Séquence {label}"), number)
                 } else {
@@ -1469,8 +1469,8 @@ impl App {
         let k = mark.and_then(|id| self.doc.panels[i].marks.iter().position(|m| m.id == id)).map_or(1, |p| p + 2);
         let scene = self.doc.panels[i].scene;
         let seq = self.doc.sequence_of(i);
-        let scene_number = self.doc.scene_number(scene).to_string();
-        let seq_number = self.doc.sequence_number(seq).to_string();
+        let scene_number = self.doc.plan_code(scene);
+        let seq_number = self.doc.sequence_code(seq);
         ui.add_space(4.0);
         ui.heading(panel_long_title(&self.doc, i));
         // Chaque champ modifie une copie ; `edited` enregistre l'étape d'annulation avant qu'on

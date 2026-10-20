@@ -523,9 +523,15 @@ pub fn build_mix(doc: &Document, wait: bool) -> Vec<MixClip> {
 /// seul, sans recouvrement) ; le volume de la piste est à part.
 pub fn bake_clip(doc: &Document, clip: &SoundClip) -> Vec<[f32; 2]> {
     let Some(sound) = doc.sounds.get(&clip.sound) else { return Vec::new() };
-    let spf = samples_per_frame(doc.fps);
+    bake_sound(sound, doc.fps, clip)
+}
+
+/// Comme `bake_clip`, sans le document : le son et la cadence suffisent (l'export pour le montage
+/// l'appelle sur un fil à part, `editorial.rs`).
+pub fn bake_sound(sound: &crate::document::Sound, fps: u32, clip: &SoundClip) -> Vec<[f32; 2]> {
+    let spf = samples_per_frame(fps);
     let pcm = processed(&sound.pcm, &clip.fx, true);
-    let (from, len) = crate::export::sample_span(doc.fps, clip.offset, clip.length);
+    let (from, len) = crate::export::sample_span(fps, clip.offset, clip.length);
     let mut out = crate::stretch::slice(&pcm, from as usize, (from + len) as usize);
     let keys: Vec<(f64, f32)> = clip.fx.keys.iter().map(|k| (k.t as f64 * spf, k.v)).collect();
     let env = ClipEnv {

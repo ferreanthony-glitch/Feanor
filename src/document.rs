@@ -551,6 +551,8 @@ pub struct Sequence {
     pub id: u64,
     /// Nom choisi ; vide = numéro automatique.
     pub name: String,
+    /// Numéro propre en numérotation verrouillée (`numerotation.rs`) ; vide = numéro du rang.
+    pub number: String,
 }
 
 /// Une scène (un plan, au sens du découpage) : un groupe de panneaux qui se suivent.
@@ -559,6 +561,8 @@ pub struct Scene {
     pub id: u64,
     /// Nom ou numéro choisi ; vide = numéro automatique.
     pub name: String,
+    /// Numéro propre en numérotation verrouillée (`numerotation.rs`) ; vide = numéro du rang.
+    pub number: String,
     pub sequence: u64,
 }
 
@@ -851,6 +855,8 @@ pub struct Structure {
     pub master_volume: f32,
     /// Storyboard verrouillé (13e) et propriétés du projet.
     pub storyboard_locked: bool,
+    /// Numérotation des plans verrouillée (`numerotation.rs`) : chaque plan garde son numéro.
+    pub numbering_locked: bool,
     pub properties: Properties,
     /// Scènes 3D de blocage, par plan, et décors par séquence (`scene3d.rs`) : une étape
     /// d'annulation les rétablit avec le reste.
@@ -907,6 +913,8 @@ pub struct Document {
     pub master_volume: f32,
     /// Storyboard verrouillé (13e) : l'ordre, le nombre et la durée des plans ne changent plus.
     pub storyboard_locked: bool,
+    /// Numérotation des plans verrouillée (`numerotation.rs`) : chaque plan garde son numéro.
+    pub numbering_locked: bool,
     /// Propriétés du projet (13e).
     pub properties: Properties,
     /// Scènes 3D de blocage (`scene3d.rs`) ; enregistrées à côté du manifeste, dans `scenes3d.json`.
@@ -978,6 +986,7 @@ impl Document {
             paper_b: DEFAULT_PAPER_B,
             master_volume: 1.0,
             storyboard_locked: false,
+            numbering_locked: false,
             properties: Properties::default(),
             scenes3d: Default::default(),
             comments: Vec::new(),
@@ -1041,6 +1050,7 @@ impl Document {
             paper_b: structure.paper_b,
             master_volume: structure.master_volume,
             storyboard_locked: structure.storyboard_locked,
+            numbering_locked: structure.numbering_locked,
             properties: structure.properties,
             scenes3d: structure.scenes3d,
             comments: structure.comments,
@@ -1223,6 +1233,7 @@ impl Document {
             paper_b: self.paper_b,
             master_volume: self.master_volume,
             storyboard_locked: self.storyboard_locked,
+            numbering_locked: self.numbering_locked,
             properties: self.properties.clone(),
             scenes3d: self.scenes3d.clone(),
             comments: self.comments.clone(),
@@ -1255,6 +1266,7 @@ impl Document {
             paper_b: std::mem::replace(&mut self.paper_b, s.paper_b),
             master_volume: std::mem::replace(&mut self.master_volume, s.master_volume),
             storyboard_locked: std::mem::replace(&mut self.storyboard_locked, s.storyboard_locked),
+            numbering_locked: std::mem::replace(&mut self.numbering_locked, s.numbering_locked),
             properties: std::mem::replace(&mut self.properties, s.properties),
             scenes3d: std::mem::replace(&mut self.scenes3d, s.scenes3d),
             comments: std::mem::replace(&mut self.comments, s.comments),
@@ -1278,7 +1290,7 @@ impl Document {
 
     pub fn new_sequence(&mut self) -> u64 {
         let id = self.alloc();
-        self.sequences.push(Sequence { id, name: String::new() });
+        self.sequences.push(Sequence { id, name: String::new(), number: String::new() });
         id
     }
 
@@ -1287,6 +1299,7 @@ impl Document {
         self.scenes.push(Scene {
             id,
             name: String::new(),
+            number: String::new(),
             sequence,
         });
         id
@@ -1379,14 +1392,14 @@ impl Document {
     pub fn scene_label(&self, scene: u64) -> String {
         match self.scene(scene) {
             Some(s) if !s.name.trim().is_empty() => s.name.trim().to_string(),
-            _ => self.scene_number(scene).to_string(),
+            _ => self.plan_code(scene),
         }
     }
 
     pub fn sequence_label(&self, sequence: u64) -> String {
         match self.sequences.iter().find(|s| s.id == sequence) {
             Some(s) if !s.name.trim().is_empty() => s.name.trim().to_string(),
-            _ => self.sequence_number(sequence).to_string(),
+            _ => self.sequence_code(sequence),
         }
     }
 
@@ -1453,6 +1466,8 @@ impl Document {
         self.prune_transitions();
         // Les références liées à un plan retiré ne le sont plus (elles restent sur le tableau).
         self.prune_references();
+        // Numérotation verrouillée : un plan ou une séquence neuf reçoit son numéro entre ses voisins.
+        self.assign_numbers();
     }
 
     // ---------------------------------------------------------------- opérations de montage

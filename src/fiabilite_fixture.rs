@@ -504,6 +504,16 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
     doc.paper_b = [190, 200, 210];
     doc.master_volume = 0.8;
     doc.storyboard_locked = true;
+    // Numérotation verrouillée (`numerotation.rs`) : un plan « 2A » (inséré après le 2), un trou au
+    // numéro 3, et une séquence « 1A ».
+    doc.lock_numbering();
+    {
+        let order = doc.scene_order();
+        doc.scene_mut(order[2]).expect("plan").number = "2A".into();
+        doc.scene_mut(order[3]).expect("plan").number = "4".into();
+        let seqs = doc.sequence_order();
+        doc.sequence_mut(*seqs.last().expect("séquence")).expect("séquence").number = "1A".into();
+    }
     doc.properties = crate::document::Properties {
         title: "Course-poursuite".into(),
         info: "Essai de fiabilité".into(),
@@ -637,7 +647,7 @@ pub(crate) fn empreinte(octets: &[u8]) -> u64 {
 pub(crate) fn instantane(doc: &Document, sans_pixels: &BTreeSet<CelId>) -> String {
     let mut s = String::new();
     let _ = writeln!(s, "feuille {}x{} cadre {:?} cadence {} papier {:?} papier_b {:?}", doc.width, doc.height, doc.frame, doc.fps, doc.paper, doc.paper_b);
-    let _ = writeln!(s, "fond {:?} image_de_depart {} volume {} verrou {}", doc.background, doc.start_frame, doc.master_volume, doc.storyboard_locked);
+    let _ = writeln!(s, "fond {:?} image_de_depart {} volume {} verrou {} numerotation_verrouillee {}", doc.background, doc.start_frame, doc.master_volume, doc.storyboard_locked, doc.numbering_locked);
     let _ = writeln!(s, "proprietes {:?}", doc.properties);
     let _ = writeln!(s, "sequences {:?}", doc.sequences);
     let _ = writeln!(s, "scenes {:?}", doc.scenes);

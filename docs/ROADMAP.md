@@ -2953,3 +2953,40 @@ Le plus grand souci d'un storyboardeur : savoir ce qui a changé entre deux livr
   l'ancienne taille : la comparaison le dit) ; les versions rangées se lisent toutes à l'ouverture (comme le contenu rogné) ;
   aucune touche par défaut ; l'export vers Storyboard Pro ne reprend ni les envois ni les versions (comment Storyboard Pro range
   les révisions d'un panneau : à vérifier).
+
+## Numérotation robuste des plans (demandée par Anthony le 2026-10-20, branche `numerotation-export`) ✅
+
+Détail des règles dans `docs/INTERFACE.md` (« Numérotation des plans : suivie ou verrouillée ») et en tête de
+`src/numerotation.rs`. Pas vu à l'écran dans cette séance.
+
+- ✅ **Deux modes** dans Réglages du projet : « Suivie » (le rang, comme avant) et « Verrouillée » (numéros propres, 12,
+  12A, 12B…, trous après une suppression, numéro gardé par un plan déplacé).
+- ✅ **Renuméroter** : confirmation, une étape d'annulation nommée ; **Verrouiller** : une étape nommée aussi.
+- ✅ **Partout** : tous les titres passent par `Document::scene_label` / `plan_code` ; les noms de clips et de fichiers
+  des exports pour le montage par `plan_full_ref` (« SQ01_PL012A »).
+- ✅ **Format** : champs facultatifs du manifeste, `VERSION` reste 27 (l'autre session peut prendre 28).
+- ✅ **Essais** : `numerotation_tests.rs` (règle d'insertion, 1500 insertions au hasard ordonnées et uniques,
+  insertion / suppression / déplacement / duplication / coupe / collage / réunion dans les deux modes, renuméroter et
+  annuler, aller-retour d'enregistrement, ancien manifeste, projet suivi écrit comme avant) ; le projet d'essai de
+  fiabilité est maintenant verrouillé (un plan 2A, un trou, une séquence 1A).
+- Pas fait / à vérifier : la correspondance avec la numérotation de plan de Storyboard Pro (SHOT n'écrit que le nom du
+  plan) ; pas de numérotation de plan automatique par séquence (SQ01 → PL001…) : un seul compte pour tout le film.
+## Export pour le montage : EDL, Final Cut XML, OpenTimelineIO (demandé par Anthony le 2026-10-20, branche `numerotation-export`) ✅
+
+Détail dans `docs/EXPORT_MONTAGE.md`. **Jamais ouvert dans Premiere Pro, DaVinci Resolve ni Avid** (à vérifier par Anthony).
+
+- ✅ **Un dossier `<Titre>_montage/`** : `media/` (un fichier vidéo par plan, ProRes 422 HQ ou H.264, par le chemin de l'export du
+  film), `audio/` (un WAV par extrait, effets compris), `.edl` (CMX 3600), `.xml` (Final Cut Pro 7 XML, xmeml 4), `.otio`
+  (OpenTimelineIO), `LISEZ-MOI.txt`.
+- ✅ **Noms de clips = numéros des plans** (`SQ01_PL012A`), chemins relatifs (ou absolus au choix), cadence du projet,
+  time code de départ au choix (01:00:00:00), NTSC en option.
+- ✅ **Transitions** : fondu enchaîné partout (avec poignées dans les vidéos : images tenues), fondu depuis / vers le noir dans
+  l'EDL ; les autres sont des coupes, dites.
+- ✅ **Fenêtre** `Fichier > Exporter > Pour le montage`, action `fichier.exporter_montage` ; tâche annulable qui efface ce
+  qu'elle a écrit ; son écrit sur un fil à part.
+- ✅ **Essais** : `editorial_tests.rs` relit chaque fichier produit (EDL, XML, OTIO) et le compare au plan à l'image près
+  (24, 25, 30 i/s, NTSC), et fait un export réel avec ffmpeg (ProRes, H.264 en 29,97 avec chemins absolus : nombre d'images de
+  chaque vidéo, durée de chaque son, chemins qui mènent aux fichiers, annulation).
+- Pas fait : calcul des images sur un fil à part (elles se calculent sur le fil de l'interface, 40 ms par image d'écran, comme
+  l'export du film) ; time code à sauts d'images ; AAF ; son dans l'EDL ; fondus par le noir ou le blanc entre deux plans et volets
+  (coupes dites) ; poignées lues dans le contenu rogné (elles sont des images tenues).
