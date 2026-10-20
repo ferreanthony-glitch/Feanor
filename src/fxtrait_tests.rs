@@ -1026,8 +1026,13 @@ fn sample_drawing() -> VectorDrawing {
 #[ignore]
 fn dump_stroke_effects_to_png() {
     let Ok(dir) = std::env::var("FXTRAIT_PNG") else { return };
+    for (file, d) in [("effets_du_trait.png", sample_drawing()), ("effets_du_trait_brosses.png", VectorDrawing { elements: crate::affichage_tests::gros_traits(5, 640, 340, 5) })] {
+        dump_sheet(&dir, file, &d);
+    }
+}
+
+fn dump_sheet(dir: &str, file: &str, d: &VectorDrawing) {
     let (w, h) = (640usize, 340usize);
-    let d = sample_drawing();
     let panels: Vec<(&str, Vec<FxStep>)> = vec![
         ("dessin", Vec::new()),
         ("ecriture 40", write_steps(40.0, &[(t::WRITE_SOFT, 20.0)])),
@@ -1046,7 +1051,7 @@ fn dump_stroke_effects_to_png() {
     let rows = panels.len().div_ceil(cols);
     let mut sheet = vec![eframe::egui::Color32::WHITE; cols * w * rows * h];
     for (n, (name, s)) in panels.iter().enumerate() {
-        let r = t::render(&d, w, h, s);
+        let r = t::render(d, w, h, s);
         let (ox, oy) = ((n % cols) * w, (n / cols) * h);
         for y in 0..h {
             for x in 0..w {
@@ -1063,6 +1068,6 @@ fn dump_stroke_effects_to_png() {
         }
         println!("{n} : {name}");
     }
-    std::fs::create_dir_all(&dir).ok();
-    crate::io::write_png(&std::path::Path::new(&dir).join("effets_du_trait.png"), &sheet, cols * w, rows * h).unwrap();
+    std::fs::create_dir_all(dir).ok();
+    crate::io::write_png(&std::path::Path::new(dir).join(file), &sheet, cols * w, rows * h).unwrap();
 }
