@@ -25,11 +25,14 @@
 //! (`fs_boil` : il relit les pixels du dessin à travers le même champ de déplacement que le calcul sur
 //! processeur, `tremblement.rs`), sauf les effets du trait (`fxtrait.rs` : écriture, crayonné, respiration,
 //! ondulation, pointillés, désagrégation), qui lisent la géométrie des traits du dessin vectoriel et gardent
-//! le calcul de fond. Règle de mélange : **une pile qui contient un seul effet sans passe est calculée
-//! tout entière sur le processeur** (l'ordre des effets compte, et le calcul sur processeur ne sait pas
-//! partir d'une texture de la carte graphique). Même chose pour un calque rempli par CTG, un fond sous le
-//! trait, une image de vidéo ou une feuille flottante en cours de geste. Un calque d'ajustement dans un
-//! dossier, ou à côté d'un qui ne passe pas, est de même résolu sur le processeur.
+//! le calcul de fond. Règle de mélange : **une pile qui contient un effet sans passe est calculée sur le
+//! processeur** (l'ordre des effets compte, et le calcul sur processeur ne sait pas partir d'une texture de
+//! la carte graphique), **sauf** quand les effets sans passe sont ceux du trait : ils agissent toujours les
+//! premiers, sur le dessin vectoriel, et la pile est alors coupée en deux (`fx::hybrid_split`) — le fil de fond
+//! calcule le dessin dérivé par les effets du trait seuls, la carte passe tous les autres dessus, à pleine
+//! résolution. Même règle « tout sur le processeur » pour un calque rempli par CTG, un fond sous le trait, une
+//! image de vidéo ou une feuille flottante en cours de geste. Un calque d'ajustement dans un dossier, ou à côté
+//! d'un qui ne passe pas, est de même résolu sur le processeur.
 //!
 //! # Géométrie
 //!

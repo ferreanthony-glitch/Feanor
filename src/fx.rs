@@ -672,6 +672,23 @@ pub fn layer_steps(layer: &crate::document::Layer, frame: usize, rest: Option<us
     steps_at_with(&layer.fx, frame, rest, layer.kind == crate::document::LayerKind::Vector)
 }
 
+/// Un élément du plan dont la pile mêle des effets du trait (calculés en arrière-plan : ils lisent les
+/// traits du dessin vectoriel, `fxtrait.rs`) et des effets qui ont une version sur la carte graphique
+/// (`gpufx.rs`) : l'élément réduit aux effets du trait — dont le dessin dérivé devient le dessin d'origine
+/// de la carte —, et les effets que la carte passe dessus, dans leur ordre. Rien pour une pile sans effet du
+/// trait, sans autre effet, ou dont un autre effet n'a pas de passe ; rien non plus pour un remplissage
+/// CTG, un fond sous le trait ou une feuille flottante.
+pub fn hybrid_split(item: &crate::render::PlanItem) -> Option<(crate::render::PlanItem, Vec<FxStep>)> {
+    if item.ctg.is_some() || item.fond.is_some() || item.pre.is_some() {
+        return None;
+    }
+    let (line, rest): (Vec<FxStep>, Vec<FxStep>) = item.fx.iter().cloned().partition(|s| s.kind.is_trait());
+    if line.is_empty() || !crate::gpufx::steps_supported(&rest) {
+        return None;
+    }
+    Some((crate::render::PlanItem { fx: line, ..item.clone() }, rest))
+}
+
 /// Les mêmes effets sans le tremblement ni les effets du trait (le calque qu'on édite se montre tel
 /// qu'il est : on dessine, on prend et on déplace ce qu'on voit).
 pub fn without_boil(steps: Vec<FxStep>) -> Vec<FxStep> {

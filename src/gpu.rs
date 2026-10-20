@@ -850,12 +850,19 @@ impl GpuCanvas {
         // dessinent à la composition, à pleine résolution, à chaque image.
         let fx_on = res.fx_enabled && res.gpufx.is_some();
         let on_gpu: Vec<bool> = plan.items.iter().map(|item| fx_on && gpu_fx_item(doc, item)).collect();
+        // Une pile qui mêle des effets du trait (calcul de fond : ils lisent les traits du dessin vectoriel) et
+        // des effets de la carte : le fil de fond calcule le dessin dérivé par les effets du trait seuls, la
+        // carte passe les autres effets dessus, à pleine résolution (`fx::hybrid_split`).
+        let hybrid: Vec<Option<(crate::render::PlanItem, Vec<crate::fx::FxStep>)>> = plan.items.iter().zip(&on_gpu).map(|(item, &gpu)| gpu.then(|| crate::fx::hybrid_split(item)).flatten()).collect();
         let displays: Vec<Option<crate::fx::Display>> = plan
             .items
             .iter()
             .zip(&on_gpu)
-            .map(|(item, &gpu)| {
-                if gpu {
+            .enumerate()
+            .map(|(i, (item, &gpu))| {
+                if let Some((line, _)) = &hybrid[i] {
+                    crate::fx::display(doc, line, level)
+                } else if gpu {
                     doc.cels.get(&item.cel).map(|cel| crate::fx::Display { cel: crate::fx::Shown::Plain(cel), id: item.cel, ready: true })
                 } else {
                     crate::fx::display(doc, item, level)
@@ -928,6 +935,16 @@ impl GpuCanvas {
             if !on_gpu[i] {
                 continue;
             }
+            // (Une pile mêlée : les effets de la carte partent du dessin dérivé par les effets du trait.)
+            let chained;
+            let item = match (&hybrid[i], &displays[i]) {
+                (Some((_, rest)), Some(shown)) => {
+                    chained = crate::render::PlanItem { cel: shown.id, fx: rest.clone(), ..item.clone() };
+                    &chained
+                }
+                (Some(_), None) => continue,
+                _ => item,
+            };
             let nth = seen.iter().filter(|&&c| c == item.cel).count();
             seen.push(item.cel);
             if let Some(out) = place_fx(rs, res, item, nth, sheet, tick, &mut bytes) {
@@ -1635,13 +1652,15 @@ fn content_of(raster: &Raster, tiles: &[usize]) -> Option<[usize; 4]> {
 }
 
 /// Les effets de cet élément du plan se dessinent-ils sur la carte graphique ? Oui si toute sa pile y
-/// passe (`gpufx::steps_supported`) et s'il s'agit d'un dessin ordinaire du projet, à la taille de la
-/// feuille (ni remplissage CTG, ni fond sous le trait, ni feuille flottante, ni image de vidéo).
+/// passe (`gpufx::steps_supported`), ou si elle mêle des effets du trait (calcul de fond) à des effets de
+/// la carte (`fx::hybrid_split` : la carte passe ceux-là sur le dessin dérivé par ceux-ci), et s'il
+/// s'agit d'un dessin ordinaire du projet, à la taille de la feuille (ni remplissage CTG, ni fond sous
+/// le trait, ni feuille flottante, ni image de vidéo).
 pub(crate) fn gpu_fx_item(doc: &Document, item: &crate::render::PlanItem) -> bool {
     item.ctg.is_none()
         && item.fond.is_none()
         && item.pre.is_none()
-        && crate::gpufx::steps_supported(&item.fx)
+        && (crate::gpufx::steps_supported(&item.fx) || crate::fx::hybrid_split(item).is_some())
         && doc.cels.get(&item.cel).is_some_and(|c| c.raster.width == doc.width && c.raster.height == doc.height)
 }
 

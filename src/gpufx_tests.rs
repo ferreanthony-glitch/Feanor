@@ -571,13 +571,14 @@ fn background_frame(gpu: &mut GpuCanvas, rs: &RenderState, s: &Scene, plan: &Pla
 }
 
 #[test]
-fn a_stack_with_a_warp_and_the_switch_off_use_the_cpu_path() {
+fn a_stack_with_only_a_stroke_effect_and_the_switch_off_use_the_cpu_path() {
     crate::fxcache::monde::lire();
     let rs = gpu_or_return!();
     let mut gpu = GpuCanvas::new(&rs);
     let s = scene(W, H);
-    // Un effet sans passe au milieu : toute la pile reste sur le processeur.
-    let mixed = vec![step(EffectKind::GaussianBlur, &[6.0]), stroke_effect(), step(EffectKind::Noise, &[20.0])];
+    // Un effet du trait seul (sans passe) : le calcul de fond, rien à dessiner sur la carte. (Mêlé à des effets de la
+    // carte, il couperait la pile en deux : `fxtrait_tests`.)
+    let mixed = vec![stroke_effect()];
     let plan = Plan { paper: None, items: vec![item(s.id, mixed.clone())] };
     let _ = render_with(&mut gpu, &rs, &s.doc, &plan, true);
     assert_eq!(gpu.effects_passes(), 0, "aucune passe : la pile n'est pas entièrement sur la carte");
