@@ -178,11 +178,14 @@ impl App {
                     self.action_item(ui, "Choisir les plans modifiés", "envoi.modifies_choisir");
                 });
                 ui.menu_button("Versions du plan", |ui| {
-                    self.action_item(ui, "Nouvelle version du plan", "version.nouvelle");
+                    self.action_item(ui, "Nouvelle version, en dupliquant la version en cours", "version.nouvelle");
+                    self.action_item(ui, "Nouvelle version, en partant d'un plan vide", "version.vide");
                     self.action_item(ui, "Version précédente", "version.precedente");
                     self.action_item(ui, "Version suivante", "version.suivante");
                     ui.separator();
                     self.action_item(ui, "Comparer le plan…", "comparer.ouvrir");
+                    ui.separator();
+                    self.purge_items(ui);
                 });
                 ui.separator();
                 let lock = if self.doc.storyboard_locked { "Déverrouiller le storyboard" } else { "Verrouiller le storyboard" };
@@ -622,8 +625,8 @@ impl App {
     pub(crate) fn status_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             let where_ = match self.mode {
-                Mode::Storyboard => format!("Storyboard · {}", crate::storyboard::panel_long_title(&self.doc, self.cur_panel)),
-                Mode::Animation => format!("Animation · {}", crate::storyboard::panel_long_title(&self.doc, self.cur_panel)),
+                Mode::Storyboard => format!("Storyboard · {}", crate::planversui::titre_long_avec_version(&self.doc, self.cur_panel)),
+                Mode::Animation => format!("Animation · {}", crate::planversui::titre_long_avec_version(&self.doc, self.cur_panel)),
             };
             ui.label(RichText::new(where_).strong());
             // Le panneau qui a la main : copier, coller, supprimer et les raccourcis le visent.

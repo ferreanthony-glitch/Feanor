@@ -271,8 +271,8 @@ fn the_sides_offered_and_their_names() {
     assert_eq!(b.app.comparer_sources(0), vec![Source::Actuelle, Source::Envoi(1)]);
     b.app.run_action("version.nouvelle");
     assert_eq!(b.app.comparer_sources(0), vec![Source::Actuelle, Source::Version(1), Source::Envoi(1)]);
-    assert_eq!(b.app.comparer_libelle(plan, &Source::Actuelle), "Aujourd'hui (v2)");
-    assert_eq!(b.app.comparer_libelle(plan, &Source::Version(1)), "Version v1");
+    assert_eq!(b.app.comparer_libelle(plan, &Source::Actuelle), "Aujourd'hui (V2)");
+    assert_eq!(b.app.comparer_libelle(plan, &Source::Version(1)), "Version V1");
     let envoi = b.app.comparer_libelle(plan, &Source::Envoi(1));
     assert!(envoi.contains("« v1 au réal »") && envoi.contains("20/10/2026"), "{envoi}");
     // Un plan sans versions, comparé au même envoi.

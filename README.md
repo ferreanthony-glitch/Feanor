@@ -1256,17 +1256,26 @@ bord haut du bloc remplace la pastille. Le « dernier envoi » est le dernier ma
   copie tout d'un coup : 15 à 32 ms pour 600 plans et 1 200 dessins bitmap (banc `envois_tests`), le reste sur un fil.
 
 **Versions d'un plan** : « Nouvelle version du plan » (barre du montage sous « Plus… », menu Storyboard > Versions du
-plan, fiche du plan, Ctrl+K `version.nouvelle`) garde le plan tel qu'il est comme version plus ancienne (v1) et
-continue sur une copie (v2). La **fiche du plan** a une ligne « Version » : la version active, le bouton « Nouvelle
-version », et pour chaque autre version de quoi **passer** à elle (les deux échangent leur contenu), la **comparer**,
-la **restaurer** (une copie d'elle devient une nouvelle version active ; rien n'est perdu) ou la **supprimer** (jamais
-l'active). Le clic droit sur un plan (bande ou vignette) a le même sous-menu « Version du plan ». Le titre du plan dit
-« Plan 3 · v2 » dans la bande et sur la planche quand il a plusieurs versions ; `version.precedente` et
-`version.suivante` passent de l'une à l'autre au clavier.
+plan, fiche du plan, Ctrl+K `version.nouvelle`) garde le plan tel qu'il est comme version plus ancienne (V1) et
+continue sur une copie (V2). Les versions se nomment **V1, V2, V3…** partout. **Dans le montage**, un plan qui a
+plusieurs versions porte une petite étiquette « V2 » près du haut de son bloc : la **survoler** ouvre, au-dessus du
+bloc, une carte par version (aperçu, nom, croix) ; un clic sur une carte fait passer le plan à cette version, la croix
+la supprime (après confirmation sur la carte ; jamais la version affichée). Le **clic droit sur un plan** (bande ou
+vignette) a « **Nouvelle version ›** » : *en dupliquant la version en cours* ou *en partant d'un plan vide* (même
+durée, même cadre, même caméra, un calque de dessin vide ; `version.vide`). Storyboard > Versions du plan >
+« **Supprimer les versions non affichées…** » (tous les plans, ou le plan courant) garde la version affichée de chaque
+plan et supprime les autres, après confirmation (« 7 versions de 4 plans seront supprimées ») ; les états gardés par les
+envois ne sont pas touchés. La **fiche du plan** a aussi une ligne « Version » : la version active, les boutons
+« Nouvelle version », et pour chaque autre version de quoi **passer** à elle (les deux échangent leur contenu), la
+**comparer**, la **restaurer** (une copie d'elle devient une nouvelle version active ; rien n'est perdu) ou la
+**supprimer** (jamais l'active). Le titre du plan dit « Plan 3 · V2 » (bande, planche, fiche, timeline, barre d'état)
+quand il a plusieurs versions ; `version.precedente` et `version.suivante` passent de l'une à l'autre au clavier. Dans
+l'export pour le montage, le clip du plan s'appelle `SQ01_PL012A_V2` quand il a plusieurs versions. Détail et liste de
+vérifications : `docs/INTERFACE.md`, partie 15.
 - Chaque version rangée a ses propres dessins : retoucher l'une ne touche pas l'autre (les tuiles sont partagées
   jusqu'à la première retouche, la mémoire ne double pas).
-- Un geste = une étape d'annulation nommée (« Nouvelle version du plan », « Passer à la version v1 », « Restaurer la
-  version v2 », « Supprimer la version v1 ») ; le storyboard verrouillé les refuse.
+- Un geste = une étape d'annulation nommée (« Nouvelle version du plan », « Passer à la version V1 », « Restaurer la
+  version V2 », « Supprimer la version V1 », « Nouvelle version du plan, vide », « Supprimer les versions non affichées ») ; le storyboard verrouillé les refuse.
 - Ce qui reste au **plan** et non à la version : sa place dans le film, son numéro, ses commentaires, ses transitions,
   son contenu rogné (réserve) ; la barre d'état le rappelle quand un plan a un contenu rogné. Dupliquer un plan ne copie
   pas ses versions.

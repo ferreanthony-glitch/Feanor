@@ -16,7 +16,9 @@
 //!
 //! Les fichiers de montage désignent les médias par des **chemins relatifs** au dossier (`media/…`),
 //! ou absolus au choix. Les noms de clips sont ceux de la numérotation des plans
-//! (`Document::plan_full_ref` : « SQ01_PL012A », voir `numerotation.rs`).
+//! (`Document::plan_full_ref` : « SQ01_PL012A », voir `numerotation.rs`) ; un plan qui a plusieurs versions
+//! (`planvers.rs`) y ajoute celle qui part : « SQ01_PL012A_V2 » (nom du clip et du fichier ; un plan à une seule
+//! version garde son nom sans suffixe).
 //!
 //! Ce module est **pur** (pas d'interface, pas de fichier) : `build_plan` lit le document et décrit
 //! l'export (`Plan`), `write_edl` / `write_xml` / `write_otio` / `readme` en font du texte. L'écriture
@@ -417,7 +419,11 @@ pub fn build_plan(doc: &Document, opts: &Options, cur_panel: usize, title: &str)
     let mut clips: Vec<PlanClip> = Vec::new();
     let mut at = 0;
     for p in a..b {
-        let name = doc.plan_full_ref(p);
+        // Un plan qui a plusieurs versions porte celle qui part dans son nom : « SQ01_PL012A_V2 » (la bobine de
+        // l'EDL reste « PL012A » : 8 caractères au plus).
+        let versionne = doc.nombre_de_versions(doc.panels[p].id) > 1;
+        let suffixe = if versionne { format!("_{}", crate::planvers::etiquette(doc.numero_de_version(doc.panels[p].id))) } else { String::new() };
+        let name = format!("{}{suffixe}", doc.plan_full_ref(p));
         let ref_only = doc.plan_ref(doc.panels[p].scene);
         let len = doc.panels[p].frame_count();
         clips.push(PlanClip {
@@ -429,7 +435,7 @@ pub fn build_plan(doc: &Document, opts: &Options, cur_panel: usize, title: &str)
             len,
             head: 0,
             tail: 0,
-            title: crate::storyboard::panel_long_title(doc, p),
+            title: if versionne { format!("{} · {}", crate::storyboard::panel_long_title(doc, p), crate::planvers::etiquette(doc.numero_de_version(doc.panels[p].id))) } else { crate::storyboard::panel_long_title(doc, p) },
         });
         at += len;
     }

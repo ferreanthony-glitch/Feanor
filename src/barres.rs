@@ -222,7 +222,7 @@ pub(crate) const MONTAGE: &[Cmd] = &[
     bouton("envoi.modifie_precedent", ph::ARROW_FAT_LEFT, "Plan modifié précédent", "Aller au plan modifié avant le plan courant, depuis le dernier envoi.", false, 1),
     bouton("envoi.modifie_suivant", ph::ARROW_FAT_RIGHT, "Plan modifié suivant", "Aller au plan modifié après le plan courant, depuis le dernier envoi.", false, 1),
     // Les versions du plan courant (`planversui.rs`).
-    bouton("version.nouvelle", ph::GIT_FORK, "Nouvelle version du plan", "Garde le plan tel qu'il est comme version plus ancienne (v1) et continue sur une copie (v2). Le sélecteur de versions est dans la fiche du plan.", false, 1),
+    bouton("version.nouvelle", ph::GIT_FORK, "Nouvelle version du plan", "Garde le plan tel qu'il est comme version plus ancienne (V1) et continue sur une copie (V2). Les versions se changent en survolant « V2 » sur le plan, dans le montage.", false, 1),
     etat("comparer.ouvrir", ph::COLUMNS, "Comparer le plan", "Deux versions du plan, ou le plan d'aujourd'hui et son état à un envoi : côte à côte, en volet, en fondu ou en superposition. Lecture seule.", false, 1),
     bouton("fichier.exporter_montage", ph::FILM_REEL, "Exporter pour le montage", "Un fichier vidéo par plan et le montage en EDL, Final Cut XML (Premiere, DaVinci Resolve) ou OpenTimelineIO.", false, 2),
     bouton("son.importer", ph::MUSIC_NOTES_PLUS, "Importer un son", "WAV, MP3, FLAC ou OGG, à l'image courante ; on peut aussi lâcher le fichier sur la fenêtre.", true, 2),

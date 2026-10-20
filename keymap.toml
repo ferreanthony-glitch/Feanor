@@ -2529,9 +2529,24 @@ action = "envoi.modifies_choisir"
 touches = []
 source = "SHOT (sans touche)"
 
-# Versions d'un plan (v1, v2, v3…) : sans touche, à choisir.
+# Versions d'un plan (V1, V2, V3…) : sans touche, à choisir.
 [[raccourci]]
 action = "version.nouvelle"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "version.vide"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "version.purger"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "version.purger_plan"
 touches = []
 source = "SHOT (sans touche)"
 

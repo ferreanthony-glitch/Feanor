@@ -29,11 +29,17 @@ mod envois;
 #[cfg(test)]
 mod envois_tests;
 mod envoisui;
-// Versions d'un plan (v1, v2, v3…) : le modèle et le fichier (`planvers`), l'interface (`planversui`).
+// Versions d'un plan (V1, V2, V3…) : le modèle et le fichier (`planvers`), l'interface (`planversui`).
 mod planvers;
 #[cfg(test)]
 mod planvers_tests;
 mod planversui;
+// La pile des versions au survol de « V2 » sur le bloc d'un plan : la logique sans interface (`pilevers`) et son
+// dessin (`pileversui`).
+mod pilevers;
+#[cfg(test)]
+mod pilevers_tests;
+mod pileversui;
 // Comparer un plan avec lui-même (deux versions, ou aujourd'hui et un envoi) : le calcul (`comparer`),
 // la fenêtre (`comparerui`).
 mod comparer;

@@ -174,7 +174,7 @@ fn the_number_of_versions_is_bounded_and_the_neighbours_turn() {
     assert_eq!(doc.nouvelle_version(0, 1), None, "pas plus de {MAX_VERSIONS} versions");
     assert_eq!(doc.version_voisine(plan, 1), Some(1), "après la dernière, la première");
     assert_eq!(doc.version_voisine(plan, -1), Some(MAX_VERSIONS as u32 - 1));
-    assert_eq!(etiquette(12), "v12");
+    assert_eq!(etiquette(12), "V12");
 }
 
 #[test]
@@ -346,7 +346,7 @@ fn each_version_gesture_is_one_named_undo_step_and_undo_brings_everything_back()
     // Quatre gestes, quatre étapes, leurs noms dans l'historique.
     let (undo, _) = b.app.history.names();
     assert_eq!(undo.len(), n0 + 4, "{undo:?}");
-    assert_eq!(&undo[n0..], ["Nouvelle version du plan", "Passer à la version v1", "Restaurer la version v2", "Supprimer la version v1"]);
+    assert_eq!(&undo[n0..], ["Nouvelle version du plan", "Passer à la version V1", "Restaurer la version V2", "Supprimer la version V1"]);
     // Défaire une étape à la fois.
     b.app.run_action("edition.annuler");
     assert_eq!(b.app.doc.versions_du_plan(plan).unwrap().numeros(), vec![1, 2, 3]);

@@ -687,6 +687,12 @@ pub fn panel_plan_at(doc: &Document, index: usize, frame: usize, paper: Option<[
     plan_with_camera(&doc.panels[index], frame, paper, &doc.camera_seen(index, frame), doc.fps)
 }
 
+/// L'image `frame` d'un plan rangé (une version qui n'est pas dans `doc.panels`), avec sa propre caméra : la
+/// vignette d'une carte de la pile des versions.
+pub fn stored_panel_plan(doc: &Document, panel: &Panel, frame: usize, paper: Option<[u8; 3]>) -> Plan {
+    plan_with_camera(panel, frame, paper, &doc.camera_seen_du_plan_range(panel, frame), doc.fps)
+}
+
 /// Le calque `li` du plan `index` seul, à l'image `frame`, tel que la caméra au centre le voit
 /// (export vers Storyboard Pro, 14b) : en mode normal, à pleine opacité et même caché (sa
 /// visibilité et son opacité sont reprises à part), effets compris. Aucun : un dossier, ou rien

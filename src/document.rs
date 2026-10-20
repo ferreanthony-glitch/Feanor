@@ -1224,6 +1224,23 @@ impl Document {
         default
     }
 
+    /// Caméra d'un plan rangé (une version qui n'est pas dans `panels`) à son image `frame` : ses propres clés,
+    /// sinon la caméra par défaut.
+    pub fn camera_du_plan_range(&self, p: &Panel, frame: usize) -> Camera {
+        let default = self.default_camera();
+        if p.camera.is_empty() {
+            default
+        } else {
+            camera::camera_at(&p.camera, frame, default)
+        }
+    }
+
+    /// Comme `camera_seen`, pour un plan rangé.
+    pub fn camera_seen_du_plan_range(&self, p: &Panel, frame: usize) -> CameraSeen {
+        let c = self.camera_du_plan_range(p, frame);
+        CameraSeen { offset: pos2(c.x, c.y) - self.stage_center(), dolly: c.dolly, d0: camera::ref_distance(self.frame) }
+    }
+
     /// Où est la caméra du plan `index` à l'image `frame`, pour le multiplan : décalage depuis
     /// le centre de la feuille, avancée, distance de référence.
     pub fn camera_seen(&self, index: usize, frame: usize) -> CameraSeen {

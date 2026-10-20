@@ -865,7 +865,8 @@ impl App {
         item(self, ui, "Nouveau plan après", &|a| a.new_panel());
         item(self, ui, "Dupliquer le plan", &|a| a.duplicate_panel());
         self.plan_color_menu(ui);
-        self.version_menu(ui, i);
+        self.nouvelle_version_menu(ui, i);
+        self.version_menu(ui, i, false);
         ui.separator();
         self.panel_clipboard_items(ui);
         ui.separator();

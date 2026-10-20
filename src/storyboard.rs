@@ -557,8 +557,10 @@ impl App {
             self.duplicate_panel();
         }
         self.plan_color_menu(ui);
-        // Les versions du plan : nouvelle, passer à, restaurer, supprimer (`planversui.rs`).
-        self.version_menu(ui, index);
+        // Les versions du plan (`planversui.rs`) : « Nouvelle version › » au premier niveau (en dupliquant la
+        // version en cours, ou en partant d'un plan vide), puis passer à, restaurer, supprimer, comparer.
+        self.nouvelle_version_menu(ui, index);
+        self.version_menu(ui, index, false);
         // Les coupes de part et d'autre du plan (`transitionsui.rs`).
         self.cut_menu_named(ui, index, "Transition au début du plan");
         self.cut_menu_named(ui, index + 1, "Transition à la fin du plan");
@@ -668,6 +670,8 @@ impl App {
         let mut blocks: Vec<Rect> = Vec::with_capacity(self.doc.panels.len());
         // Les repères « modifié depuis le dernier envoi » posés ce coup-ci : où, et à quel plan (`envoisui.rs`).
         let mut reperes: Vec<(Rect, u64)> = Vec::new();
+        // Les étiquettes de version « V2 » posées ce coup-ci (`pileversui.rs`).
+        let mut etiquettes: Vec<crate::pileversui::EtiquetteBloc> = Vec::new();
         let mut start = 0;
         for i in 0..self.doc.panels.len() {
             let len = self.doc.panels[i].frame_count();
@@ -743,6 +747,12 @@ impl App {
                     theme::marque(),
                     Stroke::NONE,
                 ));
+            }
+            // La version du plan (« V2 »), près du haut, au milieu, quand il en a plusieurs : la survoler ouvre
+            // la pile des versions (`pileversui.rs`).
+            let a_repere = self.envois_ui.etat(self.doc.panels[i].id).is_some() && crate::envoisui::repere_en_pastille(rect);
+            if let Some(e) = self.peindre_etiquette_version(&clip, rect, i, a_repere) {
+                etiquettes.push(e);
             }
             if selected || chosen {
                 painter.rect_stroke(
@@ -930,6 +940,16 @@ impl App {
             }
         }
 
+        // Une étiquette de version « V2 » prend le geste qui part d'elle : un clic ouvre la pile (pour un stylet
+        // qui ne survole pas), ni glissement ni double-clic ne traversent jusqu'au plan dessous.
+        let on_label = |p: Option<Pos2>| p.is_some_and(|p| etiquettes.iter().any(|e| e.zone.contains(p)));
+        let label_press = on_label(ui.input(|i| i.pointer.press_origin()));
+        let label_click = (resp.clicked() || resp.double_clicked()) && on_label(resp.interact_pointer_pos());
+        if label_click && resp.clicked() {
+            if let Some(plan) = resp.interact_pointer_pos().and_then(|p| etiquettes.iter().find(|e| e.zone.contains(p))).map(|e| e.plan) {
+                self.pile_epingler(plan);
+            }
+        }
         // Une transition prend le geste qui part de sa forme (ses bords changent sa durée).
         let trans_took = resp.drag_started()
             && !comment_ptr.busy
@@ -943,7 +963,7 @@ impl App {
                 self.trans_end_drag();
             }
         }
-        if resp.drag_started() && !comment_ptr.busy && !trans_took {
+        if resp.drag_started() && !comment_ptr.busy && !trans_took && !label_press {
             let origin = ui.input(|i| i.pointer.press_origin()).unwrap_or(r.center());
             // Sans recentrer la bande : le bord tiré doit rester sous le pointeur.
             self.playing = false;
@@ -1166,7 +1186,7 @@ impl App {
         }
 
         let trans_clicked = resp.clicked() && !comment_ptr.busy && resp.interact_pointer_pos().is_some_and(|p| self.trans_click(p, &badges));
-        if resp.clicked() && !comment_ptr.busy && !trans_clicked {
+        if resp.clicked() && !comment_ptr.busy && !trans_clicked && !label_click {
             self.trans.sel = None;
             // Le bord choisi pour les flèches ne l'est que par un clic sur un bord (ci-dessous).
             self.edge_sel = None;
@@ -1259,7 +1279,7 @@ impl App {
                 }
             }
         }
-        if resp.double_clicked() && !comment_ptr.busy {
+        if resp.double_clicked() && !comment_ptr.busy && !label_click {
             if let Some(p) = resp.interact_pointer_pos() {
                 if crate::transitionsui::badge_hit(&badges, p).is_some() {
                     // Sur une transition : le double-clic n'entre pas dans le plan dessous.
@@ -1424,6 +1444,17 @@ impl App {
             }
         }
 
+        // La pile des versions, au-dessus du bloc dont on survole l'étiquette (pas pendant un geste de la bande).
+        let occupe = self.montage_drag.is_some()
+            || self.handle_drag.is_some()
+            || self.cam_keys_drag.is_some()
+            || self.keys_drag.is_some()
+            || self.fx_keys_drag.is_some()
+            || self.key_rect.is_some()
+            || self.cam_rect.is_some()
+            || self.trans.drag.is_some();
+        self.pile_versions_ui(ui, &etiquettes, occupe, painter.clip_rect());
+
         // Tête de lecture et repère de déplacement.
         let gx = x_of(self.global_frame());
         painter.line_segment([pos2(gx, r.top()), pos2(gx, r.bottom())], Stroke::new(2.0_f32, cur_frame()));
@@ -1472,7 +1503,7 @@ impl App {
         let scene_number = self.doc.plan_code(scene);
         let seq_number = self.doc.sequence_code(seq);
         ui.add_space(4.0);
-        ui.heading(panel_long_title(&self.doc, i));
+        ui.heading(crate::planversui::titre_long_avec_version(&self.doc, i));
         // Chaque champ modifie une copie ; `edited` enregistre l'étape d'annulation avant qu'on
         // reporte la valeur (une étape par saisie).
         egui::Grid::new("fiche_panneau").num_columns(2).show(ui, |ui| {
