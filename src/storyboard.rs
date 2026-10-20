@@ -60,7 +60,13 @@ impl App {
     /// Applique une opération de montage du modèle (avec annulation) et rend courant le plan
     /// qu'elle désigne. `None` = opération refusée.
     pub(crate) fn structure_op(&mut self, op: impl FnOnce(&mut Document, usize) -> Option<usize>) -> bool {
-        if self.storyboard_refuses() {
+        self.structure_op_porte(true, op)
+    }
+
+    /// Comme `structure_op`. `montage` : l'opération change le montage (ordre, nombre, durée : il faut le jeton dans un film
+    /// partagé) ; sinon elle ne change que le contenu du plan courant (une marque d'image : il faut tenir le plan).
+    pub(crate) fn structure_op_porte(&mut self, montage: bool, op: impl FnOnce(&mut Document, usize) -> Option<usize>) -> bool {
+        if montage && self.storyboard_refuses() || !montage && self.content_refuses() {
             return false;
         }
         self.end_stroke();
@@ -204,7 +210,7 @@ impl App {
 
     /// Coupe le plan courant à l'image courante (F5) : la suite devient un nouveau plan.
     pub(crate) fn split_current_panel(&mut self) {
-        if self.storyboard_refuses() {
+        if self.storyboard_refuses() || !self.partage_peut_toucher(&[self.panel().id]) {
             return;
         }
         let at = self.cur_frame;
@@ -218,7 +224,8 @@ impl App {
     /// Réunit le plan courant et le suivant (de la même séquence) : le début du suivant devient
     /// une marque d'image.
     pub(crate) fn merge_next_panel(&mut self) {
-        if self.storyboard_refuses() {
+        let voisins: Vec<u64> = self.doc.panels.iter().skip(self.cur_panel).take(2).map(|p| p.id).collect();
+        if self.storyboard_refuses() || !self.partage_peut_toucher(&voisins) {
             return;
         }
         if self.structure_op(|d, i| d.join_next_plan_without_mark(i)) {
@@ -235,6 +242,9 @@ impl App {
             return;
         }
         let ids = self.board_selection();
+        if !self.partage_peut_toucher(&ids) {
+            return;
+        }
         let n = ids.len();
         if n < 2 {
             self.status = "Choisis au moins deux plans (Ctrl ou Maj + clic dans le montage) pour les fusionner.".into();
@@ -250,7 +260,8 @@ impl App {
 
     /// Réunit le plan précédent (de la même séquence) et le plan courant.
     pub(crate) fn join_previous_scene(&mut self) {
-        if self.storyboard_refuses() {
+        let voisins: Vec<u64> = self.doc.panels.iter().skip(self.cur_panel.saturating_sub(1)).take(2).map(|p| p.id).collect();
+        if self.storyboard_refuses() || !self.partage_peut_toucher(&voisins) {
             return;
         }
         if self.structure_op(|d, i| d.join_next_plan_without_mark(i.checked_sub(1)?)) {
@@ -265,7 +276,7 @@ impl App {
     pub(crate) fn toggle_mark(&mut self) {
         let frame = self.cur_frame.min(self.frame_count().saturating_sub(1));
         let mut placed = None;
-        let done = self.structure_op(|d, i| {
+        let done = self.structure_op_porte(false, |d, i| {
             placed = d.toggle_mark(i, frame);
             placed.map(|_| i)
         });
@@ -291,7 +302,7 @@ impl App {
     /// Durée du plan courant. Chaque valeur repart du plan tel qu'il était au début du geste
     /// (raccourcir puis rallonger ne perd rien), avec une seule étape d'annulation par geste.
     pub(crate) fn edit_panel_length(&mut self, n: usize) {
-        if self.storyboard_refuses() {
+        if self.storyboard_refuses() || !self.partage_peut_toucher(&[self.panel().id]) {
             return;
         }
         self.length_field_active = true;
@@ -557,6 +568,8 @@ impl App {
             ui.close_menu();
             self.enter_animation(index);
         }
+        // Film partagé : prendre, rendre, reprendre (`cooperationui.rs`).
+        self.equipe_menu_items(ui, index);
         if ui.button("Nouveau plan après").clicked() {
             ui.close_menu();
             self.new_panel();
@@ -679,6 +692,8 @@ impl App {
         let mut blocks: Vec<Rect> = Vec::with_capacity(self.doc.panels.len());
         // Les repères « modifié depuis le dernier envoi » posés ce coup-ci : où, et à quel plan (`envoisui.rs`).
         let mut reperes: Vec<(Rect, u64)> = Vec::new();
+        // Les pastilles de prise (film partagé) de ce coup-ci : la zone et le plan, pour la bulle.
+        let mut prises_zones: Vec<(Rect, u64)> = Vec::new();
         // Les étiquettes de version « V2 » posées ce coup-ci (`pileversui.rs`).
         let mut etiquettes: Vec<crate::pileversui::EtiquetteBloc> = Vec::new();
         let mut start = 0;
@@ -733,6 +748,10 @@ impl App {
             // ambre sur un bloc étroit).
             if let Some(etat) = self.envois_ui.etat(self.doc.panels[i].id) {
                 reperes.push((crate::envoisui::peindre_repere_du_bloc(&clip, rect, etat), self.doc.panels[i].id));
+            }
+            // Film partagé : qui tient le plan (pastille à sa couleur, en haut à gauche) et qui le regarde.
+            if let Some(zone) = self.peindre_pastille(&clip, rect, self.doc.panels[i].id, 1.0) {
+                prises_zones.push((zone, self.doc.panels[i].id));
             }
             let title = clip.layout_no_wrap(crate::planversui::titre_avec_version(&self.doc, i), FontId::proportional(12.0), visuals.text_color());
             let duration = clip.layout_no_wrap(
@@ -915,6 +934,9 @@ impl App {
 
         if let Some(p) = resp.hover_pos() {
             if let Some((_, phrase)) = reperes.iter().find(|(z, _)| z.contains(p)).and_then(|(_, plan)| self.envoi_repere(*plan)) {
+                resp.clone().on_hover_text_at_pointer(phrase);
+            }
+            if let Some(phrase) = prises_zones.iter().find(|(z, _)| z.contains(p)).and_then(|(_, plan)| self.pastille_phrase(*plan)) {
                 resp.clone().on_hover_text_at_pointer(phrase);
             }
             let clip_edge = matches!(

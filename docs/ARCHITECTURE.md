@@ -2025,3 +2025,54 @@ est remise sur le plan, le calque et l'image où le collage avait été demandé
 | Rééchantillonner par tuile d'arrivée, sur des fils de fond | pas de bloc géant (la toile infinie va jusqu'à ±32 768 px), parallèle, exact au pixel près à `s = 1` | 0,26 s (1 fil) à 33 ms (15 fils) pour une feuille 4K entièrement peinte | un fil de plus en route pendant le calcul (on en laisse un à l'interface) | oui |
 | Choix retenus dans les réglages, « Ne plus demander » | un choix par type de projet qu'on colle souvent, sans fenêtre à chaque fois | un bloc de réglages | on oublie qu'on a coché : Préférences > Projets le dit | oui |
 | Pas de question pour les clés, effets, éléments, zones | de petits gestes ; la fenêtre les alourdirait | ils suivent les choix retenus | un choix « remplir » s'applique sans qu'on le revoie | oui |
+
+## Travailler à plusieurs (2026-10-20, branche `cooperatif`)
+
+Conception complète : `docs/COOPERATION.md`. Ici, où c'est dans le code et ce qu'il faut retenir pour y toucher.
+
+### Les couches
+
+```
+cooperationui.rs   barrières (content_refuses / storyboard_refuses), pastilles, fenêtre Équipe, partager, préférences
+cooperation.rs     Moteur (fil de fond) + Session (interface) : prises, lectures, structure, commentaires, brouillons
+depot.rs           trait Depot  ←  DossierPartage (aujourd'hui)  /  ServeurShot (plus tard)
+verrous.rs         pur : fiches, titulaire, bail, reprise
+projet_partage.rs  format 34 (sous-module de project.rs) : ouvrir, charger_plan, charger_structure, preparer, run_partage, partager
+partagecom.rs      commentaires : un fichier par auteur, fusion le plus récent gagne
+equipe.rs          identité, séance, couleur, réglages
+```
+
+### Ce qui change dans le projet classique (rien de visible)
+
+- `project.rs` : `Manifest` porte un bloc facultatif `partage` ; `load_manifest` devient `load_manifest_avec(…, Annexes)` (les
+  annexes — versions, contenu rogné, scènes 3D, commentaires — peuvent être données au lieu d'être lues dans le dossier ; un plan relu
+  seul ne lit que ses dessins) ; la boucle des dessins de `prepare_save` est `dessins_a_ecrire` ; `SaveJob` a un champ `partage`
+  (rien pour un projet classique) ; `Loaded` a `manquants`, `partage`, `session`, `erreur_equipe`.
+- `document.rs` : `id_prefix` (0 = classique), `alloc` / `reserve_id` / `insert_model` qui le respectent ; rien d'autre.
+- `planvers.rs`, `rognage.rs`, `scene3dstore.rs`, `brushtex.rs` : de petites fonctions pour lire / écrire **un seul plan** de ces annexes.
+
+### La session
+
+- `Moteur` tourne sur un fil (`cooperation`) : `tour()` = commandes de l'interface → `Depot::surveiller` (curseur : date et taille)
+  → fiches → plans changés (lus et décodés **sur ce fil** par `charger_plan`) → structure → commentaires → battement (ma fiche) →
+  `publier` (une `Vue` immuable, `Arc`, prise une fois par image par l'interface). Il ne touche jamais au document.
+- `Session` (dans `EtatProjet::partage`, donc par onglet) : `sonder(&mut doc)` pose ce que le moteur a envoyé (`Evenement`), sans
+  décoder ; `prendre`, `rendre`, `peut_modifier_plan` / `peut_modifier_montage` répondent sans entrée-sortie ;
+  `contexte_ecriture` + `projet_partage::preparer` font le cliché de l'enregistrement ; `enregistrement_fini` avance les bases.
+- Le moteur peut tourner sans fil (`Session::pomper`) : c'est ce que font les essais, avec une `Horloge` réglable.
+- Un onglet caché garde son fil (le battement continue) ; ses événements attendent qu'il soit affiché.
+- Barrières : `content_refuses()` → le plan courant doit être à moi ; `storyboard_refuses()` → le jeton du montage ;
+  `partage_peut_toucher(ids)` pour détruire / couper / fusionner / rogner. `toggle_mark` est du contenu de plan
+  (`structure_op_porte(false, …)`). Un plan créé est à moi dès sa naissance (`apres_structure`, déclenché par le numéro d'historique).
+- Annuler / rétablir : `after_history` appelle `rafraichir_etranger` (les plans que je ne tiens pas reprennent leur dernier état reçu).
+
+### Décisions (coût / risque / réversibilité)
+
+| Décision | Pourquoi | Coût | Risque | Réversible |
+|---|---|---|---|---|
+| Fichiers à un seul auteur (fiche d'équipier, plan, commentaires par auteur) | Dropbox / Drive ne propagent pas les verrous et fabriquent des copies en conflit | plus de fichiers | peu | oui : le serveur remplacerait les fiches |
+| Titulaire calculé sur les fiches lues, pas d'arbitre | même résultat partout, aucun poste à désigner | une prise peut être « provisoire » 8 s | le perdant d'une course est prévenu et son travail est en brouillon | oui |
+| Réutiliser `load_manifest` pour un plan, la structure et le projet entier | zéro lecture de dessins en double, mêmes protections | un `Annexes` à passer | un champ de projet oublié dans le format partagé : l'essai « projet complet » le voit | oui |
+| Empreintes des dessins dans le fichier du plan | un plan n'est jamais pris à moitié arrivé ; un pixel changé change le plan | une relecture des fichiers de dessins par le lecteur | un dessin lu deux fois (cache du système) | oui : champ facultatif |
+| Moteur sur un fil, interface sans entrée-sortie | règle « sans latence » | un canal et un instantané `Arc` | un événement qui attend dans un onglet caché | oui |
+| Numéros préfixés par équipier | deux postes ne se rencontrent jamais | numéros plus grands (≤ 2⁵², sans perte en JSON) | tirage du même préfixe (1 sur un million, vérifié à l'arrivée) | oui |

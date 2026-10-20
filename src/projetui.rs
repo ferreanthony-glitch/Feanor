@@ -110,8 +110,10 @@ impl App {
     pub(crate) fn storyboard_refuses(&mut self) -> bool {
         if self.doc.storyboard_locked {
             self.status = STORYBOARD_LOCKED.into();
+            return true;
         }
-        self.doc.storyboard_locked
+        // Film partagé : il faut le jeton du montage (`cooperationui.rs`).
+        self.partage_refuse_montage()
     }
 
     /// Refuse (avec un message) ce qui changerait les dessins, les expositions ou les calques
@@ -119,8 +121,10 @@ impl App {
     pub(crate) fn content_refuses(&mut self) -> bool {
         if self.doc.storyboard_locked {
             self.status = CONTENT_LOCKED.into();
+            return true;
         }
-        self.doc.storyboard_locked
+        // Film partagé : le plan courant doit être à moi (`cooperationui.rs`).
+        self.partage_refuse_plan()
     }
 
     /// Verrouille ou déverrouille le storyboard (une étape d'annulation).

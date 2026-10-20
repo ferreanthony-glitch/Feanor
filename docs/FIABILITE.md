@@ -261,3 +261,39 @@ pourrait mal tourner, et ce qui le garde :
 | Le presse-papiers perd sa copie d'origine après un collage adapté | les fonctions de collage clonent ; la copie d'origine sert encore | `the_original_stays_in_the_clipboard_and_pastes_at_its_own_size_elsewhere` |
 | Un collage adapté s'annule en plusieurs étapes | une étape, nommée ; annuler / rétablir d'un coup | `a_4k_plan_pasted_into_…` (annuler, rétablir), `a_layer_pasted_from_a_smaller_project_is_scaled` |
 | Une cadence recalculée perd des clés ou des marques | une règle d'arrondi commune avec « Changer la cadence » ; marques après la première image, une par image | `keeping_the_duration_in_seconds_rescales_every_frame_count`, `space_and_time_adapt_together` |
+
+## 14. Travailler à plusieurs (2026-10-20, branche `cooperatif`)
+
+Le risque nouveau : deux personnes écrivent le même film par un dossier qui n'est pas un disque (Dropbox, Drive, NAS). Règle :
+**rien ne se perd, rien n'est supposé présent, aucun fichier d'un autre poste n'est jamais effacé.** Les essais sont dans
+`cooperation_tests.rs` (deux postes, dossiers synchronisés imités par `Synchro`), `cooperation_ui_tests.rs`,
+`cooperation_modele_tests.rs`, `cooperation_mesures_tests.rs`.
+
+| Risque | Garde | Essai |
+|---|---|---|
+| Un projet partagé n'est pas le même projet que l'original | le projet complet d'essai (`fiabilite_fixture`) partagé puis rouvert donne le même instantané ; l'original n'est pas touché | `a_complete_project_shared_and_reopened_is_the_same_project`, `sharing_leaves_the_original_untouched_…` |
+| Un SHOT sans partage ouvre le film sans plans | structure au format 34 : refusée comme « version plus récente » | `the_shared_manifest_is_format_34_…` |
+| Un fichier de plan manquant, abîmé ou plus récent fait écraser le plan | coquille « en attente » : ni prise, ni écriture, fichier intact | `a_plan_file_that_is_missing_or_unreadable_…`, `…from_a_newer_version…` |
+| Deux numéros de dessin identiques | préfixe par équipier, ≤ 2⁵² | `numbers_of_two_members_never_meet` |
+| Deux personnes dans le même plan | une prise : la plus ancienne prise vivante, même résultat sur tous les postes | `a_plan_is_taken_by_one_person_at_a_time`, `the_oldest_live_prise_wins_…` |
+| La course (deux prises avant de se voir) | le perdant est prévenu, son plan se ferme, son travail va dans un brouillon (dessins sous des numéros neufs) | `two_people_taking_the_same_plan_before_seeing_each_other_…` |
+| Une prise provisoire écrit par-dessus le gagnant | elle n'est pas écrite avant 8 s de confirmation (sauf en quittant) | `a_prise_still_being_confirmed_is_not_written` |
+| Un poste disparu bloque le plan | bail 10 min, reprise avec confirmation, la prise reprise reste écartée | `a_lease_that_runs_out_…`, `a_holder_that_keeps_its_lease_alive_…`, `a_fiche_seen_for_the_first_time_…` |
+| Un plan est pris avant d'être à jour | la prise attend la révision que le porteur d'avant a rendue ; « prendre tel quel » après 60 s | `taking_a_plan_waits_for_the_file_…` |
+| Le plan arrive avant ses dessins / avant la structure / la structure avant le plan | empreintes des dessins ; plan gardé pour la structure ; coquille jusqu'à l'arrivée | `a_plan_file_that_arrives_before_its_drawings_…`, `…before_the_structure…`, `the_structure_that_arrives_before_a_new_plan_…` |
+| On enregistre ce qu'on ne tient pas | l'enregistrement n'écrit que les plans tenus qui ont changé ; une retouche « sans prise » est mise de côté avant d'être remplacée | `saving_writes_only_the_plans_one_holds_…`, `a_change_in_a_plan_one_does_not_hold_…` |
+| Un pixel retouché ne change pas le fichier du plan | l'empreinte du dessin fait partie du contenu | `what_another_saved_arrives_at_the_next_refresh_…` |
+| Annuler ressuscite un vieux plan d'un autre | `rafraichir_etranger` après annuler / rétablir | `undo_never_brings_back_an_old_copy_…` |
+| Un plan supprimé alors qu'on y dessine | brouillon `.supprime.json` avant qu'il disparaisse | `a_plan_deleted_by_the_montage_holder_…` |
+| Le jeton perdu | montage mis de côté, celui du gagnant relu | `the_loser_of_the_token_race_…` |
+| Commentaires de deux personnes | un fichier par auteur, le plus récent gagne, indépendant de l'ordre ; résoudre / supprimer le commentaire d'un autre marche | `comments_of_two_people_merge_…`, `comments_merge_the_same_way_…` |
+| Copies en conflit du client de synchronisation | repérées (noms de Dropbox, Drive, OneDrive), importables comme version, rangées et jamais effacées | `file_names_made_by_sync_clients_…`, `the_scan_reports_only_what_changed_…`, `a_conflict_copy_of_a_plan_the_holder_has_…`, `two_copies_of_the_same_plan_made_in_two_folders_…` |
+| Réseau coupé | message dans la barre d'état, travail gardé en mémoire ; au retour, la prise est gardée ou le travail est en brouillon | `working_offline_…`, `work_done_offline_on_a_plan_that_was_taken_over_…` |
+| Un fil de fond qui réveille l'écran pour rien | aucune repeinture quand rien ne change | `an_idle_application_with_a_shared_project_open_…`, `the_thread_never_asks_for_a_repaint_…` |
+| L'interface lit le dossier partagé | non : tout est sur le fil de la session, le fil d'ouverture ou celui d'écriture ; l'interface lit un instantané | mesures (`docs/PERFORMANCE.md`, 18) |
+| Fermer en tenant des plans | la fermeture rend les prises et écrit la fiche finale ; un plantage laisse le bail expirer | `closing_the_project_gives_back_what_one_held`, `a_session_that_died_…` |
+| « Enregistrer sous » d'un film partagé | copie à plat au format 33 ; le projet quitte le partage | `save_as_makes_a_flat_classic_copy_…` |
+| Un champ de projet oublié dans l'échange d'onglet | `partage` et `equipe_ui` sont dans `etat_projet!` ; l'essai de garde des onglets passe | `every_field_of_the_app_is_either_a_project_field_or_shared` |
+
+Le format du projet classique ne change pas (`VERSION` 33) ; la suite complète et `scripts\verifier.ps1` (nouvelle famille « travail à
+plusieurs ») passent.

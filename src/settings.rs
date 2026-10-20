@@ -156,6 +156,10 @@ pub struct Settings {
     /// ou remplir, images ou secondes, et poser la question ou non.
     #[serde(default, rename = "collage")]
     pub collage: crate::adaptation::ReglageCollage,
+    /// Travailler à plusieurs sur un film partagé (`equipe.rs`, `cooperationui.rs`) : mon identité d'équipier, la durée d'une
+    /// prise sans nouvelles, la prise automatique, les notifications.
+    #[serde(default, rename = "equipe")]
+    pub equipe: crate::equipe::ReglageEquipe,
 }
 
 fn default_passe_partout() -> u8 {
@@ -222,6 +226,7 @@ impl Default for Settings {
             generation_son: Default::default(),
             passe_partout: default_passe_partout(),
             collage: Default::default(),
+            equipe: Default::default(),
         }
     }
 }
@@ -265,6 +270,7 @@ impl Settings {
         }
         s.generation_son = std::mem::take(&mut s.generation_son).sanitized();
         s.passe_partout = s.passe_partout.min(100);
+        s.equipe = std::mem::take(&mut s.equipe).nettoye();
         s
     }
 

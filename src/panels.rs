@@ -136,6 +136,12 @@ impl App {
                 self.action_item(ui, "Exporter…", "fichier.exporter");
                 ui.separator();
                 self.action_item(ui, "Réglages du projet…", "projet.proprietes");
+                // Travailler à plusieurs (`cooperationui.rs`).
+                if self.partage.is_some() {
+                    self.action_item(ui, "Équipe…", "equipe.fenetre");
+                } else {
+                    self.action_item(ui, "Partager ce projet…", "fichier.partager");
+                }
                 self.action_item(ui, "Préférences…", "fichier.preferences");
                 ui.separator();
                 self.action_item(ui, "Quitter", "fichier.quitter");
@@ -691,6 +697,7 @@ impl App {
             }
             self.save_status_ui(ui);
             self.recovery_status_ui(ui);
+            self.cooperation_status_ui(ui);
             // Pendant la lecture : la cadence vraiment affichée (orange si la machine ne suit pas).
             if let (true, Some((rate, skipped))) = (self.playing, self.play_meter.rate) {
                 ui.separator();

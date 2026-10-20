@@ -1879,6 +1879,39 @@ d'un même facteur en largeur et en hauteur, centre sur centre — ce que la cam
   presse-papiers n'est pas modifié.
 
 Détails : `src/adaptation.rs` (la règle), `src/collage.rs` (le parcours), `docs/INTERFACE.md` partie 23 (vérifications à l'écran).
+## Travailler à plusieurs (film partagé)
+
+Plusieurs personnes sur un seul film, par un **dossier partagé** (Dropbox, Google Drive, un serveur ou NAS du studio) : chacun **prend** les plans qu'il travaille, un
+seul à la fois par plan (demande d'Anthony, 2026-10-20 ; conception : `docs/COOPERATION.md`). Aujourd'hui deux personnes, au bureau ou à distance ;
+le stockage est derrière une couture (`Depot`) pour passer plus tard à un serveur SHOT.
+
+- **Partager** : Fichier > **Partager ce projet…** crée le film partagé dans le dossier choisi (le projet ouvert n'est pas touché), puis
+  l'ouvre dans un nouvel onglet. Le fichier `.pelure` du film partagé ne contient que la structure (format 34) : un SHOT sans le
+  partage le refuse. Un projet classique ne change pas du tout.
+- **Prendre / rendre** : clic droit sur un plan (montage ou planche) > **Prendre ce plan**, **Prendre la séquence**, **Rendre ce plan**,
+  **Prendre le montage**. Sans prise, un plan se regarde, se joue et se **commente** ; le dessin, les calques, la caméra, les textes sont refusés
+  avec la raison dans la barre d'état (« Plan 3 est à Léa… »). Le **montage** (ordre, nombre, durée, noms des plans, son, transitions…) demande
+  le **jeton du montage**, tenu par une personne à la fois. Un plan qu'on crée est à soi dès sa naissance.
+- **Voir** : une pastille de la couleur du porteur, avec ses initiales, en haut à gauche de chaque plan (montage et planche) ; un rond creux pour qui le
+  regarde ; un sablier si le fichier du plan n'est pas tout arrivé. Barre d'état : l'icône « équipe » et le nombre de personnes en ligne.
+  Fichier > **Équipe…** : qui est en ligne et ce qu'il tient, les nouveautés (« Léa a enregistré le plan 12 »), les brouillons et les copies en conflit.
+- **Enregistrer** (Ctrl+S) n'écrit que ce qu'on tient, par le même chemin sûr qu'avant. Les autres reçoivent le plan en quelques secondes
+  sans que rien ne bouge sous la main ; un plan qu'on tient n'est jamais remplacé.
+- **Si deux personnes prennent le même plan en même temps** (le dossier synchronisé est lent) : la plus ancienne prise gagne, partout ; l'autre est
+  prévenue et son travail est mis de côté en **brouillon**, à importer comme **version** du plan (« V3 »). Rien n'est perdu.
+- **Si quelqu'un disparaît** : une prise sans nouvelles depuis 10 minutes (Préférences > Équipe) se **reprend** après confirmation ; s'il revient, son
+  travail non enregistré devient un brouillon.
+- **Copies en conflit** de Dropbox / Drive : repérées et importables comme version.
+- **Hors connexion** : on continue sur ses plans ; au retour tout se rattrape.
+- **Commentaires** : un fichier par auteur, fusionnés ; tout le monde peut commenter, résoudre ou supprimer.
+- **Zéro latence** : tout ce qui touche au dossier partagé est sur un fil de fond ; l'interface ne fait que poser le résultat (0,07 ms pour un plan
+  reçu, 1,4 ms de balayage toutes les 3 s pour 600 plans, aucune repeinture au repos : `docs/PERFORMANCE.md`, 18).
+- **Commandes** (sans touche par défaut, Ctrl+K) : `fichier.partager`, `equipe.fenetre`, `equipe.prendre_plan`, `equipe.rendre_plan`,
+  `equipe.prendre_sequence`, `equipe.rendre_sequence`, `equipe.prendre_montage`, `equipe.rendre_montage`, `equipe.rendre_tout`.
+- **Préférences > Équipe** : mon nom, ma couleur, la durée d'une prise sans nouvelles, la prise automatique du plan libre qu'on modifie, les notifications.
+
+Limites et reste à faire : `docs/COOPERATION.md` (fin) — en particulier le serveur SHOT, l'enregistrement automatique dans le dossier partagé et le
+nettoyage du dossier. À regarder à l'écran : la liste de `docs/INTERFACE.md`, partie 27.
 ## Importer un scénario
 
 Fichier > Importer > « Un scénario… » (action `fichier.importer_scenario`, donc aussi dans Ctrl+K) : on
@@ -2136,6 +2169,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `lib.rs`, `main.rs` | Bibliothèque (tous les modules, `lancer`) ; l'exécutable ne fait que la lancer |
 | `noyau.rs` | Noyau pour l'appli compagnon : projet, résumé, vignettes PNG, panneaux, textes, PDF |
 | `document.rs` | Séquences, scènes, panneaux, calques, expositions, dessins ; opérations de montage |
+| `equipe.rs`, `verrous.rs`, `depot.rs`, `partagecom.rs` | Travailler à plusieurs : l'équipier ; les prises (pur) ; le dépôt (`Depot`, `DossierPartage`) ; les commentaires par auteur |
+| `cooperation.rs`, `cooperationui.rs`, `projet_partage.rs` | La session (fil de fond + interface), son interface, le format du projet partagé (format 34) |
 | `raster.rs` | Images en tuiles de 64×64 allouées à la demande |
 | `vector.rs` | Éléments vectoriels : rendu (rejeu du moteur, cache de pixels en tuiles), sélection, transformations, gomme, contours de remplissage |
 | `rejeu.rs` | Rendu exact des dessins vectoriels en arrière-plan (fil de travail, demandes numérotées) |

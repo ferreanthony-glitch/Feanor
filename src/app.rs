@@ -720,6 +720,10 @@ pub struct App {
     pub(crate) fiche: Option<crate::ficheui::FicheWindow>,
     /// Relecture par le réalisateur : export de la page, import des notes, dessin du relecteur (`relectureui.rs`).
     pub(crate) relecture: crate::relectureui::RelectureUi,
+    /// Travailler à plusieurs : la session du film partagé de ce projet (rien : projet classique) et l'état de son interface
+    /// (`cooperation.rs`, `cooperationui.rs`).
+    pub(crate) partage: Option<crate::cooperation::Session>,
+    pub(crate) equipe_ui: crate::cooperationui::EquipeUi,
     /// Fenêtre « À propos de SHOT » (`aproposui.rs`).
     pub(crate) about_window: bool,
     /// Le thème dont les couleurs sont posées dans egui : quand le réglage change, tout est
@@ -1184,6 +1188,8 @@ impl App {
             editorial: None,
             fiche: None,
             relecture: Default::default(),
+            partage: None,
+            equipe_ui: Default::default(),
             about_window: false,
             theme_applied,
             theme_unsaved: false,
@@ -2882,6 +2888,8 @@ impl App {
         self.length_origin = None;
         self.renderer.invalidate_all();
         self.modified = true;
+        // Film partagé : annuler ne ressuscite pas un vieux plan de quelqu'un d'autre (`cooperationui.rs`).
+        self.partage_apres_historique();
     }
 
     // ------------------------------------------------------------------ fichiers
@@ -2999,6 +3007,8 @@ impl App {
     }
 
     pub(crate) fn load_doc(&mut self, doc: Document) {
+        // (Un autre projet prend la place : si l'ancien était un film partagé, ce qu'on y tenait est rendu.)
+        self.lacher_la_session();
         self.rejeu.cancel_all();
         self.rejeu_again.clear();
         self.rejeu_warm.clear();
@@ -3396,6 +3406,10 @@ impl App {
         }
         // Transitions du montage (`transitionsui.rs`) ; Suppr vise celle qui a la main.
         if self.transition_action(action) {
+            return;
+        }
+        // Travailler à plusieurs : prendre, rendre, l'équipe, partager (`cooperationui.rs`).
+        if self.cooperation_action(action) {
             return;
         }
         // Envois et plans modifiés depuis le dernier (`envoisui.rs`).
@@ -4514,6 +4528,8 @@ impl App {
             self.tick_collage(ctx);
             self.collage_fenetre(ctx);
             self.tick_save(ctx);
+            // Travailler à plusieurs : ce que la session a préparé est posé (`cooperationui.rs`).
+            self.cooperation_tick(ctx);
             // Les onglets cachés : une écriture finie est adoptée, rien d'autre ne tourne pour eux.
             self.tick_onglets(ctx);
             self.groupe_fenetre(ctx);

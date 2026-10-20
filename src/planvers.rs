@@ -131,7 +131,7 @@ impl Document {
     }
 
     /// Une copie de `source` avec ses propres dessins, numéros de plan, de marques et de calques neufs.
-    fn copie_de(&mut self, source: &Panel) -> Panel {
+    pub(crate) fn copie_de(&mut self, source: &Panel) -> Panel {
         let mut panel = source.clone();
         panel.id = self.alloc();
         for m in &mut panel.marks {
@@ -331,17 +331,27 @@ pub(crate) struct VersionFichier {
     pub entree: serde_json::Value,
 }
 
+/// Les versions d'un plan sous la forme du fichier (un plan partagé les porte dans son propre fichier).
+pub(crate) fn plan_fichier(host: u64, v: &VersionsDuPlan) -> Result<PlanFichier, String> {
+    let mut autres = Vec::new();
+    for r in &v.autres {
+        autres.push(VersionFichier { numero: r.numero, date: r.date, entree: crate::project::snapshot_value(&r.panel, &|c| c)? });
+    }
+    Ok(PlanFichier { plan: host, actuelle: v.actuelle, date_actuelle: v.date_actuelle, prochaine: v.prochaine, autres })
+}
+
+/// Un fichier fait des versions de plusieurs plans, nettoyé comme celui qu'on lit (numéros uniques et non nuls…).
+pub(crate) fn fichier_de(plans: Vec<PlanFichier>) -> Result<Fichier, String> {
+    let texte = serde_json::to_string(&Fichier { format: FORMAT.into(), version: VERSION, plans }).map_err(|e| e.to_string())?;
+    parse(&texte)
+}
+
 /// Le contenu de `plans_versions.json` ; rien s'il n'y a aucune version rangée (le fichier part, ou, s'il
 /// est illisible, reste là).
 pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
     let mut plans = Vec::new();
     for (i, v) in doc.versions_vivantes() {
-        let host = doc.panels[i].id;
-        let mut autres = Vec::new();
-        for r in &v.autres {
-            autres.push(VersionFichier { numero: r.numero, date: r.date, entree: crate::project::snapshot_value(&r.panel, &|c| c)? });
-        }
-        plans.push(PlanFichier { plan: host, actuelle: v.actuelle, date_actuelle: v.date_actuelle, prochaine: v.prochaine, autres });
+        plans.push(plan_fichier(doc.panels[i].id, v)?);
     }
     plans.retain(|p| !p.autres.is_empty());
     if plans.is_empty() {

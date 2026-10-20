@@ -176,6 +176,12 @@ impl App {
         if self.storyboard_refuses() || pi >= self.doc.panels.len() {
             return None;
         }
+        // Film partagé : rogner déplace du contenu du plan dans sa réserve (et, pour une coupe, de son voisin) : les plans
+        // touchés doivent être à moi ou libres.
+        let touches: Vec<u64> = self.doc.panels.iter().skip(pi).take(if kind == EdgeKind::Roll { 2 } else { 1 }).map(|p| p.id).collect();
+        if !self.partage_peut_toucher(&touches) {
+            return None;
+        }
         if kind == EdgeKind::Roll && pi + 1 >= self.doc.panels.len() {
             return None;
         }
@@ -404,6 +410,10 @@ impl App {
     /// verrou du storyboard (la phrase est dans la barre d'état).
     pub(crate) fn rogner_plan(&mut self, pi: usize, op: Rogner, name: &str) -> Option<isize> {
         if self.storyboard_refuses() {
+            return None;
+        }
+        let touches: Vec<u64> = self.doc.panels.get(pi).map(|p| p.id).into_iter().collect();
+        if !self.partage_peut_toucher(&touches) {
             return None;
         }
         self.end_stroke();

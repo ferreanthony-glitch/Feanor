@@ -3326,3 +3326,24 @@ d'écran, projet verrouillé) ; la page HTML, l'image courante et le son seul ge
 - Reste : « Contenir / Remplir » pour les paramètres d'effets en pour cent d'une image (centre, rayon) quand les proportions
   diffèrent ; les calques vidéo (images de la vidéo, non copiées) ; une barre de progression plutôt que la barre d'état ; annuler
   le calcul en cours ; un aperçu du résultat dans la fenêtre.
+
+## Travailler à plusieurs sur un seul film (demandé par Anthony le 2026-10-20, branche `cooperatif`) ✅ (cœur)
+
+« Rendre le logiciel coopératif : possibilité de travailler à plusieurs sur un seul fichier. » Choix d'Anthony : **option A**, un dossier partagé
+(Dropbox, Drive, NAS) où chacun **prend** ses plans, un à la fois ; deux personnes pour l'instant, au bureau et à distance ; pensé pour passer à un serveur.
+Conception écrite d'abord : `docs/COOPERATION.md`.
+
+- ✅ **Format partagé** (format 34, projet partagé seulement ; le classique reste 33) : structure sans plans, un fichier par plan avec l'empreinte de ses
+  dessins, commentaires par auteur, fiches d'équipier ; numéros préfixés par équipier ; « Partager ce projet… » sans toucher l'original.
+- ✅ **Le dépôt** : trait `Depot`, `DossierPartage` (balayage par date et taille, fichiers temporaires ignorés, copies en conflit repérées) ;
+  la couture du futur `ServeurShot`.
+- ✅ **Les prises** : fiches à un seul auteur, titulaire calculé de la même façon partout, bail de 10 min, reprise confirmée, course tranchée, brouillons,
+  jeton du montage, séquence entière, plan créé = à soi.
+- ✅ **Rafraîchir sans déranger** : fil de fond, plans lus et décodés hors de l'interface, posés en 0,07 ms ; ce qu'on tient n'est jamais remplacé ;
+  annuler ne ressuscite pas un vieux plan ; notifications ; présence ; dossiers synchronisés lents ou dans le désordre (plan avant ses dessins, structure
+  avant le plan, release avant le fichier).
+- ✅ **Enregistrer** ce qu'on tient seulement, par le chemin sûr ; garde-fous (retouche sans prise, plan supprimé, jeton perdu) → brouillons.
+- ✅ **Interface** : barrières de lecture seule, pastilles, fenêtre Équipe, menus, barre d'état, préférences, commandes, hors connexion.
+- ✅ **Essais** : 62 (+1 mesure), famille ajoutée à `scripts\verifier.ps1` ; mesures dans `docs/PERFORMANCE.md`, 18.
+- Pas fait : le serveur SHOT ; l'enregistrement automatique dans le dossier partagé ; le nettoyage du dossier ; importer un montage perdu ; retenir les copies
+  en conflit ignorées ; deux porteurs écrivant le même dessin plus de huit secondes d'affilée laissent des « copies en conflit » de dessins (rien n'est perdu).
