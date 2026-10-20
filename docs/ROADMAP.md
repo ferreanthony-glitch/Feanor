@@ -120,7 +120,8 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
 - ✅ 3b. Exports (Fichier > Exporter…) : film MP4 H.264 + son AAC (regarder, envoyer), film
   MOV ProRes 422 HQ + son PCM (montage), images PNG, son seul WAV ; tout le montage, la scène ou
   le panneau ; vidéo pleine taille ou moitié. Fenêtre de progression (temps restant, annuler) :
-  la fenêtre reste vivante, le document est bloqué pendant l'export. ffmpeg : celui trouvé sur
+  la fenêtre reste vivante ; depuis 2026-10-20 (branche `exports-fond`) le document n'est plus bloqué : l'export copie le projet
+  et calcule ses images sur d'autres fils (voir plus bas). ffmpeg : celui trouvé sur
   le poste (Krita, PATH, winget) ou choisi à la main (retenu dans les réglages). Image filmée
   4 à 8 fois plus rapide (zone filmée seulement, plusieurs cœurs) et images tenues pas
   recalculées : montage lourd de 960 images 1080p exporté en 23 s (avant : ~85 s de calcul,
@@ -3282,3 +3283,25 @@ projet** (`VERSION` reste 33).
   cours de route), fenêtre, étendues, onglets) ; la suite complète passe, `scripts\verifier.ps1 -Repetitions 2`.
 - Pas fait : choix de l'image de la vignette (c'est la première du plan) ; mise en page à imprimer au-delà du paysage une
   page de large ; export Google Sheets direct ; colonnes calculées (formules) ; mouvement des calques (clés de position).
+
+## Exports hors du fil de l'interface (2026-10-20, branche `exports-fond`)
+
+Priorité d'Anthony : « un logiciel qui réponde toujours très rapidement, sans latence ». Avant, le film, les images, le GIF, le
+PDF, le montage, la relecture, la fiche et Storyboard Pro calculaient leurs images sur le fil de l'interface (40 ms par image
+d'écran, projet verrouillé) ; la page HTML, l'image courante et le son seul gelaient SHOT.
+
+- ✅ **Cliché du projet** (`exportrender.rs`, `SnapshotBuilder`) : structure copiée, dessins par tranches de 8 ms, tuiles partagées
+  par `Arc` (rien n'est recopié en pixels) ; 2 ms pour la structure d'un montage de 600 plans, 9 à 15 ms pour 600 plans de 8
+  calques de 48 images, jamais plus de 9 ms d'un coup. L'export utilise le projet tel qu'il était au départ.
+- ✅ **Fils de rendu** (`Pipeline`) : le code d'avant (mêmes pixels, essais pixel pour pixel sur le projet d'essai de la
+  fiabilité), mode exact, réserve privée de dessins dérivés par fil (`fxcache::avec_privee`), une image tenue calculée une fois,
+  un passeur qui range les images dans l'ordre, mémoire bornée, priorité sous celle de l'interface (ffmpeg aussi), deux cœurs
+  laissés à l'interface. Annuler rend la main en quelques millisecondes.
+- ✅ **Tous les exports** : film, GIF, images PNG, image courante, PDF, page HTML, son seul, montage, relecture, fiche
+  technique, Storyboard Pro. Le son est mixé sur un fil à part. Les traits texturés restés en rendu rapide sont refaits exacts dans
+  la copie (sur un autre fil).
+- ✅ **Le projet est libre** : fenêtre « Export en cours » non modale ; on change d'onglet, l'export suit son projet ;
+  « Quitter » prévient. PDF, page, image, son : `.part` puis renommage (annuler ne détruit pas le fichier d'avant).
+- Restent : l'API locale (`noyau.rs`) et la lecture du storyboard par un modèle (`lecturesb.rs`) calculent encore des images
+  d'export sur leur propre fil ; le film s'écrit directement (pas de `.part`) comme avant ; un seul export à la fois pour le
+  film / les images / le PDF…

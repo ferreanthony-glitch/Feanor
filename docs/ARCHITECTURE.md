@@ -79,12 +79,19 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   zone filmée, en tuiles entières avec 2 px de marge pour l'interpolation, répartie sur les
   cœurs (`par_chunks`, fils `std::thread::scope`) ; testée identique, pixel pour pixel, à
   l'ancien calcul (feuille entière, un fil).
-- **Exports** (`export.rs`, `exportui.rs`, 3b) : les images sont calculées sur le fil de
-  l'interface, 40 ms par image d'écran, derrière une fenêtre modale (le document ne peut pas
-  changer : pas besoin de le copier, ce qui doublerait la mémoire). Une image tenue (même plan,
-  même caméra) n'est pas recalculée. Elles partent par une file bornée (8 images) vers des fils
-  d'écriture PNG, ou vers un fil qui les verse dans l'entrée de ffmpeg (images RGBA brutes). Le
-  son est mixé d'avance (`MixState`, hors carte son) dans un WAV temporaire que ffmpeg lit à
+- **Exports** (`export.rs`, `exportrender.rs`, `exportui.rs`, 3b ; refaits le 2026-10-20, branche `exports-fond`) : **aucune
+  image n'est calculée sur le fil de l'interface, et le projet n'est pas verrouillé**. L'export prend un **cliché** du projet
+  au départ (`SnapshotBuilder` : la structure est copiée, les dessins des plans exportés par tranches de 8 ms ; les tuiles sont
+  partagées par `Arc`, comme les vignettes de `thumbs.rs`, donc rien n'est recopié en pixels et dessiner ensuite ne touche que
+  la tuile écrite). Quelques **fils de rendu** (`Pipeline`, un tiers des cœurs libres, deux cœurs laissés à l'interface, sous la
+  priorité de l'interface) calculent les images avec le code d'avant (`panel_plan_at`, `camera_image`, effets, calques
+  d'effets, transitions, incrustations : les mêmes pixels), chacun avec sa **réserve privée de dessins dérivés**
+  (`fxcache::avec_privee` : rien dans la réserve commune de l'écran). Une image tenue (même plan, même caméra) n'est calculée
+  qu'une fois pour tous les fils (`ImageStore`). Un **passeur** les range dans l'ordre vers une file bornée (4 images) vers des
+  fils d'écriture PNG, un fil qui les verse dans l'entrée de ffmpeg (images RGBA brutes), ou les fils qui réduisent les images
+  du PDF, de la relecture, de la fiche et de la page HTML (`ExportJob::collect`). La mémoire en l'air est bornée par la taille
+  d'une image (`avance_permise`). L'interface (`ExportJob::step`) ne fait que copier le projet au départ puis regarder un
+  compteur. Le son est mixé sur un fil à part (`mix_clips_blocking` sur le cliché) dans un WAV temporaire que ffmpeg lit à
   côté. Couleurs converties et étiquetées BT.709 ; tailles impaires rognées d'un pixel (les codecs
   veulent des tailles paires). Le PDF (3c) passe par la même file : un fil réduit chaque image
   (800 px, Lanczos) en JPEG, puis `pdf.rs` met en page et écrit le fichier à la fin.
@@ -94,7 +101,8 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   lignes. Coût : pas de police au choix ni d'écritures non latines — il faudrait alors embarquer
   une police TrueType (bibliothèque à ajouter, réversible : seul `pdf.rs` change). ffmpeg n'est pas fourni : cherché sur le poste, ou choisi
   (`settings.rs`, `%APPDATA%\Pelure\reglages.toml`), lancé sans fenêtre de console. Annuler ou
-  quitter pendant un export arrête ffmpeg et efface la vidéo inachevée.
+  quitter pendant un export (après un avertissement) arrête ffmpeg et efface la vidéo inachevée ; le PDF, la page, l'image
+  seule et le son s'écrivent sous un nom en `.part` puis sont renommés : un export arrêté ne touche jamais au fichier d'avant.
 - **Annuler / rétablir** (`history.rs`) : chaque modification enregistre l'état d'avant, **avant**
   d'avoir lieu : tuiles d'un dessin bitmap, dessin vectoriel, ou « structure ». La structure, c'est
   tout le document hors dessins et sons : séquences, scènes, panneaux et leurs textes, calques
@@ -1162,8 +1170,8 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   - `sbexport::prepare` décrit ce qui part (`SbOut`) : plans → plans, images de storyboard
     (`board::plan_boards`) → panneaux avec leurs textes, calques sans les dossiers (visibilité et
     opacité du dossier reportées), extraits de son. Il note ce qui n'est pas repris.
-  - `SbExportJob` calcule les images comme l'export d'images : quelques-unes par image d'écran
-    (le projet est figé pendant ce temps, `modal_open`), PNG écrits par des fils. Chaque image est
+  - `SbExportJob` calcule les images comme l'export d'images : sur le cliché du projet, par les fils de rendu
+    (`Pipeline::start_with`), PNG écrits par des fils ; le projet n'est retenu que le temps de la copie. Chaque image est
     `render::layer_plan_at` (le calque seul, mode normal, pleine opacité, même caché) vu par
     `doc.default_camera()`. Les images vides sont sautées ; deux images identiques (même hachage)
     ne font qu'un fichier.
@@ -1808,7 +1816,7 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
   rétablit). `Document::normalize` appelle `assign_numbers` : tout plan ou séquence neuf reçoit son numéro entre ses voisins ;
   rien d'autre ne le fait. Fichier : champs facultatifs du manifeste, `VERSION` inchangée (27).
 - `editorial.rs` (pur) → `Plan` (clips, poignées, fondus, son) → `write_edl` / `write_xml` / `write_otio` / `readme` ;
-  `editorialjob.rs` : une `ExportJob::video` par plan (images calculées par tranches de 40 ms sur le fil de l'interface),
+  `editorialjob.rs` : un cliché du projet pour tous les plans, puis une `ExportJob::video` par plan (images calculées sur d'autres fils),
   un fil pour les WAV, les fichiers de montage écrits à la fin, annulation qui efface ; `editorialui.rs` : la fenêtre.
   `export::video_args_rate` (cadence `24000/1001`), `audiofx::bake_sound` (un extrait sans le document).
 
@@ -1842,7 +1850,7 @@ Aucun appel existant ne change : `self.doc` est toujours le projet affiché.
 | tête de lecture (`cur_panel`, `cur_layer`, `cur_frame`, `mode`), lecture (`playing`, `play_*`), `view` (zoom, rotation, miroir), zoom du montage et de la timeline, planche (`board_*`) | outil, pinceaux, couleurs, options du pinceau, bibliothèque de pinceaux, pelure d'oignon et feuille d'exposition (réglages), textes (police) |
 | sélections (calques, images, clés de caméra / d'effets / de montage, sélection bitmap / vectorielle, `multi`), gestes en cours (`stroke`, `vdrag`, `bdrag`, `cam_drag`…), boîte de sélection | **presse-papiers** : plans, calques, images, clés de montage, de caméra et d'effets, effets d'un calque, pixels, éléments vectoriels, sélection sur plusieurs calques (`multi_clip`) : ils voyagent entre les onglets |
 | caches : `renderer`, `monde` (hors de la feuille), `thumbs`, `layer_thumbs`, `murs`, `rejeu` (et ses files), textures du plateau 3D, références, scène 3D, effets calculés (`fxcache`), textures de la carte graphique | carte graphique (`gpu`, pipelines), `audio` (moteur de sortie), `ffmpeg`, `diag`, messages et barre d'état, suggestions sonores (`sug`, remises à zéro à chaque changement) |
-| travaux : `saving` / `save_queue` / `after_save` / `save_error` (enregistrement), `open_job`, `video_import`, `recovery` (copie de secours), suivi des envois, comparaison | fenêtres qui demandent un projet entier (export, propagation, coloriage, import Storyboard Pro) : **modales ou refusées** pendant qu'elles travaillent (`onglet_occupe`) |
+| travaux : `saving` / `save_queue` / `after_save` / `save_error` (enregistrement), `open_job`, `video_import`, `recovery` (copie de secours), suivi des envois, comparaison | fenêtres qui demandent un projet entier (propagation, coloriage, import Storyboard Pro) : **modales ou refusées** pendant qu'elles travaillent (`onglet_occupe`). **Les exports** (film, images, PDF, page, montage, fiche, relecture, Storyboard Pro) ne retiennent le projet que le temps de la copie : ils continuent quand on change d'onglet (`App::export_projet` dit à quel projet ils parlent ; la page de relecture, rangée dans l'état de son onglet, est suivie par `tick_onglets`) |
 
 `doc_epoch` (le numéro du projet que les tâches de fond recopient pour savoir à qui elles répondent) vient d'un compteur
 global : deux onglets n'ont jamais la même époque, et une époque ne revient pas (0 est celle du premier projet au démarrage,
@@ -1887,9 +1895,9 @@ un plan 1). Tout cache indexé par `CelId` est donc rangé par onglet ou vidé a
   attendent sinon ; leurs fils continuent seuls). Rien ne tourne pour un onglet caché sur le fil de l'interface.
 - **Lecture et son** : arrêtées à la sortie (`playing = false`, `stop_audio`) ; un geste en cours se termine dans son onglet
   (`end_stroke`, champ de texte, champ numérique).
-- **Travaux qui parlent à l'interface** (export, propagation, coloriage, export pour le montage, génération des sons proposés,
-  pose d'un bruitage) : `onglet_occupe` refuse le changement avec la raison dans la barre d'état ; les boîtes de dialogue
-  (`modal_open`) figent la bande et les raccourcis.
+- **Travaux qui parlent à l'interface** (propagation, coloriage, génération des sons proposés, pose d'un bruitage, et la
+  copie du projet par un export — quelques images d'écran) : `onglet_occupe` refuse le changement avec la raison dans la barre
+  d'état ; les boîtes de dialogue (`modal_open`) figent la bande et les raccourcis. Un export qui tourne n'est pas de ceux-là.
 
 ### Interface
 

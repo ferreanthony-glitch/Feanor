@@ -140,13 +140,12 @@ récentes le convertissent sans perte en `Clip.2` : à vérifier.
 
 ## Comment ça tourne (règle « sans latence »)
 
-- Les **images** sont calculées sur le fil de l'interface, comme pour l'export du film : quelques-unes par image d'écran
-  (40 ms), les plans l'un après l'autre. SHOT ne copie pas le projet pour calculer ailleurs (cela doublerait la mémoire) ; tant
-  que les images se calculent, le projet est verrouillé par une fenêtre modale (`EditorialWindow::rendering`). **C'est une limite**
-  par rapport à un vrai calcul en fond.
+- Les **images** ne sont plus calculées sur le fil de l'interface (2026-10-20, branche `exports-fond`, `docs/PERFORMANCE.md` §17) :
+  l'export copie le projet au départ (quelques images d'écran, pendant lesquelles il ne bouge pas : `EditorialWindow::rendering`),
+  une seule fois pour tous les plans, puis calcule les images de chaque plan sur d'autres fils, comme pour l'export du film.
+  Le projet est libre ensuite, et l'export continue si l'on change d'onglet. Il utilise le projet tel qu'il était au départ.
 - ffmpeg (un processus par plan), l'écriture du **son** (un fil, avec son compteur) et l'écriture des fichiers sont à côté. Le
-  son est écrit en même temps que les images ; quand les images sont finies, le projet est de nouveau libre pendant que le
-  son finit.
+  son est écrit en même temps que les images.
 - La fenêtre montre le plan en cours, une barre d'images (poignées comprises), une barre du son, le temps restant.
 - **Arrêter** (ou fermer SHOT) arrête ffmpeg et le fil du son et **efface les fichiers déjà écrits par cet export** (et le
   dossier de l'export, s'il l'a créé).
@@ -184,7 +183,7 @@ récentes le convertissent sans perte en `Clip.2` : à vérifier.
 
 ## Limites
 
-- Images calculées sur le fil de l'interface (40 ms par image d'écran), pas sur un fil à part.
+- L'export utilise le projet tel qu'il était au départ : ce qu'on retouche pendant qu'il tourne n'y est pas.
 - Pas de time code à sauts d'images (29,97 DF), pas d'AAF, pas de son dans l'EDL, pas de fondus enchaînés entre extraits son.
 - Transitions écrites : le fondu enchaîné entre deux plans (partout) et le fondu depuis / vers le noir (EDL). Le reste est une coupe, dite.
 - Les plans sont rendus sans leurs transitions, mais avec tout le reste de l'export du film (incrustations gravées, calques

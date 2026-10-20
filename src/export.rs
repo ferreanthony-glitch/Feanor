@@ -1380,6 +1380,8 @@ impl ExportJob {
         let Stage::Rendu(p) = &self.stage else { return };
         let (sent, total) = (p.emitted(), self.frames.len());
         let Some(result) = self.sink.poll() else { return };
+        // (Les fils de rendu encore là — le passeur s'est arrêté avant la fin — s'en vont.)
+        self.cancel.store(true, Ordering::Relaxed);
         self.stage = Stage::Fini;
         let what = if self.unit == "Image de storyboard" { "images de storyboard exportées" } else { "images exportées" };
         self.outcome = Some(match result {

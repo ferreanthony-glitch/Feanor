@@ -1067,8 +1067,8 @@ Détail, formats et liste de contrôle : `docs/EXPORT_MONTAGE.md`. Code : `src/e
   changeraient), les transitions écrites comme des coupes, ffmpeg. Pendant l'export : le plan en cours, deux barres
   (images, son), le temps restant, « Arrêter » (efface ce qui a été écrit). À la fin : les fichiers écrits et « Ouvrir le
   dossier ».
-- **Pendant l'export** : le projet est verrouillé tant que les images se calculent (fenêtre modale, comme l'export du film),
-  puis libre pendant que le son finit.
+- **Pendant l'export** : le projet n'est retenu que le temps de la copie (quelques images d'écran), puis libre ; l'export
+  utilise le projet tel qu'il était au départ et continue si l'on change d'onglet (§ 28).
 - **Numérotation verrouillée** : bouton « Verrouiller la numérotation » et « Renuméroter les plans » sous « Plus… » du montage
   (icônes `LIST_NUMBERS` / `LOCK_KEY` et `HASH`, bulles), menu Storyboard, Réglages du projet.
 
@@ -1379,8 +1379,9 @@ Demande d'Anthony : « ouvrir plusieurs fichiers dans la même fenêtre avec un 
 - **Plantage** : la fenêtre de récupération liste une copie par projet ; « Tout ouvrir » met chacune dans son onglet.
 - **Copier-coller** : plans, calques, images, clés, effets, zones et éléments se collent d'un onglet à l'autre ; une feuille d'une
   autre taille refuse (message avec les deux tailles), une autre cadence prévient.
-- **Pendant un export, la propagation, le coloriage, la génération des sons proposés** ou une boîte de dialogue : on ne change pas
-  d'onglet (la barre d'état dit pourquoi).
+- **Pendant la propagation, le coloriage, la génération des sons proposés**, la copie du projet par un export (quelques images
+  d'écran) ou une boîte de dialogue : on ne change pas d'onglet (la barre d'état dit pourquoi). **Un export qui tourne n'empêche
+  plus de changer d'onglet** (§ 28).
 
 ### À vérifier
 
@@ -1837,8 +1838,8 @@ du projet** (`VERSION` reste 33).
   (choisir le fichier, écrire en tâche de fond) et **Copier dans le presse-papiers**. Colonnes, ordre, format, séparateur,
   time code et dernier dossier sont retenus d'une séance à l'autre (`reglages.toml`, `[fiche_technique]`).
 - **Pendant l'export** : une barre « vignette n / total », le temps restant, la croix « Arrêter » (efface tout ce qui a
-  été commencé). Le projet est verrouillé tant que les vignettes se dessinent (comme les autres exports), puis libre.
-  On ne change pas d'onglet pendant que la fiche s'écrit.
+  été commencé). Le projet n'est retenu que le temps de la copie (quelques images d'écran), puis libre ; on peut changer
+  d'onglet, la fiche continue (§ 28).
 - **À la fin** : « Terminé : 12 lignes, 12 vignettes », le chemin et la taille, le dossier des vignettes, les
   avertissements, et l'icône qui montre le dossier dans l'explorateur.
 
@@ -1932,9 +1933,9 @@ valeur au début et à la fin (« X : 960 → 1200 px ; Focale : 35 → 49 mm »
   vignettes posées par cet export sont effacés.
 - **Arrêter / fermer SHOT** : efface les `.part` et les vignettes que l'export a posées (une vignette d'une fiche
   précédente, remplacée, n'est jamais effacée).
-- **Zéro latence** : seules les images des vignettes se dessinent sur le fil de l'interface, 40 ms au plus par image
-  d'écran ; les PNG, le classeur et les fichiers sont écrits sur un fil à part. Sans colonne « Vignette », rien n'est
-  dessiné.
+- **Zéro latence** : aucune vignette ne se dessine sur le fil de l'interface (le projet est copié au départ, les images se
+  calculent sur d'autres fils, § 28) ; les PNG, le classeur et les fichiers sont écrits à côté. Sans colonne « Vignette »,
+  rien n'est dessiné.
 
 ### 26.6 Limites
 
@@ -1979,3 +1980,53 @@ valeur au début et à la fin (« X : 960 → 1200 px ; Focale : 35 → 49 mm »
     dans le presse-papiers avant ce clic.
 13. Sur un vrai projet de plusieurs dizaines de plans avec vignettes : le temps de l'export (la barre dit le temps
     restant) et la taille du dossier `vignettes/`.
+
+## 28. Exports : le projet reste libre pendant qu'ils tournent (2026-10-20, branche `exports-fond`)
+
+Demande d'Anthony : « un logiciel qui réponde toujours très rapidement, sans latence ». Avant, le film, les images, le GIF, le PDF,
+le montage, la relecture, la fiche et l'export vers Storyboard Pro calculaient leurs images sur le fil de l'interface (40 ms par
+image d'écran, projet verrouillé) ; la page HTML, l'image courante et le son seul gelaient SHOT. Maintenant, aucune image ne se
+calcule sur le fil de l'interface (mesures : `docs/PERFORMANCE.md` § 17).
+
+- **Ce qui change à l'écran.** Après « Exporter… » et le choix du fichier, une petite fenêtre « Export en cours » apparaît en
+  bas à droite, **sans rien bloquer** : phase (« Copie du projet… », « Mixage du son… »), barre d'avancement, « image n sur
+  total », temps restant, et la phrase « L'export utilise le projet tel qu'il était au départ : tu peux continuer à
+  travailler. » Les boutons sont des icônes avec leur bulle d'une seconde : **Arrêter** (croix ; efface ce qui n'est pas fini),
+  puis, à la fin, **Montrer dans l'explorateur** et **Fermer**. La fenêtre de choix rappelle la même chose sous « Exporter… ».
+- **Le projet est libre.** On peut dessiner, changer de plan, annuler, enregistrer, ouvrir un autre projet pendant l'export. Ce
+  qu'on retouche n'y entre pas (il utilise la copie du départ). Le projet n'est retenu que **le temps de la copie** (quelques
+  images d'écran, 8 ms au plus chacune) : pendant ces instants, comme avant pendant tout l'export, les raccourcis sont suspendus
+  et on ne change pas d'onglet (« Attends la fin de la copie du projet pour l'export »).
+- **Les onglets.** Un export qui tourne continue quand on change d'onglet ou qu'on ouvre un autre projet ; la fenêtre ajoute
+  « · « nom du projet » » quand on regarde un autre onglet. Il en va de même pour l'export pour le montage, la fiche technique,
+  la page de relecture (suivie dans son onglet caché, sa fin est dite dans la barre d'état) et l'export vers Storyboard Pro.
+- **Un seul export à la fois** pour le film, les images, le GIF, le PDF, la page HTML, l'image courante et le son : une
+  deuxième demande dit « Un export est déjà en cours ».
+- **Quitter.** « Quitter » (ou la croix de la fenêtre) pendant un export le dit : « Quitter arrêterait l'export : attends sa
+  fin, ou refais « Quitter » pour l'arrêter. » Un deuxième « Quitter » dans les quinze secondes quitte et arrête l'export (la
+  vidéo inachevée est effacée).
+- **Annuler** arrête les fils tout de suite (ffmpeg est tué) et efface ce qui n'est pas fini : le film ou le GIF inachevé ; le
+  `.part` du PDF, de la page, de l'image, du son ; les planches de la page HTML. **Un PDF, une page ou un son d'avant, sous le
+  même nom, n'est jamais touché** : ils s'écrivent sous un nom en `.part` puis sont renommés. Les images déjà écrites d'une suite
+  PNG restent (comme avant).
+- **Traits texturés en rendu rapide** (Préférences > Performances, « Rapide partout ») : l'export les refait exacts dans sa
+  copie, sur un autre fil. Avant, SHOT attendait au moment de cliquer « Exporter ».
+- **Priorité.** Les fils de l'export (et ffmpeg) passent **sous la priorité de l'interface**, et laissent deux cœurs libres :
+  un export n'a de cœurs que ceux dont l'interface n'a pas besoin.
+
+### À regarder à l'écran (exports)
+
+1. **Film en 4K** (Fichier > Exporter > Film) sur un projet avec des effets : pendant l'export, déplacer la tête de lecture,
+   dessiner un trait, zoomer, changer de plan, changer d'onglet : tout répond sans à-coup. La fenêtre « Export en cours » avance.
+2. **Le film est celui du départ** : dessiner en gros un trait rouge sur le plan 1 pendant que le film s'encode ; le film fini
+   ne contient pas le trait.
+3. **Annuler** pendant le film : la fenêtre dit « Export annulé », le fichier .mp4 n'existe pas, et un ancien .mp4 du même nom
+   a été remplacé seulement si l'export avait fini. Même chose pour le PDF : annuler laisse l'ancien PDF intact.
+4. **Deux projets** : lancer l'export du projet A, ouvrir B dans un autre onglet : la fenêtre dit « · « A » » ; l'export finit ;
+   « Montrer dans l'explorateur » ouvre le bon dossier.
+5. **Quitter pendant l'export** : le message de la barre d'état au premier « Quitter », la sortie au deuxième.
+6. **Image courante**, **page HTML** et **son seul** : plus de gel de SHOT ; un seul clic sur « Fermer » à la fin.
+7. **Montage, fiche technique, relecture, Storyboard Pro** : la même fenêtre qu'avant, mais l'interface répond pendant les
+   images ; changer d'onglet ne les arrête pas.
+8. **Mémoire** (Gestionnaire des tâches) : un film 4K ne fait pas grimper SHOT de plus d'un gigaoctet environ ; la mémoire
+   redescend à la fin.

@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 use eframe::egui::Color32;
 
 use crate::camera::{Camera, CameraKey};
-use crate::document::{Document, LayerKind};
+use crate::document::{Document, LayerKind, LayerTransform};
 use crate::export::{self, ExportJob, Format, Range, SoundSpan};
 use crate::export_tests::doc_with_drawing;
 use crate::exportrender::{self, meme_dessin, Image, Papier, Pipeline, Pose, Rendu, IMAGES_ICI};
@@ -170,6 +170,38 @@ fn the_new_frames_are_the_old_ones_pixel_for_pixel_on_the_reliability_project() 
         }
     }
     assert!(vus_fx > 0, "le projet d'essai doit avoir des effets dans ses images");
+}
+
+/// La toile infinie (dessin hors de la feuille, caméra qui regarde hors de la feuille) et les clés de position d'un calque :
+/// le nouvel export les rend comme l'ancien.
+#[test]
+fn the_off_sheet_world_and_the_position_keys_are_exported_like_before() {
+    monde::lire();
+    let mut doc = doc_with_drawing(1, 6);
+    let id = doc.panels[0].layers[0].frames[0].expect("dessin");
+    let rouge = crate::raster::Tile::new([Color32::from_rgba_premultiplied(200, 30, 30, 255); crate::raster::TILE_PIXELS]);
+    let cel = doc.cels.get_mut(&id).unwrap();
+    for (tx, ty) in [(-1, -1), (-2, 0), (5, 1), (1, 3), (-1, 1)] {
+        cel.raster.replace_slot(crate::raster::outer_id(tx, ty), Some(rouge.clone()));
+    }
+    // Une caméra qui regarde hors de la feuille, en haut à gauche, puis revient.
+    let c = doc.default_camera();
+    doc.panels[0].camera = vec![CameraKey::new(0, Camera { x: -30.0, y: -20.0, ..c }), CameraKey::new(5, Camera { x: c.x, y: c.y, zoom: c.zoom * 1.2, ..c })];
+    // Le deuxième calque glisse et tourne entre deux clés de position.
+    let t0 = LayerTransform::default();
+    doc.panels[0].layers[1].pos_keys = vec![crate::poskeys::PosKey::new(0, t0), crate::poskeys::PosKey::new(5, LayerTransform { x: 40.0, y: -15.0, angle: 0.4, scale: 1.1, ..t0 })];
+    let rendu = Rendu::new(exportrender::snapshot_of(&doc, &[0]), Papier::Fond, true, Vec::new(), Arc::default());
+    let mut dehors = 0;
+    for f in 0..6 {
+        let plan = render::panel_plan_at(&doc, 0, f, doc.render_paper());
+        dehors += usize::from(plan.items.iter().any(|i| doc.cels.get(&i.cel).is_some_and(|c| !c.raster.outer.is_empty())));
+        compare(&ancienne_image(&doc, 0, f, doc.render_paper(), true), &nouvelle_image(&rendu, 0, f), &format!("image {f}"));
+    }
+    assert!(dehors > 0);
+    // Les tuiles hors de la feuille sont bien dans la copie, partagées.
+    let copie = exportrender::snapshot_of(&doc, &[0]);
+    assert_eq!(copie.cels[&id].raster.outer.len(), 5);
+    assert!(copie.cels[&id].raster.outer.values().zip(doc.cels[&id].raster.outer.values()).all(|(a, b)| a.same_as(b)));
 }
 
 #[test]
@@ -653,21 +685,22 @@ fn the_html_page_has_the_old_pictures_byte_for_byte() {
     assert!(html.contains("Il entre &lt;vite&gt;"), "le texte est échappé");
     assert!(html.matches("<h2 class=\"seq\">").count() >= 2);
     assert!(!export::part_of(&dir.join("storyboard.html")).exists());
-    // Annulé : aucune planche ne reste, ni la page.
+    // Annulé en route : aucune planche ne reste, ni la page (un projet assez long pour que l'annulation tombe avant la fin).
+    let long = projet_a_effets(4, 40);
     let dir2 = dossier_neuf("html-annule");
-    let mut job = ExportJob::storyboard_page(&dir2, "Mon projet", frames, items, doc.frame);
-    for _ in 0..3 {
-        job.step(&doc, Duration::from_millis(8));
-        std::thread::sleep(Duration::from_millis(5));
+    let frames2 = export::frames_for(&long, Range::Montage, 0);
+    let items2 = vec![export::PlancheHtml { title: "Plan".into(), duration: "1 s".into(), ..Default::default() }; frames2.len()];
+    let mut job = ExportJob::storyboard_page(&dir2, "Mon projet", frames2, items2, long.frame);
+    let t = Instant::now();
+    while job.outcome.is_none() && !matches!(job.progress(), export::Progress::Running(n, _) if n >= 1) {
+        job.step(&long, Duration::from_millis(8));
+        std::thread::sleep(Duration::from_millis(1));
+        assert!(t.elapsed() < Duration::from_secs(60), "bloqué : {}", job.phase());
     }
     job.cancel();
-    assert!(matches!(job.outcome, Some(Err(_))) || matches!(job.outcome, Some(Ok(_))));
-    if matches!(job.outcome, Some(Err(_))) {
-        std::thread::sleep(Duration::from_millis(100));
-        let restes: Vec<_> = std::fs::read_dir(&dir2).unwrap().flatten().map(|e| e.file_name()).collect();
-        assert!(restes.is_empty(), "rien ne reste après l'annulation : {restes:?}");
-    }
-    for d in [&dir, &ancien, &dir2] {
+    assert!(matches!(job.outcome, Some(Err(_))), "{:?}", job.outcome);
+    let restes: Vec<_> = std::fs::read_dir(&dir2).unwrap().flatten().map(|e| e.file_name()).collect();
+    assert!(restes.is_empty(), "rien ne reste après l'annulation : {restes:?}");    for d in [&dir, &ancien, &dir2] {
         std::fs::remove_dir_all(d).ok();
     }
 }
@@ -1170,11 +1203,14 @@ mod application {
         b.app.perform(crate::app::Pending::Quit);
         assert!(b.app.allow_close);
     }
-    /// Pendant l'export, l'interface répond : le temps d'une image d'écran reste petit (pas de calcul d'image sur ce fil).
+    /// Pendant l'export, l'interface répond : aucune image ne se compose sur le fil de l'interface (compteur par fil), et le
+    /// temps d'une image d'écran reste sans rapport avec celui d'une image d'export (borne large : la machine des essais est
+    /// partagée ; les mesures sont dans `perf_export_*`).
     #[test]
-    fn the_interface_frames_stay_short_during_an_export() {
+    fn the_interface_composes_no_export_frame_and_its_frames_stay_short_during_an_export() {
         let mut b = banc(projet_pour_l_application(4), false);
-        let (dir, _) = demarrer(&mut b, "app-fluide");
+        let avant = IMAGES_ICI.with(|n| n.get());
+        let (dir, n) = demarrer(&mut b, "app-fluide");
         let mut pire = 0.0f64;
         let t = Instant::now();
         let mut images = 0;
@@ -1186,12 +1222,13 @@ mod application {
             }
             std::thread::sleep(Duration::from_millis(4));
         }
-        // (Machine partagée avec d'autres essais : une borne large, très loin des quarante millisecondes d'avant.)
-        assert!(pire < 35.0, "la pire image d'écran pendant l'export : {pire:.1} ms");
+        assert!(matches!(b.app.export_job.as_ref().unwrap().outcome, Some(Ok(_))));
+        assert_eq!(IMAGES_ICI.with(|n| n.get()), avant, "aucune image d'export composée sur le fil de l'interface");
+        assert!(dir.join(format!("app_{n:04}.png")).is_file());
+        assert!(pire < 250.0, "la pire image d'écran pendant l'export : {pire:.1} ms");
         b.app.export_job = None;
         std::fs::remove_dir_all(&dir).ok();
-    }
-}
+    }}
 
 // ------------------------------------------------------------------------------- mesures (ignorées)
 
@@ -1387,8 +1424,8 @@ mod mesures {
                 suivante += 1;
             }
             ui.push(m.construction + m.decoupage + m.carte + t_pas.elapsed().as_secs_f64() * 1e3);
-            let _ = t;
-            std::thread::sleep(Duration::from_millis(2));
+            // (Une image d'écran tous les 16 ms au plus, comme avec la synchronisation verticale de la vraie fenêtre.)
+            std::thread::sleep(Duration::from_millis(16).saturating_sub(t.elapsed()));
         }
         match ecrivain {
             Ecrivain::Png(tx, fils) => {
@@ -1430,9 +1467,11 @@ mod mesures {
         b.app.start_job(job);
         let mut ui = Vec::new();
         while b.app.export_job.as_ref().is_some_and(|j| j.outcome.is_none()) && t0.elapsed() < Duration::from_secs(900) {
+            let t = Instant::now();
             let m = b.image(Vec::new(), 0.016);
             ui.push(m.construction + m.decoupage + m.carte);
-            std::thread::sleep(Duration::from_millis(2));
+            // (Une image d'écran tous les 16 ms au plus, comme avec la synchronisation verticale de la vraie fenêtre.)
+            std::thread::sleep(Duration::from_millis(16).saturating_sub(t.elapsed()));
         }
         let total = t0.elapsed();
         assert!(matches!(b.app.export_job.as_ref().unwrap().outcome, Some(Ok(_))), "{:?}", b.app.export_job.as_ref().unwrap().outcome);

@@ -29,6 +29,10 @@ carte graphique** (plus aucun effet « ordinaire » ne force une pile sur le pro
 géométrie des traits en calcul de fond ; voir la section 13 (conception, mesures sur 2 000 traits, règle de mélange
 réduite, risques, à regarder à l'écran).
 
+Mise à jour du 2026-10-20 (branche `exports-fond`, partie de `main` f8b9222) : **les exports ne calculent plus aucune image sur le fil de
+l'interface** et ne verrouillent plus le projet (film, GIF, images, image courante, PDF, page HTML, son, montage, relecture, fiche
+technique, Storyboard Pro) ; voir la section 17 (conception, mesures avant / après, garde-fous, risques, à regarder à l'écran).
+
 Ce document dit comment mesurer, ce qui a été mesuré avant et après, ce qui a été changé, ce qui reste
 (classé), et ce qu'il faut regarder à l'écran.
 
@@ -1183,3 +1187,122 @@ Règle « sans latence » : aucun de ces gestes ne fait de travail lourd sur le 
 | **Clés de position** | la pose d'un calque à l'image demandée est une interpolation de six nombres (`poskeys::pose_at`) par calque et par image : aussi pour la lecture, l'export et les vignettes ; glisser un losange de la timeline ne refait que la liste des clés (pas de rendu avant le lâché) | — |
 
 Le fond de l'aperçu du trait (réglages du pinceau) est une couleur calculée, pas une texture de plus.
+
+## 17. Exports hors du fil de l'interface (2026-10-20, branche `exports-fond`)
+
+Règle d'Anthony : « un logiciel qui réponde toujours très rapidement, sans latence ». Avant, le film, les images, le GIF, le PDF, le
+montage, la relecture, la fiche et l'export vers Storyboard Pro calculaient leurs images **sur le fil de l'interface**, 40 ms par
+image d'écran (le test se fait entre deux images : une image de 4K finit toujours), derrière une fenêtre modale qui verrouillait le
+projet. La page HTML du storyboard, l'image courante et le son seul se calculaient d'un coup, en gelant SHOT.
+
+### Conception (`exportrender.rs`, `export.rs`)
+
+- **Le cliché** (`SnapshotBuilder`). Au départ de l'export, l'interface copie le projet : la **structure** d'un coup (plans,
+  calques, caméras, transitions, pistes son ; les plans que l'export ne montre gardent leur durée et leur caméra mais pas leurs
+  calques), les **dessins** des plans exportés par tranches de 8 ms au plus (`ExportJob::step`). Copier un dessin ne copie aucun pixel :
+  les tuiles sont partagées par `Arc` (comme les vignettes, § 11) ; si on dessine ensuite, seule la tuile touchée est copiée (copie à
+  la première écriture, essai `the_snapshot_keeps_the_structure_…`). L'export utilise donc le projet tel qu'il était au départ.
+- **Les fils de rendu** (`Pipeline`) : `(cœurs − 2) / 3` fils (1 à 6), chacun répartissant sa composition sur 2 à 3 cœurs
+  (`render::set_thread_cap`) ; deux cœurs restent à l'interface. Ils calculent chaque image avec **le code d'avant** (`panel_plan_at`,
+  `camera_image`, effets et calques d'effets en calcul bloquant, incrustations gravées, transitions) : les mêmes pixels. Chaque fil
+  a sa **réserve privée de dessins dérivés** (`fxcache::avec_privee`, limitée en octets, jamais vidée pendant l'image en cours) : un
+  export ne chasse pas de l'écran les dessins que l'interface vient de calculer, et ne range rien dans la réserve commune. Une image
+  tenue (même plan, même caméra) n'est calculée **qu'une fois pour tous les fils** (`ImageStore` : le deuxième fil attend le premier).
+- **Priorité**. Les fils de rendu, ceux qu'ils lancent (`par_chunks`, `par_map`), les fils d'écriture **et ffmpeg**
+  (`BELOW_NORMAL_PRIORITY_CLASS`) sont sous la priorité de l'interface. Mesuré : tout à la priorité normale, la pire image d'écran
+  pendant un film 4K passe de 9 ms à 78 ms ; ffmpeg normal avec des fils de rendu bas affame les fils de rendu (43 s au lieu de 9 s
+  une fois sur trois) : tous sous la normale, ensemble.
+- **Le passeur** : un fil range les images dans l'ordre vers l'écriture (file de 4 images vers les fils PNG, le fil de ffmpeg, les
+  fils de réduction du PDF / de la relecture / de la fiche / de la page HTML) ; c'est lui qui attend quand l'écriture est en retard,
+  jamais l'interface. Les fils de rendu n'avancent pas de plus de `avance_permise` images devant lui (5 à 10 en 4K) : la mémoire en
+  l'air est bornée par la taille d'une image (≈ 500 Mo de pixels en 4K).
+- **L'interface** (`ExportJob::step`) : copie le projet au départ, puis lit un compteur toutes les 100 ms (la barre d'avancement).
+  Le projet n'est retenu que le temps de la copie (`needs_project`, lu par `modal_open` et `onglet_occupe`) ; ensuite un export
+  **continue quand on change d'onglet**, la fenêtre « Export en cours » (non modale) dit de quel projet il s'agit.
+- **Le son** (film, WAV) est mixé sur un fil à part, sur le cliché (`mix_clips_blocking` : égaliseur et écho compris), avant que
+  ffmpeg parte ; le montage le fait déjà sur un fil. Les **traits texturés restés en rendu rapide** sont refaits exacts dans le
+  cliché, sur un autre fil (`SnapshotBuilder::with_exact`). **Storyboard Pro** : les images des calques se calculent par les mêmes fils
+  (`Pipeline::start_with`), les sons (égaliseur, écho) sur le fil de Storyboard Pro.
+- **Annuler** : le drapeau arrête le passeur tout de suite (il rend la file d'écriture), ffmpeg est tué, les fils de rendu finissent
+  leur image en cours et s'en vont sans qu'on les attende (annuler rend la main en quelques millisecondes, même en 4K) ; ce qui n'est
+  pas fini est effacé ; le PDF, la page HTML, l'image courante et le son passent par un fichier `.part` renommé à la fin : un fichier
+  d'avant n'est jamais touché.
+
+### Mesures
+
+Même machine (Core i7-10700K, 8 cœurs / 16 fils, RTX 2080 SUPER, partagée avec un autre travail de compilation), version release,
+`cargo test --release --offline --target-dir target\msvc perf_export -- --ignored --nocapture --test-threads=1` (un essai par
+processus : la mémoire est le pic du processus). Projet synthétique en **4K** (`mesures::projet_4k`, feuille 7 680 × 4 320) : 6 calques de
+150 tuiles, un flou gaussien, un réglage teinte-saturation, un calque tourné, une caméra qui avance, tourne et zoome ; 48 images, toutes
+différentes. L'ancien chemin est reproduit à l'identique dans l'essai (`ancien`) : images sur le fil de l'interface, pas de 40 ms,
+mêmes écrivains. Une image d'écran toutes les 16 ms au plus (synchronisation verticale), banc de `perf_tests.rs` avec carte
+graphique. « Image d'écran » = construction de l'interface + découpage + carte (+ le pas d'export de l'ancien chemin). Trois séries.
+
+| Export de 48 images 4K | Avant (fil de l'interface) | Après (fils de rendu) |
+|---|---|---|
+| **Suite de PNG** : image d'écran, moyenne | 105,5 – 106,5 ms | **3,6 – 3,7 ms** |
+| — p95 / la pire image d'écran | 143 – 150 ms / 150 – 164 ms | 6,3 – 7,0 ms / **9,9 – 11,6 ms** |
+| — durée de l'export | 5,2 s (9,3 images/s) | **4,2 s (11,5 images/s)**, 19 % plus court |
+| — mémoire (pic du processus) | 994 – 1 020 Mo | 1 267 – 1 277 Mo (+ 270 Mo) |
+| **Film MP4** (ffmpeg, H.264 d'OpenH264) : image d'écran, moyenne | 107,2 – 109,1 ms | **4,3 – 4,5 ms** |
+| — p95 / la pire image d'écran | 153 – 154 ms / 158 – 207 ms | 7,3 – 8,5 ms / **10,0 – 10,2 ms** |
+| — durée de l'export | 8,6 – 8,7 s (5,5 images/s) | 9,0 – 9,1 s (5,3 images/s) |
+| — mémoire (pic du processus) | 956 – 957 Mo | 1 194 – 1 195 Mo (+ 238 Mo) |
+
+L'interface passe d'**une image d'écran toutes les 105 ms (pire 150 à 207 ms) à 4 ms (pire 10 à 12 ms)** pendant l'export, soit celle
+d'un SHOT au repos. Les PNG vont plus vite (le rendu et l'encodage des PNG se recouvrent sur plusieurs cœurs). Le film est limité par
+ffmpeg (5,3 à 5,5 images/s tout seul) : il n'est pas plus rapide, et **3 à 4 % plus long** — la première image arrive 0,3 s plus tard
+(quatre images se calculent côte à côte au lieu d'une sur tous les cœurs) et ffmpeg passe sous la priorité normale. Le prix de la
+mémoire (+ 240 à 270 Mo en 4K) est celui des images en l'air (quelques-unes de plus : 33 Mo chacune).
+
+Le cliché (`perf_export_snapshot_cost`, ce que l'interface paie au départ, une fois) :
+
+| Projet | Structure (d'un coup) | Dessins (au total, par tranches) | Plus longue tranche |
+|---|---|---|---|
+| 30 plans × 3 calques × 24 images, tout le montage | 0,13 ms | 480 dessins en 2,7 ms | 3,0 ms |
+| 600 plans × 3 calques × 24 images, tout le montage | 2,0 ms | 9 600 dessins en 54 ms | 8,3 ms |
+| 600 plans × 8 calques × 48 images, tout le montage | 8,8 ms (pire 14,8) | 26 400 dessins en 144 ms | 8,4 ms |
+| un seul plan de ces projets | 0,01 – 0,17 ms | 0,03 – 0,16 ms | 0,23 ms |
+
+La structure reste sous 15 ms même pour 600 plans de 8 calques de 48 images (4 800 calques) ; les dessins, par tranches de 8 ms, ne
+retiennent jamais l'interface plus de 9 ms d'un coup.
+
+### Garde-fous (`exportrender_tests.rs`, 50 essais ; la suite complète : 2 158)
+
+- **Mêmes pixels** : sur le projet d'essai complet de la fiabilité (effets de calque à clés, tremblement du trait, fond sous le trait,
+  CTG, vidéo, dossier, fusion, transformation, caméra à clés, calques d'effets d'ajustement, incrustation, damier), chaque image du
+  nouvel export est celle de l'ancien chemin, pixel pour pixel, pour les trois papiers, à plusieurs images de chaque plan ; la toile
+  infinie et les clés de position, les incrustations gravées, les transitions (un plan seul et tout le montage) aussi.
+- **Chaque sorte d'export** : suite de PNG (et PNG sans papier), image courante, film et GIF (un ffmpeg qui recopie ses images brutes :
+  l'entrée du film est l'ancien chemin, dans l'ordre), images reçues par `collect` (PDF, relecture, fiche), page HTML (planches
+  identiques à l'octet à l'ancien export synchrone), médias du montage (poignées comprises), son (le même WAV que l'ancien mixage).
+- **Le projet reste libre** : retoucher tous les dessins, les calques, les caméras et le nombre de plans pendant l'export ne change pas
+  un pixel du résultat ; le compteur par fil (`IMAGES_ICI`, comme `render::THUMBNAILS_HERE`) reste à zéro sur le fil de l'interface ;
+  une image tenue n'est composée qu'une fois, même demandée par quatre fils ensemble ; l'application revient au repos après l'export
+  (`se_reposer`).
+- **Annulation** : suite de PNG sans `.part`, film effacé (ffmpeg tué), PDF d'avant intact, planches de la page effacées, film d'avant
+  intact si ffmpeg ne démarre pas, lâcher un export en cours l'annule, annuler rend la main en moins de deux secondes même quand
+  l'écriture ne répond plus ; une image qui plante arrête l'export avec un message.
+- **Onglets** : un export continue pendant qu'un autre onglet est affiché, répond à son projet (`export_projet`), ne retient l'onglet que
+  le temps de la copie ; « Quitter » prévient une fois.
+- **Mémoire** : l'avance des fils de rendu est bornée par la taille d'une image (`the_memory_in_flight_stays_bounded_…`).
+
+### Risques et limites
+
+- **Mémoire** : + 240 à 270 Mo en 4K par rapport à l'ancien chemin (quelques images de plus en l'air) ; en HD, l'avance autorisée est
+  plus grande mais les images sont quatre fois plus petites.
+- **Le film n'est pas plus rapide** (ffmpeg limite) et peut être 3 à 4 % plus long ; les exports d'images, de PDF, de pages, de fiches
+  gagnent avec les cœurs.
+- **Un seul export** (film, images, GIF, PDF, page, image, son) à la fois ; le montage, la fiche, la relecture et Storyboard Pro ont
+  chacun le leur.
+- **Ce qu'on retouche pendant l'export n'y entre pas** (c'est voulu, la fenêtre le dit). Si le projet est remplacé dans l'onglet pendant
+  la copie (quelques images d'écran), la copie serait mélangée : `modal_open` suspend alors les raccourcis et `onglet_occupe` refuse le
+  changement d'onglet, mais ouvrir un projet par un menu dans ces 10 à 100 ms n'est pas écarté.
+- L'API locale (`noyau.rs`) et la lecture du storyboard par un modèle (`lecturesb.rs`) calculent encore des images sur leurs fils.
+- Le film s'écrit directement dans le fichier choisi (pas de `.part` : ffmpeg doit connaître l'extension) ; un film inachevé est effacé.
+
+### À regarder à l'écran
+
+La liste de `docs/INTERFACE.md` § 28 : film 4K avec une interface qui répond, le film est celui du départ (un trait dessiné pendant
+l'export n'y est pas), annuler, deux projets, quitter pendant l'export, image courante / page HTML / son sans gel, montage / fiche /
+relecture / Storyboard Pro, mémoire.

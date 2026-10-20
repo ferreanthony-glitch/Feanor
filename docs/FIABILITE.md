@@ -225,3 +225,22 @@ politique de contenu `default-src 'none'`, tout texte du projet échappé (`the_
 `hostile_titles_and_texts_cannot_break_out_of_the_page`, `the_script_is_the_same_for_every_project_and_calls_nothing_outside`).
 L'export écrit `<nom>.html.part` puis renomme : un arrêt ou une erreur ne laisse pas de demi-fichier et ne détruit pas une page
 exportée avant (`stopping_the_export_leaves_no_file_and_keeps_an_older_page`). Le format du projet ne change pas (`VERSION` 32).
+
+## 12. Exports hors du fil de l'interface (2026-10-20, branche `exports-fond`)
+
+L'export tourne sur une copie du projet, sur d'autres fils, pendant que le projet est retouché : le risque est un fichier faux,
+inachevé, ou un fichier d'avant détruit. Les essais de `exportrender_tests.rs` (`docs/PERFORMANCE.md` § 17) :
+
+| Risque | Garde | Essai |
+|---|---|---|
+| Une image d'export n'est plus celle d'avant | sur le projet d'essai complet (effets à clés, trait, fond sous le trait, CTG, vidéo, fusion, caméra, calques d'effets, incrustation, damier, transitions), chaque image du nouvel export est celle de l'ancien chemin, pixel pour pixel, pour les trois papiers | `the_new_frames_are_the_old_ones_pixel_for_pixel_on_the_reliability_project`, `the_overlays_are_burned_like_before_…`, `the_transitions_are_mixed_like_before` |
+| Chaque sorte d'export reçoit les bonnes images | PNG, image courante, film et GIF (ffmpeg qui recopie ses images brutes), PDF / relecture / fiche (`collect`), page HTML (octet pour octet), montage, son (le même WAV) | `the_png_sequence_…`, `the_still_image_…`, `the_film_pipe_carries_…`, `the_gif_keeps_…`, `the_images_given_to_the_collectors_…`, `the_html_page_has_the_old_pictures_byte_for_byte`, `the_editorial_clip_frames_are_the_old_ones`, `the_sound_export_is_the_old_wav` |
+| Retoucher le projet pendant l'export change le fichier | le cliché partage les tuiles et les copie à la première écriture | `the_snapshot_keeps_the_structure_…`, `no_frame_is_composed_here_and_editing_the_project_during_the_export_changes_nothing` |
+| Une image se compose sur le fil de l'interface | un compteur par fil (comme `render::THUMBNAILS_HERE`) reste à zéro | même essai |
+| Une annulation laisse des restes ou détruit un fichier d'avant | `.part` puis renommage ; l'annulation efface le `.part`, le film inachevé, les planches de la page ; un PDF ou un film d'avant n'est jamais touché (un ffmpeg qui ne démarre pas non plus) | `the_pdf_is_written_whole_and_a_cancelled_one_keeps_the_previous_file`, `cancelling_a_png_export_…`, `cancelling_a_film_…`, `a_film_whose_ffmpeg_does_not_start_…`, `dropping_a_running_export_cancels_it` |
+| Une image qui plante ferme SHOT | le plantage d'un fil de rendu arrête l'export avec un message | `a_frame_that_panics_stops_the_export_with_a_message_not_the_program` |
+| La mémoire explose avec une grande image | l'avance des fils de rendu est bornée par la taille d'une image | `the_memory_in_flight_stays_bounded_whatever_the_frame_size` |
+| L'export gêne l'interface ou les autres onglets | fenêtre non modale ; un export suit son projet quand on change d'onglet ; au repos, plus aucune image demandée ; « Quitter » prévient | `the_export_window_is_not_modal_…`, `an_export_continues_while_another_tab_is_shown_…`, `quitting_warns_once_…` |
+| Les dessins dérivés d'un projet servent à un autre | réserve privée par fil d'export, jamais dans la réserve commune | `the_private_reserve_keeps_effects_out_of_the_shared_cache` |
+
+Le format du projet ne change pas (`VERSION` 33).

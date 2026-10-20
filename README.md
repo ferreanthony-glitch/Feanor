@@ -894,13 +894,18 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   - « Exporter le film / des images / le son… » ouvre une fenêtre : film MP4 (pour regarder,
     envoyer) ou MOV ProRes (pour un logiciel de montage), images PNG, ou son seul (WAV) ; tout le
     montage, la séquence ou le plan courant ; vidéo en taille réelle ou moitié, avec ou sans son.
-    Une barre de progression indique le temps restant ; « Annuler » arrête et efface la vidéo
-    inachevée. La vidéo est fabriquée par **ffmpeg**, que Pelure cherche sur le poste (il est
-    installé avec Krita, par exemple) ; « Choisir un autre ffmpeg… » sinon.
+    Une petite fenêtre « Export en cours » (en bas à droite, **sans rien bloquer**) indique la
+    phase, l'avancement et le temps restant ; « Arrêter » arrête et efface la vidéo inachevée.
+    **Le projet reste libre pendant l'export** : on peut dessiner, changer de plan ou d'onglet ;
+    l'export utilise le projet tel qu'il était au départ. Aucune image ne se calcule sur le fil de
+    l'interface (`docs/PERFORMANCE.md` § 17). La vidéo est fabriquée par **ffmpeg**, que Pelure
+    cherche sur le poste (il est installé avec Krita, par exemple) ; « Choisir un autre ffmpeg… » sinon.
   - « Exporter le storyboard (PDF)… » : planches A4 paysage, 6 images de storyboard par page (le
     début de chaque plan, puis ses marques d'image), avec titre, durée, action, dialogue et notes ;
     une nouvelle page à chaque séquence.
-  - Image courante (PNG), et storyboard en page HTML (une planche par image de storyboard).
+  - Image courante (PNG), et storyboard en page HTML (une planche par image de storyboard) : comme le film, ils se calculent
+    sur d'autres fils, sans geler SHOT. Le PDF, la page, l'image et le son s'écrivent sous un nom en `.part` puis sont
+    renommés : annuler ne détruit jamais un fichier d'avant.
 
 ## Appli compagnon (Tauri)
 
@@ -1232,10 +1237,10 @@ au plus, format et version vérifiés, 3000 notes au plus, textes nettoyés et c
 points par côté, 8 millions de pixels, 64 Mo de mémoire), réduits à 1280 de large et réécrits proprement (seuls les pixels
 restent). Un dessin refusé ne fait pas perdre sa note.
 
-**Sans latence** : l'interface ne calcule que les images (40 ms par image d'écran) ; leur réduction en JPEG, la page et le
-PDF sont écrits sur un autre fil, avec barre d'avancement, temps restant et « Arrêter » (rien n'est laissé : les fichiers
-sont d'abord écrits en `.part`, une page exportée avant sous le même nom n'est jamais détruite). Le projet est verrouillé
-tant que les images se calculent.
+**Sans latence** : l'interface ne calcule aucune image (le projet est copié au départ, les images se calculent sur d'autres
+fils, `docs/PERFORMANCE.md` § 17) ; leur réduction en JPEG, la page et le PDF sont écrits à côté, avec barre d'avancement, temps
+restant et « Arrêter » (rien n'est laissé : les fichiers sont d'abord écrits en `.part`, une page exportée avant sous le même
+nom n'est jamais détruite). Le projet n'est retenu que le temps de la copie ; l'export continue si l'on change d'onglet.
 
 Code : `src/relecture.rs` (modèle, page, notes, placement), `src/relecturejob.rs` (tâche), `src/relectureui.rs`
 (fenêtres, dessin sur l'image), `assets/relecture/page.js` et `page.css` (la page), `src/relecture_tests.rs`.
