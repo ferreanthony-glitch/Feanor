@@ -206,7 +206,7 @@ pixels. Un plan neuf l'a allumé.
 
 ## 9. Essais
 
-`espace3d_tests.rs` (37 essais ; le script `scripts/verifier.ps1` les nomme dans une famille « Espace 3D »), plus des essais adaptés
+`espace3d_tests.rs` (38 essais et une mesure `perf_espace3d` ; le script `scripts/verifier.ps1` les nomme dans une famille « Espace 3D »), plus des essais adaptés
 ailleurs (`scene3d_tests`, `keymap_tests`, `cooperation_tests`, `cooperation_ui_tests`, `calqueffet_tests`, `bulles_tests`) :
 
 - **Pose d'une carte** : aller-retour monde ↔ champs du calque (plusieurs poses, profondeurs, inclinaisons, étirement négatif) ;
