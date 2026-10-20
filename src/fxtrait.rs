@@ -109,7 +109,7 @@ pub const DUST_DRIFT: usize = 5;
 pub const DUST_SEED: usize = 6;
 pub const DUST_FILLS: usize = 7;
 
-const fn p(name: &'static str, min: f32, max: f32, default: f32, unit: &'static str) -> Param {
+pub(crate) const fn p(name: &'static str, min: f32, max: f32, default: f32, unit: &'static str) -> Param {
     Param { name, min, max, default, unit }
 }
 
@@ -160,11 +160,11 @@ pub(crate) const DUST: [Param; 8] = [
     p("Zones remplies avec la poussière", 0.0, 1.0, 0.0, ""),
 ];
 
-fn at(v: &[f32], k: usize, default: f32) -> f32 {
+pub(crate) fn at(v: &[f32], k: usize, default: f32) -> f32 {
     v.get(k).copied().filter(|x| x.is_finite()).unwrap_or(default)
 }
 
-fn smooth(t: f32) -> f32 {
+pub(crate) fn smooth(t: f32) -> f32 {
     let t = t.clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }
@@ -378,11 +378,16 @@ pub struct Stack {
     pub wave: Option<WaveS>,
     pub dash: Option<DashS>,
     pub dust: Option<DustS>,
+    // Effets de matière qui lisent les traits (`fxmatiere.rs`).
+    pub dry: Option<crate::fxmatiere::DryS>,
+    pub gradient: Option<crate::fxmatiere::GradS>,
+    pub nib: Option<crate::fxmatiere::NibS>,
 }
 
 impl Stack {
     /// Les effets du trait de `steps` qui changent quelque chose.
     pub fn of(steps: &[FxStep]) -> Stack {
+        use crate::fxmatiere as m;
         let mut st = Stack::default();
         for s in steps {
             let v = &s.values;
@@ -393,6 +398,9 @@ impl Stack {
                 EffectKind::StrokeWave if st.wave.is_none() => st.wave = Some(WaveS::of(v)).filter(WaveS::changes),
                 EffectKind::Dashes if st.dash.is_none() => st.dash = Some(DashS::of(v)),
                 EffectKind::Dust if st.dust.is_none() => st.dust = Some(DustS::of(v)).filter(DustS::changes),
+                EffectKind::Dry if st.dry.is_none() => st.dry = Some(m::DryS::of(v)).filter(m::DryS::changes),
+                EffectKind::StrokeGradient if st.gradient.is_none() => st.gradient = Some(m::GradS::of(v)).filter(m::GradS::changes),
+                EffectKind::Nib if st.nib.is_none() => st.nib = Some(m::NibS::of(v)).filter(m::NibS::changes),
                 _ => {}
             }
         }
@@ -400,12 +408,27 @@ impl Stack {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.write.is_none() && self.sketch.is_none() && self.breath.is_none() && self.wave.is_none() && self.dash.is_none() && self.dust.is_none()
+        self.write.is_none()
+            && self.sketch.is_none()
+            && self.breath.is_none()
+            && self.wave.is_none()
+            && self.dash.is_none()
+            && self.dust.is_none()
+            && self.dry.is_none()
+            && self.gradient.is_none()
+            && self.nib.is_none()
     }
 
     /// Un effet autre que l'écriture touche chaque trait.
     fn transforms(&self) -> bool {
-        self.sketch.is_some() || self.breath.is_some() || self.wave.is_some() || self.dash.is_some() || self.dust.is_some()
+        self.sketch.is_some()
+            || self.breath.is_some()
+            || self.wave.is_some()
+            || self.dash.is_some()
+            || self.dust.is_some()
+            || self.dry.is_some()
+            || self.gradient.is_some()
+            || self.nib.is_some()
     }
 }
 
@@ -424,7 +447,7 @@ pub fn icon(kind: EffectKind) -> &'static str {
         EffectKind::StrokeWave => ph::WAVE_SAWTOOTH,
         EffectKind::Dashes => ph::DOTS_THREE,
         EffectKind::Dust => ph::GRAINS,
-        _ => "",
+        _ => crate::fxmatiere::icon(kind),
     }
 }
 
@@ -455,7 +478,7 @@ pub fn hint(kind: EffectKind) -> &'static str {
         EffectKind::StrokeWave => "Une vague court le long de chaque trait : il ondule de part et d'autre de sa ligne, les bouts restent en place.",
         EffectKind::Dashes => "Le trait devient une suite de tirets qui défilent le long de lui-même.",
         EffectKind::Dust => "Le trait se défait en poussière, grain par grain. Avancement animable : pour une disparition ou une transition. Le hasard est fixé par la graine.",
-        _ => "",
+        _ => crate::fxmatiere::hint(kind),
     }
 }
 
@@ -497,7 +520,7 @@ pub fn param_hint(kind: EffectKind, k: usize) -> &'static str {
         (EffectKind::Dust, DUST_SEED) => "Change le tirage au hasard : une autre poussière.",
         (EffectKind::Dust, DUST_FILLS) => "Coché, les zones de couleur et les textes s'effacent peu à peu avec le trait. Décoché : ils restent.",
         (EffectKind::Boil, crate::tremblement::REST) => "Au repos, le dessin continue de trembler (l'écran se redessine à la cadence du tremblement). Éteint, l'image fixe montre la variante de l'image courante.",
-        _ => "",
+        _ => crate::fxmatiere::param_hint(kind, k),
     }
 }
 
@@ -578,16 +601,16 @@ impl Preset {
 
 // ---------------------------------------------------------------------- le hasard
 
-fn mix(h: u32) -> u32 {
+pub(crate) fn mix(h: u32) -> u32 {
     crate::tremblement::mix(h)
 }
 
-fn hash(seed: u32, a: u32, b: u32, k: u32) -> u32 {
+pub(crate) fn hash(seed: u32, a: u32, b: u32, k: u32) -> u32 {
     mix(seed ^ mix(a.wrapping_mul(0x8DA6_B343) ^ mix(b.wrapping_mul(0xD816_3841) ^ mix(k.wrapping_mul(0x9E37_79B9)))))
 }
 
 /// Un nombre de [0, 1) tiré d'un hachage.
-fn unit(h: u32) -> f32 {
+pub(crate) fn unit(h: u32) -> f32 {
     (h >> 8) as f32 / (1u32 << 24) as f32
 }
 
@@ -595,12 +618,12 @@ fn unit(h: u32) -> f32 {
 
 /// Les pixels d'un trait (prémultipliés) sur le rectangle [x0, x0 + w) × [y0, y0 + h) de la feuille.
 #[derive(Clone)]
-struct Dense {
-    x0: i32,
-    y0: i32,
-    w: usize,
-    h: usize,
-    px: Vec<Color32>,
+pub(crate) struct Dense {
+    pub(crate) x0: i32,
+    pub(crate) y0: i32,
+    pub(crate) w: usize,
+    pub(crate) h: usize,
+    pub(crate) px: Vec<Color32>,
 }
 
 impl Dense {
@@ -804,7 +827,7 @@ fn to_px(c: [f32; 4]) -> Color32 {
 }
 
 /// Le pixel multiplié par `f` (0 à 1).
-fn scaled(c: Color32, f: f32) -> Color32 {
+pub(crate) fn scaled(c: Color32, f: f32) -> Color32 {
     if f >= 0.999 {
         return c;
     }
@@ -822,14 +845,16 @@ struct Sample {
     s: f32,
     tx: f32,
     ty: f32,
+    /// Rayon du trait en ce point.
+    r: f32,
 }
 
 /// L'axe d'un trait rééchantillonné tous les `STEP` pixels (au plus 4 097 points).
-struct PathIndex {
+pub(crate) struct PathIndex {
     samples: Vec<Sample>,
-    total: f32,
+    pub(crate) total: f32,
     /// Écart des points (pixels).
-    step: f32,
+    pub(crate) step: f32,
 }
 
 const STEP: f32 = 2.0;
@@ -848,7 +873,7 @@ impl PathIndex {
             return PathIndex { samples: Vec::new(), total: 0.0, step: STEP };
         };
         if total < 1e-3 {
-            return PathIndex { samples: vec![Sample { x: first.x, y: first.y, s: 0.0, tx: 1.0, ty: 0.0 }], total: 0.0, step: STEP };
+            return PathIndex { samples: vec![Sample { x: first.x, y: first.y, s: 0.0, tx: 1.0, ty: 0.0, r: first.r }], total: 0.0, step: STEP };
         }
         let step = (total / 4096.0).max(STEP);
         let n = (total / step).ceil() as usize + 1;
@@ -862,7 +887,7 @@ impl PathIndex {
             let (a, b) = (points[j], points[(j + 1).min(points.len() - 1)]);
             let seg = cum[(j + 1).min(points.len() - 1)] - cum[j];
             let t = if seg > 1e-6 { ((s - cum[j]) / seg).clamp(0.0, 1.0) } else { 0.0 };
-            samples.push(Sample { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, s, tx: 1.0, ty: 0.0 });
+            samples.push(Sample { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, s, tx: 1.0, ty: 0.0, r: a.r + (b.r - a.r) * t });
         }
         // Tangentes : différences centrales sur deux points de chaque côté.
         let last = samples.len() - 1;
@@ -893,12 +918,14 @@ impl PathIndex {
 /// Ce que la carte donne en un pixel : l'abscisse du point de l'axe le plus proche (le pixel projeté
 /// sur l'axe), ce point, la normale et le rayon du trait.
 #[derive(Clone, Copy, Debug)]
-struct Hit {
-    s: f32,
-    cx: f32,
-    cy: f32,
-    nx: f32,
-    ny: f32,
+pub(crate) struct Hit {
+    pub(crate) s: f32,
+    pub(crate) cx: f32,
+    pub(crate) cy: f32,
+    pub(crate) nx: f32,
+    pub(crate) ny: f32,
+    /// Rayon du trait au point de l'axe.
+    pub(crate) r: f32,
 }
 
 /// Pour chaque pixel d'un rectangle, le point de l'axe le plus proche à moins de `radius` pixels
@@ -970,18 +997,18 @@ impl NearMap {
         let u = (px - sm.x) * sm.tx + (py - sm.y) * sm.ty;
         let last = path.samples.len() - 1;
         let u = u.clamp(if i == 0 { 0.0 } else { -self.stride }, if i == last { 0.0 } else { self.stride });
-        Some(Hit { s: (sm.s + u).clamp(0.0, path.total), cx: sm.x + u * sm.tx, cy: sm.y + u * sm.ty, nx: -sm.ty, ny: sm.tx })
+        Some(Hit { s: (sm.s + u).clamp(0.0, path.total), cx: sm.x + u * sm.tx, cy: sm.y + u * sm.ty, nx: -sm.ty, ny: sm.tx, r: sm.r })
     }
 }
 
 /// L'axe d'un trait et sa carte, pour les effets qui lisent l'abscisse ou la normale.
-struct Geo {
-    path: PathIndex,
+pub(crate) struct Geo {
+    pub(crate) path: PathIndex,
     near: NearMap,
 }
 
 impl Geo {
-    fn hit(&self, ix: i32, iy: i32) -> Option<Hit> {
+    pub(crate) fn hit(&self, ix: i32, iy: i32) -> Option<Hit> {
         self.near.hit(&self.path, ix, iy)
     }
 }
@@ -1099,7 +1126,12 @@ enum Job<'a> {
 
 /// Le dessin `vector` passé par les effets du trait de `steps`, sur une feuille `w` × `h`.
 pub fn render(vector: &VectorDrawing, w: usize, h: usize, steps: &[FxStep]) -> Raster {
-    let stack = Stack::of(steps);
+    let mut stack = Stack::of(steps);
+    // La plume choisie (`fxmatiere::NibCtx`) : introuvable (pinceau supprimé), l'effet ne fait rien.
+    let nib = stack.nib.and_then(|n| crate::fxmatiere::NibCtx::resolve(&n));
+    if nib.is_none() {
+        stack.nib = None;
+    }
     let mut out = Raster::new(w, h);
     if stack.is_empty() {
         for e in &vector.elements {
@@ -1159,7 +1191,7 @@ pub fn render(vector: &VectorDrawing, w: usize, h: usize, steps: &[FxStep]) -> R
     // (les éléments tels quels sont alors rendus seuls, eux aussi) ; sinon (l'écriture seule : presque
     // tout est posé tel quel depuis le cache) les éléments se posent l'un après l'autre.
     let banded = stack.transforms();
-    let ctx = Ctx { stack, timing, w, h, banded };
+    let ctx = Ctx { stack, timing, w, h, banded, nib, strokes: lengths.len() };
     // Des morceaux de 96 éléments au plus, et d'au plus `CHUNK_PIXELS` pixels de couches en vol (une boîte de
     // trait par couche) : de longs traits en diagonale ne remplissent pas la mémoire.
     let passes = 1 + ctx.stack.sketch.map_or(0, |s| s.passes);
@@ -1205,6 +1237,10 @@ struct Ctx {
     h: usize,
     /// Les couches se posent par bandes (pas d'élément posé tel quel).
     banded: bool,
+    /// La plume qui redessine les traits (`fxmatiere::NibCtx`).
+    nib: Option<crate::fxmatiere::NibCtx>,
+    /// Combien de traits compte le dessin (le dégradé sur tout le dessin).
+    strokes: usize,
 }
 
 fn run<'a>(job: &Job<'a>, ctx: &Ctx) -> Vec<Layer<'a>> {
@@ -1238,7 +1274,9 @@ fn stroke<'a>(e: &'a Element, rank: usize, ctx: &Ctx) -> Vec<Layer<'a>> {
     let (w, h) = (ctx.w, ctx.h);
     let st = &ctx.stack;
     let mut sheet = Raster::new(w, h);
-    render_element(&mut sheet, e);
+    // Une autre plume : le même tracé et les mêmes appuis, redessinés (et gardés) par la plume choisie.
+    let nibbed = ctx.nib.as_ref().and_then(|n| n.restyle(e));
+    render_element(&mut sheet, nibbed.as_deref().unwrap_or(e));
     let write = ctx.timing.as_ref().filter(|t| !t.whole(rank));
     if write.is_none() && !st.transforms() {
         return vec![Layer::Plain(e)];
@@ -1256,7 +1294,7 @@ fn stroke<'a>(e: &'a Element, rank: usize, ctx: &Ctx) -> Vec<Layer<'a>> {
     let sheet_size = (w, h);
 
     // L'axe, sa carte, et jusqu'où chaque effet pousse l'encre.
-    let needs_path = write.is_some() || st.breath.is_some() || st.wave.is_some() || st.dash.is_some() || st.dust.is_some_and(|d| d.sense > 0.0);
+    let needs_path = write.is_some() || st.breath.is_some() || st.wave.is_some() || st.dash.is_some() || st.dry.is_some() || st.gradient.is_some() || st.dust.is_some_and(|d| d.sense > 0.0);
     let geo = needs_path.then(|| {
         let path = PathIndex::build(points);
         let pb = path.bounds();
@@ -1299,6 +1337,13 @@ fn stroke<'a>(e: &'a Element, rank: usize, ctx: &Ctx) -> Vec<Layer<'a>> {
     }
     if let (Some(d), Some((geo, ..))) = (st.dash, &geo) {
         mask(&mut cur, geo, |_, s| d.factor(s));
+    }
+    // Effets de matière (`fxmatiere.rs`) : le trait sec, puis la couleur du dégradé.
+    if let (Some(d), Some((geo, ..))) = (st.dry, &geo) {
+        crate::fxmatiere::dry_stroke(&mut cur, geo, &d, rank);
+    }
+    if let (Some(g), Some((geo, ..))) = (st.gradient, &geo) {
+        crate::fxmatiere::gradient_stroke(&mut cur, geo, &g, rank, ctx.strokes);
     }
     if let (Some(t), Some((geo, ..))) = (write, &geo) {
         mask(&mut cur, geo, |_, s| t.factor(rank, s));

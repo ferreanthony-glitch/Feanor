@@ -35,7 +35,11 @@ pub(crate) fn offer(kind: EffectKind, layer: crate::document::LayerKind, folder:
     if folder {
         Offer::Absent
     } else if kind.vector_only() && layer != crate::document::LayerKind::Vector {
-        Offer::Disabled(if kind.is_trait() { TRAIT_VECTOR_ONLY } else { BOIL_VECTOR_ONLY })
+        Offer::Disabled(match kind {
+            EffectKind::StrokeGradient | EffectKind::Nib => crate::fxmatiere::bitmap_why(kind),
+            k if k.is_trait() => TRAIT_VECTOR_ONLY,
+            _ => BOIL_VECTOR_ONLY,
+        })
     } else {
         Offer::Enabled
     }
@@ -263,7 +267,7 @@ impl App {
         }
         self.record_step();
         let fx = &mut self.layers_mut()[li].fx;
-        let i = match fx.iter().position(|e| e.kind == kind).filter(|_| kind.vector_only()) {
+        let i = match fx.iter().position(|e| e.kind == kind).filter(|_| kind.single()) {
             Some(i) => {
                 fx[i].enabled = true;
                 i
@@ -338,6 +342,131 @@ impl App {
         self.select_fx(last);
         self.renderer.invalidate_all();
         self.status = format!("{} : posé sur le calque, les clés partent de l'image {}.", preset.label(), self.frame_label(self.cur_frame));
+    }
+
+    /// La rangée d'icônes des effets de matière (`fxmatiere.rs`) : comme celle du trait, juste dessous.
+    /// Le liseré, le trait sec et l'encre qui bave vont sur toutes les sortes de calques ; le dégradé et
+    /// le changement de plume, sur le vectoriel seulement (grisés avec la raison sur un bitmap).
+    pub(crate) fn matiere_strip(&mut self, ui: &mut egui::Ui, li: usize) {
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("Matière").weak());
+            for kind in crate::fxmatiere::KINDS {
+                let offer = self.fx_offer(li, kind);
+                let enabled = offer == Offer::Enabled;
+                let on = self.fx_on(li, kind);
+                let action = crate::fxmatiere::action(kind);
+                let key = self.raccourci(action);
+                let about = match offer {
+                    Offer::Disabled(why) => why,
+                    _ => kind.hint(),
+                };
+                let resp = crate::bulles::etat_si(ui, enabled, on, crate::fxmatiere::icon(kind), kind.label(), about, &key);
+                crate::raccourcisui::shortcut_menu(&resp, action, &key);
+                if enabled && resp.clicked() {
+                    self.run_action(action);
+                }
+            }
+            let usable = self.fx_offer(li, EffectKind::Outline) == Offer::Enabled;
+            let menu = ui.add_enabled_ui(usable, |ui| {
+                ui.menu_button(RichText::new(ph::MAGIC_WAND).size(crate::bulles::TAILLE), |ui| {
+                    for preset in crate::fxmatiere::Preset::ALL {
+                        let key = self.raccourci(preset.action());
+                        let ok = !preset.vector_only() || self.fx_offer(li, EffectKind::Nib) == Offer::Enabled;
+                        let note = if ok { preset.note() } else { crate::fxmatiere::bitmap_why(EffectKind::Nib) };
+                        let resp = crate::bulles::bulle(ui.add_enabled(ok, egui::Button::new(preset.label())), preset.label(), note, &key);
+                        if ok && resp.clicked() {
+                            ui.close_menu();
+                            self.apply_matter_preset(preset);
+                        }
+                    }
+                })
+                .response
+            });
+            crate::bulles::bulle(menu.inner, "Préréglages de la matière", "Des effets de matière tout réglés : encre de Chine, feutre usé, contour blanc, arc-en-ciel, plume calligraphique.", "");
+        });
+    }
+
+    /// Pose les effets du préréglage de matière `preset` sur le calque courant (une étape d'annulation) :
+    /// ceux de même sorte sont remplacés.
+    pub(crate) fn apply_matter_preset(&mut self, preset: crate::fxmatiere::Preset) {
+        let li = self.cur_layer;
+        let built = preset.build();
+        if built.iter().any(|e| self.fx_offer(li, e.kind) == Offer::Absent) {
+            return;
+        }
+        if built.iter().any(|e| !self.fx_allowed(li, e.kind)) {
+            self.status = format!("« {} » ne va que sur un calque vectoriel.", preset.label());
+            return;
+        }
+        if self.content_refuses() {
+            return;
+        }
+        self.record_step();
+        let stack = &mut self.layers_mut()[li].fx;
+        for e in built {
+            stack.retain(|x| x.kind != e.kind);
+            stack.push(e);
+        }
+        let last = stack.len() - 1;
+        self.select_fx(last);
+        self.renderer.invalidate_all();
+        self.status = format!("{} : posé sur le calque (les dessins n'ont pas changé).", preset.label());
+    }
+
+    /// « Appliquer pour de bon » : remplace les traits vectoriels du calque `li` par ceux que redessine la plume
+    /// de l'effet « Changer de plume » (une étape d'annulation nommée) et retire l'effet. Les zones remplies et
+    /// les textes restent tels quels. Les traits ne sont pas rejoués ici : ceux que l'effet a déjà redessinés
+    /// gardent leurs pixels, les autres sont rendus en rapide puis exactement en arrière-plan (`rejeu.rs`).
+    pub(crate) fn bake_nib(&mut self, li: usize) {
+        let frame = self.cur_frame;
+        let found = self.layers().get(li).and_then(|l| l.fx.iter().position(|e| e.kind == EffectKind::Nib).map(|i| (l.kind, l.frames.clone(), i, l.fx[i].values_at(frame))));
+        let Some((kind, frames, i, values)) = found else {
+            self.status = "Pas d'effet « Changer de plume » sur ce calque.".into();
+            return;
+        };
+        let Some(nib) = crate::fxmatiere::NibCtx::resolve(&crate::fxmatiere::NibS::of(&values)) else {
+            self.status = "La plume choisie n'existe plus : choisis-en une autre avant de l'appliquer.".into();
+            return;
+        };
+        if kind != crate::document::LayerKind::Vector || self.content_refuses() {
+            return;
+        }
+        let mut cels: Vec<crate::document::CelId> = Vec::new();
+        for id in frames.iter().flatten() {
+            if !cels.contains(id) {
+                cels.push(*id);
+            }
+        }
+        // Étape d'annulation : la structure d'avant (l'effet) et le dessin d'avant de chaque dessin changé.
+        let mut edits = vec![self.snapshot()];
+        let (w, h) = (self.doc.width, self.doc.height);
+        let mut changed = Vec::new();
+        for cel in cels {
+            let Some(c) = self.doc.cels.get_mut(&cel) else { continue };
+            let Some(before) = c.vector.clone() else { continue };
+            let mut baked = before.clone();
+            if crate::fxmatiere::bake_nib(&mut baked, &nib) == 0 {
+                continue;
+            }
+            // (Les pixels : ceux du cache des traits redessinés ; ce qui manque, en rapide d'abord.)
+            c.raster = baked.render_quick(w, h);
+            c.vector = Some(baked);
+            c.version += 1;
+            edits.push(crate::history::Edit::Vector { cel, drawing: before });
+            changed.push(cel);
+        }
+        self.layers_mut()[li].fx.remove(i);
+        self.deselect_fx();
+        self.fx_key_sel.clear();
+        self.named_step("Plume appliquée pour de bon", |app| app.history.push(crate::history::Edit::Group(edits)));
+        self.modified = true;
+        self.renderer.invalidate_all();
+        for cel in &changed {
+            self.rejeu_cel(*cel);
+        }
+        let plural = if changed.len() > 1 { "s" } else { "" };
+        let name = crate::fxmatiere::nib_name(crate::fxmatiere::NibS::of(&values).id).unwrap_or_default();
+        self.status = format!("Plume « {name} » appliquée pour de bon : {} dessin{plural} refait{plural}, l'effet est retiré (Ctrl+Z pour revenir).", changed.len());
     }
 
     /// Pose ou met à jour la clé de l'effet `i` du calque courant à l'image courante, avec ses
@@ -472,6 +601,7 @@ impl App {
             }
         });
         self.trait_strip(ui, li);
+        self.matiere_strip(ui, li);
         let key = self.raccourci("fx.cle_auto");
         let resp = ui.checkbox(&mut self.fx_auto_key, "Création automatique des clés");
         crate::bulles::bulle(resp, "Création automatique des clés", "Une clé est posée à l'image courante à chaque changement d'un paramètre.", &key);
@@ -488,6 +618,7 @@ impl App {
         }
         let mut remove = None;
         let mut swap = None;
+        let mut bake = false;
         for i in 0..n {
             let e = self.layers()[li].fx[i].clone();
             let chosen = self.fx_index() == Some(i);
@@ -543,12 +674,46 @@ impl App {
                 let values = e.values_at(f);
                 egui::Grid::new(("parametres_effet", i)).num_columns(2).show(ui, |ui| {
                     for (k, p) in e.kind.params().iter().enumerate() {
+                        // Le vert et le bleu d'une couleur sont dans son sélecteur.
+                        if crate::fxmatiere::color_tail(e.kind, k) {
+                            continue;
+                        }
                         let param_hint = e.kind.param_hint(k);
+                        // Une couleur (liseré, arrêts du dégradé) : un sélecteur de couleur, pas trois curseurs.
+                        if crate::fxmatiere::color_start(e.kind, k).is_some() {
+                            let name = ui.label(crate::fxmatiere::color_label(e.kind, k));
+                            if !param_hint.is_empty() {
+                                name.on_hover_text(param_hint);
+                            }
+                            let mut rgb = [values[k] as u8, values[k + 1] as u8, values[k + 2] as u8];
+                            let resp = ui.color_edit_button_srgb(&mut rgb);
+                            let resp = if param_hint.is_empty() { resp } else { resp.on_hover_text(param_hint) };
+                            if resp.dragged() || resp.changed() {
+                                crate::fx::note_interaction(ui.ctx());
+                            }
+                            if self.edited(&resp) {
+                                let mut new = values.clone();
+                                for c in 0..3 {
+                                    new[k + c] = rgb[c] as f32;
+                                }
+                                let auto = self.fx_auto_key;
+                                let effect = &mut self.layers_mut()[li].fx[i];
+                                if auto || !effect.keys.is_empty() {
+                                    effect.set_key(f, new);
+                                } else {
+                                    effect.values = new;
+                                }
+                                self.select_fx(i);
+                            }
+                            ui.end_row();
+                            continue;
+                        }
                         let name = ui.label(p.name);
                         if !param_hint.is_empty() {
                             name.on_hover_text(param_hint);
                         }
                         let mut v = values[k];
+                        let mut nib_changed = false;
                         let resp = match e.kind.param_style(k) {
                             crate::fx::ParamStyle::Slider => ui.add(egui::Slider::new(&mut v, p.min..=p.max).suffix(p.unit)),
                             crate::fx::ParamStyle::Integer => ui.add(egui::Slider::new(&mut v, p.min..=p.max).suffix(p.unit).step_by(1.0).fixed_decimals(0)),
@@ -559,19 +724,47 @@ impl App {
                                 v = if on { 1.0 } else { 0.0 };
                                 resp
                             }
+                            // Le choix d'une plume : la liste des réglages de pinceau de la bibliothèque.
+                            crate::fx::ParamStyle::Nib => {
+                                let names: Vec<String> = self.brushes.presets.iter().filter(|p| p.target == crate::brushtex::Target::Brush).map(|p| p.name.clone()).collect();
+                                let choices = crate::fxmatiere::nib_choices(&names);
+                                let current = v.round().max(0.0) as u32;
+                                let shown = choices.iter().find(|(id, _)| *id == current).map_or_else(|| "(plume introuvable)".to_string(), |(_, n)| n.clone());
+                                let mut picked = current;
+                                let resp = egui::ComboBox::from_id_salt(("plume", i))
+                                    .selected_text(shown)
+                                    .show_ui(ui, |ui| {
+                                        for (id, name) in &choices {
+                                            ui.selectable_value(&mut picked, *id, name.as_str());
+                                        }
+                                    })
+                                    .response;
+                                let resp = if param_hint.is_empty() { resp } else { resp.on_hover_text(param_hint) };
+                                if picked != current {
+                                    v = picked as f32;
+                                    nib_changed = true;
+                                }
+                                resp
+                            }
                         };
                         // Pendant le geste, l'image passe en aperçu (`fx::draft_level`) ; la pleine
                         // résolution revient au lâcher.
                         if resp.dragged() || resp.changed() {
                             crate::fx::note_interaction(ui.ctx());
                         }
-                        if self.edited(&resp) {
+                        let changed = if nib_changed {
+                            self.record_step();
+                            true
+                        } else {
+                            self.edited(&resp)
+                        };
+                        if changed {
                             let mut new = values.clone();
                             new[k] = v;
                             let auto = self.fx_auto_key;
                             let effect = &mut self.layers_mut()[li].fx[i];
-                            if e.kind.param_style(k) == crate::fx::ParamStyle::Switch {
-                                // (Un interrupteur ne s'anime pas : il vaut pour toutes les clés.)
+                            if matches!(e.kind.param_style(k), crate::fx::ParamStyle::Switch | crate::fx::ParamStyle::Nib) {
+                                // (Un interrupteur ou un choix ne s'anime pas : il vaut pour toutes les clés.)
                                 effect.set_param(k, v);
                             } else if auto || !effect.keys.is_empty() {
                                 effect.set_key(f, new);
@@ -583,6 +776,15 @@ impl App {
                         ui.end_row();
                     }
                 });
+                // « Changer de plume » : remplacer pour de bon les traits par ceux de la plume.
+                if e.kind == EffectKind::Nib {
+                    let key = self.raccourci(crate::fxmatiere::BAKE_ACTION);
+                    let resp = ui.button(format!("{}  Appliquer pour de bon", ph::CHECK));
+                    crate::raccourcisui::shortcut_menu(&resp, crate::fxmatiere::BAKE_ACTION, &key);
+                    if crate::bulles::bulle(resp, "Appliquer pour de bon", "Remplace les traits du calque par ceux de la plume (leur tracé et leur pression sont gardés) et retire l'effet. Une étape d'annulation : Ctrl+Z revient aux traits d'origine.", &key).clicked() {
+                        bake = true;
+                    }
+                }
                 ui.horizontal(|ui| {
                     let here = e.key_at(f).is_some();
                     let key = self.raccourci("fx.cle_creer");
@@ -636,6 +838,9 @@ impl App {
                 Some(None) => self.deselect_fx(),
                 None => {}
             }
+        }
+        if bake {
+            self.bake_nib(li);
         }
     }
 }

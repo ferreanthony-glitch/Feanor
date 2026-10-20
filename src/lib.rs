@@ -348,6 +348,9 @@ mod tremblement_tests;
 mod fxtrait;
 #[cfg(test)]
 mod fxtrait_tests;
+mod fxmatiere;
+#[cfg(test)]
+mod fxmatiere_tests;
 mod fxui;
 mod fxkeys;
 #[cfg(test)]

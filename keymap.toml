@@ -2705,6 +2705,63 @@ action = "fx.preset_poussiere"
 touches = []
 source = "SHOT (sans touche)"
 
+# Effets de matière du trait (fxmatiere.rs), « Appliquer pour de bon » de la plume et leurs préréglages :
+# sans touche par défaut, comme les effets du trait.
+[[raccourci]]
+action = "fx.lisere"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.trait_sec"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.encre_bave"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.degrade_trait"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.plume"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.plume_appliquer"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.preset_encre_chine"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.preset_feutre_use"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.preset_contour_blanc"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.preset_arc_en_ciel"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fx.preset_plume_calligraphique"
+touches = []
+source = "SHOT (sans touche)"
+
 [[raccourci]]
 action = "calque.propager"
 touches = []

@@ -998,6 +998,22 @@ impl BrushLibrary {
             shared.papers.entry(key).or_insert_with(|| paper.clone());
             shared.from_library.insert((TextureKind::Paper, id), key);
         }
+        drop(shared);
+        self.publish_nibs();
+    }
+
+    /// Les réglages de pinceau de la bibliothèque, tels qu'un trait vectoriel les garde (pointe et papier
+    /// désignés par leur clé de contenu), à la disposition de l'effet « Changer de plume »
+    /// (`fxmatiere::publish`) : le calcul de fond n'a pas accès à l'application.
+    fn publish_nibs(&self) {
+        let key = |kind, id: Option<u32>| id.and_then(|id| shared_key(kind, id));
+        let brushes: Vec<(String, BrushSettings)> = self
+            .presets
+            .iter()
+            .filter(|p| p.target == Target::Brush)
+            .map(|p| (p.name.clone(), BrushSettings { tip: key(TextureKind::Tip, p.settings.tip), paper: key(TextureKind::Paper, p.settings.paper), ..p.settings }))
+            .collect();
+        crate::fxmatiere::publish(&brushes);
     }
 
     /// Le réglage `s` (numéros de la bibliothèque) pour un trait vectoriel : pointe et papier

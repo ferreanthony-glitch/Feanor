@@ -127,7 +127,12 @@ pub const FORMAT: &str = "pelure-projet";
 /// crayonné multiple, respiration, ondulation du trait, pointillés, désagrégation ; voir
 /// `fxtrait.rs`). Une version précédente refuse le projet : elle ne connaît pas ces sortes d'effet et
 /// montrerait le dessin sans eux, le film changerait sans prévenir.
-pub const VERSION: u32 = 31;
+/// 32 (2026-10-20) : effets de matière dans la pile `effets` (liseré, trait sec, encre qui bave, dégradé le
+/// long du trait, changer de plume ; voir `fxmatiere.rs`). Même raisonnement que pour la 31 : une version
+/// précédente refuse le projet au lieu d'en montrer le dessin sans liseré, sans dégradé ni plume (et la
+/// plume est désignée par un numéro tiré du nom du réglage de pinceau). Un projet de version 31 ou moins
+/// s'ouvre tel quel.
+pub const VERSION: u32 = 32;
 const DRAWINGS: &str = "dessins";
 /// Fils qui lisent ou écrivent les dessins d'un projet en parallèle : au-delà de huit, le disque et
 /// la mémoire (une feuille décodée pèse 33 Mo) limitent plus que le processeur.

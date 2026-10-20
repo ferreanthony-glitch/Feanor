@@ -3916,6 +3916,18 @@ impl App {
                     self.apply_trait_preset(preset);
                 }
             }
+            // Effets de matière (`fxmatiere.rs`) du calque courant, leurs préréglages et « Appliquer pour de bon ».
+            a if crate::fxmatiere::kind_of_action(a).is_some() => {
+                if let Some(kind) = crate::fxmatiere::kind_of_action(a) {
+                    self.toggle_fx(self.cur_layer, kind);
+                }
+            }
+            a if crate::fxmatiere::Preset::from_action(a).is_some() => {
+                if let Some(preset) = crate::fxmatiere::Preset::from_action(a) {
+                    self.apply_matter_preset(preset);
+                }
+            }
+            "fx.plume_appliquer" => self.bake_nib(self.cur_layer),
             "fx.choisir_aucun" => {
                 self.deselect_fx();
                 self.status = "Aucun effet choisi : plus de clé d'effet dans la timeline ni le montage.".into();

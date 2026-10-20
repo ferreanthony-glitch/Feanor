@@ -107,6 +107,18 @@ pub enum EffectKind {
     Dashes,
     #[serde(rename = "desagregation")]
     Dust,
+    // Effets de matière du trait (`fxmatiere.rs`, Anthony, 2026-10-20) : le liseré, le trait sec et l'encre
+    // qui bave marchent sur les deux sortes de calques ; le dégradé et la plume, sur le vectoriel seulement.
+    #[serde(rename = "lisere")]
+    Outline,
+    #[serde(rename = "trait_sec")]
+    Dry,
+    #[serde(rename = "encre_bave")]
+    Bleed,
+    #[serde(rename = "degrade_trait")]
+    StrokeGradient,
+    #[serde(rename = "plume")]
+    Nib,
 }
 
 const GAUSSIAN: [Param; 1] = [Param { name: "Rayon", min: 0.0, max: 200.0, default: 8.0, unit: " px" }];
@@ -264,14 +276,16 @@ pub enum ParamStyle {
     Integer,
     /// Une case à cocher (0 ou 1).
     Switch,
+    /// Un choix de plume (liste des réglages de pinceau ; ne s'anime pas).
+    Nib,
 }
 
 /// Familles d'effets, dans l'ordre des menus (inspirées du menu Filtre et des réglages de
 /// Photoshop).
-pub const FAMILIES: [&str; 10] = ["Trait", "Flou", "Déformation", "Réglages", "Bruit", "Pixéliser", "Rendu", "Netteté", "Styliser", "Cinéma"];
+pub const FAMILIES: [&str; 11] = ["Trait", "Matière", "Flou", "Déformation", "Réglages", "Bruit", "Pixéliser", "Rendu", "Netteté", "Styliser", "Cinéma"];
 
 impl EffectKind {
-    pub const ALL: [EffectKind; 35] = [
+    pub const ALL: [EffectKind; 40] = [
         EffectKind::GaussianBlur,
         EffectKind::MotionBlur,
         EffectKind::BrightnessContrast,
@@ -307,23 +321,55 @@ impl EffectKind {
         EffectKind::StrokeWave,
         EffectKind::Dashes,
         EffectKind::Dust,
+        EffectKind::Outline,
+        EffectKind::Dry,
+        EffectKind::Bleed,
+        EffectKind::StrokeGradient,
+        EffectKind::Nib,
     ];
 
-    /// L'effet agit sur la géométrie des traits d'un dessin vectoriel (`fxtrait.rs`) : il lit le
-    /// dessin vectoriel lui-même, pas ses pixels.
+    /// L'effet est de la famille « Trait » ou « Matière » (`fxtrait.rs`, `fxmatiere.rs`) : calculé en
+    /// arrière-plan, sans aperçu réduit ni passe sur la carte graphique, et une seule fois par calque.
     pub fn is_trait(self) -> bool {
-        matches!(self, EffectKind::Write | EffectKind::Sketch | EffectKind::Breath | EffectKind::StrokeWave | EffectKind::Dashes | EffectKind::Dust)
+        self.vector_stage() || matches!(self, EffectKind::Outline | EffectKind::Bleed)
     }
 
-    /// L'effet n'a de sens que sur un calque vectoriel (le tremblement du trait et les effets du
-    /// trait).
+    /// L'effet lit le dessin vectoriel (traits, abscisse, tracé) et passe avant les autres effets de la pile
+    /// (`fxtrait::render`) ; sans dessin vectoriel, ceux qui le peuvent agissent sur les pixels (le trait sec).
+    pub fn vector_stage(self) -> bool {
+        matches!(
+            self,
+            EffectKind::Write
+                | EffectKind::Sketch
+                | EffectKind::Breath
+                | EffectKind::StrokeWave
+                | EffectKind::Dashes
+                | EffectKind::Dust
+                | EffectKind::Dry
+                | EffectKind::StrokeGradient
+                | EffectKind::Nib
+        )
+    }
+
+    /// L'effet n'a de sens que sur un calque vectoriel (le tremblement du trait et les effets du trait qui
+    /// lisent les traits). Le liseré, l'encre qui bave et le trait sec marchent aussi sur un bitmap.
     pub fn vector_only(self) -> bool {
+        self == EffectKind::Boil || (self.vector_stage() && self != EffectKind::Dry)
+    }
+
+    /// Une seule fois par calque : le tremblement et les effets du trait et de la matière (les menus les
+    /// cochent et les décochent comme un interrupteur).
+    pub fn single(self) -> bool {
         self == EffectKind::Boil || self.is_trait()
     }
 
     /// Le réglage `k` de l'effet se règle-t-il par un curseur, un curseur entier ou une case ?
     pub fn param_style(self, k: usize) -> ParamStyle {
+        use crate::fxmatiere as m;
         match (self, k) {
+            (EffectKind::Outline, m::OUTLINE_BEHIND) | (EffectKind::StrokeGradient, m::GRAD_WHOLE | m::GRAD_LOOP) => ParamStyle::Switch,
+            (EffectKind::Dry, m::DRY_SEED | m::DRY_EVERY | m::DRY_VARIANTS) | (EffectKind::Bleed, m::BLEED_SEED | m::BLEED_GRAIN) | (EffectKind::StrokeGradient, m::GRAD_COUNT) => ParamStyle::Integer,
+            (EffectKind::Nib, m::NIB_ID) => ParamStyle::Nib,
             (EffectKind::Boil, crate::tremblement::VARIANTS | crate::tremblement::SPEED | crate::tremblement::SEED) => ParamStyle::Integer,
             (EffectKind::Boil, crate::tremblement::REST) => ParamStyle::Switch,
             (EffectKind::Write, 1 | 2 | 3 | 6) | (EffectKind::StrokeWave, 3) | (EffectKind::Dust, 7) => ParamStyle::Switch,
@@ -387,6 +433,11 @@ impl EffectKind {
             EffectKind::StrokeWave => "Ondulation du trait",
             EffectKind::Dashes => "Pointillés qui défilent",
             EffectKind::Dust => "Désagrégation",
+            EffectKind::Outline => "Liseré",
+            EffectKind::Dry => "Trait sec",
+            EffectKind::Bleed => "Encre qui bave",
+            EffectKind::StrokeGradient => "Dégradé le long du trait",
+            EffectKind::Nib => "Changer de plume",
         }
     }
 
@@ -415,6 +466,7 @@ impl EffectKind {
             | EffectKind::Grain
             | EffectKind::Aberration => "Cinéma",
             EffectKind::Write | EffectKind::Sketch | EffectKind::Breath | EffectKind::StrokeWave | EffectKind::Dashes | EffectKind::Dust => "Trait",
+            EffectKind::Outline | EffectKind::Dry | EffectKind::Bleed | EffectKind::StrokeGradient | EffectKind::Nib => "Matière",
         }
     }
 
@@ -454,6 +506,11 @@ impl EffectKind {
             EffectKind::StrokeWave => &crate::fxtrait::WAVE,
             EffectKind::Dashes => &crate::fxtrait::DASH,
             EffectKind::Dust => &crate::fxtrait::DUST,
+            EffectKind::Outline => &crate::fxmatiere::OUTLINE,
+            EffectKind::Dry => &crate::fxmatiere::DRY,
+            EffectKind::Bleed => &crate::fxmatiere::BLEED,
+            EffectKind::StrokeGradient => &crate::fxmatiere::GRADIENT,
+            EffectKind::Nib => &crate::fxmatiere::NIB,
         }
     }
 
@@ -487,6 +544,11 @@ impl EffectKind {
             EffectKind::StrokeWave => crate::fxtrait::WaveS::of(v).changes(),
             EffectKind::Dashes => true,
             EffectKind::Dust => crate::fxtrait::DustS::of(v).changes(),
+            EffectKind::Outline => crate::fxmatiere::OutlineS::of(v).changes(),
+            EffectKind::Dry => crate::fxmatiere::DryS::of(v).changes(),
+            EffectKind::Bleed => crate::fxmatiere::BleedS::of(v).changes(),
+            EffectKind::StrokeGradient => crate::fxmatiere::GradS::of(v).changes(),
+            EffectKind::Nib => crate::fxmatiere::NibS::of(v).changes(),
         }
     }
 
@@ -658,6 +720,17 @@ pub fn steps_at_with(fx: &[Effect], frame: usize, rest: Option<usize>, vector: b
             match e.kind {
                 EffectKind::Sketch => values.push(crate::fxtrait::sketch_variant(&values, frame) as f32),
                 EffectKind::Breath | EffectKind::StrokeWave | EffectKind::Dashes => values.push(frame as f32),
+                // Le trait sec se retire toutes les N images (sa variante) ; le dégradé défile avec l'image
+                // (sinon un dessin dérivé suffit pour toutes) ; la plume porte la signature de son réglage.
+                EffectKind::Dry => values.push(crate::fxmatiere::dry_variant(&values, frame) as f32),
+                EffectKind::StrokeGradient => {
+                    let scrolls = values.get(crate::fxmatiere::GRAD_SCROLL).is_some_and(|s| s.abs() > 1e-6);
+                    values.push(if scrolls { frame as f32 } else { 0.0 });
+                }
+                EffectKind::Nib => {
+                    let id = crate::fxmatiere::NibS::of(&values).id;
+                    values.push(crate::fxmatiere::nib_signature(id) as f32);
+                }
                 _ => {}
             }
             FxStep { kind: e.kind, values }
@@ -682,7 +755,9 @@ pub fn hybrid_split(item: &crate::render::PlanItem) -> Option<(crate::render::Pl
     if item.ctg.is_some() || item.fond.is_some() || item.pre.is_some() {
         return None;
     }
-    let (line, rest): (Vec<FxStep>, Vec<FxStep>) = item.fx.iter().cloned().partition(|s| s.kind.is_trait());
+    // (Seuls les effets qui lisent le dessin vectoriel passent d'abord : le liseré et l'encre qui bavent
+    // sont des effets sur les pixels, qui gardent leur place dans la pile — et leur calcul sur processeur.)
+    let (line, rest): (Vec<FxStep>, Vec<FxStep>) = item.fx.iter().cloned().partition(|s| s.kind.vector_stage());
     if line.is_empty() || !crate::gpufx::steps_supported(&rest) {
         return None;
     }
@@ -692,7 +767,7 @@ pub fn hybrid_split(item: &crate::render::PlanItem) -> Option<(crate::render::Pl
 /// Les mêmes effets sans le tremblement ni les effets du trait (le calque qu'on édite se montre tel
 /// qu'il est : on dessine, on prend et on déplace ce qu'on voit).
 pub fn without_boil(steps: Vec<FxStep>) -> Vec<FxStep> {
-    steps.into_iter().filter(|s| !s.kind.vector_only()).collect()
+    steps.into_iter().filter(|s| !s.kind.vector_only() && !s.kind.vector_stage()).collect()
 }
 
 /// Numéro du dessin dérivé : le dessin `cel` passé par `steps` (bit de poids fort mis : il ne
@@ -965,13 +1040,16 @@ pub fn apply_scaled(raster: &Raster, steps: &[FxStep], level: u8) -> Raster {
 /// laissés.
 pub fn apply_with(raster: &Raster, vector: Option<&crate::vector::VectorDrawing>, steps: &[FxStep], level: u8) -> Raster {
     let mut cur: Option<Raster> = None;
+    let on_vector = vector.is_some() && level == 0;
     if let (Some(v), 0) = (vector, level) {
-        let line: Vec<FxStep> = steps.iter().filter(|s| s.kind.is_trait()).cloned().collect();
+        let line: Vec<FxStep> = steps.iter().filter(|s| s.kind.vector_stage()).cloned().collect();
         if !line.is_empty() {
             cur = Some(crate::fxtrait::render(v, raster.width, raster.height, &line));
         }
     }
-    for s in steps.iter().filter(|s| !s.kind.is_trait()) {
+    // (Sans dessin vectoriel, les effets qui ne vivent que sur les traits sont laissés ; le trait sec, lui,
+    // agit sur les pixels.)
+    for s in steps.iter().filter(|s| !(s.kind.vector_stage() && (on_vector || s.kind.vector_only()))) {
         use crate::fxfilters as f;
         // (Le premier effet lit le dessin lui-même : pas de copie d'avance.)
         let src = cur.as_ref().unwrap_or(raster);
@@ -1007,8 +1085,12 @@ pub fn apply_with(raster: &Raster, vector: Option<&crate::vector::VectorDrawing>
             EffectKind::Vignette => crate::fxcine::vignette(src, v[0], v[1], v[2], v[3], v[4], v[5], v[6]),
             EffectKind::Grain => crate::fxcine::grain(src, v[0], v[1], v[2], v.get(3).copied().unwrap_or(0.0), level),
             EffectKind::Aberration => crate::fxcine::aberration(src, v[0], v[1], v[2]),
+            // Effets de matière sur les pixels (`fxmatiere.rs`).
+            EffectKind::Outline => crate::fxmatiere::outline(src, v),
+            EffectKind::Bleed => crate::fxmatiere::bleed(src, v),
+            EffectKind::Dry => crate::fxmatiere::dry_pixels(src, v),
             // (Les effets du trait sont passés plus haut.)
-            EffectKind::Write | EffectKind::Sketch | EffectKind::Breath | EffectKind::StrokeWave | EffectKind::Dashes | EffectKind::Dust => unreachable!("effet du trait"),
+            EffectKind::Write | EffectKind::Sketch | EffectKind::Breath | EffectKind::StrokeWave | EffectKind::Dashes | EffectKind::Dust | EffectKind::StrokeGradient | EffectKind::Nib => unreachable!("effet du trait"),
         };
         cur = Some(next);
     }
@@ -1154,7 +1236,7 @@ pub(crate) fn display_with<'a>(doc: &'a Document, item: &crate::render::PlanItem
     // (Un tremblement n'a rien à gagner d'un résultat d'avant la dernière retouche du dessin : il
     // ferait disparaître le trait qu'on vient de poser ; il montre alors le dessin tel quel.
     // L'autre variante du même dessin, elle, est un bon remplaçant.)
-    let boil = item.fx.iter().any(|s| s.kind.vector_only());
+    let boil = item.fx.iter().any(|s| s.kind.vector_only() || s.kind.vector_stage());
     Some(match crate::fxcache::fallback(item.cel) {
         Some((last, cel)) if !boil || cel.version == src.version => Display { cel: Shown::Fx(cel), id: last, ready: false },
         _ => Display { cel: Shown::Plain(src), id: item.cel, ready: false },
@@ -1177,7 +1259,7 @@ fn job_for(item: &crate::render::PlanItem, src: &Cel, id: CelId, level: u8, prio
         id,
         version: src.version,
         src: crate::fxcache::source(item.cel, src),
-        vector: if item.fx.iter().any(|s| s.kind.is_trait()) { crate::fxcache::vector_source(item.cel, src) } else { None },
+        vector: if item.fx.iter().any(|s| s.kind.vector_stage()) { crate::fxcache::vector_source(item.cel, src) } else { None },
         steps: item.fx.clone(),
         level,
         prio,

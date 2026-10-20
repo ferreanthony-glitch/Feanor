@@ -236,7 +236,9 @@ fn the_same_frame_always_gives_the_same_pixels_on_one_thread_or_many() {
 
 #[test]
 fn the_settings_are_saved_with_the_layer_and_old_projects_open_unchanged() {
-    assert_eq!(crate::project::VERSION, 31);
+    // (31 : les effets du trait ; 32 : ceux de la matière, `fxmatiere_tests.rs`.)
+    assert!(crate::project::VERSION >= 31);
+    let version = format!("\"version\": {}", crate::project::VERSION);
     let mut doc = Document::new(64, 64, 24);
     let id = doc.new_cel(LayerKind::Vector);
     let layer = &mut doc.panels[0].layers[0];
@@ -256,11 +258,11 @@ fn the_settings_are_saved_with_the_layer_and_old_projects_open_unchanged() {
     let back = crate::project::load(&manifest).unwrap().doc;
     assert_eq!(back.panels[0].layers[0].fx, doc.panels[0].layers[0].fx, "mêmes réglages et mêmes clés");
     // Un projet d'avant (version 27, sans effet du trait) s'ouvre tel quel.
-    let old = text.replace("\"version\": 31", "\"version\": 27").replace("\"ecriture_trait\"", "\"flou_gaussien\"");
+    let old = text.replace(&version, "\"version\": 27").replace("\"ecriture_trait\"", "\"flou_gaussien\"");
     std::fs::write(&manifest, old).unwrap();
     assert!(crate::project::load(&manifest).is_ok());
     // Une version d'après est refusée, comme toujours.
-    std::fs::write(&manifest, text.replace("\"version\": 31", "\"version\": 32")).unwrap();
+    std::fs::write(&manifest, text.replace(&version, &format!("\"version\": {}", crate::project::VERSION + 1))).unwrap();
     assert!(crate::project::load(&manifest).is_err());
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -1018,6 +1020,11 @@ fn sample_drawing() -> VectorDrawing {
         elements.push(smooth_stroke(&[(520.0 + 48.0 * a.cos(), 90.0 + 48.0 * a.sin(), 2.2), (520.0 + 72.0 * a.cos(), 90.0 + 72.0 * a.sin(), 1.4)]));
     }
     VectorDrawing { elements }
+}
+
+/// Le petit dessin à regarder, pour les planches des autres séries d'effets (`fxmatiere_tests.rs`).
+pub(crate) fn sample_drawing_for_dump() -> VectorDrawing {
+    sample_drawing()
 }
 
 /// Regarder les effets : une planche de contact écrite dans le dossier donné par `FXTRAIT_PNG`.
