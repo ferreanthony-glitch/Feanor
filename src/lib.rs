@@ -441,6 +441,8 @@ mod selobjet;
 pub mod poskeys;
 mod poskeysui;
 #[cfg(test)]
+mod poskeysmontage_tests;
+#[cfg(test)]
 mod dessin_notes_tests;
 mod montagerows;
 #[cfg(test)]

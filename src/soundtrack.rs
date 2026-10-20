@@ -64,6 +64,8 @@ pub(crate) enum MenuTarget {
     Layer(usize),
     /// Un losange de clé d'effet de la piste d'un calque (`fxkeys.rs`).
     FxKey,
+    /// Un losange vert de clé de position de la piste d'un calque (`poskeysui.rs`).
+    PosKey,
     Camera,
     Sequence,
     Ruler,

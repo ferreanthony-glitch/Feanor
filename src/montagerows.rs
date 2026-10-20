@@ -374,6 +374,34 @@ impl App {
         })
     }
 
+    /// Losange vert de clé de position sous le point `p`, au milieu d'une piste de calque : (plan, calque,
+    /// image du plan). `top` : haut de la bande ; `blocks` : les panneaux à l'écran. Il passe avant les
+    /// poignées et le dessin dessous (`poskeysui.rs`) ; la bande des losanges d'effets, en haut de la piste
+    /// (`fxkeys::STRIP`), reste aux losanges violets.
+    pub(crate) fn montage_pos_key_at(&self, p: Pos2, top: f32, blocks: &[Rect], ppf: f32, rows: &Rows) -> Option<(usize, usize, usize)> {
+        let y = p.y - top;
+        if y < rows.layers_top() || y >= rows.background_top() {
+            return None;
+        }
+        let row = ((y - rows.layers_top()) / LAYER_H) as usize;
+        if row >= rows.count {
+            return None;
+        }
+        let in_row = (y - rows.layers_top()) - row as f32 * LAYER_H;
+        if in_row <= crate::fxkeys::STRIP || (in_row - App::pos_marker_y(0.0, LAYER_H)).abs() > crate::poskeysui::HIT_H {
+            return None;
+        }
+        let tol = (ppf * 0.5).max(5.0);
+        blocks.iter().enumerate().filter(|(_, b)| p.x >= b.left() - 1.0 - tol && p.x <= b.right() + 1.0 + tol).find_map(|(i, b)| {
+            let panel = &self.doc.panels[i];
+            let k = layer_in_row(&panel.layers, row)?;
+            let keys = &panel.layers[k].pos_keys;
+            let x0 = b.left() - 1.0;
+            let shown = keys.iter().map(|key| key.frame).filter(|&f| f < panel.frame_count());
+            crate::poskeysui::marker_near(shown, p.x, |f| x0 + f as f32 * ppf + ppf * 0.5, tol).map(|f| (i, k, f))
+        })
+    }
+
     /// Calque visé dans les pistes de calques : (panneau, calque). `top` : haut de la bande.
     pub(crate) fn layer_row_hit(&self, p: Pos2, top: f32, blocks: &[Rect], rows: &Rows) -> Option<(usize, usize)> {
         let row = self.row_at(p, top, rows)?;
