@@ -1371,6 +1371,7 @@ impl Document {
     }
 
     /// Le préfixe des numéros neufs (0 : projet classique).
+    #[cfg(test)]
     pub(crate) fn id_prefix(&self) -> u64 {
         self.id_prefix
     }

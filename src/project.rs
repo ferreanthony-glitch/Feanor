@@ -2006,6 +2006,10 @@ pub struct Loaded {
     pub manquants: BTreeSet<CelId>,
     /// Projet partagé : ce que la session a besoin de savoir de l'ouverture (`projet_partage.rs`).
     pub(crate) partage: Option<partage_io::Ouverture>,
+    /// Projet partagé : la session, démarrée sur le fil d'ouverture (le dossier partagé n'est jamais lu sur celui de l'interface),
+    /// ou pourquoi elle n'a pas pu l'être (`cooperationui::rejoindre_dans_le_fil`).
+    pub(crate) session: Option<crate::cooperation::Session>,
+    pub(crate) erreur_equipe: Option<String>,
 }
 
 /// Le plus grand numéro de séquence, de scène, de plan, de marque, de piste, d'extrait ou de son du manifeste.
@@ -2649,6 +2653,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         approx,
         manquants: missing,
         partage: None,
+        session: None,
+        erreur_equipe: None,
     })
 }
 

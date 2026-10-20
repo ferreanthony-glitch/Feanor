@@ -18,7 +18,6 @@ use crate::verrous::{Equipier, Fiche};
 
 /// Dossier des plans, des fiches d'équipier, des commentaires, des membres et des brouillons (relatifs à la racine).
 pub(crate) const PLANS: &str = "plans";
-pub(crate) const PARTAGE: &str = "partage";
 pub(crate) const FICHES: &str = "partage/equipe";
 pub(crate) const MEMBRES: &str = "partage/membres";
 pub(crate) const BROUILLONS: &str = "partage/brouillons";
@@ -32,11 +31,10 @@ pub struct Marque {
     pub taille: u64,
 }
 
-/// Un fichier lu, avec sa marque (lue avant ses octets : si le fichier change entre les deux, on le relira).
+/// Un fichier lu.
 #[derive(Clone, Debug)]
 pub struct Fichier {
     pub octets: Vec<u8>,
-    pub marque: Marque,
 }
 
 /// Ce que le balayage a vu changer depuis le dernier.
@@ -53,12 +51,6 @@ pub struct Releve {
     pub brouillons: bool,
     /// Copies en conflit vues pour la première fois.
     pub copies: Vec<CopieEnConflit>,
-}
-
-impl Releve {
-    pub fn est_vide(&self) -> bool {
-        !self.structure && self.plans.is_empty() && !self.fiches && !self.commentaires && !self.membres && !self.brouillons && self.copies.is_empty()
-    }
 }
 
 /// D'où vient une copie en conflit.
@@ -165,9 +157,6 @@ pub trait Depot: Send + Sync {
     /// Lit une copie en conflit, et la range dans `importes/` une fois importée.
     fn lire_copie(&self, copie: &CopieEnConflit) -> Result<Vec<u8>, String>;
     fn ranger_copie(&self, copie: &CopieEnConflit) -> Result<(), String>;
-
-    /// Parmi ces dessins, ceux dont le fichier n'est pas (encore) là.
-    fn dessins_manquants(&self, ids: &[u64]) -> Vec<u64>;
 }
 
 // ---------------------------------------------------------------------------------- le dossier partagé
@@ -193,13 +182,8 @@ impl DossierPartage {
     }
 
     fn lire(path: &Path) -> Result<Option<Fichier>, String> {
-        let marque = match fs::metadata(path) {
-            Ok(m) => marque_de(&m),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(e) => return Err(format!("{} : {e}", path.display())),
-        };
         match fs::read(path) {
-            Ok(octets) => Ok(Some(Fichier { octets, marque })),
+            Ok(octets) => Ok(Some(Fichier { octets })),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(e) => Err(format!("{} : {e}", path.display())),
         }
@@ -483,15 +467,6 @@ impl Depot for DossierPartage {
         let nom = copie.chemin.file_name().ok_or("copie sans nom")?;
         deplacer(&self.racine.join(sure(&copie.chemin)?), &self.racine.join(IMPORTES).join(nom))
     }
-
-    fn dessins_manquants(&self, ids: &[u64]) -> Vec<u64> {
-        let present: std::collections::HashSet<std::ffi::OsString> =
-            fs::read_dir(self.racine.join("dessins")).map(|e| e.flatten().map(|e| e.file_name()).collect()).unwrap_or_default();
-        ids.iter()
-            .copied()
-            .filter(|id| !present.contains(std::ffi::OsStr::new(&format!("{id}.png"))) && !present.contains(std::ffi::OsStr::new(&format!("{id}.json"))))
-            .collect()
-    }
 }
 
 /// Un nom de fichier simple : ni dossier, ni chemin qui sorte du projet.
@@ -523,6 +498,7 @@ fn deplacer(de: &Path, vers: &Path) -> Result<(), String> {
 }
 
 /// Le nombre de fichiers de plans qu'un projet partagé a dans `plans/` (pour les mesures et les essais).
+#[cfg(test)]
 pub(crate) fn nombre_de_plans(racine: &Path) -> usize {
     fs::read_dir(racine.join(PLANS)).map(|e| e.flatten().filter(|e| matches!(nom_de_plan(&e.file_name().to_string_lossy()), Nom::Canonique(_))).count()).unwrap_or(0)
 }

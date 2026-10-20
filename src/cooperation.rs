@@ -19,10 +19,9 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use crate::commentaires::Comment;
-use crate::depot::{CopieEnConflit, Curseur, Depot, Marque, Membre};
+use crate::depot::{CopieEnConflit, Curseur, Depot, Membre};
 use crate::document::{CelId, Document};
-use crate::equipe::{Cle, Identite};
+use crate::equipe::Identite;
 use crate::partagecom::{self, Enregistrement, Suivi};
 use crate::project::partage_io::{self, BlocPartage, Brouillon, ContexteEcriture, DonneesPlan, EtatPlan, Ouverture, PlanCharge, PlanTenu, ResultatPartage, Signature};
 use crate::verrous::{self, Cible, EtatPrise, Evaluation, Fiche, Observations, Presence, Prise, Remplace, Rendue};
@@ -61,7 +60,8 @@ impl Horloge {
         Horloge(None)
     }
 
-    /// Une horloge réglée à la main, à `ms`.
+    /// Une horloge réglée à la main, à `ms` (les essais).
+    #[cfg(test)]
     pub fn reglable(ms: u64) -> Horloge {
         Horloge(Some(Arc::new(AtomicU64::new(ms))))
     }
@@ -74,6 +74,7 @@ impl Horloge {
     }
 
     /// Avance une horloge réglable.
+    #[cfg(test)]
     pub fn avancer(&self, ms: u64) {
         if let Some(a) = &self.0 {
             a.fetch_add(ms, Ordering::Relaxed);
@@ -99,8 +100,8 @@ enum Commande {
     Recharger(u64),
     /// Cette copie en conflit est traitée.
     CopieTraitee(CopieEnConflit),
-    /// Des sons et des modèles déjà en mémoire, pour que la relecture de la structure ne les décode pas de nouveau.
-    Ressources { sons: HashMap<u64, crate::document::Sound>, modeles: HashMap<u64, Arc<crate::model3d::Model3d>> },
+    /// Cette prise n'attend plus son fichier (la synchronisation est trop lente : on prend l'état d'ici).
+    Forcer(Cible),
     /// Écrire tout de suite ma fiche et balayer.
     Reveiller,
     Arret,
@@ -124,7 +125,6 @@ pub(crate) enum Evenement {
     Changement { cible: Cible, avant: Option<String>, apres: Option<String> },
     /// Un autre poste a écrit dans une cible que je tiens.
     Intrus { cible: Cible, par: Option<Signature> },
-    Erreur(String),
 }
 
 /// La structure lue : un petit document (plans en coquille) à confronter au vrai.
@@ -217,7 +217,6 @@ pub(crate) struct Moteur {
     depot: Arc<dyn Depot>,
     moi: Identite,
     prefixe: u64,
-    projet: String,
     delais: Delais,
     horloge: Horloge,
     curseur: Curseur,
@@ -254,11 +253,6 @@ pub(crate) struct Moteur {
     premier_tour: bool,
     fiches_a_relire: bool,
     arret: bool,
-}
-
-/// L'identifiant sous lequel une prise est notée (équipier + séance).
-fn qui(r: &verrous::Revendication) -> (String, String) {
-    (r.equipier.id.clone(), r.cle.seance.clone())
 }
 
 impl Moteur {
@@ -352,9 +346,8 @@ impl Moteur {
                 s.reessayer_a = Some(now);
             }
             Commande::CopieTraitee(c) => self.copies.retain(|x| x != &c),
-            Commande::Ressources { sons, modeles } => {
-                self.sons.extend(sons);
-                self.modeles.extend(modeles);
+            Commande::Forcer(c) => {
+                self.en_attente_de_pret.remove(&c);
             }
             Commande::Reveiller => {
                 self.fiche_a_ecrire = true;
@@ -709,10 +702,7 @@ pub(crate) enum Pastille {
 /// La session d'un film partagé, côté interface.
 pub(crate) struct Session {
     pub(crate) moi: Identite,
-    pub(crate) prefixe: u64,
     pub(crate) projet: String,
-    pub(crate) racine: std::path::PathBuf,
-    nom_structure: String,
     depot: Arc<dyn Depot>,
     delais: Delais,
     horloge: Horloge,
@@ -748,8 +738,6 @@ pub(crate) struct Session {
     /// Les dessins à demander au rejeu (rendu exact) après la pose d'un plan.
     pub(crate) a_rejouer: Vec<CelId>,
     /// Ce que l'interface doit faire de ce que la session vient de poser.
-    pub(crate) a_invalider: bool,
-    derniere_vue: u64,
     pub(crate) pertes: Vec<(Cible, String)>,
     /// ermer a été fait (une seule fois).
     ferme: bool,
@@ -817,7 +805,6 @@ impl Session {
             depot: depot.clone(),
             moi: moi.clone(),
             prefixe,
-            projet: o.bloc.projet.clone(),
             delais: delais.clone(),
             horloge: horloge.clone(),
             curseur,
@@ -859,10 +846,7 @@ impl Session {
         let arret = Arc::new(AtomicBool::new(false));
         let mut s = Session {
             moi,
-            prefixe,
             projet: o.bloc.projet.clone(),
-            racine: depot.racine().to_path_buf(),
-            nom_structure: o.nom_structure.clone(),
             depot,
             delais,
             horloge,
@@ -888,8 +872,6 @@ impl Session {
             a_renoter: BTreeSet::new(),
             rendre_apres: BTreeSet::new(),
             a_rejouer: Vec::new(),
-            a_invalider: false,
-            derniere_vue: 0,
             pertes: Vec::new(),
             ferme: false,
             presence_dite: None,
@@ -943,24 +925,12 @@ impl Session {
         self.vue.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
-    pub(crate) fn maintenant(&self) -> u64 {
-        self.horloge.maintenant()
-    }
-
-    pub(crate) fn delais(&self) -> &Delais {
-        &self.delais
-    }
-
     pub(crate) fn identite_signature(&self) -> Signature {
         Signature { id: self.moi.id.clone(), nom: self.moi.nom.clone(), le: self.horloge.maintenant() }
     }
 
     pub(crate) fn depot(&self) -> Arc<dyn Depot> {
         self.depot.clone()
-    }
-
-    pub(crate) fn nom_structure(&self) -> &str {
-        &self.nom_structure
     }
 
     // ------------------------------------------------------------------ mes prises
@@ -1138,10 +1108,6 @@ impl Session {
         self.rendre_apres.extend(miennes);
     }
 
-    pub(crate) fn rendre_en_attente(&self) -> bool {
-        !self.rendre_apres.is_empty()
-    }
-
     /// Mes prises plus anciennes (une séance qui s'est mal arrêtée, la mienne) : reprises sans question.
     fn reprendre_mes_anciennes_prises(&mut self) {
         let v = self.vue();
@@ -1155,6 +1121,15 @@ impl Session {
         }
         if !cibles.is_empty() {
             self.prendre(&cibles, true);
+        }
+    }
+
+    /// La synchronisation de cette prise est trop lente : on prend le plan tel qu'on l'a (ce que l'autre a écrit de plus
+    /// arrivera comme une copie en conflit ou un brouillon).
+    pub(crate) fn forcer_la_synchronisation(&mut self, cible: Cible) {
+        if self.tiens(cible) {
+            self.prets.insert(cible);
+            let _ = self.cmd.send(Commande::Forcer(cible));
         }
     }
 
@@ -1280,7 +1255,6 @@ impl Session {
                 self.notifier(m.clone());
                 fx.messages.push(m);
             }
-            Evenement::Erreur(m) => fx.messages.push(m),
         }
     }
 
@@ -1531,19 +1505,20 @@ impl Session {
     // ------------------------------------------------------------------ enregistrer
 
     /// Ce que l'enregistrement doit savoir (`projet_partage::preparer`). Appelé sur le fil de l'interface, au cliché.
-    pub(crate) fn contexte_ecriture(&mut self, doc: &Document) -> ContexteEcriture {
+    /// `forcer` : on quitte, ce qui n'est pas écrit serait perdu — les prises encore en confirmation s'écrivent quand même.
+    pub(crate) fn contexte_ecriture(&mut self, doc: &Document, forcer: bool) -> ContexteEcriture {
         let mut tenus = Vec::new();
         for (c, _) in self.mes_prises.iter() {
             let Cible::Plan(p) = c else { continue };
             // (Un plan pas encore vérifié, ou dont la prise est provisoire, ne s'écrit pas : §10.)
-            if !self.prets.contains(c) || self.provisoire(*c) {
+            if !self.prets.contains(c) || (self.provisoire(*c) && !forcer) {
                 continue;
             }
             let Some(panel) = doc.panels.iter().find(|x| x.id == *p) else { continue };
             let e = self.plans.get(p).cloned().unwrap_or_default();
             tenus.push(PlanTenu { plan: *p, scene: panel.scene, revision: e.revision, hash: e.hash_contenu, dessins: e.dessins.clone() });
         }
-        let jeton = (self.prets.contains(&Cible::Montage) && self.tiens(Cible::Montage) && !self.provisoire(Cible::Montage)).then_some(self.structure_revision);
+        let jeton = (self.prets.contains(&Cible::Montage) && self.tiens(Cible::Montage) && (forcer || !self.provisoire(Cible::Montage))).then_some(self.structure_revision);
         self.relever_commentaires(doc);
         let commentaires = if self.suivi.a_ecrire { self.suivi.fichier(&self.moi.id).ok() } else { None };
         ContexteEcriture {
@@ -1555,11 +1530,6 @@ impl Session {
             commentaires,
             brouillons: std::mem::take(&mut self.brouillons_a_ecrire),
         }
-    }
-
-    /// Les plans que je tiens et qui n'ont pas encore leur fichier (créés ici) : à écrire avec les autres.
-    pub(crate) fn plans_neufs(&self, doc: &Document) -> Vec<u64> {
-        doc.panels.iter().map(|p| p.id).filter(|id| self.tiens(Cible::Plan(*id)) && self.plans.get(id).is_some_and(|e| e.revision == 0 && e.hash_contenu == 0)).collect()
     }
 
     /// L'écriture a réussi : les bases de comparaison avancent, mes prises annoncent les révisions écrites.
@@ -1668,17 +1638,6 @@ impl Session {
         }
     }
 
-    /// Le dernier numéro de vue publiée que l'interface a vu : elle repeint si la vue a changé.
-    pub(crate) fn vue_changee(&mut self) -> bool {
-        let n = self.vue().numero;
-        let changee = n != self.derniere_vue;
-        self.derniere_vue = n;
-        changee
-    }
-
-    pub(crate) fn marque_de_structure(&self) -> Option<Marque> {
-        None
-    }
 }
 
 impl Drop for Session {

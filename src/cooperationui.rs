@@ -16,7 +16,7 @@ use egui_phosphor::regular as ph;
 use crate::app::{App, Mode};
 use crate::bulles;
 use crate::cooperation::{Delais, Horloge, Pastille, Refus, Session};
-use crate::depot::{Depot, DossierPartage, OrigineCopie};
+use crate::depot::{DossierPartage, OrigineCopie};
 use crate::equipe::Identite;
 use crate::project::{self, partage_io, Progress};
 use crate::theme;
@@ -48,6 +48,24 @@ pub(crate) struct PartageEnCours {
     nom: String,
 }
 
+/// Ce qu'il faut savoir de moi pour rejoindre un film partagé sur le fil d'ouverture.
+pub(crate) struct ParamsEquipe {
+    pub moi: Identite,
+    pub delais: Delais,
+    pub ctx: egui::Context,
+}
+
+/// Le projet qui vient d'être lu est un film partagé : la session démarre ici, sur le fil d'ouverture (ma fiche est écrite, celles
+/// des autres lues : aucune de ces entrées-sorties n'est sur le fil de l'interface).
+pub(crate) fn rejoindre_dans_le_fil(loaded: &mut project::Loaded, p: ParamsEquipe, manifeste: &Path) {
+    let Some(o) = loaded.partage.take() else { return };
+    let depot = Arc::new(DossierPartage::nouveau(manifeste));
+    match Session::rejoindre(depot, p.moi, o, &mut loaded.doc, p.delais, Horloge::reelle(), true, Some(p.ctx)) {
+        Ok(s) => loaded.session = Some(s),
+        Err(e) => loaded.erreur_equipe = Some(e),
+    }
+}
+
 /// Les réglages de l'équipe, en durées du protocole.
 pub(crate) fn delais_de(r: &crate::equipe::ReglageEquipe) -> Delais {
     let r = r.clone().nettoye();
@@ -77,24 +95,6 @@ impl App {
             let _ = self.settings.save();
         }
         crate::equipe::identite(&self.settings.equipe.clone().nettoye(), &self.settings.comment_author)
-    }
-
-    /// Le projet qui vient de s'ouvrir est un film partagé : la session démarre (ma fiche est écrite, les prises des autres lues).
-    pub(crate) fn rejoindre_le_film(&mut self, o: partage_io::Ouverture, manifeste: &Path) -> bool {
-        let moi = self.identite_equipe();
-        let depot = Arc::new(DossierPartage::nouveau(manifeste));
-        let delais = delais_de(&self.settings.equipe);
-        match Session::rejoindre(depot, moi, o, &mut self.doc, delais, Horloge::reelle(), true, Some(self.ctx.clone())) {
-            Ok(s) => {
-                self.partage = Some(s);
-                self.equipe_ui = EquipeUi::default();
-                true
-            }
-            Err(e) => {
-                self.status = format!("Film partagé ouvert sans l'équipe : {e}. Il reste en lecture seule (Enregistrer sous en fait une copie à toi).");
-                false
-            }
-        }
     }
 
     /// Ferme la session d'un projet qui s'en va (autre projet dans l'onglet, onglet fermé) : ce qu'on tenait est rendu, sur un fil
@@ -465,7 +465,7 @@ impl App {
             if plein {
                 painter.rect_filled(bande, 1.0, fond);
             } else {
-                painter.rect_stroke(bande, 1.0, Stroke::new(1.0, fond), egui::StrokeKind::Inside);
+                painter.rect_stroke(bande, 1.0, Stroke::new(1.0_f32, fond), egui::StrokeKind::Inside);
             }
             return Some(bande.expand2(vec2(0.0, 3.0)));
         }
@@ -478,10 +478,10 @@ impl App {
             };
             if creux {
                 painter.circle_filled(centre, r, Color32::from_black_alpha(120));
-                painter.circle_stroke(centre, r, Stroke::new(1.5, fond));
+                painter.circle_stroke(centre, r, Stroke::new(1.5_f32, fond));
             } else {
                 painter.circle_filled(centre, r, fond);
-                painter.circle_stroke(centre, r, Stroke::new(1.0, contour));
+                painter.circle_stroke(centre, r, Stroke::new(1.0_f32, contour));
             }
             let texte = if matches!(p, Pastille::Attente) { ph::HOURGLASS_MEDIUM.to_string() } else { lettres };
             let encre = if creux { Color32::WHITE } else { encre_sur(fond) };
@@ -493,7 +493,7 @@ impl App {
         let mut y = centre.y + r + 5.0;
         for e in vue.equipe.iter().filter(|e| !e.moi && e.en_ligne && e.plan == Some(plan)).take(3) {
             let c = Pos2::new(centre.x, y);
-            painter.circle_stroke(c, 4.5, Stroke::new(1.5, couleur(e.couleur)));
+            painter.circle_stroke(c, 4.5, Stroke::new(1.5_f32, couleur(e.couleur)));
             y += 10.0;
         }
         zone
@@ -544,11 +544,13 @@ impl App {
         let mut importer: Vec<(String, u64)> = Vec::new();
         let mut importer_copie = None;
         let mut ignorer_copie = None;
+        let mut forcer: Vec<Cible> = Vec::new();
         let vue = self.partage.as_ref().expect("session").vue();
         let notifications: Vec<String> = self.partage.as_ref().expect("session").notifications.iter().rev().take(30).map(|n| n.texte.clone()).collect();
         let nom_film = self.path.as_ref().and_then(|p| p.file_stem()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let titre_plans: std::collections::HashMap<u64, String> = self.doc.panels.iter().enumerate().map(|(i, p)| (p.id, crate::storyboard::panel_title(&self.doc, i))).collect();
         let moi_cle = self.partage.as_ref().expect("session").moi.id.clone();
+        let depot_nom = self.partage.as_ref().expect("session").depot().nom();
         egui::Window::new(format!("Équipe — {nom_film}")).open(&mut ouverte).default_width(420.0).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if bulles::icone(ui, ph::LOCK_SIMPLE, "Prendre ce plan", "Le plan courant (ou les plans choisis) devient le tien : les autres ne le modifient plus.", &self.raccourci("equipe.prendre_plan")).clicked() {
@@ -576,6 +578,19 @@ impl App {
                     action = Some("equipe.rendre_tout");
                 }
             });
+            for c in vue.synchro_lente.iter().filter(|c| self.partage.as_ref().is_some_and(|s| s.tiens(**c))) {
+                let t = match c {
+                    Cible::Plan(p) => titre_plans.get(p).cloned().unwrap_or_else(|| "un plan".into()).to_lowercase(),
+                    Cible::Montage => "le montage".into(),
+                };
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(format!("{} {t} attend encore son dernier fichier.", ph::HOURGLASS_MEDIUM)).small());
+                    if bulles::icone(ui, ph::FAST_FORWARD, "Prendre tel quel", "La synchronisation est lente : prendre le plan tel que ce poste l'a. Ce que l'autre a écrit en plus arrivera comme brouillon ou copie en conflit.", "").clicked() {
+                        forcer.push(*c);
+                    }
+                });
+            }
+            ui.label(RichText::new(depot_nom.as_str()).small().weak());
             if let Some(h) = &vue.hors_ligne {
                 ui.add_space(4.0);
                 ui.label(RichText::new(format!("{} Le dossier partagé ne répond pas : {h}", ph::WARNING)).color(theme::erreur()));
@@ -593,7 +608,7 @@ impl App {
                         ui.painter().circle_filled(rect.center(), 8.0, c);
                         ui.painter().text(rect.center(), Align2::CENTER_CENTER, crate::equipe::initiales(&e.nom), FontId::proportional(8.0), encre_sur(c));
                     } else {
-                        ui.painter().circle_stroke(rect.center(), 8.0, Stroke::new(1.5, c));
+                        ui.painter().circle_stroke(rect.center(), 8.0, Stroke::new(1.5_f32, c));
                     }
                     let mut ligne = e.nom.clone();
                     if e.moi {
@@ -674,6 +689,11 @@ impl App {
         }
         if let Some(a) = action {
             self.run_action(a);
+        }
+        for c in forcer {
+            if let Some(s) = self.partage.as_mut() {
+                s.forcer_la_synchronisation(c);
+            }
         }
         for (nom, plan) in importer {
             self.importer_brouillon(&nom, plan);

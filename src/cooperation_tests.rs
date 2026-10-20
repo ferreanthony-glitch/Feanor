@@ -101,7 +101,7 @@ impl Poste {
     }
 
     pub(crate) fn enregistrer(&mut self) -> ResultatPartage {
-        let ctx = self.s.contexte_ecriture(&self.doc);
+        let ctx = self.s.contexte_ecriture(&self.doc, false);
         let job = partage_io::preparer(&self.doc, &self.manifeste, &mut self.ecrits, ctx).expect("préparation");
         let rapport = job.run_with(None, 2).expect("écriture");
         let r = rapport.partage.expect("rapport de partage");
@@ -221,7 +221,7 @@ fn the_shared_manifest_is_format_34_with_no_plan_inside_and_one_file_per_plan() 
 #[test]
 fn numbers_of_two_members_never_meet() {
     let (mut a, mut b, _, _) = deux_postes("numeros", 3);
-    assert_ne!(a.s.prefixe, b.s.prefixe, "chaque équipier a son préfixe");
+    assert_ne!(a.doc.id_prefix(), b.doc.id_prefix(), "chaque équipier a son préfixe");
     let mut vus = std::collections::HashSet::new();
     for p in [&mut a, &mut b] {
         for _ in 0..50 {
@@ -233,9 +233,9 @@ fn numbers_of_two_members_never_meet() {
     // Les numéros d'avant le partage sont gardés tels quels.
     assert!(a.doc.panels.iter().all(|p| p.id < (1 << 32)));
     // Le préfixe se retrouve : le même équipier rouvre avec le même.
-    let p = a.s.prefixe;
-    let autre = Poste::ouvrir(&a.manifeste, "Anthony", &a.horloge);
-    assert_eq!(autre.s.prefixe, p);
+    let p = a.doc.id_prefix();
+    let autre = Poste::ouvrir_seance(&a.manifeste, "Anthony", &a.horloge, "s9");
+    assert_eq!(autre.doc.id_prefix(), p);
 }
 
 #[test]
@@ -637,7 +637,7 @@ fn the_structure_token_is_held_by_one_person_and_the_montage_follows_to_the_othe
     a.doc.sequence_mut(seq).expect("séquence").name = "Acte I".into();
     let neuf = a.doc.add_scene_after(1);
     let neuf_id = a.doc.panels[neuf].id;
-    assert!(neuf_id >> 32 == a.s.prefixe, "son numéro porte le préfixe d'Anthony");
+    assert!(neuf_id >> 32 == a.doc.id_prefix() >> 32, "son numéro porte le préfixe d'Anthony");
     assert_eq!(a.s.apres_structure(&a.doc), vec![neuf_id]);
     assert!(a.s.tiens(Cible::Plan(neuf_id)));
     let r = a.enregistrer();
@@ -1032,6 +1032,40 @@ fn a_conflict_copy_of_a_plan_the_holder_has_is_imported_as_a_version_and_filed_a
     assert!(copie.exists() == false && fx::racine(&a.manifeste).join("partage").join("importes").exists(), "déplacée, jamais effacée");
 }
 
+#[test]
+fn work_flows_both_ways_between_two_synchronised_folders_and_a_late_fiche_does_not_matter() {
+    let (mut a, mut b, h, mut sync) = deux_postes_synchro("synchro-deux-sens", 4);
+    a.prendre_plan(0).expect("libre");
+    b.prendre_plan(2).expect("libre");
+    confirmer(&h);
+    a.tour();
+    b.tour();
+    a.dessiner(0, 31);
+    b.dessiner(2, 32);
+    a.enregistrer();
+    b.enregistrer();
+    // Rien n'a encore voyagé : chacun ne voit que son plan.
+    a.tour();
+    b.tour();
+    assert_ne!(a.rouge(2), 32);
+    assert_ne!(b.rouge(0), 31);
+    // Léa envoie d'abord (ses fichiers arrivent chez Anthony), Anthony ensuite.
+    sync.tout(Sens::BversA);
+    a.tour();
+    h.avancer(5_000);
+    a.tour();
+    assert_eq!(a.rouge(2), 32, "le plan de Léa est arrivé chez Anthony");
+    assert!(matches!(a.etat(2), EtatPrise::Autre(_)));
+    assert!(matches!(a.etat(0), EtatPrise::Moi { .. }), "Anthony tient toujours le sien");
+    sync.tout(Sens::AversB);
+    b.tour();
+    h.avancer(5_000);
+    b.tour();
+    assert_eq!(b.rouge(0), 31);
+    assert!(matches!(b.etat(0), EtatPrise::Autre(_)));
+    // Les deux ont enregistré chacun son plan : aucune copie en conflit.
+    assert!(a.s.vue().copies.is_empty() && b.s.vue().copies.is_empty());
+}
 // ------------------------------------------------------------------------------------------ hors connexion
 
 /// Un dépôt qu'on peut couper : tout échoue tant qu'il est coupé (un dossier réseau éteint).
@@ -1125,9 +1159,6 @@ impl crate::depot::Depot for DepotCoupe {
         self.ok()?;
         self.dedans.ranger_copie(c)
     }
-    fn dessins_manquants(&self, ids: &[u64]) -> Vec<u64> {
-        self.dedans.dessins_manquants(ids)
-    }
 }
 
 /// Anthony travaille par un dépôt qu'on peut couper ; Léa, par un dépôt ordinaire du même dossier.
@@ -1156,7 +1187,7 @@ fn working_offline_on_a_plan_one_still_holds_is_saved_after_reconnecting() {
     a.tour();
     assert!(a.s.vue().hors_ligne.is_some(), "le moteur dit que le dépôt ne répond pas");
     // L'enregistrement échoue sans rien perdre : le travail reste en mémoire.
-    let ctx = a.s.contexte_ecriture(&a.doc);
+    let ctx = a.s.contexte_ecriture(&a.doc, false);
     let job = partage_io::preparer(&a.doc, &a.manifeste, &mut a.ecrits, ctx).expect("préparation");
     assert!(job.run_with(None, 2).is_err());
     assert_eq!(a.rouge(0), 66);

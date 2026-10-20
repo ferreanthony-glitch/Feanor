@@ -154,11 +154,6 @@ impl Fiche {
         serde_json::to_vec_pretty(self).map_err(|e| e.to_string())
     }
 
-    /// La prise de cette fiche pour `cible` si elle n'est pas rendue.
-    pub fn prise(&self, cible: Cible) -> Option<&Prise> {
-        self.prises.iter().find(|p| p.cible == cible).filter(|p| !self.rendue_apres(p))
-    }
-
     /// La prise `p` a été rendue (par une rendue plus récente ou égale).
     pub fn rendue_apres(&self, p: &Prise) -> bool {
         self.rendues.iter().any(|r| r.cible == p.cible && r.le >= p.pris_le)
@@ -192,10 +187,6 @@ impl Observations {
     /// Le dernier changement que j'ai vu de cette fiche (mon heure).
     pub fn dernier_changement(&self, cle: &Cle) -> Option<u64> {
         self.vus.get(cle).and_then(|v| v.1)
-    }
-
-    pub fn oublier(&mut self, cle: &Cle) {
-        self.vus.remove(cle);
     }
 }
 

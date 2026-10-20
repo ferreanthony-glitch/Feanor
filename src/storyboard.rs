@@ -302,7 +302,7 @@ impl App {
     /// Durée du plan courant. Chaque valeur repart du plan tel qu'il était au début du geste
     /// (raccourcir puis rallonger ne perd rien), avec une seule étape d'annulation par geste.
     pub(crate) fn edit_panel_length(&mut self, n: usize) {
-        if self.storyboard_refuses() {
+        if self.storyboard_refuses() || !self.partage_peut_toucher(&[self.panel().id]) {
             return;
         }
         self.length_field_active = true;

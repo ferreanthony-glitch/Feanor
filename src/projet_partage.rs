@@ -230,7 +230,6 @@ pub(crate) struct PlanCharge {
     pub manquants: BTreeSet<CelId>,
     /// Dessins vectoriels en rendu rapide : leur rendu exact se demande au rejeu.
     pub approx: Vec<CelId>,
-    pub avertissements: Vec<String>,
 }
 
 impl PlanCharge {
@@ -268,7 +267,7 @@ pub(crate) fn charger_plan(dir: &Path, tete: &Tete, plan: u64, octets: &[u8], qu
     let manifest = manifest_de_tete(tete, vec![SequenceEntry { id: 1, nom: String::new(), numero: String::new(), scenes: vec![SceneEntry { id: scene, nom: String::new(), numero: String::new(), panneaux: vec![panneau] }] }], fichier.contenu.hors);
     let annexes = Annexes { fournies: true, plans_seuls: true, versions, reserves, scenes3d: Some(scenes3d), ..Default::default() };
     let loaded = load_manifest_avec(manifest, dir, quick, None, annexes)?;
-    let Loaded { mut doc, warnings, approx, manquants, .. } = loaded;
+    let Loaded { mut doc, approx, manquants, .. } = loaded;
     let index = doc.panels.iter().position(|p| p.id == plan).ok_or("le plan n'a pas pu être lu")?;
     let data = DonneesPlan::de(&doc, index, &dessins);
     let hash_contenu = data.empreinte()?;
@@ -288,7 +287,6 @@ pub(crate) fn charger_plan(dir: &Path, tete: &Tete, plan: u64, octets: &[u8], qu
         dessins,
         manquants,
         approx,
-        avertissements: warnings,
     })
 }
 
@@ -485,7 +483,6 @@ pub(crate) struct Ouverture {
     pub marque_structure: Option<depot::Marque>,
     /// Les enregistrements de commentaires de chaque auteur (`partagecom.rs`).
     pub commentaires: Vec<(String, Vec<Enregistrement>)>,
-    pub avertissements: Vec<String>,
 }
 
 /// L'état d'un plan du film, tel que la dernière lecture l'a vu.
@@ -672,7 +669,7 @@ pub(super) fn ouvrir(mut structure: Manifest, dir: &Path, quick: bool, progress:
     let hash_structure = empreinte_structure(&loaded.doc, &bloc.projet)?;
     bloc.plans = a_lire;
     let nom = nom_structure;
-    loaded.partage = Some(Ouverture { bloc, tete, nom_structure: nom, plans: etats, hash_structure, hash_fichier_structure: 0, marque_structure: None, commentaires: par_auteur, avertissements });
+    loaded.partage = Some(Ouverture { bloc, tete, nom_structure: nom, plans: etats, hash_structure, hash_fichier_structure: 0, marque_structure: None, commentaires: par_auteur });
     Ok(loaded)
 }
 

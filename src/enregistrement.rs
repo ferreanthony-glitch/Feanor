@@ -156,7 +156,8 @@ impl App {
         }
         let prepare = match self.partage.as_mut().filter(|_| partage_ici) {
             Some(s) => {
-                let ctx = s.contexte_ecriture(&self.doc);
+                // (Une suite attend — quitter, fermer : ce qui n'est pas écrit serait perdu, on écrit même une prise en confirmation.)
+                let ctx = s.contexte_ecriture(&self.doc, then.is_some() || self.after_save.is_some());
                 project::partage_io::preparer(&self.doc, &manifest, &mut self.written, ctx)
             }
             None => project::prepare_save(&self.doc, &manifest, &mut self.written, None),

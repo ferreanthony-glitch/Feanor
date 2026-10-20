@@ -25,11 +25,15 @@ pub struct OpenJob {
 
 impl OpenJob {
     /// Démarre la lecture de `path` ; `ctx` est réveillé à la fin pour que l'interface l'adopte.
-    pub fn start(path: PathBuf, ctx: &egui::Context) -> Self {
+    pub fn start(path: PathBuf, ctx: &egui::Context, equipe: Option<crate::cooperationui::ParamsEquipe>) -> Self {
         let progress = Arc::new(Progress::default());
         let (p, q, wake) = (path.clone(), progress.clone(), ctx.clone());
         let handle = std::thread::spawn(move || {
-            let result = project::load_quick_progress(&p, &q);
+            let mut result = project::load_quick_progress(&p, &q);
+            // Un film partagé : l'équipe se rejoint ici aussi, sur ce fil (ma fiche est écrite, celles des autres lues).
+            if let (Ok(loaded), Some(equipe)) = (result.as_mut(), equipe) {
+                crate::cooperationui::rejoindre_dans_le_fil(loaded, equipe, &p);
+            }
             wake.request_repaint();
             result
         });
@@ -58,7 +62,9 @@ impl App {
             return;
         }
         self.status = format!("Ouverture de {}…", path.display());
-        self.open_job = Some(OpenJob::start(path, &self.ctx));
+        // (Le film partagé a besoin de qui je suis : lu ici, sur le fil de l'interface, rien qu'en mémoire.)
+        let equipe = Some(crate::cooperationui::ParamsEquipe { moi: self.identite_equipe(), delais: crate::cooperationui::delais_de(&self.settings.equipe), ctx: self.ctx.clone() });
+        self.open_job = Some(OpenJob::start(path, &self.ctx, equipe));
     }
 
     /// À chaque image d'écran : la fenêtre d'avancement, et l'adoption du projet une fois lu.
@@ -111,11 +117,24 @@ impl App {
                 self.written = loaded.written;
                 // Un film partagé : la session démarre (`cooperationui.rs`). Sans elle, le projet reste en lecture seule : son
                 // chemin n'est pas retenu (un enregistrement ne doit jamais écrire un manifeste classique par-dessus la structure).
-                let partage_ok = match loaded.partage {
-                    Some(o) => self.rejoindre_le_film(o, &path),
-                    None => true,
+                let partage_ok = match (loaded.session, loaded.erreur_equipe, loaded.partage.is_some()) {
+                    (Some(s), _, _) => {
+                        self.partage = Some(s);
+                        self.equipe_ui = Default::default();
+                        true
+                    }
+                    (None, Some(e), _) => {
+                        self.status = format!("Film partagé ouvert sans l'équipe : {e}. Il reste en lecture seule (Enregistrer sous en fait une copie à toi).");
+                        false
+                    }
+                    (None, None, partage) => {
+                        if partage {
+                            self.status = "Film partagé ouvert sans l'équipe : il reste en lecture seule (Enregistrer sous en fait une copie à toi).".into();
+                        }
+                        !partage
+                    }
                 };
-                let status_partage = if partage_ok { None } else { Some(std::mem::take(&mut self.status)) };
+                let status_partage = if partage_ok { None } else { Some(self.status.clone()) };
                 self.status = if loaded.warnings.is_empty() {
                     format!("Ouvert : {}", path.display())
                 } else {
