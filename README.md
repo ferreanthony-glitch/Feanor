@@ -1112,6 +1112,84 @@ qu'il reste du contenu caché de ce côté).
   Dupliquer ou copier un plan ne copie pas sa réserve ; couper un plan garde le début caché au premier
   plan, réunir deux plans ne garde que le début caché du premier.
 
+## Envois, plans modifiés, versions et comparaison
+
+Savoir ce qui a changé entre deux livraisons du storyboard (« v2 au réal »), garder l'ancienne version d'un plan,
+et les regarder l'une contre l'autre. Rien de tout cela ne change le format du projet (27) : un projet sans envoi ni
+version est exactement celui d'avant (aucun fichier, aucun dossier, aucun calcul de plus).
+
+**Marquer un envoi** : barre du montage > « Plus… » > « Marquer un envoi… » (icône avion en papier), menu Storyboard >
+Envois, ou Ctrl+K `envoi.marquer`. On donne un nom (« v2 au réal ») et une date (celle du jour) ; SHOT note l'état de
+**chaque plan**, garde de quoi le revoir (dossier `versions/`) et enregistre le projet. Un dessin qui n'a pas changé entre
+deux envois n'est écrit qu'une fois. La fenêtre « Envois » (icône `GIT_DIFF` sous « Plus… », `envoi.liste`) liste les
+envois, combien de plans diffèrent de chacun, et permet de retirer un envoi de la liste (ses fichiers restent).
+
+**Plans modifiés depuis l'envoi** : un plan qui n'est plus comme au dernier envoi porte une **pastille ambre** en haut
+à droite de son bloc dans le montage et de sa première vignette dans la vue Vignettes : un crayon (modifié) ou un
+plus (ajouté depuis). La bulle dit depuis quel envoi (« Modifié depuis l'envoi « v2 au réal » »). Un plan qu'on remet
+dans l'état de l'envoi (annuler) perd sa pastille. Sur la bande zoomée très loin (blocs de moins de 44 points), une bande ambre le long du
+bord haut du bloc remplace la pastille. Le « dernier envoi » est le dernier marqué (pas le plus tardif par sa date).
+- *Ce qui compte comme un changement* : ce qui se voit et ce qui dure : les dessins (pixels, traits), les calques et
+  leurs réglages (visibilité, opacité, mode de fusion, transformation, profondeur, effets, calques d'effets), la
+  caméra, la durée, les textes d'action, de dialogue et de notes, les marques d'image.
+- *Ce qui n'en est pas un* : ce qui aide à travailler : la couleur du plan, les signets et points d'entrée / sortie, les
+  notes dessinées de la timeline, le repère 3D, le nom d'un calque, son verrou, sa ligne repliée, son groupe de
+  couleur, la pelure d'oignon et le pochoir, les noms d'instance et marques de couleur des dessins, les rôles des
+  images, le déplacement du plan dans le film. Les commentaires, les transitions, le son et les scènes 3D de blocage ne
+  sont pas non plus dans l'empreinte d'un plan.
+- *Parcourir* : « Plan modifié suivant / précédent » (barre du montage sous « Plus… », menu Storyboard > Envois, fenêtre
+  « Envois ») va au plan modifié suivant en tournant ; « Choisir les plans modifiés » les choisit tous (pour les
+  copier, les colorer, les exporter ensemble). Actions `envoi.modifie_suivant`, `envoi.modifie_precedent`,
+  `envoi.modifies_choisir`, sans touche par défaut (clic droit sur l'entrée d'un menu pour leur en donner une).
+- *Coût* : sans envoi, rien. Avec des envois, un relevé par image d'écran (le numéro de l'historique et la somme des
+  versions des dessins : moins d'une microseconde pour 1 200 dessins) ; après 0,6 s de calme (souris relâchée, pas de
+  lecture) les plans sont copiés (au plus 1,5 ms par image d'écran) et **un fil** hache les dessins. Marquer un envoi
+  copie tout d'un coup : 15 à 32 ms pour 600 plans et 1 200 dessins bitmap (banc `envois_tests`), le reste sur un fil.
+
+**Versions d'un plan** : « Nouvelle version du plan » (barre du montage sous « Plus… », menu Storyboard > Versions du
+plan, fiche du plan, Ctrl+K `version.nouvelle`) garde le plan tel qu'il est comme version plus ancienne (v1) et
+continue sur une copie (v2). La **fiche du plan** a une ligne « Version » : la version active, le bouton « Nouvelle
+version », et pour chaque autre version de quoi **passer** à elle (les deux échangent leur contenu), la **comparer**,
+la **restaurer** (une copie d'elle devient une nouvelle version active ; rien n'est perdu) ou la **supprimer** (jamais
+l'active). Le clic droit sur un plan (bande ou vignette) a le même sous-menu « Version du plan ». Le titre du plan dit
+« Plan 3 · v2 » dans la bande et sur la planche quand il a plusieurs versions ; `version.precedente` et
+`version.suivante` passent de l'une à l'autre au clavier.
+- Chaque version rangée a ses propres dessins : retoucher l'une ne touche pas l'autre (les tuiles sont partagées
+  jusqu'à la première retouche, la mémoire ne double pas).
+- Un geste = une étape d'annulation nommée (« Nouvelle version du plan », « Passer à la version v1 », « Restaurer la
+  version v2 », « Supprimer la version v1 ») ; le storyboard verrouillé les refuse.
+- Ce qui reste au **plan** et non à la version : sa place dans le film, son numéro, ses commentaires, ses transitions,
+  son contenu rogné (réserve) ; la barre d'état le rappelle quand un plan a un contenu rogné. Dupliquer un plan ne copie
+  pas ses versions.
+- L'envoi note le numéro de la version partie ; la copie d'un plan dans un autre projet ne prend que la version active.
+
+**Comparer** : icône « Comparer le plan » (barre du montage sous « Plus… »), fenêtre « Envois » (une icône par envoi),
+ligne « Version » de la fiche (une icône par version), clic droit sur un plan > « Version du plan » > « Comparer le plan… »,
+ou Ctrl+K `comparer.ouvrir`. Une fenêtre à deux côtés : *Aujourd'hui*, chaque version du plan, ou le plan **tel qu'il
+était à un envoi** (relu dans `versions/`). Quatre manières de voir : **côte à côte**, **volet** (un curseur qu'on
+glisse : un côté à gauche, l'autre à droite), **fondu**, et **superposition** (ce qui n'est que d'un côté en rouge,
+que de l'autre en bleu, des deux en noir). Une glissière choisit l'image du plan, une icône échange les côtés, une
+autre relit tout. En bas : la part de l'image qui diffère (« 3,2 % de l'image diffère » ou « Les deux images sont les
+mêmes »). **Lecture seule** : la fenêtre ne garde que des copies, ne touche ni au plan, ni à l'historique, ni aux
+fichiers. Les images se composent sur un fil de fond (effets compris), jamais sur le fil de l'interface.
+
+**Fichiers** (tous écrits par l'enregistrement habituel, atomiquement, sans jamais effacer un fichier illisible ou plus
+récent : il est mis de côté en `.illisible` si un neuf doit le remplacer) :
+
+```
+MonFilm/
+  envois.json                      les envois : nom, date, et pour chaque plan l'empreinte de son contenu
+  versions/
+    envoi-3-9f2a41c0.json          l'instantané du 3e envoi (écrit une fois, jamais modifié)
+    dessins/<empreinte>.png|json   les dessins des instantanés (un par contenu)
+    textures/                      les textures des traits texturés de ces dessins
+  plans_versions.json              les autres versions de chaque plan (leurs dessins sont dans dessins/)
+```
+
+Rien de `versions/` n'est jamais effacé (même quand un envoi est retiré de la liste). « Enregistrer sous » recopie
+`versions/`. Un projet ouvert sans `versions/` (déplacé sans lui) s'ouvre ; la comparaison avec un envoi dit alors quel
+fichier manque.
+
 ## Transitions du montage
 
 Une transition habille une **coupe** entre deux plans, ou le **début / la fin du film** : fondu enchaîné,
@@ -1468,6 +1546,9 @@ Bus/
   references/16.png    leurs images, copiées telles quelles (une vidéo : un dossier references/17/ d'images 000001.jpg…)
   crayonnes.json       la planche de crayonnés rapides (absent : pas de planche)
   scenes3d.json        les scènes 3D de blocage (absent : aucune scène)
+  envois.json          les envois (« v2 au réal ») et l'empreinte de chaque plan à chacun (absent : aucun envoi)
+  versions/            les instantanés des envois et leurs dessins, rangés par contenu (absent : aucun envoi)
+  plans_versions.json  les autres versions de chaque plan (absent : aucun plan n'a de version)
 ```
 
 Si tu enregistres « Bus.pelure » dans `Films`, le fichier est donc dans `Films\Bus\Bus.pelure`, pas
@@ -1717,6 +1798,9 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `commentaires.rs`, `commentairesui.rs` | Commentaires sur la timeline : modèle, fichier `commentaires.json`, positions ; fanions, bulle, menu, panneau |
 | `references.rs`, `referencesui.rs` | Références visuelles : modèle, fichier `references.json` et dossier `references/`, vue du tableau, filtre, image d'une vidéo selon la tête de lecture, import, cache des images ; panneau (tableau, grille, liste, pipette, lecture) |
 | `crayonnes.rs`, `crayonnesui.rs` | Crayonnés rapides : planche de cases (traits vectoriels, pinceau bitmap), appartenance et coupe des traits, ordre, pages, annulation, création des plans (mise à l'échelle), fichier `crayonnes.json` ; page, barre, gestes, numéros, légendes, fenêtre « Créer les plans » |
+| `empreinte.rs`, `envois.rs`, `envoisui.rs` | Envois : empreintes de contenu stables d'une séance à l'autre (pixels tels que le PNG les garde) ; le modèle, `envois.json`, les instantanés de `versions/` écrits une fois par contenu, le calcul sur un fil ; marquer un envoi, le suivi des plans modifiés (relevé par image d'écran, copie par tranches, fil de fond), pastilles, navigation, fenêtres « Marquer un envoi » et « Envois » |
+| `planvers.rs`, `planversui.rs` | Versions d'un plan (v1, v2…) : le modèle (nouvelle, passer, restaurer, supprimer), `plans_versions.json`, annulation ; la ligne « Version » de la fiche, le sous-menu du clic droit |
+| `comparer.rs`, `comparerui.rs` | Comparer un plan avec lui-même (deux versions, ou aujourd'hui et un envoi) en lecture seule : composition sur un fil de fond, superposition colorée, différence ; la fenêtre (côte à côte, volet, fondu, superposition) |
 | `rognage.rs`, `rognageui.rs` | Rogner les plans sans rien détruire : réserve du début et de la fin, ripple, roll, glisser, aimantation, durée tapée, fichier `rognages.json` ; bords à la souris, flèches, commandes, fenêtre « Durée… » |
 | `app.rs` | État de l'application, actions, raccourcis |
 | `vtools.rs` | Outils des calques vectoriels |

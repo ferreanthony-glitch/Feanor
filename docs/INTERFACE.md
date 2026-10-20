@@ -825,3 +825,89 @@ panneau détaché, chaque panneau de la barre s'ouvre dans chaque espace, change
 5. Passer de Storyboard à Animation et retour : le dessin ne saute pas, les panneaux ajustés se recalent en une ou
    deux images ; l'espace Montage depuis Ctrl+K ; le bouton « Storyboard » qui en revient.
 6. Un panneau détaché (Références) reste sur son écran en changeant d'espace.
+
+## 15. Envois, plans modifiés, versions de plans et comparaison (2026-10-20, branche `versions`)
+
+Demande d'Anthony : savoir ce qui a changé entre deux livraisons du storyboard. Rien n'a été regardé à l'écran dans
+cette séance (aucun lancement de SHOT) : voir « À vérifier à l'écran » plus bas. Détail du fonctionnement : `README.md`.
+
+### Mots
+
+| Mot | Sens |
+|---|---|
+| **Envoi** | l'état de tous les plans à un moment, avec un nom (« v2 au réal ») et une date |
+| **Marquer un envoi** | la commande qui le crée (aussi « Noter » dans le texte de la fenêtre) |
+| **Modifié / ajouté depuis l'envoi** | un plan qui n'est plus comme au dernier envoi / qui n'y était pas ; la pastille ambre |
+| **Version** (v1, v2…) | une autre forme du même plan, gardée à côté ; « la version active » est celle du film |
+| **Nouvelle version du plan** | garde le plan tel qu'il est et continue sur une copie |
+| **Passer à une version** | elle devient l'active, l'ancienne active est gardée |
+| **Restaurer une version** | une copie d'elle devient une nouvelle version active |
+| **Comparer** | la fenêtre à deux côtés, en lecture seule |
+
+### Où et quels gestes
+
+| Commande | Où | Raccourci |
+|---|---|---|
+| Marquer un envoi… (`envoi.marquer`) | barre du montage > Plus… ; Storyboard > Envois ; Ctrl+K | aucun |
+| Envois (`envoi.liste`, la fenêtre) | barre du montage > Plus… (icône à l'état) ; Storyboard > Envois ; Ctrl+K | aucun |
+| Plan modifié suivant / précédent (`envoi.modifie_suivant`, `envoi.modifie_precedent`) | barre du montage > Plus… ; Storyboard > Envois ; fenêtre « Envois » ; Ctrl+K | aucun |
+| Choisir les plans modifiés (`envoi.modifies_choisir`) | Storyboard > Envois ; fenêtre « Envois » ; Ctrl+K | aucun |
+| Nouvelle version du plan (`version.nouvelle`) | barre du montage > Plus… ; Storyboard > Versions du plan ; fiche du plan (icône fourche) ; clic droit sur un plan > Version du plan ; Ctrl+K | aucun |
+| Version précédente / suivante (`version.precedente`, `version.suivante`) | Storyboard > Versions du plan ; Ctrl+K | aucun |
+| Passer à, Restaurer, Supprimer une version | fiche du plan (ligne « Version ») ; clic droit sur un plan > Version du plan | aucun |
+| Comparer le plan (`comparer.ouvrir`) | barre du montage > Plus… (icône à l'état) ; Storyboard > Versions du plan ; clic droit > Version du plan ; fenêtre « Envois » (une icône par envoi) ; fiche (une icône par version) ; Ctrl+K | aucun |
+
+Tout se fait par la table des barres (`barres.rs`) et les actions (`keymap.rs`, un bloc chacune dans `keymap.toml`, sans
+touche) : clic droit sur l'entrée d'un menu ou d'une ligne de « Plus… » pour leur en donner une. Les icônes ont leur
+bulle d'une seconde (nom, raccourci, description, `bulles.rs`). La pastille est peinte avec la couleur d'avertissement du
+thème (`theme::avertissement`) ; les états allumés (Envois, Comparer) prennent `bulles::symbole_etat`.
+
+### Ce que voit l'utilisateur
+
+- **Fenêtre « Marquer un envoi »** : un nom (« v2 au réal », le numéro suivant est proposé), une date (JJ/MM/AAAA, celle du
+  jour ; rouge si elle n'est pas lisible), « Marquer l'envoi » / Annuler, Entrée valide. Un projet pas encore enregistré le
+  dit (l'envoi est gardé au premier enregistrement).
+- **Pastille** : 14 points en haut à droite du bloc du plan dans la bande et dans le coin de la première vignette du plan dans la
+  vue Vignettes ; un crayon pour un plan modifié, un plus pour un plan ajouté ; bulle « Modifié depuis l'envoi « v2 au réal » ».
+  Sur un bloc de moins de 44 points de large (la bande zoomée très loin : la pastille cacherait la poignée du bord) ou de
+  moins de 40 de haut, une **bande ambre de 5 points le long du bord haut** la remplace, avec la même bulle. Le « dernier
+  envoi » est le dernier marqué (pas le plus tardif par sa date : la date se tape).
+- **Fiche du plan, ligne « Version »** : « v2 » en gras (et « sur 3 » s'il y en a plusieurs), l'icône « Nouvelle version » ; une
+  ligne par autre version : son numéro et sa date, puis passer (flèches), comparer (colonnes), restaurer (flèche arrière),
+  supprimer (corbeille).
+- **Titre** : « Plan 3 · v2 » dans la bande et sur la planche pour un plan qui a plusieurs versions.
+- **Fenêtre « Envois »** : la ligne de commandes (marquer, plan modifié précédent / suivant, choisir les modifiés), le
+  résumé (« Depuis « v2 au réal » : 7 plans modifiés, 1 ajouté »), la liste des plans modifiés (un clic y va), puis les
+  envois du plus récent au plus ancien avec le nombre de plans qui diffèrent d'aujourd'hui, l'icône de comparaison et la
+  corbeille (« Retirer de la liste », avec confirmation ; les fichiers de `versions/` restent).
+- **Fenêtre « Comparer · Plan 3 · v2 »** : deux listes (les côtés possibles : Aujourd'hui, Version vN, Envoi « nom » (date)),
+  l'icône qui échange, l'icône qui relit ; quatre icônes de mode (côte à côte, volet, fondu, superposition) ; la glissière de
+  l'image du plan ; pour le volet et le fondu, la glissière du mélange (le volet se tire aussi à la souris dans l'image) ; en
+  bas la part de l'image qui diffère et « Lecture seule : cette vue ne change pas le plan. »
+
+### Essais ajoutés
+
+`envois_tests.rs` (dates ; fichier et protections ; empreintes — ce qui compte, ce qui ne compte pas, stabilité après
+enregistrement et réouverture sur le projet complet de `fiabilite_fixture` ; instantané écrit une fois, relu à l'identique,
+copié par « Enregistrer sous », jamais effacé ; suivi dans l'application : repère, retour à l'état de l'envoi, projet rouvert,
+navigation, repos, coût) ; `planvers_tests.rs` (modèle, annulation et noms des étapes, fichier et protections, storyboard
+verrouillé) ; `comparer_tests.rs` (composition, superposition, différence, fil, envoi relu, lecture seule, repos).
+
+### À vérifier à l'écran
+
+1. Marquer un envoi sur une copie d'un vrai projet : la fenêtre, le message de la barre d'état, `envois.json` et `versions/` dans
+   l'Explorateur ; le temps ressenti (rien ne doit se figer) ; la taille de `versions/` (les dessins sont des liens durs
+   quand le disque le permet : elle ne devrait presque rien ajouter à la première fois).
+2. Retoucher un plan : la pastille apparaît une demi-seconde après qu'on a lâché le stylet, jamais pendant le trait ; Ctrl+Z
+   la retire. Sa place et sa lisibilité dans les trois thèmes, sur des blocs larges et étroits, et sur la vue Vignettes à
+   plusieurs zooms ; la bulle au bout d'une seconde.
+3. « Plan modifié suivant » : la tête de lecture et la sélection suivent ; « Choisir les plans modifiés » les met tous en
+   évidence.
+4. Nouvelle version du plan, retoucher, « Passer à » : le dessin change tout de suite ; Ctrl+Z défait chaque geste (le nom
+   dans le panneau Historique) ; la ligne « Version » de la fiche tient dans une colonne étroite.
+5. Comparer : les quatre modes sur un vrai plan avec des effets ; le volet à la souris ; la superposition rouge / bleu est
+   lisible ; la fenêtre se compose en une ou deux secondes sans geler le dessin ; elle reste ouverte quand on change de plan
+   sans erreur (elle suit le plan comparé).
+6. Fermer et rouvrir le projet : les envois, les pastilles (aucun plan faussement modifié) et les versions sont là.
+7. Dire si la couleur ambre de la pastille et son emplacement conviennent, et si « Restaurer » (qui crée une version) est ce
+   qu'il attendait, ou s'il préfère que la version choisie remplace l'active.

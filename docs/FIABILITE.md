@@ -166,3 +166,26 @@ Il **ne lance pas** `shot.exe` (les lancements visuels sont faits à part) et ma
 - Au lancement avec beaucoup de pinceaux importés : la liste des pinceaux grossit après quelques secondes ; enregistrer
   un réglage dans « Mes brosses » juste au lancement dit « se chargent encore ».
 - Le dernier projet sur un disque éteint : SHOT s'ouvre sur l'accueil, sans attente, sans message.
+
+## 9. Envois, versions de plans, comparaison (2026-10-20)
+
+Trois annexes de plus, écrites par le même `SaveJob` que les autres (voir `docs/ARCHITECTURE.md`) ; le format du projet
+reste 27, un projet sans envoi ni version n'a ni leurs fichiers ni leur travail.
+
+| Annexe | Protection | Essai |
+|---|---|---|
+| `envois.json` | illisible, d'une version plus récente, octets quelconques : le projet s'ouvre sans envois (avertissement), l'enregistrement n'y touche pas ; marquer un envoi met l'ancien de côté en `envois.json.illisible` ; un nom de fichier qui sort de `versions/` est oublié, un numéro en double renuméroté | `a_damaged_envois_file_is_never_deleted`, `a_newer_envois_file_is_never_deleted`, `a_hand_damaged_file_is_cleaned_not_trusted` |
+| `versions/` | jamais effacé, même quand un envoi est retiré de la liste ; un fichier déjà là n'est pas réécrit ; un instantané est écrit **avant** la liste qui le cite ; « Enregistrer sous » le recopie ; un instantané ou un dessin manquant ou abîmé est dit en clair (la comparaison montre l'autre côté) | `an_envoi_is_written_once_and_unchanged_drawings_are_not_written_again`, `removing_an_envoi_from_the_list_never_deletes_its_files`, `save_as_takes_the_snapshots_along`, `a_missing_snapshot_says_so_in_plain_words` |
+| `plans_versions.json` | illisible ou plus récent : le projet s'ouvre sans versions, **aucun dessin de `dessins/` n'est effacé** tant que le fichier est là, et créer une version met l'ancien de côté en `.illisible` ; sans autre version, le fichier et les dessins de la version supprimée partent | `a_damaged_versions_file_is_never_deleted`, `a_newer_versions_file_is_never_deleted`, `deleting_the_last_other_version_removes_the_file_and_its_drawings` |
+
+- **Un projet rouvert n'a pas changé** : les empreintes d'un projet complet (`fiabilite_fixture`) sont les mêmes avant et
+  après enregistrement et réouverture (lecture complète et rapide), et un instantané se relit avec l'empreinte qu'il avait
+  (`the_digests_of_a_complete_project_survive_save_and_reopen`,
+  `the_complete_project_snapshot_reads_back_with_every_plan_intact`, `a_reopened_project_shows_no_modified_plan_until_something_changes`).
+  C'est pour cela que l'empreinte d'un dessin est celle de ce que le PNG garde (`fingerprints_survive_the_png_round_trip`).
+- **La comparaison ne change rien** : plans, versions des dessins, numéro d'historique, drapeau « modifié » identiques
+  avant et après (`the_window_shows_the_images_and_changes_nothing_in_the_project`).
+- **Au repos, rien ne repeint** : avec ou sans envoi, avec la fenêtre « Comparer » ouverte
+  (`once_the_plans_are_followed_the_application_goes_back_to_rest`, `the_comparison_window_does_not_keep_the_application_awake`).
+
+À regarder à l'écran : voir `docs/INTERFACE.md`, partie 15.

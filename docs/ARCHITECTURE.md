@@ -1606,6 +1606,45 @@ MonFilm/
   format plus récent que le logiciel est refusé avec un message. Les anciens fichiers à fichier unique
   (formats 1 et 2, `io.rs`) s'ouvrent : chaque ancien « plan » devient une scène d'un panneau.
 
+## Envois, versions de plans et comparaison (2026-10-20, branche `versions`)
+
+Trois annexes, **sans changer `project::VERSION` (27)** : `envois.json` + `versions/`, et `plans_versions.json`.
+Un projet sans envoi ni version n'a ni ces fichiers ni travail de fond de plus.
+
+- **Empreintes** (`empreinte.rs`) : 64 bits, stables d'une séance à l'autre (la fonction de hachage est la nôtre,
+  pas `DefaultHasher`). Un bitmap : taille et pixels **non prémultipliés, tels que le PNG les garde** (une tuile
+  allouée mais transparente compte comme absente) ; un dessin vectoriel : son JSON, jamais son image (elle peut être
+  approchée tant que le rejeu n'a pas fini) ; la strate Fond. `Donnees::de(&Cel)` est la copie légère (tuiles
+  partagées) qu'on envoie au fil.
+- **Empreinte d'un plan** (`project::panel_entry` en mode `digest`) : son entrée du manifeste, **réduite à ce qui se voit et
+  ce qui dure**, les dessins cités par leur empreinte (donc indépendante des numéros de dessins, de plan et de marques).
+  C'est la seule source de vérité : ce qui s'écrit dans le manifeste est ce qui compte, moins le travail (couleur du
+  plan, signets, noms et verrous de calques…). `manifest_of` appelle la même fonction (mode complet), `charger_plans`
+  relit des entrées par `load_manifest` (la fin de `load_with` : ouvrir un instantané est ouvrir un projet).
+- **Envois** (`envois.rs`) : `envois.json` = nom, date, et par plan (numéro, titre, empreinte hexadécimale, version,
+  images) ; l'instantané `versions/envoi-N-xxxx.json` = les entrées complètes ; ses dessins dans
+  `versions/dessins/<empreinte>.png|json|_fond.png|_coupe.png` (**écrits une fois par contenu**, recopiés de `dessins/`
+  par lien dur ou copie atomique quand `written` dit que le fichier est celui de cette version). `Document::envois` est
+  hors de `Structure` (marquer un envoi n'est pas une retouche : pas d'annulation). Les instantanés non encore écrits
+  (`Envois::pending`, des `Arc`) partent dans `SaveJob` (`snapshots`) ; l'enregistrement qui réussit les libère
+  (`SaveReport::snapshots`) et fixe `Envois::dossier`, d'où « Enregistrer sous » recopie `versions/`.
+- **Suivi des plans modifiés** (`envoisui.rs`) : relevé (`Releve`) = numéro d'historique + somme des versions des
+  dessins + nombres ; 0,6 s de calme ; copie des plans, puis des dessins changés à 1,5 ms par image d'écran ; un fil
+  (`envois::construire`) hache et rend (`empreintes`, `plans`) ; `etat_du_plan` compare au dernier envoi. Sans envoi,
+  `envois_tick` rend la main tout de suite. Les repères se peignent dans `storyboard.rs` (bande) et `boardui.rs`
+  (vignettes).
+- **Versions** (`planvers.rs`) : `Document::versions: BTreeMap<plan, VersionsDuPlan>` **dans `Structure`** (annulable).
+  Le plan actif est `panels[i]` ; les autres versions sont des `Panel` rangés avec leurs dessins dans `doc.cels`
+  (`used_cels`, `used_models` et les vidéos les comptent). `echanger` permute le contenu (pas `id` ni `scene`).
+  Fichier : chaque version = `project::snapshot_value` ; à la lecture, `load_manifest` ajoute les entrées dans une
+  séquence à part (numéros au-dessus de tous les autres), les lit comme des plans, puis les retire de `structure.panels`
+  avant `Document::from_parts` (`planvers::installer`). `planvers::illisible` : tant qu'un `plans_versions.json` que cette
+  version ne lit pas est là, `remove_unused` ne nettoie pas `dessins/`.
+- **Comparer** (`comparer.rs`, `comparerui.rs`) : `petit_projet` (plan + dessins en tuiles partagées, sans les traits),
+  `rendre` (= `render::thumbnail_until`, effets exacts : le fil peut attendre), `pelure`, `difference`. Le `Moteur` est un
+  fil par fenêtre qui relit un envoi (`envois::charger_plan`), reçoit des `Requete` (la dernière remplace les
+  précédentes) et rend des `Rendu`. L'interface ne fait que poser des textures.
+
 ## Raccourcis clavier
 
 - Chaque action a un **identifiant stable** (`keymap::ACTIONS`, ex. `edition.annuler`). On en ajoute,

@@ -30,6 +30,12 @@
 //!   crayonnes.json        la planche de crayonnés rapides (`crayonnes.rs`), de même sans changer
 //!                         `VERSION` : absent, il n'y a pas de planche ; une version qui ne le connaît
 //!                         pas le laisse en place
+//!   envois.json           les envois (`envois.rs`) : nom, date et empreinte de chaque plan, de même sans
+//!                         changer `VERSION` ; absent, il n'y a pas d'envoi
+//!   versions/             les instantanés des envois et leurs dessins, rangés par contenu
+//!                         (`versions/dessins/<empreinte>.png`) : jamais effacés
+//!   plans_versions.json   les autres versions de chaque plan (`planvers.rs`), de même sans changer
+//!                         `VERSION` ; leurs dessins sont dans dessins/ ; absent, aucun plan n'a de version
 //! ```
 //!
 //! Un enregistrement n'écrit que les dessins modifiés depuis le précédent, puis le manifeste.

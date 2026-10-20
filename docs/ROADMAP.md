@@ -2921,3 +2921,35 @@ l'écran dans cette séance.
   `scripts\verifier.ps1 -Repetitions 2` : OK, compilation sans avertissement).
 - Pas fait : un réglage « barres complètes » (épingler tout y revient) ; miroir et table lumineuse sous « Plus… » dans
   la barre sous le dessin (proposition 4 de la partie 5) ; préréglage de raccourcis façon Storyboard Pro (6.2).
+
+## Envois, versions de plans et comparaison (demandés par Anthony le 2026-10-20, branche `versions`) ✅
+
+Le plus grand souci d'un storyboardeur : savoir ce qui a changé entre deux livraisons. Quatre morceaux, un commit chacun
+(détail : `README.md`, « Envois, plans modifiés, versions et comparaison » ; `docs/INTERFACE.md`, partie 15 ; format :
+`docs/ARCHITECTURE.md`). Le format du projet ne change pas (27). Rien n'a été regardé à l'écran dans cette séance
+(aucun lancement de SHOT) : voir « À vérifier à l'écran ».
+
+- ✅ **Envois** (`empreinte.rs`, `envois.rs`, `envoisui.rs`) : « Marquer un envoi… » (nom + date, « v2 au réal ») note
+  l'empreinte du contenu de chaque plan et un instantané pour le revoir (`envois.json`, `versions/`). Un dessin qui n'a pas
+  changé entre deux envois n'est écrit qu'une fois (lien dur depuis `dessins/` quand le disque le permet). Écrit par
+  `prepare_save` / `SaveJob` / `write_sidecar`, avec les protections de `docs/FIABILITE.md` (rien d'effacé, `.illisible`).
+- ✅ **Plans modifiés depuis l'envoi** : pastille ambre sur le bloc du montage et la vignette de la planche, bulle « Modifié
+  depuis l'envoi « v2 au réal » », « Plan modifié suivant / précédent », « Choisir les plans modifiés ». Relevé par image
+  d'écran = 0,4 à 0,6 µs pour 1 200 dessins ; copie par tranches de 1,5 ms ; un fil hache ; rien sans envoi.
+- ✅ **Versions d'un plan** (`planvers.rs`, `planversui.rs`) : « Nouvelle version du plan », passer, restaurer, supprimer,
+  chaque geste une étape d'annulation nommée ; ligne « Version » de la fiche, sous-menu du clic droit, « Plan 3 · v2 »,
+  `plans_versions.json`.
+- ✅ **Comparer** (`comparer.rs`, `comparerui.rs`) : deux versions, ou aujourd'hui et un envoi ; côte à côte, volet, fondu,
+  superposition rouge / bleu ; part de l'image qui diffère ; lecture seule ; sur un fil de fond.
+- ✅ **Essais** : 57 nouveaux (`envois_tests.rs` 28, `planvers_tests.rs` 17, `comparer_tests.rs` 12), la suite complète
+  passe (1612 essais, `scripts\verifier.ps1 -Repetitions 2` : OK).
+- **Choix de SHOT, à confirmer** : ce qui compte comme un changement (les textes du storyboard et les marques d'image oui ;
+  la couleur du plan, les signets, les noms et verrous de calques, le repère 3D non) ; « Restaurer » fait une nouvelle version
+  plutôt que de remplacer ; marquer un envoi enregistre aussitôt le projet ; la pastille est ambre (couleur d'avertissement
+  du thème), pas une couleur propre.
+- **Limites** : les commentaires, les transitions, le son et les scènes 3D ne comptent pas dans l'empreinte d'un plan ; le contenu
+  rogné (réserve) reste attaché au plan, pas à la version ; un envoi ne note que la version active ; un envoi ne se renomme
+  pas (il se retire de la liste) ; changer la résolution du projet rend les anciens instantanés illisibles (leurs dessins ont
+  l'ancienne taille : la comparaison le dit) ; les versions rangées se lisent toutes à l'ouverture (comme le contenu rogné) ;
+  aucune touche par défaut ; l'export vers Storyboard Pro ne reprend ni les envois ni les versions (comment Storyboard Pro range
+  les révisions d'un panneau : à vérifier).
