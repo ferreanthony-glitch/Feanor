@@ -250,15 +250,24 @@ impl App {
                 self.action_item(ui, "Plein écran", "vue.plein_ecran");
                 self.action_item(ui, "Performance (temps de l'interface)", "vue.performance");
             });
+            // Les fonctions à l'essai, rangées ensemble (Anthony, 2026-10-20) : elles peuvent changer.
+            ui.menu_button("Labo", |ui| {
+                ui.label(RichText::new("Fonctions à l'essai : elles peuvent encore changer.").weak());
+                ui.separator();
+                self.action_item(ui, "Suggestions sonores…", "vue.suggestions_sonores");
+                self.action_item(ui, "Lire le storyboard (proposer des sons)", "suggestion.lire");
+                ui.separator();
+                self.action_item(ui, "Propager la peinture du calque…", "calque.propager");
+                ui.separator();
+                let rec = if self.record_strokes.is_some() { "Arrêter d'enregistrer mes traits" } else { "Enregistrer mes traits (banc d'essai du moteur)" };
+                self.action_item(ui, rec, "pinceau.enregistrer_traits");
+            });
             ui.menu_button("Aide", |ui| {
                 self.action_item(ui, "Palette de commandes…", "aide.palette");
                 self.action_item(ui, "Raccourcis clavier…", "aide.raccourcis");
                 ui.separator();
                 self.action_item(ui, "À propos de SHOT…", "aide.a_propos");
                 self.action_item(ui, "Diagnostic des performances…", "aide.diagnostic");
-                ui.separator();
-                let rec = if self.record_strokes.is_some() { "Arrêter d'enregistrer mes traits" } else { "Enregistrer mes traits (banc d'essai du moteur)" };
-                self.action_item(ui, rec, "pinceau.enregistrer_traits");
             });
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {

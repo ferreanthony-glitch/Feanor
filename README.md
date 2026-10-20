@@ -803,7 +803,7 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
 - **Profil de la pointe** (bouton courbe à côté de la Dureté) : la couverture de la pointe du
   centre au bord, en courbe, à la place de la dureté. Il part de la dureté réglée ; préréglages
   Dur, Doux, Diffus.
-- **Banc de traits** (Aide > Enregistrer mes traits) : chaque trait est gardé tel que le stylet
+- **Banc de traits** (Labo > Enregistrer mes traits) : chaque trait est gardé tel que le stylet
   le donne, avec son réglage, pour régler le moteur sur tes vrais gestes. Le même menu l'arrête.
 - **Peinture humide** (réglages du pinceau) : « Mélange » fait prendre à la brosse la couleur déjà
   posée, la mêler à la sienne et l'entraîner. « Charge » épuise la peinture le long du trait,
@@ -1094,6 +1094,10 @@ Les menus montrent l'essentiel ; le reste est rangé dans un sous-menu (« Plans
 - Fichier > Préférences… : l'apparence (voir ci-dessous), copie de secours, dernier projet rouvert,
   croix du système, panneaux ajustés, raccourcis clavier ;
 - Aide > À propos de SHOT… : le logo, la version et le nom d'avant (Échap ferme la fenêtre).
+- **Labo** (2026-10-20, demande d'Anthony) : les fonctions à l'essai, rangées ensemble — Suggestions sonores…,
+  Lire le storyboard (proposer des sons), Propager la peinture du calque…, Enregistrer mes traits (banc
+  d'essai du moteur). Le panneau Suggestions sonores n'a plus d'icône dans la barre des panneaux ni
+  d'entrée dans le menu Son ; « Propager… » reste aussi au clic droit d'un calque bitmap qui s'y prête.
 
 ### Apparence
 
@@ -1415,7 +1419,7 @@ panneau (« Actualiser » la relit).
 
 ## Suggestions sonores (phase 1)
 
-Le panneau **Suggestions sonores** (barre des panneaux, Son > Suggestions sonores…, `vue.suggestions_sonores`) lit
+Le panneau **Suggestions sonores** (menu **Labo** > Suggestions sonores…, `vue.suggestions_sonores`) lit
 le storyboard et **propose des sons témoins** pour l'animatique : bruitages, ambiances, musique d'intention, voix
 des dialogues. On les écoute, on les accepte, on les régénère ou on les supprime ; rien n'entre dans le montage
 sans accord. Le détail, le contrat du serveur local, comment le lancer et ce qui manque encore sont dans
