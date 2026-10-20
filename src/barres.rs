@@ -225,6 +225,7 @@ pub(crate) const MONTAGE: &[Cmd] = &[
     bouton("version.nouvelle", ph::GIT_FORK, "Nouvelle version du plan", "Garde le plan tel qu'il est comme version plus ancienne (V1) et continue sur une copie (V2). Les versions se changent en survolant « V2 » sur le plan, dans le montage.", false, 1),
     etat("comparer.ouvrir", ph::COLUMNS, "Comparer le plan", "Deux versions du plan, ou le plan d'aujourd'hui et son état à un envoi : côte à côte, en volet, en fondu ou en superposition. Lecture seule.", false, 1),
     bouton("fichier.exporter_montage", ph::FILM_REEL, "Exporter pour le montage", "Un fichier vidéo par plan et le montage en EDL, Final Cut XML (Premiere, DaVinci Resolve) ou OpenTimelineIO.", false, 2),
+    bouton("fichier.exporter_fiche", ph::TABLE, "Exporter la fiche technique", "Le découpage du film en tableau (CSV ou classeur XLSX) : un plan par ligne, avec durées, time codes, cadrage, mouvement de caméra, textes, sons et vignettes.", false, 2),
     // Relecture par le réalisateur (`relectureui.rs`) : la page à envoyer, puis ses notes qui reviennent.
     bouton("fichier.exporter_relecture", ph::EYEGLASSES, "Exporter pour relecture", "Une page sans internet à envoyer au réalisateur : il y écrit ses notes et dessine dessus, puis vous renvoie un petit fichier.", false, 2),
     bouton("fichier.importer_notes", ph::CHATS, "Importer les notes de relecture", "Le fichier de notes renvoyé par le réalisateur devient des commentaires sur les bons plans. On peut aussi le lâcher sur la fenêtre.", false, 2),

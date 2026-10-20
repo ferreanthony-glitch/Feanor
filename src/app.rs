@@ -712,6 +712,8 @@ pub struct App {
     pub(crate) renumber_confirm: bool,
     /// Fenêtre « Exporter pour le montage » (EDL, XML, OTIO : `editorialui.rs`).
     pub(crate) editorial: Option<crate::editorialui::EditorialWindow>,
+    /// Fenêtre « Fiche technique » (tableur CSV / XLSX : `ficheui.rs`).
+    pub(crate) fiche: Option<crate::ficheui::FicheWindow>,
     /// Relecture par le réalisateur : export de la page, import des notes, dessin du relecteur (`relectureui.rs`).
     pub(crate) relecture: crate::relectureui::RelectureUi,
     /// Fenêtre « À propos de SHOT » (`aproposui.rs`).
@@ -1171,6 +1173,7 @@ impl App {
             prefs_window: false,
             renumber_confirm: false,
             editorial: None,
+            fiche: None,
             relecture: Default::default(),
             about_window: false,
             theme_applied,
@@ -1383,6 +1386,7 @@ impl App {
             || self.sb_export.as_ref().is_some_and(crate::sbexportui::SbExportWindow::rendering)
             || self.editorial.as_ref().is_some_and(crate::editorialui::EditorialWindow::rendering)
             || self.relecture.rendering()
+            || self.fiche.as_ref().is_some_and(crate::ficheui::FicheWindow::rendering)
     }
 
     pub(crate) fn current_brush(&self) -> Option<&BrushSettings> {
@@ -3507,6 +3511,7 @@ impl App {
             "fichier.exporter_pdf" => self.open_export(crate::export::Format::Pdf),
             "fichier.exporter_gif" => self.open_export(crate::export::Format::Gif),
             "fichier.exporter_montage" => self.open_editorial(),
+            "fichier.exporter_fiche" => self.open_fiche(),
             "fichier.exporter_relecture" | "fichier.importer_notes" => {
                 self.relecture_action(action);
             }

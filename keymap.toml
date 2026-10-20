@@ -2236,6 +2236,12 @@ action = "fichier.exporter_montage"
 touches = []
 source = "SHOT (sans touche)"
 
+# Fiche technique : le découpage du film en tableau (CSV ou classeur XLSX), un plan par ligne.
+[[raccourci]]
+action = "fichier.exporter_fiche"
+touches = []
+source = "SHOT (sans touche)"
+
 # Relecture par le réalisateur : exporter la page HTML, importer les notes qui reviennent.
 [[raccourci]]
 action = "fichier.exporter_relecture"

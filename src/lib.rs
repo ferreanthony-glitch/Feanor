@@ -574,6 +574,15 @@ mod editorial;
 mod editorial_tests;
 mod editorialjob;
 mod editorialui;
+// Fiche technique (tableur CSV / XLSX, un plan par ligne) : le contenu (`fiche`), les formats
+// (`ficheformats`, `zipwrite`), la tâche (`fichejob`) et la fenêtre (`ficheui`).
+mod fiche;
+#[cfg(test)]
+mod fiche_tests;
+mod fichejob;
+mod ficheformats;
+mod ficheui;
+mod zipwrite;
 // Transitions du montage (fondus, volet, noir) : modèle, rendu, interface.
 mod transitions;
 #[cfg(test)]

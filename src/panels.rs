@@ -721,6 +721,8 @@ impl App {
         // Renuméroter les plans : la confirmation ; Exporter pour le montage : sa fenêtre.
         self.renumber_window(ctx);
         self.editorial_window(ctx);
+        // Fiche technique (tableur) : sa fenêtre (`ficheui.rs`).
+        self.fiche_window(ctx);
         // Relecture par le réalisateur : exporter la page, importer ses notes (`relectureui.rs`).
         self.relecture_windows(ctx);
         // Suggestions sonores : confirmation d'envoi en ligne, « Modifier », saisie d'une clé.

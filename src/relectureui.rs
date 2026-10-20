@@ -216,7 +216,7 @@ impl App {
     }
 
     /// Les plans (rangs) d'une étendue.
-    fn plans_de(&self, scope: Etendue, envoi: Option<u64>) -> Vec<usize> {
+    pub(crate) fn plans_de(&self, scope: Etendue, envoi: Option<u64>) -> Vec<usize> {
         let n = self.doc.panels.len();
         match scope {
             Etendue::Film => (0..n).collect(),

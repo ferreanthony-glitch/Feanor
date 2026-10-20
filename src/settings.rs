@@ -31,6 +31,10 @@ pub struct Settings {
     /// Dossier du dernier export pour le montage (EDL, XML, OTIO : `editorialui.rs`).
     #[serde(default, rename = "dossier_export_montage", skip_serializing_if = "Option::is_none")]
     pub montage_export_dir: Option<PathBuf>,
+    /// La fiche technique (`fiche.rs`, `ficheui.rs`) : colonnes choisies et leur ordre, format, séparateur, time
+    /// code de départ, dernier dossier.
+    #[serde(default, rename = "fiche_technique")]
+    pub fiche: crate::fiche::Reglages,
     /// Pelure d'oignon.
     #[serde(default, rename = "pelure")]
     pub onion: OnionSettings,
@@ -179,6 +183,7 @@ impl Default for Settings {
             sboard_template: None,
             sboard_export_dir: None,
             montage_export_dir: None,
+            fiche: Default::default(),
             onion: OnionSettings::default(),
             xsheet: Default::default(),
             flips: Default::default(),

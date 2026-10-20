@@ -428,6 +428,9 @@ impl App {
         if self.sb_export.as_ref().is_some_and(crate::sbexportui::SbExportWindow::rendering) || self.editorial.as_ref().is_some_and(crate::editorialui::EditorialWindow::rendering) {
             return Some("l'export pour le montage");
         }
+        if self.fiche.as_ref().is_some_and(crate::ficheui::FicheWindow::busy) {
+            return Some("l'export de la fiche technique");
+        }
         if self.open_job.is_some() {
             return Some("l'ouverture du projet");
         }
@@ -475,6 +478,8 @@ impl App {
         if !self.editorial.as_ref().is_some_and(crate::editorialui::EditorialWindow::rendering) {
             self.editorial = None;
         }
+        // (La fiche technique ne s'écrit pas à cet instant : `onglet_occupe` l'a vérifié.)
+        self.fiche = None;
         self.scenario_window = None;
         // (Les ressources de la scène 3D sont communes à la carte graphique : un modèle importé a un numéro propre
         // à son projet. Elles se refont à la demande.)
