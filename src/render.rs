@@ -945,8 +945,10 @@ impl Renderer {
             self.texture = None;
             self.dirty_all = true;
         }
-        // (Les repères de calques d'effets sont déjà résolus par l'écran, `calqueffet::resolve` ; sinon, ici.)
-        let plan = match crate::calqueffet::resolve_auto(doc, &plan) {
+        // (Les repères de calques d'effets sont déjà résolus par l'écran, `calqueffet::resolve` ; sinon, ici. Les
+        // dessins dérivés sont tenus jusqu'à la fin de la composition.)
+        let crate::calqueffet::Resolu { plan: resolved, tenus: _tenus } = crate::calqueffet::resolve_auto(doc, &plan);
+        let plan = match resolved {
             Cow::Borrowed(_) => plan,
             Cow::Owned(resolved) => resolved,
         };
