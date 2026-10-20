@@ -148,7 +148,9 @@ impl App {
                         }
                         Offer::Enabled => {
                             let on = self.fx_on(li, kind);
-                            if ui.checkbox(&mut on.clone(), kind.label()).clicked() {
+                            let resp = ui.checkbox(&mut on.clone(), kind.label());
+                            let resp = if kind.hint().is_empty() { resp } else { resp.on_hover_text(kind.hint()) };
+                            if resp.clicked() {
                                 self.toggle_fx(li, kind);
                             }
                         }

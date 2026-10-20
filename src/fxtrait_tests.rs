@@ -308,7 +308,11 @@ fn every_stroke_effect_has_sound_defaults_and_bad_settings_never_panic() {
 
 /// Un document de `frames` images dont le calque vectoriel porte les traits de `d` et la pile `fx`.
 pub(crate) fn drawing_doc(d: VectorDrawing, fx_stack: Vec<Effect>, frames: usize) -> Document {
-    let mut doc = Document::new(W, H, 24);
+    drawing_doc_sized(d, fx_stack, frames, W, H)
+}
+
+pub(crate) fn drawing_doc_sized(d: VectorDrawing, fx_stack: Vec<Effect>, frames: usize, w: usize, h: usize) -> Document {
+    let mut doc = Document::new(w, h, 24);
     let id = doc.new_cel(LayerKind::Vector);
     {
         let cel = doc.cels.get_mut(&id).unwrap();
@@ -666,4 +670,399 @@ fn playing_a_written_plan_never_replays_the_engine_on_the_interface_thread() {
     }
     assert_eq!(crate::vector::replay_count(), replays, "le moteur n'est jamais rejoué sur le fil de l'interface");
     assert!(ready > 0 && waiting > 0, "{ready} prêts, {waiting} attendus");
+}
+
+// ------------------------------------------------------------------ mesures
+
+/// Un hasard reproductible.
+struct Lcg(u64);
+
+impl Lcg {
+    fn next(&mut self) -> f32 {
+        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        ((self.0 >> 33) as f32) / (1u64 << 31) as f32
+    }
+}
+
+/// Un dessin dense : `smooth` traits lisses et `textured` traits de brosses texturées (feutre, fusain,
+/// gouache) de 120 à 400 pixels, sur une feuille `w` × `h`.
+pub(crate) fn dense_drawing(smooth: usize, textured: usize, w: usize, h: usize) -> VectorDrawing {
+    let mut rng = Lcg(7);
+    let mut elements = Vec::with_capacity(smooth + textured);
+    for _ in 0..smooth {
+        let (x0, y0) = (40.0 + rng.next() * (w as f32 - 480.0), 40.0 + rng.next() * (h as f32 - 280.0));
+        let (len, bend) = (120.0 + rng.next() * 280.0, (rng.next() - 0.5) * 160.0);
+        let r = 1.2 + rng.next() * 2.8;
+        let pts: Vec<(f32, f32, f32)> = (0..=8).map(|i| {
+            let u = i as f32 / 8.0;
+            (x0 + len * u, y0 + bend * (u * std::f32::consts::PI).sin() + (rng.next() - 0.5) * 6.0, r * (0.4 + 0.6 * (u * std::f32::consts::PI).sin()))
+        }).collect();
+        elements.push(smooth_stroke(&pts));
+    }
+    let lib = crate::brushtex::BrushLibrary::builtin();
+    lib.share();
+    for k in 0..textured {
+        let name = ["Feutre", "Fusain", "Gouache"][k % 3];
+        let mut s = lib.presets.iter().find(|p| p.name == name).expect("brosse").settings;
+        s.size = 5.0 + (k % 5) as f32 * 2.0;
+        let (x0, y0) = (80.0 + (k * 97 % (w - 500)) as f32, 60.0 + (k * 53 % (h - 250)) as f32);
+        let pts: Vec<_> = (0..=60)
+            .map(|i| {
+                let u = i as f32 / 60.0;
+                (eframe::egui::pos2(x0 + 300.0 * u, y0 + 90.0 * (u * 5.0 + k as f32).sin()), 0.3 + 0.7 * (u * std::f32::consts::PI).sin(), i as f64 / 200.0)
+            })
+            .collect();
+        elements.push(crate::affichage_tests::trait_rouge(&s, &lib, w, h, &pts));
+    }
+    VectorDrawing { elements }
+}
+
+fn ms_of(f: impl FnOnce()) -> f64 {
+    let t0 = std::time::Instant::now();
+    f();
+    t0.elapsed().as_secs_f64() * 1e3
+}
+
+/// Les mesures du chapitre « Effets du trait » de `docs/PERFORMANCE.md` :
+/// `cargo test --release --offline --target-dir target\msvc --lib fxtrait_tests::measure -- --ignored --nocapture --test-threads=1`
+#[test]
+#[ignore]
+fn measure_stroke_effects_on_a_dense_vector_layer() {
+    crate::fxcache::monde::ecrire();
+    let (w, h) = (1920usize, 1080usize);
+    for (smooth, textured) in [(1800usize, 200usize), (180, 20)] {
+        measure_dense(smooth, textured, w, h);
+    }
+}
+
+fn measure_dense(smooth: usize, textured: usize, w: usize, h: usize) {
+    let d = dense_drawing(smooth, textured, w, h);
+    println!("{} traits ({} texturés), feuille {w} x {h}, {} fils", d.elements.len(), textured, crate::parallele::coeurs());
+    let cold = ms_of(|| {
+        let _ = d.render(w, h);
+    });
+    let warm = ms_of(|| {
+        let _ = d.render(w, h);
+    });
+    println!("rendu du dessin sans effet : {cold:.0} ms la première fois (rejeu des traits texturés), {warm:.0} ms ensuite");
+    let run = |name: &str, kind: EffectKind, set: &[(usize, f32)]| {
+        let mut times = Vec::new();
+        for frame in 0..5 {
+            let s = steps(kind, set, frame * 3 + 1);
+            times.push(ms_of(|| {
+                let _ = t::render(&d, w, h, &s);
+            }));
+        }
+        let mean = times.iter().sum::<f64>() / times.len() as f64;
+        println!("{name:<46} {mean:>7.0} ms par image (min {:.0}, max {:.0})", times.iter().cloned().fold(f64::MAX, f64::min), times.iter().cloned().fold(0.0, f64::max));
+    };
+    run("écriture 50 %, trait par trait", EffectKind::Write, &[(t::WRITE_PROGRESS, 50.0)]);
+    run("écriture 50 %, tous ensemble", EffectKind::Write, &[(t::WRITE_PROGRESS, 50.0), (t::WRITE_TOGETHER, 1.0)]);
+    run("écriture 100 % (rien à faire)", EffectKind::Write, &[(t::WRITE_PROGRESS, 99.99)]);
+    run("crayonné, 2 passes", EffectKind::Sketch, &[]);
+    run("crayonné, 4 passes, décalage 8", EffectKind::Sketch, &[(t::SKETCH_PASSES, 4.0), (t::SKETCH_OFFSET, 8.0)]);
+    run("respiration (35 %)", EffectKind::Breath, &[]);
+    run("ondulation du trait (4 px)", EffectKind::StrokeWave, &[]);
+    run("pointillés", EffectKind::Dashes, &[]);
+    run("désagrégation 40 %", EffectKind::Dust, &[]);
+    run("désagrégation 40 %, le long du trait, 300 px", EffectKind::Dust, &[(t::DUST_SENSE, 100.0), (t::DUST_SPREAD, 300.0)]);
+    // La pile entière.
+    let stack = [
+        effect(EffectKind::Write, &[(t::WRITE_PROGRESS, 80.0)]),
+        effect(EffectKind::Breath, &[]),
+        effect(EffectKind::StrokeWave, &[]),
+        effect(EffectKind::Sketch, &[]),
+    ];
+    let s = fx::steps_at(&stack, 4);
+    println!("écriture + respiration + ondulation + crayonné : {:.0} ms", ms_of(|| {
+        let _ = t::render(&d, w, h, &s);
+    }));
+    // Le fil de l'interface : le plan, la recherche du dessin dérivé prêt, la copie du dessin vectoriel.
+    let doc = drawing_doc_sized(d.clone(), vec![effect(EffectKind::Write, &[(t::WRITE_PROGRESS, 50.0)])], 2, w, h);
+    let id = doc.panels[0].layers[0].frames[0].unwrap();
+    let copy = ms_of(|| {
+        let _ = crate::fxcache::vector_source(id, &doc.cels[&id]);
+    });
+    let copy_again = ms_of(|| {
+        let _ = crate::fxcache::vector_source(id, &doc.cels[&id]);
+    });
+    println!("fil de l'interface : copie du dessin vectoriel (une fois par version) {copy:.2} ms, ensuite {copy_again:.3} ms");
+    let plan = render::panel_plan_at(&doc, 0, 0, None);
+    let first = ms_of(|| {
+        let _ = fx::display(&doc, &plan.items[0], 0);
+    });
+    crate::fxcache::settle();
+    let ready: Vec<f64> = (0..50).map(|_| ms_of(|| {
+        let _ = fx::display(&doc, &plan.items[0], 0);
+    })).collect();
+    println!("fil de l'interface : demande du dessin dérivé {first:.2} ms ; image prête : {:.3} ms (pire {:.3})", ready.iter().sum::<f64>() / 50.0, ready.iter().cloned().fold(0.0, f64::max));
+}
+
+// ------------------------------------------------------------------ dans l'application
+
+/// Une application sans fenêtre avec un plan de 24 images et un calque de la sorte `kind`.
+fn app_with(name: &str, kind: LayerKind) -> crate::app::App {
+    let dir = std::env::temp_dir().join(format!("shot-fxtrait-{name}-{}-{:?}", std::process::id(), std::thread::current().id()));
+    let _ = std::fs::create_dir_all(&dir);
+    crate::donnees::bac_a_sable(&dir);
+    let ctx = eframe::egui::Context::default();
+    let mut app = crate::app::App::sans_fenetre(&ctx, None);
+    app.welcome = false;
+    let mut doc = Document::with_frame(64, 48, 24);
+    doc.panels[0].layers.clear();
+    doc.panels[0].set_length(24);
+    let cel = doc.new_cel(kind);
+    let mut l = crate::document::Layer::new("Dessin", kind);
+    l.frames = vec![Some(cel); 24];
+    doc.panels[0].layers.push(l);
+    app.doc = doc;
+    app.cur_panel = 0;
+    app.cur_layer = 0;
+    app.cur_frame = 6;
+    app
+}
+
+#[test]
+fn the_actions_toggle_each_stroke_effect_on_a_vector_layer_in_one_undoable_step() {
+    let mut app = app_with("actions", LayerKind::Vector);
+    for kind in t::KINDS {
+        let steps_before = app.history.names().0.len();
+        app.run_action(t::action(kind));
+        assert!(app.fx_on(0, kind), "{kind:?} est coché");
+        assert_eq!(app.history.names().0.len(), steps_before + 1, "une étape d'annulation");
+        assert_eq!(app.layers()[0].fx.iter().filter(|e| e.kind == kind).count(), 1);
+        app.run_action(t::action(kind));
+        assert!(!app.fx_on(0, kind), "{kind:?} est décoché, mais reste sur le calque");
+        assert_eq!(app.layers()[0].fx.iter().filter(|e| e.kind == kind).count(), 1);
+    }
+    app.undo();
+    assert!(app.fx_on(0, EffectKind::Dust), "défaire remet l'effet coché");
+    // Ajouter deux fois par le menu « Ajouter un effet » ne double pas l'effet.
+    let mut app = app_with("une-fois", LayerKind::Vector);
+    app.add_effect_once(0, EffectKind::Sketch);
+    app.add_effect_once(0, EffectKind::Sketch);
+    assert_eq!(app.layers()[0].fx.len(), 1);
+}
+
+#[test]
+fn a_bitmap_layer_refuses_the_stroke_effects_and_says_why() {
+    let mut app = app_with("bitmap", LayerKind::Bitmap);
+    for kind in t::KINDS {
+        assert!(matches!(app.fx_offer(0, kind), crate::fxui::Offer::Disabled(why) if why.contains("calque vectoriel")));
+        app.run_action(t::action(kind));
+        assert!(app.layers()[0].fx.is_empty(), "{kind:?} n'est pas posé sur un bitmap");
+        assert!(app.status.contains("vectoriel"), "{}", app.status);
+    }
+    app.apply_trait_preset(t::Preset::Appearance);
+    assert!(app.layers()[0].fx.is_empty());
+}
+
+#[test]
+fn the_presets_write_keyed_effects_from_the_playhead_and_replace_their_own_kind() {
+    let mut app = app_with("presets", LayerKind::Vector);
+    app.apply_trait_preset(t::Preset::Appearance);
+    let fx = &app.layers()[0].fx;
+    assert_eq!(fx.len(), 1);
+    assert_eq!(fx[0].kind, EffectKind::Write);
+    assert_eq!(fx[0].keys.iter().map(|k| k.frame).collect::<Vec<_>>(), vec![6, 23], "de la tête de lecture à la fin du plan (une seconde = 24 images, coupée à 23)");
+    assert_eq!((fx[0].values_at(6)[t::WRITE_PROGRESS], fx[0].values_at(23)[t::WRITE_PROGRESS]), (0.0, 100.0));
+    assert_eq!(fx[0].values_at(0)[t::WRITE_PROGRESS], 0.0, "avant la première clé : sa valeur");
+    assert!(fx::steps_at(fx, 23).is_empty(), "fini : rien à faire");
+    // Une seconde fois : remplacé, pas doublé.
+    app.cur_frame = 2;
+    app.apply_trait_preset(t::Preset::Appearance);
+    assert_eq!(app.layers()[0].fx.len(), 1);
+    assert_eq!(app.layers()[0].fx[0].keys[0].frame, 2);
+    app.apply_trait_preset(t::Preset::Dust);
+    app.apply_trait_preset(t::Preset::NervousSketch);
+    let kinds: Vec<EffectKind> = app.layers()[0].fx.iter().map(|e| e.kind).collect();
+    assert_eq!(kinds, vec![EffectKind::Write, EffectKind::Dust, EffectKind::Sketch, EffectKind::Boil]);
+    // Chaque préréglage a son action, dans la palette, et un nom français.
+    let palette = crate::palette::palette_commands();
+    for p in t::Preset::ALL {
+        assert_eq!(t::Preset::from_action(p.action()), Some(p));
+        assert!(palette.iter().any(|(id, _)| *id == p.action()), "{} absent de la palette", p.action());
+        assert!(!p.label().is_empty() && !p.note().is_empty());
+    }
+    for kind in t::KINDS {
+        assert!(palette.iter().any(|(id, _)| *id == t::action(kind)), "{} absent de la palette", t::action(kind));
+        assert_eq!(t::kind_of_action(t::action(kind)), Some(kind));
+    }
+    // Ils se défont d'un coup.
+    let n = app.layers()[0].fx.len();
+    app.undo();
+    assert!(app.layers()[0].fx.len() < n);
+}
+
+#[test]
+fn the_presets_build_the_same_effects_every_time() {
+    for p in t::Preset::ALL {
+        assert_eq!(p.build(24, 5, 100), p.build(24, 5, 100));
+        for e in p.build(24, 5, 100) {
+            assert_eq!(e.values_at(5).len(), e.kind.params().len());
+        }
+    }
+    // Au bout du plan : les clés ne sortent pas du plan.
+    for e in t::Preset::Appearance.build(24, 99, 100) {
+        assert!(e.keys.iter().all(|k| k.frame <= 100));
+    }
+}
+
+#[test]
+fn copy_and_paste_keep_one_stroke_effect_of_each_kind_per_layer() {
+    use crate::fxcopie::paste_onto;
+    let mut stack = vec![Effect::new(EffectKind::Write)];
+    let landed = paste_onto(&mut stack, &[Effect::new(EffectKind::Write), Effect::new(EffectKind::Dust), Effect::new(EffectKind::GaussianBlur)], true, 24, false);
+    assert_eq!(stack.iter().map(|e| e.kind).collect::<Vec<_>>(), vec![EffectKind::Write, EffectKind::Dust, EffectKind::GaussianBlur]);
+    assert_eq!(landed.duplicates_skipped, vec![EffectKind::Write]);
+    // Sur un calque bitmap : laissés de côté, le flou passe.
+    let mut bitmap = Vec::new();
+    let landed = paste_onto(&mut bitmap, &[Effect::new(EffectKind::Sketch), Effect::new(EffectKind::GaussianBlur)], false, 24, false);
+    assert_eq!(landed.vector_only_skipped, vec![EffectKind::Sketch]);
+    assert_eq!(bitmap.len(), 1);
+    // Les clés et les réglages se copient tels quels.
+    let mut keyed = Effect::new(EffectKind::Write);
+    keyed.set_key(3, effect(EffectKind::Write, &[(t::WRITE_PROGRESS, 0.0), (t::WRITE_SOFT, 12.0)]).values);
+    keyed.set_key(9, effect(EffectKind::Write, &[(t::WRITE_PROGRESS, 100.0), (t::WRITE_SOFT, 12.0)]).values);
+    let mut other = Vec::new();
+    paste_onto(&mut other, std::slice::from_ref(&keyed), true, 24, false);
+    assert_eq!(other, vec![keyed]);
+}
+
+#[test]
+fn the_stroke_effects_stay_on_the_background_thread_and_the_boil_goes_to_the_graphics_card() {
+    // Le tremblement a sa passe sur la carte graphique : une pile avec flou et tremblement y passe
+    // entière ; un effet du trait, lui, garde le calcul de fond (il lit les traits du dessin).
+    let doc = drawing_doc(six_lines(), Vec::new(), 1);
+    let id = doc.panels[0].layers[0].frames[0].unwrap();
+    let on_card = |steps: Vec<FxStep>| {
+        let item = PlanItem { cel: id, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: steps, ctg: None, fond: None, pre: None };
+        crate::gpu::gpu_fx_item(&doc, &item)
+    };
+    let boil = FxStep { kind: EffectKind::Boil, values: vec![3.0, 55.0, 3.0, 2.0, 0.0, 1.0, 0.0, 1.0] };
+    let blur = FxStep { kind: EffectKind::GaussianBlur, values: vec![6.0] };
+    assert!(on_card(vec![boil.clone()]));
+    assert!(on_card(vec![blur.clone(), boil.clone()]));
+    assert!(!on_card(write_steps(50.0, &[])), "un effet du trait seul : le fil de fond");
+    // Un effet du trait mêlé à des effets de la carte : le fil de fond calcule le dessin dérivé par l'effet du
+    // trait, la carte passe le flou et le tremblement dessus (plus de pile entière sur le processeur).
+    let mixed = [write_steps(50.0, &[]), vec![blur.clone(), boil.clone()]].concat();
+    assert!(on_card(mixed.clone()));
+    let item = PlanItem { cel: id, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: mixed, ctg: None, fond: None, pre: None };
+    let (line, rest) = fx::hybrid_split(&item).expect("pile mêlée");
+    assert_eq!(line.fx.iter().map(|s| s.kind).collect::<Vec<_>>(), vec![EffectKind::Write]);
+    assert_eq!(rest.iter().map(|s| s.kind).collect::<Vec<_>>(), vec![EffectKind::GaussianBlur, EffectKind::Boil]);
+    // Pas mêlée : rien à séparer.
+    assert!(fx::hybrid_split(&PlanItem { fx: vec![blur, boil], ..item.clone() }).is_none());
+    assert!(fx::hybrid_split(&PlanItem { fx: write_steps(50.0, &[]), ..item.clone() }).is_none());
+    // Un remplissage CTG ou une feuille flottante : tout sur le processeur.
+    assert!(fx::hybrid_split(&PlanItem { ctg: Some(crate::ctg::CtgInput { sources: vec![id], gap: 4 }), ..item }).is_none());
+}
+
+#[test]
+fn a_mixed_stack_gives_the_cpu_pixels_with_the_card_drawing_the_card_effects() {
+    use crate::gpu::GpuCanvas;
+    let Some(rs) = crate::gpu_tests::headless() else {
+        println!("pas de carte graphique : essai passé");
+        return;
+    };
+    crate::fxcache::monde::ecrire();
+    let boil = FxStep { kind: EffectKind::Boil, values: vec![3.0, 55.0, 3.0, 2.0, 0.0, 1.0, 0.0, 1.0] };
+    let steps = [write_steps(45.0, &[(t::WRITE_SOFT, 4.0)]), vec![FxStep { kind: EffectKind::GaussianBlur, values: vec![3.0] }, boil]].concat();
+    let doc = drawing_doc(six_lines(), Vec::new(), 1);
+    let id = doc.panels[0].layers[0].frames[0].unwrap();
+    let plan = render::Plan { paper: None, items: vec![PlanItem { cel: id, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: steps, ctg: None, fond: None, pre: None }] };
+    let want = render::composite_full(&doc, &plan);
+    let mut gpu = GpuCanvas::new(&rs);
+    let mut worst = (u8::MAX, 0usize);
+    for _ in 0..300 {
+        let _ = crate::gpu_tests::render_with(&mut gpu, &rs, &doc, &plan, true);
+        crate::fxcache::settle();
+        let _ = crate::gpu_tests::render_with(&mut gpu, &rs, &doc, &plan, true);
+        let got = gpu.read_frame();
+        let far = |a: Color32, b: Color32| a.to_array().iter().zip(b.to_array()).map(|(x, y)| (*x as i32 - y as i32).unsigned_abs()).max().unwrap_or(0);
+        worst = (0, got.iter().zip(&want).filter(|(a, b)| far(**a, **b) > 2).count());
+        if worst.1 == 0 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert_eq!(worst.1, 0, "{} pixels à plus de 2 niveaux de la référence", worst.1);
+    assert!(gpu.effects_passes() > 0, "le flou et le tremblement sont dessinés par la carte");
+}
+
+/// Un petit dessin à regarder : un visage, des cheveux, un soleil, un sol, de quelques épaisseurs.
+fn sample_drawing() -> VectorDrawing {
+    let arc = |cx: f32, cy: f32, rx: f32, ry: f32, a0: f32, a1: f32, r: f32| {
+        let pts: Vec<(f32, f32, f32)> = (0..=40)
+            .map(|i| {
+                let a = a0 + (a1 - a0) * i as f32 / 40.0;
+                (cx + rx * a.cos(), cy + ry * a.sin(), r * (0.55 + 0.45 * (i as f32 / 40.0 * std::f32::consts::PI).sin()))
+            })
+            .collect();
+        smooth_stroke(&pts)
+    };
+    let tau = std::f32::consts::TAU;
+    let mut elements = vec![
+        arc(240.0, 160.0, 90.0, 105.0, 0.0, tau, 3.2),
+        arc(205.0, 135.0, 14.0, 10.0, 0.0, tau, 2.4),
+        arc(275.0, 135.0, 14.0, 10.0, 0.0, tau, 2.4),
+        arc(240.0, 180.0, 40.0, 26.0, 0.25, 2.9, 2.8),
+        smooth_stroke(&[(240.0, 140.0, 2.0), (234.0, 165.0, 2.4), (246.0, 168.0, 2.0)]),
+        arc(240.0, 150.0, 118.0, 130.0, 3.5, 5.9, 4.5),
+        arc(520.0, 90.0, 38.0, 38.0, 0.0, tau, 3.0),
+        smooth_stroke(&[(20.0, 300.0, 3.0), (200.0, 312.0, 4.0), (380.0, 296.0, 3.0), (620.0, 306.0, 4.5)]),
+    ];
+    for k in 0..10 {
+        let a = tau * k as f32 / 10.0;
+        elements.push(smooth_stroke(&[(520.0 + 48.0 * a.cos(), 90.0 + 48.0 * a.sin(), 2.2), (520.0 + 72.0 * a.cos(), 90.0 + 72.0 * a.sin(), 1.4)]));
+    }
+    VectorDrawing { elements }
+}
+
+/// Regarder les effets : une planche de contact écrite dans le dossier donné par `FXTRAIT_PNG`.
+/// `$env:FXTRAIT_PNG = 'C:\\...'; cargo test --release --offline --target-dir target\msvc --lib fxtrait_tests::dump -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn dump_stroke_effects_to_png() {
+    let Ok(dir) = std::env::var("FXTRAIT_PNG") else { return };
+    let (w, h) = (640usize, 340usize);
+    let d = sample_drawing();
+    let panels: Vec<(&str, Vec<FxStep>)> = vec![
+        ("dessin", Vec::new()),
+        ("ecriture 40", write_steps(40.0, &[(t::WRITE_SOFT, 20.0)])),
+        ("ecriture ensemble 50", write_steps(50.0, &[(t::WRITE_TOGETHER, 1.0), (t::WRITE_SOFT, 10.0)])),
+        ("effacement 60", write_steps(60.0, &[(t::WRITE_ERASE, 1.0)])),
+        ("crayonne", steps(EffectKind::Sketch, &[(t::SKETCH_OFFSET, 5.0), (t::SKETCH_PASSES, 3.0)], 0)),
+        ("respiration 6", steps(EffectKind::Breath, &[(t::BREATH_AMPLITUDE, 70.0)], 6)),
+        ("respiration vague", steps(EffectKind::Breath, &[(t::BREATH_AMPLITUDE, 80.0), (t::BREATH_WAVE, 90.0)], 6)),
+        ("ondulation", steps(EffectKind::StrokeWave, &[(t::WAVE_AMPLITUDE, 6.0), (t::WAVE_LENGTH, 70.0)], 3)),
+        ("pointilles", steps(EffectKind::Dashes, &[(t::DASH_LENGTH, 14.0), (t::DASH_GAP, 9.0)], 2)),
+        ("poussiere 40", steps(EffectKind::Dust, &[(t::DUST_PROGRESS, 40.0)], 0)),
+        ("poussiere 70 sens", steps(EffectKind::Dust, &[(t::DUST_PROGRESS, 70.0), (t::DUST_SENSE, 100.0), (t::DUST_GRAIN, 3.0)], 0)),
+        ("ecriture + crayonne", [write_steps(70.0, &[]), steps(EffectKind::Sketch, &[(t::SKETCH_OFFSET, 4.0)], 0)].concat()),
+    ];
+    let cols = 3usize;
+    let rows = panels.len().div_ceil(cols);
+    let mut sheet = vec![eframe::egui::Color32::WHITE; cols * w * rows * h];
+    for (n, (name, s)) in panels.iter().enumerate() {
+        let r = t::render(&d, w, h, s);
+        let (ox, oy) = ((n % cols) * w, (n / cols) * h);
+        for y in 0..h {
+            for x in 0..w {
+                let c = crate::render::over(eframe::egui::Color32::WHITE, r.get(x, y), 255, None);
+                sheet[(oy + y) * cols * w + ox + x] = c;
+            }
+        }
+        // Un liseré pour séparer les vignettes.
+        for x in 0..w {
+            sheet[oy * cols * w + ox + x] = eframe::egui::Color32::from_gray(200);
+        }
+        for y in 0..h {
+            sheet[(oy + y) * cols * w + ox] = eframe::egui::Color32::from_gray(200);
+        }
+        println!("{n} : {name}");
+    }
+    std::fs::create_dir_all(&dir).ok();
+    crate::io::write_png(&std::path::Path::new(&dir).join("effets_du_trait.png"), &sheet, cols * w, rows * h).unwrap();
 }

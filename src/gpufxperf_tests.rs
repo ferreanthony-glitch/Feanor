@@ -248,3 +248,28 @@ fn mesure_pire_cas_gpu() {
         println!("  mémoire vidéo : dessins {:.0} Mo, effets {:.0} Mo", bench.gpu.stats().bytes as f64 / 1e6, bench.gpu.effects_bytes() as f64 / 1e6);
     }
 }
+
+/// Le tremblement du trait sur un dessin vectoriel dense (2 000 traits, 1920 × 1080), sur la carte
+/// graphique puis sur le processeur : le temps d'une image de lecture, contre le temps d'une variante
+/// calculée en arrière-plan.
+#[test]
+#[ignore]
+fn mesure_tremblement_gpu_contre_cpu() {
+    use crate::fx::{Effect, EffectKind};
+    let Some(mut bench) = Bench::new() else { return };
+    let (w, h) = (1920usize, 1080usize);
+    let drawing = crate::fxtrait_tests::dense_drawing(1800, 200, w, h);
+    let mut boil = Effect::new(EffectKind::Boil);
+    boil.set_param(crate::tremblement::INTENSITY, 4.0);
+    let doc = crate::fxtrait_tests::drawing_doc_sized(drawing, vec![boil], 24, w, h);
+    let mean = playback(&mut bench, &doc, "tremblement, 2 000 traits (1920 x 1080)");
+    let id = doc.panels[0].layers[0].frames[0].unwrap();
+    let raster = &doc.cels[&id].raster;
+    for variant in 0..3 {
+        let values = vec![4.0, 55.0, 3.0, 2.0, 0.0, 1.0, 0.0, variant as f32];
+        let t = Instant::now();
+        let _ = crate::tremblement::boil(raster, &values, 0);
+        println!("  même variante {variant} sur le processeur (fil de fond, {} fils) : {:.1} ms", crate::parallele::coeurs(), ms(t));
+    }
+    assert!(mean < 1000.0 / 24.0);
+}

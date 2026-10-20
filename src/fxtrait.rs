@@ -37,7 +37,20 @@
 //! - **Sans latence** : jamais sur le fil de l'interface (`fxcache.rs`). Un trait que l'effet ne
 //!   touche pas (écriture : déjà tracé ou pas encore commencé) est posé tel quel depuis son cache ou
 //!   sauté ; à 50 % d'une écriture « l'un après l'autre » un seul trait est vraiment transformé.
+//! - **Réparti sur les cœurs** : les traits d'un morceau de 96 éléments sont transformés en parallèle
+//!   (`parallele::par_map`), puis posés par bandes de tuiles, chaque bande recevant les couches dans
+//!   l'ordre (`compose_banded`) : le même pixel qu'avec un seul fil. Le fil de fond laisse deux cœurs
+//!   à l'interface (`render::thread_cap`).
+//! - **Carte graphique** : ces effets lisent des traits, pas des pixels : ils restent un calcul de fond.
+//!   Quand la pile mêle des effets du trait et des effets de la carte, elle est coupée en deux
+//!   (`fx::hybrid_split`) : le fond calcule le dessin dérivé par les effets du trait, la carte passe le
+//!   reste dessus (flou, couleur, tremblement…) à pleine résolution, à chaque image.
 //! - Pas d'aperçu réduit (`fxproxy.rs`) : les longueurs sont en pixels de la feuille.
+//! - **Limites** : les zones remplies et les textes ne sont pas des traits (réglage « zones remplies »
+//!   de l'écriture et de la désagrégation) ; un fond sous le trait (`fond.rs`) reste fixe ; la forme d'un
+//!   trait se lit sur ses pixels (une brosse très large qui se recoupe elle-même donne l'abscisse du
+//!   point le plus proche de l'axe, pas celle de l'ordre où la plume a posé ses empreintes) ; seul le
+//!   tremblement « anime à l'arrêt » (les autres suivent l'image courante).
 
 use std::f32::consts::TAU;
 
@@ -562,6 +575,7 @@ impl Preset {
         }
     }
 }
+
 // ---------------------------------------------------------------------- le hasard
 
 fn mix(h: u32) -> u32 {
@@ -652,7 +666,14 @@ impl Dense {
         let (tx, ty) = (fx - ix, fy - iy);
         let (ix, iy) = (ix as i32, iy as i32);
         let t = |c: Color32| [c.r() as f32, c.g() as f32, c.b() as f32, c.a() as f32];
-        let (a, b, c, d) = (t(self.get(ix, iy)), t(self.get(ix + 1, iy)), t(self.get(ix, iy + 1)), t(self.get(ix + 1, iy + 1)));
+        let (lx, ly) = (ix - self.x0, iy - self.y0);
+        let (a, b, c, d) = if lx >= 0 && ly >= 0 && (lx as usize) + 1 < self.w && (ly as usize) + 1 < self.h {
+            // (Les quatre pixels sont dans le rectangle : pas de contrôle de bords.)
+            let i = ly as usize * self.w + lx as usize;
+            (t(self.px[i]), t(self.px[i + 1]), t(self.px[i + self.w]), t(self.px[i + self.w + 1]))
+        } else {
+            (t(self.get(ix, iy)), t(self.get(ix + 1, iy)), t(self.get(ix, iy + 1)), t(self.get(ix + 1, iy + 1)))
+        };
         std::array::from_fn(|k| {
             let top = a[k] + (b[k] - a[k]) * tx;
             let bottom = c[k] + (d[k] - c[k]) * tx;
@@ -672,31 +693,82 @@ fn for_blocks(d: &Dense, w: usize, h: usize, mut f: impl FnMut(usize, (usize, us
     }
     for ty in y0 as usize / TILE..=(y1 as usize - 1) / TILE {
         for tx in x0 as usize / TILE..=(x1 as usize - 1) / TILE {
-            let (ox, oy) = (tx * TILE, ty * TILE);
-            let (bx0, bx1) = (x0.max(ox as i32), x1.min((ox + TILE) as i32));
-            let (by0, by1) = (y0.max(oy as i32), y1.min((oy + TILE) as i32));
-            let any = (by0..by1).any(|y| {
-                let row = (y - d.y0) as usize * d.w;
-                d.px[row + (bx0 - d.x0) as usize..row + (bx1 - d.x0) as usize].iter().any(|c| c.a() != 0)
-            });
-            if any {
-                f(ty * tiles_x + tx, (ox, oy), bx0, by0, bx1, by1);
+            if let Some((bx0, by0, bx1, by1)) = block_of(d, tx * TILE, ty * TILE, w, h) {
+                f(ty * tiles_x + tx, (tx * TILE, ty * TILE), bx0, by0, bx1, by1);
             }
         }
     }
 }
 
+/// Le rectangle de `d` que couvre la tuile d'origine (`ox`, `oy`) d'une feuille `w` × `h`, s'il y a de
+/// l'encre dedans.
+fn block_of(d: &Dense, ox: usize, oy: usize, w: usize, h: usize) -> Option<Region> {
+    let (x0, y0, x1, y1) = d.bounds();
+    let (bx0, bx1) = (x0.max(ox as i32), x1.min((ox + TILE).min(w) as i32));
+    let (by0, by1) = (y0.max(oy as i32), y1.min((oy + TILE).min(h) as i32));
+    if bx0 >= bx1 || by0 >= by1 {
+        return None;
+    }
+    let any = (by0..by1).any(|y| {
+        let row = (y - d.y0) as usize * d.w;
+        d.px[row + (bx0 - d.x0) as usize..row + (bx1 - d.x0) as usize].iter().any(|c| c.a() != 0)
+    });
+    any.then_some((bx0, by0, bx1, by1))
+}
+
 /// `d` posé par-dessus `out`, à l'opacité `opacity`.
 fn over_dense(out: &mut Raster, d: &Dense, opacity: u8) {
     let (w, h) = (out.width, out.height);
-    for_blocks(d, w, h, |idx, origin, bx0, by0, bx1, by1| {
-        let tile = out.tile_mut(idx);
-        for y in by0..by1 {
-            for x in bx0..bx1 {
-                let s = d.px[(y - d.y0) as usize * d.w + (x - d.x0) as usize];
-                if s.a() != 0 {
-                    let at = (y as usize - origin.1) * TILE + (x as usize - origin.0);
-                    tile[at] = crate::render::over(tile[at], s, opacity, None);
+    for_blocks(d, w, h, |idx, origin, bx0, by0, bx1, by1| over_block(out.tile_mut(idx), d, origin, (bx0, by0, bx1, by1), opacity));
+}
+
+fn over_block(tile: &mut [Color32; crate::raster::TILE_PIXELS], d: &Dense, origin: (usize, usize), block: Region, opacity: u8) {
+    for y in block.1..block.3 {
+        for x in block.0..block.2 {
+            let s = d.px[(y - d.y0) as usize * d.w + (x - d.x0) as usize];
+            if s.a() != 0 {
+                let at = (y as usize - origin.1) * TILE + (x as usize - origin.0);
+                tile[at] = crate::render::over(tile[at], s, opacity, None);
+            }
+        }
+    }
+}
+
+/// Les couches `layers` posées dans l'ordre sur `out`, bande de tuiles par bande de tuiles, les bandes
+/// réparties sur les cœurs : chaque pixel reçoit les mêmes couches dans le même ordre que si elles
+/// étaient posées l'une après l'autre (même image, quel que soit le nombre de fils).
+fn compose_banded(out: &mut Raster, layers: &[Layer]) {
+    let (w, h, tiles_x) = (out.width, out.height, out.tiles_x.max(1));
+    crate::render::par_chunks(&mut out.tiles, tiles_x, |ty, row| {
+        let oy = ty * TILE;
+        for layer in layers {
+            match layer {
+                Layer::Plain(_) => {}
+                Layer::Sheet(sheet, opacity) => {
+                    for (tx, slot) in row.iter_mut().enumerate() {
+                        let Some(src) = sheet.tiles.get(ty * tiles_x + tx).and_then(Option::as_ref) else { continue };
+                        if src.iter().all(|c| c.a() == 0) {
+                            continue;
+                        }
+                        let dst: &mut [Color32; crate::raster::TILE_PIXELS] = slot.get_or_insert_with(crate::raster::empty_tile);
+                        for (d, &s) in dst.iter_mut().zip(src.iter()) {
+                            if s.a() != 0 {
+                                *d = crate::render::over(*d, s, *opacity, None);
+                            }
+                        }
+                    }
+                }
+                Layer::Dense(d, opacity) => {
+                    let (x0, _, x1, _) = d.bounds();
+                    if x1 <= 0 || x0 >= w as i32 {
+                        continue;
+                    }
+                    for tx in (x0.max(0) as usize / TILE)..=((x1.min(w as i32) as usize - 1) / TILE).min(tiles_x - 1) {
+                        if let Some(block) = block_of(d, tx * TILE, oy, w, h) {
+                            let dst: &mut [Color32; crate::raster::TILE_PIXELS] = row[tx].get_or_insert_with(crate::raster::empty_tile);
+                            over_block(dst, d, (tx * TILE, oy), block, *opacity);
+                        }
+                    }
                 }
             }
         }
@@ -1083,10 +1155,36 @@ pub fn render(vector: &VectorDrawing, w: usize, h: usize, steps: &[FxStep]) -> R
         0 => 16,
         cap => cap,
     };
-    let ctx = Ctx { stack, timing, w, h };
-    for chunk in jobs.chunks(96) {
-        let layers: Vec<Vec<Layer>> = crate::parallele::par_map(chunk, max, |_, job| run(job, &ctx));
-        for layer in layers.into_iter().flatten() {
+    // Quand un effet transforme chaque trait, tout se pose par bandes de tuiles réparties sur les cœurs
+    // (les éléments tels quels sont alors rendus seuls, eux aussi) ; sinon (l'écriture seule : presque
+    // tout est posé tel quel depuis le cache) les éléments se posent l'un après l'autre.
+    let banded = stack.transforms();
+    let ctx = Ctx { stack, timing, w, h, banded };
+    // Des morceaux de 96 éléments au plus, et d'au plus `CHUNK_PIXELS` pixels de couches en vol (une boîte de
+    // trait par couche) : de longs traits en diagonale ne remplissent pas la mémoire.
+    let passes = 1 + ctx.stack.sketch.map_or(0, |s| s.passes);
+    let cost = |job: &Job| match job {
+        Job::Stroke(e, _) => {
+            let b = e.bounds();
+            ((b.width().max(1.0) * b.height().max(1.0)) as usize).min(w * h) * passes
+        }
+        _ => 1,
+    };
+    let mut start = 0;
+    while start < jobs.len() {
+        let (mut end, mut pixels) = (start, 0usize);
+        while end < jobs.len() && end - start < 96 && (pixels < CHUNK_PIXELS || end == start) {
+            pixels += cost(&jobs[end]);
+            end += 1;
+        }
+        let chunk = &jobs[start..end];
+        start = end;
+        let layers: Vec<Layer> = crate::parallele::par_map(chunk, max, |_, job| run(job, &ctx)).into_iter().flatten().collect();
+        if banded {
+            compose_banded(&mut out, &layers);
+            continue;
+        }
+        for layer in layers {
             match layer {
                 Layer::Plain(e) => render_element(&mut out, e),
                 Layer::Sheet(s, opacity) => over_sheet(&mut out, &s, opacity),
@@ -1097,15 +1195,25 @@ pub fn render(vector: &VectorDrawing, w: usize, h: usize, steps: &[FxStep]) -> R
     out
 }
 
+/// Pixels de couches (`Dense`) qu'un morceau d'éléments a le droit de tenir à la fois : 48 millions, 192 Mo.
+const CHUNK_PIXELS: usize = 48 << 20;
+
 struct Ctx {
     stack: Stack,
     timing: Option<Timing>,
     w: usize,
     h: usize,
+    /// Les couches se posent par bandes (pas d'élément posé tel quel).
+    banded: bool,
 }
 
 fn run<'a>(job: &Job<'a>, ctx: &Ctx) -> Vec<Layer<'a>> {
     match job {
+        Job::Plain(e) if ctx.banded => {
+            let mut sheet = Raster::new(ctx.w, ctx.h);
+            render_element(&mut sheet, e);
+            vec![Layer::Sheet(sheet, 255)]
+        }
         Job::Plain(e) => {
             // (Le rendu seul d'un trait sans cache, ici et en parallèle, le remplit : la pose, à la
             // suite, n'est plus qu'une copie.)
@@ -1281,7 +1389,7 @@ fn sketch_passes(d: &Dense, dir: (f32, f32), rank: usize, s: &SketchS, sheet: (u
 }
 
 /// Côté (pixels) des cases de la carte d'occupation.
-const CELL: usize = 16;
+const CELL: usize = 4;
 
 /// Les cases de `region` à moins de `reach` pixels de l'encre de `d`.
 struct Occupancy {
@@ -1293,17 +1401,34 @@ struct Occupancy {
 fn occupancy(d: &Dense, region: Region, reach: f32) -> Occupancy {
     let (w, h) = ((region.2 - region.0).max(0) as usize, (region.3 - region.1).max(0) as usize);
     let (cols, rows) = (w.div_ceil(CELL), h.div_ceil(CELL));
-    let mut cells = vec![false; cols * rows];
-    let grow = (reach / CELL as f32).ceil() as i64;
+    let mut ink = vec![false; cols * rows];
     for y in 0..d.h {
+        let cy = (d.y0 + y as i32 - region.1).max(0) as usize / CELL;
         for x in 0..d.w {
-            if d.px[y * d.w + x].a() == 0 {
-                continue;
+            if d.px[y * d.w + x].a() != 0 {
+                let cx = (d.x0 + x as i32 - region.0).max(0) as usize / CELL;
+                ink[(cy * cols + cx).min(cols * rows - 1)] = true;
             }
-            let (cx, cy) = (((d.x0 + x as i32 - region.0).max(0) as usize / CELL) as i64, ((d.y0 + y as i32 - region.1).max(0) as usize / CELL) as i64);
-            for yy in (cy - grow).max(0)..=(cy + grow).min(rows as i64 - 1) {
-                for xx in (cx - grow).max(0)..=(cx + grow).min(cols as i64 - 1) {
-                    cells[yy as usize * cols + xx as usize] = true;
+        }
+    }
+    // Élargi de `reach` pixels : un maximum en ligne, puis en colonne.
+    let grow = (reach / CELL as f32).ceil() as usize;
+    let mut wide = vec![false; cols * rows];
+    for cy in 0..rows {
+        for cx in 0..cols {
+            if ink[cy * cols + cx] {
+                for xx in cx.saturating_sub(grow)..=(cx + grow).min(cols - 1) {
+                    wide[cy * cols + xx] = true;
+                }
+            }
+        }
+    }
+    let mut cells = vec![false; cols * rows];
+    for cy in 0..rows {
+        for cx in 0..cols {
+            if wide[cy * cols + cx] {
+                for yy in cy.saturating_sub(grow)..=(cy + grow).min(rows - 1) {
+                    cells[yy * cols + cx] = true;
                 }
             }
         }
@@ -1333,12 +1458,14 @@ fn dust(d: &Dense, geo: Option<&Geo>, s: &DustS, rank: usize, w: usize, h: usize
                 _ => rnd,
             };
             let onset = rnd + (sn - rnd) * s.sense;
-            let u = ((s.progress - 0.6 * onset) / 0.4).clamp(0.0, 1.0);
+            // Un grain part entre 0 et 70 % de la durée et met 30 % de la durée à s'en aller : à 100 % tout est parti.
+            let u = ((s.progress - 0.7 * onset) / 0.3).clamp(0.0, 1.0);
             let (mut tx, mut ty, mut keep) = (ix, iy, 1.0f32);
             if u > 0.0 {
                 let heading = unit(mix(hg ^ 1)) * TAU;
                 let speed = 0.4 + 0.6 * unit(mix(hg ^ 2));
-                let jitter = 0.75 + 0.5 * unit(hash(s.seed ^ 0x9E37, ix as u32, iy as u32, rank as u32));
+                // Au départ le grain part d'un bloc ; en route ses pixels se séparent.
+                let jitter = 1.0 + (unit(hash(s.seed ^ 0x9E37, ix as u32, iy as u32, rank as u32)) - 0.5) * 0.7 * smooth(u * 1.5);
                 let dist = s.spread * speed * jitter * u.powf(1.3);
                 tx = (ix as f32 + heading.cos() * dist + drift.0 * u * u).round() as i32;
                 ty = (iy as f32 + heading.sin() * dist + drift.1 * u * u).round() as i32;
