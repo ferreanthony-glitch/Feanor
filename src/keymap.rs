@@ -149,6 +149,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("fichier.exporter_son", "Exporter le son (WAV)", true, false),
     act("fichier.exporter_pdf", "Exporter le storyboard (PDF)", true, false),
     act("fichier.exporter_montage", "Exporter pour le montage (EDL, Final Cut XML, OpenTimelineIO)", true, false),
+    act("fichier.exporter_relecture", "Exporter pour relecture (page HTML à envoyer au réalisateur)", true, false),
+    act("fichier.importer_notes", "Importer les notes de relecture (fichier .json)", true, false),
     act("numerotation.verrouiller", "Verrouiller / déverrouiller la numérotation des plans", true, false),
     act("numerotation.renumeroter", "Renuméroter les plans (1, 2, 3… dans l'ordre du film)", true, false),
     act("fichier.exporter_image_courante", "Exporter l'image courante (PNG)", true, false),

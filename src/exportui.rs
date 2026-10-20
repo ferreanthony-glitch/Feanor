@@ -123,6 +123,14 @@ impl App {
                     }
                     ui.end_row();
                 }
+                // Les commentaires de la timeline, écrits sous l'image où ils tombent (`export::storyboard_of_with`).
+                if s.format == Format::Pdf {
+                    ui.label("Commentaires");
+                    ui.add_enabled_ui(!self.doc.comments.is_empty(), |ui| {
+                        ui.checkbox(&mut s.comments, "Avec les commentaires (les non résolus)");
+                    });
+                    ui.end_row();
+                }
                 if s.format == Format::Png {
                     ui.label("Fond");
                     ui.checkbox(&mut s.transparent, "Sans le papier (fond transparent)");
@@ -207,7 +215,7 @@ impl App {
             }
             Format::Pdf => {
                 let Some(out) = save_dialog(&base, Format::Pdf) else { return };
-                let (shots, boards) = export::storyboard_of(&self.doc, &export::panels_of(&frames));
+                let (shots, boards) = export::storyboard_of_with(&self.doc, &export::panels_of(&frames), s.comments);
                 self.export_job = Some(ExportJob::pdf(&out, &base, shots, boards, self.doc.frame));
             }
             Format::Mp4 | Format::ProRes => {

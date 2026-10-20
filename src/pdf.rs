@@ -322,15 +322,23 @@ pub struct Board {
     pub action: String,
     pub dialogue: String,
     pub notes: String,
+    /// Les commentaires de la timeline (auteur, texte) qui tombent sur ce panneau, quand l'export les
+    /// demande (« Avec les commentaires »).
+    pub comments: Vec<(String, String)>,
 }
 
 /// Panneaux de chaque page : 6 au plus, nouvelle page à chaque séquence.
 pub fn paginate(boards: &[Board]) -> Vec<Vec<usize>> {
+    paginate_n(boards, PER_PAGE)
+}
+
+/// Panneaux de chaque page : `per_page` au plus, nouvelle page à chaque séquence.
+pub fn paginate_n(boards: &[Board], per_page: usize) -> Vec<Vec<usize>> {
     let mut pages: Vec<Vec<usize>> = Vec::new();
     for (i, b) in boards.iter().enumerate() {
         let new_page = match pages.last() {
             None => true,
-            Some(page) => page.len() >= PER_PAGE || boards[page[0]].sequence != b.sequence,
+            Some(page) => page.len() >= per_page.max(1) || boards[page[0]].sequence != b.sequence,
         };
         if new_page {
             pages.push(Vec::new());
@@ -359,7 +367,12 @@ impl BoardLine {
 pub fn board_lines(b: &Board, width: f32, max_lines: usize) -> Vec<BoardLine> {
     let mut out: Vec<BoardLine> = Vec::new();
     let mut cut = false;
-    'fields: for (label, text) in [("Action", &b.action), ("Dialogue", &b.dialogue), ("Notes", &b.notes)] {
+    let mut fields: Vec<(String, &str)> = vec![("Action".into(), &b.action), ("Dialogue".into(), &b.dialogue), ("Notes".into(), &b.notes)];
+    for (author, text) in &b.comments {
+        let who = author.trim();
+        fields.push((if who.is_empty() { "Commentaire".into() } else { format!("Commentaire ({who})") }, text));
+    }
+    'fields: for (label, text) in fields {
         let text = text.trim();
         if text.is_empty() {
             continue;
@@ -398,11 +411,23 @@ pub struct BoardImage {
 
 /// Le storyboard complet. `aspect` = largeur / hauteur du cadre.
 pub fn storyboard(title: &str, boards: &[Board], images: &[BoardImage], aspect: f32) -> Vec<u8> {
+    storyboard_with(title, boards, images, aspect, false)
+}
+
+/// Texte d'une case de la version « à imprimer pour relire » au plus, en lignes.
+const REVIEW_TEXT_LINES: usize = 8;
+/// Interligne des lignes de notes laissées blanches.
+const RULE_STEP: f32 = 17.0;
+
+/// Le storyboard complet ; `notes_area` : la version à imprimer pour relire, trois images par page (une
+/// rangée) et, sous le texte de chacune, un cadre à lignes où écrire ses notes à la main.
+pub fn storyboard_with(title: &str, boards: &[Board], images: &[BoardImage], aspect: f32, notes_area: bool) -> Vec<u8> {
     let mut pdf = PdfFile::new();
-    let pages = paginate(boards);
+    let rows = if notes_area { 1 } else { 2 };
+    let pages = if notes_area { paginate_n(boards, COLUMNS * rows) } else { paginate(boards) };
     let cell_w = (PAGE_W - 2.0 * MARGIN - (COLUMNS as f32 - 1.0) * GAP_X) / COLUMNS as f32;
     let grid_top = MARGIN + HEADER;
-    let row_h = (PAGE_H - grid_top - MARGIN - GAP_Y) / 2.0;
+    let row_h = (PAGE_H - grid_top - MARGIN - GAP_Y * (rows as f32 - 1.0)) / rows as f32;
     // Image : toute la largeur de la case, sauf si elle est trop haute (cadre carré ou vertical).
     let (img_w, img_h) = {
         let h = cell_w / aspect.max(0.1);
@@ -441,14 +466,32 @@ pub fn storyboard(title: &str, boards: &[Board], images: &[BoardImage], aspect: 
             c.gray(0.4);
             c.text_right(x + cell_w, y, &b.duration, false, 8.5);
             y += LEADING + 1.0;
-            let max_lines = ((top + row_h - y) / LEADING).floor().max(0.0) as usize + 1;
+            let max_lines = if notes_area { REVIEW_TEXT_LINES } else { ((top + row_h - y) / LEADING).floor().max(0.0) as usize + 1 };
             c.gray(0.15);
+            let text_top = y;
             for line in board_lines(b, cell_w, max_lines) {
                 if let Some(label) = &line.label {
                     c.text(x, y, label, true, TEXT_SIZE);
                 }
                 c.text(x + line.indent(), y, &line.text, false, TEXT_SIZE);
                 y += LEADING;
+            }
+            if notes_area {
+                // Le cadre des notes : de sous la place du texte jusqu'au bas de la case, des lignes à remplir.
+                let box_top = text_top + REVIEW_TEXT_LINES as f32 * LEADING + 4.0;
+                let box_h = top + row_h - box_top;
+                if box_h > 30.0 {
+                    c.gray(0.55);
+                    c.rect(x, box_top, cell_w, box_h, 0.5);
+                    c.gray(0.4);
+                    c.text(x + 4.0, box_top + 10.0, "Notes", true, 7.5);
+                    c.gray(0.82);
+                    let mut ry = box_top + 12.0 + RULE_STEP;
+                    while ry < box_top + box_h - 4.0 {
+                        c.line(x + 4.0, x + cell_w - 4.0, ry, 0.4);
+                        ry += RULE_STEP;
+                    }
+                }
             }
         }
         pdf.add_page(c.ops.as_bytes(), &used);

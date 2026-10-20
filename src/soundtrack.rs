@@ -295,6 +295,10 @@ impl App {
             return;
         }
         for path in paths {
+            // Un fichier de notes de relecture (`.json`) : la fenêtre d'import dit ce qu'il contient.
+            if self.import_dropped_notes(&path) {
+                continue;
+            }
             if !self.import_dropped_sboard(&path) && !self.import_dropped_project(&path) && !self.import_dropped_video(&path) {
                 self.import_sound_path(&path, None, None);
             }

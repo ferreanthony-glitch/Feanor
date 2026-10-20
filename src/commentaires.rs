@@ -18,6 +18,7 @@
 //!   Commentaires.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
@@ -31,7 +32,9 @@ const VERSION: u32 = 1;
 /// Couleur d'un commentaire neuf (cyan : ni la marque d'image, ni le signet, ni la tête de lecture).
 pub(crate) const DEFAULT_COLOR: [u8; 3] = [60, 200, 215];
 /// Un texte plus long qu'ici est coupé à la lecture (un fichier abîmé ne gèle pas l'interface).
-const TEXT_MAX: usize = 20_000;
+pub(crate) const TEXT_MAX: usize = 20_000;
+/// Un dessin de relecteur plus lourd qu'ici (PNG en base64) n'est pas gardé à la lecture du fichier.
+pub(crate) const ANNOTATION_B64_MAX: usize = 1_600_000;
 /// Largeur d'un repère à gauche et à droite de son mât, et hauteur de sa tête, en points : la zone
 /// où l'on prend le repère (`marker_hits`).
 pub(crate) const FLAG_LEFT: f32 = 3.0;
@@ -59,6 +62,51 @@ pub struct Comment {
     /// Résolu : le repère est estompé.
     #[serde(rename = "resolu", default, skip_serializing_if = "is_false")]
     pub done: bool,
+    /// Venu d'une note de relecture (`relecture.rs`) : l'identifiant de la note, pour ne pas la
+    /// poser deux fois si le même fichier est importé de nouveau.
+    #[serde(rename = "note", default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// Le dessin du relecteur par-dessus l'image du plan.
+    #[serde(rename = "dessin", default, skip_serializing_if = "Option::is_none", with = "annotation_serde")]
+    pub annotation: Option<Annotation>,
+}
+
+/// Le dessin qu'un relecteur a fait par-dessus l'image d'un plan : un PNG transparent de la taille du
+/// cadre (réduit à l'import), partagé entre les copies du commentaire (annulation, plans rangés).
+#[derive(Clone, Debug)]
+pub struct Annotation(pub Arc<Vec<u8>>);
+
+impl PartialEq for Annotation {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0) || self.0 == other.0
+    }
+}
+
+impl Annotation {
+    /// Octets d'un PNG, si l'en-tête est celui d'un PNG et que le fichier n'est pas trop lourd.
+    pub(crate) fn from_png(bytes: Vec<u8>) -> Option<Annotation> {
+        let sig = bytes.starts_with(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]);
+        (sig && bytes.len() <= ANNOTATION_B64_MAX / 4 * 3).then(|| Annotation(Arc::new(bytes)))
+    }
+}
+
+/// `commentaires.json` garde le dessin en base64 ; un dessin illisible (trop lourd, pas du base64, pas un
+/// PNG) est laissé de côté sans empêcher de lire le commentaire.
+mod annotation_serde {
+    use super::{Annotation, ANNOTATION_B64_MAX};
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(v: &Option<Annotation>, s: S) -> Result<S::Ok, S::Error> {
+        match v {
+            Some(a) => s.serialize_str(&crate::base64::encode(&a.0)),
+            None => s.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Annotation>, D::Error> {
+        let text = Option::<String>::deserialize(d)?;
+        Ok(text.filter(|t| t.len() <= ANNOTATION_B64_MAX).and_then(|t| crate::base64::decode(&t)).and_then(Annotation::from_png))
+    }
 }
 
 fn default_color() -> [u8; 3] {
@@ -113,6 +161,8 @@ pub(crate) fn parse(text: &str) -> Result<Vec<Comment>, String> {
         if c.text.chars().count() > TEXT_MAX {
             c.text = c.text.chars().take(TEXT_MAX).collect();
         }
+        // (Une clé de note trop longue n'est pas une clé que SHOT a écrite.)
+        c.note = c.note.filter(|n| !n.is_empty() && n.len() <= 120);
         out.push(c);
     }
     Ok(out)
@@ -290,7 +340,7 @@ impl Document {
     /// Nouveau commentaire à l'image `frame` du plan `panel`.
     pub(crate) fn add_comment(&mut self, panel: u64, frame: usize, author: &str, created: u64) -> u64 {
         let id = self.alloc();
-        self.comments.push(Comment { id, panel, frame, text: String::new(), author: author.to_string(), color: DEFAULT_COLOR, created, done: false });
+        self.comments.push(Comment { id, panel, frame, text: String::new(), author: author.to_string(), color: DEFAULT_COLOR, created, done: false, note: None, annotation: None });
         id
     }
 

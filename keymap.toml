@@ -2206,6 +2206,17 @@ action = "fichier.exporter_montage"
 touches = []
 source = "SHOT (sans touche)"
 
+# Relecture par le réalisateur : exporter la page HTML, importer les notes qui reviennent.
+[[raccourci]]
+action = "fichier.exporter_relecture"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fichier.importer_notes"
+touches = []
+source = "SHOT (sans touche)"
+
 [[raccourci]]
 action = "numerotation.verrouiller"
 touches = []

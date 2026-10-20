@@ -1409,3 +1409,101 @@ Demande d'Anthony : « ouvrir plusieurs fichiers dans la même fenêtre avec un 
 10. Fichier > Préférences > « Ouvrir dans un nouvel onglet » décoché : Ouvrir remplace le projet affiché (après la question).
 11. Les trois thèmes : la bande est lisible (nom, « • », croix) ; la fenêtre étroite : la bande défile.
 12. Laisser SHOT ouvert avec trois projets sans toucher à rien : le processeur reste à zéro (Gestionnaire des tâches).
+
+---------------------------------------------------------------------------------------------------
+
+## 22. Relecture par le réalisateur (2026-10-20, branche `revue-realisateur`)
+
+Demande d'Anthony : son réalisateur / client **n'a pas SHOT** ; il doit pouvoir relire une livraison et renvoyer des notes que
+SHOT repose en commentaires sur les bons plans. Principe, format, sécurité : `README.md` « Relecture par le réalisateur ».
+Code : `src/relecture.rs`, `src/relecturejob.rs`, `src/relectureui.rs`, `assets/relecture/page.js` et `page.css`. Rien n'a été
+regardé à l'écran de SHOT dans cette séance (aucun lancement) ; la page a été essayée dans un navigateur (voir plus bas).
+
+### Mots
+
+| Mot | Sens |
+|---|---|
+| **Relecture** | l'aller (la page HTML) et le retour (les notes) |
+| **Page de relecture** | le fichier `.html` envoyé, qui marche sans internet |
+| **Notes de relecture** | le fichier `.json` que la page fait télécharger au relecteur |
+| **Importer les notes** | les poser en commentaires de la timeline |
+| **Dessin du relecteur** | ce qu'il a tracé par-dessus l'image, gardé avec le commentaire |
+
+### Où et quels gestes
+
+| Commande | Où | Raccourci |
+|---|---|---|
+| Exporter pour relecture (`fichier.exporter_relecture`) | Fichier > Exporter… > « Pour relecture (page HTML) » ; fenêtre Envois (icône lunettes de chaque envoi) ; « Plus… » du montage ; Ctrl+K | aucun |
+| Importer les notes de relecture (`fichier.importer_notes`) | Fichier > Importer > « Des notes de relecture (.json)… » ; « Plus… » du montage ; Ctrl+K ; **ou le `.json` lâché sur la fenêtre** | aucun |
+| Montrer le dessin du relecteur | panneau Commentaires, sous l'éditeur d'un commentaire qui a un dessin (icône crayon à l'état ; corbeille : retirer le dessin) | aucun |
+
+Un bloc sans touche par action dans `keymap.toml` (clic droit sur l'entrée d'un menu : lui en donner une) ; icônes et bulles d'une
+seconde (`bulles.rs`) ; l'interrupteur allumé prend `bulles::interrupteur` (encre `sur_accent`) ; couleurs de `theme::`.
+
+### Ce que voit l'utilisateur
+
+- **Fenêtre « Exporter pour relecture »** : Titre ; Envoi (liste, « Aucun » par défaut ; son nom est écrit dans la page) ; Plans
+  (tout le film, la séquence courante, les plans choisis, « Seulement les plans modifiés depuis l'envoi (n) ») ; dans la page :
+  lecture animée, commentaires déjà posés, PDF à imprimer. Dessous : « 9 plans, 12 images de storyboard. », « Exporter… »
+  (demande où écrire le `.html`), puis la barre (« image 14 / 60 », temps restant) et « Arrêter ». À la fin : « Terminé : 9 plans, 12
+  images », le fichier et sa taille en Mo (avertissement au-delà de 20 Mo), « Montrer dans l'explorateur ».
+- **Fenêtre « Notes de relecture »** : « Claire — « Mon film » », la date, « 14 notes, dont 3 avec un dessin. », « 12 notes à poser
+  sur 9 plans. », « n retrouvées par leur numéro de plan », « n déjà importées : pas de doublon », la liste des notes sans plan, la case
+  « Les poser sur le plan courant, avec leur provenance », l'avertissement et la case « Importer quand même » si le projet n'est
+  pas le même, « Importer ». Puis le compte rendu : « 12 notes importées sur 9 plans, 1 note sans plan (plan supprimé). »
+- **Panneau Commentaires** : les notes sont des commentaires comme les autres (fanion jaune dans la règle, auteur, date, modifiables,
+  résolubles), le premier posé est choisi. Quand un commentaire avec dessin est choisi et que la tête de lecture est sur l'image
+  qu'il vise, le dessin est peint **par-dessus l'image** du dessin, au cadre de la caméra.
+- **Historique** : une seule étape, « Importer les notes de relecture » ; Ctrl+Z les retire toutes.
+
+### La page (`assets/relecture/page.js`, `page.css`)
+
+En-tête collant (titre, « Votre nom », nombre de notes, « Enregistrer mes notes »), consigne en trois lignes, sommaire (un lien par
+plan), un intertitre par séquence, une carte par plan (« Plan 12A », « V2 » s'il y a des versions, durée), la lecture animée
+(« Lire le plan », curseur) si demandée, puis une section par image de storyboard : l'image, sa légende (« Image 2 sur 3 · 12 i »),
+action / dialogue / notes, « Déjà noté dans SHOT » (commentaires existants), la barre de dessin (« Dessiner », rouge / bleu / vert,
+« Gomme », « Annuler le trait », « Tout effacer ») et le cadre jaune de la note. En bas : la note générale. Clair, une colonne sur
+téléphone, deux colonnes de cartes sur grand écran, boutons d'au moins 36 points, rien ne défile de côté. La note du relecteur et ses
+dessins sont gardés dans le navigateur (`localStorage`, s'il le permet) : rouvrir la page les retrouve.
+
+### Limites
+
+Fichier de notes 40 Mo, 3000 notes, 20 000 caractères par note, nom du relecteur 120 caractères, dessin PNG de 1,6 Mo de base64
+au plus, 4096 points par côté, 8 millions de pixels, réduit à 1280 de large à l'import. Page : images de storyboard à 960 de large
+(JPEG 80), lecture animée à 480 de large (JPEG 62), 16 images échantillonnées par plan au plus (1500 pour tout le film).
+
+### À vérifier à l'écran (par Anthony)
+
+1. Fichier > Exporter… : la ligne « Pour relecture (page HTML) » est là ; elle ouvre la fenêtre ; les cases et le résumé suivent
+   l'étendue choisie ; « Seulement les plans modifiés depuis l'envoi » est grisé sans envoi, et indique le bon nombre après un envoi
+   puis des retouches.
+2. Exporter 20 à 30 plans : l'interface reste vivante (on peut bouger la fenêtre, la barre avance, « Arrêter » efface tout) ; la page
+   se pose où tu l'as choisie, sans fichier `.part` qui traîne ; avec « PDF » : un `.pdf` du même nom à côté, trois plans par page et
+   un cadre « Notes » à remplir.
+3. **Ouvrir le HTML sur ton ordinateur, puis sur un téléphone** (envoie-le-toi par e-mail ou copie-le sur le téléphone, ouvre-le
+   dans Chrome / Safari, **en mode avion**) : les images sont là, le texte se lit sans zoomer, « Dessiner » fonctionne au doigt
+   sans faire défiler la page, la gomme et « Annuler le trait » aussi, le cadre de note se remplit, « Enregistrer mes notes »
+   télécharge `notes-<titre>-<date>.json` (si rien ne se télécharge, le cadre « Le fichier ne s'est pas téléchargé ? » donne le texte).
+   Fermer et rouvrir la page : le nom, les notes et les dessins sont retrouvés. Sans nom : le bouton demande le nom.
+4. Lecture animée : « Lire le plan » joue les images échantillonnées à la bonne cadence ; le curseur les parcourt.
+5. Importer les notes : lâcher le `.json` sur la fenêtre de SHOT (ou Fichier > Importer) ; la fenêtre annonce le bon nombre de notes
+   et de plans ; « Importer » : les fanions jaunes apparaissent dans la règle, le panneau Commentaires s'ouvre sur le premier, le
+   dessin du relecteur se voit par-dessus l'image quand son commentaire est choisi (et se cache avec l'interrupteur) ; Historique :
+   « Importer les notes de relecture » ; Ctrl+Z puis Ctrl+Shift+Z.
+6. **Réimporter le même fichier** : « Rien de nouveau », aucun commentaire de plus ; enregistrer, fermer, rouvrir le projet,
+   réimporter : toujours rien de plus.
+7. Supprimer un plan puis importer : la note de ce plan est « sans plan (plan supprimé) » ; déplacer ou renuméroter des plans
+   avant d'importer : les notes retombent sur les bons plans.
+8. PDF (Fichier > Exporter > Storyboard PDF) : la case « Avec les commentaires (les non résolus) » (grisée sans commentaire) écrit chaque
+   commentaire sous l'image où il tombe, « Commentaire (Anthony) : … » ; sans la case, le PDF est comme avant.
+9. Dire si la place du dessin du relecteur (par-dessus l'image, à la caméra) et le jaune des fanions conviennent.
+
+### Essais ajoutés
+
+`relecture_tests.rs` : échappement et page hors ligne (aucune adresse, politique de contenu, un seul script identique pour tous
+les projets, titres et textes hostiles), tous les plans et leurs versions, commentaires en contexte, lecture animée (échantillons,
+fusion des images identiques), fichier de notes (format, version, UTF-8, limites, identifiants, doublons, 3000 notes, fichier trop
+gros), dessins (décodage sous limites, réduction, transparent, refus), fichier écrit par un vrai navigateur, placement par
+identifiant / numéro / sans plan / image perdue, import (commentaires, idempotence, rouvrir le projet, dessin abîmé), compte rendu en
+français, une seule étape d'annulation nommée, PDF avec commentaires et cadres de notes, tâche d'export (page + PDF, arrêt, fermeture,
+fichier d'avant gardé), fenêtres, dessin montré / caché, aucun fichier créé à l'import.

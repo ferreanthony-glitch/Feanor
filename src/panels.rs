@@ -131,6 +131,7 @@ impl App {
                     ui.separator();
                     self.action_item(ui, "Un projet Storyboard Pro (.sboard)…", "fichier.importer_sboard");
                     self.action_item(ui, "Un scénario (Fountain, Final Draft, Word, texte)…", "fichier.importer_scenario");
+                    self.action_item(ui, "Des notes de relecture (.json)…", "fichier.importer_notes");
                 });
                 self.action_item(ui, "Exporter…", "fichier.exporter");
                 ui.separator();
@@ -252,15 +253,24 @@ impl App {
                 self.action_item(ui, "Plein écran", "vue.plein_ecran");
                 self.action_item(ui, "Performance (temps de l'interface)", "vue.performance");
             });
+            // Les fonctions à l'essai, rangées ensemble (Anthony, 2026-10-20) : elles peuvent changer.
+            ui.menu_button("Labo", |ui| {
+                ui.label(RichText::new("Fonctions à l'essai : elles peuvent encore changer.").weak());
+                ui.separator();
+                self.action_item(ui, "Suggestions sonores…", "vue.suggestions_sonores");
+                self.action_item(ui, "Lire le storyboard (proposer des sons)", "suggestion.lire");
+                ui.separator();
+                self.action_item(ui, "Propager la peinture du calque…", "calque.propager");
+                ui.separator();
+                let rec = if self.record_strokes.is_some() { "Arrêter d'enregistrer mes traits" } else { "Enregistrer mes traits (banc d'essai du moteur)" };
+                self.action_item(ui, rec, "pinceau.enregistrer_traits");
+            });
             ui.menu_button("Aide", |ui| {
                 self.action_item(ui, "Palette de commandes…", "aide.palette");
                 self.action_item(ui, "Raccourcis clavier…", "aide.raccourcis");
                 ui.separator();
                 self.action_item(ui, "À propos de SHOT…", "aide.a_propos");
                 self.action_item(ui, "Diagnostic des performances…", "aide.diagnostic");
-                ui.separator();
-                let rec = if self.record_strokes.is_some() { "Arrêter d'enregistrer mes traits" } else { "Enregistrer mes traits (banc d'essai du moteur)" };
-                self.action_item(ui, rec, "pinceau.enregistrer_traits");
             });
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -707,6 +717,8 @@ impl App {
         // Renuméroter les plans : la confirmation ; Exporter pour le montage : sa fenêtre.
         self.renumber_window(ctx);
         self.editorial_window(ctx);
+        // Relecture par le réalisateur : exporter la page, importer ses notes (`relectureui.rs`).
+        self.relecture_windows(ctx);
         // Suggestions sonores : confirmation d'envoi en ligne, « Modifier », saisie d'une clé.
         self.suggestions_windows(ctx);
         // À propos de SHOT (`aproposui.rs`).

@@ -206,3 +206,22 @@ essais de `onglets_tests.rs` (`docs/ARCHITECTURE.md`, « Onglets de projets ») 
 | Un collage entre onglets abîme un projet (feuille d'une autre taille) | refus avec les deux tailles ; cadence signalée | `plans_from_a_sheet_of_another_size_are_refused_…`, `a_copied_layer_pastes_into_…`, `copied_images_paste_into_…` |
 | Un plantage perd un onglet | une copie de secours par onglet ; chacune proposée au démarrage | `each_tab_has_its_own_rescue_copy_and_a_crash_offers_every_project`, `closing_a_tab_removes_its_rescue_copy` |
 | La session écrasée pendant qu'elle revient | `retenir_la_session` attend `session_prete` | `the_session_is_not_overwritten_while_it_comes_back`, `the_session_is_remembered_and_comes_back_in_order` |
+
+## 11. Relecture par le réalisateur (2026-10-20)
+
+Une entrée venue d'un inconnu, donc traitée comme telle (`relecture.rs`) : le fichier de notes que le relecteur renvoie.
+
+| Protection | Essai |
+|---|---|
+| Fichier de plus de 40 Mo refusé sans être lu ; lecture bornée même si sa taille annoncée ment | `a_too_big_file_is_refused_before_it_is_read` |
+| Pas du JSON, pas notre format, version plus récente, pas de l'UTF-8 : un message en français, rien n'est posé | `a_file_that_is_not_a_notes_file_says_so` |
+| Textes nettoyés (contrôles, inversions de sens d'écriture) et coupés, identifiants restreints à `A-Za-z0-9-_.`, doublons ignorés, 3000 notes au plus ; **aucun nom de fichier du fichier n'est utilisé** | `a_notes_file_is_untrusted_texts_ids_and_counts_are_bounded`, `at_most_a_few_thousand_notes_are_read`, `nothing_touches_the_disk_while_importing_notes` |
+| Dessins : PNG seulement (pas d'adresse, pas d'autre format), 1,6 Mo de base64, 4096 points par côté, 8 millions de pixels, mémoire du décodeur bornée, réduits à 1280 de large et réécrits (les octets d'origine ne sont pas gardés) ; un dessin refusé ne fait pas perdre sa note | `a_drawing_is_decoded_under_limits_and_rewritten_clean`, `a_bad_drawing_is_refused_without_stopping_the_import` |
+| `commentaires.json` : le dessin est relu avec les mêmes bornes ; un dessin abîmé est laissé de côté, le commentaire est lu ; un fichier d'avant (sans les champs `note`, `dessin`) se relit et se réécrit à l'identique | `the_note_key_and_the_drawing_survive_saving_and_reopening_the_project`, `old_comment_files_without_the_new_fields_still_load_and_write_the_same` |
+| Le projet d'essai de fiabilité porte une note de relecture avec son dessin : tous les allers-retours la comparent | `the_fixture_really_holds_everything_the_project_can_store` |
+
+La page exportée est une sortie : aucune adresse du dehors, un seul script (le même pour tous les projets, sans texte du projet),
+politique de contenu `default-src 'none'`, tout texte du projet échappé (`the_page_works_offline_and_forbids_anything_else`,
+`hostile_titles_and_texts_cannot_break_out_of_the_page`, `the_script_is_the_same_for_every_project_and_calls_nothing_outside`).
+L'export écrit `<nom>.html.part` puis renomme : un arrêt ou une erreur ne laisse pas de demi-fichier et ne détruit pas une page
+exportée avant (`stopping_the_export_leaves_no_file_and_keeps_an_older_page`). Le format du projet ne change pas (`VERSION` 32).

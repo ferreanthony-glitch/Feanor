@@ -62,14 +62,22 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
         entree(Pane::Comments, "vue.commentaires", "Commentaires", "Les commentaires laissés sur la timeline : la liste, et le texte, l'auteur et la couleur du fanion choisi. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::History, "vue.historique", "Historique", "Les étapes d'annulation, par leur nom. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::Bruitages, "vue.bruitages", "Bruitages", "Tes dossiers de sons : les chercher, les écouter et les poser dans le montage. Un clic l'ouvre ou le met devant, un autre le ferme."),
-        entree(Pane::SuggestionsSonores, "vue.suggestions_sonores", "Suggestions sonores", "SHOT lit le storyboard et propose des bruitages, des ambiances et des voix témoins, que tu écoutes, acceptes ou supprimes. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::References, "vue.references", "Références", "Un tableau d'images et de vidéos à regarder en dessinant ; se détache dans sa fenêtre pour un deuxième écran. Un clic l'ouvre ou le met devant, un autre le ferme."),
     ],
 ];
 
-/// Le panneau qu'une action ouvre ou ferme, si c'en est une de la barre.
+/// Les panneaux qui s'ouvrent et se ferment comme ceux de la barre, sans icône dans la barre : ceux
+/// des fonctions à l'essai, rangés dans le menu Labo (Anthony, 2026-10-20).
+pub(crate) const HORS_BARRE: &[Entree] = &[entree(
+    Pane::SuggestionsSonores,
+    "vue.suggestions_sonores",
+    "Suggestions sonores",
+    "SHOT lit le storyboard et propose des bruitages, des ambiances et des voix témoins, que tu écoutes, acceptes ou supprimes. Un clic l'ouvre ou le met devant, un autre le ferme.",
+)];
+
+/// Le panneau qu'une action ouvre ou ferme, si c'en est une de la barre (ou du menu Labo).
 pub(crate) fn pane_de_action(action: &str) -> Option<Pane> {
-    GROUPES.iter().flat_map(|g| g.iter()).find(|e| e.action == action).map(|e| e.pane)
+    GROUPES.iter().flat_map(|g| g.iter()).chain(HORS_BARRE).find(|e| e.action == action).map(|e| e.pane)
 }
 
 /// Ce que fait un clic sur l'icône d'un panneau.

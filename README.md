@@ -803,7 +803,7 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
 - **Profil de la pointe** (bouton courbe à côté de la Dureté) : la couverture de la pointe du
   centre au bord, en courbe, à la place de la dureté. Il part de la dureté réglée ; préréglages
   Dur, Doux, Diffus.
-- **Banc de traits** (Aide > Enregistrer mes traits) : chaque trait est gardé tel que le stylet
+- **Banc de traits** (Labo > Enregistrer mes traits) : chaque trait est gardé tel que le stylet
   le donne, avec son réglage, pour régler le moteur sur tes vrais gestes. Le même menu l'arrête.
 - **Peinture humide** (réglages du pinceau) : « Mélange » fait prendre à la brosse la couleur déjà
   posée, la mêler à la sienne et l'entraîner. « Charge » épuise la peinture le long du trait,
@@ -1094,6 +1094,10 @@ Les menus montrent l'essentiel ; le reste est rangé dans un sous-menu (« Plans
 - Fichier > Préférences… : l'apparence (voir ci-dessous), copie de secours, dernier projet rouvert,
   croix du système, panneaux ajustés, raccourcis clavier ;
 - Aide > À propos de SHOT… : le logo, la version et le nom d'avant (Échap ferme la fenêtre).
+- **Labo** (2026-10-20, demande d'Anthony) : les fonctions à l'essai, rangées ensemble — Suggestions sonores…,
+  Lire le storyboard (proposer des sons), Propager la peinture du calque…, Enregistrer mes traits (banc
+  d'essai du moteur). Le panneau Suggestions sonores n'a plus d'icône dans la barre des panneaux ni
+  d'entrée dans le menu Son ; « Propager… » reste aussi au clic droit d'un calque bitmap qui s'y prête.
 
 ### Apparence
 
@@ -1168,6 +1172,64 @@ ou le réunit à un autre.
   dans Fichier > Préférences… > Commentaires.
 - Enregistrés dans `commentaires.json`, à côté du manifeste du projet (le format du projet ne
   change pas) ; chaque changement s'annule et se rétablit.
+- **Dans le PDF** : Fichier > Exporter > Storyboard PDF écrit aussi les commentaires non résolus sous
+  l'image où ils tombent (« Commentaire (Anthony) : … ») quand on coche « Avec les commentaires ».
+
+## Relecture par le réalisateur
+
+Le réalisateur ou le client **n'a pas SHOT**. SHOT lui fabrique une page, il renvoie ses notes, SHOT les pose en
+commentaires sur les bons plans. Détail et liste de vérifications : `docs/INTERFACE.md` partie 22.
+
+**Aller** : Fichier > Exporter > « Pour relecture (page HTML) » (`fichier.exporter_relecture`), l'icône « lunettes » de
+chaque envoi dans la fenêtre Envois (les plans modifiés depuis cet envoi sont proposés d'emblée), « Plus… » de la barre du
+montage, Ctrl+K. La fenêtre propose : le titre, l'envoi concerné (son nom est écrit dans la page), les plans (tout le film,
+la séquence courante, les plans choisis, les plans modifiés depuis un envoi), et dans la page : la lecture animée de chaque
+plan (images réduites, page plus lourde), les commentaires déjà posés (en lecture seule, les résolus exclus), et un PDF
+à imprimer (3 plans par page, avec un cadre à lignes pour écrire à la main) écrit à côté de la page.
+
+**La page** : un seul fichier `.html`, images dedans, qui s'ouvre hors ligne dans n'importe quel navigateur (ordinateur ou
+téléphone, thème clair). Un plan par carte : numéro (celui de la numérotation du projet), « V2 » s'il y a des versions,
+durée, textes d'action, dialogue, notes, une carte par image de storyboard (marque d'image). Pour chaque image : un champ de
+note, et « Dessiner » (stylo à trois couleurs, gomme, annuler le trait, tout effacer) directement sur l'image, au doigt, au
+stylet ou à la souris. Une note générale, le nom du relecteur, « Enregistrer mes notes » qui télécharge
+`notes-<titre>-<date>.json` (à renvoyer par e-mail). Les notes en cours sont gardées dans le navigateur (s'il le
+permet) et retrouvées en rouvrant la page.
+
+**Retour** : Fichier > Importer > « Des notes de relecture (.json) » (`fichier.importer_notes`), ou le fichier lâché sur la
+fenêtre. Le fichier est lu et vérifié sur un autre fil ; une fenêtre dit combien de notes (dont avec dessin) seront posées sur
+combien de plans, lesquelles sont sans plan, lesquelles sont déjà importées ; « Importer » les pose en **une** étape
+d'annulation (« Importer les notes de relecture »), puis le compte rendu : « 12 notes importées sur 9 plans, 1 note sans
+plan (plan supprimé). » Chaque note devient un commentaire (fanion jaune, auteur = le relecteur, date de la note, sur
+l'image de storyboard visée). Le dessin du relecteur s'affiche par-dessus l'image quand son commentaire est choisi ;
+l'interrupteur du panneau Commentaires le cache (il reste dans le commentaire).
+
+**Où va une note** : par l'**identifiant du plan** (stable aux déplacements et aux renumérotations) ; à défaut, par son
+**numéro** ; à défaut, « sans plan » (listée, et on peut cocher « Les poser sur le plan courant » : elles y arrivent avec
+leur provenance). L'image visée est retrouvée par l'identifiant de sa marque d'image, sinon le début du plan. La note
+générale va sur le premier plan qui reçoit une note. **Réimporter le même fichier ne double rien** : la clé de la note est
+gardée dans le commentaire (`commentaires.json`, champ `note`), donc aussi après avoir fermé et rouvert le projet. Un fichier
+qui vient d'un autre projet (nom différent) demande une confirmation.
+
+**Format du fichier de notes** (`shot-relecture`, version 1, JSON UTF-8) :
+`{"format","version","paquet","projet","relecteur","cree"(secondes),"date","general","notes":[{"id","plan","image","numero","titre","texte","dessin"(data:image/png;base64,…)}]}`.
+Le fichier du projet ne change pas de version : `commentaires.json` gagne seulement deux champs facultatifs (`note`,
+`dessin`) ; un projet sans note de relecture s'écrit comme avant.
+
+**Sécurité** : la page n'a ni lien, ni script, ni police, ni image du dehors, aucune requête (politique de contenu
+`default-src 'none'` + un seul script, le même pour tous les projets, qui ne contient aucun texte du projet) ; tout texte du
+projet (titres, dialogues, commentaires) est échappé. Le fichier de notes est traité comme **venant d'un inconnu** : 40 Mo
+au plus, format et version vérifiés, 3000 notes au plus, textes nettoyés et coupés à 20 000 caractères, identifiants réduits
+à lettres / chiffres / `-_.`, aucun nom de fichier du fichier n'est jamais utilisé, dessins PNG décodés sous limites (4096
+points par côté, 8 millions de pixels, 64 Mo de mémoire), réduits à 1280 de large et réécrits proprement (seuls les pixels
+restent). Un dessin refusé ne fait pas perdre sa note.
+
+**Sans latence** : l'interface ne calcule que les images (40 ms par image d'écran) ; leur réduction en JPEG, la page et le
+PDF sont écrits sur un autre fil, avec barre d'avancement, temps restant et « Arrêter » (rien n'est laissé : les fichiers
+sont d'abord écrits en `.part`, une page exportée avant sous le même nom n'est jamais détruite). Le projet est verrouillé
+tant que les images se calculent.
+
+Code : `src/relecture.rs` (modèle, page, notes, placement), `src/relecturejob.rs` (tâche), `src/relectureui.rs`
+(fenêtres, dessin sur l'image), `assets/relecture/page.js` et `page.css` (la page), `src/relecture_tests.rs`.
 
 ## Références visuelles
 
@@ -1415,7 +1477,7 @@ panneau (« Actualiser » la relit).
 
 ## Suggestions sonores (phase 1)
 
-Le panneau **Suggestions sonores** (barre des panneaux, Son > Suggestions sonores…, `vue.suggestions_sonores`) lit
+Le panneau **Suggestions sonores** (menu **Labo** > Suggestions sonores…, `vue.suggestions_sonores`) lit
 le storyboard et **propose des sons témoins** pour l'animatique : bruitages, ambiances, musique d'intention, voix
 des dialogues. On les écoute, on les accepte, on les régénère ou on les supprime ; rien n'entre dans le montage
 sans accord. Le détail, le contrat du serveur local, comment le lancer et ce qui manque encore sont dans
