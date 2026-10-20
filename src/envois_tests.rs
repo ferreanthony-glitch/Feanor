@@ -528,7 +528,7 @@ fn the_old_projects_of_the_fixture_open_with_no_envois() {
     let dir = m.parent().unwrap();
     assert!(!dir.join("versions").exists() && !dir.join(envois::FILE).exists());
     assert!(project::load(&m).expect("ouverture").doc.envois.is_empty());
-    assert_eq!(project::VERSION, 27, "les envois ne changent pas le format du projet");
+    assert!(project::VERSION >= 27, "les envois ne changent pas le format du projet (la 30 est celle du calque de couleur et de la toile infinie)");
 }
 
 // ------------------------------------------------------------------------------------ dans l'application

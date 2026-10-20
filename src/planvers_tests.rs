@@ -239,7 +239,7 @@ fn a_project_without_versions_is_exactly_as_before() {
     let ouvert = project::load(&m).expect("ouverture");
     assert!(ouvert.warnings.is_empty());
     assert_eq!(ouvert.doc.versions_vivantes().count(), 0);
-    assert_eq!(project::VERSION, 27, "les versions de plans ne changent pas le format du projet");
+    assert!(project::VERSION >= 27, "les versions de plans ne changent pas le format du projet (la 30 est celle du calque de couleur et de la toile infinie)");
 }
 
 #[test]
