@@ -82,6 +82,10 @@ fn the_montage_needs_the_token_and_a_plan_one_creates_is_one_s_own() {
     b.app.new_panel();
     assert_eq!(b.app.doc.panels.len(), avant);
     assert!(b.app.status.contains("jeton"), "{}", b.app.status);
+    // Marquer un envoi est une décision sur tout le film : le jeton aussi.
+    b.app.status.clear();
+    b.app.envois_ouvrir_marquage();
+    assert!(b.app.envois_ui.nouveau.is_none() && b.app.status.contains("jeton"), "{}", b.app.status);
     // Léa tient le jeton : refusé, avec son nom.
     lea.s.prendre(&[Cible::Montage], false);
     confirmer(&h);

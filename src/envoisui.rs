@@ -312,6 +312,10 @@ impl App {
 
     /// Marque un envoi : l'état de chaque plan, tout de suite (copie), puis l'instantané sur un fil.
     pub(crate) fn envois_marquer(&mut self, ctx: &egui::Context, nom: &str, date: u64) {
+        // Film partagé : un envoi est une décision sur tout le film, il demande le jeton du montage.
+        if self.partage_refuse_montage() {
+            return;
+        }
         if self.envois_ui.marquage.is_some() {
             self.status = "Un envoi est déjà en préparation.".into();
             return;
@@ -379,6 +383,9 @@ impl App {
 
     /// Ouvre la fenêtre « Marquer un envoi », avec un nom et la date du jour.
     pub(crate) fn envois_ouvrir_marquage(&mut self) {
+        if self.partage_refuse_montage() {
+            return;
+        }
         let n = self.doc.envois.prochain_numero();
         self.envois_ui.nouveau = Some(NouveauEnvoi { nom: format!("v{n} au réal"), date: envois::date_courte(crate::recovery::now_secs()), focus: true });
     }
