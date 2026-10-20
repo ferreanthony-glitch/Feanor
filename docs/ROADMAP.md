@@ -2251,7 +2251,8 @@ curseur, etc. Le curseur sur la timeline est déplaçable. » Menée sur la bran
   réunis, retirés, zone de prise d'un fanion, Suppr sans focus). Pas vu à l'écran dans cette séance :
   à essayer par Anthony.
 - Pas faits : longueur d'un commentaire (une plage dans la règle) ; réponses à un commentaire ; les
-  commentaires ne sont ni exportés (PDF, Storyboard Pro) ni copiés avec des plans copiés ou dupliqués.
+  commentaires ne sont pas exportés vers Storyboard Pro ni copiés avec des plans copiés ou dupliqués. (Le **PDF** les écrit
+  depuis la relecture par le réalisateur, 2026-10-20 : option « Avec les commentaires ».)
 
 ## Références visuelles (fenêtre « Références », 2026-10-19) ✅
 
@@ -3140,3 +3141,32 @@ Détail dans `docs/EXPORT_MONTAGE.md`. **Jamais ouvert dans Premiere Pro, DaVinc
   suffixés `_V2`. Aucun changement de format. Détails et vérifications : `docs/INTERFACE.md` partie 15.
 - Reste : l'étiquette dans la vue Vignettes ; défilement des cartes au clavier ; aperçu animé (toutes les images) d'une
   version au survol.
+
+## Relecture par le réalisateur (demandée par Anthony le 2026-10-20, branche `revue-realisateur`) ✅
+
+Le réalisateur / le client n'a pas SHOT : une page HTML hors ligne à lui envoyer, ses notes qui reviennent en commentaires.
+- ✅ **Export « Pour relecture »** (Fichier > Exporter, fenêtre Envois, « Plus… », Ctrl+K) : une page `.html` autonome
+  (images en base64, aucune adresse du dehors, politique de contenu `default-src 'none'`), plan par plan (numéro de la
+  numérotation, V2, durée, action / dialogue / notes, une carte par image de storyboard), champ de note et dessin (stylo
+  trois couleurs, gomme, annuler, effacer ; doigt, stylet, souris) sur chaque image, note générale, nom du relecteur,
+  « Enregistrer mes notes » (`notes-<titre>-<date>.json`), brouillon gardé dans le navigateur. Options : lecture animée de
+  chaque plan (≤ 16 images échantillonnées, identiques fondues), commentaires existants en lecture seule, PDF à imprimer
+  (3 plans par page, cadres à lignes). Étendue : film, séquence, plans choisis, plans modifiés depuis un envoi.
+- ✅ **Import des notes** (Fichier > Importer, ou le `.json` lâché sur la fenêtre) : lecture et validation sur un autre fil ;
+  placement par identifiant de plan, puis par numéro ; notes sans plan listées (option : les poser sur le plan courant) ; une
+  étape d'annulation nommée ; compte rendu « 12 notes importées sur 9 plans, 1 note sans plan (plan supprimé). » ;
+  **idempotent** (clé de la note gardée dans le commentaire) ; le dessin du relecteur par-dessus l'image quand son commentaire
+  est choisi, interrupteur dans le panneau Commentaires.
+- ✅ **Commentaires dans le PDF** : option « Avec les commentaires » (non résolus, sous l'image où ils tombent).
+- ✅ **Sans latence** : images calculées 40 ms par image d'écran, JPEG, page et PDF sur un autre fil, barre et « Arrêter », fichiers
+  `.part` renommés à la fin. **Fiabilité** : `commentaires.json` gagne deux champs facultatifs (`note`, `dessin`), **le format
+  du projet ne change pas** (`VERSION` reste 32) ; écrit par `write_sidecar` comme avant ; le projet d'essai de fiabilité porte
+  une note de relecture avec son dessin.
+- ✅ **Sécurité** : page sans script ni donnée du projet dans le script, tout le texte échappé ; fichier de notes non cru
+  (40 Mo, 3000 notes, textes, identifiants, dessins décodés sous limites et réécrits).
+- Vérifié dans un vrai navigateur (Chromium du volet intégré) : dessin, gomme, annulation, enregistrement, brouillon retrouvé,
+  lecture animée ; le fichier produit est relu par SHOT (`a_notes_file_written_by_a_real_browser_is_read`). Pas vu : un
+  téléphone, Safari, Firefox ; l'écran de SHOT (aucun lancement dans cette séance).
+- Pas fait / reste : une note modifiée par le relecteur puis renvoyée n'est pas mise à jour (la première version importée est
+  gardée) ; pas de vidéo par plan dans la page (images échantillonnées seulement) ; une réponse du réalisateur sur un commentaire
+  existant ; envoyer la page par e-mail depuis SHOT ; les notes sans plan ne sont pas mémorisées si on ferme la fenêtre sans les poser.
