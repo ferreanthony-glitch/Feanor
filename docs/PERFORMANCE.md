@@ -1126,3 +1126,17 @@ trait sec fixes (une seule image à calculer) sont prêts en moins d'un quart de
 - Le bord de l'encre est le contour à 25 % de couverture : un pinceau très doux (aérographe) a un liseré qui suit ce contour.
 - **Pas vu à l'écran** dans cette séance (aucune application lancée, consigne) : voir `docs/INTERFACE.md` section 21 ; planche de
   contact : `$env:FXMATIERE_PNG = '...'` puis `fxmatiere_tests::dump -- --ignored`.
+
+## 15. Notes de dessin : ce que coûtent les nouveaux gestes (2026-10-20, branche `notes-dessin`)
+
+Règle « sans latence » : aucun de ces gestes ne fait de travail lourd sur le fil de l'interface PENDANT le geste.
+
+| Geste | Pendant le geste | Au relâché / au clic |
+|---|---|---|
+| **Tracé droit** (Maj pendant un trait) | une ligne d'aperçu dessinée par image d'écran ; viser 200 points : **4 µs** (rien n'est calculé, la pointe n'est pas donnée au moteur) | le segment est posé en points réguliers (au plus 3000) : un trait ordinaire, **2,3 ms** pour 380 px au pinceau de 24 px (release, mesuré par l'essai) |
+| **Choisir un objet** (Ctrl + clic) | rien (le lasso est celui d'avant) | un parcours des pixels dessinés qui se touchent, une fois, au clic : **96 ms** pour un objet de 1,5 million de pixels (un dessin presque entier ; un objet ordinaire coûte quelques ms) |
+| **Remplir la sélection** (Maj+Suppr) | — | seules les tuiles de la zone sont lues et écrites, une étape d'annulation par tuiles |
+| **Un pinceau par sorte de calque** | une comparaison de deux réglages par image d'écran (quelques centaines d'octets) ; les réglages sont enregistrés hors geste | — |
+| **Clés de position** | la pose d'un calque à l'image demandée est une interpolation de six nombres (`poskeys::pose_at`) par calque et par image : aussi pour la lecture, l'export et les vignettes ; glisser un losange de la timeline ne refait que la liste des clés (pas de rendu avant le lâché) | — |
+
+Le fond de l'aperçu du trait (réglages du pinceau) est une couleur calculée, pas une texture de plus.

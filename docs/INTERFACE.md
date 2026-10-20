@@ -30,6 +30,9 @@ touches par défaut deux à deux, celles des commandes « en réserve » compris
 | Suppr | `edition.supprimer` et `reference.decharger` (en réserve, Storyboard Pro `DRAWING_UNLOAD_MODEL_KEY`) | la commande en réserve perd sa touche (la source reste notée) |
 | Maj+Suppr | `dessin.supprimer_hors_selection` et `edition.supprimer_et_resserrer` (en réserve, `DELETE_ALT_KEY`) | idem |
 
+(**Mis à jour le 2026-10-20, partie 24** : à la demande d'Anthony, Maj+Suppr est passée à `selection.remplir`
+— remplir une zone bitmap de la couleur courante ; sans zone bitmap choisie elle fait encore « effacer hors de
+la sélection », qui garde Maj+Retour arrière.)
 Aucune touche active ne changeait de sens : Suppr et Maj+Suppr font ce qu'elles faisaient. **Aucun
 raccourci d'Anthony n'a été changé.**
 
@@ -308,7 +311,8 @@ leurs calques). Les calques où quelque chose a été pris deviennent les calque
 l'image courante sont choisies dans le montage. La boîte entoure tout ; déplacer, échelle, rotation,
 inclinaison s'appliquent à tout, une étape d'annulation (c'est la sélection multi-calques existante,
 `multisel.rs`). Ctrl seul (lasso temporaire, boîte autour du pivot) et Maj seul (ajouter / retirer) gardent
-leur sens. Ctrl+Maj remplace la sélection (il n'ajoute pas).
+leur sens. ~~Ctrl+Maj remplace la sélection (il n'ajoute pas).~~ **Depuis le 2026-10-20, Ctrl+Maj cumule** (partie
+24) : un objet s'ajoute à la sélection ou en est retiré, un lasso ajoute ce qu'il prend.
 
 ### 4.5 Différences qui restent (voulues ou à décider)
 
@@ -1432,3 +1436,173 @@ gros), dessins (décodage sous limites, réduction, transparent, refus), fichier
 identifiant / numéro / sans plan / image perdue, import (commentaires, idempotence, rouvrir le projet, dessin abîmé), compte rendu en
 français, une seule étape d'annulation nommée, PDF avec commentaires et cadres de notes, tâche d'export (page + PDF, arrêt, fermeture,
 fichier d'avant gardé), fenêtres, dessin montré / caché, aucun fichier créé à l'import.
+
+
+---------------------------------------------------------------------------------------------------
+
+## 24. Notes d'Anthony : dessin (2026-10-20, branche `notes-dessin`)
+
+Huit notes du réalisateur, lot « dessin ». Pour chacune : ce qui existait, ce qui a été fait, la règle choisie,
+les conflits contrôlés. Essais : `src/dessin_notes_tests.rs`.
+
+### 24.1 Tracé droit (Maj tenue pendant un trait)
+
+- **Existait ?** Non pour les pinceaux. Maj servait déjà aux formes (angle par 15° pour la ligne, carré pour le
+  rectangle), à l'outil Sélection (ajouter), à la boîte (proportions), au Transformer (axe, 15°), à la molette
+  (rotation de la vue) et aux flèches (10 px). Rien pendant un trait de pinceau, de crayon ou de gomme.
+- **Règle.** Pendant un trait, Maj tenue : le moteur n'avance plus, un segment droit part du **dernier point
+  posé** (le début du trait si Maj est tenue dès l'appui) jusqu'à la pointe ; on le voit en aperçu (ligne à la
+  largeur du pinceau, dans sa couleur et son opacité ; gris pour la gomme). **Maj+Alt** : l'angle du segment est
+  aligné par pas de 15° (même fonction que la Maj de la ligne, `shapes::snap_angle`). Maj relâchée (ou bouton
+  relâché) : le segment est posé en une fois, en points réguliers (un tous les quarts de la taille du pinceau,
+  à vitesse de main rapide), puis le tracé libre reprend de son bout. Une seule étape d'annulation, le trait
+  entier. Marche en vectoriel (le segment devient un trait modifiable), en bitmap et avec la gomme (vectorielle ou
+  bitmap).
+- **Choix.** Alt n'est pas tenu à l'appui : Alt + appui est la pipette (tu le tiens pendant le trait seulement).
+  Un trait aligné sur un guide (`guides.rs`) est déjà droit : Maj n'y change rien. **Pas fait** : Maj + clic, puis
+  Maj + clic ailleurs pour relier deux points (façon Photoshop) ; le segment n'est pas calculé « en direct » avec
+  le vrai pinceau (aperçu en ligne), pour ne rien refaire sur le fil de l'interface pendant le geste.
+- **Sans latence.** Pendant le geste : une ligne dessinée par image d'écran. La pose du segment est le travail
+  d'un trait ordinaire (au plus 3000 points), au relâché, sur le fil de l'interface comme un trait normal.
+
+### 24.2 Ctrl pour choisir un objet, Ctrl+Maj pour en cumuler
+
+- **Existait ?** En partie. Ctrl tenu seul prend l'outil Sélection (le « lasso temporaire », `springtools.rs`) : un
+  clic sur un trait vectoriel le choisit. Ctrl+Maj tenus avec l'outil Sélection : « tous les calques » (Storyboard
+  Pro), qui **remplaçait** la sélection. Sur un calque bitmap, un clic ne choisissait rien.
+- **Règle finale.**
+
+| Geste | Résultat |
+|---|---|
+| Ctrl + clic sur un trait ou une zone remplie (vectoriel) | l'objet est choisi seul (comme avant) |
+| Ctrl + clic sur un dessin bitmap | **la forme d'un seul tenant** sous la souris : les pixels dessinés qui se touchent (huit voisins) ; un trait fin se vise à 4 pixels d'écran près ; le clic remplace la zone |
+| Ctrl + clic dans le vide | la sélection est lâchée |
+| Ctrl + glisser | lasso ou rectangle, comme avant (seul le clic sans glisser choisit un objet) |
+| Maj + clic (outil Sélection) | ajoute ou retire, sur le calque, comme avant ; vaut aussi pour la forme d'un dessin bitmap |
+| **Ctrl + Maj + clic** | **ajoute l'objet à la sélection, sur n'importe quel calque du plan, ou le retire s'il y était** (nouveau) |
+| **Ctrl + Maj + lasso / rectangle** | **ajoute** tout ce qu'il prend sur tous les calques (avant : remplaçait) |
+
+  La sélection faite sur un seul calque (traits vectoriels, ou zone bitmap pas soulevée) est reprise dans le
+  cumul. Ctrl+Maj ne prend jamais une poignée de la boîte (c'est un geste de choix : un trait tout contre le bord
+  de la boîte se choisit quand même). Les calques où quelque chose est pris deviennent les calques choisis, et
+  leurs clés à l'image courante se choisissent dans le montage (comme avant). Un dessin bitmap lui-même soulevé
+  (déplacé, pas posé) est d'abord posé.
+- **Conflits contrôlés.** `is_all_layers_gesture` (Ctrl+Maj, sans Alt) ne change pas ; Alt reste la pipette.
+  `update_springs` accepte maintenant Maj avec Ctrl pour prendre l'outil Sélection : sans cela, ajouter Maj à Ctrl
+  tenue rendait l'outil d'avant, et le clic peignait. Maj seule garde son sens. Les clés (montage) ont leurs propres
+  règles de Ctrl / Maj (partie 4) : rien n'y change.
+- **Limites.** Une forme bitmap « d'un seul tenant » : deux traits qui ne se touchent pas sont deux objets ; un
+  fond peint d'un seul tenant est un seul objet. Les objets d'un calque de couleur ou vidéo ne sont pas choisis.
+
+### 24.3 Un pinceau par sorte de calque
+
+- **Existait ?** Non : un seul pinceau (`App::brush`) pour tous les calques, pas même retenu d'une séance à l'autre.
+- **Règle.** SHOT retient le dernier pinceau utilisé sur un calque **vectoriel** et le dernier sur un calque
+  **bitmap**. Changer de calque (ou de plan) vers l'autre sorte rend le pinceau retenu pour cette sorte
+  (« Pinceau de calque bitmap retrouvé. » dans la barre d'état). Un calque qui n'a jamais servi garde le pinceau du
+  moment et le retient. Un dossier ou un calque d'effet ne change rien. Retenus dans les réglages de l'application
+  (`[panneau_pinceaux]` : `pinceau_vecto`, `pinceau_bitmap`), ils reviennent au lancement suivant. Le crayon et la
+  gomme gardent chacun leur réglage (ils ne changent pas avec le calque).
+- Le pinceau retenu est le réglage complet (taille, opacité, dynamiques…) tel qu'il était, retouches comprises, pas
+  seulement le nom de la brosse.
+
+### 24.4 Enregistrer les réglages d'une brosse
+
+- **Existait ?** En partie, caché : « Remplacer par le réglage courant » (clic droit sur une brosse de la
+  bibliothèque) et le bouton + (nouvelle brosse). Rien dans le panneau Réglages.
+- **Fait.** Une icône disquette à droite du nom du réglage, dans le haut du panneau Réglages de l'outil, ouvre un
+  petit menu : **Enregistrer dans « X »** (remplace le réglage de la brosse d'où vient le réglage courant ; grisé si
+  rien n'a changé ou si la brosse est une brosse de SHOT) ; **Enregistrer comme nouvelle brosse…** (la ligne du nom
+  se montre dans le panneau, OK / Annuler) ; **Rétablir l'ancien réglage de « X »** (juste après un « Enregistrer
+  dans », tant que la brosse a encore ce réglage). Quand le réglage a été retouché à la main, le nom est
+  « (réglé à la main) » suivi de « d'après « X » » (la dernière brosse choisie dans la bibliothèque ou gardée sous
+  un nom) : c'est elle que l'icône remplace. L'enregistrement dans la bibliothèque n'est pas dans l'historique du
+  projet (la bibliothèque est à l'application) : d'où le « Rétablir ».
+
+### 24.5 Réglages repliés, fond de l'aperçu
+
+- **Repliés.** Dans le panneau Réglages du pinceau, tout ce qui est **sous l'aperçu du trait** (les catégories et
+  leurs réglages) est replié derrière une petite flèche (`▸` replié, `▾` déplié, bulle « Déplier les réglages du
+  pinceau »). L'état est retenu (`reglages_ouverts`). Ce qui est au-dessus (taille, opacité, nom, enregistrer) reste
+  visible.
+- **Fond.** Le fond de l'aperçu n'est plus le papier blanc du projet : c'est `theme::apercu_trait`, un gris un peu
+  plus clair que le panneau (le panneau mélangé de 12 % de blanc dans les thèmes sombres, de 55 % dans le thème
+  clair), donc pour les trois thèmes. Si la couleur du trait lui ressemble (une brosse grise, la gomme), le fond est
+  poussé vers le blanc ou le noir, celui qui fait le mieux ressortir le trait, jusqu'à un contraste de 1,8:1
+  (`theme::fond_apercu_trait`). Les vignettes et lignes de la bibliothèque gardent le papier du projet.
+
+### 24.6 Remplir la sélection bitmap (Maj+Suppr)
+
+- **Existait ?** Pas le remplissage. **Maj+Suppr n'était pas libre** : elle était à « Effacer ce qui est hors de la
+  sélection » (`dessin.supprimer_hors_selection`, `DRAWING_DELETE_NON_SELECTION_KEY` de Storyboard Pro). Choix : la
+  nouvelle commande `selection.remplir` prend Maj+Suppr ; **sans zone bitmap choisie, Maj+Suppr fait encore l'ancien
+  geste** (vectoriel : garder seulement la sélection), et « effacer hors de la sélection » garde Maj+Retour arrière
+  (son second raccourci de Storyboard Pro). Seul le cas « zone bitmap + Maj+Suppr » change. Les deux jeux de
+  raccourcis (SHOT, façon Storyboard Pro) sont pareils.
+- **Règle.** La zone prend la couleur courante (bord anticrénelé mélangé), une étape d'annulation « Remplir la
+  sélection ». Un calque verrouillé (lui, son dossier ou sa position) refuse avec son message ; « préserver la
+  transparence » ne change que la couleur de ce qui est déjà dessiné (le vide reste vide, l'opacité reste) ; les
+  pochoirs des autres calques limitent le remplissage comme le pinceau. Une zone soulevée (déplacée, pas posée) : le
+  message dit de la poser d'abord. L'icône « Remplir » (seau) est dans les réglages de l'outil Sélection.
+
+### 24.7 Clés de position (outil Transformer)
+
+- **Existait ?** La transformation d'un calque (`Layer::transform` : décalage, échelle, étirement, rotation) était
+  **fixe**, sans clé. Les clés de caméra (`camera.rs`, `camkeys.rs`) et d'effets (`fx.rs`, `fxkeys.rs`) existaient.
+- **Cible choisie : le calque entier** (comme un « peg »). Un calque a des **clés de position**
+  (`Layer::pos_keys`, `poskeys.rs`) : à l'image `n` du plan, sa pose vaut telle valeur. Entre deux clés la pose va de
+  l'une à l'autre (décalage, échelle, étirement et rotation en ligne droite), avant la première et après la dernière
+  elle ne bouge pas. **Lisser** reprend le modèle des clés de caméra : `smooth` (arrive et repart lentement sur un
+  demi-intervalle) ou des adoucis d'entrée et de sortie en images, avec `camera::ease`.
+- **Outil Transformer, réglages > « Clés de position ».** Quatre icônes : **Clé de position** (pose une clé à
+  l'image courante avec la pose actuelle ; avec plusieurs calques choisis, une clé chacun), **Lisser la clé**
+  (bascule sur la clé d'ici), **Supprimer la clé d'ici**, **Supprimer toutes les clés** (le calque garde la pose de
+  l'image courante). Avec la clé d'ici : « arrivée » et « départ », les adoucis en images. Trois commandes sans
+  touche par défaut dans le fichier : `calque.cle_position`, `calque.cle_position_lisser`,
+  `calque.cle_position_supprimer`, `calque.cles_position_supprimer`.
+- **Animer.** Un calque qui a des clés est animé : le déplacer, l'agrandir, l'étirer ou le tourner à une image (poignées,
+  champs x / y / largeur / hauteur / angle, déplacement dans la vue 3D de la scène) **pose ou met à jour la clé de cette
+  image** ; le geste est une étape d'annulation, comme avant. Ctrl+R remet la clé de l'image courante à la pose
+  d'origine. Un miroir (calque ou plan) retourne toutes les clés. Les calques de couleur suivent les clés de leur trait.
+  Sans clé, rien ne change : le calque a sa pose fixe.
+- **Dans la timeline (animation).** Des **losanges verts** au milieu de la ligne du calque (des **ronds** quand la clé
+  est adoucie, cerclés de blanc quand elle est choisie) : un clic choisit la clé et y met la tête de lecture (Ctrl :
+  ajouter ou retirer) ; glisser la déplace (avec les autres clés choisies du calque, bloquées dans le plan, une étape
+  « Déplacer des clés de position ») ; Suppr supprime les clés choisies ; clic droit : lisser, supprimer. Pas encore
+  dans le montage (les pistes du montage ne les montrent pas).
+- **Partout où l'image est fabriquée** : l'affichage, la lecture, l'export (film, images, PDF), les vignettes, la pile
+  des versions, la vue 3D du plateau (multiplan) et la vue de dessus lisent la pose **à l'image demandée** (`Layer::pose`,
+  `transform_seen_at`). Les clés suivent les images insérées ou retirées, la coupe d'un plan (la pose de la coupe est
+  gardée de chaque côté, comme les clés de caméra), la réunion de deux plans, le changement de taille de la feuille.
+- **Format.** `VERSION` passe de 32 à **33** : `cles_position` d'un calque (liste de clés : `image`, `x`, `y`, et si
+  différents de leur défaut `echelle`, `rotation`, `etirement_x`, `etirement_y`, `lisse`, `adoucir_entree`,
+  `adoucir_sortie`). Une version précédente refuse le projet (elle le montrerait immobile). Un projet de version 32 ou
+  moins s'ouvre tel quel, sans clé. **Fusion avec l'autre lot de notes** : si ce lot a aussi besoin du 33, la fusion
+  garde `VERSION = 33` et réunit les deux descriptions dans le commentaire de `project.rs`.
+- **Limites.** Pas de courbe de vitesse libre (adoucis seulement) ; pas de clé sur le pivot ni sur l'opacité ; la
+  propagation façon EbSynth (`propager*.rs`, non modifié) lit la pose fixe du calque ; les calques « toute la
+  scène » ont leurs clés propres à chaque plan ; les clés ne se montrent pas dans le montage ; pas de copier / coller
+  de clés de position.
+
+### 24.8 À regarder à l'écran
+
+1. Pinceau, bitmap : tracer, tenir Maj en plein trait : un segment droit apparaît entre le dernier point et la croix ;
+   relâcher : il est posé. Maj dès l'appui : de l'appui à la croix. Maj+Alt : l'angle saute par 15°. Même chose avec la
+   gomme et sur un calque vectoriel (le trait reste modifiable avec l'outil Sélection). Ctrl+Z défait tout le trait.
+2. Deux taches bitmap : Ctrl + clic sur l'une (le contour la cerne), Ctrl+Maj + clic sur l'autre (les deux sont
+   cernées), Ctrl+Maj + clic encore sur la seconde (elle est retirée). Sur deux calques vectoriels : pareil, les deux
+   calques deviennent les calques choisis.
+3. Pinceau « encre » sur un calque vectoriel, passer sur un calque bitmap et choisir « gouache », revenir : « encre » ;
+   revenir au bitmap : « gouache » ; fermer et rouvrir SHOT : même chose.
+4. Réglages du pinceau : changer la taille de la brosse « Encre » : « (réglé à la main) d'après « Encre » » ; la
+   disquette : « Enregistrer dans « Encre » » est grisé s'il s'agit d'une brosse de SHOT (propose « comme nouvelle ») ;
+   avec une brosse de « Mes brosses », il remplace, puis « Rétablir l'ancien réglage ».
+5. Sous l'aperçu du trait : une petite flèche, tout est replié ; la déplier, fermer et rouvrir SHOT : l'état est retenu.
+   L'aperçu est sur un gris un peu plus clair que le panneau dans « Gris sombre », « Gris clair » et « Sombre » ; choisir
+   un gris moyen comme couleur : le fond s'éclaircit ou s'assombrit pour garder le trait lisible.
+6. Lasso (outil Sélection) sur un calque bitmap : Maj+Suppr remplit de la couleur courante ; Ctrl+Z défait ; sur un
+   calque verrouillé : refusé avec son message ; avec « préserver la transparence » : seul le dessin change de couleur.
+7. Outil Transformer : « Clés de position » dans les réglages. Poser une clé à l'image 1, aller à l'image 12, tirer le
+   calque : une clé naît, la lecture le déplace d'une clé à l'autre ; losanges verts dans la timeline ; cliquer sur un
+   losange, le glisser, Suppr ; clic droit > Lisser : le losange devient rond et le mouvement ralentit à ses bouts ;
+   exporter les images : le calque bouge dans l'export.
