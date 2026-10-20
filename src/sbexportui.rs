@@ -74,7 +74,6 @@ impl App {
     /// Fichier > Exporter vers Storyboard Pro.
     pub(crate) fn open_sb_export(&mut self) {
         self.end_stroke();
-        self.exactify_idle();
         if self.sb_export.as_ref().is_some_and(SbExportWindow::busy) {
             return;
         }
@@ -96,7 +95,7 @@ impl App {
         w.kept = None;
         match SbExportJob::start(out, exe, template, dest) {
             Ok(job) => {
-                w.job = Some(job);
+                w.job = Some(job.with_exact(self.rejeu_idle.clone()));
                 self.playing = false;
             }
             Err(e) => w.result = Some(Err(e)),

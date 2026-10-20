@@ -167,7 +167,6 @@ impl App {
     /// lui sont proposés d'emblée).
     pub(crate) fn open_relecture_export(&mut self, envoi: Option<u64>) {
         self.end_stroke();
-        self.exactify_idle();
         self.playing = false;
         if self.relecture.busy() {
             return;
@@ -456,7 +455,6 @@ impl App {
         if path.extension().is_none() {
             path.set_extension("html");
         }
-        self.exactify_idle();
         self.playing = false;
         let project = match self.doc.properties.title.trim() {
             "" => self.base_name_or(&w.title),
@@ -473,7 +471,7 @@ impl App {
         };
         w.result = None;
         match RelectureJob::start(&self.doc, &panels, &w.opts, meta, &path) {
-            Ok(job) => w.job = Some(job),
+            Ok(job) => w.job = Some(job.with_exact(self.rejeu_idle.clone())),
             Err(e) => w.result = Some(Err(e)),
         }
     }

@@ -155,9 +155,10 @@ impl App {
         }
     }
 
-    /// Le rendu exact de tous les dessins restés en rendu rapide, tout de suite (avant un export) :
-    /// calculé sur plusieurs cœurs, c'est le seul endroit où le réglage « rendu rapide partout » fait
-    /// attendre, et c'est à la demande de l'utilisateur.
+    /// Le rendu exact de tous les dessins restés en rendu rapide, tout de suite : calculé sur plusieurs cœurs, ce
+    /// n'est plus l'affaire d'un export (il refait ces dessins dans sa copie du projet, sur un autre fil : `ExportJob::with_exact`),
+    /// mais celle de qui veut le projet exact maintenant.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn exactify_idle(&mut self) {
         if self.rejeu_idle.is_empty() {
             return;
@@ -166,34 +167,14 @@ impl App {
         for id in &ids {
             self.rejeu.cancel(*id);
         }
-        let (w, h) = (self.doc.width, self.doc.height);
-        let jobs: Vec<(crate::document::CelId, crate::vector::VectorDrawing)> =
-            ids.iter().filter_map(|id| self.doc.cels.get(id).and_then(|c| c.vector.clone()).map(|d| (*id, d))).collect();
-        let done = crate::parallele::par_map(&jobs, 8, |_, (_, drawing)| {
-            let mut copy = drawing.clone();
-            for e in &mut copy.elements {
-                if e.cache_is_preview() {
-                    e.invalidate_cache();
-                }
-            }
-            let raster = copy.render(w, h);
-            (copy, raster)
-        });
-        let n = jobs.len();
-        for ((id, _), (copy, raster)) in jobs.into_iter().zip(done) {
-            let Some(c) = self.doc.cels.get_mut(&id) else { continue };
-            let Some(drawing) = c.vector.as_mut() else { continue };
-            for (e, exact) in drawing.elements.iter_mut().zip(&copy.elements) {
-                e.adopt_cache(exact);
-            }
-            let before = c.version;
-            c.raster = raster;
-            c.version += 1;
-            self.rejeu_warm.insert(id, c.version);
-            crate::rejeu::keep_saved(&mut self.written, id, before, c.version);
+        let done = crate::exportrender::rendre_exacts(&mut self.doc, &ids);
+        let n = done.len();
+        for (id, before, after) in done {
+            self.rejeu_warm.insert(id, after);
+            crate::rejeu::keep_saved(&mut self.written, id, before, after);
         }
         self.renderer.invalidate_all();
-        self.status = format!("Rendu exact de {n} dessin(s) avant l'export.");
+        self.status = format!("Rendu exact de {n} dessin(s).");
     }
 
     // ------------------------------------------------------------------ la fenêtre

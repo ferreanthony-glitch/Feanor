@@ -152,7 +152,9 @@ fn the_snapshot_is_built_in_slices_and_matches_the_all_at_once_one() {
 /// transitions), chaque image du nouvel export est celle de l'ancien chemin, pixel pour pixel, à plusieurs images de chaque plan.
 #[test]
 fn the_new_frames_are_the_old_ones_pixel_for_pixel_on_the_reliability_project() {
-    monde::lire();
+    // (Exclusif : l'ancien chemin, de référence, compose avec la réserve commune des dessins dérivés, qu'un autre essai
+    // pourrait vider ou réduire en cours de route — un calque d'effet d'ajustement disparaîtrait alors de l'image.)
+    monde::ecrire();
     let travail = dossier("export-rendu-pixels");
     let doc = projet_complet(&travail).doc;
     let mut vus_fx = 0;
@@ -762,6 +764,47 @@ fn a_bad_ffmpeg_argument_list_is_said_at_once_and_a_missing_ffmpeg_too() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+#[test]
+fn textured_strokes_left_in_fast_rendering_are_made_exact_in_the_copy_only() {
+    monde::lire();
+    let (mut doc, id) = crate::affichage_tests::doc_with(640, 360, crate::affichage_tests::gros_traits(2, 640, 360, 3));
+    let mut calque = crate::document::Layer::new("Traits", LayerKind::Vector);
+    calque.frames = vec![Some(id)];
+    doc.panels[0].layers = vec![calque];
+    doc.panels[0].length = 1;
+    let avant = doc.cels[&id].version;
+    let mut b = exportrender::SnapshotBuilder::new(&doc, &[0]).with_exact(vec![id]);
+    let t = Instant::now();
+    // Tant que les dessins se copient, le projet est lu ; ensuite le rendu exact travaille sur la copie, sur un autre fil.
+    let mut a_lu = false;
+    while !b.step(&doc, Duration::ZERO) {
+        a_lu |= b.reads_project();
+        std::thread::sleep(Duration::from_millis(1));
+        assert!(t.elapsed() < Duration::from_secs(60));
+    }
+    assert!(!b.reads_project());
+    let copie = b.finish();
+    assert!(copie.cels[&id].version > avant, "la copie est refaite exacte");
+    assert_eq!(copie.cels[&id].vector.as_ref().map(|v| v.missing_caches()), Some(0), "tous ses traits ont leurs pixels exacts");
+    assert_eq!(doc.cels[&id].version, avant, "le projet affiché n'est pas touché");
+    let _ = a_lu;
+}
+
+#[test]
+fn a_film_whose_ffmpeg_does_not_start_leaves_the_previous_file_alone() {
+    monde::lire();
+    let doc = doc_with_drawing(1, 2);
+    let dir = dossier_neuf("ffmpeg-absent");
+    let out = dir.join("film.mp4");
+    std::fs::write(&out, b"ancien film").unwrap();
+    let frames = export::frames_for(&doc, Range::Montage, 0);
+    let mut job = ExportJob::video_with_sound(Path::new("ffmpeg-qui-n-existe-pas.exe"), |_| Ok(vec![]), &out, frames, None);
+    court(&mut job, &doc);
+    assert!(matches!(&job.outcome, Some(Err(e)) if e.contains("ffmpeg ne démarre pas")), "{:?}", job.outcome);
+    assert_eq!(std::fs::read(&out).unwrap(), b"ancien film", "le film d'avant n'est pas touché");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 // ------------------------------------------------------------------------- l'interface et l'export
 
 /// Aucune image ne se compose sur le fil de l'interface, et le projet peut changer pendant l'export sans changer le résultat.
@@ -1058,6 +1101,18 @@ mod application {
     }
 
     #[test]
+    fn a_finished_export_does_not_stop_the_next_one() {
+        let mut b = banc(projet_pour_l_application(1), false);
+        let (dir, _) = demarrer(&mut b, "app-suite");
+        assert!(jusqu_a(&mut b, Duration::from_secs(60), |b| b.app.export_job.as_ref().is_some_and(|j| j.outcome.is_some())));
+        // La fenêtre du premier est restée ouverte : un nouvel export la referme au lieu d'être refusé.
+        assert!(b.app.export_libre());
+        assert!(b.app.export_job.is_none());
+        assert!(b.app.status.contains("images exportées"), "{}", b.app.status);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn a_second_export_is_refused_while_one_runs() {
         let mut b = banc(projet_pour_l_application(2), false);
         let (dir, _) = demarrer(&mut b, "app-deux");
@@ -1090,6 +1145,31 @@ mod application {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    #[test]
+    fn quitting_warns_once_about_a_running_export_then_quits_and_stops_it() {
+        let mut b = banc(projet_a_effets(2, 60), false);
+        let (dir, _) = demarrer(&mut b, "app-quitter");
+        assert!(jusqu_a(&mut b, Duration::from_secs(30), |b| b.app.onglet_occupe().is_none()));
+        assert_eq!(b.app.exports_en_cours(), vec!["l'export"]);
+        b.app.perform(crate::app::Pending::Quit);
+        assert!(!b.app.allow_close, "la première fois, SHOT prévient au lieu de quitter");
+        assert!(b.app.status.contains("Quitter arrêterait l'export"), "{}", b.app.status);
+        b.app.perform(crate::app::Pending::Quit);
+        assert!(b.app.allow_close, "le deuxième « Quitter » quitte");
+        // Quitter arrête l'export : plus rien ne reste d'inachevé quand le travail est lâché.
+        let mut job = b.app.export_job.take().unwrap();
+        job.cancel();
+        assert!(matches!(job.outcome, Some(Err(_))) || matches!(job.outcome, Some(Ok(_))));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn no_export_means_quitting_is_not_held_back() {
+        let mut b = banc(projet_a_effets(1, 3), false);
+        assert!(b.app.exports_en_cours().is_empty());
+        b.app.perform(crate::app::Pending::Quit);
+        assert!(b.app.allow_close);
+    }
     /// Pendant l'export, l'interface répond : le temps d'une image d'écran reste petit (pas de calcul d'image sur ce fil).
     #[test]
     fn the_interface_frames_stay_short_during_an_export() {
@@ -1112,3 +1192,365 @@ mod application {
         std::fs::remove_dir_all(&dir).ok();
     }
 }
+
+// ------------------------------------------------------------------------------- mesures (ignorées)
+
+/// Mesures de `docs/PERFORMANCE.md`, section « Exports hors du fil de l'interface » :
+/// `cargo test --release --offline --target-dir target\msvc perf_export -- --ignored --nocapture --test-threads=1`
+/// (un essai par processus pour la mémoire : `perf_export_png_legacy`, `perf_export_png_background`, `perf_export_film_legacy`,
+/// `perf_export_film_background`, et `perf_export_snapshot_cost`).
+mod mesures {
+    use super::*;
+    use crate::document::Cel;
+    use crate::perf_tests::banc;
+    use crate::raster::{empty_tile, TILE};
+
+    #[repr(C)]
+    struct Compteurs {
+        cb: u32,
+        faute_pages: u32,
+        pic_ensemble: usize,
+        ensemble: usize,
+        pic_pagine: usize,
+        pagine: usize,
+        pic_non_pagine: usize,
+        non_pagine: usize,
+        fichier: usize,
+        pic_fichier: usize,
+    }
+
+    extern "system" {
+        fn GetCurrentProcess() -> isize;
+        fn K32GetProcessMemoryInfo(process: isize, compteurs: *mut Compteurs, cb: u32) -> i32;
+    }
+
+    /// (mémoire de travail, pic de mémoire de travail) du processus, en Mo.
+    fn memoire() -> (f64, f64) {
+        let mut c = Compteurs { cb: std::mem::size_of::<Compteurs>() as u32, faute_pages: 0, pic_ensemble: 0, ensemble: 0, pic_pagine: 0, pagine: 0, pic_non_pagine: 0, non_pagine: 0, fichier: 0, pic_fichier: 0 };
+        // SAFETY : la structure a la disposition de PROCESS_MEMORY_COUNTERS et sa taille est donnée.
+        unsafe { K32GetProcessMemoryInfo(GetCurrentProcess(), &mut c, c.cb) };
+        (c.ensemble as f64 / 1e6, c.pic_ensemble as f64 / 1e6)
+    }
+
+    fn tuile(seed: u32) -> crate::raster::Tile {
+        let mut t = empty_tile();
+        for (i, p) in t.iter_mut().enumerate() {
+            let (x, y) = ((i % TILE) as u32, (i / TILE) as u32);
+            if (x + y + seed) % 5 < 3 {
+                *p = Color32::from_rgba_premultiplied(30 + (seed % 120) as u8, 20 + (seed % 90) as u8, 40, 200);
+            }
+        }
+        t
+    }
+
+    /// Un film en 4K (feuille de 7 680 × 4 320) : six calques de 150 tuiles dont un flou, une teinte, une rotation, une caméra
+    /// qui avance et tourne un peu : chaque image est différente, et lourde.
+    fn projet_4k(images: usize) -> Document {
+        let mut doc = Document::with_frame(3840, 2160, 24);
+        let mut calques = Vec::new();
+        let (tx0, ty0, tw, th) = (30usize, 17usize, 60usize, 34usize);
+        let across = doc.width.div_ceil(TILE);
+        for l in 0..6 {
+            let mut layer = crate::document::Layer::new(&format!("Calque {}", l + 1), LayerKind::Bitmap);
+            let mut dernier = None;
+            for f in 0..images {
+                if f % (2 + l) == 0 {
+                    let mut cel = Cel::new(doc.width, doc.height, LayerKind::Bitmap);
+                    for k in 0..150 {
+                        let (x, y) = (tx0 + (k * 7 + f + l * 11) % tw, ty0 + (k * 13 + l * 5) % th);
+                        cel.raster.tiles[y * across + x] = Some(tuile((l * 1000 + f + k) as u32));
+                    }
+                    dernier = Some(doc.add_cel(cel));
+                }
+                layer.frames.push(dernier);
+            }
+            match l {
+                1 => {
+                    let mut flou = Effect::new(EffectKind::GaussianBlur);
+                    flou.set_param(0, 8.0);
+                    layer.fx.push(flou);
+                }
+                3 => layer.fx.push(Effect::new(EffectKind::HueSaturation)),
+                4 => layer.transform = crate::document::LayerTransform { angle: 0.05, scale: 1.02, ..Default::default() },
+                _ => {}
+            }
+            calques.push(layer);
+        }
+        doc.panels[0].layers = calques;
+        doc.panels[0].length = images;
+        let c = doc.default_camera();
+        doc.panels[0].camera = vec![CameraKey::new(0, c), CameraKey::new(images - 1, Camera { x: c.x + 220.0, zoom: c.zoom * 1.06, angle: 0.02, ..c })];
+        doc
+    }
+
+    fn stats(v: &mut [f64]) -> (f64, f64, f64) {
+        if v.is_empty() {
+            return (0.0, 0.0, 0.0);
+        }
+        v.sort_by(f64::total_cmp);
+        (v.iter().sum::<f64>() / v.len() as f64, v[(v.len() * 95 / 100).min(v.len() - 1)], v[v.len() - 1])
+    }
+
+    #[derive(Clone, Copy, PartialEq)]
+    enum Sortie {
+        Png,
+        Film,
+    }
+
+    fn rapporter(titre: &str, ui: &mut Vec<f64>, total: Duration, images: usize, avant: f64) {
+        let (moy, p95, pire) = stats(ui);
+        let (_, pic) = memoire();
+        println!(
+            "PERF export {titre:<34} image d'écran : moy {moy:>6.2} ms, p95 {p95:>6.2}, pire {pire:>7.2} ({} images d'écran) | export {:.1} s ({:.2} i/s) | mémoire {avant:.0} Mo avant, pic {pic:.0} Mo",
+            ui.len(),
+            total.as_secs_f64(),
+            images as f64 / total.as_secs_f64()
+        );
+    }
+
+    /// L'ancien export : les images se calculent sur le fil de l'interface, 40 ms par image d'écran au moins (le test se fait
+    /// entre deux images : une image de 4K finit toujours), et partent vers le même écrivain.
+    fn ancien(sortie: Sortie, images: usize) {
+        monde::lire();
+        let (_, avant) = memoire();
+        let mut b = banc(projet_4k(images), true);
+        let doc_frame = b.app.doc.frame;
+        let dir = dossier_neuf("mesure-ancien");
+        let frames = export::frames_for(&b.app.doc, Range::Montage, 0);
+        enum Ecrivain {
+            Png(std::sync::mpsc::SyncSender<(usize, Image)>, Vec<std::thread::JoinHandle<()>>),
+            Film(std::process::Child, std::sync::mpsc::SyncSender<Image>, std::thread::JoinHandle<()>),
+        }
+        let ecrivain = match sortie {
+            Sortie::Png => {
+                let (tx, rx) = std::sync::mpsc::sync_channel::<(usize, Image)>(8);
+                let rx = Arc::new(Mutex::new(rx));
+                let fils = (0..4)
+                    .map(|_| {
+                        let (rx, dir) = (rx.clone(), dir.clone());
+                        std::thread::spawn(move || loop {
+                            let Ok((i, img)) = rx.lock().unwrap().recv() else { break };
+                            crate::io::write_png(&dir.join(format!("a_{:04}.png", i + 1)), &img, doc_frame[0], doc_frame[1]).unwrap();
+                        })
+                    })
+                    .collect();
+                Ecrivain::Png(tx, fils)
+            }
+            Sortie::Film => {
+                let ffmpeg = export::find_ffmpeg(None).expect("ffmpeg");
+                let enc = export::probe(&ffmpeg).unwrap();
+                let out = dir.join("film.mp4");
+                let args = export::video_args(Format::Mp4, &enc, doc_frame, 24, false, None, &out).unwrap();
+                let mut c = std::process::Command::new(&ffmpeg);
+                c.args(&args).stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+                let mut child = c.spawn().expect("ffmpeg");
+                let mut stdin = child.stdin.take().unwrap();
+                let (tx, rx) = std::sync::mpsc::sync_channel::<Image>(8);
+                let fil = std::thread::spawn(move || {
+                    use std::io::Write;
+                    for img in rx {
+                        stdin.write_all(bytemuck::cast_slice(&img[..])).unwrap();
+                    }
+                });
+                Ecrivain::Film(child, tx, fil)
+            }
+        };
+        // Le cache des quatre dernières images de l'ancien export, et son pas de 40 ms.
+        let mut cache: Vec<(render::Plan, Camera, Image)> = Vec::new();
+        let (mut suivante, mut ui) = (0usize, Vec::new());
+        let t0 = Instant::now();
+        while suivante < frames.len() {
+            let t = Instant::now();
+            let m = b.image(Vec::new(), 0.016);
+            let t_pas = Instant::now();
+            // (Le pas de l'ancien export.)
+            while suivante < frames.len() && t_pas.elapsed() < Duration::from_millis(40) {
+                let (p, f) = frames[suivante];
+                let doc = &b.app.doc;
+                let plan = render::panel_plan_at(doc, p, f, doc.render_paper());
+                let cam = doc.panel_camera(p, f);
+                let img = match cache.iter().position(|(lp, lc, _)| *lp == plan && *lc == cam) {
+                    Some(k) => cache[k].2.clone(),
+                    None => {
+                        let img: Image = Arc::new(render::camera_image(doc, &plan, &cam));
+                        cache.push((plan, cam, img.clone()));
+                        if cache.len() > 4 {
+                            cache.remove(0);
+                        }
+                        img
+                    }
+                };
+                match &ecrivain {
+                    Ecrivain::Png(tx, _) => tx.send((suivante, img)).unwrap(),
+                    Ecrivain::Film(_, tx, _) => tx.send(img).unwrap(),
+                }
+                suivante += 1;
+            }
+            ui.push(m.construction + m.decoupage + m.carte + t_pas.elapsed().as_secs_f64() * 1e3);
+            let _ = t;
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        match ecrivain {
+            Ecrivain::Png(tx, fils) => {
+                drop(tx);
+                fils.into_iter().for_each(|f| f.join().unwrap());
+            }
+            Ecrivain::Film(mut child, tx, fil) => {
+                drop(tx);
+                fil.join().unwrap();
+                child.wait().unwrap();
+            }
+        }
+        rapporter(if sortie == Sortie::Png { "PNG, ancien (fil de l'interface)" } else { "film, ancien (fil de l'interface)" }, &mut ui, t0.elapsed(), frames.len(), avant);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Le nouvel export : le cliché, puis les fils de rendu ; l'interface tourne à côté.
+    fn nouveau(sortie: Sortie, images: usize) {
+        monde::lire();
+        // PELURE_PRIORITE_NORMALE=1 : pour voir ce que la priorité basse change.
+        if std::env::var_os("PELURE_PRIORITE_NORMALE").is_some() {
+            crate::parallele::set_priorite_export(false);
+        }
+        let (_, avant) = memoire();
+        let mut b = banc(projet_4k(images), true);
+        let dir = dossier_neuf("mesure-nouveau");
+        let frames = export::frames_for(&b.app.doc, Range::Montage, 0);
+        let job = match sortie {
+            Sortie::Png => ExportJob::images(&dir, "n", frames.clone(), b.app.doc.frame, true),
+            Sortie::Film => {
+                let ffmpeg = export::find_ffmpeg(None).expect("ffmpeg");
+                let enc = export::probe(&ffmpeg).unwrap();
+                let out = dir.join("film.mp4");
+                let args = export::video_args(Format::Mp4, &enc, b.app.doc.frame, 24, false, None, &out).unwrap();
+                ExportJob::video(&ffmpeg, args, &out, frames.clone(), None).unwrap()
+            }
+        };
+        let t0 = Instant::now();
+        b.app.start_job(job);
+        let mut ui = Vec::new();
+        while b.app.export_job.as_ref().is_some_and(|j| j.outcome.is_none()) && t0.elapsed() < Duration::from_secs(900) {
+            let m = b.image(Vec::new(), 0.016);
+            ui.push(m.construction + m.decoupage + m.carte);
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        let total = t0.elapsed();
+        assert!(matches!(b.app.export_job.as_ref().unwrap().outcome, Some(Ok(_))), "{:?}", b.app.export_job.as_ref().unwrap().outcome);
+        rapporter(if sortie == Sortie::Png { "PNG, nouveau (fils de rendu)" } else { "film, nouveau (fils de rendu)" }, &mut ui, total, frames.len(), avant);
+        b.app.export_job = None;
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    #[ignore]
+    fn perf_export_png_legacy() {
+        ancien(Sortie::Png, 48);
+    }
+
+    #[test]
+    #[ignore]
+    fn perf_export_png_background() {
+        nouveau(Sortie::Png, 48);
+    }
+
+    #[test]
+    #[ignore]
+    fn perf_export_film_legacy() {
+        ancien(Sortie::Film, 48);
+    }
+
+    #[test]
+    #[ignore]
+    fn perf_export_film_background() {
+        nouveau(Sortie::Film, 48);
+    }
+
+    /// Le cliché d'un grand projet : ce que l'interface paie au départ de l'export (structure + tranches de dessins).
+    #[test]
+    #[ignore]
+    fn perf_export_snapshot_cost() {
+        monde::lire();
+        for (plans, calques, images, tuiles) in [(30, 3, 24, 6), (600, 3, 24, 1), (600, 8, 48, 4)] {
+            let doc = crate::perf_tests::projet_long(plans, calques, images, tuiles);
+            let tous: Vec<usize> = (0..doc.panels.len()).collect();
+            let un_plan = [doc.panels.len() / 2];
+            for (nom, panels) in [("tout le montage", &tous[..]), ("un seul plan", &un_plan[..])] {
+                let mut structure = Vec::new();
+                let mut dessins = Vec::new();
+                let mut plus_longue = 0.0f64;
+                for _ in 0..5 {
+                    let t = Instant::now();
+                    let mut b = exportrender::SnapshotBuilder::new(&doc, panels);
+                    structure.push(t.elapsed().as_secs_f64() * 1e3);
+                    let t = Instant::now();
+                    let mut tranches = Vec::new();
+                    loop {
+                        let s = Instant::now();
+                        let fini = b.step(&doc, Duration::from_millis(8));
+                        tranches.push(s.elapsed().as_secs_f64() * 1e3);
+                        if fini {
+                            break;
+                        }
+                    }
+                    dessins.push(t.elapsed().as_secs_f64() * 1e3);
+                    plus_longue = plus_longue.max(tranches.iter().cloned().fold(0.0, f64::max));
+                    let _ = b.finish();
+                }
+                let (n_cels, _) = {
+                    let mut b = exportrender::SnapshotBuilder::new(&doc, panels);
+                    b.step(&doc, Duration::MAX);
+                    b.progress()
+                };
+                println!(
+                    "PERF cliché {plans} plans x {calques} calques x {images} images, {nom} : structure {:.2} ms (pire {:.2}), dessins {n_cels} en {:.2} ms au total (tranche la plus longue {plus_longue:.2} ms)",
+                    stats(&mut structure.clone()).0,
+                    stats(&mut structure).2,
+                    stats(&mut dessins).0
+                );
+            }
+        }
+    }
+
+    /// (Essai de mise au point) ffmpeg seul, sans calcul d'image : la vitesse de l'encodage, priorité normale ou basse.
+    #[test]
+    #[ignore]
+    fn perf_export_ffmpeg_alone() {
+        let ffmpeg = export::find_ffmpeg(None).expect("ffmpeg");
+        let enc = export::probe(&ffmpeg).unwrap();
+        let frame = [3840usize, 2160];
+        let img: Image = Arc::new(vec![Color32::from_rgb(40, 90, 150); frame[0] * frame[1]]);
+        // Des images un peu variées (sinon x264 triche).
+        let mut variees = Vec::new();
+        for k in 0..4 {
+            let mut v = (*img).clone();
+            for (i, p) in v.iter_mut().enumerate() {
+                if (i / 97 + k * 31) % 7 < 3 {
+                    *p = Color32::from_rgb((i % 251) as u8, (i / 3 % 253) as u8, 120);
+                }
+            }
+            variees.push(Arc::new(v));
+        }
+        for basse in [false, true] {
+            let out = std::env::temp_dir().join(format!("shot-ffmpeg-seul-{basse}.mp4"));
+            let args = export::video_args(Format::Mp4, &enc, frame, 24, false, None, &out).unwrap();
+            let mut c = std::process::Command::new(&ffmpeg);
+            c.args(&args).stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+            if basse {
+                use std::os::windows::process::CommandExt;
+                c.creation_flags(0x0800_0000 | 0x4000);
+            }
+            let t = Instant::now();
+            let mut child = c.spawn().unwrap();
+            let mut stdin = child.stdin.take().unwrap();
+            {
+                use std::io::Write;
+                for k in 0..48 {
+                    stdin.write_all(bytemuck::cast_slice(&variees[k % 4][..])).unwrap();
+                }
+            }
+            drop(stdin);
+            child.wait().unwrap();
+            println!("PERF ffmpeg seul, priorité {} : {:.1} s pour 48 images 4K", if basse { "basse" } else { "normale" }, t.elapsed().as_secs_f64());
+            std::fs::remove_file(&out).ok();
+        }
+    }}

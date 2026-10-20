@@ -820,6 +820,9 @@ pub struct App {
     pub(crate) doc_epoch: u64,
     pub(crate) show_help: bool,
     pub(crate) allow_close: bool,
+    /// Le moment où SHOT a prévenu qu'un export en cours serait arrêté par « Quitter » (un deuxième « Quitter » dans les
+    /// quinze secondes quitte pour de bon).
+    pub(crate) quitter_prevenu: Option<std::time::Instant>,
     pub(crate) export_transparent: bool,
     pub(crate) follow_frame: bool,
     /// Pendant l'affichage des panneaux : `follow_frame` de cette image d'écran. Le montage et la
@@ -1232,6 +1235,7 @@ impl App {
             doc_epoch: 0,
             show_help: false,
             allow_close: false,
+            quitter_prevenu: None,
             export_transparent: false,
             follow_frame: false,
             following: false,
@@ -2929,6 +2933,9 @@ impl App {
             // `accueil.rs`) : `onglets.rs`.
             Pending::Close => self.fermer_l_onglet_affiche(),
             Pending::Quit => {
+                if self.quitter_arrete_un_export() {
+                    return;
+                }
                 self.allow_close = true;
                 self.ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
@@ -3097,11 +3104,9 @@ impl App {
     /// calculent sur d'autres fils, sur une copie du projet : SHOT reste libre pendant l'export.
     pub(crate) fn export_storyboard(&mut self) {
         self.end_stroke();
-        if self.export_job.is_some() {
-            self.status = "Un export est déjà en cours : attends sa fin, ou arrête-le.".into();
+        if !self.export_libre() {
             return;
         }
-        self.exactify_idle();
         let Some(dir) = Self::pick_folder("Dossier où exporter le storyboard") else { return };
         let all: Vec<usize> = (0..self.doc.panels.len()).collect();
         let (frames, items) = crate::export::storyboard_items(&self.doc, &all);
@@ -3111,11 +3116,9 @@ impl App {
 
     pub(crate) fn export_frame(&mut self) {
         self.end_stroke();
-        if self.export_job.is_some() {
-            self.status = "Un export est déjà en cours : attends sa fin, ou arrête-le.".into();
+        if !self.export_libre() {
             return;
         }
-        self.exactify_idle();
         let Some(mut path) = rfd::FileDialog::new()
             .add_filter("Image PNG", &["png"])
             .set_file_name(format!("image_{:04}.png", self.global_frame() + 1))
@@ -4248,10 +4251,50 @@ impl App {
     fn handle_close_request(&mut self, ctx: &egui::Context) {
         // (Pendant un enregistrement, la fermeture l'attend : `request` retient la demande.)
         // (Tous les onglets comptent : un projet modifié dans un onglet caché retient aussi la fermeture.)
-        if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close && self.infos_onglets().iter().any(|i| i.a_perdre()) {
-            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-            self.request(Pending::Quit);
+        if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
+            if self.infos_onglets().iter().any(|i| i.a_perdre()) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                self.request(Pending::Quit);
+            } else if self.quitter_arrete_un_export() {
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            }
         }
+    }
+
+    /// Les exports qui tournent encore (le film, le montage, la fiche, la page de relecture, Storyboard Pro), par leur nom.
+    pub(crate) fn exports_en_cours(&self) -> Vec<&'static str> {
+        let mut v = Vec::new();
+        if self.export_job.as_ref().is_some_and(|j| j.outcome.is_none()) {
+            v.push("l'export");
+        }
+        if self.editorial.as_ref().is_some_and(crate::editorialui::EditorialWindow::busy) {
+            v.push("l'export pour le montage");
+        }
+        if self.fiche.as_ref().is_some_and(crate::ficheui::FicheWindow::busy) {
+            v.push("la fiche technique");
+        }
+        if self.sb_export.as_ref().is_some_and(crate::sbexportui::SbExportWindow::busy) {
+            v.push("l'export vers Storyboard Pro");
+        }
+        if self.onglets.iter().enumerate().any(|(i, _)| if i == self.actif { self.relecture.export_en_cours() } else { self.onglets[i].etat.as_ref().is_some_and(|e| e.relecture.export_en_cours()) }) {
+            v.push("la page de relecture");
+        }
+        v
+    }
+
+    /// « Quitter » arrêterait un export en cours : la première fois, SHOT le dit au lieu de quitter ; un deuxième « Quitter »
+    /// dans les quinze secondes quitte pour de bon (l'export est arrêté, ses fichiers inachevés effacés). Vrai : on ne quitte pas.
+    fn quitter_arrete_un_export(&mut self) -> bool {
+        let en_cours = self.exports_en_cours();
+        if en_cours.is_empty() {
+            return false;
+        }
+        if self.quitter_prevenu.is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(15)) {
+            return false;
+        }
+        self.quitter_prevenu = Some(std::time::Instant::now());
+        self.status = format!("Quitter arrêterait {} : attends sa fin, ou refais « Quitter » pour l'arrêter.", en_cours.join(" et "));
+        true
     }
 
     fn update_title(&mut self, ctx: &egui::Context) {

@@ -305,7 +305,7 @@ fn command(program: &Path) -> Command {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         // Sous la priorité normale : l'encodage (x264 prend tous les cœurs) ne passe pas avant l'interface.
         const BELOW_NORMAL_PRIORITY_CLASS: u32 = 0x0000_4000;
-        c.creation_flags(CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS);
+        c.creation_flags(CREATE_NO_WINDOW | if crate::parallele::priorite_export() { BELOW_NORMAL_PRIORITY_CLASS } else { 0 });
     }
     c
 }
@@ -834,6 +834,8 @@ pub struct ExportJob {
     /// Les zones des transitions du montage (`with_transitions`) ; vides : aucune transition.
     zones: Vec<crate::transitions::Zone>,
     snapshot: Option<Arc<Document>>,
+    /// Les dessins restés en rendu rapide, à refaire exacts dans le cliché (`with_exact`).
+    exact: Vec<crate::document::CelId>,
     prelude: Option<Prelude>,
     launch: Option<Launch>,
     stage: Stage,
@@ -844,6 +846,8 @@ pub struct ExportJob {
     cancel: Arc<AtomicBool>,
     /// Ce que l'annulation (ou un échec) efface.
     erase: Erase,
+    /// L'écriture directe de la cible (ffmpeg) commence au lancement : `erase` passe alors à `Fichier`.
+    erase_after_launch: bool,
     rendering_since: Option<Instant>,
     /// Le message de réussite, quand ce n'est pas « N images exportées ».
     done_text: Option<String>,
@@ -971,7 +975,9 @@ impl ExportJob {
         let mut job = ExportJob::new(format!("Export de la vidéo ({} images)", frames.len()), out.to_path_buf(), frames, true, Sink::Rien, Tx::Rien, Arc::default());
         job.launch = Some(launch);
         job.tx = None;
-        job.erase = Erase::Fichier;
+        // (Le film n'est effacé à l'arrêt que si ffmpeg est parti : un ffmpeg qui ne démarre pas laisse le fichier d'avant.)
+        job.erase = Erase::Rien;
+        job.erase_after_launch = true;
         if let Some(s) = sound {
             job.prelude = Some(Box::new(move |snap, cancel| {
                 let path = std::env::temp_dir().join(format!("pelure-export-{}-{}.wav", std::process::id(), NEXT_WAV.fetch_add(1, Ordering::Relaxed)));
@@ -1196,6 +1202,7 @@ impl ExportJob {
             explicite: None,
             zones: Vec::new(),
             snapshot: None,
+            exact: Vec::new(),
             prelude: None,
             launch: None,
             stage: Stage::Neuf,
@@ -1204,6 +1211,7 @@ impl ExportJob {
             fail,
             cancel: Arc::new(AtomicBool::new(false)),
             erase: Erase::Partie,
+            erase_after_launch: false,
             rendering_since: None,
             done_text: None,
             started: Instant::now(),
@@ -1228,7 +1236,12 @@ impl ExportJob {
     /// L'export n'a pas encore fini de copier le projet : il lit encore le projet affiché (il faut que ce soit le même, et
     /// qu'il ne change pas d'onglet).
     pub fn needs_project(&self) -> bool {
-        self.outcome.is_none() && self.snapshot.is_none() && matches!(self.stage, Stage::Neuf | Stage::Cliche(_))
+        self.outcome.is_none()
+            && match &self.stage {
+                Stage::Neuf => self.snapshot.is_none(),
+                Stage::Cliche(b) => b.reads_project(),
+                _ => false,
+            }
     }
 
     /// Ce que l'export fait en ce moment, en quelques mots.
@@ -1247,6 +1260,12 @@ impl ExportJob {
     pub fn with_transitions(mut self, doc: &Document) -> ExportJob {
         self.zones = crate::transitions::zones(doc);
         self
+    }
+
+    /// Les dessins `ids` du projet sont restés en rendu rapide (traits texturés, `App::rejeu_idle`) : l'export les veut exacts.
+    /// Ils sont refaits dans le cliché, sur un autre fil ; le projet affiché garde son rendu rapide.
+    pub fn set_exact(&mut self, ids: Vec<crate::document::CelId>) {
+        self.exact = ids;
     }
 
     /// Le cliché du projet, déjà pris (l'export pour le montage en fait un pour tous ses fichiers).
@@ -1278,7 +1297,7 @@ impl ExportJob {
                 Some(s) => self.after_snapshot(s),
                 None => {
                     let panels = exportrender::panels_needed(&self.frames, &self.zones);
-                    self.stage = Stage::Cliche(SnapshotBuilder::new(doc, &panels));
+                    self.stage = Stage::Cliche(SnapshotBuilder::new(doc, &panels).with_exact(std::mem::take(&mut self.exact)));
                     self.advance_snapshot(doc, budget);
                 }
             },
@@ -1337,6 +1356,9 @@ impl ExportJob {
                 Ok((sink, tx)) => {
                     self.sink = sink;
                     self.tx = Some(tx);
+                    if self.erase_after_launch {
+                        self.erase = Erase::Fichier;
+                    }
                 }
                 Err(e) => return self.stop_with(Err(e)),
             }

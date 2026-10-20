@@ -55,7 +55,6 @@ impl App {
     /// Fichier > Exporter > Pour le montage.
     pub(crate) fn open_editorial(&mut self) {
         self.end_stroke();
-        self.exactify_idle();
         self.playing = false;
         if self.editorial.as_ref().is_some_and(EditorialWindow::busy) {
             return;
@@ -82,11 +81,10 @@ impl App {
             w.result = Some(Err("ffmpeg introuvable ou inutilisable : c'est lui qui fabrique les vidéos.".into()));
             return;
         };
-        self.exactify_idle();
         w.result = None;
         match EditorialJob::start(plan, w.opts.clone(), ffmpeg, enc, &parent) {
             Ok(job) => {
-                w.job = Some(job);
+                w.job = Some(job.with_exact(self.rejeu_idle.clone()));
                 self.playing = false;
             }
             Err(e) => w.result = Some(Err(e)),

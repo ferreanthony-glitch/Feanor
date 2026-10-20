@@ -110,7 +110,6 @@ impl App {
     /// Fichier > Exporter > Fiche technique.
     pub(crate) fn open_fiche(&mut self) {
         self.end_stroke();
-        self.exactify_idle();
         if self.fiche.as_ref().is_some_and(FicheWindow::busy) {
             return;
         }
@@ -209,10 +208,9 @@ impl App {
             }
         };
         self.fiche_enregistre_reglages(w, path.parent());
-        self.exactify_idle();
         self.playing = false;
         match FicheJob::start(&self.doc, fiche, w.format, w.sep, path) {
-            Ok(job) => w.job = Some(job),
+            Ok(job) => w.job = Some(job.with_exact(self.rejeu_idle.clone())),
             Err(e) => w.result = Some(Err(e)),
         }
     }

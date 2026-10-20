@@ -124,6 +124,12 @@ impl RelectureJob {
         self.job.remaining()
     }
 
+    /// Les dessins `ids` sont restés en rendu rapide : l'export les veut exacts (refaits dans le cliché, sur un autre fil).
+    pub fn with_exact(mut self, ids: Vec<crate::document::CelId>) -> RelectureJob {
+        self.job.set_exact(ids);
+        self
+    }
+
     /// L'export copie encore le projet (les premières images d'écran) : il ne doit pas changer, ni d'onglet. Ensuite
     /// les images se calculent sur une copie, sur d'autres fils.
     pub fn rendering(&self) -> bool {

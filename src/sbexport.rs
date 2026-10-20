@@ -469,6 +469,8 @@ pub struct SbExportJob {
     /// La copie du projet, en train de se faire, puis faite.
     builder: Option<SnapshotBuilder>,
     snapshot: Option<Arc<Document>>,
+    /// Les dessins restés en rendu rapide, à refaire exacts dans le cliché.
+    exact: Vec<crate::document::CelId>,
     pipeline: Option<Pipeline>,
     /// Les fichiers décidés par le passeur (même pixels, même fichier).
     assigned: Arc<Mutex<Vec<Assigned>>>,
@@ -529,6 +531,7 @@ impl SbExportJob {
             next: 0,
             builder: None,
             snapshot: None,
+            exact: Vec::new(),
             pipeline: None,
             assigned: Arc::default(),
             cancel: Arc::new(AtomicBool::new(false)),
@@ -546,7 +549,13 @@ impl SbExportJob {
 
     /// L'export copie encore le projet : il lit le projet affiché (qui ne doit pas changer, ni d'onglet).
     pub fn needs_project(&self) -> bool {
-        matches!(self.stage, Stage::Images) && self.snapshot.is_none()
+        matches!(self.stage, Stage::Images) && self.snapshot.is_none() && self.builder.as_ref().is_none_or(SnapshotBuilder::reads_project)
+    }
+
+    /// Les dessins `ids` sont restés en rendu rapide : l'export les veut exacts (refaits dans le cliché, sur un autre fil).
+    pub fn with_exact(mut self, ids: Vec<crate::document::CelId>) -> SbExportJob {
+        self.exact = ids;
+        self
     }
 
     /// Fait avancer l'export. Le projet n'est lu que pour le copier au départ (par tranches de quelques millisecondes) ;
@@ -577,7 +586,7 @@ impl SbExportJob {
                 let mut plans: Vec<usize> = self.out.scenes.iter().map(|s| s.plan).collect();
                 plans.sort_unstable();
                 plans.dedup();
-                SnapshotBuilder::new(doc, &plans)
+                SnapshotBuilder::new(doc, &plans).with_exact(std::mem::take(&mut self.exact))
             });
             if !b.step(doc, budget.min(Duration::from_millis(8))) {
                 return;

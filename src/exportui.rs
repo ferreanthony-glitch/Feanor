@@ -28,14 +28,34 @@ impl App {
     pub(crate) fn open_export(&mut self, format: Format) {
         self.end_stroke();
         self.playing = false;
-        if self.export_job.is_some() {
-            self.status = "Un export est déjà en cours : attends sa fin, ou arrête-le.".into();
+        if !self.export_libre() {
             return;
         }
         let mut s = self.export_last.clone();
         s.format = format;
         s.transparent = self.export_transparent;
         self.export_dialog = Some(s);
+    }
+
+    /// On peut lancer un export : aucun ne tourne (un export fini, dont la fenêtre est restée, est refermé). Sinon la barre d'état le dit.
+    pub(crate) fn export_libre(&mut self) -> bool {
+        match &self.export_job {
+            Some(j) if j.outcome.is_none() => {
+                self.status = "Un export est déjà en cours : attends sa fin, ou arrête-le.".into();
+                false
+            }
+            Some(j) => {
+                self.status = match &j.outcome {
+                    Some(Ok(msg)) => msg.clone(),
+                    Some(Err(e)) => e.clone(),
+                    None => String::new(),
+                };
+                self.export_job = None;
+                self.export_projet = None;
+                true
+            }
+            None => true,
+        }
     }
 
     /// ffmpeg et ses encodeurs, cherchés une fois (et après un choix à la main).
@@ -248,8 +268,6 @@ impl App {
     /// Lance l'export choisi : demande où écrire, puis démarre. Aucune image ne se calcule ici : l'export copie le
     /// projet (le cliché) et travaille sur d'autres fils ; le projet reste libre.
     fn start_export(&mut self, s: &ExportSettings, frames: Vec<(usize, usize)>, first: usize, sound: bool) {
-        // (Traits texturés restés en rendu rapide : l'export les veut exacts.)
-        self.exactify_idle();
         let base = self.base_name();
         let fps = self.doc.fps;
         match s.format {
@@ -309,6 +327,8 @@ impl App {
 
     /// Démarre un export : il copie le projet affiché (les premières tranches tout de suite), puis tourne tout seul.
     pub(crate) fn start_job(&mut self, mut job: ExportJob) {
+        // (Traits texturés restés en rendu rapide : l'export les veut exacts, il les refait dans sa copie, sur un autre fil.)
+        job.set_exact(self.rejeu_idle.clone());
         job.step(&self.doc, Duration::from_millis(8));
         self.export_projet = Some((self.onglets.get(self.actif).map_or(0, |t| t.id), self.base_name_or("Sans titre")));
         self.export_job = Some(job);

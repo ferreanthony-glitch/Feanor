@@ -132,6 +132,8 @@ pub struct EditorialJob {
     /// Le cliché du projet, pris une fois pour tous les plans.
     builder: Option<SnapshotBuilder>,
     snapshot: Option<Arc<Document>>,
+    /// Les dessins restés en rendu rapide, à refaire exacts dans le cliché.
+    exact: Vec<crate::document::CelId>,
     pub started: Instant,
     pub outcome: Option<Result<Report, String>>,
 }
@@ -157,7 +159,7 @@ impl EditorialJob {
             let jobs = plan.audio_sources.iter().cloned().zip(plan.audio.iter()).map(|(src, a)| (src, dir.join(&a.file))).collect();
             Some(SoundWorker::start(jobs))
         };
-        Ok(EditorialJob { plan, opts, ffmpeg, enc, dir, made_dir, stage: Stage::Video, current: None, next: 0, frames_done: 0, worker, written: Vec::new(), builder: None, snapshot: None, started: Instant::now(), outcome: None })
+        Ok(EditorialJob { plan, opts, ffmpeg, enc, dir, made_dir, stage: Stage::Video, current: None, next: 0, frames_done: 0, worker, written: Vec::new(), builder: None, snapshot: None, exact: Vec::new(), started: Instant::now(), outcome: None })
     }
 
     /// Images calculées et images à calculer (poignées comprises).
@@ -198,7 +200,13 @@ impl EditorialJob {
 
     /// L'export copie encore le projet (les premières images d'écran) : il lit le projet affiché.
     pub fn needs_project(&self) -> bool {
-        self.outcome.is_none() && self.stage == Stage::Video && self.snapshot.is_none()
+        self.outcome.is_none() && self.stage == Stage::Video && self.snapshot.is_none() && self.builder.as_ref().is_none_or(SnapshotBuilder::reads_project)
+    }
+
+    /// Les dessins `ids` sont restés en rendu rapide : l'export les veut exacts (refaits dans le cliché, sur un autre fil).
+    pub fn with_exact(mut self, ids: Vec<crate::document::CelId>) -> EditorialJob {
+        self.exact = ids;
+        self
     }
 
     /// Fait avancer l'export. Le projet n'est lu que pour le copier au départ (par tranches de quelques
@@ -216,7 +224,7 @@ impl EditorialJob {
                             let mut panels: Vec<usize> = self.plan.clips.iter().map(|c| c.panel).collect();
                             panels.sort_unstable();
                             panels.dedup();
-                            SnapshotBuilder::new(doc, &panels)
+                            SnapshotBuilder::new(doc, &panels).with_exact(std::mem::take(&mut self.exact))
                         });
                         if !b.step(doc, budget.min(Duration::from_millis(8))) {
                             return;

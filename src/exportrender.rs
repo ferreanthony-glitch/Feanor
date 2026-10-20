@@ -86,12 +86,48 @@ fn plan_leger(p: &Panel) -> Panel {
     }
 }
 
+/// Le rendu exact des dessins vectoriels restés en rendu rapide (`ids`, ceux de `App::rejeu_idle`) : calculé sur
+/// plusieurs cœurs. Rend, pour chaque dessin refait, (numéro, version d'avant, version d'après). L'export l'applique à son
+/// cliché, sur un autre fil (le projet affiché garde son rendu rapide) ; l'application, elle, l'applique au projet
+/// (`App::exactify_idle`).
+pub fn rendre_exacts(doc: &mut Document, ids: &[CelId]) -> Vec<(CelId, u64, u64)> {
+    let (w, h) = (doc.width, doc.height);
+    let jobs: Vec<(CelId, crate::vector::VectorDrawing)> = ids.iter().filter_map(|id| doc.cels.get(id).and_then(|c| c.vector.clone()).map(|d| (*id, d))).collect();
+    let done = crate::parallele::par_map(&jobs, 8, |_, (_, drawing)| {
+        let mut copy = drawing.clone();
+        for e in &mut copy.elements {
+            if e.cache_is_preview() {
+                e.invalidate_cache();
+            }
+        }
+        let raster = copy.render(w, h);
+        (copy, raster)
+    });
+    let mut out = Vec::with_capacity(jobs.len());
+    for ((id, _), (copy, raster)) in jobs.into_iter().zip(done) {
+        let Some(c) = doc.cels.get_mut(&id) else { continue };
+        let Some(drawing) = c.vector.as_mut() else { continue };
+        for (e, exact) in drawing.elements.iter_mut().zip(&copy.elements) {
+            e.adopt_cache(exact);
+        }
+        let before = c.version;
+        c.raster = raster;
+        c.version += 1;
+        out.push((id, before, c.version));
+    }
+    out
+}
+
 /// Le cliché d'un projet en train de se faire. La structure est copiée à la construction ; les dessins par
-/// tranches (`step`), pour que l'interface ne s'arrête jamais plus que quelques millisecondes.
+/// tranches (`step`), pour que l'interface ne s'arrête jamais plus que quelques millisecondes. Les dessins restés en rendu
+/// rapide sont refaits exacts dans la copie (`with_exact`), sur un fil à part.
 pub struct SnapshotBuilder {
-    snap: Document,
+    snap: Option<Document>,
     ids: Vec<CelId>,
     pos: usize,
+    exact: Vec<CelId>,
+    /// Le rendu exact en cours : le fil, et la copie qu'il travaille (rendue dans la case en finissant).
+    exacting: Option<(JoinHandle<()>, Arc<Mutex<Option<Document>>>)>,
 }
 
 impl SnapshotBuilder {
@@ -130,23 +166,73 @@ impl SnapshotBuilder {
         for i in order {
             dessins_du_plan(&doc.panels[i], &mut ids, &mut seen);
         }
-        SnapshotBuilder { snap: s, ids, pos: 0 }
+        SnapshotBuilder { snap: Some(s), ids, pos: 0, exact: Vec::new(), exacting: None }
     }
 
-    /// Copie des dessins pendant `budget` au plus ; vrai quand tous le sont.
+    /// Les dessins `ids` (restés en rendu rapide dans le projet) sont refaits exacts dans la copie, une fois copiés.
+    pub fn with_exact(mut self, ids: Vec<CelId>) -> SnapshotBuilder {
+        self.exact = ids;
+        self
+    }
+
+    /// La construction lit encore le projet affiché (les dessins se copient) : il ne doit pas changer. Ensuite, le rendu exact
+    /// travaille sur la copie.
+    pub fn reads_project(&self) -> bool {
+        self.pos < self.ids.len()
+    }
+
+    /// Copie des dessins pendant `budget` au plus ; vrai quand tous le sont (et que le rendu exact est fait, s'il y en a un).
     pub fn step(&mut self, doc: &Document, budget: Duration) -> bool {
+        if let Some((h, _)) = &self.exacting {
+            if !h.is_finished() {
+                return false;
+            }
+            if let Some((h, slot)) = self.exacting.take() {
+                // (Un rendu qui plante : l'export continue avec les dessins en rendu rapide plutôt que de s'arrêter.)
+                let _ = h.join();
+                self.snap = slot.lock().unwrap_or_else(|e| e.into_inner()).take();
+            }
+            return true;
+        }
         let t0 = Instant::now();
         while self.pos < self.ids.len() {
             let id = self.ids[self.pos];
             self.pos += 1;
-            if let Some(c) = doc.cels.get(&id) {
-                self.snap.cels.insert(id, c.clone());
+            if let (Some(snap), Some(c)) = (self.snap.as_mut(), doc.cels.get(&id)) {
+                snap.cels.insert(id, c.clone());
             }
             if self.pos % 8 == 0 && t0.elapsed() >= budget {
                 break;
             }
         }
-        self.pos >= self.ids.len()
+        if self.pos < self.ids.len() {
+            return false;
+        }
+        if self.exact.is_empty() {
+            return true;
+        }
+        // Les dessins sont copiés : le rendu exact se fait sur un fil à part, sur la copie.
+        let (ids, Some(snap)) = (std::mem::take(&mut self.exact), self.snap.take()) else { return true };
+        let slot = Arc::new(Mutex::new(Some(snap)));
+        let ma_case = slot.clone();
+        let started = std::thread::Builder::new().name("export-exact".into()).spawn(move || {
+            crate::parallele::baisser_la_priorite_ici();
+            let Some(mut snap) = ma_case.lock().unwrap_or_else(|e| e.into_inner()).take() else { return };
+            // (Même en cas de panique, la copie revient telle quelle.)
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| rendre_exacts(&mut snap, &ids)));
+            *ma_case.lock().unwrap_or_else(|e| e.into_inner()) = Some(snap);
+        });
+        match started {
+            Ok(h) => {
+                self.exacting = Some((h, slot));
+                false
+            }
+            Err(_) => {
+                // (Pas de fil pour le rendu exact : la copie reste telle quelle, en rendu rapide.)
+                self.snap = slot.lock().unwrap_or_else(|e| e.into_inner()).take();
+                true
+            }
+        }
     }
 
     /// Dessins à copier au total et déjà copiés (progression, essais).
@@ -156,10 +242,9 @@ impl SnapshotBuilder {
     }
 
     pub fn finish(self) -> Arc<Document> {
-        Arc::new(self.snap)
+        Arc::new(self.snap.unwrap_or_else(|| Document::new(1, 1, 1)))
     }
 }
-
 /// Le cliché d'un coup (essais, petits travaux).
 #[cfg(test)]
 pub fn snapshot_of(doc: &Document, panels: &[usize]) -> Arc<Document> {
@@ -310,7 +395,7 @@ impl Rendu {
     /// `cancel` : levé, les fils qui attendent une image en cours de calcul l'abandonnent.
     pub fn new(doc: Arc<Document>, papier: Papier, graver: bool, zones: Vec<Zone>, cancel: Arc<AtomicBool>) -> Rendu {
         let starts = if zones.is_empty() { Vec::new() } else { (0..doc.panels.len()).map(|i| doc.panel_start(i)).collect() };
-        Rendu { doc, papier, graver, zones, starts, explicite: None, store: ImageStore::new(fils_de_rendu().0 + 3), cancel, composees: AtomicUsize::new(0) }
+        Rendu { doc, papier, graver, zones, starts, explicite: None, store: ImageStore::new(fils_de_rendu().0 + 1), cancel, composees: AtomicUsize::new(0) }
     }
 
     /// Combien d'images ont été vraiment composées jusqu'ici.
@@ -398,10 +483,10 @@ pub fn fils_pour(coeurs: usize) -> (usize, usize) {
 }
 
 /// Combien d'images d'avance les fils de rendu peuvent prendre sur l'écriture, d'après la taille d'une image : la
-/// mémoire tenue reste de l'ordre de 600 Mo en 4K (33 Mo l'image).
+/// mémoire tenue reste de l'ordre de 500 Mo en 4K (33 Mo l'image).
 pub fn avance_permise(octets_image: usize, fils: usize, file: usize) -> usize {
-    let total = ((640usize << 20) / octets_image.max(1)).clamp(6, 64);
-    let gardees = fils + 3;
+    let total = ((512usize << 20) / octets_image.max(1)).clamp(6, 64);
+    let gardees = 2 * fils + 1;
     total.saturating_sub(gardees + file).clamp(fils + 1, 2 * fils + 2)
 }
 

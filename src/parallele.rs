@@ -66,9 +66,25 @@ mod os {
     pub fn sous_la_normale() {}
 }
 
+/// Les exports travaillent-ils sous la priorité de l'interface ? Oui, toujours ; seules les mesures le coupent, pour
+/// voir ce que la priorité change.
+static PRIORITE_EXPORT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+#[cfg(test)]
+pub fn set_priorite_export(basse: bool) {
+    PRIORITE_EXPORT.store(basse, Ordering::Relaxed);
+}
+
+pub fn priorite_export() -> bool {
+    PRIORITE_EXPORT.load(Ordering::Relaxed)
+}
+
 /// Ce fil (et les fils qu'il lance pour répartir son travail) passe sous la priorité normale : un export
 /// ne prend le processeur à l'interface que si elle n'en a pas besoin.
 pub fn baisser_la_priorite_ici() {
+    if !priorite_export() {
+        return;
+    }
     PRIORITE_BASSE.with(|p| p.set(true));
     os::sous_la_normale();
 }
