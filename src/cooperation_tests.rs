@@ -621,3 +621,639 @@ fn a_released_plan_can_be_taken_over_by_the_other_with_its_last_content() {
     a.tour();
     assert_eq!(a.rouge(0), 151);
 }
+
+// ------------------------------------------------------------------------------------------ le montage
+
+#[test]
+fn the_structure_token_is_held_by_one_person_and_the_montage_follows_to_the_other() {
+    let (mut a, mut b, h, _) = deux_postes("jeton", 3);
+    assert!(a.s.prendre(&[Cible::Montage], false).remove(0).1.is_ok());
+    confirmer(&h);
+    tours(&mut a, &mut b);
+    assert_eq!(b.s.peut_modifier_montage(), Err(Refus::PrisPar("Anthony".into())));
+    assert_eq!(a.s.peut_modifier_montage(), Ok(()));
+    // Anthony nomme la séquence et crée un plan : ces plans neufs sont à lui dès leur naissance.
+    let seq = a.doc.sequences[0].id;
+    a.doc.sequence_mut(seq).expect("séquence").name = "Acte I".into();
+    let neuf = a.doc.add_scene_after(1);
+    let neuf_id = a.doc.panels[neuf].id;
+    assert!(neuf_id >> 32 == a.s.prefixe, "son numéro porte le préfixe d'Anthony");
+    assert_eq!(a.s.apres_structure(&a.doc), vec![neuf_id]);
+    assert!(a.s.tiens(Cible::Plan(neuf_id)));
+    let r = a.enregistrer();
+    assert!(r.structure.is_some(), "le montage a changé : la structure est écrite");
+    assert!(r.plans_ecrits.iter().any(|p| p.plan == neuf_id), "et le fichier du plan neuf avec");
+    tours(&mut a, &mut b);
+    tours(&mut a, &mut b);
+    assert_eq!(b.doc.sequences[0].name, "Acte I");
+    assert_eq!(b.doc.panels.len(), 4, "le plan neuf est arrivé");
+    assert_eq!(b.doc.panels[neuf].id, neuf_id);
+    assert!(b.s.notifications.iter().any(|n| n.texte.contains("Anthony a modifié le montage")), "{:?}", b.s.notifications);
+    // Léa ne peut ni prendre le jeton, ni modifier le plan neuf.
+    assert_eq!(b.s.prendre(&[Cible::Montage], false).remove(0).1, Err(Refus::PrisPar("Anthony".into())));
+    assert_eq!(b.s.peut_modifier_plan(neuf_id), Err(Refus::PrisPar("Anthony".into())));
+    // Anthony rend le jeton, Léa le prend et déplace un plan : Anthony le voit.
+    a.s.rendre(&[Cible::Montage]);
+    tours(&mut a, &mut b);
+    assert!(b.s.prendre(&[Cible::Montage], false).remove(0).1.is_ok());
+    confirmer(&h);
+    b.tour();
+    let premier = b.doc.panels[0].id;
+    b.doc.move_plans(&[premier], None).expect("déplacer");
+    b.s.apres_structure(&b.doc);
+    b.enregistrer();
+    tours(&mut a, &mut b);
+    tours(&mut a, &mut b);
+    assert_eq!(a.doc.panels.last().map(|p| p.id), Some(premier), "le plan déplacé est à la fin chez Anthony aussi");
+}
+
+#[test]
+fn a_plan_deleted_from_the_montage_goes_away_for_the_other_and_its_file_stays() {
+    let (mut a, mut b, h, racine) = deux_postes("suppression", 3);
+    a.s.prendre(&[Cible::Montage], false);
+    a.prendre_plan(2).expect("libre");
+    confirmer(&h);
+    tours(&mut a, &mut b);
+    let id = a.plan_id(2);
+    a.doc.remove_panels(&[id]).expect("supprimer");
+    a.s.apres_structure(&a.doc);
+    a.enregistrer();
+    tours(&mut a, &mut b);
+    tours(&mut a, &mut b);
+    assert_eq!(b.doc.panels.len(), 2);
+    assert!(b.doc.panels.iter().all(|p| p.id != id));
+    assert!(chemin_plan(&racine, id).exists(), "rien n'est effacé du dossier partagé");
+    assert!(!a.s.tiens(Cible::Plan(id)), "un plan supprimé n'est plus tenu");
+}
+
+// ------------------------------------------------------------------------------------------ les commentaires
+
+#[test]
+fn comments_of_two_people_merge_and_anyone_can_resolve_or_delete_any_comment() {
+    let (mut a, mut b, h, _) = deux_postes("commentaires", 3);
+    let (p0, p1) = (a.plan_id(0), a.plan_id(1));
+    // On peut commenter n'importe quel plan, sans rien tenir.
+    let c1 = a.doc.add_comment(p0, 1, "Anthony", 1);
+    a.doc.comment_mut(c1).expect("commentaire").text = "plus de mouvement ici".into();
+    let c2 = b.doc.add_comment(p1, 2, "Lea", 2);
+    b.doc.comment_mut(c2).expect("commentaire").text = "trop sombre".into();
+    a.enregistrer();
+    h.avancer(10);
+    b.enregistrer();
+    tours(&mut a, &mut b);
+    assert_eq!(a.doc.comments.len(), 2);
+    assert_eq!(b.doc.comments.len(), 2);
+    // Léa résout le commentaire d'Anthony, Anthony supprime celui de Léa.
+    h.avancer(1_000);
+    b.doc.comment_mut(c1).expect("commentaire d'Anthony").done = true;
+    a.doc.remove_comment(c2);
+    a.enregistrer();
+    b.enregistrer();
+    tours(&mut a, &mut b);
+    assert!(a.doc.comment(c1).expect("encore là").done, "résolu par Léa");
+    assert!(b.doc.comment(c1).expect("encore là").done);
+    assert!(a.doc.comment(c2).is_none() && b.doc.comment(c2).is_none(), "supprimé par Anthony, chez Léa aussi");
+    // Rien d'autre n'a été touché : les commentaires de chacun sont dans son fichier.
+    let dossier_com = fx::racine(&a.manifeste).join("commentaires");
+    assert!(dossier_com.join("anthony.json").exists() && dossier_com.join("lea.json").exists());
+    // Un enregistrement sans changement ne réécrit pas le fichier.
+    let avant = std::fs::read(dossier_com.join("anthony.json")).expect("fichier");
+    let r = a.enregistrer();
+    assert!(!r.commentaires_ecrits);
+    assert_eq!(std::fs::read(dossier_com.join("anthony.json")).expect("fichier"), avant);
+}
+
+#[test]
+fn comments_merge_the_same_way_whatever_the_order_files_arrive_in() {
+    use crate::commentaires::Comment;
+    use crate::partagecom::{fusionner, Enregistrement};
+    let base = |id, texte: &str, done| Comment { id, panel: 5, frame: 0, text: texte.into(), author: "x".into(), color: [1, 2, 3], created: 0, done, note: None, annotation: None };
+    let a = vec![
+        Enregistrement { at: 10, supprime: false, commentaire: base(1, "v1", false) },
+        Enregistrement { at: 30, supprime: false, commentaire: base(2, "de a", false) },
+    ];
+    let b = vec![
+        Enregistrement { at: 20, supprime: false, commentaire: base(1, "v2 (b)", true) },
+        Enregistrement { at: 30, supprime: true, commentaire: base(2, "de a", false) },
+    ];
+    let ab = fusionner(&[("a".into(), a.clone()), ("b".into(), b.clone())]);
+    let ba = fusionner(&[("b".into(), b), ("a".into(), a)]);
+    assert_eq!(ab, ba, "le résultat ne dépend pas de l'ordre");
+    assert_eq!(ab[&1].text, "v2 (b)", "le plus récent gagne");
+    assert!(ab.contains_key(&2), "à égalité de date, le plus petit équipier (« a ») l'emporte : sa version vivante");
+}
+
+// ------------------------------------------------------------------------------------------ les dossiers synchronisés
+
+/// Deux dossiers « Dropbox » : chacun a sa copie, la synchronisation est faite à la main (et dans l'ordre qu'on veut).
+struct Synchro {
+    a: PathBuf,
+    b: PathBuf,
+    connu: HashMap<String, u64>,
+}
+
+#[derive(Clone, Copy)]
+enum Sens {
+    AversB,
+    BversA,
+}
+
+fn lister(racine: &Path) -> std::collections::BTreeMap<String, u64> {
+    fx::arbre(racine).into_iter().filter(|(k, _)| !k.ends_with(".tmp") && !k.ends_with(".part")).collect()
+}
+
+fn copier_dossier(de: &Path, vers: &Path) {
+    for rel in lister(de).keys() {
+        let (s, d) = (de.join(rel), vers.join(rel));
+        std::fs::create_dir_all(d.parent().expect("parent")).expect("dossier");
+        std::fs::copy(s, d).expect("copie");
+    }
+}
+
+impl Synchro {
+    /// `a` est complet ; `b` en est une copie (la première synchronisation est faite).
+    fn nouveau(a: &Path, b: &Path) -> Synchro {
+        copier_dossier(a, b);
+        Synchro { a: a.to_path_buf(), b: b.to_path_buf(), connu: lister(a).into_iter().collect() }
+    }
+
+    /// Recopie ce qui a changé dans `de` vers `vers`, parmi les fichiers que `filtre` accepte. Si l'autre côté a aussi
+    /// changé le même fichier, il le garde et la version qui arrive devient une « copie en conflit ».
+    fn pousser(&mut self, sens: Sens, filtre: &dyn Fn(&str) -> bool) -> Vec<String> {
+        let (de, vers) = match sens {
+            Sens::AversB => (self.a.clone(), self.b.clone()),
+            Sens::BversA => (self.b.clone(), self.a.clone()),
+        };
+        let (s, d) = (lister(&de), lister(&vers));
+        let mut copies = Vec::new();
+        for (rel, hs) in &s {
+            if !filtre(rel) {
+                continue;
+            }
+            let connu = self.connu.get(rel).copied();
+            if connu == Some(*hs) {
+                continue;
+            }
+            let hd = d.get(rel).copied();
+            if hd == Some(*hs) {
+                self.connu.insert(rel.clone(), *hs);
+                continue;
+            }
+            let cible = if hd == connu {
+                self.connu.insert(rel.clone(), *hs);
+                vers.join(rel)
+            } else {
+                // Les deux côtés ont changé ce fichier : comme Dropbox, la copie qui arrive prend un autre nom.
+                let (dossier, nom) = rel.rsplit_once('/').map_or(("", rel.as_str()), |(d, n)| (d, n));
+                let (souche, ext) = nom.rsplit_once('.').unwrap_or((nom, ""));
+                let nouveau = format!("{souche} (Copie en conflit de poste 2026-10-20).{ext}");
+                vers.join(dossier).join(nouveau)
+            };
+            std::fs::create_dir_all(cible.parent().expect("parent")).expect("dossier");
+            std::fs::copy(de.join(rel), &cible).expect("copie");
+            copies.push(rel.clone());
+        }
+        copies
+    }
+
+    fn tout(&mut self, sens: Sens) -> Vec<String> {
+        self.pousser(sens, &|_| true)
+    }
+}
+
+/// Deux postes devant deux copies d'un dossier, synchronisées à la main.
+fn deux_postes_synchro(nom: &str, n: usize) -> (Poste, Poste, Horloge, Synchro) {
+    let racine = dossier(nom);
+    let manifeste_a = partager(&film(n), &racine.join("A"));
+    let manifeste_b = racine.join("B").join("Film").join("Film.pelure");
+    let sync = Synchro::nouveau(manifeste_a.parent().expect("dossier"), manifeste_b.parent().expect("dossier"));
+    let h = Horloge::reglable(1_760_000_000_000);
+    let a = Poste::ouvrir(&manifeste_a, "Anthony", &h);
+    let b = Poste::ouvrir(&manifeste_b, "Lea", &h);
+    (a, b, h, sync)
+}
+
+#[test]
+fn a_plan_file_that_arrives_before_its_drawings_is_waited_for_not_shown_half_done() {
+    let (mut a, mut b, h, mut sync) = deux_postes_synchro("synchro-dessins", 3);
+    a.prendre_plan(0).expect("libre");
+    confirmer(&h);
+    a.tour();
+    a.dessiner(0, 150);
+    a.enregistrer();
+    // Le fichier du plan arrive chez Léa, pas encore le dessin qu'il cite.
+    sync.pousser(Sens::AversB, &|f| !f.starts_with("dessins/"));
+    b.tour();
+    h.avancer(4_000);
+    b.tour();
+    assert_ne!(b.rouge(0), 150, "le plan à moitié arrivé n'est pas montré");
+    let info = b.s.vue().plans.get(&b.plan_id(0)).cloned().expect("info du plan");
+    assert!(info.attente.is_some(), "le plan est en attente de ses dessins : {info:?}");
+    assert!(matches!(b.s.peut_modifier_plan(b.plan_id(0)), Err(Refus::EnAttente(_))));
+    // Le dessin arrive : au tour suivant, le plan complet est posé.
+    sync.tout(Sens::AversB);
+    h.avancer(10_000);
+    b.tour();
+    h.avancer(10_000);
+    b.tour();
+    assert_eq!(b.rouge(0), 150);
+    assert!(b.s.vue().plans.get(&b.plan_id(0)).is_some_and(|i| i.attente.is_none()));
+}
+
+#[test]
+fn the_structure_that_arrives_before_a_new_plan_shows_a_shell_then_the_plan() {
+    let (mut a, mut b, h, mut sync) = deux_postes_synchro("synchro-structure", 3);
+    a.s.prendre(&[Cible::Montage], false);
+    confirmer(&h);
+    a.tour();
+    let neuf = a.doc.add_scene_after(1);
+    let neuf_id = a.doc.panels[neuf].id;
+    a.s.apres_structure(&a.doc);
+    a.enregistrer();
+    // Seule la structure (et les fiches) arrive chez Léa : le fichier du plan neuf, pas encore.
+    sync.pousser(Sens::AversB, &|f| !f.contains("plans/") && !f.contains("dessins/"));
+    b.tour();
+    assert_eq!(b.doc.panels.len(), 4, "le plan neuf est dans le film de Léa");
+    assert_eq!(b.doc.panels[neuf].id, neuf_id);
+    assert!(matches!(b.s.peut_modifier_plan(neuf_id), Err(Refus::EnAttente(_))), "mais seulement une coquille");
+    assert!(matches!(b.s.prendre(&[Cible::Plan(neuf_id)], false).remove(0).1, Err(Refus::EnAttente(_))));
+    // Le plan arrive.
+    sync.tout(Sens::AversB);
+    h.avancer(10_000);
+    b.tour();
+    h.avancer(10_000);
+    b.tour();
+    assert!(b.s.peut_modifier_plan(neuf_id).is_err(), "il est à Anthony");
+    assert!(b.s.vue().plans.get(&neuf_id).is_some_and(|i| i.attente.is_none()), "{:?}", b.s.vue().plans.get(&neuf_id));
+}
+
+#[test]
+fn a_plan_file_that_arrives_before_the_structure_waits_for_it() {
+    let (mut a, mut b, h, mut sync) = deux_postes_synchro("synchro-plan-avant", 3);
+    a.s.prendre(&[Cible::Montage], false);
+    confirmer(&h);
+    a.tour();
+    let neuf = a.doc.add_scene_after(1);
+    let neuf_id = a.doc.panels[neuf].id;
+    a.s.apres_structure(&a.doc);
+    let mut cel = Cel::new(a.doc.width, a.doc.height, LayerKind::Bitmap);
+    cel.raster.tile_mut(0)[0] = Color32::from_rgba_premultiplied(33, 1, 2, 255);
+    let id_cel = a.doc.add_cel(cel);
+    a.doc.panels[neuf].layers[0].frames.push(Some(id_cel));
+    a.enregistrer();
+    // Les plans et les dessins arrivent d'abord, la structure ensuite.
+    sync.pousser(Sens::AversB, &|f| !f.ends_with("Film.pelure"));
+    b.tour();
+    h.avancer(5_000);
+    b.tour();
+    assert_eq!(b.doc.panels.len(), 3, "le plan n'est pas dans le film tant que la structure n'est pas là");
+    sync.tout(Sens::AversB);
+    b.tour();
+    b.tour();
+    assert_eq!(b.doc.panels.len(), 4);
+    assert_eq!(b.doc.panels[neuf].id, neuf_id);
+}
+
+#[test]
+fn taking_a_plan_waits_for_the_file_its_last_holder_wrote_even_when_the_release_arrives_first() {
+    let (mut a, mut b, h, mut sync) = deux_postes_synchro("synchro-prise", 3);
+    a.prendre_plan(0).expect("libre");
+    confirmer(&h);
+    a.tour();
+    a.dessiner(0, 150);
+    a.enregistrer();
+    a.s.rendre(&[Cible::Plan(a.plan_id(0))]);
+    a.tour();
+    // La fiche (prise rendue, révision 2) arrive chez Léa, pas le plan.
+    sync.pousser(Sens::AversB, &|f| f.contains("partage/"));
+    b.tour();
+    assert_eq!(b.etat(0), EtatPrise::Libre);
+    assert!(b.prendre_plan(0).is_ok(), "la prise est enregistrée…");
+    assert_eq!(b.s.peut_modifier_plan(b.plan_id(0)), Err(Refus::Synchronisation), "…mais le plan reste fermé tant qu'il n'est pas à jour");
+    b.tour();
+    assert_eq!(b.s.peut_modifier_plan(b.plan_id(0)), Err(Refus::Synchronisation));
+    // Le plan et ses dessins arrivent : le plan s'ouvre.
+    sync.tout(Sens::AversB);
+    h.avancer(10_000);
+    b.tour();
+    h.avancer(10_000);
+    b.tour();
+    assert_eq!(b.rouge(0), 150);
+    assert_eq!(b.s.peut_modifier_plan(b.plan_id(0)), Ok(()));
+    // Et une synchronisation trop lente le dit.
+    let (mut a2, mut b2, h2, mut sync2) = deux_postes_synchro("synchro-lente", 3);
+    a2.prendre_plan(0).expect("libre");
+    confirmer(&h2);
+    a2.tour();
+    a2.dessiner(0, 9);
+    a2.enregistrer();
+    a2.s.rendre(&[Cible::Plan(a2.plan_id(0))]);
+    a2.tour();
+    sync2.pousser(Sens::AversB, &|f| f.contains("partage/"));
+    b2.tour();
+    b2.prendre_plan(0).expect("prise");
+    h2.avancer(61_000);
+    b2.tour();
+    assert!(b2.s.vue().synchro_lente.contains(&Cible::Plan(b2.plan_id(0))));
+}
+
+#[test]
+fn two_copies_of_the_same_plan_made_in_two_folders_give_a_conflict_copy_that_becomes_a_version() {
+    let (mut a, mut b, h, mut sync) = deux_postes_synchro("synchro-conflit", 3);
+    // Anthony et Léa prennent le même plan chacun dans leur copie, avant que rien ne soit synchronisé, et l'enregistrent.
+    a.prendre_plan(1).expect("libre");
+    b.prendre_plan(1).expect("libre chez elle aussi");
+    confirmer(&h);
+    a.tour();
+    b.tour();
+    a.dessiner(1, 111);
+    b.dessiner(1, 222);
+    a.enregistrer();
+    b.enregistrer();
+    // La synchronisation tombe sur deux modifications du même fichier de plan.
+    let copiees = sync.tout(Sens::AversB);
+    assert!(copiees.iter().any(|f| f.contains("plans/")));
+    let copies: Vec<String> = lister(&b.manifeste.parent().expect("dossier").join("plans")).keys().cloned().collect();
+    assert!(copies.iter().any(|f| f.contains("Copie en conflit")), "{copies:?}");
+    // Le balayage de Léa repère la copie en conflit.
+    b.tour();
+    let vue = b.s.vue();
+    assert_eq!(vue.copies.len(), 1, "{:?}", vue.copies);
+    // Les fiches sont arrivées aussi : Léa a perdu la course (Anthony était là avant), son travail est en brouillon…
+    h.avancer(1_000);
+    b.tour();
+    b.tour();
+    assert!(b.perdues.contains(&Cible::Plan(b.plan_id(1))), "{:?}", b.perdues);
+}
+
+#[test]
+fn a_conflict_copy_of_a_plan_the_holder_has_is_imported_as_a_version_and_filed_away() {
+    // Un seul poste suffit : le dossier contient une copie en conflit fabriquée par un client de synchronisation.
+    let (mut a, _, h, racine) = deux_postes("copie-conflit", 3);
+    a.prendre_plan(1).expect("libre");
+    confirmer(&h);
+    a.tour();
+    let id = a.plan_id(1);
+    // La « copie en conflit » est un plan où Léa avait dessiné 77.
+    let (mut l, _, _, _) = deux_postes("copie-conflit-source", 3);
+    l.prendre_plan(1).expect("libre");
+    confirmer(&l.horloge);
+    l.tour();
+    let mut neuf = Cel::new(l.doc.width, l.doc.height, LayerKind::Bitmap);
+    neuf.raster.tile_mut(0)[0] = Color32::from_rgba_premultiplied(77, 1, 2, 255);
+    let id_neuf = l.doc.add_cel(neuf);
+    l.doc.panels[1].layers[0].frames[0] = Some(id_neuf);
+    l.enregistrer();
+    let source = chemin_plan(&racine.parent().expect("parent").join("shot-fiabilite-coop-copie-conflit-source").join(""), id);
+    let _ = source;
+    let copie_src = fx::racine(&l.manifeste).join("plans").join(format!("{id}.json"));
+    // Les dessins de Léa sont à côté de ceux du projet d'Anthony (un client de synchronisation les aurait amenés aussi).
+    for e in std::fs::read_dir(fx::racine(&l.manifeste).join("dessins")).expect("dessins").flatten() {
+        let vers = fx::racine(&a.manifeste).join("dessins").join(e.file_name());
+        std::fs::copy(e.path(), vers).expect("copie");
+    }
+    let copie = fx::racine(&a.manifeste).join("plans").join(format!("{id} (Copie en conflit de Lea 2026-10-20).json"));
+    std::fs::copy(copie_src, &copie).expect("copie en conflit");
+    a.tour();
+    let vue = a.s.vue();
+    assert_eq!(vue.copies.len(), 1);
+    let c = vue.copies[0].clone();
+    assert_eq!(c.origine, crate::depot::OrigineCopie::Plan(id));
+    let octets = a.s.depot().lire_copie(&c).expect("lecture");
+    let numero = a.s.importer_comme_version(&mut a.doc, id, &octets, "copie en conflit de Lea").expect("importée");
+    assert_eq!(numero, 2);
+    let v = &a.doc.versions[&id].autres[0];
+    let cel = v.panel.layers[0].frames[0].expect("dessin");
+    assert_eq!(a.doc.cels[&cel].raster.get(0, 0).r(), 77);
+    a.s.depot().ranger_copie(&c).expect("rangée");
+    a.s.copie_traitee(&c);
+    a.tour();
+    assert!(a.s.vue().copies.is_empty());
+    assert!(copie.exists() == false && fx::racine(&a.manifeste).join("partage").join("importes").exists(), "déplacée, jamais effacée");
+}
+
+// ------------------------------------------------------------------------------------------ hors connexion
+
+/// Un dépôt qu'on peut couper : tout échoue tant qu'il est coupé (un dossier réseau éteint).
+struct DepotCoupe {
+    dedans: DossierPartage,
+    coupe: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl DepotCoupe {
+    fn ok(&self) -> Result<(), String> {
+        if self.coupe.load(std::sync::atomic::Ordering::Relaxed) {
+            Err("le dossier réseau ne répond pas".into())
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl crate::depot::Depot for DepotCoupe {
+    fn nom(&self) -> String {
+        "dépôt coupable".into()
+    }
+    fn racine(&self) -> &Path {
+        self.dedans.racine()
+    }
+    fn surveiller(&self, c: &mut crate::depot::Curseur) -> Result<crate::depot::Releve, String> {
+        self.ok()?;
+        self.dedans.surveiller(c)
+    }
+    fn lire_structure(&self) -> Result<Option<crate::depot::Fichier>, String> {
+        self.ok()?;
+        self.dedans.lire_structure()
+    }
+    fn ecrire_structure(&self, o: &[u8]) -> Result<(), String> {
+        self.ok()?;
+        self.dedans.ecrire_structure(o)
+    }
+    fn lire_plan(&self, p: u64) -> Result<Option<crate::depot::Fichier>, String> {
+        self.ok()?;
+        self.dedans.lire_plan(p)
+    }
+    fn ecrire_plan(&self, p: u64, o: &[u8]) -> Result<(), String> {
+        self.ok()?;
+        self.dedans.ecrire_plan(p, o)
+    }
+    fn lire_fiches(&self) -> Result<Vec<crate::verrous::Fiche>, String> {
+        self.ok()?;
+        self.dedans.lire_fiches()
+    }
+    fn ecrire_fiche(&self, f: &crate::verrous::Fiche) -> Result<(), String> {
+        self.ok()?;
+        self.dedans.ecrire_fiche(f)
+    }
+    fn lire_membres(&self) -> Result<Vec<crate::depot::Membre>, String> {
+        self.ok()?;
+        self.dedans.lire_membres()
+    }
+    fn ecrire_membre(&self, m: &crate::depot::Membre) -> Result<(), String> {
+        self.ok()?;
+        self.dedans.ecrire_membre(m)
+    }
+    fn lire_commentaires(&self) -> Result<Vec<(String, Vec<u8>)>, String> {
+        self.ok()?;
+        self.dedans.lire_commentaires()
+    }
+    fn ecrire_commentaires(&self, e: &str, o: &[u8]) -> Result<(), String> {
+        self.ok()?;
+        self.dedans.ecrire_commentaires(e, o)
+    }
+    fn ecrire_brouillon(&self, n: &str, o: &[u8]) -> Result<(), String> {
+        self.ok()?;
+        self.dedans.ecrire_brouillon(n, o)
+    }
+    fn lister_brouillons(&self) -> Result<Vec<String>, String> {
+        self.ok()?;
+        self.dedans.lister_brouillons()
+    }
+    fn lire_brouillon(&self, n: &str) -> Result<Vec<u8>, String> {
+        self.ok()?;
+        self.dedans.lire_brouillon(n)
+    }
+    fn ranger_brouillon(&self, n: &str) -> Result<(), String> {
+        self.ok()?;
+        self.dedans.ranger_brouillon(n)
+    }
+    fn lire_copie(&self, c: &crate::depot::CopieEnConflit) -> Result<Vec<u8>, String> {
+        self.ok()?;
+        self.dedans.lire_copie(c)
+    }
+    fn ranger_copie(&self, c: &crate::depot::CopieEnConflit) -> Result<(), String> {
+        self.ok()?;
+        self.dedans.ranger_copie(c)
+    }
+    fn dessins_manquants(&self, ids: &[u64]) -> Vec<u64> {
+        self.dedans.dessins_manquants(ids)
+    }
+}
+
+/// Anthony travaille par un dépôt qu'on peut couper ; Léa, par un dépôt ordinaire du même dossier.
+fn anthony_coupable(nom: &str) -> (Poste, Poste, Horloge, Arc<std::sync::atomic::AtomicBool>) {
+    let racine = dossier(nom);
+    let manifeste = partager(&film(3), &racine);
+    let h = Horloge::reglable(1_760_000_000_000);
+    let Loaded { mut doc, partage, written, .. } = project::load(&manifeste).expect("projet");
+    let coupe = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let depot = Arc::new(DepotCoupe { dedans: DossierPartage::nouveau(&manifeste), coupe: coupe.clone() });
+    let moi = Identite { id: "anthony".into(), nom: "Anthony".into(), couleur: [1, 2, 3], machine: "poste".into(), seance: "s1".into() };
+    let s = Session::rejoindre(depot, moi, partage.expect("partagé"), &mut doc, delais(), h.clone(), false, None).expect("session");
+    let a = Poste { doc, s, ecrits: written, manifeste: manifeste.clone(), horloge: h.clone(), messages: Vec::new(), perdues: Vec::new() };
+    let b = Poste::ouvrir(&manifeste, "Lea", &h);
+    (a, b, h, coupe)
+}
+
+#[test]
+fn working_offline_on_a_plan_one_still_holds_is_saved_after_reconnecting() {
+    let (mut a, mut b, h, coupe) = anthony_coupable("hors-ligne-garde");
+    a.prendre_plan(0).expect("libre");
+    confirmer(&h);
+    tours(&mut a, &mut b);
+    coupe.store(true, std::sync::atomic::Ordering::Relaxed);
+    a.dessiner(0, 66);
+    a.tour();
+    assert!(a.s.vue().hors_ligne.is_some(), "le moteur dit que le dépôt ne répond pas");
+    // L'enregistrement échoue sans rien perdre : le travail reste en mémoire.
+    let ctx = a.s.contexte_ecriture(&a.doc);
+    let job = partage_io::preparer(&a.doc, &a.manifeste, &mut a.ecrits, ctx).expect("préparation");
+    assert!(job.run_with(None, 2).is_err());
+    assert_eq!(a.rouge(0), 66);
+    // Quelques minutes passent (moins que le bail), le réseau revient.
+    h.avancer(4 * 60_000);
+    coupe.store(false, std::sync::atomic::Ordering::Relaxed);
+    a.ecrits.clear();
+    a.tour();
+    a.tour();
+    assert!(a.s.vue().hors_ligne.is_none());
+    assert!(a.s.tiens(Cible::Plan(a.plan_id(0))), "personne ne lui a pris le plan");
+    let r = a.enregistrer();
+    assert_eq!(r.plans_ecrits.len(), 1);
+    b.tour();
+    b.tour();
+    assert_eq!(b.rouge(0), 66);
+}
+
+#[test]
+fn work_done_offline_on_a_plan_that_was_taken_over_meanwhile_becomes_a_draft() {
+    let (mut a, mut b, h, coupe) = anthony_coupable("hors-ligne-repris");
+    a.prendre_plan(0).expect("libre");
+    confirmer(&h);
+    tours(&mut a, &mut b);
+    coupe.store(true, std::sync::atomic::Ordering::Relaxed);
+    a.dessiner(0, 66);
+    a.tour();
+    // Une heure passe : Léa reprend le plan d'Anthony, qui a disparu.
+    h.avancer(60 * 60_000);
+    b.tour();
+    let id = b.plan_id(0);
+    assert_eq!(b.s.prendre(&[Cible::Plan(id)], true).remove(0).1, Ok(()));
+    b.tour();
+    // Le réseau revient chez Anthony : il apprend qu'il a perdu le plan, son dessin n'est pas perdu.
+    coupe.store(false, std::sync::atomic::Ordering::Relaxed);
+    a.tour();
+    a.tour();
+    assert_eq!(a.perdues, vec![Cible::Plan(id)]);
+    a.ecrits.clear();
+    a.enregistrer();
+    assert_eq!(brouillons(&a.manifeste).len(), 1, "le travail d'Anthony est dans un brouillon");
+    // Le plan de Léa n'a pas bougé.
+    b.tour();
+    assert_ne!(b.rouge(0), 66);
+}
+
+// ------------------------------------------------------------------------------------------ présence, annuler
+
+#[test]
+fn presence_shows_who_is_there_and_what_they_look_at() {
+    let (mut a, mut b, h, _) = deux_postes("presence", 3);
+    a.s.regarde(Some(a.plan_id(1)), "Animation");
+    a.prendre_plan(0).expect("libre");
+    tours(&mut a, &mut b);
+    let vue = b.s.vue();
+    let anthony = vue.equipe.iter().find(|e| e.nom == "Anthony").expect("Anthony est en ligne");
+    assert!(anthony.en_ligne && !anthony.moi);
+    assert_eq!(anthony.tient, vec![Cible::Plan(a.plan_id(0))]);
+    // La présence (le plan regardé) est écrite au plus toutes les cinq secondes.
+    h.avancer(6_000);
+    a.tour();
+    b.tour();
+    let anthony = b.s.vue().equipe.iter().find(|e| e.nom == "Anthony").cloned().expect("Anthony");
+    assert_eq!(anthony.plan, Some(a.plan_id(1)));
+    assert_eq!(anthony.mode, "Animation");
+    assert!(b.s.vue().equipe.iter().any(|e| e.moi && e.nom == "Lea"));
+    // Plus de nouvelles depuis longtemps : hors ligne (mais s'il tient un plan, il reste dans la liste).
+    h.avancer(200_000);
+    b.tour();
+    let anthony = b.s.vue().equipe.iter().find(|e| e.nom == "Anthony").cloned().expect("encore listé : il tient un plan");
+    assert!(!anthony.en_ligne);
+    // Il rend son plan : on ne le voit plus.
+    h.avancer(31_000);
+    a.s.rendre(&[Cible::Plan(a.plan_id(0))]);
+    a.tour();
+    b.tour();
+    h.avancer(200_000);
+    b.tour();
+    assert!(!b.s.vue().equipe.iter().any(|e| e.nom == "Anthony"));
+}
+
+#[test]
+fn undo_never_brings_back_an_old_copy_of_a_plan_somebody_else_saved() {
+    let (mut a, mut b, h, _) = deux_postes("annuler", 3);
+    b.prendre_plan(1).expect("libre");
+    confirmer(&h);
+    tours(&mut a, &mut b);
+    // Anthony garde une photo de son film d'avant (comme une étape d'annulation), puis Léa enregistre.
+    let avant = a.doc.structure();
+    b.doc.panels[1].action = "Léa écrit l'action".into();
+    b.dessiner(1, 130);
+    b.enregistrer();
+    a.tour();
+    assert_eq!(a.doc.panels[1].action, "Léa écrit l'action");
+    // Anthony annule : l'étape remet toute la structure d'avant, y compris le vieux plan de Léa.
+    let _ = a.doc.replace_structure(avant);
+    assert_eq!(a.doc.panels[1].action, "", "le vieux plan est revenu avec l'annulation");
+    a.s.rafraichir_etranger(&mut a.doc);
+    assert_eq!(a.doc.panels[1].action, "Léa écrit l'action", "…puis il est remis dans son dernier état reçu");
+}

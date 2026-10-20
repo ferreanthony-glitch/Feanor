@@ -140,13 +140,28 @@ impl App {
             self.status = "Enregistrement en cours : le suivant partira à sa fin.".into();
             return true;
         }
-        // Dernière modification (13e, propriétés du projet).
-        self.doc.properties.modified = crate::recovery::now_secs();
+        // Film partagé enregistré à sa place : seulement ce qu'on tient (`projet_partage.rs`). Ailleurs (« Enregistrer sous »), c'est
+        // une copie à plat, comme un projet ordinaire.
+        let partage_ici = self.partage.is_some() && self.path.as_ref() == Some(&manifest);
+        // Dernière modification (13e, propriétés du projet) : dans un film partagé, c'est l'affaire du montage.
+        if !partage_ici || self.partage.as_ref().is_some_and(|s| s.tiens(crate::verrous::Cible::Montage)) {
+            self.doc.properties.modified = crate::recovery::now_secs();
+        }
         if self.path.as_ref() != Some(&manifest) {
             // Nouveau dossier : tous les dessins y seront écrits.
             self.written.clear();
         }
-        let job = match project::prepare_save(&self.doc, &manifest, &mut self.written, None) {
+        if partage_ici {
+            self.partage_avant_enregistrement();
+        }
+        let prepare = match self.partage.as_mut().filter(|_| partage_ici) {
+            Some(s) => {
+                let ctx = s.contexte_ecriture(&self.doc);
+                project::partage_io::preparer(&self.doc, &manifest, &mut self.written, ctx)
+            }
+            None => project::prepare_save(&self.doc, &manifest, &mut self.written, None),
+        };
+        let job = match prepare {
             Ok(job) => job,
             Err(e) => {
                 self.written.clear();
@@ -230,6 +245,13 @@ impl App {
                     if report.removed > 0 { format!(", {} inutilisé(s) effacé(s)", report.removed) } else { String::new() }
                 );
                 if same {
+                    // Film partagé : les bases de comparaison avancent, les prises annoncent ce qui est écrit ; une copie
+                    // à plat ailleurs détache le projet du partage.
+                    match (self.partage.as_mut(), report.partage.as_ref()) {
+                        (Some(s), Some(r)) => s.enregistrement_fini(r, &self.doc),
+                        (Some(_), None) => self.lacher_la_session(),
+                        _ => {}
+                    }
                     // Les instantanés d'envois sont dans le dossier : la mémoire qu'ils tenaient est rendue, et
                     // « Enregistrer sous » reprendra `versions/` de ce dossier-ci (`envois.rs`).
                     self.doc.envois.liberer(&report.snapshots);

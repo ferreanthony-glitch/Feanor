@@ -136,7 +136,7 @@ impl App {
 
     /// Retire les plans `ids` (une étape d'annulation).
     pub(crate) fn delete_panels(&mut self, ids: &[u64]) {
-        if self.storyboard_refuses() {
+        if self.storyboard_refuses() || !self.partage_peut_toucher(ids) {
             return;
         }
         self.end_stroke();
@@ -765,6 +765,8 @@ impl App {
         } else {
             None
         };
+        // Film partagé : qui tient le plan (pastille à sa couleur) et qui le regarde, sur la première vignette du plan.
+        let prise = if place.starts_plan() && thumb.width() >= 24.0 { self.peindre_pastille(&painter.with_clip_rect(view), thumb, self.doc.panels[i].id, xf.zoom) } else { None };
         // Couleur de repère du plan : un liseré dans la vignette et une bande sous l'en-tête.
         if let Some(tag) = self.doc.panels[i].color {
             let c = crate::marks::color(tag);
@@ -830,6 +832,11 @@ impl App {
                 resp.clone().on_hover_text_at_pointer(phrase);
             }
         }
+        if let Some(zone) = prise {
+            if let (true, Some(phrase)) = (resp.hover_pos().is_some_and(|p| zone.contains(p)), self.pastille_phrase(self.doc.panels[i].id)) {
+                resp.clone().on_hover_text_at_pointer(phrase);
+            }
+        }
         resp.context_menu(|ui| self.card_menu(ui, i, place.frame));
     }
 
@@ -862,6 +869,8 @@ impl App {
         item(self, ui, "Animer cette image", &|a| {
             a.set_mode(crate::app::Mode::Animation);
         });
+        // Film partagé : prendre, rendre, reprendre (`cooperationui.rs`).
+        self.equipe_menu_items(ui, i);
         item(self, ui, "Nouveau plan après", &|a| a.new_panel());
         item(self, ui, "Dupliquer le plan", &|a| a.duplicate_panel());
         self.plan_color_menu(ui);

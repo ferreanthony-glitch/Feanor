@@ -2982,3 +2982,50 @@ source = "SHOT (sans touche)"
 action = "fichier.exporter_gif"
 touches = []
 source = "SHOT (sans touche)"
+
+# Travailler à plusieurs sur un film partagé : prendre et rendre des plans, le jeton du montage, la fenêtre Équipe
+# (sans touche : à choisir).
+[[raccourci]]
+action = "fichier.partager"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "equipe.fenetre"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "equipe.prendre_plan"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "equipe.rendre_plan"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "equipe.prendre_sequence"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "equipe.rendre_sequence"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "equipe.prendre_montage"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "equipe.rendre_montage"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "equipe.rendre_tout"
+touches = []
+source = "SHOT (sans touche)"

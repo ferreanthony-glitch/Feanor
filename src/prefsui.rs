@@ -188,6 +188,8 @@ impl App {
                 });
                 ui.label(RichText::new("Vide : le nom de l'utilisateur Windows.").small().weak());
                 ui.add_space(6.0);
+                self.equipe_prefs_ui(ui);
+                ui.add_space(6.0);
                 ui.label(RichText::new("Dessin").strong());
                 let resp = ui.checkbox(&mut self.settings.system_cursor, "Croix du système sur le pinceau").on_hover_text(
                     "Affiche la croix de Windows à la pointe, en plus du cercle du pinceau : elle suit le \

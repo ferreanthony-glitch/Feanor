@@ -999,53 +999,84 @@ fn structure_sans_signature(octets: &[u8]) -> Vec<u8> {
 
 // ---------------------------------------------------------------------------------- partager un projet
 
-/// « Partager ce projet… » : écrit `doc` en disposition partagée dans `manifeste` (un dossier neuf). Le projet de départ n'est
-/// pas touché. Tous les plans et le jeton restent libres ; `moi` signe les fichiers et les commentaires. Sur un fil de fond.
-pub(crate) fn partager(doc: &Document, manifeste: &Path, moi: &Signature, projet: &str, progress: Option<&Progress>, threads: usize) -> Result<(), String> {
+/// Ce qu'il faut pour écrire un projet partagé à partir d'un projet classique : préparé sur le fil de l'interface (copies
+/// légères), joué sur un fil de fond.
+pub(crate) struct PartageAEcrire {
+    job: SaveJob,
+    manifeste: PathBuf,
+    plans: Vec<(u64, u64, DonneesPlan)>,
+    decors: Option<Vec<u8>>,
+    commentaires: Option<Vec<u8>>,
+    structure: Manifest,
+    moi: Signature,
+}
+
+/// « Partager ce projet… », première moitié : le cliché de `doc`. Le projet de départ n'est pas touché ; dans le nouveau, tous les
+/// plans et le jeton sont libres ; `moi` signe les fichiers et les commentaires.
+pub(crate) fn preparer_partage(doc: &Document, manifeste: &Path, moi: &Signature, projet: &str) -> Result<PartageAEcrire, String> {
     let dir = manifeste.parent().ok_or("chemin de projet invalide")?;
     if manifeste.exists() || dir.join(depot::PLANS).exists() {
         return Err(format!("un projet existe déjà à cet endroit ({}). Choisis un autre nom.", dir.display()));
     }
-    // 1. Tout le projet à plat, avec ses dessins, sons, modèles, références, envois (un enregistrement ordinaire).
+    // Tout le projet à plat, avec ses dessins, sons, modèles, références, envois (un enregistrement ordinaire).
     let mut written = HashMap::new();
     let job = prepare_save(doc, manifeste, &mut written, None)?;
-    job.run_with(progress, threads)?;
-    // 2. Un fichier par plan.
-    for (i, p) in doc.panels.iter().enumerate() {
-        let mut data = DonneesPlan::de(doc, i, &BTreeMap::new());
-        for id in data.cels() {
-            if let Some(h) = hash_dessin(dir, id) {
-                data.dessins.insert(id, h);
-            }
-        }
-        let fichier = data.fichier(p.scene, 1, Some(moi.clone()))?;
-        let chemin = dir.join(depot::PLANS).join(format!("{}.json", p.id));
-        if let Some(d) = chemin.parent() {
-            fs::create_dir_all(d).map_err(|e| format!("{} : {e}", d.display()))?;
-        }
-        write_atomic_synced(&chemin, &fichier.octets()?)?;
-    }
-    // 3. Ce qui est maintenant dans les plans quitte les fichiers du montage de l'ancienne disposition (dossier neuf, écrit à l'instant).
-    for nom in [crate::rognage::FILE, crate::planvers::FILE, crate::commentaires::FILE] {
-        let _ = fs::remove_file(dir.join(nom));
-    }
-    write_sidecar(&dir.join(crate::scene3dstore::FILE), crate::scene3dstore::to_bytes_decors(doc)?.as_deref(), |t| crate::scene3dstore::parse(t).is_ok())?;
-    // 4. Les commentaires, au nom de celui qui partage.
-    if !doc.comments.is_empty() {
+    let plans = doc.panels.iter().enumerate().map(|(i, p)| (p.id, p.scene, DonneesPlan::de(doc, i, &BTreeMap::new()))).collect();
+    let commentaires = if doc.comments.is_empty() {
+        None
+    } else {
         let mut suivi = partagecom::Suivi::default();
         suivi.relever(&doc.comments, &|_| true, moi.le);
-        let chemin = dir.join(depot::COMMENTAIRES).join(format!("{}.json", moi.id));
-        if let Some(d) = chemin.parent() {
-            fs::create_dir_all(d).map_err(|e| format!("{} : {e}", d.display()))?;
-        }
-        write_atomic_synced(&chemin, &suivi.fichier(&moi.id)?)?;
-    }
-    // 5. La structure, en dernier : elle cite des fichiers de plans qui sont tous là.
-    let octets = structure_octets(&mut structure_manifest(doc, projet), 1, Some(moi.clone()))?;
-    write_atomic_synced(manifeste, &octets)?;
-    Ok(())
+        Some(suivi.fichier(&moi.id)?)
+    };
+    Ok(PartageAEcrire { job, manifeste: manifeste.to_path_buf(), plans, decors: crate::scene3dstore::to_bytes_decors(doc)?, commentaires, structure: structure_manifest(doc, projet), moi: moi.clone() })
 }
 
+impl PartageAEcrire {
+    /// Seconde moitié : écrit le dossier du projet partagé. Sur un fil de fond.
+    pub(crate) fn ecrire(self, progress: Option<&Progress>, threads: usize) -> Result<(), String> {
+        let PartageAEcrire { job, manifeste, plans, decors, commentaires, mut structure, moi } = self;
+        let dir = manifeste.parent().ok_or("chemin de projet invalide")?.to_path_buf();
+        job.run_with(progress, threads)?;
+        // Un fichier par plan.
+        for (id, scene, mut data) in plans {
+            for c in data.cels() {
+                if let Some(h) = hash_dessin(&dir, c) {
+                    data.dessins.insert(c, h);
+                }
+            }
+            let fichier = data.fichier(scene, 1, Some(moi.clone()))?;
+            let chemin = dir.join(depot::PLANS).join(format!("{id}.json"));
+            if let Some(d) = chemin.parent() {
+                fs::create_dir_all(d).map_err(|e| format!("{} : {e}", d.display()))?;
+            }
+            write_atomic_synced(&chemin, &fichier.octets()?)?;
+        }
+        // Ce qui est maintenant dans les plans quitte les fichiers du montage de l'ancienne disposition (dossier neuf, écrit à l'instant).
+        for nom in [crate::rognage::FILE, crate::planvers::FILE, crate::commentaires::FILE] {
+            let _ = fs::remove_file(dir.join(nom));
+        }
+        write_sidecar(&dir.join(crate::scene3dstore::FILE), decors.as_deref(), |t| crate::scene3dstore::parse(t).is_ok())?;
+        // Les commentaires, au nom de celui qui partage.
+        if let Some(octets) = commentaires {
+            let chemin = dir.join(depot::COMMENTAIRES).join(format!("{}.json", moi.id));
+            if let Some(d) = chemin.parent() {
+                fs::create_dir_all(d).map_err(|e| format!("{} : {e}", d.display()))?;
+            }
+            write_atomic_synced(&chemin, &octets)?;
+        }
+        // La structure, en dernier : elle cite des fichiers de plans qui sont tous là.
+        let octets = structure_octets(&mut structure, 1, Some(moi))?;
+        write_atomic_synced(&manifeste, &octets)?;
+        Ok(())
+    }
+}
+
+/// « Partager ce projet… » en un temps (essais).
+#[cfg(test)]
+pub(crate) fn partager(doc: &Document, manifeste: &Path, moi: &Signature, projet: &str, progress: Option<&Progress>, threads: usize) -> Result<(), String> {
+    preparer_partage(doc, manifeste, moi, projet)?.ecrire(progress, threads)
+}
 /// Un identifiant de film neuf.
 pub(crate) fn nouveau_projet_id() -> String {
     format!("p-{}", crate::equipe::nouvel_id())

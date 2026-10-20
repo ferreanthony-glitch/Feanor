@@ -217,6 +217,9 @@ etat_projet! {
     pos_ui: crate::poskeysui::PosUi = Default::default(),
     // La relecture : sa fenêtre, sa page en calcul et les notes lues visent ce projet.
     relecture: crate::relectureui::RelectureUi = Default::default(),
+    // Le film partagé de ce projet : sa session (son fil de fond continue pour un onglet caché) et son interface.
+    partage: Option<crate::cooperation::Session> = None,
+    equipe_ui: crate::cooperationui::EquipeUi = Default::default(),
     // --- caches (rangés avec l'onglet : rien ne s'en échappe vers un autre projet)
     renderer: crate::render::Renderer = {
         let mut r = crate::render::Renderer::new();
@@ -722,6 +725,10 @@ impl App {
             // Une écriture en cours finit toute seule : on ne la coupe jamais.
             let _ = std::thread::Builder::new().name("enregistrement-fermeture".into()).spawn(move || s.attendre());
         }
+        // Un film partagé qu'on ferme : ses prises sont rendues (sur un fil, pour ne rien figer).
+        if let Some(mut s) = e.partage.take() {
+            let _ = std::thread::Builder::new().name("cooperation-fermeture".into()).spawn(move || s.fermer());
+        }
         nom
     }
 
@@ -1047,12 +1054,19 @@ impl App {
                 if let Some(r) = self.recovery.take() {
                     r.close();
                 }
+                // Un film partagé : ce qu'on tient est rendu avant de quitter.
+                if let Some(mut s) = self.partage.take() {
+                    s.fermer();
+                }
             } else if let Some(e) = self.onglets[i].etat.as_mut() {
                 if let Some(s) = e.saving.take() {
                     s.attendre();
                 }
                 if let Some(r) = e.recovery.take() {
                     r.close();
+                }
+                if let Some(mut s) = e.partage.take() {
+                    s.fermer();
                 }
             }
         }

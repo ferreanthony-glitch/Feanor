@@ -109,6 +109,13 @@ impl App {
                     self.rejeu_apres_ouverture(id);
                 }
                 self.written = loaded.written;
+                // Un film partagé : la session démarre (`cooperationui.rs`). Sans elle, le projet reste en lecture seule : son
+                // chemin n'est pas retenu (un enregistrement ne doit jamais écrire un manifeste classique par-dessus la structure).
+                let partage_ok = match loaded.partage {
+                    Some(o) => self.rejoindre_le_film(o, &path),
+                    None => true,
+                };
+                let status_partage = if partage_ok { None } else { Some(std::mem::take(&mut self.status)) };
                 self.status = if loaded.warnings.is_empty() {
                     format!("Ouvert : {}", path.display())
                 } else {
@@ -123,7 +130,12 @@ impl App {
                     );
                 }
                 self.remember_project(&path);
-                self.path = Some(path);
+                if let Some(m) = status_partage {
+                    self.status = m;
+                    self.modified = false;
+                } else {
+                    self.path = Some(path);
+                }
             }
             Err(e) => self.status = format!("Impossible d'ouvrir le projet : {e}"),
         }

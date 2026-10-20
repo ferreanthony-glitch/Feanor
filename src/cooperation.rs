@@ -309,12 +309,12 @@ impl Moteur {
     fn commande(&mut self, c: Commande, now: u64) {
         match c {
             Commande::Prendre { prise, pret } => {
-                let cible = prise.cible;
+                let (cible, pris_le) = (prise.cible, prise.pris_le);
                 self.fiche.rendues.remove(&cible);
                 self.fiche.prises.insert(cible, prise);
                 self.pertes_signalees.remove(&cible);
                 if !pret {
-                    self.en_attente_de_pret.insert(cible, now);
+                    self.en_attente_de_pret.insert(cible, pris_le.min(now));
                 }
                 self.fiche_a_ecrire = true;
             }
@@ -374,8 +374,10 @@ impl Moteur {
             self.relire_fiches(now);
         }
         for p in &releve.plans {
-            // (Je ne relis pas un plan que je tiens : c'est mon fichier.)
-            if !self.tiens(Cible::Plan(*p)) {
+            // (Je ne relis pas un plan que je tiens et dont j'ai vérifié le fichier : c'est le mien. Un plan que je viens de
+            // prendre et que j'attends, si.)
+            let c = Cible::Plan(*p);
+            if !self.tiens(c) || self.en_attente_de_pret.contains_key(&c) {
                 self.plans.entry(*p).or_default().reessayer_a = Some(now);
             }
         }
@@ -693,6 +695,17 @@ impl Refus {
     }
 }
 
+/// Ce que la pastille d'un plan dit de sa prise (le montage et la planche la peignent).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Pastille {
+    /// Je le tiens (provisoire : prise toute récente ; pret : son fichier est vérifié).
+    Moi { provisoire: bool, pret: bool },
+    Autre { nom: String, couleur: [u8; 3] },
+    Perimee { nom: String, couleur: [u8; 3] },
+    /// Le fichier du plan n'est pas (tout) arrivé.
+    Attente,
+}
+
 /// La session d'un film partagé, côté interface.
 pub(crate) struct Session {
     pub(crate) moi: Identite,
@@ -738,6 +751,12 @@ pub(crate) struct Session {
     pub(crate) a_invalider: bool,
     derniere_vue: u64,
     pub(crate) pertes: Vec<(Cible, String)>,
+    /// ermer a été fait (une seule fois).
+    ferme: bool,
+    /// Ce que l'interface a dit regarder, pour n'envoyer la présence que quand elle change.
+    presence_dite: Option<(Option<u64>, String)>,
+    /// Le numéro d'historique à la dernière vérification des plans neufs (pres_structure).
+    pub(crate) serial_vu: u64,
 }
 
 /// Ce que `sonder` a changé : l'interface réagit.
@@ -872,6 +891,9 @@ impl Session {
             a_invalider: false,
             derniere_vue: 0,
             pertes: Vec::new(),
+            ferme: false,
+            presence_dite: None,
+            serial_vu: 0,
         };
         s.structure_revision = s.bloc.revision;
         // Les plans tels que je les ai lus sont mon « dernier état reçu ».
@@ -1060,10 +1082,29 @@ impl Session {
         rendu
     }
 
+    /// Après une opération du montage (nouveau plan, copie, coupe, suppression…) : les plans neufs sont à moi dès leur
+    /// naissance, ceux qui ont disparu ne sont plus tenus. Rend les plans neufs.
+    pub(crate) fn apres_structure(&mut self, doc: &Document) -> Vec<u64> {
+        let presents: BTreeSet<u64> = doc.panels.iter().map(|p| p.id).collect();
+        let neufs: Vec<(u64, u64)> = doc.panels.iter().filter(|p| !self.plans.contains_key(&p.id)).map(|p| (p.id, p.scene)).collect();
+        for &(p, s) in &neufs {
+            self.prendre_neuf(p, s);
+        }
+        let disparus: Vec<u64> = self.plans.keys().copied().filter(|p| !presents.contains(p)).collect();
+        for p in &disparus {
+            self.rendre(&[Cible::Plan(*p)]);
+            self.plans.remove(p);
+            self.derniers_recus.remove(p);
+            self.versions_posees.remove(p);
+        }
+        neufs.into_iter().map(|(p, _)| p).collect()
+    }
+
     /// Prend un plan que je viens de créer (copie, coupe, nouveau plan) : il est à moi dès sa naissance, sans rien à vérifier.
     pub(crate) fn prendre_neuf(&mut self, plan: u64, scene: u64) {
         let c = Cible::Plan(plan);
-        let now = self.horloge.maintenant();
+        // (Nul autre ne peut l'avoir pris : son numéro est de mon préfixe. Pas de confirmation à attendre.)
+        let now = self.horloge.maintenant().saturating_sub(self.delais.confirmation.as_millis() as u64);
         let prise = Prise { cible: c, pris_le: now, revision: 0, remplace: Vec::new() };
         self.mes_prises.insert(c, prise.clone());
         self.prets.insert(c);
@@ -1120,6 +1161,45 @@ impl Session {
     /// Ce que je regarde (la présence, §9).
     pub(crate) fn regarde(&self, plan: Option<u64>, mode: &str) {
         let _ = self.cmd.send(Commande::Presence { plan, mode: mode.to_string() });
+    }
+
+    /// Comme `regarde`, mais n'écrit que quand ce que je regarde a changé (appelé à chaque image).
+    pub(crate) fn regarde_si_change(&mut self, plan: Option<u64>, mode: &str) {
+        let dit = (plan, mode.to_string());
+        if self.presence_dite.as_ref() != Some(&dit) {
+            self.regarde(plan, mode);
+            self.presence_dite = Some(dit);
+        }
+    }
+
+    /// Mes prises encore provisoires (une prise plus ancienne chez un autre peut encore arriver) : un enregistrement ne les écrit pas.
+    pub(crate) fn en_confirmation(&self) -> Vec<Cible> {
+        self.mes_prises.keys().copied().filter(|c| self.provisoire(*c)).collect()
+    }
+
+    /// Mes prises qui attendent que leur fichier soit à jour.
+    pub(crate) fn en_verification(&self) -> Vec<Cible> {
+        self.mes_prises.keys().copied().filter(|c| !self.prets.contains(c)).collect()
+    }
+
+    /// Les plans tenus par quelqu'un (pour les pastilles du montage) : plan → (équipier, ma prise ?).
+    pub(crate) fn pastille(&self, plan: u64) -> Option<Pastille> {
+        let v = self.vue();
+        let c = Cible::Plan(plan);
+        if let Some(i) = v.plans.get(&plan) {
+            if i.attente.is_some() && !self.tiens(c) {
+                return Some(Pastille::Attente);
+            }
+        }
+        if self.tiens(c) {
+            return Some(Pastille::Moi { provisoire: self.provisoire(c), pret: self.prets.contains(&c) });
+        }
+        match v.etat(c) {
+            EtatPrise::Autre(r) => Some(Pastille::Autre { nom: r.equipier.nom.clone(), couleur: r.equipier.couleur }),
+            EtatPrise::Perimee(l) => Some(Pastille::Perimee { nom: l[0].equipier.nom.clone(), couleur: l[0].equipier.couleur }),
+            EtatPrise::Perdu(Some(r)) => Some(Pastille::Autre { nom: r.equipier.nom.clone(), couleur: r.equipier.couleur }),
+            _ => None,
+        }
     }
 
     pub(crate) fn recharger(&self, plan: u64) {
@@ -1557,6 +1637,10 @@ impl Session {
 
     /// Rend tout ce que je tiens, écrit ma fiche une dernière fois et arrête le moteur.
     pub(crate) fn fermer(&mut self) {
+        if self.ferme {
+            return;
+        }
+        self.ferme = true;
         let cibles: Vec<Cible> = self.mes_prises.keys().copied().collect();
         self.rendre(&cibles);
         let _ = self.cmd.send(Commande::Arret);
@@ -1599,8 +1683,6 @@ impl Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        if self.fil.is_some() || !self.arret.load(Ordering::Relaxed) {
-            self.fermer();
-        }
+        self.fermer();
     }
 }

@@ -45,6 +45,9 @@ mod partagecom;
 mod cooperation;
 #[cfg(test)]
 mod cooperation_tests;
+#[cfg(test)]
+mod cooperation_ui_tests;
+mod cooperationui;
 // Empreintes de contenu, envois (« v2 au réal ») et plans modifiés depuis le dernier : le modèle et le
 // fichier (`envois`), l'interface (`envoisui`).
 mod empreinte;
