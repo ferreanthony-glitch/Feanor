@@ -230,36 +230,13 @@ impl App {
                     let slots = tween::resample(&l.frames, r(l.frames.len()).max(1), interpolate);
                     l.frames = self.realize(&slots);
                 }
-                l.roles = l.roles.iter().map(|(f, role)| (r(*f), *role)).collect();
-                for e in &mut l.fx {
-                    for k in &mut e.keys {
-                        k.frame = r(k.frame);
-                    }
-                }
-                if let Some(v) = &mut l.video {
-                    v.start = if v.start >= 0 { r(v.start as usize) as i64 } else { -(r(v.start.unsigned_abs() as usize) as i64) };
-                }
+                // (Rôles, clés d'effets et de position, début de la vidéo : la règle commune au collage d'un autre projet.)
+                crate::adaptation::retemps_reglages_calque(&mut l, &r);
                 new_layers.push(l);
             }
             let p = &mut self.doc.panels[pi];
             p.layers = new_layers;
-            p.length = r(p.length).max(1);
-            for k in &mut p.camera {
-                k.frame = r(k.frame);
-            }
-            for m in &mut p.marks {
-                m.frame = r(m.frame);
-            }
-            let c = &mut p.cues;
-            c.bookmarks = c.bookmarks.iter().map(|f| r(*f)).collect();
-            c.in_point = c.in_point.map(r);
-            c.out_point = c.out_point.map(r);
-            let k = fps as f32 / from as f32;
-            for n in &mut c.notes {
-                for pt in &mut n.points {
-                    pt[0] *= k;
-                }
-            }
+            crate::adaptation::retemps_reglages_plan(p, &r, fps as f32 / from as f32);
         }
         for t in &mut self.doc.audio_tracks {
             for c in &mut t.clips {

@@ -24,6 +24,14 @@ mod onglets;
 #[cfg(test)]
 mod onglets_tests;
 mod ongletsui;
+// Coller depuis un projet d'une autre taille de feuille : la règle d'adaptation (`adaptation`, pure) et le parcours
+// du collage, avec sa question et son calcul de fond (`collage`).
+mod adaptation;
+#[cfg(test)]
+mod adaptation_tests;
+mod collage;
+#[cfg(test)]
+mod collage_tests;
 mod enregistrement;
 #[cfg(test)]
 mod enregistrement_tests;

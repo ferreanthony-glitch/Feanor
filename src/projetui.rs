@@ -231,7 +231,7 @@ impl App {
         if resized {
             ui.add_space(4.0);
             ui.radio_value(&mut e.scale, true, "Mettre les dessins à l'échelle");
-            let mut text = "Dessins, caméra, guides et placement des calques suivent la nouvelle taille.".to_string();
+            let mut text = "Dessins (hors de la feuille compris), caméra, guides, placement des calques et effets en pixels suivent la nouvelle taille.".to_string();
             if e.w * frame[1] != e.h * frame[0] {
                 text += " Autres proportions : le dessin remplit le nouveau cadre sans être déformé ; ce qui dépasse sort du cadre.";
             }

@@ -152,6 +152,10 @@ pub struct Settings {
     /// réglages : la valeur d'avant (`camtools::PASSE_PARTOUT_DEFAUT`).
     #[serde(default = "default_passe_partout", rename = "opacite_passe_partout")]
     pub passe_partout: u8,
+    /// Coller ce qui vient d'un projet d'une autre taille ou d'une autre cadence (`adaptation.rs`, `collage.rs`) : contenir
+    /// ou remplir, images ou secondes, et poser la question ou non.
+    #[serde(default, rename = "collage")]
+    pub collage: crate::adaptation::ReglageCollage,
 }
 
 fn default_passe_partout() -> u8 {
@@ -217,6 +221,7 @@ impl Default for Settings {
             bruitages: Default::default(),
             generation_son: Default::default(),
             passe_partout: default_passe_partout(),
+            collage: Default::default(),
         }
     }
 }

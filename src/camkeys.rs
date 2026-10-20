@@ -692,6 +692,7 @@ impl App {
         };
         let n = clip.keys.len();
         self.cam_key_clipboard = Some(clip);
+        self.collage.origines.camera = Some(crate::adaptation::Origine::de(&self.doc));
         self.cam_clip_recent = true;
         self.fx_clip_recent = false;
         // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau SHOT (`pasteimage`).
@@ -705,6 +706,11 @@ impl App {
         let Some(clip) = self.cam_key_clipboard.clone() else {
             self.status = "Aucune clé de caméra copiée.".into();
             return;
+        };
+        // D'un projet d'une autre feuille ou cadence : adaptées (adaptation.rs, collage.rs).
+        let clip = match self.collage_preparer(crate::collage::Colle::CamKeys(clip), crate::collage::Reprise::CamKeys { tete: false }) {
+            crate::collage::Preparation::Pret(crate::collage::Colle::CamKeys(c)) => c,
+            _ => return,
         };
         let (at, only) = (self.global_frame(), (self.mode == Mode::Animation).then_some(self.cur_panel));
         self.end_stroke();
@@ -747,6 +753,10 @@ impl App {
         let Some(clip) = self.cam_key_clipboard.clone() else {
             self.status = "Aucune clé de caméra copiée.".into();
             return;
+        };
+        let clip = match self.collage_preparer(crate::collage::Colle::CamKeys(clip), crate::collage::Reprise::CamKeys { tete: true }) {
+            crate::collage::Preparation::Pret(crate::collage::Colle::CamKeys(c)) => c,
+            _ => return,
         };
         let (at, only) = (self.global_frame(), (self.mode == Mode::Animation).then_some(self.cur_panel));
         self.end_stroke();

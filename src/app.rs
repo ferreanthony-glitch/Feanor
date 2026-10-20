@@ -286,9 +286,9 @@ pub(crate) struct LayerClip {
     pub colours: Vec<Layer>,
     pub cels: HashMap<CelId, crate::document::Cel>,
     pub panel_len: usize,
-    /// La feuille du projet d'où il vient : ses dessins n'ont de sens qu'à cette taille (le calque se colle
-    /// aussi dans un autre onglet, `onglets.rs`).
-    pub size: [usize; 2],
+    /// D'où il vient (cadre, feuille, cadence) : le calque se colle aussi dans un autre onglet, adapté à sa feuille
+    /// (`adaptation.rs`).
+    pub origine: crate::adaptation::Origine,
 }
 
 pub(crate) use crate::nouveauui::NewDocDialog;
@@ -654,6 +654,8 @@ pub struct App {
     /// Ce qu'a copié la sélection sur plusieurs calques (`multisel.rs`) : commun à tous les onglets, comme les
     /// autres presse-papiers (la dernière copie est celle qui se colle).
     pub(crate) multi_clip: Option<crate::multisel::MultiClip>,
+    /// Coller ce qui vient d'un autre projet (`collage.rs`, `adaptation.rs`) : la question, le calcul, d'où viennent les copies.
+    pub(crate) collage: crate::collage::Etat,
     /// Les murs du trait que colore le calque de couleur courant (`calquecouleur.rs`).
     pub(crate) murs: crate::calquecouleur::Cache,
     /// Panneaux copiés (12e).
@@ -1138,6 +1140,7 @@ impl App {
             pixel_clipboard: None,
             layer_clipboard: None,
             multi_clip: None,
+            collage: Default::default(),
             murs: Default::default(),
             panel_clipboard: None,
             panel_focus: false,
@@ -1387,6 +1390,7 @@ impl App {
             || self.editorial.as_ref().is_some_and(crate::editorialui::EditorialWindow::rendering)
             || self.relecture.rendering()
             || self.fiche.as_ref().is_some_and(crate::ficheui::FicheWindow::rendering)
+            || self.collage_occupe()
     }
 
     pub(crate) fn current_brush(&self) -> Option<&BrushSettings> {
@@ -2694,7 +2698,7 @@ impl App {
             colours,
             cels,
             panel_len: self.frame_count(),
-            size: [self.doc.width, self.doc.height],
+            origine: crate::adaptation::Origine::de(&self.doc),
         });
     }
 
@@ -2744,11 +2748,12 @@ impl App {
             self.status = "Aucun calque copié (W pour copier le calque courant).".into();
             return;
         };
-        // Copié dans un autre onglet : ses dessins n'ont de sens que sur une feuille de la même taille.
-        if clip.size != [self.doc.width, self.doc.height] {
-            self.status = crate::onglets::refus_de_taille("Ce calque vient", clip.size, [self.doc.width, self.doc.height]);
-            return;
-        }
+        // Copié dans un autre onglet, d'une autre feuille : adapté (`adaptation.rs`, `collage.rs`) ; l'original reste
+        // dans le presse-papiers.
+        let clip = match self.collage_preparer(crate::collage::Colle::Calque(clip), crate::collage::Reprise::Calque) {
+            crate::collage::Preparation::Pret(crate::collage::Colle::Calque(c)) => c,
+            _ => return,
+        };
         self.end_stroke();
         self.drop_bitmap_selection();
         let snap = self.snapshot();
@@ -4499,6 +4504,8 @@ impl App {
             self.poll_brushes();
             self.poll_bruitages(ctx);
             self.poll_suggestions(ctx);
+            self.tick_collage(ctx);
+            self.collage_fenetre(ctx);
             self.tick_save(ctx);
             // Les onglets cachés : une écriture finie est adoptée, rien d'autre ne tourne pour eux.
             self.tick_onglets(ctx);

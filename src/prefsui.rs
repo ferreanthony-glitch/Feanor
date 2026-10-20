@@ -174,6 +174,8 @@ impl App {
                 {
                     let _ = self.settings.save();
                 }
+                ui.add_space(4.0);
+                self.collage_prefs_ui(ui);
                 ui.add_space(6.0);
                 ui.label(RichText::new("Commentaires").strong());
                 ui.horizontal(|ui| {

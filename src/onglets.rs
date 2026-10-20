@@ -434,6 +434,9 @@ impl App {
         if self.open_job.is_some() {
             return Some("l'ouverture du projet");
         }
+        if self.collage_occupe() {
+            return Some("le collage d'une copie d'un autre projet");
+        }
         if self.relecture.occupe() {
             return Some("la relecture (page ou notes)");
         }
