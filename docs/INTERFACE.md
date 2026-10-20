@@ -1270,3 +1270,67 @@ Demande d'Anthony : « le tremblement, j'adore » — d'autres effets qui agisse
 12. Le tremblement du trait (sur la carte graphique maintenant) : même aspect qu'avant ; une pile tremblement + flou : aucun
     clignotement quand on change un réglage.
 13. Les trois thèmes : icônes enfoncées lisibles dans la rangée.
+
+
+---------------------------------------------------------------------------------------------------
+
+## 21. Effets de matière (2026-10-20, branche `effets-matiere`)
+
+Suite des effets du trait, demandée par Anthony après les effets animés. Détail : README (« Effets de matière »),
+`docs/ROADMAP.md` et `docs/PERFORMANCE.md` (section 14).
+
+### Mots
+
+| Idée | Mot | À éviter |
+|---|---|---|
+| Contour d'une autre couleur autour du dessin | **Liseré** (largeur, douceur) | outline, contour (réservé au « Contour blanc » du préréglage) |
+| Trous et bord qui s'effrite | **Trait sec** (trous, bord qui s'effrite) | dry brush |
+| Bord qui déborde comme sur du buvard | **Encre qui bave** (étalement, bord plus foncé) | bleed |
+| La couleur change le long du trait | **Dégradé le long du trait** | gradient (le « Dégradé » de la famille Rendu colore l'image) |
+| Redessiner avec un autre pinceau | **Changer de plume** ; **Appliquer pour de bon** | restyle, bake |
+| Famille d'effets | **Matière** (juste après Trait) | |
+
+### Où et quels gestes
+
+- **Deuxième rangée d'icônes « Matière »** dans le panneau Effets, sous celle du Trait : liseré (sélection), trait sec (pinceau
+  large), encre (goutte), dégradé, plume. Enfoncée = l'effet est sur le calque et actif ; **grisée avec la raison dans la
+  bulle** pour le dégradé et la plume sur un calque bitmap (le liseré, le trait sec et l'encre y marchent). À droite, la
+  baguette : « Encre de Chine », « Feutre usé », « Contour blanc », « Arc-en-ciel », « Plume calligraphique ». Clic droit sur
+  une icône : lui assigner un raccourci.
+- **Aussi** : « Ajouter un effet » > Matière ; clic droit sur un calque > Effets > Matière ; Ctrl+K (« liseré », « trait sec »,
+  « encre », « dégradé », « plume », « appliquer la plume », « préréglage de la matière »).
+- **Régler** : comme les autres effets (curseurs, clés, losanges violets). Une **couleur** (liseré, arrêts du dégradé) se choisit
+  par un sélecteur de couleur et se met en clés d'un bloc. « Changer de plume » a une **liste** (la plume calligraphique de
+  SHOT, puis les réglages de pinceau de la bibliothèque) ; ce choix ne s'anime pas.
+- **« Appliquer pour de bon »** (bouton sous les réglages de la plume, ou Ctrl+K) : remplace les traits de tous les dessins du
+  calque, retire l'effet, une étape d'annulation nommée « Plume appliquée pour de bon » (Ctrl+Z rend les traits et l'effet).
+- Tant qu'on dessine sur le calque, le trait sec, le dégradé et la plume se taisent ; le liseré et l'encre (qui ne lisent que
+  les pixels) restent.
+
+### À vérifier
+
+- Les valeurs par défaut (liseré blanc de 4 px, trait sec 5 trous pour 100 px de 16 px, bavure de 2,5 px) sont des choix de SHOT,
+  à régler à l'œil. Aucune comparaison avec un autre logiciel n'a été vérifiée (**à vérifier**).
+- Une plume dont l'opacité suit l'appui (fusain, craie) sur des traits sans appui enregistré (anciens traits, souris) donne un
+  trait plus pâle : le rayon d'origine est gardé, l'appui est déduit du rayon.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Un calque vectoriel avec un visage : cliquer l'icône liseré. Un contour blanc de 4 px entoure tout le dessin ; largeur 20 px,
+   douceur 10, couleur rouge ; « Derrière le trait » décoché sur un trait translucide : l'anneau ne passe pas dessous.
+2. Un calque bitmap (une peinture) : le liseré, le trait sec et l'encre sont utilisables, le dégradé et la plume sont grisés et la
+   bulle dit pourquoi.
+3. Encre qui bave : étalement 2,5 puis 6 px, irrégularité 0 puis 100 %, bord plus foncé sur un trait de couleur ; le trait reste
+   lisible ; une autre graine, une autre bavure ; préréglage « Encre de Chine ».
+4. Trait sec : des trous le long des traits, un bord qui s'effrite en stries ; « Changer toutes les 2 images » : les trous
+   changent de place comme le tremblement ; sur un bitmap, une version plus simple (bruit sur les bords, plages creuses).
+5. Dégradé : un trait de la couleur 1 à la couleur 2 ; « Sur tout le dessin » : le premier trait rouge, le dernier bleu ;
+   défilement 5 %/img avec la boucle cochée : le dégradé court le long des traits ; quatre couleurs ; « Arc-en-ciel ».
+6. Plume : « Plume calligraphique » (pleins et déliés), Feutre, Fusain, Craie ; le dessin d'origine ne change pas quand on
+   décoche l'effet ; la taille de la plume ; lecture sans à-coup (les traits sont rejoués une fois).
+7. « Appliquer pour de bon » : les traits sont ceux de la plume, l'effet disparaît du calque, l'historique montre « Plume
+   appliquée pour de bon », Ctrl+Z puis Ctrl+Shift+Z.
+8. Pile : liseré + flou (le flou passe après le liseré), trait sec + dégradé + liseré ; copier-coller sur un calque bitmap (le
+   dégradé et la plume sont laissés de côté, la barre d'état le dit) ; enregistrer, rouvrir.
+9. Lecture et export : même image à l'écran, dans l'export et les vignettes ; un calque de 2 000 traits reste fluide.
+10. Les trois thèmes : icônes enfoncées lisibles dans les deux rangées.

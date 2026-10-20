@@ -1038,3 +1038,91 @@ et en pile avec un flou et une teinte (moyenne 0,043, maximum 2).
   à-coup, une pile « tremblement + flou + lueur » sans l'instant « sans effet » quand on change un réglage.
 - Une pile « écriture du trait + flou » : le flou se règle au curseur sans retard (la carte), l'écriture suit ses clés.
 - Éteindre « Effets sur la carte graphique » (Préférences) : retour au calcul de fond, mêmes images.
+
+## 14. Effets de matière (2026-10-20, branche `effets-matiere`)
+
+Cinq effets de plus du trait : liseré, trait sec, encre qui bave, dégradé le long du trait, changer de plume
+(`fxmatiere.rs`, essais `fxmatiere_tests.rs`). La règle de la passe tient : **le fil de l'interface ne calcule rien de ces
+effets** ; ils passent par le calcul de fond et les dessins dérivés de la section 13.
+
+### 14.1 Comment ça marche
+
+- **Liseré, encre qui bave, trait sec sur un bitmap** : opérations **sur les pixels** du dessin (vectoriel ou bitmap : le même
+  code, dans `fx::apply_with`, à leur place dans la pile). Elles lisent une **distance euclidienne exacte** aux pixels d'encre
+  (couverture de 25 % ou plus) : transformée de Felzenszwalb et Huttenlocher, une passe par colonnes puis une par lignes,
+  réparties sur les cœurs (colonnes par paquets de 32, lignes par paquets de 8 ; chaque ligne et chaque colonne se calcule
+  seule, le résultat ne dépend pas du nombre de fils : essai contre une recherche par force brute). Seule la boîte de l'encre
+  plus la portée de l'effet est traitée. Le hasard (bruit de valeur, grain) est un hachage entier de la position : aucune
+  dépendance au découpage en tuiles.
+- **Trait sec, dégradé, plume sur un calque vectoriel** : dans `fxtrait::render`, par trait, avec l'axe et la carte « point de
+  l'axe le plus proche » de la section 13 (le rayon du trait au point s'y ajoute). Posés par bandes de tuiles, dans l'ordre.
+- **Changer de plume** : chaque trait est redessiné avec le réglage choisi, **gardé** (clé = tracé, appuis, couleur, toucher ;
+  réglage final) : le moteur de brosses est rejoué une fois par trait et par plume, jamais par image. Les rayons des points
+  sont refaits d'après la plume (la boîte du trait en dépend). Les pixels sont gardés par le cache des traits (budget de
+  `vector.rs`).
+- **Règle de mélange** : le dégradé, le trait sec et la plume lisent les traits : ils passent d'abord (`hybrid_split`), la
+  carte graphique fait le reste. Le liseré et l'encre gardent leur place dans la pile, donc une pile qui en contient est un
+  **calcul de fond en entier** (l'ordre des effets compte : un flou avant ou après un liseré ne donne pas la même image).
+- **Pas d'aperçu réduit** (`fxproxy::proxyable` : longueurs en pixels de la feuille).
+
+### 14.2 Pourquoi pas de passe sur la carte graphique
+
+Décision de cette série, mesures à l'appui (14.3) : une dilatation par un disque n'est pas séparable (une approximation par
+un flou seuillé change la largeur), et tenir deux niveaux d'écart avec le calcul sur processeur demandait **le même
+algorithme** des deux côtés — une propagation de distances en plusieurs passes (inondation par sauts) dont l'arrondi diffère
+de la transformée exacte. Le calcul de fond coûte 19 à 77 ms (dessin au trait) : de l'ordre d'une image à 24 par seconde, pour
+un réglage qui change rarement. Si les curseurs du liseré paraissent mous à l'écran, la piste est une version par inondation
+sur la carte, comparée à la transformée exacte (non faite). Aucun accord carte / processeur n'est donc mesuré dans cette
+série ; l'essai `a_stack_with_the_pixel_effects_stays_on_the_processor_and_the_vector_ones_split_off` fige la règle.
+
+### 14.3 Mesures
+
+`cargo test --release --offline --target-dir target\msvc --lib fxmatiere_tests::measure -- --ignored --nocapture --test-threads=1`.
+Poste de référence (Core i7-10700K, 16 fils, RTX 2080 SUPER ; ± 30 %), 2026-10-20, chaque ligne : moyenne de 3 à 5 images.
+
+Calque vectoriel de **2 000 traits** (1 800 lisses, 200 de feutre, fusain et gouache), feuille 1920 × 1080 (le dessin seul :
+60 ms) :
+
+| Effet | ms par image | Remarque |
+|---|---|---|
+| Liseré 4 px | 19 | sur les pixels du calque |
+| Liseré 20 px, douceur 10 | 19 | la portée ne change pas le coût (transformée exacte) |
+| Encre qui bave (2,5 px, bord foncé) | 40 | deux distances (dehors et dedans) |
+| Trait sec, par trait | 78 | |
+| Trait sec, retiré toutes les 2 images | 77 | seule la variante change |
+| Dégradé, par trait | 71 | |
+| Dégradé sur tout le dessin qui défile | 71 | un dessin dérivé par image |
+| Changer de plume (Feutre) | 262 la première fois, 47 ensuite | rejeu des traits une seule fois |
+| Trait sec + dégradé | 84 | |
+| Trait sec + dégradé + liseré + encre | 135 | |
+
+Calque bitmap **4K** (3840 × 2160), un seul calcul de fond :
+
+| Contenu | Liseré 4 px | Liseré 20 px | Encre qui bave | Trait sec (bitmap) |
+|---|---|---|---|---|
+| Dessin au trait (2 000 traits) | 76 ms | 77 ms | 181 ms | 90 ms |
+| Grande forme pleine | 42 ms | 43 ms | 71 ms | 76 ms |
+| Feuille entière pleine | 77 ms | 77 ms | 96 ms | 124 ms |
+
+**Fil de l'interface** : rien de ces effets n'y est calculé. Ce qui y reste : `fx::steps_at` ajoute la signature de la plume
+(une recherche dans une courte liste) ou l'image du défilement ; la demande d'un dessin dérivé coûte 0,08 ms (section 13).
+La **plume** garde ses traits redessinés dans une table (jusqu'à 12 000 traits ; leurs pixels sont sous le budget du cache des
+traits) : la copie du dessin vectoriel pour le fond reste de 0,5 à 1 ms par retouche. « Appliquer pour de bon » ne rejoue pas
+sur le fil de l'interface : les traits déjà redessinés par l'effet gardent leurs pixels, les autres sont rendus en rapide
+(`render_quick`) puis exactement en arrière-plan (`rejeu.rs`).
+
+À lire ainsi : à 24 images par seconde il faut 41,7 ms par image. Un dessin ordinaire (200 traits) tient avec tous ces effets.
+À 2 000 traits, les effets qui changent à chaque image (dégradé qui défile) tournent à 12 images par seconde en arrière-plan,
+les images arrivent un peu après la première fois et le deuxième tour est servi par le cache ; un liseré, une bavure ou un
+trait sec fixes (une seule image à calculer) sont prêts en moins d'un quart de seconde, y compris sur une feuille 4K.
+
+### 14.4 Risques et limites
+
+- **Mémoire** : la transformée garde deux tableaux de 8 octets par pixel de la zone traitée (133 Mo pour une feuille 4K
+  entièrement couverte, 17 Mo pour 1080p), libérés à la fin du calcul ; plus une image dérivée par effet et par image dans le
+  cache de 768 Mo.
+- **Bitmap** : le trait sec y est une version simplifiée (pas de trous le long d'un trait) ; le dégradé et la plume n'y sont pas
+  (aucun trait).
+- Le bord de l'encre est le contour à 25 % de couverture : un pinceau très doux (aérographe) a un liseré qui suit ce contour.
+- **Pas vu à l'écran** dans cette séance (aucune application lancée, consigne) : voir `docs/INTERFACE.md` section 21 ; planche de
+  contact : `$env:FXMATIERE_PNG = '...'` puis `fxmatiere_tests::dump -- --ignored`.

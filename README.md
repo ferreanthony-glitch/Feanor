@@ -424,6 +424,40 @@ on les coche et décoche, le dessin reste tel quel).
   dessin donne toujours les mêmes pixels (lecture, export, vignettes). Tant que tu dessines sur le calque, ses effets du
   trait se taisent. Un fond sous le trait reste fixe. Mesures sur 2 000 traits : `docs/PERFORMANCE.md` (section 13) ;
   liste de ce qu'il faut regarder à l'écran : `docs/INTERFACE.md` (section 20).
+- **Effets de matière** (2026-10-20, famille **Matière**, `src/fxmatiere.rs`, branche `effets-matiere`). Cinq effets de
+  plus, dans une **deuxième rangée d'icônes « Matière »** juste sous celle du Trait (même baguette de préréglages, mêmes
+  clés, même copier-coller, une seule fois par calque et par sorte). Les trois premiers marchent sur **tous les calques** ;
+  les deux derniers sur **les calques vectoriels seulement** (grisés avec la raison sur un bitmap) :
+  - **Liseré** (icône sélection) : un contour d'une autre couleur autour du dessin, pour détacher un personnage du fond ;
+    largeur (distance exacte au bord de l'encre, un vrai disque), douceur du bord, opacité, couleur, « derrière le trait »
+    (sous un trait un peu transparent on voit le liseré) ou en anneau seulement. Sur les pixels du calque : vectoriel ou
+    bitmap, même résultat.
+  - **Trait sec** (icône pinceau large) : des trous le long de chaque trait (nombre pour 100 px, longueur, profondeur : des
+    poils de brosse passent) et un bord qui s'effrite en stries parallèles au trait ; graine, et **retirage toutes les N
+    images** (variantes, comme le tremblement). Sur un **bitmap**, une version simplifiée : plages creuses d'un bruit à
+    basse fréquence et bord effrité d'après la distance à l'encre (pas de trait : pas de « le long du trait »).
+  - **Encre qui bave** (icône goutte) : le bord du trait bave un peu, irrégulièrement, comme de l'encre sur du papier
+    buvard (étalement, irrégularité, force, grain du papier, graine) et fonce à l'endroit où l'encre s'accumule (bord plus
+    foncé et un peu effrité) ; la bavure est de la couleur de l'encre voisine, le cœur du trait reste intact et lisible.
+  - **Dégradé le long du trait** (icône dégradé, vectoriel) : la couleur passe de la première à la dernière de 2 à 4
+    couleurs du début à la fin de chaque trait, ou **sur tout le dessin dans l'ordre des traits** ; mélange avec la couleur
+    d'origine, **défilement** animable (en % du dégradé par image), boucle. La forme et la texture ne changent pas.
+  - **Changer de plume** (icône plume, vectoriel) : les traits sont redessinés avec **un autre réglage de pinceau** de la
+    bibliothèque (encre, feutre, fusain, craie, gouache, un réglage importé…) ou la **plume calligraphique** de SHOT, en
+    gardant leur tracé et leur pression ; taille de la plume en %. **Rien n'est modifié** : c'est un effet. Le bouton
+    **« Appliquer pour de bon »** (et l'action `fx.plume_appliquer`) remplace vraiment les traits de tous les dessins du
+    calque, en **une étape d'annulation nommée** « Plume appliquée pour de bon », et retire l'effet. Un trait sans appui
+    enregistré garde son rayon (la plume ne le dépasse pas) ; une plume dont l'opacité suit l'appui (fusain) le montre alors
+    plus pâle.
+  - **Préréglages de la matière** (baguette) : « Encre de Chine », « Feutre usé » (plume Feutre et trait sec), « Contour
+    blanc », « Arc-en-ciel » (dégradé sur tout le dessin), « Plume calligraphique ». Actions `fx.lisere`, `fx.trait_sec`,
+    `fx.encre_bave`, `fx.degrade_trait`, `fx.plume`, `fx.plume_appliquer`, `fx.preset_encre_chine`, `fx.preset_feutre_use`,
+    `fx.preset_contour_blanc`, `fx.preset_arc_en_ciel`, `fx.preset_plume_calligraphique` (Ctrl+K, sans touche par défaut).
+  Tout est calculé en arrière-plan (dessins dérivés), jamais sur le fil de l'interface ; hasard par hachage (graine,
+  position, trait, variante) : mêmes réglages, mêmes pixels, sur un fil ou plusieurs ; export, vignettes et écran
+  identiques. **Pas de passe sur la carte graphique** (voir `docs/PERFORMANCE.md`, section 14, pour la raison et les
+  mesures : 2 000 traits en 19 à 78 ms par image, une feuille 4K en 42 à 181 ms). Format de projet **32** : une version
+  précédente refuse le projet. Liste à regarder à l'écran : `docs/INTERFACE.md` (section 21).
 - Au clic droit sur un calque, la partie « Effets » : opacité, mode de fusion, chaque famille
   en cases à cocher ; on règle les paramètres dans le panneau Effets.
 - **Copier-coller des effets d'un calque à l'autre** : l'icône « Copier l'effet » de chaque effet (ou
@@ -1861,6 +1895,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `fxcache.rs`, `fxproxy.rs` | Effets : cache en octets, calcul de fond, dernier résultat en attendant ; aperçu réduit pendant la lecture et les gestes |
 | `tremblement.rs` | Tremblement du trait des calques vectoriels : champ de déplacement lisse, variantes, repos (effet de la pile) ; aussi sur la carte graphique (`fs_boil`) |
 | `fxtrait.rs` | Effets du trait des calques vectoriels (écriture, crayonné multiple, respiration, ondulation, pointillés, désagrégation) : axe des traits, rendu en pixels par trait, bandes de tuiles, préréglages, bulles |
+| `fxmatiere.rs` | Effets de matière (liseré, trait sec, encre qui bave, dégradé le long du trait, changer de plume) : distance exacte au bord, bruit par hachage, plumes publiées par la bibliothèque de pinceaux, préréglages, bulles |
 | `calqueffet.rs`, `fxcine.rs` | Calques d'effets (ajustement, incrustation) : repère du plan, dessin dérivé de ce qui est dessous, enregistrement ; effets « Cinéma » (flash, impact, lueur diffuse, secousse, vignettage, grain, aberration) |
 | `prereglages.rs`, `prereglagesui.rs`, `incrustation.rs` | Préréglages d'effets (clés posées à la tête de lecture), fenêtre à aperçu en direct et menus ; texte des incrustations (timecode…) et son tracé |
 | `ctg.rs`, `ctgui.rs` | Calque CTG : remplissage par graffitis, sources, structure (13j) |

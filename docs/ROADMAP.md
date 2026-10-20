@@ -2490,6 +2490,58 @@ application lancée, consigne) : liste à regarder dans `docs/INTERFACE.md` (sec
   pour les effets qui changent à chaque image (pistes : carte des points les plus proches gardée par version du dessin,
   version sur la carte de l'écriture) ; les « effets de matière » (prochaine série). Comparaisons avec d'autres logiciels :
   aucune vérifiée (**à vérifier**).
+
+## Effets de matière : liseré, trait sec, encre qui bave, dégradé le long du trait, changer de plume (demandés par Anthony le 2026-10-20) ✅
+
+La demande : la deuxième série d'effets du trait, ceux de matière. Branche `effets-matiere` (partie de `main` da13a79 ;
+`src/fxmatiere.rs`, essais `fxmatiere_tests.rs`). Pas vu à l'écran dans cette séance (aucune application lancée, consigne) :
+liste à regarder dans `docs/INTERFACE.md` (section 21) ; planche de contact PNG par un essai à lancer à la main.
+
+- ✅ **Où** : cinq effets de la pile du calque, famille **Matière**, dans une **deuxième rangée d'icônes** sous celle du Trait
+  (plutôt qu'une rangée de onze icônes : deux familles, deux rangées, une baguette chacune) ; mêmes clés, copier-coller,
+  enregistrement. Le liseré, le trait sec et l'encre qui bave vont **sur les deux sortes de calques** ; le dégradé et la
+  plume sont **vectoriels seulement** (grisés avec la raison dans la bulle : ils lisent l'abscisse et le tracé des traits).
+- ✅ **Liseré** : distance euclidienne **exacte** au bord de l'encre (transformée de Felzenszwalb, deux passes séparables
+  réparties sur les cœurs ; bord = contour à 25 % de couverture), pas un flou seuillé : un pixel d'encre donne un disque exact
+  (essai : tous les pixels à moins de la largeur sont pleins, à plus d'un pixel au-delà vides). Derrière le trait, ou en anneau
+  (rien sous l'encre, même transparente). Sur les pixels : vectoriel et bitmap donnent la même image.
+- ✅ **Trait sec** : vectoriel, des trous le long de chaque trait (une case de 75 / fréquence pixels, trois fois sur quatre un
+  trou de longueur tirée au hasard, où passent des poils) et un bord qui s'effrite en stries parallèles au trait (bruit étiré
+  le long de l'abscisse, rayon du trait) ; retirage toutes les N images. Bitmap, **forme simplifiée décidée** : plages creuses
+  d'un bruit de valeur à basse fréquence (la taille d'une plage = longueur des trous, la part creuse = trous × longueur) et
+  bord effrité d'après la distance à l'encre ; pas de notion de « trait » donc pas de trous le long de lui.
+- ✅ **Encre qui bave** : halo irrégulier sous le trait, de la couleur de l'encre la plus proche (fbm de la taille du grain du
+  papier, portée entre étalement × (1 − irrégularité) et × (1 + irrégularité)), bord plus foncé et un peu effrité sur 2 à
+  3 pixels, cœur intact. Sur les pixels : les deux sortes de calques.
+- ✅ **Dégradé le long du trait** : 2 à 4 couleurs, par trait ou sur tout le dessin dans l'ordre, mélange, défilement (un
+  dessin dérivé par image seulement quand il défile), boucle. Sélecteur de couleur dans le panneau (nouveauté de l'interface :
+  un réglage couleur = trois réglages à la suite, clés comprises).
+- ✅ **Changer de plume** : chaque trait est refait avec un réglage de pinceau (désigné par un numéro de 24 bits tiré de
+  son **nom**, pas de son rang : ranger ou importer des brosses ne change pas le choix ; publié par la bibliothèque à
+  chaque `share()`), tracé et appuis gardés, **rayons de ses points refaits d'après la plume** (la boîte du trait en dépend :
+  sans cela la plume était coupée). Les traits redessinés sont gardés (un rejeu par trait et par plume, pas par image).
+  **« Appliquer pour de bon »** : remplace les traits de tous les dessins du calque, rendu rapide puis exact en arrière-plan,
+  une étape nommée annulable (structure + dessins), l'effet est retiré.
+- ✅ **Préréglages** : Encre de Chine, Feutre usé, Contour blanc, Arc-en-ciel, Plume calligraphique (une plume plate inclinée de
+  SHOT, toujours disponible).
+- ✅ **Carte graphique : pas de passe** (décision documentée, `docs/PERFORMANCE.md` §14) : une dilatation par un disque n'est
+  pas séparable, et rester à moins de deux niveaux du processeur demandait le même algorithme des deux côtés (propagation de
+  distances en plusieurs passes) ; avec 19 ms (2 000 traits) à 77 ms (4K) en calcul de fond, le gain ne justifiait pas la
+  deuxième implémentation. Une pile qui contient le liseré ou l'encre reste un calcul de fond ; le dégradé, le trait sec et la
+  plume passent d'abord (`hybrid_split`) et la carte fait le reste.
+- ✅ **Format** : `project::VERSION` 31 → **32** ; les projets d'avant s'ouvrent tels quels, une version précédente refuse le projet.
+- ✅ **Essais** (`fxmatiere_tests.rs`, 30 dont deux à lancer à la main) : distance exacte contre force brute, liseré (rayon exact,
+  couleur, opacité, douceur, derrière / anneau, vectoriel = bitmap), bavure (portée, irrégularité, graine, cœur intact, bord
+  foncé), trait sec (trous, stries, retirage, bitmap), dégradé (début, fin, tout le dessin, défilement, boucle), plume (tracé,
+  pression, couleur, taille, introuvable, rejeu unique, toutes les brosses de la bibliothèque, remplir pour de bon + annuler +
+  rétablir), déterminisme (un fil ou plusieurs), réglages extrêmes et cassés, enregistrement et projets d'avant, calque
+  bitmap (trois oui, deux grisés), dessin dérivé, écran = export = vignettes, règle de mélange, copier-coller, actions,
+  préréglages, panneau Effets dessiné.
+- Pas faits : un liseré par trait ou par groupe de traits (il entoure tout le calque) ; un dégradé et une plume sur un
+  calque bitmap (aucun trait) ; le trait sec bitmap en stries le long des traits ; des plumes qui suivent des clés (le choix de
+  la plume est un choix, il ne s'anime pas) ; les textes et zones remplies ne sont pas des traits (la plume les laisse) ;
+  un « animer à l'arrêt » pour le trait sec. Comparaisons avec d'autres logiciels : aucune vérifiée (**à vérifier**).
+
 ## Retouches du 2026-10-19 (aides au cadrage, choix au rectangle, tremblement, commentaires) ✅
 
 Quatre retours d'Anthony, branche `retouches` (pas vus à l'écran dans cette séance : à regarder).
