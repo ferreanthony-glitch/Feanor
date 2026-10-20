@@ -605,6 +605,26 @@ fn a_project_file_dropped_on_the_window_opens_in_a_tab() {
 }
 
 #[test]
+fn closing_the_others_can_save_them_all_first() {
+    let dir = dossier("onglets-autres-enregistrer");
+    let mut b = banc(projet(200, 2), false);
+    let a = enregistrer_a(&mut b, &dir, "A");
+    modifier(&mut b, 201);
+    onglet_avec(&mut b, projet(90, 2));
+    let c = enregistrer_a(&mut b, &dir, "C");
+    modifier(&mut b, 91);
+    onglet_avec(&mut b, projet(50, 2));
+    let garde = b.app.onglets[b.app.actif].id;
+    b.app.fermer_les_autres(garde);
+    assert_eq!(b.app.groupe.as_ref().map(|g| g.onglets.len()), Some(2));
+    b.app.groupe_choisir(0);
+    assert!(jusqu_a(&mut b, Duration::from_secs(60), |b| b.app.onglets.len() == 1), "les autres se ferment une fois écrits : {}", b.app.status);
+    assert_eq!((rouge_sur_disque(&a), rouge_sur_disque(&c)), (201, 91));
+    assert_eq!(rouge(&b), 50, "l'onglet gardé est resté affiché");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn closing_the_others_asks_once_for_the_modified_ones() {
     let mut b = banc(projet(200, 2), false);
     onglet_avec(&mut b, projet(90, 2));
