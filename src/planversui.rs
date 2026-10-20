@@ -42,6 +42,22 @@ pub(crate) fn titre_long_avec_version(doc: &Document, index: usize) -> String {
     }
 }
 
+/// Ce que change une durée de plan qui passe de `avant` à `apres` images quand on change de version (chaque
+/// version garde la sienne) : rien si elle est la même ; sinon les plans suivants reculent ou avancent d'autant
+/// (comme pour toute durée qui change), le son reste en place.
+pub(crate) fn phrase_duree(avant: usize, apres: usize, fps: u32) -> String {
+    use crate::storyboard::duration_label;
+    if avant == apres {
+        return format!("Même durée ({}).", duration_label(apres, fps));
+    }
+    let (sens, ecart) = if apres > avant { ("reculent", apres - avant) } else { ("avancent", avant - apres) };
+    format!(
+        "Durée du plan : {} → {} ; les plans suivants {sens} de {ecart} i, le son reste en place.",
+        duration_label(avant, fps),
+        duration_label(apres, fps)
+    )
+}
+
 impl App {
     /// Une opération sur les versions du plan `index`, avec une étape d'annulation nommée `name`. `op`
     /// rend faux si rien n'a changé.
@@ -60,8 +76,17 @@ impl App {
         // Le plan courant garde sa place, mais ses calques ne sont plus les mêmes : la navigation se recale.
         if self.cur_panel == index {
             self.clamp_nav();
+            // Chaque version a sa durée : plus courte, la tête de lecture ne reste pas au-delà de la fin, et ce
+            // qui visait des images de l'autre version (clés choisies, sélection) ne vise plus rien de sûr.
+            self.after_rognage();
+            self.cur_frame = self.cur_frame.min(self.frame_count().saturating_sub(1));
         }
         true
+    }
+
+    /// La durée du plan `index` en images (0 s'il n'existe pas).
+    fn duree_du_plan(&self, index: usize) -> usize {
+        self.doc.panels.get(index).map_or(0, crate::document::Panel::frame_count)
     }
 
     /// Ce qui reste attaché au plan et non à la version : on le dit.
@@ -118,8 +143,10 @@ impl App {
     pub(crate) fn passer_a_la_version(&mut self, index: usize, numero: u32) {
         let Some(plan) = self.doc.panels.get(index).map(|p| p.id) else { return };
         let ancien = self.doc.numero_de_version(plan);
+        let avant = self.duree_du_plan(index);
         if self.version_op(&format!("Passer à la version {}", etiquette(numero)), index, |d| d.changer_de_version(index, numero)) {
-            self.status = format!("Le plan est maintenant en {} ; la {} est gardée.{}", etiquette(numero), etiquette(ancien), self.note_reserve(plan));
+            let duree = phrase_duree(avant, self.duree_du_plan(index), self.doc.fps);
+            self.status = format!("Le plan est maintenant en {} ; la {} est gardée. {duree}{}", etiquette(numero), etiquette(ancien), self.note_reserve(plan));
         }
     }
 
@@ -129,6 +156,7 @@ impl App {
         let ancien = self.doc.numero_de_version(plan);
         let now = crate::recovery::now_secs();
         let mut neuf = 0;
+        let avant = self.duree_du_plan(index);
         if self.version_op(&format!("Restaurer la version {}", etiquette(numero)), index, |d| match d.restaurer_version(index, numero, now) {
             Some(n) => {
                 neuf = n;
@@ -136,7 +164,8 @@ impl App {
             }
             None => false,
         }) {
-            self.status = format!("La {} est restaurée en {} ; la {} est gardée.{}", etiquette(numero), etiquette(neuf), etiquette(ancien), self.note_reserve(plan));
+            let duree = phrase_duree(avant, self.duree_du_plan(index), self.doc.fps);
+            self.status = format!("La {} est restaurée en {} ; la {} est gardée. {duree}{}", etiquette(numero), etiquette(neuf), etiquette(ancien), self.note_reserve(plan));
         }
     }
 
@@ -179,13 +208,16 @@ impl App {
         let index = self.cur_panel;
         let Some(plan) = self.doc.panels.get(index).map(|p| p.id) else { return };
         let actuelle = self.doc.numero_de_version(plan);
-        let autres: Vec<(u32, u64)> = self.doc.versions_du_plan(plan).map(|v| v.autres.iter().map(|r| (r.numero, r.date)).collect()).unwrap_or_default();
+        let autres: Vec<(u32, u64, usize)> = self.doc.versions_du_plan(plan).map(|v| v.autres.iter().map(|r| (r.numero, r.date, r.panel.frame_count())).collect()).unwrap_or_default();
+        let fps = self.doc.fps;
+        let duree_active = crate::storyboard::duration_label(self.duree_du_plan(index), fps);
         let (mut passer, mut restaurer, mut supprimer, mut nouvelle, mut vide, mut comparer) = (None, None, None, false, false, None);
         ui.vertical(|ui| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new(etiquette(actuelle)).strong()).on_hover_text("La version active du plan : celle que montrent le montage, l'export et les envois.");
                 if !autres.is_empty() {
-                    ui.label(RichText::new(format!("sur {}", autres.len() + 1)).color(theme::texte_doux()));
+                    ui.label(RichText::new(format!("sur {} · {duree_active}", autres.len() + 1)).color(theme::texte_doux()))
+                        .on_hover_text("Chaque version a sa durée : changer de version change la durée du plan dans le montage.");
                 }
                 let r = self.raccourci("version.nouvelle");
                 if bulles::icone(ui, ph::GIT_FORK, "Nouvelle version, en dupliquant", "Garde le plan tel qu'il est comme version plus ancienne et continue sur une copie.", &r).clicked() {
@@ -196,10 +228,11 @@ impl App {
                     vide = true;
                 }
             });
-            for &(numero, date) in &autres {
+            for &(numero, date, duree) in &autres {
                 ui.horizontal(|ui| {
                     let quand = if date > 0 { format!(" · {}", date_courte(date)) } else { String::new() };
-                    ui.label(RichText::new(format!("{}{quand}", etiquette(numero))).color(theme::texte_doux()));
+                    let duree = crate::storyboard::duration_label(duree, fps);
+                    ui.label(RichText::new(format!("{}{quand} · {duree}", etiquette(numero))).color(theme::texte_doux()));
                     if bulles::icone(ui, ph::SWAP, "Passer à cette version", "Elle devient la version active ; la version d'aujourd'hui est gardée.", "").clicked() {
                         passer = Some(numero);
                     }
@@ -259,17 +292,19 @@ impl App {
     pub(crate) fn version_menu(&mut self, ui: &mut egui::Ui, index: usize, avec_nouvelle: bool) {
         let Some(plan) = self.doc.panels.get(index).map(|p| p.id) else { return };
         let actuelle = self.doc.numero_de_version(plan);
-        let autres: Vec<(u32, u64)> = self.doc.versions_du_plan(plan).map(|v| v.autres.iter().map(|r| (r.numero, r.date)).collect()).unwrap_or_default();
+        let autres: Vec<(u32, u64, usize)> = self.doc.versions_du_plan(plan).map(|v| v.autres.iter().map(|r| (r.numero, r.date, r.panel.frame_count())).collect()).unwrap_or_default();
+        let fps = self.doc.fps;
         ui.menu_button(format!("Version du plan ({})", etiquette(actuelle)), |ui| {
             if avec_nouvelle {
                 self.nouvelle_version_menu(ui, index);
             }
-            for (k, (numero, date)) in autres.into_iter().enumerate() {
+            for (k, (numero, date, duree)) in autres.into_iter().enumerate() {
                 if avec_nouvelle || k > 0 {
                     ui.separator();
                 }
                 let quand = if date > 0 { format!(" · {}", date_courte(date)) } else { String::new() };
-                ui.label(RichText::new(format!("{}{quand}", etiquette(numero))).color(theme::texte_doux()));
+                let duree = crate::storyboard::duration_label(duree, fps);
+                ui.label(RichText::new(format!("{}{quand} · {duree}", etiquette(numero))).color(theme::texte_doux()));
                 if ui.button(format!("Passer à la {}", etiquette(numero))).clicked() {
                     ui.close_menu();
                     self.passer_a_la_version(index, numero);

@@ -12,7 +12,7 @@ use eframe::egui::{pos2, vec2, Rect};
 use crate::document::Document;
 
 /// Largeur et hauteur d'une carte.
-pub const CARTE_L: f32 = 150.0;
+pub const CARTE_L: f32 = 172.0;
 pub const CARTE_H: f32 = 46.0;
 /// Entre deux cartes, et entre les cartes et le bord de la pile.
 pub const ECART: f32 = 3.0;
@@ -35,6 +35,9 @@ pub struct Carte {
     /// La version active : celle que montre le film.
     pub actuelle: bool,
     pub date: u64,
+    /// La durée de cette version, en images : chaque version garde la sienne (changer de version change la
+    /// durée du plan dans le montage).
+    pub duree: usize,
 }
 
 /// L'étiquette « V2 » se montre dès qu'un plan a plusieurs versions (un plan à une seule reste propre).
@@ -46,8 +49,9 @@ pub fn etiquette_visible(nombre_de_versions: usize) -> bool {
 /// proche du bloc. Vide pour un plan à une seule version.
 pub fn cartes(doc: &Document, plan: u64) -> Vec<Carte> {
     let Some(v) = doc.versions_du_plan(plan) else { return Vec::new() };
-    let mut out: Vec<Carte> = v.autres.iter().map(|r| Carte { numero: r.numero, actuelle: false, date: r.date }).collect();
-    out.push(Carte { numero: v.actuelle, actuelle: true, date: v.date_actuelle });
+    let mut out: Vec<Carte> = v.autres.iter().map(|r| Carte { numero: r.numero, actuelle: false, date: r.date, duree: r.panel.frame_count() }).collect();
+    let active = doc.panels.iter().find(|p| p.id == plan).map_or(1, crate::document::Panel::frame_count);
+    out.push(Carte { numero: v.actuelle, actuelle: true, date: v.date_actuelle, duree: active });
     out.sort_by_key(|c| c.numero);
     out
 }
