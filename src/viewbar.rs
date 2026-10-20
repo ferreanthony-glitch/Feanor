@@ -135,7 +135,7 @@ impl App {
     pub(crate) fn view_tools_bar(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::entete());
-        let in3d = self.stage3d.on && !self.camera_view;
+        let in3d = self.scene3d.on && !self.camera_view;
         // Étroit : curseurs plus courts, sans la force de la table lumineuse.
         let narrow = ui.available_width() < 700.0;
         ui.horizontal_centered(|ui| {
@@ -149,9 +149,8 @@ impl App {
             let thumbs = self.board_view == crate::app::BoardView::Panels && self.mode == crate::app::Mode::Storyboard;
             self.command_button(ui, ph::SQUARES_FOUR, "vue.planches", "Vue dessin / vignettes", "Dessiner le plan, ou voir toutes ses images de storyboard en planche.", Some(thumbs));
             self.command_button(ui, ph::FRAME_CORNERS, "camera.vue", "Vue à travers la caméra", "Voir ce que filme la caméra du plan.", Some(self.camera_view));
-            self.command_button(ui, ph::CUBE_FOCUS, "vue.3d", "Plateau en 3D", "Les calques à leur profondeur, la caméra et le sol, vus en 3D.", Some(in3d));
-            self.command_button(ui, ph::CUBE, "scene3d.basculer", "Scène 3D", "Blocage en 3D : formes simples, mannequins, caméra du plateau, envoyés vers un calque de fond.", Some(self.scene3d.on && !self.camera_view));
-            if in3d || (self.scene3d.on && !self.camera_view) {
+            self.command_button(ui, ph::CUBE, "espace3d.basculer", "Espace 3D", "Les calques (cartes), les objets 3D et la caméra du plan dans un seul espace : les déplacer, les tourner, les mettre à l'échelle, pour la profondeur et la parallaxe.", Some(in3d));
+            if in3d {
                 return;
             }
             sep(ui);
@@ -250,14 +249,8 @@ impl App {
             ui.add_space(6.0);
             ui.separator();
             ui.add_space(6.0);
-            // Les boutons « Plateau en 3D » et « Scène 3D » ne sont que dans la barre du bas
-            // (`view_tools_bar`, Anthony 2026-10-20 : pas deux fois la même icône) ; ici, seulement
-            // leurs outils quand l'un des deux est actif.
-            let in3d = self.stage3d.on && !cam;
-            if in3d {
-                self.stage3d_tools(ui);
-                return;
-            }
+            // Le bouton « Espace 3D » n'est que dans la barre du bas (`view_tools_bar`, Anthony 2026-10-20 : pas
+            // deux fois la même icône) ; ici, seulement ses outils quand il est actif.
             let in_scene = self.scene3d.on && !cam;
             if in_scene {
                 self.scene3d_tools(ui);

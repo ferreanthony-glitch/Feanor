@@ -213,6 +213,29 @@ impl Monde {
         Warp::partial(src, CARD_CELLS, |p| self.to_sheet(eye, m::point(&mx, [p.x / w - 0.5, -(p.y / h - 0.5), 0.0])))
     }
 
+    /// Le point `p` de la carte (pixels de son dessin) vu de l'œil `eye`, sur la feuille (pixels).
+    pub fn card_to_sheet(&self, eye: V3, xf: &Xf, p: Pos2) -> Option<Pos2> {
+        let [w, h] = self.stage;
+        self.to_sheet(eye, m::point(&xf.matrix(), [p.x / w - 0.5, -(p.y / h - 0.5), 0.0]))
+    }
+
+    /// Le chemin inverse : le point `s` de la feuille, retrouvé sur la carte (pixels de son dessin), là où le regard de
+    /// l'œil `eye` qui passe par `s` traverse le plan de la carte. C'est ce qui sert à dessiner sur une carte inclinée.
+    pub fn sheet_to_card(&self, eye: V3, xf: &Xf, s: Pos2) -> Option<Pos2> {
+        let on_sheet = [(s.x - self.stage[0] / 2.0) * self.k, -(s.y - self.stage[1] / 2.0) * self.k, 0.0];
+        let ray = Ray::new(eye, m::sub(on_sheet, eye));
+        let (o, d) = ray.to_local(&m::inverse_affine(&xf.matrix()));
+        if d[2].abs() < 1e-9 {
+            return None;
+        }
+        let t = -o[2] / d[2];
+        if t <= 0.0 {
+            return None;
+        }
+        let (x, y) = (o[0] + d[0] * t, o[1] + d[1] * t);
+        Some(pos2((x + 0.5) * self.stage[0], (0.5 - y) * self.stage[1]))
+    }
+
     /// Le point de la carte (pixels de son dessin) touché par le rayon, et la distance le long du rayon ; rien si la
     /// carte est manquée ou derrière.
     pub fn pick_card(&self, xf: &Xf, ray: &Ray) -> Option<(f32, Pos2)> {

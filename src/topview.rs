@@ -136,7 +136,7 @@ impl App {
         (0..self.layers().len())
             .map(|i| {
                 let l = &self.layers()[i];
-                let d = distance(l.depth);
+                let d = distance(l.depth_at(self.cur_frame));
                 let shown = d.min(FAR);
                 let (x0, x1, empty) = match self.layer_content_box(i, self.cur_frame) {
                     Some(b) => {
@@ -233,11 +233,13 @@ impl App {
                     z = (z * 10.0).round() / 10.0;
                 }
                 let li = d.layer;
-                if li < self.layers().len() && self.layers()[li].depth != z {
+                if li < self.layers().len() && self.layers()[li].depth_at(self.cur_frame) != z {
                     if let Some(d) = &mut self.top_drag {
                         d.changed = true;
                     }
-                    self.layers_mut()[li].depth = z;
+                    // (Un calque animé change l'écart de profondeur de sa clé de l'image courante.)
+                    let frame = self.cur_frame;
+                    self.layers_mut()[li].set_depth_at(frame, z);
                     self.modified = true;
                     let l = &self.layers()[li];
                     self.status = format!(
@@ -338,7 +340,7 @@ impl App {
             } else {
                 painter.line_segment([a, b], stroke);
             }
-            let mut text = format!("{}  z {:.2}", l.name, l.depth);
+            let mut text = format!("{}  z {:.2}", l.name, l.depth_at(self.cur_frame));
             if it.d > FAR {
                 text.push_str(" (au loin)");
             }

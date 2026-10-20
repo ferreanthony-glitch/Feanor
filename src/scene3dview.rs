@@ -1,11 +1,13 @@
-//! La vue d'édition de la scène 3D : navigation (tourner, glisser, avancer), choix des objets à la
-//! souris, manipulateurs (déplacer, tourner, échelle), caméra du plateau, tracé. Les formes sont
-//! dessinées par la carte graphique (`scene3dgpu.rs`) ; les poignées, la boîte de sélection, la
-//! caméra et les légendes par egui, par-dessus.
+//! La vue d'édition de l'Espace 3D : navigation (tourner, glisser, avancer), choix des cartes, des objets et de la
+//! caméra à la souris, manipulateurs (déplacer, tourner, échelle), caméra du plan, tracé. Les formes sont dessinées
+//! par la carte graphique (`scene3dgpu.rs`) ; les cartes (les calques du plan, texturés par leur dessin), les
+//! poignées, la boîte de sélection, la caméra et les légendes par egui, par-dessus, dans l'ordre de la pile des
+//! calques : ce que l'image compose (`docs/ESPACE3D.md`, « Ordre »).
 
-use eframe::egui::{self, pos2, vec2, Align2, Color32, CursorIcon, FontId, PointerButton, Pos2, Rect, Shape, Stroke};
+use eframe::egui::{self, epaint::Vertex, pos2, vec2, Align2, Color32, CursorIcon, FontId, PointerButton, Pos2, Rect, Shape, Stroke};
 
 use crate::app::App;
+use crate::espace3d;
 use crate::scene3d::{SceneCam, Shape3d, Target};
 use crate::scene3dgizmo::{self as gz, Gizmo, Handle, Mode as GizmoMode, Originals, CAMERA_ID};
 use crate::scene3dgpu::{DrawObject, Frame, GridLine, Gpu3d};
@@ -63,11 +65,10 @@ pub(crate) fn grid_lines(target: V3, distance: f32) -> Vec<GridLine> {
 }
 
 impl App {
-    /// La vue d'édition, ou la vue de la caméra du plateau.
+    /// La vue d'édition, ou la vue de la caméra du plan.
     fn s3_view(&self, draw: Rect) -> View {
-        let (panel, _) = self.s3_ids();
         if self.scene3d.through_camera {
-            self.doc.scenes3d.plan(panel).map_or_else(SceneCam::default, |p| p.cam).view(draw.width())
+            self.s3_world().scene_cam(&self.current_camera()).view(draw.width())
         } else {
             orbit_view(&self.scene3d.cam.unwrap_or(Cam3d { target: [0.0; 3], azimuth: 30.0, elevation: 22.0, distance: 8.0, focal: 35.0 }), draw.width())
         }
@@ -119,23 +120,59 @@ impl App {
                 }
             }
         }
-        best.or(floor).map(|b| b.1)
+        // Les cartes : la plus proche dont le dessin est touché (elle compte comme un objet), sinon la plus proche dont
+        // la feuille l'est (en dernier recours, comme le sol).
+        let world = self.s3_world();
+        let frame = self.cur_frame;
+        let mut drawn_card: Option<(f32, u64)> = None;
+        let mut sheet_card: Option<(f32, u64)> = None;
+        if self.scene3d.show_cards {
+            for li in self.s3_visible_cards() {
+                let layer = &self.layers()[li];
+                let xf = world.card_xf(&layer.pose(frame), layer.depth_at(frame));
+                let Some((t, p)) = world.pick_card(&xf, ray) else { continue };
+                let key = espace3d::card_selection(layer.id);
+                if self.s3_card_drawn_at(li, p) && drawn_card.is_none_or(|(b, _)| t < b) {
+                    drawn_card = Some((t, key));
+                }
+                if sheet_card.is_none_or(|(b, _)| t < b) {
+                    sheet_card = Some((t, key));
+                }
+            }
+        }
+        let solid = match (best, drawn_card) {
+            (Some(o), Some(c)) => Some(if c.0 < o.0 { c } else { o }),
+            (o, c) => o.or(c),
+        };
+        solid.or(floor).or(sheet_card).map(|b| b.1)
     }
 
-    /// La caméra du plateau est touchée par le pixel (près de son corps ou de sa pyramide).
+    /// Le calque `li` a quelque chose de dessiné près du point `p` de son dessin (à l'image courante).
+    pub(crate) fn s3_card_drawn_at(&self, li: usize, p: Pos2) -> bool {
+        let Some(layer) = self.layers().get(li) else { return false };
+        let Some(cel) = layer.shown_at(self.cur_frame).and_then(|c| self.doc.cels.get(&c)) else { return false };
+        const R: f32 = 8.0;
+        (-2..=2).any(|j| {
+            (-2..=2).any(|i| {
+                let (x, y) = (p.x + i as f32 * R / 2.0, p.y + j as f32 * R / 2.0);
+                x >= 0.0 && y >= 0.0 && (x as usize) < cel.raster.width && (y as usize) < cel.raster.height && cel.raster.get(x as usize, y as usize).a() > 24
+            })
+        })
+    }
+
+    /// La caméra du plan est touchée par le pixel (près de son corps ou de sa pyramide).
     fn s3_pick_camera(&self, view: &View, px: [f32; 2], center: [f32; 2]) -> bool {
-        let (panel, _) = self.s3_ids();
-        let Some(plan) = self.doc.scenes3d.plan(panel) else { return false };
-        let corners = self.s3_camera_corners(&plan.cam, view);
+        let cam = self.s3_world().scene_cam(&self.current_camera());
+        let corners = self.s3_camera_corners(&cam, view);
         let near = |a: V3, b: V3| match (view.project(a, center), view.project(b, center)) {
             (Some(p), Some(q)) => seg_dist(px, p, q) < 7.0,
             _ => false,
         };
-        let pos = plan.cam.pos;
+        let pos = cam.pos;
         (0..4).any(|k| near(pos, corners[k]) || near(corners[k], corners[(k + 1) % 4]))
     }
 
-    /// Les coins de la pyramide de la caméra du plateau, à une distance qui se lit dans la vue.
+    /// Les coins de la pyramide de la caméra du plan, à une distance qui se lit dans la vue.
     fn s3_camera_corners(&self, cam: &SceneCam, view: &View) -> [V3; 4] {
         let d = (m::length(m::sub(cam.pos, view.eye)) * 0.22).clamp(0.5, 6.0);
         cam.corners_at(d, self.doc.frame)
@@ -143,7 +180,6 @@ impl App {
 
     /// La souris dans la zone de dessin 3D.
     fn s3_input(&mut self, ctx: &egui::Context, draw: Rect, response: &egui::Response) {
-        let (panel, _) = self.s3_ids();
         let (scroll, mods, press, primary_down) = ctx.input(|i| (i.smooth_scroll_delta, i.modifiers, i.pointer.press_origin(), i.pointer.primary_down()));
         let Some(mut cam) = self.scene3d.cam else { return };
         let through = self.scene3d.through_camera;
@@ -161,7 +197,10 @@ impl App {
                 s.history.context = before;
             });
             self.keep_gesture(GESTURE_CAMERA);
-            let mut sc = self.doc.scenes3d.plan(panel).map_or_else(SceneCam::default, |p| p.cam);
+            // La caméra du plan : réglée à l'image courante, ou sa clé de cette image si elle est animée.
+            let world = self.s3_world();
+            let base = self.current_camera();
+            let mut sc = world.scene_cam(&base);
             let view = sc.view(draw.width());
             if scroll.y != 0.0 {
                 sc.pos = m::add(sc.pos, m::scale(view.forward, scroll.y * 0.01));
@@ -174,8 +213,9 @@ impl App {
                 sc.pan += delta.x * 0.15;
                 sc.tilt = (sc.tilt - delta.y * 0.15).clamp(-crate::scene3d::MAX_TILT, crate::scene3d::MAX_TILT);
             }
-            self.doc.scenes3d.plan_mut(panel).cam = sc.sanitized();
-            self.doc.scenes3d.touch();
+            let mut new = world.camera_from_scene(&sc.sanitized());
+            new.zoom = base.zoom;
+            self.set_current_camera(new);
         } else if !through {
             if response.hovered() && scroll.y != 0.0 {
                 cam.dolly((-scroll.y * 0.002).exp());
@@ -244,6 +284,8 @@ impl App {
                     }
                 } else {
                     self.scene3d.sel = ids;
+                    // Une carte choisie est aussi le calque courant : le panneau Calques la suit.
+                    self.s3_follow_card(id);
                 }
             }
             (None, true) => {
@@ -258,6 +300,39 @@ impl App {
                     self.scene3d.sel.clear();
                 }
             }
+        }
+    }
+
+    /// Tout ce qui est choisi (la caméra mise à part) est une carte.
+    fn s3_only_cards(&self) -> bool {
+        !self.scene3d.sel.is_empty() && self.scene3d.sel.iter().all(|&s| espace3d::card_of(s).is_some())
+    }
+
+    /// Ce qui est choisi ne peut pas bouger : des cartes dont les calques sont verrouillés, ou dont la position l'est
+    /// (le message dit pourquoi).
+    fn s3_frozen(&mut self) -> bool {
+        let cards: Vec<usize> = self.scene3d.sel.iter().filter_map(|&s| self.s3_card_layer(s)).collect();
+        let others = self.scene3d.sel.len() - cards.len();
+        if cards.is_empty() || others > 0 {
+            return false;
+        }
+        let stuck = |l: &crate::document::Layer| l.locked || l.position_locked;
+        if cards.iter().all(|&li| stuck(&self.layers()[li])) {
+            let l = &self.layers()[cards[0]];
+            self.status = if l.locked { format!("Le calque « {} » est verrouillé.", l.name) } else { format!("La position du calque « {} » est verrouillée.", l.name) };
+            return true;
+        }
+        false
+    }
+
+    /// Si `selection` est une carte : son calque devient le calque courant (le choix de l'espace est déjà fait).
+    pub(crate) fn s3_follow_card(&mut self, selection: u64) {
+        if let Some(li) = self.s3_card_layer(selection) {
+            let id = self.layers()[li].id;
+            if li != self.cur_layer {
+                self.select_layer(li);
+            }
+            self.scene3d.last_layer = id;
         }
     }
 
@@ -280,10 +355,17 @@ impl App {
                     self.scene3d.drag = Some(Drag::Orbit);
                     return;
                 }
+                // Une carte est plate : sa profondeur n'a pas de taille (la poignée Z de l'échelle ne fait rien).
+                if gizmo.mode == GizmoMode::Scale && handle == Handle::Axis(2) && self.s3_only_cards() {
+                    return;
+                }
+                if self.s3_frozen() {
+                    return;
+                }
                 let name = match gizmo.mode {
-                    GizmoMode::Rotate => "Tourner dans la scène 3D",
-                    GizmoMode::Scale => "Mettre à l'échelle dans la scène 3D",
-                    _ => "Déplacer dans la scène 3D",
+                    GizmoMode::Rotate => "Tourner dans l'espace 3D",
+                    GizmoMode::Scale => "Mettre à l'échelle dans l'espace 3D",
+                    _ => "Déplacer dans l'espace 3D",
                 };
                 self.s3_begin(handle, gizmo.mode, gizmo, ray, px, name);
                 return;
@@ -297,12 +379,23 @@ impl App {
             let id = hit.unwrap_or(CAMERA_ID);
             if !self.scene3d.sel.contains(&id) {
                 self.scene3d.sel = if id == CAMERA_ID { vec![id] } else { self.doc.scenes3d.expand_groups(panel, seq, &[id]) };
+                self.s3_follow_card(id);
+            }
+            if self.s3_frozen() {
+                return;
             }
             let xfs = self.s3_xfs(&self.scene3d.sel);
             let origin = gz::pivot_of(&xfs);
             let gizmo = Gizmo { origin, axes: gz::axes_for(false, &xfs.first().map_or_else(Default::default, |x| x.1)), len: 1.0, mode: GizmoMode::Move };
-            let handle = if mods.shift { Handle::Axis(1) } else { Handle::Plane(1) };
-            let name = if id == CAMERA_ID { "Déplacer la caméra 3D" } else { "Déplacer dans la scène 3D" };
+            // Un objet glisse sur le sol (Maj : en hauteur) ; une carte, dans son plan (Maj : en profondeur).
+            let is_card = espace3d::card_of(id).is_some();
+            let handle = match (is_card, mods.shift) {
+                (false, true) => Handle::Axis(1),
+                (false, false) => Handle::Plane(1),
+                (true, true) => Handle::Axis(2),
+                (true, false) => Handle::Plane(2),
+            };
+            let name = if id == CAMERA_ID { "Déplacer la caméra" } else { "Déplacer dans l'espace 3D" };
             self.s3_begin(handle, GizmoMode::Move, gizmo, ray, px, name);
             return;
         }
@@ -400,7 +493,8 @@ impl App {
         let (panel, seq) = self.s3_ids();
         let mut lowest = f32::MAX;
         for (id, xf) in xfs {
-            if *id == CAMERA_ID {
+            // (La caméra et les cartes ne se posent pas sur le sol.)
+            if *id == CAMERA_ID || espace3d::card_of(*id).is_some() {
                 continue;
             }
             let shape = self.doc.scenes3d.find(panel, seq, *id)?.0.shape.clone();
@@ -446,16 +540,25 @@ impl App {
             .collect()
     }
 
-    /// La zone du dessin, en mode Scène 3D.
+    /// La zone du dessin, en mode Espace 3D.
     pub(crate) fn scene3d_panel(&mut self, ui: &mut egui::Ui, rect: Rect, response: &egui::Response) {
         let (panel, seq) = self.s3_ids();
         if self.scene3d.cam.is_none() {
             self.scene3d_fit();
         }
+        // Le calque courant a changé (panneau Calques, timeline) : sa carte est choisie. (À l'entrée dans l'espace aussi.)
+        let current = self.layer().id;
+        if self.scene3d.last_layer != current {
+            self.scene3d.last_layer = current;
+            if espace3d::is_card(self.layer()) && self.scene3d.drag.is_none() {
+                self.scene3d.sel = vec![espace3d::card_selection(current)];
+            }
+        }
         let through = self.scene3d.through_camera;
         let draw = if through { letterbox(rect, self.doc.frame) } else { rect };
         self.s3_input(ui.ctx(), draw, response);
         let plan = self.doc.scenes3d.plan(panel).cloned().unwrap_or_default();
+        let cam_now = self.s3_world().scene_cam(&self.current_camera());
         let view = self.s3_view(draw);
         let center = [draw.width() / 2.0, draw.height() / 2.0];
         let painter = ui.painter_at(rect);
@@ -491,12 +594,14 @@ impl App {
             None => self.s3_paint_wireframe(&painter, &proj, &objects, &grid),
         }
 
+        // Les cartes (les calques du plan), du fond vers le dessus de la pile, par-dessus les objets.
+        self.s3_paint_cards(ui.ctx(), &painter, &view, center, &to_screen);
         // La boîte des objets choisis.
         for o in &chosen {
             self.s3_paint_box(&painter, &proj, o);
         }
         if !through {
-            self.s3_paint_camera(&painter, &proj, &view, &plan.cam);
+            self.s3_paint_camera(&painter, &proj, &view, &cam_now);
         }
         if let Some(g) = self.s3_gizmo(&view) {
             self.s3_paint_gizmo(&painter, &proj, &g);
@@ -507,7 +612,7 @@ impl App {
             painter.text(
                 draw.left_top() + vec2(8.0, 6.0),
                 Align2::LEFT_TOP,
-                format!("Caméra du plateau · {:.0} mm · {:.0}° · glisser (milieu) : déplacer · clic droit : tourner · molette : avancer", plan.cam.focal, plan.cam.angle_of_view()),
+                format!("Caméra du plan · {:.0} mm · {:.0}° · glisser (milieu) : déplacer · clic droit : tourner · molette : avancer", cam_now.focal, cam_now.angle_of_view()),
                 FontId::proportional(11.0),
                 crate::theme::camera(),
             );
@@ -515,12 +620,18 @@ impl App {
             painter.text(
                 rect.left_bottom() + vec2(8.0, -6.0),
                 Align2::LEFT_BOTTOM,
-                "Clic : choisir · glisser : poser sur le sol (Maj : en hauteur) · Alt+glisser ou clic droit : tourner · milieu : glisser la vue · molette : avancer",
+                "Clic : choisir une carte, un objet ou la caméra · glisser : déplacer (objet : sur le sol ; Maj : en hauteur ou en profondeur) · Alt+glisser ou clic droit : tourner la vue · milieu : glisser la vue · molette : avancer",
                 FontId::proportional(11.0),
                 Color32::from_gray(170),
             );
         }
-        let label = format!("{} · {} objet(s){}", if self.scene3d.target == Target::Decor { "Décor" } else { "Plan" }, self.doc.scenes3d.list(panel, seq, self.scene3d.target).len(), if self.scene3d.job.is_some() { " · rendu du calque…" } else { "" });
+        let label = format!(
+            "{} · {} carte(s) · {} objet(s){}",
+            if self.scene3d.target == Target::Decor { "Décor" } else { "Plan" },
+            self.s3_visible_cards().len(),
+            self.doc.scenes3d.list(panel, seq, self.scene3d.target).len(),
+            if self.scene3d.job.is_some() { " · rendu du calque…" } else { "" }
+        );
         painter.text(rect.right_top() + vec2(-8.0, 6.0), Align2::RIGHT_TOP, label, FontId::proportional(11.0), Color32::from_gray(170));
         // Curseur.
         if response.hover_pos().is_some() {
@@ -555,10 +666,72 @@ impl App {
         }
     }
 
-    /// La caméra du plateau : pyramide de vision, cadre, haut de l'image.
+    /// Les cartes : pour chaque calque visible du plan, du fond vers le dessus de la pile (l'ordre de l'image), le voile
+    /// de sa feuille, son dessin, son contour (en couleur de sélection si elle est choisie) et son nom.
+    fn s3_paint_cards(&mut self, ctx: &egui::Context, painter: &egui::Painter, view: &View, center: [f32; 2], to_screen: &dyn Fn([f32; 2]) -> Pos2) {
+        if !self.scene3d.show_cards {
+            return;
+        }
+        let world = self.s3_world();
+        let frame = self.cur_frame;
+        for li in self.s3_visible_cards() {
+            let layer = &self.layers()[li];
+            let xf = world.card_xf(&layer.pose(frame), layer.depth_at(frame));
+            let (id, name, cel) = (layer.id, layer.name.clone(), layer.shown_at(frame));
+            let opacity = (layer.opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
+            let selected = self.scene3d.sel.contains(&espace3d::card_selection(id));
+            let mx = xf.matrix();
+            let at = |u: f32, v: f32| m::point(&mx, [u - 0.5, 0.5 - v, 0.0]);
+            painter.add(Shape::mesh(card_mesh(view, center, to_screen, &at, None, crate::viewbar::veil(if selected { 46 } else { 30 }))));
+            if let Some(tex) = cel.and_then(|c| self.s3_card_texture(ctx, c)) {
+                painter.add(Shape::mesh(card_mesh(view, center, to_screen, &at, Some(tex), crate::viewbar::veil(opacity))));
+            }
+            let corners = world.card_corners(&xf);
+            let stroke = if selected { Stroke::new(2.0_f32, ACCENT) } else { Stroke::new(1.0_f32, crate::viewbar::veil(90)) };
+            for k in 0..4 {
+                if let (Some(a), Some(b)) = (view.project(corners[k], center), view.project(corners[(k + 1) % 4], center)) {
+                    painter.line_segment([to_screen(a), to_screen(b)], stroke);
+                }
+            }
+            if let Some(p) = view.project(corners[0], center).map(to_screen) {
+                let depth = self.layers()[li].depth_at(frame);
+                let label = if depth == 0.0 { name } else { format!("{name}  ({depth:+.2})") };
+                let galley = painter.layout_no_wrap(label, FontId::proportional(11.0), if selected { ACCENT } else { Color32::from_gray(225) });
+                let pos = p + vec2(4.0, -galley.size().y - 3.0);
+                painter.rect_filled(Rect::from_min_size(pos - vec2(3.0, 1.0), galley.size() + vec2(6.0, 2.0)), 3.0, Color32::from_black_alpha(140));
+                painter.galley(pos, galley, Color32::WHITE);
+            }
+        }
+    }
+
+    /// Texture du dessin `cel` (refaite quand il change).
+    fn s3_card_texture(&mut self, ctx: &egui::Context, cel: crate::document::CelId) -> Option<egui::TextureId> {
+        let c = self.doc.cels.get(&cel)?;
+        if let Some((v, t)) = self.scene3d.card_textures.get(&cel) {
+            if *v == c.version {
+                return Some(t.id());
+            }
+        }
+        let image = crate::render::cel_image(&c.raster, 1024);
+        let tex = ctx.load_texture(format!("espace 3d {cel}"), image, egui::TextureOptions::LINEAR);
+        if self.scene3d.card_textures.len() > 256 {
+            self.scene3d.card_textures.clear();
+        }
+        let id = tex.id();
+        self.scene3d.card_textures.insert(cel, (c.version, tex));
+        Some(id)
+    }
+
+    /// La caméra du plan : pyramide de vision, cadre, haut de l'image, et sa course pendant le plan si elle est animée.
     fn s3_paint_camera(&self, painter: &egui::Painter, proj: &dyn Fn(V3) -> Option<Pos2>, view: &View, cam: &SceneCam) {
         let selected = self.scene3d.sel.contains(&CAMERA_ID);
         let color = if selected { ACCENT } else { crate::theme::camera() };
+        if self.doc.panels[self.cur_panel].camera.len() >= 2 {
+            let world = self.s3_world();
+            let n = self.frame_count().max(1);
+            let pts: Vec<Pos2> = (0..n).filter_map(|f| proj(world.eye(&self.doc.panel_camera(self.cur_panel, f)))).collect();
+            painter.add(Shape::line(pts, Stroke::new(1.0_f32, color.gamma_multiply(0.7))));
+        }
         let corners = self.s3_camera_corners(cam, view);
         let strong = Stroke::new(if selected { 2.0_f32 } else { 1.5 }, color);
         let line = |a: V3, b: V3, stroke: Stroke| {
@@ -665,4 +838,36 @@ fn seg_dist(p: [f32; 2], a: [f32; 2], b: [f32; 2]) -> f32 {
     let l2 = d.length_sq();
     let t = if l2 > 0.0 { (w.dot(d) / l2).clamp(0.0, 1.0) } else { 0.0 };
     (w - d * t).length()
+}
+
+/// Une carte subdivisée : les points `at(u, v)` (u, v de 0 à 1, v vers le bas), texturée ou d'une couleur. La texture est
+/// posée par triangles : sans subdivision, la perspective la déformerait. Un morceau qui passe derrière l'œil n'est pas
+/// dessiné.
+fn card_mesh(view: &View, center: [f32; 2], to_screen: &dyn Fn([f32; 2]) -> Pos2, at: &dyn Fn(f32, f32) -> V3, texture: Option<egui::TextureId>, color: Color32) -> egui::Mesh {
+    const SUBDIV: usize = 16;
+    let mut mesh = egui::Mesh::with_texture(texture.unwrap_or_default());
+    let n = SUBDIV;
+    let mut front = Vec::with_capacity((n + 1) * (n + 1));
+    for j in 0..=n {
+        for i in 0..=n {
+            let (u, v) = (i as f32 / n as f32, j as f32 / n as f32);
+            let p = at(u, v);
+            let ahead = view.to_view(p)[2] >= crate::scene3drender::NEAR;
+            front.push(ahead);
+            let pos = if ahead { view.project(p, center).map_or(Pos2::ZERO, to_screen) } else { Pos2::ZERO };
+            let uv = if texture.is_some() { pos2(u, v) } else { egui::epaint::WHITE_UV };
+            mesh.vertices.push(Vertex { pos, uv, color });
+        }
+    }
+    for j in 0..n {
+        for i in 0..n {
+            let a = j * (n + 1) + i;
+            let (b, c, d) = (a + 1, a + n + 1, a + n + 2);
+            if front[a] && front[b] && front[c] && front[d] {
+                mesh.add_triangle(a as u32, b as u32, d as u32);
+                mesh.add_triangle(a as u32, d as u32, c as u32);
+            }
+        }
+    }
+    mesh
 }

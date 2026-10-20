@@ -244,8 +244,7 @@ impl App {
                     self.action_item(ui, "Réinitialiser la caméra du plan", "camera.reinitialiser");
                 });
                 ui.menu_button("Plateau", |ui| {
-                    self.action_item(ui, "Plateau en 3D", "vue.3d");
-                    self.action_item(ui, "Scène 3D de blocage", "scene3d.basculer");
+                    self.action_item(ui, "Espace 3D", "espace3d.basculer");
                     self.action_item(ui, "Vue de dessus (profondeur des calques)", "vue.dessus");
                 });
                 ui.menu_button("Guides", |ui| {

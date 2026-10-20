@@ -299,7 +299,7 @@ fn every_tool_and_3d_tool_has_a_description() {
         let d = tool.description();
         assert!(d.ends_with('.') && d.len() > 10, "{} : « {d} »", tool.label());
     }
-    for t in crate::stage3dui::Nav3d::ALL {
-        assert!(t.description().ends_with('.'), "{}", t.label());
+    for mode in crate::scene3dgizmo::Mode::ALL {
+        assert!(crate::scene3dui::mode_description(mode).ends_with('.'), "{}", mode.label());
     }
 }

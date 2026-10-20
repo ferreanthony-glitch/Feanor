@@ -510,7 +510,7 @@ impl SceneCam {
 
     /// La caméra 2D du plan, à l'image où elle est, posée dans la scène : le plan z = 0 de la scène
     /// est la feuille (le plan de référence), à l'échelle de `meters_per_px`. Même focale, même
-    /// panoramique, même bascule, même rotation, et l'œil là où `stage3d::World::eye` le met : la
+    /// panoramique, même bascule, même rotation, et l'œil là où `espace3d::Monde::eye` le met : la
     /// scène vue par cette caméra et la feuille vue par la caméra 2D se superposent.
     pub fn from_plan_camera(cam: &Camera, stage: [usize; 2], frame: [usize; 2]) -> SceneCam {
         let k = Self::meters_per_px(frame[0]);

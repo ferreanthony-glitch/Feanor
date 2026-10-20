@@ -508,9 +508,7 @@ pub struct App {
     pub(crate) stage_view: Option<View>,
     /// Cadre de format personnalisé choisi (même s'il vaut l'un des formats proposés).
     pub(crate) format_custom: bool,
-    /// Plateau en 3D (9e) : affiché, outil, vue, geste en cours, textures.
-    pub(crate) stage3d: crate::stage3dui::Stage3dState,
-    /// Scène 3D de blocage (`scene3dui.rs`) : affichée, objets choisis, vue, envoi vers un calque.
+    /// Espace 3D (`scene3dui.rs`, `docs/ESPACE3D.md`) : affiché, cartes et objets choisis, vue, envoi vers un calque.
     pub(crate) scene3d: crate::scene3dui::Scene3dState,
     /// Le dessin est affiché dans la vignette choisie de la vue Vignettes (6e).
     pub(crate) in_card: bool,
@@ -1069,7 +1067,6 @@ impl App {
             camera_view: false,
             stage_view: None,
             format_custom: false,
-            stage3d: Default::default(),
             scene3d: Default::default(),
             in_card: false,
             // Nul : la page sera mise à la largeur de la vue au premier affichage.
@@ -1360,8 +1357,26 @@ impl App {
         self.layer_seen().affine(self.doc.stage_center())
     }
 
-    /// Point de la feuille → point du dessin du calque courant (là où le pinceau doit peindre).
+    /// Le calque courant est une carte inclinée (Espace 3D) : le monde, son placement, l'œil de la caméra. Il ne se pose
+    /// plus par une affinité mais par une projection (`espace3d.rs`).
+    fn tilted_card(&self) -> Option<(crate::espace3d::Monde, crate::scene3d::Xf, [f32; 3])> {
+        let l = self.layer();
+        let t = l.pose(self.cur_frame);
+        if !t.is_tilted() {
+            return None;
+        }
+        let world = crate::espace3d::Monde::of(&self.doc);
+        let xf = world.card_xf(&t, l.depth_at(self.cur_frame));
+        let eye = world.eye_seen(&self.doc.camera_seen(self.cur_panel, self.cur_frame));
+        Some((world, xf, eye))
+    }
+
+    /// Point de la feuille → point du dessin du calque courant (là où le pinceau doit peindre). Sur une carte inclinée, le
+    /// regard de la caméra qui passe par ce point de la feuille traverse la carte au point où l'on peint.
     pub(crate) fn to_layer(&self, stage: Pos2) -> Pos2 {
+        if let Some((world, xf, eye)) = self.tilted_card() {
+            return world.sheet_to_card(eye, &xf, stage).unwrap_or(stage);
+        }
         if self.layer_seen().is_identity() {
             return stage;
         }
@@ -1370,6 +1385,10 @@ impl App {
 
     /// Point du dessin du calque courant → écran.
     pub(crate) fn layer_to_screen(&self, p: Pos2) -> Pos2 {
+        if let Some((world, xf, eye)) = self.tilted_card() {
+            let stage = world.card_to_sheet(eye, &xf, p).unwrap_or(p);
+            return self.view.to_screen(self.canvas_rect, self.canvas_size(), stage);
+        }
         let stage = if self.layer_seen().is_identity() {
             p
         } else {
@@ -3062,7 +3081,6 @@ impl App {
         self.fit_pending = true;
         // Vue du plateau et vue 3D recadrées sur le nouveau projet (9d, 9e).
         self.stage_view = None;
-        self.stage3d.cam = None;
         self.scene3d_reset();
         self.modified = false;
         self.path = None;
@@ -3093,7 +3111,6 @@ impl App {
         self.renderer.invalidate_all();
         self.fit_pending = true;
         self.stage_view = None;
-        self.stage3d.cam = None;
         self.scene3d_reset();
         self.length_origin = None;
         self.modified = true;
@@ -4085,19 +4102,6 @@ impl App {
             "calque.reinit_transformation" => self.reset_layer_transform(),
             "camera.vue" => self.set_camera_view(!self.camera_view),
             "vue.cadres_securite" => self.layout.safe_frames = !self.layout.safe_frames,
-            "vue.3d" => self.set_stage3d(!(self.stage3d.on && !self.camera_view)),
-            "vue3d.recadrer" => {
-                self.set_stage3d(true);
-                self.fit_stage3d(35.0, 20.0);
-            }
-            "outil3d.orbite" | "outil3d.glisser" | "outil3d.avancer" | "outil3d.deplacer" => {
-                if let Some(t) = crate::stage3dui::Nav3d::ALL.into_iter().find(|t| t.action() == action) {
-                    if !self.stage3d.on || self.camera_view {
-                        self.set_stage3d(true);
-                    }
-                    self.stage3d.tool = t;
-                }
-            }
             "camera.masque" => self.camera_mask = !self.camera_mask,
             "camera.reinitialiser" => self.reset_camera(),
             "camera.cle_debut" => self.add_camera_key(0),

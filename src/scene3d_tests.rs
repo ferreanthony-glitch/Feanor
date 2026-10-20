@@ -895,7 +895,7 @@ fn a_handle_drag_snaps_to_the_grid_and_the_floor_and_is_one_undo_step() {
     let gizmo = b.app.s3_gizmo(&view).expect("un manipulateur");
     let before = b.app.history.names().0.len();
     let ray = view.ray(start, center);
-    b.app.s3_begin(Handle::Axis(0), Mode::Move, gizmo, ray, start, "Déplacer dans la scène 3D");
+    b.app.s3_begin(Handle::Axis(0), Mode::Move, gizmo, ray, start, "Déplacer dans l'espace 3D");
     // Un glisser de 1,37 m vers la droite : aimanté au pas de 0,25 m.
     let to = view.project([1.37, 0.5, 0.0], center).expect("visible");
     b.app.s3_drag(&view, center, to);
@@ -910,7 +910,7 @@ fn a_handle_drag_snaps_to_the_grid_and_the_floor_and_is_one_undo_step() {
     b.app.s3_finish_drag();
     let names = b.app.history.names().0.iter().map(|s| s.to_string()).collect::<Vec<_>>();
     assert_eq!(names.len(), before + 1, "tout le glisser est une seule étape : {names:?}");
-    assert_eq!(names.last().map(String::as_str), Some("Déplacer dans la scène 3D"));
+    assert_eq!(names.last().map(String::as_str), Some("Déplacer dans l'espace 3D"));
     b.app.undo();
     assert!(near(b.app.doc.scenes3d.find(panel, seq, id).expect("cube").0.xf.pos[0], 0.0, 1e-5));
     // Le sol : monté de quelques centimètres, le cube redescend sur le sol (même sans grille).
@@ -951,7 +951,7 @@ fn sending_the_scene_makes_a_normal_layer_that_follows_the_scene_in_the_backgrou
     assert_eq!((layer.name.as_str(), layer.locked, layer.kind), (crate::scene3dui::LAYER_NAME, true, crate::document::LayerKind::Bitmap));
     let cel = b.app.doc.scenes3d.plan(panel).and_then(|p| p.bake_cel).expect("lien vers le dessin");
     assert_eq!(layer.frames.iter().flatten().next(), Some(&cel));
-    assert_eq!(b.app.history.names().0.last().copied(), Some("Envoyer la scène 3D vers un calque de fond"));
+    assert_eq!(b.app.history.names().0.last().copied(), Some("Figer les objets 3D dans un calque de fond"));
     // L'image se calcule sur un autre fil : l'interface n'attend pas.
     let t = std::time::Instant::now();
     b.image(Vec::new(), 0.05);
@@ -1031,7 +1031,7 @@ fn the_scene_view_runs_in_the_application_without_a_graphics_card() {
     doc.scenes3d.add(panel, seq, Target::Decor, Shape3d::Plane, [0.0; 3]);
     let mut b = banc(doc, false);
     b.app.run_action("scene3d.basculer");
-    assert!(b.app.scene3d.on && !b.app.stage3d.on);
+    assert!(b.app.scene3d.on);
     b.chauffer(6);
     assert!(b.app.scene3d.cam.is_some(), "la vue est cadrée sur la scène");
     // Les réglages de la scène, tous les objets, la caméra, la lumière : un tour d'interface.
@@ -1048,11 +1048,13 @@ fn the_scene_view_runs_in_the_application_without_a_graphics_card() {
     b.app.run_action("scene3d.basculer");
     assert!(!b.app.scene3d.on);
     b.chauffer(3);
-    // Le plateau en 3D et la scène 3D s'excluent.
+    // Un seul espace 3D : ses trois noms (l'ancien plateau en 3D, l'ancienne scène 3D, le nouveau) mènent au même.
     b.app.run_action("vue.3d");
-    assert!(b.app.stage3d.on && !b.app.scene3d.on);
+    assert!(b.app.scene3d.on, "l'ancien nom du plateau en 3D ouvre l'Espace 3D");
+    b.app.run_action("espace3d.basculer");
+    assert!(!b.app.scene3d.on);
     b.app.run_action("scene3d.basculer");
-    assert!(b.app.scene3d.on && !b.app.stage3d.on);
+    assert!(b.app.scene3d.on);
 }
 
 #[test]
@@ -1100,7 +1102,7 @@ fn the_mouse_picks_drags_and_orbits_in_the_view() {
     b.chauffer(2);
     let x = b.app.doc.scenes3d.find(panel, seq, cube).expect("cube").0.xf.pos;
     assert!(x[0] > 1.5 && x[0] < 2.6 && near(x[1], 0.5, 1e-3), "le cube a suivi la souris : {x:?}");
-    assert_eq!(b.app.history.names().0, vec!["Déplacer dans la scène 3D"]);
+    assert_eq!(b.app.history.names().0, vec!["Déplacer dans l'espace 3D"]);
     b.app.undo();
     assert!(near(b.app.doc.scenes3d.find(panel, seq, cube).expect("cube").0.xf.pos[0], 0.0, 1e-5));
     // Clic droit glissé : la vue tourne, sans rien changer à la scène (ni étape d'annulation).
@@ -1135,6 +1137,8 @@ fn the_gpu_viewport_draws_what_the_cpu_render_draws() {
         return;
     }
     b.app.run_action("scene3d.basculer");
+    // (Les cartes sont cachées : cet essai compare les objets, pas les calques du plan.)
+    b.app.scene3d.show_cards = false;
     b.app.scene3d.show_grid = false;
     b.app.scene3d.sel.clear();
     b.chauffer(6);

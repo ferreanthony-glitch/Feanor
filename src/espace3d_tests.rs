@@ -5,6 +5,11 @@
 use eframe::egui::{pos2, vec2, Color32};
 
 use crate::camera::{Camera, CameraKey};
+use crate::perf_tests::{banc_taille, Banc};
+use crate::scene3d::{Shape3d, Target};
+use crate::scene3dgizmo::{self as gz, Handle, Mode, CAMERA_ID};
+use crate::scene3dmath as m;
+use crate::view3d::Cam3d;
 use crate::document::{CameraSeen, Document, Layer, LayerKind, LayerTransform};
 use crate::espace3d::{self, Monde};
 use crate::poskeys::{self, PosKey};
@@ -495,4 +500,281 @@ fn layer_selection_numbers_are_told_from_objects_and_the_camera() {
     assert!(!espace3d::is_card(&folder));
     folder.folder = false;
     assert!(espace3d::is_card(&folder));
+}
+
+// ======================================================================= l'application : l'Espace 3D
+
+/// Une application sans fenêtre dont le projet (feuille = cadre, 320 × 180) a ces cartes, l'Espace 3D ouvert et la vue
+/// de face, centrée, sans quadrillage ni attente d'un affichage de plus.
+fn space(cards: &[(Color32, [usize; 4], f32)]) -> Banc {
+    let mut b = banc_taille(doc_with_cards(cards), false, 1280, 720);
+    b.chauffer(2);
+    b.app.run_action("espace3d.basculer");
+    b.app.scene3d.show_grid = false;
+    b.app.scene3d.snap = false;
+    b.chauffer(4);
+    b.app.scene3d.cam = Some(Cam3d { target: [0.0, 0.0, 0.0], azimuth: 0.0, elevation: 0.0, distance: 12.0, focal: 35.0 });
+    b.chauffer(2);
+    b
+}
+
+fn orbit(b: &Banc) -> (crate::scene3dmath::View, [f32; 2]) {
+    let rect = b.app.canvas_rect;
+    (crate::scene3dview::orbit_view(&b.app.scene3d.cam.expect("vue"), rect.width()), [rect.width() / 2.0, rect.height() / 2.0])
+}
+
+/// Le geste d'un manipulateur : de l'écran `from` à l'écran `to` (relatifs à la zone de dessin), en une seule étape
+/// d'annulation, avec ce nom.
+fn gesture(b: &mut Banc, handle: Handle, from: [f32; 2], to: [f32; 2]) {
+    let (view, center) = orbit(b);
+    let gizmo = b.app.s3_gizmo(&view).expect("un manipulateur");
+    let mode = b.app.scene3d.mode;
+    b.app.s3_begin(handle, mode, gizmo, view.ray(from, center), from, "Geste d'essai");
+    b.app.s3_drag(&view, center, to);
+    b.app.s3_finish_drag();
+}
+
+#[test]
+fn one_3d_button_one_command_and_the_old_names_still_work() {
+    // Les anciens noms du plateau en 3D et de la scène 3D sont des doubles de la commande unique.
+    for (alias, original) in [("vue.3d", "espace3d.basculer"), ("scene3d.basculer", "espace3d.basculer"), ("vue3d.recadrer", "scene3d.cadrer"), ("outil3d.deplacer", "scene3d.outil_deplacer"), ("outil3d.orbite", "scene3d.outil_choisir")] {
+        assert!(crate::keymap::ALIASES.contains(&(alias, original)), "{alias} double {original}");
+        assert!(crate::keymap::action_info(alias).is_some_and(|a| a.implemented));
+    }
+    let commands = crate::palette::palette_commands();
+    assert_eq!(commands.iter().filter(|(_, label)| label.starts_with("Espace 3D (")).count(), 1, "une seule commande pour l'Espace 3D dans la palette : {commands:?}");
+    assert!(!commands.iter().any(|(_, label)| label.contains("Plateau en 3D") || label.contains("Scène 3D")), "plus de plateau en 3D ni de scène 3D dans la palette");
+    let mut b = banc_taille(doc_with_cards(&[(RED, [10, 10, 80, 60], 0.0)]), false, 1280, 720);
+    b.chauffer(2);
+    for name in ["vue.3d", "espace3d.basculer", "scene3d.basculer"] {
+        let was = b.app.scene3d.on;
+        b.app.run_action(name);
+        assert_eq!(b.app.scene3d.on, !was, "{name} ouvre ou ferme l'Espace 3D");
+    }
+    // Les outils du plateau en 3D mènent aux outils de l'espace.
+    b.app.run_action("outil3d.deplacer");
+    assert!(b.app.scene3d.on && b.app.scene3d.mode == Mode::Move);
+}
+
+#[test]
+fn the_ray_picks_the_nearest_drawn_card_and_a_click_chooses_it_and_its_layer() {
+    use eframe::egui::{Event, Modifiers, PointerButton};
+    let mut b = space(&[(BLUE, [0, 0, 320, 180], 1.5), (RED, [100, 50, 220, 130], 0.0)]);
+    let (view, center) = orbit(&b);
+    let (red, blue) = (b.app.layers()[1].id, b.app.layers()[0].id);
+    let centre = view.ray(view.project([0.0, 0.0, 0.0], center).expect("visible"), center);
+    assert_eq!(b.app.s3_pick(&centre), Some(espace3d::card_selection(red)), "le rouge, plus près, est devant le bleu");
+    // Hors du rouge (sur le bleu seulement).
+    let edge = view.ray(view.project([-2.5, 0.0, 0.0], center).expect("visible"), center);
+    assert_eq!(b.app.s3_pick(&edge), Some(espace3d::card_selection(blue)));
+    // Un clic de souris choisit la carte et fait de son calque le calque courant.
+    b.app.scene3d.mode = Mode::Select;
+    b.app.select_layer(0);
+    b.chauffer(2);
+    assert_eq!(b.app.scene3d.sel, vec![espace3d::card_selection(blue)], "le choix suit le panneau Calques");
+    let rect = b.app.canvas_rect;
+    let p = view.project([0.0, 0.0, 0.0], center).expect("visible");
+    let at = pos2(rect.left() + p[0], rect.top() + p[1]);
+    let button = |pos, pressed| Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    b.image(vec![Event::PointerMoved(at)], 0.02);
+    b.image(vec![button(at, true)], 0.02);
+    b.image(vec![button(at, false)], 0.02);
+    b.chauffer(2);
+    assert_eq!(b.app.scene3d.sel, vec![espace3d::card_selection(red)], "le clic choisit la carte rouge");
+    assert_eq!(b.app.layer().id, red, "son calque devient le calque courant");
+    assert!(b.app.history.names().0.is_empty(), "choisir n'est pas une étape d'annulation");
+}
+
+#[test]
+fn a_card_is_moved_tilted_and_scaled_by_the_same_handles_as_an_object_each_gesture_one_undo_step() {
+    let mut b = space(&[(RED, [100, 50, 220, 130], 0.0)]);
+    let card = espace3d::card_selection(b.app.layers()[0].id);
+    b.app.scene3d.sel = vec![card];
+    let (view, center) = orbit(&b);
+    let w = b.app.s3_world();
+    let before = b.app.history.names().0.len();
+    // Déplacer le long de X : une carte à 12 m, 0,5 m vers la droite.
+    b.app.scene3d.mode = Mode::Move;
+    let (from, to) = (view.project([0.0, 0.0, 0.0], center).expect("visible"), view.project([0.5, 0.0, 0.0], center).expect("visible"));
+    gesture(&mut b, Handle::Axis(0), from, to);
+    let t = b.app.layers()[0].pose(0);
+    assert!(near(t.x, 0.5 / w.k, 0.8), "0,5 m = {} px de la feuille : {}", 0.5 / w.k, t.x);
+    assert_eq!(b.app.history.names().0.len(), before + 1, "un geste, une étape");
+    b.app.undo();
+    assert_eq!(b.app.layers()[0].pose(0), LayerTransform::default(), "annuler rend la carte telle qu'elle était");
+    b.app.redo();
+    // En profondeur (axe Z) : la profondeur du calque suit, la taille dans le monde reste.
+    let size_before = w.card_xf(&b.app.layers()[0].pose(0), b.app.layers()[0].depth_at(0)).size;
+    let xfs = b.app.s3_xfs(&[card]);
+    b.app.s3_set_xfs(&gz::move_xfs(&xfs, [0.0, 0.0, -2.0]));
+    let l = &b.app.layers()[0];
+    assert!(l.depth > 0.3 && near(l.depth, 2.0 / w.d0, 1e-3), "reculée de 2 m : profondeur {}", l.depth);
+    let size_after = w.card_xf(&l.pose(0), l.depth_at(0)).size;
+    assert!(near3(size_after, size_before, 1e-3), "la taille dans le monde est gardée : {size_before:?} → {size_after:?}");
+    // (Remise à sa place : le reste de l'essai part d'une carte à profondeur 0.)
+    let xfs = b.app.s3_xfs(&[card]);
+    b.app.s3_set_xfs(&gz::move_xfs(&xfs, [0.0, 0.0, 2.0]));
+    assert!(b.app.layers()[0].depth.abs() < 1e-3);
+    // Tourner autour de Y : l'inclinaison de la carte. (Vu de face, à la hauteur de la carte, le cercle est de chant : on
+    // regarde un peu de côté et d'au-dessus.)
+    b.app.scene3d.cam = Some(Cam3d { target: [0.0, 0.0, 0.0], azimuth: 35.0, elevation: 25.0, distance: 12.0, focal: 35.0 });
+    b.app.scene3d.mode = Mode::Rotate;
+    let (view, center) = orbit(&b);
+    let g = b.app.s3_gizmo(&view).expect("manipulateur");
+    let ring = |deg: f32| {
+        let t = deg.to_radians();
+        let p = m::add(g.origin, m::scale(m::add(m::scale(g.axes[2], t.cos()), m::scale(g.axes[0], t.sin())), g.len));
+        view.project(p, center).expect("visible")
+    };
+    gesture(&mut b, Handle::Ring(1), ring(0.0), ring(30.0));
+    let t = b.app.layers()[0].pose(0);
+    assert!(near(t.tilt_y, 30.0, 0.5) && t.tilt_x.abs() < 0.01, "inclinée de 30° autour de Y : {t:?}");
+    assert!(near(t.angle, 0.0, 0.01), "l'angle dans le plan ne bouge pas");
+    // Échelle uniforme (cube du centre) : plus grande.
+    b.app.scene3d.mode = Mode::Scale;
+    let (view, center) = orbit(&b);
+    let o = view.project(w.card_xf(&b.app.layers()[0].pose(0), b.app.layers()[0].depth_at(0)).pos, center).expect("visible");
+    let scale0 = b.app.layers()[0].pose(0).scale;
+    gesture(&mut b, Handle::Center, o, [o[0], o[1] - 60.0]);
+    assert!(b.app.layers()[0].pose(0).scale > scale0 * 1.5, "agrandie : {}", b.app.layers()[0].pose(0).scale);
+    // Tout est annulable, un geste après l'autre.
+    for _ in 0..3 {
+        b.app.undo();
+    }
+    assert_eq!(b.app.layers()[0].pose(0), LayerTransform::default());
+}
+
+#[test]
+fn a_locked_card_does_not_move_and_says_why() {
+    let mut b = space(&[(RED, [100, 50, 220, 130], 0.0), (GREEN, [10, 10, 60, 60], 0.0)]);
+    b.app.layers_mut()[0].locked = true;
+    let card = espace3d::card_selection(b.app.layers()[0].id);
+    let xfs = b.app.s3_xfs(&[card]);
+    b.app.s3_set_xfs(&gz::move_xfs(&xfs, [1.0, 1.0, 0.0]));
+    assert_eq!(b.app.layers()[0].pose(0), LayerTransform::default(), "un calque verrouillé ne bouge pas");
+    b.app.layers_mut()[0].locked = false;
+    b.app.layers_mut()[0].position_locked = true;
+    b.app.s3_set_xfs(&gz::move_xfs(&xfs, [1.0, 1.0, 0.0]));
+    assert_eq!(b.app.layers()[0].pose(0), LayerTransform::default(), "ni un calque de position verrouillée");
+    b.app.layers_mut()[0].position_locked = false;
+    b.app.s3_set_xfs(&gz::move_xfs(&xfs, [1.0, 0.0, 0.0]));
+    assert!(b.app.layers()[0].pose(0).x != 0.0);
+}
+
+#[test]
+fn an_animated_card_moves_its_key_and_the_camera_is_the_plan_camera() {
+    let mut b = space(&[(RED, [100, 50, 220, 130], 0.0)]);
+    let w = b.app.s3_world();
+    // La carte animée : tirée à l'image 5, elle règle (crée) la clé de l'image 5.
+    b.app.layers_mut()[0].pos_keys = vec![PosKey::new(0, LayerTransform::default()), PosKey::new(10, LayerTransform::default())];
+    b.app.cur_frame = 5;
+    let card = espace3d::card_selection(b.app.layers()[0].id);
+    let xfs = b.app.s3_xfs(&[card]);
+    b.app.s3_set_xfs(&gz::move_xfs(&xfs, [0.4, 0.0, -1.0]));
+    let l = &b.app.layers()[0];
+    assert_eq!(l.pos_keys.len(), 3, "une clé à l'image 5");
+    assert!(l.pos_keys[1].frame == 5 && l.pos_keys[1].t.x > 0.0 && l.pos_keys[1].t.dz > 0.0, "{:?}", l.pos_keys[1]);
+    assert_eq!(l.depth, 0.0, "la profondeur de base ne bouge pas");
+    // La caméra : choisie, elle se déplace par les mêmes poignées et c'est la caméra du plan qui bouge.
+    b.app.cur_frame = 0;
+    assert!(b.app.doc.panels[0].camera.is_empty());
+    let cam_xf = b.app.s3_xfs(&[CAMERA_ID]);
+    assert!(near3(cam_xf[0].1.pos, w.eye(&b.app.current_camera()), 1e-4), "l'œil de la caméra du plan");
+    b.app.s3_set_xfs(&gz::move_xfs(&cam_xf, [0.5, 0.2, -1.0]));
+    let cam = b.app.current_camera();
+    let base = Camera::centered(320, 180);
+    assert!(near(cam.x, base.x + 0.5 / w.k, 0.1) && near(cam.y, base.y - 0.2 / w.k, 0.1) && near(cam.dolly, 1.0 / w.k, 0.1), "{cam:?}");
+    // Animée (deux clés) : on règle la clé de l'image courante.
+    b.app.doc.panels[0].camera = vec![CameraKey::new(0, base), CameraKey::new(10, base)];
+    b.app.cur_frame = 4;
+    let cam_xf = b.app.s3_xfs(&[CAMERA_ID]);
+    b.app.s3_set_xfs(&gz::move_xfs(&cam_xf, [1.0, 0.0, 0.0]));
+    let keys = &b.app.doc.panels[0].camera;
+    assert_eq!(keys.len(), 3, "une clé de caméra de plus, à l'image 4 : {keys:?}");
+    assert!(keys[1].frame == 4 && keys[1].cam.x > base.x + 10.0);
+    assert_eq!(keys[0].cam, base);
+}
+
+#[test]
+fn the_camera_gesture_is_one_named_undo_step_and_undo_restores_the_plan_camera() {
+    let mut b = space(&[(RED, [100, 50, 220, 130], 0.0)]);
+    b.app.scene3d.sel = vec![CAMERA_ID];
+    b.app.scene3d.mode = Mode::Move;
+    let (view, center) = orbit(&b);
+    let before = b.app.doc.panels[0].camera.clone();
+    let steps = b.app.history.names().0.len();
+    let eye = b.app.s3_world().eye(&b.app.current_camera());
+    let (from, to) = (view.project(eye, center).expect("visible"), view.project([eye[0] + 0.3, eye[1], eye[2]], center).expect("visible"));
+    gesture(&mut b, Handle::Axis(0), from, to);
+    assert_ne!(b.app.doc.panels[0].camera, before);
+    assert_eq!(b.app.history.names().0.len(), steps + 1);
+    b.app.undo();
+    assert_eq!(b.app.doc.panels[0].camera, before);
+}
+
+#[test]
+fn the_pile_is_ordered_by_depth_in_one_step_and_refused_when_it_would_break_links() {
+    let mut b = space(&[(RED, [10, 10, 80, 60], 1.0), (GREEN, [100, 40, 200, 120], -0.5), (BLUE, [20, 100, 60, 170], 2.0)]);
+    let names: Vec<String> = b.app.layers().iter().map(|l| l.name.clone()).collect();
+    b.app.run_action("espace3d.ordonner_profondeur");
+    let depths: Vec<f32> = b.app.layers().iter().map(|l| l.depth).collect();
+    assert_eq!(depths, vec![2.0, 1.0, -0.5], "le plus loin en bas de la pile");
+    assert_eq!(b.app.history.names().0.last().copied(), Some("Ordonner la pile selon la profondeur"));
+    b.app.undo();
+    assert_eq!(b.app.layers().iter().map(|l| l.name.clone()).collect::<Vec<_>>(), names);
+    // Un dossier dans la pile : refusé, rien ne change.
+    b.app.layers_mut().push(Layer::new_folder("Dossier"));
+    let n = b.app.history.names().0.len();
+    b.app.run_action("espace3d.ordonner_profondeur");
+    assert_eq!(b.app.history.names().0.len(), n);
+    assert!(b.app.status.contains("refusé"), "{}", b.app.status);
+}
+
+#[test]
+fn drawing_on_a_tilted_card_follows_the_tilt_both_ways() {
+    let mut doc = doc_with_cards(&[(RED, [0, 0, 320, 180], 0.4)]);
+    doc.panels[0].layers[0].transform = LayerTransform { tilt_x: 20.0, tilt_y: -30.0, angle: 5.0, x: 6.0, ..Default::default() };
+    doc.panels[0].camera = vec![CameraKey::new(0, Camera { x: 170.0, y: 95.0, dolly: 30.0, ..doc.default_camera() })];
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.chauffer(2);
+    let (world, xf, eye) = (b.app.s3_world(), b.app.s3_world().card_xf(&b.app.layer().pose(0), b.app.layer().depth_at(0)), b.app.s3_world().eye_seen(&b.app.doc.camera_seen(0, 0)));
+    for p in [pos2(160.0, 90.0), pos2(40.0, 30.0), pos2(300.0, 150.0)] {
+        let sheet = world.card_to_sheet(eye, &xf, p).expect("devant l'œil");
+        let back = b.app.to_layer(sheet);
+        assert!((back - p).length() < 0.05, "le pinceau peint en {back:?} au lieu de {p:?}");
+        let screen = b.app.layer_to_screen(p);
+        let again = b.app.view.to_canvas(b.app.canvas_rect, b.app.canvas_size(), screen);
+        assert!((again - sheet).length() < 0.2, "{again:?} contre {sheet:?}");
+    }
+}
+
+#[test]
+fn the_view_with_ten_cards_and_twenty_objects_stays_within_the_frame_budget() {
+    let cards: Vec<_> = (0..10).map(|k| (if k % 2 == 0 { RED } else { GREEN }, [10 + k * 20, 20, 90 + k * 20, 140], k as f32 * 0.4 - 1.0)).collect();
+    let mut doc = doc_with_cards(&cards);
+    let (panel, seq) = (doc.panels[0].id, doc.sequence_of(0));
+    let shapes = Shape3d::basics();
+    for k in 0..20 {
+        doc.scenes3d.add(panel, seq, Target::Plan, shapes[k % shapes.len()].clone(), [(k % 5) as f32 * 1.4 - 3.0, 0.0, -((k / 5) as f32) * 1.2]);
+    }
+    let mut b = banc_taille(doc, true, 1280, 720);
+    b.chauffer(2);
+    b.app.run_action("espace3d.basculer");
+    b.chauffer(6);
+    let ids: Vec<u64> = b.app.layers().iter().map(|l| espace3d::card_selection(l.id)).collect();
+    b.app.scene3d.sel = ids;
+    let frames: Vec<f64> = (0..60).map(|k| b.image(vec![eframe::egui::Event::PointerMoved(pos2(900.0 + k as f32, 500.0))], 1.0 / 60.0).total()).collect();
+    let mean = frames.iter().sum::<f64>() / frames.len() as f64;
+    println!("PERF Espace 3D : 10 cartes, 20 objets, carte graphique {} : {mean:.2} ms par image (max {:.2})", b.app.gpu.is_some(), frames.iter().cloned().fold(0.0, f64::max));
+    assert!(mean < 16.0, "{mean:.2} ms par image : l'Espace 3D doit tenir 60 images par seconde (10 cartes, 20 objets)");
+    // Choisir à la souris, aussi.
+    let (view, center) = orbit(&b);
+    let ray = view.ray(center, center);
+    let t = std::time::Instant::now();
+    for _ in 0..20 {
+        let _ = b.app.s3_pick(&ray);
+    }
+    let pick = t.elapsed().as_secs_f64() * 1000.0 / 20.0;
+    println!("PERF Espace 3D : choisir à la souris (10 cartes, 20 objets) : {pick:.2} ms");
+    assert!(pick < 5.0, "{pick:.2} ms pour choisir");
 }

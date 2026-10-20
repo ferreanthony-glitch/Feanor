@@ -623,10 +623,6 @@ mod texttools;
 mod stencil;
 #[cfg(test)]
 mod tabs_tests;
-mod stage3d;
-#[cfg(test)]
-mod stage3d_tests;
-mod stage3dui;
 // Espace 3D (`docs/ESPACE3D.md`) : le plateau en 3D et la scène 3D de blocage réunis, calques (cartes), objets et
 // caméra du plan dans un seul monde.
 mod espace3d;
