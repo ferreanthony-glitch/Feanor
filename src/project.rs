@@ -132,7 +132,13 @@ pub const FORMAT: &str = "pelure-projet";
 /// précédente refuse le projet au lieu d'en montrer le dessin sans liseré, sans dégradé ni plume (et la
 /// plume est désignée par un numéro tiré du nom du réglage de pinceau). Un projet de version 31 ou moins
 /// s'ouvre tel quel.
-pub const VERSION: u32 = 32;
+/// 33 (2026-10-20, notes d'Anthony « calques / effets / montage ») : interrupteur « fx » d'un calque
+/// (`effets_eteints` : la pile d'effets est éteinte d'un coup, sans être vidée). Une version précédente
+/// refuse le projet : elle montrerait les effets d'un calque que le réalisateur a éteints, le film
+/// changerait sans prévenir. Le champ est absent (donc allumé) tant qu'on n'éteint rien. Un projet de
+/// version 32 ou moins s'ouvre tel quel, effets allumés. (Une autre branche peut aussi prendre le numéro 33
+/// pour ses propres champs : chacun a son nom, les deux se lisent sous le même numéro.)
+pub const VERSION: u32 = 33;
 const DRAWINGS: &str = "dessins";
 /// Fils qui lisent ou écrivent les dessins d'un projet en parallèle : au-delà de huit, le disque et
 /// la mémoire (une feuille décodée pèse 33 Mo) limitent plus que le processeur.
@@ -584,6 +590,10 @@ struct LayerEntry {
     /// Pile d'effets (format 19) : sorte, actif, valeurs, clés (image, valeurs).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     effets: Vec<crate::fx::Effect>,
+    /// Interrupteur « fx » du calque (format 33) : vrai, la pile `effets` est éteinte d'un coup sans être
+    /// vidée. Absent : allumée.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    effets_eteints: bool,
     /// Calque CTG (format 20) : rangs de ses calques sources dans le plan (aucun : tous les
     /// autres calques de dessin) ; absent : calque ordinaire.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1587,6 +1597,7 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                 marques_couleur: l.color_marks.iter().filter(|(id, _)| l.frames.contains(&Some(**id))).map(|(id, k)| (key(*id), *k)).collect(),
                 roles: l.roles.clone(),
                 effets: l.fx.clone(),
+                effets_eteints: !l.fx_enabled,
                 ctg: l.ctg.as_ref().map(|c| CtgEntry {
                     sources: c.sources.iter().filter_map(|id| panel.layers.iter().position(|s| s.id == *id)).collect(),
                     trou: c.gap,
@@ -2328,6 +2339,7 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
                         color_marks: l.marques_couleur.into_iter().filter(|(_, k)| (*k as usize) < crate::marks::COLORS.len()).collect(),
                         roles: l.roles,
                         fx: l.effets,
+                        fx_enabled: !l.effets_eteints,
                         ctg: None,
                         // Calque vidéo (format 21) : ses images dans `videos/<id>/`.
                         video: l.video.filter(|v| v.images > 0 && v.ips > 0.0 && matches!(v.ext.as_str(), "jpg" | "png")).map(|v| {

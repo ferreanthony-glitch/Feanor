@@ -273,6 +273,8 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
         e.set_key(11, vec![40.0, 150.0]);
         e
     }];
+    // Bouton « fx » du calque éteint (format 33, `effets_eteints`) : la pile est gardée, elle ne joue plus.
+    nuage.fx_enabled = false;
     let mut ctg = Layer::new("Aplats", LayerKind::Bitmap);
     ctg.frames = vec![Some(aplats); 24];
     ctg.ctg = Some(crate::ctg::Ctg { sources: vec![perso.id], gap: 6 });

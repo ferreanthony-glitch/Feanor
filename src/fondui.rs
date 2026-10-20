@@ -1,7 +1,8 @@
-//! Fond sous le trait, côté interface (`fond.rs`) : l'option du pinceau et du crayon (choix
-//! d'Anthony, 2026-10-18 : « une option de pinceau, comme le peint derrière »), allumée pour le
-//! calque courant ; dessous, ses réglages et la bascule Trait / Fond (où peignent le pinceau, le
-//! crayon et la gomme : dans le trait, ou dans le fond, sous le trait, sans jamais le toucher).
+//! Fond sous le trait, côté interface (`fond.rs`) : un réglage du **calque**, avec son bouton sur la ligne
+//! du calque (choix d'Anthony, 2026-10-20 : « depuis le calque, en bouton, et pas depuis le pinceau » ;
+//! le 2026-10-18 c'était une option du pinceau et du crayon, à côté de « Peint derrière ») ; dans les
+//! réglages du pinceau, la bascule Trait / Fond (où peignent le pinceau, le crayon et la gomme : dans le
+//! trait, ou dans le fond, sous le trait, sans jamais le toucher) et les réglages du fond du calque courant.
 
 use eframe::egui::{self, RichText};
 use egui_phosphor::regular as ph;
@@ -10,24 +11,6 @@ use crate::app::App;
 use crate::fond::FondReglages;
 
 impl App {
-    /// « Fond sous le trait » (pinceau et crayon), à côté de « Peint derrière ».
-    pub(crate) fn fond_toggle_ui(&mut self, ui: &mut egui::Ui) {
-        let on = self.layer().fond.is_some();
-        let resp = self.bouton_etat(
-            ui,
-            on,
-            ph::USER_SQUARE,
-            "Fond sous le trait",
-            "Le calque prend un fond sous son trait : tout ce que le trait enferme, plus un léger débord, en une seule \
-             forme qui se recalcule à chaque trait. On peut changer sa couleur, et peindre dedans (bascule Fond) sans \
-             toucher au trait.",
-            "pinceau.fond",
-        );
-        if resp.clicked() {
-            self.run_action("pinceau.fond");
-        }
-    }
-
     /// Les réglages du fond du calque courant et la bascule Trait / Fond (pinceau, crayon, gomme).
     pub(crate) fn fond_options_ui(&mut self, ui: &mut egui::Ui) {
         let Some(r) = self.layer().fond else { return };
@@ -113,6 +96,58 @@ impl App {
         self.action_item(ui, "Couleur du projet à tous les fonds", "fond.couleur_partout");
     }
 
+    /// Allume ou éteint le fond sous le trait du calque `li` (une étape d'annulation, le calque courant ne
+    /// change pas). Le fond est un réglage du **calque** : le bouton de sa ligne (panneau Calques, en-tête de
+    /// la timeline, barre de commandes du panneau) et l'action `pinceau.fond` (qui vise le calque courant) font
+    /// la même chose. Avant le 2026-10-20 c'était un bouton des réglages du pinceau et du crayon ; il n'a
+    /// jamais été retenu dans les réglages de pinceau (c'était déjà ce champ du calque, `Layer::fond`) : les
+    /// projets et les réglages enregistrés se lisent donc sans aucune conversion.
+    pub(crate) fn toggle_fond(&mut self, li: usize) {
+        if self.content_refuses() {
+            return;
+        }
+        if !self.layers().get(li).is_some_and(takes_fond) {
+            self.status = "Fond sous le trait : ce calque n'en prend pas (ni dossier, ni CTG, ni vidéo).".into();
+            return;
+        }
+        self.end_stroke();
+        let on = self.layers()[li].fond.is_some();
+        let fresh = self.new_fond();
+        self.record_step();
+        self.layers_mut()[li].fond = if on { None } else { Some(fresh) };
+        if on && li == self.cur_layer {
+            self.paint_fond = false;
+        }
+        self.renderer.invalidate_all();
+        self.status = if on {
+            "Fond sous le trait : retiré de ce calque (Ctrl+Z le remet, avec ce qu'on y avait peint).".into()
+        } else {
+            "Fond sous le trait : chaque dessin du calque a maintenant un fond, recalculé à chaque trait.".into()
+        };
+    }
+
+    /// Le bouton « Fond sous le trait » d'un calque : allumé quand le calque en a un. Il est sur la ligne du
+    /// calque (panneau Calques) et dans les commandes du panneau ; rien pour un dossier, un calque CTG ou vidéo
+    /// (ils n'en prennent pas).
+    pub(crate) fn fond_layer_button(&mut self, ui: &mut egui::Ui, li: usize, small: bool) -> Option<egui::Response> {
+        let l = self.layers().get(li)?;
+        if !takes_fond(l) {
+            return None;
+        }
+        let on = l.fond.is_some();
+        let size = if small { 12.0 } else { crate::bulles::TAILLE };
+        let key = self.raccourci("pinceau.fond");
+        let about = if on {
+            "Ce calque a un fond sous son trait : tout ce que le trait enferme, plus un léger débord, en une seule forme qui se recalcule à chaque trait. Clic : le retirer. Ses réglages (couleur, débord, trous) sont dans les réglages du pinceau, et la bascule Trait / Fond dit où l'on peint."
+        } else {
+            "Donner un fond à ce calque : tout ce que le trait enferme, plus un léger débord, en une seule forme sous le trait, qui se recalcule à chaque trait. On peut changer sa couleur, et peindre dedans (bascule Fond) sans toucher au trait."
+        };
+        let resp = ui.add(egui::Button::new(crate::bulles::encre_etat(RichText::new(ph::USER_SQUARE).size(size), on)).selected(on).frame(on).min_size(egui::vec2(18.0, 0.0)));
+        let resp = crate::bulles::bulle(resp, "Fond sous le trait", about, &key);
+        crate::raccourcisui::shortcut_menu(&resp, "pinceau.fond", &key);
+        Some(resp)
+    }
+
     /// Commandes du fond ; vrai si `action` en était une.
     pub(crate) fn fond_action(&mut self, action: &str) -> bool {
         match action {
@@ -120,20 +155,7 @@ impl App {
                 if self.refuse_on_folder() {
                     return true;
                 }
-                let li = self.cur_layer;
-                let on = self.layers()[li].fond.is_some();
-                let fresh = self.new_fond();
-                self.record_step();
-                self.layers_mut()[li].fond = if on { None } else { Some(fresh) };
-                if on {
-                    self.paint_fond = false;
-                }
-                self.renderer.invalidate_all();
-                self.status = if on {
-                    "Fond sous le trait : retiré de ce calque (Ctrl+Z le remet, avec ce qu'on y avait peint).".into()
-                } else {
-                    "Fond sous le trait : chaque dessin du calque a maintenant un fond, recalculé à chaque trait.".into()
-                };
+                self.toggle_fond(self.cur_layer);
             }
             "pinceau.strate_fond" => {
                 if self.layer().fond.is_none() {

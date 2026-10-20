@@ -3981,6 +3981,8 @@ impl App {
             "dossier.sortir" => self.take_chosen_out(),
             "dossier.supprimer_seul" => self.delete_folders_only(),
             "dossier.joindre" => self.join_chosen_folders(),
+            // Bouton « fx » de la ligne du calque (`fxui.rs`).
+            "calque.effets" => self.toggle_layer_fx(self.cur_layer),
             "groupes.focus" => self.focus_current_group(),
             "panneau.couper" => self.split_current_panel(),
             "panneau.fusionner_suivant" => self.merge_next_panel(),

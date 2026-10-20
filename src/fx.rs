@@ -742,6 +742,10 @@ pub fn steps_at_with(fx: &[Effect], frame: usize, rest: Option<usize>, vector: b
 /// Les effets du calque `layer` à l'image `frame` (voir `steps_at_with`) : le tremblement n'agit que
 /// sur un calque vectoriel.
 pub fn layer_steps(layer: &crate::document::Layer, frame: usize, rest: Option<usize>) -> Vec<FxStep> {
+    // Bouton « fx » du calque éteint : aucun effet, la pile reste en place.
+    if !layer.fx_enabled {
+        return Vec::new();
+    }
     steps_at_with(&layer.fx, frame, rest, layer.kind == crate::document::LayerKind::Vector)
 }
 

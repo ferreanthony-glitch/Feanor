@@ -553,6 +553,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("dossier.sortir", "Sortir les calques choisis de leur dossier", true, false),
     act("dossier.supprimer_seul", "Supprimer uniquement le dossier (ses calques restent)", true, false),
     act("dossier.joindre", "Joindre les dossiers choisis dans le dossier courant", true, false),
+    act("calque.effets", "Effets du calque courant : tout allumer / tout éteindre (bouton fx)", true, false),
     act("groupes.editer", "Groupes de calques (noms, couleurs, montrés dans la timeline)", true, false),
     act("groupes.focus", "Focus sur le groupe du calque courant (la timeline ne montre que lui)", true, false),
     act("outil.camera", "Outil caméra", true, false),

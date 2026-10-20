@@ -264,6 +264,35 @@ impl App {
             {
                 self.add_scene_background();
             }
+            // Dossiers de calques (`folders.rs`) : un dossier vide au-dessus du calque courant ; avec
+            // plusieurs calques choisis, un deuxième bouton les range dans un nouveau dossier.
+            if self
+                .bouton(ui, ph::FOLDER_PLUS, "Nouveau dossier", "Un dossier de calques vide, au-dessus du calque courant. Glisser des calques dedans pour les ranger ; le triangle du dossier l'ouvre et le ferme. Son œil, son verrou et son opacité agissent sur tous ses calques.", "dossier.nouveau")
+                .clicked()
+            {
+                self.new_folder();
+            }
+            // Les réglages du calque courant qui se coupent d'un bouton : son fond sous le trait (`fondui.rs`)
+            // et la pile de ses effets (`fxui.rs`, seulement s'il en a).
+            let current = self.cur_layer;
+            if let Some(resp) = self.fond_layer_button(ui, current, false) {
+                if resp.clicked() {
+                    self.toggle_fond(current);
+                }
+            }
+            let ink = ui.visuals().text_color();
+            if let Some(resp) = self.fx_switch(ui, current, None, ink) {
+                if resp.clicked() {
+                    self.toggle_layer_fx(current);
+                }
+            }
+            if self.chosen_layers().len() > 1
+                && self
+                    .bouton(ui, ph::FOLDER_NOTCH_PLUS, "Ranger les calques choisis dans un dossier", "Un nouveau dossier prend les calques choisis (Ctrl ou Maj + clic).", "dossier.ranger")
+                    .clicked()
+            {
+                self.folder_from_chosen();
+            }
             if self
                 .bouton(
                     ui,
@@ -354,11 +383,22 @@ impl App {
         let list_top = ui.cursor().top();
         let mut drag_rows: Vec<crate::layerheads::Row> = Vec::new();
         let several = self.chosen_layers().len() >= 2;
+        // Dossiers fermés (comme dans la timeline : `collapsed`) : leurs calques n'ont plus de rang ici,
+        // sauf le calque courant, qu'on ne perd pas de vue.
+        let closed: Vec<u64> = self.layers().iter().filter(|l| l.folder && l.collapsed).map(|l| l.id).collect();
+        let mut fold: Option<usize> = None;
         for li in (0..self.layers().len()).rev() {
             let (id, visible, locked, kind, name, cel, folder, ctg, has_fond) = {
                 let l = &self.layers()[li];
                 (l.id, l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame), l.folder, l.ctg.is_some(), l.fond.is_some())
             };
+            let (in_folder, shut, kids) = {
+                let l = &self.layers()[li];
+                (l.parent.is_some(), l.folder && l.collapsed, if l.folder { crate::folders::children_of(self.layers(), li).len() } else { 0 })
+            };
+            if self.layers()[li].parent.is_some_and(|p| closed.contains(&p)) && li != self.cur_layer {
+                continue;
+            }
             // Calque de couleur : rangé sous son trait, en retrait ; calque de trait : le nombre de
             // couleurs qu'il porte (`calquecouleur.rs`).
             let colour_of = crate::calquecouleur::trait_de(self.layers(), li).map(|ti| self.layers()[ti].name.clone());
@@ -394,6 +434,17 @@ impl App {
                         if colour_of.is_some() {
                             ui.add_space(14.0);
                         }
+                        // Dossier : son triangle l'ouvre et le ferme ; un calque rangé dedans est décalé.
+                        if folder {
+                            let caret = if shut { ph::CARET_RIGHT } else { ph::CARET_DOWN };
+                            let resp = ui.add(egui::Button::new(RichText::new(caret).size(13.0)).frame(false).min_size(vec2(16.0, 36.0)));
+                            let (what, why) = if shut { ("Ouvrir le dossier", "Montrer ses calques.") } else { ("Fermer le dossier", "Cacher ses calques ici et dans la timeline (ils restent à l'image).") };
+                            if crate::bulles::bulle(resp, what, why, "").clicked() {
+                                fold = Some(li);
+                            }
+                        } else if in_folder {
+                            ui.add_space(14.0);
+                        }
                         let eye = if visible { ph::EYE } else { ph::EYE_SLASH };
                         let resp = ui.add(egui::Button::new(RichText::new(eye).size(15.0)).frame(false).min_size(vec2(20.0, 36.0)));
                         let resp = crate::bulles::bulle(resp, "Afficher / masquer", "Montrer ou cacher le calque.", "");
@@ -410,6 +461,13 @@ impl App {
                             lock = Some(li);
                         }
                         resp.context_menu(|ui| self.layer_full_menu(ui, li, false));
+                        // Bouton « fx » : les effets du calque, d'un coup (seulement s'il en a ; `fxui.rs`).
+                        let ink = ui.visuals().text_color();
+                        if let Some(resp) = self.fx_switch(ui, li, None, ink) {
+                            if resp.clicked() {
+                                self.toggle_layer_fx(li);
+                            }
+                        }
                         // Vignette du dessin à l'image courante (vide : cadre gris).
                         let (rect, resp) = ui.allocate_exact_size(thumb_size, Sense::click());
                         match &thumb {
@@ -423,6 +481,11 @@ impl App {
                             }
                             None => {
                                 ui.painter().rect_filled(rect, 0.0, crate::theme::controle());
+                                // Un dossier n'a pas de dessin : son icône à la place de la vignette.
+                                if folder {
+                                    let icon = if shut { ph::FOLDER } else { ph::FOLDER_OPEN };
+                                    ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, icon, egui::FontId::proportional(18.0), if visible { crate::theme::texte() } else { crate::theme::texte_doux() });
+                                }
                             }
                         }
                         let border = if current { Stroke::new(2.0_f32, crate::theme::contour()) } else { Stroke::new(1.0_f32, crate::theme::bord()) };
@@ -454,10 +517,14 @@ impl App {
                                 LayerKind::Vector => "vectoriel",
                                 LayerKind::Bitmap => "bitmap",
                             };
+                            let kind = if folder { format!("dossier · {kids} calque{}", if kids > 1 { "s" } else { "" }) } else { kind.to_string() };
                             let label = RichText::new(kind).small();
                             ui.horizontal(|ui| {
                                 ui.spacing_mut().item_spacing.x = 4.0;
-                                ui.label(if folder || current { label.weak() } else { label.color(hue) });
+                                let about = ui.label(if folder || current { label.weak() } else { label.color(hue) });
+                                if folder {
+                                    about.on_hover_text("Dossier de calques. Choisis-le pour régler son opacité (en haut) : elle s'ajoute à celle de chacun de ses calques. Son œil et son verrou agissent sur tous ses calques. Monter ou descendre le dossier emmène ses calques.");
+                                }
                                 if let Some(line) = &colour_of {
                                     ui.label(RichText::new(format!("{} sous {line}", ph::LINK_SIMPLE)).small().weak())
                                         .on_hover_text("Calque de couleur : ses images suivent celles du calque de trait. On colorie dessous, le trait reste intact.");
@@ -472,9 +539,15 @@ impl App {
                                 } else if several && chosen {
                                     ui.label(RichText::new(ph::CHECK_CIRCLE).small().color(hue)).on_hover_text("Calque choisi avec les autres (Ctrl ou Maj + clic) : les commandes sur plusieurs calques, la sélection et l'outil Transformer le prennent.");
                                 }
+                                // Fond sous le trait : un bouton par calque (allumé s'il en a un).
+                                if let Some(resp) = self.fond_layer_button(ui, li, true) {
+                                    if resp.clicked() {
+                                        self.toggle_fond(li);
+                                    }
+                                }
                             });
-                            // Fond sous le trait (`fondui.rs`) : sur le calque courant, où peint le
-                            // pinceau (le trait ou le fond) ; sur les autres, qu'il en a un.
+                            // Fond sous le trait (`fondui.rs`) : le bouton du calque, sur sa ligne ; sur le calque
+                            // courant qui en a un, la bascule où peint le pinceau (le trait ou le fond).
                             if has_fond && current {
                                 ui.horizontal(|ui| {
                                     ui.spacing_mut().item_spacing.x = 2.0;
@@ -486,8 +559,6 @@ impl App {
                                         strate = true;
                                     }
                                 });
-                            } else if has_fond {
-                                ui.label(RichText::new("+ fond").small().weak()).on_hover_text("Ce calque a un fond sous son trait.");
                             }
                         });
                     });
@@ -529,6 +600,12 @@ impl App {
                 }
             }
         }
+        if let Some(li) = fold {
+            // (Comme dans la timeline : un réglage de l'affichage, pas une étape d'annulation.)
+            let shut = self.layers()[li].collapsed;
+            self.layers_mut()[li].collapsed = !shut;
+            self.modified = true;
+        }
         if let Some(li) = toggle {
             // (Un calque de trait emmène ses calques de couleur.)
             self.toggle_layer_visible(li);
@@ -556,6 +633,7 @@ impl App {
                 self.action_item(ui, "Nouveau calque bitmap", "calque.nouveau_bitmap");
                 self.action_item(ui, "Nouveau calque de fond", "calque.nouveau_fond");
                 self.action_item(ui, "Nouveau calque de couleur (sous le calque courant)", "calque.nouveau_couleur");
+                self.action_item(ui, "Nouveau dossier", "dossier.nouveau");
                 ui.separator();
                 self.action_item(ui, "Coller le calque", "calque.coller");
             });

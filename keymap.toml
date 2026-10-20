@@ -2914,3 +2914,8 @@ source = "SHOT (sans touche)"
 action = "cadrage.format_suivant"
 touches = []
 source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "calque.effets"
+touches = []
+source = "SHOT (sans touche)"
