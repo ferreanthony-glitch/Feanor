@@ -2175,18 +2175,22 @@ gagnée (la bande donne au montage tout ce que les pistes ne prennent pas, 170 p
   touche (`piste.basculer`).
 - **Double-clic sur la colonne**, ailleurs que sur le texte du nom : plie ou déplie. (Sur le nom : le renommer, comme avant — Anthony avait demandé le double-clic
   « sur le nom » ; il reste au renommage, le premier geste appris.)
-- **Clic droit sur une piste > Replier / déplier les pistes** : cette piste, toutes les pistes, tout déplier, et la case « Déplier le calque courant tout seul ».
+- **Clic droit sur une piste > Replier / déplier les pistes** : cette piste, toutes les pistes, tout déplier, la case « Déplier le calque courant tout seul », puis le choix
+  « Repliage des pistes » (commun à tous les plans / propre à chaque plan) ; en mode « propre à chaque plan », deux lignes de plus : « … les pistes de tous les plans ».
 - **Barre du montage, sous « Plus… »** : « Replier toutes les pistes » (`piste.replier_tout`), « Déplier toutes les pistes » (`piste.deplier_tout`), « Déplier le calque
-  courant » (`piste.auto_deplier`, allumé quand le réglage l'est). Aucune touche par défaut (rien de libre sans risque de conflit) : clic droit sur l'icône pour en assigner une.
+  courant » (`piste.auto_deplier`, allumé quand le réglage l'est), « Replis propres à chaque plan » (`piste.replis_par_plan`, allumé en mode par plan ; l'icône est un maillon
+  entier en mode commun, un maillon brisé en mode par plan). Aucune touche par défaut (rien de libre sans risque de conflit) : clic droit sur l'icône pour en assigner une.
 - **Déplier le calque courant** (réglage `deplier_calque_courant`, allumé d'office) : la piste du calque courant se montre dépliée, les autres gardent leur état
   (celui qu'on a enregistré). Elle se déplie **quand la souris est relâchée**, jamais pendant un geste (sinon les pistes d'en dessous glisseraient sous le pointeur au
   milieu d'un glisser). Replier cette piste à la main, ou « Replier toutes », la laisse repliée jusqu'au prochain changement de calque.
 
 ### 29.3 Les pistes traversent les plans
 
-Chaque plan a ses calques dans son ordre (6f) ; la piste n est la rangée n de tous les plans. La hauteur d'une piste ne doit pas changer quand on clique sur un autre plan,
-elle ne dépend donc pas du plan courant : **une piste est repliée dès qu'un de ses calques l'est** (« replié l'emporte »). Le triangle plie ou déplie d'un coup le calque
-de cette rangée dans chaque plan.
+Chaque plan a ses calques dans son ordre (6f) ; la piste n est la rangée n de tous les plans. Deux façons de la replier, au choix d'Anthony (§ 29.8) ; la première est le mode d'origine :
+
+- **Commun à tous les plans** (d'office). La hauteur d'une piste ne doit pas changer quand on clique sur un autre plan, elle ne dépend donc pas du plan courant : **une piste est
+  repliée dès qu'un de ses calques l'est** (« replié l'emporte »). Le triangle plie ou déplie d'un coup le calque de cette rangée dans chaque plan.
+- **Propre à chaque plan** (Préférences > Montage, § 29.8) : chaque plan retient ses propres replis ; les hauteurs suivent le plan courant.
 
 ### 29.4 Dossiers
 
@@ -2222,3 +2226,63 @@ rien qui fasse repeindre au repos).
 6. Un dossier : son triangle le ferme, ses calques disparaissent du montage (et de la timeline) ; rouvert, ils reviennent.
 7. Enregistrer, quitter, rouvrir : les mêmes pistes sont repliées. En animation, les lignes réduites de la timeline sont les mêmes calques.
 8. Au repos, l'application ne repeint pas (le processeur reste à zéro).
+
+### 29.8 Deux façons de replier : commun à tous les plans, propre à chaque plan (2026-10-21, branche `pistes-par-plan`)
+
+Anthony garde les deux comportements et en fait un choix : **Fichier > Préférences… > Montage > « Repliage des pistes »** (deux icônes, un maillon entier « Commun à tous les plans »,
+un maillon brisé « Propre à chaque plan », une bulle d'une seconde avec une phrase pour chacun) ; aussi au **clic droit sur une piste > Replier / déplier les pistes**, et par la commande
+« Replis propres à chaque plan » de « Plus… » dans la barre du montage (`piste.replis_par_plan`, sans touche). C'est un réglage de l'application (`reglages.toml`, clé
+`repliage_pistes = "par_plan"`, absente = commun) : **rien n'est écrit dans le projet, format inchangé**. « Déplier le calque courant » reste le même réglage, dans les deux modes (il est
+aussi dans Préférences > Montage).
+
+**Ce que chaque geste écrit** (les « drapeaux » sont les `collapsed` des calques, § 29.5) :
+
+| Geste | Commun à tous les plans | Propre à chaque plan |
+|---|---|---|
+| Hauteur d'une piste (affichage) | repliée si le calque de cette rangée est replié dans **un** plan (« replié l'emporte ») | repliée si le calque de cette rangée **du plan de la mise en page** l'est (plan courant au dernier relâchement de la souris) ; sans calque à cette rangée : dépliée |
+| Triangle, double-clic, « Replier / Déplier cette piste », `piste.basculer` | écrit le calque de cette rangée dans **tous** les plans | écrit le calque de cette rangée dans le **plan courant** seulement |
+| Alt + triangle, « Replier / Déplier toutes les pistes », `piste.replier_tout` / `piste.deplier_tout` | écrit **tous** les calques de **tous** les plans | écrit tous les calques du **plan courant** seulement |
+| « Replier / Déplier les pistes de tous les plans » (clic droit, seulement en mode par plan) | (n'existe pas : c'est déjà le geste ci-dessus) | écrit tous les calques de **tous** les plans |
+| Triangle d'un dossier (dans les deux modes) | ferme / ouvre le dossier du plan courant | idem |
+| Tout replier : les dossiers | laissés comme ils sont | idem ; **tout déplier** ouvre aussi les dossiers fermés (du plan visé) |
+| Le calque courant qui se déplie tout seul | n'écrit rien (affichage) | n'écrit rien (affichage) |
+| Changer de mode | n'écrit rien | n'écrit rien |
+
+**Décision pour « tout replier dans tous les plans »** : pas de modificateur sur les boutons (Alt est déjà « toutes les pistes » sur le triangle) ; le menu du clic droit offre les deux lignes
+« … de tous les plans » quand le mode est « par plan », puisque ailleurs le geste de tous les plans est le geste normal.
+
+**Passage sans perte** : passer de « par plan » à « commun » n'écrit aucun drapeau (le commun calcule seulement son « replié l'emporte » pour l'affichage, donc une rangée repliée dans un autre
+plan apparaît repliée) ; l'inverse non plus. Les replis ne se réécrivent que si l'on plie ou déplie ensuite : la règle du mode en cours s'applique alors (en commun : à tous les plans, comme
+avant). Repasser en « par plan » retrouve exactement les hauteurs d'avant, puisque chaque plan avait gardé ses drapeaux.
+
+**Quand les hauteurs changent** (mode par plan) : le plan courant change au clic (ou au clavier, ou à la lecture), mais la mise en page des pistes garde le plan d'avant **tant que la souris est
+tenue** et prend le nouveau plan **au relâchement** (`PistesUi::layout_plan`, comme « Déplier le calque courant » qui reste actif dans les deux modes). Les pistes d'en dessous ne glissent donc
+jamais sous le pointeur au milieu d'un clic ou d'un glisser ; les cases des autres plans se dessinent dans ces hauteurs. Au clavier ou pendant la lecture (souris relâchée), les hauteurs suivent le plan
+à chaque plan franchi. Les dossiers fermés cachent les pistes de leurs calques d'après le plan courant, dans les deux modes (règle d'avant, inchangée).
+
+**Timeline de l'animation (13b)** : elle montre un seul plan, et ses lignes réduites sont les `collapsed` de ce plan. En mode par plan, elle et le montage disent exactement la même chose pour le
+plan courant, et un repli fait dans un autre plan ne change ni l'un ni l'autre. En mode commun, comportement d'avant (la timeline lit les drapeaux du plan courant, le montage ajoute le « replié
+l'emporte » des autres plans).
+
+**Travail à plusieurs** (`docs/COOPERATION.md`) : en mode par plan, replier une piste n'écrit que les calques du plan courant, donc **jamais dans un plan qu'on ne tient pas** ; en mode commun, replier
+une piste écrit dans les calques de la même rangée de tous les plans, y compris ceux d'un équipier (c'est un drapeau d'affichage, mais c'est une écriture dans son plan). Le mode par plan est donc
+le plus tranquille sur un film partagé.
+
+Limites : un projet enregistré avec des replis d'un mode s'ouvre dans l'autre sans rien perdre, mais l'affichage peut alors surprendre (en commun, un seul calque replié dans un autre plan replie la
+piste partout) ; le mode n'est pas retenu dans le projet, c'est une préférence de la personne qui travaille ; pendant la lecture de plusieurs plans en mode par plan, les pistes changent de
+hauteur à chaque plan.
+
+### 29.9 À regarder à l'écran : les deux modes (liste pour Anthony)
+
+1. Préférences > Montage : deux icônes (maillon entier, maillon brisé) ; la bulle de « Repliage des pistes » dit les deux phrases ; celle de chaque icône, la sienne. Même choix dans le clic droit
+   sur une piste > Replier / déplier les pistes, et dans « Plus… » du montage (icône allumée = par plan).
+2. Mode **commun** (d'origine) : tout se passe comme au § 29.7 ; replier la piste de « Décor » la replie dans chaque plan.
+3. Mode **par plan** : replier « Décor » dans le plan 1 ; cliquer sur une case du plan 2 : pendant que la souris est tenue, les pistes ne bougent pas ; au relâchement, elles prennent les hauteurs du
+   plan 2 (dépliées si rien n'y est replié) ; revenir au plan 1 : « Décor » est de nouveau fin.
+4. Mode par plan : les cases des autres plans se dessinent dans les hauteurs du plan courant (dessins, losanges, barre du calque) et se prennent comme d'habitude.
+5. Mode par plan : Alt + triangle et « Replier toutes les pistes » ne touchent que ce plan ; « Replier les pistes de tous les plans » (clic droit) les touche tous. Le calque courant se déplie toujours
+   tout seul au relâchement.
+6. Basculer de par plan à commun, puis revenir : aucune piste ne change de drapeau (rien n'est marqué modifié dans le titre) ; en commun on voit les rangées repliées dans n'importe quel plan, en par plan
+   seulement celles du plan courant.
+7. En animation, la timeline du plan courant montre les mêmes lignes réduites que le montage en mode par plan. Enregistrer, quitter, rouvrir : mêmes replis par plan, même mode (c'est une préférence).
+8. Au repos, l'application ne repeint pas, dans les deux modes.

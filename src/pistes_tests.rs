@@ -729,3 +729,345 @@ fn pistes_capture() {
     let l3 = lieu(&b);
     sauver(&mut b, "pistes-3-repliees.png", l3.layers_top);
 }
+// ====================================================================================== replis par plan
+
+use crate::pistes::{lanes_in, Replis, ReplisPistes};
+
+/// Les replis de chaque plan, du bas vers le haut de la pile (l'ordre de `Document::panels[..].layers`).
+fn flags(app: &App) -> Vec<Vec<bool>> {
+    app.doc.panels.iter().map(|p| p.layers.iter().map(|l| l.collapsed).collect()).collect()
+}
+
+/// Trois plans de trois calques (rangées 0 à 2 : A, B, C ; X, Y, Z ; P, Q, R), réglage « par plan » ou « commun ».
+fn trois_plans(name: &str, mode: ReplisPistes) -> App {
+    let mut app = app_with(name, doc_with(&[&["A", "B", "C"], &["X", "Y", "Z"], &["P", "Q", "R"]]));
+    app.settings.montage_auto_open = false;
+    app.settings.montage_folds = mode;
+    app
+}
+
+/// Change de plan courant comme un clic, puis relâche la souris : les hauteurs suivent.
+fn aller_au_plan(app: &mut App, plan: usize) {
+    app.set_panel(plan);
+    app.pistes_follow_current(false);
+}
+
+#[test]
+fn per_plan_heights_follow_the_current_plan_and_the_common_ones_follow_every_plan() {
+    let mut doc = doc_with(&[&["A", "B", "C"], &["X", "Y", "Z"]]);
+    doc.panels[1].layers[0].collapsed = true; // « Z », le rang 0 du plan 2 : la rangée 2
+    let plan_a = Replis { mode: ReplisPistes::ParPlan, plan: 0 };
+    let plan_b = Replis { mode: ReplisPistes::ParPlan, plan: 1 };
+    let hs = |r: Replis| lanes_in(&doc.panels, 0, 0, 3, None, r).iter().map(|l| l.h).collect::<Vec<_>>();
+    assert_eq!(hs(plan_a), [LAYER_H; 3], "le plan 1 n'a rien de replié");
+    assert_eq!(hs(plan_b), [LAYER_H, LAYER_H, FOLDED_H], "le plan 2 a replié sa rangée 2");
+    assert_eq!(hs(Replis::COMMUN), [LAYER_H, LAYER_H, FOLDED_H], "commun : replié l'emporte");
+    // Un plan qui a moins de calques : la rangée sans calque reste dépliée.
+    let court = doc_with(&[&["A"], &["X", "Y", "Z"]]);
+    let h = lanes_in(&court.panels, 0, 0, 3, None, plan_a).iter().map(|l| l.h).collect::<Vec<_>>();
+    assert_eq!(h, [LAYER_H; 3]);
+    // Le calque qui s'est déplié tout seul reste ouvert dans son plan, et rien que là.
+    let mut all = doc_with(&[&["A", "B"], &["X", "Y"]]);
+    all.panels.iter_mut().flat_map(|p| p.layers.iter_mut()).for_each(|l| l.collapsed = true);
+    let auto = Some((all.panels[1].id, all.panels[1].layers[1].id)); // « X », rangée 0 du plan 2
+    let h = |r: Replis| lanes_in(&all.panels, 0, 0, 2, auto, r).iter().map(|l| l.h).collect::<Vec<_>>();
+    assert_eq!(h(plan_b), [LAYER_H, FOLDED_H]);
+    assert_eq!(h(plan_a), [FOLDED_H, FOLDED_H], "le calque déplié est celui du plan 2 : le plan 1 n'y gagne rien");
+    assert_eq!(h(Replis::COMMUN), [LAYER_H, FOLDED_H]);
+}
+
+#[test]
+fn the_chevron_folds_the_current_plan_only_in_per_plan_mode_and_every_plan_in_common_mode() {
+    let mut commun = trois_plans("chevron-commun", ReplisPistes::Commun);
+    assert!(commun.set_track_folded(1, true));
+    assert_eq!(flags(&commun), vec![vec![false, true, false]; 3], "commun : la rangée 1 de chaque plan");
+    let mut par_plan = trois_plans("chevron-par-plan", ReplisPistes::ParPlan);
+    assert!(par_plan.set_track_folded(1, true));
+    assert_eq!(flags(&par_plan), vec![vec![false, true, false], vec![false; 3], vec![false; 3]], "par plan : le plan courant seul");
+    assert!(par_plan.modified);
+    assert_eq!(heights(&par_plan), [(0, LAYER_H), (1, FOLDED_H), (2, LAYER_H)]);
+    // Dans le plan 2, la piste n'est pas repliée, et la replier ne touche pas le plan 1.
+    aller_au_plan(&mut par_plan, 1);
+    assert_eq!(heights(&par_plan), [(0, LAYER_H), (1, LAYER_H), (2, LAYER_H)], "le plan 2 n'a rien de replié");
+    assert!(par_plan.set_track_folded(2, true));
+    assert_eq!(flags(&par_plan), vec![vec![false, true, false], vec![true, false, false], vec![false; 3]]);
+    // Le triangle (toggle) lit l'état du plan courant, pas celui des autres.
+    par_plan.toggle_track_fold(1, false);
+    assert!(par_plan.doc.panels[1].layers[1].collapsed && par_plan.doc.panels[0].layers[1].collapsed);
+    par_plan.toggle_track_fold(1, false);
+    assert!(!par_plan.doc.panels[1].layers[1].collapsed && par_plan.doc.panels[0].layers[1].collapsed, "le plan 1 garde son repli");
+}
+
+#[test]
+fn fold_all_and_unfold_all_touch_one_plan_in_per_plan_mode_and_the_context_menu_can_touch_them_all() {
+    let mut app = trois_plans("tout-par-plan", ReplisPistes::ParPlan);
+    aller_au_plan(&mut app, 1);
+    assert_eq!(app.set_all_tracks_folded(true), 3);
+    assert_eq!(flags(&app), vec![vec![false; 3], vec![true; 3], vec![false; 3]], "le plan courant seul");
+    assert_eq!(heights(&app), [(0, FOLDED_H), (1, FOLDED_H), (2, FOLDED_H)]);
+    assert!(app.status.contains("de ce plan"), "{}", app.status);
+    // Les actions ont le même effet que les méthodes.
+    app.run_action("piste.deplier_tout");
+    assert!(flags(&app).iter().flatten().all(|f| !f));
+    app.run_action("piste.replier_tout");
+    assert_eq!(flags(&app), vec![vec![false; 3], vec![true; 3], vec![false; 3]]);
+    // Dans tous les plans (menu du clic droit).
+    assert_eq!(app.set_all_tracks_folded_in(true, true), 6, "les deux autres plans");
+    assert!(flags(&app).iter().flatten().all(|f| *f));
+    assert!(app.status.contains("de tous les plans"), "{}", app.status);
+    app.set_all_tracks_folded_in(false, true);
+    assert!(flags(&app).iter().flatten().all(|f| !f));
+    // Commun : un seul geste pour tous les plans, comme avant.
+    let mut commun = trois_plans("tout-commun", ReplisPistes::Commun);
+    aller_au_plan(&mut commun, 1);
+    assert_eq!(commun.set_all_tracks_folded(true), 9);
+    assert!(flags(&commun).iter().flatten().all(|f| *f));
+}
+
+#[test]
+fn per_plan_fold_all_leaves_the_folders_of_the_plan_alone_until_unfolded() {
+    let mut doc = doc_with(&[&["A"], &["B", "C"]]);
+    doc.panels[0].layers = stack_with_folder(false);
+    let mut app = app_with("dossier-par-plan", doc);
+    app.settings.montage_auto_open = false;
+    app.settings.montage_folds = ReplisPistes::ParPlan;
+    assert_eq!(app.set_all_tracks_folded(true), 3, "les trois calques ordinaires du plan 1");
+    assert!(!app.doc.panels[0].layers[3].collapsed, "le dossier reste ouvert");
+    assert!(app.doc.panels[1].layers.iter().all(|l| !l.collapsed), "le plan 2 n'est pas touché");
+    // Fermer un dossier cache les pistes de ses calques dans le plan courant, comme dans le mode commun.
+    app.set_all_tracks_folded(false);
+    assert!(app.set_track_folded(0, true));
+    assert_eq!(heights(&app).iter().map(|h| h.0).collect::<Vec<_>>(), [0, 3], "C1 et C2 sont cachés");
+    assert!(app.doc.panels[1].layers.iter().all(|l| !l.collapsed));
+}
+
+#[test]
+fn the_layout_changes_with_the_plan_only_when_the_mouse_is_released() {
+    let mut app = trois_plans("relache", ReplisPistes::ParPlan);
+    app.doc.panels[0].layers[1].collapsed = true; // rangée 1 du plan 1
+    app.doc.panels[1].layers[2].collapsed = true; // rangée 0 du plan 2
+    app.pistes_follow_current(false);
+    let h = |app: &App| app.montage_rows(300.0).lanes.iter().map(|l| l.h).collect::<Vec<_>>();
+    assert_eq!(h(&app), [LAYER_H, FOLDED_H, LAYER_H]);
+    // Un clic sur le plan 2 : le plan courant change tout de suite, la disposition pas.
+    app.set_panel(1);
+    app.pistes_follow_current(true);
+    assert_eq!(app.cur_panel, 1);
+    assert_eq!(h(&app), [LAYER_H, FOLDED_H, LAYER_H], "souris tenue : rien ne glisse sous le pointeur");
+    app.pistes_follow_current(true);
+    assert_eq!(h(&app), [LAYER_H, FOLDED_H, LAYER_H]);
+    app.pistes_follow_current(false);
+    assert_eq!(h(&app), [FOLDED_H, LAYER_H, LAYER_H], "relâchée : les hauteurs sont celles du plan 2");
+    // Revenir au plan 1 de la même façon.
+    app.set_panel(0);
+    app.pistes_follow_current(true);
+    assert_eq!(h(&app), [FOLDED_H, LAYER_H, LAYER_H]);
+    app.pistes_follow_current(false);
+    assert_eq!(h(&app), [LAYER_H, FOLDED_H, LAYER_H]);
+    // Mode commun : la disposition ne dépend pas du plan, rien ne bouge au changement de plan.
+    app.settings.montage_folds = ReplisPistes::Commun;
+    let commun = h(&app);
+    assert_eq!(commun, [FOLDED_H, FOLDED_H, LAYER_H]);
+    app.set_panel(2);
+    app.pistes_follow_current(false);
+    assert_eq!(h(&app), commun);
+}
+
+#[test]
+fn the_current_layer_still_unfolds_itself_in_both_modes() {
+    for mode in [ReplisPistes::Commun, ReplisPistes::ParPlan] {
+        let mut app = trois_plans("auto", mode);
+        app.settings.montage_auto_open = true;
+        app.set_all_tracks_folded_in(true, true);
+        app.pistes_follow_current(true);
+        assert_eq!(heights(&app).iter().map(|h| h.1).collect::<Vec<_>>(), [FOLDED_H; 3], "{mode:?} : souris tenue");
+        app.pistes_follow_current(false);
+        assert_eq!(heights(&app).iter().map(|h| h.1).collect::<Vec<_>>(), [FOLDED_H, FOLDED_H, LAYER_H], "{mode:?} : le calque courant (rang 0, rangée 2) s'ouvre");
+        // Un autre plan devient courant : son calque courant s'ouvre au relâchement, l'ancien se referme.
+        app.set_panel(1);
+        app.pistes_follow_current(false);
+        assert_eq!(heights(&app).iter().map(|h| h.1).collect::<Vec<_>>(), [FOLDED_H, FOLDED_H, LAYER_H], "{mode:?} : plan 2");
+        assert!(flags(&app).iter().flatten().all(|f| *f), "{mode:?} : l'état enregistré n'a pas changé");
+        // Replié à la main, il reste replié jusqu'au prochain changement de calque.
+        app.toggle_track_fold(2, false);
+        assert!(app.track_is_folded(2), "{mode:?}");
+        app.pistes_follow_current(false);
+        assert!(app.track_is_folded(2), "{mode:?}");
+    }
+}
+
+#[test]
+fn switching_modes_writes_nothing_in_the_project_and_the_next_fold_follows_the_new_rule() {
+    let mut app = trois_plans("bascule", ReplisPistes::ParPlan);
+    app.doc.panels[0].layers[1].collapsed = true; // rangée 1 du plan 1
+    app.doc.panels[2].layers[0].collapsed = true; // rangée 2 du plan 3
+    app.modified = false;
+    let avant = flags(&app);
+    let par_plan = heights(&app);
+    assert_eq!(par_plan, [(0, LAYER_H), (1, FOLDED_H), (2, LAYER_H)], "plan 1 : sa rangée 1 seule");
+    // Vers le commun : « replié l'emporte », rien n'est écrit.
+    app.run_action("piste.replis_par_plan");
+    assert_eq!(app.settings.montage_folds, ReplisPistes::Commun);
+    assert_eq!(flags(&app), avant, "les drapeaux des plans sont intacts");
+    assert!(!app.modified, "le projet n'est pas marqué modifié");
+    assert_eq!(heights(&app), [(0, LAYER_H), (1, FOLDED_H), (2, FOLDED_H)], "la rangée 2 est repliée dans le plan 3");
+    // Et retour : on retrouve les hauteurs d'avant, aucun drapeau n'a bougé.
+    app.run_action("piste.replis_par_plan");
+    assert_eq!(app.settings.montage_folds, ReplisPistes::ParPlan);
+    assert_eq!(flags(&app), avant);
+    assert_eq!(heights(&app), par_plan);
+    assert!(!app.modified);
+    // Replier ensuite en mode commun applique la règle commune à tous les plans.
+    app.set_replis_pistes(ReplisPistes::Commun);
+    app.set_track_folded(0, true);
+    assert_eq!(flags(&app), vec![vec![false, true, true], vec![false, false, true], vec![true, false, true]]);
+    assert!(app.doc.panels.iter().all(|p| p.layers[2].collapsed), "la rangée 0 est repliée dans chaque plan");
+    assert!(app.doc.panels[0].layers[1].collapsed && app.doc.panels[2].layers[0].collapsed, "les replis d'avant restent");
+    assert!(app.modified);
+}
+
+#[test]
+fn the_mode_is_saved_in_the_settings_and_the_old_settings_stay_common() {
+    let mut s = crate::settings::Settings::default();
+    assert_eq!(s.montage_folds, ReplisPistes::Commun);
+    let texte = toml::to_string(&s).unwrap();
+    assert!(!texte.contains("repliage_pistes"), "le mode d'origine n'écrit rien : un ancien fichier reste valide");
+    s.montage_folds = ReplisPistes::ParPlan;
+    let texte = toml::to_string(&s).unwrap();
+    assert!(texte.contains("repliage_pistes = \"par_plan\""), "{texte}");
+    let back: crate::settings::Settings = toml::from_str(&texte).unwrap();
+    assert_eq!(back.montage_folds, ReplisPistes::ParPlan);
+    let vieux: crate::settings::Settings = toml::from_str("deplier_calque_courant = false\n").unwrap();
+    assert_eq!(vieux.montage_folds, ReplisPistes::Commun);
+    assert!(!vieux.montage_auto_open);
+}
+
+#[test]
+fn per_plan_folds_are_saved_with_each_plan_and_come_back_with_the_same_heights() {
+    let mut app = trois_plans("sauvegarde-par-plan", ReplisPistes::ParPlan);
+    app.set_track_folded(1, true); // plan 1
+    aller_au_plan(&mut app, 2);
+    app.set_track_folded(0, true); // plan 3
+    let dir = std::env::temp_dir().join(format!("shot-pistes-pp-{}-{:?}", std::process::id(), std::thread::current().id()));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).unwrap();
+    let manifest = dir.join("P.pelure");
+    crate::project::save(&app.doc, &manifest, &mut Default::default()).unwrap();
+    let text = std::fs::read_to_string(&manifest).unwrap();
+    let back = crate::project::load(&manifest).unwrap().doc;
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(text.contains(&format!("\"version\": {}", crate::project::VERSION)), "la version du format n'a pas changé");
+    assert_eq!(text.matches("\"replie\": true").count(), 2, "un drapeau par calque replié");
+    let mut again = app_with("sauvegarde-par-plan2", back);
+    again.settings.montage_auto_open = false;
+    again.settings.montage_folds = ReplisPistes::ParPlan;
+    assert_eq!(flags(&again), flags(&app));
+    assert_eq!(heights(&again), [(0, LAYER_H), (1, FOLDED_H), (2, LAYER_H)]);
+    aller_au_plan(&mut again, 2);
+    assert_eq!(heights(&again), [(0, FOLDED_H), (1, LAYER_H), (2, LAYER_H)]);
+}
+
+#[test]
+fn the_timeline_reduced_rows_are_the_folds_of_its_plan_in_per_plan_mode() {
+    use crate::layerheads::{rows_of, ROW_FULL, ROW_SMALL};
+    let mut app = trois_plans("timeline-par-plan", ReplisPistes::ParPlan);
+    app.set_track_folded(1, true); // « B » du plan 1
+    let rows = |app: &App| rows_of(app.layers(), &app.doc.groups).iter().map(|r| (r.li, r.h)).collect::<Vec<_>>();
+    assert_eq!(rows(&app), [(2, ROW_FULL), (1, ROW_SMALL), (0, ROW_FULL)]);
+    assert_eq!(heights(&app), [(0, LAYER_H), (1, FOLDED_H), (2, LAYER_H)], "le montage et la timeline disent la même chose");
+    // Le plan 2 n'a rien de replié, ni dans le montage ni dans sa timeline.
+    aller_au_plan(&mut app, 1);
+    assert_eq!(rows(&app), [(2, ROW_FULL), (1, ROW_FULL), (0, ROW_FULL)]);
+    assert_eq!(heights(&app), [(0, LAYER_H), (1, LAYER_H), (2, LAYER_H)]);
+    // Réduire une ligne dans la timeline du plan 2 replie la piste du montage, quand ce plan est le courant
+    // (le rang 0 de la pile est la rangée 2 du montage).
+    app.layers_mut()[0].collapsed = true;
+    assert_eq!(heights(&app), [(0, LAYER_H), (1, LAYER_H), (2, FOLDED_H)]);
+    assert!(!app.doc.panels[0].layers[0].collapsed, "le plan 1 n'a pas bougé");
+    // En mode commun, le comportement d'avant : le replié d'un plan fait celui de la rangée pour tous.
+    app.settings.montage_folds = ReplisPistes::Commun;
+    assert_eq!(heights(&app), [(0, LAYER_H), (1, FOLDED_H), (2, FOLDED_H)]);
+    assert_eq!(rows(&app), [(2, ROW_FULL), (1, ROW_FULL), (0, ROW_SMALL)], "la timeline ne montre que ce plan, comme avant");
+}
+
+/// Deux plans dans la vraie fenêtre : « Décor » (rangée 1) replié dans le plan 1, « Autre » (rangée 0) replié
+/// dans le plan 2.
+fn banc_par_plan() -> Banc {
+    let mut b = banc_montage();
+    b.app.settings.montage_auto_open = false;
+    b.app.settings.montage_folds = ReplisPistes::ParPlan;
+    b.app.doc.panels[0].layers[2].collapsed = true; // Décor
+    b.app.doc.panels[1].layers[0].collapsed = true; // Autre
+    b.chauffer(4);
+    b
+}
+
+fn hauteurs(b: &Banc) -> Vec<f32> {
+    b.app.montage_rows(300.0).lanes.iter().map(|l| l.h).collect()
+}
+
+#[test]
+fn clicking_another_plan_keeps_the_layout_until_release_then_hits_land_on_the_new_rows() {
+    let mut b = banc_par_plan();
+    let l = lieu(&b);
+    assert_eq!(hauteurs(&b), [LAYER_H, FOLDED_H, LAYER_H, LAYER_H]);
+    // Presse sur la case « Autre » du plan 2 (rangée 0, de la 24e à la 48e image du film).
+    let p = pos2(l.x(24 + 3), y_in(&b, &l, 0, 20.0));
+    b.image(vec![Event::PointerMoved(p)], 1.0 / 60.0);
+    b.image(vec![pointer_button(p, true, Modifiers::NONE)], 1.0 / 60.0);
+    b.image(vec![Event::PointerMoved(p + egui::vec2(1.0, 0.0))], 1.0 / 60.0);
+    b.image(Vec::new(), 1.0 / 60.0);
+    assert_eq!(hauteurs(&b), [LAYER_H, FOLDED_H, LAYER_H, LAYER_H], "souris tenue : la disposition ne bouge pas");
+    b.image(vec![pointer_button(p, false, Modifiers::NONE)], 1.0 / 60.0);
+    b.chauffer(4);
+    assert_eq!(b.app.cur_panel, 1, "le clic a choisi le plan 2");
+    assert_eq!(hauteurs(&b), [FOLDED_H, LAYER_H, LAYER_H, LAYER_H], "relâchée : les hauteurs du plan 2");
+    // Les clics tombent sur les nouvelles rangées : la case « Fond » du plan 1 (rangée 2, maintenant à 40 + 40 du haut).
+    let l = lieu(&b);
+    let q = pos2(l.x(2), y_in(&b, &l, 2, 20.0));
+    clic(&mut b, q, Modifiers::NONE);
+    assert_eq!((b.app.cur_panel, b.app.cur_layer), (0, 1), "le plan 1, « Fond » (rang 1 de bas en haut)");
+    assert_eq!(hauteurs(&b), [LAYER_H, FOLDED_H, LAYER_H, LAYER_H], "et les hauteurs reviennent à celles du plan 1");
+}
+
+#[test]
+fn idle_costs_nothing_more_in_per_plan_mode() {
+    let mut b = banc_par_plan();
+    b.chauffer(6);
+    let repos: Vec<std::time::Duration> = (0..6).map(|_| b.image(Vec::new(), 0.5).reveil).collect();
+    assert!(repos.iter().all(|r| *r >= std::time::Duration::from_secs(1)), "le mode par plan ne fait pas repeindre : {repos:?}");
+}
+
+#[test]
+fn the_choice_has_an_action_a_bar_command_and_a_preferences_section() {
+    let mut app = app_with("actions-mode", doc_with(&[&["A"]]));
+    assert!(!app.pistes_par_plan());
+    app.run_action("piste.replis_par_plan");
+    assert!(app.pistes_par_plan());
+    assert!(app.status.contains("propre à chaque plan"), "{}", app.status);
+    let cmd = crate::barres::MONTAGE.iter().find(|c| c.action == "piste.replis_par_plan").expect("la commande est dans la barre du montage");
+    assert_eq!(app.vue_de(crate::barres::Barre::Montage, cmd).etat, Some(true));
+    app.set_replis_pistes(ReplisPistes::Commun);
+    assert_eq!(app.vue_de(crate::barres::Barre::Montage, cmd).etat, Some(false));
+    assert!(crate::pistes::REPLIS_COMMUN.ends_with('.') && crate::pistes::REPLIS_PAR_PLAN.ends_with('.'));
+}
+
+#[test]
+fn the_preferences_offer_the_choice_and_changing_it_there_writes_only_the_setting() {
+    let mut b = banc_taille(film(), false, 1920, 3200);
+    b.garder_textes = true;
+    b.app.run_action("fichier.preferences");
+    b.chauffer(8);
+    b.image(Vec::new(), 1.0 / 60.0);
+    let joint = b.textes.join("\n");
+    for attendu in ["Montage", "Repliage des pistes", "Déplier le calque courant tout seul"] {
+        assert!(joint.contains(attendu), "« {attendu} » manque dans les Préférences :\n{joint}");
+    }
+    // Le choix par plan, comme le clic le ferait : les replis des plans ne bougent pas.
+    let avant = flags(&b.app);
+    b.app.modified = false;
+    b.app.set_replis_pistes(ReplisPistes::ParPlan);
+    b.chauffer(3);
+    assert_eq!(flags(&b.app), avant);
+    assert!(!b.app.modified);
+}

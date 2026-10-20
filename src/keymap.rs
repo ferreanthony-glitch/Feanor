@@ -433,6 +433,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("piste.replier_tout", "Pistes du montage : replier toutes les pistes", true, false),
     act("piste.deplier_tout", "Pistes du montage : déplier toutes les pistes", true, false),
     act("piste.auto_deplier", "Pistes du montage : déplier tout seul le calque courant (oui / non)", true, false),
+    act("piste.replis_par_plan", "Pistes du montage : replis propres à chaque plan (oui) ou communs à tous les plans (non)", true, false),
     act("storyboard.verrouiller", "Verrouiller / déverrouiller le storyboard", true, false),
     // Crayonnés rapides (`crayonnes.rs`, `crayonnesui.rs`) : Tab et les flèches y changent de case
     // (codés en dur, comme dans le dessin) ; Échap abandonne le geste.

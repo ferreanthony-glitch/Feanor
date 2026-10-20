@@ -217,6 +217,15 @@ pub(crate) const MONTAGE: &[Cmd] = &[
         false,
         1,
     ),
+    // Repliage propre à chaque plan (allumé) ou commun à tous les plans (éteint) : `pistes.rs`.
+    etat(
+        "piste.replis_par_plan",
+        ph::LINK_SIMPLE_BREAK,
+        "Replis propres à chaque plan",
+        "Allumé, chaque plan retient ses replis et les pistes suivent le plan courant. Éteint, une piste est repliée dans tous les plans à la fois.",
+        false,
+        1,
+    ),
     // Une transition à la coupe la plus proche de la tête de lecture (`transitionsui.rs`) ; le clic
     // droit sur une coupe, dans la bande, en choisit la sorte.
     bouton(
@@ -646,6 +655,10 @@ impl App {
             }
             "montage.aimanter" => v.etat = Some(self.snap_on),
             "piste.auto_deplier" => v.etat = Some(self.settings.montage_auto_open),
+            "piste.replis_par_plan" => {
+                v.etat = Some(self.pistes_par_plan());
+                v.icone = (if self.pistes_par_plan() { ph::LINK_SIMPLE_BREAK } else { ph::LINK_SIMPLE }).to_string();
+            }
             "envoi.liste" => v.etat = Some(self.envois_ui.liste),
             "comparer.ouvrir" => v.etat = Some(self.comparaison.is_some()),
             "envoi.modifie_suivant" | "envoi.modifie_precedent" => {

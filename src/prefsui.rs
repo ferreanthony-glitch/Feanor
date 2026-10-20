@@ -201,6 +201,8 @@ impl App {
                 ui.label(RichText::new("Le toucher du stylet se règle en bas des réglages du pinceau.").small().weak());
                 self.passe_partout_pref_ui(ui);
                 ui.add_space(6.0);
+                self.montage_prefs_ui(ui);
+                ui.add_space(6.0);
                 ui.label(RichText::new("Panneaux").strong());
                 let resp = ui.checkbox(&mut self.settings.panes_fit, "Ajuster les panneaux à leur contenu").on_hover_text(
                     "Les réglages de l'outil, les guides, la fiche et les effets prennent la hauteur de ce \

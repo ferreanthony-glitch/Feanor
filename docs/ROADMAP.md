@@ -3356,4 +3356,11 @@ actions `piste.*` sans touche), « Déplier le calque courant » (réglage, allu
 `Layer::collapsed`, déjà enregistré (`replie`) et déjà celui des lignes réduites de la timeline de l'animation : un seul système, format inchangé. Les gestes (choix, glisser, losanges, rectangle)
 marchent sur une piste repliée. Détail et liste de contrôle : `docs/INTERFACE.md` § 29 ; code : `src/pistes.rs`.
 
-À vérifier à l'écran : voir § 29.7. Pas fait : une touche par défaut (aucune de libre sans conflit), « Replier / Déplier » pour les pistes son, une disposition de pistes propre à chaque plan.
+À vérifier à l'écran : voir § 29.7. Pas fait : une touche par défaut (aucune de libre sans conflit), « Replier / Déplier » pour les pistes son.
+
+### Replis propres à chaque plan ou communs (demandé par Anthony le 2026-10-21, branche `pistes-par-plan`) ✅
+
+Anthony garde les deux comportements : **Préférences > Montage > « Repliage des pistes »** (aussi au clic droit sur une piste et sous « Plus… » du montage, `piste.replis_par_plan`) entre
+**commun à tous les plans** (d'origine) et **propre à chaque plan** (chaque plan retient ses replis ; hauteurs du plan courant, prises au relâchement de la souris ; triangle et « tout replier » sur
+le plan courant seulement, « … de tous les plans » au clic droit). Réglage de l'application (`repliage_pistes`), rien de neuf dans le projet ; passage d'un mode à l'autre sans perte ; en mode par
+plan, aucune écriture dans les plans qu'on ne tient pas (film partagé). Détail : `docs/INTERFACE.md` § 29.8, liste de contrôle § 29.9 ; code : `src/pistes.rs`.
