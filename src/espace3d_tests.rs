@@ -912,13 +912,13 @@ fn an_unreadable_old_scene_file_is_neither_read_nor_reported_nor_touched() {
 }
 
 #[test]
-fn no_object_or_reference_model_command_remains() {
-    // Les commandes des objets 3D et du repère 3D n'existent plus : ni dans la liste des actions, ni dans la palette, ni
+fn no_object_reference_model_or_background_layer_command_remains() {
+    // Les commandes des objets 3D, du repère 3D et du « calque de fond » (un calque bitmap ordinaire tenu sur tout le plan) n'existent plus : ni dans la liste des actions, ni dans la palette, ni
     // dans le fichier de raccourcis.
     let gone = [
         "scene3d.ajouter_cube", "scene3d.ajouter_plan", "scene3d.ajouter_cylindre", "scene3d.ajouter_sphere", "scene3d.ajouter_cone", "scene3d.ajouter_escalier",
         "scene3d.ajouter_mannequin", "scene3d.importer_modele", "scene3d.dupliquer", "scene3d.supprimer", "scene3d.grouper", "scene3d.degrouper", "scene3d.envoyer",
-        "scene3d.camera_depuis_plan", "scene3d.decor", "outil.repere3d", "fichier.importer_modele3d",
+        "scene3d.camera_depuis_plan", "scene3d.decor", "outil.repere3d", "fichier.importer_modele3d", "calque.nouveau_fond",
     ];
     for id in gone {
         assert!(crate::keymap::action_info(id).is_none(), "{id} ne doit plus exister");

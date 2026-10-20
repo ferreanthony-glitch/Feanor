@@ -643,7 +643,6 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("scene3d.vue_camera", "Espace 3D : regarder par la caméra (ancien nom)", true, false),
     act("scene3d.aimanter", "Espace 3D : aimantation à la grille (ancien nom)", true, false),
     act("scene3d.grille", "Espace 3D : grille du sol (ancien nom)", true, false),
-    act("calque.nouveau_fond", "Nouveau calque de fond (tout en bas, tenu sur tout le plan)", true, false),
     act("espace.standard", "Espace de travail : Standard", true, false),
     act("espace.dessin", "Espace de travail : Dessin", true, false),
     act("espace.timeline", "Espace de travail : Timeline", true, false),

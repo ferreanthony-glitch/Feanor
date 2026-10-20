@@ -198,24 +198,6 @@ impl App {
         }
     }
 
-    /// Nouveau calque bitmap « Fond » tout en bas (13a) : un seul dessin, tenu sur tout le plan.
-    pub(crate) fn add_scene_background(&mut self) {
-        if self.content_refuses() {
-            return;
-        }
-        self.end_stroke();
-        self.drop_bitmap_selection();
-        let snap = self.snapshot();
-        let n = self.frame_count();
-        let cel = self.doc.new_cel(LayerKind::Bitmap);
-        let mut fond = crate::document::Layer::new("Fond", LayerKind::Bitmap);
-        fond.frames = vec![Some(cel); n];
-        self.layers_mut().insert(0, fond);
-        self.cur_layer = 0;
-        self.vsel = None;
-        self.commit_structure(snap);
-        self.status = "Calque « Fond » : un seul dessin, tenu sur tout le plan.".into();
-    }
     pub(crate) fn layers_panel(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         // Opacité du calque courant (comme en haut d'une liste de calques).
@@ -274,12 +256,6 @@ impl App {
             }
             if self.bouton(ui, ph::PAINT_BRUSH_BROAD, "Nouveau calque bitmap", "De la peinture en pixels, pinceaux texturés.", "calque.nouveau_bitmap").clicked() {
                 self.add_layer(LayerKind::Bitmap);
-            }
-            if self
-                .bouton(ui, ph::MOUNTAINS, "Nouveau calque de fond", "Tout en bas, un seul dessin tenu sur tout le plan (décor).", "calque.nouveau_fond")
-                .clicked()
-            {
-                self.add_scene_background();
             }
             // Dossiers de calques (`folders.rs`) : un dossier vide au-dessus du calque courant ; avec
             // plusieurs calques choisis, un deuxième bouton les range dans un nouveau dossier.
@@ -648,7 +624,6 @@ impl App {
             resp.context_menu(|ui| {
                 self.action_item(ui, "Nouveau calque vectoriel", "calque.nouveau_vectoriel");
                 self.action_item(ui, "Nouveau calque bitmap", "calque.nouveau_bitmap");
-                self.action_item(ui, "Nouveau calque de fond", "calque.nouveau_fond");
                 self.action_item(ui, "Nouveau calque de couleur (sous le calque courant)", "calque.nouveau_couleur");
                 self.action_item(ui, "Nouveau dossier", "dossier.nouveau");
                 ui.separator();

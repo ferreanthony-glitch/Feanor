@@ -176,7 +176,6 @@ impl App {
             if !panel {
                 self.action_item(ui, "Vectoriel", "calque.nouveau_vectoriel");
                 self.action_item(ui, "Bitmap", "calque.nouveau_bitmap");
-                self.action_item(ui, "De fond", "calque.nouveau_fond");
             }
             self.action_item(ui, "De couleur (sous le trait du calque courant)", "calque.nouveau_couleur");
             self.action_item(ui, "CTG (sous le calque courant)", "calque.nouveau_ctg");

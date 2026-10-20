@@ -3806,7 +3806,6 @@ impl App {
             "exposition.raccourcir" => self.exposure_minus(),
             "calque.nouveau_vectoriel" => self.add_layer(LayerKind::Vector),
             "calque.nouveau_bitmap" => self.add_layer(LayerKind::Bitmap),
-            "calque.nouveau_fond" => self.add_scene_background(),
             "calque.supprimer" => self.delete_chosen_layers(),
             "calque.dessus" => self.select_layer(self.cur_layer + 1),
             "calque.dessous" => self.select_layer(self.cur_layer.saturating_sub(1)),

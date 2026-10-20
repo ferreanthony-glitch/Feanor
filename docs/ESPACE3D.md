@@ -6,7 +6,7 @@ Branche `espace3d-simple` (depuis `integration14` 5f3fda7), 2026-10-21. Décisio
 > On peut supprimer les objets 3D comme les cubes, cylindres, personnages… ça alourdit le logiciel et l'interface pour pas
 > grand-chose. Revenons à quelque chose de simple. »
 
-Et, dans la foulée : le **repère 3D** (un modèle glTF en fil de fer montré par-dessus le dessin) part aussi.
+Et, dans la foulée : le **repère 3D** (un modèle glTF en fil de fer montré par-dessus le dessin) part aussi, ainsi que le bouton « Nouveau calque de fond »\n(un calque bitmap ordinaire dont un seul dessin est tenu sur tout le plan : n'importe quel calque bitmap fait la même chose).
 
 Ce document décrit ce qui reste. L'historique (la conception de l'Espace 3D unifié du 2026-10-20, avec ses objets, son
 rasteriseur et son rendu dans l'image) est dans l'historique git (`espace-3d`, `5f3fda7`) et dans `docs/ROADMAP.md`.

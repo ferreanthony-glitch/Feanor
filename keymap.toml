@@ -1994,13 +1994,6 @@ action = "scene3d.grille"
 touches = []
 source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
-# ------------------------------------------------------------------------------------ Calques de toute la scène (6f)
-
-[[raccourci]]
-action = "calque.nouveau_fond"
-touches = []
-source = "SHOT (calque de fond commun aux panneaux d'une scène ; aucune commande équivalente vérifiée)"
-
 # Marque d'image (13a) : une image de storyboard de plus dans le plan ; pas de touche à elle.
 [[raccourci]]
 action = "marque.basculer"
