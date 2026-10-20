@@ -178,6 +178,20 @@ pub(crate) struct Banc {
     pub touches: Modifiers,
 }
 
+/// Efface les dossiers `shot-perf-bac-*` du dossier temporaire plus vieux que `age` (date de modification).
+/// Rend le nombre de dossiers effacés.
+pub(crate) fn menage_des_bacs(age: std::time::Duration) -> usize {
+    let Ok(entrees) = std::fs::read_dir(std::env::temp_dir()) else { return 0 };
+    let mut n = 0;
+    for e in entrees.flatten() {
+        let vieux = e.metadata().ok().and_then(|m| m.modified().ok()).and_then(|t| t.elapsed().ok()).is_some_and(|d| d > age);
+        if vieux && e.file_name().to_string_lossy().starts_with("shot-perf-bac-") && std::fs::remove_dir_all(e.path()).is_ok() {
+            n += 1;
+        }
+    }
+    n
+}
+
 pub(crate) fn banc(doc: Document, avec_gpu: bool) -> Banc {
     banc_taille(doc, avec_gpu, 1920, 1080)
 }
@@ -187,6 +201,13 @@ pub(crate) fn banc(doc: Document, avec_gpu: bool) -> Banc {
 pub(crate) fn banc_taille(doc: Document, avec_gpu: bool, largeur: u32, hauteur: u32) -> Banc {
     // Un dossier par fil d'essai : `donnees::bac_a_sable` est propre à chaque fil.
     let bac = std::env::temp_dir().join(format!("shot-perf-bac-{}-{:?}", std::process::id(), std::thread::current().id()));
+    // Ménage, une fois par processus d'essai : les dossiers des passages d'avant (plus de deux heures) partent.
+    // (Ils s'accumulaient : 34 000 dossiers en une journée, Anthony, 2026-10-20. Ceux d'un passage en cours sont
+    // récents et restent ; `scripts/verifier.ps1` efface aussi ceux de son passage à la fin.)
+    static MENAGE: std::sync::Once = std::sync::Once::new();
+    MENAGE.call_once(|| {
+        menage_des_bacs(std::time::Duration::from_secs(2 * 3600));
+    });
     // (Vidé au premier banc du fil : Windows réutilise les numéros de processus, et les fils sont numérotés dans
     // l'ordre ; un dossier de ce nom qui existe déjà vient d'un essai d'autrefois, qui y a laissé des copies de
     // secours ou des réglages. Pas aux suivants : un essai qui simule un plantage ouvre ensuite, dans un second
@@ -501,6 +522,17 @@ pub(crate) fn se_reposer(b: &mut Banc, max: usize) -> usize {
         }
     }
     max
+}
+
+/// Le ménage des dossiers d'essai n'efface que les vieux : un dossier tout neuf (celui d'un passage en
+/// cours) reste.
+#[test]
+fn the_cleanup_of_test_folders_keeps_the_recent_ones() {
+    let neuf = std::env::temp_dir().join(format!("shot-perf-bac-menage-{}", std::process::id()));
+    std::fs::create_dir_all(&neuf).unwrap();
+    menage_des_bacs(Duration::from_secs(3600));
+    assert!(neuf.exists(), "un dossier de moins d'une heure reste");
+    std::fs::remove_dir_all(&neuf).ok();
 }
 
 /// Au repos, SHOT ne demande aucune image de plus : processeur à zéro (règle « sans latence »,

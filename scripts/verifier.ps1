@@ -170,6 +170,15 @@ foreach ($l in $resume) {
     Write-Host $l -ForegroundColor $couleur
 }
 Remove-Item -Recurse -Force $temp -ErrorAction SilentlyContinue
+# Menage des dossiers d'essai (shot-perf-bac-<processus>-<fil>) : ceux dont le processus d'essai est fini partent ;
+# ceux d'un passage qui tourne encore (un autre verifier, un autre dossier de travail) restent.
+$vivants = @{}
+Get-Process | ForEach-Object { $vivants[[string]$_.Id] = $true }
+Get-ChildItem $env:TEMP -Directory -Filter 'shot-perf-bac-*' -ErrorAction SilentlyContinue | ForEach-Object {
+    if ($_.Name -match '^shot-perf-bac-(\d+)-' -and -not $vivants.ContainsKey($Matches[1])) {
+        Remove-Item -Recurse -Force $_.FullName -ErrorAction SilentlyContinue
+    }
+}
 Write-Host ''
 if ($tout_ok) {
     Write-Host ('RESULTAT : OK (' + $total + ' s)') -ForegroundColor Green
