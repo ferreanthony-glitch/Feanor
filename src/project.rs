@@ -111,7 +111,13 @@ pub const FORMAT: &str = "pelure-projet";
 /// (flash, image d'impact, lueur diffuse, secousse, vignettage, grain, aberration chromatique ; voir
 /// `fxcine.rs`). Une version précédente refuse le projet : elle en ferait des calques vides et
 /// perdrait l'effet, le film changerait sans prévenir.
-pub const VERSION: u32 = 27;
+/// 28 à 30 : réservées à d'autres chantiers menés en parallèle (versions de plans, calques de couleur
+/// et toile infinie).
+/// 31 (2026-10-20) : effets du trait des calques vectoriels dans la pile `effets` (écriture du trait,
+/// crayonné multiple, respiration, ondulation du trait, pointillés, désagrégation ; voir
+/// `fxtrait.rs`). Une version précédente refuse le projet : elle ne connaît pas ces sortes d'effet et
+/// montrerait le dessin sans eux, le film changerait sans prévenir.
+pub const VERSION: u32 = 31;
 const DRAWINGS: &str = "dessins";
 /// Fils qui lisent ou écrivent les dessins d'un projet en parallèle : au-delà de huit, le disque et
 /// la mémoire (une feuille décodée pèse 33 Mo) limitent plus que le processeur.

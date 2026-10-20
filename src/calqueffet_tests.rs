@@ -1,4 +1,4 @@
-﻿//! Calques d'effets (`calqueffet.rs`) : un calque d'ajustement n'agit que sur ce qui est dessous (dans
+//! Calques d'effets (`calqueffet.rs`) : un calque d'ajustement n'agit que sur ce qui est dessous (dans
 //! son plan, ou dans son dossier), aux images où il a une exposition, avec son opacité et son mode ;
 //! l'écran (fil de fond, jamais bloquant) et l'export (exact) montrent le même dessin ; les calques
 //! d'effets s'enregistrent et se relisent.
@@ -358,7 +358,7 @@ fn the_effect_layers_are_saved_with_the_project_and_read_back() {
     let manifest = dir.join("Film.pelure");
     crate::project::save(&d, &manifest, &mut Default::default()).unwrap();
     let json = crate::fiabilite_fixture::lire_json(&manifest);
-    assert_eq!(json["version"], 27);
+    assert_eq!(json["version"], 31);
     let loaded = crate::project::load(&manifest).unwrap();
     assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
     let layers = &loaded.doc.panels[0].layers;

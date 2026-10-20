@@ -64,10 +64,10 @@ pub(crate) struct Landed {
     pub removed: usize,
 }
 
-/// Le tremblement du trait n'est qu'une fois par calque (les menus le cochent et le décochent comme
-/// un interrupteur).
+/// Le tremblement du trait et les effets du trait ne sont qu'une fois par calque (les menus les
+/// cochent et les décochent comme un interrupteur).
 fn single_instance(kind: EffectKind) -> bool {
-    kind == EffectKind::Boil
+    kind.vector_only()
 }
 
 /// L'effet `e` pour un plan de `len` images : ses clés après la fin du plan en sont retirées. Renvoie

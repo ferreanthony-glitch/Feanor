@@ -312,6 +312,9 @@ mod effetsperf_tests;
 mod tremblement;
 #[cfg(test)]
 mod tremblement_tests;
+mod fxtrait;
+#[cfg(test)]
+mod fxtrait_tests;
 mod fxui;
 mod fxkeys;
 #[cfg(test)]

@@ -16,6 +16,10 @@ use crate::fx::{Effect, EffectKind, FAMILIES};
 pub(crate) const BOIL_VECTOR_ONLY: &str =
     "Le tremblement du trait ne va que sur un calque vectoriel : il déplace un peu les points de chaque trait, d'une variante à l'autre. Choisis un calque vectoriel, ou crée-en un (Calques > Nouveau calque > Vectoriel).";
 
+/// Pourquoi un effet du trait (`fxtrait.rs`) est grisé sur un calque bitmap (bulle des menus).
+pub(crate) const TRAIT_VECTOR_ONLY: &str =
+    "Cet effet agit sur les traits d'un dessin vectoriel (leur ordre, leur longueur, leur épaisseur) : il ne va que sur un calque vectoriel. Choisis un calque vectoriel, ou crée-en un (Calques > Nouveau calque > Vectoriel).";
+
 /// Ce qu'un menu montre d'un effet pour un calque : rien (un dossier n'a pas d'effets), l'entrée
 /// grisée avec la raison (Anthony, 2026-10-19 : « je ne trouve pas l'effet de tremblement » — il
 /// ne se cachait que sur un calque bitmap), ou l'entrée utilisable.
@@ -31,7 +35,7 @@ pub(crate) fn offer(kind: EffectKind, layer: crate::document::LayerKind, folder:
     if folder {
         Offer::Absent
     } else if kind.vector_only() && layer != crate::document::LayerKind::Vector {
-        Offer::Disabled(BOIL_VECTOR_ONLY)
+        Offer::Disabled(if kind.is_trait() { TRAIT_VECTOR_ONLY } else { BOIL_VECTOR_ONLY })
     } else {
         Offer::Enabled
     }
@@ -249,6 +253,91 @@ impl App {
         });
     }
 
+    /// Ajoute l'effet `kind` à la pile du calque `li`, ou, s'il y est déjà (les effets réservés au
+    /// vectoriel ne sont qu'une fois par calque), l'active et le choisit (une étape d'annulation).
+    pub(crate) fn add_effect_once(&mut self, li: usize, kind: EffectKind) {
+        if self.content_refuses() {
+            return;
+        }
+        self.record_step();
+        let fx = &mut self.layers_mut()[li].fx;
+        let i = match fx.iter().position(|e| e.kind == kind).filter(|_| kind.vector_only()) {
+            Some(i) => {
+                fx[i].enabled = true;
+                i
+            }
+            None => {
+                fx.push(Effect::new(kind));
+                fx.len() - 1
+            }
+        };
+        self.select_fx(i);
+        self.renderer.invalidate_all();
+    }
+
+    /// La rangée d'icônes des effets du trait (`fxtrait.rs`) : un bouton par effet, enfoncé quand il
+    /// est sur le calque et actif, grisé avec la raison sur un calque bitmap ; puis les préréglages.
+    pub(crate) fn trait_strip(&mut self, ui: &mut egui::Ui, li: usize) {
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("Trait").weak());
+            for kind in crate::fxtrait::KINDS {
+                let offer = self.fx_offer(li, kind);
+                let enabled = offer == Offer::Enabled;
+                let on = self.fx_on(li, kind);
+                let action = crate::fxtrait::action(kind);
+                let key = self.raccourci(action);
+                let about = match offer {
+                    Offer::Disabled(why) => why,
+                    _ => kind.hint(),
+                };
+                let resp = crate::bulles::etat_si(ui, enabled, on, crate::fxtrait::icon(kind), kind.label(), about, &key);
+                crate::raccourcisui::shortcut_menu(&resp, action, &key);
+                if enabled && resp.clicked() {
+                    self.run_action(action);
+                }
+            }
+            let usable = self.fx_offer(li, EffectKind::Write) == Offer::Enabled;
+            let menu = ui.add_enabled_ui(usable, |ui| {
+                ui.menu_button(RichText::new(ph::MAGIC_WAND).size(crate::bulles::TAILLE), |ui| {
+                    for preset in crate::fxtrait::Preset::ALL {
+                        let key = self.raccourci(preset.action());
+                        let resp = crate::bulles::bulle(ui.button(preset.label()), preset.label(), preset.note(), &key);
+                        if resp.clicked() {
+                            ui.close_menu();
+                            self.apply_trait_preset(preset);
+                        }
+                    }
+                })
+                .response
+            });
+            crate::bulles::bulle(menu.inner, "Préréglages du trait", "Des effets du trait tout réglés, avec leurs clés à partir de la tête de lecture : apparition écrite, croquis nerveux, poussière.", "");
+        });
+    }
+
+    /// Pose les effets du préréglage `preset` sur le calque courant (une étape d'annulation) : ceux de
+    /// même sorte sont remplacés, les clés partent de l'image courante.
+    pub(crate) fn apply_trait_preset(&mut self, preset: crate::fxtrait::Preset) {
+        let li = self.cur_layer;
+        if self.fx_offer(li, EffectKind::Write) != Offer::Enabled {
+            self.status = format!("« {} » ne va que sur un calque vectoriel.", preset.label());
+            return;
+        }
+        if self.content_refuses() {
+            return;
+        }
+        let built = preset.build(self.doc.fps, self.cur_frame, self.panel().frame_count());
+        self.record_step();
+        let stack = &mut self.layers_mut()[li].fx;
+        for e in built {
+            stack.retain(|x| x.kind != e.kind);
+            stack.push(e);
+        }
+        let last = stack.len() - 1;
+        self.select_fx(last);
+        self.renderer.invalidate_all();
+        self.status = format!("{} : posé sur le calque, les clés partent de l'image {}.", preset.label(), self.frame_label(self.cur_frame));
+    }
+
     /// Pose ou met à jour la clé de l'effet `i` du calque courant à l'image courante, avec ses
     /// paramètres à cette image (une étape d'annulation).
     pub(crate) fn fx_create_key(&mut self) {
@@ -331,17 +420,27 @@ impl App {
         ui.horizontal_wrapped(|ui| {
             ui.menu_button(format!("{}  Ajouter un effet", ph::PLUS), |ui| {
                 // Le tremblement du trait d'abord (calques vectoriels ; grisé sur un bitmap, avec la
-                // raison), puis par familles, comme le menu Filtre de Photoshop.
+                // raison), puis par familles, comme le menu Filtre de Photoshop. Les effets réservés
+                // au vectoriel (famille « Trait ») sont grisés avec la raison sur un calque bitmap.
                 self.add_boil_entry(ui, li);
                 for family in FAMILIES {
                     ui.menu_button(family, |ui| {
-                        let kinds: Vec<EffectKind> = EffectKind::ALL.into_iter().filter(|k| k.family() == family && !k.vector_only() && self.fx_allowed(li, *k)).collect();
+                        let kinds: Vec<EffectKind> = EffectKind::ALL.into_iter().filter(|k| k.family() == family && *k != EffectKind::Boil).collect();
                         for k in kinds {
-                            if ui.button(k.label()).clicked() {
-                                self.record_step();
-                                self.layers_mut()[li].fx.push(Effect::new(k));
-                                self.select_fx(self.layers()[li].fx.len() - 1);
-                                ui.close_menu();
+                            match self.fx_offer(li, k) {
+                                Offer::Absent => {}
+                                Offer::Disabled(why) => {
+                                    ui.add_enabled(false, egui::Button::new(format!("{}  {}", crate::fxtrait::icon(k), k.label()))).on_disabled_hover_text(why);
+                                }
+                                Offer::Enabled => {
+                                    let label = if k.is_trait() { format!("{}  {}", crate::fxtrait::icon(k), k.label()) } else { k.label().to_string() };
+                                    let resp = ui.button(label);
+                                    let resp = if k.hint().is_empty() { resp } else { resp.on_hover_text(k.hint()) };
+                                    if resp.clicked() {
+                                        ui.close_menu();
+                                        self.add_effect_once(li, k);
+                                    }
+                                }
                             }
                         }
                     });
@@ -370,6 +469,7 @@ impl App {
                 self.layers_mut()[li].fx.clear();
             }
         });
+        self.trait_strip(ui, li);
         let key = self.raccourci("fx.cle_auto");
         let resp = ui.checkbox(&mut self.fx_auto_key, "Création automatique des clés");
         crate::bulles::bulle(resp, "Création automatique des clés", "Une clé est posée à l'image courante à chaque changement d'un paramètre.", &key);
@@ -410,7 +510,8 @@ impl App {
                         "Choisir cet effet : ses clés se voient alors dans la timeline et le montage (les boutons de clé le visent)."
                     };
                     let name = ui.add_sized(egui::vec2(w, ui.spacing().interact_size.y), egui::SelectableLabel::new(chosen, crate::bulles::encre_etat(RichText::new(e.kind.label()).strong(), chosen)));
-                    let name_resp = crate::bulles::bulle(name, if chosen { "Effet choisi" } else { "Choisir l'effet" }, hint, "");
+                    let about = if e.kind.hint().is_empty() { hint.to_string() } else { format!("{}\n{}", e.kind.hint(), hint) };
+                    let name_resp = crate::bulles::bulle(name, if chosen { "Effet choisi" } else { "Choisir l'effet" }, &about, "");
                     // Clic droit sur le nom : copier cet effet ou la pile, coller (`fxcopie.rs`).
                     name_resp.context_menu(|ui| self.fx_clip_menu(ui, li, Some(i), true));
                     if name_resp.clicked() {
@@ -440,14 +541,19 @@ impl App {
                 let values = e.values_at(f);
                 egui::Grid::new(("parametres_effet", i)).num_columns(2).show(ui, |ui| {
                     for (k, p) in e.kind.params().iter().enumerate() {
-                        ui.label(p.name);
+                        let param_hint = e.kind.param_hint(k);
+                        let name = ui.label(p.name);
+                        if !param_hint.is_empty() {
+                            name.on_hover_text(param_hint);
+                        }
                         let mut v = values[k];
                         let resp = match e.kind.param_style(k) {
                             crate::fx::ParamStyle::Slider => ui.add(egui::Slider::new(&mut v, p.min..=p.max).suffix(p.unit)),
                             crate::fx::ParamStyle::Integer => ui.add(egui::Slider::new(&mut v, p.min..=p.max).suffix(p.unit).step_by(1.0).fixed_decimals(0)),
                             crate::fx::ParamStyle::Switch => {
                                 let mut on = v >= 0.5;
-                                let resp = ui.checkbox(&mut on, "").on_hover_text("Au repos, le dessin continue de trembler (l'écran se redessine à la cadence du tremblement). Éteint, l'image fixe montre la variante de l'image courante.");
+                                let resp = ui.checkbox(&mut on, "");
+                                let resp = if param_hint.is_empty() { resp } else { resp.on_hover_text(param_hint) };
                                 v = if on { 1.0 } else { 0.0 };
                                 resp
                             }

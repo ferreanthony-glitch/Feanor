@@ -140,7 +140,7 @@ pub fn wavelength(frequency: f32) -> f32 {
 
 // ---------------------------------------------------------------------- le champ
 
-fn mix(mut h: u32) -> u32 {
+pub(crate) fn mix(mut h: u32) -> u32 {
     h ^= h >> 16;
     h = h.wrapping_mul(0x85EB_CA6B);
     h ^= h >> 13;
@@ -167,6 +167,12 @@ pub struct Field {
 impl Field {
     pub fn new(s: &Settings) -> Field {
         Field { amp: s.intensity, cell: (wavelength(s.frequency) / 2.0).max(2.0), seed: mix(s.seed.wrapping_mul(0x9E37_79B1) ^ (s.variant as u32 + 1).wrapping_mul(0x85EB_CA6B)) }
+    }
+
+    /// Un champ d'amplitude `amp`, de maille `cell` (pixels de la feuille) et de graine `seed` (le
+    /// crayonné multiple, `fxtrait.rs`, en tire un par trait et par passe).
+    pub(crate) fn raw(amp: f32, cell: f32, seed: u32) -> Field {
+        Field { amp, cell: cell.max(2.0), seed: mix(seed) }
     }
 
     /// Le nœud (i, j) : un vecteur de norme au plus 1 et une valeur d'épaisseur dans [−1, 1].
@@ -209,7 +215,7 @@ fn blend(n: &[[f32; 3]; 4], tx: f32, ty: f32, amp: f32) -> [f32; 3] {
 }
 
 /// Les nœuds qui couvrent un rectangle de la feuille, tirés une fois pour toute une tuile.
-struct Lattice {
+pub(crate) struct Lattice {
     i0: i32,
     j0: i32,
     nx: usize,
@@ -218,7 +224,7 @@ struct Lattice {
 
 impl Lattice {
     /// Les nœuds du champ pour les points de [x0, x1] × [y0, y1].
-    fn covering(f: &Field, x0: f32, x1: f32, y0: f32, y1: f32) -> Lattice {
+    pub(crate) fn covering(f: &Field, x0: f32, x1: f32, y0: f32, y1: f32) -> Lattice {
         let (i0, j0) = ((x0 / f.cell).floor() as i32, (y0 / f.cell).floor() as i32);
         let (i1, j1) = ((x1 / f.cell).floor() as i32 + 1, (y1 / f.cell).floor() as i32 + 1);
         let (nx, ny) = ((i1 - i0 + 1) as usize, (j1 - j0 + 1) as usize);
@@ -232,7 +238,7 @@ impl Lattice {
     }
 
     /// Comme `Field::at`, pour un point dans le rectangle couvert.
-    fn at(&self, f: &Field, x: f32, y: f32) -> [f32; 3] {
+    pub(crate) fn at(&self, f: &Field, x: f32, y: f32) -> [f32; 3] {
         let (gx, gy) = (x / f.cell, y / f.cell);
         let (ix, iy) = (gx.floor(), gy.floor());
         let (i, j) = ((ix as i32 - self.i0) as usize, (iy as i32 - self.j0) as usize);

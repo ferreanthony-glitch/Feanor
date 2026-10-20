@@ -144,8 +144,9 @@ pub struct Chain {
 
 /// L'effet a-t-il une version sur la carte graphique ?
 pub fn supported(kind: EffectKind) -> bool {
-    // (Le tremblement du trait redessine le dessin vectoriel lui-même : `tremblement.rs`.)
-    kind != EffectKind::Boil
+    // (Les effets du trait lisent la géométrie du dessin vectoriel : `fxtrait.rs`, calcul de fond. Le
+    // tremblement, lui, relit les pixels du dessin à travers un champ de déplacement : `fs_boil`.)
+    kind != EffectKind::Boil && !kind.is_trait()
 }
 
 /// Toute la pile passe-t-elle par la carte graphique ? (Un seul effet qui n'y passe pas : toute la pile

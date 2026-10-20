@@ -148,7 +148,7 @@ fn the_format_version_of_the_project_is_untouched() {
     // Les commentaires n'ont pas de version de projet à eux : le manifeste reste celui d'avant.
     // (27 : la version des calques d'effets, après 26 avec le tremblement du trait ; les commentaires
     // n'y ont pas touché.)
-    assert_eq!(project::VERSION, 27);
+    assert_eq!(project::VERSION, 31);
 }
 
 #[test]
