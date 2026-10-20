@@ -102,6 +102,8 @@ enum Commande {
     CopieTraitee(CopieEnConflit),
     /// Cette prise n'attend plus son fichier (la synchronisation est trop lente : on prend l'état d'ici).
     Forcer(Cible),
+    /// Relire la structure (même si son fichier n'a pas changé) : j'ai perdu le jeton, la structure des autres me remplace.
+    RechargerStructure,
     /// Écrire tout de suite ma fiche et balayer.
     Reveiller,
     Arret,
@@ -348,6 +350,10 @@ impl Moteur {
             Commande::CopieTraitee(c) => self.copies.retain(|x| x != &c),
             Commande::Forcer(c) => {
                 self.en_attente_de_pret.remove(&c);
+            }
+            Commande::RechargerStructure => {
+                self.structure_hash_fichier = 0;
+                self.structure_a_reessayer = true;
             }
             Commande::Reveiller => {
                 self.fiche_a_ecrire = true;
@@ -1312,20 +1318,22 @@ impl Session {
             return;
         }
         let StructureRecue { doc: stub, bloc, hash_fichier } = sr;
-        if self.tiens(Cible::Montage) {
-            // (Je viens de la prendre et elle n'est pas encore vérifiée : la structure lue est la base.)
+        // (Si je viens de prendre le montage et qu'il n'est pas encore vérifié, la structure lue est la base.)
+        // Un plan que je tiens et que la structure ne cite plus : ce que j'y avais fait est mis de côté avant qu'il disparaisse.
+        let disparaissent: Vec<u64> = doc.panels.iter().map(|p| p.id).filter(|id| !bloc.plans.iter().any(|pl| pl.plan == *id)).collect();
+        for p in &disparaissent {
+            if self.tiens(Cible::Plan(*p)) {
+                let t = Self::titre(doc, *p);
+                self.mettre_de_cote_plan(doc, *p, "supprime");
+                fx.messages.push(format!("{t} a été supprimé du montage alors que tu le tenais : ton travail est mis de côté dans un brouillon."));
+            }
         }
         let retires = doc.adopter_structure(stub, &mut self.pour_plus_tard);
         for p in &retires {
-            if self.tiens(Cible::Plan(*p)) {
-                let t = Self::titre(doc, *p);
-                fx.messages.push(format!("{t} a été supprimé du montage alors que tu le tenais."));
-            }
+            self.rendre(&[Cible::Plan(*p)]);
             self.plans.remove(p);
             self.derniers_recus.remove(p);
             self.versions_posees.remove(p);
-            self.mes_prises.remove(&Cible::Plan(*p));
-            self.prets.remove(&Cible::Plan(*p));
         }
         // Les plans reçus avant la structure se posent maintenant.
         let en_attente: Vec<u64> = self.pour_plus_tard.keys().copied().collect();
@@ -1369,8 +1377,15 @@ impl Session {
                 self.plans.entry(p).or_default().hash_fichier = 0;
             }
             Cible::Montage => {
-                fx.messages.push(format!("{qui} avait pris le montage avant toi : tes changements du montage ne sont pas enregistrés."));
+                // Le montage tel que je l'avais est mis de côté (un fichier à lire à la main), puis le montage des autres est relu.
+                let mut m = partage_io::structure_manifest(doc, &self.projet);
+                if let Ok(octets) = partage_io::structure_octets(&mut m, self.structure_revision, Some(self.identite_signature())) {
+                    let nom = format!("montage.{}.{}.perdu.json", self.moi.id, self.horloge.maintenant());
+                    self.brouillons_a_ecrire.push(Brouillon { nom, octets, cels: BTreeSet::new() });
+                }
+                fx.messages.push(format!("{qui} avait pris le montage avant toi : ton montage est mis de côté dans un brouillon, celui de {qui} le remplace."));
                 self.notifier(format!("Tu as perdu le jeton du montage au profit de {qui}."));
+                let _ = self.cmd.send(Commande::RechargerStructure);
             }
         }
         self.mes_prises.remove(&cible);

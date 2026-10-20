@@ -1288,3 +1288,88 @@ fn undo_never_brings_back_an_old_copy_of_a_plan_somebody_else_saved() {
     a.s.rafraichir_etranger(&mut a.doc);
     assert_eq!(a.doc.panels[1].action, "Léa écrit l'action", "…puis il est remis dans son dernier état reçu");
 }
+
+#[test]
+fn a_plan_deleted_by_the_montage_holder_while_another_works_in_it_is_put_aside() {
+    let (mut a, mut b, h, _) = deux_postes("supprime-tenu", 3);
+    b.prendre_plan(2).expect("libre");
+    confirmer(&h);
+    tours(&mut a, &mut b);
+    b.dessiner(2, 88);
+    // Anthony prend le montage et supprime le plan 2 que Léa tient (l'interface le lui refuserait ; ici la course est faite
+    // avant que sa prise lui soit arrivée).
+    let id = a.plan_id(2);
+    a.s.prendre(&[Cible::Montage], false);
+    confirmer(&h);
+    a.tour();
+    a.doc.remove_panels(&[id]).expect("supprimer");
+    a.s.apres_structure(&a.doc);
+    a.enregistrer();
+    b.tour();
+    b.tour();
+    assert_eq!(b.doc.panels.len(), 2, "le plan a disparu du film de Léa");
+    assert!(b.messages.iter().any(|m| m.contains("supprimé") && m.contains("brouillon")), "{:?}", b.messages);
+    assert!(!b.s.tiens(Cible::Plan(id)));
+    b.enregistrer();
+    let liste = brouillons(&b.manifeste);
+    assert_eq!(liste.len(), 1);
+    assert!(liste[0].ends_with(".supprime.json"), "{liste:?}");
+}
+
+#[test]
+fn the_loser_of_the_token_race_keeps_her_montage_aside_and_gets_the_winners() {
+    let (mut a, mut b, h, _) = deux_postes("jeton-course", 3);
+    a.s.prendre(&[Cible::Montage], false);
+    h.avancer(1_000);
+    b.s.prendre(&[Cible::Montage], false);
+    // Léa renomme la séquence 0 pendant que sa prise est provisoire ; Anthony, lui, la nomme autrement.
+    let seq = b.doc.sequences[0].id;
+    b.doc.sequence_mut(seq).expect("séquence").name = "Nom de Léa".into();
+    a.doc.sequence_mut(seq).expect("séquence").name = "Nom d'Anthony".into();
+    confirmer(&h);
+    a.tour();
+    b.tour();
+    a.tour();
+    a.enregistrer();
+    for _ in 0..3 {
+        b.tour();
+    }
+    assert!(b.perdues.contains(&Cible::Montage));
+    assert_eq!(b.doc.sequences[0].name, "Nom d'Anthony", "le montage du gagnant remplace le sien");
+    b.enregistrer();
+    let liste = brouillons(&b.manifeste);
+    assert!(liste.iter().any(|n| n.starts_with("montage.lea.")), "son montage est gardé : {liste:?}");
+    let brouillon = b.s.lire_brouillon(liste.iter().find(|n| n.starts_with("montage.lea.")).expect("brouillon")).expect("lecture");
+    assert!(String::from_utf8_lossy(&brouillon).contains("Nom de Léa"));
+}
+
+#[test]
+fn opening_a_shared_project_does_not_reload_the_plans_it_just_read() {
+    let (mut a, _, _, _) = deux_postes("ouverture-calme", 4);
+    for _ in 0..3 {
+        let fx = a.tour();
+        assert!(!fx.documents_changes, "rien n'a changé depuis la lecture");
+    }
+    assert!(a.s.notifications.is_empty(), "{:?}", a.s.notifications);
+}
+
+#[test]
+fn a_shared_film_of_150_plans_costs_little_to_follow() {
+    let racine = dossier("cout");
+    let manifeste = partager(&film(150), &racine);
+    let h = Horloge::reglable(1_760_000_000_000);
+    let mut a = Poste::ouvrir(&manifeste, "Anthony", &h);
+    a.tour();
+    let t = std::time::Instant::now();
+    for _ in 0..10 {
+        a.tour();
+    }
+    let tour = t.elapsed().as_secs_f64() * 100.0;
+    let t = std::time::Instant::now();
+    for _ in 0..1000 {
+        a.s.sonder(&mut a.doc);
+    }
+    let sonder = t.elapsed().as_secs_f64() * 1e3;
+    assert!(tour < 300.0, "un tour du moteur coûte {tour:.1} ms (fil de fond)");
+    assert!(sonder < 100.0, "1000 images d'écran au repos coûtent {sonder:.1} ms de la session");
+}
