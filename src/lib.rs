@@ -34,6 +34,12 @@ mod planvers;
 #[cfg(test)]
 mod planvers_tests;
 mod planversui;
+// Comparer un plan avec lui-même (deux versions, ou aujourd'hui et un envoi) : le calcul (`comparer`),
+// la fenêtre (`comparerui`).
+mod comparer;
+#[cfg(test)]
+mod comparer_tests;
+mod comparerui;
 #[cfg(test)]
 mod gpu_contenu_tests;
 mod parallele;

@@ -142,7 +142,7 @@ impl App {
         let Some(plan) = self.doc.panels.get(index).map(|p| p.id) else { return };
         let actuelle = self.doc.numero_de_version(plan);
         let autres: Vec<(u32, u64)> = self.doc.versions_du_plan(plan).map(|v| v.autres.iter().map(|r| (r.numero, r.date)).collect()).unwrap_or_default();
-        let (mut passer, mut restaurer, mut supprimer, mut nouvelle) = (None, None, None, false);
+        let (mut passer, mut restaurer, mut supprimer, mut nouvelle, mut comparer) = (None, None, None, false, None);
         ui.vertical(|ui| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new(etiquette(actuelle)).strong()).on_hover_text("La version active du plan : celle que montrent le montage, l'export et les envois.");
@@ -160,6 +160,9 @@ impl App {
                     ui.label(RichText::new(format!("{}{quand}", etiquette(numero))).color(theme::texte_doux()));
                     if bulles::icone(ui, ph::SWAP, "Passer à cette version", "Elle devient la version active ; la version d'aujourd'hui est gardée.", "").clicked() {
                         passer = Some(numero);
+                    }
+                    if bulles::icone(ui, ph::COLUMNS, "Comparer à la version d'aujourd'hui", "Côte à côte, en volet, en fondu ou en superposition (lecture seule).", "").clicked() {
+                        comparer = Some(numero);
                     }
                     if bulles::icone(ui, ph::ARROW_COUNTER_CLOCKWISE, "Restaurer cette version", "Une copie d'elle devient une nouvelle version active ; rien n'est perdu.", "").clicked() {
                         restaurer = Some(numero);
@@ -181,6 +184,9 @@ impl App {
         }
         if let Some(n) = supprimer {
             self.supprimer_la_version(index, n);
+        }
+        if let Some(n) = comparer {
+            self.comparer_ouvrir(index, Some(crate::comparer::Source::Version(n)), Some(crate::comparer::Source::Actuelle));
         }
     }
 
@@ -210,6 +216,11 @@ impl App {
                     ui.close_menu();
                     self.supprimer_la_version(index, numero);
                 }
+            }
+            ui.separator();
+            if ui.button("Comparer le plan…").on_hover_text("Deux versions, ou aujourd'hui et un envoi (lecture seule).").clicked() {
+                ui.close_menu();
+                self.comparer_ouvrir(index, None, None);
             }
         });
     }

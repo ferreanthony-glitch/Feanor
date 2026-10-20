@@ -653,6 +653,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("version.nouvelle", "Nouvelle version du plan (garde le plan tel qu'il est)", true, false),
     act("version.precedente", "Passer à la version précédente du plan", true, false),
     act("version.suivante", "Passer à la version suivante du plan", true, false),
+    act("comparer.ouvrir", "Comparer le plan : versions ou envois (ouvrir / fermer)", true, false),
     act("reference.decharger", "Décharger la référence courante", false, false),
     act("legende.chercher", "Chercher dans les légendes", false, false),
 ];

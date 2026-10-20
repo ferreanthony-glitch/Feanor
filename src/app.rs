@@ -576,6 +576,8 @@ pub struct App {
     pub(crate) trans: crate::transitionsui::TransUi,
     /// Les envois : suivi des plans modifiés depuis le dernier, fenêtres (`envoisui.rs`).
     pub(crate) envois_ui: crate::envoisui::EnvoisUi,
+    /// La fenêtre « Comparer » : deux côtés d'un même plan, en lecture seule (`comparerui.rs`).
+    pub(crate) comparaison: Option<crate::comparerui::Comparaison>,
     /// Effets des extraits de son : clé de volume choisie (`audiofxui.rs`).
     pub(crate) sfx: crate::audiofxui::SoundFxUi,
     /// La bibliothèque de bruitages : liste, recherche, écoute, sons en cours de pose (`bruitagesui.rs`).
@@ -1054,6 +1056,7 @@ impl App {
             sel_clip: None,
             trans: Default::default(),
             envois_ui: Default::default(),
+            comparaison: None,
             sfx: Default::default(),
             brt: Default::default(),
             sug: Default::default(),
@@ -3258,8 +3261,8 @@ impl App {
         if self.envois_action(action) {
             return;
         }
-        // Versions d'un plan (`planversui.rs`).
-        if self.version_action(action) {
+        // Versions d'un plan (`planversui.rs`), et leur comparaison (`comparerui.rs`).
+        if self.version_action(action) || self.comparer_action(action) {
             return;
         }
         // Effets des extraits de son (`audiofxui.rs`) ; Suppr retire la clé de volume choisie.
@@ -4264,6 +4267,7 @@ impl App {
             self.tick_save(ctx);
             self.envois_tick(ctx);
             self.envois_windows(ctx);
+            self.comparer_fenetre(ctx);
         }
         // Export en cours : quelques images par image d'écran, la fenêtre reste vivante.
         if let Some(job) = &mut self.export_job {

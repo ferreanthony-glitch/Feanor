@@ -523,6 +523,7 @@ impl App {
         let mut ouverte = true;
         let mut aller: Option<usize> = None;
         let mut retirer: Option<u64> = None;
+        let mut comparer: Option<u64> = None;
         egui::Window::new("Envois").open(&mut ouverte).default_width(420.0).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if bulles::icone(ui, ph::PAPER_PLANE_TILT, "Marquer un envoi…", "Noter l'état de tous les plans : ce qui change ensuite sera repéré.", &self.raccourci("envoi.marquer")).clicked() {
@@ -583,6 +584,12 @@ impl App {
                         ui.label(RichText::new(e.libelle()).strong());
                         let detail = if self.envois_ui.fait_pour.is_none() { format!("{} plans", e.plans.len()) } else { format!("{} plans, {diff} différent{} d'aujourd'hui", e.plans.len(), if diff > 1 { "s" } else { "" }) };
                         ui.label(RichText::new(detail).color(theme::texte_doux()));
+                        // Le plan courant, comparé à son état à cet envoi (s'il y était).
+                        let present = self.doc.panels.get(self.cur_panel).is_some_and(|p| e.plan(p.id).is_some()) && !e.fichier.is_empty();
+                        let r = bulles::icone_si(ui, present, ph::COLUMNS, "Comparer le plan courant avec cet envoi", "Le plan d'aujourd'hui et son état à cet envoi, côte à côte ou superposés (lecture seule).", "");
+                        if r.clicked() {
+                            comparer = Some(e.id);
+                        }
                         if bulles::icone(ui, ph::TRASH, "Retirer de la liste", "L'envoi sort de la liste. Ses fichiers dans « versions » ne sont jamais effacés.", "").clicked() {
                             retirer = Some(e.id);
                         }
@@ -608,6 +615,9 @@ impl App {
         });
         if let Some(id) = retirer {
             self.envois_ui.retrait = Some(id);
+        }
+        if let Some(id) = comparer {
+            self.comparer_ouvrir(self.cur_panel, Some(crate::comparer::Source::Envoi(id)), Some(crate::comparer::Source::Actuelle));
         }
         if let Some(i) = aller {
             self.select_panel(i);

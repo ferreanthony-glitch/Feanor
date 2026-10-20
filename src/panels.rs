@@ -181,6 +181,8 @@ impl App {
                     self.action_item(ui, "Nouvelle version du plan", "version.nouvelle");
                     self.action_item(ui, "Version précédente", "version.precedente");
                     self.action_item(ui, "Version suivante", "version.suivante");
+                    ui.separator();
+                    self.action_item(ui, "Comparer le plan…", "comparer.ouvrir");
                 });
                 ui.separator();
                 let lock = if self.doc.storyboard_locked { "Déverrouiller le storyboard" } else { "Verrouiller le storyboard" };

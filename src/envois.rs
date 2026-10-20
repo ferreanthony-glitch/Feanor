@@ -352,7 +352,6 @@ struct PlanInstantane {
 
 /// Le plan `plan` de `envoi`, relu dans son instantané : un petit projet à un plan, dont les dessins sont
 /// ceux de `dossier/versions/dessins/`. Lecture complète (disque et rendu des traits) : sur un autre fil.
-#[allow(dead_code)] // (la comparaison s'en sert, étape 4)
 pub fn charger_plan(dossier: &Path, envoi: &Envoi, plan: u64) -> Result<project::Loaded, String> {
     if envoi.fichier.is_empty() {
         return Err(format!("l'envoi « {} » n'a pas d'instantané : rien à comparer.", envoi.nom));

@@ -1549,7 +1549,6 @@ impl Tete {
 /// dont les dessins sont ceux de `dir/dessins/<empreinte>.png|json`. C'est l'ouverture ordinaire d'un
 /// projet (`load_manifest`), donc avec ses protections : un dessin manquant ou abîmé est un
 /// avertissement, le plan s'ouvre quand même. `scene` : le numéro de scène que prend le plan.
-#[allow(dead_code)] // (`envois::charger_plan`, que la comparaison utilise, étape 4)
 pub(crate) fn charger_plans(dir: &Path, tete: &Tete, scene: u64, entrees: Vec<serde_json::Value>, quick: bool) -> Result<Loaded, String> {
     let panneaux: Vec<PanelEntry> = entrees
         .into_iter()
