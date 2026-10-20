@@ -550,7 +550,7 @@ impl App {
         let current = self.layer().id;
         if self.scene3d.last_layer != current {
             self.scene3d.last_layer = current;
-            if espace3d::is_card(self.layer()) && self.scene3d.drag.is_none() {
+            if espace3d::is_card(self.layer()) && self.scene3d.drag.is_none() && self.scene3d.show_cards {
                 self.scene3d.sel = vec![espace3d::card_selection(current)];
             }
         }

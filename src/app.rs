@@ -1462,6 +1462,8 @@ impl App {
         // Multiplan : les calques en profondeur défilent selon la position de la caméra.
         let camera = self.doc.camera_seen(self.cur_panel, frame);
         let world = crate::espace3d::Monde::of(&self.doc);
+        // Les objets 3D du plan, s'ils sont dans l'image : sous tous les calques (`espace3dobjets.rs`).
+        let mut objects = crate::espace3dobjets::key_for(&self.doc, self.cur_panel, &camera).map(|k| crate::espace3dobjets::item(&k));
         // Tremblement du trait (`tremblement.rs`) : à l'écran et à l'arrêt, les calques qui animent
         // à l'arrêt suivent l'horloge ; l'export, les vignettes et la lecture, l'image.
         let rest = (onion && !self.playing).then(|| crate::tremblement::rest_frame(crate::fx::now_ms(), self.doc.fps));
@@ -1475,6 +1477,9 @@ impl App {
         let mut starts: Vec<usize> = Vec::with_capacity(layers.len());
         for (li, layer) in layers.iter().enumerate() {
             starts.push(items.len());
+            if li == 0 {
+                items.extend(objects.take());
+            }
             // Caché (lui ou son dossier) : rien ; sinon son opacité, avec celle de son dossier.
             let Some(mut opacity) = crate::folders::effect(layers, li) else { continue };
             // Calque d'effet (`calqueffet.rs`) : son repère, qui couvre ce qui est dessous.
@@ -1557,6 +1562,8 @@ impl App {
             }
             items.append(&mut onion_items);
         }
+        // (Une pile sans calque : les objets seuls.)
+        items.extend(objects);
         Plan {
             // Arrière-plan (13e) : le papier seulement si c'est une couleur.
             paper: if paper { self.doc.render_paper() } else { None },
@@ -2383,6 +2390,15 @@ impl App {
             ctx.request_repaint();
         }
         if crate::fx::fond_pending() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(16));
+        }
+        // Objets 3D rendus en arrière-plan pour l'image (`espace3dobjets.rs`).
+        if crate::espace3dobjets::poll(self.doc.scenes3d.rev) {
+            self.renderer.invalidate_composed();
+            self.renderer.invalidate_all();
+            ctx.request_repaint();
+        }
+        if crate::espace3dobjets::pending(self.doc.scenes3d.rev) {
             ctx.request_repaint_after(std::time::Duration::from_millis(16));
         }
     }

@@ -1139,6 +1139,10 @@ pub fn shown_id(item: &crate::render::PlanItem) -> CelId {
         r.hash(&mut h);
         return h.finish() | (1 << 63);
     }
+    // Les objets 3D du plan (`espace3dobjets.rs`) : un numéro propre à leur rendu.
+    if let Some(crate::render::FondPart::Objets(key)) = &item.fond {
+        return crate::espace3dobjets::id_of(key);
+    }
     match &item.ctg {
         None if item.fx.is_empty() => item.cel,
         None => fx_id(item.cel, &item.fx),
@@ -1176,6 +1180,8 @@ fn shown_blocking<'a>(doc: &'a Document, item: &crate::render::PlanItem) -> Opti
         Some(crate::render::FondPart::Forme(r)) => fond_shown(doc, item, r),
         // Le repère d'un calque d'effet non résolu (`calqueffet::resolve`) ne montre rien.
         Some(crate::render::FondPart::Reglage(_)) => None,
+        // Les objets 3D du plan : leur rendu, ou le dernier en attendant (à l'écran).
+        Some(crate::render::FondPart::Objets(key)) => crate::espace3dobjets::shown(doc, key),
     }
 }
 
@@ -1279,6 +1285,7 @@ fn job_for(item: &crate::render::PlanItem, src: &Cel, id: CelId, level: u8, prio
 /// mêmes numéros et les mêmes versions que ceux du nouveau).
 pub fn forget_all() {
     crate::fxcache::forget_all();
+    crate::espace3dobjets::forget_all();
     COVERS.lock().unwrap_or_else(|e| e.into_inner()).clear();
 }
 
@@ -1539,6 +1546,16 @@ pub fn fond_poll() -> bool {
     }
     FOND_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     true
+}
+
+/// On est dans `differe` : les calculs de fond (fonds sous le trait, objets 3D) se font sur un autre fil.
+pub(crate) fn differe_actif() -> bool {
+    DIFFERE.with(std::cell::Cell::get)
+}
+
+/// Un rendu venu de l'arrière-plan (les objets 3D) compte comme un fond adopté : ce qui en dépend (vignettes) se refait.
+pub(crate) fn bump_fond_epoch() {
+    FOND_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// Un fond est-il en cours de calcul ?

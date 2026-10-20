@@ -634,6 +634,16 @@ pub struct PlanScene {
     /// Remettre à jour le calque quand la scène change.
     #[serde(rename = "suivre", default = "yes")]
     pub follow: bool,
+    /// Les objets sont dans l'image finale (rendus par la caméra du plan, sous tous les calques ; `espace3dobjets.rs`).
+    /// Absent d'un fichier d'avant l'Espace 3D : faux, ces objets étaient des repères de blocage (ils n'étaient dans
+    /// l'image que par le calque « Fond 3D ») ; une scène neuve les montre.
+    #[serde(rename = "en_image", default)]
+    pub in_image: bool,
+    /// Le calque « Fond 3D » a été figé par l'Espace 3D : c'est la feuille vue de l'œil `cam.pos` (image alignée sur
+    /// la feuille, comme les objets dans l'image), pas ce que voit la caméra de blocage d'avant. Faux d'un ancien fichier :
+    /// son calque se refait comme avant.
+    #[serde(rename = "feuille_alignee", default, skip_serializing_if = "std::ops::Not::not")]
+    pub sheet_aligned: bool,
 }
 
 fn yes() -> bool {
@@ -650,6 +660,8 @@ impl Default for PlanScene {
             render: RenderSettings::default(),
             bake_cel: None,
             follow: true,
+            in_image: true,
+            sheet_aligned: false,
         }
     }
 }

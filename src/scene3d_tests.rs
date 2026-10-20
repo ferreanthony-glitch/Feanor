@@ -943,6 +943,9 @@ fn sending_the_scene_makes_a_normal_layer_that_follows_the_scene_in_the_backgrou
     b.chauffer(2);
     let layers_before = b.app.layers().len();
     b.app.run_action("scene3d.ajouter_cube");
+    // (Cet essai est celui du calque « Fond 3D » : les objets ne sont pas, en plus, dans l'image.)
+    let panel0 = b.app.s3_ids().0;
+    b.app.doc.scenes3d.plan_mut(panel0).in_image = false;
     b.app.run_action("scene3d.envoyer");
     // Le calque est là tout de suite (vide), tout en bas, verrouillé ; le rendu vient après.
     let (panel, _) = b.app.s3_ids();

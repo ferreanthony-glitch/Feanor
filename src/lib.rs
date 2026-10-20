@@ -626,6 +626,7 @@ mod tabs_tests;
 // Espace 3D (`docs/ESPACE3D.md`) : le plateau en 3D et la scène 3D de blocage réunis, calques (cartes), objets et
 // caméra du plan dans un seul monde.
 mod espace3d;
+mod espace3dobjets;
 #[cfg(test)]
 mod espace3d_tests;
 // Scène 3D de blocage (`docs/ROADMAP.md`, « Scène 3D ») : modèle, maths, maillages, rendu par le

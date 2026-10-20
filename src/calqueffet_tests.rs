@@ -463,3 +463,28 @@ fn the_scope_of_an_effect_layer_is_its_folder_or_the_whole_stack() {
         .collect();
     assert_eq!(froms, vec![1, 0], "celui du dossier part du dessin de C1 (après A), l'autre du début");
 }
+
+#[test]
+fn an_adjustment_layer_acts_on_a_tilted_card_as_it_is_posed_on_the_sheet() {
+    // Espace 3D : une carte inclinée est posée par un maillage ; le calque d'ajustement au-dessus voit la carte posée.
+    let mut d = doc();
+    let a = painted(&mut d, (40, 24, 112, 80), RED);
+    let e = adjustment(&mut d, "Négatif", vec![invert()], 0, 12);
+    let mut card = layer("A", a, 12);
+    card.transform.tilt_y = 35.0;
+    d.panels[0].layers = vec![card, e];
+    let plan = render::panel_plan_at(&d, 0, 0, d.render_paper());
+    assert!(plan.items[0].pre.as_ref().is_some_and(|p| p.card), "la carte est posée par un maillage");
+    let buf = render::composite_full(&d, &plan);
+    assert_eq!(at(&buf, 96, 64), Color32::from_rgb(0, 255, 255), "la carte posée, inversée");
+    assert_eq!(at(&buf, 5, 5), Color32::BLACK, "le papier, inversé");
+    // Sans l'inclinaison, la même image à plat : ailleurs, mais aussi inversée.
+    d.panels[0].layers[0].transform.tilt_y = 0.0;
+    let flat_buf = flat(&d, 0);
+    assert_eq!(at(&flat_buf, 96, 64), Color32::from_rgb(0, 255, 255));
+    // Deux inclinaisons ne se confondent pas : le dessin dérivé de l'ajustement dépend du maillage.
+    d.panels[0].layers[0].transform.tilt_y = 20.0;
+    let first = render::composite_full(&d, &render::panel_plan_at(&d, 0, 0, None));
+    d.panels[0].layers[0].transform.tilt_y = 40.0;
+    let second = render::composite_full(&d, &render::panel_plan_at(&d, 0, 0, None));
+    assert!(first != second, "l'ajustement suit l'inclinaison de la carte");}

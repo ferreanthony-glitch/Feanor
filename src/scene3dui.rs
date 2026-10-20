@@ -200,6 +200,10 @@ impl App {
             self.set_camera_view(false);
             self.end_stroke();
             self.playing = false;
+            // (À l'entrée, rien n'est choisi : seul un changement de calque choisit sa carte.)
+            if !self.scene3d.on {
+                self.scene3d.last_layer = self.layer().id;
+            }
         }
         self.scene3d.on = on;
         self.scene3d.drag = None;
@@ -293,7 +297,11 @@ impl App {
         let at = self.scene3d.cam.map_or([0.0; 3], |c| [(c.target[0] * 4.0).round() / 4.0, 0.0, (c.target[2] * 4.0).round() / 4.0]);
         let target = self.scene3d.target;
         let name = format!("Ajouter : {}", shape.label().to_lowercase());
-        let id = self.scene3d_step(&name, |s| s.doc.scenes3d.add(panel, seq, target, shape, at));
+        let id = self.scene3d_step(&name, |s| {
+            // (Le plan a sa scène, donc « Objets dans l'image » : un décor seul n'en crée pas.)
+            s.doc.scenes3d.plan_mut(panel);
+            s.doc.scenes3d.add(panel, seq, target, shape, at)
+        });
         match id {
             Some(id) => {
                 self.scene3d.sel = vec![id];
@@ -575,6 +583,7 @@ impl App {
             plan.follow = true;
             plan.cam = SceneCam { pos: eye, pan: 0.0, tilt: 0.0, roll: 0.0, focal: REF_FOCAL };
             plan.render.area = RenderArea::Sheet;
+            plan.sheet_aligned = true;
             s.doc.scenes3d.touch();
         });
         self.scene3d.applied = None;
@@ -750,6 +759,16 @@ impl App {
                 s.doc.scenes3d.plan_mut(panel).use_decor = use_decor;
                 s.doc.scenes3d.touch();
             });
+        }
+        // Les objets dans l'image finale : sous tous les calques, vus de l'œil de la caméra du plan.
+        let mut in_image = self.doc.scenes3d.plan(panel).is_some_and(|p| p.in_image);
+        let r = interrupteur(ui, &mut in_image, ph::FILM_STRIP, "Objets dans l'image", "Les objets de ce plan (et le décor) sont dans l'image finale : rendus par la caméra du plan, sous tous les calques, avec la parallaxe. Éteint, ils restent des repères pour le blocage.", "");
+        if r.changed() {
+            self.scene3d_step("Objets 3D dans l'image", |s| {
+                s.doc.scenes3d.plan_mut(panel).in_image = in_image;
+                s.doc.scenes3d.touch();
+            });
+            self.renderer.invalidate_all();
         }
         ui.separator();
 

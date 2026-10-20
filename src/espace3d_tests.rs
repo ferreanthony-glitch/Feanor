@@ -5,7 +5,7 @@
 use eframe::egui::{pos2, vec2, Color32};
 
 use crate::camera::{Camera, CameraKey};
-use crate::perf_tests::{banc_taille, Banc};
+use crate::perf_tests::{banc_taille, se_reposer, Banc};
 use crate::scene3d::{Shape3d, Target};
 use crate::scene3dgizmo::{self as gz, Handle, Mode, CAMERA_ID};
 use crate::scene3dmath as m;
@@ -569,6 +569,9 @@ fn the_ray_picks_the_nearest_drawn_card_and_a_click_chooses_it_and_its_layer() {
     assert_eq!(b.app.s3_pick(&edge), Some(espace3d::card_selection(blue)));
     // Un clic de souris choisit la carte et fait de son calque le calque courant.
     b.app.scene3d.mode = Mode::Select;
+    b.app.select_layer(1);
+    b.chauffer(2);
+    assert_eq!(b.app.scene3d.sel, vec![espace3d::card_selection(red)]);
     b.app.select_layer(0);
     b.chauffer(2);
     assert_eq!(b.app.scene3d.sel, vec![espace3d::card_selection(blue)], "le choix suit le panneau Calques");
@@ -777,4 +780,169 @@ fn the_view_with_ten_cards_and_twenty_objects_stays_within_the_frame_budget() {
     let pick = t.elapsed().as_secs_f64() * 1000.0 / 20.0;
     println!("PERF Espace 3D : choisir à la souris (10 cartes, 20 objets) : {pick:.2} ms");
     assert!(pick < 5.0, "{pick:.2} ms pour choisir");
+}
+// ============================================================================ les objets dans l'image
+
+/// Un projet 320 × 180 avec un cube de 1 m posé sur le sol, à `z` mètres du plan de référence, dans l'image.
+fn doc_with_cube(z: f32) -> Document {
+    let mut doc = Document::new(320, 180, 24);
+    let (panel, seq) = (doc.panels[0].id, doc.sequence_of(0));
+    doc.scenes3d.add(panel, seq, Target::Plan, Shape3d::Cube, [0.0, 0.0, z]).expect("cube");
+    doc
+}
+
+fn opaque(img: &[Color32], w: usize) -> Option<(f32, f32)> {
+    let (mut sx, mut sy, mut n) = (0.0f64, 0.0f64, 0.0f64);
+    for (i, p) in img.iter().enumerate() {
+        if p.a() > 200 {
+            sx += (i % w) as f64 + 0.5;
+            sy += (i / w) as f64 + 0.5;
+            n += 1.0;
+        }
+    }
+    (n > 0.0).then(|| ((sx / n) as f32, (sy / n) as f32))
+}
+
+#[test]
+fn a_cube_is_in_the_final_image_under_the_cards() {
+    let mut doc = doc_with_cube(0.0);
+    assert!(doc.scenes3d.plan(doc.panels[0].id).is_some_and(|p| p.in_image), "une scène neuve montre ses objets");
+    let plan = render::panel_plan_at(&doc, 0, 0, None);
+    assert!(matches!(plan.items[0].fond, Some(render::FondPart::Objets(_))), "les objets sont le premier élément du plan");
+    let img = render::composite_full(&doc, &plan);
+    // Le cube de 1 m, posé sur le sol à l'origine, est au-dessus du centre de la feuille : 0,5 m = 27 px.
+    let at = |x: usize, y: usize| img[y * 320 + x];
+    assert!(at(160, 90 - 27).a() > 200, "le cube est là : {:?}", at(160, 90 - 27));
+    assert!(at(20, 20).a() == 0 && at(300, 170).a() == 0, "et seulement lui");
+    // Une carte par-dessus le recouvre.
+    let mut layer = Layer::new("Carte", LayerKind::Bitmap);
+    let cel = doc.new_cel(LayerKind::Bitmap);
+    fill_rect(&mut doc, cel, 120, 40, 200, 100, RED);
+    layer.frames = vec![Some(cel)];
+    doc.panels[0].layers = vec![layer];
+    let img = render::composite_full(&doc, &render::panel_plan_at(&doc, 0, 0, None));
+    let c = img[63 * 320 + 160];
+    assert!(c.r() > 200 && c.g() < 60, "la carte recouvre le cube : {c:?}");
+    // Le cube reste visible là où la carte ne le couvre pas : à côté de la carte rouge.
+    assert!(opaque(&img, 320).is_some());
+}
+
+#[test]
+fn objects_of_an_older_project_stay_blocking_aids_and_leave_the_image_untouched() {
+    let mut doc = doc_with_cube(0.0);
+    let panel = doc.panels[0].id;
+    let with = render::composite_full(&doc, &render::panel_plan_at(&doc, 0, 0, None));
+    assert!(with.iter().any(|c| c.a() > 0));
+    // Un fichier d'avant l'Espace 3D n'a pas « en_image » : faux.
+    let text = std::fs::read_to_string({
+        let dir = dir_for("scenes");
+        let manifest = dir.join("P.pelure");
+        project::save(&doc, &manifest, &mut Default::default()).expect("enregistré");
+        dir.join("scenes3d.json")
+    })
+    .expect("scenes3d.json");
+    assert!(text.contains("\"en_image\": true"));
+    let mut old = text.clone();
+    while let Some(i) = old.find("\"en_image\"") {
+        // (Le champ, sa virgule d'avant et sa valeur : le fichier écrit par une version d'avant n'en a pas.)
+        let start = old[..i].rfind(',').expect("une virgule avant");
+        let end = i + old[i..].find("true").expect("vrai") + 4;
+        old.replace_range(start..end, "");
+    }
+    assert!(!old.contains("en_image"));
+    let scenes = crate::scene3dstore::parse(&old).expect("un fichier d'avant se lit");
+    assert!(scenes.plan(panel).is_some_and(|p| !p.in_image), "absent : les objets restent des repères");
+    doc.scenes3d = scenes;
+    let plan = render::panel_plan_at(&doc, 0, 0, None);
+    assert!(plan.items.iter().all(|i| i.fond.is_none()), "aucun objet dans le plan");
+    assert!(render::composite_full(&doc, &plan).iter().all(|c| c.a() == 0), "l'image est celle d'avant : rien de plus");
+}
+
+#[test]
+fn objects_follow_the_camera_with_the_parallax_of_their_depth() {
+    // Un cube à 4 m derrière le plan de référence : la caméra se décale de 40 px, il se décale moins qu'une carte.
+    let mut doc = doc_with_cube(-4.0);
+    let start = Camera::centered(320, 180);
+    doc.panels[0].camera = vec![CameraKey::new(0, start), CameraKey::new(1, Camera { x: start.x + 40.0, ..start })];
+    // (Deux calques vides pour que le plan ait deux images.)
+    let mut layer = Layer::new("Vide", LayerKind::Bitmap);
+    let cel = doc.new_cel(LayerKind::Bitmap);
+    layer.frames = vec![Some(cel); 4];
+    doc.panels[0].layers = vec![layer];
+    let at = |frame: usize| {
+        let plan = render::panel_plan_at(&doc, 0, frame, None);
+        let img = render::camera_image(&doc, &plan, &doc.panel_camera(0, frame));
+        opaque(&img, 320).expect("le cube est dans l'image")
+    };
+    let (a, b) = (at(0), at(1));
+    let d0 = crate::camera::ref_distance(doc.frame) * crate::scene3d::SceneCam::meters_per_px(320);
+    let want = 40.0 * d0 / (d0 + 4.0);
+    assert!((a.0 - b.0 - want).abs() < 2.5, "le cube se décale de {} px au lieu de {want}", a.0 - b.0);
+    assert!((a.0 - b.0).abs() < 40.0 - 8.0, "moins vite qu'un calque au plan de référence (40 px)");
+}
+
+#[test]
+fn the_screen_never_waits_for_the_objects_and_gets_them_from_the_background() {
+    let doc = doc_with_cube(0.0);
+    let plan = render::panel_plan_at(&doc, 0, 0, None);
+    let Some(render::FondPart::Objets(key)) = plan.items[0].fond.clone() else { panic!("les objets sont dans le plan") };
+    crate::espace3dobjets::clear_for_tests();
+    // À l'écran : rien tout de suite (aucun rendu avant), le rendu part en arrière-plan.
+    let t = std::time::Instant::now();
+    let first = crate::fx::differe(|| crate::espace3dobjets::shown(&doc, &key));
+    assert!(first.is_none(), "pas de rendu avant : rien en attendant");
+    assert!(t.elapsed() < std::time::Duration::from_millis(100), "la demande n'attend pas le rendu ({:?})", t.elapsed());
+    assert!(crate::espace3dobjets::pending(key.rev));
+    crate::espace3dobjets::wait_idle();
+    let ready = crate::fx::differe(|| crate::espace3dobjets::shown(&doc, &key)).expect("le rendu est arrivé");
+    assert!(ready.raster.drawn_tile_range().is_some(), "le cube est dessiné");
+    // Ailleurs (export) : calculé tout de suite, le même.
+    crate::espace3dobjets::clear_for_tests();
+    let exact = crate::espace3dobjets::shown(&doc, &key).expect("calculé");
+    assert!(exact.raster.tiles.iter().zip(&ready.raster.tiles).all(|(a, b)| a.as_deref() == b.as_deref()), "mêmes pixels à l'écran et à l'export");
+}
+
+#[test]
+fn the_gpu_composes_the_objects_and_a_tilted_card_like_the_cpu_does() {
+    let Some(rs) = crate::gpu_tests::headless() else {
+        println!("pas de carte graphique : essai passé");
+        return;
+    };
+    let mut doc = doc_with_cube(-1.0);
+    let mut layer = Layer::new("Carte", LayerKind::Bitmap);
+    let cel = doc.new_cel(LayerKind::Bitmap);
+    fill_rect(&mut doc, cel, 200, 30, 300, 150, RED);
+    layer.frames = vec![Some(cel)];
+    layer.transform.tilt_y = -30.0;
+    doc.panels[0].layers = vec![layer];
+    doc.panels[0].camera = vec![CameraKey::new(0, Camera { x: 170.0, y: 90.0, dolly: 25.0, ..doc.default_camera() })];
+    let plan = render::panel_plan_at(&doc, 0, 0, Some([255, 255, 255]));
+    assert!(matches!(plan.items[0].fond, Some(render::FondPart::Objets(_))));
+    let mut gpu = crate::gpu::GpuCanvas::new(&rs);
+    let on_gpu = crate::gpu_tests::render_with(&mut gpu, &rs, &doc, &plan, true);
+    let on_cpu = render::composite_full(&doc, &plan);
+    let far2 = on_gpu.iter().zip(&on_cpu).filter(|(a, b)| a.to_array().iter().zip(b.to_array()).any(|(p, q)| (*p as i32 - q as i32).abs() > 2)).count();
+    let painted = on_cpu.iter().filter(|c| c.g() < 235).count();
+    println!("objets et carte inclinée : {far2} pixels à plus de 2 niveaux, sur {painted} peints");
+    assert!(painted > 5_000);
+    assert!(far2 * 50 < painted, "{far2} pixels diffèrent de plus de 2 niveaux");
+}
+#[test]
+fn the_application_rests_once_the_objects_of_the_image_are_rendered() {
+    let doc = doc_with_cube(0.0);
+    let mut b = banc_taille(doc, false, 1280, 720);
+    b.chauffer(2);
+    // Le rendu des objets part en arrière-plan ; l'interface n'attend pas, et finit par se reposer.
+    let start = std::time::Instant::now();
+    while crate::espace3dobjets::pending(b.app.doc.scenes3d.rev) {
+        assert!(start.elapsed() < std::time::Duration::from_secs(60), "le rendu des objets ne finit pas");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        b.image(Vec::new(), 0.05);
+    }
+    let calm = se_reposer(&mut b, 80);
+    assert!(calm < 80, "l'application finit par se reposer ({calm} images)");
+    for _ in 0..10 {
+        let m = b.image(Vec::new(), 0.5);
+        assert!(m.reveil >= std::time::Duration::from_millis(900), "rien à refaire : pas de réveil ({:?})", m.reveil);
+    }
 }
