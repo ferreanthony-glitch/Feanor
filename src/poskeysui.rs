@@ -152,6 +152,7 @@ impl App {
             // La dernière clé partie, le calque garde la pose qu'il avait à cette image.
             if l.pos_keys.is_empty() {
                 l.transform = here;
+                l.fold_dz();
             }
         }
         self.pos_ui.sel.clear();
@@ -203,6 +204,7 @@ impl App {
             let l = &mut self.layers_mut()[li];
             l.transform = l.pose(f);
             l.pos_keys.clear();
+            l.fold_dz();
         }
         self.pos_ui.sel.clear();
         self.renderer.invalidate_all();

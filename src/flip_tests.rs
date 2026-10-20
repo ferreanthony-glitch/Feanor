@@ -9,7 +9,7 @@ use crate::flip::{flipped_in_place, mirror_camera_x, mirror_transform_x};
 #[test]
 fn a_plan_flip_mirrors_every_point_of_a_transformed_layer() {
     let (pivot, axis) = (pos2(1920.0, 1080.0), 1920.0);
-    let t = LayerTransform { x: 40.0, y: -10.0, scale: 1.3, angle: 25.0, stretch_x: 1.5, stretch_y: 0.8 };
+    let t = LayerTransform { x: 40.0, y: -10.0, scale: 1.3, angle: 25.0, stretch_x: 1.5, stretch_y: 0.8, ..Default::default() };
     let m = mirror_transform_x(t, pivot, axis);
     for p in [pos2(1000.0, 700.0), pos2(2500.0, 1300.0), pos2(1920.0, 1080.0)] {
         let (a, b) = (t.affine(pivot).apply(p), m.affine(pivot).apply(p));

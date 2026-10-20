@@ -143,8 +143,8 @@ fn saving_a_shared_project_writes_what_one_holds_by_the_ordinary_path() {
     assert!(!b.app.modified, "enregistré");
     let plan = fx::lire_json(&racine.join("Film").join("plans").join(format!("{}.json", b.app.doc.panels[0].id)));
     assert_eq!(plan["revision"], 2);
-    // Le fichier de structure n'a pas bougé (pas de jeton) et reste au format 34.
-    assert_eq!(fx::lire_json(&racine.join("Film").join("Film.pelure"))["version"], 34);
+    // Le fichier de structure n'a pas bougé (pas de jeton) et reste au format des projets partagés.
+    assert_eq!(fx::lire_json(&racine.join("Film").join("Film.pelure"))["version"], project::version_partage_ecrite());
     // Léa voit le dessin.
     lea.tour();
     lea.tour();
@@ -165,7 +165,7 @@ fn save_as_makes_a_flat_classic_copy_and_leaves_the_sharing() {
     assert!(b.app.partage.is_none(), "la copie à plat n'est plus un film partagé");
     assert_eq!(b.app.path.as_ref(), Some(&copie));
     let v = fx::lire_json(&copie);
-    assert_eq!(v["version"], 33);
+    assert_eq!(v["version"], project::VERSION);
     assert!(v.get("partage").is_none());
     assert_eq!(project::load(&copie).expect("copie").doc.panels.len(), 3);
 }
@@ -266,7 +266,7 @@ fn sharing_an_open_project_writes_it_on_a_thread_then_opens_it_in_a_new_tab() {
     assert!(b.app.partage.is_some(), "le film partagé est ouvert : {}", b.app.status);
     assert_eq!(b.app.onglets.len(), 2, "dans un nouvel onglet (le projet de départ reste)");
     assert_eq!(b.app.doc.panels.len(), 3);
-    assert_eq!(fx::lire_json(&manifeste)["version"], 34);
+    assert_eq!(fx::lire_json(&manifeste)["version"], project::version_partage_ecrite());
     // Le projet de départ n'a pas été touché : toujours sans chemin, sans partage.
     b.app.activer_onglet(0);
     assert!(b.app.partage.is_none() && b.app.path.is_none());

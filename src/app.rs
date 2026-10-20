@@ -1442,6 +1442,7 @@ impl App {
         let washed = onion && self.light_table && !self.playing;
         // Multiplan : les calques en profondeur défilent selon la position de la caméra.
         let camera = self.doc.camera_seen(self.cur_panel, frame);
+        let world = crate::espace3d::Monde::of(&self.doc);
         // Tremblement du trait (`tremblement.rs`) : à l'écran et à l'arrêt, les calques qui animent
         // à l'arrêt suivent l'horloge ; l'export, les vignettes et la lecture, l'image.
         let rest = (onion && !self.playing).then(|| crate::tremblement::rest_frame(crate::fx::now_ms(), self.doc.fps));
@@ -1466,8 +1467,9 @@ impl App {
                 opacity *= self.light_table_strength.clamp(0.05, 1.0);
             }
             // Derrière la caméra (elle a avancé au-delà) : on ne le voit pas.
-            let Some(seen) = layer.transform_seen_at(&camera, frame) else { continue };
-            let transform = (!seen.is_identity()).then_some(seen);
+            // (Carte inclinée de l'Espace 3D : posée par un maillage, `espace3d::place`.)
+            let Some(placed) = crate::espace3d::place(&world, layer, frame, &camera) else { continue };
+            let (transform, card_pre) = (placed.transform, placed.pre);
             // Pelure d'oignon : le calque courant, et ceux qui ont la leur (13b).
             let mut onion_items = Vec::new();
             if onion && self.onion.enabled && !self.playing && (li == cur || layer.onion) {
@@ -1491,7 +1493,7 @@ impl App {
                             fx: Vec::new(),
                             ctg: None,
                             fond: None,
-                            pre: None,
+                            pre: card_pre.clone(),
                         });
                     }
                 }
@@ -1518,7 +1520,7 @@ impl App {
                     // Calque CTG (13j) : rempli d'après les traits de ses sources.
                     ctg: crate::ctg::input(layers, li, frame),
                     fond: None,
-                    pre: None,
+                    pre: card_pre.clone(),
                 };
                 // Fond sous le trait (`fond.rs`), le trait par-dessus.
                 items.extend(crate::render::fond_item(layer, &line));
@@ -1531,7 +1533,7 @@ impl App {
                 }
                 // Calque CTG courant, à l'écran seulement : ses graffitis, pâles, par-dessus.
                 if onion && layer.ctg.is_some() && li == cur && !self.playing {
-                    items.push(PlanItem { cel, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: None });
+                    items.push(PlanItem { cel, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: card_pre.clone() });
                 }
             }
             items.append(&mut onion_items);

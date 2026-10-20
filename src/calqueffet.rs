@@ -270,6 +270,8 @@ pub struct Low {
     pub opacity: u8,
     pub tint: Option<[u8; 3]>,
     pub transform: Option<LayerTransform>,
+    /// Carte inclinée de l'Espace 3D : le maillage qui la pose sur la feuille (`espace3d.rs`).
+    pub warp: Option<Arc<crate::warp::Warp>>,
     pub blend: BlendMode,
 }
 
@@ -317,6 +319,14 @@ impl Snapshot {
             .iter()
             .filter_map(|low| {
                 let r = &low.raster;
+                // Une carte inclinée est d'abord posée sur la feuille entière (le maillage), puis traitée comme un dessin
+                // à plat de la taille de la feuille.
+                if let Some(warp) = &low.warp {
+                    let laid = warp.rasterize(r, low.transform.map(|t| t.affine(pivot)).as_ref(), self.width, self.height);
+                    let raster: Cow<Raster> = if level > 0 { Cow::Owned(crate::fxproxy::downscale(&laid, level)) } else { Cow::Owned(laid) };
+                    let (kx, ky) = (raster.width as f32 / tw.max(1) as f32, raster.height as f32 / th.max(1) as f32);
+                    return Some(Prepared { raster, inv: None, kx, ky, low });
+                }
                 let raster = if r.width == tw && r.height == th {
                     Cow::Borrowed(r)
                 } else if level > 0 && r.width == self.width && r.height == self.height {
@@ -596,7 +606,7 @@ fn hash_transform(t: &Option<LayerTransform>, h: &mut DefaultHasher) {
         None => 0u8.hash(h),
         Some(t) => {
             1u8.hash(h);
-            for v in [t.x, t.y, t.scale, t.angle, t.stretch_x, t.stretch_y] {
+            for v in [t.x, t.y, t.scale, t.angle, t.stretch_x, t.stretch_y, t.tilt_x, t.tilt_y, t.dz] {
                 v.to_bits().hash(h);
             }
         }
@@ -626,6 +636,13 @@ fn content_signature(doc: &Document, r: &Reglage, lower: &[PlanItem], paper: Opt
         doc.cels.get(&item.cel).map(|c| c.version).hash(&mut h);
         (item.opacity, item.tint, item.blend).hash(&mut h);
         hash_transform(&item.transform, &mut h);
+        // (Une carte inclinée : le maillage qui la pose.)
+        if let Some(w) = item.pre.as_ref().and_then(|p| p.warp.as_ref()) {
+            for q in &w.to {
+                (q.x.to_bits(), q.y.to_bits()).hash(&mut h);
+            }
+            w.hidden.hash(&mut h);
+        }
         hash_steps(&item.fx, &mut h);
         item.ctg.hash(&mut h);
         if let Some(ctg) = &item.ctg {
@@ -650,7 +667,7 @@ fn bake(doc: &Document, r: &Reglage, lower: &[PlanItem], paper: Option<[u8; 3]>,
     }
     // La feuille flottante d'une sélection en cours de transformation n'est pas un dessin gardé : pendant
     // le geste, l'effet attend.
-    if lower.iter().any(|i| i.pre.is_some()) {
+    if lower.iter().any(|i| i.pre.as_ref().is_some_and(|p| !p.card)) {
         crate::fxcache::mark_incomplete_if_soft();
         return None;
     }
@@ -697,7 +714,7 @@ fn bake(doc: &Document, r: &Reglage, lower: &[PlanItem], paper: Option<[u8; 3]>,
             paper,
             lows: covers
                 .iter()
-                .map(|c| Low { raster: c.cel.raster.clone(), opacity: c.item.opacity, tint: c.item.tint, transform: c.item.transform, blend: c.item.blend })
+                .map(|c| Low { raster: c.cel.raster.clone(), opacity: c.item.opacity, tint: c.item.tint, transform: c.item.transform, warp: c.item.pre.as_ref().filter(|p| p.card).and_then(|p| p.warp.clone()), blend: c.item.blend })
                 .collect(),
             steps: r.steps.clone(),
             opacity: r.opacity,

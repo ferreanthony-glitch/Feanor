@@ -34,6 +34,13 @@ pub struct Entree {
     pub etirement_x: f32,
     #[serde(default = "un", skip_serializing_if = "est_un")]
     pub etirement_y: f32,
+    /// Inclinaison de la carte dans l'Espace 3D, en degrés (format 35) et écart de profondeur de la clé.
+    #[serde(default, skip_serializing_if = "est_zero")]
+    pub inclinaison_x: f32,
+    #[serde(default, skip_serializing_if = "est_zero")]
+    pub inclinaison_y: f32,
+    #[serde(default, skip_serializing_if = "est_zero")]
+    pub ecart_profondeur: f32,
     /// Clé lissée (la pose y arrive et en repart lentement).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub lisse: bool,
@@ -64,6 +71,9 @@ impl From<&PosKey> for Entree {
             rotation: k.t.angle,
             etirement_x: k.t.stretch_x,
             etirement_y: k.t.stretch_y,
+            inclinaison_x: k.t.tilt_x,
+            inclinaison_y: k.t.tilt_y,
+            ecart_profondeur: k.t.dz,
             lisse: k.smooth,
             adoucir_entree: k.ease_in,
             adoucir_sortie: k.ease_out,
@@ -74,7 +84,19 @@ impl From<&PosKey> for Entree {
 impl Entree {
     /// La clé du modèle, ou rien si une valeur est abîmée (pas un nombre).
     pub fn into_model(self) -> Option<PosKey> {
-        let vals = [self.x, self.y, self.echelle, self.rotation, self.etirement_x, self.etirement_y, self.adoucir_entree, self.adoucir_sortie];
+        let vals = [
+            self.x,
+            self.y,
+            self.echelle,
+            self.rotation,
+            self.etirement_x,
+            self.etirement_y,
+            self.inclinaison_x,
+            self.inclinaison_y,
+            self.ecart_profondeur,
+            self.adoucir_entree,
+            self.adoucir_sortie,
+        ];
         if !vals.iter().all(|v| v.is_finite()) {
             return None;
         }
@@ -87,6 +109,9 @@ impl Entree {
                 angle: self.rotation,
                 stretch_x: LayerTransform::clamp_stretch(self.etirement_x),
                 stretch_y: LayerTransform::clamp_stretch(self.etirement_y),
+                tilt_x: LayerTransform::clamp_tilt(self.inclinaison_x),
+                tilt_y: LayerTransform::clamp_tilt(self.inclinaison_y),
+                dz: self.ecart_profondeur.clamp(-1000.0, 1000.0),
             },
             smooth: self.lisse,
             ease_in: self.adoucir_entree.max(0.0),
@@ -149,6 +174,9 @@ pub fn lerp(a: &LayerTransform, b: &LayerTransform, k: f32) -> LayerTransform {
         angle: m(a.angle, b.angle),
         stretch_x: lerp_stretch(a.stretch_x, b.stretch_x, k),
         stretch_y: lerp_stretch(a.stretch_y, b.stretch_y, k),
+        tilt_x: m(a.tilt_x, b.tilt_x),
+        tilt_y: m(a.tilt_y, b.tilt_y),
+        dz: m(a.dz, b.dz),
     }
 }
 

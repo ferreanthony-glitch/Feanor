@@ -653,8 +653,8 @@ fn a_layer_without_keys_keeps_its_fixed_pose_and_with_keys_it_goes_from_one_to_t
     assert_eq!(poskeys::pose_at(&keys, 12, base).x, 100.0);
     assert_eq!(poskeys::pose_at(&keys, 40, base).x, 100.0, "après la dernière : elle");
     // Tout se mélange : rotation, échelle, étirement.
-    let a = LayerTransform { x: 0.0, y: 0.0, scale: 1.0, angle: 0.0, stretch_x: 1.0, stretch_y: 1.0 };
-    let b = LayerTransform { x: 10.0, y: -20.0, scale: 3.0, angle: 90.0, stretch_x: 2.0, stretch_y: 0.5 };
+    let a = LayerTransform { x: 0.0, y: 0.0, scale: 1.0, angle: 0.0, stretch_x: 1.0, stretch_y: 1.0, ..Default::default() };
+    let b = LayerTransform { x: 10.0, y: -20.0, scale: 3.0, angle: 90.0, stretch_x: 2.0, stretch_y: 0.5, ..Default::default() };
     let m = poskeys::lerp(&a, &b, 0.5);
     assert_eq!((m.x, m.y, m.scale, m.angle, m.stretch_x, m.stretch_y), (5.0, -10.0, 2.0, 45.0, 1.5, 0.75));
 }
@@ -819,7 +819,7 @@ fn an_animated_layer_has_its_pose_in_every_plan_the_export_and_the_thumbnails_us
 fn position_keys_are_saved_in_the_project_and_an_old_project_opens_without_keys() {
     assert!(crate::project::VERSION >= 33);
     let mut app = avec_cle("cle-projet");
-    let mut keys = vec![PosKey::new(0, pose_x(0.0)), PosKey::new(8, LayerTransform { x: 40.0, y: -12.5, scale: 1.5, angle: 30.0, stretch_x: -1.2, stretch_y: 0.9 })];
+    let mut keys = vec![PosKey::new(0, pose_x(0.0)), PosKey::new(8, LayerTransform { x: 40.0, y: -12.5, scale: 1.5, angle: 30.0, stretch_x: -1.2, stretch_y: 0.9, ..Default::default() })];
     keys[0].smooth = true;
     keys[1].ease_in = 3.0;
     app.layers_mut()[0].pos_keys = keys.clone();
@@ -839,10 +839,10 @@ fn position_keys_are_saved_in_the_project_and_an_old_project_opens_without_keys(
     assert!(crate::project::load(&manifest).unwrap().doc.panels[0].layers[0].pos_keys.is_empty());
     // Des clés abîmées (pas un nombre, deux sur la même image) se lisent sans planter.
     let clean = poskeys::from_entries(vec![
-        poskeys::Entree { image: 3, x: f32::NAN, y: 0.0, echelle: 1.0, rotation: 0.0, etirement_x: 1.0, etirement_y: 1.0, lisse: false, adoucir_entree: 0.0, adoucir_sortie: 0.0 },
-        poskeys::Entree { image: 5, x: 1.0, y: 0.0, echelle: 1.0, rotation: 0.0, etirement_x: 1.0, etirement_y: 1.0, lisse: false, adoucir_entree: 0.0, adoucir_sortie: 0.0 },
-        poskeys::Entree { image: 5, x: 2.0, y: 0.0, echelle: 1.0, rotation: 0.0, etirement_x: 1.0, etirement_y: 1.0, lisse: false, adoucir_entree: 0.0, adoucir_sortie: 0.0 },
-        poskeys::Entree { image: 1, x: 0.0, y: 0.0, echelle: 1.0, rotation: 0.0, etirement_x: 1.0, etirement_y: 1.0, lisse: false, adoucir_entree: 0.0, adoucir_sortie: 0.0 },
+        poskeys::Entree { image: 3, x: f32::NAN, y: 0.0, echelle: 1.0, rotation: 0.0, etirement_x: 1.0, etirement_y: 1.0, inclinaison_x: 0.0, inclinaison_y: 0.0, ecart_profondeur: 0.0, lisse: false, adoucir_entree: 0.0, adoucir_sortie: 0.0 },
+        poskeys::Entree { image: 5, x: 1.0, y: 0.0, echelle: 1.0, rotation: 0.0, etirement_x: 1.0, etirement_y: 1.0, inclinaison_x: 0.0, inclinaison_y: 0.0, ecart_profondeur: 0.0, lisse: false, adoucir_entree: 0.0, adoucir_sortie: 0.0 },
+        poskeys::Entree { image: 5, x: 2.0, y: 0.0, echelle: 1.0, rotation: 0.0, etirement_x: 1.0, etirement_y: 1.0, inclinaison_x: 0.0, inclinaison_y: 0.0, ecart_profondeur: 0.0, lisse: false, adoucir_entree: 0.0, adoucir_sortie: 0.0 },
+        poskeys::Entree { image: 1, x: 0.0, y: 0.0, echelle: 1.0, rotation: 0.0, etirement_x: 1.0, etirement_y: 1.0, inclinaison_x: 0.0, inclinaison_y: 0.0, ecart_profondeur: 0.0, lisse: false, adoucir_entree: 0.0, adoucir_sortie: 0.0 },
     ]);
     assert_eq!(clean.iter().map(|k| (k.frame, k.t.x)).collect::<Vec<_>>(), vec![(1, 0.0), (5, 2.0)]);
     std::fs::remove_dir_all(&dir).ok();

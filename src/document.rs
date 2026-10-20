@@ -177,6 +177,14 @@ pub struct LayerTransform {
     /// Anthony, 2026-10-18 : « l'étirement latéral »).
     pub stretch_x: f32,
     pub stretch_y: f32,
+    /// Inclinaison de la carte dans l'Espace 3D (`espace3d.rs`), en degrés : rotation autour de l'axe
+    /// horizontal (le haut vient vers la caméra quand elle est positive) puis de l'axe vertical (le bord
+    /// droit s'éloigne quand elle est positive). 0 : la carte est à plat, parallèle à la feuille.
+    pub tilt_x: f32,
+    pub tilt_y: f32,
+    /// Écart de profondeur, ajouté à `Layer::depth` : ce que porte la clé d'un calque animé (un calque fixe
+    /// n'a jamais d'écart, il change `depth` : une seule source).
+    pub dz: f32,
 }
 
 impl Default for LayerTransform {
@@ -188,13 +196,29 @@ impl Default for LayerTransform {
             angle: 0.0,
             stretch_x: 1.0,
             stretch_y: 1.0,
+            tilt_x: 0.0,
+            tilt_y: 0.0,
+            dz: 0.0,
         }
     }
 }
 
+/// Inclinaison la plus grande d'une carte (au-delà, elle est vue par la tranche).
+pub const MAX_TILT: f32 = 85.0;
+
 impl LayerTransform {
     pub fn is_identity(&self) -> bool {
         *self == Self::default()
+    }
+
+    /// La carte est inclinée dans l'espace (elle ne se pose plus par une affinité de la feuille).
+    pub fn is_tilted(&self) -> bool {
+        self.tilt_x != 0.0 || self.tilt_y != 0.0
+    }
+
+    /// Une inclinaison ramenée entre −`MAX_TILT` et `MAX_TILT` (une valeur abîmée : 0).
+    pub fn clamp_tilt(v: f32) -> f32 {
+        if v.is_finite() { v.clamp(-MAX_TILT, MAX_TILT) } else { 0.0 }
     }
 
     /// Un étirement ramené entre 1 % et 100 fois, son signe gardé (négatif : calque retourné).
@@ -456,6 +480,31 @@ impl Layer {
         self.pose_seen(self.pose(frame), seen)
     }
 
+    /// Profondeur du calque à l'image `frame` : `depth` plus l'écart de sa pose (clés), au plus près
+    /// `MIN_DEPTH`.
+    pub fn depth_at(&self, frame: usize) -> f32 {
+        (self.depth + self.pose(frame).dz).max(Self::MIN_DEPTH)
+    }
+
+    /// Règle la profondeur du calque à l'image `frame` : sa profondeur de base s'il est fixe, sinon l'écart
+    /// de la clé de cette image (créée au besoin).
+    pub fn set_depth_at(&mut self, frame: usize, depth: f32) {
+        let depth = depth.max(Self::MIN_DEPTH);
+        if self.pos_keys.is_empty() {
+            self.depth = depth;
+        } else {
+            let mut t = self.pose(frame);
+            t.dz = depth - self.depth;
+            self.set_pose(frame, t);
+        }
+    }
+
+    /// Un calque fixe n'a pas d'écart de profondeur : il passe dans `depth` (une seule source).
+    pub fn fold_dz(&mut self) {
+        self.depth = (self.depth + self.transform.dz).max(Self::MIN_DEPTH);
+        self.transform.dz = 0.0;
+    }
+
     /// La pose du calque à l'image `frame` du plan : celle que donnent ses clés de position, sinon sa
     /// transformation fixe (`transform`).
     pub fn pose(&self, frame: usize) -> LayerTransform {
@@ -472,17 +521,21 @@ impl Layer {
     pub fn set_pose(&mut self, frame: usize, t: LayerTransform) {
         if self.pos_keys.is_empty() {
             self.transform = t;
+            self.fold_dz();
         } else {
             crate::poskeys::set_key(&mut self.pos_keys, frame, t);
         }
     }
 
-    /// `t`, la pose du calque, vue par la caméra `seen` (voir `transform_seen`).
+    /// `t`, la pose du calque, vue par la caméra `seen` (voir `transform_seen`). Pour une carte inclinée
+    /// (`LayerTransform::is_tilted`), c'est la pose à plat : l'inclinaison se pose par un maillage
+    /// (`espace3d.rs`), pas par une affinité.
     fn pose_seen(&self, t: LayerTransform, seen: &CameraSeen) -> Option<LayerTransform> {
-        if self.depth == 0.0 || (seen.offset == Vec2::ZERO && seen.dolly == 0.0) {
+        let depth = self.depth + t.dz;
+        if depth == 0.0 || (seen.offset == Vec2::ZERO && seen.dolly == 0.0) {
             return Some(t);
         }
-        let d = self.depth.max(Self::MIN_DEPTH);
+        let d = depth.max(Self::MIN_DEPTH);
         let dist = seen.d0 * (1.0 + d) - seen.dolly;
         if dist <= seen.d0 * 0.02 {
             return None;

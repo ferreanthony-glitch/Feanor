@@ -83,7 +83,7 @@ fn stages(doc: &Document, frame: usize, level: u8) {
         .items
         .iter()
         .filter(|i| i.fond.is_none())
-        .map(|i| Low { raster: doc.cels[&i.cel].raster.clone(), opacity: i.opacity, tint: i.tint, transform: i.transform, blend: i.blend })
+        .map(|i| Low { raster: doc.cels[&i.cel].raster.clone(), opacity: i.opacity, tint: i.tint, transform: i.transform, warp: None, blend: i.blend })
         .collect();
     let steps: Vec<crate::fx::FxStep> = plan
         .items

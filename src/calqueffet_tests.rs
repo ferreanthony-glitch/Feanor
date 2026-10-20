@@ -338,7 +338,7 @@ fn a_floating_selection_below_bypasses_the_effect_during_the_gesture() {
     let e = adjustment(&mut d, "Négatif", vec![invert()], 0, 12);
     d.panels[0].layers = vec![layer("A", a, 12), e];
     let mut plan = render::panel_plan_at(&d, 0, 0, d.render_paper());
-    plan.items[0].pre = Some(render::Pre { aff: crate::vector::Affine::IDENTITY, dims: None, warp: None });
+    plan.items[0].pre = Some(render::Pre { aff: crate::vector::Affine::IDENTITY, dims: None, warp: None, card: false });
     let resolved = calqueffet::resolve(&d, &plan, Mode::Blocking);
     assert_eq!(resolved.items.len(), 1, "le repère est retiré, A reste");
     assert!(resolved.items[0].cel & (1 << 63) == 0);

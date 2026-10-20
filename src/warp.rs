@@ -30,6 +30,9 @@ pub struct Warp {
     pub from: Vec<Pos2>,
     /// Pour chaque point : où il tombe dans le dessin (avant la transformation du calque).
     pub to: Vec<Pos2>,
+    /// Pour chaque case : elle n'est pas dessinée (un de ses coins est invisible : derrière l'œil d'une caméra,
+    /// pour une carte inclinée de l'Espace 3D). Vide : toutes le sont.
+    pub hidden: Vec<bool>,
 }
 
 /// Un triangle du maillage : `(où il tombe, d'où il vient)` pour chacun de ses trois sommets.
@@ -58,11 +61,45 @@ impl Warp {
                 to.push(map(p));
             }
         }
-        Some(Warp { n, from, to })
+        Some(Warp { n, from, to, hidden: Vec::new() })
+    }
+
+    /// Un maillage de `n` × `n` cases sur la région `src` du dessin, qui peut ne pas tout montrer : `map` dit où tombe
+    /// chaque point, ou rien s'il est invisible (une case dont un coin l'est n'est pas dessinée). `None` si la région est
+    /// vide ou infinie, ou si rien n'est visible. Le dessin entier est l'image de la feuille (pas de marge).
+    pub fn partial(src: Rect, n: usize, map: impl Fn(Pos2) -> Option<Pos2>) -> Option<Warp> {
+        if !src.is_positive() || !src.is_finite() {
+            return None;
+        }
+        let n = n.clamp(1, 128);
+        let mut from = Vec::with_capacity((n + 1) * (n + 1));
+        let mut to = Vec::with_capacity((n + 1) * (n + 1));
+        let mut seen = Vec::with_capacity((n + 1) * (n + 1));
+        for j in 0..=n {
+            for i in 0..=n {
+                let p = pos2(src.min.x + src.width() * i as f32 / n as f32, src.min.y + src.height() * j as f32 / n as f32);
+                from.push(p);
+                let q = map(p).filter(|q| q.x.is_finite() && q.y.is_finite());
+                seen.push(q.is_some());
+                to.push(q.unwrap_or(pos2(0.0, 0.0)));
+            }
+        }
+        let mut hidden = Vec::with_capacity(n * n);
+        for j in 0..n {
+            for i in 0..n {
+                let a = j * (n + 1) + i;
+                hidden.push(!(seen[a] && seen[a + 1] && seen[a + n + 1] && seen[a + n + 2]));
+            }
+        }
+        if hidden.iter().all(|h| *h) {
+            return None;
+        }
+        Some(Warp { n, from, to, hidden })
     }
 
     /// Les deux triangles de chaque case. `layer` : la transformation du calque, appliquée aux
-    /// points d'arrivée.
+    /// points d'arrivée. Une case cachée (`hidden`) donne deux triangles sans surface : ils ne dessinent rien, et le
+    /// nombre de triangles reste le même.
     pub fn triangles<'a>(&'a self, layer: Option<&'a Affine>) -> impl Iterator<Item = Tri> + 'a {
         let n = self.n;
         let at = move |i: usize, j: usize| {
@@ -73,6 +110,9 @@ impl Warp {
         (0..n).flat_map(move |j| {
             (0..n).flat_map(move |i| {
                 let (a, b, c, d) = (at(i, j), at(i + 1, j), at(i, j + 1), at(i + 1, j + 1));
+                if self.hidden.get(j * n + i).copied().unwrap_or(false) {
+                    return [[a, a, a], [a, a, a]];
+                }
                 [[a, b, d], [a, d, c]]
             })
         })

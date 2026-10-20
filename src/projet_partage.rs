@@ -380,7 +380,7 @@ pub(crate) struct StructureLue {
 pub(crate) fn charger_structure(dir: &Path, octets: &[u8], sons: &HashMap<u64, Sound>, modeles: &HashMap<u64, Arc<Model3d>>) -> Result<StructureLue, String> {
     let texte = std::str::from_utf8(octets).map_err(|_| "la structure n'est pas du texte (UTF-8)".to_string())?;
     let mut m: Manifest = serde_json::from_str(texte.trim_start_matches('\u{feff}')).map_err(|e| format!("structure illisible ({e})"))?;
-    if m.format != FORMAT || m.version > VERSION_PARTAGE {
+    if m.format != FORMAT || m.version > crate::project::version_partage_ecrite() {
         return Err("ce n'est pas la structure d'un projet partagé de cette version".into());
     }
     let bloc = m.partage.take().ok_or("ce n'est pas un projet partagé")?;
@@ -506,7 +506,7 @@ pub(crate) struct EtatPlan {
 /// La structure du document, sans plans et sans révision : sa forme « canonique », celle dont on prend l'empreinte.
 pub(crate) fn structure_manifest(doc: &Document, projet: &str) -> Manifest {
     let mut m = manifest_de(doc, false);
-    m.version = VERSION_PARTAGE;
+    m.version = crate::project::version_partage_ecrite();
     let mut plans = Vec::new();
     for s in &m.sequences {
         for sc in &s.scenes {
