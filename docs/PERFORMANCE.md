@@ -820,6 +820,17 @@ maximum ≤ 4 (sauf la composition entière avec transformation, 1 % de pixels a
 énormes avec le processeur de référence (cause non trouvée : état commun du cache des effets entre essais, ou course) ; non
 livré, ces calques restent résolus sur le processeur.
 
+*Cause trouvée (2026-10-20, branche `gpufx-essai`)* : c'est le processeur de référence qui perdait l'image, pas la carte.
+`calqueffet::resolve` rangeait le dessin dérivé d'un calque d'ajustement dans la réserve des effets (`fxcache`) et n'en
+rendait que le numéro ; la composition (`render::composite_full`, l'export, les vignettes) le relisait ensuite, tuile par
+tuile, par ce numéro. Si d'autres calculs remplissaient la réserve entre-temps (les essais voisins du même processus, le fil
+de fond, un autre onglet), le dessin en sortait et le calque disparaissait de l'image avec tout ce qu'il couvre :
+`the_users_scenes_match_the_cpu_at_full_size` échouait alors sur l'image 12 de la scène 2 (moyenne 94,7, les 8 294 400
+pixels à plus de 2 niveaux), reproduit à coup sûr avec un fil qui remplit la réserve pendant l'essai. Le plan résolu tient
+maintenant ses dessins dérivés jusqu'à la fin de sa composition (`calqueffet::Resolu`, `Tenus` ; `derived` les y trouve) ;
+essai `calqueffet_tests::a_resolved_plan_keeps_its_derived_drawings_when_the_cache_lets_them_go`. La piste du dossier
+sur la carte peut reprendre sur cette base.
+
 Les écarts de 1 niveau sont les arrondis de la carte (le rond « au plus proche » du 8 bits) contre ceux du
 processeur, aux demi-niveaux exacts.
 
