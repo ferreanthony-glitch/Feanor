@@ -1582,7 +1582,7 @@ pub(crate) fn charger_plans(dir: &Path, tete: &Tete, scene: u64, entrees: Vec<se
         cadre: Some(tete.cadre),
         cadence: tete.cadence.max(1),
         papier: tete.papier,
-        sequences: vec![SequenceEntry { id: 1, nom: String::new(), scenes: vec![SceneEntry { id: scene.max(1), nom: String::new(), panneaux }] }],
+        sequences: vec![SequenceEntry { id: 1, nom: String::new(), numero: String::new(), scenes: vec![SceneEntry { id: scene.max(1), nom: String::new(), numero: String::new(), panneaux }] }],
         sons: Vec::new(),
         pistes_son: Vec::new(),
         guides: Vec::new(),
@@ -1594,6 +1594,7 @@ pub(crate) fn charger_plans(dir: &Path, tete: &Tete, scene: u64, entrees: Vec<se
         fond: BackgroundEntry::default(),
         volume_general: 1.0,
         storyboard_verrouille: false,
+        numerotation_verrouillee: false,
         proprietes: PropertiesEntry::default(),
     };
     let loaded = load_manifest(manifest, dir, quick, None);
@@ -1902,7 +1903,7 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
         }
         if !panneaux.is_empty() {
             let top = top_id(&manifest);
-            manifest.sequences.push(SequenceEntry { id: top + 1, nom: String::new(), scenes: vec![SceneEntry { id: top + 2, nom: String::new(), panneaux }] });
+            manifest.sequences.push(SequenceEntry { id: top + 1, nom: String::new(), numero: String::new(), scenes: vec![SceneEntry { id: top + 2, nom: String::new(), numero: String::new(), panneaux }] });
             a_ranger = Some((top + 1, top + 2, cles));
         }
     }
