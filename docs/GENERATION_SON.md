@@ -16,7 +16,7 @@ SHOT lit le storyboard et **propose des sons témoins**, de qualité animatique 
 ambiances, une musique d'intention, des voix pour les dialogues. Le réalisateur les écoute et les accepte, les
 régénère ou les supprime. Rien n'entre dans le montage sans son accord.
 
-- Panneau **Suggestions sonores** (barre des panneaux, Son > Suggestions sonores…, commande
+- Panneau **Suggestions sonores** (menu **Labo** > Suggestions sonores…, commande
   `vue.suggestions_sonores`), fermé par défaut, ouvert dans la colonne de droite.
 - **Lire le storyboard** (`suggestion.lire`) sur tout le film, la séquence courante, le plan courant ou une
   plage de plans. La liste montre pour chaque proposition : l'icône de la sorte, le plan et le moment dans le plan,
