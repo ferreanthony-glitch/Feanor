@@ -43,6 +43,9 @@ pub struct Pre {
     /// Enveloppe ou perspective (`warp.rs`) : la feuille est posée par ce maillage, pas par `aff`
     /// (le maillage compte la marge de la feuille).
     pub warp: Option<std::sync::Arc<crate::warp::Warp>>,
+    /// Carte inclinée de l'Espace 3D (`espace3d.rs`) : le maillage pose le calque entier sur la feuille, ce n'est ni un
+    /// geste en cours ni une feuille flottante (un calque d'ajustement au-dessus la voit comme un dessin posé).
+    pub card: bool,
 }
 
 impl PlanItem {
@@ -76,6 +79,9 @@ pub enum FondPart {
     /// Le repère d'un calque d'effet d'ajustement (`calqueffet.rs`) : il se résout, avec les éléments
     /// qu'il couvre, en un dessin dérivé (`calqueffet::resolve`). Jamais composé tel quel.
     Reglage(std::sync::Arc<crate::calqueffet::Reglage>),
+    /// Les objets 3D du plan, vus de l'œil de la caméra à cette image (`espace3dobjets.rs`) : l'élément le plus bas
+    /// du plan, sous tous les calques.
+    Objets(crate::espace3dobjets::ObjetsCle),
 }
 
 /// L'élément du fond sous le trait du calque `layer` (s'il en a un), à placer juste sous `line`,
@@ -637,6 +643,9 @@ struct Resolved<'a> {
     ky: f32,
     /// Le dessin a la taille de la feuille.
     same: bool,
+    /// Feuille posée par un maillage (carte inclinée de l'Espace 3D, enveloppe, perspective) : le dessin posé sur la
+    /// feuille entière, calculé une fois ; il remplace le dessin de l'élément.
+    laid: Option<Raster>,
 }
 
 fn resolve<'a>(doc: &'a Document, plan: &'a Plan) -> Vec<Resolved<'a>> {
@@ -644,10 +653,14 @@ fn resolve<'a>(doc: &'a Document, plan: &'a Plan) -> Vec<Resolved<'a>> {
         .iter()
         .filter_map(|item| {
             let cel = crate::fx::shown(doc, item)?;
+            if let Some((warp, layer)) = item.warp(doc.stage_center()) {
+                let laid = warp.rasterize(&cel.raster, layer.as_ref(), doc.width, doc.height);
+                return Some(Resolved { item, cel, inv: None, kx: 1.0, ky: 1.0, same: true, laid: Some(laid) });
+            }
             let (w, h) = (cel.raster.width, cel.raster.height);
             let kx = w as f32 / doc.width.max(1) as f32;
             let ky = h as f32 / doc.height.max(1) as f32;
-            Some(Resolved { item, cel, inv: inverse_of(doc, item), kx, ky, same: w == doc.width && h == doc.height })
+            Some(Resolved { item, cel, inv: inverse_of(doc, item), kx, ky, same: w == doc.width && h == doc.height, laid: None })
         })
         .collect()
 }
@@ -657,7 +670,7 @@ fn resolve<'a>(doc: &'a Document, plan: &'a Plan) -> Vec<Resolved<'a>> {
 fn pixel_of(layers: &[Resolved], base: Color32, x: i64, y: i64) -> Color32 {
     let mut c = base;
     for l in layers {
-        let r = &l.cel.raster;
+        let r = l.laid.as_ref().unwrap_or(&l.cel.raster);
         let s = match &l.inv {
             Some(inv) => {
                 let p = inv.apply(egui::pos2(x as f32 + 0.5, y as f32 + 0.5));
@@ -687,13 +700,16 @@ pub fn composite_pixel_i(doc: &Document, plan: &Plan, x: i64, y: i64) -> Color32
 /// Plan de l'image `frame` du panneau `index` tel que la caméra le filme (vignettes, export) :
 /// les calques en profondeur défilent selon le décalage de la caméra (multiplan).
 pub fn panel_plan_at(doc: &Document, index: usize, frame: usize, paper: Option<[u8; 3]>) -> Plan {
-    plan_with_camera(&doc.panels[index], frame, paper, &doc.camera_seen(index, frame), doc.fps)
+    let camera = doc.camera_seen(index, frame);
+    // Les objets 3D du plan, s'ils sont dans l'image : sous tous les calques.
+    let objects = crate::espace3dobjets::key_for(doc, index, &camera);
+    plan_with_camera(&crate::espace3d::Monde::of(doc), &doc.panels[index], frame, paper, &camera, doc.fps, objects)
 }
 
 /// L'image `frame` d'un plan rangé (une version qui n'est pas dans `doc.panels`), avec sa propre caméra : la
 /// vignette d'une carte de la pile des versions.
 pub fn stored_panel_plan(doc: &Document, panel: &Panel, frame: usize, paper: Option<[u8; 3]>) -> Plan {
-    plan_with_camera(panel, frame, paper, &doc.camera_seen_du_plan_range(panel, frame), doc.fps)
+    plan_with_camera(&crate::espace3d::Monde::of(doc), panel, frame, paper, &doc.camera_seen_du_plan_range(panel, frame), doc.fps, None)
 }
 
 /// Le calque `li` du plan `index` seul, à l'image `frame`, tel que la caméra au centre le voit
@@ -723,12 +739,18 @@ pub fn layer_plan_at(doc: &Document, index: usize, li: usize, frame: usize) -> O
     Some(Plan { paper: None, items: fond_item(l, &line).into_iter().chain([line]).collect() })
 }
 
-fn plan_with_camera(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, fps: u32) -> Plan {
+fn plan_with_camera(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, fps: u32, objects: Option<crate::espace3dobjets::ObjetsCle>) -> Plan {
     let mut items: Vec<PlanItem> = Vec::new();
+    // Les objets 3D passent avant le premier calque, mais après son rang de départ : un calque d'ajustement qui couvre
+    // toute la pile les couvre aussi.
+    let mut objects = objects.map(|k| crate::espace3dobjets::item(&k));
     // Pour chaque calque, le nombre d'éléments posés avant lui (un calque d'effet couvre ceux d'en dessous).
     let mut starts: Vec<usize> = Vec::with_capacity(panel.layers.len());
     for (li, l) in panel.layers.iter().enumerate() {
         starts.push(items.len());
+        if li == 0 {
+            items.extend(objects.take());
+        }
         // Caché (lui ou son dossier, 13b-5) : rien ; l'opacité du dossier s'ajoute.
         let Some(opacity) = crate::folders::effect(&panel.layers, li) else { continue };
         // Calque d'effet (`calqueffet.rs`) : son repère, ou rien (une incrustation se pose sur l'image
@@ -737,24 +759,28 @@ fn plan_with_camera(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera:
             items.extend(crate::calqueffet::marker(&panel.layers, li, frame, opacity, &starts));
             continue;
         }
-        let Some(t) = l.transform_seen_at(camera, frame) else { continue };
+        // Derrière la caméra : rien. Sinon l'affinité d'avant (carte à plat) ou le maillage d'une carte inclinée
+        // de l'Espace 3D (`espace3d::place`).
+        let Some(placed) = crate::espace3d::place(world, l, frame, camera) else { continue };
         // Calque vidéo (13k) : l'image de la vidéo qui tombe là.
         let Some(cel) = crate::video::cel_at(l, frame, fps) else { continue };
         let line = PlanItem {
             cel,
             opacity: (opacity * 255.0).round() as u8,
             tint: None,
-            transform: (!t.is_identity()).then_some(t),
+            transform: placed.transform,
             blend: l.blend,
             fx: crate::fx::layer_steps(l, frame, None),
             ctg: crate::ctg::input(&panel.layers, li, frame),
             fond: None,
-            pre: None,
+            pre: placed.pre,
         };
         // Le fond sous le trait (`fond.rs`), juste sous le dessin de son calque.
         items.extend(fond_item(l, &line));
         items.push(line);
     }
+    // (Une pile sans calque : les objets seuls.)
+    items.extend(objects);
     Plan { paper, items }
 }
 

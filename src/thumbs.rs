@@ -226,7 +226,7 @@ impl Thumbs {
         // (Plus le nombre de fonds sous le trait arrivés de l'arrière-plan, si le plan montre un fond : la
         // vignette montre le fond d'avant jusqu'à l'arrivée du nouveau. Un plan sans fond ne se refait pas
         // quand le fond d'un autre arrive. Et la taille du cadre, qui donne celle de la vignette.)
-        let fonds = plan.items.iter().any(|i| matches!(i.fond, Some(render::FondPart::Forme(_))));
+        let fonds = plan.items.iter().any(|i| matches!(i.fond, Some(render::FondPart::Forme(_) | render::FondPart::Objets(_))));
         let versions = plan
             .items
             .iter()
@@ -332,6 +332,11 @@ pub(crate) fn snapshot(doc: &Document, plan: &Plan) -> Document {
     let mut mini = Document::new(doc.width, doc.height, doc.fps);
     mini.frame = doc.frame;
     mini.paper = doc.paper;
+    // Les objets 3D du plan (`espace3dobjets.rs`) se rendent d'après la scène.
+    if plan.items.iter().any(|i| matches!(i.fond, Some(render::FondPart::Objets(_)))) {
+        mini.scenes3d = doc.scenes3d.clone();
+        mini.models = doc.models.clone();
+    }
     for item in &plan.items {
         for id in std::iter::once(item.cel).chain(item.ctg.iter().flat_map(|c| c.sources.iter().copied())) {
             if mini.cels.contains_key(&id) {

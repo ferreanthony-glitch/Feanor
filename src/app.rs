@@ -508,9 +508,7 @@ pub struct App {
     pub(crate) stage_view: Option<View>,
     /// Cadre de format personnalisé choisi (même s'il vaut l'un des formats proposés).
     pub(crate) format_custom: bool,
-    /// Plateau en 3D (9e) : affiché, outil, vue, geste en cours, textures.
-    pub(crate) stage3d: crate::stage3dui::Stage3dState,
-    /// Scène 3D de blocage (`scene3dui.rs`) : affichée, objets choisis, vue, envoi vers un calque.
+    /// Espace 3D (`scene3dui.rs`, `docs/ESPACE3D.md`) : affiché, cartes et objets choisis, vue, envoi vers un calque.
     pub(crate) scene3d: crate::scene3dui::Scene3dState,
     /// Le dessin est affiché dans la vignette choisie de la vue Vignettes (6e).
     pub(crate) in_card: bool,
@@ -1071,7 +1069,6 @@ impl App {
             camera_view: false,
             stage_view: None,
             format_custom: false,
-            stage3d: Default::default(),
             scene3d: Default::default(),
             in_card: false,
             // Nul : la page sera mise à la largeur de la vue au premier affichage.
@@ -1363,8 +1360,26 @@ impl App {
         self.layer_seen().affine(self.doc.stage_center())
     }
 
-    /// Point de la feuille → point du dessin du calque courant (là où le pinceau doit peindre).
+    /// Le calque courant est une carte inclinée (Espace 3D) : le monde, son placement, l'œil de la caméra. Il ne se pose
+    /// plus par une affinité mais par une projection (`espace3d.rs`).
+    fn tilted_card(&self) -> Option<(crate::espace3d::Monde, crate::scene3d::Xf, [f32; 3])> {
+        let l = self.layer();
+        let t = l.pose(self.cur_frame);
+        if !t.is_tilted() {
+            return None;
+        }
+        let world = crate::espace3d::Monde::of(&self.doc);
+        let xf = world.card_xf(&t, l.depth_at(self.cur_frame));
+        let eye = world.eye_seen(&self.doc.camera_seen(self.cur_panel, self.cur_frame));
+        Some((world, xf, eye))
+    }
+
+    /// Point de la feuille → point du dessin du calque courant (là où le pinceau doit peindre). Sur une carte inclinée, le
+    /// regard de la caméra qui passe par ce point de la feuille traverse la carte au point où l'on peint.
     pub(crate) fn to_layer(&self, stage: Pos2) -> Pos2 {
+        if let Some((world, xf, eye)) = self.tilted_card() {
+            return world.sheet_to_card(eye, &xf, stage).unwrap_or(stage);
+        }
         if self.layer_seen().is_identity() {
             return stage;
         }
@@ -1373,6 +1388,10 @@ impl App {
 
     /// Point du dessin du calque courant → écran.
     pub(crate) fn layer_to_screen(&self, p: Pos2) -> Pos2 {
+        if let Some((world, xf, eye)) = self.tilted_card() {
+            let stage = world.card_to_sheet(eye, &xf, p).unwrap_or(p);
+            return self.view.to_screen(self.canvas_rect, self.canvas_size(), stage);
+        }
         let stage = if self.layer_seen().is_identity() {
             p
         } else {
@@ -1445,6 +1464,9 @@ impl App {
         let washed = onion && self.light_table && !self.playing;
         // Multiplan : les calques en profondeur défilent selon la position de la caméra.
         let camera = self.doc.camera_seen(self.cur_panel, frame);
+        let world = crate::espace3d::Monde::of(&self.doc);
+        // Les objets 3D du plan, s'ils sont dans l'image : sous tous les calques (`espace3dobjets.rs`).
+        let mut objects = crate::espace3dobjets::key_for(&self.doc, self.cur_panel, &camera).map(|k| crate::espace3dobjets::item(&k));
         // Tremblement du trait (`tremblement.rs`) : à l'écran et à l'arrêt, les calques qui animent
         // à l'arrêt suivent l'horloge ; l'export, les vignettes et la lecture, l'image.
         let rest = (onion && !self.playing).then(|| crate::tremblement::rest_frame(crate::fx::now_ms(), self.doc.fps));
@@ -1458,6 +1480,9 @@ impl App {
         let mut starts: Vec<usize> = Vec::with_capacity(layers.len());
         for (li, layer) in layers.iter().enumerate() {
             starts.push(items.len());
+            if li == 0 {
+                items.extend(objects.take());
+            }
             // Caché (lui ou son dossier) : rien ; sinon son opacité, avec celle de son dossier.
             let Some(mut opacity) = crate::folders::effect(layers, li) else { continue };
             // Calque d'effet (`calqueffet.rs`) : son repère, qui couvre ce qui est dessous.
@@ -1469,8 +1494,9 @@ impl App {
                 opacity *= self.light_table_strength.clamp(0.05, 1.0);
             }
             // Derrière la caméra (elle a avancé au-delà) : on ne le voit pas.
-            let Some(seen) = layer.transform_seen_at(&camera, frame) else { continue };
-            let transform = (!seen.is_identity()).then_some(seen);
+            // (Carte inclinée de l'Espace 3D : posée par un maillage, `espace3d::place`.)
+            let Some(placed) = crate::espace3d::place(&world, layer, frame, &camera) else { continue };
+            let (transform, card_pre) = (placed.transform, placed.pre);
             // Pelure d'oignon : le calque courant, et ceux qui ont la leur (13b).
             let mut onion_items = Vec::new();
             if onion && self.onion.enabled && !self.playing && (li == cur || layer.onion) {
@@ -1494,7 +1520,7 @@ impl App {
                             fx: Vec::new(),
                             ctg: None,
                             fond: None,
-                            pre: None,
+                            pre: card_pre.clone(),
                         });
                     }
                 }
@@ -1521,7 +1547,7 @@ impl App {
                     // Calque CTG (13j) : rempli d'après les traits de ses sources.
                     ctg: crate::ctg::input(layers, li, frame),
                     fond: None,
-                    pre: None,
+                    pre: card_pre.clone(),
                 };
                 // Fond sous le trait (`fond.rs`), le trait par-dessus.
                 items.extend(crate::render::fond_item(layer, &line));
@@ -1534,11 +1560,13 @@ impl App {
                 }
                 // Calque CTG courant, à l'écran seulement : ses graffitis, pâles, par-dessus.
                 if onion && layer.ctg.is_some() && li == cur && !self.playing {
-                    items.push(PlanItem { cel, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: None });
+                    items.push(PlanItem { cel, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: card_pre.clone() });
                 }
             }
             items.append(&mut onion_items);
         }
+        // (Une pile sans calque : les objets seuls.)
+        items.extend(objects);
         Plan {
             // Arrière-plan (13e) : le papier seulement si c'est une couleur.
             paper: if paper { self.doc.render_paper() } else { None },
@@ -2367,6 +2395,15 @@ impl App {
         if crate::fx::fond_pending() {
             ctx.request_repaint_after(std::time::Duration::from_millis(16));
         }
+        // Objets 3D rendus en arrière-plan pour l'image (`espace3dobjets.rs`).
+        if crate::espace3dobjets::poll(self.doc.scenes3d.rev) {
+            self.renderer.invalidate_composed();
+            self.renderer.invalidate_all();
+            ctx.request_repaint();
+        }
+        if crate::espace3dobjets::pending(self.doc.scenes3d.rev) {
+            ctx.request_repaint_after(std::time::Duration::from_millis(16));
+        }
     }
 
     pub(crate) fn resize_brush(&mut self, factor: f32) {
@@ -3063,7 +3100,6 @@ impl App {
         self.fit_pending = true;
         // Vue du plateau et vue 3D recadrées sur le nouveau projet (9d, 9e).
         self.stage_view = None;
-        self.stage3d.cam = None;
         self.scene3d_reset();
         self.modified = false;
         self.path = None;
@@ -3094,7 +3130,6 @@ impl App {
         self.renderer.invalidate_all();
         self.fit_pending = true;
         self.stage_view = None;
-        self.stage3d.cam = None;
         self.scene3d_reset();
         self.length_origin = None;
         self.modified = true;
@@ -4098,19 +4133,6 @@ impl App {
             "calque.reinit_transformation" => self.reset_layer_transform(),
             "camera.vue" => self.set_camera_view(!self.camera_view),
             "vue.cadres_securite" => self.layout.safe_frames = !self.layout.safe_frames,
-            "vue.3d" => self.set_stage3d(!(self.stage3d.on && !self.camera_view)),
-            "vue3d.recadrer" => {
-                self.set_stage3d(true);
-                self.fit_stage3d(35.0, 20.0);
-            }
-            "outil3d.orbite" | "outil3d.glisser" | "outil3d.avancer" | "outil3d.deplacer" => {
-                if let Some(t) = crate::stage3dui::Nav3d::ALL.into_iter().find(|t| t.action() == action) {
-                    if !self.stage3d.on || self.camera_view {
-                        self.set_stage3d(true);
-                    }
-                    self.stage3d.tool = t;
-                }
-            }
             "camera.masque" => self.camera_mask = !self.camera_mask,
             "camera.reinitialiser" => self.reset_camera(),
             "camera.cle_debut" => self.add_camera_key(0),

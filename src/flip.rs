@@ -15,11 +15,12 @@ use crate::camera::Camera;
 use crate::document::LayerTransform;
 
 /// La transformation `t` (pivot : centre de la feuille) suivie d'un miroir autour de la verticale
-/// x = `axis` de la feuille : la rotation s'inverse, la largeur change de signe.
+/// x = `axis` de la feuille : la rotation s'inverse, la largeur change de signe, et l'inclinaison d'une carte autour de
+/// la verticale (Espace 3D) aussi (celle autour de l'horizontale ne change pas).
 pub fn mirror_transform_x(t: LayerTransform, pivot: Pos2, axis: f32) -> LayerTransform {
     let p = t.affine(pivot).apply(pivot);
     let target = pos2(2.0 * axis - p.x, p.y);
-    let t1 = LayerTransform { angle: -t.angle, stretch_x: -t.stretch_x, ..t };
+    let t1 = LayerTransform { angle: -t.angle, stretch_x: -t.stretch_x, tilt_y: -t.tilt_y, ..t };
     let q = t1.affine(pivot).apply(pivot);
     LayerTransform { x: t1.x + target.x - q.x, y: t1.y + target.y - q.y, ..t1 }
 }

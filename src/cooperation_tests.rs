@@ -193,20 +193,22 @@ fn sharing_leaves_the_original_untouched_and_a_classic_project_keeps_its_format(
     let racine = dossier("original-partage");
     partage_io::partager(&relu.doc, &racine.join("Film").join("Film.pelure"), &signature("Anthony"), "p-essai", None, 2).expect("partage");
     assert_eq!(avant, fx::arbre(fx::racine(&classique)), "l'original n'a pas bougé d'un octet");
-    // Un projet classique s'écrit au format 33, sans bloc de partage.
+    // Un projet classique s'écrit au format classique (35 depuis l'Espace 3D), sans bloc de partage.
     let manifeste = fx::racine(&classique).join("Film.pelure");
     let v = fx::lire_json(&manifeste);
-    assert_eq!(v["version"], 33);
+    assert_eq!(v["version"], project::VERSION);
     assert!(v.get("partage").is_none());
     assert!(project::load(&manifeste).expect("classique").partage.is_none());
 }
 
 #[test]
-fn the_shared_manifest_is_format_34_with_no_plan_inside_and_one_file_per_plan() {
+fn the_shared_manifest_is_the_newer_of_the_shared_and_classic_format_with_no_plan_inside_and_one_file_per_plan() {
     let racine = dossier("disposition");
     let manifeste = partager(&film(4), &racine);
     let v = fx::lire_json(&manifeste);
-    assert_eq!(v["version"], 34);
+    // (Espace 3D : le format classique est passé à 35, un projet partagé écrit le plus grand des deux numéros.)
+    assert_eq!(v["version"], project::version_partage_ecrite());
+    assert!(project::version_partage_ecrite() >= project::VERSION_PARTAGE && project::version_partage_ecrite() >= project::VERSION);
     assert_eq!(v["partage"]["plans"].as_array().map(Vec::len), Some(4));
     for seq in v["sequences"].as_array().expect("séquences") {
         for sc in seq["scenes"].as_array().expect("scènes") {
@@ -214,8 +216,9 @@ fn the_shared_manifest_is_format_34_with_no_plan_inside_and_one_file_per_plan() 
         }
     }
     assert_eq!(crate::depot::nombre_de_plans(fx::racine(&manifeste)), 4);
-    // Un SHOT sans partage refuse la structure plutôt que de montrer un film sans plans : le format est plus récent.
-    assert!(v["version"].as_u64().unwrap_or(0) > u64::from(project::VERSION));
+    // Un SHOT sans partage (format classique 33 au plus) refuse la structure plutôt que de montrer un film sans plans :
+    // le format est plus récent.
+    assert!(v["version"].as_u64().unwrap_or(0) > 33);
 }
 
 #[test]

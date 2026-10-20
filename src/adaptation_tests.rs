@@ -260,7 +260,7 @@ fn camera_keys_follow_the_rule_and_keep_their_lens() {
 
 fn calque_complet() -> Layer {
     let mut l = Layer::new("Décor", LayerKind::Bitmap);
-    l.transform = LayerTransform { x: 100.0, y: -40.0, scale: 1.3, angle: 12.0, stretch_x: 1.1, stretch_y: 0.9 };
+    l.transform = LayerTransform { x: 100.0, y: -40.0, scale: 1.3, angle: 12.0, stretch_x: 1.1, stretch_y: 0.9, ..Default::default() };
     l.pos_keys = vec![PosKey::new(0, l.transform), PosKey::new(8, LayerTransform { x: 400.0, y: 200.0, ..l.transform })];
     let mut flou = Effect::new(EffectKind::GaussianBlur);
     flou.values[0] = 40.0;

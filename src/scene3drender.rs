@@ -404,17 +404,61 @@ pub fn render_plate(
     threads: usize,
 ) -> Plate {
     let plan = scenes.plan(panel).cloned().unwrap_or_default();
+    // Figé par l'Espace 3D : la feuille vue de l'œil de la caméra du plan, alignée sur la feuille.
+    if plan.sheet_aligned {
+        return render_plate_eye(scenes, panel, seq, models, stage, frame, plan.cam.pos, ss, threads);
+    }
+    render_plate_with(scenes, panel, seq, models, stage, frame, plan.cam, plan.render.area, None, ss, threads)
+}
+
+/// Les objets du plan vus de l'œil `eye` (mètres) de la caméra du plan : regard droit devant, sans zoom ni rotation,
+/// toute la feuille. C'est la feuille telle que l'œil la voit (le multiplan), sur laquelle la caméra du plan ajoute
+/// ensuite son zoom, sa rotation, sa bascule et son panoramique, comme pour tout calque (`espace3dobjets.rs`).
+pub fn render_plate_eye(
+    scenes: &Scenes3d,
+    panel: u64,
+    seq: u64,
+    models: &HashMap<u64, Arc<Model3d>>,
+    stage: [usize; 2],
+    frame: [usize; 2],
+    eye: V3,
+    ss: usize,
+    threads: usize,
+) -> Plate {
+    let cam = crate::scene3d::SceneCam { pos: eye, pan: 0.0, tilt: 0.0, roll: 0.0, focal: crate::camera::REF_FOCAL };
+    // L'image est celle de la feuille : le point qu'on voit droit devant l'œil est celui de la feuille sous l'œil
+    // (x, y de la caméra), pas le centre de la feuille.
+    let k = crate::scene3d::SceneCam::meters_per_px(frame[0]);
+    let center = [stage[0] as f32 / 2.0 + eye[0] / k, stage[1] as f32 / 2.0 - eye[1] / k];
+    render_plate_with(scenes, panel, seq, models, stage, frame, cam, RenderArea::Sheet, Some(center), ss, threads)
+}
+
+/// Le rendu des objets du plan par la caméra `cam`, sur `area` (lumière et style : ceux de la scène du plan).
+pub fn render_plate_with(
+    scenes: &Scenes3d,
+    panel: u64,
+    seq: u64,
+    models: &HashMap<u64, Arc<Model3d>>,
+    stage: [usize; 2],
+    frame: [usize; 2],
+    cam: crate::scene3d::SceneCam,
+    area: RenderArea,
+    center: Option<[f32; 2]>,
+    ss: usize,
+    threads: usize,
+) -> Plate {
+    let plan = scenes.plan(panel).cloned().unwrap_or_default();
     let mut lib = MeshLib::default();
     let items = items_of(scenes, panel, seq, models, &mut lib);
     let at = frame_origin(stage, frame);
-    let (size, origin) = match plan.render.area {
+    let (size, origin) = match area {
         RenderArea::Frame => (frame, at),
         RenderArea::Sheet => (stage, [0, 0]),
     };
-    // Où la caméra regarde, dans l'image : le centre du cadre.
-    let center = [(at[0] - origin[0]) as f32 + frame[0] as f32 / 2.0, (at[1] - origin[1]) as f32 + frame[1] as f32 / 2.0];
+    // Où la caméra regarde, dans l'image : le centre du cadre (ou le point demandé).
+    let center = center.unwrap_or([(at[0] - origin[0]) as f32 + frame[0] as f32 / 2.0, (at[1] - origin[1]) as f32 + frame[1] as f32 / 2.0]);
     let opts = Opts {
-        view: plan.cam.view(frame[0].max(1) as f32),
+        view: cam.view(frame[0].max(1) as f32),
         size,
         center,
         light: plan.light,

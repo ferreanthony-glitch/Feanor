@@ -206,7 +206,6 @@ etat_projet! {
     flip_manual: Option<(usize, usize)> = None,
     // --- vue 3D, références, envois, versions
     ref3d: crate::ref3dtool::Ref3dState = Default::default(),
-    stage3d: crate::stage3dui::Stage3dState = Default::default(),
     scene3d: crate::scene3dui::Scene3dState = Default::default(),
     refs: crate::referencesui::RefUi = Default::default(),
     envois_ui: crate::envoisui::EnvoisUi = Default::default(),

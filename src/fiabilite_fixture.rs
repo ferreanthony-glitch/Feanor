@@ -217,7 +217,7 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
     perso.fond = Some(FondReglages { couleur: [250, 240, 200], debord: 4, trous: 7, bord: false });
     perso.blend = BlendMode::Multiply;
     perso.opacity = 0.8;
-    perso.transform = LayerTransform { x: 12.5, y: -4.0, scale: 1.1, angle: 3.0, stretch_x: 1.2, stretch_y: 0.9 };
+    perso.transform = LayerTransform { x: 12.5, y: -4.0, scale: 1.1, angle: 3.0, stretch_x: 1.2, stretch_y: 0.9, ..Default::default() };
     perso.depth = 0.5;
     perso.pre = Behaviour::Loop;
     perso.post = Behaviour::PingPong;

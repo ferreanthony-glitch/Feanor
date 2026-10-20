@@ -148,13 +148,27 @@ pub const FORMAT: &str = "pelure-projet";
 /// Une version précédente refuse le projet : elle montrerait le calque immobile à sa pose fixe, le film
 /// changerait sans prévenir. Un projet de version 32 ou moins s'ouvre tel quel. (Si une autre branche a aussi
 /// pris le numéro 33 pour ses propres champs, la fusion garde le 33 et réunit les deux descriptions.)
-pub const VERSION: u32 = 33;
+/// 35 (2026-10-20, `docs/ESPACE3D.md`) : **Espace 3D** — un calque est une carte posée dans l'espace : son inclinaison
+/// (`inclinaison_x`, `inclinaison_y` de sa `transformation`, en degrés) et, dans chaque clé de position, `inclinaison_x`,
+/// `inclinaison_y` et `ecart_profondeur` (écart à la `profondeur` du calque). Tous omis quand ils valent 0. Une version
+/// précédente refuse le projet : elle montrerait les cartes inclinées à plat, le film changerait sans prévenir. Un projet de
+/// version 34 ou moins s'ouvre tel quel, à l'identique (cartes à plat, aucun écart). Le numéro 34 est celui des projets
+/// partagés (ci-dessous) : comme leur numéro est celui du format classique quand celui-ci le dépasse, un projet partagé écrit
+/// désormais 35 (`version_partage_ecrite`).
+pub const VERSION: u32 = 35;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
-/// partagé porte ce numéro ; `VERSION` reste 33 pour tous les autres, qui s'écrivent et se lisent comme avant. Une version de
-/// SHOT qui ne connaît pas le partage refuse le projet (« créé par une version plus récente ») au lieu de montrer un film
-/// sans plans.
+/// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se
+/// lisent comme avant. Une version de SHOT qui ne connaît pas le partage refuse le projet (« créé par une version plus
+/// récente ») au lieu de montrer un film sans plans.
 pub const VERSION_PARTAGE: u32 = 34;
+
+/// Le numéro que porte la structure d'un projet partagé : le plus grand du numéro des projets partagés et du format classique
+/// (un projet partagé contient aussi des plans classiques : il doit être refusé par toute version qui ne connaît pas ce
+/// format, et rester lisible par celles qui connaissent le sien).
+pub const fn version_partage_ecrite() -> u32 {
+    if VERSION > VERSION_PARTAGE { VERSION } else { VERSION_PARTAGE }
+}
 const DRAWINGS: &str = "dessins";
 /// Fils qui lisent ou écrivent les dessins d'un projet en parallèle : au-delà de huit, le disque et
 /// la mémoire (une feuille décodée pèse 33 Mo) limitent plus que le processeur.
@@ -502,6 +516,15 @@ struct TransformEntry {
     etirement_x: f32,
     #[serde(default = "one", skip_serializing_if = "is_one")]
     etirement_y: f32,
+    /// Inclinaison de la carte dans l'Espace 3D, en degrés (35 ; absente = à plat).
+    #[serde(default, skip_serializing_if = "is_zero_f32")]
+    inclinaison_x: f32,
+    #[serde(default, skip_serializing_if = "is_zero_f32")]
+    inclinaison_y: f32,
+}
+
+fn is_zero_f32(v: &f32) -> bool {
+    *v == 0.0
 }
 
 fn is_one(v: &f32) -> bool {
@@ -1628,9 +1651,12 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                     rotation: l.transform.angle,
                     etirement_x: l.transform.stretch_x,
                     etirement_y: l.transform.stretch_y,
+                    inclinaison_x: l.transform.tilt_x,
+                    inclinaison_y: l.transform.tilt_y,
                 }),
                 cles_position: l.pos_keys.iter().map(crate::poskeys::Entree::from).collect(),
-                profondeur: l.depth,
+                // (Un calque fixe n'a pas d'écart de profondeur : s'il en reste un, il est écrit dans la profondeur.)
+                profondeur: if l.pos_keys.is_empty() { l.depth + l.transform.dz } else { l.depth },
                 toute_la_scene: l.scene_wide.map(|w| w.key),
                 fusion: l.blend,
                 pelure: l.onion,
@@ -2107,7 +2133,7 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
     if manifest.format != FORMAT {
         return Err("ce fichier n'est pas un projet SHOT".into());
     }
-    if manifest.version > VERSION_PARTAGE || (manifest.version > VERSION && manifest.partage.is_none()) {
+    if manifest.version > version_partage_ecrite() || (manifest.version > VERSION && manifest.partage.is_none()) {
         return Err(format!(
             "projet créé par une version plus récente de SHOT (format {})",
             manifest.version
@@ -2420,7 +2446,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                         transform: l
                             .transformation
                             .as_ref()
-                            .filter(|t| [t.x, t.y, t.echelle, t.rotation, t.etirement_x, t.etirement_y].iter().all(|v| v.is_finite()))
+                            .filter(|t| [t.x, t.y, t.echelle, t.rotation, t.etirement_x, t.etirement_y, t.inclinaison_x, t.inclinaison_y].iter().all(|v| v.is_finite()))
                             .map(|t| LayerTransform {
                                 x: t.x,
                                 y: t.y,
@@ -2428,6 +2454,9 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                                 angle: t.rotation,
                                 stretch_x: LayerTransform::clamp_stretch(t.etirement_x),
                                 stretch_y: LayerTransform::clamp_stretch(t.etirement_y),
+                                tilt_x: LayerTransform::clamp_tilt(t.inclinaison_x),
+                                tilt_y: LayerTransform::clamp_tilt(t.inclinaison_y),
+                                dz: 0.0,
                             })
                             .unwrap_or_default(),
                         pos_keys: crate::poskeys::from_entries(l.cles_position),

@@ -243,7 +243,7 @@ impl Flottante {
             _ if self.warp.is_some() => self.aff,
             (l, t) => Affine::translate(vec2(-(l as f32), -(t as f32))).then(&self.aff),
         };
-        let sheet = PlanItem { cel: sheet_id, ctg: None, pre: Some(Pre { aff, dims: self.dims, warp: self.warp.clone() }), ..line.clone() };
+        let sheet = PlanItem { cel: sheet_id, ctg: None, pre: Some(Pre { aff, dims: self.dims, warp: self.warp.clone(), card: false }), ..line.clone() };
         [base, sheet]
     }
 }
