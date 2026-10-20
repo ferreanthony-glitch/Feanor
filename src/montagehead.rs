@@ -52,6 +52,8 @@ pub(crate) fn clamp_head_w(w: f32) -> f32 {
 /// Où va chaque chose dans la rangée d'un calque, selon sa largeur.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct HeadLayout {
+    /// Le triangle qui replie la piste (`pistes.rs`), à gauche du nom.
+    pub chevron: Rect,
     pub name: Rect,
     /// Afficher, verrouiller, pelure d'oignon : autant qu'il en tient, dans cet ordre.
     pub icons: Vec<Rect>,
@@ -67,17 +69,20 @@ pub(crate) struct HeadLayout {
 pub(crate) fn head_layout(r: Rect) -> HeadLayout {
     let w = r.width();
     let left = r.left() + 6.0;
+    // Le triangle d'abord, le nom ensuite ; les réglages de la deuxième ligne restent où ils étaient.
+    let name_left = r.left() + 3.0 + crate::pistes::CHEVRON_W + 1.0;
     // La colonne étroite d'avant garde son nom seul (et le menu ⋮) ; les réglages viennent quand
     // on l'élargit.
     let opacity = w >= OPTIONS_FROM;
     let (y1, h1) = if opacity { (r.top() + 2.0, 18.0) } else { (r.center().y - 9.0, 18.0) };
-    let menu = (w >= 6.0 + NAME_MIN + MENU_W + 2.0).then(|| Rect::from_min_size(pos2(r.right() - MENU_W - 2.0, y1), vec2(MENU_W, h1)));
+    let menu = (w >= name_left - r.left() + NAME_MIN + MENU_W + 2.0).then(|| Rect::from_min_size(pos2(r.right() - MENU_W - 2.0, y1), vec2(MENU_W, h1)));
     let icons_right = menu.map_or(r.right() - 2.0, |m| m.left());
-    let room = icons_right - (left + NAME_MIN);
+    let room = icons_right - (name_left + NAME_MIN);
     let n = ((room / ICON_W).floor().max(0.0) as usize).min(3);
     let icons: Vec<Rect> = (0..n).map(|k| Rect::from_min_size(pos2(icons_right - (n - k) as f32 * ICON_W, y1), vec2(ICON_W, h1))).collect();
     let name_right = icons.first().map_or(icons_right, |i| i.left()) - 2.0;
-    let name = Rect::from_min_max(pos2(left, y1), pos2(name_right.max(left), y1 + h1));
+    let name = Rect::from_min_max(pos2(name_left, y1), pos2(name_right.max(name_left), y1 + h1));
+    let chevron = Rect::from_min_size(pos2(r.left() + 3.0, y1), vec2(crate::pistes::CHEVRON_W, h1));
     let y2 = r.top() + 21.0;
     let line2 = |x: f32, width: f32| Rect::from_min_size(pos2(x, y2), vec2(width, 16.0));
     let (mut blend, mut after) = (None, None);
@@ -92,7 +97,7 @@ pub(crate) fn head_layout(r: Rect) -> HeadLayout {
             blend = Some(b);
         }
     }
-    HeadLayout { name, icons, menu, opacity, blend, after }
+    HeadLayout { chevron, name, icons, menu, opacity, blend, after }
 }
 
 /// Icône d'un pré / post-comportement.
@@ -162,6 +167,7 @@ impl App {
         }
         let fg = ui.visuals().text_color();
         let off = fg.gamma_multiply(0.35);
+        self.track_chevron(ui, at.chevron, li, false, 13.0, fg.gamma_multiply(0.7));
         if let Some(slot) = at.icons.first() {
             self.eye_button(ui, *slot, li, visible, if visible { fg } else { off });
         }
@@ -293,6 +299,10 @@ impl App {
         if in_montage && chosen > 1 && ui.button(format!("Fusionner les {chosen} calques choisis")).clicked() {
             ui.close_menu();
             self.merge_chosen_layers();
+        }
+        // Replier / déplier les pistes du montage (`pistes.rs`).
+        if in_montage {
+            self.pistes_menu(ui, li);
         }
         // Ce qui sert souvent (menu court, Anthony, 2026-10-18) : afficher, pelure, opacité, mode
         // de fusion (dans le panneau Calques, son en-tête les a), les effets non destructifs par

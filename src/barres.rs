@@ -198,6 +198,25 @@ pub(crate) const MONTAGE: &[Cmd] = &[
         false,
         1,
     ),
+    // Pistes repliables (`pistes.rs`) : tout replier en bandes fines, tout déplier, et le calque courant qui
+    // se déplie tout seul.
+    bouton(
+        "piste.replier_tout",
+        ph::ARROWS_IN_LINE_VERTICAL,
+        "Replier toutes les pistes",
+        "Les pistes de calques en bandes fines : le nom et les dessins restent visibles. Le triangle d'une piste ne replie que celle-là (Alt + clic : toutes).",
+        false,
+        1,
+    ),
+    bouton("piste.deplier_tout", ph::ARROWS_OUT_LINE_VERTICAL, "Déplier toutes les pistes", "Les pistes de calques à leur pleine hauteur, avec leurs réglages ; les dossiers s'ouvrent.", false, 1),
+    etat(
+        "piste.auto_deplier",
+        ph::CURSOR_CLICK,
+        "Déplier le calque courant",
+        "Allumé, la piste du calque courant se montre dépliée (les autres gardent leur état), dès que la souris est relâchée.",
+        false,
+        1,
+    ),
     // Une transition à la coupe la plus proche de la tête de lecture (`transitionsui.rs`) ; le clic
     // droit sur une coupe, dans la bande, en choisit la sorte.
     bouton(
@@ -626,6 +645,7 @@ impl App {
                 v.icone = (if self.doc.storyboard_locked { ph::LOCK } else { ph::LOCK_OPEN }).to_string();
             }
             "montage.aimanter" => v.etat = Some(self.snap_on),
+            "piste.auto_deplier" => v.etat = Some(self.settings.montage_auto_open),
             "envoi.liste" => v.etat = Some(self.envois_ui.liste),
             "comparer.ouvrir" => v.etat = Some(self.comparaison.is_some()),
             "envoi.modifie_suivant" | "envoi.modifie_precedent" => {

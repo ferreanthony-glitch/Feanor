@@ -373,6 +373,9 @@ impl App {
             .resizable(false)
             .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(4, 1)))
             .show_inside(ui, |ui| self.montage_zoom_bar(ui));
+        // La piste du calque courant se déplie quand la souris est relâchée (`pistes.rs`).
+        let pointer_down = ui.input(|i| i.pointer.any_down());
+        self.pistes_follow_current(pointer_down);
         // Hauteur des panneaux : ce qui reste une fois la règle, les barres et les pistes placées.
         let rows = self.montage_rows(ui.available_height());
         egui::ScrollArea::vertical()
@@ -1165,7 +1168,7 @@ impl App {
         // Choix au rectangle : les pistes et les images couvertes ; le rectangle se dessine.
         if let Some(o) = self.key_rect.as_ref().map(|k| k.origin) {
             if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
-                let row = |y: f32| (((y - r.top() - rows.layers_top()) / crate::montagerows::LAYER_H).floor().max(0.0) as usize).min(rows.count.saturating_sub(1));
+                let row = |y: f32| rows.row_near(y - r.top() - rows.layers_top());
                 let (a, b) = (row(o.y.min(p.y)), row(o.y.max(p.y)));
                 let (g0, g1) = (free_frame_at(o.x.min(p.x)), free_frame_at(o.x.max(p.x)));
                 self.drag_key_rect(a..=b, g0, g1);

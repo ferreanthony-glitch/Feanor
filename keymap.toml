@@ -2395,6 +2395,26 @@ action = "montage.aimanter"
 touches = []
 source = "SHOT (sans touche)"
 
+[[raccourci]]
+action = "piste.basculer"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "piste.replier_tout"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "piste.deplier_tout"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "piste.auto_deplier"
+touches = []
+source = "SHOT (sans touche)"
+
 # Panneaux et barre des panneaux.
 [[raccourci]]
 action = "vue.historique"

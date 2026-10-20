@@ -73,6 +73,10 @@ pub struct Settings {
     /// voir les réglages des calques (Anthony, 2026-10-17).
     #[serde(default = "default_head_w", rename = "largeur_entetes_montage")]
     pub montage_head_w: f32,
+    /// Pistes repliables du montage (`pistes.rs`) : le calque courant déplie sa piste tout seul
+    /// (les autres gardent leur état).
+    #[serde(default = "yes", rename = "deplier_calque_courant")]
+    pub montage_auto_open: bool,
     /// Pinceau et crayon : peint derrière, remplir la forme (`brushfill`), retenus d'une séance à
     /// l'autre (Anthony, 2026-10-17).
     #[serde(default, rename = "peint_derriere")]
@@ -203,6 +207,7 @@ impl Default for Settings {
             bars: ReglageBarres::default(),
             workspaces: Vec::new(),
             montage_head_w: default_head_w(),
+            montage_auto_open: true,
             paint_behind: false,
             fill_shapes: false,
             recent_projects: Vec::new(),

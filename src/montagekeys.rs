@@ -499,11 +499,12 @@ impl App {
         let global = |k: KeyRef| self.locate(k).map(|(pi, _, s, _)| self.doc.panel_start(pi) + s);
         let (Some(ga), Some(gb), Some(ra), Some(rb)) = (global(a), global(b), self.key_row(a), self.key_row(b)) else { return vec![b] };
         let (lo, hi) = (ga.min(gb), ga.max(gb));
-        let rows = ra.min(rb)..=ra.max(rb);
+        // Les pistes cachées (dossier fermé, `pistes.rs`) n'en sont pas.
+        let rows: Vec<usize> = (ra.min(rb)..=ra.max(rb)).filter(|&r| !crate::pistes::row_hidden(&self.doc.panels, self.cur_panel, self.cur_layer, r)).collect();
         let mut out = Vec::new();
         let mut start = 0;
         for p in &self.doc.panels {
-            for row in rows.clone() {
+            for &row in &rows {
                 if let Some(li) = layer_in_row(&p.layers, row) {
                     let l = &p.layers[li];
                     for (s, _, cel) in runs(l) {
@@ -520,10 +521,11 @@ impl App {
 
     /// Les clés des rangées `rows` qui touchent les images `g0` à `g1` (comprises) du montage.
     pub(crate) fn keys_in_rect(&self, rows: std::ops::RangeInclusive<usize>, g0: usize, g1: usize) -> Vec<KeyRef> {
+        let rows: Vec<usize> = rows.filter(|&r| !crate::pistes::row_hidden(&self.doc.panels, self.cur_panel, self.cur_layer, r)).collect();
         let mut out = Vec::new();
         let mut start = 0;
         for p in &self.doc.panels {
-            for row in rows.clone() {
+            for &row in &rows {
                 if let Some(li) = layer_in_row(&p.layers, row) {
                     let l = &p.layers[li];
                     for (s, e, cel) in runs(l) {

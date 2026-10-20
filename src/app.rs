@@ -767,6 +767,8 @@ pub struct App {
     pub(crate) monde: crate::monde::Monde,
     pub(crate) thumbs: Thumbs,
     pub(crate) montage_zoom: f32,
+    /// Pistes repliables du montage : le calque qui s'est déplié tout seul (`pistes.rs`).
+    pub(crate) pistes: crate::pistes::PistesUi,
     /// Le zoom du montage et de la timeline reste calé sur la tête de lecture (`zoombande.rs`) :
     /// où elle était dans la vue au dernier affichage, et le défilement demandé par un zoom.
     pub(crate) strip_geo: [crate::zoombande::StripGeo; 2],
@@ -1212,6 +1214,7 @@ impl App {
             monde: crate::monde::Monde::new(),
             thumbs: Thumbs::default(),
             montage_zoom: 4.0,
+            pistes: Default::default(),
             strip_geo: Default::default(),
             strip_anchor: [None, None],
             montage_fit: false,
@@ -3942,6 +3945,18 @@ impl App {
                 self.snap_on = !self.snap_on;
                 self.status = format!("Aimantation des bords du montage : {}.", if self.snap_on { "oui" } else { "non" });
             }
+            // Pistes repliables du montage (`pistes.rs`).
+            "piste.basculer" => {
+                let row = self.track_row_of(self.cur_layer);
+                self.toggle_track_fold(row, false);
+            }
+            "piste.replier_tout" => {
+                self.set_all_tracks_folded(true);
+            }
+            "piste.deplier_tout" => {
+                self.set_all_tracks_folded(false);
+            }
+            "piste.auto_deplier" => self.toggle_auto_open(),
             "projet.proprietes" => self.properties_window = !self.properties_window,
             "projet.nouveau_depuis_plans" => self.request(Pending::FromChosen),
             // Panneau de la pelure d'oignon (13f, `onionui.rs`).

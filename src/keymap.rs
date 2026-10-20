@@ -428,6 +428,11 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("montage.rognage_retablir", "Rétablir le contenu rogné du plan (début et fin)", true, false),
     act("montage.rognage_oublier", "Oublier le contenu rogné du plan", true, false),
     act("montage.aimanter", "Aimantation des bords rognés dans le montage (oui / non)", true, false),
+    // Pistes repliables du montage (`pistes.rs`).
+    act("piste.basculer", "Pistes du montage : replier / déplier la piste du calque courant", true, false),
+    act("piste.replier_tout", "Pistes du montage : replier toutes les pistes", true, false),
+    act("piste.deplier_tout", "Pistes du montage : déplier toutes les pistes", true, false),
+    act("piste.auto_deplier", "Pistes du montage : déplier tout seul le calque courant (oui / non)", true, false),
     act("storyboard.verrouiller", "Verrouiller / déverrouiller le storyboard", true, false),
     // Crayonnés rapides (`crayonnes.rs`, `crayonnesui.rs`) : Tab et les flèches y changent de case
     // (codés en dur, comme dans le dessin) ; Échap abandonne le geste.

@@ -110,6 +110,7 @@ etat_projet! {
     timeline_cell: f32 = crate::timeline::CELL_W,
     timeline_fit: Option<(usize, usize)> = None,
     montage_zoom: f32 = 4.0,
+    pistes: crate::pistes::PistesUi = Default::default(),
     strip_geo: [crate::zoombande::StripGeo; 2] = Default::default(),
     strip_anchor: [Option<crate::zoombande::Anchor>; 2] = [None, None],
     montage_fit: bool = false,
