@@ -1912,6 +1912,21 @@ le stockage est derrière une couture (`Depot`) pour passer plus tard à un serv
 
 Limites et reste à faire : `docs/COOPERATION.md` (fin) — en particulier le serveur SHOT, l'enregistrement automatique dans le dossier partagé et le
 nettoyage du dossier. À regarder à l'écran : la liste de `docs/INTERFACE.md`, partie 27.
+## Pistes repliables du montage
+
+Dans le montage (Storyboard), chaque piste de calque a deux hauteurs : **dépliée** (40 points, avec l'œil, le verrou, la pelure, le ⋮ et la barre d'opacité dans la colonne de gauche) et
+**repliée** (16 points : le triangle, le nom, l'œil, le verrou ; les dessins en barres minces avec leurs limites d'exposition, les losanges d'effets et de position en petit). Beaucoup de calques
+tiennent ainsi dans la bande, et tout se prend comme avant (choisir, glisser un dessin ou une clé, rectangle, clic droit).
+
+- **Triangle** à gauche de chaque piste : la plie ou la déplie ; **Alt + clic** : toutes les pistes. **Double-clic** sur la colonne, à côté du nom : même chose (sur le nom : renommer).
+- **Clic droit sur une piste > Replier / déplier les pistes**, ou **« Plus… »** dans la barre du montage : replier toutes, déplier toutes, « Déplier le calque courant ». Actions `piste.basculer`,
+  `piste.replier_tout`, `piste.deplier_tout`, `piste.auto_deplier` (aucune touche par défaut : clic droit sur l'icône pour en assigner une).
+- **Déplier le calque courant** (allumé d'office) : la piste du calque courant se montre dépliée, les autres gardent leur état ; elle s'ouvre quand on relâche la souris, jamais en plein geste.
+- **Dossiers** : le triangle d'un dossier le ferme ; ses calques n'ont plus de piste (comme dans le panneau Calques et la timeline).
+- Même état que les **lignes réduites** de la timeline de l'animation (`Layer::collapsed`), enregistré avec le projet (format inchangé). Replier est de l'affichage : pas d'étape d'annulation.
+  Une piste traverse tous les plans (la rangée n) : elle est repliée dès qu'un de ses calques l'est.
+
+Détail et liste de contrôle à l'écran : `docs/INTERFACE.md` § 29.
 ## Importer un scénario
 
 Fichier > Importer > « Un scénario… » (action `fichier.importer_scenario`, donc aussi dans Ctrl+K) : on
@@ -2277,6 +2292,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `storyboard.rs` | Bande de montage, vue vignettes, fiche du panneau |
 | `montagerows.rs` | Pistes du montage : caméra, calques, fond de scène, noms des pistes |
 | `montagehead.rs` | Colonne de gauche du montage : largeur étirable, réglages des calques par rangée, menu de tout ce qui touche au calque |
+| `pistes.rs` | Pistes repliables du montage : deux hauteurs (dépliée 40, repliée 16), triangle, tout replier / déplier, calque courant déplié tout seul, dossiers fermés ; état = `Layer::collapsed` |
 | `toolbars.rs`, `colorui.rs`, `layersui.rs`, `brushui.rs` | Barres de commandes et d'outils, panneau Couleur, panneau Calques, case et menu d'un pinceau, import |
 | `pinceaux.rs`, `pinceauxui.rs` | Panneau Pinceaux : dossiers, recherche, état retenu, catégories des réglages (logique) ; taille, onglets, liste et réglages (affichage) |
 | `couleur.rs` | Couleurs : conversions RVB, TSV, TSL, Lab, code hexadécimal, couleurs récentes, réglages retenus |

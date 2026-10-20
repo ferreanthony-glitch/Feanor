@@ -3347,3 +3347,13 @@ Conception écrite d'abord : `docs/COOPERATION.md`.
 - ✅ **Essais** : 62 (+1 mesure), famille ajoutée à `scripts\verifier.ps1` ; mesures dans `docs/PERFORMANCE.md`, 18.
 - Pas fait : le serveur SHOT ; l'enregistrement automatique dans le dossier partagé ; le nettoyage du dossier ; importer un montage perdu ; retenir les copies
   en conflit ignorées ; deux porteurs écrivant le même dessin plus de huit secondes d'affilée laissent des « copies en conflit » de dessins (rien n'est perdu).
+
+## Pistes repliables du montage (demandées par Anthony le 2026-10-20, branche `pistes-repliables`) ✅
+
+« Un système de dépliage / repliage des calques dans la timeline pour gagner de la place tout en gardant cela lisible. » Fait dans le montage (storyboard) :
+deux hauteurs de piste (40 et 16 points), un triangle par piste (Alt + clic : toutes), double-clic sur la colonne, replier / déplier tout (menu du calque, « Plus… » de la barre du montage,
+actions `piste.*` sans touche), « Déplier le calque courant » (réglage, allumé d'office, jamais pendant un geste), les dossiers fermés cachent les pistes de leurs calques. L'état est
+`Layer::collapsed`, déjà enregistré (`replie`) et déjà celui des lignes réduites de la timeline de l'animation : un seul système, format inchangé. Les gestes (choix, glisser, losanges, rectangle)
+marchent sur une piste repliée. Détail et liste de contrôle : `docs/INTERFACE.md` § 29 ; code : `src/pistes.rs`.
+
+À vérifier à l'écran : voir § 29.7. Pas fait : une touche par défaut (aucune de libre sans conflit), « Replier / Déplier » pour les pistes son, une disposition de pistes propre à chaque plan.

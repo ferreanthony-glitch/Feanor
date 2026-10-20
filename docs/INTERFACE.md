@@ -2148,3 +2148,77 @@ Points à vérifier en particulier :
 5. Le montage refusé sans le jeton, permis avec ; un plan créé est à soi.
 6. L'application au repos avec un film partagé ouvert : le processeur reste à zéro.
 7. Ouvrir le fichier `.pelure` d'un film partagé avec une ancienne version de SHOT : message clair, rien d'écrit.
+
+
+## 29. Pistes repliables du montage (2026-10-20, branche `pistes-repliables`)
+
+Demande d'Anthony : « un système de dépliage / repliage des calques dans la timeline pour gagner de la place tout en gardant cela lisible ;
+je te laisse choisir la taille et l'ergonomie ». Code : `src/pistes.rs` (hauteurs, état, menus), `src/montagerows.rs` (pistes, hits, peinture),
+`src/montagehead.rs` (colonne de gauche).
+
+### 29.1 Deux hauteurs
+
+| | Piste dépliée (`LAYER_H`) | Piste repliée (`FOLDED_H`) |
+|---|---|---|
+| Hauteur | 40 points (comme avant) | **16 points** (celle de la piste Caméra) : 2,5 pistes repliées pour une dépliée |
+| Colonne de gauche | triangle, nom (12), œil, verrou, pelure, ⋮, barre d'opacité, mode de fusion, « après » | triangle, nom (11), œil, verrou (selon la largeur de la colonne) ; le reste est au clic droit |
+| Dessins | blocs hauts, barre du calque de 5 | barres de 8, barre du calque de 3 ; les limites d'exposition restent visibles ; le nom du calque (10) dans le bloc |
+| Losanges | effets (violets, rayon 4,5) en haut, position (verts, 5,5) au milieu | les mêmes couleurs, rayon 3 (4,2 quand choisis), effets en haut, position dessous |
+
+16 points parce que c'est la plus petite hauteur où le nom (11 points, la plus petite taille de texte de SHOT hors barre d'opacité) reste net, et où un
+losange se prend encore à la souris (7 points de haut pour les effets, 8 pour la position, 5 pour la barre du calque). Les plans, au-dessus, prennent la place
+gagnée (la bande donne au montage tout ce que les pistes ne prennent pas, 170 points au plus).
+
+### 29.2 Replier, déplier
+
+- **Triangle** à gauche de chaque piste : clic = plie ou déplie cette piste ; **Alt + clic** = toutes les pistes. Bulle d'une seconde, clic droit : lui donner une
+  touche (`piste.basculer`).
+- **Double-clic sur la colonne**, ailleurs que sur le texte du nom : plie ou déplie. (Sur le nom : le renommer, comme avant — Anthony avait demandé le double-clic
+  « sur le nom » ; il reste au renommage, le premier geste appris.)
+- **Clic droit sur une piste > Replier / déplier les pistes** : cette piste, toutes les pistes, tout déplier, et la case « Déplier le calque courant tout seul ».
+- **Barre du montage, sous « Plus… »** : « Replier toutes les pistes » (`piste.replier_tout`), « Déplier toutes les pistes » (`piste.deplier_tout`), « Déplier le calque
+  courant » (`piste.auto_deplier`, allumé quand le réglage l'est). Aucune touche par défaut (rien de libre sans risque de conflit) : clic droit sur l'icône pour en assigner une.
+- **Déplier le calque courant** (réglage `deplier_calque_courant`, allumé d'office) : la piste du calque courant se montre dépliée, les autres gardent leur état
+  (celui qu'on a enregistré). Elle se déplie **quand la souris est relâchée**, jamais pendant un geste (sinon les pistes d'en dessous glisseraient sous le pointeur au
+  milieu d'un glisser). Replier cette piste à la main, ou « Replier toutes », la laisse repliée jusqu'au prochain changement de calque.
+
+### 29.3 Les pistes traversent les plans
+
+Chaque plan a ses calques dans son ordre (6f) ; la piste n est la rangée n de tous les plans. La hauteur d'une piste ne doit pas changer quand on clique sur un autre plan,
+elle ne dépend donc pas du plan courant : **une piste est repliée dès qu'un de ses calques l'est** (« replié l'emporte »). Le triangle plie ou déplie d'un coup le calque
+de cette rangée dans chaque plan.
+
+### 29.4 Dossiers
+
+Un dossier est une piste comme les autres. Son triangle est celui du panneau Calques : **fermé** (= `collapsed`), ses calques n'ont plus de piste (c'est le plan courant qui
+décide) ; il se plie seulement dans son plan (la même rangée d'un autre plan est un calque ordinaire, qu'on ne touche pas). Le calque courant d'un dossier fermé garde sa piste
+(comme dans le panneau Calques). « Replier toutes » laisse les dossiers comme ils sont (toutes les pistes restent visibles, en bandes fines) ; « Déplier toutes » ouvre aussi les
+dossiers fermés.
+
+### 29.5 Un seul état, avec la timeline de l'animation
+
+L'état est `Layer::collapsed`, déjà enregistré avec le projet (`replie`, format inchangé : aucun champ neuf, la version du format ne bouge pas, un projet d'avant s'ouvre tout
+déplié). C'est le même que celui des **lignes réduites** de la timeline de l'animation (13b) : un calque réduit là est replié dans le montage, et inversement ; pour un dossier,
+c'est « fermé » dans les deux vues et dans le panneau Calques. Le calque courant déplié tout seul est de l'affichage seulement : il n'écrit rien.
+
+**Replier est de l'affichage** : pas d'étape d'annulation (comme les lignes réduites), mais le projet est marqué modifié, puisque l'état s'enregistre. L'état n'est pas compté
+comme un changement du plan par les envois (`envois_tests`).
+
+### 29.6 Les gestes sur une piste repliée
+
+Choisir un dessin, tirer son bord, la limite entre deux dessins, le milieu d'un dessin, la barre du calque (les trois derniers points de la piste), les losanges d'effets
+et de position (choisir, Ctrl, Maj, glisser), le choix au rectangle (les pistes cachées d'un dossier fermé n'en sont pas), les clés lâchées, le clic droit : comme dans une piste dépliée,
+d'après la géométrie de la piste sous la souris (`Lane` : `fx_hit_max`, `pos_y`, `pos_hit`, `bar_from`). Les pistes se calculent en quelques microsecondes (rien de plus par image,
+rien qui fasse repeindre au repos).
+
+### 29.7 À regarder à l'écran (liste pour Anthony)
+
+1. Montage : le petit triangle à gauche de chaque nom ; un clic replie la piste en bande fine (le nom, l'œil, le verrou, les dessins en barres, les petits losanges) et les pistes
+   d'en dessous remontent ; un autre clic la redéplie.
+2. Alt + clic sur un triangle : toutes les pistes se replient (ou se déplient). Même chose : clic droit sur une piste > Replier / déplier les pistes, ou « Plus… » dans la barre du montage.
+3. Cliquer sur un dessin d'une piste repliée : le calque devient courant et sa piste se déplie quand on relâche, les autres restent fines. Éteindre « Déplier le calque courant » : plus rien ne s'ouvre seul.
+4. Sur une piste repliée : tirer la limite entre deux dessins, le bord d'un dessin, un losange vert ou violet, un rectangle de choix sur plusieurs pistes fines. Tout marche comme sur une piste haute.
+5. Les noms restent lisibles à 100 % de zoom d'écran ; les losanges sont petits mais nets ; la barre du calque fine se prend en bas de la bande.
+6. Un dossier : son triangle le ferme, ses calques disparaissent du montage (et de la timeline) ; rouvert, ils reviennent.
+7. Enregistrer, quitter, rouvrir : les mêmes pistes sont repliées. En animation, les lignes réduites de la timeline sont les mêmes calques.
+8. Au repos, l'application ne repeint pas (le processeur reste à zéro).
