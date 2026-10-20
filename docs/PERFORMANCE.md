@@ -1206,3 +1206,29 @@ d'échelle (cadence seule) ne rééchantillonne rien et partage ses tuiles.
 
 Pour refaire les mesures : `cargo test --release --offline --target-dir target\msvc perf_collage -- --ignored --nocapture`
 (dessins pleins) et `a_big_paste_never_blocks_the_interface_thread -- --nocapture` (le plan 4K).
+
+## 18. Coopération : ce que coûte un film partagé (2026-10-20, branche `cooperatif`)
+
+Mesures de `cooperation_mesures_tests.rs` (`cargo test --release cooperation_mesures -- --nocapture --include-ignored`), dossier local,
+film de 600 plans (un de 8 calques × 12 dessins). **Rien de ce qui touche au dossier partagé ne se fait sur le fil de l'interface** ;
+le tableau dit sur quel fil chaque coût tombe.
+
+| Quoi | Fil | Coût |
+|---|---|---|
+| balayage du dossier, rien de changé (600 plans) | session | 1,4 ms (premier : 1,7 ms) |
+| un tour complet du moteur, rien de neuf | session | 1,7 ms toutes les 3 s |
+| `Session::sonder`, au repos | **interface** | 0,04 µs par image d'écran |
+| lire et décoder un plan de 96 dessins | session | 110 ms |
+| poser ce plan dans le document | **interface** | 0,07 ms |
+| relire la structure de 600 plans | session | 3,0 ms |
+| poser la structure | **interface** | 0,5 ms |
+| cliché d'un enregistrement (50 plans tenus sur 600) | **interface** | 2,3 ms |
+| écrire ces 50 plans | écriture | 270 ms |
+| enregistrer un plan de 96 dessins dont un a changé | écriture | 12 ms |
+| ouvrir le film de 600 plans (lecture exacte) | ouverture | 2,1 s |
+| créer le film partagé à partir d'un projet de 600 plans | partage | 4,3 s |
+
+- Au repos (rien ne change dans le dossier), le fil ne demande **aucune** repeinture ; la fenêtre Équipe ouverte non plus.
+- Le coût réel d'un dossier synchronisé est celui du client (Dropbox, Drive) : SHOT n'écrit qu'un petit fichier de fiche toutes les
+  30 s par fenêtre ouverte, et les plans que l'on a vraiment changés.
+- Les dessins ne sont jamais relus à chaque balayage : seulement quand le fichier de leur plan change.

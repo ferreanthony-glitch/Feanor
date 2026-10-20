@@ -193,7 +193,19 @@ impl DossierPartage {
         if let Some(d) = path.parent() {
             fs::create_dir_all(d).map_err(|e| format!("{} : {e}", d.display()))?;
         }
-        write_atomic_synced(path, octets)
+        // (Un client de synchronisation ou un antivirus tient parfois le fichier une fraction de seconde : le renommage final
+        // échoue alors avec « accès refusé ». On réessaie quelques fois avant de dire que l'écriture a échoué.)
+        let mut essai = 0;
+        loop {
+            match write_atomic_synced(path, octets) {
+                Ok(()) => return Ok(()),
+                Err(e) if essai >= 4 => return Err(e),
+                Err(_) => {
+                    essai += 1;
+                    std::thread::sleep(std::time::Duration::from_millis(80 * essai));
+                }
+            }
+        }
     }
 
     /// Les fichiers `*.json` d'un sous-dossier (sans les temporaires), avec leur marque.

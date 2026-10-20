@@ -736,6 +736,8 @@ pub(crate) struct Session {
     /// La version de chaque dessin d'un plan étranger quand je l'ai posé (pour voir qu'on y a touché).
     versions_posees: HashMap<u64, Vec<(CelId, u64)>>,
     pub(crate) notifications: VecDeque<Notification>,
+    /// Combien de notifications ont été faites depuis le début (la liste, elle, garde les plus récentes).
+    pub(crate) notif_total: usize,
     brouillons_a_ecrire: Vec<Brouillon>,
     /// Plans que je viens de rendre : leur état dans le document devient la base du garde-fou (à la prochaine pose).
     a_renoter: BTreeSet<u64>,
@@ -874,6 +876,7 @@ impl Session {
             derniers_recus: HashMap::new(),
             versions_posees: HashMap::new(),
             notifications: VecDeque::new(),
+            notif_total: 0,
             brouillons_a_ecrire: Vec::new(),
             a_renoter: BTreeSet::new(),
             rendre_apres: BTreeSet::new(),
@@ -1192,6 +1195,7 @@ impl Session {
     }
 
     pub(crate) fn notifier(&mut self, texte: String) {
+        self.notif_total += 1;
         self.notifications.push_back(Notification { quand: self.horloge.maintenant(), texte });
         while self.notifications.len() > 60 {
             self.notifications.pop_front();

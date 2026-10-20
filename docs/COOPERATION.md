@@ -59,7 +59,8 @@ MonFilm/
                            groupes de couleur, propriétés, cadence, feuille… + un bloc « partage » (voir plus bas).
                            Écrite par qui tient le jeton du montage.
   plans/<n° de plan>.json  UN PLAN : ses calques, sa caméra, ses marques, ses textes, sa durée, ses versions rangées,
-                           son contenu rogné, sa scène 3D. Écrit par qui tient le plan.
+                           son contenu rogné, sa scène 3D, et l'empreinte du fichier de chacun de ses dessins.
+                           Écrit par qui tient le plan.
   dessins/<n°>.png|json    un fichier par dessin (comme avant) ; écrits par qui tient le plan qui les cite
   sons/ modeles/ textures/ references/ videos/         comme avant ; ajoutés par qui tient le jeton
   transitions.json effets_son.json sons_proposes.json references.json crayonnes.json envois.json versions/ scenes3d.json
@@ -76,6 +77,16 @@ MonFilm/
 Le bloc `partage` du fichier de structure : `{ "projet": "<hasard>", "revision": 17, "enregistre_par": { "id", "nom", "le" },
 "plans": [{ "scene": 12, "plan": 13 }…] }`. L'ordre du film est celui des séquences et des scènes du manifeste (comme avant) ;
 `plans` dit quel fichier de `plans/` est le plan de chaque scène (un plan = une scène à un panneau depuis le format 12).
+
+**Les dessins et leurs empreintes.** Un plan ne cite pas seulement ses dessins : il porte, pour chacun, l'**empreinte de son
+fichier** telle que son porteur l'a écrite (`contenu.dessins`, 64 bits sur les octets du `.png` ou `.json` et de ses annexes
+`_fond`, `_coupe`, `_hors`). C'est ce qui rend sûres deux choses qu'un dossier synchronisé ne garantit pas :
+
+- **un plan n'est pris que complet** : un lecteur compare les fichiers qu'il a sous les yeux à ces empreintes ; si l'un manque
+  (la synchronisation n'a pas livré le dessin) ou diffère (elle a livré le plan avant le nouveau dessin, qui garde le **même nom**
+  que l'ancien), le plan reste « en attente » et le plan déjà affiché n'est pas remplacé ;
+- **un plan est « modifié » même si seul un pixel a changé** : le fichier du plan ne dit pas les pixels, mais l'empreinte du
+  dessin change, donc celle du contenu du plan, donc sa révision (sans cela, retoucher un dessin n'aurait réveillé personne).
 
 **Format.** `project::VERSION` reste **33** pour tout projet classique : un projet non partagé s'écrit, s'ouvre et se relit
 **exactement comme avant**, sans migration. Le fichier de structure d'un projet partagé porte `"version": 34` : une version
@@ -185,8 +196,9 @@ plus ancienne prise). Pour le perdant :
 
 1. le plan se ferme tout de suite (lecture seule) et un message le dit (« Léa avait pris le plan 12 avant toi. Ton travail est
    gardé. ») ;
-2. **ce qu'il avait déjà fait dans le plan est écrit dans `partage/brouillons/plan-12.<équipier>.<heure>.json`** (le fichier de plan
-   complet, ses dessins déjà dans `dessins/` sous des numéros qui sont les siens) ;
+2. **ce qu'il avait déjà fait dans le plan est écrit dans `partage/brouillons/plan-12.<équipier>.<heure>.perdu.json`** (le fichier de
+   plan complet). Les dessins qu'il a retouchés ou créés depuis qu'il a reçu le plan y prennent des **numéros neufs, à lui** et
+   s'écrivent à côté des autres dans `dessins/` : rien de ce que le porteur a dans `dessins/` n'est écrasé ;
 3. le plan reprend le contenu du gagnant dès qu'il arrive (le plan lu ici n'est jamais jeté avant qu'un brouillon existe) ;
 4. le porteur du plan voit « 1 brouillon de Léa pour ce plan » et peut l'**importer comme version** : « V3 — conflit de Léa »
    (réutilise les versions de plans, `planvers.rs` : la version rangée porte la date et le nom de son auteur en tête de ses notes).
@@ -322,4 +334,109 @@ utilisation et gardé dans `reglages.toml` ; il ne quitte jamais le dossier part
 
 ## État de la réalisation
 
-*(Rempli à la fin du chantier : voir plus bas.)*
+### Fait (branche `cooperatif`, jamais fusionnée dans `main`)
+
+| Morceau | Fichier | Rôle |
+|---|---|---|
+| Format partagé | `src/projet_partage.rs` (sous-module de `project.rs`) | structure au format 34 sans plans, un fichier par plan avec ses empreintes de dessins, ouverture (`ouvrir`, `charger_plan`, `charger_structure`), enregistrement de ce qu'on tient (`preparer`, `run_partage`), « Partager ce projet » (`preparer_partage`) |
+| Réutilisation du projet classique | `src/project.rs` | `load_manifest_avec(…, Annexes)` : la même lecture pour un projet entier, une structure ou un plan seul ; `dessins_a_ecrire` extrait de `prepare_save` ; `VERSION` reste 33 |
+| Numéros | `src/document.rs` | `alloc` préfixé par équipier (`préfixe · 2³² + compteur`), `set_id_prefix`, `reserve_id` qui ne compte que son préfixe |
+| Le dépôt | `src/depot.rs` | trait `Depot` (la couture du futur serveur), `DossierPartage`, balayage par curseur (date et taille), repérage des copies en conflit, fichiers temporaires ignorés, réécriture avec reprises |
+| Les prises | `src/verrous.rs` | pur : fiches, titulaire (la plus ancienne prise vivante), bail, reprise (`remplace`), course |
+| L'équipier | `src/equipe.rs` | identité, séance, couleur, initiales, réglages (`reglages.toml`, section `equipe`) |
+| Les commentaires | `src/partagecom.rs` | un fichier par auteur, enregistrements datés, fusion « le plus récent gagne » indépendante de l'ordre |
+| La session | `src/cooperation.rs` | `Moteur` (fil de fond : balayage, fiches, lecture des plans, bail, vue publiée) et `Session` (interface : prises, pose des plans, structure, commentaires, brouillons, annuler) |
+| L'interface | `src/cooperationui.rs` | barrières, pastilles, fenêtre Équipe, partager, préférences, menus, barre d'état |
+| Branchements | `app.rs`, `onglets.rs`, `ouverture.rs`, `enregistrement.rs`, `projetui.rs`, `storyboard.rs`, `boardui.rs`, `rognageui.rs`, `panels.rs`, `prefsui.rs`, `keymap.rs` + `keymap.toml` | voir `docs/ARCHITECTURE.md` |
+
+**Format.** `project::VERSION` = **33** (inchangé). `VERSION_PARTAGE` = **34**, écrite par un projet partagé et lui seul : un SHOT sans le
+partage le refuse (« créé par une version plus récente »). Un projet classique s'écrit et se lit comme avant ; aucun fichier d'un
+projet classique n'est migré ou touché (essai `sharing_leaves_the_original_untouched_and_a_classic_project_keeps_its_format`).
+Nouveaux fichiers : `plans/<n°>.json` (`shot-plan` 1), `commentaires/<équipier>.json` (`shot-commentaires-partage` 1),
+`partage/equipe/<équipier>.<séance>.json` (`shot-equipier` 1), `partage/membres/<équipier>.json` (`shot-membre` 1),
+`partage/brouillons/…`, `partage/importes/…`.
+
+**Essais** : 62 nouveaux (+1 mesure `#[ignore]`) — `cooperation_tests` (deux postes sur un dossier, dossiers synchronisés imités,
+hors connexion), `cooperation_ui_tests` (barrières, enregistrement par la voie ordinaire, onglets, repos, partager, réglages),
+`cooperation_modele_tests` (prises pures, noms de fichiers, balayage, équipier, fil de fond pour de vrai), `cooperation_mesures_tests`.
+Ce qu'ils prouvent, en une ligne chacun : voir `docs/FIABILITE.md`, partie 13.
+
+### Mesures (poste de développement, dossier local, film de 600 plans dont un de 96 dessins)
+
+| Quoi | Où | Coût |
+|---|---|---|
+| balayage du dossier, rien de changé | fil de fond | 1,4 ms (premier : 1,7 ms) |
+| un tour du moteur, rien de neuf | fil de fond | 1,7 ms |
+| `Session::sonder` au repos | interface | 0,04 µs par image d'écran |
+| lire et décoder le plan de 96 dessins | fil de fond | 110 ms |
+| poser ce plan dans le document | **interface** | 0,07 ms |
+| relire la structure de 600 plans / la poser | fil / **interface** | 3,0 ms / 0,5 ms |
+| cliché d'un enregistrement (50 plans tenus sur 600) | **interface** | 2,3 ms |
+| écrire ces 50 plans | fil d'écriture | 270 ms |
+| enregistrer un plan de 96 dessins dont un a changé | fil d'écriture | 12 ms |
+| ouvrir le film partagé de 600 plans / le créer à partir d'un projet | fil d'ouverture / fil | 2,1 s / 4,3 s |
+
+Au repos le fil ne demande **aucune** repeinture (essai `an_idle_application_with_a_shared_project_open_asks_for_no_repaint`
+et `the_thread_never_asks_for_a_repaint_when_nothing_changes`).
+
+### Limites connues (dites, pas cachées)
+
+- **Deux porteurs du même plan pendant plus de huit secondes** (synchronisation plus lente que la confirmation) peuvent écrire le
+  même `dessins/<n°>.png`. Le client de synchronisation en fait deux copies ; le plan reste « en attente » chez les autres jusqu'au
+  prochain enregistrement du vrai porteur. Rien n'est perdu — le perdant apprend sa perte, son travail est en brouillon sous des
+  numéros neufs — mais les « copies en conflit » de dessins restent dans le dossier (pas de nettoyage automatique).
+- Les horloges des postes ne sont pas synchronisées : l'ordre des prises est le même partout, mais « le plus ancien » est celui que
+  disent les horloges. Un poste dont l'heure est très fausse gagne ou perd toujours ses courses.
+- **Le montage perdu** (jeton pris avant nous) est mis de côté en brouillon mais ne s'importe pas encore : c'est un fichier à lire.
+- Importer un brouillon ou une copie en conflit lit les fichiers sur l'interface (un plan, une action de l'utilisateur).
+- Les copies en conflit « ignorées » reviennent au prochain lancement (la liste n'est pas retenue).
+- Importer un son ou un modèle 3D, créer une planche de crayonnés, marquer un envoi, nommer une séquence… demandent le jeton
+  (c'est du montage) ; un repère 3D dont le modèle vient d'être importé par quelqu'un d'autre perd son modèle chez qui ne l'a pas.
+- Pas d'enregistrement automatique dans le dossier partagé : les autres ne voient votre travail qu'à Ctrl+S (ou « Rendre »).
+- Les exports (montage, fiche, relecture) travaillent sur la copie locale : un plan encore « en attente » y est vide. La fenêtre
+  Équipe le dit.
+- Un dossier partagé en lecture seule ne laisse pas rejoindre le film : le projet s'ouvre en lecture seule, son chemin n'est pas
+  retenu (« Enregistrer sous » en fait une copie à soi).
+
+### Reste à faire
+
+1. **`ServeurShot`** (voir §14) : une réalisation de `Depot` par le réseau avec prise atomique côté serveur, curseur de changements
+   poussé, dessins téléchargés dans un dossier local ; authentification ; rôles (aujourd'hui tout le monde peut tout prendre).
+2. Enregistrement automatique dans le dossier partagé, et enregistrement automatique d'une prise qui vient d'être confirmée.
+3. Nettoyer le dossier partagé (plans orphelins, anciens dessins, copies en conflit de dessins) — réservé au jeton.
+4. Importer un montage perdu ; fusionner automatiquement les montages.
+5. Persister la liste des copies en conflit ignorées.
+6. Présence plus fine (curseur sur la timeline) si le serveur le permet.
+
+### À essayer à l'écran (liste pour Anthony)
+
+**Avec deux fenêtres de SHOT sur un seul poste** (le plus simple pour commencer) :
+
+1. Dans un projet ouvert, **Fichier > Partager ce projet…** : choisir un dossier **Dropbox** ou **Google Drive** (ou un dossier
+   quelconque pour essayer). Une fenêtre « Partage » avance, puis le film s'ouvre dans un nouvel onglet. L'original est intact.
+2. Lancer une **deuxième fenêtre** de `shot.exe` et ouvrir le même fichier `.pelure` du dossier partagé (deux fenêtres du même
+   poste sont deux séances : elles se disputent les plans comme deux personnes). Barre d'état : une icône « équipe » et un chiffre.
+3. Fenêtre 1 : clic droit sur le plan 2 dans le montage > **Prendre ce plan**. Une pastille de ta couleur avec tes initiales
+   apparaît en haut à gauche du bloc. Fenêtre 2 (quelques secondes après) : la pastille de l'autre est là ; la survoler une seconde
+   dit « … tient ce plan ». Essayer de dessiner dedans : refusé, la barre d'état dit à qui il est.
+4. Fenêtre 1 : dessiner, **Ctrl+S**. Fenêtre 2 : le dessin arrive tout seul en quelques secondes (barre d'état : « … a enregistré le
+   plan 2 »), sans que rien ne bouge sous la main.
+5. Fenêtre 1 : clic droit > **Rendre ce plan** (ou fermer la fenêtre). Fenêtre 2 : **Prendre ce plan** puis continuer.
+6. **Le montage** : créer un plan, déplacer un plan, changer une durée dans la fenêtre 2 sans avoir pris le montage : refusé
+   (« il faut le jeton du montage »). Clic droit > **Prendre le montage**, recommencer : permis ; l'autre fenêtre voit le nouveau plan.
+7. **Fichier > Équipe…** : qui est en ligne, ce qu'il tient, les nouveautés.
+8. **Commentaires** : sur un plan que personne ne tient, ajouter un commentaire dans une fenêtre : il apparaît dans l'autre.
+9. **Plantage** : fermer brutalement une fenêtre (gestionnaire des tâches) qui tient un plan ; dans l'autre, dix minutes plus tard (ou
+   en réglant Préférences > Équipe > « Une prise périme après » à 2 minutes), « Reprendre ce plan » demande confirmation.
+10. **La course** : prendre le même plan dans les deux fenêtres presque en même temps (avant la pastille de l'autre) : l'une
+    perd, le dit, et un **brouillon** est écrit (Équipe > Brouillons > « Importer comme version » dans la fenêtre gagnante).
+
+**Avec deux postes** : pareil, avec le même dossier Dropbox / Drive / NAS. À regarder en plus :
+
+- Dropbox / Drive : l'icône de synchronisation de chaque poste ; **attendre « à jour »** avant de dire « j'ai enregistré ». Réglages
+  conseillés : le dossier du film en **« Toujours conserver sur cet appareil »** (Drive : « Disponible hors connexion »), sinon un
+  fichier « en ligne seulement » n'est pas lisible tout de suite.
+- Couper le réseau d'un poste : la barre d'état passe en rouge (« le dossier partagé ne répond pas »), on continue sur ses plans ;
+  au retour tout se rattrape. Couper plus de 10 minutes pendant que l'autre reprend le plan : au retour, le travail est en brouillon.
+- Chercher dans le dossier du film des fichiers « … (Copie en conflit de … ) » : la fenêtre Équipe doit les montrer.
+- Vérifier qu'un SHOT sans partage (une ancienne version) **refuse** d'ouvrir le `.pelure` du film partagé avec un message clair.

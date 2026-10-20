@@ -2047,3 +2047,48 @@ valeur au début et à la fin (« X : 960 → 1200 px ; Focale : 35 → 49 mm »
     dans le presse-papiers avant ce clic.
 13. Sur un vrai projet de plusieurs dizaines de plans avec vignettes : le temps de l'export (la barre dit le temps
     restant) et la taille du dossier `vignettes/`.
+
+## 27. Travailler à plusieurs (2026-10-20, branche `cooperatif`)
+
+Conception : `docs/COOPERATION.md`. Rien ne change pour un projet ordinaire ; tout ce qui suit n'apparaît que dans un **film partagé**.
+
+### 27.1 Partager
+
+- **Fichier > Partager ce projet…** : une boîte pour choisir où créer le film (le dossier Dropbox / Drive / réseau), puis une fenêtre « Partage »
+  avec une barre d'avancement. Le projet ouvert reste tel quel ; le film partagé s'ouvre dans un **nouvel onglet**. (Dans un film déjà partagé, la
+  même entrée devient **Équipe…**.)
+- **Enregistrer sous…** d'un film partagé en fait une copie ordinaire, à plat, qui n'est plus partagée.
+
+### 27.2 Ce qu'on voit
+
+- **Pastilles** en haut à gauche de chaque plan, dans la bande du montage et sur la planche : un rond à la couleur de celui qui tient le plan, ses
+  initiales dedans. À toi : liseré blanc (orange pendant la confirmation de la prise ou la vérification du fichier). Rond **creux** : la prise est
+  périmée (sans nouvelles). **Sablier** gris : le fichier du plan, ou un de ses dessins, n'est pas encore arrivé. Petits ronds creux dessous : ceux qui regardent
+  ce plan. Sur un bloc trop étroit, une bande à la couleur du porteur le long du bas. La survoler une seconde dit la phrase complète.
+- **Barre d'état**, à droite : l'icône « équipe » et le nombre d'autres personnes en ligne ; un triangle d'avertissement s'il y a des brouillons ou des
+  copies en conflit ; rouge si le dossier partagé ne répond pas. Un clic ouvre la fenêtre Équipe.
+- **Fenêtre Équipe** (Fichier > Équipe…, `equipe.fenetre`) : les icônes prendre / rendre le plan, la séquence, le montage, tout rendre ;
+  la liste des équipiers (en ligne ou non, ce qu'ils regardent, ce qu'ils tiennent) ; le dossier ; les plans pas encore arrivés ; les prises qui attendent
+  leur fichier (icône « prendre tel quel ») ; les **copies en conflit** (importer comme version / ignorer) ; les **brouillons** (importer comme version) ; les nouveautés.
+
+### 27.3 Prendre et rendre
+
+- Clic droit sur un plan (montage ou planche) : **Prendre ce plan** (ou **Reprendre**, avec confirmation, quand la prise est périmée),
+  **Rendre ce plan**, **Prendre la séquence**, **Prendre / Rendre le montage**. Rendre enregistre d'abord.
+- Modifier un plan qu'on ne tient pas : refusé, la barre d'état dit à qui il est (« Plan 3 est à Léa. Tu peux le regarder, le jouer et le commenter. »),
+  ou « Plan 3 est libre : clic droit > Prendre ce plan ». Changer l'ordre, le nombre, la durée, les noms ou le son sans le jeton : « Il faut le jeton du
+  montage… ». Détruire, couper, fusionner ou rogner un plan demande que le plan soit à soi (ou libre : il est pris au passage).
+- Préférences > Équipe > « Prendre le plan libre que je commence à modifier » : la première modification d'un plan libre le prend.
+
+### 27.4 À regarder à l'écran
+
+La liste détaillée est en fin de `docs/COOPERATION.md` (deux fenêtres de SHOT sur un poste, puis deux postes sur Dropbox / Drive / réseau).
+Points à vérifier en particulier :
+
+1. La pastille et la bulle d'un plan pris par l'autre fenêtre ; le refus de dessiner dedans et sa phrase.
+2. Un trait enregistré dans une fenêtre arrive dans l'autre sans qu'on y touche ; la barre d'état le dit une fois.
+3. Prendre le même plan dans les deux fenêtres presque en même temps : une des deux perd, est prévenue, et trouve un brouillon dans la fenêtre Équipe.
+4. Fermer une fenêtre : ses plans redeviennent libres dans l'autre en quelques secondes.
+5. Le montage refusé sans le jeton, permis avec ; un plan créé est à soi.
+6. L'application au repos avec un film partagé ouvert : le processeur reste à zéro.
+7. Ouvrir le fichier `.pelure` d'un film partagé avec une ancienne version de SHOT : message clair, rien d'écrit.

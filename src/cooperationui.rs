@@ -34,8 +34,10 @@ pub(crate) struct EquipeUi {
     pub reprise: Option<(Vec<Cible>, String)>,
     /// « Partager ce projet… » en cours d'écriture.
     pub partage: Option<PartageEnCours>,
-    /// Combien de notifications l'utilisateur a vues (le reste est « nouveau »).
+    /// Combien de notifications l'utilisateur a vues dans la fenêtre (le reste est « nouveau »), et combien sont déjà passées
+    /// dans la barre d'état.
     pub vues: usize,
+    pub annoncees: usize,
     /// Un brouillon ou une copie en conflit dont l'import a échoué : le message.
     pub erreur: Option<String>,
 }
@@ -147,15 +149,16 @@ impl App {
         }
         if let Some(m) = fx.messages.last() {
             self.status = m.clone();
-        } else if self.settings.equipe.notifications {
-            if let Some(s) = self.partage.as_ref() {
-                if let Some(n) = s.notifications.back().filter(|_| s.notifications.len() > self.equipe_ui.vues && self.equipe_ui.vues != usize::MAX) {
-                    // (Dernière notification, une seule fois dans la barre d'état.)
-                    let texte = n.texte.clone();
-                    if self.equipe_ui.vues < s.notifications.len() {
-                        self.status = texte;
+        }
+        if let Some(s) = self.partage.as_ref() {
+            // La dernière notification passe une fois dans la barre d'état (si on veut les voir).
+            if s.notif_total > self.equipe_ui.annoncees {
+                if self.settings.equipe.notifications && fx.messages.is_empty() {
+                    if let Some(n) = s.notifications.back() {
+                        self.status = n.texte.clone();
                     }
                 }
+                self.equipe_ui.annoncees = s.notif_total;
             }
         }
         // Les commentaires que j'ai changés sont à écrire au prochain enregistrement : le projet est « modifié ».
@@ -507,7 +510,7 @@ impl App {
         let v = s.vue();
         let autres = v.equipe.iter().filter(|e| !e.moi && e.en_ligne).count();
         let a_voir = v.copies.len() + v.brouillons.len();
-        let nouvelles = s.notifications.len().saturating_sub(self.equipe_ui.vues);
+        let nouvelles = s.notif_total.saturating_sub(self.equipe_ui.vues);
         let hors = v.hors_ligne.clone();
         let mon = s.mes_cibles().len();
         ui.separator();
@@ -689,7 +692,7 @@ impl App {
         });
         self.equipe_ui.fenetre = ouverte;
         if let Some(s) = self.partage.as_ref() {
-            self.equipe_ui.vues = s.notifications.len();
+            self.equipe_ui.vues = s.notif_total;
         }
         if let Some(a) = action {
             self.run_action(a);

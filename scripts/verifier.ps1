@@ -4,7 +4,7 @@
 #   1. cargo check --release : la compilation de SHOT ne donne aucun avertissement ;
 #   2. toute la suite d'essais (cargo test --release) ;
 #   3. les essais de fiabilite, un par un, par leur nom : aller-retour des projets, fumee de toute
-#      l'application, fichiers abimes, demarrage ;
+#      l'application, fichiers abimes, demarrage, travail a plusieurs ;
 #   4. avec -Repetitions N : toute la suite N fois de suite, pour faire apparaitre un essai
 #      intermittent (il est nomme dans le resume, avec le nombre de fois ou il a echoue).
 # Puis il affiche un resume OK / ECHEC (avec le E accent aigu majuscule) et sort avec le code 0 (tout est OK)
@@ -144,7 +144,8 @@ $groupes = @(
     @('dessins abimes (PNG, JSON, valeurs absurdes)', 'fiabilite_dessins'),
     @('fichiers annexes, sons et modeles illisibles', 'fiabilite_annexes'),
     @('dessins d''une autre taille que la feuille', 'fiabilite_raster'),
-    @('demarrage (premiere image, pinceaux, dernier projet)', 'fiabilite_demarrage')
+    @('demarrage (premiere image, pinceaux, dernier projet)', 'fiabilite_demarrage'),
+    @('travail a plusieurs (prises, dossiers synchronises, fil de fond, barrieres)', 'cooperation')
 )
 Write-Host "== Essais de fiabilite, un par un =="
 foreach ($g in $groupes) {
