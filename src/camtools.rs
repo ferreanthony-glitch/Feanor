@@ -17,6 +17,60 @@ fn camera_color() -> Color32 {
     crate::theme::camera()
 }
 
+/// Opacité du passe-partout (le voile du hors-champ) d'origine, en pour cent : 27 % (70 sur 255) sur la
+/// feuille, comme avant que ce soit un réglage (Préférences > « Opacité du passe-partout »).
+pub const PASSE_PARTOUT_DEFAUT: u8 = 27;
+
+/// Où le voile se pose : il s'adapte pour rester lisible (plus léger quand il couvre tout l'écran autour du
+/// cadre, plus fort pendant la lecture).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum PasseContexte {
+    /// La feuille autour du cadre : la valeur du réglage.
+    Feuille,
+    /// La toile infinie : tout l'écran autour du cadre, 65 % de la valeur.
+    ToileInfinie,
+    /// Pendant la lecture : plus de deux fois la valeur (le hors-champ se voit mieux qu'à l'arrêt).
+    Lecture,
+}
+
+/// L'opacité (0 à 255) du passe-partout pour le réglage `pourcent` (0 à 100) : 0 % ne voile rien.
+pub(crate) fn passe_partout_alpha(pourcent: u8, contexte: PasseContexte) -> u8 {
+    let base = f32::from(pourcent.min(100)) * 2.55;
+    let facteur = match contexte {
+        PasseContexte::Feuille => 1.0,
+        PasseContexte::ToileInfinie => 0.65,
+        PasseContexte::Lecture => 2.15,
+    };
+    (base * facteur).round().clamp(0.0, 255.0) as u8
+}
+
+/// Opacité du liseré sombre sous le cadre de la caméra.
+pub(crate) const FRAME_HALO_ALPHA: u8 = 90;
+
+/// Épaisseur, en points, du trait du cadre de la caméra : 1 pixel de l'écran (1,5 avec l'outil Caméra), quelle que
+/// soit l'échelle de l'affichage (`pixels_per_point`).
+pub(crate) fn frame_line_width(pixels_per_point: f32, editing: bool) -> f32 {
+    (if editing { 1.5 } else { 1.0 }) / pixels_per_point.max(0.5)
+}
+
+/// Épaisseur du liseré sombre sous le trait : le trait et un pixel de chaque côté.
+pub(crate) fn frame_halo_width(pixels_per_point: f32, editing: bool) -> f32 {
+    frame_line_width(pixels_per_point, editing) + 2.0 / pixels_per_point.max(0.5)
+}
+
+/// Un point du cadre posé sur la grille des pixels de l'écran, au milieu du pixel : un trait de 1 pixel qui tombe
+/// à cheval sur deux pixels serait étalé et flou.
+pub(crate) fn crisp(p: Pos2, pixels_per_point: f32) -> Pos2 {
+    let s = pixels_per_point.max(0.5);
+    pos2(((p.x * s).floor() + 0.5) / s, ((p.y * s).floor() + 0.5) / s)
+}
+
+/// Le cadre `quad` (quatre coins) calé sur la grille des pixels. Un cadre tourné reste lisse (le trait n'est pas
+/// horizontal ni vertical : le calage n'y changerait rien de net) mais ses coins restent sur la grille.
+pub(crate) fn crisp_quad(quad: &[Pos2], pixels_per_point: f32) -> Vec<Pos2> {
+    quad.iter().map(|p| crisp(*p, pixels_per_point)).collect()
+}
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub(crate) enum CamHandle {
     Move,
@@ -297,26 +351,31 @@ impl App {
         if fills_stage && !self.camera_view && !infinite {
             return;
         }
-        // Hors-champ : en vue caméra, tout l'écran autour du cadre ; sinon la feuille, si on veut.
+        // Hors-champ : en vue caméra, tout l'écran autour du cadre ; sinon la feuille, si on veut. Le passe-partout
+        // (le voile) prend l'opacité des Préférences (« Opacité du passe-partout »).
         let alpha = if self.camera_view {
             235
         } else if !self.camera_mask {
             0
         } else if self.playing {
-            150
+            passe_partout_alpha(self.settings.passe_partout, PasseContexte::Lecture)
         } else if infinite {
             // (Plus léger : le hors-champ est tout l'écran autour du cadre.)
-            45
+            passe_partout_alpha(self.settings.passe_partout, PasseContexte::ToileInfinie)
         } else {
-            70
+            passe_partout_alpha(self.settings.passe_partout, PasseContexte::Feuille)
         };
+        // Le trait du cadre : un pixel de l'écran, net, et un liseré sombre qui le garde visible sur n'importe quel fond.
+        let ppp = painter.ctx().pixels_per_point();
         if fills_stage && infinite {
             // Le cadre de la caméra est la feuille : voile léger autour, et un trait fin, discret.
             let quad = corners.map(to_s);
             if alpha > 0 {
                 painter.add(crate::viewbar::band(around(&quad), quad, Color32::from_black_alpha(alpha)));
             }
-            painter.add(Shape::closed_line(quad.to_vec(), Stroke::new(1.0_f32, Color32::from_rgba_unmultiplied(120, 120, 120, 150))));
+            let net = crisp_quad(&quad, ppp);
+            painter.add(Shape::closed_line(net.clone(), Stroke::new(frame_halo_width(ppp, false), Color32::from_black_alpha(FRAME_HALO_ALPHA / 2))));
+            painter.add(Shape::closed_line(net,Stroke::new(frame_line_width(ppp, false), Color32::from_rgba_unmultiplied(150, 150, 150, 200))));
             return;
         }
         // Caméra tournée, sur la feuille : le cadre filmé (un trapèze) peut déborder de la
@@ -364,11 +423,11 @@ impl App {
         }
         let quad: Vec<Pos2> = corners.iter().map(|c| to_s(*c)).collect();
         let editing = self.tool == crate::app::Tool::Camera;
-        painter.add(Shape::closed_line(quad.clone(), Stroke::new(3.0_f32, Color32::from_black_alpha(120))));
-        painter.add(Shape::closed_line(
-            quad.clone(),
-            Stroke::new(if editing { 2.0_f32 } else { 1.0 }, if editing { camera_color() } else { Color32::from_gray(235) }),
-        ));
+        // Cadre fin (1 pixel de l'écran, 1,5 avec l'outil Caméra), posé sur la grille des pixels pour rester net,
+        // sur un liseré sombre de 3 pixels qui le détache d'un fond clair comme d'un fond sombre.
+        let line = crisp_quad(&quad, ppp);
+        painter.add(Shape::closed_line(line.clone(), Stroke::new(frame_halo_width(ppp, editing), Color32::from_black_alpha(FRAME_HALO_ALPHA))));
+        painter.add(Shape::closed_line(line, Stroke::new(frame_line_width(ppp, editing), if editing { camera_color() } else { Color32::from_gray(235) })));
         painter.text(
             quad[0] + vec2(4.0, -3.0),
             egui::Align2::LEFT_BOTTOM,

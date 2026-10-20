@@ -108,6 +108,32 @@ impl App {
         ui.label(RichText::new("Changer une couleur passe en « Personnalisé » ; le survol, le texte secondaire et les couleurs de la timeline s'en déduisent.").small().weak());
     }
 
+    /// « Opacité du passe-partout » : le voile autour du cadre de la caméra quand « Estomper le hors-champ » est
+    /// allumé (`camtools.rs`). De 0 % (rien) à 100 % (le hors-champ noir) ; retenu dans les réglages.
+    pub(crate) fn passe_partout_pref_ui(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Opacité du passe-partout");
+            let mut v = f32::from(self.settings.passe_partout);
+            let resp = ui.add(egui::Slider::new(&mut v, 0.0..=100.0).suffix(" %").fixed_decimals(0));
+            let resp = crate::bulles::bulle(
+                resp,
+                "Opacité du passe-partout",
+                "Le voile qui estompe ce qui est hors du cadre de la caméra, quand « Estomper le hors-champ » est allumé. 0 % : aucun voile ; 100 % : le hors-champ noir.",
+                &self.raccourci("camera.masque"),
+            );
+            if resp.changed() {
+                self.settings.passe_partout = v.round().clamp(0.0, 100.0) as u8;
+            }
+            if resp.drag_stopped() || (resp.changed() && !resp.dragged()) {
+                let _ = self.settings.save();
+            }
+            if ui.small_button("Rétablir").on_hover_text("Revenir à l'opacité d'origine (27 %).").clicked() {
+                self.settings.passe_partout = crate::camtools::PASSE_PARTOUT_DEFAUT;
+                let _ = self.settings.save();
+            }
+        });
+    }
+
     /// La fenêtre Préférences… (menu Fichier).
     pub(crate) fn preferences_window(&mut self, ctx: &egui::Context) {
         if !self.prefs_window {
@@ -157,6 +183,7 @@ impl App {
                     let _ = self.settings.save();
                 }
                 ui.label(RichText::new("Le toucher du stylet se règle en bas des réglages du pinceau.").small().weak());
+                self.passe_partout_pref_ui(ui);
                 ui.add_space(6.0);
                 ui.label(RichText::new("Panneaux").strong());
                 let resp = ui.checkbox(&mut self.settings.panes_fit, "Ajuster les panneaux à leur contenu").on_hover_text(
