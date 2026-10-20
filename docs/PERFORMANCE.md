@@ -650,15 +650,19 @@ en défilant un montage de 600 plans ou en sautant de plan en plan, chaque image
   d'abandon entre deux lignes), dans le mode « doux » d'avant (`fx::differe` + `fxcache::soft_scope`) : les
   effets de calque pas encore calculés sont demandés au fil des effets et remplacés par leur dernier résultat ou
   le dessin sans effet, les calques d'effets (`calqueffet`) se résolvent de même, le fond sous le trait montre
-  celui d'avant jusqu'à l'arrivée du nouveau, les images de calque vidéo se lisent sur le fil de fond (elles se
+  celui d'avant jusqu'à l'arrivée du nouveau (alors seules les vignettes des plans qui montrent un fond se
+  refont : le compte des fonds arrivés, `fx::fond_epoch`, n'est dans la clé que pour eux), les images de calque vidéo se lisent sur le fil de fond (elles se
   lisaient sur l'interface). Une vignette incomplète se refait quand un calcul de fond finit
-  (`fxcache::generation`), comme avant. Un fil qui plante rend une vignette vide au lieu de fermer SHOT.
+  (`fxcache::generation`), comme avant, et aussi quand une demande d'effet est abandonnée parce qu'elle a vieilli
+  (fil des effets occupé plus de six images d'écran) : sans cela, elle restait incomplète pour toujours. Un fil qui plante rend une vignette vide au lieu de fermer SHOT.
 - **File d'attente.** Une demande par vignette : la nouvelle **remplace** celle qui attend et **arrête** celle qui
   se calcule (un indicateur testé entre deux lignes). Une demande que l'écran **ne renouvelle plus** depuis
   3 images d'écran (la vignette n'est plus visible) est **abandonnée** ; parmi celles qui restent, la plus
   récemment demandée passe la première, et dans une même image, dans l'ordre où l'écran les a demandées. Une
   réponse plus ancienne que celle qu'on montre déjà ne la remplace pas (deux fils finissent dans le désordre).
-  Autre projet, nouvelle résolution : `clear` abandonne tout (file, calculs, images finies).
+  Une vignette finie pendant l'image d'écran, pas encore envoyée, est la réponse : l'écran ne la redemande pas
+  (elle était composée deux fois quand le fil finissait entre `begin_frame` et la demande), sauf si une demande
+  plus récente pour la même vignette l'a suivie. Autre projet, nouvelle résolution : `clear` abandonne tout (file, calculs, images finies).
 - **Miniatures de dessins** (timeline, panneau Calques, en-têtes de calques, 64 × 36) : la même file (deux
   fils), le calcul est `thumbs::cel_thumbnail`, déplacé tel quel de `App::layer_thumb`. L'ancienne miniature reste
   en attendant la neuve ; un dessin qui n'en a pas montre un cadre vide. (Au passage : l'ouverture d'un autre
@@ -722,7 +726,12 @@ qui réveillent l'écran à la fin de chaque vignette (egui regroupe les réveil
   puis la timeline zoomée sous les yeux, et exige zéro sur le fil de l'interface (et des compositions sur les
   fils de fond) ; 200 demandes à froid en moins de 250 ms.
 - Le banc des essais attend les fils de vignettes (`Banc::attendre_vignettes`, `App::vignettes_en_cours`) : un
-  réveil qui tombe au hasard ne trouble ni « au repos, SHOT ne repeint pas » ni les essais de fiabilité.
+  réveil qui tombe au hasard ne trouble ni « au repos, SHOT ne repeint pas » ni les essais de fiabilité. Il
+  attend aussi les demandes remises à l'image suivante (`Thumbs::pending` : sur une machine chargée, les 2 ms
+  de `THUMB_TIME` passent avant la première demande, et rien n'est encore en file), et ne s'arrête qu'après
+  trois images de suite sans demande ni calcul (juste après un changement d'onglet, rien n'est encore demandé).
+  Son dossier de données (`shot-perf-bac-<processus>-<fil>`) est vidé au premier banc du fil : Windows
+  réutilise les numéros de processus, et un ancien essai y avait laissé une copie de secours.
   `scripts\verifier.ps1 -Repetitions 2` : OK (1 502 essais deux fois de suite, aucun intermittent).
 
 ### Risques

@@ -1568,6 +1568,12 @@ pub fn fond_epoch() -> u64 {
     FOND_EPOCH.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// Essais : comme si un fond venait d'être adopté (`fond_poll`), pour un dessin d'ailleurs.
+#[cfg(test)]
+pub(crate) fn fond_adopte_ailleurs() {
+    FOND_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// Pendant qu'on peint ou qu'on gomme dans la strate Fond du dessin `cel` (fond aux réglages
 /// `r`) : le fond affiché refait sur les tuiles `tiles` seulement, sans changer de version, pour
 /// le voir en direct (la version change au lâcher, et tout est refait).

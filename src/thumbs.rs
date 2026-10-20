@@ -223,13 +223,15 @@ impl Thumbs {
     fn texture_of(&mut self, ctx: &egui::Context, doc: &Document, id: u64, plan: Plan, cam: Camera, width: usize, deadline: Instant) -> Option<TextureId> {
         let _t = crate::perf::section("vignettes : clés et demandes");
         let slot = (id, width);
-        // (Plus le nombre de fonds sous le trait arrivés de l'arrière-plan : la vignette montre le
-        // fond d'avant jusqu'à l'arrivée du nouveau ; et la taille du cadre, qui donne celle de la vignette.)
+        // (Plus le nombre de fonds sous le trait arrivés de l'arrière-plan, si le plan montre un fond : la
+        // vignette montre le fond d'avant jusqu'à l'arrivée du nouveau. Un plan sans fond ne se refait pas
+        // quand le fond d'un autre arrive. Et la taille du cadre, qui donne celle de la vignette.)
+        let fonds = plan.items.iter().any(|i| matches!(i.fond, Some(render::FondPart::Forme(_))));
         let versions = plan
             .items
             .iter()
             .map(|i| doc.cels.get(&i.cel).map_or(0, |c| c.version))
-            .chain([crate::fx::fond_epoch(), doc.frame[0] as u64, doc.frame[1] as u64])
+            .chain([if fonds { crate::fx::fond_epoch() } else { 0 }, doc.frame[0] as u64, doc.frame[1] as u64])
             .collect();
         let key = Key::Plan(plan, versions, [cam.x, cam.y, cam.zoom, cam.angle, cam.dolly, cam.tilt, cam.pan].map(f32::to_bits));
         let generation = crate::fxcache::generation();
@@ -500,8 +502,8 @@ impl Shared {
         self.lock().outstanding()
     }
 
-    /// La demande pour `slot` de contenu `key` est-elle déjà en file ou en calcul ? Alors elle est
-    /// renouvelée (l'écran la veut encore) et rien d'autre à faire.
+    /// La demande pour `slot` de contenu `key` est-elle déjà en file, en calcul ou finie (pas encore
+    /// envoyée) ? Alors elle est renouvelée (l'écran la veut encore) et rien d'autre à faire.
     fn touch(&self, slot: Slot, key: &Key) -> bool {
         let mut q = self.lock();
         q.order += 1;
@@ -513,7 +515,19 @@ impl Shared {
         }
         // (Un calcul qui vient d'être arrêté, parce qu'une demande plus récente l'a remplacé, n'est pas une
         // réponse : l'écran est revenu au contenu d'avant, il faut le redemander.)
-        q.running.iter().any(|r| r.slot == slot && *r.key == *key && !r.cancel.load(Ordering::Relaxed))
+        if q.running.iter().any(|r| r.slot == slot && *r.key == *key && !r.cancel.load(Ordering::Relaxed)) {
+            return true;
+        }
+        // (Une vignette finie après le début de cette image d'écran, pas encore envoyée à la carte
+        // graphique, est la réponse : `Thumbs::begin_frame` la pose à l'image suivante. La redemander la
+        // ferait composer une seconde fois. Sauf si une demande plus récente pour la même vignette attend,
+        // se calcule ou est finie : elle la remplacerait, il faut redemander ce contenu-ci.)
+        let newer = |seq: u64| {
+            q.waiting.iter().any(|j| j.slot == slot && j.seq > seq)
+                || q.running.iter().any(|r| r.slot == slot && r.seq > seq && !r.cancel.load(Ordering::Relaxed))
+                || q.done.iter().any(|d| d.slot == slot && d.seq > seq)
+        };
+        q.done.iter().any(|d| d.slot == slot && *d.key == *key && !newer(d.seq))
     }
 
     /// Met `job` en file. Celle d'avant pour la même vignette ne vaut plus rien : retirée si elle

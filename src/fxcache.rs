@@ -498,7 +498,13 @@ fn enqueue(st: &mut State, mut job: Job) -> bool {
 /// ancienne). Celles que l'interface n'a pas renouvelées depuis `MAX_AGE` images d'écran, ou dont
 /// le résultat est déjà là, sont abandonnées. Le calcul est noté en cours.
 fn take_next(st: &mut State, now: u64) -> Option<Job> {
-    st.queue.retain(|j| j.epoch + MAX_AGE >= now);
+    // (Une demande abandonnée ne viendra pas : comme après un calcul fini, les vignettes incomplètes qui
+    // l'attendaient (`generation`) se refont, et la redemandent si elles en ont encore besoin. Sans cela,
+    // une vignette dont la demande d'effet vieillissait avant que le fil la prenne — fil occupé, machine
+    // chargée — restait incomplète pour toujours.)
+    if drop_aged(st, now) {
+        GENERATION.fetch_add(1, Ordering::Relaxed);
+    }
     loop {
         let best = st.queue.iter().enumerate().min_by_key(|(_, j)| (j.prio, j.seq)).map(|(i, _)| i)?;
         let job = st.queue.swap_remove(best);
@@ -508,6 +514,14 @@ fn take_next(st: &mut State, now: u64) -> Option<Job> {
         st.inflight.insert(job.id, job.version);
         return Some(job);
     }
+}
+
+/// Abandonne les demandes que l'interface n'a pas renouvelées depuis `MAX_AGE` images d'écran (au temps
+/// `now`) ; vrai s'il y en avait.
+fn drop_aged(st: &mut State, now: u64) -> bool {
+    let before = st.queue.len();
+    st.queue.retain(|j| j.epoch + MAX_AGE >= now);
+    st.queue.len() < before
 }
 
 /// Un dessin dérivé est-il prêt ou demandé ? (Pour ne pas le redemander à chaque image.)

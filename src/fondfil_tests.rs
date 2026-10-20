@@ -1,6 +1,10 @@
 //! Fond sous le trait calculé en arrière-plan (`fondfil.rs`, `fx::differe`) : demande caduque
 //! jetée, adoption, résultat final identique au calcul direct, et durées sur le fil de
 //! l'interface (essai `#[ignore]`).
+//!
+//! Les essais qui passent par le fond affiché (`fx::fond_poll`, le cache des dessins dérivés) touchent à
+//! l'état commun : ils le prennent en lecture (`fxcache::monde::lire`), sinon un fond adopté ici change
+//! le compte des fonds (`fx::fond_epoch`) sous un essai qui l'a pris pour lui seul.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -13,6 +17,7 @@ use crate::document::{Cel, CelId, Document, LayerKind};
 use crate::fond::{compose, silhouette, FondReglages};
 use crate::fondfil::{calculer, Demande, FondFil};
 use crate::fx;
+use crate::fxcache::monde;
 use crate::raster::{Raster, TILE};
 use crate::render::{self, FondPart, Plan, PlanItem};
 use crate::vector::{Element, Trace};
@@ -143,6 +148,7 @@ fn wait_new(doc: &Document, item: &PlanItem, old: &Arc<Cel>) -> Arc<Cel> {
 
 #[test]
 fn on_screen_the_previous_background_stays_until_the_new_one_is_ready() {
+    monde::lire();
     let (mut doc, id, r) = doc_with(ring(100.0), [11, 22, 33]);
     let item = fond_item(id, r);
     // Premier affichage : rien d'avant, calculé tout de suite.
@@ -163,6 +169,7 @@ fn on_screen_the_previous_background_stays_until_the_new_one_is_ready() {
 
 #[test]
 fn the_exact_background_is_computed_at_once_for_export_and_save() {
+    monde::lire();
     let (mut doc, id, r) = doc_with(ring(100.0), [12, 23, 34]);
     let item = fond_item(id, r);
     let first = arc_of(&doc, &item);
@@ -176,6 +183,7 @@ fn the_exact_background_is_computed_at_once_for_export_and_save() {
 
 #[test]
 fn only_the_latest_of_several_quick_changes_is_adopted() {
+    monde::lire();
     let (mut doc, id, r) = doc_with(ring(60.0), [13, 24, 35]);
     let item = fond_item(id, r);
     let first = fx::differe(|| arc_of(&doc, &item));
@@ -272,6 +280,7 @@ fn serie(elements: &[Element], differe: bool, couleur: [u8; 3]) -> Vec<(usize, f
 #[test]
 #[ignore]
 fn fond_background_keeps_the_ui_thread_free() {
+    monde::lire();
     let lib = BrushLibrary::builtin();
     lib.share();
     let s = BrushSettings::graphite();

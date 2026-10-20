@@ -147,9 +147,11 @@ impl Mesure {
 }
 
 impl App {
-    /// Des vignettes (des plans, des dessins) se font sur les fils de fond ou attendent d'être envoyées.
+    /// Des vignettes (des plans, des dessins) se font sur les fils de fond ou attendent d'être envoyées ; ou des
+    /// vignettes de plans attendent d'être demandées (le temps de l'image d'écran, `THUMB_TIME`, était passé :
+    /// sur une machine chargée, rien n'est encore en file, elles partent à l'image suivante).
     pub(crate) fn vignettes_en_cours(&self) -> bool {
-        self.thumbs.busy() || self.layer_thumbs.busy()
+        self.thumbs.busy() || self.thumbs.pending || self.layer_thumbs.busy()
     }
 }
 
@@ -185,6 +187,16 @@ pub(crate) fn banc(doc: Document, avec_gpu: bool) -> Banc {
 pub(crate) fn banc_taille(doc: Document, avec_gpu: bool, largeur: u32, hauteur: u32) -> Banc {
     // Un dossier par fil d'essai : `donnees::bac_a_sable` est propre à chaque fil.
     let bac = std::env::temp_dir().join(format!("shot-perf-bac-{}-{:?}", std::process::id(), std::thread::current().id()));
+    // (Vidé au premier banc du fil : Windows réutilise les numéros de processus, et les fils sont numérotés dans
+    // l'ordre ; un dossier de ce nom qui existe déjà vient d'un essai d'autrefois, qui y a laissé des copies de
+    // secours ou des réglages. Pas aux suivants : un essai qui simule un plantage ouvre ensuite, dans un second
+    // banc du même fil, ce que le premier a laissé.)
+    thread_local! {
+        static BAC_PRET: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+    if !BAC_PRET.with(|p| p.replace(true)) {
+        let _ = std::fs::remove_dir_all(&bac);
+    }
     let _ = std::fs::create_dir_all(&bac);
     crate::donnees::bac_a_sable(&bac);
     let rs = if avec_gpu { headless() } else { None };
@@ -232,9 +244,19 @@ impl Banc {
     /// veuille dire la même chose à chaque essai.
     pub fn attendre_vignettes(&mut self) {
         let debut = Instant::now();
-        while self.app.vignettes_en_cours() && debut.elapsed() < Duration::from_secs(60) {
-            std::thread::sleep(Duration::from_millis(1));
+        // (Jusqu'à trois images de suite où l'écran n'a rien demandé et où rien ne se fait : les vignettes ne
+        // sont demandées qu'en dessinant l'écran. Juste après un changement d'onglet ou de projet, rien n'est
+        // encore en file : l'attente s'arrêtait avant la première demande, et sur une machine chargée les
+        // images qui suivaient ne laissaient pas aux fils le temps de finir.)
+        let mut calmes = 0;
+        while calmes < 3 && debut.elapsed() < Duration::from_secs(60) {
             self.image(Vec::new(), 1.0 / 60.0);
+            if self.app.vignettes_en_cours() {
+                calmes = 0;
+                std::thread::sleep(Duration::from_millis(1));
+            } else {
+                calmes += 1;
+            }
         }
         // (Chaque réveil laisse derrière lui deux images, `egui::Context::request_repaint`.)
         self.chauffer(3);

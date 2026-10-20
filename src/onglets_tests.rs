@@ -1393,8 +1393,9 @@ fn closing_a_tab_removes_its_rescue_copy() {
     b.app.demarrer_secours();
     onglet_avec(&mut b, projet(90, 2));
     let racine = crate::recovery::root().expect("racine");
-    let avant = std::fs::read_dir(&racine).map(|d| d.count()).unwrap_or(0);
-    assert_eq!(avant, 2);
+    let contenu = || -> Vec<String> { std::fs::read_dir(&racine).map(|d| d.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect()).unwrap_or_default() };
+    let avant = contenu();
+    assert_eq!(avant.len(), 2, "{} : {avant:?}", racine.display());
     b.app.fermer_onglet(1);
     // (Effacée sur un fil : on attend un peu.)
     let t = Instant::now();

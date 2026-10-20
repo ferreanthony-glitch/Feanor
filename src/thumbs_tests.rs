@@ -368,6 +368,29 @@ fn a_running_job_is_cancelled_when_its_thumbnail_changes_again() {
     assert!(q.running.iter().all(|r| r.cancel.load(Ordering::Relaxed)));
 }
 
+/// Une vignette finie, pas encore envoyée à la carte graphique, est déjà la réponse à son contenu ; mais
+/// plus si une demande plus récente pour la même vignette l'a suivie (l'écran revient au contenu d'avant,
+/// annuler : il faut le redemander, sinon la plus récente s'afficherait).
+#[test]
+fn a_finished_thumbnail_answers_its_content_until_a_newer_request() {
+    monde::lire();
+    let doc = projet_long(1, 2, 4, 2);
+    let s = shared();
+    let first = fake_job(&doc, (1, 192), 10);
+    let key = first.key.clone();
+    s.push(first);
+    let job = s.lock().pick().expect("la demande");
+    {
+        let mut q = s.lock();
+        q.running.retain(|r| r.seq != job.seq);
+        q.done.push_back(Done { slot: job.slot, key: job.key.clone(), seq: job.seq, image: ColorImage::new([1, 1], Color32::RED), waiting: None });
+    }
+    assert!(s.touch((1, 192), &key), "finie : déjà la réponse");
+    assert!(!s.touch((2, 192), &key), "une autre vignette n'est pas finie");
+    s.push(fake_job(&doc, (1, 192), 20));
+    assert!(!s.touch((1, 192), &key), "une demande plus récente la remplacerait : à redemander");
+}
+
 /// Les vignettes qu'on ne voit plus (demande non renouvelée depuis quelques images) ne sont jamais
 /// composées ; les plus récemment demandées passent d'abord, dans l'ordre où l'écran les a demandées.
 #[test]
@@ -443,6 +466,69 @@ fn many_changes_before_a_thread_is_free_cost_one_composition() {
     assert_eq!(thumbs.rendered(), 1, "huit états, une composition");
     let (want, _) = old_path(&doc, 0, 0, WIDTH);
     assert!(same_image(thumbs.image_of(wants[0].2, WIDTH).unwrap(), &want));
+}
+
+/// Attend qu'un fil ait fini une vignette (elle attend d'être envoyée à la carte graphique), sans
+/// commencer d'image d'écran.
+fn wait_done(thumbs: &Thumbs) {
+    let shared = &thumbs.pool.as_ref().expect("les fils sont lancés").shared;
+    let t = Instant::now();
+    while !shared.has_done() {
+        assert!(t.elapsed() < Duration::from_secs(60), "la vignette ne finit pas : {} en file", shared.outstanding());
+        std::thread::sleep(Duration::from_millis(1));
+    }
+}
+
+/// Une vignette finie entre le début d'une image d'écran et la demande de l'écran (elle n'est pas encore
+/// envoyée à la carte graphique) est la réponse : l'écran ne la redemande pas, elle n'est composée qu'une
+/// fois. (Avant, elle était redemandée et composée deux fois : les essais qui comptent les compositions
+/// échouaient de temps en temps sur une machine chargée, quand le fil finissait dans cet intervalle.)
+#[test]
+fn a_thumbnail_finished_during_the_frame_is_not_asked_again() {
+    monde::lire();
+    let doc = projet_long(1, 2, 4, 2);
+    let ctx = egui::Context::default();
+    let mut thumbs = Thumbs::default();
+    let wants = firsts(&doc);
+    start_paused(&mut thumbs, &ctx);
+    thumbs.begin_frame(&ctx);
+    thumbs.texture_at(&ctx, &doc, 0, 0, wants[0].2, WIDTH, far());
+    pause(&thumbs, false);
+    wait_done(&thumbs);
+    // Même image d'écran : la vignette finie n'est pas encore là, l'écran la demande encore.
+    assert!(thumbs.image_of(wants[0].2, WIDTH).is_none());
+    thumbs.texture_at(&ctx, &doc, 0, 0, wants[0].2, WIDTH, far());
+    {
+        let q = thumbs.pool.as_ref().unwrap().shared.lock();
+        assert!(q.waiting.is_empty() && q.running.is_empty(), "pas redemandée ({} en file, {} en calcul)", q.waiting.len(), q.running.len());
+    }
+    settle(&mut thumbs, &ctx, &doc, &wants);
+    assert_eq!(thumbs.rendered(), 1, "une seule composition");
+    let (want, _) = old_path(&doc, 0, 0, WIDTH);
+    assert!(same_image(thumbs.image_of(wants[0].2, WIDTH).unwrap(), &want));
+}
+
+/// Un fond sous le trait adopté ailleurs (un autre dessin, un autre onglet, un autre essai) ne refait
+/// que les vignettes des plans qui montrent un fond (elles montraient le fond d'avant) ; celle d'un plan
+/// sans fond reste. (Avant, il refaisait toutes les vignettes, y compris celles que comptent les essais
+/// d'au-dessus quand un autre essai adoptait un fond en même temps.)
+#[test]
+fn a_background_adopted_elsewhere_only_refreshes_the_thumbnails_that_show_one() {
+    monde::ecrire();
+    let mut doc = projet_long(2, 2, 4, 2);
+    doc.panels[1].layers[0].fond = Some(crate::fond::FondReglages { couleur: [201, 187, 142], ..Default::default() });
+    let ctx = egui::Context::default();
+    let mut thumbs = Thumbs::default();
+    let wants = firsts(&doc);
+    settle(&mut thumbs, &ctx, &doc, &wants);
+    assert_eq!(thumbs.rendered(), 2);
+    crate::fx::fond_adopte_ailleurs();
+    settle(&mut thumbs, &ctx, &doc, &wants);
+    assert_eq!(thumbs.rendered(), 3, "seule la vignette du plan qui a un fond se refait");
+    for &(p, f, id) in &wants {
+        let (want, _) = old_path(&doc, p, f, WIDTH);
+        assert!(same_image(thumbs.image_of(id, WIDTH).unwrap(), &want), "plan {p}");
+    }
 }
 
 // ------------------------------------------------------------------ rien sur le fil de l'interface

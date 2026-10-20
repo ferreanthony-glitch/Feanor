@@ -86,6 +86,19 @@ fn requests_go_by_priority_then_arrival_and_the_aged_ones_are_dropped() {
     assert_eq!(st.inflight.len(), 3, "les calculs pris sont notés en cours");
 }
 
+/// Une demande abandonnée parce qu'elle a vieilli est signalée (`take_next` réveille alors les vignettes qui
+/// l'attendaient, `generation`) ; rien n'est signalé quand rien n'a vieilli.
+#[test]
+fn dropping_an_aged_request_is_reported() {
+    let mut st = State::new();
+    assert!(enqueue(&mut st, job(1, 0, 100, 10)));
+    assert!(!drop_aged(&mut st, 10 + MAX_AGE), "encore attendue");
+    assert_eq!(st.queue.len(), 1);
+    assert!(drop_aged(&mut st, 11 + MAX_AGE), "vieillie : abandonnée");
+    assert!(st.queue.is_empty());
+    assert!(!drop_aged(&mut st, 100), "plus rien à abandonner");
+}
+
 #[test]
 fn asking_again_raises_the_priority_and_a_new_version_replaces_the_request() {
     let mut st = State::new();
