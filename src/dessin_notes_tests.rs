@@ -931,7 +931,15 @@ fn the_transform_tool_gesture_on_an_animated_layer_sets_the_key_of_the_current_f
 
 #[test]
 fn the_timeline_and_the_tool_panel_draw_with_position_keys_without_trouble() {
-    let mut b = banc_dessin(LayerKind::Bitmap);
+    // Une fenêtre plus haute que `banc_dessin` : sous la bande d'onglets, les réglages de l'outil
+    // Transformer descendent jusqu'au groupe « Clés de position ».
+    let mut doc = Document::new(400, 300, 24);
+    doc.panels[0].layers = vec![Layer::new("Dessin", LayerKind::Bitmap)];
+    doc.panels[0].length = 4;
+    let mut b = banc_taille(doc, false, 1280, 1000);
+    b.app.set_mode(Mode::Animation);
+    (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
+    b.chauffer(10);
     b.app.layers_mut()[0].pos_keys = vec![PosKey::new(0, pose_x(0.0)), PosKey::new(3, pose_x(20.0))];
     b.app.tool = Tool::Transform;
     b.garder_textes = true;

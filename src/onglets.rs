@@ -212,6 +212,9 @@ etat_projet! {
     comparaison: Option<crate::comparerui::Comparaison> = None,
     pile_versions: crate::pilevers::Pile = Default::default(),
     purge_versions: Option<Option<u64>> = None,
+    // Le tracé droit en cours (Maj tenue) et les clés de position choisies sur la timeline.
+    droit: crate::tracedroit::Droit = Default::default(),
+    pos_ui: crate::poskeysui::PosUi = Default::default(),
     // La relecture : sa fenêtre, sa page en calcul et les notes lues visent ce projet.
     relecture: crate::relectureui::RelectureUi = Default::default(),
     // --- caches (rangés avec l'onglet : rien ne s'en échappe vers un autre projet)
