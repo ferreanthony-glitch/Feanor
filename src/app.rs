@@ -367,6 +367,9 @@ pub struct App {
     pub(crate) fx_auto_key: bool,
     pub(crate) fx_keys_shown: bool,
     pub(crate) fx_choice: Option<crate::fxkeys::FxSel>,
+    /// Les autres effets choisis avec lui, sur le même calque (Ctrl / Maj + clic sur leur nom) : leurs
+    /// rangs dans la pile. Seul `fx_choice` montre ses clés ; tous se copient d'un coup (`fxcopie.rs`).
+    pub(crate) fx_multi: Vec<usize>,
     /// Clés d'effets choisies dans le montage ou la timeline (`fxkeys.rs`) et la dernière cliquée
     /// (départ des Maj + clic), clés copiées (`fx_clip_recent` : la dernière copie est la leur,
     /// Ctrl+V les vise), clés prises à la souris.
@@ -379,6 +382,10 @@ pub struct App {
     /// était dedans : Ctrl+C et Ctrl+V visent ses effets).
     pub(crate) fx_stack_clipboard: Option<crate::fxcopie::FxStackClip>,
     pub(crate) fx_pane_focus: bool,
+    /// La dernière chose copiée est un ou des effets (`fx_pile_recent`), et le panneau Calques a la main
+    /// (`layers_pane_focus`, le dernier clic était dedans) : Ctrl+V y colle ces effets sur le calque cliqué.
+    pub(crate) fx_pile_recent: bool,
+    pub(crate) layers_pane_focus: bool,
     /// Import vidéo en cours (13k, `videoui.rs`).
     pub(crate) video_import: Option<crate::videoui::VideoImport>,
     /// Propagation d'une peinture sur la vidéo, façon EbSynth (`propagerui.rs`).
@@ -994,6 +1001,7 @@ impl App {
             fx_auto_key: false,
             fx_keys_shown: true,
             fx_choice: None,
+            fx_multi: Vec::new(),
             fx_key_sel: Vec::new(),
             fx_key_anchor: None,
             fx_key_clipboard: None,
@@ -1001,6 +1009,8 @@ impl App {
             fx_keys_drag: None,
             fx_stack_clipboard: None,
             fx_pane_focus: false,
+            fx_pile_recent: false,
+            layers_pane_focus: false,
             video_import: None,
             propagation: crate::propagerui::Propagation::new(wgpu_render_state),
             coloriage: crate::coloriageui::Coloriage::new(),
@@ -3065,6 +3075,7 @@ impl App {
         crate::fx::forget_all();
         // (Un autre projet : l'effet choisi et les clés choisies étaient ceux de l'ancien.)
         self.fx_choice = None;
+        self.fx_multi.clear();
         self.fx_key_sel.clear();
         self.fx_key_anchor = None;
         self.clear_cam_keys();
@@ -3397,6 +3408,11 @@ impl App {
     fn run_action_now(&mut self, action: &str) {
         // Un texte en cours de saisie est posé avant toute commande (annuler, changer d'image…).
         self.finish_text_edit();
+        // Une autre copie (dessin, plans, images, clés…) prend la place des effets copiés pour Ctrl+V
+        // depuis le panneau Calques ; la copie d'effets, plus bas, la redonne (`fxcopie.rs`).
+        if matches!(action, "edition.copier" | "edition.couper") {
+            self.fx_pile_recent = false;
+        }
         // Le panneau Références a la main : Ctrl+V y colle l'image du presse-papiers.
         if self.refs.focus && matches!(action, "edition.coller" | "edition.coller_a_la_tete" | "edition.coller_sur_place") {
             self.refs_paste();
@@ -3549,9 +3565,9 @@ impl App {
             // choisi et Ctrl+V colle les effets copiés, avant tous les autres presse-papiers
             // (`fxcopie.rs`). Sans effet sur la pile, Ctrl+C suit les règles d'avant.
             "edition.copier" if self.fx_pane_has_focus() && !self.layer().fx.is_empty() => self.fx_copy_chosen(),
-            "edition.coller" if self.fx_pane_has_focus() && self.fx_stack_clipboard.is_some() => {
-                self.fx_paste(self.fx_paste_targets(self.cur_layer), false)
-            }
+            // Coller des effets : le panneau Effets a la main, ou le panneau Calques l'a et la dernière
+            // copie est celle d'effets (on a cliqué le calque où les coller).
+            "edition.coller" if self.fx_paste_has_hand() => self.fx_paste(self.fx_paste_targets(self.cur_layer), false),
             // Des clés de caméra choisies (un losange jaune de la piste Caméra) : copier, couper,
             // supprimer les visent, coller aussi tant que c'est la dernière chose copiée
             // (`camkeys.rs`).
@@ -4468,6 +4484,8 @@ impl App {
             // De même pour le panneau Effets : s'il est sous le clic, il reprend la main pendant
             // cette image (`fxcopie.rs`).
             self.fx_pane_focus = false;
+            // Et le panneau Calques (`layersui.rs`) : Ctrl+V y colle des effets copiés.
+            self.layers_pane_focus = false;
             // Et pour le panneau Références (`referencesui.rs`).
             self.refs.focus = false;
         }

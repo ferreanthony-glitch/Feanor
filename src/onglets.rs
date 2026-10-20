@@ -131,6 +131,7 @@ etat_projet! {
     cam_key_sel: Vec<crate::camkeys::CamKeyRef> = Vec::new(),
     cam_key_anchor: Option<crate::camkeys::CamKeyRef> = None,
     fx_choice: Option<crate::fxkeys::FxSel> = None,
+    fx_multi: Vec<usize> = Vec::new(),
     fx_key_sel: Vec<crate::fxkeys::FxKeyRef> = Vec::new(),
     fx_key_anchor: Option<crate::fxkeys::FxKeyRef> = None,
     board_sel: Vec<u64> = Vec::new(),

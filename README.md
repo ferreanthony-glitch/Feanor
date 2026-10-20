@@ -375,10 +375,11 @@ on les coche et décoche, le dessin reste tel quel).
   postérisation, seuil), **Bruit**, **Pixéliser** (mosaïque), **Rendu** (nuages, éclairage,
   dégradé : ils texturent ou éclairent le dessin), **Netteté**, **Styliser** (ombre portée,
   lueur).
-- **Tremblement du trait** (famille Déformation, **calques vectoriels seulement**, comme dans
-  WigglyPaint) : le dessin « bout », montré en quelques variantes légèrement déplacées qui se
-  suivent à basse cadence, même sur une image fixe. Où le trouver : en tête de « Ajouter un effet »
-  (panneau Effets), au clic droit sur un calque dans le panneau Calques, dans le montage et dans
+- **Tremblement du trait** (famille **Trait** depuis le 2026-10-21, avant Déformation ; **calques vectoriels
+  seulement**, comme dans WigglyPaint) : le dessin « bout », montré en quelques variantes légèrement déplacées qui se
+  suivent à basse cadence, même sur une image fixe. Où le trouver : **en premier du bouton déroulant « Trait ▾ »**
+  du panneau Effets (avec les autres effets du trait ; il n'est plus une entrée à part de « Ajouter un effet », où il
+  est dans la famille Trait), au clic droit sur un calque dans le panneau Calques, dans le montage et dans
   l'en-tête de la timeline (la case « Tremblement du trait » et « Animer à l'arrêt »), dans les
   réglages du pinceau et du crayon sur un calque vectoriel (l'icône en vague), et par Ctrl+K en
   tapant « tremblement ». Sur un calque bitmap, l'entrée est grisée et dit pourquoi (il ne va que
@@ -465,18 +466,27 @@ on les coche et décoche, le dessin reste tel quel).
   précédente refuse le projet. Liste à regarder à l'écran : `docs/INTERFACE.md` (section 21).
 - Au clic droit sur un calque, la partie « Effets » : opacité, mode de fusion, chaque famille
   en cases à cocher ; on règle les paramètres dans le panneau Effets.
-- **Copier-coller des effets d'un calque à l'autre** : l'icône « Copier l'effet » de chaque effet (ou
-  son clic droit, ou le menu « Copier / coller » du panneau) copie l'effet avec ses réglages et toutes
-  ses clés ; « Copier tous les effets du calque » copie la pile (aussi dans « Effets » du clic droit
-  d'un calque). « Coller l'effet » / « Coller les effets » l'ajoutent à la fin de la pile du calque, ou
-  de tous les calques choisis (Ctrl / Maj + clic) ; « Remplacer les effets » remplace leur pile. Une
-  seule étape d'annulation. Les clés gardent leurs images (celles d'après la fin du plan sont laissées
-  de côté) ; le tremblement du trait est laissé de côté sur un calque bitmap ; la barre d'état dit ce
-  qui est collé où. Au clavier : quand le panneau Effets a la main (on y a cliqué en dernier), Ctrl+C
-  copie l'effet choisi (ou le seul de la pile) et Ctrl+V colle, avant les autres presse-papiers ; un
-  clic dans la timeline, le montage ou le dessin rend la main à ce qu'on y a choisi (les clés d'effets
-  gardent leur Ctrl+C / Ctrl+V). Actions `fx.copier`, `fx.copier_tout`, `fx.coller`, `fx.remplacer`
-  (Ctrl+K, sans raccourci par défaut). Détails dans `src/fxcopie.rs`.
+- **Copier-coller des effets d'un calque à l'autre** (2026-10-21 : plus de bouton « Copier / coller » dans le
+  panneau, tout se fait au clavier) : un clic sur le **nom d'un effet** le choisit et donne la main au panneau
+  Effets ; Ctrl + clic ajoute ou retire un effet du choix, Maj + clic prend tous ceux d'entre l'effet choisi et celui
+  cliqué (le choix est encadré). **Ctrl+C** copie les effets choisis avec tous leurs réglages et leurs clés (un
+  seul effet dans la pile : pas besoin de le choisir). On clique alors un autre calque **dans le panneau Calques**
+  (ou dans le panneau Effets, ouvert sur ce calque) : **Ctrl+V** colle les effets copiés à la fin de la pile du
+  calque (comme « Ajouter un effet »), même si un effet de la même sorte y est déjà, en **une étape
+  d'annulation** nommée « Coller l'effet » ou « Coller 2 effets ». Le presse-papiers d'effets est celui de
+  l'application : il passe d'un onglet à l'autre, et les réglages en pixels sont adaptés à la feuille du projet
+  d'arrivée. Quand les effets collés viennent d'arriver sur le calque courant, ils sont les effets choisis.
+  **Règle du clavier** : Ctrl+V colle des effets si le panneau Effets a la main, ou si le panneau Calques a la main
+  *et* que la dernière chose copiée est un effet ; dès qu'on copie autre chose (dessin, plans, images, clés), Ctrl+V
+  reprend son sens d'avant ; sans effet choisi, Ctrl+C aussi (dessins, plans, clés d'effets de la timeline…).
+  Restent : l'icône « Copier l'effet » de chaque effet (copie tout le choix si l'effet en fait partie), son clic
+  droit, « Copier tous les effets du calque » (aussi dans « Effets » du clic droit d'un calque), « Coller l'effet »
+  / « Coller les effets » (calque courant ou calques choisis par Ctrl / Maj + clic) et « Remplacer les effets »
+  (remplace toute la pile). Les clés gardent leurs images (celles d'après la fin du plan sont laissées de côté) ;
+  le tremblement du trait est laissé de côté sur un calque bitmap, et les effets du trait / de matière, qu'un calque
+  n'a qu'une fois, ne sont pas ajoutés s'ils y sont déjà ; la barre d'état dit ce qui est collé où. Actions
+  `fx.copier`, `fx.copier_tout`, `fx.coller`, `fx.remplacer` (Ctrl+K, sans raccourci par défaut). Détails dans
+  `src/fxcopie.rs`.
 - On les active, les ordonne ou les retire à tout moment.
 - On peut les animer par clés : « Créer une clé » à une image, puis à une autre, et les
   paramètres vont de l'une à l'autre. Les clés de l'effet choisi dans le panneau Effets (clic sur

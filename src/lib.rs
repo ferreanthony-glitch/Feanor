@@ -393,6 +393,8 @@ mod fxkeys;
 mod fxkeys_tests;
 mod fxcopie;
 #[cfg(test)]
+mod fxclavier_tests;
+#[cfg(test)]
 mod fxcopie_tests;
 #[cfg(test)]
 mod folders_tests;

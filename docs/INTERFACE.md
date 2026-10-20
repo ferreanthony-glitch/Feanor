@@ -1673,7 +1673,7 @@ Les icônes ont leur bulle d'une seconde (nom, raccourci, description : `bulles.
 
 ### Ce que voit l'utilisateur
 
-- **Panneau Effets** : sous « Ajouter un effet / Préréglages / Copier-coller », deux boutons « Trait ▾ » et « Matière ▾ ». Un effet allumé sur
+- **Panneau Effets** : sous « Ajouter un effet / Préréglages » (le bouton « Copier / coller » a disparu le 2026-10-21, partie 31), deux boutons « Trait ▾ » et « Matière ▾ ». Un effet allumé sur
   le calque est enfoncé dans la liste ; le titre compte les effets allumés (« Trait (2) ▾ »). Sur un calque bitmap, les entrées qu'il
   refuse sont grisées et la bulle dit pourquoi. Les préréglages sont sous un petit titre « Préréglages ». Si les effets du calque sont
   éteints (bouton fx), une ligne le dit, avec « Rallumer ».
@@ -2436,3 +2436,68 @@ l'onglet jusqu'en bas), ou montre une étiquette d'un autre onglet.
 8. Une seconde sur un onglet, le champ de recherche, un réglage : la bulle.
 9. Écran de 1366 × 768 ou fenêtre de SHOT réduite : la fenêtre se ramène à l'écran et son contenu défile.
 10. Fenêtre ouverte, application au repos : aucun repeint (le processeur reste à zéro).
+
+## 31. Effets au clavier et tremblement dans « Trait » (2026-10-21, branche `effets-clavier`)
+
+Deux demandes d'Anthony : le bouton « Copier / coller » du panneau Effets ne sert à rien (on choisit un effet, Ctrl+C, on clique un
+autre calque, Ctrl+V) ; le tremblement du trait est de la famille Trait et doit être avec les autres.
+
+### Mots
+
+| Mot | Sens | À éviter |
+|---|---|---|
+| **Effet choisi** | l'effet dont le nom est encadré dans le panneau Effets (ses clés se voient dans la timeline et le montage) ; Ctrl / Maj + clic en choisit plusieurs | sélectionné (pour les clés, c'est autre chose) |
+| **Coller en fin de pile** | l'effet est ajouté après ceux du calque (il s'applique après eux), comme « Ajouter un effet » ; jamais à la place d'un autre | écraser |
+
+### Où et quels gestes
+
+| Geste | Où | Effet |
+|---|---|---|
+| Clic sur le nom d'un effet | panneau Effets | le choisit ; le panneau a la main (cadre discret) ; un second clic le lâche |
+| Ctrl + clic / Maj + clic sur un nom | panneau Effets | ajoute ou retire un effet du choix / prend la plage jusqu'à l'effet choisi |
+| Ctrl+C | panneau Effets a la main, un effet choisi (ou un seul effet sur le calque) | copie les effets choisis : réglages et clés |
+| Clic sur un calque | panneau Calques | le calque devient courant ; le panneau a la main (cadre discret s'il y a des effets copiés) |
+| Ctrl+V | panneau Effets a la main, ou panneau Calques a la main après une copie d'effets | colle à la fin de la pile du calque courant (ou des calques choisis) : une étape « Coller l'effet » / « Coller 2 effets » |
+| « Copier tous les effets du calque », « Coller », « Remplacer les effets » | clic droit sur un calque > Effets ; clic droit sur le nom d'un effet ; Ctrl+K (`fx.copier_tout`, `fx.coller`, `fx.remplacer`) | comme avant |
+| Tremblement du trait | bouton « Trait ▾ » du panneau Effets, premier de la liste (icône vague) ; aussi menus de calque, en-tête de la timeline, outils vectoriels, Ctrl+K (`fx.tremblement`) | coche / décoche, grisé avec la raison sur un calque bitmap |
+
+### Ce que voit l'utilisateur
+
+- **Panneau Effets** : « Ajouter un effet » et « Préréglages » ; plus de bouton « Copier / coller ». Chaque effet a toujours son icône « Copier l'effet »
+  (elle copie tout le choix si l'effet en fait partie). Les effets choisis ont le cadre de la couleur de sélection.
+- **Menu « Trait ▾ »** : « Tremblement du trait », puis écriture, crayonné, respiration, ondulation, pointillés, désagrégation ; le titre compte
+  les effets allumés (le tremblement compte), la section « Préréglages » est inchangée (le tremblement n'a pas de préréglage ; ceux de « Tremblement
+  de l'image » restent dans « Préréglages » du panneau).
+- **« Ajouter un effet »** : plus d'entrée « Tremblement du trait » en tête ; il est dans la famille « Trait » de ce menu, avec les autres.
+- **Panneau Calques** : un cadre discret quand Ctrl+V va y coller des effets.
+- **Barre d'état** : « 2 effets copiés : Flou gaussien, Lueur. Ctrl+V sur un autre calque… », puis « 2 effets collés sur le calque « B ». ».
+
+### Limites
+
+- Ctrl+V depuis la timeline ou le montage garde son sens d'avant (images, clés, plans) : pour coller des effets, cliquer le calque dans le panneau
+  Calques (ou travailler dans le panneau Effets).
+- Les effets du trait et de matière, ainsi que le tremblement, ne sont qu'une fois par calque : sur un calque qui l'a déjà, la copie n'est pas ajoutée (la barre d'état le dit).
+- Seul le premier effet choisi (le dernier cliqué) montre ses clés dans la timeline.
+- Ni Ctrl+X sur les effets, ni glisser-déposer d'un effet sur un calque.
+- Le tremblement ne change que de menu : son rendu (processeur et carte graphique) et l'enregistrement des projets sont ceux d'avant (la famille n'est pas enregistrée).
+
+### Essais ajoutés
+
+`fxclavier_tests.rs` (16 essais) : clic sur un nom (choix, main au panneau, second clic), Ctrl / Maj + clic, choix perdu en changeant de calque, Ctrl+C /
+Ctrl+V vers un autre calque (réglages et clés identiques, une étape nommée, annulation), plusieurs effets d'un coup, effet de même sorte ajouté et non
+remplacé, `fx.remplacer` et `fx.coller` toujours là, Ctrl+V depuis le panneau Calques seulement après une copie d'effets, rien sans la main, un appui ailleurs
+rend la main, collage d'une feuille 320×180 dans une 640×360 (pixels doublés), bouton disparu, tremblement premier du menu « Trait » et absent en tête
+de « Ajouter un effet », grisé sur un bitmap, projet avec tremblement enregistré et relu à l'identique.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Panneau Effets : plus de bouton « Copier / coller » à côté de « Préréglages ».
+2. Sur un calque avec trois effets, cliquer le nom du premier : cadre ; Ctrl + clic sur le troisième : deux cadres ; Maj + clic : la plage ; un clic simple :
+   un seul ; re-cliquer l'unique : plus aucun.
+3. Choisir deux effets, Ctrl+C ; cliquer un autre calque dans le panneau Calques (un cadre discret apparaît) ; Ctrl+V : les deux effets arrivent
+   en bas de sa pile, avec leurs réglages et leurs clés ; Historique : « Coller 2 effets » ; Ctrl+Z les retire d'un coup.
+4. Coller deux fois le même flou : deux flous (aucun n'en remplace un autre). Ctrl+K « remplacer les effets » : la pile est remplacée.
+5. Copier un effet, puis copier un dessin (outil de sélection, Ctrl+C), cliquer un calque : Ctrl+V colle le dessin, plus l'effet.
+6. Copier un effet dans un projet, ouvrir un autre onglet d'une autre taille de feuille, cliquer un calque, Ctrl+V : l'effet arrive, ses pixels adaptés.
+7. Menu « Trait ▾ » : « Tremblement du trait » est le premier ; grisé (bulle) sur un calque bitmap ; « Ajouter un effet » : pas d'entrée à part
+   en tête, mais « Trait > Tremblement du trait ». Rouvrir un projet d'avant avec un tremblement : il tremble comme avant.

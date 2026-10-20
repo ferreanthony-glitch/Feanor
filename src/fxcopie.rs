@@ -7,8 +7,9 @@
 //! projet, rien dans un effet ne renvoie à un dessin.
 //!
 //! Où ça se trouve :
-//! - panneau Effets : l'icône « Copier l'effet » de chaque effet, le clic droit sur son nom, et le
-//!   menu « Copier / coller » de la rangée du haut ;
+//! - panneau Effets : le clavier (voir « Le focus »), l'icône « Copier l'effet » de chaque effet et le clic
+//!   droit sur son nom (le bouton « Copier / coller » de la rangée du haut a disparu le 2026-10-21 : Anthony,
+//!   « on doit pouvoir sélectionner un effet puis Ctrl+C, Ctrl+V dans un autre calque ») ;
 //! - menus des calques (panneau Calques, montage, timeline) : sous-menu « Effets », en bas ;
 //! - actions `fx.copier`, `fx.copier_tout`, `fx.coller`, `fx.remplacer` (palette Ctrl+K, raccourcis
 //!   à donner soi-même : aucun par défaut) ;
@@ -26,12 +27,22 @@
 //!   et s'il est déjà sur le calque (un seul par calque) ; les dossiers n'ont pas d'effets ;
 //! - la barre d'état dit ce qui a été collé où, et ce qui a été laissé de côté.
 //!
+//! Le choix : un clic sur le nom d'un effet le choisit (`fx_click_name`) ; Ctrl + clic ajoute ou retire
+//! un effet du choix, Maj + clic prend la plage. `fx_choice` (le dernier cliqué) montre ses clés,
+//! `fx_multi` porte les autres ; `fx_selected` les rend tous, dans l'ordre de la pile.
+//!
 //! Le focus : cliquer dans le panneau Effets lui donne la main (cadre de la couleur d'accent, et les
-//! montages / timeline / dessin la perdent). Alors Ctrl+C copie l'effet choisi (le seul de la pile
+//! montages / timeline / dessin la perdent). Alors Ctrl+C copie les effets choisis (le seul de la pile
 //! s'il n'y en a qu'un) et Ctrl+V colle les effets copiés, avant tout autre presse-papiers (clés
 //! d'effets, de caméra, de dessins, images, plans). Un clic ailleurs (une clé d'effet dans la
 //! timeline, le montage, le dessin) rend la main à ce qui est cliqué, et « Créer une clé » rend la
 //! main à la clé qu'il vient de créer : Ctrl+C copie alors ces clés, comme avant.
+//!
+//! Le panneau Calques : un clic dedans lui donne aussi la main (`layers_pane_focus`, sans rien prendre aux
+//! autres bandes). Ctrl+V y colle les effets copiés sur le calque cliqué si la DERNIÈRE chose copiée est
+//! un ou des effets (`fx_pile_recent` : tombe à faux dès qu'on copie autre chose) ; sinon Ctrl+V garde
+//! son sens d'avant. La règle est dans `fx_paste_has_hand`. Depuis la timeline ou le montage, Ctrl+V reste
+//! celui des images, clés et plans.
 //!
 //! La logique est ici en fonctions pures (`paste_onto`, `message`…), testées dans
 //! `fxcopie_tests.rs` ; `impl App` ne fait que la brancher sur le document, les menus et
@@ -172,6 +183,17 @@ impl Report {
     }
 }
 
+/// Le nom de l'étape d'annulation d'un collage de `n` effets par calque (Historique).
+pub(crate) fn step_name(replace: bool, n: usize) -> String {
+    if replace {
+        "Remplacer les effets".to_string()
+    } else if n <= 1 {
+        "Coller l'effet".to_string()
+    } else {
+        format!("Coller {n} effets")
+    }
+}
+
 fn plural(n: usize, one: &str, many: &str) -> String {
     format!("{n} {}", if n > 1 { many } else { one })
 }
@@ -248,6 +270,46 @@ impl App {
         self.key_focus = false;
     }
 
+    /// Clic sur le nom de l'effet de rang `rank` (panneau Effets) : il est choisi et le panneau a la main
+    /// (Ctrl+C / Ctrl+V visent les effets). Clic seul : cet effet seul (un second clic sur l'unique effet
+    /// choisi le lâche) ; Ctrl + clic : l'ajoute aux effets choisis ou l'en retire ; Maj + clic : tous
+    /// ceux d'entre l'effet choisi et celui-ci.
+    pub(crate) fn fx_click_name(&mut self, rank: usize, ctrl: bool, shift: bool) {
+        let len = self.layers().get(self.cur_layer).map_or(0, |l| l.fx.len());
+        if rank >= len {
+            return;
+        }
+        self.take_fx_pane_focus();
+        let chosen = self.fx_selected();
+        if shift && !chosen.is_empty() {
+            let anchor = self.fx_index().unwrap_or(rank);
+            let (lo, hi) = (anchor.min(rank), anchor.max(rank));
+            self.select_fx(anchor);
+            self.fx_multi = (lo..=hi).filter(|&r| r != anchor).collect();
+        } else if ctrl {
+            let mut set = chosen;
+            let added = !set.contains(&rank);
+            if added {
+                set.push(rank);
+            } else {
+                set.retain(|&r| r != rank);
+            }
+            // (Celui qu'on vient d'ajouter montre ses clés ; sinon, le premier qui reste.)
+            let main = if added { Some(rank) } else { set.first().copied() };
+            match main {
+                Some(main) => {
+                    self.select_fx(main);
+                    self.fx_multi = set.into_iter().filter(|&r| r != main).collect();
+                }
+                None => self.deselect_fx(),
+            }
+        } else if chosen == [rank] {
+            self.deselect_fx();
+        } else {
+            self.select_fx(rank);
+        }
+    }
+
     /// Les calques sur lesquels colle une commande lancée depuis le calque `li` : tous les calques
     /// choisis si `li` en est, sinon `li` seul.
     pub(crate) fn fx_paste_targets(&self, li: usize) -> Vec<usize> {
@@ -272,6 +334,20 @@ impl App {
         Some(parts.join(", "))
     }
 
+    /// Ctrl+V colle des effets : le panneau Effets a la main (et des effets sont copiés), ou le panneau
+    /// Calques l'a et la dernière chose copiée est un ou des effets. C'est la règle du clavier ; les
+    /// menus et la palette collent toujours (`fx.coller`).
+    pub(crate) fn fx_paste_has_hand(&self) -> bool {
+        self.fx_stack_clipboard.is_some() && (self.fx_pane_focus || (self.layers_pane_focus && self.fx_pile_recent))
+    }
+
+    /// Un clic dans le panneau Calques lui donne la main : si des effets viennent d'être copiés, Ctrl+V
+    /// les colle sur le calque cliqué. Il ne prend rien aux autres bandes : sans copie d'effets récente,
+    /// Ctrl+C / Ctrl+V gardent leur sens d'avant.
+    pub(crate) fn take_layers_pane_focus(&mut self) {
+        self.layers_pane_focus = true;
+    }
+
     fn set_fx_stack_clip(&mut self, effects: Vec<Effect>) {
         self.fx_stack_clipboard = Some(FxStackClip { effects });
         self.collage.origines.pile = Some(crate::adaptation::Origine::de(&self.doc));
@@ -279,21 +355,40 @@ impl App {
         // dans la timeline (Ctrl+V y vise ce qui a été copié en dernier).
         self.fx_clip_recent = false;
         self.cam_clip_recent = false;
+        self.fx_pile_recent = true;
         // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau SHOT (`pasteimage`).
         self.ctx.copy_text(format!("{}effets copiés", crate::pasteimage::MARK));
     }
 
     /// Copie l'effet de rang `rank` de la pile du calque `li`.
     pub(crate) fn fx_copy_effect(&mut self, li: usize, rank: usize) {
-        let Some(e) = self.layers().get(li).and_then(|l| l.fx.get(rank)).cloned() else {
+        self.fx_copy_effects(li, &[rank]);
+    }
+
+    /// Copie les effets de rangs `ranks` de la pile du calque `li`, dans l'ordre de la pile : sorte,
+    /// état, réglages et clés de chacun. Ils vont dans le presse-papiers d'effets de l'application, qui
+    /// passe d'un onglet à l'autre.
+    pub(crate) fn fx_copy_effects(&mut self, li: usize, ranks: &[usize]) {
+        let mut ranks = ranks.to_vec();
+        ranks.sort_unstable();
+        ranks.dedup();
+        let effects: Vec<Effect> = ranks.iter().filter_map(|&r| self.layers().get(li).and_then(|l| l.fx.get(r)).cloned()).collect();
+        if effects.is_empty() {
             self.status = "Pas d'effet à copier : choisis un effet dans la pile du calque (clic sur son nom, dans le panneau Effets).".into();
             return;
-        };
-        let keys = e.keys.len();
-        let label = e.kind.label();
-        self.set_fx_stack_clip(vec![e]);
-        let keys = if keys > 0 { format!(" avec {}", plural(keys, "clé", "clés")) } else { String::new() };
-        self.status = format!("Effet copié : {label}{keys}. Ctrl+V dans le panneau Effets (ou Effets > Coller l'effet, dans le menu d'un calque) le colle sur le calque, ou sur les calques choisis.");
+        }
+        let tail = " Ctrl+V sur un autre calque (cliqué dans le panneau Calques, ou le panneau Effets ouvert dessus) le colle avec les mêmes réglages.";
+        if effects.len() == 1 {
+            let (keys, label) = (effects[0].keys.len(), effects[0].kind.label());
+            self.set_fx_stack_clip(effects);
+            let keys = if keys > 0 { format!(" avec {}", plural(keys, "clé", "clés")) } else { String::new() };
+            self.status = format!("Effet copié : {label}{keys}.{tail}");
+        } else {
+            let n = effects.len();
+            let kinds: Vec<EffectKind> = effects.iter().map(|e| e.kind).collect();
+            self.set_fx_stack_clip(effects);
+            self.status = format!("{n} effets copiés : {}.{tail}", names(&kinds));
+        }
     }
 
     /// Copie tous les effets du calque `li`.
@@ -318,11 +413,12 @@ impl App {
     pub(crate) fn fx_copy_chosen(&mut self) {
         let li = self.cur_layer;
         let n = self.layers().get(li).map_or(0, |l| l.fx.len());
-        match (self.fx_index(), n) {
-            (Some(i), _) => self.fx_copy_effect(li, i),
-            (None, 1) => self.fx_copy_effect(li, 0),
-            (None, 0) => self.status = "Aucun effet sur ce calque : rien à copier.".into(),
-            (None, _) => self.status = "Choisis d'abord l'effet à copier (clic sur son nom, dans le panneau Effets), ou copie tous les effets du calque.".into(),
+        let chosen = self.fx_selected();
+        match (chosen.is_empty(), n) {
+            (false, _) => self.fx_copy_effects(li, &chosen),
+            (true, 1) => self.fx_copy_effect(li, 0),
+            (true, 0) => self.status = "Aucun effet sur ce calque : rien à copier.".into(),
+            (true, _) =>self.status = "Choisis d'abord l'effet à copier (clic sur son nom, dans le panneau Effets), ou copie tous les effets du calque.".into(),
         }
     }
 
@@ -344,7 +440,7 @@ impl App {
         let len = self.frame_count();
         let mut rep = Report::default();
         // (calque, nouvelle pile, rang du premier effet collé)
-        let mut changes: Vec<(usize, Vec<Effect>, usize)> = Vec::new();
+        let mut changes: Vec<(usize, Vec<Effect>, usize, usize)> = Vec::new();
         for &li in &targets {
             let Some(layer) = self.layers().get(li) else { continue };
             if layer.folder {
@@ -356,7 +452,7 @@ impl App {
             rep.absorb(li, &landed);
             if !landed.added.is_empty() {
                 let first = stack.len() - landed.added.len();
-                changes.push((li, stack, first));
+                changes.push((li, stack, first, landed.added.len()));
             }
         }
         // (Le nom du calque, quand il n'y en a qu'un.)
@@ -369,9 +465,9 @@ impl App {
         self.end_stroke();
         let snap = self.snapshot();
         let mut select = None;
-        for (li, stack, first) in changes {
+        for (li, stack, first, count) in changes {
             if li == self.cur_layer {
-                select = Some(first);
+                select = Some((first, count));
             }
             self.layers_mut()[li].fx = stack;
         }
@@ -381,20 +477,16 @@ impl App {
             self.fx_key_sel.clear();
             self.fx_key_anchor = None;
         }
-        // Sur le calque courant, le premier effet collé devient le choix (ses clés se voient).
-        if let Some(first) = select {
+        // Sur le calque courant, les effets collés sont les effets choisis (le premier montre ses clés) :
+        // on peut les recopier aussitôt.
+        if let Some((first, count)) = select {
             self.select_fx(first);
+            self.fx_multi = (first + 1..first + count).collect();
         }
         self.status = message(&rep, replace, &name);
-        let step = if replace {
-            "Remplacer les effets"
-        } else if clip.effects.len() == 1 {
-            "Coller l'effet"
-        } else {
-            "Coller les effets"
-        };
+        let step = step_name(replace, rep.most);
         self.renderer.invalidate_all();
-        self.commit_named(snap, step);
+        self.commit_named(snap, &step);
     }
 
     /// Les commandes `fx.copier`, `fx.copier_tout`, `fx.coller` et `fx.remplacer`.

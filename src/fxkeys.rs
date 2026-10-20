@@ -387,7 +387,9 @@ impl App {
     /// Choisit l'effet de rang `effect` dans la pile du calque courant : ses clés, et elles seules,
     /// se montrent dans le montage et la timeline. Changer d'effet lâche le choix des clés.
     pub(crate) fn select_fx(&mut self, effect: usize) {
-        let new = self.doc.panels.get(self.cur_panel).and_then(|p| {
+        // (Un seul effet choisi : les autres choisis avec lui sont lâchés.)
+        self.fx_multi.clear();
+        let new =self.doc.panels.get(self.cur_panel).and_then(|p| {
             let l = p.layers.get(self.cur_layer)?;
             (effect < l.fx.len()).then_some(FxSel { panel: p.id, layer: l.id, effect })
         });
@@ -396,7 +398,19 @@ impl App {
 
     /// Plus aucun effet choisi : plus de losange.
     pub(crate) fn deselect_fx(&mut self) {
+        self.fx_multi.clear();
         self.set_fx_choice(None);
+    }
+
+    /// Les effets choisis de la pile du calque courant, dans l'ordre de la pile : l'effet choisi
+    /// (`fx_index`) et ceux qu'on lui a ajoutés (Ctrl / Maj + clic). Vide si aucun n'est choisi.
+    pub(crate) fn fx_selected(&self) -> Vec<usize> {
+        let Some(main) = self.fx_index() else { return Vec::new() };
+        let len = self.layers().get(self.cur_layer).map_or(0, |l| l.fx.len());
+        let mut out: Vec<usize> = self.fx_multi.iter().copied().filter(|&r| r < len).chain([main]).collect();
+        out.sort_unstable();
+        out.dedup();
+        out
     }
 
     fn set_fx_choice(&mut self, new: Option<FxSel>) {
