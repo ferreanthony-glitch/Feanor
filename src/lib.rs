@@ -35,6 +35,16 @@ mod collage_tests;
 mod enregistrement;
 #[cfg(test)]
 mod enregistrement_tests;
+// Travailler à plusieurs sur un film (`docs/COOPERATION.md`) : l'équipier (`equipe`), les prises (`verrous`, pur), le
+// stockage (`depot`), les commentaires de chacun (`partagecom`), la session (`cooperation`) et son interface
+// (`cooperationui`). Le format est `projet_partage.rs`, sous-module de `project`.
+mod equipe;
+mod verrous;
+mod depot;
+mod partagecom;
+mod cooperation;
+#[cfg(test)]
+mod cooperation_tests;
 // Empreintes de contenu, envois (« v2 au réal ») et plans modifiés depuis le dernier : le modèle et le
 // fichier (`envois`), l'interface (`envoisui`).
 mod empreinte;

@@ -1011,7 +1011,13 @@ pub struct Document {
     /// (`panels`) est toujours la version active.
     pub versions: std::collections::BTreeMap<u64, crate::planvers::VersionsDuPlan>,
     next_id: u64,
+    /// Préfixe des numéros neufs d'un projet partagé (`préfixe << 32`, `cooperation.rs`) : deux équipiers ne
+    /// donnent jamais le même numéro. 0 pour un projet classique, dont les numéros ne changent pas.
+    id_prefix: u64,
 }
+
+/// Les 32 bits du bas d'un numéro : le compteur de son équipier (`Document::id_prefix`).
+pub(crate) const ID_LOW: u64 = 0xFFFF_FFFF;
 
 impl Document {
     /// Projet neuf d'un cadre `frame_w`×`frame_h`, sur une feuille deux fois plus grande.
@@ -1062,6 +1068,7 @@ impl Document {
             envois: Default::default(),
             versions: Default::default(),
             next_id: 1,
+            id_prefix: 0,
         };
         let seq = doc.new_sequence();
         let scene = doc.new_scene(seq);
@@ -1126,6 +1133,7 @@ impl Document {
             envois: Default::default(),
             versions: structure.versions,
             next_id: max_id + 1,
+            id_prefix: 0,
         };
         doc.normalize();
         doc
@@ -1349,12 +1357,60 @@ impl Document {
     pub(crate) fn alloc(&mut self) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
-        id
+        id | self.id_prefix
     }
 
-    /// Les numéros jusqu'à `id` sont pris (marques et commentaires d'une réserve relue).
+    /// Les numéros jusqu'à `id` sont pris (marques et commentaires d'une réserve relue). Dans un projet partagé,
+    /// seuls comptent les numéros de mon préfixe : ceux des autres équipiers ont leur propre compteur.
     pub(crate) fn reserve_id(&mut self, id: u64) {
-        self.next_id = self.next_id.max(id + 1);
+        if self.id_prefix == 0 {
+            self.next_id = self.next_id.max(id + 1);
+        } else if id & !ID_LOW == self.id_prefix {
+            self.next_id = self.next_id.max((id & ID_LOW) + 1);
+        }
+    }
+
+    /// Le préfixe des numéros neufs (0 : projet classique).
+    pub(crate) fn id_prefix(&self) -> u64 {
+        self.id_prefix
+    }
+
+    /// Passe le projet à la numérotation d'un équipier (`prefixe` sur 20 bits) : les numéros neufs sont
+    /// `prefixe << 32 | compteur`, le compteur repartant au-dessus du plus grand numéro de ce préfixe déjà
+    /// dans le projet. Les numéros d'avant ne changent pas.
+    pub(crate) fn set_id_prefix(&mut self, prefixe: u64) {
+        self.id_prefix = (prefixe & 0xF_FFFF) << 32;
+        self.next_id = 1;
+        let mine = self.id_prefix;
+        let mut top = 0u64;
+        let mut see = |id: u64| {
+            if mine != 0 && id & !ID_LOW == mine {
+                top = top.max(id & ID_LOW);
+            }
+        };
+        for p in self.panels.iter().chain(self.plans_ranges()) {
+            see(p.id);
+            p.marks.iter().for_each(|m| see(m.id));
+        }
+        self.scenes.iter().for_each(|s| see(s.id));
+        self.sequences.iter().for_each(|s| see(s.id));
+        for t in &self.audio_tracks {
+            see(t.id);
+            t.clips.iter().for_each(|c| see(c.id));
+        }
+        self.comments.iter().for_each(|c| see(c.id));
+        self.transitions.iter().for_each(|t| see(t.id));
+        self.references.iter().for_each(|r| see(r.id));
+        self.cels.keys().for_each(|&c| see(c));
+        self.sounds.keys().for_each(|&s| see(s));
+        self.models.keys().for_each(|&m| see(m));
+        for r in self.reserves.values() {
+            for piece in [&r.head, &r.tail] {
+                piece.marks.iter().for_each(|m| see(m.id));
+                piece.comments.iter().for_each(|c| see(c.id));
+            }
+        }
+        self.next_id = top + 1;
     }
 
     pub fn new_sequence(&mut self) -> u64 {
@@ -2799,7 +2855,7 @@ impl Document {
 
     /// Remet un modèle relu d'un projet, avec son identifiant.
     pub fn insert_model(&mut self, model: crate::model3d::Model3d) {
-        self.next_id = self.next_id.max(model.id + 1);
+        self.reserve_id(model.id);
         self.models.insert(model.id, Arc::new(model));
     }
 

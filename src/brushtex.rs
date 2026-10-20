@@ -788,6 +788,15 @@ pub fn shared_image(kind: TextureKind, key: u32) -> Option<GrayImage> {
     }
 }
 
+/// La texture `(kind, key)` est déjà partagée (sans la copier).
+pub fn has_shared(kind: TextureKind, key: u32) -> bool {
+    let Ok(shared) = SHARED.read() else { return false };
+    match kind {
+        TextureKind::Tip => shared.tips.contains_key(&key),
+        TextureKind::Paper => shared.papers.contains_key(&key),
+    }
+}
+
 /// Ajoute une texture lue dans un projet, sous sa clé (sans remplacer celle déjà là).
 pub fn share_texture(kind: TextureKind, key: u32, img: GrayImage) {
     let Ok(mut shared) = SHARED.write() else { return };

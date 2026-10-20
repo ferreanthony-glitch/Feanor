@@ -52,9 +52,13 @@ struct DecorEntry {
 /// Le contenu du fichier pour `doc` ; rien s'il n'y a aucune scène à garder (le fichier part).
 /// Seuls les plans et les séquences qui existent sont écrits, dans l'ordre du film.
 pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
+    to_bytes_avec(doc, true)
+}
+
+fn to_bytes_avec(doc: &Document, avec_plans: bool) -> Result<Option<Vec<u8>>, String> {
     let scenes = &doc.scenes3d;
     let mut plans = Vec::new();
-    for p in &doc.panels {
+    for p in doc.panels.iter().filter(|_| avec_plans) {
         if let Some(scene) = scenes.plans.get(&p.id).filter(|s| **s != PlanScene::default()) {
             plans.push(PlanEntry { plan: p.id, scene: scene.clone() });
         }
@@ -91,6 +95,26 @@ pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
     serde_json::to_vec_pretty(&sidecar).map(Some).map_err(|e| e.to_string())
 }
 
+/// Les décors de séquence seuls, pour un projet partagé : la scène de chaque plan est dans le fichier de son plan
+/// (`projet_partage.rs`), les décors au montage.
+pub(crate) fn to_bytes_decors(doc: &Document) -> Result<Option<Vec<u8>>, String> {
+    to_bytes_avec(doc, false)
+}
+
+/// Les scènes d'un projet partagé : les décors (texte de `scenes3d.json`, ou rien) et la scène de chaque plan, tirée de son
+/// fichier. Numéros d'objets uniques dans tout le projet (deux porteurs ont pu donner le même à leur objet).
+pub(crate) fn assembler(decors: Option<&str>, plans: Vec<(u64, PlanScene)>) -> Result<Scenes3d, String> {
+    let mut scenes = match decors {
+        Some(t) => parse(t)?,
+        None => Scenes3d { rev: crate::scene3d::next_rev(), ..Default::default() },
+    };
+    for (plan, scene) in plans {
+        scenes.plans.insert(plan, scene);
+    }
+    reparer(&mut scenes);
+    Ok(scenes)
+}
+
 /// Les scènes lues dans le texte de `scenes3d.json`. Numéros d'objets uniques (un doublon en reçoit
 /// un neuf), valeurs ramenées dans des bornes sûres.
 pub(crate) fn parse(text: &str) -> Result<Scenes3d, String> {
@@ -107,6 +131,12 @@ pub(crate) fn parse(text: &str) -> Result<Scenes3d, String> {
         next_id: 0,
         rev: crate::scene3d::next_rev(),
     };
+    reparer(&mut scenes);
+    Ok(scenes)
+}
+
+/// Numéros d'objets uniques dans tout le projet, valeurs dans des bornes sûres.
+fn reparer(scenes: &mut Scenes3d) {
     // Numéros uniques dans tout le projet.
     let mut seen = HashSet::new();
     let mut dup = Vec::new();
@@ -131,5 +161,4 @@ pub(crate) fn parse(text: &str) -> Result<Scenes3d, String> {
         }
         scenes.next_id = next;
     }
-    Ok(scenes)
 }

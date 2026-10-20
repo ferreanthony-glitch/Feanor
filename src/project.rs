@@ -63,6 +63,10 @@ use crate::view3d::{Cam3d, MAX_ELEVATION};
 use crate::raster::Raster;
 use crate::vector::VectorDrawing;
 
+// Le format partagé (`docs/COOPERATION.md`) : sous-module de celui-ci pour lire les mêmes types privés.
+#[path = "projet_partage.rs"]
+pub(crate) mod partage_io;
+
 pub const FORMAT: &str = "pelure-projet";
 /// 4 (phase 2b) : la feuille de dessin est plus grande que le cadre de la caméra (`cadre`).
 /// 5 (phase 2d) : modèles 3D (`modeles`) et repère 3D par panneau (`repere3d`).
@@ -145,6 +149,12 @@ pub const FORMAT: &str = "pelure-projet";
 /// changerait sans prévenir. Un projet de version 32 ou moins s'ouvre tel quel. (Si une autre branche a aussi
 /// pris le numéro 33 pour ses propres champs, la fusion garde le 33 et réunit les deux descriptions.)
 pub const VERSION: u32 = 33;
+/// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
+/// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
+/// partagé porte ce numéro ; `VERSION` reste 33 pour tous les autres, qui s'écrivent et se lisent comme avant. Une version de
+/// SHOT qui ne connaît pas le partage refuse le projet (« créé par une version plus récente ») au lieu de montrer un film
+/// sans plans.
+pub const VERSION_PARTAGE: u32 = 34;
 const DRAWINGS: &str = "dessins";
 /// Fils qui lisent ou écrivent les dessins d'un projet en parallèle : au-delà de huit, le disque et
 /// la mémoire (une feuille décodée pèse 33 Mo) limitent plus que le processeur.
@@ -161,7 +171,7 @@ const TEXTURES: &str = "textures";
 pub const SOUND_EXTS: [&str; 5] = ["wav", "mp3", "flac", "ogg", "oga"];
 
 #[derive(Serialize, Deserialize)]
-struct Manifest {
+pub(crate) struct Manifest {
     format: String,
     version: u32,
     /// Taille de la feuille de dessin (et de chaque fichier de `dessins/`).
@@ -216,6 +226,10 @@ struct Manifest {
     /// `dessins/<id>_hors.png` et son index `<id>_hors.json` ; absent : aucun.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     dessins_hors: Vec<u64>,
+    /// Projet partagé (format 34, `projet_partage.rs`) : le manifeste n'est que la structure, les plans sont dans
+    /// `plans/`. Absent : projet classique.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    partage: Option<partage_io::BlocPartage>,
 }
 
 /// Propriétés du projet (format 17). Dates en secondes depuis 1970.
@@ -410,7 +424,7 @@ struct SceneEntry {
 }
 
 #[derive(Serialize, Deserialize)]
-struct PanelEntry {
+pub(crate) struct PanelEntry {
     id: u64,
     #[serde(default)]
     duree: usize,
@@ -917,7 +931,7 @@ fn texture_file(dir: &Path, kind: TextureKind, key: u32) -> PathBuf {
 }
 
 /// Lit les textures du projet et les met à la disposition des traits vectoriels.
-fn load_textures(dir: &Path, warnings: &mut Vec<String>) {
+fn load_textures(dir: &Path, warnings: &mut Vec<String>, nouvelles_seulement: bool) {
     let Ok(entries) = fs::read_dir(dir.join(TEXTURES)) else { return };
     for entry in entries.flatten() {
         let path = entry.path();
@@ -928,6 +942,10 @@ fn load_textures(dir: &Path, warnings: &mut Vec<String>) {
             _ => continue,
         };
         let Ok(key) = key.parse::<u32>() else { continue };
+        // (Une texture ne change jamais sous la même clé : un plan relu seul ne relit pas celles qu'il a déjà.)
+        if nouvelles_seulement && crate::brushtex::has_shared(kind, key) {
+            continue;
+        }
         match image::open(&path) {
             Ok(img) => {
                 let gray = img.to_luma8();
@@ -966,6 +984,8 @@ pub struct SaveReport {
     pub removed: usize,
     /// Les instantanés d'envois écrits (`envois.rs`) : l'application libère leur mémoire.
     pub snapshots: Vec<u64>,
+    /// Projet partagé : ce qui a été écrit (`projet_partage.rs`).
+    pub partage: Option<partage_io::ResultatPartage>,
 }
 
 /// Enregistre le projet. `written` retient la version de chaque dessin déjà écrit dans ce dossier.
@@ -1051,31 +1071,34 @@ pub struct SaveJob {
     snapshots: Vec<Arc<crate::envois::Instantane>>,
     snapshot_reuse: HashMap<u64, PathBuf>,
     versions_from: Option<PathBuf>,
+    /// Projet partagé : ce que je tiens, écrit à la place du manifeste unique (`projet_partage.rs`). Rien : projet classique.
+    partage: Option<partage_io::TravailPartage>,
 }
 
-/// Prépare l'enregistrement de `doc` dans `manifest_path`. `written` est mis à jour comme si
-/// l'écriture allait réussir (à vider si elle échoue).
-pub fn prepare_save(
+/// Les dessins de `used` à écrire dans `dir/dessins/` : ceux dont la version n'est pas celle déjà écrite (`written`) ou dont le
+/// fichier manque, avec leur atlas hors-feuille et leur strate Fond. `written` est mis à jour comme si l'écriture allait
+/// réussir. Rend aussi les dessins qui ont une strate Fond et ceux qui ont un hors-feuille.
+#[allow(clippy::type_complexity)]
+fn dessins_a_ecrire(
     doc: &Document,
-    manifest_path: &Path,
+    dir: &Path,
+    used: &BTreeSet<CelId>,
     written: &mut HashMap<CelId, u64>,
-    reuse: Option<Reuse>,
-) -> Result<SaveJob, String> {
-    let dir = manifest_path.parent().ok_or("chemin de projet invalide")?;
-    let reuse_dir = reuse.as_ref().and_then(|r| r.manifest_path.parent());
-    let used = doc.used_cels();
-    written.retain(|id, _| used.contains(id));
+    reuse: Option<&Reuse>,
+) -> Result<(Vec<(PathBuf, DrawingData)>, BTreeSet<CelId>, BTreeSet<CelId>, BTreeSet<CelId>), String> {
+    let reuse_dir = reuse.and_then(|r| r.manifest_path.parent());
     let mut drawings = Vec::new();
+    let mut reecrits = BTreeSet::new();
     // Les dessins qui ont une strate Fond peinte (format 23) : les autres `<id>_fond.png` partent.
     let fonds: BTreeSet<CelId> = used.iter().copied().filter(|id| doc.cels.get(id).and_then(|c| c.fond.as_ref()).is_some_and(|f| !f.is_empty())).collect();
-    let hors = hors_of(doc, &used);
+    let hors = hors_of(doc, used);
     // Les fichiers déjà là, d'une seule lecture du dossier : un `exists` par dessin coûtait 0,15 ms
     // chacun sur le fil de l'interface (450 ms pour un enregistrement de 3 000 dessins où rien
     // n'avait changé).
     let present: std::collections::HashSet<std::ffi::OsString> =
         fs::read_dir(dir.join(DRAWINGS)).map(|entries| entries.flatten().map(|e| e.file_name()).collect()).unwrap_or_default();
     let there = |p: &Path| p.file_name().is_some_and(|n| present.contains(n));
-    for &id in &used {
+    for &id in used {
         let Some(cel) = doc.cels.get(&id) else { continue };
         let vector = cel.vector.is_some();
         let path = drawing_path(dir, id, vector);
@@ -1086,7 +1109,8 @@ pub fn prepare_save(
         {
             continue;
         }
-        let same_elsewhere = reuse_dir.zip(reuse.as_ref()).filter(|(_, r)| r.written.get(&id) == Some(&cel.version)).map(|(d, _)| d);
+        reecrits.insert(id);
+        let same_elsewhere = reuse_dir.zip(reuse).filter(|(_, r)| r.written.get(&id) == Some(&cel.version)).map(|(d, _)| d);
         let elsewhere = same_elsewhere.map(|d| drawing_path(d, id, vector)).filter(|p| p.exists());
         let data = match (&cel.vector, elsewhere) {
             (_, Some(from)) => DrawingData::CopyFrom(from),
@@ -1123,6 +1147,21 @@ pub fn prepare_save(
         }
         written.insert(id, cel.version);
     }
+    Ok((drawings, fonds, hors, reecrits))
+}
+
+/// Prépare l'enregistrement de `doc` dans `manifest_path`. `written` est mis à jour comme si
+/// l'écriture allait réussir (à vider si elle échoue).
+pub fn prepare_save(
+    doc: &Document,
+    manifest_path: &Path,
+    written: &mut HashMap<CelId, u64>,
+    reuse: Option<Reuse>,
+) -> Result<SaveJob, String> {
+    let dir = manifest_path.parent().ok_or("chemin de projet invalide")?;
+    let used = doc.used_cels();
+    written.retain(|id, _| used.contains(id));
+    let (drawings, fonds, hors, _) = dessins_a_ecrire(doc, dir, &used, written, reuse.as_ref())?;
     // Un son ne change jamais : on ne l'écrit que s'il n'est pas déjà dans le dossier.
     let used_sounds = used_sounds(doc);
     let sounds = used_sounds
@@ -1199,6 +1238,7 @@ pub fn prepare_save(
         snapshots,
         snapshot_reuse,
         versions_from,
+        partage: None,
     })
 }
 
@@ -1389,6 +1429,9 @@ impl SaveJob {
     /// Comme `run`, sur au plus `threads` fils, en comptant dans `progress` les dessins écrits (un
     /// autre fil l'affiche pendant que celui-ci écrit : `enregistrement.rs`).
     pub fn run_with(self, progress: Option<&Progress>, threads: usize) -> Result<SaveReport, String> {
+        if self.partage.is_some() {
+            return self.run_partage(progress, threads);
+        }
         let dir = self.manifest_path.parent().ok_or("chemin de projet invalide")?;
         fs::create_dir_all(dir.join(DRAWINGS)).map_err(|e| format!("{} : {e}", dir.display()))?;
         let mut count = 0;
@@ -1474,7 +1517,7 @@ impl SaveJob {
             + remove_unused_models(dir, &self.used_models, &self.kept)
             + if self.has_unreadable { 0 } else { remove_unused_textures(dir, &self.used_textures) }
             + self.references.cleanup(dir);
-        Ok(SaveReport { written: count, removed, snapshots: self.snapshots.iter().map(|s| s.id).collect() })
+        Ok(SaveReport { written: count, removed, snapshots: self.snapshots.iter().map(|s| s.id).collect(), partage: None })
     }
 }
 
@@ -1777,6 +1820,7 @@ pub(crate) fn charger_plans(dir: &Path, tete: &Tete, scene: u64, entrees: Vec<se
         proprietes: PropertiesEntry::default(),
         // Les instantanés ne gardent que la feuille de leurs dessins (pas leur hors-feuille, `monde.rs`).
         dessins_hors: Vec::new(),
+        partage: None,
     };
     let loaded = load_manifest(manifest, dir, quick, None);
     for (id, previous) in videos {
@@ -1788,10 +1832,16 @@ pub(crate) fn charger_plans(dir: &Path, tete: &Tete, scene: u64, entrees: Vec<se
 }
 
 fn manifest_of(doc: &Document) -> Manifest {
+    manifest_de(doc, true)
+}
+
+/// Le manifeste de `doc`. Sans `avec_plans` (la structure d'un projet partagé), les scènes n'ont pas de panneaux : chaque
+/// plan est dans son propre fichier (`projet_partage.rs`).
+fn manifest_de(doc: &Document, avec_plans: bool) -> Manifest {
     let mut sequences: Vec<SequenceEntry> = Vec::new();
     // Les dessins qui seront enregistrés : un calque de couleur n'écrit que les couples dont les deux
     // dessins le sont.
-    let drawn = doc.used_cels();
+    let drawn = if avec_plans { doc.used_cels() } else { BTreeSet::new() };
     for (i, panel) in doc.panels.iter().enumerate() {
         let seq = doc.sequence_of(i);
         if sequences.last().is_none_or(|s| s.id != seq) {
@@ -1815,7 +1865,9 @@ fn manifest_of(doc: &Document) -> Manifest {
                 panneaux: Vec::new(),
             });
         }
-        scenes.last_mut().expect("scène ajoutée juste avant").panneaux.push(panel_entry(panel, &|c| c, &|c| drawn.contains(&c), false));
+        if avec_plans {
+            scenes.last_mut().expect("scène ajoutée juste avant").panneaux.push(panel_entry(panel, &|c| c, &|c| drawn.contains(&c), false));
+        }
     }
     let used = used_sounds(doc);
     Manifest {
@@ -1917,7 +1969,8 @@ fn manifest_of(doc: &Document) -> Manifest {
                 fond: p.fond,
             }
         },
-        dessins_hors: hors_of(doc, &drawn).into_iter().collect(),
+        dessins_hors: if avec_plans { hors_of(doc, &drawn).into_iter().collect() } else { Vec::new() },
+        partage: None,
     }
 }
 
@@ -1948,6 +2001,11 @@ pub struct Loaded {
     /// Dessins vectoriels affichés en rendu rapide (`load_quick`) : leur rendu exact est à
     /// demander au rejeu en arrière-plan (`rejeu.rs`).
     pub approx: Vec<CelId>,
+    /// Dessins cités par le projet que le dossier n'a pas pu donner (absents, pas encore arrivés d'un dossier synchronisé,
+    /// illisibles). Un plan partagé qui en a un est « en attente » : on ne le prend pas, on ne l'enregistre pas.
+    pub manquants: BTreeSet<CelId>,
+    /// Projet partagé : ce que la session a besoin de savoir de l'ouverture (`projet_partage.rs`).
+    pub(crate) partage: Option<partage_io::Ouverture>,
 }
 
 /// Le plus grand numéro de séquence, de scène, de plan, de marque, de piste, d'extrait ou de son du manifeste.
@@ -2031,6 +2089,7 @@ pub struct Progress {
 fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> Result<Loaded, String> {
     // (Des messages en français qui disent quel fichier : « stream did not contain valid UTF-8 »
     // ou « Le chemin d'accès spécifié est introuvable » ne disent pas ce qui ne va pas.)
+    let marque_structure = fs::metadata(manifest_path).ok().map(|m| crate::depot::marque_de(&m));
     let octets = fs::read(manifest_path).map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
             format!("projet introuvable : {}", manifest_path.display())
@@ -2044,19 +2103,53 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
     if manifest.format != FORMAT {
         return Err("ce fichier n'est pas un projet SHOT".into());
     }
-    if manifest.version > VERSION {
+    if manifest.version > VERSION_PARTAGE || (manifest.version > VERSION && manifest.partage.is_none()) {
         return Err(format!(
             "projet créé par une version plus récente de SHOT (format {})",
             manifest.version
         ));
     }
     let dir = manifest_path.parent().unwrap_or(Path::new("."));
+    if manifest.partage.is_some() {
+        // Projet partagé : la structure est ici, les plans dans `plans/` (`projet_partage.rs`).
+        let mut loaded = partage_io::ouvrir(manifest, dir, quick, progress)?;
+        if let Some(o) = loaded.partage.as_mut() {
+            o.nom_structure = manifest_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            o.hash_fichier_structure = crate::empreinte::de_octets(text.as_bytes());
+            o.marque_structure = marque_structure;
+        }
+        return Ok(loaded);
+    }
     load_manifest(manifest, dir, quick, progress)
 }
 
 /// La suite de l'ouverture, une fois le manifeste lu : les dessins de `dir/dessins/`, les sons, les
 /// annexes, puis le document. (Les instantanés des envois passent aussi par là, `charger_plans`.)
-fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Option<&Progress>) -> Result<Loaded, String> {
+fn load_manifest(manifest: Manifest, dir: &Path, quick: bool, progress: Option<&Progress>) -> Result<Loaded, String> {
+    load_manifest_avec(manifest, dir, quick, progress, Annexes::default())
+}
+
+/// Ce que l'ouverture prend ailleurs que dans les fichiers annexes du dossier, ou ne lit pas : un projet partagé donne
+/// lui-même les versions, le contenu rogné, les scènes 3D de ses plans et les commentaires (fusionnés de tous les
+/// auteurs) ; un plan relu seul ne lit rien d'autre que ses dessins (`projet_partage.rs`). `Annexes::default()` est
+/// l'ouverture d'un projet classique : tout vient du dossier.
+#[derive(Default)]
+pub(crate) struct Annexes {
+    /// Les quatre annexes ci-dessous remplacent la lecture de leur fichier (même vides).
+    pub fournies: bool,
+    /// Un plan relu seul : ni transitions, ni références, ni effets de son, ni envois… et les textures déjà connues
+    /// ne sont pas relues.
+    pub plans_seuls: bool,
+    pub versions: Option<crate::planvers::Fichier>,
+    pub reserves: Option<crate::rognage::Loaded>,
+    pub scenes3d: Option<crate::scene3d::Scenes3d>,
+    pub commentaires: Vec<crate::commentaires::Comment>,
+    /// Sons et modèles déjà en mémoire, par numéro : ils ne sont pas relus du dossier (relecture de la structure).
+    pub sons_connus: HashMap<u64, Sound>,
+    pub modeles_connus: HashMap<u64, Arc<Model3d>>,
+}
+
+fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress: Option<&Progress>, mut annexes: Annexes) -> Result<Loaded, String> {
     let (w, h) = (manifest.largeur, manifest.hauteur);
     if w == 0 || h == 0 {
         return Err("taille d'image invalide dans le manifeste".into());
@@ -2068,10 +2161,10 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
     }
     let mut warnings = Vec::new();
     // Les textures d'abord : les dessins vectoriels texturés en ont besoin pour leur rendu.
-    load_textures(dir, &mut warnings);
+    load_textures(dir, &mut warnings, annexes.plans_seuls);
     // Les autres versions des plans (`plans_versions.json`) : leurs plans passent par la même lecture que
     // les autres, dans une séquence à part qu'on retire ensuite du film (`planvers.rs`).
-    let mut versions = crate::planvers::lire(dir, &mut warnings);
+    let mut versions = if annexes.fournies { annexes.versions.take() } else { crate::planvers::lire(dir, &mut warnings) };
     let mut a_ranger: Option<(u64, u64, Vec<(u64, u32)>)> = None;
     if let Some(f) = versions.as_mut() {
         let (mut cles, mut panneaux) = (Vec::new(), Vec::new());
@@ -2095,7 +2188,7 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
     let mut cels: HashMap<CelId, Cel> = HashMap::new();
     let mut missing: BTreeSet<CelId> = BTreeSet::new();
     // Le contenu rogné des plans (`rognages.json`) : ses dessins se chargent avec les autres.
-    let reserves = load_reserves(dir, &mut warnings);
+    let reserves = if annexes.fournies { annexes.reserves.take() } else { load_reserves(dir, &mut warnings) };
     let mut referenced: BTreeSet<CelId> = manifest
         .sequences
         .iter()
@@ -2142,6 +2235,10 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
     // Fichiers de sons et de modèles illisibles : l'enregistrement ne les efface pas.
     let mut unreadable_files: BTreeSet<PathBuf> = BTreeSet::new();
     for entry in &manifest.sons {
+        if let Some(known) = annexes.sons_connus.get(&entry.id) {
+            sounds.insert(entry.id, known.clone());
+            continue;
+        }
         match load_sound(dir, entry) {
             Ok(sound) => {
                 sounds.insert(sound.id, sound);
@@ -2155,7 +2252,12 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
         }
     }
     let mut models: HashMap<u64, Model3d> = HashMap::new();
+    let mut known_models: Vec<Arc<Model3d>> = Vec::new();
     for entry in &manifest.modeles {
+        if let Some(known) = annexes.modeles_connus.get(&entry.id) {
+            known_models.push(known.clone());
+            continue;
+        }
         match fs::read(model_file(dir, entry.id))
             .map_err(|e| e.to_string())
             .and_then(|b| crate::model3d::from_bytes(&b))
@@ -2426,7 +2528,7 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
                     dialogue: p.dialogue,
                     notes: p.notes,
                     camera,
-                    ref3d: p.repere3d.as_ref().filter(|r| models.contains_key(&r.modele)).and_then(ref3d_of),
+                    ref3d: p.repere3d.as_ref().filter(|r| models.contains_key(&r.modele) || known_models.iter().any(|m| m.id == r.modele)).and_then(ref3d_of),
                     marks: marks_of(p.marques),
                     cues: crate::document::Cues {
                         bookmarks: {
@@ -2466,32 +2568,42 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
         return Err("le projet ne contient aucun plan".into());
     }
     // Les scènes 3D, dans leur fichier à côté du manifeste (absent : aucune scène).
-    structure.scenes3d = load_scenes3d(dir, &mut warnings);
+    structure.scenes3d = if annexes.fournies { annexes.scenes3d.take().unwrap_or_default() } else { load_scenes3d(dir, &mut warnings) };
     // Les commentaires, dans leur fichier à côté du manifeste (absent : aucun commentaire).
-    structure.comments = load_comments(dir, &mut warnings);
-    // Les transitions du montage, de même (`transitions.json`).
-    structure.transitions = load_transitions(dir, &mut warnings);
-    // Les références visuelles : `references.json` et le dossier `references/` (absents : aucune).
-    structure.references = crate::references::load(dir, &mut warnings);
+    structure.comments = if annexes.fournies { std::mem::take(&mut annexes.commentaires) } else { load_comments(dir, &mut warnings) };
+    if !annexes.plans_seuls {
+        // Les transitions du montage, de même (`transitions.json`).
+        structure.transitions = load_transitions(dir, &mut warnings);
+        // Les références visuelles : `references.json` et le dossier `references/` (absents : aucune).
+        structure.references = crate::references::load(dir, &mut warnings);
+    }
     let frame = manifest.cadre;
     let mut written: HashMap<CelId, u64> = cels.keys().map(|&id| (id, 0)).collect();
     let mut doc = Document::from_parts(w, h, structure, cels, sounds);
-    // Les effets des sons (fondus, volume, égaliseur, écho, solo : `effets_son.json`).
-    if let Some(fx) = load_sound_fx(dir, &mut warnings) {
-        fx.install(&mut doc);
+    if !annexes.plans_seuls {
+        // Les effets des sons (fondus, volume, égaliseur, écho, solo : `effets_son.json`).
+        if let Some(fx) = load_sound_fx(dir, &mut warnings) {
+            fx.install(&mut doc);
+        }
+        // Les sons proposés (`sons_proposes.json`).
+        doc.sons_proposes = load_sons_proposes(dir, &mut warnings);
     }
-    // Les sons proposés (`sons_proposes.json`).
-    doc.sons_proposes = load_sons_proposes(dir, &mut warnings);
     for model in models.into_values() {
         doc.insert_model(model);
+    }
+    for model in known_models {
+        doc.reserve_id(model.id);
+        doc.models.insert(model.id, model);
     }
     if let Some(r) = reserves {
         r.install(&mut doc, &missing);
     }
-    // La planche de crayonnés rapides, dans son fichier (absent : aucune).
-    doc.crayonnes = load_crayonnes(dir, &mut warnings);
-    // Les envois (`envois.json`, absent : aucun) ; leurs instantanés ne se lisent qu'à la demande.
-    doc.envois = crate::envois::load(dir, &mut warnings);
+    if !annexes.plans_seuls {
+        // La planche de crayonnés rapides, dans son fichier (absent : aucune).
+        doc.crayonnes = load_crayonnes(dir, &mut warnings);
+        // Les envois (`envois.json`, absent : aucun) ; leurs instantanés ne se lisent qu'à la demande.
+        doc.envois = crate::envois::load(dir, &mut warnings);
+    }
     // Les autres versions des plans.
     if let (Some(f), Some((_, _, cles))) = (versions, a_ranger) {
         crate::planvers::installer(&mut doc, f, cles, rangees, &mut warnings);
@@ -2523,14 +2635,20 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
     // enregistrement ne les efface jamais (on pourra les récupérer ou les rouvrir avec une
     // version qui les lit).
     // (Chacun a déjà son avertissement, plus haut.)
-    keep_unreadable(dir, &missing);
-    keep_files(dir, unreadable_files);
+    // (Un projet partagé n'efface jamais rien : ces listes ne servent pas, et un plan relu seul ne doit pas écraser celles
+    // du projet.)
+    if !annexes.fournies {
+        keep_unreadable(dir, &missing);
+        keep_files(dir, unreadable_files);
+    }
     Ok(Loaded {
         doc,
         written,
         warnings,
         converted,
         approx,
+        manquants: missing,
+        partage: None,
     })
 }
 

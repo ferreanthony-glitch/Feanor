@@ -978,10 +978,22 @@ pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
     serde_json::to_vec_pretty(&sidecar).map(Some).map_err(|e| e.to_string())
 }
 
+/// Le contenu rogné d'un seul plan, au format de `rognages.json` : un plan partagé le porte dans son propre fichier
+/// (`projet_partage.rs`).
+pub(crate) fn plan_value(panel: &Panel, r: &Reserve) -> Result<serde_json::Value, String> {
+    let plan = file::PlanFile { plan: panel.id, debut: piece_file(&r.head, panel), fin: piece_file(&r.tail, panel) };
+    serde_json::to_value(file::Sidecar { format: FORMAT.into(), version: VERSION, plans: vec![plan] }).map_err(|e| e.to_string())
+}
+
 /// Le fichier lu, pas encore rangé dans un document (les calques y sont par rang).
 pub(crate) struct Loaded(Vec<file::PlanFile>);
 
 impl Loaded {
+    /// Plusieurs fichiers de plans en un (les plans d'un projet partagé).
+    pub(crate) fn fusion(parts: Vec<Loaded>) -> Loaded {
+        Loaded(parts.into_iter().flat_map(|l| l.0).collect())
+    }
+
     /// Les dessins cités (à charger avec les autres).
     pub(crate) fn cels(&self) -> impl Iterator<Item = CelId> + '_ {
         self.0.iter().flat_map(|p| [&p.debut, &p.fin]).flat_map(|f| f.calques.iter()).flat_map(|l| l.expositions.iter()).filter_map(|e| e.0)
