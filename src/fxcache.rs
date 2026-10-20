@@ -226,8 +226,101 @@ pub(crate) fn bump_generation() {
     GENERATION.fetch_add(1, Ordering::Relaxed);
 }
 
+// ------------------------------------------------------------------ la réserve privée d'un fil d'export
+
+/// Un dessin dérivé de la réserve privée.
+struct EntreePrivee {
+    version: u64,
+    cel: Arc<Cel>,
+    used: u64,
+    bytes: usize,
+}
+
+/// La réserve d'un fil d'export (`exportrender.rs`). L'export calcule ses effets sur des fils à lui, avec une
+/// copie du projet : il ne touche ni à la réserve commune (il ne chasse pas de l'écran les dessins que
+/// l'interface vient de calculer, et n'y range pas ceux d'un projet que l'utilisateur est en train de
+/// retoucher), ni à ses calculs de fond. Chaque fil a la sienne, limitée en octets ; les dessins touchés pendant
+/// l'image en cours ne partent jamais (l'image en cours les relit : elle dépasse alors la limite plutôt que de
+/// se tromper).
+struct Privee {
+    cache: BTreeMap<CelId, EntreePrivee>,
+    bytes: usize,
+    limit: usize,
+    /// Horloge au début de l'image en cours.
+    image_from: u64,
+}
+
+impl Privee {
+    fn get(&mut self, id: CelId, version: Option<u64>) -> Option<(u64, Arc<Cel>)> {
+        let e = self.cache.get_mut(&id).filter(|e| version.is_none_or(|v| e.version == v))?;
+        e.used = tick();
+        Some((e.version, e.cel.clone()))
+    }
+
+    fn insert(&mut self, id: CelId, version: u64, cel: Arc<Cel>) {
+        let bytes = cel_bytes(&cel);
+        if let Some(old) = self.cache.insert(id, EntreePrivee { version, cel, used: tick(), bytes }) {
+            self.bytes -= old.bytes;
+        }
+        self.bytes += bytes;
+        while self.bytes > self.limit {
+            let from = self.image_from;
+            let Some(old) = self.cache.iter().filter(|(k, e)| **k != id && e.used < from).min_by_key(|(_, e)| e.used).map(|(k, _)| *k) else { break };
+            if let Some(e) = self.cache.remove(&old) {
+                self.bytes -= e.bytes;
+            }
+        }
+    }
+}
+
+thread_local! {
+    static PRIVEE: std::cell::RefCell<Option<Privee>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Exécute `f` avec une réserve privée de `limit` octets pour ce fil : tous les dessins dérivés qu'il demande
+/// (effets, fonds, calques d'effets) y sont calculés et gardés, jamais dans la réserve commune.
+pub(crate) fn avec_privee<R>(limit: usize, f: impl FnOnce() -> R) -> R {
+    struct Garde;
+    impl Drop for Garde {
+        fn drop(&mut self) {
+            PRIVEE.with(|p| *p.borrow_mut() = None);
+        }
+    }
+    PRIVEE.with(|p| *p.borrow_mut() = Some(Privee { cache: BTreeMap::new(), bytes: 0, limit, image_from: tick() }));
+    let _garde = Garde;
+    f()
+}
+
+/// Une nouvelle image commence sur ce fil : les dessins gardés jusqu'ici peuvent partir si la limite l'exige.
+pub(crate) fn privee_nouvelle_image() {
+    PRIVEE.with(|p| {
+        if let Some(p) = p.borrow_mut().as_mut() {
+            p.image_from = tick();
+        }
+    });
+}
+
+/// Ce fil travaille-t-il avec une réserve privée ?
+pub(crate) fn privee_active() -> bool {
+    PRIVEE.with(|p| p.borrow().is_some())
+}
+
+/// `f` sur la réserve privée du fil, s'il en a une.
+fn dans_privee<R>(f: impl FnOnce(&mut Privee) -> R) -> Option<R> {
+    PRIVEE.with(|p| p.borrow_mut().as_mut().map(f))
+}
+
+/// Octets gardés par la réserve privée de ce fil (essais).
+#[cfg(test)]
+pub(crate) fn privee_octets() -> usize {
+    dans_privee(|p| p.bytes).unwrap_or(0)
+}
+
 /// Le dessin dérivé `id` de la version `version`, s'il est gardé.
 pub(crate) fn get(id: CelId, version: u64) -> Option<Arc<Cel>> {
+    if let Some(r) = dans_privee(|p| p.get(id, Some(version)).map(|(_, c)| c)) {
+        return r;
+    }
     if monde_perime() {
         return None;
     }
@@ -240,6 +333,9 @@ pub(crate) fn get(id: CelId, version: u64) -> Option<Arc<Cel>> {
 /// Le dessin dérivé `id` gardé, quelle que soit sa version (avec sa version) : le fond sous le
 /// trait montre l'ancien en attendant le nouveau (`fx::fond_shown`).
 pub(crate) fn get_any(id: CelId) -> Option<(u64, Arc<Cel>)> {
+    if let Some(r) = dans_privee(|p| p.get(id, None)) {
+        return r;
+    }
     if monde_perime() {
         return None;
     }
@@ -251,7 +347,7 @@ pub(crate) fn get_any(id: CelId) -> Option<(u64, Arc<Cel>)> {
 
 /// Range un dessin dérivé arrivé d'ailleurs (le fond calculé en arrière-plan, `fx::fond_poll`).
 pub(crate) fn put(id: CelId, version: u64, cel: Arc<Cel>) {
-    if monde_perime() {
+    if privee_active() || monde_perime() {
         return;
     }
     let dropped = insert(&mut lock(), id, version, cel, None);
@@ -315,6 +411,15 @@ impl Drop for Inflight {
 /// Le dessin dérivé `id` de la version `version` : gardé, ou calculé par `make` (bloquant, hors
 /// verrou). Si un autre fil le calcule déjà, on l'attend au lieu de le refaire.
 pub(crate) fn get_or_compute(id: CelId, version: u64, origin: Option<CelId>, make: impl FnOnce() -> Cel) -> Arc<Cel> {
+    // Un fil d'export : sa réserve à lui (rien n'est partagé, rien n'est attendu).
+    if privee_active() {
+        if let Some(Some((_, cel))) = dans_privee(|p| p.get(id, Some(version))) {
+            return cel;
+        }
+        let cel = Arc::new(make());
+        dans_privee(|p| p.insert(id, version, cel.clone()));
+        return cel;
+    }
     // (Un fil qui travaille pour un onglet qui n'est plus affiché ne touche pas au cache de celui qui l'est.)
     if monde_perime() {
         return Arc::new(make());
@@ -343,7 +448,7 @@ pub(crate) fn get_or_compute(id: CelId, version: u64, origin: Option<CelId>, mak
 /// Remplace le dessin dérivé `id` (sans changer sa version) par ce que `f` fait de l'ancien (le
 /// fond refait tuile par tuile pendant qu'on peint, `fx::fond_patch`).
 pub(crate) fn update(id: CelId, f: impl FnOnce(&Arc<Cel>) -> Arc<Cel>) {
-    if monde_perime() {
+    if privee_active() || monde_perime() {
         return;
     }
     let mut st = lock();
@@ -447,7 +552,7 @@ fn reduced_source(job: &Job) -> Arc<Raster> {
 
 /// Le dernier dessin dérivé du dessin d'origine `origin` (numéro sous lequel il est gardé, dessin).
 pub(crate) fn fallback(origin: CelId) -> Option<(CelId, Arc<Cel>)> {
-    if monde_perime() {
+    if privee_active() || monde_perime() {
         return None;
     }
     let mut st = lock();
@@ -459,8 +564,9 @@ pub(crate) fn fallback(origin: CelId) -> Option<(CelId, Arc<Cel>)> {
 /// Demande le calcul de `job` au fil de fond (sans attendre). Rien si le dessin est déjà gardé ou
 /// en cours de calcul ; une demande déjà en file voit sa priorité remontée.
 pub(crate) fn request(job: Job) {
-    // (Un travail de fond qui a perdu son monde — l'onglet a changé — ne demande rien.)
-    if monde_perime() {
+    // (Un travail de fond qui a perdu son monde — l'onglet a changé — ne demande rien. Un fil d'export non
+    // plus : il calcule lui-même, tout de suite.)
+    if privee_active() || monde_perime() {
         return;
     }
     if !enqueue(&mut lock(), job) {

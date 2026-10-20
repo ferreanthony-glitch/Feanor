@@ -2,10 +2,10 @@
 //! `fichier.exporter_montage`) : les formats, le dossier, le time code de départ, la séquence, puis
 //! l'export (`editorialjob.rs`) et son compte rendu. Ce qui est écrit et comment : `editorial.rs`.
 //!
-//! Règle « sans latence » : l'interface ne calcule que les images (quelques-unes par image d'écran,
-//! comme l'export du film) ; ffmpeg, le fil du son et l'écriture des fichiers sont à côté. Tant que
-//! les images se calculent le document ne bouge pas (`EditorialWindow::rendering`, lu par
-//! `App::modal_open`) ; pendant le son, on peut déjà travailler.
+//! Règle « sans latence » : l'interface ne calcule aucune image. L'export copie le projet au départ (quelques
+//! images d'écran, `EditorialWindow::rendering`, lu par `App::modal_open`), puis les images se calculent sur
+//! d'autres fils (comme l'export du film, `exportrender.rs`) ; ffmpeg, le fil du son et l'écriture des
+//! fichiers sont à côté. Le projet est libre pendant tout le reste.
 
 use std::path::{Path, PathBuf};
 
@@ -30,12 +30,13 @@ pub(crate) struct EditorialWindow {
 }
 
 impl EditorialWindow {
-    /// SHOT calcule encore les images : le projet ne doit pas changer.
+    /// L'export copie encore le projet (les premières images d'écran) : il ne doit pas changer, ni d'onglet.
     pub(crate) fn rendering(&self) -> bool {
-        self.job.as_ref().is_some_and(|j| j.running() && j.stage == Stage::Video)
+        self.job.as_ref().is_some_and(EditorialJob::needs_project)
     }
 
-    fn busy(&self) -> bool {
+    /// Un export tourne (la fenêtre reste quand on change d'onglet).
+    pub(crate) fn busy(&self) -> bool {
         self.job.as_ref().is_some_and(EditorialJob::running)
     }
 }
@@ -96,11 +97,15 @@ impl App {
     pub(crate) fn editorial_window(&mut self, ctx: &egui::Context) {
         let Some(mut w) = self.editorial.take() else { return };
         if let Some(job) = &mut w.job {
-            job.step(&self.doc, std::time::Duration::from_millis(40));
+            job.step(&self.doc, std::time::Duration::from_millis(8));
             let (done, total) = job.frames();
             match job.stage {
                 Stage::Video => {
-                    ctx.request_repaint();
+                    if job.needs_project() {
+                        ctx.request_repaint();
+                    } else {
+                        ctx.request_repaint_after(std::time::Duration::from_millis(100));
+                    }
                     self.status = format!("Export pour le montage : {} (image {done} / {total})", job.status());
                 }
                 Stage::Sound => {

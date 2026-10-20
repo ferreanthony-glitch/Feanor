@@ -26,12 +26,14 @@ pub(crate) struct SbExportWindow {
 }
 
 impl SbExportWindow {
-    /// Pelure calcule encore les images : le projet ne doit pas changer.
+    /// L'export copie encore le projet (les premières images d'écran) : il ne doit pas changer, ni d'onglet. Ensuite les images
+    /// des calques se calculent sur une copie, sur d'autres fils.
     pub(crate) fn rendering(&self) -> bool {
-        self.job.as_ref().is_some_and(|j| matches!(j.stage, Stage::Images))
+        self.job.as_ref().is_some_and(SbExportJob::needs_project)
     }
 
-    fn busy(&self) -> bool {
+    /// Un export tourne (la fenêtre reste quand on change d'onglet).
+    pub(crate) fn busy(&self) -> bool {
         self.job.as_ref().is_some_and(SbExportJob::running)
     }
 }
@@ -113,10 +115,14 @@ impl App {
     pub(crate) fn sb_export_ui(&mut self, ctx: &egui::Context) {
         let Some(mut w) = self.sb_export.take() else { return };
         if let Some(job) = &mut w.job {
-            job.step(&self.doc, std::time::Duration::from_millis(40));
+            job.step(&self.doc, std::time::Duration::from_millis(8));
             match &job.stage {
                 Stage::Images => {
-                    ctx.request_repaint();
+                    if job.needs_project() {
+                        ctx.request_repaint();
+                    } else {
+                        ctx.request_repaint_after(std::time::Duration::from_millis(100));
+                    }
                     self.status = format!("Export vers Storyboard Pro : images des calques {} / {}", job.next, job.total_images());
                 }
                 Stage::Storyboard(b) => {

@@ -2,11 +2,11 @@
 //!
 //! Trois travaux, qui ne bloquent jamais l'interface :
 //!
-//! 1. **Un fichier vidéo par plan**, l'un après l'autre : les images sont calculées par quelques-unes à
-//!    chaque image d'écran (`budget`, 40 ms), comme pour le film (`export::ExportJob`), et envoyées à un
-//!    ffmpeg par plan (ProRes ou H.264, sans transitions : elles sont dans les fichiers de montage). Les
-//!    poignées d'un fondu enchaîné sont des images tenues, que l'export d'images met en cache (elles ne
-//!    sont pas recalculées).
+//! 1. **Un fichier vidéo par plan**, l'un après l'autre : le projet est copié une fois au départ (le cliché,
+//!    `exportrender.rs`), puis les images de chaque plan sont calculées sur d'autres fils, comme pour le film
+//!    (`export::ExportJob`), et envoyées à un ffmpeg par plan (ProRes ou H.264, sans transitions : elles sont
+//!    dans les fichiers de montage). Les poignées d'un fondu enchaîné sont des images tenues, que l'export
+//!    d'images met en cache (elles ne sont pas recalculées). Le projet reste libre pendant ce temps.
 //! 2. **Un fichier son par extrait**, sur un **fil à part** qui démarre en même temps (effets et
 //!    égaliseur compris), avec son compteur d'avancement.
 //! 3. À la fin, les **fichiers de montage** (EDL, XML, OTIO, `LISEZ-MOI.txt`) : quelques kilo-octets.
@@ -24,6 +24,7 @@ use std::time::{Duration, Instant};
 use crate::document::Document;
 use crate::editorial::{self, Options, Plan, PlanClip};
 use crate::export::{self, Encoders, ExportJob, Progress};
+use crate::exportrender::SnapshotBuilder;
 
 /// Le compte rendu d'un export réussi.
 #[derive(Clone, Debug)]
@@ -128,6 +129,9 @@ pub struct EditorialJob {
     worker: Option<SoundWorker>,
     /// Fichiers vidéo écrits (à effacer si l'on annule).
     written: Vec<PathBuf>,
+    /// Le cliché du projet, pris une fois pour tous les plans.
+    builder: Option<SnapshotBuilder>,
+    snapshot: Option<Arc<Document>>,
     pub started: Instant,
     pub outcome: Option<Result<Report, String>>,
 }
@@ -153,7 +157,7 @@ impl EditorialJob {
             let jobs = plan.audio_sources.iter().cloned().zip(plan.audio.iter()).map(|(src, a)| (src, dir.join(&a.file))).collect();
             Some(SoundWorker::start(jobs))
         };
-        Ok(EditorialJob { plan, opts, ffmpeg, enc, dir, made_dir, stage: Stage::Video, current: None, next: 0, frames_done: 0, worker, written: Vec::new(), started: Instant::now(), outcome: None })
+        Ok(EditorialJob { plan, opts, ffmpeg, enc, dir, made_dir, stage: Stage::Video, current: None, next: 0, frames_done: 0, worker, written: Vec::new(), builder: None, snapshot: None, started: Instant::now(), outcome: None })
     }
 
     /// Images calculées et images à calculer (poignées comprises).
@@ -192,8 +196,13 @@ impl EditorialJob {
         self.outcome.is_none()
     }
 
-    /// Fait avancer l'export pendant `budget` au plus (les images se calculent ici, à chaque image
-    /// d'écran ; le reste se fait à côté).
+    /// L'export copie encore le projet (les premières images d'écran) : il lit le projet affiché.
+    pub fn needs_project(&self) -> bool {
+        self.outcome.is_none() && self.stage == Stage::Video && self.snapshot.is_none()
+    }
+
+    /// Fait avancer l'export. Le projet n'est lu que pour le copier au départ (par tranches de quelques
+    /// millisecondes) ; ensuite les images se calculent sur d'autres fils et cet appel ne fait que regarder.
     pub fn step(&mut self, doc: &Document, budget: Duration) {
         if self.outcome.is_some() {
             return;
@@ -202,6 +211,18 @@ impl EditorialJob {
         loop {
             match self.stage {
                 Stage::Video => {
+                    if self.snapshot.is_none() {
+                        let b = self.builder.get_or_insert_with(|| {
+                            let mut panels: Vec<usize> = self.plan.clips.iter().map(|c| c.panel).collect();
+                            panels.sort_unstable();
+                            panels.dedup();
+                            SnapshotBuilder::new(doc, &panels)
+                        });
+                        if !b.step(doc, budget.min(Duration::from_millis(8))) {
+                            return;
+                        }
+                        self.snapshot = self.builder.take().map(SnapshotBuilder::finish);
+                    }
                     if self.current.is_none() {
                         let Some(clip) = self.plan.clips.get(self.next).cloned() else {
                             self.stage = Stage::Sound;
@@ -258,7 +279,11 @@ impl EditorialJob {
     fn start_clip(&self, clip: &PlanClip) -> Result<ExportJob, String> {
         let out = self.dir.join(&clip.file);
         let args = export::video_args_rate(self.plan.media.format(), &self.enc, self.plan.frame, &self.plan.rate.ffmpeg(), self.plan.half, None, &out)?;
-        ExportJob::video(&self.ffmpeg, args, &out, clip_frames(clip), None)
+        let job = ExportJob::video(&self.ffmpeg, args, &out, clip_frames(clip), None)?;
+        Ok(match &self.snapshot {
+            Some(s) => job.with_snapshot(s.clone()),
+            None => job,
+        })
     }
 
     /// Les fichiers de montage, une fois les médias écrits.

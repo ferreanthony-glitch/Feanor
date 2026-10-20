@@ -1449,9 +1449,12 @@ fn fond_shown<'a>(doc: &'a Document, item: &crate::render::PlanItem, r: &crate::
             return Some(Shown::Fx(cel));
         }
     }
-    // Calcul direct (export, enregistrement, premier affichage) : ce qu'on attendait ne vaut plus.
-    if let Some(fil) = FIL.get() {
-        fil.lock().unwrap_or_else(|e| e.into_inner()).cancel(id);
+    // Calcul direct (export, enregistrement, premier affichage) : ce qu'on attendait ne vaut plus. (Pas pour un
+    // fil d'export : sa copie du projet n'est pas celle que l'écran attend.)
+    if !crate::fxcache::privee_active() {
+        if let Some(fil) = FIL.get() {
+            fil.lock().unwrap_or_else(|e| e.into_inner()).cancel(id);
+        }
     }
     let derived = crate::fxcache::get_or_compute(id, version, None, || {
         let tick = TICK.fetch_add(1, std::sync::atomic::Ordering::Relaxed);

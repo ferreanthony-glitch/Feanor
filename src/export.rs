@@ -1,9 +1,11 @@
-//! Exports (3b) : film (MP4 H.264 ou MOV ProRes, encodé par ffmpeg), suite d'images PNG, son seul
-//! (WAV).
+//! Exports (3b) : film (MP4 H.264 ou MOV ProRes, encodé par ffmpeg), GIF, suite d'images PNG, image seule,
+//! storyboard PDF, page HTML, son seul (WAV).
 //!
-//! Les images sont calculées sur le fil de l'interface, quelques-unes par image d'écran : la
-//! fenêtre reste vivante, et une fenêtre modale empêche de modifier le document pendant ce temps.
-//! L'écriture des fichiers et l'encodage se font à côté (fils d'écriture, processus ffmpeg).
+//! Aucune image n'est calculée sur le fil de l'interface, et le projet n'est pas verrouillé : l'export prend une
+//! copie du projet au départ (`exportrender.rs` : le cliché, dont les dessins partagent leurs tuiles) et calcule
+//! ses images sur d'autres fils, à une priorité inférieure à celle de l'interface. Un autre fil range les images
+//! dans l'ordre à l'écriture (fichiers PNG, ffmpeg, PDF…). L'interface (`ExportJob::step`) ne fait que copier le
+//! projet par petites tranches au départ, puis regarder où l'export en est.
 
 use std::io::{BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
@@ -19,8 +21,9 @@ use eframe::egui::Color32;
 use crate::audio::{self, MixClip, MixState};
 use crate::camera::Camera;
 use crate::document::Document;
+use crate::exportrender::{self, Image, Papier, Pipeline, Pose, Rendu, SnapshotBuilder};
 use crate::pdf;
-use crate::render::{self, Plan};
+use crate::render::Plan;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Format {
@@ -300,7 +303,9 @@ fn command(program: &Path) -> Command {
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        c.creation_flags(CREATE_NO_WINDOW);
+        // Sous la priorité normale : l'encodage (x264 prend tous les cœurs) ne passe pas avant l'interface.
+        const BELOW_NORMAL_PRIORITY_CLASS: u32 = 0x0000_4000;
+        c.creation_flags(CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS);
     }
     c
 }
@@ -444,7 +449,14 @@ pub fn has_sound(clips: &[MixClip], start: u64, len: u64) -> bool {
 }
 
 /// Mixe les extraits entre `start` et `start + len` (échantillons) et l'écrit en WAV.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn write_wav(path: &Path, clips: Vec<MixClip>, start: u64, len: u64) -> std::io::Result<()> {
+    write_wav_until(path, clips, start, len, None).map(|_| ())
+}
+
+/// Comme `write_wav`, mais `cancel` est regardé entre deux morceaux : vrai, le mixage s'arrête (le fichier est
+/// laissé tel quel, à effacer) et la fonction rend `false`.
+pub fn write_wav_until(path: &Path, clips: Vec<MixClip>, start: u64, len: u64, cancel: Option<&AtomicBool>) -> std::io::Result<bool> {
     let mut f = BufWriter::new(std::fs::File::create(path)?);
     f.write_all(&wav_header(len as u32))?;
     let mut mix = MixState {
@@ -459,6 +471,9 @@ pub fn write_wav(path: &Path, clips: Vec<MixClip>, start: u64, len: u64) -> std:
     let mut bytes = Vec::with_capacity(4 * 4800);
     let mut left = len;
     while left > 0 {
+        if cancel.is_some_and(|c| c.load(Ordering::Relaxed)) {
+            return Ok(false);
+        }
         let n = left.min(4800) as usize;
         let out = &mut buf[..2 * n];
         mix.render(out, 1.0);
@@ -469,50 +484,12 @@ pub fn write_wav(path: &Path, clips: Vec<MixClip>, start: u64, len: u64) -> std:
         f.write_all(&bytes)?;
         left -= n as u64;
     }
-    f.flush()
+    f.flush()?;
+    Ok(true)
 }
 
-// -------------------------------------------------------------------------------------- tâche
 
-type Image = Arc<Vec<Color32>>;
-
-/// L'image finale du plan `p`, image `f`, avec les incrustations gravées (timecode…) des calques
-/// d'incrustation visibles qui ne sont pas réglés « Seulement à l'écran » (`incrustation.rs`). L'image
-/// d'origine, gardée pour l'image suivante si rien n'a changé, n'est pas touchée.
-fn burned(doc: &Document, p: usize, f: usize, img: Image) -> Image {
-    if !crate::incrustation::any_for(doc, p, f, true) {
-        return img;
-    }
-    let boxes = crate::incrustation::boxes_for(doc, p, f, true, crate::incrustation::now_secs());
-    let mut pixels = (*img).clone();
-    crate::incrustation::burn(&mut pixels, doc.frame, &boxes);
-    Arc::new(pixels)
-}
-
-/// Où partent les images calculées.
-enum Sink {
-    /// Fils d'écriture PNG : (numéro de l'image, image).
-    Png {
-        tx: Option<SyncSender<(usize, Image)>>,
-        workers: Vec<JoinHandle<()>>,
-        error: Arc<Mutex<Option<String>>>,
-    },
-    /// Processus ffmpeg, nourri par un fil d'écriture.
-    Video {
-        child: Child,
-        tx: Option<SyncSender<Image>>,
-        writer: Option<JoinHandle<Result<(), String>>>,
-        stderr: Option<JoinHandle<String>>,
-        /// Son mixé, à effacer à la fin.
-        wav: Option<PathBuf>,
-    },
-    /// Storyboard PDF : un fil réduit chaque image en JPEG, puis écrit le fichier à la fin.
-    Pdf {
-        tx: Option<SyncSender<(usize, Image)>>,
-        writer: Option<JoinHandle<Result<(), String>>>,
-        cancelled: Arc<AtomicBool>,
-    },
-}
+// ------------------------------------------------------------------------ images de storyboard
 
 /// Largeur des images du PDF, en pixels : ~220 points par pouce dans une case de 3,5 pouces.
 const PDF_IMAGE_WIDTH: u32 = 800;
@@ -615,62 +592,129 @@ pub fn storyboard_of_with(doc: &Document, panels: &[usize], with_comments: bool)
     }
     (frames, boards)
 }
-enum Sent {
-    Ok,
-    Full(Image),
-    Broken,
+
+// -------------------------------------------------------------------------------------- tâche
+
+/// Écrit `bytes` sous `path` : d'abord dans `<path>.part`, puis renommé. Un disque plein, un fichier tenu ouvert
+/// ailleurs ou un arrêt en route ne laissent ni demi-fichier ni fichier d'avant abîmé.
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let part = part_of(path);
+    std::fs::write(&part, bytes).map_err(|e| {
+        let _ = std::fs::remove_file(&part);
+        format!("{} : {e}", part.display())
+    })?;
+    if let Err(e) = std::fs::rename(&part, path) {
+        let _ = std::fs::remove_file(&part);
+        return Err(format!("{} : {e}", path.display()));
+    }
+    Ok(())
 }
 
-impl Sink {
-    fn send(&mut self, index: usize, img: Image) -> Sent {
+/// `<nom>.pdf` -> `<nom>.pdf.part`.
+pub(crate) fn part_of(path: &Path) -> PathBuf {
+    let mut s = path.as_os_str().to_os_string();
+    s.push(".part");
+    PathBuf::from(s)
+}
+
+/// L'image finale du plan `p`, image `f`, avec les incrustations gravées (timecode…) des calques
+/// d'incrustation visibles qui ne sont pas réglés « Seulement à l'écran » (`incrustation.rs`). L'image
+/// d'origine, gardée pour l'image suivante si rien n'a changé, n'est pas touchée.
+pub(crate) fn burned(doc: &Document, p: usize, f: usize, img: Image) -> Image {
+    if !crate::incrustation::any_for(doc, p, f, true) {
+        return img;
+    }
+    let boxes = crate::incrustation::boxes_for(doc, p, f, true, crate::incrustation::now_secs());
+    let mut pixels = (*img).clone();
+    crate::incrustation::burn(&mut pixels, doc.frame, &boxes);
+    Arc::new(pixels)
+}
+
+/// Images en attente d'écriture au plus (≈ 8 Mo chacune en 1920×1080, 33 Mo en 4K).
+const QUEUE: usize = 4;
+
+/// Comment s'appellent les fichiers d'une suite d'images.
+#[derive(Clone, Debug)]
+enum Naming {
+    /// `<base>_0001.png`… dans le dossier.
+    Numbered(String),
+    /// Un seul fichier, ce chemin.
+    Exact(PathBuf),
+}
+
+/// L'entrée du fil d'écriture : le passeur de `exportrender` la tient et la ferme en finissant.
+enum Tx {
+    Png(SyncSender<(usize, Image)>),
+    Video(SyncSender<Image>),
+    Collect(SyncSender<(usize, Image)>),
+    /// Rien à écrire image par image (le son seul).
+    Rien,
+}
+
+impl Tx {
+    fn send(&self, index: usize, img: Image) -> Pose {
         let result = match self {
-            Sink::Png { tx: Some(tx), .. } => tx.try_send((index, img)).map_err(|e| match e {
+            Tx::Png(tx) | Tx::Collect(tx) => tx.try_send((index, img)).map_err(|e| match e {
                 TrySendError::Full((_, img)) => Some(img),
                 TrySendError::Disconnected(_) => None,
             }),
-            Sink::Video { tx: Some(tx), .. } => tx.try_send(img).map_err(|e| match e {
+            Tx::Video(tx) => tx.try_send(img).map_err(|e| match e {
                 TrySendError::Full(img) => Some(img),
                 TrySendError::Disconnected(_) => None,
             }),
-            Sink::Pdf { tx: Some(tx), .. } => tx.try_send((index, img)).map_err(|e| match e {
-                TrySendError::Full((_, img)) => Some(img),
-                TrySendError::Disconnected(_) => None,
-            }),
-            _ => Err(None),
+            Tx::Rien => Err(None),
         };
         match result {
-            Ok(()) => Sent::Ok,
-            Err(Some(img)) => Sent::Full(img),
-            Err(None) => Sent::Broken,
+            Ok(()) => Pose::Ok,
+            Err(Some(img)) => Pose::Pleine(img),
+            Err(None) => Pose::Cassee,
         }
     }
+}
 
-    /// Plus d'images : les fils finissent d'écrire ce qu'ils ont reçu.
-    fn close(&mut self) {
-        match self {
-            Sink::Png { tx, .. } => *tx = None,
-            Sink::Video { tx, .. } => *tx = None,
-            Sink::Pdf { tx, .. } => *tx = None,
-        }
-    }
+/// Les fils qui écrivent, et ce qu'il faut pour les arrêter.
+enum Sink {
+    /// Fils d'écriture PNG.
+    Png { workers: Vec<JoinHandle<()>> },
+    /// Processus ffmpeg, nourri par un fil d'écriture.
+    Video {
+        child: Child,
+        writer: Option<JoinHandle<Result<(), String>>>,
+        /// Ce que le fil d'écriture a rendu en finissant.
+        written: Option<Result<(), String>>,
+        stderr: Option<JoinHandle<String>>,
+        /// Son mixé, à effacer à la fin.
+        wav: Option<PathBuf>,
+    },
+    /// Fils qui réduisent chaque image (JPEG du PDF ou de la page de relecture, PNG de la page HTML…), puis un fil qui écrit le fichier
+    /// quand elles sont toutes arrivées.
+    Collect { finisher: Option<JoinHandle<Result<(), String>>>, stop: Arc<AtomicBool> },
+    /// Rien n'écrit (pas encore lancé, ou le son seul).
+    Rien,
+}
 
+impl Sink {
     /// Fin de l'écriture : `None` tant que ce n'est pas fini.
     fn poll(&mut self) -> Option<Result<(), String>> {
         match self {
-            Sink::Png { workers, error, .. } => {
+            Sink::Png { workers } => {
                 if workers.iter().any(|w| !w.is_finished()) {
                     return None;
                 }
                 for w in workers.drain(..) {
                     let _ = w.join();
                 }
-                Some(match error.lock().unwrap().take() {
-                    Some(e) => Err(e),
-                    None => Ok(()),
-                })
+                Some(Ok(()))
             }
-            Sink::Video { child, writer, stderr, wav, .. } => {
-                if writer.as_ref().is_some_and(|w| !w.is_finished()) {
+            Sink::Video { child, writer, written, stderr, wav } => {
+                if written.is_none() && writer.as_ref().is_some_and(|w| w.is_finished()) {
+                    *written = Some(writer.take().map_or(Ok(()), |w| w.join().unwrap_or(Err("écriture interrompue".into()))));
+                }
+                // Le fil d'écriture s'est arrêté sur une erreur : ffmpeg ne recevra plus rien, inutile de l'attendre.
+                if matches!(written, Some(Err(_))) {
+                    let _ = child.kill();
+                }
+                if written.is_none() && writer.is_some() {
                     return None;
                 }
                 let status = match child.try_wait() {
@@ -678,7 +722,7 @@ impl Sink {
                     Ok(None) => return None,
                     Err(e) => return Some(Err(e.to_string())),
                 };
-                let written = writer.take().map_or(Ok(()), |w| w.join().unwrap_or(Err("écriture interrompue".into())));
+                let written = written.take().unwrap_or(Ok(()));
                 let message = stderr.take().and_then(|r| r.join().ok()).unwrap_or_default();
                 if let Some(w) = wav.take() {
                     let _ = std::fs::remove_file(w);
@@ -694,24 +738,20 @@ impl Sink {
                     })
                 })
             }
-            Sink::Pdf { writer, .. } => {
-                if writer.as_ref().is_some_and(|w| !w.is_finished()) {
+            Sink::Collect { finisher, .. } => {
+                if finisher.as_ref().is_some_and(|w| !w.is_finished()) {
                     return None;
                 }
-                Some(writer.take().map_or(Ok(()), |w| w.join().unwrap_or(Err("écriture interrompue".into()))))
+                Some(finisher.take().map_or(Ok(()), |w| w.join().unwrap_or(Err("écriture interrompue".into()))))
             }
+            Sink::Rien => Some(Ok(())),
         }
     }
 
-    /// Arrêt immédiat (annulation, fermeture).
+    /// Arrêt immédiat (annulation, fermeture). L'entrée du fil d'écriture est déjà fermée (le passeur est arrêté).
     fn abort(&mut self) {
-        // Avant de fermer la file : le fil du PDF ne doit pas prendre la fin pour un export fini.
-        if let Sink::Pdf { cancelled, .. } = self {
-            cancelled.store(true, Ordering::Relaxed);
-        }
-        self.close();
         match self {
-            Sink::Png { workers, .. } => {
+            Sink::Png { workers } => {
                 for w in workers.drain(..) {
                     let _ = w.join();
                 }
@@ -729,125 +769,257 @@ impl Sink {
                     let _ = std::fs::remove_file(w);
                 }
             }
-            Sink::Pdf { writer, .. } => {
-                if let Some(w) = writer.take() {
+            Sink::Collect { finisher, stop } => {
+                stop.store(true, Ordering::Relaxed);
+                if let Some(w) = finisher.take() {
                     let _ = w.join();
                 }
             }
+            Sink::Rien => {}
         }
     }
 }
 
 /// Où en est un export.
 pub enum Progress {
-    /// Images calculées sur le total.
+    /// Images passées à l'écriture sur le total.
     Running(usize, usize),
     /// Tout est calculé ; l'écriture ou l'encodage se termine.
     Finishing,
     Done,
 }
 
-/// Un export en cours.
+/// Ce que fait l'export avant de lancer l'écriture : en général un fil de fond qui mixe le son avec le cliché du projet.
+/// Rend un fichier à effacer si l'export s'arrête (le son mixé que lit ffmpeg).
+type Prelude = Box<dyn FnOnce(&Document, &AtomicBool) -> Result<Option<PathBuf>, String> + Send>;
+
+/// Lance l'écriture (ffmpeg…) quand le son mixé est prêt (son chemin) ; rend le fil d'écriture et son entrée.
+type Launch = Box<dyn FnOnce(Option<PathBuf>) -> Result<(Sink, Tx), String> + Send>;
+
+enum Stage {
+    /// Rien n'est parti : le cliché du projet se prend au premier `step`.
+    Neuf,
+    /// Le cliché du projet se copie, par tranches de quelques millisecondes.
+    Cliche(SnapshotBuilder),
+    /// Le son se mixe sur un fil à part.
+    Son(JoinHandle<Result<Option<PathBuf>, String>>),
+    /// Les images se calculent.
+    Rendu(Pipeline),
+    Fini,
+}
+
+/// Ce que l'annulation d'un export efface.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Erase {
+    /// Rien : les images déjà écrites d'une suite restent.
+    Rien,
+    /// Le fichier `.part` à côté de la cible : la cible, éventuellement d'un export d'avant, reste intacte.
+    Partie,
+    /// La cible elle-même : ffmpeg y écrit directement (un film inachevé n'est pas un film).
+    Fichier,
+}
+
+/// Un export en cours. Le projet n'est lu qu'au départ (le cliché) : l'interface ne calcule aucune image, et le projet
+/// reste libre pendant l'export.
 pub struct ExportJob {
     pub title: String,
     /// Ce qu'on compte dans la progression (« Image », « Panneau »).
     pub unit: &'static str,
     /// Fichier ou dossier produit.
     pub target: PathBuf,
-    frames: Vec<(usize, usize)>,
-    paper: bool,
-    next: usize,
-    /// Dernières images calculées : une image tenue (même plan, même caméra) n'est pas recalculée.
-    /// Quatre, pour qu'une transition qui tient une image d'un côté ne la recalcule pas à chaque
-    /// image de l'autre.
-    cache: Vec<(Plan, Camera, Image)>,
-    /// Les zones des transitions et la première image de chaque plan (`with_transitions`) ; vides :
-    /// aucune transition.
+    frames: Arc<Vec<(usize, usize)>>,
+    papier: Papier,
+    graver: bool,
+    explicite: Option<(Plan, Camera)>,
+    /// Les zones des transitions du montage (`with_transitions`) ; vides : aucune transition.
     zones: Vec<crate::transitions::Zone>,
-    starts: Vec<usize>,
-    /// Image calculée qui attend une place dans la file d'écriture.
-    pending: Option<Image>,
+    snapshot: Option<Arc<Document>>,
+    prelude: Option<Prelude>,
+    launch: Option<Launch>,
+    stage: Stage,
     sink: Sink,
+    tx: Option<Tx>,
+    /// La première erreur d'un fil (écriture, rendu).
+    fail: Arc<Mutex<Option<String>>>,
+    cancel: Arc<AtomicBool>,
+    /// Ce que l'annulation (ou un échec) efface.
+    erase: Erase,
+    rendering_since: Option<Instant>,
+    /// Le message de réussite, quand ce n'est pas « N images exportées ».
+    done_text: Option<String>,
     pub started: Instant,
     /// Résultat : message de réussite ou d'erreur.
     pub outcome: Option<Result<String, String>>,
 }
 
-/// Images en attente d'écriture au plus (≈ 8 Mo chacune en 1920×1080).
-const QUEUE: usize = 8;
+type Fail = Arc<Mutex<Option<String>>>;
+
+/// Les fils d'écriture d'une suite d'images PNG : `n` fils qui lisent la même file.
+fn png_writers(dir: PathBuf, naming: Naming, size: [usize; 2], fail: Fail) -> (SyncSender<(usize, Image)>, Vec<JoinHandle<()>>) {
+    let (tx, rx) = sync_channel::<(usize, Image)>(QUEUE);
+    let rx = Arc::new(Mutex::new(rx));
+    let n = std::thread::available_parallelism().map_or(2, |n| n.get()).clamp(2, 6);
+    let workers = (0..n)
+        .map(|_| {
+            let (rx, fail, dir, naming) = (rx.clone(), fail.clone(), dir.clone(), naming.clone());
+            std::thread::spawn(move || {
+                crate::parallele::baisser_la_priorite_ici();
+                loop {
+                    let msg = rx.lock().unwrap_or_else(|e| e.into_inner()).recv();
+                    let Ok((i, img)) = msg else { break };
+                    let path = match &naming {
+                        Naming::Numbered(base) => dir.join(format!("{base}_{:04}.png", i + 1)),
+                        Naming::Exact(p) => p.clone(),
+                    };
+                    // (D'abord sous un nom en `.part` : pas de demi-image si l'on s'arrête en route.)
+                    let part = part_of(&path);
+                    let written = crate::io::write_png(&part, &img, size[0], size[1]).and_then(|()| std::fs::rename(&part, &path).map_err(|e| e.to_string()));
+                    if let Err(e) = written {
+                        let _ = std::fs::remove_file(&part);
+                        let mut f = fail.lock().unwrap_or_else(|e| e.into_inner());
+                        if f.is_none() {
+                            *f = Some(format!("{} : {e}", path.display()));
+                        }
+                        break;
+                    }
+                }
+            })
+        })
+        .collect();
+    (tx, workers)
+}
+
+/// Lance ffmpeg (images brutes sur son entrée standard) et le fil qui les lui écrit.
+fn spawn_video(ffmpeg: &Path, args: &[String], wav: Option<PathBuf>) -> Result<(Sink, Tx), String> {
+    let mut child = command(ffmpeg)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("ffmpeg ne démarre pas ({e})"))?;
+    let mut stdin = child.stdin.take().ok_or("pas d'entrée vers ffmpeg")?;
+    let mut err = child.stderr.take().ok_or("pas de sortie d'erreur de ffmpeg")?;
+    let stderr = std::thread::spawn(move || {
+        let mut s = String::new();
+        let _ = err.read_to_string(&mut s);
+        s
+    });
+    let (tx, rx) = sync_channel::<Image>(QUEUE);
+    let writer = std::thread::spawn(move || -> Result<(), String> {
+        crate::parallele::baisser_la_priorite_ici();
+        for img in rx {
+            stdin
+                .write_all(bytemuck::cast_slice(&img[..]))
+                .map_err(|e| format!("ffmpeg ne reçoit plus les images ({e})"))?;
+        }
+        Ok(())
+    });
+    Ok((Sink::Video { child, writer: Some(writer), written: None, stderr: Some(stderr), wav }, Tx::Video(tx)))
+}
+
+/// Le son mixé de l'étendue, écrit en WAV (`start` et `len` en échantillons), pour que ffmpeg le lise à côté des images.
+pub struct SoundSpan {
+    pub start: u64,
+    pub len: u64,
+}
 
 impl ExportJob {
     /// Suite d'images PNG `base_0001.png`… dans `dir`.
     pub fn images(dir: &Path, base: &str, frames: Vec<(usize, usize)>, size: [usize; 2], paper: bool) -> ExportJob {
-        let (tx, rx) = sync_channel::<(usize, Image)>(QUEUE);
-        let rx = Arc::new(Mutex::new(rx));
-        let error = Arc::new(Mutex::new(None));
-        let n = std::thread::available_parallelism().map_or(2, |n| n.get()).clamp(2, 6);
-        let workers = (0..n)
-            .map(|_| {
-                let (rx, error, dir, base) = (rx.clone(), error.clone(), dir.to_path_buf(), base.to_string());
-                std::thread::spawn(move || loop {
-                    let msg = rx.lock().unwrap().recv();
-                    let Ok((i, img)) = msg else { break };
-                    let path = dir.join(format!("{base}_{:04}.png", i + 1));
-                    if let Err(e) = crate::io::write_png(&path, &img, size[0], size[1]) {
-                        *error.lock().unwrap() = Some(format!("{} : {e}", path.display()));
-                        break;
-                    }
-                })
-            })
-            .collect();
-        ExportJob::new(
-            format!("Export de {} images", frames.len()),
-            dir.to_path_buf(),
-            frames,
-            paper,
-            Sink::Png {
-                tx: Some(tx),
-                workers,
-                error,
-            },
-        )
+        let fail: Fail = Arc::default();
+        let (tx, workers) = png_writers(dir.to_path_buf(), Naming::Numbered(base.to_string()), size, fail.clone());
+        let mut job = ExportJob::new(format!("Export de {} images", frames.len()), dir.to_path_buf(), frames, paper, Sink::Png { workers }, Tx::Png(tx), fail);
+        job.erase = Erase::Rien;
+        job
     }
 
-    /// Vidéo encodée par ffmpeg (`args` : voir `video_args`), avec le son `wav` s'il y en a.
+    /// Une seule image PNG, `path` : le plan `plan` filmé par `cam` (celui que l'écran montre : `App::build_plan`), image
+    /// `frame` du plan `panel`, avec les incrustations gravées.
+    pub fn still(path: &Path, plan: Plan, cam: Camera, panel: usize, frame: usize, size: [usize; 2]) -> ExportJob {
+        let fail: Fail = Arc::default();
+        let dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+        let (tx, workers) = png_writers(dir, Naming::Exact(path.to_path_buf()), size, fail.clone());
+        let mut job = ExportJob::new("Export de l'image".to_string(), path.to_path_buf(), vec![(panel, frame)], true, Sink::Png { workers }, Tx::Png(tx), fail);
+        job.explicite = Some((plan, cam));
+        job.graver = true;
+        job
+    }
+
+    /// Vidéo encodée par ffmpeg (`args` : voir `video_args`), avec le son `wav` s'il y en a (déjà écrit).
     pub fn video(ffmpeg: &Path, args: Vec<String>, out: &Path, frames: Vec<(usize, usize)>, wav: Option<PathBuf>) -> Result<ExportJob, String> {
-        let mut child = command(ffmpeg)
-            .args(&args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("ffmpeg ne démarre pas ({e})"))?;
-        let mut stdin = child.stdin.take().ok_or("pas d'entrée vers ffmpeg")?;
-        let mut err = child.stderr.take().ok_or("pas de sortie d'erreur de ffmpeg")?;
-        let stderr = std::thread::spawn(move || {
-            let mut s = String::new();
-            let _ = err.read_to_string(&mut s);
-            s
+        let (sink, tx) = spawn_video(ffmpeg, &args, wav)?;
+        let mut job = ExportJob::new(format!("Export de la vidéo ({} images)", frames.len()), out.to_path_buf(), frames, true, sink, tx, Arc::default());
+        job.erase = Erase::Fichier;
+        Ok(job)
+    }
+
+    /// Comme `video`, mais le son est mixé par l'export lui-même, sur un fil à part, avant que ffmpeg parte : `args(wav)`
+    /// donne les arguments de ffmpeg une fois le chemin du son connu. Rien ne s'attend sur le fil de l'interface.
+    pub fn video_with_sound(
+        ffmpeg: &Path,
+        args: impl FnOnce(Option<&Path>) -> Result<Vec<String>, String> + Send + 'static,
+        out: &Path,
+        frames: Vec<(usize, usize)>,
+        sound: Option<SoundSpan>,
+    ) -> ExportJob {
+        let ffmpeg = ffmpeg.to_path_buf();
+        let launch: Launch = Box::new(move |wav| {
+            let a = args(wav.as_deref())?;
+            spawn_video(&ffmpeg, &a, wav)
         });
-        let (tx, rx) = sync_channel::<Image>(QUEUE);
-        let writer = std::thread::spawn(move || -> Result<(), String> {
-            for img in rx {
-                stdin
-                    .write_all(bytemuck::cast_slice(&img[..]))
-                    .map_err(|e| format!("ffmpeg ne reçoit plus les images ({e})"))?;
+        let mut job = ExportJob::new(format!("Export de la vidéo ({} images)", frames.len()), out.to_path_buf(), frames, true, Sink::Rien, Tx::Rien, Arc::default());
+        job.launch = Some(launch);
+        job.tx = None;
+        job.erase = Erase::Fichier;
+        if let Some(s) = sound {
+            job.prelude = Some(Box::new(move |snap, cancel| {
+                let path = std::env::temp_dir().join(format!("pelure-export-{}-{}.wav", std::process::id(), NEXT_WAV.fetch_add(1, Ordering::Relaxed)));
+                match write_wav_until(&path, audio::mix_clips_blocking(snap), s.start, s.len, Some(cancel)) {
+                    Ok(true) => Ok(Some(path)),
+                    Ok(false) => {
+                        let _ = std::fs::remove_file(&path);
+                        Err("annulé".into())
+                    }
+                    Err(e) => {
+                        let _ = std::fs::remove_file(&path);
+                        Err(format!("Échec du mixage du son : {e}"))
+                    }
+                }
+            }));
+        }
+        job
+    }
+
+    /// Le son seul de l'étendue, en WAV, mixé sur un fil à part (aucune image).
+    pub fn sound(out: &Path, span: SoundSpan) -> ExportJob {
+        let mut job = ExportJob::new("Export du son".to_string(), out.to_path_buf(), Vec::new(), true, Sink::Rien, Tx::Rien, Arc::default());
+        let target = out.to_path_buf();
+        job.done_text = Some(format!("Son exporté : {}", out.display()));
+        job.prelude = Some(Box::new(move |snap, cancel| {
+            let part = part_of(&target);
+            match write_wav_until(&part, audio::mix_clips_blocking(snap), span.start, span.len, Some(cancel)) {
+                Ok(true) => {}
+                Ok(false) => {
+                    let _ = std::fs::remove_file(&part);
+                    return Err("annulé".into());
+                }
+                Err(e) => {
+                    let _ = std::fs::remove_file(&part);
+                    return Err(format!("Échec de l'export du son : {e}"));
+                }
             }
-            Ok(())
-        });
-        Ok(ExportJob::new(
-            format!("Export de la vidéo ({} images)", frames.len()),
-            out.to_path_buf(),
-            frames,
-            true,
-            Sink::Video {
-                child,
-                tx: Some(tx),
-                writer: Some(writer),
-                stderr: Some(stderr),
-                wav,
-            },
-        ))
+            if cancel.load(Ordering::Relaxed) {
+                let _ = std::fs::remove_file(&part);
+                return Err("annulé".into());
+            }
+            std::fs::rename(&part, &target).map_err(|e| {
+                let _ = std::fs::remove_file(&part);
+                format!("Échec de l'export du son : {e}")
+            })?;
+            Ok(None)
+        }));
+        job
     }
 
     /// GIF animé encodé par ffmpeg (`args` : voir `gif_args`) : les images `frames` sont déjà celles du GIF
@@ -879,7 +1051,7 @@ impl ExportJob {
             move |_, img| board_image(img, frame),
             move |images: Vec<pdf::BoardImage>| {
                 let bytes = pdf::storyboard_with(&name, &boards, &images, aspect, notes_area);
-                std::fs::write(&path, bytes).map_err(|e| format!("{} : {e}", path.display()))
+                write_atomic(&path, &bytes)
             },
         );
         job.unit = "Image de storyboard";
@@ -887,176 +1059,435 @@ impl ExportJob {
     }
 
     /// Un export qui garde chaque image calculée sous une autre forme et écrit le tout à la fin
-    /// (un PDF, une page de relecture) : `encode(rang, pixels)` s'exécute sur un fil à part, image
+    /// (un PDF, une page de relecture) : `encode(rang, pixels)` s'exécute sur quelques fils à part, image
     /// après image, `finish(toutes)` une fois qu'elles sont toutes arrivées. Annuler ou fermer SHOT
-    /// arrête le fil et efface `out` (`finish` ne s'exécute pas).
+    /// arrête les fils et efface `out` (`finish` ne s'exécute pas).
     pub fn collect<T, E, F>(title: String, unit: &'static str, out: &Path, frames: Vec<(usize, usize)>, encode: E, finish: F) -> ExportJob
     where
         T: Send + 'static,
-        E: Fn(usize, &[Color32]) -> Result<T, String> + Send + 'static,
+        E: Fn(usize, &[Color32]) -> Result<T, String> + Send + Sync + 'static,
         F: FnOnce(Vec<T>) -> Result<(), String> + Send + 'static,
     {
+        ExportJob::collect_with(title, unit, out, frames, encode, finish, || {})
+    }
+
+    /// Comme `collect` ; `cleanup` s'exécute si l'export s'arrête sans avoir fini (annulé, raté) : il efface ce que
+    /// `encode` a écrit en route.
+    pub fn collect_with<T, E, F, C>(title: String, unit: &'static str, out: &Path, frames: Vec<(usize, usize)>, encode: E, finish: F, cleanup: C) -> ExportJob
+    where
+        T: Send + 'static,
+        E: Fn(usize, &[Color32]) -> Result<T, String> + Send + Sync + 'static,
+        F: FnOnce(Vec<T>) -> Result<(), String> + Send + 'static,
+        C: FnOnce() + Send + 'static,
+    {
         let (tx, rx) = sync_channel::<(usize, Image)>(QUEUE);
-        let cancelled = Arc::new(AtomicBool::new(false));
-        let stop = cancelled.clone();
+        let rx = Arc::new(Mutex::new(rx));
+        let stop = Arc::new(AtomicBool::new(false));
+        let fail: Fail = Arc::default();
         let n = frames.len();
-        let writer = std::thread::spawn(move || -> Result<(), String> {
-            let mut done: Vec<Option<T>> = (0..n).map(|_| None).collect();
-            for (i, img) in rx {
-                if stop.load(Ordering::Relaxed) {
+        let slots: Arc<Mutex<Vec<Option<T>>>> = Arc::new(Mutex::new((0..n).map(|_| None).collect()));
+        let encode = Arc::new(encode);
+        let encoders: Vec<JoinHandle<Result<(), String>>> = (0..exportrender::fils_de_rendu().0.clamp(1, 4))
+            .map(|_| {
+                let (rx, stop, slots, encode, fail) = (rx.clone(), stop.clone(), slots.clone(), encode.clone(), fail.clone());
+                std::thread::spawn(move || -> Result<(), String> {
+                    crate::parallele::baisser_la_priorite_ici();
+                    loop {
+                        let msg = rx.lock().unwrap_or_else(|e| e.into_inner()).recv();
+                        let Ok((i, img)) = msg else { return Ok(()) };
+                        if stop.load(Ordering::Relaxed) {
+                            return Err("annulé".into());
+                        }
+                        if i >= n {
+                            continue;
+                        }
+                        match encode(i, &img) {
+                            Ok(t) => slots.lock().unwrap_or_else(|e| e.into_inner())[i] = Some(t),
+                            Err(e) => {
+                                let mut f = fail.lock().unwrap_or_else(|e| e.into_inner());
+                                if f.is_none() {
+                                    *f = Some(e.clone());
+                                }
+                                stop.store(true, Ordering::Relaxed);
+                                return Err(e);
+                            }
+                        }
+                    }
+                })
+            })
+            .collect();
+        let stopped = stop.clone();
+        let finisher = std::thread::spawn(move || -> Result<(), String> {
+            let result = (|| {
+                let mut error: Option<String> = None;
+                for e in encoders {
+                    match e.join() {
+                        Ok(Ok(())) => {}
+                        Ok(Err(e)) => {
+                            error.get_or_insert(e);
+                        }
+                        Err(_) => {
+                            error.get_or_insert("écriture interrompue".into());
+                        }
+                    }
+                }
+                if let Some(e) = error {
+                    return Err(e);
+                }
+                if stopped.load(Ordering::Relaxed) {
                     return Err("annulé".into());
                 }
-                if i < n {
-                    done[i] = Some(encode(i, &img)?);
-                }
+                let all: Vec<T> = std::mem::take(&mut *slots.lock().unwrap_or_else(|e| e.into_inner())).into_iter().collect::<Option<_>>().ok_or("image manquante")?;
+                finish(all)
+            })();
+            if result.is_err() {
+                cleanup();
             }
-            if stop.load(Ordering::Relaxed) {
-                return Err("annulé".into());
-            }
-            let all: Vec<T> = done.into_iter().collect::<Option<_>>().ok_or("image manquante")?;
-            finish(all)
+            result
         });
-        let mut job = ExportJob::new(title, out.to_path_buf(), frames, true, Sink::Pdf { tx: Some(tx), writer: Some(writer), cancelled });
+        let mut job = ExportJob::new(title, out.to_path_buf(), frames, true, Sink::Collect { finisher: Some(finisher), stop }, Tx::Collect(tx), fail);
         job.unit = unit;
         job
     }
 
-    fn new(title: String, target: PathBuf, frames: Vec<(usize, usize)>, paper: bool, sink: Sink) -> ExportJob {
+    /// La page HTML du storyboard (une planche PNG par image de storyboard, 960 pixels de large, et `storyboard.html`
+    /// dans `dir`) : le papier est toujours celui du projet, sans transition ni incrustation (comme avant).
+    pub fn storyboard_page(dir: &Path, title: &str, frames: Vec<(usize, usize)>, items: Vec<PlancheHtml>, frame: [usize; 2]) -> ExportJob {
+        let n = items.len();
+        let (d_encode, d_finish, d_clean) = (dir.to_path_buf(), dir.to_path_buf(), dir.to_path_buf());
+        let name = title.to_string();
+        let written: Arc<Mutex<Vec<PathBuf>>> = Arc::default();
+        let (w_encode, w_clean) = (written.clone(), written.clone());
+        let page = dir.join("storyboard.html");
+        let mut job = ExportJob::collect_with(
+            format!("Export de la page du storyboard ({n} images)"),
+            "Image de storyboard",
+            &page,
+            frames,
+            move |k, img| {
+                let file = format!("planche_{:03}.png", k + 1);
+                let path = d_encode.join(&file);
+                w_encode.lock().unwrap_or_else(|e| e.into_inner()).push(path.clone());
+                crate::io::write_png_scaled(&path, img, frame[0], frame[1], 960).map_err(|e| format!("{} : {e}", path.display()))?;
+                Ok(file)
+            },
+            move |files: Vec<String>| write_atomic(&d_finish.join("storyboard.html"), storyboard_html(&name, &items, &files).as_bytes()),
+            move || {
+                for p in w_clean.lock().unwrap_or_else(|e| e.into_inner()).drain(..) {
+                    let _ = std::fs::remove_file(p);
+                }
+                let _ = std::fs::remove_file(part_of(&d_clean.join("storyboard.html")));
+            },
+        );
+        job.papier = Papier::Feuille;
+        job.graver = false;
+        job.done_text = Some(format!("Storyboard exporté : {}", dir.join("storyboard.html").display()));
+        job
+    }
+
+    fn new(title: String, target: PathBuf, frames: Vec<(usize, usize)>, paper: bool, sink: Sink, tx: Tx, fail: Fail) -> ExportJob {
         ExportJob {
             unit: "Image",
             title,
             target,
-            frames,
-            paper,
-            next: 0,
-            cache: Vec::new(),
+            frames: Arc::new(frames),
+            papier: if paper { Papier::Fond } else { Papier::Aucun },
+            graver: true,
+            explicite: None,
             zones: Vec::new(),
-            starts: Vec::new(),
-            pending: None,
+            snapshot: None,
+            prelude: None,
+            launch: None,
+            stage: Stage::Neuf,
             sink,
+            tx: Some(tx),
+            fail,
+            cancel: Arc::new(AtomicBool::new(false)),
+            erase: Erase::Partie,
+            rendering_since: None,
+            done_text: None,
             started: Instant::now(),
             outcome: None,
         }
     }
 
+    /// Où en est l'export : les images passées à l'écriture sur le total ; tant que le projet se copie ou que le son se
+    /// mixe, zéro.
     pub fn progress(&self) -> Progress {
+        let total = self.frames.len();
         if self.outcome.is_some() {
-            Progress::Done
-        } else if self.next < self.frames.len() {
-            Progress::Running(self.next, self.frames.len())
-        } else {
-            Progress::Finishing
+            return Progress::Done;
+        }
+        match &self.stage {
+            Stage::Rendu(p) if p.emitted() >= total => Progress::Finishing,
+            Stage::Rendu(p) => Progress::Running(p.emitted(), total),
+            _ => Progress::Running(0, total),
+        }
+    }
+
+    /// L'export n'a pas encore fini de copier le projet : il lit encore le projet affiché (il faut que ce soit le même, et
+    /// qu'il ne change pas d'onglet).
+    pub fn needs_project(&self) -> bool {
+        self.outcome.is_none() && self.snapshot.is_none() && matches!(self.stage, Stage::Neuf | Stage::Cliche(_))
+    }
+
+    /// Ce que l'export fait en ce moment, en quelques mots.
+    pub fn phase(&self) -> &'static str {
+        match &self.stage {
+            Stage::Neuf | Stage::Cliche(_) => "Copie du projet…",
+            Stage::Son(_) => "Mixage du son…",
+            Stage::Rendu(_) => "Calcul des images…",
+            Stage::Fini => "",
         }
     }
 
     /// Applique les transitions du montage à cet export (`transitions.rs`) : les images qu'une zone
-    /// recouvre sont le mélange des deux plans, calculé ici sur le processeur, comme le reste de
-    /// l'export (la carte graphique ne sert qu'à l'écran).
+    /// recouvre sont le mélange des deux plans, calculé sur le processeur, comme le reste de l'export (la
+    /// carte graphique ne sert qu'à l'écran).
     pub fn with_transitions(mut self, doc: &Document) -> ExportJob {
         self.zones = crate::transitions::zones(doc);
-        if !self.zones.is_empty() {
-            self.starts = (0..doc.panels.len()).map(|i| doc.panel_start(i)).collect();
-        }
         self
     }
 
-    /// L'image d'un plan (caméra comprise), recalculée seulement si elle a changé.
-    fn render_plain(&mut self, doc: &Document, p: usize, f: usize) -> Image {
-        // Arrière-plan (13e) : aucun ou damier → image transparente.
-        let plan = render::panel_plan_at(doc, p, f, if self.paper { doc.render_paper() } else { None });
-        let cam = doc.panel_camera(p, f);
-        // (Le cache garde l'image sans incrustation : le timecode change à chaque image, `burned` la
-        // grave sur la copie qu'on rend.)
-        if let Some(at) = self.cache.iter().position(|(lp, lc, _)| *lp == plan && *lc == cam) {
-            let entry = self.cache.remove(at);
-            let img = entry.2.clone();
-            self.cache.push(entry);
-            return burned(doc, p, f, img);
-        }
-        let img: Image = Arc::new(render::camera_image(doc, &plan, &cam));
-        self.cache.push((plan, cam, img.clone()));
-        if self.cache.len() > 4 {
-            self.cache.remove(0);
-        }
-        burned(doc, p, f, img)
+    /// Le cliché du projet, déjà pris (l'export pour le montage en fait un pour tous ses fichiers).
+    pub fn with_snapshot(mut self, snapshot: Arc<Document>) -> ExportJob {
+        self.snapshot = Some(snapshot);
+        self
     }
 
-    fn render(&mut self, doc: &Document, i: usize) -> Image {
-        let (p, f) = self.frames[i];
-        let mix = match self.starts.get(p) {
-            Some(&start) => crate::transitions::mix_in(&self.zones, start + f).map(|(_, m)| m),
-            None => None,
-        };
-        let Some(mix) = mix else {
-            return self.render_plain(doc, p, f);
-        };
-        let a = mix.a.map(|(p, f)| self.render_plain(doc, p, f));
-        let b = mix.b.map(|(p, f)| self.render_plain(doc, p, f));
-        Arc::new(crate::transitions::blend_images(&mix, a.as_deref().map(|v| &v[..]), b.as_deref().map(|v| &v[..]), doc.frame))
+    /// Le cliché de l'export, quand il est pris.
+    #[cfg(test)]
+    pub fn snapshot(&self) -> Option<Arc<Document>> {
+        self.snapshot.clone()
     }
 
-    /// Calcule des images pendant `budget` au plus, puis rend la main à l'interface.
+    /// Fait avancer l'export. `doc` n'est lu que pour copier le projet au départ (quelques millisecondes au plus par
+    /// appel, `budget` borné) ; ensuite l'export tourne sur son cliché, sur d'autres fils, et cet appel ne fait que
+    /// regarder où il en est.
     pub fn step(&mut self, doc: &Document, budget: Duration) {
         if self.outcome.is_some() {
             return;
         }
-        let t0 = Instant::now();
-        while self.next < self.frames.len() {
-            if t0.elapsed() >= budget {
-                return;
-            }
-            let img = match self.pending.take() {
-                Some(img) => img,
-                None => self.render(doc, self.next),
-            };
-            match self.sink.send(self.next, img) {
-                Sent::Ok => self.next += 1,
-                Sent::Full(img) => {
-                    // L'écriture est en retard : on garde l'image pour la prochaine fois.
-                    self.pending = Some(img);
-                    return;
-                }
-                Sent::Broken => {
-                    // Le fil d'écriture s'est arrêté sur une erreur : on va la lire.
-                    self.next = self.frames.len();
-                    break;
-                }
-            }
+        let failure = self.fail.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        if let Some(e) = failure {
+            self.stop_with(Err(e));
+            return;
         }
-        self.sink.close();
-        if let Some(result) = self.sink.poll() {
-            let n = self.frames.len();
-            let what = if self.unit == "Image de storyboard" { "images de storyboard exportées" } else { "images exportées" };
-            self.outcome = Some(result.map(|()| format!("{n} {what} : {}", self.target.display())));
+        match &self.stage {
+            Stage::Neuf => match self.snapshot.clone() {
+                Some(s) => self.after_snapshot(s),
+                None => {
+                    let panels = exportrender::panels_needed(&self.frames, &self.zones);
+                    self.stage = Stage::Cliche(SnapshotBuilder::new(doc, &panels));
+                    self.advance_snapshot(doc, budget);
+                }
+            },
+            Stage::Cliche(_) => self.advance_snapshot(doc, budget),
+            Stage::Son(h) => {
+                if h.is_finished() {
+                    let Stage::Son(h) = std::mem::replace(&mut self.stage, Stage::Fini) else { return };
+                    match h.join() {
+                        Ok(Ok(wav)) => match self.snapshot.clone() {
+                            Some(s) => self.launch_render(s, wav),
+                            None => self.stop_with(Err("cliché du projet manquant".into())),
+                        },
+                        Ok(Err(e)) => self.stop_with(Err(e)),
+                        Err(_) => self.stop_with(Err("le mixage du son a échoué".into())),
+                    }
+                }
+            }
+            Stage::Rendu(p) => {
+                if p.finished() {
+                    self.conclude();
+                }
+            }
+            Stage::Fini => {}
         }
     }
 
-    /// Arrête l'export ; une vidéo inachevée est effacée.
+    fn advance_snapshot(&mut self, doc: &Document, budget: Duration) {
+        let Stage::Cliche(b) = &mut self.stage else { return };
+        if b.step(doc, budget.min(Duration::from_millis(8))) {
+            let Stage::Cliche(b) = std::mem::replace(&mut self.stage, Stage::Fini) else { return };
+            let snapshot = b.finish();
+            self.snapshot = Some(snapshot.clone());
+            self.after_snapshot(snapshot);
+        }
+    }
+
+    fn after_snapshot(&mut self, snapshot: Arc<Document>) {
+        let Some(prelude) = self.prelude.take() else {
+            return self.launch_render(snapshot, None);
+        };
+        let cancel = self.cancel.clone();
+        let started = std::thread::Builder::new().name("export-son".into()).spawn(move || {
+            crate::parallele::baisser_la_priorite_ici();
+            prelude(&snapshot, &cancel)
+        });
+        match started {
+            Ok(h) => self.stage = Stage::Son(h),
+            Err(e) => self.stop_with(Err(format!("impossible de lancer l'export ({e})"))),
+        }
+    }
+
+    /// Le cliché est pris (et le son mixé) : l'écriture démarre, puis les fils de rendu.
+    fn launch_render(&mut self, snapshot: Arc<Document>, wav: Option<PathBuf>) {
+        if let Some(launch) = self.launch.take() {
+            match launch(wav) {
+                Ok((sink, tx)) => {
+                    self.sink = sink;
+                    self.tx = Some(tx);
+                }
+                Err(e) => return self.stop_with(Err(e)),
+            }
+        }
+        let Some(tx) = self.tx.take() else {
+            return self.stop_with(Err("l'écriture n'a pas démarré".into()));
+        };
+        let mut rendu = Rendu::new(snapshot, self.papier, self.graver, self.zones.clone(), self.cancel.clone());
+        if let Some((plan, cam)) = self.explicite.clone() {
+            rendu = rendu.avec_plan(plan, cam);
+        }
+        self.rendering_since = Some(Instant::now());
+        let pipeline = Pipeline::start(Arc::new(rendu), self.frames.clone(), Box::new(move |i, img| tx.send(i, img)), self.fail.clone(), QUEUE);
+        self.stage = Stage::Rendu(pipeline);
+    }
+
+    /// Toutes les images sont parties (ou le passeur s'est arrêté) : on attend les fils d'écriture.
+    fn conclude(&mut self) {
+        let Stage::Rendu(p) = &self.stage else { return };
+        let (sent, total) = (p.emitted(), self.frames.len());
+        let Some(result) = self.sink.poll() else { return };
+        self.stage = Stage::Fini;
+        let what = if self.unit == "Image de storyboard" { "images de storyboard exportées" } else { "images exportées" };
+        self.outcome = Some(match result {
+            Ok(()) if sent < total => Err("écriture interrompue".into()),
+            Ok(()) => Ok(self.done_text.clone().unwrap_or_else(|| format!("{total} {what} : {}", self.target.display()))),
+            Err(e) => Err(e),
+        });
+    }
+
+    /// Arrête tout et note `outcome` : fils de rendu, passeur, écriture ; ce que l'export a commencé d'écrire est effacé.
+    fn stop_with(&mut self, outcome: Result<String, String>) {
+        self.cancel.store(true, Ordering::Relaxed);
+        match std::mem::replace(&mut self.stage, Stage::Fini) {
+            Stage::Rendu(mut p) => p.cancel(),
+            Stage::Son(h) => {
+                // Le mixage ne s'interrompt pas en route : un fil à part attend sa fin et efface ce qu'il a écrit.
+                let _ = std::thread::Builder::new().name("export-nettoyage".into()).spawn(move || {
+                    if let Ok(Ok(Some(path))) = h.join() {
+                        let _ = std::fs::remove_file(path);
+                    }
+                });
+            }
+            _ => {}
+        }
+        self.prelude = None;
+        self.launch = None;
+        self.tx = None;
+        self.sink.abort();
+        match self.erase {
+            Erase::Rien => {}
+            Erase::Partie => {
+                let _ = std::fs::remove_file(part_of(&self.target));
+            }
+            Erase::Fichier => {
+                let _ = std::fs::remove_file(&self.target);
+            }
+        }
+        self.outcome = Some(outcome);
+    }
+
+    /// Arrête l'export ; un film, un PDF ou un son inachevé est effacé.
     pub fn cancel(&mut self) {
         if self.outcome.is_some() {
             return;
         }
-        self.sink.abort();
-        if matches!(self.sink, Sink::Video { .. } | Sink::Pdf { .. }) {
-            let _ = std::fs::remove_file(&self.target);
-        }
-        self.outcome = Some(Err("Export annulé.".into()));
+        self.stop_with(Err("Export annulé.".into()));
     }
 
     /// Temps restant estimé, d'après le rythme jusqu'ici.
     pub fn remaining(&self) -> Option<Duration> {
-        (self.next >= 4).then(|| {
-            let per = self.started.elapsed().as_secs_f64() / self.next as f64;
-            Duration::from_secs_f64(per * (self.frames.len() - self.next) as f64)
+        let Stage::Rendu(p) = &self.stage else { return None };
+        let (done, total) = (p.emitted(), self.frames.len());
+        (done >= 4 && total > done).then(|| {
+            let per = self.rendering_since.map_or(0.0, |t| t.elapsed().as_secs_f64()) / done as f64;
+            Duration::from_secs_f64(per * (total - done) as f64)
         })
     }
 }
 
 impl Drop for ExportJob {
     fn drop(&mut self) {
-        // Fermeture de Pelure pendant un export : on n'abandonne pas un ffmpeg derrière soi.
+        // Fermeture de SHOT pendant un export : on n'abandonne pas un ffmpeg derrière soi.
         if self.outcome.is_none() {
             self.cancel();
         }
     }
+}
+
+static NEXT_WAV: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+// ------------------------------------------------------------------------------ la page HTML
+
+/// Une planche de la page HTML du storyboard.
+#[derive(Clone, Debug, Default)]
+pub struct PlancheHtml {
+    /// L'intertitre qui ouvre une séquence (« Séquence 2 »), s'il y en a un avant cette planche.
+    pub sequence: Option<String>,
+    /// Ce qui précède l'intertitre : c'est la première séquence (pas de `</main>` à fermer).
+    pub premiere: bool,
+    pub title: String,
+    pub duration: String,
+    pub action: String,
+    pub dialogue: String,
+    pub notes: String,
+}
+
+/// Les planches de la page HTML : une par image de storyboard de `panels`, avec l'intertitre des séquences.
+pub fn storyboard_items(doc: &Document, panels: &[usize]) -> (Vec<(usize, usize)>, Vec<PlancheHtml>) {
+    let (frames, boards) = storyboard_of(doc, panels);
+    let items = frames
+        .iter()
+        .zip(boards)
+        .map(|(&(i, f), board)| {
+            // Intertitre au début de chaque séquence.
+            let sequence = (f == 0 && doc.sequence_run(i).0 == i).then(|| doc.sequence_label(doc.sequence_of(i)));
+            PlancheHtml { sequence, premiere: i == 0, title: board.title, duration: board.duration, action: board.action, dialogue: board.dialogue, notes: board.notes }
+        })
+        .collect();
+    (frames, items)
+}
+
+/// Le texte de la page HTML : `files` donne le fichier image de chaque planche.
+pub fn storyboard_html(title: &str, items: &[PlancheHtml], files: &[String]) -> String {
+    use crate::io::html_escape;
+    let title = html_escape(title);
+    let mut html = format!(
+        "<!doctype html><html lang=\"fr\"><head><meta charset=\"utf-8\"><title>{title}</title><style>\
+         body{{font-family:system-ui,sans-serif;margin:24px;color:#222}}\
+         h1{{font-size:20px}}main{{display:grid;grid-template-columns:repeat(2,1fr);gap:24px}}\
+         section{{border:1px solid #ccc;padding:10px;break-inside:avoid}}\
+         img{{width:100%;border:1px solid #999}}h2{{font-size:15px;margin:8px 0 2px}}\
+         .dur{{color:#777;font-size:12px;margin:0 0 6px}}p{{font-size:13px;margin:4px 0}}\
+         .label{{font-weight:600}}h2.seq{{font-size:18px;margin:28px 0 10px;break-after:avoid}}\
+         </style></head><body><h1>{title} — storyboard</h1>"
+    );
+    for (item, file) in items.iter().zip(files) {
+        if let Some(seq) = &item.sequence {
+            if !item.premiere {
+                html += "</main>";
+            }
+            html += &format!("<h2 class=\"seq\">Séquence {}</h2><main>", html_escape(seq));
+        }
+        html += &format!("<section><img src=\"{file}\"><h2>{}</h2><p class=\"dur\">{}</p>", html_escape(&item.title), item.duration);
+        for (label, text) in [("Action", &item.action), ("Dialogue", &item.dialogue), ("Notes", &item.notes)] {
+            if !text.trim().is_empty() {
+                html += &format!("<p><span class=\"label\">{label} :</span> {}</p>", html_escape(text));
+            }
+        }
+        html += "</section>";
+    }
+    html += "</main></body></html>";
+    html
 }

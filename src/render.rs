@@ -524,9 +524,12 @@ pub(crate) fn par_chunks<T: Send>(buf: &mut [T], chunk: usize, f: impl Fn(usize,
         }
         return;
     }
+    // (Un export travaille sous la priorité de l'interface : ses fils aussi.)
+    let basse = crate::parallele::priorite_basse();
     std::thread::scope(|s| {
         for group in groups {
             s.spawn(move || {
+                crate::parallele::heriter_la_priorite(basse);
                 for (i, c) in group {
                     f(i, c);
                 }

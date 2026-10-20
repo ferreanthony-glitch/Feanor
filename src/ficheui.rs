@@ -3,10 +3,11 @@
 //! l'écriture en tâche de fond (`fichejob.rs`) ou la copie dans le presse-papiers. Ce que contient la
 //! fiche : `fiche.rs` ; les formats : `ficheformats.rs`.
 //!
-//! Règle « sans latence » : l'interface ne calcule que les images des vignettes, quelques-unes par image
-//! d'écran (40 ms) ; tant qu'elles se calculent le document ne bouge pas (`FicheWindow::rendering`, lu
-//! par `App::modal_open`). Le reste (PNG, classeur, fichiers) est sur un fil à part. Le presse-papiers
-//! n'est touché que sur un clic du bouton « Copier ».
+//! Règle « sans latence » : l'interface ne calcule aucune vignette. Le projet est copié au départ (quelques images
+//! d'écran, pendant lesquelles il ne bouge pas : `FicheWindow::rendering`, lu par `App::modal_open`), puis les
+//! images se calculent sur d'autres fils (`exportrender.rs`) ; le reste (PNG, classeur, fichiers) est à côté. Le
+//! projet est libre et l'export continue si l'on change d'onglet. Le presse-papiers n'est touché que sur un clic du
+//! bouton « Copier ».
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -49,12 +50,12 @@ pub(crate) struct FicheWindow {
 }
 
 impl FicheWindow {
-    /// SHOT calcule encore les images : le projet ne doit pas changer.
+    /// La fiche copie encore le projet : il ne doit pas changer, ni d'onglet.
     pub(crate) fn rendering(&self) -> bool {
         self.job.as_ref().is_some_and(FicheJob::rendering)
     }
 
-    /// Une fiche s'écrit : on ne ferme pas l'onglet.
+    /// Une fiche s'écrit : on ne ferme pas l'onglet (le fichier est en cours d'écriture).
     pub(crate) fn busy(&self) -> bool {
         self.job.as_ref().is_some_and(FicheJob::running)
     }
@@ -235,10 +236,15 @@ impl App {
     pub(crate) fn fiche_window(&mut self, ctx: &egui::Context) {
         let Some(mut w) = self.fiche.take() else { return };
         if let Some(job) = &mut w.job {
-            job.step(&self.doc, Duration::from_millis(40));
+            job.step(&self.doc, Duration::from_millis(8));
+            let copie = job.rendering();
             match job.progress() {
                 Progress::Running(done, total) => {
-                    ctx.request_repaint();
+                    if copie {
+                        ctx.request_repaint();
+                    } else {
+                        ctx.request_repaint_after(Duration::from_millis(100));
+                    }
                     self.status = format!("Fiche technique : vignette {} sur {total}", done + 1);
                 }
                 Progress::Finishing => ctx.request_repaint_after(Duration::from_millis(60)),

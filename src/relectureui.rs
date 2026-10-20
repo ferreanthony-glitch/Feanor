@@ -7,8 +7,9 @@
 //!   nommée pose les commentaires ;
 //! - le dessin du relecteur, montré par-dessus l'image quand son commentaire est choisi.
 //!
-//! Règle « sans latence » : l'interface ne calcule que les images de l'export (40 ms par image d'écran) ; la page,
-//! le PDF, la lecture et la validation du fichier de notes, le décodage des dessins se font à côté.
+//! Règle « sans latence » : l'interface ne calcule aucune image de l'export (le projet est copié au départ, les images se
+//! calculent sur d'autres fils : `exportrender.rs`) ; la page, le PDF, la lecture et la validation du fichier de notes,
+//! le décodage des dessins se font à côté. Le projet reste libre, et l'export continue si l'on change d'onglet.
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
@@ -82,10 +83,15 @@ pub(crate) struct RelectureUi {
 }
 
 impl RelectureUi {
-    /// Une page se calcule ou des notes se lisent : le projet ne peut pas changer d'onglet
-    /// (`onglets.rs`, `onglet_occupe`).
+    /// Le projet ne peut pas changer d'onglet (`onglets.rs`, `onglet_occupe`) : l'export copie encore le projet, ou des
+    /// notes se lisent. (Une page qui se calcule, elle, continue dans l'onglet caché : `App::relecture_hors_ecran`.)
     pub(crate) fn occupe(&self) -> bool {
-        self.export.as_ref().is_some_and(|e| e.job.is_some()) || self.import.as_ref().is_some_and(|i| matches!(i.state, EtatImport::Lecture(_)))
+        self.rendering() || self.import.as_ref().is_some_and(|i| matches!(i.state, EtatImport::Lecture(_)))
+    }
+
+    /// Une page de relecture est en train de s'écrire (dans cet onglet).
+    pub(crate) fn export_en_cours(&self) -> bool {
+        self.busy()
     }
 }
 
@@ -237,16 +243,28 @@ impl App {
         self.relecture_import_window(ctx);
     }
 
-    fn relecture_export_window(&mut self, ctx: &egui::Context) {
-        let Some(mut w) = self.relecture.export.take() else { return };
+    /// Fait avancer l'export de la fenêtre `w` (le projet affiché n'est lu que pour le copier au départ) ; `ctx` :
+    /// l'écran à réveiller (rien pour un onglet caché).
+    fn relecture_export_avance(&mut self, w: &mut FenetreExport, ctx: Option<&egui::Context>) {
         if let Some(job) = &mut w.job {
-            job.step(&self.doc, Duration::from_millis(40));
+            job.step(&self.doc, Duration::from_millis(8));
+            let copie = job.rendering();
             match job.progress() {
                 Progress::Running(done, total) => {
-                    ctx.request_repaint();
+                    if let Some(ctx) = ctx {
+                        if copie {
+                            ctx.request_repaint();
+                        } else {
+                            ctx.request_repaint_after(Duration::from_millis(100));
+                        }
+                    }
                     self.status = format!("Export pour relecture : image {done} sur {total}");
                 }
-                Progress::Finishing => ctx.request_repaint_after(Duration::from_millis(60)),
+                Progress::Finishing => {
+                    if let Some(ctx) = ctx {
+                        ctx.request_repaint_after(Duration::from_millis(60));
+                    }
+                }
                 Progress::Done => {}
             }
         }
@@ -259,6 +277,19 @@ impl App {
             };
             w.result = Some(result);
         }
+    }
+
+    /// L'export de relecture d'un onglet caché avance (la fenêtre est celle de cet onglet, échangée le temps d'un appel,
+    /// `onglets.rs`) : sa fin se dit dans la barre d'état, le compte rendu attend le retour dans l'onglet.
+    pub(crate) fn relecture_hors_ecran(&mut self) {
+        let Some(mut w) = self.relecture.export.take() else { return };
+        self.relecture_export_avance(&mut w, None);
+        self.relecture.export = Some(w);
+    }
+
+    fn relecture_export_window(&mut self, ctx: &egui::Context) {
+        let Some(mut w) = self.relecture.export.take() else { return };
+        self.relecture_export_avance(&mut w, Some(ctx));
         let mut open = true;
         let mut start = false;
         egui::Window::new("Exporter pour relecture")

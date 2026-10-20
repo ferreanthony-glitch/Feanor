@@ -30,6 +30,7 @@ use serde_json::{json, Value};
 
 use crate::audio::Pcm;
 use crate::document::{Document, LayerKind};
+use crate::exportrender::{Calcul, Pipeline, Pose, SnapshotBuilder};
 use crate::sbbatch::{self, Batch};
 
 /// Nom du script de construction.
@@ -440,14 +441,19 @@ type Png = (PathBuf, Arc<Vec<Color32>>);
 
 /// Où en est l'export.
 pub enum Stage {
-    /// Pelure calcule les images des calques (`next` sur le total).
+    /// SHOT copie le projet, puis calcule les images des calques sur d'autres fils (`next` sur le total).
     Images,
     /// Storyboard Pro travaille.
     Storyboard(Batch<Built>),
     Done(Result<Built, String>),
 }
 
-/// Un export vers Storyboard Pro en cours.
+/// Une image de calque dont le fichier est décidé : (plan, panneau, calque dans `SbOut`, fichier).
+type Assigned = (usize, usize, usize, String);
+
+/// Un export vers Storyboard Pro en cours. Le projet est copié au départ (`exportrender.rs`) ; les images des calques se
+/// calculent sur d'autres fils, à une priorité inférieure à celle de l'interface, et se rangent dans l'ordre ; les sons
+/// (égaliseur, écho) se préparent sur le fil de Storyboard Pro. L'interface ne fait que regarder où l'on en est.
 pub struct SbExportJob {
     pub out: SbOut,
     pub stage: Stage,
@@ -458,14 +464,21 @@ pub struct SbExportJob {
     pub work: PathBuf,
     /// Images à calculer : (plan, panneau, calque) dans `out`.
     tasks: Vec<(usize, usize, usize)>,
+    /// Images passées à l'écriture.
     pub next: usize,
-    /// Mêmes pixels, même fichier.
-    seen: HashMap<u64, String>,
-    tx: Option<SyncSender<Png>>,
-    pending: Option<Png>,
-    sent: usize,
+    /// La copie du projet, en train de se faire, puis faite.
+    builder: Option<SnapshotBuilder>,
+    snapshot: Option<Arc<Document>>,
+    pipeline: Option<Pipeline>,
+    /// Les fichiers décidés par le passeur (même pixels, même fichier).
+    assigned: Arc<Mutex<Vec<Assigned>>>,
+    cancel: Arc<AtomicBool>,
+    fail: Arc<Mutex<Option<String>>>,
+    /// Images envoyées aux fils d'écriture, et écrites.
+    sent: Arc<AtomicUsize>,
     written: Arc<AtomicUsize>,
-    error: Arc<Mutex<Option<String>>>,
+    /// Les fils d'écriture des images, tant que l'entrée n'est pas donnée au passeur.
+    tx: Option<SyncSender<Png>>,
     pub started: Instant,
 }
 
@@ -482,21 +495,27 @@ impl SbExportJob {
             .enumerate()
             .flat_map(|(s, sc)| sc.panels.iter().enumerate().flat_map(move |(k, p)| p.layers.iter().enumerate().filter(|(_, l)| l.drawn).map(move |(j, _)| (s, k, j))))
             .collect();
-        let (tx, rx) = sync_channel::<Png>(8);
+        let (tx, rx) = sync_channel::<Png>(4);
         let rx = Arc::new(Mutex::new(rx));
         let written = Arc::new(AtomicUsize::new(0));
-        let error = Arc::new(Mutex::new(None));
+        let fail: Arc<Mutex<Option<String>>> = Arc::default();
         let [w, h] = out.size;
         let n = std::thread::available_parallelism().map_or(2, |n| n.get()).clamp(2, 6);
         for _ in 0..n {
-            let (rx, written, error) = (rx.clone(), written.clone(), error.clone());
-            std::thread::spawn(move || loop {
-                let msg = rx.lock().unwrap_or_else(|e| e.into_inner()).recv();
-                let Ok((path, img)) = msg else { break };
-                if let Err(e) = crate::io::write_png(&path, &img, w, h) {
-                    *error.lock().unwrap_or_else(|e| e.into_inner()) = Some(format!("{} : {e}", path.display()));
+            let (rx, written, fail) = (rx.clone(), written.clone(), fail.clone());
+            std::thread::spawn(move || {
+                crate::parallele::baisser_la_priorite_ici();
+                loop {
+                    let msg = rx.lock().unwrap_or_else(|e| e.into_inner()).recv();
+                    let Ok((path, img)) = msg else { break };
+                    if let Err(e) = crate::io::write_png(&path, &img, w, h) {
+                        let mut f = fail.lock().unwrap_or_else(|e| e.into_inner());
+                        if f.is_none() {
+                            *f = Some(format!("image non écrite : {} : {e}", path.display()));
+                        }
+                    }
+                    written.fetch_add(1, Ordering::Relaxed);
                 }
-                written.fetch_add(1, Ordering::Relaxed);
             });
         }
         Ok(SbExportJob {
@@ -508,12 +527,15 @@ impl SbExportJob {
             work,
             tasks,
             next: 0,
-            seen: HashMap::new(),
-            tx: Some(tx),
-            pending: None,
-            sent: 0,
+            builder: None,
+            snapshot: None,
+            pipeline: None,
+            assigned: Arc::default(),
+            cancel: Arc::new(AtomicBool::new(false)),
+            fail,
+            sent: Arc::new(AtomicUsize::new(0)),
             written,
-            error,
+            tx: Some(tx),
             started: Instant::now(),
         })
     }
@@ -522,8 +544,14 @@ impl SbExportJob {
         self.tasks.len()
     }
 
-    /// Calcule des images pendant `budget` au plus ; une fois toutes écrites, lance Storyboard
-    /// Pro. Le résultat arrive dans `stage`.
+    /// L'export copie encore le projet : il lit le projet affiché (qui ne doit pas changer, ni d'onglet).
+    pub fn needs_project(&self) -> bool {
+        matches!(self.stage, Stage::Images) && self.snapshot.is_none()
+    }
+
+    /// Fait avancer l'export. Le projet n'est lu que pour le copier au départ (par tranches de quelques millisecondes) ;
+    /// ensuite les images se calculent sur d'autres fils et cet appel ne fait que regarder. Une fois toutes écrites,
+    /// lance Storyboard Pro ; le résultat arrive dans `stage`.
     pub fn step(&mut self, doc: &Document, budget: Duration) {
         match &self.stage {
             Stage::Images => {}
@@ -538,78 +566,137 @@ impl SbExportJob {
             }
             Stage::Done(_) => return,
         }
-        let t0 = Instant::now();
-        while self.next < self.tasks.len() && t0.elapsed() < budget {
-            let png = match self.pending.take() {
-                Some(p) => Some(p),
-                None => self.render(doc, self.next),
-            };
-            if let Some(png) = png {
-                let Some(tx) = &self.tx else { return };
-                match tx.try_send(png) {
-                    Ok(()) => self.sent += 1,
-                    Err(TrySendError::Full(p)) => {
-                        // L'écriture est en retard : on garde l'image pour la prochaine fois.
-                        self.pending = Some(p);
-                        return;
-                    }
-                    Err(TrySendError::Disconnected(_)) => {
-                        self.fail("l'écriture des images s'est arrêtée".into());
-                        return;
-                    }
-                }
+        let failure = self.fail.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        if let Some(e) = failure {
+            self.fail_with(e);
+            return;
+        }
+        // 1. La copie du projet.
+        if self.snapshot.is_none() {
+            let b = self.builder.get_or_insert_with(|| {
+                let mut plans: Vec<usize> = self.out.scenes.iter().map(|s| s.plan).collect();
+                plans.sort_unstable();
+                plans.dedup();
+                SnapshotBuilder::new(doc, &plans)
+            });
+            if !b.step(doc, budget.min(Duration::from_millis(8))) {
+                return;
             }
-            self.next += 1;
+            self.snapshot = self.builder.take().map(SnapshotBuilder::finish);
         }
-        if self.next < self.tasks.len() || self.written.load(Ordering::Relaxed) < self.sent {
+        let Some(snapshot) = self.snapshot.clone() else { return };
+        // 2. Les images des calques, sur d'autres fils.
+        if self.pipeline.is_none() {
+            self.start_pipeline(snapshot.clone());
+        }
+        let Some(p) = &self.pipeline else { return };
+        self.next = p.emitted();
+        if !p.finished() || self.written.load(Ordering::Relaxed) < self.sent.load(Ordering::Relaxed) {
             return;
         }
-        self.tx = None;
-        let error = self.error.lock().unwrap_or_else(|e| e.into_inner()).take();
-        if let Some(e) = error {
-            self.fail(format!("image non écrite : {e}"));
+        if self.next < self.tasks.len() {
+            // Le passeur s'est arrêté avant la fin : les fils d'écriture sont partis.
+            self.fail_with("l'écriture des images s'est arrêtée".into());
             return;
         }
-        // Toutes les images sont écrites : le script, puis Storyboard Pro.
+        self.pipeline = None;
+        let failure = self.fail.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        if let Some(e) = failure {
+            self.fail_with(e);
+            return;
+        }
+        // Les images décidées reviennent dans l'export (même pixels, même fichier).
+        for (s, k, j, file) in std::mem::take(&mut *self.assigned.lock().unwrap_or_else(|e| e.into_inner())) {
+            self.out.scenes[s].panels[k].layers[j].image = Some(file);
+        }
+        // 3. Toutes les images sont écrites : le script, puis Storyboard Pro.
         let data = self.work.join("donnees");
         if let Err(e) = std::fs::write(data.join(SCRIPT), script(&self.out, &data, &self.dest)) {
-            self.fail(format!("écriture du script impossible ({e})"));
+            self.fail_with(format!("écriture du script impossible ({e})"));
             return;
         }
-        let sounds = sounds_of(doc, &self.out);
         let (exe, template, work, dest) = (self.exe.clone(), self.template.clone(), self.work.clone(), self.dest.clone());
         let total = self.out.scenes.len();
+        let out = self.out.clone();
         self.stage = Stage::Storyboard(Batch::spawn(self.work.clone(), total, "Copie du projet modèle…", move |set, done, cancel| {
+            // (Les sons — égaliseur et écho compris — se préparent ici, sur le fil de Storyboard Pro, avec la copie du projet.)
+            let sounds = sounds_of(&snapshot, &out);
             build(&exe, &template, &work, &dest, sounds, set, done, cancel)
         }));
     }
 
-    /// L'image du calque de la tâche `i`, à écrire (aucune : déjà écrite pareille, ou vide).
-    fn render(&mut self, doc: &Document, i: usize) -> Option<Png> {
-        let (s, k, j) = self.tasks[i];
-        let (plan, start, layer) = {
-            let sc = &self.out.scenes[s];
-            (sc.plan, sc.panels[k].start, sc.panels[k].layers[j].layer)
-        };
-        let lp = crate::render::layer_plan_at(doc, plan, layer, start)?;
-        let img = crate::render::camera_image(doc, &lp, &doc.default_camera());
-        if img.iter().all(|c| c.a() == 0) {
-            return None;
-        }
-        let mut h = DefaultHasher::new();
-        bytemuck::cast_slice::<Color32, u8>(&img).hash(&mut h);
-        let key = h.finish();
-        if let Some(file) = self.seen.get(&key) {
-            self.out.scenes[s].panels[k].layers[j].image = Some(file.clone());
-            return None;
-        }
-        let file = format!("images/{:04}_{:03}_{:03}.png", s + 1, k + 1, j + 1);
-        self.seen.insert(key, file.clone());
-        self.out.scenes[s].panels[k].layers[j].image = Some(file.clone());
-        Some((self.work.join("donnees").join(&file), Arc::new(img)))
+    /// Lance le calcul des images des calques : le passeur décide du fichier de chacune (une image déjà vue, pixel pour
+    /// pixel, ne s'écrit pas deux fois) et la donne à un fil d'écriture.
+    fn start_pipeline(&mut self, snapshot: Arc<Document>) {
+        let Some(tx) = self.tx.take() else { return };
+        // Pour chaque tâche : le plan du document, la première image du panneau, le calque.
+        let jobs: Vec<(usize, usize, usize)> = self
+            .tasks
+            .iter()
+            .map(|&(s, k, j)| {
+                let sc = &self.out.scenes[s];
+                (sc.plan, sc.panels[k].start, sc.panels[k].layers[j].layer)
+            })
+            .collect();
+        let cancel = self.cancel.clone();
+        let (snap, c) = (snapshot.clone(), cancel.clone());
+        let make: Arc<Calcul> = Arc::new(move |i| {
+            if c.load(Ordering::Relaxed) {
+                return None;
+            }
+            let (plan, start, layer) = jobs[i];
+            // Un calque sans dessin à cette image, ou entièrement transparent : image vide (rien à écrire).
+            let Some(lp) = crate::render::layer_plan_at(&snap, plan, layer, start) else { return Some(Arc::new(Vec::new())) };
+            let img = crate::render::camera_image(&snap, &lp, &snap.default_camera());
+            Some(Arc::new(if img.iter().all(|c| c.a() == 0) { Vec::new() } else { img }))
+        });
+        let tasks = self.tasks.clone();
+        let (assigned, sent, work) = (self.assigned.clone(), self.sent.clone(), self.work.clone());
+        let mut seen: HashMap<u64, String> = HashMap::new();
+        let mut hashed: Option<(usize, u64)> = None;
+        let send: Box<dyn FnMut(usize, Arc<Vec<Color32>>) -> Pose + Send> = Box::new(move |i, img| {
+            if img.is_empty() {
+                return Pose::Ok;
+            }
+            let (s, k, j) = tasks[i];
+            // (Le hachage d'une grande image n'est pas refait quand l'écriture rend l'image : elle revient.)
+            let key = match hashed {
+                Some((n, key)) if n == i => key,
+                _ => {
+                    let mut h = DefaultHasher::new();
+                    bytemuck::cast_slice::<Color32, u8>(&img).hash(&mut h);
+                    h.finish()
+                }
+            };
+            if let Some(file) = seen.get(&key) {
+                assigned.lock().unwrap_or_else(|e| e.into_inner()).push((s, k, j, file.clone()));
+                return Pose::Ok;
+            }
+            let file = format!("images/{:04}_{:03}_{:03}.png", s + 1, k + 1, j + 1);
+            match tx.try_send((work.join("donnees").join(&file), img)) {
+                Ok(()) => {
+                    sent.fetch_add(1, Ordering::Relaxed);
+                    seen.insert(key, file.clone());
+                    assigned.lock().unwrap_or_else(|e| e.into_inner()).push((s, k, j, file));
+                    hashed = None;
+                    Pose::Ok
+                }
+                Err(TrySendError::Full((_, img))) => {
+                    hashed = Some((i, key));
+                    Pose::Pleine(img)
+                }
+                Err(TrySendError::Disconnected(_)) => Pose::Cassee,
+            }
+        });
+        let octets = self.out.size[0] * self.out.size[1] * 4;
+        self.pipeline = Some(Pipeline::start_with(make, self.tasks.len(), octets, cancel, send, self.fail.clone(), 4));
     }
 
-    fn fail(&mut self, e: String) {
+    fn fail_with(&mut self, e: String) {
+        self.cancel.store(true, Ordering::Relaxed);
+        if let Some(mut p) = self.pipeline.take() {
+            p.cancel();
+        }
         self.tx = None;
         self.stage = Stage::Done(Err(e));
     }
@@ -619,9 +706,23 @@ impl SbExportJob {
         match &self.stage {
             Stage::Storyboard(b) => b.cancel(),
             Stage::Images => {
+                self.cancel.store(true, Ordering::Relaxed);
+                if let Some(mut p) = self.pipeline.take() {
+                    p.cancel();
+                }
                 self.tx = None;
-                self.pending = None;
                 self.stage = Stage::Done(Err("export arrêté".into()));
+                // (Les fils d'écriture finissent les images déjà envoyées avant de s'en aller.)
+                let work = self.work.clone();
+                let written = self.written.clone();
+                let sent = self.sent.clone();
+                std::thread::spawn(move || {
+                    let t = Instant::now();
+                    while written.load(Ordering::Relaxed) < sent.load(Ordering::Relaxed) && t.elapsed() < Duration::from_secs(10) {
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    let _ = std::fs::remove_dir_all(&work);
+                });
                 let _ = std::fs::remove_dir_all(&self.work);
             }
             Stage::Done(_) => {}

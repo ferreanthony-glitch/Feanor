@@ -1239,7 +1239,7 @@ fn the_window_exports_in_the_background_and_remembers_the_choices() {
 }
 
 #[test]
-fn a_fiche_being_written_blocks_the_tab_change_and_closing_the_window_cancels_it() {
+fn a_fiche_being_written_holds_the_tab_only_while_the_project_is_copied_and_cancelling_leaves_nothing() {
     let (ctx, mut app, dir) = app_de(film(), "onglet");
     app.run_action("fichier.exporter_fiche");
     let mut w = app.fiche.take().unwrap();
@@ -1247,7 +1247,8 @@ fn a_fiche_being_written_blocks_the_tab_change_and_closing_the_window_cancels_it
     let cible = dir.join("film.xlsx");
     app.fiche_lancer(&mut w, &cible);
     app.fiche = Some(w);
-    assert_eq!(app.onglet_occupe(), Some("l'export de la fiche technique"));
+    // Le projet n'est retenu que le temps de la copie (les premières images d'écran).
+    assert_eq!(app.onglet_occupe(), Some("la copie du projet pour la fiche technique"));
     // On annule : plus rien n'occupe, rien n'est écrit.
     app.fiche.as_mut().unwrap().job.as_mut().unwrap().cancel();
     image(&ctx, &mut app);

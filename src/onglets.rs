@@ -416,8 +416,10 @@ impl App {
     /// entier (export, propagation, coloriage) sont modaux ; ceux qui parlent à l'interface (suggestions
     /// sonores, bruitages en cours de pose) ne peuvent pas suivre un projet qu'on quitte.
     pub(crate) fn onglet_occupe(&self) -> Option<&'static str> {
-        if self.export_job.is_some() {
-            return Some("l'export");
+        // (Un export qui tourne n'empêche plus de changer d'onglet : il travaille sur sa copie du projet. Il ne
+        // retient l'onglet que le temps de la prendre, quelques images d'écran.)
+        if self.export_job.as_ref().is_some_and(crate::export::ExportJob::needs_project) {
+            return Some("la copie du projet pour l'export");
         }
         if self.propagation.running() {
             return Some("la propagation");
@@ -428,14 +430,14 @@ impl App {
         if self.sb_export.as_ref().is_some_and(crate::sbexportui::SbExportWindow::rendering) || self.editorial.as_ref().is_some_and(crate::editorialui::EditorialWindow::rendering) {
             return Some("l'export pour le montage");
         }
-        if self.fiche.as_ref().is_some_and(crate::ficheui::FicheWindow::busy) {
-            return Some("l'export de la fiche technique");
+        if self.fiche.as_ref().is_some_and(crate::ficheui::FicheWindow::rendering) {
+            return Some("la copie du projet pour la fiche technique");
         }
         if self.open_job.is_some() {
             return Some("l'ouverture du projet");
         }
         if self.relecture.occupe() {
-            return Some("la relecture (page ou notes)");
+            return Some("la relecture (copie du projet ou lecture des notes)");
         }
         if self.sug.occupe() {
             return Some("la génération des sons proposés");
@@ -472,14 +474,16 @@ impl App {
         self.reset_suggestions();
         // Les fenêtres qui montrent un calcul fait sur ce projet (export pour le montage, vers Storyboard Pro,
         // scénario à importer) se ferment : elles se rouvrent sur le projet affiché.
-        if !self.sb_export.as_ref().is_some_and(crate::sbexportui::SbExportWindow::rendering) {
+        if !self.sb_export.as_ref().is_some_and(crate::sbexportui::SbExportWindow::busy) {
             self.sb_export = None;
         }
-        if !self.editorial.as_ref().is_some_and(crate::editorialui::EditorialWindow::rendering) {
+        // (Un export qui tourne continue : il travaille sur sa copie du projet, sa fenêtre reste.)
+        if !self.editorial.as_ref().is_some_and(crate::editorialui::EditorialWindow::busy) {
             self.editorial = None;
         }
-        // (La fiche technique ne s'écrit pas à cet instant : `onglet_occupe` l'a vérifié.)
-        self.fiche = None;
+        if !self.fiche.as_ref().is_some_and(crate::ficheui::FicheWindow::busy) {
+            self.fiche = None;
+        }
         self.scenario_window = None;
         // (Les ressources de la scène 3D sont communes à la carte graphique : un modèle importé a un numéro propre
         // à son projet. Elles se refont à la demande.)
@@ -795,11 +799,17 @@ impl App {
         let mut revoir: Option<Duration> = None;
         let mut a_montrer: Option<usize> = None;
         let interval = self.autosave_interval();
+        let mut relectures: Vec<usize> = Vec::new();
         for i in 0..self.onglets.len() {
             if i == self.actif {
                 continue;
             }
             let Some(e) = &self.onglets[i].etat else { continue };
+            // Une page de relecture se calcule pour cet onglet caché : elle avance, et sa fin se dit dans la barre d'état.
+            if e.relecture.export_en_cours() {
+                relectures.push(i);
+                a_regarder = true;
+            }
             let fini = e.saving.as_ref().is_some_and(crate::enregistrement::Enregistrement::fini);
             if e.saving.is_some() && !fini {
                 a_regarder = true;
@@ -817,6 +827,9 @@ impl App {
             if let Some(d) = self.tick_secours_cache(i, interval) {
                 revoir = Some(revoir.map_or(d, |r: Duration| r.min(d)));
             }
+        }
+        for i in relectures {
+            self.avec_onglet_cache(i, App::relecture_hors_ecran);
         }
         if let Some(i) = a_montrer {
             // Une erreur à lire, ou une suite à faire : l'onglet passe à l'écran.

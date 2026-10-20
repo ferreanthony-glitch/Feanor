@@ -535,6 +535,8 @@ pub struct App {
     pub(crate) export_dialog: Option<crate::export::ExportSettings>,
     pub(crate) export_last: crate::export::ExportSettings,
     pub(crate) export_job: Option<crate::export::ExportJob>,
+    /// Le projet de l'export en cours (numéro d'onglet, nom) : l'export suit son projet quand on change d'onglet.
+    pub(crate) export_projet: Option<(u64, String)>,
     /// ffmpeg trouvé (ou choisi) et ce qu'il sait encoder ; cherché à la première ouverture.
     pub(crate) ffmpeg: Option<Option<(PathBuf, Result<crate::export::Encoders, String>)>>,
     /// Réglages de l'application (%APPDATA%\SHOT\reglages.toml).
@@ -1076,6 +1078,7 @@ impl App {
             export_dialog: None,
             export_last: Default::default(),
             export_job: None,
+            export_projet: None,
             ffmpeg: None,
             layout: crate::workspace::Layout::default(),
             dock: None,
@@ -1374,7 +1377,9 @@ impl App {
             || self.pending.is_some()
             || self.groupe.is_some()
             || self.export_dialog.is_some()
-            || self.export_job.is_some()
+            // (L'export ne tient la main que le temps de copier le projet, quelques images d'écran : ensuite il travaille
+            // sur sa copie et le projet est libre.)
+            || self.export_job.as_ref().is_some_and(crate::export::ExportJob::needs_project)
             || !self.orphans.is_empty()
             || self.workspace_name.is_some()
             || self.open_job.is_some()
@@ -3088,64 +3093,28 @@ impl App {
         rfd::FileDialog::new().set_title(title).pick_folder()
     }
 
-    /// Une planche par plan (première image) et une page HTML imprimable avec les indications.
+    /// Une planche par plan (première image) et une page HTML imprimable avec les indications. Les planches se
+    /// calculent sur d'autres fils, sur une copie du projet : SHOT reste libre pendant l'export.
     pub(crate) fn export_storyboard(&mut self) {
         self.end_stroke();
+        if self.export_job.is_some() {
+            self.status = "Un export est déjà en cours : attends sa fin, ou arrête-le.".into();
+            return;
+        }
         self.exactify_idle();
         let Some(dir) = Self::pick_folder("Dossier où exporter le storyboard") else { return };
-        let title = io::html_escape(&self.base_name());
-        let mut html = format!(
-            "<!doctype html><html lang=\"fr\"><head><meta charset=\"utf-8\"><title>{title}</title><style>\
-             body{{font-family:system-ui,sans-serif;margin:24px;color:#222}}\
-             h1{{font-size:20px}}main{{display:grid;grid-template-columns:repeat(2,1fr);gap:24px}}\
-             section{{border:1px solid #ccc;padding:10px;break-inside:avoid}}\
-             img{{width:100%;border:1px solid #999}}h2{{font-size:15px;margin:8px 0 2px}}\
-             .dur{{color:#777;font-size:12px;margin:0 0 6px}}p{{font-size:13px;margin:4px 0}}\
-             .label{{font-weight:600}}h2.seq{{font-size:18px;margin:28px 0 10px;break-after:avoid}}\
-             </style></head><body><h1>{title} — storyboard</h1>"
-        );
-        let [w, h] = self.doc.frame;
         let all: Vec<usize> = (0..self.doc.panels.len()).collect();
-        let (frames, boards) = crate::export::storyboard_of(&self.doc, &all);
-        for (k, ((i, f), board)) in frames.into_iter().zip(boards).enumerate() {
-            // Intertitre au début de chaque séquence.
-            if f == 0 && self.doc.sequence_run(i).0 == i {
-                if i > 0 {
-                    html += "</main>";
-                }
-                html += &format!(
-                    "<h2 class=\"seq\">Séquence {}</h2><main>",
-                    io::html_escape(&self.doc.sequence_label(self.doc.sequence_of(i)))
-                );
-            }
-            let plan = render::panel_plan_at(&self.doc, i, f, Some(self.doc.paper));
-            let pixels = render::camera_image(&self.doc, &plan, &self.doc.panel_camera(i, f));
-            let file = format!("planche_{:03}.png", k + 1);
-            if let Err(e) = io::write_png_scaled(&dir.join(&file), &pixels, w, h, 960) {
-                self.status = format!("Échec de l'export : {e}");
-                return;
-            }
-            html += &format!(
-                "<section><img src=\"{file}\"><h2>{}</h2><p class=\"dur\">{}</p>",
-                io::html_escape(&board.title),
-                board.duration
-            );
-            for (label, text) in [("Action", &board.action), ("Dialogue", &board.dialogue), ("Notes", &board.notes)] {
-                if !text.trim().is_empty() {
-                    html += &format!("<p><span class=\"label\">{label} :</span> {}</p>", io::html_escape(text));
-                }
-            }
-            html += "</section>";
-        }
-        html += "</main></body></html>";
-        self.status = match std::fs::write(dir.join("storyboard.html"), html) {
-            Ok(()) => format!("Storyboard exporté : {}", dir.join("storyboard.html").display()),
-            Err(e) => format!("Échec de l'export : {e}"),
-        };
+        let (frames, items) = crate::export::storyboard_items(&self.doc, &all);
+        let job = crate::export::ExportJob::storyboard_page(&dir, &self.base_name(), frames, items, self.doc.frame);
+        self.start_job(job);
     }
 
     pub(crate) fn export_frame(&mut self) {
         self.end_stroke();
+        if self.export_job.is_some() {
+            self.status = "Un export est déjà en cours : attends sa fin, ou arrête-le.".into();
+            return;
+        }
         self.exactify_idle();
         let Some(mut path) = rfd::FileDialog::new()
             .add_filter("Image PNG", &["png"])
@@ -3157,18 +3126,13 @@ impl App {
         if path.extension().is_none() {
             path.set_extension("png");
         }
+        // Le plan que montre l'écran (sans pelure ni table lumineuse) se fait ici, sans pixel ; l'image, avec ses
+        // incrustations (timecode…) gravées, se calcule sur un autre fil (`ExportJob::still`).
         let plan = self.build_plan(self.cur_frame, false, !self.export_transparent);
         let cam = self.doc.panel_camera(self.cur_panel, self.cur_frame);
-        let mut pixels = render::camera_image(&self.doc, &plan, &cam);
-        // Les incrustations (timecode…) sont gravées dans l'image (`incrustation.rs`).
-        let boxes = crate::incrustation::boxes_for(&self.doc, self.cur_panel, self.cur_frame, true, crate::incrustation::now_secs());
-        crate::incrustation::burn(&mut pixels, self.doc.frame, &boxes);
-        self.status = match io::write_png(&path, &pixels, self.doc.frame[0], self.doc.frame[1]) {
-            Ok(()) => format!("Image exportée : {}", path.display()),
-            Err(e) => format!("Échec de l'export : {e}"),
-        };
+        let job = crate::export::ExportJob::still(&path, plan, cam, self.cur_panel, self.cur_frame, self.doc.frame);
+        self.start_job(job);
     }
-
     /// Pose une image (PNG/JPEG) au centre du dessin courant d'un calque bitmap.
     pub(crate) fn import_image(&mut self) {
         self.end_stroke();
@@ -4509,11 +4473,16 @@ impl App {
             self.comparer_fenetre(ctx);
             self.purge_versions_fenetre(ctx);
         }
-        // Export en cours : quelques images par image d'écran, la fenêtre reste vivante.
+        // Export en cours : le projet se copie par tranches de quelques millisecondes au départ, puis l'export tourne sur
+        // d'autres fils ; ici on ne fait que le regarder, à peu près dix fois par seconde (la barre d'avancement).
         if let Some(job) = &mut self.export_job {
-            job.step(&self.doc, std::time::Duration::from_millis(40));
+            job.step(&self.doc, std::time::Duration::from_millis(8));
             if job.outcome.is_none() {
-                ctx.request_repaint();
+                if job.needs_project() {
+                    ctx.request_repaint();
+                } else {
+                    ctx.request_repaint_after(std::time::Duration::from_millis(100));
+                }
             }
         }
         self.export_windows(ctx);

@@ -1,10 +1,10 @@
 //! La tâche de l'export de la fiche technique (`fiche.rs` décrit, `ficheformats.rs` met en forme, ceci
 //! écrit).
 //!
-//! Comme l'export pour la relecture et celui du storyboard : l'interface ne calcule que les images des
-//! vignettes, quelques-unes par image d'écran (40 ms au plus, `ExportJob::collect`) ; leur réduction en
-//! PNG, les fichiers de vignettes et la fiche elle-même s'écrivent sur un fil à part. Une fiche sans
-//! colonne « Vignette » n'a aucune image à calculer : elle s'écrit tout de suite.
+//! Comme l'export pour la relecture et celui du storyboard : l'interface ne calcule aucune vignette. Le projet est
+//! copié au départ (`exportrender.rs`), les images des vignettes se calculent sur d'autres fils
+//! (`ExportJob::collect`) ; leur réduction en PNG, les fichiers de vignettes et la fiche elle-même s'écrivent à
+//! côté. Une fiche sans colonne « Vignette » n'a aucune image à calculer : elle s'écrit tout de suite.
 //!
 //! # Écriture
 //!
@@ -211,9 +211,10 @@ impl FicheJob {
         self.job.remaining()
     }
 
-    /// SHOT calcule encore les images : le projet ne doit pas changer.
+    /// L'export copie encore le projet (les premières images d'écran) : il ne doit pas changer, ni d'onglet. Ensuite
+    /// les vignettes se calculent sur une copie, sur d'autres fils.
     pub fn rendering(&self) -> bool {
-        self.report.is_none() && matches!(self.job.progress(), Progress::Running(..))
+        self.report.is_none() && self.job.needs_project()
     }
 
     pub fn running(&self) -> bool {

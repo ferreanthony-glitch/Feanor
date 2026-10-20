@@ -1,9 +1,9 @@
 //! La tâche de l'export « Pour relecture » (`relecture.rs` décrit, ceci écrit).
 //!
-//! Comme l'export du film et celui pour le montage : l'interface ne calcule que les images, quelques-unes par
-//! image d'écran (40 ms au plus) ; leur réduction en JPEG, la page HTML et le PDF se font sur un fil à part
-//! (`ExportJob::collect`), avec une barre d'avancement et un bouton « Arrêter ». Tant que les images se calculent
-//! le projet ne bouge pas (la fenêtre est modale pour le document, `RelectureJob::rendering`).
+//! Comme l'export du film et celui pour le montage : l'interface ne calcule aucune image. Le projet est copié au
+//! départ (`exportrender.rs`), les images se calculent sur d'autres fils, et leur réduction en JPEG, la page HTML et
+//! le PDF se font à côté (`ExportJob::collect`), avec une barre d'avancement et un bouton « Arrêter ». Le projet
+//! n'est retenu que le temps de la copie (`RelectureJob::rendering`, quelques images d'écran).
 //!
 //! Les fichiers sont d'abord écrits sous un nom en `.part` puis renommés : un export arrêté ou raté ne laisse
 //! ni demi-fichier, ni ne détruit une page déjà exportée sous le même nom.
@@ -124,9 +124,10 @@ impl RelectureJob {
         self.job.remaining()
     }
 
-    /// SHOT calcule encore les images : le projet ne doit pas changer.
+    /// L'export copie encore le projet (les premières images d'écran) : il ne doit pas changer, ni d'onglet. Ensuite
+    /// les images se calculent sur une copie, sur d'autres fils.
     pub fn rendering(&self) -> bool {
-        self.report.is_none() && matches!(self.job.progress(), Progress::Running(..))
+        self.report.is_none() && self.job.needs_project()
     }
 
     /// Le compte rendu, quand l'export est fini (réussi, raté ou arrêté).

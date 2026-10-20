@@ -288,6 +288,7 @@ mod cutter;
 mod cutter_tests;
 mod document;
 mod export;
+mod exportrender;
 #[cfg(test)]
 mod export_tests;
 mod exportui;

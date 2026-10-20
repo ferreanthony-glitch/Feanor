@@ -1,13 +1,18 @@
 //! Fenêtres d'export (3b) : choix (contenu, étendue, taille, son), puis progression.
-//! Toutes deux modales : rien ne bouge dans le document pendant un export.
+//! Le choix est modal ; la progression ne l'est pas : l'export travaille sur une copie du projet, sur d'autres fils
+//! (`exportrender.rs`), et le projet reste libre pendant ce temps.
 
 use std::path::PathBuf;
+use std::time::Duration;
 
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, vec2, Align2, Color32, RichText};
+
+use egui_phosphor::regular as ph;
 
 use crate::app::App;
 use crate::audio;
-use crate::export::{self, ExportJob, ExportSettings, Format, Progress, Range};
+use crate::bulles;
+use crate::export::{self, ExportJob, ExportSettings, Format, Progress, Range, SoundSpan};
 use crate::storyboard::duration_label;
 
 fn warn() -> Color32 {
@@ -24,6 +29,7 @@ impl App {
         self.end_stroke();
         self.playing = false;
         if self.export_job.is_some() {
+            self.status = "Un export est déjà en cours : attends sa fin, ou arrête-le.".into();
             return;
         }
         let mut s = self.export_last.clone();
@@ -222,6 +228,8 @@ impl App {
                 go = ui.button("Exporter…").clicked();
                 close = ui.button("Annuler").clicked();
             });
+            ui.add_space(4.0);
+            ui.label(RichText::new("L'export utilise le projet tel qu'il est au départ : tu pourras continuer à travailler pendant qu'il tourne.").small().color(crate::theme::texte_doux()));
         });
         if choose {
             self.choose_ffmpeg();
@@ -237,7 +245,8 @@ impl App {
         }
     }
 
-    /// Lance l'export choisi : demande où écrire, puis démarre (ou écrit directement le son).
+    /// Lance l'export choisi : demande où écrire, puis démarre. Aucune image ne se calcule ici : l'export copie le
+    /// projet (le cliché) et travaille sur d'autres fils ; le projet reste libre.
     fn start_export(&mut self, s: &ExportSettings, frames: Vec<(usize, usize)>, first: usize, sound: bool) {
         // (Traits texturés restés en rendu rapide : l'export les veut exacts.)
         self.exactify_idle();
@@ -247,21 +256,18 @@ impl App {
             Format::Wav => {
                 let Some(path) = save_dialog(&base, Format::Wav) else { return };
                 let (start, len) = export::sample_span(fps, first, frames.len());
-                // (Le son exporté attend l'égaliseur et l'écho : `mix_clips_blocking`.)
-                self.status = match export::write_wav(&path, audio::mix_clips_blocking(&self.doc), start, len) {
-                    Ok(()) => format!("Son exporté : {}", path.display()),
-                    Err(e) => format!("Échec de l'export du son : {e}"),
-                };
+                // (Le son exporté attend l'égaliseur et l'écho : `mix_clips_blocking`, sur un fil à part.)
+                self.start_job(ExportJob::sound(&path, SoundSpan { start, len }));
             }
             Format::Png => {
                 let Some(dir) = Self::pick_folder("Dossier où exporter les images") else { return };
                 let job = ExportJob::images(&dir, &base, frames, self.doc.frame, !s.transparent);
-                self.export_job = Some(if s.transitions { job.with_transitions(&self.doc) } else { job });
+                self.start_job(if s.transitions { job.with_transitions(&self.doc) } else { job });
             }
             Format::Pdf => {
                 let Some(out) = save_dialog(&base, Format::Pdf) else { return };
                 let (shots, boards) = export::storyboard_of_with(&self.doc, &export::panels_of(&frames), s.comments);
-                self.export_job = Some(ExportJob::pdf(&out, &base, shots, boards, self.doc.frame));
+                self.start_job(ExportJob::pdf(&out, &base, shots, boards, self.doc.frame));
             }
             Format::Gif => {
                 let Some((ffmpeg, Ok(_))) = self.ffmpeg_info().cloned() else {
@@ -274,7 +280,7 @@ impl App {
                 let kept = export::gif_sample(&frames, fps, rate);
                 let args = export::gif_args(self.doc.frame, rate, &s.gif, &out);
                 match ExportJob::gif(&ffmpeg, args, &out, kept) {
-                    Ok(job) => self.export_job = Some(if s.transitions { job.with_transitions(&self.doc) } else { job }),
+                    Ok(job) => self.start_job(if s.transitions { job.with_transitions(&self.doc) } else { job }),
                     Err(e) => self.status = format!("Export impossible : {e}"),
                 }
             }
@@ -284,84 +290,104 @@ impl App {
                     return;
                 };
                 let Some(out) = save_dialog(&base, s.format) else { return };
-                // Le son est mixé d'avance dans un fichier temporaire, que ffmpeg lit à côté des images.
-                let wav = if sound {
-                    let path = std::env::temp_dir().join(format!("pelure-export-{}.wav", std::process::id()));
-                    let (start, len) = export::sample_span(fps, first, frames.len());
-                    if let Err(e) = export::write_wav(&path, audio::mix_clips_blocking(&self.doc), start, len) {
-                        self.status = format!("Échec du mixage du son : {e}");
-                        return;
-                    }
-                    Some(path)
-                } else {
-                    None
-                };
-                let args = match export::video_args(s.format, &enc, self.doc.frame, fps, s.half, wav.as_deref(), &out) {
-                    Ok(a) => a,
-                    Err(e) => {
-                        self.status = format!("Export impossible : {e}");
-                        return;
-                    }
-                };
-                match ExportJob::video(&ffmpeg, args, &out, frames, wav) {
-                    Ok(job) => self.export_job = Some(if s.transitions { job.with_transitions(&self.doc) } else { job }),
-                    Err(e) => self.status = format!("Export impossible : {e}"),
+                // Les arguments de ffmpeg sont vérifiés tout de suite (encodeur absent…) ; le son est mixé ensuite, sur un fil
+                // à part, dans un fichier temporaire que ffmpeg lit à côté des images.
+                if let Err(e) = export::video_args(s.format, &enc, self.doc.frame, fps, s.half, None, &out) {
+                    self.status = format!("Export impossible : {e}");
+                    return;
                 }
+                let span = sound.then(|| {
+                    let (start, len) = export::sample_span(fps, first, frames.len());
+                    SoundSpan { start, len }
+                });
+                let (format, frame, half, target) = (s.format, self.doc.frame, s.half, out.clone());
+                let job = ExportJob::video_with_sound(&ffmpeg, move |wav| export::video_args(format, &enc, frame, fps, half, wav, &target), &out, frames, span);
+                self.start_job(if s.transitions { job.with_transitions(&self.doc) } else { job });
             }
         }
     }
 
+    /// Démarre un export : il copie le projet affiché (les premières tranches tout de suite), puis tourne tout seul.
+    pub(crate) fn start_job(&mut self, mut job: ExportJob) {
+        job.step(&self.doc, Duration::from_millis(8));
+        self.export_projet = Some((self.onglets.get(self.actif).map_or(0, |t| t.id), self.base_name_or("Sans titre")));
+        self.export_job = Some(job);
+    }
+
+    /// Le projet de l'export en cours n'est pas celui qu'on regarde.
+    fn export_d_un_autre_projet(&self) -> Option<&str> {
+        let (id, nom) = self.export_projet.as_ref()?;
+        (self.onglets.get(self.actif).map(|t| t.id) != Some(*id)).then_some(nom.as_str())
+    }
+
+    /// La fenêtre de l'export en cours : pas modale, le projet reste libre (l'export travaille sur sa copie).
     fn export_progress_window(&mut self, ctx: &egui::Context) {
+        let autre = self.export_d_un_autre_projet().map(str::to_string);
         let Some(job) = &mut self.export_job else { return };
         let mut cancel = false;
         let mut dismiss = false;
         let mut reveal = false;
-        egui::Modal::new(egui::Id::new("progression_export")).show(ctx, |ui| {
-            ui.set_width(420.0);
-            ui.heading(&job.title);
-            ui.add_space(6.0);
-            match job.progress() {
-                Progress::Running(done, total) => {
-                    ui.add(egui::ProgressBar::new(done as f32 / total.max(1) as f32).show_percentage());
-                    let mut text = format!("{} {done} sur {total}", job.unit);
-                    if let Some(rest) = job.remaining() {
-                        let s = rest.as_secs();
-                        text += &format!(" · reste environ {}:{:02}", s / 60, s % 60);
+        egui::Window::new("Export en cours")
+            .id(egui::Id::new("progression_export"))
+            .anchor(Align2::RIGHT_BOTTOM, vec2(-16.0, -40.0))
+            .collapsible(false)
+            .resizable(false)
+            .title_bar(false)
+            .default_width(380.0)
+            .show(ctx, |ui| {
+                ui.set_width(360.0);
+                ui.horizontal(|ui| {
+                    ui.strong(&job.title);
+                    if let Some(nom) = &autre {
+                        ui.label(RichText::new(format!("· « {nom} »")).weak());
                     }
-                    ui.label(text);
-                    ui.add_space(6.0);
-                    cancel = ui.button("Annuler").clicked();
-                }
-                Progress::Finishing => {
-                    ui.horizontal(|ui| {
-                        ui.spinner();
-                        ui.label("Finalisation…");
-                    });
-                    ui.add_space(6.0);
-                    cancel = ui.button("Annuler").clicked();
-                }
-                Progress::Done => {
-                    match &job.outcome {
-                        Some(Ok(msg)) => {
-                            let s = job.started.elapsed().as_secs();
-                            ui.colored_label(good(),format!("Terminé en {}:{:02}.", s / 60, s % 60));
-                            ui.label(msg);
+                });
+                ui.add_space(4.0);
+                match job.progress() {
+                    Progress::Running(done, total) => {
+                        let phase = job.phase();
+                        let progress = if done == 0 && !phase.starts_with("Calcul") { 0.0 } else { done as f32 / total.max(1) as f32 };
+                        ui.add(egui::ProgressBar::new(progress).show_percentage());
+                        let mut text = if done == 0 && !phase.is_empty() && !phase.starts_with("Calcul") { phase.to_string() } else { format!("{} {done} sur {total}", job.unit) };
+                        if let Some(rest) = job.remaining() {
+                            let s = rest.as_secs();
+                            text += &format!(" · reste environ {}:{:02}", s / 60, s % 60);
                         }
-                        Some(Err(e)) => {
-                            ui.colored_label(warn(), e);
-                        }
-                        None => {}
+                        ui.label(text);
+                        ui.label(RichText::new("L'export utilise le projet tel qu'il était au départ : tu peux continuer à travailler.").small().color(crate::theme::texte_doux()));
+                        ui.add_space(4.0);
+                        cancel = bouton_arreter(ui);
                     }
-                    ui.add_space(6.0);
-                    ui.horizontal(|ui| {
-                        if matches!(job.outcome, Some(Ok(_))) {
-                            reveal = ui.button("Montrer dans l'explorateur").clicked();
+                    Progress::Finishing => {
+                        ui.horizontal(|ui| {
+                            ui.spinner();
+                            ui.label("Finalisation…");
+                        });
+                        ui.add_space(4.0);
+                        cancel = bouton_arreter(ui);
+                    }
+                    Progress::Done => {
+                        match &job.outcome {
+                            Some(Ok(msg)) => {
+                                let s = job.started.elapsed().as_secs();
+                                ui.colored_label(good(), format!("Terminé en {}:{:02}.", s / 60, s % 60));
+                                ui.label(msg);
+                            }
+                            Some(Err(e)) => {
+                                ui.colored_label(warn(), e);
+                            }
+                            None => {}
                         }
-                        dismiss = ui.button("Fermer").clicked();
-                    });
+                        ui.add_space(4.0);
+                        ui.horizontal(|ui| {
+                            if matches!(job.outcome, Some(Ok(_))) {
+                                reveal = bulles::bulle(ui.button(format!("{} Montrer dans l'explorateur", ph::FOLDER_OPEN)), "Montrer dans l'explorateur", "Ouvre le dossier du fichier exporté.", "").clicked();
+                            }
+                            dismiss = bulles::bulle(ui.button(format!("{} Fermer", ph::CHECK)), "Fermer", "Ferme cette fenêtre (l'export est fini).", "").clicked();
+                        });
+                    }
                 }
-            }
-        });
+            });
         if cancel {
             job.cancel();
         }
@@ -376,8 +402,14 @@ impl App {
                     None => String::new(),
                 };
             }
+            self.export_projet = None;
         }
     }
+}
+
+/// Le bouton qui arrête l'export (icône, nom, bulle au bout d'une seconde).
+fn bouton_arreter(ui: &mut egui::Ui) -> bool {
+    bulles::bulle(ui.button(format!("{} Arrêter", ph::X)), "Arrêter l'export", "Arrête l'export et efface ce qu'il a commencé d'écrire (un export fini plus tôt n'est pas touché).", "").clicked()
 }
 
 fn save_dialog(base: &str, format: Format) -> Option<PathBuf> {

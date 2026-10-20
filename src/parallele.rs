@@ -37,6 +37,55 @@ thread_local! {
     pub static EN_SERIE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
+// ---------------------------------------------------------------------------- priorité des fils
+
+thread_local! {
+    /// Ce fil de fond travaille « en dessous » de l'interface (export) : les fils qu'il lance pour répartir
+    /// son travail (`render::par_chunks`, `par_map`) en font autant.
+    static PRIORITE_BASSE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(windows)]
+mod os {
+    extern "system" {
+        fn GetCurrentThread() -> isize;
+        fn SetThreadPriority(thread: isize, priority: i32) -> i32;
+    }
+
+    /// THREAD_PRIORITY_BELOW_NORMAL (-1) pour le fil appelant : l'interface, au niveau normal, passe avant.
+    pub fn sous_la_normale() {
+        // SAFETY : deux appels Win32 sans pointeur ; `GetCurrentThread` rend un pseudo-descripteur du fil appelant.
+        unsafe {
+            SetThreadPriority(GetCurrentThread(), -1);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+mod os {
+    pub fn sous_la_normale() {}
+}
+
+/// Ce fil (et les fils qu'il lance pour répartir son travail) passe sous la priorité normale : un export
+/// ne prend le processeur à l'interface que si elle n'en a pas besoin.
+pub fn baisser_la_priorite_ici() {
+    PRIORITE_BASSE.with(|p| p.set(true));
+    os::sous_la_normale();
+}
+
+/// La priorité basse est-elle demandée pour ce fil ? (À lire avant de lancer des fils.)
+pub(crate) fn priorite_basse() -> bool {
+    PRIORITE_BASSE.with(std::cell::Cell::get)
+}
+
+/// En tête d'un fil lancé par un fil de priorité basse (`basse` lu avant de le lancer) : il l'est aussi.
+pub(crate) fn heriter_la_priorite(basse: bool) {
+    if basse {
+        PRIORITE_BASSE.with(|p| p.set(true));
+        os::sous_la_normale();
+    }
+}
+
 /// Nombre de fils pour `n` travaux, au plus `max` (et jamais plus que de cœurs).
 fn fils(n: usize, max: usize) -> usize {
     #[cfg(test)]
@@ -55,10 +104,12 @@ pub fn par_map<T: Sync, R: Send>(items: &[T], max: usize, f: impl Fn(usize, &T) 
     }
     let next = AtomicUsize::new(0);
     let (next, f) = (&next, &f);
+    let basse = priorite_basse();
     let mut done: Vec<(usize, R)> = std::thread::scope(|s| {
         let handles: Vec<_> = (0..threads)
             .map(|_| {
                 s.spawn(move || {
+                    heriter_la_priorite(basse);
                     let mut mine = Vec::new();
                     loop {
                         let i = next.fetch_add(1, Ordering::Relaxed);
