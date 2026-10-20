@@ -571,7 +571,7 @@ fn colour_layers_are_saved_and_read_back() {
     std::fs::remove_dir_all(&dir).ok();
     assert!(back.warnings.is_empty(), "{:?}", back.warnings);
     assert!(text.contains("\"calque_couleur\"") && text.contains(&format!("\"version\": {}", project::VERSION)));
-    assert_eq!(project::VERSION, 30);
+    assert!(project::VERSION >= 30, "30 : la version du calque de couleur");
     let layers = &back.doc.panels[0].layers;
     assert_eq!(layers.iter().map(|l| l.name.as_str()).collect::<Vec<_>>(), ["Trait couleur", "Trait", "Autre"]);
     let (colour, line) = (&layers[0], &layers[1]);
