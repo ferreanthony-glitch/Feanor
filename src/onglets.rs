@@ -123,7 +123,6 @@ etat_projet! {
     xsheet_seen_frame: Option<usize> = None,
     plan_len_seen: Option<(u64, usize)> = None,
     // --- sélections
-    crayonnes: crate::crayonnesui::Etat = Default::default(),
     layer_sel: Vec<u64> = Vec::new(),
     frame_sel: Option<(usize, usize)> = None,
     key_sel: Vec<crate::montagekeys::KeyRef> = Vec::new(),

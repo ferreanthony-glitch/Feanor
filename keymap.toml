@@ -1424,69 +1424,6 @@ action = "storyboard.verrouiller"
 touches = []
 source = "TVPaint 12 sans touche"
 
-# Crayonnés rapides. Dans la planche, Tab / Maj+Tab et les flèches changent de case (codés en dur,
-# comme les flèches du dessin : Tab sert aussi à passer en animation) ; ces commandes n'ont pas de
-# touche par défaut, mais restent dans la palette (Ctrl+K), les menus et « Assigner un raccourci… ».
-[[raccourci]]
-action = "storyboard.crayonnes"
-touches = []
-source = "proposition (sans touche : Ctrl+K)"
-
-[[raccourci]]
-action = "crayonnes.case_suivante"
-touches = []
-source = "proposition (sans touche : Tab dans la planche)"
-
-[[raccourci]]
-action = "crayonnes.case_precedente"
-touches = []
-source = "proposition (sans touche : Maj+Tab dans la planche)"
-
-[[raccourci]]
-action = "crayonnes.page_suivante"
-touches = []
-source = "proposition (sans touche)"
-
-[[raccourci]]
-action = "crayonnes.page_precedente"
-touches = []
-source = "proposition (sans touche)"
-
-[[raccourci]]
-action = "crayonnes.ajouter_page"
-touches = []
-source = "proposition (sans touche)"
-
-[[raccourci]]
-action = "crayonnes.inserer_case"
-touches = []
-source = "proposition (sans touche)"
-
-[[raccourci]]
-action = "crayonnes.supprimer_case"
-touches = []
-source = "proposition (sans touche)"
-
-[[raccourci]]
-action = "crayonnes.vider_case"
-touches = []
-source = "proposition (sans touche)"
-
-[[raccourci]]
-action = "crayonnes.tout_choisir"
-touches = []
-source = "proposition (sans touche)"
-
-[[raccourci]]
-action = "crayonnes.creer_plans"
-touches = []
-source = "proposition (sans touche)"
-
-[[raccourci]]
-action = "crayonnes.case_auto"
-touches = []
-source = "proposition (sans touche)"
-
 [[raccourci]]
 action = "projet.proprietes"
 touches = []

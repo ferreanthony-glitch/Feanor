@@ -168,6 +168,8 @@ mod board;
 #[cfg(test)]
 mod board_tests;
 mod boardui;
+#[cfg(test)]
+mod vignettes_tests;
 mod bottomtabs;
 mod brush;
 mod brushtex;
@@ -236,10 +238,7 @@ mod zoombande;
 mod zoombande_tests;
 mod camtools;
 mod canvas;
-mod crayonnes;
-#[cfg(test)]
-mod crayonnes_tests;
-mod crayonnesui;
+mod crayonnesheritage;
 #[cfg(test)]
 mod color_tests;
 mod commentaires;
