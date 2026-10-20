@@ -335,8 +335,9 @@ impl App {
                 &fill_key,
                 "pinceau.remplir",
             );
-            self.fond_toggle_ui(ui);
         });
+        // (Le fond sous le trait n'est plus un réglage du pinceau : son bouton est sur la ligne du calque, dans
+        // le panneau Calques, et dans ses commandes. Ses réglages, eux, se montrent ici quand le calque en a un.)
         self.fond_options_ui(ui);
     }
 

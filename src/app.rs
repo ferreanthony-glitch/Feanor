@@ -3497,6 +3497,7 @@ impl App {
             "fichier.exporter_images" => self.open_export(crate::export::Format::Png),
             "fichier.exporter_son" => self.open_export(crate::export::Format::Wav),
             "fichier.exporter_pdf" => self.open_export(crate::export::Format::Pdf),
+            "fichier.exporter_gif" => self.open_export(crate::export::Format::Gif),
             "fichier.exporter_montage" => self.open_editorial(),
             "fichier.exporter_relecture" | "fichier.importer_notes" => {
                 self.relecture_action(action);
@@ -4052,6 +4053,8 @@ impl App {
             "dossier.sortir" => self.take_chosen_out(),
             "dossier.supprimer_seul" => self.delete_folders_only(),
             "dossier.joindre" => self.join_chosen_folders(),
+            // Bouton « fx » de la ligne du calque (`fxui.rs`).
+            "calque.effets" => self.toggle_layer_fx(self.cur_layer),
             "groupes.focus" => self.focus_current_group(),
             "panneau.couper" => self.split_current_panel(),
             "panneau.fusionner_suivant" => self.merge_next_panel(),

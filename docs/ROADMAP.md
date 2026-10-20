@@ -3194,3 +3194,28 @@ Le réalisateur / le client n'a pas SHOT : une page HTML hors ligne à lui envoy
 - Pas fait / reste : une note modifiée par le relecteur puis renvoyée n'est pas mise à jour (la première version importée est
   gardée) ; pas de vidéo par plan dans la page (images échantillonnées seulement) ; une réponse du réalisateur sur un commentaire
   existant ; envoyer la page par e-mail depuis SHOT ; les notes sans plan ne sont pas mémorisées si on ferme la fenêtre sans les poser.
+
+
+## Notes d'Anthony : calques, effets, montage, export, caméra (2026-10-20, branche `notes-calques`) ✅
+
+Sept demandes d'une même note du réalisateur ; pour chacune, vérifier d'abord si cela existait. Détail : `README.md` (« Notes
+d'Anthony du 2026-10-20 »), vérifications à l'écran : `docs/INTERFACE.md`, partie 25.
+- ✅ **Effets : « Trait ▾ » et « Matière ▾ »** à la place des deux rangées d'icônes (icône + nom, préréglages en section,
+  entrées grisées avec leur raison sur un bitmap, nombre d'effets allumés dans le titre).
+- ✅ **Dossiers de calques** : le modèle, la timeline et le menu Calques > Dossiers existaient ; ajouté dans le panneau Calques
+  le bouton Nouveau dossier (et Ranger les calques choisis), le triangle d'ouverture, l'icône et le compte, le décalage des
+  calques rangés, les dossiers fermés sans ligne.
+- ✅ **Fond sous le trait** : un bouton du **calque** (ligne du panneau Calques, commandes) ; retiré des réglages du pinceau.
+  Aucune conversion à faire (c'était déjà `Layer::fond`).
+- ✅ **Bouton « fx »** de la ligne du calque (panneau Calques, timeline, menus de calque) : éteint toute la pile sans la
+  toucher ; une étape d'annulation ; **format 33** (`effets_eteints`).
+- ✅ **Versions de plan de durées différentes** : le modèle les permettait ; corrigé la tête de lecture et les choix d'images
+  dans un plan plus court, ajouté les durées dans les cartes, la fiche, le menu et la phrase de la barre d'état (les plans
+  suivants avancent ou reculent, le son reste en place). Export pour le montage, empreintes des envois et comparaison vérifiés.
+- ✅ **GIF animé** (Fichier > Exporter) : film, séquence, plan courant ou plans choisis ; taille, cadence ≤ celle du projet,
+  boucle, tramage ; ffmpeg `palettegen` / `paletteuse`, même tâche de fond que le film ; seules les images gardées sont calculées.
+- ✅ **Cadre de la caméra** à 1 pixel de l'écran, net, sur un liseré sombre ; **opacité du passe-partout** réglable dans les
+  Préférences (0 à 100 %).
+- Reste : l'étiquette « fx » dans la colonne du montage (pas de place : seulement dans les menus) ; un GIF avec des plans
+  choisis qui ne se suivent pas n'a pas de son (le GIF n'en a jamais) ; la réserve de rognage reste attachée au plan et non à
+  la version (une version plus longue ne ramène pas les images rognées de l'autre).

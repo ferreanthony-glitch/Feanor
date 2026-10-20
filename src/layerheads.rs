@@ -411,6 +411,12 @@ impl App {
         if h.collapsed && !h.folder {
             let lock = Rect::from_min_size(pos2(r.right() - 22.0, r.top() + 2.0), vec2(20.0, 18.0));
             self.lock_button(ui, lock, li, h.locked, shade(h.locked));
+            let fx = Rect::from_min_size(pos2(r.right() - 42.0, r.top() + 2.0), vec2(20.0, 18.0));
+            if let Some(resp) = self.fx_switch(ui, li, Some(fx), fg) {
+                if resp.clicked() {
+                    self.toggle_layer_fx(li);
+                }
+            }
             return;
         }
         let opts = Rect::from_min_size(pos2(r.right() - 20.0, r.top() + 2.0), vec2(18.0, 18.0));
@@ -511,6 +517,12 @@ impl App {
         let button = egui::Button::new(RichText::new(ph::FOLDER_SIMPLE).size(13.0).color(group_color(group.color))).frame(false);
         let resp = egui::menu::menu_custom_button(&mut child, button, |ui| self.group_menu(ui, li)).response;
         bulle(resp, &format!("Groupe : {}", group.name), "Ranger le calque dans un groupe de couleur.", "");
+        // Les effets du calque, d'un coup (comme l'œil et le cadenas ; seulement s'il en a : `fxui.rs`).
+        if let Some(resp) = self.fx_switch(ui, li, Some(slot(8)), fg) {
+            if resp.clicked() {
+                self.toggle_layer_fx(li);
+            }
+        }
 
         // Opacité : une barre qu'on tire.
         let y3 = r.top() + 38.0;

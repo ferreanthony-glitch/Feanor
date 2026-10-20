@@ -143,6 +143,15 @@ pub struct Settings {
     /// une clé : elles sont dans le Gestionnaire d'identifiants de Windows (`clessecretes.rs`).
     #[serde(default, rename = "generation_son")]
     pub generation_son: crate::genreglages::GenerationSonReglages,
+    /// Opacité du passe-partout, en pour cent (0 à 100) : le voile du hors-champ autour du cadre de la caméra
+    /// quand « Estomper le hors-champ » est allumé (`camtools.rs`, Fichier > Préférences…). Absente des anciens
+    /// réglages : la valeur d'avant (`camtools::PASSE_PARTOUT_DEFAUT`).
+    #[serde(default = "default_passe_partout", rename = "opacite_passe_partout")]
+    pub passe_partout: u8,
+}
+
+fn default_passe_partout() -> u8 {
+    crate::camtools::PASSE_PARTOUT_DEFAUT
 }
 
 fn default_autosave() -> u32 {
@@ -202,6 +211,7 @@ impl Default for Settings {
             keymap_preset: Default::default(),
             bruitages: Default::default(),
             generation_son: Default::default(),
+            passe_partout: default_passe_partout(),
         }
     }
 }
@@ -244,6 +254,7 @@ impl Settings {
             s.storyboard_space = Espace::Storyboard;
         }
         s.generation_son = std::mem::take(&mut s.generation_son).sanitized();
+        s.passe_partout = s.passe_partout.min(100);
         s
     }
 

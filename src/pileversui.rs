@@ -162,6 +162,8 @@ impl App {
         let aspect = self.doc.frame[0] as f32 / self.doc.frame[1].max(1) as f32;
         let confirme = self.pile_versions.confirme;
         let affichee = etiquette(cartes.iter().find(|c| c.actuelle).map_or(1, |c| c.numero));
+        let fps = self.doc.fps;
+        let duree_affichee = cartes.iter().find(|c| c.actuelle).map_or(1, |c| c.duree);
         let plus_haut = premiere > 0;
         let plus_bas = premiere + visibles < cartes.len();
 
@@ -228,7 +230,11 @@ impl App {
                     continue;
                 }
                 // Le nom, et dessous : « affichée » ou la date de la version.
-                p.text(pos2(x, rect.top() + 7.0), Align2::LEFT_TOP, &nom, FontId::proportional(14.0), ink);
+                let galley = p.layout_no_wrap(nom.clone(), FontId::proportional(14.0), ink);
+                let largeur_nom = galley.size().x;
+                p.galley(pos2(x, rect.top() + 7.0), galley, ink);
+                // La durée de cette version (chacune a la sienne) : « 2s 12 », juste après le nom.
+                p.text(pos2(x + largeur_nom + 6.0, rect.top() + 10.0), Align2::LEFT_TOP, crate::storyboard::duration_label(c.duree, fps), FontId::proportional(10.5), doux);
                 let sous = if c.actuelle {
                     "affichée".to_string()
                 } else if c.date > 0 {
@@ -258,7 +264,8 @@ impl App {
                 if c.actuelle {
                     bulles::bulle(carte, &format!("{nom}, version affichée"), "C'est celle que montrent le film, l'export et les envois.", "");
                 } else {
-                    bulles::bulle(carte, &format!("Passer à la {nom}"), &format!("Elle devient la version affichée ; la {affichee} est gardée."), "");
+                    let note = crate::planversui::phrase_duree(duree_affichee, c.duree, fps);
+                    bulles::bulle(carte, &format!("Passer à la {nom}"), &format!("Elle devient la version affichée ; la {affichee} est gardée. {note}"), "");
                 }
                 if clique {
                     geste = Some(Geste::Passer(c.numero));

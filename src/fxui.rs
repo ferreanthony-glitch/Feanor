@@ -108,6 +108,62 @@ impl App {
         self.layers().get(li).is_some_and(|l| l.fx.iter().any(|e| e.kind == EffectKind::Boil && e.enabled && e.values_at(self.cur_frame).get(crate::tremblement::REST).is_some_and(|v| *v >= 0.5)))
     }
 
+    /// Le bouton « fx » de la ligne du calque `li` se montre : le calque a une pile d'effets, ou ses effets
+    /// sont éteints (il faut pouvoir les rallumer). Pas pour un dossier.
+    pub(crate) fn fx_switch_shown(&self, li: usize) -> bool {
+        self.layers().get(li).is_some_and(|l| !l.folder && (!l.fx.is_empty() || !l.fx_enabled))
+    }
+
+    /// Allume ou éteint d'un coup toute la pile d'effets du calque `li` (une étape d'annulation) : la pile
+    /// n'est pas touchée (réglages, clés, effets cochés), elle ne s'applique simplement plus. Enregistré avec le
+    /// calque (`effets_eteints`).
+    pub(crate) fn toggle_layer_fx(&mut self, li: usize) {
+        if li >= self.layers().len() || self.content_refuses() {
+            return;
+        }
+        if self.layers()[li].folder {
+            self.status = "Un dossier n'a pas d'effets : ils sont sur ses calques.".into();
+            return;
+        }
+        self.end_stroke();
+        let on = self.layers()[li].fx_enabled;
+        self.record_step();
+        self.layers_mut()[li].fx_enabled = !on;
+        self.renderer.invalidate_all();
+        self.status = if on {
+            "Effets du calque éteints (la pile est gardée, le bouton fx les rallume).".into()
+        } else {
+            "Effets du calque rallumés.".into()
+        };
+    }
+
+    /// Le bouton « fx » d'une ligne de calque : allumé quand les effets du calque jouent, éteint (barré) sinon.
+    /// Rien si le calque n'a pas d'effets (`fx_switch_shown`). `rect` : où le poser (ligne de la timeline), ou
+    /// `None` pour le placer dans la mise en page (panneau Calques).
+    pub(crate) fn fx_switch(&mut self, ui: &mut egui::Ui, li: usize, rect: Option<egui::Rect>, ink: egui::Color32) -> Option<egui::Response> {
+        if !self.fx_switch_shown(li) {
+            return None;
+        }
+        let on = self.layers()[li].fx_enabled;
+        let n = self.layers()[li].fx.len();
+        let key = self.raccourci("calque.effets");
+        let text = RichText::new("fx").size(13.0).italics();
+        let text = if on { text.strong().color(ink) } else { text.strikethrough().color(ink.gamma_multiply(0.45)) };
+        let button = egui::Button::new(text).frame(false).min_size(egui::vec2(18.0, 0.0));
+        let resp = match rect {
+            Some(r) => ui.put(r, button),
+            None => ui.add(button),
+        };
+        let about = if on {
+            format!("Les effets du calque jouent ({n}). Clic : les éteindre d'un coup ; la pile (réglages, clés) est gardée.")
+        } else {
+            format!("Les effets du calque sont éteints ({n} gardé{}). Clic : les rallumer.", if n > 1 { "s" } else { "" })
+        };
+        let resp = crate::bulles::bulle(resp, if on { "Effets allumés" } else { "Effets éteints" }, &about, &key);
+        crate::raccourcisui::shortcut_menu(&resp, "calque.effets", &key);
+        Some(resp)
+    }
+
     /// Coche ou décoche l'effet `kind` du calque `li` (une étape d'annulation, le dessin ne
     /// change pas) : absent, il s'ajoute avec ses réglages par défaut ; présent, il s'active ou
     /// se désactive, ses réglages restent.
@@ -174,6 +230,15 @@ impl App {
             return;
         }
         ui.menu_button("Effets", |ui| self.fx_menu_items(ui, li));
+        // L'interrupteur « fx » de la ligne du calque, aussi ici (la colonne du montage n'a pas la place de son bouton).
+        if self.fx_switch_shown(li) {
+            let on = self.layers()[li].fx_enabled;
+            let resp = ui.checkbox(&mut on.clone(), "Effets du calque allumés").on_hover_text("Éteint, aucun effet de ce calque ne joue ; la pile est gardée. Bouton fx de la ligne du calque.");
+            if resp.clicked() {
+                ui.close_menu();
+                self.toggle_layer_fx(li);
+            }
+        }
         self.boil_menu_items(ui, li);
     }
 
@@ -281,43 +346,59 @@ impl App {
         self.renderer.invalidate_all();
     }
 
-    /// La rangée d'icônes des effets du trait (`fxtrait.rs`) : un bouton par effet, enfoncé quand il
-    /// est sur le calque et actif, grisé avec la raison sur un calque bitmap ; puis les préréglages.
-    pub(crate) fn trait_strip(&mut self, ui: &mut egui::Ui, li: usize) {
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("Trait").weak());
+    /// Une entrée de menu d'effet (menus déroulants « Trait » et « Matière ») : icône et nom, allumée
+    /// quand l'effet est sur le calque et actif, grisée avec la raison sur un calque qui ne le prend pas.
+    /// Clic : coche ou décoche l'effet (l'action de l'effet : une étape d'annulation). Clic droit :
+    /// lui assigner un raccourci.
+    fn fx_menu_entry(&mut self, ui: &mut egui::Ui, li: usize, kind: EffectKind, icon: &str, action: &'static str) {
+        let offer = self.fx_offer(li, kind);
+        let enabled = offer == Offer::Enabled;
+        let on = self.fx_on(li, kind);
+        let key = self.raccourci(action);
+        let about = match offer {
+            Offer::Disabled(why) => why,
+            _ => kind.hint(),
+        };
+        let label = crate::bulles::encre_etat(RichText::new(format!("{icon}  {}", kind.label())), on);
+        let resp = ui.add_enabled(enabled, egui::Button::new(label).selected(on).min_size(egui::vec2(ui.available_width(), 0.0)));
+        let resp = crate::bulles::bulle(resp, kind.label(), about, &key);
+        crate::raccourcisui::shortcut_menu(&resp, action, &key);
+        if enabled && resp.clicked() {
+            ui.close_menu();
+            self.run_action(action);
+        }
+    }
+
+    /// Combien d'effets de la liste `kinds` sont sur le calque `li` et actifs (le chiffre du bouton du menu).
+    pub(crate) fn fx_count_on(&self, li: usize, kinds: &[EffectKind]) -> usize {
+        kinds.iter().filter(|k| self.fx_on(li, **k)).count()
+    }
+
+    /// Le menu déroulant « Trait » (`fxtrait.rs`) : tous les effets du trait, icône et nom, puis dans une
+    /// section les préréglages. Un effet allumé est sur le calque et actif ; grisé avec la raison dans la
+    /// bulle sur un calque bitmap. Il remplace la rangée d'icônes d'avant (Anthony, 2026-10-20 : « un seul
+    /// menu déroulant »).
+    pub(crate) fn trait_menu(&mut self, ui: &mut egui::Ui, li: usize) {
+        let n = self.fx_count_on(li, &crate::fxtrait::KINDS);
+        let title = if n > 0 { format!("Trait ({n}) {}", ph::CARET_DOWN) } else { format!("Trait {}", ph::CARET_DOWN) };
+        let menu = ui.menu_button(title, |ui| {
             for kind in crate::fxtrait::KINDS {
-                let offer = self.fx_offer(li, kind);
-                let enabled = offer == Offer::Enabled;
-                let on = self.fx_on(li, kind);
-                let action = crate::fxtrait::action(kind);
-                let key = self.raccourci(action);
-                let about = match offer {
-                    Offer::Disabled(why) => why,
-                    _ => kind.hint(),
-                };
-                let resp = crate::bulles::etat_si(ui, enabled, on, crate::fxtrait::icon(kind), kind.label(), about, &key);
-                crate::raccourcisui::shortcut_menu(&resp, action, &key);
-                if enabled && resp.clicked() {
-                    self.run_action(action);
+                self.fx_menu_entry(ui, li, kind, crate::fxtrait::icon(kind), crate::fxtrait::action(kind));
+            }
+            ui.separator();
+            ui.label(RichText::new(format!("{}  Préréglages", ph::MAGIC_WAND)).weak());
+            let usable = self.fx_offer(li, EffectKind::Write) == Offer::Enabled;
+            for preset in crate::fxtrait::Preset::ALL {
+                let key = self.raccourci(preset.action());
+                let note = if usable { preset.note() } else { TRAIT_VECTOR_ONLY };
+                let resp = crate::bulles::bulle(ui.add_enabled(usable, egui::Button::new(preset.label())), preset.label(), note, &key);
+                if usable && resp.clicked() {
+                    ui.close_menu();
+                    self.apply_trait_preset(preset);
                 }
             }
-            let usable = self.fx_offer(li, EffectKind::Write) == Offer::Enabled;
-            let menu = ui.add_enabled_ui(usable, |ui| {
-                ui.menu_button(RichText::new(ph::MAGIC_WAND).size(crate::bulles::TAILLE), |ui| {
-                    for preset in crate::fxtrait::Preset::ALL {
-                        let key = self.raccourci(preset.action());
-                        let resp = crate::bulles::bulle(ui.button(preset.label()), preset.label(), preset.note(), &key);
-                        if resp.clicked() {
-                            ui.close_menu();
-                            self.apply_trait_preset(preset);
-                        }
-                    }
-                })
-                .response
-            });
-            crate::bulles::bulle(menu.inner, "Préréglages du trait", "Des effets du trait tout réglés, avec leurs clés à partir de la tête de lecture : apparition écrite, croquis nerveux, poussière.", "");
         });
+        crate::bulles::bulle(menu.response, "Effets du trait", "Écriture, crayonné, respiration, ondulation, pointillés, désagrégation, et des préréglages tout réglés. Les effets cochés sont sur ce calque.", "");
     }
 
     /// Pose les effets du préréglage `preset` sur le calque courant (une étape d'annulation) : ceux de
@@ -344,46 +425,31 @@ impl App {
         self.status = format!("{} : posé sur le calque, les clés partent de l'image {}.", preset.label(), self.frame_label(self.cur_frame));
     }
 
-    /// La rangée d'icônes des effets de matière (`fxmatiere.rs`) : comme celle du trait, juste dessous.
-    /// Le liseré, le trait sec et l'encre qui bave vont sur toutes les sortes de calques ; le dégradé et
-    /// le changement de plume, sur le vectoriel seulement (grisés avec la raison sur un bitmap).
-    pub(crate) fn matiere_strip(&mut self, ui: &mut egui::Ui, li: usize) {
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("Matière").weak());
+    /// Le menu déroulant « Matière » (`fxmatiere.rs`) : comme « Trait », juste à côté. Le liseré, le trait
+    /// sec et l'encre qui bave vont sur toutes les sortes de calques ; le dégradé et le changement de
+    /// plume, sur le vectoriel seulement (grisés avec la raison sur un bitmap).
+    pub(crate) fn matiere_menu(&mut self, ui: &mut egui::Ui, li: usize) {
+        let n = self.fx_count_on(li, &crate::fxmatiere::KINDS);
+        let title = if n > 0 { format!("Matière ({n}) {}", ph::CARET_DOWN) } else { format!("Matière {}", ph::CARET_DOWN) };
+        let menu = ui.menu_button(title, |ui| {
             for kind in crate::fxmatiere::KINDS {
-                let offer = self.fx_offer(li, kind);
-                let enabled = offer == Offer::Enabled;
-                let on = self.fx_on(li, kind);
-                let action = crate::fxmatiere::action(kind);
-                let key = self.raccourci(action);
-                let about = match offer {
-                    Offer::Disabled(why) => why,
-                    _ => kind.hint(),
-                };
-                let resp = crate::bulles::etat_si(ui, enabled, on, crate::fxmatiere::icon(kind), kind.label(), about, &key);
-                crate::raccourcisui::shortcut_menu(&resp, action, &key);
-                if enabled && resp.clicked() {
-                    self.run_action(action);
+                self.fx_menu_entry(ui, li, kind, crate::fxmatiere::icon(kind), crate::fxmatiere::action(kind));
+            }
+            ui.separator();
+            ui.label(RichText::new(format!("{}  Préréglages", ph::MAGIC_WAND)).weak());
+            let usable = self.fx_offer(li, EffectKind::Outline) == Offer::Enabled;
+            for preset in crate::fxmatiere::Preset::ALL {
+                let key = self.raccourci(preset.action());
+                let ok = usable && (!preset.vector_only() || self.fx_offer(li, EffectKind::Nib) == Offer::Enabled);
+                let note = if ok { preset.note() } else { crate::fxmatiere::bitmap_why(EffectKind::Nib) };
+                let resp = crate::bulles::bulle(ui.add_enabled(ok, egui::Button::new(preset.label())), preset.label(), note, &key);
+                if ok && resp.clicked() {
+                    ui.close_menu();
+                    self.apply_matter_preset(preset);
                 }
             }
-            let usable = self.fx_offer(li, EffectKind::Outline) == Offer::Enabled;
-            let menu = ui.add_enabled_ui(usable, |ui| {
-                ui.menu_button(RichText::new(ph::MAGIC_WAND).size(crate::bulles::TAILLE), |ui| {
-                    for preset in crate::fxmatiere::Preset::ALL {
-                        let key = self.raccourci(preset.action());
-                        let ok = !preset.vector_only() || self.fx_offer(li, EffectKind::Nib) == Offer::Enabled;
-                        let note = if ok { preset.note() } else { crate::fxmatiere::bitmap_why(EffectKind::Nib) };
-                        let resp = crate::bulles::bulle(ui.add_enabled(ok, egui::Button::new(preset.label())), preset.label(), note, &key);
-                        if ok && resp.clicked() {
-                            ui.close_menu();
-                            self.apply_matter_preset(preset);
-                        }
-                    }
-                })
-                .response
-            });
-            crate::bulles::bulle(menu.inner, "Préréglages de la matière", "Des effets de matière tout réglés : encre de Chine, feutre usé, contour blanc, arc-en-ciel, plume calligraphique.", "");
         });
+        crate::bulles::bulle(menu.response, "Effets de matière", "Liseré, trait sec, encre qui bave, dégradé le long du trait, changer de plume, et des préréglages tout réglés. Les effets cochés sont sur ce calque.", "");
     }
 
     /// Pose les effets du préréglage de matière `preset` sur le calque courant (une étape d'annulation) :
@@ -547,6 +613,15 @@ impl App {
     fn fx_stack_ui(&mut self, ui: &mut egui::Ui) {
         let li = self.cur_layer;
         let f = self.cur_frame;
+        // L'interrupteur « fx » de la ligne du calque est éteint : on le dit ici, et on le rallume.
+        if !self.layers()[li].fx_enabled {
+            ui.horizontal(|ui| {
+                ui.colored_label(crate::theme::avertissement(), "Les effets de ce calque sont éteints (bouton fx).");
+                if crate::bulles::bulle(ui.small_button("Rallumer"), "Rallumer les effets", "La pile du calque joue de nouveau.", &self.raccourci("calque.effets")).clicked() {
+                    self.toggle_layer_fx(li);
+                }
+            });
+        }
         // (À la ligne quand le panneau est étroit.)
         ui.horizontal_wrapped(|ui| {
             ui.menu_button(format!("{}  Ajouter un effet", ph::PLUS), |ui| {
@@ -600,8 +675,11 @@ impl App {
                 self.layers_mut()[li].fx.clear();
             }
         });
-        self.trait_strip(ui, li);
-        self.matiere_strip(ui, li);
+        // Les effets du trait et de matière : un menu déroulant chacun (icône et nom, préréglages en section).
+        ui.horizontal_wrapped(|ui| {
+            self.trait_menu(ui, li);
+            self.matiere_menu(ui, li);
+        });
         let key = self.raccourci("fx.cle_auto");
         let resp = ui.checkbox(&mut self.fx_auto_key, "Création automatique des clés");
         crate::bulles::bulle(resp, "Création automatique des clés", "Une clé est posée à l'image courante à chaque changement d'un paramètre.", &key);

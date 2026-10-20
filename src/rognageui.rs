@@ -314,7 +314,7 @@ impl App {
 
     /// Après un rognage : ce qui visait des images du plan (choix de clés, d'images) ne vise plus
     /// rien de sûr, la tête reste dans le plan.
-    fn after_rognage(&mut self) {
+    pub(crate) fn after_rognage(&mut self) {
         self.vsel = None;
         self.frame_sel = None;
         self.clear_cam_keys();

@@ -318,6 +318,10 @@ pub struct Layer {
     pub roles: crate::roles::Roles,
     /// Pile d'effets (13i) : appliqués à l'affichage et à l'export, dans l'ordre.
     pub fx: Vec<crate::fx::Effect>,
+    /// Interrupteur général de la pile d'effets (bouton « fx » de la ligne du calque, avec l'œil et le
+    /// cadenas) : éteint, aucun effet du calque ne s'applique, mais la pile reste telle quelle (réglages,
+    /// clés, effets cochés) et revient en rallumant. Allumé d'office.
+    pub fx_enabled: bool,
     /// Calque CTG (13j) : ses dessins sont des graffitis de couleur, qui remplissent les zones
     /// fermées par les traits de ses sources.
     pub ctg: Option<crate::ctg::Ctg>,
@@ -395,6 +399,7 @@ impl Layer {
             color_marks: Default::default(),
             roles: Default::default(),
             fx: Vec::new(),
+            fx_enabled: true,
             ctg: None,
             video: None,
             fond: None,

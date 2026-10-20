@@ -395,8 +395,10 @@ on les coche et décoche, le dessin reste tel quel).
   écart d'un niveau au plus avec le processeur).
 - **Effets du trait** (2026-10-20, famille **Trait**, **calques vectoriels seulement** : grisés avec la raison sur un
   calque bitmap ; `src/fxtrait.rs`). Six effets de plus de la pile, qui agissent sur les traits eux-mêmes ; mêmes
-  réglages enregistrés, mêmes clés, même copier-coller que le reste. Une **rangée d'icônes** en tête du panneau
-  Effets les coche et les décoche (bulle : nom, raccourci, description), un menu baguette pose des **préréglages** :
+  réglages enregistrés, mêmes clés, même copier-coller que le reste. Un **bouton déroulant « Trait ▾ »** en tête du
+  panneau Effets (depuis le 2026-10-20 : c'était une rangée d'icônes) liste les effets avec leur icône et leur nom, les
+  coche et les décoche (bulle : nom, raccourci, description ; grisés avec la raison sur un bitmap) et, dans une section
+  « Préréglages » du même menu, pose des **préréglages** :
   - **Écriture du trait** (icône signature) : le dessin se trace de lui-même, trait par trait dans l'ordre où ils ont été
     dessinés (ou tous ensemble), selon un **avancement** de 0 à 100 % animable (une clé à 0 %, une à 100 %).
     Réglages : effacement (le dessin se défait dans le même ordre), tous les traits ensemble, durée selon la longueur
@@ -425,8 +427,8 @@ on les coche et décoche, le dessin reste tel quel).
   trait se taisent. Un fond sous le trait reste fixe. Mesures sur 2 000 traits : `docs/PERFORMANCE.md` (section 13) ;
   liste de ce qu'il faut regarder à l'écran : `docs/INTERFACE.md` (section 20).
 - **Effets de matière** (2026-10-20, famille **Matière**, `src/fxmatiere.rs`, branche `effets-matiere`). Cinq effets de
-  plus, dans une **deuxième rangée d'icônes « Matière »** juste sous celle du Trait (même baguette de préréglages, mêmes
-  clés, même copier-coller, une seule fois par calque et par sorte). Les trois premiers marchent sur **tous les calques** ;
+  plus, dans un **bouton déroulant « Matière ▾ »** juste à côté de « Trait ▾ » (depuis le 2026-10-20 ; avant, une deuxième
+  rangée d'icônes) : même section « Préréglages », mêmes clés, même copier-coller, une seule fois par calque et par sorte. Les trois premiers marchent sur **tous les calques** ;
   les deux derniers sur **les calques vectoriels seulement** (grisés avec la raison sur un bitmap) :
   - **Liseré** (icône sélection) : un contour d'une autre couleur autour du dessin, pour détacher un personnage du fond ;
     largeur (distance exacte au bord de l'encre, un vrai disque), douceur du bord, opacité, couleur, « derrière le trait »
@@ -981,8 +983,10 @@ propagation, export) restent aussi quelques secondes en bas à droite ; un clic 
 
 ## Fond sous le trait
 
-Pour détacher un personnage du décor sans le remplir à la main : dans les réglages du pinceau ou
-du crayon, allume « Fond sous le trait » (à côté de « Peint derrière »). Chaque dessin du calque
+Pour détacher un personnage du décor sans le remplir à la main : allume « Fond sous le trait » **sur le
+calque** (depuis le 2026-10-20, un bouton de la ligne du calque dans le panneau Calques, de l'en-tête de la
+timeline et des commandes du panneau Calques ; ce n'est plus une option des réglages du pinceau et du crayon :
+c'est un réglage du calque, un bouton par calque de dessin). Chaque dessin du calque
 prend alors un fond sous son trait : tout ce que le trait enferme, plus un léger débord autour,
 en une seule forme qui se recalcule à chaque trait (en animation aussi). Réglages, juste dessous :
 - couleur du fond (blanc d'office) ;
@@ -1054,7 +1058,9 @@ dans Storyboard Pro (le fonctionnement exact de Storyboard Pro est **à vérifie
 
 - **À l'écran** : le papier (ou le damier, ou le noir de l'arrière-plan) couvre tout ce que la vue regarde,
   plus d'ombre ni de zone hachurée autour de la feuille. Le **cadre de la caméra** est un trait fin et
-  discret ; « Estomper le hors-champ » (Caméra) voile, plus légèrement, tout ce qui est autour du cadre.
+  discret (1 pixel de l'écran, net, sur un liseré sombre qui le garde visible sur n'importe quel fond) ;
+  « Estomper le hors-champ » (Caméra) voile, plus légèrement, tout ce qui est autour du cadre : l'opacité de ce
+  **passe-partout** se règle dans Fichier > Préférences… (voir « Notes d'Anthony du 2026-10-20 » plus bas).
 - **Dessiner** : le pinceau, le crayon, la gomme et les formes vont où on les mène, coordonnées négatives
   comprises (de −32 768 à 32 768 pixels autour de la feuille). Les traits vectoriels n'ont pas de limite
   de feuille. Une zone où l'on n'a rien dessiné ne coûte aucune mémoire (tuiles de 64 px à la demande).
@@ -1403,6 +1409,68 @@ MonFilm/
 Rien de `versions/` n'est jamais effacé (même quand un envoi est retiré de la liste). « Enregistrer sous » recopie
 `versions/`. Un projet ouvert sans `versions/` (déplacé sans lui) s'ouvre ; la comparaison avec un envoi dit alors quel
 fichier manque.
+
+## Notes d'Anthony du 2026-10-20 : calques, effets, montage, export, caméra
+
+Sept demandes, une branche (`notes-calques`). Pour chacune : ce qui existait déjà, ce qui a été fait. Liste de ce qu'il
+faut regarder à l'écran : `docs/INTERFACE.md`, partie 25. **Format de projet 33** (voir plus bas).
+
+1. **Effets sur le trait et sur la matière dans un menu déroulant chacun.** Les deux rangées d'icônes du panneau Effets
+   sont remplacées par deux boutons, « Trait ▾ » et « Matière ▾ » (le nombre d'effets allumés s'affiche dans le
+   titre : « Trait (2) ▾ »). Chaque menu liste les effets avec leur **icône et leur nom**, allumés quand ils sont sur le
+   calque ; ceux qu'un calque bitmap refuse restent **grisés avec la raison dans la bulle**. Les préréglages sont dans une
+   section « Préréglages » du même menu. Clic sur une entrée : même action qu'avant (`fx.ecriture`…), une étape
+   d'annulation ; clic droit : lui assigner un raccourci. Code : `fxui.rs` (`trait_menu`, `matiere_menu`).
+2. **Dossiers de calques.** Le modèle (`Layer::folder`, `parent`, format 14), la timeline (bouton « Nouveau dossier »,
+   triangle, glisser dedans et dehors, œil, verrou, opacité) et le menu Calques > Dossiers existaient **déjà** ; ce qui
+   manquait, c'était le panneau **Calques** : maintenant un bouton « Nouveau dossier » (et « Ranger les calques choisis
+   dans un dossier » quand plusieurs sont choisis) dans ses commandes, « Nouveau dossier » au clic droit dans le vide de
+   la liste, la ligne du dossier avec son **triangle** (ouvrir / fermer, comme dans la timeline : le réglage est le même),
+   son icône à la place de la vignette et « dossier · 3 calques », les calques rangés **décalés** vers la droite, et les
+   calques d'un dossier fermé sans ligne (le calque courant reste toujours listé). Glisser une ligne entre les calques d'un
+   dossier l'y range, au-dessus du dossier l'en sort (`move_layer_to`, déjà là) ; monter ou descendre un dossier emmène ses
+   calques ; son opacité (le champ en haut, quand le dossier est choisi) multiplie celle de ses calques.
+3. **Fond sous le trait : un bouton du calque, plus une option du pinceau.** Le fond a toujours été un réglage du calque
+   (`Layer::fond`) : l'ancien bouton des réglages du pinceau et du crayon n'enregistrait rien dans les réglages de
+   pinceau. Il est **retiré** de ces réglages et devient un bouton (icône carré-utilisateur) sur **la ligne de chaque calque
+   de dessin** du panneau Calques, dans ses commandes (pour le calque courant) ; allumé = le calque a un fond. L'action
+   `pinceau.fond` (raccourci d'avant) fait la même chose pour le calque courant. Aucune conversion : un projet ou des
+   réglages d'avant se lisent tels quels. Les réglages du fond (couleur, débord, trous) et la bascule Trait / Fond restent
+   sous le pinceau, visibles quand le calque courant a un fond.
+4. **Bouton « fx » du calque.** Un petit « fx » à côté de l'œil et du cadenas (ligne du panneau Calques, ligne de la
+   timeline, et « Effets du calque allumés » dans les menus de calque, la colonne du montage n'ayant pas la place) éteint
+   **toute la pile d'effets** du calque d'un coup, sans la toucher (réglages, clés et effets cochés restent). Il ne se montre
+   que sur un calque qui a des effets (ou qui les a éteints : il faut pouvoir les rallumer) ; éteint il est barré, et le
+   panneau Effets le dit avec un bouton « Rallumer ». Une étape d'annulation, action `calque.effets` (Ctrl+K, sans touche).
+   Enregistré dans le projet (`effets_eteints`, format 33) ; l'écran, l'export, les vignettes et les comparaisons le suivent
+   (un seul point, `fx::layer_steps`).
+5. **Durées différentes selon la version d'un plan.** Le modèle les gardait déjà (passer à une version échange la durée avec
+   le contenu : c'est la durée du plan dans le montage, donc les plans suivants reculent ou avancent comme pour tout
+   changement de durée, le son restant en place). Ce qui manquait : la tête de lecture et les choix d'images ne restaient
+   pas dans le plan plus court (corrigé), la barre d'état ne le disait pas (« Durée du plan : 2s 00 → 3s 00 ; les plans
+   suivants reculent de 24 i, le son reste en place. »), et on ne voyait pas la durée de chaque version : elle est dans les
+   **cartes de la pile** (« V2 3s 00 »), dans la bulle de la carte, dans la fiche du plan et le menu « Version du plan ».
+   Passer à une version, la restaurer : toujours **une étape d'annulation**. L'export pour le montage prend la durée de la
+   version active (et son nom : `…_V2`) ; l'empreinte des envois suit la version (un plan d'une autre durée est « modifié »,
+   et ne l'est plus quand on revient à la version envoyée) ; « Comparer » reste dans les images de chaque côté. Limite : le
+   contenu rogné (réserve) reste attaché au plan, pas à la version.
+6. **Exporter un GIF animé.** Fichier > Exporter… > « Un GIF animé » (ou la fenêtre d'export, ou Ctrl+K
+   `fichier.exporter_gif`) : le film, la séquence, le plan courant ou les **plans choisis** ; une **taille** (480 px, 720 px
+   de large, 50 % ou image finale, jamais plus grand que l'image finale), une **cadence** (6 à 24 images par seconde, jamais
+   plus que celle du projet), **boucle** (sans fin ou une fois) et **tramage** (dégradés plus doux, fichier plus lourd).
+   Même tâche de fond que le film : progression, temps restant, Annuler (le GIF inachevé est effacé). ffmpeg
+   (`palettegen` puis `paletteuse` : une palette de 256 couleurs calculée sur tout le GIF) ; **aucune caisse de plus** ;
+   seules les images que le GIF garde sont calculées. Pas de son. Les transitions du montage peuvent y être.
+7. **Cadre de la caméra plus fin, passe-partout réglable.** Le cadre est tracé à **1 pixel de l'écran** (1,5 avec l'outil
+   Caméra), calé sur la grille des pixels, sur un liseré sombre d'un pixel de chaque côté qui le garde lisible sur fond clair
+   comme sur fond sombre. Fichier > Préférences… > Dessin > « **Opacité du passe-partout** » (0 à 100 %, 27 % d'origine,
+   « Rétablir ») règle le voile de « Estomper le hors-champ » ; sur la toile infinie il vaut 65 % de la valeur, et pendant la
+   lecture un peu plus du double. Réglage de l'application (`opacite_passe_partout`), pas du projet.
+
+**Format du projet : 33** (`src/project.rs`). Un seul champ nouveau, `effets_eteints` dans l'entrée d'un calque, écrit
+seulement s'il est vrai (aucun calque éteint : le manifeste est celui d'avant, au numéro près). Une version précédente refuse
+un projet 33 plutôt que de montrer les effets qu'on a éteints. Un projet de 32 ou moins s'ouvre tel quel, effets allumés.
+Les durées par version n'ajoutent rien (c'est le contenu de `plans_versions.json` d'avant) ; le GIF et le passe-partout non plus.
 
 ## Transitions du montage
 
@@ -2015,7 +2083,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `monde.rs` | Toile infinie à l'écran : texture du monde hors de la feuille, composée par le processeur par petits morceaux |
 | `gpu.rs` | Composition et affichage par la carte graphique, envoi des dessins par tuiles ; une texture par dessin à la taille de son contenu (pas de la feuille) et image composée gardée tant que rien ne change |
 | `playback.rs` | Lecture fluide : dessins envoyés d'avance, cadence affichée |
-| `export.rs`, `exportui.rs` | Exports : film (ffmpeg), images, son, PDF ; fenêtres de choix et de progression |
+| `export.rs`, `exportui.rs` | Exports : film (ffmpeg), GIF animé (ffmpeg, palette), images, son, PDF ; fenêtres de choix et de progression |
+| `notes_calques_tests.rs` | Les notes d'Anthony du 2026-10-20 : menus Trait / Matière, dossiers du panneau Calques, fond et effets en boutons du calque, durées par version, GIF, cadre fin et passe-partout |
 | `pdf.rs` | Écriture du PDF de storyboard : texte, images, mise en page |
 | `settings.rs` | Réglages de l'application (emplacement de ffmpeg) |
 | `camera.rs`, `camtools.rs` | Caméra du panneau : images clés, adoucis, avancée, focale ; outil Caméra, sa fenêtre, vue caméra |
