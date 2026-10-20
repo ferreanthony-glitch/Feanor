@@ -234,6 +234,40 @@ pub fn overhang(b: Rect, w: usize, h: usize) -> (usize, usize, usize, usize) {
 pub struct Place {
     pub shift: (i64, i64),
     pub sheet: (usize, usize),
+    /// L'image reçoit aussi ce qui sort de ses bornes (toile infinie : le dessin lui-même, avec ses
+    /// tuiles hors de la feuille) ; faux : tout est coupé à l'image, comme pour les feuilles
+    /// temporaires (feuille flottante, aperçus).
+    pub open: bool,
+}
+
+/// Un cadre ne dépasse pas autant de pixels (le trait lointain est rendu dans son seul rectangle).
+const MAX_FRAME_PIXELS: usize = 1 << 26;
+
+/// Le cadre où un trait de portée `reach` est rendu seul, sur une feuille `w` × `h` : (abscisse du
+/// coin haut gauche, ordonnée, largeur, hauteur), en pixels du monde. La feuille entière tant que le
+/// trait y reste (rien n'a changé), agrandie aux tuiles qu'il touche autour sinon ; si le cadre
+/// ainsi agrandi devenait énorme (un trait très loin de la feuille), le seul rectangle du trait.
+fn stroke_frame(reach: Rect, w: usize, h: usize) -> (i64, i64, usize, usize) {
+    let sheet = (0, 0, w, h);
+    if !reach.is_finite() || reach.max.x < reach.min.x || reach.max.y < reach.min.y {
+        return sheet;
+    }
+    let t = TILE as i64;
+    let world = crate::raster::WORLD as f32;
+    let c = |v: f32| v.clamp(-world, world);
+    let down = |v: f32| (c(v).floor() as i64).div_euclid(t) * t;
+    let up = |v: f32| (c(v).ceil() as i64 + t - 1).div_euclid(t) * t;
+    let (rx0, ry0, rx1, ry1) = (down(reach.min.x), down(reach.min.y), up(reach.max.x), up(reach.max.y));
+    let (x0, y0) = (rx0.min(0), ry0.min(0));
+    let (x1, y1) = (if reach.max.x > w as f32 { rx1 } else { w as i64 }, if reach.max.y > h as f32 { ry1 } else { h as i64 });
+    let (x0, y0) = (if reach.min.x < 0.0 { x0 } else { 0 }, if reach.min.y < 0.0 { y0 } else { 0 });
+    let union_px = (x1 - x0).max(0) as usize * (y1 - y0).max(0) as usize;
+    if union_px <= MAX_FRAME_PIXELS && (x1 > x0) && (y1 > y0) {
+        return (x0, y0, (x1 - x0) as usize, (y1 - y0) as usize);
+    }
+    // Très loin de la feuille : le rectangle du trait seul.
+    let (fw, fh) = ((rx1 - rx0).max(t) as usize, (ry1 - ry0).max(t) as usize);
+    (rx0, ry0, fw.min(MAX_SIDE * 2), fh.min(MAX_SIDE * 2))
 }
 
 impl CachedPixels {
@@ -889,8 +923,8 @@ impl VectorDrawing {
         for e in &self.elements {
             match e {
                 Element::Stroke { points, color, opacity, hardness, brush: Some(_), trace } if e.cache_bytes() == 0 => {
-                    let (sheet, _) = render_stroke_alone(width, height, points, *color, *opacity, *hardness, None, trace, Rect::NOTHING);
-                    blit_sheet(&mut raster, &sheet, Rect::EVERYTHING, (0, 0));
+                    let (sheet, _) = render_stroke_alone(width, height, points, *color, *opacity, *hardness, None, trace, Rect::NOTHING, false);
+                    blit_sheet(&mut raster, &sheet, Rect::EVERYTHING, (0, 0), false);
                 }
                 _ => render_element(&mut raster, e),
             }
@@ -1046,15 +1080,15 @@ pub fn polygon_coverage(contours: &[Vec<[f32; 2]>], width: usize, height: usize)
     for v in &mut mask.data {
         *v = v.min(1.0);
     }
-    Some((mask.x0, mask.y0, mask.w, mask.h, mask.data))
+    Some((mask.x0 as usize, mask.y0 as usize, mask.w, mask.h, mask.data))
 }
 
 // ---------------------------------------------------------------------------------- rendu
 
 /// Couverture (0 à 1) d'un élément sur une zone de l'image, avant de la peindre.
 struct Mask {
-    x0: usize,
-    y0: usize,
+    x0: i64,
+    y0: i64,
     w: usize,
     h: usize,
     data: Vec<f32>,
@@ -1073,12 +1107,32 @@ impl Mask {
             return None;
         }
         Some(Self {
-            x0,
-            y0,
+            x0: x0 as i64,
+            y0: y0 as i64,
             w: x1 - x0,
             h: y1 - y0,
             data: vec![0.0; (x1 - x0) * (y1 - y0)],
         })
+    }
+
+    /// Comme `new`, sans les bornes de l'image : toute la toile infinie (négative comprise), jusqu'aux
+    /// limites du monde et d'une couverture de `MAX_FRAME_PIXELS` pixels.
+    fn open(bounds: Rect) -> Option<Self> {
+        if !bounds.is_finite() {
+            return None;
+        }
+        let world = crate::raster::WORLD as f32;
+        let c = |v: f32| v.clamp(-world, world);
+        let (x0, y0) = (c(bounds.min.x).floor() as i64, c(bounds.min.y).floor() as i64);
+        let (x1, y1) = (c(bounds.max.x).ceil() as i64, c(bounds.max.y).ceil() as i64);
+        if x0 >= x1 || y0 >= y1 {
+            return None;
+        }
+        let (w, h) = ((x1 - x0) as usize, (y1 - y0) as usize);
+        if w.saturating_mul(h) > MAX_FRAME_PIXELS {
+            return None;
+        }
+        Some(Self { x0, y0, w, h, data: vec![0.0; w * h] })
     }
 
     fn stamp(&mut self, cx: f32, cy: f32, radius: f32, hardness: f32) {
@@ -1093,9 +1147,9 @@ impl Mask {
         let lx1 = (((cx + radius + 1.0).ceil() - self.x0 as f32).max(0.0) as usize).min(self.w);
         let ly1 = (((cy + radius + 1.0).ceil() - self.y0 as f32).max(0.0) as usize).min(self.h);
         for ly in ly0..ly1 {
-            let dy = (self.y0 + ly) as f32 + 0.5 - cy;
+            let dy = (self.y0 + ly as i64) as f32 + 0.5 - cy;
             for lx in lx0..lx1 {
-                let dx = (self.x0 + lx) as f32 + 0.5 - cx;
+                let dx = (self.x0 + lx as i64) as f32 + 0.5 - cx;
                 let v = coverage((dx * dx + dy * dy).sqrt(), radius, inner, false) * flow;
                 let m = &mut self.data[ly * self.w + lx];
                 if v > *m {
@@ -1112,9 +1166,10 @@ impl Mask {
                 if m <= 0.0 {
                     continue;
                 }
-                let (x, y) = (self.x0 + lx, self.y0 + ly);
-                let idx = raster.tile_index_of(x, y);
-                let i = (y % TILE) * TILE + x % TILE;
+                let (x, y) = (self.x0 + lx as i64, self.y0 + ly as i64);
+                let t = TILE as i64;
+                let idx = raster.id_of(x.div_euclid(t) as i32, y.div_euclid(t) as i32);
+                let i = y.rem_euclid(t) as usize * TILE + x.rem_euclid(t) as usize;
                 let tile = raster.tile_mut(idx);
                 tile[i] = paint(tile[i], rgb, m.min(1.0) * opacity);
             }
@@ -1140,7 +1195,7 @@ fn render_in_bands(elems: &[&Element], w: usize, h: usize, shift: (i64, i64), sh
     if elems.len() < 8 || bands < 2 || threads < 2 || !elems.iter().all(|e| e.cache_ready()) {
         let mut raster = Raster::new(w, h);
         for e in elems {
-            render_element_in(&mut raster, e, Rect::EVERYTHING, Place { shift, sheet });
+            render_element_in(&mut raster, e, Rect::EVERYTHING, Place { shift, sheet, open: false });
         }
         return raster;
     }
@@ -1153,7 +1208,7 @@ fn render_in_bands(elems: &[&Element], w: usize, h: usize, shift: (i64, i64), sh
                         .map(|b| {
                             let y0 = b * BAND;
                             let mut band = Raster::new(w, BAND.min(h - y0));
-                            let place = Place { shift: (shift.0, shift.1 - y0 as i64), sheet };
+                            let place = Place { shift: (shift.0, shift.1 - y0 as i64), sheet, open: false };
                             for e in elems {
                                 render_element_in(&mut band, e, Rect::EVERYTHING, place);
                             }
@@ -1183,7 +1238,7 @@ fn render_in_bands(elems: &[&Element], w: usize, h: usize, shift: (i64, i64), sh
 /// été depuis (déplacement : copie ; échelle, rotation : rééchantillonnage, exact au lâcher quand
 /// le cache est refait).
 pub fn render_element_clipped(raster: &mut Raster, e: &Element, clip: Rect) {
-    render_element_in(raster, e, clip, Place { shift: (0, 0), sheet: (raster.width, raster.height) });
+    render_element_in(raster, e, clip, Place { shift: (0, 0), sheet: (raster.width, raster.height), open: true });
 }
 
 /// Comme `render_element_clipped`, sur une image qui n'est pas la feuille elle-même (`place`) :
@@ -1210,12 +1265,12 @@ pub fn render_element_in(raster: &mut Raster, e: &Element, clip: Rect, place: Pl
                 match &r.pixels {
                     Some(px) => {
                         let delta = px.base.inverse().unwrap_or(Affine::IDENTITY).then(&trace.cache.xf).then(&Affine::translate(shift));
-                        blit_cache(raster, px, &delta, clip);
+                        blit_cache(raster, px, &delta, clip, place.open);
                     }
                     None => {
                         // Trop grand pour le cache : rejoué à chaque fois, posé dans la zone.
-                        let (sheet, off) = render_stroke_alone(place.sheet.0, place.sheet.1, points, *color, *opacity, *hardness, brush.as_deref(), trace, reach);
-                        blit_sheet(raster, &sheet, clip, (place.shift.0 - off.0 as i64, place.shift.1 - off.1 as i64));
+                        let (sheet, off) = render_stroke_alone(place.sheet.0, place.sheet.1, points, *color, *opacity, *hardness, brush.as_deref(), trace, reach, place.open);
+                        blit_sheet(raster, &sheet, clip, (place.shift.0 - off.0, place.shift.1 - off.1), place.open);
                     }
                 }
                 return;
@@ -1226,8 +1281,8 @@ pub fn render_element_in(raster: &mut Raster, e: &Element, clip: Rect, place: Pl
         // sans signature (seul un autre aperçu du même trait le reprendra). Les pixels gardés sont
         // ceux de l'image du trait, marge comprise (ce qui dépasse de la feuille) : `base` en tient
         // compte.
-        let (sheet, off) = render_stroke_alone(place.sheet.0, place.sheet.1, points, *color, *opacity, *hardness, brush.as_deref(), trace, reach);
-        blit_sheet(raster, &sheet, clip, (place.shift.0 - off.0 as i64, place.shift.1 - off.1 as i64));
+        let (sheet, off) = render_stroke_alone(place.sheet.0, place.sheet.1, points, *color, *opacity, *hardness, brush.as_deref(), trace, reach, place.open);
+        blit_sheet(raster, &sheet, clip, (place.shift.0 - off.0, place.shift.1 - off.1), place.open);
         let kept = CachedPixels::from_sheet(&sheet, trace.cache.xf.then(&Affine::translate(vec2(off.0 as f32, off.1 as f32))));
         let bytes = kept.as_ref().map_or(0, CachedPixels::bytes);
         let Ok(mut reg) = REGISTRY.lock() else { return };
@@ -1255,7 +1310,9 @@ pub fn render_element_in(raster: &mut Raster, e: &Element, clip: Rect, place: Pl
         render_element_in(raster, &e.transformed(&Affine::translate(shift)), clip, Place { shift: (0, 0), ..place });
         return;
     }
-    let Some(mut mask) = Mask::new(e.bounds().expand(1.5).intersect(clip), raster.width, raster.height) else {
+    let bounds = e.bounds().expand(1.5).intersect(clip);
+    let mask = if place.open { Mask::open(bounds) } else { Mask::new(bounds, raster.width, raster.height) };
+    let Some(mut mask) = mask else {
         return;
     };
     match e {
@@ -1320,10 +1377,17 @@ pub fn pressure_for_radius(s: &BrushSettings, r: f32) -> f32 {
 /// ceux qu'on aurait sans marge ; ceux de la marge servent quand le trait est déplacé vers
 /// l'intérieur. Aucune marge (trait dans la feuille) : une image à la taille de la feuille.
 #[allow(clippy::too_many_arguments)]
-fn render_stroke_alone(w: usize, h: usize, points: &[VPoint], color: [u8; 3], opacity: f32, hardness: f32, brush: Option<&BrushSettings>, trace: &Trace, reach: Rect) -> (Raster, (usize, usize)) {
+fn render_stroke_alone(w: usize, h: usize, points: &[VPoint], color: [u8; 3], opacity: f32, hardness: f32, brush: Option<&BrushSettings>, trace: &Trace, reach: Rect, open: bool) -> (Raster, (i64, i64)) {
     REPLAYS.with(|r| r.set(r.get() + 1));
-    let (l, t, r, d) = overhang(reach, w, h);
-    let (sw, sh) = (w + l + r, h + t + d);
+    // Le cadre du trait : sur la toile infinie (`open`), la feuille agrandie aux tuiles qu'il touche,
+    // où qu'elles soient ; sinon, la marge d'avant (jusqu'à `MAX_OVERHANG` de chaque côté).
+    let (l, t, sw, sh) = if open {
+        let (x0, y0, fw, fh) = stroke_frame(reach, w, h);
+        (-x0, -y0, fw, fh)
+    } else {
+        let (l, t, r, d) = overhang(reach, w, h);
+        (l as i64, t as i64, w + l + r, h + t + d)
+    };
     let shifted: Vec<VPoint>;
     let points = if (l, t) == (0, 0) {
         points
@@ -1364,24 +1428,40 @@ fn render_stroke_alone(w: usize, h: usize, points: &[VPoint], color: [u8; 3], op
     (sheet, (l, t))
 }
 
-/// Bornes entières de `clip` dans une image `w`×`h` : (x0, y0, x1, y1), vides si rien.
-fn clip_bounds(clip: Rect, w: usize, h: usize) -> (usize, usize, usize, usize) {
+/// Bornes entières de `clip` dans une image `w`×`h` : (x0, y0, x1, y1), vides si rien. `open` : l'image
+/// reçoit aussi ce qui sort de ses bornes (toile infinie), seulement bornée au monde.
+fn clip_bounds(clip: Rect, w: usize, h: usize, open: bool) -> (i64, i64, i64, i64) {
+    let world = crate::raster::WORLD as f32;
+    if open {
+        let c = |v: f32| v.clamp(-world, world);
+        return (c(clip.min.x).floor() as i64, c(clip.min.y).floor() as i64, c(clip.max.x).ceil() as i64, c(clip.max.y).ceil() as i64);
+    }
     let x0 = clip.min.x.max(0.0).floor() as usize;
     let y0 = clip.min.y.max(0.0).floor() as usize;
     let x1 = (clip.max.x.max(0.0).ceil() as usize).min(w);
     let y1 = (clip.max.y.max(0.0).ceil() as usize).min(h);
-    (x0, y0, x1, y1)
+    (x0 as i64, y0 as i64, x1 as i64, y1 as i64)
+}
+
+/// Pose `s` par-dessus le pixel (`x`, `y`) du monde de `raster` (hors de la feuille aussi : la tuile
+/// est créée là où il faut).
+fn put_over(raster: &mut Raster, x: i64, y: i64, s: Color32) {
+    let t = TILE as i64;
+    let id = raster.id_of(x.div_euclid(t) as i32, y.div_euclid(t) as i32);
+    let dst = raster.tile_mut(id);
+    let i = y.rem_euclid(t) as usize * TILE + x.rem_euclid(t) as usize;
+    dst[i] = crate::render::over(dst[i], s, 255, None);
 }
 
 /// Pose la feuille `sheet` (le trait seul) sur `raster`, dans `clip` (un rectangle de `raster`) :
 /// le pixel (x, y) de `sheet` va en (x + d.0, y + d.1).
-fn blit_sheet(raster: &mut Raster, sheet: &Raster, clip: Rect, d: (i64, i64)) {
-    let (x0, y0, x1, y1) = clip_bounds(clip, raster.width, raster.height);
+fn blit_sheet(raster: &mut Raster, sheet: &Raster, clip: Rect, d: (i64, i64), open: bool) {
+    let (x0, y0, x1, y1) = clip_bounds(clip, raster.width, raster.height, open);
     for idx in 0..sheet.tiles.len() {
         let Some(tile) = &sheet.tiles[idx] else { continue };
         let (tx, ty, tw, th) = sheet.tile_bounds(idx);
-        let (from_x, to_x) = ((tx as i64 + d.0).max(x0 as i64), ((tx + tw) as i64 + d.0).min(x1 as i64));
-        let (from_y, to_y) = ((ty as i64 + d.1).max(y0 as i64), ((ty + th) as i64 + d.1).min(y1 as i64));
+        let (from_x, to_x) = ((tx as i64 + d.0).max(x0), ((tx + tw) as i64 + d.0).min(x1));
+        let (from_y, to_y) = ((ty as i64 + d.1).max(y0), ((ty + th) as i64 + d.1).min(y1));
         for y in from_y..to_y {
             let sy = (y - d.1) as usize;
             for x in from_x..to_x {
@@ -1390,11 +1470,7 @@ fn blit_sheet(raster: &mut Raster, sheet: &Raster, clip: Rect, d: (i64, i64)) {
                 if s.a() == 0 {
                     continue;
                 }
-                let (x, y) = (x as usize, y as usize);
-                let di = raster.tile_index_of(x, y);
-                let dst = raster.tile_mut(di);
-                let i = (y % TILE) * TILE + x % TILE;
-                dst[i] = crate::render::over(dst[i], s, 255, None);
+                put_over(raster, x, y, s);
             }
         }
     }
@@ -1402,11 +1478,11 @@ fn blit_sheet(raster: &mut Raster, sheet: &Raster, clip: Rect, d: (i64, i64)) {
 
 /// Pose les pixels en cache d'un trait, transformés par `delta` (rien : tels quels ; une
 /// translation entière : copiés décalés ; sinon rééchantillonnés), dans `clip`.
-fn blit_cache(raster: &mut Raster, px: &CachedPixels, delta: &Affine, clip: Rect) {
+fn blit_cache(raster: &mut Raster, px: &CachedPixels, delta: &Affine, clip: Rect, open: bool) {
     if px.is_empty() {
         return;
     }
-    let (cx0, cy0, cx1, cy1) = clip_bounds(clip, raster.width, raster.height);
+    let (cx0, cy0, cx1, cy1) = clip_bounds(clip, raster.width, raster.height, open);
     if cx0 >= cx1 || cy0 >= cy1 {
         return;
     }
@@ -1417,21 +1493,17 @@ fn blit_cache(raster: &mut Raster, px: &CachedPixels, delta: &Affine, clip: Rect
                 let Some(tile) = px.tile(cx as i64, cy as i64) else { continue };
                 // Coin de la tuile sur la feuille de destination.
                 let (ox, oy) = ((px.tx0 + cx as i64) * TILE as i64 + dx, (px.ty0 + cy as i64) * TILE as i64 + dy);
-                let y_from = (cy0 as i64).max(oy);
-                let y_to = (cy1 as i64).min(oy + TILE as i64);
-                let x_from = (cx0 as i64).max(ox);
-                let x_to = (cx1 as i64).min(ox + TILE as i64);
+                let y_from = cy0.max(oy);
+                let y_to = cy1.min(oy + TILE as i64);
+                let x_from = cx0.max(ox);
+                let x_to = cx1.min(ox + TILE as i64);
                 for y in y_from..y_to {
                     for x in x_from..x_to {
                         let s = tile[(y - oy) as usize * TILE + (x - ox) as usize];
                         if s.a() == 0 {
                             continue;
                         }
-                        let (x, y) = (x as usize, y as usize);
-                        let di = raster.tile_index_of(x, y);
-                        let dst = raster.tile_mut(di);
-                        let i = (y % TILE) * TILE + x % TILE;
-                        dst[i] = crate::render::over(dst[i], s, 255, None);
+                        put_over(raster, x, y, s);
                     }
                 }
             }
@@ -1440,7 +1512,7 @@ fn blit_cache(raster: &mut Raster, px: &CachedPixels, delta: &Affine, clip: Rect
     }
     let Some(inv) = delta.inverse() else { return };
     let dest = delta.apply_rect(px.rect()).expand(1.0);
-    let (x0, y0, x1, y1) = clip_bounds(dest.intersect(Rect::from_min_max(pos2(cx0 as f32, cy0 as f32), pos2(cx1 as f32, cy1 as f32))), raster.width, raster.height);
+    let (x0, y0, x1, y1) = clip_bounds(dest.intersect(Rect::from_min_max(pos2(cx0 as f32, cy0 as f32), pos2(cx1 as f32, cy1 as f32))), raster.width, raster.height, open);
     for y in y0..y1 {
         for x in x0..x1 {
             let s = inv.apply(pos2(x as f32 + 0.5, y as f32 + 0.5));
@@ -1448,10 +1520,7 @@ fn blit_cache(raster: &mut Raster, px: &CachedPixels, delta: &Affine, clip: Rect
             if c.a() == 0 {
                 continue;
             }
-            let di = raster.tile_index_of(x, y);
-            let dst = raster.tile_mut(di);
-            let i = (y % TILE) * TILE + x % TILE;
-            dst[i] = crate::render::over(dst[i], c, 255, None);
+            put_over(raster, x, y, c);
         }
     }
 }
@@ -1472,7 +1541,7 @@ fn fill_nonzero(mask: &mut Mask, contours: &[Vec<[f32; 2]>]) {
     let ox = mask.x0 as f32;
     let mut xs: Vec<(f32, i32)> = Vec::new();
     for ly in 0..mask.h {
-        let row_y = (mask.y0 + ly) as f32;
+        let row_y = (mask.y0 + ly as i64) as f32;
         let row = &mut mask.data[ly * mask.w..(ly + 1) * mask.w];
         for s in 0..SUB {
             let sy = row_y + (s as f32 + 0.5) / SUB as f32;
@@ -1529,7 +1598,7 @@ fn fill_even_odd(mask: &mut Mask, contours: &[Vec<[f32; 2]>]) {
     let ox = mask.x0 as f32;
     let mut xs: Vec<f32> = Vec::new();
     for ly in 0..mask.h {
-        let row_y = (mask.y0 + ly) as f32;
+        let row_y = (mask.y0 + ly as i64) as f32;
         let row = &mut mask.data[ly * mask.w..(ly + 1) * mask.w];
         for s in 0..SUB {
             let sy = row_y + (s as f32 + 0.5) / SUB as f32;
@@ -1588,6 +1657,18 @@ pub fn tiles_in(raster: &Raster, rect: Rect) -> Vec<usize> {
     (y0..=y1)
         .flat_map(|ty| (x0..=x1).map(move |tx| ty * tiles_x + tx))
         .collect()
+}
+
+/// Comme `tiles_in`, avec toute la toile infinie : les tuiles hors de la feuille aussi (numéros
+/// hors-feuille, `Raster::id_of`). Pour le code qui sait lire et écrire par numéro de tuile
+/// (`Raster::slot`, `replace_slot`) ; le code d'avant, qui indexe `raster.tiles`, garde `tiles_in`.
+pub fn tiles_in_world(raster: &Raster, rect: Rect) -> Vec<usize> {
+    if !rect.is_finite() {
+        return Vec::new();
+    }
+    let w = crate::raster::WORLD as f32;
+    let c = |v: f32| v.clamp(-w, w);
+    raster.ids_covering(c(rect.min.x).floor() as i64, c(rect.min.y).floor() as i64, c(rect.max.x).floor() as i64 + 1, c(rect.max.y).floor() as i64 + 1)
 }
 
 // ---------------------------------------------------------------------------------- géométrie

@@ -1778,6 +1778,11 @@ impl App {
             .with_secondary(self.couleurs.prefs.back)
             .on_layer(self.layer().keep_alpha, stencil)
             .with_options(behind, fill, tol);
+        // Toile infinie : on peint aussi hors de la feuille (tuiles gardées à part, `Raster::outer`) ;
+        // sauf dans la zone fermée d'un calque de couleur (son pochoir est celui de la feuille).
+        if !(painting && self.layer().couleur.as_ref().is_some_and(|c| c.zone)) {
+            stroke = stroke.on_infinite_canvas();
+        }
         let mut dirty = Vec::new();
         // L'instant de l'événement (étalé dans l'image d'écran, `canvas_input`) : la vitesse du
         // trait et le lissage selon le temps en viennent.
@@ -2485,7 +2490,7 @@ impl App {
             self.push_vector(id, before, None);
             return;
         }
-        let tiles: Vec<(usize, Option<Tile>)> = c
+        let mut tiles: Vec<(usize, Option<Tile>)> = c
             .raster
             .tiles
             .iter_mut()
@@ -2493,6 +2498,11 @@ impl App {
             .filter(|(_, t)| t.is_some())
             .map(|(i, t)| (i, t.take()))
             .collect();
+        // (Toile infinie : ce qui est hors de la feuille part aussi.)
+        let outside: Vec<usize> = c.raster.outer.keys().map(|&(tx, ty)| crate::raster::outer_id(tx, ty)).collect();
+        for id in outside {
+            tiles.push((id, c.raster.replace_slot(id, None)));
+        }
         if !tiles.is_empty() {
             self.push_pixels(id, None, tiles);
         }

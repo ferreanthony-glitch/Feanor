@@ -46,7 +46,7 @@ impl Edit {
                 };
                 let tiles = tiles
                     .into_iter()
-                    .map(|(i, t)| (i, std::mem::replace(&mut c.raster.tiles[i], t)))
+                    .map(|(i, t)| (i, c.raster.replace_slot(i, t)))
                     .collect();
                 c.version += 1;
                 Edit::Tiles { cel, tiles }
@@ -58,7 +58,7 @@ impl Edit {
                 let (w, h) = (c.raster.width, c.raster.height);
                 let s = c.fond.get_or_insert_with(|| Box::new(crate::document::Strate::new(w, h)));
                 let target = if coupe { &mut s.coupe } else { &mut s.peinture.raster };
-                let tiles = tiles.into_iter().map(|(i, t)| (i, std::mem::replace(&mut target.tiles[i], t))).collect();
+                let tiles = tiles.into_iter().map(|(i, t)| (i, target.replace_slot(i, t))).collect();
                 s.peinture.version += 1;
                 c.version += 1;
                 Edit::FondTiles { cel, tiles, coupe }

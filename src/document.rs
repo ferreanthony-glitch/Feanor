@@ -81,7 +81,7 @@ impl Cel {
     pub fn is_empty(&self) -> bool {
         match &self.vector {
             Some(v) => v.elements.is_empty(),
-            None => self.raster.tiles.iter().all(Option::is_none),
+            None => self.raster.is_blank(),
         }
     }
 
@@ -91,9 +91,8 @@ impl Cel {
             return Vec::new();
         };
         let fresh = v.render(self.raster.width, self.raster.height);
-        let changed = (0..fresh.tiles.len())
-            .filter(|&i| self.raster.tiles[i].is_some() || fresh.tiles[i].is_some())
-            .collect();
+        // (Toile infinie : les tuiles hors de la feuille comptent aussi.)
+        let changed = self.raster.ids_either(&fresh);
         self.raster = fresh;
         self.version += 1;
         changed
@@ -106,10 +105,10 @@ impl Cel {
     pub fn render_on_top(&mut self, before: Vec<(usize, Option<crate::raster::Tile>)>, element: &crate::vector::Element) -> Vec<usize> {
         let mut changed: Vec<usize> = before.iter().map(|t| t.0).collect();
         for (i, t) in before {
-            self.raster.tiles[i] = t;
+            self.raster.replace_slot(i, t);
         }
         crate::vector::render_element(&mut self.raster, element);
-        changed.extend(crate::vector::tiles_in(&self.raster, element.bounds().expand(1.5)));
+        changed.extend(crate::vector::tiles_in_world(&self.raster, element.bounds().expand(1.5)));
         changed.sort_unstable();
         changed.dedup();
         self.version += 1;
@@ -124,17 +123,18 @@ impl Cel {
         let Some(v) = &self.vector else {
             return Vec::new();
         };
-        let tiles = crate::vector::tiles_in(&self.raster, region);
+        let tiles = crate::vector::tiles_in_world(&self.raster, region);
         if tiles.is_empty() {
             return tiles;
         }
-        // Rectangle exact des tuiles : on y redessine tout, pixel pour pixel.
+        // Rectangle exact des tuiles (entières, hors de la feuille comprises) : on y redessine tout,
+        // pixel pour pixel.
         let clip = tiles.iter().fold(Rect::NOTHING, |r, &i| {
-            let (x, y, w, h) = self.raster.tile_bounds(i);
-            r.union(Rect::from_min_size(pos2(x as f32, y as f32), vec2(w as f32, h as f32)))
+            let (x, y) = self.raster.tile_origin(i);
+            r.union(Rect::from_min_size(pos2(x as f32, y as f32), vec2(crate::raster::TILE as f32, crate::raster::TILE as f32)))
         });
         for &i in &tiles {
-            self.raster.tiles[i] = None;
+            self.raster.replace_slot(i, None);
         }
         for e in &v.elements {
             if e.bounds().expand(1.5).intersects(clip) {

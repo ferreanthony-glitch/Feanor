@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::brushtex::{grain_factor, BrushTextures};
 use crate::document::CelId;
 use crate::history::Edit;
-use crate::raster::{Raster, Tile, TILE, TILE_PIXELS};
+use crate::raster::{Raster, Tile, TILE, TILE_PIXELS, WORLD};
 use crate::vector::VPoint;
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
@@ -1051,6 +1051,10 @@ pub struct StrokeState {
     /// marge à gauche et en haut, pour garder ce qui dépasse de la feuille) : le papier se lit
     /// comme sur la feuille, pas sur l'image décalée.
     grain_off: (i64, i64),
+    /// Le trait ne sort pas de l'image qu'il peint (comportement d'origine : les images temporaires
+    /// du rendu des traits vectoriels, les cases de la planche…). Faux : toile infinie, le trait
+    /// peint où il va, hors de la feuille aussi (`Raster::outer`).
+    bounded: bool,
 }
 
 /// Graine du hasard d'un trait (la même à chaque fois : un trait rejoué est le même).
@@ -1121,14 +1125,22 @@ impl StrokeState {
             replaying: false,
             origin: None,
             grain_off: (0, 0),
+            bounded: true,
         }
+    }
+
+    /// Toile infinie : le trait peint partout où il passe, hors de la feuille comprise (les tuiles
+    /// hors de la fenêtre du dessin sont gardées à part, `Raster::outer`).
+    pub fn on_infinite_canvas(mut self) -> Self {
+        self.bounded = false;
+        self
     }
 
     /// Le trait est peint sur une image décalée de `off` pixels (marge à gauche et en haut) :
     /// le grain du papier reste celui de la feuille. Les positions du chemin sont celles de l'image
     /// décalée (l'appelant les a décalées aussi).
-    pub fn with_grain_offset(mut self, off: (usize, usize)) -> Self {
-        self.grain_off = (off.0 as i64, off.1 as i64);
+    pub fn with_grain_offset(mut self, off: (i64, i64)) -> Self {
+        self.grain_off = off;
         self
     }
 
@@ -1372,10 +1384,8 @@ impl StrokeState {
             return;
         }
         for (&idx, tile) in &self.before {
-            if idx < raster.tiles.len() {
-                raster.tiles[idx] = tile.clone();
-                dirty.push(idx);
-            }
+            raster.replace_slot(idx, tile.clone());
+            dirty.push(idx);
         }
         let log = std::mem::take(&mut self.raw_log);
         self.reset_gesture();
@@ -1684,9 +1694,9 @@ impl StrokeState {
         let (psin, pcos) = s.paper_angle.to_radians().sin_cos();
         // Grain du papier en un pixel, fixe sur le dessin (à sa taille, son angle, inversé ou non),
         // fois le grain du crayon.
-        let grain_at = |px: usize, py: usize| -> f32 {
+        let grain_at = |px: i64, py: i64| -> f32 {
             let (x, y) = (px as f32 + 0.5 - origin.x, py as f32 + 0.5 - origin.y);
-            let (sx, sy) = (px as i64 - gox, py as i64 - goy);
+            let (sx, sy) = (px - gox, py - goy);
             let mut f = paper.as_ref().map_or(1.0, |p| {
                 let h = if paper_plain {
                     p.tiled_at(sx, sy)
@@ -1704,13 +1714,16 @@ impl StrokeState {
         // Une pointe en image tournée déborde du cercle : on couvre le carré qui la contient.
         let reach = if tip.is_some() { radius * std::f32::consts::SQRT_2 } else { radius };
 
-        let x0 = (c.x - reach - 1.0).floor().max(0.0) as usize;
-        let y0 = (c.y - reach - 1.0).floor().max(0.0) as usize;
-        let x1 = (c.x + reach + 1.0).ceil().clamp(0.0, raster.width as f32) as usize;
-        let y1 = (c.y + reach + 1.0).ceil().clamp(0.0, raster.height as f32) as usize;
+        // Les bornes en pixels du monde : la feuille du dessin, ou (toile infinie) tout l'espace.
+        let (lo_x, lo_y, hi_x, hi_y) = if self.bounded { (0, 0, raster.width as i64, raster.height as i64) } else { (-WORLD, -WORLD, WORLD, WORLD) };
+        let x0 = ((c.x - reach - 1.0).floor() as i64).clamp(lo_x, hi_x);
+        let y0 = ((c.y - reach - 1.0).floor() as i64).clamp(lo_y, hi_y);
+        let x1 = ((c.x + reach + 1.0).ceil() as i64).clamp(lo_x, hi_x);
+        let y1 = ((c.y + reach + 1.0).ceil() as i64).clamp(lo_y, hi_y);
         if x0 >= x1 || y0 >= y1 {
             return;
         }
+        let tile_px = TILE as i64;
         // Couverture d'un pixel par l'empreinte, à (dx, dy) de son centre.
         let footprint = |dx: f32, dy: f32| -> f32 {
             let (lx, ly) = if shaped {
@@ -1760,7 +1773,7 @@ impl StrokeState {
                     if cov <= 0.0 {
                         continue;
                     }
-                    let p = raster.get(px, py);
+                    let p = raster.get_i(px, py);
                     acc[0] += p.r() as f32 * cov;
                     acc[1] += p.g() as f32 * cov;
                     acc[2] += p.b() as f32 * cov;
@@ -1786,26 +1799,26 @@ impl StrokeState {
             let rgb = self.wet_rgb;
             let behind = self.behind;
             let stencil = self.stencil.as_ref();
-            for ty in y0 / TILE..=(y1 - 1) / TILE {
-                for tx in x0 / TILE..=(x1 - 1) / TILE {
-                    let idx = ty * raster.tiles_x + tx;
-                    if (keep_alpha && raster.tiles[idx].is_none()) || stencil.is_some_and(|st| st.blocks(idx)) {
+            for ty in y0.div_euclid(tile_px)..=(y1 - 1).div_euclid(tile_px) {
+                for tx in x0.div_euclid(tile_px)..=(x1 - 1).div_euclid(tile_px) {
+                    let idx = raster.id_of(tx as i32, ty as i32);
+                    if (keep_alpha && raster.slot(idx).is_none()) || stencil.is_some_and(|st| st.blocks(idx)) {
                         continue;
                     }
-                    let (ox, oy) = (tx * TILE, ty * TILE);
+                    let (ox, oy) = (tx * tile_px, ty * tile_px);
                     if !self.before.contains_key(&idx) {
-                        self.before.insert(idx, raster.tiles[idx].clone());
+                        self.before.insert(idx, raster.slot(idx).cloned());
                     }
                     let tile = raster.tile_mut(idx);
                     let mut changed = false;
-                    for py in y0.max(oy)..y1.min(oy + TILE) {
-                        for px in x0.max(ox)..x1.min(ox + TILE) {
+                    for py in y0.max(oy)..y1.min(oy + tile_px) {
+                        for px in x0.max(ox)..x1.min(ox + tile_px) {
                             let cov = footprint(px as f32 + 0.5 - c.x, py as f32 + 0.5 - c.y);
                             if cov <= 0.0 {
                                 continue;
                             }
                             let grain = grain_at(px, py);
-                            let i = (py - oy) * TILE + (px - ox);
+                            let i = (py - oy) as usize * TILE + (px - ox) as usize;
                             let through = stencil.map_or(1.0, |st| st.at(idx, i));
                             let amt = cov * flow * grain * through * s.opacity * s.power.clamp(0.0, 1.0);
                             if amt <= 0.0 {
@@ -1826,18 +1839,18 @@ impl StrokeState {
         }
         let stencil = self.stencil.as_ref();
         let behind = self.behind;
-        for ty in y0 / TILE..=(y1 - 1) / TILE {
-            for tx in x0 / TILE..=(x1 - 1) / TILE {
-                let idx = ty * raster.tiles_x + tx;
-                if (matches!(mode, StrokeMode::Erase) || keep_alpha) && raster.tiles[idx].is_none() {
+        for ty in y0.div_euclid(tile_px)..=(y1 - 1).div_euclid(tile_px) {
+            for tx in x0.div_euclid(tile_px)..=(x1 - 1).div_euclid(tile_px) {
+                let idx = raster.id_of(tx as i32, ty as i32);
+                if (matches!(mode, StrokeMode::Erase) || keep_alpha) && raster.slot(idx).is_none() {
                     continue;
                 }
                 if stencil.is_some_and(|st| st.blocks(idx)) {
                     continue;
                 }
-                let (ox, oy) = (tx * TILE, ty * TILE);
+                let (ox, oy) = (tx * tile_px, ty * tile_px);
                 if !self.before.contains_key(&idx) {
-                    self.before.insert(idx, raster.tiles[idx].clone());
+                    self.before.insert(idx, raster.slot(idx).cloned());
                 }
                 let before = self.before[&idx].as_deref();
                 let mask = self
@@ -1846,16 +1859,16 @@ impl StrokeState {
                     .or_insert_with(|| Box::new([0.0; TILE_PIXELS]));
                 let tile = raster.tile_mut(idx);
                 let mut changed = false;
-                for py in y0.max(oy)..y1.min(oy + TILE) {
+                for py in y0.max(oy)..y1.min(oy + tile_px) {
                     let dy = py as f32 + 0.5 - c.y;
-                    for px in x0.max(ox)..x1.min(ox + TILE) {
+                    for px in x0.max(ox)..x1.min(ox + tile_px) {
                         let dx = px as f32 + 0.5 - c.x;
                         let cov = footprint(dx, dy);
                         if cov <= 0.0 {
                             continue;
                         }
                         let grain = grain_at(px, py);
-                        let i = (py - oy) * TILE + (px - ox);
+                        let i = (py - oy) as usize * TILE + (px - ox) as usize;
                         let through = stencil.map_or(1.0, |st| st.at(idx, i));
                         let v = cov * flow * grain * through * deposit;
                         let m = if s.build_up {

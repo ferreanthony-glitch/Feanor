@@ -119,7 +119,9 @@ impl App {
             .with_feel(self.toucher)
             .with_zoom(self.layer_zoom())
             .with_secondary(self.couleurs.prefs.back)
-            .with_options(self.paint_behind, false, 0.0);
+            .with_options(self.paint_behind, false, 0.0)
+            // Toile infinie : l'aperçu du trait suit le stylet hors de la feuille aussi.
+            .on_infinite_canvas();
         let mut dirty = Vec::new();
         let time = self.input_time;
         if let Some(c) = self.doc.cels.get_mut(&cel) {
@@ -161,7 +163,7 @@ impl App {
             if let (Some(tiles), Some(c)) = (preview, self.doc.cels.get_mut(&vs.cel)) {
                 let changed: Vec<usize> = tiles.iter().map(|t| t.0).collect();
                 for (i, t) in tiles {
-                    c.raster.tiles[i] = t;
+                    c.raster.replace_slot(i, t);
                 }
                 self.renderer.invalidate_tiles(&changed);
             }
