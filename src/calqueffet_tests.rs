@@ -227,6 +227,42 @@ fn the_screen_shows_the_same_picture_as_the_export_and_never_waits_for_it() {
     assert_eq!(render::composite_full(&d, &second), exact);
 }
 
+/// La réserve des effets peut lâcher un dessin dérivé à tout moment, quand d'autres calculs la remplissent (le
+/// fil de fond, un autre onglet, les essais voisins : `gpufx_tests::the_users_scenes_match_the_cpu_at_full_size`
+/// échouait ainsi sous charge). Le plan résolu tient les siens jusqu'à la fin de sa composition ; avant, il n'en
+/// gardait que le numéro, et le calque d'effet disparaissait de l'image avec tout ce qu'il couvre.
+#[test]
+fn a_resolved_plan_keeps_its_derived_drawings_when_the_cache_lets_them_go() {
+    crate::fxcache::monde::ecrire();
+    let mut d = doc();
+    let a = painted(&mut d, (10, 10, 30, 30), RED);
+    let e = adjustment(&mut d, "Négatif", vec![invert()], 0, 12);
+    d.panels[0].layers = vec![layer("A", a, 12), e];
+    let plan = render::panel_plan_at(&d, 0, 0, d.render_paper());
+    let exact = render::composite_full(&d, &plan);
+    assert_eq!(at(&exact, 20, 20), Color32::from_rgb(0, 255, 255));
+    let resolved = calqueffet::resolve_auto(&d, &plan);
+    assert_eq!(resolved.items.len(), 1);
+    let id = resolved.items[0].cel;
+    assert!(id & (1 << 63) != 0, "le dessin dérivé");
+    // Une réserve d'un mégaoctet, puis un autre dessin de quatre : le dessin dérivé en sort.
+    struct Rend(usize);
+    impl Drop for Rend {
+        fn drop(&mut self) {
+            crate::fxcache::set_limit(self.0);
+        }
+    }
+    let _rend = Rend(crate::fxcache::limit());
+    crate::fxcache::set_limit(1 << 20);
+    let other = crate::raster::Raster::from_rgba(1024, 1024, &vec![200u8; 1024 * 1024 * 4]);
+    crate::fxcache::get_or_compute((1 << 63) | 0xC0FFEE, 1, None, || crate::document::Cel { raster: other, vector: None, version: 1, fond: None });
+    assert!(crate::fxcache::get_any(id).is_none(), "le dessin dérivé a quitté la réserve");
+    let again = render::composite_full(&d, &resolved);
+    assert!(again == exact, "le plan résolu compose encore le calque d'effet : {:?} au point (20, 20)", at(&again, 20, 20));
+    drop(resolved);
+    assert!(calqueffet::derived(id).is_none(), "plus aucun plan ne le tient");
+}
+
 #[test]
 fn the_preview_level_gives_a_smaller_picture_of_the_same_scene() {
     crate::fxcache::monde::ecrire();

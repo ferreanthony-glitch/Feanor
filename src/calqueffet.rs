@@ -30,8 +30,9 @@
 
 use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use eframe::egui::{pos2, Color32};
 use serde::{Deserialize, Serialize};
@@ -453,26 +454,87 @@ pub(crate) fn proxy_level(level: u8, width: usize, height: usize) -> u8 {
 }
 
 /// Résout les repères du plan comme l'écran, l'export ou les vignettes le veulent : calcul tout de
-/// suite, sauf dans une portée « douce » (vignettes de l'écran, `fxcache::soft_scope`).
-pub fn resolve_auto<'a>(doc: &Document, plan: &'a Plan) -> Cow<'a, Plan> {
+/// suite, sauf dans une portée « douce » (vignettes de l'écran, `fxcache::soft_scope`). Les dessins
+/// dérivés sont tenus tant que le plan résolu vit (`Tenus`).
+pub fn resolve_auto<'a>(doc: &Document, plan: &'a Plan) -> Resolu<'a> {
     if !has_markers(plan) {
-        return Cow::Borrowed(plan);
+        return Resolu { plan: Cow::Borrowed(plan), tenus: Tenus::default() };
     }
     if crate::fxcache::soft_active() {
-        resolve(doc, plan, Mode::Display { level: 0, prio: SOFT_PRIO })
+        resolve_tenu(doc, plan, Mode::Display { level: 0, prio: SOFT_PRIO })
     } else {
-        resolve(doc, plan, Mode::Blocking)
+        resolve_tenu(doc, plan, Mode::Blocking)
     }
 }
 
 /// Priorité des calculs demandés pour les vignettes (après l'image affichée et les suivantes).
 const SOFT_PRIO: u32 = 100;
 
+/// Les dessins dérivés que tiennent les plans résolus encore en vie (`Tenus`), par numéro, avec le nombre
+/// de plans qui les tiennent. La réserve des effets (`fxcache`) peut lâcher un dessin à tout moment quand
+/// d'autres calculs la remplissent (le fil de fond, un autre onglet, une vignette, les essais voisins) : un
+/// plan résolu qui n'en garderait que le numéro perdrait, au milieu de sa composition, le calque d'effet et
+/// tout ce qu'il couvre.
+static TENUS: Mutex<BTreeMap<CelId, (usize, Arc<Cel>)>> = Mutex::new(BTreeMap::new());
+
+/// Les dessins dérivés d'un plan résolu, tenus jusqu'à la fin de sa composition : `derived` les trouve
+/// même si la réserve des effets les a lâchés.
+#[derive(Default)]
+pub struct Tenus(Vec<CelId>);
+
+impl Tenus {
+    fn tenir(&mut self, id: CelId, cel: Arc<Cel>) {
+        let mut tenus = TENUS.lock().unwrap_or_else(|e| e.into_inner());
+        // (Un numéro déjà tenu montre le même dessin : il est fait de son contenu.)
+        tenus.entry(id).or_insert((0, cel)).0 += 1;
+        self.0.push(id);
+    }
+}
+
+impl Drop for Tenus {
+    fn drop(&mut self) {
+        let mut partis = Vec::new();
+        let mut tenus = TENUS.lock().unwrap_or_else(|e| e.into_inner());
+        for id in self.0.drain(..) {
+            if let Some(e) = tenus.get_mut(&id) {
+                e.0 -= 1;
+                if e.0 == 0 {
+                    partis.extend(tenus.remove(&id));
+                }
+            }
+        }
+        drop(tenus);
+        // (Les dessins se libèrent hors du verrou.)
+        drop(partis);
+    }
+}
+
+/// Un plan résolu, avec les dessins dérivés qu'il montre, tenus tant qu'il vit.
+pub struct Resolu<'a> {
+    pub plan: Cow<'a, Plan>,
+    pub tenus: Tenus,
+}
+
+impl std::ops::Deref for Resolu<'_> {
+    type Target = Plan;
+    fn deref(&self) -> &Plan {
+        &self.plan
+    }
+}
+
 /// Le plan, ses repères de calques d'effets remplacés chacun, avec ce qu'il couvre, par le dessin
 /// dérivé (`bake`). Un repère dont le dessin n'est pas prêt est retiré : ce qu'il couvrait reste.
+/// (Les dessins dérivés ne sont pas tenus : c'est l'écran, qui résout de nouveau à chaque image. Une
+/// composition qui doit aller au bout prend `resolve_tenu`.)
 pub fn resolve<'a>(doc: &Document, plan: &'a Plan, mode: Mode) -> Cow<'a, Plan> {
+    resolve_tenu(doc, plan, mode).plan
+}
+
+/// `resolve`, les dessins dérivés tenus tant que le plan résolu vit.
+pub fn resolve_tenu<'a>(doc: &Document, plan: &'a Plan, mode: Mode) -> Resolu<'a> {
+    let mut tenus = Tenus::default();
     if !has_markers(plan) {
-        return Cow::Borrowed(plan);
+        return Resolu { plan: Cow::Borrowed(plan), tenus };
     }
     let mut out: Vec<PlanItem> = Vec::with_capacity(plan.items.len());
     // Pour chaque élément du plan d'origine, la place qu'il prend dans `out` à son arrivée.
@@ -485,12 +547,12 @@ pub fn resolve<'a>(doc: &Document, plan: &'a Plan, mode: Mode) -> Cow<'a, Plan> 
         };
         let start = at.get(r.from).copied().unwrap_or(0).min(out.len());
         let paper = if r.root { plan.paper } else { None };
-        if let Some(derived) = bake(doc, r, &out[start..], paper, mode) {
+        if let Some(derived) = bake(doc, r, &out[start..], paper, mode, &mut tenus) {
             out.truncate(start);
             out.push(derived);
         }
     }
-    Cow::Owned(Plan { paper: plan.paper, items: out })
+    Resolu { plan: Cow::Owned(Plan { paper: plan.paper, items: out }), tenus }
 }
 
 /// Un élément couvert, résolu : son dessin affiché, le numéro sous lequel il est gardé.
@@ -581,8 +643,8 @@ fn content_signature(doc: &Document, r: &Reglage, lower: &[PlanItem], paper: Opt
 
 /// Le dessin dérivé d'un calque d'ajustement : `lower` (ce qu'il couvre) passé par ses effets, fondu
 /// sur lui. Rend l'élément qui le montre (son numéro gardé par `fxcache`), ou rien : il n'est pas prêt
-/// (alors ce qu'il couvre reste tel quel).
-fn bake(doc: &Document, r: &Reglage, lower: &[PlanItem], paper: Option<[u8; 3]>, mode: Mode) -> Option<PlanItem> {
+/// (alors ce qu'il couvre reste tel quel). Le dessin montré est tenu par `tenus`.
+fn bake(doc: &Document, r: &Reglage, lower: &[PlanItem], paper: Option<[u8; 3]>, mode: Mode, tenus: &mut Tenus) -> Option<PlanItem> {
     if lower.is_empty() && paper.is_none() {
         return None;
     }
@@ -625,7 +687,7 @@ fn bake(doc: &Document, r: &Reglage, lower: &[PlanItem], paper: Option<[u8; 3]>,
         pre: None,
     };
     if let Some(cel) = crate::fxcache::get(id, sig) {
-        let _ = cel;
+        tenus.tenir(id, cel);
         return Some(item(id));
     }
     let snapshot = || {
@@ -645,7 +707,8 @@ fn bake(doc: &Document, r: &Reglage, lower: &[PlanItem], paper: Option<[u8; 3]>,
     match mode {
         Mode::Blocking => {
             let base = snapshot();
-            crate::fxcache::get_or_compute(id, sig, Some(origin), || Cel { raster: base.render(0), vector: None, version: sig, fond: None });
+            let cel = crate::fxcache::get_or_compute(id, sig, Some(origin), || Cel { raster: base.render(0), vector: None, version: sig, fond: None });
+            tenus.tenir(id, cel);
             Some(item(id))
         }
         Mode::Display { .. } | Mode::Ahead { .. } => {
@@ -670,7 +733,7 @@ fn bake(doc: &Document, r: &Reglage, lower: &[PlanItem], paper: Option<[u8; 3]>,
             // d'aperçu, un aperçu qui s'achève), sinon l'image sans l'effet.
             if matches!(mode, Mode::Display { .. }) {
                 if let Some((last, cel)) = crate::fxcache::fallback(origin).filter(|(_, c)| c.version == sig) {
-                    let _ = cel;
+                    tenus.tenir(last, cel);
                     return Some(item(last));
                 }
             }
@@ -695,10 +758,11 @@ pub fn ahead(doc: &Document, plan: &Plan, prio: u32, level: u8) -> Vec<(CelId, A
         .collect()
 }
 
-/// Le dessin dérivé gardé sous le numéro `id` (un élément résolu d'un calque d'effet), s'il y est.
+/// Le dessin dérivé gardé sous le numéro `id` (un élément résolu d'un calque d'effet), s'il y est : dans
+/// la réserve des effets, ou tenu par un plan résolu (`Tenus`).
 pub fn derived(id: CelId) -> Option<Arc<Cel>> {
     if id & (1 << 63) == 0 {
         return None;
     }
-    crate::fxcache::get_any(id).map(|(_, c)| c)
+    crate::fxcache::get_any(id).map(|(_, c)| c).or_else(|| TENUS.lock().unwrap_or_else(|e| e.into_inner()).get(&id).map(|e| e.1.clone()))
 }
