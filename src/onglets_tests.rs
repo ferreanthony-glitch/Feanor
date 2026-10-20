@@ -1044,6 +1044,56 @@ fn camera_keys_and_effects_travel_between_tabs() {
 }
 
 #[test]
+fn montage_keys_travel_between_tabs_and_refuse_another_sheet_size() {
+    let mut b = banc(projet(200, 4), false);
+    b.app.cur_frame = 0;
+    b.app.copy_keys();
+    assert!(b.app.key_clipboard.is_some(), "{}", b.app.status);
+    onglet_avec(&mut b, projet(90, 4));
+    b.app.cur_frame = 2;
+    b.app.paste_keys_at_head();
+    let id = b.app.layer().frames[2].expect("clé collée");
+    assert_eq!(b.app.doc.cels[&id].raster.get(0, 0).r(), 200, "le dessin de la clé copiée dans l'autre onglet : {}", b.app.status);
+    // Une feuille d'une autre taille : refusé.
+    onglet_avec(&mut b, projet_grand());
+    b.app.paste_keys_at_head();
+    assert!(b.app.status.contains("640×360"), "{}", b.app.status);
+}
+
+#[test]
+fn vector_elements_copied_in_one_tab_paste_into_another() {
+    use crate::vector::{Element, VPoint};
+    use crate::vtools::VSelection;
+    let vecto = |rouge: u8| {
+        let mut doc = Document::with_frame(320, 180, 24);
+        let mut layer = Layer::new("Trait", LayerKind::Vector);
+        let mut cel = Cel::new(doc.width, doc.height, LayerKind::Vector);
+        cel.vector.as_mut().expect("dessin vectoriel").elements.push(Element::Stroke {
+            points: vec![VPoint { x: 20.0, y: 40.0, r: 4.0 }, VPoint { x: 180.0, y: 40.0, r: 4.0 }],
+            color: [rouge, 0, 0],
+            opacity: 1.0,
+            hardness: 0.9,
+            brush: None,
+            trace: Default::default(),
+        });
+        layer.frames.push(Some(doc.add_cel(cel)));
+        doc.panels[0].layers = vec![layer];
+        doc.panels[0].length = 1;
+        doc
+    };
+    let mut b = banc(vecto(201), false);
+    let cel = premier_dessin(&b);
+    b.app.vsel = Some(VSelection { cel, items: vec![0] });
+    assert!(b.app.copy_selection());
+    onglet_avec(&mut b, vecto(5));
+    b.app.paste();
+    let id = premier_dessin(&b);
+    let elements = &b.app.doc.cels[&id].vector.as_ref().expect("vectoriel").elements;
+    assert_eq!(elements.len(), 2, "l'élément copié dans l'autre onglet est collé : {}", b.app.status);
+    assert!(matches!(&elements[1], Element::Stroke { color, .. } if color[0] == 201));
+}
+
+#[test]
 fn pixels_copied_in_one_tab_paste_into_another() {
     use crate::pixsel::Floating;
     let mut b = banc(projet(200, 2), false);

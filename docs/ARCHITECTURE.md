@@ -1816,7 +1816,7 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 
 Demande d'Anthony : « ouvrir plusieurs fichiers dans la même fenêtre avec un système d'onglets ». Un onglet = un projet
 ouvert, en mémoire, avec tout ce qui le concerne ; passer de l'un à l'autre ne relit rien sur le disque. Code :
-`onglets.rs` (l'état échangé et les opérations), `ongletsui.rs` (la bande), `onglets_tests.rs` (45 essais).
+`onglets.rs` (l'état échangé et les opérations), `ongletsui.rs` (la bande), `onglets_tests.rs` (47 essais).
 
 ### Le choix : un état de projet qu'on échange, pas un `App` découpé
 
@@ -1932,8 +1932,9 @@ nouveaux numéros (essais `copied_*`, `camera_keys_and_effects_travel_between_ta
 |---|---|
 | Plans (`PanelClip`) | collés avec leurs propres dessins ; **feuille d'une autre taille : refusé**, message avec les deux tailles (existait, message précisé) ; **autre cadence : collé, avec un avertissement** (`PanelClip::fps`) |
 | Calque (`LayerClip`), images (`ImageClip`) | collés avec leurs propres dessins ; **feuille d'une autre taille : refusé**, avec les deux tailles (champ `size` ajouté : un dessin n'a de sens qu'à sa taille) |
-| Clés de caméra, de montage, d'effets ; effets d'un calque | des valeurs : collés tels quels (`load_doc` n'efface plus les clés de caméra copiées) |
-| Zone bitmap (`Floating`), éléments vectoriels | collés à leur place d'origine |
+| Clés de caméra, d'effets ; effets d'un calque | des valeurs : collés tels quels (`load_doc` n'efface plus les clés de caméra copiées) |
+| Clés de montage (`KeyClip`) | elles portent leur dessin : **feuille d'une autre taille refusée** (champ `size`), comme un calque |
+| Zone bitmap (`Floating`), éléments vectoriels | collés à leur place d'origine (essais `pixels_copied_…`, `vector_elements_copied_…`) |
 | Sélection sur plusieurs calques (`multi_clip`) | commune, mais elle vise des calques par numéro : dans un autre projet, rien n'y correspond et rien n'est collé |
 
 Perdu au passage d'un projet à l'autre (comme pour un collage de plans dans le même projet) : ce qui est rangé à côté du plan
