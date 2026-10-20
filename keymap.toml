@@ -67,6 +67,28 @@ action = "fichier.quitter"
 touches = ["Ctrl+Q"]
 source = "Storyboard Pro 27 : QUIT_KEY"
 
+# Onglets de projets (`onglets.rs`) : comme un navigateur. Ctrl+W (« fichier.fermer ») ferme l'onglet affiché.
+# Tab et Maj+Tab restent le passage storyboard / animation et la planche : Ctrl+Tab est libre.
+[[raccourci]]
+action = "onglet.nouveau"
+touches = ["Ctrl+T"]
+source = "proposition (comme un navigateur)"
+
+[[raccourci]]
+action = "onglet.suivant"
+touches = ["Ctrl+Tab"]
+source = "proposition (comme un navigateur)"
+
+[[raccourci]]
+action = "onglet.precedent"
+touches = ["Ctrl+Maj+Tab"]
+source = "proposition (comme un navigateur)"
+
+[[raccourci]]
+action = "onglet.fermer_autres"
+touches = []
+source = "SHOT (sans touche)"
+
 # Exports : commandes de Storyboard Pro 27 sans touche par défaut (correspondance par le nom).
 [[raccourci]]
 action = "fichier.exporter_film"

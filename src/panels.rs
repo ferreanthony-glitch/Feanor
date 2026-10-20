@@ -114,7 +114,9 @@ impl App {
                 self.action_item(ui, "Enregistrer", "fichier.enregistrer");
                 self.action_item(ui, "Enregistrer sous…", "fichier.enregistrer_sous");
                 self.action_item(ui, "Afficher le projet dans l'Explorateur", "fichier.afficher_explorateur");
-                self.action_item(ui, "Fermer le projet", "fichier.fermer");
+                self.action_item(ui, "Nouvel onglet", "onglet.nouveau");
+                self.action_item(ui, "Fermer l'onglet", "fichier.fermer");
+                self.action_item(ui, "Fermer les autres onglets", "onglet.fermer_autres");
                 ui.separator();
                 ui.menu_button("Importer", |ui| {
                     if menu_item(ui, "Une image (calque bitmap)…", "") {
@@ -737,12 +739,14 @@ impl App {
 
         if let Some(action) = self.pending.take() {
             let mut choice = None;
+            // (Avec plusieurs onglets, la boîte dit de quel projet elle parle.)
+            let nom = crate::onglets::nom_de(self.path.as_deref(), self.import_source.as_deref(), false);
             egui::Window::new("Modifications non enregistrées")
                 .collapsible(false)
                 .resizable(false)
                 .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
                 .show(ctx, |ui| {
-                    ui.label("Le projet a été modifié depuis le dernier enregistrement.");
+                    ui.label(format!("Le projet « {nom} » a été modifié depuis le dernier enregistrement."));
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
                         if ui.button("Enregistrer").clicked() {

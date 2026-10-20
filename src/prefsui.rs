@@ -131,7 +131,18 @@ impl App {
                 ui.add_space(6.0);
                 ui.label(RichText::new("Projets").strong());
                 self.autosave_menu_ui(ui);
-                if ui.checkbox(&mut self.settings.reopen_last, "Rouvrir le dernier projet au lancement").changed() {
+                if ui
+                    .checkbox(&mut self.settings.reopen_last, "Rouvrir le dernier projet au lancement")
+                    .on_hover_text("Avec plusieurs onglets ouverts à la fermeture, ils reviennent tous, dans le même ordre.")
+                    .changed()
+                {
+                    let _ = self.settings.save();
+                }
+                if ui
+                    .checkbox(&mut self.settings.open_in_new_tab, "Ouvrir dans un nouvel onglet")
+                    .on_hover_text("Ouvrir, Nouveau, un projet récent ou un import prennent un onglet à eux. Décoché, ils remplacent le projet affiché (après la question habituelle).")
+                    .changed()
+                {
                     let _ = self.settings.save();
                 }
                 ui.add_space(6.0);
