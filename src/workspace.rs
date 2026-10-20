@@ -175,14 +175,20 @@ impl Layout {
     }
 }
 
-/// Les trois espaces de travail liés aux boutons de mode (INTERFACE.md, 6.1). Chacun retient sa
-/// propre disposition : passer en Animation ouvre la disposition d'animation, revenir en Storyboard
-/// remet celle du storyboard, et ce que l'utilisateur change dans l'une ne touche pas les autres.
+/// Hauteur de la bande du montage dans l'espace Montage (points de la fenêtre de référence) : celle
+/// du storyboard est de 290, celle de l'animation de 340.
+const MONTAGE_BANDE: f32 = 440.0;
+
+/// Les trois espaces de travail, un onglet chacun en haut à droite (INTERFACE.md, 6.1 et 14).
+/// Chacun retient sa propre disposition : passer en Animation ouvre la disposition d'animation,
+/// revenir en Storyboard remet celle du storyboard, et ce que l'utilisateur change dans l'une ne
+/// touche pas les autres.
 ///
 /// « Montage » n'est pas un troisième mode : il garde les raccourcis, les outils et le dessin du
-/// storyboard (`Mode::Storyboard`) ; seule sa disposition diffère (la bande du montage en grand,
-/// les panneaux de dessin repliés). On y va par Affichage > Espaces de travail ou la palette
-/// (Ctrl+K), et le bouton « Storyboard » en revient.
+/// storyboard (`Mode::Storyboard`) ; seules diffèrent sa disposition (le lecteur du film en haut, la
+/// bande avec toutes les pistes en grand en bas, les panneaux de dessin repliés) et sa barre de
+/// commandes (`Barre::MontageEdition`). On y va par son onglet, Alt+M, Affichage > Espaces de
+/// travail ou la palette (Ctrl+K) ; Tab en revient au storyboard.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Espace {
     #[default]
@@ -230,27 +236,47 @@ impl Espace {
     /// - Storyboard : la disposition standard (le dessin, les calques et les effets, les réglages et
     ///   la fiche du plan, le montage en bas).
     /// - Animation : la même, avec la bande (la timeline) plus haute et les calques plus larges.
-    /// - Montage : la bande du montage en grand ; ni calques, ni effets, ni réglages de l'outil, ni
-    ///   couleur : la fiche du plan reste, pour les textes et les durées, et les bruitages et les
-    ///   suggestions sonores s'ouvrent à droite (on pose les sons dans la bande).
+    /// - Montage : le travail de montage (`DockLayout::pour_le_montage`). Le lecteur du film en grand
+    ///   en haut, vu à travers la caméra ; la bande avec toutes ses pistes en bas, plus haute que
+    ///   celle du storyboard ; à droite la fiche du plan, et en onglets les bruitages, les
+    ///   suggestions sonores, les commentaires et l'historique. Ni calques, ni effets, ni réglages
+    ///   de l'outil, ni couleur, ni pinceaux, ni guides, ni barre d'outils verticale.
     ///
-    /// Les Références, l'Historique, les Commentaires et la feuille d'exposition restent à la demande
-    /// partout (barre des panneaux) ; la feuille d'exposition n'existe qu'en animation.
+    /// Les Références et la feuille d'exposition restent à la demande partout (barre des panneaux) ;
+    /// la feuille d'exposition n'existe qu'en animation.
     pub fn defaut(self) -> Layout {
         let standard = Layout::default();
         match self {
             Espace::Storyboard => standard,
             Espace::Animation => Layout { montage_height: 340.0, sheet_width: 250.0, ..standard },
-            Espace::Montage => {
-                let base = Layout { tools: false, sheet: true, montage_height: 420.0, ..standard };
-                let mut dock = DockLayout::from_legacy(&Layout { sheet: false, ..base.clone() });
-                dock.open(Pane::Sheet);
-                dock.open(Pane::Bruitages);
-                dock.open(Pane::SuggestionsSonores);
-                Layout { panneaux: Some(dock), ..base }
-            }
+            Espace::Montage => Layout {
+                tools: false,
+                sheet: true,
+                montage_height: MONTAGE_BANDE,
+                tool_bar: false,
+                panneaux: Some(DockLayout::pour_le_montage(MONTAGE_BANDE)),
+                ..standard
+            },
         }
     }
+}
+
+/// La disposition de l'espace Montage telle qu'elle était avant son onglet : la bande en grand, la
+/// fiche du plan à droite, les bruitages et les suggestions sonores. Une disposition retenue qui n'a
+/// pas bougé depuis est remplacée par la nouvelle (`Settings::load`) ; une disposition que
+/// l'utilisateur a changée reste la sienne.
+fn montage_d_avant_l_onglet() -> Layout {
+    let base = Layout { tools: false, sheet: true, montage_height: 420.0, ..Layout::default() };
+    let mut dock = DockLayout::from_legacy(&Layout { sheet: false, ..base.clone() });
+    dock.open(Pane::Sheet);
+    dock.open(Pane::Bruitages);
+    dock.open(Pane::SuggestionsSonores);
+    Layout { panneaux: Some(dock), ..base }
+}
+
+/// `layout` est la disposition d'origine de l'espace Montage d'avant son onglet, inchangée.
+pub fn est_le_montage_d_avant(layout: &Layout) -> bool {
+    layout.dock_layout().close_to(&montage_d_avant_l_onglet().dock_layout())
 }
 
 /// Un espace de travail nommé.

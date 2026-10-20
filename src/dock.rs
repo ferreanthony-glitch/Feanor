@@ -361,6 +361,9 @@ const REF_WIDTH: f32 = 1454.0;
 const REF_HEIGHT: f32 = 820.0;
 /// Largeur de la colonne des réglages (quatre onglets depuis 9b).
 const TOOLS_WIDTH: f32 = 350.0;
+/// Part du lecteur, dans l'espace Montage, de la largeur au-dessus de la bande (le reste : la fiche
+/// du plan et les panneaux du montage).
+const MONTAGE_LECTEUR_PART: f32 = 0.7;
 
 impl DockNode {
     fn collect(&self, out: &mut Vec<Pane>) {
@@ -518,6 +521,25 @@ impl DockLayout {
             center = column(1.0 - h / REF_HEIGHT, center, band);
         }
         DockLayout { principal: center, ..DockLayout::empty() }.sanitized()
+    }
+
+    /// La disposition d'origine de l'espace Montage (le troisième onglet, en haut à droite) : le
+    /// lecteur du film en grand en haut à gauche (le dessin, vu à travers la caméra) ; à sa droite la
+    /// fiche du plan (durée, textes) et, dessous, les panneaux du travail de montage en onglets
+    /// (bruitages, suggestions sonores, commentaires, historique) ; en bas, sur toute la largeur, la
+    /// bande du montage avec toutes ses pistes. Ni outils, ni couleur, ni pinceaux, ni calques, ni
+    /// effets, ni guides : ceux-là restent à la demande (barre des panneaux, menu Affichage).
+    /// `bande_hauteur` : hauteur de la bande, en points de la fenêtre de référence.
+    pub fn pour_le_montage(bande_hauteur: f32) -> DockLayout {
+        let lecteur = tabs(vec![Pane::Canvas]);
+        let cote = column(
+            0.4,
+            tabs(vec![Pane::Sheet]),
+            tabs(vec![Pane::Bruitages, Pane::SuggestionsSonores, Pane::Comments, Pane::History]),
+        );
+        let haut = row(MONTAGE_LECTEUR_PART, lecteur, cote);
+        let h = bande_hauteur.clamp(140.0, 1200.0);
+        DockLayout { principal: column(1.0 - h / REF_HEIGHT, haut, tabs(vec![Pane::Montage])), ..DockLayout::empty() }.sanitized()
     }
 
     /// Une disposition enregistrée par une version précédente, mise à jour : avant 6a, le

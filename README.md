@@ -855,16 +855,20 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   sélections, panneaux, scènes, séquences, calques, sons, textes, noms, réglages des calques et des
   pistes, guides, papier, cadence. Une saisie ou un glissé de curseur compte pour une seule étape.
 - **Espaces de travail liés aux modes** (Affichage > Espaces de travail) : **Storyboard**, **Animation**
-  et **Montage** retiennent chacun leur disposition des panneaux. Les boutons « Storyboard » et
-  « Animation » (en haut à droite), Tab et « Animer ce plan » changent d'espace et posent tout de
-  suite la disposition qu'on y avait ; ce qu'on change dans l'un (un panneau fermé, une colonne
+  et **Montage** retiennent chacun leur disposition des panneaux. Les trois onglets « Storyboard »,
+  « Animation » et « Montage » (en haut à droite), Tab, Alt+M et « Animer ce plan » changent d'espace
+  et posent tout de suite la disposition qu'on y avait, sans rien changer au projet (le plan, l'image
+  et la sélection restent) ; ce qu'on change dans l'un (un panneau fermé, une colonne
   déplacée) ne touche pas les autres. La première fois, chacun a sa disposition d'origine :
   Storyboard (la disposition standard), Animation (la bande, c'est-à-dire la timeline, plus haute et
-  les calques plus larges), Montage (la bande du montage en grand ; ni calques, ni effets, ni réglages
-  de l'outil, ni couleur ; la fiche du plan, les bruitages et les suggestions sonores à droite).
-  Montage n'est pas un troisième mode : il garde les outils, les raccourcis et le dessin du
-  storyboard ; on y va par Affichage > Espaces de travail > Montage (ou Ctrl+K), et le bouton
-  « Storyboard » (ou « Storyboard » du menu) en revient. Quitter l'animation ramène à celui des deux
+  les calques plus larges), Montage (pensée pour monter : le film en grand en haut, dans le Lecteur en
+  vue caméra, et en bas la bande avec toutes ses pistes, plus haute ; à droite la fiche du plan et,
+  en onglets, les bruitages, les suggestions sonores, les commentaires et l'historique ; ni outils,
+  ni couleur, ni calques, ni effets). La barre de la bande y montre d'office les commandes de montage :
+  couper, rogner, durée, avancer / reculer, aimantation, transitions, sons, bruitages, relecture et
+  exports. Montage n'est pas un troisième mode : il garde les outils, les raccourcis et le dessin du
+  storyboard ; on y va par son onglet, Alt+M, Affichage > Espaces de travail > Montage ou Ctrl+K, et
+  Tab (ou l'onglet « Storyboard ») en revient. Quitter l'animation ramène à celui des deux
   espaces du côté storyboard où l'on était. **Affichage > Espaces de travail > Rétablir la
   disposition** remet celle d'origine de l'espace en cours, sans toucher aux autres. Les panneaux
   dans leur propre fenêtre restent où ils sont (ils sont sur un autre écran), la feuille d'exposition

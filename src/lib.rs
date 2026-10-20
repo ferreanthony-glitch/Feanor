@@ -476,6 +476,8 @@ mod montagerows_tests;
 mod montagehead;
 #[cfg(test)]
 mod montagehead_tests;
+#[cfg(test)]
+mod montageonglet_tests;
 mod pistes;
 #[cfg(test)]
 mod pistes_tests;

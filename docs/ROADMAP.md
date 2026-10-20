@@ -3035,6 +3035,22 @@ l'écran dans cette séance.
 - Pas fait : un réglage « barres complètes » (épingler tout y revient) ; miroir et table lumineuse sous « Plus… » dans
   la barre sous le dessin (proposition 4 de la partie 5) ; préréglage de raccourcis façon Storyboard Pro (6.2).
 
+## Le troisième onglet Montage (demandé par Anthony le 2026-10-21, branche `espace-montage`) ✅
+
+« En haut à droite, à côté de Storyboard et Animation, un troisième onglet Montage, avec une organisation des panneaux
+propre au travail de montage. » Détail et liste de contrôle : `docs/INTERFACE.md` partie 14, « Le troisième onglet
+Montage ». Pas vu à l'écran dans cette séance.
+
+- ✅ **Trois onglets** Storyboard · Animation · Montage, en haut à droite, bulle à 1 s, **Alt+M** pour le Montage ; changer
+  est instantané et ne touche pas au projet (plan, image, plans choisis). **Tab** depuis le Montage revient au Storyboard.
+- ✅ **Montage = une disposition du mode Storyboard** (pas un troisième `Mode`) : mêmes outils et raccourcis.
+- ✅ **Disposition propre au montage** : Lecteur en grand (vue caméra) en haut, bande à 440 avec toutes les pistes en
+  bas, Fiche du plan et Bruitages / Suggestions sonores / Commentaires / Historique à droite, sans outils ni
+  pinceaux ni calques ni effets ni barre verticale. Retenue, rétablissable, enregistrable comme les autres espaces.
+- ✅ **Barre du Montage** (`Barre::MontageEdition`) : coupes, rognage, durée, avancer / reculer, aimant, transitions,
+  sons, bruitages, pistes, relecture et exports visibles d'office ; le reste sous « Plus… » ; épingles à elle.
+- Pas fait : des panneaux Son et Transitions à part (ils se règlent dans la bande) ; un lecteur qui n'est pas le dessin.
+
 ## Envois, versions de plans et comparaison (demandés par Anthony le 2026-10-20, branche `versions`) ✅
 
 Le plus grand souci d'un storyboardeur : savoir ce qui a changé entre deux livraisons. Quatre morceaux, un commit chacun

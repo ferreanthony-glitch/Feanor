@@ -554,6 +554,8 @@ pub struct App {
     /// que `remember_layout` retient. Storyboard et Montage sont deux dispositions du mode
     /// storyboard (`workspace::Espace`).
     pub(crate) espace: crate::workspace::Espace,
+    /// La vue caméra a été mise par l'entrée dans l'espace Montage (elle s'éteint à la sortie).
+    pub(crate) vue_camera_du_montage: bool,
     /// Des réglages (la disposition d'un espace qu'on vient de quitter, l'espace du côté storyboard)
     /// attendent d'être écrits : `remember_layout` s'en charge à l'image d'écran suivante.
     pub(crate) settings_a_ecrire: bool,
@@ -1094,6 +1096,7 @@ impl App {
             detach_request: None,
             exposition_masquee: None,
             espace: crate::workspace::Espace::Storyboard,
+            vue_camera_du_montage: false,
             settings_a_ecrire: false,
             workspace_name: None,
             settings,
@@ -1304,6 +1307,11 @@ impl App {
             app.layout.safe_frames = layout.safe_frames;
             app.layout.frame_format = layout.frame_format;
             app.apply_layout(layout);
+        }
+        // (Le lecteur de l'espace Montage montre la vue caméra, comme quand on y entre.)
+        if app.espace == crate::workspace::Espace::Montage {
+            app.set_camera_view(true);
+            app.vue_camera_du_montage = true;
         }
         crate::demarrage::marque("disposition des panneaux");
         app
@@ -1647,10 +1655,19 @@ impl App {
     /// disposition qu'on y avait (`aller_a_l_espace`).
     pub(crate) fn set_espace(&mut self, espace: crate::workspace::Espace) {
         use crate::workspace::Espace;
+        let avant = self.espace;
         self.cancel_montage_drag();
         self.end_stroke();
         self.playing = false;
         self.aller_a_l_espace(espace);
+        // Le lecteur de l'espace Montage montre le film tel que la caméra le filme ; en sortir remet
+        // la vue du plateau, si c'est lui qui l'avait changée (un réglage de vue : rien dans le projet).
+        if espace == Espace::Montage && avant != Espace::Montage && !self.camera_view {
+            self.set_camera_view(true);
+            self.vue_camera_du_montage = true;
+        } else if avant == Espace::Montage && espace != Espace::Montage && std::mem::take(&mut self.vue_camera_du_montage) {
+            self.set_camera_view(false);
+        }
         let mode = self.mode;
         // Le dessin change : c'est lui qui prend la main (les raccourcis suivent le nouveau mode).
         self.panel_focus = false;
@@ -1663,7 +1680,7 @@ impl App {
         self.follow_frame = true;
         self.status = match espace {
             Espace::Storyboard => "Storyboard : montage des plans.".into(),
-            Espace::Montage => "Montage : la bande des plans en grand (Affichage > Espaces de travail > Storyboard pour en revenir).".into(),
+            Espace::Montage => "Montage : le film en haut, toutes les pistes en bas (Tab ou l'onglet Storyboard pour en revenir).".into(),
             Espace::Animation => format!("Animation de {} (Tab : retour au storyboard).", crate::storyboard::panel_long_title(&self.doc, self.cur_panel)),
         };
         // La feuille d'exposition n'existe qu'en animation.
@@ -3749,6 +3766,9 @@ impl App {
                     self.board_view = BoardView::Panels;
                 }
             }
+            // Tab : du storyboard à l'animation et retour. Du Montage, il revient au storyboard (le
+            // montage n'est pas un côté de la bascule : « Animer ce plan », dans sa barre, entre dans le plan).
+            "mode.basculer" if self.espace == crate::workspace::Espace::Montage => self.set_espace(crate::workspace::Espace::Storyboard),
             "mode.basculer" => self.set_mode(if board_shown { Mode::Animation } else { Mode::Storyboard }),
             "aide.raccourcis" => self.show_help = !self.show_help,
             "outil.pinceau" => self.set_tool(Tool::Brush),

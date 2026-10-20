@@ -2078,8 +2078,9 @@ action = "espace.enregistrer"
 touches = []
 source = "SHOT (Storyboard Pro 27 passe par WORKSPACE_MANAGER, sans touche)"
 
-# Les espaces liés aux modes (INTERFACE.md, 6.1) : Storyboard, Animation et Montage retiennent
-# chacun leur disposition ; pas de touche (Tab passe déjà du storyboard à l'animation et retour).
+# Les trois espaces de travail (INTERFACE.md, 6.1 et 14), un onglet chacun en haut à droite :
+# Storyboard, Animation et Montage retiennent chacun leur disposition. Tab passe déjà du storyboard
+# à l'animation et retour (du Montage, il revient au storyboard) ; le Montage a Alt+M.
 [[raccourci]]
 action = "espace.storyboard"
 touches = []
@@ -2092,8 +2093,8 @@ source = "SHOT (espace de travail lié au mode Animation)"
 
 [[raccourci]]
 action = "espace.montage"
-touches = []
-source = "SHOT (disposition du mode Storyboard : la bande du montage en grand)"
+touches = ["Alt+M"]
+source = "proposition (M comme Montage ; troisième onglet en haut à droite)"
 
 [[raccourci]]
 action = "espace.retablir"

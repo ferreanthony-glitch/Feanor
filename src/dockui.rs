@@ -98,6 +98,8 @@ impl App {
             Pane::Montage | Pane::Timeline => "Montage",
             Pane::Canvas if self.crayonnes_shown() => "Crayonnés",
             Pane::Canvas if self.mode == Mode::Storyboard && self.board_view == BoardView::Panels => "Vignettes",
+            // Dans l'espace Montage, le dessin est le lecteur du film.
+            Pane::Canvas if self.espace == crate::workspace::Espace::Montage => "Lecteur",
             p => p.tab_name(),
         }
     }

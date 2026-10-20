@@ -274,6 +274,11 @@ impl Settings {
         s.framing = s.framing.sanitized();
         s.perf = s.perf.sanitized();
         s.bars = s.bars.nettoyees();
+        // L'espace Montage a maintenant son propre agencement : l'ancienne disposition d'origine,
+        // retenue sans que l'utilisateur y ait touché, cède la place à la nouvelle.
+        if s.montage_layout.as_ref().is_some_and(crate::workspace::est_le_montage_d_avant) {
+            s.montage_layout = None;
+        }
         // (Le côté storyboard n'est jamais l'animation.)
         if s.storyboard_space == Espace::Animation {
             s.storyboard_space = Espace::Storyboard;

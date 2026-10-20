@@ -791,22 +791,22 @@ lancement de SHOT) : voir « À vérifier » plus bas.
 
 ### Espaces de travail (6.1)
 
-- **Trois espaces, chacun sa disposition** : Storyboard, Animation, Montage (`workspace::Espace`). Changer de mode
-  (boutons « Storyboard » / « Animation », Tab, « Animer ce plan ») pose la disposition de l'espace d'arrivée ;
+- **Trois espaces, chacun sa disposition** : Storyboard, Animation, Montage (`workspace::Espace`). Changer d'espace
+  (les trois onglets en haut à droite, Tab, « Animer ce plan ») pose la disposition de l'espace d'arrivée ;
   ce qu'on change dans un espace se retient pour lui seul (réglages `disposition`, `disposition_animation`,
   `disposition_montage`, `espace_storyboard`, toutes avec une valeur d'origine : un fichier ancien se lit tel quel).
 - **Montage est une disposition du mode Storyboard, pas un troisième mode** (choix expliqué) : mêmes outils,
   mêmes raccourcis (les touches du montage), même dessin, et le bouton « Animer ce plan » entre en animation depuis lui.
   Un troisième mode aurait doublé les contextes de raccourcis, les menus qui changent selon le mode et les essais qui
-  les suivent, pour une différence qui n'est qu'une disposition. On y va par Affichage > Espaces de travail ou
-  Ctrl+K ; le bouton « Storyboard » (ou l'entrée Storyboard du même sous-menu) en revient. Quitter l'animation
-  ramène à celui des deux espaces du côté storyboard où l'on était (`espace_storyboard`).
+  les suivent, pour une différence qui n'est qu'une disposition. On y va par son onglet (depuis le 2026-10-21, voir
+  « Le troisième onglet Montage » plus bas), Alt+M, Affichage > Espaces de travail ou Ctrl+K ; l'onglet Storyboard
+  (ou Tab) en revient. Quitter l'animation ramène à celui des deux espaces du côté storyboard où l'on était
+  (`espace_storyboard`).
 - **Dispositions d'origine** : Storyboard = la disposition standard ; Animation = la bande (la timeline) plus haute
-  (340 au lieu de 290) et les calques plus larges (250 au lieu de 230) ; Montage = la bande à 420, ni calques, ni
-  effets, ni réglages de l'outil, ni couleur, la fiche du plan, **Bruitages et Suggestions sonores** à droite (on pose
-  les sons dans la bande). Références, Historique, Commentaires restent à la demande partout ; la feuille d'exposition
-  n'existe qu'en animation. Les valeurs sont modestes à dessein : l'essai de fumée déplace une sélection au pointeur
-  dans une fenêtre de 1280 × 720, et une bande à 400 laissait trop peu de dessin.
+  (340 au lieu de 290) et les calques plus larges (250 au lieu de 230) ; Montage = voir « Le troisième onglet
+  Montage » (le film en haut, la bande à 440 avec toutes les pistes, la fiche du plan et les panneaux de montage à
+  droite). Références et feuille d'exposition restent à la demande ; la feuille d'exposition n'existe qu'en
+  animation.
 - **Migration** : l'unique disposition d'un ancien `reglages.toml` devient celle du Storyboard sans conversion
   (le champ garde son nom) ; les deux autres commencent par leur disposition d'origine.
 - **« Rétablir la disposition »** (Affichage > Espaces de travail, Ctrl+K `espace.retablir`) : l'espace en cours
@@ -821,8 +821,8 @@ lancement de SHOT) : voir « À vérifier » plus bas.
 - **Correction au passage** : la colonne de droite ne savait recevoir que les calques, l'exposition et les effets ;
   sans calques (c'est le cas de l'espace Montage), Historique, Commentaires, Bruitages, Suggestions sonores et
   Références ne s'ouvraient pas. Ils forment maintenant leurs onglets (`dock.rs`, `right_column`).
-- **Actions** (`keymap.toml`, un bloc chacune, sans touche) : `espace.storyboard`, `espace.animation`,
-  `espace.montage`, `espace.retablir`.
+- **Actions** (`keymap.toml`, un bloc chacune, sans touche sauf `espace.montage` : Alt+M) : `espace.storyboard`,
+  `espace.animation`, `espace.montage`, `espace.retablir`.
 
 ### Barres minces (6.3) et « Plus… »
 
@@ -874,11 +874,96 @@ panneau détaché, chaque panneau de la barre s'ouvre dans chaque espace, change
    Repères, Affichage, Images) ouverts depuis une ligne qui porte une épingle, clic sur l'épingle (le menu reste ouvert).
 2. Une barre de la timeline dans un panneau étroit : où passe la coupure, le bouton « Plus… » toujours visible à droite.
 3. Les trois thèmes : icônes enfoncées lisibles dans la barre et dans « Plus… ».
-4. Les trois dispositions d'origine sur ton écran (la bande à 340 en animation, à 420 en Montage) ; ajuste si elles
+4. Les trois dispositions d'origine sur ton écran (la bande à 340 en animation, à 440 en Montage) ; ajuste si elles
    mangent trop le dessin.
 5. Passer de Storyboard à Animation et retour : le dessin ne saute pas, les panneaux ajustés se recalent en une ou
-   deux images ; l'espace Montage depuis Ctrl+K ; le bouton « Storyboard » qui en revient.
+   deux images ; l'espace Montage depuis son onglet, Alt+M ou Ctrl+K ; l'onglet « Storyboard » (ou Tab) qui en revient.
 6. Un panneau détaché (Références) reste sur son écran en changeant d'espace.
+
+### Le troisième onglet Montage (2026-10-21, branche `espace-montage`)
+
+Demande d'Anthony : « en haut à droite, à côté de Storyboard et Animation, un troisième onglet Montage, avec une
+organisation des panneaux propre au travail de montage ».
+
+- **Les trois onglets**, en haut à droite, dans l'ordre du travail : **Storyboard · Animation · Montage** (même style,
+  l'onglet de l'espace en cours est allumé avec l'encre faite pour l'accent, `bulles::encre_etat`). Un clic, la bulle
+  à 1 s (nom, raccourci, description) et le clic droit « Assigner un raccourci » comme pour toute commande. Passer de
+  l'un à l'autre est instantané et ne change rien au projet : le plan courant, l'image, la tête de lecture, les plans
+  choisis et les calques restent ; seule la disposition (et la barre du montage) change. La lecture s'arrête.
+- **Choix : une disposition du mode Storyboard, pas un troisième mode** (`Espace::Montage.mode() == Mode::Storyboard`).
+  Le montage garde les outils, les raccourcis et le dessin du storyboard : c'est le même travail sur les plans, vu
+  autrement. Un troisième `Mode` aurait doublé les contextes de raccourcis, les menus qui dépendent du mode et leurs
+  essais, pour une différence qui est une disposition et une barre. Ce qui s'adapte à l'espace : la disposition
+  (`DockLayout::pour_le_montage`), la barre de la bande (`Barre::MontageEdition`), le titre « Lecteur » du dessin, la
+  barre d'état (« Montage · plan 3 »), la vue caméra du lecteur.
+- **Raccourcis** : **Alt+M** (`espace.montage`, libre : « M » seul reste le miroir ; Alt+lettre est le même geste que
+  les outils) ; Ctrl+K « Espace de travail : Montage ». **Tab** : du Storyboard à l'Animation et retour, comme avant ;
+  **depuis le Montage, Tab revient au Storyboard** (le Montage n'est pas un côté de la bascule : « Animer ce plan », dans
+  sa barre, ou le double-clic sur un plan, entre en animation, et Tab ramène alors au Montage, d'où l'on venait).
+- **La disposition d'origine du Montage** (pensée pour monter, pas pour dessiner) :
+  - en haut à gauche, le **Lecteur** (le dessin) en grand, en **vue caméra** : on voit le film tel que la caméra le filme
+    (à l'entrée, la vue caméra s'allume si elle ne l'était pas ; à la sortie elle s'éteint si c'est l'entrée qui l'avait
+    allumée) ;
+  - en bas, sur toute la largeur, la **bande du montage** avec toutes ses pistes (plans, pistes de calques, pistes de son,
+    transitions), à 440 au lieu de 290 (storyboard) et 340 (animation) ;
+  - à droite, la **Fiche du plan** (durée, textes) en haut, et dessous, en onglets : **Bruitages**, **Suggestions sonores**,
+    **Commentaires**, **Historique** ;
+  - ni Outils, ni Couleur, ni Pinceaux, ni Réglages de l'outil, ni Guides, ni Calques, ni Effets, et la **barre d'outils
+    verticale est repliée** ; tous restent à la demande (barre des panneaux, Affichage > Espaces de travail > Panneaux).
+  - Les panneaux « Son » et « Transitions » n'existent pas comme panneaux : les pistes son (volumes, fondus, clés,
+    solo), leurs effets et les transitions se règlent dans la bande, par la barre et par les menus du clic droit.
+    La relecture est faite de fenêtres (exporter / importer les notes), lancées depuis la barre.
+- **Mémoire** : comme les autres espaces, la disposition qu'on y fait se retient (`disposition_montage` dans
+  `reglages.toml`), se restitue à l'entrée et à l'ouverture suivante (on démarre dans le Montage si on l'a quitté
+  ainsi), s'enregistre comme espace de travail nommé (Affichage > Espaces de travail > Enregistrer la disposition…) et
+  « Rétablir la disposition » (Ctrl+K `espace.retablir`) la remet à son origine sans toucher aux deux autres.
+  L'ancienne disposition d'origine du Montage, restée intacte dans les réglages, est remplacée par la nouvelle à la
+  lecture ; une disposition retouchée à la main reste la sienne.
+- **La barre du Montage** (`Barre::MontageEdition`, `barres.rs`) montre d'office les commandes d'édition, qui sont sous
+  « Plus… » dans la barre du montage du storyboard :
+  1. lire : début, lecture, boucle, son pendant la lecture, position ;
+  2. plans : nouveau plan, nouvelle séquence ;
+  3. couper et rogner : couper le plan, réunir avec le suivant, rogner le début, rogner la fin, durée du plan, avancer,
+     reculer, aimantation des bords, menu Plans ;
+  4. transitions et son : ajouter une transition, importer un son, nouvelle piste son, couper le son, menu Son,
+     panneau Bruitages (interrupteur) ;
+  5. pistes : replier toutes, déplier toutes ;
+  6. relecture et exports : nouveau commentaire, exporter pour relecture, importer les notes, exporter pour le montage,
+     exporter la fiche technique ;
+  7. « Animer ce plan ».
+  Sous « Plus… » : toutes les autres commandes de la barre du montage (verrous, numérotation, envois, versions,
+  comparer, vidéo, vues dessin / vignettes / crayonnés, copier / coller / supprimer les plans, replis des pistes) ; la place
+  qui manque les y envoie d'elle-même, comme pour toute barre. Elle a **ses propres épingles** (`[barres.montage_edition]`
+  dans `reglages.toml`) : celles de la barre du storyboard n'y changent rien.
+- **Limites** : pas de panneaux Son ou Transitions à part ; le lecteur est le dessin (il lit le film entier avec la
+  lecture du montage, mais il garde les outils de dessin à portée d'Alt+lettre) ; la hauteur de la bande est modeste
+  dans une petite fenêtre (1280 × 720 : le lecteur garde environ la moitié de la hauteur, tire le bord au besoin).
+
+#### Essais ajoutés (`montageonglet_tests.rs`)
+
+Les trois onglets se dessinent dans l'ordre et passent d'un espace à l'autre au clic ; rien ne change dans le projet
+en changeant (plan, image, plans choisis, historique) ; seul l'onglet de l'espace est allumé ; Alt+M (aucun conflit) et
+Tab depuis le Montage au clavier ; « Animer ce plan » puis Tab ramènent au Montage ; contenu de la disposition du Montage ;
+vue caméra à l'entrée et à la sortie ; chaque panneau de la barre des panneaux s'ouvre dans le Montage ; disposition
+retenue, restituée, rétablie, enregistrée comme espace, démarrage dans le Montage ; l'ancienne disposition cède la place
+et une disposition retouchée reste ; contenu de la barre du Montage et des commandes qui font leur travail ; épingles
+propres à la barre ; changement instantané ; repos (aucun réveil à moins d'une seconde) et image du Montage rapide.
+
+#### À vérifier à l'écran (par Anthony, troisième onglet)
+
+1. Les trois onglets en haut à droite : Storyboard, Animation, Montage, lisibles dans les trois thèmes, le bon allumé ;
+   les bulles à 1 s (Montage : Alt+M).
+2. Un clic sur Montage : le dessin devient « Lecteur », en vue caméra, grand ; la bande en bas, haute, avec toutes les
+   pistes ; la Fiche du plan et les onglets Bruitages, Suggestions, Commentaires, Historique à droite ; plus de barre
+   d'outils à gauche.
+3. Le plan courant, l'image, la tête de lecture et les plans choisis sont les mêmes qu'avant le clic ; pareil dans
+   l'autre sens (Storyboard, Animation).
+4. La barre en tête de la bande : couper, rogner, durée, avancer/reculer, aimant, transition, sons, bruitages, pistes,
+   relecture, exports se voient sans « Plus… » (sur une grande fenêtre ; sur une petite, le bouton « Plus… » prend la suite).
+5. Tab depuis le Montage : retour au Storyboard ; « Animer ce plan », puis Tab : retour au Montage.
+6. Ferme l'Historique dans le Montage, passe en Storyboard puis reviens : il est toujours fermé. Affichage > Espaces de
+   travail > Rétablir la disposition : il revient. Ferme SHOT dans le Montage : il s'ouvre dans le Montage.
+7. Au repos, dans le Montage : rien ne bouge, le processeur dort (comme ailleurs).
 
 ## 15. Envois, plans modifiés, versions de plans et comparaison (2026-10-20, branche `versions`)
 
