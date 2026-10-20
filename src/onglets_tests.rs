@@ -1406,6 +1406,19 @@ fn closing_a_tab_removes_its_rescue_copy() {
 
 // ---------------------------------------------------------------------------------------------- repos et mesures
 
+/// Attend que les onglets cachés n'aient plus de calcul de vignette en route (un calcul abandonné finit de lui-même et
+/// réveille l'écran une dernière fois en finissant), puis que l'application se repose. Rend le nombre d'images.
+fn au_calme(b: &mut Banc) -> usize {
+    for i in 0..b.app.onglets.len() {
+        if i != b.app.actif {
+            assert!(calme_de_l_onglet(b, i), "l'onglet caché {i} finit ses calculs abandonnés");
+        }
+    }
+    // (Le fil qui finit réveille l'écran juste après avoir quitté la file.)
+    std::thread::sleep(Duration::from_millis(150));
+    se_reposer(b, 3000)
+}
+
 #[test]
 fn three_open_tabs_at_rest_ask_for_no_repaint() {
     crate::fxcache::monde::ecrire();
@@ -1413,7 +1426,7 @@ fn three_open_tabs_at_rest_ask_for_no_repaint() {
     onglet_avec(&mut b, crate::perf_tests::projet_long(8, 2, 24, 3));
     onglet_avec(&mut b, crate::perf_tests::projet_long(6, 2, 12, 3));
     assert_eq!(b.app.onglets.len(), 3);
-    assert!(se_reposer(&mut b, 3000) < 3000, "SHOT finit par se reposer avec trois onglets");
+    assert!(au_calme(&mut b) < 3000, "SHOT finit par se reposer avec trois onglets");
     let repos: Vec<Duration> = (0..10).map(|_| b.image(Vec::new(), 0.5).reveil).collect();
     let pire = repos.iter().min().copied().unwrap_or(Duration::MAX);
     assert!(pire >= Duration::from_secs(1), "trois onglets au repos : SHOT demande à être repeint dans {pire:?}");
@@ -1422,7 +1435,7 @@ fn three_open_tabs_at_rest_ask_for_no_repaint() {
         assert!(b.app.activer_onglet(k % 3));
         b.image(Vec::new(), 0.1);
     }
-    assert!(se_reposer(&mut b, 3000) < 3000, "SHOT se repose après des changements d'onglet");
+    assert!(au_calme(&mut b) < 3000, "SHOT se repose après des changements d'onglet");
     let repos: Vec<Duration> = (0..6).map(|_| b.image(Vec::new(), 0.5).reveil).collect();
     assert!(repos.iter().min().copied().unwrap_or(Duration::MAX) >= Duration::from_secs(1));
 }
