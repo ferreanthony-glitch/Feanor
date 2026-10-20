@@ -212,6 +212,8 @@ etat_projet! {
     comparaison: Option<crate::comparerui::Comparaison> = None,
     pile_versions: crate::pilevers::Pile = Default::default(),
     purge_versions: Option<Option<u64>> = None,
+    // La relecture : sa fenêtre, sa page en calcul et les notes lues visent ce projet.
+    relecture: crate::relectureui::RelectureUi = Default::default(),
     // --- caches (rangés avec l'onglet : rien ne s'en échappe vers un autre projet)
     renderer: crate::render::Renderer = {
         let mut r = crate::render::Renderer::new();
@@ -425,6 +427,9 @@ impl App {
         }
         if self.open_job.is_some() {
             return Some("l'ouverture du projet");
+        }
+        if self.relecture.occupe() {
+            return Some("la relecture (page ou notes)");
         }
         if self.sug.occupe() {
             return Some("la génération des sons proposés");

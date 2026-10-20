@@ -81,6 +81,14 @@ pub(crate) struct RelectureUi {
     calque: Option<Calque>,
 }
 
+impl RelectureUi {
+    /// Une page se calcule ou des notes se lisent : le projet ne peut pas changer d'onglet
+    /// (`onglets.rs`, `onglet_occupe`).
+    pub(crate) fn occupe(&self) -> bool {
+        self.export.as_ref().is_some_and(|e| e.job.is_some()) || self.import.as_ref().is_some_and(|i| matches!(i.state, EtatImport::Lecture(_)))
+    }
+}
+
 impl Default for RelectureUi {
     fn default() -> Self {
         RelectureUi { export: None, import: None, montrer_dessin: true, calque: None }
