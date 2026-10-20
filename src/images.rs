@@ -453,6 +453,9 @@ pub(crate) struct ImageClip {
     pub cels: HashMap<CelId, Cel>,
     /// Les rôles des images copiées (13g-2), une rangée par calque, à partir de 0.
     pub roles: Vec<Vec<(usize, crate::roles::Role)>>,
+    /// La feuille du projet d'où elles viennent (elles se collent aussi dans un autre onglet : leurs dessins
+    /// n'ont de sens qu'à cette taille).
+    pub size: [usize; 2],
 }
 
 impl App {
@@ -570,7 +573,7 @@ impl App {
             .filter_map(|id| self.doc.cels.get(id).map(|c| (*id, c.clone())))
             .collect();
         let (n, k) = (b - a, rows.len());
-        self.image_clipboard = Some(ImageClip { rows, cels, roles: role_rows });
+        self.image_clipboard = Some(ImageClip { rows, cels, roles: role_rows, size: [self.doc.width, self.doc.height] });
         self.fx_clip_recent = false;
         self.cam_clip_recent = false;
         // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau Pelure (`pasteimage`).
@@ -592,6 +595,10 @@ impl App {
             self.status = "Aucune image copiée.".into();
             return;
         };
+        if clip.size != [self.doc.width, self.doc.height] {
+            self.status = crate::onglets::refus_de_taille("Ces images viennent", clip.size, [self.doc.width, self.doc.height]);
+            return;
+        }
         if self.refuse_on_folder() {
             return;
         }

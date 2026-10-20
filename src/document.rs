@@ -155,6 +155,8 @@ pub struct PanelClip {
     pub panels: Vec<Panel>,
     pub cels: HashMap<CelId, Cel>,
     pub size: [usize; 2],
+    /// La cadence du projet d'où ils viennent (ils se collent aussi dans un autre onglet).
+    pub fps: u32,
 }
 
 /// Identifiant de calque, unique pendant la session (il n'est pas enregistré).
@@ -2088,7 +2090,7 @@ impl Document {
             .flat_map(|l| l.frames.iter().flatten())
             .filter_map(|id| self.cels.get(id).map(|c| (*id, c.clone())))
             .collect();
-        Some(PanelClip { panels, cels, size: [self.width, self.height] })
+        Some(PanelClip { panels, cels, size: [self.width, self.height], fps: self.fps })
     }
 
     /// Colle les panneaux copiés juste après le panneau `index`, dans sa scène, chacun avec ses

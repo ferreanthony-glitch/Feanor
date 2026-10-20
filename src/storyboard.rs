@@ -153,8 +153,13 @@ impl App {
                 1 => format!("Plan collé après le {}.", after.to_lowercase()),
                 n => format!("{n} plans collés après le {}.", after.to_lowercase()),
             };
+            // Copiés dans un autre onglet, d'un projet d'une autre cadence : les plans gardent leurs images, donc
+            // leur durée change (24 images = une seconde à 24 i/s, un peu moins à 25).
+            if clip.fps != self.doc.fps {
+                self.status += &format!(" Attention : ils viennent d'un projet à {} i/s, celui-ci tourne à {} i/s : leur durée change.", clip.fps, self.doc.fps);
+            }
         } else {
-            self.status = "Ces plans viennent d'un projet d'une autre taille : ils ne se collent pas ici.".into();
+            self.status = crate::onglets::refus_de_taille(if n > 1 { "Ces plans viennent" } else { "Ce plan vient" }, clip.size, [self.doc.width, self.doc.height]);
         }
         self.panel_clipboard = Some(clip);
     }
