@@ -825,3 +825,72 @@ panneau détaché, chaque panneau de la barre s'ouvre dans chaque espace, change
 5. Passer de Storyboard à Animation et retour : le dessin ne saute pas, les panneaux ajustés se recalent en une ou
    deux images ; l'espace Montage depuis Ctrl+K ; le bouton « Storyboard » qui en revient.
 6. Un panneau détaché (Références) reste sur son écran en changeant d'espace.
+
+---------------------------------------------------------------------------------------------------
+
+## 15. Effets du trait (2026-10-20, branche `effets-trait`)
+
+Demande d'Anthony : « le tremblement, j'adore » — d'autres effets qui agissent sur le trait lui-même. Détail : README
+(« Effets du trait »), `docs/ROADMAP.md` et `docs/PERFORMANCE.md` (section 13).
+
+### Mots
+
+| Idée | Mot | À éviter |
+|---|---|---|
+| Le dessin se trace de lui-même | **Écriture du trait** (avancement) ; l'inverse : **effacement** | write-on, animation de tracé |
+| Chaque trait redoublé de passes décalées | **Crayonné multiple** (passes, retirage) | rough, doublage |
+| L'épaisseur qui pulse | **Respiration** (amplitude, période) | pulsation du trait |
+| Vague le long du trait | **Ondulation du trait** (≠ « Onde » et « Ondulation » de la famille Déformation, qui déforment l'image) | wiggle |
+| Tirets qui défilent | **Pointillés qui défilent** (tiret, intervalle) | dash |
+| Le trait part en poussière | **Désagrégation** (grains, vent) | dissolution, particules |
+| Famille d'effets | **Trait** (en tête des familles) | effets de matière (la série d'après) |
+
+### Où et quels gestes
+
+- **Rangée d'icônes « Trait »** en tête du panneau Effets : six icônes (signature, gribouillis, battement, vague en dents
+  de scie, trois points, grains) cochent et décochent chaque effet sur le calque courant (une étape d'annulation) ; enfoncée =
+  l'effet est sur le calque et actif ; grisée, avec la raison dans la bulle, sur un calque bitmap. Clic droit sur une
+  icône : lui assigner un raccourci. À droite, la **baguette** : « Apparition écrite », « Croquis nerveux »,
+  « Poussière ».
+- **Aussi** : « Ajouter un effet » > Trait ; clic droit sur un calque > Effets > Trait (cases à cocher) ; Ctrl+K (« écriture »,
+  « crayonné », « respiration », « ondulation », « pointillés », « désagrégation », « préréglage du trait »).
+- **Régler** : le nom de l'effet dans le panneau Effets montre ses clés dans la timeline et le montage (losanges violets,
+  comme le tremblement) ; chaque réglage a une bulle. L'avancement de l'écriture et de la désagrégation se met en clés (0 % puis
+  100 %) ; « Création automatique des clés » marche comme pour les autres effets.
+- **Tant qu'on dessine** sur le calque (trait, gomme, sélection, transformation), ses effets du trait et son tremblement se
+  taisent : on voit le dessin tel qu'il est.
+- **Copier-coller** : comme le reste de la pile ; une seule fois par calque et par sorte (comme le tremblement) ; laissés de
+  côté sur un calque bitmap, la barre d'état le dit.
+
+### À vérifier
+
+- Aucune comparaison avec Storyboard Pro, TVPaint ou WigglyPaint n'a été vérifiée (**à vérifier** : l'ordre d'écriture
+  des traits dans Storyboard Pro pour son effet de tracé, s'il en a un).
+- Les valeurs par défaut (écriture à 60 %, crayonné à 2 passes de 2,5 px, respiration 35 % sur 24 images, ondulation 4 px,
+  pointillés 18 / 12 px, poussière 40 % avec 80 px de dispersion) sont des choix de SHOT, à régler à l'œil.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Un calque vectoriel avec quelques traits (un visage) : cliquer l'icône signature. Le dessin est à moitié tracé (60 %),
+   la pointe de chaque trait s'efface-t-elle assez doucement ? « Bord doux » à 20 px, « Douceur du rythme » à 100 %.
+2. Poser « Apparition écrite » (baguette) à l'image 1 d'un plan de 3 secondes : le dessin se trace en une seconde, les clés
+   se voient dans la timeline ; tirer la tête de lecture : l'écriture suit sans retard. À 100 %, le dessin est celui d'avant.
+3. « Tous les traits ensemble » : tous avancent à la fois ; « Effacement » : le dessin se défait dans l'ordre ; « Durée
+   selon la longueur » : un grand trait met plus de temps qu'un petit.
+4. Dessiner un trait pendant que l'écriture est à 30 % : le trait neuf se voit en entier pendant le geste, puis rejoint
+   l'effet. Annuler : une étape par effet posé.
+5. Crayonné multiple : des passes pâles de chaque côté du trait, qui changent toutes les deux images ; « Vitesse » 1 à 12,
+   « Variantes » 2 à 6 ; le trait d'origine reste net par-dessus. « Croquis nerveux » : crayonné + léger tremblement.
+6. Respiration : le trait gonfle et se resserre sur 24 images ; « Vague le long du trait » : le gonflement court le long du
+   trait ; épaisseur de base à 50 % puis 200 % (par clés).
+7. Ondulation du trait : une vague qui avance (vitesse positive puis négative), les bouts restent en place ; « Bouts fixes »
+   décoché, les bouts bougent.
+8. Pointillés : tirets qui défilent dans les deux sens ; vitesse 0 : tirets fixes ; longueur et intervalle très courts.
+9. Désagrégation : l'avancement de 0 à 100 % défait le trait en poussière ; « Sens du trait » à 100 % : du début vers la fin ;
+   le vent change la direction ; la graine change la poussière ; « Poussière » (préréglage) en une seconde.
+10. Un trait de brosse texturée (gouache, fusain) sous chaque effet : la texture suit la déformation (respiration, ondulation).
+11. Lecture avec un calque de beaucoup de traits : l'écran reste fluide, les images arrivent un peu après la première fois
+    (calcul de fond), le deuxième tour est servi. Un calque bitmap : les six icônes grisées, la bulle dit pourquoi.
+12. Le tremblement du trait (sur la carte graphique maintenant) : même aspect qu'avant ; une pile tremblement + flou : aucun
+    clignotement quand on change un réglage.
+13. Les trois thèmes : icônes enfoncées lisibles dans la rangée.
