@@ -16,23 +16,35 @@
 //! drapeau est déjà enregistré avec le projet (`replie` du manifeste) : ni champ neuf ni changement de
 //! version du format.
 //!
-//! Une piste (rangée r) traverse tous les plans : chaque plan a ses calques dans son ordre (6f). La
-//! hauteur de la rangée ne dépend donc PAS du plan courant (elle sauterait à chaque clic sur un autre
-//! plan) mais de tous : une rangée est repliée dès qu'un de ses calques l'est (« replié l'emporte »), et
-//! le triangle plie ou déplie d'un coup le calque de cette rangée dans chaque plan. Un dossier ne
-//! concerne que son plan : la rangée d'un dossier fermé cache celles de ses calques, d'après le plan
-//! courant.
+//! Une piste (rangée r) traverse tous les plans : chaque plan a ses calques dans son ordre (6f). Deux
+//! façons de la replier, au choix d'Anthony (2026-10-20, Préférences > Montage, `ReplisPistes`) :
 //!
-//! « Déplier le calque courant » (réglage, allumé d'office) : la piste du calque courant se montre
-//! dépliée, les autres gardent leur état. Elle se déplie quand la souris est relâchée, jamais pendant
-//! un geste (sinon les pistes d'en dessous glisseraient sous le pointeur) ; replier cette piste à la
-//! main ou « Replier toutes les pistes » la laissent repliée jusqu'au prochain changement de calque.
+//! - **Commun à tous les plans** (d'office) : la hauteur de la rangée ne dépend PAS du plan courant
+//!   (elle sauterait à chaque clic sur un autre plan) mais de tous : une rangée est repliée dès qu'un de
+//!   ses calques l'est (« replié l'emporte »), et le triangle plie ou déplie d'un coup le calque de cette
+//!   rangée dans chaque plan.
+//! - **Propre à chaque plan** : chaque plan retient ses replis (les `collapsed` de ses propres calques). Les
+//!   hauteurs suivent le plan courant ; les cases des autres plans se dessinent dans ces hauteurs. Le
+//!   triangle et « tout replier / tout déplier » ne touchent que le plan courant (« … dans tous les plans »
+//!   est au menu du clic droit). Les hauteurs changent quand la souris est relâchée (`PistesUi::layout_plan`),
+//!   comme le dépliage du calque courant. Rien n'écrit dans les plans qu'on ne tient pas : utile à plusieurs.
+//!
+//! Passer d'un mode à l'autre n'écrit rien dans le projet : le mode commun calcule seulement son « replié
+//! l'emporte » pour l'affichage. Un dossier ne concerne que son plan dans les deux modes : la rangée d'un
+//! dossier fermé cache celles de ses calques, d'après le plan courant.
+//!
+//! « Déplier le calque courant » (réglage, allumé d'office, dans les deux modes) : la piste du calque
+//! courant se montre dépliée, les autres gardent leur état. Elle se déplie quand la souris est relâchée,
+//! jamais pendant un geste (sinon les pistes d'en dessous glisseraient sous le pointeur) ; replier cette
+//! piste à la main ou « Replier toutes les pistes » la laissent repliée jusqu'au prochain changement de
+//! calque.
 //!
 //! Replier ou déplier est de l'affichage : pas d'étape d'annulation (comme les lignes réduites de la
 //! timeline), mais le projet est marqué modifié puisque l'état s'enregistre avec lui.
 
-use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Rect, Response, Sense, Ui};
+use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Rect, Response, RichText, Sense, Ui};
 use egui_phosphor::regular as ph;
+use serde::{Deserialize, Serialize};
 
 use crate::app::App;
 use crate::document::Panel;
@@ -117,12 +129,48 @@ pub(crate) fn full_lane() -> Lane {
 /// Le calque `(plan, calque)` — ids — qui s'est déplié tout seul en devenant courant.
 pub(crate) type AutoOpen = Option<(u64, u64)>;
 
+/// Comment les pistes se replient (réglage de l'application, `reglages.toml` : `repliage_pistes`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReplisPistes {
+    /// Une piste traverse tous les plans : repliée dès qu'un de ses calques l'est, repliée ou dépliée
+    /// dans chaque plan d'un coup.
+    #[default]
+    Commun,
+    /// Chaque plan retient ses replis : les hauteurs suivent le plan courant, qui est seul touché.
+    ParPlan,
+}
+
+impl ReplisPistes {
+    pub fn est_commun(&self) -> bool {
+        *self == ReplisPistes::Commun
+    }
+}
+
+/// Ce qu'il faut savoir pour dire si une rangée est repliée : le mode, et dans le mode « par plan » le
+/// plan (son rang) dont les replis font les hauteurs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Replis {
+    pub mode: ReplisPistes,
+    pub plan: usize,
+}
+
+impl Replis {
+    /// Le mode commun : le plan n'y compte pas.
+    #[cfg(test)]
+    pub const COMMUN: Replis = Replis { mode: ReplisPistes::Commun, plan: 0 };
+}
+
 /// Ce que le montage retient des pistes en dehors du document : quel calque s'est déplié tout seul.
 #[derive(Default)]
 pub(crate) struct PistesUi {
     pub auto_open: AutoOpen,
     /// Le dernier calque courant vu : la piste ne se déplie qu'au changement.
     seen: AutoOpen,
+    /// Le plan (son id) dont les replis font les hauteurs en mode « propre à chaque plan » : le plan
+    /// courant au dernier relâchement de la souris (sinon les pistes d'en dessous glisseraient sous le
+    /// pointeur quand un clic change de plan). Vide : le plan courant.
+    pub layout_plan: Option<u64>,
 }
 
 /// La rangée `row` est cachée : son calque, dans le plan courant `cur`, est rangé dans un dossier fermé
@@ -133,30 +181,48 @@ pub(crate) fn row_hidden(panels: &[Panel], cur: usize, cur_layer: usize, row: us
     k != cur_layer && layers[k].parent.is_some_and(|p| layers.iter().any(|f| f.folder && f.id == p && f.collapsed))
 }
 
-/// Le calque qui s'est déplié tout seul est à la rangée `row` (de son plan).
-fn auto_open_at(panels: &[Panel], auto: AutoOpen, row: usize) -> bool {
+/// Le calque qui s'est déplié tout seul est à la rangée `row` (de son plan ; `only` : dans ce plan-là
+/// seulement, en mode « par plan »).
+fn auto_open_at(panels: &[Panel], auto: AutoOpen, row: usize, only: Option<usize>) -> bool {
     let Some((panel, layer)) = auto else { return false };
-    panels.iter().any(|p| p.id == panel && layer_in_row(&p.layers, row).is_some_and(|k| p.layers[k].id == layer && !p.layers[k].folder))
+    panels.iter().enumerate().any(|(i, p)| (only.is_none() || only == Some(i)) && p.id == panel && layer_in_row(&p.layers, row).is_some_and(|k| p.layers[k].id == layer && !p.layers[k].folder))
 }
 
-/// La rangée `row` est repliée : un de ses calques l'est (dans un plan quelconque), sauf si le calque
-/// courant s'y est déplié tout seul.
-pub(crate) fn row_folded(panels: &[Panel], row: usize, auto: AutoOpen) -> bool {
-    if auto_open_at(panels, auto, row) {
-        return false;
+/// La rangée `row` est repliée selon `replis`. Commun : un de ses calques l'est (dans un plan quelconque).
+/// Par plan : le calque de cette rangée dans le plan `replis.plan` l'est (pas de calque à cette rangée :
+/// dépliée). Dans les deux cas, pas repliée si le calque courant s'y est déplié tout seul.
+pub(crate) fn row_folded_in(panels: &[Panel], row: usize, auto: AutoOpen, replis: Replis) -> bool {
+    match replis.mode {
+        ReplisPistes::Commun => !auto_open_at(panels, auto, row, None) && panels.iter().any(|p| layer_in_row(&p.layers, row).is_some_and(|k| p.layers[k].collapsed)),
+        ReplisPistes::ParPlan => {
+            !auto_open_at(panels, auto, row, Some(replis.plan))
+                && panels.get(replis.plan).is_some_and(|p| layer_in_row(&p.layers, row).is_some_and(|k| p.layers[k].collapsed))
+        }
     }
-    panels.iter().any(|p| layer_in_row(&p.layers, row).is_some_and(|k| p.layers[k].collapsed))
 }
 
-/// Les pistes visibles, de haut en bas : `count` rangées au plus, celles d'un dossier fermé en moins.
+/// `row_folded_in` en mode commun (pour les essais).
+#[cfg(test)]
+pub(crate) fn row_folded(panels: &[Panel], row: usize, auto: AutoOpen) -> bool {
+    row_folded_in(panels, row, auto, Replis::COMMUN)
+}
+
+/// Les pistes visibles en mode commun, de haut en bas : `count` rangées au plus, celles d'un dossier fermé en
+/// moins (pour les essais ; l'application passe par `lanes_in`).
+#[cfg(test)]
 pub(crate) fn lanes(panels: &[Panel], cur: usize, cur_layer: usize, count: usize, auto: AutoOpen) -> Vec<Lane> {
+    lanes_in(panels, cur, cur_layer, count, auto, Replis::COMMUN)
+}
+
+/// `lanes` selon le mode de repliage.
+pub(crate) fn lanes_in(panels: &[Panel], cur: usize, cur_layer: usize, count: usize, auto: AutoOpen, replis: Replis) -> Vec<Lane> {
     let mut top = 0.0;
     let mut out = Vec::new();
     for row in 0..count {
         if row_hidden(panels, cur, cur_layer, row) {
             continue;
         }
-        let folded = row_folded(panels, row, auto);
+        let folded = row_folded_in(panels, row, auto, replis);
         let h = if folded { FOLDED_H } else { LAYER_H };
         out.push(Lane { row, top, h, folded });
         top += h;
@@ -205,9 +271,17 @@ impl App {
 
     /// La piste du calque courant se déplie quand il change (réglage « Déplier le calque courant »), pas
     /// pendant un geste : `pointer_down` (la souris est tenue) la retient.
+    /// Le plan dont les replis font les hauteurs (mode « par plan ») suit le plan courant au même moment.
     pub(crate) fn pistes_follow_current(&mut self, pointer_down: bool) {
+        if pointer_down {
+            return;
+        }
+        let plan = self.doc.panels.get(self.cur_panel).map(|p| p.id);
+        if self.pistes.layout_plan != plan {
+            self.pistes.layout_plan = plan;
+        }
         let cur = self.doc.panels.get(self.cur_panel).and_then(|p| p.layers.get(self.cur_layer).map(|l| (p.id, l.id)));
-        if pointer_down || cur == self.pistes.seen {
+        if cur == self.pistes.seen {
             return;
         }
         self.pistes.seen = cur;
@@ -224,23 +298,37 @@ impl App {
         self.layers().len().saturating_sub(li + 1)
     }
 
+    /// Comment les rangées se replient maintenant : le mode des Préférences et le plan dont les replis font
+    /// les hauteurs (celui du dernier relâchement de la souris ; le plan courant s'il n'existe plus).
+    pub(crate) fn pistes_replis(&self) -> Replis {
+        let plan = self.pistes.layout_plan.and_then(|id| self.doc.panels.iter().position(|p| p.id == id)).unwrap_or(self.cur_panel);
+        Replis { mode: self.settings.montage_folds, plan }
+    }
+
+    /// Le repliage est propre à chaque plan (et non commun à tous).
+    pub(crate) fn pistes_par_plan(&self) -> bool {
+        self.settings.montage_folds == ReplisPistes::ParPlan
+    }
+
     /// La rangée `row` est repliée à l'écran (réglage du calque courant compris).
     pub(crate) fn track_is_folded(&self, row: usize) -> bool {
-        row_folded(&self.doc.panels, row, self.pistes_auto_open())
+        row_folded_in(&self.doc.panels, row, self.pistes_auto_open(), self.pistes_replis())
     }
 
     /// Replie ou déplie la piste de la rangée `row`. Un calque ordinaire : le calque de cette rangée dans
-    /// chaque plan ; un dossier : celui du plan courant seulement (fermé, il cache les pistes de ses
-    /// calques). Faux si rien n'existe à cette rangée.
+    /// chaque plan (mode commun) ou dans le plan courant seulement (mode « par plan ») ; un dossier : celui
+    /// du plan courant seulement (fermé, il cache les pistes de ses calques). Faux si rien n'existe à cette
+    /// rangée.
     pub(crate) fn set_track_folded(&mut self, row: usize, folded: bool) -> bool {
         let cur = self.cur_panel;
+        let per_plan = self.pistes_par_plan();
         let Some(is_folder) = self.doc.panels.get(cur).and_then(|p| layer_in_row(&p.layers, row).map(|k| p.layers[k].folder)) else { return false };
-        if folded && auto_open_at(&self.doc.panels, self.pistes.auto_open, row) {
+        if folded && auto_open_at(&self.doc.panels, self.pistes.auto_open, row, per_plan.then_some(cur)) {
             self.pistes.auto_open = None;
         }
         let mut changed = false;
         for (pi, p) in self.doc.panels.iter_mut().enumerate() {
-            if is_folder && pi != cur {
+            if (is_folder || per_plan) && pi != cur {
                 continue;
             }
             if let Some(k) = layer_in_row(&p.layers, row) {
@@ -268,10 +356,21 @@ impl App {
     }
 
     /// Replie toutes les pistes (les dossiers restent comme ils sont), ou déplie tout (les dossiers
-    /// fermés s'ouvrent : plus aucune piste cachée). Renvoie le nombre de calques changés.
+    /// fermés s'ouvrent : plus aucune piste cachée) : dans tous les plans en mode commun, dans le plan
+    /// courant en mode « par plan ». Renvoie le nombre de calques changés.
     pub(crate) fn set_all_tracks_folded(&mut self, folded: bool) -> usize {
+        let all_plans = !self.pistes_par_plan();
+        self.set_all_tracks_folded_in(folded, all_plans)
+    }
+
+    /// `set_all_tracks_folded` dans tous les plans (`all_plans`) ou dans le plan courant seulement.
+    pub(crate) fn set_all_tracks_folded_in(&mut self, folded: bool, all_plans: bool) -> usize {
         let mut changed = 0;
-        for p in &mut self.doc.panels {
+        let cur = self.cur_panel;
+        for (pi, p) in self.doc.panels.iter_mut().enumerate() {
+            if !all_plans && pi != cur {
+                continue;
+            }
             for l in &mut p.layers {
                 if l.folder && folded {
                     continue;
@@ -288,8 +387,40 @@ impl App {
         if changed > 0 {
             self.modified = true;
         }
-        self.status = if folded { "Toutes les pistes sont repliées.".into() } else { "Toutes les pistes sont dépliées.".into() };
+        let scope = if all_plans && self.pistes_par_plan() {
+            " de tous les plans"
+        } else if self.pistes_par_plan() {
+            " de ce plan"
+        } else {
+            ""
+        };
+        self.status = format!("Toutes les pistes{scope} sont {}.", if folded { "repliées" } else { "dépliées" });
         changed
+    }
+
+    /// Le repliage des pistes : commun à tous les plans, ou propre à chaque plan. N'écrit rien dans le
+    /// projet : les replis de chaque plan restent tels quels, seul l'affichage change.
+    pub(crate) fn set_replis_pistes(&mut self, mode: ReplisPistes) {
+        if self.settings.montage_folds == mode {
+            return;
+        }
+        self.settings.montage_folds = mode;
+        // Les hauteurs suivent le plan courant tout de suite : on vient de cliquer un réglage, pas une piste.
+        self.pistes.layout_plan = self.doc.panels.get(self.cur_panel).map(|p| p.id);
+        if let Err(e) = self.settings.save() {
+            self.status = format!("Réglages non enregistrés : {e}");
+            return;
+        }
+        self.status = match mode {
+            ReplisPistes::Commun => "Repliage des pistes : commun à tous les plans.".into(),
+            ReplisPistes::ParPlan => "Repliage des pistes : propre à chaque plan.".into(),
+        };
+    }
+
+    /// Bascule entre les deux façons de replier les pistes (action `piste.replis_par_plan`).
+    pub(crate) fn toggle_replis_pistes(&mut self) {
+        let next = if self.pistes_par_plan() { ReplisPistes::Commun } else { ReplisPistes::ParPlan };
+        self.set_replis_pistes(next);
     }
 
     /// « Déplier le calque courant » : allumé, éteint.
@@ -348,12 +479,14 @@ impl App {
         let icon = if folded { ph::CARET_RIGHT } else { ph::CARET_DOWN };
         let resp = mini_icon(ui, rect, egui::Id::new(("triangle_piste", id)), icon, size, color);
         let (what, why) = match (folder, folded) {
-            (true, true) => ("Ouvrir le dossier", "Montre les pistes de ses calques. Alt + clic : déplier toutes les pistes."),
-            (true, false) => ("Fermer le dossier", "Cache les pistes de ses calques (ils restent à l'image). Alt + clic : replier toutes les pistes."),
-            (false, true) => ("Déplier la piste", "Montre les réglages du calque et rend la piste plus haute. Alt + clic : déplier toutes les pistes."),
-            (false, false) => ("Replier la piste", "Réduit la piste à une bande fine : le nom et les dessins restent visibles. Alt + clic : replier toutes les pistes."),
+            (true, true) => ("Ouvrir le dossier", "Montre les pistes de ses calques. Alt + clic : déplier toutes les pistes"),
+            (true, false) => ("Fermer le dossier", "Cache les pistes de ses calques (ils restent à l'image). Alt + clic : replier toutes les pistes"),
+            (false, true) => ("Déplier la piste", "Montre les réglages du calque et rend la piste plus haute. Alt + clic : déplier toutes les pistes"),
+            (false, false) => ("Replier la piste", "Réduit la piste à une bande fine : le nom et les dessins restent visibles. Alt + clic : replier toutes les pistes"),
         };
-        if self.aide(resp, what, why, "piste.basculer").clicked() {
+        // Mode « par plan » : seul le plan courant est touché, dit dans la bulle.
+        let why = if self.pistes_par_plan() { format!("{why} de ce plan. Les autres plans gardent leurs replis.") } else { format!("{why}.") };
+        if self.aide(resp, what, &why, "piste.basculer").clicked() {
             let all = ui.input(|i| i.modifiers.alt);
             let row = self.track_row_of(li);
             self.toggle_track_fold(row, all);
@@ -415,13 +548,65 @@ impl App {
                 ui.close_menu();
                 self.set_track_folded(row, !folded);
             }
-            self.action_item(ui, "Replier toutes les pistes", "piste.replier_tout");
-            self.action_item(ui, "Déplier toutes les pistes", "piste.deplier_tout");
+            let par_plan = self.pistes_par_plan();
+            self.action_item(ui, if par_plan { "Replier toutes les pistes de ce plan" } else { "Replier toutes les pistes" }, "piste.replier_tout");
+            self.action_item(ui, if par_plan { "Déplier toutes les pistes de ce plan" } else { "Déplier toutes les pistes" }, "piste.deplier_tout");
+            if par_plan {
+                if ui.button("Replier les pistes de tous les plans").clicked() {
+                    ui.close_menu();
+                    self.set_all_tracks_folded_in(true, true);
+                }
+                if ui.button("Déplier les pistes de tous les plans").clicked() {
+                    ui.close_menu();
+                    self.set_all_tracks_folded_in(false, true);
+                }
+            }
             ui.separator();
             let mut auto = self.settings.montage_auto_open;
             if ui.checkbox(&mut auto, "Déplier le calque courant tout seul").on_hover_text("La piste du calque courant se montre dépliée ; les autres gardent leur état.").clicked() {
                 self.run_action("piste.auto_deplier");
             }
+            ui.separator();
+            ui.label(RichText::new("Repliage des pistes").small().weak());
+            self.replis_choices(ui);
         });
     }
+
+    /// Les deux façons de replier, en deux lignes à choisir (menu du clic droit sur une piste).
+    fn replis_choices(&mut self, ui: &mut Ui) {
+        for (mode, nom, aide) in [(ReplisPistes::Commun, "Commun à tous les plans", REPLIS_COMMUN), (ReplisPistes::ParPlan, "Propre à chaque plan", REPLIS_PAR_PLAN)] {
+            let on = self.settings.montage_folds == mode;
+            let resp = ui.selectable_label(on, nom);
+            if crate::bulles::bulle(resp, nom, aide, "").clicked() {
+                ui.close_menu();
+                self.set_replis_pistes(mode);
+            }
+        }
+    }
+
+    /// La section « Montage » de Fichier > Préférences… : le repliage des pistes (deux icônes à choisir, une
+    /// phrase de bulle pour chacune) et « Déplier le calque courant ».
+    pub(crate) fn montage_prefs_ui(&mut self, ui: &mut Ui) {
+        ui.label(RichText::new("Montage").strong());
+        ui.horizontal(|ui| {
+            let label = ui.label("Repliage des pistes");
+            crate::bulles::bulle(label, "Repliage des pistes", &format!("{REPLIS_COMMUN} {REPLIS_PAR_PLAN}"), "");
+            let mut mode = self.settings.montage_folds;
+            let a = crate::bulles::choix(ui, &mut mode, ReplisPistes::Commun, ph::LINK_SIMPLE, "Commun à tous les plans", REPLIS_COMMUN, "");
+            let b = crate::bulles::choix(ui, &mut mode, ReplisPistes::ParPlan, ph::LINK_SIMPLE_BREAK, "Propre à chaque plan", REPLIS_PAR_PLAN, "");
+            if a.changed() || b.changed() {
+                self.set_replis_pistes(mode);
+            }
+            ui.label(RichText::new(if mode == ReplisPistes::Commun { "commun à tous les plans" } else { "propre à chaque plan" }).small().weak());
+        });
+        let mut auto = self.settings.montage_auto_open;
+        let resp = ui.checkbox(&mut auto, "Déplier le calque courant tout seul").on_hover_text("La piste du calque courant se montre dépliée ; les autres gardent leur état.");
+        if resp.clicked() {
+            self.run_action("piste.auto_deplier");
+        }
+    }
 }
+
+/// Une phrase pour chaque façon de replier (bulles, Préférences, menu).
+pub(crate) const REPLIS_COMMUN: &str = "Commun à tous les plans : une piste est repliée dès qu'un de ses calques l'est, et le triangle la plie dans chaque plan.";
+pub(crate) const REPLIS_PAR_PLAN: &str = "Propre à chaque plan : chaque plan retient ses replis, les hauteurs suivent le plan courant et le triangle ne touche que lui.";

@@ -98,7 +98,7 @@ impl App {
     /// Rangées pour une bande haute de `available` : les panneaux prennent la place qui reste.
     pub(crate) fn montage_rows(&self, available: f32) -> Rows {
         let count = self.doc.panels.iter().map(|p| p.layers.len()).max().unwrap_or(0);
-        let lanes = crate::pistes::lanes(&self.doc.panels, self.cur_panel, self.cur_layer, count, self.pistes_auto_open());
+        let lanes = crate::pistes::lanes_in(&self.doc.panels, self.cur_panel, self.cur_layer, count, self.pistes_auto_open(), self.pistes_replis());
         let mut rows = Rows { block_h: 0.0, lanes };
         let fixed = rows.height(self.doc.audio_tracks.len()) + 12.0;
         rows.block_h = (available - fixed).clamp(56.0, 170.0);

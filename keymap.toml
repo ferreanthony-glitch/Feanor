@@ -2425,6 +2425,11 @@ action = "piste.auto_deplier"
 touches = []
 source = "SHOT (sans touche)"
 
+[[raccourci]]
+action = "piste.replis_par_plan"
+touches = []
+source = "SHOT (sans touche)"
+
 # Panneaux et barre des panneaux.
 [[raccourci]]
 action = "vue.historique"

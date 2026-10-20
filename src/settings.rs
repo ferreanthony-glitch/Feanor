@@ -77,6 +77,10 @@ pub struct Settings {
     /// (les autres gardent leur état).
     #[serde(default = "yes", rename = "deplier_calque_courant")]
     pub montage_auto_open: bool,
+    /// Repliage des pistes du montage : commun à tous les plans (d'office) ou propre à chaque plan
+    /// (`pistes.rs`, Préférences > Montage). Un réglage de l'application : rien n'est écrit dans le projet.
+    #[serde(default, rename = "repliage_pistes", skip_serializing_if = "crate::pistes::ReplisPistes::est_commun")]
+    pub montage_folds: crate::pistes::ReplisPistes,
     /// Pinceau et crayon : peint derrière, remplir la forme (`brushfill`), retenus d'une séance à
     /// l'autre (Anthony, 2026-10-17).
     #[serde(default, rename = "peint_derriere")]
@@ -208,6 +212,7 @@ impl Default for Settings {
             workspaces: Vec::new(),
             montage_head_w: default_head_w(),
             montage_auto_open: true,
+            montage_folds: Default::default(),
             paint_behind: false,
             fill_shapes: false,
             recent_projects: Vec::new(),

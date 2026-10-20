@@ -1924,9 +1924,13 @@ tiennent ainsi dans la bande, et tout se prend comme avant (choisir, glisser un 
 - **Déplier le calque courant** (allumé d'office) : la piste du calque courant se montre dépliée, les autres gardent leur état ; elle s'ouvre quand on relâche la souris, jamais en plein geste.
 - **Dossiers** : le triangle d'un dossier le ferme ; ses calques n'ont plus de piste (comme dans le panneau Calques et la timeline).
 - Même état que les **lignes réduites** de la timeline de l'animation (`Layer::collapsed`), enregistré avec le projet (format inchangé). Replier est de l'affichage : pas d'étape d'annulation.
-  Une piste traverse tous les plans (la rangée n) : elle est repliée dès qu'un de ses calques l'est.
+  Une piste traverse tous les plans (la rangée n) : en mode d'origine, elle est repliée dès qu'un de ses calques l'est.
+- **Deux façons de replier** (Fichier > Préférences… > Montage > « Repliage des pistes », ou clic droit sur une piste > Replier / déplier les pistes, ou « Replis propres à chaque plan »
+  sous « Plus… » du montage, action `piste.replis_par_plan`) : **commun à tous les plans** (d'origine : le triangle et « tout replier » écrivent dans tous les plans) ou **propre à chaque plan**
+  (chaque plan retient ses replis, les hauteurs suivent le plan courant, le triangle et « tout replier » ne touchent que lui, « … de tous les plans » est au clic droit). Les hauteurs changent
+  au relâchement de la souris, jamais sous le pointeur. Changer de mode n'écrit rien dans le projet ; en mode par plan, replier n'écrit jamais dans un plan qu'on ne tient pas (film partagé).
 
-Détail et liste de contrôle à l'écran : `docs/INTERFACE.md` § 29.
+Détail, ce que chaque geste écrit et listes de contrôle à l'écran : `docs/INTERFACE.md` § 29 (29.8 et 29.9 pour les deux modes).
 ## Importer un scénario
 
 Fichier > Importer > « Un scénario… » (action `fichier.importer_scenario`, donc aussi dans Ctrl+K) : on
@@ -2296,7 +2300,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `storyboard.rs` | Bande de montage, vue vignettes, fiche du panneau |
 | `montagerows.rs` | Pistes du montage : caméra, calques, fond de scène, noms des pistes |
 | `montagehead.rs` | Colonne de gauche du montage : largeur étirable, réglages des calques par rangée, menu de tout ce qui touche au calque |
-| `pistes.rs` | Pistes repliables du montage : deux hauteurs (dépliée 40, repliée 16), triangle, tout replier / déplier, calque courant déplié tout seul, dossiers fermés ; état = `Layer::collapsed` |
+| `pistes.rs` | Pistes repliables du montage : deux hauteurs (dépliée 40, repliée 16), triangle, tout replier / déplier, calque courant déplié tout seul, dossiers fermés, repliage commun à tous les plans ou propre à chaque plan (`ReplisPistes`) ; état = `Layer::collapsed` |
 | `toolbars.rs`, `colorui.rs`, `layersui.rs`, `brushui.rs` | Barres de commandes et d'outils, panneau Couleur, panneau Calques, case et menu d'un pinceau, import |
 | `pinceaux.rs`, `pinceauxui.rs` | Panneau Pinceaux : dossiers, recherche, état retenu, catégories des réglages (logique) ; taille, onglets, liste et réglages (affichage) |
 | `couleur.rs` | Couleurs : conversions RVB, TSV, TSL, Lab, code hexadécimal, couleurs récentes, réglages retenus |
