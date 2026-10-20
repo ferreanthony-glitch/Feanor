@@ -132,7 +132,13 @@ pub const FORMAT: &str = "pelure-projet";
 /// précédente refuse le projet au lieu d'en montrer le dessin sans liseré, sans dégradé ni plume (et la
 /// plume est désignée par un numéro tiré du nom du réglage de pinceau). Un projet de version 31 ou moins
 /// s'ouvre tel quel.
-pub const VERSION: u32 = 32;
+/// 33 (2026-10-20, notes d'Anthony « dessin ») : clés de position des calques (`cles_position` d'un calque :
+/// pour chaque clé, l'image du plan, le décalage `x` `y`, l'`echelle`, la `rotation`, les étirements
+/// (`etirement_x`, `etirement_y`), et `lisse`, `adoucir_entree`, `adoucir_sortie` ; voir `poskeys.rs`).
+/// Une version précédente refuse le projet : elle montrerait le calque immobile à sa pose fixe, le film
+/// changerait sans prévenir. Un projet de version 32 ou moins s'ouvre tel quel. (Si une autre branche a aussi
+/// pris le numéro 33 pour ses propres champs, la fusion garde le 33 et réunit les deux descriptions.)
+pub const VERSION: u32 = 33;
 const DRAWINGS: &str = "dessins";
 /// Fils qui lisent ou écrivent les dessins d'un projet en parallèle : au-delà de huit, le disque et
 /// la mémoire (une feuille décodée pèse 33 Mo) limitent plus que le processeur.
@@ -528,6 +534,10 @@ struct LayerEntry {
     /// échelle, rotation en degrés, autour du centre de la feuille.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     transformation: Option<TransformEntry>,
+    /// Clés de position (format 33, `poskeys.rs`) : la pose du calque à certaines images du plan, qui
+    /// l'animent ; absentes : le calque a sa pose fixe (`transformation`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    cles_position: Vec<crate::poskeys::Entree>,
     /// Profondeur multiplan (2c ; absent = 0, plan de référence).
     #[serde(default, skip_serializing_if = "is_zero")]
     profondeur: f32,
@@ -1566,6 +1576,7 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                     etirement_x: l.transform.stretch_x,
                     etirement_y: l.transform.stretch_y,
                 }),
+                cles_position: l.pos_keys.iter().map(crate::poskeys::Entree::from).collect(),
                 profondeur: l.depth,
                 toute_la_scene: l.scene_wide.map(|w| w.key),
                 fusion: l.blend,
@@ -2302,6 +2313,7 @@ fn load_manifest(mut manifest: Manifest, dir: &Path, quick: bool, progress: Opti
                                 stretch_y: LayerTransform::clamp_stretch(t.etirement_y),
                             })
                             .unwrap_or_default(),
+                        pos_keys: crate::poskeys::from_entries(l.cles_position),
                         depth: if l.profondeur.is_finite() {
                             l.profondeur.clamp(Layer::MIN_DEPTH, 1000.0)
                         } else {

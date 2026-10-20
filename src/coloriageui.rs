@@ -430,7 +430,7 @@ impl App {
         let transforms_differ = source_id
             .and_then(|id| self.layers().iter().find(|l| l.id == id))
             .zip(self.layers().get(li))
-            .is_some_and(|(s, l)| s.transform != l.transform && self.coloriage.dest == Dest::Same);
+            .is_some_and(|(s, l)| (s.transform != l.transform || s.pos_keys != l.pos_keys) && self.coloriage.dest == Dest::Same);
         let span = 0..self.frame_count();
         let (mut open, mut go) = (true, false);
         let (mut line_choice, mut source_choice, mut dest, mut keys_typed) = (line_id, source_id, self.coloriage.dest, self.coloriage.keys_typed);
@@ -684,6 +684,7 @@ impl App {
                 let mut layer = Layer::new(self.new_colour_name(), kind);
                 let l = &self.layers()[line];
                 (layer.parent, layer.transform, layer.depth) = (l.parent, l.transform, l.depth);
+                layer.pos_keys = l.pos_keys.clone();
                 self.layers_mut().insert(line, layer);
                 // Le calque de trait et tout ce qui est au-dessus montent d'un rang.
                 if self.cur_layer >= line {

@@ -426,6 +426,15 @@ mod rognageui;
 mod springtools;
 #[cfg(test)]
 mod springtools_tests;
+// Notes d'Anthony, lot « dessin » (2026-10-20) : tracé droit, sélection d'un objet au clic, remplir la
+// sélection, clés de position.
+mod tracedroit;
+mod remplirsel;
+mod selobjet;
+pub mod poskeys;
+mod poskeysui;
+#[cfg(test)]
+mod dessin_notes_tests;
 mod montagerows;
 #[cfg(test)]
 mod montagerows_tests;

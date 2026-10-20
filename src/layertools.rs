@@ -232,7 +232,7 @@ impl App {
         let corners = self.box_corners();
         // Centre de la boîte telle qu'on la voit, ramené au repère de la transformation du calque
         // (sans le défilement multiplan, qui ne dépend que de la caméra).
-        let (seen, own) = (self.layer_seen(), self.layer().transform);
+        let (seen, own) = (self.layer_seen(), self.layer().pose(self.cur_frame));
         let seen_center = pos2(
             corners.iter().map(|c| c.x).sum::<f32>() / 4.0,
             corners.iter().map(|c| c.y).sum::<f32>() / 4.0,
@@ -265,8 +265,8 @@ impl App {
             .iter()
             .map(|&li| {
                 let l = &self.layers()[li];
-                let own = l.transform;
-                let seen = l.transform_seen(&camera).unwrap_or(own);
+                let own = l.pose(self.cur_frame);
+                let seen = l.transform_seen_at(&camera, self.cur_frame).unwrap_or(own);
                 Peer { li, t0: own, off: vec2(seen.x - own.x, seen.y - own.y) }
             })
             .collect();
@@ -278,7 +278,7 @@ impl App {
             handle,
             start: stage,
             many: Some(Many { peers: list, box0, a: crate::vector::Affine::IDENTITY }),
-            t0: self.layer().transform,
+            t0: self.layer().pose(self.cur_frame),
             center: Pos2::ZERO,
             seen_center: Pos2::ZERO,
             content: box0,
@@ -347,7 +347,7 @@ impl App {
             .collect();
         d.changed = true;
         for (li, t) in moved {
-            self.layers_mut()[li].transform = t;
+            self.set_layer_pose(li, t);
         }
         self.modified = true;
         self.status = format!("{n} calques {text}.");
@@ -391,7 +391,7 @@ impl App {
         };
         d.changed = true;
         let li = self.cur_layer;
-        self.layers_mut()[li].transform = t;
+        self.set_layer_pose(li, t);
         self.modified = true;
         self.status = format!(
             "Calque : décalage {:+.0} × {:+.0} px, largeur {:.0} %, hauteur {:.0} %, rotation {:.1}°",
@@ -430,18 +430,20 @@ impl App {
             if self.content_refuses() {
                 return;
             }
-            if peers.iter().all(|&li| self.layers()[li].transform.is_identity()) {
+            let f = self.cur_frame;
+            if peers.iter().all(|&li| self.layers()[li].pose(f).is_identity()) {
                 self.status = "Ces calques ne sont pas transformés.".into();
                 return;
             }
             self.record_step();
+            // (Un calque animé retrouve sa place à cette image : la clé de l'image prend la pose d'origine.)
             for &li in &peers {
-                self.layers_mut()[li].transform = LayerTransform::default();
+                self.set_layer_pose(li, LayerTransform::default());
             }
             self.status = format!("Transformation de {} calques annulée.", peers.len());
             return;
         }
-        if self.layer().transform.is_identity() {
+        if self.layer().pose(self.cur_frame).is_identity() {
             self.status = "Ce calque n'est pas transformé.".into();
             return;
         }
@@ -454,8 +456,19 @@ impl App {
         }
         self.record_step();
         let li = self.cur_layer;
-        self.layers_mut()[li].transform = LayerTransform::default();
-        self.status = "Transformation du calque annulée.".into();
+        self.set_layer_pose(li, LayerTransform::default());
+        self.status = if self.layer().is_animated() {
+            "Le calque retrouve sa place à cette image (la clé de position de cette image prend la pose d'origine).".into()
+        } else {
+            "Transformation du calque annulée.".into()
+        };
+    }
+
+    /// Le calque `li` prend la pose `t` à l'image courante : sa transformation fixe, ou, s'il est animé
+    /// (clés de position), la clé de cette image, posée au besoin (`Layer::set_pose`).
+    pub(crate) fn set_layer_pose(&mut self, li: usize, t: LayerTransform) {
+        let f = self.cur_frame;
+        self.layers_mut()[li].set_pose(f, t);
     }
 
     /// Boîte et poignées de l'outil Transformer.
@@ -501,7 +514,7 @@ impl App {
             ui.label("Position verrouillée : déverrouille-la pour transformer le calque.");
             return;
         }
-        let t = self.layer().transform;
+        let t = self.layer().pose(self.cur_frame);
         let (mut x, mut y, mut angle) = (t.x, t.y, t.angle);
         // En valeur absolue : un calque retourné garde son signe (`flip.rs`).
         let (mut width, mut height) = ((t.scale * t.stretch_x * 100.0).abs(), (t.scale * t.stretch_y * 100.0).abs());
@@ -546,7 +559,9 @@ impl App {
         }
         if let Some(t) = next {
             let li = self.cur_layer;
-            self.layers_mut()[li].transform = t;
+            self.set_layer_pose(li, t);
         }
+        // Les clés de position : animer le calque (`poskeysui.rs`).
+        self.pos_keys_ui(ui);
     }
 }

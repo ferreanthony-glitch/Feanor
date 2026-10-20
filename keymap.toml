@@ -549,10 +549,40 @@ action = "selection.miroir_v"
 touches = ["Alt+V"]
 source = "Storyboard Pro 27 : DRAWING_FLIP_VERTICAL_KEY"
 
+# Maj+Suppr : « Effacer ce qui est hors de la sélection » (DRAWING_DELETE_NON_SELECTION_KEY de Storyboard
+# Pro) cède Maj+Suppr à « Remplir la sélection » (choix d'Anthony, 2026-10-20) ; Maj+Retour arrière
+# (DRAWING_DELETE_NON_SELECTION_BACKSPACE_KEY) lui reste. Sans zone bitmap choisie, Maj+Suppr fait encore
+# « Effacer ce qui est hors de la sélection » (voir app.rs).
 [[raccourci]]
 action = "dessin.supprimer_hors_selection"
-touches = ["Maj+Suppr", "Maj+Retour arrière"]
-source = "Storyboard Pro 27 : DRAWING_DELETE_NON_SELECTION_KEY, DRAWING_DELETE_NON_SELECTION_BACKSPACE_KEY"
+touches = ["Maj+Retour arrière"]
+source = "Storyboard Pro 27 : DRAWING_DELETE_NON_SELECTION_BACKSPACE_KEY (sa touche Maj+Suppr va à selection.remplir)"
+
+[[raccourci]]
+action = "selection.remplir"
+touches = ["Maj+Suppr"]
+source = "choix d'Anthony, 2026-10-20 (zone bitmap : remplie de la couleur courante ; sinon : effacer hors de la sélection)"
+
+# Clés de position des calques (outil Transformer, notes d'Anthony 2026-10-20) : sans touche par défaut.
+[[raccourci]]
+action = "calque.cle_position"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "calque.cle_position_lisser"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "calque.cle_position_supprimer"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "calque.cles_position_supprimer"
+touches = []
+source = "SHOT (sans touche)"
 
 [[raccourci]]
 action = "dessin.aplatir"

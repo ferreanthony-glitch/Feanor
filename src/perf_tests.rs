@@ -163,6 +163,8 @@ pub(crate) struct Banc {
     /// Les textes peints par la dernière image (si `garder_textes`).
     pub textes: Vec<String>,
     pub garder_textes: bool,
+    /// Les touches tenues pendant les images (Maj, Ctrl, Alt) : `RawInput::modifiers`.
+    pub touches: Modifiers,
 }
 
 pub(crate) fn banc(doc: Document, avec_gpu: bool) -> Banc {
@@ -195,7 +197,7 @@ pub(crate) fn banc_taille(doc: Document, avec_gpu: bool, largeur: u32, hauteur: 
             view_formats: &[],
         })
     });
-    let mut b = Banc { ctx, app, rs, taille, t: 0.0, cible, textes: Vec::new(), garder_textes: false };
+    let mut b = Banc { ctx, app, rs, taille, t: 0.0, cible, textes: Vec::new(), garder_textes: false, touches: Modifiers::NONE };
     b.attendre_pinceaux();
     b.chauffer(8);
     b.attendre_vignettes();
@@ -239,7 +241,7 @@ impl Banc {
     /// Une image d'écran, `dt` secondes après la précédente, avec ces événements.
     pub fn image(&mut self, events: Vec<Event>, dt: f64) -> Mesure {
         self.t += dt;
-        let mut input = RawInput { screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), self.taille)), time: Some(self.t), events, ..RawInput::default() };
+        let mut input = RawInput { screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), self.taille)), time: Some(self.t), events, modifiers: self.touches, ..RawInput::default() };
         input.viewports.entry(ViewportId::ROOT).or_default().native_pixels_per_point = Some(1.0);
         let t0 = Instant::now();
         let app = &mut self.app;

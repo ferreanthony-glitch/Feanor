@@ -69,6 +69,21 @@ impl PixelMask {
         )
     }
 
+    /// Cette zone moins `other` (Ctrl+Maj + clic sur un objet déjà choisi : le retirer).
+    pub fn without(&self, other: &PixelMask) -> PixelMask {
+        let mut data = self.data.clone();
+        for y in 0..self.h {
+            for x in 0..self.w {
+                let o = other.at(self.x0 + x, self.y0 + y);
+                if o > 0.0 {
+                    let v = &mut data[y * self.w + x];
+                    *v = (*v - o).max(0.0);
+                }
+            }
+        }
+        PixelMask { x0: self.x0, y0: self.y0, w: self.w, h: self.h, data }
+    }
+
     /// Réunion de deux zones (Maj : ajouter à la sélection).
     pub fn union(&self, other: &PixelMask) -> PixelMask {
         let x0 = self.x0.min(other.x0);

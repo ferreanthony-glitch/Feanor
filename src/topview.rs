@@ -142,7 +142,7 @@ impl App {
                     Some(b) => {
                         // Le dessin avec la transformation propre du calque (sans le défilement :
                         // c'est la caméra qui le produit, vue de dessus).
-                        let aff = l.transform.affine(pivot);
+                        let aff = l.pose(self.cur_frame).affine(pivot);
                         let xs = [b.left_top(), b.right_top(), b.right_bottom(), b.left_bottom()].map(|p| aff.apply(p).x);
                         let (lo, hi) = xs.iter().fold((f32::MAX, f32::MIN), |(lo, hi), &x| (lo.min(x), hi.max(x)));
                         (lo, hi, false)

@@ -187,7 +187,10 @@ fn the_preset_keys_work_and_their_old_owners_let_go() {
         assert_eq!(press(&sbp, Key::F4, NONE, mode).as_deref(), Some("dessin.nouvelle_cle_vide"));
         assert_eq!(press(&sbp, Key::L, Modifiers::COMMAND, mode).as_deref(), Some("calque.pelure"));
         assert_eq!(press(&sbp, Key::Delete, NONE, mode).as_deref(), Some("edition.supprimer"));
-        assert_eq!(press(&sbp, Key::Delete, Modifiers::SHIFT, mode).as_deref(), Some("dessin.supprimer_hors_selection"));
+        // Maj+Suppr remplit la zone bitmap (choix d'Anthony, 2026-10-20) ; l'effacement hors de la
+        // sélection garde Maj+Retour arrière.
+        assert_eq!(press(&sbp, Key::Delete, Modifiers::SHIFT, mode).as_deref(), Some("selection.remplir"));
+        assert_eq!(press(&sbp, Key::Backspace, Modifiers::SHIFT, mode).as_deref(), Some("dessin.supprimer_hors_selection"));
     }
     // Le plan précédent / suivant par Ctrl+PgPréc / Ctrl+PgSuiv (second raccourci) ne change pas.
     assert_eq!(press(&sbp, Key::PageUp, Modifiers::COMMAND, Mode::Storyboard).as_deref(), Some("scene.precedente"));

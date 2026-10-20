@@ -62,6 +62,27 @@ impl App {
         }
     }
 
+    /// Une fois par image : SHOT retient le dernier pinceau utilisé sur un calque vectoriel et le
+    /// dernier sur un calque bitmap, et rend celui de la sorte du calque courant quand on change de
+    /// calque (Anthony, 2026-10-20 : « encre » en vectoriel, « gouache » en bitmap). Retenu dans les
+    /// réglages de l'application (`Panneau::pinceau_vecto`, `pinceau_bitmap`).
+    pub(crate) fn suivre_sorte_pinceau(&mut self) {
+        let Some(l) = self.layers().get(self.cur_layer) else { return };
+        // (Un dossier ou un calque d'effet ne dessine pas : la sorte vue ne change pas.)
+        if l.folder || l.effet.is_some() {
+            return;
+        }
+        let (sorte, brush) = (l.kind, self.brush);
+        let lancement = self.pinceaux.sorte_vue.is_none();
+        if let Some(b) = self.pinceaux.suivre_sorte(sorte, &brush) {
+            self.brush = b;
+            self.brush_previews.memory.clear();
+            if !lancement {
+                self.status = format!("Pinceau de {} retrouvé.", if sorte == LayerKind::Vector { "calque vectoriel" } else { "calque bitmap" });
+            }
+        }
+    }
+
     /// Le réglage de la bibliothèque visé : ceux de la gomme avec la gomme, sinon ceux du pinceau.
     fn panel_target(&self) -> Target {
         if self.tool == Tool::Eraser {
@@ -135,7 +156,7 @@ impl App {
             choix(ui, &mut liste, false, ph::SQUARES_FOUR, "Vignettes", "Une grille de vignettes : l'aperçu du trait et la taille ; le nom au survol.", "");
         });
         self.pinceaux.liste = liste;
-        self.preset_edit_row(ui, target, current);
+        self.preset_edit_row(ui, target, current, false);
 
         let search = self.brush_previews.search.clone();
         let searching = !search.trim().is_empty();
@@ -229,7 +250,9 @@ impl App {
                 }
             }
             self.brush_previews.memory.clear();
-            self.status = format!("Réglage « {} ».", self.brushes.presets[i].name);
+            let p = &self.brushes.presets[i];
+            self.brush_previews.base = Some((p.target, p.name.clone(), p.source.clone()));
+            self.status = format!("Réglage « {} ».", p.name);
         }
         if let Some((i, a)) = menu {
             self.apply_preset_menu(i, a, target, current);
@@ -318,6 +341,20 @@ impl App {
         let wide = ui.available_width() >= NARROW;
         ui.add_space(4.0);
         self.current_preview(ui);
+        // Tout ce qui est sous l'aperçu du trait est replié derrière une petite flèche (retenu).
+        let open = self.pinceaux.reglages_ouverts;
+        ui.horizontal(|ui| {
+            let (symbole, nom) = if open { (ph::CARET_DOWN, "Replier les réglages du pinceau") } else { (ph::CARET_RIGHT, "Déplier les réglages du pinceau") };
+            if icone(ui, symbole, nom, "Les catégories de réglages (pointe, taille et appui, dispersion, grain, couleur, lissage, toucher) sous l'aperçu du trait.", "").clicked() {
+                self.pinceaux.reglages_ouverts = !open;
+            }
+            if !open {
+                ui.label(RichText::new("Tous les réglages").small().weak());
+            }
+        });
+        if !open {
+            return;
+        }
         ui.add_space(4.0);
         if wide {
             ui.horizontal_top(|ui| {
@@ -473,10 +510,11 @@ impl App {
         let Some((_, _, tex)) = &self.brush_previews.current else { return };
         let tex = tex.id();
         let (rect, resp) = ui.allocate_exact_size(vec2(shown, CURRENT_H), Sense::hover());
-        let [r, g, b] = self.doc.paper;
         let [cr, cg, cb] = self.color;
         let trait_ = if self.tool == Tool::Eraser { Color32::from_gray(150) } else { Color32::from_rgb(cr, cg, cb) };
-        ui.painter().rect_filled(rect, 3.0, Color32::from_rgb(r, g, b));
+        // Fond : un gris un peu plus clair que le panneau, pas le papier du projet (Anthony,
+        // 2026-10-20) ; poussé vers le blanc ou le noir si le trait s'y perdrait.
+        ui.painter().rect_filled(rect, 3.0, crate::theme::fond_apercu_trait(trait_));
         ui.painter().image(tex, rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), trait_);
         bulle(resp, "Aperçu du trait", "Le trait du pinceau courant, tracé par le moteur avec tous ses réglages.", "");
     }
@@ -629,7 +667,9 @@ impl App {
         self.size_row(ui);
         let target = self.panel_target();
         let current = self.panel_brush();
-        let name = choisi(&self.brushes.presets, target, &current).map_or("(réglé à la main)".to_string(), |i| self.brushes.presets[i].name.clone());
+        let exact = choisi(&self.brushes.presets, target, &current);
+        let name = exact.map_or("(réglé à la main)".to_string(), |i| self.brushes.presets[i].name.clone());
+        let base = self.base_preset(target);
         let s = self.panel_brush_mut();
         ui.horizontal(|ui| {
             interrupteur(ui, &mut s.pressure_size, ph::PEN_NIB, "Taille selon la pression", "Plus on appuie avec le stylet, plus le trait est gros.", "");
@@ -639,7 +679,73 @@ impl App {
             ui.add(egui::Slider::new(&mut s.opacity, 0.0..=1.0).text("Opacité"));
             interrupteur(ui, &mut s.pressure_opacity, ph::PEN_NIB, "Opacité selon la pression", "Plus on appuie avec le stylet, plus le trait couvre.", "");
         });
-        ui.label(RichText::new(name).strong());
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(name).strong());
+            // Retouché à la main : on rappelle d'après quelle brosse (c'est elle que « Enregistrer » remplace).
+            if let (None, Some(b)) = (exact, base) {
+                ui.label(RichText::new(format!("d'après « {} »", self.brushes.presets[b].name)).small().weak());
+            }
+            self.save_brush_button(ui, target, current, exact, base);
+        });
+        self.preset_edit_row(ui, target, current, true);
+    }
+
+    /// Le dernier réglage choisi dans la bibliothèque (ou gardé sous un nom), s'il existe encore.
+    pub(crate) fn base_preset(&self, target: Target) -> Option<usize> {
+        let (t, name, source) = self.brush_previews.base.as_ref()?;
+        if *t != target {
+            return None;
+        }
+        self.brushes.presets.iter().position(|p| p.target == target && p.name == *name && p.source == *source)
+    }
+
+    /// L'icône « Enregistrer » du panneau Réglages : garder le réglage courant dans la brosse dont il
+    /// vient (la remplacer), ou comme nouvelle brosse ; rétablir l'ancien réglage qu'on vient de
+    /// remplacer. Les brosses fournies par SHOT ne se remplacent pas.
+    fn save_brush_button(&mut self, ui: &mut egui::Ui, target: Target, current: BrushSettings, exact: Option<usize>, base: Option<usize>) {
+        // La brosse que « Enregistrer » remplacerait : celle d'où vient le réglage.
+        let over = exact.or(base).filter(|&i| supprimable(&self.brushes.presets[i]));
+        let over_name = over.map(|i| self.brushes.presets[i].name.clone());
+        let differs = over.is_some_and(|i| self.brushes.presets[i].settings != current);
+        let ancien = self.brush_previews.ancien.clone().filter(|a| a.target == target && self.brushes.presets.iter().any(|p| p.target == a.target && p.name == a.name && p.source == a.source && p.settings == a.after));
+        let mut action = None;
+        let resp = ui.menu_button(RichText::new(ph::FLOPPY_DISK).size(crate::bulles::TAILLE), |ui| {
+            let label = match &over_name {
+                Some(n) => format!("Enregistrer dans « {n} »"),
+                None => "Enregistrer dans la brosse".to_string(),
+            };
+            let hint = if over.is_some() {
+                "Remplace le réglage de cette brosse par le réglage courant (on peut le rétablir juste après)."
+            } else {
+                "Choisis d'abord une brosse de « Mes brosses » ou importée : celles de SHOT ne se remplacent pas (utilise « comme nouvelle brosse »)."
+            };
+            if ui.add_enabled(over.is_some() && differs, egui::Button::new(label)).on_hover_text(hint).on_disabled_hover_text(if over.is_some() { "Rien à enregistrer : la brosse a déjà ce réglage." } else { hint }).clicked() {
+                action = Some(0);
+                ui.close_menu();
+            }
+            if ui.button("Enregistrer comme nouvelle brosse…").on_hover_text("Garde le réglage courant sous un nom, dans « Mes brosses ».").clicked() {
+                action = Some(1);
+                ui.close_menu();
+            }
+            if let Some(a) = &ancien {
+                if ui.button(format!("Rétablir l'ancien réglage de « {} »", a.name)).on_hover_text("Annule le dernier « Enregistrer dans… ».").clicked() {
+                    action = Some(2);
+                    ui.close_menu();
+                }
+            }
+        });
+        let tip = if differs { "Le réglage a changé : l'enregistrer dans sa brosse, ou comme nouvelle brosse." } else { "Garder les réglages de ce pinceau dans une brosse (la remplacer, ou en faire une nouvelle)." };
+        bulle(resp.response, "Enregistrer la brosse", tip, "");
+        match action {
+            Some(0) => {
+                if let Some(i) = over {
+                    self.apply_preset_menu(i, crate::brushui::PresetMenu::Update, target, current);
+                }
+            }
+            Some(1) => self.start_save_preset_from_summary(target),
+            Some(2) => self.restore_preset(),
+            _ => {}
+        }
     }
 }
 

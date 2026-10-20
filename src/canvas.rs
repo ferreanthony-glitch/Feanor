@@ -226,6 +226,7 @@ impl App {
         self.paint_persp_overlay(&painter);
         self.paint_envelope_overlay(&painter);
         self.paint_stroke_tip(&painter);
+        self.paint_droit(&painter);
         if !self.in_card {
             self.paint_canvas_title(&painter, rect);
         }
@@ -416,6 +417,8 @@ impl App {
                             self.begin_paint(p, pressure, pen);
                             if self.stroke.is_some() || self.erase_pen().is_some() {
                                 self.begin_guided_stroke(stage);
+                                // Maj tenue pendant le trait : un segment droit (`tracedroit.rs`).
+                                self.droit_start(p);
                             }
                         }
                         Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline => self.shape_press(p, modifiers.shift),
@@ -459,12 +462,12 @@ impl App {
                         // Trait aligné sur le guide (sur la feuille) : rien tant que la direction
                         // n'est pas choisie.
                         if let Some(q) = self.guided_point(stage) {
-                            self.stroke_to(self.to_layer(q), pressure);
+                            self.stroke_point(self.to_layer(q), pressure, &mods, false);
                         }
                     } else if let Some(pen) = self.erase_pen() {
                         let pressure = if pen { self.pen_pressure } else { 1.0 };
                         if let Some(q) = self.guided_point(stage) {
-                            self.erase_to(self.to_layer(q), pressure);
+                            self.stroke_point(self.to_layer(q), pressure, &mods, true);
                         }
                     } else if self.cutter_drag(p) {
                     } else if self.envelope_drag(p) {
@@ -525,6 +528,9 @@ impl App {
         self.hover_canvas = hover
             .filter(|p| rect.contains(*p))
             .map(|p| self.view.to_canvas(rect, size, p));
+        // Maj tenue (ou relâchée) sans que la souris bouge : le segment droit suit quand même.
+        let pen = self.stroke.as_ref().map(|s| s.pen).or(self.erase_pen()).unwrap_or(false);
+        self.droit_follow(&mods, primary_down, self.hover_canvas, if pen { self.pen_pressure } else { 1.0 });
     }
 
     /// Sélection vectorielle, lasso et aperçu des formes, par-dessus le dessin.

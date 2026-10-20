@@ -265,6 +265,9 @@ pub struct Palette {
     pub graduation_seconde: Color32,
     pub bloc: Color32,
     pub poignee: Color32,
+    /// Fond de l'aperçu du trait dans les réglages du pinceau : un gris un peu plus clair que le
+    /// panneau (et non le papier blanc du projet) ; voir `fond_apercu_trait`.
+    pub apercu_trait: Color32,
     /// Contour des éléments choisis (clés, séquences), blanc ou presque noir.
     pub contour: Color32,
     /// Encre sur les dessins vifs de la timeline, et fond des pastilles posées sur une rangée.
@@ -359,6 +362,9 @@ impl Palette {
             graduation_seconde: palier(0.23),
             bloc: controle,
             poignee: texte_doux,
+            // Un peu plus clair que le panneau : vers le blanc, de 12 % (thèmes sombres) ou de
+            // 55 % (thème clair, dont le panneau est déjà pâle).
+            apercu_trait: melange(panneau, Color32::WHITE, if claire { 0.55 } else { 0.12 }),
             contour: if claire { gris(15) } else { Color32::WHITE },
             encre: if claire { Color32::WHITE } else { melange(rangee, Color32::BLACK, 0.6) },
             sur_calque: if claire { gris(20) } else { gris(242) },
@@ -513,6 +519,8 @@ couleurs_courantes! {
     /// Bloc d'un panneau dans le montage, et sa poignée de durée.
     bloc,
     poignee,
+    /// Fond de l'aperçu du trait (réglages du pinceau).
+    apercu_trait,
     /// Contour des éléments choisis.
     contour,
     /// Encre sur les dessins vifs, fond des pastilles posées sur une rangée.
@@ -588,6 +596,22 @@ pub fn fond_calque(kind: LayerKind, ctg: bool) -> Color32 {
         (false, LayerKind::Vector) => p.calque_vectoriel,
         (false, LayerKind::Bitmap) => p.calque_bitmap,
     }
+}
+
+/// Contraste minimal (WCAG) entre le trait de l'aperçu et son fond : en dessous, le trait se
+/// perdrait dans le gris.
+pub const CONTRASTE_APERCU: f32 = 1.8;
+
+/// Le fond de l'aperçu du trait pour un trait de cette couleur : le gris `apercu_trait`, ou, si le
+/// trait lui ressemble trop (une brosse grise, la gomme), ce gris poussé vers le blanc ou le noir —
+/// celui qui fait le mieux ressortir le trait — jusqu'à `CONTRASTE_APERCU`.
+pub fn fond_apercu_trait(trait_: Color32) -> Color32 {
+    let base = palette().apercu_trait;
+    if contraste(trait_, base) >= CONTRASTE_APERCU {
+        return base;
+    }
+    let pole = if contraste(trait_, Color32::WHITE) >= contraste(trait_, Color32::BLACK) { Color32::WHITE } else { Color32::BLACK };
+    assurer(base, &[trait_], CONTRASTE_APERCU, pole)
 }
 
 /// Barres des séquences et des scènes, alternées pour qu'on voie les limites.

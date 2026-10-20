@@ -704,7 +704,7 @@ pub fn layer_plan_at(doc: &Document, index: usize, li: usize, frame: usize) -> O
         return None;
     }
     let cel = crate::video::cel_at(l, frame, doc.fps)?;
-    let t = l.transform;
+    let t = l.pose(frame);
     let line = PlanItem {
         cel,
         opacity: 255,
@@ -734,7 +734,7 @@ fn plan_with_camera(panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera:
             items.extend(crate::calqueffet::marker(&panel.layers, li, frame, opacity, &starts));
             continue;
         }
-        let Some(t) = l.transform_seen(camera) else { continue };
+        let Some(t) = l.transform_seen_at(camera, frame) else { continue };
         // Calque vidéo (13k) : l'image de la vidéo qui tombe là.
         let Some(cel) = crate::video::cel_at(l, frame, fps) else { continue };
         let line = PlanItem {
