@@ -325,7 +325,11 @@ impl App {
     pub(crate) fn scene3d_delete_selection(&mut self) {
         let ids: Vec<u64> = self.scene3d.sel.iter().copied().filter(|id| *id != CAMERA_ID && espace3d::card_of(*id).is_none()).collect();
         if ids.is_empty() {
-            self.status = "Aucun objet choisi.".into();
+            self.status = if self.scene3d.sel.iter().any(|s| espace3d::card_of(*s).is_some()) {
+                "Une carte est un calque : supprime-le dans le panneau Calques.".into()
+            } else {
+                "Aucun objet choisi.".into()
+            };
             return;
         }
         let (panel, seq) = self.s3_ids();
@@ -1038,7 +1042,7 @@ impl App {
                     let r = ui.add(egui::DragValue::new(&mut depth).speed(0.01).range(Layer::MIN_DEPTH..=1000.0).max_decimals(2));
                     deepened |= self.edited3d(&r, "Profondeur de la carte");
                     crate::bulles::bulle(r, "Profondeur (multiplan)", "Comme dans le panneau Calques : la carte recule en gardant, vue de la caméra de référence, la taille qu'elle a. Le manipulateur, lui, la recule en gardant sa taille dans l'espace.", "");
-                    if self.bouton_si(ui, t.is_tilted(), ph::ARROW_COUNTER_CLOCKWISE, "Remettre à plat", "Annule l'inclinaison : la carte redevient parallèle à la feuille.", "").clicked() {
+                    if crate::bulles::icone_si(ui, t.is_tilted(), ph::ARROW_COUNTER_CLOCKWISE, "Remettre à plat", "Annule l'inclinaison : la carte redevient parallèle à la feuille.", "").clicked() {
                         flat = true;
                     }
                 });

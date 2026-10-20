@@ -468,6 +468,11 @@ fn the_scope_of_an_effect_layer_is_its_folder_or_the_whole_stack() {
 fn an_adjustment_layer_acts_on_a_tilted_card_as_it_is_posed_on_the_sheet() {
     // Espace 3D : une carte inclinée est posée par un maillage ; le calque d'ajustement au-dessus voit la carte posée.
     let mut d = doc();
+    // (Des numéros de dessins à part : le cache des dessins dérivés est commun à tous les essais, et deux essais qui ont les
+    // mêmes numéros, les mêmes versions et les mêmes effets se confondraient.)
+    for _ in 0..40 {
+        d.new_cel(LayerKind::Bitmap);
+    }
     let a = painted(&mut d, (40, 24, 112, 80), RED);
     let e = adjustment(&mut d, "Négatif", vec![invert()], 0, 12);
     let mut card = layer("A", a, 12);

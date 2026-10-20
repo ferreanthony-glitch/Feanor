@@ -2,6 +2,8 @@
 //! le multiplan d'avant, la carte inclinée (géométrie, parallaxe, processeur contre carte graphique, vignette), les clés,
 //! l'enregistrement (format 35) et les anciens projets.
 
+use std::sync::Arc;
+
 use eframe::egui::{pos2, vec2, Color32};
 
 use crate::camera::{Camera, CameraKey};
@@ -929,6 +931,8 @@ fn the_gpu_composes_the_objects_and_a_tilted_card_like_the_cpu_does() {
 }
 #[test]
 fn the_application_rests_once_the_objects_of_the_image_are_rendered() {
+    // (Seul avec les caches communs : un fil de fond d'un autre essai réveillerait cet écran.)
+    crate::fxcache::monde::ecrire();
     let doc = doc_with_cube(0.0);
     let mut b = banc_taille(doc, false, 1280, 720);
     b.chauffer(2);
@@ -945,4 +949,94 @@ fn the_application_rests_once_the_objects_of_the_image_are_rendered() {
         let m = b.image(Vec::new(), 0.5);
         assert!(m.reveil >= std::time::Duration::from_millis(900), "rien à refaire : pas de réveil ({:?})", m.reveil);
     }
+}
+#[test]
+fn the_export_composes_the_same_image_as_the_plan_of_the_screen_with_tilted_cards_objects_and_a_turned_camera() {
+    use crate::exportrender::{self, Papier, Rendu};
+    let mut doc = doc_with_cube(-2.0);
+    let mut card = Layer::new("Carte", LayerKind::Bitmap);
+    let cel = doc.new_cel(LayerKind::Bitmap);
+    fill_rect(&mut doc, cel, 60, 30, 260, 150, RED);
+    card.frames = vec![Some(cel); 6];
+    card.transform = LayerTransform { tilt_x: 15.0, tilt_y: -25.0, ..Default::default() };
+    card.depth = 0.5;
+    doc.panels[0].layers = vec![card];
+    let start = Camera { x: 150.0, y: 85.0, ..doc.default_camera() };
+    doc.panels[0].camera = vec![CameraKey::new(0, start), CameraKey::new(5, Camera { x: 190.0, tilt: 6.0, pan: -9.0, dolly: 30.0, ..start })];
+    let rendu = Rendu::new(exportrender::snapshot_of(&doc, &[0]), Papier::Fond, false, Vec::new(), Arc::default());
+    for f in [0usize, 2, 5] {
+        let plan = render::panel_plan_at(&doc, 0, f, doc.render_paper());
+        let want = render::camera_image(&doc, &plan, &doc.panel_camera(0, f));
+        let got = crate::fxcache::avec_privee(256 << 20, || rendu.image(0, f)).expect("image");
+        assert!(want.iter().any(|c| c.a() > 0), "l'image n'est pas vide");
+        assert!(*got == want, "l'image {f} de l'export est celle de l'écran, pixel pour pixel");
+    }
+}
+#[test]
+fn an_old_background_layer_is_rendered_again_exactly_as_before() {
+    use crate::scene3drender::{self as sr, Opts};
+    // Un « Fond 3D » d'avant l'Espace 3D : la caméra de blocage d'alors, la zone et le style d'alors. Le refaire donne les
+    // mêmes octets que le calcul d'avant (rien n'a été touché pour lui : ni « en_image », ni « feuille alignée »).
+    let mut doc = Document::new(240, 135, 24);
+    let (panel, seq) = (doc.panels[0].id, doc.sequence_of(0));
+    doc.scenes3d.add(panel, seq, Target::Plan, Shape3d::Cube, [0.5, 0.0, 0.0]);
+    doc.scenes3d.add(panel, seq, Target::Plan, Shape3d::Cylinder, [-1.2, 0.0, -1.0]);
+    {
+        let plan = doc.scenes3d.plan_mut(panel);
+        plan.in_image = false;
+        plan.sheet_aligned = false;
+        plan.cam = crate::scene3d::SceneCam { pos: [0.7, 1.4, 6.5], pan: -4.0, tilt: -6.0, roll: 0.0, focal: 40.0 };
+    }
+    let stage = [doc.width, doc.height];
+    let now = sr::render_plate(&doc.scenes3d, panel, seq, &doc.models, stage, doc.frame, 1, 2);
+    // Le calcul d'avant, écrit à la main.
+    let plan = doc.scenes3d.plan(panel).cloned().expect("scène");
+    let mut lib = crate::scene3dmesh::MeshLib::default();
+    let items = sr::items_of(&doc.scenes3d, panel, seq, &doc.models, &mut lib);
+    let at = sr::frame_origin(stage, doc.frame);
+    let center = [at[0] as f32 + doc.frame[0] as f32 / 2.0 - 0.0, at[1] as f32 + doc.frame[1] as f32 / 2.0 - 0.0];
+    let (size, origin) = match plan.render.area {
+        crate::scene3d::RenderArea::Frame => (doc.frame, at),
+        crate::scene3d::RenderArea::Sheet => (stage, [0, 0]),
+    };
+    let center = [center[0] - origin[0] as f32, center[1] - origin[1] as f32];
+    let opts = Opts {
+        view: plan.cam.view(doc.frame[0] as f32),
+        size,
+        center,
+        light: plan.light,
+        style: plan.render.style,
+        lines: plan.render.has_lines(),
+        line_px: plan.render.line_px,
+        ss: 1,
+        paper: None,
+        threads: 2,
+    };
+    let before = sr::render(&items, &opts);
+    assert!(now.rgba == before, "le calque « Fond 3D » d'un ancien projet se refait à l'identique");
+    assert!(now.rgba.chunks_exact(4).any(|p| p[3] > 0));
+    // Et un calque figé par l'Espace 3D est, lui, la feuille vue de l'œil : décalée d'autant que l'œil l'est du centre.
+    {
+        let plan = doc.scenes3d.plan_mut(panel);
+        plan.sheet_aligned = true;
+        plan.cam = crate::scene3d::SceneCam { pos: [0.5, 0.2, 5.83], pan: 0.0, tilt: 0.0, roll: 0.0, focal: 35.0 };
+    }
+    let aligned = sr::render_plate(&doc.scenes3d, panel, seq, &doc.models, stage, doc.frame, 1, 2);
+    let eye = sr::render_plate_eye(&doc.scenes3d, panel, seq, &doc.models, stage, doc.frame, [0.5, 0.2, 5.83], 1, 2);
+    assert!(aligned.rgba == eye.rgba, "figé par l'Espace 3D = les objets vus de l'œil");
+}
+#[test]
+fn mirroring_a_plan_mirrors_the_tilt_of_its_cards_and_the_stack_beats_the_depth_in_the_image() {
+    // Retourner un plan de gauche à droite : une carte inclinée autour de la verticale l'est dans l'autre sens.
+    let t = LayerTransform { x: 20.0, tilt_x: 12.0, tilt_y: 30.0, angle: 7.0, ..Default::default() };
+    let m = crate::flip::mirror_transform_x(t, pos2(160.0, 90.0), 160.0);
+    assert!(near(m.tilt_y, -30.0, 1e-5) && near(m.tilt_x, 12.0, 1e-5) && near(m.angle, -7.0, 1e-5), "{m:?}");
+    let back = crate::flip::mirror_transform_x(m, pos2(160.0, 90.0), 160.0);
+    assert!(near(back.tilt_y, 30.0, 1e-5) && near(back.x, 20.0, 1e-3) && near(back.stretch_x, 1.0, 1e-5), "{back:?}");
+    // L'ordre de l'image est celui de la pile, pas celui de la distance : la carte du fond, posée au-dessus dans la pile,
+    // recouvre celle qui est plus près de la caméra.
+    let doc = doc_with_cards(&[(RED, [100, 50, 220, 130], -0.5), (GREEN, [100, 50, 220, 130], 2.0)]);
+    let img = sheet(&doc, 0);
+    let c = img[90 * 320 + 160];
+    assert!(c.g() > 150 && c.r() < 80, "la carte lointaine, dessus dans la pile, est ce qu'on voit : {c:?}");
 }

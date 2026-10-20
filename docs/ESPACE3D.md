@@ -206,12 +206,32 @@ pixels. Un plan neuf l'a allumé.
 
 ## 9. Essais
 
-Migration (profondeurs du plateau → Z, caméra du plateau, ancien calque « Fond 3D », projet d'avant identique pixel pour pixel,
-numéros de format et projets partagés), pose d'une carte (aller-retour monde ↔ calque, manipulateurs déplacer / tourner /
-échelle, annulation en une étape, verrous), clés 3D (interpolation, adoucis, écriture / lecture), parallaxe (une carte plus
-loin bouge moins quand la caméra se déplace ; une carte inclinée aussi), rendu (processeur contre carte graphique ≤ 2 niveaux,
-vignette = composition, export = écran), ordre, budget de temps, interface (une seule entrée, doubles, bulles).
+`espace3d_tests.rs` (37 essais ; le script `scripts/verifier.ps1` les nomme dans une famille « Espace 3D »), plus des essais adaptés
+ailleurs (`scene3d_tests`, `keymap_tests`, `cooperation_tests`, `cooperation_ui_tests`, `calqueffet_tests`, `bulles_tests`) :
 
+- **Pose d'une carte** : aller-retour monde ↔ champs du calque (plusieurs poses, profondeurs, inclinaisons, étirement négatif) ;
+  reculer une carte garde sa taille et sa position dans le monde ; échelle sur un axe = étirement, uniforme = échelle ; la carte
+  est le calque du multiplan vu de l'œil (profondeurs −0,5 à 6, caméra décalée ou avancée, à 0,05 px près) ; calque fixe : pas
+  d'écart de profondeur, calque animé : la clé de l'image.
+- **Caméra** : la caméra du plan ↔ la caméra 3D dans les deux sens ; l'ancienne caméra de blocage donne la caméra du plan qui
+  voit la même chose.
+- **Rendu** : le plan d'une image est celui d'avant pour des cartes à plat ; carte inclinée = projection de la géométrie (boîte à
+  1,5 px près) ; opacité et fusion gardées ; carte derrière l'œil non dessinée ; vignette (`composite_pixel`) = composition ;
+  processeur contre carte graphique ≤ 2 niveaux (carte inclinée ; objets + carte inclinée) ; calque d'ajustement au-dessus d'une
+  carte inclinée ; l'export compose la même image que l'écran avec cartes inclinées, objets et caméra tournée.
+- **Parallaxe** : une carte plus loin bouge moins (rapport 6 à ±0,6, à plat et incliné) ; les objets aussi (valeur attendue à
+  2,5 px).
+- **Ordre** : la pile l'emporte sur la distance ; les objets sont sous les cartes ; « Ordonner la pile » (une étape, refusé avec des
+  dossiers).
+- **Clés** : interpolation, adoucis, écart de profondeur ; enregistrement et relecture ; retourner un plan retourne l'inclinaison.
+- **Format et anciens projets** : un projet sans inclinaison n'écrit aucun champ nouveau ; un projet de format 33 s'ouvre avec les
+  mêmes pixels (7 images) ; un format plus récent est refusé ; un projet partagé écrit `version_partage_ecrite()` ; une scène sans
+  `en_image` garde ses objets hors de l'image ; un « Fond 3D » d'avant se refait octet pour octet.
+- **Interface** : un seul bouton / une seule commande dans la palette, anciens noms en doubles ; choisir une carte au rayon et à la
+  souris, le calque courant suit ; déplacer, incliner, mettre à l'échelle par les poignées, une étape d'annulation par geste ;
+  calque verrouillé immobile ; caméra du plan déplacée (clé de l'image si animée) ; pinceau sur une carte inclinée (aller-retour) ;
+  l'application finit par se reposer avec des objets dans l'image ; le rendu des objets ne bloque pas l'écran.
+- **Budget** : 10 cartes et 20 objets, ≈ 2 ms par image ; choisir à la souris ≈ 0,06 ms ; plan de 10 cartes inclinées ≈ 2 ms.
 ## 10. Comparaison avec Storyboard Pro et Harmony (à vérifier)
 
 Storyboard Pro a, d'après sa documentation, un « stage 3D » où les couches sont des plans que l'on place dans l'espace ; le
