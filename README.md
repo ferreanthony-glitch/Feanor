@@ -1272,8 +1272,9 @@ dans `docs/INTERFACE.md`, partie 24.
   image pose ou met à jour la clé de cette image, et entre deux clés il va de l'une à l'autre (lecture, export,
   vignettes). **Lisser** : la clé arrive et repart lentement ; arrivée et départ se règlent en images, comme les
   clés de caméra (`camera::ease`). Dans la timeline : losanges verts sur la ligne du calque (ronds quand la clé est
-  adoucie), clic pour choisir, glisser pour déplacer, Suppr, clic droit. Le format du projet passe à **33**
-  (`cles_position` d'un calque).
+  adoucie), clic pour choisir (Ctrl : ajouter, Maj : jusqu'ici), glisser pour déplacer, Suppr, clic droit ; les mêmes
+  losanges, avec les mêmes gestes, au milieu de la piste de chaque calque du montage (un losange pris passe avant le
+  dessin dessous). Le format du projet passe à **33** (`cles_position` d'un calque).
 
 Code : `src/tracedroit.rs`, `src/selobjet.rs`, `src/remplirsel.rs`, `src/poskeys.rs` (modèle), `src/poskeysui.rs`
 (écran), `src/pinceaux.rs` / `src/pinceauxui.rs` / `src/brushui.rs` (brosses), `src/dessin_notes_tests.rs`.
@@ -2092,7 +2093,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `tbbrush.rs` | Import des pinceaux Toon Boom (XML) |
 | `tracedroit.rs` | Tracé droit (Maj pendant un trait) : segment en attente, aperçu, pose par le moteur au relâché |
 | `selobjet.rs`, `remplirsel.rs` | Choisir un objet au clic (forme d'un seul tenant, Ctrl / Ctrl+Maj, cumul) ; remplir la zone bitmap (Maj+Suppr) |
-| `poskeys.rs`, `poskeysui.rs` | Clés de position des calques : pose entre les clés, adoucis, coupe et réunion des plans, enregistrement ; réglages de l'outil Transformer, losanges de la timeline |
+| `poskeys.rs`, `poskeysui.rs` | Clés de position des calques : pose entre les clés, adoucis, coupe et réunion des plans, enregistrement ; réglages de l'outil Transformer, losanges de la timeline et du montage |
 | `onion.rs` | Pelure d'oignon |
 | `onionui.rs` | Panneau de la pelure d'oignon (13f) |
 | `bottomtabs.rs`, `notes.rs` | Onglets du bas de la timeline, notes dessinées (13e) |

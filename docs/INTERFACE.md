@@ -1746,9 +1746,35 @@ les conflits contrôlés. Essais : `src/dessin_notes_tests.rs`.
   Sans clé, rien ne change : le calque a sa pose fixe.
 - **Dans la timeline (animation).** Des **losanges verts** au milieu de la ligne du calque (des **ronds** quand la clé
   est adoucie, cerclés de blanc quand elle est choisie) : un clic choisit la clé et y met la tête de lecture (Ctrl :
-  ajouter ou retirer) ; glisser la déplace (avec les autres clés choisies du calque, bloquées dans le plan, une étape
-  « Déplacer des clés de position ») ; Suppr supprime les clés choisies ; clic droit : lisser, supprimer. Pas encore
-  dans le montage (les pistes du montage ne les montrent pas).
+  ajouter ou retirer, Maj : ajouter celles d'entre la dernière cliquée et celle-ci) ; glisser la déplace (avec les autres
+  clés choisies du calque, bloquées dans le plan, une étape « Déplacer des clés de position ») ; Suppr supprime les
+  clés choisies ; clic droit : lisser, supprimer. La main (curseur « Grab ») se montre au survol.
+- **Dans le montage (Anthony, 2026-10-20 : « ajoute le glisser dans le montage »).** Les mêmes losanges, **au milieu de
+  la piste de chaque calque de chaque plan** (la bande des losanges violets d'effets reste en haut, `fxkeys::STRIP` :
+  les deux ne se recouvrent pas), avec les mêmes gestes (`montage_pos_key_at` dans `montagerows.rs`, branchés dans
+  `montage_strip`, les aides communes dans `poskeysui.rs` : `marker_near`, `choose_pos_marker`, `begin_pos_drag`).
+  - **Priorité.** Un appui sur un losange vert passe avant tout ce qui est dessous : poignées du dessin (bords, limite
+    entre deux dessins, barre, glisser d'un dessin par son milieu), choix au rectangle (même avec Ctrl ou Maj), choix
+    des plans, double-clic qui pose une clé de dessin. Partout ailleurs les gestes du montage sont ceux d'avant ; un
+    clic ou un geste qui ne part pas d'un losange vert **lâche** le choix des clés de position. La poignée du dessin
+    ne s'allume plus sous un losange.
+  - **Clic** : la clé est choisie (Ctrl : ajouter ou retirer ; Maj : ajouter celles d'entre), **la tête de lecture va
+    sur la clé** (image du film), son plan et son calque deviennent courants, les clés de dessins, de caméra et d'effets
+    choisies sont lâchées et Suppr vise les clés de position (`key_focus`). Les clés choisies sont **d'un seul plan** :
+    en prendre une dans un autre plan lâche le choix d'avant.
+  - **Glisser** : les clés choisies du calque suivent la souris, à l'image entière (accrochées aux images), sans sortir du
+    plan (le décalage est limité par la clé la plus proche d'un bord, le groupe garde ses écarts), même si la souris
+    sort du plan. Une clé qui arrive sur une autre du calque **la remplace** (règle de la timeline, `poskeys::moved`) ;
+    l'annulation rend les deux. Un losange pris hors du choix devient le choix. Une seule étape d'annulation,
+    « Déplacer des clés de position » ; Échap pendant le geste remet les clés comme avant, sans rien enregistrer
+    (`cancel_drags`, qui sert aussi à la timeline). Storyboard verrouillé : refusé, comme les autres gestes.
+  - **Suppr** supprime les clés de position choisies quand elles ont la main (jamais les dessins) ; **clic droit** sur un
+    losange : `pos_key_menu` (lisser, supprimer, poser une clé ici, supprimer toutes les clés du calque), un losange non
+    choisi l'est seul.
+  - **Bulle** (1 s, réglage général des bulles) : « Clé de position, image N (calque) », glisser pour la déplacer,
+    Ctrl / Maj + clic, Suppr, clic droit.
+  - **Rien de lourd à chaque image** : la recherche d'un losange ne se fait que sous la souris (les plans à l'écran, les
+    clés du calque de la rangée visée) ; la timeline et le montage partagent `marker_near`.
 - **Partout où l'image est fabriquée** : l'affichage, la lecture, l'export (film, images, PDF), les vignettes, la pile
   des versions, la vue 3D du plateau (multiplan) et la vue de dessus lisent la pose **à l'image demandée** (`Layer::pose`,
   `transform_seen_at`). Les clés suivent les images insérées ou retirées, la coupe d'un plan (la pose de la coupe est
@@ -1760,8 +1786,9 @@ les conflits contrôlés. Essais : `src/dessin_notes_tests.rs`.
   garde `VERSION = 33` et réunit les deux descriptions dans le commentaire de `project.rs`.
 - **Limites.** Pas de courbe de vitesse libre (adoucis seulement) ; pas de clé sur le pivot ni sur l'opacité ; la
   propagation façon EbSynth (`propager*.rs`, non modifié) lit la pose fixe du calque ; les calques « toute la
-  scène » ont leurs clés propres à chaque plan ; les clés ne se montrent pas dans le montage ; pas de copier / coller
-  de clés de position.
+  scène » ont leurs clés propres à chaque plan ; pas de copier / coller de clés de position ; dans le montage, le choix
+  ne passe pas d'un plan à l'autre (un seul plan à la fois) ; glisser un dessin ou une limite entre deux dessins pousse
+  la suite du calque **avec ses clés de position** (comme avant).
 
 ### 24.8 À regarder à l'écran
 
@@ -1784,4 +1811,7 @@ les conflits contrôlés. Essais : `src/dessin_notes_tests.rs`.
 7. Outil Transformer : « Clés de position » dans les réglages. Poser une clé à l'image 1, aller à l'image 12, tirer le
    calque : une clé naît, la lecture le déplace d'une clé à l'autre ; losanges verts dans la timeline ; cliquer sur un
    losange, le glisser, Suppr ; clic droit > Lisser : le losange devient rond et le mouvement ralentit à ses bouts ;
-   exporter les images : le calque bouge dans l'export.
+   exporter les images : le calque bouge dans l'export. Dans le montage : les mêmes losanges verts au milieu de la piste
+   du calque, de chaque plan ; la main au survol puis la bulle ; cliquer (la tête de lecture y va), Ctrl / Maj + clic,
+   glisser sur le dessin (le dessin ne bouge pas), tirer au-delà de la fin du plan (bloqué), Échap pendant le geste,
+   Suppr, clic droit ; les losanges violets d'effets, juste au-dessus, se prennent toujours à part.

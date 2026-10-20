@@ -163,6 +163,12 @@ pub(crate) struct Banc {
     /// Les textes peints par la dernière image (si `garder_textes`).
     pub textes: Vec<String>,
     pub garder_textes: bool,
+    /// Les formes peintes par la dernière image (si `garder_formes`) : de quoi retrouver où un losange est
+    /// tombé à l'écran.
+    pub formes: Vec<egui::epaint::ClippedShape>,
+    pub garder_formes: bool,
+    /// Le curseur demandé par la dernière image.
+    pub curseur: egui::CursorIcon,
     /// Passe les événements par `raw_input_hook` d'eframe, comme la vraie fenêtre (Tab retiré à egui, traité
     /// comme raccourci) ; faux par défaut, comme avant.
     pub crochet: bool,
@@ -200,7 +206,7 @@ pub(crate) fn banc_taille(doc: Document, avec_gpu: bool, largeur: u32, hauteur: 
             view_formats: &[],
         })
     });
-    let mut b = Banc { ctx, app, rs, taille, t: 0.0, cible, textes: Vec::new(), garder_textes: false, crochet: false, touches: Modifiers::NONE };
+    let mut b = Banc { ctx, app, rs, taille, t: 0.0, cible, textes: Vec::new(), garder_textes: false, formes: Vec::new(), garder_formes: false, curseur: egui::CursorIcon::Default, crochet: false, touches: Modifiers::NONE };
     b.attendre_pinceaux();
     b.chauffer(8);
     b.attendre_vignettes();
@@ -264,6 +270,10 @@ impl Banc {
                 .iter()
                 .filter_map(|s| if let egui::epaint::Shape::Text(t) = &s.shape { Some(t.galley.job.text.clone()) } else { None })
                 .collect();
+        }
+        self.curseur = out.platform_output.cursor_icon;
+        if self.garder_formes {
+            self.formes = out.shapes.clone();
         }
         let prims = self.ctx.tessellate(out.shapes, ppp);
         let sommets = prims.iter().map(|p| if let egui::epaint::Primitive::Mesh(m) = &p.primitive { m.vertices.len() } else { 0 }).sum();

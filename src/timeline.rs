@@ -956,7 +956,10 @@ impl App {
                 self.end_handle_drag();
             }
         } else if !holding_key && self.image_drag.is_none() && self.fx_keys_drag.is_none() && self.pos_ui.drag.is_none() {
-            if let Some(h) = resp.hover_pos().filter(|p| !on_playhead(*p)).and_then(|p| self.timeline_handle_at(p, r, cell, &rows, grid_top)) {
+            // Un losange vert se prend (`poskeysui.rs`), comme dans le montage.
+            if resp.hover_pos().is_some_and(|p| !on_playhead(p) && self.pos_marker_in_timeline(p, r, cell, &rows, grid_top).is_some()) {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+            } else if let Some(h) = resp.hover_pos().filter(|p| !on_playhead(*p)).and_then(|p| self.timeline_handle_at(p, r, cell, &rows, grid_top)) {
                 ui.ctx().set_cursor_icon(cursor_for(h, false));
             }
         }
@@ -1051,7 +1054,8 @@ impl App {
         let mut pos_clicked = false;
         if resp.clicked() && !holding_key && !in_notes {
             if let Some((layer, f)) = resp.interact_pointer_pos().and_then(|p| self.pos_marker_in_timeline(p, r, cell, &rows, grid_top)) {
-                self.click_pos_marker(layer, f, ui.input(|i| i.modifiers.command));
+                let m = ui.input(|i| i.modifiers);
+                self.click_pos_marker_with(layer, f, m.command, m.shift && !m.command);
                 pos_clicked = true;
             }
         }

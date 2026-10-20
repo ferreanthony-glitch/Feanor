@@ -1046,6 +1046,7 @@ impl App {
             || self.montage_layer_drag.is_some()
             || self.keys_drag.is_some()
             || self.fx_keys_drag.is_some()
+            || self.pos_ui.drag.is_some()
             || self.key_rect.is_some()
             || self.comment_ui.drag.is_some()
     }
@@ -1056,6 +1057,7 @@ impl App {
         self.cancel_montage_drag();
         self.cancel_keys_drag();
         self.cancel_fx_keys_drag();
+        self.cancel_pos_drag();
         self.cancel_cam_keys_drag();
         self.cancel_cam_rect();
         self.cancel_comment_drag();
@@ -1093,6 +1095,9 @@ impl App {
         }
         if self.fx_keys_drag.is_some() {
             self.end_fx_keys_drag();
+        }
+        if self.pos_ui.drag.is_some() {
+            self.end_pos_drag();
         }
         if self.cam_keys_drag.is_some() {
             self.end_cam_keys_drag();

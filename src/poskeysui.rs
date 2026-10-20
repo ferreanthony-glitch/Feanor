@@ -13,8 +13,12 @@
 //! - « Lisser » : la clé de l'image courante arrive et repart lentement (ou les adoucis réglés à la main,
 //!   en images, comme les clés de caméra).
 //! - Dans la timeline : un clic sur un losange le choisit et y met la tête de lecture (Ctrl : en ajouter
-//!   ou en retirer), glisser le déplace (avec lui, les autres clés choisies du calque), Suppr le supprime,
-//!   clic droit : lisser, supprimer. Les losanges lissés sont des ronds.
+//!   ou en retirer, Maj : ajouter celles d'entre), glisser le déplace (avec lui, les autres clés choisies
+//!   du calque), Suppr le supprime, clic droit : lisser, supprimer. Les losanges lissés sont des ronds.
+//! - Dans le montage (Anthony, 2026-10-20 : « ajoute le glisser dans le montage ») : les mêmes gestes sur
+//!   les losanges verts, au milieu de la piste de chaque calque, de n'importe quel plan. Un geste qui part
+//!   d'un losange passe avant les gestes du dessin dessous (poignées, glisser d'un dessin, choix au
+//!   rectangle) ; les clés d'un seul plan à la fois sont choisies (le plan du losange pris devient courant).
 
 use eframe::egui::{self, pos2, Color32, Painter, Pos2, Rect, RichText, Shape, Stroke};
 use egui_phosphor::regular as ph;
@@ -24,14 +28,22 @@ use crate::history::Edit;
 use crate::poskeys::{self, PosKey};
 
 /// Demi-hauteur de la zone qui prend un losange à la souris.
-const HIT_H: f32 = 7.0;
+pub(crate) const HIT_H: f32 = 7.0;
 
-/// Les clés de position choisies dans la timeline et le geste en cours.
+/// Les clés de position choisies (timeline et montage) et le geste en cours.
 #[derive(Default)]
 pub(crate) struct PosUi {
     /// Clés choisies : (id du calque, image du plan).
     pub sel: Vec<(u64, usize)>,
+    /// La dernière clé cliquée : le départ d'un choix Maj + clic.
+    pub anchor: Option<(u64, usize)>,
     pub drag: Option<PosDrag>,
+}
+
+/// L'image de clé la plus proche de l'abscisse `px`, à `tol` près au plus (la timeline et le montage s'en
+/// servent). `x_of` : l'abscisse du milieu d'une image.
+pub(crate) fn marker_near(frames: impl Iterator<Item = usize>, px: f32, x_of: impl Fn(usize) -> f32, tol: f32) -> Option<usize> {
+    frames.map(|f| (f, (x_of(f) - px).abs())).filter(|&(_, d)| d <= tol).min_by(|a, b| a.1.total_cmp(&b.1)).map(|(f, _)| f)
 }
 
 /// Des clés prises à la souris : les clés du calque telles qu'elles étaient, celles qui bougent, le point
@@ -260,9 +272,10 @@ impl App {
 
     // ------------------------------------------------------------------ la timeline
 
-    /// Des clés de position sont choisies dans la timeline et elle a la main : Suppr les vise.
+    /// Des clés de position sont choisies dans la timeline ou le montage et il a la main (`images_focus` :
+    /// la timeline ; `key_focus` : une piste de calque du montage) : Suppr les vise.
     pub(crate) fn pos_keys_have_focus(&self) -> bool {
-        self.images_focus && self.pos_ui.sel.iter().any(|&(id, fr)| self.layers().iter().any(|l| l.id == id && poskeys::key_at(&l.pos_keys, fr).is_some()))
+        (self.images_focus || self.key_focus) && self.pos_ui.sel.iter().any(|&(id, fr)| self.layers().iter().any(|l| l.id == id && poskeys::key_at(&l.pos_keys, fr).is_some()))
     }
 
     /// Les losanges d'un calque : verts, ronds quand la clé est adoucie, cerclés de blanc quand ils sont
@@ -292,30 +305,20 @@ impl App {
             return None;
         }
         let tol = (cell * 0.5).max(5.0);
-        let x_of = |f: usize| r.left() + (f as f32 + 0.5) * cell;
-        layer
-            .pos_keys
-            .iter()
-            .map(|k| (k.frame, (x_of(k.frame) - p.x).abs()))
-            .filter(|&(_, d)| d <= tol)
-            .min_by(|a, b| a.1.total_cmp(&b.1))
-            .map(|(f, _)| (row.li, f))
+        marker_near(layer.pos_keys.iter().map(|k| k.frame), p.x, |f| r.left() + (f as f32 + 0.5) * cell, tol).map(|f| (row.li, f))
     }
 
     /// Clic sur le losange de l'image `frame` du calque `li` : il est choisi (`toggle` : ajouté ou
     /// retiré), la tête de lecture va dessus et le calque devient courant.
     pub(crate) fn click_pos_marker(&mut self, li: usize, frame: usize, toggle: bool) {
-        let Some(id) = self.layers().get(li).map(|l| l.id) else { return };
-        let k = (id, frame);
-        if toggle {
-            match self.pos_ui.sel.iter().position(|x| *x == k) {
-                Some(i) => {
-                    self.pos_ui.sel.remove(i);
-                }
-                None => self.pos_ui.sel.push(k),
-            }
-        } else {
-            self.pos_ui.sel = vec![k];
+        self.click_pos_marker_with(li, frame, toggle, false);
+    }
+
+    /// Comme `click_pos_marker`, avec `range` (Maj + clic) : les clés du calque entre la dernière cliquée et
+    /// celle-ci rejoignent le choix.
+    pub(crate) fn click_pos_marker_with(&mut self, li: usize, frame: usize, toggle: bool, range: bool) {
+        if !self.choose_pos_marker(li, frame, toggle, range) {
+            return;
         }
         self.images_focus = true;
         self.panel_focus = false;
@@ -323,12 +326,110 @@ impl App {
         self.frame_sel = None;
         self.set_frame_free(frame);
         self.select_layer(li);
+        self.say_pos_choice();
+    }
+
+    /// Le choix des clés de position : un clic le remplace, Ctrl ajoute ou retire, Maj ajoute celles d'entre.
+    /// Faux si le calque n'existe plus.
+    fn choose_pos_marker(&mut self, li: usize, frame: usize, toggle: bool, range: bool) -> bool {
+        let Some(layer) = self.layers().get(li) else { return false };
+        let id = layer.id;
+        let k = (id, frame);
+        let between = match self.pos_ui.anchor {
+            Some((a, from)) if range && a == id => poskeys::frames_between(&layer.pos_keys, from, frame),
+            _ => vec![frame],
+        };
+        if range {
+            for f in between {
+                if !self.pos_ui.sel.contains(&(id, f)) {
+                    self.pos_ui.sel.push((id, f));
+                }
+            }
+            self.pos_ui.anchor.get_or_insert(k);
+        } else if toggle {
+            match self.pos_ui.sel.iter().position(|x| *x == k) {
+                Some(i) => {
+                    self.pos_ui.sel.remove(i);
+                }
+                None => {
+                    self.pos_ui.sel.push(k);
+                    self.pos_ui.anchor = Some(k);
+                }
+            }
+        } else {
+            self.pos_ui.sel = vec![k];
+            self.pos_ui.anchor = Some(k);
+        }
+        true
+    }
+
+    fn say_pos_choice(&mut self) {
         let n = self.pos_ui.sel.len();
         self.status = if n == 0 {
             "Plus aucune clé de position choisie.".into()
         } else {
             format!("{n} clé{} de position choisie{} : glisser pour décaler, Suppr pour supprimer ; clic droit : lisser.", s(n), s(n))
         };
+    }
+
+    // ------------------------------------------------------------------ le montage
+
+    /// Clic sur le losange de l'image `frame` du calque `li` du plan `pi`, dans une piste du montage : comme
+    /// dans la timeline (`click_pos_marker_with`), la tête de lecture va sur le losange (image du film) et
+    /// ce plan devient courant. Les clés choisies sont d'un seul plan : prendre un losange d'un autre plan
+    /// lâche le choix d'avant.
+    pub(crate) fn click_pos_marker_in_montage(&mut self, pi: usize, li: usize, frame: usize, toggle: bool, range: bool) {
+        if pi >= self.doc.panels.len() {
+            return;
+        }
+        if pi != self.cur_panel {
+            self.set_panel(pi);
+            self.pos_ui.sel.clear();
+            self.pos_ui.anchor = None;
+        }
+        if !self.choose_pos_marker(li, frame, toggle, range) {
+            return;
+        }
+        // Les clés de position ont la main : elles remplacent le choix des autres clés (dessins, caméra, effets).
+        self.clear_cam_keys();
+        self.key_sel.clear();
+        self.key_anchor = None;
+        self.fx_key_sel.clear();
+        self.frame_sel = None;
+        self.panel_focus = false;
+        self.images_focus = false;
+        self.key_focus = true;
+        let g = self.doc.panel_start(pi) + frame;
+        self.goto_global(g);
+        self.select_layer(li);
+        self.say_pos_choice();
+    }
+
+    /// Commence à glisser, depuis le montage, les clés choisies en prenant le losange de l'image `frame` du
+    /// calque `li` du plan `pi` ; `grab` : l'image du plan sous la souris (même repère que `drag_pos_keys`).
+    /// Un losange pris hors du choix devient le choix. Faux si refusé (storyboard verrouillé…).
+    pub(crate) fn begin_pos_drag_in_montage(&mut self, pi: usize, li: usize, frame: usize, grab: usize) -> bool {
+        if pi >= self.doc.panels.len() {
+            return false;
+        }
+        let id = self.doc.panels[pi].layers.get(li).map(|l| l.id);
+        let taken = id.is_some_and(|id| pi == self.cur_panel && self.pos_ui.sel.contains(&(id, frame)));
+        if !taken {
+            self.click_pos_marker_in_montage(pi, li, frame, false, false);
+        }
+        self.key_focus = true;
+        self.begin_pos_drag(li, frame, grab)
+    }
+
+    /// Échap pendant le geste : les clés du calque reviennent comme avant, rien n'est enregistré.
+    pub(crate) fn cancel_pos_drag(&mut self) {
+        let Some(d) = self.pos_ui.drag.take() else { return };
+        for p in &mut self.doc.panels {
+            if let Some(l) = p.layers.iter_mut().find(|l| l.id == d.layer) {
+                l.pos_keys = d.before.clone();
+            }
+        }
+        self.renderer.invalidate_all();
     }
 
     // ------------------------------------------------------------------ déplacer

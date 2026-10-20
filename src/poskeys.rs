@@ -196,6 +196,17 @@ pub fn key_at(keys: &[PosKey], frame: usize) -> Option<usize> {
     keys.iter().position(|k| k.frame == frame)
 }
 
+/// Les images des clés comprises entre `a` et `b` (dans un sens ou dans l'autre, bornes comprises), pour un
+/// choix Maj + clic ; `b` y est toujours, même sans clé.
+pub fn frames_between(keys: &[PosKey], a: usize, b: usize) -> Vec<usize> {
+    let (lo, hi) = (a.min(b), a.max(b));
+    let mut out: Vec<usize> = keys.iter().map(|k| k.frame).filter(|f| (lo..=hi).contains(f)).collect();
+    if !out.contains(&b) {
+        out.push(b);
+    }
+    out
+}
+
 /// Retire la clé de l'image `frame` ; faux s'il n'y en avait pas.
 pub fn remove_key(keys: &mut Vec<PosKey>, frame: usize) -> bool {
     let before = keys.len();
