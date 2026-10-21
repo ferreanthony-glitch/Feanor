@@ -73,6 +73,8 @@ struct Marquage {
     rx: Receiver<Result<Resultat, String>>,
     releve: Releve,
     nom: String,
+    /// La variante choisie de chaque séquence au moment du marquage (`variantes.rs`).
+    variantes: Vec<envois::VarianteEnvoyee>,
 }
 
 /// La fenêtre « Marquer un envoi ».
@@ -281,7 +283,7 @@ impl App {
         }
         if let Some(m) = self.envois_ui.marquage.take() {
             match m.rx.try_recv() {
-                Ok(Ok(r)) => self.envois_fini(ctx, r, m.releve),
+                Ok(Ok(r)) => self.envois_fini(ctx, r, m.releve, m.variantes),
                 Ok(Err(e)) => self.status = format!("Envoi « {} » : échec ({e}).", m.nom),
                 Err(TryRecvError::Empty) => self.envois_ui.marquage = Some(m),
                 Err(TryRecvError::Disconnected) => self.status = format!("Envoi « {} » : le calcul s'est arrêté.", m.nom),
@@ -298,7 +300,7 @@ impl App {
         ui.reference = Some((dernier.id, dernier.libelle()));
         for p in &self.doc.panels {
             if let Some(&e) = ui.digests.get(&p.id) {
-                match envois::etat_du_plan(dernier, p.id, e) {
+                match envois::etat_du_plan_dans(&self.doc, dernier, p.id, e) {
                     Etat::Inchange => {}
                     s => {
                         ui.etats.insert(p.id, s);
@@ -332,6 +334,7 @@ impl App {
             }
         }
         let note_le = crate::recovery::now_secs();
+        let variantes = self.doc.variantes_pour_envoi();
         let demande = Demande {
             plans,
             cels,
@@ -354,7 +357,7 @@ impl App {
         });
         match started {
             Ok(_) => {
-                self.envois_ui.marquage = Some(Marquage { rx, releve, nom: nom.trim().to_string() });
+                self.envois_ui.marquage = Some(Marquage { rx, releve, nom: nom.trim().to_string(), variantes });
                 self.status = format!("Envoi « {} » : état des plans en cours de relevé…", nom.trim());
             }
             Err(e) => self.status = format!("Envoi impossible : {e}"),
@@ -362,8 +365,9 @@ impl App {
     }
 
     /// L'instantané est prêt : l'envoi entre dans le projet, et le projet est enregistré.
-    fn envois_fini(&mut self, ctx: &egui::Context, r: Resultat, releve: Releve) {
-        let Some((envoi, instantane)) = r.envoi else { return };
+    fn envois_fini(&mut self, ctx: &egui::Context, r: Resultat, releve: Releve, variantes: Vec<envois::VarianteEnvoyee>) {
+        let Some((mut envoi, instantane)) = r.envoi else { return };
+        envoi.variantes = variantes;
         let (n, titre) = (envoi.plans.len(), envoi.libelle());
         self.envois_ui.connus.extend(r.empreintes);
         self.envois_ui.digests = r.plans.into_iter().collect();
@@ -598,12 +602,18 @@ impl App {
                 for e in lignes {
                     ui.horizontal(|ui| {
                         // Combien de plans diffèrent de cet envoi (d'après les empreintes du dernier relevé).
-                        let diff = self.doc.panels.iter().filter(|p| self.envois_ui.digests.get(&p.id).is_some_and(|&d| envois::etat_du_plan(e, p.id, d) != Etat::Inchange)).count();
+                        let diff = self.doc.panels.iter().filter(|p| self.envois_ui.digests.get(&p.id).is_some_and(|&d| envois::etat_du_plan_dans(&self.doc, e, p.id, d) != Etat::Inchange)).count();
                         ui.label(RichText::new(e.libelle()).strong());
                         let detail = if self.envois_ui.fait_pour.is_none() { format!("{} plans", e.plans.len()) } else { format!("{} plans, {diff} différent{} d'aujourd'hui", e.plans.len(), if diff > 1 { "s" } else { "" }) };
                         ui.label(RichText::new(detail).color(theme::texte_doux()));
+                        // Les variantes de séquences choisies à ce moment-là (`variantes.rs`).
+                        if !e.variantes.is_empty() {
+                            let v: Vec<String> = e.variantes.iter().map(|v| format!("séquence {} : {}", self.doc.sequence_label(v.sequence), crate::variantes::etiquette(v.numero, &v.nom))).collect();
+                            ui.label(RichText::new(format!("· {}", v.join(" ; "))).color(theme::texte_doux()))
+                                .on_hover_text("La variante de chaque séquence qui en a plusieurs quand cet envoi est parti.");
+                        }
                         // Le plan courant, comparé à son état à cet envoi (s'il y était).
-                        let present = self.doc.panels.get(self.cur_panel).is_some_and(|p| e.plan(p.id).is_some()) && !e.fichier.is_empty();
+                        let present = self.doc.panels.get(self.cur_panel).is_some_and(|p| self.doc.plan_dans_envoi(e, p.id).is_some()) && !e.fichier.is_empty();
                         let r = bulles::icone_si(ui, present, ph::COLUMNS, "Comparer le plan courant avec cet envoi", "Le plan d'aujourd'hui et son état à cet envoi, côte à côte ou superposés (lecture seule).", "");
                         if r.clicked() {
                             comparer = Some(e.id);

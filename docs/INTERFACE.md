@@ -3110,3 +3110,101 @@ vocabulaire.
    personnage. Recliquer la sous-ligne : le pot de peinture prend la couleur d'aplat du personnage.
 8. Enregistrer, fermer, rouvrir : l'aplat et sa peinture sont là, la sous-ligne aussi, et c'est le trait qu'on dessine. Ouvrir un projet d'avant : ses aplats ont leur sous-ligne.
 9. Au repos, sous-ligne choisie : rien ne bouge, le processeur reste à zéro.
+
+## 36. Variantes de séquence : un autre découpage sans perdre le premier (2026-10-21, branche `variantes-sequence`)
+
+Anthony : « essayer un autre découpage d'une séquence (A plus serrée, B avec un plan de plus…) sans perdre le premier ». Ce ne sont ni des versions du film
+entier (trop lourd) ni des versions d'un plan (partie 15) : une variante est **un jeu de plans pour la séquence**. Code : `src/variantes.rs` (modèle et fichier),
+`src/variantesui.rs` (sélecteur, menus, fenêtres), essais `src/variantes_tests.rs`.
+
+### Ce que c'est
+
+- Une séquence a toujours **une variante choisie** : ses plans, dans le film. Le **montage, la lecture, les exports, la numérotation, l'export pour le montage,
+  la relecture et la fiche technique la suivent** sans rien faire de plus. Les **autres variantes sont rangées** : elles ne sont ni dans le montage ni dans
+  les exports, mais elles sont enregistrées avec le projet.
+- Les variantes se nomment **A, B, C…** (jusqu'à Z) ; un **nom court** peut suivre la lettre (« B · serré »). Une séquence qui n'a jamais eu de variante n'a rien
+  de nouveau à l'écran : c'est la A.
+- Une variante rangée est complète : ses scènes, ses plans (dessins, marques d'image, clés de caméra, textes, notes), les versions de chaque plan, leur
+  contenu rogné, leurs commentaires, leurs transitions entre deux plans de la variante. Rien d'elle ne traîne dans le film.
+
+### Où ça se trouve
+
+| Geste | Où |
+|---|---|
+| **Sélecteur « A · B · C »** (clic = passer à la variante ; clic droit = renommer, comparer, supprimer) | une rangée discrète en haut de la vue Vignettes, sous les réglages ; elle porte la **séquence du plan courant**. Une séquence sans variante n'a que l'icône (branche), à demi effacée : clic = le menu « Variantes de la séquence » |
+| Nouvelle variante, en dupliquant / en partant d'un plan vide (`variante.nouvelle`, `variante.vide`) | menu de l'icône ; Storyboard > Variantes de la séquence ; clic droit sur la barre de la séquence dans le montage ; Ctrl+K |
+| Passer à la variante précédente / suivante (`variante.precedente`, `variante.suivante`) | Ctrl+K (sans touche, à choisir) |
+| Renommer, supprimer, comparer (`variante.renommer`, `variante.supprimer`, `variante.comparer`) | clic droit sur une lettre ; mêmes menus ; Ctrl+K |
+| Variante choisie, lisible dans le montage | la barre de la séquence dit « Séquence 2 · B » dès qu'elle a plusieurs variantes |
+
+### Les gestes
+
+- **Nouvelle variante, en dupliquant** : le film **ne bouge pas** (mêmes plans, mêmes numéros : la sélection, l'historique, les notes de la planche accrochées aux
+  plans, les envois suivent). Ses plans prennent la lettre suivante ; c'est une **copie profonde** (numéros neufs de plans, de scènes, de marques et de calques,
+  dessins dupliqués, tuiles partagées jusqu'à la première retouche) qui est rangée sous la lettre d'avant. Les versions des plans, les commentaires, les transitions
+  internes et les liens des références sont copiés ; **le contenu rogné ne l'est pas**.
+- **Nouvelle variante, en partant d'un plan vide** : le jeu de plans en cours est rangé tel quel ; la séquence repart d'une scène et d'un plan vide.
+- **Passer à une variante** : les deux jeux de plans **s'échangent**. Les transitions aux bords de la séquence (avec le plan d'avant, avec le plan d'après) restent
+  sur la coupe et passent au nouveau premier ou dernier plan. Les notes de la planche attachées à des plans rangés sont cachées jusqu'à leur retour.
+- **Supprimer** (après confirmation : « N plans et M images seront supprimés ») : jamais la dernière variante. Supprimer la variante choisie fait passer la séquence à la
+  plus petite des autres. La lettre libérée est reprise par la prochaine variante.
+- **Renommer** : un nom court (40 lettres au plus, une ligne) ; vide : la lettre seule.
+- Un geste = **une étape d'annulation nommée** (panneau Historique) : « Nouvelle variante de la séquence », « Passer à la variante B », « Supprimer la variante B »,
+  « Renommer la variante B ». Le storyboard verrouillé les refuse. Aucun ne touche un pixel sur le fil de l'interface : on échange des listes de plans, sans
+  rien recopier ni relire (l'étape d'annulation partage les variantes rangées, `Arc`).
+- **Copier-coller entre variantes** : copier des plans (ou des cases de la vue Vignettes) dans une variante, passer à l'autre, coller. Le presse-papiers est autonome.
+
+### Comparer
+
+La fenêtre « Comparer » (partie 15) propose, parmi les côtés du plan courant, « **Variante B** » : le **plan de même rang** (le 2e de la séquence, le 3e…) dans
+cette variante, contre le plan d'aujourd'hui, côte à côte, en volet, en fondu ou en superposition. Une variante qui n'a pas de plan à ce rang n'est pas proposée
+(« la variante B n'a pas de plan au rang 3 de la séquence » si on la demande quand même). Comparer deux jeux de plans entiers côte à côte n'est pas fait : c'est
+plan par plan.
+
+### Envois
+
+- Un envoi note la **variante choisie de chaque séquence qui en a plusieurs** ; la liste des envois la rappelle (« séquence 2 : B »).
+- Les plans d'une copie ont des numéros neufs : pour que « modifié depuis l'envoi » reste juste, chaque plan copié se souvient du plan dont il vient, et on le
+  compare à celui-là (les empreintes sont celles du contenu, pas des numéros). Passer à une copie non touchée ne signale rien ; retoucher un plan ne signale que
+  celui-là ; un plan d'une variante vide est « nouveau ».
+
+### Fichier
+
+`variantes.json` à côté du manifeste, **sans changer le format du projet (36)** : par séquence, la variante choisie et, pour chaque variante rangée, ses scènes, ses
+plans (l'entrée du manifeste), leurs versions, le contenu rogné, les commentaires, les transitions. Absent : aucune séquence n'a de variante. Les dessins sont dans
+`dessins/` comme les autres. Un fichier illisible ou plus récent n'est jamais effacé, le projet s'ouvre sans les variantes rangées (avertissement) et
+l'enregistrement ne nettoie pas `dessins/`. Une version de SHOT qui ne connaît pas le fichier l'ignore et ouvre la variante choisie. Détail : en-tête de `src/variantes.rs`.
+
+### Travailler à plusieurs
+
+- **Créer, passer, supprimer ou renommer une variante demande le jeton du montage** (comme changer l'ordre des plans), et les plans que l'échange fait **sortir** du film
+  doivent être à moi ou libres (jamais à un autre : « Léa tient ce plan »). Les plans qui entrent sont à moi dès leur arrivée.
+- Les variantes rangées sont une **annexe du montage** : `variantes.json` dans le dossier partagé, écrit par celui qui tient le jeton, avec leurs dessins. Les autres
+  postes les relisent quand la structure change. Si des dessins de variantes n'étaient pas arrivés à la lecture, le fichier n'est jamais réécrit et les gestes sont
+  refusés (« Des dessins de variantes manquent… ») jusqu'à une relecture complète.
+- Voir aussi `docs/COOPERATION.md`, §12.
+
+### Limites connues
+
+- Le contenu rogné n'est pas copié par « en dupliquant » (il suit la variante qu'il a quittée) ; les commentaires et les notes de la planche d'un plan rangé ne se voient
+  pas tant que sa variante est rangée.
+- Compare plan par plan (même rang), pas deux jeux de plans côte à côte.
+- Dans un film partagé, chaque changement de structure relit les dessins des variantes rangées (sur un fil de fond) ; un plan qui revient dans le film retrouve son
+  ancien fichier de plan comme après un « annuler » de suppression.
+- Pas de fusion de deux variantes ; pas de variantes du film entier (voir les envois et les versions de plan).
+
+### À vérifier à l'écran (par Anthony)
+
+1. Vue Vignettes : sous la rangée de réglages, une petite icône de branche à demi effacée (la séquence du plan courant n'a pas de variante). Cliquer un plan d'une autre
+   séquence : l'icône suit. Rien d'autre n'est ajouté à la vue.
+2. Cliquer l'icône : « Nouvelle variante, en dupliquant » / « en partant d'un plan vide ». Choisir la première : la rangée montre « Séquence 2 · A B » avec **B** enfoncée ;
+   la barre de la séquence dans le montage dit « Séquence 2 · B » ; le film n'a pas bougé.
+3. Dans la B, ajouter un plan, en raccourcir un : le montage change. Cliquer **A** : la séquence revient comme avant, la B est gardée ; recliquer B : le plan ajouté est là.
+4. Ctrl+Z après chaque passage : le panneau Historique dit « Passer à la variante A » ; l'annulation rend l'autre variante.
+5. Clic droit sur une lettre : Renommer… (« serré » : le sélecteur garde la lettre, la bulle et le montage disent « B · serré »), Comparer, Supprimer… (confirmation, jamais la dernière).
+6. Fenêtre Comparer sur un plan : « Variante A » est un des côtés ; les deux plans se superposent.
+7. Copier un plan dans la A, passer à la B, coller : il est là.
+8. Marquer un envoi, passer à la A (une copie), laisser le relevé finir : aucun plan n'est signalé « modifié » ; retoucher un plan : seul lui l'est.
+9. Enregistrer, fermer, rouvrir : les deux variantes, leurs noms et la choisie sont là ; l'exemple d'avant (sans variante) s'ouvre sans fichier de plus.
+10. Film partagé : sans le jeton du montage, créer ou passer à une variante est refusé avec la raison ; avec le jeton, ça marche, et un plan tenu par un autre empêche le passage.
+11. Au repos, avec des variantes : rien ne bouge, le processeur reste à zéro.

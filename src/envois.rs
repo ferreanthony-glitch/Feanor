@@ -104,6 +104,17 @@ pub struct PlanEnvoye {
     pub images: usize,
 }
 
+/// La variante choisie d'une séquence quand l'envoi est parti (`variantes.rs`) : seulement pour les séquences qui en
+/// ont plusieurs.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VarianteEnvoyee {
+    /// Le numéro de la séquence.
+    pub sequence: u64,
+    pub numero: u32,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub nom: String,
+}
+
 /// Un envoi : un nom, une date, l'état de chaque plan.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Envoi {
@@ -118,6 +129,9 @@ pub struct Envoi {
     #[serde(default)]
     pub fichier: String,
     pub plans: Vec<PlanEnvoye>,
+    /// La variante choisie de chaque séquence qui en a plusieurs (`variantes.rs`) ; vide : aucune séquence n'en avait.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub variantes: Vec<VarianteEnvoyee>,
 }
 
 impl Envoi {
@@ -219,6 +233,15 @@ pub fn etat_du_plan(envoi: &Envoi, plan: u64, empreinte: u64) -> Etat {
         None => Etat::Nouveau,
         Some(p) if p.empreinte == empreinte => Etat::Inchange,
         Some(_) => Etat::Modifie,
+    }
+}
+
+/// Comme `etat_du_plan`, pour un plan du film d'aujourd'hui : un plan copié par une variante de séquence
+/// (`variantes.rs`) se compare au plan dont il vient quand l'envoi ne le connaît pas lui-même.
+pub fn etat_du_plan_dans(doc: &Document, envoi: &Envoi, plan: u64, empreinte: u64) -> Etat {
+    match doc.plan_dans_envoi(envoi, plan) {
+        Some(connu) => etat_du_plan(envoi, connu, empreinte),
+        None => Etat::Nouveau,
     }
 }
 
@@ -509,6 +532,8 @@ pub fn construire(demande: Demande) -> Result<Resultat, String> {
             .zip(&resultats)
             .map(|(p, (_, e))| PlanEnvoye { plan: p.panel.id, titre: p.titre.clone(), empreinte: *e, version: p.version.max(1), images: p.panel.frame_count() })
             .collect(),
+        // (Les variantes choisies : notées par l'appelant, qui a le document.)
+        variantes: Vec::new(),
     };
     Ok(Resultat { empreintes, plans: resultats, envoi: Some((envoi, Instantane { id: nouveau.id, fichier, octets, dessins, textures })) })
 }

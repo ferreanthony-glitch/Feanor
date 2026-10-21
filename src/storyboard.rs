@@ -862,7 +862,7 @@ impl App {
                         Some(s) if !s.name.trim().is_empty() => s.name.trim().to_string(),
                         _ => self.doc.sequence_code(seq),
                     };
-                    (format!("Séquence {label}"), number)
+                    (format!("Séquence {label}{}", crate::variantesui::suffixe_barre(&self.doc, seq)), number)
                 } else {
                     let scene = self.doc.panels[start].scene;
                     (format!("Scène {}", self.doc.scene_label(scene)), self.doc.scene_number(scene))
@@ -1522,6 +1522,8 @@ impl App {
                     self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
                     self.action_item(ui, "Nouveau plan", "panneau.nouveau");
                     self.action_item(ui, "Nouveau plan avant le plan courant", "plan.nouveau_avant");
+                    ui.separator();
+                    self.variantes_sous_menu(ui);
                     ui.separator();
                     self.action_item(ui, "Verrouiller / déverrouiller le storyboard", "storyboard.verrouiller");
                 }

@@ -999,6 +999,20 @@ impl Loaded {
         self.0.iter().flat_map(|p| [&p.debut, &p.fin]).flat_map(|f| f.calques.iter()).flat_map(|l| l.expositions.iter()).filter_map(|e| e.0)
     }
 
+    /// Les réserves lues pour ces plans (hors du film : ceux d'une variante rangée, `variantes.rs`), qui ne sont pas
+    /// dans un document ; `missing` : dessins illisibles. Les réserves vides sont laissées.
+    pub(crate) fn pour_plans(self, panels: &[&Panel], missing: &std::collections::BTreeSet<CelId>) -> Vec<(u64, Reserve)> {
+        let mut out = Vec::new();
+        for plan in self.0 {
+            let Some(panel) = panels.iter().find(|p| p.id == plan.plan) else { continue };
+            let r = Reserve { head: piece_of(plan.debut, panel, missing), tail: piece_of(plan.fin, panel, missing) };
+            if !r.is_empty() {
+                out.push((plan.plan, r));
+            }
+        }
+        out
+    }
+
     /// Range les réserves dans `doc` (dont les plans sont chargés) ; `missing` : dessins illisibles.
     pub(crate) fn install(self, doc: &mut Document, missing: &std::collections::BTreeSet<CelId>) {
         for plan in self.0 {

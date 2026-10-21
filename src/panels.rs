@@ -194,6 +194,7 @@ impl App {
                     ui.separator();
                     self.purge_items(ui);
                 });
+                self.variantes_sous_menu(ui);
                 ui.separator();
                 let lock = if self.doc.storyboard_locked { "Déverrouiller le storyboard" } else { "Verrouiller le storyboard" };
                 self.action_item(ui, lock, "storyboard.verrouiller");

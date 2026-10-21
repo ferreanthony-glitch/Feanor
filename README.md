@@ -1602,6 +1602,17 @@ vérifications : `docs/INTERFACE.md`, partie 15.
   pas ses versions.
 - L'envoi note le numéro de la version partie ; la copie d'un plan dans un autre projet ne prend que la version active.
 
+**Variantes de séquence (A · B · C)** : essayer un autre découpage d'une **séquence** (plus serrée, avec un plan de plus…) sans perdre le
+premier. La variante **choisie** est celle du film : montage, lecture, exports, numérotation, export pour le montage, relecture et fiche
+technique la suivent ; les autres sont rangées avec le projet (`variantes.json`, le format 36 ne change pas). Un petit sélecteur « A · B · C » en
+haut de la vue Vignettes (pour la séquence du plan courant ; une séquence sans variante n'a que l'icône branche, à demi effacée), le menu Storyboard >
+« Variantes de la séquence », le clic droit sur la barre de la séquence dans le montage et Ctrl+K (`variante.nouvelle`, `variante.vide`,
+`variante.precedente`, `variante.suivante`, `variante.renommer`, `variante.supprimer`, `variante.comparer`). « Nouvelle variante » **en dupliquant** (le film
+ne bouge pas, une copie profonde est rangée) ou **en partant d'un plan vide** ; passer d'une variante à l'autre échange les jeux de plans (une étape
+d'annulation nommée, sans rien recopier) ; supprimer (jamais la dernière, après confirmation) ; renommer (« B · serré »). La fenêtre Comparer propose « Variante B »
+(le plan de même rang). Un envoi note la variante choisie de chaque séquence ; un plan copié se compare au plan dont il vient. Dans un film partagé il faut le
+jeton du montage. Détail, limites et vérifications : `docs/INTERFACE.md`, partie 36.
+
 **Comparer** : icône « Comparer le plan » (barre du montage sous « Plus… »), fenêtre « Envois » (une icône par envoi),
 ligne « Version » de la fiche (une icône par version), clic droit sur un plan > « Version du plan » > « Comparer le plan… »,
 ou Ctrl+K `comparer.ouvrir`. Une fenêtre à deux côtés : *Aujourd'hui*, chaque version du plan, ou le plan **tel qu'il

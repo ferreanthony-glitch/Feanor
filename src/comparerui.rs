@@ -98,10 +98,21 @@ impl App {
         if let Some(v) = self.doc.versions_du_plan(plan) {
             out.extend(v.autres.iter().rev().map(|r| Source::Version(r.numero)));
         }
-        let mut envois: Vec<&crate::envois::Envoi> = self.doc.envois.list.iter().filter(|e| e.plan(plan).is_some()).collect();
+        // Les autres variantes de sa séquence qui ont un plan de même rang (`variantes.rs`).
+        let sequence = self.doc.sequence_of(index);
+        if let Some(v) = self.doc.variantes_de(sequence) {
+            let rang = self.rang_dans_sequence(index);
+            out.extend(v.autres.iter().filter(|r| r.contenu.panels.len() > rang).map(|r| Source::Variante(r.numero)));
+        }
+        let mut envois: Vec<&crate::envois::Envoi> = self.doc.envois.list.iter().filter(|e| self.doc.plan_dans_envoi(e, plan).is_some()).collect();
         envois.sort_by_key(|e| std::cmp::Reverse(e.id));
         out.extend(envois.into_iter().map(|e| Source::Envoi(e.id)));
         out
+    }
+
+    /// Le rang du plan `index` dans sa séquence (0 pour le premier).
+    fn rang_dans_sequence(&self, index: usize) -> usize {
+        self.doc.course_de_sequence(self.doc.sequence_of(index)).map_or(0, |(debut, _)| index.saturating_sub(debut))
     }
 
     /// Le nom d'un côté pour le plan `plan`.
@@ -112,9 +123,13 @@ impl App {
                 Some(r) if r.date > 0 => format!("Version {} ({})", etiquette(*n), date_courte(r.date)),
                 _ => format!("Version {}", etiquette(*n)),
             },
+            Source::Variante(n) => {
+                let sequence = self.doc.panels.iter().position(|p| p.id == plan).map_or(0, |i| self.doc.sequence_of(i));
+                format!("Variante {}", self.doc.etiquette_de_variante(sequence, *n))
+            }
             Source::Envoi(id) => match self.doc.envois.trouve(*id) {
                 Some(e) => {
-                    let v = e.plan(plan).map_or(1, |p| p.version);
+                    let v = self.doc.plan_dans_envoi(e, plan).and_then(|connu| e.plan(connu)).map_or(1, |p| p.version);
                     let suite = if v > 1 || self.doc.nombre_de_versions(plan) > 1 { format!(", {}", etiquette(v)) } else { String::new() };
                     format!("Envoi « {} » ({}{suite})", e.nom, date_courte(e.date))
                 }
@@ -134,8 +149,19 @@ impl App {
                 let r = self.doc.versions_du_plan(plan).and_then(|v| v.rangee(*n)).ok_or_else(|| format!("la version {} n'existe plus", etiquette(*n)))?;
                 Ok(Entree::Doc(Box::new(comparer::petit_projet(&self.doc, &r.panel))))
             }
+            Source::Variante(n) => {
+                let sequence = self.doc.sequence_of(index);
+                let rang = self.rang_dans_sequence(index);
+                let r = self
+                    .doc
+                    .plan_de_variante_au_rang(sequence, *n, rang)
+                    .ok_or_else(|| format!("la variante {} n'a pas de plan au rang {} de la séquence", self.doc.etiquette_de_variante(sequence, *n), rang + 1))?;
+                Ok(Entree::Doc(Box::new(comparer::petit_projet(&self.doc, r))))
+            }
             Source::Envoi(id) => {
                 let envoi = self.doc.envois.trouve(*id).ok_or("cet envoi n'est plus dans la liste")?;
+                // Un plan copié par une variante se relit sous le numéro du plan dont il vient (`variantes.rs`).
+                let plan = self.doc.plan_dans_envoi(envoi, plan).unwrap_or(plan);
                 if self.doc.envois.pending.iter().any(|p| p.id == *id) {
                     return Err(format!("l'envoi « {} » s'enregistre encore : réessaie dans un instant.", envoi.nom));
                 }
@@ -194,7 +220,7 @@ impl App {
                 return Some(Source::Version(n));
             }
         }
-        self.doc.envois.list.iter().filter(|e| e.plan(plan).is_some() && !e.fichier.is_empty()).max_by_key(|e| e.id).map(|e| Source::Envoi(e.id))
+        self.doc.envois.list.iter().filter(|e| self.doc.plan_dans_envoi(e, plan).is_some() && !e.fichier.is_empty()).max_by_key(|e| e.id).map(|e| Source::Envoi(e.id))
     }
 
     /// Relit les deux côtés (autres côtés choisis, ou « Rafraîchir »).

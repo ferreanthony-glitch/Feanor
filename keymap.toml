@@ -2534,6 +2534,42 @@ action = "version.suivante"
 touches = []
 source = "SHOT (sans touche)"
 
+# Variantes d'une séquence (A · B · C) : sans touche, à choisir.
+[[raccourci]]
+action = "variante.nouvelle"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "variante.vide"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "variante.precedente"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "variante.suivante"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "variante.renommer"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "variante.supprimer"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "variante.comparer"
+touches = []
+source = "SHOT (sans touche)"
+
 # Comparer un plan avec lui-même : deux versions, ou aujourd'hui et un envoi (sans touche : à choisir).
 [[raccourci]]
 action = "comparer.ouvrir"

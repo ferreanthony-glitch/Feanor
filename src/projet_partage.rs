@@ -407,6 +407,7 @@ impl Document {
         s.reserves = std::mem::take(&mut self.reserves).into_iter().filter(|(p, _)| existe.contains(p)).collect();
         s.comments = std::mem::take(&mut self.comments).into_iter().filter(|c| existe.contains(&c.panel)).collect();
         let _ = self.replace_structure(s);
+        self.variantes_partielles = stub.variantes_partielles;
         self.sons_proposes = stub.sons_proposes;
         self.envois = stub.envois;
         for (k, v) in stub.sounds {
@@ -721,6 +722,12 @@ pub(crate) fn preparer(doc: &Document, manifest_path: &Path, written: &mut HashM
     for b in &ctx.brouillons {
         used.extend(b.cels.iter().copied());
     }
+    // Les variantes rangées des séquences sont une annexe du montage (`variantes.rs`) : celui qui tient le jeton écrit aussi
+    // leurs dessins (sauf si des dessins manquaient à la lecture : on n'y touche pas).
+    let variantes = ctx.jeton.is_some() && !doc.variantes_partielles;
+    if variantes {
+        used.extend(doc.cels_des_variantes());
+    }
     let (drawings, fonds, hors, reecrits) = dessins_a_ecrire(doc, dir, &used, written, None)?;
     let used_textures = used_textures(doc, &used);
     let textures = used_textures
@@ -757,6 +764,8 @@ pub(crate) fn preparer(doc: &Document, manifest_path: &Path, written: &mut HashM
         job.sound_fx = crate::audiofx::to_bytes(doc)?;
         job.personnages = crate::personnages::to_bytes(doc)?;
         job.sons_proposes = crate::indications::to_bytes(doc)?;
+        job.variantes = if variantes { variantes_octets(doc)? } else { None };
+        job.variantes_gardees = doc.variantes_partielles;
         job.references = crate::references::plan_save(doc, dir)?;
         job.envois = crate::envois::to_bytes(doc)?;
         job.snapshots = doc.envois.pending.clone();
@@ -792,6 +801,8 @@ impl SaveJob {
             references: Default::default(),
             envois: None,
             plans_versions: None,
+            variantes: None,
+            variantes_gardees: false,
             keep_drawings: false,
             snapshots: Vec::new(),
             snapshot_reuse: HashMap::new(),
@@ -899,6 +910,10 @@ impl SaveJob {
             ecrire(dir.join(crate::personnages::FILE), self.personnages.as_deref(), &|t| crate::personnages::parse(t).is_ok())?;
             ecrire(dir.join(crate::indications::FILE), self.sons_proposes.as_deref(), &|t| crate::indications::parse(t).is_ok())?;
             ecrire(dir.join(crate::envois::FILE), self.envois.as_deref(), &|t| crate::envois::parse(t).is_ok())?;
+            // Les variantes rangées (leurs dessins viennent d'être écrits) : le fichier n'est touché que si elles ont été lues en entier.
+            if !self.variantes_gardees {
+                ecrire(dir.join(crate::variantes::FILE), self.variantes.as_deref(), &|t| crate::variantes::parse(t).is_ok())?;
+            }
             count += self.references.write(&dir)?;
             count += crate::envois::ecrire(&dir, &self.snapshots, &self.snapshot_reuse, None)?;
             // La structure : ré-écrite si ses octets ont changé, ou si une annexe a changé (les autres postes ne surveillent que

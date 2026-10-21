@@ -36,6 +36,9 @@ pub enum Source {
     Version(u32),
     /// Le plan tel qu'il était à un envoi, par le numéro de l'envoi.
     Envoi(u64),
+    /// Le plan de même rang (le 2e de la séquence, le 3e…) dans une autre variante de sa séquence (`variantes.rs`),
+    /// par le numéro de la variante.
+    Variante(u32),
 }
 
 /// Comment les deux côtés se montrent.
